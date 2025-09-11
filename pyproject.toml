@@ -1,0 +1,15 @@
+[project]
+name = "campus-network-auth"
+version = "1.0.0"
+description = "校园网自动认证工具，支持GUI和命令行两种使用方式"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "playwright>=1.55.0",
+    "pyinstaller>=6.15.0",
+    "python-dotenv>=1.0.0",
+]
+
+[[tool.uv.index]]
+url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
+default = true
