@@ -312,6 +312,12 @@ class NetworkMonitorGUI:
             bool: 登录是否成功
         """
         try:
+            # 检查当前时间是否在禁止登录时段（0点到6点）
+            current_hour = datetime.datetime.now().hour
+            if 0 <= current_hour < 6:
+                self.log_message(f"⏰ 当前时间 {current_hour}:xx 在禁止登录时段（0点-6点），跳过登录")
+                return False
+            
             # 从GUI获取配置并转换
             config = load_config_from_env()
             # 使用GUI中的值覆盖配置
