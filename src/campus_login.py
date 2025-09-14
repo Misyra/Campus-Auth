@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import random
 import sys
 from typing import Optional
 
@@ -13,57 +14,13 @@ from playwright.async_api import (
     Page,
     TimeoutError as PlaywrightTimeoutError,
 )
+from utils import ConfigLoader, LoggerSetup
 
 # 加载环境变量
 load_dotenv()
 
 
-def load_config_from_env() -> dict:
-    """从环境变量加载配置"""
-    
-    def str_to_bool(value: str) -> bool:
-        """将字符串转换为布尔值"""
-        return value.lower() in ('true', '1', 'yes', 'on')
-    
-    def get_int_env(key: str, default: int) -> int:
-        """获取整数环境变量"""
-        try:
-            return int(os.getenv(key, str(default)))
-        except ValueError:
-            return default
-    
-    return {
-        "username": os.getenv("CAMPUS_USERNAME", ""),
-        "password": os.getenv("CAMPUS_PASSWORD", ""),
-        "auth_url": os.getenv("CAMPUS_AUTH_URL", "http://172.29.0.2"),
-        "isp": os.getenv("CAMPUS_ISP", "@cmcc"),
-        "auto_start_monitoring": str_to_bool(os.getenv("AUTO_START_MONITORING", "false")),
-        
-        "browser_settings": {
-            "headless": str_to_bool(os.getenv("BROWSER_HEADLESS", "false")),
-            "timeout": get_int_env("BROWSER_TIMEOUT", 10000),
-            "user_agent": os.getenv(
-                "BROWSER_USER_AGENT",
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            )
-        },
-        
-        "retry_settings": {
-            "max_retries": get_int_env("RETRY_MAX_RETRIES", 3),
-            "retry_interval": get_int_env("RETRY_INTERVAL", 5)
-        },
-        
-        "logging": {
-            "level": os.getenv("LOG_LEVEL", "INFO"),
-            "format": os.getenv("LOG_FORMAT", "%(asctime)s - %(levelname)s - %(message)s"),
-            "file": os.getenv("LOG_FILE", "logs/campus_auth.log") or None  # 空字符串转为None
-        },
-        
-        "monitor": {
-            "interval": get_int_env("MONITOR_INTERVAL", 240),
-            "ping_targets": [target.strip() for target in os.getenv("PING_TARGETS", "8.8.8.8,114.114.114.114,baidu.com").split(",") if target.strip()]
-        }
-    }
+# 配置工具函数 - 已移至utils.py统一管理
 
 
 class EnhancedCampusNetworkAuth:
@@ -92,60 +49,99 @@ class EnhancedCampusNetworkAuth:
         self._setup_logging()
 
     def _setup_logging(self) -> None:
-        """设置日志配置（带容错）"""
+        """设置日志配置（使用工具类）"""
         log_config = self.config.get('logging', {})
         
-        # 创建唯一的logger名称，避免重复
+        # 使用工具类设置日志
         logger_name = f"{__name__}_{id(self)}"
-        self.logger = logging.getLogger(logger_name)
-        
-        # 如果logger已经有处理器，说明已经配置过，直接返回
-        if self.logger.handlers:
-            return
-            
-        # 设置日志级别
-        self.logger.setLevel(getattr(logging, log_config.get("level", "INFO")))
-        
-        # 创建格式器
-        formatter = logging.Formatter(
-            log_config.get("format", "%(asctime)s - %(levelname)s - %(message)s")
-        )
-        
-        # 添加文件处理器
-        if log_config.get("file"):
-            import os
-            log_file = log_config["file"]
-            # 确保日志目录存在
-            log_dir = os.path.dirname(log_file)
-            if log_dir and not os.path.exists(log_dir):
-                os.makedirs(log_dir, exist_ok=True)
-                
-            file_handler = logging.FileHandler(log_file, encoding='utf-8')
-            file_handler.setFormatter(formatter)
-            self.logger.addHandler(file_handler)
-        
-        # 防止日志传播到根logger，避免重复输出
-        self.logger.propagate = False
+        self.logger = LoggerSetup.setup_logger(logger_name, log_config)
 
     async def start_browser(self) -> None:
         """启动浏览器"""
         self.playwright = await async_playwright().start()
 
         headless = self.browser_settings.get("headless", False)
-        self.browser = await self.playwright.chromium.launch(headless=headless)
-        self.page = await self.browser.new_page()
-
-        user_agent = self.browser_settings.get(
-            "user_agent",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        
+        # 启动浏览器时添加更多反检测参数
+        browser_args = [
+            '--no-sandbox',
+            '--disable-blink-features=AutomationControlled',
+            '--disable-features=VizDisplayCompositor',
+            '--disable-web-security',
+            '--disable-features=TranslateUI',
+            '--disable-ipc-flooding-protection',
+            '--no-first-run',
+            '--no-default-browser-check',
+            '--disable-default-apps',
+            '--disable-popup-blocking',
+            '--disable-extensions',
+            '--disable-plugins',
+            '--disable-images',
+            '--disable-javascript',
+            '--disable-plugins-discovery',
+            '--disable-preconnect',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding'
+        ]
+        
+        self.browser = await self.playwright.chromium.launch(
+            headless=headless,
+            args=browser_args
         )
-        await self.page.set_extra_http_headers({"User-Agent": user_agent})
+        
+        # 创建页面时添加反检测上下文
+        context = await self.browser.new_context(
+            viewport={'width': 1920, 'height': 1080},
+            user_agent=self._get_random_user_agent(),
+            extra_http_headers={
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                'Accept-Encoding': 'gzip, deflate',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            }
+        )
+        
+        self.page = await context.new_page()
+        
+        # 注入反检测脚本
+        await self.page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined,
+            });
+            
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5],
+            });
+            
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['zh-CN', 'zh', 'en'],
+            });
+            
+            window.chrome = {
+                runtime: {},
+            };
+        """)
 
         self.logger.info(f"浏览器已启动，无头模式: {headless}")
+    
+    def _get_random_user_agent(self) -> str:
+        """获取随机User-Agent"""
+        import random
+        user_agents = self.browser_settings.get("user_agents", [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ])
+        return random.choice(user_agents)
 
     async def navigate_to_auth_page(self) -> bool:
         """导航到认证页面"""
         try:
+            if not self.page:
+                self.logger.error("页面未初始化")
+                return False
+                
             timeout = self.browser_settings.get("timeout", 10000)
             self.logger.info(f"正在访问认证页面: {self.auth_url}")
 
@@ -165,46 +161,79 @@ class EnhancedCampusNetworkAuth:
     async def check_already_logged_in(self) -> bool:
         """✅ 重点增强：精准检测已登录状态（支持你提供的页面结构）"""
         try:
-            await self.page.wait_for_load_state("networkidle", timeout=5000)
-
-            # 🎯 方案1：检测 <div name="PageTips">您已经成功登录。</div>
-            page_tips_locator = self.page.locator('div[name="PageTips"]')
-            if await page_tips_locator.count() > 0:
-                tip_text = await page_tips_locator.text_content()
-                if tip_text and ("成功登录" in tip_text or "already logged in" in tip_text.lower()):
-                    self.logger.info(f"✅ 检测到已登录提示: {tip_text.strip()}")
-                    return True
-
-            # 🎯 方案2：检测注销按钮 <input name="logout" value="注  销">
-            logout_button_locator = self.page.locator('input[name="logout"], button:has-text("注销"), button:has-text("注  销")')
-            if await logout_button_locator.count() > 0 and await logout_button_locator.is_visible():
-                self.logger.info("✅ 检测到“注销”按钮，说明已登录")
-                return True
-
-            # 🎯 方案3：通用文本兜底检测
-            body_text = await self.page.text_content("body")
-            if body_text:
-                indicators = [
-                    "您已登录", "在线用户", "当前在线", "logout", "登出", "注销",
-                    "already logged in", "online user", "logged in", "success"
-                ]
-                for indicator in indicators:
-                    if indicator.lower() in body_text.lower():
-                        self.logger.info(f"✅ 通过通用文本检测到已登录状态: {indicator}")
-                        return True
-
+            if not self.page:
+                return False
+                
+            # 检测已登录状态的标识符
+            login_indicators = [
+                ('div[name="PageTips"]', ['成功登录', 'already logged in']),
+                ('input[name="logout"], button:has-text("注销"), button:has-text("注  销")', None),
+                ('body', ['您已登录', '在线用户', '当前在线', 'logout', '登出', '注销',
+                          'already logged in', 'online user', 'logged in', 'success'])
+            ]
+            
+            for selector, keywords in login_indicators:
+                try:
+                    element = self.page.locator(selector)
+                    if await element.count() > 0:
+                        if keywords is None:  # 按钮存在即为登录
+                            if await element.is_visible(timeout=2000):
+                                self.logger.info("✅ 检测到'注销'按钮，说明已登录")
+                                return True
+                        else:  # 检查文本内容
+                            text_content = await element.text_content(timeout=2000)
+                            if text_content:
+                                for keyword in keywords:
+                                    if keyword.lower() in text_content.lower():
+                                        self.logger.info(f"✅ 检测到已登录状态: {keyword}")
+                                        return True
+                except Exception:
+                    continue
+            
             return False
-
+            
         except Exception as e:
             self.logger.warning(f"检测已登录状态时发生异常: {e}")
             return False
     
-    async def test_connection(self) -> tuple[bool, str]:
-        """测试连接到认证页面
-        
-        返回:
-            tuple[bool, str]: (是否成功, 提示信息)
+    async def _find_and_fill_element(self, selectors: list, value: str, element_type: str) -> bool:
         """
+        通用的元素查找和填写方法
+        
+        参数:
+            selectors: 选择器列表
+            value: 要填入的值
+            element_type: 元素类型描述（用于日志）
+            
+        返回:
+            bool: 是否成功填写
+        """
+        if not self.page:
+            return False
+            
+        for selector in selectors:
+            try:
+                element = self.page.locator(selector)
+                if await element.count() > 0:
+                    # 检查元素是否可用
+                    is_visible = await element.is_visible()
+                    is_enabled = await element.is_enabled()
+                    element_input_type = await element.get_attribute('type')
+                    
+                    if is_visible and is_enabled and element_input_type != 'hidden':
+                        await element.clear()
+                        await element.fill(value)
+                        self.logger.info(f"✅ {element_type}填写成功，使用选择器: {selector}")
+                        return True
+                    else:
+                        self.logger.debug(f"选择器 {selector} 不满足条件: visible={is_visible}, enabled={is_enabled}, type={element_input_type}")
+            except Exception as e:
+                self.logger.warning(f"{element_type}选择器 {selector} 填写失败: {e}")
+                continue
+        return False
+    
+    async def test_connection(self) -> tuple[bool, str]:
+        """测试连接到认证页面（修复内存泄漏）"""
         try:
             await self.start_browser()
             
@@ -222,15 +251,16 @@ class EnhancedCampusNetworkAuth:
             self.logger.error(error_msg)
             return False, error_msg
         finally:
-            if self.browser:
-                await self.browser.close()
-            if self.playwright:
-                await self.playwright.stop()
+            # 确保总是清理资源
+            await self.cleanup()
 
     async def fill_login_form(self) -> bool:
-        """填写登录表单"""
+        """填写登录表单（简化版）"""
         try:
-            # 👇 等待表单关键元素出现（优化选择器，避免隐藏元素）
+            if not self.page:
+                return False
+                
+            # 等待表单关键元素出现
             try:
                 await self.page.wait_for_selector(
                     'input[name="DDDDD"][type="text"]:visible, input[name="upass"][type="password"]:visible',
@@ -240,122 +270,56 @@ class EnhancedCampusNetworkAuth:
                 self.logger.info("📝 表单元素已加载")
             except Exception as e:
                 self.logger.warning(f"等待表单元素超时: {e}")
-                # 尝试备用选择器
-                try:
-                    await self.page.wait_for_selector(
-                        'input[type="text"]:visible, input[type="password"]:visible',
-                        state="visible",
-                        timeout=5000
-                    )
-                    self.logger.info("📝 通过备用选择器找到表单元素")
-                except Exception as e2:
-                    self.logger.warning(f"备用选择器也失败: {e2}")
 
-            # 用户名选择器（优化优先级，更精确匹配）
+            # 用户名选择器（优化优先级）
             username_selectors = [
-                'input[name="DDDDD"][type="text"]:visible',  # 最高优先级：明确指定类型和可见性
-                'input[name="DDDDD"]:not([type="hidden"]):visible',  # 排除隐藏字段
+                'input[name="DDDDD"][type="text"]:visible',
+                'input[name="DDDDD"]:not([type="hidden"]):visible',
                 'input[type="text"][placeholder*="学工号"]:visible',
                 'input[type="text"][placeholder*="用户名"]:visible', 
                 'input[name="username"]:visible',
-                'input[name="user"]:visible',
                 'input[type="text"]:visible'
             ]
 
-            # 密码选择器（优化优先级，更精确匹配）
+            # 密码选择器（优化优先级）
             password_selectors = [
-                'input[name="upass"][type="password"]:visible',  # 最高优先级：明确指定类型和可见性
-                'input[name="upass"]:not([type="hidden"]):visible',  # 排除隐藏字段
+                'input[name="upass"][type="password"]:visible',
+                'input[name="upass"]:not([type="hidden"]):visible',
                 'input[type="password"][placeholder*="密码"]:visible',
-                'input[type="password"][placeholder*="云陶"]:visible',
                 'input[name="password"]:visible',
                 'input[type="password"]:visible'
             ]
 
-            # 填写用户名（增加更严格的可见性检查）
-            username_filled = False
-            for selector in username_selectors:
-                try:
-                    element = self.page.locator(selector)
-                    if await element.count() > 0:
-                        # 更严格的可见性检查
-                        is_visible = await element.is_visible()
-                        is_enabled = await element.is_enabled()
-                        element_type = await element.get_attribute('type')
-                        
-                        if is_visible and is_enabled and element_type != 'hidden':
-                            await element.clear()  # 使用 clear() 替代 fill('')
-                            await element.fill(self.username)
-                            username_filled = True
-                            self.logger.info(f"👤 用户名填写成功，使用选择器: {selector}")
-                            break
-                        else:
-                            self.logger.debug(f"选择器 {selector} 不满足条件: visible={is_visible}, enabled={is_enabled}, type={element_type}")
-                except Exception as e:
-                    self.logger.warning(f"用户名选择器 {selector} 填写失败: {e}")
-                    continue
-
-            if not username_filled:
+            # 填写用户名
+            if not await self._find_and_fill_element(username_selectors, self.username, "用户名"):
                 self.logger.error("❌ 未找到可见的用户名输入框")
-                # 调试：打印所有 input 元素
-                all_inputs = await self.page.query_selector_all('input')
-                for i, inp in enumerate(all_inputs):
-                    inp_type = await inp.get_attribute('type')
-                    inp_name = await inp.get_attribute('name')
-                    inp_visible = await inp.is_visible()
-                    self.logger.debug(f"Input {i}: type={inp_type}, name={inp_name}, visible={inp_visible}")
                 return False
 
-            # 填写密码（增加更严格的可见性检查）
-            password_filled = False
-            for selector in password_selectors:
-                try:
-                    element = self.page.locator(selector)
-                    if await element.count() > 0:
-                        # 更严格的可见性检查
-                        is_visible = await element.is_visible()
-                        is_enabled = await element.is_enabled()
-                        element_type = await element.get_attribute('type')
-                        
-                        if is_visible and is_enabled and element_type != 'hidden':
-                            await element.clear()  # 使用 clear() 替代 fill('')
-                            await element.fill(self.password)
-                            password_filled = True
-                            self.logger.info(f"🔑 密码填写成功，使用选择器: {selector}")
-                            break
-                        else:
-                            self.logger.debug(f"选择器 {selector} 不满足条件: visible={is_visible}, enabled={is_enabled}, type={element_type}")
-                except Exception as e:
-                    self.logger.warning(f"密码选择器 {selector} 填写失败: {e}")
-                    continue
-
-            if not password_filled:
+            # 填写密码
+            if not await self._find_and_fill_element(password_selectors, self.password, "密码"):
                 self.logger.error("❌ 未找到可见的密码输入框")
                 return False
 
-            # 选择运营商（优化选择器优先级）
+            # 选择运营商（可选）
             if self.isp and self.isp.strip():
                 isp_selectors = [
-                    'select[name="ISP_select"]:visible',  # 最高优先级
+                    'select[name="ISP_select"]:visible',
                     'select[name="isp"]:visible',
-                    'select[name="operator"]:visible',
                     '#ISP_select:visible',
-                    '#isp:visible',
-                    '#operator:visible'
+                    '#isp:visible'
                 ]
-                isp_selected = False
+                
                 for selector in isp_selectors:
                     try:
                         element = self.page.locator(selector)
                         if await element.count() > 0 and await element.is_visible():
                             await element.select_option(self.isp)
-                            isp_selected = True
-                            self.logger.info(f"🌐 运营商选择成功: {self.isp}，使用选择器: {selector}")
+                            self.logger.info(f"🌐 运营商选择成功: {self.isp}")
                             break
                     except Exception as e:
                         self.logger.warning(f"运营商选择器 {selector} 失败: {e}")
                         continue
-                if not isp_selected:
+                else:
                     self.logger.warning("⚠️ 未找到运营商选择框，跳过运营商选择")
 
             return True
@@ -365,12 +329,15 @@ class EnhancedCampusNetworkAuth:
             return False
 
     async def submit_form(self) -> bool:
-        """提交登录表单（优化选择器优先级）"""
+        """提交登录表单（简化版）"""
         try:
-            # 提交按钮选择器（优化优先级，更精确匹配）
+            if not self.page:
+                return False
+                
+            # 提交按钮选择器（优化优先级）
             submit_selectors = [
-                'input[name="0MKKey"][type="button"]:visible',  # 最高优先级：明确指定类型和可见性
-                'input[name="0MKKey"]:not([type="hidden"]):visible',  # 排除隐藏字段
+                'input[name="0MKKey"][type="button"]:visible',
+                'input[name="0MKKey"]:not([type="hidden"]):visible',
                 'input[onclick*="ee(1)"]:visible',
                 'input[value="登录"][type="button"]:visible',
                 'input[value="登录"]:visible',
@@ -379,7 +346,7 @@ class EnhancedCampusNetworkAuth:
                 'button:has-text("登录"):visible'
             ]
 
-            # 遍历提交按钮选择器（增加更严格的可用性检查）
+            # 尝试点击提交按钮
             for selector in submit_selectors:
                 try:
                     button = self.page.locator(selector)
@@ -390,6 +357,8 @@ class EnhancedCampusNetworkAuth:
                         if is_visible and is_enabled:
                             self.logger.info(f"🚀 正在提交认证表单... 使用选择器: {selector}")
                             await button.click()
+                            await self.page.wait_for_timeout(2000)
+                            self.logger.info("✅ 表单提交完成")
                             return True
                         else:
                             self.logger.debug(f"提交按钮 {selector} 不可用: visible={is_visible}, enabled={is_enabled}")
@@ -406,7 +375,10 @@ class EnhancedCampusNetworkAuth:
                     await self.page.focus('input[name="upass"]')
                 except:
                     self.logger.warning("⚠️ 无法聚焦任何输入框")
+            
             await self.page.keyboard.press("Enter")
+            await self.page.wait_for_timeout(2000)
+            self.logger.info("✅ 回车提交完成")
             return True
 
         except Exception as e:
@@ -420,87 +392,68 @@ class EnhancedCampusNetworkAuth:
             tuple[bool, str]: (是否成功, 提示信息)
         """
         try:
-            await self.page.wait_for_load_state("networkidle", timeout=8000)
-
-            success_indicators = [
-                "认证成功", "登录成功", "连接成功", "welcome", "success",
-                "authentication successful", "login successful", "connected",
-                "您已经成功登录"  # 特别加入你页面的提示
-            ]
-
+            if not self.page:
+                return False, "页面未初始化"
+                
+            # 等待页面加载完成，但使用更短的超时时间避免长时间等待
+            try:
+                await self.page.wait_for_load_state("networkidle", timeout=5000)
+            except Exception as e:
+                self.logger.debug(f"等待页面加载超时，继续检查登录状态: {e}")
+            
+            # 直接使用check_already_logged_in函数判断登录状态
+            if await self.check_already_logged_in():
+                success_msg = "登录成功: 检测到'您已经成功登录'提示"
+                self.logger.info(f"✅ {success_msg}")
+                return True, success_msg
+            
+            # 如果没有检测到成功登录，检查是否有失败提示
             failure_indicators = [
                 "认证失败", "登录失败", "用户名或密码错误", "账号或密码", "incorrect",
                 "authentication failed", "login failed", "invalid username or password",
                 "用户不存在", "密码错误", "账户被锁定", "网络异常"
             ]
-
+            
             body_text = (await self.page.text_content("body") or "")
             body_text_lower = body_text.lower()
-
-            # 检查特定的提示框内容
-            try:
-                # 查找包含提示信息的div元素
-                tip_elements = await self.page.query_selector_all('div[name="PageTips"], .edit_lobo_cell, .message, .alert, .tip')
-                for element in tip_elements:
-                    element_text = await element.text_content()
-                    if element_text and element_text.strip():
-                        self.logger.info(f"📋 检测到提示信息: {element_text.strip()}")
-                        
-                        # 检查是否为成功提示
-                        for indicator in success_indicators:
-                            if indicator.lower() in element_text.lower():
-                                success_msg = f"登录成功: {element_text.strip()}"
-                                self.logger.info(f"✅ {success_msg}")
-                                return True, success_msg
-                        
-                        # 检查是否为失败提示
-                        for indicator in failure_indicators:
-                            if indicator.lower() in element_text.lower():
-                                failure_msg = f"登录失败: {element_text.strip()}"
-                                self.logger.warning(f"❌ {failure_msg}")
-                                await self.page.screenshot(path="auth_failed.png")
-                                return False, failure_msg
-            except Exception as e:
-                self.logger.debug(f"检查提示元素时出错: {e}")
-
-            # 先检查失败
+            
+            # 检查失败标识
             for indicator in failure_indicators:
                 if indicator.lower() in body_text_lower:
                     failure_msg = f"登录失败: 检测到失败标识 '{indicator}'"
                     self.logger.warning(f"❌ {failure_msg}")
-                    await self.page.screenshot(path="auth_failed.png")
-                    self.logger.info("📸 已保存失败截图: auth_failed.png")
+                    if self.page:
+                        await self.page.screenshot(path="auth_failed.png")
+                        self.logger.info("📸 已保存失败截图: auth_failed.png")
                     return False, failure_msg
-
-            # 再检查成功
-            for indicator in success_indicators:
-                if indicator.lower() in body_text_lower:
-                    success_msg = f"登录成功: 检测到成功标识 '{indicator}'"
-                    self.logger.info(f"✅ {success_msg}")
-                    return True, success_msg
-
-            # 检查URL变化
-            if self.page.url != self.auth_url:
-                success_msg = f"登录成功: 页面URL已变化到 {self.page.url}"
-                self.logger.info(f"✅ {success_msg}")
-                return True, success_msg
-
-            # 无法确定结果
-            ambiguous_msg = "无法确定登录结果，可能网络异常或页面加载问题"
-            self.logger.warning(f"⚠️ {ambiguous_msg}")
-            await self.page.screenshot(path="auth_ambiguous.png")
-            return False, ambiguous_msg
-
+            
+            # 如果没有明确的成功或失败标识，默认认为失败
+            failure_msg = "登录失败: 未检测到明确的成功标识"
+            self.logger.warning(f"❌ {failure_msg}")
+            if self.page:
+                await self.page.screenshot(path="auth_unknown.png")
+                self.logger.info("📸 已保存未知状态截图: auth_unknown.png")
+            return False, failure_msg
+            
         except Exception as e:
             self.logger.error(f"检查认证结果时发生错误: {e}")
-            return False
+            return False, f"检查认证结果时发生错误: {e}"
+
+    async def cleanup(self) -> None:
+        """清理资源，防止内存泄漏"""
+        try:
+            if self.browser:
+                await self.browser.close()
+                self.browser = None
+            if self.playwright:
+                await self.playwright.stop()
+                self.playwright = None
+            self.page = None
+        except Exception as e:
+            self.logger.warning(f"清理资源时发生错误: {e}")
 
     async def authenticate_once(self) -> tuple[bool, str]:
-        """执行一次认证尝试
-        
-        返回:
-            tuple[bool, str]: (是否成功, 提示信息)
-        """
+        """执行一次认证尝试（修复内存泄漏）"""
         try:
             await self.start_browser()
 
@@ -525,23 +478,29 @@ class EnhancedCampusNetworkAuth:
             self.logger.error(error_msg)
             return False, error_msg
         finally:
-            if self.browser:
-                await self.browser.close()
-            if self.playwright:
-                await self.playwright.stop()  # 防止内存泄漏
+            # 确保总是清理资源
+            await self.cleanup()
 
     async def authenticate(self) -> tuple[bool, str]:
-        """执行完整的认证流程（包含重试机制）
+        """执行完整的认证流程（包含智能重试机制）
         
         返回:
             tuple[bool, str]: (是否成功, 详细信息)
         """
         max_retries = self.retry_settings.get("max_retries", 3)
-        retry_interval = self.retry_settings.get("retry_interval", 5)
+        base_retry_interval = self.retry_settings.get("retry_interval", 5)
         last_message = ""
+        consecutive_failures = 0
 
         for attempt in range(max_retries):
             self.logger.info(f"🔁 开始第 {attempt + 1} 次认证尝试")
+
+            # 在重试前添加随机延迟，避免被识别为机器人
+            if attempt > 0:
+                # 指数退避 + 随机延迟
+                delay = base_retry_interval * (2 ** (attempt - 1)) + random.randint(1, 5)
+                self.logger.info(f"⏳ 智能延迟 {delay} 秒后重试...")
+                await asyncio.sleep(delay)
 
             success, message = await self.authenticate_once()
             last_message = message
@@ -551,22 +510,136 @@ class EnhancedCampusNetworkAuth:
                 self.logger.info(f"🎉 {success_info}")
                 return True, success_info
 
-            self.logger.warning(f"❌ 第 {attempt + 1} 次尝试失败: {message}")
+            # 分析失败原因
+            failure_type = self._analyze_failure_type(message)
+            consecutive_failures += 1
+            
+            self.logger.warning(f"❌ 第 {attempt + 1} 次尝试失败: {message} (失败类型: {failure_type})")
+
+            # 根据失败类型调整策略
+            if failure_type == "blacklisted":
+                self.logger.error("🚫 检测到可能被拉黑，建议等待更长时间或手动认证")
+                if attempt < max_retries - 1:
+                    # 被拉黑时等待更长时间
+                    long_delay = 300 + random.randint(0, 120)  # 5-7分钟
+                    self.logger.info(f"⏳ 检测到拉黑风险，等待 {long_delay} 秒后重试")
+                    await asyncio.sleep(long_delay)
+            elif failure_type == "rate_limited":
+                self.logger.warning("⏰ 检测到频率限制，增加延迟时间")
+                if attempt < max_retries - 1:
+                    rate_limit_delay = 60 + random.randint(0, 30)  # 1-1.5分钟
+                    self.logger.info(f"⏳ 频率限制延迟 {rate_limit_delay} 秒")
+                    await asyncio.sleep(rate_limit_delay)
 
             if attempt < max_retries - 1:
-                self.logger.info(f"⏳ 认证失败，{retry_interval}秒后进行第 {attempt + 2} 次尝试")
-                await asyncio.sleep(retry_interval)
+                continue
             else:
                 self.logger.error(f"💥 所有 {max_retries} 次认证尝试均失败")
 
         failure_info = f"认证失败！已尝试 {max_retries} 次，最后错误: {last_message}"
         return False, failure_info
+    
+    def _analyze_failure_type(self, error_message: str) -> str:
+        """分析失败类型
+        
+        参数:
+            error_message: 错误消息
+            
+        返回:
+            str: 失败类型
+        """
+        error_lower = error_message.lower()
+        
+        # 检测可能的拉黑情况
+        blacklist_indicators = [
+            "authentication fail", "认证失败", "被拒绝", "access denied",
+            "forbidden", "blocked", "banned", "拉黑", "限制", "locked"
+        ]
+        
+        # 检测频率限制
+        rate_limit_indicators = [
+            "too many requests", "rate limit", "频率限制", "请求过于频繁",
+            "timeout", "超时", "connection reset"
+        ]
+        
+        # 检测网络问题
+        network_indicators = [
+            "network error", "网络错误", "connection failed", "连接失败",
+            "dns", "无法访问", "unreachable"
+        ]
+        
+        for indicator in blacklist_indicators:
+            if indicator in error_lower:
+                return "blacklisted"
+        
+        for indicator in rate_limit_indicators:
+            if indicator in error_lower:
+                return "rate_limited"
+        
+        for indicator in network_indicators:
+            if indicator in error_lower:
+                return "network_error"
+        
+        return "unknown"
+    
+    async def manual_auth_fallback(self) -> tuple[bool, str]:
+        """手动认证备选方案
+        
+        当自动认证失败时，提供手动认证选项
+        
+        返回:
+            tuple[bool, str]: (是否成功, 详细信息)
+        """
+        try:
+            self.logger.info("🔄 启动手动认证备选方案...")
+            
+            # 启动非无头模式浏览器
+            original_headless = self.browser_settings.get("headless", False)
+            self.browser_settings["headless"] = False
+            
+            await self.start_browser()
+            
+            if not await self.navigate_to_auth_page():
+                return False, "无法访问认证页面"
+            
+            # 检查是否已登录
+            if await self.check_already_logged_in():
+                self.logger.info("✅ 检测到已登录状态")
+                return True, "已经处于登录状态"
+            
+            # 填写表单
+            if not await self.fill_login_form():
+                return False, "填写登录表单失败"
+            
+            # 提示用户手动点击登录按钮
+            self.logger.info("👆 请手动点击登录按钮完成认证...")
+            self.logger.info("⏰ 等待30秒，请在此期间完成手动登录...")
+            
+            # 等待用户手动操作
+            await asyncio.sleep(30)
+            
+            # 检查登录结果
+            if await self.check_already_logged_in():
+                self.logger.info("✅ 手动认证成功")
+                return True, "手动认证成功"
+            else:
+                self.logger.warning("❌ 手动认证失败或超时")
+                return False, "手动认证失败或超时"
+                
+        except Exception as e:
+            error_msg = f"手动认证过程中发生错误: {e}"
+            self.logger.error(error_msg)
+            return False, error_msg
+        finally:
+            # 恢复原始设置
+            self.browser_settings["headless"] = original_headless
+            await self.cleanup()
 
 
 async def main():
     """主函数"""
     # 从环境变量加载配置
-    config = load_config_from_env()
+    config = ConfigLoader.load_config_from_env()
     
     # 检查配置
     if not config["username"] or config["username"] == "your_username_here":

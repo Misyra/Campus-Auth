@@ -8,11 +8,12 @@ wheels/
 
 # Virtual environments
 .venv
+uv.lock
 
 # Environment variables (sensitive information)
 .env
 .agreed
-
+.DS_Store
 # Log files
 *.log
 logs/

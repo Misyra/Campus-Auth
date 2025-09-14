@@ -18,8 +18,9 @@ from pathlib import Path
 src_path = Path(__file__).parent / "src"
 sys.path.insert(0, str(src_path))
 
-from campus_login import EnhancedCampusNetworkAuth, load_config_from_env
+from campus_login import EnhancedCampusNetworkAuth
 from network_test import is_network_available
+from utils import TimeUtils, LoginAttemptHandler, LoggerSetup, get_runtime_stats, ConfigLoader, ConfigValidator
 
 
 class SimpleNetworkMonitor:
@@ -33,7 +34,7 @@ class SimpleNetworkMonitor:
         初始化网络监控器
         """
         # 加载配置
-        self.config = load_config_from_env()
+        self.config = ConfigLoader.load_config_from_env()
         
         # 监控状态
         self.monitoring = False
@@ -49,31 +50,11 @@ class SimpleNetworkMonitor:
         signal.signal(signal.SIGTERM, self._signal_handler)
     
     def _setup_logging(self) -> None:
-        """
-        设置日志配置
-        """
-        log_level = self.config.get('logging', {}).get('level', 'INFO')
-        log_format = '%(asctime)s - %(levelname)s - %(message)s'
+        """设置日志配置（使用工具类）"""
+        log_config = self.config.get('logging', {})
         
-        # 配置根日志记录器
-        logging.basicConfig(
-            level=getattr(logging, log_level.upper()),
-            format=log_format,
-            handlers=[
-                logging.StreamHandler(sys.stdout),
-            ]
-        )
-        
-        # 添加文件日志
-        log_file = self.config.get('logging', {}).get('file', 'logs/campus_auth.log')
-        if log_file:
-            log_path = Path(log_file)
-            log_path.parent.mkdir(parents=True, exist_ok=True)
-            file_handler = logging.FileHandler(log_path, encoding='utf-8')
-            file_handler.setFormatter(logging.Formatter(log_format))
-            logging.getLogger().addHandler(file_handler)
-        
-        self.logger = logging.getLogger(__name__)
+        # 使用 LoggerSetup 工具类
+        self.logger = LoggerSetup.setup_logger(__name__, log_config)
     
     def _signal_handler(self, signum, frame):
         """
@@ -139,13 +120,11 @@ class SimpleNetworkMonitor:
         
         self.monitoring = False
         if self.start_time:
-            elapsed = int(time.time() - self.start_time)
-            hours = elapsed // 3600
-            minutes = (elapsed % 3600) // 60
-            seconds = elapsed % 60
+            # 使用 get_runtime_stats 获取统计信息
+            runtime_str, stats_str = get_runtime_stats(self.start_time, self.network_check_count)
             self.log_message("=" * 50)
-            self.log_message(f"监控已停止，总运行时间: {hours:02d}:{minutes:02d}:{seconds:02d}")
-            self.log_message(f"总检测次数: {self.network_check_count}")
+            self.log_message(f"监控已停止，总运行时间: {runtime_str}")
+            self.log_message(f"总{stats_str}")
             self.log_message("=" * 50)
         else:
             self.log_message("监控已停止")
@@ -224,34 +203,25 @@ class SimpleNetworkMonitor:
     
     def attempt_login(self) -> bool:
         """
-        尝试登录校园网
+        尝试登录校园网（使用工具类简化）
         
         返回:
             bool: 登录是否成功
         """
         try:
-            # 检查当前时间是否在禁止登录时段（0点到6点）
-            current_hour = datetime.datetime.now().hour
-            if 0 <= current_hour < 6:
-                self.log_message(f"⏰ 当前时间 {current_hour}:xx 在禁止登录时段（0点-6点），跳过登录")
+            # 使用 TimeUtils 检查暂停时段
+            pause_config = self.config.get('pause_login', {})
+            if TimeUtils.is_in_pause_period(pause_config):
+                current_hour = datetime.datetime.now().hour
+                start_hour = pause_config.get('start_hour', 0)
+                end_hour = pause_config.get('end_hour', 6)
+                self.log_message(f"⏰ 当前时间 {current_hour}:xx 在暂停登录时段（{start_hour}点-{end_hour}点），跳过登录")
                 return False
             
-            # 创建登录实例
-            auth = EnhancedCampusNetworkAuth(self.config)
-            
-            # 尝试登录（异步调用）
-            try:
-                success, message = asyncio.run(auth.authenticate())
-            except Exception as e:
-                self.log_message(f"❌ 校园网登录失败: {str(e)}")
-                return False
-            
-            if success:
-                self.log_message(f"✅ 校园网登录成功: {message}")
-                return True
-            else:
-                self.log_message(f"❌ 校园网登录失败: {message}")
-                return False
+            # 使用 LoginAttemptHandler 进行登录
+            login_handler = LoginAttemptHandler(self.config)
+            success = asyncio.run(login_handler.attempt_login())
+            return success
                 
         except Exception as e:
             self.log_message(f"❌ 登录过程中发生错误: {str(e)}")
@@ -265,29 +235,22 @@ def check_config() -> bool:
     返回:
         bool: 配置是否完整
     """
-    config = load_config_from_env()
+    config = ConfigLoader.load_config_from_env()
     
-    # 检查必要配置
-    username = config.get('username')
-    password = config.get('password')
-    auth_url = config.get('auth_url')
+    # 使用统一的验证工具
+    is_valid, error_msg = ConfigValidator.validate_env_config(config)
     
-    if not username or not password:
-        print("❌ 配置错误: 缺少用户名或密码")
+    if not is_valid:
+        print(f"❌ 配置错误: {error_msg}")
         print("请在 .env 文件中配置:")
-        print("USERNAME=你的学号@cmcc")
-        print("PASSWORD=你的密码")
-        return False
-    
-    if not auth_url:
-        print("❌ 配置错误: 缺少认证地址")
-        print("请在 .env 文件中配置:")
-        print("AUTH_URL=http://172.29.0.2")
+        print("CAMPUS_USERNAME=你的学号@cmcc")
+        print("CAMPUS_PASSWORD=你的密码")
+        print("CAMPUS_AUTH_URL=http://172.29.0.2")
         return False
     
     print("✅ 配置检查通过")
-    print(f"用户名: {username}")
-    print(f"认证地址: {auth_url}")
+    print(f"用户名: {config.get('username')}")
+    print(f"认证地址: {config.get('auth_url')}")
     return True
 
 

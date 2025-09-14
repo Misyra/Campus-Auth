@@ -87,10 +87,12 @@ def is_network_available_curl(test_urls=None, timeout=2, verbose=False):
             continue
     return False
 
-def is_network_available(test_sites=None, test_urls=None, timeout=2, verbose=True):
+def is_network_available(test_sites=None, test_urls=None, timeout=2, verbose=True, require_both=False):
     """
-    综合网络检测：同时使用Socket连接和curl两种方法检测网络
-    只有当两种方法都成功时才判断网络联通（可调整策略）
+    综合网络检测：使用Socket和curl两种方法检测网络（简化版）
+    
+    参数:
+        require_both: 是否要求两种方法都成功（默认False，任一成功即可）
     """
     log("正在进行 Socket 连接测试...", verbose)
     socket_result = is_network_available_socket(test_sites, timeout, verbose)
@@ -101,10 +103,11 @@ def is_network_available(test_sites=None, test_urls=None, timeout=2, verbose=Tru
     log(f"Socket测试结果: {'成功' if socket_result else '失败'}", verbose)
     log(f"curl测试结果: {'成功' if curl_result else '失败'}", verbose)
 
-    # 你可以根据需求调整策略：
-    # - 两者都成功：return socket_result and curl_result
-    # - 任一成功：return socket_result or curl_result
-    return socket_result and curl_result
+    # 灵活的策略选择
+    if require_both:
+        return socket_result and curl_result
+    else:
+        return socket_result or curl_result
 
 def check_campus_network_status(verbose=True):
     """
