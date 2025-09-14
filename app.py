@@ -463,7 +463,7 @@ class NetworkMonitorGUI:
     
     def initial_network_check(self):
         """
-        启动时立即进行登录尝试
+        启动时检查是否需要自动开始监控
         """
         # 使用GUI中的自动启动选项
         auto_start = self.auto_start_var.get()
@@ -472,26 +472,24 @@ class NetworkMonitorGUI:
             self.log_message("ℹ️ 根据配置，启动时不自动开始监控")
             return
             
-        def login_on_startup():
+        # 检查是否有必要的登录信息
+        if not self.username_var.get() or not self.password_var.get():
+            self.log_message("⚠️ 缺少用户名或密码，跳过自动启动监控")
+            return
+        
+        # 延迟启动监控，给界面一些时间完成初始化
+        def auto_start_monitoring():
             try:
-                self.log_message("🚀 应用启动，开始自动登录...")
+                time.sleep(1)  # 等待2秒让界面完全加载
+                self.log_message("🚀 应用启动，根据配置自动开始监控")
                 
-                # 检查是否有必要的登录信息
-                if not self.username_var.get() or not self.password_var.get():
-                    self.log_message("⚠️ 缺少用户名或密码，跳过自动登录")
-                    return
-                
-                # 尝试登录
-                success = self.attempt_login()
-                if success:
-                    self.log_message("🎉 启动时自动登录完成")
-                else:
-                    self.log_message("⚠️ 启动时自动登录失败，请检查网络或手动登录")
+                # 直接调用监控切换方法启动监控
+                self.root.after(0, self.toggle_monitoring)
                     
             except Exception as e:
-                self.log_message(f"❌ 启动时登录发生错误: {str(e)}")
+                self.log_message(f"❌ 自动启动监控发生错误: {str(e)}")
         
-        threading.Thread(target=login_on_startup, daemon=True).start()
+        threading.Thread(target=auto_start_monitoring, daemon=True).start()
     
     def validate_config(self) -> tuple[bool, str]:
         """

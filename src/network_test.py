@@ -25,16 +25,13 @@ def is_local_network_connected(verbose=False):
             log(f"获取本地IP失败: {e}", verbose)
         return False
 
-def is_network_available_socket(test_sites=None, timeout=3, verbose=False):
+def is_network_available_socket(test_sites=None, timeout=2, verbose=False):
     """
     方法1：使用Socket连接检测网络是否可用（TCP 443端口）
     """
     if test_sites is None:
         test_sites = [
             ("www.baidu.com", 443),
-            ("www.github.com", 443),
-            ("www.qq.com", 443),
-            ("www.microsoft.com", 443),
         ]
 
     for site, port in test_sites:
@@ -52,16 +49,13 @@ def is_network_available_socket(test_sites=None, timeout=3, verbose=False):
             continue
     return False
 
-def is_network_available_curl(test_urls=None, timeout=3, verbose=False):
+def is_network_available_curl(test_urls=None, timeout=2, verbose=False):
     """
     方法2：使用curl命令检测网络是否可用（模拟真实HTTP请求）
     """
     if test_urls is None:
         test_urls = [
             "https://www.baidu.com",
-            "https://www.github.com",
-            "https://www.qq.com",
-            "https://www.microsoft.com",
         ]
 
     # 检测系统是否安装 curl
@@ -93,7 +87,7 @@ def is_network_available_curl(test_urls=None, timeout=3, verbose=False):
             continue
     return False
 
-def is_network_available(test_sites=None, test_urls=None, timeout=5, verbose=True):
+def is_network_available(test_sites=None, test_urls=None, timeout=2, verbose=True):
     """
     综合网络检测：同时使用Socket连接和curl两种方法检测网络
     只有当两种方法都成功时才判断网络联通（可调整策略）
@@ -119,7 +113,7 @@ def check_campus_network_status(verbose=True):
     log("正在检测网络状态...", verbose)
 
     is_local = is_local_network_connected(verbose)
-    is_internet = is_network_available(None, None, 3, verbose)
+    is_internet = is_network_available(None, None, 2, verbose)
 
     if not is_local:
         return "🔴 未连接到校园网，请检查网络连接（未获取到有效IP）"

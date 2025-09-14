@@ -5,6 +5,7 @@ description = "校园网自动认证工具，支持GUI和命令行两种使用�
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "dotenv>=0.9.9",
     "playwright>=1.55.0",
     "pyinstaller>=6.15.0",
     "python-dotenv>=1.0.0",
