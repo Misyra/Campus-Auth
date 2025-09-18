@@ -6,6 +6,7 @@
 
 import datetime
 import logging
+import logging.handlers
 import os
 import random
 from typing import Dict, Any, Tuple
@@ -163,7 +164,7 @@ class LoggerSetup:
             config.get("format", "%(asctime)s - %(levelname)s - %(message)s")
         )
         
-        # 添加文件处理器
+        # 添加文件处理器（带轮转功能）
         log_file = config.get("file")
         if log_file:
             try:
@@ -171,8 +172,16 @@ class LoggerSetup:
                 log_dir = os.path.dirname(log_file)
                 if log_dir and not os.path.exists(log_dir):
                     os.makedirs(log_dir, exist_ok=True)
-                    
-                file_handler = logging.FileHandler(log_file, encoding='utf-8')
+                
+                # 使用RotatingFileHandler实现日志轮转
+                # maxBytes: 2MB = 2 * 1024 * 1024 bytes
+                # backupCount: 保留5个备份文件
+                file_handler = logging.handlers.RotatingFileHandler(
+                    log_file, 
+                    maxBytes=2 * 1024 * 1024,  # 2MB
+                    backupCount=5,
+                    encoding='utf-8'
+                )
                 file_handler.setFormatter(formatter)
                 logger.addHandler(file_handler)
             except Exception as e:

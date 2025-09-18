@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- 服务标识符 -->
+    <key>Label</key>
+    <string>com.campus.network.auth</string>
+    
+    <!-- 程序路径和参数 -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/uv</string>
+        <string>run</string>
+        <string>app_cli.py</string>
+    </array>
+    
+    <!-- 工作目录 -->
+    <key>WorkingDirectory</key>
+    <string>/Users/misyra/JCU_auto_network</string>
+    
+    <!-- 开机自启动 -->
+    <key>RunAtLoad</key>
+    <true/>
+    
+    <!-- 保持运行状态，如果程序退出会自动重启 -->
+    <key>KeepAlive</key>
+    <true/>
+    
+    <!-- 标准输出重定向到日志文件 -->
+    <key>StandardOutPath</key>
+    <string>/Users/misyra/JCU_auto_network/logs/campus_auth.log</string>
+    
+    <!-- 标准错误重定向到日志文件 -->
+    <key>StandardErrorPath</key>
+    <string>/Users/misyra/JCU_auto_network/logs/campus_auth_error.log</string>
+    
+    <!-- 环境变量 -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>/Users/misyra</string>
+    </dict>
+    
+    <!-- 启动延迟（秒），避免系统启动时网络未就绪 -->
+    <key>StartInterval</key>
+    <integer>30</integer>
+    
+    <!-- 用户级服务 -->
+    <key>UserName</key>
+    <string>misyra</string>
+</dict>
+</plist>

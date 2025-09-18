@@ -8,6 +8,7 @@ import sys
 import asyncio
 import webbrowser
 import logging
+import logging.handlers
 from pathlib import Path
 from typing import Optional
 
@@ -322,8 +323,15 @@ class NetworkMonitorGUI:
                 
             self.gui_logger.setLevel(logging.INFO)
             
-            # 创建文件处理器
-            file_handler = logging.FileHandler(log_file, encoding='utf-8')
+            # 创建文件处理器（带轮转功能）
+            # maxBytes: 2MB = 2 * 1024 * 1024 bytes
+            # backupCount: 保留5个备份文件
+            file_handler = logging.handlers.RotatingFileHandler(
+                log_file, 
+                maxBytes=2 * 1024 * 1024,  # 2MB
+                backupCount=5,
+                encoding='utf-8'
+            )
             file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
             file_handler.setFormatter(file_formatter)
             

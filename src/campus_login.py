@@ -265,7 +265,7 @@ class EnhancedCampusNetworkAuth:
                 await self.page.wait_for_selector(
                     'input[name="DDDDD"][type="text"]:visible, input[name="upass"][type="password"]:visible',
                     state="visible", 
-                    timeout=10000
+                    timeout=3000
                 )
                 self.logger.info("📝 表单元素已加载")
             except Exception as e:
@@ -377,7 +377,7 @@ class EnhancedCampusNetworkAuth:
                     self.logger.warning("⚠️ 无法聚焦任何输入框")
             
             await self.page.keyboard.press("Enter")
-            await self.page.wait_for_timeout(2000)
+            await self.page.wait_for_timeout(1000)
             self.logger.info("✅ 回车提交完成")
             return True
 
@@ -397,7 +397,7 @@ class EnhancedCampusNetworkAuth:
                 
             # 等待页面加载完成，但使用更短的超时时间避免长时间等待
             try:
-                await self.page.wait_for_load_state("networkidle", timeout=5000)
+                await self.page.wait_for_load_state("networkidle", timeout=2000)
             except Exception as e:
                 self.logger.debug(f"等待页面加载超时，继续检查登录状态: {e}")
             

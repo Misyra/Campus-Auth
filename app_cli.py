@@ -13,6 +13,8 @@ import signal
 import sys
 import time
 from pathlib import Path
+import argparse
+import atexit
 
 # 添加src目录到Python路径
 src_path = Path(__file__).parent / "src"
@@ -29,9 +31,12 @@ class SimpleNetworkMonitor:
     自动从.env加载配置，启动后直接进入监控模式
     """
     
-    def __init__(self):
+    def __init__(self, daemon_mode=False):
         """
         初始化网络监控器
+        
+        参数:
+            daemon_mode: 是否以守护进程模式运行
         """
         # 加载配置
         self.config = ConfigLoader.load_config_from_env()
@@ -41,6 +46,7 @@ class SimpleNetworkMonitor:
         self.network_check_count = 0
         self.login_attempt_count = 0
         self.start_time = None
+        self.daemon_mode = daemon_mode
         
         # 设置日志
         self._setup_logging()
@@ -48,6 +54,61 @@ class SimpleNetworkMonitor:
         # 信号处理
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
+        
+        # 守护进程模式下的额外设置
+        if self.daemon_mode:
+            self._setup_daemon_mode()
+    
+    def _setup_daemon_mode(self) -> None:
+        """
+        设置守护进程模式
+        """
+        # 创建PID文件目录
+        pid_dir = Path.home() / '.campus_network_auth'
+        pid_dir.mkdir(exist_ok=True)
+        
+        self.pid_file = pid_dir / 'campus_network_auth.pid'
+        
+        # 检查是否已有实例在运行
+        if self.pid_file.exists():
+            try:
+                with open(self.pid_file, 'r') as f:
+                    old_pid = int(f.read().strip())
+                
+                # 检查进程是否还在运行
+                try:
+                    os.kill(old_pid, 0)  # 发送信号0检查进程是否存在
+                    print(f"错误: 已有实例在运行 (PID: {old_pid})")
+                    sys.exit(1)
+                except OSError:
+                    # 进程不存在，删除旧的PID文件
+                    self.pid_file.unlink()
+            except (ValueError, FileNotFoundError):
+                # PID文件损坏，删除它
+                self.pid_file.unlink()
+        
+        # 写入当前进程PID
+        with open(self.pid_file, 'w') as f:
+            f.write(str(os.getpid()))
+        
+        # 注册退出时清理PID文件
+        atexit.register(self._cleanup_pid_file)
+        
+        # 在守护进程模式下，重定向标准输出到日志
+        if self.daemon_mode:
+            # 禁用控制台输出，只使用日志文件
+            sys.stdout = open(os.devnull, 'w')
+            sys.stderr = open(os.devnull, 'w')
+    
+    def _cleanup_pid_file(self) -> None:
+        """
+        清理PID文件
+        """
+        if hasattr(self, 'pid_file') and self.pid_file.exists():
+            try:
+                self.pid_file.unlink()
+            except OSError:
+                pass
     
     def _setup_logging(self) -> None:
         """设置日志配置（使用工具类）"""
@@ -64,8 +125,13 @@ class SimpleNetworkMonitor:
             signum: 信号编号
             frame: 当前栈帧
         """
-        self.logger.info(f"收到信号 {signum}，正在停止监控...")
-        self.stop_monitoring()
+        signal_name = signal.Signals(signum).name
+        self.logger.info(f"收到信号 {signal_name}，正在停止监控...")
+        self.monitoring = False
+        
+        # 清理PID文件
+        if hasattr(self, 'pid_file'):
+            self._cleanup_pid_file()
     
     def log_message(self, message: str) -> None:
         """
@@ -254,30 +320,160 @@ def check_config() -> bool:
     return True
 
 
+def parse_arguments():
+    """
+    解析命令行参数
+    """
+    parser = argparse.ArgumentParser(
+        description='校园网自动认证工具',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""使用示例:
+  %(prog)s                    # 前台运行
+  %(prog)s --daemon           # 后台守护进程模式运行
+  %(prog)s --status           # 查看运行状态
+  %(prog)s --stop             # 停止后台运行的服务
+        """
+    )
+    
+    parser.add_argument(
+        '--daemon', '-d',
+        action='store_true',
+        help='以守护进程模式在后台运行'
+    )
+    
+    parser.add_argument(
+        '--status', '-s',
+        action='store_true',
+        help='查看服务运行状态'
+    )
+    
+    parser.add_argument(
+        '--stop',
+        action='store_true',
+        help='停止后台运行的服务'
+    )
+    
+    return parser.parse_args()
+
+
+def get_pid_file_path():
+    """
+    获取PID文件路径
+    """
+    pid_dir = Path.home() / '.campus_network_auth'
+    return pid_dir / 'campus_network_auth.pid'
+
+
+def check_service_status():
+    """
+    检查服务运行状态
+    """
+    pid_file = get_pid_file_path()
+    
+    if not pid_file.exists():
+        print("服务未运行")
+        return False
+    
+    try:
+        with open(pid_file, 'r') as f:
+            pid = int(f.read().strip())
+        
+        # 检查进程是否还在运行
+        try:
+            os.kill(pid, 0)
+            print(f"服务正在运行 (PID: {pid})")
+            return True
+        except OSError:
+            print("服务未运行 (PID文件存在但进程不存在)")
+            # 清理无效的PID文件
+            pid_file.unlink()
+            return False
+    except (ValueError, FileNotFoundError):
+        print("服务未运行 (PID文件损坏)")
+        pid_file.unlink()
+        return False
+
+
+def stop_service():
+    """
+    停止后台运行的服务
+    """
+    pid_file = get_pid_file_path()
+    
+    if not pid_file.exists():
+        print("服务未运行")
+        return
+    
+    try:
+        with open(pid_file, 'r') as f:
+            pid = int(f.read().strip())
+        
+        # 尝试优雅地停止进程
+        try:
+            print(f"正在停止服务 (PID: {pid})...")
+            os.kill(pid, signal.SIGTERM)
+            
+            # 等待进程结束
+            for i in range(10):  # 最多等待10秒
+                time.sleep(1)
+                try:
+                    os.kill(pid, 0)
+                except OSError:
+                    print("服务已停止")
+                    return
+            
+            # 如果进程仍在运行，强制终止
+            print("强制终止服务...")
+            os.kill(pid, signal.SIGKILL)
+            print("服务已强制停止")
+            
+        except OSError:
+            print("服务未运行")
+            # 清理PID文件
+            pid_file.unlink()
+    except (ValueError, FileNotFoundError):
+        print("服务未运行 (PID文件损坏)")
+        pid_file.unlink()
+
+
 def main():
     """
     主函数
     """
-    try:
-        print("校园网自动认证工具 - 简化命令行版本")
-        print("正在检查配置...")
-        
-        # 检查配置
-        if not check_config():
-            print("\n请修复配置后重新运行")
-            sys.exit(1)
-        
-        print("\n正在启动监控...")
-        
-        # 创建监控器并启动
-        monitor = SimpleNetworkMonitor()
-        monitor.start_monitoring()
+    args = parse_arguments()
     
+    # 处理状态查询
+    if args.status:
+        check_service_status()
+        return
+    
+    # 处理停止服务
+    if args.stop:
+        stop_service()
+        return
+    
+    # 创建监控器实例
+    monitor = SimpleNetworkMonitor(daemon_mode=args.daemon)
+    
+    if args.daemon:
+        print(f"启动守护进程模式... (PID: {os.getpid()})")
+        print("使用 'python app_cli.py --status' 查看状态")
+        print("使用 'python app_cli.py --stop' 停止服务")
+    else:
+        print("校园网自动认证工具 - 简化命令行版本")
+        print("按 Ctrl+C 停止监控")
+        print("-" * 50)
+    
+    try:
+        # 启动监控
+        asyncio.run(monitor.start_monitoring())
     except KeyboardInterrupt:
-        print("\n用户中断，程序退出")
-        sys.exit(0)
+        if not args.daemon:
+            print("\n程序被用户中断")
     except Exception as e:
-        print(f"程序运行出错: {str(e)}")
+        if not args.daemon:
+            print(f"程序运行出错: {e}")
+        monitor.logger.error(f"程序运行出错: {e}")
         sys.exit(1)
 
 
