@@ -9,7 +9,108 @@ import logging
 import logging.handlers
 import os
 import random
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Type, Optional
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+
+class ExceptionHandler:
+    """异常处理增强器 - 按项目规范处理具体异常类型"""
+    
+    @staticmethod
+    def handle_playwright_timeout(e: PlaywrightTimeoutError, operation: str, logger: logging.Logger) -> str:
+        """处理Playwright超时异常"""
+        error_msg = f"{operation}超时: {str(e)}"
+        logger.error(error_msg)
+        return error_msg
+    
+    @staticmethod
+    def handle_network_error(e: Exception, operation: str, logger: logging.Logger) -> str:
+        """处理网络相关异常"""
+        error_msg = f"{operation}网络错误: {str(e)}"
+        logger.error(error_msg)
+        return error_msg
+    
+    @staticmethod
+    def handle_config_error(e: Exception, operation: str, logger: logging.Logger) -> str:
+        """处理配置相关异常"""
+        error_msg = f"{operation}配置错误: {str(e)}"
+        logger.error(error_msg)
+        return error_msg
+    
+    @staticmethod
+    def wrap_with_specific_handling(operation: str, logger: logging.Logger):
+        """装饰器：为方法添加具体异常处理"""
+        def decorator(func):
+            async def wrapper(*args, **kwargs):
+                try:
+                    return await func(*args, **kwargs)
+                except PlaywrightTimeoutError as e:
+                    error_msg = ExceptionHandler.handle_playwright_timeout(e, operation, logger)
+                    raise PlaywrightTimeoutError(error_msg) from e
+                except (ConnectionError, OSError) as e:
+                    error_msg = ExceptionHandler.handle_network_error(e, operation, logger)
+                    raise ConnectionError(error_msg) from e
+                except (ValueError, KeyError, TypeError) as e:
+                    error_msg = ExceptionHandler.handle_config_error(e, operation, logger)
+                    raise ValueError(error_msg) from e
+                except Exception as e:
+                    # 最后才使用通用异常处理
+                    error_msg = f"{operation}发生未知错误: {str(e)}"
+                    logger.error(error_msg)
+                    raise RuntimeError(error_msg) from e
+            return wrapper
+        return decorator
+
+
+class SimpleRetryHandler:
+    """简化重试处理器 - 使用简单的重试机制"""
+    
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+        self.retry_settings = config.get('retry_settings', {})
+        self.logger = LoggerSetup.setup_logger(f"{__name__}_retry", config.get('logging', {}))
+    
+    async def retry_with_simple_backoff(self, operation, max_retries: int = None) -> Tuple[bool, Any, str]:
+        """
+        简单的重试机制
+        
+        参数:
+            operation: 要重试的异步操作
+            max_retries: 最大重试次数
+            
+        返回:
+            Tuple[bool, Any, str]: (是否成功, 结果, 错误信息)
+        """
+        if max_retries is None:
+            max_retries = self.retry_settings.get('max_retries', 3)
+        
+        retry_interval = self.retry_settings.get('retry_interval', 5)
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                result = await operation()
+                if attempt > 0:
+                    self.logger.info(f"✅ 操作在第{attempt + 1}次尝试后成功")
+                return True, result, ""
+                
+            except Exception as e:
+                last_error = e
+                
+                if attempt < max_retries - 1:  # 不是最后一次尝试
+                    self.logger.warning(
+                        f"❌ 第{attempt + 1}次尝试失败: {str(e)}, "
+                        f"{retry_interval}秒后重试..."
+                    )
+                    
+                    # 简单等待
+                    import asyncio
+                    await asyncio.sleep(retry_interval)
+                else:
+                    self.logger.error(f"❌ 所有{max_retries}次尝试均失败")
+        
+        error_msg = f"重试{max_retries}次后仍然失败，最后错误: {str(last_error)}"
+        return False, None, error_msg
 
 
 class TimeUtils:
@@ -79,7 +180,7 @@ class ConfigAdapter:
 
 
 class LoginAttemptHandler:
-    """登录尝试处理器 - 统一登录逻辑"""
+    """登录尝试处理器 - 统一登录逻辑（解决循环依赖）"""
     
     def __init__(self, config: Dict[str, Any]):
         """
@@ -89,38 +190,48 @@ class LoginAttemptHandler:
             config: 配置字典
         """
         self.config = config
-        self.logger = logging.getLogger(__name__)
+        self.logger = LoggerSetup.setup_logger(f"{__name__}_login", config.get('logging', {}))
     
-    async def attempt_login(self) -> bool:
+    async def attempt_login(self, skip_pause_check: bool = False) -> bool:
         """
         尝试登录校园网（统一实现）
+        
+        参数:
+            skip_pause_check: 是否跳过暂停时间检查
         
         返回:
             bool: 登录是否成功
         """
         try:
-            # 检查当前时间是否在暂停登录时段
-            pause_config = self.config.get('pause_login', {})
+            # 检查当前时间是否在暂停登录时段（如果没有跳过检查）
+            if not skip_pause_check:
+                pause_config = self.config.get('pause_login', {})
+                
+                if TimeUtils.is_in_pause_period(pause_config):
+                    current_hour = datetime.datetime.now().hour
+                    start_hour = pause_config.get('start_hour', 0)
+                    end_hour = pause_config.get('end_hour', 6)
+                    self.logger.info(f"⏰ 当前时间 {current_hour}:xx 在暂停登录时段（{start_hour}点-{end_hour}点），跳过登录")
+                    return False
             
-            if TimeUtils.is_in_pause_period(pause_config):
-                current_hour = datetime.datetime.now().hour
-                start_hour = pause_config.get('start_hour', 0)
-                end_hour = pause_config.get('end_hour', 6)
-                self.logger.info(f"⏰ 当前时间 {current_hour}:xx 在暂停登录时段（{start_hour}点-{end_hour}点），跳过登录")
-                return False
-            
-            # 动态导入以避免循环依赖
+            # 使用延迟导入避免循环依赖 - 但使用更安全的方式
+            return await self._perform_login_with_auth_class()
+                
+        except Exception as e:
+            self.logger.error(f"❌ 登录过程中发生错误: {str(e)}")
+            return False
+    
+    async def _perform_login_with_auth_class(self) -> bool:
+        """使用认证类执行登录（延迟导入）"""
+        try:
+            # 延迟导入避免循环依赖
             from campus_login import EnhancedCampusNetworkAuth
             
             # 创建登录实例
             auth = EnhancedCampusNetworkAuth(self.config)
             
             # 尝试登录（异步调用）
-            try:
-                success, message = await auth.authenticate()
-            except Exception as e:
-                self.logger.error(f"❌ 校园网登录失败: {str(e)}")
-                return False
+            success, message = await auth.authenticate()
             
             if success:
                 self.logger.info(f"✅ 校园网登录成功: {message}")
@@ -129,8 +240,11 @@ class LoginAttemptHandler:
                 self.logger.error(f"❌ 校园网登录失败: {message}")
                 return False
                 
+        except ImportError as e:
+            self.logger.error(f"❌ 无法导入认证模块: {e}")
+            return False
         except Exception as e:
-            self.logger.error(f"❌ 登录过程中发生错误: {str(e)}")
+            self.logger.error(f"❌ 登录执行失败: {str(e)}")
             return False
 
 
@@ -173,13 +287,13 @@ class LoggerSetup:
                 if log_dir and not os.path.exists(log_dir):
                     os.makedirs(log_dir, exist_ok=True)
                 
-                # 使用RotatingFileHandler实现日志轮转
-                # maxBytes: 2MB = 2 * 1024 * 1024 bytes
-                # backupCount: 保留5个备份文件
+                # 使用RotatingFileHandler实现日志轮转 - 优化参数减少磁盘占用
+                # maxBytes: 1MB = 1 * 1024 * 1024 bytes (从2MB降低到1MB)
+                # backupCount: 保疙3个备份文件 (从5个降低到3个)
                 file_handler = logging.handlers.RotatingFileHandler(
                     log_file, 
-                    maxBytes=2 * 1024 * 1024,  # 2MB
-                    backupCount=5,
+                    maxBytes=1 * 1024 * 1024,  # 1MB
+                    backupCount=3,
                     encoding='utf-8'
                 )
                 file_handler.setFormatter(formatter)
@@ -249,24 +363,14 @@ class ConfigLoader:
     @staticmethod
     def _load_browser_config() -> dict:
         """加载浏览器配置"""
-        # 随机User-Agent池，避免被识别为机器人
-        user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/121.0"
-        ]
-        
-        default_user_agent = random.choice(user_agents)
+        # 使用固定的User-Agent，简化逻辑
+        default_user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         
         return {
             "headless": ConfigLoader._str_to_bool(os.getenv("BROWSER_HEADLESS", "false")),
-            "timeout": ConfigLoader._get_int_env("BROWSER_TIMEOUT", 10000),
+            "timeout": ConfigLoader._get_int_env("BROWSER_TIMEOUT", 8000),  # 从10000降低到8000ms
             "user_agent": os.getenv("BROWSER_USER_AGENT", default_user_agent),
-            "user_agents": user_agents
+            "low_resource_mode": ConfigLoader._str_to_bool(os.getenv("BROWSER_LOW_RESOURCE_MODE", "true"))  # 新增低资源模式
         }
 
     @staticmethod
@@ -373,124 +477,160 @@ class ConfigValidator:
         return True, ""
 
 
-class BrowserManager:
-    """浏览器管理工具类 - 统一管理浏览器启动和清理"""
+class BrowserContextManager:
+    """浏览器上下文管理器 - 使用异步上下文管理器确保资源正确释放"""
     
     def __init__(self, config: dict):
         """
-        初始化浏览器管理器
+        初始化浏览器上下文管理器
         
         参数:
             config: 配置字典
         """
         self.config = config
         self.browser_settings = config.get("browser_settings", {})
-        self.logger = logging.getLogger(__name__)
+        self.logger = LoggerSetup.setup_logger(f"{__name__}_browser", config.get('logging', {}))
         
         # 浏览器相关属性
         self.playwright = None
         self.browser = None
+        self.context = None
         self.page = None
     
-    async def start_browser(self) -> bool:
-        """
-        启动浏览器
-        
-        返回:
-            bool: 是否启动成功
-        """
+    async def __aenter__(self):
+        """异步上下文管理器入口"""
+        await self._start_browser()
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """异步上下文管理器出口 - 确保资源总是被释放"""
+        await self._cleanup_browser()
+        # 如果有异常，记录但不抑制
+        if exc_type:
+            self.logger.error(f"浏览器操作异常: {exc_type.__name__}: {exc_val}")
+        return False  # 不抑制异常
+    
+    async def _start_browser(self) -> None:
+        """启动浏览器（内部方法）"""
         try:
             from playwright.async_api import async_playwright
             
             self.playwright = await async_playwright().start()
             headless = self.browser_settings.get("headless", False)
             
-            # 启动浏览器时添加更多反检测参数
-            browser_args = [
-                '--no-sandbox',
-                '--disable-blink-features=AutomationControlled',
-                '--disable-features=VizDisplayCompositor',
-                '--disable-web-security',
-                '--disable-features=TranslateUI',
-                '--disable-ipc-flooding-protection',
-                '--no-first-run',
-                '--no-default-browser-check',
-                '--disable-default-apps',
-                '--disable-popup-blocking',
-                '--disable-extensions',
-                '--disable-plugins',
-                '--disable-images',
-                '--disable-javascript',
-                '--disable-plugins-discovery',
-                '--disable-preconnect',
-                '--disable-background-timer-throttling',
-                '--disable-backgrounding-occluded-windows',
-                '--disable-renderer-backgrounding'
-            ]
+            # 统一的浏览器启动参数
+            browser_args = self._get_browser_args()
             
             self.browser = await self.playwright.chromium.launch(
                 headless=headless,
                 args=browser_args
             )
             
-            # 创建页面时添加反检测上下文
-            context = await self.browser.new_context(
-                viewport={'width': 1920, 'height': 1080},
-                user_agent=self._get_random_user_agent(),
-                extra_http_headers={
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-                    'Accept-Encoding': 'gzip, deflate',
-                    'DNT': '1',
-                    'Connection': 'keep-alive',
-                    'Upgrade-Insecure-Requests': '1',
-                }
+            # 创建浏览器上下文 - 优化视口大小减少内存占用
+            self.context = await self.browser.new_context(
+                viewport={'width': 1024, 'height': 768},  # 从1920x1080缩小到1024x768
+                user_agent=self.browser_settings.get("user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
+                extra_http_headers=self._get_default_headers()
             )
             
-            self.page = await context.new_page()
-            
-            # 注入反检测脚本
-            await self.page.add_init_script("""
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined,
-                });
-                
-                Object.defineProperty(navigator, 'plugins', {
-                    get: () => [1, 2, 3, 4, 5],
-                });
-                
-                Object.defineProperty(navigator, 'languages', {
-                    get: () => ['zh-CN', 'zh', 'en'],
-                });
-                
-                window.chrome = {
-                    runtime: {},
-                };
-            """)
+            # 创建页面
+            self.page = await self.context.new_page()
 
             self.logger.info(f"浏览器已启动，无头模式: {headless}")
-            return True
             
         except Exception as e:
             self.logger.error(f"启动浏览器失败: {e}")
-            return False
+            # 启动失败时也要清理资源
+            await self._cleanup_browser()
+            raise
     
-    def _get_random_user_agent(self) -> str:
-        """获取随机User-Agent"""
-        user_agents = self.browser_settings.get("user_agents", [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        ])
-        return random.choice(user_agents)
+    def _get_browser_args(self) -> list[str]:
+        """获取优化的浏览器启动参数，减少内存和资源占用"""
+        return [
+            '--no-sandbox',
+            '--disable-web-security',
+            '--disable-dev-shm-usage',  # 解决Docker环境下的内存问题
+            '--disable-gpu',  # 禁用GPU加速，减少资源占用
+            '--disable-extensions',  # 禁用扩展
+            '--disable-plugins',  # 禁用插件
+            '--disable-images',  # 禁用图片加载，提高性能
+            '--memory-pressure-off',  # 关闭内存压力检测
+            '--max_old_space_size=256'  # 限制内存使用
+        ]
     
-    async def cleanup(self) -> None:
-        """清理浏览器资源"""
+    def _get_default_headers(self) -> dict[str, str]:
+        """获取简单的HTTP头"""
+        return {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
+        }
+    
+    async def _cleanup_browser(self) -> None:
+        """清理浏览器资源（内部方法）"""
+        cleanup_errors = []
+        
+        # 按顺序清理资源
+        try:
+            if self.page:
+                await self.page.close()
+                self.page = None
+        except Exception as e:
+            cleanup_errors.append(f"关闭页面失败: {e}")
+        
+        try:
+            if self.context:
+                await self.context.close()
+                self.context = None
+        except Exception as e:
+            cleanup_errors.append(f"关闭上下文失败: {e}")
+        
         try:
             if self.browser:
                 await self.browser.close()
                 self.browser = None
+        except Exception as e:
+            cleanup_errors.append(f"关闭浏览器失败: {e}")
+        
+        try:
             if self.playwright:
                 await self.playwright.stop()
                 self.playwright = None
-            self.page = None
         except Exception as e:
-            self.logger.warning(f"清理浏览器资源时发生错误: {e}")
+            cleanup_errors.append(f"停止playwright失败: {e}")
+        
+        # 如果有清理错误，记录但不抛出异常
+        if cleanup_errors:
+            self.logger.warning(f"浏览器资源清理时出现错误: {'; '.join(cleanup_errors)}")
+        else:
+            self.logger.debug("浏览器资源已完全清理")
+    
+    async def navigate_to(self, url: str, timeout: int = None) -> bool:
+        """导航到指定URL"""
+        if not self.page:
+            raise RuntimeError("浏览器未启动，请在上下文管理器中使用")
+        
+        try:
+            timeout = timeout or self.browser_settings.get("timeout", 10000)
+            await self.page.goto(url, timeout=timeout)
+            await self.page.wait_for_load_state("networkidle", timeout=timeout)
+            return True
+        except Exception as e:
+            self.logger.error(f"导航到 {url} 失败: {e}")
+            return False
+    
+    async def take_screenshot(self, path: str = None) -> str:
+        """截图功能"""
+        if not self.page:
+            raise RuntimeError("浏览器未启动，请在上下文管理器中使用")
+        
+        if not path:
+            import time
+            path = f"screenshot_{int(time.time())}.png"
+        
+        try:
+            await self.page.screenshot(path=path)
+            self.logger.info(f"截图已保存: {path}")
+            return path
+        except Exception as e:
+            self.logger.error(f"截图失败: {e}")
+            raise

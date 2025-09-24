@@ -25,7 +25,7 @@ def is_local_network_connected(verbose=False):
             log(f"获取本地IP失败: {e}", verbose)
         return False
 
-def is_network_available_socket(test_sites=None, timeout=2, verbose=False):
+def is_network_available_socket(test_sites=None, timeout=1, verbose=False):
     """
     方法1：使用Socket连接检测网络是否可用（TCP 443端口）
     """
@@ -49,7 +49,7 @@ def is_network_available_socket(test_sites=None, timeout=2, verbose=False):
             continue
     return False
 
-def is_network_available_curl(test_urls=None, timeout=2, verbose=False):
+def is_network_available_curl(test_urls=None, timeout=1, verbose=False):
     """
     方法2：使用curl命令检测网络是否可用（模拟真实HTTP请求）
     """
@@ -87,7 +87,7 @@ def is_network_available_curl(test_urls=None, timeout=2, verbose=False):
             continue
     return False
 
-def is_network_available(test_sites=None, test_urls=None, timeout=2, verbose=True, require_both=False):
+def is_network_available(test_sites=None, test_urls=None, timeout=1, verbose=True, require_both=False):
     """
     综合网络检测：使用Socket和curl两种方法检测网络（简化版）
     
@@ -116,7 +116,7 @@ def check_campus_network_status(verbose=True):
     log("正在检测网络状态...", verbose)
 
     is_local = is_local_network_connected(verbose)
-    is_internet = is_network_available(None, None, 2, verbose)
+    is_internet = is_network_available(None, None, 1, verbose)
 
     if not is_local:
         return "🔴 未连接到校园网，请检查网络连接（未获取到有效IP）"

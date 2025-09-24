@@ -5,7 +5,6 @@ import time
 import datetime
 import os
 import sys
-import asyncio
 import webbrowser
 import logging
 import logging.handlers
@@ -16,9 +15,10 @@ from typing import Optional
 src_path = Path(__file__).parent / "src"
 sys.path.insert(0, str(src_path))
 
-from campus_login import EnhancedCampusNetworkAuth
+# 导入CLI核心逻辑
+from app_cli import NetworkMonitorCore
 from network_test import is_network_available
-from utils import TimeUtils, ConfigAdapter, LoginAttemptHandler, LoggerSetup, get_runtime_stats, ConfigLoader, ConfigValidator
+from utils import ConfigLoader, ConfigValidator
 
 
 # 工具提示功能已移除，避免bug
@@ -45,10 +45,9 @@ class NetworkMonitorGUI:
         # 监控状态变量
         self.monitoring: bool = False
         self.monitor_thread: Optional[threading.Thread] = None
-        self.start_time: Optional[float] = None
-        self.network_check_count: int = 0
-        self.login_attempt_count: int = 0
-        self.last_check_time: Optional[datetime.datetime] = None
+        
+        # 创建核心监控器（使用CLI的核心逻辑）
+        self.monitor_core = NetworkMonitorCore(log_callback=self.log_message)
         
         # 设置GUI日志记录器
         self._setup_gui_logging()
@@ -323,13 +322,13 @@ class NetworkMonitorGUI:
                 
             self.gui_logger.setLevel(logging.INFO)
             
-            # 创建文件处理器（带轮转功能）
-            # maxBytes: 2MB = 2 * 1024 * 1024 bytes
-            # backupCount: 保留5个备份文件
+            # 创建文件处理器（带轮转功能）- 优化参数减少磁盘占用
+            # maxBytes: 1MB = 1 * 1024 * 1024 bytes (从2MB降低到1MB)
+            # backupCount: 保疙3个备份文件 (从5个降低到3个)
             file_handler = logging.handlers.RotatingFileHandler(
                 log_file, 
-                maxBytes=2 * 1024 * 1024,  # 2MB
-                backupCount=5,
+                maxBytes=1 * 1024 * 1024,  # 1MB
+                backupCount=3,
                 encoding='utf-8'
             )
             file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -396,10 +395,8 @@ class NetworkMonitorGUI:
             
             # 开始监控
             self.monitoring = True
-            self.start_time = time.time()
-            self.network_check_count = 0
-            self.login_attempt_count = 0
             
+            # 更新GUI状态
             self.monitor_button.config(text="⏹️ 停止监控")
             self.username_entry.config(state="disabled")
             self.password_entry.config(state="disabled")
@@ -408,13 +405,16 @@ class NetworkMonitorGUI:
             self.progress_bar.start()
             
             # 启动监控线程
-            self.monitor_thread = threading.Thread(target=self.monitor_network, daemon=True)
+            self.monitor_thread = threading.Thread(target=self._run_monitoring, daemon=True)
             self.monitor_thread.start()
             
             self.log_message("🚀 开始网络监控")
         else:
             # 停止监控
             self.monitoring = False
+            self.monitor_core.monitoring = False
+            
+            # 更新GUI状态
             self.monitor_button.config(text="▶️ 开始监控")
             self.username_entry.config(state="normal")
             self.password_entry.config(state="normal")
@@ -424,162 +424,47 @@ class NetworkMonitorGUI:
             
             self.log_message("⏹️ 停止网络监控")
     
-    def monitor_network(self) -> None:
+    def _run_monitoring(self):
         """
-        网络监控主循环
-        """
-        consecutive_failures = 0
-        
-        while self.monitoring:
-            try:
-                # 检查是否在暂停登录时段
-                if self._is_in_pause_period():
-                    self.log_message("⏰ 当前处于暂停登录时段，暂停网络监控")
-                    # 等待1分钟后重新检查
-                    for i in range(60):
-                        if not self.monitoring:
-                            return
-                        time.sleep(1)
-                    continue
-                
-                # 更新检测次数
-                self.network_check_count += 1
-                self.last_check_time = datetime.datetime.now()
-                
-                self.log_message(f"第{self.network_check_count}次网络检测")
-                
-                # 检测网络状态
-                try:
-                    network_ok = is_network_available()
-                except Exception as e:
-                    self.log_message(f"网络检测失败: {str(e)}")
-                    network_ok = False
-                
-                if network_ok:
-                    self.log_message("网络连接正常")
-                    consecutive_failures = 0
-                    self.login_attempt_count = 0
-                else:
-                    consecutive_failures += 1
-                    self.log_message(f"网络连接异常 (连续失败{consecutive_failures}次)")
-                    
-                    # 检测到网络异常立即尝试登录
-                    self.log_message("检测到网络异常，立即尝试重新登录")
-                    
-                    # 尝试登录（不检查暂停时间，因为已经在监控循环中检查了）
-                    login_success = self._attempt_login_without_pause_check()
-                    
-                    if login_success:
-                        consecutive_failures = 0
-                        self.login_attempt_count = 0
-                        self.log_message("登录成功，重置失败计数")
-                    else:
-                        self.login_attempt_count += 1
-                        self.log_message(f"登录失败 (第{self.login_attempt_count}次)")
-                        
-                        # 连续登录失败3次后等待5分钟
-                        if self.login_attempt_count >= 3:
-                            self.log_message("登录连续3次失败，等待5分钟后重试")
-                            # 等待5分钟
-                            for i in range(300):
-                                if not self.monitoring:
-                                    return
-                                time.sleep(1)
-                            self.login_attempt_count = 0
-                            continue
-                
-                # 根据用户设置的间隔等待
-                try:
-                    interval_minutes = int(self.check_interval_var.get())
-                    if interval_minutes < 1:
-                        interval_minutes = 5  # 最小1分钟
-                except ValueError:
-                    interval_minutes = 5  # 默认5分钟
-                
-                wait_seconds = interval_minutes * 60
-                self.log_message(f"等待{interval_minutes}分钟后进行下次检测")
-                
-                for i in range(wait_seconds):
-                    if not self.monitoring:
-                        return
-                    time.sleep(1)
-                    
-            except Exception as e:
-                self.log_message(f"监控过程中发生错误: {str(e)}")
-                # 发生错误时等待1分钟，但检查是否需要停止
-                for i in range(60):
-                    if not self.monitoring:
-                        return
-                    time.sleep(1)
-    
-    def _is_in_pause_period(self) -> bool:
-        """
-        检查当前是否在暂停登录时段
-        
-        返回:
-            bool: 是否在暂停时段
-        """
-        # 检查暂停登录是否启用
-        if not self.pause_login_var.get():
-            return False
-        
-        current_hour = datetime.datetime.now().hour
-        start_hour = int(self.pause_start_var.get())
-        end_hour = int(self.pause_end_var.get())
-        
-        if start_hour < end_hour:
-            return start_hour <= current_hour < end_hour
-        else:  # 跨天情况
-            return current_hour >= start_hour or current_hour < end_hour
-    
-    def _attempt_login_without_pause_check(self) -> bool:
-        """
-        执行登录（不检查暂停时间）
-        
-        返回:
-            bool: 登录是否成功
+        在线程中运行监控逻辑
         """
         try:
-            # 使用 ConfigAdapter 创建认证配置
-            gui_config = {
-                'username': self.username_var.get(),
-                'password': self.password_var.get(),
-                'carrier_suffix': self.carrier_mapping.get(self.carrier_var.get(), ''),
-                'headless': self.headless_var.get()
-            }
+            # 创建临时核心监控器，使用GUI配置
+            gui_config = self._get_gui_config()
+            temp_monitor = NetworkMonitorCore(config=None, log_callback=self.log_message)
             
-            config = ConfigLoader.load_config_from_env()
-            auth_config = ConfigAdapter.create_auth_config(gui_config, config)
-            
-            # 使用 LoginAttemptHandler 进行登录
-            login_handler = LoginAttemptHandler(auth_config)
-            
-            # 执行登录（异步调用）
+            # 覆盖配置中的检测间隔
             try:
-                success = asyncio.run(login_handler.attempt_login())
-                return success
-            except Exception as e:
-                self.log_message(f"❌ 校园网登录失败: {str(e)}")
-                return False
-                
+                interval_minutes = int(self.check_interval_var.get())
+                if interval_minutes < 1:
+                    interval_minutes = 5  # 最小1分钟
+            except ValueError:
+                interval_minutes = 5  # 默认5分钟
+            
+            temp_monitor.config['monitor']['interval'] = interval_minutes * 60
+            
+            # 同步监控状态
+            temp_monitor.monitoring = True
+            
+            # 运行监控逻辑
+            temp_monitor.monitor_network()
+            
         except Exception as e:
-            self.log_message(f"❌ 登录过程中发生错误: {str(e)}")
-            return False
+            self.log_message(f"监控过程中发生错误: {str(e)}")
+        finally:
+            # 确保状态正确
+            self.monitoring = False
     
-    def attempt_login(self) -> bool:
+    def _get_gui_config(self) -> dict:
         """
-        尝试登录校园网（手动登录，不检查暂停时间）
-        
-        返回:
-            bool: 登录是否成功
+        获取GUI配置字典
         """
-        try:
-            # 手动登录不检查暂停时间，直接执行登录
-            return self._attempt_login_without_pause_check()
-                
-        except Exception as e:
-            self.log_message(f"❌ 登录过程中发生错误: {str(e)}")
-            return False
+        return {
+            'username': self.username_var.get(),
+            'password': self.password_var.get(),
+            'carrier_suffix': self.carrier_mapping.get(self.carrier_var.get(), ''),
+            'headless': self.headless_var.get()
+        }
     
     def manual_login(self):
         """
@@ -594,7 +479,8 @@ class NetworkMonitorGUI:
         # 在新线程中执行登录
         def run_manual_login():
             try:
-                success = self.attempt_login()
+                gui_config = self._get_gui_config()
+                success = self.monitor_core.attempt_login_with_gui_config(gui_config)
                 if success:
                     self.log_message("✅ 手动登录成功！")
                 else:
@@ -630,22 +516,10 @@ class NetworkMonitorGUI:
         # 在新线程中执行手动认证
         def run_manual_auth():
             try:
-                # 使用 ConfigAdapter 创建认证配置
-                gui_config = {
-                    'username': self.username_var.get(),
-                    'password': self.password_var.get(),
-                    'carrier_suffix': self.carrier_mapping.get(self.carrier_var.get(), ''),
-                    'headless': False  # 手动认证必须使用非无头模式
-                }
+                gui_config = self._get_gui_config()
+                gui_config['headless'] = False  # 手动认证必须使用非无头模式
                 
-                base_config = ConfigLoader.load_config_from_env()
-                auth_config = ConfigAdapter.create_auth_config(gui_config, base_config)
-                
-                # 创建认证器实例
-                auth = EnhancedCampusNetworkAuth(auth_config)
-                
-                # 执行手动认证
-                success, message = asyncio.run(auth.manual_auth_fallback())
+                success, message = self.monitor_core.manual_auth_fallback_with_gui_config(gui_config)
                 
                 if success:
                     self.log_message(f"✅ 手动认证成功！{message}")
@@ -695,30 +569,13 @@ class NetworkMonitorGUI:
         # 在新线程中执行测试
         def test():
             try:
-                # 使用 ConfigAdapter 创建认证配置
-                gui_config = {
-                    'username': self.username_var.get().strip(),
-                    'password': self.password_var.get().strip(),
-                    'carrier_suffix': self.carrier_mapping.get(self.carrier_var.get(), ""),
-                    'headless': self.headless_var.get()
-                }
+                gui_config = self._get_gui_config()
+                success, message = self.monitor_core.test_connection_with_gui_config(gui_config)
                 
-                base_config = ConfigLoader.load_config_from_env()
-                auth_config = ConfigAdapter.create_auth_config(gui_config, base_config)
-                
-                # 创建认证器实例
-                auth = EnhancedCampusNetworkAuth(auth_config)
-                
-                # 执行连接测试
-                self.log_message("正在测试连接到认证页面...")
-                try:
-                    success, message = asyncio.run(auth.test_connection())
-                    if success:
-                        self.log_message(f"✅ {message}")
-                    else:
-                        self.log_message(f"❌ {message}")
-                except Exception as e:
-                    self.log_message(f"❌ 连接测试失败: {str(e)}")
+                if success:
+                    self.log_message(f"✅ {message}")
+                else:
+                    self.log_message(f"❌ {message}")
                         
             except Exception as e:
                 self.log_message(f"❌ 连接测试发生错误: {str(e)}")
@@ -730,9 +587,10 @@ class NetworkMonitorGUI:
         更新状态显示
         """
         if self.monitoring:
-            # 使用 get_runtime_stats 获取运行时间
-            if self.start_time:
-                runtime_str, _ = get_runtime_stats(self.start_time, self.network_check_count)
+            # 使用核心监控器的数据
+            if self.monitor_core.start_time:
+                from utils import get_runtime_stats
+                runtime_str, _ = get_runtime_stats(self.monitor_core.start_time, self.monitor_core.network_check_count)
                 self.time_label.config(text=f"⏱️ 运行时间: {runtime_str}")
             
             self.status_label.config(text="🟢 状态: 监控中", foreground="#27ae60")
@@ -740,15 +598,15 @@ class NetworkMonitorGUI:
             self.status_label.config(text="🔴 状态: 未监控", foreground="#e74c3c")
         
         # 更新检测次数
-        self.check_label.config(text=f"🔍 网络检测次数: {self.network_check_count}")
+        self.check_label.config(text=f"🔍 网络检测次数: {self.monitor_core.network_check_count}")
         
         # 更新上次检测时间
-        if self.last_check_time:
-            time_str = self.last_check_time.strftime("%H:%M:%S")
+        if self.monitor_core.last_check_time:
+            time_str = self.monitor_core.last_check_time.strftime("%H:%M:%S")
             self.last_check_label.config(text=f"🕐 上次检测: {time_str}")
         
-        # 每秒更新一次
-        self.root.after(1000, self.update_status)
+        # 每3秒更新一次，降低GUI更新频率以减少资源占用
+        self.root.after(3000, self.update_status)
     
     def initial_network_check(self):
         """
@@ -769,7 +627,7 @@ class NetworkMonitorGUI:
         # 延迟启动监控，给界面一些时间完成初始化
         def auto_start_monitoring():
             try:
-                time.sleep(1)  # 等待2秒让界面完全加载
+                time.sleep(2)  # 等待2秒让界面完全加载，从1秒优化为2秒
                 self.log_message("🚀 应用启动，根据配置自动开始监控")
                 
                 # 直接调用监控切换方法启动监控
