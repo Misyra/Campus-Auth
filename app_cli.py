@@ -395,12 +395,15 @@ class SimpleNetworkMonitor:
             frame: 当前栈帧
         """
         signal_name = signal.Signals(signum).name
-        self.monitor_core.log_message(f"收到信号 {signal_name}，正在停止监控...")
+        print(f"\n收到信号 {signal_name}，正在停止监控...")
         self.monitor_core.monitoring = False
         
         # 清理PID文件
         if hasattr(self, 'pid_file'):
             self._cleanup_pid_file()
+        
+        # 立即退出，不等待清理完成
+        sys.exit(0)
     
     @property
     def config(self):
@@ -422,6 +425,17 @@ class SimpleNetworkMonitor:
         """
         if self.monitor_core.monitoring:
             self.log_message("监控已在运行中")
+            return
+        
+        # 在启动监控前先检查配置
+        from utils import ConfigValidator
+        is_valid, error_msg = ConfigValidator.validate_env_config(self.config)
+        if not is_valid:
+            print(f"❌ 配置错误: {error_msg}")
+            print("请在 .env 文件中配置:")
+            print("CAMPUS_USERNAME=你的学号@cmcc")
+            print("CAMPUS_PASSWORD=你的密码")
+            print("CAMPUS_AUTH_URL=http://172.29.0.2")
             return
         
         # 显示启动信息
@@ -616,11 +630,13 @@ def main():
         print("-" * 50)
     
     try:
-        # 启动监控
-        asyncio.run(monitor.start_monitoring())
+        # 启动监控（修复：直接调用同步方法，不使用asyncio.run）
+        monitor.start_monitoring()
     except KeyboardInterrupt:
-        if not args.daemon:
-            print("\n程序被用户中断")
+        print("\n👋 程序被用户中断")
+        # 确保停止监控
+        monitor.monitor_core.monitoring = False
+        sys.exit(0)
     except Exception as e:
         if not args.daemon:
             print(f"程序运行出错: {e}")

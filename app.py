@@ -32,7 +32,7 @@ class NetworkMonitorGUI:
             root: tkinter根窗口
         """
         self.root = root
-        self.root.title("🌐 校园网络监控助手")
+        self.root.title("校园网络监控助手")
         self.root.geometry("800x700")
         self.root.resizable(True, True)
         
@@ -64,12 +64,11 @@ class NetworkMonitorGUI:
         # 启动时立即检测一次网络状态
         self.initial_network_check()
         
-        # 启动状态更新定时器
-        self.update_status()
+        # 删除状态更新定时器，状态栏已移除
     
     def setup_styles(self):
         """
-        设置界面样式和主题
+        设置界面样式和主题（简化版）
         """
         # 创建样式对象
         self.style = ttk.Style()
@@ -77,25 +76,33 @@ class NetworkMonitorGUI:
         # 设置主题
         self.style.theme_use('clam')
         
-        # 自定义样式
-        self.style.configure('Title.TLabel', font=('Arial', 12, 'bold'), foreground='#2c3e50')
-        self.style.configure('Status.TLabel', font=('Arial', 10, 'bold'))
-        self.style.configure('Success.TLabel', foreground='#27ae60')
-        self.style.configure('Error.TLabel', foreground='#e74c3c')
-        self.style.configure('Warning.TLabel', foreground='#f39c12')
-        self.style.configure('Info.TLabel', foreground='#3498db')
+        # 简化的样式配置，增大字体
+        self.style.configure('Title.TLabel', font=('Arial', 16, 'bold'), foreground='#2c3e50')
+        self.style.configure('Status.TLabel', font=('Arial', 12, 'bold'))
         
-        # 按钮样式
-        self.style.configure('Primary.TButton', font=('Arial', 9, 'bold'))
-        self.style.configure('Success.TButton', font=('Arial', 9))
-        self.style.configure('Warning.TButton', font=('Arial', 9))
-        self.style.configure('Info.TButton', font=('Arial', 9))
-        self.style.configure('Danger.TButton', font=('Arial', 9))
+        # 增大输入框和下拉框字体
+        self.style.configure('TEntry', font=('Arial', 12))
+        self.style.configure('TCombobox', font=('Arial', 12))
         
-        # 框架样式
-        self.style.configure('Card.TFrame', relief='solid', borderwidth=1)
-        self.style.configure('Status.TFrame', relief='solid', borderwidth=1)
-    
+        # 增大按钮字体
+        self.style.configure('TButton', font=('Arial', 11))
+        
+        # 增大标签字体
+        self.style.configure('TLabel', font=('Arial', 11))
+        self.style.configure('TLabelFrame.Label', font=('Arial', 12, 'bold'))
+        
+        # 增大复选框字体
+        self.style.configure('TCheckbutton', font=('Arial', 11))
+        self.style.configure('Large.TCheckbutton', font=('Arial', 12))
+        
+        # 优化checkbutton样式，使用更好的选中标志
+        self.style.configure('TCheckbutton', focuscolor='none')
+        self.style.configure('Large.TCheckbutton', focuscolor='none')
+        # 在一些主题下，可以通过map来改变选中状态的显示
+        self.style.map('TCheckbutton',
+                      background=[('active', '#e1f5fe'),
+                                  ('pressed', '#b3e5fc')])
+
     def create_widgets(self):
         """
         创建GUI界面组件
@@ -108,26 +115,26 @@ class NetworkMonitorGUI:
         title_frame = ttk.Frame(main_frame)
         title_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 15))
         
-        title_label = ttk.Label(title_frame, text="🌐 校园网络监控助手", style='Title.TLabel')
+        title_label = ttk.Label(title_frame, text="校园网络监控助手", style='Title.TLabel')
         title_label.pack()
         
         # 配置信息框架 - 使用卡片式设计
-        config_frame = ttk.LabelFrame(main_frame, text="⚙️ 登录配置", padding="15")
+        config_frame = ttk.LabelFrame(main_frame, text="登录配置", padding="15")
         config_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 15))
         
-        # 第一行：账号和密码
-        ttk.Label(config_frame, text="👤 账号:", font=('Arial', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, padx=(0, 8), pady=(0, 10))
+        # 第一行：账号和密码（增大字体）
+        ttk.Label(config_frame, text=" 账号:", font=('Arial', 12, 'bold')).grid(row=0, column=0, sticky=tk.W, padx=(0, 8), pady=(0, 10))
         self.username_var = tk.StringVar()
-        self.username_entry = ttk.Entry(config_frame, textvariable=self.username_var, width=20)
+        self.username_entry = ttk.Entry(config_frame, textvariable=self.username_var, width=20, font=('Arial', 12))
         self.username_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(0, 20), pady=(0, 10))
         
-        ttk.Label(config_frame, text="🔒 密码:", font=('Arial', 9, 'bold')).grid(row=0, column=2, sticky=tk.W, padx=(20, 8), pady=(0, 10))
+        ttk.Label(config_frame, text=" 密码:", font=('Arial', 12, 'bold')).grid(row=0, column=2, sticky=tk.W, padx=(20, 8), pady=(0, 10))
         self.password_var = tk.StringVar()
-        self.password_entry = ttk.Entry(config_frame, textvariable=self.password_var, show="•", width=20)
+        self.password_entry = ttk.Entry(config_frame, textvariable=self.password_var, show="•", width=20, font=('Arial', 12))
         self.password_entry.grid(row=0, column=3, sticky=(tk.W, tk.E), padx=(0, 0), pady=(0, 10))
         
-        # 第二行：运营商和检测间隔
-        ttk.Label(config_frame, text="🌐 运营商:", font=('Arial', 9, 'bold')).grid(row=1, column=0, sticky=tk.W, padx=(0, 8), pady=(0, 10))
+        # 第二行：运营商和检测间隔（增大字体）
+        ttk.Label(config_frame, text=" 运营商:", font=('Arial', 12, 'bold')).grid(row=1, column=0, sticky=tk.W, padx=(0, 8), pady=(0, 10))
         self.carrier_var = tk.StringVar(value="无")
         # 运营商中文映射
         self.carrier_mapping = {
@@ -139,12 +146,12 @@ class NetworkMonitorGUI:
         }
         self.carrier_combo = ttk.Combobox(config_frame, textvariable=self.carrier_var, 
                                    values=list(self.carrier_mapping.keys()), 
-                                   state="readonly", width=18)
+                                   state="readonly", width=18, font=('Arial', 12))
         self.carrier_combo.grid(row=1, column=1, sticky=(tk.W, tk.E), padx=(0, 20), pady=(0, 10))
         
-        ttk.Label(config_frame, text="⏰ 检测间隔(分钟):", font=('Arial', 9, 'bold')).grid(row=1, column=2, sticky=tk.W, padx=(20, 8), pady=(0, 10))
+        ttk.Label(config_frame, text=" 检测间隔(分钟):", font=('Arial', 12, 'bold')).grid(row=1, column=2, sticky=tk.W, padx=(20, 8), pady=(0, 10))
         self.check_interval_var = tk.StringVar(value="5")
-        self.interval_entry = ttk.Entry(config_frame, textvariable=self.check_interval_var, width=18)
+        self.interval_entry = ttk.Entry(config_frame, textvariable=self.check_interval_var, width=18, font=('Arial', 12))
         self.interval_entry.grid(row=1, column=3, sticky=(tk.W, tk.E), padx=(0, 0), pady=(0, 10))
         
         # 第三行：选项配置
@@ -152,37 +159,37 @@ class NetworkMonitorGUI:
         options_frame.grid(row=2, column=0, columnspan=4, sticky=(tk.W, tk.E), pady=(10, 0))
         
         self.auto_start_var = tk.BooleanVar(value=False)
-        self.auto_start_check = ttk.Checkbutton(options_frame, text="🚀 启动时自动监控", variable=self.auto_start_var)
+        self.auto_start_check = ttk.Checkbutton(options_frame, text="启动时自动运行", variable=self.auto_start_var, style='Large.TCheckbutton')
         self.auto_start_check.pack(side=tk.LEFT, padx=(0, 20))
         
         self.headless_var = tk.BooleanVar(value=False)
-        self.headless_check = ttk.Checkbutton(options_frame, text="👁️ 无头模式运行", variable=self.headless_var)
+        self.headless_check = ttk.Checkbutton(options_frame, text="后台静默运行", variable=self.headless_var, style='Large.TCheckbutton')
         self.headless_check.pack(side=tk.LEFT, padx=(0, 20))
         
         # 第四行：暂停登录时间配置
         pause_frame = ttk.Frame(config_frame)
         pause_frame.grid(row=3, column=0, columnspan=4, sticky=(tk.W, tk.E), pady=(10, 0))
         
-        ttk.Label(pause_frame, text="⏰ 暂停登录时段:", font=('Arial', 9, 'bold')).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Label(pause_frame, text=" 暂停登录时段:", font=('Arial', 12, 'bold')).pack(side=tk.LEFT, padx=(0, 10))
         
         self.pause_login_var = tk.BooleanVar(value=True)
-        self.pause_check = ttk.Checkbutton(pause_frame, text="启用", variable=self.pause_login_var)
+        self.pause_check = ttk.Checkbutton(pause_frame, text="启用", variable=self.pause_login_var, style='Large.TCheckbutton')
         self.pause_check.pack(side=tk.LEFT, padx=(0, 15))
         
-        ttk.Label(pause_frame, text="从", font=('Arial', 9)).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(pause_frame, text="从", font=('Arial', 11)).pack(side=tk.LEFT, padx=(0, 5))
         self.pause_start_var = tk.StringVar(value="0")
-        self.start_spinbox = ttk.Spinbox(pause_frame, from_=0, to=23, textvariable=self.pause_start_var, width=8)
+        self.start_spinbox = ttk.Spinbox(pause_frame, from_=0, to=23, textvariable=self.pause_start_var, width=8, font=('Arial', 11))
         self.start_spinbox.pack(side=tk.LEFT, padx=(0, 5))
         
-        ttk.Label(pause_frame, text="点到", font=('Arial', 9)).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(pause_frame, text="点到", font=('Arial', 11)).pack(side=tk.LEFT, padx=(0, 5))
         self.pause_end_var = tk.StringVar(value="6")
-        self.end_spinbox = ttk.Spinbox(pause_frame, from_=0, to=23, textvariable=self.pause_end_var, width=8)
+        self.end_spinbox = ttk.Spinbox(pause_frame, from_=0, to=23, textvariable=self.pause_end_var, width=8, font=('Arial', 11))
         self.end_spinbox.pack(side=tk.LEFT, padx=(0, 5))
         
-        ttk.Label(pause_frame, text="点", font=('Arial', 9)).pack(side=tk.LEFT)
+        ttk.Label(pause_frame, text="点", font=('Arial', 11)).pack(side=tk.LEFT)
         
         # 控制按钮框架 - 使用卡片式设计
-        control_frame = ttk.LabelFrame(main_frame, text="🎮 控制面板", padding="15")
+        control_frame = ttk.LabelFrame(main_frame, text="控制面板", padding="15")
         control_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 15))
         
         # 所有按钮放在一行
@@ -193,90 +200,54 @@ class NetworkMonitorGUI:
         button_width = 12
         button_padx = 5  # 按钮间距
         
-        # 主要操作按钮
-        self.monitor_button = ttk.Button(buttons_frame, text="▶️ 开始监控", command=self.toggle_monitoring, style='Primary.TButton', width=button_width)
+        # 主要操作按钮（使用统一样式）
+        self.monitor_button = ttk.Button(buttons_frame, text="开始监控", command=self.toggle_monitoring, width=button_width)
         self.monitor_button.pack(side=tk.LEFT, padx=(0, button_padx))
         
-        self.login_button = ttk.Button(buttons_frame, text="🔑 手动登录", command=self.manual_login, style='Success.TButton', width=button_width)
+        self.login_button = ttk.Button(buttons_frame, text="手动登录", command=self.manual_login, width=button_width)
         self.login_button.pack(side=tk.LEFT, padx=(0, button_padx))
         
-        self.manual_auth_button = ttk.Button(buttons_frame, text="🔄 手动认证", command=self.manual_auth_fallback, style='Warning.TButton', width=button_width)
+        self.manual_auth_button = ttk.Button(buttons_frame, text="手动认证", command=self.manual_auth_fallback, width=button_width)
         self.manual_auth_button.pack(side=tk.LEFT, padx=(0, button_padx))
         
         # 辅助操作按钮
-        self.test_button = ttk.Button(buttons_frame, text="🌐 网络测试", command=self.test_network, style='Info.TButton', width=button_width)
+        self.test_button = ttk.Button(buttons_frame, text="网络测试", command=self.test_network, width=button_width)
         self.test_button.pack(side=tk.LEFT, padx=(0, button_padx))
         
-        self.test_connection_button = ttk.Button(buttons_frame, text="🔗 测试连接", command=self.test_connection, style='Info.TButton', width=button_width)
-        self.test_connection_button.pack(side=tk.LEFT, padx=(0, button_padx))
-        
-        self.save_button = ttk.Button(buttons_frame, text="💾 保存配置", command=self.save_config, style='Success.TButton', width=button_width)
+        self.save_button = ttk.Button(buttons_frame, text="保存配置", command=self.save_config, width=button_width)
         self.save_button.pack(side=tk.LEFT, padx=(0, button_padx))
         
-        self.about_button = ttk.Button(buttons_frame, text="ℹ️ 关于", command=self.show_about, style='Info.TButton', width=button_width)
+        self.about_button = ttk.Button(buttons_frame, text="关于", command=self.show_about, width=button_width)
         self.about_button.pack(side=tk.LEFT)
         
-        # 状态信息框架 - 使用卡片式设计
-        status_frame = ttk.LabelFrame(main_frame, text="📊 运行状态", padding="15")
-        status_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 15))
-        
-        # 状态指示器
-        status_indicator_frame = ttk.Frame(status_frame)
-        status_indicator_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        self.status_label = ttk.Label(status_indicator_frame, text="● 状态: 未开始监控", font=("Arial", 11, "bold"), style='Status.TLabel')
-        self.status_label.pack(side=tk.LEFT)
-        
-        # 状态详细信息
-        status_details_frame = ttk.Frame(status_frame)
-        status_details_frame.pack(fill=tk.X)
-        
-        # 左侧状态信息
-        left_status_frame = ttk.Frame(status_details_frame)
-        left_status_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        
-        self.time_label = ttk.Label(left_status_frame, text="⏱️ 运行时间: 00:00:00", font=('Arial', 9))
-        self.time_label.pack(anchor=tk.W, pady=(2, 0))
-        
-        self.check_label = ttk.Label(left_status_frame, text="🔍 网络检测次数: 0", font=('Arial', 9))
-        self.check_label.pack(anchor=tk.W, pady=(2, 0))
-        
-        # 右侧状态信息
-        right_status_frame = ttk.Frame(status_details_frame)
-        right_status_frame.pack(side=tk.RIGHT, fill=tk.X, expand=True)
-        
-        self.last_check_label = ttk.Label(right_status_frame, text="🕐 上次检测: 未检测", font=('Arial', 9))
-        self.last_check_label.pack(anchor=tk.E, pady=(2, 0))
-        
-        # 添加进度条
-        self.progress_frame = ttk.Frame(status_frame)
-        self.progress_frame.pack(fill=tk.X, pady=(10, 0))
-        
-        ttk.Label(self.progress_frame, text="📈 监控进度:", font=('Arial', 9, 'bold')).pack(anchor=tk.W)
-        self.progress_bar = ttk.Progressbar(self.progress_frame, mode='indeterminate', length=300)
-        self.progress_bar.pack(fill=tk.X, pady=(5, 0))
+        # 删除运行状态栏，直接从按钮区跳转到日志区
         
         # 日志显示框架 - 使用卡片式设计
-        log_frame = ttk.LabelFrame(main_frame, text="📝 运行日志", padding="15")
-        log_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S))
+        log_frame = ttk.LabelFrame(main_frame, text="运行日志", padding="15")
+        log_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # 日志工具栏
         log_toolbar = ttk.Frame(log_frame)
         log_toolbar.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
         
-        ttk.Label(log_toolbar, text="📋 实时日志输出", font=('Arial', 9, 'bold')).pack(side=tk.LEFT)
+        ttk.Label(log_toolbar, text=" 实时日志输出", font=('Arial', 11, 'bold')).pack(side=tk.LEFT)
         
         # 日志控制按钮
         log_controls = ttk.Frame(log_toolbar)
         log_controls.pack(side=tk.RIGHT)
         
-        self.clear_log_button = ttk.Button(log_controls, text="🗑️ 清空", command=self.clear_log, style='Danger.TButton')
+        self.clear_log_button = ttk.Button(log_controls, text="清空", command=self.clear_log)
         self.clear_log_button.pack(side=tk.LEFT, padx=(5, 0))
         
-        # 日志文本框
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=10, width=80, font=('Consolas', 9), 
+        # 日志文本框（增大字体）
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=10, width=80, font=('Consolas', 11), 
                                                 bg='#f8f9fa', fg='#2c3e50', insertbackground='#2c3e50')
         self.log_text.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # 日志缓存和性能优化
+        self.log_cache = []
+        self.log_update_pending = False
+        self.max_log_lines = 500  # 限制最大日志行数
         
         # 配置网格权重 - 实现自适应布局
         # 主框架权重配置
@@ -285,14 +256,13 @@ class NetworkMonitorGUI:
         
         # 主框架内部权重配置
         main_frame.columnconfigure(0, weight=1)
-        main_frame.rowconfigure(4, weight=1)  # 日志框架可扩展
+        main_frame.rowconfigure(3, weight=1)  # 日志框架可扩展
         
         # 配置框架内部权重配置
         config_frame.columnconfigure(1, weight=1)
         config_frame.columnconfigure(3, weight=1)
         
-        # 状态框架内部权重配置
-        status_frame.columnconfigure(0, weight=1)
+        # 删除状态框架权重配置
         
         # 日志框架内部权重配置
         log_frame.columnconfigure(0, weight=1)
@@ -346,7 +316,7 @@ class NetworkMonitorGUI:
     
     def log_message(self, message):
         """
-        在日志区域显示消息，并同时保存到文件
+        在日志区域显示消息，并同时保存到文件（优化版）
         
         参数:
             message: 要显示的消息
@@ -354,8 +324,14 @@ class NetworkMonitorGUI:
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         log_entry = f"[{timestamp}] {message}\n"
         
-        # 在主线程中更新GUI
-        self.root.after(0, lambda: self._update_log_text(log_entry))
+        # 添加到缓存
+        self.log_cache.append(log_entry)
+        
+        # 如果还没有挂起的更新，则计划一个
+        if not self.log_update_pending:
+            self.log_update_pending = True
+            # 延迟100ms批量更新，提升性能
+            self.root.after(100, self._batch_update_log)
         
         # 同时写入日志文件
         if hasattr(self, 'gui_logger') and self.gui_logger:
@@ -366,22 +342,38 @@ class NetworkMonitorGUI:
             except Exception as e:
                 print(f"写入日志文件失败: {e}")
     
-    def _update_log_text(self, log_entry):
+    def _batch_update_log(self):
         """
-        更新日志文本框内容
+        批量更新日志文本框，提升性能
+        """
+        if self.log_cache:
+            # 合并所有缓存的日志
+            combined_logs = ''.join(self.log_cache)
+            self.log_cache.clear()
+            
+            # 更新文本框
+            self.log_text.insert(tk.END, combined_logs)
+            
+            # 检查是否超过最大行数
+            lines = self.log_text.get('1.0', tk.END).count('\n')
+            if lines > self.max_log_lines:
+                # 删除前100行
+                self.log_text.delete('1.0', f'{100}.0')
+            
+            # 智能滚动：仅在用户位于底部附近时自动滚动
+            current_pos = self.log_text.yview()[1]
+            if current_pos > 0.9:  # 如果滚动条在底部90%以下
+                self.log_text.see(tk.END)
         
-        参数:
-            log_entry: 日志条目
-        """
-        self.log_text.insert(tk.END, log_entry)
-        self.log_text.see(tk.END)
+        self.log_update_pending = False
     
     def clear_log(self):
         """
-        清空日志内容
+        清空日志内容（优化版）
         """
         self.log_text.delete(1.0, tk.END)
-        self.log_message("📝 日志已清空")
+        self.log_cache.clear()  # 同时清空缓存
+        self.log_message("日志已清空")
     
     def toggle_monitoring(self):
         """
@@ -397,32 +389,26 @@ class NetworkMonitorGUI:
             self.monitoring = True
             
             # 更新GUI状态
-            self.monitor_button.config(text="⏹️ 停止监控")
+            self.monitor_button.config(text="停止监控")
             self.username_entry.config(state="disabled")
             self.password_entry.config(state="disabled")
-            
-            # 启动进度条
-            self.progress_bar.start()
             
             # 启动监控线程
             self.monitor_thread = threading.Thread(target=self._run_monitoring, daemon=True)
             self.monitor_thread.start()
             
-            self.log_message("🚀 开始网络监控")
+            self.log_message("开始网络监控")
         else:
             # 停止监控
             self.monitoring = False
             self.monitor_core.monitoring = False
             
             # 更新GUI状态
-            self.monitor_button.config(text="▶️ 开始监控")
+            self.monitor_button.config(text="开始监控")
             self.username_entry.config(state="normal")
             self.password_entry.config(state="normal")
             
-            # 停止进度条
-            self.progress_bar.stop()
-            
-            self.log_message("⏹️ 停止网络监控")
+            self.log_message("停止网络监控")
     
     def _run_monitoring(self):
         """
@@ -482,13 +468,13 @@ class NetworkMonitorGUI:
                 gui_config = self._get_gui_config()
                 success = self.monitor_core.attempt_login_with_gui_config(gui_config)
                 if success:
-                    self.log_message("✅ 手动登录成功！")
+                    self.log_message("手动登录成功！")
                 else:
-                    self.log_message("❌ 手动登录失败")
+                    self.log_message("手动登录失败")
             except Exception as e:
                 error_msg = f"手动登录发生错误: {str(e)}"
-                self.log_message(f"❌ {error_msg}")
-        
+                self.log_message(f"{error_msg}")
+
         threading.Thread(target=run_manual_login, daemon=True).start()
     
     def manual_auth_fallback(self):
@@ -511,7 +497,7 @@ class NetworkMonitorGUI:
         if not result:
             return
         
-        self.log_message("🔄 启动手动认证备选方案...")
+        self.log_message("启动手动认证备选方案...")
         
         # 在新线程中执行手动认证
         def run_manual_auth():
@@ -522,15 +508,15 @@ class NetworkMonitorGUI:
                 success, message = self.monitor_core.manual_auth_fallback_with_gui_config(gui_config)
                 
                 if success:
-                    self.log_message(f"✅ 手动认证成功！{message}")
+                    self.log_message(f"手动认证成功！{message}")
                     messagebox.showinfo("成功", f"手动认证成功！{message}")
                 else:
-                    self.log_message(f"❌ 手动认证失败: {message}")
+                    self.log_message(f"手动认证失败: {message}")
                     messagebox.showerror("失败", f"手动认证失败: {message}")
                     
             except Exception as e:
                 error_msg = f"手动认证发生错误: {str(e)}"
-                self.log_message(f"❌ {error_msg}")
+                self.log_message(f"{error_msg}")
                 messagebox.showerror("错误", error_msg)
         
         threading.Thread(target=run_manual_auth, daemon=True).start()
@@ -554,59 +540,13 @@ class NetworkMonitorGUI:
         
         threading.Thread(target=test, daemon=True).start()
     
-    def test_connection(self):
-        """
-        测试校园网连接配置
-        """
-        # 验证配置
-        is_valid, error_msg = self.validate_config()
-        if not is_valid:
-            messagebox.showerror("配置错误", error_msg)
-            return
-        
-        self.log_message("开始测试校园网连接配置...")
-        
-        # 在新线程中执行测试
-        def test():
-            try:
-                gui_config = self._get_gui_config()
-                success, message = self.monitor_core.test_connection_with_gui_config(gui_config)
-                
-                if success:
-                    self.log_message(f"✅ {message}")
-                else:
-                    self.log_message(f"❌ {message}")
-                        
-            except Exception as e:
-                self.log_message(f"❌ 连接测试发生错误: {str(e)}")
-        
-        threading.Thread(target=test, daemon=True).start()
-    
+
     def update_status(self):
         """
-        更新状态显示
+        删除状态显示更新 - 状态栏已移除
         """
-        if self.monitoring:
-            # 使用核心监控器的数据
-            if self.monitor_core.start_time:
-                from utils import get_runtime_stats
-                runtime_str, _ = get_runtime_stats(self.monitor_core.start_time, self.monitor_core.network_check_count)
-                self.time_label.config(text=f"⏱️ 运行时间: {runtime_str}")
-            
-            self.status_label.config(text="🟢 状态: 监控中", foreground="#27ae60")
-        else:
-            self.status_label.config(text="🔴 状态: 未监控", foreground="#e74c3c")
-        
-        # 更新检测次数
-        self.check_label.config(text=f"🔍 网络检测次数: {self.monitor_core.network_check_count}")
-        
-        # 更新上次检测时间
-        if self.monitor_core.last_check_time:
-            time_str = self.monitor_core.last_check_time.strftime("%H:%M:%S")
-            self.last_check_label.config(text=f"🕐 上次检测: {time_str}")
-        
-        # 每3秒更新一次，降低GUI更新频率以减少资源占用
-        self.root.after(3000, self.update_status)
+        # 状态栏已删除，不再需要更新状态显示
+        pass
     
     def initial_network_check(self):
         """
@@ -616,26 +556,26 @@ class NetworkMonitorGUI:
         auto_start = self.auto_start_var.get()
         
         if not auto_start:
-            self.log_message("ℹ️ 根据配置，启动时不自动开始监控")
+            self.log_message("根据配置，启动时不自动开始监控")
             return
             
         # 检查是否有必要的登录信息
         if not self.username_var.get() or not self.password_var.get():
-            self.log_message("⚠️ 缺少用户名或密码，跳过自动启动监控")
+            self.log_message("缺少用户名或密码，跳过自动启动监控")
             return
         
         # 延迟启动监控，给界面一些时间完成初始化
         def auto_start_monitoring():
             try:
                 time.sleep(2)  # 等待2秒让界面完全加载，从1秒优化为2秒
-                self.log_message("🚀 应用启动，根据配置自动开始监控")
+                self.log_message("应用启动，根据配置自动开始监控")
                 
                 # 直接调用监控切换方法启动监控
                 self.root.after(0, self.toggle_monitoring)
                     
             except Exception as e:
-                self.log_message(f"❌ 自动启动监控发生错误: {str(e)}")
-        
+                self.log_message(f"自动启动监控发生错误: {str(e)}")
+
         threading.Thread(target=auto_start_monitoring, daemon=True).start()
     
     def validate_config(self) -> tuple[bool, str]:
@@ -705,18 +645,17 @@ LOG_FILE=logs/campus_auth.log
                     f.write(env_content)
             except Exception as e:
                 error_msg = f"写入配置文件失败: {e}"
-                self.log_message(f"❌ {error_msg}")
+                self.log_message(f"写入配置文件失败: {e}")
                 messagebox.showerror("错误", error_msg)
                 return
             
-            self.log_message("✅ 配置已保存到.env文件")
+            self.log_message("配置已保存到.env文件")
             messagebox.showinfo("成功", "配置已成功保存到.env文件")
             
         except Exception as e:
             error_msg = f"保存配置失败: {e}"
-            self.log_message(f"❌ {error_msg}")
-            messagebox.showerror("错误", error_msg)
-    
+            self.log_message(f"保存配置失败: {e}")
+
     def load_env_config(self):
         """
         从.env文件加载配置
@@ -959,10 +898,9 @@ LOG_FILE=logs/campus_auth.log
         try:
             # 打开GitHub仓库链接
             webbrowser.open("https://github.com/Misyra/JCU_auto_network")
-            self.log_message("🔗 已打开GitHub仓库页面")
+            self.log_message("已打开GitHub项目页面")
         except Exception as e:
-            self.log_message(f"❌ 打开GitHub页面失败: {e}")
-            messagebox.showerror("错误", f"无法打开GitHub页面: {e}")
+            self.log_message(f"打开GitHub页面失败: {e}")
 
 def main():
     """

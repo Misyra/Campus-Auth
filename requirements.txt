@@ -1,0 +1,29 @@
+# 校园网自动认证工具依赖包
+# 生成时间: 2025-09-24
+# Python版本要求: >=3.10
+
+# 核心依赖
+python-dotenv>=1.0.0    # 环境变量管理，从.env文件加载配置
+playwright>=1.55.0      # 浏览器自动化库，用于校园网登录
+
+# 可选依赖
+pyinstaller>=6.15.0     # 打包工具，用于生成可执行文件（可选）
+
+# 内置模块（不需要安装）
+# tkinter              # GUI界面库（Python内置）
+# asyncio              # 异步编程支持（Python内置）
+# threading            # 多线程支持（Python内置）
+# logging              # 日志系统（Python内置）
+# pathlib              # 路径操作（Python内置）
+# datetime             # 日期时间处理（Python内置）
+# socket               # 网络Socket操作（Python内置）
+# subprocess           # 进程管理（Python内置）
+# argparse             # 命令行参数解析（Python内置）
+# signal               # 信号处理（Python内置）
+# webbrowser           # 浏览器操作（Python内置）
+# typing               # 类型注解（Python内置）
+
+# 注意事项：
+# 1. 安装后需要运行: playwright install 来下载浏览器驱动
+# 2. 推荐使用 uv 包管理器进行依赖管理：uv sync
+# 3. 生产环境建议固定版本号以确保稳定性
