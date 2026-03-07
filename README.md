@@ -52,6 +52,20 @@ uv run app.py
 
 启动后打开 [http://127.0.0.1:50721](http://127.0.0.1:50721)
 
+## 脚本启动（推荐，无需打包）
+
+按平台直接使用项目根目录启动脚本：
+
+- Windows: `启动.bat`
+- macOS: `bash 启动.sh`
+
+脚本会自动完成：
+
+- 准备本地 Python 运行环境（Windows 下载便携版到 `.jcu_python`，macOS 使用本地 venv）
+- 安装 `requirements.txt` 依赖
+- 安装 Playwright 包与 Chromium 内核
+- 启动 Web 控制台
+
 ## CLI 使用
 
 ```bash
@@ -95,24 +109,3 @@ uv run app_cli.py --autostart-disable
 - `APP_PORT`（可选，默认 `50721`）
 
 其余配置可在 Web 控制台直接修改并保存。
-
-## Nuitka 分发（无 Python 环境）
-
-已提供整项目打包方案：
-- 直接打包 `app.py`（后端 + 前端）
-- 不内置 `playwright`，首次启动自动安装并下载 Chromium
-- 内置 `pip/ensurepip`（含 bundled wheel）以支持首次自动安装流程
-- 启动后自动打开 Web UI（默认 `50721`）
-
-构建命令：
-
-```bash
-# macOS
-bash packaging/build_macos.sh
-
-# Windows
-packaging\\build_windows.bat
-```
-
-详细说明见：
-`packaging/README.md`
