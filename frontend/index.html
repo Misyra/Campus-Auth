@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>校园网自动认证控制台</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="icon" type="image/svg+xml" href="/static/black-cat.svg" />
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div id="app" class="page" v-cloak>
+      <div class="bg-shape bg-shape-1"></div>
+      <div class="bg-shape bg-shape-2"></div>
+
+      <header class="hero card">
+        <div>
+          <p class="kicker">Campus Network Auth 2.0</p>
+          <h1>校园网自动认证控制台</h1>
+          <p class="sub">前后端分离架构 · FastAPI + Vue</p>
+        </div>
+        <div class="hero-actions">
+          <span class="status" :class="status.monitoring ? 'on' : 'off'">
+            {{ status.monitoring ? '监控中' : '未运行' }}
+          </span>
+          <button class="btn strong" @click="toggleMonitor" :disabled="busy.monitor">
+            {{ status.monitoring ? '停止监控' : '启动监控' }}
+          </button>
+        </div>
+      </header>
+
+      <main class="grid">
+        <section class="card">
+          <h2>登录配置</h2>
+          <div class="form-grid">
+            <label>
+              账号
+              <input v-model.trim="config.username" type="text" placeholder="学号/账号" />
+            </label>
+            <label>
+              密码
+              <input v-model="config.password" type="password" placeholder="输入密码" />
+            </label>
+            <label>
+              运营商
+              <select v-model="config.carrier">
+                <option>无</option>
+                <option>移动</option>
+                <option>联通</option>
+                <option>电信</option>
+                <option>教育网</option>
+              </select>
+            </label>
+            <label>
+              检测间隔（分钟）
+              <input v-model.number="config.check_interval_minutes" type="number" min="1" max="1440" />
+            </label>
+            <label>
+              暂停开始（小时）
+              <input v-model.number="config.pause_start_hour" type="number" min="0" max="23" />
+            </label>
+            <label>
+              暂停结束（小时）
+              <input v-model.number="config.pause_end_hour" type="number" min="0" max="23" />
+            </label>
+          </div>
+
+          <div class="switches">
+            <label><input type="checkbox" v-model="config.auto_start" /> 启动后自动监控</label>
+            <label><input type="checkbox" v-model="config.headless" /> 无头浏览器</label>
+            <label><input type="checkbox" v-model="config.pause_enabled" /> 启用暂停时段</label>
+          </div>
+
+          <button class="btn" @click="saveConfig" :disabled="busy.save">保存配置</button>
+        </section>
+
+        <section class="card">
+          <h2>运行状态</h2>
+          <div class="stats">
+            <div>
+              <span>运行时长</span>
+              <strong>{{ formatDuration(status.runtime_seconds) }}</strong>
+            </div>
+            <div>
+              <span>检测次数</span>
+              <strong>{{ status.network_check_count }}</strong>
+            </div>
+            <div>
+              <span>登录失败计数</span>
+              <strong>{{ status.login_attempt_count }}</strong>
+            </div>
+            <div>
+              <span>最后检测</span>
+              <strong>{{ status.last_check_time ? status.last_check_time.replace('T', ' ') : '-' }}</strong>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button class="btn" @click="manualLogin" :disabled="busy.action">手动登录</button>
+            <button class="btn" @click="testNetwork" :disabled="busy.action">网络测试</button>
+          </div>
+
+          <h3>开机自启动</h3>
+          <div class="autostart">
+            <p class="muted">
+              状态：{{ autostart.enabled ? '已启用' : '未启用' }} · {{ autostart.platform }} · {{ autostart.method }}
+            </p>
+            <p class="muted">位置：{{ autostart.location || '-' }}</p>
+            <div class="actions">
+              <button class="btn" @click="enableAutostart" :disabled="busy.autostart || autostart.enabled">
+                启用自启动
+              </button>
+              <button class="btn" @click="disableAutostart" :disabled="busy.autostart || !autostart.enabled">
+                关闭自启动
+              </button>
+            </div>
+          </div>
+
+          <h3>实时日志</h3>
+          <div class="logs">
+            <p v-if="!logs.length" class="muted">暂无日志</p>
+            <p v-for="item in logs" :key="item.timestamp + item.message">
+              <span class="log-time">{{ item.timestamp }}</span>
+              <span>{{ item.message }}</span>
+            </p>
+          </div>
+        </section>
+      </main>
+
+      <p v-if="toast.message" class="toast" :class="toast.success ? 'ok' : 'err'">
+        {{ toast.message }}
+      </p>
+    </div>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.8.4/dist/axios.min.js"></script>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

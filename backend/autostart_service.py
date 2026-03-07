@@ -1,0 +1,194 @@
+from __future__ import annotations
+
+import os
+import platform
+import subprocess
+from pathlib import Path
+
+
+class AutoStartService:
+    """管理开机自启动（按平台实现）。"""
+
+    def __init__(self, project_root: Path):
+        self.project_root = project_root
+        self.platform_name = platform.system().lower()
+        self.service_name = "jcu-auto-network"
+
+    def _start_command(self) -> str:
+        packaged_executable = os.getenv("JCU_START_EXECUTABLE", "").strip()
+        if packaged_executable:
+            return f"JCU_AUTO_OPEN_BROWSER=false \"{packaged_executable}\""
+        return f"cd '{self.project_root}' && uv run app.py"
+
+    def _run(self, cmd: list[str]) -> tuple[bool, str]:
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            if proc.returncode == 0:
+                return True, (proc.stdout or "").strip()
+            return False, (proc.stderr or proc.stdout or "").strip()
+        except Exception as exc:
+            return False, str(exc)
+
+    def _mac_plist_path(self) -> Path:
+        return Path.home() / "Library" / "LaunchAgents" / f"{self.service_name}.plist"
+
+    def _linux_service_path(self) -> Path:
+        return Path.home() / ".config" / "systemd" / "user" / f"{self.service_name}.service"
+
+    def _windows_startup_bat(self) -> Path:
+        appdata = os.getenv("APPDATA", "")
+        return Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / f"{self.service_name}.bat"
+
+    def status(self) -> dict[str, str | bool]:
+        if self.platform_name == "darwin":
+            target = self._mac_plist_path()
+            return {
+                "platform": "macOS",
+                "enabled": target.exists(),
+                "method": "launchd",
+                "location": str(target),
+            }
+
+        if self.platform_name == "linux":
+            target = self._linux_service_path()
+            return {
+                "platform": "Linux",
+                "enabled": target.exists(),
+                "method": "systemd --user",
+                "location": str(target),
+            }
+
+        if self.platform_name.startswith("win"):
+            target = self._windows_startup_bat()
+            return {
+                "platform": "Windows",
+                "enabled": target.exists(),
+                "method": "Startup folder",
+                "location": str(target),
+            }
+
+        return {
+            "platform": platform.system(),
+            "enabled": False,
+            "method": "unsupported",
+            "location": "",
+        }
+
+    def enable(self) -> tuple[bool, str]:
+        if self.platform_name == "darwin":
+            return self._enable_macos()
+        if self.platform_name == "linux":
+            return self._enable_linux()
+        if self.platform_name.startswith("win"):
+            return self._enable_windows()
+        return False, "当前平台不支持自动配置开机自启动"
+
+    def disable(self) -> tuple[bool, str]:
+        if self.platform_name == "darwin":
+            return self._disable_macos()
+        if self.platform_name == "linux":
+            return self._disable_linux()
+        if self.platform_name.startswith("win"):
+            return self._disable_windows()
+        return False, "当前平台不支持自动配置开机自启动"
+
+    def _enable_macos(self) -> tuple[bool, str]:
+        plist_path = self._mac_plist_path()
+        plist_path.parent.mkdir(parents=True, exist_ok=True)
+
+        log_dir = self.project_root / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        content = f"""<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
+<plist version=\"1.0\">
+<dict>
+    <key>Label</key>
+    <string>{self.service_name}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string>
+        <string>-lc</string>
+        <string>{self._start_command()}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>{log_dir / 'autostart.out.log'}</string>
+    <key>StandardErrorPath</key>
+    <string>{log_dir / 'autostart.err.log'}</string>
+</dict>
+</plist>
+"""
+        plist_path.write_text(content, encoding="utf-8")
+
+        self._run(["launchctl", "unload", str(plist_path)])
+        ok, msg = self._run(["launchctl", "load", str(plist_path)])
+        if ok:
+            return True, f"已启用 macOS 开机自启动: {plist_path}"
+        return False, f"已写入配置但加载失败: {msg}"
+
+    def _disable_macos(self) -> tuple[bool, str]:
+        plist_path = self._mac_plist_path()
+        if plist_path.exists():
+            self._run(["launchctl", "unload", str(plist_path)])
+            plist_path.unlink(missing_ok=True)
+        return True, "已关闭 macOS 开机自启动"
+
+    def _enable_linux(self) -> tuple[bool, str]:
+        service_path = self._linux_service_path()
+        service_path.parent.mkdir(parents=True, exist_ok=True)
+
+        content = f"""[Unit]
+Description=JCU Auto Network Web Console
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory={self.project_root}
+ExecStart=/bin/bash -lc \"{self._start_command()}\"
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+"""
+        service_path.write_text(content, encoding="utf-8")
+
+        self._run(["systemctl", "--user", "daemon-reload"])
+        self._run(["systemctl", "--user", "enable", "--now", self.service_name])
+        return True, f"已启用 Linux 开机自启动: {service_path}"
+
+    def _disable_linux(self) -> tuple[bool, str]:
+        service_path = self._linux_service_path()
+        self._run(["systemctl", "--user", "disable", "--now", self.service_name])
+        service_path.unlink(missing_ok=True)
+        self._run(["systemctl", "--user", "daemon-reload"])
+        return True, "已关闭 Linux 开机自启动"
+
+    def _enable_windows(self) -> tuple[bool, str]:
+        startup_bat = self._windows_startup_bat()
+        startup_bat.parent.mkdir(parents=True, exist_ok=True)
+
+        packaged_executable = os.getenv("JCU_START_EXECUTABLE", "").strip()
+        if packaged_executable:
+            content = (
+                "@echo off\n"
+                "set JCU_AUTO_OPEN_BROWSER=false\n"
+                f"\"{packaged_executable}\"\n"
+            )
+        else:
+            content = (
+                "@echo off\n"
+                f"cd /d \"{self.project_root}\"\n"
+                "uv run app.py\n"
+            )
+        startup_bat.write_text(content, encoding="utf-8")
+        return True, f"已启用 Windows 开机自启动: {startup_bat}"
+
+    def _disable_windows(self) -> tuple[bool, str]:
+        startup_bat = self._windows_startup_bat()
+        startup_bat.unlink(missing_ok=True)
+        return True, "已关闭 Windows 开机自启动"

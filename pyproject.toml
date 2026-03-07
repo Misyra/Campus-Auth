@@ -1,13 +1,23 @@
 [project]
 name = "campus-network-auth"
-version = "1.0.0"
-description = "校园网自动认证工具，支持GUI和命令行两种使用方式"
+version = "2.0.0"
+description = "校园网自动认证工具，前后端分离（FastAPI + Web UI）"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "python-dotenv>=1.0.0",
     "playwright>=1.55.0",
-    "pyinstaller>=6.15.0",
+    "fastapi>=0.116.1",
+    "uvicorn>=0.35.0",
+    "pydantic>=2.11.7",
+    "httpx>=0.28.1",
+]
+
+[project.optional-dependencies]
+build = [
+    "nuitka>=2.5.7",
+    "ordered-set>=4.1.0",
+    "zstandard>=0.23.0",
 ]
 
 [[tool.uv.index]]

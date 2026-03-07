@@ -9,8 +9,18 @@ import logging
 import logging.handlers
 import os
 import random
+from pathlib import Path
 from typing import Dict, Any, Tuple, Type, Optional
-from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+from dotenv import load_dotenv
+
+try:
+    from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+except Exception:
+    class PlaywrightTimeoutError(Exception):
+        """Fallback timeout error when playwright is not installed yet."""
+
+        pass
 
 
 class ExceptionHandler:
@@ -225,7 +235,7 @@ class LoginAttemptHandler:
         """使用认证类执行登录（延迟导入）"""
         try:
             # 延迟导入避免循环依赖
-            from campus_login import EnhancedCampusNetworkAuth
+            from .campus_login import EnhancedCampusNetworkAuth
             
             # 创建登录实例
             auth = EnhancedCampusNetworkAuth(self.config)
@@ -400,6 +410,12 @@ class ConfigLoader:
     @staticmethod
     def load_config_from_env() -> dict:
         """从环境变量加载配置"""
+        env_override = os.getenv("JCU_ENV_FILE", "").strip()
+        if env_override:
+            load_dotenv(Path(env_override), override=True)
+        else:
+            load_dotenv(Path.cwd() / ".env", override=False)
+
         config = ConfigLoader._load_basic_config()
         config["browser_settings"] = ConfigLoader._load_browser_config()
         config.update(ConfigLoader._load_other_configs())
