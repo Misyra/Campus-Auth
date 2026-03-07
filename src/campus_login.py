@@ -525,12 +525,12 @@ async def main():
     print(f"🌐 认证URL: {config['auth_url']}\n")
 
     # 执行认证
-    success = await auth.authenticate()
+    success, message = await auth.authenticate()
 
     if success:
         print("\n🎉 校园网认证成功！")
     else:
-        print("\n❌ 校园网认证失败，请检查配置、网络连接或查看日志")
+        print(f"\n❌ 校园网认证失败: {message}")
 
 
 if __name__ == "__main__":
