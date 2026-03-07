@@ -18,9 +18,7 @@ echo "开始构建 macOS 可执行程序..."
   --remove-output \
   --output-dir=dist \
   --output-filename=jcu-auto-network \
-  --include-package=pip \
   --include-package=ensurepip \
-  --include-package-data=pip \
   --include-package-data=ensurepip \
   --nofollow-import-to=playwright \
   --nofollow-import-to=playwright.async_api \
