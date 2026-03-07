@@ -10,9 +10,9 @@ cd /d "%ROOT%"
 set "PY_DIR=%ROOT%\.jcu_python"
 set "PY_EXE=%PY_DIR%\python.exe"
 set "PY_ZIP=%PY_DIR%\python-embed.zip"
-set "PY_VER=3.10.18"
+set "PY_VER=3.10.11"
 set "PY_ARCH=amd64"
-set "PIP_INDEX_URL=https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
+set "PIP_INDEX_URL=https://mirrors.tuna.tsinghua.edu.cn/pypi/simple"
 if not defined PLAYWRIGHT_DOWNLOAD_HOST set "PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright"
 
 echo [1/6] Preparing portable Python...

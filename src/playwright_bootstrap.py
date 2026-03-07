@@ -23,7 +23,7 @@ from typing import Callable
 _BOOTSTRAP_LOCK = threading.Lock()
 _BOOTSTRAP_DONE = False
 
-_DEFAULT_PIP_INDEX = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
+_DEFAULT_PIP_INDEX = "https://mirrors.tuna.tsinghua.edu.cn/pypi/simple"
 _DEFAULT_PLAYWRIGHT_HOST = "https://npmmirror.com/mirrors/playwright"
 _DEFAULT_PORTABLE_PYTHON = "3.10.18"
 

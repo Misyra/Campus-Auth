@@ -7,7 +7,7 @@ cd "$ROOT_DIR"
 PY_DIR="$ROOT_DIR/.jcu_python"
 PY_EXE="$PY_DIR/bin/python3"
 
-export PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple}"
+export PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.tuna.tsinghua.edu.cn/pypi/simple}"
 export PLAYWRIGHT_DOWNLOAD_HOST="${PLAYWRIGHT_DOWNLOAD_HOST:-https://npmmirror.com/mirrors/playwright}"
 export JCU_PROJECT_ROOT="$ROOT_DIR"
 export JCU_ENV_FILE="$ROOT_DIR/.env"
