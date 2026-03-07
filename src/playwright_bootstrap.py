@@ -186,6 +186,51 @@ def _ensure_pip_with_portable_python(
     if _run([str(python_exe), "-c", "import pip"]).returncode == 0:
         return True
 
+    pip_pyz_urls = []
+    custom_pip_pyz = os.getenv("JCU_PIP_PYZ_URL", "").strip()
+    if custom_pip_pyz:
+        pip_pyz_urls.append(custom_pip_pyz)
+    pip_pyz_urls.append("https://bootstrap.pypa.io/pip/pip.pyz")
+
+    pip_pyz_path = _portable_python_dir() / "pip.pyz"
+    last_error = ""
+    for url in pip_pyz_urls:
+        try:
+            if log:
+                log(f"正在下载 pip.pyz: {url}")
+            _download_to_file(url, pip_pyz_path)
+            break
+        except Exception as exc:
+            last_error = str(exc)
+    else:
+        pip_pyz_path = None
+
+    if pip_pyz_path and pip_pyz_path.exists():
+        env = os.environ.copy()
+        env.setdefault("PIP_INDEX_URL", _DEFAULT_PIP_INDEX)
+        result = _run(
+            [
+                str(python_exe),
+                str(pip_pyz_path),
+                "install",
+                "--upgrade",
+                "--disable-pip-version-check",
+                "--no-warn-script-location",
+                "--index-url",
+                env["PIP_INDEX_URL"],
+                "pip",
+                "setuptools",
+                "wheel",
+            ],
+            env=env,
+        )
+        pip_pyz_path.unlink(missing_ok=True)
+        if result.returncode == 0 and _run([str(python_exe), "-c", "import pip"]).returncode == 0:
+            return True
+        if log:
+            msg = _tail(f"{result.stdout}\n{result.stderr}")
+            log(f"pip.pyz 初始化 pip 失败: {msg or 'unknown error'}")
+
     get_pip_urls = []
     custom_get_pip_url = os.getenv("JCU_GET_PIP_URL", "").strip()
     if custom_get_pip_url:

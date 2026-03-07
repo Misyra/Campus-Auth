@@ -64,6 +64,26 @@ echo [2/6] Ensuring pip...
 if errorlevel 1 (
   powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "$ErrorActionPreference='Stop';" ^
+    "$u='https://bootstrap.pypa.io/pip/pip.pyz';" ^
+    "Invoke-WebRequest -UseBasicParsing -Uri $u -OutFile '%PY_DIR%\pip.pyz'" >nul 2>nul
+  if errorlevel 1 (
+    echo Failed to download pip.pyz.
+    exit /b 1
+  )
+
+  "%PY_EXE%" "%PY_DIR%\pip.pyz" install --upgrade --disable-pip-version-check --no-warn-script-location --index-url "%PIP_INDEX_URL%" pip setuptools wheel
+  if errorlevel 1 (
+    echo Failed to bootstrap pip with pip.pyz.
+    exit /b 1
+  )
+
+  del /f /q "%PY_DIR%\pip.pyz" >nul 2>nul
+
+  "%PY_EXE%" -c "import pip" >nul 2>nul
+  if not errorlevel 1 goto pip_ready
+
+  powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "$ErrorActionPreference='Stop';" ^
     "$u='https://bootstrap.pypa.io/pip/3.10/get-pip.py';" ^
     "Invoke-WebRequest -UseBasicParsing -Uri $u -OutFile '%PY_DIR%\get-pip.py'" >nul 2>nul
   if errorlevel 1 (
@@ -83,6 +103,7 @@ if errorlevel 1 (
     exit /b 1
   )
 )
+:pip_ready
 
 echo [3/6] Installing Python dependencies...
 "%PY_EXE%" -m pip install --upgrade --disable-pip-version-check --no-warn-script-location --index-url "%PIP_INDEX_URL%" -r "%ROOT%\requirements.txt"
