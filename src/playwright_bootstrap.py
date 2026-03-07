@@ -14,6 +14,7 @@ import site
 import sys
 import subprocess
 import threading
+from pathlib import Path
 from typing import Callable
 
 
@@ -46,6 +47,56 @@ def _has_chromium() -> bool:
     return result.returncode == 0 and "chromium-" in output
 
 
+def _can_import_pip() -> bool:
+    try:
+        import pip  # noqa: F401
+
+        return True
+    except Exception:
+        return False
+
+
+def _load_pip_from_ensurepip_bundled(log: Callable[[str], None] | None = None) -> bool:
+    try:
+        import ensurepip
+    except Exception as exc:
+        if log:
+            log(f"无法导入 ensurepip: {exc}")
+        return False
+
+    bundled_dir = Path(ensurepip.__file__).resolve().parent / "_bundled"
+    if not bundled_dir.exists():
+        if log:
+            log(f"ensurepip bundled 目录不存在: {bundled_dir}")
+        return False
+
+    # 直接从 ensurepip 自带 wheel 加载 pip，避免 frozen 环境下 ensurepip.bootstrap 子进程问题。
+    wheel_candidates = []
+    wheel_candidates.extend(sorted(bundled_dir.glob("pip-*.whl")))
+    wheel_candidates.extend(sorted(bundled_dir.glob("setuptools-*.whl")))
+    wheel_candidates.extend(sorted(bundled_dir.glob("wheel-*.whl")))
+
+    if not wheel_candidates:
+        if log:
+            log(f"未找到 ensurepip bundled wheel 文件: {bundled_dir}")
+        return False
+
+    for wheel_path in wheel_candidates:
+        wheel_str = str(wheel_path)
+        if wheel_str not in sys.path:
+            sys.path.insert(0, wheel_str)
+
+    importlib.invalidate_caches()
+    if _can_import_pip():
+        if log:
+            log("已从 ensurepip._bundled 加载 pip 组件")
+        return True
+
+    if log:
+        log("从 ensurepip._bundled 加载 pip 失败")
+    return False
+
+
 def _ensure_playwright_package(log: Callable[[str], None] | None = None) -> bool:
     user_site = site.getusersitepackages()
     if user_site and user_site not in sys.path:
@@ -59,14 +110,27 @@ def _ensure_playwright_package(log: Callable[[str], None] | None = None) -> bool
         pass
 
     try:
-        try:
-            import pip  # noqa: F401
-        except Exception:
-            import ensurepip
-
+        if not _can_import_pip():
             if log:
-                log("检测到未安装 pip，正在初始化 pip 组件...")
-            ensurepip.bootstrap(upgrade=True, user=True)
+                log("检测到未安装 pip，正在从 ensurepip bundled 组件初始化...")
+
+            if not _load_pip_from_ensurepip_bundled(log):
+                # 兜底再尝试 ensurepip.bootstrap；在部分环境可成功。
+                try:
+                    import ensurepip
+
+                    if log:
+                        log("正在尝试 ensurepip.bootstrap 方式初始化 pip...")
+                    ensurepip.bootstrap(upgrade=True, user=True)
+                except Exception as exc:
+                    if log:
+                        log(f"ensurepip.bootstrap 初始化失败: {exc}")
+                    return False
+
+            if not _can_import_pip():
+                if log:
+                    log("pip 初始化完成但仍无法导入 pip 模块")
+                return False
 
         user_site = site.getusersitepackages()
         if user_site and user_site not in sys.path:
@@ -104,7 +168,7 @@ def _ensure_playwright_package(log: Callable[[str], None] | None = None) -> bool
     except Exception as exc:
         if log:
             log(f"playwright 包安装异常: {exc}")
-            log("请使用最新打包脚本重建：需包含 pip/ensurepip 及 ensurepip._bundled 数据文件")
+            log("请使用最新打包脚本重建：需包含 ensurepip 及 ensurepip._bundled 数据文件")
         return False
 
 
