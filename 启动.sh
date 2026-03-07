@@ -4,26 +4,31 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
-PY_DIR="$ROOT_DIR/.jcu_python"
-PY_EXE="$PY_DIR/bin/python3"
-
-export PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.tuna.tsinghua.edu.cn/pypi/simple}"
+export UV_INDEX_URL="${UV_INDEX_URL:-https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple}"
 export PLAYWRIGHT_DOWNLOAD_HOST="${PLAYWRIGHT_DOWNLOAD_HOST:-https://npmmirror.com/mirrors/playwright}"
 export JCU_PROJECT_ROOT="$ROOT_DIR"
 export JCU_ENV_FILE="$ROOT_DIR/.env"
 export JCU_AUTO_OPEN_BROWSER="${JCU_AUTO_OPEN_BROWSER:-true}"
 
-echo "[1/5] Preparing local Python runtime..."
-if [[ ! -x "$PY_EXE" ]]; then
-  python3 -m venv "$PY_DIR"
+if command -v uv >/dev/null 2>&1; then
+  UV_BIN="uv"
+  echo "[1/4] Using uv from PATH..."
+else
+  echo "[1/4] Installing uv..."
+  export UV_UNMANAGED_INSTALL="$ROOT_DIR/.uv"
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  UV_BIN="$UV_UNMANAGED_INSTALL/bin/uv"
+  if [[ ! -x "$UV_BIN" ]]; then
+    echo "Failed to install uv."
+    exit 1
+  fi
 fi
 
-echo "[2/5] Installing Python dependencies..."
-"$PY_EXE" -m pip install --upgrade pip --disable-pip-version-check --no-warn-script-location
-"$PY_EXE" -m pip install --upgrade --disable-pip-version-check --no-warn-script-location -r "$ROOT_DIR/requirements.txt"
+echo "[2/4] Syncing dependencies with mirror..."
+"$UV_BIN" sync
 
-echo "[3/5] Installing Playwright Chromium..."
-"$PY_EXE" -m playwright install chromium
+echo "[3/4] Installing Playwright Chromium..."
+"$UV_BIN" run playwright install chromium
 
-echo "[4/5] Starting web app..."
-exec "$PY_EXE" "$ROOT_DIR/app.py"
+echo "[4/4] Starting web app..."
+exec "$UV_BIN" run app.py
