@@ -59,9 +59,15 @@ def _ensure_playwright_package(log: Callable[[str], None] | None = None) -> bool
         pass
 
     try:
-        import ensurepip
+        try:
+            import pip  # noqa: F401
+        except Exception:
+            import ensurepip
 
-        ensurepip.bootstrap(upgrade=True, user=True)
+            if log:
+                log("检测到未安装 pip，正在初始化 pip 组件...")
+            ensurepip.bootstrap(upgrade=True, user=True)
+
         user_site = site.getusersitepackages()
         if user_site and user_site not in sys.path:
             sys.path.insert(0, user_site)
@@ -98,6 +104,7 @@ def _ensure_playwright_package(log: Callable[[str], None] | None = None) -> bool
     except Exception as exc:
         if log:
             log(f"playwright 包安装异常: {exc}")
+            log("请使用最新打包脚本重建：需包含 pip/ensurepip 及 ensurepip._bundled 数据文件")
         return False
 
 

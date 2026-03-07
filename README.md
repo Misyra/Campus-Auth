@@ -101,6 +101,7 @@ uv run app_cli.py --autostart-disable
 已提供整项目打包方案：
 - 直接打包 `app.py`（后端 + 前端）
 - 不内置 `playwright`，首次启动自动安装并下载 Chromium
+- 内置 `pip/ensurepip` 以支持首次自动安装流程
 - 启动后自动打开 Web UI（默认 `50721`）
 
 构建命令：
