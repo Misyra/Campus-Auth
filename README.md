@@ -61,9 +61,9 @@ uv run app.py
 
 脚本会自动完成：
 
-- 准备本地 Python 运行环境（Windows 下载便携版到 `.jcu_python`，macOS 使用本地 venv）
-- 安装 `requirements.txt` 依赖
-- 安装 Playwright 包与 Chromium 内核
+- 自动安装/复用 `uv`（未安装时下载到本机）
+- 使用镜像源执行 `uv sync`
+- 执行 `uv run playwright install chromium`
 - 启动 Web 控制台
 
 ## CLI 使用
