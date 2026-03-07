@@ -7,7 +7,7 @@
 - 输出可执行程序（无需用户自行安装 Python）
 - 支持开机自启动（通过 Web 控制台或 CLI 启用）
 - 不打包 Playwright，首次启动后自动下载安装 Playwright + Chromium
-- 打包内置 `ensurepip`（含 `_bundled`），确保首次自动安装可用
+- 打包内置 `pip/ensurepip`（含 `_bundled`），确保首次自动安装可用
 
 ## 目录约定
 

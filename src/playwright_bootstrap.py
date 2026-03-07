@@ -168,7 +168,7 @@ def _ensure_playwright_package(log: Callable[[str], None] | None = None) -> bool
     except Exception as exc:
         if log:
             log(f"playwright 包安装异常: {exc}")
-            log("请使用最新打包脚本重建：需包含 ensurepip 及 ensurepip._bundled 数据文件")
+            log("请使用最新打包脚本重建：需包含 pip/ensurepip 及 ensurepip._bundled 数据文件")
         return False
 
 

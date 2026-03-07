@@ -11,6 +11,12 @@ if [[ ! -x "$PYTHON_BIN" ]]; then
   exit 1
 fi
 
+# Ensure pip exists in build interpreter.
+if ! "$PYTHON_BIN" -c "import importlib.util,sys;sys.exit(0 if importlib.util.find_spec('pip') else 1)"; then
+  echo "检测到构建环境缺少 pip，正在用 ensurepip 初始化..."
+  "$PYTHON_BIN" -m ensurepip --upgrade
+fi
+
 echo "开始构建 macOS 可执行程序..."
 "$PYTHON_BIN" -m nuitka \
   --standalone \
@@ -18,8 +24,11 @@ echo "开始构建 macOS 可执行程序..."
   --remove-output \
   --output-dir=dist \
   --output-filename=jcu-auto-network \
+  --include-package=pip \
+  --include-package-data=pip \
   --include-package=ensurepip \
   --include-package-data=ensurepip \
+  --include-module=optparse \
   --nofollow-import-to=playwright \
   --nofollow-import-to=playwright.async_api \
   --nofollow-import-to=playwright.sync_api \
