@@ -107,11 +107,11 @@ uv run app_cli.py --autostart-disable
 
 ```bash
 # macOS
-./packaging/build_macos.sh
+bash packaging/build_macos.sh
 
 # Windows
 packaging\\build_windows.bat
 ```
 
 详细说明见：
-[packaging/README.md](/Users/misyra/JCU_auto_network/packaging/README.md)
+`packaging/README.md`
