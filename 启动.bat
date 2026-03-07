@@ -64,17 +64,17 @@ echo [2/6] Ensuring pip...
 if errorlevel 1 (
   powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "$ErrorActionPreference='Stop';" ^
-    "$u='https://mirrors.aliyun.com/pypi/get-pip.py';" ^
+    "$u='https://bootstrap.pypa.io/pip/3.10/get-pip.py';" ^
     "Invoke-WebRequest -UseBasicParsing -Uri $u -OutFile '%PY_DIR%\get-pip.py'" >nul 2>nul
   if errorlevel 1 (
     powershell -NoProfile -ExecutionPolicy Bypass -Command ^
       "$ErrorActionPreference='Stop';" ^
       "$u='https://bootstrap.pypa.io/get-pip.py';" ^
       "Invoke-WebRequest -UseBasicParsing -Uri $u -OutFile '%PY_DIR%\get-pip.py'" >nul 2>nul
-    if errorlevel 1 (
-      echo Failed to download get-pip.py.
-      exit /b 1
-    )
+  )
+  if errorlevel 1 (
+    echo Failed to download get-pip.py from bootstrap.pypa.io.
+    exit /b 1
   )
 
   "%PY_EXE%" "%PY_DIR%\get-pip.py" --disable-pip-version-check --no-warn-script-location

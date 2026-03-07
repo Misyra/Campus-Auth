@@ -192,7 +192,7 @@ def _ensure_pip_with_portable_python(
         get_pip_urls.append(custom_get_pip_url)
     get_pip_urls.extend(
         [
-            "https://mirrors.aliyun.com/pypi/get-pip.py",
+            "https://bootstrap.pypa.io/pip/3.10/get-pip.py",
             "https://bootstrap.pypa.io/get-pip.py",
         ]
     )
