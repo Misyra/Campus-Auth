@@ -14,7 +14,7 @@ from playwright.async_api import (
     Page,
     TimeoutError as PlaywrightTimeoutError,
 )
-from utils import ConfigLoader, LoggerSetup, BrowserContextManager, ExceptionHandler, SimpleRetryHandler
+from .utils import ConfigLoader, LoggerSetup, BrowserContextManager, ExceptionHandler, SimpleRetryHandler
 
 # 加载环境变量
 load_dotenv()
