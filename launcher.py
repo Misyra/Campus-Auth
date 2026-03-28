@@ -15,7 +15,7 @@ else:
     PROJECT_ROOT = Path(__file__).resolve().parent
 
 ENV_DIR = PROJECT_ROOT / "environment"
-PYTHON_DIR = ENV_DIR / "python"
+PYTHON_DIR = ENV_DIR
 PYTHON_EXE = PYTHON_DIR / "python.exe"
 PIP_EXE = PYTHON_DIR / "Scripts" / "pip.exe"
 REQUIREMENTS_TXT = PROJECT_ROOT / "requirements.txt"
