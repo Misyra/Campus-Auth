@@ -137,9 +137,7 @@ def install_pip():
 
     # get-pip.py 镜像源列表
     get_pip_urls = [
-        "https://mirrors.tuna.tsinghua.edu.cn/pypi/get-pip.py",
         "https://mirrors.aliyun.com/pypi/get-pip.py",
-        "https://pypi.tuna.tsinghua.edu.cn/simple/pip/",
         "https://bootstrap.pypa.io/get-pip.py",
     ]
 
@@ -152,8 +150,11 @@ def install_pip():
         urllib.request.urlretrieve(get_pip_url, tmp_path)
         log("运行 get-pip.py...")
 
+        pip_mirror = "https://mirrors.aliyun.com/pypi/simple"
+        pip_host = "mirrors.aliyun.com"
+
         proc = subprocess.Popen(
-            [str(PYTHON_EXE), tmp_path],
+            [str(PYTHON_EXE), tmp_path, "-i", pip_mirror, "--trusted-host", pip_host],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
