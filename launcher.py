@@ -260,8 +260,16 @@ def main():
         download_python()
 
     log("检查 pip...")
-    if not PIP_EXE.exists():
+    pip_works = subprocess.run(
+        [str(PYTHON_EXE), "-m", "pip", "--version"],
+        capture_output=True, text=True,
+    ).returncode == 0
+    
+    if not pip_works:
+        log("pip 不可用，重新安装...")
         install_pip()
+    else:
+        log("pip 已可用")
 
     log("检查依赖...")
     deps = ["dotenv", "playwright", "fastapi"]
