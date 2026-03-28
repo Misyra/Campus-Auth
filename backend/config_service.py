@@ -42,6 +42,8 @@ def load_ui_config() -> MonitorConfigPayload:
         pause_enabled=bool(pause_config.get("enabled", True)),
         pause_start_hour=int(pause_config.get("start_hour", 0)),
         pause_end_hour=int(pause_config.get("end_hour", 6)),
+        access_log=bool(config.get("access_log", False)),
+        minimize_to_tray=bool(config.get("minimize_to_tray", False)),
     )
 
 
@@ -64,6 +66,9 @@ def build_runtime_config(payload: MonitorConfigPayload) -> dict[str, Any]:
     monitor = base.setdefault("monitor", {})
     monitor["interval"] = payload.check_interval_minutes * 60
 
+    base["access_log"] = payload.access_log
+    base["minimize_to_tray"] = payload.minimize_to_tray
+
     return base
 
 
@@ -80,6 +85,7 @@ BROWSER_TIMEOUT=8000
 BROWSER_LOW_RESOURCE_MODE=true
 
 # 网络检测配置
+APP_PORT=50721
 MONITOR_INTERVAL={payload.check_interval_minutes * 60}
 AUTO_START_MONITORING={str(payload.auto_start).lower()}
 PING_TARGETS=8.8.8.8,114.114.114.114,baidu.com
@@ -97,5 +103,11 @@ PAUSE_LOGIN_END_HOUR={payload.pause_end_hour}
 LOG_LEVEL=INFO
 LOG_FORMAT=%(asctime)s - %(levelname)s - %(message)s
 LOG_FILE=logs/campus_auth.log
+
+# HTTP请求日志（控制台是否显示API请求）
+UVICORN_ACCESS_LOG={str(payload.access_log).lower()}
+
+# 系统托盘配置
+MINIMIZE_TO_TRAY={str(payload.minimize_to_tray).lower()}
 """
     env_path.write_text(env_content, encoding="utf-8")

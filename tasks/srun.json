@@ -1,0 +1,72 @@
+{
+  "name": "深澜认证",
+  "description": "深澜(Srun)校园网认证流程",
+  "version": "1.0",
+  "author": "Community",
+  "url": "http://172.29.0.2",
+  "variables": {
+    "username": "{{CAMPUS_USERNAME}}",
+    "password": "{{CAMPUS_PASSWORD}}",
+    "isp": "{{CAMPUS_ISP}}"
+  },
+  "timeout": 30000,
+  "steps": [
+    {
+      "id": "navigate",
+      "type": "navigate",
+      "url": "{{url}}",
+      "description": "打开认证页面",
+      "wait_until": "networkidle"
+    },
+    {
+      "id": "input_username",
+      "type": "input",
+      "selector": "#username",
+      "value": "{{username}}{{isp}}",
+      "clear": true,
+      "description": "输入用户名（含运营商后缀）"
+    },
+    {
+      "id": "input_password",
+      "type": "input",
+      "selector": "#password",
+      "value": "{{password}}",
+      "clear": true,
+      "description": "输入密码"
+    },
+    {
+      "id": "click_login",
+      "type": "click",
+      "selector": "#login, .login-btn",
+      "description": "点击登录按钮"
+    },
+    {
+      "id": "wait_result",
+      "type": "wait",
+      "selector": ".result, #result_msg, .success, .error",
+      "timeout": 10000,
+      "description": "等待登录结果"
+    },
+    {
+      "id": "check_success",
+      "type": "eval",
+      "script": "document.body.innerText.includes('登录成功') || document.body.innerText.includes('认证成功')",
+      "store_as": "login_success",
+      "description": "检查是否登录成功"
+    }
+  ],
+  "success_conditions": [
+    {
+      "type": "variable",
+      "variable": "login_success",
+      "value": true
+    }
+  ],
+  "on_success": {
+    "message": "深澜认证成功"
+  },
+  "on_failure": {
+    "message": "深澜认证失败",
+    "screenshot": true
+  }
+}

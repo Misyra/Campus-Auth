@@ -1,0 +1,72 @@
+{
+  "name": "默认校园网登录",
+  "description": "标准校园网认证流程",
+  "version": "1.0",
+  "author": "System",
+  "url": "http://172.29.0.2",
+  "variables": {
+    "username": "{{CAMPUS_USERNAME}}",
+    "password": "{{CAMPUS_PASSWORD}}",
+    "isp": "{{CAMPUS_ISP}}"
+  },
+  "timeout": 30000,
+  "steps": [
+    {
+      "id": "navigate",
+      "type": "navigate",
+      "url": "{{url}}",
+      "description": "打开登录页面",
+      "wait_until": "networkidle"
+    },
+    {
+      "id": "input_username",
+      "type": "input",
+      "selector": "#username, input[name='username'], input[name='user'], input[type='text']:first-of-type",
+      "value": "{{username}}{{isp}}",
+      "clear": true,
+      "description": "输入用户名（含运营商后缀）"
+    },
+    {
+      "id": "input_password",
+      "type": "input",
+      "selector": "#password, input[name='password'], input[name='passwd'], input[type='password']",
+      "value": "{{password}}",
+      "clear": true,
+      "description": "输入密码"
+    },
+    {
+      "id": "click_login",
+      "type": "click",
+      "selector": "#login, button[type='submit'], input[type='submit'], .login-btn, button:has-text('登录')",
+      "description": "点击登录按钮"
+    },
+    {
+      "id": "wait_result",
+      "type": "wait",
+      "selector": ".success, .error, #success, #error, [class*='success'], [class*='error'], [class*='fail']",
+      "timeout": 10000,
+      "description": "等待登录结果"
+    },
+    {
+      "id": "check_result",
+      "type": "eval",
+      "script": "document.body.innerText.includes('成功') || document.body.innerText.includes('success') || document.title.includes('成功')",
+      "store_as": "login_success",
+      "description": "检查是否登录成功"
+    }
+  ],
+  "success_conditions": [
+    {
+      "type": "variable",
+      "variable": "login_success",
+      "value": true
+    }
+  ],
+  "on_success": {
+    "message": "登录成功"
+  },
+  "on_failure": {
+    "message": "登录失败，请检查账号密码",
+    "screenshot": true
+  }
+}

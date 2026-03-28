@@ -1,0 +1,57 @@
+{
+  "name": "锐捷认证",
+  "description": "锐捷校园网认证流程",
+  "version": "1.0",
+  "author": "Community",
+  "url": "http://172.29.0.2",
+  "variables": {
+    "username": "{{CAMPUS_USERNAME}}",
+    "password": "{{CAMPUS_PASSWORD}}"
+  },
+  "timeout": 30000,
+  "steps": [
+    {
+      "id": "navigate",
+      "type": "navigate",
+      "url": "{{url}}",
+      "description": "打开认证页面",
+      "wait_until": "networkidle"
+    },
+    {
+      "id": "input_username",
+      "type": "input",
+      "selector": "#username",
+      "value": "{{username}}",
+      "clear": true,
+      "description": "输入用户名"
+    },
+    {
+      "id": "input_password",
+      "type": "input",
+      "selector": "#password",
+      "value": "{{password}}",
+      "clear": true,
+      "description": "输入密码"
+    },
+    {
+      "id": "click_login",
+      "type": "click",
+      "selector": "#login",
+      "description": "点击登录按钮"
+    },
+    {
+      "id": "wait_success",
+      "type": "wait",
+      "selector": ".success, #success_msg",
+      "timeout": 10000,
+      "description": "等待登录成功"
+    }
+  ],
+  "on_success": {
+    "message": "锐捷认证成功"
+  },
+  "on_failure": {
+    "message": "锐捷认证失败",
+    "screenshot": true
+  }
+}

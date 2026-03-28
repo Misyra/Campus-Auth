@@ -12,13 +12,16 @@ class AutoStartService:
     def __init__(self, project_root: Path):
         self.project_root = project_root
         self.platform_name = platform.system().lower()
-        self.service_name = "jcu-auto-network"
+        self.service_name = "campus-auth"
 
     def _start_command(self) -> str:
-        packaged_executable = os.getenv("JCU_START_EXECUTABLE", "").strip()
+        python_exe = self.project_root / "environment" / "python" / "python.exe"
+        if python_exe.exists():
+            return f'"{python_exe}" "{self.project_root / "app.py"}"'
+        packaged_executable = os.getenv("Campus-Auth_START_EXECUTABLE", "").strip()
         if packaged_executable:
-            return f"JCU_AUTO_OPEN_BROWSER=false \"{packaged_executable}\""
-        return f"cd '{self.project_root}' && uv run app.py"
+            return f'"{packaged_executable}"'
+        return f'"{python_exe}" "{self.project_root / "app.py"}"'
 
     def _run(self, cmd: list[str]) -> tuple[bool, str]:
         try:
@@ -35,9 +38,9 @@ class AutoStartService:
     def _linux_service_path(self) -> Path:
         return Path.home() / ".config" / "systemd" / "user" / f"{self.service_name}.service"
 
-    def _windows_startup_bat(self) -> Path:
+    def _windows_startup_vbs(self) -> Path:
         appdata = os.getenv("APPDATA", "")
-        return Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / f"{self.service_name}.bat"
+        return Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / f"{self.service_name}.vbs"
 
     def status(self) -> dict[str, str | bool]:
         if self.platform_name == "darwin":
@@ -59,11 +62,11 @@ class AutoStartService:
             }
 
         if self.platform_name.startswith("win"):
-            target = self._windows_startup_bat()
+            target = self._windows_startup_vbs()
             return {
                 "platform": "Windows",
                 "enabled": target.exists(),
-                "method": "Startup folder",
+                "method": "VBScript startup",
                 "location": str(target),
             }
 
@@ -142,7 +145,7 @@ class AutoStartService:
         service_path.parent.mkdir(parents=True, exist_ok=True)
 
         content = f"""[Unit]
-Description=JCU Auto Network Web Console
+Description=Campus-Auth Auto Network Web Console
 After=network.target
 
 [Service]
@@ -169,26 +172,28 @@ WantedBy=default.target
         return True, "已关闭 Linux 开机自启动"
 
     def _enable_windows(self) -> tuple[bool, str]:
-        startup_bat = self._windows_startup_bat()
-        startup_bat.parent.mkdir(parents=True, exist_ok=True)
+        startup_vbs = self._windows_startup_vbs()
+        startup_vbs.parent.mkdir(parents=True, exist_ok=True)
 
-        packaged_executable = os.getenv("JCU_START_EXECUTABLE", "").strip()
-        if packaged_executable:
-            content = (
-                "@echo off\n"
-                "set JCU_AUTO_OPEN_BROWSER=false\n"
-                f"\"{packaged_executable}\"\n"
-            )
+        python_exe = self.project_root / "environment" / "python" / "python.exe"
+        app_py = self.project_root / "app.py"
+
+        if python_exe.exists():
+            content = f'''Set WshShell = CreateObject("WScript.Shell")
+WshShell.Environment("SYSTEM")("Campus-Auth_AUTO_OPEN_BROWSER") = "false"
+WshShell.Run """{python_exe}"" ""{app_py}""", 0, False
+'''
         else:
-            content = (
-                "@echo off\n"
-                f"cd /d \"{self.project_root}\"\n"
-                "uv run app.py\n"
-            )
-        startup_bat.write_text(content, encoding="utf-8")
-        return True, f"已启用 Windows 开机自启动: {startup_bat}"
+            packaged = os.getenv("Campus-Auth_START_EXECUTABLE", "").strip()
+            content = f'''Set WshShell = CreateObject("WScript.Shell")
+WshShell.Environment("SYSTEM")("Campus-Auth_AUTO_OPEN_BROWSER") = "false"
+WshShell.Run """{packaged}""", 0, False
+'''
+        
+        startup_vbs.write_text(content, encoding="utf-8")
+        return True, f"已启用 Windows 开机自启动: {startup_vbs}"
 
     def _disable_windows(self) -> tuple[bool, str]:
-        startup_bat = self._windows_startup_bat()
-        startup_bat.unlink(missing_ok=True)
+        startup_vbs = self._windows_startup_vbs()
+        startup_vbs.unlink(missing_ok=True)
         return True, "已关闭 Windows 开机自启动"

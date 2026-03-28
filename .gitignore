@@ -10,11 +10,28 @@ wheels/
 .venv
 uv.lock
 
+# Embedded Python environment (auto-downloaded)
+environment/
+
+# Executable files
+*.exe
+*.spec
+
 # Environment variables (sensitive information)
 .env
 .agreed
 .DS_Store
+
 # Log files
 *.log
 logs/
-.qoder/*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
