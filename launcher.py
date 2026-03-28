@@ -21,7 +21,7 @@ PYTHON_EXE = PYTHON_DIR / "python.exe"
 PIP_EXE = PYTHON_DIR / "Scripts" / "pip.exe"
 REQUIREMENTS_TXT = PROJECT_ROOT / "requirements.txt"
 LOG_FILE = PROJECT_ROOT / "setup_launcher.log"
-PYTHON_VERSION = "3.10"
+PYTHON_VERSION = "3.10.11"
 
 
 def log(msg):
@@ -68,7 +68,7 @@ def download_python():
     PYTHON_DIR.mkdir(parents=True, exist_ok=True)
 
     urls = [
-        f"https://www.python.org/ftp/python/{PYTHON_VERSION}.0/python-{PYTHON_VERSION}.0-embed-amd64.zip",
+        f"https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embed-amd64.zip",
     ]
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
@@ -180,7 +180,8 @@ def install_pip():
 
 
 def _enable_import_site():
-    pth_file = PYTHON_DIR / f"python{PYTHON_VERSION.replace('.','')}._pth"
+    major_minor = PYTHON_VERSION.rsplit('.', 1)[0]
+    pth_file = PYTHON_DIR / f"python{major_minor.replace('.','')}._pth"
     if pth_file.exists():
         with open(pth_file, "r") as f:
             content = f.read()
