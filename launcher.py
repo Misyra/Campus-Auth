@@ -126,21 +126,30 @@ def get_fastest_mirror(urls, timeout=5):
 
 
 def install_pip():
-    if PIP_EXE.exists():
-        log("pip 已存在")
-        return True
-
     log("安装 pip...")
 
     scripts_dir = PYTHON_DIR / "Scripts"
     scripts_dir.mkdir(exist_ok=True)
 
-    # get-pip.py 镜像源列表
+    # 优先使用 ensurepip（Python 自带）
+    log("尝试 ensurepip...")
+    result = subprocess.run(
+        [str(PYTHON_EXE), "-m", "ensurepip", "--upgrade"],
+        capture_output=True, text=True,
+    )
+    if result.returncode == 0:
+        log("ensurepip 安装成功")
+        _enable_import_site()
+        return True
+    else:
+        log(f"ensurepip 失败: {result.stderr[:200]}")
+
+    # ensurepip 失败，使用 get-pip.py
+    log("使用 get-pip.py...")
     get_pip_urls = [
         "https://mirrors.aliyun.com/pypi/get-pip.py",
         "https://bootstrap.pypa.io/get-pip.py",
     ]
-
     get_pip_url = get_fastest_mirror(get_pip_urls)
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".py") as tmp:
@@ -148,43 +157,38 @@ def install_pip():
 
     try:
         urllib.request.urlretrieve(get_pip_url, tmp_path)
-        log("运行 get-pip.py...")
-
         pip_mirror = "https://mirrors.aliyun.com/pypi/simple"
         pip_host = "mirrors.aliyun.com"
 
-        proc = subprocess.Popen(
+        proc = subprocess.run(
             [str(PYTHON_EXE), tmp_path, "-i", pip_mirror, "--trusted-host", pip_host],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True, text=True,
         )
-        stdout, stderr = proc.communicate()
 
         if proc.returncode != 0:
-            log(f"pip 安装stderr: {stderr.decode()[:500]}")
+            log(f"get-pip 失败: {proc.stderr[:500]}")
+            return False
         else:
-            log("pip 安装成功")
-
-        pth_file = PYTHON_DIR / f"python{PYTHON_VERSION.replace('.','')}._pth"
-        if pth_file.exists():
-            with open(pth_file, "r") as f:
-                content = f.read()
-            if "# import site" in content:
-                content = content.replace("# import site", "import site")
-                with open(pth_file, "w") as f:
-                    f.write(content)
-                log("已启用 _pth 中的 import site")
-        else:
-            log(f"警告: pth 文件不存在: {pth_file}")
-
-        return True
-    except Exception as e:
-        log(f"pip 安装异常: {e}")
+            log("get-pip 安装成功")
+            _enable_import_site()
+            return True
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
 
     return False
+
+
+def _enable_import_site():
+    pth_file = PYTHON_DIR / f"python{PYTHON_VERSION.replace('.','')}._pth"
+    if pth_file.exists():
+        with open(pth_file, "r") as f:
+            content = f.read()
+        if "# import site" in content:
+            content = content.replace("# import site", "import site")
+            with open(pth_file, "w") as f:
+                f.write(content)
+            log("已启用 import site")
 
 
 def install_requirements():
