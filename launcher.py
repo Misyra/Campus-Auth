@@ -16,7 +16,7 @@ else:
     PROJECT_ROOT = Path(__file__).resolve().parent
 
 ENV_DIR = PROJECT_ROOT / "environment"
-PYTHON_DIR = ENV_DIR
+PYTHON_DIR = ENV_DIR / "tools"
 PYTHON_EXE = PYTHON_DIR / "python.exe"
 PIP_EXE = PYTHON_DIR / "Scripts" / "pip.exe"
 REQUIREMENTS_TXT = PROJECT_ROOT / "requirements.txt"
@@ -67,8 +67,14 @@ def download_python():
 
     PYTHON_DIR.mkdir(parents=True, exist_ok=True)
 
-    # NuGet Python 包 URL
-    url = f"https://www.nuget.org/api/v2/package/python/{PYTHON_NUGET_VERSION}"
+    # NuGet 镜像源
+    nuget_urls = [
+        f"https://mirrors.tuna.tsinghua.edu.cn/nuget/v3-flatcontainer/python/{PYTHON_NUGET_VERSION}/python.{PYTHON_NUGET_VERSION}.nupkg",
+        f"https://api.nuget.org/v3-flatcontainer/python/{PYTHON_NUGET_VERSION}/python.{PYTHON_NUGET_VERSION}.nupkg",
+        f"https://www.nuget.org/api/v2/package/python/{PYTHON_NUGET_VERSION}",
+    ]
+
+    url = get_fastest_mirror(nuget_urls)
     log(f"下载: {url}")
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".nupkg") as tmp:
