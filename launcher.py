@@ -11,7 +11,10 @@ from pathlib import Path
 import datetime
 
 if getattr(sys, 'frozen', False):
-    PROJECT_ROOT = Path(sys.argv[0]).resolve().parent
+    import ctypes
+    buf = ctypes.create_unicode_buffer(260)
+    ctypes.windll.kernel32.GetModuleFileNameW(None, buf, 260)
+    PROJECT_ROOT = Path(buf.value).resolve().parent
 else:
     PROJECT_ROOT = Path(__file__).resolve().parent
 
