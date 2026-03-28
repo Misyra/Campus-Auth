@@ -16,7 +16,7 @@ else:
     PROJECT_ROOT = Path(__file__).resolve().parent
 
 ENV_DIR = PROJECT_ROOT / "environment"
-PYTHON_DIR = ENV_DIR
+PYTHON_DIR = ENV_DIR / "python"
 PYTHON_EXE = PYTHON_DIR / "python.exe"
 PIP_EXE = PYTHON_DIR / "Scripts" / "pip.exe"
 REQUIREMENTS_TXT = PROJECT_ROOT / "requirements.txt"
@@ -65,7 +65,7 @@ def check_python():
 def download_python():
     log("开始下载 Python...")
 
-    ENV_DIR.mkdir(exist_ok=True)
+    PYTHON_DIR.mkdir(parents=True, exist_ok=True)
 
     urls = [
         f"https://www.python.org/ftp/python/{PYTHON_VERSION}.0/python-{PYTHON_VERSION}.0-embed-amd64.zip",
@@ -86,11 +86,11 @@ def download_python():
 
         log("解压 Python...")
         with zipfile.ZipFile(tmp_path, "r") as z:
-            z.extractall(ENV_DIR)
+            z.extractall(PYTHON_DIR)
 
-        for dll in ENV_DIR.glob("python3*.dll"):
+        for dll in PYTHON_DIR.glob("python3*.dll"):
             target = dll.name.replace("python3x", "python3")
-            target_path = ENV_DIR / target
+            target_path = PYTHON_DIR / target
             if not target_path.exists():
                 shutil.move(str(dll), str(target_path))
 
