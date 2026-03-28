@@ -4,6 +4,7 @@ import sys
 import subprocess
 import shutil
 import urllib.request
+import urllib.parse
 import zipfile
 import tempfile
 from pathlib import Path
@@ -99,6 +100,31 @@ def download_python():
             os.unlink(tmp_path)
 
 
+def get_fastest_mirror(urls, timeout=5):
+    """测试多个镜像源，返回最快的一个"""
+    import socket
+    import time
+
+    fastest_url = urls[0]
+    fastest_time = float('inf')
+
+    for url in urls:
+        try:
+            start = time.time()
+            req = urllib.request.Request(url, method='HEAD')
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                elapsed = time.time() - start
+                log(f"镜像 {url} 响应时间: {elapsed:.2f}s")
+                if elapsed < fastest_time:
+                    fastest_time = elapsed
+                    fastest_url = url
+        except Exception as e:
+            log(f"镜像 {url} 不可用: {e}")
+
+    log(f"选择最快镜像: {fastest_url} ({fastest_time:.2f}s)")
+    return fastest_url
+
+
 def install_pip():
     if PIP_EXE.exists():
         log("pip 已存在")
@@ -109,7 +135,16 @@ def install_pip():
     scripts_dir = PYTHON_DIR / "Scripts"
     scripts_dir.mkdir(exist_ok=True)
 
-    get_pip_url = "https://bootstrap.pypa.io/get-pip.py"
+    # get-pip.py 镜像源列表
+    get_pip_urls = [
+        "https://mirrors.tuna.tsinghua.edu.cn/pypi/get-pip.py",
+        "https://mirrors.aliyun.com/pypi/get-pip.py",
+        "https://pypi.tuna.tsinghua.edu.cn/simple/pip/",
+        "https://bootstrap.pypa.io/get-pip.py",
+    ]
+
+    get_pip_url = get_fastest_mirror(get_pip_urls)
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=".py") as tmp:
         tmp_path = tmp.name
 
@@ -156,16 +191,22 @@ def install_requirements():
 
     log("安装项目依赖...")
 
-    mirror = "https://mirrors.tuna.tsinghua.edu.cn/simple"
+    mirrors = [
+        "https://mirrors.tuna.tsinghua.edu.cn/simple",
+        "https://mirrors.aliyun.com/pypi/simple",
+        "https://pypi.tuna.tsinghua.edu.cn/simple",
+    ]
+    mirror = get_fastest_mirror(mirrors)
+    mirror_host = urllib.parse.urlparse(mirror).hostname or "mirrors.tuna.tsinghua.edu.cn"
 
     subprocess.run(
-        [str(PYTHON_EXE), "-m", "pip", "install", "--trusted-host", "mirrors.aliyun.com",
+        [str(PYTHON_EXE), "-m", "pip", "install", "--trusted-host", mirror_host,
          "-i", mirror, "setuptools", "wheel"],
         capture_output=True,
     )
 
     subprocess.run(
-        [str(PYTHON_EXE), "-m", "pip", "install", "--trusted-host", "mirrors.aliyun.com",
+        [str(PYTHON_EXE), "-m", "pip", "install", "--trusted-host", mirror_host,
          "-i", mirror, "-r", str(REQUIREMENTS_TXT)],
         capture_output=True,
     )
