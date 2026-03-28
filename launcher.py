@@ -11,7 +11,7 @@ from pathlib import Path
 import datetime
 
 if getattr(sys, 'frozen', False):
-    PROJECT_ROOT = Path.cwd()
+    PROJECT_ROOT = Path(sys.executable).resolve().parent
 else:
     PROJECT_ROOT = Path(__file__).resolve().parent
 
@@ -173,6 +173,8 @@ def install_pip():
                 with open(pth_file, "w") as f:
                     f.write(content)
                 log("已启用 _pth 中的 import site")
+        else:
+            log(f"警告: pth 文件不存在: {pth_file}")
 
         return True
     except Exception as e:
@@ -199,17 +201,22 @@ def install_requirements():
     mirror = get_fastest_mirror(mirrors)
     mirror_host = urllib.parse.urlparse(mirror).hostname or "mirrors.tuna.tsinghua.edu.cn"
 
-    subprocess.run(
+    result1 = subprocess.run(
         [str(PYTHON_EXE), "-m", "pip", "install", "--trusted-host", mirror_host,
          "-i", mirror, "setuptools", "wheel"],
-        capture_output=True,
+        capture_output=True, text=True,
     )
+    if result1.returncode != 0:
+        log(f"setuptools/wheel 安装失败: {result1.stderr[:500]}")
 
-    subprocess.run(
+    result2 = subprocess.run(
         [str(PYTHON_EXE), "-m", "pip", "install", "--trusted-host", mirror_host,
          "-i", mirror, "-r", str(REQUIREMENTS_TXT)],
-        capture_output=True,
+        capture_output=True, text=True,
     )
+    if result2.returncode != 0:
+        log(f"依赖安装失败: {result2.stderr[:500]}")
+        return False
 
     log("依赖安装完成")
     return True
