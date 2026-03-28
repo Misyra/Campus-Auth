@@ -16,12 +16,12 @@ else:
     PROJECT_ROOT = Path(__file__).resolve().parent
 
 ENV_DIR = PROJECT_ROOT / "environment"
-PYTHON_DIR = ENV_DIR / "python"
+PYTHON_DIR = ENV_DIR
 PYTHON_EXE = PYTHON_DIR / "python.exe"
 PIP_EXE = PYTHON_DIR / "Scripts" / "pip.exe"
 REQUIREMENTS_TXT = PROJECT_ROOT / "requirements.txt"
 LOG_FILE = PROJECT_ROOT / "setup_launcher.log"
-PYTHON_VERSION = "3.10.11"
+PYTHON_NUGET_VERSION = "3.10.11"
 
 
 def log(msg):
@@ -67,34 +67,23 @@ def download_python():
 
     PYTHON_DIR.mkdir(parents=True, exist_ok=True)
 
-    urls = [
-        f"https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embed-amd64.zip",
-    ]
+    # NuGet Python 包 URL
+    url = f"https://www.nuget.org/api/v2/package/python/{PYTHON_NUGET_VERSION}"
+    log(f"下载: {url}")
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".nupkg") as tmp:
         tmp_path = tmp.name
 
     try:
-        for url in urls:
-            try:
-                log(f"下载: {url}")
-                urllib.request.urlretrieve(url, tmp_path)
-                break
-            except Exception as e:
-                log(f"下载失败: {e}")
-                continue
-
+        urllib.request.urlretrieve(url, tmp_path)
         log("解压 Python...")
         with zipfile.ZipFile(tmp_path, "r") as z:
             z.extractall(PYTHON_DIR)
-
-        for dll in PYTHON_DIR.glob("python3*.dll"):
-            target = dll.name.replace("python3x", "python3")
-            target_path = PYTHON_DIR / target
-            if not target_path.exists():
-                shutil.move(str(dll), str(target_path))
-
         log("Python 解压完成")
+        return True
+    except Exception as e:
+        log(f"下载/解压失败: {e}")
+        return False
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
@@ -180,7 +169,7 @@ def install_pip():
 
 
 def _enable_import_site():
-    major_minor = PYTHON_VERSION.rsplit('.', 1)[0]
+    major_minor = PYTHON_NUGET_VERSION.rsplit('.', 1)[0]
     pth_file = PYTHON_DIR / f"python{major_minor.replace('.','')}._pth"
     if pth_file.exists():
         with open(pth_file, "r") as f:
