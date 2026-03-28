@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import datetime
+import json
 import threading
 import time
 from collections import deque
 from pathlib import Path
 from typing import Any
+
+from fastapi import WebSocket
 
 from src.monitor_core import NetworkMonitorCore
 from src.network_test import is_network_available
@@ -13,6 +17,46 @@ from src.utils import ConfigValidator
 
 from .config_service import build_runtime_config, load_ui_config, write_env_file
 from .schemas import LogEntry, MonitorConfigPayload, MonitorStatusResponse
+
+
+class WebSocketManager:
+    def __init__(self):
+        self._connections: list[WebSocket] = []
+        self._lock = asyncio.Lock()
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        async with self._lock:
+            self._connections.append(websocket)
+
+    async def disconnect(self, websocket: WebSocket):
+        async with self._lock:
+            if websocket in self._connections:
+                self._connections.remove(websocket)
+
+    async def broadcast(self, message: str):
+        async with self._lock:
+            connections = self._connections.copy()
+
+        tasks = []
+        for ws in connections:
+            tasks.append(self._send_safe(ws, message))
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        async with self._lock:
+            for ws, result in zip(connections, results):
+                if isinstance(result, Exception) and ws in self._connections:
+                    self._connections.remove(ws)
+
+    async def _send_safe(self, ws: WebSocket, message: str):
+        try:
+            await ws.send_text(message)
+        except Exception:
+            raise
+
+
+ws_manager = WebSocketManager()
 
 
 class MonitorService:
@@ -28,10 +72,19 @@ class MonitorService:
 
         self._monitor_core: NetworkMonitorCore | None = None
         self._monitor_thread: threading.Thread | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+
+    def set_event_loop(self, loop: asyncio.AbstractEventLoop):
+        self._loop = loop
 
     def _push_log(self, message: str) -> None:
         stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self._logs.append(LogEntry(timestamp=stamp, message=message))
+        entry = LogEntry(timestamp=stamp, message=message)
+        self._logs.append(entry)
+
+        if self._loop and self._loop.is_running():
+            data = json.dumps({"type": "log", "data": {"timestamp": stamp, "message": message}})
+            asyncio.run_coroutine_threadsafe(ws_manager.broadcast(data), self._loop)
 
     def boot(self) -> None:
         if self._ui_config.auto_start:
@@ -138,7 +191,7 @@ class MonitorService:
 
     def test_network(self) -> tuple[bool, str]:
         try:
-            ok = is_network_available(timeout=2, verbose=False, require_both=False)
+            ok = is_network_available(timeout=2, require_both=False)
             return (True, "网络连接正常") if ok else (False, "网络连接异常")
         except Exception as exc:
             return False, f"网络测试失败: {exc}"

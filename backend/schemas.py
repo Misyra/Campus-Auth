@@ -13,6 +13,8 @@ class MonitorConfigPayload(BaseModel):
     pause_enabled: bool = True
     pause_start_hour: int = Field(default=0, ge=0, le=23)
     pause_end_hour: int = Field(default=6, ge=0, le=23)
+    access_log: bool = False
+    minimize_to_tray: bool = False
 
 
 class ActionResponse(BaseModel):

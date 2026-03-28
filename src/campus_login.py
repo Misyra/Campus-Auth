@@ -14,7 +14,7 @@ from playwright.async_api import (
     Page,
     TimeoutError as PlaywrightTimeoutError,
 )
-from .utils import ConfigLoader, LoggerSetup, BrowserContextManager, ExceptionHandler, SimpleRetryHandler
+from .utils import ConfigLoader, LoggerSetup, BrowserContextManager, SimpleRetryHandler
 
 # 加载环境变量
 load_dotenv()
@@ -329,7 +329,7 @@ class EnhancedCampusNetworkAuth:
                     self.logger.warning(f"❌ {failure_msg}")
                     # 保存截图用于调试
                     try:
-                        await browser_manager.take_screenshot("auth_failed.png")
+                        await browser_manager.take_screenshot("debug/auth_failed.png")
                     except Exception:
                         pass
                     return False, failure_msg
@@ -338,7 +338,7 @@ class EnhancedCampusNetworkAuth:
             failure_msg = "登录失败: 未检测到明确的成功标识"
             self.logger.warning(f"❌ {failure_msg}")
             try:
-                await browser_manager.take_screenshot("auth_unknown.png")
+                await browser_manager.take_screenshot("debug/auth_unknown.png")
             except Exception:
                 pass
             return False, failure_msg
@@ -346,11 +346,6 @@ class EnhancedCampusNetworkAuth:
         except Exception as e:
             self.logger.error(f"检查认证结果时发生错误: {e}")
             return False, f"检查认证结果时发生错误: {e}"
-
-    async def cleanup(self) -> None:
-        """清理资源，防止内存泄漏（已废弃，使用BrowserContextManager代替）"""
-        self.logger.warning("此方法已废弃，请使用BrowserContextManager上下文管理器")
-        pass
 
     async def authenticate_once(self) -> tuple[bool, str]:
         """执行一次认证尝试（使用上下文管理器修复内存泄漏）"""

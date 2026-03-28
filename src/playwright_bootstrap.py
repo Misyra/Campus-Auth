@@ -52,7 +52,7 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
 
         os.environ.setdefault(
             "PLAYWRIGHT_DOWNLOAD_HOST",
-            "https://npmmirror.com/mirrors/playwright",
+            "https://playwright.azureedge.net",
         )
 
         try:

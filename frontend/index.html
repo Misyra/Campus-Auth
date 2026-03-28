@@ -3,138 +3,774 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>校园网自动认证控制台</title>
+    <title>Campus-Auth Campus Auth</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Space+Grotesk:wght@500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
     <link rel="icon" type="image/svg+xml" href="/static/black-cat.svg" />
     <link rel="stylesheet" href="/static/style.css" />
   </head>
   <body>
-    <div id="app" class="page" v-cloak>
-      <div class="bg-shape bg-shape-1"></div>
-      <div class="bg-shape bg-shape-2"></div>
+    <div id="app" v-cloak>
+      <div v-if="showWizard" class="wizard-overlay">
+        <div class="wizard-container">
+          <div class="wizard-header">
+            <img src="/static/black-cat.svg" alt="logo" class="wizard-logo" />
+            <h1>欢迎使用 Campus-Auth 校园网自动认证</h1>
+            <p>让我们快速配置您的账号信息</p>
+          </div>
 
-      <header class="hero card">
-        <div>
-          <p class="kicker">Campus Network Auth 2.0</p>
-          <h1>校园网自动认证控制台</h1>
-          <p class="sub">前后端分离架构 · FastAPI + Vue</p>
+          <div class="wizard-steps">
+            <div class="step" :class="{ active: wizardStep === 1, completed: wizardStep > 1 }">
+              <span class="step-number">1</span>
+              <span class="step-label">账号配置</span>
+            </div>
+            <div class="step-line" :class="{ completed: wizardStep > 1 }"></div>
+            <div class="step" :class="{ active: wizardStep === 2, completed: wizardStep > 2 }">
+              <span class="step-number">2</span>
+              <span class="step-label">运营商设置</span>
+            </div>
+            <div class="step-line" :class="{ completed: wizardStep > 2 }"></div>
+            <div class="step" :class="{ active: wizardStep === 3, completed: wizardStep > 3 }">
+              <span class="step-number">3</span>
+              <span class="step-label">监控设置</span>
+            </div>
+            <div class="step-line" :class="{ completed: wizardStep > 3 }"></div>
+            <div class="step" :class="{ active: wizardStep === 4 }">
+              <span class="step-number">4</span>
+              <span class="step-label">完成</span>
+            </div>
+          </div>
+
+          <div class="wizard-content">
+            <div v-if="wizardStep === 1" class="wizard-page">
+              <h2>账号配置</h2>
+              <p class="description">请输入您的校园网账号和密码，这些信息将用于自动登录认证。</p>
+
+              <div class="form-group">
+                <label>账号 <span class="required">*</span></label>
+                <input v-model.trim="config.username" type="text" placeholder="请输入学号或账号" />
+                <span class="hint">您的校园网登录账号，通常是学号</span>
+              </div>
+
+              <div class="form-group">
+                <label>密码 <span class="required">*</span></label>
+                <input v-model="config.password" type="password" placeholder="请输入密码" />
+                <span class="hint">您的校园网登录密码</span>
+              </div>
+            </div>
+
+            <div v-if="wizardStep === 2" class="wizard-page">
+              <h2>运营商设置</h2>
+              <p class="description">选择您使用的网络运营商，如果您不确定，可以选择"无"。</p>
+
+              <div class="form-group">
+                <label>运营商</label>
+                <select v-model="config.carrier">
+                  <option>无</option>
+                  <option>移动</option>
+                  <option>联通</option>
+                  <option>电信</option>
+                  <option>教育网</option>
+                </select>
+                <span class="hint">选择与您宽带套餐对应的运营商</span>
+              </div>
+
+              <div class="info-box">
+                <h4>运营商说明</h4>
+                <ul>
+                  <li><strong>无</strong>：仅使用校园网，不使用运营商宽带</li>
+                  <li><strong>移动</strong>：中国移动宽带用户</li>
+                  <li><strong>联通</strong>：中国联通宽带用户</li>
+                  <li><strong>电信</strong>：中国电信宽带用户</li>
+                  <li><strong>教育网</strong>：教育网用户</li>
+                </ul>
+              </div>
+            </div>
+
+            <div v-if="wizardStep === 3" class="wizard-page">
+              <h2>监控设置</h2>
+              <p class="description">配置自动监控和登录的行为。</p>
+
+              <div class="form-group">
+                <label>检测间隔（分钟）</label>
+                <input v-model.number="config.check_interval_minutes" type="number" min="1" max="1440" />
+                <span class="hint">每隔多久检测一次网络状态，建议 3-10 分钟</span>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>暂停开始时间</label>
+                  <input v-model.number="config.pause_start_hour" type="number" min="0" max="23" />
+                  <span class="hint">开始暂停的小时（0-23）</span>
+                </div>
+                <div class="form-group">
+                  <label>暂停结束时间</label>
+                  <input v-model.number="config.pause_end_hour" type="number" min="0" max="23" />
+                  <span class="hint">结束暂停的小时（0-23）</span>
+                </div>
+              </div>
+
+              <div class="toggle-group">
+                <label class="toggle">
+                  <input type="checkbox" v-model="config.pause_enabled" />
+                  <span class="toggle-slider"></span>
+                  <span class="toggle-label">启用暂停时段</span>
+                </label>
+                <span class="hint">在指定时段内不进行自动登录，避免深夜频繁认证</span>
+              </div>
+
+              <div class="toggle-group">
+                <label class="toggle">
+                  <input type="checkbox" v-model="config.auto_start" />
+                  <span class="toggle-slider"></span>
+                  <span class="toggle-label">启动后自动开始监控</span>
+                </label>
+                <span class="hint">程序启动后自动开始检测网络状态</span>
+              </div>
+            </div>
+
+            <div v-if="wizardStep === 4" class="wizard-page">
+              <h2>配置完成</h2>
+              <p class="description">您已完成基本配置，可以开始使用了！</p>
+
+              <div class="config-summary">
+                <h4>配置摘要</h4>
+                <div class="summary-item">
+                  <span class="label">账号</span>
+                  <span class="value">{{ config.username || '未设置' }}</span>
+                </div>
+                <div class="summary-item">
+                  <span class="label">运营商</span>
+                  <span class="value">{{ config.carrier }}</span>
+                </div>
+                <div class="summary-item">
+                  <span class="label">检测间隔</span>
+                  <span class="value">{{ config.check_interval_minutes }} 分钟</span>
+                </div>
+                <div class="summary-item">
+                  <span class="label">自动监控</span>
+                  <span class="value">{{ config.auto_start ? '是' : '否' }}</span>
+                </div>
+              </div>
+
+              <div class="info-box success">
+                <h4>提示</h4>
+                <p>您随时可以在"设置"页面修改这些配置。</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="wizard-footer">
+            <button v-if="wizardStep > 1" class="btn btn-secondary" @click="wizardStep--">
+              上一步
+            </button>
+            <div class="spacer"></div>
+            <button class="btn btn-text" @click="skipWizard">跳过向导</button>
+            <button v-if="wizardStep < 4" class="btn btn-primary" @click="nextWizardStep" :disabled="!canProceed">
+              下一步
+            </button>
+            <button v-else class="btn btn-primary" @click="finishWizard" :disabled="busy.save">
+              完成配置
+            </button>
+          </div>
         </div>
-        <div class="hero-actions">
-          <span class="status" :class="status.monitoring ? 'on' : 'off'">
-            {{ status.monitoring ? '监控中' : '未运行' }}
-          </span>
-          <button class="btn strong" @click="toggleMonitor" :disabled="busy.monitor">
-            {{ status.monitoring ? '停止监控' : '启动监控' }}
+      </div>
+
+      <nav v-if="!showWizard" class="sidebar">
+        <div class="sidebar-header">
+          <div class="logo">
+            <img src="/static/black-cat.svg" alt="logo" class="logo-icon" />
+            <span class="logo-text">Campus-Auth Auth</span>
+          </div>
+        </div>
+
+        <div class="nav-links">
+          <button
+            class="nav-item"
+            :class="{ active: currentPage === 'dashboard' }"
+            @click="currentPage = 'dashboard'"
+          >
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="7" height="7" rx="1"/>
+              <rect x="14" y="3" width="7" height="7" rx="1"/>
+              <rect x="3" y="14" width="7" height="7" rx="1"/>
+              <rect x="14" y="14" width="7" height="7" rx="1"/>
+            </svg>
+            <span>仪表盘</span>
+          </button>
+
+          <button
+            class="nav-item"
+            :class="{ active: currentPage === 'settings' }"
+            @click="currentPage = 'settings'"
+          >
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+            </svg>
+            <span>设置</span>
+          </button>
+
+          <button
+            class="nav-item"
+            :class="{ active: currentPage === 'tasks' }"
+            @click="currentPage = 'tasks'"
+          >
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            <span>任务</span>
+          </button>
+
+          <button
+            class="nav-item"
+            :class="{ active: currentPage === 'about' }"
+            @click="currentPage = 'about'"
+          >
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+            <span>关于</span>
           </button>
         </div>
-      </header>
 
-      <main class="grid">
-        <section class="card">
-          <h2>登录配置</h2>
-          <div class="form-grid">
-            <label>
-              账号
-              <input v-model.trim="config.username" type="text" placeholder="学号/账号" />
-            </label>
-            <label>
-              密码
-              <input v-model="config.password" type="password" placeholder="输入密码" />
-            </label>
-            <label>
-              运营商
-              <select v-model="config.carrier">
-                <option>无</option>
-                <option>移动</option>
-                <option>联通</option>
-                <option>电信</option>
-                <option>教育网</option>
-              </select>
-            </label>
-            <label>
-              检测间隔（分钟）
-              <input v-model.number="config.check_interval_minutes" type="number" min="1" max="1440" />
-            </label>
-            <label>
-              暂停开始（小时）
-              <input v-model.number="config.pause_start_hour" type="number" min="0" max="23" />
-            </label>
-            <label>
-              暂停结束（小时）
-              <input v-model.number="config.pause_end_hour" type="number" min="0" max="23" />
-            </label>
+        <div class="sidebar-footer">
+          <div class="status-badge" :class="status.monitoring ? 'online' : 'offline'">
+            <span class="status-dot"></span>
+            {{ status.monitoring ? '运行中' : '已停止' }}
+          </div>
+          <button class="btn btn-danger btn-sm quit-btn" @click="quitApp" title="退出应用">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            退出
+          </button>
+        </div>
+      </nav>
+
+      <main class="main-content">
+        <header class="top-bar">
+          <h1 class="page-title">{{ pageTitle }}</h1>
+          <div class="top-actions">
+            <button class="btn btn-primary" @click="toggleMonitor" :disabled="busy.monitor">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon v-if="!status.monitoring" points="5 3 19 12 5 21 5 3"/>
+                <g v-else>
+                  <rect x="6" y="4" width="4" height="16"/>
+                  <rect x="14" y="4" width="4" height="16"/>
+                </g>
+              </svg>
+              {{ status.monitoring ? '停止监控' : '启动监控' }}
+            </button>
+          </div>
+        </header>
+
+        <div class="content-wrapper">
+          <!-- Dashboard Page -->
+          <div v-if="currentPage === 'dashboard'" class="page-content fade-in">
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-icon green">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                </div>
+                <div class="stat-info">
+                  <span class="stat-label">运行时长</span>
+                  <span class="stat-value">{{ formatDuration(status.runtime_seconds) }}</span>
+                </div>
+              </div>
+
+              <div class="stat-card">
+                <div class="stat-icon blue">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                  </svg>
+                </div>
+                <div class="stat-info">
+                  <span class="stat-label">检测次数</span>
+                  <span class="stat-value">{{ status.network_check_count }}</span>
+                </div>
+              </div>
+
+              <div class="stat-card">
+                <div class="stat-icon orange">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                  </svg>
+                </div>
+                <div class="stat-info">
+                  <span class="stat-label">失败计数</span>
+                  <span class="stat-value">{{ status.login_attempt_count }}</span>
+                </div>
+              </div>
+
+              <div class="stat-card">
+                <div class="stat-icon purple">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                    <line x1="16" y1="2" x2="16" y2="6"/>
+                    <line x1="8" y1="2" x2="8" y2="6"/>
+                    <line x1="3" y1="10" x2="21" y2="10"/>
+                  </svg>
+                </div>
+                <div class="stat-info">
+                  <span class="stat-label">最后检测</span>
+                  <span class="stat-value">{{ status.last_check_time ? formatTime(status.last_check_time) : '-' }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="dashboard-grid">
+              <div class="card">
+                <div class="card-header">
+                  <h2>快捷操作</h2>
+                </div>
+                <div class="card-body">
+                  <div class="action-buttons">
+                    <button class="btn btn-secondary" @click="manualLogin" :disabled="busy.action">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+                        <polyline points="10 17 15 12 10 7"/>
+                        <line x1="15" y1="12" x2="3" y2="12"/>
+                      </svg>
+                      手动登录
+                    </button>
+                    <button class="btn btn-secondary" @click="testNetwork" :disabled="busy.action">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+                        <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+                        <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+                        <circle cx="12" cy="20" r="1"/>
+                      </svg>
+                      网络测试
+                    </button>
+                  </div>
+
+                  <div class="autostart-section">
+                    <h3>开机自启动</h3>
+                    <p class="info-text">
+                      {{ autostart.enabled ? '已启用' : '未启用' }}
+                      <span v-if="autostart.method !== '-'"> · {{ autostart.method }}</span>
+                    </p>
+                    <div class="action-buttons">
+                      <button class="btn btn-sm" @click="enableAutostart" :disabled="busy.autostart || autostart.enabled">
+                        启用
+                      </button>
+                      <button class="btn btn-sm" @click="disableAutostart" :disabled="busy.autostart || !autostart.enabled">
+                        关闭
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card log-card">
+                <div class="card-header">
+                  <h2>实时日志</h2>
+                  <button class="btn btn-icon-only" @click="fetchLogs" title="刷新">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="23 4 23 10 17 10"/>
+                      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                    </svg>
+                  </button>
+                </div>
+                <div class="card-body">
+                  <div class="log-viewer">
+                    <div v-if="!logs.length" class="empty-state">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                        <polyline points="10 9 9 9 8 9"/>
+                      </svg>
+                      <span>暂无日志</span>
+                    </div>
+                    <div v-else class="log-entries">
+                      <div v-for="item in logs" :key="item.timestamp + item.message" class="log-entry">
+                        <span class="log-time">{{ formatLogTime(item.timestamp) }}</span>
+                        <span class="log-message" :class="getLogClass(item.message)">{{ item.message }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div class="switches">
-            <label><input type="checkbox" v-model="config.auto_start" /> 启动后自动监控</label>
-            <label><input type="checkbox" v-model="config.headless" /> 无头浏览器</label>
-            <label><input type="checkbox" v-model="config.pause_enabled" /> 启用暂停时段</label>
-          </div>
+          <!-- Settings Page -->
+          <div v-if="currentPage === 'settings'" class="page-content fade-in">
+            <div class="settings-grid">
+              <div class="card">
+                <div class="card-header">
+                  <h2>登录配置</h2>
+                </div>
+                <div class="card-body">
+                  <div class="form-group">
+                    <label>账号</label>
+                    <input v-model.trim="config.username" type="text" placeholder="学号/账号" />
+                  </div>
+                  <div class="form-group">
+                    <label>密码</label>
+                    <input v-model="config.password" type="password" placeholder="输入密码" />
+                  </div>
+                  <div class="form-group">
+                    <label>运营商</label>
+                    <select v-model="config.carrier">
+                      <option>无</option>
+                      <option>移动</option>
+                      <option>联通</option>
+                      <option>电信</option>
+                      <option>教育网</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
 
-          <button class="btn" @click="saveConfig" :disabled="busy.save">保存配置</button>
-        </section>
+              <div class="card">
+                <div class="card-header">
+                  <h2>监控设置</h2>
+                </div>
+                <div class="card-body">
+                  <div class="form-group">
+                    <label>检测间隔（分钟）</label>
+                    <input v-model.number="config.check_interval_minutes" type="number" min="1" max="1440" />
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>暂停开始（小时）</label>
+                      <input v-model.number="config.pause_start_hour" type="number" min="0" max="23" />
+                    </div>
+                    <div class="form-group">
+                      <label>暂停结束（小时）</label>
+                      <input v-model.number="config.pause_end_hour" type="number" min="0" max="23" />
+                    </div>
+                  </div>
+                  <div class="toggle-group">
+                    <label class="toggle">
+                      <input type="checkbox" v-model="config.pause_enabled" />
+                      <span class="toggle-slider"></span>
+                      <span class="toggle-label">启用暂停时段</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
 
-        <section class="card">
-          <h2>运行状态</h2>
-          <div class="stats">
-            <div>
-              <span>运行时长</span>
-              <strong>{{ formatDuration(status.runtime_seconds) }}</strong>
+              <div class="card">
+                <div class="card-header">
+                  <h2>系统设置</h2>
+                </div>
+                <div class="card-body">
+                  <div class="toggle-group">
+                    <label class="toggle">
+                      <input type="checkbox" v-model="config.auto_start" />
+                      <span class="toggle-slider"></span>
+                      <span class="toggle-label">启动后自动监控</span>
+                    </label>
+                  </div>
+                  <div class="toggle-group">
+                    <label class="toggle">
+                      <input type="checkbox" v-model="config.headless" />
+                      <span class="toggle-slider"></span>
+                      <span class="toggle-label">无头浏览器模式</span>
+                    </label>
+                  </div>
+                  <div class="toggle-group">
+                    <label class="toggle">
+                      <input type="checkbox" v-model="config.access_log" />
+                      <span class="toggle-slider"></span>
+                      <span class="toggle-label">显示HTTP请求日志</span>
+                    </label>
+                  </div>
+                  <div class="toggle-group">
+                    <label class="toggle">
+                      <input type="checkbox" v-model="config.minimize_to_tray" />
+                      <span class="toggle-slider"></span>
+                      <span class="toggle-label">最小化到系统托盘</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div>
-              <span>检测次数</span>
-              <strong>{{ status.network_check_count }}</strong>
-            </div>
-            <div>
-              <span>登录失败计数</span>
-              <strong>{{ status.login_attempt_count }}</strong>
-            </div>
-            <div>
-              <span>最后检测</span>
-              <strong>{{ status.last_check_time ? status.last_check_time.replace('T', ' ') : '-' }}</strong>
-            </div>
-          </div>
 
-          <div class="actions">
-            <button class="btn" @click="manualLogin" :disabled="busy.action">手动登录</button>
-            <button class="btn" @click="testNetwork" :disabled="busy.action">网络测试</button>
-          </div>
-
-          <h3>开机自启动</h3>
-          <div class="autostart">
-            <p class="muted">
-              状态：{{ autostart.enabled ? '已启用' : '未启用' }} · {{ autostart.platform }} · {{ autostart.method }}
-            </p>
-            <p class="muted">位置：{{ autostart.location || '-' }}</p>
-            <div class="actions">
-              <button class="btn" @click="enableAutostart" :disabled="busy.autostart || autostart.enabled">
-                启用自启动
+            <div class="settings-footer">
+              <button class="btn btn-primary btn-lg" @click="saveConfig" :disabled="busy.save">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                  <polyline points="17 21 17 13 7 13 7 21"/>
+                  <polyline points="7 3 7 8 15 8"/>
+                </svg>
+                保存配置
               </button>
-              <button class="btn" @click="disableAutostart" :disabled="busy.autostart || !autostart.enabled">
-                关闭自启动
-              </button>
             </div>
           </div>
 
-          <h3>实时日志</h3>
-          <div class="logs">
-            <p v-if="!logs.length" class="muted">暂无日志</p>
-            <p v-for="item in logs" :key="item.timestamp + item.message">
-              <span class="log-time">{{ item.timestamp }}</span>
-              <span>{{ item.message }}</span>
-            </p>
-          </div>
-        </section>
-      </main>
+          <!-- Tasks Page -->
+          <div v-if="currentPage === 'tasks'" class="page-content fade-in">
+            <div class="tasks-grid">
+              <div class="card">
+                <div class="card-header">
+                  <h2>登录任务列表</h2>
+                  <button class="btn btn-sm btn-primary" @click="showTaskEditor(null)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="12" y1="5" x2="12" y2="19"/>
+                      <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    新建任务
+                  </button>
+                </div>
+                <div class="card-body">
+                  <div v-if="!tasks.length" class="empty-state">
+                    <p>暂无任务配置</p>
+                  </div>
+                  <div v-else class="task-list">
+                    <div v-for="task in tasks" :key="task.id" class="task-item" :class="{ active: activeTaskId === task.id }">
+                      <div class="task-info">
+                        <h3>{{ task.name }}</h3>
+                        <p>{{ task.description }}</p>
+                      </div>
+                      <div class="task-actions">
+                        <button class="btn btn-sm" @click="setActiveTask(task.id)" :disabled="activeTaskId === task.id">
+                          {{ activeTaskId === task.id ? '当前使用' : '使用' }}
+                        </button>
+                        <button class="btn btn-sm" @click="showTaskEditor(task.id)">编辑</button>
+                        <button class="btn btn-sm btn-danger" @click="deleteTask(task.id)" :disabled="task.id === 'default'">
+                          删除
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-      <p v-if="toast.message" class="toast" :class="toast.success ? 'ok' : 'err'">
-        {{ toast.message }}
-      </p>
+              <div v-if="editingTask" class="card task-editor">
+                <div class="card-header">
+                  <h2>{{ editingTask.id ? '编辑任务' : '新建任务' }}</h2>
+                  <button class="btn btn-icon-only" @click="editingTask = null">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/>
+                      <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                </div>
+                <div class="card-body">
+                  <div class="form-group">
+                    <label>任务ID</label>
+                    <input v-model="editingTask.id" type="text" placeholder="task_id" :disabled="!!editingTask.id" />
+                    <span class="hint">只能包含字母、数字和下划线</span>
+                  </div>
+                  <div class="form-group">
+                    <label>任务名称</label>
+                    <input v-model="editingTask.name" type="text" placeholder="我的登录任务" />
+                  </div>
+                  <div class="form-group">
+                    <label>描述</label>
+                    <input v-model="editingTask.description" type="text" placeholder="任务描述" />
+                  </div>
+                  <div class="form-group">
+                    <label>认证地址</label>
+                    <input v-model="editingTask.url" type="text" placeholder="http://172.29.0.2" />
+                  </div>
+                  <div class="form-group">
+                    <label>JSON 配置</label>
+                    <textarea v-model="editingTask.json" rows="12" placeholder="任务JSON配置"></textarea>
+                    <span class="hint">编辑完整的任务配置JSON</span>
+                  </div>
+                  <div class="task-editor-actions">
+                    <button class="btn btn-secondary" @click="loadTemplate('default')">加载默认模板</button>
+                    <button class="btn btn-secondary" @click="loadTemplate('ruijie')">加载锐捷模板</button>
+                    <button class="btn btn-secondary" @click="loadTemplate('srun')">加载深澜模板</button>
+                    <button class="btn btn-secondary" @click="loadTemplate('drcom')">加载城市热点模板</button>
+                  </div>
+                </div>
+                <div class="card-footer">
+                  <button class="btn btn-secondary" @click="editingTask = null">取消</button>
+                  <button class="btn btn-primary" @click="saveTask">保存任务</button>
+                </div>
+              </div>
+
+              <div v-else class="card">
+                <div class="card-header">
+                  <h2>JSON 配置说明</h2>
+                </div>
+                <div class="card-body">
+                  <div class="help-content">
+                    <h4>支持的步骤类型</h4>
+                    <ul>
+                      <li><code>navigate</code> - 打开网页</li>
+                      <li><code>input</code> - 输入文本</li>
+                      <li><code>click</code> - 点击元素</li>
+                      <li><code>select</code> - 选择下拉框</li>
+                      <li><code>wait</code> - 等待元素出现</li>
+                      <li><code>eval</code> - 执行JavaScript</li>
+                    </ul>
+                    <h4>可用变量</h4>
+                    <ul>
+                      <li><code v-pre>{{username}}</code> - 用户名</li>
+                      <li><code v-pre>{{password}}</code> - 密码</li>
+                      <li><code v-pre>{{isp}}</code> - 运营商后缀</li>
+                      <li><code v-pre>{{url}}</code> - 认证地址</li>
+                    </ul>
+                    <h4>示例</h4>
+                    <pre v-pre>{
+  "steps": [
+    {
+      "type": "input",
+      "selector": "#username",
+      "value": "{{username}}{{isp}}",
+      "description": "输入用户名"
+    }
+  ]
+}</pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- About Page -->
+          <div v-if="currentPage === 'about'" class="page-content fade-in">
+            <div class="about-container">
+              <div class="about-hero card">
+                <img src="/static/black-cat.svg" alt="Logo" class="about-logo" />
+                <h1>Campus-Auth Campus Network Auth</h1>
+                <p class="version">Version 3.0.0</p>
+                <p class="description">校园网自动认证工具</p>
+              </div>
+
+              <div class="about-grid">
+                <div class="card">
+                  <div class="card-header">
+                    <h2>技术栈</h2>
+                  </div>
+                  <div class="card-body">
+                    <div class="tech-stack">
+                      <div class="tech-item">
+                        <span class="tech-badge python">Python 3.10+</span>
+                      </div>
+                      <div class="tech-item">
+                        <span class="tech-badge fastapi">FastAPI</span>
+                      </div>
+                      <div class="tech-item">
+                        <span class="tech-badge vue">Vue 3</span>
+                      </div>
+                      <div class="tech-item">
+                        <span class="tech-badge playwright">Playwright</span>
+                      </div>
+                      <div class="tech-item">
+                        <span class="tech-badge uv">uv</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card">
+                  <div class="card-header">
+                    <h2>特性</h2>
+                  </div>
+                  <div class="card-body">
+                    <ul class="feature-list">
+                      <li>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        前后端分离架构
+                      </li>
+                      <li>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        自动网络检测与登录
+                      </li>
+                      <li>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        实时日志与状态监控
+                      </li>
+                      <li>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        配置热更新
+                      </li>
+                      <li>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        开机自启动支持
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="card">
+                  <div class="card-header">
+                    <h2>系统信息</h2>
+                  </div>
+                  <div class="card-body">
+                    <div class="info-list">
+                      <div class="info-item">
+                        <span class="info-label">Python</span>
+                        <span class="info-value">3.10+</span>
+                      </div>
+                      <div class="info-item">
+                        <span class="info-label">平台</span>
+                        <span class="info-value">{{ autostart.platform }}</span>
+                      </div>
+                      <div class="info-item">
+                        <span class="info-label">自启动</span>
+                        <span class="info-value">{{ autostart.enabled ? '已启用' : '未启用' }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="about-footer card">
+                <div class="about-links">
+                  <a href="https://github.com/Misyra/Campus-Auth" target="_blank" class="github-link">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    GitHub
+                  </a>
+                </div>
+                <p>License: MIT</p>
+                <p class="muted">Made with ❤️ for campus network users</p>
+              </div>
+            </div>
+          </div>
+        </main>
+
+      <div v-if="toast.message" class="toast" :class="toast.success ? 'success' : 'error'">
+        <svg v-if="toast.success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+          <polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="15" y1="9" x2="9" y2="15"/>
+          <line x1="9" y1="9" x2="15" y2="15"/>
+        </svg>
+        <span>{{ toast.message }}</span>
+      </div>
     </div>
 
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
