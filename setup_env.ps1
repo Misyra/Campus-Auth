@@ -26,6 +26,7 @@ $RequirementsFile = Join-Path $ProjectRoot "requirements.txt"
 $HashFile = Join-Path $EnvDir ".requirements_hash"
 $LogDir = Join-Path $ProjectRoot "logs"
 $LogFile = Join-Path $LogDir "setup_env.log"
+$DefaultPort = 50721
 
 # Python 嵌入式版本下载链接 (官方)
 $PythonDownloadUrl = "https://www.python.org/ftp/python/${PythonVersion}.0/python-${PythonVersion}.0-embed-amd64.zip"
@@ -85,6 +86,78 @@ function Write-Progress-Stage {
     $timestamp = Get-Timestamp
     Write-Host "[$timestamp] [$Stage] $Message ($Percent%)" -ForegroundColor Yellow
     Write-Log "[$Stage] $Message ($Percent%)" "PROGRESS"
+}
+
+function Get-DuplicateExitDelay {
+    $raw = ${env:Campus-Auth_DUPLICATE_EXIT_DELAY}
+    if ([string]::IsNullOrWhiteSpace($raw)) {
+        return 10
+    }
+
+    $delay = 0
+    if ([int]::TryParse($raw, [ref]$delay) -and $delay -ge 0) {
+        return $delay
+    }
+    return 10
+}
+
+function Wait-BeforeDuplicateExit {
+    $delay = Get-DuplicateExitDelay
+    if ($delay -le 0) {
+        return
+    }
+    Write-Info "$delay 秒后自动退出"
+    Start-Sleep -Seconds $delay
+}
+
+function Resolve-AppPort {
+    $raw = $env:APP_PORT
+    if (-not [string]::IsNullOrWhiteSpace($raw)) {
+        $port = 0
+        if ([int]::TryParse($raw, [ref]$port) -and $port -ge 1 -and $port -le 65535) {
+            return $port
+        }
+    }
+
+    $envFile = Join-Path $ProjectRoot ".env"
+    if (Test-Path $envFile) {
+        try {
+            $line = Get-Content $envFile | Where-Object { $_ -match '^\s*APP_PORT\s*=\s*\d+\s*$' } | Select-Object -Last 1
+            if ($line) {
+                $value = ($line -split '=', 2)[1].Trim()
+                $port = 0
+                if ([int]::TryParse($value, [ref]$port) -and $port -ge 1 -and $port -le 65535) {
+                    return $port
+                }
+            }
+        } catch {
+            # 忽略解析失败，回退默认端口
+        }
+    }
+
+    return $DefaultPort
+}
+
+function Test-ServiceRunning {
+    param([int]$Port)
+
+    $client = $null
+    try {
+        $client = New-Object System.Net.Sockets.TcpClient
+        $iar = $client.BeginConnect("127.0.0.1", $Port, $null, $null)
+        $ok = $iar.AsyncWaitHandle.WaitOne(600, $false)
+        if (-not $ok) {
+            return $false
+        }
+        $client.EndConnect($iar) | Out-Null
+        return $true
+    } catch {
+        return $false
+    } finally {
+        if ($client) {
+            $client.Close()
+        }
+    }
 }
 
 # ==================== 步骤 1: 环境检查 ====================
@@ -417,6 +490,14 @@ function Main {
     Write-Info "  项目根目录：$ProjectRoot"
     Write-Info "========================================"
     Write-Info ""
+
+    $port = Resolve-AppPort
+    if (Test-ServiceRunning -Port $port) {
+        Write-Success "检测到服务已在运行: http://127.0.0.1:$port"
+        Write-Info "请勿重复启动"
+        Wait-BeforeDuplicateExit
+        return
+    }
     
     # 阶段 1: 检查 Python 环境
     Write-Info ">>> 阶段 1/3: 检查 Python 环境"
