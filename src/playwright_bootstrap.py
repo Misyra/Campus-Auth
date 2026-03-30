@@ -108,7 +108,9 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
                 if log:
                     log(f"尝试下载源: {host}")
 
-                result = _run([sys.executable, "-m", "playwright", "install", "chromium"])
+                result = _run(
+                    [sys.executable, "-m", "playwright", "install", "chromium"]
+                )
                 if result.returncode == 0:
                     _BOOTSTRAP_DONE = True
                     if log:
