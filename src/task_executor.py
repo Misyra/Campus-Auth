@@ -19,7 +19,9 @@ class TaskConfig:
         self.variables: dict[str, str] = config.get("variables", {})
         self.timeout: int = config.get("timeout", 30000)
         self.steps: list[dict[str, Any]] = config.get("steps", [])
-        self.success_conditions: list[dict[str, Any]] = config.get("success_conditions", [])
+        self.success_conditions: list[dict[str, Any]] = config.get(
+            "success_conditions", []
+        )
         self.on_success: dict[str, Any] = config.get("on_success", {})
         self.on_failure: dict[str, Any] = config.get("on_failure", {})
 
@@ -34,12 +36,14 @@ class TaskManager:
         for file in self.tasks_dir.glob("*.json"):
             try:
                 config = json.loads(file.read_text(encoding="utf-8"))
-                tasks.append({
-                    "id": file.stem,
-                    "name": config.get("name", file.stem),
-                    "description": config.get("description", ""),
-                    "file": str(file),
-                })
+                tasks.append(
+                    {
+                        "id": file.stem,
+                        "name": config.get("name", file.stem),
+                        "description": config.get("description", ""),
+                        "file": str(file),
+                    }
+                )
             except Exception as e:
                 logger.warning(f"无法读取任务文件 {file}: {e}")
         return tasks
@@ -58,7 +62,9 @@ class TaskManager:
     def save_task(self, task_id: str, config: dict[str, Any]) -> bool:
         file = self.tasks_dir / f"{task_id}.json"
         try:
-            file.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+            file.write_text(
+                json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
             return True
         except Exception as e:
             logger.error(f"无法保存任务 {task_id}: {e}")
@@ -95,7 +101,12 @@ class TaskExecutor:
     def __init__(self, config: TaskConfig, env_vars: dict[str, str]):
         self.config = config
         self.env_vars = env_vars
-        self.variables: dict[str, Any] = {}
+        self.variables: dict[str, Any] = {
+            "url": config.url,
+            "name": config.name,
+            "description": config.description,
+            "version": config.version,
+        }
 
     def _resolve_variable(self, value: str) -> str:
         if not isinstance(value, str):
@@ -105,6 +116,8 @@ class TaskExecutor:
             var_name = match.group(1)
             if var_name in self.variables:
                 return str(self.variables[var_name])
+            if hasattr(self.config, var_name):
+                return str(getattr(self.config, var_name))
             if var_name in self.env_vars:
                 return str(self.env_vars[var_name])
             if var_name in self.config.variables:
@@ -112,10 +125,24 @@ class TaskExecutor:
                 return self._resolve_variable(val)
             return match.group(0)
 
-        return re.sub(r'\{\{(\w+)\}\}', replacer, value)
+        return re.sub(r"\{\{(\w+)\}\}", replacer, value)
 
     async def execute(self, page) -> tuple[bool, str]:
         try:
+            if self.config.steps:
+                first_step_type = (
+                    str(self.config.steps[0].get("type", "")).strip().lower()
+                )
+                if first_step_type != "navigate":
+                    default_url = self._resolve_variable(self.config.url)
+                    if default_url:
+                        logger.info("任务未配置首步导航，自动打开任务URL")
+                        await page.goto(
+                            default_url,
+                            wait_until="domcontentloaded",
+                            timeout=self.config.timeout,
+                        )
+
             for step in self.config.steps:
                 success, message = await self._execute_step(page, step)
                 if not success:
@@ -124,8 +151,11 @@ class TaskExecutor:
                         await page.screenshot(path="debug/task_failure.png")
                     return False, message or step.get("description", "步骤执行失败")
 
+            current_url = getattr(page, "url", "") or ""
+            self.variables["_current_url"] = current_url
+
             for condition in self.config.success_conditions:
-                if not self._check_condition(condition):
+                if not self._check_condition(condition, current_url):
                     return False, self.config.on_failure.get("message", "条件不满足")
 
             return True, self.config.on_success.get("message", "任务执行成功")
@@ -205,17 +235,29 @@ class TaskExecutor:
         except Exception as e:
             return False, f"{description} 失败: {str(e)}"
 
-    def _check_condition(self, condition: dict[str, Any]) -> bool:
+    def _check_condition(
+        self, condition: dict[str, Any], current_url: str = ""
+    ) -> bool:
         cond_type = condition.get("type")
 
         if cond_type == "variable":
             var_name = condition.get("variable")
             expected = condition.get("value")
+            if not isinstance(var_name, str) or not var_name:
+                return False
             actual = self.variables.get(var_name)
             return actual == expected
 
         elif cond_type == "url_contains":
             pattern = condition.get("pattern", "")
-            return pattern in str(self.variables.get("_current_url", ""))
+            url = current_url or str(self.variables.get("_current_url", ""))
+            if not pattern:
+                return bool(url)
+            if pattern in url:
+                return True
+            try:
+                return bool(re.search(pattern, url))
+            except re.error:
+                return False
 
         return True
