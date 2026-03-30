@@ -31,12 +31,11 @@ from .schemas import (
 )
 from .task_service import TaskService
 
-
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 
 app = FastAPI(
     title="Campus Network Auth API",
-    version="2.0.0",
+    version="3.0.1",
 )
 
 service = MonitorService(project_root=PROJECT_ROOT)
@@ -134,7 +133,7 @@ def autostart_status() -> AutoStartStatusResponse:
         platform=str(status.get("platform", "")),
         enabled=bool(status.get("enabled", False)),
         method=str(status.get("method", "")),
-        location=str(status.get("location", ""))
+        location=str(status.get("location", "")),
     )
 
 
@@ -213,6 +212,7 @@ def shutdown_server() -> ActionResponse:
 
         try:
             from src.system_tray import SystemTray
+
             tray = SystemTray(port=_resolve_port())
             tray.stop()
         except Exception:
@@ -243,7 +243,9 @@ def _resolve_port() -> int:
 
 def run() -> None:
     import logging
+
     import uvicorn
+
     from src.utils import ConfigLoader
 
     config = ConfigLoader.load_config_from_env()
