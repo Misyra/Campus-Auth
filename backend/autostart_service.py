@@ -173,24 +173,80 @@ WantedBy=default.target
 
     def _enable_windows(self) -> tuple[bool, str]:
         startup_vbs = self._windows_startup_vbs()
-        startup_vbs.parent.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            startup_vbs.parent.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            return False, "无法创建启动文件夹，请检查权限或杀毒软件是否拦截"
+        except Exception as exc:
+            return False, f"创建启动文件夹失败: {exc}"
 
         python_exe = self.project_root / "environment" / "python" / "python.exe"
         app_py = self.project_root / "app.py"
 
         if python_exe.exists():
             content = f'''Set WshShell = CreateObject("WScript.Shell")
-WshShell.Environment("SYSTEM")("Campus-Auth_AUTO_OPEN_BROWSER") = "false"
-WshShell.Run """{python_exe}"" ""{app_py}""", 0, False
+WshShell.Environment("PROCESS")("Campus-Auth_AUTO_OPEN_BROWSER") = "false"
+
+' 检查是否已经在运行
+Set fso = CreateObject("Scripting.FileSystemObject")
+pidFile = WshShell.ExpandEnvironmentStrings("%USERPROFILE%") & "\\.campus_network_auth\\campus_network_auth.pid"
+
+If fso.FileExists(pidFile) Then
+    Set file = fso.OpenTextFile(pidFile, 1)
+    pid = Trim(file.ReadAll)
+    file.Close
+    
+    ' 尝试检查进程是否在运行
+    On Error Resume Next
+    Set objWMIService = GetObject("winmgmts:\\\\.\\root\\cimv2")
+    Set colProcessList = objWMIService.ExecQuery("Select * from Win32_Process where ProcessId = " & pid)
+    If colProcessList.Count > 0 Then
+        WScript.Quit
+    End If
+    On Error GoTo 0
+End If
+
+WshShell.Run Chr(34) & "{python_exe}" & Chr(34) & " " & Chr(34) & "{app_py}" & Chr(34) & " --no-browser", 0, False
 '''
         else:
             packaged = os.getenv("Campus-Auth_START_EXECUTABLE", "").strip()
             content = f'''Set WshShell = CreateObject("WScript.Shell")
-WshShell.Environment("SYSTEM")("Campus-Auth_AUTO_OPEN_BROWSER") = "false"
-WshShell.Run """{packaged}""", 0, False
+WshShell.Environment("PROCESS")("Campus-Auth_AUTO_OPEN_BROWSER") = "false"
+
+' 检查是否已经在运行
+Set fso = CreateObject("Scripting.FileSystemObject")
+pidFile = WshShell.ExpandEnvironmentStrings("%USERPROFILE%") & "\\.campus_network_auth\\campus_network_auth.pid"
+
+If fso.FileExists(pidFile) Then
+    Set file = fso.OpenTextFile(pidFile, 1)
+    pid = Trim(file.ReadAll)
+    file.Close
+    
+    ' 尝试检查进程是否在运行
+    On Error Resume Next
+    Set objWMIService = GetObject("winmgmts:\\\\.\\root\\cimv2")
+    Set colProcessList = objWMIService.ExecQuery("Select * from Win32_Process where ProcessId = " & pid)
+    If colProcessList.Count > 0 Then
+        WScript.Quit
+    End If
+    On Error GoTo 0
+End If
+
+WshShell.Run Chr(34) & "{packaged}" & Chr(34) & " --no-browser", 0, False
 '''
         
-        startup_vbs.write_text(content, encoding="utf-8")
+        try:
+            startup_vbs.write_text(content, encoding="utf-8")
+        except PermissionError:
+            return False, "写入启动文件失败，可能被杀毒软件拦截，请将程序添加到白名单后重试"
+        except OSError as exc:
+            if "另一个程序正在使用此文件" in str(exc) or "being used by another process" in str(exc):
+                return False, "启动文件被占用，请关闭可能占用该文件的程序后重试"
+            return False, f"写入启动文件失败: {exc}"
+        except Exception as exc:
+            return False, f"创建启动文件时发生未知错误: {exc}"
+        
         return True, f"已启用 Windows 开机自启动: {startup_vbs}"
 
     def _disable_windows(self) -> tuple[bool, str]:

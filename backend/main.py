@@ -130,7 +130,12 @@ def test_network() -> ActionResponse:
 @app.get("/api/autostart/status", response_model=AutoStartStatusResponse)
 def autostart_status() -> AutoStartStatusResponse:
     status = autostart_service.status()
-    return AutoStartStatusResponse(**status)
+    return AutoStartStatusResponse(
+        platform=str(status.get("platform", "")),
+        enabled=bool(status.get("enabled", False)),
+        method=str(status.get("method", "")),
+        location=str(status.get("location", ""))
+    )
 
 
 @app.post("/api/autostart/enable", response_model=ActionResponse)
@@ -199,19 +204,24 @@ def shutdown_server() -> ActionResponse:
     def _do_shutdown():
         import os
         import signal
+        import time
 
-        # 停止托盘图标
+        try:
+            service.stop_monitoring()
+        except Exception:
+            pass
+
         try:
             from src.system_tray import SystemTray
-            tray = SystemTray(port=50721)
+            tray = SystemTray(port=_resolve_port())
             tray.stop()
         except Exception:
             pass
 
-        # 发送 SIGTERM 信号给当前进程
+        time.sleep(0.5)
+
         os.kill(os.getpid(), signal.SIGTERM)
 
-    # 在后台线程中执行关闭，确保响应能正常返回
     threading.Thread(target=_do_shutdown, daemon=True).start()
 
     return ActionResponse(success=True, message="服务器正在关闭...")
