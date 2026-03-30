@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "python-dotenv>=1.0.0",
-    "playwright>=1.55.0",
+    "playwright>=1.57.0,<1.58.0",
     "fastapi>=0.116.1",
     "uvicorn>=0.35.0",
     "pydantic>=2.11.7",

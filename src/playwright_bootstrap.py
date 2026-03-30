@@ -14,8 +14,38 @@ import threading
 from pathlib import Path
 from typing import Callable
 
+from dotenv import load_dotenv
+
 _BOOTSTRAP_LOCK = threading.Lock()
 _BOOTSTRAP_DONE = False
+
+
+def _load_env_file() -> None:
+    env_file = os.getenv("Campus-Auth_ENV_FILE", "").strip()
+    if env_file:
+        load_dotenv(Path(env_file), override=False)
+        return
+
+    cwd_env = Path.cwd() / ".env"
+    if cwd_env.exists():
+        load_dotenv(cwd_env, override=False)
+
+
+def _candidate_hosts() -> list[str]:
+    configured = os.getenv("PLAYWRIGHT_DOWNLOAD_HOST", "").strip()
+    hosts: list[str] = []
+
+    if configured:
+        hosts.append(configured)
+
+    defaults = [
+        "https://npmmirror.com/mirrors/playwright",
+        "https://playwright.azureedge.net",
+    ]
+    for host in defaults:
+        if host not in hosts:
+            hosts.append(host)
+    return hosts
 
 
 def _is_enabled() -> bool:
@@ -55,10 +85,7 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
             _BOOTSTRAP_DONE = True
             return True
 
-        os.environ.setdefault(
-            "PLAYWRIGHT_DOWNLOAD_HOST",
-            "https://playwright.azureedge.net",
-        )
+        _load_env_file()
 
         try:
             import playwright  # noqa: F401
@@ -76,16 +103,22 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
             if log:
                 log("正在安装 Playwright Chromium 浏览器内核...")
 
-            result = _run([sys.executable, "-m", "playwright", "install", "chromium"])
-            if result.returncode == 0:
-                _BOOTSTRAP_DONE = True
+            for host in _candidate_hosts():
+                os.environ["PLAYWRIGHT_DOWNLOAD_HOST"] = host
                 if log:
-                    log("Playwright Chromium 下载完成")
-                return True
+                    log(f"尝试下载源: {host}")
 
-            if log:
-                msg = (result.stderr or result.stdout or "").strip()
-                log(f"Playwright Chromium 下载失败: {msg}")
+                result = _run([sys.executable, "-m", "playwright", "install", "chromium"])
+                if result.returncode == 0:
+                    _BOOTSTRAP_DONE = True
+                    if log:
+                        log("Playwright Chromium 下载完成")
+                    return True
+
+                if log:
+                    msg = (result.stderr or result.stdout or "").strip()
+                    log(f"下载源失败 ({host}): {msg}")
+
             return False
         except Exception as exc:
             if log:
