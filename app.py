@@ -6,6 +6,7 @@ import atexit
 import logging
 import os
 import signal
+import socket
 import sys
 import threading
 import time
@@ -25,14 +26,16 @@ def _setup_logging() -> None:
     root_logger.setLevel(logging.INFO)
 
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(ColoredFormatter(
-        "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%H:%M:%S"
-    ))
+    console_handler.setFormatter(
+        ColoredFormatter(
+            "%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%H:%M:%S"
+        )
+    )
     root_logger.addHandler(console_handler)
 
 
 # ==================== PID 管理 ====================
+
 
 def _get_pid_file() -> Path:
     pid_dir = Path.home() / ".campus_network_auth"
@@ -49,11 +52,30 @@ def _is_service_running() -> tuple[bool, int | None]:
         if pid <= 0:
             pid_file.unlink(missing_ok=True)
             return False, None
-        os.kill(pid, 0)
+        try:
+            os.kill(pid, 0)
+        except PermissionError:
+            # Windows 下可能因权限导致探活失败，此时保守地认为进程仍在运行
+            return True, pid
+        except ProcessLookupError:
+            pid_file.unlink(missing_ok=True)
+            return False, None
+        except OSError as exc:
+            # winerror=5 通常表示 Access is denied，保守地视为存活
+            if getattr(exc, "winerror", None) == 5:
+                return True, pid
+            pid_file.unlink(missing_ok=True)
+            return False, None
         return True, pid
-    except (OSError, ValueError, SystemError, ProcessLookupError, PermissionError):
+    except (ValueError, SystemError):
         pid_file.unlink(missing_ok=True)
         return False, None
+
+
+def _is_local_port_in_use(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(0.4)
+        return sock.connect_ex(("127.0.0.1", port)) == 0
 
 
 def _write_pid() -> None:
@@ -65,6 +87,7 @@ def _cleanup_pid() -> None:
 
 
 # ==================== 打包环境 ====================
+
 
 def _is_packaged() -> bool:
     return bool(getattr(sys, "frozen", False) or globals().get("__compiled__"))
@@ -82,22 +105,32 @@ def _setup_packaged_env() -> None:
 
 # ==================== 浏览器控制 ====================
 
+
 def _open_browser(port: int) -> None:
     auto_open = os.getenv("Campus-Auth_AUTO_OPEN_BROWSER", "true").strip().lower()
     if auto_open not in {"1", "true", "yes", "on"}:
         return
+
     def _worker():
         time.sleep(1.2)
         webbrowser.open(f"http://127.0.0.1:{port}")
+
     threading.Thread(target=_worker, daemon=True).start()
 
 
 # ==================== CLI 命令 ====================
 
+
 def _cmd_status() -> None:
     running, pid = _is_service_running()
+    from backend.main import _resolve_port
+
+    port = _resolve_port()
+
     if running:
         print(f"服务正在运行 (PID: {pid})")
+    elif _is_local_port_in_use(port):
+        print(f"服务疑似正在运行 (端口: {port})")
     else:
         print("服务未运行")
 
@@ -129,6 +162,7 @@ def _cmd_stop() -> None:
 
 def _cmd_autostart(action: str) -> None:
     from backend.autostart_service import AutoStartService
+
     autostart = AutoStartService(project_root=Path(__file__).parent.resolve())
 
     if action == "status":
@@ -149,11 +183,14 @@ def _cmd_autostart(action: str) -> None:
 
 # ==================== 主启动 ====================
 
+
 def _run_server(no_browser: bool = False, tray: bool = False) -> None:
     running, pid = _is_service_running()
-    if running:
-        from backend.main import _resolve_port
-        port = _resolve_port()
+    from backend.main import _resolve_port
+
+    port = _resolve_port()
+
+    if running or _is_local_port_in_use(port):
         print(f"软件已启动 (PID: {pid})，请勿重复启动")
         print(f"请打开网页: http://127.0.0.1:{port}")
         sys.exit(0)
@@ -162,7 +199,7 @@ def _run_server(no_browser: bool = False, tray: bool = False) -> None:
     atexit.register(_cleanup_pid)
 
     def _signal_handler(signum, _frame):
-        print(f"\n收到停止信号，正在关闭...")
+        print("\n收到停止信号，正在关闭...")
         _cleanup_pid()
         sys.exit(0)
 
@@ -176,16 +213,18 @@ def _run_server(no_browser: bool = False, tray: bool = False) -> None:
     config = ConfigLoader.load_config_from_env()
     minimize_to_tray = tray or bool(config.get("minimize_to_tray", False))
 
-    from backend.main import run, _resolve_port
-    port = _resolve_port()
+    from backend.main import run
 
     tray_icon = None
     if minimize_to_tray:
         try:
             from src.system_tray import SystemTray
-            tray_icon = SystemTray(port=port, on_exit=lambda: os.kill(os.getpid(), signal.SIGTERM))
+
+            tray_icon = SystemTray(
+                port=port, on_exit=lambda: os.kill(os.getpid(), signal.SIGTERM)
+            )
             tray_icon.start()
-            print(f"系统托盘已启动，双击图标打开控制台")
+            print("系统托盘已启动，双击图标打开控制台")
         except Exception as e:
             print(f"启动系统托盘失败: {e}")
 
@@ -204,6 +243,7 @@ def _run_server(no_browser: bool = False, tray: bool = False) -> None:
 
 # ==================== 入口 ====================
 
+
 def main() -> None:
     _setup_logging()
 
@@ -219,16 +259,23 @@ def main() -> None:
   python app.py --stop             停止服务
   python app.py --autostart        查看开机自启动状态
   python app.py --autostart enable 启用开机自启动
-        """
+        """,
     )
 
-    parser.add_argument("--no-browser", action="store_true", help="启动后不自动打开浏览器")
+    parser.add_argument(
+        "--no-browser", action="store_true", help="启动后不自动打开浏览器"
+    )
     parser.add_argument("--tray", action="store_true", help="启动到系统托盘")
     parser.add_argument("--status", action="store_true", help="查看服务状态")
     parser.add_argument("--stop", action="store_true", help="停止服务")
-    parser.add_argument("--autostart", nargs="?", const="status", default=None,
-                        choices=["status", "enable", "disable"],
-                        help="管理开机自启动 (status/enable/disable)")
+    parser.add_argument(
+        "--autostart",
+        nargs="?",
+        const="status",
+        default=None,
+        choices=["status", "enable", "disable"],
+        help="管理开机自启动 (status/enable/disable)",
+    )
 
     args = parser.parse_args()
 

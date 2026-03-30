@@ -24,7 +24,8 @@ $PipExe = Join-Path $PythonDir "Scripts" "pip.exe"
 $TempDir = Join-Path $ProjectRoot "temp"
 $RequirementsFile = Join-Path $ProjectRoot "requirements.txt"
 $HashFile = Join-Path $EnvDir ".requirements_hash"
-$LogFile = Join-Path $ProjectRoot "setup_env.log"
+$LogDir = Join-Path $ProjectRoot "logs"
+$LogFile = Join-Path $LogDir "setup_env.log"
 
 # Python 嵌入式版本下载链接 (官方)
 $PythonDownloadUrl = "https://www.python.org/ftp/python/${PythonVersion}.0/python-${PythonVersion}.0-embed-amd64.zip"
@@ -50,6 +51,9 @@ function Write-Log {
     }
     
     try {
+        if (-not (Test-Path $LogDir)) {
+            New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
+        }
         Add-Content -Path $LogFile -Value $logEntry
     } catch {
         # 忽略日志写入失败

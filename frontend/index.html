@@ -50,17 +50,33 @@
               <h2>账号配置</h2>
               <p class="description">请输入您的校园网账号和密码，这些信息将用于自动登录认证。</p>
 
-              <div class="form-group">
-                <label>账号 <span class="required">*</span></label>
-                <input v-model.trim="config.username" type="text" placeholder="请输入学号或账号" />
-                <span class="hint">您的校园网登录账号，通常是学号</span>
-              </div>
+              <form @submit.prevent="nextWizardStep" autocomplete="on">
+                <div class="form-group">
+                  <label for="wizard-username">账号 <span class="required">*</span></label>
+                  <input
+                    id="wizard-username"
+                    v-model.trim="config.username"
+                    name="username"
+                    type="text"
+                    placeholder="请输入学号或账号"
+                    autocomplete="username"
+                  />
+                  <span class="hint">您的校园网登录账号，通常是学号</span>
+                </div>
 
-              <div class="form-group">
-                <label>密码 <span class="required">*</span></label>
-                <input v-model="config.password" type="password" placeholder="请输入密码" />
-                <span class="hint">您的校园网登录密码</span>
-              </div>
+                <div class="form-group">
+                  <label for="wizard-password">密码 <span class="required">*</span></label>
+                  <input
+                    id="wizard-password"
+                    v-model="config.password"
+                    name="password"
+                    type="password"
+                    placeholder="请输入密码"
+                    autocomplete="current-password"
+                  />
+                  <span class="hint">您的校园网登录密码</span>
+                </div>
+              </form>
             </div>
 
             <div v-if="wizardStep === 2" class="wizard-page">
@@ -416,109 +432,125 @@
 
           <!-- Settings Page -->
           <div v-if="currentPage === 'settings'" class="page-content fade-in">
-            <div class="settings-grid">
-              <div class="card">
-                <div class="card-header">
-                  <h2>登录配置</h2>
-                </div>
-                <div class="card-body">
-                  <div class="form-group">
-                    <label>账号</label>
-                    <input v-model.trim="config.username" type="text" placeholder="学号/账号" />
+            <form @submit.prevent="saveConfig" autocomplete="on">
+              <div class="settings-grid">
+                <div class="card">
+                  <div class="card-header">
+                    <h2>登录配置</h2>
                   </div>
-                  <div class="form-group">
-                    <label>密码</label>
-                    <input v-model="config.password" type="password" placeholder="输入密码" />
-                  </div>
-                  <div class="form-group">
-                    <label>运营商</label>
-                    <select v-model="config.carrier">
-                      <option>无</option>
-                      <option>移动</option>
-                      <option>联通</option>
-                      <option>电信</option>
-                      <option>教育网</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div class="card">
-                <div class="card-header">
-                  <h2>监控设置</h2>
-                </div>
-                <div class="card-body">
-                  <div class="form-group">
-                    <label>检测间隔（分钟）</label>
-                    <input v-model.number="config.check_interval_minutes" type="number" min="1" max="1440" />
-                  </div>
-                  <div class="form-row">
+                  <div class="card-body">
                     <div class="form-group">
-                      <label>暂停开始（小时）</label>
-                      <input v-model.number="config.pause_start_hour" type="number" min="0" max="23" />
+                      <label for="settings-username">账号</label>
+                      <input
+                        id="settings-username"
+                        v-model.trim="config.username"
+                        name="username"
+                        type="text"
+                        placeholder="学号/账号"
+                        autocomplete="username"
+                      />
                     </div>
                     <div class="form-group">
-                      <label>暂停结束（小时）</label>
-                      <input v-model.number="config.pause_end_hour" type="number" min="0" max="23" />
+                      <label for="settings-password">密码</label>
+                      <input
+                        id="settings-password"
+                        v-model="config.password"
+                        name="password"
+                        type="password"
+                        placeholder="输入密码"
+                        autocomplete="current-password"
+                      />
+                    </div>
+                    <div class="form-group">
+                      <label for="settings-carrier">运营商</label>
+                      <select id="settings-carrier" v-model="config.carrier" name="carrier">
+                        <option>无</option>
+                        <option>移动</option>
+                        <option>联通</option>
+                        <option>电信</option>
+                        <option>教育网</option>
+                      </select>
                     </div>
                   </div>
-                  <div class="toggle-group">
-                    <label class="toggle">
-                      <input type="checkbox" v-model="config.pause_enabled" />
-                      <span class="toggle-slider"></span>
-                      <span class="toggle-label">启用暂停时段</span>
-                    </label>
+                </div>
+
+                <div class="card">
+                  <div class="card-header">
+                    <h2>监控设置</h2>
+                  </div>
+                  <div class="card-body">
+                    <div class="form-group">
+                      <label for="settings-interval">检测间隔（分钟）</label>
+                      <input id="settings-interval" v-model.number="config.check_interval_minutes" type="number" min="1" max="1440" />
+                    </div>
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label for="settings-pause-start">暂停开始（小时）</label>
+                        <input id="settings-pause-start" v-model.number="config.pause_start_hour" type="number" min="0" max="23" />
+                      </div>
+                      <div class="form-group">
+                        <label for="settings-pause-end">暂停结束（小时）</label>
+                        <input id="settings-pause-end" v-model.number="config.pause_end_hour" type="number" min="0" max="23" />
+                      </div>
+                    </div>
+                    <div class="toggle-group">
+                      <label class="toggle">
+                        <input type="checkbox" v-model="config.pause_enabled" />
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">启用暂停时段</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card">
+                  <div class="card-header">
+                    <h2>系统设置</h2>
+                  </div>
+                  <div class="card-body">
+                    <div class="toggle-group">
+                      <label class="toggle">
+                        <input type="checkbox" v-model="config.auto_start" />
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">启动后自动监控</span>
+                      </label>
+                    </div>
+                    <div class="toggle-group">
+                      <label class="toggle">
+                        <input type="checkbox" v-model="config.headless" />
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">无头浏览器模式</span>
+                      </label>
+                    </div>
+                    <div class="toggle-group">
+                      <label class="toggle">
+                        <input type="checkbox" v-model="config.access_log" />
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">显示HTTP请求日志</span>
+                      </label>
+                    </div>
+                    <div class="toggle-group">
+                      <label class="toggle">
+                        <input type="checkbox" v-model="config.minimize_to_tray" />
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">最小化到系统托盘</span>
+                      </label>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div class="card">
-                <div class="card-header">
-                  <h2>系统设置</h2>
-                </div>
-                <div class="card-body">
-                  <div class="toggle-group">
-                    <label class="toggle">
-                      <input type="checkbox" v-model="config.auto_start" />
-                      <span class="toggle-slider"></span>
-                      <span class="toggle-label">启动后自动监控</span>
-                    </label>
-                  </div>
-                  <div class="toggle-group">
-                    <label class="toggle">
-                      <input type="checkbox" v-model="config.headless" />
-                      <span class="toggle-slider"></span>
-                      <span class="toggle-label">无头浏览器模式</span>
-                    </label>
-                  </div>
-                  <div class="toggle-group">
-                    <label class="toggle">
-                      <input type="checkbox" v-model="config.access_log" />
-                      <span class="toggle-slider"></span>
-                      <span class="toggle-label">显示HTTP请求日志</span>
-                    </label>
-                  </div>
-                  <div class="toggle-group">
-                    <label class="toggle">
-                      <input type="checkbox" v-model="config.minimize_to_tray" />
-                      <span class="toggle-slider"></span>
-                      <span class="toggle-label">最小化到系统托盘</span>
-                    </label>
-                  </div>
-                </div>
+              <div class="settings-footer">
+                <button class="btn btn-primary btn-lg" type="submit" :disabled="busy.save">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                    <polyline points="17 21 17 13 7 13 7 21"/>
+                    <polyline points="7 3 7 8 15 8"/>
+                  </svg>
+                  保存配置
+                </button>
               </div>
-            </div>
-
-            <div class="settings-footer">
-              <button class="btn btn-primary btn-lg" @click="saveConfig" :disabled="busy.save">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                  <polyline points="17 21 17 13 7 13 7 21"/>
-                  <polyline points="7 3 7 8 15 8"/>
-                </svg>
-                保存配置
-              </button>
-            </div>
+            </form>
           </div>
 
           <!-- Tasks Page -->
