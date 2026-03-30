@@ -11,8 +11,8 @@ import os
 import subprocess
 import sys
 import threading
+from pathlib import Path
 from typing import Callable
-
 
 _BOOTSTRAP_LOCK = threading.Lock()
 _BOOTSTRAP_DONE = False
@@ -33,9 +33,14 @@ def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
 
 
 def _has_chromium() -> bool:
-    result = _run([sys.executable, "-m", "playwright", "install", "--list"])
-    output = f"{result.stdout}\n{result.stderr}".lower()
-    return result.returncode == 0 and "chromium-" in output
+    try:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as p:
+            exe = p.chromium.executable_path
+        return bool(exe and Path(exe).exists())
+    except Exception:
+        return False
 
 
 def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
