@@ -35,3 +35,7 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Release staging artifacts
+release/stage-win/
+release/stage-win-full/
