@@ -73,7 +73,7 @@ class ConfigLoader:
                 "interval": ConfigLoader._get_int_env("MONITOR_INTERVAL", 240),
                 "ping_targets": [target.strip() for target in os.getenv("PING_TARGETS", "8.8.8.8,114.114.114.114,baidu.com").split(",") if target.strip()]
             },
-            "minimize_to_tray": ConfigLoader._str_to_bool(os.getenv("MINIMIZE_TO_TRAY", "false"))
+            "minimize_to_tray": ConfigLoader._str_to_bool(os.getenv("MINIMIZE_TO_TRAY", "true"))
         }
 
     @staticmethod

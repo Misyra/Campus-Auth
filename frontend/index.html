@@ -249,7 +249,7 @@
             <span class="status-dot"></span>
             {{ status.monitoring ? '运行中' : '已停止' }}
           </div>
-          <button class="btn btn-danger btn-sm quit-btn" @click="quitApp" title="退出应用">
+          <button class="btn btn-danger btn-sm quit-btn" @click="quitApp" :disabled="busy.monitor" title="退出应用">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
               <polyline points="16 17 21 12 16 7"/>

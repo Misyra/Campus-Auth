@@ -19,6 +19,7 @@ dependencies = [
 build = [
     "nuitka>=2.5.7",
     "ordered-set>=4.1.0",
+    "pyinstaller>=6.19.0",
     "zstandard>=0.23.0",
 ]
 

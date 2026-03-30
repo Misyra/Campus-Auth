@@ -46,9 +46,12 @@ def _is_service_running() -> tuple[bool, int | None]:
         return False, None
     try:
         pid = int(pid_file.read_text(encoding="utf-8").strip())
+        if pid <= 0:
+            pid_file.unlink(missing_ok=True)
+            return False, None
         os.kill(pid, 0)
         return True, pid
-    except (OSError, ValueError):
+    except (OSError, ValueError, SystemError, ProcessLookupError, PermissionError):
         pid_file.unlink(missing_ok=True)
         return False, None
 
@@ -149,9 +152,11 @@ def _cmd_autostart(action: str) -> None:
 def _run_server(no_browser: bool = False, tray: bool = False) -> None:
     running, pid = _is_service_running()
     if running:
-        print(f"服务已在运行 (PID: {pid})")
-        print("请先停止现有服务: python app.py --stop")
-        sys.exit(1)
+        from backend.main import _resolve_port
+        port = _resolve_port()
+        print(f"软件已启动 (PID: {pid})，请勿重复启动")
+        print(f"请打开网页: http://127.0.0.1:{port}")
+        sys.exit(0)
 
     _write_pid()
     atexit.register(_cleanup_pid)

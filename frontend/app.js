@@ -138,6 +138,7 @@ createApp({
 
       this.ws = new WebSocket(wsUrl);
       this.wsRetryCount = this.wsRetryCount || 0;
+      this.wsMaxRetries = 5;
 
       this.ws.onopen = () => {
         this.wsRetryCount = 0;
@@ -158,6 +159,10 @@ createApp({
       };
 
       this.ws.onclose = () => {
+        if (this.wsRetryCount >= this.wsMaxRetries) {
+          this.notify(false, "与服务器的连接已断开，请刷新页面");
+          return;
+        }
         const delay = Math.min(1000 * Math.pow(2, this.wsRetryCount), 30000);
         this.wsRetryCount++;
         setTimeout(() => {
@@ -208,8 +213,13 @@ createApp({
       try {
         const { data } = await api.get("/api/status");
         this.status = data;
+        this.fetchStatusFailCount = 0;
       } catch (error) {
-        console.error('Failed to fetch status:', error);
+        this.fetchStatusFailCount = (this.fetchStatusFailCount || 0) + 1;
+        if (this.fetchStatusFailCount >= 3) {
+          this.notify(false, "无法连接到服务器，请检查后端是否已关闭");
+          this.fetchStatusFailCount = 0;
+        }
       }
     },
     async fetchLogs() {
@@ -420,12 +430,17 @@ createApp({
     async quitApp() {
       if (!confirm("确定要退出应用吗？")) return;
       try {
+        this.busy.monitor = true;
         await api.post("/api/shutdown");
+        this.notify(true, "应用正在关闭...");
         setTimeout(() => {
           window.close();
-        }, 1000);
+        }, 1500);
       } catch (error) {
+        this.notify(false, "退出失败，请手动关闭窗口");
         window.close();
+      } finally {
+        this.busy.monitor = false;
       }
     },
   },

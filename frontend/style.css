@@ -142,6 +142,7 @@ body {
   border: 1px solid rgba(239, 68, 68, 0.2);
   cursor: pointer;
   transition: all 0.2s;
+  min-height: 40px;
 }
 
 .quit-btn:hover {
@@ -162,6 +163,7 @@ body {
   border-radius: 10px;
   font-size: 13px;
   font-weight: 500;
+  min-height: 40px;
 }
 
 .status-badge.online {
@@ -217,6 +219,7 @@ body {
 .top-actions {
   display: flex;
   gap: 12px;
+  align-items: center;
 }
 
 .content-wrapper {
@@ -263,7 +266,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 10px 20px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg-secondary);
@@ -272,6 +275,8 @@ body {
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
+  min-height: 40px;
+  white-space: nowrap;
 }
 
 .btn:hover:not(:disabled) {
@@ -301,13 +306,15 @@ body {
 }
 
 .btn-sm {
-  padding: 6px 12px;
+  padding: 8px 16px;
   font-size: 13px;
+  min-height: 36px;
 }
 
 .btn-lg {
-  padding: 14px 24px;
-  font-size: 16px;
+  padding: 12px 24px;
+  font-size: 15px;
+  min-height: 44px;
 }
 
 .btn-icon {
@@ -319,6 +326,8 @@ body {
   padding: 8px;
   background: transparent;
   border: none;
+  min-height: 36px;
+  min-width: 36px;
 }
 
 .btn-icon-only svg {
@@ -409,11 +418,13 @@ body {
 
 .action-buttons .btn {
   justify-content: flex-start;
+  width: 100%;
 }
 
 .action-buttons .btn svg {
   width: 18px;
   height: 18px;
+  flex-shrink: 0;
 }
 
 .autostart-section {
@@ -610,6 +621,10 @@ body {
   justify-content: flex-end;
 }
 
+.settings-footer .btn {
+  min-width: 140px;
+}
+
 .about-container {
   max-width: 800px;
   margin: 0 auto;
@@ -657,10 +672,13 @@ body {
 }
 
 .tech-badge {
-  padding: 6px 12px;
+  padding: 8px 14px;
   border-radius: 20px;
   font-size: 13px;
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
 }
 
 .tech-badge.python {
@@ -766,6 +784,7 @@ body {
   text-decoration: none;
   font-weight: 500;
   transition: all 0.2s ease;
+  min-height: 40px;
 }
 
 .github-link:hover {
@@ -1088,12 +1107,17 @@ body {
   flex: 1;
 }
 
+.wizard-footer .btn {
+  min-width: 100px;
+}
+
 .btn-text {
   background: transparent;
   border: none;
   color: var(--text-muted);
   cursor: pointer;
   padding: 10px 16px;
+  min-height: 40px;
 }
 
 .btn-text:hover {
@@ -1172,6 +1196,7 @@ body {
 .task-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
 }
 
 .btn-danger {
@@ -1209,12 +1234,18 @@ body {
   margin-top: 16px;
 }
 
+.task-editor-actions .btn {
+  flex: 1;
+  min-width: 120px;
+}
+
 .card-footer {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
   padding: 16px 20px;
   border-top: 1px solid var(--border);
+  align-items: center;
 }
 
 .help-content h4 {
