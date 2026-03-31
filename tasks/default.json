@@ -1,8 +1,8 @@
 {
-  "name": "景德镇陶瓷大学",
-  "description": "景德镇陶瓷大学校园网认证流程",
-  "version": "1.0",
-  "author": "System",
+  "id": "default",
+  "name": "默认",
+  "description": "语义识别，不依赖固定元素选择器",
+  "version": "3.1.0",
   "url": "http://172.29.0.2",
   "variables": {
     "username": "{{CAMPUS_USERNAME}}",
@@ -19,40 +19,29 @@
       "wait_until": "networkidle"
     },
     {
-      "id": "input_username",
-      "type": "input",
-      "selector": "#username, input[name='username'], input[name='user'], input[type='text']:first-of-type",
-      "value": "{{username}}{{isp}}",
-      "clear": true,
-      "description": "输入用户名（含运营商后缀）"
+      "id": "fill_credentials_auto",
+      "type": "custom_js",
+      "script": "(() => { const username = String('{{username}}' || '').trim(); const password = String('{{password}}' || '').trim(); const visible = (el) => { if (!el) return false; const style = window.getComputedStyle(el); if (!style || style.visibility === 'hidden' || style.display === 'none') return false; const rect = el.getBoundingClientRect(); return rect.width > 2 && rect.height > 2; }; const editable = (el) => el && !el.disabled && !el.readOnly; const nearText = (el) => { const parts = []; const id = el.id || ''; if (id) { const label = document.querySelector(`label[for='${id}']`); if (label) parts.push(label.innerText || ''); } let p = el.parentElement; let depth = 0; while (p && depth < 3) { parts.push(p.innerText || ''); p = p.parentElement; depth += 1; } return parts.join(' ').toLowerCase(); }; const attrsText = (el) => [el.name, el.id, el.className, el.placeholder, el.getAttribute('aria-label'), el.getAttribute('autocomplete')].filter(Boolean).join(' ').toLowerCase(); const scoreUser = (el) => { let s = 0; const t = String(el.type || '').toLowerCase(); if (t === 'text' || t === 'email' || t === 'tel' || t === '') s += 4; if (t === 'password' || t === 'hidden') s -= 8; const text = `${attrsText(el)} ${nearText(el)}`; if (/账号|帳號|帐号|用户名|使用者|学号|工号|手机号|手机|user|username|login|id/.test(text)) s += 16; if (/密码|pass|验证码|code/.test(text)) s -= 10; return s; }; const scorePass = (el) => { let s = 0; const t = String(el.type || '').toLowerCase(); if (t === 'password') s += 20; const text = `${attrsText(el)} ${nearText(el)}`; if (/密码|密碼|pass|passwd|pwd/.test(text)) s += 12; if (/账号|帳號|帐号|用户名|user|username/.test(text)) s -= 8; return s; }; const candidates = Array.from(document.querySelectorAll('input, textarea')).filter((el) => visible(el) && editable(el)); const userInput = candidates.slice().sort((a, b) => scoreUser(b) - scoreUser(a))[0] || null; const passInput = candidates.slice().sort((a, b) => scorePass(b) - scorePass(a))[0] || null; const fill = (el, val) => { if (!el || !val) return false; el.focus(); el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); el.value = val; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); return true; }; const userOk = fill(userInput, username); const passOk = fill(passInput, password); if (!userOk || !passOk) { throw new Error('未能自动识别账号或密码输入框'); } return true; })()",
+      "description": "自动识别账号/密码输入框并填写"
     },
     {
-      "id": "input_password",
-      "type": "input",
-      "selector": "#password, input[name='password'], input[name='passwd'], input[type='password']",
-      "value": "{{password}}",
-      "clear": true,
-      "description": "输入密码"
+      "id": "select_isp",
+      "type": "custom_js",
+      "script": "(() => { try { const isp = String('{{isp}}' || '').trim(); const map = { '': ['校园用户', '校园其他'], '@dx': ['校园电信', '电信'], '@lt': ['校园联通', '联通'], '@cmcc': ['校园移动', '移动'], '@unicom': ['校园联通', '联通'], '@telecom': ['校园电信', '电信'], '@xyw': ['校园用户', '教育网'] }; const normalize = (v) => String(v || '').replace(/\\s+/g, '').toLowerCase(); const names = new Set((map[isp] || []).map(normalize)); const suffixHints = [isp, isp.replace('@', ''), isp === '@dx' ? 'telecom' : '', isp === '@lt' ? 'unicom' : '', isp === '@cmcc' ? 'cmcc' : ''].filter(Boolean).map(normalize); const visible = (el) => { if (!el) return false; const style = window.getComputedStyle(el); if (!style || style.display === 'none' || style.visibility === 'hidden') return false; const rect = el.getBoundingClientRect(); return rect.width > 1 && rect.height > 1; }; const attrDump = (el) => { const attrs = []; if (el && el.attributes) { for (const a of Array.from(el.attributes)) attrs.push(a.name + '=' + a.value); } return normalize([el.innerText, el.textContent, el.value, el.name, el.id, el.className, el.title, el.getAttribute('aria-label'), el.getAttribute('data-name'), el.getAttribute('data-value'), attrs.join(' ')].filter(Boolean).join(' ')); }; const hasCarrierName = (text) => Array.from(names).some((n) => n && text.includes(n)); const hasSuffixHint = (text) => suffixHints.some((h) => h && text.includes(h)); const scoreCarrier = (text) => { let s = 0; if (hasCarrierName(text)) s += 24; if (hasSuffixHint(text)) s += 12; if (/运营商|套餐|网络|宽带|服务/.test(text)) s += 4; if (/登录|扫码|注册|找回|短信|验证码/.test(text)) s -= 10; return s; }; const selects = Array.from(document.querySelectorAll('select')).filter(visible); for (const sel of selects) { const options = Array.from(sel.options || []); let best = null; let bestScore = -999; for (const opt of options) { const t = attrDump(opt); const sc = scoreCarrier(t); if (sc > bestScore) { best = opt; bestScore = sc; } } if (best && bestScore > 6) { sel.value = best.value; sel.dispatchEvent(new Event('change', { bubbles: true })); sel.dispatchEvent(new Event('input', { bubbles: true })); return true; } } const radios = Array.from(document.querySelectorAll('input[type=radio]')).filter(visible); { let best = null; let bestScore = -999; for (const r of radios) { const t = attrDump(r) + ' ' + attrDump(r.parentElement); const sc = scoreCarrier(t); if (sc > bestScore) { best = r; bestScore = sc; } } if (best && bestScore > 6) { best.click(); return true; } } const clickables = Array.from(document.querySelectorAll('button, input[type=button], a, label, span, div, li')).filter(visible); { let best = null; let bestScore = -999; for (const el of clickables) { const t = attrDump(el); const sc = scoreCarrier(t); if (sc > bestScore) { best = el; bestScore = sc; } } if (best && bestScore > 8) { best.click(); return true; } } return true; } catch (e) { return true; } })()",
+      "description": "匹配选择运营商"
     },
     {
-      "id": "click_login",
-      "type": "click",
-      "selector": "#login, button[type='submit'], input[type='submit'], .login-btn, button:has-text('登录')",
-      "description": "点击登录按钮"
-    },
-    {
-      "id": "wait_result",
-      "type": "wait",
-      "selector": ".success, .error, #success, #error, [class*='success'], [class*='error'], [class*='fail']",
-      "timeout": 10000,
-      "description": "等待登录结果"
+      "id": "click_login_auto",
+      "type": "custom_js",
+      "script": "(() => { const visible = (el) => { if (!el) return false; const style = window.getComputedStyle(el); if (!style || style.visibility === 'hidden' || style.display === 'none') return false; const rect = el.getBoundingClientRect(); return rect.width > 2 && rect.height > 2; }; const textOf = (el) => String((el.innerText || el.value || el.getAttribute('aria-label') || '')).replace(/\\s+/g, '').trim(); const score = (el) => { let s = 0; const text = textOf(el); if (!text) s -= 3; if (text === '登录' || text === '登入') s += 40; if (/^登录$|^登入$|^用户登录$|^账号登录$/.test(text)) s += 28; if (/登录|登入|认证|连接网络|开始上网|上网/.test(text)) s += 18; if (/扫码|二维码|云购|云上购|验证码登录|短信登录|手机登录|微信|支付宝/.test(text)) s -= 30; if (/重置|取消|清空|退出|返回/.test(text)) s -= 16; const type = String(el.type || '').toLowerCase(); if (type === 'submit' || type === 'button') s += 4; if (el.tagName === 'INPUT') s += 2; return s; }; const nodes = Array.from(document.querySelectorAll('button, input[type=submit], input[type=button], a, div[role=button], span[role=button]')).filter(visible); const ranked = nodes.slice().sort((a, b) => score(b) - score(a)); const target = ranked[0] || null; if (!target || score(target) < 8) throw new Error('未找到可用登录按钮'); target.click(); return true; })()",
+      "description": "自动识别中文登录按钮并点击"
     },
     {
       "id": "check_result",
       "type": "eval",
-      "script": "document.body.innerText.includes('成功') || document.body.innerText.includes('success') || document.title.includes('成功')",
+      "script": "(async () => { const okWords = ['登录成功', '认证成功', '已连接', '已上线', '欢迎使用', 'success']; const badWords = ['失败', '错误', '无效', '请重试', '密码错误', '账号错误']; const hasAny = (text, words) => words.some((w) => text.includes(w)); const start = Date.now(); while (Date.now() - start < 12000) { const text = String((document.body && document.body.innerText) || '') + ' ' + String(document.title || ''); if (hasAny(text, okWords)) return true; if (hasAny(text, badWords)) return false; await new Promise((r) => setTimeout(r, 400)); } return false; })()",
       "store_as": "login_success",
-      "description": "检查是否登录成功"
+      "description": "按中文结果文本判断是否登录成功"
     }
   ],
   "success_conditions": [
@@ -66,7 +55,7 @@
     "message": "登录成功"
   },
   "on_failure": {
-    "message": "登录失败，请检查账号密码",
+    "message": "登录失败：页面未出现成功信息，请按学校页面调整样例任务",
     "screenshot": true
   }
 }

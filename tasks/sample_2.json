@@ -1,0 +1,79 @@
+{
+  "name": "元素识别",
+  "description": "元素识别，仅使用标准步骤类型，可按页面调整选择器",
+  "version": "3.1.0",
+  "author": "System",
+  "url": "{{CAMPUS_AUTH_URL}}",
+  "variables": {
+    "username": "{{CAMPUS_USERNAME}}",
+    "password": "{{CAMPUS_PASSWORD}}",
+    "isp": "{{CAMPUS_ISP}}"
+  },
+  "timeout": 30000,
+  "steps": [
+    {
+      "id": "navigate_login_page",
+      "type": "navigate",
+      "url": "{{url}}",
+      "wait_until": "domcontentloaded",
+      "description": "打开认证页面"
+    },
+    {
+      "id": "input_username",
+      "type": "input",
+      "selector": "#username, input[name='username'], input[name='DDDDD']",
+      "value": "{{username}}",
+      "clear": true,
+      "description": "输入账号"
+    },
+    {
+      "id": "input_password",
+      "type": "input",
+      "selector": "#password, input[name='password'], input[name='upass'], input[type='password']",
+      "value": "{{password}}",
+      "clear": true,
+      "description": "输入密码"
+    },
+    {
+      "id": "select_isp",
+      "type": "select",
+      "selector": "#isp, #operator, select[name='isp'], select[name='carrier']",
+      "value": "{{isp}}",
+      "description": "选择运营商（无该控件可删除此步骤）"
+    },
+    {
+      "id": "click_login",
+      "type": "click",
+      "selector": "#login, input[name='0MKKey'], input[type='submit'], button[type='submit']",
+      "description": "点击登录"
+    },
+    {
+      "id": "wait_result",
+      "type": "wait",
+      "selector": ".success, .error, #success, #error, .msg, #message",
+      "timeout": 10000,
+      "description": "等待结果区域出现"
+    },
+    {
+      "id": "eval_login_result",
+      "type": "eval",
+      "script": "(() => { const text = String((document.body && document.body.innerText) || '') + ' ' + String(document.title || ''); const ok = ['成功','已连接','认证通过','welcome','success']; const bad = ['失败','错误','无效','超时']; const has = (arr) => arr.some((k) => text.toLowerCase().includes(String(k).toLowerCase())); if (has(bad)) return false; return has(ok); })()",
+      "store_as": "login_success",
+      "description": "执行JS判断是否登录成功"
+    }
+  ],
+  "success_conditions": [
+    {
+      "type": "variable",
+      "variable": "login_success",
+      "value": true
+    }
+  ],
+  "on_success": {
+    "message": "登录成功"
+  },
+  "on_failure": {
+    "message": "登录失败，请按学校页面调整选择器或结果关键词",
+    "screenshot": true
+  }
+}

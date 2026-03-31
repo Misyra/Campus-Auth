@@ -4,6 +4,48 @@ const api = axios.create({
   timeout: 10000,
 });
 
+const LOG_LEVELS = {
+  DEBUG: 10,
+  INFO: 20,
+  WARNING: 30,
+  ERROR: 40,
+};
+
+function createFrontendLogger(initialLevel = 'INFO') {
+  let currentLevel = String(initialLevel || 'INFO').toUpperCase();
+
+  const shouldLog = (level) => {
+    const left = LOG_LEVELS[String(level || '').toUpperCase()] || LOG_LEVELS.INFO;
+    const right = LOG_LEVELS[currentLevel] || LOG_LEVELS.INFO;
+    return left >= right;
+  };
+
+  const format = (level, scope, message, meta) => {
+    const stamp = new Date().toISOString();
+    return [stamp, level, 'FRONTEND', scope, message, meta || ''];
+  };
+
+  return {
+    setLevel(level) {
+      const next = String(level || '').toUpperCase();
+      currentLevel = LOG_LEVELS[next] ? next : 'INFO';
+      console.info(...format('INFO', 'logger', `frontend log level => ${currentLevel}`));
+    },
+    debug(scope, message, meta) {
+      if (shouldLog('DEBUG')) console.debug(...format('DEBUG', scope, message, meta));
+    },
+    info(scope, message, meta) {
+      if (shouldLog('INFO')) console.info(...format('INFO', scope, message, meta));
+    },
+    warn(scope, message, meta) {
+      if (shouldLog('WARNING')) console.warn(...format('WARNING', scope, message, meta));
+    },
+    error(scope, message, meta) {
+      if (shouldLog('ERROR')) console.error(...format('ERROR', scope, message, meta));
+    },
+  };
+}
+
 createApp({
   data() {
     return {
@@ -21,9 +63,13 @@ createApp({
         pause_enabled: true,
         pause_start_hour: 0,
         pause_end_hour: 6,
+        network_targets: "8.8.8.8:53,114.114.114.114:53,www.baidu.com:443",
+        backend_log_level: "INFO",
+        frontend_log_level: "INFO",
         access_log: false,
         minimize_to_tray: false,
       },
+      frontendLogger: createFrontendLogger("INFO"),
       status: {
         monitoring: false,
         network_check_count: 0,
@@ -81,7 +127,11 @@ createApp({
     }
   },
   methods: {
+    setFrontendLogLevel(level) {
+      this.frontendLogger.setLevel(level);
+    },
     async init() {
+      this.frontendLogger.info('app.init', 'start init');
       await Promise.all([
         this.fetchConfig(),
         this.fetchStatus(),
@@ -94,6 +144,7 @@ createApp({
       this.connectWebSocket();
       this.timers.push(setInterval(this.fetchStatus, 4000));
       this.timers.push(setInterval(this.fetchAutostart, 12000));
+      this.frontendLogger.info('app.init', 'init finished');
     },
     async checkInitStatus() {
       try {
@@ -137,11 +188,13 @@ createApp({
       }
 
       this.ws = new WebSocket(wsUrl);
+      this.frontendLogger.info('websocket', `connecting ${wsUrl}`);
       this.wsRetryCount = this.wsRetryCount || 0;
       this.wsMaxRetries = 5;
 
       this.ws.onopen = () => {
         this.wsRetryCount = 0;
+        this.frontendLogger.info('websocket', 'connected');
       };
 
       this.ws.onmessage = (event) => {
@@ -154,11 +207,12 @@ createApp({
             }
           }
         } catch (e) {
-          console.error('WebSocket message parse error:', e);
+          this.frontendLogger.error('websocket', 'message parse error', e);
         }
       };
 
       this.ws.onclose = () => {
+        this.frontendLogger.warn('websocket', 'connection closed');
         if (this.wsRetryCount >= this.wsMaxRetries) {
           this.notify(false, "与服务器的连接已断开，请刷新页面");
           return;
@@ -171,6 +225,7 @@ createApp({
       };
 
       this.ws.onerror = () => {
+        this.frontendLogger.error('websocket', 'connection error');
         this.ws.close();
       };
     },
@@ -195,18 +250,35 @@ createApp({
       if (!timestamp) return '';
       return timestamp.substring(11, 19);
     },
+    formatLogMeta(item) {
+      const level = String(item?.level || 'INFO').toUpperCase();
+      const source = String(item?.source || 'monitor');
+      return `[${level}] [${source}]`;
+    },
+    extractScreenshotUrl(message) {
+      const text = String(message || '');
+      const match = text.match(/截图[:：]\s*(\/debug\/[^\s]+)/i);
+      return match ? match[1] : '';
+    },
+    stripScreenshotHint(message) {
+      const text = String(message || '');
+      return text.replace(/\s*截图[:：]\s*\/debug\/[^\s]+/gi, '').trim();
+    },
     getLogClass(message) {
-      if (message.includes('成功') || message.includes('✓')) return 'success';
-      if (message.includes('异常') || message.includes('警告') || message.includes('失败')) return 'warning';
-      if (message.includes('错误') || message.includes('✗')) return 'error';
+      const text = this.stripScreenshotHint(message);
+      if (text.includes('错误') || text.includes('✗') || text.includes('EXCEPTION')) return 'error';
+      if (text.includes('异常') || text.includes('警告') || text.includes('失败')) return 'warning';
+      if (text.includes('成功') || text.includes('✓')) return 'success';
       return '';
     },
     async fetchConfig() {
       try {
         const { data } = await api.get("/api/config");
         this.config = data;
+        this.setFrontendLogLevel(this.config.frontend_log_level || 'INFO');
+        this.frontendLogger.info('config', 'config loaded');
       } catch (error) {
-        console.error('Failed to fetch config:', error);
+        this.frontendLogger.error('config', 'failed to fetch config', error);
       }
     },
     async fetchStatus() {
@@ -216,6 +288,7 @@ createApp({
         this.fetchStatusFailCount = 0;
       } catch (error) {
         this.fetchStatusFailCount = (this.fetchStatusFailCount || 0) + 1;
+        this.frontendLogger.warn('status', 'fetch status failed', error);
         if (this.fetchStatusFailCount >= 3) {
           this.notify(false, "无法连接到服务器，请检查后端是否已关闭");
           this.fetchStatusFailCount = 0;
@@ -227,7 +300,7 @@ createApp({
         const { data } = await api.get("/api/logs", { params: { limit: 250 } });
         this.logs = data;
       } catch (error) {
-        console.error('Failed to fetch logs:', error);
+        this.frontendLogger.error('logs', 'failed to fetch logs', error);
       }
     },
     async fetchAutostart() {
@@ -235,6 +308,7 @@ createApp({
         const { data } = await api.get("/api/autostart/status");
         this.autostart = data;
       } catch (error) {
+        this.frontendLogger.warn('autostart', 'fetch autostart failed', error);
         if (error?.response?.status === 404) {
           this.autostart = {
             platform: "-",
@@ -249,9 +323,11 @@ createApp({
       this.busy.save = true;
       try {
         const { data } = await api.put("/api/config", this.config);
+        this.setFrontendLogLevel(this.config.frontend_log_level || 'INFO');
         this.notify(data.success, data.message);
       } catch (error) {
         const msg = error?.response?.data?.detail || "保存失败";
+        this.frontendLogger.error('config', 'save config failed', error);
         this.notify(false, msg);
       } finally {
         this.busy.save = false;
@@ -261,10 +337,12 @@ createApp({
       this.busy.monitor = true;
       try {
         const url = this.status.monitoring ? "/api/monitor/stop" : "/api/monitor/start";
+        this.frontendLogger.info('monitor', `request ${url}`);
         const { data } = await api.post(url);
         this.notify(data.success, data.message);
         await this.fetchStatus();
       } catch {
+        this.frontendLogger.error('monitor', 'toggle monitor failed');
         this.notify(false, "操作失败");
       } finally {
         this.busy.monitor = false;
@@ -273,9 +351,11 @@ createApp({
     async manualLogin() {
       this.busy.action = true;
       try {
+        this.frontendLogger.info('action', 'manual login requested');
         const { data } = await api.post("/api/actions/login");
         this.notify(data.success, data.message);
       } catch {
+        this.frontendLogger.error('action', 'manual login failed');
         this.notify(false, "手动登录失败");
       } finally {
         this.busy.action = false;
@@ -284,9 +364,11 @@ createApp({
     async testNetwork() {
       this.busy.action = true;
       try {
+        this.frontendLogger.info('action', 'network test requested');
         const { data } = await api.post("/api/actions/test-network");
         this.notify(data.success, data.message);
       } catch {
+        this.frontendLogger.error('action', 'network test failed');
         this.notify(false, "网络测试失败");
       } finally {
         this.busy.action = false;
@@ -329,7 +411,7 @@ createApp({
         const { data } = await api.get("/api/tasks");
         this.tasks = data;
       } catch (error) {
-        console.error('Failed to fetch tasks:', error);
+        this.frontendLogger.error('tasks', 'failed to fetch tasks', error);
       }
     },
     async fetchActiveTask() {
@@ -337,11 +419,12 @@ createApp({
         const { data } = await api.get("/api/tasks/active");
         this.activeTaskId = data.task_id;
       } catch (error) {
-        console.error('Failed to fetch active task:', error);
+        this.frontendLogger.error('tasks', 'failed to fetch active task', error);
       }
     },
     async setActiveTask(taskId) {
       try {
+        this.frontendLogger.info('tasks', `set active task: ${taskId}`);
         const { data } = await api.post(`/api/tasks/active/${taskId}`);
         if (data.success) {
           this.activeTaskId = taskId;
@@ -393,11 +476,13 @@ createApp({
         return;
       }
       try {
+        this.frontendLogger.info('tasks', `save task: ${this.editingTask.id}`);
         const config = JSON.parse(this.editingTask.json);
         config.name = this.editingTask.name || config.name;
         config.description = this.editingTask.description || config.description;
         config.url = this.editingTask.url || config.url;
 
+        
         const { data } = await api.put(`/api/tasks/${this.editingTask.id}`, config);
         if (data.success) {
           this.notify(true, "任务保存成功");
@@ -407,6 +492,7 @@ createApp({
           this.notify(false, data.message);
         }
       } catch (error) {
+        this.frontendLogger.error('tasks', 'save task failed', error);
         this.notify(false, error.message || "保存失败");
       }
     },

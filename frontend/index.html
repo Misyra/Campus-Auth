@@ -421,7 +421,13 @@
                     <div v-else class="log-entries">
                       <div v-for="item in logs" :key="item.timestamp + item.message" class="log-entry">
                         <span class="log-time">{{ formatLogTime(item.timestamp) }}</span>
-                        <span class="log-message" :class="getLogClass(item.message)">{{ item.message }}</span>
+                        <span class="log-time">{{ formatLogMeta(item) }}</span>
+                        <div class="log-content">
+                          <span class="log-message" :class="getLogClass(item.message)">{{ stripScreenshotHint(item.message) }}</span>
+                          <div v-if="extractScreenshotUrl(item.message)" class="log-screenshot-wrap">
+                            <a :href="extractScreenshotUrl(item.message)" target="_blank" rel="noopener" class="log-screenshot-link">查看截图</a>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -483,6 +489,16 @@
                       <label for="settings-interval">检测间隔（分钟）</label>
                       <input id="settings-interval" v-model.number="config.check_interval_minutes" type="number" min="1" max="1440" />
                     </div>
+                    <div class="form-group">
+                      <label for="settings-network-targets">网络检测目标（逗号分隔）</label>
+                      <input
+                        id="settings-network-targets"
+                        v-model="config.network_targets"
+                        type="text"
+                        placeholder="8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
+                      />
+                      <span class="hint">支持 host 或 host:port，多个目标用英文逗号分隔</span>
+                    </div>
                     <div class="form-row">
                       <div class="form-group">
                         <label for="settings-pause-start">暂停开始（小时）</label>
@@ -508,6 +524,28 @@
                     <h2>系统设置</h2>
                   </div>
                   <div class="card-body">
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label for="settings-backend-log-level">后端日志级别</label>
+                        <select id="settings-backend-log-level" v-model="config.backend_log_level">
+                          <option>DEBUG</option>
+                          <option>INFO</option>
+                          <option>WARNING</option>
+                          <option>ERROR</option>
+                          <option>CRITICAL</option>
+                        </select>
+                      </div>
+                      <div class="form-group">
+                        <label for="settings-frontend-log-level">前端日志级别</label>
+                        <select id="settings-frontend-log-level" v-model="config.frontend_log_level">
+                          <option>DEBUG</option>
+                          <option>INFO</option>
+                          <option>WARNING</option>
+                          <option>ERROR</option>
+                          <option>CRITICAL</option>
+                        </select>
+                      </div>
+                    </div>
                     <div class="toggle-group">
                       <label class="toggle">
                         <input type="checkbox" v-model="config.auto_start" />

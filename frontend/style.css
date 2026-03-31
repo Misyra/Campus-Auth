@@ -509,6 +509,36 @@ body {
   word-break: break-all;
 }
 
+.log-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.log-screenshot-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.log-screenshot-link {
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: underline;
+  width: fit-content;
+}
+
+.log-screenshot-preview {
+  width: 160px;
+  max-width: 40vw;
+  max-height: 100px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-primary);
+}
+
 .log-message.success {
   color: var(--success);
 }

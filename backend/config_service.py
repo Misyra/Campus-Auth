@@ -7,7 +7,6 @@ from src.utils import ConfigLoader
 
 from .schemas import MonitorConfigPayload
 
-
 CARRIER_MAP = {
     "移动": "@cmcc",
     "联通": "@unicom",
@@ -15,6 +14,20 @@ CARRIER_MAP = {
     "教育网": "@xyw",
     "无": "",
 }
+
+VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+
+
+def _normalize_level(raw: str, default: str = "INFO") -> str:
+    level = str(raw or default).upper().strip()
+    return level if level in VALID_LOG_LEVELS else default
+
+
+def _normalize_targets(raw: str) -> str:
+    parts = [item.strip() for item in str(raw or "").split(",") if item.strip()]
+    if not parts:
+        return "8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
+    return ",".join(parts)
 
 
 def load_ui_config() -> MonitorConfigPayload:
@@ -31,6 +44,11 @@ def load_ui_config() -> MonitorConfigPayload:
 
     pause_config = config.get("pause_login", {})
     browser_config = config.get("browser_settings", {})
+    monitor_config = config.get("monitor", {})
+    ping_targets = monitor_config.get("ping_targets", [])
+    network_targets = _normalize_targets(
+        ",".join(str(item) for item in ping_targets) if ping_targets else ""
+    )
 
     return MonitorConfigPayload(
         username=config.get("username", ""),
@@ -42,6 +60,13 @@ def load_ui_config() -> MonitorConfigPayload:
         pause_enabled=bool(pause_config.get("enabled", True)),
         pause_start_hour=int(pause_config.get("start_hour", 0)),
         pause_end_hour=int(pause_config.get("end_hour", 6)),
+        network_targets=network_targets,
+        backend_log_level=_normalize_level(
+            config.get("logging", {}).get("level", "INFO")
+        ),
+        frontend_log_level=_normalize_level(
+            config.get("frontend_logging", {}).get("level", "INFO")
+        ),
         access_log=bool(config.get("access_log", False)),
         minimize_to_tray=bool(config.get("minimize_to_tray", False)),
     )
@@ -65,6 +90,18 @@ def build_runtime_config(payload: MonitorConfigPayload) -> dict[str, Any]:
 
     monitor = base.setdefault("monitor", {})
     monitor["interval"] = payload.check_interval_minutes * 60
+    monitor["ping_targets"] = [
+        item.strip() for item in payload.network_targets.split(",") if item.strip()
+    ]
+
+    backend_level = _normalize_level(payload.backend_log_level)
+    frontend_level = _normalize_level(payload.frontend_log_level)
+
+    logging_config = base.setdefault("logging", {})
+    logging_config["level"] = backend_level
+
+    frontend_logging = base.setdefault("frontend_logging", {})
+    frontend_logging["level"] = frontend_level
 
     base["access_log"] = payload.access_log
     base["minimize_to_tray"] = payload.minimize_to_tray
@@ -73,6 +110,9 @@ def build_runtime_config(payload: MonitorConfigPayload) -> dict[str, Any]:
 
 
 def write_env_file(payload: MonitorConfigPayload, env_path: Path) -> None:
+    network_targets = _normalize_targets(payload.network_targets)
+    backend_level = _normalize_level(payload.backend_log_level)
+    frontend_level = _normalize_level(payload.frontend_log_level)
     env_content = f"""# 校园网认证配置
 CAMPUS_USERNAME={payload.username.strip()}
 CAMPUS_PASSWORD={payload.password.strip()}
@@ -88,7 +128,7 @@ BROWSER_LOW_RESOURCE_MODE=true
 APP_PORT=50721
 MONITOR_INTERVAL={payload.check_interval_minutes * 60}
 AUTO_START_MONITORING={str(payload.auto_start).lower()}
-PING_TARGETS=8.8.8.8,114.114.114.114,baidu.com
+PING_TARGETS={network_targets}
 
 # 重试策略配置
 RETRY_MAX_RETRIES=3
@@ -100,8 +140,10 @@ PAUSE_LOGIN_START_HOUR={payload.pause_start_hour}
 PAUSE_LOGIN_END_HOUR={payload.pause_end_hour}
 
 # 日志配置
-LOG_LEVEL=INFO
-LOG_FORMAT=%(asctime)s - %(levelname)s - %(message)s
+LOG_LEVEL={backend_level}
+BACKEND_LOG_LEVEL={backend_level}
+FRONTEND_LOG_LEVEL={frontend_level}
+LOG_FORMAT=%(asctime)s | %(levelname)s | %(side)s | %(name)s | %(message)s
 LOG_FILE=logs/campus_auth.log
 
 # HTTP请求日志（控制台是否显示API请求）

@@ -1,3 +1,5 @@
+# 忽略 debug 目录
+debug/
 # Python-generated files
 __pycache__/
 *.py[oc]
@@ -39,3 +41,4 @@ Thumbs.db
 # Release staging artifacts
 release/stage-win/
 release/stage-win-full/
+release/*

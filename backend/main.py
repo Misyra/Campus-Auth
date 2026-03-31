@@ -1,24 +1,25 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import sys
+import time
 from pathlib import Path
 
-_ENV_PROJECT_ROOT = os.getenv("Campus-Auth_PROJECT_ROOT", "").strip()
-PROJECT_ROOT = (
-    Path(_ENV_PROJECT_ROOT).expanduser().resolve()
-    if _ENV_PROJECT_ROOT
-    else Path(__file__).resolve().parents[1]
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
 )
-os.environ.setdefault("Campus-Auth_ENV_FILE", str(PROJECT_ROOT / ".env"))
-SRC_DIR = PROJECT_ROOT / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+
+from src.utils import ConfigLoader
+from src.utils.logging import configure_root_logger, get_logger
 
 from .autostart_service import AutoStartService
 from .monitor_service import MonitorService, ws_manager
@@ -31,7 +32,20 @@ from .schemas import (
 )
 from .task_service import TaskService
 
+_ENV_PROJECT_ROOT = os.getenv("Campus-Auth_PROJECT_ROOT", "").strip()
+PROJECT_ROOT = (
+    Path(_ENV_PROJECT_ROOT).expanduser().resolve()
+    if _ENV_PROJECT_ROOT
+    else Path(__file__).resolve().parents[1]
+)
+os.environ.setdefault("Campus-Auth_ENV_FILE", str(PROJECT_ROOT / ".env"))
+SRC_DIR = PROJECT_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
+DEBUG_DIR = PROJECT_ROOT / "debug"
+DEBUG_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(
     title="Campus Network Auth API",
@@ -41,23 +55,61 @@ app = FastAPI(
 service = MonitorService(project_root=PROJECT_ROOT)
 autostart_service = AutoStartService(project_root=PROJECT_ROOT)
 task_service = TaskService(project_root=PROJECT_ROOT)
+http_logger = get_logger("backend.http", side="BACKEND")
+startup_logger = get_logger("backend.startup", side="BACKEND")
+api_logger = get_logger("backend.api", side="BACKEND")
+ws_logger = get_logger("backend.ws", side="BACKEND")
+
+
+@app.middleware("http")
+async def request_logging_middleware(request: Request, call_next):
+    start = time.perf_counter()
+    try:
+        response = await call_next(request)
+        duration_ms = (time.perf_counter() - start) * 1000
+        http_logger.info(
+            "%s %s -> %s (%.1fms)",
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+        )
+        return response
+    except Exception:
+        duration_ms = (time.perf_counter() - start) * 1000
+        http_logger.exception(
+            "%s %s -> EXCEPTION (%.1fms)",
+            request.method,
+            request.url.path,
+            duration_ms,
+        )
+        raise
 
 
 @app.on_event("startup")
 def on_startup() -> None:
+    start = asyncio.get_event_loop().time()
+    startup_logger.info("FastAPI 启动钩子: 开始设置事件循环与服务引导")
     service.set_event_loop(asyncio.get_event_loop())
     service.boot()
+    startup_logger.info(
+        "FastAPI 启动钩子: 完成，耗时 %.3fs",
+        asyncio.get_event_loop().time() - start,
+    )
 
 
 @app.websocket("/ws/logs")
 async def websocket_logs(websocket: WebSocket):
+    ws_logger.info("WebSocket connecting: /ws/logs")
     await ws_manager.connect(websocket)
     try:
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
+        ws_logger.info("WebSocket disconnected: /ws/logs")
         await ws_manager.disconnect(websocket)
     except Exception:
+        ws_logger.exception("WebSocket error: /ws/logs")
         await ws_manager.disconnect(websocket)
 
 
@@ -87,8 +139,10 @@ def get_config() -> MonitorConfigPayload:
 def save_config(payload: MonitorConfigPayload) -> ActionResponse:
     try:
         service.save_config(payload)
+        api_logger.info("Config updated")
         return ActionResponse(success=True, message="配置保存成功")
     except ValueError as exc:
+        api_logger.warning("Config update rejected: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -105,24 +159,28 @@ def get_logs(limit: int = Query(default=200, ge=1, le=1000)) -> list[LogEntry]:
 @app.post("/api/monitor/start", response_model=ActionResponse)
 def start_monitoring() -> ActionResponse:
     ok, message = service.start_monitoring()
+    api_logger.info("Monitor start requested -> success=%s, message=%s", ok, message)
     return ActionResponse(success=ok, message=message)
 
 
 @app.post("/api/monitor/stop", response_model=ActionResponse)
 def stop_monitoring() -> ActionResponse:
     ok, message = service.stop_monitoring()
+    api_logger.info("Monitor stop requested -> success=%s, message=%s", ok, message)
     return ActionResponse(success=ok, message=message)
 
 
 @app.post("/api/actions/login", response_model=ActionResponse)
 def manual_login() -> ActionResponse:
     ok, message = service.run_manual_login()
+    api_logger.info("Manual login requested -> success=%s, message=%s", ok, message)
     return ActionResponse(success=ok, message=message)
 
 
 @app.post("/api/actions/test-network", response_model=ActionResponse)
 def test_network() -> ActionResponse:
     ok, message = service.test_network()
+    api_logger.info("Network test requested -> success=%s, message=%s", ok, message)
     return ActionResponse(success=ok, message=message)
 
 
@@ -140,12 +198,16 @@ def autostart_status() -> AutoStartStatusResponse:
 @app.post("/api/autostart/enable", response_model=ActionResponse)
 def enable_autostart() -> ActionResponse:
     ok, message = autostart_service.enable()
+    api_logger.info("Autostart enable requested -> success=%s, message=%s", ok, message)
     return ActionResponse(success=ok, message=message)
 
 
 @app.post("/api/autostart/disable", response_model=ActionResponse)
 def disable_autostart() -> ActionResponse:
     ok, message = autostart_service.disable()
+    api_logger.info(
+        "Autostart disable requested -> success=%s, message=%s", ok, message
+    )
     return ActionResponse(success=ok, message=message)
 
 
@@ -170,18 +232,23 @@ def get_task(task_id: str) -> dict:
 @app.put("/api/tasks/{task_id}", response_model=ActionResponse)
 def save_task(task_id: str, payload: dict) -> ActionResponse:
     ok, message = task_service.save_task(task_id, payload)
+    api_logger.info("Save task %s -> success=%s, message=%s", task_id, ok, message)
     return ActionResponse(success=ok, message=message)
 
 
 @app.delete("/api/tasks/{task_id}", response_model=ActionResponse)
 def delete_task(task_id: str) -> ActionResponse:
     ok, message = task_service.delete_task(task_id)
+    api_logger.info("Delete task %s -> success=%s, message=%s", task_id, ok, message)
     return ActionResponse(success=ok, message=message)
 
 
 @app.post("/api/tasks/active/{task_id}", response_model=ActionResponse)
 def set_active_task(task_id: str) -> ActionResponse:
     ok, message = task_service.set_active_task(task_id)
+    api_logger.info(
+        "Set active task %s -> success=%s, message=%s", task_id, ok, message
+    )
     return ActionResponse(success=ok, message=message)
 
 
@@ -198,6 +265,7 @@ def _setShutdownEvent(event):
 @app.post("/api/shutdown", response_model=ActionResponse)
 def shutdown_server() -> ActionResponse:
     """关闭服务器"""
+    api_logger.warning("Shutdown requested")
     import threading
 
     def _do_shutdown():
@@ -228,6 +296,7 @@ def shutdown_server() -> ActionResponse:
 
 
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+app.mount("/debug", StaticFiles(directory=DEBUG_DIR), name="debug")
 
 
 def _resolve_port() -> int:
@@ -242,13 +311,10 @@ def _resolve_port() -> int:
 
 
 def run() -> None:
-    import logging
-
     import uvicorn
 
-    from src.utils import ConfigLoader
-
     config = ConfigLoader.load_config_from_env()
+    configure_root_logger(config.get("logging", {}), side="BACKEND")
     access_log_enabled = bool(config.get("access_log", False))
 
     if not access_log_enabled:
