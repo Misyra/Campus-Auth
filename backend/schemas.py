@@ -13,6 +13,11 @@ class MonitorConfigPayload(BaseModel):
     pause_enabled: bool = True
     pause_start_hour: int = Field(default=0, ge=0, le=23)
     pause_end_hour: int = Field(default=6, ge=0, le=23)
+    network_targets: str = Field(
+        default="8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
+    )
+    backend_log_level: str = Field(default="INFO")
+    frontend_log_level: str = Field(default="INFO")
     access_log: bool = False
     minimize_to_tray: bool = False
 
@@ -32,6 +37,8 @@ class MonitorStatusResponse(BaseModel):
 
 class LogEntry(BaseModel):
     timestamp: str
+    level: str = "INFO"
+    source: str = "monitor"
     message: str
 
 

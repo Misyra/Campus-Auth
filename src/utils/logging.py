@@ -26,28 +26,67 @@ class ColoredFormatter(logging.Formatter):
             record.levelname = original_levelname
 
 
-def setup_logger(name: str, config: Dict[str, Any] | None = None) -> logging.Logger:
-    if config is None:
-        config = {}
+class _DefaultContextFilter(logging.Filter):
+    def __init__(self, side: str = "BACKEND"):
+        super().__init__()
+        self.side = side
 
-    logger = logging.getLogger(name)
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not hasattr(record, "side"):
+            record.side = self.side
+        return True
 
-    if logger.handlers:
-        return logger
 
-    log_level = config.get("level", "INFO")
-    logger.setLevel(getattr(logging, log_level.upper()))
+class _SideFilter(logging.Filter):
+    def __init__(self, side: str):
+        super().__init__()
+        self.side = side
 
-    console_formatter = ColoredFormatter(
-        "%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%H:%M:%S"
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.side = self.side
+        return True
+
+
+def _normalize_level(level: str | None, default: str = "INFO") -> str:
+    raw = str(level or default).upper().strip()
+    return raw if raw in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"} else default
+
+
+def _level_value(level: str | None, default: str = "INFO") -> int:
+    return getattr(logging, _normalize_level(level, default), logging.INFO)
+
+
+def _formatter(pattern: str, colored: bool = False) -> logging.Formatter:
+    if colored:
+        return ColoredFormatter(pattern, datefmt="%H:%M:%S")
+    return logging.Formatter(pattern, datefmt="%Y-%m-%d %H:%M:%S")
+
+
+def configure_root_logger(
+    config: Dict[str, Any] | None = None, side: str = "BACKEND"
+) -> logging.Logger:
+    config = config or {}
+    root = logging.getLogger()
+
+    level = _level_value(config.get("level", "INFO"))
+    pattern = str(
+        config.get(
+            "format",
+            "%(asctime)s | %(levelname)s | %(side)s | %(name)s | %(message)s",
+        )
     )
-    file_formatter = logging.Formatter(
-        "%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-    )
+    root.setLevel(level)
+
+    for handler in list(root.handlers):
+        root.removeHandler(handler)
+
+    context_filter = _DefaultContextFilter(side=side)
 
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(console_formatter)
-    logger.addHandler(console_handler)
+    console_handler.setLevel(level)
+    console_handler.setFormatter(_formatter(pattern, colored=True))
+    console_handler.addFilter(context_filter)
+    root.addHandler(console_handler)
 
     log_file = config.get("file")
     if log_file:
@@ -57,14 +96,42 @@ def setup_logger(name: str, config: Dict[str, Any] | None = None) -> logging.Log
                 os.makedirs(log_dir, exist_ok=True)
 
             file_handler = logging.handlers.RotatingFileHandler(
-                log_file, maxBytes=1 * 1024 * 1024, backupCount=3, encoding="utf-8"
+                log_file,
+                maxBytes=1 * 1024 * 1024,
+                backupCount=5,
+                encoding="utf-8",
             )
-            file_handler.setFormatter(file_formatter)
-            logger.addHandler(file_handler)
+            file_handler.setLevel(level)
+            file_handler.setFormatter(_formatter(pattern, colored=False))
+            file_handler.addFilter(context_filter)
+            root.addHandler(file_handler)
         except Exception as e:
-            logger.warning(f"无法创建日志文件 {log_file}: {e}")
+            root.warning(f"无法创建日志文件 {log_file}: {e}")
 
-    logger.propagate = False
+    return root
+
+
+def _attach_side_filter(logger: logging.Logger, side: str) -> None:
+    for filt in logger.filters:
+        if isinstance(filt, _SideFilter) and filt.side == side:
+            return
+    logger.addFilter(_SideFilter(side))
+
+
+def get_logger(name: str, side: str = "BACKEND") -> logging.Logger:
+    logger = logging.getLogger(name)
+    _attach_side_filter(logger, side)
+    return logger
+
+
+def setup_logger(name: str, config: Dict[str, Any] | None = None) -> logging.Logger:
+    config = config or {}
+    configure_root_logger(config, side="BACKEND")
+
+    logger = get_logger(name, side="BACKEND")
+    logger.handlers.clear()
+    logger.propagate = True
+    logger.setLevel(_level_value(config.get("level", "INFO")))
     return logger
 
 

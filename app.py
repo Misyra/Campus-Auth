@@ -3,7 +3,6 @@
 
 import argparse
 import atexit
-import logging
 import os
 import signal
 import socket
@@ -20,18 +19,16 @@ from src.playwright_bootstrap import ensure_playwright_ready
 
 
 def _setup_logging() -> None:
-    from src.utils import ColoredFormatter
+    from src.utils.logging import configure_root_logger
 
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
-
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(
-        ColoredFormatter(
-            "%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%H:%M:%S"
-        )
+    level = os.getenv("BACKEND_LOG_LEVEL", os.getenv("LOG_LEVEL", "INFO"))
+    configure_root_logger(
+        {
+            "level": level,
+            "file": os.getenv("LOG_FILE", "logs/campus_auth.log") or None,
+        },
+        side="BACKEND",
     )
-    root_logger.addHandler(console_handler)
 
 
 # ==================== PID 管理 ====================
@@ -185,6 +182,10 @@ def _cmd_autostart(action: str) -> None:
 
 
 def _run_server(no_browser: bool = False, tray: bool = False) -> None:
+    from src.utils.logging import get_logger
+
+    startup_logger = get_logger("startup", side="APP")
+    startup_begin = time.perf_counter()
     running, pid = _is_service_running()
     from backend.main import _resolve_port
 
@@ -206,11 +207,23 @@ def _run_server(no_browser: bool = False, tray: bool = False) -> None:
     signal.signal(signal.SIGINT, _signal_handler)
     signal.signal(signal.SIGTERM, _signal_handler)
 
+    stage_begin = time.perf_counter()
+    startup_logger.info("启动阶段: 开始检查 Playwright 运行环境")
     ensure_playwright_ready(print)
+    startup_logger.info(
+        "启动阶段: Playwright 检查完成，耗时 %.3fs",
+        time.perf_counter() - stage_begin,
+    )
 
     from src.utils import ConfigLoader
 
+    stage_begin = time.perf_counter()
+    startup_logger.info("启动阶段: 开始加载运行配置")
     config = ConfigLoader.load_config_from_env()
+    startup_logger.info(
+        "启动阶段: 运行配置加载完成，耗时 %.3fs",
+        time.perf_counter() - stage_begin,
+    )
     minimize_to_tray = tray or bool(config.get("minimize_to_tray", False))
 
     from backend.main import run
@@ -233,6 +246,10 @@ def _run_server(no_browser: bool = False, tray: bool = False) -> None:
 
     print(f"Web 控制台已启动: http://127.0.0.1:{port}")
     print("按 Ctrl+C 停止服务")
+    startup_logger.info(
+        "启动阶段: 启动准备完成，总耗时 %.3fs，开始启动 Uvicorn",
+        time.perf_counter() - startup_begin,
+    )
 
     try:
         run()

@@ -1,9 +1,9 @@
 {
-  "id": "default",
-  "name": "默认",
-  "description": "语义识别，不依赖固定元素选择器",
+  "name": "语义识别",
+  "description": "语义识别，自动识别账号、密码和登录按钮",
   "version": "3.1.0",
-  "url": "http://172.29.0.2",
+  "author": "User",
+  "url": "http://你的学校认证地址",
   "variables": {
     "username": "{{CAMPUS_USERNAME}}",
     "password": "{{CAMPUS_PASSWORD}}",
@@ -16,19 +16,19 @@
       "type": "navigate",
       "url": "{{url}}",
       "description": "打开登录页面",
-      "wait_until": "networkidle"
+      "wait_until": "domcontentloaded"
     },
     {
       "id": "fill_credentials_auto",
       "type": "custom_js",
-      "script": "(() => { const username = String('{{username}}' || '').trim(); const password = String('{{password}}' || '').trim(); const visible = (el) => { if (!el) return false; const style = window.getComputedStyle(el); if (!style || style.visibility === 'hidden' || style.display === 'none') return false; const rect = el.getBoundingClientRect(); return rect.width > 2 && rect.height > 2; }; const editable = (el) => el && !el.disabled && !el.readOnly; const nearText = (el) => { const parts = []; const id = el.id || ''; if (id) { const label = document.querySelector(`label[for='${id}']`); if (label) parts.push(label.innerText || ''); } let p = el.parentElement; let depth = 0; while (p && depth < 3) { parts.push(p.innerText || ''); p = p.parentElement; depth += 1; } return parts.join(' ').toLowerCase(); }; const attrsText = (el) => [el.name, el.id, el.className, el.placeholder, el.getAttribute('aria-label'), el.getAttribute('autocomplete')].filter(Boolean).join(' ').toLowerCase(); const scoreUser = (el) => { let s = 0; const t = String(el.type || '').toLowerCase(); if (t === 'text' || t === 'email' || t === 'tel' || t === '') s += 4; if (t === 'password' || t === 'hidden') s -= 8; const text = `${attrsText(el)} ${nearText(el)}`; if (/账号|帳號|帐号|用户名|使用者|学号|工号|手机号|手机|user|username|login|id/.test(text)) s += 16; if (/密码|pass|验证码|code/.test(text)) s -= 10; return s; }; const scorePass = (el) => { let s = 0; const t = String(el.type || '').toLowerCase(); if (t === 'password') s += 20; const text = `${attrsText(el)} ${nearText(el)}`; if (/密码|密碼|pass|passwd|pwd/.test(text)) s += 12; if (/账号|帳號|帐号|用户名|user|username/.test(text)) s -= 8; return s; }; const candidates = Array.from(document.querySelectorAll('input, textarea')).filter((el) => visible(el) && editable(el)); const userInput = candidates.slice().sort((a, b) => scoreUser(b) - scoreUser(a))[0] || null; const passInput = candidates.slice().sort((a, b) => scorePass(b) - scorePass(a))[0] || null; const fill = (el, val) => { if (!el || !val) return false; el.focus(); el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); el.value = val; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); return true; }; const userOk = fill(userInput, username); const passOk = fill(passInput, password); if (!userOk || !passOk) { throw new Error('未能自动识别账号或密码输入框'); } return true; })()",
+      "script": "(() => { const username = String('{{username}}' || '').trim(); const password = String('{{password}}' || '').trim(); const visible = (el) => { if (!el) return false; const style = window.getComputedStyle(el); if (!style || style.visibility === 'hidden' || style.display === 'none') return false; const rect = el.getBoundingClientRect(); return rect.width > 2 && rect.height > 2; }; const editable = (el) => el && !el.disabled && !el.readOnly; const nearText = (el) => { const parts = []; const id = el.id || ''; if (id) { const label = document.querySelector(`label[for='${id}']`); if (label) parts.push(label.innerText || ''); } let p = el.parentElement; let depth = 0; while (p && depth < 3) { parts.push(p.innerText || ''); p = p.parentElement; depth += 1; } return parts.join(' ').toLowerCase(); }; const attrsText = (el) => [el.name, el.id, el.className, el.placeholder, el.getAttribute('aria-label'), el.getAttribute('autocomplete')].filter(Boolean).join(' ').toLowerCase(); const scoreUser = (el) => { let s = 0; const t = String(el.type || '').toLowerCase(); if (t === 'text' || t === 'email' || t === 'tel' || t === '') s += 4; if (t === 'password' || t === 'hidden') s -= 8; const text = `${attrsText(el)} ${nearText(el)}`; if (/账号|帳號|帐号|用户名|使用者|学号|工号|手机号|手机|user|username|login|id/.test(text)) s += 16; if (/密码|pass|验证码|code/.test(text)) s -= 10; return s; }; const scorePass = (el) => { let s = 0; const t = String(el.type || '').toLowerCase(); if (t === 'password') s += 20; const text = `${attrsText(el)} ${nearText(el)}`; if (/密码|密碼|pass|passwd|pwd/.test(text)) s += 12; if (/账号|帳號|帐号|用户名|user|username/.test(text)) s -= 8; return s; }; const candidates = Array.from(document.querySelectorAll('input, textarea')).filter((el) => visible(el) && editable(el)); const userInput = candidates.slice().sort((a, b) => scoreUser(b) - scoreUser(a))[0] || null; const passInput = candidates.slice().sort((a, b) => scorePass(b) - scorePass(a))[0] || null; const fill = (el, val) => { if (!el || !val) return false; el.focus(); el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); el.value = val; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); return true; }; const userOk = fill(userInput, username); const passOk = fill(passInput, password); if (!userOk || !passOk) throw new Error('未能自动识别账号或密码输入框'); return true; })()",
       "description": "自动识别账号/密码输入框并填写"
     },
     {
       "id": "select_isp",
       "type": "custom_js",
       "script": "(() => { try { const isp = String('{{isp}}' || '').trim(); const map = { '': ['校园用户', '校园其他'], '@dx': ['校园电信', '电信'], '@lt': ['校园联通', '联通'], '@cmcc': ['校园移动', '移动'], '@unicom': ['校园联通', '联通'], '@telecom': ['校园电信', '电信'], '@xyw': ['校园用户', '教育网'] }; const normalize = (v) => String(v || '').replace(/\\s+/g, '').toLowerCase(); const names = new Set((map[isp] || []).map(normalize)); const suffixHints = [isp, isp.replace('@', ''), isp === '@dx' ? 'telecom' : '', isp === '@lt' ? 'unicom' : '', isp === '@cmcc' ? 'cmcc' : ''].filter(Boolean).map(normalize); const visible = (el) => { if (!el) return false; const style = window.getComputedStyle(el); if (!style || style.display === 'none' || style.visibility === 'hidden') return false; const rect = el.getBoundingClientRect(); return rect.width > 1 && rect.height > 1; }; const attrDump = (el) => { const attrs = []; if (el && el.attributes) { for (const a of Array.from(el.attributes)) attrs.push(a.name + '=' + a.value); } return normalize([el.innerText, el.textContent, el.value, el.name, el.id, el.className, el.title, el.getAttribute('aria-label'), el.getAttribute('data-name'), el.getAttribute('data-value'), attrs.join(' ')].filter(Boolean).join(' ')); }; const hasCarrierName = (text) => Array.from(names).some((n) => n && text.includes(n)); const hasSuffixHint = (text) => suffixHints.some((h) => h && text.includes(h)); const scoreCarrier = (text) => { let s = 0; if (hasCarrierName(text)) s += 24; if (hasSuffixHint(text)) s += 12; if (/运营商|套餐|网络|宽带|服务/.test(text)) s += 4; if (/登录|扫码|注册|找回|短信|验证码/.test(text)) s -= 10; return s; }; const selects = Array.from(document.querySelectorAll('select')).filter(visible); for (const sel of selects) { const options = Array.from(sel.options || []); let best = null; let bestScore = -999; for (const opt of options) { const t = attrDump(opt); const sc = scoreCarrier(t); if (sc > bestScore) { best = opt; bestScore = sc; } } if (best && bestScore > 6) { sel.value = best.value; sel.dispatchEvent(new Event('change', { bubbles: true })); sel.dispatchEvent(new Event('input', { bubbles: true })); return true; } } const radios = Array.from(document.querySelectorAll('input[type=radio]')).filter(visible); { let best = null; let bestScore = -999; for (const r of radios) { const t = attrDump(r) + ' ' + attrDump(r.parentElement); const sc = scoreCarrier(t); if (sc > bestScore) { best = r; bestScore = sc; } } if (best && bestScore > 6) { best.click(); return true; } } const clickables = Array.from(document.querySelectorAll('button, input[type=button], a, label, span, div, li')).filter(visible); { let best = null; let bestScore = -999; for (const el of clickables) { const t = attrDump(el); const sc = scoreCarrier(t); if (sc > bestScore) { best = el; bestScore = sc; } } if (best && bestScore > 8) { best.click(); return true; } } return true; } catch (e) { return true; } })()",
-      "description": "匹配选择运营商"
+      "description": "可选：按中文识别运营商（没有运营商可保留）"
     },
     {
       "id": "click_login_auto",
@@ -55,7 +55,7 @@
     "message": "登录成功"
   },
   "on_failure": {
-    "message": "登录失败：页面未出现成功信息，请按学校页面调整样例任务",
+    "message": "登录失败：请按本样例继续调整关键词或页面地址",
     "screenshot": true
   }
 }

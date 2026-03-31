@@ -4,6 +4,8 @@ import json
 import logging
 import os
 import re
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +19,7 @@ class TaskConfig:
         self.version: str = config.get("version", "1.0")
         self.url: str = config.get("url", "")
         self.variables: dict[str, str] = config.get("variables", {})
-        self.timeout: int = config.get("timeout", 30000)
+        self.timeout: int = config.get("timeout", 5000)
         self.steps: list[dict[str, Any]] = config.get("steps", [])
         self.success_conditions: list[dict[str, Any]] = config.get(
             "success_conditions", []
@@ -127,6 +129,88 @@ class TaskExecutor:
 
         return re.sub(r"\{\{(\w+)\}\}", replacer, value)
 
+    def _resolve_timeout(
+        self, step: dict[str, Any], default_timeout: int | None = None
+    ) -> int:
+        fallback = (
+            default_timeout if default_timeout is not None else self.config.timeout
+        )
+        raw = step.get("timeout")
+        if raw is None:
+            return int(fallback)
+        try:
+            timeout = int(raw)
+            return timeout if timeout > 0 else int(fallback)
+        except (TypeError, ValueError):
+            return int(fallback)
+
+    def _assert_no_unresolved_template(self, text: str, field_name: str) -> None:
+        if not isinstance(text, str):
+            return
+        match = re.search(r"\{\{[A-Za-z_][A-Za-z0-9_]*\}\}", text)
+        if match:
+            raise RuntimeError(f"{field_name} 存在未解析变量: {match.group(0)}")
+
+    def _selector_candidates(self, selector: str) -> list[str]:
+        if not isinstance(selector, str):
+            return []
+        return [item.strip() for item in selector.split(",") if item.strip()]
+
+    async def _capture_failure_screenshot(self, page) -> str | None:
+        if not self.config.on_failure.get("screenshot"):
+            return None
+        try:
+            os.makedirs("debug", exist_ok=True)
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            filename = f"task_failure_{stamp}.png"
+            local_path = os.path.join("debug", filename)
+            await page.screenshot(path=local_path, full_page=True)
+            web_path = f"/debug/{filename}"
+            self.variables["_last_failure_screenshot"] = web_path
+            return web_path
+        except Exception as screenshot_error:
+            logger.warning(f"失败截图保存失败: {screenshot_error}")
+            return None
+
+    def _attach_screenshot_hint(self, message: str, screenshot_url: str | None) -> str:
+        base = message or self.config.on_failure.get("message", "步骤执行失败")
+        if screenshot_url:
+            return f"{base} 截图: {screenshot_url}"
+        return base
+
+    async def _find_first_visible_locator(self, page, selector: str, timeout: int):
+        candidates = self._selector_candidates(selector)
+        if not candidates:
+            raise RuntimeError("选择器不能为空")
+
+        deadline = time.monotonic() + max(0.2, timeout / 1000)
+        last_error: Exception | None = None
+
+        while time.monotonic() < deadline:
+            for candidate in candidates:
+                locator = page.locator(candidate)
+                try:
+                    count = await locator.count()
+                except Exception as e:
+                    last_error = e
+                    continue
+
+                for i in range(count):
+                    element = locator.nth(i)
+                    try:
+                        if await element.is_visible(timeout=50):
+                            return element
+                    except Exception as e:
+                        last_error = e
+
+            await page.wait_for_timeout(100)
+
+        if last_error:
+            raise RuntimeError(
+                f"未找到可见元素: {selector}; 已等待 {timeout}ms; 最后错误: {last_error}"
+            )
+        raise RuntimeError(f"未找到可见元素: {selector}; 已等待 {timeout}ms")
+
     async def execute(self, page) -> tuple[bool, str]:
         try:
             if self.config.steps:
@@ -146,23 +230,29 @@ class TaskExecutor:
             for step in self.config.steps:
                 success, message = await self._execute_step(page, step)
                 if not success:
-                    if self.config.on_failure.get("screenshot"):
-                        os.makedirs("debug", exist_ok=True)
-                        await page.screenshot(path="debug/task_failure.png")
-                    return False, message or step.get("description", "步骤执行失败")
+                    screenshot_url = await self._capture_failure_screenshot(page)
+                    error_message = message or step.get("description", "步骤执行失败")
+                    return False, self._attach_screenshot_hint(
+                        error_message, screenshot_url
+                    )
 
             current_url = getattr(page, "url", "") or ""
             self.variables["_current_url"] = current_url
 
             for condition in self.config.success_conditions:
                 if not self._check_condition(condition, current_url):
-                    return False, self.config.on_failure.get("message", "条件不满足")
+                    screenshot_url = await self._capture_failure_screenshot(page)
+                    return False, self._attach_screenshot_hint(
+                        self.config.on_failure.get("message", "条件不满足"),
+                        screenshot_url,
+                    )
 
             return True, self.config.on_success.get("message", "任务执行成功")
 
         except Exception as e:
             logger.error(f"任务执行异常: {e}")
-            return False, str(e)
+            screenshot_url = await self._capture_failure_screenshot(page)
+            return False, self._attach_screenshot_hint(str(e), screenshot_url)
 
     async def _execute_step(self, page, step: dict[str, Any]) -> tuple[bool, str]:
         step_type = step.get("type")
@@ -172,46 +262,77 @@ class TaskExecutor:
         try:
             if step_type == "navigate":
                 url = self._resolve_variable(step.get("url", ""))
+                self._assert_no_unresolved_template(url, "导航地址")
                 wait_until = step.get("wait_until", "networkidle")
-                await page.goto(url, wait_until=wait_until, timeout=self.config.timeout)
+                timeout = self._resolve_timeout(step)
+                logger.info(
+                    f"步骤详情[navigate]: url={url}, wait_until={wait_until}, timeout={timeout}ms"
+                )
+                await page.goto(url, wait_until=wait_until, timeout=timeout)
                 return True, ""
 
             elif step_type == "input":
                 selector = step.get("selector", "")
                 value = self._resolve_variable(step.get("value", ""))
+                self._assert_no_unresolved_template(value, "输入值")
                 clear = step.get("clear", True)
-                element = page.locator(selector).first
+                timeout = self._resolve_timeout(step)
+                logger.info(
+                    f"步骤详情[input]: selector={selector}, clear={clear}, timeout={timeout}ms"
+                )
+                element = await self._find_first_visible_locator(
+                    page, selector, timeout
+                )
                 if clear:
-                    await element.fill("")
-                await element.fill(value)
+                    await element.fill("", timeout=timeout)
+                await element.fill(value, timeout=timeout)
                 return True, ""
 
             elif step_type == "click":
                 selector = step.get("selector", "")
-                element = page.locator(selector).first
-                await element.click()
+                timeout = self._resolve_timeout(step)
+                logger.info(
+                    f"步骤详情[click]: selector={selector}, timeout={timeout}ms"
+                )
+                element = await self._find_first_visible_locator(
+                    page, selector, timeout
+                )
+                await element.click(timeout=timeout)
                 return True, ""
 
             elif step_type == "select":
                 selector = step.get("selector", "")
                 value = self._resolve_variable(step.get("value", ""))
-                await page.select_option(selector, value)
+                self._assert_no_unresolved_template(value, "下拉选项值")
+                timeout = self._resolve_timeout(step)
+                logger.info(
+                    f"步骤详情[select]: selector={selector}, value={value}, timeout={timeout}ms"
+                )
+                element = await self._find_first_visible_locator(
+                    page, selector, timeout
+                )
+                await element.select_option(value, timeout=timeout)
                 return True, ""
 
             elif step_type == "wait":
                 selector = step.get("selector", "")
-                timeout = step.get("timeout", 10000)
+                timeout = self._resolve_timeout(step, default_timeout=5000)
+                logger.info(f"步骤详情[wait]: selector={selector}, timeout={timeout}ms")
                 await page.wait_for_selector(selector, timeout=timeout)
                 return True, ""
 
             elif step_type == "wait_url":
                 pattern = step.get("pattern", "")
-                timeout = step.get("timeout", 10000)
+                timeout = self._resolve_timeout(step, default_timeout=5000)
+                logger.info(
+                    f"步骤详情[wait_url]: pattern={pattern}, timeout={timeout}ms"
+                )
                 await page.wait_for_url(re.compile(pattern), timeout=timeout)
                 return True, ""
 
             elif step_type == "eval":
-                script = step.get("script", "")
+                script = self._resolve_variable(step.get("script", ""))
+                self._assert_no_unresolved_template(script, "eval脚本")
                 store_as = step.get("store_as")
                 result = await page.evaluate(script)
                 if store_as:
@@ -219,7 +340,8 @@ class TaskExecutor:
                 return True, ""
 
             elif step_type == "custom_js":
-                script = step.get("script", "")
+                script = self._resolve_variable(step.get("script", ""))
+                self._assert_no_unresolved_template(script, "custom_js脚本")
                 await page.evaluate(script)
                 return True, ""
 
