@@ -1,0 +1,287 @@
+<div v-if="currentPage === 'settings'" class="page-content fade-in settings-page">
+  <div class="settings-tabs card">
+    <button
+      v-for="tab in settingsTabs"
+      :key="tab.id"
+      type="button"
+      class="settings-tab"
+      :class="{ active: currentSettingsTab === tab.id }"
+      @click="setSettingsTab(tab.id)"
+    >
+      <span>{{ tab.label }}</span>
+    </button>
+  </div>
+
+  <form v-if="currentSettingsTab !== 'tasks'" @submit.prevent="saveConfig" autocomplete="on" class="settings-form">
+    <div v-if="currentSettingsTab === 'account'" class="settings-panel-grid">
+      <section class="card settings-panel">
+        <div class="card-header">
+          <h2>账号配置</h2>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label for="settings-username">账号</label>
+            <input
+              id="settings-username"
+              v-model.trim="config.username"
+              name="username"
+              type="text"
+              placeholder="学号/账号"
+              autocomplete="username"
+            />
+          </div>
+          <div class="form-group">
+            <label for="settings-password">密码</label>
+            <input
+              id="settings-password"
+              v-model="config.password"
+              name="password"
+              type="password"
+              placeholder="输入密码"
+              autocomplete="current-password"
+            />
+          </div>
+          <div class="form-group">
+            <div class="field-label-row">
+              <label for="settings-auth-url">认证地址</label>
+              <span
+                class="field-help"
+                tabindex="0"
+                role="note"
+                data-tip="会同步到后端运行配置、.env 和任务模板中的 {{url}} 变量。"
+              >?</span>
+            </div>
+            <input
+              id="settings-auth-url"
+              v-model.trim="config.auth_url"
+              type="text"
+              placeholder="http://172.29.0.2"
+            />
+          </div>
+          <div class="form-group">
+            <label for="settings-carrier">运营商</label>
+            <select id="settings-carrier" v-model="config.carrier" name="carrier">
+              <option>无</option>
+              <option>移动</option>
+              <option>联通</option>
+              <option>电信</option>
+              <option>教育网</option>
+            </select>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div v-else-if="currentSettingsTab === 'system'" class="settings-panel-grid">
+      <section class="card settings-panel">
+        <div class="card-header">
+          <h2>系统策略</h2>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label for="settings-interval">检测间隔（分钟）</label>
+            <input id="settings-interval" v-model.number="config.check_interval_minutes" type="number" min="1" max="1440" />
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="settings-backend-log-level">后端日志级别</label>
+              <select id="settings-backend-log-level" v-model="config.backend_log_level">
+                <option>DEBUG</option>
+                <option>INFO</option>
+                <option>WARNING</option>
+                <option>ERROR</option>
+                <option>CRITICAL</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="settings-frontend-log-level">前端日志级别</label>
+              <select id="settings-frontend-log-level" v-model="config.frontend_log_level">
+                <option>DEBUG</option>
+                <option>INFO</option>
+                <option>WARNING</option>
+                <option>ERROR</option>
+                <option>CRITICAL</option>
+              </select>
+            </div>
+          </div>
+          <div class="toggle-group">
+            <label class="toggle">
+              <input type="checkbox" v-model="config.auto_start" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">启动后自动监控</span>
+            </label>
+          </div>
+          <div class="toggle-group">
+            <label class="toggle">
+              <input type="checkbox" v-model="config.access_log" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">显示 HTTP 请求日志</span>
+            </label>
+          </div>
+          <div class="toggle-group">
+            <label class="toggle">
+              <input type="checkbox" v-model="config.minimize_to_tray" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">最小化到系统托盘</span>
+            </label>
+          </div>
+          <div class="form-group">
+            <div class="field-label-row">
+              <label for="settings-network-targets">网络检测目标（逗号分隔）</label>
+              <span
+                class="field-help"
+                tabindex="0"
+                role="note"
+                data-tip="支持 host 或 host:port，多个目标使用英文逗号分隔。"
+              >?</span>
+            </div>
+            <input
+              id="settings-network-targets"
+              v-model="config.network_targets"
+              type="text"
+              placeholder="8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
+            />
+          </div>
+          <div class="toggle-group">
+            <div class="toggle-with-help">
+              <label class="toggle toggle-help-inline">
+                <input type="checkbox" v-model="config.pause_enabled" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">启用暂停时段</span>
+                <span
+                  class="field-help"
+                  tabindex="0"
+                  role="note"
+                  data-tip="启用后会在设定时段内暂停自动登录，避免深夜频繁认证。"
+                >?</span>
+              </label>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="settings-pause-start">暂停开始（小时）</label>
+              <input id="settings-pause-start" v-model.number="config.pause_start_hour" type="number" min="0" max="23" />
+            </div>
+            <div class="form-group">
+              <label for="settings-pause-end">暂停结束（小时）</label>
+              <input id="settings-pause-end" v-model.number="config.pause_end_hour" type="number" min="0" max="23" />
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div v-else-if="currentSettingsTab === 'browser'" class="settings-panel-grid settings-panel-grid--browser">
+      <section class="card settings-panel settings-panel--wide">
+        <div class="card-header">
+          <h2>浏览器参数</h2>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label for="settings-browser-timeout">页面超时（毫秒）</label>
+            <input id="settings-browser-timeout" v-model.number="config.browser_timeout" type="number" min="1000" max="60000" />
+          </div>
+          <div class="form-group">
+            <div class="field-label-row">
+              <label for="settings-browser-ua">用户代理</label>
+              <span
+                class="field-help"
+                tabindex="0"
+                role="note"
+                data-tip="留空时使用默认 UA。仅在认证系统对 UA 有要求时再修改。"
+              >?</span>
+            </div>
+            <input id="settings-browser-ua" v-model.trim="config.browser_user_agent" type="text" placeholder="浏览器 User-Agent" />
+          </div>
+          <div class="toggle-group">
+            <div class="toggle-with-help">
+              <label class="toggle toggle-help-inline">
+                <input type="checkbox" v-model="config.headless" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">无头浏览器模式</span>
+                <span
+                  class="field-help"
+                  tabindex="0"
+                  role="note"
+                  data-tip="开启后浏览器在后台运行，不显示窗口。"
+                >?</span>
+              </label>
+            </div>
+          </div>
+          <div class="toggle-group">
+            <div class="toggle-with-help">
+              <label class="toggle toggle-help-inline">
+                <input type="checkbox" v-model="config.browser_low_resource_mode" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">低资源模式（禁用图片）</span>
+                <span
+                  class="field-help"
+                  tabindex="0"
+                  role="note"
+                  data-tip="会拦截图片请求，降低带宽和内存占用。"
+                >?</span>
+              </label>
+            </div>
+          </div>
+          <div class="form-group">
+            <div class="field-label-row">
+              <label for="settings-browser-headers">自定义请求头（JSON）</label>
+              <span
+                class="field-help"
+                tabindex="0"
+                role="note"
+                data-tip="请输入 JSON 对象，会与默认请求头合并后注入浏览器上下文。"
+              >?</span>
+            </div>
+            <textarea
+              id="settings-browser-headers"
+              v-model.trim="config.browser_extra_headers_json"
+              rows="8"
+              spellcheck="false"
+              placeholder='{"Referer":"http://172.29.0.2","X-Trace-Id":"campus-auth"}'
+            ></textarea>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="settings-footer">
+      <button class="btn btn-primary btn-lg" type="submit" :disabled="busy.save">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+          <polyline points="17 21 17 13 7 13 7 21"/>
+          <polyline points="7 3 7 8 15 8"/>
+        </svg>
+        保存配置
+      </button>
+    </div>
+  </form>
+
+  <div v-else class="settings-panel-grid settings-panel-grid--task">
+    <section class="card settings-panel settings-panel--wide">
+      <div class="card-header">
+        <h2>任务概览</h2>
+      </div>
+      <div class="card-body">
+        <div class="info-box compact">
+          <h4>当前活动任务</h4>
+          <p>活动任务：<strong>{{ activeTaskId }}</strong></p>
+        </div>
+        <div class="task-mini-grid">
+          <div class="mini-stat">
+            <span class="mini-stat-label">已加载任务</span>
+            <span class="mini-stat-value">{{ tasks.length }}</span>
+          </div>
+          <div class="mini-stat">
+            <span class="mini-stat-label">默认模板</span>
+            <span class="mini-stat-value">default / sample / sample_2</span>
+          </div>
+        </div>
+        <div class="task-panel-actions">
+          <button class="btn btn-primary" type="button" @click="currentPage = 'tasks'">打开任务管理</button>
+          <button class="btn btn-secondary" type="button" @click="fetchTasks">刷新任务列表</button>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import platform
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -16,12 +17,16 @@ class AutoStartService:
 
     def _start_command(self) -> str:
         python_exe = self.project_root / "environment" / "python" / "python.exe"
+        app_entry = self.project_root / "app.py"
         if python_exe.exists():
-            return f'"{python_exe}" "{self.project_root / "app.py"}"'
+            return f'"{python_exe}" "{app_entry}"'
         packaged_executable = os.getenv("Campus-Auth_START_EXECUTABLE", "").strip()
         if packaged_executable:
             return f'"{packaged_executable}"'
-        return f'"{python_exe}" "{self.project_root / "app.py"}"'
+        runtime_python = Path(sys.executable).resolve()
+        if runtime_python.exists():
+            return f'"{runtime_python}" "{app_entry}"'
+        return f'python "{app_entry}"'
 
     def _run(self, cmd: list[str]) -> tuple[bool, str]:
         try:
@@ -36,11 +41,25 @@ class AutoStartService:
         return Path.home() / "Library" / "LaunchAgents" / f"{self.service_name}.plist"
 
     def _linux_service_path(self) -> Path:
-        return Path.home() / ".config" / "systemd" / "user" / f"{self.service_name}.service"
+        return (
+            Path.home()
+            / ".config"
+            / "systemd"
+            / "user"
+            / f"{self.service_name}.service"
+        )
 
     def _windows_startup_vbs(self) -> Path:
         appdata = os.getenv("APPDATA", "")
-        return Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / f"{self.service_name}.vbs"
+        return (
+            Path(appdata)
+            / "Microsoft"
+            / "Windows"
+            / "Start Menu"
+            / "Programs"
+            / "Startup"
+            / f"{self.service_name}.vbs"
+        )
 
     def status(self) -> dict[str, str | bool]:
         if self.platform_name == "darwin":
@@ -119,9 +138,9 @@ class AutoStartService:
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>{log_dir / 'autostart.out.log'}</string>
+    <string>{log_dir / "autostart.out.log"}</string>
     <key>StandardErrorPath</key>
-    <string>{log_dir / 'autostart.err.log'}</string>
+    <string>{log_dir / "autostart.err.log"}</string>
 </dict>
 </plist>
 """
@@ -173,7 +192,7 @@ WantedBy=default.target
 
     def _enable_windows(self) -> tuple[bool, str]:
         startup_vbs = self._windows_startup_vbs()
-        
+
         try:
             startup_vbs.parent.mkdir(parents=True, exist_ok=True)
         except PermissionError:
@@ -235,18 +254,23 @@ End If
 
 WshShell.Run Chr(34) & "{packaged}" & Chr(34) & " --no-browser", 0, False
 '''
-        
+
         try:
             startup_vbs.write_text(content, encoding="utf-8")
         except PermissionError:
-            return False, "写入启动文件失败，可能被杀毒软件拦截，请将程序添加到白名单后重试"
+            return (
+                False,
+                "写入启动文件失败，可能被杀毒软件拦截，请将程序添加到白名单后重试",
+            )
         except OSError as exc:
-            if "另一个程序正在使用此文件" in str(exc) or "being used by another process" in str(exc):
+            if "另一个程序正在使用此文件" in str(
+                exc
+            ) or "being used by another process" in str(exc):
                 return False, "启动文件被占用，请关闭可能占用该文件的程序后重试"
             return False, f"写入启动文件失败: {exc}"
         except Exception as exc:
             return False, f"创建启动文件时发生未知错误: {exc}"
-        
+
         return True, f"已启用 Windows 开机自启动: {startup_vbs}"
 
     def _disable_windows(self) -> tuple[bool, str]:

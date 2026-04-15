@@ -356,8 +356,9 @@ def install_pip():
             return False
 
         log_progress("Pip", "安装 Pip...", 50)
-        pip_mirror = "https://pypi.org/simple"
-        pip_host = "pypi.org"
+        pip_mirror = (PIP_MIRROR or "https://pypi.org/simple").strip()
+        parsed = urllib.parse.urlparse(pip_mirror)
+        pip_host = parsed.hostname or "pypi.org"
 
         log_info(f"使用镜像源: {pip_mirror}")
         log_info(f"镜像源主机: {pip_host}")
@@ -426,8 +427,9 @@ def install_requirements():
         log_progress("依赖", "安装基础工具 (setuptools, wheel)...", 10)
         log_info("升级 setuptools 和 wheel...")
 
-        mirror = "https://pypi.org/simple"
-        mirror_host = "pypi.org"
+        mirror = (PIP_MIRROR or "https://pypi.org/simple").strip()
+        parsed = urllib.parse.urlparse(mirror)
+        mirror_host = parsed.hostname or "pypi.org"
 
         try:
             result1 = subprocess.run(

@@ -1,0 +1,15 @@
+<header class="top-bar">
+  <h1 class="page-title">{{ pageTitle }}</h1>
+  <div class="top-actions">
+    <button class="btn btn-primary" @click="toggleMonitor" :disabled="busy.monitor">
+      <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon v-if="!status.monitoring" points="5 3 19 12 5 21 5 3"/>
+        <g v-else>
+          <rect x="6" y="4" width="4" height="16"/>
+          <rect x="14" y="4" width="4" height="16"/>
+        </g>
+      </svg>
+      {{ status.monitoring ? '停止监控' : '启动监控' }}
+    </button>
+  </div>
+</header>

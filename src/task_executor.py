@@ -10,6 +10,18 @@ from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger("task_executor")
+TASK_ID_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
+
+
+def normalize_task_id(task_id: str | None) -> str:
+    if not isinstance(task_id, str):
+        return ""
+    return task_id.strip()
+
+
+def is_valid_task_id(task_id: str | None) -> bool:
+    normalized = normalize_task_id(task_id)
+    return bool(normalized and TASK_ID_PATTERN.fullmatch(normalized))
 
 
 class TaskConfig:
@@ -33,6 +45,22 @@ class TaskManager:
         self.tasks_dir = tasks_dir
         self.tasks_dir.mkdir(parents=True, exist_ok=True)
 
+    def _is_valid_task_id(self, task_id: str) -> bool:
+        return is_valid_task_id(task_id)
+
+    def _safe_task_path(self, task_id: str) -> Path | None:
+        normalized_task_id = normalize_task_id(task_id)
+        if not self._is_valid_task_id(normalized_task_id):
+            return None
+
+        base = self.tasks_dir.resolve()
+        candidate = (self.tasks_dir / f"{normalized_task_id}.json").resolve()
+        try:
+            candidate.relative_to(base)
+        except ValueError:
+            return None
+        return candidate
+
     def list_tasks(self) -> list[dict[str, str]]:
         tasks = []
         for file in self.tasks_dir.glob("*.json"):
@@ -51,7 +79,9 @@ class TaskManager:
         return tasks
 
     def load_task(self, task_id: str) -> TaskConfig | None:
-        file = self.tasks_dir / f"{task_id}.json"
+        file = self._safe_task_path(task_id)
+        if file is None:
+            return None
         if not file.exists():
             return None
         try:
@@ -62,7 +92,9 @@ class TaskManager:
             return None
 
     def save_task(self, task_id: str, config: dict[str, Any]) -> bool:
-        file = self.tasks_dir / f"{task_id}.json"
+        file = self._safe_task_path(task_id)
+        if file is None:
+            return False
         try:
             file.write_text(
                 json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -73,8 +105,10 @@ class TaskManager:
             return False
 
     def delete_task(self, task_id: str) -> bool:
-        file = self.tasks_dir / f"{task_id}.json"
         if task_id == "default":
+            return False
+        file = self._safe_task_path(task_id)
+        if file is None:
             return False
         try:
             file.unlink(missing_ok=True)
@@ -90,9 +124,15 @@ class TaskManager:
         return "default"
 
     def set_active_task(self, task_id: str) -> bool:
+        normalized_task_id = normalize_task_id(task_id)
+        if not self._is_valid_task_id(normalized_task_id):
+            return False
+        file = self._safe_task_path(normalized_task_id)
+        if file is None or not file.exists():
+            return False
         config_file = self.tasks_dir / "active.txt"
         try:
-            config_file.write_text(task_id, encoding="utf-8")
+            config_file.write_text(normalized_task_id, encoding="utf-8")
             return True
         except Exception as e:
             logger.error(f"无法设置活动任务: {e}")
@@ -100,6 +140,8 @@ class TaskManager:
 
 
 class TaskExecutor:
+    MAX_TEMPLATE_DEPTH = 8
+
     def __init__(self, config: TaskConfig, env_vars: dict[str, str]):
         self.config = config
         self.env_vars = env_vars
@@ -110,9 +152,20 @@ class TaskExecutor:
             "version": config.version,
         }
 
-    def _resolve_variable(self, value: str) -> str:
+    def _resolve_variable(
+        self,
+        value: Any,
+        depth: int = 0,
+        visited: set[str] | None = None,
+    ) -> Any:
         if not isinstance(value, str):
             return value
+
+        visited_names = set() if visited is None else set(visited)
+        if depth > self.MAX_TEMPLATE_DEPTH:
+            raise RuntimeError(
+                f"变量展开层级超过限制({self.MAX_TEMPLATE_DEPTH})，请检查变量引用关系"
+            )
 
         def replacer(match):
             var_name = match.group(1)
@@ -123,8 +176,16 @@ class TaskExecutor:
             if var_name in self.env_vars:
                 return str(self.env_vars[var_name])
             if var_name in self.config.variables:
+                if var_name in visited_names:
+                    raise RuntimeError(f"检测到变量循环引用: {var_name}")
                 val = self.config.variables[var_name]
-                return self._resolve_variable(val)
+                return str(
+                    self._resolve_variable(
+                        val,
+                        depth=depth + 1,
+                        visited=visited_names | {var_name},
+                    )
+                )
             return match.group(0)
 
         return re.sub(r"\{\{(\w+)\}\}", replacer, value)

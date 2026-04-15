@@ -3,7 +3,7 @@
   "name": "默认",
   "description": "语义识别，不依赖固定元素选择器",
   "version": "3.1.0",
-  "url": "http://172.29.0.2",
+  "url": "{{CAMPUS_AUTH_URL}}",
   "variables": {
     "username": "{{CAMPUS_USERNAME}}",
     "password": "{{CAMPUS_PASSWORD}}",

@@ -7,7 +7,7 @@
 - Web 控制台（初始化向导 + 仪表盘 + 设置 + 任务管理 + 关于页）
 - 网络监控与自动重连（定时检测网络，掉线后自动执行认证）
 - 手动操作（手动登录、网络测试）
-- 任务系统（内置 default/ruijie/srun/drcom，可在 UI 新建/编辑/切换）
+- 任务系统（内置 default/sample/sample_2，可在 UI 新建/编辑/切换）
 - 实时日志（WebSocket 推送日志）
 - 开机自启动（Windows/macOS/Linux）
 - 系统托盘（可配置最小化到托盘）
@@ -98,7 +98,8 @@ cp .env.example .env
 | `CAMPUS_ISP` | `@cmcc` | 运营商后缀：`@cmcc/@unicom/@telecom/@xyw/空` |
 | `APP_PORT` | `50721` | Web 控制台端口 |
 | `AUTO_START_MONITORING` | `false` | 启动后自动开始监控 |
-| `MONITOR_INTERVAL` | `240` | 网络检测间隔（秒） |
+| `MONITOR_INTERVAL` | `300` | 网络检测间隔（秒） |
+| `PING_TARGETS` | `8.8.8.8:53,114.114.114.114:53,www.baidu.com:443` | 网络探测目标 |
 | `PAUSE_LOGIN_ENABLED` | `true` | 启用暂停登录时段 |
 | `PAUSE_LOGIN_START_HOUR` | `0` | 暂停开始小时 |
 | `PAUSE_LOGIN_END_HOUR` | `6` | 暂停结束小时 |
@@ -116,9 +117,8 @@ cp .env.example .env
 默认模板：
 
 - default.json
-- ruijie.json
-- srun.json
-- drcom.json
+- sample.json
+- sample_2.json
 
 详细说明（字段定义、步骤类型、变量替换、示例与调试）见：
 

@@ -1,0 +1,180 @@
+<div v-if="showWizard" class="wizard-overlay">
+  <div class="wizard-container">
+    <div class="wizard-header">
+      <img src="/static/black-cat.svg" alt="logo" class="wizard-logo" />
+      <h1>欢迎使用 Campus-Auth 校园网自动认证</h1>
+      <p>让我们快速配置您的账号信息</p>
+    </div>
+
+    <div class="wizard-steps">
+      <div class="step" :class="{ active: wizardStep === 1, completed: wizardStep > 1 }">
+        <span class="step-number">1</span>
+        <span class="step-label">账号配置</span>
+      </div>
+      <div class="step-line" :class="{ completed: wizardStep > 1 }"></div>
+      <div class="step" :class="{ active: wizardStep === 2, completed: wizardStep > 2 }">
+        <span class="step-number">2</span>
+        <span class="step-label">运营商设置</span>
+      </div>
+      <div class="step-line" :class="{ completed: wizardStep > 2 }"></div>
+      <div class="step" :class="{ active: wizardStep === 3, completed: wizardStep > 3 }">
+        <span class="step-number">3</span>
+        <span class="step-label">监控设置</span>
+      </div>
+      <div class="step-line" :class="{ completed: wizardStep > 3 }"></div>
+      <div class="step" :class="{ active: wizardStep === 4 }">
+        <span class="step-number">4</span>
+        <span class="step-label">完成</span>
+      </div>
+    </div>
+
+    <div class="wizard-content">
+      <div v-if="wizardStep === 1" class="wizard-page">
+        <h2>账号配置</h2>
+        <p class="description">请输入您的校园网账号和密码，这些信息将用于自动登录认证。</p>
+
+        <form @submit.prevent="nextWizardStep" autocomplete="on">
+          <div class="form-group">
+            <label for="wizard-username">账号 <span class="required">*</span></label>
+            <input
+              id="wizard-username"
+              v-model.trim="config.username"
+              name="username"
+              type="text"
+              placeholder="请输入学号或账号"
+              autocomplete="username"
+            />
+            <span class="hint">您的校园网登录账号，通常是学号</span>
+          </div>
+
+          <div class="form-group">
+            <label for="wizard-password">密码 <span class="required">*</span></label>
+            <input
+              id="wizard-password"
+              v-model="config.password"
+              name="password"
+              type="password"
+              placeholder="请输入密码"
+              autocomplete="current-password"
+            />
+            <span class="hint">您的校园网登录密码</span>
+          </div>
+        </form>
+      </div>
+
+      <div v-if="wizardStep === 2" class="wizard-page">
+        <h2>运营商设置</h2>
+        <p class="description">选择您使用的网络运营商，如果您不确定，可以选择"无"。</p>
+
+        <div class="form-group">
+          <label>运营商</label>
+          <select v-model="config.carrier">
+            <option>无</option>
+            <option>移动</option>
+            <option>联通</option>
+            <option>电信</option>
+            <option>教育网</option>
+          </select>
+          <span class="hint">选择与您宽带套餐对应的运营商</span>
+        </div>
+
+        <div class="info-box">
+          <h4>运营商说明</h4>
+          <ul>
+            <li><strong>无</strong>：仅使用校园网，不使用运营商宽带</li>
+            <li><strong>移动</strong>：中国移动宽带用户</li>
+            <li><strong>联通</strong>：中国联通宽带用户</li>
+            <li><strong>电信</strong>：中国电信宽带用户</li>
+            <li><strong>教育网</strong>：教育网用户</li>
+          </ul>
+        </div>
+      </div>
+
+      <div v-if="wizardStep === 3" class="wizard-page">
+        <h2>监控设置</h2>
+        <p class="description">配置自动监控和登录的行为。</p>
+
+        <div class="form-group">
+          <label>检测间隔（分钟）</label>
+          <input v-model.number="config.check_interval_minutes" type="number" min="1" max="1440" />
+          <span class="hint">每隔多久检测一次网络状态，建议 3-10 分钟</span>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>暂停开始时间</label>
+            <input v-model.number="config.pause_start_hour" type="number" min="0" max="23" />
+            <span class="hint">开始暂停的小时（0-23）</span>
+          </div>
+          <div class="form-group">
+            <label>暂停结束时间</label>
+            <input v-model.number="config.pause_end_hour" type="number" min="0" max="23" />
+            <span class="hint">结束暂停的小时（0-23）</span>
+          </div>
+        </div>
+
+        <div class="toggle-group">
+          <label class="toggle">
+            <input type="checkbox" v-model="config.pause_enabled" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">启用暂停时段</span>
+          </label>
+          <span class="hint">在指定时段内不进行自动登录，避免深夜频繁认证</span>
+        </div>
+
+        <div class="toggle-group">
+          <label class="toggle">
+            <input type="checkbox" v-model="config.auto_start" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">启动后自动开始监控</span>
+          </label>
+          <span class="hint">程序启动后自动开始检测网络状态</span>
+        </div>
+      </div>
+
+      <div v-if="wizardStep === 4" class="wizard-page">
+        <h2>配置完成</h2>
+        <p class="description">您已完成基本配置，可以开始使用了！</p>
+
+        <div class="config-summary">
+          <h4>配置摘要</h4>
+          <div class="summary-item">
+            <span class="label">账号</span>
+            <span class="value">{{ config.username || '未设置' }}</span>
+          </div>
+          <div class="summary-item">
+            <span class="label">运营商</span>
+            <span class="value">{{ config.carrier }}</span>
+          </div>
+          <div class="summary-item">
+            <span class="label">检测间隔</span>
+            <span class="value">{{ config.check_interval_minutes }} 分钟</span>
+          </div>
+          <div class="summary-item">
+            <span class="label">自动监控</span>
+            <span class="value">{{ config.auto_start ? '是' : '否' }}</span>
+          </div>
+        </div>
+
+        <div class="info-box success">
+          <h4>提示</h4>
+          <p>您随时可以在"设置"页面修改这些配置。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="wizard-footer">
+      <button v-if="wizardStep > 1" class="btn btn-secondary" @click="wizardStep--">
+        上一步
+      </button>
+      <div class="spacer"></div>
+      <button class="btn btn-text" @click="skipWizard">跳过向导</button>
+      <button v-if="wizardStep < 4" class="btn btn-primary" @click="nextWizardStep" :disabled="!canProceed">
+        下一步
+      </button>
+      <button v-else class="btn btn-primary" @click="finishWizard" :disabled="busy.save">
+        完成配置
+      </button>
+    </div>
+  </div>
+</div>

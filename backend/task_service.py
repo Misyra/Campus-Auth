@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any
 
-from src.task_executor import TaskManager
+from src.task_executor import TaskManager, is_valid_task_id, normalize_task_id
 from src.utils.logging import get_logger
 
 task_logger = get_logger("backend.task_service", side="BACKEND")
@@ -14,11 +13,17 @@ class TaskService:
     def __init__(self, project_root: Path):
         self.task_manager = TaskManager(project_root / "tasks")
 
+    def _is_valid_task_id(self, task_id: str) -> bool:
+        return is_valid_task_id(task_id)
+
     def list_tasks(self) -> list[dict[str, str]]:
         task_logger.debug("Listing tasks")
         return self.task_manager.list_tasks()
 
     def get_task(self, task_id: str) -> dict[str, Any] | None:
+        task_id = normalize_task_id(task_id)
+        if not self._is_valid_task_id(task_id):
+            return None
         task_logger.debug("Loading task %s", task_id)
         task = self.task_manager.load_task(task_id)
         if task:
@@ -38,7 +43,8 @@ class TaskService:
         return None
 
     def save_task(self, task_id: str, config: dict[str, Any]) -> tuple[bool, str]:
-        if not task_id or not re.fullmatch(r"[A-Za-z0-9_]+", task_id):
+        task_id = normalize_task_id(task_id)
+        if not self._is_valid_task_id(task_id):
             return False, "任务ID只能包含字母、数字和下划线"
 
         if not config.get("name"):
@@ -55,6 +61,7 @@ class TaskService:
         return False, "任务保存失败"
 
     def delete_task(self, task_id: str) -> tuple[bool, str]:
+        task_id = normalize_task_id(task_id)
         if task_id == "default":
             return False, "不能删除默认任务"
 
@@ -69,7 +76,11 @@ class TaskService:
         return self.task_manager.get_active_task()
 
     def set_active_task(self, task_id: str) -> tuple[bool, str]:
-        if not (self.task_manager.tasks_dir / f"{task_id}.json").exists():
+        task_id = normalize_task_id(task_id)
+        if not self._is_valid_task_id(task_id):
+            return False, "任务ID只能包含字母、数字和下划线"
+
+        if not self.task_manager.load_task(task_id):
             return False, "任务不存在"
 
         success = self.task_manager.set_active_task(task_id)
