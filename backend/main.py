@@ -118,11 +118,6 @@ async def on_startup() -> None:
     start = asyncio.get_event_loop().time()
     startup_logger.info("FastAPI 启动钩子: 开始设置事件循环与服务引导")
     service.set_event_loop(asyncio.get_event_loop())
-
-    # 启动 WebSocket 批量处理器
-    await ws_manager.start_batch_processor()
-    startup_logger.info("WebSocket 批量处理器已启动")
-
     service.boot()
     startup_logger.info(
         "FastAPI 启动钩子: 完成，耗时 %.3fs",
@@ -133,12 +128,6 @@ async def on_startup() -> None:
 @app.on_event("shutdown")
 async def on_shutdown() -> None:
     startup_logger.info("FastAPI 关闭钩子: 正在停止服务...")
-
-    # 停止 WebSocket 批量处理器
-    await ws_manager.stop_batch_processor()
-    startup_logger.info("WebSocket 批量处理器已停止")
-
-    # 停止监控服务
     service.stop_monitoring()
     startup_logger.info("监控服务已停止")
 
