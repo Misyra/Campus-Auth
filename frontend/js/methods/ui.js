@@ -19,6 +19,13 @@ export const uiMethods = {
   setSettingsTab(tabId) {
     this.currentSettingsTab = tabId;
   },
+  scrollLogToBottom() {
+    // 自动滚动日志到底部
+    const logViewer = document.querySelector('.log-viewer');
+    if (logViewer) {
+      logViewer.scrollTop = logViewer.scrollHeight;
+    }
+  },
   async quitApp() {
     if (!confirm('确定要退出应用吗？')) return;
     try {

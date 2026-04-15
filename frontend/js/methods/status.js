@@ -17,6 +17,7 @@ export const statusMethods = {
     try {
       const { data } = await this.$api.get('/api/logs', { params: { limit: 250 } });
       this.logs = data;
+      this.$nextTick(() => this.scrollLogToBottom());
     } catch (error) {
       this.frontendLogger.error('logs', 'failed to fetch logs', error);
     }

@@ -62,9 +62,20 @@ export const lifecycleMethods = {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'log') {
+          // 单条日志消息
           this.logs.push(data.data);
           if (this.logs.length > 300) {
             this.logs = this.logs.slice(-300);
+          }
+          this.$nextTick(() => this.scrollLogToBottom());
+        } else if (data.type === 'log_batch') {
+          // 批量日志消息
+          if (Array.isArray(data.data)) {
+            this.logs.push(...data.data);
+            if (this.logs.length > 300) {
+              this.logs = this.logs.slice(-300);
+            }
+            this.$nextTick(() => this.scrollLogToBottom());
           }
         }
       } catch (e) {

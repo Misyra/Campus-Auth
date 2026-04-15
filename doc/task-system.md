@@ -70,7 +70,7 @@ tasks 目录通常包含以下文件：
 
 示例：
 
-- {{CAMPUS_USERNAME}}、{{CAMPUS_PASSWORD}} 来自环境变量
+- {{USERNAME}}、{{PASSWORD}} 来自环境变量
 - {{username}}{{isp}} 可拼接账号与运营商后缀
 
 ## 5. 支持的步骤类型
@@ -167,8 +167,8 @@ on_failure 常用字段：
   "version": "1.0",
   "url": "http://172.29.0.2",
   "variables": {
-    "username": "{{CAMPUS_USERNAME}}",
-    "password": "{{CAMPUS_PASSWORD}}"
+    "username": "{{USERNAME}}",
+    "password": "{{PASSWORD}}"
   },
   "timeout": 30000,
   "steps": [
