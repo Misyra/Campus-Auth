@@ -15,6 +15,7 @@ dependencies = [
     "pystray>=0.19.5",
     "Pillow>=10.0.0",
     "cairosvg>=2.7.0",
+    "cryptography>=42.0.0",
 ]
 
 [project.optional-dependencies]

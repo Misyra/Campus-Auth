@@ -15,7 +15,8 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.utils import ConfigLoader
@@ -48,9 +49,35 @@ DEBUG_DIR = PROJECT_ROOT / "debug"
 DEBUG_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(
-    title="Campus Network Auth API",
-    version="3.0.1",
+    title="校园网认证助手 API",
+    version="3.1.0",
 )
+
+# ==================== CORS 配置 ====================
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1", "http://localhost"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ==================== API 鉴权 ====================
+_API_TOKEN = os.getenv("API_TOKEN", "").strip()
+_WRITE_METHODS = {"POST", "PUT", "DELETE"}
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    """对写操作 API 进行简易 token 鉴权校验"""
+    if request.method in _WRITE_METHODS and _API_TOKEN:
+        token = request.headers.get("X-API-Token", "")
+        if token != _API_TOKEN:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "无效的 API Token"},
+            )
+    return await call_next(request)
 
 service = MonitorService(project_root=PROJECT_ROOT)
 autostart_service = AutoStartService(project_root=PROJECT_ROOT)
@@ -252,14 +279,21 @@ def set_active_task(task_id: str) -> ActionResponse:
     return ActionResponse(success=ok, message=message)
 
 
-# 全局停止事件
+# 全局停止事件与系统托盘引用
 _shutdown_event = None
+_tray_icon_ref = None  # 由 app.py 中设置，用于 shutdown 时正确停止
 
 
 def _setShutdownEvent(event):
     """设置关闭事件回调"""
     global _shutdown_event
     _shutdown_event = event
+
+
+def _setTrayIcon(tray_icon):
+    """设置系统托盘实例引用"""
+    global _tray_icon_ref
+    _tray_icon_ref = tray_icon
 
 
 @app.post("/api/shutdown", response_model=ActionResponse)
@@ -278,11 +312,10 @@ def shutdown_server() -> ActionResponse:
         except Exception:
             pass
 
+        # 停止正在运行的系统托盘实例（而非创建新实例）
         try:
-            from src.system_tray import SystemTray
-
-            tray = SystemTray(port=_resolve_port())
-            tray.stop()
+            if _tray_icon_ref:
+                _tray_icon_ref.stop()
         except Exception:
             pass
 

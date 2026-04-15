@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 from src.utils import ConfigLoader
+from src.utils.crypto import decrypt_password, encrypt_password, is_encrypted, mask_password
 
 from .schemas import DEFAULT_BROWSER_USER_AGENT, MonitorConfigPayload
 
@@ -66,7 +68,7 @@ def load_ui_config() -> MonitorConfigPayload:
 
     return MonitorConfigPayload(
         username=config.get("username", ""),
-        password=config.get("password", ""),
+        password=mask_password(config.get("password", "")),
         auth_url=str(config.get("auth_url", "http://172.29.0.2")),
         carrier=carrier,
         check_interval_minutes=max(1, interval_seconds // 60),
@@ -77,6 +79,7 @@ def load_ui_config() -> MonitorConfigPayload:
             browser_config.get("user_agent", DEFAULT_BROWSER_USER_AGENT)
         ),
         browser_low_resource_mode=bool(browser_config.get("low_resource_mode", False)),
+        browser_disable_web_security=bool(browser_config.get("disable_web_security", False)),
         browser_extra_headers_json=str(browser_config.get("extra_headers_json", "")),
         pause_enabled=bool(pause_config.get("enabled", True)),
         pause_start_hour=int(pause_config.get("start_hour", 0)),
@@ -97,7 +100,12 @@ def build_runtime_config(payload: MonitorConfigPayload) -> dict[str, Any]:
     base = ConfigLoader.load_config_from_env()
 
     base["username"] = payload.username.strip()
-    base["password"] = payload.password.strip()
+    # 如果前端返回的是掩码，说明密码未修改，保留 .env 中的原值
+    raw_password = payload.password.strip()
+    if raw_password and not raw_password.startswith("•"):
+        base["password"] = raw_password
+    # 否则 base["password"] 已由 ConfigLoader.load_config_from_env() 正确解密
+
     base["auth_url"] = payload.auth_url.strip() or "http://172.29.0.2"
     base["isp"] = CARRIER_MAP.get(payload.carrier, "")
     base["auto_start_monitoring"] = payload.auto_start
@@ -109,6 +117,7 @@ def build_runtime_config(payload: MonitorConfigPayload) -> dict[str, Any]:
         payload.browser_user_agent.strip() or DEFAULT_BROWSER_USER_AGENT
     )
     browser["low_resource_mode"] = payload.browser_low_resource_mode
+    browser["disable_web_security"] = payload.browser_disable_web_security
     browser["extra_headers_json"] = _normalize_headers_json(
         payload.browser_extra_headers_json
     )
@@ -139,6 +148,14 @@ def build_runtime_config(payload: MonitorConfigPayload) -> dict[str, Any]:
     return base
 
 
+def _save_password(raw: str) -> str:
+    """处理前端提交的密码：掩码不更新，明文则加密存储"""
+    if not raw or raw.startswith("•"):
+        existing = os.getenv("PASSWORD", "")
+        return existing if existing else raw
+    return encrypt_password(raw)
+
+
 def write_env_file(payload: MonitorConfigPayload, env_path: Path) -> None:
     network_targets = _normalize_targets(payload.network_targets)
     backend_level = _normalize_level(payload.backend_log_level)
@@ -149,14 +166,15 @@ def write_env_file(payload: MonitorConfigPayload, env_path: Path) -> None:
     browser_headers_json = _normalize_headers_json(payload.browser_extra_headers_json)
 
     managed_values = {
-        "CAMPUS_USERNAME": payload.username.strip(),
-        "CAMPUS_PASSWORD": payload.password.strip(),
-        "CAMPUS_AUTH_URL": payload.auth_url.strip() or "http://172.29.0.2",
-        "CAMPUS_ISP": CARRIER_MAP.get(payload.carrier, ""),
+        "USERNAME": payload.username.strip(),
+        "PASSWORD": _save_password(payload.password.strip()),
+        "LOGIN_URL": payload.auth_url.strip() or "http://172.29.0.2",
+        "ISP": CARRIER_MAP.get(payload.carrier, ""),
         "BROWSER_HEADLESS": str(payload.headless).lower(),
         "BROWSER_TIMEOUT": str(payload.browser_timeout),
         "BROWSER_USER_AGENT": browser_user_agent,
         "BROWSER_LOW_RESOURCE_MODE": str(payload.browser_low_resource_mode).lower(),
+        "BROWSER_DISABLE_WEB_SECURITY": str(payload.browser_disable_web_security).lower(),
         "BROWSER_EXTRA_HEADERS_JSON": browser_headers_json,
         "MONITOR_INTERVAL": str(payload.check_interval_minutes * 60),
         "AUTO_START_MONITORING": str(payload.auto_start).lower(),

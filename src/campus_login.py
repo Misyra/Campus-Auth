@@ -501,12 +501,12 @@ async def main():
     
     # 检查配置
     if not config["username"] or config["username"] == "your_username_here":
-        print("❌ 错误: 请在 .env 文件中配置 CAMPUS_USERNAME")
+        print("❌ 错误: 请在 .env 文件中配置 USERNAME")
         print("提示: 请参考 .env.example 文件进行配置")
         return
 
     if not config["password"] or config["password"] == "your_password_here":
-        print("❌ 错误: 请在 .env 文件中配置 CAMPUS_PASSWORD")
+        print("❌ 错误: 请在 .env 文件中配置 PASSWORD")
         print("提示: 请参考 .env.example 文件进行配置")
         return
 

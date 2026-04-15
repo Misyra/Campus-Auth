@@ -19,6 +19,7 @@ class MonitorConfigPayload(BaseModel):
     browser_timeout: int = Field(default=8000, ge=1000, le=60000)
     browser_user_agent: str = Field(default=DEFAULT_BROWSER_USER_AGENT)
     browser_low_resource_mode: bool = False
+    browser_disable_web_security: bool = False
     browser_extra_headers_json: str = Field(default="")
     pause_enabled: bool = True
     pause_start_hour: int = Field(default=0, ge=0, le=23)

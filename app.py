@@ -15,20 +15,18 @@ from pathlib import Path
 # 将项目根目录添加到 Python 路径
 sys.path.insert(0, str(Path(__file__).parent))
 
+# ==================== 最早加载 .env ====================
+# 必须在任何 import（特别是 backend.main）之前加载，
+# 否则模块级 get_logger() 会用默认 INFO 配置根 logger 并锁死
+from dotenv import load_dotenv
+load_dotenv(Path.cwd() / ".env", override=True)
+
 from src.playwright_bootstrap import ensure_playwright_ready
 
 
 def _setup_logging() -> None:
-    from src.utils.logging import configure_root_logger
-
-    level = os.getenv("BACKEND_LOG_LEVEL", os.getenv("LOG_LEVEL", "INFO"))
-    configure_root_logger(
-        {
-            "level": level,
-            "file": os.getenv("LOG_FILE", "logs/campus_auth.log") or None,
-        },
-        side="BACKEND",
-    )
+    """日志初始化延迟到 backend/main.run() 中执行（确保 .env 已加载）。"""
+    pass
 
 
 # ==================== PID 管理 ====================
@@ -238,6 +236,10 @@ def _run_server(no_browser: bool = False, tray: bool = False) -> None:
             )
             tray_icon.start()
             print("系统托盘已启动，双击图标打开控制台")
+
+            # 将托盘实例引用传递给 backend，确保 shutdown 时能正确停止
+            from backend.main import _setTrayIcon
+            _setTrayIcon(tray_icon)
         except Exception as e:
             print(f"启动系统托盘失败: {e}")
 

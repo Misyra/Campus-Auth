@@ -57,7 +57,7 @@ class SystemTray:
         self.icon = pystray.Icon(
             "campus_auth",
             self._load_icon(),
-            "Campus-Auth 校园网认证",
+            "校园网认证助手",
             self._create_menu(),
         )
         self._thread = threading.Thread(target=self.icon.run, daemon=True)

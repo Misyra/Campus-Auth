@@ -5,9 +5,9 @@
   "author": "User",
   "url": "http://你的学校认证地址",
   "variables": {
-    "username": "{{CAMPUS_USERNAME}}",
-    "password": "{{CAMPUS_PASSWORD}}",
-    "isp": "{{CAMPUS_ISP}}"
+    "username": "{{USERNAME}}",
+    "password": "{{PASSWORD}}",
+    "isp": "{{ISP}}"
   },
   "timeout": 30000,
   "steps": [

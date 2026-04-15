@@ -10,6 +10,8 @@ from typing import Tuple
 
 from dotenv import load_dotenv
 
+from .crypto import decrypt_password
+
 
 class ConfigLoader:
     """配置加载工具类 - 统一管理所有配置加载逻辑"""
@@ -29,12 +31,12 @@ class ConfigLoader:
 
     @staticmethod
     def _load_basic_config() -> dict:
-        """加载基础配置"""
+        """加载基础配置（密码自动解密）"""
         return {
-            "username": os.getenv("CAMPUS_USERNAME", ""),
-            "password": os.getenv("CAMPUS_PASSWORD", ""),
-            "auth_url": os.getenv("CAMPUS_AUTH_URL", "http://172.29.0.2"),
-            "isp": os.getenv("CAMPUS_ISP", "@cmcc"),
+            "username": os.getenv("USERNAME", ""),
+            "password": decrypt_password(os.getenv("PASSWORD", "")),
+            "auth_url": os.getenv("LOGIN_URL", "http://172.29.0.2"),
+            "isp": os.getenv("ISP", "@cmcc"),
             "auto_start_monitoring": ConfigLoader._str_to_bool(
                 os.getenv("AUTO_START_MONITORING", "false")
             ),
@@ -56,6 +58,9 @@ class ConfigLoader:
                 os.getenv("BROWSER_LOW_RESOURCE_MODE", "false")
             ),
             "extra_headers_json": os.getenv("BROWSER_EXTRA_HEADERS_JSON", ""),
+            "disable_web_security": ConfigLoader._str_to_bool(
+                os.getenv("BROWSER_DISABLE_WEB_SECURITY", "false")
+            ),
         }
 
     @staticmethod
@@ -109,7 +114,7 @@ class ConfigLoader:
         if env_override:
             load_dotenv(Path(env_override), override=True)
         else:
-            load_dotenv(Path.cwd() / ".env", override=False)
+            load_dotenv(Path.cwd() / ".env", override=True)
 
         config = ConfigLoader._load_basic_config()
         config["browser_settings"] = ConfigLoader._load_browser_config()

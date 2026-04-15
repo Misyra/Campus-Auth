@@ -142,6 +142,9 @@ class TaskManager:
 class TaskExecutor:
     MAX_TEMPLATE_DEPTH = 8
 
+    # 项目根目录基准，用于截图等绝对路径
+    _PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
     def __init__(self, config: TaskConfig, env_vars: dict[str, str]):
         self.config = config
         self.env_vars = env_vars
@@ -161,8 +164,12 @@ class TaskExecutor:
         if not isinstance(value, str):
             return value
 
+        # 快速路径：无模板标记直接返回
+        if "{{" not in value and "}}" not in value:
+            return value
+
         visited_names = set() if visited is None else set(visited)
-        if depth > self.MAX_TEMPLATE_DEPTH:
+        if depth > self.MAX_TEMPLATE_DEPTH * 2:
             raise RuntimeError(
                 f"变量展开层级超过限制({self.MAX_TEMPLATE_DEPTH})，请检查变量引用关系"
             )
@@ -170,7 +177,9 @@ class TaskExecutor:
         def replacer(match):
             var_name = match.group(1)
             if var_name in self.variables:
-                return str(self.variables[var_name])
+                resolved = str(self.variables[var_name])
+                # 递归解析：如果结果仍包含模板标记，继续解析
+                return self._resolve_variable(resolved, depth=depth + 1, visited=visited_names | {var_name})
             if hasattr(self.config, var_name):
                 return str(getattr(self.config, var_name))
             if var_name in self.env_vars:
@@ -179,16 +188,14 @@ class TaskExecutor:
                 if var_name in visited_names:
                     raise RuntimeError(f"检测到变量循环引用: {var_name}")
                 val = self.config.variables[var_name]
-                return str(
-                    self._resolve_variable(
-                        val,
-                        depth=depth + 1,
-                        visited=visited_names | {var_name},
-                    )
-                )
-            return match.group(0)
+                return self._resolve_variable(val, depth=depth + 1, visited=visited_names | {var_name})
+            return match.group(0)  # 未找到的变量保留原样
 
-        return re.sub(r"\{\{(\w+)\}\}", replacer, value)
+        result = re.sub(r"\{\{(\w+)\}\}", replacer, value)
+        # 如果结果仍有未解析的模板标记，再做一轮完整解析（处理链式引用如 url→AUTH_URL）
+        if "{{" in result and depth <= self.MAX_TEMPLATE_DEPTH:
+            result = self._resolve_variable(result, depth=depth + 1, visited=visited_names)
+        return result
 
     def _resolve_timeout(
         self, step: dict[str, Any], default_timeout: int | None = None
@@ -221,10 +228,11 @@ class TaskExecutor:
         if not self.config.on_failure.get("screenshot"):
             return None
         try:
-            os.makedirs("debug", exist_ok=True)
+            debug_dir = self._PROJECT_ROOT / "debug"
+            debug_dir.mkdir(parents=True, exist_ok=True)
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
             filename = f"task_failure_{stamp}.png"
-            local_path = os.path.join("debug", filename)
+            local_path = str(debug_dir / filename)
             await page.screenshot(path=local_path, full_page=True)
             web_path = f"/debug/{filename}"
             self.variables["_last_failure_screenshot"] = web_path
@@ -407,8 +415,13 @@ class TaskExecutor:
                 return True, ""
 
             elif step_type == "screenshot":
-                path = step.get("path", "debug/step_screenshot.png")
-                os.makedirs("debug", exist_ok=True)
+                path = step.get("path", "")
+                if not path:
+                    debug_dir = self._PROJECT_ROOT / "debug"
+                    debug_dir.mkdir(parents=True, exist_ok=True)
+                    path = str(debug_dir / "step_screenshot.png")
+                else:
+                    os.makedirs(os.path.dirname(path) or "debug", exist_ok=True)
                 await page.screenshot(path=path)
                 return True, ""
 

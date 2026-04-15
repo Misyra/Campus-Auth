@@ -37,8 +37,9 @@
               v-model="config.password"
               name="password"
               type="password"
-              placeholder="输入密码"
+              :placeholder="config.password && config.password.startsWith('\u2022') ? '\u5bc6\u7801\u5df2\u52a0\u5bc6\u4fdd\u5b58\uff0c\u6e05\u7a7a\u540e\u8f93\u5165\u65b0\u5bc6\u7801' : '\u8f93\u5165\u5bc6\u7801'"
               autocomplete="current-password"
+              @focus="$event.target.select()"
             />
           </div>
           <div class="form-group">
@@ -219,6 +220,21 @@
                   tabindex="0"
                   role="note"
                   data-tip="会拦截图片请求，降低带宽和内存占用。"
+                >?</span>
+              </label>
+            </div>
+          </div>
+          <div class="toggle-group">
+            <div class="toggle-with-help">
+              <label class="toggle toggle-help-inline">
+                <input type="checkbox" v-model="config.browser_disable_web_security" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">禁用同源策略</span>
+                <span
+                  class="field-help"
+                  tabindex="0"
+                  role="note"
+                  data-tip="关闭浏览器同源安全策略，仅在认证页面跨域请求失败时启用。启用后安全性降低，建议仅在必要时开启。"
                 >?</span>
               </label>
             </div>
