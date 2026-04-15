@@ -1,0 +1,140 @@
+<div v-if="currentPage === 'dashboard'" class="page-content fade-in">
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon green">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+      </div>
+      <div class="stat-info">
+        <span class="stat-label">运行时长</span>
+        <span class="stat-value">{{ formatDuration(status.runtime_seconds) }}</span>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon blue">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+        </svg>
+      </div>
+      <div class="stat-info">
+        <span class="stat-label">检测次数</span>
+        <span class="stat-value">{{ status.network_check_count }}</span>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon orange">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </div>
+      <div class="stat-info">
+        <span class="stat-label">失败计数</span>
+        <span class="stat-value">{{ status.login_attempt_count }}</span>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon purple">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+          <line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/>
+          <line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+      </div>
+      <div class="stat-info">
+        <span class="stat-label">最后检测</span>
+        <span class="stat-value">{{ status.last_check_time ? formatTime(status.last_check_time) : '-' }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="dashboard-grid">
+    <div class="card">
+      <div class="card-header">
+        <h2>快捷操作</h2>
+      </div>
+      <div class="card-body">
+        <div class="action-buttons">
+          <button class="btn btn-secondary" @click="manualLogin" :disabled="busy.action">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+              <polyline points="10 17 15 12 10 7"/>
+              <line x1="15" y1="12" x2="3" y2="12"/>
+            </svg>
+            手动登录
+          </button>
+          <button class="btn btn-secondary" @click="testNetwork" :disabled="busy.action">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+              <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+              <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+              <circle cx="12" cy="20" r="1"/>
+            </svg>
+            网络测试
+          </button>
+        </div>
+
+        <div class="autostart-section">
+          <h3>开机自启动</h3>
+          <p class="info-text">
+            {{ autostart.enabled ? '已启用' : '未启用' }}
+            <span v-if="autostart.method !== '-'"> · {{ autostart.method }}</span>
+          </p>
+          <div class="action-buttons">
+            <button class="btn btn-sm" @click="enableAutostart" :disabled="busy.autostart || autostart.enabled">
+              启用
+            </button>
+            <button class="btn btn-sm" @click="disableAutostart" :disabled="busy.autostart || !autostart.enabled">
+              关闭
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card log-card">
+      <div class="card-header">
+        <h2>实时日志</h2>
+        <button class="btn btn-icon-only" @click="fetchLogs" title="刷新">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"/>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          </svg>
+        </button>
+      </div>
+      <div class="card-body">
+        <div class="log-viewer">
+          <div v-if="!logs.length" class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            <span>暂无日志</span>
+          </div>
+          <div v-else class="log-entries">
+            <div v-for="item in logs" :key="item.timestamp + item.message" class="log-entry">
+              <span class="log-time">{{ formatLogTime(item.timestamp) }}</span>
+              <span class="log-time">{{ formatLogMeta(item) }}</span>
+              <div class="log-content">
+                <span class="log-message" :class="getLogClass(item.message)">{{ stripScreenshotHint(item.message) }}</span>
+                <div v-if="extractScreenshotUrl(item.message)" class="log-screenshot-wrap">
+                  <a :href="extractScreenshotUrl(item.message)" target="_blank" rel="noopener" class="log-screenshot-link">查看截图</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

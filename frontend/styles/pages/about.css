@@ -1,0 +1,177 @@
+.about-container {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.about-hero {
+  text-align: center;
+  padding: 48px 24px;
+  margin-bottom: 24px;
+}
+
+.about-logo {
+  width: 80px;
+  height: 80px;
+  margin-bottom: 16px;
+}
+
+.about-hero h1 {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.version {
+  color: var(--accent);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.description {
+  color: var(--text-secondary);
+}
+
+.about-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.tech-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tech-badge {
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+}
+
+.tech-badge.python {
+  background: rgba(55, 118, 171, 0.2);
+  color: #3776ab;
+  border: 1px solid rgba(55, 118, 171, 0.3);
+}
+
+.tech-badge.fastapi {
+  background: rgba(0, 150, 136, 0.2);
+  color: #009688;
+  border: 1px solid rgba(0, 150, 136, 0.3);
+}
+
+.tech-badge.vue {
+  background: rgba(65, 184, 131, 0.2);
+  color: #41b883;
+  border: 1px solid rgba(65, 184, 131, 0.3);
+}
+
+.tech-badge.playwright {
+  background: rgba(51, 85, 51, 0.2);
+  color: #2eaa55;
+  border: 1px solid rgba(46, 170, 85, 0.3);
+}
+
+.tech-badge.uv {
+  background: rgba(34, 211, 238, 0.2);
+  color: var(--accent);
+  border: 1px solid rgba(34, 211, 238, 0.3);
+}
+
+.feature-list {
+  list-style: none;
+}
+
+.feature-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.feature-list svg {
+  width: 18px;
+  height: 18px;
+  color: var(--success);
+  flex-shrink: 0;
+}
+
+.info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.info-item:last-child {
+  border-bottom: none;
+}
+
+.info-label {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.info-value {
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.about-footer {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.about-links {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.github-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-primary);
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  min-height: 40px;
+}
+
+.github-link:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+  transform: translateY(-2px);
+}
+
+.github-link svg {
+  width: 20px;
+  height: 20px;
+}
+
+.muted {
+  color: var(--text-muted);
+  margin-top: 8px;
+}

@@ -53,8 +53,9 @@ class ConfigLoader:
             "timeout": ConfigLoader._get_int_env("BROWSER_TIMEOUT", 8000),
             "user_agent": os.getenv("BROWSER_USER_AGENT", default_user_agent),
             "low_resource_mode": ConfigLoader._str_to_bool(
-                os.getenv("BROWSER_LOW_RESOURCE_MODE", "true")
+                os.getenv("BROWSER_LOW_RESOURCE_MODE", "false")
             ),
+            "extra_headers_json": os.getenv("BROWSER_EXTRA_HEADERS_JSON", ""),
         }
 
     @staticmethod
@@ -83,17 +84,18 @@ class ConfigLoader:
                 "end_hour": ConfigLoader._get_int_env("PAUSE_LOGIN_END_HOUR", 6),
             },
             "monitor": {
-                "interval": ConfigLoader._get_int_env("MONITOR_INTERVAL", 240),
+                "interval": ConfigLoader._get_int_env("MONITOR_INTERVAL", 300),
                 "ping_targets": [
                     target.strip()
                     for target in os.getenv(
-                        "PING_TARGETS", "8.8.8.8,114.114.114.114,baidu.com"
+                        "PING_TARGETS",
+                        "8.8.8.8:53,114.114.114.114:53,www.baidu.com:443",
                     ).split(",")
                     if target.strip()
                 ],
             },
             "minimize_to_tray": ConfigLoader._str_to_bool(
-                os.getenv("MINIMIZE_TO_TRAY", "true")
+                os.getenv("MINIMIZE_TO_TRAY", "false")
             ),
         }
 

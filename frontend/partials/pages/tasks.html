@@ -1,0 +1,120 @@
+<div v-if="currentPage === 'tasks'" class="page-content fade-in">
+  <div class="tasks-grid">
+    <div class="card">
+      <div class="card-header">
+        <h2>登录任务列表</h2>
+        <button class="btn btn-sm btn-primary" @click="showTaskEditor(null)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          新建任务
+        </button>
+      </div>
+      <div class="card-body">
+        <div v-if="!tasks.length" class="empty-state">
+          <p>暂无任务配置</p>
+        </div>
+        <div v-else class="task-list">
+          <div v-for="task in tasks" :key="task.id" class="task-item" :class="{ active: activeTaskId === task.id }">
+            <div class="task-info">
+              <h3>{{ task.name }}</h3>
+              <p>{{ task.description }}</p>
+            </div>
+            <div class="task-actions">
+              <button class="btn btn-sm" @click="setActiveTask(task.id)" :disabled="activeTaskId === task.id">
+                {{ activeTaskId === task.id ? '当前使用' : '使用' }}
+              </button>
+              <button class="btn btn-sm" @click="showTaskEditor(task.id)">编辑</button>
+              <button class="btn btn-sm btn-danger" @click="deleteTask(task.id)" :disabled="task.id === 'default'">
+                删除
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="editingTask" class="card task-editor">
+      <div class="card-header">
+        <h2>{{ editingTask.id ? '编辑任务' : '新建任务' }}</h2>
+        <button class="btn btn-icon-only" @click="editingTask = null">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="card-body">
+        <div class="form-group">
+          <label>任务ID</label>
+          <input v-model="editingTask.id" type="text" placeholder="task_id" :disabled="!!editingTask.id" />
+          <span class="hint">只能包含字母、数字和下划线</span>
+        </div>
+        <div class="form-group">
+          <label>任务名称</label>
+          <input v-model="editingTask.name" type="text" placeholder="我的登录任务" />
+        </div>
+        <div class="form-group">
+          <label>描述</label>
+          <input v-model="editingTask.description" type="text" placeholder="任务描述" />
+        </div>
+        <div class="form-group">
+          <label>认证地址</label>
+          <input v-model="editingTask.url" type="text" placeholder="http://172.29.0.2" />
+        </div>
+        <div class="form-group">
+          <label>JSON 配置</label>
+          <textarea v-model="editingTask.json" rows="12" placeholder="任务JSON配置"></textarea>
+          <span class="hint">编辑完整的任务配置JSON</span>
+        </div>
+        <div class="task-editor-actions">
+          <button class="btn btn-secondary" @click="loadTemplate('default')">加载默认模板</button>
+          <button class="btn btn-secondary" @click="loadTemplate('sample')">加载语义识别模板</button>
+          <button class="btn btn-secondary" @click="loadTemplate('sample_2')">加载元素识别模板</button>
+        </div>
+      </div>
+      <div class="card-footer">
+        <button class="btn btn-secondary" @click="editingTask = null">取消</button>
+        <button class="btn btn-primary" @click="saveTask">保存任务</button>
+      </div>
+    </div>
+
+    <div v-else class="card">
+      <div class="card-header">
+        <h2>JSON 配置说明</h2>
+      </div>
+      <div class="card-body">
+        <div class="help-content">
+          <h4>支持的步骤类型</h4>
+          <ul>
+            <li><code>navigate</code> - 打开网页</li>
+            <li><code>input</code> - 输入文本</li>
+            <li><code>click</code> - 点击元素</li>
+            <li><code>select</code> - 选择下拉框</li>
+            <li><code>wait</code> - 等待元素出现</li>
+            <li><code>eval</code> - 执行JavaScript</li>
+          </ul>
+          <h4>可用变量</h4>
+          <ul>
+            <li><code v-pre>{{username}}</code> - 用户名</li>
+            <li><code v-pre>{{password}}</code> - 密码</li>
+            <li><code v-pre>{{isp}}</code> - 运营商后缀</li>
+            <li><code v-pre>{{url}}</code> - 认证地址</li>
+          </ul>
+          <h4>示例</h4>
+          <pre v-pre>{
+"steps": [
+  {
+    "type": "input",
+    "selector": "#username",
+    "value": "{{username}}{{isp}}",
+    "description": "输入用户名"
+  }
+]
+}</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

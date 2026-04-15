@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
 from src.utils import ConfigLoader
 
-from .schemas import MonitorConfigPayload
+from .schemas import DEFAULT_BROWSER_USER_AGENT, MonitorConfigPayload
 
 CARRIER_MAP = {
     "移动": "@cmcc",
@@ -16,6 +17,7 @@ CARRIER_MAP = {
 }
 
 VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+_ENV_HEADER = "# Campus-Auth managed settings"
 
 
 def _normalize_level(raw: str, default: str = "INFO") -> str:
@@ -28,6 +30,18 @@ def _normalize_targets(raw: str) -> str:
     if not parts:
         return "8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
     return ",".join(parts)
+
+
+def _normalize_headers_json(raw: str) -> str:
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+
+    parsed = json.loads(text)
+    if not isinstance(parsed, dict):
+        raise ValueError("浏览器请求头必须是 JSON 对象")
+
+    return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
 
 
 def load_ui_config() -> MonitorConfigPayload:
@@ -53,10 +67,17 @@ def load_ui_config() -> MonitorConfigPayload:
     return MonitorConfigPayload(
         username=config.get("username", ""),
         password=config.get("password", ""),
+        auth_url=str(config.get("auth_url", "http://172.29.0.2")),
         carrier=carrier,
         check_interval_minutes=max(1, interval_seconds // 60),
         auto_start=bool(config.get("auto_start_monitoring", False)),
         headless=bool(browser_config.get("headless", False)),
+        browser_timeout=int(browser_config.get("timeout", 8000)),
+        browser_user_agent=str(
+            browser_config.get("user_agent", DEFAULT_BROWSER_USER_AGENT)
+        ),
+        browser_low_resource_mode=bool(browser_config.get("low_resource_mode", False)),
+        browser_extra_headers_json=str(browser_config.get("extra_headers_json", "")),
         pause_enabled=bool(pause_config.get("enabled", True)),
         pause_start_hour=int(pause_config.get("start_hour", 0)),
         pause_end_hour=int(pause_config.get("end_hour", 6)),
@@ -77,11 +98,20 @@ def build_runtime_config(payload: MonitorConfigPayload) -> dict[str, Any]:
 
     base["username"] = payload.username.strip()
     base["password"] = payload.password.strip()
+    base["auth_url"] = payload.auth_url.strip() or "http://172.29.0.2"
     base["isp"] = CARRIER_MAP.get(payload.carrier, "")
     base["auto_start_monitoring"] = payload.auto_start
 
     browser = base.setdefault("browser_settings", {})
     browser["headless"] = payload.headless
+    browser["timeout"] = payload.browser_timeout
+    browser["user_agent"] = (
+        payload.browser_user_agent.strip() or DEFAULT_BROWSER_USER_AGENT
+    )
+    browser["low_resource_mode"] = payload.browser_low_resource_mode
+    browser["extra_headers_json"] = _normalize_headers_json(
+        payload.browser_extra_headers_json
+    )
 
     pause = base.setdefault("pause_login", {})
     pause["enabled"] = payload.pause_enabled
@@ -113,43 +143,66 @@ def write_env_file(payload: MonitorConfigPayload, env_path: Path) -> None:
     network_targets = _normalize_targets(payload.network_targets)
     backend_level = _normalize_level(payload.backend_log_level)
     frontend_level = _normalize_level(payload.frontend_log_level)
-    env_content = f"""# 校园网认证配置
-CAMPUS_USERNAME={payload.username.strip()}
-CAMPUS_PASSWORD={payload.password.strip()}
-CAMPUS_AUTH_URL=http://172.29.0.2
-CAMPUS_ISP={CARRIER_MAP.get(payload.carrier, "")}
+    browser_user_agent = (
+        payload.browser_user_agent.strip() or DEFAULT_BROWSER_USER_AGENT
+    )
+    browser_headers_json = _normalize_headers_json(payload.browser_extra_headers_json)
 
-# 浏览器配置
-BROWSER_HEADLESS={str(payload.headless).lower()}
-BROWSER_TIMEOUT=8000
-BROWSER_LOW_RESOURCE_MODE=true
+    managed_values = {
+        "CAMPUS_USERNAME": payload.username.strip(),
+        "CAMPUS_PASSWORD": payload.password.strip(),
+        "CAMPUS_AUTH_URL": payload.auth_url.strip() or "http://172.29.0.2",
+        "CAMPUS_ISP": CARRIER_MAP.get(payload.carrier, ""),
+        "BROWSER_HEADLESS": str(payload.headless).lower(),
+        "BROWSER_TIMEOUT": str(payload.browser_timeout),
+        "BROWSER_USER_AGENT": browser_user_agent,
+        "BROWSER_LOW_RESOURCE_MODE": str(payload.browser_low_resource_mode).lower(),
+        "BROWSER_EXTRA_HEADERS_JSON": browser_headers_json,
+        "MONITOR_INTERVAL": str(payload.check_interval_minutes * 60),
+        "AUTO_START_MONITORING": str(payload.auto_start).lower(),
+        "PING_TARGETS": network_targets,
+        "PAUSE_LOGIN_ENABLED": str(payload.pause_enabled).lower(),
+        "PAUSE_LOGIN_START_HOUR": str(payload.pause_start_hour),
+        "PAUSE_LOGIN_END_HOUR": str(payload.pause_end_hour),
+        "LOG_LEVEL": backend_level,
+        "BACKEND_LOG_LEVEL": backend_level,
+        "FRONTEND_LOG_LEVEL": frontend_level,
+        "UVICORN_ACCESS_LOG": str(payload.access_log).lower(),
+        "MINIMIZE_TO_TRAY": str(payload.minimize_to_tray).lower(),
+    }
 
-# 网络检测配置
-APP_PORT=50721
-MONITOR_INTERVAL={payload.check_interval_minutes * 60}
-AUTO_START_MONITORING={str(payload.auto_start).lower()}
-PING_TARGETS={network_targets}
+    existing_lines: list[str] = []
+    if env_path.exists():
+        existing_lines = env_path.read_text(encoding="utf-8").splitlines()
 
-# 重试策略配置
-RETRY_MAX_RETRIES=3
-RETRY_INTERVAL=5
+    updated_lines: list[str] = []
+    seen_keys: set[str] = set()
 
-# 暂停登录时段配置
-PAUSE_LOGIN_ENABLED={str(payload.pause_enabled).lower()}
-PAUSE_LOGIN_START_HOUR={payload.pause_start_hour}
-PAUSE_LOGIN_END_HOUR={payload.pause_end_hour}
+    for line in existing_lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in line:
+            updated_lines.append(line)
+            continue
 
-# 日志配置
-LOG_LEVEL={backend_level}
-BACKEND_LOG_LEVEL={backend_level}
-FRONTEND_LOG_LEVEL={frontend_level}
-LOG_FORMAT=%(asctime)s | %(levelname)s | %(side)s | %(name)s | %(message)s
-LOG_FILE=logs/campus_auth.log
+        key, _ = line.split("=", 1)
+        key = key.strip()
+        if key in managed_values and key not in seen_keys:
+            updated_lines.append(f"{key}={managed_values[key]}")
+            seen_keys.add(key)
+        else:
+            updated_lines.append(line)
 
-# HTTP请求日志（控制台是否显示API请求）
-UVICORN_ACCESS_LOG={str(payload.access_log).lower()}
+    missing_keys = [k for k in managed_values if k not in seen_keys]
+    if missing_keys:
+        if updated_lines and updated_lines[-1].strip():
+            updated_lines.append("")
+        updated_lines.append(_ENV_HEADER)
+        for key in missing_keys:
+            updated_lines.append(f"{key}={managed_values[key]}")
 
-# 系统托盘配置
-MINIMIZE_TO_TRAY={str(payload.minimize_to_tray).lower()}
-"""
-    env_path.write_text(env_content, encoding="utf-8")
+    if not updated_lines:
+        updated_lines = [_ENV_HEADER]
+        for key, value in managed_values.items():
+            updated_lines.append(f"{key}={value}")
+
+    env_path.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
