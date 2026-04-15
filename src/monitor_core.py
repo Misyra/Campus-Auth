@@ -211,7 +211,15 @@ class NetworkMonitorCore:
         self.log_message("正在尝试登录...")
         try:
             handler = LoginAttemptHandler(self.config)
-            success, message = asyncio.run(handler.attempt_login(skip_pause_check=True))
+            # 在同步线程中安全运行异步代码：每次创建独立事件循环
+            # 使用 asyncio.run() 的替代方案，避免在已有事件循环时崩溃
+            loop = asyncio.new_event_loop()
+            try:
+                success, message = loop.run_until_complete(
+                    handler.attempt_login(skip_pause_check=True)
+                )
+            finally:
+                loop.close()
             if success:
                 self.log_message(f"登录成功 ✓ {message}")
             else:

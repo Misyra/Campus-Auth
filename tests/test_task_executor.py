@@ -22,13 +22,13 @@ def _build_executor(variables: dict[str, str]) -> TaskExecutor:
             "steps": [],
         }
     )
-    return TaskExecutor(config=config, env_vars={"CAMPUS_USERNAME": "alice"})
+    return TaskExecutor(config=config, env_vars={"USERNAME": "alice"})
 
 
 def test_resolve_variable_nested_reference() -> None:
     executor = _build_executor(
         {
-            "username": "{{CAMPUS_USERNAME}}",
+            "username": "{{USERNAME}}",
             "greeting": "hello-{{username}}",
         }
     )
@@ -49,9 +49,10 @@ def test_resolve_variable_cycle_raises() -> None:
 
 
 def test_resolve_variable_depth_limit_raises() -> None:
-    # Build a long chain a0 -> a1 -> ... -> a10.
-    long_chain = {f"a{i}": f"{{{{a{i + 1}}}}}" for i in range(10)}
-    long_chain["a10"] = "final"
+    # Build a chain long enough to exceed MAX_TEMPLATE_DEPTH * 2
+    # (multi-pass resolution effectively doubles recursion depth)
+    long_chain = {f"a{i}": f"{{{{a{i + 1}}}}}" for i in range(17)}
+    long_chain["a17"] = "final"
 
     executor = _build_executor(long_chain)
 

@@ -3,11 +3,11 @@
   "description": "元素识别，仅使用标准步骤类型，可按页面调整选择器",
   "version": "3.1.0",
   "author": "System",
-  "url": "{{CAMPUS_AUTH_URL}}",
+  "url": "{{LOGIN_URL}}",
   "variables": {
-    "username": "{{CAMPUS_USERNAME}}",
-    "password": "{{CAMPUS_PASSWORD}}",
-    "isp": "{{CAMPUS_ISP}}"
+    "username": "{{USERNAME}}",
+    "password": "{{PASSWORD}}",
+    "isp": "{{ISP}}"
   },
   "timeout": 30000,
   "steps": [

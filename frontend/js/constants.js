@@ -23,6 +23,7 @@ export const DEFAULT_CONFIG = {
   browser_timeout: 8000,
   browser_user_agent: DEFAULT_BROWSER_USER_AGENT,
   browser_low_resource_mode: false,
+  browser_disable_web_security: false,
   browser_extra_headers_json: "",
   pause_enabled: true,
   pause_start_hour: 0,

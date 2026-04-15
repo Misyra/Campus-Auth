@@ -93,7 +93,6 @@ class BrowserContextManager:
         """获取优化的浏览器启动参数，减少内存和资源占用"""
         args = [
             "--no-sandbox",
-            "--disable-web-security",
             "--disable-dev-shm-usage",
             "--disable-gpu",
             "--disable-extensions",
@@ -101,6 +100,10 @@ class BrowserContextManager:
             "--memory-pressure-off",
             "--max_old_space_size=256",
         ]
+        # 同源策略：仅在配置明确启用时禁用（默认保留浏览器安全策略）
+        disable_web_security = self.browser_settings.get("disable_web_security", False)
+        if disable_web_security:
+            args.append("--disable-web-security")
         if self.browser_settings.get("low_resource_mode", False):
             args.append("--blink-settings=imagesEnabled=false")
         return args
@@ -199,14 +202,17 @@ class BrowserContextManager:
         if not self.page:
             raise RuntimeError("浏览器未启动，请在上下文管理器中使用")
 
-        import os
+        from pathlib import Path
 
         if not path:
             import time
 
-            path = f"debug/screenshot_{int(time.time())}.png"
+            project_root = Path(__file__).resolve().parents[2]
+            debug_dir = project_root / "debug"
+            debug_dir.mkdir(parents=True, exist_ok=True)
+            path = str(debug_dir / f"screenshot_{int(time.time())}.png")
 
-        os.makedirs("debug", exist_ok=True)
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
 
         try:
             await self.page.screenshot(path=path)

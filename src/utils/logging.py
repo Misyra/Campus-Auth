@@ -62,11 +62,21 @@ def _formatter(pattern: str, colored: bool = False) -> logging.Formatter:
     return logging.Formatter(pattern, datefmt="%Y-%m-%d %H:%M:%S")
 
 
+# 全局标记：根 logger 是否已完成首次配置
+_root_configured = False
+
+
 def configure_root_logger(
     config: Dict[str, Any] | None = None, side: str = "BACKEND"
 ) -> logging.Logger:
+    """配置根日志器。仅首次调用时完整配置，后续调用跳过以避免重复 handler。"""
+    global _root_configured
     config = config or {}
     root = logging.getLogger()
+
+    # 一旦完成过一次完整配置就永远不再重新配置
+    if _root_configured:
+        return root
 
     level = _level_value(config.get("level", "INFO"))
     pattern = str(
@@ -108,6 +118,7 @@ def configure_root_logger(
         except Exception as e:
             root.warning(f"无法创建日志文件 {log_file}: {e}")
 
+    _root_configured = True
     return root
 
 
