@@ -150,3 +150,104 @@ class LoggerSetup:
     @staticmethod
     def setup_logger(name: str, config: Dict[str, Any]) -> logging.Logger:
         return setup_logger(name, config)
+
+
+class LogConfigCenter:
+    """
+    日志配置中心（单例模式）
+
+    统一管理整个应用的日志配置，避免重复配置和配置不一致问题
+    """
+
+    _instance = None
+    _lock = False
+
+    # 默认配置
+    DEFAULT_CONFIG = {
+        "level": "INFO",
+        "format": "%(asctime)s | %(levelname)s | %(side)s | %(name)s | %(message)s",
+        "date_format": "%Y-%m-%d %H:%M:%S",
+        "console_colored": True,
+        "file": None,
+        "file_max_bytes": 5 * 1024 * 1024,  # 5MB
+        "file_backup_count": 3,
+    }
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self):
+        if self._initialized:
+            return
+        self._config = self.DEFAULT_CONFIG.copy()
+        self._side = "BACKEND"
+        self._initialized = True
+
+    @classmethod
+    def get_instance(cls) -> "LogConfigCenter":
+        """获取日志配置中心实例"""
+        if cls._instance is None:
+            cls()
+        return cls._instance
+
+    def initialize(self, config: Dict[str, Any] | None = None, side: str = "BACKEND") -> None:
+        """
+        初始化日志配置（仅首次调用有效）
+
+        Args:
+            config: 日志配置字典
+            side: 应用侧标识（BACKEND/FRONTEND）
+        """
+        if self._lock:
+            return
+
+        if config:
+            self._config.update(config)
+        self._side = side
+
+        # 配置根日志器
+        configure_root_logger(self._config, side)
+        self._lock = True
+
+    def get_logger(self, name: str, side: str | None = None) -> logging.Logger:
+        """
+        获取配置好的日志器
+
+        Args:
+            name: 日志器名称
+            side: 应用侧标识（默认使用初始化时的设置）
+
+        Returns:
+            logging.Logger: 配置好的日志器
+        """
+        if not self._lock:
+            self.initialize()
+        return get_logger(name, side or self._side)
+
+    def get_config(self) -> Dict[str, Any]:
+        """获取当前配置"""
+        return self._config.copy()
+
+    def is_initialized(self) -> bool:
+        """检查是否已初始化"""
+        return self._lock
+
+
+# 便捷函数：获取统一配置的日志器
+def get_configured_logger(name: str, side: str = "BACKEND") -> logging.Logger:
+    """
+    获取统一配置的日志器
+
+    使用日志配置中心获取日志器，确保配置一致性
+
+    Args:
+        name: 日志器名称
+        side: 应用侧标识
+
+    Returns:
+        logging.Logger: 配置好的日志器
+    """
+    return LogConfigCenter.get_instance().get_logger(name, side)

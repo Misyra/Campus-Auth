@@ -18,6 +18,23 @@ from .utils import (
 
 
 class NetworkMonitorCore:
+    """网络监控核心类"""
+
+    # 类常量：监控配置
+    DEFAULT_INTERVAL_SECONDS = 240
+    MAX_CONSECUTIVE_LOGIN_FAILURES = 3
+    LOGIN_COOLDOWN_SECONDS = 120
+    PAUSE_CHECK_INTERVAL_SECONDS = 300
+    PAUSE_CHECK_STEP_SECONDS = 15
+    LOGIN_COOLDOWN_STEP_SECONDS = 10
+    MIN_WAIT_STEP_SECONDS = 5
+    MAX_WAIT_STEP_SECONDS = 20
+    LOG_DIVIDER_LENGTH = 50
+
+    # 类常量：网络检测配置
+    NETWORK_CHECK_TIMEOUT_SECONDS = 2
+    DEFAULT_PING_TARGETS = ["8.8.8.8:53", "114.114.114.114:53", "www.baidu.com:443"]
+
     def __init__(
         self,
         config: Optional[Dict[str, Any]] = None,
@@ -33,6 +50,7 @@ class NetworkMonitorCore:
         self.last_check_time: Optional[datetime.datetime] = None
 
         self._stop_requested = False
+        self._test_sites_cache: Optional[list[tuple[str, int]]] = None
         self.logger = setup_logger("monitor", self.config.get("logging", {}))
 
     def _now(self) -> str:
@@ -68,13 +86,14 @@ class NetworkMonitorCore:
         self.start_time = time.time()
         self.network_check_count = 0
         self.login_attempt_count = 0
+        self._test_sites_cache = None  # 重置缓存
 
-        self.log_message("=" * 50)
+        interval = self.config.get("monitor", {}).get("interval", self.DEFAULT_INTERVAL_SECONDS)
+
+        self.log_message("=" * self.LOG_DIVIDER_LENGTH)
         self.log_message("网络监控已启动")
-        self.log_message(
-            f"检测间隔: {self.config.get('monitor', {}).get('interval', 240)} 秒"
-        )
-        self.log_message("=" * 50)
+        self.log_message(f"检测间隔: {interval} 秒")
+        self.log_message("=" * self.LOG_DIVIDER_LENGTH)
 
         try:
             self.monitor_network()
@@ -97,10 +116,10 @@ class NetworkMonitorCore:
             runtime, stats = get_runtime_stats(
                 self.start_time, self.network_check_count
             )
-            self.log_message("=" * 50)
+            self.log_message("=" * self.LOG_DIVIDER_LENGTH)
             self.log_message(f"监控已停止，运行时长: {runtime}")
             self.log_message(f"检测次数: {self.network_check_count}")
-            self.log_message("=" * 50)
+            self.log_message("=" * self.LOG_DIVIDER_LENGTH)
 
     def _wait_interruptible(self, seconds: int, step: int = 5) -> bool:
         remaining = max(0, seconds)
@@ -111,8 +130,8 @@ class NetworkMonitorCore:
 
     def monitor_network(self) -> None:
         consecutive_failures = 0
-        interval = int(self.config.get("monitor", {}).get("interval", 240))
-        test_sites = self._build_test_sites()
+        interval = int(self.config.get("monitor", {}).get("interval", self.DEFAULT_INTERVAL_SECONDS))
+        test_sites = self._get_test_sites()
 
         while self.monitoring:
             pause_config = self.config.get("pause_login", {})
@@ -124,7 +143,9 @@ class NetworkMonitorCore:
                     f"当前 {now_hour}:xx 在暂停时段({start_hour}-{end_hour})，跳过检测",
                     logging.DEBUG,
                 )
-                if not self._wait_interruptible(300, step=15):
+                if not self._wait_interruptible(
+                    self.PAUSE_CHECK_INTERVAL_SECONDS, step=self.PAUSE_CHECK_STEP_SECONDS
+                ):
                     break
                 continue
 
@@ -135,9 +156,12 @@ class NetworkMonitorCore:
             try:
                 network_ok = is_network_available(
                     test_sites=test_sites,
-                    timeout=2,
+                    timeout=self.NETWORK_CHECK_TIMEOUT_SECONDS,
                     require_both=False,
                 )
+            except OSError as exc:
+                self.log_message(f"网络检测 IO 错误: {exc}", logging.ERROR)
+                network_ok = False
             except Exception as exc:
                 self.log_message(f"网络检测异常: {exc}", logging.ERROR)
                 network_ok = False
@@ -164,12 +188,16 @@ class NetworkMonitorCore:
                         f"[{self.network_check_count}] 自动登录失败，第 {self.login_attempt_count} 次",
                         logging.ERROR,
                     )
-                    if self.login_attempt_count >= 3:
+                    if self.login_attempt_count >= self.MAX_CONSECUTIVE_LOGIN_FAILURES:
                         self.log_message(
-                            "连续登录失败达到 3 次，冷却 120 秒", logging.WARNING
+                            f"连续登录失败达到 {self.MAX_CONSECUTIVE_LOGIN_FAILURES} 次，"
+                            f"冷却 {self.LOGIN_COOLDOWN_SECONDS} 秒",
+                            logging.WARNING,
                         )
                         self.login_attempt_count = 0
-                        if not self._wait_interruptible(120, step=10):
+                        if not self._wait_interruptible(
+                            self.LOGIN_COOLDOWN_SECONDS, step=self.LOGIN_COOLDOWN_STEP_SECONDS
+                        ):
                             break
                         continue
 
@@ -177,12 +205,22 @@ class NetworkMonitorCore:
             self.log_message(
                 f"下次检测: {next_check.strftime('%H:%M:%S')}", logging.DEBUG
             )
-            if not self._wait_interruptible(
-                interval, step=min(20, max(5, interval // 10))
-            ):
+            wait_step = min(
+                self.MAX_WAIT_STEP_SECONDS,
+                max(self.MIN_WAIT_STEP_SECONDS, interval // 10)
+            )
+            if not self._wait_interruptible(interval, step=wait_step):
                 break
 
+    def _get_test_sites(self) -> list[tuple[str, int]]:
+        """获取测试站点列表（带缓存）"""
+        if self._test_sites_cache is not None:
+            return self._test_sites_cache
+        self._test_sites_cache = self._build_test_sites()
+        return self._test_sites_cache
+
     def _build_test_sites(self) -> list[tuple[str, int]]:
+        """构建测试站点列表"""
         targets = self.config.get("monitor", {}).get("ping_targets", [])
         if isinstance(targets, str):
             raw_targets = [item.strip() for item in targets.split(",") if item.strip()]
@@ -190,7 +228,7 @@ class NetworkMonitorCore:
             raw_targets = [str(item).strip() for item in targets if str(item).strip()]
 
         if not raw_targets:
-            raw_targets = ["8.8.8.8:53", "114.114.114.114:53", "www.baidu.com:443"]
+            raw_targets = self.DEFAULT_PING_TARGETS.copy()
 
         parsed: list[tuple[str, int]] = []
         for item in raw_targets:
@@ -225,6 +263,15 @@ class NetworkMonitorCore:
             else:
                 self.log_message(f"登录失败 ✗ {message}", logging.ERROR)
             return success, message
+        except asyncio.TimeoutError as exc:
+            self.log_message(f"登录超时: {exc}", logging.ERROR)
+            return False, f"登录超时: {exc}"
+        except ConnectionError as exc:
+            self.log_message(f"登录连接错误: {exc}", logging.ERROR)
+            return False, f"连接错误: {exc}"
+        except RuntimeError as exc:
+            self.log_message(f"登录运行时错误: {exc}", logging.ERROR)
+            return False, f"运行时错误: {exc}"
         except Exception as exc:
             self.log_message(f"登录执行异常: {exc}", logging.ERROR)
             return False, str(exc)

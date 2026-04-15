@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.utils import ConfigLoader
-from src.utils.logging import configure_root_logger, get_logger
+from src.utils.logging import LogConfigCenter, configure_root_logger, get_logger
 
 from .autostart_service import AutoStartService
 from .monitor_service import MonitorService, ws_manager
@@ -114,15 +114,33 @@ async def request_logging_middleware(request: Request, call_next):
 
 
 @app.on_event("startup")
-def on_startup() -> None:
+async def on_startup() -> None:
     start = asyncio.get_event_loop().time()
     startup_logger.info("FastAPI 启动钩子: 开始设置事件循环与服务引导")
     service.set_event_loop(asyncio.get_event_loop())
+
+    # 启动 WebSocket 批量处理器
+    await ws_manager.start_batch_processor()
+    startup_logger.info("WebSocket 批量处理器已启动")
+
     service.boot()
     startup_logger.info(
         "FastAPI 启动钩子: 完成，耗时 %.3fs",
         asyncio.get_event_loop().time() - start,
     )
+
+
+@app.on_event("shutdown")
+async def on_shutdown() -> None:
+    startup_logger.info("FastAPI 关闭钩子: 正在停止服务...")
+
+    # 停止 WebSocket 批量处理器
+    await ws_manager.stop_batch_processor()
+    startup_logger.info("WebSocket 批量处理器已停止")
+
+    # 停止监控服务
+    service.stop_monitoring()
+    startup_logger.info("监控服务已停止")
 
 
 @app.websocket("/ws/logs")
@@ -347,7 +365,11 @@ def run() -> None:
     import uvicorn
 
     config = ConfigLoader.load_config_from_env()
-    configure_root_logger(config.get("logging", {}), side="BACKEND")
+
+    # 使用日志配置中心统一配置
+    log_center = LogConfigCenter.get_instance()
+    log_center.initialize(config.get("logging", {}), side="BACKEND")
+
     access_log_enabled = bool(config.get("access_log", False))
 
     if not access_log_enabled:

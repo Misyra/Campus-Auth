@@ -154,6 +154,8 @@ class TaskExecutor:
             "description": config.description,
             "version": config.version,
         }
+        # 变量解析缓存：避免重复解析相同的模板
+        self._variable_cache: dict[str, str] = {}
 
     def _resolve_variable(
         self,
@@ -167,6 +169,11 @@ class TaskExecutor:
         # 快速路径：无模板标记直接返回
         if "{{" not in value and "}}" not in value:
             return value
+
+        # 检查缓存（只在顶层调用时缓存）
+        cache_key = value
+        if depth == 0 and cache_key in self._variable_cache:
+            return self._variable_cache[cache_key]
 
         visited_names = set() if visited is None else set(visited)
         if depth > self.MAX_TEMPLATE_DEPTH * 2:
@@ -195,6 +202,11 @@ class TaskExecutor:
         # 如果结果仍有未解析的模板标记，再做一轮完整解析（处理链式引用如 url→AUTH_URL）
         if "{{" in result and depth <= self.MAX_TEMPLATE_DEPTH:
             result = self._resolve_variable(result, depth=depth + 1, visited=visited_names)
+
+        # 缓存结果（只在顶层调用时缓存）
+        if depth == 0:
+            self._variable_cache[cache_key] = result
+
         return result
 
     def _resolve_timeout(

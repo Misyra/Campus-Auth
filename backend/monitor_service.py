@@ -21,9 +21,102 @@ from .schemas import LogEntry, MonitorConfigPayload, MonitorStatusResponse
 
 
 class WebSocketManager:
+    """WebSocket 管理器（支持批量发送优化）"""
+
+    # 批量发送配置
+    BATCH_SIZE = 10  # 每批最大消息数
+    BATCH_INTERVAL_MS = 50  # 批量发送间隔（毫秒）
+
     def __init__(self):
         self._connections: list[WebSocket] = []
         self._lock = asyncio.Lock()
+        self._message_queue: asyncio.Queue[str] = asyncio.Queue()
+        self._batch_task: asyncio.Task | None = None
+        self._shutdown_event = asyncio.Event()
+
+    async def start_batch_processor(self):
+        """启动批量处理任务"""
+        if self._batch_task is None or self._batch_task.done():
+            self._batch_task = asyncio.create_task(self._batch_processor())
+
+    async def stop_batch_processor(self):
+        """停止批量处理任务"""
+        self._shutdown_event.set()
+        if self._batch_task and not self._batch_task.done():
+            self._batch_task.cancel()
+            try:
+                await self._batch_task
+            except asyncio.CancelledError:
+                pass
+
+    async def _batch_processor(self):
+        """批量消息处理器"""
+        while not self._shutdown_event.is_set():
+            messages: list[str] = []
+            try:
+                # 等待第一条消息
+                msg = await asyncio.wait_for(
+                    self._message_queue.get(),
+                    timeout=1.0
+                )
+                messages.append(msg)
+
+                # 收集更多消息（非阻塞）
+                deadline = asyncio.get_event_loop().time() + (self.BATCH_INTERVAL_MS / 1000)
+                while len(messages) < self.BATCH_SIZE:
+                    timeout = max(0, deadline - asyncio.get_event_loop().time())
+                    if timeout <= 0:
+                        break
+                    try:
+                        msg = await asyncio.wait_for(
+                            self._message_queue.get(),
+                            timeout=timeout
+                        )
+                        messages.append(msg)
+                    except asyncio.TimeoutError:
+                        break
+
+                # 批量发送
+                if messages:
+                    await self._broadcast_batch(messages)
+
+            except asyncio.TimeoutError:
+                continue
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                continue
+
+    async def _broadcast_batch(self, messages: list[str]):
+        """批量广播消息"""
+        if not messages:
+            return
+
+        # 如果只有一条消息，直接发送；多条则合并
+        if len(messages) == 1:
+            payload = messages[0]
+        else:
+            # 合并多条日志消息
+            payload = json.dumps({
+                "type": "log_batch",
+                "data": [json.loads(m).get("data", {}) for m in messages]
+            })
+
+        async with self._lock:
+            connections = self._connections.copy()
+
+        if not connections:
+            return
+
+        # 并发发送给所有连接
+        tasks = [self._send_safe(ws, payload) for ws in connections]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # 清理断开连接
+        async with self._lock:
+            for ws, result in zip(connections, results):
+                if isinstance(result, Exception) and ws in self._connections:
+                    self._connections.remove(ws)
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
@@ -36,13 +129,19 @@ class WebSocketManager:
                 self._connections.remove(websocket)
 
     async def broadcast(self, message: str):
+        """广播消息（使用批量队列）"""
+        try:
+            await self._message_queue.put(message)
+        except Exception:
+            # 队列已满或已关闭，降级为直接发送
+            await self._broadcast_single(message)
+
+    async def _broadcast_single(self, message: str):
+        """直接单条广播（降级方案）"""
         async with self._lock:
             connections = self._connections.copy()
 
-        tasks = []
-        for ws in connections:
-            tasks.append(self._send_safe(ws, message))
-
+        tasks = [self._send_safe(ws, message) for ws in connections]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         async with self._lock:

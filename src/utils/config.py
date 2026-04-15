@@ -5,6 +5,7 @@
 """
 
 import os
+import threading
 from pathlib import Path
 from typing import Tuple
 
@@ -193,3 +194,62 @@ class ConfigValidator:
             return False, "缺少认证地址"
 
         return True, ""
+
+
+class ConfigManager:
+    """
+    配置管理器（单例模式）
+
+    统一管理配置加载，避免重复读取环境变量
+    """
+
+    _instance = None
+    _config = None
+    _lock = threading.Lock()
+
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+        return cls._instance
+
+    @classmethod
+    def get_config(cls, force_reload: bool = False) -> dict:
+        """
+        获取配置（单例访问点）
+
+        Args:
+            force_reload: 是否强制重新加载配置
+
+        Returns:
+            dict: 配置字典
+        """
+        if cls._config is None or force_reload:
+            with cls._lock:
+                if cls._config is None or force_reload:
+                    cls._config = ConfigLoader.load_config_from_env()
+        return cls._config
+
+    @classmethod
+    def reload_config(cls) -> dict:
+        """
+        重新加载配置
+
+        Returns:
+            dict: 新的配置字典
+        """
+        return cls.get_config(force_reload=True)
+
+    @classmethod
+    def clear_cache(cls) -> None:
+        """清除配置缓存"""
+        with cls._lock:
+            cls._config = None
+
+    @classmethod
+    def get_instance(cls) -> "ConfigManager":
+        """获取配置管理器实例"""
+        if cls._instance is None:
+            cls()
+        return cls._instance
