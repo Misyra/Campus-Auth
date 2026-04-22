@@ -73,9 +73,19 @@
             <option>移动</option>
             <option>联通</option>
             <option>电信</option>
-            <option>教育网</option>
+            <option>自定义</option>
           </select>
           <span class="hint">选择与您宽带套餐对应的运营商</span>
+        </div>
+
+        <div v-if="config.carrier === '自定义'" class="form-group">
+          <label>自定义运营商关键字</label>
+          <input
+            v-model.trim="config.carrier_custom"
+            type="text"
+            placeholder="例如：校园专网、宿舍网、移动(新)"
+          />
+          <span class="hint">将按关键字匹配登录页的运营商选项</span>
         </div>
 
         <div class="info-box">
@@ -85,7 +95,7 @@
             <li><strong>移动</strong>：中国移动宽带用户</li>
             <li><strong>联通</strong>：中国联通宽带用户</li>
             <li><strong>电信</strong>：中国电信宽带用户</li>
-            <li><strong>教育网</strong>：教育网用户</li>
+            <li><strong>自定义</strong>：手动输入关键字，匹配页面运营商选项</li>
           </ul>
         </div>
       </div>
