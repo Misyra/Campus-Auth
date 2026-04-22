@@ -60,15 +60,85 @@
             />
           </div>
           <div class="form-group">
-            <label for="settings-carrier">运营商</label>
+            <div class="field-label-row">
+              <label for="settings-carrier">运营商</label>
+              <span
+                class="field-help"
+                tabindex="0"
+                role="note"
+                data-tip="任务执行时会先识别运营商下拉框：若选择“无”则跳过运营商步骤；若选择“自定义”，将按你输入的关键字匹配下拉选项文本。"
+              >?</span>
+            </div>
             <select id="settings-carrier" v-model="config.carrier" name="carrier">
-              <option>无</option>
               <option>移动</option>
               <option>联通</option>
               <option>电信</option>
-              <option>教育网</option>
+              <option>无</option>
+              <option>自定义</option>
             </select>
           </div>
+          <div v-if="config.carrier === '自定义'" class="form-group">
+            <label for="settings-carrier-custom">自定义运营商关键字</label>
+            <input
+              id="settings-carrier-custom"
+              v-model.trim="config.carrier_custom"
+              name="carrier_custom"
+              type="text"
+              placeholder="例如：校园网、教育网、移动(新)"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section class="card settings-panel">
+        <div class="card-header">
+          <h2>自定义变量</h2>
+        </div>
+        <div class="card-body">
+          <p class="form-help-text">在任务模板中使用 <code v-pre>{{变量名}}</code> 引用这些变量</p>
+          
+          <!-- 表头 -->
+          <div v-if="Object.keys(config.custom_variables || {}).length > 0" class="custom-vars-header">
+            <span class="header-name">变量名</span>
+            <span class="header-separator"></span>
+            <span class="header-value">变量值</span>
+            <span class="header-action"></span>
+          </div>
+          
+          <div class="custom-vars-list">
+            <div v-for="(value, key) in config.custom_variables" :key="key" class="custom-var-item">
+              <div class="var-name-col">
+                <input
+                  type="text"
+                  :value="key"
+                  @change="updateCustomVarKey(key, $event.target.value)"
+                  placeholder="如：MY_VAR"
+                />
+              </div>
+              <span class="var-separator">:</span>
+              <div class="var-value-col">
+                <input
+                  type="text"
+                  v-model="config.custom_variables[key]"
+                  placeholder="变量值"
+                />
+              </div>
+              <button type="button" class="btn btn-icon-only btn-danger btn-delete-var" @click="removeCustomVar(key)" title="删除">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          
+          <button type="button" class="btn btn-secondary btn-sm" @click="addCustomVar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            添加变量
+          </button>
         </div>
       </section>
     </div>

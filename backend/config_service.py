@@ -6,17 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from src.utils import ConfigLoader
-from src.utils.crypto import decrypt_password, encrypt_password, is_encrypted, mask_password
+from src.utils.crypto import encrypt_password, mask_password
 
 from .schemas import DEFAULT_BROWSER_USER_AGENT, MonitorConfigPayload
 
-CARRIER_MAP = {
-    "移动": "@cmcc",
-    "联通": "@unicom",
-    "电信": "@telecom",
-    "教育网": "@xyw",
-    "无": "",
-}
+BUILTIN_CARRIERS = {"移动", "联通", "电信"}
 
 VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 _ENV_HEADER = "# Campus-Auth managed settings"
@@ -48,13 +42,15 @@ def _normalize_headers_json(raw: str) -> str:
 
 def load_ui_config() -> MonitorConfigPayload:
     config = ConfigLoader.load_config_from_env()
-    isp_code = config.get("isp", "")
+    isp_value = str(config.get("isp", "") or "").strip()
 
     carrier = "无"
-    for cn, code in CARRIER_MAP.items():
-        if code == isp_code:
-            carrier = cn
-            break
+    carrier_custom = ""
+    if isp_value in BUILTIN_CARRIERS:
+        carrier = isp_value
+    elif isp_value:
+        carrier = "自定义"
+        carrier_custom = isp_value
 
     interval_seconds = int(config.get("monitor", {}).get("interval", 300))
 
@@ -66,11 +62,23 @@ def load_ui_config() -> MonitorConfigPayload:
         ",".join(str(item) for item in ping_targets) if ping_targets else ""
     )
 
+    # 加载自定义变量
+    custom_vars_str = os.getenv("CUSTOM_VARIABLES", "")
+    custom_variables: dict[str, str] = {}
+    if custom_vars_str:
+        try:
+            custom_variables = json.loads(custom_vars_str)
+            if not isinstance(custom_variables, dict):
+                custom_variables = {}
+        except json.JSONDecodeError:
+            custom_variables = {}
+
     return MonitorConfigPayload(
         username=config.get("username", ""),
         password=mask_password(config.get("password", "")),
         auth_url=str(config.get("auth_url", "http://172.29.0.2")),
         carrier=carrier,
+        carrier_custom=carrier_custom,
         check_interval_minutes=max(1, interval_seconds // 60),
         auto_start=bool(config.get("auto_start_monitoring", False)),
         headless=bool(browser_config.get("headless", False)),
@@ -79,7 +87,9 @@ def load_ui_config() -> MonitorConfigPayload:
             browser_config.get("user_agent", DEFAULT_BROWSER_USER_AGENT)
         ),
         browser_low_resource_mode=bool(browser_config.get("low_resource_mode", False)),
-        browser_disable_web_security=bool(browser_config.get("disable_web_security", False)),
+        browser_disable_web_security=bool(
+            browser_config.get("disable_web_security", False)
+        ),
         browser_extra_headers_json=str(browser_config.get("extra_headers_json", "")),
         pause_enabled=bool(pause_config.get("enabled", True)),
         pause_start_hour=int(pause_config.get("start_hour", 0)),
@@ -93,6 +103,7 @@ def load_ui_config() -> MonitorConfigPayload:
         ),
         access_log=bool(config.get("access_log", False)),
         minimize_to_tray=bool(config.get("minimize_to_tray", False)),
+        custom_variables=custom_variables,
     )
 
 
@@ -107,7 +118,14 @@ def build_runtime_config(payload: MonitorConfigPayload) -> dict[str, Any]:
     # 否则 base["password"] 已由 ConfigLoader.load_config_from_env() 正确解密
 
     base["auth_url"] = payload.auth_url.strip() or "http://172.29.0.2"
-    base["isp"] = CARRIER_MAP.get(payload.carrier, "")
+    carrier = str(payload.carrier or "无").strip() or "无"
+    custom_isp = str(payload.carrier_custom or "").strip()
+    if carrier == "自定义":
+        base["isp"] = custom_isp
+    elif carrier == "无":
+        base["isp"] = ""
+    else:
+        base["isp"] = carrier
     base["auto_start_monitoring"] = payload.auto_start
 
     browser = base.setdefault("browser_settings", {})
@@ -145,6 +163,9 @@ def build_runtime_config(payload: MonitorConfigPayload) -> dict[str, Any]:
     base["access_log"] = payload.access_log
     base["minimize_to_tray"] = payload.minimize_to_tray
 
+    # 添加自定义变量
+    base["custom_variables"] = payload.custom_variables
+
     return base
 
 
@@ -165,16 +186,34 @@ def write_env_file(payload: MonitorConfigPayload, env_path: Path) -> None:
     )
     browser_headers_json = _normalize_headers_json(payload.browser_extra_headers_json)
 
+    # 序列化自定义变量
+    custom_vars_json = (
+        json.dumps(payload.custom_variables, ensure_ascii=False)
+        if payload.custom_variables
+        else ""
+    )
+
+    carrier = str(payload.carrier or "无").strip() or "无"
+    custom_isp = str(payload.carrier_custom or "").strip()
+    if carrier == "自定义":
+        isp_value = custom_isp
+    elif carrier == "无":
+        isp_value = ""
+    else:
+        isp_value = carrier
+
     managed_values = {
         "USERNAME": payload.username.strip(),
         "PASSWORD": _save_password(payload.password.strip()),
         "LOGIN_URL": payload.auth_url.strip() or "http://172.29.0.2",
-        "ISP": CARRIER_MAP.get(payload.carrier, ""),
+        "ISP": isp_value,
         "BROWSER_HEADLESS": str(payload.headless).lower(),
         "BROWSER_TIMEOUT": str(payload.browser_timeout),
         "BROWSER_USER_AGENT": browser_user_agent,
         "BROWSER_LOW_RESOURCE_MODE": str(payload.browser_low_resource_mode).lower(),
-        "BROWSER_DISABLE_WEB_SECURITY": str(payload.browser_disable_web_security).lower(),
+        "BROWSER_DISABLE_WEB_SECURITY": str(
+            payload.browser_disable_web_security
+        ).lower(),
         "BROWSER_EXTRA_HEADERS_JSON": browser_headers_json,
         "MONITOR_INTERVAL": str(payload.check_interval_minutes * 60),
         "AUTO_START_MONITORING": str(payload.auto_start).lower(),
@@ -187,6 +226,7 @@ def write_env_file(payload: MonitorConfigPayload, env_path: Path) -> None:
         "FRONTEND_LOG_LEVEL": frontend_level,
         "UVICORN_ACCESS_LOG": str(payload.access_log).lower(),
         "MINIMIZE_TO_TRAY": str(payload.minimize_to_tray).lower(),
+        "CUSTOM_VARIABLES": custom_vars_json,
     }
 
     existing_lines: list[str] = []

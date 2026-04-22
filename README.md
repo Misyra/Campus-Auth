@@ -127,6 +127,8 @@ cp .env.example .env
 | `BROWSER_LOW_RESOURCE_MODE` | `false` | 低资源模式 |
 | **系统配置** |||
 | `MINIMIZE_TO_TRAY` | `false` | 最小化到系统托盘 |
+| **自定义变量** |||
+| `CUSTOM_VARIABLES` | `{}` | 自定义变量（JSON格式），可在任务模板中使用 |
 | `AUTO_INSTALL_PLAYWRIGHT` | `true` | 自动安装 Chromium |
 | `PLAYWRIGHT_DOWNLOAD_HOST` | `https://npmmirror.com/mirrors/playwright` | 下载源镜像 |
 
