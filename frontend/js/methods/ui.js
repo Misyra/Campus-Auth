@@ -19,6 +19,56 @@ export const uiMethods = {
   setSettingsTab(tabId) {
     this.currentSettingsTab = tabId;
   },
+  addCustomVar() {
+    // 确保 custom_variables 是对象
+    if (!this.config.custom_variables || typeof this.config.custom_variables !== 'object') {
+      this.config.custom_variables = {};
+    }
+    // 生成默认变量名
+    let index = 1;
+    let key = `var_${index}`;
+    while (this.config.custom_variables.hasOwnProperty(key)) {
+      index++;
+      key = `var_${index}`;
+    }
+    this.config.custom_variables[key] = '';
+  },
+  removeCustomVar(key) {
+    if (this.config.custom_variables && this.config.custom_variables.hasOwnProperty(key)) {
+      const newVars = { ...this.config.custom_variables };
+      delete newVars[key];
+      this.config.custom_variables = newVars;
+    }
+  },
+  updateCustomVarKey(oldKey, newKey) {
+    if (!newKey || oldKey === newKey) return;
+    newKey = newKey.trim();
+    if (!newKey) return;
+    // 验证新变量名格式
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(newKey)) {
+      this.notify(false, '变量名必须以字母或下划线开头，只能包含字母、数字和下划线');
+      // 恢复原值
+      this.$nextTick(() => {
+        const input = document.querySelector('.custom-var-item input[var-key="' + oldKey + '"]');
+        if (input) input.value = oldKey;
+      });
+      return;
+    }
+    if (this.config.custom_variables.hasOwnProperty(newKey)) {
+      this.notify(false, '变量名已存在');
+      return;
+    }
+    // 创建新键并复制值
+    const newVars = {};
+    for (const [k, v] of Object.entries(this.config.custom_variables)) {
+      if (k === oldKey) {
+        newVars[newKey] = v;
+      } else {
+        newVars[k] = v;
+      }
+    }
+    this.config.custom_variables = newVars;
+  },
   scrollLogToBottom() {
     // 自动滚动日志到底部
     const logViewer = document.querySelector('.log-viewer');

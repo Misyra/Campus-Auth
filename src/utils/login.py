@@ -109,6 +109,11 @@ class LoginAttemptHandler:
                 return None
 
             env_vars = dict(os.environ)
+            # 合并自定义变量
+            custom_vars = self.config.get("custom_variables", {})
+            if custom_vars and isinstance(custom_vars, dict):
+                env_vars.update(custom_vars)
+                self.logger.debug(f"已加载 {len(custom_vars)} 个自定义变量")
             self.logger.info(f"🧩 使用活动任务执行登录: {active_task_id}")
 
             async with BrowserContextManager(self.config) as browser_manager:

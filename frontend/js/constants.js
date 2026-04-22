@@ -17,6 +17,7 @@ export const DEFAULT_CONFIG = {
   password: "",
   auth_url: "http://172.29.0.2",
   carrier: "无",
+  carrier_custom: "",
   check_interval_minutes: 5,
   auto_start: false,
   headless: false,
@@ -33,6 +34,7 @@ export const DEFAULT_CONFIG = {
   frontend_log_level: "INFO",
   access_log: false,
   minimize_to_tray: false,
+  custom_variables: {},
 };
 
 export const SETTINGS_TABS = [

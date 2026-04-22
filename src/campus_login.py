@@ -1,20 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import asyncio
-import logging
-import os
-import random
 import sys
-from typing import Optional
 
 from dotenv import load_dotenv
 from playwright.async_api import (
-    async_playwright,
-    Browser,
-    Page,
     TimeoutError as PlaywrightTimeoutError,
 )
-from .utils import ConfigLoader, LoggerSetup, BrowserContextManager, SimpleRetryHandler
+
+from .utils import BrowserContextManager, ConfigLoader, LoggerSetup, SimpleRetryHandler
 
 # 加载环境变量
 load_dotenv()
@@ -37,7 +31,7 @@ class EnhancedCampusNetworkAuth:
         self.username = config["username"]
         self.password = config["password"]
         self.auth_url = config["auth_url"]
-        self.isp = config.get("isp", "@cmcc")  # 默认使用移动
+        self.isp = config.get("isp", "")
         self.browser_settings = config.get("browser_settings", {})
         self.retry_settings = config.get("retry_settings", {})
 
@@ -46,13 +40,15 @@ class EnhancedCampusNetworkAuth:
 
     def _setup_logging(self) -> None:
         """设置日志配置（使用工具类）"""
-        log_config = self.config.get('logging', {})
-        
+        log_config = self.config.get("logging", {})
+
         # 使用工具类设置日志
         logger_name = f"{__name__}_{id(self)}"
         self.logger = LoggerSetup.setup_logger(logger_name, log_config)
 
-    async def navigate_to_auth_page(self, browser_manager: BrowserContextManager) -> bool:
+    async def navigate_to_auth_page(
+        self, browser_manager: BrowserContextManager
+    ) -> bool:
         """导航到认证页面"""
         try:
             self.logger.info(f"正在访问认证页面: {self.auth_url}")
@@ -67,7 +63,9 @@ class EnhancedCampusNetworkAuth:
             self.logger.error(f"访问认证页面时发生错误: {type(e).__name__}: {e}")
             return False
 
-    async def check_already_logged_in(self, browser_manager: BrowserContextManager) -> bool:
+    async def check_already_logged_in(
+        self, browser_manager: BrowserContextManager
+    ) -> bool:
         """✅ 重点增强：精准检测已登录状态（支持你提供的页面结构）"""
         try:
             page = browser_manager.page
@@ -76,10 +74,26 @@ class EnhancedCampusNetworkAuth:
 
             # 检测已登录状态的标识符
             login_indicators = [
-                ('div[name="PageTips"]', ['成功登录', 'already logged in']),
-                ('input[name="logout"], button:has-text("注销"), button:has-text("注  销")', None),
-                ('body', ['您已登录', '在线用户', '当前在线', 'logout', '登出', '注销',
-                          'already logged in', 'online user', 'logged in', 'success'])
+                ('div[name="PageTips"]', ["成功登录", "already logged in"]),
+                (
+                    'input[name="logout"], button:has-text("注销"), button:has-text("注  销")',
+                    None,
+                ),
+                (
+                    "body",
+                    [
+                        "您已登录",
+                        "在线用户",
+                        "当前在线",
+                        "logout",
+                        "登出",
+                        "注销",
+                        "already logged in",
+                        "online user",
+                        "logged in",
+                        "success",
+                    ],
+                ),
             ]
 
             for selector, keywords in login_indicators:
@@ -95,7 +109,9 @@ class EnhancedCampusNetworkAuth:
                             if text_content:
                                 for keyword in keywords:
                                     if keyword.lower() in text_content.lower():
-                                        self.logger.info(f"✅ 检测到已登录状态: {keyword}")
+                                        self.logger.info(
+                                            f"✅ 检测到已登录状态: {keyword}"
+                                        )
                                         return True
                 except PlaywrightTimeoutError:
                     continue
@@ -110,8 +126,14 @@ class EnhancedCampusNetworkAuth:
         except Exception as e:
             self.logger.warning(f"检测已登录状态时发生异常: {type(e).__name__}: {e}")
             return False
-    
-    async def _find_and_fill_element(self, browser_manager: BrowserContextManager, selectors: list, value: str, element_type: str) -> bool:
+
+    async def _find_and_fill_element(
+        self,
+        browser_manager: BrowserContextManager,
+        selectors: list,
+        value: str,
+        element_type: str,
+    ) -> bool:
         """
         通用的元素查找和填写方法
 
@@ -135,15 +157,19 @@ class EnhancedCampusNetworkAuth:
                     # 检查元素是否可用
                     is_visible = await element.is_visible()
                     is_enabled = await element.is_enabled()
-                    element_input_type = await element.get_attribute('type')
+                    element_input_type = await element.get_attribute("type")
 
-                    if is_visible and is_enabled and element_input_type != 'hidden':
+                    if is_visible and is_enabled and element_input_type != "hidden":
                         await element.clear()
                         await element.fill(value)
-                        self.logger.info(f"✅ {element_type}填写成功，使用选择器: {selector}")
+                        self.logger.info(
+                            f"✅ {element_type}填写成功，使用选择器: {selector}"
+                        )
                         return True
                     else:
-                        self.logger.debug(f"选择器 {selector} 不满足条件: visible={is_visible}, enabled={is_enabled}, type={element_input_type}")
+                        self.logger.debug(
+                            f"选择器 {selector} 不满足条件: visible={is_visible}, enabled={is_enabled}, type={element_input_type}"
+                        )
             except PlaywrightTimeoutError as e:
                 self.logger.debug(f"{element_type}选择器 {selector} 超时: {e}")
                 continue
@@ -151,23 +177,25 @@ class EnhancedCampusNetworkAuth:
                 self.logger.debug(f"{element_type}选择器 {selector} 运行时错误: {e}")
                 continue
             except Exception as e:
-                self.logger.warning(f"{element_type}选择器 {selector} 填写失败: {type(e).__name__}: {e}")
+                self.logger.warning(
+                    f"{element_type}选择器 {selector} 填写失败: {type(e).__name__}: {e}"
+                )
                 continue
         return False
-    
+
     async def test_connection(self) -> tuple[bool, str]:
         """测试连接到认证页面（使用上下文管理器修复内存泄漏）"""
         try:
             async with BrowserContextManager(self.config) as browser_manager:
                 if not await self.navigate_to_auth_page(browser_manager):
                     return False, "无法访问认证页面"
-                
+
                 # 检查是否已登录
                 if await self.check_already_logged_in(browser_manager):
                     return True, "成功连接到认证页面，并检测到已登录状态"
                 else:
                     return True, "成功连接到认证页面"
-                    
+
         except Exception as e:
             error_msg = f"连接测试失败: {e}"
             self.logger.error(error_msg)
@@ -185,7 +213,7 @@ class EnhancedCampusNetworkAuth:
                 await page.wait_for_selector(
                     'input[name="DDDDD"][type="text"]:visible, input[name="upass"][type="password"]:visible',
                     state="visible",
-                    timeout=3000
+                    timeout=3000,
                 )
                 self.logger.info("📝 表单元素已加载")
             except PlaywrightTimeoutError:
@@ -200,7 +228,7 @@ class EnhancedCampusNetworkAuth:
                 'input[type="text"][placeholder*="学工号"]:visible',
                 'input[type="text"][placeholder*="用户名"]:visible',
                 'input[name="username"]:visible',
-                'input[type="text"]:visible'
+                'input[type="text"]:visible',
             ]
 
             # 密码选择器（优化优先级）
@@ -209,16 +237,20 @@ class EnhancedCampusNetworkAuth:
                 'input[name="upass"]:not([type="hidden"]):visible',
                 'input[type="password"][placeholder*="密码"]:visible',
                 'input[name="password"]:visible',
-                'input[type="password"]:visible'
+                'input[type="password"]:visible',
             ]
 
             # 填写用户名
-            if not await self._find_and_fill_element(browser_manager, username_selectors, self.username, "用户名"):
+            if not await self._find_and_fill_element(
+                browser_manager, username_selectors, self.username, "用户名"
+            ):
                 self.logger.error("❌ 未找到可见的用户名输入框")
                 return False
 
             # 填写密码
-            if not await self._find_and_fill_element(browser_manager, password_selectors, self.password, "密码"):
+            if not await self._find_and_fill_element(
+                browser_manager, password_selectors, self.password, "密码"
+            ):
                 self.logger.error("❌ 未找到可见的密码输入框")
                 return False
 
@@ -227,8 +259,8 @@ class EnhancedCampusNetworkAuth:
                 isp_selectors = [
                     'select[name="ISP_select"]:visible',
                     'select[name="isp"]:visible',
-                    '#ISP_select:visible',
-                    '#isp:visible'
+                    "#ISP_select:visible",
+                    "#isp:visible",
                 ]
 
                 for selector in isp_selectors:
@@ -245,7 +277,9 @@ class EnhancedCampusNetworkAuth:
                         self.logger.debug(f"运营商选择器 {selector} 错误: {e}")
                         continue
                     except Exception as e:
-                        self.logger.warning(f"运营商选择器 {selector} 失败: {type(e).__name__}: {e}")
+                        self.logger.warning(
+                            f"运营商选择器 {selector} 失败: {type(e).__name__}: {e}"
+                        )
                         continue
                 else:
                     self.logger.warning("⚠️ 未找到运营商选择框，跳过运营商选择")
@@ -275,7 +309,7 @@ class EnhancedCampusNetworkAuth:
                 'input[value="登录"]:visible',
                 'input[type="submit"]:visible',
                 'button[type="submit"]:visible',
-                'button:has-text("登录"):visible'
+                'button:has-text("登录"):visible',
             ]
 
             # 尝试点击提交按钮
@@ -287,13 +321,17 @@ class EnhancedCampusNetworkAuth:
                         is_enabled = await button.is_enabled()
 
                         if is_visible and is_enabled:
-                            self.logger.info(f"🚀 正在提交认证表单... 使用选择器: {selector}")
+                            self.logger.info(
+                                f"🚀 正在提交认证表单... 使用选择器: {selector}"
+                            )
                             await button.click()
                             await page.wait_for_timeout(2000)
                             self.logger.info("✅ 表单提交完成")
                             return True
                         else:
-                            self.logger.debug(f"提交按钮 {selector} 不可用: visible={is_visible}, enabled={is_enabled}")
+                            self.logger.debug(
+                                f"提交按钮 {selector} 不可用: visible={is_visible}, enabled={is_enabled}"
+                            )
                 except PlaywrightTimeoutError as e:
                     self.logger.debug(f"点击提交按钮 {selector} 超时: {e}")
                     continue
@@ -301,7 +339,9 @@ class EnhancedCampusNetworkAuth:
                     self.logger.debug(f"点击提交按钮 {selector} 错误: {e}")
                     continue
                 except Exception as e:
-                    self.logger.warning(f"点击提交按钮 {selector} 失败: {type(e).__name__}: {e}")
+                    self.logger.warning(
+                        f"点击提交按钮 {selector} 失败: {type(e).__name__}: {e}"
+                    )
                     continue
 
             # Fallback: 聚焦后按回车
@@ -331,7 +371,9 @@ class EnhancedCampusNetworkAuth:
             self.logger.error(f"提交表单时发生错误: {type(e).__name__}: {e}")
             return False
 
-    async def check_auth_result(self, browser_manager: BrowserContextManager) -> tuple[bool, str]:
+    async def check_auth_result(
+        self, browser_manager: BrowserContextManager
+    ) -> tuple[bool, str]:
         """检查认证结果
 
         返回:
@@ -358,12 +400,21 @@ class EnhancedCampusNetworkAuth:
 
             # 如果没有检测到成功登录，检查是否有失败提示
             failure_indicators = [
-                "认证失败", "登录失败", "用户名或密码错误", "账号或密码", "incorrect",
-                "authentication failed", "login failed", "invalid username or password",
-                "用户不存在", "密码错误", "账户被锁定", "网络异常"
+                "认证失败",
+                "登录失败",
+                "用户名或密码错误",
+                "账号或密码",
+                "incorrect",
+                "authentication failed",
+                "login failed",
+                "invalid username or password",
+                "用户不存在",
+                "密码错误",
+                "账户被锁定",
+                "网络异常",
             ]
 
-            body_text = (await page.text_content("body") or "")
+            body_text = await page.text_content("body") or ""
             body_text_lower = body_text.lower()
 
             # 检查失败标识
@@ -437,18 +488,20 @@ class EnhancedCampusNetworkAuth:
 
     async def authenticate(self) -> tuple[bool, str]:
         """执行完整的认证流程（使用简单重试机制）
-        
+
         返回:
             tuple[bool, str]: (是否成功, 详细信息)
         """
         retry_handler = SimpleRetryHandler(self.config)
-        
+
         async def auth_operation():
             """重试操作封装"""
             return await self.authenticate_once()
-        
-        success, result, error_msg = await retry_handler.retry_with_simple_backoff(auth_operation)
-        
+
+        success, result, error_msg = await retry_handler.retry_with_simple_backoff(
+            auth_operation
+        )
+
         if success:
             success_status, message = result
             if success_status:
@@ -460,50 +513,68 @@ class EnhancedCampusNetworkAuth:
         else:
             failure_info = f"认证失败！{error_msg}"
             return False, failure_info
-    
+
     def _analyze_failure_type(self, error_message: str) -> str:
         """分析失败类型
-        
+
         参数:
             error_message: 错误消息
-            
+
         返回:
             str: 失败类型
         """
         error_lower = error_message.lower()
-        
+
         # 检测可能的拉黑情况
         blacklist_indicators = [
-            "authentication fail", "认证失败", "被拒绝", "access denied",
-            "forbidden", "blocked", "banned", "拉黑", "限制", "locked"
+            "authentication fail",
+            "认证失败",
+            "被拒绝",
+            "access denied",
+            "forbidden",
+            "blocked",
+            "banned",
+            "拉黑",
+            "限制",
+            "locked",
         ]
-        
+
         # 检测频率限制
         rate_limit_indicators = [
-            "too many requests", "rate limit", "频率限制", "请求过于频繁",
-            "timeout", "超时", "connection reset"
+            "too many requests",
+            "rate limit",
+            "频率限制",
+            "请求过于频繁",
+            "timeout",
+            "超时",
+            "connection reset",
         ]
-        
+
         # 检测网络问题
         network_indicators = [
-            "network error", "网络错误", "connection failed", "连接失败",
-            "dns", "无法访问", "unreachable"
+            "network error",
+            "网络错误",
+            "connection failed",
+            "连接失败",
+            "dns",
+            "无法访问",
+            "unreachable",
         ]
-        
+
         for indicator in blacklist_indicators:
             if indicator in error_lower:
                 return "blacklisted"
-        
+
         for indicator in rate_limit_indicators:
             if indicator in error_lower:
                 return "rate_limited"
-        
+
         for indicator in network_indicators:
             if indicator in error_lower:
                 return "network_error"
-        
+
         return "unknown"
-    
+
     async def manual_auth_fallback(self) -> tuple[bool, str]:
         """手动认证备选方案
 
@@ -571,7 +642,7 @@ async def main():
     """主函数"""
     # 从环境变量加载配置
     config = ConfigLoader.load_config_from_env()
-    
+
     # 检查配置
     if not config["username"] or config["username"] == "your_username_here":
         print("❌ 错误: 请在 .env 文件中配置 USERNAME")

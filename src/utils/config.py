@@ -37,7 +37,7 @@ class ConfigLoader:
             "username": os.getenv("USERNAME", ""),
             "password": decrypt_password(os.getenv("PASSWORD", "")),
             "auth_url": os.getenv("LOGIN_URL", "http://172.29.0.2"),
-            "isp": os.getenv("ISP", "@cmcc"),
+            "isp": os.getenv("ISP", ""),
             "auto_start_monitoring": ConfigLoader._str_to_bool(
                 os.getenv("AUTO_START_MONITORING", "false")
             ),

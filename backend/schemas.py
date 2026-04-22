@@ -13,6 +13,7 @@ class MonitorConfigPayload(BaseModel):
     password: str = Field(default="")
     auth_url: str = Field(default="http://172.29.0.2")
     carrier: str = Field(default="无")
+    carrier_custom: str = Field(default="")
     check_interval_minutes: int = Field(default=5, ge=1, le=1440)
     auto_start: bool = False
     headless: bool = False
@@ -31,6 +32,7 @@ class MonitorConfigPayload(BaseModel):
     frontend_log_level: str = Field(default="INFO")
     access_log: bool = False
     minimize_to_tray: bool = False
+    custom_variables: dict[str, str] = Field(default_factory=dict)
 
 
 class ActionResponse(BaseModel):

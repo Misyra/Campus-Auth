@@ -19,7 +19,11 @@ export const configMethods = {
   async saveConfig() {
     this.busy.save = true;
     try {
-      const { data } = await this.$api.put('/api/config', this.config);
+      const payload = { ...this.config };
+      if (payload.carrier !== '自定义') {
+        payload.carrier_custom = '';
+      }
+      const { data } = await this.$api.put('/api/config', payload);
       this.setFrontendLogLevel(this.config.frontend_log_level || 'INFO');
       this.notify(data.success, data.message);
     } catch (error) {
