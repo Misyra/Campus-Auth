@@ -73,7 +73,9 @@ class ConfigLoader:
                 "retry_interval": ConfigLoader._get_int_env("RETRY_INTERVAL", 5),
             },
             "logging": {
-                "level": os.getenv("BACKEND_LOG_LEVEL", os.getenv("LOG_LEVEL", "WARNING")),
+                "level": os.getenv(
+                    "BACKEND_LOG_LEVEL", os.getenv("LOG_LEVEL", "WARNING")
+                ),
                 "format": os.getenv(
                     "LOG_FORMAT", "%(asctime)s - %(levelname)s - %(message)s"
                 ),
