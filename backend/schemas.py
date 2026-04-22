@@ -16,10 +16,10 @@ class MonitorConfigPayload(BaseModel):
     carrier_custom: str = Field(default="")
     check_interval_minutes: int = Field(default=5, ge=1, le=1440)
     auto_start: bool = False
-    headless: bool = False
+    headless: bool = True
     browser_timeout: int = Field(default=8000, ge=1000, le=60000)
     browser_user_agent: str = Field(default=DEFAULT_BROWSER_USER_AGENT)
-    browser_low_resource_mode: bool = False
+    browser_low_resource_mode: bool = True
     browser_disable_web_security: bool = False
     browser_extra_headers_json: str = Field(default="")
     pause_enabled: bool = True
@@ -28,10 +28,10 @@ class MonitorConfigPayload(BaseModel):
     network_targets: str = Field(
         default="8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
     )
-    backend_log_level: str = Field(default="INFO")
-    frontend_log_level: str = Field(default="INFO")
+    backend_log_level: str = Field(default="WARNING")
+    frontend_log_level: str = Field(default="WARNING")
     access_log: bool = False
-    minimize_to_tray: bool = False
+    minimize_to_tray: bool = True
     custom_variables: dict[str, str] = Field(default_factory=dict)
 
 

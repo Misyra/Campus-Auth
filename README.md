@@ -107,7 +107,7 @@ cp .env.example .env
 | `USERNAME` | - | 校园网用户名（必填） |
 | `PASSWORD` | - | 校园网密码（必填，支持加密存储） |
 | `LOGIN_URL` | `http://172.29.0.2` | 认证页面地址 |
-| `ISP` | `@cmcc` | 运营商后缀：`@cmcc/@unicom/@telecom/@xyw/空` |
+| `ISP` | `` | 运营商关键字：`移动/联通/电信/自定义关键字/空` |
 | **服务配置** |||
 | `APP_PORT` | `50721` | Web 控制台端口 |
 | `UVICORN_ACCESS_LOG` | `false` | 是否显示 HTTP 请求日志 |
@@ -122,11 +122,11 @@ cp .env.example .env
 | `PAUSE_LOGIN_START_HOUR` | `0` | 暂停开始小时（0-23） |
 | `PAUSE_LOGIN_END_HOUR` | `6` | 暂停结束小时（0-23） |
 | **浏览器配置** |||
-| `BROWSER_HEADLESS` | `false` | 无头浏览器模式 |
+| `BROWSER_HEADLESS` | `true` | 无头浏览器模式 |
 | `BROWSER_TIMEOUT` | `8000` | 浏览器操作超时（毫秒） |
-| `BROWSER_LOW_RESOURCE_MODE` | `false` | 低资源模式 |
+| `BROWSER_LOW_RESOURCE_MODE` | `true` | 低资源模式 |
 | **系统配置** |||
-| `MINIMIZE_TO_TRAY` | `false` | 最小化到系统托盘 |
+| `MINIMIZE_TO_TRAY` | `true` | 最小化到系统托盘 |
 | **自定义变量** |||
 | `CUSTOM_VARIABLES` | `{}` | 自定义变量（JSON格式），可在任务模板中使用 |
 | `AUTO_INSTALL_PLAYWRIGHT` | `true` | 自动安装 Chromium |

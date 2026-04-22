@@ -16,7 +16,7 @@ VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 _ENV_HEADER = "# Campus-Auth managed settings"
 
 
-def _normalize_level(raw: str, default: str = "INFO") -> str:
+def _normalize_level(raw: str, default: str = "WARNING") -> str:
     level = str(raw or default).upper().strip()
     return level if level in VALID_LOG_LEVELS else default
 
@@ -81,12 +81,12 @@ def load_ui_config() -> MonitorConfigPayload:
         carrier_custom=carrier_custom,
         check_interval_minutes=max(1, interval_seconds // 60),
         auto_start=bool(config.get("auto_start_monitoring", False)),
-        headless=bool(browser_config.get("headless", False)),
+        headless=bool(browser_config.get("headless", True)),
         browser_timeout=int(browser_config.get("timeout", 8000)),
         browser_user_agent=str(
             browser_config.get("user_agent", DEFAULT_BROWSER_USER_AGENT)
         ),
-        browser_low_resource_mode=bool(browser_config.get("low_resource_mode", False)),
+        browser_low_resource_mode=bool(browser_config.get("low_resource_mode", True)),
         browser_disable_web_security=bool(
             browser_config.get("disable_web_security", False)
         ),
@@ -96,13 +96,13 @@ def load_ui_config() -> MonitorConfigPayload:
         pause_end_hour=int(pause_config.get("end_hour", 6)),
         network_targets=network_targets,
         backend_log_level=_normalize_level(
-            config.get("logging", {}).get("level", "INFO")
+            config.get("logging", {}).get("level", "WARNING")
         ),
         frontend_log_level=_normalize_level(
-            config.get("frontend_logging", {}).get("level", "INFO")
+            config.get("frontend_logging", {}).get("level", "WARNING")
         ),
         access_log=bool(config.get("access_log", False)),
-        minimize_to_tray=bool(config.get("minimize_to_tray", False)),
+        minimize_to_tray=bool(config.get("minimize_to_tray", True)),
         custom_variables=custom_variables,
     )
 

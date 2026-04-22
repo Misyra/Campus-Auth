@@ -64,6 +64,9 @@ export const appOptions = {
       if (this.wizardStep === 1) {
         return this.config.username && this.config.password;
       }
+      if (this.wizardStep === 2 && this.config.carrier === '自定义') {
+        return !!(this.config.carrier_custom && this.config.carrier_custom.trim());
+      }
       return true;
     },
   },

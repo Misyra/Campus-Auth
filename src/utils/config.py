@@ -51,12 +51,12 @@ class ConfigLoader:
 
         return {
             "headless": ConfigLoader._str_to_bool(
-                os.getenv("BROWSER_HEADLESS", "false")
+                os.getenv("BROWSER_HEADLESS", "true")
             ),
             "timeout": ConfigLoader._get_int_env("BROWSER_TIMEOUT", 8000),
             "user_agent": os.getenv("BROWSER_USER_AGENT", default_user_agent),
             "low_resource_mode": ConfigLoader._str_to_bool(
-                os.getenv("BROWSER_LOW_RESOURCE_MODE", "false")
+                os.getenv("BROWSER_LOW_RESOURCE_MODE", "true")
             ),
             "extra_headers_json": os.getenv("BROWSER_EXTRA_HEADERS_JSON", ""),
             "disable_web_security": ConfigLoader._str_to_bool(
@@ -73,14 +73,14 @@ class ConfigLoader:
                 "retry_interval": ConfigLoader._get_int_env("RETRY_INTERVAL", 5),
             },
             "logging": {
-                "level": os.getenv("BACKEND_LOG_LEVEL", os.getenv("LOG_LEVEL", "INFO")),
+                "level": os.getenv("BACKEND_LOG_LEVEL", os.getenv("LOG_LEVEL", "WARNING")),
                 "format": os.getenv(
                     "LOG_FORMAT", "%(asctime)s - %(levelname)s - %(message)s"
                 ),
                 "file": os.getenv("LOG_FILE", "logs/campus_auth.log") or None,
             },
             "frontend_logging": {
-                "level": os.getenv("FRONTEND_LOG_LEVEL", "INFO"),
+                "level": os.getenv("FRONTEND_LOG_LEVEL", "WARNING"),
             },
             "pause_login": {
                 "enabled": ConfigLoader._str_to_bool(
@@ -101,7 +101,7 @@ class ConfigLoader:
                 ],
             },
             "minimize_to_tray": ConfigLoader._str_to_bool(
-                os.getenv("MINIMIZE_TO_TRAY", "false")
+                os.getenv("MINIMIZE_TO_TRAY", "true")
             ),
         }
 
