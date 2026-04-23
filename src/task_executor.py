@@ -860,7 +860,7 @@ class TaskExecutor:
         message = f"{base_message}: {reason}"
 
         if screenshot_url:
-            message += f" [截图: {screenshot_url}]"
+            message += f" 截图: {screenshot_url}"
 
         logger.error(f"任务执行失败: {message}")
         return False, message

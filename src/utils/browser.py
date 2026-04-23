@@ -65,7 +65,7 @@ class BrowserContextManager:
             # 创建浏览器上下文 - 优化视口大小减少内存占用
             extra_headers = self._get_extra_http_headers()
             self.context = await self.browser.new_context(
-                viewport={"width": 1024, "height": 768},
+                viewport={"width": 1280, "height": 720},
                 user_agent=self.browser_settings.get(
                     "user_agent",
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
