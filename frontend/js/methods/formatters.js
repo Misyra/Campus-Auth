@@ -21,12 +21,12 @@ export const formatterMethods = {
   },
   extractScreenshotUrl(message) {
     const text = String(message || '');
-    const match = text.match(/截图[:：]\s*(\/debug\/[^\s]+)/i);
+    const match = text.match(/截图[:：]\s*(\/debug\/[\w./-]+\.(?:png|jpg|jpeg|webp|gif))/i);
     return match ? match[1] : '';
   },
   stripScreenshotHint(message) {
     const text = String(message || '');
-    return text.replace(/\s*截图[:：]\s*\/debug\/[^\s]+/gi, '').trim();
+    return text.replace(/\s*[\[(]?\s*截图[:：]\s*\/debug\/[\w./-]+\.(?:png|jpg|jpeg|webp|gif)\s*[\])]?/gi, '').trim();
   },
   getLogClass(message) {
     const text = this.stripScreenshotHint(message);
