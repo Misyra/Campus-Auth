@@ -3,6 +3,7 @@ import argparse
 import datetime
 import hashlib
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -21,12 +22,29 @@ else:
     PROJECT_ROOT = Path(__file__).resolve().parent
 
 ENV_DIR = PROJECT_ROOT / "environment"
+BOOTSTRAP_DIR = PROJECT_ROOT / "bootstrap"
+LOCAL_GET_PIP = BOOTSTRAP_DIR / "get-pip.py"
 PYTHON_DIR = ENV_DIR / "python"
 PYTHON_EXE = PYTHON_DIR / "python.exe"
 PIP_EXE = PYTHON_DIR / "Scripts" / "pip.exe"
 REQUIREMENTS_TXT = PROJECT_ROOT / "requirements.txt"
 HASH_FILE = ENV_DIR / ".requirements_hash"
 LOG_FILE = PROJECT_ROOT / "logs" / "setup_env.log"
+
+DEFAULT_PIP_MIRROR = "https://mirrors.tuna.tsinghua.edu.cn/simple"
+FALLBACK_PIP_MIRRORS = [
+    "https://mirrors.tuna.tsinghua.edu.cn/simple",
+    "https://mirrors.aliyun.com/pypi/simple",
+    "https://pypi.org/simple",
+]
+
+VERBOSE = False
+FORCE_REINSTALL = False
+PYTHON_VERSION = "3.10"
+PIP_MIRROR = DEFAULT_PIP_MIRROR
+PYTHON_MIRROR = "https://mirrors.tuna.tsinghua.edu.cn/python"
+PYTHON_EMBED_URL = ""
+USE_SYSTEM_PROXY = False
 
 
 def resolve_port() -> int:
@@ -272,6 +290,111 @@ def check_dependencies():
     }
 
 
+def _get_python_embed_urls() -> list[str]:
+    version = f"{PYTHON_VERSION}.0"
+    filename = f"python-{version}-embed-amd64.zip"
+
+    configured_url = (PYTHON_EMBED_URL or "").strip()
+    configured_mirror = (PYTHON_MIRROR or "").strip().rstrip("/")
+
+    candidates = [
+        configured_url,
+        f"{configured_mirror}/{version}/{filename}" if configured_mirror else "",
+        f"https://mirrors.tuna.tsinghua.edu.cn/python/{version}/{filename}",
+        f"https://www.python.org/ftp/python/{version}/{filename}",
+    ]
+
+    unique: list[str] = []
+    seen = set()
+    for url in candidates:
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        unique.append(url)
+    return unique
+
+
+def _get_pip_mirror_candidates() -> list[str]:
+    configured = (PIP_MIRROR or "").strip()
+    merged = [configured, *FALLBACK_PIP_MIRRORS]
+    unique: list[str] = []
+    seen = set()
+    for mirror in merged:
+        if not mirror or mirror in seen:
+            continue
+        seen.add(mirror)
+        unique.append(mirror)
+    return unique
+
+
+def _get_network_env() -> dict[str, str]:
+    """安装相关子进程的网络环境：默认忽略系统代理，避免无效代理导致失败。"""
+    env = os.environ.copy()
+    if USE_SYSTEM_PROXY:
+        return env
+
+    for key in [
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "no_proxy",
+    ]:
+        env.pop(key, None)
+    return env
+
+
+def _download_file(url: str, destination: Path) -> None:
+    """下载文件。默认禁用系统代理，必要时可通过参数启用。"""
+    if USE_SYSTEM_PROXY:
+        urllib.request.urlretrieve(url, destination)
+        return
+
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(url, timeout=60) as resp, open(destination, "wb") as fp:
+        shutil.copyfileobj(resp, fp)
+
+
+def _run_pip_with_mirror(base_args: list[str], stage: str):
+    """按镜像候选顺序执行 pip 命令，失败时自动切换镜像重试。"""
+    errors = []
+    for mirror in _get_pip_mirror_candidates():
+        parsed = urllib.parse.urlparse(mirror)
+        host = parsed.hostname or "pypi.org"
+        log_info(f"[{stage}] 尝试镜像源: {mirror}")
+        proc = subprocess.run(
+            [
+                str(PYTHON_EXE),
+                "-m",
+                "pip",
+                *base_args,
+                "-i",
+                mirror,
+                "--trusted-host",
+                host,
+            ],
+            capture_output=True,
+            text=True,
+            env=_get_network_env(),
+        )
+        if proc.returncode == 0:
+            return proc, mirror
+
+        stderr = (proc.stderr or "")[:500]
+        errors.append((mirror, stderr))
+        log_warning(f"[{stage}] 镜像失败: {mirror}")
+
+    if errors:
+        last_mirror, last_stderr = errors[-1]
+        log_error(f"[{stage}] 所有镜像均失败，最后一次镜像: {last_mirror}")
+        if last_stderr:
+            log_error(last_stderr)
+    return None, None
+
+
 def install_python():
     log_info("=== 安装 Python 嵌入式环境 ===")
 
@@ -282,16 +405,21 @@ def install_python():
         temp_dir.mkdir(exist_ok=True)
 
         log_progress("Python", "下载 Python 嵌入式版本...", 30)
-        python_version = PYTHON_VERSION
-        python_url = f"https://www.python.org/ftp/python/{python_version}.0/python-{python_version}.0-embed-amd64.zip"
-        log_info(f"下载地址: {python_url}")
-
         zip_path = temp_dir / "python.zip"
-        try:
-            urllib.request.urlretrieve(python_url, zip_path)
-            log_success("Python 下载完成")
-        except Exception as e:
-            log_error(f"Python 下载失败: {e}")
+
+        downloaded = False
+        for python_url in _get_python_embed_urls():
+            log_info(f"下载地址: {python_url}")
+            try:
+                _download_file(python_url, zip_path)
+                log_success("Python 下载完成")
+                downloaded = True
+                break
+            except Exception as e:
+                log_warning(f"Python 下载失败，尝试下一个源: {e}")
+
+        if not downloaded:
+            log_error("Python 下载失败：所有下载源均不可用")
             return False
 
         log_progress("Python", "正在解压 Python...", 60)
@@ -306,7 +434,7 @@ def install_python():
             return False
 
         log_progress("Python", "配置 Python 环境...", 80)
-        pth_file = PYTHON_DIR / f"python{python_version.replace('.', '')}._pth"
+        pth_file = PYTHON_DIR / f"python{PYTHON_VERSION.replace('.', '')}._pth"
 
         if pth_file.exists():
             log_info(f"配置文件: {pth_file}")
@@ -343,48 +471,61 @@ def install_pip():
         temp_dir.mkdir(exist_ok=True)
         get_pip_path = temp_dir / "get-pip.py"
 
-        log_progress("Pip", "下载 get-pip.py...", 20)
-        log_info("下载地址: https://bootstrap.pypa.io/get-pip.py")
-
-        try:
-            urllib.request.urlretrieve(
-                "https://bootstrap.pypa.io/get-pip.py", get_pip_path
-            )
-            log_success("get-pip.py 下载完成")
-        except Exception as e:
-            log_error(f"get-pip.py 下载失败: {e}")
-            return False
+        if LOCAL_GET_PIP.exists():
+            log_progress("Pip", "使用项目内 get-pip.py...", 20)
+            log_info(f"本地文件: {LOCAL_GET_PIP}")
+            try:
+                shutil.copy2(LOCAL_GET_PIP, get_pip_path)
+                log_success("已复制本地 get-pip.py")
+            except Exception as e:
+                log_error(f"复制本地 get-pip.py 失败: {e}")
+                return False
+        else:
+            log_progress("Pip", "下载 get-pip.py...", 20)
+            log_info("下载地址: https://bootstrap.pypa.io/get-pip.py")
+            try:
+                _download_file("https://bootstrap.pypa.io/get-pip.py", get_pip_path)
+                log_success("get-pip.py 下载完成")
+            except Exception as e:
+                log_error(f"get-pip.py 下载失败: {e}")
+                log_error("请将 get-pip.py 放到项目目录 bootstrap/get-pip.py 后重试")
+                return False
 
         log_progress("Pip", "安装 Pip...", 50)
-        pip_mirror = (PIP_MIRROR or "https://pypi.org/simple").strip()
-        parsed = urllib.parse.urlparse(pip_mirror)
-        pip_host = parsed.hostname or "pypi.org"
-
-        log_info(f"使用镜像源: {pip_mirror}")
-        log_info(f"镜像源主机: {pip_host}")
-
-        try:
-            proc = subprocess.run(
-                [
-                    str(PYTHON_EXE),
-                    str(get_pip_path),
-                    "-i",
-                    pip_mirror,
-                    "--trusted-host",
-                    pip_host,
-                ],
-                capture_output=True,
-                text=True,
-            )
+        installed = False
+        for mirror in _get_pip_mirror_candidates():
+            parsed = urllib.parse.urlparse(mirror)
+            pip_host = parsed.hostname or "pypi.org"
+            log_info(f"使用镜像源: {mirror}")
+            log_info(f"镜像源主机: {pip_host}")
+            try:
+                proc = subprocess.run(
+                    [
+                        str(PYTHON_EXE),
+                        str(get_pip_path),
+                        "-i",
+                        mirror,
+                        "--trusted-host",
+                        pip_host,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    env=_get_network_env(),
+                )
+            except Exception as e:
+                log_warning(f"Pip 安装异常，镜像 {mirror}: {e}")
+                continue
 
             if proc.returncode == 0:
                 log_success("Pip 安装成功")
                 _enable_import_site()
-            else:
-                log_error(f"Pip 安装失败: {proc.stderr}")
-                return False
-        except Exception as e:
-            log_error(f"Pip 安装失败: {e}")
+                installed = True
+                break
+
+            log_warning(f"Pip 安装失败，镜像 {mirror}: {(proc.stderr or '')[:300]}")
+
+        if not installed:
+            log_error("Pip 安装失败：所有镜像均不可用")
             return False
 
         log_progress("Pip", "清理临时文件...", 90)
@@ -427,32 +568,15 @@ def install_requirements():
         log_progress("依赖", "安装基础工具 (setuptools, wheel)...", 10)
         log_info("升级 setuptools 和 wheel...")
 
-        mirror = (PIP_MIRROR or "https://pypi.org/simple").strip()
-        parsed = urllib.parse.urlparse(mirror)
-        mirror_host = parsed.hostname or "pypi.org"
-
         try:
-            result1 = subprocess.run(
-                [
-                    str(PYTHON_EXE),
-                    "-m",
-                    "pip",
-                    "install",
-                    "--upgrade",
-                    "setuptools",
-                    "wheel",
-                    "-i",
-                    mirror,
-                    "--trusted-host",
-                    mirror_host,
-                ],
-                capture_output=True,
-                text=True,
+            result1, mirror1 = _run_pip_with_mirror(
+                ["install", "--upgrade", "setuptools", "wheel"],
+                stage="基础工具",
             )
-            if result1.returncode == 0:
-                log_success("基础工具安装完成")
+            if result1 is not None:
+                log_success(f"基础工具安装完成 (镜像: {mirror1})")
             else:
-                log_warning(f"基础工具安装失败: {result1.stderr[:500]}")
+                log_warning("基础工具安装失败，继续尝试安装项目依赖")
         except Exception as e:
             log_warning(f"基础工具安装异常: {e}")
 
@@ -460,26 +584,18 @@ def install_requirements():
         log_info("安装依赖包...")
 
         try:
-            result2 = subprocess.run(
+            result2, mirror2 = _run_pip_with_mirror(
                 [
-                    str(PYTHON_EXE),
-                    "-m",
-                    "pip",
                     "install",
                     "-r",
                     str(REQUIREMENTS_TXT),
-                    "-i",
-                    mirror,
-                    "--trusted-host",
-                    mirror_host,
                     "--no-warn-script-location",
                 ],
-                capture_output=True,
-                text=True,
+                stage="项目依赖",
             )
 
-            if result2.returncode == 0:
-                log_success("项目依赖安装完成")
+            if result2 is not None:
+                log_success(f"项目依赖安装完成 (镜像: {mirror2})")
                 if VERBOSE:
                     for line in result2.stdout.split("\n"):
                         if any(
@@ -492,7 +608,6 @@ def install_requirements():
                         ):
                             log_info(line)
             else:
-                log_error(f"项目依赖安装失败: {result2.stderr[:500]}")
                 return False
         except Exception as e:
             log_error(f"项目依赖安装异常: {e}")
@@ -532,7 +647,14 @@ def install_playwright():
 
 
 def main():
-    global VERBOSE, FORCE_REINSTALL, PYTHON_VERSION, PIP_MIRROR
+    global \
+        VERBOSE, \
+        FORCE_REINSTALL, \
+        PYTHON_VERSION, \
+        PIP_MIRROR, \
+        PYTHON_MIRROR, \
+        PYTHON_EMBED_URL, \
+        USE_SYSTEM_PROXY
 
     parser = argparse.ArgumentParser(description="Campus-Auth 环境初始化启动器")
     parser.add_argument(
@@ -540,8 +662,23 @@ def main():
     )
     parser.add_argument(
         "--pip-mirror",
-        default="https://mirrors.tuna.tsinghua.edu.cn/simple",
+        default=DEFAULT_PIP_MIRROR,
         help="Pip镜像源",
+    )
+    parser.add_argument(
+        "--python-mirror",
+        default="https://mirrors.tuna.tsinghua.edu.cn/python",
+        help="Python嵌入包镜像根地址（示例: https://mirrors.tuna.tsinghua.edu.cn/python）",
+    )
+    parser.add_argument(
+        "--python-embed-url",
+        default="",
+        help="Python嵌入包完整下载地址（优先级最高）",
+    )
+    parser.add_argument(
+        "--use-system-proxy",
+        action="store_true",
+        help="安装阶段使用系统代理（默认关闭，避免无效代理导致安装失败）",
     )
     parser.add_argument("--force-reinstall", action="store_true", help="强制重新安装")
     parser.add_argument("--verbose", "-v", action="store_true", help="详细输出")
@@ -551,6 +688,9 @@ def main():
     FORCE_REINSTALL = args.force_reinstall
     PYTHON_VERSION = args.python_version
     PIP_MIRROR = args.pip_mirror
+    PYTHON_MIRROR = args.python_mirror
+    PYTHON_EMBED_URL = args.python_embed_url
+    USE_SYSTEM_PROXY = args.use_system_proxy
 
     print("=" * 40)
     print("Campus-Auth 校园网认证 - 启动器")
@@ -567,7 +707,13 @@ def main():
     log_info(f"ENV目录: {ENV_DIR}")
     log_info(f"Python路径: {PYTHON_EXE}")
     log_info(f"Python版本: {PYTHON_VERSION}")
+    log_info(f"Python镜像源: {PYTHON_MIRROR}")
+    if PYTHON_EMBED_URL:
+        log_info(f"Python嵌入包直链: {PYTHON_EMBED_URL}")
     log_info(f"Pip镜像源: {PIP_MIRROR}")
+    log_info(
+        f"安装阶段代理: {'系统代理' if USE_SYSTEM_PROXY else '直连(忽略系统代理)'}"
+    )
     print()
 
     log_info(">>> 阶段 1/3: 检查 Python 环境")

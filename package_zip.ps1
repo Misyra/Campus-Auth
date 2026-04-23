@@ -54,6 +54,7 @@ $ExeCandidates = @(
 $IncludeItems = @(
     "app.py",
     "launcher.py",
+    "bootstrap",
     "backend",
     "frontend",
     "src",
