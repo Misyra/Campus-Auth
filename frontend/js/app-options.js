@@ -28,6 +28,7 @@ export const appOptions = {
         runtime_seconds: 0,
       },
       logs: [],
+      appVersion: 'unknown',
       autostart: {
         platform: '-',
         enabled: false,
