@@ -5,6 +5,7 @@ export const lifecycleMethods = {
       this.fetchConfig(),
       this.fetchStatus(),
       this.fetchLogs(),
+      this.fetchAppVersion(),
       this.fetchAutostart(),
       this.checkInitStatus(),
       this.fetchTasks(),
@@ -21,6 +22,36 @@ export const lifecycleMethods = {
       this.showWizard = !data.initialized;
     } catch {
       this.showWizard = false;
+    }
+  },
+  async fetchAppVersion() {
+    try {
+      const { data } = await this.$api.get('/api/health');
+      if (data?.version) {
+        this.appVersion = data.version;
+        return;
+      }
+
+      const openapiResp = await fetch('/openapi.json', { cache: 'no-cache' });
+      if (openapiResp.ok) {
+        const schema = await openapiResp.json();
+        this.appVersion = schema?.info?.version || 'unknown';
+        return;
+      }
+
+      this.appVersion = 'unknown';
+    } catch {
+      try {
+        const openapiResp = await fetch('/openapi.json', { cache: 'no-cache' });
+        if (openapiResp.ok) {
+          const schema = await openapiResp.json();
+          this.appVersion = schema?.info?.version || 'unknown';
+          return;
+        }
+      } catch {
+        // ignore fallback fetch error
+      }
+      this.appVersion = 'unknown';
     }
   },
   async finishWizard() {

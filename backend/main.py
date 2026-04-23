@@ -20,7 +20,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.utils import ConfigLoader
-from src.utils.logging import LogConfigCenter, configure_root_logger, get_logger
+from src.utils.logging import LogConfigCenter, get_logger
+from src.version import get_project_version
 
 from .autostart_service import AutoStartService
 from .monitor_service import MonitorService, ws_manager
@@ -50,7 +51,7 @@ DEBUG_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(
     title="校园网认证助手 API",
-    version="3.1.0",
+    version=get_project_version(PROJECT_ROOT),
 )
 
 # ==================== CORS 配置 ====================
@@ -78,6 +79,7 @@ async def auth_middleware(request: Request, call_next):
                 content={"detail": "无效的 API Token"},
             )
     return await call_next(request)
+
 
 service = MonitorService(project_root=PROJECT_ROOT)
 autostart_service = AutoStartService(project_root=PROJECT_ROOT)
@@ -154,7 +156,7 @@ def index() -> FileResponse:
 
 @app.get("/api/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "version": get_project_version(PROJECT_ROOT)}
 
 
 @app.get("/api/init-status")
