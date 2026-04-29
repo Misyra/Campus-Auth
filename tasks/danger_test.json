@@ -29,7 +29,7 @@
       "id": "get_token",
       "type": "eval",
       "description": "动态获取表单token",
-      "code": "return document.querySelector('input[name=\"token\"]')?.value || '';"
+      "script": "return document.querySelector('input[name=\"token\"]')?.value || '';"
     },
     {
       "id": "click_login",
@@ -41,7 +41,7 @@
       "id": "check_result",
       "type": "eval",
       "description": "判断登录是否成功",
-      "code": "return document.body.innerText.includes('成功') || document.body.innerText.includes('success');"
+      "script": "return document.body.innerText.includes('成功') || document.body.innerText.includes('success');"
     }
   ],
   "success_conditions": [
