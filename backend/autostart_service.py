@@ -4,6 +4,7 @@ import os
 import platform
 import subprocess
 import sys
+import xml.sax.saxutils
 from pathlib import Path
 
 
@@ -26,6 +27,9 @@ class AutoStartService:
         runtime_python = Path(sys.executable).resolve()
         if runtime_python.exists():
             return f'"{runtime_python}" "{app_entry}"'
+        # macOS/Linux 现代系统优先尝试 python3
+        if not self.platform_name.startswith("win"):
+            return f'python3 "{app_entry}"'
         return f'python "{app_entry}"'
 
     def _run(self, cmd: list[str]) -> tuple[bool, str]:
@@ -121,9 +125,13 @@ class AutoStartService:
         log_dir = self.project_root / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
 
-        content = f"""<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
-<plist version=\"1.0\">
+        escaped_cmd = xml.sax.saxutils.escape(self._start_command())
+        escaped_log_out = xml.sax.saxutils.escape(str(log_dir / "autostart.out.log"))
+        escaped_log_err = xml.sax.saxutils.escape(str(log_dir / "autostart.err.log"))
+
+        content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
 <dict>
     <key>Label</key>
     <string>{self.service_name}</string>
@@ -131,16 +139,16 @@ class AutoStartService:
     <array>
         <string>/bin/zsh</string>
         <string>-lc</string>
-        <string>{self._start_command()}</string>
+        <string>{escaped_cmd}</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>{log_dir / "autostart.out.log"}</string>
+    <string>{escaped_log_out}</string>
     <key>StandardErrorPath</key>
-    <string>{log_dir / "autostart.err.log"}</string>
+    <string>{escaped_log_err}</string>
 </dict>
 </plist>
 """
@@ -180,8 +188,10 @@ WantedBy=default.target
         service_path.write_text(content, encoding="utf-8")
 
         self._run(["systemctl", "--user", "daemon-reload"])
-        self._run(["systemctl", "--user", "enable", "--now", self.service_name])
-        return True, f"已启用 Linux 开机自启动: {service_path}"
+        ok, msg = self._run(["systemctl", "--user", "enable", "--now", self.service_name])
+        if ok:
+            return True, f"已启用 Linux 开机自启动: {service_path}"
+        return False, f"已写入配置但 systemd 启用失败: {msg}"
 
     def _disable_linux(self) -> tuple[bool, str]:
         service_path = self._linux_service_path()
@@ -230,6 +240,8 @@ WshShell.Run Chr(34) & "{python_exe}" & Chr(34) & " " & Chr(34) & "{app_py}" & C
 '''
         else:
             packaged = os.getenv("Campus-Auth_START_EXECUTABLE", "").strip()
+            if not packaged:
+                return False, "未找到可用的 Python 解释器或打包可执行文件，无法创建自启动脚本"
             content = f'''Set WshShell = CreateObject("WScript.Shell")
 WshShell.Environment("PROCESS")("Campus-Auth_AUTO_OPEN_BROWSER") = "false"
 

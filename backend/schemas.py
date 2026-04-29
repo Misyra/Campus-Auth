@@ -1,11 +1,17 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+import json
+import re
+
+from pydantic import BaseModel, Field, field_validator
 
 DEFAULT_BROWSER_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
+
+_VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+_URL_PATTERN = re.compile(r"^https?://")
 
 
 class MonitorConfigPayload(BaseModel):
@@ -34,6 +40,48 @@ class MonitorConfigPayload(BaseModel):
     minimize_to_tray: bool = True
     custom_variables: dict[str, str] = Field(default_factory=dict)
 
+    @field_validator("auth_url")
+    @classmethod
+    def validate_auth_url(cls, v: str) -> str:
+        v = v.strip()
+        if v and not _URL_PATTERN.match(v):
+            raise ValueError("认证地址必须以 http:// 或 https:// 开头")
+        return v
+
+    @field_validator("backend_log_level", "frontend_log_level")
+    @classmethod
+    def validate_log_level(cls, v: str) -> str:
+        v = v.upper().strip()
+        if v and v not in _VALID_LOG_LEVELS:
+            raise ValueError(f"无效的日志级别: {v}，可选值: {', '.join(_VALID_LOG_LEVELS)}")
+        return v
+
+    @field_validator("browser_extra_headers_json")
+    @classmethod
+    def validate_headers_json(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            return ""
+        try:
+            parsed = json.loads(v)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"浏览器请求头 JSON 格式错误: {e}") from e
+        if not isinstance(parsed, dict):
+            raise ValueError("浏览器请求头必须是 JSON 对象")
+        return v
+
+    @field_validator("custom_variables")
+    @classmethod
+    def validate_custom_variables(cls, v: dict[str, str]) -> dict[str, str]:
+        if len(v) > 50:
+            raise ValueError("自定义变量最多 50 个")
+        for key, val in v.items():
+            if len(key) > 100:
+                raise ValueError(f"变量名过长（最大 100 字符）: {key}")
+            if len(val) > 10000:
+                raise ValueError(f"变量 {key} 的值过长（最大 10000 字符）")
+        return v
+
 
 class ActionResponse(BaseModel):
     success: bool
@@ -53,6 +101,12 @@ class LogEntry(BaseModel):
     level: str = "INFO"
     source: str = "monitor"
     message: str
+
+    @field_validator("level")
+    @classmethod
+    def validate_level(cls, v: str) -> str:
+        v = v.upper().strip()
+        return v if v in _VALID_LOG_LEVELS else "INFO"
 
 
 class AutoStartStatusResponse(BaseModel):

@@ -116,14 +116,15 @@ export const lifecycleMethods = {
 
     this.ws.onclose = () => {
       this.frontendLogger.warn('websocket', 'connection closed');
+      if (this._wsDestroyed) return;
       if (this.wsRetryCount >= this.wsMaxRetries) {
         this.notify(false, '与服务器的连接已断开，请刷新页面');
         return;
       }
       const delay = Math.min(1000 * Math.pow(2, this.wsRetryCount), 30000);
       this.wsRetryCount++;
-      setTimeout(() => {
-        this.connectWebSocket();
+      this._wsRetryTimer = setTimeout(() => {
+        if (!this._wsDestroyed) this.connectWebSocket();
       }, delay);
     };
 

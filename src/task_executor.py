@@ -188,7 +188,7 @@ class VariableResolver:
             return self._cache[value]
 
         visited = visited or set()
-        if depth > self.MAX_DEPTH * 2:
+        if depth > self.MAX_DEPTH:
             raise StepError(
                 f"变量展开层级超过限制({self.MAX_DEPTH})，请检查变量引用关系"
             )
@@ -228,6 +228,10 @@ class VariableResolver:
     def set_runtime_var(self, name: str, value: Any) -> None:
         """设置运行时变量"""
         self.runtime_vars[name] = value
+        # 清除包含该变量的缓存条目
+        self._cache = {
+            k: v for k, v in self._cache.items() if f"{{{{{name}}}}}" not in k
+        }
 
 
 class StepHandler(ABC):
@@ -261,6 +265,25 @@ class StepHandler(ABC):
         for key, value in step.extra.items():
             params[key] = resolver.resolve(value)
         return params
+
+    async def _find_element(self, page, selector: str, timeout: int):
+        """查找元素（支持多个候选选择器）"""
+        candidates = [s.strip() for s in selector.split(",") if s.strip()]
+        deadline = time.monotonic() + timeout / 1000
+
+        while time.monotonic() < deadline:
+            for candidate in candidates:
+                try:
+                    locator = page.locator(candidate)
+                    if await locator.count() > 0:
+                        element = locator.first
+                        if await element.is_visible(timeout=100):
+                            return element
+                except Exception:
+                    continue
+            await page.wait_for_timeout(100)
+
+        return None
 
 
 class NavigateHandler(StepHandler):
@@ -317,25 +340,6 @@ class InputHandler(StepHandler):
         await element.fill(value, timeout=timeout)
         return True, ""
 
-    async def _find_element(self, page, selector: str, timeout: int):
-        """查找元素（支持多个候选选择器）"""
-        candidates = [s.strip() for s in selector.split(",") if s.strip()]
-        deadline = time.monotonic() + timeout / 1000
-
-        while time.monotonic() < deadline:
-            for candidate in candidates:
-                try:
-                    locator = page.locator(candidate)
-                    if await locator.count() > 0:
-                        element = locator.first
-                        if await element.is_visible(timeout=100):
-                            return element
-                except Exception:
-                    continue
-            await page.wait_for_timeout(100)
-
-        return None
-
 
 class ClickHandler(StepHandler):
     """点击步骤处理器"""
@@ -362,25 +366,6 @@ class ClickHandler(StepHandler):
 
         await element.click(timeout=timeout)
         return True, ""
-
-    async def _find_element(self, page, selector: str, timeout: int):
-        """查找元素"""
-        candidates = [s.strip() for s in selector.split(",") if s.strip()]
-        deadline = time.monotonic() + timeout / 1000
-
-        while time.monotonic() < deadline:
-            for candidate in candidates:
-                try:
-                    locator = page.locator(candidate)
-                    if await locator.count() > 0:
-                        element = locator.first
-                        if await element.is_visible(timeout=100):
-                            return element
-                except Exception:
-                    continue
-            await page.wait_for_timeout(100)
-
-        return None
 
 
 class SelectHandler(StepHandler):
@@ -449,25 +434,6 @@ class SelectHandler(StepHandler):
                     continue
 
         return False
-
-    async def _find_element(self, page, selector: str, timeout: int):
-        """查找元素"""
-        candidates = [s.strip() for s in selector.split(",") if s.strip()]
-        deadline = time.monotonic() + timeout / 1000
-
-        while time.monotonic() < deadline:
-            for candidate in candidates:
-                try:
-                    locator = page.locator(candidate)
-                    if await locator.count() > 0:
-                        element = locator.first
-                        if await element.is_visible(timeout=100):
-                            return element
-                except Exception:
-                    continue
-            await page.wait_for_timeout(100)
-
-        return None
 
 
 class WaitHandler(StepHandler):
@@ -577,13 +543,16 @@ class ScreenshotHandler(StepHandler):
         params = self.resolve_params(step, resolver)
         path = params.get("path", "")
 
+        debug_dir = self.PROJECT_ROOT / "debug"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+
         if not path:
-            debug_dir = self.PROJECT_ROOT / "debug"
-            debug_dir.mkdir(parents=True, exist_ok=True)
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
             path = str(debug_dir / f"step_screenshot_{stamp}.png")
         else:
-            os.makedirs(os.path.dirname(path) or "debug", exist_ok=True)
+            # 限制路径在 debug/ 目录内，防止路径遍历
+            safe_name = Path(path).name
+            path = str(debug_dir / safe_name)
 
         logger.info(f"[screenshot] path={path}")
         await page.screenshot(path=path, full_page=True)
@@ -592,6 +561,8 @@ class ScreenshotHandler(StepHandler):
 
 class SleepHandler(StepHandler):
     """休眠处理器"""
+
+    MAX_SLEEP_MS = 300000  # 最大 5 分钟
 
     @property
     def step_type(self) -> str:
@@ -602,6 +573,12 @@ class SleepHandler(StepHandler):
     ) -> tuple[bool, str]:
         params = self.resolve_params(step, resolver)
         duration = params.get("duration", 1000)
+
+        if duration > self.MAX_SLEEP_MS:
+            logger.warning(
+                f"[sleep] duration={duration}ms 超过上限 {self.MAX_SLEEP_MS}ms，已截断"
+            )
+            duration = self.MAX_SLEEP_MS
 
         logger.info(f"[sleep] duration={duration}ms")
         await page.wait_for_timeout(duration)
@@ -811,13 +788,13 @@ class TaskExecutor:
         self.resolver.set_runtime_var("_current_url", current_url)
 
         for cond in self.config.success_conditions:
-            if not self._evaluate_condition(cond, current_url, page):
+            if not await self._evaluate_condition(cond, current_url, page):
                 logger.warning(f"成功条件不满足: {cond}")
                 return False
 
         return True
 
-    def _evaluate_condition(
+    async def _evaluate_condition(
         self, cond: ConditionConfig, current_url: str, page
     ) -> bool:
         """评估单个条件"""
@@ -838,7 +815,28 @@ class TaskExecutor:
             except re.error:
                 return False
 
-        return True
+        elif cond_type == ConditionType.ELEMENT_EXISTS:
+            selector = cond.selector or ""
+            if not selector:
+                return False
+            try:
+                locator = page.locator(selector)
+                return await locator.count() > 0
+            except Exception:
+                return False
+
+        elif cond_type == ConditionType.JS_EXPRESSION:
+            script = cond.script or ""
+            if not script:
+                return False
+            try:
+                result = await page.evaluate(script)
+                return bool(result)
+            except Exception:
+                return False
+
+        logger.warning(f"未知的条件类型: {cond_type}")
+        return False
 
     async def _handle_success(self, page) -> tuple[bool, str]:
         """处理成功情况"""
@@ -934,6 +932,7 @@ class TaskManager:
                         "name": config.get("name", file.stem),
                         "description": config.get("description", ""),
                         "version": config.get("version", "1.0"),
+                        "source": config.get("source", "builtin"),
                     }
                 )
             except Exception as e:
