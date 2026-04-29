@@ -124,3 +124,113 @@
   overflow-x: auto;
   margin-top: 8px;
 }
+
+/* 危险步骤确认弹窗 */
+.danger-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  animation: fadeIn 0.2s ease;
+}
+
+.danger-modal {
+  background: var(--bg-card);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 16px;
+  width: min(640px, calc(100vw - 48px));
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+  animation: slideIn 0.25s ease;
+}
+
+.danger-modal-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.danger-modal-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--warning);
+  margin: 0 0 4px;
+}
+
+.danger-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.danger-modal-body {
+  padding: 16px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.danger-step {
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.danger-step:last-child {
+  margin-bottom: 0;
+}
+
+.danger-step-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(245, 158, 11, 0.06);
+  border-bottom: 1px solid var(--border);
+}
+
+.danger-step-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warning);
+}
+
+.danger-step-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.danger-step-code {
+  margin: 0;
+  padding: 12px 14px;
+  background: rgba(15, 23, 42, 0.5);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.danger-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+}

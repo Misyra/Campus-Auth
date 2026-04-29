@@ -27,8 +27,8 @@ def _detect_task_source(task_data: dict[str, Any]) -> str:
     return _TASK_SOURCE_API
 
 
-def _check_dangerous_steps(task_data: dict[str, Any], source: str) -> list[str]:
-    """检查任务中的危险步骤，返回警告信息列表"""
+def _check_dangerous_steps(task_data: dict[str, Any], source: str) -> list[dict[str, Any]]:
+    """检查任务中的危险步骤，返回详细信息列表（含代码内容）"""
     if source in (_TASK_SOURCE_BUILTIN, _TASK_SOURCE_SIGNED):
         return []
 
@@ -38,10 +38,14 @@ def _check_dangerous_steps(task_data: dict[str, Any], source: str) -> list[str]:
         step_type = step.get("type", "")
         if step_type in _DANGEROUS_STEP_TYPES:
             desc = step.get("description", step.get("id", f"步骤{i+1}"))
-            warnings.append(
-                f"步骤 [{desc}] 使用了 '{step_type}' 类型，"
-                f"该步骤会执行任意 JavaScript 代码，请确认来源可信"
-            )
+            # 提取实际的 JS 代码内容
+            code = step.get("script", step.get("code", step.get("value", "")))
+            warnings.append({
+                "step_index": i + 1,
+                "step_type": step_type,
+                "description": desc,
+                "code": str(code)[:2000],  # 限制长度防止过长
+            })
     return warnings
 
 
@@ -68,6 +72,7 @@ class TaskService:
                 "name": task.name,
                 "description": task.description,
                 "version": task.version,
+                "source": task.source,
                 "url": task.url,
                 "variables": task.variables,
                 "timeout": task.timeout,
@@ -102,10 +107,7 @@ class TaskService:
         success = self.task_manager.save_task(task_id, config)
         if success:
             task_logger.info("Task saved: %s", task_id)
-            msg = "任务保存成功"
-            if warnings:
-                msg += "（注意：任务包含危险步骤，请确认来源可信）"
-            return True, msg
+            return True, "任务保存成功"
         task_logger.error("Task save failed: %s", task_id)
         return False, "任务保存失败"
 

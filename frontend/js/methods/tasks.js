@@ -1,3 +1,28 @@
+const DANGEROUS_STEP_TYPES = new Set(['eval', 'custom_js']);
+const TRUSTED_SOURCES = new Set(['builtin', 'signed']);
+
+function detectDangerousSteps(config) {
+  const source = config.source || '';
+  if (TRUSTED_SOURCES.has(source)) return [];
+  const steps = config.steps || [];
+  const warnings = [];
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    const type = step.type || '';
+    if (DANGEROUS_STEP_TYPES.has(type)) {
+      const desc = step.description || step.id || `步骤 ${i + 1}`;
+      const code = step.script || step.code || step.value || '';
+      warnings.push({
+        stepIndex: i + 1,
+        stepType: type,
+        description: desc,
+        code: String(code).slice(0, 2000),
+      });
+    }
+  }
+  return warnings;
+}
+
 export const taskMethods = {
   async fetchTasks() {
     try {
@@ -93,20 +118,27 @@ export const taskMethods = {
       this.notify(false, '请输入任务ID');
       return;
     }
+    let config;
+    try {
+      config = JSON.parse(this.editingTask.json);
+    } catch (e) {
+      this.jsonError = e.message;
+      this.notify(false, 'JSON 格式错误: ' + e.message);
+      return;
+    }
+    config.name = this.editingTask.name || config.name;
+    config.description = this.editingTask.description || config.description;
+    config.url = this.editingTask.url || config.url;
+
+    // 客户端检测危险步骤
+    const dangers = detectDangerousSteps(config);
+    if (dangers.length > 0) {
+      const confirmed = await this.showDangerConfirm(dangers);
+      if (!confirmed) return;
+    }
+
     try {
       this.frontendLogger.info('tasks', `save task: ${this.editingTask.id}`);
-      let config;
-      try {
-        config = JSON.parse(this.editingTask.json);
-      } catch (e) {
-        this.jsonError = e.message;
-        this.notify(false, 'JSON 格式错误: ' + e.message);
-        return;
-      }
-      config.name = this.editingTask.name || config.name;
-      config.description = this.editingTask.description || config.description;
-      config.url = this.editingTask.url || config.url;
-
       const { data } = await this.$api.put(`/api/tasks/${this.editingTask.id}`, config);
       if (data.success) {
         this.notify(true, data.message || '任务保存成功');
@@ -119,6 +151,17 @@ export const taskMethods = {
     } catch (error) {
       this.frontendLogger.error('tasks', 'save task failed', error);
       this.notify(false, error?.response?.data?.detail || error.message || '保存失败');
+    }
+  },
+  showDangerConfirm(dangers) {
+    return new Promise((resolve) => {
+      this.dangerConfirm = { dangers, resolve };
+    });
+  },
+  confirmDanger(allow) {
+    if (this.dangerConfirm) {
+      this.dangerConfirm.resolve(allow);
+      this.dangerConfirm = null;
     }
   },
   async deleteTask(taskId) {
@@ -189,7 +232,10 @@ export const taskMethods = {
             json: JSON.stringify(data, null, 2),
           };
           this.jsonError = '';
-          this.notify(true, '已导入任务配置，请检查后保存');
+          // 显示来源信息
+          const source = data.source || 'api';
+          const sourceLabel = source === 'builtin' ? '内置' : source === 'signed' ? '已签名' : '外部导入';
+          this.notify(true, `已导入任务配置（来源：${sourceLabel}），请检查后保存`);
         } catch {
           this.notify(false, '文件不是有效的 JSON');
         }
