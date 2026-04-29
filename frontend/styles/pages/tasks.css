@@ -14,6 +14,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   padding: 16px;
   background: var(--bg-primary);
   border: 1px solid var(--border);
@@ -30,9 +31,17 @@
   background: rgba(34, 211, 238, 0.05);
 }
 
+.task-info {
+  flex: 1;
+  min-width: 0;
+}
+
 .task-info h3 {
   font-size: 14px;
   margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .task-info p {
@@ -42,8 +51,11 @@
 
 .task-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .task-editor textarea {

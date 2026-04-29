@@ -34,6 +34,13 @@
   }
 }
 
+@media (max-width: 1200px) {
+  .task-actions .btn:not(.btn-danger) {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+}
+
 @media (max-width: 768px) {
   .sidebar {
     width: 64px;
