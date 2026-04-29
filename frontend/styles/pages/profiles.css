@@ -1,0 +1,491 @@
+/* ==================== 配置方案页面 ==================== */
+
+/* 顶部状态栏 */
+.profiles-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.profiles-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profiles-status-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.profiles-status-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.profiles-status-icon.on {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.profiles-status-icon.off {
+  background: var(--bg-hover);
+  color: var(--text-muted);
+}
+
+.profiles-topbar-info h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.profiles-topbar-info p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.profiles-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* 网络检测结果横幅 */
+.detect-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  animation: fadeIn 0.3s ease;
+}
+
+.detect-banner.matched {
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.detect-banner.unmatched {
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.25);
+}
+
+.detect-banner-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.detect-banner-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.detect-banner.matched .detect-banner-icon {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.detect-banner.unmatched .detect-banner-icon {
+  background: rgba(234, 179, 8, 0.15);
+  color: #eab308;
+}
+
+.detect-banner-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.detect-banner-info strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.detect-details {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* 使用说明横条 */
+.profiles-guide {
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.profiles-guide-steps {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.guide-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.guide-step-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg-primary);
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.guide-step-content strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 1px;
+}
+
+.guide-step-content p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.guide-step-divider {
+  width: 1px;
+  height: 36px;
+  background: var(--border);
+  margin: 0 20px;
+  flex-shrink: 0;
+}
+
+/* 方案列表 */
+.profiles-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.profile-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.profile-card:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-hover);
+}
+
+.profile-card.active {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.profile-card-main {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.profile-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.profile-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.profile-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-card-id {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.profile-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.profile-badge.active {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.profile-card-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.profile-card-meta {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.profile-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.profile-tag svg {
+  flex-shrink: 0;
+}
+
+.profile-tag.muted {
+  color: var(--text-muted);
+  font-family: inherit;
+}
+
+/* ==================== 编辑方案页面 ==================== */
+
+.profile-editor-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  gap: 16px;
+}
+
+.profile-editor-topbar h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.profile-editor-card {
+  width: 100%;
+}
+
+.profile-editor-body {
+  padding: 0 24px 20px;
+}
+
+.editor-section {
+  padding-top: 20px;
+}
+
+.editor-section + .editor-section {
+  margin-top: 4px;
+}
+
+/* 区域标题：左侧 accent 竖线 + 加粗文字 */
+.editor-section-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  padding-left: 12px;
+  border-left: 3px solid var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.editor-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 20px 0;
+}
+
+/* 高级设置折叠 */
+.editor-collapsible {
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.editor-collapsible-title {
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  background: var(--bg-hover);
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editor-collapsible-title::-webkit-details-marker {
+  display: none;
+}
+
+.editor-collapsible-title::before {
+  content: '';
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-left: 5px solid var(--text-secondary);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.2s;
+}
+
+.editor-collapsible[open] .editor-collapsible-title::before {
+  transform: rotate(90deg);
+}
+
+.editor-collapsible[open] .editor-collapsible-title {
+  border-bottom: 1px solid var(--border);
+}
+
+.editor-collapsible-body {
+  padding: 12px 14px;
+}
+
+/* Toggle */
+.toggle-group {
+  margin-top: 4px;
+}
+
+.toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+/* Field help tooltip */
+.field-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: help;
+  position: relative;
+}
+
+.field-help:hover::after,
+.field-help:focus::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 8px);
+  transform: translateY(-50%);
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-hover);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 400;
+  white-space: nowrap;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* 空状态 */
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--text-muted);
+}
+
+.empty-state svg {
+  margin-bottom: 16px;
+}
+
+.empty-state p {
+  margin: 0 0 16px;
+}
+
+/* 响应式 */
+@media (max-width: 700px) {
+  .profiles-guide-steps {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .guide-step-divider {
+    width: 100%;
+    height: 1px;
+    margin: 0;
+  }
+
+  .profile-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .profile-card-actions {
+    width: 100%;
+  }
+
+  .profile-card-actions .btn {
+    flex: 1;
+  }
+
+  .profiles-topbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .profiles-topbar-actions {
+    width: 100%;
+  }
+}

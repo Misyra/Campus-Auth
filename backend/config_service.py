@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from src.utils import ConfigLoader
-from src.utils.crypto import encrypt_password, mask_password
+from src.utils.crypto import decrypt_password, encrypt_password, mask_password
 
-from .schemas import DEFAULT_BROWSER_USER_AGENT, MonitorConfigPayload
+from .schemas import DEFAULT_BROWSER_USER_AGENT, MonitorConfigPayload, ProfileSettings
 
 BUILTIN_CARRIERS = {"移动", "联通", "电信"}
 
@@ -41,69 +41,144 @@ def _normalize_headers_json(raw: str) -> str:
     return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
 
 
-def load_ui_config() -> MonitorConfigPayload:
+def load_ui_config(project_root: Path | None = None) -> MonitorConfigPayload:
     config = ConfigLoader.load_config_from_env()
-    isp_value = str(config.get("isp", "") or "").strip()
 
-    carrier = "无"
-    carrier_custom = ""
-    if isp_value in BUILTIN_CARRIERS:
-        carrier = isp_value
-    elif isp_value:
-        carrier = "自定义"
-        carrier_custom = isp_value
-
-    interval_seconds = int(config.get("monitor", {}).get("interval", 300))
-
-    pause_config = config.get("pause_login", {})
-    browser_config = config.get("browser_settings", {})
-    monitor_config = config.get("monitor", {})
-    ping_targets = monitor_config.get("ping_targets", [])
-    network_targets = _normalize_targets(
-        ",".join(str(item) for item in ping_targets) if ping_targets else ""
-    )
-
-    # 加载自定义变量
-    custom_vars_str = os.getenv("CUSTOM_VARIABLES", "")
-    custom_variables: dict[str, str] = {}
-    if custom_vars_str:
+    # 尝试从 settings.json 加载活动方案的 profile 设置
+    profile: ProfileSettings | None = None
+    if project_root is not None:
         try:
-            custom_variables = json.loads(custom_vars_str)
-            if not isinstance(custom_variables, dict):
+            from .profile_service import ProfileService
+
+            ps = ProfileService(project_root)
+            profile = ps.get_active_profile()
+        except Exception:
+            profile = None
+
+    # 账号密码：方案独立 > 全局
+    use_global = True
+    if profile and not profile.use_global_credentials and profile.username:
+        username = profile.username
+        use_global = False
+        # 方案密码：如果是加密的则解密，如果是掩码则保留
+        raw_pwd = profile.password or ""
+        if raw_pwd.startswith("ENC:"):
+            password = mask_password(decrypt_password(raw_pwd))
+        elif raw_pwd.startswith("•"):
+            password = raw_pwd
+        elif raw_pwd:
+            password = mask_password(raw_pwd)
+        else:
+            password = mask_password(config.get("password", ""))
+    else:
+        username = config.get("username", "")
+        password = mask_password(config.get("password", ""))
+
+    # 基本设置：auth_url、carrier 始终来自 profile（如有）
+    if profile:
+        auth_url = profile.auth_url or str(config.get("auth_url", "http://172.29.0.2"))
+        carrier = profile.carrier
+        carrier_custom = profile.carrier_custom
+    else:
+        isp_value = str(config.get("isp", "") or "").strip()
+        carrier = "无"
+        carrier_custom = ""
+        if isp_value in BUILTIN_CARRIERS:
+            carrier = isp_value
+        elif isp_value:
+            carrier = "自定义"
+            carrier_custom = isp_value
+        auth_url = str(config.get("auth_url", "http://172.29.0.2"))
+
+    # 高级设置：跟随全局时从 .env 读取，否则使用 profile 值
+    use_advanced_from_env = not profile or profile.use_global_advanced
+    if use_advanced_from_env:
+        interval_seconds = int(config.get("monitor", {}).get("interval", 300))
+        pause_config = config.get("pause_login", {})
+        browser_config = config.get("browser_settings", {})
+        monitor_config = config.get("monitor", {})
+        ping_targets = monitor_config.get("ping_targets", [])
+        network_targets = _normalize_targets(
+            ",".join(str(item) for item in ping_targets) if ping_targets else ""
+        )
+
+        custom_vars_str = os.getenv("CUSTOM_VARIABLES", "")
+        custom_variables = {}
+        if custom_vars_str:
+            try:
+                custom_variables = json.loads(custom_vars_str)
+                if not isinstance(custom_variables, dict):
+                    custom_variables = {}
+            except json.JSONDecodeError:
                 custom_variables = {}
-        except json.JSONDecodeError:
-            custom_variables = {}
+
+        check_interval_minutes = max(1, interval_seconds // 60)
+        auto_start = bool(config.get("auto_start_monitoring", False))
+        headless = bool(browser_config.get("headless", True))
+        browser_timeout = int(browser_config.get("timeout", 8000))
+        browser_user_agent = str(
+            browser_config.get("user_agent", DEFAULT_BROWSER_USER_AGENT)
+        )
+        browser_low_resource_mode = bool(
+            browser_config.get("low_resource_mode", True)
+        )
+        browser_disable_web_security = bool(
+            browser_config.get("disable_web_security", False)
+        )
+        browser_extra_headers_json = str(
+            browser_config.get("extra_headers_json", "")
+        )
+        pause_enabled = bool(pause_config.get("enabled", True))
+        pause_start_hour = int(pause_config.get("start_hour", 0))
+        pause_end_hour = int(pause_config.get("end_hour", 6))
+    else:
+        check_interval_minutes = profile.check_interval_minutes
+        auto_start = profile.auto_start
+        headless = profile.headless
+        browser_timeout = profile.browser_timeout
+        browser_user_agent = profile.browser_user_agent or DEFAULT_BROWSER_USER_AGENT
+        browser_low_resource_mode = profile.browser_low_resource_mode
+        browser_disable_web_security = profile.browser_disable_web_security
+        browser_extra_headers_json = profile.browser_extra_headers_json
+        pause_enabled = profile.pause_enabled
+        pause_start_hour = profile.pause_start_hour
+        pause_end_hour = profile.pause_end_hour
+        network_targets = _normalize_targets(profile.network_targets)
+        custom_variables = profile.custom_variables
+
+    # 系统设置始终从 .env 读取
+    backend_log_level = _normalize_level(
+        config.get("logging", {}).get("level", "WARNING")
+    )
+    frontend_log_level = _normalize_level(
+        config.get("frontend_logging", {}).get("level", "WARNING")
+    )
+    access_log = bool(config.get("access_log", False))
+    minimize_to_tray = bool(config.get("minimize_to_tray", True))
 
     return MonitorConfigPayload(
-        username=config.get("username", ""),
-        password=mask_password(config.get("password", "")),
-        auth_url=str(config.get("auth_url", "http://172.29.0.2")),
+        username=username,
+        password=password,
+        use_global_credentials=use_global,
+        auth_url=auth_url,
         carrier=carrier,
         carrier_custom=carrier_custom,
-        check_interval_minutes=max(1, interval_seconds // 60),
-        auto_start=bool(config.get("auto_start_monitoring", False)),
-        headless=bool(browser_config.get("headless", True)),
-        browser_timeout=int(browser_config.get("timeout", 8000)),
-        browser_user_agent=str(
-            browser_config.get("user_agent", DEFAULT_BROWSER_USER_AGENT)
-        ),
-        browser_low_resource_mode=bool(browser_config.get("low_resource_mode", True)),
-        browser_disable_web_security=bool(
-            browser_config.get("disable_web_security", False)
-        ),
-        browser_extra_headers_json=str(browser_config.get("extra_headers_json", "")),
-        pause_enabled=bool(pause_config.get("enabled", True)),
-        pause_start_hour=int(pause_config.get("start_hour", 0)),
-        pause_end_hour=int(pause_config.get("end_hour", 6)),
+        check_interval_minutes=check_interval_minutes,
+        auto_start=auto_start,
+        headless=headless,
+        browser_timeout=browser_timeout,
+        browser_user_agent=browser_user_agent,
+        browser_low_resource_mode=browser_low_resource_mode,
+        browser_disable_web_security=browser_disable_web_security,
+        browser_extra_headers_json=browser_extra_headers_json,
+        pause_enabled=pause_enabled,
+        pause_start_hour=pause_start_hour,
+        pause_end_hour=pause_end_hour,
         network_targets=network_targets,
-        backend_log_level=_normalize_level(
-            config.get("logging", {}).get("level", "WARNING")
-        ),
-        frontend_log_level=_normalize_level(
-            config.get("frontend_logging", {}).get("level", "WARNING")
-        ),
-        access_log=bool(config.get("access_log", False)),
-        minimize_to_tray=bool(config.get("minimize_to_tray", True)),
+        backend_log_level=backend_log_level,
+        frontend_log_level=frontend_log_level,
+        access_log=access_log,
+        minimize_to_tray=minimize_to_tray,
         custom_variables=custom_variables,
     )
 
@@ -179,56 +254,24 @@ def _save_password(raw: str) -> str:
 
 
 def write_env_file(payload: MonitorConfigPayload, env_path: Path) -> None:
-    network_targets = _normalize_targets(payload.network_targets)
+    """只写入敏感数据和系统设置到 .env（非敏感设置由 profile 管理）"""
     backend_level = _normalize_level(payload.backend_log_level)
     frontend_level = _normalize_level(payload.frontend_log_level)
-    browser_user_agent = (
-        payload.browser_user_agent.strip() or DEFAULT_BROWSER_USER_AGENT
-    )
-    browser_headers_json = _normalize_headers_json(payload.browser_extra_headers_json)
 
-    # 序列化自定义变量
-    custom_vars_json = (
-        json.dumps(payload.custom_variables, ensure_ascii=False)
-        if payload.custom_variables
-        else ""
-    )
+    managed_values: dict[str, str] = {}
 
-    carrier = str(payload.carrier or "无").strip() or "无"
-    custom_isp = str(payload.carrier_custom or "").strip()
-    if carrier == "自定义":
-        isp_value = custom_isp
-    elif carrier == "无":
-        isp_value = ""
-    else:
-        isp_value = carrier
+    # 只有使用全局凭证时才写入 .env
+    if payload.use_global_credentials:
+        managed_values["USERNAME"] = payload.username.strip()
+        managed_values["PASSWORD"] = _save_password(payload.password.strip())
 
-    managed_values = {
-        "USERNAME": payload.username.strip(),
-        "PASSWORD": _save_password(payload.password.strip()),
-        "LOGIN_URL": payload.auth_url.strip() or "http://172.29.0.2",
-        "ISP": isp_value,
-        "BROWSER_HEADLESS": str(payload.headless).lower(),
-        "BROWSER_TIMEOUT": str(payload.browser_timeout),
-        "BROWSER_USER_AGENT": browser_user_agent,
-        "BROWSER_LOW_RESOURCE_MODE": str(payload.browser_low_resource_mode).lower(),
-        "BROWSER_DISABLE_WEB_SECURITY": str(
-            payload.browser_disable_web_security
-        ).lower(),
-        "BROWSER_EXTRA_HEADERS_JSON": browser_headers_json,
-        "MONITOR_INTERVAL": str(payload.check_interval_minutes * 60),
-        "AUTO_START_MONITORING": str(payload.auto_start).lower(),
-        "PING_TARGETS": network_targets,
-        "PAUSE_LOGIN_ENABLED": str(payload.pause_enabled).lower(),
-        "PAUSE_LOGIN_START_HOUR": str(payload.pause_start_hour),
-        "PAUSE_LOGIN_END_HOUR": str(payload.pause_end_hour),
+    managed_values.update({
         "LOG_LEVEL": backend_level,
         "BACKEND_LOG_LEVEL": backend_level,
         "FRONTEND_LOG_LEVEL": frontend_level,
         "UVICORN_ACCESS_LOG": str(payload.access_log).lower(),
         "MINIMIZE_TO_TRAY": str(payload.minimize_to_tray).lower(),
-        "CUSTOM_VARIABLES": custom_vars_json,
-    }
+    })
 
     existing_lines: list[str] = []
     if env_path.exists():
@@ -279,3 +322,47 @@ def write_env_file(payload: MonitorConfigPayload, env_path: Path) -> None:
         except OSError:
             pass
         raise
+
+
+def save_profile_from_payload(
+    payload: MonitorConfigPayload, project_root: Path
+) -> None:
+    """从 MonitorConfigPayload 提取 profile 字段并保存到 settings.json"""
+    from .profile_service import ProfileService
+
+    ps = ProfileService(project_root)
+    active_id = ps.get_active_profile_id()
+    existing = ps.get_active_profile()
+
+    # 保留原有的匹配规则和凭证设置
+    updated = ProfileSettings(
+        name=existing.name,
+        match_gateway_ip=existing.match_gateway_ip,
+        match_ssid=existing.match_ssid,
+        username=existing.username,
+        password=existing.password,
+        use_global_credentials=existing.use_global_credentials,
+        use_global_advanced=existing.use_global_advanced,
+        auth_url=payload.auth_url.strip() or "http://172.29.0.2",
+        carrier=str(payload.carrier or "无").strip(),
+        carrier_custom=str(payload.carrier_custom or "").strip(),
+        check_interval_minutes=payload.check_interval_minutes,
+        auto_start=payload.auto_start,
+        headless=payload.headless,
+        browser_timeout=payload.browser_timeout,
+        browser_user_agent=(
+            payload.browser_user_agent.strip() or DEFAULT_BROWSER_USER_AGENT
+        ),
+        browser_low_resource_mode=payload.browser_low_resource_mode,
+        browser_disable_web_security=payload.browser_disable_web_security,
+        browser_extra_headers_json=_normalize_headers_json(
+            payload.browser_extra_headers_json
+        ),
+        pause_enabled=payload.pause_enabled,
+        pause_start_hour=payload.pause_start_hour,
+        pause_end_hour=payload.pause_end_hour,
+        network_targets=_normalize_targets(payload.network_targets),
+        custom_variables=payload.custom_variables,
+    )
+
+    ps.save_profile(active_id, updated)

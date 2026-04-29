@@ -43,7 +43,7 @@ export const taskMethods = {
       const { data } = await this.$api.post(`/api/tasks/active/${taskId}`);
       if (data.success) {
         this.activeTaskId = taskId;
-        this.notify(true, '活动任务已设置');
+        this.frontendLogger.info('tasks', `活动任务已设置: ${taskId}`);
       } else {
         this.notify(false, data.message);
       }
@@ -138,7 +138,7 @@ export const taskMethods = {
       this.frontendLogger.info('tasks', `save task: ${this.editingTask.id}`);
       const { data } = await this.$api.put(`/api/tasks/${this.editingTask.id}`, config);
       if (data.success) {
-        this.notify(true, data.message || '任务保存成功');
+        this.frontendLogger.info('tasks', data.message || '任务保存成功');
         this.editingTask = null;
         this.jsonError = '';
         await this.fetchTasks();
@@ -166,7 +166,7 @@ export const taskMethods = {
     try {
       const { data } = await this.$api.delete(`/api/tasks/${taskId}`);
       if (data.success) {
-        this.notify(true, '任务删除成功');
+        this.frontendLogger.info('tasks', '任务删除成功');
         await this.fetchTasks();
         if (this.activeTaskId === taskId) {
           this.activeTaskId = 'default';
@@ -204,7 +204,7 @@ export const taskMethods = {
       a.download = `${taskId}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      this.notify(true, '任务已导出');
+      this.frontendLogger.info('tasks', '任务已导出');
     }).catch(() => {
       this.notify(false, '导出失败');
     });
@@ -229,7 +229,7 @@ export const taskMethods = {
             json: JSON.stringify(data, null, 2),
           };
           this.jsonError = '';
-          this.notify(true, '已导入任务配置，请检查后保存');
+          this.frontendLogger.info('tasks', '已导入任务配置，请检查后保存');
         } catch {
           this.notify(false, '文件不是有效的 JSON');
         }

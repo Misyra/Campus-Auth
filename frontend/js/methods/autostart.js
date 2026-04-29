@@ -19,7 +19,11 @@ export const autostartMethods = {
     this.busy.autostart = true;
     try {
       const { data } = await this.$api.post('/api/autostart/enable');
-      this.notify(data.success, data.message);
+      if (data.success) {
+        this.frontendLogger.info('autostart', data.message);
+      } else {
+        this.notify(false, data.message);
+      }
     } catch (error) {
       if (error?.response?.status === 404) {
         this.notify(false, '当前后端版本不支持开机自启动，请重启后端');
@@ -35,7 +39,11 @@ export const autostartMethods = {
     this.busy.autostart = true;
     try {
       const { data } = await this.$api.post('/api/autostart/disable');
-      this.notify(data.success, data.message);
+      if (data.success) {
+        this.frontendLogger.info('autostart', data.message);
+      } else {
+        this.notify(false, data.message);
+      }
     } catch (error) {
       if (error?.response?.status === 404) {
         this.notify(false, '当前后端版本不支持开机自启动，请重启后端');

@@ -106,13 +106,24 @@ export const uiMethods = {
     try {
       this.busy.monitor = true;
       await this.$api.post('/api/shutdown');
-      this.notify(true, '应用正在关闭...');
+      // 尝试关闭窗口，浏览器可能拦截
       setTimeout(() => {
         window.close();
-      }, 1500);
+        // 如果窗口没关成（浏览器拦截），显示提示
+        setTimeout(() => {
+          document.body.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px;font-family:system-ui;color:#f1f5f9;background:#0f172a;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" width="48" height="48">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+              <h2 style="margin:0;font-size:20px;">应用已退出</h2>
+              <p style="margin:0;color:#94a3b8;font-size:14px;">后端已关闭，你可以关闭此标签页</p>
+            </div>`;
+        }, 500);
+      }, 1000);
     } catch (error) {
       this.notify(false, '退出失败，请手动关闭窗口');
-      window.close();
     } finally {
       this.busy.monitor = false;
     }

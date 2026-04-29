@@ -17,6 +17,7 @@ from src.utils import ConfigValidator
 from src.utils.logging import get_logger
 
 from .config_service import build_runtime_config, load_ui_config, write_env_file
+from .profile_service import ProfileService
 from .schemas import LogEntry, MonitorConfigPayload, MonitorStatusResponse
 
 
@@ -71,7 +72,7 @@ class MonitorService:
         self._lock = threading.Lock()
         self._logs: deque[LogEntry] = deque(maxlen=1200)
 
-        self._ui_config = load_ui_config()
+        self._ui_config = load_ui_config(project_root=project_root)
         self._runtime_config = build_runtime_config(self._ui_config)
 
         self._monitor_core: NetworkMonitorCore | None = None
@@ -145,6 +146,32 @@ class MonitorService:
                 "监控已按新配置重启", level="INFO", source="backend.monitor_service"
             )
 
+    def reload_config(self) -> None:
+        """重新加载配置（从 .env + settings.json 合并）"""
+        with self._lock:
+            self._ui_config = load_ui_config(project_root=self.project_root)
+            self._runtime_config = build_runtime_config(self._ui_config)
+        service_logger.info("Config reloaded from profile")
+
+    def apply_profile(self, profile_name: str) -> None:
+        """切换到新方案并重启监控"""
+        with self._lock:
+            running = self._is_monitoring_unsafe()
+
+        self.reload_config()
+        self._push_log(
+            f"已切换到配置方案: {profile_name}",
+            level="INFO",
+            source="backend.monitor_service",
+        )
+
+        if running:
+            self.stop_monitoring()
+            self.start_monitoring()
+            self._push_log(
+                "监控已按新方案重启", level="INFO", source="backend.monitor_service"
+            )
+
     def _is_monitoring_unsafe(self) -> bool:
         return bool(
             self._monitor_core
@@ -167,6 +194,9 @@ class MonitorService:
                 config=self._runtime_config.copy(),
                 log_callback=self._push_log,
             )
+            # 设置 profile 服务用于自动切换
+            ps = ProfileService(self.project_root)
+            core.set_profile_service(ps, on_switch=self._on_profile_switch)
             thread = threading.Thread(target=core.start_monitoring, daemon=True)
 
             self._monitor_core = core
@@ -176,6 +206,19 @@ class MonitorService:
         self._push_log("监控线程已启动", level="INFO", source="backend.monitor_service")
         service_logger.info("Monitoring thread started")
         return True, "监控已启动"
+
+    def _on_profile_switch(self, profile_name: str) -> None:
+        """自动切换方案时的回调"""
+        self.reload_config()
+        self._push_log(
+            f"自动切换到配置方案: {profile_name}",
+            level="INFO",
+            source="backend.monitor_service",
+        )
+        # 更新运行中的监控核心配置
+        with self._lock:
+            if self._monitor_core:
+                self._monitor_core.update_config(self._runtime_config.copy())
 
     def stop_monitoring(self) -> tuple[bool, str]:
         service_logger.info("Stop monitoring requested")

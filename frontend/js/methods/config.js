@@ -1,7 +1,7 @@
 import { DEFAULT_CONFIG } from '../constants.js';
 
 export const configMethods = {
-  async fetchConfig() {
+  async fetchConfig(updateSnapshot = false) {
     try {
       const { data } = await this.$api.get('/api/config');
       this.config = {
@@ -11,6 +11,9 @@ export const configMethods = {
         browser_extra_headers_json: data.browser_extra_headers_json || '',
       };
       this.setFrontendLogLevel(this.config.frontend_log_level || 'INFO');
+      if (updateSnapshot) {
+        this.savedConfigSnapshot = JSON.stringify(this.config);
+      }
       this.frontendLogger.info('config', 'config loaded');
     } catch (error) {
       this.frontendLogger.error('config', 'failed to fetch config', error);
@@ -25,9 +28,12 @@ export const configMethods = {
       }
       const { data } = await this.$api.put('/api/config', payload);
       this.setFrontendLogLevel(this.config.frontend_log_level || 'INFO');
-      this.notify(data.success, data.message);
       if (data.success) {
+        this.frontendLogger.info('config', data.message || '配置保存成功');
         this.savedConfigSnapshot = JSON.stringify(this.config);
+        this.fetchProfiles();
+      } else {
+        this.notify(false, data.message);
       }
     } catch (error) {
       const msg = error?.response?.data?.detail || '保存失败';
@@ -40,6 +46,6 @@ export const configMethods = {
   resetConfig() {
     if (!confirm('确定要恢复默认设置吗？当前修改将丢失。')) return;
     this.config = { ...DEFAULT_CONFIG };
-    this.notify(true, '已恢复默认设置，请点击保存以生效');
+    this.frontendLogger.info('config', '已恢复默认设置，请点击保存以生效');
   },
 };

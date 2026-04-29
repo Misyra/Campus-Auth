@@ -11,6 +11,7 @@ export const lifecycleMethods = {
       this.checkInitStatus(),
       this.fetchTasks(),
       this.fetchActiveTask(),
+      this.fetchProfiles(),
     ]);
     this.isLoading = false;
     // 保存配置快照用于未保存检测
@@ -64,7 +65,7 @@ export const lifecycleMethods = {
       const { data } = await this.$api.put('/api/config', this.config);
       if (data.success) {
         this.showWizard = false;
-        this.notify(true, '配置完成！');
+        this.frontendLogger.info('lifecycle', '配置完成');
       } else {
         this.notify(false, data.message);
       }
