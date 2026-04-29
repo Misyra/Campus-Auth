@@ -26,6 +26,9 @@ export const configMethods = {
       const { data } = await this.$api.put('/api/config', payload);
       this.setFrontendLogLevel(this.config.frontend_log_level || 'INFO');
       this.notify(data.success, data.message);
+      if (data.success) {
+        this.savedConfigSnapshot = JSON.stringify(this.config);
+      }
     } catch (error) {
       const msg = error?.response?.data?.detail || '保存失败';
       this.frontendLogger.error('config', 'save config failed', error);
@@ -33,5 +36,10 @@ export const configMethods = {
     } finally {
       this.busy.save = false;
     }
+  },
+  resetConfig() {
+    if (!confirm('确定要恢复默认设置吗？当前修改将丢失。')) return;
+    this.config = { ...DEFAULT_CONFIG };
+    this.notify(true, '已恢复默认设置，请点击保存以生效');
   },
 };

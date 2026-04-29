@@ -3,9 +3,21 @@ export const uiMethods = {
     this.frontendLogger.setLevel(level);
   },
   notify(success, message) {
-    this.toast = { success, message };
-    setTimeout(() => {
-      this.toast.message = '';
+    // 记录通知历史
+    const entry = { success, message, time: new Date().toLocaleTimeString() };
+    this.notifications.unshift(entry);
+    if (this.notifications.length > 30) this.notifications.length = 30;
+    this.unreadNotifications++;
+
+    // Toast 带淡出动画
+    this.toast = { success, message, leaving: false };
+    if (this._toastTimer) clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => {
+      this.toast.leaving = true;
+      setTimeout(() => {
+        this.toast.message = '';
+        this.toast.leaving = false;
+      }, 300);
     }, 3000);
   },
   nextWizardStep() {
@@ -70,10 +82,23 @@ export const uiMethods = {
     this.config.custom_variables = newVars;
   },
   scrollLogToBottom() {
-    // 自动滚动日志到底部
+    // 智能滚动：仅在用户已经在底部时自动滚动
+    const logViewer = document.querySelector('.log-viewer');
+    if (!logViewer) return;
+    const isAtBottom = logViewer.scrollTop + logViewer.clientHeight >= logViewer.scrollHeight - 60;
+    if (isAtBottom) {
+      logViewer.scrollTop = logViewer.scrollHeight;
+      this._newLogCount = 0;
+    } else {
+      this._newLogCount = (this._newLogCount || 0) + 1;
+    }
+  },
+  scrollToBottom() {
+    // 手动点击"新消息"按钮时滚动
     const logViewer = document.querySelector('.log-viewer');
     if (logViewer) {
       logViewer.scrollTop = logViewer.scrollHeight;
+      this._newLogCount = 0;
     }
   },
   async quitApp() {

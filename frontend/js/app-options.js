@@ -20,6 +20,7 @@ export const appOptions = {
       settingsTabs: SETTINGS_TABS,
       config: { ...DEFAULT_CONFIG },
       frontendLogger: createFrontendLogger('INFO'),
+      isLoading: true,
       status: {
         monitoring: false,
         network_check_count: 0,
@@ -44,13 +45,23 @@ export const appOptions = {
       toast: {
         success: true,
         message: '',
+        leaving: false,
       },
       timers: [],
       _wsDestroyed: false,
       _wsRetryTimer: null,
+      _newLogCount: 0,
+      wsReconnecting: false,
+      wsRetryAttempt: 0,
+      notifications: [],
+      unreadNotifications: 0,
+      showNotifications: false,
+      logFilter: { level: '', search: '' },
       tasks: [],
       activeTaskId: 'default',
       editingTask: null,
+      jsonError: '',
+      savedConfigSnapshot: '',
     };
   },
   computed: {
@@ -71,6 +82,26 @@ export const appOptions = {
         return !!(this.config.carrier_custom && this.config.carrier_custom.trim());
       }
       return true;
+    },
+    configDirty() {
+      if (!this.savedConfigSnapshot) return false;
+      return JSON.stringify(this.config) !== this.savedConfigSnapshot;
+    },
+    filteredLogs() {
+      let result = this.logs;
+      if (this.logFilter.level) {
+        result = result.filter(l => l.level === this.logFilter.level);
+      }
+      if (this.logFilter.search) {
+        const q = this.logFilter.search.toLowerCase();
+        result = result.filter(l => l.message.toLowerCase().includes(q));
+      }
+      return result;
+    },
+    networkStatus() {
+      if (!this.status.monitoring) return 'idle';
+      if (this.status.login_attempt_count > 0) return 'disconnected';
+      return 'connected';
     },
   },
   mounted() {

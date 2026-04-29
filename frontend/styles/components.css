@@ -306,7 +306,15 @@
 }
 
 .toggle input {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .toggle-slider {
@@ -416,6 +424,11 @@
   box-shadow: var(--shadow-lg);
   animation: slideIn 0.3s ease;
   z-index: 1000;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.toast.leaving {
+  animation: slideOut 0.3s ease forwards;
 }
 
 .toast svg {

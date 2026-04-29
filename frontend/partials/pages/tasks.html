@@ -3,13 +3,23 @@
     <div class="card">
       <div class="card-header">
         <h2>登录任务列表</h2>
-        <button class="btn btn-sm btn-primary" @click="showTaskEditor(null)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="5" x2="12" y2="19"/>
-            <line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          新建任务
-        </button>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-sm" @click="importTask" title="从文件导入任务">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            导入
+          </button>
+          <button class="btn btn-sm btn-primary" @click="showTaskEditor(null)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            新建任务
+          </button>
+        </div>
       </div>
       <div class="card-body">
         <div v-if="!tasks.length" class="empty-state">
@@ -18,7 +28,11 @@
         <div v-else class="task-list">
           <div v-for="task in tasks" :key="task.id" class="task-item" :class="{ active: activeTaskId === task.id }">
             <div class="task-info">
-              <h3>{{ task.name }}</h3>
+              <h3>
+                {{ task.name }}
+                <span v-if="task.source === 'builtin'" class="task-source-badge builtin" title="项目内置任务">内置</span>
+                <span v-else-if="task.source === 'signed'" class="task-source-badge signed" title="已签名验证">签名</span>
+              </h3>
               <p>{{ task.description }}</p>
             </div>
             <div class="task-actions">
@@ -26,6 +40,8 @@
                 {{ activeTaskId === task.id ? '当前使用' : '使用' }}
               </button>
               <button class="btn btn-sm" @click="showTaskEditor(task.id)">编辑</button>
+              <button class="btn btn-sm" @click="duplicateTask(task.id)" title="复制此任务">复制</button>
+              <button class="btn btn-sm" @click="exportTask(task.id)" title="导出为JSON文件">导出</button>
               <button class="btn btn-sm btn-danger" @click="deleteTask(task.id)" :disabled="task.id === 'default'">
                 删除
               </button>
@@ -65,18 +81,26 @@
         </div>
         <div class="form-group">
           <label>JSON 配置</label>
-          <textarea v-model="editingTask.json" rows="12" placeholder="任务JSON配置"></textarea>
-          <span class="hint">编辑完整的任务配置JSON</span>
+          <textarea
+            v-model="editingTask.json"
+            rows="12"
+            placeholder="任务JSON配置"
+            @input="validateJson"
+            :class="{ 'json-invalid': jsonError, 'json-valid': editingTask.json.trim() && !jsonError }"
+          ></textarea>
+          <div v-if="jsonError" class="json-error">{{ jsonError }}</div>
+          <span v-else class="hint">编辑完整的任务配置JSON</span>
         </div>
         <div class="task-editor-actions">
           <button class="btn btn-secondary" @click="loadTemplate('default')">加载默认模板</button>
           <button class="btn btn-secondary" @click="loadTemplate('sample')">加载语义识别模板</button>
           <button class="btn btn-secondary" @click="loadTemplate('sample_2')">加载元素识别模板</button>
+          <button class="btn btn-secondary" @click="formatJson" title="格式化JSON">格式化</button>
         </div>
       </div>
       <div class="card-footer">
         <button class="btn btn-secondary" @click="editingTask = null">取消</button>
-        <button class="btn btn-primary" @click="saveTask">保存任务</button>
+        <button class="btn btn-primary" @click="saveTask" :disabled="!!jsonError">保存任务</button>
       </div>
     </div>
 

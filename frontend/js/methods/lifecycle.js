@@ -1,6 +1,7 @@
 export const lifecycleMethods = {
   async init() {
     this.frontendLogger.info('app.init', 'start init');
+    this.isLoading = true;
     await Promise.all([
       this.fetchConfig(),
       this.fetchStatus(),
@@ -11,6 +12,9 @@ export const lifecycleMethods = {
       this.fetchTasks(),
       this.fetchActiveTask(),
     ]);
+    this.isLoading = false;
+    // 保存配置快照用于未保存检测
+    this.savedConfigSnapshot = JSON.stringify(this.config);
     this.connectWebSocket();
     this.timers.push(setInterval(this.fetchStatus, 4000));
     this.timers.push(setInterval(this.fetchAutostart, 12000));
@@ -86,6 +90,8 @@ export const lifecycleMethods = {
 
     this.ws.onopen = () => {
       this.wsRetryCount = 0;
+      this.wsReconnecting = false;
+      this.wsRetryAttempt = 0;
       this.frontendLogger.info('websocket', 'connected');
     };
 
@@ -118,9 +124,12 @@ export const lifecycleMethods = {
       this.frontendLogger.warn('websocket', 'connection closed');
       if (this._wsDestroyed) return;
       if (this.wsRetryCount >= this.wsMaxRetries) {
+        this.wsReconnecting = false;
         this.notify(false, '与服务器的连接已断开，请刷新页面');
         return;
       }
+      this.wsReconnecting = true;
+      this.wsRetryAttempt = this.wsRetryCount + 1;
       const delay = Math.min(1000 * Math.pow(2, this.wsRetryCount), 30000);
       this.wsRetryCount++;
       this._wsRetryTimer = setTimeout(() => {
