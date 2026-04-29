@@ -127,6 +127,7 @@ class TaskConfig:
     name: str = "未命名任务"
     description: str = ""
     version: str = "1.0.0"
+    source: str = "api"
     url: str = ""
     timeout: int = 30000
     variables: dict[str, str] = field(default_factory=dict)
@@ -143,6 +144,7 @@ class TaskConfig:
             name=data.get("name", "未命名任务"),
             description=data.get("description", ""),
             version=data.get("version", "1.0.0"),
+            source=data.get("source", "api"),
             url=data.get("url", ""),
             timeout=data.get("timeout", 30000),
             variables=data.get("variables", {}),

@@ -62,6 +62,7 @@ export const appOptions = {
       editingTask: null,
       jsonError: '',
       savedConfigSnapshot: '',
+      dangerConfirm: null,
     };
   },
   computed: {

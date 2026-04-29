@@ -141,4 +141,34 @@
       </div>
     </div>
   </div>
+
+  <!-- 危险步骤确认弹窗 -->
+  <div v-if="dangerConfirm" class="danger-overlay" @click.self="confirmDanger(false)">
+    <div class="danger-modal">
+      <div class="danger-modal-header">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;color:var(--warning);flex-shrink:0;">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <div>
+          <h3>安全警告：任务包含可执行代码</h3>
+          <p class="danger-subtitle">以下步骤会执行 JavaScript 代码，请确认来源可信后再保存</p>
+        </div>
+      </div>
+      <div class="danger-modal-body">
+        <div v-for="d in dangerConfirm.dangers" :key="d.stepIndex" class="danger-step">
+          <div class="danger-step-header">
+            <span class="danger-step-badge">{{ d.stepType }}</span>
+            <span class="danger-step-desc">步骤 {{ d.stepIndex }}：{{ d.description }}</span>
+          </div>
+          <pre class="danger-step-code">{{ d.code || '(无代码内容)' }}</pre>
+        </div>
+      </div>
+      <div class="danger-modal-footer">
+        <button class="btn btn-secondary" @click="confirmDanger(false)">取消</button>
+        <button class="btn btn-primary" @click="confirmDanger(true)" style="background:linear-gradient(135deg,var(--warning),#d97706);">我已确认风险，继续保存</button>
+      </div>
+    </div>
+  </div>
 </div>
