@@ -24,6 +24,9 @@ environment/
 .agreed
 .DS_Store
 
+# User-specific network profiles
+settings.json
+
 # Log files
 *.log
 logs/

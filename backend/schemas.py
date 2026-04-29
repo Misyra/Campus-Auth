@@ -17,6 +17,10 @@ _URL_PATTERN = re.compile(r"^https?://")
 class MonitorConfigPayload(BaseModel):
     username: str = Field(default="")
     password: str = Field(default="")
+    use_global_credentials: bool = Field(
+        default=True,
+        description="当前是否使用全局凭证（前端只读，后端填充）",
+    )
     auth_url: str = Field(default="http://172.29.0.2")
     carrier: str = Field(default="无")
     carrier_custom: str = Field(default="")
@@ -114,3 +118,83 @@ class AutoStartStatusResponse(BaseModel):
     enabled: bool
     method: str
     location: str
+
+
+class ProfileSettings(BaseModel):
+    """Profile-specific non-sensitive settings stored in settings.json"""
+
+    name: str = Field(default="默认方案")
+    match_gateway_ip: str = Field(
+        default="",
+        description="匹配的网关 IP，留空表示不匹配（手动选择时使用）",
+    )
+    match_ssid: str = Field(
+        default="",
+        description="匹配的 WiFi SSID，留空表示不匹配",
+    )
+    username: str = Field(
+        default="",
+        description="方案独立账号，留空则使用全局账号",
+    )
+    password: str = Field(
+        default="",
+        description="方案独立密码（加密存储），留空则使用全局密码",
+    )
+    use_global_credentials: bool = Field(
+        default=True,
+        description="是否使用全局账号密码（true 时忽略 username/password）",
+    )
+    use_global_advanced: bool = Field(
+        default=True,
+        description="是否使用全局高级设置（true 时忽略以下高级字段，使用 .env 中的值）",
+    )
+    auth_url: str = Field(default="http://172.29.0.2")
+    carrier: str = Field(default="无")
+    carrier_custom: str = Field(default="")
+    check_interval_minutes: int = Field(default=5, ge=1, le=1440)
+    auto_start: bool = False
+    headless: bool = True
+    browser_timeout: int = Field(default=8000, ge=1000, le=60000)
+    browser_user_agent: str = Field(default="")
+    browser_low_resource_mode: bool = True
+    browser_disable_web_security: bool = False
+    browser_extra_headers_json: str = Field(default="")
+    pause_enabled: bool = True
+    pause_start_hour: int = Field(default=0, ge=0, le=23)
+    pause_end_hour: int = Field(default=6, ge=0, le=23)
+    network_targets: str = Field(
+        default="8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
+    )
+    custom_variables: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("auth_url")
+    @classmethod
+    def validate_auth_url(cls, v: str) -> str:
+        v = v.strip()
+        if v and not _URL_PATTERN.match(v):
+            raise ValueError("认证地址必须以 http:// 或 https:// 开头")
+        return v
+
+    @field_validator("browser_extra_headers_json")
+    @classmethod
+    def validate_headers_json(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            return ""
+        try:
+            parsed = json.loads(v)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"浏览器请求头 JSON 格式错误: {e}") from e
+        if not isinstance(parsed, dict):
+            raise ValueError("浏览器请求头必须是 JSON 对象")
+        return v
+
+
+class ProfilesData(BaseModel):
+    """Top-level structure of settings.json"""
+
+    auto_switch: bool = Field(
+        default=True, description="是否根据网关 IP 自动切换方案"
+    )
+    active_profile: str = Field(default="default")
+    profiles: dict[str, ProfileSettings] = Field(default_factory=dict)

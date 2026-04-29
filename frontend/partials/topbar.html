@@ -16,7 +16,7 @@
         </svg>
         <span v-if="unreadNotifications > 0" style="position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:var(--error);color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:700;">{{ unreadNotifications > 9 ? '9+' : unreadNotifications }}</span>
       </button>
-      <div v-if="showNotifications" class="notification-dropdown" style="position:absolute;top:100%;right:0;width:320px;max-height:400px;overflow-y:auto;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);z-index:100;margin-top:8px;">
+      <div v-if="showNotifications" class="notification-dropdown" style="position:absolute;top:100%;right:0;width:320px;max-height:400px;overflow-y:auto;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);z-index:100;margin-top:8px;">
         <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
           <span style="font-size:13px;font-weight:600;">通知历史</span>
           <button class="btn btn-text" style="padding:4px 8px;min-height:auto;font-size:12px;" @click="notifications = []">清空</button>

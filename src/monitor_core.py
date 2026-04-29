@@ -5,7 +5,7 @@ import datetime
 import logging
 import re
 import time
-from typing import Any, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 from .network_test import is_network_available
 from .utils import (
@@ -15,6 +15,9 @@ from .utils import (
     get_runtime_stats,
     setup_logger,
 )
+
+if TYPE_CHECKING:
+    from backend.profile_service import ProfileService
 
 
 class NetworkMonitorCore:
@@ -35,6 +38,9 @@ class NetworkMonitorCore:
     NETWORK_CHECK_TIMEOUT_SECONDS = 2
     DEFAULT_PING_TARGETS = ["8.8.8.8:53", "114.114.114.114:53", "www.baidu.com:443"]
 
+    # 类常量：自动切换检测冷却
+    GATEWAY_CHECK_COOLDOWN_SECONDS = 60
+
     def __init__(
         self,
         config: Optional[Dict[str, Any]] = None,
@@ -52,6 +58,12 @@ class NetworkMonitorCore:
         self._stop_requested = False
         self._test_sites_cache: Optional[list[tuple[str, int]]] = None
         self.logger = setup_logger("monitor", self.config.get("logging", {}))
+
+        # 自动切换相关
+        self._profile_service: Optional[ProfileService] = None
+        self._on_profile_switch: Optional[Callable[[str], None]] = None
+        self._last_profile_id: Optional[str] = None
+        self._last_gateway_check_time: float = 0
 
     def _now(self) -> str:
         return datetime.datetime.now().strftime("%H:%M:%S")
@@ -75,6 +87,22 @@ class NetworkMonitorCore:
             else None,
             "start_time": self.start_time,
         }
+
+    def set_profile_service(
+        self,
+        profile_service: ProfileService,
+        on_switch: Optional[Callable[[str], None]] = None,
+    ) -> None:
+        """设置 profile 服务用于自动切换"""
+        self._profile_service = profile_service
+        self._on_profile_switch = on_switch
+        if profile_service:
+            self._last_profile_id = profile_service.get_active_profile_id()
+
+    def update_config(self, new_config: Dict[str, Any]) -> None:
+        """热更新运行时配置（方案切换时调用）"""
+        self.config = new_config
+        self._test_sites_cache = None  # 清除测试站点缓存
 
     def start_monitoring(self) -> None:
         if self.monitoring:
@@ -149,6 +177,9 @@ class NetworkMonitorCore:
                 ):
                     break
                 continue
+
+            # 自动切换方案检测（有冷却时间，避免频繁调用子进程）
+            self._check_profile_switch()
 
             self.network_check_count += 1
             self.last_check_time = datetime.datetime.now()
@@ -245,6 +276,37 @@ class NetworkMonitorCore:
                 port = 53 if is_ipv4 else 443
             parsed.append((host, port))
         return parsed
+
+    def _check_profile_switch(self) -> None:
+        """检测网关 IP 并自动切换方案（带冷却时间）"""
+        if not self._profile_service:
+            return
+
+        now = time.time()
+        if now - self._last_gateway_check_time < self.GATEWAY_CHECK_COOLDOWN_SECONDS:
+            return
+
+        self._last_gateway_check_time = now
+
+        data = self._profile_service.load()
+        if not data.auto_switch:
+            return
+
+        matched_id = self._profile_service.detect_matching_profile()
+        if matched_id and matched_id != self._last_profile_id:
+            profile = data.profiles.get(matched_id)
+            profile_name = profile.name if profile else matched_id
+
+            self.log_message(
+                f"检测到网络环境变化，切换方案: {profile_name}",
+                logging.INFO,
+            )
+
+            self._last_profile_id = matched_id
+            self._profile_service.set_active_profile(matched_id)
+
+            if self._on_profile_switch:
+                self._on_profile_switch(profile_name)
 
     def attempt_login(self) -> tuple[bool, str]:
         self.log_message("正在尝试登录...")

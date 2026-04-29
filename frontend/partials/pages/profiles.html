@@ -1,0 +1,368 @@
+<div v-if="currentPage === 'profiles'" class="page-content">
+  <!-- 顶部状态栏 -->
+  <div class="profiles-topbar card">
+    <div class="profiles-topbar-left">
+      <div class="profiles-status-icon" :class="autoSwitch ? 'on' : 'off'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+          <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+          <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+          <line x1="12" y1="20" x2="12.01" y2="20"/>
+        </svg>
+      </div>
+      <div class="profiles-topbar-info">
+        <h2>配置方案</h2>
+        <p>{{ autoSwitch ? '自动切换已开启' : '自动切换已关闭' }} · {{ Object.keys(profiles).length }} 个方案</p>
+      </div>
+    </div>
+    <div class="profiles-topbar-actions">
+      <label class="toggle compact">
+        <input type="checkbox" :checked="autoSwitch" @change="toggleAutoSwitch()" />
+        <span class="toggle-slider"></span>
+        <span class="toggle-label">自动切换</span>
+      </label>
+      <button class="btn btn-sm" @click="detectNetwork()" :disabled="busy.detect" title="检测当前网络环境">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="2" y1="12" x2="22" y2="12"/>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+        </svg>
+        {{ busy.detect ? '检测中...' : '检测网络' }}
+      </button>
+      <button class="btn btn-sm btn-primary" @click="showProfileEditor(null)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        新建方案
+      </button>
+    </div>
+  </div>
+
+  <!-- 网络环境检测结果 -->
+  <div v-if="detectResult" class="detect-banner card" :class="detectResult.matched_profile_id ? 'matched' : 'unmatched'">
+    <div class="detect-banner-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <template v-if="detectResult.matched_profile_id">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+          <polyline points="22 4 12 14.01 9 11.01"/>
+        </template>
+        <template v-else>
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </template>
+      </svg>
+    </div>
+    <div class="detect-banner-info">
+      <template v-if="detectResult.matched_profile_id">
+        <strong>匹配方案: {{ detectResult.matched_profile_name || detectResult.matched_profile_id }}</strong>
+      </template>
+      <template v-else>
+        <strong>未匹配到任何方案</strong>
+      </template>
+      <span class="detect-details">
+        <span v-if="detectResult.gateway_ip">网关 {{ detectResult.gateway_ip }}</span>
+        <span v-if="detectResult.gateway_ip && detectResult.ssid"> · </span>
+        <span v-if="detectResult.ssid">SSID "{{ detectResult.ssid }}"</span>
+        <span v-if="!detectResult.gateway_ip && !detectResult.ssid">未能获取网络信息</span>
+      </span>
+    </div>
+    <button class="btn btn-icon-only btn-sm" @click="detectResult = null" title="关闭">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+        <line x1="18" y1="6" x2="6" y2="18"/>
+        <line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- 使用说明 -->
+  <div class="profiles-guide card">
+    <div class="profiles-guide-steps">
+      <div class="guide-step">
+        <span class="guide-step-num">1</span>
+        <div class="guide-step-content">
+          <strong>创建方案</strong>
+          <p>为宿舍、教室、图书馆等不同网络分别创建配置方案</p>
+        </div>
+      </div>
+      <div class="guide-step-divider"></div>
+      <div class="guide-step">
+        <span class="guide-step-num">2</span>
+        <div class="guide-step-content">
+          <strong>设置匹配规则</strong>
+          <p>填写网关 IP 或 WiFi 名称，系统自动识别当前网络</p>
+        </div>
+      </div>
+      <div class="guide-step-divider"></div>
+      <div class="guide-step">
+        <span class="guide-step-num">3</span>
+        <div class="guide-step-content">
+          <strong>开启自动切换</strong>
+          <p>连接新网络时自动应用对应方案，无需手动操作</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 空状态 -->
+  <div v-if="!Object.keys(profiles).length" class="card">
+    <div class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:0.3;">
+        <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+        <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+        <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+        <line x1="12" y1="20" x2="12.01" y2="20"/>
+      </svg>
+      <p style="font-size:15px;">暂无配置方案</p>
+      <p style="font-size:13px;color:var(--text-muted);">为不同网络环境创建独立的认证配置</p>
+      <button class="btn btn-sm btn-primary" @click="showProfileEditor(null)">创建第一个方案</button>
+    </div>
+  </div>
+
+  <!-- 方案列表 -->
+  <div v-else class="profiles-list">
+    <div
+      v-for="(info, pid) in profiles"
+      :key="pid"
+      class="profile-card"
+      :class="{ active: activeProfileId === pid }"
+    >
+      <div class="profile-card-main" @click="setActiveProfile(pid)">
+        <div class="profile-card-header">
+          <div class="profile-card-title">
+            <span class="profile-card-name">{{ info.name || pid }}</span>
+            <span v-if="activeProfileId === pid" class="profile-badge active">当前</span>
+          </div>
+          <span class="profile-card-id">{{ pid }}</span>
+        </div>
+        <div class="profile-card-meta">
+          <span v-if="info.match_gateway_ip" class="profile-tag">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;">
+              <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+              <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+              <line x1="6" y1="6" x2="6.01" y2="6"/>
+              <line x1="6" y1="18" x2="6.01" y2="18"/>
+            </svg>
+            {{ info.match_gateway_ip }}
+          </span>
+          <span v-if="info.match_ssid" class="profile-tag">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;">
+              <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+              <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+              <line x1="12" y1="20" x2="12.01" y2="20"/>
+            </svg>
+            {{ info.match_ssid }}
+          </span>
+          <span v-if="info.carrier && info.carrier !== '无'" class="profile-tag">{{ info.carrier === '自定义' ? info.carrier_custom : info.carrier }}</span>
+          <span v-if="!info.match_gateway_ip && !info.match_ssid" class="profile-tag muted">手动切换</span>
+        </div>
+      </div>
+      <div class="profile-card-actions" @click.stop>
+        <button class="btn btn-xs" @click="setActiveProfile(pid)" :disabled="activeProfileId === pid">
+          {{ activeProfileId === pid ? '使用中' : '切换' }}
+        </button>
+        <button class="btn btn-xs" @click="showProfileEditor(pid)">编辑</button>
+        <button class="btn btn-xs btn-danger" @click="deleteProfile(pid)" :disabled="pid === 'default'">删除</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 编辑方案（独立页面） -->
+<div v-if="currentPage === 'profile-edit'" class="page-content">
+  <div class="profile-editor-topbar">
+    <button class="btn btn-sm" @click="currentPage = 'profiles'">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+        <line x1="19" y1="12" x2="5" y2="12"/>
+        <polyline points="12 19 5 12 12 5"/>
+      </svg>
+      返回方案列表
+    </button>
+    <h2>{{ editingProfile && editingProfile.id ? '编辑方案' : '新建方案' }}</h2>
+    <div></div>
+  </div>
+
+  <div v-if="editingProfile" class="card profile-editor-card">
+    <div class="card-body profile-editor-body">
+      <!-- 基本信息 -->
+      <div class="editor-section">
+        <div class="editor-section-label">基本信息</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>方案 ID</label>
+            <input v-model="editingProfile.id" type="text" placeholder="dorm" :disabled="!!editingProfile.id" />
+            <span class="hint">字母、数字、下划线</span>
+          </div>
+          <div class="form-group">
+            <label>方案名称</label>
+            <input v-model="editingProfile.name" type="text" placeholder="宿舍 WiFi" />
+          </div>
+        </div>
+      </div>
+
+      <!-- 网络匹配 -->
+      <div class="editor-section">
+        <div class="editor-section-label">
+          网络匹配
+          <span class="field-help" tabindex="0" role="note" data-tip="设置匹配规则后，自动切换时会根据当前网络环境选择对应方案。两项都留空则仅手动切换。">?</span>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>网关 IP</label>
+            <input v-model.trim="editingProfile.match_gateway_ip" type="text" placeholder="172.29.0.2" />
+          </div>
+          <div class="form-group">
+            <label>WiFi 名称（SSID）</label>
+            <input v-model.trim="editingProfile.match_ssid" type="text" placeholder="Campus-Dorm-5G" />
+          </div>
+        </div>
+      </div>
+
+      <!-- 账号凭证 -->
+      <div class="editor-section">
+        <div class="editor-section-label">账号凭证</div>
+        <div class="toggle-group">
+          <label class="toggle compact">
+            <input type="checkbox" v-model="editingProfile.use_global_credentials" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">使用全局账号密码</span>
+          </label>
+        </div>
+        <div v-if="!editingProfile.use_global_credentials" class="form-row" style="margin-top:8px;">
+          <div class="form-group">
+            <label>独立账号</label>
+            <input v-model.trim="editingProfile.username" type="text" placeholder="留空使用全局" />
+          </div>
+          <div class="form-group">
+            <label>独立密码</label>
+            <input
+              v-model="editingProfile.password"
+              type="password"
+              :placeholder="editingProfile.password && editingProfile.password.startsWith('•') ? '已保存，清空可更新' : '留空使用全局'"
+              @focus="$event.target.select()"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- 认证设置 -->
+      <div class="editor-section">
+        <div class="editor-section-label">认证设置</div>
+        <div class="form-group">
+          <label>认证地址</label>
+          <input v-model.trim="editingProfile.auth_url" type="text" placeholder="http://172.29.0.2" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>运营商</label>
+            <select v-model="editingProfile.carrier">
+              <option>移动</option>
+              <option>联通</option>
+              <option>电信</option>
+              <option>无</option>
+              <option>自定义</option>
+            </select>
+          </div>
+          <div v-if="editingProfile.carrier === '自定义'" class="form-group">
+            <label>自定义运营商</label>
+            <input v-model.trim="editingProfile.carrier_custom" type="text" placeholder="校园专网" />
+          </div>
+        </div>
+      </div>
+
+      <!-- 高级设置（可折叠） -->
+      <details class="editor-collapsible">
+        <summary class="editor-collapsible-title">高级设置</summary>
+        <div class="editor-collapsible-body">
+          <div class="toggle-group" style="margin-bottom:12px;">
+            <label class="toggle compact">
+              <input type="checkbox" v-model="editingProfile.use_global_advanced" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">跟随全局设置</span>
+            </label>
+            <span class="hint" style="margin-top:4px;display:block;">开启后以下设置使用全局配置，关闭则使用本方案独立设置</span>
+          </div>
+          <div v-if="!editingProfile.use_global_advanced">
+          <div class="form-row">
+            <div class="form-group">
+              <label>检测间隔（分钟）</label>
+              <input v-model.number="editingProfile.check_interval_minutes" type="number" min="1" max="1440" />
+            </div>
+            <div class="form-group">
+              <label>网络检测目标</label>
+              <input v-model="editingProfile.network_targets" type="text" placeholder="8.8.8.8:53,..." />
+            </div>
+          </div>
+          <div class="toggle-row">
+            <label class="toggle compact">
+              <input type="checkbox" v-model="editingProfile.auto_start" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">启动后自动监控</span>
+            </label>
+            <label class="toggle compact">
+              <input type="checkbox" v-model="editingProfile.pause_enabled" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">暂停时段</span>
+            </label>
+          </div>
+          <div v-if="editingProfile.pause_enabled" class="form-row">
+            <div class="form-group">
+              <label>暂停开始</label>
+              <input v-model.number="editingProfile.pause_start_hour" type="number" min="0" max="23" />
+            </div>
+            <div class="form-group">
+              <label>暂停结束</label>
+              <input v-model.number="editingProfile.pause_end_hour" type="number" min="0" max="23" />
+            </div>
+          </div>
+
+          <div class="editor-divider"></div>
+          <div class="editor-section-label">浏览器</div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>页面超时（毫秒）</label>
+              <input v-model.number="editingProfile.browser_timeout" type="number" min="1000" max="60000" />
+            </div>
+            <div class="form-group">
+              <label>用户代理</label>
+              <input v-model.trim="editingProfile.browser_user_agent" type="text" placeholder="留空使用默认" />
+            </div>
+          </div>
+          <div class="toggle-row">
+            <label class="toggle compact">
+              <input type="checkbox" v-model="editingProfile.headless" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">无头模式</span>
+            </label>
+            <label class="toggle compact">
+              <input type="checkbox" v-model="editingProfile.browser_low_resource_mode" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">低资源模式</span>
+            </label>
+            <label class="toggle compact">
+              <input type="checkbox" v-model="editingProfile.browser_disable_web_security" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">禁用同源策略</span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label>自定义请求头（JSON）</label>
+            <textarea
+              v-model.trim="editingProfile.browser_extra_headers_json"
+              rows="3"
+              spellcheck="false"
+              placeholder='{"Referer":"http://172.29.0.2"}'
+            ></textarea>
+          </div>
+          </div>
+        </div>
+      </details>
+    </div>
+    <div class="card-footer">
+      <button class="btn btn-secondary" @click="currentPage = 'profiles'">取消</button>
+      <button class="btn btn-primary" @click="saveProfile">保存方案</button>
+    </div>
+  </div>
+</div>

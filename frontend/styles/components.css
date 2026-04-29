@@ -82,6 +82,12 @@
   min-height: 36px;
 }
 
+.btn-xs {
+  padding: 4px 10px;
+  font-size: 11px;
+  min-height: 26px;
+}
+
 .btn-lg {
   padding: 12px 24px;
   font-size: 15px;

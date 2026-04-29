@@ -25,13 +25,17 @@ from src.utils.logging import LogConfigCenter, get_logger
 from src.version import get_project_version
 
 from .autostart_service import AutoStartService
+from .config_service import save_profile_from_payload
 from .monitor_service import MonitorService, ws_manager
+from .profile_service import ProfileService
 from .schemas import (
     ActionResponse,
     AutoStartStatusResponse,
     LogEntry,
     MonitorConfigPayload,
     MonitorStatusResponse,
+    ProfileSettings,
+    ProfilesData,
 )
 from .task_service import TaskService
 
@@ -56,6 +60,16 @@ async def lifespan(app_instance):
     start = asyncio.get_event_loop().time()
     startup_logger.info("FastAPI 启动: 开始设置事件循环与服务引导")
     service.set_event_loop(asyncio.get_event_loop())
+
+    # 首次迁移：从 .env 创建默认配置方案
+    try:
+        from src.utils import ConfigLoader
+
+        env_config = ConfigLoader.load_config_from_env()
+        profile_service.migrate_from_env(env_config)
+    except Exception as exc:
+        startup_logger.warning("配置方案迁移失败: %s", exc)
+
     service.boot()
     startup_logger.info(
         "FastAPI 启动: 完成，耗时 %.3fs",
@@ -107,6 +121,7 @@ async def auth_middleware(request: Request, call_next):
 service = MonitorService(project_root=PROJECT_ROOT)
 autostart_service = AutoStartService(project_root=PROJECT_ROOT)
 task_service = TaskService(project_root=PROJECT_ROOT)
+profile_service = ProfileService(project_root=PROJECT_ROOT)
 http_logger = get_logger("backend.http", side="BACKEND")
 startup_logger = get_logger("backend.startup", side="BACKEND")
 api_logger = get_logger("backend.api", side="BACKEND")
@@ -180,6 +195,11 @@ def get_config() -> MonitorConfigPayload:
 def save_config(payload: MonitorConfigPayload) -> ActionResponse:
     try:
         service.save_config(payload)
+        # 同时保存 profile 非敏感设置
+        try:
+            save_profile_from_payload(payload, PROJECT_ROOT)
+        except Exception as exc:
+            api_logger.warning("Profile save failed: %s", exc)
         api_logger.info("Config updated")
         return ActionResponse(success=True, message="配置保存成功")
     except ValueError as exc:
@@ -291,6 +311,139 @@ def set_active_task(task_id: str) -> ActionResponse:
         "Set active task %s -> success=%s, message=%s", task_id, ok, message
     )
     return ActionResponse(success=ok, message=message)
+
+
+# ==================== 配置方案 API ====================
+
+
+@app.get("/api/profiles")
+def list_profiles() -> dict:
+    data = profile_service.load()
+    result = {}
+    for pid, settings in data.profiles.items():
+        result[pid] = {
+            "name": settings.name,
+            "match_gateway_ip": settings.match_gateway_ip,
+            "match_ssid": settings.match_ssid,
+        }
+    return {
+        "profiles": result,
+        "active_profile": data.active_profile,
+        "auto_switch": data.auto_switch,
+    }
+
+
+@app.get("/api/profiles/active")
+def get_active_profile() -> dict:
+    data = profile_service.load()
+    profile = profile_service.get_active_profile()
+    return {
+        "profile_id": data.active_profile,
+        "auto_switch": data.auto_switch,
+        "settings": profile.model_dump(),
+    }
+
+
+@app.get("/api/profiles/{profile_id}")
+def get_profile(profile_id: str) -> dict:
+    data = profile_service.load()
+    profile = data.profiles.get(profile_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="方案不存在")
+    return {
+        "profile_id": profile_id,
+        "settings": profile.model_dump(),
+    }
+
+
+@app.put("/api/profiles/{profile_id}", response_model=ActionResponse)
+def save_profile(profile_id: str, payload: ProfileSettings) -> ActionResponse:
+    ok, message = profile_service.save_profile(profile_id, payload)
+    api_logger.info(
+        "Save profile %s -> success=%s, message=%s", profile_id, ok, message
+    )
+    if ok:
+        # 如果修改的是当前活动方案，热更新配置
+        data = profile_service.load()
+        if data.active_profile == profile_id:
+            try:
+                service.apply_profile(payload.name)
+            except Exception as exc:
+                api_logger.warning("Apply profile failed: %s", exc)
+    return ActionResponse(success=ok, message=message)
+
+
+@app.delete("/api/profiles/{profile_id}", response_model=ActionResponse)
+def delete_profile(profile_id: str) -> ActionResponse:
+    ok, message = profile_service.delete_profile(profile_id)
+    api_logger.info(
+        "Delete profile %s -> success=%s, message=%s", profile_id, ok, message
+    )
+    return ActionResponse(success=ok, message=message)
+
+
+@app.post("/api/profiles/active/{profile_id}", response_model=ActionResponse)
+def set_active_profile(profile_id: str) -> ActionResponse:
+    ok, message = profile_service.set_active_profile(profile_id)
+    api_logger.info(
+        "Set active profile %s -> success=%s, message=%s", profile_id, ok, message
+    )
+    if ok:
+        data = profile_service.load()
+        profile = data.profiles.get(profile_id)
+        profile_name = profile.name if profile else profile_id
+        try:
+            service.apply_profile(profile_name)
+        except Exception as exc:
+            api_logger.warning("Apply profile failed: %s", exc)
+    return ActionResponse(success=ok, message=message)
+
+
+@app.post("/api/profiles/detect")
+def detect_network_profile() -> dict:
+    from .profile_service import detect_gateway_ip, detect_wifi_ssid
+
+    try:
+        gateway = detect_gateway_ip()
+    except Exception as exc:
+        api_logger.error("网关检测异常: %s", exc, exc_info=True)
+        gateway = None
+
+    try:
+        ssid = detect_wifi_ssid()
+    except Exception as exc:
+        api_logger.error("SSID 检测异常: %s", exc, exc_info=True)
+        ssid = None
+
+    try:
+        matched_id = profile_service.detect_matching_profile()
+    except Exception as exc:
+        api_logger.error("方案匹配异常: %s", exc, exc_info=True)
+        matched_id = None
+
+    data = profile_service.load()
+    matched_name = None
+    if matched_id and matched_id in data.profiles:
+        matched_name = data.profiles[matched_id].name
+
+    api_logger.info(
+        "网络检测结果: gateway=%s, ssid=%s, matched=%s",
+        gateway, ssid, matched_id,
+    )
+    return {
+        "gateway_ip": gateway,
+        "ssid": ssid,
+        "matched_profile_id": matched_id,
+        "matched_profile_name": matched_name,
+    }
+
+
+@app.post("/api/profiles/auto-switch", response_model=ActionResponse)
+def toggle_auto_switch(enabled: bool = True) -> ActionResponse:
+    profile_service.set_auto_switch(enabled)
+    state = "开启" if enabled else "关闭"
+    api_logger.info("Auto-switch %s", state)
+    return ActionResponse(success=True, message=f"自动切换已{state}")
 
 
 # 全局停止事件与系统托盘引用

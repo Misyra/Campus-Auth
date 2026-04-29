@@ -15,6 +15,7 @@ export const DEFAULT_BROWSER_USER_AGENT =
 export const DEFAULT_CONFIG = {
   username: "",
   password: "",
+  use_global_credentials: true,
   auth_url: "http://172.29.0.2",
   carrier: "无",
   carrier_custom: "",
@@ -43,3 +44,29 @@ export const SETTINGS_TABS = [
   { id: 'browser', label: '浏览器设置', hint: '请求头、图片与浏览器参数' },
   { id: 'tasks', label: '任务设置', hint: '活动任务与模板入口' },
 ];
+
+export const DEFAULT_PROFILE_SETTINGS = {
+  name: '',
+  match_gateway_ip: '',
+  match_ssid: '',
+  username: '',
+  password: '',
+  use_global_credentials: true,
+  use_global_advanced: true,
+  auth_url: 'http://172.29.0.2',
+  carrier: '无',
+  carrier_custom: '',
+  check_interval_minutes: 5,
+  auto_start: false,
+  headless: true,
+  browser_timeout: 8000,
+  browser_user_agent: '',
+  browser_low_resource_mode: true,
+  browser_disable_web_security: false,
+  browser_extra_headers_json: '',
+  pause_enabled: true,
+  pause_start_hour: 0,
+  pause_end_hour: 6,
+  network_targets: '8.8.8.8:53,114.114.114.114:53,www.baidu.com:443',
+  custom_variables: {},
+};

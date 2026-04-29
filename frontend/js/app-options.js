@@ -5,6 +5,7 @@ import { autostartMethods } from './methods/autostart.js';
 import { configMethods } from './methods/config.js';
 import { formatterMethods } from './methods/formatters.js';
 import { lifecycleMethods } from './methods/lifecycle.js';
+import { profileMethods } from './methods/profiles.js';
 import { statusMethods } from './methods/status.js';
 import { taskMethods } from './methods/tasks.js';
 import { uiMethods } from './methods/ui.js';
@@ -41,6 +42,7 @@ export const appOptions = {
         monitor: false,
         action: false,
         autostart: false,
+        detect: false,
       },
       toast: {
         success: true,
@@ -63,6 +65,11 @@ export const appOptions = {
       jsonError: '',
       savedConfigSnapshot: '',
       dangerConfirm: null,
+      profiles: {},
+      activeProfileId: 'default',
+      autoSwitch: true,
+      editingProfile: null,
+      detectResult: null,
     };
   },
   computed: {
@@ -71,6 +78,8 @@ export const appOptions = {
         dashboard: '仪表盘',
         settings: '设置',
         tasks: '任务管理',
+        profiles: '配置方案',
+        'profile-edit': this.editingProfile?.id ? '编辑方案' : '新建方案',
         about: '关于',
       };
       return titles[this.currentPage] || '仪表盘';
@@ -128,5 +137,6 @@ export const appOptions = {
     ...actionMethods,
     ...autostartMethods,
     ...taskMethods,
+    ...profileMethods,
   },
 };
