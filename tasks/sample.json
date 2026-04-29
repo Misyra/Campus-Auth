@@ -2,7 +2,6 @@
   "name": "案例1-语义识别",
   "description": "案例1：通过语义识别账号、密码、运营商和登录按钮，减少对选择器的依赖",
   "version": "3.3.0",
-  "author": "Campus-Auth",
   "source": "builtin",
   "url": "{{LOGIN_URL}}",
   "timeout": 30000,
@@ -59,10 +58,5 @@
   "on_failure": {
     "message": "案例1执行失败（语义识别）",
     "screenshot": true
-  },
-  "metadata": {
-    "category": "example_semantic",
-    "compatibility": ["dynamic_pages"],
-    "priority": 2
   }
 }

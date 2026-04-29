@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 
 from src.task_executor import (
+    ConditionConfig,
+    StepConfig,
     TaskConfig,
     TaskExecutor,
     TaskManager,
@@ -178,3 +180,95 @@ def test_task_config_from_dict() -> None:
     assert config.timeout == 15000
     assert len(config.steps) == 1
     assert len(config.success_conditions) == 1
+
+
+def test_step_config_to_dict_strips_nulls() -> None:
+    """测试 to_dict 跳过默认值和 None"""
+    step = StepConfig(id="s1", type="navigate", url="http://example.com")
+    d = step.to_dict()
+    assert d == {"id": "s1", "type": "navigate", "url": "http://example.com"}
+    # 不应包含 description, timeout, selector 等默认值
+    assert "description" not in d
+    assert "timeout" not in d
+    assert "selector" not in d
+    assert "extra" not in d
+
+
+def test_step_config_to_dict_includes_non_defaults() -> None:
+    """测试 to_dict 包含非默认值"""
+    step = StepConfig(
+        id="s1", type="input", selector="#user", value="test", clear=False, timeout=3000
+    )
+    d = step.to_dict()
+    assert d["selector"] == "#user"
+    assert d["value"] == "test"
+    assert d["clear"] is False
+    assert d["timeout"] == 3000
+    # clear=True 是默认值，clear=False 应该出现
+
+
+def test_step_config_to_dict_merges_extra() -> None:
+    """测试 to_dict 将 extra 合并回顶层"""
+    step = StepConfig(id="s1", type="click", selector="#btn", extra={"custom": 42})
+    d = step.to_dict()
+    assert d["custom"] == 42
+    assert "extra" not in d
+
+
+def test_step_config_from_dict_normalizes_code_to_script() -> None:
+    """测试 from_dict 将 code 规范化为 script"""
+    step = StepConfig.from_dict({
+        "id": "s1", "type": "eval", "code": "return 1+1"
+    })
+    assert step.script == "return 1+1"
+    # code 不应留在 extra 中
+    assert "code" not in step.extra
+
+
+def test_step_config_from_dict_script_takes_precedence() -> None:
+    """测试 from_dict 中 script 优先于 code"""
+    step = StepConfig.from_dict({
+        "id": "s1", "type": "eval", "script": "return 1", "code": "return 2"
+    })
+    assert step.script == "return 1"
+
+
+def test_condition_config_to_dict() -> None:
+    """测试 ConditionConfig.to_dict 跳过 None"""
+    cond = ConditionConfig(type="variable", variable="x", value=True)
+    d = cond.to_dict()
+    assert d == {"type": "variable", "variable": "x", "value": True}
+    assert "pattern" not in d
+    assert "selector" not in d
+    assert "script" not in d
+
+
+def test_task_config_to_dict_compact() -> None:
+    """测试 TaskConfig.to_dict 输出紧凑"""
+    config = TaskConfig(
+        name="test",
+        url="http://example.com",
+        steps=[StepConfig(id="s1", type="navigate", url="http://example.com")],
+    )
+    d = config.to_dict()
+    assert "variables" not in d  # 空 dict 不包含
+    assert "success_conditions" not in d
+    assert "on_success" not in d
+    assert "on_failure" not in d
+    assert "metadata" not in d
+    assert len(d["steps"]) == 1
+    assert d["steps"][0]["id"] == "s1"
+
+
+def test_task_manager_list_tasks_source_default(tmp_path: Path) -> None:
+    """测试 list_tasks 对无 source 字段的任务默认为 api"""
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir()
+    (tasks_dir / "test.json").write_text(
+        '{"name": "test", "steps": [{"id": "s1", "type": "navigate", "url": "http://x"}]}',
+        encoding="utf-8",
+    )
+    manager = TaskManager(tasks_dir)
+    tasks = manager.list_tasks()
+    assert len(tasks) == 1
+    assert tasks[0]["source"] == "api"

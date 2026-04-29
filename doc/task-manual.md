@@ -474,6 +474,24 @@
 }
 ```
 
+#### 4. element_exists - 元素存在判断
+
+```json
+{
+  "type": "element_exists",
+  "selector": ".welcome-message"
+}
+```
+
+#### 5. js_expression - JS表达式判断
+
+```json
+{
+  "type": "js_expression",
+  "script": "document.body.innerText.includes('成功')"
+}
+```
+
 ---
 
 ## 校验规则
@@ -510,7 +528,7 @@
 使用 TaskValidator 验证任务：
 
 ```python
-from src.task_executor_v2 import TaskValidator
+from src.task_executor import TaskValidator
 
 is_valid, errors = TaskValidator.validate(task_dict)
 if not is_valid:

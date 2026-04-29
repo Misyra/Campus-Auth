@@ -117,7 +117,19 @@
             <li><code>click</code> - 点击元素</li>
             <li><code>select</code> - 选择下拉框</li>
             <li><code>wait</code> - 等待元素出现</li>
-            <li><code>eval</code> - 执行JavaScript</li>
+            <li><code>wait_url</code> - 等待URL匹配</li>
+            <li><code>eval</code> - 执行JS并保存结果</li>
+            <li><code>custom_js</code> - 执行JS（无返回值）</li>
+            <li><code>screenshot</code> - 保存截图</li>
+            <li><code>sleep</code> - 等待指定时间</li>
+          </ul>
+          <h4>条件类型（success_conditions）</h4>
+          <ul>
+            <li><code>variable</code> - 变量值判断</li>
+            <li><code>url_contains</code> - URL包含字符串</li>
+            <li><code>url_matches</code> - URL正则匹配</li>
+            <li><code>element_exists</code> - 元素是否存在</li>
+            <li><code>js_expression</code> - JS表达式判断</li>
           </ul>
           <h4>可用变量</h4>
           <ul>

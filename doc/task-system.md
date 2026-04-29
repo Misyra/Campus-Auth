@@ -138,6 +138,12 @@ tasks 目录通常包含以下文件：
 - 常用参数：
   - path: 截图路径，默认 debug/step_screenshot.png
 
+10) sleep
+
+- 作用：等待指定时间
+- 常用参数：
+  - duration: 等待毫秒数，默认 1000，最大 300000
+
 ## 6. 成功判定与失败处理
 
 success_conditions 目前支持：
@@ -148,6 +154,15 @@ success_conditions 目前支持：
 - url_contains
   - 判断当前 URL 是否包含指定字符串
   - 参数：pattern
+- url_matches
+  - 判断当前 URL 是否匹配正则
+  - 参数：pattern
+- element_exists
+  - 判断页面是否存在指定元素
+  - 参数：selector
+- js_expression
+  - 执行 JS 表达式判断结果
+  - 参数：script
 
 on_success 常用字段：
 
