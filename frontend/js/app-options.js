@@ -50,7 +50,7 @@ export const appOptions = {
       timers: [],
       _wsDestroyed: false,
       _wsRetryTimer: null,
-      _newLogCount: 0,
+      newLogCount: 0,
       wsReconnecting: false,
       wsRetryAttempt: 0,
       notifications: [],
