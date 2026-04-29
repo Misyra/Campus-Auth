@@ -2,7 +2,6 @@
   "name": "案例2-元素识别（选择器）",
   "description": "案例2：通过明确选择器执行账号、密码、运营商和登录按钮步骤",
   "version": "3.3.0",
-  "author": "Campus-Auth",
   "source": "builtin",
   "url": "{{LOGIN_URL}}",
   "timeout": 30000,
@@ -68,10 +67,5 @@
   "on_failure": {
     "message": "案例2执行失败（元素识别）",
     "screenshot": true
-  },
-  "metadata": {
-    "category": "example_selector",
-    "compatibility": ["simple_pages", "common_campus_network"],
-    "priority": 3
   }
 }

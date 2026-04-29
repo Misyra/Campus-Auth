@@ -1,5 +1,5 @@
 """
-任务执行器 v2 - 标准化任务处理模块
+任务执行器 - 标准化任务处理模块
 
 提供标准化的任务执行流程，支持多种步骤类型，内置完善的验证和错误处理机制。
 """
@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import time
 from abc import ABC, abstractmethod
@@ -39,12 +38,6 @@ class StepError(TaskError):
         super().__init__(message)
         self.step_id = step_id
         self.step_type = step_type
-
-
-class ValidationError(TaskError):
-    """任务验证错误"""
-
-    pass
 
 
 class StepType(str, Enum):
@@ -94,9 +87,21 @@ class StepConfig:
     # 扩展参数
     extra: dict[str, Any] = field(default_factory=dict)
 
+    # 字段默认值映射，to_dict 时跳过与默认值相同的字段
+    _DEFAULTS = {
+        "description": "", "timeout": None, "url": None, "selector": None,
+        "value": None, "pattern": None, "script": None, "store_as": None,
+        "clear": True, "wait_until": "networkidle", "path": None,
+        "duration": 1000, "extra": {},
+    }
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> StepConfig:
-        """从字典创建步骤配置"""
+        """从字典创建步骤配置，自动将 code 规范化为 script"""
+        # code → script 规范化
+        if "code" in data and "script" not in data:
+            data = dict(data)
+            data["script"] = data.pop("code")
         base_fields = {
             k: v for k, v in data.items()
             if k in cls.__dataclass_fields__ and k != "extra"
@@ -107,6 +112,21 @@ class StepConfig:
         # 合并数据中自带的 extra 和不在 dataclass 中的字段
         merged_extra = {**data.get("extra", {}), **extra_fields}
         return cls(**base_fields, extra=merged_extra)
+
+    def to_dict(self) -> dict[str, Any]:
+        """序列化为紧凑字典，跳过默认值和 None，合并 extra 回顶层"""
+        result: dict[str, Any] = {"id": self.id, "type": self.type}
+        for field_name in self.__dataclass_fields__:
+            if field_name in ("id", "type", "extra"):
+                continue
+            value = getattr(self, field_name)
+            default = self._DEFAULTS.get(field_name)
+            if value is not None and value != default:
+                result[field_name] = value
+        # 把 extra 里的扩展字段合并回顶层
+        if self.extra:
+            result.update(self.extra)
+        return result
 
 
 @dataclass
@@ -124,6 +144,17 @@ class ConditionConfig:
     def from_dict(cls, data: dict[str, Any]) -> ConditionConfig:
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
+    def to_dict(self) -> dict[str, Any]:
+        """序列化为紧凑字典，跳过 None 字段"""
+        result: dict[str, Any] = {"type": self.type}
+        for field_name in self.__dataclass_fields__:
+            if field_name == "type":
+                continue
+            value = getattr(self, field_name)
+            if value is not None:
+                result[field_name] = value
+        return result
+
 
 @dataclass
 class TaskConfig:
@@ -140,7 +171,7 @@ class TaskConfig:
     success_conditions: list[ConditionConfig] = field(default_factory=list)
     on_success: dict[str, Any] = field(default_factory=dict)
     on_failure: dict[str, Any] = field(default_factory=dict)
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)  # 用户自定义元数据，执行器不使用
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TaskConfig:
@@ -161,6 +192,29 @@ class TaskConfig:
             on_failure=data.get("on_failure", {}),
             metadata=data.get("metadata", {}),
         )
+
+    def to_dict(self) -> dict[str, Any]:
+        """序列化为紧凑字典，跳过空值和默认值"""
+        result: dict[str, Any] = {
+            "name": self.name,
+            "description": self.description,
+            "version": self.version,
+            "source": self.source,
+            "url": self.url,
+            "timeout": self.timeout,
+            "steps": [s.to_dict() for s in self.steps],
+        }
+        if self.variables:
+            result["variables"] = self.variables
+        if self.success_conditions:
+            result["success_conditions"] = [c.to_dict() for c in self.success_conditions]
+        if self.on_success:
+            result["on_success"] = self.on_success
+        if self.on_failure:
+            result["on_failure"] = self.on_failure
+        if self.metadata:
+            result["metadata"] = self.metadata
+        return result
 
 
 class VariableResolver:
@@ -498,11 +552,11 @@ class EvalHandler(StepHandler):
         self, page, step: StepConfig, resolver: VariableResolver
     ) -> tuple[bool, str]:
         params = self.resolve_params(step, resolver)
-        script = params.get("script") or params.get("code") or ""
+        script = params.get("script") or ""
         store_as = params.get("store_as")
 
         if not script:
-            return False, "eval 步骤需要 script 或 code"
+            return False, "eval 步骤需要 script 字段"
 
         logger.info(f"[eval] store_as={store_as}")
         result = await page.evaluate(script)
@@ -624,10 +678,6 @@ class StepExecutorRegistry:
         """获取处理器"""
         return self._handlers.get(step_type)
 
-    def list_types(self) -> list[str]:
-        """列出支持的类型"""
-        return list(self._handlers.keys())
-
 
 class TaskValidator:
     """任务验证器"""
@@ -707,13 +757,13 @@ class TaskValidator:
             errors.append(f"{prefix} (custom_js) 需要 'script' 字段")
 
         if step_type == StepType.EVAL and not step.get("script") and not step.get("code"):
-            errors.append(f"{prefix} (eval) 需要 'script' 或 'code' 字段")
+            errors.append(f"{prefix} (eval) 需要 'script' 字段（'code' 仍兼容但已废弃）")
 
         return errors
 
 
 class TaskExecutor:
-    """任务执行器 v2"""
+    """任务执行器"""
 
     PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -887,19 +937,7 @@ class TaskExecutor:
             logger.warning(f"截图失败: {e}")
             return None
 
-    def get_execution_summary(self) -> dict[str, Any]:
-        """获取执行摘要"""
-        return {
-            "task_name": self.config.name,
-            "steps_total": len(self.config.steps),
-            "steps_executed": len(self._step_results),
-            "steps_succeeded": sum(1 for r in self._step_results if r["success"]),
-            "steps_failed": sum(1 for r in self._step_results if not r["success"]),
-            "step_results": self._step_results,
-        }
 
-
-# 向后兼容
 def normalize_task_id(task_id: str | None) -> str:
     if not isinstance(task_id, str):
         return ""
@@ -942,7 +980,7 @@ class TaskManager:
                         "name": config.get("name", file.stem),
                         "description": config.get("description", ""),
                         "version": config.get("version", "1.0"),
-                        "source": config.get("source", "builtin"),
+                        "source": config.get("source", "api"),
                     }
                 )
             except Exception as e:

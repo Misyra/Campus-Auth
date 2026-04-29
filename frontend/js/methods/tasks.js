@@ -1,9 +1,6 @@
 const DANGEROUS_STEP_TYPES = new Set(['eval', 'custom_js']);
-const TRUSTED_SOURCES = new Set(['builtin', 'signed']);
 
 function detectDangerousSteps(config) {
-  const source = config.source || '';
-  if (TRUSTED_SOURCES.has(source)) return [];
   const steps = config.steps || [];
   const warnings = [];
   for (let i = 0; i < steps.length; i++) {
@@ -11,7 +8,7 @@ function detectDangerousSteps(config) {
     const type = step.type || '';
     if (DANGEROUS_STEP_TYPES.has(type)) {
       const desc = step.description || step.id || `步骤 ${i + 1}`;
-      const code = step.script || step.code || step.value || step.extra?.code || step.extra?.script || '';
+      const code = step.script || step.extra?.script || '';
       warnings.push({
         stepIndex: i + 1,
         stepType: type,
@@ -232,10 +229,7 @@ export const taskMethods = {
             json: JSON.stringify(data, null, 2),
           };
           this.jsonError = '';
-          // 显示来源信息
-          const source = data.source || 'api';
-          const sourceLabel = source === 'builtin' ? '内置' : source === 'signed' ? '已签名' : '外部导入';
-          this.notify(true, `已导入任务配置（来源：${sourceLabel}），请检查后保存`);
+          this.notify(true, '已导入任务配置，请检查后保存');
         } catch {
           this.notify(false, '文件不是有效的 JSON');
         }

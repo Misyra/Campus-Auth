@@ -1,6 +1,6 @@
 [project]
 name = "campus-auth"
-version = "3.1.0"
+version = "3.2.0"
 description = "校园网自动认证工具，前后端分离（FastAPI + Web UI）"
 readme = "README.md"
 requires-python = ">=3.10"
