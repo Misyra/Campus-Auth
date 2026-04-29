@@ -97,11 +97,16 @@ class StepConfig:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> StepConfig:
         """从字典创建步骤配置"""
-        base_fields = {k: v for k, v in data.items() if k in cls.__dataclass_fields__}
+        base_fields = {
+            k: v for k, v in data.items()
+            if k in cls.__dataclass_fields__ and k != "extra"
+        }
         extra_fields = {
             k: v for k, v in data.items() if k not in cls.__dataclass_fields__
         }
-        return cls(**base_fields, extra=extra_fields)
+        # 合并数据中自带的 extra 和不在 dataclass 中的字段
+        merged_extra = {**data.get("extra", {}), **extra_fields}
+        return cls(**base_fields, extra=merged_extra)
 
 
 @dataclass
