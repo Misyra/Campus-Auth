@@ -11,7 +11,7 @@ function detectDangerousSteps(config) {
     const type = step.type || '';
     if (DANGEROUS_STEP_TYPES.has(type)) {
       const desc = step.description || step.id || `步骤 ${i + 1}`;
-      const code = step.script || step.code || step.value || '';
+      const code = step.script || step.code || step.value || step.extra?.code || step.extra?.script || '';
       warnings.push({
         stepIndex: i + 1,
         stepType: type,
