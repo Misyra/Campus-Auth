@@ -38,8 +38,9 @@ def _check_dangerous_steps(task_data: dict[str, Any], source: str) -> list[dict[
         step_type = step.get("type", "")
         if step_type in _DANGEROUS_STEP_TYPES:
             desc = step.get("description", step.get("id", f"步骤{i+1}"))
-            # 提取实际的 JS 代码内容
-            code = step.get("script", step.get("code", step.get("value", "")))
+            # 提取实际的 JS 代码内容（可能在顶层或 extra 中）
+            extra = step.get("extra", {})
+            code = step.get("script") or step.get("code") or step.get("value") or extra.get("code") or extra.get("script") or ""
             warnings.append({
                 "step_index": i + 1,
                 "step_type": step_type,
