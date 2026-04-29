@@ -498,11 +498,11 @@ class EvalHandler(StepHandler):
         self, page, step: StepConfig, resolver: VariableResolver
     ) -> tuple[bool, str]:
         params = self.resolve_params(step, resolver)
-        script = params.get("script", "")
+        script = params.get("script") or params.get("code") or ""
         store_as = params.get("store_as")
 
         if not script:
-            return False, "eval 步骤需要 script"
+            return False, "eval 步骤需要 script 或 code"
 
         logger.info(f"[eval] store_as={store_as}")
         result = await page.evaluate(script)
@@ -703,8 +703,11 @@ class TaskValidator:
         if step_type == StepType.WAIT_URL and not step.get("pattern"):
             errors.append(f"{prefix} (wait_url) 需要 'pattern' 字段")
 
-        if step_type in (StepType.EVAL, StepType.CUSTOM_JS) and not step.get("script"):
-            errors.append(f"{prefix} ({step_type}) 需要 'script' 字段")
+        if step_type == StepType.CUSTOM_JS and not step.get("script"):
+            errors.append(f"{prefix} (custom_js) 需要 'script' 字段")
+
+        if step_type == StepType.EVAL and not step.get("script") and not step.get("code"):
+            errors.append(f"{prefix} (eval) 需要 'script' 或 'code' 字段")
 
         return errors
 
