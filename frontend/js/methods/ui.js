@@ -88,9 +88,9 @@ export const uiMethods = {
     const isAtBottom = logViewer.scrollTop + logViewer.clientHeight >= logViewer.scrollHeight - 60;
     if (isAtBottom) {
       logViewer.scrollTop = logViewer.scrollHeight;
-      this._newLogCount = 0;
+      this.newLogCount = 0;
     } else {
-      this._newLogCount = (this._newLogCount || 0) + 1;
+      this.newLogCount = (this.newLogCount || 0) + 1;
     }
   },
   scrollToBottom() {
@@ -98,7 +98,7 @@ export const uiMethods = {
     const logViewer = document.querySelector('.log-viewer');
     if (logViewer) {
       logViewer.scrollTop = logViewer.scrollHeight;
-      this._newLogCount = 0;
+      this.newLogCount = 0;
     }
   },
   async quitApp() {
