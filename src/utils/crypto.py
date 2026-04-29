@@ -11,8 +11,11 @@
 
 import base64
 import hashlib
+import logging
 import os
 from pathlib import Path
+
+logger = logging.getLogger("crypto")
 
 _KEY_DIR = Path.home() / ".campus_network_auth"
 _KEY_FILE = _KEY_DIR / ".enc_key"
@@ -63,6 +66,10 @@ def encrypt_password(plaintext: str) -> str:
         from cryptography.fernet import Fernet
     except ImportError:
         # cryptography 未安装时回退到简单混淆（不推荐，但保证可用）
+        logger.warning(
+            "cryptography 库未安装，密码将使用 Base64 编码存储（非真正加密），"
+            "建议安装 cryptography: pip install cryptography"
+        )
         return _simple_obfuscate(plaintext)
 
     key = _derive_fernet_key()
@@ -88,10 +95,15 @@ def decrypt_password(ciphertext: str) -> str:
         f = Fernet(key)
         return f.decrypt(encrypted_data.encode("ascii")).decode("utf-8")
     except ImportError:
+        logger.warning("cryptography 库未安装，尝试 Base64 反混淆")
         return _simple_deobfuscate(encrypted_data)
     except Exception:
-        # 解密失败时回退：可能是密钥变更，返回原文
-        return ciphertext
+        # 解密失败：可能是密钥变更，记录错误并返回空字符串
+        logger.error(
+            "密码解密失败（可能是密钥变更或数据损坏），"
+            "请在设置页面重新输入密码"
+        )
+        return ""
 
 
 def is_encrypted(value: str) -> bool:

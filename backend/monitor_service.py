@@ -56,10 +56,7 @@ class WebSocketManager:
                     self._connections.remove(ws)
 
     async def _send_safe(self, ws: WebSocket, message: str):
-        try:
-            await ws.send_text(message)
-        except Exception:
-            raise
+        await ws.send_text(message)
 
 
 ws_manager = WebSocketManager()

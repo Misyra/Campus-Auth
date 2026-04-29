@@ -3,6 +3,7 @@
   "description": "案例2：通过明确选择器执行账号、密码、运营商和登录按钮步骤",
   "version": "3.3.0",
   "author": "Campus-Auth",
+  "source": "builtin",
   "url": "{{LOGIN_URL}}",
   "timeout": 30000,
   "variables": {

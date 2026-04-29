@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import (
@@ -49,18 +50,40 @@ FRONTEND_DIR = PROJECT_ROOT / "frontend"
 DEBUG_DIR = PROJECT_ROOT / "debug"
 DEBUG_DIR.mkdir(parents=True, exist_ok=True)
 
+@asynccontextmanager
+async def lifespan(app_instance):
+    """应用生命周期管理"""
+    start = asyncio.get_event_loop().time()
+    startup_logger.info("FastAPI 启动: 开始设置事件循环与服务引导")
+    service.set_event_loop(asyncio.get_event_loop())
+    service.boot()
+    startup_logger.info(
+        "FastAPI 启动: 完成，耗时 %.3fs",
+        asyncio.get_event_loop().time() - start,
+    )
+    yield
+    startup_logger.info("FastAPI 关闭: 正在停止服务...")
+    service.stop_monitoring()
+    startup_logger.info("监控服务已停止")
+
+
 app = FastAPI(
     title="校园网认证助手 API",
     version=get_project_version(PROJECT_ROOT),
+    lifespan=lifespan,
 )
 
 # ==================== CORS 配置 ====================
+_cors_port = os.getenv("APP_PORT", "50721")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1", "http://localhost"],
+    allow_origins=[
+        f"http://127.0.0.1:{_cors_port}",
+        f"http://localhost:{_cors_port}",
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Token"],
 )
 
 # ==================== API 鉴权 ====================
@@ -114,24 +137,6 @@ async def request_logging_middleware(request: Request, call_next):
         )
         raise
 
-
-@app.on_event("startup")
-async def on_startup() -> None:
-    start = asyncio.get_event_loop().time()
-    startup_logger.info("FastAPI 启动钩子: 开始设置事件循环与服务引导")
-    service.set_event_loop(asyncio.get_event_loop())
-    service.boot()
-    startup_logger.info(
-        "FastAPI 启动钩子: 完成，耗时 %.3fs",
-        asyncio.get_event_loop().time() - start,
-    )
-
-
-@app.on_event("shutdown")
-async def on_shutdown() -> None:
-    startup_logger.info("FastAPI 关闭钩子: 正在停止服务...")
-    service.stop_monitoring()
-    startup_logger.info("监控服务已停止")
 
 
 @app.websocket("/ws/logs")

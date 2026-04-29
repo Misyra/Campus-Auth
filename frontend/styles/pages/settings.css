@@ -286,7 +286,7 @@
 }
 
 .settings-panel .var-name-col input {
-  width: 100% !important;
+  width: 100%;
   margin: 0 !important;
   padding: 7px 10px;
   background: rgba(8, 15, 30, 0.65) !important;
@@ -313,7 +313,7 @@
 }
 
 .settings-panel .var-value-col input {
-  width: 100% !important;
+  width: 100%;
   margin: 0 !important;
   padding: 7px 10px;
   background: rgba(8, 15, 30, 0.65) !important;

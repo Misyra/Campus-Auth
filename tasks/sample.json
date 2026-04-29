@@ -3,6 +3,7 @@
   "description": "案例1：通过语义识别账号、密码、运营商和登录按钮，减少对选择器的依赖",
   "version": "3.3.0",
   "author": "Campus-Auth",
+  "source": "builtin",
   "url": "{{LOGIN_URL}}",
   "timeout": 30000,
   "variables": {

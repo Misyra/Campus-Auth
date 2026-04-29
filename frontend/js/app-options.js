@@ -46,6 +46,8 @@ export const appOptions = {
         message: '',
       },
       timers: [],
+      _wsDestroyed: false,
+      _wsRetryTimer: null,
       tasks: [],
       activeTaskId: 'default',
       editingTask: null,
@@ -76,6 +78,10 @@ export const appOptions = {
     this.init();
   },
   beforeUnmount() {
+    this._wsDestroyed = true;
+    if (this._wsRetryTimer) {
+      clearTimeout(this._wsRetryTimer);
+    }
     this.timers.forEach((t) => clearInterval(t));
     if (this.ws) {
       this.ws.close();

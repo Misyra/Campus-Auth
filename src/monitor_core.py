@@ -130,10 +130,11 @@ class NetworkMonitorCore:
 
     def monitor_network(self) -> None:
         consecutive_failures = 0
-        interval = int(self.config.get("monitor", {}).get("interval", self.DEFAULT_INTERVAL_SECONDS))
         test_sites = self._get_test_sites()
 
         while self.monitoring:
+            # 每次循环重新读取 interval，支持运行时修改
+            interval = int(self.config.get("monitor", {}).get("interval", self.DEFAULT_INTERVAL_SECONDS))
             pause_config = self.config.get("pause_login", {})
             if TimeUtils.is_in_pause_period(pause_config):
                 now_hour = datetime.datetime.now().hour

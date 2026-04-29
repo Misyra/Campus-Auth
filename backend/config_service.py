@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -263,4 +264,18 @@ def write_env_file(payload: MonitorConfigPayload, env_path: Path) -> None:
         for key, value in managed_values.items():
             updated_lines.append(f"{key}={value}")
 
-    env_path.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
+    # 原子写入：先写临时文件，再替换，防止崩溃导致 .env 损坏
+    content = "\n".join(updated_lines) + "\n"
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        dir=env_path.parent, suffix=".tmp", prefix=".env."
+    )
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp_path, env_path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
