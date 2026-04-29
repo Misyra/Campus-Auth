@@ -40,6 +40,7 @@ export const taskMethods = {
           url: data.url,
           json: JSON.stringify(data, null, 2),
         };
+        this.jsonError = '';
       } catch (error) {
         this.notify(false, '加载任务失败');
       }
@@ -51,6 +52,7 @@ export const taskMethods = {
         url: 'http://172.29.0.2',
         json: '',
       };
+      this.jsonError = '';
     }
   },
   async loadTemplate(templateId) {
@@ -58,9 +60,32 @@ export const taskMethods = {
       const { data } = await this.$api.get(`/api/tasks/${templateId}`);
       if (this.editingTask) {
         this.editingTask.json = JSON.stringify(data, null, 2);
+        this.jsonError = '';
       }
     } catch (error) {
       this.notify(false, '加载模板失败');
+    }
+  },
+  validateJson() {
+    if (!this.editingTask || !this.editingTask.json.trim()) {
+      this.jsonError = '';
+      return;
+    }
+    try {
+      JSON.parse(this.editingTask.json);
+      this.jsonError = '';
+    } catch (e) {
+      this.jsonError = e.message;
+    }
+  },
+  formatJson() {
+    if (!this.editingTask) return;
+    try {
+      const parsed = JSON.parse(this.editingTask.json);
+      this.editingTask.json = JSON.stringify(parsed, null, 2);
+      this.jsonError = '';
+    } catch (e) {
+      this.notify(false, 'JSON 格式错误，无法格式化');
     }
   },
   async saveTask() {
@@ -70,22 +95,30 @@ export const taskMethods = {
     }
     try {
       this.frontendLogger.info('tasks', `save task: ${this.editingTask.id}`);
-      const config = JSON.parse(this.editingTask.json);
+      let config;
+      try {
+        config = JSON.parse(this.editingTask.json);
+      } catch (e) {
+        this.jsonError = e.message;
+        this.notify(false, 'JSON 格式错误: ' + e.message);
+        return;
+      }
       config.name = this.editingTask.name || config.name;
       config.description = this.editingTask.description || config.description;
       config.url = this.editingTask.url || config.url;
 
       const { data } = await this.$api.put(`/api/tasks/${this.editingTask.id}`, config);
       if (data.success) {
-        this.notify(true, '任务保存成功');
+        this.notify(true, data.message || '任务保存成功');
         this.editingTask = null;
+        this.jsonError = '';
         await this.fetchTasks();
       } else {
         this.notify(false, data.message);
       }
     } catch (error) {
       this.frontendLogger.error('tasks', 'save task failed', error);
-      this.notify(false, error.message || '保存失败');
+      this.notify(false, error?.response?.data?.detail || error.message || '保存失败');
     }
   },
   async deleteTask(taskId) {
@@ -104,5 +137,65 @@ export const taskMethods = {
     } catch (error) {
       this.notify(false, '删除任务失败');
     }
+  },
+  async duplicateTask(taskId) {
+    try {
+      const { data } = await this.$api.get(`/api/tasks/${taskId}`);
+      const newId = taskId + '_copy';
+      this.editingTask = {
+        id: newId,
+        name: data.name + ' (副本)',
+        description: data.description,
+        url: data.url,
+        json: JSON.stringify(data, null, 2),
+      };
+      this.jsonError = '';
+    } catch (error) {
+      this.notify(false, '复制任务失败');
+    }
+  },
+  exportTask(taskId) {
+    this.$api.get(`/api/tasks/${taskId}`).then(({ data }) => {
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${taskId}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      this.notify(true, '任务已导出');
+    }).catch(() => {
+      this.notify(false, '导出失败');
+    });
+  },
+  importTask() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = JSON.parse(ev.target.result);
+          const id = file.name.replace(/\.json$/, '').replace(/[^A-Za-z0-9_]/g, '_');
+          this.editingTask = {
+            id: id,
+            name: data.name || '',
+            description: data.description || '',
+            url: data.url || '',
+            json: JSON.stringify(data, null, 2),
+          };
+          this.jsonError = '';
+          this.notify(true, '已导入任务配置，请检查后保存');
+        } catch {
+          this.notify(false, '文件不是有效的 JSON');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
   },
 };

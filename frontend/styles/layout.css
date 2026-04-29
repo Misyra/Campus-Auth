@@ -80,6 +80,19 @@
   align-items: center;
 }
 
+.top-title-area {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.top-dirty-hint {
+  font-size: 13px;
+  color: var(--warning);
+  font-weight: 500;
+  animation: fadeIn 0.2s ease;
+}
+
 .content-wrapper {
   flex: 1;
   padding: 24px 32px;

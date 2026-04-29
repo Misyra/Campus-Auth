@@ -7,7 +7,7 @@
   --border-hover: rgba(148, 163, 184, 0.2);
   --text-primary: #f1f5f9;
   --text-secondary: #94a3b8;
-  --text-muted: #94a3b8;
+  --text-muted: #64748b;
   --accent: #22d3ee;
   --accent-hover: #06b6d4;
   --success: #10b981;
@@ -16,6 +16,11 @@
   --purple: #a78bfa;
   --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+  /* 设计系统：圆角 */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 16px;
 }
 
 * {
@@ -75,4 +80,236 @@ body {
     opacity: 1;
     transform: translateX(0);
   }
+}
+
+@keyframes slideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 加载骨架屏 */
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-hover) 50%, var(--bg-secondary) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-md);
+}
+
+/* 内联加载旋转 */
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+/* 无障碍：减少动画 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 日志过滤工具栏 */
+.log-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.log-toolbar .log-search {
+  flex: 1;
+  min-width: 120px;
+  padding: 6px 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.log-toolbar .log-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.log-filter-chip {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.log-filter-chip:hover {
+  border-color: var(--border-hover);
+  color: var(--text-secondary);
+}
+
+.log-filter-chip.active {
+  background: var(--accent);
+  color: var(--bg-primary);
+  border-color: var(--accent);
+}
+
+/* 新消息提示按钮 */
+.new-logs-btn {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 16px;
+  border-radius: 20px;
+  background: var(--accent);
+  color: var(--bg-primary);
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  animation: fadeIn 0.2s ease;
+  z-index: 10;
+}
+
+.new-logs-btn:hover {
+  background: var(--accent-hover);
+}
+
+/* 网络状态横幅 */
+.network-status-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-radius: var(--radius-lg);
+  margin-bottom: 16px;
+  border: 1px solid;
+  backdrop-filter: blur(10px);
+}
+
+.network-status-banner.connected {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.2);
+  color: var(--success);
+}
+
+.network-status-banner.disconnected {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: var(--error);
+}
+
+.network-status-banner.idle {
+  background: rgba(148, 163, 184, 0.08);
+  border-color: rgba(148, 163, 184, 0.15);
+  color: var(--text-secondary);
+}
+
+.network-status-banner .status-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.network-status-banner .status-text {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.network-status-banner .status-detail {
+  font-size: 12px;
+  opacity: 0.8;
+  margin-left: auto;
+}
+
+/* WS 重连指示器 */
+.ws-reconnect-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(245, 158, 11, 0.15);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.2);
+  color: var(--warning);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.ws-reconnect-bar .spinner {
+  border-top-color: var(--warning);
+}
+
+/* 任务来源标签 */
+.task-source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.task-source-badge.builtin {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--success);
+}
+
+.task-source-badge.api {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warning);
+}
+
+.task-source-badge.signed {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent);
+}
+
+/* JSON 校验错误 */
+.json-error {
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: var(--radius-sm);
+  color: var(--error);
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  word-break: break-all;
+}
+
+textarea.json-invalid {
+  border-color: var(--error) !important;
+}
+
+textarea.json-valid {
+  border-color: var(--success) !important;
 }

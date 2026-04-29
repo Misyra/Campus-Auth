@@ -1,4 +1,11 @@
 <div v-if="currentPage === 'dashboard'" class="page-content fade-in">
+  <div v-if="status.monitoring" class="network-status-banner" :class="networkStatus">
+    <span class="status-dot"></span>
+    <span v-if="networkStatus === 'connected'">网络已连接</span>
+    <span v-else-if="networkStatus === 'disconnected'">网络已断开 · 正在尝试认证...</span>
+    <span v-else>监控已停止</span>
+  </div>
+
   <div class="stats-grid">
     <div class="stat-card">
       <div class="stat-icon green">
@@ -102,16 +109,34 @@
     <div class="card log-card">
       <div class="card-header">
         <h2>实时日志</h2>
-        <button class="btn btn-icon-only" @click="fetchLogs" title="刷新">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="23 4 23 10 17 10"/>
-            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-          </svg>
-        </button>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button class="btn btn-icon-only" @click="fetchLogs" title="刷新">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+          </button>
+          <button class="btn btn-icon-only" @click="logs = []; _newLogCount = 0" title="清空日志">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+          </button>
+        </div>
       </div>
       <div class="card-body">
+        <div class="log-toolbar">
+          <div class="log-filter-chips">
+            <button class="log-filter-chip" :class="{ active: !logFilter.level }" @click="logFilter.level = ''">全部</button>
+            <button class="log-filter-chip" :class="{ active: logFilter.level === 'INFO' }" @click="logFilter.level = logFilter.level === 'INFO' ? '' : 'INFO'">INFO</button>
+            <button class="log-filter-chip" :class="{ active: logFilter.level === 'WARNING' }" @click="logFilter.level = logFilter.level === 'WARNING' ? '' : 'WARNING'">WARN</button>
+            <button class="log-filter-chip" :class="{ active: logFilter.level === 'ERROR' }" @click="logFilter.level = logFilter.level === 'ERROR' ? '' : 'ERROR'">ERROR</button>
+            <button class="log-filter-chip" :class="{ active: logFilter.level === 'DEBUG' }" @click="logFilter.level = logFilter.level === 'DEBUG' ? '' : 'DEBUG'">DEBUG</button>
+          </div>
+          <input v-model="logFilter.search" type="text" placeholder="搜索日志..." class="log-search" />
+        </div>
         <div class="log-viewer">
-          <div v-if="!logs.length" class="empty-state">
+          <div v-if="!filteredLogs.length" class="empty-state">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
@@ -119,10 +144,10 @@
               <line x1="16" y1="17" x2="8" y2="17"/>
               <polyline points="10 9 9 9 8 9"/>
             </svg>
-            <span>暂无日志</span>
+            <span>{{ logFilter.search || logFilter.level ? '无匹配日志' : '暂无日志' }}</span>
           </div>
           <div v-else class="log-entries">
-            <div v-for="item in logs" :key="item.timestamp + item.message" class="log-entry">
+            <div v-for="item in filteredLogs" :key="item.timestamp + item.message" class="log-entry">
               <span class="log-time">{{ formatLogTime(item.timestamp) }}</span>
               <span class="log-time">{{ formatLogMeta(item) }}</span>
               <div class="log-content">
@@ -133,6 +158,9 @@
               </div>
             </div>
           </div>
+          <button v-if="_newLogCount > 0" class="new-logs-btn" @click="scrollToBottom(); _newLogCount = 0">
+            {{ _newLogCount }} 条新消息
+          </button>
         </div>
       </div>
     </div>
