@@ -22,7 +22,6 @@ environment/
 # Environment variables (sensitive information)
 .env
 .agreed
-.DS_Store
 
 # User-specific network profiles
 settings.json
@@ -36,6 +35,9 @@ logs/
 .idea/
 *.swp
 *.swo
+
+# Claude Code
+.claude/
 
 # OS
 .DS_Store
