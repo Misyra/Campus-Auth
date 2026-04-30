@@ -272,7 +272,7 @@ WshShell.Run Chr(34) & "{packaged}" & Chr(34) & " --no-browser", 0, False
         except PermissionError:
             return (
                 False,
-                "写入启动文件失败，可能被杀毒软件拦截，请将程序添加到白名单后重试",
+                "写入启动文件失败，可能被杀毒软件拦截，请暂时关闭杀毒软件后重试",
             )
         except OSError as exc:
             if "另一个程序正在使用此文件" in str(
@@ -282,6 +282,12 @@ WshShell.Run Chr(34) & "{packaged}" & Chr(34) & " --no-browser", 0, False
             return False, f"写入启动文件失败: {exc}"
         except Exception as exc:
             return False, f"创建启动文件时发生未知错误: {exc}"
+
+        if not startup_vbs.exists():
+            return (
+                False,
+                f"自启动脚本创建后被拦截，请暂时关闭杀毒软件后重试\n预期位置: {startup_vbs}",
+            )
 
         return True, f"已启用 Windows 开机自启动: {startup_vbs}"
 
