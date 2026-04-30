@@ -12,6 +12,12 @@ wheels/
 .venv
 uv.lock
 
+# Task active state (local user preference)
+tasks/active.txt
+
+# Third-party scripts
+bootstrap/
+
 # Embedded Python environment (auto-downloaded)
 environment/
 
