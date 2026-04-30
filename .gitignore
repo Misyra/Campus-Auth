@@ -46,6 +46,9 @@ logs/
 .DS_Store
 Thumbs.db
 
+# Source assets
+1.png
+
 # Release staging artifacts
 release/stage-win/
 release/stage-win-full/
