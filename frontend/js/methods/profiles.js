@@ -23,6 +23,7 @@ export const profileMethods = {
     }
   },
   showProfileEditor(profileId) {
+    this.editorDetectResult = null;
     if (profileId && this.profiles[profileId]) {
       this.$api.get(`/api/profiles/${profileId}`).then(({ data }) => {
         this.editingProfile = {
@@ -104,6 +105,19 @@ export const profileMethods = {
       }
     } catch (error) {
       this.notify(false, '切换方案失败');
+    }
+  },
+  async detectNetworkForEditor() {
+    this.busy.editorDetect = true;
+    this.editorDetectResult = null;
+    try {
+      const { data } = await this.$api.post('/api/profiles/detect');
+      this.editorDetectResult = { gateway_ip: data.gateway_ip, ssid: data.ssid };
+    } catch (error) {
+      this.editorDetectResult = { gateway_ip: null, ssid: null };
+      this.frontendLogger.error('profiles', 'editor network detect failed', error);
+    } finally {
+      this.busy.editorDetect = false;
     }
   },
   async detectNetwork() {

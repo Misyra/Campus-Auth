@@ -146,7 +146,7 @@ class ProfileSettings(BaseModel):
     )
     use_global_advanced: bool = Field(
         default=True,
-        description="是否使用全局高级设置（true 时忽略以下高级字段，使用 .env 中的值）",
+        description="是否使用全局高级设置（true 时忽略以下高级字段，使用系统设置中的值）",
     )
     auth_url: str = Field(default="http://172.29.0.2")
     carrier: str = Field(default="无")
@@ -190,6 +190,27 @@ class ProfileSettings(BaseModel):
         return v
 
 
+class SystemSettings(BaseModel):
+    """全局系统配置（原 .env 中的业务配置）"""
+
+    username: str = Field(default="", description="全局校园网用户名")
+    password: str = Field(default="", description="全局校园网密码（ENC: 加密）")
+    backend_log_level: str = Field(default="WARNING")
+    frontend_log_level: str = Field(default="WARNING")
+    access_log: bool = Field(default=False, description="Uvicorn HTTP 请求日志")
+    minimize_to_tray: bool = Field(default=True, description="最小化到系统托盘")
+    max_retries: int = Field(default=3, ge=0, le=10)
+    retry_interval: int = Field(default=5, ge=1, le=300, description="重试间隔（秒）")
+
+    @field_validator("backend_log_level", "frontend_log_level")
+    @classmethod
+    def validate_log_level(cls, v: str) -> str:
+        v = v.upper().strip()
+        if v and v not in _VALID_LOG_LEVELS:
+            raise ValueError(f"无效的日志级别: {v}，可选值: {', '.join(_VALID_LOG_LEVELS)}")
+        return v
+
+
 class ProfilesData(BaseModel):
     """Top-level structure of settings.json"""
 
@@ -197,4 +218,5 @@ class ProfilesData(BaseModel):
         default=True, description="是否根据网关 IP 自动切换方案"
     )
     active_profile: str = Field(default="default")
+    system: SystemSettings = Field(default_factory=SystemSettings)
     profiles: dict[str, ProfileSettings] = Field(default_factory=dict)

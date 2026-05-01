@@ -14,7 +14,7 @@ from typing import Any
 from src.utils.crypto import decrypt_password, encrypt_password, mask_password
 from src.utils.logging import get_logger
 
-from .schemas import ProfileSettings, ProfilesData
+from .schemas import ProfileSettings, ProfilesData, SystemSettings
 
 profile_logger = get_logger("backend.profile_service", side="BACKEND")
 
@@ -430,20 +430,52 @@ class ProfileService:
         self.save(data)
         profile_logger.info("自动切换: %s", "开启" if enabled else "关闭")
 
-    def migrate_from_env(self, config: dict[str, Any]) -> None:
-        """从 .env 配置迁移，创建默认方案（仅在 settings.json 不存在时执行）"""
-        if self._settings_path.exists():
+    def migrate_config(self, env_config: dict[str, Any]) -> None:
+        """迁移配置到 settings.json 格式。
+
+        处理两种场景：
+        1. settings.json 不存在 → 从 .env 创建完整配置（system + 默认方案）
+        2. settings.json 存在但缺少 system 字段 → 从 .env 补充 system
+        """
+        if not self._settings_path.exists():
+            profile_logger.info("执行首次迁移：从 .env 创建 settings.json")
+            self._create_from_env(env_config)
             return
 
-        profile_logger.info("执行首次迁移：从 .env 创建默认配置方案")
+        # settings.json 存在，检查是否需要补充 system 字段
+        data = self.load()
+        default_system = SystemSettings()
+        if data.system == default_system and env_config:
+            profile_logger.info("补充 system 字段（从 .env 迁移）")
+            data.system = self._build_system_from_env(env_config)
+            self.save(data)
+            profile_logger.info("system 字段已补充")
 
+    def _build_system_from_env(self, config: dict[str, Any]) -> SystemSettings:
+        """从 .env 配置构建 SystemSettings"""
+        return SystemSettings(
+            username=config.get("username", ""),
+            password=config.get("password", ""),
+            backend_log_level=str(
+                config.get("logging", {}).get("level", "WARNING")
+            ).upper(),
+            frontend_log_level=str(
+                config.get("frontend_logging", {}).get("level", "WARNING")
+            ).upper(),
+            access_log=bool(config.get("access_log", False)),
+            minimize_to_tray=bool(config.get("minimize_to_tray", True)),
+            max_retries=int(config.get("retry_settings", {}).get("max_retries", 3)),
+            retry_interval=int(config.get("retry_settings", {}).get("retry_interval", 5)),
+        )
+
+    def _create_from_env(self, config: dict[str, Any]) -> None:
+        """从 .env 配置创建完整的 settings.json"""
         browser_config = config.get("browser_settings", {})
         pause_config = config.get("pause_login", {})
         monitor_config = config.get("monitor", {})
         ping_targets = monitor_config.get("ping_targets", [])
 
         carrier, carrier_custom = _normalize_isp_to_carrier(config.get("isp", ""))
-
         interval_seconds = int(monitor_config.get("interval", 300))
 
         default_profile = ProfileSettings(
@@ -478,7 +510,8 @@ class ProfileService:
         data = ProfilesData(
             auto_switch=True,
             active_profile="default",
+            system=self._build_system_from_env(config),
             profiles={"default": default_profile},
         )
         self.save(data)
-        profile_logger.info("默认方案已创建")
+        profile_logger.info("settings.json 已从 .env 创建")

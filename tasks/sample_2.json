@@ -1,56 +1,49 @@
 {
-  "name": "案例2-元素识别（选择器）",
-  "description": "案例2：通过明确选择器执行账号、密码、运营商和登录按钮步骤",
+  "name": "样例2",
+  "description": "案例2：通过明确选择器执行账号、密码、运营商和登录按钮步骤（不能直接使用，请自行修改）",
   "version": "3.3.0",
   "source": "builtin",
   "url": "{{LOGIN_URL}}",
   "timeout": 30000,
-  "variables": {
-    "username": "{{USERNAME}}",
-    "password": "{{PASSWORD}}",
-    "isp": "{{ISP}}"
-  },
   "steps": [
     {
       "id": "navigate",
       "type": "navigate",
       "description": "打开认证页面",
+      "timeout": 10000,
       "url": "{{url}}",
-      "wait_until": "domcontentloaded",
-      "timeout": 10000
+      "wait_until": "domcontentloaded"
     },
     {
       "id": "input_username",
       "type": "input",
       "description": "输入账号（元素识别）",
+      "timeout": 5000,
       "selector": "input[name='DDDDD'], input[name='username'], #username, input[placeholder*='账号'], input[placeholder*='用户名']",
-      "value": "{{username}}",
-      "clear": true,
-      "timeout": 5000
+      "value": "{{username}}"
     },
     {
       "id": "input_password",
       "type": "input",
       "description": "输入密码（元素识别）",
+      "timeout": 5000,
       "selector": "input[name='upass'], input[name='password'], input[type='password'], #password",
-      "value": "{{password}}",
-      "clear": true,
-      "timeout": 5000
+      "value": "{{password}}"
     },
     {
       "id": "select_isp",
       "type": "select",
       "description": "选择运营商下拉（无值或未检测到自动跳过）",
+      "timeout": 3000,
       "selector": "select[name='ISP_select'], select[name='isp'], #isp, select[id*='运营商'], select[name*='carrier']",
-      "value": "{{isp}}",
-      "timeout": 3000
+      "value": "{{isp}}"
     },
     {
       "id": "click_login",
       "type": "click",
       "description": "点击登录",
-      "selector": "input[name='0MKKey'], input[type='submit'], button[type='submit'], #login, .login-btn",
-      "timeout": 5000
+      "timeout": 5000,
+      "selector": "input[name='0MKKey'], input[type='submit'], button[type='submit'], #login, .login-btn"
     },
     {
       "id": "wait_result",
@@ -59,7 +52,11 @@
       "duration": 3000
     }
   ],
-  "success_conditions": [],
+  "variables": {
+    "username": "{{USERNAME}}",
+    "password": "{{PASSWORD}}",
+    "isp": "{{ISP}}"
+  },
   "on_success": {
     "message": "案例2执行完成（元素识别）",
     "screenshot": false
@@ -67,5 +64,6 @@
   "on_failure": {
     "message": "案例2执行失败（元素识别）",
     "screenshot": true
-  }
+  },
+  "id": "sample_2"
 }

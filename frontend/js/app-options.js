@@ -43,6 +43,7 @@ export const appOptions = {
         action: false,
         autostart: false,
         detect: false,
+        editorDetect: false,
       },
       toast: {
         success: true,
@@ -70,6 +71,7 @@ export const appOptions = {
       autoSwitch: true,
       editingProfile: null,
       detectResult: null,
+      editorDetectResult: null,
     };
   },
   computed: {
