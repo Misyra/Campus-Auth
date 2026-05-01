@@ -207,6 +207,27 @@
           网络匹配
           <span class="field-help" tabindex="0" role="note" data-tip="设置匹配规则后，自动切换时会根据当前网络环境选择对应方案。两项都留空则仅手动切换。">?</span>
         </div>
+        <div class="editor-network-detect">
+          <button class="btn btn-sm" @click="detectNetworkForEditor()" :disabled="busy.editorDetect">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="2" y1="12" x2="22" y2="12"/>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+            {{ busy.editorDetect ? '检测中...' : '检测当前网络' }}
+          </button>
+          <span v-if="editorDetectResult" class="editor-detect-info">
+            <span v-if="editorDetectResult.gateway_ip" class="editor-detect-tag">
+              网关 <code>{{ editorDetectResult.gateway_ip }}</code>
+              <button class="btn-link" @click="editingProfile.match_gateway_ip = editorDetectResult.gateway_ip" title="填入网关 IP">填入</button>
+            </span>
+            <span v-if="editorDetectResult.ssid" class="editor-detect-tag">
+              SSID <code>{{ editorDetectResult.ssid }}</code>
+              <button class="btn-link" @click="editingProfile.match_ssid = editorDetectResult.ssid" title="填入 SSID">填入</button>
+            </span>
+            <span v-if="!editorDetectResult.gateway_ip && !editorDetectResult.ssid" class="editor-detect-tag muted">未能获取网络信息</span>
+          </span>
+        </div>
         <div class="form-row">
           <div class="form-group">
             <label>网关 IP</label>

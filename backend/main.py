@@ -61,14 +61,15 @@ async def lifespan(app_instance):
     startup_logger.info("FastAPI 启动: 开始设置事件循环与服务引导")
     service.set_event_loop(asyncio.get_event_loop())
 
-    # 首次迁移：从 .env 创建默认配置方案
+    # 迁移：从 .env 创建或补充 settings.json
     try:
         from src.utils import ConfigLoader
 
         env_config = ConfigLoader.load_config_from_env()
-        profile_service.migrate_from_env(env_config)
+        profile_service.migrate_config(env_config)
+        service.reload_config()
     except Exception as exc:
-        startup_logger.warning("配置方案迁移失败: %s", exc)
+        startup_logger.warning("配置迁移失败: %s", exc)
 
     service.boot()
     startup_logger.info(

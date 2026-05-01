@@ -1,23 +1,17 @@
 {
-  "name": "默认语义识别登录（推荐）",
+  "name": "默认任务",
   "description": "默认任务：语义识别账号、密码、运营商（下拉可选）并点击登录",
   "version": "3.3.0",
   "source": "builtin",
   "url": "{{LOGIN_URL}}",
   "timeout": 30000,
-  "variables": {
-    "username": "{{USERNAME}}",
-    "password": "{{PASSWORD}}",
-    "isp": "{{ISP}}"
-  },
   "steps": [
     {
       "id": "navigate",
       "type": "navigate",
       "description": "打开认证页面",
-      "url": "{{url}}",
-      "wait_until": "networkidle",
-      "timeout": 12000
+      "timeout": 12000,
+      "url": "{{url}}"
     },
     {
       "id": "recognize_username",
@@ -57,6 +51,11 @@
       "store_as": "login_success"
     }
   ],
+  "variables": {
+    "username": "{{USERNAME}}",
+    "password": "{{PASSWORD}}",
+    "isp": "{{ISP}}"
+  },
   "success_conditions": [
     {
       "type": "variable",
@@ -71,5 +70,6 @@
   "on_failure": {
     "message": "登录失败（默认语义识别）",
     "screenshot": true
-  }
+  },
+  "id": "default"
 }

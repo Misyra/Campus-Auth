@@ -109,6 +109,11 @@ class LoginAttemptHandler:
                 return None
 
             env_vars = dict(os.environ)
+            # 将配置方案中的字段注入环境变量，供任务模板 {{LOGIN_URL}} / {{ISP}} 等解析
+            if self.config.get("auth_url"):
+                env_vars.setdefault("LOGIN_URL", self.config["auth_url"])
+            if self.config.get("isp"):
+                env_vars.setdefault("ISP", self.config["isp"])
             # 合并自定义变量
             custom_vars = self.config.get("custom_variables", {})
             if custom_vars and isinstance(custom_vars, dict):

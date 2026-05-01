@@ -16,7 +16,7 @@ from src.network_test import is_network_available
 from src.utils import ConfigValidator
 from src.utils.logging import get_logger
 
-from .config_service import build_runtime_config, load_ui_config, write_env_file
+from .config_service import build_runtime_config, load_ui_config, write_system_settings
 from .profile_service import ProfileService
 from .schemas import LogEntry, MonitorConfigPayload, MonitorStatusResponse
 
@@ -67,13 +67,15 @@ service_logger = get_logger("backend.monitor_service", side="BACKEND")
 class MonitorService:
     def __init__(self, project_root: Path):
         self.project_root = project_root
-        self.env_file = project_root / ".env"
+        self._profile_service = ProfileService(project_root)
 
         self._lock = threading.Lock()
         self._logs: deque[LogEntry] = deque(maxlen=1200)
 
-        self._ui_config = load_ui_config(project_root=project_root)
-        self._runtime_config = build_runtime_config(self._ui_config)
+        self._ui_config = load_ui_config(self._profile_service)
+        self._runtime_config = build_runtime_config(
+            self._ui_config, self._profile_service.load().system
+        )
 
         self._monitor_core: NetworkMonitorCore | None = None
         self._monitor_thread: threading.Thread | None = None
@@ -129,11 +131,13 @@ class MonitorService:
 
         service_logger.info("Saving monitor config")
 
-        write_env_file(payload, self.env_file)
+        write_system_settings(payload, self._profile_service)
 
         with self._lock:
             self._ui_config = payload
-            self._runtime_config = build_runtime_config(payload)
+            self._runtime_config = build_runtime_config(
+                payload, self._profile_service.load().system
+            )
             running = self._is_monitoring_unsafe()
 
         self._push_log("配置已保存", level="INFO", source="backend.monitor_service")
@@ -147,11 +151,13 @@ class MonitorService:
             )
 
     def reload_config(self) -> None:
-        """重新加载配置（从 .env + settings.json 合并）"""
+        """重新加载配置（从 settings.json）"""
         with self._lock:
-            self._ui_config = load_ui_config(project_root=self.project_root)
-            self._runtime_config = build_runtime_config(self._ui_config)
-        service_logger.info("Config reloaded from profile")
+            self._ui_config = load_ui_config(self._profile_service)
+            self._runtime_config = build_runtime_config(
+                self._ui_config, self._profile_service.load().system
+            )
+        service_logger.info("Config reloaded from settings.json")
 
     def apply_profile(self, profile_name: str) -> None:
         """切换到新方案并重启监控"""
@@ -194,9 +200,7 @@ class MonitorService:
                 config=self._runtime_config.copy(),
                 log_callback=self._push_log,
             )
-            # 设置 profile 服务用于自动切换
-            ps = ProfileService(self.project_root)
-            core.set_profile_service(ps, on_switch=self._on_profile_switch)
+            core.set_profile_service(self._profile_service, on_switch=self._on_profile_switch)
             thread = threading.Thread(target=core.start_monitoring, daemon=True)
 
             self._monitor_core = core
