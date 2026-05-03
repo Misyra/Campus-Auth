@@ -242,6 +242,10 @@ class MonitorService:
         if thread:
             thread.join(timeout=3)
 
+        with self._lock:
+            self._monitor_core = None
+            self._monitor_thread = None
+
         self._push_log("监控已停止", level="INFO", source="backend.monitor_service")
         service_logger.info("Monitoring stopped")
         return True, "监控已停止"
@@ -298,4 +302,18 @@ class MonitorService:
     def list_logs(self, limit: int = 200) -> list[LogEntry]:
         if limit <= 0:
             return []
-        return list(self._logs)[-limit:]
+        with self._lock:
+            snapshot = list(self._logs)
+        if len(snapshot) <= limit:
+            return snapshot
+        return snapshot[-limit:]
+
+    def toggle_safe_mode(self) -> bool:
+        """切换安全模式，返回新值"""
+        with self._lock:
+            new_value = not self.safe_mode
+            data = self._profile_service.load()
+            data.system.safe_mode = new_value
+            self._profile_service.save(data)
+            self.safe_mode = new_value
+        return new_value

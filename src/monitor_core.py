@@ -66,9 +66,6 @@ class NetworkMonitorCore:
         self._last_profile_id: Optional[str] = None
         self._last_gateway_check_time: float = 0
 
-    def _now(self) -> str:
-        return datetime.datetime.now().strftime("%H:%M:%S")
-
     def log_message(self, message: str, level: int = logging.INFO) -> None:
         self.logger.log(level, message)
         if self.log_callback:
@@ -159,6 +156,15 @@ class NetworkMonitorCore:
             remaining -= step
         return self.monitoring
 
+    def _get_retry_config(self) -> tuple[int, list[int]]:
+        """从配置中读取重试参数，回退到默认值"""
+        retry_settings = self.config.get("retry_settings", {})
+        max_retries = int(retry_settings.get("max_retries", self.MAX_CONSECUTIVE_LOGIN_FAILURES))
+        retry_interval = int(retry_settings.get("retry_interval", 5))
+        # 生成递增间隔列表：[retry_interval, retry_interval*2, retry_interval*4, ...]
+        intervals = [retry_interval * (2 ** i) for i in range(max_retries)]
+        return max_retries, intervals
+
     def _login_retry_or_break(self) -> str:
         """登录失败后决定重试还是放弃。
 
@@ -167,9 +173,10 @@ class NetworkMonitorCore:
             "break"   — 监控已停止（break）
             "give_up" — 超过最大重试次数，应等待正常检测间隔（fall through）
         """
+        max_retries, intervals = self._get_retry_config()
         idx = self.login_attempt_count - 1
-        if idx < len(self.LOGIN_RETRY_INTERVALS):
-            wait = self.LOGIN_RETRY_INTERVALS[idx]
+        if idx < len(intervals):
+            wait = intervals[idx]
             self.log_message(f"{wait} 秒后重试登录...", logging.DEBUG)
             if not self._wait_interruptible(wait, step=5):
                 return "break"

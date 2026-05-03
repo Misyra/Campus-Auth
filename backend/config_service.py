@@ -8,12 +8,11 @@ from src.utils.crypto import decrypt_password, encrypt_password, mask_password
 
 from .profile_service import ProfileService
 from .schemas import (
+    VALID_LOG_LEVELS,
     MonitorConfigPayload,
     ProfileSettings,
     SystemSettings,
 )
-
-VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 
 
 def _normalize_level(raw: str, default: str = "WARNING") -> str:
@@ -33,7 +32,10 @@ def _normalize_headers_json(raw: str) -> str:
     if not text:
         return ""
 
-    parsed = json.loads(text)
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"浏览器请求头 JSON 格式错误: {e}") from e
     if not isinstance(parsed, dict):
         raise ValueError("浏览器请求头必须是 JSON 对象")
 
@@ -64,39 +66,57 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
         password = mask_password(sys.password)
 
     # 认证地址：跟随全局或使用方案独立值
-    if profile.use_global_auth_url:
+    if not profile or profile.use_global_auth_url:
         auth_url = sys.auth_url
     else:
         auth_url = profile.auth_url
 
     # 任务：跟随全局或使用方案独立任务
-    if profile.use_global_task:
+    if not profile or profile.use_global_task:
         active_task = ""
     else:
         active_task = profile.active_task
     # 运营商：跟随全局账号密码开关
-    if profile.use_global_credentials:
+    if not profile or profile.use_global_credentials:
         carrier = sys.carrier
         carrier_custom = sys.carrier_custom
     else:
         carrier = profile.carrier
         carrier_custom = profile.carrier_custom
 
-    # 高级设置：use_global_advanced 时使用 profile 值（已无 .env 全局源）
-    check_interval_minutes = profile.check_interval_minutes
-    auto_start = profile.auto_start
-    headless = profile.headless
-    browser_timeout = profile.browser_timeout
-    browser_user_agent = profile.browser_user_agent
-    browser_low_resource_mode = profile.browser_low_resource_mode
-    browser_disable_web_security = profile.browser_disable_web_security
-    browser_extra_headers_json = profile.browser_extra_headers_json
-    browser_args = profile.browser_args
-    pause_enabled = profile.pause_enabled
-    pause_start_hour = profile.pause_start_hour
-    pause_end_hour = profile.pause_end_hour
-    network_targets = _normalize_targets(profile.network_targets)
-    custom_variables = profile.custom_variables
+    # 高级设置：use_global_advanced 时使用 default 方案的值，否则使用方案独立值
+    if profile and not profile.use_global_advanced:
+        check_interval_minutes = profile.check_interval_minutes
+        auto_start = profile.auto_start
+        headless = profile.headless
+        browser_timeout = profile.browser_timeout
+        browser_user_agent = profile.browser_user_agent
+        browser_low_resource_mode = profile.browser_low_resource_mode
+        browser_disable_web_security = profile.browser_disable_web_security
+        browser_extra_headers_json = profile.browser_extra_headers_json
+        browser_args = profile.browser_args
+        pause_enabled = profile.pause_enabled
+        pause_start_hour = profile.pause_start_hour
+        pause_end_hour = profile.pause_end_hour
+        network_targets = _normalize_targets(profile.network_targets)
+        custom_variables = profile.custom_variables
+    else:
+        # 使用 default 方案的实际配置值（而非硬编码默认值）
+        global_profile = data.profiles.get("default", ProfileSettings())
+        check_interval_minutes = global_profile.check_interval_minutes
+        auto_start = global_profile.auto_start
+        headless = global_profile.headless
+        browser_timeout = global_profile.browser_timeout
+        browser_user_agent = global_profile.browser_user_agent
+        browser_low_resource_mode = global_profile.browser_low_resource_mode
+        browser_disable_web_security = global_profile.browser_disable_web_security
+        browser_extra_headers_json = global_profile.browser_extra_headers_json
+        browser_args = global_profile.browser_args
+        pause_enabled = global_profile.pause_enabled
+        pause_start_hour = global_profile.pause_start_hour
+        pause_end_hour = global_profile.pause_end_hour
+        network_targets = _normalize_targets(global_profile.network_targets)
+        custom_variables = global_profile.custom_variables
 
     return MonitorConfigPayload(
         username=username,
@@ -229,10 +249,11 @@ def write_system_settings(payload: MonitorConfigPayload, profile_service: Profil
 
 
 def save_profile_from_payload(
-    payload: MonitorConfigPayload, project_root: Path
+    payload: MonitorConfigPayload, project_root: Path,
+    profile_service: ProfileService | None = None,
 ) -> None:
     """从 MonitorConfigPayload 提取 profile 字段并保存到 settings.json"""
-    ps = ProfileService(project_root)
+    ps = profile_service or ProfileService(project_root)
     active_id = ps.get_active_profile_id()
     existing = ps.get_active_profile()
 
@@ -261,6 +282,7 @@ def save_profile_from_payload(
         browser_extra_headers_json=_normalize_headers_json(
             payload.browser_extra_headers_json
         ),
+        browser_args=payload.browser_args.strip(),
         pause_enabled=payload.pause_enabled,
         pause_start_hour=payload.pause_start_hour,
         pause_end_hour=payload.pause_end_hour,

@@ -3,7 +3,7 @@ export const lifecycleMethods = {
     this.frontendLogger.info('app.init', 'start init');
     this.isLoading = true;
     await Promise.all([
-      this.fetchConfig(),
+      this.fetchConfig(true),
       this.fetchStatus(),
       this.fetchLogs(),
       this.fetchAppVersion(),
@@ -15,8 +15,6 @@ export const lifecycleMethods = {
       this.fetchSafeMode(),
     ]);
     this.isLoading = false;
-    // 保存配置快照用于未保存检测
-    this.savedConfigSnapshot = JSON.stringify(this.config);
     this.connectWebSocket();
     this.timers.push(setInterval(this.fetchStatus, 4000));
     this.timers.push(setInterval(this.fetchAutostart, 12000));
@@ -82,6 +80,8 @@ export const lifecycleMethods = {
   connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/logs`;
+
+    clearTimeout(this._wsRetryTimer);
 
     if (this.ws) {
       this.ws.close();

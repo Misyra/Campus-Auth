@@ -538,13 +538,13 @@ class WaitUrlHandler(StepHandler):
             return False, "wait_url 步骤需要 pattern"
 
         logger.info(f"[wait_url] pattern={pattern}")
-        deadline = asyncio.get_event_loop().time() + timeout / 1000
+        deadline = asyncio.get_running_loop().time() + timeout / 1000
         while True:
             current_url = page.url
             if re.search(pattern, current_url):
                 logger.info(f"[wait_url] URL 已匹配: {current_url}")
                 return True, ""
-            remaining = deadline - asyncio.get_event_loop().time()
+            remaining = deadline - asyncio.get_running_loop().time()
             if remaining <= 0:
                 return False, f"等待 URL 匹配 '{pattern}' 超时，当前: {current_url}"
             await asyncio.sleep(min(0.2, remaining))
@@ -722,6 +722,17 @@ class TaskValidator:
             for i, cond in enumerate(config["success_conditions"]):
                 if not cond.get("type"):
                     errors.append(f"success_conditions[{i}] 必须包含 'type'")
+                    continue
+                cond_type = cond["type"]
+                cond_prefix = f"success_conditions[{i}]"
+                if cond_type == "VARIABLE" and not cond.get("variable"):
+                    errors.append(f"{cond_prefix} (VARIABLE) 需要 'variable' 字段")
+                if cond_type in ("URL_CONTAINS", "URL_MATCHES") and not cond.get("pattern"):
+                    errors.append(f"{cond_prefix} ({cond_type}) 需要 'pattern' 字段")
+                if cond_type == "ELEMENT_EXISTS" and not cond.get("selector"):
+                    errors.append(f"{cond_prefix} (ELEMENT_EXISTS) 需要 'selector' 字段")
+                if cond_type == "JS_EXPRESSION" and not cond.get("script"):
+                    errors.append(f"{cond_prefix} (JS_EXPRESSION) 需要 'script' 字段")
 
         return len(errors) == 0, errors
 
@@ -951,8 +962,8 @@ class TaskExecutor:
 
             return True
         except Exception as e:
-            logger.warning(f"默认页面检查异常，保守判定为成功: {e}")
-            return True
+            logger.warning(f"默认页面检查异常，判定为失败: {e}")
+            return False
 
     async def _evaluate_condition(
         self, cond: ConditionConfig, current_url: str, page

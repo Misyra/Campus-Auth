@@ -188,7 +188,7 @@ class BrowserContextManager:
         else:
             self.logger.debug("浏览器资源已完全清理")
 
-    async def navigate_to(self, url: str, timeout: int = None) -> bool:
+    async def navigate_to(self, url: str, timeout: int | None = None) -> bool:
         """导航到指定URL"""
         if not self.page:
             raise RuntimeError("浏览器未启动，请在上下文管理器中使用")

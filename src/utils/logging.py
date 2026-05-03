@@ -2,6 +2,7 @@ import logging
 import logging.handlers
 import os
 import sys
+import threading
 from typing import Any, Dict
 
 
@@ -43,7 +44,8 @@ class _SideFilter(logging.Filter):
         self.side = side
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.side = self.side
+        if not hasattr(record, "side"):
+            record.side = self.side
         return True
 
 
@@ -160,7 +162,7 @@ class LogConfigCenter:
     """
 
     _instance = None
-    _lock = False
+    _init_lock = threading.Lock()
 
     # 默认配置
     DEFAULT_CONFIG = {
@@ -175,8 +177,10 @@ class LogConfigCenter:
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
+            with cls._init_lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
         return cls._instance
 
     def __init__(self):
@@ -184,6 +188,7 @@ class LogConfigCenter:
             return
         self._config = self.DEFAULT_CONFIG.copy()
         self._side = "BACKEND"
+        self._configured = False
         self._initialized = True
 
     @classmethod
@@ -201,16 +206,17 @@ class LogConfigCenter:
             config: 日志配置字典
             side: 应用侧标识（BACKEND/FRONTEND）
         """
-        if self._lock:
-            return
+        with self._init_lock:
+            if self._configured:
+                return
 
-        if config:
-            self._config.update(config)
-        self._side = side
+            if config:
+                self._config.update(config)
+            self._side = side
 
-        # 配置根日志器
-        configure_root_logger(self._config, side)
-        self._lock = True
+            # 配置根日志器
+            configure_root_logger(self._config, side)
+            self._configured = True
 
     def get_logger(self, name: str, side: str | None = None) -> logging.Logger:
         """
@@ -223,7 +229,7 @@ class LogConfigCenter:
         Returns:
             logging.Logger: 配置好的日志器
         """
-        if not self._lock:
+        if not self._configured:
             self.initialize()
         return get_logger(name, side or self._side)
 
@@ -233,21 +239,4 @@ class LogConfigCenter:
 
     def is_initialized(self) -> bool:
         """检查是否已初始化"""
-        return self._lock
-
-
-# 便捷函数：获取统一配置的日志器
-def get_configured_logger(name: str, side: str = "BACKEND") -> logging.Logger:
-    """
-    获取统一配置的日志器
-
-    使用日志配置中心获取日志器，确保配置一致性
-
-    Args:
-        name: 日志器名称
-        side: 应用侧标识
-
-    Returns:
-        logging.Logger: 配置好的日志器
-    """
-    return LogConfigCenter.get_instance().get_logger(name, side)
+        return self._configured

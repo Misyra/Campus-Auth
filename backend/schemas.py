@@ -5,12 +5,7 @@ import re
 
 from pydantic import BaseModel, Field, field_validator
 
-DEFAULT_BROWSER_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-)
-
-_VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 _URL_PATTERN = re.compile(r"^https?://")
 
 
@@ -61,8 +56,8 @@ class MonitorConfigPayload(BaseModel):
     @classmethod
     def validate_log_level(cls, v: str) -> str:
         v = v.upper().strip()
-        if v and v not in _VALID_LOG_LEVELS:
-            raise ValueError(f"无效的日志级别: {v}，可选值: {', '.join(_VALID_LOG_LEVELS)}")
+        if v and v not in VALID_LOG_LEVELS:
+            raise ValueError(f"无效的日志级别: {v}，可选值: {', '.join(VALID_LOG_LEVELS)}")
         return v
 
     @field_validator("browser_extra_headers_json")
@@ -115,7 +110,7 @@ class LogEntry(BaseModel):
     @classmethod
     def validate_level(cls, v: str) -> str:
         v = v.upper().strip()
-        return v if v in _VALID_LOG_LEVELS else "INFO"
+        return v if v in VALID_LOG_LEVELS else "INFO"
 
 
 class AutoStartStatusResponse(BaseModel):
@@ -228,8 +223,8 @@ class SystemSettings(BaseModel):
     @classmethod
     def validate_log_level(cls, v: str) -> str:
         v = v.upper().strip()
-        if v and v not in _VALID_LOG_LEVELS:
-            raise ValueError(f"无效的日志级别: {v}，可选值: {', '.join(_VALID_LOG_LEVELS)}")
+        if v and v not in VALID_LOG_LEVELS:
+            raise ValueError(f"无效的日志级别: {v}，可选值: {', '.join(VALID_LOG_LEVELS)}")
         return v
 
 
@@ -237,7 +232,7 @@ class ProfilesData(BaseModel):
     """Top-level structure of settings.json"""
 
     auto_switch: bool = Field(
-        default=True, description="是否根据网关 IP 自动切换方案"
+        default=False, description="是否根据网关 IP 自动切换方案"
     )
     active_profile: str = Field(default="default")
     system: SystemSettings = Field(default_factory=SystemSettings)

@@ -11,17 +11,6 @@ export const profileMethods = {
       this.frontendLogger.error('profiles', 'failed to fetch profiles', error);
     }
   },
-  async fetchActiveProfile() {
-    try {
-      const { data } = await this.$api.get('/api/profiles/active');
-      this.activeProfileId = data.profile_id;
-      this.autoSwitch = data.auto_switch;
-      return data;
-    } catch (error) {
-      this.frontendLogger.error('profiles', 'failed to fetch active profile', error);
-      return null;
-    }
-  },
   showProfileEditor(profileId) {
     this.editorDetectResult = null;
     if (profileId && this.profiles[profileId]) {

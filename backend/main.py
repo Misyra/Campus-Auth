@@ -35,7 +35,6 @@ from .schemas import (
     MonitorConfigPayload,
     MonitorStatusResponse,
     ProfileSettings,
-    ProfilesData,
 )
 from .task_service import TaskService
 
@@ -57,14 +56,13 @@ DEBUG_DIR.mkdir(parents=True, exist_ok=True)
 @asynccontextmanager
 async def lifespan(app_instance):
     """应用生命周期管理"""
-    start = asyncio.get_event_loop().time()
+    loop = asyncio.get_running_loop()
+    start = loop.time()
     startup_logger.info("FastAPI 启动: 开始设置事件循环与服务引导")
-    service.set_event_loop(asyncio.get_event_loop())
+    service.set_event_loop(loop)
 
     # 迁移：从 .env 创建或补充 settings.json
     try:
-        from src.utils import ConfigLoader
-
         env_config = ConfigLoader.load_config_from_env()
         profile_service.migrate_config(env_config)
         service.reload_config()
@@ -74,7 +72,7 @@ async def lifespan(app_instance):
     service.boot()
     startup_logger.info(
         "FastAPI 启动: 完成，耗时 %.3fs",
-        asyncio.get_event_loop().time() - start,
+        asyncio.get_running_loop().time() - start,
     )
     yield
     startup_logger.info("FastAPI 关闭: 正在停止服务...")
@@ -355,7 +353,7 @@ def save_config(payload: MonitorConfigPayload) -> ActionResponse:
         service.save_config(payload)
         # 同时保存 profile 非敏感设置
         try:
-            save_profile_from_payload(payload, PROJECT_ROOT)
+            save_profile_from_payload(payload, PROJECT_ROOT, profile_service)
         except Exception as exc:
             api_logger.warning("Profile save failed: %s", exc)
         api_logger.info("Config updated")
@@ -481,13 +479,8 @@ def get_safe_mode() -> dict:
 
 @app.post("/api/safe-mode")
 def toggle_safe_mode() -> dict:
-    new_value = not service.safe_mode
     try:
-        with service._lock:
-            data = service._profile_service.load()
-            data.system.safe_mode = new_value
-            service._profile_service.save(data)
-        service.safe_mode = new_value
+        new_value = service.toggle_safe_mode()
         api_logger.info("Safe mode toggled -> %s", new_value)
         return {"enabled": new_value}
     except Exception as exc:
@@ -758,15 +751,8 @@ def toggle_auto_switch(enabled: bool = True) -> ActionResponse:
     return ActionResponse(success=True, message=f"自动切换已{state}")
 
 
-# 全局停止事件与系统托盘引用
-_shutdown_event = None
-_tray_icon_ref = None  # 由 app.py 中设置，用于 shutdown 时正确停止
-
-
-def _setShutdownEvent(event):
-    """设置关闭事件回调"""
-    global _shutdown_event
-    _shutdown_event = event
+# 系统托盘引用（由 app.py 中设置，用于 shutdown 时正确停止）
+_tray_icon_ref = None
 
 
 def _setTrayIcon(tray_icon):
@@ -782,8 +768,6 @@ def shutdown_server() -> ActionResponse:
     import threading
 
     def _do_shutdown():
-        import os
-        import signal
         import time
 
         try:
@@ -800,7 +784,11 @@ def shutdown_server() -> ActionResponse:
 
         time.sleep(0.5)
 
-        os.kill(os.getpid(), signal.SIGTERM)
+        if sys.platform == "win32":
+            os._exit(0)
+        else:
+            import signal as _signal
+            os.kill(os.getpid(), _signal.SIGTERM)
 
     threading.Thread(target=_do_shutdown, daemon=True).start()
 
@@ -827,11 +815,18 @@ def run() -> None:
 
     config = ConfigLoader.load_config_from_env()
 
+    # 优先从 settings.json 读取系统设置（Web 控制台可修改）
+    try:
+        sys_settings = profile_service.load().system
+        log_level = sys_settings.backend_log_level or config.get("logging", {}).get("level", "WARNING")
+        access_log_enabled = bool(sys_settings.access_log)
+    except Exception:
+        log_level = config.get("logging", {}).get("level", "WARNING")
+        access_log_enabled = bool(config.get("access_log", False))
+
     # 使用日志配置中心统一配置
     log_center = LogConfigCenter.get_instance()
-    log_center.initialize(config.get("logging", {}), side="BACKEND")
-
-    access_log_enabled = bool(config.get("access_log", False))
+    log_center.initialize({"level": log_level}, side="BACKEND")
 
     if not access_log_enabled:
         logging.getLogger("uvicorn.access").setLevel(logging.WARNING)

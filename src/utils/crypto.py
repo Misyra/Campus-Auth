@@ -21,15 +21,23 @@ _KEY_DIR = Path.home() / ".campus_network_auth"
 _KEY_FILE = _KEY_DIR / ".enc_key"
 _ENC_PREFIX = "ENC:"
 
+_cached_raw_key: bytes | None = None
+_cached_fernet_key: bytes | None = None
+
 
 def _get_or_create_key() -> bytes:
     """获取或创建加密密钥（Fernet 要求 32 字节 base64 编码的密钥）"""
+    global _cached_raw_key
+    if _cached_raw_key is not None:
+        return _cached_raw_key
+
     _KEY_DIR.mkdir(parents=True, exist_ok=True)
 
     if _KEY_FILE.exists():
         try:
             key = base64.urlsafe_b64decode(_KEY_FILE.read_text(encoding="utf-8").strip())
             if len(key) == 32:
+                _cached_raw_key = key
                 return key
         except Exception:
             pass
@@ -44,17 +52,23 @@ def _get_or_create_key() -> bytes:
     except OSError:
         pass
 
+    _cached_raw_key = key
     return key
 
 
 def _derive_fernet_key() -> bytes:
     """从原始密钥派生 Fernet 兼容的密钥（32 字节 URL-safe base64 编码）"""
+    global _cached_fernet_key
+    if _cached_fernet_key is not None:
+        return _cached_fernet_key
+
     raw_key = _get_or_create_key()
     # Fernet 密钥 = 32 字节 URL-safe base64 编码的字符串
     # 内部 = 16 字节 signing key + 16 字节 encryption key (共 32 字节 → base64 后 44 字符)
     signing_key = hashlib.sha256(raw_key + b":signing").digest()[:16]
     encryption_key = hashlib.sha256(raw_key + b":encryption").digest()[:16]
-    return base64.urlsafe_b64encode(signing_key + encryption_key)
+    _cached_fernet_key = base64.urlsafe_b64encode(signing_key + encryption_key)
+    return _cached_fernet_key
 
 
 def encrypt_password(plaintext: str) -> str:
