@@ -275,11 +275,18 @@ class MonitorService:
 
     def test_network(self) -> tuple[bool, str]:
         service_logger.debug("Network test requested")
+        self._push_log("正在测试网络连接...", "INFO", "network")
         try:
             ok = is_network_available(timeout=2, require_both=False)
-            return (True, "网络连接正常") if ok else (False, "网络连接异常")
+            if ok:
+                self._push_log("网络连接正常 ✓", "INFO", "network")
+                return True, "网络连接正常"
+            else:
+                self._push_log("网络连接异常 ✗", "WARNING", "network")
+                return False, "网络连接异常"
         except Exception as exc:
             service_logger.exception("Network test failed")
+            self._push_log(f"网络测试失败: {exc}", "ERROR", "network")
             return False, f"网络测试失败: {exc}"
 
     def list_logs(self, limit: int = 200) -> list[LogEntry]:

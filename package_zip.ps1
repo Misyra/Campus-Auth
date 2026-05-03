@@ -1,7 +1,7 @@
 param(
     [string]$OutputDir = "release",
     [string]$Version = "",
-    [switch]$IncludeExe = $true,
+    [switch]$IncludeExe,
     [switch]$KeepStaging = $false
 )
 
@@ -12,6 +12,10 @@ $StageRoot = Join-Path $ProjectRoot "build\zip-staging"
 $StageDir = Join-Path $StageRoot "Campus-Auth"
 $OutputPath = Join-Path $ProjectRoot $OutputDir
 $Timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+
+if (-not $PSBoundParameters.ContainsKey("IncludeExe")) {
+    $IncludeExe = $true
+}
 
 function Resolve-ProjectVersion {
     param([string]$Root)
@@ -61,13 +65,11 @@ $IncludeItems = @(
     "tasks",
     "doc",
     "requirements.txt",
-    "pyproject.toml",
     "README.md",
     "LICENSE",
     ".env.example",
     "setup_env.ps1",
-    "setup_env.sh",
-    "Campus-Auth-Setup.spec"
+    "setup_env.sh"
 )
 
 if ($IncludeExe) {

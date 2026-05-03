@@ -85,6 +85,11 @@ export const uiMethods = {
     // 智能滚动：仅在用户已经在底部时自动滚动
     const logViewer = document.querySelector('.log-viewer');
     if (!logViewer) return;
+    if (!this.autoScroll) {
+      // 自动滚动关闭时，只计数新消息
+      this.newLogCount = (this.newLogCount || 0) + 1;
+      return;
+    }
     const isAtBottom = logViewer.scrollTop + logViewer.clientHeight >= logViewer.scrollHeight - 60;
     if (isAtBottom) {
       logViewer.scrollTop = logViewer.scrollHeight;

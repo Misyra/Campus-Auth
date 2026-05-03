@@ -112,6 +112,12 @@
   height: 18px;
 }
 
+.btn-active {
+  background: rgba(34, 211, 238, 0.15) !important;
+  color: var(--accent) !important;
+  border-radius: var(--radius-md);
+}
+
 .btn-danger {
   background: rgba(239, 68, 68, 0.2);
   color: var(--error);

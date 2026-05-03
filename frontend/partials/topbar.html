@@ -1,7 +1,9 @@
 <header class="top-bar">
   <div class="top-title-area">
     <h1 class="page-title">{{ pageTitle }}</h1>
-    <span v-if="configDirty" class="top-dirty-hint">· 未保存的更改</span>
+    <span v-if="configDirty" class="top-dirty-hint">
+      <span class="top-dirty-dot"></span>未保存
+    </span>
   </div>
   <div class="top-actions">
     <div v-if="wsReconnecting" class="ws-reconnect-bar" style="position:static;border:none;padding:6px 12px;border-radius:var(--radius-md);">

@@ -5,6 +5,7 @@
 """
 
 import json
+import threading
 
 from .logging import LoggerSetup
 
@@ -12,14 +13,16 @@ from .logging import LoggerSetup
 class BrowserContextManager:
     """浏览器上下文管理器 - 使用异步上下文管理器确保资源正确释放"""
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, cancel_event: threading.Event | None = None):
         """
         初始化浏览器上下文管理器
 
         参数:
             config: 配置字典
+            cancel_event: 取消事件，设置后中断浏览器操作
         """
         self.config = config
+        self.cancel_event = cancel_event
         self.browser_settings = config.get("browser_settings", {})
         self.logger = LoggerSetup.setup_logger(
             f"{__name__}_browser", config.get("logging", {})
@@ -31,8 +34,13 @@ class BrowserContextManager:
         self.context = None
         self.page = None
 
+    def _is_cancelled(self) -> bool:
+        return self.cancel_event is not None and self.cancel_event.is_set()
+
     async def __aenter__(self):
         """异步上下文管理器入口"""
+        if self._is_cancelled():
+            raise RuntimeError("浏览器启动已取消")
         await self._start_browser()
         return self
 
@@ -187,6 +195,8 @@ class BrowserContextManager:
         """导航到指定URL"""
         if not self.page:
             raise RuntimeError("浏览器未启动，请在上下文管理器中使用")
+        if self._is_cancelled():
+            raise RuntimeError("浏览器操作已取消")
 
         try:
             timeout = timeout or self.browser_settings.get("timeout", 10000)

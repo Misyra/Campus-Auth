@@ -158,14 +158,14 @@
   <div v-if="dangerConfirm" class="danger-overlay" @click.self="confirmDanger(false)">
     <div class="danger-modal">
       <div class="danger-modal-header">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;color:var(--warning);flex-shrink:0;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:28px;height:28px;color:var(--error);flex-shrink:0;">
           <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
           <line x1="12" y1="9" x2="12" y2="13"/>
           <line x1="12" y1="17" x2="12.01" y2="17"/>
         </svg>
         <div>
           <h3>安全警告：任务包含可执行代码</h3>
-          <p class="danger-subtitle">以下步骤会执行 JavaScript 代码，请确认来源可信后再保存</p>
+          <p class="danger-subtitle">该任务中的以下步骤可在浏览器上下文中执行任意 JavaScript 代码，存在较高安全风险。<br>恶意代码可能窃取您的账号密码、篡改页面内容或执行其他未授权操作。<br><strong>请务必确认代码来源可信、内容安全后再保存。</strong></p>
         </div>
       </div>
       <div class="danger-modal-body">
@@ -179,7 +179,10 @@
       </div>
       <div class="danger-modal-footer">
         <button class="btn btn-secondary" @click="confirmDanger(false)">取消</button>
-        <button class="btn btn-primary" @click="confirmDanger(true)" style="background:linear-gradient(135deg,var(--warning),#d97706);">我已确认风险，继续保存</button>
+        <button class="btn btn-primary danger-confirm-btn" @click="confirmDanger(true)" :disabled="dangerCountdown > 0">
+          <span v-if="dangerCountdown > 0">请仔细阅读警告 ({{ dangerCountdown }}s)</span>
+          <span v-else>我已确认风险，继续保存</span>
+        </button>
       </div>
     </div>
   </div>
