@@ -80,6 +80,7 @@ class MonitorService:
         self._monitor_core: NetworkMonitorCore | None = None
         self._monitor_thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
+        self.safe_mode: bool = self._profile_service.load().system.safe_mode
 
     def set_event_loop(self, loop: asyncio.AbstractEventLoop):
         self._loop = loop
@@ -196,8 +197,11 @@ class MonitorService:
             if not valid:
                 return False, f"配置无效: {error}"
 
+            config = self._runtime_config.copy()
+            if self.safe_mode:
+                config.setdefault("browser_settings", {})["safe_mode"] = True
             core = NetworkMonitorCore(
-                config=self._runtime_config.copy(),
+                config=config,
                 log_callback=self._push_log,
             )
             core.set_profile_service(self._profile_service, on_switch=self._on_profile_switch)
@@ -264,6 +268,8 @@ class MonitorService:
         service_logger.info("Manual login requested")
         with self._lock:
             runtime_config = self._runtime_config.copy()
+        if self.safe_mode:
+            runtime_config.setdefault("browser_settings", {})["safe_mode"] = True
 
         core = NetworkMonitorCore(config=runtime_config, log_callback=self._push_log)
         success, message = core.attempt_login()

@@ -59,36 +59,41 @@ class BrowserContextManager:
 
             self.playwright = await async_playwright().start()
             headless = self.browser_settings.get("headless", False)
-            low_resource_mode = bool(
-                self.browser_settings.get("low_resource_mode", False)
-            )
+            safe_mode = self.browser_settings.get("safe_mode", False)
 
-            # 统一的浏览器启动参数
-            browser_args = self._get_browser_args()
-
-            self.browser = await self.playwright.chromium.launch(
-                headless=headless, args=browser_args
-            )
-
-            # 创建浏览器上下文 - 优化视口大小减少内存占用
-            extra_headers = self._get_extra_http_headers()
-            self.context = await self.browser.new_context(
-                viewport={"width": 1280, "height": 720},
-                user_agent=self.browser_settings.get(
-                    "user_agent",
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                ),
-                extra_http_headers=extra_headers,
-            )
-
-            if low_resource_mode:
-                await self.context.route("**/*", self._handle_low_resource_request)
+            if safe_mode:
+                # 安全模式：不注入任何自定义参数
+                self.browser = await self.playwright.chromium.launch(
+                    headless=headless
+                )
+                self.context = await self.browser.new_context(
+                    viewport={"width": 1280, "height": 720},
+                )
+            else:
+                low_resource_mode = bool(
+                    self.browser_settings.get("low_resource_mode", False)
+                )
+                browser_args = self._get_browser_args()
+                self.browser = await self.playwright.chromium.launch(
+                    headless=headless, args=browser_args
+                )
+                extra_headers = self._get_extra_http_headers()
+                ctx_opts: dict = {
+                    "viewport": {"width": 1280, "height": 720},
+                    "extra_http_headers": extra_headers,
+                }
+                user_agent = (self.browser_settings.get("user_agent") or "").strip()
+                if user_agent:
+                    ctx_opts["user_agent"] = user_agent
+                self.context = await self.browser.new_context(**ctx_opts)
+                if low_resource_mode:
+                    await self.context.route("**/*", self._handle_low_resource_request)
 
             # 创建页面
             self.page = await self.context.new_page()
 
             self.logger.info(
-                f"浏览器已启动，无头模式: {headless}, 低资源模式: {low_resource_mode}"
+                f"浏览器已启动，无头模式: {headless}, 安全模式: {safe_mode}"
             )
 
         except Exception as e:
@@ -98,50 +103,42 @@ class BrowserContextManager:
             raise
 
     def _get_browser_args(self) -> list[str]:
-        """获取优化的浏览器启动参数，减少内存和资源占用"""
+        """获取浏览器启动参数：基础优化 + 用户自定义"""
         args = [
             "--no-sandbox",
             "--disable-dev-shm-usage",
             "--disable-gpu",
-            "--disable-extensions",
-            "--disable-plugins",
             "--memory-pressure-off",
-            "--max_old_space_size=256",
         ]
-        # 同源策略：仅在配置明确启用时禁用（默认保留浏览器安全策略）
-        disable_web_security = self.browser_settings.get("disable_web_security", False)
-        if disable_web_security:
+        if self.browser_settings.get("disable_web_security", False):
             args.append("--disable-web-security")
         if self.browser_settings.get("low_resource_mode", False):
             args.append("--blink-settings=imagesEnabled=false")
+        # 用户自定义参数
+        custom = str(self.browser_settings.get("browser_args", "") or "").strip()
+        if custom:
+            for flag in custom.split():
+                flag = flag.strip()
+                if flag and flag not in args:
+                    args.append(flag)
         return args
 
     def _get_extra_http_headers(self) -> dict[str, str]:
-        """合并默认请求头和用户自定义请求头"""
-        headers = {
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-        }
-
+        """返回用户自定义请求头"""
         raw_headers = str(
             self.browser_settings.get("extra_headers_json", "") or ""
         ).strip()
         if not raw_headers:
-            return headers
+            return {}
 
         try:
             custom_headers = json.loads(raw_headers)
             if isinstance(custom_headers, dict):
-                for key, value in custom_headers.items():
-                    if key is None:
-                        continue
-                    headers[str(key)] = str(value)
-            else:
-                self.logger.warning("浏览器自定义请求头必须是 JSON 对象，已忽略")
+                return {str(k): str(v) for k, v in custom_headers.items() if k is not None}
+            self.logger.warning("浏览器自定义请求头必须是 JSON 对象，已忽略")
         except Exception as exc:
             self.logger.warning(f"解析浏览器自定义请求头失败，已忽略: {exc}")
-
-        return headers
+        return {}
 
     async def _handle_low_resource_request(self, route) -> None:
         request = route.request

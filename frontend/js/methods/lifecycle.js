@@ -12,6 +12,7 @@ export const lifecycleMethods = {
       this.fetchTasks(),
       this.fetchActiveTask(),
       this.fetchProfiles(),
+      this.fetchSafeMode(),
     ]);
     this.isLoading = false;
     // 保存配置快照用于未保存检测

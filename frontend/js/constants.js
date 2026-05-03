@@ -9,9 +9,6 @@ export const LOG_LEVELS = {
   ERROR: 40,
 };
 
-export const DEFAULT_BROWSER_USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-
 export const DEFAULT_CONFIG = {
   username: "",
   password: "",
@@ -23,10 +20,11 @@ export const DEFAULT_CONFIG = {
   auto_start: false,
   headless: true,
   browser_timeout: 8000,
-  browser_user_agent: DEFAULT_BROWSER_USER_AGENT,
+  browser_user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
   browser_low_resource_mode: true,
   browser_disable_web_security: false,
   browser_extra_headers_json: "",
+  browser_args: "",
   pause_enabled: true,
   pause_start_hour: 0,
   pause_end_hour: 6,
@@ -64,6 +62,7 @@ export const DEFAULT_PROFILE_SETTINGS = {
   browser_low_resource_mode: true,
   browser_disable_web_security: false,
   browser_extra_headers_json: '',
+  browser_args: '',
   pause_enabled: true,
   pause_start_hour: 0,
   pause_end_hour: 6,

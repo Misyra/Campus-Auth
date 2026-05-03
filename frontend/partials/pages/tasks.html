@@ -40,6 +40,7 @@
                 {{ activeTaskId === task.id ? '当前使用' : '使用' }}
               </button>
               <button class="btn btn-sm" @click="showTaskEditor(task.id)">编辑</button>
+              <button class="btn btn-sm btn-debug" @click="startDebug(task.id)" :disabled="debugLoading || debugSession.running" title="逐步调试此任务">调试</button>
               <button class="btn btn-sm" @click="duplicateTask(task.id)" title="复制此任务">复制</button>
               <button class="btn btn-sm" @click="exportTask(task.id)" title="导出为JSON文件">导出</button>
               <button class="btn btn-sm btn-danger" @click="deleteTask(task.id)" :disabled="task.id === 'default'">
@@ -64,7 +65,7 @@
       <div class="card-body">
         <div class="form-group">
           <label>任务ID</label>
-          <input v-model="editingTask.id" type="text" placeholder="task_id" :disabled="!!editingTask.id" />
+          <input v-model="editingTask.id" type="text" placeholder="task_id" :disabled="!editingTask._isNew" />
           <span class="hint">只能包含字母、数字和下划线</span>
         </div>
         <div class="form-group">
@@ -77,7 +78,8 @@
         </div>
         <div class="form-group">
           <label>认证地址</label>
-          <input v-model="editingTask.url" type="text" placeholder="http://172.29.0.2" />
+          <input v-model="editingTask.url" type="text" placeholder="不填则使用系统设置的认证地址" />
+          <span class="hint">留空使用系统默认地址，填写后会覆盖 {{LOGIN_URL}} 变量</span>
         </div>
         <div class="form-group">
           <label>JSON 配置</label>
@@ -183,6 +185,58 @@
           <span v-if="dangerCountdown > 0">请仔细阅读警告 ({{ dangerCountdown }}s)</span>
           <span v-else>我已确认风险，继续保存</span>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 调试模式面板 -->
+  <div v-if="debugSession.running" class="debug-overlay">
+    <div class="debug-panel">
+      <div class="debug-header">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;color:var(--accent);">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          调试：{{ debugSession.task_id }}
+        </h3>
+        <span class="debug-step-counter">{{ debugSession.current_step }} / {{ debugSession.total_steps }}</span>
+      </div>
+      <div class="debug-body">
+        <div class="debug-screenshot-container">
+          <img v-if="debugSession.screenshot_url" :src="debugSession.screenshot_url" alt="页面截图" class="debug-screenshot" />
+          <div v-else class="debug-screenshot-placeholder">等待截图...</div>
+        </div>
+        <div class="debug-steps">
+          <div v-for="step in debugSession.steps" :key="step.index"
+               class="debug-step-item" :class="getDebugStepStatus(step.index)">
+            <div class="debug-step-indicator">
+              <span v-if="getDebugStepStatus(step.index) === 'success'" class="step-check">&#10003;</span>
+              <span v-else-if="getDebugStepStatus(step.index) === 'failed'" class="step-cross">&#10007;</span>
+              <span v-else-if="getDebugStepStatus(step.index) === 'current'" class="step-arrow">&#9654;</span>
+              <span v-else class="step-dot">&#8226;</span>
+            </div>
+            <div class="debug-step-info">
+              <span class="debug-step-badge">{{ step.type }}</span>
+              <span class="debug-step-desc">{{ step.description }}</span>
+              <span v-if="getDebugStepResult(step.index)" class="debug-step-msg"
+                    :class="getDebugStepResult(step.index).success ? 'msg-ok' : 'msg-fail'">
+                {{ getDebugStepResult(step.index).message || (getDebugStepResult(step.index).success ? '成功' : '失败') }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="debug-footer">
+        <button class="btn btn-sm btn-primary" @click="debugNextStep()"
+                :disabled="busy.debug || debugSession.current_step >= debugSession.total_steps">
+          {{ busy.debug ? '执行中...' : '下一步' }}
+        </button>
+        <button class="btn btn-sm" @click="debugRunAll()"
+                :disabled="busy.debug || debugSession.current_step >= debugSession.total_steps">
+          运行剩余
+        </button>
+        <button class="btn btn-sm btn-danger" @click="debugStop()">停止并关闭</button>
       </div>
     </div>
   </div>

@@ -61,6 +61,7 @@ export const taskMethods = {
           description: data.description,
           url: data.url,
           json: JSON.stringify(data, null, 2),
+          _isNew: false,
         };
         this.jsonError = '';
       } catch (error) {
@@ -73,6 +74,7 @@ export const taskMethods = {
         description: '',
         url: 'http://172.29.0.2',
         json: '',
+        _isNew: true,
       };
       this.jsonError = '';
     }
@@ -251,5 +253,87 @@ export const taskMethods = {
       reader.readAsText(file);
     };
     input.click();
+  },
+
+  async fetchSafeMode() {
+    try {
+      const { data } = await this.$api.get('/api/safe-mode');
+      this.safeMode = data.enabled;
+    } catch { /* ignore */ }
+  },
+
+  async toggleSafeMode() {
+    try {
+      const { data } = await this.$api.post('/api/safe-mode');
+      this.safeMode = data.enabled;
+      this.notify(true, `安全模式已${data.enabled ? '开启' : '关闭'}`);
+    } catch {
+      this.safeMode = !this.safeMode;
+      this.notify(false, '切换安全模式失败');
+    }
+  },
+
+  async startDebug(taskId) {
+    this.debugLoading = true;
+    try {
+      const { data } = await this.$api.post('/api/debug/start', { task_id: taskId });
+      this.debugSession = data;
+      this.frontendLogger.info('debug', `started for task ${taskId}`);
+    } catch (error) {
+      const msg = error?.response?.data?.detail || '启动调试失败';
+      this.notify(false, msg);
+    } finally {
+      this.debugLoading = false;
+    }
+  },
+
+  async debugNextStep() {
+    this.busy.debug = true;
+    try {
+      const { data } = await this.$api.post('/api/debug/next');
+      this.debugSession = data;
+    } catch (error) {
+      const msg = error?.response?.data?.detail || '执行步骤失败';
+      this.notify(false, msg);
+    } finally {
+      this.busy.debug = false;
+    }
+  },
+
+  async debugRunAll() {
+    this.busy.debug = true;
+    try {
+      const { data } = await this.$api.post('/api/debug/run-all');
+      this.debugSession = data;
+    } catch (error) {
+      const msg = error?.response?.data?.detail || '执行失败';
+      this.notify(false, msg);
+    } finally {
+      this.busy.debug = false;
+    }
+  },
+
+  async debugStop() {
+    try {
+      const { data } = await this.$api.post('/api/debug/stop');
+      this.debugSession = {
+        running: false, task_id: null, current_step: 0,
+        total_steps: 0, steps: [], results: [], screenshot_url: null,
+      };
+      this.notify(true, data.message || '调试已停止');
+    } catch {
+      this.notify(false, '停止调试失败');
+    }
+  },
+
+  getDebugStepResult(index) {
+    return this.debugSession.results.find(r => r.step_index === index) || null;
+  },
+
+  getDebugStepStatus(index) {
+    const result = this.getDebugStepResult(index);
+    if (result) return result.success ? 'success' : 'failed';
+    if (index === this.debugSession.current_step) return 'current';
+    return 'pending';
   },
 };

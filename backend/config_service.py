@@ -8,7 +8,6 @@ from src.utils.crypto import decrypt_password, encrypt_password, mask_password
 
 from .profile_service import ProfileService
 from .schemas import (
-    DEFAULT_BROWSER_USER_AGENT,
     MonitorConfigPayload,
     ProfileSettings,
     SystemSettings,
@@ -74,10 +73,11 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
     auto_start = profile.auto_start
     headless = profile.headless
     browser_timeout = profile.browser_timeout
-    browser_user_agent = profile.browser_user_agent or DEFAULT_BROWSER_USER_AGENT
+    browser_user_agent = profile.browser_user_agent
     browser_low_resource_mode = profile.browser_low_resource_mode
     browser_disable_web_security = profile.browser_disable_web_security
     browser_extra_headers_json = profile.browser_extra_headers_json
+    browser_args = profile.browser_args
     pause_enabled = profile.pause_enabled
     pause_start_hour = profile.pause_start_hour
     pause_end_hour = profile.pause_end_hour
@@ -99,6 +99,7 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
         browser_low_resource_mode=browser_low_resource_mode,
         browser_disable_web_security=browser_disable_web_security,
         browser_extra_headers_json=browser_extra_headers_json,
+        browser_args=browser_args,
         pause_enabled=pause_enabled,
         pause_start_hour=pause_start_hour,
         pause_end_hour=pause_end_hour,
@@ -141,14 +142,13 @@ def build_runtime_config(payload: MonitorConfigPayload, sys: SystemSettings | No
     browser = base.setdefault("browser_settings", {})
     browser["headless"] = payload.headless
     browser["timeout"] = payload.browser_timeout
-    browser["user_agent"] = (
-        payload.browser_user_agent.strip() or DEFAULT_BROWSER_USER_AGENT
-    )
+    browser["user_agent"] = payload.browser_user_agent.strip()
     browser["low_resource_mode"] = payload.browser_low_resource_mode
     browser["disable_web_security"] = payload.browser_disable_web_security
     browser["extra_headers_json"] = _normalize_headers_json(
         payload.browser_extra_headers_json
     )
+    browser["browser_args"] = payload.browser_args.strip()
 
     pause = base.setdefault("pause_login", {})
     pause["enabled"] = payload.pause_enabled
@@ -233,9 +233,7 @@ def save_profile_from_payload(
         auto_start=payload.auto_start,
         headless=payload.headless,
         browser_timeout=payload.browser_timeout,
-        browser_user_agent=(
-            payload.browser_user_agent.strip() or DEFAULT_BROWSER_USER_AGENT
-        ),
+        browser_user_agent=payload.browser_user_agent.strip(),
         browser_low_resource_mode=payload.browser_low_resource_mode,
         browser_disable_web_security=payload.browser_disable_web_security,
         browser_extra_headers_json=_normalize_headers_json(

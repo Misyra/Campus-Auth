@@ -243,26 +243,14 @@
     </div>
 
     <div v-else-if="currentSettingsTab === 'browser'" class="settings-panel-grid settings-panel-grid--browser">
-      <section class="card settings-panel settings-panel--wide">
+      <section class="card settings-panel">
         <div class="card-header">
-          <h2>浏览器参数</h2>
+          <h2>基本设置</h2>
         </div>
         <div class="card-body">
           <div class="form-group">
             <label for="settings-browser-timeout">页面超时（毫秒）</label>
             <input id="settings-browser-timeout" v-model.number="config.browser_timeout" type="number" min="1000" max="60000" />
-          </div>
-          <div class="form-group">
-            <div class="field-label-row">
-              <label for="settings-browser-ua">用户代理</label>
-              <span
-                class="field-help"
-                tabindex="0"
-                role="note"
-                data-tip="留空时使用默认 UA。仅在认证系统对 UA 有要求时再修改。"
-              >?</span>
-            </div>
-            <input id="settings-browser-ua" v-model.trim="config.browser_user_agent" type="text" placeholder="浏览器 User-Agent" />
           </div>
           <div class="toggle-group">
             <div class="toggle-with-help">
@@ -270,12 +258,7 @@
                 <input type="checkbox" v-model="config.headless" />
                 <span class="toggle-slider"></span>
                 <span class="toggle-label">无头浏览器模式</span>
-                <span
-                  class="field-help"
-                  tabindex="0"
-                  role="note"
-                  data-tip="开启后浏览器在后台运行，不显示窗口。"
-                >?</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="开启后浏览器在后台运行，不显示窗口。">?</span>
               </label>
             </div>
           </div>
@@ -285,12 +268,7 @@
                 <input type="checkbox" v-model="config.browser_low_resource_mode" />
                 <span class="toggle-slider"></span>
                 <span class="toggle-label">低资源模式（禁用图片）</span>
-                <span
-                  class="field-help"
-                  tabindex="0"
-                  role="note"
-                  data-tip="会拦截图片请求，降低带宽和内存占用。"
-                >?</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="会拦截图片请求，降低带宽和内存占用。">?</span>
               </label>
             </div>
           </div>
@@ -300,33 +278,66 @@
                 <input type="checkbox" v-model="config.browser_disable_web_security" />
                 <span class="toggle-slider"></span>
                 <span class="toggle-label">禁用同源策略</span>
-                <span
-                  class="field-help"
-                  tabindex="0"
-                  role="note"
-                  data-tip="关闭浏览器同源安全策略，仅在认证页面跨域请求失败时启用。启用后安全性降低，建议仅在必要时开启。"
-                >?</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="关闭浏览器同源安全策略，仅在认证页面跨域请求失败时启用。">?</span>
               </label>
             </div>
           </div>
-          <div class="form-group">
-            <div class="field-label-row">
-              <label for="settings-browser-headers">自定义请求头（JSON）</label>
-              <span
-                class="field-help"
-                tabindex="0"
-                role="note"
-                data-tip="请输入 JSON 对象，会与默认请求头合并后注入浏览器上下文。"
-              >?</span>
+        </div>
+      </section>
+
+      <section class="card settings-panel">
+        <div class="card-header">
+          <h2>安全模式与高级设置</h2>
+        </div>
+        <div class="card-body">
+          <div class="toggle-group">
+            <div class="toggle-with-help">
+              <label class="toggle toggle-help-inline">
+                <input type="checkbox" v-model="safeMode" @change="toggleSafeMode()" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">安全模式</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="使用 Chromium 默认设置启动浏览器，不注入任何自定义参数（UA、请求头、启动参数等）。适用于反爬严格的网站。">?</span>
+              </label>
             </div>
-            <textarea
-              id="settings-browser-headers"
-              v-model.trim="config.browser_extra_headers_json"
-              rows="8"
-              spellcheck="false"
-              placeholder='{"Referer":"http://172.29.0.2","X-Trace-Id":"campus-auth"}'
-            ></textarea>
           </div>
+          <div v-if="safeMode" class="browser-safe-info">
+            <p>安全模式已开启，浏览器使用 Chromium 原始设置。关闭安全模式后可自定义以下高级选项。</p>
+          </div>
+          <template v-if="!safeMode">
+            <div class="form-group">
+              <div class="field-label-row">
+                <label for="settings-browser-args">自定义浏览器参数</label>
+                <span class="field-help" tabindex="0" role="note" data-tip="每行一个 Chromium 启动参数，会与基础参数合并。留空则仅使用基础参数。">?</span>
+              </div>
+              <textarea
+                id="settings-browser-args"
+                v-model.trim="config.browser_args"
+                rows="4"
+                spellcheck="false"
+                placeholder="--disable-web-security&#10;--disable-extensions"
+              ></textarea>
+            </div>
+            <div class="form-group">
+              <div class="field-label-row">
+                <label for="settings-browser-ua">用户代理</label>
+                <span class="field-help" tabindex="0" role="note" data-tip="留空时使用 Chromium 默认 UA。仅在认证系统对 UA 有要求时再修改。">?</span>
+              </div>
+              <input id="settings-browser-ua" v-model.trim="config.browser_user_agent" type="text" placeholder="留空使用 Chromium 默认值" />
+            </div>
+            <div class="form-group">
+              <div class="field-label-row">
+                <label for="settings-browser-headers">自定义请求头（JSON）</label>
+                <span class="field-help" tabindex="0" role="note" data-tip="请输入 JSON 对象，会作为额外 HTTP 请求头注入浏览器上下文。">?</span>
+              </div>
+              <textarea
+                id="settings-browser-headers"
+                v-model.trim="config.browser_extra_headers_json"
+                rows="4"
+                spellcheck="false"
+                placeholder='{"Referer":"http://172.29.0.2"}'
+              ></textarea>
+            </div>
+          </template>
         </div>
       </section>
     </div>
