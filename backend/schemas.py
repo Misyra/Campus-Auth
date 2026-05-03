@@ -28,10 +28,14 @@ class MonitorConfigPayload(BaseModel):
     auto_start: bool = False
     headless: bool = True
     browser_timeout: int = Field(default=8000, ge=1000, le=60000)
-    browser_user_agent: str = Field(default=DEFAULT_BROWSER_USER_AGENT)
+    browser_user_agent: str = Field(
+        default="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+    )
     browser_low_resource_mode: bool = True
     browser_disable_web_security: bool = False
     browser_extra_headers_json: str = Field(default="")
+    browser_args: str = Field(default="")
     pause_enabled: bool = True
     pause_start_hour: int = Field(default=0, ge=0, le=23)
     pause_end_hour: int = Field(default=6, ge=0, le=23)
@@ -155,10 +159,14 @@ class ProfileSettings(BaseModel):
     auto_start: bool = False
     headless: bool = True
     browser_timeout: int = Field(default=8000, ge=1000, le=60000)
-    browser_user_agent: str = Field(default="")
+    browser_user_agent: str = Field(
+        default="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+    )
     browser_low_resource_mode: bool = True
     browser_disable_web_security: bool = False
     browser_extra_headers_json: str = Field(default="")
+    browser_args: str = Field(default="", description="自定义 Chromium 启动参数，每行一个")
     pause_enabled: bool = True
     pause_start_hour: int = Field(default=0, ge=0, le=23)
     pause_end_hour: int = Field(default=6, ge=0, le=23)
@@ -201,6 +209,7 @@ class SystemSettings(BaseModel):
     minimize_to_tray: bool = Field(default=True, description="最小化到系统托盘")
     max_retries: int = Field(default=3, ge=0, le=10)
     retry_interval: int = Field(default=5, ge=1, le=300, description="重试间隔（秒）")
+    safe_mode: bool = Field(default=True, description="安全模式：不注入浏览器自定义参数")
 
     @field_validator("backend_log_level", "frontend_log_level")
     @classmethod

@@ -78,6 +78,8 @@ async def lifespan(app_instance):
     )
     yield
     startup_logger.info("FastAPI 关闭: 正在停止服务...")
+    if _debug["session"]:
+        await _debug["session"].close()
     service.stop_monitoring()
     startup_logger.info("监控服务已停止")
 
@@ -127,6 +129,161 @@ http_logger = get_logger("backend.http", side="BACKEND")
 startup_logger = get_logger("backend.startup", side="BACKEND")
 api_logger = get_logger("backend.api", side="BACKEND")
 ws_logger = get_logger("backend.ws", side="BACKEND")
+
+# ==================== 调试会话 ====================
+
+from datetime import datetime
+
+from src.task_executor import TaskExecutor, TaskManager
+
+
+class DebugSession:
+    """调试会话：管理浏览器生命周期 + 单步执行"""
+
+    def __init__(self):
+        self._pw = None
+        self._browser = None
+        self._context = None
+        self.page = None
+
+    async def start(
+        self, runtime_config: dict, url: str | None, safe_mode: bool = False
+    ) -> None:
+        from playwright.async_api import async_playwright
+
+        self._pw = await async_playwright().start()
+
+        if safe_mode:
+            # 安全模式：不注入任何自定义参数，使用 Chromium 默认设置
+            self._browser = await self._pw.chromium.launch(headless=False)
+            self._context = await self._browser.new_context(
+                viewport={"width": 1280, "height": 720},
+            )
+        else:
+            browser_settings = runtime_config.get("browser_settings", {})
+
+            args = [
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--memory-pressure-off",
+            ]
+            if browser_settings.get("disable_web_security", False):
+                args.append("--disable-web-security")
+            if browser_settings.get("low_resource_mode", False):
+                args.append("--blink-settings=imagesEnabled=false")
+            # 用户自定义参数
+            custom_args = str(browser_settings.get("browser_args", "") or "").strip()
+            if custom_args:
+                for flag in custom_args.split():
+                    flag = flag.strip()
+                    if flag and flag not in args:
+                        args.append(flag)
+
+            extra_headers: dict = {}
+            raw_headers = str(
+                browser_settings.get("extra_headers_json", "") or ""
+            ).strip()
+            if raw_headers:
+                try:
+                    import json as _json
+
+                    custom = _json.loads(raw_headers)
+                    if isinstance(custom, dict):
+                        extra_headers = {
+                            str(k): str(v)
+                            for k, v in custom.items()
+                            if k is not None
+                        }
+                except Exception:
+                    pass
+
+            self._browser = await self._pw.chromium.launch(
+                headless=False, args=args
+            )
+            ctx_opts: dict = {
+                "viewport": {"width": 1280, "height": 720},
+            }
+            if extra_headers:
+                ctx_opts["extra_http_headers"] = extra_headers
+            user_agent = (browser_settings.get("user_agent") or "").strip()
+            if user_agent:
+                ctx_opts["user_agent"] = user_agent
+            self._context = await self._browser.new_context(**ctx_opts)
+
+            if browser_settings.get("low_resource_mode", False):
+
+                async def _block_images(route):
+                    if route.request.resource_type == "image":
+                        await route.abort()
+                    else:
+                        await route.continue_()
+
+                await self._context.route("**/*", _block_images)
+
+        self.page = await self._context.new_page()
+
+        if url:
+            await self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
+
+    async def close(self) -> None:
+        for resource in [self.page, self._context, self._browser]:
+            if resource:
+                try:
+                    await resource.close()
+                except Exception:
+                    pass
+        if self._pw:
+            try:
+                await self._pw.stop()
+            except Exception:
+                pass
+        self.page = None
+        self._pw = None
+        self._browser = None
+        self._context = None
+
+
+_debug: dict = {
+    "session": None,
+    "task_id": None,
+    "executor": None,
+    "current_step": 0,
+    "steps": [],
+    "results": [],
+    "screenshot_url": None,
+    "running": False,
+}
+
+
+def _debug_response() -> dict:
+    return {
+        "running": _debug["running"],
+        "task_id": _debug["task_id"],
+        "current_step": _debug["current_step"],
+        "total_steps": len(_debug["steps"]),
+        "steps": _debug["steps"],
+        "results": _debug["results"],
+        "screenshot_url": _debug["screenshot_url"],
+    }
+
+
+def _require_debug_session():
+    if not _debug["session"] or not _debug["running"]:
+        raise HTTPException(status_code=400, detail="没有活跃的调试会话")
+    return _debug["session"], _debug["executor"], _debug["session"].page
+
+
+async def _take_debug_screenshot(page) -> str | None:
+    try:
+        debug_dir = PROJECT_ROOT / "debug"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        filename = f"debug_step_{stamp}.png"
+        await page.screenshot(path=str(debug_dir / filename), full_page=True)
+        return f"/debug/{filename}"
+    except Exception:
+        return None
 
 
 @app.middleware("http")
@@ -312,6 +469,160 @@ def set_active_task(task_id: str) -> ActionResponse:
         "Set active task %s -> success=%s, message=%s", task_id, ok, message
     )
     return ActionResponse(success=ok, message=message)
+
+
+# ==================== 安全模式 API ====================
+
+
+@app.get("/api/safe-mode")
+def get_safe_mode() -> dict:
+    return {"enabled": service.safe_mode}
+
+
+@app.post("/api/safe-mode")
+def toggle_safe_mode() -> dict:
+    new_value = not service.safe_mode
+    try:
+        with service._lock:
+            data = service._profile_service.load()
+            data.system.safe_mode = new_value
+            service._profile_service.save(data)
+        service.safe_mode = new_value
+        api_logger.info("Safe mode toggled -> %s", new_value)
+        return {"enabled": new_value}
+    except Exception as exc:
+        api_logger.error("切换安全模式失败: %s", exc)
+        raise HTTPException(status_code=500, detail=f"切换安全模式失败: {exc}")
+
+
+# ==================== 调试 API ====================
+
+
+@app.post("/api/debug/start")
+async def debug_start(request: Request) -> dict:
+    global _debug
+    if _debug["session"]:
+        await _debug["session"].close()
+
+    body = await request.json()
+    task_id = body.get("task_id", "")
+    if not task_id:
+        raise HTTPException(status_code=400, detail="缺少 task_id")
+
+    tm = TaskManager(PROJECT_ROOT / "tasks")
+    task = tm.load_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    # 构建环境变量（复用 service 的运行时配置）
+    with service._lock:
+        runtime_config = service._runtime_config.copy()
+
+    env_vars = dict(os.environ)
+    if runtime_config.get("auth_url"):
+        env_vars["LOGIN_URL"] = runtime_config["auth_url"]
+    # 任务自定义 url 覆盖系统 LOGIN_URL
+    if task.url:
+        resolved_url = task.url
+        for k, v in env_vars.items():
+            resolved_url = resolved_url.replace("{{" + k + "}}", v)
+        env_vars["LOGIN_URL"] = resolved_url
+    if runtime_config.get("isp"):
+        env_vars["ISP"] = runtime_config["isp"]
+    if runtime_config.get("username"):
+        env_vars["USERNAME"] = runtime_config["username"]
+    if runtime_config.get("password"):
+        env_vars["PASSWORD"] = runtime_config["password"]
+    custom_vars = runtime_config.get("custom_variables", {})
+    if custom_vars and isinstance(custom_vars, dict):
+        env_vars.update(custom_vars)
+
+    # 解析任务 URL
+    url = task.url or ""
+    for k, v in env_vars.items():
+        url = url.replace("{{" + k + "}}", v)
+
+    session = DebugSession()
+    await session.start(runtime_config, url if url else None, safe_mode=service.safe_mode)
+
+    steps_info = [
+        {
+            "index": i,
+            "id": step.id,
+            "type": step.type,
+            "description": step.description or step.type,
+        }
+        for i, step in enumerate(task.steps)
+    ]
+
+    executor = TaskExecutor(task, env_vars)
+
+    _debug = {
+        "session": session,
+        "task_id": task_id,
+        "executor": executor,
+        "current_step": 0,
+        "steps": steps_info,
+        "results": [],
+        "screenshot_url": None,
+        "running": True,
+    }
+
+    _debug["screenshot_url"] = await _take_debug_screenshot(session.page)
+    api_logger.info("Debug session started for task %s", task_id)
+    return _debug_response()
+
+
+@app.post("/api/debug/next")
+async def debug_next() -> dict:
+    session, executor, page = _require_debug_session()
+    idx = _debug["current_step"]
+
+    if idx >= len(_debug["steps"]):
+        return {**_debug_response(), "message": "所有步骤已执行完毕"}
+
+    result = await executor.execute_step_at(page, idx)
+    _debug["results"].append(result)
+    _debug["screenshot_url"] = result.get("screenshot_url")
+    _debug["current_step"] = idx + 1
+    return _debug_response()
+
+
+@app.post("/api/debug/run-all")
+async def debug_run_all() -> dict:
+    session, executor, page = _require_debug_session()
+    from_idx = _debug["current_step"]
+
+    if from_idx >= len(_debug["steps"]):
+        return {**_debug_response(), "message": "所有步骤已执行完毕"}
+
+    agg = await executor.execute_remaining(page, from_idx)
+    _debug["results"].extend(agg["results"])
+    _debug["current_step"] = len(_debug["steps"])
+
+    if agg["results"]:
+        _debug["screenshot_url"] = agg["results"][-1].get("screenshot_url")
+
+    return _debug_response()
+
+
+@app.post("/api/debug/stop")
+async def debug_stop() -> dict:
+    global _debug
+    if _debug["session"]:
+        await _debug["session"].close()
+    _debug = {
+        "session": None, "task_id": None, "executor": None,
+        "current_step": 0, "steps": [], "results": [],
+        "screenshot_url": None, "running": False,
+    }
+    api_logger.info("Debug session stopped")
+    return {"running": False, "message": "调试会话已关闭"}
+
+
+@app.get("/api/debug/status")
+async def debug_status() -> dict:
+    return _debug_response()
 
 
 # ==================== 配置方案 API ====================

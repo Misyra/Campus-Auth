@@ -29,6 +29,7 @@ export const profileMethods = {
         this.editingProfile = {
           id: profileId,
           ...data.settings,
+          _isNew: false,
         };
         this.currentPage = 'profile-edit';
       }).catch(() => {
@@ -38,6 +39,7 @@ export const profileMethods = {
       this.editingProfile = {
         id: '',
         ...DEFAULT_PROFILE_SETTINGS,
+        _isNew: true,
       };
       this.currentPage = 'profile-edit';
     }

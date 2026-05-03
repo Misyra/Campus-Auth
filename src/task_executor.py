@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -537,8 +538,16 @@ class WaitUrlHandler(StepHandler):
             return False, "wait_url 步骤需要 pattern"
 
         logger.info(f"[wait_url] pattern={pattern}")
-        await page.wait_for_url(re.compile(pattern), timeout=timeout)
-        return True, ""
+        deadline = asyncio.get_event_loop().time() + timeout / 1000
+        while True:
+            current_url = page.url
+            if re.search(pattern, current_url):
+                logger.info(f"[wait_url] URL 已匹配: {current_url}")
+                return True, ""
+            remaining = deadline - asyncio.get_event_loop().time()
+            if remaining <= 0:
+                return False, f"等待 URL 匹配 '{pattern}' 超时，当前: {current_url}"
+            await asyncio.sleep(min(0.2, remaining))
 
 
 class EvalHandler(StepHandler):
@@ -788,7 +797,10 @@ class TaskExecutor:
             await self._auto_navigate_if_needed(page)
 
             # 执行步骤
-            for step in self.config.steps:
+            for i, step in enumerate(self.config.steps):
+                # 步骤间等待，给页面渲染留出时间
+                if i > 0:
+                    await asyncio.sleep(0.5)
                 success, message = await self._execute_step(page, step)
                 self._step_results.append(
                     {
@@ -838,6 +850,52 @@ class TaskExecutor:
         except Exception as e:
             logger.error(f"步骤 [{step.id}] 执行失败: {e}")
             return False, str(e)
+
+    async def execute_step_at(self, page, step_index: int) -> dict[str, Any]:
+        """执行单个步骤（调试模式），返回结果字典"""
+        if step_index < 0 or step_index >= len(self.config.steps):
+            return {
+                "step_index": step_index,
+                "success": False,
+                "message": "步骤索引超出范围",
+                "screenshot_url": None,
+            }
+
+        step = self.config.steps[step_index]
+        success, message = await self._execute_step(page, step)
+        screenshot_url = await self._capture_screenshot(page)
+
+        result = {
+            "step_index": step_index,
+            "step_id": step.id,
+            "step_type": step.type,
+            "description": step.description or step.type,
+            "success": success,
+            "message": message or "",
+            "screenshot_url": screenshot_url,
+        }
+        self._step_results.append(result)
+        return result
+
+    async def execute_remaining(self, page, from_index: int) -> dict[str, Any]:
+        """从指定索引开始执行所有步骤（调试模式）"""
+        results = []
+        for i in range(from_index, len(self.config.steps)):
+            result = await self.execute_step_at(page, i)
+            results.append(result)
+            if not result["success"]:
+                return {
+                    "results": results,
+                    "all_success": False,
+                    "stopped_at": i,
+                    "message": f"步骤 {i + 1} 失败: {result['message']}",
+                }
+        return {
+            "results": results,
+            "all_success": True,
+            "stopped_at": len(self.config.steps) - 1,
+            "message": "所有步骤执行完成",
+        }
 
     async def _check_success_conditions(self, page) -> bool:
         """检查成功条件"""
