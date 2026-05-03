@@ -1,7 +1,7 @@
 {
   "name": "样例2",
   "description": "案例2：通过明确选择器执行账号、密码、运营商和登录按钮步骤（不能直接使用，请自行修改）",
-  "version": "3.3.0",
+  "version": "3.3.1",
   "source": "builtin",
   "url": "{{LOGIN_URL}}",
   "timeout": 30000,
