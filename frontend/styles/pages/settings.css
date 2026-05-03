@@ -16,9 +16,10 @@
   width: 100%;
   gap: 8px;
   padding: 6px;
-  border: 1px solid rgba(56, 189, 248, 0.24);
-  background: linear-gradient(180deg, rgba(30, 41, 59, 0.94), rgba(15, 23, 42, 0.9));
-  box-shadow: 0 6px 16px rgba(2, 8, 23, 0.35);
+  border: 1px solid rgba(56, 189, 248, 0.15);
+  background: rgba(30, 41, 59, 0.6);
+  backdrop-filter: blur(12px);
+  border-radius: 14px;
 }
 
 .settings-tab {
@@ -108,6 +109,12 @@
   border-radius: 14px;
   border: 1px solid var(--border);
   background: rgba(15, 23, 42, 0.35);
+  transition: border-color 0.25s ease, transform 0.25s ease;
+}
+
+.mini-stat:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
 }
 
 .mini-stat-label {
@@ -186,18 +193,19 @@
   width: min(320px, calc(100vw - 320px));
   padding: 10px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(56, 189, 248, 0.45);
-  background: rgba(8, 15, 30, 0.98);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  background: rgba(8, 15, 30, 0.95);
   color: #e6f1ff;
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
   font-size: 12px;
   font-weight: 600;
   line-height: 1.45;
   white-space: normal;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.16s ease, transform 0.16s ease;
+  transition: opacity 0.2s ease, transform 0.2s ease;
   z-index: 200;
+  backdrop-filter: blur(12px);
 }
 
 .field-help:hover::after,
@@ -214,6 +222,7 @@
 
 .settings-footer .btn {
   min-width: 140px;
+  transition: all 0.25s ease;
 }
 
 .settings-footer .btn svg {

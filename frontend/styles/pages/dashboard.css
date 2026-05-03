@@ -6,7 +6,7 @@
 }
 
 .stat-card {
-  background: var(--bg-card);
+  background: rgba(30, 41, 59, 0.5);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 20px;
@@ -14,6 +14,13 @@
   align-items: center;
   gap: 16px;
   backdrop-filter: blur(10px);
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-hover);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 }
 
 .stat-icon {
@@ -23,6 +30,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: transform 0.25s ease;
+}
+
+.stat-card:hover .stat-icon {
+  transform: scale(1.08);
 }
 
 .stat-icon svg {
@@ -132,6 +144,15 @@
   -webkit-overflow-scrolling: touch;
 }
 
+.log-viewer::-webkit-scrollbar {
+  width: 4px;
+}
+
+.log-viewer::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.15);
+  border-radius: 2px;
+}
+
 .log-entries {
   padding: 12px;
 }
@@ -141,12 +162,14 @@
   gap: 12px;
   padding: 8px 12px;
   border-radius: 6px;
-  transition: background 0.15s ease;
+  transition: background 0.2s ease;
   contain: content;
+  border-left: 2px solid transparent;
 }
 
 .log-entry:hover {
-  background: var(--bg-hover);
+  background: rgba(51, 65, 85, 0.3);
+  border-left-color: var(--accent);
 }
 
 .log-time {

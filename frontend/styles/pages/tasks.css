@@ -16,14 +16,16 @@
   align-items: center;
   gap: 12px;
   padding: 16px;
-  background: var(--bg-primary);
+  background: rgba(15, 23, 42, 0.6);
   border: 1px solid var(--border);
   border-radius: 10px;
-  transition: all 0.2s ease;
+  transition: all 0.25s ease;
 }
 
 .task-item:hover {
   border-color: var(--border-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .task-item.active {
@@ -62,13 +64,14 @@
   width: 100%;
   min-height: 300px;
   padding: 12px;
-  background: var(--bg-primary);
+  background: rgba(15, 23, 42, 0.7);
   border: 1px solid var(--border);
   border-radius: 10px;
   color: var(--text-primary);
   font-family: 'JetBrains Mono', monospace;
   font-size: 13px;
   resize: vertical;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .task-editor textarea:focus {
@@ -116,21 +119,22 @@
 }
 
 .help-content pre {
-  background: var(--bg-primary);
+  background: rgba(15, 23, 42, 0.6);
   padding: 12px;
   border-radius: 8px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
   overflow-x: auto;
   margin-top: 8px;
+  border: 1px solid var(--border);
 }
 
 /* 危险步骤确认弹窗 */
 .danger-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -139,7 +143,7 @@
 }
 
 .danger-modal {
-  background: var(--bg-card);
+  background: rgba(30, 41, 59, 0.9);
   border: 1px solid rgba(239, 68, 68, 0.3);
   border-radius: 16px;
   width: min(640px, calc(100vw - 48px));
@@ -148,6 +152,7 @@
   flex-direction: column;
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
   animation: slideIn 0.25s ease;
+  backdrop-filter: blur(16px);
 }
 
 .danger-modal-header {
@@ -193,7 +198,7 @@
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  background: rgba(245, 158, 11, 0.06);
+  background: rgba(245, 158, 11, 0.08);
   border-bottom: 1px solid var(--border);
 }
 
@@ -237,6 +242,7 @@
 
 .danger-confirm-btn {
   background: linear-gradient(135deg, var(--error), #dc2626) !important;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.25);
 }
 
 .danger-confirm-btn:disabled {

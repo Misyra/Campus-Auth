@@ -9,6 +9,10 @@
   margin-bottom: 16px;
   gap: 16px;
   flex-wrap: wrap;
+  background: rgba(30, 41, 59, 0.5);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  backdrop-filter: blur(8px);
 }
 
 .profiles-topbar-left {
@@ -33,12 +37,13 @@
 }
 
 .profiles-status-icon.on {
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
   color: var(--bg-primary);
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.25);
 }
 
 .profiles-status-icon.off {
-  background: var(--bg-hover);
+  background: rgba(51, 65, 85, 0.5);
   color: var(--text-muted);
 }
 
@@ -68,8 +73,9 @@
   gap: 12px;
   padding: 12px 16px;
   margin-bottom: 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   animation: fadeIn 0.3s ease;
+  backdrop-filter: blur(8px);
 }
 
 .detect-banner.matched {
@@ -128,6 +134,7 @@
 .profiles-guide {
   padding: 16px 20px;
   margin-bottom: 16px;
+  backdrop-filter: blur(4px);
 }
 
 .profiles-guide-steps {
@@ -148,7 +155,7 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), var(--purple));
   color: var(--bg-primary);
   font-size: 13px;
   font-weight: 700;
@@ -156,6 +163,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.2);
 }
 
 .guide-step-content strong {
@@ -184,7 +192,7 @@
 .profiles-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .profile-card {
@@ -193,32 +201,37 @@
   justify-content: space-between;
   gap: 16px;
   padding: 14px 18px;
-  background: var(--bg-secondary);
-  border-radius: 8px;
+  background: rgba(30, 41, 59, 0.7);
+  border-radius: 10px;
   border: 1px solid var(--border);
-  transition: border-color 0.2s, background 0.2s;
+  transition: border-color 0.25s, background 0.25s, box-shadow 0.25s, transform 0.25s;
 }
 
 .profile-card:hover {
   border-color: var(--border-hover);
-  background: var(--bg-hover);
+  background: rgba(51, 65, 85, 0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
 }
 
+
 .profile-card.active {
-  border-color: var(--accent);
-  box-shadow: inset 3px 0 0 var(--accent);
+  border-color: rgba(34, 211, 238, 0.4);
+  box-shadow: inset 3px 0 0 var(--accent), 0 0 16px rgba(34, 211, 238, 0.08);
 }
 
 .profile-card-main {
   flex: 1;
   min-width: 0;
   cursor: pointer;
+  padding: 2px 0;
 }
 
 .profile-card-header {
   display: flex;
   align-items: center;
   gap: 10px;
+  margin-bottom: 2px;
 }
 
 .profile-card-title {
@@ -226,6 +239,7 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
+  flex: 1;
 }
 
 .profile-card-name {
@@ -234,17 +248,19 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text-primary);
 }
 
 .profile-card-id {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
-  font-family: var(--font-mono);
+  font-family: 'JetBrains Mono', monospace;
+  opacity: 0.6;
 }
 
 .profile-badge {
   font-size: 10px;
-  padding: 1px 6px;
+  padding: 2px 8px;
   border-radius: 4px;
   font-weight: 600;
   flex-shrink: 0;
@@ -253,19 +269,20 @@
 }
 
 .profile-badge.active {
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
   color: var(--bg-primary);
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.3);
 }
 
 .profile-card-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
 .profile-card-meta {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   margin-top: 8px;
   flex-wrap: wrap;
 }
@@ -277,9 +294,10 @@
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 4px;
-  background: var(--bg-primary);
+  background: rgba(15, 23, 42, 0.6);
   color: var(--text-secondary);
   font-family: var(--font-mono);
+  border: 1px solid var(--border);
 }
 
 .profile-tag svg {
@@ -296,7 +314,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
   flex-wrap: wrap;
 }
 
@@ -307,7 +325,7 @@
   flex-wrap: wrap;
   font-size: 12px;
   color: var(--text-secondary);
-  animation: fadeIn 0.25s ease;
+  animation: fadeIn 0.3s ease;
 }
 
 .editor-detect-tag {
@@ -318,6 +336,7 @@
   border-radius: 6px;
   background: rgba(34, 197, 94, 0.08);
   border: 1px solid rgba(34, 197, 94, 0.2);
+  backdrop-filter: blur(4px);
 }
 
 .editor-detect-tag.muted {
@@ -357,6 +376,7 @@
   justify-content: space-between;
   margin-bottom: 16px;
   gap: 16px;
+  padding: 12px 0;
 }
 
 .profile-editor-topbar h2 {
@@ -367,14 +387,15 @@
 
 .profile-editor-card {
   width: 100%;
+  backdrop-filter: blur(8px);
 }
 
 .profile-editor-body {
-  padding: 0 24px 20px;
+  padding: 0 24px 24px;
 }
 
 .editor-section {
-  padding-top: 20px;
+  padding-top: 24px;
 }
 
 .editor-section + .editor-section {
@@ -388,7 +409,8 @@
   color: var(--text-primary);
   margin-bottom: 12px;
   padding-left: 12px;
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid transparent;
+  border-image: linear-gradient(180deg, var(--accent), var(--purple)) 1;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -396,7 +418,7 @@
 
 .editor-divider {
   height: 1px;
-  background: var(--border);
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
   margin: 20px 0;
 }
 
@@ -404,8 +426,13 @@
 .editor-collapsible {
   margin-top: 4px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
+  transition: border-color 0.25s ease;
+}
+
+.editor-collapsible[open] {
+  border-color: var(--border-hover);
 }
 
 .editor-collapsible-title {
@@ -416,12 +443,17 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   cursor: pointer;
-  background: var(--bg-hover);
+  background: rgba(51, 65, 85, 0.3);
   user-select: none;
   list-style: none;
   display: flex;
   align-items: center;
   gap: 8px;
+  transition: background 0.2s ease;
+}
+
+.editor-collapsible-title:hover {
+  background: rgba(51, 65, 85, 0.5);
 }
 
 .editor-collapsible-title::-webkit-details-marker {
@@ -448,7 +480,7 @@
 }
 
 .editor-collapsible-body {
-  padding: 12px 14px;
+  padding: 14px;
 }
 
 /* Toggle */

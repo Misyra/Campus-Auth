@@ -4,7 +4,10 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(15, 23, 42, 0.95);
+  background:
+    radial-gradient(ellipse 70% 50% at 30% 30%, rgba(34, 211, 238, 0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 70% 70%, rgba(167, 139, 250, 0.05) 0%, transparent 60%),
+    rgba(15, 23, 42, 0.95);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -13,14 +16,15 @@
 }
 
 .wizard-container {
-  background: var(--bg-secondary);
+  background: rgba(30, 41, 59, 0.85);
   border: 1px solid var(--border);
   border-radius: 20px;
   width: 100%;
   max-width: 600px;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(20px) saturate(1.2);
 }
 
 .wizard-header {
@@ -70,13 +74,14 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--text-muted);
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
 }
 
 .step.active .step-number {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--bg-primary);
+  box-shadow: 0 0 16px rgba(34, 211, 238, 0.35);
 }
 
 .step.completed .step-number {
@@ -120,10 +125,11 @@
 }
 
 .config-summary {
-  background: var(--bg-primary);
+  background: rgba(15, 23, 42, 0.5);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 16px;
+  backdrop-filter: blur(4px);
 }
 
 .config-summary h4 {

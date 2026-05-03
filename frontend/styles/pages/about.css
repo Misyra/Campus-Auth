@@ -7,6 +7,19 @@
   text-align: center;
   padding: 48px 24px;
   margin-bottom: 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+.about-hero::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(ellipse at center, rgba(34, 211, 238, 0.08) 0%, transparent 60%);
+  pointer-events: none;
 }
 
 .about-logo {
@@ -38,6 +51,16 @@
   margin-bottom: 24px;
 }
 
+.about-grid .card {
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.about-grid .card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-hover);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
 .tech-stack {
   display: flex;
   flex-wrap: wrap;
@@ -52,6 +75,12 @@
   display: inline-flex;
   align-items: center;
   min-height: 36px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tech-badge:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .tech-badge.python {
@@ -164,6 +193,7 @@
   background: var(--bg-hover);
   border-color: var(--border-hover);
   transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
 .github-link svg {
