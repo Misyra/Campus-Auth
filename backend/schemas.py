@@ -214,6 +214,8 @@ class SystemSettings(BaseModel):
     username: str = Field(default="", description="全局校园网用户名")
     password: str = Field(default="", description="全局校园网密码（ENC: 加密）")
     auth_url: str = Field(default="", description="全局认证地址")
+    carrier: str = Field(default="无", description="全局运营商")
+    carrier_custom: str = Field(default="", description="自定义运营商关键字")
     backend_log_level: str = Field(default="WARNING")
     frontend_log_level: str = Field(default="WARNING")
     access_log: bool = Field(default=False, description="Uvicorn HTTP 请求日志")
