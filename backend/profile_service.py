@@ -456,6 +456,7 @@ class ProfileService:
         return SystemSettings(
             username=config.get("username", ""),
             password=config.get("password", ""),
+            auth_url=str(config.get("auth_url", "")),
             backend_log_level=str(
                 config.get("logging", {}).get("level", "WARNING")
             ).upper(),
@@ -481,7 +482,7 @@ class ProfileService:
         default_profile = ProfileSettings(
             name="默认方案",
             match_gateway_ip="",
-            auth_url=str(config.get("auth_url", "http://172.29.0.2")),
+            auth_url=str(config.get("auth_url", "")),
             carrier=carrier,
             carrier_custom=carrier_custom,
             check_interval_minutes=max(1, interval_seconds // 60),

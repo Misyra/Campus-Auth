@@ -21,7 +21,7 @@ class MonitorConfigPayload(BaseModel):
         default=True,
         description="当前是否使用全局凭证（前端只读，后端填充）",
     )
-    auth_url: str = Field(default="http://172.29.0.2")
+    auth_url: str = Field(default="")
     carrier: str = Field(default="无")
     carrier_custom: str = Field(default="")
     check_interval_minutes: int = Field(default=5, ge=1, le=1440)
@@ -152,7 +152,11 @@ class ProfileSettings(BaseModel):
         default=True,
         description="是否使用全局高级设置（true 时忽略以下高级字段，使用系统设置中的值）",
     )
-    auth_url: str = Field(default="http://172.29.0.2")
+    use_global_auth_url: bool = Field(
+        default=True,
+        description="是否使用全局认证地址（true 时忽略 auth_url，使用系统设置中的认证地址）",
+    )
+    auth_url: str = Field(default="")
     carrier: str = Field(default="无")
     carrier_custom: str = Field(default="")
     check_interval_minutes: int = Field(default=5, ge=1, le=1440)
@@ -203,6 +207,7 @@ class SystemSettings(BaseModel):
 
     username: str = Field(default="", description="全局校园网用户名")
     password: str = Field(default="", description="全局校园网密码（ENC: 加密）")
+    auth_url: str = Field(default="", description="全局认证地址")
     backend_log_level: str = Field(default="WARNING")
     frontend_log_level: str = Field(default="WARNING")
     access_log: bool = Field(default=False, description="Uvicorn HTTP 请求日志")
