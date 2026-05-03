@@ -6,6 +6,7 @@
 
 import datetime
 import os
+import threading
 from pathlib import Path
 from typing import Any, Dict
 
@@ -18,14 +19,16 @@ from .time import TimeUtils
 class LoginAttemptHandler:
     """登录尝试处理器 - 统一登录逻辑（解决循环依赖）"""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], cancel_event: threading.Event | None = None):
         """
         初始化登录处理器
 
         参数:
             config: 配置字典
+            cancel_event: 取消事件，设置后中断登录操作
         """
         self.config = config
+        self.cancel_event = cancel_event
         self.logger = LoggerSetup.setup_logger(
             f"{__name__}_login", config.get("logging", {})
         )
@@ -121,7 +124,10 @@ class LoginAttemptHandler:
                 self.logger.debug(f"已加载 {len(custom_vars)} 个自定义变量")
             self.logger.info(f"🧩 使用活动任务执行登录: {active_task_id}")
 
-            async with BrowserContextManager(self.config) as browser_manager:
+            if self.cancel_event and self.cancel_event.is_set():
+                return False, "登录已取消"
+
+            async with BrowserContextManager(self.config, cancel_event=self.cancel_event) as browser_manager:
                 if not browser_manager.page:
                     return False, "任务执行失败：浏览器页面初始化失败"
 

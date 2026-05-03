@@ -110,6 +110,12 @@
       <div class="card-header">
         <h2>实时日志</h2>
         <div style="display:flex;gap:6px;align-items:center;">
+          <button class="btn btn-icon-only" :class="{ 'btn-active': autoScroll }" @click="autoScroll = !autoScroll" :title="autoScroll ? '自动滚动：开' : '自动滚动：关'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path v-if="autoScroll" d="M12 19V5M5 12l7-7 7 7"/>
+              <path v-else d="M12 5v14M5 12l7 7 7-7"/>
+            </svg>
+          </button>
           <button class="btn btn-icon-only" @click="fetchLogs" title="刷新">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="23 4 23 10 17 10"/>

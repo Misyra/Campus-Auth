@@ -153,12 +153,26 @@ export const taskMethods = {
   showDangerConfirm(dangers) {
     return new Promise((resolve) => {
       this.dangerConfirm = { dangers, resolve };
+      this.dangerCountdown = 5;
+      const timer = setInterval(() => {
+        this.dangerCountdown--;
+        if (this.dangerCountdown <= 0) {
+          clearInterval(timer);
+          this.dangerCountdown = 0;
+        }
+      }, 1000);
+      this._dangerTimer = timer;
     });
   },
   confirmDanger(allow) {
+    if (this._dangerTimer) {
+      clearInterval(this._dangerTimer);
+      this._dangerTimer = null;
+    }
     if (this.dangerConfirm) {
       this.dangerConfirm.resolve(allow);
       this.dangerConfirm = null;
+      this.dangerCountdown = 0;
     }
   },
   async deleteTask(taskId) {

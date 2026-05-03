@@ -842,7 +842,7 @@ class TaskExecutor:
     async def _check_success_conditions(self, page) -> bool:
         """检查成功条件"""
         if not self.config.success_conditions:
-            return True
+            return await self._default_page_check(page)
 
         current_url = page.url if hasattr(page, "url") else ""
         self.resolver.set_runtime_var("_current_url", current_url)
@@ -853,6 +853,48 @@ class TaskExecutor:
                 return False
 
         return True
+
+    async def _default_page_check(self, page) -> bool:
+        """当任务未定义 success_conditions 时，检查页面是否包含明显的错误信息。
+
+        如果页面包含登录失败相关的关键词，判定为失败；否则保守地判定为成功。
+        建议为任务配置明确的 success_conditions 以获得更准确的判定。
+        """
+        try:
+            page_text = await page.evaluate(
+                "() => (document.body && document.body.innerText || '') + ' ' + (document.title || '')"
+            )
+            page_text_lower = page_text.lower()
+
+            error_keywords = [
+                "密码错误", "密码不正确", "密码有误", "账号错误", "账号不存在",
+                "账号或密码", "用户名或密码", "认证失败", "登录失败", "登入失败",
+                "password error", "password incorrect", "invalid password",
+                "login failed", "authentication failed", "invalid credentials",
+            ]
+            for keyword in error_keywords:
+                if keyword in page_text_lower:
+                    logger.warning(f"页面检测到错误信息: {keyword}")
+                    return False
+
+            try:
+                has_alert = await page.evaluate(
+                    "() => { try { return !!document.querySelector('.alert-danger, .error-msg, .login-error, [class*=error], [class*=alert]'); } catch { return false; } }"
+                )
+                if has_alert:
+                    alert_text = await page.evaluate(
+                        "() => { try { const el = document.querySelector('.alert-danger, .error-msg, .login-error, [class*=error], [class*=alert]'); return el ? el.innerText.trim() : ''; } catch { return ''; } }"
+                    )
+                    if alert_text and len(alert_text) > 2:
+                        logger.warning(f"页面检测到错误提示元素: {alert_text[:100]}")
+                        return False
+            except Exception:
+                pass
+
+            return True
+        except Exception as e:
+            logger.warning(f"默认页面检查异常，保守判定为成功: {e}")
+            return True
 
     async def _evaluate_condition(
         self, cond: ConditionConfig, current_url: str, page

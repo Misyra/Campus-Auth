@@ -4,6 +4,7 @@ import asyncio
 import datetime
 import logging
 import re
+import threading
 import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
@@ -26,10 +27,9 @@ class NetworkMonitorCore:
     # 类常量：监控配置
     DEFAULT_INTERVAL_SECONDS = 240
     MAX_CONSECUTIVE_LOGIN_FAILURES = 3
-    LOGIN_COOLDOWN_SECONDS = 120
+    LOGIN_RETRY_INTERVALS = [5, 30, 60]
     PAUSE_CHECK_INTERVAL_SECONDS = 300
     PAUSE_CHECK_STEP_SECONDS = 15
-    LOGIN_COOLDOWN_STEP_SECONDS = 10
     MIN_WAIT_STEP_SECONDS = 5
     MAX_WAIT_STEP_SECONDS = 20
     LOG_DIVIDER_LENGTH = 50
@@ -56,6 +56,7 @@ class NetworkMonitorCore:
         self.last_check_time: Optional[datetime.datetime] = None
 
         self._stop_requested = False
+        self._cancel_login = threading.Event()
         self._test_sites_cache: Optional[list[tuple[str, int]]] = None
         self.logger = setup_logger("monitor", self.config.get("logging", {}))
 
@@ -111,6 +112,7 @@ class NetworkMonitorCore:
 
         self.monitoring = True
         self._stop_requested = False
+        self._cancel_login.clear()
         self.start_time = time.time()
         self.network_check_count = 0
         self.login_attempt_count = 0
@@ -137,6 +139,7 @@ class NetworkMonitorCore:
             return
 
         self._stop_requested = True
+        self._cancel_login.set()
         was_monitoring = self.monitoring
         self.monitoring = False
 
@@ -155,6 +158,29 @@ class NetworkMonitorCore:
             time.sleep(min(step, remaining))
             remaining -= step
         return self.monitoring
+
+    def _login_retry_or_break(self) -> str:
+        """登录失败后决定重试还是放弃。
+
+        Returns:
+            "retry"   — 短暂等待后应重试（continue）
+            "break"   — 监控已停止（break）
+            "give_up" — 超过最大重试次数，应等待正常检测间隔（fall through）
+        """
+        idx = self.login_attempt_count - 1
+        if idx < len(self.LOGIN_RETRY_INTERVALS):
+            wait = self.LOGIN_RETRY_INTERVALS[idx]
+            self.log_message(f"{wait} 秒后重试登录...", logging.DEBUG)
+            if not self._wait_interruptible(wait, step=5):
+                return "break"
+            return "retry"
+        # 超过最大重试次数，放弃本次网络检测周期
+        self.log_message(
+            f"连续登录失败 {self.login_attempt_count} 次，等待下次检测周期",
+            logging.WARNING,
+        )
+        self.login_attempt_count = 0
+        return "give_up"
 
     def monitor_network(self) -> None:
         consecutive_failures = 0
@@ -211,27 +237,48 @@ class NetworkMonitorCore:
 
                 login_ok, _ = self.attempt_login()
                 if login_ok:
-                    consecutive_failures = 0
-                    self.login_attempt_count = 0
-                    self.log_message(f"[{self.network_check_count}] 自动登录成功 ✓")
+                    # 登录成功后等待几秒再验证网络连接
+                    self.log_message("登录完成，等待 5 秒后验证网络连接...")
+                    if not self._wait_interruptible(5, step=5):
+                        break
+
+                    try:
+                        verify_ok = is_network_available(
+                            test_sites=test_sites,
+                            timeout=self.NETWORK_CHECK_TIMEOUT_SECONDS,
+                            require_both=False,
+                        )
+                    except Exception:
+                        verify_ok = False
+
+                    if verify_ok:
+                        consecutive_failures = 0
+                        self.login_attempt_count = 0
+                        self.log_message(f"[{self.network_check_count}] 自动登录成功，网络已恢复 ✓")
+                    else:
+                        # 登录后网络仍不通，视为登录失败
+                        self.login_attempt_count += 1
+                        self.log_message(
+                            f"[{self.network_check_count}] 登录完成但网络仍不通，可能密码错误或认证失败",
+                            logging.WARNING,
+                        )
+                        action = self._login_retry_or_break()
+                        if action == "break":
+                            break
+                        if action == "retry":
+                            continue
                 else:
                     self.login_attempt_count += 1
                     self.log_message(
                         f"[{self.network_check_count}] 自动登录失败，第 {self.login_attempt_count} 次",
                         logging.ERROR,
                     )
-                    if self.login_attempt_count >= self.MAX_CONSECUTIVE_LOGIN_FAILURES:
-                        self.log_message(
-                            f"连续登录失败达到 {self.MAX_CONSECUTIVE_LOGIN_FAILURES} 次，"
-                            f"冷却 {self.LOGIN_COOLDOWN_SECONDS} 秒",
-                            logging.WARNING,
-                        )
-                        self.login_attempt_count = 0
-                        if not self._wait_interruptible(
-                            self.LOGIN_COOLDOWN_SECONDS, step=self.LOGIN_COOLDOWN_STEP_SECONDS
-                        ):
-                            break
+                    action = self._login_retry_or_break()
+                    if action == "break":
+                        break
+                    if action == "retry":
                         continue
+                    # "give_up" → fall through to normal interval wait
 
             next_check = datetime.datetime.now() + datetime.timedelta(seconds=interval)
             self.log_message(
@@ -311,7 +358,7 @@ class NetworkMonitorCore:
     def attempt_login(self) -> tuple[bool, str]:
         self.log_message("正在尝试登录...")
         try:
-            handler = LoginAttemptHandler(self.config)
+            handler = LoginAttemptHandler(self.config, cancel_event=self._cancel_login)
             # 在同步线程中安全运行异步代码：每次创建独立事件循环
             # 使用 asyncio.run() 的替代方案，避免在已有事件循环时崩溃
             loop = asyncio.new_event_loop()
@@ -321,6 +368,10 @@ class NetworkMonitorCore:
                 )
             finally:
                 loop.close()
+            # 检查是否在登录过程中被取消
+            if self._cancel_login.is_set():
+                self.log_message("登录已被取消", logging.WARNING)
+                return False, "登录已被取消"
             if success:
                 self.log_message(f"登录成功 ✓ {message}")
             else:

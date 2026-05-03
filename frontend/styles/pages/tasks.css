@@ -140,7 +140,7 @@
 
 .danger-modal {
   background: var(--bg-card);
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  border: 1px solid rgba(239, 68, 68, 0.3);
   border-radius: 16px;
   width: min(640px, calc(100vw - 48px));
   max-height: calc(100vh - 80px);
@@ -161,7 +161,7 @@
 .danger-modal-header h3 {
   font-size: 16px;
   font-weight: 600;
-  color: var(--warning);
+  color: var(--error);
   margin: 0 0 4px;
 }
 
@@ -233,4 +233,15 @@
   gap: 10px;
   padding: 16px 24px;
   border-top: 1px solid var(--border);
+}
+
+.danger-confirm-btn {
+  background: linear-gradient(135deg, var(--error), #dc2626) !important;
+}
+
+.danger-confirm-btn:disabled {
+  background: var(--bg-primary) !important;
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.7;
 }

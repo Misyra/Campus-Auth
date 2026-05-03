@@ -50,6 +50,20 @@
       "type": "sleep",
       "description": "等待登录结果",
       "duration": 3000
+    },
+    {
+      "id": "eval_result",
+      "type": "eval",
+      "description": "判断登录是否成功",
+      "script": "(() => { const text = String((document.body && document.body.innerText) || '') + ' ' + String(document.title || ''); const okWords = ['登录成功', '认证成功', '已连接', '已上线', '欢迎', 'success', 'connected']; const badWords = ['失败', '错误', '无效', '密码错误', '账号错误', 'failed', 'error']; const has = (arr) => arr.some((w) => text.toLowerCase().includes(w.toLowerCase())); if (has(badWords)) return false; return has(okWords); })()",
+      "store_as": "login_success"
+    }
+  ],
+  "success_conditions": [
+    {
+      "type": "variable",
+      "variable": "login_success",
+      "value": true
     }
   ],
   "variables": {
