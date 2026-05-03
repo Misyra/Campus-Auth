@@ -279,6 +279,22 @@
             />
           </div>
         </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>运营商</label>
+            <select v-model="editingProfile.carrier">
+              <option>移动</option>
+              <option>联通</option>
+              <option>电信</option>
+              <option>无</option>
+              <option>自定义</option>
+            </select>
+          </div>
+          <div v-if="editingProfile.carrier === '自定义'" class="form-group">
+            <label>自定义运营商</label>
+            <input v-model.trim="editingProfile.carrier_custom" type="text" placeholder="校园专网" />
+          </div>
+        </div>
       </div>
 
       <!-- 认证设置 -->
@@ -310,22 +326,6 @@
             <option value="">默认任务</option>
             <option v-for="t in tasks" :key="t.id" :value="t.id">{{ t.name || t.id }}</option>
           </select>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>运营商</label>
-            <select v-model="editingProfile.carrier">
-              <option>移动</option>
-              <option>联通</option>
-              <option>电信</option>
-              <option>无</option>
-              <option>自定义</option>
-            </select>
-          </div>
-          <div v-if="editingProfile.carrier === '自定义'" class="form-group">
-            <label>自定义运营商</label>
-            <input v-model.trim="editingProfile.carrier_custom" type="text" placeholder="校园专网" />
-          </div>
         </div>
       </div>
 
