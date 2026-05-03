@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-import logging
 import os
 import platform
 import re
@@ -11,7 +9,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from src.utils.crypto import decrypt_password, encrypt_password, mask_password
+from src.utils.crypto import encrypt_password
 from src.utils.logging import get_logger
 
 from .schemas import ProfileSettings, ProfilesData, SystemSettings
@@ -281,21 +279,21 @@ class ProfileService:
     def save(self, data: ProfilesData) -> None:
         """原子写入 settings.json"""
         content = data.model_dump_json(indent=2)
-        tmp_fd, tmp_path = tempfile.mkstemp(
-            dir=self._settings_path.parent, suffix=".tmp", prefix="settings."
-        )
-        try:
-            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
-                f.write(content)
-            os.replace(tmp_path, self._settings_path)
-        except Exception:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-            raise
-
         with self._lock:
+            tmp_fd, tmp_path = tempfile.mkstemp(
+                dir=self._settings_path.parent, suffix=".tmp", prefix="settings."
+            )
+            try:
+                with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                    f.write(content)
+                os.replace(tmp_path, self._settings_path)
+            except Exception:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
+
             self._data = data
 
         profile_logger.info("settings.json 已保存")
@@ -341,16 +339,14 @@ class ProfileService:
             return False, "方案 ID 只能包含字母、数字和下划线"
 
         # 处理密码：掩码不更新，明文则加密存储
+        data = self.load()
         if settings.password and not settings.password.startswith("•") and not settings.password.startswith("ENC:"):
             settings.password = encrypt_password(settings.password)
         elif settings.password and settings.password.startswith("•"):
             # 保留已有的加密密码
-            data = self.load()
             existing = data.profiles.get(profile_id)
             if existing and existing.password:
                 settings.password = existing.password
-
-        data = self.load()
         data.profiles[profile_id] = settings
 
         # 如果是第一个方案，设为活动方案
@@ -511,7 +507,7 @@ class ProfileService:
         )
 
         data = ProfilesData(
-            auto_switch=True,
+            auto_switch=False,
             active_profile="default",
             system=self._build_system_from_env(config),
             profiles={"default": default_profile},

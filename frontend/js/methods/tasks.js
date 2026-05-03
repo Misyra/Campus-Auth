@@ -204,6 +204,7 @@ export const taskMethods = {
         description: data.description,
         url: data.url,
         json: JSON.stringify(data, null, 2),
+        _isNew: true,
       };
       this.jsonError = '';
     } catch (error) {
@@ -243,6 +244,7 @@ export const taskMethods = {
             description: data.description || '',
             url: data.url || '',
             json: JSON.stringify(data, null, 2),
+            _isNew: true,
           };
           this.jsonError = '';
           this.frontendLogger.info('tasks', '已导入任务配置，请检查后保存');

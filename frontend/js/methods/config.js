@@ -7,7 +7,6 @@ export const configMethods = {
       this.config = {
         ...DEFAULT_CONFIG,
         ...data,
-        auth_url: data.auth_url || DEFAULT_CONFIG.auth_url,
         browser_extra_headers_json: data.browser_extra_headers_json || '',
       };
       this.setFrontendLogLevel(this.config.frontend_log_level || 'INFO');
@@ -31,7 +30,7 @@ export const configMethods = {
       if (data.success) {
         this.frontendLogger.info('config', data.message || '配置保存成功');
         this.savedConfigSnapshot = JSON.stringify(this.config);
-        this.fetchProfiles();
+        await this.fetchProfiles();
       } else {
         this.notify(false, data.message);
       }

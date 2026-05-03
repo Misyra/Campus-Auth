@@ -30,9 +30,6 @@ load_dotenv(_env_file, override=True)
 from src.playwright_bootstrap import ensure_playwright_ready
 
 
-def _setup_logging() -> None:
-    """日志初始化延迟到 backend/main.run() 中执行（确保 .env 已加载）。"""
-    pass
 
 
 # ==================== PID 管理 ====================
@@ -152,7 +149,9 @@ def _cmd_stop() -> None:
                 print("服务已停止")
                 _cleanup_pid()
                 return
-        if sys.platform != "win32":
+        if sys.platform == "win32":
+            print("服务未能在 10 秒内停止，请手动结束进程")
+        else:
             os.kill(pid, signal.SIGKILL)
             print("服务已强制停止")
     except OSError:
@@ -228,7 +227,13 @@ def _run_server(no_browser: bool = False, tray: bool = False) -> None:
         "启动阶段: 运行配置加载完成，耗时 %.3fs",
         time.perf_counter() - stage_begin,
     )
-    minimize_to_tray = tray or bool(config.get("minimize_to_tray", False))
+    # 优先从 settings.json 读取（Web 控制台可修改），回退到 .env
+    try:
+        from backend.profile_service import ProfileService
+        _ps = ProfileService(Path(__file__).parent.resolve())
+        minimize_to_tray = tray or bool(_ps.load().system.minimize_to_tray)
+    except Exception:
+        minimize_to_tray = tray or bool(config.get("minimize_to_tray", False))
 
     from backend.main import run
 
@@ -270,8 +275,6 @@ def _run_server(no_browser: bool = False, tray: bool = False) -> None:
 
 
 def main() -> None:
-    _setup_logging()
-
     parser = argparse.ArgumentParser(
         description="Campus-Auth 校园网自动认证",
         formatter_class=argparse.RawDescriptionHelpFormatter,

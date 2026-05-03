@@ -8,7 +8,7 @@
   <div class="top-actions">
     <div v-if="wsReconnecting" class="ws-reconnect-bar" style="position:static;border:none;padding:6px 12px;border-radius:var(--radius-md);">
       <span class="spinner"></span>
-      重连中 ({{ wsRetryAttempt }}/{{ 5 }})
+      重连中 ({{ wsRetryAttempt }}/{{ wsMaxRetries }})
     </div>
     <div class="notification-wrapper" style="position:relative;">
       <button class="btn btn-icon-only" @click="showNotifications = !showNotifications; unreadNotifications = 0" title="通知历史">

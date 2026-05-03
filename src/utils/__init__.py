@@ -7,7 +7,6 @@ from .logging import (
     LoggerSetup,
     LogConfigCenter,
     configure_root_logger,
-    get_configured_logger,
     get_logger,
     setup_logger,
 )
@@ -21,7 +20,6 @@ __all__ = [
     "ColoredFormatter",
     "configure_root_logger",
     "get_logger",
-    "get_configured_logger",
     "LogConfigCenter",
     "ExceptionHandler",
     "SimpleRetryHandler",
