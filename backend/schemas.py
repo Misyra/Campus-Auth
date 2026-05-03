@@ -22,6 +22,7 @@ class MonitorConfigPayload(BaseModel):
         description="当前是否使用全局凭证（前端只读，后端填充）",
     )
     auth_url: str = Field(default="")
+    active_task: str = Field(default="")
     carrier: str = Field(default="无")
     carrier_custom: str = Field(default="")
     check_interval_minutes: int = Field(default=5, ge=1, le=1440)
@@ -156,7 +157,12 @@ class ProfileSettings(BaseModel):
         default=True,
         description="是否使用全局认证地址（true 时忽略 auth_url，使用系统设置中的认证地址）",
     )
+    use_global_task: bool = Field(
+        default=True,
+        description="是否使用全局活动任务（true 时忽略 active_task，使用全局任务）",
+    )
     auth_url: str = Field(default="")
+    active_task: str = Field(default="", description="方案使用的任务 ID，留空使用默认任务")
     carrier: str = Field(default="无")
     carrier_custom: str = Field(default="")
     check_interval_minutes: int = Field(default=5, ge=1, le=1440)

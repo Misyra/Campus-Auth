@@ -162,6 +162,13 @@
             </svg>
             自定义地址
           </span>
+          <span v-if="!info.use_global_task && info.active_task" class="profile-tag">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;">
+              <polyline points="4 17 10 11 4 5"/>
+              <line x1="12" y1="19" x2="20" y2="19"/>
+            </svg>
+            {{ info.active_task }}
+          </span>
           <span v-if="!info.match_gateway_ip && !info.match_ssid" class="profile-tag muted">手动切换</span>
         </div>
       </div>
@@ -288,6 +295,21 @@
         <div v-if="!editingProfile.use_global_auth_url" class="form-group">
           <label>认证地址</label>
           <input v-model.trim="editingProfile.auth_url" type="text" placeholder="http://" />
+        </div>
+        <div class="toggle-group" style="margin-bottom: 12px;">
+          <label class="toggle compact">
+            <input type="checkbox" v-model="editingProfile.use_global_task" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">跟随全局任务</span>
+          </label>
+          <span class="hint">开启后使用任务管理页面设置的活动任务，关闭后可为本方案指定独立任务</span>
+        </div>
+        <div v-if="!editingProfile.use_global_task" class="form-group">
+          <label>执行任务</label>
+          <select v-model="editingProfile.active_task">
+            <option value="">默认任务</option>
+            <option v-for="t in tasks" :key="t.id" :value="t.id">{{ t.name || t.id }}</option>
+          </select>
         </div>
         <div class="form-row">
           <div class="form-group">
