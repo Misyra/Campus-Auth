@@ -72,7 +72,7 @@ export const taskMethods = {
         id: '',
         name: '',
         description: '',
-        url: 'http://172.29.0.2',
+        url: '',
         json: '',
         _isNew: true,
       };

@@ -93,8 +93,8 @@
 
 @media (max-width: 640px) {
   .field-help::after {
-    left: 0;
-    width: min(260px, calc(100vw - 92px));
+    left: calc(100% + 8px);
+    max-width: calc(100vw - 120px);
   }
 
   .wizard-container {

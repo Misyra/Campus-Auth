@@ -59,6 +59,17 @@
             />
             <span class="hint">您的校园网登录密码</span>
           </div>
+
+          <div class="form-group">
+            <label for="wizard-auth-url">认证地址 <span class="required">*</span></label>
+            <input
+              id="wizard-auth-url"
+              v-model.trim="config.auth_url"
+              type="text"
+              placeholder="http://"
+            />
+            <span class="hint">校园网认证页面的网址，例如 http://auth.school.edu.cn</span>
+          </div>
         </form>
       </div>
 
@@ -151,6 +162,10 @@
           <div class="summary-item">
             <span class="label">账号</span>
             <span class="value">{{ config.username || '未设置' }}</span>
+          </div>
+          <div class="summary-item">
+            <span class="label">认证地址</span>
+            <span class="value">{{ config.auth_url || '未设置' }}</span>
           </div>
           <div class="summary-item">
             <span class="label">运营商</span>

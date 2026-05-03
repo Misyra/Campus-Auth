@@ -495,38 +495,54 @@
   margin-top: 8px;
 }
 
-/* Field help tooltip */
+/* Field help tooltip — 与 settings.css 保持一致，避免样式覆盖 */
 .field-help {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--bg-hover);
-  color: var(--text-muted);
-  font-size: 10px;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  border: 1px solid rgba(34, 211, 238, 0.45);
+  background: rgba(34, 211, 238, 0.14);
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
   cursor: help;
-  position: relative;
+  isolation: isolate;
+}
+
+.field-help::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%) translateX(4px);
+  width: max-content;
+  max-width: min(380px, calc(100vw - 80px));
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  background: rgba(8, 15, 30, 0.95);
+  color: #e6f1ff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.7;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 200;
+  backdrop-filter: blur(12px);
 }
 
 .field-help:hover::after,
-.field-help:focus::after {
-  content: attr(data-tip);
-  position: absolute;
-  top: 50%;
-  left: calc(100% + 8px);
-  transform: translateY(-50%);
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-hover);
-  color: var(--text-primary);
-  font-size: 11px;
-  font-weight: 400;
-  white-space: nowrap;
-  z-index: 10;
-  pointer-events: none;
+.field-help:focus-visible::after {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
 }
 
 /* 空状态 */

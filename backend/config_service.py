@@ -63,8 +63,11 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
         username = sys.username
         password = mask_password(sys.password)
 
-    # 基本设置：auth_url、carrier 始终来自 profile
-    auth_url = profile.auth_url or "http://172.29.0.2"
+    # 认证地址：跟随全局或使用方案独立值
+    if profile.use_global_auth_url:
+        auth_url = sys.auth_url
+    else:
+        auth_url = profile.auth_url
     carrier = profile.carrier
     carrier_custom = profile.carrier_custom
 
@@ -128,7 +131,7 @@ def build_runtime_config(payload: MonitorConfigPayload, sys: SystemSettings | No
     elif sys:
         base["password"] = decrypt_password(sys.password) if sys.password else ""
 
-    base["auth_url"] = payload.auth_url.strip() or "http://172.29.0.2"
+    base["auth_url"] = payload.auth_url.strip()
     carrier = str(payload.carrier or "无").strip() or "无"
     custom_isp = str(payload.carrier_custom or "").strip()
     if carrier == "自定义":
@@ -200,6 +203,7 @@ def write_system_settings(payload: MonitorConfigPayload, profile_service: Profil
         sys.username = payload.username.strip()
         sys.password = _save_password_field(payload.password.strip(), sys.password)
 
+    sys.auth_url = payload.auth_url.strip()
     sys.backend_log_level = _normalize_level(payload.backend_log_level)
     sys.frontend_log_level = _normalize_level(payload.frontend_log_level)
     sys.access_log = payload.access_log
@@ -226,7 +230,8 @@ def save_profile_from_payload(
         password=existing.password,
         use_global_credentials=existing.use_global_credentials,
         use_global_advanced=existing.use_global_advanced,
-        auth_url=payload.auth_url.strip() or "http://172.29.0.2",
+        use_global_auth_url=existing.use_global_auth_url,
+        auth_url=existing.auth_url if existing.use_global_auth_url else payload.auth_url.strip(),
         carrier=str(payload.carrier or "无").strip(),
         carrier_custom=str(payload.carrier_custom or "").strip(),
         check_interval_minutes=payload.check_interval_minutes,
