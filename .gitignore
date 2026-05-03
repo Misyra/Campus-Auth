@@ -41,6 +41,9 @@ logs/
 
 # Claude Code
 .claude/
+.agents/
+CLAUDE.md
+skills-lock.json
 
 # OS
 .DS_Store

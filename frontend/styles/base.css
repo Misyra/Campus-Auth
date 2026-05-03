@@ -35,10 +35,36 @@
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  background: var(--bg-primary);
+  background:
+    radial-gradient(ellipse 80% 60% at 10% 20%, rgba(34, 211, 238, 0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 90% 80%, rgba(167, 139, 250, 0.05) 0%, transparent 60%),
+    var(--bg-primary);
   color: var(--text-primary);
   min-height: 100vh;
   display: flex;
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.25);
+  color: #fff;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.35);
 }
 
 #app {
@@ -48,7 +74,7 @@ body {
 }
 
 .page-content {
-  animation: fadeIn 0.3s ease;
+  animation: fadeIn 0.35s ease;
 }
 
 .include-error {
@@ -161,9 +187,10 @@ body {
 }
 
 .log-filter-chip.active {
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
   color: var(--bg-primary);
   border-color: var(--accent);
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.2);
 }
 
 /* 新消息提示按钮 */
@@ -187,6 +214,7 @@ body {
 
 .new-logs-btn:hover {
   background: var(--accent-hover);
+  box-shadow: 0 4px 16px rgba(34, 211, 238, 0.3);
 }
 
 /* 网络状态横幅 */
@@ -199,6 +227,7 @@ body {
   margin-bottom: 16px;
   border: 1px solid;
   backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
 }
 
 .network-status-banner.connected {
@@ -243,11 +272,12 @@ body {
   justify-content: center;
   gap: 8px;
   padding: 6px 12px;
-  background: rgba(245, 158, 11, 0.15);
+  background: rgba(245, 158, 11, 0.12);
   border-bottom: 1px solid rgba(245, 158, 11, 0.2);
   color: var(--warning);
   font-size: 12px;
   font-weight: 500;
+  backdrop-filter: blur(4px);
 }
 
 .ws-reconnect-bar .spinner {
@@ -284,13 +314,14 @@ body {
 .json-error {
   margin-top: 6px;
   padding: 8px 12px;
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(239, 68, 68, 0.08);
   border: 1px solid rgba(239, 68, 68, 0.2);
   border-radius: var(--radius-sm);
   color: var(--error);
   font-size: 12px;
   font-family: 'JetBrains Mono', monospace;
   word-break: break-all;
+  backdrop-filter: blur(4px);
 }
 
 textarea.json-invalid {

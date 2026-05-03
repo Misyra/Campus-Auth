@@ -18,8 +18,14 @@ sys.path.insert(0, str(Path(__file__).parent))
 # ==================== 最早加载 .env ====================
 # 必须在任何 import（特别是 backend.main）之前加载，
 # 否则模块级 get_logger() 会用默认 INFO 配置根 logger 并锁死
+_env_file = Path.cwd() / ".env"
+if not _env_file.exists():
+    _env_example = Path.cwd() / ".env.example"
+    if _env_example.exists():
+        import shutil
+        shutil.copy2(_env_example, _env_file)
 from dotenv import load_dotenv
-load_dotenv(Path.cwd() / ".env", override=True)
+load_dotenv(_env_file, override=True)
 
 from src.playwright_bootstrap import ensure_playwright_ready
 

@@ -1,9 +1,14 @@
 .card {
-  background: var(--bg-card);
+  background: rgba(30, 41, 59, 0.6);
   border: 1px solid var(--border);
   border-radius: 16px;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(12px) saturate(1.1);
   box-shadow: var(--shadow);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.card:hover {
+  border-color: var(--border-hover);
 }
 
 .card-header {
@@ -54,6 +59,7 @@
   background: var(--bg-hover);
   border-color: var(--border-hover);
   transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .btn:disabled {
@@ -69,7 +75,8 @@
 }
 
 .btn-primary:hover:not(:disabled) {
-  box-shadow: 0 0 20px rgba(34, 211, 238, 0.3);
+  box-shadow: 0 0 24px rgba(34, 211, 238, 0.35), 0 4px 12px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
 }
 
 .btn-secondary {
@@ -164,9 +171,10 @@
 }
 
 .nav-item.active {
-  background: linear-gradient(135deg, rgba(34, 211, 238, 0.1), rgba(167, 139, 250, 0.1));
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.12), rgba(167, 139, 250, 0.08));
   color: var(--accent);
   border: 1px solid rgba(34, 211, 238, 0.2);
+  box-shadow: 0 0 20px rgba(34, 211, 238, 0.08);
 }
 
 .nav-icon {
@@ -196,6 +204,7 @@
 .quit-btn:hover {
   background: rgba(239, 68, 68, 0.2);
   border-color: var(--error);
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.15);
 }
 
 .quit-btn svg {
@@ -218,6 +227,7 @@
   background: rgba(16, 185, 129, 0.1);
   color: var(--success);
   border: 1px solid rgba(16, 185, 129, 0.2);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.1);
 }
 
 .status-badge.offline {
@@ -251,13 +261,19 @@
 .form-group textarea {
   width: 100%;
   padding: 12px 14px;
-  background: var(--bg-primary);
+  background: rgba(15, 23, 42, 0.7);
   border: 1px solid var(--border);
   border-radius: 10px;
   color: var(--text-primary);
   font-size: 14px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
   color-scheme: dark;
+}
+
+.form-group input:hover,
+.form-group select:hover,
+.form-group textarea:hover {
+  background: rgba(15, 23, 42, 0.85);
 }
 
 .form-group input:focus,
@@ -265,7 +281,7 @@
 .form-group textarea:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12), 0 0 16px rgba(34, 211, 238, 0.06);
 }
 
 /* ========== Custom Select Dropdown ========== */
@@ -352,8 +368,9 @@
 }
 
 .toggle input:checked + .toggle-slider {
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
   border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.25);
 }
 
 .toggle input:checked + .toggle-slider::after {
@@ -374,6 +391,7 @@
   padding: 40px;
   color: var(--text-muted);
   gap: 12px;
+  opacity: 0.8;
 }
 
 .empty-state svg {
@@ -383,11 +401,12 @@
 }
 
 .info-box {
-  background: var(--bg-primary);
+  background: rgba(15, 23, 42, 0.5);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 16px;
   margin-top: 20px;
+  backdrop-filter: blur(4px);
 }
 
 .info-box h4 {
@@ -430,9 +449,9 @@
   gap: 10px;
   padding: 14px 20px;
   border-radius: 12px;
-  background: var(--bg-card);
+  background: rgba(30, 41, 59, 0.9);
   border: 1px solid var(--border);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(16px) saturate(1.2);
   box-shadow: var(--shadow-lg);
   animation: slideIn 0.3s ease;
   z-index: 1000;

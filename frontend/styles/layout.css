@@ -1,6 +1,6 @@
 .sidebar {
   width: 240px;
-  background: var(--bg-secondary);
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98));
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -8,6 +8,7 @@
   position: fixed;
   height: 100vh;
   z-index: 100;
+  backdrop-filter: blur(20px);
 }
 
 .sidebar-header {
@@ -62,11 +63,12 @@
   justify-content: space-between;
   align-items: center;
   padding: 20px 32px;
-  background: var(--bg-secondary);
+  background: rgba(30, 41, 59, 0.85);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 50;
+  backdrop-filter: blur(16px) saturate(1.2);
 }
 
 .page-title {
