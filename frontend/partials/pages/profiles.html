@@ -264,35 +264,37 @@
             <span class="toggle-label">使用全局账号密码</span>
           </label>
         </div>
-        <div v-if="!editingProfile.use_global_credentials" class="form-row" style="margin-top:8px;">
-          <div class="form-group">
-            <label>独立账号</label>
-            <input v-model.trim="editingProfile.username" type="text" placeholder="留空使用全局" />
+        <div v-if="!editingProfile.use_global_credentials" style="margin-top:8px;">
+          <div class="form-row">
+            <div class="form-group">
+              <label>独立账号</label>
+              <input v-model.trim="editingProfile.username" type="text" placeholder="留空使用全局" />
+            </div>
+            <div class="form-group">
+              <label>独立密码</label>
+              <input
+                v-model="editingProfile.password"
+                type="password"
+                :placeholder="editingProfile.password && editingProfile.password.startsWith('•') ? '已保存，清空可更新' : '留空使用全局'"
+                @focus="$event.target.select()"
+              />
+            </div>
           </div>
-          <div class="form-group">
-            <label>独立密码</label>
-            <input
-              v-model="editingProfile.password"
-              type="password"
-              :placeholder="editingProfile.password && editingProfile.password.startsWith('•') ? '已保存，清空可更新' : '留空使用全局'"
-              @focus="$event.target.select()"
-            />
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>运营商</label>
-            <select v-model="editingProfile.carrier">
-              <option>移动</option>
-              <option>联通</option>
-              <option>电信</option>
-              <option>无</option>
-              <option>自定义</option>
-            </select>
-          </div>
-          <div v-if="editingProfile.carrier === '自定义'" class="form-group">
-            <label>自定义运营商</label>
-            <input v-model.trim="editingProfile.carrier_custom" type="text" placeholder="校园专网" />
+          <div class="form-row">
+            <div class="form-group">
+              <label>运营商</label>
+              <select v-model="editingProfile.carrier">
+                <option>移动</option>
+                <option>联通</option>
+                <option>电信</option>
+                <option>无</option>
+                <option>自定义</option>
+              </select>
+            </div>
+            <div v-if="editingProfile.carrier === '自定义'" class="form-group">
+              <label>自定义运营商</label>
+              <input v-model.trim="editingProfile.carrier_custom" type="text" placeholder="校园专网" />
+            </div>
           </div>
         </div>
       </div>

@@ -457,6 +457,8 @@ class ProfileService:
             username=config.get("username", ""),
             password=config.get("password", ""),
             auth_url=str(config.get("auth_url", "")),
+            carrier=str(config.get("isp", "无") or "无"),
+            carrier_custom="",
             backend_log_level=str(
                 config.get("logging", {}).get("level", "WARNING")
             ).upper(),

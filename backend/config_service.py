@@ -74,8 +74,13 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
         active_task = ""
     else:
         active_task = profile.active_task
-    carrier = profile.carrier
-    carrier_custom = profile.carrier_custom
+    # 运营商：跟随全局账号密码开关
+    if profile.use_global_credentials:
+        carrier = sys.carrier
+        carrier_custom = sys.carrier_custom
+    else:
+        carrier = profile.carrier
+        carrier_custom = profile.carrier_custom
 
     # 高级设置：use_global_advanced 时使用 profile 值（已无 .env 全局源）
     check_interval_minutes = profile.check_interval_minutes
@@ -212,6 +217,8 @@ def write_system_settings(payload: MonitorConfigPayload, profile_service: Profil
         sys.password = _save_password_field(payload.password.strip(), sys.password)
 
     sys.auth_url = payload.auth_url.strip()
+    sys.carrier = str(payload.carrier or "无").strip()
+    sys.carrier_custom = str(payload.carrier_custom or "").strip()
     sys.backend_log_level = _normalize_level(payload.backend_log_level)
     sys.frontend_log_level = _normalize_level(payload.frontend_log_level)
     sys.access_log = payload.access_log
@@ -242,8 +249,8 @@ def save_profile_from_payload(
         use_global_task=existing.use_global_task,
         auth_url=existing.auth_url if existing.use_global_auth_url else payload.auth_url.strip(),
         active_task=existing.active_task,
-        carrier=str(payload.carrier or "无").strip(),
-        carrier_custom=str(payload.carrier_custom or "").strip(),
+        carrier=existing.carrier if existing.use_global_credentials else str(payload.carrier or "无").strip(),
+        carrier_custom=existing.carrier_custom if existing.use_global_credentials else str(payload.carrier_custom or "").strip(),
         check_interval_minutes=payload.check_interval_minutes,
         auto_start=payload.auto_start,
         headless=payload.headless,
