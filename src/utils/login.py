@@ -104,7 +104,10 @@ class LoginAttemptHandler:
             )
 
             task_manager = TaskManager(project_root / "tasks")
-            active_task_id = task_manager.get_active_task().strip() or "default"
+            # 优先使用方案指定的任务，其次使用全局活动任务
+            active_task_id = self.config.get("active_task", "").strip()
+            if not active_task_id:
+                active_task_id = task_manager.get_active_task().strip() or "default"
             task = task_manager.load_task(active_task_id)
 
             if not task:

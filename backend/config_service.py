@@ -68,6 +68,12 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
         auth_url = sys.auth_url
     else:
         auth_url = profile.auth_url
+
+    # 任务：跟随全局或使用方案独立任务
+    if profile.use_global_task:
+        active_task = ""
+    else:
+        active_task = profile.active_task
     carrier = profile.carrier
     carrier_custom = profile.carrier_custom
 
@@ -92,6 +98,7 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
         password=password,
         use_global_credentials=use_global,
         auth_url=auth_url,
+        active_task=active_task,
         carrier=carrier,
         carrier_custom=carrier_custom,
         check_interval_minutes=check_interval_minutes,
@@ -132,6 +139,7 @@ def build_runtime_config(payload: MonitorConfigPayload, sys: SystemSettings | No
         base["password"] = decrypt_password(sys.password) if sys.password else ""
 
     base["auth_url"] = payload.auth_url.strip()
+    base["active_task"] = payload.active_task.strip()
     carrier = str(payload.carrier or "无").strip() or "无"
     custom_isp = str(payload.carrier_custom or "").strip()
     if carrier == "自定义":
@@ -231,7 +239,9 @@ def save_profile_from_payload(
         use_global_credentials=existing.use_global_credentials,
         use_global_advanced=existing.use_global_advanced,
         use_global_auth_url=existing.use_global_auth_url,
+        use_global_task=existing.use_global_task,
         auth_url=existing.auth_url if existing.use_global_auth_url else payload.auth_url.strip(),
+        active_task=existing.active_task,
         carrier=str(payload.carrier or "无").strip(),
         carrier_custom=str(payload.carrier_custom or "").strip(),
         check_interval_minutes=payload.check_interval_minutes,
