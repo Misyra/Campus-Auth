@@ -8,7 +8,7 @@ set -euo pipefail
 # - Avoid duplicate start by checking APP_PORT
 
 PYTHON_VERSION="${PYTHON_VERSION:-3.10}"
-PIP_MIRROR="${PIP_MIRROR:-https://pypi.tuna.tsinghua.edu.cn/simple}"
+PIP_MIRROR="${PIP_MIRROR:-https://mirrors.aliyun.com/pypi/simple}"
 FORCE_REINSTALL="${FORCE_REINSTALL:-0}"
 VERBOSE="${VERBOSE:-0}"
 
@@ -140,6 +140,38 @@ calculate_hash() {
   fi
 }
 
+FALLBACK_PIP_MIRRORS=(
+  "https://mirrors.tuna.tsinghua.edu.cn/simple"
+  "https://pypi.org/simple"
+)
+
+get_mirror_candidates() {
+  local mirrors=("$PIP_MIRROR")
+  for m in "${FALLBACK_PIP_MIRRORS[@]}"; do
+    local dup=0
+    for existing in "${mirrors[@]}"; do
+      [[ "$m" == "$existing" ]] && dup=1 && break
+    done
+    (( dup == 0 )) && mirrors+=("$m")
+  done
+  printf '%s\n' "${mirrors[@]}"
+}
+
+run_pip_with_mirror() {
+  local stage="$1"
+  shift
+  while IFS= read -r mirror; do
+    log_info "[$stage] 尝试镜像源: $mirror"
+    if "$PYTHON_EXE" -m pip "$@" -i "$mirror" >/dev/null 2>&1; then
+      log_success "[$stage] 镜像成功: $mirror"
+      return 0
+    fi
+    log_warning "[$stage] 镜像失败: $mirror"
+  done < <(get_mirror_candidates)
+  log_error "[$stage] 所有镜像均失败"
+  return 1
+}
+
 ensure_python() {
   if [[ -x "$PYTHON_EXE" && "$FORCE_REINSTALL" != "1" ]]; then
     local py_ver
@@ -172,7 +204,7 @@ ensure_pip() {
   fi
 
   "$PYTHON_EXE" -m ensurepip --upgrade >/dev/null 2>&1 || true
-  "$PYTHON_EXE" -m pip install --upgrade pip setuptools wheel -i "$PIP_MIRROR" >/dev/null
+  run_pip_with_mirror "基础工具" install --upgrade pip setuptools wheel || true
   local pip_ver
   pip_ver="$($PYTHON_EXE -m pip --version 2>&1 || true)"
   log_success "Pip 已就绪 (版本: $pip_ver)"
@@ -198,7 +230,7 @@ install_dependencies_if_needed() {
 
   if [[ "$FORCE_REINSTALL" == "1" || -z "$last_hash" || "$current_hash" != "$last_hash" ]]; then
     log_info ">>> 开始安装依赖..."
-    "$PYTHON_EXE" -m pip install -r "$REQUIREMENTS_FILE" -i "$PIP_MIRROR"
+    run_pip_with_mirror "项目依赖" install -r "$REQUIREMENTS_FILE"
     printf "%s" "$current_hash" > "$HASH_FILE"
     log_success "依赖安装完成"
   else
@@ -228,8 +260,10 @@ ensure_playwright() {
     return
   fi
 
+  local pw_host="${PLAYWRIGHT_DOWNLOAD_HOST:-https://npmmirror.com/mirrors/playwright}"
   log_info ">>> 安装 Playwright 浏览器..."
-  "$PYTHON_EXE" -m playwright install chromium
+  log_info "Playwright 镜像: $pw_host"
+  PLAYWRIGHT_DOWNLOAD_HOST="$pw_host" "$PYTHON_EXE" -m playwright install chromium
   log_success "Playwright 安装完成"
 }
 

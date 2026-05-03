@@ -31,10 +31,9 @@ REQUIREMENTS_TXT = PROJECT_ROOT / "requirements.txt"
 HASH_FILE = ENV_DIR / ".requirements_hash"
 LOG_FILE = PROJECT_ROOT / "logs" / "setup_env.log"
 
-DEFAULT_PIP_MIRROR = "https://mirrors.tuna.tsinghua.edu.cn/simple"
+DEFAULT_PIP_MIRROR = "https://mirrors.aliyun.com/pypi/simple"
 FALLBACK_PIP_MIRRORS = [
     "https://mirrors.tuna.tsinghua.edu.cn/simple",
-    "https://mirrors.aliyun.com/pypi/simple",
     "https://pypi.org/simple",
 ]
 
@@ -630,17 +629,43 @@ def install_playwright():
     log_info("=== 安装 Playwright 浏览器 ===")
 
     try:
-        result = subprocess.run(
+        env = _get_network_env()
+        download_host = os.getenv(
+            "PLAYWRIGHT_DOWNLOAD_HOST",
+            "https://npmmirror.com/mirrors/playwright",
+        ).strip()
+        env["PLAYWRIGHT_DOWNLOAD_HOST"] = download_host
+        log_info(f"Playwright 镜像: {download_host}")
+
+        proc = subprocess.Popen(
             [str(PYTHON_EXE), "-m", "playwright", "install", "chromium"],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env=env,
         )
 
-        if result.returncode == 0:
+        for line in proc.stdout:
+            line = line.strip()
+            if not line or "DeprecationWarning" in line or "trace-deprecation" in line:
+                continue
+            if "|" in line and ("%" in line or "MiB" in line):
+                continue
+            log_info(f"[Playwright] {line}")
+
+        proc.wait(timeout=600)
+
+        if proc.returncode == 0:
+            log_progress("Playwright", "安装完成", 100)
             log_success("Playwright 安装完成")
             return True
         else:
-            log_error(f"Playwright 安装失败: {result.stderr.decode()[:200]}")
+            log_error(f"Playwright 安装失败 (exit code: {proc.returncode})")
             return False
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        log_error("Playwright 安装超时 (10分钟)")
+        return False
     except Exception as e:
         log_error(f"Playwright 安装异常: {e}")
         return False

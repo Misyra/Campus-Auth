@@ -1,4 +1,4 @@
-#   JCU_auto_network: Python Environment Setup Script
+#   Python Environment Setup Script
 #   Copyright © 2026
 
 #   This script installs embedded Python and project dependencies
@@ -6,7 +6,7 @@
 
 param(
     [string]$PythonVersion = "3.10",
-    [string]$PipMirror = "https://pypi.tuna.tsinghua.edu.cn/simple",
+    [string]$PipMirror = "https://mirrors.aliyun.com/pypi/simple",
     [switch]$ForceReinstall = $false,
     [switch]$Verbose = $false
 )
@@ -158,6 +158,47 @@ function Test-ServiceRunning {
             $client.Close()
         }
     }
+}
+
+$DefaultPipMirror = "https://mirrors.aliyun.com/pypi/simple"
+$FallbackPipMirrors = @(
+    "https://mirrors.tuna.tsinghua.edu.cn/simple",
+    "https://pypi.org/simple"
+)
+
+function Get-PipMirrorCandidates {
+    $mirrors = @($PipMirror) + $FallbackPipMirrors
+    $seen = @{}
+    $result = @()
+    foreach ($m in $mirrors) {
+        if ($m -and -not $seen.ContainsKey($m)) {
+            $seen[$m] = $true
+            $result += $m
+        }
+    }
+    return $result
+}
+
+function Invoke-PipWithMirror {
+    param(
+        [string[]]$PipArgs,
+        [string]$Stage = "pip"
+    )
+
+    foreach ($mirror in (Get-PipMirrorCandidates)) {
+        $hostname = [System.Uri]::new($mirror).Host
+        Write-Info "[$Stage] 尝试镜像源：$mirror"
+        try {
+            $result = & $PythonExe -m pip @PipArgs -i $mirror --trusted-host $hostname 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                return @{success = $true; output = $result; mirror = $mirror}
+            }
+            Write-Warning-Custom "[$Stage] 镜像失败：$mirror"
+        } catch {
+            Write-Warning-Custom "[$Stage] 镜像异常：$mirror - $_"
+        }
+    }
+    return @{success = $false; output = $null; mirror = $null}
 }
 
 # ==================== 步骤 1: 环境检查 ====================
@@ -349,53 +390,73 @@ function Install-Python {
 
 function Install-Pip {
     Write-Info "=== 安装 Pip ==="
-    
-    $getPipPath = Join-Path $PythonDir "get-pip.py"
-    
+
+    $tempDir = Join-Path $ProjectRoot "temp"
+    $getPipPath = Join-Path $tempDir "get-pip.py"
+    $localGetPip = Join-Path $ProjectRoot "bootstrap" "get-pip.py"
+
     try {
-        # 下载 get-pip.py
-        Write-Progress-Stage "Pip" "下载 get-pip.py..." 20
-        Write-Info "下载地址：https://bootstrap.pypa.io/get-pip.py"
-        
-        try {
-            Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile $getPipPath -UseBasicParsing
-            Write-Success "get-pip.py 下载完成"
-        } catch {
-            Write-Error-Custom "get-pip.py 下载失败：$_"
-            return @{success = $false; error = $_}
+        if (-not (Test-Path $tempDir)) {
+            New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
         }
-        
-        # 执行安装
-        Write-Progress-Stage "Pip" "安装 Pip..." 50
-        Write-Info "使用镜像源：$PipMirror"
-        
-        try {
-            $hostname = [System.Uri]::new($PipMirror).Host
-            Write-Info "镜像源主机：$hostname"
-            
-            # 执行安装并捕获输出
-            $installOutput = & $PythonExe $getPipPath -i $PipMirror --trusted-host $hostname 2>&1
-            
-            if ($LASTEXITCODE -eq 0) {
-                Write-Success "Pip 安装成功"
-                if ($Verbose -and $installOutput) {
-                    $installOutput | ForEach-Object { Write-Info $_ }
-                }
-            } else {
-                Write-Warning-Custom "Pip 安装退出码：$LASTEXITCODE"
+
+        # 优先使用项目内 get-pip.py
+        if (Test-Path $localGetPip) {
+            Write-Progress-Stage "Pip" "使用项目内 get-pip.py..." 20
+            Write-Info "本地文件：$localGetPip"
+            try {
+                Copy-Item $localGetPip $getPipPath -Force
+                Write-Success "已复制本地 get-pip.py"
+            } catch {
+                Write-Error-Custom "复制本地 get-pip.py 失败：$_"
+                return @{success = $false; error = $_}
             }
-        } catch {
-            Write-Error-Custom "Pip 安装失败：$_"
-            return @{success = $false; error = $_}
+        } else {
+            Write-Progress-Stage "Pip" "下载 get-pip.py..." 20
+            Write-Info "下载地址：https://bootstrap.pypa.io/get-pip.py"
+            try {
+                Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile $getPipPath -UseBasicParsing
+                Write-Success "get-pip.py 下载完成"
+            } catch {
+                Write-Error-Custom "get-pip.py 下载失败：$_"
+                Write-Error-Custom "请将 get-pip.py 放到项目目录 bootstrap/get-pip.py 后重试"
+                return @{success = $false; error = $_}
+            }
         }
-        
+
+        # 执行安装（带镜像回退）
+        Write-Progress-Stage "Pip" "安装 Pip..." 50
+
+        $installed = $false
+        foreach ($mirror in (Get-PipMirrorCandidates)) {
+            $hostname = [System.Uri]::new($mirror).Host
+            Write-Info "使用镜像源：$mirror"
+            Write-Info "镜像源主机：$hostname"
+            try {
+                $installOutput = & $PythonExe $getPipPath -i $mirror --trusted-host $hostname 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Success "Pip 安装成功"
+                    $installed = $true
+                    break
+                }
+                Write-Warning-Custom "Pip 安装失败，镜像 ${mirror}：$($installOutput | Select-Object -First 2)"
+            } catch {
+                Write-Warning-Custom "Pip 安装异常，镜像 ${mirror}：$_"
+            }
+        }
+
+        if (-not $installed) {
+            Write-Error-Custom "Pip 安装失败：所有镜像均不可用"
+            return @{success = $false; error = "所有镜像均不可用"}
+        }
+
         # 清理临时文件
         Write-Progress-Stage "Pip" "清理临时文件..." 90
         if (Test-Path $getPipPath) {
             Remove-Item $getPipPath -Force
             Write-Info "清理临时文件：$getPipPath"
         }
-        
+
         Write-Progress-Stage "Pip" "Pip 安装完成" 100
         return @{success = $true}
     } catch {
@@ -409,72 +470,88 @@ function Install-Pip {
 
 function Install-Dependencies {
     Write-Info "=== 安装项目依赖 ==="
-    
+
     try {
         # 安装基础工具
         Write-Progress-Stage "依赖" "安装基础工具 (setuptools, wheel)..." 10
         Write-Info "升级 setuptools 和 wheel..."
-        
-        try {
-            $hostname = [System.Uri]::new($PipMirror).Host
-            $installOutput = & $PythonExe -m pip install --upgrade setuptools wheel -i $PipMirror --trusted-host $hostname 2>&1
-            
-            if ($LASTEXITCODE -eq 0) {
-                Write-Success "基础工具安装完成"
-                if ($Verbose -and $installOutput) {
-                    $installOutput | ForEach-Object { Write-Info $_ }
-                }
-            } else {
-                Write-Warning-Custom "基础工具安装退出码：$LASTEXITCODE"
-            }
-        } catch {
-            Write-Warning-Custom "基础工具安装失败：$_，但继续执行"
+
+        $baseResult = Invoke-PipWithMirror -PipArgs @("install", "--upgrade", "setuptools", "wheel") -Stage "基础工具"
+        if ($baseResult.success) {
+            Write-Success "基础工具安装完成 (镜像：$($baseResult.mirror))"
+        } else {
+            Write-Warning-Custom "基础工具安装失败，继续尝试安装项目依赖"
         }
-        
+
         # 安装 requirements.txt
         Write-Progress-Stage "依赖" "安装项目依赖..." 40
         Write-Info "安装依赖包..."
-        
-        try {
-            $hostname = [System.Uri]::new($PipMirror).Host
-            Write-Info "使用镜像源：$PipMirror (主机：$hostname)"
-            
-            $installOutput = & $PythonExe -m pip install -r $RequirementsFile -i $PipMirror --trusted-host $hostname --no-warn-script-location 2>&1
-            
-            if ($LASTEXITCODE -eq 0) {
-                Write-Success "项目依赖安装完成"
-                if ($Verbose -and $installOutput) {
-                    # 解析 pip 输出，显示重要信息
-                    $installOutput | ForEach-Object {
-                        if ($_ -match "Successfully installed|Requirement already satisfied|Collecting") {
-                            Write-Info $_
-                        }
-                    }
-                }
-            } else {
-                Write-Error-Custom "项目依赖安装退出码：$LASTEXITCODE"
-                if ($installOutput) {
-                    $installOutput | ForEach-Object { Write-Error-Custom $_ }
-                }
-                return @{success = $false; error = "pip install 失败，退出码：$LASTEXITCODE"}
-            }
-        } catch {
-            Write-Error-Custom "项目依赖安装失败：$_"
-            return @{success = $false; error = $_}
+
+        $depResult = Invoke-PipWithMirror -PipArgs @("install", "-r", $RequirementsFile, "--no-warn-script-location") -Stage "项目依赖"
+
+        if ($depResult.success) {
+            Write-Success "项目依赖安装完成 (镜像：$($depResult.mirror))"
+        } else {
+            Write-Error-Custom "项目依赖安装失败：所有镜像均不可用"
+            return @{success = $false; error = "所有镜像均不可用"}
         }
-        
+
         # 保存哈希
         Write-Progress-Stage "依赖" "保存哈希值..." 95
         $currentHash = Get-FileHash $RequirementsFile -Algorithm SHA256
         $currentHash.Hash | Set-Content $HashFile -NoNewline
         Write-Success "哈希值已保存：$($currentHash.Hash.Substring(0, 8))..."
-        
+
         Write-Progress-Stage "依赖" "依赖安装完成" 100
         return @{success = $true}
     } catch {
         $errorMsg = "依赖安装失败：$_"
         Write-Error-Custom $errorMsg
         return @{success = $false; error = $errorMsg}
+    }
+}
+
+# ==================== 步骤 5: 安装 Playwright ====================
+
+function Test-PlaywrightChromium {
+    try {
+        $probeCode = @"
+from pathlib import Path
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    exe = p.chromium.executable_path
+    print('1' if exe and Path(exe).exists() else '0')
+"@
+        $result = & $PythonExe -c $probeCode 2>&1
+        return ($LASTEXITCODE -eq 0 -and $result -match "1")
+    } catch {
+        return $false
+    }
+}
+
+function Install-Playwright {
+    Write-Info "=== 安装 Playwright 浏览器 ==="
+
+    try {
+        $pwHost = if ($env:PLAYWRIGHT_DOWNLOAD_HOST) { $env:PLAYWRIGHT_DOWNLOAD_HOST } else { "https://npmmirror.com/mirrors/playwright" }
+        Write-Info "Playwright 镜像：$pwHost"
+
+        Write-Progress-Stage "Playwright" "下载 Chromium 浏览器..." 10
+
+        $env:PLAYWRIGHT_DOWNLOAD_HOST = $pwHost
+        $installOutput = & $PythonExe -m playwright install chromium 2>&1
+
+        if ($LASTEXITCODE -eq 0) {
+            Write-Progress-Stage "Playwright" "安装完成" 100
+            Write-Success "Playwright 安装完成"
+            return @{success = $true}
+        } else {
+            Write-Error-Custom "Playwright 安装失败 (exit code: $LASTEXITCODE)"
+            return @{success = $false; error = "exit code $LASTEXITCODE"}
+        }
+    } catch {
+        Write-Error-Custom "Playwright 安装异常：$_"
+        return @{success = $false; error = $_}
     }
 }
 
@@ -551,7 +628,19 @@ function Main {
         Write-Success "依赖已是最新，跳过安装"
     }
     Write-Info ""
-    
+
+    # Playwright 浏览器
+    if (-not (Test-PlaywrightChromium)) {
+        Write-Info ">>> 安装 Playwright 浏览器..."
+        $pwResult = Install-Playwright
+        if (-not $pwResult.success) {
+            Write-Warning-Custom "Playwright 安装失败，但继续启动应用"
+        }
+    } else {
+        Write-Success "Playwright 浏览器已安装"
+    }
+    Write-Info ""
+
     # 完成
     Write-Info "========================================"
     Write-Success "环境初始化完成！"
