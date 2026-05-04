@@ -42,6 +42,7 @@ class MonitorConfigPayload(BaseModel):
     frontend_log_level: str = Field(default="INFO")
     access_log: bool = False
     minimize_to_tray: bool = True
+    login_then_exit: bool = False
     log_retention_days: int = Field(default=30, ge=1, le=365)
     screenshot_retention_days: int = Field(default=7, ge=1, le=90)
     custom_variables: dict[str, str] = Field(default_factory=dict)
@@ -217,6 +218,7 @@ class SystemSettings(BaseModel):
     frontend_log_level: str = Field(default="INFO")
     access_log: bool = Field(default=False, description="Uvicorn HTTP 请求日志")
     minimize_to_tray: bool = Field(default=True, description="最小化到系统托盘")
+    login_then_exit: bool = Field(default=False, description="登录一次后退出软件")
     max_retries: int = Field(default=3, ge=0, le=10)
     retry_interval: int = Field(default=5, ge=1, le=300, description="重试间隔（秒）")
     safe_mode: bool = Field(default=True, description="安全模式：不注入浏览器自定义参数")

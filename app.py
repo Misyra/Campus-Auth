@@ -181,6 +181,55 @@ def _cmd_autostart(action: str) -> None:
         sys.exit(0 if ok else 1)
 
 
+# ==================== 登录后退出 ====================
+
+
+def _run_login_then_exit(config: dict, logger) -> None:
+    """登录后退出模式：执行一次登录，无论成功失败均退出"""
+    from src.utils import LoginAttemptHandler
+
+    print("登录后退出模式：正在执行一次登录...")
+
+    try:
+        from backend.profile_service import ProfileService
+        ps = ProfileService(Path(__file__).parent.resolve())
+        data = ps.load()
+        profile = ps.get_active_profile()
+
+        # 构建运行时配置
+        from backend.config_service import build_runtime_config, load_ui_config
+        ui_config = load_ui_config(ps)
+        runtime_config = build_runtime_config(ui_config, data.system)
+    except Exception as exc:
+        print(f"加载配置失败: {exc}")
+        sys.exit(1)
+
+    handler = LoginAttemptHandler(runtime_config)
+
+    import asyncio
+    success = False
+    message = ""
+    try:
+        loop = asyncio.new_event_loop()
+        try:
+            success, message = loop.run_until_complete(
+                handler.attempt_login(skip_pause_check=True)
+            )
+        finally:
+            loop.close()
+    except Exception as exc:
+        message = f"登录异常: {exc}"
+
+    if success:
+        print(f"登录成功: {message}")
+    else:
+        print(f"登录失败: {message}")
+
+    print("登录完成，正在退出...")
+    _cleanup_pid()
+    sys.exit(0 if success else 1)
+
+
 # ==================== 主启动 ====================
 
 
@@ -231,9 +280,17 @@ def _run_server(no_browser: bool = False, tray: bool = False) -> None:
     try:
         from backend.profile_service import ProfileService
         _ps = ProfileService(Path(__file__).parent.resolve())
-        minimize_to_tray = tray or bool(_ps.load().system.minimize_to_tray)
+        _sys_settings = _ps.load().system
+        minimize_to_tray = tray or bool(_sys_settings.minimize_to_tray)
+        login_then_exit = bool(_sys_settings.login_then_exit)
     except Exception:
         minimize_to_tray = tray or bool(config.get("minimize_to_tray", False))
+        login_then_exit = False
+
+    # 登录后退出模式：执行一次登录即退出
+    if login_then_exit:
+        _run_login_then_exit(config, startup_logger)
+        return
 
     from backend.main import run
 

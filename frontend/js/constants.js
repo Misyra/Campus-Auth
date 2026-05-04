@@ -34,6 +34,7 @@ export const DEFAULT_CONFIG = {
   frontend_log_level: "INFO",
   access_log: false,
   minimize_to_tray: true,
+  login_then_exit: false,
   log_retention_days: 30,
   screenshot_retention_days: 7,
   custom_variables: {},

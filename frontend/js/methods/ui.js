@@ -121,6 +121,12 @@ export const uiMethods = {
       this.newLogCount = 0;
     }
   },
+  openFullscreen(src) {
+    this.fullscreenSrc = src;
+  },
+  closeFullscreen() {
+    this.fullscreenSrc = '';
+  },
   async quitApp() {
     if (!confirm('确定要退出应用吗？')) return;
     try {

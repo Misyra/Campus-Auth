@@ -213,9 +213,10 @@ class BrowserContextManager:
 
         if not path:
             import time
+            from datetime import datetime
 
             project_root = Path(__file__).resolve().parents[2]
-            sc_dir = project_root / "screenshots"
+            sc_dir = project_root / "debug" / datetime.now().strftime("%Y-%m-%d")
             sc_dir.mkdir(parents=True, exist_ok=True)
             stamp = time.strftime("%Y%m%d_%H%M%S")
             path = str(sc_dir / f"manual_{stamp}.png")
