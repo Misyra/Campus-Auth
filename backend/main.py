@@ -96,6 +96,13 @@ async def lifespan(app_instance):
     startup_logger.info("FastAPI 关闭: 正在停止服务...")
     if _debug["session"]:
         await _debug["session"].close()
+    # 清理临时调试截图
+    try:
+        import shutil
+        if TEMP_DIR.exists():
+            shutil.rmtree(TEMP_DIR, ignore_errors=True)
+    except Exception:
+        pass
     service.stop_monitoring()
     startup_logger.info("监控服务已停止")
 
@@ -149,8 +156,6 @@ ws_logger = get_logger("backend.ws", side="BACKEND")
 # ==================== 调试会话 ====================
 
 from datetime import datetime
-
-from src.task_executor import TaskExecutor, TaskManager
 
 
 class DebugSession:
@@ -292,14 +297,13 @@ def _require_debug_session():
 
 async def _take_debug_screenshot(page, step_label: str = "") -> str | None:
     try:
-        debug_dir = PROJECT_ROOT / "debug"
-        debug_dir.mkdir(parents=True, exist_ok=True)
+        TEMP_DIR.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         task_id = (_debug.get("task_id") or "unknown")[:30]
         step_part = f"_{step_label}" if step_label else ""
         filename = f"{task_id}{step_part}_{stamp}.png"
-        await page.screenshot(path=str(debug_dir / filename), full_page=True)
-        return f"/debug/{filename}"
+        await page.screenshot(path=str(TEMP_DIR / filename), full_page=True)
+        return f"/temp/{filename}"
     except Exception:
         return None
 
@@ -538,6 +542,8 @@ async def debug_start(request: Request) -> dict:
     if not task_id:
         raise HTTPException(status_code=400, detail="缺少 task_id")
 
+    from src.task_executor import TaskManager
+
     tm = TaskManager(PROJECT_ROOT / "tasks")
     task = tm.load_task(task_id)
     if not task:
@@ -585,7 +591,9 @@ async def debug_start(request: Request) -> dict:
             for i, step in enumerate(task.steps)
         ]
 
-        executor = TaskExecutor(task, env_vars)
+        from src.task_executor import TaskExecutor
+
+        executor = TaskExecutor(task, env_vars, screenshot_dir=TEMP_DIR)
 
         _debug = {
             "session": session,
@@ -650,6 +658,14 @@ async def debug_stop() -> dict:
         "current_step": 0, "steps": [], "results": [],
         "screenshot_url": None, "running": False,
     }
+    # 清理临时调试截图
+    try:
+        import shutil
+        if TEMP_DIR.exists():
+            shutil.rmtree(TEMP_DIR, ignore_errors=True)
+            TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
     api_logger.info("Debug session stopped")
     return {"running": False, "message": "调试会话已关闭"}
 
@@ -954,12 +970,12 @@ def delete_backup(filename: str) -> ActionResponse:
         raise HTTPException(status_code=500, detail=f"删除备份失败: {exc}")
 
 
-SCREENSHOTS_DIR = PROJECT_ROOT / "screenshots"
-SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+TEMP_DIR = PROJECT_ROOT / "temp"
+TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 app.mount("/debug", StaticFiles(directory=DEBUG_DIR), name="debug")
-app.mount("/screenshots", StaticFiles(directory=SCREENSHOTS_DIR), name="screenshots")
+app.mount("/temp", StaticFiles(directory=TEMP_DIR), name="temp")
 
 
 def _resolve_port() -> int:
@@ -1015,14 +1031,13 @@ def run() -> None:
     except Exception:
         pass
 
-    # 自动清理过期的截图和调试文件
+    # 自动清理过期的调试截图（按日期子目录）
     try:
-        from src.utils.logging import cleanup_old_files
+        from src.utils.logging import cleanup_debug_screenshots
 
-        n1 = cleanup_old_files(str(DEBUG_DIR), "*.png", sc_retention)
-        n2 = cleanup_old_files(str(SCREENSHOTS_DIR), "*.png", sc_retention)
-        if n1 or n2:
-            startup_logger.info("清理过期截图: debug=%d, screenshots=%d", n1, n2)
+        n = cleanup_debug_screenshots(str(DEBUG_DIR), sc_retention)
+        if n:
+            startup_logger.info("清理过期截图: %d 张", n)
     except Exception:
         pass
 

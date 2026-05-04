@@ -137,6 +137,23 @@
   backdrop-filter: blur(4px);
 }
 
+.profiles-guide-intro {
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.profiles-guide-intro p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.profiles-guide-intro strong {
+  color: var(--text-primary);
+}
+
 .profiles-guide-steps {
   display: flex;
   align-items: center;

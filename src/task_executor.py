@@ -161,6 +161,7 @@ class ConditionConfig:
 class TaskConfig:
     """任务配置"""
 
+    task_id: str = ""
     name: str = "未命名任务"
     description: str = ""
     version: str = "1.0.0"
@@ -603,7 +604,7 @@ class CustomJsHandler(StepHandler):
 
 
 class ScreenshotHandler(StepHandler):
-    """截图处理器 — 运行时截图存入 screenshots/ 目录"""
+    """截图处理器 — 运行时截图存入 debug/{date}/ 目录"""
 
     PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -617,21 +618,18 @@ class ScreenshotHandler(StepHandler):
         params = self.resolve_params(step, resolver)
         path = params.get("path", "")
 
-        screenshots_dir = self.PROJECT_ROOT / "screenshots"
-        screenshots_dir.mkdir(parents=True, exist_ok=True)
+        date_dir = self.PROJECT_ROOT / "debug" / datetime.now().strftime("%Y-%m-%d")
+        date_dir.mkdir(parents=True, exist_ok=True)
 
         if not path:
-            task_name = resolver.config.name or "unknown"
+            task_id = resolver.config.task_id or "unknown"
             step_id = step.id or "s0"
-            # 文件名安全化：移除非法字符
-            safe_task = re.sub(r'[\\/:*?"<>|]', '_', task_name)[:40]
-            safe_step = re.sub(r'[\\/:*?"<>|]', '_', step_id)[:30]
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-            filename = f"{safe_task}_{safe_step}_{stamp}.png"
-            path = str(screenshots_dir / filename)
+            filename = f"{task_id}_{step_id}_{stamp}.png"
+            path = str(date_dir / filename)
         else:
             safe_name = Path(path).name
-            path = str(screenshots_dir / safe_name)
+            path = str(date_dir / safe_name)
 
         logger.info(f"[screenshot] path={path}")
         await page.screenshot(path=path, full_page=True)
@@ -796,12 +794,14 @@ class TaskExecutor:
 
     PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-    def __init__(self, config: TaskConfig, env_vars: dict[str, str] | None = None):
+    def __init__(self, config: TaskConfig, env_vars: dict[str, str] | None = None,
+                 screenshot_dir: Path | str | None = None):
         self.config = config
         self.env_vars = env_vars or {}
         self.resolver = VariableResolver(config, self.env_vars)
         self.registry = StepExecutorRegistry()
         self._step_results: list[dict[str, Any]] = []
+        self._screenshot_dir = Path(screenshot_dir) if screenshot_dir else None
 
     async def execute(self, page) -> tuple[bool, str]:
         """执行任务
@@ -1049,17 +1049,21 @@ class TaskExecutor:
         return False, message
 
     async def _capture_screenshot(self, page) -> str | None:
-        """捕获失败截图 → screenshots/ 目录"""
+        """捕获截图 → 指定目录或 debug/{date}/ 目录"""
         try:
-            screenshots_dir = self.PROJECT_ROOT / "screenshots"
-            screenshots_dir.mkdir(parents=True, exist_ok=True)
+            if self._screenshot_dir:
+                out_dir = self._screenshot_dir
+                url_prefix = f"/temp"
+            else:
+                out_dir = self.PROJECT_ROOT / "debug" / datetime.now().strftime("%Y-%m-%d")
+                url_prefix = f"/debug/{out_dir.name}"
+            out_dir.mkdir(parents=True, exist_ok=True)
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-            task_name = self.config.name or "unknown"
-            safe_name = re.sub(r'[\\/:*?"<>|]', '_', task_name)[:40]
-            filename = f"{safe_name}_failure_{stamp}.png"
-            local_path = str(screenshots_dir / filename)
+            task_id = self.config.task_id or "unknown"
+            filename = f"{task_id}_{stamp}.png"
+            local_path = str(out_dir / filename)
             await page.screenshot(path=local_path, full_page=True)
-            return f"/screenshots/{filename}"
+            return f"{url_prefix}/{filename}"
         except Exception as e:
             logger.warning(f"截图失败: {e}")
             return None
@@ -1120,7 +1124,9 @@ class TaskManager:
             return None
         try:
             data = json.loads(file.read_text(encoding="utf-8"))
-            return TaskConfig.from_dict(data)
+            config = TaskConfig.from_dict(data)
+            config.task_id = task_id
+            return config
         except Exception as e:
             logger.error(f"无法加载任务 {task_id}: {e}")
             return None

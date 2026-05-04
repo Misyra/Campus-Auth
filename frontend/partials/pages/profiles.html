@@ -16,7 +16,7 @@
       </div>
     </div>
     <div class="profiles-topbar-actions">
-      <label class="toggle compact">
+      <label class="toggle compact" title="开启后根据检测到的网关 IP 自动切换到匹配的方案">
         <input type="checkbox" :checked="autoSwitch" @change="toggleAutoSwitch()" />
         <span class="toggle-slider"></span>
         <span class="toggle-label">自动切换</span>
@@ -78,6 +78,9 @@
 
   <!-- 使用说明 -->
   <div class="profiles-guide card">
+    <div class="profiles-guide-intro">
+      <p>配置方案适用于<strong>在多个网络环境间切换</strong>的用户，例如宿舍、教学楼、图书馆使用不同的网关或运营商。每个方案可独立配置账号、认证地址和匹配规则，连接新网络时自动切换，无需手动修改设置。</p>
+    </div>
     <div class="profiles-guide-steps">
       <div class="guide-step">
         <span class="guide-step-num">1</span>
@@ -262,6 +265,7 @@
             <input type="checkbox" v-model="editingProfile.use_global_credentials" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">使用全局账号密码</span>
+            <span class="field-help" tabindex="0" role="note" data-tip="开启则使用系统设置中的账号密码，关闭后可为本方案配置独立的账号、密码和运营商。">?</span>
           </label>
         </div>
         <div v-if="!editingProfile.use_global_credentials" style="margin-top:8px;">
@@ -307,8 +311,8 @@
             <input type="checkbox" v-model="editingProfile.use_global_auth_url" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">跟随全局认证地址</span>
+            <span class="field-help" tabindex="0" role="note" data-tip="开启后使用系统设置中的认证地址，关闭后可为本方案单独配置认证 URL（如不同运营商有不同的认证入口）。">?</span>
           </label>
-          <span class="hint">开启后使用系统设置中的认证地址，关闭后可为本方案单独配置</span>
         </div>
         <div v-if="!editingProfile.use_global_auth_url" class="form-group">
           <label>认证地址</label>
@@ -319,8 +323,8 @@
             <input type="checkbox" v-model="editingProfile.use_global_task" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">跟随全局任务</span>
+            <span class="field-help" tabindex="0" role="note" data-tip="开启后使用任务管理页面设置的活动任务，关闭后可为本方案指定独立的登录任务（如不同网络使用不同的认证流程）。">?</span>
           </label>
-          <span class="hint">开启后使用任务管理页面设置的活动任务，关闭后可为本方案指定独立任务</span>
         </div>
         <div v-if="!editingProfile.use_global_task" class="form-group">
           <label>执行任务</label>
@@ -340,8 +344,8 @@
               <input type="checkbox" v-model="editingProfile.use_global_advanced" />
               <span class="toggle-slider"></span>
               <span class="toggle-label">跟随全局设置</span>
+              <span class="field-help" tabindex="0" role="note" data-tip="开启后检测间隔、无头模式、暂停时段等高级设置使用全局配置，关闭则使用本方案的独立设置。">?</span>
             </label>
-            <span class="hint" style="margin-top:4px;display:block;">开启后以下设置使用全局配置，关闭则使用本方案独立设置</span>
           </div>
           <div v-if="!editingProfile.use_global_advanced">
           <div class="form-row">

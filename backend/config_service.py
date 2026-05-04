@@ -147,6 +147,7 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
         frontend_log_level=_normalize_level(sys.frontend_log_level),
         access_log=sys.access_log,
         minimize_to_tray=sys.minimize_to_tray,
+        login_then_exit=sys.login_then_exit,
         log_retention_days=sys.log_retention_days,
         screenshot_retention_days=sys.screenshot_retention_days,
         custom_variables=custom_variables,
@@ -214,6 +215,7 @@ def build_runtime_config(payload: MonitorConfigPayload, sys: SystemSettings | No
 
     base["access_log"] = payload.access_log
     base["minimize_to_tray"] = payload.minimize_to_tray
+    base["login_then_exit"] = payload.login_then_exit
     base["log_retention_days"] = payload.log_retention_days
     base["screenshot_retention_days"] = payload.screenshot_retention_days
     base["custom_variables"] = payload.custom_variables
@@ -264,6 +266,7 @@ def write_system_settings(payload: MonitorConfigPayload, profile_service: Profil
     sys.frontend_log_level = _normalize_level(payload.frontend_log_level)
     sys.access_log = payload.access_log
     sys.minimize_to_tray = payload.minimize_to_tray
+    sys.login_then_exit = payload.login_then_exit
     sys.log_retention_days = payload.log_retention_days
     sys.screenshot_retention_days = payload.screenshot_retention_days
 
@@ -371,6 +374,7 @@ def save_config_combined(
     sys.frontend_log_level = _normalize_level(payload.frontend_log_level)
     sys.access_log = payload.access_log
     sys.minimize_to_tray = payload.minimize_to_tray
+    sys.login_then_exit = payload.login_then_exit
     sys.log_retention_days = payload.log_retention_days
     sys.screenshot_retention_days = payload.screenshot_retention_days
 

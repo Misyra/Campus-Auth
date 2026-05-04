@@ -259,6 +259,41 @@ def cleanup_old_files(directory: str, pattern: str, retention_days: int) -> int:
     return deleted
 
 
+def cleanup_debug_screenshots(debug_dir: str, retention_days: int) -> int:
+    """清理 debug/ 下按日期命名的子目录中的过期截图，并删除空目录
+
+    目录结构: debug/{YYYY-MM-DD}/*.png
+    """
+    import shutil
+
+    base = Path(debug_dir)
+    if not base.exists():
+        return 0
+
+    cutoff = time.time() - retention_days * 86400
+    deleted = 0
+    for subdir in sorted(base.iterdir()):
+        if not subdir.is_dir():
+            continue
+        # 只处理日期格式的子目录
+        if not subdir.name[:4].isdigit():
+            continue
+        for f in subdir.glob("*.png"):
+            try:
+                if f.stat().st_mtime < cutoff:
+                    f.unlink()
+                    deleted += 1
+            except OSError:
+                pass
+        # 子目录为空则删除
+        try:
+            if not any(subdir.iterdir()):
+                subdir.rmdir()
+        except OSError:
+            pass
+    return deleted
+
+
 class LogConfigCenter:
     """
     日志配置中心（单例模式）

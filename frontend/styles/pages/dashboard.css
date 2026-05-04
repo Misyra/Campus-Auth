@@ -202,13 +202,21 @@
 }
 
 .log-screenshot-preview {
-  width: 160px;
-  max-width: 40vw;
-  max-height: 100px;
+  width: 240px;
+  max-width: 50vw;
+  aspect-ratio: 16 / 9;
   object-fit: cover;
+  object-position: top center;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg-primary);
+  cursor: zoom-in;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.log-screenshot-preview:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
 .log-message.success {

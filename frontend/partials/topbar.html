@@ -33,7 +33,7 @@
         </div>
       </div>
     </div>
-    <button class="btn btn-primary" @click="toggleMonitor" :disabled="busy.monitor">
+    <button class="btn btn-primary" @click="toggleMonitor" :disabled="busy.monitor" :title="status.monitoring ? '停止网络监控和自动登录' : '开始监控网络，断网时自动登录'">
       <span v-if="busy.monitor" class="spinner" style="border-top-color:var(--bg-primary);"></span>
       <svg v-else class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <polygon v-if="!status.monitoring" points="5 3 19 12 5 21 5 3"/>

@@ -89,6 +89,7 @@ export const appOptions = {
       editingProfile: null,
       detectResult: null,
       editorDetectResult: null,
+      fullscreenSrc: '',
     };
   },
   computed: {
@@ -134,6 +135,7 @@ export const appOptions = {
     },
   },
   mounted() {
+    document.getElementById('app').style.display = '';
     this.$api = api;
     this.init();
   },

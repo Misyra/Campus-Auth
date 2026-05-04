@@ -69,7 +69,7 @@
       </div>
       <div class="card-body">
         <div class="action-buttons">
-          <button class="btn btn-secondary" @click="manualLogin" :disabled="busy.action">
+          <button class="btn btn-secondary" @click="manualLogin" :disabled="busy.action" title="立即执行一次登录认证，不影响自动监控">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
               <polyline points="10 17 15 12 10 7"/>
@@ -77,7 +77,7 @@
             </svg>
             手动登录
           </button>
-          <button class="btn btn-secondary" @click="testNetwork" :disabled="busy.action">
+          <button class="btn btn-secondary" @click="testNetwork" :disabled="busy.action" title="检测当前网络连接是否正常">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
               <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
@@ -159,7 +159,13 @@
               <div class="log-content">
                 <span class="log-message" :class="getLogClass(item.message)">{{ stripScreenshotHint(item.message) }}</span>
                 <div v-if="extractScreenshotUrl(item.message)" class="log-screenshot-wrap">
-                  <a :href="extractScreenshotUrl(item.message)" target="_blank" rel="noopener" class="log-screenshot-link">查看截图</a>
+                  <img
+                    :src="extractScreenshotUrl(item.message)"
+                    class="log-screenshot-preview"
+                    @click="openFullscreen(extractScreenshotUrl(item.message))"
+                    loading="lazy"
+                    alt="截图"
+                  />
                 </div>
               </div>
             </div>

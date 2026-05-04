@@ -150,12 +150,18 @@
         </div>
         <div class="card-body">
           <div class="form-group">
-            <label for="settings-interval">检测间隔（分钟）</label>
+            <div class="field-label-row">
+              <label for="settings-interval">检测间隔（分钟）</label>
+              <span class="field-help" tabindex="0" role="note" data-tip="每隔多久检测一次网络是否可用，检测到断网时自动触发登录。">?</span>
+            </div>
             <input id="settings-interval" v-model.number="config.check_interval_minutes" type="number" min="1" max="1440" />
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label for="settings-backend-log-level">后端日志级别</label>
+              <div class="field-label-row">
+                <label for="settings-backend-log-level">后端日志级别</label>
+                <span class="field-help" tabindex="0" role="note" data-tip="控制控制台显示的日志详细程度。DEBUG 最详细，CRITICAL 仅显示致命错误。">?</span>
+              </div>
               <select id="settings-backend-log-level" v-model="config.backend_log_level">
                 <option>DEBUG</option>
                 <option>INFO</option>
@@ -165,7 +171,10 @@
               </select>
             </div>
             <div class="form-group">
-              <label for="settings-frontend-log-level">前端日志级别</label>
+              <div class="field-label-row">
+                <label for="settings-frontend-log-level">前端日志级别</label>
+                <span class="field-help" tabindex="0" role="note" data-tip="控制 Web 控制台日志面板显示的日志详细程度。">?</span>
+              </div>
               <select id="settings-frontend-log-level" v-model="config.frontend_log_level">
                 <option>DEBUG</option>
                 <option>INFO</option>
@@ -188,11 +197,29 @@
             </div>
           </div>
           <div class="toggle-group">
-            <label class="toggle">
-              <input type="checkbox" v-model="config.auto_start" />
-              <span class="toggle-slider"></span>
-              <span class="toggle-label">启动后自动监控</span>
-            </label>
+            <div class="toggle-with-help">
+              <label class="toggle toggle-help-inline">
+                <input type="checkbox" v-model="config.auto_start" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">启动后自动监控</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="开启后软件启动即开始检测网络，断网时自动登录。关闭则启动后等待手动点击「启动监控」。">?</span>
+              </label>
+            </div>
+          </div>
+          <div class="toggle-group">
+            <div class="toggle-with-help">
+              <label class="toggle toggle-help-inline">
+                <input type="checkbox" v-model="config.login_then_exit" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">登录后退出</span>
+                <span
+                  class="field-help"
+                  tabindex="0"
+                  role="note"
+                  data-tip="启动后执行一次登录，成功或失败均自动退出软件。适用于只需登录一次、不需要持续监控的场景。"
+                >?</span>
+              </label>
+            </div>
           </div>
           <div class="toggle-group">
             <label class="toggle">
@@ -242,11 +269,17 @@
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label for="settings-pause-start">暂停开始（小时）</label>
+              <div class="field-label-row">
+                <label for="settings-pause-start">暂停开始（小时）</label>
+                <span class="field-help" tabindex="0" role="note" data-tip="该时刻起停止自动登录。例如设为 0 表示从 0:00 开始暂停。">?</span>
+              </div>
               <input id="settings-pause-start" v-model.number="config.pause_start_hour" type="number" min="0" max="23" />
             </div>
             <div class="form-group">
-              <label for="settings-pause-end">暂停结束（小时）</label>
+              <div class="field-label-row">
+                <label for="settings-pause-end">暂停结束（小时）</label>
+                <span class="field-help" tabindex="0" role="note" data-tip="该时刻恢复自动登录。例如设为 6 表示 6:00 后恢复。跨越午夜也支持（如 23→5）。">?</span>
+              </div>
               <input id="settings-pause-end" v-model.number="config.pause_end_hour" type="number" min="0" max="23" />
             </div>
           </div>
@@ -290,9 +323,9 @@
               <span class="backup-col-time">{{ b.created }}</span>
               <span class="backup-col-size">{{ (b.size / 1024).toFixed(1) }} KB</span>
               <span class="backup-col-actions">
-                <button class="btn btn-sm btn-secondary" type="button" @click="restoreBackup(b.filename)">恢复</button>
-                <button class="btn btn-sm btn-secondary" type="button" @click="exportBackup(b.filename)">导出</button>
-                <button class="btn btn-sm btn-danger-ghost" type="button" @click="deleteBackup(b.filename)">删除</button>
+                <button class="btn btn-sm btn-secondary" type="button" @click="restoreBackup(b.filename)" title="用此备份覆盖当前配置（操作前会自动备份当前配置）">恢复</button>
+                <button class="btn btn-sm btn-secondary" type="button" @click="exportBackup(b.filename)" title="下载备份文件到本地">导出</button>
+                <button class="btn btn-sm btn-danger-ghost" type="button" @click="deleteBackup(b.filename)" title="删除此备份文件">删除</button>
               </span>
             </div>
           </div>
