@@ -3,6 +3,8 @@ import logging.handlers
 import os
 import sys
 import threading
+import time
+from pathlib import Path
 from typing import Any, Dict
 
 
@@ -154,6 +156,109 @@ class LoggerSetup:
         return setup_logger(name, config)
 
 
+class _DateRotatingFileHandler(logging.Handler):
+    """按日期自动切换的日志处理器 — 当前日志写入 YYYY-MM-DD.log"""
+
+    def __init__(self, log_dir: str, retention_days: int = 30,
+                 level: int = logging.INFO, formatter: logging.Formatter | None = None):
+        super().__init__(level=level)
+        self._log_dir = log_dir
+        self._retention = retention_days
+        self._current_date: str | None = None
+        self._last_cleanup: float = 0
+        self._stream = None
+        if formatter:
+            self.setFormatter(formatter)
+
+    def _get_log_path(self) -> str:
+        import os
+        from datetime import datetime
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        return os.path.join(self._log_dir, f"{date_str}.log")
+
+    def _open_file(self, path: str) -> None:
+        import os
+        os.makedirs(self._log_dir, exist_ok=True)
+        if self._stream:
+            try:
+                self._stream.close()
+            except Exception:
+                pass
+        self._stream = open(path, "a", encoding="utf-8")
+
+    def emit(self, record: logging.LogRecord) -> None:
+        import os
+        import sys
+        from datetime import datetime
+
+        try:
+            today = datetime.now().strftime("%Y-%m-%d")
+            if today != self._current_date or self._stream is None:
+                self._current_date = today
+                path = self._get_log_path()
+                self._open_file(path)
+
+            # 每小时运行一次过期日志清理
+            now = time.time()
+            if now - self._last_cleanup > 3600:
+                self._last_cleanup = now
+                cutoff = now - self._retention * 86400
+                for f in Path(self._log_dir).glob("*.log"):
+                    try:
+                        if f.stat().st_mtime < cutoff:
+                            f.unlink()
+                    except OSError:
+                        pass
+
+            if self._stream:
+                msg = self.format(record)
+                self._stream.write(msg + os.linesep)
+                self._stream.flush()
+        except Exception as exc:
+            # 出错时写入 stderr，确保开发/调试时可见
+            print(f"[LOG ERROR] 写入日志文件失败: {exc}", file=sys.stderr)
+            self.handleError(record)
+
+    def close(self) -> None:
+        try:
+            if self._stream:
+                self._stream.close()
+                self._stream = None
+        except Exception:
+            pass
+        super().close()
+
+
+def cleanup_old_files(directory: str, pattern: str, retention_days: int) -> int:
+    """清理目录中超过保留天数的文件
+
+    Args:
+        directory: 目录路径
+        pattern: glob 匹配模式 (如 '*.png')
+        retention_days: 保留天数
+
+    Returns:
+        删除的文件数量
+    """
+    import time
+    from pathlib import Path
+
+    dir_path = Path(directory)
+    if not dir_path.exists():
+        return 0
+
+    cutoff = time.time() - retention_days * 86400
+    deleted = 0
+    for f in dir_path.glob(pattern):
+        try:
+            if f.stat().st_mtime < cutoff:
+                f.unlink()
+                deleted += 1
+        except OSError:
+            pass
+    return deleted
+
+
 class LogConfigCenter:
     """
     日志配置中心（单例模式）
@@ -240,3 +345,40 @@ class LogConfigCenter:
     def is_initialized(self) -> bool:
         """检查是否已初始化"""
         return self._configured
+
+    def add_file_handler(self, log_dir: str,
+                         retention_days: int = 30) -> None:
+        """添加按日期存储的日志处理器（始终记录全部级别）
+
+        Args:
+            log_dir: 日志目录路径
+            retention_days: 日志保留天数
+        """
+        root = logging.getLogger()
+        for handler in root.handlers:
+            if isinstance(handler, _DateRotatingFileHandler):
+                return
+
+        try:
+            # 确保 root logger 不会阻挡低级别日志到达文件
+            if root.level > logging.DEBUG and root.level != logging.NOTSET:
+                root.setLevel(logging.DEBUG)
+            # 文件始终记录 DEBUG 及以上全部日志
+            file_handler = _DateRotatingFileHandler(
+                log_dir=log_dir,
+                retention_days=retention_days,
+                level=logging.DEBUG,
+                formatter=_formatter(
+                    "%(asctime)s | %(levelname)s | %(side)s | %(name)s | %(message)s",
+                    colored=False,
+                ),
+            )
+            file_handler.addFilter(_DefaultContextFilter(side="BACKEND"))
+            root.addHandler(file_handler)
+            # 写入醒目的启动标记，确认文件日志正常工作
+            root.info("=" * 54)
+            root.info(">>> Campus-Auth 日志系统启动")
+            root.info(">>> 日志目录: %s | 保留 %d 天", log_dir, retention_days)
+            root.info("=" * 54)
+        except Exception as e:
+            root.warning("无法启用文件日志 %s: %s", log_dir, e)

@@ -147,17 +147,20 @@ class ConfigValidator:
         username = username.strip()
         password = password.strip()
 
+        # 掩码密码（"••••••••"）表示服务端已有加密密码，无需校验
+        is_masked = password.startswith("•")
+
         if not username:
             return False, "账号不能为空"
-        if not password:
+        if not password and not is_masked:
             return False, "密码不能为空"
 
         # 验证账号格式（基本验证）
         if len(username) < 2:
             return False, "账号长度不能少于2位"
 
-        # 验证密码格式（基本验证）
-        if len(password) < 2:
+        # 验证密码格式（基本验证）— 跳过掩码
+        if not is_masked and len(password) < 2:
             return False, "密码长度不能少于2位"
 
         # 验证检测间隔

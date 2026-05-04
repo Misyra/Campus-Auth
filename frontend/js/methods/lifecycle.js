@@ -13,10 +13,11 @@ export const lifecycleMethods = {
       this.fetchActiveTask(),
       this.fetchProfiles(),
       this.fetchSafeMode(),
+      this.fetchBackups(),
     ]);
     this.isLoading = false;
     this.connectWebSocket();
-    this.timers.push(setInterval(this.fetchStatus, 4000));
+    this.timers.push(setInterval(this.fetchStatus, 30000));  // 30s fallback, WS 实时推送
     this.timers.push(setInterval(this.fetchAutostart, 12000));
     this.frontendLogger.info('app.init', 'init finished');
   },
@@ -77,6 +78,15 @@ export const lifecycleMethods = {
       this.busy.save = false;
     }
   },
+  _shouldShowLog(level) {
+    // 根据前端日志级别过滤 WebSocket 日志显示
+    // 完整日志始终写入文件，前端仅按级别展示
+    const frontendLevel = (this.config.frontend_log_level || 'WARNING').toUpperCase();
+    const levels = { DEBUG: 0, INFO: 1, WARNING: 2, ERROR: 3, CRITICAL: 4 };
+    const msgLevel = levels[String(level || '').toUpperCase()] ?? 1;
+    const minLevel = levels[frontendLevel] ?? 2;
+    return msgLevel >= minLevel;
+  },
   connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/logs`;
@@ -89,30 +99,31 @@ export const lifecycleMethods = {
 
     this.ws = new WebSocket(wsUrl);
     this.frontendLogger.info('websocket', `connecting ${wsUrl}`);
-    this.wsRetryCount = this.wsRetryCount || 0;
-    this.wsMaxRetries = 5;
 
     this.ws.onopen = () => {
       this.wsRetryCount = 0;
       this.wsReconnecting = false;
-      this.wsRetryAttempt = 0;
       this.frontendLogger.info('websocket', 'connected');
     };
 
     this.ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === 'log') {
-          // 单条日志消息
-          this.logs.push(data.data);
-          if (this.logs.length > 300) {
-            this.logs = this.logs.slice(-300);
+        if (data.type === 'status') {
+          this.status = { ...this.status, ...data.data };
+        } else if (data.type === 'log') {
+          // 按前端日志级别过滤显示（完整日志已写入文件）
+          if (this._shouldShowLog(data.data.level)) {
+            this.logs.push(data.data);
+            if (this.logs.length > 300) {
+              this.logs = this.logs.slice(-300);
+            }
+            this.$nextTick(() => this.scrollLogToBottom());
           }
-          this.$nextTick(() => this.scrollLogToBottom());
         } else if (data.type === 'log_batch') {
-          // 批量日志消息
           if (Array.isArray(data.data)) {
-            this.logs.push(...data.data);
+            const filtered = data.data.filter(d => this._shouldShowLog(d.level));
+            this.logs.push(...filtered);
             if (this.logs.length > 300) {
               this.logs = this.logs.slice(-300);
             }
@@ -133,7 +144,6 @@ export const lifecycleMethods = {
         return;
       }
       this.wsReconnecting = true;
-      this.wsRetryAttempt = this.wsRetryCount + 1;
       const delay = Math.min(1000 * Math.pow(2, this.wsRetryCount), 30000);
       this.wsRetryCount++;
       this._wsRetryTimer = setTimeout(() => {

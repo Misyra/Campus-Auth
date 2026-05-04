@@ -257,7 +257,8 @@ def _run_server(no_browser: bool = False, tray: bool = False) -> None:
     if not no_browser and not minimize_to_tray:
         _open_browser(port)
 
-    print(f"Web 控制台已启动: http://127.0.0.1:{port}")
+    print(f"Web 控制台: http://127.0.0.1:{port}")
+    print(f"日志文件:   {Path.cwd() / 'logs'}")
     print("按 Ctrl+C 停止服务")
     startup_logger.info(
         "启动阶段: 启动准备完成，总耗时 %.3fs，开始启动 Uvicorn",

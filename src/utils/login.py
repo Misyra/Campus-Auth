@@ -12,6 +12,7 @@ from typing import Any, Dict
 
 from ..task_executor import TaskExecutor, TaskManager
 from .browser import BrowserContextManager
+from .exceptions import LoginCancelledError
 from .logging import LoggerSetup
 from .time import TimeUtils
 
@@ -59,6 +60,9 @@ class LoginAttemptHandler:
             # 使用延迟导入避免循环依赖
             return await self._perform_login_with_auth_class()
 
+        except LoginCancelledError:
+            self.logger.info("登录操作已取消")
+            return False, "登录已取消"
         except Exception as e:
             error_msg = f"登录过程中发生错误: {str(e)}"
             self.logger.error(f"❌ {error_msg}")
@@ -95,6 +99,8 @@ class LoginAttemptHandler:
 
     async def _perform_login_with_active_task(self) -> tuple[bool, str] | None:
         """执行当前活动任务；返回 None 表示未找到可执行任务。"""
+        import time as _time
+        phase_start = _time.perf_counter()
         try:
             root_override = os.getenv("Campus-Auth_PROJECT_ROOT", "").strip()
             project_root = (
@@ -104,56 +110,63 @@ class LoginAttemptHandler:
             )
 
             task_manager = TaskManager(project_root / "tasks")
-            # 优先使用方案指定的任务，其次使用全局活动任务
             active_task_id = self.config.get("active_task", "").strip()
             if not active_task_id:
                 active_task_id = task_manager.get_active_task().strip() or "default"
             task = task_manager.load_task(active_task_id)
 
             if not task:
-                self.logger.warning(f"⚠️ 未找到活动任务: {active_task_id}")
+                self.logger.warning("未找到活动任务: %s", active_task_id)
                 return None
 
+            login_url = self.config.get("auth_url", "")
+            username = self.config.get("username", "")
+            isp = self.config.get("isp", "")
+            self.logger.info(
+                "登录开始 → 任务=%s URL=%s 用户=%s 运营商=%s %d个步骤",
+                active_task_id, login_url, username, isp or "无", len(task.steps))
+
             env_vars = dict(os.environ)
-            # 将配置方案中的字段注入环境变量，供任务模板 {{LOGIN_URL}} / {{ISP}} 等解析
-            if self.config.get("auth_url"):
-                env_vars["LOGIN_URL"] = self.config["auth_url"]
-            # 任务自定义 url 覆盖系统 LOGIN_URL
+            if login_url:
+                env_vars["LOGIN_URL"] = login_url
             if task.url:
                 resolved_url = task.url
                 for k, v in env_vars.items():
                     resolved_url = resolved_url.replace("{{" + k + "}}", v)
                 env_vars["LOGIN_URL"] = resolved_url
-            if self.config.get("isp"):
-                env_vars["ISP"] = self.config["isp"]
-            if self.config.get("username"):
-                env_vars["USERNAME"] = self.config["username"]
+            if isp:
+                env_vars["ISP"] = isp
+            if username:
+                env_vars["USERNAME"] = username
             if self.config.get("password"):
                 env_vars["PASSWORD"] = self.config["password"]
-            # 合并自定义变量
             custom_vars = self.config.get("custom_variables", {})
             if custom_vars and isinstance(custom_vars, dict):
                 env_vars.update(custom_vars)
-                self.logger.debug(f"已加载 {len(custom_vars)} 个自定义变量")
-            self.logger.info(f"🧩 使用活动任务执行登录: {active_task_id}")
 
             if self.cancel_event and self.cancel_event.is_set():
                 return False, "登录已取消"
 
+            self.logger.info("启动浏览器...")
+            browser_start = _time.perf_counter()
             async with BrowserContextManager(self.config, cancel_event=self.cancel_event) as browser_manager:
+                self.logger.info("浏览器就绪 (%.1fs)", _time.perf_counter() - browser_start)
                 if not browser_manager.page:
                     return False, "任务执行失败：浏览器页面初始化失败"
 
                 executor = TaskExecutor(task, env_vars)
                 success, message = await executor.execute(browser_manager.page)
+                total = _time.perf_counter() - phase_start
                 if success:
-                    self.logger.info(f"✅ 任务登录成功: {message}")
+                    self.logger.info("登录成功 (总耗时 %.1fs): %s", total, message)
                     return True, message
-
-                self.logger.error(f"❌ 任务登录失败: {message}")
+                self.logger.error("登录失败 (总耗时 %.1fs): %s", total, message)
                 return False, message
 
+        except LoginCancelledError:
+            self.logger.info("登录已取消")
+            return False, "登录已取消"
         except Exception as e:
-            error_msg = f"任务执行异常: {e}"
-            self.logger.error(f"❌ {error_msg}")
-            return False, error_msg
+            total = _time.perf_counter() - phase_start
+            self.logger.error("登录异常 (总耗时 %.1fs): %s", total, e)
+            return False, f"任务执行异常: {e}"

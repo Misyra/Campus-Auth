@@ -34,11 +34,12 @@ export const actionMethods = {
     try {
       this.frontendLogger.info('action', 'network test requested');
       const { data } = await this.$api.post('/api/actions/test-network');
-      this.notify(data.success, data.message);
+      // 网络测试结果只显示 toast，不记录通知历史
+      this.toastOnly(data.success, data.message);
     } catch (error) {
       const msg = error?.response?.data?.detail || '网络测试失败';
       this.frontendLogger.error('action', 'network test failed', msg);
-      this.notify(false, msg);
+      this.toastOnly(false, msg);
     } finally {
       this.busy.action = false;
     }

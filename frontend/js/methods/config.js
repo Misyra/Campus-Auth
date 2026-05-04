@@ -19,6 +19,19 @@ export const configMethods = {
     }
   },
   async saveConfig() {
+    // 关键字段检查
+    if (!this.config.auth_url && !confirm('认证地址为空，自动认证将无法工作。\n\n确定要继续保存吗？')) {
+      return;
+    }
+    if (!this.config.username && !confirm('账号为空，自动认证将无法工作。\n\n确定要继续保存吗？')) {
+      return;
+    }
+    if (this.config.password && this.config.password.startsWith('•')) {
+      // 密码是掩码，说明服务端已有加密密码，无需警告
+    } else if (!this.config.password && !confirm('密码为空，自动认证将无法工作。\n\n确定要继续保存吗？')) {
+      return;
+    }
+
     this.busy.save = true;
     try {
       const payload = { ...this.config };
@@ -46,5 +59,68 @@ export const configMethods = {
     if (!confirm('确定要恢复默认设置吗？当前修改将丢失。')) return;
     this.config = { ...DEFAULT_CONFIG };
     this.frontendLogger.info('config', '已恢复默认设置，请点击保存以生效');
+  },
+  async fetchBackups() {
+    try {
+      const { data } = await this.$api.get('/api/backup/list');
+      this.backups = data;
+    } catch {
+      this.backups = [];
+    }
+  },
+  async createBackup() {
+    this.busy.backup = true;
+    try {
+      const { data } = await this.$api.post('/api/backup/create');
+      if (data.success) {
+        this.notify(true, data.message);
+        await this.fetchBackups();
+      } else {
+        this.notify(false, data.message);
+      }
+    } catch (error) {
+      this.notify(false, error?.response?.data?.detail || '创建备份失败');
+    } finally {
+      this.busy.backup = false;
+    }
+  },
+  async restoreBackup(filename) {
+    if (!confirm(`确定要从 ${filename} 恢复配置吗？当前配置将被覆盖。`)) return;
+    try {
+      const { data } = await this.$api.post(`/api/backup/restore/${filename}`);
+      if (data.success) {
+        this.notify(true, data.message);
+        await this.fetchConfig(true);
+        await this.fetchProfiles();
+        await this.fetchBackups();
+      } else {
+        this.notify(false, data.message);
+      }
+    } catch (error) {
+      this.notify(false, error?.response?.data?.detail || '恢复备份失败');
+    }
+  },
+  exportBackup(filename) {
+    // 直接触发浏览器下载
+    const url = `${window.location.origin}/api/backup/download/${filename}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    this.frontendLogger.info('config', `导出备份: ${filename}`);
+  },
+  async deleteBackup(filename) {
+    if (!confirm(`确定要删除备份 ${filename} 吗？`)) return;
+    try {
+      const { data } = await this.$api.delete(`/api/backup/${filename}`);
+      if (data.success) {
+        this.notify(true, data.message);
+        await this.fetchBackups();
+      } else {
+        this.notify(false, data.message);
+      }
+    } catch (error) {
+      this.notify(false, error?.response?.data?.detail || '删除备份失败');
+    }
   },
 };

@@ -133,7 +133,7 @@ def _detect_gateway_linux() -> str | None:
                     # 网关字段是小端序十六进制
                     gateway_hex = parts[2]
                     gateway_bytes = bytes.fromhex(gateway_hex)
-                    ip = ".".join(str(b) for b in gateway_bytes)
+                    ip = ".".join(str(b) for b in reversed(gateway_bytes))
                     if ip != "0.0.0.0":
                         return ip
     except Exception as exc:
@@ -258,6 +258,11 @@ class ProfileService:
         self._settings_path = project_root / _SETTINGS_FILE
         self._lock = threading.Lock()
         self._data: ProfilesData | None = None
+
+    def invalidate_cache(self) -> None:
+        """清除缓存，强制下次 load() 从磁盘读取"""
+        with self._lock:
+            self._data = None
 
     def load(self) -> ProfilesData:
         """加载 settings.json，不存在则返回空结构"""
@@ -429,23 +434,40 @@ class ProfileService:
     def migrate_config(self, env_config: dict[str, Any]) -> None:
         """迁移配置到 settings.json 格式。
 
-        处理两种场景：
-        1. settings.json 不存在 → 从 .env 创建完整配置（system + 默认方案）
-        2. settings.json 存在但缺少 system 字段 → 从 .env 补充 system
+        处理场景：
+        1. settings.json 不存在 → 从 .env 创建完整配置
+        2. settings.json 存在且 system 为全默认 → 从 .env 补充
+        3. 已存在有效配置 → 不做任何修改
         """
         if not self._settings_path.exists():
-            profile_logger.info("执行首次迁移：从 .env 创建 settings.json")
+            profile_logger.info("首次启动: 从 .env 创建 settings.json")
             self._create_from_env(env_config)
             return
 
-        # settings.json 存在，检查是否需要补充 system 字段
         data = self.load()
         default_system = SystemSettings()
+
+        # 已有有效用户名和密码 → 绝不覆盖
+        if data.system.username and data.system.password:
+            profile_logger.info(
+                "已有完整配置 (用户=%s), 跳过迁移", data.system.username)
+            return
+
+        # system 为全默认且 .env 有配置 → 补充
         if data.system == default_system and env_config:
-            profile_logger.info("补充 system 字段（从 .env 迁移）")
-            data.system = self._build_system_from_env(env_config)
-            self.save(data)
-            profile_logger.info("system 字段已补充")
+            env_user = env_config.get("username", "")
+            env_pass = env_config.get("password", "")
+            if env_user or env_pass:
+                profile_logger.info(
+                    "从 .env 补充系统设置 (用户=%s)", env_user)
+                data.system = self._build_system_from_env(env_config)
+                self.save(data)
+            else:
+                profile_logger.info(
+                    ".env 中无有效凭证，保持 settings.json 不变")
+            return
+
+        profile_logger.info("配置迁移: 无需操作")
 
     def _build_system_from_env(self, config: dict[str, Any]) -> SystemSettings:
         """从 .env 配置构建 SystemSettings"""
@@ -456,10 +478,10 @@ class ProfileService:
             carrier=str(config.get("isp", "无") or "无"),
             carrier_custom="",
             backend_log_level=str(
-                config.get("logging", {}).get("level", "WARNING")
+                config.get("logging", {}).get("level", "INFO")
             ).upper(),
             frontend_log_level=str(
-                config.get("frontend_logging", {}).get("level", "WARNING")
+                config.get("frontend_logging", {}).get("level", "INFO")
             ).upper(),
             access_log=bool(config.get("access_log", False)),
             minimize_to_tray=bool(config.get("minimize_to_tray", True)),

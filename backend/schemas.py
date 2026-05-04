@@ -38,10 +38,12 @@ class MonitorConfigPayload(BaseModel):
     network_targets: str = Field(
         default="8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
     )
-    backend_log_level: str = Field(default="WARNING")
-    frontend_log_level: str = Field(default="WARNING")
+    backend_log_level: str = Field(default="INFO")
+    frontend_log_level: str = Field(default="INFO")
     access_log: bool = False
     minimize_to_tray: bool = True
+    log_retention_days: int = Field(default=30, ge=1, le=365)
+    screenshot_retention_days: int = Field(default=7, ge=1, le=90)
     custom_variables: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("auth_url")
@@ -211,13 +213,15 @@ class SystemSettings(BaseModel):
     auth_url: str = Field(default="", description="全局认证地址")
     carrier: str = Field(default="无", description="全局运营商")
     carrier_custom: str = Field(default="", description="自定义运营商关键字")
-    backend_log_level: str = Field(default="WARNING")
-    frontend_log_level: str = Field(default="WARNING")
+    backend_log_level: str = Field(default="INFO")
+    frontend_log_level: str = Field(default="INFO")
     access_log: bool = Field(default=False, description="Uvicorn HTTP 请求日志")
     minimize_to_tray: bool = Field(default=True, description="最小化到系统托盘")
     max_retries: int = Field(default=3, ge=0, le=10)
     retry_interval: int = Field(default=5, ge=1, le=300, description="重试间隔（秒）")
     safe_mode: bool = Field(default=True, description="安全模式：不注入浏览器自定义参数")
+    log_retention_days: int = Field(default=30, ge=1, le=365, description="日志文件保留天数")
+    screenshot_retention_days: int = Field(default=7, ge=1, le=90, description="失败截图保留天数")
 
     @field_validator("backend_log_level", "frontend_log_level")
     @classmethod

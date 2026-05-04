@@ -2,14 +2,25 @@ export const uiMethods = {
   setFrontendLogLevel(level) {
     this.frontendLogger.setLevel(level);
   },
+  toastOnly(success, message) {
+    // 仅显示 Toast，不记录到通知历史（用于非关键信息如网络测试结果）
+    this.toast = { success, message, leaving: false };
+    if (this._toastTimer) clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => {
+      this.toast.leaving = true;
+      setTimeout(() => {
+        this.toast.message = '';
+        this.toast.leaving = false;
+      }, 300);
+    }, 3000);
+  },
   notify(success, message) {
-    // 记录通知历史
+    // 记录通知历史 + Toast（用于重要事件）
     const entry = { success, message, time: new Date().toLocaleTimeString() };
     this.notifications.unshift(entry);
     if (this.notifications.length > 30) this.notifications.length = 30;
     this.unreadNotifications++;
 
-    // Toast 带淡出动画
     this.toast = { success, message, leaving: false };
     if (this._toastTimer) clearTimeout(this._toastTimer);
     this._toastTimer = setTimeout(() => {
@@ -26,6 +37,10 @@ export const uiMethods = {
     }
   },
   skipWizard() {
+    // 至少要有用户名和认证地址才能跳过
+    if (!this.config.username || !this.config.auth_url) {
+      if (!confirm('账号和认证地址尚未填写，跳过向导将无法使用自动认证。\n\n确定要跳过吗？')) return;
+    }
     this.showWizard = false;
   },
   setSettingsTab(tabId) {
@@ -58,7 +73,7 @@ export const uiMethods = {
     if (!newKey) return;
     // 验证新变量名格式
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(newKey)) {
-      this.notify(false, '变量名必须以字母或下划线开头，只能包含字母、数字和下划线');
+      this.toastOnly(false, '变量名必须以字母或下划线开头，只能包含字母、数字和下划线');
       // 恢复原值
       this.$nextTick(() => {
         const input = document.querySelector('.custom-var-item input[var-key="' + oldKey + '"]');
@@ -67,7 +82,7 @@ export const uiMethods = {
       return;
     }
     if (this.config.custom_variables.hasOwnProperty(newKey)) {
-      this.notify(false, '变量名已存在');
+      this.toastOnly(false, '变量名已存在');
       return;
     }
     // 创建新键并复制值

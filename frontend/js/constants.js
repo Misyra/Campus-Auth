@@ -30,10 +30,12 @@ export const DEFAULT_CONFIG = {
   pause_start_hour: 0,
   pause_end_hour: 6,
   network_targets: "8.8.8.8:53,114.114.114.114:53,www.baidu.com:443",
-  backend_log_level: "WARNING",
-  frontend_log_level: "WARNING",
+  backend_log_level: "INFO",
+  frontend_log_level: "INFO",
   access_log: false,
   minimize_to_tray: true,
+  log_retention_days: 30,
+  screenshot_retention_days: 7,
   custom_variables: {},
 };
 
