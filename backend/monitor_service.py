@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import json
+import logging
 import threading
 import time
 from collections import deque
@@ -85,6 +86,17 @@ class MonitorService:
     def set_event_loop(self, loop: asyncio.AbstractEventLoop):
         self._loop = loop
 
+    def _push_status(self) -> None:
+        """推送当前监控状态到 WebSocket"""
+        if not self._loop or not self._loop.is_running():
+            return
+        status = self.get_status()
+        data = json.dumps({
+            "type": "status",
+            "data": status.model_dump(),
+        })
+        asyncio.run_coroutine_threadsafe(ws_manager.broadcast(data), self._loop)
+
     def _push_log(
         self, message: str, level: str = "INFO", source: str = "monitor"
     ) -> None:
@@ -98,6 +110,14 @@ class MonitorService:
             message=message,
         )
         self._logs.append(entry)
+
+        # 同步写入 Python 日志系统 → 自动持久化到文件
+        log_level = getattr(logging, level_name, logging.INFO) if hasattr(logging, level_name) else logging.INFO
+        service_logger.log(log_level, "[%s] %s", source_name, message)
+
+        # 监控相关日志触发的状态推送（网络检测、登录尝试等）
+        if source_name in ("monitor.core", "monitor", "network"):
+            self._push_status()
 
         if self._loop and self._loop.is_running():
             data = json.dumps(
@@ -152,12 +172,15 @@ class MonitorService:
             )
 
     def reload_config(self) -> None:
-        """重新加载配置（从 settings.json）"""
+        """重新加载配置（从 settings.json），并推送到运行中的监控"""
         with self._lock:
             self._ui_config = load_ui_config(self._profile_service)
             self._runtime_config = build_runtime_config(
                 self._ui_config, self._profile_service.load().system
             )
+            # 如果监控正在运行，热更新配置
+            if self._monitor_core and self._monitor_core.monitoring:
+                self._monitor_core.update_config(self._runtime_config.copy())
         service_logger.info("Config reloaded from settings.json")
 
     def apply_profile(self, profile_name: str) -> None:
@@ -166,8 +189,10 @@ class MonitorService:
             running = self._is_monitoring_unsafe()
 
         self.reload_config()
+        new_url = self._runtime_config.get("auth_url", "")
+        new_user = self._runtime_config.get("username", "")
         self._push_log(
-            f"已切换到配置方案: {profile_name}",
+            f"切换方案 → {profile_name} (认证={new_url}, 用户={new_user})",
             level="INFO",
             source="backend.monitor_service",
         )
@@ -212,18 +237,21 @@ class MonitorService:
             thread.start()
 
         self._push_log("监控线程已启动", level="INFO", source="backend.monitor_service")
+        self._push_status()
         service_logger.info("Monitoring thread started")
         return True, "监控已启动"
 
     def _on_profile_switch(self, profile_name: str) -> None:
         """自动切换方案时的回调"""
         self.reload_config()
+        new_url = self._runtime_config.get("auth_url", "")
+        new_user = self._runtime_config.get("username", "")
         self._push_log(
-            f"自动切换到配置方案: {profile_name}",
+            f"自动切换方案 → {profile_name} "
+            f"(认证={new_url}, 用户={new_user})",
             level="INFO",
             source="backend.monitor_service",
         )
-        # 更新运行中的监控核心配置
         with self._lock:
             if self._monitor_core:
                 self._monitor_core.update_config(self._runtime_config.copy())
@@ -247,6 +275,7 @@ class MonitorService:
             self._monitor_thread = None
 
         self._push_log("监控已停止", level="INFO", source="backend.monitor_service")
+        self._push_status()
         service_logger.info("Monitoring stopped")
         return True, "监控已停止"
 
@@ -284,19 +313,19 @@ class MonitorService:
         return False, f"手动登录失败：{message}"
 
     def test_network(self) -> tuple[bool, str]:
-        service_logger.debug("Network test requested")
-        self._push_log("正在测试网络连接...", "INFO", "network")
+        service_logger.info("手动网络测试")
+        self._push_log("手动网络测试 → 使用默认检测目标", "INFO", "network")
         try:
             ok = is_network_available(timeout=2, require_both=False)
             if ok:
-                self._push_log("网络连接正常 ✓", "INFO", "network")
+                self._push_log("手动测试结果: 网络正常", "INFO", "network")
                 return True, "网络连接正常"
             else:
-                self._push_log("网络连接异常 ✗", "WARNING", "network")
+                self._push_log("手动测试结果: 网络异常", "WARNING", "network")
                 return False, "网络连接异常"
         except Exception as exc:
             service_logger.exception("Network test failed")
-            self._push_log(f"网络测试失败: {exc}", "ERROR", "network")
+            self._push_log(f"手动测试异常: {exc}", "ERROR", "network")
             return False, f"网络测试失败: {exc}"
 
     def list_logs(self, limit: int = 200) -> list[LogEntry]:

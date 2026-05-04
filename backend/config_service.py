@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from src.utils.crypto import decrypt_password, encrypt_password, mask_password
+from src.utils.logging import get_logger
 
 from .profile_service import ProfileService
 from .schemas import (
@@ -13,6 +14,9 @@ from .schemas import (
     ProfileSettings,
     SystemSettings,
 )
+
+
+config_logger = get_logger("backend.config_service", side="BACKEND")
 
 
 def _normalize_level(raw: str, default: str = "WARNING") -> str:
@@ -143,6 +147,8 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
         frontend_log_level=_normalize_level(sys.frontend_log_level),
         access_log=sys.access_log,
         minimize_to_tray=sys.minimize_to_tray,
+        log_retention_days=sys.log_retention_days,
+        screenshot_retention_days=sys.screenshot_retention_days,
         custom_variables=custom_variables,
     )
 
@@ -208,6 +214,8 @@ def build_runtime_config(payload: MonitorConfigPayload, sys: SystemSettings | No
 
     base["access_log"] = payload.access_log
     base["minimize_to_tray"] = payload.minimize_to_tray
+    base["log_retention_days"] = payload.log_retention_days
+    base["screenshot_retention_days"] = payload.screenshot_retention_days
     base["custom_variables"] = payload.custom_variables
 
     # 重试策略从系统设置读取
@@ -223,7 +231,12 @@ def build_runtime_config(payload: MonitorConfigPayload, sys: SystemSettings | No
 def _save_password_field(raw: str, existing_encrypted: str) -> str:
     """处理前端提交的密码：掩码不更新，明文则加密存储"""
     if not raw or raw.startswith("•"):
+        # 掩码或空值 → 保留已有密码
+        if not existing_encrypted:
+            config_logger.warning(
+                "收到掩码密码但无已有加密密码，密码将保持为空！raw=%s", repr(raw[:20]))
         return existing_encrypted or ""
+    # 明文密码 → 加密存储
     return encrypt_password(raw)
 
 
@@ -232,9 +245,17 @@ def write_system_settings(payload: MonitorConfigPayload, profile_service: Profil
     data = profile_service.load()
     sys = data.system
 
+    pwd_raw = payload.password.strip()
     if payload.use_global_credentials:
+        old_user = sys.username
         sys.username = payload.username.strip()
-        sys.password = _save_password_field(payload.password.strip(), sys.password)
+        sys.password = _save_password_field(pwd_raw, sys.password)
+        config_logger.info(
+            "保存系统设置: 用户=%s (旧=%s), 密码=%s, use_global=%s",
+            sys.username, old_user,
+            "已更新" if (pwd_raw and not pwd_raw.startswith("•")) else "保留",
+            payload.use_global_credentials,
+        )
 
     sys.auth_url = payload.auth_url.strip()
     sys.carrier = str(payload.carrier or "无").strip()
@@ -243,9 +264,32 @@ def write_system_settings(payload: MonitorConfigPayload, profile_service: Profil
     sys.frontend_log_level = _normalize_level(payload.frontend_log_level)
     sys.access_log = payload.access_log
     sys.minimize_to_tray = payload.minimize_to_tray
+    sys.log_retention_days = payload.log_retention_days
+    sys.screenshot_retention_days = payload.screenshot_retention_days
 
     data.system = sys
     profile_service.save(data)
+    config_logger.info(
+        "系统设置已写入: auth_url=%s, carrier=%s, interval=%d, auto_start=%s",
+        sys.auth_url, sys.carrier, payload.check_interval_minutes, payload.auto_start,
+    )
+
+    # 立即读盘验证，确保写入真正生效
+    import json as _json
+    try:
+        vpath = profile_service._settings_path
+        if vpath.exists():
+            vdata = _json.loads(vpath.read_text(encoding="utf-8"))
+            vsys = vdata.get("system", {})
+            config_logger.info(
+                "磁盘验证: size=%d user=%s pwd=%s auth=%s",
+                vpath.stat().st_size,
+                repr(vsys.get("username", "")),
+                "ENC" if str(vsys.get("password", "")).startswith("ENC:") else "空",
+                repr(vsys.get("auth_url", "")),
+            )
+    except Exception:
+        pass
 
 
 def save_profile_from_payload(
@@ -291,3 +335,95 @@ def save_profile_from_payload(
     )
 
     ps.save_profile(active_id, updated)
+
+
+def save_config_combined(
+    payload: MonitorConfigPayload, profile_service: ProfileService,
+) -> None:
+    """原子化保存系统设置 + 活动方案设置，避免两次独立写入导致数据丢失。"""
+    data = profile_service.load()
+    sys = data.system
+
+    # ── 先读取活动方案，判断哪些系统字段需要更新 ──
+    active_id = data.active_profile
+    existing = data.profiles.get(active_id, ProfileSettings())
+
+    # ── 更新系统设置 ──
+    pwd_raw = payload.password.strip()
+    if payload.use_global_credentials:
+        old_user = sys.username
+        sys.username = payload.username.strip()
+        sys.password = _save_password_field(pwd_raw, sys.password)
+        config_logger.info(
+            "保存系统设置: 用户=%s (旧=%s), 密码=%s, use_global=%s",
+            sys.username, old_user,
+            "已更新" if (pwd_raw and not pwd_raw.startswith("•")) else "保留",
+            payload.use_global_credentials,
+        )
+
+    # 仅当活动方案使用全局设置时才更新系统级字段，避免独立方案的值覆盖全局
+    if existing.use_global_auth_url:
+        sys.auth_url = payload.auth_url.strip()
+    if existing.use_global_credentials:
+        sys.carrier = str(payload.carrier or "无").strip()
+        sys.carrier_custom = str(payload.carrier_custom or "").strip()
+    sys.backend_log_level = _normalize_level(payload.backend_log_level)
+    sys.frontend_log_level = _normalize_level(payload.frontend_log_level)
+    sys.access_log = payload.access_log
+    sys.minimize_to_tray = payload.minimize_to_tray
+    sys.log_retention_days = payload.log_retention_days
+    sys.screenshot_retention_days = payload.screenshot_retention_days
+
+    data.system = sys
+
+    # ── 更新活动方案 ──
+    updated = ProfileSettings(
+        name=existing.name,
+        match_gateway_ip=existing.match_gateway_ip,
+        match_ssid=existing.match_ssid,
+        username=existing.username,
+        password=existing.password,
+        use_global_credentials=existing.use_global_credentials,
+        use_global_advanced=existing.use_global_advanced,
+        use_global_auth_url=existing.use_global_auth_url,
+        use_global_task=existing.use_global_task,
+        auth_url=existing.auth_url if existing.use_global_auth_url else payload.auth_url.strip(),
+        active_task=existing.active_task,
+        carrier=existing.carrier if existing.use_global_credentials else str(payload.carrier or "无").strip(),
+        carrier_custom=existing.carrier_custom if existing.use_global_credentials else str(payload.carrier_custom or "").strip(),
+        check_interval_minutes=payload.check_interval_minutes,
+        auto_start=payload.auto_start,
+        headless=payload.headless,
+        browser_timeout=payload.browser_timeout,
+        browser_user_agent=payload.browser_user_agent.strip(),
+        browser_low_resource_mode=payload.browser_low_resource_mode,
+        browser_disable_web_security=payload.browser_disable_web_security,
+        browser_extra_headers_json=_normalize_headers_json(
+            payload.browser_extra_headers_json
+        ),
+        browser_args=payload.browser_args.strip(),
+        pause_enabled=payload.pause_enabled,
+        pause_start_hour=payload.pause_start_hour,
+        pause_end_hour=payload.pause_end_hour,
+        network_targets=_normalize_targets(payload.network_targets),
+        custom_variables=payload.custom_variables,
+    )
+
+    # 处理方案密码
+    if updated.password and not updated.password.startswith("•") and not updated.password.startswith("ENC:"):
+        updated.password = encrypt_password(updated.password)
+    elif updated.password and updated.password.startswith("•"):
+        if existing.password:
+            updated.password = existing.password
+
+    data.profiles[active_id] = updated
+
+    # ── 单次写入 ──
+    profile_service.save(data)
+    config_logger.info(
+        "配置已原子保存: system(user=%s, pwd=%s, auth=%s), profile=%s",
+        sys.username,
+        "ENC" if sys.password else "空",
+        sys.auth_url,
+        active_id,
+    )

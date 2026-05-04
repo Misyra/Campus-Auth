@@ -7,6 +7,7 @@
 import json
 import threading
 
+from .exceptions import LoginCancelledError
 from .logging import LoggerSetup
 
 
@@ -40,7 +41,7 @@ class BrowserContextManager:
     async def __aenter__(self):
         """异步上下文管理器入口"""
         if self._is_cancelled():
-            raise RuntimeError("浏览器启动已取消")
+            raise LoginCancelledError("浏览器启动已取消")
         await self._start_browser()
         return self
 
@@ -62,7 +63,7 @@ class BrowserContextManager:
             safe_mode = self.browser_settings.get("safe_mode", False)
 
             if safe_mode:
-                # 安全模式：不注入任何自定义参数
+                self.logger.info("启动浏览器 (安全模式, headless=%s)", headless)
                 self.browser = await self.playwright.chromium.launch(
                     headless=headless
                 )
@@ -70,35 +71,34 @@ class BrowserContextManager:
                     viewport={"width": 1280, "height": 720},
                 )
             else:
-                low_resource_mode = bool(
-                    self.browser_settings.get("low_resource_mode", False)
-                )
+                low_resource = bool(self.browser_settings.get("low_resource_mode", False))
                 browser_args = self._get_browser_args()
+                self.logger.info(
+                    "启动浏览器 (headless=%s, low_resource=%s, args=%d)",
+                    headless, low_resource, len(browser_args))
                 self.browser = await self.playwright.chromium.launch(
                     headless=headless, args=browser_args
                 )
                 extra_headers = self._get_extra_http_headers()
+                ua = (self.browser_settings.get("user_agent") or "").strip()
                 ctx_opts: dict = {
                     "viewport": {"width": 1280, "height": 720},
                     "extra_http_headers": extra_headers,
                 }
-                user_agent = (self.browser_settings.get("user_agent") or "").strip()
-                if user_agent:
-                    ctx_opts["user_agent"] = user_agent
+                if ua:
+                    ctx_opts["user_agent"] = ua
+                    self.logger.info("使用自定义 UA: %s...", ua[:80])
+                if extra_headers:
+                    self.logger.info("注入自定义请求头: %d 项", len(extra_headers))
                 self.context = await self.browser.new_context(**ctx_opts)
-                if low_resource_mode:
+                if low_resource:
                     await self.context.route("**/*", self._handle_low_resource_request)
 
-            # 创建页面
             self.page = await self.context.new_page()
-
-            self.logger.info(
-                f"浏览器已启动，无头模式: {headless}, 安全模式: {safe_mode}"
-            )
+            self.logger.info("浏览器启动完成")
 
         except Exception as e:
-            self.logger.error(f"启动浏览器失败: {e}")
-            # 启动失败时也要清理资源
+            self.logger.error("启动浏览器失败: %s", e)
             await self._cleanup_browser()
             raise
 
@@ -215,9 +215,10 @@ class BrowserContextManager:
             import time
 
             project_root = Path(__file__).resolve().parents[2]
-            debug_dir = project_root / "debug"
-            debug_dir.mkdir(parents=True, exist_ok=True)
-            path = str(debug_dir / f"screenshot_{int(time.time())}.png")
+            sc_dir = project_root / "screenshots"
+            sc_dir.mkdir(parents=True, exist_ok=True)
+            stamp = time.strftime("%Y%m%d_%H%M%S")
+            path = str(sc_dir / f"manual_{stamp}.png")
 
         Path(path).parent.mkdir(parents=True, exist_ok=True)
 

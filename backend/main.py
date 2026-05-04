@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
+import re
 import sys
 import time
 from contextlib import asynccontextmanager
@@ -20,12 +22,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.utils import ConfigLoader
+from src.utils import ConfigLoader, ConfigValidator
 from src.utils.logging import LogConfigCenter, get_logger
 from src.version import get_project_version
 
 from .autostart_service import AutoStartService
-from .config_service import save_profile_from_payload
+from .config_service import save_config_combined
 from .monitor_service import MonitorService, ws_manager
 from .profile_service import ProfileService
 from .schemas import (
@@ -35,6 +37,7 @@ from .schemas import (
     MonitorConfigPayload,
     MonitorStatusResponse,
     ProfileSettings,
+    ProfilesData,
 )
 from .task_service import TaskService
 
@@ -62,10 +65,25 @@ async def lifespan(app_instance):
     service.set_event_loop(loop)
 
     # 迁移：从 .env 创建或补充 settings.json
+    settings_path = PROJECT_ROOT / "settings.json"
+    startup_logger.info("settings.json 路径: %s (存在=%s, 大小=%d)",
+                        settings_path, settings_path.exists(),
+                        settings_path.stat().st_size if settings_path.exists() else 0)
     try:
         env_config = ConfigLoader.load_config_from_env()
         profile_service.migrate_config(env_config)
         service.reload_config()
+        # 诊断：打印加载后的关键配置
+        config = service.get_config()
+        startup_logger.info(
+            "当前配置: 用户=%s, 密码=%s, 认证=%s, 运营商=%s, 间隔=%dmin, 自动监控=%s",
+            f"'{config.username}'" if config.username else "(空)",
+            "已设置" if config.password else "(空)",
+            f"'{config.auth_url}'" if config.auth_url else "(空)",
+            config.carrier,
+            config.check_interval_minutes,
+            config.auto_start,
+        )
     except Exception as exc:
         startup_logger.warning("配置迁移失败: %s", exc)
 
@@ -272,12 +290,14 @@ def _require_debug_session():
     return _debug["session"], _debug["executor"], _debug["session"].page
 
 
-async def _take_debug_screenshot(page) -> str | None:
+async def _take_debug_screenshot(page, step_label: str = "") -> str | None:
     try:
         debug_dir = PROJECT_ROOT / "debug"
         debug_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        filename = f"debug_step_{stamp}.png"
+        task_id = (_debug.get("task_id") or "unknown")[:30]
+        step_part = f"_{step_label}" if step_label else ""
+        filename = f"{task_id}{step_part}_{stamp}.png"
         await page.screenshot(path=str(debug_dir / filename), full_page=True)
         return f"/debug/{filename}"
     except Exception:
@@ -339,6 +359,13 @@ def health() -> dict[str, str]:
 def get_init_status() -> dict[str, bool]:
     config = service.get_config()
     is_initialized = bool(config.username and config.password)
+    if not is_initialized:
+        startup_logger.info(
+            "初始化状态: 未完成 — username=%s, password=%s, auth_url=%s",
+            f"'{config.username}'" if config.username else "空",
+            "已设置" if config.password else "空",
+            f"'{config.auth_url}'" if config.auth_url else "空",
+        )
     return {"initialized": is_initialized}
 
 
@@ -350,12 +377,21 @@ def get_config() -> MonitorConfigPayload:
 @app.put("/api/config", response_model=ActionResponse)
 def save_config(payload: MonitorConfigPayload) -> ActionResponse:
     try:
-        service.save_config(payload)
-        # 同时保存 profile 非敏感设置
-        try:
-            save_profile_from_payload(payload, PROJECT_ROOT, profile_service)
-        except Exception as exc:
-            api_logger.warning("Profile save failed: %s", exc)
+        # 校验关键字段
+        ok, error = ConfigValidator.validate_gui_config(
+            payload.username,
+            payload.password,
+            str(payload.check_interval_minutes),
+        )
+        if not ok:
+            raise ValueError(error)
+
+        # 原子化保存：系统设置 + 活动方案，使用 MonitorService 内部的 ProfileService 实例
+        save_config_combined(payload, service._profile_service)
+        # 同步更新 MonitorService 运行时配置
+        service.reload_config()
+        # 使全局 profile_service 缓存失效，确保其他 API 端点读到最新数据
+        profile_service.invalidate_cache()
         api_logger.info("Config updated")
         return ActionResponse(success=True, message="配置保存成功")
     except ValueError as exc:
@@ -538,30 +574,35 @@ async def debug_start(request: Request) -> dict:
     session = DebugSession()
     await session.start(runtime_config, url if url else None, safe_mode=service.safe_mode)
 
-    steps_info = [
-        {
-            "index": i,
-            "id": step.id,
-            "type": step.type,
-            "description": step.description or step.type,
+    try:
+        steps_info = [
+            {
+                "index": i,
+                "id": step.id,
+                "type": step.type,
+                "description": step.description or step.type,
+            }
+            for i, step in enumerate(task.steps)
+        ]
+
+        executor = TaskExecutor(task, env_vars)
+
+        _debug = {
+            "session": session,
+            "task_id": task_id,
+            "executor": executor,
+            "current_step": 0,
+            "steps": steps_info,
+            "results": [],
+            "screenshot_url": None,
+            "running": True,
         }
-        for i, step in enumerate(task.steps)
-    ]
 
-    executor = TaskExecutor(task, env_vars)
+        _debug["screenshot_url"] = await _take_debug_screenshot(session.page)
+    except Exception:
+        await session.close()
+        raise
 
-    _debug = {
-        "session": session,
-        "task_id": task_id,
-        "executor": executor,
-        "current_step": 0,
-        "steps": steps_info,
-        "results": [],
-        "screenshot_url": None,
-        "running": True,
-    }
-
-    _debug["screenshot_url"] = await _take_debug_screenshot(session.page)
     api_logger.info("Debug session started for task %s", task_id)
     return _debug_response()
 
@@ -795,8 +836,130 @@ def shutdown_server() -> ActionResponse:
     return ActionResponse(success=True, message="服务器正在关闭...")
 
 
+# ==================== 配置备份与恢复 API ====================
+
+_BACKUP_DIR = PROJECT_ROOT / "backups"
+_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@app.get("/api/backup/list")
+def list_backups() -> list[dict]:
+    """列出所有备份"""
+    backups = []
+    for f in sorted(_BACKUP_DIR.glob("settings_*.json"), reverse=True):
+        stat = f.stat()
+        backups.append({
+            "filename": f.name,
+            "size": stat.st_size,
+            "created": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+        })
+    return backups
+
+
+@app.post("/api/backup/create", response_model=ActionResponse)
+def create_backup() -> ActionResponse:
+    """创建当前配置的备份"""
+    settings_path = PROJECT_ROOT / "settings.json"
+    if not settings_path.exists():
+        raise HTTPException(status_code=404, detail="settings.json 不存在，无需备份")
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = _BACKUP_DIR / f"settings_{stamp}.json"
+
+    try:
+        backup_path.write_bytes(settings_path.read_bytes())
+        api_logger.info("备份已创建: %s", backup_path.name)
+        return ActionResponse(success=True, message=f"备份已创建: {backup_path.name}")
+    except Exception as exc:
+        api_logger.error("创建备份失败: %s", exc)
+        raise HTTPException(status_code=500, detail=f"创建备份失败: {exc}")
+
+
+@app.post("/api/backup/restore/{filename}", response_model=ActionResponse)
+def restore_backup(filename: str) -> ActionResponse:
+    """从备份恢复配置"""
+    backup_path = _BACKUP_DIR / filename
+    if not backup_path.exists():
+        raise HTTPException(status_code=404, detail="备份文件不存在")
+
+    # 安全校验：文件名格式 settings_YYYYMMDD_HHMMSS[_autosave].json
+    if not re.match(r"^settings_\d{8}_\d{6}(_autosave)?\.json$", filename):
+        raise HTTPException(status_code=400, detail="无效的备份文件名")
+
+    # 恢复前先自动创建当前配置的备份
+    settings_path = PROJECT_ROOT / "settings.json"
+    if settings_path.exists():
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        auto_backup = _BACKUP_DIR / f"settings_{stamp}_autosave.json"
+        try:
+            auto_backup.write_bytes(settings_path.read_bytes())
+        except Exception:
+            pass
+
+    try:
+        backup_data = json.loads(backup_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        api_logger.error("备份文件不是有效 JSON: %s — %s", filename, exc)
+        raise HTTPException(status_code=400, detail=f"备份文件格式损坏: {exc}")
+
+    try:
+        ProfilesData.model_validate(backup_data)
+    except Exception as exc:
+        api_logger.error("备份文件 schema 校验失败: %s — %s", filename, exc)
+        raise HTTPException(status_code=400, detail=f"备份文件结构不合法: {exc}")
+
+    try:
+        settings_path.write_bytes(backup_path.read_bytes())
+        # 清除 ProfileService 缓存，强制从磁盘重新读取
+        profile_service.invalidate_cache()
+        service.reload_config()
+        api_logger.info("配置已从备份恢复: %s", filename)
+        return ActionResponse(success=True, message="配置已从备份恢复，请刷新页面查看")
+    except Exception as exc:
+        api_logger.error("恢复备份失败: %s", exc)
+        raise HTTPException(status_code=500, detail=f"恢复备份失败: {exc}")
+
+
+@app.get("/api/backup/download/{filename}")
+def download_backup(filename: str):
+    """下载备份文件"""
+    if not re.match(r"^settings_\d{8}_\d{6}(_autosave)?\.json$", filename):
+        raise HTTPException(status_code=400, detail="无效的备份文件名")
+    backup_path = _BACKUP_DIR / filename
+    if not backup_path.exists():
+        raise HTTPException(status_code=404, detail="备份文件不存在")
+    return FileResponse(
+        backup_path,
+        media_type="application/json",
+        filename=filename,
+    )
+
+
+@app.delete("/api/backup/{filename}", response_model=ActionResponse)
+def delete_backup(filename: str) -> ActionResponse:
+    """删除备份"""
+    if not re.match(r"^settings_\d{8}_\d{6}(_autosave)?\.json$", filename):
+        raise HTTPException(status_code=400, detail="无效的备份文件名")
+
+    backup_path = _BACKUP_DIR / filename
+    if not backup_path.exists():
+        raise HTTPException(status_code=404, detail="备份文件不存在")
+
+    try:
+        backup_path.unlink()
+        api_logger.info("备份已删除: %s", filename)
+        return ActionResponse(success=True, message="备份已删除")
+    except Exception as exc:
+        api_logger.error("删除备份失败: %s", exc)
+        raise HTTPException(status_code=500, detail=f"删除备份失败: {exc}")
+
+
+SCREENSHOTS_DIR = PROJECT_ROOT / "screenshots"
+SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 app.mount("/debug", StaticFiles(directory=DEBUG_DIR), name="debug")
+app.mount("/screenshots", StaticFiles(directory=SCREENSHOTS_DIR), name="screenshots")
 
 
 def _resolve_port() -> int:
@@ -827,6 +990,41 @@ def run() -> None:
     # 使用日志配置中心统一配置
     log_center = LogConfigCenter.get_instance()
     log_center.initialize({"level": log_level}, side="BACKEND")
+
+    # 启用日志持久化到文件（按天存储，自动清理过期日志和截图）
+    try:
+        sys_settings = profile_service.load().system
+        log_retention = max(1, sys_settings.log_retention_days)
+        sc_retention = max(1, sys_settings.screenshot_retention_days)
+    except Exception:
+        log_retention = 30
+        sc_retention = 7
+
+    log_dir = PROJECT_ROOT / "logs"
+    try:
+        # 文件始终记录完整日志，不受前后端日志级别限制
+        log_center.add_file_handler(str(log_dir), retention_days=log_retention)
+        from datetime import datetime
+        today_log = log_dir / f"{datetime.now().strftime('%Y-%m-%d')}.log"
+        print(f"[Campus-Auth] 日志文件: {today_log}")
+        startup_logger.info("日志文件: %s", today_log)
+        # 清理旧版日志文件，避免混淆
+        old_log = log_dir / "campus_auth.log"
+        if old_log.exists():
+            old_log.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+    # 自动清理过期的截图和调试文件
+    try:
+        from src.utils.logging import cleanup_old_files
+
+        n1 = cleanup_old_files(str(DEBUG_DIR), "*.png", sc_retention)
+        n2 = cleanup_old_files(str(SCREENSHOTS_DIR), "*.png", sc_retention)
+        if n1 or n2:
+            startup_logger.info("清理过期截图: debug=%d, screenshots=%d", n1, n2)
+    except Exception:
+        pass
 
     if not access_log_enabled:
         logging.getLogger("uvicorn.access").setLevel(logging.WARNING)

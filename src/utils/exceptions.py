@@ -5,7 +5,11 @@
 """
 
 import logging
-from typing import Callable
+
+class LoginCancelledError(Exception):
+    """登录操作被取消的信号异常"""
+    pass
+
 
 try:
     from playwright.async_api import TimeoutError as PlaywrightTimeoutError

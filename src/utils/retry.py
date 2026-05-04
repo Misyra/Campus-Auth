@@ -5,7 +5,6 @@
 """
 
 import asyncio
-import logging
 from typing import Dict, Any, Tuple, Callable
 
 from .logging import LoggerSetup

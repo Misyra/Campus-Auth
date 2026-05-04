@@ -358,6 +358,7 @@ class NavigateHandler(StepHandler):
     async def execute(
         self, page, step: StepConfig, resolver: VariableResolver
     ) -> tuple[bool, str]:
+        import time as _time
         params = self.resolve_params(step, resolver)
         url = params.get("url", "")
         wait_until = params.get("wait_until", "networkidle")
@@ -366,8 +367,10 @@ class NavigateHandler(StepHandler):
         if not url:
             return False, "导航地址不能为空"
 
-        logger.info(f"[navigate] url={url}, wait_until={wait_until}")
+        logger.info("导航 → %s (wait=%s, timeout=%dms)", url, wait_until, timeout)
+        start = _time.perf_counter()
         await page.goto(url, wait_until=wait_until, timeout=timeout)
+        logger.info("导航完成 → %s (%.1fs)", page.url, _time.perf_counter() - start)
         return True, ""
 
 
@@ -390,9 +393,8 @@ class InputHandler(StepHandler):
         if not selector:
             return False, "输入步骤需要 selector"
 
-        logger.info(f"[input] selector={selector}, clear={clear}")
+        logger.info("输入 → %s (clear=%s)", selector, clear)
 
-        # 等待并查找元素
         element = await self._find_element(page, selector, timeout)
         if not element:
             return False, f"未找到输入元素: {selector}"
@@ -400,6 +402,7 @@ class InputHandler(StepHandler):
         if clear:
             await element.fill("", timeout=timeout)
         await element.fill(value, timeout=timeout)
+        logger.info("输入完成 → %s", selector)
         return True, ""
 
 
@@ -420,13 +423,14 @@ class ClickHandler(StepHandler):
         if not selector:
             return False, "点击步骤需要 selector"
 
-        logger.info(f"[click] selector={selector}")
+        logger.info("点击 → %s", selector)
 
         element = await self._find_element(page, selector, timeout)
         if not element:
             return False, f"未找到点击元素: {selector}"
 
         await element.click(timeout=timeout)
+        logger.info("点击完成 → %s", selector)
         return True, ""
 
 
@@ -599,7 +603,7 @@ class CustomJsHandler(StepHandler):
 
 
 class ScreenshotHandler(StepHandler):
-    """截图处理器"""
+    """截图处理器 — 运行时截图存入 screenshots/ 目录"""
 
     PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -613,16 +617,21 @@ class ScreenshotHandler(StepHandler):
         params = self.resolve_params(step, resolver)
         path = params.get("path", "")
 
-        debug_dir = self.PROJECT_ROOT / "debug"
-        debug_dir.mkdir(parents=True, exist_ok=True)
+        screenshots_dir = self.PROJECT_ROOT / "screenshots"
+        screenshots_dir.mkdir(parents=True, exist_ok=True)
 
         if not path:
+            task_name = resolver.config.name or "unknown"
+            step_id = step.id or "s0"
+            # 文件名安全化：移除非法字符
+            safe_task = re.sub(r'[\\/:*?"<>|]', '_', task_name)[:40]
+            safe_step = re.sub(r'[\\/:*?"<>|]', '_', step_id)[:30]
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-            path = str(debug_dir / f"step_screenshot_{stamp}.png")
+            filename = f"{safe_task}_{safe_step}_{stamp}.png"
+            path = str(screenshots_dir / filename)
         else:
-            # 限制路径在 debug/ 目录内，防止路径遍历
             safe_name = Path(path).name
-            path = str(debug_dir / safe_name)
+            path = str(screenshots_dir / safe_name)
 
         logger.info(f"[screenshot] path={path}")
         await page.screenshot(path=path, full_page=True)
@@ -723,16 +732,16 @@ class TaskValidator:
                 if not cond.get("type"):
                     errors.append(f"success_conditions[{i}] 必须包含 'type'")
                     continue
-                cond_type = cond["type"]
+                cond_type = cond["type"].lower()
                 cond_prefix = f"success_conditions[{i}]"
-                if cond_type == "VARIABLE" and not cond.get("variable"):
-                    errors.append(f"{cond_prefix} (VARIABLE) 需要 'variable' 字段")
-                if cond_type in ("URL_CONTAINS", "URL_MATCHES") and not cond.get("pattern"):
+                if cond_type == ConditionType.VARIABLE and not cond.get("variable"):
+                    errors.append(f"{cond_prefix} ({cond_type}) 需要 'variable' 字段")
+                if cond_type in (ConditionType.URL_CONTAINS, ConditionType.URL_MATCHES) and not cond.get("pattern"):
                     errors.append(f"{cond_prefix} ({cond_type}) 需要 'pattern' 字段")
-                if cond_type == "ELEMENT_EXISTS" and not cond.get("selector"):
-                    errors.append(f"{cond_prefix} (ELEMENT_EXISTS) 需要 'selector' 字段")
-                if cond_type == "JS_EXPRESSION" and not cond.get("script"):
-                    errors.append(f"{cond_prefix} (JS_EXPRESSION) 需要 'script' 字段")
+                if cond_type == ConditionType.ELEMENT_EXISTS and not cond.get("selector"):
+                    errors.append(f"{cond_prefix} ({cond_type}) 需要 'selector' 字段")
+                if cond_type == ConditionType.JS_EXPRESSION and not cond.get("script"):
+                    errors.append(f"{cond_prefix} ({cond_type}) 需要 'script' 字段")
 
         return len(errors) == 0, errors
 
@@ -800,40 +809,45 @@ class TaskExecutor:
         Returns:
             (success, message)
         """
-        logger.info(f"开始执行任务: {self.config.name} (v{self.config.version})")
+        import time as _time
+        task_start = _time.perf_counter()
+        logger.info("任务开始 [%s] v%s, %d 个步骤",
+                     self.config.name, self.config.version, len(self.config.steps))
         self._step_results = []
 
         try:
-            # 自动导航到任务URL（如果步骤中没有导航）
             await self._auto_navigate_if_needed(page)
 
-            # 执行步骤
             for i, step in enumerate(self.config.steps):
-                # 步骤间等待，给页面渲染留出时间
                 if i > 0:
                     await asyncio.sleep(0.5)
+                step_start = _time.perf_counter()
                 success, message = await self._execute_step(page, step)
+                step_elapsed = (_time.perf_counter() - step_start) * 1000
+                status = "OK" if success else "FAIL"
+                logger.info("  步骤[%d/%d] %s (%s) → %s (%.0fms)%s",
+                            i + 1, len(self.config.steps), step.id, step.type,
+                            status, step_elapsed,
+                            f" — {message}" if message else "")
                 self._step_results.append(
-                    {
-                        "step_id": step.id,
-                        "type": step.type,
-                        "success": success,
-                        "message": message,
-                    }
+                    {"step_id": step.id, "type": step.type,
+                     "success": success, "message": message}
                 )
 
                 if not success:
                     return await self._handle_failure(page, step, message)
 
-            # 检查成功条件
             if not await self._check_success_conditions(page):
                 return await self._handle_failure(page, None, "成功条件不满足")
 
-            # 执行成功
+            total_elapsed = (_time.perf_counter() - task_start) * 1000
+            logger.info("任务成功 [%s] 总耗时 %.0fms", self.config.name, total_elapsed)
             return await self._handle_success(page)
 
         except Exception as e:
-            logger.error(f"任务执行异常: {e}")
+            total_elapsed = (_time.perf_counter() - task_start) * 1000
+            logger.error("任务异常 [%s] 耗时 %.0fms: %s",
+                         self.config.name, total_elapsed, e)
             return await self._handle_failure(page, None, str(e))
 
     async def _auto_navigate_if_needed(self, page) -> None:
@@ -969,7 +983,7 @@ class TaskExecutor:
         self, cond: ConditionConfig, current_url: str, page
     ) -> bool:
         """评估单个条件"""
-        cond_type = cond.type
+        cond_type = cond.type.lower() if cond.type else ""
 
         if cond_type == ConditionType.VARIABLE:
             actual = self.resolver.runtime_vars.get(cond.variable)
@@ -1035,15 +1049,17 @@ class TaskExecutor:
         return False, message
 
     async def _capture_screenshot(self, page) -> str | None:
-        """捕获失败截图"""
+        """捕获失败截图 → screenshots/ 目录"""
         try:
-            debug_dir = self.PROJECT_ROOT / "debug"
-            debug_dir.mkdir(parents=True, exist_ok=True)
+            screenshots_dir = self.PROJECT_ROOT / "screenshots"
+            screenshots_dir.mkdir(parents=True, exist_ok=True)
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-            filename = f"task_failure_{stamp}.png"
-            local_path = str(debug_dir / filename)
+            task_name = self.config.name or "unknown"
+            safe_name = re.sub(r'[\\/:*?"<>|]', '_', task_name)[:40]
+            filename = f"{safe_name}_failure_{stamp}.png"
+            local_path = str(screenshots_dir / filename)
             await page.screenshot(path=local_path, full_page=True)
-            return f"/debug/{filename}"
+            return f"/screenshots/{filename}"
         except Exception as e:
             logger.warning(f"截图失败: {e}")
             return None

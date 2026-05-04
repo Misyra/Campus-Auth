@@ -16,6 +16,7 @@ from .utils import (
     get_runtime_stats,
     setup_logger,
 )
+from .utils.notify import send_notification
 
 if TYPE_CHECKING:
     from backend.profile_service import ProfileService
@@ -116,10 +117,15 @@ class NetworkMonitorCore:
         self._test_sites_cache = None  # 重置缓存
 
         interval = self.config.get("monitor", {}).get("interval", self.DEFAULT_INTERVAL_SECONDS)
+        test_sites_info = self._get_test_sites()
+        targets_str = ", ".join(f"{h}:{p}" for h, p in test_sites_info)
 
         self.log_message("=" * self.LOG_DIVIDER_LENGTH)
         self.log_message("网络监控已启动")
-        self.log_message(f"检测间隔: {interval} 秒")
+        self.log_message(f"检测间隔: {interval}s | 检测目标: {targets_str}")
+        self.log_message(f"认证地址: {self.config.get('auth_url', '未设置')}")
+        self.log_message(f"账号: {self.config.get('username', '未设置')}")
+        self.log_message(f"运营商: {self.config.get('isp', '无') or '无'}")
         self.log_message("=" * self.LOG_DIVIDER_LENGTH)
 
         try:
@@ -191,19 +197,17 @@ class NetworkMonitorCore:
 
     def monitor_network(self) -> None:
         consecutive_failures = 0
-        test_sites = self._get_test_sites()
 
         while self.monitoring:
-            # 每次循环重新读取 interval，支持运行时修改
+            # 每次循环重新读取 interval 和 test_sites，支持运行时方案切换
             interval = int(self.config.get("monitor", {}).get("interval", self.DEFAULT_INTERVAL_SECONDS))
             pause_config = self.config.get("pause_login", {})
             if TimeUtils.is_in_pause_period(pause_config):
-                now_hour = datetime.datetime.now().hour
                 start_hour = pause_config.get("start_hour", 0)
                 end_hour = pause_config.get("end_hour", 6)
                 self.log_message(
-                    f"当前 {now_hour}:xx 在暂停时段({start_hour}-{end_hour})，跳过检测",
-                    logging.DEBUG,
+                    f"暂停时段 ({start_hour}:00-{end_hour}:00)，跳过检测",
+                    logging.INFO,
                 )
                 if not self._wait_interruptible(
                     self.PAUSE_CHECK_INTERVAL_SECONDS, step=self.PAUSE_CHECK_STEP_SECONDS
@@ -211,12 +215,17 @@ class NetworkMonitorCore:
                     break
                 continue
 
-            # 自动切换方案检测（有冷却时间，避免频繁调用子进程）
+            # 自动切换方案检测
             self._check_profile_switch()
+
+            # 重新读取测试站点（方案切换后可能已更新）
+            test_sites = self._get_test_sites()
 
             self.network_check_count += 1
             self.last_check_time = datetime.datetime.now()
-            self.log_message(f"[{self.network_check_count}] 开始网络检测")
+            targets_str = ", ".join(f"{h}:{p}" for h, p in test_sites)
+            self.log_message(
+                f"[#{self.network_check_count}] 网络检测 → {targets_str}")
 
             try:
                 network_ok = is_network_available(
@@ -234,18 +243,19 @@ class NetworkMonitorCore:
             if network_ok:
                 consecutive_failures = 0
                 self.login_attempt_count = 0
-                self.log_message(f"[{self.network_check_count}] 网络连接正常 ✓")
+                self.log_message(
+                    f"[#{self.network_check_count}] 网络正常，无需登录",
+                    logging.INFO)
             else:
                 consecutive_failures += 1
                 self.log_message(
-                    f"[{self.network_check_count}] 网络异常，连续失败 {consecutive_failures} 次",
+                    f"[#{self.network_check_count}] 网络异常，连续失败 {consecutive_failures} 次",
                     logging.WARNING,
                 )
 
-                login_ok, _ = self.attempt_login()
+                login_ok, login_msg = self.attempt_login()
                 if login_ok:
-                    # 登录成功后等待几秒再验证网络连接
-                    self.log_message("登录完成，等待 5 秒后验证网络连接...")
+                    self.log_message("登录完成，等待 5 秒后验证网络...")
                     if not self._wait_interruptible(5, step=5):
                         break
 
@@ -261,31 +271,56 @@ class NetworkMonitorCore:
                     if verify_ok:
                         consecutive_failures = 0
                         self.login_attempt_count = 0
-                        self.log_message(f"[{self.network_check_count}] 自动登录成功，网络已恢复 ✓")
+                        self.log_message(
+                            f"[#{self.network_check_count}] 登录成功，网络已恢复")
                     else:
-                        # 登录后网络仍不通，视为登录失败
                         self.login_attempt_count += 1
                         self.log_message(
-                            f"[{self.network_check_count}] 登录完成但网络仍不通，可能密码错误或认证失败",
+                            f"[#{self.network_check_count}] 登录表单提交成功但网络未恢复"
+                            f" — 可能密码错误或运营商不匹配",
                             logging.WARNING,
                         )
+                        if self.login_attempt_count == 2:
+                            send_notification(
+                                "Campus-Auth 登录异常",
+                                "登录完成但网络仍未恢复，可能密码错误或认证失败"
+                            )
+                        failed_count = self.login_attempt_count
                         action = self._login_retry_or_break()
                         if action == "break":
                             break
                         if action == "retry":
                             continue
+                        # "give_up"
+                        send_notification(
+                            "Campus-Auth 登录失败",
+                            f"连续 {failed_count} 次登录失败，等待下次检测周期"
+                        )
                 else:
                     self.login_attempt_count += 1
+                    max_retries, _ = self._get_retry_config()
                     self.log_message(
-                        f"[{self.network_check_count}] 自动登录失败，第 {self.login_attempt_count} 次",
+                        f"[#{self.network_check_count}] 登录失败 "
+                        f"(第{self.login_attempt_count}/{max_retries}次)",
                         logging.ERROR,
                     )
+                    # 第2次失败时发送桌面通知提醒
+                    if self.login_attempt_count == 2:
+                        send_notification(
+                            "Campus-Auth 登录失败",
+                            f"自动登录已失败 {self.login_attempt_count} 次，正在重试..."
+                        )
+                    failed_count = self.login_attempt_count
                     action = self._login_retry_or_break()
                     if action == "break":
                         break
                     if action == "retry":
                         continue
                     # "give_up" → fall through to normal interval wait
+                    send_notification(
+                        "Campus-Auth 登录失败",
+                        f"连续 {failed_count} 次登录失败，等待下次检测周期"
+                    )
 
             next_check = datetime.datetime.now() + datetime.timedelta(seconds=interval)
             self.log_message(
@@ -363,7 +398,12 @@ class NetworkMonitorCore:
                 self._on_profile_switch(profile_name)
 
     def attempt_login(self) -> tuple[bool, str]:
-        self.log_message("正在尝试登录...")
+        active_task = self.config.get("active_task", "") or "default"
+        self.log_message(
+            f"开始登录认证 → URL={self.config.get('auth_url', '?')} "
+            f"用户={self.config.get('username', '?')} "
+            f"运营商={self.config.get('isp', '无') or '无'} "
+            f"任务={active_task}")
         try:
             handler = LoginAttemptHandler(self.config, cancel_event=self._cancel_login)
             # 在同步线程中安全运行异步代码：每次创建独立事件循环

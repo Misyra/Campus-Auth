@@ -65,7 +65,7 @@ export const taskMethods = {
         };
         this.jsonError = '';
       } catch (error) {
-        this.notify(false, '加载任务失败');
+        this.toastOnly(false, '加载任务失败');
       }
     } else {
       this.editingTask = {
@@ -87,7 +87,7 @@ export const taskMethods = {
         this.jsonError = '';
       }
     } catch (error) {
-      this.notify(false, '加载模板失败');
+      this.toastOnly(false, '加载模板失败');
     }
   },
   validateJson() {
@@ -109,12 +109,12 @@ export const taskMethods = {
       this.editingTask.json = JSON.stringify(parsed, null, 2);
       this.jsonError = '';
     } catch (e) {
-      this.notify(false, 'JSON 格式错误，无法格式化');
+      this.toastOnly(false, 'JSON 格式错误，无法格式化');
     }
   },
   async saveTask() {
     if (!this.editingTask || !this.editingTask.id) {
-      this.notify(false, '请输入任务ID');
+      this.toastOnly(false, '请输入任务ID');
       return;
     }
     let config;
@@ -122,7 +122,7 @@ export const taskMethods = {
       config = JSON.parse(this.editingTask.json);
     } catch (e) {
       this.jsonError = e.message;
-      this.notify(false, 'JSON 格式错误: ' + e.message);
+      this.toastOnly(false, 'JSON 格式错误: ' + e.message);
       return;
     }
     config.name = this.editingTask.name || config.name;
@@ -161,6 +161,7 @@ export const taskMethods = {
         if (this.dangerCountdown <= 0) {
           clearInterval(timer);
           this.dangerCountdown = 0;
+          this.confirmDanger(false); // 倒计时结束自动拒绝
         }
       }, 1000);
       this._dangerTimer = timer;
@@ -208,7 +209,7 @@ export const taskMethods = {
       };
       this.jsonError = '';
     } catch (error) {
-      this.notify(false, '复制任务失败');
+      this.toastOnly(false, '复制任务失败');
     }
   },
   exportTask(taskId) {
@@ -223,7 +224,7 @@ export const taskMethods = {
       URL.revokeObjectURL(url);
       this.frontendLogger.info('tasks', '任务已导出');
     }).catch(() => {
-      this.notify(false, '导出失败');
+      this.toastOnly(false, '导出失败');
     });
   },
   importTask() {
@@ -249,7 +250,7 @@ export const taskMethods = {
           this.jsonError = '';
           this.frontendLogger.info('tasks', '已导入任务配置，请检查后保存');
         } catch {
-          this.notify(false, '文件不是有效的 JSON');
+          this.toastOnly(false, '文件不是有效的 JSON');
         }
       };
       reader.readAsText(file);
@@ -268,10 +269,10 @@ export const taskMethods = {
     try {
       const { data } = await this.$api.post('/api/safe-mode');
       this.safeMode = data.enabled;
-      this.notify(true, `安全模式已${data.enabled ? '开启' : '关闭'}`);
+      this.toastOnly(true, `安全模式已${data.enabled ? '开启' : '关闭'}`);
     } catch {
       this.safeMode = !this.safeMode;
-      this.notify(false, '切换安全模式失败');
+      this.toastOnly(false, '切换安全模式失败');
     }
   },
 
