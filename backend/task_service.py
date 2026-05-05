@@ -62,7 +62,7 @@ class TaskService:
     def save_task(self, task_id: str, config: dict[str, Any]) -> tuple[bool, str]:
         task_id = normalize_task_id(task_id)
         if not self._is_valid_task_id(task_id):
-            return False, "任务ID只能包含字母、数字和下划线"
+            return False, "任务ID必须以字母开头，且只能包含字母、数字和下划线"
 
         if not config.get("name"):
             return False, "任务名称不能为空"
@@ -107,7 +107,7 @@ class TaskService:
     def set_active_task(self, task_id: str) -> tuple[bool, str]:
         task_id = normalize_task_id(task_id)
         if not self._is_valid_task_id(task_id):
-            return False, "任务ID只能包含字母、数字和下划线"
+            return False, "任务ID必须以字母开头，且只能包含字母、数字和下划线"
 
         if not self.task_manager.load_task(task_id):
             return False, "任务不存在"
