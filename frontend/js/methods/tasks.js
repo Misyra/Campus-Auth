@@ -161,7 +161,6 @@ export const taskMethods = {
         if (this.dangerCountdown <= 0) {
           clearInterval(timer);
           this.dangerCountdown = 0;
-          this.confirmDanger(false); // 倒计时结束自动拒绝
         }
       }, 1000);
       this._dangerTimer = timer;

@@ -33,7 +33,6 @@
                 <span v-if="task.source === 'builtin'" class="task-source-badge builtin" title="项目内置任务">内置</span>
                 <span v-else-if="task.source === 'signed'" class="task-source-badge signed" title="已签名验证">签名</span>
               </h3>
-              <p>{{ task.description }}</p>
             </div>
             <div class="task-actions">
               <button class="btn btn-sm" @click="setActiveTask(task.id)" :disabled="activeTaskId === task.id">
@@ -66,7 +65,7 @@
         <div class="form-group">
           <label>任务ID</label>
           <input v-model="editingTask.id" type="text" placeholder="task_id" :disabled="!editingTask._isNew" />
-          <span class="hint">只能包含字母、数字和下划线</span>
+          <span class="hint">必须以字母开头，且只能包含字母、数字和下划线</span>
         </div>
         <div class="form-group">
           <label>任务名称</label>
