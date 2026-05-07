@@ -68,13 +68,14 @@ class NetworkMonitorCore:
         self._last_gateway_check_time: float = 0
 
     def log_message(self, message: str, level: int = logging.INFO) -> None:
-        self.logger.log(level, message)
         if self.log_callback:
             self.log_callback(
                 message,
                 logging.getLevelName(level),
                 "monitor.core",
             )
+        else:
+            self.logger.log(level, message)
 
     def snapshot(self) -> Dict[str, Any]:
         return {

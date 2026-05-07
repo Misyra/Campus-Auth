@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import re
 import time
 from abc import ABC, abstractmethod
@@ -18,7 +17,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger("task_executor")
+from src.utils.logging import get_logger
+
+logger = get_logger("task_executor", side="BACKEND")
 
 # 任务ID验证正则
 TASK_ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")

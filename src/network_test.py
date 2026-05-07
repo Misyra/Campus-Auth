@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import socket
 import sys
 import time
@@ -8,7 +7,9 @@ from typing import Iterable, Sequence
 
 import httpx
 
-logger = logging.getLogger("network_test")
+from src.utils.logging import get_logger
+
+logger = get_logger("network_test", side="BACKEND")
 
 
 def is_local_network_connected() -> bool:

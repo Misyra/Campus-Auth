@@ -49,7 +49,7 @@
                 class="field-help"
                 tabindex="0"
                 role="note"
-                data-tip="会同步到后端运行配置、.env 和任务模板中的 {{url}} 变量。"
+                data-tip="校园网认证页面的地址，以 http:// 或 https:// 开头。会同步到后端运行配置和任务模板中的 {{url}} 变量。"
               >?</span>
             </div>
             <input
@@ -66,7 +66,7 @@
                 class="field-help"
                 tabindex="0"
                 role="note"
-                data-tip="任务执行时会先识别运营商下拉框：若选择“无”则跳过运营商步骤；若选择“自定义”，将按你输入的关键字匹配下拉选项文本。"
+                data-tip=”校园网登录页面的运营商选择。选择”无”则跳过运营商步骤；选择”自定义”可输入关键字匹配下拉选项文本，适用于非标准运营商名称。”
               >?</span>
             </div>
             <select id="settings-carrier" v-model="config.carrier" name="carrier">
@@ -152,7 +152,7 @@
           <div class="form-group">
             <div class="field-label-row">
               <label for="settings-interval">检测间隔（分钟）</label>
-              <span class="field-help" tabindex="0" role="note" data-tip="每隔多久检测一次网络是否可用，检测到断网时自动触发登录。">?</span>
+              <span class="field-help" tabindex="0" role="note" data-tip="每隔多久检测一次网络连通性。检测到断网时自动触发浏览器登录流程。建议 3~10 分钟，过短会增加资源占用。">?</span>
             </div>
             <input id="settings-interval" v-model.number="config.check_interval_minutes" type="number" min="1" max="1440" />
           </div>
@@ -167,7 +167,7 @@
             <div class="form-group">
               <div class="field-label-row">
                 <label for="settings-backend-log-level">后端日志级别</label>
-                <span class="field-help" tabindex="0" role="note" data-tip="控制控制台显示的日志详细程度。DEBUG 最详细，CRITICAL 仅显示致命错误。">?</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="控制控制台和日志文件记录的详细程度。DEBUG 最详细（含网络检测细节），INFO 显示常规运行信息，WARNING 仅显示警告和错误。修改后立即生效。">?</span>
               </div>
               <select id="settings-backend-log-level" v-model="config.backend_log_level">
                 <option>DEBUG</option>
@@ -180,7 +180,7 @@
             <div class="form-group">
               <div class="field-label-row">
                 <label for="settings-frontend-log-level">前端日志级别</label>
-                <span class="field-help" tabindex="0" role="note" data-tip="控制 Web 控制台日志面板显示的日志详细程度。">?</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="控制 Web 控制台日志面板显示的日志详细程度。仅影响前端展示，不影响日志文件写入。">?</span>
               </div>
               <select id="settings-frontend-log-level" v-model="config.frontend_log_level">
                 <option>DEBUG</option>
@@ -193,14 +193,18 @@
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label for="settings-log-retention">日志保留天数</label>
+              <div class="field-label-row">
+                <label for="settings-log-retention">日志保留天数</label>
+                <span class="field-help" tabindex="0" role="note" data-tip="日志按天生成独立文件，超过设定天数的旧日志会自动清理。设为 7 可平衡排查需求与磁盘占用。">?</span>
+              </div>
               <input id="settings-log-retention" v-model.number="config.log_retention_days" type="number" min="1" max="365" />
-              <span class="hint">日志按天存储，超过天数的自动删除</span>
             </div>
             <div class="form-group">
-              <label for="settings-sc-retention">截图保留天数</label>
+              <div class="field-label-row">
+                <label for="settings-sc-retention">截图保留天数</label>
+                <span class="field-help" tabindex="0" role="note" data-tip="登录失败时自动保存的截图和调试截图的保留天数，过期自动删除。">?</span>
+              </div>
               <input id="settings-sc-retention" v-model.number="config.screenshot_retention_days" type="number" min="1" max="90" />
-              <span class="hint">失败截图和调试截图的保留天数</span>
             </div>
           </div>
           <div class="toggle-group">
@@ -209,7 +213,7 @@
                 <input type="checkbox" v-model="config.auto_start" />
                 <span class="toggle-slider"></span>
                 <span class="toggle-label">启动后自动监控</span>
-                <span class="field-help" tabindex="0" role="note" data-tip="开启后软件启动即开始检测网络，断网时自动登录。关闭则启动后等待手动点击「启动监控」。">?</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="开启后软件启动即自动开始检测网络，断网时自动触发登录。关闭则需手动点击「启动监控」才会开始工作。配合开机自启可实现全自动登录。">?</span>
               </label>
             </div>
           </div>
@@ -223,36 +227,42 @@
                   class="field-help"
                   tabindex="0"
                   role="note"
-                  data-tip="启动后执行一次登录，成功或失败均自动退出软件。适用于只需登录一次、不需要持续监控的场景。"
+                  data-tip="启动后执行一次登录，无论成功或失败均自动退出软件。适用于搭配开机自启使用，只需登录一次、不需要持续监控的场景。"
                 >?</span>
               </label>
             </div>
           </div>
           <div class="toggle-group">
-            <label class="toggle">
-              <input type="checkbox" v-model="config.access_log" />
-              <span class="toggle-slider"></span>
-              <span class="toggle-label">显示 HTTP 请求日志</span>
-            </label>
-          </div>
-          <div class="toggle-group">
-            <label class="toggle">
-              <input type="checkbox" v-model="config.minimize_to_tray" />
-              <span class="toggle-slider"></span>
-              <span class="toggle-label">最小化到系统托盘</span>
-            </label>
+            <div class="toggle-with-help">
+              <label class="toggle toggle-help-inline">
+                <input type="checkbox" v-model="config.access_log" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">显示 HTTP 请求日志</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="开启后会记录每次 API 请求的方法、路径和耗时。调试时有用，日常使用建议关闭以减少日志量。">?</span>
+              </label>
+            </div>
           </div>
           <div class="toggle-group">
             <div class="toggle-with-help">
               <label class="toggle toggle-help-inline">
-                <input type="checkbox" v-model="config.auto_open_browser" />
+                <input type="checkbox" v-model="config.minimize_to_tray" />
                 <span class="toggle-slider"></span>
-                <span class="toggle-label">启动后自动打开浏览器</span>
+                <span class="toggle-label">最小化到系统托盘</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="关闭窗口时最小化到系统托盘，可通过托盘图标重新打开界面。关闭此选项后关闭窗口程序仍在后台运行，但只能手动输入地址访问。">?</span>
+              </label>
+            </div>
+          </div>
+          <div class="toggle-group">
+            <div class="toggle-with-help">
+              <label class="toggle toggle-help-inline">
+                <input type="checkbox" :checked="!config.auto_open_browser" @change="config.auto_open_browser = !$event.target.checked" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">静默启动</span>
                 <span
                   class="field-help"
                   tabindex="0"
                   role="note"
-                  data-tip="启动软件后自动使用默认浏览器打开 Web 控制台页面。关闭后可通过 --no-browser 参数或手动访问地址。"
+                  data-tip="开启后启动软件时不自动打开浏览器窗口。如果你希望开机后后台静默登录，建议开启。"
                 >?</span>
               </label>
             </div>
@@ -264,7 +274,7 @@
                 class="field-help"
                 tabindex="0"
                 role="note"
-                data-tip="支持 host 或 host:port，多个目标使用英文逗号分隔。"
+                data-tip="用于检测网络是否连通的目标地址，支持 host 或 host:port 格式，多个目标用英文逗号分隔。任一目标可达即判定网络正常。"
               >?</span>
             </div>
             <input
@@ -284,7 +294,7 @@
                   class="field-help"
                   tabindex="0"
                   role="note"
-                  data-tip="启用后会在设定时段内暂停自动登录，避免深夜频繁认证。"
+                  data-tip="启用后在设定时段内暂停自动登录和网络检测。适用于深夜校园网维护时段，避免无意义的认证请求。"
                 >?</span>
               </label>
             </div>
@@ -293,14 +303,14 @@
             <div class="form-group">
               <div class="field-label-row">
                 <label for="settings-pause-start">暂停开始（小时）</label>
-                <span class="field-help" tabindex="0" role="note" data-tip="该时刻起停止自动登录。例如设为 0 表示从 0:00 开始暂停。">?</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="从该时刻起停止自动登录。例如设为 0 表示从 0:00 开始暂停检测和登录。">?</span>
               </div>
               <input id="settings-pause-start" v-model.number="config.pause_start_hour" type="number" min="0" max="23" />
             </div>
             <div class="form-group">
               <div class="field-label-row">
                 <label for="settings-pause-end">暂停结束（小时）</label>
-                <span class="field-help" tabindex="0" role="note" data-tip="该时刻恢复自动登录。例如设为 6 表示 6:00 后恢复。跨越午夜也支持（如 23→5）。">?</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="到该时刻恢复自动登录。例如设为 6 表示 6:00 后恢复检测。支持跨越午夜（如暂停 23:00~5:00）。">?</span>
               </div>
               <input id="settings-pause-end" v-model.number="config.pause_end_hour" type="number" min="0" max="23" />
             </div>
@@ -372,7 +382,7 @@
           <div class="form-group">
             <div class="field-label-row">
               <label for="settings-browser-timeout">页面操作超时（毫秒）</label>
-              <span class="field-help" tabindex="0" role="note" data-tip="任务执行时每个浏览器步骤（点击、输入、等待元素等）的超时时间。不影响整体登录流程，仅控制单步操作。">?</span>
+              <span class="field-help" tabindex="0" role="note" data-tip="任务执行时每个浏览器步骤（点击、输入、等待元素加载等）的最长等待时间。超时则该步骤失败，不影响整体登录流程的其他步骤。">?</span>
             </div>
             <input id="settings-browser-timeout" v-model.number="config.browser_timeout" type="number" min="1000" max="60000" />
           </div>
@@ -382,7 +392,7 @@
                 <input type="checkbox" v-model="config.headless" />
                 <span class="toggle-slider"></span>
                 <span class="toggle-label">无头浏览器模式</span>
-                <span class="field-help" tabindex="0" role="note" data-tip="开启后浏览器在后台运行，不显示窗口。">?</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="开启后浏览器在后台运行，不显示窗口。关闭可观察浏览器操作过程，便于调试登录问题。">?</span>
               </label>
             </div>
           </div>
@@ -392,7 +402,7 @@
                 <input type="checkbox" v-model="config.browser_low_resource_mode" />
                 <span class="toggle-slider"></span>
                 <span class="toggle-label">低资源模式（禁用图片）</span>
-                <span class="field-help" tabindex="0" role="note" data-tip="会拦截图片请求，降低带宽和内存占用。">?</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="拦截页面中的图片资源请求，减少带宽消耗和内存占用。对登录流程无影响，建议保持开启。">?</span>
               </label>
             </div>
           </div>
@@ -402,7 +412,7 @@
                 <input type="checkbox" v-model="config.browser_disable_web_security" />
                 <span class="toggle-slider"></span>
                 <span class="toggle-label">禁用同源策略</span>
-                <span class="field-help" tabindex="0" role="note" data-tip="关闭浏览器同源安全策略，仅在认证页面跨域请求失败时启用。">?</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="关闭浏览器的同源安全策略（CORS）。仅在认证页面因跨域请求被拦截而登录失败时才需要启用，一般情况请保持关闭。">?</span>
               </label>
             </div>
           </div>
@@ -420,7 +430,7 @@
                 <input type="checkbox" v-model="safeMode" @change="toggleSafeMode()" />
                 <span class="toggle-slider"></span>
                 <span class="toggle-label">安全模式</span>
-                <span class="field-help" tabindex="0" role="note" data-tip="使用 Chromium 默认设置启动浏览器，不注入任何自定义参数（UA、请求头、启动参数等）。适用于反爬严格的网站。">?</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="使用 Chromium 原始设置启动浏览器，不注入任何自定义参数（UA、请求头、启动参数等）。适用于认证系统检测浏览器指纹的场景，可降低被识别为自动化工具的风险。">?</span>
               </label>
             </div>
           </div>
@@ -431,7 +441,7 @@
             <div class="form-group">
               <div class="field-label-row">
                 <label for="settings-browser-args">自定义浏览器参数</label>
-                <span class="field-help" tabindex="0" role="note" data-tip="每行一个 Chromium 启动参数，会与基础参数合并。留空则仅使用基础参数。">?</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="每行填写一个 Chromium 启动参数，会与程序内置的基础参数合并。留空则仅使用基础参数。常见参数：--disable-gpu、--no-sandbox。">?</span>
               </div>
               <textarea
                 id="settings-browser-args"
@@ -444,14 +454,14 @@
             <div class="form-group">
               <div class="field-label-row">
                 <label for="settings-browser-ua">用户代理</label>
-                <span class="field-help" tabindex="0" role="note" data-tip="留空时使用 Chromium 默认 UA。仅在认证系统对 UA 有要求时再修改。">?</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="浏览器的 User-Agent 字符串。留空使用 Chromium 默认值，仅在认证系统对 UA 有特殊要求时再修改。">?</span>
               </div>
               <input id="settings-browser-ua" v-model.trim="config.browser_user_agent" type="text" placeholder="留空使用 Chromium 默认值" />
             </div>
             <div class="form-group">
               <div class="field-label-row">
                 <label for="settings-browser-headers">自定义请求头（JSON）</label>
-                <span class="field-help" tabindex="0" role="note" data-tip="请输入 JSON 对象，会作为额外 HTTP 请求头注入浏览器上下文。">?</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="填写 JSON 对象格式的请求头，会注入浏览器所有请求中。常用于设置 Referer、Cookie 等自定义头。">?</span>
               </div>
               <textarea
                 id="settings-browser-headers"

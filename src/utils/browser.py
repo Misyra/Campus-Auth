@@ -8,7 +8,7 @@ import json
 import threading
 
 from .exceptions import LoginCancelledError
-from .logging import LoggerSetup
+from .logging import setup_logger
 
 
 class BrowserContextManager:
@@ -25,7 +25,7 @@ class BrowserContextManager:
         self.config = config
         self.cancel_event = cancel_event
         self.browser_settings = config.get("browser_settings", {})
-        self.logger = LoggerSetup.setup_logger(
+        self.logger = setup_logger(
             f"{__name__}_browser", config.get("logging", {})
         )
 

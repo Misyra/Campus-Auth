@@ -400,6 +400,8 @@ def save_config(payload: MonitorConfigPayload) -> ActionResponse:
 
         # 原子化保存：系统设置 + 活动方案，使用 MonitorService 内部的 ProfileService 实例
         save_config_combined(payload, service._profile_service)
+        # 热更新日志级别
+        LogConfigCenter.get_instance().set_level(payload.backend_log_level)
         # 同步更新 MonitorService 运行时配置
         service.reload_config()
         # 使全局 profile_service 缓存失效，确保其他 API 端点读到最新数据
@@ -1066,8 +1068,8 @@ def run() -> None:
     global _access_log_enabled
     _access_log_enabled = access_log_enabled
 
-    if not access_log_enabled:
-        logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    # 始终禁用 Uvicorn 内置 access log，由自定义中间件统一处理，避免重复输出
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
     uvicorn.run(
         "backend.main:app",
@@ -1075,7 +1077,7 @@ def run() -> None:
         port=_resolve_port(),
         reload=False,
         log_level="info",
-        access_log=access_log_enabled,
+        access_log=False,
     )
 
 
