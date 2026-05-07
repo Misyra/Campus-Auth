@@ -7,7 +7,7 @@
 import asyncio
 from typing import Dict, Any, Tuple, Callable
 
-from .logging import LoggerSetup
+from .logging import setup_logger
 
 
 class SimpleRetryHandler:
@@ -16,7 +16,7 @@ class SimpleRetryHandler:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.retry_settings = config.get('retry_settings', {})
-        self.logger = LoggerSetup.setup_logger(f"{__name__}_retry", config.get('logging', {}))
+        self.logger = setup_logger(f"{__name__}_retry", config.get('logging', {}))
     
     async def retry_with_simple_backoff(self, operation: Callable, max_retries: int = None) -> Tuple[bool, Any, str]:
         """

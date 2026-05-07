@@ -3,12 +3,13 @@
 
 from __future__ import annotations
 
-import logging
 import os
 import platform
 import subprocess
 
-logger = logging.getLogger("notify")
+from src.utils.logging import get_logger
+
+logger = get_logger("notify", side="BACKEND")
 
 _SYSTEM = platform.system()
 

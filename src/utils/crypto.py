@@ -11,11 +11,12 @@
 
 import base64
 import hashlib
-import logging
 import os
 from pathlib import Path
 
-logger = logging.getLogger("crypto")
+from src.utils.logging import get_logger
+
+logger = get_logger("crypto", side="BACKEND")
 
 _KEY_DIR = Path.home() / ".campus_network_auth"
 _KEY_FILE = _KEY_DIR / ".enc_key"

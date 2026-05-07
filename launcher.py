@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 import urllib.parse
+import webbrowser
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -816,6 +817,7 @@ def main():
     if is_service_running(port):
         log_success(f"检测到服务已在运行: http://127.0.0.1:{port}")
         log_info("已跳过重复启动")
+        webbrowser.open(f"http://127.0.0.1:{port}")
         wait_before_duplicate_exit()
         return
 
@@ -827,12 +829,28 @@ def main():
         launch_env["AUTO_INSTALL_PLAYWRIGHT"] = "false"
 
     try:
-        subprocess.run([str(PYTHON_EXE), str(PROJECT_ROOT / "app.py")], env=launch_env)
-    except KeyboardInterrupt:
-        log_info("应用被用户中断")
+        proc = subprocess.Popen([str(PYTHON_EXE), str(PROJECT_ROOT / "app.py"), "--no-browser"], env=launch_env)
     except Exception as e:
         log_error(f"应用启动失败: {e}")
         sys.exit(1)
+
+    # 等待服务就绪后打开浏览器
+    opened = False
+    for _ in range(20):
+        time.sleep(1)
+        if is_service_running(port):
+            log_success(f"服务已启动: http://127.0.0.1:{port}")
+            webbrowser.open(f"http://127.0.0.1:{port}")
+            opened = True
+            break
+
+    if not opened:
+        log_warning("等待服务启动超时，未自动打开浏览器")
+
+    try:
+        proc.wait()
+    except KeyboardInterrupt:
+        log_info("应用被用户中断")
 
 
 if __name__ == "__main__":

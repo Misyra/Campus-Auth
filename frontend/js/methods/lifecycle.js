@@ -84,7 +84,7 @@ export const lifecycleMethods = {
   _shouldShowLog(level) {
     // 根据前端日志级别过滤 WebSocket 日志显示
     // 完整日志始终写入文件，前端仅按级别展示
-    const frontendLevel = (this.config.frontend_log_level || 'WARNING').toUpperCase();
+    const frontendLevel = (this.config.frontend_log_level || 'INFO').toUpperCase();
     const levels = { DEBUG: 0, INFO: 1, WARNING: 2, ERROR: 3, CRITICAL: 4 };
     const msgLevel = levels[String(level || '').toUpperCase()] ?? 1;
     const minLevel = levels[frontendLevel] ?? 2;

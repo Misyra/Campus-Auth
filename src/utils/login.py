@@ -13,7 +13,7 @@ from typing import Any, Dict
 from ..task_executor import TaskExecutor, TaskManager
 from .browser import BrowserContextManager
 from .exceptions import LoginCancelledError
-from .logging import LoggerSetup
+from .logging import setup_logger
 from .time import TimeUtils
 
 
@@ -30,7 +30,7 @@ class LoginAttemptHandler:
         """
         self.config = config
         self.cancel_event = cancel_event
-        self.logger = LoggerSetup.setup_logger(
+        self.logger = setup_logger(
             f"{__name__}_login", config.get("logging", {})
         )
 
