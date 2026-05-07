@@ -23,6 +23,7 @@ _ENC_PREFIX = "ENC:"
 
 _cached_raw_key: bytes | None = None
 _cached_fernet_key: bytes | None = None
+_decryption_failed: bool = False
 
 
 def _get_or_create_key() -> bytes:
@@ -89,6 +90,8 @@ def encrypt_password(plaintext: str) -> str:
     key = _derive_fernet_key()
     f = Fernet(key)
     encrypted = f.encrypt(plaintext.encode("utf-8"))
+    # 新密码加密成功，清除之前的解密失败标记
+    clear_decryption_error()
     return f"{_ENC_PREFIX}{encrypted.decode('ascii')}"
 
 
@@ -113,6 +116,8 @@ def decrypt_password(ciphertext: str) -> str:
         return _simple_deobfuscate(encrypted_data)
     except Exception:
         # 解密失败：可能是密钥变更，记录错误并返回空字符串
+        global _decryption_failed
+        _decryption_failed = True
         logger.error(
             "密码解密失败（可能是密钥变更或数据损坏），"
             "请在设置页面重新输入密码"
@@ -123,6 +128,17 @@ def decrypt_password(ciphertext: str) -> str:
 def is_encrypted(value: str) -> bool:
     """判断值是否已加密"""
     return bool(value and value.startswith(_ENC_PREFIX))
+
+
+def has_decryption_error() -> bool:
+    """检查是否有解密失败记录"""
+    return _decryption_failed
+
+
+def clear_decryption_error() -> None:
+    """清除解密失败标记（重新输入密码后调用）"""
+    global _decryption_failed
+    _decryption_failed = False
 
 
 def mask_password(value: str) -> str:

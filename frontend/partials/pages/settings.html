@@ -235,6 +235,21 @@
               <span class="toggle-label">最小化到系统托盘</span>
             </label>
           </div>
+          <div class="toggle-group">
+            <div class="toggle-with-help">
+              <label class="toggle toggle-help-inline">
+                <input type="checkbox" v-model="config.auto_open_browser" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">启动后自动打开浏览器</span>
+                <span
+                  class="field-help"
+                  tabindex="0"
+                  role="note"
+                  data-tip="启动软件后自动使用默认浏览器打开 Web 控制台页面。关闭后可通过 --no-browser 参数或手动访问地址。"
+                >?</span>
+              </label>
+            </div>
+          </div>
           <div class="form-group">
             <div class="field-label-row">
               <label for="settings-network-targets">网络检测目标（逗号分隔）</label>

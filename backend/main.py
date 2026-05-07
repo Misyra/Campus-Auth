@@ -360,7 +360,9 @@ def health() -> dict[str, str]:
 
 
 @app.get("/api/init-status")
-def get_init_status() -> dict[str, bool]:
+def get_init_status() -> dict:
+    from src.utils.crypto import has_decryption_error
+
     config = service.get_config()
     is_initialized = bool(config.username and config.password)
     if not is_initialized:
@@ -370,7 +372,10 @@ def get_init_status() -> dict[str, bool]:
             "已设置" if config.password else "空",
             f"'{config.auth_url}'" if config.auth_url else "空",
         )
-    return {"initialized": is_initialized}
+    return {
+        "initialized": is_initialized,
+        "password_decryption_failed": has_decryption_error(),
+    }
 
 
 @app.get("/api/config", response_model=MonitorConfigPayload)
@@ -562,6 +567,9 @@ async def debug_start(request: Request) -> dict:
         for k, v in env_vars.items():
             resolved_url = resolved_url.replace("{{" + k + "}}", v)
         env_vars["LOGIN_URL"] = resolved_url
+    # 确保 LOGIN_URL 始终可用
+    if not env_vars.get("LOGIN_URL", "").strip() and runtime_config.get("auth_url"):
+        env_vars["LOGIN_URL"] = runtime_config["auth_url"]
     if runtime_config.get("isp"):
         env_vars["ISP"] = runtime_config["isp"]
     if runtime_config.get("username"):
@@ -593,7 +601,8 @@ async def debug_start(request: Request) -> dict:
 
         from src.task_executor import TaskExecutor
 
-        executor = TaskExecutor(task, env_vars, screenshot_dir=TEMP_DIR)
+        browser_timeout = runtime_config.get("browser_settings", {}).get("timeout", 10000)
+        executor = TaskExecutor(task, env_vars, screenshot_dir=TEMP_DIR, default_timeout=browser_timeout)
 
         _debug = {
             "session": session,

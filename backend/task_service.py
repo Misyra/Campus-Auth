@@ -11,11 +11,6 @@ task_logger = get_logger("backend.task_service", side="BACKEND")
 # 危险步骤类型：包含任意 JS 执行
 _DANGEROUS_STEP_TYPES = {"eval", "custom_js"}
 
-# 任务来源标记
-_TASK_SOURCE_BUILTIN = "builtin"
-_TASK_SOURCE_SIGNED = "signed"
-_TASK_SOURCE_API = "api"
-
 
 def _check_dangerous_steps(task_data: dict[str, Any]) -> list[dict[str, Any]]:
     """检查任务中的危险步骤，返回详细信息列表（含代码内容）"""
@@ -69,13 +64,6 @@ class TaskService:
 
         if not config.get("steps"):
             return False, "至少需要一个执行步骤"
-
-        # 如果已有同名任务且来源是 builtin/signed，保留原来源
-        existing = self.task_manager.load_task(task_id)
-        if existing and existing.source in (_TASK_SOURCE_BUILTIN, _TASK_SOURCE_SIGNED):
-            config["source"] = existing.source
-        elif "source" not in config:
-            config["source"] = _TASK_SOURCE_API
 
         # 检查危险步骤并记录警告
         warnings = _check_dangerous_steps(config)

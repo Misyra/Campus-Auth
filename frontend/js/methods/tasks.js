@@ -129,6 +129,10 @@ export const taskMethods = {
     config.description = this.editingTask.description || config.description;
     config.url = this.editingTask.url || config.url;
 
+    // 清理已废弃字段
+    delete config.version;
+    delete config.source;
+
     // 客户端检测危险步骤
     const dangers = detectDangerousSteps(config);
     if (dangers.length > 0) {

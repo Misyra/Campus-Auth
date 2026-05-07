@@ -134,6 +134,9 @@ class LoginAttemptHandler:
                 for k, v in env_vars.items():
                     resolved_url = resolved_url.replace("{{" + k + "}}", v)
                 env_vars["LOGIN_URL"] = resolved_url
+            # 确保 LOGIN_URL 始终可用，避免无 URL 任务卡住浏览器
+            if not env_vars.get("LOGIN_URL", "").strip() and login_url:
+                env_vars["LOGIN_URL"] = login_url
             if isp:
                 env_vars["ISP"] = isp
             if username:
@@ -154,7 +157,8 @@ class LoginAttemptHandler:
                 if not browser_manager.page:
                     return False, "任务执行失败：浏览器页面初始化失败"
 
-                executor = TaskExecutor(task, env_vars)
+                browser_timeout = self.config.get("browser_settings", {}).get("timeout", 10000)
+                executor = TaskExecutor(task, env_vars, default_timeout=browser_timeout)
                 success, message = await executor.execute(browser_manager.page)
                 total = _time.perf_counter() - phase_start
                 if success:

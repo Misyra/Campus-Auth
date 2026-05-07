@@ -25,6 +25,9 @@ export const lifecycleMethods = {
     try {
       const { data } = await this.$api.get('/api/init-status');
       this.showWizard = !data.initialized;
+      if (data.password_decryption_failed) {
+        this.notify(false, '密码解密失败，请在设置页面重新输入密码');
+      }
     } catch {
       this.showWizard = false;
     }

@@ -284,32 +284,6 @@ body {
   border-top-color: var(--warning);
 }
 
-/* 任务来源标签 */
-.task-source-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.task-source-badge.builtin {
-  background: rgba(16, 185, 129, 0.15);
-  color: var(--success);
-}
-
-.task-source-badge.api {
-  background: rgba(245, 158, 11, 0.15);
-  color: var(--warning);
-}
-
-.task-source-badge.signed {
-  background: rgba(59, 130, 246, 0.15);
-  color: var(--accent);
-}
-
 /* JSON 校验错误 */
 .json-error {
   margin-top: 6px;
