@@ -1,72 +1,60 @@
 {
-  "name": "样例2",
-  "description": "案例2：通过明确选择器执行账号、密码、运营商和登录按钮步骤（不能直接使用，请自行修改）",
-  "version": "3.3.2",
-  "source": "builtin",
+  "name": "DR.COM 模板",
+  "description": "适用于 DR.COM / 深澜 / 常见 Web 认证页面，通过表单提交判断结果",
   "url": "{{LOGIN_URL}}",
-  "timeout": 30000,
+  "timeout": 20000,
+  "variables": {
+    "username": "{{USERNAME}}",
+    "password": "{{PASSWORD}}",
+    "isp": "{{ISP}}"
+  },
   "steps": [
     {
-      "id": "navigate",
-      "type": "navigate",
-      "description": "打开认证页面",
-      "timeout": 10000,
-      "url": "{{url}}",
-      "wait_until": "domcontentloaded"
+      "id": "fill_username",
+      "type": "custom_js",
+      "description": "填写账号（兼容 DDDDD 字段）",
+      "script": "(() => { const val = '{{username}}'.trim(); if (!val) throw new Error('账号为空'); const el = document.querySelector(\"input[name='DDDDD'], input[name='username'], input[name='userId']\"); if (!el) throw new Error('找不到账号输入框'); const nativeSet=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set; nativeSet.call(el,val); el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); return true; })()"
     },
     {
-      "id": "input_username",
-      "type": "input",
-      "description": "输入账号（元素识别）",
-      "timeout": 5000,
-      "selector": "input[name='DDDDD'], input[name='username'], #username, input[placeholder*='账号'], input[placeholder*='用户名']",
-      "value": "{{username}}"
-    },
-    {
-      "id": "input_password",
-      "type": "input",
-      "description": "输入密码（元素识别）",
-      "timeout": 5000,
-      "selector": "input[name='upass'], input[name='password'], input[type='password'], #password",
-      "value": "{{password}}"
+      "id": "fill_password",
+      "type": "custom_js",
+      "description": "填写密码（兼容 upass 字段）",
+      "script": "(() => { const val = '{{password}}'.trim(); if (!val) throw new Error('密码为空'); const el = document.querySelector(\"input[name='upass'], input[name='password'], input[type='password']\"); if (!el) throw new Error('找不到密码输入框'); const nativeSet=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set; nativeSet.call(el,val); el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); return true; })()"
     },
     {
       "id": "select_isp",
-      "type": "select",
-      "description": "选择运营商下拉（无值或未检测到自动跳过）",
-      "timeout": 3000,
-      "selector": "select[name='ISP_select'], select[name='isp'], #isp, select[id*='运营商'], select[name*='carrier']",
-      "value": "{{isp}}"
-    },
-    {
-      "id": "save_url",
       "type": "custom_js",
-      "description": "记录登录前 URL",
-      "script": "(() => { window.__preLoginUrl = window.location.href; return true; })()"
+      "description": "选择运营商（下拉框 / 单选按钮 / 按钮组，无值自动跳过）",
+      "script": "(() => { const isp = String('{{isp}}' || '').trim(); if (!isp) return true; const vis = el => { if(!el) return false; const s=getComputedStyle(el); if(!s||s.display==='none'||s.visibility==='hidden') return false; const r=el.getBoundingClientRect(); return r.width>1&&r.height>1; }; const norm = s => String(s||'').replace(/\\s+/g,'').toLowerCase(); const want = norm(isp); const carrierKw = /移动|联通|电信|铁通|教育网|cmcc|cucc|ctcc|cernet|mobile|unicom|telecom/i; const sels = Array.from(document.querySelectorAll(\"select[name='ISP_select'], select[name='isp'], select[name='ISP']\")).filter(vis); for (const sel of sels) { const opts = Array.from(sel.options||[]); let best=null, bestS=-999; for (const o of opts) { const t = norm([o.textContent,o.label,o.value].filter(Boolean).join(' ')); let s=0; if (t.includes(want)||want.includes(t)) s+=30; if (carrierKw.test(t)) s+=6; if (/请选择|--/.test(t)) s-=5; if (s>bestS){bestS=s;best=o;} } if (best&&bestS>=10){sel.value=best.value;sel.dispatchEvent(new Event('change',{bubbles:true}));return true;} } const radios = Array.from(document.querySelectorAll('input[type=radio]')).filter(vis); if (radios.length >= 2) { const pool = radios.filter(r => { const label = r.labels&&r.labels[0]?r.labels[0].innerText:''; const ctx = [r.name,r.id,r.value,label].filter(Boolean).join(' '); return carrierKw.test(ctx); }); const use = pool.length>=2 ? pool : radios; let best=null, bestS=-999; for (const r of use) { const label = r.labels&&r.labels[0]?r.labels[0].innerText:''; const t = norm([r.value,label,r.parentElement&&r.parentElement.innerText].filter(Boolean).join(' ')); let s=0; if (t.includes(want)||want.includes(t)) s+=30; if (carrierKw.test(t)) s+=6; if (s>bestS){bestS=s;best=r;} } if (best&&bestS>=5){best.click();return true;} } const clickables = Array.from(document.querySelectorAll('li,label,span,div,a,button')).filter(el => { if (!vis(el)) return false; const t = norm(el.innerText); return carrierKw.test(t) && el.children.length <= 3; }); if (clickables.length >= 2) { const parent = clickables[0].parentElement; const siblings = parent ? Array.from(parent.children).filter(vis) : clickables; let best=null, bestS=-999; for (const el of siblings) { const t = norm(el.innerText); let s=0; if (t.includes(want)||want.includes(t)) s+=30; if (carrierKw.test(t)) s+=6; if (s>bestS){bestS=s;best=el;} } if (best&&bestS>=5){best.click();return true;} } return true; })()"
     },
     {
-      "id": "click_login",
-      "type": "click",
-      "description": "点击登录",
-      "timeout": 5000,
-      "selector": "input[name='0MKKey'], input[type='submit'], button[type='submit'], #login, .login-btn"
+      "id": "record_state",
+      "type": "custom_js",
+      "description": "记录提交前页面文本",
+      "script": "(() => { window.__preBody = (document.body.innerText || '').substring(0, 3000); window.__preUrl = location.href; return true; })()"
     },
     {
-      "id": "wait_result",
+      "id": "click_submit",
+      "type": "custom_js",
+      "description": "点击登录（兼容 0MKKey）",
+      "script": "(() => { const btn = document.querySelector(\"input[name='0MKKey'], input[type='submit'], button[type='submit']\"); if (!btn) throw new Error('找不到登录按钮'); btn.click(); return true; })()"
+    },
+    {
+      "id": "wait_response",
       "type": "sleep",
-      "description": "等待登录结果",
-      "duration": 2000
+      "description": "等待服务器响应",
+      "duration": 3000
     },
     {
-      "id": "screenshot_result",
+      "id": "screenshot",
       "type": "screenshot",
-      "description": "登录后截图"
+      "description": "提交后截图"
     },
     {
-      "id": "eval_result",
+      "id": "check_result",
       "type": "eval",
-      "description": "判断登录是否成功",
-      "script": "(() => { const urlChanged = window.location.href !== (window.__preLoginUrl || ''); if (urlChanged) return true; const text = String((document.body && document.body.innerText) || '') + ' ' + String(document.title || ''); const t = text.toLowerCase(); const failPhrases = ['密码错误', '密码不正确', '密码有误', '账号错误', '账号不存在', '账号或密码', '用户名或密码', '认证失败', '登录失败', '登入失败', 'login failed', 'authentication failed', 'invalid credentials', 'invalid password']; for (const p of failPhrases) { if (t.includes(p.toLowerCase())) return false; } const okWords = ['登录成功', '认证成功', '已连接', '已上线', '欢迎', 'success', 'connected', 'logout', '退出', '注销']; if (okWords.some((w) => t.includes(w.toLowerCase()))) return true; return false; })()",
+      "description": "判断登录结果",
+      "script": "(() => { const urlChanged = location.href !== (window.__preUrl || ''); if (urlChanged) return true; const body = (document.body.innerText || ''); const diff = Math.abs(body.length - (window.__preBody || '').length); if (diff > 100) return true; const t = (body + ' ' + document.title).toLowerCase(); const fail = ['密码错误','密码不正确','密码有误','账号不存在','账号或密码','用户不存在','认证失败','登录失败','error','failed','invalid','incorrect']; for (const w of fail) { if (t.includes(w.toLowerCase())) return false; } const ok = ['登录成功','认证成功','已连接','已上线','success','connected','online']; if (ok.some(w => t.toLowerCase().includes(w.toLowerCase()))) return true; const msg = document.querySelector('#msg, .err_msg, [id*=result], [class*=result]'); if (msg) { const mt = msg.innerText.toLowerCase(); if (fail.some(w => mt.includes(w.toLowerCase()))) return false; } return false; })()",
       "store_as": "login_success"
     }
   ],
@@ -77,18 +65,11 @@
       "value": true
     }
   ],
-  "variables": {
-    "username": "{{USERNAME}}",
-    "password": "{{PASSWORD}}",
-    "isp": "{{ISP}}"
-  },
   "on_success": {
-    "message": "案例2执行完成（元素识别）",
-    "screenshot": false
+    "message": "登录成功"
   },
   "on_failure": {
-    "message": "案例2执行失败（元素识别）",
+    "message": "登录失败",
     "screenshot": true
-  },
-  "id": "sample_2"
+  }
 }

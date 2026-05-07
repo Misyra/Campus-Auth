@@ -291,8 +291,15 @@ main() {
   ensure_playwright
 
   log_success "环境初始化完成！"
+  log_info ""
   log_info "Python 路径: $PYTHON_EXE"
   log_info "Pip 路径: $PIP_EXE"
+  log_info ""
+  log_info "使用方法:"
+  log_info "  运行项目: $PYTHON_EXE app.py"
+  log_info "  安装新依赖: $PYTHON_EXE -m pip install <包名> -i $PIP_MIRROR"
+  log_info "  查看已安装包: $PYTHON_EXE -m pip list"
+  log_info ""
   log_info "日志文件: $LOG_FILE"
 
   if is_service_running "$port"; then
@@ -303,11 +310,28 @@ main() {
   fi
 
   log_info ">>> 启动应用..."
-  exec env \
+  env \
     "Campus-Auth_PROJECT_ROOT=$PROJECT_ROOT" \
     "Campus-Auth_ENV_FILE=$PROJECT_ROOT/.env" \
     "AUTO_INSTALL_PLAYWRIGHT=false" \
-    "$PYTHON_EXE" "$PROJECT_ROOT/app.py"
+    "$PYTHON_EXE" "$PROJECT_ROOT/app.py" &
+  APP_PID=$!
+
+  # 等待服务就绪后打开浏览器
+  for i in $(seq 1 15); do
+    sleep 1
+    if is_service_running "$port"; then
+      log_success "服务已启动: http://127.0.0.1:$port"
+      if command -v open >/dev/null 2>&1; then
+        open "http://127.0.0.1:$port"
+      elif command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "http://127.0.0.1:$port"
+      fi
+      break
+    fi
+  done
+
+  wait $APP_PID
 }
 
 main "$@"

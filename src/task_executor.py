@@ -164,8 +164,6 @@ class TaskConfig:
     task_id: str = ""
     name: str = "未命名任务"
     description: str = ""
-    version: str = "1.0.0"
-    source: str = "api"
     url: str = ""
     timeout: int = 30000
     variables: dict[str, str] = field(default_factory=dict)
@@ -181,8 +179,6 @@ class TaskConfig:
         return cls(
             name=data.get("name", "未命名任务"),
             description=data.get("description", ""),
-            version=data.get("version", "1.0.0"),
-            source=data.get("source", "api"),
             url=data.get("url", ""),
             timeout=data.get("timeout", 30000),
             variables=data.get("variables", {}),
@@ -200,8 +196,6 @@ class TaskConfig:
         result: dict[str, Any] = {
             "name": self.name,
             "description": self.description,
-            "version": self.version,
-            "source": self.source,
             "url": self.url,
             "timeout": self.timeout,
             "steps": [s.to_dict() for s in self.steps],
@@ -232,7 +226,6 @@ class VariableResolver:
             "url": config.url,
             "name": config.name,
             "description": config.description,
-            "version": config.version,
         }
         self._cache: dict[str, str] = {}
 
@@ -389,7 +382,7 @@ class InputHandler(StepHandler):
         selector = params.get("selector", "")
         value = params.get("value", "")
         clear = params.get("clear", True)
-        timeout = step.timeout or 5000
+        timeout = step.timeout or 10000
 
         if not selector:
             return False, "输入步骤需要 selector"
@@ -419,7 +412,7 @@ class ClickHandler(StepHandler):
     ) -> tuple[bool, str]:
         params = self.resolve_params(step, resolver)
         selector = params.get("selector", "")
-        timeout = step.timeout or 5000
+        timeout = step.timeout or 10000
 
         if not selector:
             return False, "点击步骤需要 selector"
@@ -448,7 +441,7 @@ class SelectHandler(StepHandler):
         params = self.resolve_params(step, resolver)
         selector = params.get("selector", "")
         value = str(params.get("value", "") or "").strip()
-        timeout = step.timeout or 5000
+        timeout = step.timeout or 10000
 
         if not selector:
             return False, "选择步骤需要 selector"
@@ -515,7 +508,7 @@ class WaitHandler(StepHandler):
     ) -> tuple[bool, str]:
         params = self.resolve_params(step, resolver)
         selector = params.get("selector", "")
-        timeout = step.timeout or 5000
+        timeout = step.timeout or 10000
 
         if not selector:
             return False, "等待步骤需要 selector"
@@ -537,7 +530,7 @@ class WaitUrlHandler(StepHandler):
     ) -> tuple[bool, str]:
         params = self.resolve_params(step, resolver)
         pattern = params.get("pattern", "")
-        timeout = step.timeout or 5000
+        timeout = step.timeout or 10000
 
         if not pattern:
             return False, "wait_url 步骤需要 pattern"
@@ -794,10 +787,14 @@ class TaskExecutor:
 
     PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
+    DEFAULT_STEP_TIMEOUT = 10000
+
     def __init__(self, config: TaskConfig, env_vars: dict[str, str] | None = None,
-                 screenshot_dir: Path | str | None = None):
+                 screenshot_dir: Path | str | None = None,
+                 default_timeout: int | None = None):
         self.config = config
         self.env_vars = env_vars or {}
+        self.default_timeout = default_timeout or self.DEFAULT_STEP_TIMEOUT
         self.resolver = VariableResolver(config, self.env_vars)
         self.registry = StepExecutorRegistry()
         self._step_results: list[dict[str, Any]] = []
@@ -811,14 +808,19 @@ class TaskExecutor:
         """
         import time as _time
         task_start = _time.perf_counter()
-        logger.info("任务开始 [%s] v%s, %d 个步骤",
-                     self.config.name, self.config.version, len(self.config.steps))
+        logger.info("任务开始 [%s], %d 个步骤",
+                     self.config.name, len(self.config.steps))
         self._step_results = []
 
         try:
-            await self._auto_navigate_if_needed(page)
+            await self._auto_navigate(page)
 
             for i, step in enumerate(self.config.steps):
+                # 跳过 navigate 步骤，已由 _auto_navigate 统一处理
+                if step.type == StepType.NAVIGATE:
+                    logger.info("  步骤[%d/%d] %s (navigate) → 跳过，已自动导航",
+                                i + 1, len(self.config.steps), step.id)
+                    continue
                 if i > 0:
                     await asyncio.sleep(0.5)
                 step_start = _time.perf_counter()
@@ -850,17 +852,14 @@ class TaskExecutor:
                          self.config.name, total_elapsed, e)
             return await self._handle_failure(page, None, str(e))
 
-    async def _auto_navigate_if_needed(self, page) -> None:
-        """如果第一个步骤不是导航，自动导航到任务URL"""
-        if not self.config.steps:
-            return
-
-        first_step = self.config.steps[0]
-        if first_step.type != StepType.NAVIGATE and self.config.url:
-            url = self.resolver.resolve(self.config.url)
-            if url:
-                logger.info(f"自动导航到任务URL: {url}")
-                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+    async def _auto_navigate(self, page) -> None:
+        """自动导航到任务URL（优先任务 url，回退到 LOGIN_URL）"""
+        url = self.resolver.resolve(self.config.url) if self.config.url else ""
+        if not url:
+            url = self.env_vars.get("LOGIN_URL", "").strip()
+        if url:
+            logger.info(f"自动导航到任务URL: {url}")
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
 
     async def _execute_step(self, page, step: StepConfig) -> tuple[bool, str]:
         """执行单个步骤"""
@@ -1110,8 +1109,6 @@ class TaskManager:
                         "id": file.stem,
                         "name": config.get("name", file.stem),
                         "description": config.get("description", ""),
-                        "version": config.get("version", "1.0"),
-                        "source": config.get("source", "api"),
                     }
                 )
             except Exception as e:

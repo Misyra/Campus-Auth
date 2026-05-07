@@ -656,6 +656,31 @@ function Main {
     Write-Info ""
     Write-Info "日志文件：$LogFile"
     Write-Info ""
+
+    # 启动应用
+    if (Test-ServiceRunning -Port $port) {
+        Write-Success "服务已在运行: http://127.0.0.1:$port"
+        Wait-BeforeDuplicateExit
+        return
+    }
+
+    Write-Info ">>> 启动应用..."
+    $appPy = Join-Path $ProjectRoot "app.py"
+    Start-Process -FilePath $PythonExe -ArgumentList $appPy -WorkingDirectory $ProjectRoot -EnvironmentVariables @{
+        "Campus-Auth_PROJECT_ROOT" = $ProjectRoot
+        "Campus-Auth_ENV_FILE" = Join-Path $ProjectRoot ".env"
+        "AUTO_INSTALL_PLAYWRIGHT" = "false"
+    }
+
+    # 等待服务就绪后打开浏览器
+    for ($i = 0; $i -lt 15; $i++) {
+        Start-Sleep -Seconds 1
+        if (Test-ServiceRunning -Port $port) {
+            Write-Success "服务已启动: http://127.0.0.1:$port"
+            Start-Process "http://127.0.0.1:$port"
+            break
+        }
+    }
 }
 
 # 执行主流程

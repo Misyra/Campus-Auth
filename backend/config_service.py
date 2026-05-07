@@ -147,6 +147,7 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
         frontend_log_level=_normalize_level(sys.frontend_log_level),
         access_log=sys.access_log,
         minimize_to_tray=sys.minimize_to_tray,
+        auto_open_browser=sys.auto_open_browser,
         login_then_exit=sys.login_then_exit,
         log_retention_days=sys.log_retention_days,
         screenshot_retention_days=sys.screenshot_retention_days,
@@ -266,6 +267,7 @@ def write_system_settings(payload: MonitorConfigPayload, profile_service: Profil
     sys.frontend_log_level = _normalize_level(payload.frontend_log_level)
     sys.access_log = payload.access_log
     sys.minimize_to_tray = payload.minimize_to_tray
+    sys.auto_open_browser = payload.auto_open_browser
     sys.login_then_exit = payload.login_then_exit
     sys.log_retention_days = payload.log_retention_days
     sys.screenshot_retention_days = payload.screenshot_retention_days
@@ -374,6 +376,7 @@ def save_config_combined(
     sys.frontend_log_level = _normalize_level(payload.frontend_log_level)
     sys.access_log = payload.access_log
     sys.minimize_to_tray = payload.minimize_to_tray
+    sys.auto_open_browser = payload.auto_open_browser
     sys.login_then_exit = payload.login_then_exit
     sys.log_retention_days = payload.log_retention_days
     sys.screenshot_retention_days = payload.screenshot_retention_days

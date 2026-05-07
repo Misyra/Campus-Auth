@@ -104,10 +104,14 @@ def _setup_packaged_env() -> None:
 # ==================== 浏览器控制 ====================
 
 
-def _open_browser(port: int) -> None:
-    auto_open = os.getenv("Campus-Auth_AUTO_OPEN_BROWSER", "true").strip().lower()
-    if auto_open not in {"1", "true", "yes", "on"}:
-        return
+def _open_browser(port: int, setting: bool | None = None) -> None:
+    if setting is not None:
+        if not setting:
+            return
+    else:
+        auto_open = os.getenv("Campus-Auth_AUTO_OPEN_BROWSER", "true").strip().lower()
+        if auto_open not in {"1", "true", "yes", "on"}:
+            return
 
     def _worker():
         time.sleep(1.2)
@@ -277,12 +281,14 @@ def _run_server(no_browser: bool = False, tray: bool = False) -> None:
         time.perf_counter() - stage_begin,
     )
     # 优先从 settings.json 读取（Web 控制台可修改），回退到 .env
+    auto_open_browser = None
     try:
         from backend.profile_service import ProfileService
         _ps = ProfileService(Path(__file__).parent.resolve())
         _sys_settings = _ps.load().system
         minimize_to_tray = tray or bool(_sys_settings.minimize_to_tray)
         login_then_exit = bool(_sys_settings.login_then_exit)
+        auto_open_browser = bool(_sys_settings.auto_open_browser)
     except Exception:
         minimize_to_tray = tray or bool(config.get("minimize_to_tray", False))
         login_then_exit = False
@@ -311,8 +317,8 @@ def _run_server(no_browser: bool = False, tray: bool = False) -> None:
         except Exception as e:
             print(f"启动系统托盘失败: {e}")
 
-    if not no_browser and not minimize_to_tray:
-        _open_browser(port)
+    if not no_browser:
+        _open_browser(port, setting=auto_open_browser)
 
     print(f"Web 控制台: http://127.0.0.1:{port}")
     print(f"日志文件:   {Path.cwd() / 'logs'}")
