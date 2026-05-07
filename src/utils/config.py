@@ -73,7 +73,7 @@ class ConfigLoader:
             },
             "logging": {
                 "level": os.getenv(
-                    "BACKEND_LOG_LEVEL", os.getenv("LOG_LEVEL", "WARNING")
+                    "BACKEND_LOG_LEVEL", os.getenv("LOG_LEVEL", "INFO")
                 ),
                 "format": os.getenv(
                     "LOG_FORMAT", "%(asctime)s - %(levelname)s - %(message)s"
@@ -81,7 +81,7 @@ class ConfigLoader:
                 "file": os.getenv("LOG_FILE", "logs/campus_auth.log") or None,
             },
             "frontend_logging": {
-                "level": os.getenv("FRONTEND_LOG_LEVEL", "WARNING"),
+                "level": os.getenv("FRONTEND_LOG_LEVEL", "INFO"),
             },
             "pause_login": {
                 "enabled": ConfigLoader._str_to_bool(
