@@ -152,6 +152,7 @@ http_logger = get_logger("backend.http", side="BACKEND")
 startup_logger = get_logger("backend.startup", side="BACKEND")
 api_logger = get_logger("backend.api", side="BACKEND")
 ws_logger = get_logger("backend.ws", side="BACKEND")
+_access_log_enabled = False
 
 # ==================== 调试会话 ====================
 
@@ -314,14 +315,15 @@ async def request_logging_middleware(request: Request, call_next):
     start = time.perf_counter()
     try:
         response = await call_next(request)
-        duration_ms = (time.perf_counter() - start) * 1000
-        http_logger.info(
-            "%s %s -> %s (%.1fms)",
-            request.method,
-            request.url.path,
-            response.status_code,
-            duration_ms,
-        )
+        if _access_log_enabled:
+            duration_ms = (time.perf_counter() - start) * 1000
+            http_logger.info(
+                "%s %s -> %s (%.1fms)",
+                request.method,
+                request.url.path,
+                response.status_code,
+                duration_ms,
+            )
         return response
     except Exception:
         duration_ms = (time.perf_counter() - start) * 1000
@@ -1033,7 +1035,7 @@ def run() -> None:
         log_retention = max(1, sys_settings.log_retention_days)
         sc_retention = max(1, sys_settings.screenshot_retention_days)
     except Exception:
-        log_retention = 30
+        log_retention = 7
         sc_retention = 7
 
     log_dir = PROJECT_ROOT / "logs"
@@ -1060,6 +1062,9 @@ def run() -> None:
             startup_logger.info("清理过期截图: %d 张", n)
     except Exception:
         pass
+
+    global _access_log_enabled
+    _access_log_enabled = access_log_enabled
 
     if not access_log_enabled:
         logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
