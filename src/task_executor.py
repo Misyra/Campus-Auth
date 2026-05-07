@@ -343,7 +343,7 @@ class StepHandler(ABC):
 
 
 class NavigateHandler(StepHandler):
-    """导航步骤处理器"""
+    """导航步骤处理器（已废弃，请使用任务的 url 字段）"""
 
     @property
     def step_type(self) -> str:
@@ -353,6 +353,7 @@ class NavigateHandler(StepHandler):
         self, page, step: StepConfig, resolver: VariableResolver
     ) -> tuple[bool, str]:
         import time as _time
+        logger.warning("navigate 步骤已废弃，建议使用任务的 url 字段代替")
         params = self.resolve_params(step, resolver)
         url = params.get("url", "")
         wait_until = params.get("wait_until", "networkidle")

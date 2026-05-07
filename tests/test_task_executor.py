@@ -160,7 +160,6 @@ def test_task_config_from_dict() -> None:
     data = {
         "name": "测试任务",
         "description": "测试描述",
-        "version": "1.0.0",
         "url": "http://example.com",
         "timeout": 15000,
         "variables": {"key": "value"},
@@ -176,7 +175,6 @@ def test_task_config_from_dict() -> None:
     config = TaskConfig.from_dict(data)
     assert config.name == "测试任务"
     assert config.description == "测试描述"
-    assert config.version == "1.0.0"
     assert config.timeout == 15000
     assert len(config.steps) == 1
     assert len(config.success_conditions) == 1
@@ -260,15 +258,17 @@ def test_task_config_to_dict_compact() -> None:
     assert d["steps"][0]["id"] == "s1"
 
 
-def test_task_manager_list_tasks_source_default(tmp_path: Path) -> None:
-    """测试 list_tasks 对无 source 字段的任务默认为 api"""
+def test_task_manager_list_tasks_returns_fields(tmp_path: Path) -> None:
+    """测试 list_tasks 返回正确的字段"""
     tasks_dir = tmp_path / "tasks"
     tasks_dir.mkdir()
     (tasks_dir / "test.json").write_text(
-        '{"name": "test", "steps": [{"id": "s1", "type": "navigate", "url": "http://x"}]}',
+        '{"name": "test", "description": "desc", "steps": [{"id": "s1", "type": "navigate", "url": "http://x"}]}',
         encoding="utf-8",
     )
     manager = TaskManager(tasks_dir)
     tasks = manager.list_tasks()
     assert len(tasks) == 1
-    assert tasks[0]["source"] == "api"
+    assert tasks[0]["id"] == "test"
+    assert tasks[0]["name"] == "test"
+    assert tasks[0]["description"] == "desc"

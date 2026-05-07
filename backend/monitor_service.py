@@ -17,7 +17,7 @@ from src.network_test import is_network_available
 from src.utils import ConfigValidator
 from src.utils.logging import get_logger
 
-from .config_service import build_runtime_config, load_ui_config, write_system_settings
+from .config_service import build_runtime_config, load_ui_config
 from .profile_service import ProfileService
 from .schemas import LogEntry, MonitorConfigPayload, MonitorStatusResponse
 
@@ -140,36 +140,6 @@ class MonitorService:
     def get_config(self) -> MonitorConfigPayload:
         with self._lock:
             return self._ui_config.model_copy(deep=True)
-
-    def save_config(self, payload: MonitorConfigPayload) -> None:
-        ok, error = ConfigValidator.validate_gui_config(
-            payload.username,
-            payload.password,
-            str(payload.check_interval_minutes),
-        )
-        if not ok:
-            raise ValueError(error)
-
-        service_logger.info("Saving monitor config")
-
-        write_system_settings(payload, self._profile_service)
-
-        with self._lock:
-            self._ui_config = payload
-            self._runtime_config = build_runtime_config(
-                payload, self._profile_service.load().system
-            )
-            running = self._is_monitoring_unsafe()
-
-        self._push_log("配置已保存", level="INFO", source="backend.monitor_service")
-        service_logger.info("Monitor config saved")
-
-        if running:
-            self.stop_monitoring()
-            self.start_monitoring()
-            self._push_log(
-                "监控已按新配置重启", level="INFO", source="backend.monitor_service"
-            )
 
     def reload_config(self) -> None:
         """重新加载配置（从 settings.json），并推送到运行中的监控"""

@@ -229,36 +229,6 @@ class _DateRotatingFileHandler(logging.Handler):
         super().close()
 
 
-def cleanup_old_files(directory: str, pattern: str, retention_days: int) -> int:
-    """清理目录中超过保留天数的文件
-
-    Args:
-        directory: 目录路径
-        pattern: glob 匹配模式 (如 '*.png')
-        retention_days: 保留天数
-
-    Returns:
-        删除的文件数量
-    """
-    import time
-    from pathlib import Path
-
-    dir_path = Path(directory)
-    if not dir_path.exists():
-        return 0
-
-    cutoff = time.time() - retention_days * 86400
-    deleted = 0
-    for f in dir_path.glob(pattern):
-        try:
-            if f.stat().st_mtime < cutoff:
-                f.unlink()
-                deleted += 1
-        except OSError:
-            pass
-    return deleted
-
-
 def cleanup_debug_screenshots(debug_dir: str, retention_days: int) -> int:
     """清理 debug/ 下按日期命名的子目录中的过期截图，并删除空目录
 

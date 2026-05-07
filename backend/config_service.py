@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 
 from src.utils.crypto import decrypt_password, encrypt_password, mask_password
@@ -280,11 +279,10 @@ def write_system_settings(payload: MonitorConfigPayload, profile_service: Profil
     )
 
     # 立即读盘验证，确保写入真正生效
-    import json as _json
     try:
         vpath = profile_service._settings_path
         if vpath.exists():
-            vdata = _json.loads(vpath.read_text(encoding="utf-8"))
+            vdata = json.loads(vpath.read_text(encoding="utf-8"))
             vsys = vdata.get("system", {})
             config_logger.info(
                 "磁盘验证: size=%d user=%s pwd=%s auth=%s",
@@ -295,51 +293,6 @@ def write_system_settings(payload: MonitorConfigPayload, profile_service: Profil
             )
     except Exception:
         pass
-
-
-def save_profile_from_payload(
-    payload: MonitorConfigPayload, project_root: Path,
-    profile_service: ProfileService | None = None,
-) -> None:
-    """从 MonitorConfigPayload 提取 profile 字段并保存到 settings.json"""
-    ps = profile_service or ProfileService(project_root)
-    active_id = ps.get_active_profile_id()
-    existing = ps.get_active_profile()
-
-    # 保留原有的匹配规则和凭证设置
-    updated = ProfileSettings(
-        name=existing.name,
-        match_gateway_ip=existing.match_gateway_ip,
-        match_ssid=existing.match_ssid,
-        username=existing.username,
-        password=existing.password,
-        use_global_credentials=existing.use_global_credentials,
-        use_global_advanced=existing.use_global_advanced,
-        use_global_auth_url=existing.use_global_auth_url,
-        use_global_task=existing.use_global_task,
-        auth_url=existing.auth_url if existing.use_global_auth_url else payload.auth_url.strip(),
-        active_task=existing.active_task,
-        carrier=existing.carrier if existing.use_global_credentials else str(payload.carrier or "无").strip(),
-        carrier_custom=existing.carrier_custom if existing.use_global_credentials else str(payload.carrier_custom or "").strip(),
-        check_interval_minutes=payload.check_interval_minutes,
-        auto_start=payload.auto_start,
-        headless=payload.headless,
-        browser_timeout=payload.browser_timeout,
-        browser_user_agent=payload.browser_user_agent.strip(),
-        browser_low_resource_mode=payload.browser_low_resource_mode,
-        browser_disable_web_security=payload.browser_disable_web_security,
-        browser_extra_headers_json=_normalize_headers_json(
-            payload.browser_extra_headers_json
-        ),
-        browser_args=payload.browser_args.strip(),
-        pause_enabled=payload.pause_enabled,
-        pause_start_hour=payload.pause_start_hour,
-        pause_end_hour=payload.pause_end_hour,
-        network_targets=_normalize_targets(payload.network_targets),
-        custom_variables=payload.custom_variables,
-    )
-
-    ps.save_profile(active_id, updated)
 
 
 def save_config_combined(

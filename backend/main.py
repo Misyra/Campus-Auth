@@ -275,6 +275,7 @@ _debug: dict = {
     "screenshot_url": None,
     "running": False,
 }
+_debug_lock = asyncio.Lock()
 
 
 def _debug_response() -> dict:
@@ -539,8 +540,9 @@ def toggle_safe_mode() -> dict:
 @app.post("/api/debug/start")
 async def debug_start(request: Request) -> dict:
     global _debug
-    if _debug["session"]:
-        await _debug["session"].close()
+    async with _debug_lock:
+        if _debug["session"]:
+            await _debug["session"].close()
 
     body = await request.json()
     task_id = body.get("task_id", "")
@@ -604,18 +606,19 @@ async def debug_start(request: Request) -> dict:
         browser_timeout = runtime_config.get("browser_settings", {}).get("timeout", 10000)
         executor = TaskExecutor(task, env_vars, screenshot_dir=TEMP_DIR, default_timeout=browser_timeout)
 
-        _debug = {
-            "session": session,
-            "task_id": task_id,
-            "executor": executor,
-            "current_step": 0,
-            "steps": steps_info,
-            "results": [],
-            "screenshot_url": None,
-            "running": True,
-        }
+        async with _debug_lock:
+            _debug = {
+                "session": session,
+                "task_id": task_id,
+                "executor": executor,
+                "current_step": 0,
+                "steps": steps_info,
+                "results": [],
+                "screenshot_url": None,
+                "running": True,
+            }
 
-        _debug["screenshot_url"] = await _take_debug_screenshot(session.page)
+            _debug["screenshot_url"] = await _take_debug_screenshot(session.page)
     except Exception:
         await session.close()
         raise
@@ -626,47 +629,54 @@ async def debug_start(request: Request) -> dict:
 
 @app.post("/api/debug/next")
 async def debug_next() -> dict:
-    session, executor, page = _require_debug_session()
-    idx = _debug["current_step"]
+    async with _debug_lock:
+        session, executor, page = _require_debug_session()
+        idx = _debug["current_step"]
 
-    if idx >= len(_debug["steps"]):
-        return {**_debug_response(), "message": "所有步骤已执行完毕"}
+        if idx >= len(_debug["steps"]):
+            return {**_debug_response(), "message": "所有步骤已执行完毕"}
 
     result = await executor.execute_step_at(page, idx)
-    _debug["results"].append(result)
-    _debug["screenshot_url"] = result.get("screenshot_url")
-    _debug["current_step"] = idx + 1
-    return _debug_response()
+
+    async with _debug_lock:
+        _debug["results"].append(result)
+        _debug["screenshot_url"] = result.get("screenshot_url")
+        _debug["current_step"] = idx + 1
+        return _debug_response()
 
 
 @app.post("/api/debug/run-all")
 async def debug_run_all() -> dict:
-    session, executor, page = _require_debug_session()
-    from_idx = _debug["current_step"]
+    async with _debug_lock:
+        session, executor, page = _require_debug_session()
+        from_idx = _debug["current_step"]
 
-    if from_idx >= len(_debug["steps"]):
-        return {**_debug_response(), "message": "所有步骤已执行完毕"}
+        if from_idx >= len(_debug["steps"]):
+            return {**_debug_response(), "message": "所有步骤已执行完毕"}
 
     agg = await executor.execute_remaining(page, from_idx)
-    _debug["results"].extend(agg["results"])
-    _debug["current_step"] = len(_debug["steps"])
 
-    if agg["results"]:
-        _debug["screenshot_url"] = agg["results"][-1].get("screenshot_url")
+    async with _debug_lock:
+        _debug["results"].extend(agg["results"])
+        _debug["current_step"] = len(_debug["steps"])
 
-    return _debug_response()
+        if agg["results"]:
+            _debug["screenshot_url"] = agg["results"][-1].get("screenshot_url")
+
+        return _debug_response()
 
 
 @app.post("/api/debug/stop")
 async def debug_stop() -> dict:
     global _debug
-    if _debug["session"]:
-        await _debug["session"].close()
-    _debug = {
-        "session": None, "task_id": None, "executor": None,
-        "current_step": 0, "steps": [], "results": [],
-        "screenshot_url": None, "running": False,
-    }
+    async with _debug_lock:
+        if _debug["session"]:
+            await _debug["session"].close()
+        _debug = {
+            "session": None, "task_id": None, "executor": None,
+            "current_step": 0, "steps": [], "results": [],
+            "screenshot_url": None, "running": False,
+        }
     # 清理临时调试截图
     try:
         import shutil
@@ -681,7 +691,8 @@ async def debug_stop() -> dict:
 
 @app.get("/api/debug/status")
 async def debug_status() -> dict:
-    return _debug_response()
+    async with _debug_lock:
+        return _debug_response()
 
 
 # ==================== 配置方案 API ====================

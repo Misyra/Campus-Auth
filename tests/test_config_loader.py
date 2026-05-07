@@ -8,7 +8,6 @@ def test_load_config_defaults_monitor_interval_and_ping_targets(monkeypatch) -> 
     monkeypatch.delenv("MONITOR_INTERVAL", raising=False)
     monkeypatch.delenv("PING_TARGETS", raising=False)
     monkeypatch.delenv("Campus-Auth_ENV_FILE", raising=False)
-    monkeypatch.delenv("JCU_ENV_FILE", raising=False)
 
     config = ConfigLoader.load_config_from_env()
 
