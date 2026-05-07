@@ -62,6 +62,18 @@ export const lifecycleMethods = {
       this.appVersion = 'unknown';
     }
   },
+  async checkUpdate() {
+    this.updateLoading = true;
+    this.updateInfo = null;
+    try {
+      const { data } = await this.$api.get('/api/check-update');
+      this.updateInfo = data;
+    } catch {
+      this.updateInfo = { error: '检查更新失败，请检查网络连接' };
+    } finally {
+      this.updateLoading = false;
+    }
+  },
   async finishWizard() {
     this.busy.save = true;
     try {

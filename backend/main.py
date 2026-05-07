@@ -362,6 +362,47 @@ def health() -> dict[str, str]:
     return {"status": "ok", "version": get_project_version(PROJECT_ROOT)}
 
 
+@app.get("/api/check-update")
+def check_update() -> dict:
+    import json
+    import urllib.request
+
+    current = get_project_version(PROJECT_ROOT)
+    try:
+        req = urllib.request.Request(
+            "https://api.github.com/repos/Misyra/Campus-Auth/releases/latest",
+            headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "Campus-Auth"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        tag = data.get("tag_name", "").lstrip("v")
+        return {
+            "current": current,
+            "latest": tag,
+            "has_update": _compare_versions(tag, current) > 0,
+            "url": data.get("html_url", ""),
+            "body": data.get("body", ""),
+            "published_at": data.get("published_at", ""),
+        }
+    except Exception as e:
+        return {"current": current, "latest": None, "has_update": False, "error": str(e)}
+
+
+def _compare_versions(a: str, b: str) -> int:
+    """比较语义版本号，a > b 返回 1，a < b 返回 -1，相等返回 0"""
+    try:
+        va = [int(x) for x in a.split(".")]
+        vb = [int(x) for x in b.split(".")]
+        for x, y in zip(va, vb):
+            if x > y:
+                return 1
+            if x < y:
+                return -1
+        return len(va) - len(vb)
+    except (ValueError, AttributeError):
+        return 0
+
+
 @app.get("/api/init-status")
 def get_init_status() -> dict:
     from src.utils.crypto import has_decryption_error

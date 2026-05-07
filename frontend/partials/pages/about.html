@@ -5,6 +5,31 @@
       <h1>Campus-Auth Campus Network Auth</h1>
       <p class="version">Version {{ appVersion || 'unknown' }}</p>
       <p class="description">校园网自动认证工具</p>
+      <div class="update-section">
+        <button class="btn btn-secondary btn-sm" @click="checkUpdate" :disabled="updateLoading">
+          {{ updateLoading ? '检查中...' : '检查更新' }}
+        </button>
+        <div v-if="updateInfo && !updateInfo.error" class="update-result">
+          <div v-if="updateInfo.has_update" class="update-available">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            <span>发现新版本 <strong>v{{ updateInfo.latest }}</strong></span>
+            <a :href="updateInfo.url" target="_blank" class="btn btn-primary btn-sm">前往下载</a>
+          </div>
+          <div v-else class="update-latest">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            <span>当前已是最新版本</span>
+          </div>
+        </div>
+        <div v-else-if="updateInfo && updateInfo.error" class="update-error">
+          {{ updateInfo.error }}
+        </div>
+      </div>
     </div>
 
     <div class="about-grid">

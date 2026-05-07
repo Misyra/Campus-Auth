@@ -90,6 +90,8 @@ export const appOptions = {
       detectResult: null,
       editorDetectResult: null,
       fullscreenSrc: '',
+      updateInfo: null,
+      updateLoading: false,
     };
   },
   computed: {
