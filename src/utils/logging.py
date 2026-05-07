@@ -159,7 +159,7 @@ class LoggerSetup:
 class _DateRotatingFileHandler(logging.Handler):
     """按日期自动切换的日志处理器 — 当前日志写入 YYYY-MM-DD.log"""
 
-    def __init__(self, log_dir: str, retention_days: int = 30,
+    def __init__(self, log_dir: str, retention_days: int = 7,
                  level: int = logging.INFO, formatter: logging.Formatter | None = None):
         super().__init__(level=level)
         self._log_dir = log_dir
@@ -352,7 +352,7 @@ class LogConfigCenter:
         return self._configured
 
     def add_file_handler(self, log_dir: str,
-                         retention_days: int = 30) -> None:
+                         retention_days: int = 7) -> None:
         """添加按日期存储的日志处理器（始终记录全部级别）
 
         Args:

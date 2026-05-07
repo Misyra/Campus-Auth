@@ -37,7 +37,7 @@ export const DEFAULT_CONFIG = {
   minimize_to_tray: true,
   auto_open_browser: false,
   login_then_exit: false,
-  log_retention_days: 30,
+  log_retention_days: 7,
   screenshot_retention_days: 7,
   custom_variables: {},
 };
