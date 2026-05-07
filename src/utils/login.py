@@ -69,33 +69,14 @@ class LoginAttemptHandler:
             return False, error_msg
 
     async def _perform_login_with_auth_class(self) -> tuple[bool, str]:
-        """优先使用活动任务执行登录，未配置任务时回退到认证类。"""
+        """使用活动任务执行登录。"""
         task_result = await self._perform_login_with_active_task()
         if task_result is not None:
             return task_result
 
-        # 回退到历史认证流程，兼容未配置任务的场景
-        try:
-            from ..campus_login import EnhancedCampusNetworkAuth
-
-            auth = EnhancedCampusNetworkAuth(self.config)
-            success, message = await auth.authenticate()
-
-            if success:
-                self.logger.info(f"✅ 校园网登录成功: {message}")
-                return True, message
-            else:
-                self.logger.error(f"❌ 校园网登录失败: {message}")
-                return False, message
-
-        except ImportError as e:
-            error_msg = f"无法导入认证模块: {e}"
-            self.logger.error(f"❌ {error_msg}")
-            return False, error_msg
-        except Exception as e:
-            error_msg = f"登录执行失败: {str(e)}"
-            self.logger.error(f"❌ {error_msg}")
-            return False, error_msg
+        error_msg = "未找到可执行的活动任务，请在任务管理页面配置并激活一个任务"
+        self.logger.error(f"❌ {error_msg}")
+        return False, error_msg
 
     async def _perform_login_with_active_task(self) -> tuple[bool, str] | None:
         """执行当前活动任务；返回 None 表示未找到可执行任务。"""
