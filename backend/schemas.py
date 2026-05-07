@@ -45,7 +45,7 @@ class MonitorConfigPayload(BaseModel):
     minimize_to_tray: bool = True
     auto_open_browser: bool = False
     login_then_exit: bool = False
-    log_retention_days: int = Field(default=30, ge=1, le=365)
+    log_retention_days: int = Field(default=7, ge=1, le=365)
     screenshot_retention_days: int = Field(default=7, ge=1, le=90)
     custom_variables: dict[str, str] = Field(default_factory=dict)
 
@@ -226,7 +226,7 @@ class SystemSettings(BaseModel):
     max_retries: int = Field(default=3, ge=0, le=10)
     retry_interval: int = Field(default=5, ge=1, le=300, description="重试间隔（秒）")
     safe_mode: bool = Field(default=True, description="安全模式：不注入浏览器自定义参数")
-    log_retention_days: int = Field(default=30, ge=1, le=365, description="日志文件保留天数")
+    log_retention_days: int = Field(default=7, ge=1, le=365, description="日志文件保留天数")
     screenshot_retention_days: int = Field(default=7, ge=1, le=90, description="失败截图保留天数")
 
     @field_validator("backend_log_level", "frontend_log_level")
