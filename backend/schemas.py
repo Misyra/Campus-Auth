@@ -24,6 +24,7 @@ class MonitorConfigPayload(BaseModel):
     auto_start: bool = False
     headless: bool = True
     browser_timeout: int = Field(default=8000, ge=1000, le=60000)
+    login_timeout: int = Field(default=120, ge=10, le=600, description="手动登录 API 请求超时（秒）")
     browser_user_agent: str = Field(
         default="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
@@ -168,6 +169,7 @@ class ProfileSettings(BaseModel):
     auto_start: bool = False
     headless: bool = True
     browser_timeout: int = Field(default=8000, ge=1000, le=60000)
+    login_timeout: int = Field(default=120, ge=10, le=600, description="手动登录 API 请求超时（秒）")
     browser_user_agent: str = Field(
         default="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"

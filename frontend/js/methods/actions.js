@@ -19,7 +19,8 @@ export const actionMethods = {
     this.busy.action = true;
     try {
       this.frontendLogger.info('action', 'manual login requested');
-      const { data } = await this.$api.post('/api/actions/login', null, { timeout: 120000 });
+      const loginTimeoutMs = (this.config.login_timeout || 120) * 1000;
+      const { data } = await this.$api.post('/api/actions/login', null, { timeout: loginTimeoutMs });
       this.notify(data.success, data.message);
     } catch (error) {
       const msg = error?.response?.data?.detail || '手动登录失败';
