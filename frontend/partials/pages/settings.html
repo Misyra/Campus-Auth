@@ -156,6 +156,13 @@
             </div>
             <input id="settings-interval" v-model.number="config.check_interval_minutes" type="number" min="1" max="1440" />
           </div>
+          <div class="form-group">
+            <div class="field-label-row">
+              <label for="settings-login-timeout">登录请求超时（秒）</label>
+              <span class="field-help" tabindex="0" role="note" data-tip="点击「手动登录」后，前端等待后端完成登录流程的最长时间。超时后前端会提示失败，但后端可能仍在执行。自动登录不受此限制。">?</span>
+            </div>
+            <input id="settings-login-timeout" v-model.number="config.login_timeout" type="number" min="10" max="600" />
+          </div>
           <div class="form-row">
             <div class="form-group">
               <div class="field-label-row">
@@ -363,7 +370,10 @@
         </div>
         <div class="card-body">
           <div class="form-group">
-            <label for="settings-browser-timeout">页面超时（毫秒）</label>
+            <div class="field-label-row">
+              <label for="settings-browser-timeout">页面操作超时（毫秒）</label>
+              <span class="field-help" tabindex="0" role="note" data-tip="任务执行时每个浏览器步骤（点击、输入、等待元素等）的超时时间。不影响整体登录流程，仅控制单步操作。">?</span>
+            </div>
             <input id="settings-browser-timeout" v-model.number="config.browser_timeout" type="number" min="1000" max="60000" />
           </div>
           <div class="toggle-group">

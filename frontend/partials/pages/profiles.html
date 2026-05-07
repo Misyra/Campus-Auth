@@ -386,9 +386,21 @@
 
           <div class="form-row">
             <div class="form-group">
-              <label>页面超时（毫秒）</label>
+              <div class="field-label-row">
+                <label>页面操作超时（毫秒）</label>
+                <span class="field-help" tabindex="0" role="note" data-tip="任务执行时每个浏览器步骤（点击、输入、等待元素等）的超时时间。">?</span>
+              </div>
               <input v-model.number="editingProfile.browser_timeout" type="number" min="1000" max="60000" />
             </div>
+            <div class="form-group">
+              <div class="field-label-row">
+                <label>登录请求超时（秒）</label>
+                <span class="field-help" tabindex="0" role="note" data-tip="手动登录时前端等待后端响应的最长时间。">?</span>
+              </div>
+              <input v-model.number="editingProfile.login_timeout" type="number" min="10" max="600" />
+            </div>
+          </div>
+          <div class="form-row">
             <div class="form-group">
               <label>用户代理</label>
               <input v-model.trim="editingProfile.browser_user_agent" type="text" placeholder="留空使用默认" />

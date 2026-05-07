@@ -93,6 +93,7 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
         auto_start = profile.auto_start
         headless = profile.headless
         browser_timeout = profile.browser_timeout
+        login_timeout = profile.login_timeout
         browser_user_agent = profile.browser_user_agent
         browser_low_resource_mode = profile.browser_low_resource_mode
         browser_disable_web_security = profile.browser_disable_web_security
@@ -110,6 +111,7 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
         auto_start = global_profile.auto_start
         headless = global_profile.headless
         browser_timeout = global_profile.browser_timeout
+        login_timeout = global_profile.login_timeout
         browser_user_agent = global_profile.browser_user_agent
         browser_low_resource_mode = global_profile.browser_low_resource_mode
         browser_disable_web_security = global_profile.browser_disable_web_security
@@ -133,6 +135,7 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
         auto_start=auto_start,
         headless=headless,
         browser_timeout=browser_timeout,
+        login_timeout=login_timeout,
         browser_user_agent=browser_user_agent,
         browser_low_resource_mode=browser_low_resource_mode,
         browser_disable_web_security=browser_disable_web_security,
@@ -355,6 +358,7 @@ def save_config_combined(
         auto_start=payload.auto_start,
         headless=payload.headless,
         browser_timeout=payload.browser_timeout,
+        login_timeout=payload.login_timeout,
         browser_user_agent=payload.browser_user_agent.strip(),
         browser_low_resource_mode=payload.browser_low_resource_mode,
         browser_disable_web_security=payload.browser_disable_web_security,
