@@ -444,3 +444,252 @@
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+/* ==================== 仓库导入 ==================== */
+
+.repo-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  animation: fadeIn 0.2s ease;
+}
+
+.repo-modal {
+  background: rgba(30, 41, 59, 0.95);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  width: min(600px, calc(100vw - 48px));
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(16px);
+  animation: slideIn 0.25s ease;
+}
+
+.repo-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.repo-modal-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.repo-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.repo-modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.repo-url-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  align-items: stretch;
+}
+
+.repo-url-input {
+  flex: 1;
+  padding: 12px 14px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: 'JetBrains Mono', monospace;
+  transition: border-color 0.2s;
+  resize: vertical;
+  min-height: 60px;
+}
+
+.repo-url-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.repo-error {
+  padding: 10px 14px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 8px;
+  color: var(--error);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.repo-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.repo-task-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: all 0.2s;
+}
+
+.repo-task-item:hover {
+  border-color: var(--border-hover);
+  background: rgba(15, 23, 42, 0.7);
+}
+
+.repo-task-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.repo-task-name {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.repo-tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  background: rgba(34, 211, 238, 0.1);
+  color: var(--accent);
+  border: 1px solid rgba(34, 211, 238, 0.2);
+}
+
+.repo-task-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repo-task-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  display: flex;
+  gap: 8px;
+}
+
+/* ==================== 免责声明弹窗 ==================== */
+
+.repo-disclaimer-modal {
+  background: rgba(30, 41, 59, 0.95);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 16px;
+  width: min(520px, calc(100vw - 48px));
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(16px);
+  animation: slideIn 0.25s ease;
+}
+
+.repo-disclaimer-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.repo-disclaimer-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--warning);
+  margin: 0 0 4px;
+}
+
+.repo-disclaimer-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.repo-disclaimer-body {
+  padding: 16px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.repo-risk-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 14px;
+}
+
+.repo-risk-list li {
+  position: relative;
+  padding: 6px 0 6px 20px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.repo-risk-list li::before {
+  content: '⚠';
+  position: absolute;
+  left: 0;
+  color: var(--warning);
+  font-size: 12px;
+}
+
+.repo-disclaimer-warning {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: rgba(245, 158, 11, 0.06);
+  border: 1px solid rgba(245, 158, 11, 0.15);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.repo-disclaimer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+}
+
+.repo-disclaimer-accept {
+  background: linear-gradient(135deg, var(--warning), #d97706) !important;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.2);
+}
+
+.repo-disclaimer-accept:disabled {
+  background: var(--bg-primary) !important;
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.7;
+}

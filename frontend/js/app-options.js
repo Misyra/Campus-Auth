@@ -92,6 +92,15 @@ export const appOptions = {
       fullscreenSrc: '',
       updateInfo: null,
       updateLoading: false,
+      repoImport: {
+        visible: false,
+        url: 'https://github.com/Misyra/campus-auth-tasks/blob/master/index.json',
+        loading: false,
+        error: '',
+        tasks: [],
+        disclaimer: null,
+        disclaimerCountdown: 0,
+      },
     };
   },
   computed: {
