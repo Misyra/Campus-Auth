@@ -264,44 +264,51 @@ class ProfileService:
         with self._lock:
             self._data = None
 
+    def _load_unsafe(self) -> ProfilesData:
+        """加载 settings.json（不加锁，由调用者持有锁）"""
+        if self._data is not None:
+            return self._data.model_copy(deep=True)
+
+        if self._settings_path.exists():
+            try:
+                raw = self._settings_path.read_text(encoding="utf-8")
+                self._data = ProfilesData.model_validate_json(raw)
+                return self._data.model_copy(deep=True)
+            except Exception as exc:
+                profile_logger.error("加载 settings.json 失败: %s", exc)
+
+        self._data = ProfilesData()
+        return self._data.model_copy(deep=True)
+
+    def _save_unsafe(self, data: ProfilesData) -> None:
+        """原子写入 settings.json（不加锁，由调用者持有锁）"""
+        content = data.model_dump_json(indent=2)
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            dir=self._settings_path.parent, suffix=".tmp", prefix="settings."
+        )
+        try:
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                f.write(content)
+            os.replace(tmp_path, self._settings_path)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+
+        self._data = data
+        profile_logger.info("settings.json 已保存")
+
     def load(self) -> ProfilesData:
         """加载 settings.json，不存在则返回空结构"""
         with self._lock:
-            if self._data is not None:
-                return self._data.model_copy(deep=True)
-
-            if self._settings_path.exists():
-                try:
-                    raw = self._settings_path.read_text(encoding="utf-8")
-                    self._data = ProfilesData.model_validate_json(raw)
-                    return self._data.model_copy(deep=True)
-                except Exception as exc:
-                    profile_logger.error("加载 settings.json 失败: %s", exc)
-
-            self._data = ProfilesData()
-            return self._data.model_copy(deep=True)
+            return self._load_unsafe()
 
     def save(self, data: ProfilesData) -> None:
         """原子写入 settings.json"""
-        content = data.model_dump_json(indent=2)
         with self._lock:
-            tmp_fd, tmp_path = tempfile.mkstemp(
-                dir=self._settings_path.parent, suffix=".tmp", prefix="settings."
-            )
-            try:
-                with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
-                    f.write(content)
-                os.replace(tmp_path, self._settings_path)
-            except Exception:
-                try:
-                    os.unlink(tmp_path)
-                except OSError:
-                    pass
-                raise
-
-            self._data = data
-
-        profile_logger.info("settings.json 已保存")
+            self._save_unsafe(data)
 
     def get_active_profile(self) -> ProfileSettings:
         """获取当前活动方案的设置"""
@@ -323,12 +330,13 @@ class ProfileService:
 
     def set_active_profile(self, profile_id: str) -> tuple[bool, str]:
         """设置活动方案"""
-        data = self.load()
-        if profile_id not in data.profiles:
-            return False, f"方案 '{profile_id}' 不存在"
+        with self._lock:
+            data = self._load_unsafe()
+            if profile_id not in data.profiles:
+                return False, f"方案 '{profile_id}' 不存在"
 
-        data.active_profile = profile_id
-        self.save(data)
+            data.active_profile = profile_id
+            self._save_unsafe(data)
         profile_logger.info("活动方案已切换: %s", profile_id)
         return True, f"已切换到方案: {data.profiles[profile_id].name}"
 
@@ -343,22 +351,20 @@ class ProfileService:
         if not re.fullmatch(r"[a-zA-Z0-9_]+", profile_id):
             return False, "方案 ID 只能包含字母、数字和下划线"
 
-        # 处理密码：掩码不更新，明文则加密存储
-        data = self.load()
-        if settings.password and not settings.password.startswith("•") and not settings.password.startswith("ENC:"):
-            settings.password = encrypt_password(settings.password)
-        elif settings.password and settings.password.startswith("•"):
-            # 保留已有的加密密码
-            existing = data.profiles.get(profile_id)
-            if existing and existing.password:
-                settings.password = existing.password
-        data.profiles[profile_id] = settings
+        with self._lock:
+            data = self._load_unsafe()
+            if settings.password and not settings.password.startswith("•") and not settings.password.startswith("ENC:"):
+                settings.password = encrypt_password(settings.password)
+            elif settings.password and settings.password.startswith("•"):
+                existing = data.profiles.get(profile_id)
+                if existing and existing.password:
+                    settings.password = existing.password
+            data.profiles[profile_id] = settings
 
-        # 如果是第一个方案，设为活动方案
-        if len(data.profiles) == 1:
-            data.active_profile = profile_id
+            if len(data.profiles) == 1:
+                data.active_profile = profile_id
 
-        self.save(data)
+            self._save_unsafe(data)
         profile_logger.info("方案已保存: %s (%s)", profile_id, settings.name)
         return True, f"方案 '{settings.name}' 保存成功"
 
@@ -367,20 +373,20 @@ class ProfileService:
         if profile_id == "default":
             return False, "不能删除默认方案"
 
-        data = self.load()
-        if profile_id not in data.profiles:
-            return False, f"方案 '{profile_id}' 不存在"
+        with self._lock:
+            data = self._load_unsafe()
+            if profile_id not in data.profiles:
+                return False, f"方案 '{profile_id}' 不存在"
 
-        if len(data.profiles) <= 1:
-            return False, "至少需要保留一个方案"
+            if len(data.profiles) <= 1:
+                return False, "至少需要保留一个方案"
 
-        del data.profiles[profile_id]
+            del data.profiles[profile_id]
 
-        # 如果删除的是活动方案，切换到第一个
-        if data.active_profile == profile_id:
-            data.active_profile = next(iter(data.profiles))
+            if data.active_profile == profile_id:
+                data.active_profile = next(iter(data.profiles))
 
-        self.save(data)
+            self._save_unsafe(data)
         profile_logger.info("方案已删除: %s", profile_id)
         return True, "方案删除成功"
 
@@ -426,9 +432,10 @@ class ProfileService:
 
     def set_auto_switch(self, enabled: bool) -> None:
         """设置自动切换开关"""
-        data = self.load()
-        data.auto_switch = enabled
-        self.save(data)
+        with self._lock:
+            data = self._load_unsafe()
+            data.auto_switch = enabled
+            self._save_unsafe(data)
         profile_logger.info("自动切换: %s", "开启" if enabled else "关闭")
 
     def migrate_config(self, env_config: dict[str, Any]) -> None:

@@ -16,6 +16,9 @@ dependencies = [
     "Pillow>=10.0.0",
     "cairosvg>=2.7.0",
     "cryptography>=42.0.0",
+    "ddddocr>=1.6.1",
+    "onnxruntime<1.21",
+    "python-multipart>=0.0.27",
 ]
 
 [project.optional-dependencies]

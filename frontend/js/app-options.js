@@ -132,7 +132,7 @@ export const appOptions = {
     },
     networkStatus() {
       if (!this.status.monitoring) return 'idle';
-      if (this.status.login_attempt_count > 0) return 'disconnected';
+      if (this.status.network_connected === false) return 'disconnected';
       return 'connected';
     },
   },

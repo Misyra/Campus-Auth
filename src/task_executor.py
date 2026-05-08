@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import random
 import re
 import time
 from abc import ABC, abstractmethod
@@ -55,6 +56,7 @@ class StepType(str, Enum):
     CUSTOM_JS = "custom_js"
     SCREENSHOT = "screenshot"
     SLEEP = "sleep"
+    OCR = "ocr"
 
 
 class ConditionType(str, Enum):
@@ -86,6 +88,7 @@ class StepConfig:
     wait_until: str = "networkidle"
     path: str | None = None
     duration: int = 1000  # sleep duration in ms
+    frame: str | None = None  # frame 选择器（URL、name 或 CSS 选择器）
     # 扩展参数
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -94,7 +97,7 @@ class StepConfig:
         "description": "", "timeout": None, "url": None, "selector": None,
         "value": None, "pattern": None, "script": None, "store_as": None,
         "clear": True, "wait_until": "networkidle", "path": None,
-        "duration": 1000, "extra": {},
+        "duration": 1000, "frame": None, "extra": {},
     }
 
     @classmethod
@@ -285,10 +288,7 @@ class VariableResolver:
     def set_runtime_var(self, name: str, value: Any) -> None:
         """设置运行时变量"""
         self.runtime_vars[name] = value
-        # 清除包含该变量的缓存条目
-        self._cache = {
-            k: v for k, v in self._cache.items() if f"{{{{{name}}}}}" not in k
-        }
+        self._cache.clear()
 
 
 class StepHandler(ABC):
@@ -323,22 +323,42 @@ class StepHandler(ABC):
             params[key] = resolver.resolve(value)
         return params
 
-    async def _find_element(self, page, selector: str, timeout: int):
-        """查找元素（支持多个候选选择器）"""
-        candidates = [s.strip() for s in selector.split(",") if s.strip()]
-        deadline = time.monotonic() + timeout / 1000
+    async def _resolve_frame(self, page, step: StepConfig):
+        """解析 frame 上下文，返回实际操作的 page 或 frame 对象"""
+        frame_selector = step.frame
+        if not frame_selector:
+            return page
+        try:
+            # 优先按 name 匹配
+            frame = page.frame(name=frame_selector)
+            if frame:
+                logger.info("[frame] 使用 frame (name): %s", frame_selector)
+                return frame
+            # 回退到 URL 匹配
+            frame = page.frame(url=frame_selector)
+            if frame:
+                logger.info("[frame] 使用 frame (url): %s", frame_selector)
+                return frame
+            # 最后尝试 frame_locator（CSS 选择器）
+            frame = page.frame_locator(frame_selector)
+            logger.info("[frame] 使用 frame (locator): %s", frame_selector)
+            return frame
+        except Exception as e:
+            logger.warning("[frame] 无法定位 frame '%s': %s", frame_selector, e)
+            return page
 
-        while time.monotonic() < deadline:
-            for candidate in candidates:
-                try:
-                    locator = page.locator(candidate)
-                    if await locator.count() > 0:
-                        element = locator.first
-                        if await element.is_visible(timeout=100):
-                            return element
-                except Exception:
-                    continue
-            await page.wait_for_timeout(100)
+    async def _find_element(self, ctx, selector: str, timeout: int):
+        """查找元素（支持多个候选选择器，兼容 Page 和 FrameLocator）"""
+        candidates = [s.strip() for s in selector.split(",") if s.strip()]
+        timeout_sec = timeout / 1000
+
+        for candidate in candidates:
+            try:
+                locator = ctx.locator(candidate)
+                await locator.first.wait_for(state="visible", timeout=timeout)
+                return locator.first
+            except Exception:
+                continue
 
         return None
 
@@ -389,9 +409,10 @@ class InputHandler(StepHandler):
         if not selector:
             return False, "输入步骤需要 selector"
 
+        ctx = await self._resolve_frame(page, step)
         logger.info("输入 → %s (clear=%s)", selector, clear)
 
-        element = await self._find_element(page, selector, timeout)
+        element = await self._find_element(ctx, selector, timeout)
         if not element:
             return False, f"未找到输入元素: {selector}"
 
@@ -419,9 +440,10 @@ class ClickHandler(StepHandler):
         if not selector:
             return False, "点击步骤需要 selector"
 
+        ctx = await self._resolve_frame(page, step)
         logger.info("点击 → %s", selector)
 
-        element = await self._find_element(page, selector, timeout)
+        element = await self._find_element(ctx, selector, timeout)
         if not element:
             return False, f"未找到点击元素: {selector}"
 
@@ -452,9 +474,10 @@ class SelectHandler(StepHandler):
             logger.info("[select] value 为空，跳过选择步骤")
             return True, ""
 
+        ctx = await self._resolve_frame(page, step)
         logger.info(f"[select] selector={selector}, value={value}")
 
-        element = await self._find_element(page, selector, timeout)
+        element = await self._find_element(ctx, selector, timeout)
         if not element:
             logger.info(f"[select] 未找到选择元素，跳过: {selector}")
             return True, ""
@@ -515,8 +538,9 @@ class WaitHandler(StepHandler):
         if not selector:
             return False, "等待步骤需要 selector"
 
+        ctx = await self._resolve_frame(page, step)
         logger.info(f"[wait] selector={selector}, timeout={timeout}")
-        await page.wait_for_selector(selector, timeout=timeout)
+        await ctx.locator(selector).first.wait_for(timeout=timeout)
         return True, ""
 
 
@@ -657,6 +681,74 @@ class SleepHandler(StepHandler):
         return True, ""
 
 
+class OcrHandler(StepHandler):
+    """验证码识别步骤处理器"""
+
+    _ocr_instances: dict[bool, Any] = {}
+
+    @classmethod
+    def _get_ocr(cls, old: bool = False):
+        if old not in cls._ocr_instances:
+            try:
+                import ddddocr
+                cls._ocr_instances[old] = ddddocr.DdddOcr(old=old, show_ad=False)
+            except ImportError:
+                raise StepError("ddddocr 未安装，请运行: uv add ddddocr")
+        return cls._ocr_instances[old]
+
+    @property
+    def step_type(self) -> str:
+        return StepType.OCR
+
+    async def execute(
+        self, page, step: StepConfig, resolver: VariableResolver
+    ) -> tuple[bool, str]:
+        params = self.resolve_params(step, resolver)
+        selector = params.get("selector", "")
+        store_as = params.get("store_as")
+        target_selector = params.get("target_selector", "")
+        old = params.get("old", False)
+
+        if not selector:
+            return False, "ocr 步骤需要 selector（验证码图片选择器）"
+
+        timeout = step.timeout or 10000
+        ctx = await self._resolve_frame(page, step)
+
+        # 查找验证码图片元素
+        element = await self._find_element(ctx, selector, timeout)
+        if not element:
+            return False, f"未找到验证码图片元素: {selector}"
+
+        # 截取验证码图片
+        try:
+            img_bytes = await element.screenshot()
+        except Exception as e:
+            return False, f"验证码截图失败: {e}"
+
+        # OCR 识别
+        try:
+            ocr = self._get_ocr(old=old)
+            result = ocr.classification(img_bytes)
+        except Exception as e:
+            return False, f"验证码识别失败: {e}"
+
+        logger.info("[ocr] 识别结果: %s", result)
+
+        # 存储到变量
+        if store_as:
+            resolver.set_runtime_var(store_as, result)
+
+        # 自动填入目标输入框
+        if target_selector:
+            target = await self._find_element(ctx, target_selector, timeout)
+            if not target:
+                return False, f"未找到验证码输入框: {target_selector}"
+            await target.fill(result, timeout=timeout)
+
+        return True, result
+
+
 class StepExecutorRegistry:
     """步骤执行器注册表"""
 
@@ -667,7 +759,6 @@ class StepExecutorRegistry:
     def _register_defaults(self) -> None:
         """注册默认处理器"""
         handlers = [
-            NavigateHandler(),
             InputHandler(),
             ClickHandler(),
             SelectHandler(),
@@ -677,6 +768,7 @@ class StepExecutorRegistry:
             CustomJsHandler(),
             ScreenshotHandler(),
             SleepHandler(),
+            OcrHandler(),
         ]
         for handler in handlers:
             self.register(handler)
@@ -781,6 +873,9 @@ class TaskValidator:
         if step_type == StepType.EVAL and not step.get("script") and not step.get("code"):
             errors.append(f"{prefix} (eval) 需要 'script' 字段（'code' 仍兼容但已废弃）")
 
+        if step_type == StepType.OCR and not step.get("selector"):
+            errors.append(f"{prefix} (ocr) 需要 'selector' 字段（验证码图片选择器）")
+
         return errors
 
 
@@ -810,14 +905,21 @@ class TaskExecutor:
         """
         import time as _time
         task_start = _time.perf_counter()
-        logger.info("任务开始 [%s], %d 个步骤",
-                     self.config.name, len(self.config.steps))
+        task_timeout_ms = self.config.timeout or 30000
+        task_deadline = task_start + task_timeout_ms / 1000
+        logger.info("任务开始 [%s], %d 个步骤, 超时 %dms",
+                     self.config.name, len(self.config.steps), task_timeout_ms)
         self._step_results = []
 
         try:
             await self._auto_navigate(page)
 
             for i, step in enumerate(self.config.steps):
+                # 任务超时检查
+                remaining_s = task_deadline - _time.perf_counter()
+                if remaining_s <= 0:
+                    return await self._handle_failure(page, None,
+                        f"任务超时 ({task_timeout_ms}ms)")
                 # 跳过 navigate 步骤，已由 _auto_navigate 统一处理
                 if step.type == StepType.NAVIGATE:
                     logger.info("  步骤[%d/%d] %s (navigate) → 跳过，已自动导航",
@@ -1054,7 +1156,7 @@ class TaskExecutor:
         try:
             if self._screenshot_dir:
                 out_dir = self._screenshot_dir
-                url_prefix = f"/temp"
+                url_prefix = "/temp"
             else:
                 out_dir = self.PROJECT_ROOT / "debug" / datetime.now().strftime("%Y-%m-%d")
                 url_prefix = f"/debug/{out_dir.name}"

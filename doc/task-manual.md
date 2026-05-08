@@ -111,6 +111,7 @@
 | `type` | string | 是 | - | 步骤类型 |
 | `description` | string | 否 | "" | 步骤描述，会输出到日志 |
 | `timeout` | number | 否 | 视类型而定 | 超时时间（毫秒） |
+| `frame` | string | 否 | null | 目标 frame 的名称或 URL 片段，用于 frameset/iframe 页面 |
 
 #### 扩展字段（extra）
 
@@ -360,6 +361,134 @@
 
 ---
 
+### 11. ocr - 验证码识别
+
+使用 ddddocr 识别验证码图片，自动截取指定元素的图片进行 OCR 识别。识别结果可存储到变量或直接填入输入框。
+
+**执行流程：**
+
+```
+定位验证码图片元素 (selector)
+       │
+       ▼
+  截取元素截图 → img_bytes
+       │
+       ▼
+  ddddocr.classification(img_bytes) → 识别结果
+       │
+       ├── store_as 已设置 → 结果存入运行时变量（后续步骤可用 {{变量名}} 引用）
+       │
+       └── target_selector 已设置 → 自动填入目标输入框
+```
+
+**参数：**
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `selector` | string | 是 | - | 验证码图片元素选择器（支持多个，逗号分隔） |
+| `target_selector` | string | 否 | - | 验证码输入框选择器，识别后自动填入 |
+| `store_as` | string | 否 | - | 识别结果存储到的变量名 |
+| `timeout` | number | 否 | 10000 | 超时时间（毫秒） |
+| `frame` | string | 否 | null | 验证码所在的 frame 名称或 URL |
+| `old` | boolean | 否 | false | 是否使用旧版 OCR 模型（见下方说明） |
+
+**关于新旧模型：**
+
+ddddocr 内置两套模型，`old` 参数控制使用哪一套：
+
+| `old` | 模型 | 适用场景 |
+|-------|------|----------|
+| `false`（默认） | 新版模型 | 通用场景，对数字+字母混合验证码效果更好 |
+| `true` | 旧版模型 | 纯数字验证码或特定校园网系统的验证码风格 |
+
+如果你的校园网验证码识别不准，可以尝试切换 `old` 参数值。两套模型独立缓存，首次使用时各自初始化。
+
+**使用模式：**
+
+**模式一：识别后自动填入（推荐）**
+
+同时设置 `selector` 和 `target_selector`，OCR 识别完成后自动将结果填入输入框。适合验证码图片和输入框在同一页面、无额外处理的场景。
+
+```json
+{
+  "id": "solve_captcha",
+  "type": "ocr",
+  "description": "识别验证码并填入",
+  "selector": "#captcha-img",
+  "target_selector": "#captcha-input"
+}
+```
+
+**模式二：识别后存储到变量**
+
+只设置 `store_as`，识别结果保存为运行时变量，可在后续步骤中通过模板语法引用。适合需要在填入前对结果进行处理的场景。
+
+```json
+{
+  "id": "read_captcha",
+  "type": "ocr",
+  "description": "识别验证码",
+  "selector": "img.captcha",
+  "store_as": "captcha_text"
+}
+```
+
+然后在后续步骤中使用：
+
+```json
+{
+  "id": "input_captcha",
+  "type": "input",
+  "description": "填入验证码",
+  "selector": "#captcha-input",
+  "value": "{{captcha_text}}"
+}
+```
+
+**模式三：同时存储和填入**
+
+同时设置 `target_selector` 和 `store_as`，既自动填入输入框，又存储到变量以备后续使用。
+
+```json
+{
+  "id": "captcha_full",
+  "type": "ocr",
+  "description": "识别验证码",
+  "selector": "#captcha-img",
+  "target_selector": "#captcha-input",
+  "store_as": "captcha_result"
+}
+```
+
+**Frame 支持：**
+
+`ocr` 步骤支持 `frame` 字段，可以在指定的 iframe/frameset 子页面中查找验证码图片。选择器（`selector` 和 `target_selector`）都在 `frame` 指定的上下文中查找。
+
+```json
+{
+  "id": "captcha_in_frame",
+  "type": "ocr",
+  "description": "iframe 中的验证码",
+  "selector": "#code-img",
+  "target_selector": "#code-input",
+  "frame": "main"
+}
+```
+
+**超时与错误处理：**
+
+- 找不到验证码图片元素或输入框时，步骤失败并返回错误信息
+- 截图或 OCR 识别异常时，步骤失败并返回具体错误原因
+- 建议 `timeout` 设置 >= 5000ms，给页面加载留足时间
+
+**选择器建议：**
+
+- 验证码图片通常用 `img` 标签，选择器如 `img[src*='captcha']`、`#captcha-img`、`.code-img`
+- 如果图片在多个元素中，提供多个备选选择器（逗号分隔）提高兼容性
+- 输入框通常用 `input` 标签，选择器如 `input[name='captcha']`、`#captcha-input`
+
+---
+
 ## 变量系统
 
 ### 预定义变量
@@ -522,6 +651,16 @@
 
 这种设计确保运营商选择在不同页面结构下都能兼容。
 
+### Frame 支持
+
+部分校园网认证页面使用 `<frameset>` 或 `<iframe>` 嵌套结构，登录表单在子 frame 中。通过步骤的 `frame` 字段可以指定目标 frame，执行器会自动切换到对应 frame 上下文后再查找元素。
+
+`frame` 字段的值可以是：
+- frame 的 `name` 属性（如 `"main"`）
+- URL 匹配字符串（如 `"url=user/unionautologin.do"`）
+
+所有操作类步骤（`input`、`click`、`select`、`wait`、`ocr`）都支持 `frame` 字段。
+
 ### 危险步骤检测
 
 `eval` 和 `custom_js` 步骤可以执行任意 JavaScript 代码。系统会在以下环节进行安全检测：
@@ -622,6 +761,7 @@ Profiles 系统允许你为不同的网络环境（如宿舍 WiFi、教学楼 Wi
 | custom_js | `script`（兼容已废弃的 `code`） |
 | screenshot | 无 |
 | sleep | 无 |
+| ocr | `selector` |
 
 ### 验证工具
 
@@ -791,6 +931,51 @@ if not is_valid:
 
 > 注意：执行器会自动导航到 `url` 字段指定的地址，无需手动添加 navigate 步骤。
 
+### 带验证码的登录任务
+
+```json
+{
+  "name": "验证码登录",
+  "description": "需要输入验证码的校园网登录",
+  "url": "{{LOGIN_URL}}",
+  "timeout": 30000,
+  "steps": [
+    {
+      "id": "input_username",
+      "type": "input",
+      "selector": "#username",
+      "value": "{{USERNAME}}"
+    },
+    {
+      "id": "input_password",
+      "type": "input",
+      "selector": "#password",
+      "value": "{{PASSWORD}}"
+    },
+    {
+      "id": "solve_captcha",
+      "type": "ocr",
+      "description": "识别验证码并填入",
+      "selector": "#captcha-img",
+      "target_selector": "#captcha-input"
+    },
+    {
+      "id": "click_login",
+      "type": "click",
+      "selector": "#login-btn"
+    },
+    {
+      "id": "wait",
+      "type": "sleep",
+      "duration": 3000
+    }
+  ],
+  "success_conditions": [],
+  "on_success": { "message": "登录成功" },
+  "on_failure": { "message": "登录失败", "screenshot": true }
+}
+```
+
 ---
 
 ## API 参考
@@ -956,6 +1141,9 @@ if not is_valid:
 | custom_js | 执行JS | `script` | `code` 为已废弃别名 |
 | screenshot | 截图 | `path` | - |
 | sleep | 休眠 | `duration` | 最大 300000ms |
+| ocr | 验证码识别 | `selector`, `target_selector`, `store_as`, `old` | 截取图片元素 → ddddocr 识别 → 自动填入 或 存入变量；支持新旧模型切换 |
+
+> 所有操作类步骤都支持公共字段 `frame`，用于 frameset/iframe 页面中定位子 frame 内的元素。
 
 ---
 

@@ -144,10 +144,10 @@ async def auth_middleware(request: Request, call_next):
     return await call_next(request)
 
 
-service = MonitorService(project_root=PROJECT_ROOT)
+profile_service = ProfileService(project_root=PROJECT_ROOT)
+service = MonitorService(project_root=PROJECT_ROOT, profile_service=profile_service)
 autostart_service = AutoStartService(project_root=PROJECT_ROOT)
 task_service = TaskService(project_root=PROJECT_ROOT)
-profile_service = ProfileService(project_root=PROJECT_ROOT)
 http_logger = get_logger("backend.http", side="BACKEND")
 startup_logger = get_logger("backend.startup", side="BACKEND")
 api_logger = get_logger("backend.api", side="BACKEND")
@@ -277,6 +277,7 @@ _debug: dict = {
     "running": False,
 }
 _debug_lock = asyncio.Lock()
+_debug_exec_sem = asyncio.Semaphore(1)
 
 
 def _debug_response() -> dict:
@@ -363,18 +364,17 @@ def health() -> dict[str, str]:
 
 
 @app.get("/api/check-update")
-def check_update() -> dict:
-    import json
-    import urllib.request
+async def check_update() -> dict:
+    import httpx
 
     current = get_project_version(PROJECT_ROOT)
     try:
-        req = urllib.request.Request(
-            "https://api.github.com/repos/Misyra/Campus-Auth/releases/latest",
-            headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "Campus-Auth"},
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                "https://api.github.com/repos/Misyra/Campus-Auth/releases/latest",
+                headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "Campus-Auth"},
+            )
+        data = resp.json()
         tag = data.get("tag_name", "").lstrip("v")
         return {
             "current": current,
@@ -439,14 +439,12 @@ def save_config(payload: MonitorConfigPayload) -> ActionResponse:
         if not ok:
             raise ValueError(error)
 
-        # 原子化保存：系统设置 + 活动方案，使用 MonitorService 内部的 ProfileService 实例
-        save_config_combined(payload, service._profile_service)
+        # 原子化保存：系统设置 + 活动方案
+        save_config_combined(payload, profile_service)
         # 热更新日志级别
         LogConfigCenter.get_instance().set_level(payload.backend_log_level)
         # 同步更新 MonitorService 运行时配置
         service.reload_config()
-        # 使全局 profile_service 缓存失效，确保其他 API 端点读到最新数据
-        profile_service.invalidate_cache()
         api_logger.info("Config updated")
         return ActionResponse(success=True, message="配置保存成功")
     except ValueError as exc:
@@ -625,7 +623,13 @@ async def debug_start(request: Request) -> dict:
         env_vars["PASSWORD"] = runtime_config["password"]
     custom_vars = runtime_config.get("custom_variables", {})
     if custom_vars and isinstance(custom_vars, dict):
-        env_vars.update(custom_vars)
+        _ENV_DENYLIST = {"PATH", "PYTHONPATH", "HOME", "USER", "USERNAME",
+            "SYSTEMROOT", "TEMP", "TMP", "PATHEXT", "COMSPEC", "WINDIR",
+            "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH", "DISPLAY", "SHELL",
+            "LANG", "LC_ALL"}
+        for k, v in custom_vars.items():
+            if k.upper() not in _ENV_DENYLIST:
+                env_vars[k] = v
 
     # 解析任务 URL
     url = task.url or ""
@@ -674,54 +678,57 @@ async def debug_start(request: Request) -> dict:
 
 @app.post("/api/debug/next")
 async def debug_next() -> dict:
-    async with _debug_lock:
-        session, executor, page = _require_debug_session()
-        idx = _debug["current_step"]
+    async with _debug_exec_sem:
+        async with _debug_lock:
+            session, executor, page = _require_debug_session()
+            idx = _debug["current_step"]
 
-        if idx >= len(_debug["steps"]):
-            return {**_debug_response(), "message": "所有步骤已执行完毕"}
+            if idx >= len(_debug["steps"]):
+                return {**_debug_response(), "message": "所有步骤已执行完毕"}
 
-    result = await executor.execute_step_at(page, idx)
+        result = await executor.execute_step_at(page, idx)
 
-    async with _debug_lock:
-        _debug["results"].append(result)
-        _debug["screenshot_url"] = result.get("screenshot_url")
-        _debug["current_step"] = idx + 1
-        return _debug_response()
+        async with _debug_lock:
+            _debug["results"].append(result)
+            _debug["screenshot_url"] = result.get("screenshot_url")
+            _debug["current_step"] = idx + 1
+            return _debug_response()
 
 
 @app.post("/api/debug/run-all")
 async def debug_run_all() -> dict:
-    async with _debug_lock:
-        session, executor, page = _require_debug_session()
-        from_idx = _debug["current_step"]
+    async with _debug_exec_sem:
+        async with _debug_lock:
+            session, executor, page = _require_debug_session()
+            from_idx = _debug["current_step"]
 
-        if from_idx >= len(_debug["steps"]):
-            return {**_debug_response(), "message": "所有步骤已执行完毕"}
+            if from_idx >= len(_debug["steps"]):
+                return {**_debug_response(), "message": "所有步骤已执行完毕"}
 
-    agg = await executor.execute_remaining(page, from_idx)
+        agg = await executor.execute_remaining(page, from_idx)
 
-    async with _debug_lock:
-        _debug["results"].extend(agg["results"])
-        _debug["current_step"] = len(_debug["steps"])
+        async with _debug_lock:
+            _debug["results"].extend(agg["results"])
+            _debug["current_step"] = len(_debug["steps"])
 
-        if agg["results"]:
-            _debug["screenshot_url"] = agg["results"][-1].get("screenshot_url")
+            if agg["results"]:
+                _debug["screenshot_url"] = agg["results"][-1].get("screenshot_url")
 
-        return _debug_response()
+            return _debug_response()
 
 
 @app.post("/api/debug/stop")
 async def debug_stop() -> dict:
     global _debug
-    async with _debug_lock:
-        if _debug["session"]:
-            await _debug["session"].close()
-        _debug = {
-            "session": None, "task_id": None, "executor": None,
-            "current_step": 0, "steps": [], "results": [],
-            "screenshot_url": None, "running": False,
-        }
+    async with _debug_exec_sem:
+        async with _debug_lock:
+            if _debug["session"]:
+                await _debug["session"].close()
+            _debug = {
+                "session": None, "task_id": None, "executor": None,
+                "current_step": 0, "steps": [], "results": [],
+                "screenshot_url": None, "running": False,
+            }
     # 清理临时调试截图
     try:
         import shutil
@@ -752,6 +759,12 @@ def list_profiles() -> dict:
             "name": settings.name,
             "match_gateway_ip": settings.match_gateway_ip,
             "match_ssid": settings.match_ssid,
+            "carrier": settings.carrier,
+            "carrier_custom": settings.carrier_custom,
+            "use_global_auth_url": settings.use_global_auth_url,
+            "auth_url": settings.auth_url,
+            "use_global_task": settings.use_global_task,
+            "active_task": settings.active_task,
         }
     return {
         "profiles": result,
@@ -866,9 +879,10 @@ def detect_network_profile() -> dict:
 
 
 @app.post("/api/profiles/auto-switch", response_model=ActionResponse)
-def toggle_auto_switch(enabled: bool = True) -> ActionResponse:
-    profile_service.set_auto_switch(enabled)
-    state = "开启" if enabled else "关闭"
+def toggle_auto_switch(enabled: str = Query(default="true")) -> ActionResponse:
+    enabled_bool = enabled.strip().lower() in ("true", "1", "yes", "on")
+    profile_service.set_auto_switch(enabled_bool)
+    state = "开启" if enabled_bool else "关闭"
     api_logger.info("Auto-switch %s", state)
     return ActionResponse(success=True, message=f"自动切换已{state}")
 

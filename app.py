@@ -18,9 +18,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 # ==================== 最早加载 .env ====================
 # 必须在任何 import（特别是 backend.main）之前加载，
 # 否则模块级 get_logger() 会用默认 INFO 配置根 logger 并锁死
-_env_file = Path.cwd() / ".env"
+_env_file = Path(__file__).parent / ".env"
 if not _env_file.exists():
-    _env_example = Path.cwd() / ".env.example"
+    _env_example = Path(__file__).parent / ".env.example"
     if _env_example.exists():
         import shutil
         shutil.copy2(_env_example, _env_file)
@@ -109,8 +109,8 @@ def _open_browser(port: int, setting: bool | None = None) -> None:
         if not setting:
             return
     else:
-        auto_open = os.getenv("Campus-Auth_AUTO_OPEN_BROWSER", "true").strip().lower()
-        if auto_open not in {"1", "true", "yes", "on"}:
+        from src.utils import str_to_bool
+        if not str_to_bool(os.getenv("Campus-Auth_AUTO_OPEN_BROWSER", "true")):
             return
 
     def _worker():
@@ -144,7 +144,16 @@ def _cmd_stop() -> None:
         return
     try:
         print(f"正在停止服务 (PID: {pid})...")
-        os.kill(pid, signal.SIGTERM)
+        if sys.platform == "win32":
+            # Windows: taskkill 发送 WM_CLOSE 实现优雅关闭
+            import subprocess as _sp
+            _sp.run(
+                ["taskkill", "/PID", str(pid)],
+                capture_output=True,
+                creationflags=_sp.CREATE_NO_WINDOW if hasattr(_sp, "CREATE_NO_WINDOW") else 0,
+            )
+        else:
+            os.kill(pid, signal.SIGTERM)
         for _ in range(10):
             time.sleep(1)
             try:
@@ -154,7 +163,13 @@ def _cmd_stop() -> None:
                 _cleanup_pid()
                 return
         if sys.platform == "win32":
-            print("服务未能在 10 秒内停止，请手动结束进程")
+            import subprocess as _sp
+            _sp.run(
+                ["taskkill", "/F", "/PID", str(pid)],
+                capture_output=True,
+                creationflags=_sp.CREATE_NO_WINDOW if hasattr(_sp, "CREATE_NO_WINDOW") else 0,
+            )
+            print("服务已强制停止")
         else:
             os.kill(pid, signal.SIGKILL)
             print("服务已强制停止")

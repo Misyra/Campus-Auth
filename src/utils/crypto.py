@@ -12,6 +12,7 @@
 import base64
 import hashlib
 import os
+import threading
 from pathlib import Path
 
 from src.utils.logging import get_logger
@@ -25,6 +26,7 @@ _ENC_PREFIX = "ENC:"
 _cached_raw_key: bytes | None = None
 _cached_fernet_key: bytes | None = None
 _decryption_failed: bool = False
+_key_lock = threading.Lock()
 
 
 def _get_or_create_key() -> bytes:
@@ -33,29 +35,32 @@ def _get_or_create_key() -> bytes:
     if _cached_raw_key is not None:
         return _cached_raw_key
 
-    _KEY_DIR.mkdir(parents=True, exist_ok=True)
+    with _key_lock:
+        if _cached_raw_key is not None:
+            return _cached_raw_key
 
-    if _KEY_FILE.exists():
+        _KEY_DIR.mkdir(parents=True, exist_ok=True)
+
+        if _KEY_FILE.exists():
+            try:
+                key = base64.urlsafe_b64decode(_KEY_FILE.read_text(encoding="utf-8").strip())
+                if len(key) == 32:
+                    _cached_raw_key = key
+                    return key
+            except Exception:
+                pass
+
+        # 生成新密钥
+        key = os.urandom(32)
+        _KEY_FILE.write_text(base64.urlsafe_b64encode(key).decode("ascii"), encoding="utf-8")
+
         try:
-            key = base64.urlsafe_b64decode(_KEY_FILE.read_text(encoding="utf-8").strip())
-            if len(key) == 32:
-                _cached_raw_key = key
-                return key
-        except Exception:
+            _KEY_FILE.chmod(0o600)
+        except OSError:
             pass
 
-    # 生成新密钥
-    key = os.urandom(32)
-    _KEY_FILE.write_text(base64.urlsafe_b64encode(key).decode("ascii"), encoding="utf-8")
-
-    # 限制文件权限（仅当前用户可读写）
-    try:
-        _KEY_FILE.chmod(0o600)
-    except OSError:
-        pass
-
-    _cached_raw_key = key
-    return key
+        _cached_raw_key = key
+        return key
 
 
 def _derive_fernet_key() -> bytes:
@@ -106,6 +111,10 @@ def decrypt_password(ciphertext: str) -> str:
         return ciphertext
 
     encrypted_data = ciphertext[len(_ENC_PREFIX):]
+
+    # B64: 前缀表示无 cryptography 时的简单混淆，优先路由避免 Fernet 错误
+    if encrypted_data.startswith(_OBFUSCATE_PREFIX):
+        return _simple_deobfuscate(encrypted_data)
 
     try:
         from cryptography.fernet import Fernet

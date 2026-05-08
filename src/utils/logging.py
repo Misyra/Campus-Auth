@@ -81,9 +81,6 @@ def configure_root_logger(
     )
     root.setLevel(level)
 
-    for handler in list(root.handlers):
-        root.removeHandler(handler)
-
     context_filter = SideFilter(side=side)
 
     console_handler = logging.StreamHandler(sys.stdout)
@@ -131,6 +128,7 @@ class _DateRotatingFileHandler(logging.Handler):
         self._current_date: str | None = None
         self._last_cleanup: float = 0
         self._stream = None
+        self._emit_lock = threading.Lock()
         if formatter:
             self.setFormatter(formatter)
 
@@ -148,32 +146,33 @@ class _DateRotatingFileHandler(logging.Handler):
         self._stream = open(path, "a", encoding="utf-8")
 
     def emit(self, record: logging.LogRecord) -> None:
-        try:
-            today = datetime.now().strftime("%Y-%m-%d")
-            if today != self._current_date or self._stream is None:
-                self._current_date = today
-                path = self._get_log_path()
-                self._open_file(path)
+        with self._emit_lock:
+            try:
+                today = datetime.now().strftime("%Y-%m-%d")
+                if today != self._current_date or self._stream is None:
+                    self._current_date = today
+                    path = self._get_log_path()
+                    self._open_file(path)
 
-            # 每小时运行一次过期日志清理
-            now = time.time()
-            if now - self._last_cleanup > 3600:
-                self._last_cleanup = now
-                cutoff = now - self._retention * 86400
-                for f in Path(self._log_dir).glob("*.log"):
-                    try:
-                        if f.stat().st_mtime < cutoff:
-                            f.unlink()
-                    except OSError:
-                        pass
+                # 每小时运行一次过期日志清理
+                now = time.time()
+                if now - self._last_cleanup > 3600:
+                    self._last_cleanup = now
+                    cutoff = now - self._retention * 86400
+                    for f in Path(self._log_dir).glob("*.log"):
+                        try:
+                            if f.stat().st_mtime < cutoff:
+                                f.unlink()
+                        except OSError:
+                            pass
 
-            if self._stream:
-                msg = self.format(record)
-                self._stream.write(msg + os.linesep)
-                self._stream.flush()
-        except Exception as exc:
-            print(f"[LOG ERROR] 写入日志文件失败: {exc}", file=sys.stderr)
-            self.handleError(record)
+                if self._stream:
+                    msg = self.format(record)
+                    self._stream.write(msg + os.linesep)
+                    self._stream.flush()
+            except Exception as exc:
+                print(f"[LOG ERROR] 写入日志文件失败: {exc}", file=sys.stderr)
+                self.handleError(record)
 
     def close(self) -> None:
         try:

@@ -66,9 +66,9 @@ service_logger = get_logger("backend.monitor_service", side="BACKEND")
 
 
 class MonitorService:
-    def __init__(self, project_root: Path):
+    def __init__(self, project_root: Path, profile_service: ProfileService | None = None):
         self.project_root = project_root
-        self._profile_service = ProfileService(project_root)
+        self._profile_service = profile_service or ProfileService(project_root)
 
         self._lock = threading.Lock()
         self._logs: deque[LogEntry] = deque(maxlen=1200)
@@ -109,7 +109,8 @@ class MonitorService:
             source=source_name,
             message=message,
         )
-        self._logs.append(entry)
+        with self._lock:
+            self._logs.append(entry)
 
         # 同步写入 Python 日志系统 → 自动持久化到文件
         log_level = getattr(logging, level_name, logging.INFO) if hasattr(logging, level_name) else logging.INFO
@@ -258,13 +259,15 @@ class MonitorService:
 
         start_time = snapshot.get("start_time")
         runtime_seconds = int(time.time() - start_time) if running and start_time else 0
+        login_attempts = int(snapshot.get("login_attempt_count", 0))
 
         return MonitorStatusResponse(
             monitoring=running,
             network_check_count=int(snapshot.get("network_check_count", 0)),
-            login_attempt_count=int(snapshot.get("login_attempt_count", 0)),
+            login_attempt_count=login_attempts,
             last_check_time=snapshot.get("last_check_time"),
             runtime_seconds=runtime_seconds,
+            network_connected=running and login_attempts == 0,
         )
 
     def run_manual_login(self) -> tuple[bool, str]:

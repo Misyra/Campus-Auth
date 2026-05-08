@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import socket
 import sys
 import time
@@ -79,19 +80,20 @@ def is_network_available(
     timeout: float = 1.5,
     require_both: bool = False,
 ) -> bool:
+    urls_list = list(test_urls or ())
     logger.info("开始网络检测 (TCP目标=%d, HTTP目标=%d, require_both=%s)",
-                len(test_sites or ()), len(list(test_urls or ())), require_both)
+                len(test_sites or ()), len(urls_list), require_both)
     socket_ok = is_network_available_socket(test_sites=test_sites, timeout=timeout)
     if require_both:
         # 两者都必须成功，不能短路
-        http_ok = is_network_available_http(test_urls=test_urls, timeout=max(timeout, 2.0))
+        http_ok = is_network_available_http(test_urls=urls_list, timeout=max(timeout, 2.0))
         result = socket_ok and http_ok
     else:
         # TCP 成功即可，跳过 HTTP 检测节省时间
         if socket_ok:
             logger.info("网络检测完成: TCP=通 → 网络正常")
             return True
-        http_ok = is_network_available_http(test_urls=test_urls, timeout=max(timeout, 2.0))
+        http_ok = is_network_available_http(test_urls=urls_list, timeout=max(timeout, 2.0))
         result = http_ok
     logger.info("网络检测完成: TCP=%s HTTP=%s → %s",
                 "通" if socket_ok else "断",
