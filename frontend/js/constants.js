@@ -40,6 +40,7 @@ export const DEFAULT_CONFIG = {
   log_retention_days: 7,
   screenshot_retention_days: 7,
   custom_variables: {},
+  proxy: "",
 };
 
 export const SETTINGS_TABS = [

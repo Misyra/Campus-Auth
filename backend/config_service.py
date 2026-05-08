@@ -154,6 +154,7 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
         log_retention_days=sys.log_retention_days,
         screenshot_retention_days=sys.screenshot_retention_days,
         custom_variables=custom_variables,
+        proxy=sys.proxy,
     )
 
 
@@ -284,6 +285,7 @@ def save_config_combined(
     sys.login_then_exit = payload.login_then_exit
     sys.log_retention_days = payload.log_retention_days
     sys.screenshot_retention_days = payload.screenshot_retention_days
+    sys.proxy = payload.proxy.strip()
 
     data.system = sys
 

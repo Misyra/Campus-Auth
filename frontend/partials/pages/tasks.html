@@ -4,6 +4,14 @@
       <div class="card-header">
         <h2>登录任务列表</h2>
         <div style="display:flex;gap:6px;">
+          <button class="btn btn-sm" @click="showRepoImport()" title="从任务仓库导入">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            远程仓库导入
+          </button>
           <button class="btn btn-sm" @click="importTask()" title="从文件导入任务">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -237,6 +245,95 @@
           运行剩余
         </button>
         <button class="btn btn-sm btn-danger" @click="debugStop()">停止并关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 仓库导入弹窗 -->
+  <div v-if="repoImport.visible" class="repo-overlay" @click.self="closeRepoImport">
+    <div class="repo-modal">
+      <div class="repo-modal-header">
+        <div>
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;color:var(--accent);vertical-align:-3px;margin-right:6px;">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            从远程仓库导入
+          </h3>
+          <p class="repo-subtitle">输入任务仓库索引地址，浏览并导入任务配置</p>
+        </div>
+        <button class="btn btn-icon-only" @click="closeRepoImport">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="repo-modal-body">
+        <div class="repo-url-row">
+          <textarea v-model="repoImport.url" rows="3" placeholder="https://raw.githubusercontent.com/.../index.json"
+                    @keyup.enter.prevent="fetchRepoIndex" class="repo-url-input"></textarea>
+          <button class="btn btn-primary btn-sm" @click="fetchRepoIndex" :disabled="repoImport.loading">
+            {{ repoImport.loading ? '加载中...' : '加载列表' }}
+          </button>
+        </div>
+        <div v-if="repoImport.error" class="repo-error">{{ repoImport.error }}</div>
+        <div v-if="repoImport.tasks.length" class="repo-task-list">
+          <div v-for="task in repoImport.tasks" :key="task.id" class="repo-task-item">
+            <div class="repo-task-info">
+              <div class="repo-task-name">
+                {{ task.name }}
+                <span v-for="tag in (task.tags || [])" :key="tag" class="repo-tag">{{ tag }}</span>
+              </div>
+              <div class="repo-task-desc">{{ task.description }}</div>
+              <div class="repo-task-meta" v-if="task.author">
+                <span>{{ task.author }}</span>
+                <span v-if="task.version">v{{ task.version }}</span>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-sm" @click="confirmRepoImport(task)">下载</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 仓库导入免责声明弹窗 -->
+  <div v-if="repoImport.disclaimer" class="repo-overlay" style="z-index:210;" @click.self="cancelRepoDisclaimer">
+    <div class="repo-disclaimer-modal">
+      <div class="repo-disclaimer-header">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:28px;height:28px;color:var(--warning);flex-shrink:0;">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <div>
+          <h3>风险提示与免责声明</h3>
+          <p class="repo-disclaimer-subtitle">
+            您即将从远程仓库导入任务配置 <strong>{{ repoImport.disclaimer.name }}</strong>。<br>
+            该任务可能包含可在浏览器中执行的任意 JavaScript 代码，存在以下风险：
+          </p>
+        </div>
+      </div>
+      <div class="repo-disclaimer-body">
+        <ul class="repo-risk-list">
+          <li>窃取您的校园网账号和密码</li>
+          <li>篡改登录页面内容或跳转到恶意网站</li>
+          <li>执行未经授权的操作或访问敏感数据</li>
+          <li>携带恶意脚本对您的设备造成损害</li>
+        </ul>
+        <p class="repo-disclaimer-warning">
+          请务必确认任务来源可信、代码内容安全后再导入。使用远程任务所造成的一切后果由您自行承担，本项目不承担任何责任。
+        </p>
+      </div>
+      <div class="repo-disclaimer-footer">
+        <button class="btn btn-secondary" @click="cancelRepoDisclaimer">取消</button>
+        <button class="btn btn-primary repo-disclaimer-accept" @click="acceptRepoDisclaimer" :disabled="repoImport.disclaimerCountdown > 0">
+          <span v-if="repoImport.disclaimerCountdown > 0">请仔细阅读 ({{ repoImport.disclaimerCountdown }}s)</span>
+          <span v-else>我已知悉风险，继续导入</span>
+        </button>
       </div>
     </div>
   </div>

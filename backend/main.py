@@ -558,6 +558,87 @@ def set_active_task(task_id: str) -> ActionResponse:
     return ActionResponse(success=ok, message=message)
 
 
+# ==================== 仓库代理 API ====================
+
+
+def _normalize_repo_url(url: str) -> str:
+    """将 GitHub 页面链接转换为 raw 链接，其他链接原样返回"""
+    import re as _re
+    m = _re.match(r"https?://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+)", url)
+    if m:
+        return f"https://raw.githubusercontent.com/{m.group(1)}/{m.group(2)}/{m.group(3)}/{m.group(4)}"
+    return url
+
+
+def _get_configured_proxy() -> str:
+    """从 settings.json 读取代理配置"""
+    try:
+        return (profile_service.load().system.proxy or "").strip()
+    except Exception:
+        return ""
+
+
+def _repo_get(url: str):
+    """请求远程 JSON，使用配置的代理（如有）"""
+    import requests as _requests
+
+    headers = {"User-Agent": "Campus-Auth"}
+    proxy = _get_configured_proxy()
+    proxies = {"http": proxy, "https": proxy} if proxy else None
+
+    resp = _requests.get(url, headers=headers, timeout=15, proxies=proxies)
+    resp.raise_for_status()
+    return resp
+
+
+@app.get("/api/repo/fetch")
+def repo_fetch_index(url: str = Query(..., description="索引 JSON 地址")) -> list:
+    """代理获取任务仓库索引，避免前端跨域问题"""
+    import requests as _requests
+
+    url = _normalize_repo_url(url)
+    api_logger.info("获取远程索引: %s", url)
+
+    try:
+        resp = _repo_get(url)
+        data = resp.json()
+        if not isinstance(data, list):
+            raise HTTPException(status_code=422, detail="索引格式不正确，应为 JSON 数组")
+        api_logger.info("远程索引获取成功: %d 个任务", len(data))
+        return data
+    except _requests.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else 502
+        api_logger.error("远程索引获取失败: HTTP %s (%s)", status, url)
+        raise HTTPException(status_code=status, detail=f"远程返回错误: {status} ({url})") from exc
+    except Exception as exc:
+        api_logger.error("远程索引获取失败: %s (%s)", exc, url)
+        raise HTTPException(status_code=502, detail=f"获取索引失败: {exc}") from exc
+
+
+@app.get("/api/repo/task")
+def repo_fetch_task(url: str = Query(..., description="任务 JSON 地址")) -> dict:
+    """代理获取单个任务配置"""
+    import requests as _requests
+
+    url = _normalize_repo_url(url)
+    api_logger.info("下载远程任务: %s", url)
+
+    try:
+        resp = _repo_get(url)
+        data = resp.json()
+        if not isinstance(data, dict):
+            raise HTTPException(status_code=422, detail="任务格式不正确，应为 JSON 对象")
+        api_logger.info("远程任务下载成功: %s", data.get("name", "未命名"))
+        return data
+    except _requests.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else 502
+        api_logger.error("远程任务下载失败: HTTP %s (%s)", status, url)
+        raise HTTPException(status_code=status, detail=f"远程返回错误: {status} ({url})") from exc
+    except Exception as exc:
+        api_logger.error("远程任务下载失败: %s (%s)", exc, url)
+        raise HTTPException(status_code=502, detail=f"获取任务失败: {exc}") from exc
+
+
 # ==================== 安全模式 API ====================
 
 

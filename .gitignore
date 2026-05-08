@@ -52,6 +52,8 @@ Thumbs.db
 # Source assets
 1.png
 logo.png
+cat.svg
+development/
 
 # Release staging artifacts
 release/stage-win/

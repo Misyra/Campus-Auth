@@ -342,4 +342,100 @@ export const taskMethods = {
     if (index === this.debugSession.current_step) return 'current';
     return 'pending';
   },
+
+  // ==================== 仓库导入 ====================
+
+  showRepoImport() {
+    this.repoImport.visible = true;
+    this.repoImport.error = '';
+    this.repoImport.tasks = [];
+    this.repoImport.loading = false;
+    this.repoImport.disclaimer = null;
+  },
+
+  closeRepoImport() {
+    this.repoImport.visible = false;
+    this.repoImport.tasks = [];
+    this.repoImport.error = '';
+    this.repoImport.disclaimer = null;
+  },
+
+  async fetchRepoIndex() {
+    const url = this.repoImport.url.trim();
+    if (!url) {
+      this.repoImport.error = '请输入索引地址';
+      return;
+    }
+    this.repoImport.loading = true;
+    this.repoImport.error = '';
+    this.repoImport.tasks = [];
+    try {
+      const { data } = await this.$api.get(`/api/repo/fetch?url=${encodeURIComponent(url)}`);
+      if (!Array.isArray(data) || data.length === 0) {
+        this.repoImport.error = '索引为空或格式不正确';
+        return;
+      }
+      this.repoImport.tasks = data;
+    } catch (e) {
+      const msg = e?.response?.data?.detail || '加载失败，请检查地址是否正确';
+      this.repoImport.error = msg;
+      this.frontendLogger.error('tasks', '获取远程索引失败', msg);
+      this.notify(false, `获取远程索引失败: ${msg}`);
+    } finally {
+      this.repoImport.loading = false;
+    }
+  },
+
+  async confirmRepoImport(task) {
+    this.repoImport.disclaimer = task;
+    this.repoImport.disclaimerCountdown = 3;
+    const timer = setInterval(() => {
+      this.repoImport.disclaimerCountdown--;
+      if (this.repoImport.disclaimerCountdown <= 0) {
+        clearInterval(timer);
+        this.repoImport.disclaimerCountdown = 0;
+      }
+    }, 1000);
+    this._repoDisclaimerTimer = timer;
+  },
+
+  cancelRepoDisclaimer() {
+    if (this._repoDisclaimerTimer) {
+      clearInterval(this._repoDisclaimerTimer);
+      this._repoDisclaimerTimer = null;
+    }
+    this.repoImport.disclaimer = null;
+    this.repoImport.disclaimerCountdown = 0;
+  },
+
+  async acceptRepoDisclaimer() {
+    if (this._repoDisclaimerTimer) {
+      clearInterval(this._repoDisclaimerTimer);
+      this._repoDisclaimerTimer = null;
+    }
+    const task = this.repoImport.disclaimer;
+    this.repoImport.disclaimer = null;
+    if (!task) return;
+
+    try {
+      const { data } = await this.$api.get(`/api/repo/task?url=${encodeURIComponent(task.url)}`);
+      const id = (task.id || data.name || 'imported').replace(/[^A-Za-z0-9_]/g, '_');
+      this.editingTask = {
+        id: id,
+        name: data.name || task.name || '',
+        description: data.description || task.description || '',
+        url: data.url || '',
+        json: JSON.stringify(data, null, 2),
+        _isNew: true,
+      };
+      this.jsonError = '';
+      this.closeRepoImport();
+      this.frontendLogger.info('tasks', `已从仓库导入: ${task.name}`);
+      this.notify(true, `已导入「${task.name}」，请在右侧编辑器内确认后保存`);
+    } catch (e) {
+      const msg = e?.response?.data?.detail || '下载任务失败';
+      this.frontendLogger.error('tasks', '远程任务下载失败', msg);
+      this.notify(false, `远程任务下载失败: ${msg}`);
+    }
+  },
 };
