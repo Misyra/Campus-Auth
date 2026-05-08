@@ -26,6 +26,7 @@ export const lifecycleMethods = {
       const { data } = await this.$api.get('/api/init-status');
       this.showWizard = !data.initialized;
       if (data.password_decryption_failed) {
+        this.frontendLogger.error('init', '密码解密失败，请在设置页面重新输入密码');
         this.notify(false, '密码解密失败，请在设置页面重新输入密码');
       }
     } catch {
@@ -84,10 +85,12 @@ export const lifecycleMethods = {
         await this.fetchConfig(true);
         this.frontendLogger.info('lifecycle', '配置完成');
       } else {
+        this.frontendLogger.warn('lifecycle', '向导保存失败: ' + data.message);
         this.notify(false, data.message);
       }
     } catch (error) {
       const msg = error?.response?.data?.detail || '保存失败';
+      this.frontendLogger.error('lifecycle', '向导保存异常: ' + msg, error);
       this.notify(false, msg);
     } finally {
       this.busy.save = false;
@@ -118,6 +121,7 @@ export const lifecycleMethods = {
     this.ws.onopen = () => {
       this.wsRetryCount = 0;
       this.wsReconnecting = false;
+      this.frontendLogger.setWebSocket(this.ws);
       this.frontendLogger.info('websocket', 'connected');
     };
 
@@ -151,10 +155,12 @@ export const lifecycleMethods = {
     };
 
     this.ws.onclose = () => {
+      this.frontendLogger.setWebSocket(null);
       this.frontendLogger.warn('websocket', 'connection closed');
       if (this._wsDestroyed) return;
       if (this.wsRetryCount >= this.wsMaxRetries) {
         this.wsReconnecting = false;
+        this.frontendLogger.error('websocket', '连接断开，重试次数已耗尽');
         this.notify(false, '与服务器的连接已断开，请刷新页面');
         return;
       }

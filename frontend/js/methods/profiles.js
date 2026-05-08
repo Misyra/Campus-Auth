@@ -22,6 +22,7 @@ export const profileMethods = {
         };
         this.currentPage = 'profile-edit';
       }).catch(() => {
+        this.frontendLogger.error('profiles', '加载方案失败: ' + profileId);
         this.notify(false, '加载方案失败');
       });
     } else {
@@ -38,10 +39,12 @@ export const profileMethods = {
 
     const profileId = this.editingProfile.id.trim();
     if (!profileId) {
+      this.frontendLogger.warn('profiles', '保存方案被拒绝: 空 ID');
       this.notify(false, '请输入方案 ID');
       return;
     }
     if (!/^[a-zA-Z0-9_]+$/.test(profileId)) {
+      this.frontendLogger.warn('profiles', '保存方案被拒绝: ID 格式无效');
       this.notify(false, '方案 ID 只能包含字母、数字和下划线');
       return;
     }
@@ -51,6 +54,7 @@ export const profileMethods = {
     try {
       const { data } = await this.$api.put(`/api/profiles/${profileId}`, settings);
       if (data.success) {
+        this.frontendLogger.info('profiles', '方案保存成功: ' + profileId);
         this.notify(true, data.message || '方案保存成功');
         this.editingProfile = null;
         this.currentPage = 'profiles';
@@ -60,10 +64,13 @@ export const profileMethods = {
           await this.fetchConfig(true);
         }
       } else {
+        this.frontendLogger.warn('profiles', '方案保存失败: ' + data.message);
         this.notify(false, data.message);
       }
     } catch (error) {
-      this.notify(false, error?.response?.data?.detail || '保存失败');
+      const msg = error?.response?.data?.detail || '保存失败';
+      this.frontendLogger.error('profiles', '方案保存异常: ' + msg, error);
+      this.notify(false, msg);
     }
   },
   async deleteProfile(profileId) {
@@ -71,6 +78,7 @@ export const profileMethods = {
     try {
       const { data } = await this.$api.delete(`/api/profiles/${profileId}`);
       if (data.success) {
+        this.frontendLogger.info('profiles', '方案删除成功: ' + profileId);
         this.notify(true, '方案删除成功');
         if (this.currentPage === 'profile-edit') {
           this.editingProfile = null;
@@ -78,9 +86,11 @@ export const profileMethods = {
         }
         await this.fetchProfiles();
       } else {
+        this.frontendLogger.warn('profiles', '方案删除失败: ' + data.message);
         this.notify(false, data.message);
       }
     } catch (error) {
+      this.frontendLogger.error('profiles', '方案删除异常', error);
       this.notify(false, '删除方案失败');
     }
   },
@@ -90,11 +100,14 @@ export const profileMethods = {
       if (data.success) {
         this.activeProfileId = profileId;
         this.frontendLogger.info('profiles', data.message || `已切换到方案 ${profileId}`);
+        this.toastOnly(true, data.message || `已切换到方案 ${profileId}`);
         await this.fetchConfig(true);
       } else {
+        this.frontendLogger.warn('profiles', '切换方案失败: ' + data.message);
         this.notify(false, data.message);
       }
     } catch (error) {
+      this.frontendLogger.error('profiles', '切换方案异常', error);
       this.notify(false, '切换方案失败');
     }
   },
@@ -133,10 +146,13 @@ export const profileMethods = {
       if (data.success) {
         this.autoSwitch = newState;
         this.frontendLogger.info('profiles', data.message);
+        this.toastOnly(true, data.message);
       } else {
+        this.frontendLogger.warn('profiles', '切换自动切换失败: ' + data.message);
         this.notify(false, data.message);
       }
     } catch (error) {
+      this.frontendLogger.error('profiles', '切换自动切换异常', error);
       this.notify(false, '切换自动切换失败');
     }
   },

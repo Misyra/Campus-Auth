@@ -45,9 +45,11 @@ export const taskMethods = {
         this.activeTaskId = taskId;
         this.frontendLogger.info('tasks', `活动任务已设置: ${taskId}`);
       } else {
+        this.frontendLogger.warn('tasks', '设置活动任务失败: ' + data.message);
         this.notify(false, data.message);
       }
     } catch (error) {
+      this.frontendLogger.error('tasks', '设置活动任务异常', error);
       this.notify(false, '设置活动任务失败');
     }
   },
@@ -65,6 +67,7 @@ export const taskMethods = {
         };
         this.jsonError = '';
       } catch (error) {
+        this.frontendLogger.error('tasks', '加载任务失败: ' + taskId, error);
         this.toastOnly(false, '加载任务失败');
       }
     } else {
@@ -87,6 +90,7 @@ export const taskMethods = {
         this.jsonError = '';
       }
     } catch (error) {
+      this.frontendLogger.error('tasks', '加载模板失败: ' + templateId, error);
       this.toastOnly(false, '加载模板失败');
     }
   },
@@ -109,11 +113,13 @@ export const taskMethods = {
       this.editingTask.json = JSON.stringify(parsed, null, 2);
       this.jsonError = '';
     } catch (e) {
+      this.frontendLogger.warn('tasks', 'JSON 格式化失败: ' + e.message);
       this.toastOnly(false, 'JSON 格式错误，无法格式化');
     }
   },
   async saveTask() {
     if (!this.editingTask || !this.editingTask.id) {
+      this.frontendLogger.warn('tasks', '保存任务被拒绝: 空 ID');
       this.toastOnly(false, '请输入任务ID');
       return;
     }
@@ -122,6 +128,7 @@ export const taskMethods = {
       config = JSON.parse(this.editingTask.json);
     } catch (e) {
       this.jsonError = e.message;
+      this.frontendLogger.warn('tasks', '保存任务被拒绝: JSON 无效: ' + e.message);
       this.toastOnly(false, 'JSON 格式错误: ' + e.message);
       return;
     }
@@ -186,15 +193,18 @@ export const taskMethods = {
     try {
       const { data } = await this.$api.delete(`/api/tasks/${taskId}`);
       if (data.success) {
-        this.frontendLogger.info('tasks', '任务删除成功');
+        this.frontendLogger.info('tasks', '任务删除成功: ' + taskId);
+        this.toastOnly(true, '任务已删除');
         await this.fetchTasks();
         if (this.activeTaskId === taskId) {
           this.activeTaskId = 'default';
         }
       } else {
+        this.frontendLogger.warn('tasks', '删除任务失败: ' + data.message);
         this.notify(false, data.message);
       }
     } catch (error) {
+      this.frontendLogger.error('tasks', '删除任务异常', error);
       this.notify(false, '删除任务失败');
     }
   },
@@ -212,6 +222,7 @@ export const taskMethods = {
       };
       this.jsonError = '';
     } catch (error) {
+      this.frontendLogger.error('tasks', '复制任务失败: ' + taskId, error);
       this.toastOnly(false, '复制任务失败');
     }
   },
@@ -226,7 +237,8 @@ export const taskMethods = {
       a.click();
       URL.revokeObjectURL(url);
       this.frontendLogger.info('tasks', '任务已导出');
-    }).catch(() => {
+    }).catch((error) => {
+      this.frontendLogger.error('tasks', '导出任务失败: ' + taskId, error);
       this.toastOnly(false, '导出失败');
     });
   },
@@ -252,7 +264,8 @@ export const taskMethods = {
           };
           this.jsonError = '';
           this.frontendLogger.info('tasks', '已导入任务配置，请检查后保存');
-        } catch {
+        } catch (e) {
+          this.frontendLogger.warn('tasks', '导入失败: 文件不是有效 JSON: ' + e.message);
           this.toastOnly(false, '文件不是有效的 JSON');
         }
       };
@@ -272,9 +285,11 @@ export const taskMethods = {
     try {
       const { data } = await this.$api.post('/api/safe-mode');
       this.safeMode = data.enabled;
+      this.frontendLogger.info('tasks', `安全模式已${data.enabled ? '开启' : '关闭'}`);
       this.toastOnly(true, `安全模式已${data.enabled ? '开启' : '关闭'}`);
-    } catch {
+    } catch (error) {
       this.safeMode = !this.safeMode;
+      this.frontendLogger.error('tasks', '切换安全模式失败', error);
       this.toastOnly(false, '切换安全模式失败');
     }
   },
@@ -287,6 +302,7 @@ export const taskMethods = {
       this.frontendLogger.info('debug', `started for task ${taskId}`);
     } catch (error) {
       const msg = error?.response?.data?.detail || '启动调试失败';
+      this.frontendLogger.error('debug', '启动调试失败: ' + msg);
       this.notify(false, msg);
     } finally {
       this.debugLoading = false;
@@ -300,6 +316,7 @@ export const taskMethods = {
       this.debugSession = data;
     } catch (error) {
       const msg = error?.response?.data?.detail || '执行步骤失败';
+      this.frontendLogger.error('debug', '执行步骤失败: ' + msg);
       this.notify(false, msg);
     } finally {
       this.busy.debug = false;
@@ -313,6 +330,7 @@ export const taskMethods = {
       this.debugSession = data;
     } catch (error) {
       const msg = error?.response?.data?.detail || '执行失败';
+      this.frontendLogger.error('debug', '执行全部失败: ' + msg);
       this.notify(false, msg);
     } finally {
       this.busy.debug = false;
@@ -326,8 +344,10 @@ export const taskMethods = {
         running: false, task_id: null, current_step: 0,
         total_steps: 0, steps: [], results: [], screenshot_url: null,
       };
+      this.frontendLogger.info('debug', '调试已停止');
       this.notify(true, data.message || '调试已停止');
-    } catch {
+    } catch (error) {
+      this.frontendLogger.error('debug', '停止调试失败', error);
       this.notify(false, '停止调试失败');
     }
   },

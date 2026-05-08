@@ -358,8 +358,10 @@ class StepHandler(ABC):
                 await locator.first.wait_for(state="visible", timeout=timeout)
                 return locator.first
             except Exception:
+                logger.debug("选择器未匹配: %s", candidate)
                 continue
 
+        logger.warning("所有选择器均未匹配: %s", selector)
         return None
 
 
@@ -1110,7 +1112,8 @@ class TaskExecutor:
             try:
                 locator = page.locator(selector)
                 return await locator.count() > 0
-            except Exception:
+            except Exception as exc:
+                logger.debug("条件评估异常 (element_exists): %s", exc)
                 return False
 
         elif cond_type == ConditionType.JS_EXPRESSION:
@@ -1120,7 +1123,8 @@ class TaskExecutor:
             try:
                 result = await page.evaluate(script)
                 return bool(result)
-            except Exception:
+            except Exception as exc:
+                logger.debug("条件评估异常 (js_expression): %s", exc)
                 return False
 
         logger.warning(f"未知的条件类型: {cond_type}")

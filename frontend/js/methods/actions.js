@@ -5,7 +5,8 @@ export const actionMethods = {
       const url = this.status.monitoring ? '/api/monitor/stop' : '/api/monitor/start';
       this.frontendLogger.info('monitor', `request ${url}`);
       const { data } = await this.$api.post(url);
-      this.notify(data.success, data.message);
+      this.frontendLogger.info('monitor', 'monitor toggled: ' + data.message);
+      this.toastOnly(data.success, data.message);
       await this.fetchStatus();
     } catch (error) {
       const msg = error?.response?.data?.detail || '操作失败';
@@ -21,6 +22,7 @@ export const actionMethods = {
       this.frontendLogger.info('action', 'manual login requested');
       const loginTimeoutMs = (this.config.login_timeout || 120) * 1000;
       const { data } = await this.$api.post('/api/actions/login', null, { timeout: loginTimeoutMs });
+      this.frontendLogger.info('action', 'manual login result: ' + data.message);
       this.notify(data.success, data.message);
     } catch (error) {
       const msg = error?.response?.data?.detail || '手动登录失败';

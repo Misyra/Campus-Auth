@@ -8,6 +8,7 @@ export const statusMethods = {
       this.fetchStatusFailCount = (this.fetchStatusFailCount || 0) + 1;
       this.frontendLogger.warn('status', 'fetch status failed', error);
       if (this.fetchStatusFailCount >= 3) {
+        this.frontendLogger.error('status', '无法连接到服务器，已连续失败 3 次');
         this.notify(false, '无法连接到服务器，请检查后端是否已关闭');
         this.fetchStatusFailCount = 0;
       }

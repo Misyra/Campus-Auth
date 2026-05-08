@@ -48,6 +48,7 @@ def _normalize_headers_json(raw: str) -> str:
 def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
     data = profile_service.load()
     sys = data.system
+    config_logger.debug("加载 UI 配置: profile=%s", profile_service.get_active_profile_id())
     profile = profile_service.get_active_profile()
 
     # 账号密码：方案独立 > 全局
@@ -165,6 +166,7 @@ def build_runtime_config(payload: MonitorConfigPayload, sys: SystemSettings | No
         payload: 前端传来的合并配置
         sys: settings.json 中的系统设置（用于读取重试策略等非 UI 字段）
     """
+    config_logger.debug("构建运行时配置: user=%s, url=%s", payload.username, payload.auth_url)
     base: dict[str, Any] = {"password": ""}
 
     base["username"] = payload.username.strip()
