@@ -61,6 +61,10 @@ class NetworkMonitorCore:
         self._test_sites_cache: Optional[list[tuple[str, int]]] = None
         self.logger = setup_logger("monitor", self.config.get("logging", {}))
 
+        # 持久化登录处理器，重试时复用浏览器
+        self._login_handler: Optional[LoginAttemptHandler] = None
+        self._reuse_browser = False
+
         # 自动切换相关
         self._profile_service: Optional[ProfileService] = None
         self._on_profile_switch: Optional[Callable[[str], None]] = None
@@ -112,6 +116,7 @@ class NetworkMonitorCore:
         self.monitoring = True
         self._stop_requested = False
         self._cancel_login.clear()
+        self._reuse_browser = True
         self.start_time = time.time()
         self.network_check_count = 0
         self.login_attempt_count = 0
@@ -146,6 +151,15 @@ class NetworkMonitorCore:
         self._cancel_login.set()
         was_monitoring = self.monitoring
         self.monitoring = False
+
+        # 关闭登录浏览器
+        if self._login_handler:
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(self._login_handler.close_browser())
+            finally:
+                loop.close()
+            self._login_handler = None
 
         if was_monitoring and self.start_time:
             runtime, stats = get_runtime_stats(
@@ -406,16 +420,21 @@ class NetworkMonitorCore:
             f"运营商={self.config.get('isp', '无') or '无'} "
             f"任务={active_task}")
         try:
-            handler = LoginAttemptHandler(self.config, cancel_event=self._cancel_login)
-            # 在同步线程中安全运行异步代码：每次创建独立事件循环
-            # 使用 asyncio.run() 的替代方案，避免在已有事件循环时崩溃
+            # 复用持久化 handler，重试时保留浏览器
+            if self._login_handler is None:
+                self._login_handler = LoginAttemptHandler(
+                    self.config, cancel_event=self._cancel_login
+                )
+            else:
+                self._login_handler.config = self.config
+
+            handler = self._login_handler
             loop = asyncio.new_event_loop()
             try:
                 success, message = loop.run_until_complete(
-                    handler.attempt_login(skip_pause_check=True)
+                    handler.attempt_login(skip_pause_check=True, reuse_browser=self._reuse_browser)
                 )
             finally:
-                # 完成所有待处理异步任务（如 Playwright 浏览器关闭）再关闭循环
                 pending = asyncio.all_tasks(loop)
                 if pending:
                     loop.run_until_complete(asyncio.gather(*pending))
