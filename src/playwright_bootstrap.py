@@ -49,8 +49,8 @@ def _candidate_hosts() -> list[str]:
 
 
 def _is_enabled() -> bool:
-    value = os.getenv("AUTO_INSTALL_PLAYWRIGHT", "true").strip().lower()
-    return value in {"1", "true", "yes", "on"}
+    from src.utils import str_to_bool
+    return str_to_bool(os.getenv("AUTO_INSTALL_PLAYWRIGHT", "true"))
 
 
 def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
@@ -171,7 +171,3 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
             if log:
                 log(f"Playwright 初始化失败: {exc}")
             return False
-
-
-def ensure_chromium_installed(log: Callable[[str], None] | None = None) -> bool:
-    return ensure_playwright_ready(log)

@@ -59,7 +59,7 @@ class BrowserContextManager:
             from playwright.async_api import async_playwright
 
             self.playwright = await async_playwright().start()
-            headless = self.browser_settings.get("headless", False)
+            headless = self.browser_settings.get("headless", True)
             safe_mode = self.browser_settings.get("safe_mode", False)
 
             if safe_mode:
@@ -187,46 +187,3 @@ class BrowserContextManager:
             )
         else:
             self.logger.debug("浏览器资源已完全清理")
-
-    async def navigate_to(self, url: str, timeout: int | None = None) -> bool:
-        """导航到指定URL"""
-        if not self.page:
-            raise RuntimeError("浏览器未启动，请在上下文管理器中使用")
-        if self._is_cancelled():
-            raise RuntimeError("浏览器操作已取消")
-
-        try:
-            timeout = timeout or self.browser_settings.get("timeout", 10000)
-            await self.page.goto(url, timeout=timeout)
-            await self.page.wait_for_load_state("networkidle", timeout=timeout)
-            return True
-        except Exception as e:
-            self.logger.error(f"导航到 {url} 失败: {e}")
-            return False
-
-    async def take_screenshot(self, path: str = None) -> str:
-        """截图功能"""
-        if not self.page:
-            raise RuntimeError("浏览器未启动，请在上下文管理器中使用")
-
-        from pathlib import Path
-
-        if not path:
-            import time
-            from datetime import datetime
-
-            project_root = Path(__file__).resolve().parents[2]
-            sc_dir = project_root / "debug" / datetime.now().strftime("%Y-%m-%d")
-            sc_dir.mkdir(parents=True, exist_ok=True)
-            stamp = time.strftime("%Y%m%d_%H%M%S")
-            path = str(sc_dir / f"manual_{stamp}.png")
-
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-
-        try:
-            await self.page.screenshot(path=path)
-            self.logger.info(f"截图已保存: {path}")
-            return path
-        except Exception as e:
-            self.logger.error(f"截图失败: {e}")
-            raise

@@ -26,7 +26,7 @@ class NetworkMonitorCore:
     """网络监控核心类"""
 
     # 类常量：监控配置
-    DEFAULT_INTERVAL_SECONDS = 240
+    DEFAULT_INTERVAL_SECONDS = 300
     MAX_CONSECUTIVE_LOGIN_FAILURES = 3
     LOGIN_RETRY_INTERVALS = [5, 30, 60]
     PAUSE_CHECK_INTERVAL_SECONDS = 300
@@ -415,6 +415,10 @@ class NetworkMonitorCore:
                     handler.attempt_login(skip_pause_check=True)
                 )
             finally:
+                # 完成所有待处理异步任务（如 Playwright 浏览器关闭）再关闭循环
+                pending = asyncio.all_tasks(loop)
+                if pending:
+                    loop.run_until_complete(asyncio.gather(*pending))
                 loop.close()
             # 检查是否在登录过程中被取消
             if self._cancel_login.is_set():

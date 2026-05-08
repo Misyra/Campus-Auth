@@ -178,7 +178,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory={self.project_root}
-ExecStart=/bin/bash -lc \"{self._start_command()}\"
+ExecStart=/bin/bash -lc {self._start_command()}
 Restart=always
 RestartSec=5
 

@@ -10,6 +10,11 @@ from .logging import (
 from .login import LoginAttemptHandler
 from .time import TimeUtils, get_runtime_stats
 
+
+def str_to_bool(value: str) -> bool:
+    """将字符串值转换为布尔值。接受: true/1/yes/on（大小写不敏感）"""
+    return str(value).strip().lower() in ("true", "1", "yes", "on")
+
 __all__ = [
     "setup_logger",
     "get_logger",
@@ -24,4 +29,5 @@ __all__ = [
     "encrypt_password",
     "decrypt_password",
     "mask_password",
+    "str_to_bool",
 ]

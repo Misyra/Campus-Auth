@@ -3,6 +3,7 @@ import argparse
 import datetime
 import hashlib
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -215,9 +216,19 @@ def check_python_environment():
             text=True,
         )
         if result.returncode == 0:
-            version = result.stdout.strip()
-            log_success(f"Python 版本: {version}")
-            return {"exe_exists": True, "can_run": True, "version": version}
+            version_output = result.stdout.strip()
+            log_success(f"Python 版本: {version_output}")
+            # 验证版本号是否匹配
+            version_match = re.search(r"(\d+\.\d+)", version_output)
+            if version_match:
+                detected = version_match.group(1)
+                if detected != PYTHON_VERSION:
+                    log_warning(
+                        f"Python 版本不匹配: 检测到 {detected}, 期望 {PYTHON_VERSION}"
+                    )
+                    return {"exe_exists": True, "can_run": True,
+                            "version": version_output, "version_mismatch": True}
+            return {"exe_exists": True, "can_run": True, "version": version_output}
         else:
             log_warning(f"Python 无法正常运行: {result.stderr}")
             return {"exe_exists": True, "can_run": False, "version": None}
@@ -748,6 +759,7 @@ def main():
     if (
         not python_result["exe_exists"]
         or not python_result["can_run"]
+        or python_result.get("version_mismatch")
         or FORCE_REINSTALL
     ):
         log_info(">>> 开始安装 Python...")

@@ -164,7 +164,7 @@ def build_runtime_config(payload: MonitorConfigPayload, sys: SystemSettings | No
         payload: 前端传来的合并配置
         sys: settings.json 中的系统设置（用于读取重试策略等非 UI 字段）
     """
-    base: dict[str, Any] = {}
+    base: dict[str, Any] = {"password": ""}
 
     base["username"] = payload.username.strip()
     raw_password = payload.password.strip()
@@ -244,58 +244,6 @@ def _save_password_field(raw: str, existing_encrypted: str) -> str:
     # 明文密码 → 加密存储
     return encrypt_password(raw)
 
-
-def write_system_settings(payload: MonitorConfigPayload, profile_service: ProfileService) -> None:
-    """将系统级设置写入 settings.json 的 system 字段"""
-    data = profile_service.load()
-    sys = data.system
-
-    pwd_raw = payload.password.strip()
-    if payload.use_global_credentials:
-        old_user = sys.username
-        sys.username = payload.username.strip()
-        sys.password = _save_password_field(pwd_raw, sys.password)
-        config_logger.info(
-            "保存系统设置: 用户=%s (旧=%s), 密码=%s, use_global=%s",
-            sys.username, old_user,
-            "已更新" if (pwd_raw and not pwd_raw.startswith("•")) else "保留",
-            payload.use_global_credentials,
-        )
-
-    sys.auth_url = payload.auth_url.strip()
-    sys.carrier = str(payload.carrier or "无").strip()
-    sys.carrier_custom = str(payload.carrier_custom or "").strip()
-    sys.backend_log_level = _normalize_level(payload.backend_log_level)
-    sys.frontend_log_level = _normalize_level(payload.frontend_log_level)
-    sys.access_log = payload.access_log
-    sys.minimize_to_tray = payload.minimize_to_tray
-    sys.auto_open_browser = payload.auto_open_browser
-    sys.login_then_exit = payload.login_then_exit
-    sys.log_retention_days = payload.log_retention_days
-    sys.screenshot_retention_days = payload.screenshot_retention_days
-
-    data.system = sys
-    profile_service.save(data)
-    config_logger.info(
-        "系统设置已写入: auth_url=%s, carrier=%s, interval=%d, auto_start=%s",
-        sys.auth_url, sys.carrier, payload.check_interval_minutes, payload.auto_start,
-    )
-
-    # 立即读盘验证，确保写入真正生效
-    try:
-        vpath = profile_service._settings_path
-        if vpath.exists():
-            vdata = json.loads(vpath.read_text(encoding="utf-8"))
-            vsys = vdata.get("system", {})
-            config_logger.info(
-                "磁盘验证: size=%d user=%s pwd=%s auth=%s",
-                vpath.stat().st_size,
-                repr(vsys.get("username", "")),
-                "ENC" if str(vsys.get("password", "")).startswith("ENC:") else "空",
-                repr(vsys.get("auth_url", "")),
-            )
-    except Exception:
-        pass
 
 
 def save_config_combined(

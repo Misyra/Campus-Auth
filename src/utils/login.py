@@ -126,7 +126,13 @@ class LoginAttemptHandler:
                 env_vars["PASSWORD"] = self.config["password"]
             custom_vars = self.config.get("custom_variables", {})
             if custom_vars and isinstance(custom_vars, dict):
-                env_vars.update(custom_vars)
+                _ENV_DENYLIST = {"PATH", "PYTHONPATH", "HOME", "USER", "USERNAME",
+                    "SYSTEMROOT", "TEMP", "TMP", "PATHEXT", "COMSPEC", "WINDIR",
+                    "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH", "DISPLAY", "SHELL",
+                    "LANG", "LC_ALL"}
+                for k, v in custom_vars.items():
+                    if k.upper() not in _ENV_DENYLIST:
+                        env_vars[k] = v
 
             if self.cancel_event and self.cancel_event.is_set():
                 return False, "登录已取消"

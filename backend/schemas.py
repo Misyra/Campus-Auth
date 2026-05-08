@@ -103,6 +103,7 @@ class MonitorStatusResponse(BaseModel):
     login_attempt_count: int
     last_check_time: str | None
     runtime_seconds: int
+    network_connected: bool = False
 
 
 class LogEntry(BaseModel):

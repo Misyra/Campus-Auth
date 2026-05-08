@@ -164,6 +164,12 @@
   border: 1px solid rgba(34, 211, 238, 0.3);
 }
 
+.tech-badge.ddddocr {
+  background: rgba(147, 51, 234, 0.2);
+  color: #a855f7;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
 .feature-list {
   list-style: none;
 }
