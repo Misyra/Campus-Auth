@@ -105,6 +105,7 @@ class NetworkMonitorCore:
 
     def update_config(self, new_config: Dict[str, Any]) -> None:
         """热更新运行时配置（方案切换时调用）"""
+        self.log_message("运行时配置已更新 (热更新)", logging.INFO)
         self.config = new_config
         self._test_sites_cache = None  # 清除测试站点缓存
 
@@ -280,7 +281,8 @@ class NetworkMonitorCore:
                             timeout=self.NETWORK_CHECK_TIMEOUT_SECONDS,
                             require_both=False,
                         )
-                    except Exception:
+                    except Exception as exc:
+                        self.log_message(f"登录后网络验证异常: {exc}", logging.WARNING)
                         verify_ok = False
 
                     if verify_ok:

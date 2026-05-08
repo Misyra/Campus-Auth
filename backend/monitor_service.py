@@ -114,7 +114,12 @@ class MonitorService:
 
         # 同步写入 Python 日志系统 → 自动持久化到文件
         log_level = getattr(logging, level_name, logging.INFO) if hasattr(logging, level_name) else logging.INFO
-        service_logger.log(log_level, "[%s] %s", source_name, message)
+        record = service_logger.makeRecord(
+            service_logger.name, log_level, "(monitor_service)", 0,
+            "[%s] %s", (source_name, message), None,
+        )
+        record.side = "FRONTEND" if source_name == "frontend" else "BACKEND"
+        service_logger.handle(record)
 
         # 监控相关日志触发的状态推送（网络检测、登录尝试等）
         if source_name in ("monitor.core", "monitor", "network"):

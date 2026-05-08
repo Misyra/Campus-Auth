@@ -47,10 +47,11 @@ def _get_or_create_key() -> bytes:
                 if len(key) == 32:
                     _cached_raw_key = key
                     return key
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("密钥文件读取失败，将生成新密钥: %s", exc)
 
         # 生成新密钥
+        logger.info("已生成新加密密钥: %s", _KEY_DIR)
         key = os.urandom(32)
         _KEY_FILE.write_text(base64.urlsafe_b64encode(key).decode("ascii"), encoding="utf-8")
 

@@ -73,6 +73,7 @@ export const uiMethods = {
     if (!newKey) return;
     // 验证新变量名格式
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(newKey)) {
+      this.frontendLogger.warn('config', '自定义变量名格式无效: ' + newKey);
       this.toastOnly(false, '变量名必须以字母或下划线开头，只能包含字母、数字和下划线');
       // 恢复原值
       this.$nextTick(() => {
@@ -82,6 +83,7 @@ export const uiMethods = {
       return;
     }
     if (this.config.custom_variables.hasOwnProperty(newKey)) {
+      this.frontendLogger.warn('config', '自定义变量名已存在: ' + newKey);
       this.toastOnly(false, '变量名已存在');
       return;
     }
@@ -149,6 +151,7 @@ export const uiMethods = {
         }, 500);
       }, 1000);
     } catch (error) {
+      this.frontendLogger.error('app', '退出应用失败', error);
       this.notify(false, '退出失败，请手动关闭窗口');
     } finally {
       this.busy.monitor = false;

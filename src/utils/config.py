@@ -11,6 +11,9 @@ from typing import Tuple
 from dotenv import load_dotenv
 
 from .crypto import decrypt_password
+from .logging import get_logger
+
+logger = get_logger("config", side="BACKEND")
 
 
 class ConfigLoader:
@@ -27,6 +30,7 @@ class ConfigLoader:
         try:
             return int(os.getenv(key, str(default)))
         except ValueError:
+            logger.debug("环境变量 %s 不是有效整数，使用默认值 %d", key, default)
             return default
 
     @staticmethod
@@ -112,8 +116,10 @@ class ConfigLoader:
         env_override = os.getenv("Campus-Auth_ENV_FILE", "").strip()
         if env_override:
             load_dotenv(Path(env_override), override=True)
+            logger.info("配置已从环境变量加载: env_file=%s", env_override)
         else:
             load_dotenv(Path.cwd() / ".env", override=True)
+            logger.info("配置已从环境变量加载: env_file=.env")
 
         config = ConfigLoader._load_basic_config()
         config["browser_settings"] = ConfigLoader._load_browser_config()

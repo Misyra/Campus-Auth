@@ -217,8 +217,8 @@ class DebugSession:
                             for k, v in custom.items()
                             if k is not None
                         }
-                except Exception:
-                    pass
+                except Exception as exc:
+                    api_logger.debug("自定义请求头 JSON 解析失败: %s", exc)
 
             self._browser = await self._pw.chromium.launch(
                 headless=False, args=args
@@ -307,7 +307,8 @@ async def _take_debug_screenshot(page, step_label: str = "") -> str | None:
         filename = f"{task_id}{step_part}_{stamp}.png"
         await page.screenshot(path=str(TEMP_DIR / filename), full_page=True)
         return f"/temp/{filename}"
-    except Exception:
+    except Exception as exc:
+        api_logger.debug("调试截图失败: %s", exc)
         return None
 
 
@@ -344,7 +345,18 @@ async def websocket_logs(websocket: WebSocket):
     await ws_manager.connect(websocket)
     try:
         while True:
-            await websocket.receive_text()
+            raw = await websocket.receive_text()
+            try:
+                msg = json.loads(raw)
+                if msg.get("type") == "frontend_log":
+                    d = msg.get("data", {})
+                    service._push_log(
+                        message=f"[{d.get('scope', '?')}] {d.get('message', '')}",
+                        level=d.get("level", "INFO"),
+                        source="frontend",
+                    )
+            except (json.JSONDecodeError, KeyError):
+                pass
     except WebSocketDisconnect:
         ws_logger.info("WebSocket disconnected: /ws/logs")
         await ws_manager.disconnect(websocket)
@@ -574,7 +586,8 @@ def _get_configured_proxy() -> str:
     """从 settings.json 读取代理配置"""
     try:
         return (profile_service.load().system.proxy or "").strip()
-    except Exception:
+    except Exception as exc:
+        api_logger.debug("读取代理配置失败: %s", exc)
         return ""
 
 

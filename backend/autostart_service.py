@@ -7,6 +7,10 @@ import sys
 import xml.sax.saxutils
 from pathlib import Path
 
+from src.utils.logging import get_logger
+
+logger = get_logger("backend.autostart", side="BACKEND")
+
 
 class AutoStartService:
     """管理开机自启动（按平台实现）。"""
@@ -34,11 +38,15 @@ class AutoStartService:
 
     def _run(self, cmd: list[str]) -> tuple[bool, str]:
         try:
+            logger.debug("执行命令: %s", " ".join(cmd))
             proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
             if proc.returncode == 0:
+                logger.debug("命令成功: %s", (proc.stdout or "").strip()[:200])
                 return True, (proc.stdout or "").strip()
+            logger.warning("命令失败 (code=%d): %s", proc.returncode, (proc.stderr or proc.stdout or "").strip()[:200])
             return False, (proc.stderr or proc.stdout or "").strip()
         except Exception as exc:
+            logger.error("命令异常: %s -> %s", " ".join(cmd), exc)
             return False, str(exc)
 
     def _mac_plist_path(self) -> Path:
@@ -101,25 +109,30 @@ class AutoStartService:
         }
 
     def enable(self) -> tuple[bool, str]:
+        logger.info("启用开机自启动: platform=%s", self.platform_name)
         if self.platform_name == "darwin":
             return self._enable_macos()
         if self.platform_name == "linux":
             return self._enable_linux()
         if self.platform_name.startswith("win"):
             return self._enable_windows()
+        logger.warning("当前平台不支持开机自启动: %s", self.platform_name)
         return False, "当前平台不支持自动配置开机自启动"
 
     def disable(self) -> tuple[bool, str]:
+        logger.info("禁用开机自启动: platform=%s", self.platform_name)
         if self.platform_name == "darwin":
             return self._disable_macos()
         if self.platform_name == "linux":
             return self._disable_linux()
         if self.platform_name.startswith("win"):
             return self._disable_windows()
+        logger.warning("当前平台不支持开机自启动: %s", self.platform_name)
         return False, "当前平台不支持自动配置开机自启动"
 
     def _enable_macos(self) -> tuple[bool, str]:
         plist_path = self._mac_plist_path()
+        logger.info("macOS plist 路径: %s", plist_path)
         plist_path.parent.mkdir(parents=True, exist_ok=True)
 
         log_dir = self.project_root / "logs"
@@ -153,22 +166,29 @@ class AutoStartService:
 </plist>
 """
         plist_path.write_text(content, encoding="utf-8")
+        logger.info("macOS plist 已写入: %s", plist_path)
 
         self._run(["launchctl", "unload", str(plist_path)])
         ok, msg = self._run(["launchctl", "load", str(plist_path)])
         if ok:
+            logger.info("macOS launchctl load 成功")
             return True, f"已启用 macOS 开机自启动: {plist_path}"
+        logger.error("macOS launchctl load 失败: %s", msg)
         return False, f"已写入配置但加载失败: {msg}"
 
     def _disable_macos(self) -> tuple[bool, str]:
         plist_path = self._mac_plist_path()
         if plist_path.exists():
+            logger.info("macOS 移除 plist: %s", plist_path)
             self._run(["launchctl", "unload", str(plist_path)])
             plist_path.unlink(missing_ok=True)
+        else:
+            logger.debug("macOS plist 不存在: %s", plist_path)
         return True, "已关闭 macOS 开机自启动"
 
     def _enable_linux(self) -> tuple[bool, str]:
         service_path = self._linux_service_path()
+        logger.info("Linux service 路径: %s", service_path)
         service_path.parent.mkdir(parents=True, exist_ok=True)
 
         content = f"""[Unit]
@@ -186,15 +206,19 @@ RestartSec=5
 WantedBy=default.target
 """
         service_path.write_text(content, encoding="utf-8")
+        logger.info("Linux service 已写入: %s", service_path)
 
         self._run(["systemctl", "--user", "daemon-reload"])
         ok, msg = self._run(["systemctl", "--user", "enable", "--now", self.service_name])
         if ok:
+            logger.info("Linux systemd enable 成功")
             return True, f"已启用 Linux 开机自启动: {service_path}"
+        logger.error("Linux systemd enable 失败: %s", msg)
         return False, f"已写入配置但 systemd 启用失败: {msg}"
 
     def _disable_linux(self) -> tuple[bool, str]:
         service_path = self._linux_service_path()
+        logger.info("Linux 禁用自启动: %s", service_path)
         self._run(["systemctl", "--user", "disable", "--now", self.service_name])
         service_path.unlink(missing_ok=True)
         self._run(["systemctl", "--user", "daemon-reload"])
@@ -202,12 +226,15 @@ WantedBy=default.target
 
     def _enable_windows(self) -> tuple[bool, str]:
         startup_vbs = self._windows_startup_vbs()
+        logger.info("Windows VBS 路径: %s", startup_vbs)
 
         try:
             startup_vbs.parent.mkdir(parents=True, exist_ok=True)
         except PermissionError:
+            logger.error("无法创建启动文件夹: PermissionError")
             return False, "无法创建启动文件夹，请检查权限或杀毒软件是否拦截"
         except Exception as exc:
+            logger.error("创建启动文件夹失败: %s", exc)
             return False, f"创建启动文件夹失败: {exc}"
 
         python_exe = self.project_root / "environment" / "python" / "python.exe"
@@ -270,6 +297,7 @@ WshShell.Run Chr(34) & "{packaged}" & Chr(34) & " --no-browser", 0, False
         try:
             startup_vbs.write_text(content, encoding="utf-8")
         except PermissionError:
+            logger.error("写入启动文件失败: PermissionError，可能被杀毒软件拦截")
             return (
                 False,
                 "写入启动文件失败，可能被杀毒软件拦截，请暂时关闭杀毒软件后重试",
@@ -278,20 +306,26 @@ WshShell.Run Chr(34) & "{packaged}" & Chr(34) & " --no-browser", 0, False
             if "另一个程序正在使用此文件" in str(
                 exc
             ) or "being used by another process" in str(exc):
+                logger.error("启动文件被占用: %s", exc)
                 return False, "启动文件被占用，请关闭可能占用该文件的程序后重试"
+            logger.error("写入启动文件失败: %s", exc)
             return False, f"写入启动文件失败: {exc}"
         except Exception as exc:
+            logger.error("创建启动文件时发生未知错误: %s", exc)
             return False, f"创建启动文件时发生未知错误: {exc}"
 
         if not startup_vbs.exists():
+            logger.error("自启动脚本创建后被拦截，疑似杀毒软件: %s", startup_vbs)
             return (
                 False,
                 f"自启动脚本创建后被拦截，请暂时关闭杀毒软件后重试\n预期位置: {startup_vbs}",
             )
 
+        logger.info("Windows VBS 已写入: %s", startup_vbs)
         return True, f"已启用 Windows 开机自启动: {startup_vbs}"
 
     def _disable_windows(self) -> tuple[bool, str]:
         startup_vbs = self._windows_startup_vbs()
+        logger.info("Windows 移除自启动脚本: %s", startup_vbs)
         startup_vbs.unlink(missing_ok=True)
         return True, "已关闭 Windows 开机自启动"
