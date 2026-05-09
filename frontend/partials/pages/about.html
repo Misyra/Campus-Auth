@@ -142,5 +142,84 @@
       <p>License: MIT</p>
       <p class="muted">Made with ❤️ for campus network users</p>
     </div>
+
+    <!-- 卸载 -->
+    <div class="uninstall-section card">
+      <div class="uninstall-header">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          <line x1="10" y1="11" x2="10" y2="17"/>
+          <line x1="14" y1="11" x2="14" y2="17"/>
+        </svg>
+        <div>
+          <h3>卸载程序</h3>
+          <p class="uninstall-desc">清理开机自启、加密密钥、浏览器缓存等外部残留</p>
+        </div>
+      </div>
+      <button class="btn btn-danger btn-sm" @click="openUninstall" :disabled="busy.uninstall">
+        {{ busy.uninstall ? '检测中...' : '卸载' }}
+      </button>
+    </div>
+
+    <!-- 卸载弹窗 -->
+    <div v-if="uninstall.visible" class="uninstall-overlay" @click.self="closeUninstall">
+      <div class="uninstall-modal">
+        <div class="uninstall-modal-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="28" height="28" style="color:var(--error);flex-shrink:0;">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <div>
+            <h3>卸载 Campus-Auth</h3>
+            <p class="uninstall-subtitle">选择要清理的项目。清理完成后，请手动删除项目目录。</p>
+          </div>
+        </div>
+
+        <div v-if="uninstall.scanning" class="uninstall-scanning">
+          <span class="spinner"></span> 正在检测...
+        </div>
+
+        <div v-else-if="uninstall.results" class="uninstall-results">
+          <div class="uninstall-result-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="color:var(--success);">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            <span>清理完成</span>
+          </div>
+          <div v-for="r in uninstall.results" :key="r.key" class="uninstall-result-row">
+            <span :class="r.success ? 'result-ok' : 'result-fail'">{{ r.success ? 'OK' : 'FAIL' }}</span>
+            <span>{{ r.label }}: {{ r.message }}</span>
+          </div>
+          <p class="uninstall-final-hint">请手动删除项目目录后关闭此页面。</p>
+        </div>
+
+        <div v-else class="uninstall-modal-body">
+          <div v-if="uninstall.items.length === 0" class="uninstall-empty">
+            未检测到任何外部残留。
+          </div>
+          <label v-for="it in uninstall.items" :key="it.key" class="uninstall-item" :class="{ disabled: !it.exists }">
+            <input type="checkbox" v-model="it.checked" :disabled="!it.exists" />
+            <div class="uninstall-item-info">
+              <span class="uninstall-item-label">{{ it.label }}</span>
+              <span v-if="it.path" class="uninstall-item-path">{{ it.path }}</span>
+              <span v-if="it.key === 'playwright' && it.size_mb > 0" class="uninstall-item-size">约 {{ it.size_mb }} MB</span>
+            </div>
+            <span v-if="!it.exists" class="uninstall-item-tag">未检测到</span>
+          </label>
+        </div>
+
+        <div v-if="!uninstall.scanning && !uninstall.results" class="uninstall-modal-footer">
+          <button class="btn btn-secondary" @click="closeUninstall">取消</button>
+          <button class="btn btn-danger" @click="confirmUninstall" :disabled="uninstallCheckedCount === 0">
+            清理选中项目 ({{ uninstallCheckedCount }})
+          </button>
+        </div>
+        <div v-else-if="uninstall.results" class="uninstall-modal-footer">
+          <button class="btn btn-secondary" @click="closeUninstall">关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>

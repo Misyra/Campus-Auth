@@ -79,7 +79,7 @@
 }
 
 .update-error {
-  color: var(--danger);
+  color: var(--error);
   font-size: 13px;
 }
 
@@ -261,4 +261,238 @@
 .muted {
   color: var(--text-muted);
   margin-top: 8px;
+}
+
+/* 卸载区域 */
+.uninstall-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  margin-top: 16px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.04);
+}
+
+.uninstall-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-secondary);
+}
+
+.uninstall-header svg {
+  color: var(--error);
+  flex-shrink: 0;
+}
+
+.uninstall-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.uninstall-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 2px 0 0;
+}
+
+/* 卸载弹窗 */
+.uninstall-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  backdrop-filter: blur(4px);
+}
+
+.uninstall-modal {
+  background: var(--bg-card, #1e293b);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  width: 480px;
+  max-width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.uninstall-modal-header {
+  display: flex;
+  gap: 12px;
+  padding: 20px 20px 0;
+  align-items: flex-start;
+}
+
+.uninstall-modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.uninstall-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 4px 0 0;
+}
+
+.uninstall-scanning {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 20px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.uninstall-modal-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.uninstall-empty {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.uninstall-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.uninstall-item:hover:not(.disabled) {
+  border-color: var(--accent);
+}
+
+.uninstall-item.disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.uninstall-item input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.uninstall-item-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.uninstall-item-label {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.uninstall-item-path {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uninstall-item-size {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.uninstall-item-tag {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-primary);
+  padding: 2px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.uninstall-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+}
+
+/* 清理结果 */
+.uninstall-results {
+  padding: 16px 20px;
+  overflow-y: auto;
+}
+
+.uninstall-result-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.uninstall-result-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+.result-ok {
+  color: var(--success);
+  font-weight: 600;
+  font-size: 12px;
+  min-width: 32px;
+}
+
+.result-fail {
+  color: var(--error);
+  font-weight: 600;
+  font-size: 12px;
+  min-width: 32px;
+}
+
+.uninstall-final-hint {
+  margin-top: 16px;
+  padding: 10px 12px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
 }

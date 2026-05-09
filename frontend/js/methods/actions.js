@@ -1,4 +1,40 @@
 export const actionMethods = {
+  async openUninstall() {
+    this.uninstall.visible = true;
+    this.uninstall.scanning = true;
+    this.uninstall.results = null;
+    this.uninstall.items = [];
+    try {
+      const { data } = await this.$api.get('/api/uninstall/detect');
+      this.uninstall.items = data.map(it => ({ ...it, checked: it.exists }));
+    } catch (error) {
+      const msg = error?.response?.data?.detail || '检测失败';
+      this.toastOnly(false, msg);
+      this.uninstall.visible = false;
+    } finally {
+      this.uninstall.scanning = false;
+    }
+  },
+  closeUninstall() {
+    this.uninstall.visible = false;
+    this.uninstall.results = null;
+  },
+  async confirmUninstall() {
+    const keys = this.uninstall.items.filter(it => it.exists && it.checked).map(it => it.key);
+    if (keys.length === 0) return;
+    if (!confirm(`确定要清理以下 ${keys.length} 个项目吗？此操作不可撤销。`)) return;
+    this.busy.uninstall = true;
+    try {
+      const { data } = await this.$api.post('/api/uninstall', { keys });
+      this.uninstall.results = data.results || [];
+      this.toastOnly(data.success, data.success ? '清理完成' : '部分项目清理失败');
+    } catch (error) {
+      const msg = error?.response?.data?.detail || '卸载失败';
+      this.toastOnly(false, msg);
+    } finally {
+      this.busy.uninstall = false;
+    }
+  },
   async toggleMonitor() {
     this.busy.monitor = true;
     try {
