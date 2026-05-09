@@ -163,7 +163,6 @@ cp .env.example .env
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `APP_PORT` | `50721` | Web 控制台端口。 |
-| `UVICORN_ACCESS_LOG` | `false` | 是否输出 HTTP 访问日志。 |
 
 #### 监控配置
 
@@ -173,6 +172,8 @@ cp .env.example .env
 | `MONITOR_INTERVAL` | `300` | 网络检测间隔，单位秒。 |
 | `PING_TARGETS` | `8.8.8.8:53,114.114.114.114:53,www.baidu.com:443` | 探测目标列表。 |
 | `MAX_CONSECUTIVE_FAILURES` | `3` | 连续登录失败次数上限。 |
+| `RETRY_MAX_RETRIES` | `3` | 登录重试最大次数。 |
+| `RETRY_INTERVAL` | `5` | 重试间隔，单位秒。 |
 
 #### 暂停时段
 
@@ -188,7 +189,7 @@ cp .env.example .env
 |------|--------|------|
 | `BROWSER_HEADLESS` | `true` | 是否使用无头模式。 |
 | `BROWSER_TIMEOUT` | `8000` | 浏览器操作超时时间，单位毫秒。 |
-| `BROWSER_LOW_RESOURCE_MODE` | `true` | 是否启用低资源模式。 |
+| `BROWSER_LOW_RESOURCE_MODE` | `false` | 是否启用低资源模式（屏蔽图片、字体、媒体）。 |
 | `BROWSER_USER_AGENT` | 内置默认值 | 自定义 User-Agent。 |
 | `BROWSER_EXTRA_HEADERS_JSON` | 空 | 额外请求头，JSON 格式。 |
 | `BROWSER_DISABLE_WEB_SECURITY` | `false` | 禁用浏览器同源策略。 |
@@ -199,7 +200,7 @@ cp .env.example .env
 |------|--------|------|
 | `MINIMIZE_TO_TRAY` | `true` | 是否最小化到系统托盘。 |
 | `CUSTOM_VARIABLES` | `{}` | 自定义变量，JSON 格式，可在任务模板中引用。 |
-| `AUTO_OPEN_BROWSER` | `true` | 启动后是否自动打开浏览器（可通过 Web 控制台设置覆盖）。 |
+| `AUTO_OPEN_BROWSER` | `false` | 启动后是否自动打开浏览器（可通过 Web 控制台设置覆盖）。 |
 
 #### Playwright 配置
 
@@ -207,6 +208,19 @@ cp .env.example .env
 |------|--------|------|
 | `AUTO_INSTALL_PLAYWRIGHT` | `true` | 是否自动安装 Chromium。 |
 | `PLAYWRIGHT_DOWNLOAD_HOST` | `https://npmmirror.com/mirrors/playwright` | Playwright 下载镜像源。 |
+
+#### settings.json 专有配置
+
+以下配置仅通过 Web 控制台或直接编辑 `settings.json` 设置，不支持环境变量：
+
+| 选项 | 默认值 | 说明 |
+|------|--------|------|
+| `login_then_exit` | `false` | 登录成功后自动退出程序，适用于只需登录一次的场景。 |
+| `proxy` | 空 | 网络代理地址，用于远程任务仓库访问。留空不使用代理。 |
+| `safe_mode` | `false` | 安全模式，使用纯净 Chromium（无扩展、无自定义参数）。 |
+| `access_log` | `false` | 是否输出 Uvicorn HTTP 访问日志。 |
+| `log_retention_days` | `7` | 日志文件保留天数（1-365）。 |
+| `screenshot_retention_days` | `7` | 截图文件保留天数（1-90）。 |
 
 ## 任务系统
 
@@ -294,7 +308,7 @@ cp .env.example .env
 | `screenshot` | 截图保存。 | `path` |
 | `sleep` | 等待指定时间。 | `duration` |
 
-更完整的任务格式说明请参考 [doc/task-manual.md](doc/task-manual.md)。
+更完整的任务格式说明请参考 [doc/task-manual.md](doc/task-manual.md)（开发参考）和 [doc/task-writing-guide.md](doc/task-writing-guide.md)（编写指南）。
 
 ### 编写建议
 
@@ -358,6 +372,7 @@ Campus-Auth/
 │   ├── monitor_service.py    # 网络监控与认证触发
 │   ├── task_service.py       # 任务读写与活动任务管理
 │   ├── autostart_service.py  # 开机自启动管理
+│   ├── uninstall_service.py  # 卸载功能服务
 │   └── schemas.py            # Pydantic 数据模型
 ├── src/                      # 核心逻辑与工具模块
 │   ├── task_executor.py      # 任务执行器（按 JSON 步骤执行）
@@ -374,6 +389,7 @@ Campus-Auth/
 │       ├── login.py          # 登录尝试处理
 │       ├── retry.py          # 重试策略
 │       ├── time.py           # 时间工具
+│       ├── notify.py         # 跨平台桌面通知
 │       └── exceptions.py     # 异常处理
 ├── frontend/                 # 前端控制台
 │   ├── index.html            # 入口页面
@@ -395,7 +411,10 @@ Campus-Auth/
 ├── tasks/                    # 任务模板
 ├── tests/                    # 测试
 ├── doc/                      # 文档
-│   └── task-manual.md        # 任务编写手册
+│   ├── task-manual.md        # 任务开发参考
+│   └── task-writing-guide.md # 任务编写指南
+├── tools/                    # 辅助工具
+│   └── task-recorder.user.js # Tampermonkey 任务录制脚本
 ├── debug/                    # 调试截图输出
 ├── logs/                     # 运行日志
 └── release/                  # 发布产物
@@ -410,11 +429,13 @@ Campus-Auth/
 - `backend/monitor_service.py`：网络监控、认证触发、WebSocket 日志广播。
 - `backend/task_service.py`：任务读写、活动任务管理、危险步骤检测。
 - `backend/autostart_service.py`：跨平台开机自启动（Windows VBS / macOS LaunchAgent / Linux systemd）。
+- `backend/uninstall_service.py`：卸载功能，扫描并清理程序文件、配置、日志等。
 - `src/task_executor.py`：任务执行器，负责按 JSON 步骤逐条执行浏览器操作。
 - `src/monitor_core.py`：监控核心，网络探测循环与 Profile 自动切换。
-- `src/network_test.py`：网络连通性检测（TCP 探测）。
+- `src/network_test.py`：网络连通性检测（TCP 探测 + HTTP 探测，自动降级）。
 - `src/playwright_bootstrap.py`：Playwright 运行环境检查与自动安装。
 - `src/system_tray.py`：系统托盘图标与菜单。
+- `src/utils/notify.py`：跨平台桌面通知（登录成功/失败提醒）。
 - `src/utils/`：工具模块集（配置、日志、加密、浏览器、重试等）。
 
 ## 技术栈
@@ -425,8 +446,9 @@ Campus-Auth/
 - Uvicorn：ASGI 服务运行器。
 - Pydantic：配置与请求数据校验。
 - Playwright：浏览器自动化执行。
-- httpx：网络检测。
+- socket + httpx：网络检测（TCP 探测 + HTTP 探测）。
 - cryptography：密码加密。
+- ddddocr：验证码 OCR 识别（任务步骤中使用）。
 
 ### 前端
 

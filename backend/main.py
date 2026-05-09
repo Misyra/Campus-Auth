@@ -227,14 +227,15 @@ class DebugSession:
             self._context = await self._browser.new_context(**ctx_opts)
 
             if browser_settings.get("low_resource_mode", False):
+                _blocked_types = {"image", "font", "media"}
 
-                async def _block_images(route):
-                    if route.request.resource_type == "image":
+                async def _block_resources(route):
+                    if route.request.resource_type in _blocked_types:
                         await route.abort()
                     else:
                         await route.continue_()
 
-                await self._context.route("**/*", _block_images)
+                await self._context.route("**/*", _block_resources)
 
         self.page = await self._context.new_page()
 

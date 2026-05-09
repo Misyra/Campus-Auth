@@ -57,6 +57,9 @@ export const appOptions = {
       timers: [],
       _wsDestroyed: false,
       _wsRetryTimer: null,
+      _dangerTimer: null,
+      _repoDisclaimerTimer: null,
+      _toastTimer: null,
       newLogCount: 0,
       wsReconnecting: false,
       wsRetryCount: 0,
@@ -193,6 +196,15 @@ export const appOptions = {
     this._wsDestroyed = true;
     if (this._wsRetryTimer) {
       clearTimeout(this._wsRetryTimer);
+    }
+    if (this._dangerTimer) {
+      clearInterval(this._dangerTimer);
+    }
+    if (this._repoDisclaimerTimer) {
+      clearInterval(this._repoDisclaimerTimer);
+    }
+    if (this._toastTimer) {
+      clearTimeout(this._toastTimer);
     }
     this.timers.forEach((t) => clearInterval(t));
     if (this.ws) {
