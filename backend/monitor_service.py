@@ -67,7 +67,9 @@ service_logger = get_logger("backend.monitor_service", side="BACKEND")
 
 
 class MonitorService:
-    def __init__(self, project_root: Path, profile_service: ProfileService | None = None):
+    def __init__(
+        self, project_root: Path, profile_service: ProfileService | None = None
+    ):
         self.project_root = project_root
         self._profile_service = profile_service or ProfileService(project_root)
 
@@ -76,7 +78,8 @@ class MonitorService:
 
         self._ui_config = load_ui_config(self._profile_service)
         self._runtime_config = build_runtime_config(
-            load_runtime_config(self._profile_service), self._profile_service.load().system
+            load_runtime_config(self._profile_service),
+            self._profile_service.load().system,
         )
 
         self._monitor_core: NetworkMonitorCore | None = None
@@ -92,10 +95,12 @@ class MonitorService:
         if not self._loop or not self._loop.is_running():
             return
         status = self.get_status()
-        data = json.dumps({
-            "type": "status",
-            "data": status.model_dump(),
-        })
+        data = json.dumps(
+            {
+                "type": "status",
+                "data": status.model_dump(),
+            }
+        )
         asyncio.run_coroutine_threadsafe(ws_manager.broadcast(data), self._loop)
 
     def _push_log(
@@ -114,10 +119,19 @@ class MonitorService:
             self._logs.append(entry)
 
         # 同步写入 Python 日志系统 → 自动持久化到文件
-        log_level = getattr(logging, level_name, logging.INFO) if hasattr(logging, level_name) else logging.INFO
+        log_level = (
+            getattr(logging, level_name, logging.INFO)
+            if hasattr(logging, level_name)
+            else logging.INFO
+        )
         record = service_logger.makeRecord(
-            service_logger.name, log_level, "(monitor_service)", 0,
-            "[%s] %s", (source_name, message), None,
+            service_logger.name,
+            log_level,
+            "(monitor_service)",
+            0,
+            "[%s] %s",
+            (source_name, message),
+            None,
         )
         record.side = "FRONTEND" if source_name == "frontend" else "BACKEND"
         service_logger.handle(record)
@@ -153,7 +167,8 @@ class MonitorService:
         with self._lock:
             self._ui_config = load_ui_config(self._profile_service)
             self._runtime_config = build_runtime_config(
-                load_runtime_config(self._profile_service), self._profile_service.load().system
+                load_runtime_config(self._profile_service),
+                self._profile_service.load().system,
             )
             # 如果监控正在运行，热更新配置
             if self._monitor_core and self._monitor_core.monitoring:
@@ -206,7 +221,9 @@ class MonitorService:
                 config=config,
                 log_callback=self._push_log,
             )
-            core.set_profile_service(self._profile_service, on_switch=self._on_profile_switch)
+            core.set_profile_service(
+                self._profile_service, on_switch=self._on_profile_switch
+            )
             thread = threading.Thread(target=core.start_monitoring, daemon=True)
 
             self._monitor_core = core
@@ -224,8 +241,7 @@ class MonitorService:
         new_url = self._runtime_config.get("auth_url", "")
         new_user = self._runtime_config.get("username", "")
         self._push_log(
-            f"自动切换方案 → {profile_name} "
-            f"(认证={new_url}, 用户={new_user})",
+            f"自动切换方案 → {profile_name} (认证={new_url}, 用户={new_user})",
             level="INFO",
             source="backend.monitor_service",
         )
@@ -266,6 +282,8 @@ class MonitorService:
         start_time = snapshot.get("start_time")
         runtime_seconds = int(time.time() - start_time) if running and start_time else 0
         login_attempts = int(snapshot.get("login_attempt_count", 0))
+        # network_connected reflects the last verified network check result.
+        last_network_ok = bool(snapshot.get("last_network_ok"))
 
         return MonitorStatusResponse(
             monitoring=running,
@@ -273,7 +291,7 @@ class MonitorService:
             login_attempt_count=login_attempts,
             last_check_time=snapshot.get("last_check_time"),
             runtime_seconds=runtime_seconds,
-            network_connected=running and login_attempts == 0,
+            network_connected=running and last_network_ok,
         )
 
     def run_manual_login(self) -> tuple[bool, str]:
@@ -288,7 +306,7 @@ class MonitorService:
         if success:
             service_logger.info("Manual login succeeded")
             return True, f"手动登录成功：{message}"
-        log_msg = re.sub(r'\s*截图[:：]\s*/\S+\.(?:png|jpg|jpeg|webp|gif)', '', message)
+        log_msg = re.sub(r"\s*截图[:：]\s*/\S+\.(?:png|jpg|jpeg|webp|gif)", "", message)
         service_logger.warning("Manual login failed: %s", log_msg)
         return False, f"手动登录失败：{message}"
 

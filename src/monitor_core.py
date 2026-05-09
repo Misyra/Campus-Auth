@@ -55,6 +55,8 @@ class NetworkMonitorCore:
         self.login_attempt_count = 0
         self.start_time: Optional[float] = None
         self.last_check_time: Optional[datetime.datetime] = None
+        # Last known connectivity result for UI status.
+        self.last_network_ok: Optional[bool] = None
 
         self._stop_requested = False
         self._cancel_login = threading.Event()
@@ -90,6 +92,7 @@ class NetworkMonitorCore:
             if self.last_check_time
             else None,
             "start_time": self.start_time,
+            "last_network_ok": self.last_network_ok,
         }
 
     def set_profile_service(
@@ -121,9 +124,12 @@ class NetworkMonitorCore:
         self.start_time = time.time()
         self.network_check_count = 0
         self.login_attempt_count = 0
+        self.last_network_ok = None
         self._test_sites_cache = None  # 重置缓存
 
-        interval = self.config.get("monitor", {}).get("interval", self.DEFAULT_INTERVAL_SECONDS)
+        interval = self.config.get("monitor", {}).get(
+            "interval", self.DEFAULT_INTERVAL_SECONDS
+        )
         test_sites_info = self._get_test_sites()
         targets_str = ", ".join(f"{h}:{p}" for h, p in test_sites_info)
 
@@ -181,10 +187,12 @@ class NetworkMonitorCore:
     def _get_retry_config(self) -> tuple[int, list[int]]:
         """从配置中读取重试参数，回退到默认值"""
         retry_settings = self.config.get("retry_settings", {})
-        max_retries = int(retry_settings.get("max_retries", self.MAX_CONSECUTIVE_LOGIN_FAILURES))
+        max_retries = int(
+            retry_settings.get("max_retries", self.MAX_CONSECUTIVE_LOGIN_FAILURES)
+        )
         retry_interval = int(retry_settings.get("retry_interval", 5))
         # 生成递增间隔列表：[retry_interval, retry_interval*2, retry_interval*4, ...]
-        intervals = [retry_interval * (2 ** i) for i in range(max_retries)]
+        intervals = [retry_interval * (2**i) for i in range(max_retries)]
         return max_retries, intervals
 
     def _login_retry_or_break(self) -> str:
@@ -216,7 +224,11 @@ class NetworkMonitorCore:
 
         while self.monitoring:
             # 每次循环重新读取 interval 和 test_sites，支持运行时方案切换
-            interval = int(self.config.get("monitor", {}).get("interval", self.DEFAULT_INTERVAL_SECONDS))
+            interval = int(
+                self.config.get("monitor", {}).get(
+                    "interval", self.DEFAULT_INTERVAL_SECONDS
+                )
+            )
             pause_config = self.config.get("pause_login", {})
             if TimeUtils.is_in_pause_period(pause_config):
                 start_hour = pause_config.get("start_hour", 0)
@@ -226,7 +238,8 @@ class NetworkMonitorCore:
                     logging.INFO,
                 )
                 if not self._wait_interruptible(
-                    self.PAUSE_CHECK_INTERVAL_SECONDS, step=self.PAUSE_CHECK_STEP_SECONDS
+                    self.PAUSE_CHECK_INTERVAL_SECONDS,
+                    step=self.PAUSE_CHECK_STEP_SECONDS,
                 ):
                     break
                 continue
@@ -240,8 +253,7 @@ class NetworkMonitorCore:
             self.network_check_count += 1
             self.last_check_time = datetime.datetime.now()
             targets_str = ", ".join(f"{h}:{p}" for h, p in test_sites)
-            self.log_message(
-                f"[#{self.network_check_count}] 网络检测 → {targets_str}")
+            self.log_message(f"[#{self.network_check_count}] 网络检测 → {targets_str}")
 
             try:
                 network_ok = is_network_available(
@@ -256,12 +268,15 @@ class NetworkMonitorCore:
                 self.log_message(f"网络检测异常: {exc}", logging.ERROR)
                 network_ok = False
 
+            # Update last known connectivity state based on the check result.
+            self.last_network_ok = network_ok
+
             if network_ok:
                 consecutive_failures = 0
                 self.login_attempt_count = 0
                 self.log_message(
-                    f"[#{self.network_check_count}] 网络正常，无需登录",
-                    logging.INFO)
+                    f"[#{self.network_check_count}] 网络正常，无需登录", logging.INFO
+                )
             else:
                 consecutive_failures += 1
                 self.log_message(
@@ -277,13 +292,16 @@ class NetworkMonitorCore:
                     )
                     consecutive_failures = 0
                     self.login_attempt_count = 0
-                    next_check = datetime.datetime.now() + datetime.timedelta(seconds=interval)
+                    self.last_network_ok = False
+                    next_check = datetime.datetime.now() + datetime.timedelta(
+                        seconds=interval
+                    )
                     self.log_message(
                         f"下次检测: {next_check.strftime('%H:%M:%S')}", logging.DEBUG
                     )
                     wait_step = min(
                         self.MAX_WAIT_STEP_SECONDS,
-                        max(self.MIN_WAIT_STEP_SECONDS, interval // 10)
+                        max(self.MIN_WAIT_STEP_SECONDS, interval // 10),
                     )
                     if not self._wait_interruptible(interval, step=wait_step):
                         break
@@ -308,10 +326,13 @@ class NetworkMonitorCore:
                     if verify_ok:
                         consecutive_failures = 0
                         self.login_attempt_count = 0
+                        self.last_network_ok = True
                         self.log_message(
-                            f"[#{self.network_check_count}] 登录成功，网络已恢复")
+                            f"[#{self.network_check_count}] 登录成功，网络已恢复"
+                        )
                     else:
                         self.login_attempt_count += 1
+                        self.last_network_ok = False
                         self.log_message(
                             f"[#{self.network_check_count}] 登录表单提交成功但网络未恢复"
                             f" — 可能密码错误或运营商不匹配",
@@ -320,7 +341,7 @@ class NetworkMonitorCore:
                         if self.login_attempt_count == 2:
                             send_notification(
                                 "Campus-Auth 登录异常",
-                                "登录完成但网络仍未恢复，可能密码错误或认证失败"
+                                "登录完成但网络仍未恢复，可能密码错误或认证失败",
                             )
                         failed_count = self.login_attempt_count
                         action = self._login_retry_or_break()
@@ -331,10 +352,11 @@ class NetworkMonitorCore:
                         # "give_up"
                         send_notification(
                             "Campus-Auth 登录失败",
-                            f"连续 {failed_count} 次登录失败，等待下次检测周期"
+                            f"连续 {failed_count} 次登录失败，等待下次检测周期",
                         )
                 else:
                     self.login_attempt_count += 1
+                    self.last_network_ok = False
                     max_retries, _ = self._get_retry_config()
                     self.log_message(
                         f"[#{self.network_check_count}] 登录失败 "
@@ -345,7 +367,7 @@ class NetworkMonitorCore:
                     if self.login_attempt_count == 2:
                         send_notification(
                             "Campus-Auth 登录失败",
-                            f"自动登录已失败 {self.login_attempt_count} 次，正在重试..."
+                            f"自动登录已失败 {self.login_attempt_count} 次，正在重试...",
                         )
                     failed_count = self.login_attempt_count
                     action = self._login_retry_or_break()
@@ -356,7 +378,7 @@ class NetworkMonitorCore:
                     # "give_up" → fall through to normal interval wait
                     send_notification(
                         "Campus-Auth 登录失败",
-                        f"连续 {failed_count} 次登录失败，等待下次检测周期"
+                        f"连续 {failed_count} 次登录失败，等待下次检测周期",
                     )
 
             next_check = datetime.datetime.now() + datetime.timedelta(seconds=interval)
@@ -365,7 +387,7 @@ class NetworkMonitorCore:
             )
             wait_step = min(
                 self.MAX_WAIT_STEP_SECONDS,
-                max(self.MIN_WAIT_STEP_SECONDS, interval // 10)
+                max(self.MIN_WAIT_STEP_SECONDS, interval // 10),
             )
             if not self._wait_interruptible(interval, step=wait_step):
                 break
@@ -440,7 +462,8 @@ class NetworkMonitorCore:
             f"开始登录认证 → URL={self.config.get('auth_url', '?')} "
             f"用户={self.config.get('username', '?')} "
             f"运营商={self.config.get('isp', '无') or '无'} "
-            f"任务={active_task}")
+            f"任务={active_task}"
+        )
         try:
             # 复用持久化 handler，重试时保留浏览器
             if self._login_handler is None:
@@ -454,7 +477,9 @@ class NetworkMonitorCore:
             loop = asyncio.new_event_loop()
             try:
                 success, message = loop.run_until_complete(
-                    handler.attempt_login(skip_pause_check=True, reuse_browser=self._reuse_browser)
+                    handler.attempt_login(
+                        skip_pause_check=True, reuse_browser=self._reuse_browser
+                    )
                 )
             finally:
                 pending = asyncio.all_tasks(loop)
