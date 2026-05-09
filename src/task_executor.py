@@ -8,9 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-import random
 import re
-import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -94,10 +92,20 @@ class StepConfig:
 
     # 字段默认值映射，to_dict 时跳过与默认值相同的字段
     _DEFAULTS = {
-        "description": "", "timeout": None, "url": None, "selector": None,
-        "value": None, "pattern": None, "script": None, "store_as": None,
-        "clear": True, "wait_until": "networkidle", "path": None,
-        "duration": 1000, "frame": None, "extra": {},
+        "description": "",
+        "timeout": None,
+        "url": None,
+        "selector": None,
+        "value": None,
+        "pattern": None,
+        "script": None,
+        "store_as": None,
+        "clear": True,
+        "wait_until": "networkidle",
+        "path": None,
+        "duration": 1000,
+        "frame": None,
+        "extra": {},
     }
 
     @classmethod
@@ -108,7 +116,8 @@ class StepConfig:
             data = dict(data)
             data["script"] = data.pop("code")
         base_fields = {
-            k: v for k, v in data.items()
+            k: v
+            for k, v in data.items()
             if k in cls.__dataclass_fields__ and k != "extra"
         }
         extra_fields = {
@@ -175,7 +184,9 @@ class TaskConfig:
     success_conditions: list[ConditionConfig] = field(default_factory=list)
     on_success: dict[str, Any] = field(default_factory=dict)
     on_failure: dict[str, Any] = field(default_factory=dict)
-    metadata: dict[str, Any] = field(default_factory=dict)  # 用户自定义元数据，执行器不使用
+    metadata: dict[str, Any] = field(
+        default_factory=dict
+    )  # 用户自定义元数据，执行器不使用
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TaskConfig:
@@ -207,7 +218,9 @@ class TaskConfig:
         if self.variables:
             result["variables"] = self.variables
         if self.success_conditions:
-            result["success_conditions"] = [c.to_dict() for c in self.success_conditions]
+            result["success_conditions"] = [
+                c.to_dict() for c in self.success_conditions
+            ]
         if self.on_success:
             result["on_success"] = self.on_success
         if self.on_failure:
@@ -376,6 +389,7 @@ class NavigateHandler(StepHandler):
         self, page, step: StepConfig, resolver: VariableResolver
     ) -> tuple[bool, str]:
         import time as _time
+
         logger.warning("navigate 步骤已废弃，建议使用任务的 url 字段代替")
         params = self.resolve_params(step, resolver)
         url = params.get("url", "")
@@ -693,6 +707,7 @@ class OcrHandler(StepHandler):
         if old not in cls._ocr_instances:
             try:
                 import ddddocr
+
                 cls._ocr_instances[old] = ddddocr.DdddOcr(old=old, show_ad=False)
             except ImportError:
                 raise StepError("ddddocr 未安装，请运行: uv add ddddocr")
@@ -824,9 +839,14 @@ class TaskValidator:
                 cond_prefix = f"success_conditions[{i}]"
                 if cond_type == ConditionType.VARIABLE and not cond.get("variable"):
                     errors.append(f"{cond_prefix} ({cond_type}) 需要 'variable' 字段")
-                if cond_type in (ConditionType.URL_CONTAINS, ConditionType.URL_MATCHES) and not cond.get("pattern"):
+                if cond_type in (
+                    ConditionType.URL_CONTAINS,
+                    ConditionType.URL_MATCHES,
+                ) and not cond.get("pattern"):
                     errors.append(f"{cond_prefix} ({cond_type}) 需要 'pattern' 字段")
-                if cond_type == ConditionType.ELEMENT_EXISTS and not cond.get("selector"):
+                if cond_type == ConditionType.ELEMENT_EXISTS and not cond.get(
+                    "selector"
+                ):
                     errors.append(f"{cond_prefix} ({cond_type}) 需要 'selector' 字段")
                 if cond_type == ConditionType.JS_EXPRESSION and not cond.get("script"):
                     errors.append(f"{cond_prefix} ({cond_type}) 需要 'script' 字段")
@@ -851,8 +871,10 @@ class TaskValidator:
             errors.append(f"{prefix} 未知的步骤类型: '{step_type}'")
 
         # 根据类型验证特定字段
-        if step_type == StepType.NAVIGATE and not step.get("url"):
-            errors.append(f"{prefix} (navigate) 需要 'url' 字段")
+        if step_type == StepType.NAVIGATE:
+            # navigate 已废弃：统一使用任务的 url 字段自动导航
+            errors.append(f"{prefix} (navigate) 已废弃，请使用任务的 url 字段")
+            return errors
 
         if step_type == StepType.INPUT:
             if not step.get("selector"):
@@ -873,8 +895,14 @@ class TaskValidator:
         if step_type == StepType.CUSTOM_JS and not step.get("script"):
             errors.append(f"{prefix} (custom_js) 需要 'script' 字段")
 
-        if step_type == StepType.EVAL and not step.get("script") and not step.get("code"):
-            errors.append(f"{prefix} (eval) 需要 'script' 字段（'code' 仍兼容但已废弃）")
+        if (
+            step_type == StepType.EVAL
+            and not step.get("script")
+            and not step.get("code")
+        ):
+            errors.append(
+                f"{prefix} (eval) 需要 'script' 字段（'code' 仍兼容但已废弃）"
+            )
 
         if step_type == StepType.OCR and not step.get("selector"):
             errors.append(f"{prefix} (ocr) 需要 'selector' 字段（验证码图片选择器）")
@@ -889,9 +917,13 @@ class TaskExecutor:
 
     DEFAULT_STEP_TIMEOUT = 10000
 
-    def __init__(self, config: TaskConfig, env_vars: dict[str, str] | None = None,
-                 screenshot_dir: Path | str | None = None,
-                 default_timeout: int | None = None):
+    def __init__(
+        self,
+        config: TaskConfig,
+        env_vars: dict[str, str] | None = None,
+        screenshot_dir: Path | str | None = None,
+        default_timeout: int | None = None,
+    ):
         self.config = config
         self.env_vars = env_vars or {}
         self.default_timeout = default_timeout or self.DEFAULT_STEP_TIMEOUT
@@ -907,11 +939,16 @@ class TaskExecutor:
             (success, message)
         """
         import time as _time
+
         task_start = _time.perf_counter()
         task_timeout_ms = self.config.timeout or 30000
         task_deadline = task_start + task_timeout_ms / 1000
-        logger.info("任务开始 [%s], %d 个步骤, 超时 %dms",
-                     self.config.name, len(self.config.steps), task_timeout_ms)
+        logger.info(
+            "任务开始 [%s], %d 个步骤, 超时 %dms",
+            self.config.name,
+            len(self.config.steps),
+            task_timeout_ms,
+        )
         self._step_results = []
 
         try:
@@ -921,12 +958,17 @@ class TaskExecutor:
                 # 任务超时检查
                 remaining_s = task_deadline - _time.perf_counter()
                 if remaining_s <= 0:
-                    return await self._handle_failure(page, None,
-                        f"任务超时 ({task_timeout_ms}ms)")
+                    return await self._handle_failure(
+                        page, None, f"任务超时 ({task_timeout_ms}ms)"
+                    )
                 # 跳过 navigate 步骤，已由 _auto_navigate 统一处理
                 if step.type == StepType.NAVIGATE:
-                    logger.info("  步骤[%d/%d] %s (navigate) → 跳过，已自动导航",
-                                i + 1, len(self.config.steps), step.id)
+                    logger.info(
+                        "  步骤[%d/%d] %s (navigate) → 跳过，已自动导航",
+                        i + 1,
+                        len(self.config.steps),
+                        step.id,
+                    )
                     continue
                 if i > 0:
                     await asyncio.sleep(0.5)
@@ -934,13 +976,23 @@ class TaskExecutor:
                 success, message = await self._execute_step(page, step)
                 step_elapsed = (_time.perf_counter() - step_start) * 1000
                 status = "OK" if success else "FAIL"
-                logger.info("  步骤[%d/%d] %s (%s) → %s (%.0fms)%s",
-                            i + 1, len(self.config.steps), step.id, step.type,
-                            status, step_elapsed,
-                            f" — {message}" if message else "")
+                logger.info(
+                    "  步骤[%d/%d] %s (%s) → %s (%.0fms)%s",
+                    i + 1,
+                    len(self.config.steps),
+                    step.id,
+                    step.type,
+                    status,
+                    step_elapsed,
+                    f" — {message}" if message else "",
+                )
                 self._step_results.append(
-                    {"step_id": step.id, "type": step.type,
-                     "success": success, "message": message}
+                    {
+                        "step_id": step.id,
+                        "type": step.type,
+                        "success": success,
+                        "message": message,
+                    }
                 )
 
                 if not success:
@@ -955,8 +1007,9 @@ class TaskExecutor:
 
         except Exception as e:
             total_elapsed = (_time.perf_counter() - task_start) * 1000
-            logger.error("任务异常 [%s] 耗时 %.0fms: %s",
-                         self.config.name, total_elapsed, e)
+            logger.error(
+                "任务异常 [%s] 耗时 %.0fms: %s", self.config.name, total_elapsed, e
+            )
             return await self._handle_failure(page, None, str(e))
 
     async def _auto_navigate(self, page) -> None:
@@ -1056,10 +1109,22 @@ class TaskExecutor:
             page_text_lower = page_text.lower()
 
             error_keywords = [
-                "密码错误", "密码不正确", "密码有误", "账号错误", "账号不存在",
-                "账号或密码", "用户名或密码", "认证失败", "登录失败", "登入失败",
-                "password error", "password incorrect", "invalid password",
-                "login failed", "authentication failed", "invalid credentials",
+                "密码错误",
+                "密码不正确",
+                "密码有误",
+                "账号错误",
+                "账号不存在",
+                "账号或密码",
+                "用户名或密码",
+                "认证失败",
+                "登录失败",
+                "登入失败",
+                "password error",
+                "password incorrect",
+                "invalid password",
+                "login failed",
+                "authentication failed",
+                "invalid credentials",
             ]
             for keyword in error_keywords:
                 if keyword in page_text_lower:
@@ -1164,7 +1229,9 @@ class TaskExecutor:
                 out_dir = self._screenshot_dir
                 url_prefix = "/temp"
             else:
-                out_dir = self.PROJECT_ROOT / "debug" / datetime.now().strftime("%Y-%m-%d")
+                out_dir = (
+                    self.PROJECT_ROOT / "debug" / datetime.now().strftime("%Y-%m-%d")
+                )
                 url_prefix = f"/debug/{out_dir.name}"
             out_dir.mkdir(parents=True, exist_ok=True)
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
