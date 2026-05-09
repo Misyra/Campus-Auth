@@ -8,7 +8,7 @@ import threading
 import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
-from .network_test import is_network_available
+from .network_test import is_local_network_connected, is_network_available
 from .utils import (
     ConfigLoader,
     LoginAttemptHandler,
@@ -268,6 +268,26 @@ class NetworkMonitorCore:
                     f"[#{self.network_check_count}] 网络异常，连续失败 {consecutive_failures} 次",
                     logging.WARNING,
                 )
+
+                # 检查物理网络是否连接，未连接则跳过登录
+                if not is_local_network_connected():
+                    self.log_message(
+                        f"[#{self.network_check_count}] 物理网络未连接（WiFi/网线断开），跳过登录，等待下次检测",
+                        logging.WARNING,
+                    )
+                    consecutive_failures = 0
+                    self.login_attempt_count = 0
+                    next_check = datetime.datetime.now() + datetime.timedelta(seconds=interval)
+                    self.log_message(
+                        f"下次检测: {next_check.strftime('%H:%M:%S')}", logging.DEBUG
+                    )
+                    wait_step = min(
+                        self.MAX_WAIT_STEP_SECONDS,
+                        max(self.MIN_WAIT_STEP_SECONDS, interval // 10)
+                    )
+                    if not self._wait_interruptible(interval, step=wait_step):
+                        break
+                    continue
 
                 login_ok, login_msg = self.attempt_login()
                 if login_ok:
