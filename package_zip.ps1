@@ -58,11 +58,13 @@ $ExeCandidates = @(
 $IncludeItems = @(
     "app.py",
     "launcher.py",
+    "uninstall.py",
     "bootstrap",
     "backend",
     "frontend",
     "src",
     "tasks",
+    "tools",
     "doc",
     "requirements.txt",
     "README.md",
