@@ -33,9 +33,9 @@ REQUIREMENTS_TXT = PROJECT_ROOT / "requirements.txt"
 HASH_FILE = ENV_DIR / ".requirements_hash"
 LOG_FILE = PROJECT_ROOT / "logs" / "setup_env.log"
 
-DEFAULT_PIP_MIRROR = "https://mirrors.aliyun.com/pypi/simple"
+DEFAULT_PIP_MIRROR = "https://mirrors.cernet.edu.cn/pypi/simple"
 FALLBACK_PIP_MIRRORS = [
-    "https://mirrors.tuna.tsinghua.edu.cn/simple",
+    "https://mirrors.aliyun.com/pypi/simple",
     "https://pypi.org/simple",
 ]
 
@@ -43,7 +43,7 @@ VERBOSE = False
 FORCE_REINSTALL = False
 PYTHON_VERSION = "3.10"
 PIP_MIRROR = DEFAULT_PIP_MIRROR
-PYTHON_MIRROR = "https://mirrors.tuna.tsinghua.edu.cn/python"
+PYTHON_MIRROR = "https://mirrors.cernet.edu.cn/python"
 PYTHON_EMBED_URL = ""
 USE_SYSTEM_PROXY = False
 
@@ -311,7 +311,8 @@ def _get_python_embed_urls() -> list[str]:
     candidates = [
         configured_url,
         f"{configured_mirror}/{version}/{filename}" if configured_mirror else "",
-        f"https://mirrors.tuna.tsinghua.edu.cn/python/{version}/{filename}",
+        f"https://mirrors.cernet.edu.cn/python/{version}/{filename}",
+        f"https://mirrors.aliyun.com/python/{version}/{filename}",
         f"https://www.python.org/ftp/python/{version}/{filename}",
     ]
 
@@ -359,18 +360,34 @@ def _get_network_env() -> dict[str, str]:
 
 
 def _download_file(url: str, destination: Path) -> None:
-    """下载文件。默认禁用系统代理，必要时可通过参数启用。"""
-    if USE_SYSTEM_PROXY:
-        urllib.request.urlretrieve(url, destination)
-        return
-
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    with opener.open(url, timeout=60) as resp, open(destination, "wb") as fp:
-        shutil.copyfileobj(resp, fp)
+    """下载文件，显示进度条。默认禁用系统代理，必要时可通过参数启用。"""
+    proxy_handler = {} if USE_SYSTEM_PROXY else urllib.request.ProxyHandler({})
+    opener = urllib.request.build_opener(proxy_handler)
+    req = urllib.request.Request(url)
+    with opener.open(req, timeout=60) as resp:
+        total = resp.headers.get("Content-Length")
+        total = int(total) if total else None
+        downloaded = 0
+        block_size = 8192
+        with open(destination, "wb") as fp:
+            while True:
+                chunk = resp.read(block_size)
+                if not chunk:
+                    break
+                fp.write(chunk)
+                downloaded += len(chunk)
+                if total:
+                    pct = downloaded * 100 // total
+                    bar = "#" * (pct // 2) + "-" * (50 - pct // 2)
+                    size_mb = downloaded / (1024 * 1024)
+                    total_mb = total / (1024 * 1024)
+                    print(f"\r  [{bar}] {pct}%  {size_mb:.1f}/{total_mb:.1f} MB", end="", flush=True)
+        if total:
+            print()
 
 
 def _run_pip_with_mirror(base_args: list[str], stage: str):
-    """按镜像候选顺序执行 pip 命令，失败时自动切换镜像重试。"""
+    """按镜像候选顺序执行 pip 命令，失败时自动切换镜像重试。stdout 直接输出以显示进度条。"""
     errors = []
     for mirror in _get_pip_mirror_candidates():
         parsed = urllib.parse.urlparse(mirror)
@@ -382,12 +399,14 @@ def _run_pip_with_mirror(base_args: list[str], stage: str):
                 "-m",
                 "pip",
                 *base_args,
+                "--progress-bar=on",
                 "-i",
                 mirror,
                 "--trusted-host",
                 host,
             ],
-            capture_output=True,
+            capture_output=False,
+            stderr=subprocess.PIPE,
             text=True,
             env=_get_network_env(),
         )
@@ -607,17 +626,6 @@ def install_requirements():
 
             if result2 is not None:
                 log_success(f"项目依赖安装完成 (镜像: {mirror2})")
-                if VERBOSE:
-                    for line in result2.stdout.split("\n"):
-                        if any(
-                            keyword in line
-                            for keyword in [
-                                "Successfully installed",
-                                "Requirement already satisfied",
-                                "Collecting",
-                            ]
-                        ):
-                            log_info(line)
             else:
                 return False
         except Exception as e:
@@ -704,8 +712,8 @@ def main():
     )
     parser.add_argument(
         "--python-mirror",
-        default="https://mirrors.tuna.tsinghua.edu.cn/python",
-        help="Python嵌入包镜像根地址（示例: https://mirrors.tuna.tsinghua.edu.cn/python）",
+        default="https://mirrors.cernet.edu.cn/python",
+        help="Python嵌入包镜像根地址（示例: https://mirrors.cernet.edu.cn/python）",
     )
     parser.add_argument(
         "--python-embed-url",
