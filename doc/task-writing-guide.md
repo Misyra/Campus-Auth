@@ -2,6 +2,24 @@
 
 本指南帮助你（或 AI）为 Campus-Auth 编写标准化的浏览器认证任务。任务以 JSON 格式定义，由 Playwright 驱动浏览器自动执行。
 
+## 目录
+
+1. [任务 JSON 完整结构](#任务-json-完整结构)
+2. [步骤公共字段](#步骤公共字段)
+3. [步骤类型详解](#步骤类型详解)
+4. [变量系统](#变量系统)
+5. [成功条件](#成功条件)
+6. [Frame 支持](#frame-支持)
+7. [选择器建议](#选择器建议)
+8. [自动导航](#自动导航)
+9. [完整示例](#完整示例)
+10. [最佳实践](#最佳实践)
+11. [常见问题](#常见问题)
+12. [步骤类型速查表](#步骤类型速查表)
+13. [分享你创建的任务](#分享你创建的任务)
+
+---
+
 ## 任务 JSON 完整结构
 
 ```json
@@ -52,6 +70,8 @@
 | `timeout` | 否 | 超时时间（毫秒），默认值因类型而异 |
 | `frame` | 否 | 目标 frame 的 name 或 URL 片段，用于 frameset/iframe 页面 |
 
+**扩展字段（extra）：** 步骤中任何未被识别的字段会被自动收集并在序列化时保留，你可以在步骤中添加自定义字段而不影响执行逻辑。
+
 ---
 
 ## 步骤类型详解
@@ -99,6 +119,7 @@
 ### select — 下拉选择
 
 选择下拉框选项。有特殊容错行为：
+
 - `value` 为空 → 步骤自动跳过（视为成功）
 - 找不到下拉框元素 → 步骤自动跳过（视为成功）
 - 精确匹配 `value` 失败 → 回退到按选项文本**子字符串包含**匹配
@@ -161,7 +182,7 @@
 
 ### eval — JavaScript 求值
 
-执行 JavaScript 表达式并可选保存结果到变量。`code` 字段是 `script` 的已废弃别名。
+执行 JavaScript 表达式并可选保存结果到变量。`code` 字段是 `script` 的已废弃别名，仍然支持但建议使用 `script`。
 
 | 参数 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
@@ -178,7 +199,7 @@
 }
 ```
 
-> **安全提示：** 包含 `eval` 或 `custom_js` 步骤的任务在 Web 控制台保存时会弹出安全确认对话框。
+> **安全提示：** 包含 `eval` 或 `custom_js` 步骤的任务在 Web 控制台保存时会弹出安全确认对话框，显示待执行的代码内容，需要用户明确确认。
 
 ### custom_js — 执行 JavaScript
 
@@ -199,11 +220,11 @@
 
 ### screenshot — 截图
 
-截取当前页面截图。
+截取当前页面截图。截图保存到 `debug/` 目录下按日期分类的子目录中。
 
 | 参数 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
-| `path` | 否 | 自动生成 | 截图保存路径 |
+| `path` | 否 | 自动生成 | 截图保存路径（仅文件名生效，目录由系统管理） |
 
 ```json
 { "id": "s8", "type": "screenshot", "description": "截图保存" }
@@ -232,7 +253,18 @@
 | `store_as` | 否 | — | 识别结果存储到的变量名 |
 | `timeout` | 否 | `10000` | 超时时间（毫秒） |
 | `frame` | 否 | — | 验证码所在的 frame |
-| `old` | 否 | `false` | 纯数字验证码设为 true；`false` 对数字+字母混合效果更好 |
+| `old` | 否 | `false` | 使用旧版 OCR 模型（见下方说明） |
+
+**关于新旧模型：**
+
+ddddocr 内置两套模型，`old` 参数控制使用哪一套：
+
+| `old` | 模型 | 适用场景 |
+|-------|------|----------|
+| `false`（默认） | 新版模型 | 通用场景，对数字+字母混合验证码效果更好 |
+| `true` | 旧版模型 | 纯数字验证码或特定校园网系统的验证码风格 |
+
+如果你的校园网验证码识别不准，可以尝试切换 `old` 参数值。
 
 **三种使用模式：**
 
@@ -246,6 +278,10 @@
 // 模式三：同时自动填入并存储
 { "id": "s1", "type": "ocr", "selector": "#captcha-img", "target_selector": "#captcha-input", "store_as": "captcha_code" }
 ```
+
+**超时与错误处理：**
+- 找不到验证码图片元素或输入框时，步骤失败并返回错误信息
+- 建议 `timeout` 设置 >= 5000ms，给页面加载留足时间
 
 ---
 
@@ -265,13 +301,13 @@
 
 ### 自定义变量
 
-- **用户自定义变量：** 通过 Web 控制台「账号设置」页面添加，可在所有任务中使用，优先级高于环境变量
+- **用户自定义变量：** 通过 Web 控制台「设置 → 账号设置 → 自定义变量」添加，可在所有任务中使用，优先级高于环境变量
 - **任务级变量：** 在任务 JSON 的 `variables` 字段中定义，支持模板语法引用其他变量
 - **运行时变量：** 通过 `eval` 步骤的 `store_as` 写入，仅在当前执行过程中有效
 
 ### 模板语法
 
-使用 `{{变量名}}` 引用变量，可用于 `value`、`url`、`selector` 等任何字段：
+使用 `{{变量名}}` 引用变量，可用于 `value`、`url`、`selector` 等任何字段。支持递归引用（最大 8 层深度），系统会自动检测循环引用并报错。
 
 ```json
 {
@@ -289,11 +325,15 @@
 3. 环境变量（系统环境与 `.env`）
 4. 任务文件内 `variables` 字段
 
+未找到的变量会原样保留在输出中（不会报错）。
+
 ---
 
 ## 成功条件
 
-`success_conditions` 为空数组时，所有步骤执行完毕且没有失败即视为成功。如需更精确的判定，可组合使用以下条件类型：
+`success_conditions` 为空数组时，所有步骤执行完毕且没有失败即视为成功。此时系统会自动检查页面中是否包含错误关键词（如"失败"、"错误"、"error"等）以及常见的错误 DOM 元素（`.alert-danger`、`.error-msg` 等），如检测到则判定为失败。
+
+如需更精确的判定，可组合使用以下条件类型：
 
 | 类型 | 说明 | 示例 |
 |------|------|------|
@@ -315,7 +355,7 @@
 - frame 的 `name` 属性（如 `"main"`）
 - URL 匹配字符串（如 `"url=user/unionautologin.do"`）
 
-所有操作类步骤（`input`、`click`、`select`、`wait`、`ocr`）都支持 `frame` 字段。
+所有操作类步骤（`input`、`click`、`select`、`wait`、`ocr`）都支持 `frame` 字段。如果指定的 frame 找不到，系统会回退到主页面继续执行（不会直接失败）。
 
 ```json
 {
@@ -335,12 +375,13 @@
 - **优先使用稳定的属性**：`id`、`name` 等，避免使用易变的 `class`
 - **提供多个备选选择器**，逗号分隔提高兼容性：`"input[name='user'], #username, .login-user"`
 - 支持标准 CSS 选择器语法
+- 验证码图片通常用 `img[src*='captcha']`、`#captcha-img`、`.code-img`
 
 ---
 
 ## 自动导航
 
-系统会在执行步骤前**自动导航**到认证地址，无需在任务中添加 navigate 步骤。导航地址优先级：
+系统会在执行步骤前**自动导航**到认证地址，无需在任务中添加 navigate 步骤（旧任务中的 navigate 步骤会被自动跳过）。导航地址优先级：
 
 1. 任务 `url` 字段（支持变量模板）
 2. 系统设置的认证地址（`LOGIN_URL`）
@@ -350,6 +391,8 @@
 ---
 
 ## 完整示例
+
+### 标准登录任务
 
 ```json
 {
@@ -420,9 +463,172 @@
 }
 ```
 
+### 精简登录任务
+
+利用自动导航和空成功条件的简化任务：
+
+```json
+{
+  "name": "精简登录",
+  "description": "适用于简单认证页面",
+  "url": "{{LOGIN_URL}}",
+  "timeout": 15000,
+  "steps": [
+    { "id": "s1", "type": "input", "selector": "#username", "value": "{{USERNAME}}" },
+    { "id": "s2", "type": "input", "selector": "#password", "value": "{{PASSWORD}}" },
+    { "id": "s3", "type": "click", "selector": "#login-btn" },
+    { "id": "s4", "type": "sleep", "duration": 3000 }
+  ],
+  "success_conditions": [],
+  "on_success": { "message": "登录成功" },
+  "on_failure": { "message": "登录失败", "screenshot": true }
+}
+```
+
+### 带验证码的登录任务
+
+```json
+{
+  "name": "验证码登录",
+  "description": "需要输入验证码的校园网登录",
+  "url": "{{LOGIN_URL}}",
+  "timeout": 30000,
+  "steps": [
+    { "id": "s1", "type": "input", "selector": "#username", "value": "{{USERNAME}}" },
+    { "id": "s2", "type": "input", "selector": "#password", "value": "{{PASSWORD}}" },
+    {
+      "id": "s3",
+      "type": "ocr",
+      "description": "识别验证码并填入",
+      "selector": "#captcha-img",
+      "target_selector": "#captcha-input"
+    },
+    { "id": "s4", "type": "click", "selector": "#login-btn" },
+    { "id": "s5", "type": "sleep", "duration": 3000 }
+  ],
+  "success_conditions": [],
+  "on_success": { "message": "登录成功" },
+  "on_failure": { "message": "登录失败", "screenshot": true }
+}
+```
+
+### 带 Frame 的登录任务
+
+```json
+{
+  "name": "iframe 登录",
+  "description": "登录表单在 iframe 中的认证页面",
+  "url": "{{LOGIN_URL}}",
+  "timeout": 30000,
+  "steps": [
+    {
+      "id": "s1",
+      "type": "input",
+      "description": "在 iframe 中输入账号",
+      "selector": "#username",
+      "value": "{{USERNAME}}",
+      "frame": "mainFrame"
+    },
+    {
+      "id": "s2",
+      "type": "input",
+      "description": "在 iframe 中输入密码",
+      "selector": "#password",
+      "value": "{{PASSWORD}}",
+      "frame": "mainFrame"
+    },
+    {
+      "id": "s3",
+      "type": "click",
+      "description": "在 iframe 中点击登录",
+      "selector": "#login-btn",
+      "frame": "mainFrame"
+    },
+    { "id": "s4", "type": "sleep", "duration": 3000 }
+  ],
+  "success_conditions": [],
+  "on_success": { "message": "登录成功" },
+  "on_failure": { "message": "登录失败", "screenshot": true }
+}
+```
+
 ---
 
-## 步骤类型速查
+## 最佳实践
+
+### 选择器编写
+
+- 使用多个备选选择器提高兼容性：
+  ```json
+  "selector": "input[name='username'], #username, .login-user"
+  ```
+- 优先使用稳定的属性（`id`、`name`），避免使用易变的 `class`
+
+### 错误处理
+
+- 设置合理的超时时间，网络慢时适当调大
+- 启用失败截图（`on_failure.screenshot: true`）便于调试
+- 提供清晰的步骤描述，方便排查问题
+
+### 变量使用
+
+- 将重复的值定义为变量，避免硬编码
+- 使用有意义的变量名
+- 避免变量循环引用（系统会检测并报错）
+
+### 步骤组织
+
+- 为每个步骤设置 `description`
+- 使用有意义的步骤 ID（如 `input_username`、`click_login`）
+- 合理拆分复杂操作，每步只做一件事
+
+### 成功判定
+
+- 简单场景留空 `success_conditions`，步骤全部完成即为成功
+- 复杂场景建议组合使用 `eval` + `variable` 条件
+- 认证页面会跳转的场景，优先用 `url_contains` 或 `url_matches`
+
+---
+
+## 常见问题
+
+**Q: 选择器怎么写？**
+
+A: 支持 CSS 选择器，多个选择器用逗号分隔。常用形式：
+- `input[name='username']` — 属性选择
+- `#username` — ID 选择
+- `.login-input` — 类选择
+- `button[type='submit']` — 组合选择
+
+**Q: 变量不生效怎么办？**
+
+A: 检查以下几点：
+1. 变量名是否正确（区分大小写）
+2. 模板语法是否正确（使用双大括号 `{{}}`）
+3. 变量来源是否正确（环境变量或 task.variables）
+
+**Q: 如何判断登录成功？**
+
+A: 推荐组合使用：
+1. `eval` 步骤检查页面内容，存储结果到变量
+2. `success_conditions` 中检查该变量
+3. 或使用 `url_contains` 检查跳转后的 URL
+
+**Q: 保存任务时弹出安全警告？**
+
+A: 因为任务中包含 `eval` 或 `custom_js` 步骤，这些步骤可以执行任意 JavaScript 代码。系统会显示代码内容要求确认，确认代码安全后点击确认即可。
+
+**Q: 内置任务和普通任务有什么区别？**
+
+A: 内置任务是随项目分发的预设任务。你可以在内置任务的基础上复制、修改来创建自己的任务。
+
+**Q: 验证码识别不准怎么办？**
+
+A: 尝试切换 `ocr` 步骤的 `old` 参数（`true`/`false`），两套模型对不同风格的验证码效果不同。
+
+---
+
+## 步骤类型速查表
 
 | 类型 | 用途 | 关键参数 | 特殊行为 |
 |------|------|----------|----------|
