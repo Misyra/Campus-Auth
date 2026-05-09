@@ -4,6 +4,7 @@ import asyncio
 import datetime
 import json
 import logging
+import re
 import threading
 import time
 from collections import deque
@@ -287,7 +288,8 @@ class MonitorService:
         if success:
             service_logger.info("Manual login succeeded")
             return True, f"手动登录成功：{message}"
-        service_logger.warning("Manual login failed: %s", message)
+        log_msg = re.sub(r'\s*截图[:：]\s*/\S+\.(?:png|jpg|jpeg|webp|gif)', '', message)
+        service_logger.warning("Manual login failed: %s", log_msg)
         return False, f"手动登录失败：{message}"
 
     def test_network(self) -> tuple[bool, str]:

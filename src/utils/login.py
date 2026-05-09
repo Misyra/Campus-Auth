@@ -6,6 +6,7 @@
 
 import datetime
 import os
+import re
 import threading
 from pathlib import Path
 from typing import Any, Dict
@@ -167,8 +168,7 @@ class LoginAttemptHandler:
                 browser_start = _time.perf_counter()
                 browser_manager = BrowserContextManager(self.config, cancel_event=self.cancel_event)
                 await browser_manager.__aenter__()
-                if reuse_browser:
-                    self._browser_ctx = browser_manager
+                self._browser_ctx = browser_manager
                 self.logger.info("浏览器就绪 (%.1fs)", _time.perf_counter() - browser_start)
 
             try:
@@ -183,7 +183,8 @@ class LoginAttemptHandler:
                     self.logger.info("登录成功 (总耗时 %.1fs): %s", total, message)
                     await self.close_browser()
                     return True, message
-                self.logger.error("登录失败 (总耗时 %.1fs): %s", total, message)
+                log_msg = re.sub(r'\s*截图[:：]\s*/\S+\.(?:png|jpg|jpeg|webp|gif)', '', message)
+                self.logger.error("登录失败 (总耗时 %.1fs): %s", total, log_msg)
                 if not reuse_browser:
                     await self.close_browser()
                 return False, message

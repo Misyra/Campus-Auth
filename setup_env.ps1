@@ -576,11 +576,19 @@ function Install-Dependencies {
 function Test-PlaywrightChromium {
     try {
         $probeCode = @"
+import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 with sync_playwright() as p:
     exe = p.chromium.executable_path
-    print('1' if exe and Path(exe).exists() else '0')
+    if not (exe and Path(exe).exists()):
+        print('0')
+    else:
+        # 同时检查 chromium_headless_shell 是否存在
+        chromium_dir = Path(exe).resolve().parent.parent
+        rev = chromium_dir.name.replace('chromium-', '')
+        headless = chromium_dir.parent / f'chromium_headless_shell-{rev}'
+        print('1' if headless.is_dir() else '0')
 "@
         $result = & $PythonExe -c $probeCode 2>&1
         return ($LASTEXITCODE -eq 0 -and $result -match "1")
