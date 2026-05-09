@@ -19,7 +19,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.utils import ConfigLoader, ConfigValidator
@@ -114,7 +114,17 @@ app = FastAPI(
 )
 
 # ==================== CORS 配置 ====================
-_cors_port = os.getenv("APP_PORT", "50721")
+def _resolve_port() -> int:
+    raw = os.getenv("APP_PORT", "50721")
+    try:
+        port = int(raw)
+    except ValueError:
+        return 50721
+    if 1 <= port <= 65535:
+        return port
+    return 50721
+
+_cors_port = _resolve_port()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -123,25 +133,8 @@ app.add_middleware(
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "X-API-Token"],
+    allow_headers=["Content-Type"],
 )
-
-# ==================== API 鉴权 ====================
-_API_TOKEN = os.getenv("API_TOKEN", "").strip()
-_WRITE_METHODS = {"POST", "PUT", "DELETE"}
-
-
-@app.middleware("http")
-async def auth_middleware(request: Request, call_next):
-    """对写操作 API 进行简易 token 鉴权校验"""
-    if request.method in _WRITE_METHODS and _API_TOKEN:
-        token = request.headers.get("X-API-Token", "")
-        if token != _API_TOKEN:
-            return JSONResponse(
-                status_code=403,
-                content={"detail": "无效的 API Token"},
-            )
-    return await call_next(request)
 
 
 profile_service = ProfileService(project_root=PROJECT_ROOT)
@@ -568,6 +561,31 @@ def set_active_task(task_id: str) -> ActionResponse:
         "Set active task %s -> success=%s, message=%s", task_id, ok, message
     )
     return ActionResponse(success=ok, message=message)
+
+
+@app.get("/api/tools/task-recorder.user.js")
+def download_task_recorder():
+    """下载任务录制器用户脚本（Tampermonkey 会自动拦截 .user.js 并弹出安装）"""
+    script_path = PROJECT_ROOT / "tools" / "task-recorder.user.js"
+    if not script_path.exists():
+        raise HTTPException(status_code=404, detail="任务录制器脚本不存在")
+    return FileResponse(
+        script_path,
+        media_type="text/javascript",
+    )
+
+
+@app.get("/api/docs/task-writing-guide")
+def download_task_writing_guide():
+    """下载任务编写指南文档"""
+    doc_path = PROJECT_ROOT / "doc" / "task-writing-guide.md"
+    if not doc_path.exists():
+        raise HTTPException(status_code=404, detail="文档不存在")
+    return FileResponse(
+        doc_path,
+        media_type="text/markdown",
+        filename="task-writing-guide.md",
+    )
 
 
 # ==================== 仓库代理 API ====================
@@ -1149,17 +1167,6 @@ TEMP_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 app.mount("/debug", StaticFiles(directory=DEBUG_DIR), name="debug")
 app.mount("/temp", StaticFiles(directory=TEMP_DIR), name="temp")
-
-
-def _resolve_port() -> int:
-    raw = os.getenv("APP_PORT", "50721")
-    try:
-        port = int(raw)
-    except ValueError:
-        return 50721
-    if 1 <= port <= 65535:
-        return port
-    return 50721
 
 
 def run() -> None:

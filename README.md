@@ -164,7 +164,6 @@ cp .env.example .env
 |------|--------|------|
 | `APP_PORT` | `50721` | Web 控制台端口。 |
 | `UVICORN_ACCESS_LOG` | `false` | 是否输出 HTTP 访问日志。 |
-| `API_TOKEN` | 空 | API 写操作鉴权令牌，可选。 |
 
 #### 监控配置
 
@@ -519,10 +518,6 @@ POST /api/autostart/disable  # 禁用自启动
 ```text
 GET  /debug/{filename}       # 调试截图文件访问
 ```
-
-### API 鉴权
-
-设置 `API_TOKEN` 环境变量后，所有写操作（POST/PUT/DELETE）需要在请求头中携带 `X-API-Token`。未设置时不需要鉴权。
 
 ## 开发与调试
 

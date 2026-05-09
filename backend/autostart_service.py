@@ -191,6 +191,9 @@ class AutoStartService:
         logger.info("Linux service 路径: %s", service_path)
         service_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # 用单引号包裹命令，确保路径含空格时 systemd 正确解析
+        # 如果命令本身含单引号，用 '\'' 转义
+        cmd = self._start_command().replace("'", "'\\''")
         content = f"""[Unit]
 Description=Campus-Auth Auto Network Web Console
 After=network.target
@@ -198,7 +201,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory={self.project_root}
-ExecStart=/bin/bash -lc {self._start_command()}
+ExecStart=/bin/bash -lc '{cmd}'
 Restart=always
 RestartSec=5
 

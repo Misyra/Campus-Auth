@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+import platform
 import socket
+import subprocess
 import sys
 import time
 from typing import Iterable, Sequence
@@ -14,6 +16,25 @@ logger = get_logger("network_test", side="BACKEND")
 
 
 def is_local_network_connected() -> bool:
+    """检查本地网络是否有实际连接（有线或无线）。
+
+    Windows: 通过 netsh 检查是否有已连接的网络接口。
+    Linux:   检查是否有非 lo 接口存在默认路由。
+    macOS:   检查是否有活跃的网络服务。
+    回退:    检查是否有非回环 IP。
+    """
+    system = platform.system()
+    try:
+        if system == "Windows":
+            return _check_windows_adapter()
+        elif system == "Linux":
+            return _check_linux_route()
+        elif system == "Darwin":
+            return _check_macos_service()
+    except Exception as exc:
+        logger.debug("平台网络检测失败，回退到 IP 检查: %s", exc)
+
+    # 回退：检查非回环 IP
     try:
         hostname = socket.gethostname()
         ip_list = socket.gethostbyname_ex(hostname)[2]
@@ -26,6 +47,107 @@ def is_local_network_connected() -> bool:
     except Exception as exc:
         logger.warning("获取本地 IP 失败: %s", exc)
         return False
+
+
+def _check_windows_adapter() -> bool:
+    """Windows: 检查网络适配器是否实际连接。
+
+    netsh 输出是本地化的（中文"已连接"、英文"Connected"、日文"接続済み"等），
+    无法穷举所有语言。改用 PowerShell Get-NetAdapter（输出结构化，不依赖语言），
+    失败时回退到 netsh + 多语言匹配。
+    """
+    # 优先使用 PowerShell（结构化输出，不受系统语言影响）
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "Get-NetAdapter | Select-Object -ExpandProperty Status"],
+            capture_output=True, text=True, timeout=5,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        if result.returncode == 0:
+            statuses = [line.strip().lower() for line in result.stdout.splitlines() if line.strip()]
+            if "up" in statuses:
+                logger.info("检测到已连接的网络适配器 (PowerShell)")
+                return True
+            logger.warning("所有网络适配器均未连接 (PowerShell)")
+            return False
+    except FileNotFoundError:
+        logger.debug("PowerShell 不可用，回退到 netsh")
+
+    # 回退：netsh（输出受系统语言影响，尝试常见语言）
+    try:
+        result = subprocess.run(
+            ["netsh", "interface", "show", "interface"],
+            capture_output=True, text=True, timeout=5,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        if result.returncode != 0:
+            logger.debug("netsh 执行失败: %s", result.stderr)
+            return False
+
+        # 已知的"已连接"多语言映射
+        connected_keywords = {"connected", "已连接", "接続済み", "connecté",
+                              "verbunden", "подключено", "conectado"}
+        for line in result.stdout.splitlines():
+            parts = line.split()
+            if len(parts) >= 4 and parts[1].lower() in connected_keywords:
+                name = " ".join(parts[3:])
+                lower_name = name.lower()
+                if "loopback" not in lower_name and "tunnel" not in lower_name:
+                    logger.info("检测到已连接的网络接口: %s", name)
+                    return True
+
+        logger.warning("未检测到已连接的网络接口")
+        return False
+    except FileNotFoundError:
+        logger.debug("netsh 不可用")
+        return False
+
+
+def _check_linux_route() -> bool:
+    """Linux: 检查是否有默认路由（表示有实际网络连接）。"""
+    try:
+        with open("/proc/net/route", "r") as f:
+            for line in f:
+                fields = line.strip().split()
+                if len(fields) >= 3 and fields[1] == "00000000":
+                    iface = fields[0]
+                    if iface != "lo":
+                        logger.info("检测到默认路由接口: %s", iface)
+                        return True
+    except Exception as exc:
+        logger.debug("读取路由表失败: %s", exc)
+    logger.warning("未检测到默认路由")
+    return False
+
+
+def _check_macos_service() -> bool:
+    """macOS: 检查网络接口是否有实际连接（IP 地址分配）。
+
+    使用 ifconfig 检查常见接口（en0=有线/WiFi, en1=WiFi/有线）是否分配了 IP。
+    仅检查接口名存在不够 — 接口可能存在但未连接。
+    """
+    for iface in ("en0", "en1"):
+        try:
+            result = subprocess.run(
+                ["ifconfig", iface],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode != 0:
+                continue
+            # 检查是否有 "status: active" 或分配了非 0.0.0.0 的 IP
+            output = result.stdout
+            if "status: active" in output:
+                # 进一步确认有 IP 地址
+                import re
+                if re.search(r"inet\s+(?!0\.0\.0\.0)\d+\.\d+\.\d+\.\d+", output):
+                    logger.info("检测到活跃的网络接口: %s", iface)
+                    return True
+        except Exception:
+            continue
+
+    logger.warning("未检测到活跃的网络接口")
+    return False
 
 
 def is_network_available_socket(
@@ -59,7 +181,7 @@ def is_network_available_http(
                 try:
                     resp = client.get(url)
                     elapsed = (time.perf_counter() - start) * 1000
-                    if resp.status_code < 500:
+                    if 200 <= resp.status_code < 300:
                         logger.info("HTTP 请求成功: %s → %s (%.0fms)",
                                     url, resp.status_code, elapsed)
                         return True
@@ -80,6 +202,11 @@ def is_network_available(
     timeout: float = 1.5,
     require_both: bool = False,
 ) -> bool:
+    # 物理网络预检查：无实际连接时直接跳过，避免徒增功耗
+    if not is_local_network_connected():
+        logger.warning("物理网络未连接，跳过 TCP/HTTP 检测")
+        return False
+
     urls_list = list(test_urls or ())
     logger.info("开始网络检测 (TCP目标=%d, HTTP目标=%d, require_both=%s)",
                 len(test_sites or ()), len(urls_list), require_both)

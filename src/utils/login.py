@@ -145,8 +145,22 @@ class LoginAttemptHandler:
             # 复用或创建浏览器
             if reuse_browser and self._browser_ctx is not None:
                 browser_manager = self._browser_ctx
-                self.logger.info("复用浏览器...")
-            else:
+                # 健康检查：验证浏览器是否仍然存活
+                try:
+                    if not browser_manager.browser or not browser_manager.browser.is_connected():
+                        raise RuntimeError("浏览器进程已断开")
+                    if browser_manager.page and browser_manager.page.is_closed():
+                        raise RuntimeError("浏览器页面已关闭")
+                except Exception as exc:
+                    self.logger.warning("浏览器健康检查失败，将重新启动: %s", exc)
+                    await self.close_browser()
+                    browser_manager = None
+                    reuse_browser = False
+
+                if browser_manager is not None:
+                    self.logger.info("复用浏览器...")
+
+            if not reuse_browser or self._browser_ctx is None:
                 # 不复用：关闭旧的（如果有），新建
                 await self.close_browser()
                 self.logger.info("启动浏览器...")

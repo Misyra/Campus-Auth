@@ -27,12 +27,12 @@
 ```
 任务定义
 ├── 基本信息（name, description）
+├── 元数据（metadata）
 ├── 认证地址（url）
 ├── 变量定义（variables）
 ├── 步骤列表（steps）
 ├── 成功条件（success_conditions）
-├── 结果处理（on_success, on_failure）
-└── 元数据（metadata）
+└── 结果处理（on_success, on_failure）
 ```
 
 ---
@@ -45,6 +45,7 @@
 {
   "name": "任务名称",
   "description": "任务描述",
+  "metadata": {},
   "url": "{{LOGIN_URL}}",
   "timeout": 30000,
   "variables": {
@@ -73,8 +74,7 @@
   "on_failure": {
     "message": "登录失败",
     "screenshot": true
-  },
-  "metadata": {}
+  }
 }
 ```
 
@@ -84,6 +84,7 @@
 |------|------|------|--------|------|
 | `name` | string | 是 | - | 任务名称，显示在任务列表中 |
 | `description` | string | 否 | "" | 任务描述 |
+| `metadata` | object | 否 | {} | 用户自定义元数据，执行器不使用，可用于存储附加信息 |
 | `url` | string | 否 | "" | 任务自定义认证地址，填写后会覆盖 `{{LOGIN_URL}}` 变量；留空则使用系统设置的认证地址 |
 | `timeout` | number | 否 | 30000 | 全局超时时间（毫秒） |
 | `variables` | object | 否 | {} | 变量定义，支持模板语法 |
@@ -91,7 +92,6 @@
 | `success_conditions` | array | 否 | [] | 成功条件，全部满足才算成功 |
 | `on_success` | object | 否 | {} | 成功时的处理 |
 | `on_failure` | object | 否 | {} | 失败时的处理 |
-| `metadata` | object | 否 | {} | 用户自定义元数据，执行器不使用，可用于存储附加信息 |
 
 #### 关于 `metadata` 字段
 
@@ -822,6 +822,7 @@ if not is_valid:
 {
   "name": "校园网基础登录",
   "description": "使用标准选择器的登录任务",
+  "metadata": {},
   "url": "{{LOGIN_URL}}",
   "timeout": 30000,
   "variables": {
@@ -897,6 +898,7 @@ if not is_valid:
 {
   "name": "精简登录",
   "description": "利用自动导航和空成功条件的简化任务",
+  "metadata": {},
   "url": "{{LOGIN_URL}}",
   "timeout": 15000,
   "steps": [
@@ -937,6 +939,7 @@ if not is_valid:
 {
   "name": "验证码登录",
   "description": "需要输入验证码的校园网登录",
+  "metadata": {},
   "url": "{{LOGIN_URL}}",
   "timeout": 30000,
   "steps": [
@@ -1049,10 +1052,6 @@ if not is_valid:
 | GET | `/api/health` | 健康检查，返回状态和版本 |
 | POST | `/api/shutdown` | 关闭服务 |
 
-### API 鉴权
-
-如果设置了 `API_TOKEN` 环境变量，所有写操作（POST/PUT/DELETE）需要在请求头中携带 `X-API-Token`。未设置 `API_TOKEN` 时不需要鉴权。
-
 ### 调试文件
 
 `/debug/` 路径提供截图文件的静态访问，可用于查看失败截图。
@@ -1075,7 +1074,6 @@ if not is_valid:
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `APP_PORT` | `50721` | Web 控制台端口 |
-| `API_TOKEN` | 空 | API 写操作鉴权令牌 |
 | `UVICORN_ACCESS_LOG` | `false` | 是否输出 HTTP 访问日志 |
 
 ### 监控配置
