@@ -29,7 +29,7 @@ class MonitorConfigPayload(BaseModel):
         default="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
     )
-    browser_low_resource_mode: bool = True
+    browser_low_resource_mode: bool = False
     browser_disable_web_security: bool = False
     browser_extra_headers_json: str = Field(default="")
     browser_args: str = Field(default="")
@@ -176,7 +176,7 @@ class ProfileSettings(BaseModel):
         default="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
     )
-    browser_low_resource_mode: bool = True
+    browser_low_resource_mode: bool = False
     browser_disable_web_security: bool = False
     browser_extra_headers_json: str = Field(default="")
     browser_args: str = Field(default="", description="自定义 Chromium 启动参数，每行一个")

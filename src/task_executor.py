@@ -761,6 +761,7 @@ class StepExecutorRegistry:
     def _register_defaults(self) -> None:
         """注册默认处理器"""
         handlers = [
+            NavigateHandler(),
             InputHandler(),
             ClickHandler(),
             SelectHandler(),

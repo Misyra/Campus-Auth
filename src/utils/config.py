@@ -59,7 +59,7 @@ class ConfigLoader:
             "timeout": ConfigLoader._get_int_env("BROWSER_TIMEOUT", 8000),
             "user_agent": os.getenv("BROWSER_USER_AGENT", default_user_agent),
             "low_resource_mode": ConfigLoader._str_to_bool(
-                os.getenv("BROWSER_LOW_RESOURCE_MODE", "true")
+                os.getenv("BROWSER_LOW_RESOURCE_MODE", "false")
             ),
             "extra_headers_json": os.getenv("BROWSER_EXTRA_HEADERS_JSON", ""),
             "disable_web_security": ConfigLoader._str_to_bool(

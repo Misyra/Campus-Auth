@@ -17,8 +17,8 @@ export const lifecycleMethods = {
     ]);
     this.isLoading = false;
     this.connectWebSocket();
-    this.timers.push(setInterval(this.fetchStatus, 30000));  // 30s fallback, WS 实时推送
-    this.timers.push(setInterval(this.fetchAutostart, 12000));
+    this.timers.push(setInterval(() => this.fetchStatus(), 30000));  // 30s fallback, WS 实时推送
+    this.timers.push(setInterval(() => this.fetchAutostart(), 12000));
     this.frontendLogger.info('app.init', 'init finished');
   },
   async checkInitStatus() {
