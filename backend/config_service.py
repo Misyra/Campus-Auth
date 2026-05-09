@@ -46,10 +46,92 @@ def _normalize_headers_json(raw: str) -> str:
 
 
 def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
+    """加载 UI 配置 —— 始终返回全局设置。
+
+    设置页面展示和修改的都是全局配置（system + default 方案），
+    不随活动方案变化。方案独立的覆盖值在方案页面单独管理。
+    """
     data = profile_service.load()
     sys = data.system
-    config_logger.debug("加载 UI 配置: profile=%s", profile_service.get_active_profile_id())
+    config_logger.debug("加载 UI 配置（全局）: active_profile=%s", data.active_profile)
+
+    # 账号密码：始终使用全局
+    username = sys.username
+    password = mask_password(sys.password)
+
+    # 认证地址：始终使用全局
+    auth_url = sys.auth_url
+
+    # 任务：全局状态不绑定特定任务
+    active_task = ""
+
+    # 运营商：始终使用全局
+    carrier = sys.carrier
+    carrier_custom = sys.carrier_custom
+
+    # 高级设置：始终从 default 方案读取
+    global_profile = data.profiles.get("default", ProfileSettings())
+    check_interval_minutes = global_profile.check_interval_minutes
+    auto_start = global_profile.auto_start
+    headless = global_profile.headless
+    browser_timeout = global_profile.browser_timeout
+    login_timeout = global_profile.login_timeout
+    browser_user_agent = global_profile.browser_user_agent
+    browser_low_resource_mode = global_profile.browser_low_resource_mode
+    browser_disable_web_security = global_profile.browser_disable_web_security
+    browser_extra_headers_json = global_profile.browser_extra_headers_json
+    browser_args = global_profile.browser_args
+    pause_enabled = global_profile.pause_enabled
+    pause_start_hour = global_profile.pause_start_hour
+    pause_end_hour = global_profile.pause_end_hour
+    network_targets = _normalize_targets(global_profile.network_targets)
+    custom_variables = global_profile.custom_variables
+
+    return MonitorConfigPayload(
+        username=username,
+        password=password,
+        use_global_credentials=True,
+        auth_url=auth_url,
+        active_task=active_task,
+        carrier=carrier,
+        carrier_custom=carrier_custom,
+        check_interval_minutes=check_interval_minutes,
+        auto_start=auto_start,
+        headless=headless,
+        browser_timeout=browser_timeout,
+        login_timeout=login_timeout,
+        browser_user_agent=browser_user_agent,
+        browser_low_resource_mode=browser_low_resource_mode,
+        browser_disable_web_security=browser_disable_web_security,
+        browser_extra_headers_json=browser_extra_headers_json,
+        browser_args=browser_args,
+        pause_enabled=pause_enabled,
+        pause_start_hour=pause_start_hour,
+        pause_end_hour=pause_end_hour,
+        network_targets=network_targets,
+        backend_log_level=_normalize_level(sys.backend_log_level),
+        frontend_log_level=_normalize_level(sys.frontend_log_level),
+        access_log=sys.access_log,
+        minimize_to_tray=sys.minimize_to_tray,
+        auto_open_browser=sys.auto_open_browser,
+        login_then_exit=sys.login_then_exit,
+        log_retention_days=sys.log_retention_days,
+        screenshot_retention_days=sys.screenshot_retention_days,
+        custom_variables=custom_variables,
+        proxy=sys.proxy,
+    )
+
+
+def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload:
+    """加载运行时配置 —— 根据活动方案的 use_global_* 标志合并全局与方案独立值。
+
+    与 load_ui_config 不同，此函数会按活动方案的覆盖标志来决定使用全局值还是方案独立值，
+    确保运行时实际生效的配置与方案设置一致。
+    """
+    data = profile_service.load()
+    sys = data.system
     profile = profile_service.get_active_profile()
+    config_logger.debug("加载运行时配置: profile=%s", data.active_profile)
 
     # 账号密码：方案独立 > 全局
     use_global = True
@@ -106,7 +188,6 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
         network_targets = _normalize_targets(profile.network_targets)
         custom_variables = profile.custom_variables
     else:
-        # 使用 default 方案的实际配置值（而非硬编码默认值）
         global_profile = data.profiles.get("default", ProfileSettings())
         check_interval_minutes = global_profile.check_interval_minutes
         auto_start = global_profile.auto_start
@@ -252,33 +333,29 @@ def _save_password_field(raw: str, existing_encrypted: str) -> str:
 def save_config_combined(
     payload: MonitorConfigPayload, profile_service: ProfileService,
 ) -> None:
-    """原子化保存系统设置 + 活动方案设置，避免两次独立写入导致数据丢失。"""
+    """原子化保存全局设置（system + default 方案）。
+
+    设置页面始终修改全局配置，不涉及活动方案的独立字段。
+    方案页面的独立设置通过 /api/profiles/{id} 单独保存。
+    """
     data = profile_service.load()
     sys = data.system
-
-    # ── 先读取活动方案，判断哪些系统字段需要更新 ──
     active_id = data.active_profile
-    existing = data.profiles.get(active_id, ProfileSettings())
 
-    # ── 更新系统设置 ──
+    # ── 更新系统设置（始终写入全局）──
     pwd_raw = payload.password.strip()
-    if payload.use_global_credentials:
-        old_user = sys.username
-        sys.username = payload.username.strip()
-        sys.password = _save_password_field(pwd_raw, sys.password)
-        config_logger.info(
-            "保存系统设置: 用户=%s (旧=%s), 密码=%s, use_global=%s",
-            sys.username, old_user,
-            "已更新" if (pwd_raw and not pwd_raw.startswith("•")) else "保留",
-            payload.use_global_credentials,
-        )
+    old_user = sys.username
+    sys.username = payload.username.strip()
+    sys.password = _save_password_field(pwd_raw, sys.password)
+    config_logger.info(
+        "保存系统设置: 用户=%s (旧=%s), 密码=%s",
+        sys.username, old_user,
+        "已更新" if (pwd_raw and not pwd_raw.startswith("•")) else "保留",
+    )
 
-    # 仅当活动方案使用全局设置时才更新系统级字段，避免独立方案的值覆盖全局
-    if existing.use_global_auth_url:
-        sys.auth_url = payload.auth_url.strip()
-    if existing.use_global_credentials:
-        sys.carrier = str(payload.carrier or "无").strip()
-        sys.carrier_custom = str(payload.carrier_custom or "").strip()
+    sys.auth_url = payload.auth_url.strip()
+    sys.carrier = str(payload.carrier or "无").strip()
+    sys.carrier_custom = str(payload.carrier_custom or "").strip()
     sys.backend_log_level = _normalize_level(payload.backend_log_level)
     sys.frontend_log_level = _normalize_level(payload.frontend_log_level)
     sys.access_log = payload.access_log
@@ -291,53 +368,31 @@ def save_config_combined(
 
     data.system = sys
 
-    # ── 更新活动方案 ──
-    updated = ProfileSettings(
-        name=existing.name,
-        match_gateway_ip=existing.match_gateway_ip,
-        match_ssid=existing.match_ssid,
-        username=existing.username,
-        password=existing.password,
-        use_global_credentials=existing.use_global_credentials,
-        use_global_advanced=existing.use_global_advanced,
-        use_global_auth_url=existing.use_global_auth_url,
-        use_global_task=existing.use_global_task,
-        auth_url=existing.auth_url if existing.use_global_auth_url else payload.auth_url.strip(),
-        active_task=existing.active_task,
-        carrier=existing.carrier if existing.use_global_credentials else str(payload.carrier or "无").strip(),
-        carrier_custom=existing.carrier_custom if existing.use_global_credentials else str(payload.carrier_custom or "").strip(),
-        check_interval_minutes=payload.check_interval_minutes,
-        auto_start=payload.auto_start,
-        headless=payload.headless,
-        browser_timeout=payload.browser_timeout,
-        login_timeout=payload.login_timeout,
-        browser_user_agent=payload.browser_user_agent.strip(),
-        browser_low_resource_mode=payload.browser_low_resource_mode,
-        browser_disable_web_security=payload.browser_disable_web_security,
-        browser_extra_headers_json=_normalize_headers_json(
-            payload.browser_extra_headers_json
-        ),
-        browser_args=payload.browser_args.strip(),
-        pause_enabled=payload.pause_enabled,
-        pause_start_hour=payload.pause_start_hour,
-        pause_end_hour=payload.pause_end_hour,
-        network_targets=_normalize_targets(payload.network_targets),
-        custom_variables=payload.custom_variables,
-    )
+    # ── 更新 default 方案的高级设置（始终写入全局）──
+    if "default" in data.profiles:
+        glob = data.profiles["default"]
+        glob.check_interval_minutes = payload.check_interval_minutes
+        glob.auto_start = payload.auto_start
+        glob.headless = payload.headless
+        glob.browser_timeout = payload.browser_timeout
+        glob.login_timeout = payload.login_timeout
+        glob.browser_user_agent = payload.browser_user_agent.strip()
+        glob.browser_low_resource_mode = payload.browser_low_resource_mode
+        glob.browser_disable_web_security = payload.browser_disable_web_security
+        glob.browser_extra_headers_json = _normalize_headers_json(payload.browser_extra_headers_json)
+        glob.browser_args = payload.browser_args.strip()
+        glob.pause_enabled = payload.pause_enabled
+        glob.pause_start_hour = payload.pause_start_hour
+        glob.pause_end_hour = payload.pause_end_hour
+        glob.network_targets = _normalize_targets(payload.network_targets)
+        glob.custom_variables = payload.custom_variables
 
-    # 处理方案密码
-    if updated.password and not updated.password.startswith("•") and not updated.password.startswith("ENC:"):
-        updated.password = encrypt_password(updated.password)
-    elif updated.password and updated.password.startswith("•"):
-        if existing.password:
-            updated.password = existing.password
-
-    data.profiles[active_id] = updated
+    # 活动方案保持不变 —— 设置页面不修改方案独立配置
 
     # ── 单次写入 ──
     profile_service.save(data)
     config_logger.info(
-        "配置已原子保存: system(user=%s, pwd=%s, auth=%s), profile=%s",
+        "配置已原子保存: system(user=%s, pwd=%s, auth=%s), active_profile=%s",
         sys.username,
         "ENC" if sys.password else "空",
         sys.auth_url,

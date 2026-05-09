@@ -18,7 +18,7 @@ from src.network_test import is_network_available
 from src.utils import ConfigValidator
 from src.utils.logging import get_logger
 
-from .config_service import build_runtime_config, load_ui_config
+from .config_service import build_runtime_config, load_runtime_config, load_ui_config
 from .profile_service import ProfileService
 from .schemas import LogEntry, MonitorConfigPayload, MonitorStatusResponse
 
@@ -76,7 +76,7 @@ class MonitorService:
 
         self._ui_config = load_ui_config(self._profile_service)
         self._runtime_config = build_runtime_config(
-            self._ui_config, self._profile_service.load().system
+            load_runtime_config(self._profile_service), self._profile_service.load().system
         )
 
         self._monitor_core: NetworkMonitorCore | None = None
@@ -153,7 +153,7 @@ class MonitorService:
         with self._lock:
             self._ui_config = load_ui_config(self._profile_service)
             self._runtime_config = build_runtime_config(
-                self._ui_config, self._profile_service.load().system
+                load_runtime_config(self._profile_service), self._profile_service.load().system
             )
             # 如果监控正在运行，热更新配置
             if self._monitor_core and self._monitor_core.monitoring:
