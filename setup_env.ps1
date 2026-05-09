@@ -6,7 +6,7 @@
 
 param(
     [string]$PythonVersion = "3.10",
-    [string]$PipMirror = "https://mirrors.aliyun.com/pypi/simple",
+    [string]$PipMirror = "https://mirrors.cernet.edu.cn/pypi/simple",
     [switch]$ForceReinstall = $false,
     [switch]$Verbose = $false
 )
@@ -28,8 +28,13 @@ $LogDir = Join-Path $ProjectRoot "logs"
 $LogFile = Join-Path $LogDir "setup_env.log"
 $DefaultPort = 50721
 
-# Python 嵌入式版本下载链接 (官方)
-$PythonDownloadUrl = "https://www.python.org/ftp/python/${PythonVersion}.0/python-${PythonVersion}.0-embed-amd64.zip"
+# Python 嵌入式版本下载链接（优先级: cernet → aliyun → 官方）
+$PythonEmbedFilename = "python-${PythonVersion}.0-embed-amd64.zip"
+$PythonDownloadUrls = @(
+    "https://mirrors.cernet.edu.cn/python/${PythonVersion}.0/$PythonEmbedFilename",
+    "https://mirrors.aliyun.com/python/${PythonVersion}.0/$PythonEmbedFilename",
+    "https://www.python.org/ftp/python/${PythonVersion}.0/$PythonEmbedFilename"
+)
 
 # ==================== 工具函数 ====================
 
@@ -160,11 +165,60 @@ function Test-ServiceRunning {
     }
 }
 
-$DefaultPipMirror = "https://mirrors.aliyun.com/pypi/simple"
+$DefaultPipMirror = "https://mirrors.cernet.edu.cn/pypi/simple"
 $FallbackPipMirrors = @(
-    "https://mirrors.tuna.tsinghua.edu.cn/simple",
+    "https://mirrors.aliyun.com/pypi/simple",
     "https://pypi.org/simple"
 )
+
+function Download-WithProgress {
+    param(
+        [string]$Url,
+        [string]$OutFile,
+        [int]$TimeoutSec = 60
+    )
+    try {
+        $request = [System.Net.HttpWebRequest]::Create($Url)
+        $request.Timeout = $TimeoutSec * 1000
+        $request.ReadTimeout = $TimeoutSec * 1000
+        if (-not $UseSystemProxy) {
+            $request.Proxy = $null
+        }
+        $response = $request.GetResponse()
+        $totalBytes = $response.ContentLength
+        $stream = $response.GetResponseStream()
+        $fileStream = [System.IO.File]::Create($OutFile)
+        $buffer = New-Object byte[] 8192
+        $totalRead = 0
+        $lastPercent = -1
+
+        while (($bytesRead = $stream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+            $fileStream.Write($buffer, 0, $bytesRead)
+            $totalRead += $bytesRead
+            if ($totalBytes -gt 0) {
+                $percent = [math]::Floor($totalRead * 100 / $totalBytes)
+                if ($percent -ne $lastPercent) {
+                    $barLen = [math]::Floor($percent / 2)
+                    $bar = ("#" * $barLen) + ("-" * (50 - $barLen))
+                    $sizeMB = "{0:N1}" -f ($totalRead / 1MB)
+                    $totalMB = "{0:N1}" -f ($totalBytes / 1MB)
+                    Write-Host "`r  [$bar] $percent%  $sizeMB/$totalMB MB" -NoNewline
+                    $lastPercent = $percent
+                }
+            }
+        }
+        $fileStream.Close()
+        $stream.Close()
+        $response.Close()
+        if ($totalBytes -gt 0) { Write-Host "" }
+        return @{success = $true}
+    } catch {
+        if ($fileStream) { $fileStream.Close() }
+        if ($stream) { $stream.Close() }
+        if ($response) { $response.Close() }
+        return @{success = $false; error = $_.Exception.Message}
+    }
+}
 
 function Get-PipMirrorCandidates {
     $mirrors = @($PipMirror) + $FallbackPipMirrors
@@ -189,9 +243,9 @@ function Invoke-PipWithMirror {
         $hostname = [System.Uri]::new($mirror).Host
         Write-Info "[$Stage] 尝试镜像源：$mirror"
         try {
-            $result = & $PythonExe -m pip @PipArgs -i $mirror --trusted-host $hostname 2>&1
+            & $PythonExe -m pip @PipArgs --progress-bar=on -i $mirror --trusted-host $hostname
             if ($LASTEXITCODE -eq 0) {
-                return @{success = $true; output = $result; mirror = $mirror}
+                return @{success = $true; mirror = $mirror}
             }
             Write-Warning-Custom "[$Stage] 镜像失败：$mirror"
         } catch {
@@ -332,16 +386,22 @@ function Install-Python {
             Write-Info "创建目录：$TempDir"
         }
         
-        # 下载 Python
+        # 下载 Python（镜像回退）
         Write-Progress-Stage "Python" "下载 Python 嵌入式版本..." 30
-        Write-Info "下载地址：$PythonDownloadUrl"
-        
-        try {
-            Invoke-WebRequest -Uri $PythonDownloadUrl -OutFile $zipPath -UseBasicParsing
-            Write-Success "Python 下载完成"
-        } catch {
-            Write-Error-Custom "Python 下载失败：$_"
-            return @{success = $false; error = $_}
+        $downloaded = $false
+        foreach ($dlUrl in $PythonDownloadUrls) {
+            Write-Info "下载地址：$dlUrl"
+            $dlResult = Download-WithProgress -Url $dlUrl -OutFile $zipPath
+            if ($dlResult.success) {
+                Write-Success "Python 下载完成"
+                $downloaded = $true
+                break
+            }
+            Write-Warning-Custom "下载失败，尝试下一个源: $($dlResult.error)"
+        }
+        if (-not $downloaded) {
+            Write-Error-Custom "Python 下载失败：所有下载源均不可用"
+            return @{success = $false; error = "所有下载源均不可用"}
         }
         
         # 解压 Python

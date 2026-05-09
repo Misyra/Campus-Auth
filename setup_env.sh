@@ -8,7 +8,7 @@ set -euo pipefail
 # - Avoid duplicate start by checking APP_PORT
 
 PYTHON_VERSION="${PYTHON_VERSION:-3.10}"
-PIP_MIRROR="${PIP_MIRROR:-https://mirrors.aliyun.com/pypi/simple}"
+PIP_MIRROR="${PIP_MIRROR:-https://mirrors.cernet.edu.cn/pypi/simple}"
 FORCE_REINSTALL="${FORCE_REINSTALL:-0}"
 VERBOSE="${VERBOSE:-0}"
 
@@ -141,7 +141,7 @@ calculate_hash() {
 }
 
 FALLBACK_PIP_MIRRORS=(
-  "https://mirrors.tuna.tsinghua.edu.cn/simple"
+  "https://mirrors.aliyun.com/pypi/simple"
   "https://pypi.org/simple"
 )
 
@@ -162,7 +162,7 @@ run_pip_with_mirror() {
   shift
   while IFS= read -r mirror; do
     log_info "[$stage] 尝试镜像源: $mirror"
-    if "$PYTHON_EXE" -m pip "$@" -i "$mirror" >/dev/null 2>&1; then
+    if "$PYTHON_EXE" -m pip "$@" --progress-bar=on -i "$mirror" 2>/dev/null; then
       log_success "[$stage] 镜像成功: $mirror"
       return 0
     fi
