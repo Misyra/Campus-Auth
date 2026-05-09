@@ -83,13 +83,38 @@ def detect_wifi_ssid() -> str | None:
 
 
 def _detect_gateway_windows() -> str | None:
-    """Windows: 解析 ipconfig 输出获取默认网关（使用原始字节匹配，避免编码问题）"""
+    """Windows: 检测默认网关 IP。
+
+    优先使用 PowerShell Get-NetRoute（结构化输出，不受系统语言影响），
+    失败时回退到 ipconfig + 多语言字节匹配。
+    """
+    creationflags = (
+        subprocess.CREATE_NO_WINDOW
+        if hasattr(subprocess, "CREATE_NO_WINDOW")
+        else 0
+    )
+
+    # 优先使用 PowerShell（结构化输出，不受语言影响）
     try:
-        creationflags = (
-            subprocess.CREATE_NO_WINDOW
-            if hasattr(subprocess, "CREATE_NO_WINDOW")
-            else 0
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "Get-NetRoute -DestinationPrefix '0.0.0.0/0' | "
+             "Select-Object -First 1 -ExpandProperty NextHop"],
+            capture_output=True, text=True, timeout=5,
+            creationflags=creationflags,
         )
+        if result.returncode == 0:
+            ip = result.stdout.strip()
+            if ip and re.fullmatch(r"\d+\.\d+\.\d+\.\d+", ip) and ip != "0.0.0.0":
+                profile_logger.info("检测到网关 IP (PowerShell): %s", ip)
+                return ip
+    except FileNotFoundError:
+        profile_logger.debug("PowerShell 不可用，回退到 ipconfig")
+    except Exception as exc:
+        profile_logger.debug("PowerShell 网关检测失败: %s", exc)
+
+    # 回退：ipconfig + 多语言字节匹配
+    try:
         result = subprocess.run(
             ["ipconfig"],
             capture_output=True,
@@ -100,13 +125,20 @@ def _detect_gateway_windows() -> str | None:
 
         output = result.stdout
 
-        # 使用原始字节匹配，避免 Windows 中文编码问题
-        # "默认网关" GBK: c4ac c8cf cdf8 b9d8
-        # "Default Gateway" ASCII
-        pattern = re.compile(
-            rb"(?:\xc4\xac\xc8\xcf\xcd\xf8\xb9\xd8|Default\s+Gateway)"
-            rb"[\s.:]*(\d+\.\d+\.\d+\.\d+)"
-        )
+        # 使用原始字节匹配，避免 Windows 编码问题
+        # 已知的"默认网关"多语言字节序列
+        gateway_patterns = [
+            rb"\xc4\xac\xc8\xcf\xcd\xf8\xb9\xd8",  # "默认网关" GBK
+            rb"Default\s+Gateway",                    # English
+            rb"Standardgateway",                      # German
+            rb"Passerelle\s+par\s+d\xc3\xa9faut",    # French (UTF-8)
+            rb"Gateway\s+predefinito",                # Italian
+            rb"Puerta\s+de\s+enlace\s+predeterminada", # Spanish
+            rb"\xe3\x83\x87\xe3\x83\x95\xe3\x82\xa9\xe3\x83\xab\xe3\x83\x88\xe3\x82\xb2\xe3\x83\xbc\xe3\x83\x88\xe3\x82\xa6\xe3\x82\xa7\xe3\x82\xa4",  # "デフォルトゲートウェイ" UTF-8
+            rb"\xec\x98\xa4\xeb\xa5\xb8 \xea\xb2\x8c\xec\x9d\xb4\xed\x8a\xb8\xec\x9b\xa8\xec\x9d\xb4",  # "오른 게이트웨이" UTF-8
+        ]
+        combined = rb"(?:" + rb"|".join(gateway_patterns) + rb")"
+        pattern = re.compile(combined + rb"[\s.:]*(\d+\.\d+\.\d+\.\d+)")
         for match in pattern.finditer(output):
             ip = match.group(1).decode("ascii")
             if ip != "0.0.0.0":
@@ -165,7 +197,11 @@ def _detect_gateway_darwin() -> str | None:
 
 
 def _detect_ssid_windows() -> str | None:
-    """Windows: 解析 netsh wlan show interfaces 获取当前 WiFi SSID"""
+    """Windows: 解析 netsh wlan show interfaces 获取当前 WiFi SSID。
+
+    netsh 输出使用系统默认编码（中文 Windows 为 GBK/cp936），
+    SSID 可能包含非 ASCII 字符（如中文），需用系统编码解码。
+    """
     try:
         creationflags = (
             subprocess.CREATE_NO_WINDOW
@@ -180,12 +216,18 @@ def _detect_ssid_windows() -> str | None:
         )
         output = result.stdout
 
-        # "SSID" is always ASCII in netsh output, so raw bytes matching works
-        # Format: "    SSID                   : MyNetwork"
+        # 使用系统默认编码解码（中文 Windows 为 GBK，英文为 cp1252）
+        import locale
+        encoding = locale.getpreferredencoding(False) or "utf-8"
+
         pattern = re.compile(rb"^\s*SSID\s*:\s*(.+)$", re.MULTILINE)
         match = pattern.search(output)
         if match:
-            ssid = match.group(1).strip().decode("utf-8", errors="replace")
+            raw = match.group(1).strip()
+            try:
+                ssid = raw.decode(encoding)
+            except (UnicodeDecodeError, LookupError):
+                ssid = raw.decode("utf-8", errors="replace")
             if ssid:
                 return ssid
     except Exception as exc:
@@ -229,7 +271,12 @@ def _detect_ssid_linux() -> str | None:
 
 
 def _detect_ssid_darwin() -> str | None:
-    """macOS: 使用 airport 命令获取当前 WiFi SSID"""
+    """macOS: 获取当前 WiFi SSID。
+
+    优先使用 airport 命令，失败时回退到 networksetup。
+    注意：较新版本的 macOS 可能已移除 airport 工具。
+    """
+    # 方式 1：airport 命令（较旧 macOS）
     try:
         result = subprocess.run(
             [
@@ -241,11 +288,47 @@ def _detect_ssid_darwin() -> str | None:
             text=True,
             timeout=5,
         )
-        for line in result.stdout.splitlines():
-            if "SSID:" in line and "BSSID:" not in line:
-                return line.split(":", 1)[1].strip()
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                if "SSID:" in line and "BSSID:" not in line:
+                    ssid = line.split(":", 1)[1].strip()
+                    if ssid:
+                        return ssid
+    except FileNotFoundError:
+        profile_logger.debug("airport 命令不存在（较新 macOS 版本）")
     except Exception as exc:
-        profile_logger.debug("macOS SSID 检测失败: %s", exc)
+        profile_logger.debug("macOS SSID 检测失败 (airport): %s", exc)
+
+    # 方式 2：networksetup（所有 macOS 版本可用）
+    try:
+        # 先获取 Wi-Fi 硬件端口名
+        result = subprocess.run(
+            ["networksetup", "-listallhardwareports"],
+            capture_output=True, text=True, timeout=5,
+        )
+        wifi_device = None
+        lines = result.stdout.splitlines()
+        for i, line in enumerate(lines):
+            if "Wi-Fi" in line or "AirPort" in line:
+                # 下一行是 Device
+                if i + 1 < len(lines):
+                    wifi_device = lines[i + 1].split(":")[-1].strip()
+                    break
+
+        if wifi_device:
+            result = subprocess.run(
+                ["networksetup", "-getairportnetwork", wifi_device],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode == 0:
+                output = result.stdout.strip()
+                # 输出格式: "Current Wi-Fi Network: MyNetwork"
+                if ":" in output:
+                    ssid = output.split(":", 1)[1].strip()
+                    if ssid and "not associated" not in ssid.lower():
+                        return ssid
+    except Exception as exc:
+        profile_logger.debug("macOS SSID 检测失败 (networksetup): %s", exc)
 
     return None
 

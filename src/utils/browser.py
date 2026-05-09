@@ -84,6 +84,11 @@ class BrowserContextManager:
                 ctx_opts: dict = {
                     "viewport": {"width": 1280, "height": 720},
                     "extra_http_headers": extra_headers,
+                    "locale": "zh-CN",
+                    "timezone_id": "Asia/Shanghai",
+                    "has_touch": False,
+                    "color_scheme": "light",
+                    "ignore_https_errors": True,
                 }
                 if ua:
                     ctx_opts["user_agent"] = ua
@@ -95,6 +100,53 @@ class BrowserContextManager:
                     await self.context.route("**/*", self._handle_low_resource_request)
 
             self.page = await self.context.new_page()
+            # 注入反检测脚本，抹除自动化痕迹
+            await self.page.add_init_script("""
+                // 隐藏 webdriver 标志
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+
+                // 模拟真实的 plugins 对象
+                const makePlugin = (name, desc, filename) => ({
+                    name, description: desc, filename,
+                    length: 1,
+                    item: () => null,
+                    namedItem: () => null,
+                });
+                const fakePlugins = {
+                    0: makePlugin('Chrome PDF Plugin', 'Portable Document Format', 'internal-pdf-viewer'),
+                    1: makePlugin('Chrome PDF Viewer', '', 'mhjfbmdgcfjbbpaeojofohoefgiehjai'),
+                    2: makePlugin('Native Client', '', 'internal-nacl-plugin'),
+                    length: 3,
+                    item: function(i) { return this[i] || null; },
+                    namedItem: function(name) {
+                        for (let i = 0; i < this.length; i++) {
+                            if (this[i].name === name) return this[i];
+                        }
+                        return null;
+                    },
+                    refresh: function() {},
+                    [Symbol.iterator]: function*() {
+                        for (let i = 0; i < this.length; i++) yield this[i];
+                    },
+                };
+                Object.defineProperty(navigator, 'plugins', {get: () => fakePlugins});
+
+                // 模拟 chrome 对象
+                window.chrome = {
+                    runtime: { connect: function(){}, sendMessage: function(){} },
+                    loadTimes: function() { return {}; },
+                    csi: function() { return {}; },
+                };
+
+                // 覆盖 languages
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['zh-CN', 'zh', 'en-US', 'en'],
+                });
+
+                // 隐藏 Playwright 注入的属性
+                delete window.__playwright;
+                delete window.__pw_manual;
+            """)
             self.logger.info("浏览器启动完成")
 
         except Exception as e:
@@ -142,7 +194,9 @@ class BrowserContextManager:
 
     async def _handle_low_resource_request(self, route) -> None:
         request = route.request
-        if request.resource_type == "image":
+        # 低资源模式：屏蔽图片、字体、媒体文件，减少内存和带宽消耗
+        blocked_types = {"image", "font", "media"}
+        if request.resource_type in blocked_types:
             await route.abort()
             return
         await route.continue_()

@@ -83,12 +83,11 @@ export const taskMethods = {
     }
   },
   async loadTemplate(templateId) {
+    if (!this.editingTask) return;
     try {
       const { data } = await this.$api.get(`/api/tasks/${templateId}`);
-      if (this.editingTask) {
-        this.editingTask.json = JSON.stringify(data, null, 2);
-        this.jsonError = '';
-      }
+      this.editingTask.json = JSON.stringify(data, null, 2);
+      this.jsonError = '';
     } catch (error) {
       this.frontendLogger.error('tasks', '加载模板失败: ' + templateId, error);
       this.toastOnly(false, '加载模板失败');
@@ -134,7 +133,7 @@ export const taskMethods = {
     }
     config.name = this.editingTask.name || config.name;
     config.description = this.editingTask.description || config.description;
-    config.url = this.editingTask.url || config.url;
+    config.url = this.editingTask.url || config.url || '{{LOGIN_URL}}';
 
     // 清理已废弃字段
     delete config.version;
@@ -165,6 +164,10 @@ export const taskMethods = {
   },
   showDangerConfirm(dangers) {
     return new Promise((resolve) => {
+      if (this._dangerTimer) {
+        clearInterval(this._dangerTimer);
+        this._dangerTimer = null;
+      }
       this.dangerConfirm = { dangers, resolve };
       this.dangerCountdown = 5;
       const timer = setInterval(() => {
@@ -211,10 +214,19 @@ export const taskMethods = {
   async duplicateTask(taskId) {
     try {
       const { data } = await this.$api.get(`/api/tasks/${taskId}`);
-      const newId = taskId + '_copy';
+      const baseId = taskId.replace(/_copy(_\d+)?$/, '');
+      const existingIds = new Set((this.tasks || []).map(t => t.id));
+      let newId = baseId + '_copy';
+      let counter = 2;
+      while (existingIds.has(newId)) {
+        newId = baseId + '_copy_' + counter;
+        counter++;
+      }
+      const baseName = data.name.replace(/\s*\(副本\)(\s*\d+)?$/, '');
+      const suffix = counter > 2 ? ` (副本${counter - 1})` : ' (副本)';
       this.editingTask = {
         id: newId,
-        name: data.name + ' (副本)',
+        name: baseName + suffix,
         description: data.description,
         url: data.url,
         json: JSON.stringify(data, null, 2),
@@ -263,6 +275,7 @@ export const taskMethods = {
             _isNew: true,
           };
           this.jsonError = '';
+          this.currentPage = 'tasks';
           this.frontendLogger.info('tasks', '已导入任务配置，请检查后保存');
         } catch (e) {
           this.frontendLogger.warn('tasks', '导入失败: 文件不是有效 JSON: ' + e.message);
@@ -285,12 +298,12 @@ export const taskMethods = {
     try {
       const { data } = await this.$api.post('/api/safe-mode');
       this.safeMode = data.enabled;
-      this.frontendLogger.info('tasks', `安全模式已${data.enabled ? '开启' : '关闭'}`);
-      this.toastOnly(true, `安全模式已${data.enabled ? '开启' : '关闭'}`);
+      this.frontendLogger.info('tasks', `纯净模式已${data.enabled ? '开启' : '关闭'}`);
+      this.toastOnly(true, `纯净模式已${data.enabled ? '开启' : '关闭'}`);
     } catch (error) {
       this.safeMode = !this.safeMode;
-      this.frontendLogger.error('tasks', '切换安全模式失败', error);
-      this.toastOnly(false, '切换安全模式失败');
+      this.frontendLogger.error('tasks', '切换纯净模式失败', error);
+      this.toastOnly(false, '切换纯净模式失败');
     }
   },
 
@@ -369,6 +382,7 @@ export const taskMethods = {
     this.repoImport.visible = true;
     this.repoImport.error = '';
     this.repoImport.tasks = [];
+    this.repoImport.searchQuery = '';
     this.repoImport.loading = false;
     this.repoImport.disclaimer = null;
   },
@@ -376,6 +390,7 @@ export const taskMethods = {
   closeRepoImport() {
     this.repoImport.visible = false;
     this.repoImport.tasks = [];
+    this.repoImport.searchQuery = '';
     this.repoImport.error = '';
     this.repoImport.disclaimer = null;
   },
@@ -389,6 +404,7 @@ export const taskMethods = {
     this.repoImport.loading = true;
     this.repoImport.error = '';
     this.repoImport.tasks = [];
+    this.repoImport.searchQuery = '';
     try {
       const { data } = await this.$api.get(`/api/repo/fetch?url=${encodeURIComponent(url)}`);
       if (!Array.isArray(data) || data.length === 0) {
@@ -450,6 +466,7 @@ export const taskMethods = {
       };
       this.jsonError = '';
       this.closeRepoImport();
+      this.currentPage = 'tasks';
       this.frontendLogger.info('tasks', `已从仓库导入: ${task.name}`);
       this.notify(true, `已导入「${task.name}」，请在右侧编辑器内确认后保存`);
     } catch (e) {

@@ -98,12 +98,16 @@ export const appOptions = {
         loading: false,
         error: '',
         tasks: [],
+        searchQuery: '',
         disclaimer: null,
         disclaimerCountdown: 0,
       },
     };
   },
   computed: {
+    activeTask() {
+      return this.tasks.find(t => t.id === this.activeTaskId) || null;
+    },
     pageTitle() {
       const titles = {
         dashboard: '仪表盘',
@@ -143,6 +147,31 @@ export const appOptions = {
       if (!this.status.monitoring) return 'idle';
       if (this.status.network_connected === false) return 'disconnected';
       return 'connected';
+    },
+    filteredRepoTasks() {
+      const q = this.repoImport.searchQuery.trim().toLowerCase();
+      if (!q) return this.repoImport.tasks;
+      return this.repoImport.tasks.filter(t => {
+        const name = (t.name || '').toLowerCase();
+        const desc = (t.description || '').toLowerCase();
+        const tags = (t.tags || []).join(' ').toLowerCase();
+        const author = (t.author || '').toLowerCase();
+        return name.includes(q) || desc.includes(q) || tags.includes(q) || author.includes(q);
+      });
+    },
+  },
+  watch: {
+    currentPage() {
+      // 页面切换时清理待处理的危险确认对话框，避免 Promise 永久挂起
+      if (this.dangerConfirm) {
+        this.dangerConfirm.resolve(false);
+        this.dangerConfirm = null;
+        this.dangerCountdown = 0;
+        if (this._dangerTimer) {
+          clearInterval(this._dangerTimer);
+          this._dangerTimer = null;
+        }
+      }
     },
   },
   mounted() {
