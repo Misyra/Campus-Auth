@@ -49,6 +49,9 @@ skills-lock.json
 .DS_Store
 Thumbs.db
 
+# Temporary files
+temp/
+
 # Source assets
 1.png
 logo.png
