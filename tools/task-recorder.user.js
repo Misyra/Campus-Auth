@@ -371,12 +371,13 @@
 
   function detectIframe(el) {
     try {
+      // 情况 1: 脚本在主文档运行，元素在 iframe/frame 内
       if (el.ownerDocument !== document) {
-        // 元素在 iframe 内
-        const frames = document.querySelectorAll("iframe");
+        const frames = document.querySelectorAll("iframe, frame");
         for (const frame of frames) {
           try {
             if (frame.contentDocument === el.ownerDocument) {
+              const tag = frame.tagName.toLowerCase();
               return {
                 inIframe: true,
                 frameSrc: frame.src || "",
@@ -385,16 +386,39 @@
                 frameSelector: frame.id
                   ? `#${frame.id}`
                   : frame.name
-                    ? `iframe[name="${frame.name}"]`
+                    ? `${tag}[name="${frame.name}"]`
                     : buildShortCss(frame),
               };
             }
           } catch (_) {
-            // 跨域 iframe
             return { inIframe: true, crossOrigin: true, frameSrc: frame.src || "" };
           }
         }
         return { inIframe: true, crossOrigin: false };
+      }
+
+      // 情况 2: 脚本自身运行在 frame 内（如 <frameset> 页面的子 <frame>）
+      // 此时 document 就是 frame 的文档，el.ownerDocument === document 恒为 true
+      // 需要通过 window.frameElement 找到父文档中的 frame 元素
+      if (window.self !== window.top) {
+        let frameEl = null;
+        try { frameEl = window.frameElement; } catch (_) {}
+        if (frameEl) {
+          const tag = frameEl.tagName.toLowerCase();
+          return {
+            inIframe: true,
+            frameSrc: frameEl.src || "",
+            frameName: frameEl.name || "",
+            frameId: frameEl.id || "",
+            frameSelector: frameEl.id
+              ? `#${frameEl.id}`
+              : frameEl.name
+                ? `${tag}[name="${frameEl.name}"]`
+                : null,
+          };
+        }
+        // 跨域 frame，拿不到 frameElement
+        return { inIframe: true, crossOrigin: true, frameSrc: "" };
       }
     } catch (_) {}
     return { inIframe: false };
@@ -439,7 +463,7 @@
       ? ` <span class="ca-tt-class">.${info.attrs.class.split(/\s+/).slice(0, 2).join(".")}</span>`
       : "";
     const iframeHint = info.iframe.inIframe
-      ? `<div class="ca-tt-hint">⚠️ 位于 iframe 内${info.iframe.crossOrigin ? "（跨域）" : ""}</div>`
+      ? `<div class="ca-tt-hint">⚠️ 位于 frame/iframe 内${info.iframe.crossOrigin ? "（跨域）" : ""}</div>`
       : "";
 
     state.tooltip.innerHTML = `${tag}${id}${cls}${iframeHint}`;
@@ -1303,6 +1327,43 @@
 
   // ==================== 激活/停用 ====================
 
+  // 对 frame/iframe 文档也绑定事件，使录制器能感知 frame 内的元素
+  function attachFrameListeners(doc) {
+    try {
+      doc.addEventListener("mouseover", onHover, true);
+      doc.addEventListener("click", onClick, true);
+      doc.addEventListener("keydown", onKeyDown, true);
+    } catch (_) {}
+  }
+
+  function detachFrameListeners(doc) {
+    try {
+      doc.removeEventListener("mouseover", onHover, true);
+      doc.removeEventListener("click", onClick, true);
+      doc.removeEventListener("keydown", onKeyDown, true);
+    } catch (_) {}
+  }
+
+  function attachAllFrameListeners() {
+    document.querySelectorAll("iframe, frame").forEach(frame => {
+      try {
+        if (frame.contentDocument) {
+          attachFrameListeners(frame.contentDocument);
+        }
+      } catch (_) {}
+    });
+  }
+
+  function detachAllFrameListeners() {
+    document.querySelectorAll("iframe, frame").forEach(frame => {
+      try {
+        if (frame.contentDocument) {
+          detachFrameListeners(frame.contentDocument);
+        }
+      } catch (_) {}
+    });
+  }
+
   function activate() {
     if (state.active) return;
     state.active = true;
@@ -1310,6 +1371,8 @@
     document.addEventListener("mouseover", onHover, true);
     document.addEventListener("click", onClick, true);
     document.addEventListener("keydown", onKeyDown, true);
+    // 对已加载的 frame 也绑定事件
+    attachAllFrameListeners();
   }
 
   function deactivate() {
@@ -1321,6 +1384,7 @@
     document.removeEventListener("mouseover", onHover, true);
     document.removeEventListener("click", onClick, true);
     document.removeEventListener("keydown", onKeyDown, true);
+    detachAllFrameListeners();
     hideTooltip();
     if (state.hoveredEl) {
       state.hoveredEl.classList.remove("ca-highlight");
