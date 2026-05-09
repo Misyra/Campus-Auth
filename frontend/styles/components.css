@@ -53,6 +53,7 @@
   transition: all 0.2s ease;
   min-height: 40px;
   white-space: nowrap;
+  text-decoration: none;
 }
 
 .btn:hover:not(:disabled) {
