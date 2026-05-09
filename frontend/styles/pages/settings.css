@@ -142,6 +142,92 @@
   margin-top: 18px;
 }
 
+.task-overview-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.task-overview-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-overview-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.task-overview-desc {
+  display: block;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 任务录制器卡片 */
+.task-recorder-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.task-recorder-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin: 0;
+}
+
+.task-recorder-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.task-recorder-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 10px 14px;
+  background: rgba(34, 211, 238, 0.05);
+  border: 1px solid rgba(34, 211, 238, 0.12);
+  border-radius: 8px;
+  line-height: 1.6;
+}
+
+.task-recorder-note a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.task-recorder-note a:hover {
+  text-decoration: underline;
+}
+
+.task-recorder-note code {
+  background: rgba(34, 211, 238, 0.1);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+/* 快捷操作 */
+.task-quick-actions {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.task-quick-actions .btn {
+  font-size: 13px;
+  padding: 10px 14px;
+  justify-content: center;
+}
+
 .field-label-row {
   display: flex;
   align-items: center;

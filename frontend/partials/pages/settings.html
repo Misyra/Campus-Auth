@@ -433,7 +433,7 @@
 
       <section class="card settings-panel">
         <div class="card-header">
-          <h2>安全模式与高级设置</h2>
+          <h2>纯净模式与高级设置</h2>
         </div>
         <div class="card-body">
           <div class="toggle-group">
@@ -441,27 +441,37 @@
               <label class="toggle toggle-help-inline">
                 <input type="checkbox" v-model="safeMode" @change="toggleSafeMode()" />
                 <span class="toggle-slider"></span>
-                <span class="toggle-label">安全模式</span>
+                <span class="toggle-label">纯净模式</span>
                 <span class="field-help" tabindex="0" role="note" data-tip="使用 Chromium 原始设置启动浏览器，不注入任何自定义参数（UA、请求头、启动参数等）。适用于认证系统检测浏览器指纹的场景，可降低被识别为自动化工具的风险。">?</span>
               </label>
             </div>
           </div>
           <div v-if="safeMode" class="browser-safe-info">
-            <p>安全模式已开启，浏览器使用 Chromium 原始设置。关闭安全模式后可自定义以下高级选项。</p>
+            <p>纯净模式已开启，浏览器使用 Chromium 原始设置。关闭后可自定义以下高级选项。</p>
+          </div>
+          <div v-if="!safeMode" class="browser-safe-info" style="border-color: rgba(255, 152, 0, 0.3); background: rgba(255, 152, 0, 0.06);">
+            <p>纯净模式适配大部分环境。如果登录异常或无法打开网页，请尝试修改下方参数。</p>
           </div>
           <template v-if="!safeMode">
             <div class="form-group">
               <div class="field-label-row">
                 <label for="settings-browser-args">自定义浏览器参数</label>
-                <span class="field-help" tabindex="0" role="note" data-tip="每行填写一个 Chromium 启动参数，会与程序内置的基础参数合并。留空则仅使用基础参数。常见参数：--disable-gpu、--no-sandbox。">?</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="每行填写一个 Chromium 启动参数，会与程序内置的基础参数合并。留空则仅使用基础参数。">?</span>
+                <button class="btn btn-sm btn-secondary" type="button" style="margin-left:auto;" @click="config.browser_args = '--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees'">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                  </svg>
+                  加载推荐参数
+                </button>
               </div>
               <textarea
                 id="settings-browser-args"
                 v-model.trim="config.browser_args"
                 rows="4"
                 spellcheck="false"
-                placeholder="--disable-web-security&#10;--disable-extensions"
+                placeholder="--disable-blink-features=AutomationControlled&#10;--disable-software-rasterizer&#10;--disable-extensions"
               ></textarea>
+              <span class="hint">每行一个参数。如果登录时被识别为自动化工具或页面无法正常加载，可点击「加载推荐参数」尝试。</span>
             </div>
             <div class="form-group">
               <div class="field-label-row">
@@ -507,30 +517,114 @@
   </form>
 
   <div v-else class="settings-panel-grid settings-panel-grid--task">
-    <section class="card settings-panel settings-panel--wide">
+
+    <!-- 当前使用任务 -->
+    <section class="card">
       <div class="card-header">
-        <h2>任务概览</h2>
+        <h2>当前使用任务</h2>
       </div>
       <div class="card-body">
-        <div class="info-box compact">
-          <h4>当前活动任务</h4>
-          <p>活动任务：<strong>{{ activeTaskId }}</strong></p>
-        </div>
-        <div class="task-mini-grid">
-          <div class="mini-stat">
-            <span class="mini-stat-label">已加载任务</span>
-            <span class="mini-stat-value">{{ tasks.length }}</span>
+        <div class="task-overview-row">
+          <div class="task-overview-info">
+            <span class="task-overview-name">{{ activeTask?.name || activeTaskId }}</span>
+            <span v-if="activeTask?.description" class="task-overview-desc">{{ activeTask.description }}</span>
           </div>
-          <div class="mini-stat">
-            <span class="mini-stat-label">默认模板</span>
-            <span class="mini-stat-value">default / sample / sample_2</span>
-          </div>
-        </div>
-        <div class="task-panel-actions">
-          <button class="btn btn-primary" type="button" @click="currentPage = 'tasks'">打开任务管理</button>
-          <button class="btn btn-secondary" type="button" @click="fetchTasks">刷新任务列表</button>
+          <button class="btn btn-primary btn-sm" type="button" @click="currentPage = 'tasks'">管理任务</button>
         </div>
       </div>
     </section>
+
+    <!-- 任务录制器 -->
+    <section class="card">
+      <div class="card-header">
+        <h2>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;color:var(--accent);vertical-align:-3px;margin-right:6px;">
+            <circle cx="12" cy="12" r="10"/>
+            <circle cx="12" cy="12" r="3"/>
+            <line x1="12" y1="2" x2="12" y2="6"/>
+            <line x1="12" y1="18" x2="12" y2="22"/>
+            <line x1="2" y1="12" x2="6" y2="12"/>
+            <line x1="18" y1="12" x2="22" y2="12"/>
+          </svg>
+          任务录制器
+        </h2>
+      </div>
+      <div class="card-body">
+        <div class="task-recorder-section">
+          <p class="task-recorder-desc">
+            任务录制器是一个浏览器用户脚本，可在校园网登录页面上可视化选取元素（账号框、密码框、验证码、提交按钮等），自动生成符合 Campus-Auth 格式的任务 JSON 配置。
+          </p>
+          <div class="task-recorder-actions">
+            <a href="/api/tools/task-recorder.user.js" class="btn btn-primary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              安装录制器脚本
+            </a>
+            <a href="/api/docs/task-writing-guide" class="btn btn-secondary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+              </svg>
+              导出编写指南
+            </a>
+          </div>
+          <div class="task-recorder-note">
+            需要 <a href="https://www.tampermonkey.net/" target="_blank" rel="noopener">Tampermonkey</a> 浏览器扩展支持。安装后在登录页面点击浮动按钮即可开始录制。
+          </div>
+          <div class="task-recorder-note">
+            详细文档请查看项目 <code>doc/</code> 目录下的 <code>task-writing-guide.md</code> 和 <code>task-manual.md</code>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 快捷操作 -->
+    <section class="card">
+      <div class="card-header">
+        <h2>快捷操作</h2>
+      </div>
+      <div class="card-body">
+        <div class="task-quick-actions">
+          <button class="btn btn-secondary" type="button" @click="showRepoImport()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            远程仓库导入
+          </button>
+          <button class="btn btn-secondary" type="button" @click="importTask()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            导入任务文件
+          </button>
+          <button class="btn btn-secondary" type="button" @click="fetchTasks">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+            刷新任务列表
+          </button>
+          <a href="https://github.com/Misyra/campus-auth-tasks" target="_blank" rel="noopener" class="btn btn-secondary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+              <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+            </svg>
+            分享适配
+          </a>
+        </div>
+      </div>
+    </section>
+
   </div>
 </div>
