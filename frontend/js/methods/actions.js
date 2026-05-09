@@ -58,12 +58,11 @@ export const actionMethods = {
       this.frontendLogger.info('action', 'manual login requested');
       const loginTimeoutMs = (this.config.login_timeout || 120) * 1000;
       const { data } = await this.$api.post('/api/actions/login', null, { timeout: loginTimeoutMs });
-      this.frontendLogger.info('action', 'manual login result: ' + data.message);
-      this.notify(data.success, data.message);
+      this.notify(data.success, this.stripScreenshotHint(data.message));
     } catch (error) {
       const msg = error?.response?.data?.detail || '手动登录失败';
       this.frontendLogger.error('action', 'manual login failed', msg);
-      this.notify(false, msg);
+      this.notify(false, this.stripScreenshotHint(msg));
     } finally {
       this.busy.action = false;
     }

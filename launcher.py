@@ -88,11 +88,19 @@ def is_service_running(port: int) -> bool:
 def has_playwright_chromium() -> bool:
     try:
         probe_code = (
+            "import os\n"
             "from pathlib import Path\n"
             "from playwright.sync_api import sync_playwright\n"
             "with sync_playwright() as p:\n"
             "    exe = p.chromium.executable_path\n"
-            "    print('1' if exe and Path(exe).exists() else '0')\n"
+            "    if not (exe and Path(exe).exists()):\n"
+            "        print('0')\n"
+            "    else:\n"
+            "        # 同时检查 chromium_headless_shell 是否存在\n"
+            "        chromium_dir = Path(exe).resolve().parent.parent\n"
+            "        rev = chromium_dir.name.replace('chromium-', '')\n"
+            "        headless = chromium_dir.parent / f'chromium_headless_shell-{rev}'\n"
+            "        print('1' if headless.is_dir() else '0')\n"
         )
         result = subprocess.run(
             [str(PYTHON_EXE), "-c", probe_code],

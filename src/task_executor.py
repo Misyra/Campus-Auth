@@ -1153,7 +1153,8 @@ class TaskExecutor:
         if screenshot_url:
             message += f" 截图: {screenshot_url}"
 
-        logger.error(f"任务执行失败: {message}")
+        # 日志只输出不含截图 URL 的部分，避免上层重复打印时出现两张截图
+        logger.error(f"任务执行失败: {base_message}: {reason}")
         return False, message
 
     async def _capture_screenshot(self, page) -> str | None:

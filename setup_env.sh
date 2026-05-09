@@ -337,6 +337,7 @@ install_dependencies_if_needed() {
 
 has_playwright_chromium() {
   "$PYTHON_EXE" - <<'PY'
+import os
 from pathlib import Path
 import sys
 
@@ -347,7 +348,13 @@ except Exception:
 
 with sync_playwright() as p:
     exe = p.chromium.executable_path
-sys.exit(0 if exe and Path(exe).exists() else 1)
+    if not (exe and Path(exe).exists()):
+        sys.exit(1)
+    # 同时检查 chromium_headless_shell 是否存在
+    chromium_dir = Path(exe).resolve().parent.parent
+    rev = chromium_dir.name.replace('chromium-', '')
+    headless = chromium_dir.parent / f'chromium_headless_shell-{rev}'
+    sys.exit(0 if headless.is_dir() else 1)
 PY
 }
 
