@@ -46,6 +46,7 @@ export const appOptions = {
         editorDetect: false,
         debug: false,
         backup: false,
+        uninstall: false,
       },
       backups: [],
       toast: {
@@ -101,6 +102,12 @@ export const appOptions = {
         searchQuery: '',
         disclaimer: null,
         disclaimerCountdown: 0,
+      },
+      uninstall: {
+        visible: false,
+        scanning: false,
+        items: [],
+        results: null,
       },
     };
   },
@@ -158,6 +165,9 @@ export const appOptions = {
         const author = (t.author || '').toLowerCase();
         return name.includes(q) || desc.includes(q) || tags.includes(q) || author.includes(q);
       });
+    },
+    uninstallCheckedCount() {
+      return this.uninstall.items.filter(it => it.exists && it.checked).length;
     },
   },
   watch: {

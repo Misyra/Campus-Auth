@@ -1043,6 +1043,44 @@ def shutdown_server() -> ActionResponse:
     return ActionResponse(success=True, message="服务器正在关闭...")
 
 
+# ==================== 卸载 API ====================
+
+
+@app.get("/api/uninstall/detect")
+def uninstall_detect() -> list[dict]:
+    """检测可清理的外部残留项目"""
+    from backend.uninstall_service import detect
+
+    items = detect()
+    return [
+        {
+            "key": it.key,
+            "label": it.label,
+            "exists": it.exists,
+            "path": it.path,
+            "size_mb": round(it.size_mb, 1),
+        }
+        for it in items
+    ]
+
+
+@app.post("/api/uninstall")
+def uninstall_perform(payload: dict) -> dict:
+    """执行卸载清理"""
+    from backend.uninstall_service import perform
+
+    keys = payload.get("keys", [])
+    api_logger.warning("Uninstall requested, keys=%s", keys)
+    results = perform(keys)
+    return {
+        "success": all(r.success for r in results),
+        "results": [
+            {"key": r.key, "label": r.label, "success": r.success, "message": r.message}
+            for r in results
+        ],
+    }
+
+
 # ==================== 配置备份与恢复 API ====================
 
 _BACKUP_DIR = PROJECT_ROOT / "backups"
