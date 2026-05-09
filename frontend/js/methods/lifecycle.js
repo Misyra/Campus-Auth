@@ -131,22 +131,23 @@ export const lifecycleMethods = {
         if (data.type === 'status') {
           this.status = { ...this.status, ...data.data };
         } else if (data.type === 'log') {
-          // 按前端日志级别过滤显示（完整日志已写入文件）
           if (this._shouldShowLog(data.data.level)) {
+            const wasAtBottom = this._isViewerAtBottom();
             this.logs.push(data.data);
             if (this.logs.length > 300) {
               this.logs = this.logs.slice(-300);
             }
-            this.$nextTick(() => this.scrollLogToBottom());
+            this.$nextTick(() => this.scrollLogToBottom(wasAtBottom));
           }
         } else if (data.type === 'log_batch') {
           if (Array.isArray(data.data)) {
             const filtered = data.data.filter(d => this._shouldShowLog(d.level));
+            const wasAtBottom = this._isViewerAtBottom();
             this.logs.push(...filtered);
             if (this.logs.length > 300) {
               this.logs = this.logs.slice(-300);
             }
-            this.$nextTick(() => this.scrollLogToBottom());
+            this.$nextTick(() => this.scrollLogToBottom(wasAtBottom));
           }
         }
       } catch (e) {

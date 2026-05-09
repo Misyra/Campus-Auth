@@ -19,7 +19,7 @@ export const statusMethods = {
       const { data } = await this.$api.get('/api/logs', { params: { limit: 250 } });
       // 按前端日志级别过滤（完整日志已在文件中）
       this.logs = data.filter(l => this._shouldShowLog(l.level));
-      this.$nextTick(() => this.scrollLogToBottom());
+      this.$nextTick(() => this.scrollToBottom());
     } catch (error) {
       this.frontendLogger.error('logs', 'failed to fetch logs', error);
     }
