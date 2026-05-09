@@ -24,7 +24,6 @@ Campus-Auth 主要解决三个场景：
 - 智能状态判断：识别已登录状态，减少重复提交和无效请求。
 - 暂停时段：支持在夜间或指定时间段暂停自动登录。
 - 失败重试：使用退避策略降低短时间内的重复冲击。
-- API 鉴权：支持通过 Token 保护写操作接口。
 
 ## 运行前准备
 
@@ -224,100 +223,10 @@ cp .env.example .env
 
 ## 任务系统
 
-任务系统采用 JSON 文件描述认证流程，适合不同校园网页面、不同按钮名称和不同跳转逻辑。你可以把它理解为一份"自动登录脚本配置"。
+任务系统使用 JSON 文件描述浏览器自动化认证流程，支持多种步骤类型、变量模板、成功条件判断和帧上下文。任务文件存放在 `tasks/` 目录，通过 Web 控制台管理（新建、编辑、导入导出、复制、设置活动任务）。
 
-### 任务文件位置
-
-项目默认把任务放在 `tasks/` 目录下，常见文件包括：
-
-- `default.json`：默认认证任务（内置，不可删除）。
-- `active.txt`：当前活动任务标识。
-
-### Web 控制台操作
-
-在任务页面可以：
-
-- 查看任务列表
-- 新建、编辑、删除任务
-- 导入/导出任务（JSON 文件）
-- 复制任务（创建 `_copy` 后缀的副本）
-- 设置活动任务
-- 保存包含 `eval` / `custom_js` 步骤的任务时，会弹出安全确认对话框
-
-### 任务结构示例
-
-```json
-{
-  "name": "校园网认证",
-  "description": "自动登录校园网",
-  "url": "http://172.29.0.2",
-  "timeout": 10000,
-  "variables": {
-    "username": "{{USERNAME}}",
-    "password": "{{PASSWORD}}"
-  },
-  "steps": [
-    {
-      "id": "input_username",
-      "type": "input",
-      "selector": "input[name='DDDDD']",
-      "value": "{{username}}",
-      "description": "填写用户名"
-    },
-    {
-      "id": "input_password",
-      "type": "input",
-      "selector": "input[name='upass']",
-      "value": "{{password}}",
-      "description": "填写密码"
-    },
-    {
-      "id": "click_login",
-      "type": "click",
-      "selector": "input[name='0MKKey']",
-      "description": "点击登录"
-    }
-  ],
-  "success_conditions": [
-    {
-      "type": "url_contains",
-      "pattern": "success"
-    }
-  ],
-  "on_success": {
-    "message": "登录成功"
-  },
-  "on_failure": {
-    "message": "登录失败",
-    "screenshot": true
-  }
-}
-```
-
-### 支持的步骤类型
-
-| 类型 | 说明 | 关键参数 |
-|------|------|----------|
-| `input` | 在输入框中填写文本。 | `selector`, `value`, `clear`, `timeout` |
-| `click` | 点击页面元素。 | `selector`, `timeout` |
-| `select` | 选择下拉框选项。value 为空或元素不存在时自动跳过，支持按选项文本模糊匹配。 | `selector`, `value`, `timeout` |
-| `wait` | 等待元素出现。 | `selector`, `timeout` |
-| `wait_url` | 等待 URL 匹配指定模式。 | `pattern`, `timeout` |
-| `eval` | 执行 JavaScript 并保存结果。`code` 为已废弃别名。 | `script`, `store_as` |
-| `custom_js` | 执行自定义 JavaScript。`code` 为已废弃别名。 | `script` |
-| `screenshot` | 截图保存。 | `path` |
-| `sleep` | 等待指定时间。 | `duration` |
-
-更完整的任务格式说明请参考 [doc/task-manual.md](doc/task-manual.md)（开发参考）和 [doc/task-writing-guide.md](doc/task-writing-guide.md)（编写指南）。
-
-### 编写建议
-
-- 优先给每一步写清楚 `description`，方便日志回溯。
-- 选择器尽量写得稳一点，避免只依赖单个脆弱的 CSS 片段。
-- 如果页面会跳转，建议在登录后增加 URL 或结果页判断。
-- 失败时建议开启截图，便于定位页面变化或表单异常。
-- 执行器会在执行步骤前自动导航到任务的 `url` 字段或系统设置的认证地址，无需手动添加导航步骤。
-- 简单任务可以留空 `success_conditions`，所有步骤完成即为成功。
+- [任务开发参考](doc/task-manual.md) — 架构、步骤类型、变量解析、API 接口
+- [任务编写指南](doc/task-writing-guide.md) — 完整示例、最佳实践、常见问题
 
 ## 多网络配置方案
 
