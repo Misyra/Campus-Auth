@@ -1,736 +1,252 @@
-# Campus-Auth 任务编写手册
+# Campus-Auth 开发文档
 
-本文档详细描述 Campus-Auth 任务系统的格式规范、参数配置及校验规则，帮助用户编写标准化的认证任务。
+本文档面向开发者，详细描述 Campus-Auth 的内部架构、执行流程、API 接口及配置参考。如需编写任务 JSON，请参阅 [任务编写指南](task-writing-guide.md)。
 
 ## 目录
 
-1. [任务结构概述](#任务结构概述)
-2. [任务格式规范](#任务格式规范)
-3. [步骤类型详解](#步骤类型详解)
-4. [变量系统](#变量系统)
-5. [条件判断](#条件判断)
-6. [执行行为说明](#执行行为说明)
-7. [多网络配置方案（Profiles）](#多网络配置方案profiles)
-8. [任务管理功能](#任务管理功能)
-9. [校验规则](#校验规则)
-10. [最佳实践](#最佳实践)
-11. [示例任务](#示例任务)
-12. [API 参考](#api-参考)
-13. [环境变量参考](#环境变量参考)
+1. [架构概览](#架构概览)
+2. [任务执行流程](#任务执行流程)
+3. [变量解析机制](#变量解析机制)
+4. [Frame 上下文切换](#frame-上下文切换)
+5. [浏览器反检测](#浏览器反检测)
+6. [错误处理与重试](#错误处理与重试)
+7. [截图机制](#截图机制)
+8. [校验规则](#校验规则)
+9. [任务文件管理](#任务文件管理)
+10. [API 参考](#api-参考)
+11. [环境变量参考](#环境变量参考)
 
 ---
 
-## 任务结构概述
+## 架构概览
 
-一个完整的任务由以下部分组成：
+系统由四层组成，自上而下依次调用：
 
 ```
-任务定义
-├── 基本信息（name, description）
-├── 元数据（metadata）
-├── 认证地址（url）
-├── 变量定义（variables）
-├── 步骤列表（steps）
-├── 成功条件（success_conditions）
-└── 结果处理（on_success, on_failure）
+NetworkMonitorCore          网络监控循环（检测断网、触发登录、重试退避）
+    └── LoginAttemptHandler     登录处理器（加载任务、构建环境变量、管理浏览器生命周期）
+            └── TaskExecutor        任务执行器（解析模板、执行步骤序列、判定成功条件）
+                    └── StepHandler          步骤处理器（单个步骤的具体执行逻辑）
 ```
 
----
+### 核心模块
 
-## 任务格式规范
-
-### 完整结构
-
-```json
-{
-  "name": "任务名称",
-  "description": "任务描述",
-  "metadata": {},
-  "url": "{{LOGIN_URL}}",
-  "timeout": 30000,
-  "variables": {
-    "username": "{{USERNAME}}",
-    "password": "{{PASSWORD}}"
-  },
-  "steps": [
-    {
-      "id": "step_1",
-      "type": "input",
-      "description": "输入用户名",
-      "selector": "#username",
-      "value": "{{username}}"
-    }
-  ],
-  "success_conditions": [
-    {
-      "type": "variable",
-      "variable": "login_success",
-      "value": true
-    }
-  ],
-  "on_success": {
-    "message": "登录成功"
-  },
-  "on_failure": {
-    "message": "登录失败",
-    "screenshot": true
-  }
-}
-```
-
-### 字段说明
-
-| 字段 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `name` | string | 是 | - | 任务名称，显示在任务列表中 |
-| `description` | string | 否 | "" | 任务描述 |
-| `metadata` | object | 否 | {} | 用户自定义元数据，执行器不使用，可用于存储附加信息 |
-| `url` | string | 否 | "" | 任务自定义认证地址，填写后会覆盖 `{{LOGIN_URL}}` 变量；留空则使用系统设置的认证地址 |
-| `timeout` | number | 否 | 30000 | 全局超时时间（毫秒） |
-| `variables` | object | 否 | {} | 变量定义，支持模板语法 |
-| `steps` | array | 是 | [] | 步骤列表，按顺序执行 |
-| `success_conditions` | array | 否 | [] | 成功条件，全部满足才算成功 |
-| `on_success` | object | 否 | {} | 成功时的处理 |
-| `on_failure` | object | 否 | {} | 失败时的处理 |
-
-#### 关于 `metadata` 字段
-
-`metadata` 是一个自由结构的对象，执行器不会读取或使用其中的数据。你可以用它存储任务的附加信息，例如作者、创建时间、适配的校园网型号等。
-
----
-
-## 步骤类型详解
-
-### 步骤公共字段
-
-所有步骤类型都支持以下公共字段：
-
-| 字段 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `id` | string | 是 | - | 步骤唯一标识 |
-| `type` | string | 是 | - | 步骤类型 |
-| `description` | string | 否 | "" | 步骤描述，会输出到日志 |
-| `timeout` | number | 否 | 视类型而定 | 超时时间（毫秒） |
-| `frame` | string | 否 | null | 目标 frame 的名称或 URL 片段，用于 frameset/iframe 页面 |
-
-#### 扩展字段（extra）
-
-步骤中任何未被识别的字段会被自动收集到 `extra` 中，并在序列化时合并回顶层。这意味着你可以在步骤中添加自定义字段，它们会被保留但不影响执行逻辑。
-
----
-
-### ~~navigate - 页面导航~~（已废弃）
-
-> 导航现在由系统自动处理，无需在任务中添加 navigate 步骤。系统会在执行步骤前自动导航到任务的 `url` 字段或系统设置的认证地址。旧任务中的 navigate 步骤会被自动跳过。
-
----
-
-### 2. input - 文本输入
-
-在输入框中填写文本。
-
-**参数：**
-
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `selector` | string | 是 | - | 元素选择器（支持多个，逗号分隔） |
-| `value` | string | 是 | - | 输入值（支持变量） |
-| `clear` | boolean | 否 | true | 是否先清空输入框 |
-| `timeout` | number | 否 | 5000 | 超时时间（毫秒） |
-
-**示例：**
-
-```json
-{
-  "id": "input_username",
-  "type": "input",
-  "description": "输入用户名",
-  "selector": "input[name='username'], #username",
-  "value": "{{USERNAME}}",
-  "clear": true
-}
-```
-
----
-
-### 3. click - 点击元素
-
-点击页面元素。
-
-**参数：**
-
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `selector` | string | 是 | - | 元素选择器（支持多个，逗号分隔） |
-| `timeout` | number | 否 | 5000 | 超时时间（毫秒） |
-
-**示例：**
-
-```json
-{
-  "id": "click_login",
-  "type": "click",
-  "description": "点击登录按钮",
-  "selector": "button[type='submit'], #login-btn",
-  "timeout": 3000
-}
-```
-
----
-
-### 4. select - 下拉选择
-
-选择下拉框选项。此步骤有特殊容错行为：
-
-- 如果 `value` 为空，步骤自动跳过（视为成功）。
-- 如果找不到下拉框元素，步骤自动跳过（视为成功）。
-- 如果精确匹配 `value` 失败，会回退到按选项文本进行模糊匹配（子字符串包含）。
-
-这些设计是为了兼容不同校园网页面中运营商选择框的差异。
-
-**参数：**
-
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `selector` | string | 是 | - | 下拉框选择器 |
-| `value` | string | 是 | - | 选项值（支持变量），支持模糊匹配 |
-| `timeout` | number | 否 | 5000 | 超时时间（毫秒） |
-
-**示例：**
-
-```json
-{
-  "id": "select_isp",
-  "type": "select",
-  "description": "选择运营商",
-  "selector": "select[name='isp']",
-  "value": "{{ISP}}"
-}
-```
-
----
-
-### 5. wait - 等待元素
-
-等待元素出现在页面上。
-
-**参数：**
-
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `selector` | string | 是 | - | 等待的元素选择器 |
-| `timeout` | number | 否 | 5000 | 超时时间（毫秒） |
-
-**示例：**
-
-```json
-{
-  "id": "wait_result",
-  "type": "wait",
-  "description": "等待结果出现",
-  "selector": ".success-message, .error-message",
-  "timeout": 10000
-}
-```
-
----
-
-### 6. wait_url - 等待URL
-
-等待URL匹配指定模式。
-
-**参数：**
-
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `pattern` | string | 是 | - | URL正则表达式模式 |
-| `timeout` | number | 否 | 5000 | 超时时间（毫秒） |
-
-**示例：**
-
-```json
-{
-  "id": "wait_redirect",
-  "type": "wait_url",
-  "description": "等待跳转",
-  "pattern": "success|welcome",
-  "timeout": 10000
-}
-```
-
----
-
-### 7. eval - JavaScript求值
-
-执行JavaScript并可选保存结果。
-
-**参数：**
-
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `script` | string | 是 | - | JavaScript代码（支持变量） |
-| `store_as` | string | 否 | - | 结果存储到的变量名 |
-
-> **兼容性说明：** `code` 字段是 `script` 的已废弃别名，仍然支持但建议使用 `script`。
-
-> **安全提示：** 包含 `eval` 步骤的任务在 Web 控制台保存时会弹出安全确认对话框，显示待执行的代码内容，需要用户明确确认。
-
-**示例：**
-
-```json
-{
-  "id": "check_login_status",
-  "type": "eval",
-  "description": "检查登录状态",
-  "script": "document.querySelector('.user-name') !== null",
-  "store_as": "is_logged_in"
-}
-```
-
----
-
-### 8. custom_js - 自定义JavaScript
-
-执行自定义JavaScript代码（不返回值）。
-
-**参数：**
-
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `script` | string | 是 | - | JavaScript代码 |
-
-> **兼容性说明：** 同 `eval`，`code` 字段是 `script` 的已废弃别名。
-
-> **安全提示：** 同 `eval`，保存时会弹出安全确认对话框。
-
-**示例：**
-
-```json
-{
-  "id": "custom_action",
-  "type": "custom_js",
-  "description": "自定义操作",
-  "script": "document.querySelector('#agree').click();"
-}
-```
-
----
-
-### 9. screenshot - 截图
-
-截取当前页面截图。
-
-**参数：**
-
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `path` | string | 否 | 自动生成 | 截图保存路径 |
-
-**示例：**
-
-```json
-{
-  "id": "capture_result",
-  "type": "screenshot",
-  "description": "截图保存结果"
-}
-```
-
----
-
-### 10. sleep - 休眠等待
-
-暂停指定时间。
-
-**参数：**
-
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `duration` | number | 否 | 1000 | 休眠时间（毫秒），最大 300000 |
-
-**示例：**
-
-```json
-{
-  "id": "wait_loading",
-  "type": "sleep",
-  "description": "等待加载完成",
-  "duration": 2000
-}
-```
-
----
-
-### 11. ocr - 验证码识别
-
-使用 ddddocr 识别验证码图片，自动截取指定元素的图片进行 OCR 识别。识别结果可存储到变量或直接填入输入框。
-
-**执行流程：**
-
-```
-定位验证码图片元素 (selector)
-       │
-       ▼
-  截取元素截图 → img_bytes
-       │
-       ▼
-  ddddocr.classification(img_bytes) → 识别结果
-       │
-       ├── store_as 已设置 → 结果存入运行时变量（后续步骤可用 {{变量名}} 引用）
-       │
-       └── target_selector 已设置 → 自动填入目标输入框
-```
-
-**参数：**
-
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `selector` | string | 是 | - | 验证码图片元素选择器（支持多个，逗号分隔） |
-| `target_selector` | string | 否 | - | 验证码输入框选择器，识别后自动填入 |
-| `store_as` | string | 否 | - | 识别结果存储到的变量名 |
-| `timeout` | number | 否 | 10000 | 超时时间（毫秒） |
-| `frame` | string | 否 | null | 验证码所在的 frame 名称或 URL |
-| `old` | boolean | 否 | false | 是否使用旧版 OCR 模型（见下方说明） |
-
-**关于新旧模型：**
-
-ddddocr 内置两套模型，`old` 参数控制使用哪一套：
-
-| `old` | 模型 | 适用场景 |
-|-------|------|----------|
-| `false`（默认） | 新版模型 | 通用场景，对数字+字母混合验证码效果更好 |
-| `true` | 旧版模型 | 纯数字验证码或特定校园网系统的验证码风格 |
-
-如果你的校园网验证码识别不准，可以尝试切换 `old` 参数值。两套模型独立缓存，首次使用时各自初始化。
-
-**使用模式：**
-
-**模式一：识别后自动填入（推荐）**
-
-同时设置 `selector` 和 `target_selector`，OCR 识别完成后自动将结果填入输入框。适合验证码图片和输入框在同一页面、无额外处理的场景。
-
-```json
-{
-  "id": "solve_captcha",
-  "type": "ocr",
-  "description": "识别验证码并填入",
-  "selector": "#captcha-img",
-  "target_selector": "#captcha-input"
-}
-```
-
-**模式二：识别后存储到变量**
-
-只设置 `store_as`，识别结果保存为运行时变量，可在后续步骤中通过模板语法引用。适合需要在填入前对结果进行处理的场景。
-
-```json
-{
-  "id": "read_captcha",
-  "type": "ocr",
-  "description": "识别验证码",
-  "selector": "img.captcha",
-  "store_as": "captcha_text"
-}
-```
-
-然后在后续步骤中使用：
-
-```json
-{
-  "id": "input_captcha",
-  "type": "input",
-  "description": "填入验证码",
-  "selector": "#captcha-input",
-  "value": "{{captcha_text}}"
-}
-```
-
-**模式三：同时存储和填入**
-
-同时设置 `target_selector` 和 `store_as`，既自动填入输入框，又存储到变量以备后续使用。
-
-```json
-{
-  "id": "captcha_full",
-  "type": "ocr",
-  "description": "识别验证码",
-  "selector": "#captcha-img",
-  "target_selector": "#captcha-input",
-  "store_as": "captcha_result"
-}
-```
-
-**Frame 支持：**
-
-`ocr` 步骤支持 `frame` 字段，可以在指定的 iframe/frameset 子页面中查找验证码图片。选择器（`selector` 和 `target_selector`）都在 `frame` 指定的上下文中查找。
-
-```json
-{
-  "id": "captcha_in_frame",
-  "type": "ocr",
-  "description": "iframe 中的验证码",
-  "selector": "#code-img",
-  "target_selector": "#code-input",
-  "frame": "main"
-}
-```
-
-**超时与错误处理：**
-
-- 找不到验证码图片元素或输入框时，步骤失败并返回错误信息
-- 截图或 OCR 识别异常时，步骤失败并返回具体错误原因
-- 建议 `timeout` 设置 >= 5000ms，给页面加载留足时间
-
-**选择器建议：**
-
-- 验证码图片通常用 `img` 标签，选择器如 `img[src*='captcha']`、`#captcha-img`、`.code-img`
-- 如果图片在多个元素中，提供多个备选选择器（逗号分隔）提高兼容性
-- 输入框通常用 `input` 标签，选择器如 `input[name='captcha']`、`#captcha-input`
-
----
-
-## 变量系统
-
-### 预定义变量
-
-任务执行时自动提供以下变量：
-
-| 变量名 | 来源 | 说明 |
-|--------|------|------|
-| `USERNAME` | 环境变量 / Profile | 校园网用户名 |
-| `PASSWORD` | 环境变量 / Profile | 校园网密码 |
-| `LOGIN_URL` | 环境变量 / Profile | 认证页面地址 |
-| `ISP` | 环境变量 / Profile | 运营商后缀 |
-| `url` | 任务配置 | 任务定义的 url 字段 |
-| `name` | 任务配置 | 任务名称 |
-| `description` | 任务配置 | 任务描述 |
-
-### 用户自定义变量
-
-通过 Web 控制台【账号设置】页面添加的自定义变量，可以在所有任务中使用。
-
-**配置位置：** 设置 → 账号设置 → 自定义变量
-
-**示例：**
-- 变量名：`MY_PARAM`，变量值：`extra_value`
-- 在任务中使用：`{{MY_PARAM}}`
-
-**使用场景：**
-- 存储额外的认证参数
-- 定义环境特定的值
-- 存储敏感信息（如密钥）
-
-**注意：** 自定义变量优先级高于环境变量，如果名称冲突会覆盖环境变量。
-
-### 任务级自定义变量
-
-在 `variables` 中定义：
-
-```json
-{
-  "variables": {
-    "username": "{{USERNAME}}",
-    "password": "{{PASSWORD}}",
-    "full_username": "{{USERNAME}}{{ISP}}"
-  }
-}
-```
-
-### 运行时变量
-
-通过 `eval` 步骤的 `store_as` 存储：
-
-```json
-{
-  "id": "check_result",
-  "type": "eval",
-  "script": "document.title.includes('成功')",
-  "store_as": "login_success"
-}
-```
-
-### 模板语法
-
-使用 `{{variable_name}}` 引用变量：
-
-```json
-{
-  "value": "{{USERNAME}}",
-  "url": "{{LOGIN_URL}}?user={{USERNAME}}"
-}
-```
-
-### 变量解析顺序
-
-1. 运行时变量（通过 `eval` 步骤的 `store_as` 写入）
-2. 用户自定义变量（Web 控制台设置）
-3. 环境变量（系统环境与 `.env`）
-4. 任务文件内 `variables` 字段
-
----
-
-## 条件判断
-
-### 条件类型
-
-#### 1. variable - 变量值判断
-
-```json
-{
-  "type": "variable",
-  "variable": "login_success",
-  "value": true
-}
-```
-
-#### 2. url_contains - URL包含判断
-
-```json
-{
-  "type": "url_contains",
-  "pattern": "success"
-}
-```
-
-#### 3. url_matches - URL正则匹配
-
-```json
-{
-  "type": "url_matches",
-  "pattern": "success|welcome|home"
-}
-```
-
-#### 4. element_exists - 元素存在判断
-
-```json
-{
-  "type": "element_exists",
-  "selector": ".welcome-message"
-}
-```
-
-#### 5. js_expression - JS表达式判断
-
-```json
-{
-  "type": "js_expression",
-  "script": "document.body.innerText.includes('成功')"
-}
-```
-
-### 空成功条件
-
-如果 `success_conditions` 为空数组，只要所有步骤执行完毕且没有失败，任务即视为成功。这是一种简化的成功判定方式，适合不需要复杂判断的场景。
-
----
-
-## 执行行为说明
-
-### 自动导航
-
-执行器会在执行步骤之前**自动导航**到认证页面，无需在任务中添加 navigate 步骤。导航地址的优先级：
-
-1. 任务 `url` 字段（支持变量模板）
-2. 系统设置的认证地址（`LOGIN_URL`）
-
-任务中的 `navigate` 类型步骤会被自动跳过（向后兼容旧任务）。
-
-### URL 覆盖
-
-如果任务定义了 `url` 字段，执行时会用该值覆盖 `{{LOGIN_URL}}` 变量。这意味着步骤中的 `{{LOGIN_URL}}` 会解析为任务自定义的地址，而非系统设置的认证地址。留空则使用系统默认地址。
-
-### select 步骤容错
-
-`select` 步骤采用宽松策略：
-
-1. 如果 `value` 为空，步骤自动跳过（成功）。
-2. 如果找不到下拉框元素，步骤自动跳过（成功）。
-3. 选择时优先按 `value` 精确匹配选项的值属性。
-4. 精确匹配失败后，回退到按选项文本进行子字符串包含匹配。
-
-这种设计确保运营商选择在不同页面结构下都能兼容。
-
-### Frame 支持
-
-部分校园网认证页面使用 `<frameset>` 或 `<iframe>` 嵌套结构，登录表单在子 frame 中。通过步骤的 `frame` 字段可以指定目标 frame，执行器会自动切换到对应 frame 上下文后再查找元素。
-
-`frame` 字段的值可以是：
-- frame 的 `name` 属性（如 `"main"`）
-- URL 匹配字符串（如 `"url=user/unionautologin.do"`）
-
-所有操作类步骤（`input`、`click`、`select`、`wait`、`ocr`）都支持 `frame` 字段。
-
-### 危险步骤检测
-
-`eval` 和 `custom_js` 步骤可以执行任意 JavaScript 代码。系统会在以下环节进行安全检测：
-
-- **后端保存时：** 检测到危险步骤会记录警告日志，包含代码内容（截断至 2000 字符）。
-- **前端保存时：** 弹出安全确认对话框，显示待执行的代码内容，需要用户明确确认后才能保存。
-
----
-
-## 多网络配置方案（Profiles）
-
-Profiles 系统允许你为不同的网络环境（如宿舍 WiFi、教学楼 WiFi、有线网络）配置不同的认证参数，系统可以根据当前网络自动切换。
-
-### 工作原理
-
-1. 每个 Profile 可以设置匹配条件：网关 IP 或 WiFi SSID。
-2. 系统检测当前网络的网关 IP 和 WiFi SSID。
-3. 优先按网关 IP 匹配，其次按 SSID 匹配。
-4. 匹配成功后自动切换到对应 Profile 的配置。
-
-### Profile 字段
-
-| 字段 | 类型 | 说明 |
+| 模块 | 文件 | 职责 |
 |------|------|------|
-| `name` | string | 方案名称 |
-| `match_gateway_ip` | string | 匹配的网关 IP（留空则不匹配） |
-| `match_ssid` | string | 匹配的 WiFi SSID（留空则不匹配） |
-| `username` | string | 该方案专用的用户名（`use_global_credentials` 为 false 时生效） |
-| `password` | string | 该方案专用的密码（加密存储） |
-| `use_global_credentials` | boolean | 是否使用全局凭证（默认 true） |
-| `use_global_advanced` | boolean | 是否使用全局高级设置（默认 true） |
-| `auth_url` | string | 认证页面地址 |
-| `carrier` | string | 运营商 |
-| `check_interval_minutes` | number | 检测间隔（分钟） |
-| `headless` | boolean | 是否无头模式 |
-| `browser_timeout` | number | 浏览器超时 |
-| `pause_enabled` | boolean | 是否启用暂停时段 |
-| `pause_start_hour` | number | 暂停开始小时 |
-| `pause_end_hour` | number | 暂停结束小时 |
-| `network_targets` | string | 探测目标列表 |
-| `custom_variables` | object | 自定义变量 |
-
-### 自动切换
-
-启用自动切换后，监控核心每 60 秒检测一次网络环境变化。当检测到当前网络匹配到不同的 Profile 时，会自动切换配置并重新加载监控。
-
-### Web 控制台操作
-
-在"配置方案"页面可以：
-
-- 查看所有方案列表及当前活动方案
-- 新建、编辑、删除方案
-- 检测当前网络环境（网关 IP、WiFi SSID、匹配的方案）
-- 开启/关闭自动切换
-- 为每个方案独立配置凭证和高级设置
+| `NetworkMonitorCore` | `src/monitor_core.py` | 网络检测循环、重试退避、Profile 自动切换 |
+| `LoginAttemptHandler` | `src/utils/login.py` | 任务加载、环境变量构建、浏览器生命周期管理 |
+| `BrowserContextManager` | `src/utils/browser.py` | Playwright 浏览器启动与配置、反检测注入 |
+| `TaskExecutor` | `src/task_executor.py` | 步骤执行引擎、变量解析、成功条件判定 |
+| `TaskValidator` | `src/task_executor.py` | 任务 JSON 校验 |
+| `TaskManager` | `src/task_executor.py` | 任务文件的 CRUD 操作 |
+| `TaskService` | `backend/task_service.py` | 任务 API 的后端服务层 |
 
 ---
 
-## 任务管理功能
+## 任务执行流程
 
-### 任务导入/导出
+### 从监控到登录的完整链路
 
-在 Web 控制台的任务页面：
+**1. 网络检测（NetworkMonitorCore）**
 
-- **导出：** 点击任务的导出按钮，将任务下载为 `.json` 文件。
-- **导入：** 点击导入按钮，选择 `.json` 文件导入为新任务。
+`monitor_network()` 主循环每次迭代：
+- 检查是否在暂停时段内
+- 对配置的探测目标（默认 `8.8.8.8:53`、`114.114.114.114:53`、`www.baidu.com:443`）发起 TCP 连接测试
+- 连接失败则调用 `attempt_login()`
 
-### 任务复制
+**2. 登录准备（LoginAttemptHandler）**
 
-点击任务的复制按钮，会创建一个以 `_copy` 为后缀的副本，方便基于现有任务快速创建新任务。
+`_perform_login_with_active_task()` 的执行步骤：
+1. 通过 `TaskManager.get_active_task()` 获取当前活动任务 ID
+2. 加载对应的 `TaskConfig` JSON 文件
+3. 构建环境变量字典（覆盖顺序见下方）
+4. 检查浏览器健康状态（如启用浏览器复用），必要时重建
+5. 创建 `TaskExecutor` 并调用 `executor.execute(page)`
+
+**环境变量构建的覆盖顺序：**
+1. 系统环境变量（`os.environ`）
+2. `LOGIN_URL` ← config 的 `auth_url`
+3. `LOGIN_URL` ← 任务的 `url` 字段（经过模板解析）
+4. `ISP`、`USERNAME`、`PASSWORD` ← config
+5. 自定义变量 ← `config["custom_variables"]`（过滤掉系统保留变量名如 `PATH`、`HOME` 等）
+
+**3. 步骤执行（TaskExecutor）**
+
+`execute(page)` 的流程：
+1. 记录任务开始时间，计算全局超时截止时间
+2. 调用 `_auto_navigate(page)` 自动导航到认证地址
+3. 遍历 `config.steps`：
+   - 检查是否超过全局超时
+   - 跳过 `navigate` 类型步骤（已由自动导航处理）
+   - 步骤间休眠 0.5 秒
+   - 从 `StepExecutorRegistry` 查找对应的 `StepHandler`
+   - 调用 `handler.execute(page, step, resolver)`
+   - 记录步骤结果；任一步骤失败立即终止
+4. 所有步骤成功后，执行成功条件检查
+
+**4. 成功条件判定**
+
+- `success_conditions` 为空 → 调用 `_default_page_check()`，扫描页面文本中的错误关键词（中英文登录错误信息）以及常见错误 DOM 元素（`.alert-danger`、`.error-msg`、`[class*=error]` 等）
+- `success_conditions` 非空 → 逐条评估，全部满足才算成功
+
+---
+
+## 变量解析机制
+
+### VariableResolver
+
+模板语法：`{{变量名}}`，正则匹配 `\{\{(\w+)\}\}`。
+
+**三级查找优先级（从高到低）：**
+
+| 优先级 | 来源 | 说明 |
+|--------|------|------|
+| 1 | 运行时变量 | `eval`/`ocr` 步骤通过 `store_as` 写入，以及任务元数据（`url`、`name`、`description`） |
+| 2 | 环境变量 | OS 环境变量 + config 覆盖 + 自定义变量 |
+| 3 | 任务变量 | 任务 JSON 的 `variables` 字段（自身也支持模板引用） |
+
+**递归解析规则：**
+- 解析后的值如果仍包含 `{{`，会递归解析，最大深度 8 层
+- 循环引用检测：维护 `visited` 集合，重复出现的变量名会抛出 `StepError`
+- 未找到的变量：原样保留 `{{VAR}}` 在输出中（不报错）
+- 缓存：首次解析的结果会被缓存，`set_runtime_var()` 调用时清除缓存
+
+**解析的触发点：**
+- `StepHandler.resolve_params()` — 解析步骤的所有字段
+- `_auto_navigate()` — 解析任务的 `url` 字段
+- `LoginAttemptHandler` — 解析任务 URL 后存入环境变量
+
+---
+
+## Frame 上下文切换
+
+通过步骤的 `frame` 字段指定目标 frame，`StepHandler._resolve_frame()` 依次尝试三种定位方式：
+
+1. **按 name 属性：** `page.frame(name=frame_selector)`
+2. **按 URL 匹配：** `page.frame(url=frame_selector)`
+3. **按 CSS 选择器：** `page.frame_locator(frame_selector)`
+
+如果三种方式都失败，系统会回退到主页面继续执行（不会直接失败），这是一种容错设计。
+
+返回的 frame 对象作为 `ctx` 传入 `_find_element()`，所有元素查找都在该上下文中进行。
+
+---
+
+## 浏览器反检测
+
+`BrowserContextManager._start_browser()` 通过 `page.add_init_script()` 在页面 JavaScript 执行前注入反检测脚本：
+
+### 注入的 JavaScript
+
+**隐藏自动化标志：**
+```js
+Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+```
+
+**伪造插件列表：** 模拟 Chrome 默认的三个插件（Chrome PDF Plugin、Chrome PDF Viewer、Native Client），包含完整的 `item()`、`namedItem()` 方法和 `Symbol.iterator` 支持。
+
+**伪造 chrome 对象：**
+```js
+window.chrome = {
+    runtime: { connect: function(){}, sendMessage: function(){} },
+    loadTimes: function() { return {}; },
+    csi: function() { return {}; },
+};
+```
+
+**语言覆盖：** `navigator.languages = ['zh-CN', 'zh', 'en-US', 'en']`
+
+**清理 Playwright 痕迹：** `delete window.__playwright; delete window.__pw_manual;`
+
+### 浏览器上下文配置
+
+| 配置项 | 值 | 说明 |
+|--------|-----|------|
+| `has_touch` | `false` | 桌面模式 |
+| `color_scheme` | `"light"` | 浅色主题 |
+| `locale` | `"zh-CN"` | 中文语言 |
+| `timezone_id` | `"Asia/Shanghai"` | 上海时区 |
+| `ignore_https_errors` | `True` | 忽略 HTTPS 证书错误 |
+| `user_agent` | 可自定义 | 来自 config 的 `browser_user_agent` |
+| `extra_http_headers` | 可自定义 | 来自 config 的 `browser_extra_headers_json` |
+
+### 低资源模式
+
+启用后通过 Playwright 的路由功能拦截以下请求类型：
+- 图片（`image`）
+- 字体（`font`）
+- 媒体（`media`）
+
+返回空响应，减少带宽和内存占用。
+
+### 安全模式
+
+使用纯净 Chromium 启动（不加载任何扩展），通过 `--disable-extensions` 参数实现，用于解决浏览器插件冲突问题。
+
+---
+
+## 错误处理与重试
+
+### 任务执行层面
+
+- 每个步骤的执行都包裹在 try/except 中，异常被捕获并返回 `(False, 错误信息)`
+- 全局超时：每步执行前检查 `perf_counter() - start > timeout / 1000`，超时立即失败
+- 任一步骤失败 → 调用 `_handle_failure()` → 截图 + 构建错误消息 → 返回
+
+### 监控重试机制
+
+`NetworkMonitorCore` 的重试策略：
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `retry_settings.max_retries` | 3 | 最大重试次数 |
+| `retry_settings.retry_interval` | 5 | 基础重试间隔（秒） |
+
+**退避算法：** 指数退避，第 N 次重试的等待时间为 `retry_interval × 2^(N-1)`。
+- 默认配置下：5s → 10s → 20s
+
+**重试结果：**
+- `"retry"` — 等待后重试
+- `"break"` — 等待期间监控被停止
+- `"give_up"` — 所有重试用尽，重置计数器，回到正常检测间隔
+
+**通知：** 第 2 次失败和放弃时会发送桌面通知。
+
+### 浏览器复用与健康检查
+
+启用浏览器复用时，每次登录前检查：
+- `browser.is_connected()` — 浏览器进程是否存活
+- `not page.is_closed()` — 页面是否仍然打开
+
+检查失败则关闭旧浏览器并创建新的。
+
+### 可中断等待
+
+`_wait_interruptible(seconds, step)` 以 5 秒为单位分段休眠，每段检查 `self.monitoring` 标志。如果监控在等待期间被停止，立即返回 `False`，实现优雅退出。
+
+---
+
+## 截图机制
+
+### 自动失败截图
+
+当 `on_failure.screenshot` 不为 `false`（默认 `true`）时，任务失败会自动截图：
+
+- 保存目录：`debug/{YYYY-MM-DD}/`
+- 文件名格式：`{task_id}_{YYYYMMDD_HHMMSS_microseconds}.png`
+- 截图方式：`page.screenshot(path=..., full_page=True)`
+- 返回 URL 路径如 `/debug/2026-05-09/taskid_20260509_143022_123456.png`，追加到失败消息中
+
+### 手动截图步骤
+
+任务中的 `screenshot` 步骤：
+- 保存目录同上
+- 指定 `path` 时仅取文件名（目录由系统管理）
+- 未指定时自动生成 `{task_id}_{step_id}_{timestamp}.png`
+
+### 调试模式截图
+
+逐步调试时，每步执行完成后都会自动截图，用于在调试面板中展示每步的页面状态。
 
 ---
 
@@ -738,246 +254,81 @@ Profiles 系统允许你为不同的网络环境（如宿舍 WiFi、教学楼 Wi
 
 ### 任务级校验
 
-- `name` 必须存在且不为空
-- `steps` 必须存在且为数组
-- 任务 ID 必须符合正则：`^[A-Za-z][A-Za-z0-9_]*$`
+| 规则 | 错误信息 |
+|------|----------|
+| 必须包含 `name` 字段 | "任务必须包含 'name' 字段" |
+| 必须包含 `steps` 字段 | "任务必须包含 'steps' 字段" |
+| `steps` 必须是数组 | "'steps' 必须是数组" |
 
 ### 步骤级校验
 
-每个步骤必须包含：
-- `id` - 唯一标识
-- `type` - 步骤类型（必须是预定义类型之一）
+每个步骤必须包含 `id` 和 `type` 字段。`type` 必须是以下之一：
 
-各类型必需字段：
+`navigate`、`input`、`click`、`select`、`wait`、`wait_url`、`eval`、`custom_js`、`screenshot`、`sleep`、`ocr`
 
-| 类型 | 必需字段 |
+各类型的额外必填字段：
+
+| 类型 | 必填字段 |
 |------|----------|
-| input | `selector`, `value` |
-| click | `selector` |
-| select | `selector`, `value` |
-| wait | `selector` |
-| wait_url | `pattern` |
-| eval | `script`（兼容已废弃的 `code`） |
-| custom_js | `script`（兼容已废弃的 `code`） |
-| screenshot | 无 |
-| sleep | 无 |
-| ocr | `selector` |
+| `navigate` | `url` |
+| `input` | `selector` |
+| `click` | `selector` |
+| `select` | `selector` |
+| `wait` | `selector` |
+| `wait_url` | `pattern` |
+| `eval` | `script`（兼容已废弃的 `code`） |
+| `custom_js` | `script`（兼容已废弃的 `code`） |
+| `screenshot` | 无 |
+| `sleep` | 无 |
+| `ocr` | `selector` |
 
-### 验证工具
+### 成功条件校验
 
-使用 TaskValidator 验证任务：
+每个条件必须包含 `type` 字段：
 
-```python
-from src.task_executor import TaskValidator
+| 类型 | 必填字段 |
+|------|----------|
+| `variable` | `variable` |
+| `url_contains` | `pattern` |
+| `url_matches` | `pattern` |
+| `element_exists` | `selector` |
+| `js_expression` | `script` |
 
-is_valid, errors = TaskValidator.validate(task_dict)
-if not is_valid:
-    print("验证失败:", errors)
-```
+### 危险步骤检测
 
----
+`eval` 和 `custom_js` 步骤会被标记为危险步骤。后端保存时会记录警告日志（包含代码内容，截断至 2000 字符），前端会弹出安全确认对话框。此检测不会阻止保存，仅做提醒。
 
-## 最佳实践
+### Task ID 校验
 
-### 1. 选择器编写
-
-- 使用多个备选选择器，提高兼容性：
-  ```json
-  "selector": "input[name='username'], #username, .login-user"
-  ```
-
-- 优先使用稳定的属性（如 name、id），避免使用易变的 class
-
-### 2. 错误处理
-
-- 设置合理的超时时间
-- 启用失败截图便于调试
-- 提供清晰的步骤描述
-
-### 3. 变量使用
-
-- 将重复的值定义为变量
-- 使用有意义的变量名
-- 避免变量循环引用
-
-### 4. 步骤组织
-
-- 为每个步骤设置描述
-- 使用有意义的步骤ID
-- 合理拆分复杂操作
-
-### 5. 成功判定
-
-- 简单场景可以留空 `success_conditions`，步骤全部完成即为成功
-- 复杂场景建议组合使用 `eval` + `variable` 条件
-- 认证页面会跳转的场景，优先用 `url_contains` 或 `url_matches`
+正则：`^[A-Za-z][A-Za-z0-9_]*$`（必须以字母开头，只能包含字母、数字、下划线）。
 
 ---
 
-## 示例任务
+## 任务文件管理
 
-### 基础登录任务
+### 存储结构
 
-```json
-{
-  "name": "校园网基础登录",
-  "description": "使用标准选择器的登录任务",
-  "metadata": {},
-  "url": "{{LOGIN_URL}}",
-  "timeout": 30000,
-  "variables": {
-    "username": "{{USERNAME}}",
-    "password": "{{PASSWORD}}",
-    "isp": "{{ISP}}"
-  },
-  "steps": [
-    {
-      "id": "input_username",
-      "type": "input",
-      "description": "输入账号",
-      "selector": "input[name='DDDDD'], input[name='username']",
-      "value": "{{username}}",
-      "clear": true
-    },
-    {
-      "id": "input_password",
-      "type": "input",
-      "description": "输入密码",
-      "selector": "input[name='upass'], input[type='password']",
-      "value": "{{password}}",
-      "clear": true
-    },
-    {
-      "id": "select_isp",
-      "type": "select",
-      "description": "选择运营商",
-      "selector": "select[name='ISP_select'], select[name='isp']",
-      "value": "{{isp}}"
-    },
-    {
-      "id": "click_login",
-      "type": "click",
-      "description": "点击登录",
-      "selector": "input[name='0MKKey'], button[type='submit']"
-    },
-    {
-      "id": "wait_result",
-      "type": "wait",
-      "description": "等待结果",
-      "selector": ".success, .error, #msg",
-      "timeout": 10000
-    },
-    {
-      "id": "check_result",
-      "type": "eval",
-      "description": "检查结果",
-      "script": "() => { const text = document.body.innerText; return text.includes('成功') || text.includes('已连接'); }",
-      "store_as": "login_success"
-    }
-  ],
-  "success_conditions": [
-    {
-      "type": "variable",
-      "variable": "login_success",
-      "value": true
-    }
-  ],
-  "on_success": {
-    "message": "登录成功"
-  },
-  "on_failure": {
-    "message": "登录失败",
-    "screenshot": true
-  }
-}
+```
+tasks/
+├── active.txt          # 当前活动任务 ID（纯文本）
+├── default.json        # 内置默认任务
+└── *.json              # 用户自定义任务
 ```
 
-### 精简登录任务
+### TaskManager 操作
 
-```json
-{
-  "name": "精简登录",
-  "description": "利用自动导航和空成功条件的简化任务",
-  "metadata": {},
-  "url": "{{LOGIN_URL}}",
-  "timeout": 15000,
-  "steps": [
-    {
-      "id": "input_username",
-      "type": "input",
-      "selector": "#username",
-      "value": "{{USERNAME}}"
-    },
-    {
-      "id": "input_password",
-      "type": "input",
-      "selector": "#password",
-      "value": "{{PASSWORD}}"
-    },
-    {
-      "id": "click_login",
-      "type": "click",
-      "selector": "#login-btn"
-    },
-    {
-      "id": "wait",
-      "type": "sleep",
-      "duration": 3000
-    }
-  ],
-  "success_conditions": [],
-  "on_success": { "message": "登录成功" },
-  "on_failure": { "message": "登录失败", "screenshot": true }
-}
-```
+| 方法 | 说明 |
+|------|------|
+| `load_task(task_id)` | 加载指定任务，返回 `TaskConfig` 对象 |
+| `save_task(task_id, config)` | 校验后保存任务 JSON（`ensure_ascii=False, indent=2`） |
+| `list_tasks()` | 列出所有任务的 `{id, name, description}` |
+| `get_active_task()` | 读取 `active.txt`，不存在时返回 `"default"` |
+| `set_active_task(task_id)` | 校验 ID 和文件存在性后写入 `active.txt` |
+| `delete_task(task_id)` | 删除任务文件，`"default"` 不可删除 |
 
-> 注意：执行器会自动导航到 `url` 字段指定的地址，无需手动添加 navigate 步骤。
+### 安全措施
 
-### 带验证码的登录任务
-
-```json
-{
-  "name": "验证码登录",
-  "description": "需要输入验证码的校园网登录",
-  "metadata": {},
-  "url": "{{LOGIN_URL}}",
-  "timeout": 30000,
-  "steps": [
-    {
-      "id": "input_username",
-      "type": "input",
-      "selector": "#username",
-      "value": "{{USERNAME}}"
-    },
-    {
-      "id": "input_password",
-      "type": "input",
-      "selector": "#password",
-      "value": "{{PASSWORD}}"
-    },
-    {
-      "id": "solve_captcha",
-      "type": "ocr",
-      "description": "识别验证码并填入",
-      "selector": "#captcha-img",
-      "target_selector": "#captcha-input"
-    },
-    {
-      "id": "click_login",
-      "type": "click",
-      "selector": "#login-btn"
-    },
-    {
-      "id": "wait",
-      "type": "sleep",
-      "duration": 3000
-    }
-  ],
-  "success_conditions": [],
-  "on_success": { "message": "登录成功" },
-  "on_failure": { "message": "登录失败", "screenshot": true }
-}
-```
+路径遍历防护：`_safe_task_path()` 解析路径后验证是否在 `tasks_dir` 范围内，防止 `../` 攻击。
 
 ---
 
@@ -1045,6 +396,23 @@ if not is_valid:
 | POST | `/api/autostart/enable` | 启用自启动 |
 | POST | `/api/autostart/disable` | 禁用自启动 |
 
+### 配置备份
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/backup/list` | 列出所有备份 |
+| POST | `/api/backup/create` | 创建备份 |
+| POST | `/api/backup/restore/{filename}` | 恢复备份 |
+| GET | `/api/backup/export/{filename}` | 导出备份文件 |
+| DELETE | `/api/backup/{filename}` | 删除备份 |
+
+### 卸载
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/uninstall/detect` | 检测可清理的外部残留 |
+| POST | `/api/uninstall` | 执行卸载清理 |
+
 ### 系统
 
 | 方法 | 路径 | 说明 |
@@ -1052,9 +420,12 @@ if not is_valid:
 | GET | `/api/health` | 健康检查，返回状态和版本 |
 | POST | `/api/shutdown` | 关闭服务 |
 
-### 调试文件
+### 静态文件
 
-`/debug/` 路径提供截图文件的静态访问，可用于查看失败截图。
+| 路径 | 说明 |
+|------|------|
+| `/debug/` | 截图文件的静态访问 |
+| `/temp/` | 调试截图临时目录 |
 
 ---
 
@@ -1064,8 +435,8 @@ if not is_valid:
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `USERNAME` | - | 校园网用户名 |
-| `PASSWORD` | - | 校园网密码（支持 `ENC:` 前缀加密存储） |
+| `USERNAME` | — | 校园网用户名 |
+| `PASSWORD` | — | 校园网密码（支持 `ENC:` 前缀加密存储） |
 | `LOGIN_URL` | `http://172.29.0.2` | 认证页面地址 |
 | `ISP` | 空 | 运营商关键字 |
 
@@ -1099,10 +470,18 @@ if not is_valid:
 |------|--------|------|
 | `BROWSER_HEADLESS` | `true` | 无头模式 |
 | `BROWSER_TIMEOUT` | `8000` | 浏览器超时（毫秒） |
-| `BROWSER_LOW_RESOURCE_MODE` | `true` | 低资源模式 |
+| `BROWSER_LOW_RESOURCE_MODE` | `true` | 低资源模式（屏蔽图片、字体、媒体） |
 | `BROWSER_USER_AGENT` | 内置默认值 | 自定义 User-Agent |
 | `BROWSER_EXTRA_HEADERS_JSON` | 空 | 额外请求头（JSON） |
 | `BROWSER_DISABLE_WEB_SECURITY` | `false` | 禁用浏览器安全策略 |
+| `BROWSER_SAFE_MODE` | `false` | 安全模式（纯净 Chromium，无扩展） |
+
+### 重试配置
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `MAX_RETRIES` | `3` | 最大重试次数 |
+| `RETRY_INTERVAL` | `5` | 基础重试间隔（秒），退避公式：`interval × 2^(n-1)` |
 
 ### 系统配置
 
@@ -1123,60 +502,3 @@ if not is_valid:
 | `Campus-Auth_START_EXECUTABLE` | 打包可执行文件路径 |
 | `Campus-Auth_AUTO_OPEN_BROWSER` | 是否自动打开浏览器 |
 | `Campus-Auth_ENV_FILE` | .env 文件路径 |
-
----
-
-## 步骤类型速查表
-
-| 类型 | 用途 | 关键参数 | 特殊行为 |
-|------|------|----------|----------|
-| input | 输入文本 | `selector`, `value`, `clear` | - |
-| click | 点击元素 | `selector` | - |
-| select | 下拉选择 | `selector`, `value` | value 为空或元素不存在时跳过；支持模糊匹配 |
-| wait | 等待元素 | `selector` | - |
-| wait_url | 等待URL | `pattern` | - |
-| eval | JS求值 | `script`, `store_as` | `code` 为已废弃别名 |
-| custom_js | 执行JS | `script` | `code` 为已废弃别名 |
-| screenshot | 截图 | `path` | - |
-| sleep | 休眠 | `duration` | 最大 300000ms |
-| ocr | 验证码识别 | `selector`, `target_selector`, `store_as`, `old` | 截取图片元素 → ddddocr 识别 → 自动填入 或 存入变量；支持新旧模型切换 |
-
-> 所有操作类步骤都支持公共字段 `frame`，用于 frameset/iframe 页面中定位子 frame 内的元素。
-
----
-
-## 常见问题
-
-**Q: 选择器怎么写？**
-
-A: 支持 CSS 选择器，多个选择器用逗号分隔。常用形式：
-- `input[name='username']` - 属性选择
-- `#username` - ID选择
-- `.login-input` - 类选择
-- `button[type='submit']` - 组合选择
-
-**Q: 变量不生效怎么办？**
-
-A: 检查以下几点：
-1. 变量名是否正确（区分大小写）
-2. 模板语法是否正确（使用双大括号 `{{}}`）
-3. 变量来源是否正确（环境变量或 task.variables）
-
-**Q: 如何判断登录成功？**
-
-A: 推荐组合使用：
-1. `eval` 步骤检查页面内容，存储结果到变量
-2. `success_conditions` 中检查该变量
-3. 或使用 `url_contains` 检查跳转后的URL
-
-**Q: 多个校园网怎么配置？**
-
-A: 使用"配置方案"页面为每个网络创建独立的 Profile，设置匹配条件（网关 IP 或 WiFi SSID），并开启自动切换。
-
-**Q: 保存任务时弹出安全警告？**
-
-A: 这是因为任务中包含 `eval` 或 `custom_js` 步骤。这些步骤可以执行任意 JavaScript 代码，系统会显示代码内容要求确认。确认代码安全后点击确认即可。
-
-**Q: 内置任务和普通任务有什么区别？**
-
-A: 内置任务是随项目分发的预设任务。你可以在内置任务的基础上复制、修改来创建自己的任务。
