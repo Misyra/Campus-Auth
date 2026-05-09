@@ -8,15 +8,17 @@ set -euo pipefail
 # - Avoid duplicate start by checking APP_PORT
 
 PYTHON_VERSION="${PYTHON_VERSION:-3.10}"
+PYTHON_FULL_VERSION="${PYTHON_FULL_VERSION:-3.10.16}"
 PIP_MIRROR="${PIP_MIRROR:-https://mirrors.cernet.edu.cn/pypi/simple}"
+PYTHON_MIRROR="${PYTHON_MIRROR:-https://mirrors.cernet.edu.cn/python}"
 FORCE_REINSTALL="${FORCE_REINSTALL:-0}"
 VERBOSE="${VERBOSE:-0}"
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_DIR="$PROJECT_ROOT/environment"
 VENV_DIR="$ENV_DIR/python"
-PYTHON_EXE="$VENV_DIR/bin/python"
-PIP_EXE="$VENV_DIR/bin/pip"
+PYTHON_EXE="$VENV_DIR/bin/python3"
+PIP_EXE="$VENV_DIR/bin/pip3"
 REQUIREMENTS_FILE="$PROJECT_ROOT/requirements.txt"
 HASH_FILE="$ENV_DIR/.requirements_hash"
 LOG_DIR="$PROJECT_ROOT/logs"
@@ -32,7 +34,8 @@ usage() {
 Usage: ./setup_env.sh [options]
 
 Options:
-  --python-version <ver>    Python version hint (default: 3.10)
+  --python-version <ver>    Python version (default: 3.10)
+  --python-mirror <url>     Python download mirror URL
   --pip-mirror <url>        Pip mirror URL
   --force-reinstall         Force reinstall dependencies
   --verbose                 Print logs to terminal
@@ -47,6 +50,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --python-version)
       PYTHON_VERSION="${2:-$PYTHON_VERSION}"
+      shift 2
+      ;;
+    --python-mirror)
+      PYTHON_MIRROR="${2:-$PYTHON_MIRROR}"
       shift 2
       ;;
     --pip-mirror)
@@ -172,29 +179,119 @@ run_pip_with_mirror() {
   return 1
 }
 
-ensure_python() {
-  if [[ -x "$PYTHON_EXE" && "$FORCE_REINSTALL" != "1" ]]; then
-    local py_ver
-    py_ver="$($PYTHON_EXE --version 2>&1 || true)"
-    if [[ -n "$py_ver" ]]; then
-      log_success "Python 已就绪 (版本: $py_ver)，跳过创建虚拟环境"
-      return
+get_platform_info() {
+  local os arch
+  os="$(uname -s)"
+  arch="$(uname -m)"
+
+  case "$os" in
+    Linux)
+      case "$arch" in
+        x86_64)  echo "x86_64-unknown-linux-gnu" ;;
+        aarch64) echo "aarch64-unknown-linux-gnu" ;;
+        *)       log_error "不支持的 Linux 架构: $arch"; exit 1 ;;
+      esac
+      ;;
+    Darwin)
+      case "$arch" in
+        x86_64)  echo "x86_64-apple-darwin" ;;
+        arm64)   echo "aarch64-apple-darwin" ;;
+        *)       log_error "不支持的 macOS 架构: $arch"; exit 1 ;;
+      esac
+      ;;
+    *)
+      log_error "不支持的操作系统: $os"
+      exit 1
+      ;;
+  esac
+}
+
+download_embed_python() {
+  local platform="$1"
+  local version="$PYTHON_FULL_VERSION"
+  local filename="cpython-${version}-${platform}-install_only.tar.gz"
+
+  local temp_dir="$PROJECT_ROOT/temp"
+  mkdir -p "$temp_dir"
+  local tar_path="$temp_dir/$filename"
+
+  # 构建候选下载地址
+  local candidates=(
+    "${PYTHON_MIRROR}/${version}/${filename}"
+    "https://mirrors.cernet.edu.cn/python/${version}/${filename}"
+    "https://mirrors.aliyun.com/python/${version}/${filename}"
+    "https://github.com/indygreg/python-build-standalone/releases/download/${version}/${filename}"
+  )
+
+  log_info "下载 Python ${version} (${platform})..."
+  for url in "${candidates[@]}"; do
+    log_info "尝试下载: $url"
+    if curl -fSL --connect-timeout 15 --max-time 300 -o "$tar_path" "$url" 2>/dev/null; then
+      log_success "Python 下载完成"
+      echo "$tar_path"
+      return 0
     fi
+    log_warning "下载失败，尝试下一个源..."
+  done
+
+  log_error "Python 下载失败：所有下载源均不可用"
+  return 1
+}
+
+install_embed_python() {
+  local platform
+  platform="$(get_platform_info)"
+
+  local tar_path
+  tar_path="$(download_embed_python "$platform")" || return 1
+
+  log_info "解压 Python 到: $VENV_DIR"
+  mkdir -p "$VENV_DIR"
+  tar -xzf "$tar_path" -C "$VENV_DIR" --strip-components=1
+
+  log_info "清理临时文件..."
+  rm -f "$tar_path"
+
+  # 确保 pip 可用
+  if [[ ! -x "$PIP_EXE" ]]; then
+    log_info "安装 pip..."
+    "$PYTHON_EXE" -m ensurepip --upgrade 2>/dev/null || true
   fi
 
-  local py_cmd
-  if command -v python3 >/dev/null 2>&1; then
-    py_cmd="python3"
-  elif command -v python >/dev/null 2>&1; then
-    py_cmd="python"
-  else
-    log_error "未找到 Python，请先安装 Python ${PYTHON_VERSION}+"
+  log_success "Python 嵌入式环境安装完成"
+}
+
+check_python_version() {
+  if [[ ! -x "$PYTHON_EXE" ]]; then
+    return 1
+  fi
+  local py_ver
+  py_ver="$($PYTHON_EXE --version 2>&1 || true)"
+  if [[ "$py_ver" == *"$PYTHON_VERSION"* ]]; then
+    return 0
+  fi
+  return 1
+}
+
+ensure_python() {
+  if check_python_version && [[ "$FORCE_REINSTALL" != "1" ]]; then
+    local py_ver
+    py_ver="$($PYTHON_EXE --version 2>&1 || true)"
+    log_success "Python 已就绪 (版本: $py_ver)"
+    return
+  fi
+
+  log_info "安装 Python ${PYTHON_VERSION} 嵌入式环境..."
+  install_embed_python
+
+  if ! check_python_version; then
+    log_error "Python 安装失败，请检查网络连接或手动安装 Python ${PYTHON_VERSION}+"
     exit 1
   fi
 
-  log_info "创建虚拟环境: $VENV_DIR"
-  "$py_cmd" -m venv "$VENV_DIR"
-  log_success "虚拟环境创建完成"
+  local py_ver
+  py_ver="$($PYTHON_EXE --version 2>&1 || true)"
+  log_success "Python 已就绪 (版本: $py_ver)"
 }
 
 ensure_pip() {
@@ -273,7 +370,8 @@ main() {
   log_info "========================================"
   log_info "项目根目录: $PROJECT_ROOT"
   log_info "ENV 目录: $ENV_DIR"
-  log_info "Python 版本要求: ${PYTHON_VERSION}+"
+  log_info "Python 版本: ${PYTHON_VERSION}"
+  log_info "Python 镜像源: $PYTHON_MIRROR"
   log_info "Pip 镜像源: $PIP_MIRROR"
 
   local port
