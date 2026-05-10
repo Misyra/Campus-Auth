@@ -32,7 +32,8 @@ class MonitorConfigPayload(BaseModel):
     browser_low_resource_mode: bool = False
     browser_disable_web_security: bool = False
     browser_extra_headers_json: str = Field(default="")
-    browser_args: str = Field(default="")
+    browser_args: str = Field(default="--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees\n--disable-ipc-flooding-protection\n--disable-hang-monitor\n--disable-popup-blocking")
+    stealth_mode: bool = Field(default=False, description="注入反检测脚本，隐藏浏览器自动化痕迹")
     pause_enabled: bool = True
     pause_start_hour: int = Field(default=0, ge=0, le=23)
     pause_end_hour: int = Field(default=6, ge=0, le=23)
@@ -179,7 +180,8 @@ class ProfileSettings(BaseModel):
     browser_low_resource_mode: bool = False
     browser_disable_web_security: bool = False
     browser_extra_headers_json: str = Field(default="")
-    browser_args: str = Field(default="", description="自定义 Chromium 启动参数，每行一个")
+    browser_args: str = Field(default="--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees\n--disable-ipc-flooding-protection\n--disable-hang-monitor\n--disable-popup-blocking", description="自定义 Chromium 启动参数，每行一个")
+    stealth_mode: bool = Field(default=False, description="注入反检测脚本，隐藏浏览器自动化痕迹")
     pause_enabled: bool = True
     pause_start_hour: int = Field(default=0, ge=0, le=23)
     pause_end_hour: int = Field(default=6, ge=0, le=23)

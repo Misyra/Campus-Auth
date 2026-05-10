@@ -279,6 +279,7 @@ def build_runtime_config(payload: MonitorConfigPayload, sys: SystemSettings | No
         payload.browser_extra_headers_json
     )
     browser["browser_args"] = payload.browser_args.strip()
+    browser["stealth_mode"] = payload.stealth_mode
 
     pause = base.setdefault("pause_login", {})
     pause["enabled"] = payload.pause_enabled

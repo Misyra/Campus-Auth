@@ -100,8 +100,9 @@ class BrowserContextManager:
                     await self.context.route("**/*", self._handle_low_resource_request)
 
             self.page = await self.context.new_page()
-            # 注入反检测脚本，抹除自动化痕迹
-            await self.page.add_init_script("""
+            # 反检测脚本（默认关闭，需在方案设置中启用 stealth_mode）
+            if self.browser_settings.get("stealth_mode", False):
+                await self.page.add_init_script("""
                 // 隐藏 webdriver 标志
                 Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
 
