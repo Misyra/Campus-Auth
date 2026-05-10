@@ -428,6 +428,16 @@
               </label>
             </div>
           </div>
+          <div class="toggle-group">
+            <div class="toggle-with-help">
+              <label class="toggle toggle-help-inline">
+                <input type="checkbox" v-model="config.stealth_mode" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">反检测模式</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="注入脚本隐藏浏览器自动化痕迹（navigator.webdriver、plugins 等）。部分认证页面可能因此脚本而显示异常，一般请保持关闭。">?</span>
+              </label>
+            </div>
+          </div>
         </div>
       </section>
 

@@ -609,6 +609,8 @@ class ProfileService:
             browser_extra_headers_json=str(
                 browser_config.get("extra_headers_json", "")
             ),
+            browser_args=str(browser_config.get("browser_args", "")),
+            stealth_mode=bool(browser_config.get("stealth_mode", False)),
             pause_enabled=bool(pause_config.get("enabled", True)),
             pause_start_hour=int(pause_config.get("start_hour", 0)),
             pause_end_hour=int(pause_config.get("end_hour", 6)),
