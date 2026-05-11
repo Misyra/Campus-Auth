@@ -17,9 +17,69 @@ export const lifecycleMethods = {
     ]);
     this.isLoading = false;
     this.connectWebSocket();
+    this.autoCheckUpdateOnStartup();
     this.timers.push(setInterval(() => this.fetchStatus(), 30000));  // 30s fallback, WS 实时推送
     this.timers.push(setInterval(() => this.fetchAutostart(), 12000));
     this.frontendLogger.info('app.init', 'init finished');
+  },
+  async _waitWebSocketReady(timeoutMs = 2000) {
+    if (!this.ws) return false;
+    if (this.ws.readyState === WebSocket.OPEN) return true;
+    if (this.ws.readyState === WebSocket.CLOSING || this.ws.readyState === WebSocket.CLOSED) {
+      return false;
+    }
+
+    return new Promise((resolve) => {
+      let done = false;
+      const ws = this.ws;
+
+      const cleanup = (result) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        ws.removeEventListener('open', onOpen);
+        ws.removeEventListener('close', onClose);
+        resolve(result);
+      };
+
+      const onOpen = () => cleanup(true);
+      const onClose = () => cleanup(false);
+      const timer = setTimeout(() => cleanup(ws.readyState === WebSocket.OPEN), timeoutMs);
+
+      ws.addEventListener('open', onOpen, { once: true });
+      ws.addEventListener('close', onClose, { once: true });
+    });
+  },
+  async autoCheckUpdateOnStartup() {
+    try {
+      const { data } = await this.$api.get('/api/check-update');
+      this.updateInfo = data;
+      if (!data?.has_update) return;
+
+      const latest = data.latest ? `v${data.latest}` : '新版本';
+      const current = data.current ? `（当前 v${data.current}）` : '';
+      const message = `发现新版本 ${latest}${current}`;
+
+      this.notify(true, message);
+      const wsReady = await this._waitWebSocketReady();
+      const logMessage = `${message}，请前往“关于”页面下载`;
+      this.frontendLogger.warn('update', logMessage);
+      if (!wsReady) {
+        const wasAtBottom = this._isViewerAtBottom();
+        this.logs.push({
+          timestamp: new Date().toISOString(),
+          level: 'WARNING',
+          source: 'frontend',
+          message: `[update] ${logMessage}`,
+        });
+        if (this.logs.length > 300) {
+          this.logs = this.logs.slice(-300);
+        }
+        this.$nextTick(() => this.scrollLogToBottom(wasAtBottom));
+      }
+    } catch (error) {
+      this.frontendLogger.debug('update', '启动自动检查更新失败', error);
+    }
   },
   async checkInitStatus() {
     try {

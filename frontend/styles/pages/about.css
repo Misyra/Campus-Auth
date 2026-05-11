@@ -263,6 +263,15 @@
   margin-top: 8px;
 }
 
+.qq-group {
+  margin-top: 8px;
+}
+
+.qq-group strong {
+  color: var(--accent);
+  font-family: 'JetBrains Mono', monospace;
+}
+
 /* 卸载区域 */
 .uninstall-section {
   display: flex;
