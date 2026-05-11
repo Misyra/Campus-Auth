@@ -32,6 +32,7 @@ export const DEFAULT_CONFIG = {
   pause_start_hour: 0,
   pause_end_hour: 6,
   network_targets: "8.8.8.8:53,114.114.114.114:53,www.baidu.com:443",
+  network_strict_mode: true,
   backend_log_level: "INFO",
   frontend_log_level: "INFO",
   access_log: false,
@@ -80,5 +81,6 @@ export const DEFAULT_PROFILE_SETTINGS = {
   pause_start_hour: 0,
   pause_end_hour: 6,
   network_targets: '8.8.8.8:53,114.114.114.114:53,www.baidu.com:443',
+  network_strict_mode: true,
   custom_variables: {},
 };

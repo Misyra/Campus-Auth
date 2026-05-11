@@ -85,6 +85,7 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
     pause_start_hour = global_profile.pause_start_hour
     pause_end_hour = global_profile.pause_end_hour
     network_targets = _normalize_targets(global_profile.network_targets)
+    network_strict_mode = global_profile.network_strict_mode
     custom_variables = global_profile.custom_variables
 
     return MonitorConfigPayload(
@@ -109,6 +110,7 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
         pause_start_hour=pause_start_hour,
         pause_end_hour=pause_end_hour,
         network_targets=network_targets,
+        network_strict_mode=network_strict_mode,
         backend_log_level=_normalize_level(sys.backend_log_level),
         frontend_log_level=_normalize_level(sys.frontend_log_level),
         access_log=sys.access_log,
@@ -186,6 +188,7 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
         pause_start_hour = profile.pause_start_hour
         pause_end_hour = profile.pause_end_hour
         network_targets = _normalize_targets(profile.network_targets)
+        network_strict_mode = profile.network_strict_mode
         custom_variables = profile.custom_variables
     else:
         global_profile = data.profiles.get("default", ProfileSettings())
@@ -203,6 +206,7 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
         pause_start_hour = global_profile.pause_start_hour
         pause_end_hour = global_profile.pause_end_hour
         network_targets = _normalize_targets(global_profile.network_targets)
+        network_strict_mode = global_profile.network_strict_mode
         custom_variables = global_profile.custom_variables
 
     return MonitorConfigPayload(
@@ -227,6 +231,7 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
         pause_start_hour=pause_start_hour,
         pause_end_hour=pause_end_hour,
         network_targets=network_targets,
+        network_strict_mode=network_strict_mode,
         backend_log_level=_normalize_level(sys.backend_log_level),
         frontend_log_level=_normalize_level(sys.frontend_log_level),
         access_log=sys.access_log,
@@ -291,6 +296,7 @@ def build_runtime_config(payload: MonitorConfigPayload, sys: SystemSettings | No
     monitor["ping_targets"] = [
         item.strip() for item in payload.network_targets.split(",") if item.strip()
     ]
+    monitor["strict_mode"] = payload.network_strict_mode
 
     backend_level = _normalize_level(payload.backend_log_level)
     frontend_level = _normalize_level(payload.frontend_log_level)
@@ -386,6 +392,7 @@ def save_config_combined(
         glob.pause_start_hour = payload.pause_start_hour
         glob.pause_end_hour = payload.pause_end_hour
         glob.network_targets = _normalize_targets(payload.network_targets)
+        glob.network_strict_mode = payload.network_strict_mode
         glob.custom_variables = payload.custom_variables
 
     # 活动方案保持不变 —— 设置页面不修改方案独立配置

@@ -443,6 +443,17 @@
   flex-shrink: 0;
 }
 
+.uninstall-hint-box {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: rgba(34, 211, 238, 0.06);
+  border: 1px solid rgba(34, 211, 238, 0.15);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
 .uninstall-modal-footer {
   display: flex;
   justify-content: flex-end;
