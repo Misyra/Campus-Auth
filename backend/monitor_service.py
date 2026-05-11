@@ -312,9 +312,35 @@ class MonitorService:
 
     def test_network(self) -> tuple[bool, str]:
         service_logger.info("手动网络测试")
-        self._push_log("手动网络测试 → 使用默认检测目标", "INFO", "network")
+        with self._lock:
+            config = self._runtime_config.copy()
+        monitor_cfg = config.get("monitor", {})
+        targets = monitor_cfg.get("ping_targets", [])
+        strict_mode = monitor_cfg.get("strict_mode", True)
+        # 解析 host:port 为 (host, port) 元组列表
+        test_sites: list[tuple[str, int]] = []
+        for item in targets:
+            host = item
+            port = 0
+            if ":" in str(item):
+                host_part, port_part = str(item).rsplit(":", 1)
+                if host_part.strip() and port_part.strip().isdigit():
+                    host = host_part.strip()
+                    port = int(port_part.strip())
+            if port <= 0:
+                import re
+                port = 53 if re.fullmatch(r"\d+\.\d+\.\d+\.\d+", host) else 443
+            test_sites.append((host, port))
+        self._push_log(
+            f"手动网络测试 → 目标={len(test_sites)} 严格模式={'开' if strict_mode else '关'}",
+            "INFO", "network",
+        )
         try:
-            ok = is_network_available(timeout=2, require_both=False)
+            ok = is_network_available(
+                test_sites=test_sites if test_sites else None,
+                timeout=2,
+                require_both=strict_mode,
+            )
             if ok:
                 self._push_log("手动测试结果: 网络正常", "INFO", "network")
                 return True, "网络连接正常"

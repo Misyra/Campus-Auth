@@ -40,6 +40,10 @@ class MonitorConfigPayload(BaseModel):
     network_targets: str = Field(
         default="8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
     )
+    network_strict_mode: bool = Field(
+        default=True,
+        description="网络检测严格模式：开启后 TCP 和 HTTP 必须同时通过才算联网成功",
+    )
     backend_log_level: str = Field(default="INFO")
     frontend_log_level: str = Field(default="INFO")
     access_log: bool = False
@@ -187,6 +191,10 @@ class ProfileSettings(BaseModel):
     pause_end_hour: int = Field(default=6, ge=0, le=23)
     network_targets: str = Field(
         default="8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
+    )
+    network_strict_mode: bool = Field(
+        default=True,
+        description="网络检测严格模式：开启后 TCP 和 HTTP 必须同时通过才算联网成功",
     )
     custom_variables: dict[str, str] = Field(default_factory=dict)
 

@@ -6,6 +6,7 @@ import socket
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Iterable, Sequence
 
 import httpx
@@ -18,11 +19,20 @@ logger = get_logger("network_test", side="BACKEND")
 def is_local_network_connected() -> bool:
     """检查本地网络是否有实际连接（有线或无线）。
 
-    Windows: 通过 netsh 检查是否有已连接的网络接口。
-    Linux:   检查是否有非 lo 接口存在默认路由。
-    macOS:   检查是否有活跃的网络服务。
-    回退:    检查是否有非回环 IP。
+    优先使用快速 IP 检测，失败时回退到平台特判。
     """
+    # 优先：快速 IP 检测（~10ms），避免 Windows 上 PowerShell 启动慢
+    try:
+        hostname = socket.gethostname()
+        ip_list = socket.gethostbyname_ex(hostname)[2]
+        non_loopback = [ip for ip in ip_list if not ip.startswith("127.")]
+        if non_loopback:
+            logger.info("本地网络已连接，IP: %s", ", ".join(non_loopback))
+            return True
+    except Exception as exc:
+        logger.debug("快速 IP 检测失败: %s", exc)
+
+    # 回退：平台特判
     system = platform.system()
     try:
         if system == "Windows":
@@ -32,21 +42,10 @@ def is_local_network_connected() -> bool:
         elif system == "Darwin":
             return _check_macos_service()
     except Exception as exc:
-        logger.debug("平台网络检测失败，回退到 IP 检查: %s", exc)
+        logger.debug("平台网络检测失败: %s", exc)
 
-    # 回退：检查非回环 IP
-    try:
-        hostname = socket.gethostname()
-        ip_list = socket.gethostbyname_ex(hostname)[2]
-        non_loopback = [ip for ip in ip_list if not ip.startswith("127.")]
-        if non_loopback:
-            logger.info("本地网络已连接，IP: %s", ", ".join(non_loopback))
-        else:
-            logger.warning("未检测到有效本地 IP")
-        return len(non_loopback) > 0
-    except Exception as exc:
-        logger.warning("获取本地 IP 失败: %s", exc)
-        return False
+    logger.warning("未检测到本地网络连接")
+    return False
 
 
 def _check_windows_adapter() -> bool:
@@ -155,16 +154,28 @@ def is_network_available_socket(
     timeout: float = 1.5,
 ) -> bool:
     targets = test_sites or (("www.baidu.com", 443), ("1.1.1.1", 53))
-    for host, port in targets:
+
+    def _connect_one(host: str, port: int) -> tuple[str, bool, str]:
         start = time.perf_counter()
         try:
             with socket.create_connection((host, port), timeout=timeout):
                 elapsed = (time.perf_counter() - start) * 1000
-                logger.info("TCP 连接成功: %s:%s (%.0fms)", host, port, elapsed)
-                return True
+                return (f"{host}:{port}", True, f"({elapsed:.0f}ms)")
         except Exception as exc:
             elapsed = (time.perf_counter() - start) * 1000
-            logger.info("TCP 连接失败: %s:%s (%.0fms) — %s", host, port, elapsed, exc)
+            return (f"{host}:{port}", False, f"{type(exc).__name__}")
+
+    executor = ThreadPoolExecutor(max_workers=len(targets))
+    futures = {executor.submit(_connect_one, h, p): (h, p) for h, p in targets}
+    try:
+        for future in as_completed(futures):
+            label, ok, detail = future.result()
+            if ok:
+                logger.info("TCP 连接成功: %s %s", label, detail)
+                return True
+            logger.info("TCP 连接失败: %s — %s", label, detail)
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
     logger.warning("所有 TCP 目标均不可达 (%d 个)", len(targets))
     return False
 
@@ -172,26 +183,37 @@ def is_network_available_socket(
 def is_network_available_http(
     test_urls: Iterable[str] | None = None,
     timeout: float = 2.0,
+    follow_redirects: bool = True,
 ) -> bool:
     urls = list(test_urls or ("https://www.baidu.com", "https://www.qq.com"))
+    if len(urls) == 0:
+        return False
+
+    def _check_one(url: str) -> tuple[str, bool, str]:
+        """在独立线程中检测单个 URL。返回 (url, success, detail)。"""
+        start = time.perf_counter()
+        try:
+            with httpx.Client(timeout=timeout, follow_redirects=follow_redirects) as client:
+                resp = client.get(url)
+                elapsed = (time.perf_counter() - start) * 1000
+                if 200 <= resp.status_code < 300:
+                    return (url, True, f"HTTP {resp.status_code} ({elapsed:.0f}ms)")
+                return (url, False, f"HTTP {resp.status_code} ({elapsed:.0f}ms)")
+        except Exception as exc:
+            elapsed = (time.perf_counter() - start) * 1000
+            return (url, False, f"{type(exc).__name__}: {exc}")
+
+    executor = ThreadPoolExecutor(max_workers=len(urls))
+    futures = {executor.submit(_check_one, url): url for url in urls}
     try:
-        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
-            for url in urls:
-                start = time.perf_counter()
-                try:
-                    resp = client.get(url)
-                    elapsed = (time.perf_counter() - start) * 1000
-                    if 200 <= resp.status_code < 300:
-                        logger.info("HTTP 请求成功: %s → %s (%.0fms)",
-                                    url, resp.status_code, elapsed)
-                        return True
-                    logger.warning("HTTP 请求失败: %s → %s (%.0fms)",
-                                   url, resp.status_code, elapsed)
-                except Exception as exc:
-                    elapsed = (time.perf_counter() - start) * 1000
-                    logger.info("HTTP 请求异常: %s (%.0fms) — %s", url, elapsed, exc)
-    except Exception as exc:
-        logger.warning("HTTP 客户端初始化失败: %s", exc)
+        for future in as_completed(futures):
+            url, ok, detail = future.result()
+            if ok:
+                logger.info("HTTP 请求成功: %s → %s", url, detail)
+                return True
+            logger.info("HTTP 请求失败: %s — %s", url, detail)
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
     logger.warning("所有 HTTP 目标均不可达 (%d 个)", len(urls))
     return False
 
@@ -212,9 +234,16 @@ def is_network_available(
                 len(test_sites or ()), len(urls_list), require_both)
     socket_ok = is_network_available_socket(test_sites=test_sites, timeout=timeout)
     if require_both:
-        # 两者都必须成功，不能短路
-        http_ok = is_network_available_http(test_urls=urls_list, timeout=max(timeout, 2.0))
-        result = socket_ok and http_ok
+        # 严格模式：TCP + HTTP 双重验证
+        # TCP 已失败则直接判定断网，跳过 HTTP 省时间
+        if not socket_ok:
+            logger.info("网络检测完成: TCP=断 → 严格模式直接判定网络异常，跳过 HTTP")
+            return False
+        # 不跟重定向：portal 重定向到登录页 = 未认证 = 判定失败
+        http_ok = is_network_available_http(
+            test_urls=urls_list, timeout=max(timeout, 2.0), follow_redirects=False,
+        )
+        result = http_ok
     else:
         # TCP 成功即可，跳过 HTTP 检测节省时间
         if socket_ok:

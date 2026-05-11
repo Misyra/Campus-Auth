@@ -247,8 +247,9 @@ class NetworkMonitorCore:
             # 自动切换方案检测
             self._check_profile_switch()
 
-            # 重新读取测试站点（方案切换后可能已更新）
+            # 重新读取测试站点和探测模式（方案切换后可能已更新）
             test_sites = self._get_test_sites()
+            strict_mode = self.config.get("monitor", {}).get("strict_mode", True)
 
             self.network_check_count += 1
             self.last_check_time = datetime.datetime.now()
@@ -259,7 +260,7 @@ class NetworkMonitorCore:
                 network_ok = is_network_available(
                     test_sites=test_sites,
                     timeout=self.NETWORK_CHECK_TIMEOUT_SECONDS,
-                    require_both=False,
+                    require_both=strict_mode,
                 )
             except OSError as exc:
                 self.log_message(f"网络检测 IO 错误: {exc}", logging.ERROR)
@@ -317,7 +318,7 @@ class NetworkMonitorCore:
                         verify_ok = is_network_available(
                             test_sites=test_sites,
                             timeout=self.NETWORK_CHECK_TIMEOUT_SECONDS,
-                            require_both=False,
+                            require_both=strict_mode,
                         )
                     except Exception as exc:
                         self.log_message(f"登录后网络验证异常: {exc}", logging.WARNING)

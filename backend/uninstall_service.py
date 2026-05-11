@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import os
 import shutil
-import signal
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 USER_DATA_DIR = Path.home() / ".campus_network_auth"
-PID_FILE = USER_DATA_DIR / "campus_network_auth.pid"
 
 PLATFORM = sys.platform
 
@@ -36,15 +33,6 @@ class CleanupResult:
 def detect() -> list[CleanupItem]:
     """检测可清理项目。"""
     items: list[CleanupItem] = []
-
-    # 进程
-    pid = _check_running_pid()
-    if pid:
-        items.append(
-            CleanupItem("process", f"运行中的进程 (PID: {pid})", True, str(pid))
-        )
-    else:
-        items.append(CleanupItem("process", "运行中的进程", False))
 
     # 开机自启
     autostart = _check_autostart()
@@ -79,14 +67,6 @@ def perform(keys: list[str]) -> list[CleanupResult]:
     """执行清理。keys 为要清理的项目 key 列表。"""
     results: list[CleanupResult] = []
 
-    if "process" in keys:
-        pid = _check_running_pid()
-        if pid:
-            ok, msg = _stop_process(pid)
-            results.append(CleanupResult("process", "停止进程", ok, msg))
-        else:
-            results.append(CleanupResult("process", "停止进程", True, "进程未在运行"))
-
     if "autostart" in keys:
         ok, msg = _remove_autostart()
         results.append(CleanupResult("autostart", "移除开机自启", ok, msg))
@@ -107,19 +87,6 @@ def perform(keys: list[str]) -> list[CleanupResult]:
 # ==================== 内部实现 ====================
 
 
-def _check_running_pid() -> int | None:
-    if not PID_FILE.exists():
-        return None
-    try:
-        pid = int(PID_FILE.read_text(encoding="utf-8").strip())
-        if pid <= 0:
-            return None
-        os.kill(pid, 0)
-        return pid
-    except (ValueError, ProcessLookupError, PermissionError, OSError):
-        return None
-
-
 def _check_autostart() -> dict:
     try:
         sys.path.insert(0, str(PROJECT_ROOT))
@@ -134,24 +101,6 @@ def _check_autostart() -> dict:
             "method": "unknown",
             "location": "",
         }
-
-
-def _stop_process(pid: int) -> tuple[bool, str]:
-    try:
-        if PLATFORM == "win32":
-            os.system(f"taskkill /F /PID {pid} /T >nul 2>&1")
-        else:
-            os.kill(pid, signal.SIGTERM)
-            import time
-            time.sleep(0.5)
-            try:
-                os.kill(pid, 0)
-                os.kill(pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-        return True, f"已停止进程 PID={pid}"
-    except Exception as exc:
-        return False, f"停止进程失败: {exc}"
 
 
 def _remove_autostart() -> tuple[bool, str]:

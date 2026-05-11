@@ -155,7 +155,7 @@
         </svg>
         <div>
           <h3>卸载程序</h3>
-          <p class="uninstall-desc">清理开机自启、加密密钥、浏览器缓存等外部残留</p>
+          <p class="uninstall-desc">清理开机自启、用户数据、浏览器缓存等外部残留</p>
         </div>
       </div>
       <button class="btn btn-danger btn-sm" @click="openUninstall" :disabled="busy.uninstall">
@@ -174,7 +174,7 @@
           </svg>
           <div>
             <h3>卸载 Campus-Auth</h3>
-            <p class="uninstall-subtitle">选择要清理的项目。清理完成后，请手动删除项目目录。</p>
+            <p class="uninstall-subtitle">选择要清理的外部残留项目。</p>
           </div>
         </div>
 
@@ -193,7 +193,7 @@
             <span :class="r.success ? 'result-ok' : 'result-fail'">{{ r.success ? 'OK' : 'FAIL' }}</span>
             <span>{{ r.label }}: {{ r.message }}</span>
           </div>
-          <p class="uninstall-final-hint">请手动删除项目目录后关闭此页面。</p>
+          <p class="uninstall-final-hint">请关闭本程序，然后手动删除整个项目文件夹即可完成卸载。</p>
         </div>
 
         <div v-else class="uninstall-modal-body">
@@ -209,6 +209,9 @@
             </div>
             <span v-if="!it.exists" class="uninstall-item-tag">未检测到</span>
           </label>
+          <div class="uninstall-hint-box">
+            清理完成后，请先关闭本程序，再手动删除整个项目文件夹即可完成卸载。
+          </div>
         </div>
 
         <div v-if="!uninstall.scanning && !uninstall.results" class="uninstall-modal-footer">
