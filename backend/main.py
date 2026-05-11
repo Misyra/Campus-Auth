@@ -3,12 +3,18 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import mimetypes
 import os
 import re
 import sys
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+# Windows 上 mimetypes 模块可能无法正确识别 .js 的 MIME 类型，
+# 导致 type="module" 脚本因返回 text/plain 而被浏览器拒绝加载
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("application/javascript", ".mjs")
 
 from fastapi import (
     FastAPI,
