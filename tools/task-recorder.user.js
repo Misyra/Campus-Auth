@@ -51,6 +51,8 @@
   const state = {
     active: false,
     recording: false,
+    multiStepMode: false,       // 多步录制：开启后每次点击记录一个步骤，不自动停止
+    hiddenDetectionEnabled: true, // 隐藏元素检测：自动扫描容器内 display:none 的真实输入框
     steps: [],
     hoveredEl: null,
     selectedEl: null,
@@ -254,6 +256,17 @@
       background: linear-gradient(135deg, #2a1a4e 0%, #1a2a4e 100%);
       border: 1px solid #667eea; border-radius: 8px; padding: 10px 12px;
     }
+    #ca-recorder-panel .ca-toolbar { display: flex; gap: 6px; margin-bottom: 8px; }
+    #ca-recorder-panel .ca-toggle {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;
+      padding: 6px 8px; background: #2a2a3e; border: 1px solid #444;
+      border-radius: 8px; cursor: pointer; color: #888; font-size: 12px;
+      transition: all 0.2s; user-select: none;
+    }
+    #ca-recorder-panel .ca-toggle:hover { background: #333; }
+    #ca-recorder-panel .ca-toggle.active {
+      background: #2a2a5e; border-color: #667eea; color: #aab; box-shadow: 0 0 6px rgba(102,126,234,0.25);
+    }
   `);
 
   // ==================== 选择器生成 ====================
@@ -446,6 +459,109 @@
     };
   }
 
+  // ==================== 隐藏输入框检测 ====================
+  //
+  // 校园网认证页面常见的两种隐藏输入框模式：
+  //
+  // 模式1 — 深澜/Sangfor：可见的 type=text 假占位 + 隐藏的 type=password (display:none)
+  //   <input type="text" name="pwdLabel" placeholder="密码">
+  //   <input type="password" id="password" style="display:none;">
+  //
+  // 模式2 — 杭州康工 HK Posi：可见的 readonly tip + 隐藏的真实输入框
+  //   <input class="input_tip" readonly value="用户名Username" style="display:block;">
+  //   <input class="input" name="username" id="username" style="display:none;" type="text">
+  //
+  // detectHiddenRealInput 统一处理两种模式，返回隐藏真实输入框的选择器，或 null。
+  //
+  // 搜索策略：
+  //   1. 如果点击的元素本身隐藏 → 直接返回自身（force 模式填入）
+  //   2. 在容器内搜索匹配目标类型的隐藏 input
+  //   3. 在父元素内搜索（处理嵌套 div 如 HK Posi 的 userNameDiv）
+  //
+  function detectHiddenRealInput(el, stepType) {
+    // 策略1: 所选元素本身隐藏（理论不可达，但做防御）
+    if (isElementHidden(el) && stepType !== "click" && stepType !== "submit") {
+      if (el.id) return `#${CSS.escape(el.id)}`;
+      if (el.name) return `input[name="${CSS.escape(el.name)}"]`;
+    }
+
+    // 确定要搜索的 input type
+    const needPassword = stepType === "password";
+    let typeSelector;
+    if (needPassword) {
+      typeSelector = 'input[type="password"]';
+    } else {
+      // username / captcha_input 等：text 类输入框
+      typeSelector = 'input[type="text"], input:not([type])';
+    }
+
+    // 搜索范围：从特定容器类名到通用父元素
+    const containerSelectors = [
+      "li, form",
+      ".ant-input-affix-wrapper",       // 模式1: 深澜
+      "div[id$='_posi']",              // 模式2: HK Posi 的 username_hk_posi
+      ".login_frame_hang_1",           // 模式2: HK Posi 容器类
+      ".input-group, .form-group",
+    ];
+    let container = null;
+    for (const sel of containerSelectors) {
+      container = el.closest(sel);
+      if (container) break;
+    }
+    if (!container) container = el.parentElement;
+    if (!container) return null;
+
+    // 在容器及父元素中搜索隐藏的匹配输入框
+    const searchRoots = [container];
+    // 模式2：比如点了 username_tip，真实 input 在父元素 #userNameDiv 里
+    const parent = el.parentElement;
+    if (parent && !searchRoots.includes(parent)) {
+      searchRoots.push(parent);
+    }
+
+    for (const root of searchRoots) {
+      if (!root) continue;
+      const candidates = root.querySelectorAll(typeSelector);
+      for (const input of candidates) {
+        if (input === el) continue;
+        if (input.readOnly) continue;  // 跳过 tip 本身
+        if (!isElementHidden(input)) continue;
+
+        if (input.id) return `#${CSS.escape(input.id)}`;
+        if (input.name) return `input[name="${CSS.escape(input.name)}"]`;
+      }
+    }
+
+    // 兜底：在容器内搜索所有隐藏 input（不限类型），适用于 type 属性缺失的情况
+    for (const root of searchRoots) {
+      if (!root) continue;
+      const allHidden = root.querySelectorAll("input");
+      for (const input of allHidden) {
+        if (input === el) continue;
+        if (input.readOnly) continue;
+        if (!isElementHidden(input)) continue;
+        // 排除明显不对的类型
+        if (input.type === "submit" || input.type === "button" || input.type === "checkbox" || input.type === "radio") continue;
+
+        if (input.id) return `#${CSS.escape(input.id)}`;
+        if (input.name) return `input[name="${CSS.escape(input.name)}"]`;
+      }
+    }
+
+    return null;
+  }
+
+  // 检查元素是否实际隐藏（综合考虑 display:none / visibility:hidden / offsetParent）
+  function isElementHidden(el) {
+    if (!el) return true;
+    if (el.offsetParent === null) return true;
+    try {
+      const s = getComputedStyle(el);
+      if (s.display === "none" || s.visibility === "hidden") return true;
+    } catch (_) {}
+    return false;
+  }
+
   // ==================== UI: 提示框 ====================
 
   function showTooltip(el, x, y) {
@@ -466,7 +582,7 @@
       ? `<div class="ca-tt-hint">⚠️ 位于 frame/iframe 内${info.iframe.crossOrigin ? "（跨域）" : ""}</div>`
       : "";
 
-    state.tooltip.innerHTML = `${tag}${id}${cls}${iframeHint}`;
+    state.tooltip.innerHTML = `${tag}${id}${cls}${iframeHint}<div class="ca-tt-hint">🖱️ 点击记录  |  ⏎ Enter 无click记录</div>`;
     state.tooltip.style.left = `${Math.min(x + 12, window.innerWidth - 420)}px`;
     state.tooltip.style.top = `${Math.min(y + 12, window.innerHeight - 100)}px`;
     state.tooltip.style.display = "block";
@@ -485,13 +601,35 @@
     state.panel.id = "ca-recorder-panel";
     state.panel.innerHTML = `
       <div class="ca-header" id="ca-drag-handle">
-        <h3>🎬 Campus-Auth 任务录制器</h3>
-        <small>v1.0 — 选取元素，生成任务配置</small>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <h3>🎬 Campus-Auth 任务录制器</h3>
+            <small>v1.0 — 选取元素，生成任务配置</small>
+          </div>
+          <button id="ca-btn-help" style="width:26px;height:26px;border-radius:50%;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;cursor:pointer;font-size:14px;font-weight:bold;line-height:1;" title="使用说明">?</button>
+        </div>
       </div>
       <div class="ca-body">
         <div class="ca-section">
           <div class="ca-section-title">选择步骤类型后点击页面元素</div>
           <div class="ca-step-grid" id="ca-step-grid"></div>
+        </div>
+        <div class="ca-section">
+          <div class="ca-toolbar">
+            <span class="ca-toggle" id="ca-toggle-multistep" title="开启后每次点击记录一步，不会自动停止录制">🔁 多步录制</span>
+            <span class="ca-toggle active" id="ca-toggle-detect" title="开启后自动检测容器内 display:none 的隐藏输入框">🔍 隐藏检测</span>
+          </div>
+          <div style="font-size:11px;color:#666;margin-bottom:4px;">💡 <b>Esc</b> 取消  |  <b>Enter</b> 无 click 记录元素
+            <span id="ca-help-toggle" style="cursor:pointer;color:#667eea;margin-left:6px;text-decoration:underline;">详细说明 ▾</span>
+          </div>
+          <div id="ca-help-detail" style="display:none;font-size:11px;color:#888;background:#1f1f30;border-radius:6px;padding:8px 10px;margin-bottom:8px;line-height:1.6;">
+            <b>🖱️ 点击</b> — 记录元素并重放 click 给页面（下拉框会展开/按钮会触发）<br>
+            <b>⏎ Enter</b> — 仅记录元素，<b>不</b>发送 click 给页面（悬停菜单、下拉选项不会关闭）<br>
+            <b>Esc</b> — 取消当前录制<br>
+            <b>🔁 多步录制</b> — 开启后每次点击/Enter 记录一步，不会自动停止，需手动 Esc<br>
+            <b>🔍 隐藏检测</b> — 开启后自动扫描容器内 <code style="color:#FF9800;">display:none</code> 的真实输入框<br>
+            <span style="color:#667eea;">💡 运营商下拉框建议：打开多步录制 → 点下拉框 → 切「点击元素」→ 点选项</span>
+          </div>
         </div>
         <div class="ca-section">
           <div class="ca-section-title">已录制步骤</div>
@@ -538,6 +676,33 @@
       grid.appendChild(btn);
     }
 
+    // 多步录制 / 隐藏检测 切换按钮
+    const toggleMulti = state.panel.querySelector("#ca-toggle-multistep");
+    const toggleDetect = state.panel.querySelector("#ca-toggle-detect");
+    const refreshToggles = () => {
+      toggleMulti.classList.toggle("active", state.multiStepMode);
+      toggleDetect.classList.toggle("active", state.hiddenDetectionEnabled);
+    };
+    refreshToggles();
+    toggleMulti.addEventListener("click", () => {
+      state.multiStepMode = !state.multiStepMode;
+      refreshToggles();
+      if (state.multiStepMode) {
+        setStatus("🔁 多步录制已开启 — 连续点击记录，按 Esc 停止");
+      } else {
+        setStatus("多步录制已关闭");
+      }
+    });
+    toggleDetect.addEventListener("click", () => {
+      state.hiddenDetectionEnabled = !state.hiddenDetectionEnabled;
+      refreshToggles();
+      if (state.hiddenDetectionEnabled) {
+        setStatus("🔍 隐藏元素检测已开启");
+      } else {
+        setStatus("隐藏元素检测已关闭");
+      }
+    });
+
     // 生成条件类型按钮
     const condGrid = state.panel.querySelector("#ca-cond-grid");
     for (const ct of CONDITION_TYPES) {
@@ -555,6 +720,16 @@
     state.panel.querySelector("#ca-btn-export-json").addEventListener("click", () => exportJSON());
     state.panel.querySelector("#ca-btn-export-md").addEventListener("click", () => exportMarkdown());
     state.panel.querySelector("#ca-btn-close").addEventListener("click", deactivate);
+    state.panel.querySelector("#ca-btn-help").addEventListener("click", showHelpModal);
+
+    // 帮助详情展开/折叠
+    const helpToggle = state.panel.querySelector("#ca-help-toggle");
+    const helpDetail = state.panel.querySelector("#ca-help-detail");
+    helpToggle.addEventListener("click", () => {
+      const open = helpDetail.style.display === "block";
+      helpDetail.style.display = open ? "none" : "block";
+      helpToggle.textContent = open ? "详细说明 ▾" : "详细说明 ▴";
+    });
 
     // 拖拽
     makeDraggable(state.panel, state.panel.querySelector("#ca-drag-handle"));
@@ -562,11 +737,10 @@
 
   function selectStepType(type) {
     state.currentStepType = type;
-    // 高亮按钮
     state.panel.querySelectorAll(".ca-step-btn").forEach(b => {
       b.classList.toggle("active", b.dataset.type === type);
     });
-    setStatus(`已选择 [${STEP_TYPES[type].label}]，点击页面元素`, "recording");
+    setStatus(`已选择 [${STEP_TYPES[type].label}]，点击页面元素  |  Enter=无click记录  Esc=取消`, "recording");
     state.recording = true;
   }
 
@@ -580,16 +754,22 @@
     const list = state.panel.querySelector("#ca-recorded-list");
     list.innerHTML = state.steps
       .map(
-        (s, i) => `
+        (s, i) => {
+          const displaySelector = s.hiddenRealSelector
+            ? (s.tipSelector ? `${s.tipSelector} 👆 → ${s.hiddenRealSelector}` : `${s.hiddenRealSelector} ⚠️`)
+            : (s.bestSelector || "(无选择器)");
+          const warningIcon = s.hiddenRealSelector ? (s.tipSelector ? " 👆🔒" : " 🔒") : "";
+          return `
       <li class="ca-recorded-item">
         <span class="ca-idx">${i + 1}</span>
         <div class="ca-info">
-          <div class="ca-label">${STEP_TYPES[s.type]?.icon || "📝"} ${STEP_TYPES[s.type]?.label || s.type}: ${s.description || ""}</div>
-          <div class="ca-selector" title="${s.bestSelector || ""}">${s.bestSelector || "(无选择器)"}</div>
+          <div class="ca-label">${STEP_TYPES[s.type]?.icon || "📝"} ${STEP_TYPES[s.type]?.label || s.type}: ${s.description || ""}${warningIcon}</div>
+          <div class="ca-selector" title="${displaySelector}">${displaySelector}</div>
         </div>
         <button class="ca-del" data-idx="${i}" title="删除">✕</button>
       </li>
-    `
+    `;
+        }
       )
       .join("");
 
@@ -802,11 +982,19 @@
     state.selectedEl = el;
 
     const info = getElementInfo(el);
-    state.recording = false;
     hideTooltip();
 
-    // 根据步骤类型走不同流程
+    // 调用处理函数（carrier 可能保持录制状态）
     handleElementSelected(el, info);
+
+    // 如果录制仍开启（carrier 两阶段第一阶段），重放点击触发页面行为（打开下拉框）
+    if (state.recording) {
+      const newEvt = new MouseEvent("click", {
+        bubbles: true, cancelable: true, view: window,
+        clientX: e.clientX, clientY: e.clientY,
+      });
+      el.dispatchEvent(newEvt);
+    }
   }
 
   function handleElementSelected(el, info) {
@@ -820,6 +1008,7 @@
         selector: bestSelector,
         label: `存在元素: ${bestSelector}`,
       });
+      state.recording = false;
       state.selectedEl?.classList.remove("ca-highlight-selected");
       state.selectedEl = null;
       return;
@@ -864,6 +1053,36 @@
     const bestSelector = info.selectors[0]?.value || "";
     const selectorCandidates = info.selectors.map(s => s.value);
 
+    // 检测隐藏输入框模式（深澜 / 杭州康工 HK Posi 等）
+    let hiddenRealSelector = null;
+    let hiddenWarning = "";
+    const isInputStep = type === "username" || type === "password" || type === "captcha_input";
+
+    if (isInputStep && state.hiddenDetectionEnabled) {
+      // 触发条件：
+      //   1. 元素本身 display:none
+      //   2. 密码步骤但点中的是 type="text"（深澜/Sangfor）
+      //   3. 选中元素是 readonly/disabled 占位（HK Posi 的 input_tip）
+      //   4. 选中元素是容器 div/span（HK Posi 的 _hk_posi 外层容器）
+      const typeWrong = (type === "password" && info.attrs.type !== "password");
+      const isTip = el.readOnly || el.disabled;
+      const isContainer = el.tagName !== "INPUT" && el.tagName !== "TEXTAREA";
+      if (isElementHidden(el) || typeWrong || isTip || isContainer) {
+        hiddenRealSelector = detectHiddenRealInput(el, type);
+        if (hiddenRealSelector) {
+          const reasons = [];
+          if (isElementHidden(el)) reasons.push("所选元素 display:none");
+          if (typeWrong) reasons.push(`所选元素 type="${info.attrs.type || "text"}" 非预期`);
+          if (isTip) reasons.push("所选元素为 readonly 占位");
+          if (isContainer && !isTip && !isElementHidden(el)) reasons.push("所选元素为容器 div，自动扫描内部隐藏输入框");
+          hiddenWarning = `⚠️ 检测到隐藏输入框！${reasons.join("；")}。真实输入框 ${hiddenRealSelector} 已自动识别，导出时将使用 force 模式。`;
+        }
+      }
+    }
+
+    // 如果真实输入框和点击元素不同，记录 tip 选择器（用于生成点击步骤触发门户 JS）
+    const tipSelector = hiddenRealSelector && hiddenRealSelector !== bestSelector ? bestSelector : null;
+
     const step = {
       type,
       description,
@@ -873,6 +1092,10 @@
       iframe: info.iframe,
       attrs: info.attrs,
       text: info.text,
+      visible: info.visible,
+      hiddenRealSelector,
+      hiddenWarning,
+      tipSelector,
     };
 
     state.steps.push(step);
@@ -880,9 +1103,25 @@
     state.selectedEl = null;
     updateRecordedList();
     saveState();
-    setStatus(`已添加: ${description}`);
-    state.recording = false;
-    state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+    if (hiddenWarning) {
+      setStatus(hiddenWarning, "recording");
+      setTimeout(() => {
+        if (state.panel && state.recording) setStatus(`已添加: ${description}`);
+      }, 6000);
+    } else {
+      setStatus(`已添加: ${description}`);
+    }
+    if (!state.multiStepMode) {
+      state.recording = false;
+      state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+    }
+    // 多步模式下保持录制，状态提示
+    if (state.multiStepMode && state.recording) {
+      const nextHint = state.currentStepType
+        ? `继续 [${STEP_TYPES[state.currentStepType]?.label || state.currentStepType}] — 点击下一个元素或按 Esc 停止`
+        : "点击下一个元素或选择步骤类型，按 Esc 停止";
+      setStatus(`🔁 ${nextHint}`, "recording");
+    }
   }
 
   // ==================== 弹窗 ====================
@@ -997,26 +1236,53 @@
     const captchaType = state.steps.find(s => s.captchaType)?.captchaType || "4digit";
 
     for (const s of state.steps) {
-      const stepId = `s${stepIdx++}`;
+      let stepId = `s${stepIdx++}`;
 
       if (s.type === "username") {
-        steps.push({
+        // 如果点击的是 tip 占位，先插入 click 步骤触发门户 JS 显示真实输入框
+        if (s.tipSelector) {
+          steps.push({
+            id: stepId,
+            type: "click",
+            description: "点击账号占位（触发真实输入框显示）",
+            selector: s.tipSelector,
+          });
+          stepId = `s${stepIdx++}`;
+        }
+        const uSel = s.hiddenRealSelector || s.bestSelector;
+        const uForce = !!s.hiddenRealSelector;
+        const uStep = {
           id: stepId,
           type: "input",
-          description: "输入账号",
-          selector: s.bestSelector,
+          description: "输入账号" + (uForce ? " (force 模式，目标隐藏)" : ""),
+          selector: uSel,
           value: "{{USERNAME}}",
           clear: true,
-        });
+        };
+        if (uForce) uStep.force = true;
+        steps.push(uStep);
       } else if (s.type === "password") {
-        steps.push({
+        if (s.tipSelector) {
+          steps.push({
+            id: stepId,
+            type: "click",
+            description: "点击密码占位（触发真实输入框显示）",
+            selector: s.tipSelector,
+          });
+          stepId = `s${stepIdx++}`;
+        }
+        const pwSel = s.hiddenRealSelector || s.bestSelector;
+        const needForce = !!s.hiddenRealSelector;
+        const pwStep = {
           id: stepId,
           type: "input",
-          description: "输入密码",
-          selector: s.bestSelector,
+          description: "输入密码" + (needForce ? " (force 模式，目标隐藏)" : ""),
+          selector: pwSel,
           value: "{{PASSWORD}}",
           clear: true,
-        });
+        };
+        if (needForce) pwStep.force = true;
+        steps.push(pwStep);
       } else if (s.type === "carrier") {
         steps.push({
           id: stepId,
@@ -1150,6 +1416,11 @@
 
       if (s.captchaType) {
         md += `| 验证码类型 | ${CAPTCHA_TYPES.find(t => t.value === s.captchaType)?.label || s.captchaType} |\n`;
+      }
+
+      if (s.hiddenRealSelector) {
+        const tipInfo = s.tipSelector ? `，先点击 \`${s.tipSelector}\` 触发显示` : "";
+        md += `| ⚠️ 隐藏输入框 | \`${s.hiddenRealSelector}\` — 所见元素为假占位，真实输入框被隐藏，导出时已自动使用${tipInfo} |\n`;
       }
 
       if (s.attrs) {
@@ -1364,6 +1635,131 @@
     });
   }
 
+  // ==================== 使用说明 ====================
+
+  function showHelpModal() {
+    const overlay = document.createElement("div");
+    overlay.className = "ca-modal-overlay";
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+    overlay.innerHTML = `
+      <div class="ca-modal" style="width:600px;max-height:82vh;overflow-y:auto;padding:24px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h4 style="margin:0;font-size:18px;">📖 Campus-Auth 任务录制器 — 使用说明</h4>
+          <button id="ca-help-close" style="background:none;border:none;color:#888;cursor:pointer;font-size:20px;">✕</button>
+        </div>
+
+        <div style="line-height:1.8;color:#ccc;">
+
+          <h5 style="color:#667eea;margin:14px 0 6px;">一、启动与关闭</h5>
+          <ul style="margin:4px 0;padding-left:18px;">
+            <li>快捷键 <b style="color:#fff;">Ctrl+Shift+R</b> 打开或关闭录制器面板</li>
+            <li>页面右下角浮动按钮 🎬 也可点击打开</li>
+            <li>面板可拖拽（按住顶部蓝色标题栏移动）</li>
+          </ul>
+
+          <h5 style="color:#667eea;margin:14px 0 6px;">二、基本录制流程</h5>
+          <ol style="margin:4px 0;padding-left:18px;">
+            <li>点击面板中的步骤类型按钮（如「账号输入框」）</li>
+            <li>鼠标移到页面目标元素上，会显示蓝色高亮 + 选择器信息</li>
+            <li><b style="color:#fff;">点击</b>元素 → 记录步骤 → 显示在「已录制步骤」列表中</li>
+            <li>重复以上步骤，依次录完所有步骤</li>
+            <li>录完后点击 <b style="color:#fff;">✅ 完成登录</b>，设置登录成功条件</li>
+            <li>点击 <b style="color:#fff;">📋 导出 JSON</b> 复制到剪贴板，粘贴到 Campus-Auth 中</li>
+          </ol>
+
+          <h5 style="color:#667eea;margin:14px 0 6px;">三、步骤类型说明</h5>
+          <table style="width:100%;font-size:12px;border-collapse:collapse;margin:4px 0;">
+            <tr style="color:#aaa;"><td style="padding:3px 6px;">按钮</td><td style="padding:3px 6px;">用途</td><td style="padding:3px 6px;">导出为</td></tr>
+            <tr><td style="padding:3px 6px;">👤 账号输入框</td><td style="padding:3px 6px;">点击用户名输入区域</td><td style="padding:3px 6px;"><code>input</code> + {{USERNAME}}</td></tr>
+            <tr><td style="padding:3px 6px;">🔒 密码输入框</td><td style="padding:3px 6px;">点击密码输入区域</td><td style="padding:3px 6px;"><code>input</code> + {{PASSWORD}}</td></tr>
+            <tr><td style="padding:3px 6px;">📶 运营商选择</td><td style="padding:3px 6px;">点击运营商下拉框</td><td style="padding:3px 6px;"><code>select</code> + {{ISP}}</td></tr>
+            <tr><td style="padding:3px 6px;">🖼️ 验证码图片</td><td style="padding:3px 6px;">点击验证码图片</td><td style="padding:3px 6px;"><code>screenshot</code> 步骤</td></tr>
+            <tr><td style="padding:3px 6px;">✏️ 验证码输入</td><td style="padding:3px 6px;">点击验证码输入框</td><td style="padding:3px 6px;"><code>ocr</code> 识别 + 填入</td></tr>
+            <tr><td style="padding:3px 6px;">🚀 提交按钮</td><td style="padding:3px 6px;">点击登录/提交按钮</td><td style="padding:3px 6px;"><code>click</code> 步骤</td></tr>
+            <tr><td style="padding:3px 6px;">👆 点击元素</td><td style="padding:3px 6px;">点击任意元素</td><td style="padding:3px 6px;"><code>click</code> 步骤</td></tr>
+            <tr><td style="padding:3px 6px;">⏳ 等待元素</td><td style="padding:3px 6px;">等待某元素出现</td><td style="padding:3px 6px;"><code>wait</code> 步骤</td></tr>
+            <tr><td style="padding:3px 6px;">⚙️ 执行JS</td><td style="padding:3px 6px;">输入 JS 代码</td><td style="padding:3px 6px;"><code>eval</code> 步骤</td></tr>
+            <tr><td style="padding:3px 6px;">📝 自定义</td><td style="padding:3px 6px;">自定义描述与选择器</td><td style="padding:3px 6px;">通用步骤</td></tr>
+          </table>
+
+          <h5 style="color:#667eea;margin:14px 0 6px;">四、功能开关</h5>
+          <ul style="margin:4px 0;padding-left:18px;">
+            <li><b style="color:#fff;">🔁 多步录制</b> — 开启后每次点击/Enter 记录一步，不会自动停止，适合连续录制多个步骤。关闭后每次只记录一步。</li>
+            <li><b style="color:#fff;">🔍 隐藏检测</b> — 开启后，当点击容器 <code>div</code> 或 <code>readonly</code> 占位元素时，自动扫描内部 <code>display:none</code> 的隐藏输入框（常见于深澜/Sangfor 和杭州康工 HK Posi 认证页面）。检测到后导出自动使用真实隐藏输入框 + <code>force</code> 模式。</li>
+          </ul>
+
+          <h5 style="color:#667eea;margin:14px 0 6px;">五、键盘快捷键</h5>
+          <table style="width:100%;font-size:12px;border-collapse:collapse;margin:4px 0;">
+            <tr style="color:#aaa;"><td style="padding:3px 6px;">按键</td><td style="padding:3px 6px;">功能</td><td style="padding:3px 6px;">说明</td></tr>
+            <tr><td style="padding:3px 6px;"><b style="color:#fff;">Ctrl+Shift+R</b></td><td style="padding:3px 6px;">打开/关闭面板</td><td style="padding:3px 6px;">全局快捷键</td></tr>
+            <tr><td style="padding:3px 6px;"><b style="color:#fff;">Esc</b></td><td style="padding:3px 6px;">取消当前录制</td><td style="padding:3px 6px;">清除选中状态，停止录制</td></tr>
+            <tr><td style="padding:3px 6px;"><b style="color:#fff;">Enter</b></td><td style="padding:3px 6px;">无 click 记录</td><td style="padding:3px 6px;">记录悬停元素但不发送 click 给页面（下拉菜单保持打开）</td></tr>
+          </table>
+
+          <h5 style="color:#667eea;margin:14px 0 6px;">六、典型场景</h5>
+
+          <p style="margin:4px 0;"><b style="color:#fff;">场景 A：普通账号密码登录</b></p>
+          <ol style="margin:0 0 8px;padding-left:18px;font-size:12px;">
+            <li>点「账号输入框」→ 点页面上账号框</li>
+            <li>点「密码输入框」→ 点页面上密码框</li>
+            <li>点「提交按钮」→ 点页面登录按钮</li>
+            <li>点「✅ 完成登录」→ 设置成功条件 → 导出</li>
+          </ol>
+
+          <p style="margin:4px 0;"><b style="color:#fff;">场景 B：运营商下拉框（自定义 UI，非原生 select）</b></p>
+          <ol style="margin:0 0 8px;padding-left:18px;font-size:12px;">
+            <li>点「运营商选择」→ 点下拉框触发器</li>
+            <li>下拉框弹出后，切到「点击元素」→ <b style="color:#fff;">用 Enter 键</b>点选项（避免点击关掉下拉框）</li>
+            <li>点「提交按钮」→ 点登录按钮</li>
+            <li>完成 → 导出</li>
+          </ol>
+
+          <p style="margin:4px 0;"><b style="color:#fff;">场景 C：隐藏输入框模式（深澜/HK Posi）</b></p>
+          <ol style="margin:0 0 8px;padding-left:18px;font-size:12px;">
+            <li>确保 <b style="color:#fff;">🔍 隐藏检测</b> 已开启</li>
+            <li>点「账号输入框」→ 点页面上账号占位区域（div 容器或 readonly tip）</li>
+            <li>录制器自动检测隐藏的真实输入框，列表中显示 ⚠️ 标记</li>
+            <li>点「密码输入框」→ 同样操作</li>
+            <li>导出 JSON 会自动生成先 click 占位 + force 填隐藏框的步骤</li>
+          </ol>
+
+          <h5 style="color:#667eea;margin:14px 0 6px;">七、登录成功条件</h5>
+          <ul style="margin:4px 0;padding-left:18px;">
+            <li><b style="color:#fff;">页面跳转</b> — 登录后 URL 包含的关键词（如 <code>success|welcome</code>）</li>
+            <li><b style="color:#fff;">页面文字</b> — 登录后页面出现的文字（如「登录成功」）</li>
+            <li><b style="color:#fff;">页面元素</b> — 登录后出现的特定元素（点击即可记录其选择器）</li>
+            <li><b style="color:#fff;">跳过</b> — 不设置条件，步骤全执行完即视为成功</li>
+          </ul>
+
+          <h5 style="color:#667eea;margin:14px 0 6px;">八、导出格式</h5>
+          <ul style="margin:4px 0;padding-left:18px;">
+            <li><b style="color:#fff;">📋 导出 JSON</b> — 直接生成 Campus-Auth 可用的任务 JSON，复制到剪贴板后粘贴到任务编辑器</li>
+            <li><b style="color:#fff;">📄 导出文档</b> — 生成 Markdown 文档，包含步骤详情、选择器、元素属性等完整信息，适合提交 Issue 或分享给社区</li>
+          </ul>
+
+          <h5 style="color:#667eea;margin:14px 0 6px;">九、选择器优先级</h5>
+          <p style="margin:4px 0;font-size:12px;">录制器按以下优先级生成选择器：<code>#id</code> &gt; <code>[name="..."]</code> &gt; <code>[type="..."]</code> &gt; <code>[placeholder="..."]</code> &gt; 文本内容 &gt; CSS 路径 &gt; XPath。多个选择器候选会全部保留在 JSON 中，执行时依次尝试。</p>
+
+          <h5 style="color:#667eea;margin:14px 0 6px;">十、技巧与注意事项</h5>
+          <ul style="margin:4px 0;padding-left:18px;font-size:12px;">
+            <li>录制状态会<b style="color:#fff;">自动保存</b>到油猴存储，刷新页面后自动恢复（2 小时内有效）</li>
+            <li>如果元素在 <b style="color:#fff;">iframe</b> 内部，录制器会自动检测并记录 iframe 信息</li>
+            <li>连续录制多个步骤时建议开启 <b style="color:#fff;">🔁 多步录制</b></li>
+            <li>下拉菜单内的选项建议用 <b style="color:#fff;">Enter</b> 键选取（点击会关闭菜单）</li>
+            <li>如果浮层按钮/面板被页面 JS 冲掉，录制器会<b style="color:#fff;">自动恢复</b>（DOM 守护）</li>
+            <li>导出前可在列表中点击 ✕ 删除不需要的步骤</li>
+          </ul>
+
+          <p style="margin-top:16px;padding-top:12px;border-top:1px solid #333;font-size:11px;color:#666;text-align:center;">
+            Campus-Auth 任务录制器 v1.0 · <a href="https://github.com/Misyra/Campus-Auth" target="_blank" style="color:#667eea;">GitHub</a>
+          </p>
+        </div>
+      </div>
+    `;
+    state.panel.appendChild(overlay);
+    overlay.querySelector("#ca-help-close").addEventListener("click", () => overlay.remove());
+  }
+
   function activate() {
     if (state.active) return;
     state.active = true;
@@ -1405,18 +1801,153 @@
     if (e.key === "Escape") {
       if (state.recording) {
         state.recording = false;
+        state.currentStepType = null;
         hideTooltip();
         state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+        if (state.hoveredEl) {
+          state.hoveredEl.classList.remove("ca-highlight");
+          state.hoveredEl = null;
+        }
         setStatus("已取消选择");
         e.preventDefault();
         e.stopPropagation();
       }
+    }
+    // Enter 键：录制模式下记录悬停元素（不触发 click，避免关闭下拉框/弹出菜单）
+    if (e.key === "Enter" && state.recording && state.hoveredEl && state.currentStepType) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const el = state.hoveredEl;
+      const info = getElementInfo(el);
+      const type = state.currentStepType;
+      const optText = (el.textContent || "").trim().substring(0, 50);
+
+      addStepFromElement(type, el, info, optText || STEP_TYPES[type]?.label || "");
+
+      if (state.hoveredEl) {
+        state.hoveredEl.classList.remove("ca-highlight");
+        state.hoveredEl = null;
+      }
+      updateRecordedList();
+      saveState();
+      setStatus(`✅ Enter 记录: ${optText || info.tag}`);
     }
     // Ctrl+Shift+R 切换面板
     if (e.ctrlKey && e.shiftKey && e.key === "R") {
       state.active ? deactivate() : activate();
       e.preventDefault();
     }
+  }
+
+  // ==================== DOM 守护：防止页面框架清空注入元素 ====================
+
+  // 深澜/Sangfor 等门户在 document-idle 后仍会操作 body.innerHTML，
+  // 导致浮动按钮和面板被移除。用 MutationObserver + 定时轮询双保险守护。
+  const domGuard = {
+    _elems: new Set(),    // 需要守护的 DOM 元素
+    _observer: null,
+    _interval: 0,
+    _pendingRestore: false,
+
+    register(el) {
+      if (!el || el.nodeType !== 1) return;
+      el.__caGuard = true;
+      this._elems.add(el);
+    },
+
+    unregister(el) {
+      if (el) { delete el.__caGuard; }
+      this._elems.delete(el);
+    },
+
+    _restoreAll() {
+      if (this._pendingRestore) return;
+      this._pendingRestore = true;
+      // requestAnimationFrame 避免在一次微任务中反复重挂
+      requestAnimationFrame(() => {
+        this._pendingRestore = false;
+        const body = document.body;
+        if (!body) return;
+        for (const el of this._elems) {
+          if (el && !el.isConnected) {
+            try { body.appendChild(el); } catch (_) {}
+          }
+        }
+        // 面板激活状态也检查一下
+        if (state.active && state.panel && !state.panel.isConnected && body) {
+          try { body.appendChild(state.panel); } catch (_) {}
+        }
+        // 如果面板还在，重新绑定事件（防止 body 被整体替换后事件代理失效）
+        if (state.active && state.panel) {
+          ensureGlobalListeners();
+        }
+      });
+    },
+
+    start() {
+      // 策略1: MutationObserver 监听 body 子节点变动
+      const body = document.body;
+      if (body && !this._observer) {
+        try {
+          this._observer = new MutationObserver((records) => {
+            for (const r of records) {
+              for (const node of r.removedNodes) {
+                if (node.nodeType === 1) {
+                  // 直接移除
+                  if (node.__caGuard) this._restoreAll();
+                  // 子节点中包含守护元素
+                  if (node.querySelectorAll) {
+                    const lost = node.querySelectorAll("[__caGuard]");
+                    if (lost.length > 0) this._restoreAll();
+                  }
+                }
+              }
+            }
+          });
+          this._observer.observe(body, { childList: true, subtree: true });
+        } catch (_) {}
+      }
+
+      // 策略2: 每 2 秒兜底巡检
+      if (!this._interval) {
+        this._interval = setInterval(() => {
+          let missing = false;
+          for (const el of this._elems) {
+            if (el && !el.isConnected) { missing = true; break; }
+          }
+          if (!missing && state.active && state.panel && !state.panel.isConnected) {
+            missing = true;
+          }
+          if (missing) this._restoreAll();
+        }, 2000);
+      }
+    },
+
+    stop() {
+      if (this._observer) { this._observer.disconnect(); this._observer = null; }
+      if (this._interval) { clearInterval(this._interval); this._interval = 0; }
+      this._elems.clear();
+    },
+  };
+
+  // 全局事件监听可能因 body 替换而失效，统一管理
+  let _globalListenersAttached = false;
+  function ensureGlobalListeners() {
+    if (_globalListenersAttached) return;
+    document.addEventListener("mouseover", onHover, true);
+    document.addEventListener("click", onClick, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    attachAllFrameListeners();
+    _globalListenersAttached = true;
+  }
+
+  function removeGlobalListeners() {
+    document.removeEventListener("mouseover", onHover, true);
+    document.removeEventListener("click", onClick, true);
+    document.removeEventListener("keydown", onKeyDown, true);
+    detachAllFrameListeners();
+    _globalListenersAttached = false;
   }
 
   // ==================== 启动 ====================
@@ -1426,6 +1957,24 @@
   if (savedData) {
     restoreFromSaved(savedData);
   }
+
+  // 修改 activate/deactivate 使用新的监听器管理和 DOM 守护
+  const _origActivate = activate;
+  const _origDeactivate = deactivate;
+
+  activate = function () {
+    if (state.active) return;
+    _origActivate();
+    _globalListenersAttached = true;  // _origActivate 内部已绑定事件
+    if (state.panel) domGuard.register(state.panel);
+  };
+
+  deactivate = function () {
+    if (!state.active) return;
+    if (state.panel) domGuard.unregister(state.panel);
+    _origDeactivate();
+    _globalListenersAttached = false;
+  };
 
   // 添加浮动入口按钮
   const entryBtn = document.createElement("div");
@@ -1453,4 +2002,7 @@
   entryBtn.addEventListener("mouseleave", () => (entryBtn.style.transform = "scale(1)"));
   entryBtn.addEventListener("click", () => (state.active ? deactivate() : activate()));
   document.body.appendChild(entryBtn);
+
+  domGuard.register(entryBtn);
+  domGuard.start();
 })();

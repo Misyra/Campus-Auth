@@ -421,12 +421,16 @@ class InputHandler(StepHandler):
         value = params.get("value", "")
         clear = params.get("clear", True)
         timeout = step.timeout or 10000
+        force = params.get("force", False)
 
         if not selector:
             return False, "输入步骤需要 selector"
 
         ctx = await self._resolve_frame(page, step)
-        logger.info("输入 → %s (clear=%s)", selector, clear)
+        logger.info("输入 → %s (clear=%s, force=%s)", selector, clear, force)
+
+        if force:
+            return await self._force_input(ctx, selector, value, clear, timeout)
 
         element = await self._find_element(ctx, selector, timeout)
         if not element:
@@ -436,6 +440,32 @@ class InputHandler(StepHandler):
             await element.fill("", timeout=timeout)
         await element.fill(value, timeout=timeout)
         logger.info("输入完成 → %s", selector)
+        return True, ""
+
+    async def _force_input(
+        self, ctx, selector: str, value: str, clear: bool, timeout: int
+    ) -> tuple[bool, str]:
+        """强制输入：跳过可见性检查，通过 JS 设置值并触发事件。
+        适用于 display:none / visibility:hidden 的隐藏输入框。
+        """
+        timeout_sec = timeout / 1000
+        element = ctx.locator(selector).first
+        await element.wait_for(state="attached", timeout=timeout_sec)
+        
+
+        if clear:
+            await element.evaluate("el => { el.value = ''; }")
+        await element.evaluate(
+            "(el, val) => {"
+            "  const nativeSet = Object.getOwnPropertyDescriptor("
+            "    HTMLInputElement.prototype, 'value').set;"
+            "  nativeSet.call(el, val);"
+            "  el.dispatchEvent(new Event('input', {bubbles:true}));"
+            "  el.dispatchEvent(new Event('change', {bubbles:true}));"
+            "}",
+            value,
+        )
+        logger.info("强制输入完成 → %s", selector)
         return True, ""
 
 
@@ -953,6 +983,7 @@ class TaskExecutor:
 
         try:
             await self._auto_navigate(page)
+            await page.wait_for_timeout(2000)  # 导航后等待 2s 页面稳定
 
             for i, step in enumerate(self.config.steps):
                 # 任务超时检查
@@ -971,7 +1002,7 @@ class TaskExecutor:
                     )
                     continue
                 if i > 0:
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(1.0)  # 步骤间强制间隔 1s
                 step_start = _time.perf_counter()
                 success, message = await self._execute_step(page, step)
                 step_elapsed = (_time.perf_counter() - step_start) * 1000
@@ -1013,13 +1044,35 @@ class TaskExecutor:
             return await self._handle_failure(page, None, str(e))
 
     async def _auto_navigate(self, page) -> None:
-        """自动导航到任务URL（优先任务 url，回退到 LOGIN_URL）"""
+        """自动导航到任务URL（优先任务 url，回退到 LOGIN_URL）
+
+        使用 'load' 事件 + URL 稳定检测处理 JS 重定向链：
+        - 校园网门户常有 DNS 劫持 → 重定向到认证页
+        - SSO 统一认证 → 多次 JS redirect
+        """
         url = self.resolver.resolve(self.config.url) if self.config.url else ""
         if not url:
             url = self.env_vars.get("LOGIN_URL", "").strip()
         if url:
             logger.info(f"自动导航到任务URL: {url}")
-            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            await page.goto(url, wait_until="load", timeout=30000)
+            await self._wait_url_stable(page)
+
+    async def _wait_url_stable(self, page, timeout_ms: int = 5000):
+        """等待 URL 稳定，处理 JS 重定向链（最多 5 跳）"""
+        import time as _time
+        deadline = _time.perf_counter() + timeout_ms / 1000
+        last_url = page.url
+        redirects = 0
+        max_redirects = 5
+        while _time.perf_counter() < deadline and redirects < max_redirects:
+            await asyncio.sleep(0.5)
+            current = page.url
+            if current != last_url:
+                logger.info(f"URL 重定向: {last_url} → {current}")
+                last_url = current
+                redirects += 1
+                deadline = max(deadline, _time.perf_counter() + timeout_ms / 1000)
 
     async def _execute_step(self, page, step: StepConfig) -> tuple[bool, str]:
         """执行单个步骤"""
