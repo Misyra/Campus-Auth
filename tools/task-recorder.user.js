@@ -1230,7 +1230,8 @@
   function generatePrompt(url) {
     let prompt = `请根据以下校园网登录页面的元素信息，生成 Campus-Auth 的任务 JSON 配置。\n\n`;
     prompt += `任务编写规范请参考 Campus-Auth 项目中的 doc/task-writing-guide.md 文档。\n\n`;
-    prompt += `页面地址: ${url}\n\n`;
+    prompt += `页面地址: ${url}\n`;
+    prompt += `> **重要：不要填写 url 字段。** 任务 JSON 的 url 字段请留空或使用 "{{LOGIN_URL}}"，由用户自行在 Campus-Auth 系统设置中配置认证地址。硬编码 URL 会导致任务无法通用。\n\n`;
 
     // 步骤类型映射表
     prompt += `## 步骤类型映射（录制器 → 任务JSON）\n\n`;
@@ -1407,7 +1408,7 @@
 
           <h5 style="color:#667eea;margin:14px 0 6px;">一、启动与关闭</h5>
           <ul style="margin:4px 0;padding-left:18px;">
-            <li>快捷键 <b style="color:#fff;">Ctrl+Shift+R</b> 打开或关闭录制器面板</li>
+            <li>快捷键 <b style="color:#fff;">Ctrl+Shift+E</b> 打开或关闭录制器面板</li>
             <li>页面右下角浮动按钮 🎬 也可点击打开</li>
             <li>面板可拖拽（按住顶部蓝色标题栏移动）</li>
           </ul>
@@ -1446,7 +1447,7 @@
           <h5 style="color:#667eea;margin:14px 0 6px;">五、键盘快捷键</h5>
           <table style="width:100%;font-size:12px;border-collapse:collapse;margin:4px 0;">
             <tr style="color:#aaa;"><td style="padding:3px 6px;">按键</td><td style="padding:3px 6px;">功能</td><td style="padding:3px 6px;">说明</td></tr>
-            <tr><td style="padding:3px 6px;"><b style="color:#fff;">Ctrl+Shift+R</b></td><td style="padding:3px 6px;">打开/关闭面板</td><td style="padding:3px 6px;">全局快捷键</td></tr>
+            <tr><td style="padding:3px 6px;"><b style="color:#fff;">Ctrl+Shift+E</b></td><td style="padding:3px 6px;">打开/关闭面板</td><td style="padding:3px 6px;">全局快捷键</td></tr>
             <tr><td style="padding:3px 6px;"><b style="color:#fff;">Esc</b></td><td style="padding:3px 6px;">取消当前录制</td><td style="padding:3px 6px;">清除选中状态，停止录制</td></tr>
             <tr><td style="padding:3px 6px;"><b style="color:#fff;">Enter</b></td><td style="padding:3px 6px;">无 click 记录</td><td style="padding:3px 6px;">记录悬停元素但不发送 click 给页面（下拉菜单保持打开）</td></tr>
           </table>
@@ -1589,8 +1590,8 @@
       saveState();
       setStatus(`✅ Enter 记录: ${optText || info.tag}`);
     }
-    // Ctrl+Shift+R 切换面板
-    if (e.ctrlKey && e.shiftKey && e.key === "R") {
+    // Ctrl+Shift+E 切换面板
+    if (e.ctrlKey && e.shiftKey && e.key === "E") {
       state.active ? deactivate() : activate();
       e.preventDefault();
     }
@@ -1735,7 +1736,7 @@
   // 添加浮动入口按钮
   const entryBtn = document.createElement("div");
   entryBtn.innerHTML = "🎬";
-  entryBtn.title = "Campus-Auth 任务录制器 (Ctrl+Shift+R)";
+  entryBtn.title = "Campus-Auth 任务录制器 (Ctrl+Shift+E)";
   Object.assign(entryBtn.style, {
     position: "fixed",
     bottom: "20px",
