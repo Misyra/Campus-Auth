@@ -8,7 +8,8 @@ param(
     [string]$PythonVersion = "3.10",
     [string]$PipMirror = "https://mirrors.cernet.edu.cn/pypi/simple",
     [switch]$ForceReinstall = $false,
-    [switch]$Verbose = $false
+    [switch]$Verbose = $false,
+    [switch]$NoAuto = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -734,7 +735,9 @@ function Main {
 
     Write-Info ">>> 启动应用..."
     $appPy = Join-Path $ProjectRoot "app.py"
-    Start-Process -FilePath $PythonExe -ArgumentList $appPy -WorkingDirectory $ProjectRoot -EnvironmentVariables @{
+    $appArgs = @($appPy)
+    if ($NoAuto) { $appArgs += "--no-auto" }
+    Start-Process -FilePath $PythonExe -ArgumentList $appArgs -WorkingDirectory $ProjectRoot -EnvironmentVariables @{
         "Campus-Auth_PROJECT_ROOT" = $ProjectRoot
         "Campus-Auth_ENV_FILE" = Join-Path $ProjectRoot ".env"
         "AUTO_INSTALL_PLAYWRIGHT" = "false"

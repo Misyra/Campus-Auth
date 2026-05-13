@@ -200,14 +200,14 @@ def _cmd_autostart(action: str) -> None:
         sys.exit(0 if ok else 1)
 
 
-# ==================== 登录后退出 ====================
+# ==================== 登录成功后退出 ====================
 
 
 def _run_login_then_exit(config: dict, logger) -> None:
-    """登录后退出模式：执行一次登录，无论成功失败均退出"""
+    """登录成功后退出模式：循环重试登录，直到成功后退出进程。"""
     from src.utils import LoginAttemptHandler
 
-    print("登录后退出模式：正在执行一次登录...")
+    print("登录成功后退出模式：正在登录...")
 
     try:
         from backend.profile_service import ProfileService
@@ -223,36 +223,57 @@ def _run_login_then_exit(config: dict, logger) -> None:
         print(f"加载配置失败: {exc}")
         sys.exit(1)
 
+    # login_then_exit 模式最多重试 3 次，避免重试过多影响下次网络检测登录
+    max_retries = min(runtime_config.get("max_retries", 3) or 3, 3)
+    retry_interval = runtime_config.get("retry_interval", 5)
+
     handler = LoginAttemptHandler(runtime_config)
 
     import asyncio
-    success = False
-    message = ""
-    try:
-        loop = asyncio.new_event_loop()
+    attempt = 0
+    while True:
+        attempt += 1
+        # 指数退避：首次间隔 0，后续 interval × 2^(attempt-2)
+        if attempt > 1:
+            delay = retry_interval * (2 ** (attempt - 2))
+            print(f"等待 {delay} 秒后重试第 {attempt} 次...")
+            time.sleep(delay)
+
+        success = False
+        message = ""
         try:
-            success, message = loop.run_until_complete(
-                handler.attempt_login(skip_pause_check=True)
-            )
-        finally:
-            loop.close()
-    except Exception as exc:
-        message = f"登录异常: {exc}"
+            loop = asyncio.new_event_loop()
+            try:
+                success, message = loop.run_until_complete(
+                    handler.attempt_login(skip_pause_check=True)
+                )
+            finally:
+                loop.close()
+        except Exception as exc:
+            message = f"登录异常: {exc}"
 
-    if success:
-        print(f"登录成功: {message}")
-    else:
-        print(f"登录失败: {message}")
+        if success:
+            print(f"登录成功: {message}")
+            print("登录完成，正在退出...")
+            _cleanup_pid()
+            sys.exit(0)
 
-    print("登录完成，正在退出...")
-    _cleanup_pid()
-    sys.exit(0 if success else 1)
+        print(f"登录失败 (第 {attempt} 次): {message}")
+
+        if max_retries > 0 and attempt >= max_retries:
+            break
+
+    # 超过最大重试次数，回退到正常启动
+    print(f"已重试 {max_retries} 次均失败，回退到正常模式启动服务器")
+    logger.warning(
+        "login_then_exit 登录失败（已重试 %d 次），回退到正常模式启动服务器", max_retries
+    )
 
 
 # ==================== 主启动 ====================
 
 
-def _run_server(no_browser: bool = False, tray: bool = False) -> None:
+def _run_server(no_browser: bool = False, tray: bool = False, no_auto: bool = False) -> None:
     from src.utils.logging import get_logger
 
     startup_logger = get_logger("startup", side="APP")
@@ -308,10 +329,15 @@ def _run_server(no_browser: bool = False, tray: bool = False) -> None:
         minimize_to_tray = tray or bool(config.get("minimize_to_tray", False))
         login_then_exit = False
 
-    # 登录后退出模式：执行一次登录即退出
-    if login_then_exit:
+    # 登录成功后退出模式：循环重试直到登录成功，成功后退出进程
+    # --no-auto 可跳过此模式，用于 login_then_exit 开启后无法进入 Web 控制台的恢复场景
+    if login_then_exit and not no_auto:
         _run_login_then_exit(config, startup_logger)
-        return
+        # 登录成功会 sys.exit(0)，不会到达这里；失败超限则回退到正常启动
+
+    # 通过环境变量传递 --no-auto 标志给后端，跳过 auto_start
+    if no_auto:
+        os.environ["CAMPUS_AUTH_NO_AUTO"] = "1"
 
     from backend.main import run
 
@@ -361,6 +387,7 @@ def main() -> None:
 示例:
   python app.py                    启动 Web 控制台
   python app.py --no-browser       启动但不打开浏览器
+  python app.py --no-auto          跳过自动登录和自动启动（用于恢复设置）
   python app.py --tray             启动到系统托盘
   python app.py --status           查看服务状态
   python app.py --stop             停止服务
@@ -371,6 +398,12 @@ def main() -> None:
 
     parser.add_argument(
         "--no-browser", action="store_true", help="启动后不自动打开浏览器"
+    )
+    parser.add_argument(
+        "--no-auto",
+        action="store_true",
+        help="跳过自动登录（login_then_exit）和自动启动监控（auto_start），"
+        "用于 login_then_exit 开启后无法进入 Web 控制台的恢复场景",
     )
     parser.add_argument("--tray", action="store_true", help="启动到系统托盘")
     parser.add_argument("--status", action="store_true", help="查看服务状态")
@@ -400,7 +433,7 @@ def main() -> None:
         _cmd_autostart(args.autostart)
         return
 
-    _run_server(no_browser=args.no_browser, tray=args.tray)
+    _run_server(no_browser=args.no_browser, tray=args.tray, no_auto=args.no_auto)
 
 
 if __name__ == "__main__":

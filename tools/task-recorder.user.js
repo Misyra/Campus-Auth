@@ -59,7 +59,6 @@
     currentStepType: null,
     panel: null,
     tooltip: null,
-    overlay: null,
     iframeWarning: null,
     loginCompleted: false,
     successConditions: [],
@@ -74,6 +73,7 @@
         loginCompleted: state.loginCompleted,
         successConditions: state.successConditions,
         savedAt: Date.now(),
+        url: window.location.href,
       });
     } catch (_) {}
   }
@@ -84,6 +84,11 @@
       if (!data || !data.steps || data.steps.length === 0) return false;
       // 超过 2 小时自动过期
       if (Date.now() - (data.savedAt || 0) > 2 * 60 * 60 * 1000) {
+        clearSavedState();
+        return false;
+      }
+      // URL 变化说明已跳转，保存的选择器失效
+      if (data.url && data.url !== window.location.href) {
         clearSavedState();
         return false;
       }
@@ -106,7 +111,7 @@
     if (state.loginCompleted) {
       completeLoginUI();
       updateSuccessConditionsList();
-      if (state.successConditions.length > 0) showExportButtons();
+      if (state.successConditions.length > 0) showCopyPromptButton();
     }
   }
 
@@ -171,7 +176,7 @@
       width: 20px; height: 20px; display: flex; align-items: center;
       justify-content: center; font-size: 11px; flex-shrink: 0;
     }
-    #ca-recorded-item .ca-info { flex: 1; min-width: 0; overflow: hidden; }
+    #ca-recorder-panel .ca-recorded-item .ca-info { flex: 1; min-width: 0; overflow: hidden; }
     #ca-recorder-panel .ca-recorded-item .ca-info .ca-label {
       font-weight: 600; white-space: nowrap; overflow: hidden;
       text-overflow: ellipsis;
@@ -649,8 +654,7 @@
         </div>
         <div class="ca-status" id="ca-status">选择步骤类型后点击页面元素</div>
         <div class="ca-actions" style="margin-top:12px;">
-          <button class="ca-btn ca-btn-success" id="ca-btn-export-json" style="display:none;">📋 导出 JSON</button>
-          <button class="ca-btn ca-btn-primary" id="ca-btn-export-md" style="display:none;">📄 导出文档</button>
+          <button class="ca-btn ca-btn-primary" id="ca-btn-copy-prompt" style="display:none;">📋 复制 AI 提示词</button>
           <button class="ca-btn ca-btn-danger ca-btn-sm" id="ca-btn-close" style="margin-left:auto;">✕</button>
         </div>
       </div>
@@ -717,8 +721,10 @@
     state.panel.querySelector("#ca-btn-undo").addEventListener("click", undoStep);
     state.panel.querySelector("#ca-btn-clear").addEventListener("click", clearSteps);
     state.panel.querySelector("#ca-btn-complete").addEventListener("click", completeLogin);
-    state.panel.querySelector("#ca-btn-export-json").addEventListener("click", () => exportJSON());
-    state.panel.querySelector("#ca-btn-export-md").addEventListener("click", () => exportMarkdown());
+    state.panel.querySelector("#ca-btn-copy-prompt").addEventListener("click", () => {
+      GM_setClipboard(generatePrompt(window.location.href));
+      setStatus("✅ AI 提示词已复制到剪贴板！发送给大模型即可生成任务 JSON");
+    });
     state.panel.querySelector("#ca-btn-close").addEventListener("click", deactivate);
     state.panel.querySelector("#ca-btn-help").addEventListener("click", showHelpModal);
 
@@ -910,7 +916,7 @@
     state.successConditions.push(condition);
     updateSuccessConditionsList();
     saveState();
-    showExportButtons();
+    showCopyPromptButton();
     const label = condition.label || CONDITION_TYPES.find(c => c.value === condition.type)?.label || condition.type;
     setStatus(`✅ 已添加条件: ${label}`);
   }
@@ -933,19 +939,17 @@
         state.successConditions.splice(parseInt(btn.dataset.idx), 1);
         updateSuccessConditionsList();
         saveState();
-        if (state.successConditions.length === 0) hideExportButtons();
+        if (state.successConditions.length === 0) hideCopyPromptButton();
       });
     });
   }
 
-  function showExportButtons() {
-    state.panel.querySelector("#ca-btn-export-json").style.display = "";
-    state.panel.querySelector("#ca-btn-export-md").style.display = "";
+  function showCopyPromptButton() {
+    state.panel.querySelector("#ca-btn-copy-prompt").style.display = "";
   }
 
-  function hideExportButtons() {
-    state.panel.querySelector("#ca-btn-export-json").style.display = "none";
-    state.panel.querySelector("#ca-btn-export-md").style.display = "none";
+  function hideCopyPromptButton() {
+    state.panel.querySelector("#ca-btn-copy-prompt").style.display = "none";
   }
 
   // ==================== 元素点击处理 ====================
@@ -1223,265 +1227,39 @@
     });
   }
 
-  // ==================== 导出: 任务 JSON ====================
-
-  function exportJSON() {
-    const url = window.location.href;
-    const steps = [];
-    let stepIdx = 1;
-
-    // 检查是否有验证码
-    const hasCaptchaImg = state.steps.some(s => s.type === "captcha_img");
-    const hasCaptchaInput = state.steps.some(s => s.type === "captcha_input");
-    const captchaType = state.steps.find(s => s.captchaType)?.captchaType || "4digit";
-
-    for (const s of state.steps) {
-      let stepId = `s${stepIdx++}`;
-
-      if (s.type === "username") {
-        // 如果点击的是 tip 占位，先插入 click 步骤触发门户 JS 显示真实输入框
-        if (s.tipSelector) {
-          steps.push({
-            id: stepId,
-            type: "click",
-            description: "点击账号占位（触发真实输入框显示）",
-            selector: s.tipSelector,
-          });
-          stepId = `s${stepIdx++}`;
-        }
-        const uSel = s.hiddenRealSelector || s.bestSelector;
-        const uForce = !!s.hiddenRealSelector;
-        const uStep = {
-          id: stepId,
-          type: "input",
-          description: "输入账号" + (uForce ? " (force 模式，目标隐藏)" : ""),
-          selector: uSel,
-          value: "{{USERNAME}}",
-          clear: true,
-        };
-        if (uForce) uStep.force = true;
-        steps.push(uStep);
-      } else if (s.type === "password") {
-        if (s.tipSelector) {
-          steps.push({
-            id: stepId,
-            type: "click",
-            description: "点击密码占位（触发真实输入框显示）",
-            selector: s.tipSelector,
-          });
-          stepId = `s${stepIdx++}`;
-        }
-        const pwSel = s.hiddenRealSelector || s.bestSelector;
-        const needForce = !!s.hiddenRealSelector;
-        const pwStep = {
-          id: stepId,
-          type: "input",
-          description: "输入密码" + (needForce ? " (force 模式，目标隐藏)" : ""),
-          selector: pwSel,
-          value: "{{PASSWORD}}",
-          clear: true,
-        };
-        if (needForce) pwStep.force = true;
-        steps.push(pwStep);
-      } else if (s.type === "carrier") {
-        steps.push({
-          id: stepId,
-          type: "select",
-          description: "选择运营商",
-          selector: s.bestSelector,
-          value: "{{ISP}}",
-        });
-      } else if (s.type === "captcha_img") {
-        steps.push({
-          id: stepId,
-          type: "screenshot",
-          description: "截图验证码区域",
-        });
-      } else if (s.type === "captcha_input") {
-        steps.push({
-          id: stepId,
-          type: "ocr",
-          description: `识别验证码 (${CAPTCHA_TYPES.find(t => t.value === captchaType)?.label || captchaType})`,
-          selector: s.bestSelector,  // 验证码图片选择器（从 img 步骤获取）
-          target_selector: s.bestSelector,
-          store_as: "captcha_code",
-          old: captchaType === "math",
-        });
-        // 修正：ocr 的 selector 是图片，target_selector 是输入框
-        const imgStep = [...state.steps].reverse().find(ss => ss.type === "captcha_img");
-        if (imgStep) {
-          steps[steps.length - 1].selector = imgStep.bestSelector;
-          steps[steps.length - 1].target_selector = s.bestSelector;
-        }
-      } else if (s.type === "submit") {
-        steps.push({
-          id: stepId,
-          type: "click",
-          description: "点击提交",
-          selector: s.bestSelector,
-        });
-      } else if (s.type === "click") {
-        steps.push({
-          id: stepId,
-          type: "click",
-          description: s.description,
-          selector: s.bestSelector,
-        });
-      } else if (s.type === "wait") {
-        steps.push({
-          id: stepId,
-          type: "wait",
-          description: s.description,
-          selector: s.bestSelector,
-        });
-      } else if (s.type === "eval") {
-        steps.push({
-          id: stepId,
-          type: "eval",
-          description: s.description,
-          script: s.value || "",
-        });
-      } else if (s.type === "custom") {
-        steps.push({
-          id: stepId,
-          type: "click",
-          description: s.description,
-          selector: s.bestSelector,
-        });
-      }
-    }
-
-    // 构建成功条件
-    const successConditions = [];
-    for (const sc of state.successConditions) {
-      if (sc.type === "skip") continue;
-      const cond = { type: sc.type };
-      if (sc.pattern) cond.pattern = sc.pattern;
-      if (sc.selector) cond.selector = sc.selector;
-      if (sc.script) cond.script = sc.script;
-      successConditions.push(cond);
-    }
-
-    const task = {
-      name: "自动生成的登录任务",
-      description: `从 ${url} 录制`,
-      metadata: {},
-      url: url,
-      timeout: 30000,
-      steps,
-      success_conditions: successConditions,
-    };
-
-    const json = JSON.stringify(task, null, 2);
-    GM_setClipboard(json);
-    setStatus("✅ 任务 JSON 已复制到剪贴板！");
-    showExportModal("任务 JSON", json, "json");
-  }
-
-  // ==================== 导出: Markdown 文档 ====================
-
-  function exportMarkdown() {
-    const url = window.location.href;
-    const ts = new Date().toISOString().replace("T", " ").substring(0, 19);
-
-    let md = `# Campus-Auth 任务配置文档\n\n`;
-    md += `> 生成时间: ${ts}\n`;
-    md += `> 页面地址: ${url}\n\n`;
-    md += `## 页面信息\n\n`;
-    md += `- **URL**: ${url}\n`;
-    md += `- **标题**: ${document.title}\n\n`;
-
-    md += `## 录制步骤\n\n`;
-
-    state.steps.forEach((s, i) => {
-      const typeLabel = STEP_TYPES[s.type]?.label || s.type;
-      md += `### 步骤 ${i + 1}: ${typeLabel}\n\n`;
-      md += `| 属性 | 值 |\n|------|----|\n`;
-      md += `| 类型 | ${s.type} |\n`;
-      md += `| 描述 | ${s.description} |\n`;
-      md += `| 标签 | \`${s.tag}\` |\n`;
-      md += `| 最佳选择器 | \`${s.bestSelector}\` |\n`;
-
-      if (s.selectorCandidates?.length > 1) {
-        md += `| 候选选择器 | ${s.selectorCandidates.map(c => `\`${c}\``).join(", ")} |\n`;
-      }
-
-      if (s.iframe?.inIframe) {
-        md += `| iframe | ${s.iframe.crossOrigin ? "跨域" : s.iframe.frameSelector || "是"} |\n`;
-      }
-
-      if (s.value) {
-        md += `| 值 | ${s.value} |\n`;
-      }
-
-      if (s.captchaType) {
-        md += `| 验证码类型 | ${CAPTCHA_TYPES.find(t => t.value === s.captchaType)?.label || s.captchaType} |\n`;
-      }
-
-      if (s.hiddenRealSelector) {
-        const tipInfo = s.tipSelector ? `，先点击 \`${s.tipSelector}\` 触发显示` : "";
-        md += `| ⚠️ 隐藏输入框 | \`${s.hiddenRealSelector}\` — 所见元素为假占位，真实输入框被隐藏，导出时已自动使用${tipInfo} |\n`;
-      }
-
-      if (s.attrs) {
-        const attrStr = Object.entries(s.attrs).map(([k, v]) => `${k}="${v}"`).join(" ");
-        if (attrStr) md += `| 属性 | ${attrStr} |\n`;
-      }
-
-      md += `\n`;
-    });
-
-    md += `## 登录成功条件\n\n`;
-    if (state.successConditions.length > 0) {
-      for (const sc of state.successConditions) {
-        if (sc.type === "skip") {
-          md += `- 跳过（步骤全部完成即为成功）\n`;
-        } else if (sc.type === "url_matches") {
-          md += `- URL 匹配: \`${sc.pattern}\`\n`;
-        } else if (sc.type === "js_expression") {
-          md += `- 页面包含文字: ${sc.label || ""}\n`;
-        } else if (sc.type === "element_exists") {
-          md += `- 页面存在元素: \`${sc.selector}\`\n`;
-        }
-      }
-    } else {
-      md += `- 未设置\n`;
-    }
-    md += `\n`;
-
-    md += `## 元素详细信息\n\n`;
-    md += `<details>\n<summary>展开查看原始元素数据</summary>\n\n`;
-    md += "```json\n";
-    md += JSON.stringify(
-      state.steps.map(s => ({
-        type: s.type,
-        description: s.description,
-        tag: s.tag,
-        selectors: s.selectorCandidates,
-        iframe: s.iframe,
-        attrs: s.attrs,
-        captchaType: s.captchaType,
-      })),
-      null,
-      2
-    );
-    md += "\n```\n\n</details>\n\n";
-
-    md += `## 任务编写提示词\n\n`;
-    md += `将以下提示词和上方的步骤信息一起发送给 AI，即可生成完整的任务 JSON：\n\n`;
-    md += "```\n";
-    md += generatePrompt(url);
-    md += "\n```\n";
-
-    GM_setClipboard(md);
-    setStatus("✅ 文档已复制到剪贴板！");
-    showExportModal("任务文档 (Markdown)", md, "md");
-  }
-
   function generatePrompt(url) {
     let prompt = `请根据以下校园网登录页面的元素信息，生成 Campus-Auth 的任务 JSON 配置。\n\n`;
     prompt += `任务编写规范请参考 Campus-Auth 项目中的 doc/task-writing-guide.md 文档。\n\n`;
     prompt += `页面地址: ${url}\n\n`;
+
+    // 步骤类型映射表
+    prompt += `## 步骤类型映射（录制器 → 任务JSON）\n\n`;
+    prompt += `| 录制器类型 | 任务JSON类型 | 说明 |\n`;
+    prompt += `|-----------|-------------|------|\n`;
+    prompt += `| username | input | value: {{USERNAME}} |\n`;
+    prompt += `| password | input | value: {{PASSWORD}}，隐藏输入框需 force:true |\n`;
+    prompt += `| carrier | select | value: {{ISP}} |\n`;
+    prompt += `| captcha_img + captcha_input | ocr | 合并为一个 ocr 步骤，selector=图片, target_selector=输入框 |\n`;
+    prompt += `| submit | click | — |\n`;
+    prompt += `| click | click | — |\n`;
+    prompt += `| wait | wait | — |\n`;
+    prompt += `| eval | eval | — |\n`;
+    prompt += `\n`;
+
+    // 隐藏输入框警告汇总
+    const hiddenSteps = state.steps.filter(s => s.hiddenRealSelector);
+    if (hiddenSteps.length > 0) {
+      prompt += `## ⚠️ 隐藏输入框检测\n\n`;
+      prompt += `以下步骤的真实输入框是 display:none，必须使用 force:true 模式：\n\n`;
+      for (const hs of hiddenSteps) {
+        prompt += `- ${STEP_TYPES[hs.type]?.label || hs.type}: 真实输入框 \`${hs.hiddenRealSelector}\``;
+        if (hs.tipSelector) {
+          prompt += `，占位元素 \`${hs.tipSelector}\`（建议先 click 占位元素触发门户 JS）`;
+        }
+        prompt += `\n`;
+      }
+      prompt += `\n`;
+    }
 
     // 如果有验证码，补充说明
     const captchaSteps = state.steps.filter(s => s.type === "captcha_input" && s.captchaType);
@@ -1491,7 +1269,7 @@
         const label = CAPTCHA_TYPES.find(t => t.value === cs.captchaType)?.label || cs.captchaType;
         prompt += `- 验证码类型: ${label}\n`;
         if (cs.captchaType === "math") {
-          prompt += `- 需要使用 ocr 步骤的 old=true 参数来识别数学运算\n`;
+          prompt += `- 如果识别率不高，可尝试切换 ocr 步骤的 old 参数（true/false）\n`;
         }
       }
       prompt += `\n`;
@@ -1502,7 +1280,7 @@
       prompt += `## 登录成功条件\n\n`;
       for (const sc of state.successConditions) {
         if (sc.type === "skip") {
-          prompt += `- 跳过（步骤全部完成即为成功）\n`;
+          prompt += `- 跳过（不设置条件）→ success_conditions 应为空数组 []\n`;
         } else if (sc.type === "url_matches") {
           prompt += `- URL 匹配: \`${sc.pattern}\`\n`;
         } else if (sc.type === "js_expression") {
@@ -1519,12 +1297,18 @@
     state.steps.forEach((s, i) => {
       const typeLabel = STEP_TYPES[s.type]?.label || s.type;
       prompt += `### 步骤 ${i + 1}: ${typeLabel}\n`;
-      prompt += `- 类型: ${s.type}\n`;
+      prompt += `- 录制器类型: ${s.type}\n`;
       prompt += `- 描述: ${s.description}\n`;
       prompt += `- 标签: <${s.tag}>\n`;
       prompt += `- 最佳选择器: \`${s.bestSelector}\`\n`;
       if (s.selectorCandidates?.length > 1) {
         prompt += `- 候选选择器: ${s.selectorCandidates.map(c => "`" + c + "`").join(", ")}\n`;
+      }
+      if (s.hiddenRealSelector) {
+        prompt += `- ⚠️ 真实输入框（隐藏）: \`${s.hiddenRealSelector}\` → 需 force:true\n`;
+      }
+      if (s.tipSelector) {
+        prompt += `- 占位元素: \`${s.tipSelector}\` → 需先 click 触发显示\n`;
       }
       if (s.iframe?.inIframe) {
         prompt += `- 在 iframe 内: ${s.iframe.crossOrigin ? "跨域" : s.iframe.frameSelector || "是"}\n`;
@@ -1536,35 +1320,6 @@
     });
 
     return prompt;
-  }
-
-  // ==================== 导出弹窗 ====================
-
-  function showExportModal(title, content, ext) {
-    const overlay = document.createElement("div");
-    overlay.className = "ca-modal-overlay";
-    const preview = content.length > 3000 ? content.substring(0, 3000) + "\n\n... (已截断，完整内容已复制到剪贴板)" : content;
-    overlay.innerHTML = `
-      <div class="ca-modal" style="width:600px;max-height:80vh;overflow-y:auto;">
-        <h4>${title}</h4>
-        <textarea style="min-height:300px;font-family:monospace;font-size:12px;" readonly>${escapeHtml(preview)}</textarea>
-        <div class="ca-modal-actions">
-          <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-export-copy">📋 复制</button>
-          <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-export-close">关闭</button>
-        </div>
-      </div>
-    `;
-    state.panel.appendChild(overlay);
-
-    overlay.querySelector("#ca-export-copy").addEventListener("click", () => {
-      GM_setClipboard(content);
-      setStatus("✅ 已复制到剪贴板");
-    });
-    overlay.querySelector("#ca-export-close").addEventListener("click", () => overlay.remove());
-  }
-
-  function escapeHtml(str) {
-    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
   // ==================== 拖拽 ====================
@@ -1664,7 +1419,7 @@
             <li><b style="color:#fff;">点击</b>元素 → 记录步骤 → 显示在「已录制步骤」列表中</li>
             <li>重复以上步骤，依次录完所有步骤</li>
             <li>录完后点击 <b style="color:#fff;">✅ 完成登录</b>，设置登录成功条件</li>
-            <li>点击 <b style="color:#fff;">📋 导出 JSON</b> 复制到剪贴板，粘贴到 Campus-Auth 中</li>
+            <li>点击 <b style="color:#fff;">📋 复制 AI 提示词</b>，将提示词发送给 AI（ChatGPT/Claude 等）即可生成完整的任务 JSON</li>
           </ol>
 
           <h5 style="color:#667eea;margin:14px 0 6px;">三、步骤类型说明</h5>
@@ -1673,7 +1428,7 @@
             <tr><td style="padding:3px 6px;">👤 账号输入框</td><td style="padding:3px 6px;">点击用户名输入区域</td><td style="padding:3px 6px;"><code>input</code> + {{USERNAME}}</td></tr>
             <tr><td style="padding:3px 6px;">🔒 密码输入框</td><td style="padding:3px 6px;">点击密码输入区域</td><td style="padding:3px 6px;"><code>input</code> + {{PASSWORD}}</td></tr>
             <tr><td style="padding:3px 6px;">📶 运营商选择</td><td style="padding:3px 6px;">点击运营商下拉框</td><td style="padding:3px 6px;"><code>select</code> + {{ISP}}</td></tr>
-            <tr><td style="padding:3px 6px;">🖼️ 验证码图片</td><td style="padding:3px 6px;">点击验证码图片</td><td style="padding:3px 6px;"><code>screenshot</code> 步骤</td></tr>
+            <tr><td style="padding:3px 6px;">🖼️ 验证码图片</td><td style="padding:3px 6px;">点击验证码图片</td><td style="padding:3px 6px;"><code>ocr</code> 步骤（与验证码输入框合并）</td></tr>
             <tr><td style="padding:3px 6px;">✏️ 验证码输入</td><td style="padding:3px 6px;">点击验证码输入框</td><td style="padding:3px 6px;"><code>ocr</code> 识别 + 填入</td></tr>
             <tr><td style="padding:3px 6px;">🚀 提交按钮</td><td style="padding:3px 6px;">点击登录/提交按钮</td><td style="padding:3px 6px;"><code>click</code> 步骤</td></tr>
             <tr><td style="padding:3px 6px;">👆 点击元素</td><td style="padding:3px 6px;">点击任意元素</td><td style="padding:3px 6px;"><code>click</code> 步骤</td></tr>
@@ -1703,7 +1458,7 @@
             <li>点「账号输入框」→ 点页面上账号框</li>
             <li>点「密码输入框」→ 点页面上密码框</li>
             <li>点「提交按钮」→ 点页面登录按钮</li>
-            <li>点「✅ 完成登录」→ 设置成功条件 → 导出</li>
+            <li>点「✅ 完成登录」→ 设置成功条件 → 复制 AI 提示词</li>
           </ol>
 
           <p style="margin:4px 0;"><b style="color:#fff;">场景 B：运营商下拉框（自定义 UI，非原生 select）</b></p>
@@ -1711,7 +1466,7 @@
             <li>点「运营商选择」→ 点下拉框触发器</li>
             <li>下拉框弹出后，切到「点击元素」→ <b style="color:#fff;">用 Enter 键</b>点选项（避免点击关掉下拉框）</li>
             <li>点「提交按钮」→ 点登录按钮</li>
-            <li>完成 → 导出</li>
+            <li>完成 → 复制 AI 提示词</li>
           </ol>
 
           <p style="margin:4px 0;"><b style="color:#fff;">场景 C：隐藏输入框模式（深澜/HK Posi）</b></p>
@@ -1720,7 +1475,7 @@
             <li>点「账号输入框」→ 点页面上账号占位区域（div 容器或 readonly tip）</li>
             <li>录制器自动检测隐藏的真实输入框，列表中显示 ⚠️ 标记</li>
             <li>点「密码输入框」→ 同样操作</li>
-            <li>导出 JSON 会自动生成先 click 占位 + force 填隐藏框的步骤</li>
+            <li>录制器自动检测隐藏的真实输入框，提示词中会包含 force 模式和隐藏输入框信息</li>
           </ol>
 
           <h5 style="color:#667eea;margin:14px 0 6px;">七、登录成功条件</h5>
@@ -1731,10 +1486,11 @@
             <li><b style="color:#fff;">跳过</b> — 不设置条件，步骤全执行完即视为成功</li>
           </ul>
 
-          <h5 style="color:#667eea;margin:14px 0 6px;">八、导出格式</h5>
+          <h5 style="color:#667eea;margin:14px 0 6px;">八、获取任务 JSON</h5>
           <ul style="margin:4px 0;padding-left:18px;">
-            <li><b style="color:#fff;">📋 导出 JSON</b> — 直接生成 Campus-Auth 可用的任务 JSON，复制到剪贴板后粘贴到任务编辑器</li>
-            <li><b style="color:#fff;">📄 导出文档</b> — 生成 Markdown 文档，包含步骤详情、选择器、元素属性等完整信息，适合提交 Issue 或分享给社区</li>
+            <li>录制完成后点击 <b style="color:#fff;">📋 复制 AI 提示词</b>，将录制到的元素信息（选择器、类型、属性等）以结构化提示词形式复制到剪贴板</li>
+            <li>将提示词发送给 AI（ChatGPT、Claude 等），AI 会参考 <code>doc/task-writing-guide.md</code> 规范生成完整的任务 JSON</li>
+            <li>也可以将提示词粘贴到 Campus-Auth 的 Issue 或社区中，方便其他人帮助创建任务</li>
           </ul>
 
           <h5 style="color:#667eea;margin:14px 0 6px;">九、选择器优先级</h5>
@@ -1747,7 +1503,7 @@
             <li>连续录制多个步骤时建议开启 <b style="color:#fff;">🔁 多步录制</b></li>
             <li>下拉菜单内的选项建议用 <b style="color:#fff;">Enter</b> 键选取（点击会关闭菜单）</li>
             <li>如果浮层按钮/面板被页面 JS 冲掉，录制器会<b style="color:#fff;">自动恢复</b>（DOM 守护）</li>
-            <li>导出前可在列表中点击 ✕ 删除不需要的步骤</li>
+            <li>可在列表中点击 ✕ 删除不需要的步骤</li>
           </ul>
 
           <p style="margin-top:16px;padding-top:12px;border-top:1px solid #333;font-size:11px;color:#666;text-align:center;">

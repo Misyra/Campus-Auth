@@ -38,6 +38,7 @@ Options:
   --python-mirror <url>     Python download mirror URL
   --pip-mirror <url>        Pip mirror URL
   --force-reinstall         Force reinstall dependencies
+  --no-auto                 Skip auto-login and auto-start (recovery mode)
   --verbose                 Print logs to terminal
   -h, --help                Show help
 
@@ -46,6 +47,7 @@ Environment:
 EOF
 }
 
+NO_AUTO=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --python-version)
@@ -62,6 +64,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --force-reinstall)
       FORCE_REINSTALL="1"
+      shift
+      ;;
+    --no-auto)
+      NO_AUTO="--no-auto"
       shift
       ;;
     --verbose|-v)
@@ -419,7 +425,7 @@ main() {
     "Campus-Auth_PROJECT_ROOT=$PROJECT_ROOT" \
     "Campus-Auth_ENV_FILE=$PROJECT_ROOT/.env" \
     "AUTO_INSTALL_PLAYWRIGHT=false" \
-    "$PYTHON_EXE" "$PROJECT_ROOT/app.py" &
+    "$PYTHON_EXE" "$PROJECT_ROOT/app.py" --no-browser $NO_AUTO &
   APP_PID=$!
 
   # 等待服务就绪后打开浏览器

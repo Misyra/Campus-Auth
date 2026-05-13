@@ -278,12 +278,12 @@
 
 ddddocr 内置两套模型，`old` 参数控制使用哪一套：
 
-| `old` | 模型 | 适用场景 |
-|-------|------|----------|
-| `false`（默认） | 新版模型 | 通用场景，对数字+字母混合验证码效果更好 |
-| `true` | 旧版模型 | 纯数字验证码或特定校园网系统的验证码风格 |
+| `old` | 模型 | 说明 |
+|-------|------|------|
+| `false`（默认） | 新版模型 | 通用场景 |
+| `true` | 旧版模型 | 旧版模型，部分校园网系统上识别率可能更高 |
 
-如果你的校园网验证码识别不准，可以尝试切换 `old` 参数值。
+如果你的校园网验证码识别不准，可以尝试切换 `old` 参数值（true/false）。
 
 **三种使用模式：**
 
@@ -361,6 +361,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
 | `url_matches` | 当前 URL 匹配正则 | `{ "type": "url_matches", "pattern": "success\|welcome\|home" }` |
 | `element_exists` | 页面存在指定元素 | `{ "type": "element_exists", "selector": ".welcome-message" }` |
 | `js_expression` | JS 表达式返回 truthy | `{ "type": "js_expression", "script": "document.body.innerText.includes('成功')" }` |
+| `skip` | 跳过，不设置额外条件 | `{ "type": "skip" }` — 等价于空数组，步骤完成即成功 |
 
 多个条件全部满足才算成功。典型组合：先用 `eval` 步骤检查页面并存储结果到变量，再用 `variable` 条件判断该变量。
 
