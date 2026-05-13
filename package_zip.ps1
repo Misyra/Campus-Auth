@@ -67,6 +67,7 @@ $IncludeItems = @(
     "tools",
     "doc",
     "requirements.txt",
+    "pyproject.toml",
     "README.md",
     "LICENSE",
     ".env.example",

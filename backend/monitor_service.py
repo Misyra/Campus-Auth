@@ -4,6 +4,7 @@ import asyncio
 import datetime
 import json
 import logging
+import os
 import re
 import threading
 import time
@@ -155,6 +156,10 @@ class MonitorService:
             asyncio.run_coroutine_threadsafe(ws_manager.broadcast(data), self._loop)
 
     def boot(self) -> None:
+        # --no-auto 启动标志：跳过 login_then_exit 和 auto_start，用于恢复设置
+        if os.environ.pop("CAMPUS_AUTH_NO_AUTO", None):
+            service_logger.info("--no-auto 模式：跳过自动启动监控")
+            return
         if self._ui_config.auto_start:
             self.start_monitoring()
 

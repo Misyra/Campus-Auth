@@ -117,6 +117,8 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
         minimize_to_tray=sys.minimize_to_tray,
         auto_open_browser=sys.auto_open_browser,
         login_then_exit=sys.login_then_exit,
+        max_retries=sys.max_retries,
+        retry_interval=sys.retry_interval,
         log_retention_days=sys.log_retention_days,
         screenshot_retention_days=sys.screenshot_retention_days,
         custom_variables=custom_variables,
@@ -238,6 +240,8 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
         minimize_to_tray=sys.minimize_to_tray,
         auto_open_browser=sys.auto_open_browser,
         login_then_exit=sys.login_then_exit,
+        max_retries=sys.max_retries,
+        retry_interval=sys.retry_interval,
         log_retention_days=sys.log_retention_days,
         screenshot_retention_days=sys.screenshot_retention_days,
         custom_variables=custom_variables,
@@ -369,6 +373,8 @@ def save_config_combined(
     sys.minimize_to_tray = payload.minimize_to_tray
     sys.auto_open_browser = payload.auto_open_browser
     sys.login_then_exit = payload.login_then_exit
+    sys.max_retries = payload.max_retries
+    sys.retry_interval = payload.retry_interval
     sys.log_retention_days = payload.log_retention_days
     sys.screenshot_retention_days = payload.screenshot_retention_days
     sys.proxy = payload.proxy.strip()

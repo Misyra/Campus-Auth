@@ -50,6 +50,8 @@ class MonitorConfigPayload(BaseModel):
     minimize_to_tray: bool = True
     auto_open_browser: bool = False
     login_then_exit: bool = False
+    max_retries: int = Field(default=3, ge=1, le=5, description="登录重试最大次数")
+    retry_interval: int = Field(default=5, ge=1, le=300, description="重试间隔（秒），指数退避基数")
     log_retention_days: int = Field(default=7, ge=1, le=365)
     screenshot_retention_days: int = Field(default=7, ge=1, le=90)
     custom_variables: dict[str, str] = Field(default_factory=dict)
@@ -234,7 +236,7 @@ class SystemSettings(BaseModel):
     access_log: bool = Field(default=False, description="Uvicorn HTTP 请求日志")
     minimize_to_tray: bool = Field(default=True, description="最小化到系统托盘")
     auto_open_browser: bool = Field(default=False, description="启动后自动打开浏览器")
-    login_then_exit: bool = Field(default=False, description="登录一次后退出软件")
+    login_then_exit: bool = Field(default=False, description="登录成功后退出软件")
     max_retries: int = Field(default=3, ge=0, le=10)
     retry_interval: int = Field(default=5, ge=1, le=300, description="重试间隔（秒）")
     safe_mode: bool = Field(default=False, description="安全模式：不注入浏览器自定义参数")

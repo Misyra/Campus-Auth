@@ -67,6 +67,7 @@ class ConditionType(str, Enum):
     URL_MATCHES = "url_matches"
     ELEMENT_EXISTS = "element_exists"
     JS_EXPRESSION = "js_expression"
+    SKIP = "skip"  # 无额外条件，步骤完成即成功
 
 
 @dataclass
@@ -869,6 +870,13 @@ class TaskValidator:
             errors.append(f"{prefix} 缺少必需字段: {missing}")
             return errors
 
+        # 验证步骤 ID 格式
+        step_id = step.get("id", "")
+        if not TASK_ID_PATTERN.fullmatch(step_id):
+            errors.append(
+                f"{prefix} id '{step_id}' 格式无效，须匹配 ^[A-Za-z][A-Za-z0-9_]*$"
+            )
+
         # 验证步骤类型
         step_type = step.get("type", "")
         if step_type not in cls.VALID_STEP_TYPES:
@@ -1186,6 +1194,9 @@ class TaskExecutor:
         if cond_type == ConditionType.VARIABLE:
             actual = self.resolver.runtime_vars.get(cond.variable)
             return actual == cond.value
+
+        elif cond_type == ConditionType.SKIP:
+            return True
 
         elif cond_type == ConditionType.URL_CONTAINS:
             pattern = cond.pattern or ""

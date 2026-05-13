@@ -735,6 +735,11 @@ def main():
     )
     parser.add_argument("--force-reinstall", action="store_true", help="强制重新安装")
     parser.add_argument("--verbose", "-v", action="store_true", help="详细输出")
+    parser.add_argument(
+        "--no-auto",
+        action="store_true",
+        help="跳过自动登录和自动启动（传递给 app.py），用于 login_then_exit 锁死恢复",
+    )
 
     args = parser.parse_args()
     VERBOSE = args.verbose
@@ -857,7 +862,10 @@ def main():
         launch_env["AUTO_INSTALL_PLAYWRIGHT"] = "false"
 
     try:
-        proc = subprocess.Popen([str(PYTHON_EXE), str(PROJECT_ROOT / "app.py"), "--no-browser"], env=launch_env)
+        app_args = [str(PYTHON_EXE), str(PROJECT_ROOT / "app.py"), "--no-browser"]
+        if args.no_auto:
+            app_args.append("--no-auto")
+        proc = subprocess.Popen(app_args, env=launch_env)
     except Exception as e:
         log_error(f"应用启动失败: {e}")
         sys.exit(1)

@@ -166,6 +166,22 @@
           <div class="form-row">
             <div class="form-group">
               <div class="field-label-row">
+                <label for="settings-max-retries">最大登录重试次数</label>
+                <span class="field-help" tabindex="0" role="note" data-tip="登录失败后最多重试几次，超出后等待下次网络检测周期再试。监控模式上限 5 次，登录成功后退出模式上限 3 次。">?</span>
+              </div>
+              <input id="settings-max-retries" v-model.number="config.max_retries" type="number" min="1" max="5" />
+            </div>
+            <div class="form-group">
+              <div class="field-label-row">
+                <label for="settings-retry-interval">重试间隔（秒）</label>
+                <span class="field-help" tabindex="0" role="note" data-tip="登录失败后等待的基础秒数。实际等待时间按指数退避计算：首次 0 秒，第二次以此间隔 ×1，第三次 ×2，以此类推。">?</span>
+              </div>
+              <input id="settings-retry-interval" v-model.number="config.retry_interval" type="number" min="1" max="300" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <div class="field-label-row">
                 <label for="settings-backend-log-level">后端日志级别</label>
                 <span class="field-help" tabindex="0" role="note" data-tip="控制控制台和日志文件记录的详细程度。DEBUG 最详细（含网络检测细节），INFO 显示常规运行信息，WARNING 仅显示警告和错误。修改后立即生效。">?</span>
               </div>
@@ -222,12 +238,12 @@
               <label class="toggle toggle-help-inline">
                 <input type="checkbox" v-model="config.login_then_exit" />
                 <span class="toggle-slider"></span>
-                <span class="toggle-label">登录后退出</span>
+                <span class="toggle-label">登录成功后退出</span>
                 <span
                   class="field-help"
                   tabindex="0"
                   role="note"
-                  data-tip="启动后执行一次登录，无论成功或失败均自动退出软件。适用于搭配开机自启使用，只需登录一次、不需要持续监控的场景。"
+                  data-tip="启动后自动登录，登录成功后退出软件。登录失败会自动重试（最多 3 次），超限后回退到正常启动进入 Web 控制台。适用于搭配开机自启使用，只需认证一次、不需要持续监控的场景。"
                 >?</span>
               </label>
             </div>
