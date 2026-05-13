@@ -218,6 +218,7 @@ cp .env.example .env
 |------|--------|------|
 | `login_then_exit` | `false` | 登录成功后自动退出程序，适用于只需登录一次的场景。 |
 | `proxy` | 空 | 网络代理地址，用于远程任务仓库访问。留空不使用代理。 |
+| `browser_args` | 见默认值 | 自定义 Chromium 启动参数，每行一个，用于反检测或浏览器行为定制。 |
 | `safe_mode` | `false` | 安全模式，使用纯净 Chromium（无扩展、无自定义参数）。 |
 | `access_log` | `false` | 是否输出 Uvicorn HTTP 访问日志。 |
 | `log_retention_days` | `7` | 日志文件保留天数（1-365）。 |
@@ -574,6 +575,14 @@ python app.py --stop
 Windows 自启动使用 VBS 脚本，部分杀毒软件可能会拦截。建议将程序目录添加到杀毒软件白名单，或暂时关闭杀毒软件后重试 `python app.py --autostart enable`。
 
 ## 更新日志
+
+### v3.6.3
+
+- **`input` 步骤新增 `force` 参数**：支持对 `display:none` 的隐藏输入框强制填入值，通过 JS 原生 setter + 事件派发实现，解决深澜/Sangfor 系校园网门户密码框隐藏的问题。
+- **任务录制器（油猴脚本）隐藏输入框检测**：统一检测深澜/Sangfor（假 type=text 占位）和杭州康工 HK Posi（readonly tip + 容器 div）两类隐藏输入框模式，同时覆盖账号和密码输入框；检测到后导出自动生成 click 占位 + force 输入步骤。
+- **任务录制器（油猴脚本）独立功能开关**：新增「多步录制」和「隐藏检测」两个独立按钮，多步录制开启后每次点击记录一步不自动停止，隐藏检测控制是否自动扫描 `display:none` 输入框；Enter 键在录制模式下可记录悬停元素而不触发页面 click；面板内建可折叠详细说明和使用手册弹窗。
+- **任务录制器（油猴脚本）DOM 守护**：MutationObserver + 定时轮询双保险，防止门户 JS 在 `document-idle` 后冲刷 `body.innerHTML` 导致浮动按钮/面板消失。
+- 修复部分校园网门户录制时密码步骤选择器指向假输入框导致填表失败的问题。
 
 ### v3.6.2
 

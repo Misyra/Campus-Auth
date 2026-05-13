@@ -4,13 +4,25 @@
 
 ## v3.6.x (待定)
 
-### 新功能
-
-- **`input` 步骤新增 `force` 参数**：支持对 `display:none` 的隐藏输入框强制填入值，通过 JS 原生 setter + 事件派发实现，解决深澜/Sangfor 系校园网门户密码框隐藏的问题
-- **任务录制器（油猴脚本）隐藏输入框检测**：统一检测深澜/Sangfor（假 type=text 占位）和杭州康工 HK Posi（readonly tip + 容器 div）两类隐藏输入框模式，同时覆盖账号和密码输入框；检测到后导出自动生成 click 占位 + force 输入步骤
-- **任务录制器（油猴脚本）独立功能开关**：新增「🔁 多步录制」和「🔍 隐藏检测」两个独立按钮，多步录制开启后每次点击记录一步不自动停止，隐藏检测控制是否自动扫描 `display:none` 输入框；Enter 键在录制模式下可记录悬停元素而不触发页面 click；面板内建可折叠详细说明和使用手册弹窗
-- **任务录制器（油猴脚本）DOM 守护**：MutationObserver + 定时轮询双保险，防止门户 JS 在 `document-idle` 后冲刷 `body.innerHTML` 导致浮动按钮/面板消失
-
 ### 修复
 
-- 修复部分校园网门户录制时密码步骤选择器指向假输入框导致填表失败的问题
+- **修复监控运行时保存设置后端卡死**：`reload_config()` 持锁期间调用 `update_config()` → `_push_log()` 触发同一 `threading.Lock` 的不可重入死锁。改为 `RLock` + 将热更新调用移到锁外执行，同时修复 `_on_profile_switch` 中的同类型死锁。
+- **修复 `save_task()` 非原子写入**：改为临时文件 + `os.replace()` 原子替换，防止崩溃时损坏任务 JSON 文件。
+- **修复 `is_in_pause_period` 边界条件**：`start_hour == end_hour` 时区间退化为零长度（永不为真），改为视为全天暂停。
+- **修复 `set_active_profile` 返回值被丢弃**：TOCTOU 场景下方案切换可能静默失败，现检查返回值并回退缓存状态。
+- **修复 `LOG_LEVELS` 缺少 `CRITICAL` 级别**：前端 logger 对 CRITICAL 静默降级为 INFO，现与后端对齐。
+- **修复通知面板关闭时也清零未读计数**：改为仅在打开面板时清零。
+- **`_setTrayIcon` → `_set_tray_icon`**：统一 snake_case 命名。
+- **`schemas.py` `safe_mode` 默认值 `True` → `False`**：与其他代码路径和文档保持一致。
+
+### 移除
+
+- **移除废弃的 `NavigateHandler` 类**：navigate 步骤已不再支持（由任务 URL 字段自动导航取代），保留 `StepType.NAVIGATE` 枚举和 TaskValidator 弃用提示以兼容旧任务文件。
+
+### 文档
+
+- 删除 `task-manual.md` 中不存在的 `BROWSER_SAFE_MODE` 环境变量条目
+- 修正 `task-manual.md` 中 `MAX_RETRIES` → `RETRY_MAX_RETRIES`
+- 标注 `task-manual.md` 中 navigate 步骤类型为已废弃
+- 补充 `README.md` 中 `browser_args` 配置项文档
+- 删除 `main.py` 中冗余的 `import re as _re`

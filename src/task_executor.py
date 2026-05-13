@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
+import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -377,33 +379,6 @@ class StepHandler(ABC):
         logger.warning("所有选择器均未匹配: %s", selector)
         return None
 
-
-class NavigateHandler(StepHandler):
-    """导航步骤处理器（已废弃，请使用任务的 url 字段）"""
-
-    @property
-    def step_type(self) -> str:
-        return StepType.NAVIGATE
-
-    async def execute(
-        self, page, step: StepConfig, resolver: VariableResolver
-    ) -> tuple[bool, str]:
-        import time as _time
-
-        logger.warning("navigate 步骤已废弃，建议使用任务的 url 字段代替")
-        params = self.resolve_params(step, resolver)
-        url = params.get("url", "")
-        wait_until = params.get("wait_until", "networkidle")
-        timeout = step.timeout or 30000
-
-        if not url:
-            return False, "导航地址不能为空"
-
-        logger.info("导航 → %s (wait=%s, timeout=%dms)", url, wait_until, timeout)
-        start = _time.perf_counter()
-        await page.goto(url, wait_until=wait_until, timeout=timeout)
-        logger.info("导航完成 → %s (%.1fs)", page.url, _time.perf_counter() - start)
-        return True, ""
 
 
 class InputHandler(StepHandler):
@@ -806,7 +781,6 @@ class StepExecutorRegistry:
     def _register_defaults(self) -> None:
         """注册默认处理器"""
         handlers = [
-            NavigateHandler(),
             InputHandler(),
             ClickHandler(),
             SelectHandler(),
@@ -1371,9 +1345,20 @@ class TaskManager:
             return False
 
         try:
-            file.write_text(
-                json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8"
+            # 原子写入：先写临时文件，再 os.replace 原子替换，防止崩溃时损坏任务文件
+            tmp_fd, tmp_path = tempfile.mkstemp(
+                dir=file.parent, suffix=".tmp", prefix="task."
             )
+            try:
+                with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                    f.write(json.dumps(config, ensure_ascii=False, indent=2))
+                os.replace(tmp_path, file)
+            except Exception:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
             return True
         except Exception as e:
             logger.error(f"无法保存任务 {task_id}: {e}")

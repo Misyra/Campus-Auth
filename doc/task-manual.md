@@ -265,13 +265,13 @@ window.chrome = {
 
 每个步骤必须包含 `id` 和 `type` 字段。`type` 必须是以下之一：
 
-`navigate`、`input`、`click`、`select`、`wait`、`wait_url`、`eval`、`custom_js`、`screenshot`、`sleep`、`ocr`
+`navigate`（已废弃）、`input`、`click`、`select`、`wait`、`wait_url`、`eval`、`custom_js`、`screenshot`、`sleep`、`ocr`
 
 各类型的额外必填字段：
 
 | 类型 | 必填字段 |
 |------|----------|
-| `navigate` | `url` |
+| `navigate`（已废弃，请使用任务的 `url` 字段） | `url` |
 | `input` | `selector` |
 | `click` | `selector` |
 | `select` | `selector` |
@@ -474,13 +474,11 @@ tasks/
 | `BROWSER_USER_AGENT` | 内置默认值 | 自定义 User-Agent |
 | `BROWSER_EXTRA_HEADERS_JSON` | 空 | 额外请求头（JSON） |
 | `BROWSER_DISABLE_WEB_SECURITY` | `false` | 禁用浏览器安全策略 |
-| `BROWSER_SAFE_MODE` | `false` | 安全模式（纯净 Chromium，无扩展） |
-
 ### 重试配置
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `MAX_RETRIES` | `3` | 最大重试次数 |
+| `RETRY_MAX_RETRIES` | `3` | 最大重试次数 |
 | `RETRY_INTERVAL` | `5` | 基础重试间隔（秒），退避公式：`interval × 2^(n-1)` |
 
 ### 系统配置

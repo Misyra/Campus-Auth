@@ -73,7 +73,7 @@ class MonitorService:
         self.project_root = project_root
         self._profile_service = profile_service or ProfileService(project_root)
 
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()  # 可重入锁，避免同一线程内 update_config → _push_log → _push_status 链式获取死锁
         self._logs: deque[LogEntry] = deque(maxlen=1200)
 
         self._ui_config = load_ui_config(self._profile_service)
@@ -170,9 +170,13 @@ class MonitorService:
                 load_runtime_config(self._profile_service),
                 self._profile_service.load().system,
             )
-            # 如果监控正在运行，热更新配置
-            if self._monitor_core and self._monitor_core.monitoring:
-                self._monitor_core.update_config(self._runtime_config.copy())
+            need_update = bool(self._monitor_core and self._monitor_core.monitoring)
+            new_config = self._runtime_config.copy() if need_update else None
+
+        # 在锁外执行热更新，避免 update_config → _push_log → 再次获取锁的死锁
+        if need_update and new_config is not None:
+            self._monitor_core.update_config(new_config)
+
         service_logger.info("Config reloaded from settings.json")
 
     def apply_profile(self, profile_name: str) -> None:
@@ -245,9 +249,13 @@ class MonitorService:
             level="INFO",
             source="backend.monitor_service",
         )
+        # 在锁外执行热更新，避免 update_config → _push_log → 再次获取锁的死锁
+        new_config = None
         with self._lock:
             if self._monitor_core:
-                self._monitor_core.update_config(self._runtime_config.copy())
+                new_config = self._runtime_config.copy()
+        if new_config is not None:
+            self._monitor_core.update_config(new_config)
 
     def stop_monitoring(self) -> tuple[bool, str]:
         service_logger.info("Stop monitoring requested")

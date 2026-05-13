@@ -7,6 +7,7 @@ export const LOG_LEVELS = {
   INFO: 20,
   WARNING: 30,
   ERROR: 40,
+  CRITICAL: 50,
 };
 
 export const DEFAULT_CONFIG = {

@@ -600,8 +600,7 @@ def download_task_writing_guide():
 
 def _normalize_repo_url(url: str) -> str:
     """将 GitHub 页面链接转换为 raw 链接，其他链接原样返回"""
-    import re as _re
-    m = _re.match(r"https?://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+)", url)
+    m = re.match(r"https?://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+)", url)
     if m:
         return f"https://raw.githubusercontent.com/{m.group(1)}/{m.group(2)}/{m.group(3)}/{m.group(4)}"
     return url
@@ -1010,7 +1009,7 @@ def toggle_auto_switch(enabled: str = Query(default="true")) -> ActionResponse:
 _tray_icon_ref = None
 
 
-def _setTrayIcon(tray_icon):
+def _set_tray_icon(tray_icon):
     """设置系统托盘实例引用"""
     global _tray_icon_ref
     _tray_icon_ref = tray_icon
