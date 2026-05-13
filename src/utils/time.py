@@ -29,8 +29,12 @@ class TimeUtils:
         start_hour = pause_config.get('start_hour', 0)
         end_hour = pause_config.get('end_hour', 6)
         
+        # start_hour == end_hour 时视为全天暂停（如 "全天不检测" 场景）
+        if start_hour == end_hour:
+            return True
+
         # 处理跨天的情况（如23点到6点）
-        if start_hour <= end_hour:
+        if start_hour < end_hour:
             # 同一天内的时间段（如0点到6点）
             return start_hour <= current_hour < end_hour
         else:

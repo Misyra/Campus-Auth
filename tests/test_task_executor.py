@@ -85,7 +85,7 @@ def test_task_validator_valid_task() -> None:
     valid_task = {
         "name": "测试任务",
         "steps": [
-            {"id": "step1", "type": "navigate", "url": "http://example.com"}
+            {"id": "step1", "type": "input", "selector": "#username", "value": "test"}
         ],
     }
     is_valid, errors = TaskValidator.validate(valid_task)
@@ -96,7 +96,7 @@ def test_task_validator_valid_task() -> None:
 def test_task_validator_missing_name() -> None:
     """测试验证器检测缺少名称"""
     invalid_task = {
-        "steps": [{"id": "step1", "type": "navigate", "url": "http://example.com"}]
+        "steps": [{"id": "step1", "type": "input", "selector": "#username", "value": "test"}]
     }
     is_valid, errors = TaskValidator.validate(invalid_task)
     assert is_valid is False

@@ -452,7 +452,11 @@ class NetworkMonitorCore:
             )
 
             self._last_profile_id = matched_id
-            self._profile_service.set_active_profile(matched_id)
+            ok, msg = self._profile_service.set_active_profile(matched_id)
+            if not ok:
+                # 方案可能在检测后被删除，回退缓存状态
+                self._last_profile_id = self._profile_service.load().active_profile
+                self.log_message(f"方案切换失败: {msg}", logging.WARNING)
 
             if self._on_profile_switch:
                 self._on_profile_switch(profile_name)
