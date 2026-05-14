@@ -524,6 +524,22 @@
       searchRoots.push(parent);
     }
 
+    // 密码步骤：优先搜索 input[type="password"]（忽略可见性）
+    // 因为点击包裹元素后门户 JS 可能已切换可见性（隐藏 pwdLabel，显示 pwd），
+    // 按可见性搜索会错误返回 pwdLabel 占位符而非真正的密码输入框
+    if (needPassword) {
+      for (const root of searchRoots) {
+        if (!root) continue;
+        const pwInputs = root.querySelectorAll('input[type="password"]');
+        for (const input of pwInputs) {
+          if (input === el) continue;
+          if (input.readOnly) continue;
+          if (input.id) return `#${CSS.escape(input.id)}`;
+          if (input.name) return `input[name="${CSS.escape(input.name)}"]`;
+        }
+      }
+    }
+
     for (const root of searchRoots) {
       if (!root) continue;
       const candidates = root.querySelectorAll(typeSelector);

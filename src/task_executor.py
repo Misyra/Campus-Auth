@@ -423,11 +423,23 @@ class InputHandler(StepHandler):
     ) -> tuple[bool, str]:
         """强制输入：跳过可见性检查，通过 JS 设置值并触发事件。
         适用于 display:none / visibility:hidden 的隐藏输入框。
+        支持逗号分隔的候选选择器，按顺序尝试，取第一个 attached 的元素。
         """
-        timeout_sec = timeout / 1000
-        element = ctx.locator(selector).first
-        await element.wait_for(state="attached", timeout=timeout_sec)
-        
+        candidates = [s.strip() for s in selector.split(",") if s.strip()]
+
+        element = None
+        for candidate in candidates:
+            try:
+                el = ctx.locator(candidate).first
+                await el.wait_for(state="attached", timeout=timeout)
+                element = el
+                break
+            except Exception:
+                logger.debug("force_input 选择器未匹配: %s", candidate)
+                continue
+
+        if not element:
+            return False, f"force_input 未找到可用的输入元素: {selector}"
 
         if clear:
             await element.evaluate("el => { el.value = ''; }")
