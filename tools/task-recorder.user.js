@@ -60,6 +60,7 @@
     panel: null,
     tooltip: null,
     iframeWarning: null,
+    carrierClickPhase: null,
     loginCompleted: false,
     successConditions: [],
   };
@@ -524,10 +525,10 @@
       searchRoots.push(parent);
     }
 
-    // 密码步骤：优先搜索 input[type="password"]（忽略可见性）
-    // 因为点击包裹元素后门户 JS 可能已切换可见性（隐藏 pwdLabel，显示 pwd），
-    // 按可见性搜索会错误返回 pwdLabel 占位符而非真正的密码输入框
-    if (needPassword) {
+    // 深澜/Sangfor 模式：密码步骤点中的是 type="text" 假占位，真实密码框可能被
+    // 门户 JS 切换可见性。此时忽略可见性搜索 input[type="password"]。
+    const clickedIsTextDecoy = needPassword && el.tagName === "INPUT" && el.type === "text";
+    if (clickedIsTextDecoy) {
       for (const root of searchRoots) {
         if (!root) continue;
         const pwInputs = root.querySelectorAll('input[type="password"]');
@@ -540,6 +541,7 @@
       }
     }
 
+    // 通用搜索：按类型 + 可见性筛选隐藏输入框
     for (const root of searchRoots) {
       if (!root) continue;
       const candidates = root.querySelectorAll(typeSelector);
@@ -649,7 +651,7 @@
             <b>Esc</b> — 取消当前录制<br>
             <b>🔁 多步录制</b> — 开启后每次点击/Enter 记录一步，不会自动停止，需手动 Esc<br>
             <b>🔍 隐藏检测</b> — 开启后自动扫描容器内 <code style="color:#FF9800;">display:none</code> 的真实输入框<br>
-            <span style="color:#667eea;">💡 运营商下拉框建议：打开多步录制 → 点下拉框 → 切「点击元素」→ 点选项</span>
+            <span style="color:#667eea;">💡 运营商：点「运营商选择」→ 点下拉框（原生 select 一键完成；自定义 div 自动进入两阶段：触发器→选项）</span>
           </div>
         </div>
         <div class="ca-section">
@@ -759,6 +761,7 @@
 
   function selectStepType(type) {
     state.currentStepType = type;
+    state.carrierClickPhase = null;
     state.panel.querySelectorAll(".ca-step-btn").forEach(b => {
       b.classList.toggle("active", b.dataset.type === type);
     });
@@ -986,13 +989,24 @@
   }
 
   function onClick(e) {
+    if (!e.isTrusted) return;
     if (!state.recording) return;
-    const el = e.target;
+    let el = e.target;
+    // <select> 的 mousedown 已打开下拉框，用户实际点中的是 <option>，往上找到 <select>
+    if (el.tagName === "OPTION") {
+      el = el.closest("select") || el.parentElement || el;
+    }
     if (el === state.panel || state.panel?.contains(el)) return;
     if (el.closest("#ca-tooltip")) return;
 
-    e.preventDefault();
-    e.stopPropagation();
+    // 运营商（非原生 select）需要点击到达页面以展开自定义下拉框，不能拦截
+    const needsClickThrough = state.currentStepType === "carrier"
+      && el.tagName !== "SELECT"
+      && !state.carrierClickPhase;
+    if (!needsClickThrough) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
 
     el.classList.remove("ca-highlight");
     el.classList.add("ca-highlight-selected");
@@ -1004,17 +1018,7 @@
     const info = getElementInfo(el);
     hideTooltip();
 
-    // 调用处理函数（carrier 可能保持录制状态）
     handleElementSelected(el, info);
-
-    // 如果录制仍开启（carrier 两阶段第一阶段），重放点击触发页面行为（打开下拉框）
-    if (state.recording) {
-      const newEvt = new MouseEvent("click", {
-        bubbles: true, cancelable: true, view: window,
-        clientX: e.clientX, clientY: e.clientY,
-      });
-      el.dispatchEvent(newEvt);
-    }
   }
 
   function handleElementSelected(el, info) {
@@ -1057,7 +1061,7 @@
       return;
     }
     if (type === "carrier") {
-      addStepFromElement(type, el, info, "运营商选择");
+      handleCarrierClickPhase(el, info);
       return;
     }
     if (type === "submit") {
@@ -1069,8 +1073,77 @@
     showCustomStepModal(type, el, info);
   }
 
+  function handleCarrierClickPhase(el, info) {
+    // 原生 <select>：直接记录，不走两阶段
+    if (!state.carrierClickPhase && info.tag === "select") {
+      addStepFromElement("carrier", el, info, "运营商选择 → {{ISP}}");
+      return;
+    }
+
+    if (!state.carrierClickPhase) {
+      // Phase 1: 记录触发器
+      state.carrierClickPhase = { triggerEl: el, triggerInfo: info };
+      state.selectedEl = null;
+      setStatus("🔽 已记录下拉触发器，现在点击任意一个运营商选项（用于展示选项格式，实际值用 {{ISP}} 变量）", "recording");
+    } else {
+      // Phase 2: 记录选项，合并为一步
+      const triggerInfo = state.carrierClickPhase.triggerInfo;
+      const triggerSelector = triggerInfo.selectors[0]?.value || "";
+      const optionText = (el.textContent || "").trim().substring(0, 50);
+
+      const step = {
+        type: "carrier",
+        description: `运营商选择 → {{ISP}}（示例: ${optionText}）`,
+        tag: triggerInfo.tag,
+        bestSelector: triggerSelector,
+        selectorCandidates: triggerInfo.selectors.map(s => s.value),
+        iframe: triggerInfo.iframe,
+        attrs: triggerInfo.attrs,
+        text: triggerInfo.text,
+        visible: triggerInfo.visible,
+        optionText: optionText,
+        optionTag: info.tag,
+        optionSelector: info.selectors[0]?.value || "",
+      };
+
+      state.steps.push(step);
+      state.carrierClickPhase = null;
+      state.selectedEl?.classList.remove("ca-highlight-selected");
+      state.selectedEl = null;
+      updateRecordedList();
+      saveState();
+      setStatus(`已添加: 运营商选择 → {{ISP}}（示例选项: ${optionText}）`);
+      if (!state.multiStepMode) {
+        state.recording = false;
+        state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+      }
+      if (state.multiStepMode && state.recording) {
+        setStatus("🔁 点击下一个元素或选择步骤类型，按 Esc 停止", "recording");
+      }
+    }
+  }
+
   function addStepFromElement(type, el, info, description) {
+    // 跟随 <label for="..."> 到目标输入框
+    let tipSelector = null;
+    if (el.tagName === "LABEL" && el.htmlFor) {
+      const target = document.getElementById(el.htmlFor);
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT")) {
+        if (isElementHidden(target)) {
+          tipSelector = info.selectors[0]?.value || "";  // 目标隐藏 → label 作为 tip
+        }
+        info = getElementInfo(target);                   // 改用目标 input 的选择器
+      }
+    }
+
     const bestSelector = info.selectors[0]?.value || "";
+
+    // 去重：相同类型 + 相同选择器（检查所有已录制步骤，防止交替录制时重复）
+    if (state.steps.some(s => s.type === type && s.bestSelector === bestSelector)) {
+      setStatus(`⏭️ 已跳过重复: ${description} (${bestSelector})`, "recording");
+      return;
+    }
+
     const selectorCandidates = info.selectors.map(s => s.value);
 
     // 检测隐藏输入框模式（深澜 / 杭州康工 HK Posi 等）
@@ -1079,29 +1152,17 @@
     const isInputStep = type === "username" || type === "password" || type === "captcha_input";
 
     if (isInputStep && state.hiddenDetectionEnabled) {
-      // 触发条件：
-      //   1. 元素本身 display:none
-      //   2. 密码步骤但点中的是 type="text"（深澜/Sangfor）
-      //   3. 选中元素是 readonly/disabled 占位（HK Posi 的 input_tip）
-      //   4. 选中元素是容器 div/span（HK Posi 的 _hk_posi 外层容器）
-      const typeWrong = (type === "password" && info.attrs.type !== "password");
-      const isTip = el.readOnly || el.disabled;
-      const isContainer = el.tagName !== "INPUT" && el.tagName !== "TEXTAREA";
-      if (isElementHidden(el) || typeWrong || isTip || isContainer) {
-        hiddenRealSelector = detectHiddenRealInput(el, type);
-        if (hiddenRealSelector) {
-          const reasons = [];
-          if (isElementHidden(el)) reasons.push("所选元素 display:none");
-          if (typeWrong) reasons.push(`所选元素 type="${info.attrs.type || "text"}" 非预期`);
-          if (isTip) reasons.push("所选元素为 readonly 占位");
-          if (isContainer && !isTip && !isElementHidden(el)) reasons.push("所选元素为容器 div，自动扫描内部隐藏输入框");
-          hiddenWarning = `⚠️ 检测到隐藏输入框！${reasons.join("；")}。真实输入框 ${hiddenRealSelector} 已自动识别，导出时将使用 force 模式。`;
-        }
+      hiddenRealSelector = detectHiddenRealInput(el, type);
+      if (hiddenRealSelector) {
+        hiddenWarning = `⚠️ 检测到隐藏输入框！真实输入框 ${hiddenRealSelector} 已自动识别，导出时将使用 force 模式。`;
       }
     }
 
-    // 如果真实输入框和点击元素不同，记录 tip 选择器（用于生成点击步骤触发门户 JS）
-    const tipSelector = hiddenRealSelector && hiddenRealSelector !== bestSelector ? bestSelector : null;
+    // 如果真实输入框和点击元素不同，记录 tip 选择器
+    // tipSelector 可能已在 label-for 跟随中设置，此处仅补充隐藏检测的情况
+    if (!tipSelector && hiddenRealSelector && hiddenRealSelector !== bestSelector) {
+      tipSelector = bestSelector;
+    }
 
     const step = {
       type,
@@ -1255,7 +1316,7 @@
     prompt += `|-----------|-------------|------|\n`;
     prompt += `| username | input | value: {{USERNAME}} |\n`;
     prompt += `| password | input | value: {{PASSWORD}}，隐藏输入框需 force:true |\n`;
-    prompt += `| carrier | select | value: {{ISP}} |\n`;
+    prompt += `| carrier | select 或 click_select | value: {{ISP}}（原生 select → select，自定义 div → click_select） |\n`;
     prompt += `| captcha_img + captcha_input | ocr | 合并为一个 ocr 步骤，selector=图片, target_selector=输入框 |\n`;
     prompt += `| submit | click | — |\n`;
     prompt += `| click | click | — |\n`;
@@ -1329,6 +1390,15 @@
       }
       if (s.iframe?.inIframe) {
         prompt += `- 在 iframe 内: ${s.iframe.crossOrigin ? "跨域" : s.iframe.frameSelector || "是"}\n`;
+      }
+      if (s.type === "carrier" && s.optionText) {
+        prompt += `- ⚠️ 自定义下拉框（非原生 select）→ 映射为 click_select，value 用 {{ISP}}\n`;
+        prompt += `- 触发器选择器: \`${s.bestSelector}\`\n`;
+        prompt += `- 选项容器选择器（建议填写 option_selector）: \`${s.optionSelector || "（手动指定选项的父容器）"}\`\n`;
+        prompt += `- 选项示例（仅参考格式，实际值取 {{ISP}}）: \`${s.optionText}\`\n`;
+      }
+      if (s.type === "carrier" && !s.optionText) {
+        prompt += `- 原生 select 下拉框 → 映射为 select，value 用 {{ISP}}\n`;
       }
       if (s.captchaType) {
         prompt += `- 验证码类型: ${CAPTCHA_TYPES.find(t => t.value === s.captchaType)?.label || s.captchaType}\n`;
@@ -1444,7 +1514,7 @@
             <tr style="color:#aaa;"><td style="padding:3px 6px;">按钮</td><td style="padding:3px 6px;">用途</td><td style="padding:3px 6px;">导出为</td></tr>
             <tr><td style="padding:3px 6px;">👤 账号输入框</td><td style="padding:3px 6px;">点击用户名输入区域</td><td style="padding:3px 6px;"><code>input</code> + {{USERNAME}}</td></tr>
             <tr><td style="padding:3px 6px;">🔒 密码输入框</td><td style="padding:3px 6px;">点击密码输入区域</td><td style="padding:3px 6px;"><code>input</code> + {{PASSWORD}}</td></tr>
-            <tr><td style="padding:3px 6px;">📶 运营商选择</td><td style="padding:3px 6px;">点击运营商下拉框</td><td style="padding:3px 6px;"><code>select</code> + {{ISP}}</td></tr>
+            <tr><td style="padding:3px 6px;">📶 运营商选择</td><td style="padding:3px 6px;">点下拉框（自动识别原生/自定义）</td><td style="padding:3px 6px;"><code>select</code> 或 <code>click_select</code> + {{ISP}}</td></tr>
             <tr><td style="padding:3px 6px;">🖼️ 验证码图片</td><td style="padding:3px 6px;">点击验证码图片</td><td style="padding:3px 6px;"><code>ocr</code> 步骤（与验证码输入框合并）</td></tr>
             <tr><td style="padding:3px 6px;">✏️ 验证码输入</td><td style="padding:3px 6px;">点击验证码输入框</td><td style="padding:3px 6px;"><code>ocr</code> 识别 + 填入</td></tr>
             <tr><td style="padding:3px 6px;">🚀 提交按钮</td><td style="padding:3px 6px;">点击登录/提交按钮</td><td style="padding:3px 6px;"><code>click</code> 步骤</td></tr>
@@ -1478,12 +1548,11 @@
             <li>点「✅ 完成登录」→ 设置成功条件 → 复制 AI 提示词</li>
           </ol>
 
-          <p style="margin:4px 0;"><b style="color:#fff;">场景 B：运营商下拉框（自定义 UI，非原生 select）</b></p>
+          <p style="margin:4px 0;"><b style="color:#fff;">场景 B：运营商下拉框</b></p>
           <ol style="margin:0 0 8px;padding-left:18px;font-size:12px;">
-            <li>点「运营商选择」→ 点下拉框触发器</li>
-            <li>下拉框弹出后，切到「点击元素」→ <b style="color:#fff;">用 Enter 键</b>点选项（避免点击关掉下拉框）</li>
-            <li>点「提交按钮」→ 点登录按钮</li>
-            <li>完成 → 复制 AI 提示词</li>
+            <li>点「运营商选择」→ 点下拉框</li>
+            <li>原生 <code>&lt;select&gt;</code> 直接完成；自定义 div 自动提示"点运营商选项"</li>
+            <li>点选项文字或用 <b style="color:#fff;">Enter 键</b> 悬停选取 → 自动合并为一步</li>
           </ol>
 
           <p style="margin:4px 0;"><b style="color:#fff;">场景 C：隐藏输入框模式（深澜/HK Posi）</b></p>
@@ -1575,6 +1644,7 @@
       if (state.recording) {
         state.recording = false;
         state.currentStepType = null;
+        state.carrierClickPhase = null;
         hideTooltip();
         state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
         if (state.hoveredEl) {
@@ -1596,7 +1666,11 @@
       const type = state.currentStepType;
       const optText = (el.textContent || "").trim().substring(0, 50);
 
-      addStepFromElement(type, el, info, optText || STEP_TYPES[type]?.label || "");
+      if (type === "carrier") {
+        handleCarrierClickPhase(el, info);
+      } else {
+        addStepFromElement(type, el, info, optText || STEP_TYPES[type]?.label || "");
+      }
 
       if (state.hoveredEl) {
         state.hoveredEl.classList.remove("ca-highlight");

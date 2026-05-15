@@ -265,7 +265,7 @@ window.chrome = {
 
 每个步骤必须包含 `id` 和 `type` 字段。`type` 必须是以下之一：
 
-`navigate`（已废弃）、`input`、`click`、`select`、`wait`、`wait_url`、`eval`、`custom_js`、`screenshot`、`sleep`、`ocr`
+`navigate`（已废弃）、`input`、`click`、`select`、`click_select`、`wait`、`wait_url`、`eval`、`custom_js`、`screenshot`、`sleep`、`ocr`
 
 各类型的额外必填字段：
 
@@ -275,6 +275,7 @@ window.chrome = {
 | `input` | `selector` |
 | `click` | `selector` |
 | `select` | `selector` |
+| `click_select` | `selector` |
 | `wait` | `selector` |
 | `wait_url` | `pattern` |
 | `eval` | `script`（兼容已废弃的 `code`） |

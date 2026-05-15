@@ -57,6 +57,7 @@ class StepType(str, Enum):
     SCREENSHOT = "screenshot"
     SLEEP = "sleep"
     OCR = "ocr"
+    CLICK_SELECT = "click_select"
 
 
 class ConditionType(str, Enum):
@@ -555,6 +556,60 @@ class SelectHandler(StepHandler):
         return False
 
 
+class ClickSelectHandler(StepHandler):
+    """点击-选择步骤 — 用于自定义 div 下拉框（非原生 select）"""
+
+    @property
+    def step_type(self) -> str:
+        return StepType.CLICK_SELECT
+
+    async def execute(
+        self, page, step: StepConfig, resolver: VariableResolver
+    ) -> tuple[bool, str]:
+        params = self.resolve_params(step, resolver)
+        selector = params.get("selector", "")
+        value = str(params.get("value", "") or "").strip()
+        option_selector = params.get("option_selector", "")
+        timeout = step.timeout or 10000
+
+        if not selector:
+            return False, "click_select 步骤需要 selector"
+        if not value:
+            logger.info("[click_select] value 为空，跳过")
+            return True, ""
+
+        ctx = await self._resolve_frame(page, step)
+        logger.info("[click_select] trigger=%s, value=%s, option_sel=%s", selector, value, option_selector or "(auto)")
+
+        trigger = await self._find_element(ctx, selector, timeout)
+        if not trigger:
+            logger.info("[click_select] 未找到触发器，跳过: %s", selector)
+            return True, ""
+
+        await trigger.click(timeout=timeout)
+        await page.wait_for_timeout(500)
+
+        clicked = await self._click_option(page, value, option_selector, timeout)
+        if not clicked:
+            logger.info("[click_select] 未匹配到选项，跳过: %s", value)
+        return True, ""
+
+    async def _click_option(self, page, text: str, option_selector: str, timeout: int) -> bool:
+        try:
+            if option_selector:
+                # 限定容器内搜索，更精准
+                container = page.locator(option_selector).first
+                option = container.get_by_text(text, exact=False).first
+            else:
+                option = page.get_by_text(text, exact=False).first
+            await option.wait_for(state="visible", timeout=min(timeout, 3000))
+            await option.click(timeout=timeout)
+            logger.info("[click_select] 点击选项: %s", text)
+            return True
+        except Exception:
+            return False
+
+
 class WaitHandler(StepHandler):
     """等待步骤处理器"""
 
@@ -797,6 +852,7 @@ class StepExecutorRegistry:
             InputHandler(),
             ClickHandler(),
             SelectHandler(),
+            ClickSelectHandler(),
             WaitHandler(),
             WaitUrlHandler(),
             EvalHandler(),
@@ -909,6 +965,9 @@ class TaskValidator:
 
         if step_type == StepType.SELECT and not step.get("selector"):
             errors.append(f"{prefix} (select) 需要 'selector' 字段")
+
+        if step_type == StepType.CLICK_SELECT and not step.get("selector"):
+            errors.append(f"{prefix} (click_select) 需要 'selector' 字段")
 
         if step_type == StepType.WAIT and not step.get("selector"):
             errors.append(f"{prefix} (wait) 需要 'selector' 字段")
