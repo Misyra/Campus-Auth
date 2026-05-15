@@ -7,6 +7,7 @@ import pytest
 from src.task_executor import (
     ConditionConfig,
     StepConfig,
+    StepType,
     TaskConfig,
     TaskExecutor,
     TaskManager,
@@ -96,7 +97,9 @@ def test_task_validator_valid_task() -> None:
 def test_task_validator_missing_name() -> None:
     """测试验证器检测缺少名称"""
     invalid_task = {
-        "steps": [{"id": "step1", "type": "input", "selector": "#username", "value": "test"}]
+        "steps": [
+            {"id": "step1", "type": "input", "selector": "#username", "value": "test"}
+        ]
     }
     is_valid, errors = TaskValidator.validate(invalid_task)
     assert is_valid is False
@@ -163,9 +166,7 @@ def test_task_config_from_dict() -> None:
         "url": "http://example.com",
         "timeout": 15000,
         "variables": {"key": "value"},
-        "steps": [
-            {"id": "s1", "type": "navigate", "url": "{{url}}"}
-        ],
+        "steps": [{"id": "s1", "type": "navigate", "url": "{{url}}"}],
         "success_conditions": [
             {"type": "variable", "variable": "result", "value": True}
         ],
@@ -215,9 +216,7 @@ def test_step_config_to_dict_merges_extra() -> None:
 
 def test_step_config_from_dict_normalizes_code_to_script() -> None:
     """测试 from_dict 将 code 规范化为 script"""
-    step = StepConfig.from_dict({
-        "id": "s1", "type": "eval", "code": "return 1+1"
-    })
+    step = StepConfig.from_dict({"id": "s1", "type": "eval", "code": "return 1+1"})
     assert step.script == "return 1+1"
     # code 不应留在 extra 中
     assert "code" not in step.extra
@@ -225,9 +224,9 @@ def test_step_config_from_dict_normalizes_code_to_script() -> None:
 
 def test_step_config_from_dict_script_takes_precedence() -> None:
     """测试 from_dict 中 script 优先于 code"""
-    step = StepConfig.from_dict({
-        "id": "s1", "type": "eval", "script": "return 1", "code": "return 2"
-    })
+    step = StepConfig.from_dict(
+        {"id": "s1", "type": "eval", "script": "return 1", "code": "return 2"}
+    )
     assert step.script == "return 1"
 
 
@@ -272,3 +271,48 @@ def test_task_manager_list_tasks_returns_fields(tmp_path: Path) -> None:
     assert tasks[0]["id"] == "test"
     assert tasks[0]["name"] == "test"
     assert tasks[0]["description"] == "desc"
+
+
+def test_click_select_is_valid_step_type() -> None:
+    """click_select 应在 StepType 枚举中"""
+    assert "click_select" in {t.value for t in StepType}
+
+
+def test_task_validator_click_select_missing_selector() -> None:
+    """缺少 selector 时 click_select 验证失败"""
+    invalid_task = {
+        "name": "test",
+        "steps": [{"id": "s1", "type": "click_select", "value": "联通宽带接入"}],
+    }
+    is_valid, errors = TaskValidator.validate(invalid_task)
+    assert is_valid is False
+    assert any("selector" in e for e in errors)
+
+
+def test_task_validator_click_select_valid() -> None:
+    """完整 click_select 步骤验证通过"""
+    valid_task = {
+        "name": "test",
+        "steps": [
+            {
+                "id": "s1",
+                "type": "click_select",
+                "selector": "#dropdown",
+                "value": "{{ISP}}",
+            }
+        ],
+    }
+    is_valid, errors = TaskValidator.validate(valid_task)
+    assert is_valid is True
+    assert len(errors) == 0
+
+
+def test_step_config_click_select_to_dict() -> None:
+    """click_select 步骤序列化正确"""
+    step = StepConfig(
+        id="s1", type="click_select", selector="#trigger", value="{{ISP}}"
+    )
+    d = step.to_dict()
+    assert d["type"] == "click_select"
+    assert d["selector"] == "#trigger"
+    assert d["value"] == "{{ISP}}"
