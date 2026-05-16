@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import subprocess
 import sys
 import xml.sax.saxutils
@@ -227,7 +228,22 @@ WantedBy=default.target
         self._run(["systemctl", "--user", "daemon-reload"])
         return True, "已关闭 Linux 开机自启动"
 
+    @staticmethod
+    def _has_cjk_chars(path: str) -> bool:
+        """检查路径是否包含中日韩(CJK)统一表意文字。"""
+        return bool(re.search(r'[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]', path))
+
     def _enable_windows(self) -> tuple[bool, str]:
+        project_root_str = str(self.project_root)
+        if self._has_cjk_chars(project_root_str):
+            logger.error("项目路径包含中日韩字符: %s", project_root_str)
+            return (
+                False,
+                f"项目路径包含中文/日文/韩文字符，自启动可能无法正常启动。\n"
+                f"请将 Campus-Auth 文件夹移动到纯英文路径（如 D:\\Campus-Auth）后重新启用自启动。\n"
+                f"当前路径: {project_root_str}",
+            )
+
         startup_vbs = self._windows_startup_vbs()
         logger.info("Windows VBS 路径: %s", startup_vbs)
 
@@ -266,7 +282,30 @@ If fso.FileExists(pidFile) Then
     On Error GoTo 0
 End If
 
-WshShell.Run Chr(34) & "{python_exe}" & Chr(34) & " " & Chr(34) & "{app_py}" & Chr(34) & " --no-browser", 0, False
+' 检测路径是否包含中日韩(CJK)字符（此类字符可能导致 WshShell.Run 找不到文件）
+Function HasCJK(sPath)
+    HasCJK = False
+    Dim i, code
+    For i = 1 To Len(sPath)
+        code = AscW(Mid(sPath, i, 1))
+        If code >= 19968 And code <= 40959 Then
+            HasCJK = True
+            Exit Function
+        End If
+    Next
+End Function
+
+targetExe = "{python_exe}"
+If Not fso.FileExists(targetExe) Then
+    If HasCJK(targetExe) Then
+        MsgBox "检测到项目路径包含中文/日文/韩文字符，自启动无法运行。" & vbCrLf & vbCrLf & _
+               "请将 Campus-Auth 文件夹移到纯英文路径(如 D:\Campus-Auth)后重新启用自启动。" & vbCrLf & _
+               "当前路径: " & targetExe, _
+               48, "Campus-Auth 自启动失败"
+    End If
+End If
+
+WshShell.Run Chr(34) & targetExe & Chr(34) & " " & Chr(34) & "{app_py}" & Chr(34) & " --no-browser", 0, False
 '''
         else:
             packaged = os.getenv("Campus-Auth_START_EXECUTABLE", "").strip()
@@ -294,7 +333,30 @@ If fso.FileExists(pidFile) Then
     On Error GoTo 0
 End If
 
-WshShell.Run Chr(34) & "{packaged}" & Chr(34) & " --no-browser", 0, False
+' 检测路径是否包含中日韩(CJK)字符（此类字符可能导致 WshShell.Run 找不到文件）
+Function HasCJK(sPath)
+    HasCJK = False
+    Dim i, code
+    For i = 1 To Len(sPath)
+        code = AscW(Mid(sPath, i, 1))
+        If code >= 19968 And code <= 40959 Then
+            HasCJK = True
+            Exit Function
+        End If
+    Next
+End Function
+
+targetExe = "{packaged}"
+If Not fso.FileExists(targetExe) Then
+    If HasCJK(targetExe) Then
+        MsgBox "检测到项目路径包含中文/日文/韩文字符，自启动无法运行。" & vbCrLf & vbCrLf & _
+               "请将 Campus-Auth 文件夹移到纯英文路径后重新启用自启动。" & vbCrLf & _
+               "当前路径: " & targetExe, _
+               48, "Campus-Auth 自启动失败"
+    End If
+End If
+
+WshShell.Run Chr(34) & targetExe & Chr(34) & " --no-browser", 0, False
 '''
 
         try:

@@ -99,6 +99,7 @@ export const appOptions = {
       repoImport: {
         visible: false,
         url: 'https://github.com/Misyra/campus-auth-tasks/blob/master/index.json',
+        source: 'github',
         loading: false,
         error: '',
         tasks: [],

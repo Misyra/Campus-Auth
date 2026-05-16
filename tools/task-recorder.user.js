@@ -20,16 +20,16 @@
   // ==================== 配置 ====================
 
   const STEP_TYPES = {
-    username: { label: "账号输入框", icon: "👤", color: "#4CAF50" },
-    password: { label: "密码输入框", icon: "🔒", color: "#2196F3" },
-    carrier: { label: "运营商选择", icon: "📶", color: "#FF9800" },
-    captcha_img: { label: "验证码图片", icon: "🖼️", color: "#9C27B0" },
-    captcha_input: { label: "验证码输入框", icon: "✏️", color: "#9C27B0" },
-    submit: { label: "提交按钮", icon: "🚀", color: "#F44336" },
-    click: { label: "点击元素", icon: "👆", color: "#607D8B" },
-    wait: { label: "等待元素", icon: "⏳", color: "#795548" },
-    eval: { label: "执行JS", icon: "⚙️", color: "#00BCD4" },
-    custom: { label: "自定义步骤", icon: "📝", color: "#9E9E9E" },
+    username: { category: "basic", label: "账号输入框", icon: "👤", color: "#4CAF50", hint: "点击页面上真实的账号输入框（不是旁边的文字标签），支持自动检测隐藏输入框" },
+    password: { category: "basic", label: "密码输入框", icon: "🔒", color: "#2196F3", hint: "点击密码输入框，录制器会自动检测 display:none 的隐藏密码框" },
+    carrier: { category: "basic", label: "运营商选择", icon: "📶", color: "#FF9800", hint: "点击运营商下拉框：原生 select 一键完成；自定义 div 自动进入两阶段选选项" },
+    captcha_img: { category: "basic", label: "验证码图片", icon: "🖼️", color: "#9C27B0", hint: "点击验证码图片，录制器会自动提示继续点击验证码输入框" },
+    captcha_input: { category: "basic", label: "验证码输入框", icon: "✏️", color: "#9C27B0", hint: "点击验证码输入框，自动弹出验证码类型选择（数字/字母/运算等）" },
+    submit: { category: "basic", label: "提交按钮", icon: "🚀", color: "#F44336", hint: "点击登录/提交按钮，通常放在最后一步" },
+    click: { category: "advanced", label: "点击元素", icon: "👆", color: "#607D8B", hint: "点击任意页面元素，仅记录点击操作，不填空" },
+    wait: { category: "advanced", label: "等待元素", icon: "⏳", color: "#795548", hint: "鼠标悬停在要等待的元素上，然后按 Enter 键记录" },
+    eval: { category: "advanced", label: "执行JS", icon: "⚙️", color: "#00BCD4", hint: "输入一段要在页面中执行的 JavaScript 代码" },
+    custom: { category: "advanced", label: "自定义步骤", icon: "📝", color: "#9E9E9E", hint: "手动填写步骤描述、选择器、填写值，自由度高" },
   };
 
   const CAPTCHA_TYPES = [
@@ -63,6 +63,11 @@
     carrierClickPhase: null,
     loginCompleted: false,
     successConditions: [],
+    awaitingPanelRect: false,
+    rectSelectMode: false,
+    drawing: false,
+    rectStart: null,
+    rectOverlay: null,
   };
 
   const STORAGE_KEY = "ca_recorder_state";
@@ -285,12 +290,14 @@
       selectors.push({ type: "css", value: `#${CSS.escape(el.id)}`, reliability: 10 });
     }
 
-    // 2. name 属性
+    // 2. name 属性（检查唯一性：隐藏表单 f0 可能与可见表单 f1 有同名 input）
     if (el.name) {
+      const nameSelector = `${el.tagName.toLowerCase()}[name="${CSS.escape(el.name)}"]`;
+      const matchCount = document.querySelectorAll(nameSelector).length;
       selectors.push({
         type: "css",
-        value: `${el.tagName.toLowerCase()}[name="${CSS.escape(el.name)}"]`,
-        reliability: 9,
+        value: nameSelector,
+        reliability: matchCount === 1 ? 9 : 6,
       });
     }
 
@@ -311,13 +318,25 @@
       });
     }
 
-    // 5. 文本内容（按钮/链接）
+    // 5. data-testid（React/Vue 现代 SPA 最稳定标识）
+    const testId = el.getAttribute("data-testid");
+    if (testId) {
+      selectors.push({ type: "css", value: `[data-testid="${CSS.escape(testId)}"]`, reliability: 9 });
+    }
+
+    // 6. aria-label
+    const ariaLabel = el.getAttribute("aria-label");
+    if (ariaLabel) {
+      selectors.push({ type: "css", value: `[aria-label="${CSS.escape(ariaLabel)}"]`, reliability: 7 });
+    }
+
+    // 7. 文本内容（按钮/链接）
     const text = (el.textContent || "").trim();
     if (text && text.length < 30 && ["A", "BUTTON", "SPAN", "DIV"].includes(el.tagName)) {
       selectors.push({ type: "text", value: text, reliability: 5 });
     }
 
-    // 6. 短 CSS 路径
+    // 8. 短 CSS 路径
     try {
       const shortCss = buildShortCss(el);
       if (shortCss && document.querySelectorAll(shortCss).length === 1) {
@@ -325,12 +344,19 @@
       }
     } catch (_) {}
 
-    // 7. XPath
+    // 9. XPath
     selectors.push({ type: "xpath", value: buildXPath(el), reliability: 3 });
 
     // 按可靠性排序
     selectors.sort((a, b) => b.reliability - a.reliability);
     return selectors;
+  }
+
+  // 检测 CSS Modules / 动态 hash class（如 login_abc12345__xyz、css-1a2b3c4）
+  function isHashedClass(name) {
+    return /^[a-z]+-[a-z0-9]{6,}$/.test(name)          // css-1a2b3c4
+      || /^[a-zA-Z]+_\w{6,}(?:__\w+)?$/.test(name)     // login_abc123 或 login_abc123__xyz
+      || /^[a-zA-Z]+-[a-f0-9]{6,}$/.test(name);         // header-abc123
   }
 
   function buildShortCss(el) {
@@ -343,7 +369,8 @@
         break;
       }
       if (current.className && typeof current.className === "string") {
-        const classes = current.className.trim().split(/\s+/).filter(c => c && !/^[\d-]/.test(c));
+        const classes = current.className.trim().split(/\s+/)
+          .filter(c => c && !/^[\d-]/.test(c) && !isHashedClass(c));
         if (classes.length > 0) {
           part += "." + classes.slice(0, 2).map(c => CSS.escape(c)).join(".");
         }
@@ -410,7 +437,20 @@
               };
             }
           } catch (_) {
-            return { inIframe: true, crossOrigin: true, frameSrc: frame.src || "" };
+            // 跨域 iframe：拿不到内部内容，但 frame 元素本身在主文档可见，可获取属性
+            const tag = frame.tagName.toLowerCase();
+            return {
+              inIframe: true,
+              crossOrigin: true,
+              frameSrc: frame.src || "",
+              frameName: frame.name || "",
+              frameId: frame.id || "",
+              frameSelector: frame.id
+                ? `#${frame.id}`
+                : frame.name
+                  ? `${tag}[name="${frame.name}"]`
+                  : buildShortCss(frame),
+            };
           }
         }
         return { inIframe: true, crossOrigin: false };
@@ -449,7 +489,12 @@
     const tag = el.tagName.toLowerCase();
     const attrs = {};
     for (const attr of el.attributes) {
-      if (["id", "class", "name", "type", "placeholder", "value", "href", "src", "action"].includes(attr.name)) {
+      if (["id", "class", "name", "type", "placeholder", "value", "href", "src", "action",
+           "data-testid", "aria-label", "aria-describedby", "role"].includes(attr.name)) {
+        attrs[attr.name] = attr.value;
+      }
+      // 收集所有 data-* 属性作为候选
+      if (attr.name.startsWith("data-")) {
         attrs[attr.name] = attr.value;
       }
     }
@@ -484,6 +529,15 @@
   //   2. 在容器内搜索匹配目标类型的隐藏 input
   //   3. 在父元素内搜索（处理嵌套 div 如 HK Posi 的 userNameDiv）
   //
+  // 判断元素是否是验证码相关（防止把验证码输入框误判为 hidden real input）
+  function isElementCaptcha(el) {
+    const name = (el.name || "").toLowerCase();
+    const id = (el.id || "").toLowerCase();
+    const cls = (el.className || "").toLowerCase();
+    return name.includes("captcha") || id.includes("captcha") || cls.includes("captcha")
+      || name.includes("verify") || id.includes("verify");
+  }
+
   function detectHiddenRealInput(el, stepType) {
     // 策略1: 所选元素本身隐藏（理论不可达，但做防御）
     if (isElementHidden(el) && stepType !== "click" && stepType !== "submit") {
@@ -501,19 +555,37 @@
       typeSelector = 'input[type="text"], input:not([type])';
     }
 
-    // 搜索范围：从特定容器类名到通用父元素
-    const containerSelectors = [
-      "li, form",
-      ".ant-input-affix-wrapper",       // 模式1: 深澜
-      "div[id$='_posi']",              // 模式2: HK Posi 的 username_hk_posi
-      ".login_frame_hang_1",           // 模式2: HK Posi 容器类
-      ".input-group, .form-group",
-    ];
+    // 搜索范围：从点击元素向上查找
     let container = null;
-    for (const sel of containerSelectors) {
-      container = el.closest(sel);
-      if (container) break;
+    // 已知门户模式快速匹配
+    if (!container) {
+      const knownSelectors = [
+        "li, form",
+        ".ant-input-affix-wrapper",       // 模式1: 深澜
+        "div[id$='_posi']",              // 模式2: HK Posi 的 username_hk_posi
+        ".login_frame_hang_1",           // 模式2: HK Posi 容器类
+        ".input-group, .form-group",
+      ];
+      for (const sel of knownSelectors) {
+        container = el.closest(sel);
+        if (container) break;
+      }
     }
+    // 动态向上搜索（向上 4 层，找第一个包含隐藏匹配输入框的祖先）
+    if (!container) {
+      let cur = el.parentElement;
+      let depth = 0;
+      while (cur && cur !== document.body && cur !== document.documentElement && depth < 4) {
+        const candidates = cur.querySelectorAll(typeSelector);
+        const hasHidden = Array.from(candidates).some(inp =>
+          inp !== el && !inp.readOnly && isElementHidden(inp)
+        );
+        if (hasHidden) { container = cur; break; }
+        cur = cur.parentElement;
+        depth++;
+      }
+    }
+    // 兜底父元素
     if (!container) container = el.parentElement;
     if (!container) return null;
 
@@ -549,6 +621,8 @@
         if (input === el) continue;
         if (input.readOnly) continue;  // 跳过 tip 本身
         if (!isElementHidden(input)) continue;
+        // 非验证码步骤跳过验证码输入框（Dr.com 等页面 captcha 初始隐藏，不是 hidden real input）
+        if (stepType !== "captcha_input" && isElementCaptcha(input)) continue;
 
         if (input.id) return `#${CSS.escape(input.id)}`;
         if (input.name) return `input[name="${CSS.escape(input.name)}"]`;
@@ -556,18 +630,27 @@
     }
 
     // 兜底：在容器内搜索所有隐藏 input（不限类型），适用于 type 属性缺失的情况
-    for (const root of searchRoots) {
-      if (!root) continue;
-      const allHidden = root.querySelectorAll("input");
-      for (const input of allHidden) {
-        if (input === el) continue;
-        if (input.readOnly) continue;
-        if (!isElementHidden(input)) continue;
-        // 排除明显不对的类型
-        if (input.type === "submit" || input.type === "button" || input.type === "checkbox" || input.type === "radio") continue;
+    // 如果用户已经点击了正确类型的 input，不需要兜底（Dr.com 上误判 captcha 的根因）
+    const clickedIsCorrectType = el.tagName === "INPUT" && (
+      (needPassword && el.type === "password") ||
+      (!needPassword && (el.type === "text" || el.type === "" || !el.type))
+    );
+    if (!clickedIsCorrectType) {
+      for (const root of searchRoots) {
+        if (!root) continue;
+        const allHidden = root.querySelectorAll("input");
+        for (const input of allHidden) {
+          if (input === el) continue;
+          if (input.readOnly) continue;
+          if (!isElementHidden(input)) continue;
+          // 排除明显不对的类型
+          if (input.type === "submit" || input.type === "button" || input.type === "checkbox" || input.type === "radio") continue;
+          // 非验证码步骤跳过验证码输入框
+          if (stepType !== "captcha_input" && isElementCaptcha(input)) continue;
 
-        if (input.id) return `#${CSS.escape(input.id)}`;
-        if (input.name) return `input[name="${CSS.escape(input.name)}"]`;
+          if (input.id) return `#${CSS.escape(input.id)}`;
+          if (input.name) return `input[name="${CSS.escape(input.name)}"]`;
+        }
       }
     }
 
@@ -651,7 +734,10 @@
             <b>Esc</b> — 取消当前录制<br>
             <b>🔁 多步录制</b> — 开启后每次点击/Enter 记录一步，不会自动停止，需手动 Esc<br>
             <b>🔍 隐藏检测</b> — 开启后自动扫描容器内 <code style="color:#FF9800;">display:none</code> 的真实输入框<br>
-            <span style="color:#667eea;">💡 运营商：点「运营商选择」→ 点下拉框（原生 select 一键完成；自定义 div 自动进入两阶段：触发器→选项）</span>
+            <span style="color:#4CAF50;">👤 账号</span> — 点账号输入框 | <span style="color:#2196F3;">🔒 密码</span> — 点密码框 | <span style="color:#FF9800;">📶 运营商</span> — 点下拉框<br>
+            <span style="color:#9C27B0;">🖼️ 验证码</span> — 先点图片再点输入框 | <span style="color:#F44336;">🚀 提交</span> — 点登录按钮<br>
+            <span style="color:#607D8B;">👆 点击</span> — 任意元素仅点击 | <span style="color:#00BCD4;">⚙️ JS</span> — 执行自定义代码<br>
+            <span style="color:#E91E63;">📦 面板框选</span> — 点「完成登录」后自动进入，拖拽画框圈选整个登录区域
           </div>
         </div>
         <div class="ca-section">
@@ -687,13 +773,21 @@
     `;
     document.body.appendChild(state.panel);
 
-    // 生成步骤按钮
+    // 生成步骤按钮（分组：basic → 分隔线 → advanced）
     const grid = state.panel.querySelector("#ca-step-grid");
+    let lastCategory = null;
     for (const [key, cfg] of Object.entries(STEP_TYPES)) {
+      if (lastCategory && cfg.category !== lastCategory) {
+        const sep = document.createElement("div");
+        sep.style.cssText = "grid-column:1/-1;height:1px;background:#333;margin:2px 0;";
+        grid.appendChild(sep);
+      }
+      lastCategory = cfg.category;
       const btn = document.createElement("div");
       btn.className = "ca-step-btn";
       btn.dataset.type = key;
       btn.innerHTML = `<span class="ca-icon">${cfg.icon}</span><span>${cfg.label}</span>`;
+      btn.title = cfg.hint || cfg.label;
       btn.addEventListener("click", () => selectStepType(key));
       grid.appendChild(btn);
     }
@@ -765,7 +859,7 @@
     state.panel.querySelectorAll(".ca-step-btn").forEach(b => {
       b.classList.toggle("active", b.dataset.type === type);
     });
-    setStatus(`已选择 [${STEP_TYPES[type].label}]，点击页面元素  |  Enter=无click记录  Esc=取消`, "recording");
+    setStatus(`${STEP_TYPES[type]?.icon || "📝"} ${STEP_TYPES[type]?.hint || STEP_TYPES[type]?.label || type}`, "recording");
     state.recording = true;
   }
 
@@ -837,6 +931,19 @@
     state.steps = [];
     state.loginCompleted = false;
     state.successConditions = [];
+    state.awaitingPanelRect = false;
+    state.rectSelectMode = false;
+    // completeLoginUI 设置了 opacity/pointerEvents，需恢复
+    state.panel.querySelectorAll(".ca-step-btn").forEach(b => {
+      b.style.opacity = "";
+      b.style.pointerEvents = "";
+    });
+    const successSection = state.panel.querySelector("#ca-success-section");
+    if (successSection) successSection.style.display = "none";
+    // 恢复按钮显示（updateButtons 可能隐藏了 undo/clear/complete）
+    state.panel.querySelector("#ca-btn-undo").style.display = "";
+    state.panel.querySelector("#ca-btn-clear").style.display = "";
+    state.panel.querySelector("#ca-btn-complete").style.display = "";
     updateRecordedList();
     clearSavedState();
     setStatus("已清空所有步骤");
@@ -845,11 +952,9 @@
   // ==================== 成功条件流程 ====================
 
   function completeLogin() {
-    state.loginCompleted = true;
-    state.recording = false;
-    completeLoginUI();
-    saveState();
-    setStatus("录制完成！请选择登录成功的判断方式");
+    state.awaitingPanelRect = true;
+    state.rectSelectMode = true;
+    setStatus("📦 请在登录面板周围拖拽画框，框选整个登录区域");
   }
 
   function completeLoginUI() {
@@ -1229,7 +1334,10 @@
 
     overlay.querySelector("#ca-captcha-cancel").addEventListener("click", () => {
       overlay.remove();
-      state.recording = true;
+      state.recording = false;
+      state.currentStepType = null;
+      state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+      setStatus("已取消验证码选择");
     });
     overlay.querySelector("#ca-captcha-ok").addEventListener("click", () => {
       const captchaType = overlay.querySelector("#ca-captcha-type").value;
@@ -1324,6 +1432,53 @@
     prompt += `| eval | eval | — |\n`;
     prompt += `\n`;
 
+    // 容器框选数据（附加在最后一步上）
+    const containerStep = state.steps.find(s => s.rawHTML);
+    if (containerStep) {
+      prompt += `## 📦 登录面板整体框选（补充参考）\n\n`;
+      prompt += `以下容器 HTML 供你参考，用于辅助推导选择器和分析页面结构。\n\n`;
+      prompt += `**容器信息**\n`;
+      prompt += `- 容器选择器: \`${containerStep.containerSelector || containerStep.bestSelector || "（见下方 HTML 自行推导）"}\`\n`;
+      prompt += `- 容器标签: <${containerStep.containerTag || "form"}>\n`;
+      if (containerStep.containerAttrs && Object.keys(containerStep.containerAttrs).length > 0) {
+        const attrStr = Object.entries(containerStep.containerAttrs).map(([k, v]) => `${k}="${v}"`).join(" ");
+        prompt += `- 容器属性: \`<${containerStep.containerTag || "form"} ${attrStr}>\`\n`;
+      }
+      if (containerStep.containerCandidates?.length > 0) {
+        prompt += `- 候选容器（备选作用域：更精确或更宽泛的祖先）:\n`;
+        for (const cc of containerStep.containerCandidates) {
+          prompt += `  - <${cc.tag}> \`${cc.selector}\` (CSS: ${cc.path})\n`;
+        }
+      }
+      prompt += `\n`;
+      prompt += `**容器内 HTML 源码**（原始结构，供分析选择器使用）:\n\n`;
+      prompt += "```html\n";
+      prompt += containerStep.rawHTML;
+      prompt += "\n```\n\n";
+
+      if (containerStep.containerScan) {
+        const s = containerStep.containerScan;
+        prompt += `**容器内检测到的元素**：`;
+        const parts = [];
+        if (s.inputs.length) {
+          const vis = s.inputs.filter(i => i.visible).length;
+          const hid = s.inputs.length - vis;
+          if (hid > 0) {
+            parts.push(`${s.inputs.length} 个 input（${vis} 可见，${hid} 隐藏）`);
+          } else {
+            parts.push(`${s.inputs.length} 个 input`);
+          }
+        }
+        if (s.selects.length) parts.push(`${s.selects.length} 个 select`);
+        if (s.buttons.length) parts.push(`${s.buttons.length} 个 button`);
+        if (s.images.length) parts.push(`${s.images.length} 个 img`);
+        prompt += parts.join("，") + "\n\n";
+      }
+
+      prompt += `> 以上方逐字段录制的选择器为准，容器 HTML 仅作参考。如果两者不一致，以逐字段版本为准。\n`;
+      prompt += `\n`;
+    }
+
     // 隐藏输入框警告汇总
     const hiddenSteps = state.steps.filter(s => s.hiddenRealSelector);
     if (hiddenSteps.length > 0) {
@@ -1382,6 +1537,14 @@
       if (s.selectorCandidates?.length > 1) {
         prompt += `- 候选选择器: ${s.selectorCandidates.map(c => "`" + c + "`").join(", ")}\n`;
       }
+      if (s.attrs) {
+        const extras = [];
+        if (s.attrs["data-testid"]) extras.push(`data-testid="${s.attrs["data-testid"]}"`);
+        if (s.attrs["aria-label"]) extras.push(`aria-label="${s.attrs["aria-label"]}"`);
+        if (extras.length > 0) {
+          prompt += `- 稳定属性: ${extras.join(", ")}\n`;
+        }
+      }
       if (s.hiddenRealSelector) {
         prompt += `- ⚠️ 真实输入框（隐藏）: \`${s.hiddenRealSelector}\` → 需 force:true\n`;
       }
@@ -1389,7 +1552,18 @@
         prompt += `- 占位元素: \`${s.tipSelector}\` → 需先 click 触发显示\n`;
       }
       if (s.iframe?.inIframe) {
-        prompt += `- 在 iframe 内: ${s.iframe.crossOrigin ? "跨域" : s.iframe.frameSelector || "是"}\n`;
+        if (s.iframe.crossOrigin) {
+          const frameParts = [];
+          if (s.iframe.frameSrc) frameParts.push(`src="${s.iframe.frameSrc}"`);
+          if (s.iframe.frameName) frameParts.push(`name="${s.iframe.frameName}"`);
+          if (s.iframe.frameId) frameParts.push(`#${s.iframe.frameId}`);
+          prompt += `- ⚠️ 位于跨域 iframe 内（油猴脚本无法直接访问，需后端 Playwright 处理）\n`;
+          if (frameParts.length > 0 || s.iframe.frameSelector) {
+            prompt += `- iframe 定位: ${s.iframe.frameSelector || frameParts.join(" | ")}\n`;
+          }
+        } else {
+          prompt += `- 在 iframe 内: ${s.iframe.frameSelector || "是"}\n`;
+        }
       }
       if (s.type === "carrier" && s.optionText) {
         prompt += `- ⚠️ 自定义下拉框（非原生 select）→ 映射为 click_select，value 用 {{ISP}}\n`;
@@ -1501,12 +1675,12 @@
 
           <h5 style="color:#667eea;margin:14px 0 6px;">二、基本录制流程</h5>
           <ol style="margin:4px 0;padding-left:18px;">
-            <li>点击面板中的步骤类型按钮（如「账号输入框」）</li>
-            <li>鼠标移到页面目标元素上，会显示蓝色高亮 + 选择器信息</li>
-            <li><b style="color:#fff;">点击</b>元素 → 记录步骤 → 显示在「已录制步骤」列表中</li>
-            <li>重复以上步骤，依次录完所有步骤</li>
-            <li>录完后点击 <b style="color:#fff;">✅ 完成登录</b>，设置登录成功条件</li>
-            <li>点击 <b style="color:#fff;">📋 复制 AI 提示词</b>，将提示词发送给 AI（ChatGPT/Claude 等）即可生成完整的任务 JSON</li>
+            <li>点击面板中的步骤类型按钮（如「账号输入框」），点击页面目标元素录制</li>
+            <li>重复以上步骤，依次录完账号、密码、运营商、提交等所有步骤</li>
+            <li>录完后点击 <b style="color:#fff;">✅ 完成登录</b> → 进入框选模式</li>
+            <li>在登录面板周围<b style="color:#fff;">拖拽画框</b>，框选整个登录区域</li>
+            <li>框选完成后，设置登录成功条件</li>
+            <li>点击 <b style="color:#fff;">📋 复制 AI 提示词</b>，将提示词发送给 AI 即可生成完整的任务 JSON</li>
           </ol>
 
           <h5 style="color:#667eea;margin:14px 0 6px;">三、步骤类型说明</h5>
@@ -1564,6 +1738,15 @@
             <li>录制器自动检测隐藏的真实输入框，提示词中会包含 force 模式和隐藏输入框信息</li>
           </ol>
 
+          <p style="margin:4px 0;"><b style="color:#fff;">场景 D：逐字段 + 面板框选（标准流程）</b></p>
+          <ol style="margin:0 0 8px;padding-left:18px;font-size:12px;">
+            <li>先使用面板中的步骤类型按钮，逐一点击账号、密码、运营商、提交等字段</li>
+            <li>录完所有步骤后点 <b style="color:#fff;">✅ 完成登录</b></li>
+            <li>此时自动进入框选模式 → 在登录面板周围<b style="color:#fff;">拖拽画框</b>，框选整个登录区域</li>
+            <li>框选完成后进入成功条件设置</li>
+            <li>最终提示词中会<b style="color:#667eea;">同时包含逐字段选择器和容器原始 HTML</b>，AI 交叉比对生成最准确的任务 JSON</li>
+          </ol>
+
           <h5 style="color:#667eea;margin:14px 0 6px;">七、登录成功条件</h5>
           <ul style="margin:4px 0;padding-left:18px;">
             <li><b style="color:#fff;">页面跳转</b> — 登录后 URL 包含的关键词（如 <code>success|welcome</code>）</li>
@@ -1609,6 +1792,9 @@
     document.addEventListener("mouseover", onHover, true);
     document.addEventListener("click", onClick, true);
     document.addEventListener("keydown", onKeyDown, true);
+    document.addEventListener("mousedown", onMouseDown, true);
+    document.addEventListener("mousemove", onDocMouseMove, true);
+    document.addEventListener("mouseup", onMouseUp, true);
     // 对已加载的 frame 也绑定事件
     attachAllFrameListeners();
   }
@@ -1618,6 +1804,11 @@
     state.recording = false;
     state.loginCompleted = false;
     state.successConditions = [];
+    state.awaitingPanelRect = false;
+    state.rectSelectMode = false;
+    state.drawing = false;
+    state.rectStart = null;
+    if (state.rectOverlay) { state.rectOverlay.remove(); state.rectOverlay = null; }
     clearSavedState();
     document.removeEventListener("mouseover", onHover, true);
     document.removeEventListener("click", onClick, true);
@@ -1638,9 +1829,187 @@
     }
   }
 
+  function isInHiddenContainer(el) {
+    // 检查元素是否在任何 display:none 的祖先中（Dr.com 隐藏表单 f0 等）
+    let cur = el.parentElement;
+    while (cur) {
+      if (cur.style && cur.style.display === "none") return true;
+      cur = cur.parentElement;
+    }
+    return false;
+  }
+
+  function scanContainer(el) {
+    const scan = { inputs: [], selects: [], buttons: [], images: [], hasFormControls: false };
+    el.querySelectorAll("input").forEach(inp => {
+      if (isInHiddenContainer(inp)) return;  // 跳过隐藏容器（如 Dr.com 的 f0 表单）
+      scan.inputs.push({
+        type: inp.type,
+        name: inp.name,
+        id: inp.id,
+        placeholder: inp.placeholder,
+        visible: inp.offsetParent !== null && getComputedStyle(inp).display !== "none",
+      });
+      if (inp.type === "submit" || inp.type === "button") scan.hasFormControls = true;
+    });
+    el.querySelectorAll("select").forEach(sel => {
+      if (isInHiddenContainer(sel)) return;
+      scan.selects.push({
+        name: sel.name,
+        id: sel.id,
+        options: Array.from(sel.options).map(o => o.textContent.trim()).slice(0, 5),
+      });
+      scan.hasFormControls = true;
+    });
+    el.querySelectorAll('button, input[type="submit"], input[type="button"]').forEach(btn => {
+      if (isInHiddenContainer(btn)) return;
+      scan.buttons.push({
+        text: (btn.textContent || btn.value || "").trim().substring(0, 30),
+        type: btn.type || btn.tagName.toLowerCase(),
+      });
+      scan.hasFormControls = true;
+    });
+    el.querySelectorAll("img").forEach(img => {
+      if (isInHiddenContainer(img)) return;
+      const isCaptcha = (img.src && (img.src.includes("captcha") || img.src.includes("verify") || img.src.includes("code")))
+        || (img.id && img.id.includes("captcha"))
+        || (img.className && img.className.includes("captcha"));
+      if (isCaptcha) {
+        scan.images.push({ src: (img.src || "").substring(0, 120), alt: img.alt || "" });
+      }
+    });
+    return scan;
+  }
+
+  function findContainerFromRect(rect) {
+    const elements = [];
+    const all = document.querySelectorAll("*");
+    for (const el of all) {
+      const r = el.getBoundingClientRect();
+      if (r.width < 5 || r.height < 5) continue;
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      if (cx >= rect.left && cx <= rect.right && cy >= rect.top && cy <= rect.bottom) {
+        elements.push(el);
+      }
+    }
+    if (elements.length === 0) return null;
+    // 容器自身
+    let container = elements[0];
+    const candidates = [container];
+    // 逐级向上扩展，收集候选容器（最多 3 级）
+    let cur = container.parentElement;
+    while (cur && cur !== document.body && cur !== document.documentElement && candidates.length < 3) {
+      const cr = cur.getBoundingClientRect();
+      if (cr.width >= rect.width * 0.7 && cr.height >= rect.height * 0.7) {
+        candidates.push(cur);
+        container = cur;  // 最宽泛的作为主容器
+      }
+      cur = cur.parentElement;
+    }
+    return { container, candidates };
+  }
+
+  function removeRectOverlay() {
+    if (state.rectOverlay) {
+      state.rectOverlay.remove();
+      state.rectOverlay = null;
+    }
+  }
+
+  function onMouseDown(e) {
+    if (!state.rectSelectMode || state.drawing) return;
+    state.drawing = true;
+    state.rectStart = { x: e.clientX, y: e.clientY };
+    state.rectOverlay = document.createElement("div");
+    Object.assign(state.rectOverlay.style, {
+      position: "fixed",
+      border: "2px dashed #E91E63",
+      background: "rgba(233,30,99,0.08)",
+      pointerEvents: "none",
+      zIndex: "2147483644",
+      left: `${e.clientX}px`,
+      top: `${e.clientY}px`,
+      width: "0px",
+      height: "0px",
+    });
+    document.body.appendChild(state.rectOverlay);
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  function onDocMouseMove(e) {
+    if (!state.drawing || !state.rectOverlay || !state.rectStart) return;
+    const x = Math.min(state.rectStart.x, e.clientX);
+    const y = Math.min(state.rectStart.y, e.clientY);
+    state.rectOverlay.style.left = `${x}px`;
+    state.rectOverlay.style.top = `${y}px`;
+    state.rectOverlay.style.width = `${Math.abs(e.clientX - state.rectStart.x)}px`;
+    state.rectOverlay.style.height = `${Math.abs(e.clientY - state.rectStart.y)}px`;
+  }
+
+  function onMouseUp(e) {
+    if (!state.drawing || !state.rectStart || !state.rectSelectMode) return;
+
+    state.drawing = false;
+    if (state.rectOverlay) { state.rectOverlay.remove(); state.rectOverlay = null; }
+
+    const w = Math.abs(e.clientX - state.rectStart.x);
+    const h = Math.abs(e.clientY - state.rectStart.y);
+    if (w < 20 && h < 20) {
+      setStatus("📦 拖拽画框太小，请拖拽更大的区域", "recording");
+      state.rectStart = null;
+      return;
+    }
+
+    const rect = {
+      left: Math.min(state.rectStart.x, e.clientX),
+      top: Math.min(state.rectStart.y, e.clientY),
+      right: Math.max(state.rectStart.x, e.clientX),
+      bottom: Math.max(state.rectStart.y, e.clientY),
+      width: w,
+      height: h,
+    };
+    state.rectStart = null;
+
+    const found = findContainerFromRect(rect);
+    if (!found) {
+      setStatus("框选范围内未找到有效元素，请重试", "recording");
+      return;
+    }
+    const { container, candidates } = found;
+
+    state.rectSelectMode = false;
+    const info = getElementInfo(container);
+    state.awaitingPanelRect = false;
+    const lastStep = state.steps[state.steps.length - 1];
+    if (lastStep) {
+      lastStep.containerScan = scanContainer(container);
+      lastStep.rawHTML = container.innerHTML.substring(0, 4000);
+      lastStep.containerSelector = info.bestSelector;
+      lastStep.containerTag = info.tag;
+      lastStep.containerAttrs = info.attrs;
+      lastStep.containerIframe = info.iframe;
+      lastStep.containerCandidates = candidates.slice(1).map(c => {
+        const ci = getElementInfo(c);
+        return { selector: ci.selectors[0]?.value || ci.tag, tag: ci.tag, path: buildShortCss(c) };
+      });
+    }
+    state.loginCompleted = true;
+    state.recording = false;
+    completeLoginUI();
+    saveState();
+    setStatus("✅ 录制完成！请选择登录成功的判断方式");
+  }
+
   function onKeyDown(e) {
-    // Esc 取消当前选择
     if (e.key === "Escape") {
+      if (state.awaitingPanelRect) {
+        setStatus("📦 请在登录面板周围拖拽画框，框选整个登录区域");
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       if (state.recording) {
         state.recording = false;
         state.currentStepType = null;
@@ -1668,6 +2037,7 @@
 
       if (type === "carrier") {
         handleCarrierClickPhase(el, info);
+        // handleCarrierClickPhase 内部已调用 updateRecordedList + saveState + setStatus
       } else {
         addStepFromElement(type, el, info, optText || STEP_TYPES[type]?.label || "");
       }
@@ -1676,9 +2046,11 @@
         state.hoveredEl.classList.remove("ca-highlight");
         state.hoveredEl = null;
       }
-      updateRecordedList();
-      saveState();
-      setStatus(`✅ Enter 记录: ${optText || info.tag}`);
+      if (type !== "carrier") {
+        updateRecordedList();
+        saveState();
+        setStatus(`✅ Enter 记录: ${optText || info.tag}`);
+      }
     }
     // Ctrl+Shift+E 切换面板
     if (e.ctrlKey && e.shiftKey && e.key === "E") {
@@ -1799,12 +2171,6 @@
 
   // ==================== 启动 ====================
 
-  // 检查是否有保存的录制状态，自动恢复
-  const savedData = loadState();
-  if (savedData) {
-    restoreFromSaved(savedData);
-  }
-
   // 修改 activate/deactivate 使用新的监听器管理和 DOM 守护
   const _origActivate = activate;
   const _origDeactivate = deactivate;
@@ -1822,6 +2188,12 @@
     _origDeactivate();
     _globalListenersAttached = false;
   };
+
+  // 检查是否有保存的录制状态，自动恢复（必须在 activate 重写之后，确保 domGuard 注册）
+  const savedData = loadState();
+  if (savedData) {
+    restoreFromSaved(savedData);
+  }
 
   // 添加浮动入口按钮
   const entryBtn = document.createElement("div");
