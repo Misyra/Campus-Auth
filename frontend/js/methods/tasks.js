@@ -378,6 +378,16 @@ export const taskMethods = {
 
   // ==================== 仓库导入 ====================
 
+  selectRepoSource(source) {
+    this.repoImport.source = source;
+    if (source === 'github') {
+      this.repoImport.url = 'https://github.com/Misyra/campus-auth-tasks/blob/master/index.json';
+    } else if (source === 'gitee') {
+      this.repoImport.url = 'https://raw.giteeusercontent.com/Misyra/campus-auth-tasks/raw/master/index.gitee.json';
+    }
+    // 'custom' 保留当前 URL 不动
+  },
+
   showRepoImport() {
     this.repoImport.visible = true;
     this.repoImport.error = '';

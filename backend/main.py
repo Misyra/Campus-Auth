@@ -599,10 +599,13 @@ def download_task_writing_guide():
 
 
 def _normalize_repo_url(url: str) -> str:
-    """将 GitHub 页面链接转换为 raw 链接，其他链接原样返回"""
+    """将 GitHub/Gitee 页面链接转换为 raw 链接，其他链接原样返回"""
     m = re.match(r"https?://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+)", url)
     if m:
         return f"https://raw.githubusercontent.com/{m.group(1)}/{m.group(2)}/{m.group(3)}/{m.group(4)}"
+    m = re.match(r"https?://gitee\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+)", url)
+    if m:
+        return f"https://gitee.com/{m.group(1)}/{m.group(2)}/raw/{m.group(3)}/{m.group(4)}"
     return url
 
 
