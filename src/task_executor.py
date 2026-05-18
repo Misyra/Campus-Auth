@@ -455,7 +455,9 @@ class InputHandler(StepHandler):
             return False, f"force_input 未找到可用的输入元素: {selector}"
 
         await element.evaluate(
-            "(el, val, doClear) => {"
+            "(el, params) => {"
+            "  const val = params.val;"
+            "  const doClear = params.doClear;"
             "  // 移除可能阻止输入的限制属性"
             "  el.removeAttribute('readonly');"
             "  el.removeAttribute('disabled');"
@@ -482,8 +484,7 @@ class InputHandler(StepHandler):
             "  // 8. blur — 触发校验/同步（如深澜双输入框的值同步）"
             "  el.dispatchEvent(new FocusEvent('blur', {bubbles:true}));"
             "}",
-            value,
-            clear,
+            {"val": value, "doClear": clear},
         )
         logger.info("强制输入完成 → %s", selector)
         return True, ""
