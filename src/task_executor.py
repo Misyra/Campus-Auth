@@ -511,13 +511,33 @@ class ClickHandler(StepHandler):
         ctx = await self._resolve_frame(page, step)
         logger.info("点击 → %s", selector)
 
-        element = await self._find_element(ctx, selector, timeout)
-        if not element:
-            return False, f"未找到点击元素: {selector}"
+        # 策略1: 快速尝试普通 click（3s 超时）
+        candidates = [s.strip() for s in selector.split(",") if s.strip()]
+        for candidate in candidates:
+            try:
+                loc = ctx.locator(candidate).first
+                await loc.wait_for(state="visible", timeout=3000)
+                await loc.click(timeout=timeout)
+                logger.info("点击完成(普通) → %s", candidate)
+                return True, ""
+            except Exception:
+                logger.debug("普通 click 候选失败: %s", candidate)
+                continue
 
-        await element.click(timeout=timeout)
-        logger.info("点击完成 → %s", selector)
-        return True, ""
+        # 策略2: 自动降级到 force click（隐藏/不可交互的元素用 JS click）
+        logger.info("普通 click 失败，自动降级到 force click")
+        for candidate in candidates:
+            try:
+                loc = ctx.locator(candidate).first
+                await loc.wait_for(state="attached", timeout=timeout)
+                await loc.dispatch_event("click")
+                logger.info("点击完成(force) → %s", candidate)
+                return True, ""
+            except Exception:
+                logger.debug("force click 候选失败: %s", candidate)
+                continue
+
+        return False, f"未找到可点击的元素: {selector}"
 
 
 class SelectHandler(StepHandler):
@@ -1165,15 +1185,13 @@ class TaskExecutor:
                 deadline = max(deadline, _time.perf_counter() + timeout_ms / 1000)
 
     async def _reveal_hidden_inputs(self, page) -> None:
-        """强制显示所有隐藏的 text/password 输入框。
-        通过 JS 将 display:none / visibility:hidden / opacity:0 的输入框变为可见，
-        后续 fill() 可直接操作，无需 force 降级。"""
+        """强制显示所有隐藏的表单输入框。
+        通过 JS 将 display:none / visibility:hidden / opacity:0 的 input 变为可见，
+        后续 fill()/click() 可直接操作，无需 force 降级。覆盖 text/password/checkbox/radio 等。"""
         logger.info("[reveal] 强制显示隐藏输入框")
         await page.evaluate("""
             () => {
-                const inputs = document.querySelectorAll(
-                    'input[type="text"], input[type="password"], input:not([type])'
-                );
+                const inputs = document.querySelectorAll('input');
                 let count = 0;
                 inputs.forEach(el => {
                     try {
