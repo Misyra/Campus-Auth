@@ -267,6 +267,52 @@
     #ca-recorder-panel .ca-toggle.active {
       background: #2a2a5e; border-color: #667eea; color: #aab; box-shadow: 0 0 6px rgba(102,126,234,0.25);
     }
+    /* 隐藏输入框高亮 */
+    .ca-revealed-highlight {
+      outline: 3px dashed #4CAF50 !important; outline-offset: 3px !important;
+      background: rgba(76,175,80,0.1) !important; cursor: pointer !important;
+      animation: ca-reveal-pulse 2s infinite;
+    }
+    @keyframes ca-reveal-pulse {
+      0%,100% { outline-color: #4CAF50; } 50% { outline-color: #81C784; }
+    }
+    .ca-revealed-label {
+      position: fixed; background: #4CAF50; color: #fff; padding: 2px 6px;
+      border-radius: 3px; font-size: 10px; font-family: monospace;
+      white-space: nowrap; z-index: 2147483646; pointer-events: none;
+      transform: translateY(-110%);
+    }
+    /* 揭示面板 */
+    #ca-reveal-panel {
+      position: fixed; left: 10px; top: 10px; z-index: 2147483646;
+      width: 260px; max-height: 60vh; overflow-y: auto;
+      background: #1a1a2e; color: #e0e0e0; border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 12px;
+    }
+    #ca-reveal-panel .ca-rv-header {
+      padding: 10px 12px; background: #2e7d32; border-radius: 12px 12px 0 0;
+      font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px;
+    }
+    #ca-reveal-panel .ca-rv-item {
+      display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+      border-bottom: 1px solid #2a2a3e; cursor: pointer; transition: background 0.15s;
+    }
+    #ca-reveal-panel .ca-rv-item:hover { background: #2a2a4e; }
+    #ca-reveal-panel .ca-rv-icon { font-size: 14px; flex-shrink: 0; }
+    #ca-reveal-panel .ca-rv-info { flex: 1; min-width: 0; }
+    #ca-reveal-panel .ca-rv-sel {
+      font-family: monospace; font-size: 11px; color: #81C784; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; max-width: 180px;
+    }
+    #ca-reveal-panel .ca-rv-type { font-size: 10px; color: #888; }
+    #ca-reveal-panel .ca-rv-btn {
+      flex-shrink: 0; padding: 2px 8px; border: 1px solid #4CAF50; border-radius: 4px;
+      background: transparent; color: #4CAF50; cursor: pointer; font-size: 11px;
+      transition: all 0.15s;
+    }
+    #ca-reveal-panel .ca-rv-btn:hover { background: #4CAF50; color: #fff; }
   `);
 
   // ==================== 选择器生成 ====================
@@ -884,13 +930,7 @@
       if (state.revealEnabled) {
         revealHiddenInputsForRecorder();
       } else {
-        // 恢复隐藏
-        document.querySelectorAll('[data-ca-revealed="1"]').forEach(el => {
-          el.style.removeProperty('display');
-          el.style.removeProperty('visibility');
-          el.style.removeProperty('opacity');
-          delete el.dataset.caRevealed;
-        });
+        hideRevealedInputs();
         setStatus("已恢复隐藏输入框");
       }
     });
@@ -2011,35 +2051,236 @@
     overlay.querySelector("#ca-help-close").addEventListener("click", () => overlay.remove());
   }
 
-  // ==================== 隐藏输入框强制显示 ====================
-  // 录制器激活时注入 JS，将隐藏的 text/password 输入框强制显示，
-  // 让用户能直接看到并点选真实输入框（深澜/HK Posi 等双输入框模式）。
+  // ==================== 隐藏输入框强制显示 + 高亮 + 面板 ====================
+  // 强制显示隐藏输入框，绿色虚线高亮 + 浮动标签，点击直接记录步骤。
+  // 左侧新开独立面板列出所有发现的隐藏输入框。
 
-  let _revealStyleId = null;
+  let _revealedInputs = []; // { el, selector, type, labelText }
 
   function revealHiddenInputsForRecorder() {
-    if (_revealStyleId && document.getElementById(_revealStyleId)) return;
-    _revealStyleId = 'ca-reveal-hidden-' + Date.now();
-    // 使用 JS 遍历所有输入框，强制显示隐藏的
-    const inputs = document.querySelectorAll(
-      'input'
-    );
-    let count = 0;
+    if (_revealedInputs.length > 0) return; // 已经显示
+    _revealedInputs = [];
+
+    const inputs = document.querySelectorAll('input');
     inputs.forEach(el => {
       try {
         const s = getComputedStyle(el);
         if (s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) <= 0) {
+          // 排除提交/按钮类
+          if (el.type === 'submit' || el.type === 'button' || el.type === 'hidden') return;
+          // 强制显示
           el.style.setProperty('display', 'inline-block', 'important');
           el.style.setProperty('visibility', 'visible', 'important');
           el.style.setProperty('opacity', '1', 'important');
           el.dataset.caRevealed = '1';
-          count++;
+          // 高亮
+          el.classList.add('ca-revealed-highlight');
+          // 浮动标签
+          addRevealLabel(el);
+          // 记录
+          const tag = el.tagName.toLowerCase();
+          let sel = '';
+          if (el.id) sel = '#' + CSS.escape(el.id);
+          else if (el.name) sel = tag + '[name="' + CSS.escape(el.name) + '"]';
+          else sel = tag + (el.type ? '[type="' + el.type + '"]' : '');
+          _revealedInputs.push({
+            el,
+            selector: sel,
+            inputType: el.type || 'text',
+            labelText: el.name || el.id || el.placeholder || el.type || 'input',
+          });
         }
       } catch (_) {}
     });
-    if (count > 0) {
-      setStatus(`👁️ 已显示 ${count} 个隐藏输入框，可直接点选`);
+
+    // 监听滚动/调整更新标签位置
+    _revealScrollHandler = updateRevealLabels;
+    window.addEventListener('scroll', _revealScrollHandler, true);
+    window.addEventListener('resize', _revealScrollHandler);
+
+    createRevealPanel();
+    if (_revealedInputs.length > 0) {
+      setStatus(`👁️ 已显示 ${_revealedInputs.length} 个隐藏输入框，点击高亮框直接记录`);
+    } else {
+      setStatus('👁️ 未发现隐藏输入框');
     }
+  }
+
+  function hideRevealedInputs() {
+    _revealedInputs.forEach(({ el }) => {
+      el.style.removeProperty('display');
+      el.style.removeProperty('visibility');
+      el.style.removeProperty('opacity');
+      el.classList.remove('ca-revealed-highlight');
+      delete el.dataset.caRevealed;
+    });
+    _revealedInputs = [];
+    // 移除浮动标签
+    document.querySelectorAll('.ca-revealed-label').forEach(l => l.remove());
+    // 移除面板
+    const panel = document.getElementById('ca-reveal-panel');
+    if (panel) panel.remove();
+    // 移除监听
+    if (_revealScrollHandler) {
+      window.removeEventListener('scroll', _revealScrollHandler, true);
+      window.removeEventListener('resize', _revealScrollHandler);
+      _revealScrollHandler = null;
+    }
+  }
+
+  let _revealScrollHandler = null;
+
+  // 浮动标签
+  function addRevealLabel(el) {
+    const label = document.createElement('div');
+    label.className = 'ca-revealed-label';
+    const typeIcon = el.type === 'password' ? '🔒' : el.type === 'checkbox' ? '☑️' : '👤';
+    label.textContent = typeIcon + ' ' + (el.name || el.id || el.type || '');
+    label.dataset.forReveal = '1';
+    document.body.appendChild(label);
+    positionRevealLabel(label, el);
+  }
+
+  function positionRevealLabel(label, el) {
+    const rect = el.getBoundingClientRect();
+    label.style.left = rect.left + 'px';
+    label.style.top = rect.top + 'px';
+  }
+
+  function updateRevealLabels() {
+    const labels = document.querySelectorAll('.ca-revealed-label');
+    _revealedInputs.forEach(({ el }, i) => {
+      if (labels[i]) positionRevealLabel(labels[i], el);
+    });
+  }
+
+  // 点击高亮输入框的处理
+  function onRevealedClick(e) {
+    if (!state.revealEnabled) return;
+    const el = e.target.closest('.ca-revealed-highlight');
+    if (!el) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+
+    // 确定步骤类型
+    let stepType, desc;
+    if (el.type === 'password') {
+      stepType = 'password';
+      desc = '密码输入框 → {{PASSWORD}}';
+    } else if (el.type === 'checkbox') {
+      stepType = 'click';
+      desc = '勾选 ' + (el.name || el.id || '复选框');
+    } else {
+      stepType = 'username';
+      desc = '账号输入框 → {{USERNAME}}';
+    }
+
+    const info = getElementInfo(el);
+    // 复制 addStepFromElement 的核心记录逻辑，跳过隐藏检测和重复检查（用户手动操作，信任之）
+    const bestSelector = info.selectors[0]?.value || '';
+    const step = {
+      type: stepType,
+      description: desc,
+      tag: info.tag,
+      bestSelector,
+      selectorCandidates: info.selectors.map(s => s.value),
+      iframe: info.iframe,
+      attrs: info.attrs,
+      text: info.text,
+      visible: true, // 已强制显示
+      elementHTML: el.outerHTML,
+      elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, 3000) : '',
+      elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, 5000) || '',
+      _revealRecorded: true,
+    };
+
+    state.steps.push(step);
+    updateRecordedList();
+    saveState();
+
+    // 移除该输入框的高亮和标签
+    el.classList.remove('ca-revealed-highlight');
+    const lbl = document.querySelector('.ca-revealed-label[data-for-reveal="1"]');
+    // 更精确：找到对应标签移除
+    document.querySelectorAll('.ca-revealed-label').forEach(l => {
+      if (l.textContent.includes(el.name || el.id || '')) l.remove();
+    });
+    _revealedInputs = _revealedInputs.filter(r => r.el !== el);
+
+    // 更新面板
+    refreshRevealPanel();
+    setStatus(`✅ 已记录: ${desc} (${bestSelector})`);
+
+    // 全部记录完自动关闭
+    if (_revealedInputs.length === 0) {
+      state.revealEnabled = false;
+      const toggle = document.getElementById('ca-toggle-reveal');
+      if (toggle) toggle.classList.remove('active');
+      const panel = document.getElementById('ca-reveal-panel');
+      if (panel) panel.remove();
+      setStatus('✅ 所有隐藏输入框已记录，显示隐藏已关闭');
+    }
+  }
+
+  // 揭示面板
+  function createRevealPanel() {
+    const existing = document.getElementById('ca-reveal-panel');
+    if (existing) existing.remove();
+
+    const panel = document.createElement('div');
+    panel.id = 'ca-reveal-panel';
+    panel.innerHTML = `
+      <div class="ca-rv-header">
+        <span>👁️</span> 隐藏输入框 <span id="ca-rv-count" style="background:#fff;color:#2e7d32;padding:0 6px;border-radius:10px;font-size:11px;">${_revealedInputs.length}</span>
+      </div>
+      <div id="ca-rv-list"></div>
+    `;
+    document.body.appendChild(panel);
+    refreshRevealPanel();
+  }
+
+  function refreshRevealPanel() {
+    const list = document.getElementById('ca-rv-list');
+    const countEl = document.getElementById('ca-rv-count');
+    if (!list) return;
+    if (countEl) countEl.textContent = _revealedInputs.length;
+
+    list.innerHTML = _revealedInputs.map((r, i) => {
+      const icon = r.inputType === 'password' ? '🔒' : r.inputType === 'checkbox' ? '☑️' : '👤';
+      const btnLabel = r.inputType === 'password' ? '密码' : r.inputType === 'checkbox' ? '点击' : '账号';
+      return `<div class="ca-rv-item" data-rv-idx="${i}">
+        <span class="ca-rv-icon">${icon}</span>
+        <div class="ca-rv-info">
+          <div class="ca-rv-sel">${escHtml(r.selector)}</div>
+          <div class="ca-rv-type">type=${r.inputType} · ${escHtml(r.labelText)}</div>
+        </div>
+        <button class="ca-rv-btn">${btnLabel}</button>
+      </div>`;
+    }).join('');
+
+    // 面板内按钮点击
+    list.querySelectorAll('.ca-rv-btn').forEach((btn, i) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const item = _revealedInputs[i];
+        if (!item) return;
+        // 模拟点击高亮元素
+        item.el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+    });
+    // 面板内整行点击也触发
+    list.querySelectorAll('.ca-rv-item').forEach((row, i) => {
+      row.addEventListener('click', () => {
+        const item = _revealedInputs[i];
+        if (!item) return;
+        item.el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+    });
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   function activate() {
@@ -2053,6 +2294,7 @@
       updateSuccessConditionsList();
     }
     document.addEventListener("mouseover", onHover, true);
+    document.addEventListener("click", onRevealedClick, true);  // 先于 onClick，拦截高亮输入框点击
     document.addEventListener("click", onClick, true);
     document.addEventListener("keydown", onKeyDown, true);
     attachAllFrameListeners();
@@ -2062,14 +2304,11 @@
     state.active = false;
     state.recording = false;
     state.carrierClickPhase = null;
-    // 恢复被强制显示的隐藏输入框
-    document.querySelectorAll('[data-ca-revealed="1"]').forEach(el => {
-      el.style.removeProperty('display');
-      el.style.removeProperty('visibility');
-      el.style.removeProperty('opacity');
-      delete el.dataset.caRevealed;
-    });
+    // 恢复被强制显示的隐藏输入框 + 移除面板和高亮
+    hideRevealedInputs();
+    state.revealEnabled = false;
     document.removeEventListener("mouseover", onHover, true);
+    document.removeEventListener("click", onRevealedClick, true);
     document.removeEventListener("click", onClick, true);
     document.removeEventListener("keydown", onKeyDown, true);
     detachAllFrameListeners();
