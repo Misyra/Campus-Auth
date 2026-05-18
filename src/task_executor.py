@@ -223,10 +223,9 @@ class TaskConfig:
         }
         if self.variables:
             result["variables"] = self.variables
-        if self.success_conditions:
-            result["success_conditions"] = [
-                c.to_dict() for c in self.success_conditions
-            ]
+        result["success_conditions"] = [
+            c.to_dict() for c in self.success_conditions
+        ]
         if self.on_success:
             result["on_success"] = self.on_success
         if self.on_failure:
@@ -1473,6 +1472,9 @@ class TaskManager:
     def list_tasks(self) -> list[dict[str, str]]:
         tasks = []
         for file in self.tasks_dir.glob("*.json"):
+            # 跳过任务 ID 格式无效的文件（如含连字符的文件名）
+            if not is_valid_task_id(file.stem):
+                continue
             try:
                 config = json.loads(file.read_text(encoding="utf-8"))
                 tasks.append(
