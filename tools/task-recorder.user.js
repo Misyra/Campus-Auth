@@ -2022,7 +2022,7 @@
     _revealStyleId = 'ca-reveal-hidden-' + Date.now();
     // 使用 JS 遍历所有输入框，强制显示隐藏的
     const inputs = document.querySelectorAll(
-      'input[type="text"], input[type="password"], input:not([type])'
+      'input'
     );
     let count = 0;
     inputs.forEach(el => {
