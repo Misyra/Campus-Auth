@@ -313,6 +313,27 @@
       transition: all 0.15s;
     }
     #ca-reveal-panel .ca-rv-btn:hover { background: #4CAF50; color: #fff; }
+    /* 高亮输入框点击后的步骤选择弹窗 */
+    .ca-reveal-popup {
+      position: fixed; z-index: 2147483647;
+      background: #1a1a2e; color: #e0e0e0; border-radius: 10px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6); padding: 12px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px; min-width: 200px;
+    }
+    .ca-reveal-popup .ca-rpop-header {
+      margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #333;
+      font-size: 12px; word-break: break-all;
+    }
+    .ca-reveal-popup .ca-rpop-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .ca-reveal-popup .ca-rpop-actions button {
+      padding: 6px 12px; border: 1px solid #444; border-radius: 6px;
+      background: #2a2a3e; color: #ddd; cursor: pointer; font-size: 12px;
+      transition: all 0.15s;
+    }
+    .ca-reveal-popup .ca-rpop-actions button:hover { background: #3a3a5e; border-color: #667eea; }
+    .ca-reveal-popup .ca-rpop-actions button[data-rpop-type="dismiss"] { color: #888; border-color: transparent; }
+    .ca-reveal-popup .ca-rpop-actions button[data-rpop-type="dismiss"]:hover { color: #e74c3c; }
   `);
 
   // ==================== 选择器生成 ====================
@@ -2154,7 +2175,7 @@
     });
   }
 
-  // 点击高亮输入框的处理
+  // 点击高亮输入框 → 弹出步骤类型选择
   function onRevealedClick(e) {
     if (!state.revealEnabled) return;
     const el = e.target.closest('.ca-revealed-highlight');
@@ -2163,64 +2184,100 @@
     e.stopPropagation();
     e.stopImmediatePropagation();
 
-    // 确定步骤类型
-    let stepType, desc;
-    if (el.type === 'password') {
-      stepType = 'password';
-      desc = '密码输入框 → {{PASSWORD}}';
-    } else if (el.type === 'checkbox') {
-      stepType = 'click';
-      desc = '勾选 ' + (el.name || el.id || '复选框');
-    } else {
-      stepType = 'username';
-      desc = '账号输入框 → {{USERNAME}}';
-    }
+    showRevealPopup(el, e.clientX, e.clientY);
+  }
+
+  function showRevealPopup(el, x, y) {
+    // 移除旧弹窗
+    document.querySelectorAll('.ca-reveal-popup').forEach(p => p.remove());
 
     const info = getElementInfo(el);
-    // 复制 addStepFromElement 的核心记录逻辑，跳过隐藏检测和重复检查（用户手动操作，信任之）
-    const bestSelector = info.selectors[0]?.value || '';
-    const step = {
-      type: stepType,
-      description: desc,
-      tag: info.tag,
-      bestSelector,
-      selectorCandidates: info.selectors.map(s => s.value),
-      iframe: info.iframe,
-      attrs: info.attrs,
-      text: info.text,
-      visible: true, // 已强制显示
-      elementHTML: el.outerHTML,
-      elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, 3000) : '',
-      elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, 5000) || '',
-      _revealRecorded: true,
-    };
+    const selector = info.selectors[0]?.value || '';
+    const typeIcon = el.type === 'password' ? '🔒' : el.type === 'checkbox' ? '☑️' : '👤';
 
-    state.steps.push(step);
-    updateRecordedList();
-    saveState();
+    const popup = document.createElement('div');
+    popup.className = 'ca-reveal-popup';
+    popup.innerHTML = `
+      <div class="ca-rpop-header">${typeIcon} <b>${escHtml(selector)}</b></div>
+      <div class="ca-rpop-actions">
+        <button data-rpop-type="username">👤 账号</button>
+        <button data-rpop-type="password">🔒 密码</button>
+        <button data-rpop-type="submit">🚀 提交</button>
+        <button data-rpop-type="click">☑️ 勾选</button>
+        <button data-rpop-type="click">👆 点击</button>
+        <button data-rpop-type="dismiss">✕ 忽略</button>
+      </div>
+    `;
+    // 定位
+    popup.style.left = Math.min(x, window.innerWidth - 300) + 'px';
+    popup.style.top = Math.min(y, window.innerHeight - 200) + 'px';
+    document.body.appendChild(popup);
 
-    // 移除该输入框的高亮和标签
-    el.classList.remove('ca-revealed-highlight');
-    const lbl = document.querySelector('.ca-revealed-label[data-for-reveal="1"]');
-    // 更精确：找到对应标签移除
-    document.querySelectorAll('.ca-revealed-label').forEach(l => {
-      if (l.textContent.includes(el.name || el.id || '')) l.remove();
+    // 点击选项
+    popup.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const stepType = btn.dataset.rpopType;
+        if (stepType === 'dismiss') {
+          popup.remove();
+          return;
+        }
+        const descMap = {
+          username: '账号输入框 → {{USERNAME}}',
+          password: '密码输入框 → {{PASSWORD}}',
+          submit: '提交按钮',
+          click: (el.type === 'checkbox' ? '勾选 ' : '点击 ') + (el.name || el.id || el.tagName),
+        };
+        const step = {
+          type: stepType,
+          description: descMap[stepType] || '点击元素',
+          tag: info.tag,
+          bestSelector: selector,
+          selectorCandidates: info.selectors.map(s => s.value),
+          iframe: info.iframe,
+          attrs: info.attrs,
+          text: info.text,
+          visible: true,
+          elementHTML: el.outerHTML,
+          elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, 3000) : '',
+          elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, 5000) || '',
+          _revealRecorded: true,
+        };
+        state.steps.push(step);
+        updateRecordedList();
+        saveState();
+
+        // 移除高亮
+        el.classList.remove('ca-revealed-highlight');
+        document.querySelectorAll('.ca-revealed-label').forEach(l => {
+          if (l.textContent.includes(el.name || el.id || '')) l.remove();
+        });
+        _revealedInputs = _revealedInputs.filter(r => r.el !== el);
+        refreshRevealPanel();
+        popup.remove();
+        setStatus(`✅ 已记录: ${descMap[stepType]} (${selector})`);
+
+        if (_revealedInputs.length === 0) {
+          state.revealEnabled = false;
+          const toggle = document.getElementById('ca-toggle-reveal');
+          if (toggle) toggle.classList.remove('active');
+          const panel = document.getElementById('ca-reveal-panel');
+          if (panel) panel.remove();
+          setStatus('✅ 所有隐藏输入框已记录');
+        }
+      });
     });
-    _revealedInputs = _revealedInputs.filter(r => r.el !== el);
 
-    // 更新面板
-    refreshRevealPanel();
-    setStatus(`✅ 已记录: ${desc} (${bestSelector})`);
-
-    // 全部记录完自动关闭
-    if (_revealedInputs.length === 0) {
-      state.revealEnabled = false;
-      const toggle = document.getElementById('ca-toggle-reveal');
-      if (toggle) toggle.classList.remove('active');
-      const panel = document.getElementById('ca-reveal-panel');
-      if (panel) panel.remove();
-      setStatus('✅ 所有隐藏输入框已记录，显示隐藏已关闭');
-    }
+    // 点击弹窗外关闭
+    setTimeout(() => {
+      const closePop = (ev) => {
+        if (!popup.contains(ev.target)) {
+          popup.remove();
+          document.removeEventListener('click', closePop, true);
+        }
+      };
+      document.addEventListener('click', closePop, true);
+    }, 0);
   }
 
   // 揭示面板
@@ -2259,22 +2316,15 @@
       </div>`;
     }).join('');
 
-    // 面板内按钮点击
-    list.querySelectorAll('.ca-rv-btn').forEach((btn, i) => {
-      btn.addEventListener('click', (e) => {
+    // 面板内整行点击 → 弹出步骤选择（按钮点击冒泡到行）
+    list.querySelectorAll('.ca-rv-item').forEach(row => {
+      row.addEventListener('click', (e) => {
         e.stopPropagation();
-        const item = _revealedInputs[i];
+        const idx = parseInt(row.dataset.rvIdx);
+        const item = _revealedInputs[idx];
         if (!item) return;
-        // 模拟点击高亮元素
-        item.el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      });
-    });
-    // 面板内整行点击也触发
-    list.querySelectorAll('.ca-rv-item').forEach((row, i) => {
-      row.addEventListener('click', () => {
-        const item = _revealedInputs[i];
-        if (!item) return;
-        item.el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        const rect = item.el.getBoundingClientRect();
+        showRevealPopup(item.el, rect.left + rect.width / 2, rect.top);
       });
     });
   }
