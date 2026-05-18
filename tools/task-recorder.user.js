@@ -42,13 +42,6 @@
     { value: "other", label: "其他（请描述）" },
   ];
 
-  const CONDITION_TYPES = [
-    { value: "url_change", label: "页面跳转（URL 变化）", icon: "🔗", hint: "登录成功后 URL 会改变" },
-    { value: "text", label: "页面出现特定文字", icon: "📝", hint: "页面上出现「成功」「已连接」等文字" },
-    { value: "element", label: "页面出现特定元素", icon: "🎯", hint: "出现某个表示成功的页面元素" },
-    { value: "skip", label: "跳过（仅靠步骤完成判断）", icon: "⏭️", hint: "不设置额外条件，步骤全部完成即为成功" },
-  ];
-
   // ==================== 状态 ====================
 
   const state = {
@@ -65,7 +58,6 @@
     tooltip: null,
     iframeWarning: null,
     carrierClickPhase: null,
-    successConditions: [],
   };
 
   const STORAGE_KEY = "ca_recorder_state";
@@ -74,7 +66,6 @@
     try {
       GM_setValue(STORAGE_KEY, {
         steps: state.steps,
-        successConditions: state.successConditions,
         savedAt: Date.now(),
         url: window.location.href,
       });
@@ -105,12 +96,8 @@
 
   function restoreFromSaved(saved) {
     state.steps = saved.steps;
-    state.successConditions = saved.successConditions || [];
     activate();
     updateRecordedList();
-    if (state.successConditions.length > 0) {
-      updateSuccessConditionsList();
-    }
   }
 
   // ==================== 样式注入 ====================
@@ -236,27 +223,6 @@
     #ca-tooltip .ca-tt-hint { color: #888; font-size: 11px; margin-top: 4px; }
     .ca-highlight { outline: 3px solid #667eea !important; outline-offset: 2px !important; background: rgba(102,126,234,0.1) !important; }
     .ca-highlight-selected { outline: 3px solid #4CAF50 !important; outline-offset: 2px !important; background: rgba(76,175,80,0.1) !important; }
-    #ca-recorder-panel .ca-cond-dropdown-btn {
-      width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px;
-      padding: 8px 14px; background: #2a2a3e; border: 1px solid #555;
-      border-radius: 8px; cursor: pointer; color: #aaa; font-size: 13px;
-      transition: all 0.2s; user-select: none;
-    }
-    #ca-recorder-panel .ca-cond-dropdown-btn:hover { background: #333; border-color: #667eea; color: #ddd; }
-    #ca-recorder-panel .ca-cond-menu {
-      position: absolute; top: 100%; left: 0; right: 0;
-      background: #1f1f35; border: 1px solid #555; border-radius: 8px;
-      z-index: 10; margin-top: 4px; overflow: hidden;
-    }
-    #ca-recorder-panel .ca-cond-menu-item {
-      display: flex; align-items: center; gap: 8px;
-      padding: 10px 12px; cursor: pointer; color: #ddd; font-size: 12px;
-      transition: all 0.15s; border-bottom: 1px solid #2a2a3e;
-    }
-    #ca-recorder-panel .ca-cond-menu-item:last-child { border-bottom: none; }
-    #ca-recorder-panel .ca-cond-menu-item:hover { background: #2a2a5e; }
-    #ca-recorder-panel .ca-cond-menu-item .ca-cond-icon { font-size: 16px; flex-shrink: 0; }
-    #ca-recorder-panel .ca-cond-menu-item .ca-cond-hint { font-size: 11px; color: #888; }
     #ca-recorder-panel .ca-recorded-item { cursor: pointer; }
     #ca-recorder-panel .ca-recorded-item:hover { background: #333; }
     #ca-recorder-panel .ca-step-edit-overlay {
@@ -277,15 +243,6 @@
     }
     #ca-recorder-panel .ca-step-edit-modal textarea { min-height: 50px; resize: vertical; }
     #ca-recorder-panel .ca-step-edit-modal .ca-modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
-    #ca-recorder-panel .ca-cond-tag {
-      display: inline-flex; align-items: center; gap: 4px;
-      padding: 6px 10px; background: #2a2a4e; border-radius: 8px;
-      font-size: 12px; border: 1px solid #667eea;
-    }
-    #ca-recorder-panel .ca-cond-del {
-      background: none; border: none; color: #e74c3c; cursor: pointer;
-      font-size: 14px; padding: 0 2px;
-    }
     #ca-recorder-panel .ca-toolbar { display: flex; gap: 4px; margin-bottom: 8px; }
     #ca-recorder-panel .ca-toggle {
       flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;
@@ -870,14 +827,6 @@
             <button class="ca-btn ca-btn-danger ca-btn-sm" id="ca-btn-clear" disabled>🗑 清空</button>
           </div>
         </div>
-        <div class="ca-section">
-          <div class="ca-section-title">登录成功条件（可选）</div>
-          <div id="ca-cond-list" style="margin-bottom:8px;"></div>
-          <div style="position:relative;">
-            <button class="ca-cond-dropdown-btn" id="ca-btn-add-condition">📋 添加成功条件 ▾</button>
-            <div class="ca-cond-menu" id="ca-cond-menu" style="display:none;"></div>
-          </div>
-        </div>
         <div class="ca-status" id="ca-status">选择步骤类型后点击页面元素</div>
         <div class="ca-actions" style="margin-top:12px;">
           <button class="ca-btn ca-btn-primary" id="ca-btn-copy-prompt">📋 复制 AI 提示词</button>
@@ -1033,35 +982,6 @@
     state.panel.querySelector("#ca-btn-close").addEventListener("click", deactivate);
     state.panel.querySelector("#ca-btn-help").addEventListener("click", showHelpModal);
 
-    // 生成条件类型下拉菜单
-    const condMenu = state.panel.querySelector("#ca-cond-menu");
-    const condDropdownBtn = state.panel.querySelector("#ca-btn-add-condition");
-    for (const ct of CONDITION_TYPES) {
-      const item = document.createElement("div");
-      item.className = "ca-cond-menu-item";
-      item.innerHTML = `<span class="ca-cond-icon">${ct.icon}</span><div><div>${ct.label}</div><div class="ca-cond-hint">${ct.hint}</div></div>`;
-      item.addEventListener("click", (e) => {
-        e.stopPropagation();
-        condMenu.style.display = "none";
-        condDropdownBtn.innerHTML = "📋 添加成功条件 ▾";
-        handleConditionType(ct.value);
-      });
-      condMenu.appendChild(item);
-    }
-    condDropdownBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const isOpen = condMenu.style.display === "block";
-      condMenu.style.display = isOpen ? "none" : "block";
-      condDropdownBtn.innerHTML = isOpen ? "📋 添加成功条件 ▾" : "📋 添加成功条件 ▴";
-    });
-    // 点击其他地方关闭下拉
-    document.addEventListener("click", (e) => {
-      if (!condMenu.contains(e.target) && e.target !== condDropdownBtn) {
-        condMenu.style.display = "none";
-        condDropdownBtn.innerHTML = "📋 添加成功条件 ▾";
-      }
-    }, true);
-
     // 帮助详情展开/折叠
     const helpToggle = state.panel.querySelector("#ca-help-toggle");
     const helpDetail = state.panel.querySelector("#ca-help-detail");
@@ -1207,110 +1127,10 @@
   function clearSteps() {
     if (state.steps.length === 0) return;
     state.steps = [];
-    state.successConditions = [];
     state.carrierClickPhase = null;
     updateRecordedList();
-    updateSuccessConditionsList();
     clearSavedState();
     setStatus("已清空所有步骤");
-  }
-
-  // ==================== 成功条件流程 ====================
-
-  function handleConditionType(type) {
-    if (type === "skip") {
-      addSuccessCondition({ type: "skip" });
-      return;
-    }
-    if (type === "url_change") {
-      showConditionModal("url_change");
-      return;
-    }
-    if (type === "text") {
-      showConditionModal("text");
-      return;
-    }
-    if (type === "element") {
-      state.currentStepType = "success_condition";
-      state.recording = true;
-      setStatus("请点击表示登录成功的页面元素", "recording");
-    }
-  }
-
-  function showConditionModal(type) {
-    const overlay = document.createElement("div");
-    overlay.className = "ca-modal-overlay";
-
-    let content = "";
-    if (type === "url_change") {
-      content = `
-        <h4>🔗 页面跳转条件</h4>
-        <label>登录成功后 URL 会包含的关键词（正则表达式）</label>
-        <input type="text" id="ca-cond-pattern" placeholder="如: success|welcome|home|portal" />
-        <div style="font-size:12px;color:#888;margin-bottom:10px;">多个关键词用 | 分隔，匹配登录成功后跳转的 URL</div>
-      `;
-    } else if (type === "text") {
-      content = `
-        <h4>📝 页面文字条件</h4>
-        <label>登录成功后页面上会出现的文字</label>
-        <input type="text" id="ca-cond-text" placeholder="如: 登录成功、已连接、欢迎" />
-        <div style="font-size:12px;color:#888;margin-bottom:10px;">如果登录后页面显示这些文字，即判断为成功</div>
-      `;
-    }
-
-    overlay.innerHTML = `
-      <div class="ca-modal">
-        ${content}
-        <div class="ca-modal-actions">
-          <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-cond-cancel">取消</button>
-          <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-cond-confirm">确定</button>
-        </div>
-      </div>
-    `;
-    state.panel.appendChild(overlay);
-
-    overlay.querySelector("#ca-cond-cancel").addEventListener("click", () => overlay.remove());
-    overlay.querySelector("#ca-cond-confirm").addEventListener("click", () => {
-      if (type === "url_change") {
-        const pattern = overlay.querySelector("#ca-cond-pattern").value.trim();
-        if (!pattern) return;
-        overlay.remove();
-        addSuccessCondition({ type: "url_matches", pattern, label: `URL 匹配: ${pattern}` });
-      } else if (type === "text") {
-        const text = overlay.querySelector("#ca-cond-text").value.trim();
-        if (!text) return;
-        overlay.remove();
-        addSuccessCondition({ type: "js_expression", script: `document.body.innerText.includes('${text.replace(/'/g, "\\'")}')`, label: `页面包含: ${text}` });
-      }
-    });
-  }
-
-  function addSuccessCondition(condition) {
-    state.successConditions.push(condition);
-    updateSuccessConditionsList();
-    saveState();
-  }
-
-  function updateSuccessConditionsList() {
-    const list = state.panel.querySelector("#ca-cond-list");
-    list.innerHTML = state.successConditions
-      .map(
-        (c, i) => `
-      <span class="ca-cond-tag">
-        ${c.label || c.type}
-        <button class="ca-cond-del" data-idx="${i}" title="删除">✕</button>
-      </span>
-    `
-      )
-      .join("");
-
-    list.querySelectorAll(".ca-cond-del").forEach(btn => {
-      btn.addEventListener("click", () => {
-        state.successConditions.splice(parseInt(btn.dataset.idx), 1);
-        updateSuccessConditionsList();
-        saveState();
-      });
-    });
   }
 
   // ==================== 元素点击处理 ====================
@@ -1366,20 +1186,6 @@
 
   function handleElementSelected(el, info) {
     const type = state.currentStepType;
-
-    if (type === "success_condition") {
-      const bestSelector = info.selectors[0]?.value || "";
-      const desc = info.text ? `元素: ${info.text.substring(0, 20)}` : `元素: ${info.tag}`;
-      addSuccessCondition({
-        type: "element_exists",
-        selector: bestSelector,
-        label: `存在元素: ${bestSelector}`,
-      });
-      state.recording = false;
-      state.selectedEl?.classList.remove("ca-highlight-selected");
-      state.selectedEl = null;
-      return;
-    }
 
     if (type === "captcha_img") {
       // 验证码图片：记录后提示选输入框
@@ -1892,23 +1698,6 @@
       prompt += `\n`;
     }
 
-    // 成功条件
-    if (state.successConditions.length > 0) {
-      prompt += `## 登录成功条件\n\n`;
-      for (const sc of state.successConditions) {
-        if (sc.type === "skip") {
-          prompt += `- 跳过（不设置条件）→ success_conditions 应为空数组 []\n`;
-        } else if (sc.type === "url_matches") {
-          prompt += `- URL 匹配: \`${sc.pattern}\`\n`;
-        } else if (sc.type === "js_expression") {
-          prompt += `- 页面包含文字: ${sc.label || sc.script}\n`;
-        } else if (sc.type === "element_exists") {
-          prompt += `- 页面存在元素: \`${sc.selector}\`\n`;
-        }
-      }
-      prompt += `\n`;
-    }
-
     // 从 DOM 找所有步骤元素的公共祖先，生成统一的页面上下文
     const stepEls = [];
     for (const s of state.steps) {
@@ -2107,7 +1896,6 @@
             <li>重复以上步骤，依次录完账号、密码、运营商、提交等所有步骤</li>
             <li>录完后点击 <b style="color:#fff;">✅ 完成登录</b> → 自动检测登录容器，检测失败时进入框选模式</li>
             <li>如自动检测的容器不准确，可在框选模式下<b style="color:#fff;">拖拽画框</b>手动选择</li>
-            <li>框选完成后，设置登录成功条件</li>
             <li>点击 <b style="color:#fff;">📋 复制 AI 提示词</b>，将提示词发送给 AI 即可生成完整的任务 JSON</li>
           </ol>
 
@@ -2150,7 +1938,7 @@
             <li>点「账号输入框」→ 点页面上账号框</li>
             <li>点「密码输入框」→ 点页面上密码框</li>
             <li>点「提交按钮」→ 点页面登录按钮</li>
-            <li>点「✅ 完成登录」→ 设置成功条件 → 复制 AI 提示词</li>
+            <li>点「📋 复制 AI 提示词」→ 将提示词发送给 AI 生成任务 JSON</li>
           </ol>
 
           <p style="margin:4px 0;"><b style="color:#fff;">场景 B：运营商选择</b></p>
@@ -2175,17 +1963,8 @@
             <li>先使用面板中的步骤类型按钮，逐一点击账号、密码、运营商、提交等字段</li>
             <li>录完所有步骤后点 <b style="color:#fff;">✅ 完成登录</b></li>
             <li>录制器自动检测登录面板容器 → 如检测准确直接完成；如不准确，进入框选模式手动<b style="color:#fff;">拖拽画框</b></li>
-            <li>框选完成后进入成功条件设置</li>
             <li>最终提示词中会<b style="color:#667eea;">同时包含逐字段选择器和容器原始 HTML</b>，AI 交叉比对生成最准确的任务 JSON</li>
           </ol>
-
-          <h5 style="color:#667eea;margin:14px 0 6px;">七、登录成功条件</h5>
-          <ul style="margin:4px 0;padding-left:18px;">
-            <li><b style="color:#fff;">页面跳转</b> — 登录后 URL 包含的关键词（如 <code>success|welcome</code>）</li>
-            <li><b style="color:#fff;">页面文字</b> — 登录后页面出现的文字（如「登录成功」）</li>
-            <li><b style="color:#fff;">页面元素</b> — 登录后出现的特定元素（点击即可记录其选择器）</li>
-            <li><b style="color:#fff;">跳过</b> — 不设置条件，步骤全执行完即视为成功</li>
-          </ul>
 
           <h5 style="color:#667eea;margin:14px 0 6px;">八、获取任务 JSON</h5>
           <ul style="margin:4px 0;padding-left:18px;">
@@ -2486,9 +2265,6 @@
     createPanel();
     if (state.steps.length > 0) {
       updateRecordedList();
-    }
-    if (state.successConditions.length > 0) {
-      updateSuccessConditionsList();
     }
     document.addEventListener("mouseover", onHover, true);
     document.addEventListener("click", onRevealedClick, true);  // 先于 onClick，拦截高亮输入框点击
