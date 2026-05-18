@@ -26,8 +26,11 @@
     captcha_img: { category: "basic", label: "验证码图片", icon: "🖼️", color: "#9C27B0", primary: true, hint: "点击验证码图片，录制器会自动提示继续点击验证码输入框" },
     captcha_input: { category: "basic", label: "验证码输入框", icon: "✏️", color: "#9C27B0", primary: false, hint: "点击验证码输入框，自动弹出验证码类型选择（数字/字母/运算等）" },
     submit: { category: "basic", label: "提交按钮", icon: "🚀", color: "#F44336", primary: true, hint: "点击登录/提交按钮，通常放在最后一步" },
+    checkbox: { category: "basic", label: "勾选/协议", icon: "☑️", color: "#FF5722", primary: true, hint: "点击复选框、用户协议勾选框，自动录制勾选操作" },
+    smart_detect: { category: "basic", label: "智能检测", icon: "🔍", color: "#00BCD4", primary: true, hint: "打字自动识别账号/密码，点击自动识别勾选/提交/下拉框，按 Esc 停止" },
     click: { category: "advanced", label: "点击元素", icon: "👆", color: "#607D8B", primary: false, hint: "点击任意页面元素，仅记录点击操作，不填空" },
     wait: { category: "advanced", label: "等待元素", icon: "⏳", color: "#795548", primary: false, hint: "鼠标悬停在要等待的元素上，然后按 Enter 键记录" },
+    detect: { category: "advanced", label: "检测变动", icon: "🔎", color: "#E91E63", primary: false, hint: "检测页面元素变化（动态出现/消失/内容变更），常用于等待登录结果弹出" },
     eval: { category: "advanced", label: "执行JS", icon: "⚙️", color: "#00BCD4", primary: false, hint: "输入一段要在页面中执行的 JavaScript 代码" },
     custom: { category: "advanced", label: "自定义步骤", icon: "📝", color: "#9E9E9E", primary: false, hint: "手动填写步骤描述、选择器、填写值，自由度高" },
   };
@@ -53,8 +56,6 @@
     recording: false,
     multiStepMode: false,
     hiddenDetectionEnabled: true,
-    manualFillMode: false,
-    manualFillPhase: null,  // "username" | "password"
     revealEnabled: false,   // 强制显示隐藏输入框开关
     steps: [],
     hoveredEl: null,
@@ -235,18 +236,47 @@
     #ca-tooltip .ca-tt-hint { color: #888; font-size: 11px; margin-top: 4px; }
     .ca-highlight { outline: 3px solid #667eea !important; outline-offset: 2px !important; background: rgba(102,126,234,0.1) !important; }
     .ca-highlight-selected { outline: 3px solid #4CAF50 !important; outline-offset: 2px !important; background: rgba(76,175,80,0.1) !important; }
-    #ca-recorder-panel .ca-cond-grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+    #ca-recorder-panel .ca-cond-dropdown-btn {
+      width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 8px 14px; background: #2a2a3e; border: 1px solid #555;
+      border-radius: 8px; cursor: pointer; color: #aaa; font-size: 13px;
+      transition: all 0.2s; user-select: none;
     }
-    #ca-recorder-panel .ca-cond-btn {
-      display: flex; align-items: center; gap: 6px;
-      padding: 8px 10px; background: #2a2a3e; border: 1px solid #444;
-      border-radius: 8px; cursor: pointer; color: #ddd; font-size: 12px;
-      transition: all 0.2s; text-align: left;
+    #ca-recorder-panel .ca-cond-dropdown-btn:hover { background: #333; border-color: #667eea; color: #ddd; }
+    #ca-recorder-panel .ca-cond-menu {
+      position: absolute; top: 100%; left: 0; right: 0;
+      background: #1f1f35; border: 1px solid #555; border-radius: 8px;
+      z-index: 10; margin-top: 4px; overflow: hidden;
     }
-    #ca-recorder-panel .ca-cond-btn:hover { background: #3a3a4e; border-color: #667eea; }
-    #ca-recorder-panel .ca-cond-btn .ca-cond-icon { font-size: 16px; flex-shrink: 0; }
-    #ca-recorder-panel .ca-cond-btn .ca-cond-hint { font-size: 11px; color: #888; }
+    #ca-recorder-panel .ca-cond-menu-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 12px; cursor: pointer; color: #ddd; font-size: 12px;
+      transition: all 0.15s; border-bottom: 1px solid #2a2a3e;
+    }
+    #ca-recorder-panel .ca-cond-menu-item:last-child { border-bottom: none; }
+    #ca-recorder-panel .ca-cond-menu-item:hover { background: #2a2a5e; }
+    #ca-recorder-panel .ca-cond-menu-item .ca-cond-icon { font-size: 16px; flex-shrink: 0; }
+    #ca-recorder-panel .ca-cond-menu-item .ca-cond-hint { font-size: 11px; color: #888; }
+    #ca-recorder-panel .ca-recorded-item { cursor: pointer; }
+    #ca-recorder-panel .ca-recorded-item:hover { background: #333; }
+    #ca-recorder-panel .ca-step-edit-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+      z-index: 2147483646; display: flex; align-items: center; justify-content: center;
+    }
+    #ca-recorder-panel .ca-step-edit-modal {
+      background: #1a1a2e; border-radius: 12px; padding: 20px;
+      width: 380px; max-width: 90vw; color: #e0e0e0;
+    }
+    #ca-recorder-panel .ca-step-edit-modal h4 { margin: 0 0 14px; font-size: 15px; }
+    #ca-recorder-panel .ca-step-edit-modal label { display: block; margin-bottom: 4px; font-size: 12px; color: #888; }
+    #ca-recorder-panel .ca-step-edit-modal select,
+    #ca-recorder-panel .ca-step-edit-modal input,
+    #ca-recorder-panel .ca-step-edit-modal textarea {
+      width: 100%; padding: 8px 10px; background: #2a2a3e; border: 1px solid #444;
+      border-radius: 6px; color: #e0e0e0; font-size: 13px; margin-bottom: 10px;
+    }
+    #ca-recorder-panel .ca-step-edit-modal textarea { min-height: 50px; resize: vertical; }
+    #ca-recorder-panel .ca-step-edit-modal .ca-modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
     #ca-recorder-panel .ca-cond-tag {
       display: inline-flex; align-items: center; gap: 4px;
       padding: 6px 10px; background: #2a2a4e; border-radius: 8px;
@@ -256,7 +286,7 @@
       background: none; border: none; color: #e74c3c; cursor: pointer;
       font-size: 14px; padding: 0 2px;
     }
-    #ca-recorder-panel .ca-toolbar { display: flex; gap: 6px; margin-bottom: 8px; }
+    #ca-recorder-panel .ca-toolbar { display: flex; gap: 4px; margin-bottom: 8px; }
     #ca-recorder-panel .ca-toggle {
       flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;
       padding: 6px 8px; background: #2a2a3e; border: 1px solid #444;
@@ -813,7 +843,6 @@
           <div class="ca-toolbar">
             <span class="ca-toggle" id="ca-toggle-multistep" title="开启后每次点击记录一步，不会自动停止录制">🔁 多步录制</span>
             <span class="ca-toggle active" id="ca-toggle-detect" title="开启后自动检测容器内 display:none 的隐藏输入框">🔍 隐藏检测</span>
-            <span class="ca-toggle" id="ca-toggle-manual" title="手动在页面输入框中打字，录制器捕获真实的输入框选择器。适用于隐藏/双输入框等自动检测搞不定的场景">✍️ 手动填写</span>
             <span class="ca-toggle" id="ca-toggle-reveal" title="强制显示页面上所有 display:none 的输入框，让你能直接看到并点选">👁️ 显示隐藏</span>
           </div>
           <div style="font-size:11px;color:#666;margin-bottom:4px;">💡 <b>Esc</b> 取消  |  <b>Enter</b> 无 click 记录元素
@@ -825,11 +854,12 @@
             <b>Esc</b> — 取消当前录制<br>
             <b>🔁 多步录制</b> — 开启后每次点击/Enter 记录一步，不会自动停止，需手动 Esc<br>
             <b>🔍 隐藏检测</b> — 开启后自动扫描容器内 <code style="color:#FF9800;">display:none</code> 的真实输入框<br>
-            <b>✍️ 手动填写</b> — 点击后在页面输入框中<b>手动打字</b>，录制器捕获接收输入的真正元素。先填账号再填密码，自动依次记录<br>
-            <b>👁️ 显示隐藏</b> — 强制显示页面上所有隐藏的输入框（<code style="color:#FF9800;">display:none</code>/opacity:0），让你直接看到并点选真实输入框。关闭后恢复隐藏<br>
+            <b>👁️ 显示隐藏</b> — 强制显示页面上所有隐藏的输入框，让你直接看到并点选真实输入框<br>
             <span style="color:#4CAF50;">👤 账号</span> — 点账号输入框 | <span style="color:#2196F3;">🔒 密码</span> — 点密码框 | <span style="color:#FF9800;">📶 运营商</span> — 点下拉框<br>
             <span style="color:#9C27B0;">🖼️ 验证码</span> — 先点图片再点输入框 | <span style="color:#F44336;">🚀 提交</span> — 点登录按钮<br>
+            <span style="color:#FF5722;">☑️ 勾选</span> — 点复选框/协议 | <span style="color:#00BCD4;">🔍 智能检测</span> — 点输入框后打字记录真实元素，点击其他自动识别<br>
             <span style="color:#607D8B;">👆 点击</span> — 任意元素仅点击 | <span style="color:#00BCD4;">⚙️ JS</span> — 执行自定义代码<br>
+            <span style="color:#667eea;">💡 点击列表中的步骤可编辑类型和备注</span><br>
           </div>
         </div>
         <div class="ca-section">
@@ -843,7 +873,10 @@
         <div class="ca-section">
           <div class="ca-section-title">登录成功条件（可选）</div>
           <div id="ca-cond-list" style="margin-bottom:8px;"></div>
-          <div class="ca-cond-grid" id="ca-cond-grid"></div>
+          <div style="position:relative;">
+            <button class="ca-cond-dropdown-btn" id="ca-btn-add-condition">📋 添加成功条件 ▾</button>
+            <div class="ca-cond-menu" id="ca-cond-menu" style="display:none;"></div>
+          </div>
         </div>
         <div class="ca-status" id="ca-status">选择步骤类型后点击页面元素</div>
         <div class="ca-actions" style="margin-top:12px;">
@@ -915,15 +948,13 @@
       grid.appendChild(moreContainer);
     }
 
-    // 多步录制 / 隐藏检测 / 手动填写 切换按钮
+    // 多步录制 / 隐藏检测 / 显示隐藏 切换按钮
     const toggleMulti = state.panel.querySelector("#ca-toggle-multistep");
-    const toggleDetect = state.panel.querySelector("#ca-toggle-detect");
-    const toggleManual = state.panel.querySelector("#ca-toggle-manual");
+    const toggleHiddenDetect = state.panel.querySelector("#ca-toggle-detect");
     const toggleReveal = state.panel.querySelector("#ca-toggle-reveal");
     const refreshToggles = () => {
       toggleMulti.classList.toggle("active", state.multiStepMode);
-      toggleDetect.classList.toggle("active", state.hiddenDetectionEnabled);
-      toggleManual.classList.toggle("active", state.manualFillMode);
+      toggleHiddenDetect.classList.toggle("active", state.hiddenDetectionEnabled);
       toggleReveal.classList.toggle("active", state.revealEnabled);
     };
     refreshToggles();
@@ -936,7 +967,7 @@
         setStatus("多步录制已关闭");
       }
     });
-    toggleDetect.addEventListener("click", () => {
+    toggleHiddenDetect.addEventListener("click", () => {
       state.hiddenDetectionEnabled = !state.hiddenDetectionEnabled;
       refreshToggles();
       if (state.hiddenDetectionEnabled) {
@@ -955,35 +986,40 @@
         setStatus("已恢复隐藏输入框");
       }
     });
-    toggleManual.addEventListener("click", () => {
-      if (!state.manualFillMode) {
-        startManualFill();
-      } else {
-        stopManualFill();
-      }
-      refreshToggles();
-    });
 
-    // 全局 input 事件监听（手动填写模式 — capture 阶段确保最先捕获）
+    // 全局 input 事件监听（手动填写 & 智能检测共用 — capture 阶段确保最先捕获）
     document.addEventListener("input", (e) => {
-      if (!state.manualFillMode || !state.manualFillPhase) return;
       const el = e.target;
       if (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA") return;
       if (el.type === "checkbox" || el.type === "radio" || el.type === "submit" || el.type === "button") return;
+      // 只记录用户当前正在聚焦的元素，防止密码管理器自动填充触发误记录
+      if (document.activeElement !== el) return;
 
-      const stepType = state.manualFillPhase;
-      const desc = stepType === "username"
-        ? "账号输入框 → {{USERNAME}}"
-        : "密码输入框 → {{PASSWORD}}";
-      addManualFillStep(stepType, el, desc);
+      // 智能检测模式：按 input type 自动分类记录
+      if (state.currentStepType === "smart_detect") {
+        const stepType = el.type === "password" ? "password" : "username";
+        const desc = stepType === "password" ? "密码输入框 → {{PASSWORD}}" : "账号输入框 → {{USERNAME}}";
+        addManualFillStep(stepType, el, desc);
+        setStatus("🔍 已记录。继续点击或输入，按 Esc 停止", "recording");
+        return;
+      }
+    }, true);  // capture phase
 
-      if (state.manualFillPhase === "username") {
-        state.manualFillPhase = "password";
-        setStatus("✍️ 已捕获账号框。请在页面上的**密码输入框**中输入任意字符…", "recording");
-      } else {
-        stopManualFill();
-        refreshToggles();
-        setStatus("✅ 已捕获账号和密码框！可继续录制其他步骤（运营商/验证码/提交）或导出");
+    // change 事件监听（智能检测模式：勾选/下拉框变动后记录）
+    document.addEventListener("change", (e) => {
+      if (state.currentStepType !== "smart_detect") return;
+      const el = e.target;
+      if (el === state.panel || state.panel?.contains(el)) return;
+
+      const tag = el.tagName.toLowerCase();
+      if (tag === "input" && el.type === "checkbox") {
+        const desc = "勾选: " + (el.name || el.id || "checkbox");
+        addManualFillStep("checkbox", el, desc);
+        setStatus("🔍 已记录勾选。继续操作或按 Esc 停止", "recording");
+      } else if (tag === "select") {
+        const desc = "运营商选择 → {{ISP}}（选项: " + (el.value || "") + "）";
+        addManualFillStep("carrier", el, desc);
+        setStatus("🔍 已记录运营商选择。继续操作或按 Esc 停止", "recording");
       }
     }, true);  // capture phase
 
@@ -997,15 +1033,34 @@
     state.panel.querySelector("#ca-btn-close").addEventListener("click", deactivate);
     state.panel.querySelector("#ca-btn-help").addEventListener("click", showHelpModal);
 
-    // 生成条件类型按钮
-    const condGrid = state.panel.querySelector("#ca-cond-grid");
+    // 生成条件类型下拉菜单
+    const condMenu = state.panel.querySelector("#ca-cond-menu");
+    const condDropdownBtn = state.panel.querySelector("#ca-btn-add-condition");
     for (const ct of CONDITION_TYPES) {
-      const btn = document.createElement("div");
-      btn.className = "ca-cond-btn";
-      btn.innerHTML = `<span class="ca-cond-icon">${ct.icon}</span><div><div>${ct.label}</div><div class="ca-cond-hint">${ct.hint}</div></div>`;
-      btn.addEventListener("click", () => handleConditionType(ct.value));
-      condGrid.appendChild(btn);
+      const item = document.createElement("div");
+      item.className = "ca-cond-menu-item";
+      item.innerHTML = `<span class="ca-cond-icon">${ct.icon}</span><div><div>${ct.label}</div><div class="ca-cond-hint">${ct.hint}</div></div>`;
+      item.addEventListener("click", (e) => {
+        e.stopPropagation();
+        condMenu.style.display = "none";
+        condDropdownBtn.innerHTML = "📋 添加成功条件 ▾";
+        handleConditionType(ct.value);
+      });
+      condMenu.appendChild(item);
     }
+    condDropdownBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = condMenu.style.display === "block";
+      condMenu.style.display = isOpen ? "none" : "block";
+      condDropdownBtn.innerHTML = isOpen ? "📋 添加成功条件 ▾" : "📋 添加成功条件 ▴";
+    });
+    // 点击其他地方关闭下拉
+    document.addEventListener("click", (e) => {
+      if (!condMenu.contains(e.target) && e.target !== condDropdownBtn) {
+        condMenu.style.display = "none";
+        condDropdownBtn.innerHTML = "📋 添加成功条件 ▾";
+      }
+    }, true);
 
     // 帮助详情展开/折叠
     const helpToggle = state.panel.querySelector("#ca-help-toggle");
@@ -1060,7 +1115,8 @@
       .join("");
 
     list.querySelectorAll(".ca-del").forEach(btn => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();  // 防止触发编辑弹窗
         state.steps.splice(parseInt(btn.dataset.idx), 1);
         updateRecordedList();
         saveState();
@@ -1068,7 +1124,67 @@
       });
     });
 
+    // 点击步骤项可编辑类型和备注
+    list.querySelectorAll(".ca-recorded-item").forEach(item => {
+      item.addEventListener("click", () => {
+        const idx = parseInt(item.querySelector(".ca-del")?.dataset.idx);
+        if (idx >= 0) showStepEditModal(idx);
+      });
+    });
+
     updateButtons();
+  }
+
+  function showStepEditModal(idx) {
+    const step = state.steps[idx];
+    if (!step) return;
+
+    const overlay = document.createElement("div");
+    overlay.className = "ca-step-edit-overlay";
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+
+    const typeOptions = Object.entries(STEP_TYPES)
+      .map(([k, cfg]) => `<option value="${k}" ${step.type === k ? "selected" : ""}>${cfg.icon} ${cfg.label}</option>`)
+      .join("");
+
+    overlay.innerHTML = `
+      <div class="ca-step-edit-modal">
+        <h4>✏️ 编辑步骤 ${idx + 1}</h4>
+        <label>步骤类型</label>
+        <select id="ca-edit-type">${typeOptions}</select>
+        <label>描述 / 备注</label>
+        <input type="text" id="ca-edit-desc" value="${escHtml(step.description || "")}" placeholder="描述这个步骤的作用" />
+        <label>选择器</label>
+        <input type="text" id="ca-edit-selector" value="${escHtml(step.bestSelector || "")}" placeholder="CSS 选择器" />
+        <div style="font-size:11px;color:#666;margin-bottom:8px;">${step.hiddenRealSelector ? `⚠️ 隐藏输入框: ${escHtml(step.hiddenRealSelector)}` : `标签: &lt;${step.tag}&gt;`}</div>
+        <div class="ca-modal-actions">
+          <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-edit-cancel">取消</button>
+          <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-edit-save">保存</button>
+        </div>
+      </div>
+    `;
+    state.panel.appendChild(overlay);
+
+    overlay.querySelector("#ca-edit-cancel").addEventListener("click", () => overlay.remove());
+    overlay.querySelector("#ca-edit-save").addEventListener("click", () => {
+      const newType = overlay.querySelector("#ca-edit-type").value;
+      const newDesc = overlay.querySelector("#ca-edit-desc").value.trim();
+      const newSelector = overlay.querySelector("#ca-edit-selector").value.trim();
+
+      step.type = newType;
+      step.description = newDesc || STEP_TYPES[newType]?.label || newType;
+      if (newSelector) {
+        step.bestSelector = newSelector;
+        if (!step.selectorCandidates.includes(newSelector)) {
+          step.selectorCandidates.unshift(newSelector);
+        }
+      }
+
+      overlay.remove();
+      updateRecordedList();
+      saveState();
+      setStatus(`✅ 步骤 ${idx + 1} 已更新: ${STEP_TYPES[newType]?.icon || ""} ${step.description}`);
+    });
   }
 
   function updateButtons() {
@@ -1225,10 +1341,11 @@
     if (el === state.panel || state.panel?.contains(el)) return;
     if (el.closest("#ca-tooltip")) return;
 
-    // 运营商（非原生 select）需要点击到达页面以展开自定义下拉框，不能拦截
-    const needsClickThrough = state.currentStepType === "carrier"
+    // 运营商 / 智能检测：需要点击到达页面，不能拦截
+    const needsClickThrough = (state.currentStepType === "carrier"
       && el.tagName !== "SELECT"
-      && !state.carrierClickPhase;
+      && !state.carrierClickPhase)
+      || state.currentStepType === "smart_detect";
     if (!needsClickThrough) {
       e.preventDefault();
       e.stopPropagation();
@@ -1292,6 +1409,20 @@
     }
     if (type === "submit") {
       addStepFromElement(type, el, info, "提交按钮");
+      return;
+    }
+    if (type === "checkbox") {
+      const checkboxDesc = info.text ? `勾选: ${info.text.substring(0, 30)}` : "勾选/用户协议";
+      addStepFromElement(type, el, info, checkboxDesc);
+      return;
+    }
+    if (type === "smart_detect") {
+      handleSmartDetectClick(el, info);
+      return;
+    }
+    if (type === "detect") {
+      const detectDesc = info.text ? `检测变动: ${info.text.substring(0, 30)}` : "检测元素变动";
+      addStepFromElement(type, el, info, detectDesc);
       return;
     }
 
@@ -1403,11 +1534,12 @@
     } else {
       setStatus(`已添加: ${description}`);
     }
-    if (!state.multiStepMode) {
+    const isSmartDetect = state.currentStepType === "smart_detect";
+    if (!state.multiStepMode && !isSmartDetect) {
       state.recording = false;
       state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
     }
-    if (state.multiStepMode && state.recording) {
+    if ((state.multiStepMode || isSmartDetect) && state.recording) {
       const nextHint = state.currentStepType
         ? `继续 [${STEP_TYPES[state.currentStepType]?.label || state.currentStepType}] — 点击下一个元素或按 Esc 停止`
         : "点击下一个元素或选择步骤类型，按 Esc 停止";
@@ -1415,24 +1547,7 @@
     }
   }
 
-  // ==================== 手动填写模式 ====================
-  // 用户直接在页面输入框中打字，录制器捕获 receiving 输入的真实元素。
-  // 彻底解决隐藏输入框/双输入框模式（深澜/HK Posi 等）的选择器识别问题。
-
-  function startManualFill() {
-    state.manualFillMode = true;
-    state.manualFillPhase = "username";
-    // 关闭录制状态，避免冲突
-    state.recording = false;
-    state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
-    setStatus("✍️ 请在页面上的**账号输入框**中输入任意字符…", "recording");
-  }
-
-  function stopManualFill() {
-    state.manualFillMode = false;
-    state.manualFillPhase = null;
-  }
-
+  // 从 input 事件记录步骤（智能检测 & 旧版手动填写共用）
   function addManualFillStep(type, el, description) {
     const info = getElementInfo(el);
     const bestSelector = info.selectors[0]?.value || "";
@@ -1456,8 +1571,6 @@
       elementHTML: el.outerHTML,
       elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, 3000) : "",
       elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, 5000) || "",
-      // 手动填写模式：用户直接操作的必然是正确元素
-      _manualFill: true,
     };
 
     state.steps.push(step);
@@ -1465,6 +1578,33 @@
     state.selectedEl = null;
     updateRecordedList();
     saveState();
+  }
+
+  // ==================== 智能检测模式 ====================
+  // 核心：不拦截用户操作，监听 input/change 事件捕获真正变动的元素
+  // click 仅处理提交按钮、图片和无法归类的点击
+  function handleSmartDetectClick(el, info) {
+    const tag = el.tagName.toLowerCase();
+    const type = (el.type || "").toLowerCase();
+
+    // 提交按钮 → 直接记录
+    if (type === "submit" || (tag === "button" && /登录|提交|submit|login/i.test(el.textContent || el.value || ""))) {
+      addStepFromElement("submit", el, info, "提交按钮");
+      return;
+    }
+    // 图片 → 验证码
+    if (tag === "img") {
+      const imgDesc = (el.alt || el.src || "").substring(0, 50);
+      addStepFromElement("captcha_img", el, info, "验证码图片" + (imgDesc ? `: ${imgDesc}` : ""));
+      selectStepType("captcha_input");
+      return;
+    }
+    // input/select → 不处理 click，留给 input/change 事件捕获变动后的真实元素
+    if (tag === "input" || tag === "select" || tag === "textarea") return;
+    if (tag === "label" && el.htmlFor) return;
+    // 其他可点击元素
+    const clickDesc = info.text ? `点击: ${info.text.substring(0, 30)}` : `点击: ${tag}`;
+    addStepFromElement("click", el, info, clickDesc);
   }
 
   function handleCarrierClickPhase(el, info) {
@@ -1696,8 +1836,11 @@
     prompt += `| carrier | select / click_select / click_select(按钮组) | value: {{ISP}}（原生 select → select，自定义 div → click_select，按钮组 → click_select 按文本匹配） |\n`;
     prompt += `| captcha_img + captcha_input | ocr | 合并为一个 ocr 步骤，selector=图片, target_selector=输入框 |\n`;
     prompt += `| submit | click | — |\n`;
+    prompt += `| checkbox | click | 勾选复选框/用户协议 |\n`;
+    prompt += `| smart_detect | 自动分类 | 智能检测模式：自动识别账号/密码/勾选/提交/点击等 |\n`;
     prompt += `| click | click | — |\n`;
     prompt += `| wait | wait | — |\n`;
+    prompt += `| detect | wait / eval | 检测元素变动（出现→wait，内容变更→eval） |\n`;
     prompt += `| eval | eval | — |\n`;
     prompt += `\n`;
 
@@ -1977,8 +2120,11 @@
             <tr><td style="padding:3px 6px;">🖼️ 验证码图片</td><td style="padding:3px 6px;">点击验证码图片</td><td style="padding:3px 6px;"><code>ocr</code> 步骤（与验证码输入框合并）</td></tr>
             <tr><td style="padding:3px 6px;">✏️ 验证码输入</td><td style="padding:3px 6px;">点击验证码输入框</td><td style="padding:3px 6px;"><code>ocr</code> 识别 + 填入</td></tr>
             <tr><td style="padding:3px 6px;">🚀 提交按钮</td><td style="padding:3px 6px;">点击登录/提交按钮</td><td style="padding:3px 6px;"><code>click</code> 步骤</td></tr>
+            <tr><td style="padding:3px 6px;">☑️ 勾选/协议</td><td style="padding:3px 6px;">点击复选框/用户协议勾选框</td><td style="padding:3px 6px;"><code>click</code> 步骤</td></tr>
+            <tr><td style="padding:3px 6px;">🔍 智能检测</td><td style="padding:3px 6px;">打字自动识别账号/密码，点击自动识别勾选/提交/下拉框/图片等</td><td style="padding:3px 6px;">自动分类为对应步骤类型</td></tr>
             <tr><td style="padding:3px 6px;">👆 点击元素</td><td style="padding:3px 6px;">点击任意元素</td><td style="padding:3px 6px;"><code>click</code> 步骤</td></tr>
             <tr><td style="padding:3px 6px;">⏳ 等待元素</td><td style="padding:3px 6px;">等待某元素出现</td><td style="padding:3px 6px;"><code>wait</code> 步骤</td></tr>
+            <tr><td style="padding:3px 6px;">🔎 检测变动</td><td style="padding:3px 6px;">检测页面元素变化（动态出现/消失/内容变更）</td><td style="padding:3px 6px;"><code>wait</code> / <code>eval</code> 步骤</td></tr>
             <tr><td style="padding:3px 6px;">⚙️ 执行JS</td><td style="padding:3px 6px;">输入 JS 代码</td><td style="padding:3px 6px;"><code>eval</code> 步骤</td></tr>
             <tr><td style="padding:3px 6px;">📝 自定义</td><td style="padding:3px 6px;">自定义描述与选择器</td><td style="padding:3px 6px;">通用步骤</td></tr>
           </table>
@@ -2203,7 +2349,7 @@
         <button data-rpop-type="username">👤 账号</button>
         <button data-rpop-type="password">🔒 密码</button>
         <button data-rpop-type="submit">🚀 提交</button>
-        <button data-rpop-type="click">☑️ 勾选</button>
+        <button data-rpop-type="checkbox">☑️ 勾选</button>
         <button data-rpop-type="click">👆 点击</button>
         <button data-rpop-type="dismiss">✕ 忽略</button>
       </div>
@@ -2226,7 +2372,8 @@
           username: '账号输入框 → {{USERNAME}}',
           password: '密码输入框 → {{PASSWORD}}',
           submit: '提交按钮',
-          click: (el.type === 'checkbox' ? '勾选 ' : '点击 ') + (el.name || el.id || el.tagName),
+          checkbox: '勾选: ' + (el.name || el.id || el.tagName),
+          click: '点击: ' + (el.name || el.id || el.tagName),
         };
         const step = {
           type: stepType,
@@ -2330,7 +2477,7 @@
   }
 
   function escHtml(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   function activate() {
@@ -2379,13 +2526,6 @@
 
   function onKeyDown(e) {
     if (e.key === "Escape") {
-      if (state.manualFillMode) {
-        stopManualFill();
-        setStatus("已退出手动填写模式");
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
       if (state.recording) {
         state.recording = false;
         state.currentStepType = null;
