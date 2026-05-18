@@ -52,7 +52,7 @@
 | `timeout` | 否 | `30000` | 全局超时时间（毫秒） |
 | `variables` | 否 | `{}` | 任务级变量，支持 `{{VAR}}` 模板引用其他变量 |
 | `steps` | 是 | `[]` | 步骤列表，按顺序执行 |
-| `success_conditions` | 否 | `[]` | 成功条件列表，全部满足才算成功；**留空则所有步骤完成即为成功** |
+| `success_conditions` | 否（建议显式填写） | `[]` | 成功条件列表。设为 `[]` 则步骤全部完成即成功。**不要省略此字段**，省略会触发兜底页面错误检查，可能误判 |
 | `on_success` | 否 | `{}` | 成功时的处理，如 `{ "message": "登录成功" }` |
 | `on_failure` | 否 | `{}` | 失败时的处理，如 `{ "message": "登录失败", "screenshot": true }` |
 
@@ -377,7 +377,11 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
 
 ## 成功条件
 
-`success_conditions` 为空数组时，所有步骤执行完毕且没有失败即视为成功。此时系统会自动检查页面中是否包含错误关键词（如"失败"、"错误"、"error"等）以及常见的错误 DOM 元素（`.alert-danger`、`.error-msg` 等），如检测到则判定为失败。
+**必须显式填写 `success_conditions` 字段。** 若希望所有步骤执行完毕即视为成功，请设置为空数组 `[]`。
+
+> **注意：** 不能省略 `success_conditions` 字段。代码对缺失该字段有兜底逻辑，会扫描页面中的错误关键词（如"失败"、"错误"、"error"等）和错误 DOM 元素（`.alert-danger`、`.error-msg` 等），检测到则判定为失败。这可能导致正常登录被误判。**请始终显式设置此字段。**
+
+`success_conditions` 为空数组 `[]` 时，所有步骤执行完毕且没有失败即视为成功。
 
 如需更精确的判定，可组合使用以下条件类型：
 
@@ -388,7 +392,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
 | `url_matches` | 当前 URL 匹配正则 | `{ "type": "url_matches", "pattern": "success\|welcome\|home" }` |
 | `element_exists` | 页面存在指定元素 | `{ "type": "element_exists", "selector": ".welcome-message" }` |
 | `js_expression` | JS 表达式返回 truthy | `{ "type": "js_expression", "script": "document.body.innerText.includes('成功')" }` |
-| `skip` | 跳过，不设置额外条件 | `{ "type": "skip" }` — 等价于空数组，步骤完成即成功 |
+| `skip` | 跳过条件检查（显式声明） | `{ "type": "skip" }` — 显式跳过该条件项，用于组合条件中排除某项 |
 
 多个条件全部满足才算成功。典型组合：先用 `eval` 步骤检查页面并存储结果到变量，再用 `variable` 条件判断该变量。
 
@@ -690,7 +694,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
 
 ### 成功判定
 
-- 简单场景留空 `success_conditions`，步骤全部完成即为成功
+- 简单场景设置 `success_conditions` 为空数组 `[]`，步骤全部完成即成功。不要省略此字段
 - 复杂场景建议组合使用 `eval` + `variable` 条件
 - 认证页面会跳转的场景，优先用 `url_contains` 或 `url_matches`
 
