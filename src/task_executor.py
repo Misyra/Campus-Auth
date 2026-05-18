@@ -191,6 +191,7 @@ class TaskConfig:
     metadata: dict[str, Any] = field(
         default_factory=dict
     )  # 用户自定义元数据，执行器不使用
+    reveal_hidden: bool = False  # 执行前强制显示所有隐藏输入框
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TaskConfig:
@@ -208,6 +209,7 @@ class TaskConfig:
             on_success=data.get("on_success", {}),
             on_failure=data.get("on_failure", {}),
             metadata=data.get("metadata", {}),
+            reveal_hidden=data.get("reveal_hidden", False),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -231,6 +233,8 @@ class TaskConfig:
             result["on_failure"] = self.on_failure
         if self.metadata:
             result["metadata"] = self.metadata
+        if self.reveal_hidden:
+            result["reveal_hidden"] = True
         return result
 
 
@@ -398,33 +402,41 @@ class InputHandler(StepHandler):
         value = params.get("value", "")
         clear = params.get("clear", True)
         timeout = step.timeout or 10000
-        force = params.get("force", False)
 
         if not selector:
             return False, "输入步骤需要 selector"
 
         ctx = await self._resolve_frame(page, step)
-        logger.info("输入 → %s (clear=%s, force=%s)", selector, clear, force)
+        logger.info("输入 → %s (clear=%s)", selector, clear)
 
-        if force:
-            return await self._force_input(ctx, selector, value, clear, timeout)
+        # 策略1: 快速尝试普通 fill（3s 超时，可见输入框瞬间完成）
+        candidates = [s.strip() for s in selector.split(",") if s.strip()]
+        for candidate in candidates:
+            try:
+                loc = ctx.locator(candidate).first
+                await loc.wait_for(state="visible", timeout=3000)
+                if clear:
+                    await loc.fill("", timeout=timeout)
+                await loc.fill(value, timeout=timeout)
+                logger.info("输入完成(普通) → %s", candidate)
+                return True, ""
+            except Exception:
+                logger.debug("普通 fill 候选失败: %s", candidate)
+                continue
 
-        element = await self._find_element(ctx, selector, timeout)
-        if not element:
-            return False, f"未找到输入元素: {selector}"
-
-        if clear:
-            await element.fill("", timeout=timeout)
-        await element.fill(value, timeout=timeout)
-        logger.info("输入完成 → %s", selector)
-        return True, ""
+        # 策略2: 自动降级到强制输入（隐藏/不可交互的输入框）
+        logger.info("普通 fill 失败，自动降级到强制输入模式")
+        return await self._force_input(ctx, selector, value, clear, timeout)
 
     async def _force_input(
         self, ctx, selector: str, value: str, clear: bool, timeout: int
     ) -> tuple[bool, str]:
-        """强制输入：跳过可见性检查，通过 JS 设置值并触发事件。
-        适用于 display:none / visibility:hidden 的隐藏输入框。
+        """强制输入：跳过可见性检查，通过 JS 设置值并模拟完整用户交互事件。
+        适用于 display:none / visibility:hidden / opacity:0 等隐藏输入框。
         支持逗号分隔的候选选择器，按顺序尝试，取第一个 attached 的元素。
+
+        事件序列（模拟真实用户操作）：
+          focus → (clear) → beforeinput → set value → input → keyup → change → blur
         """
         candidates = [s.strip() for s in selector.split(",") if s.strip()]
 
@@ -442,17 +454,36 @@ class InputHandler(StepHandler):
         if not element:
             return False, f"force_input 未找到可用的输入元素: {selector}"
 
-        if clear:
-            await element.evaluate("el => { el.value = ''; }")
         await element.evaluate(
-            "(el, val) => {"
+            "(el, val, doClear) => {"
+            "  // 移除可能阻止输入的限制属性"
+            "  el.removeAttribute('readonly');"
+            "  el.removeAttribute('disabled');"
+            "  // 1. focus — 触发页面 JS 的显隐切换/占位收起"
+            "  el.dispatchEvent(new FocusEvent('focus', {bubbles:true}));"
+            "  // 2. 清空"
+            "  if (doClear) {"
+            "    const nativeSet = Object.getOwnPropertyDescriptor("
+            "      HTMLInputElement.prototype, 'value').set;"
+            "    nativeSet.call(el, '');"
+            "  }"
+            "  // 3. beforeinput — React 17+ 受控组件需要"
+            "  el.dispatchEvent(new InputEvent('beforeinput', {bubbles:true, inputType:'insertText', data:val}));"
+            "  // 4. 设置值（原生 setter 绕过 React/Vue 的 getter/setter 劫持）"
             "  const nativeSet = Object.getOwnPropertyDescriptor("
             "    HTMLInputElement.prototype, 'value').set;"
             "  nativeSet.call(el, val);"
-            "  el.dispatchEvent(new Event('input', {bubbles:true}));"
+            "  // 5. input — 所有框架都监听此事件更新状态"
+            "  el.dispatchEvent(new InputEvent('input', {bubbles:true, inputType:'insertText', data:val}));"
+            "  // 6. keyup — 部分门户做逐字校验"
+            "  el.dispatchEvent(new KeyboardEvent('keyup', {bubbles:true}));"
+            "  // 7. change"
             "  el.dispatchEvent(new Event('change', {bubbles:true}));"
+            "  // 8. blur — 触发校验/同步（如深澜双输入框的值同步）"
+            "  el.dispatchEvent(new FocusEvent('blur', {bubbles:true}));"
             "}",
             value,
+            clear,
         )
         logger.info("强制输入完成 → %s", selector)
         return True, ""
@@ -1038,6 +1069,10 @@ class TaskExecutor:
             await self._auto_navigate(page)
             await page.wait_for_timeout(2000)  # 导航后等待 2s 页面稳定
 
+            # reveal_hidden: 强制显示所有隐藏输入框，让后续 fill() 可以直接操作
+            if self.config.reveal_hidden:
+                await self._reveal_hidden_inputs(page)
+
             for i, step in enumerate(self.config.steps):
                 # 任务超时检查
                 remaining_s = task_deadline - _time.perf_counter()
@@ -1126,6 +1161,36 @@ class TaskExecutor:
                 last_url = current
                 redirects += 1
                 deadline = max(deadline, _time.perf_counter() + timeout_ms / 1000)
+
+    async def _reveal_hidden_inputs(self, page) -> None:
+        """强制显示所有隐藏的 text/password 输入框。
+        通过 JS 将 display:none / visibility:hidden / opacity:0 的输入框变为可见，
+        后续 fill() 可直接操作，无需 force 降级。"""
+        logger.info("[reveal] 强制显示隐藏输入框")
+        await page.evaluate("""
+            () => {
+                const inputs = document.querySelectorAll(
+                    'input[type="text"], input[type="password"], input:not([type])'
+                );
+                let count = 0;
+                inputs.forEach(el => {
+                    try {
+                        const s = getComputedStyle(el);
+                        const hidden = s.display === 'none'
+                            || s.visibility === 'hidden'
+                            || parseFloat(s.opacity) <= 0;
+                        if (hidden) {
+                            el.style.setProperty('display', 'inline-block', 'important');
+                            el.style.setProperty('visibility', 'visible', 'important');
+                            el.style.setProperty('opacity', '1', 'important');
+                            count++;
+                        }
+                    } catch (_) {}
+                });
+                return count;
+            }
+        """)
+        logger.info("[reveal] 完成")
 
     async def _execute_step(self, page, step: StepConfig) -> tuple[bool, str]:
         """执行单个步骤"""
