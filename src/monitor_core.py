@@ -312,51 +312,13 @@ class NetworkMonitorCore:
 
                 login_ok, login_msg = self.attempt_login()
                 if login_ok:
-                    self.log_message("登录完成，等待 5 秒后验证网络...")
-                    if not self._wait_interruptible(5, step=5):
-                        break
-
-                    try:
-                        verify_ok = is_network_available(
-                            test_sites=test_sites,
-                            timeout=self.NETWORK_CHECK_TIMEOUT_SECONDS,
-                            require_both=strict_mode,
-                        )
-                    except Exception as exc:
-                        self.log_message(f"登录后网络验证异常: {exc}", logging.WARNING)
-                        verify_ok = False
-
-                    if verify_ok:
-                        consecutive_failures = 0
-                        self.login_attempt_count = 0
-                        self.last_network_ok = True
-                        self.log_message(
-                            f"[#{self.network_check_count}] 登录成功，网络已恢复"
-                        )
-                    else:
-                        self.login_attempt_count += 1
-                        self.last_network_ok = False
-                        self.log_message(
-                            f"[#{self.network_check_count}] 登录表单提交成功但网络未恢复"
-                            f" — 可能密码错误或运营商不匹配",
-                            logging.WARNING,
-                        )
-                        if self.login_attempt_count == 2:
-                            send_notification(
-                                "Campus-Auth 登录异常",
-                                "登录完成但网络仍未恢复，可能密码错误或认证失败",
-                            )
-                        failed_count = self.login_attempt_count
-                        action = self._login_retry_or_break()
-                        if action == "break":
-                            break
-                        if action == "retry":
-                            continue
-                        # "give_up"
-                        send_notification(
-                            "Campus-Auth 登录失败",
-                            f"连续 {failed_count} 次登录失败，等待下次检测周期",
-                        )
+                    # 网络检测已移至 task_executor 内部，登录成功即表示网络已恢复
+                    consecutive_failures = 0
+                    self.login_attempt_count = 0
+                    self.last_network_ok = True
+                    self.log_message(
+                        f"[#{self.network_check_count}] 登录成功，网络已恢复"
+                    )
                 else:
                     self.login_attempt_count += 1
                     self.last_network_ok = False

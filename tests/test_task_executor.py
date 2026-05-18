@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from src.task_executor import (
-    ConditionConfig,
     StepConfig,
     StepType,
     TaskConfig,
@@ -178,7 +177,6 @@ def test_task_config_from_dict() -> None:
     assert config.description == "测试描述"
     assert config.timeout == 15000
     assert len(config.steps) == 1
-    assert len(config.success_conditions) == 1
 
 
 def test_step_config_to_dict_strips_nulls() -> None:
@@ -230,16 +228,6 @@ def test_step_config_from_dict_script_takes_precedence() -> None:
     assert step.script == "return 1"
 
 
-def test_condition_config_to_dict() -> None:
-    """测试 ConditionConfig.to_dict 跳过 None"""
-    cond = ConditionConfig(type="variable", variable="x", value=True)
-    d = cond.to_dict()
-    assert d == {"type": "variable", "variable": "x", "value": True}
-    assert "pattern" not in d
-    assert "selector" not in d
-    assert "script" not in d
-
-
 def test_task_config_to_dict_compact() -> None:
     """测试 TaskConfig.to_dict 输出紧凑"""
     config = TaskConfig(
@@ -249,7 +237,6 @@ def test_task_config_to_dict_compact() -> None:
     )
     d = config.to_dict()
     assert "variables" not in d  # 空 dict 不包含
-    assert "success_conditions" not in d
     assert "on_success" not in d
     assert "on_failure" not in d
     assert "metadata" not in d

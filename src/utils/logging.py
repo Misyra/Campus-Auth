@@ -189,8 +189,6 @@ def cleanup_debug_screenshots(debug_dir: str, retention_days: int) -> int:
 
     目录结构: debug/{YYYY-MM-DD}/*.png
     """
-    import shutil
-
     base = Path(debug_dir)
     if not base.exists():
         return 0
