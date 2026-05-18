@@ -414,7 +414,7 @@ class InputHandler(StepHandler):
         for candidate in candidates:
             try:
                 loc = ctx.locator(candidate).first
-                await loc.wait_for(state="visible", timeout=3000)
+                await loc.wait_for(state="visible", timeout=1500)
                 if clear:
                     await loc.fill("", timeout=timeout)
                 await loc.fill(value, timeout=timeout)
@@ -516,7 +516,7 @@ class ClickHandler(StepHandler):
         for candidate in candidates:
             try:
                 loc = ctx.locator(candidate).first
-                await loc.wait_for(state="visible", timeout=3000)
+                await loc.wait_for(state="visible", timeout=1500)
                 await loc.click(timeout=timeout)
                 logger.info("点击完成(普通) → %s", candidate)
                 return True, ""
