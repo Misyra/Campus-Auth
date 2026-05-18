@@ -65,8 +65,6 @@ def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
 def _has_chromium() -> bool:
     # 快速路径：直接扫描 ms-playwright 浏览器目录，避免导入 playwright.sync_api
     # （后者会加载 ~15-20MB 的 Python 绑定并启动一个 Playwright 实例）
-    import glob as _glob
-
     _search_locations = []
     # 标准 ms-playwright 缓存目录
     if sys.platform == "win32":

@@ -35,8 +35,7 @@
     "isp": "{{ISP}}"
   },
   "steps": [],
-  "success_conditions": [],
-  "on_success": { "message": "登录成功" },
+    "on_success": { "message": "登录成功" },
   "on_failure": { "message": "登录失败", "screenshot": true }
 }
 ```
@@ -52,7 +51,7 @@
 | `timeout` | 否 | `30000` | 全局超时时间（毫秒） |
 | `variables` | 否 | `{}` | 任务级变量，支持 `{{VAR}}` 模板引用其他变量 |
 | `steps` | 是 | `[]` | 步骤列表，按顺序执行 |
-| `success_conditions` | 否（建议显式填写） | `[]` | 成功条件列表。设为 `[]` 则步骤全部完成即成功。**不要省略此字段**，省略会触发兜底页面错误检查，可能误判 |
+| `success_conditions` | 否（兼容保留） | `[]` | 原有成功条件字段，系统不再使用，仅保留格式兼容 |
 | `on_success` | 否 | `{}` | 成功时的处理，如 `{ "message": "登录成功" }` |
 | `on_failure` | 否 | `{}` | 失败时的处理，如 `{ "message": "登录失败", "screenshot": true }` |
 
@@ -375,26 +374,11 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
 
 ---
 
-## 成功条件
+## 成功判断
 
-**必须显式填写 `success_conditions` 字段。** 若希望所有步骤执行完毕即视为成功，请设置为空数组 `[]`。
+系统统一使用网络连通性检测判断任务成功与否：任务步骤全部完成后，自动检测网络是否可达。网络通 = 认证成功，网络断 = 认证失败。
 
-> **注意：** 不能省略 `success_conditions` 字段。代码对缺失该字段有兜底逻辑，会扫描页面中的错误关键词（如"失败"、"错误"、"error"等）和错误 DOM 元素（`.alert-danger`、`.error-msg` 等），检测到则判定为失败。这可能导致正常登录被误判。**请始终显式设置此字段。**
-
-`success_conditions` 为空数组 `[]` 时，所有步骤执行完毕且没有失败即视为成功。
-
-如需更精确的判定，可组合使用以下条件类型：
-
-| 类型 | 说明 | 示例 |
-|------|------|------|
-| `variable` | 变量值等于指定值 | `{ "type": "variable", "variable": "login_ok", "value": true }` |
-| `url_contains` | 当前 URL 包含字符串 | `{ "type": "url_contains", "pattern": "success" }` |
-| `url_matches` | 当前 URL 匹配正则 | `{ "type": "url_matches", "pattern": "success\|welcome\|home" }` |
-| `element_exists` | 页面存在指定元素 | `{ "type": "element_exists", "selector": ".welcome-message" }` |
-| `js_expression` | JS 表达式返回 truthy | `{ "type": "js_expression", "script": "document.body.innerText.includes('成功')" }` |
-| `skip` | 跳过条件检查（显式声明） | `{ "type": "skip" }` — 显式跳过该条件项，用于组合条件中排除某项 |
-
-多个条件全部满足才算成功。典型组合：先用 `eval` 步骤检查页面并存储结果到变量，再用 `variable` 条件判断该变量。
+> **兼容性说明：** 原有 `success_conditions` 字段仍会被读取和保留，但不再参与成功判断。任务文件中可以保留该字段以维持格式兼容。
 
 ---
 
@@ -506,17 +490,14 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
       "store_as": "login_success"
     }
   ],
-  "success_conditions": [
-    { "type": "variable", "variable": "login_success", "value": true }
-  ],
-  "on_success": { "message": "登录成功" },
+    "on_success": { "message": "登录成功" },
   "on_failure": { "message": "登录失败", "screenshot": true }
 }
 ```
 
 ### 精简登录任务
 
-利用自动导航和空成功条件的简化任务：
+利用自动导航的简化任务：
 
 ```json
 {
@@ -530,8 +511,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
     { "id": "s3", "type": "click", "selector": "#login-btn" },
     { "id": "s4", "type": "sleep", "duration": 3000 }
   ],
-  "success_conditions": [],
-  "on_success": { "message": "登录成功" },
+    "on_success": { "message": "登录成功" },
   "on_failure": { "message": "登录失败", "screenshot": true }
 }
 ```
@@ -557,8 +537,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
     { "id": "s4", "type": "click", "selector": "#login-btn" },
     { "id": "s5", "type": "sleep", "duration": 3000 }
   ],
-  "success_conditions": [],
-  "on_success": { "message": "登录成功" },
+    "on_success": { "message": "登录成功" },
   "on_failure": { "message": "登录失败", "screenshot": true }
 }
 ```
@@ -597,8 +576,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
     },
     { "id": "s4", "type": "sleep", "duration": 3000 }
   ],
-  "success_conditions": [],
-  "on_success": { "message": "登录成功" },
+    "on_success": { "message": "登录成功" },
   "on_failure": { "message": "登录失败", "screenshot": true }
 }
 ```
@@ -650,8 +628,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
     },
     { "id": "s6", "type": "sleep", "duration": 3000 }
   ],
-  "success_conditions": [],
-  "on_success": { "message": "登录成功" },
+    "on_success": { "message": "登录成功" },
   "on_failure": { "message": "登录失败", "screenshot": true }
 }
 ```
@@ -694,9 +671,8 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
 
 ### 成功判定
 
-- 简单场景设置 `success_conditions` 为空数组 `[]`，步骤全部完成即成功。不要省略此字段
-- 复杂场景建议组合使用 `eval` + `variable` 条件
-- 认证页面会跳转的场景，优先用 `url_contains` 或 `url_matches`
+- 系统统一使用网络检测兜底判断成功，无需配置成功条件
+- 原有 `success_conditions` 字段保留兼容性，可留空数组 `[]`
 
 ---
 
@@ -719,10 +695,7 @@ A: 检查以下几点：
 
 **Q: 如何判断登录成功？**
 
-A: 推荐组合使用：
-1. `eval` 步骤检查页面内容，存储结果到变量
-2. `success_conditions` 中检查该变量
-3. 或使用 `url_contains` 检查跳转后的 URL
+A: 系统自动在网络检测成功后判定为登录成功，无需额外配置。网络检测失败通常表示密码错误或运营商不匹配。
 
 **Q: 保存任务时弹出安全警告？**
 

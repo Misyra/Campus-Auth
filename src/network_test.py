@@ -193,7 +193,7 @@ def is_network_available_http(
         """在独立线程中检测单个 URL。返回 (url, success, detail)。"""
         start = time.perf_counter()
         try:
-            with httpx.Client(timeout=timeout, follow_redirects=follow_redirects) as client:
+            with httpx.Client(timeout=timeout, follow_redirects=follow_redirects, trust_env=False) as client:
                 resp = client.get(url)
                 elapsed = (time.perf_counter() - start) * 1000
                 if 200 <= resp.status_code < 300:

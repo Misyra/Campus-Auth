@@ -176,7 +176,14 @@ class LoginAttemptHandler:
                     raise RuntimeError("浏览器页面初始化失败")
 
                 browser_timeout = self.config.get("browser_settings", {}).get("timeout", 10000)
-                executor = TaskExecutor(task, env_vars, default_timeout=browser_timeout)
+
+                # 构建网络检测配置，传递给 TaskExecutor 用于成功判断
+                network_test_config = self._build_network_test_config()
+
+                executor = TaskExecutor(
+                    task, env_vars, default_timeout=browser_timeout,
+                    network_test_config=network_test_config,
+                )
                 success, message = await executor.execute(browser_manager.page)
                 total = _time.perf_counter() - phase_start
                 if success:
@@ -199,6 +206,35 @@ class LoginAttemptHandler:
             total = _time.perf_counter() - phase_start
             self.logger.error("登录异常 (总耗时 %.1fs): %s", total, e)
             return False, f"任务执行异常: {e}"
+
+    def _build_network_test_config(self) -> dict:
+        """构建网络检测配置，供 TaskExecutor 成功判断使用。"""
+        import re
+
+        monitor = self.config.get("monitor", {})
+        targets = monitor.get("ping_targets", [])
+        if isinstance(targets, str):
+            targets = [item.strip() for item in targets.split(",") if item.strip()]
+
+        test_sites = []
+        for item in targets:
+            host = item
+            port = 0
+            if ":" in item:
+                host_part, port_part = item.rsplit(":", 1)
+                if host_part.strip() and port_part.strip().isdigit():
+                    host = host_part.strip()
+                    port = int(port_part.strip())
+            if port <= 0:
+                is_ipv4 = bool(re.fullmatch(r"\d+\.\d+\.\d+\.\d+", host))
+                port = 53 if is_ipv4 else 443
+            test_sites.append((host, port))
+
+        return {
+            "test_sites": test_sites if test_sites else None,
+            "timeout": monitor.get("network_check_timeout", 2),
+            "strict_mode": monitor.get("strict_mode", True),
+        }
 
     async def close_browser(self) -> None:
         """关闭浏览器（登录成功或监控停止时调用）"""

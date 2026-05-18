@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-from pydantic import BaseModel
 
 from backend.config_service import (
     load_runtime_config,

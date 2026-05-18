@@ -60,15 +60,6 @@ class StepType(str, Enum):
     CLICK_SELECT = "click_select"
 
 
-class ConditionType(str, Enum):
-    """条件类型"""
-
-    VARIABLE = "variable"
-    URL_CONTAINS = "url_contains"
-    URL_MATCHES = "url_matches"
-    ELEMENT_EXISTS = "element_exists"
-    JS_EXPRESSION = "js_expression"
-    SKIP = "skip"  # 无额外条件，步骤完成即成功
 
 
 @dataclass
@@ -147,32 +138,6 @@ class StepConfig:
         return result
 
 
-@dataclass
-class ConditionConfig:
-    """条件配置"""
-
-    type: str
-    variable: str | None = None
-    value: Any = None
-    pattern: str | None = None
-    selector: str | None = None
-    script: str | None = None
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> ConditionConfig:
-        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
-
-    def to_dict(self) -> dict[str, Any]:
-        """序列化为紧凑字典，跳过 None 字段"""
-        result: dict[str, Any] = {"type": self.type}
-        for field_name in self.__dataclass_fields__:
-            if field_name == "type":
-                continue
-            value = getattr(self, field_name)
-            if value is not None:
-                result[field_name] = value
-        return result
-
 
 @dataclass
 class TaskConfig:
@@ -185,7 +150,6 @@ class TaskConfig:
     timeout: int = 30000
     variables: dict[str, str] = field(default_factory=dict)
     steps: list[StepConfig] = field(default_factory=list)
-    success_conditions: list[ConditionConfig] = field(default_factory=list)
     on_success: dict[str, Any] = field(default_factory=dict)
     on_failure: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(
@@ -203,9 +167,6 @@ class TaskConfig:
             timeout=data.get("timeout", 30000),
             variables=data.get("variables", {}),
             steps=[StepConfig.from_dict(s) for s in data.get("steps", [])],
-            success_conditions=[
-                ConditionConfig.from_dict(c) for c in data.get("success_conditions", [])
-            ],
             on_success=data.get("on_success", {}),
             on_failure=data.get("on_failure", {}),
             metadata=data.get("metadata", {}),
@@ -223,9 +184,6 @@ class TaskConfig:
         }
         if self.variables:
             result["variables"] = self.variables
-        result["success_conditions"] = [
-            c.to_dict() for c in self.success_conditions
-        ]
         if self.on_success:
             result["on_success"] = self.on_success
         if self.on_failure:
@@ -954,27 +912,6 @@ class TaskValidator:
                 step_errors = cls._validate_step(step, i)
                 errors.extend(step_errors)
 
-        # 验证成功条件
-        if "success_conditions" in config:
-            for i, cond in enumerate(config["success_conditions"]):
-                if not cond.get("type"):
-                    errors.append(f"success_conditions[{i}] 必须包含 'type'")
-                    continue
-                cond_type = cond["type"].lower()
-                cond_prefix = f"success_conditions[{i}]"
-                if cond_type == ConditionType.VARIABLE and not cond.get("variable"):
-                    errors.append(f"{cond_prefix} ({cond_type}) 需要 'variable' 字段")
-                if cond_type in (
-                    ConditionType.URL_CONTAINS,
-                    ConditionType.URL_MATCHES,
-                ) and not cond.get("pattern"):
-                    errors.append(f"{cond_prefix} ({cond_type}) 需要 'pattern' 字段")
-                if cond_type == ConditionType.ELEMENT_EXISTS and not cond.get(
-                    "selector"
-                ):
-                    errors.append(f"{cond_prefix} ({cond_type}) 需要 'selector' 字段")
-                if cond_type == ConditionType.JS_EXPRESSION and not cond.get("script"):
-                    errors.append(f"{cond_prefix} ({cond_type}) 需要 'script' 字段")
 
         return len(errors) == 0, errors
 
@@ -1058,6 +995,7 @@ class TaskExecutor:
         env_vars: dict[str, str] | None = None,
         screenshot_dir: Path | str | None = None,
         default_timeout: int | None = None,
+        network_test_config: dict[str, Any] | None = None,
     ):
         self.config = config
         self.env_vars = env_vars or {}
@@ -1066,6 +1004,7 @@ class TaskExecutor:
         self.registry = StepExecutorRegistry()
         self._step_results: list[dict[str, Any]] = []
         self._screenshot_dir = Path(screenshot_dir) if screenshot_dir else None
+        self.network_test_config = network_test_config
 
     async def execute(self, page) -> tuple[bool, str]:
         """执行任务
@@ -1138,7 +1077,7 @@ class TaskExecutor:
                 if not success:
                     return await self._handle_failure(page, step, message)
 
-            if not await self._check_success_conditions(page):
+            if not await self._check_success(page):
                 return await self._handle_failure(page, None, "成功条件不满足")
 
             total_elapsed = (_time.perf_counter() - task_start) * 1000
@@ -1271,123 +1210,45 @@ class TaskExecutor:
             "message": "所有步骤执行完成",
         }
 
-    async def _check_success_conditions(self, page) -> bool:
-        """检查成功条件"""
-        if not self.config.success_conditions:
-            return await self._default_page_check(page)
-
-        current_url = page.url if hasattr(page, "url") else ""
-        self.resolver.set_runtime_var("_current_url", current_url)
-
-        for cond in self.config.success_conditions:
-            if not await self._evaluate_condition(cond, current_url, page):
-                logger.warning(f"成功条件不满足: {cond}")
-                return False
-
+    async def _check_success(self, page) -> bool:
+        if self.network_test_config:
+            return await self._network_detection_check()
         return True
 
-    async def _default_page_check(self, page) -> bool:
-        """当任务未定义 success_conditions 时，检查页面是否包含明显的错误信息。
+    async def _network_detection_check(self) -> bool:
+        """通过网络连通性检测判断任务是否成功。
 
-        如果页面包含登录失败相关的关键词，判定为失败；否则保守地判定为成功。
-        建议为任务配置明确的 success_conditions 以获得更准确的判定。
+        网络检测成功 → 判定任务成功（登录已生效）
+        网络检测失败 → 判定任务失败（认证未生效，可能密码错误或运营商不匹配）
         """
         try:
-            page_text = await page.evaluate(
-                "() => (document.body && document.body.innerText || '') + ' ' + (document.title || '')"
+            from src.network_test import is_network_available
+
+            test_sites = self.network_test_config.get("test_sites")
+            timeout = self.network_test_config.get("timeout", 2)
+            strict_mode = self.network_test_config.get("strict_mode", True)
+
+            logger.info(
+                "开始网络检测兜底 (test_sites=%s, timeout=%s, strict_mode=%s)",
+                test_sites, timeout, strict_mode,
             )
-            page_text_lower = page_text.lower()
 
-            error_keywords = [
-                "密码错误",
-                "密码不正确",
-                "密码有误",
-                "账号错误",
-                "账号不存在",
-                "账号或密码",
-                "用户名或密码",
-                "认证失败",
-                "登录失败",
-                "登入失败",
-                "password error",
-                "password incorrect",
-                "invalid password",
-                "login failed",
-                "authentication failed",
-                "invalid credentials",
-            ]
-            for keyword in error_keywords:
-                if keyword in page_text_lower:
-                    logger.warning(f"页面检测到错误信息: {keyword}")
-                    return False
+            result = is_network_available(
+                test_sites=test_sites,
+                timeout=timeout,
+                require_both=strict_mode,
+            )
 
-            try:
-                has_alert = await page.evaluate(
-                    "() => { try { return !!document.querySelector('.alert-danger, .error-msg, .login-error, [class*=error], [class*=alert]'); } catch { return false; } }"
-                )
-                if has_alert:
-                    alert_text = await page.evaluate(
-                        "() => { try { const el = document.querySelector('.alert-danger, .error-msg, .login-error, [class*=error], [class*=alert]'); return el ? el.innerText.trim() : ''; } catch { return ''; } }"
-                    )
-                    if alert_text and len(alert_text) > 2:
-                        logger.warning(f"页面检测到错误提示元素: {alert_text[:100]}")
-                        return False
-            except Exception:
-                pass
+            if result:
+                logger.info("网络检测成功，判定任务成功")
+            else:
+                logger.warning("网络检测失败，判定任务失败")
 
-            return True
+            return result
+
         except Exception as e:
-            logger.warning(f"默认页面检查异常，判定为失败: {e}")
+            logger.error("网络检测兜底异常，判定为失败: %s", e)
             return False
-
-    async def _evaluate_condition(
-        self, cond: ConditionConfig, current_url: str, page
-    ) -> bool:
-        """评估单个条件"""
-        cond_type = cond.type.lower() if cond.type else ""
-
-        if cond_type == ConditionType.VARIABLE:
-            actual = self.resolver.runtime_vars.get(cond.variable)
-            return actual == cond.value
-
-        elif cond_type == ConditionType.SKIP:
-            return True
-
-        elif cond_type == ConditionType.URL_CONTAINS:
-            pattern = cond.pattern or ""
-            return pattern in current_url
-
-        elif cond_type == ConditionType.URL_MATCHES:
-            pattern = cond.pattern or ""
-            try:
-                return bool(re.search(pattern, current_url))
-            except re.error:
-                return False
-
-        elif cond_type == ConditionType.ELEMENT_EXISTS:
-            selector = cond.selector or ""
-            if not selector:
-                return False
-            try:
-                locator = page.locator(selector)
-                return await locator.count() > 0
-            except Exception as exc:
-                logger.debug("条件评估异常 (element_exists): %s", exc)
-                return False
-
-        elif cond_type == ConditionType.JS_EXPRESSION:
-            script = cond.script or ""
-            if not script:
-                return False
-            try:
-                result = await page.evaluate(script)
-                return bool(result)
-            except Exception as exc:
-                logger.debug("条件评估异常 (js_expression): %s", exc)
-                return False
-
-        logger.warning(f"未知的条件类型: {cond_type}")
-        return False
 
     async def _handle_success(self, page) -> tuple[bool, str]:
         """处理成功情况"""
