@@ -455,35 +455,36 @@ class InputHandler(StepHandler):
             return False, f"force_input 未找到可用的输入元素: {selector}"
 
         await element.evaluate(
-            "(el, params) => {"
-            "  const val = params.val;"
-            "  const doClear = params.doClear;"
-            "  // 移除可能阻止输入的限制属性"
-            "  el.removeAttribute('readonly');"
-            "  el.removeAttribute('disabled');"
-            "  // 1. focus — 触发页面 JS 的显隐切换/占位收起"
-            "  el.dispatchEvent(new FocusEvent('focus', {bubbles:true}));"
-            "  // 2. 清空"
-            "  if (doClear) {"
-            "    const nativeSet = Object.getOwnPropertyDescriptor("
-            "      HTMLInputElement.prototype, 'value').set;"
-            "    nativeSet.call(el, '');"
-            "  }"
-            "  // 3. beforeinput — React 17+ 受控组件需要"
-            "  el.dispatchEvent(new InputEvent('beforeinput', {bubbles:true, inputType:'insertText', data:val}));"
-            "  // 4. 设置值（原生 setter 绕过 React/Vue 的 getter/setter 劫持）"
-            "  const nativeSet = Object.getOwnPropertyDescriptor("
-            "    HTMLInputElement.prototype, 'value').set;"
-            "  nativeSet.call(el, val);"
-            "  // 5. input — 所有框架都监听此事件更新状态"
-            "  el.dispatchEvent(new InputEvent('input', {bubbles:true, inputType:'insertText', data:val}));"
-            "  // 6. keyup — 部分门户做逐字校验"
-            "  el.dispatchEvent(new KeyboardEvent('keyup', {bubbles:true}));"
-            "  // 7. change"
-            "  el.dispatchEvent(new Event('change', {bubbles:true}));"
-            "  // 8. blur — 触发校验/同步（如深澜双输入框的值同步）"
-            "  el.dispatchEvent(new FocusEvent('blur', {bubbles:true}));"
-            "}",
+            """(el, params) => {
+              const val = params.val;
+              const doClear = params.doClear;
+              el.removeAttribute('readonly');
+              el.removeAttribute('disabled');
+              // 1. focus — 触发页面 JS 的显隐切换/占位收起
+              el.dispatchEvent(new FocusEvent('focus', {bubbles:true}));
+              // 2. 清空
+              if (doClear) {
+                const nativeSet = Object.getOwnPropertyDescriptor(
+                  HTMLInputElement.prototype, 'value').set;
+                nativeSet.call(el, '');
+              }
+              // 3. beforeinput — React 17+ 受控组件需要
+              el.dispatchEvent(new InputEvent('beforeinput',
+                {bubbles:true, inputType:'insertText', data:val}));
+              // 4. 设置值（原生 setter 绕过 React/Vue 的 getter/setter 劫持）
+              const nativeSet = Object.getOwnPropertyDescriptor(
+                HTMLInputElement.prototype, 'value').set;
+              nativeSet.call(el, val);
+              // 5. input — 所有框架都监听此事件更新状态
+              el.dispatchEvent(new InputEvent('input',
+                {bubbles:true, inputType:'insertText', data:val}));
+              // 6. keyup — 部分门户做逐字校验
+              el.dispatchEvent(new KeyboardEvent('keyup', {bubbles:true}));
+              // 7. change
+              el.dispatchEvent(new Event('change', {bubbles:true}));
+              // 8. blur — 触发校验/同步（如深澜双输入框的值同步）
+              el.dispatchEvent(new FocusEvent('blur', {bubbles:true}));
+            }""",
             {"val": value, "doClear": clear},
         )
         logger.info("强制输入完成 → %s", selector)
