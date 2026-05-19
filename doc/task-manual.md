@@ -264,7 +264,7 @@ window.chrome = {
 
 每个步骤必须包含 `id` 和 `type` 字段。`type` 必须是以下之一：
 
-`navigate`（已废弃）、`input`、`click`、`select`、`click_select`、`wait`、`wait_url`、`eval`、`custom_js`、`screenshot`、`sleep`、`ocr`
+`navigate`（已废弃）、`input`、`click`、`select`、`click_select`、`wait`、`wait_url`、`eval`、`screenshot`、`sleep`、`ocr`
 
 各类型的额外必填字段：
 
@@ -278,7 +278,7 @@ window.chrome = {
 | `wait` | `selector` |
 | `wait_url` | `pattern` |
 | `eval` | `script`（兼容已废弃的 `code`） |
-| `custom_js` | `script`（兼容已废弃的 `code`） |
+| `eval` | `script`（兼容已废弃的 `code`） |
 | `screenshot` | 无 |
 | `sleep` | 无 |
 | `ocr` | `selector` |
@@ -289,7 +289,7 @@ window.chrome = {
 
 ### 危险步骤检测
 
-`eval` 和 `custom_js` 步骤会被标记为危险步骤。后端保存时会记录警告日志（包含代码内容，截断至 2000 字符），前端会弹出安全确认对话框。此检测不会阻止保存，仅做提醒。
+`eval` 步骤会被标记为危险步骤。后端保存时会记录警告日志（包含代码内容，截断至 2000 字符），前端会弹出安全确认对话框。此检测不会阻止保存，仅做提醒。
 
 ### Task ID 校验
 
