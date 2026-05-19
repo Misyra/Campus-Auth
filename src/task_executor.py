@@ -1026,7 +1026,7 @@ class TaskExecutor:
 
         try:
             await self._auto_navigate(page)
-            await page.wait_for_timeout(2000)  # 导航后等待 2s 页面稳定
+            await page.wait_for_timeout(1000)  # 导航后等待 1s 页面稳定
 
             # reveal_hidden: 强制显示所有隐藏输入框，让后续 fill() 可以直接操作
             if self.config.reveal_hidden:
@@ -1105,7 +1105,7 @@ class TaskExecutor:
             await page.goto(url, wait_until="load", timeout=30000)
             await self._wait_url_stable(page)
 
-    async def _wait_url_stable(self, page, timeout_ms: int = 5000):
+    async def _wait_url_stable(self, page, timeout_ms: int = 3000):
         """等待 URL 稳定，处理 JS 重定向链（最多 5 跳）"""
         import time as _time
         deadline = _time.perf_counter() + timeout_ms / 1000
@@ -1222,6 +1222,8 @@ class TaskExecutor:
         """
         try:
             from src.network_test import is_network_available
+
+            await asyncio.sleep(2)  # 等待页面响应登录请求后再检测网络
 
             test_sites = self.network_test_config.get("test_sites")
             timeout = self.network_test_config.get("timeout", 2)
