@@ -328,7 +328,6 @@ class StepHandler(ABC):
     async def _find_element(self, ctx, selector: str, timeout: int):
         """查找元素（支持多个候选选择器，兼容 Page 和 FrameLocator）"""
         candidates = [s.strip() for s in selector.split(",") if s.strip()]
-        timeout_sec = timeout / 1000
 
         for candidate in candidates:
             try:
