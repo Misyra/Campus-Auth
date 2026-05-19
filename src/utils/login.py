@@ -143,6 +143,8 @@ class LoginAttemptHandler:
             if self.cancel_event and self.cancel_event.is_set():
                 return False, "登录已取消"
 
+            browser_manager: BrowserContextManager | None = None
+
             # 复用或创建浏览器
             if reuse_browser and self._browser_ctx is not None:
                 browser_manager = self._browser_ctx
@@ -171,6 +173,7 @@ class LoginAttemptHandler:
                 self._browser_ctx = browser_manager
                 self.logger.info("浏览器就绪 (%.1fs)", _time.perf_counter() - browser_start)
 
+            assert browser_manager is not None, "浏览器实例应在复用或新建分支中初始化"
             try:
                 if not browser_manager.page:
                     raise RuntimeError("浏览器页面初始化失败")
