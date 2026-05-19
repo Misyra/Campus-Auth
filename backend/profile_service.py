@@ -529,6 +529,10 @@ class ProfileService:
         2. settings.json 存在且 system 为全默认 → 从 .env 补充
         3. 已存在有效配置 → 不做任何修改
         """
+        # 如果 env_config 为空，尝试直接从 .env 文件读取（兼容旧版升级）
+        if not env_config or not env_config.get("username"):
+            env_config = self._try_load_dotenv_fallback(env_config)
+
         if not self._settings_path.exists():
             profile_logger.info("首次启动: 从 .env 创建 settings.json")
             self._create_from_env(env_config)
@@ -559,6 +563,42 @@ class ProfileService:
 
         profile_logger.info("配置迁移: 无需操作")
 
+    @staticmethod
+    def _try_load_dotenv_fallback(env_config: dict[str, Any]) -> dict[str, Any]:
+        """回退：直接读取 .env 文件（旧版用户升级时 dotenv 不再自动加载）"""
+        import os as _os
+        from pathlib import Path as _Path
+        env_file = _Path.cwd() / ".env"
+        if not env_file.exists():
+            return env_config
+        try:
+            lines = env_file.read_text(encoding="utf-8").splitlines()
+            for line in lines:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip("\"'")
+                if not value:
+                    continue
+                if key in ("USERNAME",) and not env_config.get("username"):
+                    env_config["username"] = value
+                elif key in ("PASSWORD",) and not env_config.get("password"):
+                    env_config["password"] = value
+                elif key in ("LOGIN_URL",) and not env_config.get("auth_url"):
+                    env_config["auth_url"] = value
+                elif key in ("ISP",) and not env_config.get("isp"):
+                    env_config["isp"] = value
+            if env_config.get("username"):
+                profile_logger.info(
+                    "从 .env 文件回退读取配置成功: 用户=%s",
+                    env_config["username"])
+            return env_config
+        except Exception as exc:
+            profile_logger.debug(".env 回退读取失败: %s", exc)
+            return env_config
+
     def _build_system_from_env(self, config: dict[str, Any]) -> SystemSettings:
         """从 .env 配置构建 SystemSettings"""
         return SystemSettings(
@@ -577,6 +617,7 @@ class ProfileService:
             minimize_to_tray=bool(config.get("minimize_to_tray", True)),
             max_retries=int(config.get("retry_settings", {}).get("max_retries", 3)),
             retry_interval=int(config.get("retry_settings", {}).get("retry_interval", 5)),
+            app_port=int(config.get("app_port", 50721)),
         )
 
     def _create_from_env(self, config: dict[str, Any]) -> None:
