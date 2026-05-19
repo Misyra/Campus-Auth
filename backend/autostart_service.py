@@ -26,7 +26,7 @@ class AutoStartService:
         app_entry = self.project_root / "app.py"
         if python_exe.exists():
             return f'"{python_exe}" "{app_entry}"'
-        packaged_executable = os.getenv("Campus-Auth_START_EXECUTABLE", "").strip()
+        packaged_executable = os.getenv("CAMPUS_AUTH_START_EXECUTABLE", "").strip()
         if packaged_executable:
             return f'"{packaged_executable}"'
         runtime_python = Path(sys.executable).resolve()
@@ -261,7 +261,7 @@ WantedBy=default.target
 
         if python_exe.exists():
             content = f'''Set WshShell = CreateObject("WScript.Shell")
-WshShell.Environment("PROCESS")("Campus-Auth_AUTO_OPEN_BROWSER") = "false"
+WshShell.Environment("PROCESS")("CAMPUS_AUTH_AUTO_OPEN_BROWSER") = "false"
 
 ' 检查是否已经在运行
 Set fso = CreateObject("Scripting.FileSystemObject")
@@ -308,11 +308,11 @@ End If
 WshShell.Run Chr(34) & targetExe & Chr(34) & " " & Chr(34) & "{app_py}" & Chr(34) & " --no-browser", 0, False
 '''
         else:
-            packaged = os.getenv("Campus-Auth_START_EXECUTABLE", "").strip()
+            packaged = os.getenv("CAMPUS_AUTH_START_EXECUTABLE", "").strip()
             if not packaged:
                 return False, "未找到可用的 Python 解释器或打包可执行文件，无法创建自启动脚本"
             content = f'''Set WshShell = CreateObject("WScript.Shell")
-WshShell.Environment("PROCESS")("Campus-Auth_AUTO_OPEN_BROWSER") = "false"
+WshShell.Environment("PROCESS")("CAMPUS_AUTH_AUTO_OPEN_BROWSER") = "false"
 
 ' 检查是否已经在运行
 Set fso = CreateObject("Scripting.FileSystemObject")

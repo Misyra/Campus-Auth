@@ -422,8 +422,7 @@ main() {
 
   log_info ">>> 启动应用..."
   env \
-    "Campus-Auth_PROJECT_ROOT=$PROJECT_ROOT" \
-    "Campus-Auth_ENV_FILE=$PROJECT_ROOT/.env" \
+    "CAMPUS_AUTH_PROJECT_ROOT=$PROJECT_ROOT" \
     "AUTO_INSTALL_PLAYWRIGHT=false" \
     "$PYTHON_EXE" "$PROJECT_ROOT/app.py" --no-browser $NO_AUTO &
   APP_PID=$!

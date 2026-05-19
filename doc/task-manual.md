@@ -488,7 +488,6 @@ tasks/
 
 | 变量 | 说明 |
 |------|------|
-| `Campus-Auth_PROJECT_ROOT` | 项目根目录路径 |
-| `Campus-Auth_START_EXECUTABLE` | 打包可执行文件路径 |
-| `Campus-Auth_AUTO_OPEN_BROWSER` | 是否自动打开浏览器 |
-| `Campus-Auth_ENV_FILE` | .env 文件路径 |
+| `CAMPUS_AUTH_PROJECT_ROOT` | 项目根目录路径 |
+| `CAMPUS_AUTH_START_EXECUTABLE` | 打包可执行文件路径 |
+| `CAMPUS_AUTH_AUTO_OPEN_BROWSER` | 是否自动打开浏览器 |
