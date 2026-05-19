@@ -13,6 +13,7 @@ from typing import Any, Dict
 
 from ..task_executor import TaskExecutor, TaskManager
 from .browser import BrowserContextManager
+from .env import build_login_env_vars
 from .exceptions import LoginCancelledError
 from .logging import setup_logger
 from .time import TimeUtils
@@ -57,7 +58,7 @@ class LoginAttemptHandler:
                     start_hour = pause_config.get("start_hour", 0)
                     end_hour = pause_config.get("end_hour", 6)
                     msg = f"当前时间 {current_hour}:xx 在暂停登录时段（{start_hour}点-{end_hour}点），跳过登录"
-                    self.logger.info(f"⏰ {msg}")
+                    self.logger.info(msg)
                     return False, msg
 
             # 使用延迟导入避免循环依赖
@@ -68,7 +69,7 @@ class LoginAttemptHandler:
             return False, "登录已取消"
         except Exception as e:
             error_msg = f"登录过程中发生错误: {str(e)}"
-            self.logger.error(f"❌ {error_msg}")
+            self.logger.error(error_msg)
             return False, error_msg
 
     async def _perform_login_with_auth_class(self, *, reuse_browser: bool = False) -> tuple[bool, str]:
@@ -89,7 +90,7 @@ class LoginAttemptHandler:
         import time as _time
         phase_start = _time.perf_counter()
         try:
-            root_override = os.getenv("Campus-Auth_PROJECT_ROOT", "").strip()
+            root_override = os.getenv("CAMPUS_AUTH_PROJECT_ROOT", "").strip()
             project_root = (
                 Path(root_override).expanduser().resolve()
                 if root_override
@@ -113,32 +114,8 @@ class LoginAttemptHandler:
                 "登录开始 → 任务=%s URL=%s 用户=%s 运营商=%s %d个步骤",
                 active_task_id, login_url, username, isp or "无", len(task.steps))
 
-            env_vars = dict(os.environ)
-            if login_url:
-                env_vars["LOGIN_URL"] = login_url
-            if task.url:
-                resolved_url = task.url
-                for k, v in env_vars.items():
-                    resolved_url = resolved_url.replace("{{" + k + "}}", v)
-                env_vars["LOGIN_URL"] = resolved_url
-            # 确保 LOGIN_URL 始终可用，避免无 URL 任务卡住浏览器
-            if not env_vars.get("LOGIN_URL", "").strip() and login_url:
-                env_vars["LOGIN_URL"] = login_url
-            if isp:
-                env_vars["ISP"] = isp
-            if username:
-                env_vars["USERNAME"] = username
-            if self.config.get("password"):
-                env_vars["PASSWORD"] = self.config["password"]
-            custom_vars = self.config.get("custom_variables", {})
-            if custom_vars and isinstance(custom_vars, dict):
-                _ENV_DENYLIST = {"PATH", "PYTHONPATH", "HOME", "USER", "USERNAME",
-                    "SYSTEMROOT", "TEMP", "TMP", "PATHEXT", "COMSPEC", "WINDIR",
-                    "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH", "DISPLAY", "SHELL",
-                    "LANG", "LC_ALL"}
-                for k, v in custom_vars.items():
-                    if k.upper() not in _ENV_DENYLIST:
-                        env_vars[k] = v
+            env_vars = build_login_env_vars(
+                self.config, task.url, self.config.get("custom_variables", {}))
 
             if self.cancel_event and self.cancel_event.is_set():
                 return False, "登录已取消"
@@ -175,6 +152,15 @@ class LoginAttemptHandler:
 
             assert browser_manager is not None, "浏览器实例应在复用或新建分支中初始化"
             try:
+                if reuse_browser:
+                    try:
+                        await browser_manager.page.evaluate("1")
+                    except Exception:
+                        self.logger.warning("浏览器实例已失效，重新创建")
+                        await self.close_browser()
+                        browser_manager = await self._create_new_browser()
+                        assert browser_manager is not None
+
                 if not browser_manager.page:
                     raise RuntimeError("浏览器页面初始化失败")
 
@@ -238,6 +224,13 @@ class LoginAttemptHandler:
             "timeout": monitor.get("network_check_timeout", 2),
             "strict_mode": monitor.get("strict_mode", True),
         }
+
+    async def _create_new_browser(self) -> BrowserContextManager:
+        """创建新的浏览器实例（提取为方法，供复用路径调用）"""
+        browser_manager = BrowserContextManager(self.config, cancel_event=self.cancel_event)
+        await browser_manager.__aenter__()
+        self._browser_ctx = browser_manager
+        return browser_manager
 
     async def close_browser(self) -> None:
         """关闭浏览器（登录成功或监控停止时调用）"""

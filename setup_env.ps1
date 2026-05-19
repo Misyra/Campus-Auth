@@ -95,7 +95,7 @@ function Write-Progress-Stage {
 }
 
 function Get-DuplicateExitDelay {
-    $raw = ${env:Campus-Auth_DUPLICATE_EXIT_DELAY}
+    $raw = ${env:CAMPUS_AUTH_DUPLICATE_EXIT_DELAY}
     if ([string]::IsNullOrWhiteSpace($raw)) {
         return 10
     }
@@ -628,7 +628,7 @@ function Install-Playwright {
 
 function Main {
     Write-Info "========================================"
-    Write-Info "  JCU_auto_network 环境初始化脚本"
+    Write-Info "  Campus-Auth 环境初始化脚本"
     Write-Info "  参考 AUTO-MAS 项目方案设计"
     Write-Info "========================================"
     Write-Info "  Python 版本：$PythonVersion"
@@ -738,8 +738,7 @@ function Main {
     $appArgs = @($appPy)
     if ($NoAuto) { $appArgs += "--no-auto" }
     Start-Process -FilePath $PythonExe -ArgumentList $appArgs -WorkingDirectory $ProjectRoot -EnvironmentVariables @{
-        "Campus-Auth_PROJECT_ROOT" = $ProjectRoot
-        "Campus-Auth_ENV_FILE" = Join-Path $ProjectRoot ".env"
+        "CAMPUS_AUTH_PROJECT_ROOT" = $ProjectRoot
         "AUTO_INSTALL_PLAYWRIGHT" = "false"
     }
 

@@ -58,17 +58,15 @@ def resolve_port() -> int:
         except ValueError:
             pass
 
-    env_file = PROJECT_ROOT / ".env"
-    if env_file.exists():
+    settings_file = PROJECT_ROOT / "settings.json"
+    if settings_file.exists():
         try:
-            for line in env_file.read_text(encoding="utf-8").splitlines():
-                row = line.strip()
-                if not row or row.startswith("#") or "=" not in row:
-                    continue
-                key, value = row.split("=", 1)
-                if key.strip() != "APP_PORT":
-                    continue
-                port = int(value.strip())
+            import json
+            data = json.loads(settings_file.read_text(encoding="utf-8"))
+            system = data.get("system", {})
+            app_port = system.get("app_port")
+            if app_port is not None:
+                port = int(app_port)
                 if 1 <= port <= 65535:
                     return port
         except Exception:
@@ -113,7 +111,7 @@ def has_playwright_chromium() -> bool:
 
 
 def duplicate_exit_delay_seconds() -> int:
-    raw = os.getenv("Campus-Auth_DUPLICATE_EXIT_DELAY", "10").strip()
+    raw = os.getenv("CAMPUS_AUTH_DUPLICATE_EXIT_DELAY", "10").strip()
     try:
         delay = int(raw)
         if delay >= 0:
@@ -855,8 +853,7 @@ def main():
         return
 
     launch_env = os.environ.copy()
-    launch_env["Campus-Auth_PROJECT_ROOT"] = str(PROJECT_ROOT)
-    launch_env["Campus-Auth_ENV_FILE"] = str(PROJECT_ROOT / ".env")
+    launch_env["CAMPUS_AUTH_PROJECT_ROOT"] = str(PROJECT_ROOT)
     if playwright_ready:
         # 启动器已确保浏览器可用，避免 app.py 再次执行同样安装流程
         launch_env["AUTO_INSTALL_PLAYWRIGHT"] = "false"

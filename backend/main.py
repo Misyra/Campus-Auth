@@ -29,6 +29,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.utils import ConfigLoader, ConfigValidator
+from src.utils.env import build_login_env_vars
 from src.utils.logging import LogConfigCenter, get_logger
 from src.version import get_project_version
 
@@ -47,16 +48,12 @@ from .schemas import (
 )
 from .task_service import TaskService
 
-_ENV_PROJECT_ROOT = os.getenv("Campus-Auth_PROJECT_ROOT", "").strip()
+_ENV_PROJECT_ROOT = os.getenv("CAMPUS_AUTH_PROJECT_ROOT", "").strip()
 PROJECT_ROOT = (
     Path(_ENV_PROJECT_ROOT).expanduser().resolve()
     if _ENV_PROJECT_ROOT
     else Path(__file__).resolve().parents[1]
 )
-os.environ.setdefault("Campus-Auth_ENV_FILE", str(PROJECT_ROOT / ".env"))
-SRC_DIR = PROJECT_ROOT / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
 
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 DEBUG_DIR = PROJECT_ROOT / "debug"
@@ -121,13 +118,29 @@ app = FastAPI(
 
 # ==================== CORS 配置 ====================
 def _resolve_port() -> int:
-    raw = os.getenv("APP_PORT", "50721")
-    try:
-        port = int(raw)
-    except ValueError:
-        return 50721
-    if 1 <= port <= 65535:
-        return port
+    raw = os.getenv("APP_PORT", "").strip()
+    if raw:
+        try:
+            port = int(raw)
+            if 1 <= port <= 65535:
+                return port
+        except ValueError:
+            pass
+
+    # 回退：从 settings.json 读取（与 launcher.py 保持一致）
+    settings_path = PROJECT_ROOT / "settings.json"
+    if settings_path.exists():
+        try:
+            import json as _json
+            data = _json.loads(settings_path.read_text(encoding="utf-8"))
+            app_port = data.get("system", {}).get("app_port")
+            if app_port is not None:
+                port = int(app_port)
+                if 1 <= port <= 65535:
+                    return port
+        except Exception:
+            pass
+
     return 50721
 
 _cors_port = _resolve_port()
@@ -721,36 +734,9 @@ async def debug_start(request: Request) -> dict:
         raise HTTPException(status_code=404, detail="任务不存在")
 
     # 构建环境变量（复用 service 的运行时配置）
-    with service._lock:
-        runtime_config = service._runtime_config.copy()
-
-    env_vars = dict(os.environ)
-    if runtime_config.get("auth_url"):
-        env_vars["LOGIN_URL"] = runtime_config["auth_url"]
-    # 任务自定义 url 覆盖系统 LOGIN_URL
-    if task.url:
-        resolved_url = task.url
-        for k, v in env_vars.items():
-            resolved_url = resolved_url.replace("{{" + k + "}}", v)
-        env_vars["LOGIN_URL"] = resolved_url
-    # 确保 LOGIN_URL 始终可用
-    if not env_vars.get("LOGIN_URL", "").strip() and runtime_config.get("auth_url"):
-        env_vars["LOGIN_URL"] = runtime_config["auth_url"]
-    if runtime_config.get("isp"):
-        env_vars["ISP"] = runtime_config["isp"]
-    if runtime_config.get("username"):
-        env_vars["USERNAME"] = runtime_config["username"]
-    if runtime_config.get("password"):
-        env_vars["PASSWORD"] = runtime_config["password"]
-    custom_vars = runtime_config.get("custom_variables", {})
-    if custom_vars and isinstance(custom_vars, dict):
-        _ENV_DENYLIST = {"PATH", "PYTHONPATH", "HOME", "USER", "USERNAME",
-            "SYSTEMROOT", "TEMP", "TMP", "PATHEXT", "COMSPEC", "WINDIR",
-            "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH", "DISPLAY", "SHELL",
-            "LANG", "LC_ALL"}
-        for k, v in custom_vars.items():
-            if k.upper() not in _ENV_DENYLIST:
-                env_vars[k] = v
+    runtime_config = service.get_runtime_config()
+    env_vars = build_login_env_vars(
+        runtime_config, task.url, runtime_config.get("custom_variables", {}))
 
     # 解析任务 URL
     url = task.url or ""
@@ -1136,14 +1122,14 @@ def restore_backup(filename: str) -> ActionResponse:
     if not backup_path.exists():
         raise HTTPException(status_code=404, detail="备份文件不存在")
 
-    # 安全校验：文件名格式 settings_YYYYMMDD_HHMMSS[_autosave].json
-    if not re.match(r"^settings_\d{8}_\d{6}(_autosave)?\.json$", filename):
+    # 安全校验：文件名格式 settings_YYYYMMDD_HHMMSS[_ffffff][_autosave].json
+    if not re.match(r"^settings_\d{8}_\d{6}(_\d{6})?(_autosave)?\.json$", filename):
         raise HTTPException(status_code=400, detail="无效的备份文件名")
 
     # 恢复前先自动创建当前配置的备份
     settings_path = PROJECT_ROOT / "settings.json"
     if settings_path.exists():
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         auto_backup = _BACKUP_DIR / f"settings_{stamp}_autosave.json"
         try:
             auto_backup.write_bytes(settings_path.read_bytes())
@@ -1177,7 +1163,7 @@ def restore_backup(filename: str) -> ActionResponse:
 @app.get("/api/backup/download/{filename}")
 def download_backup(filename: str):
     """下载备份文件"""
-    if not re.match(r"^settings_\d{8}_\d{6}(_autosave)?\.json$", filename):
+    if not re.match(r"^settings_\d{8}_\d{6}(_\d{6})?(_autosave)?\.json$", filename):
         raise HTTPException(status_code=400, detail="无效的备份文件名")
     backup_path = _BACKUP_DIR / filename
     if not backup_path.exists():
@@ -1192,7 +1178,7 @@ def download_backup(filename: str):
 @app.delete("/api/backup/{filename}", response_model=ActionResponse)
 def delete_backup(filename: str) -> ActionResponse:
     """删除备份"""
-    if not re.match(r"^settings_\d{8}_\d{6}(_autosave)?\.json$", filename):
+    if not re.match(r"^settings_\d{8}_\d{6}(_\d{6})?(_autosave)?\.json$", filename):
         raise HTTPException(status_code=400, detail="无效的备份文件名")
 
     backup_path = _BACKUP_DIR / filename
