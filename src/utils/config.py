@@ -5,10 +5,8 @@
 """
 
 import os
-from pathlib import Path
 from typing import Tuple
 
-from dotenv import load_dotenv
 
 from .crypto import decrypt_password
 from .logging import get_logger
@@ -50,7 +48,7 @@ class ConfigLoader:
     def _load_browser_config() -> dict:
         """加载浏览器配置"""
         # 使用固定的User-Agent，简化逻辑
-        default_user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        default_user_agent = ""  # 空值表示使用 schemas.py 中的默认值
 
         return {
             "headless": ConfigLoader._str_to_bool(
@@ -82,7 +80,6 @@ class ConfigLoader:
                 "format": os.getenv(
                     "LOG_FORMAT", "%(asctime)s - %(levelname)s - %(message)s"
                 ),
-                "file": os.getenv("LOG_FILE", "logs/campus_auth.log") or None,
             },
             "frontend_logging": {
                 "level": os.getenv("FRONTEND_LOG_LEVEL", "INFO"),
@@ -112,15 +109,7 @@ class ConfigLoader:
 
     @staticmethod
     def load_config_from_env() -> dict:
-        """从环境变量加载配置"""
-        env_override = os.getenv("Campus-Auth_ENV_FILE", "").strip()
-        if env_override:
-            load_dotenv(Path(env_override), override=True)
-            logger.info("配置已从环境变量加载: env_file=%s", env_override)
-        else:
-            load_dotenv(Path.cwd() / ".env", override=True)
-            logger.info("配置已从环境变量加载: env_file=.env")
-
+        """从系统环境变量加载配置（不再读取 .env 文件）"""
         config = ConfigLoader._load_basic_config()
         config["browser_settings"] = ConfigLoader._load_browser_config()
         config.update(ConfigLoader._load_other_configs())

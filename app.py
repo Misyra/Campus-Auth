@@ -12,21 +12,6 @@ import time
 import webbrowser
 from pathlib import Path
 
-# 将项目根目录添加到 Python 路径
-sys.path.insert(0, str(Path(__file__).parent))
-
-# ==================== 最早加载 .env ====================
-# 必须在任何 import（特别是 backend.main）之前加载，
-# 否则模块级 get_logger() 会用默认 INFO 配置根 logger 并锁死
-_env_file = Path(__file__).parent / ".env"
-if not _env_file.exists():
-    _env_example = Path(__file__).parent / ".env.example"
-    if _env_example.exists():
-        import shutil
-        shutil.copy2(_env_example, _env_file)
-from dotenv import load_dotenv
-load_dotenv(_env_file, override=True)
-
 from src.playwright_bootstrap import ensure_playwright_ready
 
 
@@ -96,9 +81,8 @@ def _setup_packaged_env() -> None:
         return
     exe_path = Path(sys.argv[0]).resolve()
     project_root = exe_path.parent
-    os.environ.setdefault("Campus-Auth_START_EXECUTABLE", str(exe_path))
-    os.environ.setdefault("Campus-Auth_PROJECT_ROOT", str(project_root))
-    os.environ.setdefault("Campus-Auth_ENV_FILE", str(project_root / ".env"))
+    os.environ.setdefault("CAMPUS_AUTH_START_EXECUTABLE", str(exe_path))
+    os.environ.setdefault("CAMPUS_AUTH_PROJECT_ROOT", str(project_root))
 
 
 # ==================== 浏览器控制 ====================
@@ -110,7 +94,7 @@ def _open_browser(port: int, setting: bool | None = None) -> None:
             return
     else:
         from src.utils import str_to_bool
-        if not str_to_bool(os.getenv("Campus-Auth_AUTO_OPEN_BROWSER", "true")):
+        if not str_to_bool(os.getenv("CAMPUS_AUTH_AUTO_OPEN_BROWSER", "true")):
             return
 
     def _worker():
@@ -213,7 +197,6 @@ def _run_login_then_exit(config: dict, logger) -> None:
         from backend.profile_service import ProfileService
         ps = ProfileService(Path(__file__).parent.resolve())
         data = ps.load()
-        profile = ps.get_active_profile()
 
         # 构建运行时配置
         from backend.config_service import build_runtime_config, load_ui_config

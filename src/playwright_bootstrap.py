@@ -14,21 +14,8 @@ import threading
 from pathlib import Path
 from typing import Callable
 
-from dotenv import load_dotenv
-
 _BOOTSTRAP_LOCK = threading.Lock()
 _BOOTSTRAP_DONE = False
-
-
-def _load_env_file() -> None:
-    env_file = os.getenv("Campus-Auth_ENV_FILE", "").strip()
-    if env_file:
-        load_dotenv(Path(env_file), override=False)
-        return
-
-    cwd_env = Path.cwd() / ".env"
-    if cwd_env.exists():
-        load_dotenv(cwd_env, override=False)
 
 
 def _candidate_hosts() -> list[str]:
@@ -121,8 +108,6 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
         if not _is_enabled():
             _BOOTSTRAP_DONE = True
             return True
-
-        _load_env_file()
 
         # 快速路径：直接检查 chromium 是否已安装，避免导入 playwright（~15-20MB）
         try:
