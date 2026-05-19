@@ -179,8 +179,14 @@ class MonitorService:
             new_config = self._runtime_config.copy() if need_update else None
 
         # 在锁外执行热更新，避免 update_config → _push_log → 再次获取锁的死锁
+        # 双重检查：锁外重新确认监控状态，防止 TOCTOU 竞态
         if need_update and new_config is not None:
-            self._monitor_core.update_config(new_config)
+            with self._lock:
+                still_monitoring = bool(self._monitor_core and self._monitor_core.monitoring)
+            if still_monitoring:
+                self._monitor_core.update_config(new_config)
+            else:
+                service_logger.debug("跳过热更新：监控已停止")
 
         service_logger.info("Config reloaded from settings.json")
 
@@ -383,3 +389,8 @@ class MonitorService:
             self._profile_service.save(data)
             self.safe_mode = new_value
         return new_value
+
+    def get_runtime_config(self) -> dict:
+        """线程安全地获取运行时配置副本"""
+        with self._lock:
+            return self._runtime_config.copy()
