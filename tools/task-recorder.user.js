@@ -32,6 +32,9 @@
     wait: { category: "advanced", label: "等待元素", icon: "⏳", color: "#795548", primary: false, hint: "鼠标悬停在要等待的元素上，然后按 Enter 键记录" },
     eval: { category: "advanced", label: "执行JS", icon: "⚙️", color: "#00BCD4", primary: false, hint: "输入一段要在页面中执行的 JavaScript 代码" },
     custom: { category: "advanced", label: "自定义步骤", icon: "📝", color: "#9E9E9E", primary: false, hint: "手动填写步骤描述、选择器、填写值，自由度高" },
+    sleep: { category: "advanced", label: "延时等待", icon: "⏳", color: "#795548", primary: false, hint: "添加一个等待步骤，页面不操作仅等待指定时间" },
+    screenshot: { category: "advanced", label: "页面截图", icon: "📸", color: "#607D8B", primary: false, hint: "截取当前页面状态，用于调试" },
+    wait_url: { category: "advanced", label: "等待URL", icon: "🔗", color: "#795548", primary: false, hint: "等待浏览器 URL 匹配指定正则表达式" },
   };
 
   const CAPTCHA_TYPES = [
@@ -63,8 +66,17 @@
 
   function saveState() {
     try {
+      // 移除大字段防止超出油猴存储限制（通常 5MB）
+      const slimSteps = state.steps.map(s => {
+        const copy = { ...s };
+        delete copy.elementHTML;
+        delete copy.elementParentContext;
+        delete copy.elementContainerHTML;
+        delete copy.hiddenRealHTML;
+        return copy;
+      });
       GM_setValue(STORAGE_KEY, {
-        steps: state.steps,
+        steps: slimSteps,
         savedAt: Date.now(),
         url: window.location.href,
       });
@@ -327,49 +339,91 @@
   function getSelectors(el) {
     const selectors = [];
 
-    // 1. ID 选择器（最可靠）
+    // 检测 Shadow DOM 上下文：选择器只在 Shadow Root 内有效，外部无法直接查询
+    let queryRoot = document;
+    let inShadowRoot = false;
+    try {
+      const root = el.getRootNode?.();
+      if (root && root instanceof ShadowRoot) {
+        queryRoot = root;
+        inShadowRoot = true;
+      }
+    } catch (_) {}
+
+    function queryCount(sel) {
+      try { return queryRoot.querySelectorAll(sel).length; } catch (_) { return 0; }
+    }
+
+    // 1. ID 选择器（最可靠 — 但 Shadow DOM 内 ID 只在 Shadow Root 作用域内有效）
     if (el.id && !/^\d/.test(el.id)) {
-      selectors.push({ type: "css", value: `#${CSS.escape(el.id)}`, reliability: 10 });
+      selectors.push({
+        type: "css",
+        value: `#${CSS.escape(el.id)}`,
+        reliability: inShadowRoot ? 7 : 10,
+        shadowScoped: inShadowRoot || undefined,
+      });
     }
 
     // 2. name 属性（检查唯一性：隐藏表单 f0 可能与可见表单 f1 有同名 input）
     if (el.name) {
       const nameSelector = `${el.tagName.toLowerCase()}[name="${CSS.escape(el.name)}"]`;
-      const matchCount = document.querySelectorAll(nameSelector).length;
+      const matchCount = queryCount(nameSelector);
+      // iframe 内元素：name 唯一性只在当前 document 内有效，降低可靠性
+      const inIframe = el.ownerDocument !== document;
+      const baseReliability = matchCount === 1 ? 9 : 6;
       selectors.push({
         type: "css",
         value: nameSelector,
-        reliability: matchCount === 1 ? 9 : 6,
+        reliability: inShadowRoot ? Math.min(baseReliability, 5) : (inIframe ? 5 : baseReliability),
+        shadowScoped: inShadowRoot || undefined,
       });
     }
 
     // 3. 独特的属性组合
     if (el.type && (el.tagName === "INPUT" || el.tagName === "BUTTON")) {
       const s = `${el.tagName.toLowerCase()}[type="${el.type}"]`;
-      if (document.querySelectorAll(s).length === 1) {
-        selectors.push({ type: "css", value: s, reliability: 7 });
+      if (queryCount(s) === 1) {
+        selectors.push({
+          type: "css",
+          value: s,
+          reliability: inShadowRoot ? 5 : 7,
+          shadowScoped: inShadowRoot || undefined,
+        });
       }
     }
 
-    // 4. placeholder
+    // 4. placeholder（文案可能因多语言/A/B测试变化，可靠性降低）
     if (el.placeholder) {
+      const placeholderSelector = `${el.tagName.toLowerCase()}[placeholder="${CSS.escape(el.placeholder)}"]`;
+      const placeholderCount = queryCount(placeholderSelector);
       selectors.push({
         type: "css",
-        value: `${el.tagName.toLowerCase()}[placeholder="${CSS.escape(el.placeholder)}"]`,
-        reliability: 6,
+        value: placeholderSelector,
+        reliability: placeholderCount === 1 ? (inShadowRoot ? 3 : 4) : 2,
+        shadowScoped: inShadowRoot || undefined,
       });
     }
 
     // 5. data-testid（React/Vue 现代 SPA 最稳定标识）
     const testId = el.getAttribute("data-testid");
     if (testId) {
-      selectors.push({ type: "css", value: `[data-testid="${CSS.escape(testId)}"]`, reliability: 9 });
+      selectors.push({
+        type: "css",
+        value: `[data-testid="${CSS.escape(testId)}"]`,
+        reliability: inShadowRoot ? 6 : 9,
+        shadowScoped: inShadowRoot || undefined,
+      });
     }
 
     // 6. aria-label
     const ariaLabel = el.getAttribute("aria-label");
     if (ariaLabel) {
-      selectors.push({ type: "css", value: `[aria-label="${CSS.escape(ariaLabel)}"]`, reliability: 7 });
+      selectors.push({
+        type: "css",
+        value: `[aria-label="${CSS.escape(ariaLabel)}"]`,
+        reliability: inShadowRoot ? 5 : 7,
+        shadowScoped: inShadowRoot || undefined,
+      });
     }
 
     // 7. 文本内容（按钮/链接）
@@ -381,13 +435,18 @@
     // 8. 短 CSS 路径
     try {
       const shortCss = buildShortCss(el);
-      if (shortCss && document.querySelectorAll(shortCss).length === 1) {
-        selectors.push({ type: "css", value: shortCss, reliability: 4 });
+      if (shortCss && queryCount(shortCss) === 1) {
+        selectors.push({
+          type: "css",
+          value: shortCss,
+          reliability: inShadowRoot ? 2 : 4,
+          shadowScoped: inShadowRoot || undefined,
+        });
       }
     } catch (_) {}
 
     // 9. XPath
-    selectors.push({ type: "xpath", value: buildXPath(el), reliability: 3 });
+    selectors.push({ type: "xpath", value: buildXPath(el), reliability: inShadowRoot ? 1 : 3 });
 
     // 按可靠性排序
     selectors.sort((a, b) => b.reliability - a.reliability);
@@ -396,9 +455,22 @@
 
   // 检测 CSS Modules / 动态 hash class（如 login_abc12345__xyz、css-1a2b3c4）
   function isHashedClass(name) {
-    return /^[a-z]+-[a-z0-9]{6,}$/.test(name)          // css-1a2b3c4
-      || /^[a-zA-Z]+_\w{6,}(?:__\w+)?$/.test(name)     // login_abc123 或 login_abc123__xyz
-      || /^[a-zA-Z]+-[a-f0-9]{6,}$/.test(name);         // header-abc123
+    return /^[a-z]+-[a-z0-9]{6,}(?:-[a-z0-9]+)?$/.test(name)       // css-1a2b3c4, css-1a2b3c4-d7e8 (Emotion/CSS-in-JS)
+      || /^[a-zA-Z]+_\w{6,}(?:__\w+)?$/.test(name)                  // login_abc123 或 login_abc123__xyz (CSS Modules)
+      || /^[a-zA-Z]+-[a-f0-9]{6,}$/.test(name)                      // header-abc123
+      || /^sc-[a-zA-Z]+$/.test(name)                                 // sc-bdVaJa (styled-components)
+      || /^css-[a-z0-9]+$/.test(name)                                // css-1a2b3c (Emotion standalone)
+      || /^[a-z][a-z0-9]{5,}$/.test(name)                           // e1d2c3f4 (Emotion v10+ short hash)
+      || /^_[a-z0-9]{4,}$/.test(name)                                // _2x3y4 (CSS Modules hash suffix)
+      || /^jss-\d+$/.test(name);                                     // jss-123 (JSS)
+  }
+
+  // 跨 Shadow Root 边界获取父元素
+  function getParentNode(el) {
+    if (el.parentElement) return el.parentElement;
+    const root = el.getRootNode?.();
+    if (root && root !== document && root instanceof ShadowRoot) return root.host;
+    return null;
   }
 
   function buildShortCss(el) {
@@ -417,8 +489,7 @@
           part += "." + classes.slice(0, 2).map(c => CSS.escape(c)).join(".");
         }
       }
-      // 加 nth-child 消歧
-      const parent = current.parentElement;
+      const parent = getParentNode(current);
       if (parent) {
         const siblings = Array.from(parent.children).filter(c => c.tagName === current.tagName);
         if (siblings.length > 1) {
@@ -427,7 +498,7 @@
         }
       }
       parts.unshift(part);
-      current = current.parentElement;
+      current = parent;
     }
     return parts.join(" > ");
   }
@@ -441,7 +512,7 @@
         parts.unshift(`//*[@id="${current.id}"]`);
         return parts.join("");
       }
-      const parent = current.parentElement;
+      const parent = getParentNode(current);
       if (parent) {
         const siblings = Array.from(parent.children).filter(c => c.tagName === current.tagName);
         if (siblings.length > 1) {
@@ -450,7 +521,7 @@
         }
       }
       parts.unshift(`/${part}`);
-      current = current.parentElement;
+      current = parent;
     }
     return parts.join("") || "/";
   }
@@ -461,40 +532,65 @@
     try {
       // 情况 1: 脚本在主文档运行，元素在 iframe/frame 内
       if (el.ownerDocument !== document) {
-        const frames = document.querySelectorAll("iframe, frame");
-        for (const frame of frames) {
-          try {
-            if (frame.contentDocument === el.ownerDocument) {
-              const tag = frame.tagName.toLowerCase();
-              return {
-                inIframe: true,
-                frameSrc: frame.src || "",
-                frameName: frame.name || "",
-                frameId: frame.id || "",
-                frameSelector: frame.id
+        // 修复：跨域 frame 只记录不立刻 return，继续检查后续 frame（避免误判）
+        let crossOriginFallback = null;
+
+        function searchFrames(doc, depth) {
+          if (depth > 10) return null; // 防止过深递归
+          const frames = doc.querySelectorAll("iframe, frame");
+          for (const frame of frames) {
+            try {
+              const contentDoc = frame.contentDocument;
+              if (contentDoc === el.ownerDocument) {
+                const tag = frame.tagName.toLowerCase();
+                return {
+                  inIframe: true,
+                  frameSrc: frame.src || "",
+                  frameName: frame.name || "",
+                  frameId: frame.id || "",
+                  frameSelector: frame.id
+                    ? `#${frame.id}`
+                    : frame.name
+                      ? `${tag}[name="${frame.name}"]`
+                      : buildShortCss(frame),
+                };
+              }
+              if (contentDoc) {
+                const nested = searchFrames(contentDoc, depth + 1);
+                if (nested) return nested;
+              }
+            } catch (_) {
+              // 跨域 iframe：记录但不 return，继续检查后续 frame
+              if (!crossOriginFallback) {
+                const tag = frame.tagName.toLowerCase();
+                // 兜底：生成 nth-of-type 索引选择器
+                let fallbackSelector = frame.id
                   ? `#${frame.id}`
                   : frame.name
                     ? `${tag}[name="${frame.name}"]`
-                    : buildShortCss(frame),
-              };
+                    : buildShortCss(frame);
+                if (!fallbackSelector) {
+                  const allFrames = Array.from(document.querySelectorAll("iframe, frame"));
+                  const idx = allFrames.indexOf(frame) + 1;
+                  fallbackSelector = `${tag}:nth-of-type(${idx})`;
+                }
+                crossOriginFallback = {
+                  inIframe: true,
+                  crossOrigin: true,
+                  frameSrc: frame.src || "",
+                  frameName: frame.name || "",
+                  frameId: frame.id || "",
+                  frameSelector: fallbackSelector,
+                };
+              }
             }
-          } catch (_) {
-            // 跨域 iframe：拿不到内部内容，但 frame 元素本身在主文档可见，可获取属性
-            const tag = frame.tagName.toLowerCase();
-            return {
-              inIframe: true,
-              crossOrigin: true,
-              frameSrc: frame.src || "",
-              frameName: frame.name || "",
-              frameId: frame.id || "",
-              frameSelector: frame.id
-                ? `#${frame.id}`
-                : frame.name
-                  ? `${tag}[name="${frame.name}"]`
-                  : buildShortCss(frame),
-            };
           }
+          return null;
         }
+
+        const found = searchFrames(document, 0);
+        if (found) return found;
+        if (crossOriginFallback) return crossOriginFallback;
         return { inIframe: true, crossOrigin: false };
       }
 
@@ -527,6 +623,23 @@
 
   // ==================== 元素信息提取 ====================
 
+  function detectShadowRoot(el) {
+    try {
+      const root = el.getRootNode?.();
+      if (root && root instanceof ShadowRoot) {
+        const host = root.host;
+        const hostInfo = host ? {
+          tag: host.tagName.toLowerCase(),
+          id: host.id || "",
+          class: (host.className || "").substring(0, 100),
+          selector: host.id ? `#${CSS.escape(host.id)}` : host.tagName.toLowerCase(),
+        } : null;
+        return { inShadowRoot: true, host: hostInfo };
+      }
+    } catch (_) {}
+    return { inShadowRoot: false, host: null };
+  }
+
   function getElementInfo(el) {
     const tag = el.tagName.toLowerCase();
     const attrs = {};
@@ -547,6 +660,7 @@
       text: (el.textContent || "").trim().substring(0, 100),
       selectors: getSelectors(el),
       iframe: detectIframe(el),
+      shadowRoot: detectShadowRoot(el),
       visible: el.offsetParent !== null,
       rect: el.getBoundingClientRect().toJSON(),
     };
@@ -593,21 +707,21 @@
     if (needPassword) {
       typeSelector = 'input[type="password"]';
     } else {
-      // username / captcha_input 等：text 类输入框
-      typeSelector = 'input[type="text"], input:not([type])';
+      // username / captcha_input 等：text 类输入框（含 email/tel 等变体）
+      typeSelector = 'input[type="text"], input[type="email"], input[type="tel"], input:not([type])';
     }
 
     // 搜索范围：从点击元素向上查找
     let container = null;
     // 已知门户模式快速匹配
     if (!container) {
-      const knownSelectors = [
-        "li, form",
-        ".ant-input-affix-wrapper",       // 模式1: 深澜
-        "div[id$='_posi']",              // 模式2: HK Posi 的 username_hk_posi
-        ".login_frame_hang_1",           // 模式2: HK Posi 容器类
-        ".input-group, .form-group",
-      ];
+    const knownSelectors = [
+      "form",
+      ".ant-input-affix-wrapper",
+      "div[id$='_posi']",
+      ".login_frame_hang_1",
+      ".input-group, .form-group",
+    ];
       for (const sel of knownSelectors) {
         container = el.closest(sel);
         if (container) break;
@@ -617,7 +731,7 @@
     if (!container) {
       let cur = el.parentElement;
       let depth = 0;
-      while (cur && cur !== document.body && cur !== document.documentElement && depth < 4) {
+      while (cur && cur !== document.body && cur !== document.documentElement && depth < 6) {
         const candidates = cur.querySelectorAll(typeSelector);
         const hasHidden = Array.from(candidates).some(inp =>
           inp !== el && !inp.readOnly && isElementHidden(inp)
@@ -733,6 +847,7 @@
       if (r.width <= 0 || r.height <= 0) return true;
       if (s.clip === "rect(0px, 0px, 0px, 0px)" || s.clip === "rect(0, 0, 0, 0)") return true;
       if (typeof s.clipPath === "string" && s.clipPath.includes("inset(100%")) return true;
+      if (r.left < -1000 || r.top < -1000) return true;
     } catch (_) {}
     if (el.offsetParent === null) {
       try {
@@ -937,14 +1052,31 @@
 
     // 全局 input 事件监听（手动填写 & 智能检测共用 — capture 阶段确保最先捕获）
     document.addEventListener("input", (e) => {
-      const el = e.target;
+      const el = e.composedPath()[0];
       if (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA") return;
       if (el.type === "checkbox" || el.type === "radio" || el.type === "submit" || el.type === "button") return;
-      // 只记录用户当前正在聚焦的元素，防止密码管理器自动填充触发误记录
       if (document.activeElement !== el) return;
 
       // 智能检测模式：按 input type 自动分类记录
       if (state.currentStepType === "smart_detect") {
+        // 区分搜索框和登录输入框：检查是否在 login/auth 相关 form 内
+        let inLoginForm = false;
+        let cur = el.closest("form");
+        if (cur) {
+          const action = (cur.action || "").toLowerCase();
+          const cls = (cur.className || "").toLowerCase();
+          const id = (cur.id || "").toLowerCase();
+          inLoginForm = /login|auth|signin|sso/.test(action) || /login|auth|signin/.test(cls) || /login|auth|signin/.test(id);
+        }
+        // 不在登录表单内的输入框，记录为 click 而非 username/password
+        if (!inLoginForm && !el.closest("[role='search'], [role='searchbox']")) {
+          const name = (el.name || "").toLowerCase();
+          const placeholder = (el.placeholder || "").toLowerCase();
+          if (/search|query|find|filter/.test(name) || /search|query|find|filter/.test(placeholder)) {
+            return; // 跳过搜索框
+          }
+        }
+
         const stepType = el.type === "password" ? "password" : "username";
         const desc = stepType === "password" ? "密码输入框 → {{PASSWORD}}" : "账号输入框 → {{USERNAME}}";
         addManualFillStep(stepType, el, desc);
@@ -1023,8 +1155,8 @@
       <li class="ca-recorded-item">
         <span class="ca-idx">${i + 1}</span>
         <div class="ca-info">
-          <div class="ca-label">${STEP_TYPES[s.type]?.icon || "📝"} ${STEP_TYPES[s.type]?.label || s.type}: ${s.description || ""}${warningIcon}</div>
-          <div class="ca-selector" title="${displaySelector}">${displaySelector}</div>
+          <div class="ca-label">${STEP_TYPES[s.type]?.icon || "📝"} ${STEP_TYPES[s.type]?.label || s.type}: ${escHtml(s.description || "")}${warningIcon}</div>
+          <div class="ca-selector" title="${escHtml(displaySelector)}">${escHtml(displaySelector)}</div>
         </div>
         <button class="ca-del" data-idx="${i}" title="删除">✕</button>
       </li>
@@ -1075,6 +1207,7 @@
         <input type="text" id="ca-edit-desc" value="${escHtml(step.description || "")}" placeholder="描述这个步骤的作用" />
         <label>选择器</label>
         <input type="text" id="ca-edit-selector" value="${escHtml(step.bestSelector || "")}" placeholder="CSS 选择器" />
+        <div id="ca-edit-selector-status" style="font-size:11px;margin-bottom:8px;min-height:16px;"></div>
         <div style="font-size:11px;color:#666;margin-bottom:8px;">${step.hiddenRealSelector ? `⚠️ 隐藏输入框: ${escHtml(step.hiddenRealSelector)}` : `标签: &lt;${step.tag}&gt;`}</div>
         <div class="ca-modal-actions">
           <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-edit-cancel">取消</button>
@@ -1085,6 +1218,28 @@
     state.panel.appendChild(overlay);
 
     overlay.querySelector("#ca-edit-cancel").addEventListener("click", () => overlay.remove());
+
+    const selectorInput = overlay.querySelector("#ca-edit-selector");
+    const statusEl = overlay.querySelector("#ca-edit-selector-status");
+    const validateSelector = () => {
+      const val = selectorInput.value.trim();
+      if (!val) {
+        statusEl.textContent = "";
+        return;
+      }
+      try {
+        const match = document.querySelector(val);
+        if (match) {
+          statusEl.innerHTML = `<span style="color:#4CAF50;">✅ 匹配到 &lt;${match.tagName.toLowerCase()}&gt;</span>`;
+        } else {
+          statusEl.innerHTML = `<span style="color:#e74c3c;">⚠️ 未匹配到任何元素</span>`;
+        }
+      } catch (e) {
+        statusEl.innerHTML = `<span style="color:#e74c3c;">❌ 选择器语法错误: ${escHtml(e.message)}</span>`;
+      }
+    };
+    selectorInput.addEventListener("input", validateSelector);
+    validateSelector();
     overlay.querySelector("#ca-edit-save").addEventListener("click", () => {
       const newType = overlay.querySelector("#ca-edit-type").value;
       const newDesc = overlay.querySelector("#ca-edit-desc").value.trim();
@@ -1161,10 +1316,9 @@
     if (el.closest("#ca-tooltip")) return;
 
     // 运营商 / 智能检测：需要点击到达页面，不能拦截
-    const needsClickThrough = (state.currentStepType === "carrier"
-      && el.tagName !== "SELECT"
-      && !state.carrierClickPhase)
-      || state.currentStepType === "smart_detect";
+    // 运营商第二阶段（选选项）也放行，避免自定义下拉框选项点击被拦截
+    const needsClickThrough = state.currentStepType === "smart_detect"
+      || (state.currentStepType === "carrier" && (el.tagName !== "SELECT" || state.carrierClickPhase));
     if (!needsClickThrough) {
       e.preventDefault();
       e.stopPropagation();
@@ -1225,8 +1379,29 @@
       handleSmartDetectClick(el, info);
       return;
     }
+    if (type === "sleep") {
+      showSleepModal(el, info);
+      return;
+    }
+    if (type === "screenshot") {
+      showScreenshotModal(el, info);
+      return;
+    }
+    if (type === "wait") {
+      const waitDesc = info.text ? `等待元素出现: ${info.text.substring(0, 30)}` : `等待元素: ${info.tag}`;
+      addStepFromElement(type, el, info, waitDesc);
+      return;
+    }
+    if (type === "eval") {
+      showEvalModal(el, info);
+      return;
+    }
+    if (type === "wait_url") {
+      showWaitUrlModal(el, info);
+      return;
+    }
 
-    // 通用步骤：弹出自定义描述
+    // 通用步骤（click / custom）：弹出自定义描述
     showCustomStepModal(type, el, info);
   }
 
@@ -1307,6 +1482,7 @@
       bestSelector,
       selectorCandidates,
       iframe: info.iframe,
+      shadowRoot: info.shadowRoot,
       attrs: info.attrs,
       text: info.text,
       visible: info.visible,
@@ -1358,6 +1534,34 @@
       return;
     }
 
+    const isInputStep = type === "username" || type === "password" || type === "captcha_input";
+    let hiddenRealSelector = null;
+    let hiddenRealHTML = "";
+    let hiddenRealTag = "";
+    let hiddenRealRelation = "";
+    let hiddenWarning = "";
+
+    if (isInputStep && state.hiddenDetectionEnabled) {
+      hiddenRealSelector = detectHiddenRealInput(el, type);
+      if (hiddenRealSelector) {
+        try {
+          const hiddenEl = document.querySelector(hiddenRealSelector);
+          if (hiddenEl) {
+            hiddenRealHTML = hiddenEl.outerHTML.substring(0, 2000);
+            hiddenRealTag = hiddenEl.tagName.toLowerCase();
+            if (hiddenEl.parentElement === el.parentElement) {
+              hiddenRealRelation = `同一 <${el.parentElement.tagName.toLowerCase()}> 内的兄弟元素`;
+            } else if (el.parentElement && el.parentElement.contains(hiddenEl)) {
+              hiddenRealRelation = `点击元素所在 <${el.parentElement.tagName.toLowerCase()}> 的子元素`;
+            } else {
+              hiddenRealRelation = `位于容器内，与点击元素不同分支`;
+            }
+          }
+        } catch (_) {}
+        hiddenWarning = `⚠️ 检测到隐藏输入框！真实输入框 ${hiddenRealSelector} 已自动识别`;
+      }
+    }
+
     const step = {
       type,
       description,
@@ -1365,9 +1569,15 @@
       bestSelector,
       selectorCandidates: info.selectors.map(s => s.value),
       iframe: info.iframe,
+      shadowRoot: info.shadowRoot,
       attrs: info.attrs,
       text: info.text,
       visible: info.visible,
+      hiddenRealSelector,
+      hiddenRealHTML,
+      hiddenRealTag,
+      hiddenRealRelation,
+      hiddenWarning,
       elementHTML: el.outerHTML,
       elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, 3000) : "",
       elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, 5000) || "",
@@ -1378,6 +1588,14 @@
     state.selectedEl = null;
     updateRecordedList();
     saveState();
+    if (hiddenWarning) {
+      setStatus(hiddenWarning, "recording");
+      setTimeout(() => {
+        if (state.panel && state.recording) setStatus(`已添加: ${description}`);
+      }, 5000);
+    } else {
+      setStatus(`已添加: ${description}`);
+    }
   }
 
   // ==================== 智能检测模式 ====================
@@ -1407,6 +1625,30 @@
     addStepFromElement("click", el, info, clickDesc);
   }
 
+  function findOptionContainer(el) {
+    // 从点击的选项向上查找下拉列表容器，返回其选择器
+    let cur = el.parentElement;
+    let depth = 0;
+    while (cur && cur !== document.body && depth < 6) {
+      const tag = cur.tagName.toLowerCase();
+      const cls = (cur.className || "").toLowerCase();
+      const id = (cur.id || "").toLowerCase();
+      // 常见下拉列表容器特征
+      if (tag === "ul" || tag === "ol") return cur;
+      if (/dropdown|select|menu|list|option|popup|pull-down/i.test(cls + id)) return cur;
+      // 包含多个同类子元素（如多个 <li>/<div>/<span>），很可能是选项列表
+      if (cur.children.length >= 2) {
+        const childTags = Array.from(cur.children).map(c => c.tagName);
+        const modeTag = Object.entries(childTags.reduce((acc, t) => { acc[t] = (acc[t] || 0) + 1; return acc; }, {}))
+          .sort((a, b) => b[1] - a[1])[0];
+        if (modeTag && modeTag[1] >= 2) return cur;
+      }
+      cur = cur.parentElement;
+      depth++;
+    }
+    return el.parentElement;
+  }
+
   function handleCarrierClickPhase(el, info) {
     // 原生 <select>：直接记录，不走两阶段
     if (!state.carrierClickPhase && info.tag === "select") {
@@ -1430,6 +1672,11 @@
     const triggerSelector = triggerInfo.selectors[0]?.value || "";
     const optionText = (el.textContent || "").trim().substring(0, 50);
 
+    // 找到选项所在的下拉容器，用容器选择器而非选项自身选择器（选项可能在临时弹出层中）
+    const optionContainer = findOptionContainer(el);
+    const containerInfo = optionContainer ? getElementInfo(optionContainer) : null;
+    const optionContainerSelector = containerInfo?.selectors[0]?.value || "";
+
     const step = {
       type: "carrier",
       description: `运营商选择 → {{ISP}}（示例: ${optionText}）`,
@@ -1437,18 +1684,32 @@
       bestSelector: triggerSelector,
       selectorCandidates: triggerInfo.selectors.map(s => s.value),
       iframe: triggerInfo.iframe,
+      shadowRoot: triggerInfo.shadowRoot,
       attrs: triggerInfo.attrs,
       text: triggerInfo.text,
       visible: triggerInfo.visible,
       optionText: optionText,
       optionTag: info.tag,
-      optionSelector: info.selectors[0]?.value || "",
+      optionSelector: optionContainerSelector || info.selectors[0]?.value || "",
       elementHTML: el.outerHTML,
       elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, 3000) : "",
       elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, 5000) || "",
     };
 
     state.steps.push(step);
+    state.carrierClickPhase = null;
+    state.selectedEl?.classList.remove("ca-highlight-selected");
+    state.selectedEl = null;
+    updateRecordedList();
+    saveState();
+    setStatus(`已添加: 运营商选择 → {{ISP}}（示例: ${optionText}）`);
+    if (!state.multiStepMode) {
+      state.recording = false;
+      state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+    }
+    if (state.multiStepMode && state.recording) {
+      setStatus("🔁 点击下一个元素或选择步骤类型，按 Esc 停止", "recording");
+    }
   }
 
   function detectButtonGroup(el) {
@@ -1459,7 +1720,14 @@
       const siblings = Array.from(el.children);
       const textSiblings = siblings.filter(s => {
         const t = (s.textContent || "").trim();
-        return t.length > 0 && t.length < 30;
+        // Handle nested elements like <button><span>Text</span></button>
+        // by checking the first direct text node length
+        const firstDirectText = Array.from(s.childNodes)
+          .filter(n => n.nodeType === 3)
+          .map(n => n.textContent.trim())
+          .find(t => t.length > 0);
+        const effectiveLength = firstDirectText ? firstDirectText.length : t.length;
+        return t.length > 0 && effectiveLength < 40;
       });
       if (textSiblings.length < 2) continue;
       const tagCounts = {};
@@ -1486,6 +1754,7 @@
       bestSelector: info.selectors[0]?.value || "",
       selectorCandidates: info.selectors.map(s => s.value),
       iframe: info.iframe,
+      shadowRoot: info.shadowRoot,
       attrs: info.attrs,
       text: info.text,
       visible: info.visible,
@@ -1574,7 +1843,7 @@
         <input type="text" id="ca-custom-desc" placeholder="描述这个步骤的作用" />
         ${type === "click" ? "" : `<label>填入的值（如需要）</label><input type="text" id="ca-custom-value" placeholder="留空则不填入" />`}
         <label>自定义选择器（可选，留空则自动检测）</label>
-        <input type="text" id="ca-custom-selector" placeholder="CSS 选择器" value="${info.selectors[0]?.value || ""}" />
+        <input type="text" id="ca-custom-selector" placeholder="CSS 选择器" value="${escHtml(info.selectors[0]?.value || "")}" />
         <div class="ca-modal-actions">
           <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-custom-cancel">取消</button>
           <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-custom-ok">确定</button>
@@ -1602,6 +1871,7 @@
         bestSelector,
         selectorCandidates: customSelector ? [customSelector] : info.selectors.map(s => s.value),
         iframe: info.iframe,
+        shadowRoot: info.shadowRoot,
         attrs: info.attrs,
         text: info.text,
         value: value || undefined,
@@ -1620,12 +1890,175 @@
     });
   }
 
+  function showEvalModal(el, info) {
+    const overlay = document.createElement("div");
+    overlay.className = "ca-modal-overlay";
+    overlay.innerHTML = `
+      <div class="ca-modal">
+        <h4>⚙️ 执行 JavaScript</h4>
+        <label>JS 代码（在页面上下文中执行）</label>
+        <textarea id="ca-eval-code" placeholder="document.querySelector('#btn').click();"></textarea>
+        <label>步骤描述（可选）</label>
+        <input type="text" id="ca-eval-desc" placeholder="执行自定义脚本" />
+        <div class="ca-modal-actions">
+          <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-eval-cancel">取消</button>
+          <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-eval-ok">确定</button>
+        </div>
+      </div>
+    `;
+    state.panel.appendChild(overlay);
+
+    overlay.querySelector("#ca-eval-cancel").addEventListener("click", () => {
+      overlay.remove();
+      state.recording = true;
+    });
+    overlay.querySelector("#ca-eval-ok").addEventListener("click", () => {
+      const code = overlay.querySelector("#ca-eval-code").value.trim();
+      if (!code) {
+        setStatus("⚠️ 请输入要执行的 JavaScript 代码");
+        return;
+      }
+      const desc = overlay.querySelector("#ca-eval-desc").value.trim() || `执行 JS: ${code.substring(0, 40)}`;
+      overlay.remove();
+
+      state.steps.push({ type: "eval", description: desc, code });
+      updateRecordedList();
+      saveState();
+      setStatus(`已添加: ${desc}`);
+      state.recording = false;
+      state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+    });
+  }
+
+  function showSleepModal(el, info) {
+    const overlay = document.createElement("div");
+    overlay.className = "ca-modal-overlay";
+    overlay.innerHTML = `
+      <div class="ca-modal">
+        <h4>⏳ 延时等待</h4>
+        <label>等待时长（毫秒）</label>
+        <input type="number" id="ca-sleep-duration" placeholder="1000" value="1000" min="100" />
+        <label>描述（可选）</label>
+        <input type="text" id="ca-sleep-desc" placeholder="等待页面加载" />
+        <div class="ca-modal-actions">
+          <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-sleep-cancel">取消</button>
+          <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-sleep-ok">确定</button>
+        </div>
+      </div>
+    `;
+    state.panel.appendChild(overlay);
+
+    overlay.querySelector("#ca-sleep-cancel").addEventListener("click", () => {
+      overlay.remove();
+      state.recording = true;
+    });
+    overlay.querySelector("#ca-sleep-ok").addEventListener("click", () => {
+      const duration = parseInt(overlay.querySelector("#ca-sleep-duration").value) || 1000;
+      const desc = overlay.querySelector("#ca-sleep-desc").value.trim() || `等待 ${duration}ms`;
+      overlay.remove();
+
+      state.steps.push({ type: "sleep", description: desc, duration });
+      updateRecordedList();
+      saveState();
+      setStatus(`已添加: 延时等待 ${duration}ms`);
+      state.recording = false;
+      state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+    });
+  }
+
+  function showScreenshotModal(el, info) {
+    const overlay = document.createElement("div");
+    overlay.className = "ca-modal-overlay";
+    overlay.innerHTML = `
+      <div class="ca-modal">
+        <h4>📸 页面截图</h4>
+        <label>截图路径/名称（可选）</label>
+        <input type="text" id="ca-screenshot-path" placeholder="debug/screenshot.png" />
+        <label>描述（可选）</label>
+        <input type="text" id="ca-screenshot-desc" placeholder="页面截图" />
+        <div class="ca-modal-actions">
+          <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-screenshot-cancel">取消</button>
+          <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-screenshot-ok">确定</button>
+        </div>
+      </div>
+    `;
+    state.panel.appendChild(overlay);
+
+    overlay.querySelector("#ca-screenshot-cancel").addEventListener("click", () => {
+      overlay.remove();
+      state.recording = true;
+    });
+    overlay.querySelector("#ca-screenshot-ok").addEventListener("click", () => {
+      const pathValue = overlay.querySelector("#ca-screenshot-path").value.trim();
+      const desc = overlay.querySelector("#ca-screenshot-desc").value.trim() || "页面截图";
+      overlay.remove();
+
+      const step = { type: "screenshot", description: desc };
+      if (pathValue) step.path = pathValue;
+      state.steps.push(step);
+      updateRecordedList();
+      saveState();
+      setStatus(`已添加: 页面截图`);
+      state.recording = false;
+      state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+    });
+  }
+
+  function showWaitUrlModal(el, info) {
+    const overlay = document.createElement("div");
+    overlay.className = "ca-modal-overlay";
+    overlay.innerHTML = `
+      <div class="ca-modal">
+        <h4>🔗 等待URL</h4>
+        <label>URL 正则表达式</label>
+        <input type="text" id="ca-waiturl-pattern" placeholder=".*success.*" />
+        <label>超时（毫秒）</label>
+        <input type="number" id="ca-waiturl-timeout" placeholder="10000" value="10000" min="1000" />
+        <label>描述（可选）</label>
+        <input type="text" id="ca-waiturl-desc" placeholder="等待 URL 匹配" />
+        <div class="ca-modal-actions">
+          <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-waiturl-cancel">取消</button>
+          <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-waiturl-ok">确定</button>
+        </div>
+      </div>
+    `;
+    state.panel.appendChild(overlay);
+
+    overlay.querySelector("#ca-waiturl-cancel").addEventListener("click", () => {
+      overlay.remove();
+      state.recording = true;
+    });
+    overlay.querySelector("#ca-waiturl-ok").addEventListener("click", () => {
+      const pattern = overlay.querySelector("#ca-waiturl-pattern").value.trim();
+      if (!pattern) {
+        setStatus("⚠️ 请输入 URL 正则表达式");
+        return;
+      }
+      const timeout = parseInt(overlay.querySelector("#ca-waiturl-timeout").value) || 10000;
+      const desc = overlay.querySelector("#ca-waiturl-desc").value.trim() || `等待 URL 匹配: ${pattern}`;
+      overlay.remove();
+
+      state.steps.push({ type: "wait_url", description: desc, pattern, timeout });
+      updateRecordedList();
+      saveState();
+      setStatus(`已添加: 等待URL匹配`);
+      state.recording = false;
+      state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+    });
+  }
+
   function generatePrompt(url) {
     let prompt = `请根据以下校园网登录页面的元素信息，生成 Campus-Auth 的任务 JSON 配置。\n\n`;
     prompt += `任务编写规范请参考 Campus-Auth 项目中的 doc/task-writing-guide.md 文档。\n\n`;
     prompt += `页面地址: ${url}\n`;
     prompt += `> **重要：不要填写 url 字段。** 任务 JSON 的 url 字段请留空或使用 "{{LOGIN_URL}}"，由用户自行在 Campus-Auth 系统设置中配置认证地址。硬编码 URL 会导致任务无法通用。\n`;
     prompt += `> **新增配置：** 请在任务 JSON 顶层添加 \`"reveal_hidden": true\`，执行器会在填写前自动显示所有隐藏输入框，无需 force 或 click 占位。\n\n`;
+
+    // on_success / on_failure 建议
+    prompt += `## 建议添加 on_success / on_failure 字段\n\n`;
+    prompt += `建议在任务 JSON 顶层添加以下字段以增强可用性：\n\n`;
+    prompt += `\`\`\`json\n{\n  "on_success": { "message": "登录成功" },\n  "on_failure": { "message": "登录失败", "screenshot": true }\n}\n\`\`\`\n\n`;
+    prompt += `其中 \`on_failure.screenshot: true\` 会在登录失败时自动保存页面截图，便于排查问题。\n\n`;
 
     // 步骤类型映射表
     prompt += `## 步骤类型映射（录制器 → 任务JSON）\n\n`;
@@ -1641,6 +2074,9 @@
     prompt += `| click | click | — |\n`;
     prompt += `| wait | wait | — |\n`;
     prompt += `| eval | eval | — |\n`;
+    prompt += `| sleep | sleep | duration 毫秒 |\n`;
+    prompt += `| screenshot | screenshot | — |\n`;
+    prompt += `| wait_url | wait_url | pattern 为 URL 正则 |\n`;
     prompt += `\n`;
 
     // 交叉验证指引 — 提醒 AI 不要盲信录制器选择器
@@ -1715,7 +2151,7 @@
         common = common.parentElement;
       }
       if (common) {
-        prompt += `- 页面上下文 HTML:\n\`\`\`html\n${common.innerHTML.substring(0, 8000)}\n\`\`\`\n`;
+        prompt += `- 页面上下文 HTML:\n\`\`\`html\n${common.innerHTML.substring(0, 12000)}\n\`\`\`\n`;
       }
     }
 
@@ -1765,9 +2201,20 @@
           if (frameParts.length > 0 || s.iframe.frameSelector) {
             prompt += `- iframe 定位: ${s.iframe.frameSelector || frameParts.join(" | ")}\n`;
           }
+          prompt += `- 建议在步骤中添加 "frame": "${s.iframe.frameSelector || "请填写iframe选择器"}" 字段\n`;
         } else {
           prompt += `- 在 iframe 内: ${s.iframe.frameSelector || "是"}\n`;
+          if (s.iframe.frameSelector) {
+            prompt += `- 建议在本步骤及同一 iframe 内的其他步骤中添加 "frame": "${s.iframe.frameSelector}" 字段\n`;
+          }
         }
+      }
+      if (s.shadowRoot?.inShadowRoot) {
+        prompt += `- ⚠️ 位于 Shadow DOM 内（Web Components 封装）\n`;
+        if (s.shadowRoot.host) {
+          prompt += `- Shadow Host: <${s.shadowRoot.host.tag}>${s.shadowRoot.host.selector ? " " + s.shadowRoot.host.selector : ""}\n`;
+        }
+        prompt += `- ⚠️ CSS 选择器仅在 Shadow Root 内部有效，执行器需要先穿透 Shadow Host 再查询\n`;
       }
       if (s.type === "carrier" && s.carrierMode === "button_group") {
         prompt += `- 按钮组模式 → 映射为 click_select，value 用 {{ISP}}\n`;
@@ -1778,14 +2225,28 @@
         prompt += `- 匹配逻辑: 根据 {{ISP}} 文本匹配按钮组中的对应项并点击\n`;
       } else if (s.type === "carrier" && s.optionText) {
         prompt += `- ⚠️ 自定义下拉框（非原生 select）→ 映射为 click_select，value 用 {{ISP}}\n`;
-        prompt += `- 触发器选择器: \`${s.bestSelector}\`\n`;
-        prompt += `- 选项容器选择器（建议填写 option_selector）: \`${s.optionSelector || "（手动指定选项的父容器）"}\`\n`;
+        prompt += `- 触发器选择器（必须设置为 selector 字段）: \`${s.bestSelector}\`\n`;
+        prompt += `- 选项容器选择器（必须设置为 option_selector 字段以限定搜索范围）: \`${s.optionSelector || "（手动指定选项的父容器）"}\`\n`;
+        prompt += `- 推荐用法:\n\`\`\`json\n{\n  "type": "click_select",\n  "selector": "${s.bestSelector}",\n  "value": "{{ISP}}",\n  "option_selector": "${s.optionSelector || ""}"\n}\n\`\`\`\n`;
         prompt += `- 选项示例（仅参考格式，实际值取 {{ISP}}）: \`${s.optionText}\`\n`;
       } else if (s.type === "carrier" && !s.optionText) {
         prompt += `- 原生 select 下拉框 → 映射为 select，value 用 {{ISP}}\n`;
       }
       if (s.captchaType) {
         prompt += `- 验证码类型: ${CAPTCHA_TYPES.find(t => t.value === s.captchaType)?.label || s.captchaType}\n`;
+      }
+      if (s.type === "eval" && s.code) {
+        prompt += `- JS 代码:\n\`\`\`js\n${s.code}\n\`\`\`\n`;
+      }
+      if (s.type === "sleep" && s.duration) {
+        prompt += `- 等待时长: ${s.duration}ms\n`;
+      }
+      if (s.type === "wait_url" && s.pattern) {
+        prompt += `- URL 正则: \`${s.pattern}\`\n`;
+        if (s.timeout) prompt += `- 超时: ${s.timeout}ms\n`;
+      }
+      if (s.type === "screenshot" && s.path) {
+        prompt += `- 截图路径: ${s.path}\n`;
       }
       prompt += `\n`;
     });
@@ -1841,6 +2302,9 @@
     } catch (_) {}
   }
 
+  // Dynamic iframe MutationObserver — watches for new iframe/frame elements added to DOM
+  let _iframeObserver = null;
+
   function attachAllFrameListeners() {
     document.querySelectorAll("iframe, frame").forEach(frame => {
       try {
@@ -1849,6 +2313,51 @@
         }
       } catch (_) {}
     });
+
+    // Watch for dynamically added iframes/frames
+    if (!_iframeObserver && document.body) {
+      _iframeObserver = new MutationObserver((records) => {
+        for (const r of records) {
+          for (const node of r.addedNodes) {
+            if (node.nodeType !== 1) continue;
+            if (node.tagName === "IFRAME" || node.tagName === "FRAME") {
+              try {
+                if (node.contentDocument) {
+                  attachFrameListeners(node.contentDocument);
+                }
+                node.addEventListener("load", () => {
+                  try {
+                    if (node.contentDocument) {
+                      attachFrameListeners(node.contentDocument);
+                    }
+                  } catch (_) {}
+                });
+              } catch (_) {}
+            }
+            // Also check nested iframes within added nodes
+            if (node.querySelectorAll) {
+              node.querySelectorAll("iframe, frame").forEach(frame => {
+                try {
+                  if (frame.contentDocument) {
+                    attachFrameListeners(frame.contentDocument);
+                  }
+                  frame.addEventListener("load", () => {
+                    try {
+                      if (frame.contentDocument) {
+                        attachFrameListeners(frame.contentDocument);
+                      }
+                    } catch (_) {}
+                  });
+                } catch (_) {}
+              });
+            }
+          }
+        }
+      });
+      try {
+        _iframeObserver.observe(document.body, { childList: true, subtree: true });
+      } catch (_) {}
+    }
   }
 
   function detachAllFrameListeners() {
@@ -1859,6 +2368,65 @@
         }
       } catch (_) {}
     });
+    if (_iframeObserver) {
+      _iframeObserver.disconnect();
+      _iframeObserver = null;
+    }
+  }
+
+  // SPA 延迟加载表单检测 — 监听主文档中新增的登录表单元素
+  let _spaFormObserver = null;
+
+  function startSpaFormWatcher() {
+    if (_spaFormObserver || !document.body) return;
+    try {
+      _spaFormObserver = new MutationObserver((records) => {
+        for (const r of records) {
+          for (const node of r.addedNodes) {
+            if (node.nodeType !== 1) continue;
+            // 检测新增的登录表单相关元素
+            const isFormLike = node.tagName === "FORM"
+              || (node.tagName === "INPUT" && (node.type === "password" || node.type === "text"))
+              || (node.tagName === "DIV" && /login|auth|signin|form/i.test((node.className || "") + (node.id || "")));
+            // 如果节点本身不像表单元素，检查是否包含表单子元素
+            let hasFormChild = false;
+            if (!isFormLike && node.querySelectorAll) {
+              const formInputs = node.querySelectorAll(
+                'form, input[type="password"], input[type="text"], input[type="email"], input[type="tel"]'
+              );
+              hasFormChild = formInputs.length > 0;
+            }
+            if (isFormLike || hasFormChild) {
+              if (state.active && state.panel) {
+                setStatus("🆕 检测到新表单元素出现，可开始录制");
+              }
+              // 新出现的 iframe 也需要绑定监听器
+              if (node.querySelectorAll) {
+                node.querySelectorAll("iframe, frame").forEach(frame => {
+                  try {
+                    frame.addEventListener("load", () => {
+                      try {
+                        if (frame.contentDocument) attachFrameListeners(frame.contentDocument);
+                      } catch (_) {}
+                    });
+                    if (frame.contentDocument) attachFrameListeners(frame.contentDocument);
+                  } catch (_) {}
+                });
+              }
+              break;  // 一次变动只通知一次
+            }
+          }
+        }
+      });
+      _spaFormObserver.observe(document.body, { childList: true, subtree: true });
+    } catch (_) {}
+  }
+
+  function stopSpaFormWatcher() {
+    if (_spaFormObserver) {
+      _spaFormObserver.disconnect();
+      _spaFormObserver = null;
+    }
   }
 
   // ==================== 使用说明 ====================
@@ -1887,8 +2455,6 @@
           <ol style="margin:4px 0;padding-left:18px;">
             <li>点击面板中的步骤类型按钮（如「账号输入框」），点击页面目标元素录制</li>
             <li>重复以上步骤，依次录完账号、密码、运营商、提交等所有步骤</li>
-            <li>录完后点击 <b style="color:#fff;">✅ 完成登录</b> → 自动检测登录容器，检测失败时进入框选模式</li>
-            <li>如自动检测的容器不准确，可在框选模式下<b style="color:#fff;">拖拽画框</b>手动选择</li>
             <li>点击 <b style="color:#fff;">📋 复制 AI 提示词</b>，将提示词发送给 AI 即可生成完整的任务 JSON</li>
           </ol>
 
@@ -1908,6 +2474,9 @@
             <tr><td style="padding:3px 6px;">🔎 检测变动</td><td style="padding:3px 6px;">检测页面元素变化（动态出现/消失/内容变更）</td><td style="padding:3px 6px;"><code>wait</code> / <code>eval</code> 步骤</td></tr>
             <tr><td style="padding:3px 6px;">⚙️ 执行JS</td><td style="padding:3px 6px;">输入 JS 代码</td><td style="padding:3px 6px;"><code>eval</code> 步骤</td></tr>
             <tr><td style="padding:3px 6px;">📝 自定义</td><td style="padding:3px 6px;">自定义描述与选择器</td><td style="padding:3px 6px;">通用步骤</td></tr>
+            <tr><td style="padding:3px 6px;">⏳ 延时等待</td><td style="padding:3px 6px;">页面不操作仅等待指定时间</td><td style="padding:3px 6px;"><code>sleep</code> 步骤</td></tr>
+            <tr><td style="padding:3px 6px;">📸 页面截图</td><td style="padding:3px 6px;">截取当前页面状态用于调试</td><td style="padding:3px 6px;"><code>screenshot</code> 步骤</td></tr>
+            <tr><td style="padding:3px 6px;">🔗 等待URL</td><td style="padding:3px 6px;">等待浏览器 URL 匹配正则</td><td style="padding:3px 6px;"><code>wait_url</code> 步骤</td></tr>
           </table>
 
           <h5 style="color:#667eea;margin:14px 0 6px;">四、功能开关</h5>
@@ -1951,32 +2520,25 @@
             <li>录制器自动检测隐藏的真实输入框，提示词中会包含 force 模式和隐藏输入框信息</li>
           </ol>
 
-          <p style="margin:4px 0;"><b style="color:#fff;">场景 D：逐字段 + 面板框选（标准流程）</b></p>
-          <ol style="margin:0 0 8px;padding-left:18px;font-size:12px;">
-            <li>先使用面板中的步骤类型按钮，逐一点击账号、密码、运营商、提交等字段</li>
-            <li>录完所有步骤后点 <b style="color:#fff;">✅ 完成登录</b></li>
-            <li>录制器自动检测登录面板容器 → 如检测准确直接完成；如不准确，进入框选模式手动<b style="color:#fff;">拖拽画框</b></li>
-            <li>最终提示词中会<b style="color:#667eea;">同时包含逐字段选择器和容器原始 HTML</b>，AI 交叉比对生成最准确的任务 JSON</li>
-          </ol>
+          <!-- 场景 D 已移除：原「完成登录」+ 框选模式已被 AI 提示词方式取代 -->
 
-          <h5 style="color:#667eea;margin:14px 0 6px;">八、获取任务 JSON</h5>
+          <h5 style="color:#667eea;margin:14px 0 6px;">七、获取任务 JSON</h5>
           <ul style="margin:4px 0;padding-left:18px;">
             <li>录制完成后点击 <b style="color:#fff;">📋 复制 AI 提示词</b>，将录制到的元素信息（选择器、类型、属性等）以结构化提示词形式复制到剪贴板</li>
             <li>将提示词发送给 AI（ChatGPT、Claude 等），AI 会参考 <code>doc/task-writing-guide.md</code> 规范生成完整的任务 JSON</li>
             <li>也可以将提示词粘贴到 Campus-Auth 的 Issue 或社区中，方便其他人帮助创建任务</li>
           </ul>
 
-          <h5 style="color:#667eea;margin:14px 0 6px;">九、选择器优先级</h5>
+          <h5 style="color:#667eea;margin:14px 0 6px;">八、选择器优先级</h5>
           <p style="margin:4px 0;font-size:12px;">录制器按以下优先级生成选择器：<code>#id</code> &gt; <code>[name="..."]</code> &gt; <code>[type="..."]</code> &gt; <code>[placeholder="..."]</code> &gt; 文本内容 &gt; CSS 路径 &gt; XPath。多个选择器候选会全部保留在 JSON 中，执行时依次尝试。</p>
 
-          <h5 style="color:#667eea;margin:14px 0 6px;">十、技巧与注意事项</h5>
+          <h5 style="color:#667eea;margin:14px 0 6px;">九、技巧与注意事项</h5>
           <ul style="margin:4px 0;padding-left:18px;font-size:12px;">
             <li>录制状态会<b style="color:#fff;">自动保存</b>到油猴存储，刷新页面后自动恢复（2 小时内有效）</li>
             <li>如果元素在 <b style="color:#fff;">iframe</b> 内部，录制器会自动检测并记录 iframe 信息</li>
             <li>连续录制多个步骤时建议开启 <b style="color:#fff;">🔁 多步录制</b></li>
             <li>下拉菜单内的选项建议用 <b style="color:#fff;">Enter</b> 键选取（点击会关闭菜单）</li>
             <li>如果浮层按钮/面板被页面 JS 冲掉，录制器会<b style="color:#fff;">自动恢复</b>（DOM 守护）</li>
-            <li>录制完成后点「完成登录」会<b style="color:#fff;">自动检测</b>登录容器，通常无需手动框选</li>
             <li>可在列表中点击 ✕ 删除不需要的步骤</li>
           </ul>
 
@@ -2032,6 +2594,39 @@
       } catch (_) {}
     });
 
+    // Also scan inside all iframes/frames
+    document.querySelectorAll("iframe, frame").forEach(frame => {
+      try {
+        if (!frame.contentDocument) return;
+        const frameInputs = frame.contentDocument.querySelectorAll("input");
+        frameInputs.forEach(el => {
+          try {
+            const s = getComputedStyle(el);
+            if (s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) <= 0) {
+              if (el.type === 'submit' || el.type === 'button' || el.type === 'hidden') return;
+              el.style.setProperty('display', 'inline-block', 'important');
+              el.style.setProperty('visibility', 'visible', 'important');
+              el.style.setProperty('opacity', '1', 'important');
+              el.dataset.caRevealed = '1';
+              el.classList.add('ca-revealed-highlight');
+              addRevealLabel(el);
+              const tag = el.tagName.toLowerCase();
+              let sel = '';
+              if (el.id) sel = '#' + CSS.escape(el.id);
+              else if (el.name) sel = tag + '[name="' + CSS.escape(el.name) + '"]';
+              else sel = tag + (el.type ? '[type="' + el.type + '"]' : '');
+              _revealedInputs.push({
+                el,
+                selector: sel,
+                inputType: el.type || 'text',
+                labelText: el.name || el.id || el.placeholder || el.type || 'input',
+              });
+            }
+          } catch (_) {}
+        });
+      } catch (_) {} // cross-origin iframe, skip
+    });
+
     // 监听滚动/调整更新标签位置
     _revealScrollHandler = updateRevealLabels;
     window.addEventListener('scroll', _revealScrollHandler, true);
@@ -2047,11 +2642,13 @@
 
   function hideRevealedInputs() {
     _revealedInputs.forEach(({ el }) => {
-      el.style.removeProperty('display');
-      el.style.removeProperty('visibility');
-      el.style.removeProperty('opacity');
-      el.classList.remove('ca-revealed-highlight');
-      delete el.dataset.caRevealed;
+      try {
+        el.style.removeProperty('display');
+        el.style.removeProperty('visibility');
+        el.style.removeProperty('opacity');
+        el.classList.remove('ca-revealed-highlight');
+        delete el.dataset.caRevealed;
+      } catch (_) {}
     });
     _revealedInputs = [];
     // 移除浮动标签
@@ -2154,6 +2751,7 @@
           bestSelector: selector,
           selectorCandidates: info.selectors.map(s => s.value),
           iframe: info.iframe,
+          shadowRoot: info.shadowRoot,
           attrs: info.attrs,
           text: info.text,
           visible: true,
@@ -2264,6 +2862,7 @@
     document.addEventListener("click", onClick, true);
     document.addEventListener("keydown", onKeyDown, true);
     attachAllFrameListeners();
+    startSpaFormWatcher();
   }
 
   function deactivate() {
@@ -2278,6 +2877,7 @@
     document.removeEventListener("click", onClick, true);
     document.removeEventListener("keydown", onKeyDown, true);
     detachAllFrameListeners();
+    stopSpaFormWatcher();
     hideTooltip();
     if (state.hoveredEl) {
       state.hoveredEl.classList.remove("ca-highlight");
@@ -2424,7 +3024,7 @@
             missing = true;
           }
           if (missing) this._restoreAll();
-        }, 2000);
+        }, 8000);
       }
     },
 
