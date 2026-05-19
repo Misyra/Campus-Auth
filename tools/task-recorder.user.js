@@ -30,7 +30,6 @@
     smart_detect: { category: "basic", label: "智能检测", icon: "🔍", color: "#00BCD4", primary: true, hint: "打字自动识别账号/密码，点击自动识别勾选/提交/下拉框，按 Esc 停止" },
     click: { category: "advanced", label: "点击元素", icon: "👆", color: "#607D8B", primary: false, hint: "点击任意页面元素，仅记录点击操作，不填空" },
     wait: { category: "advanced", label: "等待元素", icon: "⏳", color: "#795548", primary: false, hint: "鼠标悬停在要等待的元素上，然后按 Enter 键记录" },
-    detect: { category: "advanced", label: "检测变动", icon: "🔎", color: "#E91E63", primary: false, hint: "检测页面元素变化（动态出现/消失/内容变更），常用于等待登录结果弹出" },
     eval: { category: "advanced", label: "执行JS", icon: "⚙️", color: "#00BCD4", primary: false, hint: "输入一段要在页面中执行的 JavaScript 代码" },
     custom: { category: "advanced", label: "自定义步骤", icon: "📝", color: "#9E9E9E", primary: false, hint: "手动填写步骤描述、选择器、填写值，自由度高" },
   };
@@ -1226,11 +1225,6 @@
       handleSmartDetectClick(el, info);
       return;
     }
-    if (type === "detect") {
-      const detectDesc = info.text ? `检测变动: ${info.text.substring(0, 30)}` : "检测元素变动";
-      addStepFromElement(type, el, info, detectDesc);
-      return;
-    }
 
     // 通用步骤：弹出自定义描述
     showCustomStepModal(type, el, info);
@@ -1646,7 +1640,6 @@
     prompt += `| smart_detect | 自动分类 | 智能检测模式：自动识别账号/密码/勾选/提交/点击等 |\n`;
     prompt += `| click | click | — |\n`;
     prompt += `| wait | wait | — |\n`;
-    prompt += `| detect | wait / eval | 检测元素变动（出现→wait，内容变更→eval） |\n`;
     prompt += `| eval | eval | — |\n`;
     prompt += `\n`;
 
