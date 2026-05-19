@@ -4,6 +4,7 @@
 登录尝试处理器
 """
 
+import asyncio
 import datetime
 import os
 import re
@@ -169,6 +170,14 @@ class LoginAttemptHandler:
                 # 构建网络检测配置，传递给 TaskExecutor 用于成功判断
                 network_test_config = self._build_network_test_config()
 
+                # 监听页面 alert/confirm/prompt，记录内容并延迟关闭让用户看到
+                async def _handle_dialog(dialog):
+                    self.logger.info("页面弹窗 [%s]: %s", dialog.type, dialog.message)
+                    await asyncio.sleep(1.5)  # 延迟关闭，让用户看到弹窗
+                    await dialog.accept()
+
+                browser_manager.page.on("dialog", _handle_dialog)
+
                 executor = TaskExecutor(
                     task, env_vars, default_timeout=browser_timeout,
                     network_test_config=network_test_config,
@@ -177,6 +186,7 @@ class LoginAttemptHandler:
                 total = _time.perf_counter() - phase_start
                 if success:
                     self.logger.info("登录成功 (总耗时 %.1fs): %s", total, message)
+                    await asyncio.sleep(2)  # 登录成功后等待 2s 再关闭浏览器，让用户看到成功状态
                     await self.close_browser()
                     return True, message
                 log_msg = re.sub(r'\s*截图[:：]\s*/\S+\.(?:png|jpg|jpeg|webp|gif)', '', message)
