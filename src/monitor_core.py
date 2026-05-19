@@ -311,6 +311,7 @@ class NetworkMonitorCore:
                     continue
 
                 login_ok, login_msg = self.attempt_login()
+                time.sleep(2)  # 任务完成后等待 2s 再进行下一次网络检测
                 if login_ok:
                     # 网络检测已移至 task_executor 内部，登录成功即表示网络已恢复
                     consecutive_failures = 0
