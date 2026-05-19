@@ -61,6 +61,7 @@ export const appOptions = {
       _repoDisclaimerTimer: null,
       _toastTimer: null,
       newLogCount: 0,
+      fetchStatusFailCount: 0,
       wsReconnecting: false,
       wsRetryCount: 0,
       wsMaxRetries: 5,

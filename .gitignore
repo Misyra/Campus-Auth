@@ -24,6 +24,8 @@ environment/
 
 # Environment variables (sensitive information)
 .env
+.env.bak
+.env.migrated
 .agreed
 
 # User-specific network profiles
@@ -44,7 +46,7 @@ logs/
 .agents/
 CLAUDE.md
 skills-lock.json
-
+.sisyphus/
 # OS
 .DS_Store
 Thumbs.db

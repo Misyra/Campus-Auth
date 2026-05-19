@@ -89,7 +89,6 @@ def perform(keys: list[str]) -> list[CleanupResult]:
 
 def _check_autostart() -> dict:
     try:
-        sys.path.insert(0, str(PROJECT_ROOT))
         from backend.autostart_service import AutoStartService
 
         svc = AutoStartService(PROJECT_ROOT)
@@ -105,7 +104,6 @@ def _check_autostart() -> dict:
 
 def _remove_autostart() -> tuple[bool, str]:
     try:
-        sys.path.insert(0, str(PROJECT_ROOT))
         from backend.autostart_service import AutoStartService
 
         svc = AutoStartService(PROJECT_ROOT)
