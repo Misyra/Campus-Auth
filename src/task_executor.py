@@ -699,27 +699,6 @@ class EvalHandler(StepHandler):
         return True, ""
 
 
-class CustomJsHandler(StepHandler):
-    """自定义JavaScript处理器"""
-
-    @property
-    def step_type(self) -> str:
-        return StepType.CUSTOM_JS
-
-    async def execute(
-        self, page, step: StepConfig, resolver: VariableResolver
-    ) -> tuple[bool, str]:
-        params = self.resolve_params(step, resolver)
-        script = params.get("script", "")
-
-        if not script:
-            return False, "custom_js 步骤需要 script"
-
-        logger.info("[custom_js] 执行自定义脚本")
-        await page.evaluate(script)
-        return True, ""
-
-
 class ScreenshotHandler(StepHandler):
     """截图处理器 — 运行时截图存入 debug/{date}/ 目录"""
 
@@ -865,13 +844,15 @@ class StepExecutorRegistry:
             WaitHandler(),
             WaitUrlHandler(),
             EvalHandler(),
-            CustomJsHandler(),
             ScreenshotHandler(),
             SleepHandler(),
             OcrHandler(),
         ]
         for handler in handlers:
             self.register(handler)
+
+        # custom_js 已合并到 eval，保留映射以兼容旧任务
+        self._handlers[StepType.CUSTOM_JS] = self._handlers.get(StepType.EVAL)
 
     def register(self, handler: StepHandler) -> None:
         """注册处理器"""
@@ -963,14 +944,7 @@ class TaskValidator:
         if step_type == StepType.WAIT_URL and not step.get("pattern"):
             errors.append(f"{prefix} (wait_url) 需要 'pattern' 字段")
 
-        if step_type == StepType.CUSTOM_JS and not step.get("script"):
-            errors.append(f"{prefix} (custom_js) 需要 'script' 字段")
-
-        if (
-            step_type == StepType.EVAL
-            and not step.get("script")
-            and not step.get("code")
-        ):
+        if step_type in (StepType.EVAL, StepType.CUSTOM_JS) and not step.get("script") and not step.get("code"):
             errors.append(
                 f"{prefix} (eval) 需要 'script' 字段（'code' 仍兼容但已废弃）"
             )
