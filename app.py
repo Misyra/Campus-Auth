@@ -272,8 +272,8 @@ def _run_server(no_browser: bool = False, tray: bool = False, no_auto: bool = Fa
     port = _resolve_port()
 
     if running or _is_local_port_in_use(port):
-        print(f"软件已启动 (PID: {pid})，请勿重复启动")
-        print(f"请打开网页: http://127.0.0.1:{port}")
+        print(f"软件已启动 (PID: {pid})，正在打开 Web 控制台...")
+        webbrowser.open(f"http://127.0.0.1:{port}")
         sys.exit(0)
 
     _write_pid()
