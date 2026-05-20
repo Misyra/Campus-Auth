@@ -138,22 +138,25 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
     config_logger.debug("加载运行时配置: profile=%s", data.active_profile)
 
     # 账号密码：方案独立 > 全局
+    # 注意：运行时配置使用解密后的明文密码，不做掩码处理
+    # 掩码仅在 load_ui_config 中用于前端展示
     use_global = True
     if profile and not profile.use_global_credentials and profile.username:
         username = profile.username
         use_global = False
         raw_pwd = profile.password or ""
         if raw_pwd.startswith("ENC:"):
-            password = mask_password(decrypt_password(raw_pwd))
+            password = decrypt_password(raw_pwd)
         elif raw_pwd.startswith("•"):
-            password = raw_pwd
+            # 掩码值，从全局密码解密
+            password = decrypt_password(sys.password) if sys.password else ""
         elif raw_pwd:
-            password = mask_password(raw_pwd)
+            password = raw_pwd
         else:
-            password = mask_password(sys.password)
+            password = decrypt_password(sys.password) if sys.password else ""
     else:
         username = sys.username
-        password = mask_password(sys.password)
+        password = decrypt_password(sys.password) if sys.password else ""
 
     # 认证地址：跟随全局或使用方案独立值
     if not profile or profile.use_global_auth_url:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 
 from backend.config_service import (
+    build_runtime_config,
     load_runtime_config,
     load_ui_config,
     save_config_combined,
@@ -397,3 +398,97 @@ class TestHeadlessBugFix:
         # 4. 刷新设置页面 — headless 应仍是 false
         ui_after = load_ui_config(svc)
         assert ui_after.headless is False
+
+
+# ---------------------------------------------------------------------------
+# build_runtime_config —— 从 Payload 构建运行时配置字典
+# ---------------------------------------------------------------------------
+
+class TestBuildRuntimeConfig:
+    """build_runtime_config：将 MonitorConfigPayload + SystemSettings 转为运行时 dict。"""
+
+    def _make_payload(self, **overrides) -> MonitorConfigPayload:
+        """构建带合理默认值的 payload，允许覆盖任意字段。"""
+        defaults = dict(
+            username="test_user",
+            password="decrypted_pass",
+            auth_url="http://test.auth",
+            carrier="移动",
+            carrier_custom="",
+            auto_start=True,
+            headless=False,
+            browser_timeout=10000,
+            browser_user_agent="TestAgent/1.0",
+            browser_low_resource_mode=True,
+            browser_disable_web_security=True,
+            browser_extra_headers_json="",
+            browser_args="--test-arg",
+            stealth_mode=True,
+            pause_enabled=True,
+            pause_start_hour=1,
+            pause_end_hour=5,
+            check_interval_minutes=10,
+            network_targets="1.1.1.1:53",
+            network_strict_mode=False,
+            backend_log_level="DEBUG",
+            frontend_log_level="DEBUG",
+            access_log=True,
+            minimize_to_tray=False,
+            login_then_exit=True,
+            log_retention_days=14,
+            screenshot_retention_days=14,
+            custom_variables={"key": "val"},
+            active_task="",
+        )
+        defaults.update(overrides)
+        return MonitorConfigPayload(**defaults)
+
+    def test_uses_decrypted_password_directly(self):
+        """payload.password 是明文（非掩码）时，直接使用。"""
+        payload = self._make_payload(password="plain_secret")
+        sys = SystemSettings(password="")
+        config = build_runtime_config(payload, sys)
+        assert config["password"] == "plain_secret"
+
+    def test_falls_back_to_sys_password_when_empty(self):
+        """payload.password 为空且 sys.password 有值时，解密 sys.password。"""
+        from src.utils.crypto import encrypt_password
+        payload = self._make_payload(password="")
+        sys = SystemSettings(password=encrypt_password("sys_secret"))
+        config = build_runtime_config(payload, sys)
+        assert config["password"] == "sys_secret"
+
+    def test_empty_password_when_both_empty(self):
+        """payload.password 和 sys.password 都为空时，密码为空字符串。"""
+        payload = self._make_payload(password="")
+        sys = SystemSettings(password="")
+        config = build_runtime_config(payload, sys)
+        assert config["password"] == ""
+
+    def test_username_and_auth_url_passed_through(self):
+        """username 和 auth_url 从 payload 正确传递到运行时配置。"""
+        payload = self._make_payload(username="my_user", auth_url="http://my.auth/login")
+        sys = SystemSettings(password="")
+        config = build_runtime_config(payload, sys)
+        assert config["username"] == "my_user"
+        assert config["auth_url"] == "http://my.auth/login"
+
+    def test_browser_settings_configured(self):
+        """浏览器设置从 payload 正确填充到 browser_settings 子字典。"""
+        payload = self._make_payload(
+            headless=False,
+            browser_timeout=15000,
+            browser_user_agent="CustomAgent/2.0",
+            browser_low_resource_mode=True,
+            browser_disable_web_security=False,
+            stealth_mode=True,
+        )
+        sys = SystemSettings(password="")
+        config = build_runtime_config(payload, sys)
+        browser = config["browser_settings"]
+        assert browser["headless"] is False
+        assert browser["timeout"] == 15000
+        assert browser["user_agent"] == "CustomAgent/2.0"
+        assert browser["low_resource_mode"] is True
+        assert browser["disable_web_security"] is False
+        assert browser["stealth_mode"] is True
