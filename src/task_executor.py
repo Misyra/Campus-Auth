@@ -165,7 +165,7 @@ class TaskConfig:
     metadata: dict[str, Any] = field(
         default_factory=dict
     )  # 用户自定义元数据，执行器不使用
-    reveal_hidden: bool = False  # 执行前强制显示所有隐藏输入框
+    reveal_hidden: bool = True  # 执行前默认显示所有隐藏输入框
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TaskConfig:
@@ -180,7 +180,7 @@ class TaskConfig:
             on_success=data.get("on_success", {}),
             on_failure=data.get("on_failure", {}),
             metadata=data.get("metadata", {}),
-            reveal_hidden=data.get("reveal_hidden", False),
+            reveal_hidden=data.get("reveal_hidden", True),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -278,6 +278,25 @@ class VariableResolver:
         self.runtime_vars[name] = value
         self._cache.clear()
 
+    def resolve_for_js(self, value: str) -> str:
+        """Resolve variables with JSON-safe encoding for JavaScript embedding.
+
+        Unlike resolve(), this method JSON-encodes resolved values so they can
+        be safely embedded in JavaScript code without syntax errors.
+        Example: password "admin'123" → '"admin\'123"' (valid JS string literal)
+        """
+        if not isinstance(value, str) or "{{" not in value:
+            return value
+
+        def replacer(match: re.Match) -> str:
+            resolved = self.resolve(match.group(0))
+            # If variable not found, resolve returns the original pattern
+            if resolved == match.group(0):
+                return '""'  # Default to empty string
+            return json.dumps(resolved)
+
+        return self.TEMPLATE_PATTERN.sub(replacer, value)
+
 
 class StepHandler(ABC):
     """步骤处理器基类"""
@@ -335,9 +354,17 @@ class StepHandler(ABC):
                 logger.info("[frame] 使用 frame (url): %s", frame_selector)
                 return frame
             # 最后尝试 frame_locator（CSS 选择器）
-            frame = page.frame_locator(frame_selector)
-            logger.info("[frame] 使用 frame (locator): %s", frame_selector)
-            return frame
+            try:
+                frame_element = await page.query_selector(frame_selector)
+                if frame_element:
+                    frame = page.frame_locator(frame_selector)
+                    logger.info("[frame] 使用 frame (locator): %s", frame_selector)
+                    return frame
+                else:
+                    logger.warning("[frame] CSS 选择器未匹配到 frame 元素: %s", frame_selector)
+            except Exception as e:
+                logger.warning("[frame] 验证 frame 元素时出错: %s, 错误: %s", frame_selector, e)
+            return page
         except Exception as e:
             logger.warning("[frame] 无法定位 frame '%s': %s", frame_selector, e)
             return page
@@ -381,12 +408,13 @@ class InputHandler(StepHandler):
         ctx = await self._resolve_frame(page, step)
         logger.info("输入 → %s (clear=%s)", selector, clear)
 
-        # 策略1: 快速尝试普通 fill（3s 超时，可见输入框瞬间完成）
+        # 策略1: 快速尝试普通 fill（使用步骤 timeout 的 15%，最少 1500ms）
         candidates = [s.strip() for s in selector.split(",") if s.strip()]
+        wait_timeout = max(1500, int(timeout * 0.15))
         for candidate in candidates:
             try:
                 loc = ctx.locator(candidate).first
-                await loc.wait_for(state="visible", timeout=1500)
+                await loc.wait_for(state="visible", timeout=wait_timeout)
                 if clear:
                     await loc.fill("", timeout=timeout)
                 await loc.fill(value, timeout=timeout)
@@ -705,15 +733,17 @@ class EvalHandler(StepHandler):
     async def execute(
         self, page, step: StepConfig, resolver: VariableResolver
     ) -> tuple[bool, str]:
-        params = self.resolve_params(step, resolver)
-        script = params.get("script") or ""
-        store_as = params.get("store_as")
-
+        # Use JS-safe variable resolution to prevent syntax errors from
+        # special characters in passwords, usernames, etc.
+        script = step.script or ""
         if not script:
             return False, "eval 步骤需要 script 字段"
 
+        resolved_script = resolver.resolve_for_js(script)
+
+        store_as = step.store_as
         logger.info(f"[eval] store_as={store_as}")
-        result = await page.evaluate(script)
+        result = await page.evaluate(resolved_script)
 
         if store_as:
             resolver.set_runtime_var(store_as, result)
