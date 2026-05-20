@@ -45,6 +45,7 @@ logs/
 .claude/
 .agents/
 CLAUDE.md
+AGENTS.md
 skills-lock.json
 .sisyphus/
 # OS

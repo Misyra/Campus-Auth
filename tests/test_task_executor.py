@@ -303,3 +303,24 @@ def test_step_config_click_select_to_dict() -> None:
     assert d["type"] == "click_select"
     assert d["selector"] == "#trigger"
     assert d["value"] == "{{ISP}}"
+
+
+def test_frame_bool_not_crash() -> None:
+    """StepConfig.from_dict should coerce bool frame to None"""
+    # 布尔值 frame → 清空
+    s = StepConfig.from_dict({"id": "s1", "type": "input", "frame": True})
+    assert s.frame is None
+
+    # 正常的字符串 frame → 保留
+    s2 = StepConfig.from_dict(
+        {"id": "s2", "type": "input", "frame": "iframe[name=test]"}
+    )
+    assert s2.frame == "iframe[name=test]"
+
+    # None frame → 保留
+    s3 = StepConfig.from_dict({"id": "s3", "type": "input"})
+    assert s3.frame is None
+
+    # 布尔值 false frame → 清空
+    s4 = StepConfig.from_dict({"id": "s4", "type": "input", "frame": False})
+    assert s4.frame is None
