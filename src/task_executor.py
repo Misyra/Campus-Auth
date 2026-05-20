@@ -60,8 +60,6 @@ class StepType(str, Enum):
     CLICK_SELECT = "click_select"
 
 
-
-
 @dataclass
 class StepConfig:
     """步骤配置"""
@@ -110,6 +108,19 @@ class StepConfig:
         if "code" in data and "script" not in data:
             data = dict(data)
             data["script"] = data.pop("code")
+        # frame 类型规范化：非字符串非 None 的值（如布尔值 true）静默清空
+        if (
+            "frame" in data
+            and data["frame"] is not None
+            and not isinstance(data["frame"], str)
+        ):
+            logger.warning(
+                "[StepConfig] 步骤 %s 的 frame 字段应为字符串，实际为 %s，已忽略",
+                data.get("id", "?"),
+                type(data["frame"]).__name__,
+            )
+            data = dict(data)
+            data["frame"] = None
         base_fields = {
             k: v
             for k, v in data.items()
@@ -136,7 +147,6 @@ class StepConfig:
         if self.extra:
             result.update(self.extra)
         return result
-
 
 
 @dataclass
@@ -304,7 +314,14 @@ class StepHandler(ABC):
     async def _resolve_frame(self, page, step: StepConfig):
         """解析 frame 上下文，返回实际操作的 page 或 frame 对象"""
         frame_selector = step.frame
-        if not frame_selector:
+        if not isinstance(frame_selector, str):
+            if frame_selector is not None:
+                logger.warning(
+                    "[frame] 步骤 %s 的 frame 字段应为字符串，实际为 %s (%s)，将回退到主页面执行",
+                    step.id,
+                    frame_selector,
+                    type(frame_selector).__name__,
+                )
             return page
         try:
             # 优先按 name 匹配
@@ -340,7 +357,6 @@ class StepHandler(ABC):
 
         logger.warning("所有选择器均未匹配: %s", selector)
         return None
-
 
 
 class InputHandler(StepHandler):
@@ -588,7 +604,12 @@ class ClickSelectHandler(StepHandler):
             return True, ""
 
         ctx = await self._resolve_frame(page, step)
-        logger.info("[click_select] trigger=%s, value=%s, option_sel=%s", selector, value, option_selector or "(auto)")
+        logger.info(
+            "[click_select] trigger=%s, value=%s, option_sel=%s",
+            selector,
+            value,
+            option_selector or "(auto)",
+        )
 
         trigger = await self._find_element(ctx, selector, timeout)
         if not trigger:
@@ -603,7 +624,9 @@ class ClickSelectHandler(StepHandler):
             logger.info("[click_select] 未匹配到选项，跳过: %s", value)
         return True, ""
 
-    async def _click_option(self, page, text: str, option_selector: str, timeout: int) -> bool:
+    async def _click_option(
+        self, page, text: str, option_selector: str, timeout: int
+    ) -> bool:
         try:
             if option_selector:
                 # 限定容器内搜索，更精准
@@ -892,7 +915,6 @@ class TaskValidator:
                 step_errors = cls._validate_step(step, i)
                 errors.extend(step_errors)
 
-
         return len(errors) == 0, errors
 
     @classmethod
@@ -944,7 +966,11 @@ class TaskValidator:
         if step_type == StepType.WAIT_URL and not step.get("pattern"):
             errors.append(f"{prefix} (wait_url) 需要 'pattern' 字段")
 
-        if step_type in (StepType.EVAL, StepType.CUSTOM_JS) and not step.get("script") and not step.get("code"):
+        if (
+            step_type in (StepType.EVAL, StepType.CUSTOM_JS)
+            and not step.get("script")
+            and not step.get("code")
+        ):
             errors.append(
                 f"{prefix} (eval) 需要 'script' 字段（'code' 仍兼容但已废弃）"
             )
@@ -1082,6 +1108,7 @@ class TaskExecutor:
     async def _wait_url_stable(self, page, timeout_ms: int = 3000):
         """等待 URL 稳定，处理 JS 重定向链（最多 5 跳）"""
         import time as _time
+
         deadline = _time.perf_counter() + timeout_ms / 1000
         last_url = page.url
         redirects = 0
@@ -1205,7 +1232,9 @@ class TaskExecutor:
 
             logger.info(
                 "开始网络检测兜底 (test_sites=%s, timeout=%s, strict_mode=%s)",
-                test_sites, timeout, strict_mode,
+                test_sites,
+                timeout,
+                strict_mode,
             )
 
             result = is_network_available(
