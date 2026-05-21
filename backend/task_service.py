@@ -17,6 +17,8 @@ def _check_dangerous_steps(task_data: dict[str, Any]) -> list[dict[str, Any]]:
     warnings = []
     steps = task_data.get("steps", [])
     for i, step in enumerate(steps):
+        if not isinstance(step, dict):
+            continue
         step_type = step.get("type", "")
         if step_type in _DANGEROUS_STEP_TYPES:
             desc = step.get("description", step.get("id", f"步骤{i+1}"))

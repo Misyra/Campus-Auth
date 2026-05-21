@@ -1389,8 +1389,8 @@ class TaskManager:
         if not is_valid_task_id(normalized):
             return None
 
-        base = self.tasks_dir.resolve()
-        candidate = (self.tasks_dir / f"{normalized}.json").resolve()
+        base = self.tasks_dir.absolute()
+        candidate = (self.tasks_dir / f"{normalized}.json").absolute()
         try:
             candidate.relative_to(base)
         except ValueError:
