@@ -191,7 +191,8 @@ class LoginAttemptHandler:
 
                 async def _handle_dialog(dialog):
                     self.logger.info("页面弹窗 [%s]: %s", dialog.type, dialog.message)
-                    await asyncio.sleep(1.5)  # 延迟关闭，让用户看到弹窗
+                    if not self.config.get("browser_settings", {}).get("headless", True):
+                        await asyncio.sleep(1.5)  # 延迟关闭，让用户看到弹窗
                     await dialog.accept()
 
                 self._dialog_handler = _handle_dialog
