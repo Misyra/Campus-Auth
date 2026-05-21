@@ -5,6 +5,8 @@ import platform
 import socket
 import subprocess
 import sys
+import atexit
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Iterable, Sequence
@@ -14,6 +16,32 @@ import httpx
 from src.utils.logging import get_logger
 
 logger = get_logger("network_test", side="BACKEND")
+
+_executor: ThreadPoolExecutor | None = None
+_thread_local = threading.local()
+
+
+def _get_executor() -> ThreadPoolExecutor:
+    global _executor
+    if _executor is None:
+        _executor = ThreadPoolExecutor(max_workers=5)
+    return _executor
+
+
+def _get_http_client() -> httpx.Client:
+    if not hasattr(_thread_local, "client"):
+        _thread_local.client = httpx.Client(trust_env=False)
+    return _thread_local.client
+
+
+def _cleanup_resources() -> None:
+    global _executor
+    if _executor is not None:
+        _executor.shutdown(wait=False, cancel_futures=True)
+        _executor = None
+
+
+atexit.register(_cleanup_resources)
 
 
 def is_local_network_connected() -> bool:
@@ -165,17 +193,14 @@ def is_network_available_socket(
             elapsed = (time.perf_counter() - start) * 1000
             return (f"{host}:{port}", False, f"{type(exc).__name__}")
 
-    executor = ThreadPoolExecutor(max_workers=len(targets))
+    executor = _get_executor()
     futures = {executor.submit(_connect_one, h, p): (h, p) for h, p in targets}
-    try:
-        for future in as_completed(futures):
-            label, ok, detail = future.result()
-            if ok:
-                logger.info("TCP 连接成功: %s %s", label, detail)
-                return True
-            logger.info("TCP 连接失败: %s — %s", label, detail)
-    finally:
-        executor.shutdown(wait=False, cancel_futures=True)
+    for future in as_completed(futures):
+        label, ok, detail = future.result()
+        if ok:
+            logger.info("TCP 连接成功: %s %s", label, detail)
+            return True
+        logger.info("TCP 连接失败: %s — %s", label, detail)
     logger.warning("所有 TCP 目标均不可达 (%d 个)", len(targets))
     return False
 
@@ -193,27 +218,24 @@ def is_network_available_http(
         """在独立线程中检测单个 URL。返回 (url, success, detail)。"""
         start = time.perf_counter()
         try:
-            with httpx.Client(timeout=timeout, follow_redirects=follow_redirects, trust_env=False) as client:
-                resp = client.get(url)
-                elapsed = (time.perf_counter() - start) * 1000
-                if 200 <= resp.status_code < 300:
-                    return (url, True, f"HTTP {resp.status_code} ({elapsed:.0f}ms)")
-                return (url, False, f"HTTP {resp.status_code} ({elapsed:.0f}ms)")
+            client = _get_http_client()
+            resp = client.get(url, timeout=timeout, follow_redirects=follow_redirects)
+            elapsed = (time.perf_counter() - start) * 1000
+            if 200 <= resp.status_code < 300:
+                return (url, True, f"HTTP {resp.status_code} ({elapsed:.0f}ms)")
+            return (url, False, f"HTTP {resp.status_code} ({elapsed:.0f}ms)")
         except Exception as exc:
             elapsed = (time.perf_counter() - start) * 1000
             return (url, False, f"{type(exc).__name__}: {exc}")
 
-    executor = ThreadPoolExecutor(max_workers=len(urls))
+    executor = _get_executor()
     futures = {executor.submit(_check_one, url): url for url in urls}
-    try:
-        for future in as_completed(futures):
-            url, ok, detail = future.result()
-            if ok:
-                logger.info("HTTP 请求成功: %s → %s", url, detail)
-                return True
-            logger.info("HTTP 请求失败: %s — %s", url, detail)
-    finally:
-        executor.shutdown(wait=False, cancel_futures=True)
+    for future in as_completed(futures):
+        url, ok, detail = future.result()
+        if ok:
+            logger.info("HTTP 请求成功: %s → %s", url, detail)
+            return True
+        logger.info("HTTP 请求失败: %s — %s", url, detail)
     logger.warning("所有 HTTP 目标均不可达 (%d 个)", len(urls))
     return False
 
