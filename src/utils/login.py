@@ -36,6 +36,7 @@ class LoginAttemptHandler:
             f"{__name__}_login", config.get("logging", {})
         )
         self._browser_ctx: BrowserContextManager | None = None
+        self._dialog_handler = None
 
     async def attempt_login(self, skip_pause_check: bool = False, reuse_browser: bool = False) -> tuple[bool, str]:
         """
@@ -172,12 +173,17 @@ class LoginAttemptHandler:
                 network_test_config = self._build_network_test_config()
 
                 # 监听页面 alert/confirm/prompt，记录内容并延迟关闭让用户看到
+                # 复用浏览器时先移除旧监听器，避免重复叠加
+                if self._dialog_handler is not None:
+                    browser_manager.page.remove_listener("dialog", self._dialog_handler)
+
                 async def _handle_dialog(dialog):
                     self.logger.info("页面弹窗 [%s]: %s", dialog.type, dialog.message)
                     await asyncio.sleep(1.5)  # 延迟关闭，让用户看到弹窗
                     await dialog.accept()
 
-                browser_manager.page.on("dialog", _handle_dialog)
+                self._dialog_handler = _handle_dialog
+                browser_manager.page.on("dialog", self._dialog_handler)
 
                 executor = TaskExecutor(
                     task, env_vars, default_timeout=browser_timeout,
@@ -251,4 +257,5 @@ class LoginAttemptHandler:
             except Exception as exc:
                 self.logger.debug("浏览器关闭时异常 (非关键): %s", exc)
             self._browser_ctx = None
+            self._dialog_handler = None
             self.logger.info("浏览器已关闭")

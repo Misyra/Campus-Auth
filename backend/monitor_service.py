@@ -59,6 +59,18 @@ class WebSocketManager:
                 if isinstance(result, Exception) and ws in self._connections:
                     self._connections.remove(ws)
 
+    async def close_all(self):
+        """关闭所有 WebSocket 连接"""
+        async with self._lock:
+            connections = self._connections.copy()
+            self._connections.clear()
+
+        for ws in connections:
+            try:
+                await ws.close(code=1001, reason="Server shutting down")
+            except Exception:
+                pass
+
     async def _send_safe(self, ws: WebSocket, message: str):
         await ws.send_text(message)
 
@@ -85,6 +97,7 @@ class MonitorService:
 
         self._monitor_core: NetworkMonitorCore | None = None
         self._monitor_thread: threading.Thread | None = None
+        self._thread_done = threading.Event()
         self._loop: asyncio.AbstractEventLoop | None = None
         self.safe_mode: bool = self._profile_service.load().system.safe_mode
 
@@ -217,6 +230,7 @@ class MonitorService:
             and self._monitor_core.monitoring
             and self._monitor_thread
             and self._monitor_thread.is_alive()
+            and not self._thread_done.is_set()
         )
 
     def start_monitoring(self) -> tuple[bool, str]:
@@ -232,9 +246,11 @@ class MonitorService:
             config = self._runtime_config.copy()
             if self.safe_mode:
                 config.setdefault("browser_settings", {})["safe_mode"] = True
+            self._thread_done.clear()
             core = NetworkMonitorCore(
                 config=config,
                 log_callback=self._push_log,
+                thread_done=self._thread_done,
             )
             core.set_profile_service(
                 self._profile_service, on_switch=self._on_profile_switch
@@ -281,10 +297,13 @@ class MonitorService:
 
         if thread:
             thread.join(timeout=3)
+            if thread.is_alive():
+                self._thread_done.wait(timeout=5)
 
         with self._lock:
             self._monitor_core = None
             self._monitor_thread = None
+            self._thread_done.clear()
 
         self._push_log("监控已停止", level="INFO", source="backend.monitor_service")
         self._push_status()
@@ -321,7 +340,25 @@ class MonitorService:
             runtime_config.setdefault("browser_settings", {})["safe_mode"] = True
 
         core = NetworkMonitorCore(config=runtime_config, log_callback=self._push_log)
-        success, message = core.attempt_login()
+        try:
+            success, message = core.attempt_login()
+        finally:
+            # 清理手动登录创建的事件循环和浏览器，避免资源泄漏
+            if core._login_handler and core._loop:
+                try:
+                    asyncio.set_event_loop(core._loop)
+                    core._loop.run_until_complete(
+                        core._login_handler.close_browser()
+                    )
+                except Exception:
+                    pass
+                core._login_handler = None
+            if core._loop:
+                try:
+                    core._loop.close()
+                except Exception:
+                    pass
+                core._loop = None
         if success:
             service_logger.info("Manual login succeeded")
             return True, f"手动登录成功：{message}"
