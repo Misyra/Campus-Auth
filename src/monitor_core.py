@@ -121,6 +121,7 @@ class NetworkMonitorCore:
         self.monitoring = True
         self._stop_requested = False
         self._cancel_login.clear()
+        self._stop_event.clear()
         self._reuse_browser = True
         self.start_time = time.time()
         self.network_check_count = 0
@@ -459,7 +460,10 @@ class NetworkMonitorCore:
             finally:
                 pending = asyncio.all_tasks()
                 if pending:
-                    loop.run_until_complete(asyncio.gather(*pending))
+                    try:
+                        loop.run_until_complete(asyncio.gather(*pending))
+                    except Exception:
+                        pass
                 loop.close()
             # 检查是否在登录过程中被取消
             if self._cancel_login.is_set():
