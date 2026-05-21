@@ -213,7 +213,7 @@ class DebugSession:
             # 用户自定义参数
             custom_args = str(browser_settings.get("browser_args", "") or "").strip()
             if custom_args:
-                for flag in custom_args.split():
+                for flag in custom_args.splitlines():
                     flag = flag.strip()
                     if flag and flag not in args:
                         args.append(flag)
@@ -1315,7 +1315,6 @@ def run() -> None:
     try:
         # 文件始终记录完整日志，不受前后端日志级别限制
         log_center.add_file_handler(str(log_dir), retention_days=log_retention)
-        from datetime import datetime
         today_log = log_dir / f"{datetime.now().strftime('%Y-%m-%d')}.log"
         print(f"[Campus-Auth] 日志文件: {today_log}")
         startup_logger.info("日志文件: %s", today_log)
