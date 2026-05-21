@@ -82,6 +82,9 @@ class NetworkMonitorCore:
         # 持久化事件循环，避免每次调用 attempt_login / stop_monitoring 重新创建
         self._loop: asyncio.AbstractEventLoop | None = None
 
+        # 跟踪登录相关任务，避免取消无关任务
+        self._login_tasks: set[asyncio.Task] = set()
+
     def log_message(self, message: str, level: int = logging.INFO) -> None:
         if self.log_callback:
             self.log_callback(
@@ -495,6 +498,8 @@ class NetworkMonitorCore:
                 self._loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(self._loop)
             asyncio.set_event_loop(self._loop)
+            # Capture existing tasks before login to isolate login-related ones
+            _existing_tasks = asyncio.all_tasks(self._loop)
             try:
                 success, message = self._loop.run_until_complete(
                     handler.attempt_login(
@@ -502,18 +507,20 @@ class NetworkMonitorCore:
                     )
                 )
             finally:
-                # 安全清理：取消所有待处理任务，避免 asyncio.gather(*pending) 无限挂起
+                # Identify tasks created during login execution
+                self._login_tasks = asyncio.all_tasks(self._loop) - _existing_tasks
                 try:
                     asyncio.set_event_loop(self._loop)
-                    pending = asyncio.all_tasks()
-                    for task in pending:
+                    for task in self._login_tasks:
                         task.cancel()
-                    if pending:
+                    if self._login_tasks:
                         self._loop.run_until_complete(
-                            asyncio.gather(*pending, return_exceptions=True)
+                            asyncio.gather(*self._login_tasks, return_exceptions=True)
                         )
                 except Exception:
                     pass
+                finally:
+                    self._login_tasks.clear()
             # 检查是否在登录过程中被取消
             if self._cancel_login.is_set():
                 self.log_message("登录已被取消", logging.WARNING)

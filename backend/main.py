@@ -1296,9 +1296,13 @@ def run() -> None:
         sys_settings = profile_service.load().system
         log_level = sys_settings.backend_log_level or config.get("logging", {}).get("level", "WARNING")
         access_log_enabled = bool(sys_settings.access_log)
+        log_retention = max(1, sys_settings.log_retention_days)
+        sc_retention = max(1, sys_settings.screenshot_retention_days)
     except Exception:
         log_level = config.get("logging", {}).get("level", "WARNING")
         access_log_enabled = bool(config.get("access_log", False))
+        log_retention = 7
+        sc_retention = 7
 
     # 使用日志配置中心统一配置
     log_center = LogConfigCenter.get_instance()
@@ -1307,14 +1311,6 @@ def run() -> None:
     logging.getLogger("PIL").setLevel(logging.WARNING)
 
     # 启用日志持久化到文件（按天存储，自动清理过期日志和截图）
-    try:
-        sys_settings = profile_service.load().system
-        log_retention = max(1, sys_settings.log_retention_days)
-        sc_retention = max(1, sys_settings.screenshot_retention_days)
-    except Exception:
-        log_retention = 7
-        sc_retention = 7
-
     log_dir = PROJECT_ROOT / "logs"
     try:
         # 文件始终记录完整日志，不受前后端日志级别限制

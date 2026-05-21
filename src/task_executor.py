@@ -11,6 +11,7 @@ import json
 import os
 import re
 import tempfile
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -78,14 +79,12 @@ class StepError(TaskError):
 class StepType(str, Enum):
     """标准步骤类型"""
 
-    NAVIGATE = "navigate"
     INPUT = "input"
     CLICK = "click"
     SELECT = "select"
     WAIT = "wait"
     WAIT_URL = "wait_url"
     EVAL = "eval"
-    CUSTOM_JS = "custom_js"
     SCREENSHOT = "screenshot"
     SLEEP = "sleep"
     OCR = "ocr"
@@ -920,7 +919,7 @@ class StepExecutorRegistry:
             self.register(handler)
 
         # custom_js 已合并到 eval，保留映射以兼容旧任务
-        self._handlers[StepType.CUSTOM_JS] = self._handlers.get(StepType.EVAL)
+        self._handlers["custom_js"] = self._handlers.get(StepType.EVAL)
 
     def register(self, handler: StepHandler) -> None:
         """注册处理器"""
@@ -935,7 +934,7 @@ class TaskValidator:
     """任务验证器"""
 
     REQUIRED_STEP_FIELDS = {"id", "type"}
-    VALID_STEP_TYPES = {t.value for t in StepType}
+    VALID_STEP_TYPES = {t.value for t in StepType} | {"navigate", "custom_js"}
 
     @classmethod
     def validate(cls, config: dict[str, Any]) -> tuple[bool, list[str]]:
@@ -987,7 +986,7 @@ class TaskValidator:
             errors.append(f"{prefix} 未知的步骤类型: '{step_type}'")
 
         # 根据类型验证特定字段
-        if step_type == StepType.NAVIGATE:
+        if step_type == "navigate":
             # navigate 已废弃：统一使用任务的 url 字段自动导航
             errors.append(f"{prefix} (navigate) 已废弃，请使用任务的 url 字段")
             return errors
@@ -1012,7 +1011,7 @@ class TaskValidator:
             errors.append(f"{prefix} (wait_url) 需要 'pattern' 字段")
 
         if (
-            step_type in (StepType.EVAL, StepType.CUSTOM_JS)
+            step_type in (StepType.EVAL, "custom_js")
             and not step.get("script")
             and not step.get("code")
         ):
@@ -1091,7 +1090,7 @@ class TaskExecutor:
                         page, None, f"任务超时 ({task_timeout_ms}ms)"
                     )
                 # 跳过 navigate 步骤，已由 _auto_navigate 统一处理
-                if step.type == StepType.NAVIGATE:
+                if step.type == "navigate":
                     logger.info(
                         "  步骤[%d/%d] %s (navigate) → 跳过，已自动导航",
                         i + 1,
