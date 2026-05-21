@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from unittest.mock import patch
+import asyncio
+import threading
+import time
+import warnings
+from unittest.mock import MagicMock, patch
 
 from src.monitor_core import NetworkMonitorCore
 
@@ -111,3 +115,94 @@ class TestStartStop:
             core.start_monitoring()
             core.stop_monitoring()
             assert core.monitoring is False
+
+
+class TestEventLoopSetup:
+
+    def test_stop_monitoring_sets_event_loop(self):
+        core = NetworkMonitorCore()
+        core._login_handler = MagicMock()
+        core._login_handler.close_browser = MagicMock(
+            return_value=asyncio.coroutine(lambda: None)()
+        )
+        core.monitoring = True
+        core.start_time = time.time()
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            core.stop_monitoring()
+            deprecation_warnings = [
+                x for x in w if issubclass(x.category, DeprecationWarning)
+            ]
+            assert len(deprecation_warnings) == 0, (
+                f"Unexpected DeprecationWarning: {deprecation_warnings}"
+            )
+
+    def test_attempt_login_sets_event_loop(self):
+        config = {
+            "active_task": "default",
+            "auth_url": "http://test",
+            "username": "test",
+            "isp": "",
+        }
+        core = NetworkMonitorCore(config=config)
+
+        mock_handler = MagicMock()
+        mock_attempt = MagicMock()
+        mock_attempt.return_value = asyncio.coroutine(
+            lambda: (True, "success")
+        )()
+        mock_handler.attempt_login = mock_attempt
+        core._login_handler = mock_handler
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            core.attempt_login()
+            deprecation_warnings = [
+                x for x in w if issubclass(x.category, DeprecationWarning)
+            ]
+            assert len(deprecation_warnings) == 0, (
+                f"Unexpected DeprecationWarning: {deprecation_warnings}"
+            )
+
+
+class TestInterruptibleWait:
+
+    def test_stop_event_exists(self):
+        core = NetworkMonitorCore()
+        assert isinstance(core._stop_event, threading.Event)
+
+    def test_stop_event_set_on_stop_monitoring(self):
+        core = NetworkMonitorCore()
+        core.monitoring = True
+        core.stop_monitoring()
+        assert core._stop_event.is_set()
+
+    def test_wait_responds_quickly_to_stop(self):
+        core = NetworkMonitorCore()
+        core.monitoring = True
+
+        def stop_after_delay():
+            time.sleep(0.5)
+            core._stop_event.set()
+            core.monitoring = False
+
+        stopper = threading.Thread(target=stop_after_delay)
+        stopper.start()
+
+        start = time.monotonic()
+        result = core._wait_interruptible(300, step=15)
+        elapsed = time.monotonic() - start
+
+        stopper.join(timeout=5)
+        assert result is False
+        assert elapsed < 2.0, (
+            f"_wait_interruptible took {elapsed:.2f}s, expected < 2s"
+        )
+
+    def test_wait_returns_true_when_not_stopped(self):
+        core = NetworkMonitorCore()
+        core.monitoring = True
+        result = core._wait_interruptible(1, step=1)
+        assert result is True
+        assert core.monitoring is True

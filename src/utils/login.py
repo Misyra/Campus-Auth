@@ -12,7 +12,6 @@ import threading
 from pathlib import Path
 from typing import Any, Dict
 
-from ..task_executor import TaskExecutor, TaskManager
 from .browser import BrowserContextManager
 from .env import build_login_env_vars
 from .exceptions import LoginCancelledError
@@ -89,6 +88,8 @@ class LoginAttemptHandler:
         reuse_browser=True 时，失败后保留浏览器供下次重试复用。
         """
         import time as _time
+        from ..task_executor import TaskExecutor, TaskManager
+
         phase_start = _time.perf_counter()
         try:
             root_override = os.getenv("CAMPUS_AUTH_PROJECT_ROOT", "").strip()

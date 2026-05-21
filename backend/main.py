@@ -1010,25 +1010,39 @@ def shutdown_server() -> ActionResponse:
     api_logger.warning("Shutdown requested")
     import threading
 
+    def _cleanup_pid_file():
+        try:
+            pid_dir = Path.home() / ".campus_network_auth"
+            pid_file = pid_dir / "campus_network_auth.pid"
+            pid_file.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    def _force_exit_after_timeout(timeout_seconds=3):
+        time.sleep(timeout_seconds)
+        os._exit(0)
+
     def _do_shutdown():
-        import time
+        import time as _time
 
         try:
             service.stop_monitoring()
         except Exception:
             pass
 
-        # 停止正在运行的系统托盘实例（而非创建新实例）
         try:
             if _tray_icon_ref:
                 _tray_icon_ref.stop()
         except Exception:
             pass
 
-        time.sleep(0.5)
+        _time.sleep(0.5)
 
         if sys.platform == "win32":
-            os._exit(0)
+            _cleanup_pid_file()
+            watchdog = threading.Thread(target=_force_exit_after_timeout, daemon=True)
+            watchdog.start()
+            sys.exit(0)
         else:
             import signal as _signal
             os.kill(os.getpid(), _signal.SIGTERM)
@@ -1219,6 +1233,8 @@ def run() -> None:
     # 使用日志配置中心统一配置
     log_center = LogConfigCenter.get_instance()
     log_center.initialize({"level": log_level}, side="BACKEND")
+    # 压制 PIL 库的 DEBUG 日志，避免启动时大量 "Importing XxxImagePlugin" 刷屏
+    logging.getLogger("PIL").setLevel(logging.WARNING)
 
     # 启用日志持久化到文件（按天存储，自动清理过期日志和截图）
     try:

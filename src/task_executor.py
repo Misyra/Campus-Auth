@@ -25,6 +25,38 @@ logger = get_logger("task_executor", side="BACKEND")
 # 任务ID验证正则
 TASK_ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 
+# 强制输入 JS 脚本：绕过可见性检查，通过原生 setter 设置值并模拟完整用户交互事件
+_FORCE_INPUT_JS = """(el, params) => {
+  const val = params.val;
+  const doClear = params.doClear;
+  el.removeAttribute('readonly');
+  el.removeAttribute('disabled');
+  // 1. focus — 触发页面 JS 的显隐切换/占位收起
+  el.dispatchEvent(new FocusEvent('focus', {bubbles:true}));
+  // 2. 清空
+  if (doClear) {
+    const nativeSet = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype, 'value').set;
+    nativeSet.call(el, '');
+  }
+  // 3. beforeinput — React 17+ 受控组件需要
+  el.dispatchEvent(new InputEvent('beforeinput',
+    {bubbles:true, inputType:'insertText', data:val}));
+  // 4. 设置值（原生 setter 绕过 React/Vue 的 getter/setter 劫持）
+  const nativeSet = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype, 'value').set;
+    nativeSet.call(el, val);
+  // 5. input — 所有框架都监听此事件更新状态
+  el.dispatchEvent(new InputEvent('input',
+    {bubbles:true, inputType:'insertText', data:val}));
+  // 6. keyup — 部分门户做逐字校验
+  el.dispatchEvent(new KeyboardEvent('keyup', {bubbles:true}));
+  // 7. change
+  el.dispatchEvent(new Event('change', {bubbles:true}));
+  // 8. blur — 触发校验/同步（如深澜双输入框的值同步）
+  el.dispatchEvent(new FocusEvent('blur', {bubbles:true}));
+}"""
+
 
 class TaskError(Exception):
     """任务执行错误"""
@@ -353,13 +385,16 @@ class StepHandler(ABC):
             if frame:
                 logger.info("[frame] 使用 frame (url): %s", frame_selector)
                 return frame
-            # 最后尝试 frame_locator（CSS 选择器）
+            # 最后尝试 CSS 选择器匹配 iframe 元素
             try:
                 frame_element = await page.query_selector(frame_selector)
                 if frame_element:
-                    frame = page.frame_locator(frame_selector)
-                    logger.info("[frame] 使用 frame (locator): %s", frame_selector)
-                    return frame
+                    frame = await frame_element.content_frame()
+                    if frame:
+                        logger.info("[frame] 使用 frame (content_frame): %s", frame_selector)
+                        return frame
+                    else:
+                        logger.warning("[frame] content_frame() 返回 None: %s", frame_selector)
                 else:
                     logger.warning("[frame] CSS 选择器未匹配到 frame 元素: %s", frame_selector)
             except Exception as e:
@@ -440,55 +475,21 @@ class InputHandler(StepHandler):
         """
         candidates = [s.strip() for s in selector.split(",") if s.strip()]
 
-        element = None
         for candidate in candidates:
             try:
                 el = ctx.locator(candidate).first
                 await el.wait_for(state="attached", timeout=timeout)
-                element = el
-                break
+                await el.evaluate(
+                    _FORCE_INPUT_JS,
+                    {"val": value, "doClear": clear},
+                )
+                logger.info("强制输入完成 → %s", candidate)
+                return True, ""
             except Exception:
-                logger.debug("force_input 选择器未匹配: %s", candidate)
+                logger.debug("force_input 候选失败: %s", candidate)
                 continue
 
-        if not element:
-            return False, f"force_input 未找到可用的输入元素: {selector}"
-
-        await element.evaluate(
-            """(el, params) => {
-              const val = params.val;
-              const doClear = params.doClear;
-              el.removeAttribute('readonly');
-              el.removeAttribute('disabled');
-              // 1. focus — 触发页面 JS 的显隐切换/占位收起
-              el.dispatchEvent(new FocusEvent('focus', {bubbles:true}));
-              // 2. 清空
-              if (doClear) {
-                const nativeSet = Object.getOwnPropertyDescriptor(
-                  HTMLInputElement.prototype, 'value').set;
-                nativeSet.call(el, '');
-              }
-              // 3. beforeinput — React 17+ 受控组件需要
-              el.dispatchEvent(new InputEvent('beforeinput',
-                {bubbles:true, inputType:'insertText', data:val}));
-              // 4. 设置值（原生 setter 绕过 React/Vue 的 getter/setter 劫持）
-              const nativeSet = Object.getOwnPropertyDescriptor(
-                HTMLInputElement.prototype, 'value').set;
-              nativeSet.call(el, val);
-              // 5. input — 所有框架都监听此事件更新状态
-              el.dispatchEvent(new InputEvent('input',
-                {bubbles:true, inputType:'insertText', data:val}));
-              // 6. keyup — 部分门户做逐字校验
-              el.dispatchEvent(new KeyboardEvent('keyup', {bubbles:true}));
-              // 7. change
-              el.dispatchEvent(new Event('change', {bubbles:true}));
-              // 8. blur — 触发校验/同步（如深澜双输入框的值同步）
-              el.dispatchEvent(new FocusEvent('blur', {bubbles:true}));
-            }""",
-            {"val": value, "doClear": clear},
-        )
-        logger.info("强制输入完成 → %s", selector)
-        return True, ""
+        return False, f"force_input 未找到可用的输入元素: {selector}"
 
 
 class ClickHandler(StepHandler):
@@ -647,21 +648,21 @@ class ClickSelectHandler(StepHandler):
         await trigger.click(timeout=timeout)
         await page.wait_for_timeout(500)
 
-        clicked = await self._click_option(page, value, option_selector, timeout)
+        clicked = await self._click_option(ctx, value, option_selector, timeout)
         if not clicked:
             logger.info("[click_select] 未匹配到选项，跳过: %s", value)
         return True, ""
 
     async def _click_option(
-        self, page, text: str, option_selector: str, timeout: int
+        self, ctx, text: str, option_selector: str, timeout: int
     ) -> bool:
         try:
             if option_selector:
                 # 限定容器内搜索，更精准
-                container = page.locator(option_selector).first
+                container = ctx.locator(option_selector).first
                 option = container.get_by_text(text, exact=False).first
             else:
-                option = page.get_by_text(text, exact=False).first
+                option = ctx.get_by_text(text, exact=False).first
             await option.wait_for(state="visible", timeout=min(timeout, 3000))
             await option.click(timeout=timeout)
             logger.info("[click_select] 点击选项: %s", text)
@@ -710,11 +711,16 @@ class WaitUrlHandler(StepHandler):
         if not pattern:
             return False, "wait_url 步骤需要 pattern"
 
+        try:
+            compiled = re.compile(pattern)
+        except re.error:
+            return False, f"wait_url 步骤的 pattern 不是有效的正则表达式: {pattern}"
+
         logger.info(f"[wait_url] pattern={pattern}")
         deadline = asyncio.get_running_loop().time() + timeout / 1000
         while True:
             current_url = page.url
-            if re.search(pattern, current_url):
+            if compiled.search(current_url):
                 logger.info(f"[wait_url] URL 已匹配: {current_url}")
                 return True, ""
             remaining = deadline - asyncio.get_running_loop().time()
@@ -875,7 +881,17 @@ class OcrHandler(StepHandler):
             target = await self._find_element(ctx, target_selector, timeout)
             if not target:
                 return False, f"未找到验证码输入框: {target_selector}"
-            await target.fill(result, timeout=timeout)
+            try:
+                await target.fill(result, timeout=timeout)
+                logger.info("[ocr] 填入验证码成功(普通): %s", target_selector)
+            except Exception:
+                logger.info("[ocr] 普通 fill 失败，降级到强制输入: %s", target_selector)
+                await target.wait_for(state="attached", timeout=timeout)
+                await target.evaluate(
+                    _FORCE_INPUT_JS,
+                    {"val": result, "doClear": False},
+                )
+                logger.info("[ocr] 强制输入完成 → %s", target_selector)
 
         return True, result
 
@@ -1056,7 +1072,13 @@ class TaskExecutor:
 
         try:
             await self._auto_navigate(page)
-            await page.wait_for_timeout(1000)  # 导航后等待 1s 页面稳定
+
+            # 等待表单元素出现（最长 5s），覆盖 SPA 门户延迟渲染的场景
+            # 如果页面没有表单元素，静默跳过，不阻塞流程
+            try:
+                await page.wait_for_selector('input,textarea', timeout=5000)
+            except Exception:
+                pass
 
             # reveal_hidden: 强制显示所有隐藏输入框，让后续 fill() 可以直接操作
             if self.config.reveal_hidden:
@@ -1159,7 +1181,7 @@ class TaskExecutor:
         logger.info("[reveal] 强制显示隐藏输入框")
         await page.evaluate("""
             () => {
-                const inputs = document.querySelectorAll('input');
+                const inputs = document.querySelectorAll('input,textarea');
                 let count = 0;
                 inputs.forEach(el => {
                     try {

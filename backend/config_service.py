@@ -5,6 +5,7 @@ from typing import Any
 
 from src.utils.crypto import decrypt_password, encrypt_password, mask_password
 from src.utils.logging import get_logger
+from src.utils.exceptions import DecryptionError
 
 from .profile_service import ProfileService
 from .schemas import (
@@ -16,6 +17,17 @@ from .schemas import (
 
 
 config_logger = get_logger("backend.config_service", side="BACKEND")
+
+
+def _safe_decrypt(ciphertext: str) -> str:
+    """解密密码，失败时返回空字符串并记录警告。"""
+    if not ciphertext:
+        return ""
+    try:
+        return decrypt_password(ciphertext)
+    except DecryptionError:
+        config_logger.warning("密码解密失败，使用空密码")
+        return ""
 
 
 def _normalize_level(raw: str, default: str = "WARNING") -> str:
@@ -146,17 +158,17 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
         use_global = False
         raw_pwd = profile.password or ""
         if raw_pwd.startswith("ENC:"):
-            password = decrypt_password(raw_pwd)
+            password = _safe_decrypt(raw_pwd)
         elif raw_pwd.startswith("•"):
             # 掩码值，从全局密码解密
-            password = decrypt_password(sys.password) if sys.password else ""
+            password = _safe_decrypt(sys.password) if sys.password else ""
         elif raw_pwd:
             password = raw_pwd
         else:
-            password = decrypt_password(sys.password) if sys.password else ""
+            password = _safe_decrypt(sys.password) if sys.password else ""
     else:
         username = sys.username
-        password = decrypt_password(sys.password) if sys.password else ""
+        password = _safe_decrypt(sys.password) if sys.password else ""
 
     # 认证地址：跟随全局或使用方案独立值
     if not profile or profile.use_global_auth_url:
@@ -267,7 +279,7 @@ def build_runtime_config(payload: MonitorConfigPayload, sys: SystemSettings | No
     if raw_password and not raw_password.startswith("•"):
         base["password"] = raw_password
     elif sys:
-        base["password"] = decrypt_password(sys.password) if sys.password else ""
+        base["password"] = _safe_decrypt(sys.password) if sys.password else ""
 
     base["auth_url"] = payload.auth_url.strip()
     base["active_task"] = payload.active_task.strip()

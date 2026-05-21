@@ -28,7 +28,11 @@ class TestPausePeriod:
             with patch.object(handler, "_perform_login_with_auth_class", new_callable=AsyncMock) as mock:
                 mock.return_value = (True, "success")
                 return await handler.attempt_login(skip_pause_check=True)
-        success, msg = asyncio.get_event_loop().run_until_complete(run())
+        loop = asyncio.new_event_loop()
+        try:
+            success, msg = loop.run_until_complete(run())
+        finally:
+            loop.close()
         assert success is True
 
     def test_in_pause_period(self):
@@ -39,7 +43,11 @@ class TestPausePeriod:
         with patch("src.utils.login.TimeUtils.is_in_pause_period", return_value=True):
             async def run():
                 return await handler.attempt_login(skip_pause_check=False)
-            success, msg = asyncio.get_event_loop().run_until_complete(run())
+            loop = asyncio.new_event_loop()
+            try:
+                success, msg = loop.run_until_complete(run())
+            finally:
+                loop.close()
             assert success is False
             assert "暂停登录时段" in msg
 
@@ -72,5 +80,9 @@ class TestCloseBrowser:
         handler = LoginAttemptHandler({})
         async def run():
             await handler.close_browser()
-        asyncio.get_event_loop().run_until_complete(run())
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
         assert handler._browser_ctx is None
