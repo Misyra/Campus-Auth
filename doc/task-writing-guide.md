@@ -35,7 +35,7 @@
     "isp": "{{ISP}}"
   },
   "steps": [],
-    "on_success": { "message": "登录成功" },
+  "on_success": { "message": "登录成功" },
   "on_failure": { "message": "登录失败", "screenshot": true }
 }
 ```
@@ -51,7 +51,7 @@
 | `timeout` | 否 | `30000` | 全局超时时间（毫秒） |
 | `variables` | 否 | `{}` | 任务级变量，支持 `{{VAR}}` 模板引用其他变量 |
 | `steps` | 是 | `[]` | 步骤列表，按顺序执行 |
-| `reveal_hidden` | 否 | `false` | 执行前自动显示所有隐藏输入框，适用于深澜/Sangfor 等隐藏输入框场景 |
+| `reveal_hidden` | 否 | `true` | 执行前自动显示所有隐藏输入框，适用于深澜/Sangfor 等隐藏输入框场景 |
 | `success_conditions` | 否（已废弃） | — | 原有成功条件字段，系统不再使用 |
 | `on_success` | 否 | `{}` | 成功时的处理，如 `{ "message": "登录成功" }` |
 | `on_failure` | 否 | `{}` | 失败时的处理，如 `{ "message": "登录失败", "screenshot": true }` |
@@ -478,7 +478,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
       "store_as": "login_success"
     }
   ],
-    "on_success": { "message": "登录成功" },
+  "on_success": { "message": "登录成功" },
   "on_failure": { "message": "登录失败", "screenshot": true }
 }
 ```
@@ -499,7 +499,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
     { "id": "s3", "type": "click", "selector": "#login-btn" },
     { "id": "s4", "type": "sleep", "duration": 3000 }
   ],
-    "on_success": { "message": "登录成功" },
+  "on_success": { "message": "登录成功" },
   "on_failure": { "message": "登录失败", "screenshot": true }
 }
 ```
@@ -525,7 +525,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
     { "id": "s4", "type": "click", "selector": "#login-btn" },
     { "id": "s5", "type": "sleep", "duration": 3000 }
   ],
-    "on_success": { "message": "登录成功" },
+  "on_success": { "message": "登录成功" },
   "on_failure": { "message": "登录失败", "screenshot": true }
 }
 ```
@@ -564,7 +564,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
     },
     { "id": "s4", "type": "sleep", "duration": 3000 }
   ],
-    "on_success": { "message": "登录成功" },
+  "on_success": { "message": "登录成功" },
   "on_failure": { "message": "登录失败", "screenshot": true }
 }
 ```
