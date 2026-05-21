@@ -18,6 +18,9 @@ from .exceptions import LoginCancelledError
 from .logging import setup_logger
 from .time import TimeUtils
 
+if False:  # Type-only import to avoid circular dependency at runtime
+    from ..task_executor import TaskManager
+
 
 class LoginAttemptHandler:
     """登录尝试处理器 - 统一登录逻辑（解决循环依赖）"""
@@ -37,6 +40,8 @@ class LoginAttemptHandler:
         )
         self._browser_ctx: BrowserContextManager | None = None
         self._dialog_handler = None
+        self._task_manager: TaskManager | None = None
+        self._project_root: Path | None = None
 
     async def attempt_login(self, skip_pause_check: bool = False, reuse_browser: bool = False) -> tuple[bool, str]:
         """
@@ -93,14 +98,16 @@ class LoginAttemptHandler:
 
         phase_start = _time.perf_counter()
         try:
-            root_override = os.getenv("CAMPUS_AUTH_PROJECT_ROOT", "").strip()
-            project_root = (
-                Path(root_override).expanduser().resolve()
-                if root_override
-                else Path(__file__).resolve().parents[2]
-            )
+            if self._task_manager is None:
+                root_override = os.getenv("CAMPUS_AUTH_PROJECT_ROOT", "").strip()
+                self._project_root = (
+                    Path(root_override).expanduser().resolve()
+                    if root_override
+                    else Path(__file__).resolve().parents[2]
+                )
+                self._task_manager = TaskManager(self._project_root / "tasks")
 
-            task_manager = TaskManager(project_root / "tasks")
+            task_manager = self._task_manager
             active_task_id = self.config.get("active_task", "").strip()
             if not active_task_id:
                 active_task_id = task_manager.get_active_task().strip() or "default"

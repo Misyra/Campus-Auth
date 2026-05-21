@@ -59,7 +59,7 @@ class TestBrowserArgs:
         assert "--blink-settings=imagesEnabled=false" in args
 
     def test_custom_args(self):
-        config = {"browser_settings": {"browser_args": "--flag1 --flag2"}}
+        config = {"browser_settings": {"browser_args": "--flag1\n--flag2"}}
         mgr = BrowserContextManager(config)
         args = mgr._get_browser_args()
         assert "--flag1" in args

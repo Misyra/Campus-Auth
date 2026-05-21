@@ -170,7 +170,7 @@ class BrowserContextManager:
         # 用户自定义参数
         custom = str(self.browser_settings.get("browser_args", "") or "").strip()
         if custom:
-            for flag in custom.split():
+            for flag in custom.splitlines():
                 flag = flag.strip()
                 if flag and flag not in args:
                     args.append(flag)
