@@ -46,9 +46,13 @@ class NetworkMonitorCore:
         self,
         config: Optional[Dict[str, Any]] = None,
         log_callback: Optional[Callable[[str, str, str], None]] = None,
+        thread_done: Optional[threading.Event] = None,
     ) -> None:
         self.config = config or ConfigLoader.load_config_from_env()
         self.log_callback = log_callback
+
+        # 线程完成事件：由 MonitorService 传入，用于安全等待线程实际结束
+        self._thread_done: Optional[threading.Event] = thread_done
 
         self.monitoring = False
         self.network_check_count = 0
@@ -61,6 +65,7 @@ class NetworkMonitorCore:
         self._stop_requested = False
         self._cancel_login = threading.Event()
         self._stop_event = threading.Event()
+        self._config_lock = threading.RLock()
         self._test_sites_cache: Optional[list[tuple[str, int]]] = None
         self.logger = setup_logger("monitor", self.config.get("logging", {}))
 
@@ -73,6 +78,9 @@ class NetworkMonitorCore:
         self._on_profile_switch: Optional[Callable[[str], None]] = None
         self._last_profile_id: Optional[str] = None
         self._last_gateway_check_time: float = 0
+
+        # 持久化事件循环，避免每次调用 attempt_login / stop_monitoring 重新创建
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     def log_message(self, message: str, level: int = logging.INFO) -> None:
         if self.log_callback:
@@ -110,47 +118,60 @@ class NetworkMonitorCore:
     def update_config(self, new_config: Dict[str, Any]) -> None:
         """热更新运行时配置（方案切换时调用）"""
         self.log_message("运行时配置已更新 (热更新)", logging.INFO)
-        self.config = new_config
-        self._test_sites_cache = None  # 清除测试站点缓存
+        with self._config_lock:
+            self.config = new_config
+            self._test_sites_cache = None  # 清除测试站点缓存
 
     def start_monitoring(self) -> None:
-        if self.monitoring:
-            self.log_message("监控已在运行中", logging.WARNING)
-            return
-
-        self.monitoring = True
-        self._stop_requested = False
-        self._cancel_login.clear()
-        self._stop_event.clear()
-        self._reuse_browser = True
-        self.start_time = time.time()
-        self.network_check_count = 0
-        self.login_attempt_count = 0
-        self.last_network_ok = None
-        self._test_sites_cache = None  # 重置缓存
-
-        interval = self.config.get("monitor", {}).get(
-            "interval", self.DEFAULT_INTERVAL_SECONDS
-        )
-        test_sites_info = self._get_test_sites()
-        targets_str = ", ".join(f"{h}:{p}" for h, p in test_sites_info)
-
-        self.log_message("=" * self.LOG_DIVIDER_LENGTH)
-        self.log_message("网络监控已启动")
-        self.log_message(f"检测间隔: {interval}s | 检测目标: {targets_str}")
-        self.log_message(f"认证地址: {self.config.get('auth_url', '未设置')}")
-        self.log_message(f"账号: {self.config.get('username', '未设置')}")
-        self.log_message(f"运营商: {self.config.get('isp', '无') or '无'}")
-        self.log_message("=" * self.LOG_DIVIDER_LENGTH)
-
         try:
-            self.monitor_network()
-        except KeyboardInterrupt:
-            self.log_message("收到中断信号，停止监控", logging.WARNING)
-        except Exception as exc:
-            self.log_message(f"监控异常: {exc}", logging.ERROR)
+            if self.monitoring:
+                self.log_message("监控已在运行中", logging.WARNING)
+                return
+
+            self.monitoring = True
+            self._stop_requested = False
+            self._cancel_login.clear()
+            self._stop_event.clear()
+            self._reuse_browser = True
+            self.start_time = time.time()
+            self.network_check_count = 0
+            self.login_attempt_count = 0
+            self.last_network_ok = None
+            self._test_sites_cache = None  # 重置缓存
+
+            # 创建并存储持久化事件循环，供 attempt_login 和 stop_monitoring 复用
+            self._loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self._loop)
+
+            with self._config_lock:
+                interval = self.config.get("monitor", {}).get(
+                    "interval", self.DEFAULT_INTERVAL_SECONDS
+                )
+                auth_url = self.config.get("auth_url", "未设置")
+                username = self.config.get("username", "未设置")
+                isp = self.config.get("isp", "无") or "无"
+            test_sites_info = self._get_test_sites()
+            targets_str = ", ".join(f"{h}:{p}" for h, p in test_sites_info)
+
+            self.log_message("=" * self.LOG_DIVIDER_LENGTH)
+            self.log_message("网络监控已启动")
+            self.log_message(f"检测间隔: {interval}s | 检测目标: {targets_str}")
+            self.log_message(f"认证地址: {auth_url}")
+            self.log_message(f"账号: {username}")
+            self.log_message(f"运营商: {isp}")
+            self.log_message("=" * self.LOG_DIVIDER_LENGTH)
+
+            try:
+                self.monitor_network()
+            except KeyboardInterrupt:
+                self.log_message("收到中断信号，停止监控", logging.WARNING)
+            except Exception as exc:
+                self.log_message(f"监控异常: {exc}", logging.ERROR)
+            finally:
+                self.stop_monitoring()
         finally:
-            self.stop_monitoring()
+            if self._thread_done is not None:
+                self._thread_done.set()
 
     def stop_monitoring(self) -> None:
         if not self.monitoring and self._stop_requested:
@@ -162,15 +183,27 @@ class NetworkMonitorCore:
         was_monitoring = self.monitoring
         self.monitoring = False
 
-        # 关闭登录浏览器
+        # 关闭登录浏览器（使用独立的事件循环，避免与监控线程的事件循环冲突）
         if self._login_handler:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            close_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(close_loop)
             try:
-                loop.run_until_complete(self._login_handler.close_browser())
+                close_loop.run_until_complete(
+                    self._login_handler.close_browser()
+                )
+            except Exception:
+                pass
             finally:
-                loop.close()
+                close_loop.close()
             self._login_handler = None
+
+        # 关闭持久化事件循环
+        if self._loop is not None:
+            try:
+                self._loop.close()
+            except Exception:
+                pass
+            self._loop = None
 
         if was_monitoring and self.start_time:
             runtime, stats = get_runtime_stats(
@@ -191,7 +224,8 @@ class NetworkMonitorCore:
 
     def _get_retry_config(self) -> tuple[int, list[int]]:
         """从配置中读取重试参数，回退到默认值"""
-        retry_settings = self.config.get("retry_settings", {})
+        with self._config_lock:
+            retry_settings = self.config.get("retry_settings", {})
         max_retries = int(
             retry_settings.get("max_retries", self.MAX_CONSECUTIVE_LOGIN_FAILURES)
         )
@@ -231,12 +265,13 @@ class NetworkMonitorCore:
 
         while self.monitoring:
             # 每次循环重新读取 interval 和 test_sites，支持运行时方案切换
-            interval = int(
-                self.config.get("monitor", {}).get(
-                    "interval", self.DEFAULT_INTERVAL_SECONDS
+            with self._config_lock:
+                interval = int(
+                    self.config.get("monitor", {}).get(
+                        "interval", self.DEFAULT_INTERVAL_SECONDS
+                    )
                 )
-            )
-            pause_config = self.config.get("pause_login", {})
+                pause_config = self.config.get("pause_login", {})
             if TimeUtils.is_in_pause_period(pause_config):
                 start_hour = pause_config.get("start_hour", 0)
                 end_hour = pause_config.get("end_hour", 6)
@@ -256,7 +291,8 @@ class NetworkMonitorCore:
 
             # 重新读取测试站点和探测模式（方案切换后可能已更新）
             test_sites = self._get_test_sites()
-            strict_mode = self.config.get("monitor", {}).get("strict_mode", True)
+            with self._config_lock:
+                strict_mode = self.config.get("monitor", {}).get("strict_mode", True)
 
             self.network_check_count += 1
             self.last_check_time = datetime.datetime.now()
@@ -372,7 +408,8 @@ class NetworkMonitorCore:
 
     def _build_test_sites(self) -> list[tuple[str, int]]:
         """构建测试站点列表"""
-        targets = self.config.get("monitor", {}).get("ping_targets", [])
+        with self._config_lock:
+            targets = self.config.get("monitor", {}).get("ping_targets", [])
         if isinstance(targets, str):
             raw_targets = [item.strip() for item in targets.split(",") if item.strip()]
         else:
@@ -432,39 +469,51 @@ class NetworkMonitorCore:
                 self._on_profile_switch(profile_name)
 
     def attempt_login(self) -> tuple[bool, str]:
-        active_task = self.config.get("active_task", "") or "default"
+        with self._config_lock:
+            active_task = self.config.get("active_task", "") or "default"
+            auth_url = self.config.get("auth_url", "?")
+            username = self.config.get("username", "?")
+            isp = self.config.get("isp", "无") or "无"
+            config_ref = self.config
         self.log_message(
-            f"开始登录认证 → URL={self.config.get('auth_url', '?')} "
-            f"用户={self.config.get('username', '?')} "
-            f"运营商={self.config.get('isp', '无') or '无'} "
+            f"开始登录认证 → URL={auth_url} "
+            f"用户={username} "
+            f"运营商={isp} "
             f"任务={active_task}"
         )
         try:
             # 复用持久化 handler，重试时保留浏览器
             if self._login_handler is None:
                 self._login_handler = LoginAttemptHandler(
-                    self.config, cancel_event=self._cancel_login
+                    config_ref, cancel_event=self._cancel_login
                 )
             else:
-                self._login_handler.config = self.config
+                self._login_handler.config = config_ref
 
             handler = self._login_handler
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            if self._loop is None:
+                self._loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self._loop)
+            asyncio.set_event_loop(self._loop)
             try:
-                success, message = loop.run_until_complete(
+                success, message = self._loop.run_until_complete(
                     handler.attempt_login(
                         skip_pause_check=True, reuse_browser=self._reuse_browser
                     )
                 )
             finally:
-                pending = asyncio.all_tasks()
-                if pending:
-                    try:
-                        loop.run_until_complete(asyncio.gather(*pending))
-                    except Exception:
-                        pass
-                loop.close()
+                # 安全清理：取消所有待处理任务，避免 asyncio.gather(*pending) 无限挂起
+                try:
+                    asyncio.set_event_loop(self._loop)
+                    pending = asyncio.all_tasks()
+                    for task in pending:
+                        task.cancel()
+                    if pending:
+                        self._loop.run_until_complete(
+                            asyncio.gather(*pending, return_exceptions=True)
+                        )
+                except Exception:
+                    pass
             # 检查是否在登录过程中被取消
             if self._cancel_login.is_set():
                 self.log_message("登录已被取消", logging.WARNING)
