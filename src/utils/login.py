@@ -21,6 +21,9 @@ from .time import TimeUtils
 if False:  # Type-only import to avoid circular dependency at runtime
     from ..task_executor import TaskManager
 
+# Shared regex pattern for stripping screenshot paths from log messages
+SCREENSHOT_URL_PATTERN = r'\s*截图[:：]\s*/\S+\.(?:png|jpg|jpeg|webp|gif)'
+
 
 class LoginAttemptHandler:
     """登录尝试处理器 - 统一登录逻辑（解决循环依赖）"""
@@ -160,7 +163,8 @@ class LoginAttemptHandler:
                 self._browser_ctx = browser_manager
                 self.logger.info("浏览器就绪 (%.1fs)", _time.perf_counter() - browser_start)
 
-            assert browser_manager is not None, "浏览器实例应在复用或新建分支中初始化"
+            if browser_manager is None:
+                raise RuntimeError("浏览器实例应在复用或新建分支中初始化")
             try:
                 if reuse_browser:
                     try:
@@ -169,7 +173,8 @@ class LoginAttemptHandler:
                         self.logger.warning("浏览器实例已失效，重新创建")
                         await self.close_browser()
                         browser_manager = await self._create_new_browser()
-                        assert browser_manager is not None
+                        if browser_manager is None:
+                            raise RuntimeError("浏览器实例应在复用或新建分支中初始化")
 
                 if not browser_manager.page:
                     raise RuntimeError("浏览器页面初始化失败")
@@ -200,10 +205,11 @@ class LoginAttemptHandler:
                 total = _time.perf_counter() - phase_start
                 if success:
                     self.logger.info("登录成功 (总耗时 %.1fs): %s", total, message)
-                    await asyncio.sleep(2)  # 登录成功后等待 2s 再关闭浏览器，让用户看到成功状态
+                    if not self.config.get("browser_settings", {}).get("headless", True):
+                        await asyncio.sleep(2)
                     await self.close_browser()
                     return True, message
-                log_msg = re.sub(r'\s*截图[:：]\s*/\S+\.(?:png|jpg|jpeg|webp|gif)', '', message)
+                log_msg = re.sub(SCREENSHOT_URL_PATTERN, '', message)
                 self.logger.error("登录失败 (总耗时 %.1fs): %s", total, log_msg)
                 if not reuse_browser:
                     await self.close_browser()
