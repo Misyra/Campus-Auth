@@ -206,3 +206,82 @@ class TestInterruptibleWait:
         result = core._wait_interruptible(1, step=1)
         assert result is True
         assert core.monitoring is True
+
+
+class TestProfileSwitchTrigger:
+
+    def test_profile_switch_not_called_when_network_ok(self):
+        config = {"monitor": {"interval": 60}}
+        core = NetworkMonitorCore(config=config)
+        core.monitoring = True
+
+        with (
+            patch("src.monitor_core.is_network_available", return_value=True),
+            patch("src.monitor_core.is_local_network_connected", return_value=True),
+            patch.object(core, "_wait_interruptible", return_value=False),
+            patch.object(core, "_check_profile_switch", wraps=core._check_profile_switch) as mock_check,
+        ):
+            core.monitor_network()
+
+        mock_check.assert_not_called()
+
+    def test_profile_switch_called_when_network_not_ok(self):
+        config = {"monitor": {"interval": 60}}
+        core = NetworkMonitorCore(config=config)
+        core.monitoring = True
+
+        with (
+            patch("src.monitor_core.is_network_available", return_value=False),
+            patch("src.monitor_core.is_local_network_connected", return_value=True),
+            patch.object(core, "attempt_login", return_value=(True, "success")),
+            patch.object(core, "_wait_interruptible", return_value=False),
+            patch.object(core, "_check_profile_switch", wraps=core._check_profile_switch) as mock_check,
+        ):
+            core.monitor_network()
+
+        mock_check.assert_called_once()
+
+    def test_profile_switch_cooldown_on_consecutive_failures(self):
+        config = {"monitor": {"interval": 60}}
+        core = NetworkMonitorCore(config=config)
+        core.monitoring = True
+        core._last_gateway_check_time = time.time()
+
+        call_count = 0
+
+        def track_calls():
+            nonlocal call_count
+            call_count += 1
+
+        with (
+            patch("src.monitor_core.is_network_available", return_value=False),
+            patch("src.monitor_core.is_local_network_connected", return_value=True),
+            patch.object(core, "attempt_login", return_value=(True, "success")),
+            patch.object(core, "_wait_interruptible", return_value=False),
+            patch.object(core, "_check_profile_switch", side_effect=track_calls),
+        ):
+            core.monitor_network()
+
+        assert call_count == 1
+
+    def test_profile_switch_called_each_iteration_when_cooldown_expired(self):
+        config = {"monitor": {"interval": 60}}
+        core = NetworkMonitorCore(config=config)
+        core.monitoring = True
+        core._last_gateway_check_time = 0
+
+        call_times = []
+
+        def track_call():
+            call_times.append(time.time())
+
+        with (
+            patch("src.monitor_core.is_network_available", return_value=False),
+            patch("src.monitor_core.is_local_network_connected", return_value=True),
+            patch.object(core, "attempt_login", return_value=(True, "success")),
+            patch.object(core, "_wait_interruptible", return_value=False),
+            patch.object(core, "_check_profile_switch", side_effect=lambda: track_call()),
+        ):
+            core.monitor_network()
+
+        assert len(call_times) == 1

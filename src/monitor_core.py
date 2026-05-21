@@ -289,9 +289,6 @@ class NetworkMonitorCore:
                     break
                 continue
 
-            # 自动切换方案检测
-            self._check_profile_switch()
-
             # 重新读取测试站点和探测模式（方案切换后可能已更新）
             test_sites = self._get_test_sites()
             with self._config_lock:
@@ -330,6 +327,8 @@ class NetworkMonitorCore:
                     f"[#{self.network_check_count}] 网络异常，连续失败 {consecutive_failures} 次",
                     logging.WARNING,
                 )
+
+                self._check_profile_switch()
 
                 # 检查物理网络是否连接，未连接则跳过登录
                 if not is_local_network_connected():
