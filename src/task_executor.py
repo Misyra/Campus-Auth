@@ -232,8 +232,7 @@ class TaskConfig:
             result["on_failure"] = self.on_failure
         if self.metadata:
             result["metadata"] = self.metadata
-        if self.reveal_hidden:
-            result["reveal_hidden"] = True
+        result["reveal_hidden"] = self.reveal_hidden
         return result
 
 

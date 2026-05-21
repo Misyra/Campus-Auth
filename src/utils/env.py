@@ -23,15 +23,9 @@ def build_login_env_vars(
     if auth_url:
         env_vars["LOGIN_URL"] = auth_url
 
-    if task_url:
-        resolved_url = task_url
-        for k, v in env_vars.items():
-            resolved_url = resolved_url.replace("{{" + k + "}}", v)
-        env_vars["LOGIN_URL"] = resolved_url
-
-    if not env_vars.get("LOGIN_URL", "").strip() and auth_url:
-        env_vars["LOGIN_URL"] = auth_url
-
+    # Inject runtime config vars BEFORE task_url resolution,
+    # so that {{USERNAME}}/{{PASSWORD}}/{{ISP}} in task_url resolve
+    # to the campus-auth config values instead of OS env or staying unresolved.
     isp = runtime_config.get("isp", "")
     if isp:
         env_vars["ISP"] = isp
@@ -48,5 +42,15 @@ def build_login_env_vars(
         for k, v in custom_variables.items():
             if k.upper() not in _ENV_DENYLIST:
                 env_vars[k] = v
+
+    # Resolve task_url template AFTER all vars are injected
+    if task_url:
+        resolved_url = task_url
+        for k, v in env_vars.items():
+            resolved_url = resolved_url.replace("{{" + k + "}}", v)
+        env_vars["LOGIN_URL"] = resolved_url
+
+    if not env_vars.get("LOGIN_URL", "").strip() and auth_url:
+        env_vars["LOGIN_URL"] = auth_url
 
     return env_vars
