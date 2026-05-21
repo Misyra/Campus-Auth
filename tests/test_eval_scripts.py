@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 TASKS_DIR = Path(__file__).resolve().parents[1] / "tasks"
-TEMPLATE_FILES = ["default.json", "select-isp.json", "click-isp.json", "no-isp.json"]
+TEMPLATE_FILES = ["default.json", "select_isp.json", "click_isp.json", "no_isp.json"]
 
 REQUIRED_EVENTS = ["focus", "beforeinput", "input", "keyup", "change", "blur"]
 
