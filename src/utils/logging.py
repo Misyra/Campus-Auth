@@ -129,6 +129,10 @@ class _DateRotatingFileHandler(logging.Handler):
         self._last_cleanup: float = 0
         self._stream = None
         self._emit_lock = threading.Lock()
+        self._unflushed_count = 0
+        self._last_flush_time = time.monotonic()
+        self._unflushed_lines: list[str] = []
+        self._pending_path: str | None = None
         if formatter:
             self.setFormatter(formatter)
 
@@ -138,22 +142,22 @@ class _DateRotatingFileHandler(logging.Handler):
 
     def _open_file(self, path: str) -> None:
         os.makedirs(self._log_dir, exist_ok=True)
-        new_stream = open(path, "a", encoding="utf-8")
         if self._stream:
             try:
                 self._stream.close()
             except Exception:
                 pass
-        self._stream = new_stream
+        self._stream = open(path, "a", encoding="utf-8")
+        self._pending_path = None
 
     def emit(self, record: logging.LogRecord) -> None:
         with self._emit_lock:
             try:
                 today = datetime.now().strftime("%Y-%m-%d")
-                if today != self._current_date or self._stream is None:
+                if today != self._current_date or (self._stream is None and self._pending_path is None):
                     self._current_date = today
                     path = self._get_log_path()
-                    self._open_file(path)
+                    self._pending_path = path
 
                 # 每小时运行一次过期日志清理
                 now = time.time()
@@ -167,22 +171,39 @@ class _DateRotatingFileHandler(logging.Handler):
                         except OSError:
                             pass
 
-                if self._stream is None:
+                if self._stream is None and self._pending_path is None:
                     try:
-                        self._open_file(self._get_log_path())
+                        self._pending_path = self._get_log_path()
                     except Exception:
                         pass
 
-                if self._stream:
+                if self._pending_path is not None or self._stream is not None:
                     msg = self.format(record)
-                    self._stream.write(msg + os.linesep)
-                    self._stream.flush()
+                    self._unflushed_lines.append(msg)
+                    self._unflushed_count += 1
+                    if self._unflushed_count >= 10 or (time.monotonic() - self._last_flush_time) > 5:
+                        if self._pending_path and self._stream is None:
+                            self._open_file(self._pending_path)
+                        for line in self._unflushed_lines:
+                            self._stream.write(line + "\n")
+                        self._stream.flush()
+                        self._unflushed_lines.clear()
+                        self._unflushed_count = 0
+                        self._last_flush_time = time.monotonic()
             except Exception as exc:
                 print(f"[LOG ERROR] 写入日志文件失败: {exc}", file=sys.stderr)
                 self.handleError(record)
 
     def close(self) -> None:
         try:
+            if self._unflushed_lines:
+                if self._pending_path and self._stream is None:
+                    self._open_file(self._pending_path)
+                if self._stream:
+                    for line in self._unflushed_lines:
+                        self._stream.write(line + "\n")
+                    self._stream.flush()
+                    self._unflushed_lines.clear()
             if self._stream:
                 self._stream.close()
                 self._stream = None

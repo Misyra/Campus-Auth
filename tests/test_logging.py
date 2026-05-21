@@ -3,16 +3,194 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
+import threading
+import time
 from pathlib import Path
 
 from src.utils.logging import (
     ColoredFormatter,
     SideFilter,
+    _DateRotatingFileHandler,
     _normalize_level,
     _level_value,
     LogConfigCenter,
     cleanup_debug_screenshots,
 )
+
+
+class TestDateRotatingFileHandlerFlush:
+    """Tests for buffered flush behavior: count threshold (10) and time threshold (5s)."""
+
+    def _make_handler(self, log_dir: str) -> _DateRotatingFileHandler:
+        """Create a handler with a simple formatter."""
+        formatter = logging.Formatter("%(message)s")
+        return _DateRotatingFileHandler(
+            log_dir=log_dir,
+            retention_days=7,
+            level=logging.DEBUG,
+            formatter=formatter,
+        )
+
+    def _make_record(self, msg: str) -> logging.LogRecord:
+        """Create a minimal LogRecord."""
+        return logging.LogRecord(
+            name="test", level=logging.INFO, pathname="", lineno=0,
+            msg=msg, args=(), exc_info=None,
+        )
+
+    def test_write_9_lines_no_flush(self):
+        """Writing 9 log lines should NOT flush to disk."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            handler = self._make_handler(tmpdir)
+            log_path = os.path.join(tmpdir, f"{time.strftime('%Y-%m-%d')}.log")
+
+            for i in range(9):
+                handler.emit(self._make_record(f"line {i}"))
+
+            # File should not exist yet (no flush happened)
+            assert not os.path.exists(log_path), \
+                "Expected no file after 9 writes (below flush threshold)"
+
+            handler.close()
+
+    def test_write_10_lines_triggers_flush(self):
+        """Writing the 10th log line should trigger flush to disk."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            handler = self._make_handler(tmpdir)
+            log_path = os.path.join(tmpdir, f"{time.strftime('%Y-%m-%d')}.log")
+
+            for i in range(10):
+                handler.emit(self._make_record(f"line {i}"))
+
+            # File should exist after 10th write
+            assert os.path.exists(log_path), \
+                "Expected file after 10 writes (flush threshold reached)"
+
+            content = Path(log_path).read_text(encoding="utf-8")
+            lines = [line for line in content.strip().splitlines() if line]
+            assert len(lines) == 10, f"Expected 10 lines, got {len(lines)}"
+            for i in range(10):
+                assert f"line {i}" in lines[i], f"Line {i} mismatch: {lines[i]}"
+
+            handler.close()
+
+    def test_time_threshold_triggers_flush(self):
+        """Writing after 5+ seconds should trigger flush even with few lines."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            handler = self._make_handler(tmpdir)
+            log_path = os.path.join(tmpdir, f"{time.strftime('%Y-%m-%d')}.log")
+
+            # Write 3 lines
+            for i in range(3):
+                handler.emit(self._make_record(f"line {i}"))
+
+            # File should not exist yet
+            assert not os.path.exists(log_path), \
+                "Expected no file after 3 writes"
+
+            # Wait for time threshold to pass (>5 seconds)
+            time.sleep(6)
+
+            # Write 4th line - should trigger time-based flush
+            handler.emit(self._make_record("line 3"))
+
+            # File should now exist
+            assert os.path.exists(log_path), \
+                "Expected file after time threshold exceeded"
+
+            content = Path(log_path).read_text(encoding="utf-8")
+            lines = [line for line in content.strip().splitlines() if line]
+            assert len(lines) == 4, f"Expected 4 lines, got {len(lines)}"
+
+            handler.close()
+
+    def test_close_flushes_remaining_buffer(self):
+        """close() should flush any remaining buffered content."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            handler = self._make_handler(tmpdir)
+            log_path = os.path.join(tmpdir, f"{time.strftime('%Y-%m-%d')}.log")
+
+            # Write only 3 lines (below count threshold, within time threshold)
+            for i in range(3):
+                handler.emit(self._make_record(f"line {i}"))
+
+            assert not os.path.exists(log_path), \
+                "Expected no file before close"
+
+            # Close should flush remaining buffer
+            handler.close()
+
+            assert os.path.exists(log_path), \
+                "Expected file after close() flushes buffer"
+
+            content = Path(log_path).read_text(encoding="utf-8")
+            lines = [line for line in content.strip().splitlines() if line]
+            assert len(lines) == 3, f"Expected 3 lines after close, got {len(lines)}"
+
+    def test_concurrent_writes_no_data_loss(self):
+        """Multiple threads writing concurrently should not lose data."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            handler = self._make_handler(tmpdir)
+            log_path = os.path.join(tmpdir, f"{time.strftime('%Y-%m-%d')}.log")
+
+            num_threads = 5
+            lines_per_thread = 10
+            total_lines = num_threads * lines_per_thread
+
+            def writer(thread_id: int):
+                for i in range(lines_per_thread):
+                    handler.emit(self._make_record(f"t{thread_id}-line{i}"))
+
+            threads = [threading.Thread(target=writer, args=(tid,)) for tid in range(num_threads)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+            handler.close()
+
+            assert os.path.exists(log_path), "Expected file after concurrent writes"
+
+            content = Path(log_path).read_text(encoding="utf-8")
+            lines = [line for line in content.strip().splitlines() if line]
+            assert len(lines) == total_lines, \
+                f"Expected {total_lines} lines, got {len(lines)}"
+
+            # Verify all threads' lines are present
+            for tid in range(num_threads):
+                thread_lines = [line for line in lines if f"t{tid}-" in line]
+                assert len(thread_lines) == lines_per_thread, \
+                    f"Thread {tid} lost data: expected {lines_per_thread}, got {len(thread_lines)}"
+
+    def test_flush_resets_count_and_timer(self):
+        """After flush, count and timer should reset, requiring another 10 lines or 5s."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            handler = self._make_handler(tmpdir)
+            log_path = os.path.join(tmpdir, f"{time.strftime('%Y-%m-%d')}.log")
+
+            # Write 10 lines -> triggers flush
+            for i in range(10):
+                handler.emit(self._make_record(f"batch1-line{i}"))
+
+            assert os.path.exists(log_path)
+            content1 = Path(log_path).read_text(encoding="utf-8")
+            lines1 = [line for line in content1.strip().splitlines() if line]
+            assert len(lines1) == 10
+
+            # Write 5 more lines -> should NOT flush yet (below threshold, within time)
+            for i in range(5):
+                handler.emit(self._make_record(f"batch2-line{i}"))
+
+            # Read file again - should still have only 10 lines
+            content2 = Path(log_path).read_text(encoding="utf-8")
+            lines2 = [line for line in content2.strip().splitlines() if line]
+            assert len(lines2) == 10, \
+                f"Expected 10 lines (no new flush), got {len(lines2)}"
+
+            handler.close()
+
+
+# ==================== Original tests (restored) ====================
 
 
 class TestNormalizeLevel:
