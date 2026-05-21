@@ -244,6 +244,27 @@ def test_task_config_to_dict_compact() -> None:
     assert d["steps"][0]["id"] == "s1"
 
 
+def test_task_config_reveal_hidden_roundtrip() -> None:
+    """测试 reveal_hidden 序列化与反序列化往返"""
+    # False 应被保留
+    config_false = TaskConfig(name="test", url="http://x", steps=[], reveal_hidden=False)
+    d = config_false.to_dict()
+    assert d["reveal_hidden"] is False
+
+    # True 应被保留
+    config_true = TaskConfig(name="test", url="http://x", steps=[], reveal_hidden=True)
+    d2 = config_true.to_dict()
+    assert d2["reveal_hidden"] is True
+
+    # 往返: False 保存后重新加载仍为 False
+    restored = TaskConfig.from_dict(config_false.to_dict())
+    assert restored.reveal_hidden is False
+
+    # 往返: True 保存后重新加载仍为 True
+    restored2 = TaskConfig.from_dict(config_true.to_dict())
+    assert restored2.reveal_hidden is True
+
+
 def test_task_manager_list_tasks_returns_fields(tmp_path: Path) -> None:
     """测试 list_tasks 返回正确的字段"""
     tasks_dir = tmp_path / "tasks"

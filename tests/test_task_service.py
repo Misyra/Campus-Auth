@@ -29,6 +29,21 @@ class TestCheckDangerousSteps:
         warnings = _check_dangerous_steps(task)
         assert len(warnings[0]["code"]) <= 2000
 
+    def test_legacy_code_field_detected(self):
+        """Legacy 'code' field (pre-normalization) should also trigger warnings."""
+        task = {"steps": [{"type": "eval", "code": "alert(1)"}]}
+        warnings = _check_dangerous_steps(task)
+        assert len(warnings) == 1
+        assert warnings[0]["step_type"] == "eval"
+        assert "alert(1)" in warnings[0]["code"]
+
+    def test_legacy_code_field_in_extra(self):
+        """Legacy 'code' field inside 'extra' should also trigger warnings."""
+        task = {"steps": [{"type": "eval", "extra": {"code": "alert(2)"}}]}
+        warnings = _check_dangerous_steps(task)
+        assert len(warnings) == 1
+        assert "alert(2)" in warnings[0]["code"]
+
 
 class TestTaskService:
 
