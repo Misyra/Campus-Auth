@@ -147,6 +147,9 @@ Write-Info "清理缓存文件..."
 Get-ChildItem -Path $StageDir -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force
 Get-ChildItem -Path $StageDir -Recurse -File -Filter "*.pyc" | Remove-Item -Force
 
+# 清理所有 AGENTS.md 文件
+Get-ChildItem -Path $StageDir -Recurse -File -Filter "AGENTS.md" | Remove-Item -Force
+
 if ($ResolvedExePath) {
     Copy-Item -Path $ResolvedExePath -Destination (Join-Path $StageDir "Campus-Auth-Setup.exe") -Force
 }
