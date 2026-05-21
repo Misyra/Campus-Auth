@@ -231,11 +231,23 @@ def _run_login_then_exit(config: dict, logger) -> None:
         message = ""
         try:
             loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             try:
                 success, message = loop.run_until_complete(
                     handler.attempt_login(skip_pause_check=True)
                 )
             finally:
+                # 取消待处理任务，避免 loop.close() 因未完成任务而报错
+                pending = asyncio.all_tasks(loop)
+                for task in pending:
+                    task.cancel()
+                if pending:
+                    try:
+                        loop.run_until_complete(
+                            asyncio.gather(*pending, return_exceptions=True)
+                        )
+                    except Exception:
+                        pass
                 loop.close()
         except Exception as exc:
             message = f"登录异常: {exc}"
@@ -281,6 +293,11 @@ def _run_server(no_browser: bool = False, tray: bool = False, no_auto: bool = Fa
 
     def _signal_handler(signum, _frame):
         print("\n收到停止信号，正在关闭...")
+        try:
+            from backend.main import service
+            service.stop_monitoring()
+        except Exception:
+            pass
         _cleanup_pid()
         sys.exit(0)
 

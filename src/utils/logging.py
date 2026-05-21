@@ -138,12 +138,13 @@ class _DateRotatingFileHandler(logging.Handler):
 
     def _open_file(self, path: str) -> None:
         os.makedirs(self._log_dir, exist_ok=True)
+        new_stream = open(path, "a", encoding="utf-8")
         if self._stream:
             try:
                 self._stream.close()
             except Exception:
                 pass
-        self._stream = open(path, "a", encoding="utf-8")
+        self._stream = new_stream
 
     def emit(self, record: logging.LogRecord) -> None:
         with self._emit_lock:
@@ -165,6 +166,12 @@ class _DateRotatingFileHandler(logging.Handler):
                                 f.unlink()
                         except OSError:
                             pass
+
+                if self._stream is None:
+                    try:
+                        self._open_file(self._get_log_path())
+                    except Exception:
+                        pass
 
                 if self._stream:
                     msg = self.format(record)
