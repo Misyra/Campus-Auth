@@ -126,6 +126,7 @@
             <li><code>navigate</code> - 打开网页（已废弃，请使用 url 字段）</li>
             <li><code>input</code> - 输入文本</li>
             <li><code>click</code> - 点击元素</li>
+            <li><code>click_select</code> - 点击并选择（点击元素后从弹出菜单中选择）</li>
             <li><code>select</code> - 选择下拉框</li>
             <li><code>wait</code> - 等待元素出现</li>
             <li><code>wait_url</code> - 等待URL匹配</li>
@@ -140,21 +141,22 @@
           </ul>
           <h4>可用变量</h4>
           <ul>
-            <li><code v-pre>{{username}}</code> - 用户名</li>
-            <li><code v-pre>{{password}}</code> - 密码</li>
-            <li><code v-pre>{{isp}}</code> - 运营商后缀</li>
-            <li><code v-pre>{{url}}</code> - 认证地址</li>
+            <li><code v-pre>{{USERNAME}}</code> / <code v-pre>{{username}}</code> - 用户名（系统变量 / 需 variables 映射）</li>
+            <li><code v-pre>{{PASSWORD}}</code> / <code v-pre>{{password}}</code> - 密码（系统变量 / 需 variables 映射）</li>
+            <li><code v-pre>{{ISP}}</code> / <code v-pre>{{isp}}</code> - 运营商后缀（系统变量 / 需 variables 映射）</li>
+            <li><code v-pre>{{LOGIN_URL}}</code> / <code v-pre>{{url}}</code> - 认证地址（系统变量 / 需 variables 映射）</li>
           </ul>
           <h4>示例</h4>
           <pre v-pre>{
-"steps": [
-  {
-    "type": "input",
-    "selector": "#username",
-    "value": "{{username}}{{isp}}",
-    "description": "输入用户名"
-  }
-]
+  "variables": {"username": "{{USERNAME}}", "isp": "{{ISP}}"},
+  "steps": [
+    {
+      "type": "input",
+      "selector": "#username",
+      "value": "{{username}}",
+      "description": "输入用户名"
+    }
+  ]
 }</pre>
         </div>
       </div>

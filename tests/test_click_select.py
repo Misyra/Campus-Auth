@@ -240,3 +240,115 @@ class TestClickSelectExecutePassesCtx:
             assert not click_option_called
 
         asyncio.run(_run())
+
+    def test_execute_trigger_not_found_required_true_returns_fail(self):
+        """required=True: trigger not found returns (False, error_msg)."""
+        async def _run():
+            handler = ClickSelectHandler()
+            mock_page = MagicMock()
+            mock_ctx = MagicMock()
+
+            handler._resolve_frame = AsyncMock(return_value=mock_ctx)
+            handler._find_element = AsyncMock(return_value=None)
+
+            step = StepConfig(
+                id="s1",
+                type=StepType.CLICK_SELECT,
+                selector="#nonexistent",
+                value="mobile",
+                required=True,
+            )
+            resolver = _make_resolver()
+
+            success, msg = await handler.execute(mock_page, step, resolver)
+
+            assert success is False
+            assert "触发器" in msg or "未找到" in msg
+
+        asyncio.run(_run())
+
+    def test_execute_trigger_not_found_required_false_returns_ok(self):
+        """required=False (default): trigger not found returns (True, '')."""
+        async def _run():
+            handler = ClickSelectHandler()
+            mock_page = MagicMock()
+            mock_ctx = MagicMock()
+
+            handler._resolve_frame = AsyncMock(return_value=mock_ctx)
+            handler._find_element = AsyncMock(return_value=None)
+
+            step = StepConfig(
+                id="s1",
+                type=StepType.CLICK_SELECT,
+                selector="#nonexistent",
+                value="mobile",
+                required=False,
+            )
+            resolver = _make_resolver()
+
+            success, msg = await handler.execute(mock_page, step, resolver)
+
+            assert success is True
+            assert msg == ""
+
+        asyncio.run(_run())
+
+    def test_execute_option_not_found_required_true_returns_fail(self):
+        """required=True: trigger found but option not found returns (False, error_msg)."""
+        async def _run():
+            handler = ClickSelectHandler()
+            mock_page = MagicMock()
+            mock_page.wait_for_timeout = AsyncMock()
+            mock_ctx = MagicMock()
+
+            handler._resolve_frame = AsyncMock(return_value=mock_ctx)
+            mock_trigger = MagicMock()
+            mock_trigger.click = AsyncMock()
+            handler._find_element = AsyncMock(return_value=mock_trigger)
+            handler._click_option = AsyncMock(return_value=False)
+
+            step = StepConfig(
+                id="s1",
+                type=StepType.CLICK_SELECT,
+                selector="#trigger",
+                value="missing-option",
+                required=True,
+            )
+            resolver = _make_resolver()
+
+            success, msg = await handler.execute(mock_page, step, resolver)
+
+            assert success is False
+            assert "选项" in msg or "未匹配" in msg
+
+        asyncio.run(_run())
+
+    def test_execute_option_not_found_required_false_returns_ok(self):
+        """required=False: trigger found but option not found returns (True, '')."""
+        async def _run():
+            handler = ClickSelectHandler()
+            mock_page = MagicMock()
+            mock_page.wait_for_timeout = AsyncMock()
+            mock_ctx = MagicMock()
+
+            handler._resolve_frame = AsyncMock(return_value=mock_ctx)
+            mock_trigger = MagicMock()
+            mock_trigger.click = AsyncMock()
+            handler._find_element = AsyncMock(return_value=mock_trigger)
+            handler._click_option = AsyncMock(return_value=False)
+
+            step = StepConfig(
+                id="s1",
+                type=StepType.CLICK_SELECT,
+                selector="#trigger",
+                value="missing-option",
+                required=False,
+            )
+            resolver = _make_resolver()
+
+            success, msg = await handler.execute(mock_page, step, resolver)
+
+            assert success is True
+            assert msg == ""
+
+        asyncio.run(_run())

@@ -18,6 +18,7 @@ from src.monitor_core import NetworkMonitorCore
 from src.network_test import is_network_available
 from src.utils import ConfigValidator
 from src.utils.logging import get_logger
+from src.utils.login import SCREENSHOT_URL_PATTERN
 
 from .config_service import build_runtime_config, load_runtime_config, load_ui_config
 from .profile_service import ProfileService
@@ -362,7 +363,7 @@ class MonitorService:
         if success:
             service_logger.info("Manual login succeeded")
             return True, f"手动登录成功：{message}"
-        log_msg = re.sub(r"\s*截图[:：]\s*/\S+\.(?:png|jpg|jpeg|webp|gif)", "", message)
+        log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
         service_logger.warning("Manual login failed: %s", log_msg)
         return False, f"手动登录失败：{message}"
 

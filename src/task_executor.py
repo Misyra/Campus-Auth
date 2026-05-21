@@ -111,6 +111,7 @@ class StepConfig:
     path: str | None = None
     duration: int = 1000  # sleep duration in ms
     frame: str | None = None  # frame 选择器（URL、name 或 CSS 选择器）
+    required: bool = False  # 当为 True 时，元素/选项未找到则返回失败
     # 扩展参数
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -129,6 +130,7 @@ class StepConfig:
         "path": None,
         "duration": 1000,
         "frame": None,
+        "required": False,
         "extra": {},
     }
 
@@ -197,6 +199,7 @@ class TaskConfig:
         default_factory=dict
     )  # 用户自定义元数据，执行器不使用
     reveal_hidden: bool = True  # 执行前默认显示所有隐藏输入框
+    step_delay: float = 1.0
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TaskConfig:
@@ -212,6 +215,7 @@ class TaskConfig:
             on_failure=data.get("on_failure", {}),
             metadata=data.get("metadata", {}),
             reveal_hidden=data.get("reveal_hidden", True),
+            step_delay=float(data.get("step_delay", 1.0)),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -322,6 +326,7 @@ class VariableResolver:
             resolved = self.resolve(match.group(0))
             # If variable not found, resolve returns the original pattern
             if resolved == match.group(0):
+                logger.warning("[VariableResolver] 未解析的变量: %s", match.group(0))
                 return '""'  # Default to empty string
             return json.dumps(resolved)
 
@@ -567,11 +572,15 @@ class SelectHandler(StepHandler):
         element = await self._find_element(ctx, selector, timeout)
         if not element:
             logger.info(f"[select] 未找到选择元素，跳过: {selector}")
+            if step.required:
+                return False, f"选择元素未找到: {selector}"
             return True, ""
 
         selected = await self._select_with_fallback(element, value, timeout)
         if not selected:
             logger.info(f"[select] 未匹配到运营商选项，跳过: {value}")
+            if step.required:
+                return False, f"选择选项未匹配: {value}"
         return True, ""
 
     async def _select_with_fallback(self, element, value: str, timeout: int) -> bool:
@@ -597,7 +606,7 @@ class SelectHandler(StepHandler):
             if not current:
                 continue
             normalized = current.lower()
-            if normalized_target in normalized or normalized in normalized_target:
+            if normalized_target == normalized or normalized_target in normalized:
                 try:
                     result = await element.select_option(label=current, timeout=timeout)
                     if result:
@@ -641,6 +650,8 @@ class ClickSelectHandler(StepHandler):
         trigger = await self._find_element(ctx, selector, timeout)
         if not trigger:
             logger.info("[click_select] 未找到触发器，跳过: %s", selector)
+            if step.required:
+                return False, f"click_select 触发器未找到: {selector}"
             return True, ""
 
         await trigger.click(timeout=timeout)
@@ -649,6 +660,8 @@ class ClickSelectHandler(StepHandler):
         clicked = await self._click_option(ctx, value, option_selector, timeout)
         if not clicked:
             logger.info("[click_select] 未匹配到选项，跳过: %s", value)
+            if step.required:
+                return False, f"click_select 选项未匹配: {value}"
         return True, ""
 
     async def _click_option(
@@ -661,7 +674,7 @@ class ClickSelectHandler(StepHandler):
                 option = container.get_by_text(text, exact=False).first
             else:
                 option = ctx.get_by_text(text, exact=False).first
-            await option.wait_for(state="visible", timeout=min(timeout, 3000))
+            await option.wait_for(state="visible", timeout=timeout)
             await option.click(timeout=timeout)
             logger.info("[click_select] 点击选项: %s", text)
             return True
@@ -1099,7 +1112,7 @@ class TaskExecutor:
                     )
                     continue
                 if i > 0:
-                    await asyncio.sleep(1.0)  # 步骤间强制间隔 1s
+                    await asyncio.sleep(self.config.step_delay)
                 step_start = _time.perf_counter()
                 success, message = await self._execute_step(page, step)
                 step_elapsed = (_time.perf_counter() - step_start) * 1000
