@@ -8,6 +8,7 @@ import os
 import re
 import sys
 import time
+from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -91,6 +92,7 @@ async def lifespan(app_instance):
         startup_logger.warning("配置迁移失败: %s", exc)
 
     service.boot()
+    _cleanup_old_backups()
     startup_logger.info(
         "FastAPI 启动: 完成，耗时 %.3fs",
         asyncio.get_running_loop().time() - start,
@@ -108,6 +110,8 @@ async def lifespan(app_instance):
         pass
     service.stop_monitoring()
     startup_logger.info("监控服务已停止")
+    await ws_manager.close_all()
+    startup_logger.info("WebSocket 连接已关闭")
 
 
 app = FastAPI(
@@ -300,7 +304,7 @@ def _debug_response() -> dict:
         "current_step": _debug["current_step"],
         "total_steps": len(_debug["steps"]),
         "steps": _debug["steps"],
-        "results": _debug["results"],
+        "results": list(_debug["results"]),
         "screenshot_url": _debug["screenshot_url"],
     }
 
@@ -717,10 +721,6 @@ def toggle_safe_mode() -> dict:
 @app.post("/api/debug/start")
 async def debug_start(request: Request) -> dict:
     global _debug
-    async with _debug_lock:
-        if _debug["session"]:
-            await _debug["session"].close()
-
     body = await request.json()
     task_id = body.get("task_id", "")
     if not task_id:
@@ -743,10 +743,11 @@ async def debug_start(request: Request) -> dict:
     for k, v in env_vars.items():
         url = url.replace("{{" + k + "}}", v)
 
+    # 创建并启动会话（在锁外执行，失败时自动清理）
     session = DebugSession()
-    await session.start(runtime_config, url if url else None, safe_mode=service.safe_mode)
-
     try:
+        await session.start(runtime_config, url if url else None, safe_mode=service.safe_mode)
+
         steps_info = [
             {
                 "index": i,
@@ -762,18 +763,20 @@ async def debug_start(request: Request) -> dict:
         browser_timeout = runtime_config.get("browser_settings", {}).get("timeout", 10000)
         executor = TaskExecutor(task, env_vars, screenshot_dir=TEMP_DIR, default_timeout=browser_timeout)
 
+        # 所有资源就绪后，在锁内更新 _debug
         async with _debug_lock:
+            if _debug["session"]:
+                await _debug["session"].close()
             _debug = {
                 "session": session,
                 "task_id": task_id,
                 "executor": executor,
                 "current_step": 0,
                 "steps": steps_info,
-                "results": [],
+                "results": deque(maxlen=1000),
                 "screenshot_url": None,
                 "running": True,
             }
-
             _debug["screenshot_url"] = await _take_debug_screenshot(session.page)
     except Exception:
         await session.close()
@@ -1018,7 +1021,7 @@ def shutdown_server() -> ActionResponse:
         except Exception:
             pass
 
-    def _force_exit_after_timeout(timeout_seconds=3):
+    def _force_exit_after_timeout(timeout_seconds=1):
         time.sleep(timeout_seconds)
         os._exit(0)
 
@@ -1094,6 +1097,17 @@ def uninstall_perform(payload: dict) -> dict:
 
 _BACKUP_DIR = PROJECT_ROOT / "backups"
 _BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+MAX_BACKUPS = 20
+
+
+def _cleanup_old_backups(max_backups: int = MAX_BACKUPS) -> None:
+    """清理旧备份，仅保留最新的 max_backups 个文件"""
+    backups = sorted(_BACKUP_DIR.glob("settings_*.json"), reverse=True)
+    for old in backups[max_backups:]:
+        try:
+            old.unlink()
+        except OSError:
+            pass
 
 
 @app.get("/api/backup/list")
@@ -1122,6 +1136,7 @@ def create_backup() -> ActionResponse:
 
     try:
         backup_path.write_bytes(settings_path.read_bytes())
+        _cleanup_old_backups()
         api_logger.info("备份已创建: %s", backup_path.name)
         return ActionResponse(success=True, message=f"备份已创建: {backup_path.name}")
     except Exception as exc:
@@ -1167,6 +1182,7 @@ def restore_backup(filename: str) -> ActionResponse:
         # 清除 ProfileService 缓存，强制从磁盘重新读取
         profile_service.invalidate_cache()
         service.reload_config()
+        _cleanup_old_backups()
         api_logger.info("配置已从备份恢复: %s", filename)
         return ActionResponse(success=True, message="配置已从备份恢复，请刷新页面查看")
     except Exception as exc:
