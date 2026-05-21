@@ -346,6 +346,9 @@ _debug: dict = {
     "results": [],
     "screenshot_url": None,
     "running": False,
+    "_last_activity": 0.0,
+    "_debug_gen": 0,
+    "_timer_task": None,
 }
 _debug_lock = asyncio.Lock()
 _debug_exec_sem = asyncio.Semaphore(1)
@@ -367,6 +370,37 @@ def _require_debug_session():
     if not _debug["session"] or not _debug["running"]:
         raise HTTPException(status_code=400, detail="没有活跃的调试会话")
     return _debug["session"], _debug["executor"], _debug["session"].page
+
+
+async def _debug_timeout_watcher(gen: int, *, timeout_seconds: float = 1800.0) -> None:
+    """监控调试会话超时，超过 timeout_seconds 无操作则关闭浏览器。"""
+    check_interval = min(60, timeout_seconds / 10)
+    try:
+        while True:
+            await asyncio.sleep(check_interval)
+            if gen != _debug["_debug_gen"]:
+                return
+            if time.monotonic() - _debug["_last_activity"] > timeout_seconds:
+                async with _debug_lock:
+                    if gen != _debug["_debug_gen"]:
+                        return
+                    api_logger.info(
+                        "调试会话超时（%ds 无操作），正在关闭浏览器",
+                        timeout_seconds,
+                    )
+                    if _debug["session"]:
+                        await _debug["session"].close()
+                    _debug["session"] = None
+                    _debug["running"] = False
+                    _debug["executor"] = None
+                    _debug["current_step"] = 0
+                    _debug["steps"] = []
+                    _debug["results"] = []
+                    _debug["screenshot_url"] = None
+                    _debug["_timer_task"] = None
+                    _debug["_last_activity"] = 0.0
+    except asyncio.CancelledError:
+        pass
 
 
 async def _take_debug_screenshot(page, step_label: str = "") -> str | None:
@@ -821,6 +855,13 @@ async def debug_start(request: Request) -> dict:
         async with _debug_lock:
             if _debug["session"]:
                 await _debug["session"].close()
+            if _debug["_timer_task"] and not _debug["_timer_task"].done():
+                _debug["_timer_task"].cancel()
+                try:
+                    await _debug["_timer_task"]
+                except asyncio.CancelledError:
+                    pass
+            gen = _debug["_debug_gen"] + 1
             _debug = {
                 "session": session,
                 "task_id": task_id,
@@ -830,7 +871,13 @@ async def debug_start(request: Request) -> dict:
                 "results": deque(maxlen=1000),
                 "screenshot_url": None,
                 "running": True,
+                "_last_activity": time.monotonic(),
+                "_debug_gen": gen,
+                "_timer_task": None,
             }
+            _debug["_timer_task"] = asyncio.create_task(
+                _debug_timeout_watcher(gen)
+            )
             _debug["screenshot_url"] = await _take_debug_screenshot(session.page)
     except Exception:
         await session.close()
@@ -856,6 +903,7 @@ async def debug_next() -> dict:
             _debug["results"].append(result)
             _debug["screenshot_url"] = result.get("screenshot_url")
             _debug["current_step"] = idx + 1
+            _debug["_last_activity"] = time.monotonic()
             return _debug_response()
 
 
@@ -874,6 +922,7 @@ async def debug_run_all() -> dict:
         async with _debug_lock:
             _debug["results"].extend(agg["results"])
             _debug["current_step"] = len(_debug["steps"])
+            _debug["_last_activity"] = time.monotonic()
 
             if agg["results"]:
                 _debug["screenshot_url"] = agg["results"][-1].get("screenshot_url")
@@ -886,12 +935,20 @@ async def debug_stop() -> dict:
     global _debug
     async with _debug_exec_sem:
         async with _debug_lock:
+            timer = _debug.get("_timer_task")
+            if timer and not timer.done():
+                timer.cancel()
+                try:
+                    await timer
+                except asyncio.CancelledError:
+                    pass
             if _debug["session"]:
                 await _debug["session"].close()
             _debug = {
                 "session": None, "task_id": None, "executor": None,
                 "current_step": 0, "steps": [], "results": [],
                 "screenshot_url": None, "running": False,
+                "_last_activity": 0.0, "_debug_gen": 0, "_timer_task": None,
             }
     # 清理临时调试截图
     try:
