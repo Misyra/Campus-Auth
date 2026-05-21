@@ -2477,7 +2477,6 @@
             <tr><td style="padding:3px 6px;">🔍 智能检测</td><td style="padding:3px 6px;">打字自动识别账号/密码，点击自动识别勾选/提交/下拉框/图片等</td><td style="padding:3px 6px;">自动分类为对应步骤类型</td></tr>
             <tr><td style="padding:3px 6px;">👆 点击元素</td><td style="padding:3px 6px;">点击任意元素</td><td style="padding:3px 6px;"><code>click</code> 步骤</td></tr>
             <tr><td style="padding:3px 6px;">⏳ 等待元素</td><td style="padding:3px 6px;">等待某元素出现</td><td style="padding:3px 6px;"><code>wait</code> 步骤</td></tr>
-            <tr><td style="padding:3px 6px;">🔎 检测变动</td><td style="padding:3px 6px;">检测页面元素变化（动态出现/消失/内容变更）</td><td style="padding:3px 6px;"><code>wait</code> / <code>eval</code> 步骤</td></tr>
             <tr><td style="padding:3px 6px;">⚙️ 执行JS</td><td style="padding:3px 6px;">输入 JS 代码</td><td style="padding:3px 6px;"><code>eval</code> 步骤</td></tr>
             <tr><td style="padding:3px 6px;">📝 自定义</td><td style="padding:3px 6px;">自定义描述与选择器</td><td style="padding:3px 6px;">通用步骤</td></tr>
             <tr><td style="padding:3px 6px;">⏳ 延时等待</td><td style="padding:3px 6px;">页面不操作仅等待指定时间</td><td style="padding:3px 6px;"><code>sleep</code> 步骤</td></tr>
@@ -2488,7 +2487,7 @@
           <h5 style="color:#667eea;margin:14px 0 6px;">四、功能开关</h5>
           <ul style="margin:4px 0;padding-left:18px;">
             <li><b style="color:#fff;">🔁 多步录制</b> — 开启后每次点击/Enter 记录一步，不会自动停止，适合连续录制多个步骤。关闭后每次只记录一步。</li>
-            <li><b style="color:#fff;">🔍 隐藏检测</b> — 开启后，当点击容器 <code>div</code> 或 <code>readonly</code> 占位元素时，自动扫描内部 <code>display:none</code> 的隐藏输入框（常见于深澜/Sangfor 和杭州康工 HK Posi 认证页面）。检测到后导出自动使用真实隐藏输入框 + <code>force</code> 模式。</li>
+            <li><b style="color:#fff;">🔍 隐藏检测</b> — 开启后，当点击容器 <code>div</code> 或 <code>readonly</code> 占位元素时，自动扫描内部 <code>display:none</code> 的隐藏输入框（常见于深澜/Sangfor 和杭州康工 HK Posi 认证页面）。检测到后导出自动在任务 JSON 顶层添加 <code>"reveal_hidden": true</code>，执行器会自动显示所有隐藏输入框。</li>
           </ul>
 
           <h5 style="color:#667eea;margin:14px 0 6px;">五、键盘快捷键</h5>
@@ -2523,7 +2522,7 @@
             <li>点「账号输入框」→ 点页面上账号占位区域（div 容器或 readonly tip）</li>
             <li>录制器自动检测隐藏的真实输入框，列表中显示 ⚠️ 标记</li>
             <li>点「密码输入框」→ 同样操作</li>
-            <li>录制器自动检测隐藏的真实输入框，提示词中会包含 force 模式和隐藏输入框信息</li>
+            <li>录制器自动检测隐藏的真实输入框，提示词中会包含 reveal_hidden 配置和隐藏输入框信息</li>
           </ol>
 
           <!-- 场景 D 已移除：原「完成登录」+ 框选模式已被 AI 提示词方式取代 -->
