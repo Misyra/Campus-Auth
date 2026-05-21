@@ -60,6 +60,7 @@ class NetworkMonitorCore:
 
         self._stop_requested = False
         self._cancel_login = threading.Event()
+        self._stop_event = threading.Event()
         self._test_sites_cache: Optional[list[tuple[str, int]]] = None
         self.logger = setup_logger("monitor", self.config.get("logging", {}))
 
@@ -156,12 +157,14 @@ class NetworkMonitorCore:
 
         self._stop_requested = True
         self._cancel_login.set()
+        self._stop_event.set()
         was_monitoring = self.monitoring
         self.monitoring = False
 
         # 关闭登录浏览器
         if self._login_handler:
             loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             try:
                 loop.run_until_complete(self._login_handler.close_browser())
             finally:
@@ -180,7 +183,8 @@ class NetworkMonitorCore:
     def _wait_interruptible(self, seconds: int, step: int = 5) -> bool:
         remaining = max(0, seconds)
         while self.monitoring and remaining > 0:
-            time.sleep(min(step, remaining))
+            if self._stop_event.wait(timeout=min(step, remaining)):
+                return False
             remaining -= step
         return self.monitoring
 
@@ -445,6 +449,7 @@ class NetworkMonitorCore:
 
             handler = self._login_handler
             loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             try:
                 success, message = loop.run_until_complete(
                     handler.attempt_login(
@@ -452,7 +457,7 @@ class NetworkMonitorCore:
                     )
                 )
             finally:
-                pending = asyncio.all_tasks(loop)
+                pending = asyncio.all_tasks()
                 if pending:
                     loop.run_until_complete(asyncio.gather(*pending))
                 loop.close()

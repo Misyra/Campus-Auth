@@ -10,6 +10,7 @@ from typing import Tuple
 
 from .crypto import decrypt_password
 from .logging import get_logger
+from .exceptions import DecryptionError
 
 logger = get_logger("config", side="BACKEND")
 
@@ -34,9 +35,15 @@ class ConfigLoader:
     @staticmethod
     def _load_basic_config() -> dict:
         """加载基础配置（密码自动解密）"""
+        raw_password = os.getenv("PASSWORD", "")
+        try:
+            password = decrypt_password(raw_password)
+        except DecryptionError:
+            logger.warning("环境变量 PASSWORD 解密失败，使用空密码")
+            password = ""
         return {
             "username": os.getenv("USERNAME", ""),
-            "password": decrypt_password(os.getenv("PASSWORD", "")),
+            "password": password,
             "auth_url": os.getenv("LOGIN_URL", ""),
             "isp": os.getenv("ISP", ""),
             "auto_start_monitoring": ConfigLoader._str_to_bool(

@@ -16,6 +16,7 @@ import threading
 from pathlib import Path
 
 from src.utils.logging import get_logger
+from src.utils.exceptions import DecryptionError
 
 logger = get_logger("crypto", side="BACKEND")
 
@@ -126,14 +127,14 @@ def decrypt_password(ciphertext: str) -> str:
         logger.warning("cryptography 库未安装，尝试 Base64 反混淆")
         return _simple_deobfuscate(encrypted_data)
     except Exception:
-        # 解密失败：可能是密钥变更，记录错误并返回空字符串
+        # 解密失败：可能是密钥变更，记录错误并抛出异常
         global _decryption_failed
         _decryption_failed = True
         logger.error(
             "密码解密失败（可能是密钥变更或数据损坏），"
             "请在设置页面重新输入密码"
         )
-        return ""
+        raise DecryptionError("密码解密失败，请重新输入密码")
 
 
 def is_encrypted(value: str) -> bool:
