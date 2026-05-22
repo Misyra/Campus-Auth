@@ -340,7 +340,11 @@ class MonitorService:
         if self.safe_mode:
             runtime_config.setdefault("browser_settings", {})["safe_mode"] = True
 
-        core = NetworkMonitorCore(config=runtime_config, log_callback=self._push_log)
+        core = NetworkMonitorCore(
+            config=runtime_config,
+            log_callback=self._push_log,
+            thread_done=threading.Event(),
+        )
         try:
             success, message = core.attempt_login()
         finally:

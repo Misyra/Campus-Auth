@@ -6,7 +6,6 @@ import logging
 import mimetypes
 import os
 import re
-import sys
 import time
 from collections import deque
 from contextlib import asynccontextmanager
@@ -455,11 +454,13 @@ async def websocket_logs(websocket: WebSocket):
                 msg = json.loads(raw)
                 if msg.get("type") == "frontend_log":
                     d = msg.get("data", {})
-                    service._push_log(
-                        message=f"[{d.get('scope', '?')}] {d.get('message', '')}",
-                        level=d.get("level", "INFO"),
-                        source="frontend",
-                    )
+                    message_text = d.get("message", "")
+                    if message_text:
+                        service._push_log(
+                            message=f"[{d.get('scope', '?')}] {message_text}",
+                            level=d.get("level", "INFO"),
+                            source="frontend",
+                        )
             except (json.JSONDecodeError, KeyError):
                 pass
     except WebSocketDisconnect:
@@ -515,7 +516,7 @@ def _compare_versions(a: str, b: str) -> int:
                 return 1
             if x < y:
                 return -1
-        return len(va) - len(vb)
+        return 1 if len(va) > len(vb) else -1
     except (ValueError, AttributeError):
         return 0
 
@@ -1152,14 +1153,12 @@ def shutdown_server() -> ActionResponse:
 
         _time.sleep(0.5)
 
-        if sys.platform == "win32":
-            _cleanup_pid_file()
-            watchdog = threading.Thread(target=_force_exit_after_timeout, daemon=True)
-            watchdog.start()
-            sys.exit(0)
-        else:
-            import signal as _signal
-            os.kill(os.getpid(), _signal.SIGTERM)
+        _cleanup_pid_file()
+        watchdog = threading.Thread(
+            target=_force_exit_after_timeout, args=(0.5,), daemon=True
+        )
+        watchdog.start()
+        os._exit(0)  # 直接终止整个进程（在 daemon thread 中必须使用 os._exit 而非 sys.exit）
 
     threading.Thread(target=_do_shutdown, daemon=True).start()
 
