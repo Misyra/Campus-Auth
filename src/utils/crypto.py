@@ -163,6 +163,43 @@ def mask_password(value: str) -> str:
     return "•" * min(len(value), 8)
 
 
+def save_password_field(raw: str | None, existing_encrypted: str) -> str:
+    """处理前端提交的密码：掩码保留原值，ENC 原样返回，明文加密存储。
+
+    分支行为：
+    - raw is None （字段未传）→ 静默返回 existing_encrypted（无日志）
+    - raw == ""    （显式传空）→ 返回 existing_encrypted
+      + existing_encrypted 为空 → 警告 + 返回 ""
+      + existing_encrypted 有值 → 保留（无日志）
+    - raw startswith "•" （掩码）→ 同 raw=="" 行为
+    - raw startswith "ENC:" （已是加密值）→ 原样返回，不二次加密
+    - 其他（明文密码） → encrypt_password(raw) 加密后返回
+
+    Args:
+        raw: 前端传来的原始值。None = 未传（静默），"" = 显式置空
+        existing_encrypted: 数据库中已有的加密密码（ENC:xxx 或 ""）
+
+    Returns:
+        加密后的密码字符串（ENC: 前缀）或空字符串
+    """
+    if raw is None:
+        # 未传密码 → 无操作，保留原值。不发警告（合法场景）
+        return existing_encrypted or ""
+    if raw == "" or raw.startswith("•"):
+        # 显式置空或掩码 → 尝试保留已有密码
+        if not existing_encrypted:
+            logger.warning(
+                "密码为空或掩码但无已有加密密码，密码将保持为空！raw=%s",
+                repr(raw[:20]),
+            )
+        return existing_encrypted or ""
+    if raw.startswith("ENC:"):
+        # 已是加密值（来自已保存的方案）→ 原样返回
+        return raw
+    # 明文密码 → 加密存储
+    return encrypt_password(raw)
+
+
 # ==================== 简单回退方案 ====================
 # 当 cryptography 不可用时，使用 base64 混淆（非加密，仅防肉眼）
 

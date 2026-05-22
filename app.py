@@ -211,8 +211,9 @@ def _run_login_then_exit(config: dict, logger) -> None:
         print(f"加载配置失败: {exc}")
         sys.exit(1)
 
-    # login_then_exit 模式最多重试 3 次，避免重试过多影响下次网络检测登录
-    max_retries = min(runtime_config.get("max_retries", 3) or 3, 3)
+    retry_settings = runtime_config.get("retry_settings", {})
+    raw = retry_settings.get("max_retries", 3)
+    max_retries = max(0, min(raw, 10))
     retry_interval = runtime_config.get("retry_interval", 5)
 
     handler = LoginAttemptHandler(runtime_config)

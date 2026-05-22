@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from src.utils.crypto import decrypt_password, encrypt_password, mask_password
+from src.utils.crypto import decrypt_password, mask_password, save_password_field
 from src.utils.logging import get_logger
 from src.utils.exceptions import DecryptionError
 
@@ -22,6 +22,7 @@ config_logger = get_logger("backend.config_service", side="BACKEND")
 def _safe_decrypt(ciphertext: str) -> str:
     """解密密码，失败时返回空字符串并记录警告。"""
     if not ciphertext:
+        config_logger.warning("_safe_decrypt 收到空密码，返回空字符串")
         return ""
     try:
         return decrypt_password(ciphertext)
@@ -146,7 +147,7 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
     """
     data = profile_service.load()
     sys = data.system
-    profile = profile_service.get_active_profile()
+    profile = data.profiles.get(data.active_profile)
     config_logger.debug("加载运行时配置: profile=%s", data.active_profile)
 
     # 账号密码：方案独立 > 全局
@@ -161,7 +162,14 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
             password = _safe_decrypt(raw_pwd)
         elif raw_pwd.startswith("•"):
             # 掩码值，从全局密码解密
-            password = _safe_decrypt(sys.password) if sys.password else ""
+            if sys.password:
+                password = _safe_decrypt(sys.password)
+            else:
+                config_logger.warning(
+                    "方案 '%s' 密码为掩码但全局密码为空，无法解析",
+                    data.active_profile,
+                )
+                password = ""
         elif raw_pwd:
             password = raw_pwd
         else:
@@ -344,15 +352,8 @@ def build_runtime_config(payload: MonitorConfigPayload, sys: SystemSettings | No
 
 
 def _save_password_field(raw: str, existing_encrypted: str) -> str:
-    """处理前端提交的密码：掩码不更新，明文则加密存储"""
-    if not raw or raw.startswith("•"):
-        # 掩码或空值 → 保留已有密码
-        if not existing_encrypted:
-            config_logger.warning(
-                "收到掩码密码但无已有加密密码，密码将保持为空！raw=%s", repr(raw[:20]))
-        return existing_encrypted or ""
-    # 明文密码 → 加密存储
-    return encrypt_password(raw)
+    """处理前端提交的密码：委托给 save_password_field"""
+    return save_password_field(raw, existing_encrypted)
 
 
 

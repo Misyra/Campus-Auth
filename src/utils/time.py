@@ -53,7 +53,7 @@ def get_runtime_stats(start_time: float, check_count: int) -> Tuple[str, str]:
     返回:
         Tuple[str, str]: (运行时间字符串, 统计信息字符串)
     """
-    if start_time:
+    if start_time is not None:
         elapsed = int(datetime.datetime.now().timestamp() - start_time)
         hours = elapsed // 3600
         minutes = (elapsed % 3600) // 60

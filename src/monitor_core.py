@@ -81,6 +81,7 @@ class NetworkMonitorCore:
 
         # 持久化事件循环，避免每次调用 attempt_login / stop_monitoring 重新创建
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._loop_stopped: bool = False  # 标记 loop 已停止，防止并发使用
 
         # 跟踪登录相关任务，避免取消无关任务
         self._login_tasks: set[asyncio.Task] = set()
@@ -199,6 +200,9 @@ class NetworkMonitorCore:
             finally:
                 close_loop.close()
             self._login_handler = None
+
+        # 标记 loop 已停止，防止 attempt_login 并发使用
+        self._loop_stopped = True
 
         # 关闭持久化事件循环
         if self._loop is not None:
@@ -483,6 +487,12 @@ class NetworkMonitorCore:
             f"运营商={isp} "
             f"任务={active_task}"
         )
+
+        # 检查事件循环是否已被 stop_monitoring 关闭
+        if self._loop_stopped:
+            self.log_message("事件循环已关闭，跳过登录", logging.WARNING)
+            return False, "事件循环已关闭"
+
         try:
             # 复用持久化 handler，重试时保留浏览器
             if self._login_handler is None:
@@ -505,6 +515,9 @@ class NetworkMonitorCore:
                         skip_pause_check=True, reuse_browser=self._reuse_browser
                     )
                 )
+            except RuntimeError as e:
+                self.log_message(f"事件循环错误: {e}，跳过登录", logging.WARNING)
+                return False, "事件循环已关闭"
             finally:
                 # Identify tasks created during login execution
                 self._login_tasks = asyncio.all_tasks(self._loop) - _existing_tasks

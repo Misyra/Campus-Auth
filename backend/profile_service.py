@@ -9,7 +9,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from src.utils.crypto import encrypt_password
+from src.utils.crypto import save_password_field
 from src.utils.logging import get_logger
 
 from .schemas import ProfileSettings, ProfilesData, SystemSettings
@@ -436,12 +436,11 @@ class ProfileService:
 
         with self._lock:
             data = self._load_unsafe()
-            if settings.password and not settings.password.startswith("•") and not settings.password.startswith("ENC:"):
-                settings.password = encrypt_password(settings.password)
-            elif settings.password and settings.password.startswith("•"):
-                existing = data.profiles.get(profile_id)
-                if existing and existing.password:
-                    settings.password = existing.password
+            existing = data.profiles.get(profile_id)
+            settings.password = save_password_field(
+                settings.password or "",
+                existing.password if existing else "",
+            )
             data.profiles[profile_id] = settings
 
             if len(data.profiles) == 1:
