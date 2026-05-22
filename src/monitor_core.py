@@ -267,6 +267,79 @@ class NetworkMonitorCore:
         self.login_attempt_count = 0
         return "give_up"
 
+    def _login_recovery_loop(self) -> str:
+        """登录恢复内层循环。
+
+        在外层检测到网络异常后调用，只做登录重试，不做网络检测。
+        使用 is_local_network_connected() 做快速物理连接检查（~10ms）。
+
+        Returns:
+            "login_ok"         — 登录成功，外层应重置计数器
+            "give_up"          — 超过最大重试次数，外层应等待正常检测间隔
+            "break"            — 监控已停止
+            "net_disconnect"   — 物理网络断开，外层应等待正常检测间隔
+
+        Design rationale:
+        方法是独立循环而非内联在 monitor_network() 中的原因：
+        原设计是在 monitor_network() 的单层 while 循环中通过 continue 回绕到
+        循环顶部，导致每次 retry 都重新执行 is_network_available()（TCP 探测
+        耗时 2-8s），使配置的 retry_interval（如 5s）实际被拉长到 12-20s。
+        提取为独立方法后，内层只做快速物理连接检查（is_local_network_connected,
+        ~10ms）+ 登录重试，不做 is_network_available()，确保 retry 间隔准确。
+        """
+        while self.monitoring:
+            # 1. 快速检查物理网络连接（~10ms，非 TCP 探测）
+            if not is_local_network_connected():
+                self.log_message(
+                    "物理网络未连接，停止重试，等待下次检测周期",
+                    logging.WARNING,
+                )
+                self.login_attempt_count = 0
+                self.last_network_ok = False
+                return "net_disconnect"
+
+            # 2. 检查配置方案是否切换（内部有 60s 冷却）
+            self._check_profile_switch()
+
+            # 3. 执行登录
+            login_ok, login_msg = self.attempt_login()
+            time.sleep(2)  # 保持与现有行为一致：等待 2s 后再做重试决策，
+                           # 避免在 Portal 尚未完全更新会话状态时立即重试
+
+            if login_ok:
+                self.login_attempt_count = 0
+                self.last_network_ok = True
+                return "login_ok"
+
+            # 4. 登录失败，记录并判断是否重试
+            self.login_attempt_count += 1
+            self.last_network_ok = False
+            max_retries, _ = self._get_retry_config()
+            self.log_message(
+                f"登录失败 (第{self.login_attempt_count}/{max_retries}次)",
+                logging.ERROR,
+            )
+
+            if self.login_attempt_count == 2:
+                send_notification(
+                    "Campus-Auth 登录失败",
+                    f"自动登录已失败 {self.login_attempt_count} 次，正在重试...",
+                )
+
+            failed_count = self.login_attempt_count
+            action = self._login_retry_or_break()
+            if action == "break":
+                return "break"
+            if action == "give_up":
+                send_notification(
+                    "Campus-Auth 登录失败",
+                    f"连续 {failed_count} 次登录失败，等待下次检测周期",
+                )
+                return "give_up"
+            # action == "retry" → 继续内层循环，不做网络检测
+
+        return "break"
+
     def monitor_network(self) -> None:
         consecutive_failures = 0
 
@@ -332,9 +405,12 @@ class NetworkMonitorCore:
                     logging.WARNING,
                 )
 
-                self._check_profile_switch()
+                # ── 网络异常处理路径 ──
+                # 当 is_network_available() 返回 False 时，先判断物理连接状态。
+                # 如果物理连接正常，则进入 _login_recovery_loop() 内层循环做登录重试；
+                # 如果物理断开，则跳过登录，直接等待下次检测周期。
 
-                # 检查物理网络是否连接，未连接则跳过登录
+                # 检查物理网络是否连接，未连接则跳过登录恢复
                 if not is_local_network_connected():
                     self.log_message(
                         f"[#{self.network_check_count}] 物理网络未连接（WiFi/网线断开），跳过登录，等待下次检测",
@@ -343,56 +419,23 @@ class NetworkMonitorCore:
                     consecutive_failures = 0
                     self.login_attempt_count = 0
                     self.last_network_ok = False
-                    next_check = datetime.datetime.now() + datetime.timedelta(
-                        seconds=interval
-                    )
-                    self.log_message(
-                        f"下次检测: {next_check.strftime('%H:%M:%S')}", logging.DEBUG
-                    )
-                    wait_step = min(
-                        self.MAX_WAIT_STEP_SECONDS,
-                        max(self.MIN_WAIT_STEP_SECONDS, interval // 10),
-                    )
-                    if not self._wait_interruptible(interval, step=wait_step):
-                        break
-                    continue
-
-                login_ok, login_msg = self.attempt_login()
-                time.sleep(2)  # 任务完成后等待 2s 再进行下一次网络检测
-                if login_ok:
-                    # 网络检测已移至 task_executor 内部，登录成功即表示网络已恢复
-                    consecutive_failures = 0
-                    self.login_attempt_count = 0
-                    self.last_network_ok = True
-                    self.log_message(
-                        f"[#{self.network_check_count}] 登录成功，网络已恢复"
-                    )
                 else:
-                    self.login_attempt_count += 1
-                    self.last_network_ok = False
-                    max_retries, _ = self._get_retry_config()
-                    self.log_message(
-                        f"[#{self.network_check_count}] 登录失败 "
-                        f"(第{self.login_attempt_count}/{max_retries}次)",
-                        logging.ERROR,
-                    )
-                    # 第2次失败时发送桌面通知提醒
-                    if self.login_attempt_count == 2:
-                        send_notification(
-                            "Campus-Auth 登录失败",
-                            f"自动登录已失败 {self.login_attempt_count} 次，正在重试...",
+                    # 进入登录恢复内层循环
+                    # 内层不做 is_network_available()，只做快速物理连接检查 + 登录重试
+                    recovery_result = self._login_recovery_loop()
+                    if recovery_result == "login_ok":
+                        consecutive_failures = 0
+                        self.login_attempt_count = 0
+                        self.last_network_ok = True
+                        self.log_message(
+                            f"[#{self.network_check_count}] 登录成功，网络已恢复"
                         )
-                    failed_count = self.login_attempt_count
-                    action = self._login_retry_or_break()
-                    if action == "break":
+                    elif recovery_result == "break":
                         break
-                    if action == "retry":
-                        continue
-                    # "give_up" → fall through to normal interval wait
-                    send_notification(
-                        "Campus-Auth 登录失败",
-                        f"连续 {failed_count} 次登录失败，等待下次检测周期",
-                    )
+                    elif recovery_result == "net_disconnect":
+                        consecutive_failures = 0
+                        # fall through to interval wait
+                    # "give_up" → fall through to interval wait
 
             next_check = datetime.datetime.now() + datetime.timedelta(seconds=interval)
             self.log_message(
