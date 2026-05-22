@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Campus-Auth 任务录制器
 // @namespace    https://github.com/Misyra/Campus-Auth
-// @version      3.6.7
+// @version      3.7.0
 // @description  可视化选取校园网登录页面元素，自动生成任务 JSON 或结构化文档
 // @author       Misyra
 // @match        http://*/*
@@ -909,7 +909,7 @@
         <div style="display:flex;align-items:center;justify-content:space-between;">
           <div>
             <h3>🎬 Campus-Auth 任务录制器</h3>
-            <small>v3.6.7 — 选取元素，生成任务配置</small>
+            <small>v3.7.0 — 选取元素，生成任务配置</small>
           </div>
           <button id="ca-btn-help" style="width:26px;height:26px;border-radius:50%;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;cursor:pointer;font-size:14px;font-weight:bold;line-height:1;" title="使用说明">?</button>
         </div>
@@ -2062,7 +2062,7 @@
     prompt += `页面地址: ${url}\n`;
     prompt += `> **重要：不要填写 url 字段。** 任务 JSON 的 url 字段请留空或使用 "{{LOGIN_URL}}"，由用户自行在 Campus-Auth 系统设置中配置认证地址。硬编码 URL 会导致任务无法通用。\n`;
     prompt += `> **新增配置：** 请在任务 JSON 顶层添加 \`"reveal_hidden": true\`，执行器会在填写前自动显示所有隐藏输入框，无需 force 或 click 占位。\n\n`;
-    prompt += `> **version 字段：** 请在任务 JSON 顶层添加 \`"version": "3.6.7"\` 字段，标识此任务适用的 Campus-Auth 版本。\n`;
+    prompt += `> **version 字段：** 请在任务 JSON 顶层添加 \`"version": "3.7.0"\` 字段，标识此任务适用的 Campus-Auth 版本。\n`;
 
     // on_success / on_failure 建议
     prompt += `## 建议添加 on_success / on_failure 字段\n\n`;
@@ -2557,7 +2557,7 @@
           </ul>
 
           <p style="margin-top:16px;padding-top:12px;border-top:1px solid #333;font-size:11px;color:#666;text-align:center;">
-            Campus-Auth 任务录制器 v3.6.7 · <a href="https://github.com/Misyra/Campus-Auth" target="_blank" style="color:#667eea;">GitHub</a>
+            Campus-Auth 任务录制器 v3.7.0 · <a href="https://github.com/Misyra/Campus-Auth" target="_blank" style="color:#667eea;">GitHub</a>
           </p>
         </div>
       </div>
