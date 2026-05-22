@@ -285,3 +285,155 @@ class TestProfileSwitchTrigger:
             core.monitor_network()
 
         assert len(call_times) == 1
+
+
+class TestLoginRecoveryLoop:
+    """验证 _login_recovery_loop() 的行为。
+
+    测试覆盖：
+    - 重试路径中不调用 is_network_available()（关键 Bug fix 验证，Bug:
+       原单层循环 via continue 导致重试时重复执行 TCP 探测）
+    - 物理网络断开时内层循环正常退出，不执行登录
+    - 第 2 次失败和 give_up 时触发桌面通知
+    - 重试成功后计数器正确重置（login_attempt_count=0, last_network_ok=True）
+    """
+
+    def test_retry_does_not_call_network_check(self):
+        """验证登录重试期间 is_network_available() 只被调用 1 次（外层初始检测）。
+
+        mock 设计：attempt_login 连续失败 4 次 → _login_retry_or_bread 返回
+        retry×3 → give_up。如果内层循环错误地调用了 is_network_available，
+        network_call_count 会 > 1。
+        """
+        network_call_count = 0
+
+        def mock_network_available(*args, **kwargs):
+            nonlocal network_call_count
+            network_call_count += 1
+            return False
+
+        login_attempts = iter([
+            (False, "err"),
+            (False, "err"),
+            (False, "err"),
+            (False, "err"),
+        ])
+
+        retry_decisions = iter(["retry", "retry", "retry", "give_up"])
+
+        config = {
+            "monitor": {"interval": 60, "ping_targets": ["8.8.8.8:53"]},
+            "pause_login": {"enabled": False},
+        }
+        core = NetworkMonitorCore(config=config, log_callback=lambda *a: None)
+        core.monitoring = True
+
+        with (
+            patch("src.monitor_core.is_network_available", mock_network_available),
+            patch("src.monitor_core.is_local_network_connected", return_value=True),
+            patch.object(core, "attempt_login", side_effect=lambda: next(login_attempts)),
+            patch.object(core, "_login_retry_or_break", side_effect=lambda: next(retry_decisions)),
+            patch.object(core, "_wait_interruptible", return_value=False),
+        ):
+            core.monitor_network()
+
+        assert network_call_count == 1, (
+            f"Expected 1 network check, got {network_call_count}"
+        )
+
+    def test_recovery_loop_physical_disconnect(self):
+        """验证物理网络断开时登录恢复循环不执行登录重试。
+
+        当 is_local_network_connected() 返回 False 时，_login_recovery_loop()
+        应直接返回 "net_disconnect"，不调用 attempt_login()。验证断言：
+        login_attempt_count 保持为 0。
+        """
+        config = {
+            "monitor": {"interval": 60, "ping_targets": ["8.8.8.8:53"]},
+            "pause_login": {"enabled": False},
+        }
+        core = NetworkMonitorCore(config=config, log_callback=lambda *a: None)
+        core.monitoring = True
+
+        with (
+            patch("src.monitor_core.is_network_available", return_value=False),
+            patch("src.monitor_core.is_local_network_connected", return_value=False),
+            patch.object(core, "_wait_interruptible", return_value=False),
+        ):
+            core.monitor_network()
+
+        assert core.login_attempt_count == 0
+        assert core.last_network_ok is False
+
+    def test_retry_notification_timing(self):
+        """验证桌面通知在正确时机触发：第 2 次登录失败 + give_up 时各一次。
+
+        mock 设计：模拟 4 次失败，_login_retry_or_bread 返回 retry×3 → give_up。
+        预期触发 2 次通知，且首次通知包含 "2 次"。
+        """
+        notifications = []
+
+        def mock_notification(title, message):
+            notifications.append((title, message))
+
+        login_attempts = iter([
+            (False, "err"),
+            (False, "err"),
+            (False, "err"),
+            (False, "err"),
+        ])
+
+        retry_decisions = iter(["retry", "retry", "retry", "give_up"])
+
+        config = {
+            "monitor": {"interval": 60, "ping_targets": ["8.8.8.8:53"]},
+            "pause_login": {"enabled": False},
+        }
+        core = NetworkMonitorCore(config=config, log_callback=lambda *a: None)
+        core.monitoring = True
+
+        with (
+            patch("src.monitor_core.is_network_available", return_value=False),
+            patch("src.monitor_core.is_local_network_connected", return_value=True),
+            patch.object(core, "attempt_login", side_effect=lambda: next(login_attempts)),
+            patch.object(core, "_login_retry_or_break", side_effect=lambda: next(retry_decisions)),
+            patch.object(core, "_wait_interruptible", return_value=False),
+            patch("src.monitor_core.send_notification", mock_notification),
+        ):
+            core.monitor_network()
+
+        assert len(notifications) == 2
+        assert "2 次" in notifications[0][1]
+
+    def test_recovery_success_after_retry(self):
+        """验证重试成功后计数器正确重置。
+
+        mock 设计：前 2 次登录失败（retry），第 3 次成功 → _login_recovery_loop
+        返回 "login_ok"。外层应设置 login_attempt_count=0, last_network_ok=True。
+        """
+        login_attempts = iter([
+            (False, "err"),
+            (False, "err"),
+            (True, "ok"),
+        ])
+
+        retry_decisions = iter(["retry", "retry"])
+
+        config = {
+            "monitor": {"interval": 60, "ping_targets": ["8.8.8.8:53"]},
+            "pause_login": {"enabled": False},
+        }
+        core = NetworkMonitorCore(config=config, log_callback=lambda *a: None)
+        core.monitoring = True
+
+        with (
+            patch("src.monitor_core.is_network_available", return_value=False),
+            patch("src.monitor_core.is_local_network_connected", return_value=True),
+            patch.object(core, "attempt_login", side_effect=lambda: next(login_attempts)),
+            patch.object(core, "_login_retry_or_break", side_effect=lambda: next(retry_decisions)),
+            patch.object(core, "_wait_interruptible", return_value=False),
+        ):
+            core.monitor_network()
+
+        assert core.login_attempt_count == 0
+        assert core.last_network_ok is True
