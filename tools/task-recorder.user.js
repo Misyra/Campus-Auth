@@ -95,6 +95,15 @@
         clearSavedState();
         return false;
       }
+      // 迁移旧数据：code → script（兼容旧录制数据）
+      if (data.steps) {
+        data.steps.forEach(function(step) {
+          if (step.code !== undefined && step.script === undefined) {
+            step.script = step.code;
+            delete step.code;
+          }
+        });
+      }
       return data;
     } catch (_) {
       return false;
@@ -1921,7 +1930,7 @@
       const desc = overlay.querySelector("#ca-eval-desc").value.trim() || `执行 JS: ${code.substring(0, 40)}`;
       overlay.remove();
 
-      state.steps.push({ type: "eval", description: desc, code });
+      state.steps.push({ type: "eval", description: desc, script: code });
       updateRecordedList();
       saveState();
       setStatus(`已添加: ${desc}`);
@@ -2237,8 +2246,8 @@
       if (s.captchaType) {
         prompt += `- 验证码类型: ${CAPTCHA_TYPES.find(t => t.value === s.captchaType)?.label || s.captchaType}\n`;
       }
-      if (s.type === "eval" && s.code) {
-        prompt += `- JS 代码:\n\`\`\`js\n${s.code}\n\`\`\`\n`;
+      if (s.type === "eval" && (s.code || s.script)) {
+        prompt += `- JS 代码:\n\`\`\`js\n${s.script || s.code}\n\`\`\`\n`;
       }
       if (s.type === "sleep" && s.duration) {
         prompt += `- 等待时长: ${s.duration}ms\n`;

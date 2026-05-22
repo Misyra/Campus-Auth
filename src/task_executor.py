@@ -198,7 +198,7 @@ class TaskConfig:
         default_factory=dict
     )  # 用户自定义元数据，执行器不使用
     reveal_hidden: bool = True  # 执行前默认显示所有隐藏输入框
-    step_delay: float = 1.0
+    step_delay: float = 0.5
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TaskConfig:
@@ -214,7 +214,7 @@ class TaskConfig:
             on_failure=data.get("on_failure", {}),
             metadata=data.get("metadata", {}),
             reveal_hidden=data.get("reveal_hidden", True),
-            step_delay=float(data.get("step_delay", 1.0)),
+            step_delay=float(data.get("step_delay", 0.5)),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -1091,8 +1091,8 @@ class TaskExecutor:
                 pass
 
             # reveal_hidden: 强制显示所有隐藏输入框，让后续 fill() 可以直接操作
-            if self.config.reveal_hidden:
-                await self._reveal_hidden_inputs(page)
+            if self.config.reveal_hidden and any(s.type != StepType.EVAL for s in self.config.steps):
+                count = await self._reveal_hidden_inputs(page)
 
             for i, step in enumerate(self.config.steps):
                 # 任务超时检查
@@ -1184,17 +1184,18 @@ class TaskExecutor:
                 redirects += 1
                 deadline = max(deadline, _time.perf_counter() + timeout_ms / 1000)
 
-    async def _reveal_hidden_inputs(self, page) -> None:
+    async def _reveal_hidden_inputs(self, page) -> int:
         """强制显示所有隐藏的表单输入框。
         通过 JS 将 display:none / visibility:hidden / opacity:0 的 input 变为可见，
         后续 fill()/click() 可直接操作，无需 force 降级。覆盖 text/password/checkbox/radio 等。"""
         logger.info("[reveal] 强制显示隐藏输入框")
-        await page.evaluate("""
+        count = await page.evaluate("""
             () => {
                 const inputs = document.querySelectorAll('input,textarea');
                 let count = 0;
                 inputs.forEach(el => {
                     try {
+                        if (el.type === 'hidden') return;  // 跳过 type=hidden 元数据字段
                         const s = getComputedStyle(el);
                         const hidden = s.display === 'none'
                             || s.visibility === 'hidden'
@@ -1210,7 +1211,8 @@ class TaskExecutor:
                 return count;
             }
         """)
-        logger.info("[reveal] 完成")
+        logger.info("[reveal] 已强制显示 %d 个隐藏输入框", count)
+        return count
 
     async def _execute_step(self, page, step: StepConfig) -> tuple[bool, str]:
         """执行单个步骤"""
