@@ -141,6 +141,8 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
         custom_variables=custom_variables,
         proxy=sys.proxy,
         block_proxy=sys.block_proxy,
+        app_port=sys.app_port,
+        network_check_timeout=sys.network_check_timeout,
     )
 
 
@@ -283,6 +285,8 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
         custom_variables=custom_variables,
         proxy=sys.proxy,
         block_proxy=block_proxy,
+        app_port=sys.app_port,
+        network_check_timeout=sys.network_check_timeout,
     )
 
 
@@ -340,6 +344,7 @@ def build_runtime_config(payload: MonitorConfigPayload, sys: SystemSettings | No
         item.strip() for item in payload.network_targets.split(",") if item.strip()
     ]
     monitor["strict_mode"] = payload.network_strict_mode
+    monitor["network_check_timeout"] = payload.network_check_timeout
 
     backend_level = _normalize_level(payload.backend_log_level)
     frontend_level = _normalize_level(payload.frontend_log_level)
@@ -412,6 +417,8 @@ def save_config_combined(
     sys.screenshot_retention_days = payload.screenshot_retention_days
     sys.proxy = payload.proxy.strip()
     sys.block_proxy = payload.block_proxy  # 屏蔽系统代理
+    sys.network_check_timeout = payload.network_check_timeout
+    sys.app_port = payload.app_port
 
     data.system = sys
 

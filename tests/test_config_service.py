@@ -492,3 +492,13 @@ class TestBuildRuntimeConfig:
         assert browser["low_resource_mode"] is True
         assert browser["disable_web_security"] is False
         assert browser["stealth_mode"] is True
+
+    def test_build_runtime_config_includes_network_check_timeout(self):
+        """验证 build_runtime_config 输出的 monitor 字典包含 network_check_timeout"""
+        payload = self._make_payload(network_check_timeout=7)
+        sys = SystemSettings(password="")
+        config = build_runtime_config(payload, sys)
+        monitor = config.get("monitor", {})
+        assert monitor.get("network_check_timeout") == 7, (
+            f"预期 7，实际 {monitor.get('network_check_timeout')}"
+        )

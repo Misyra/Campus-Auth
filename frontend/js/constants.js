@@ -49,11 +49,14 @@ export const DEFAULT_CONFIG = {
   block_proxy: true,
   browser_locale: "zh-CN",
   browser_timezone: "Asia/Shanghai",
+  network_check_timeout: 2,
+  app_port: 50721,
 };
 
 export const SETTINGS_TABS = [
   { id: 'account', label: '账号设置', hint: '账号、密码与认证地址' },
-  { id: 'system', label: '系统设置', hint: '监控、日志与行为控制' },
+  { id: 'monitor', label: '网络与监控', hint: '检测策略、重试与代理' },
+  { id: 'system', label: '系统与日志', hint: '日志、自启动与配置备份' },
   { id: 'browser', label: '浏览器设置', hint: '请求头、图片与浏览器参数' },
   { id: 'tasks', label: '任务设置', hint: '活动任务与模板入口' },
 ];
