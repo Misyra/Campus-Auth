@@ -302,7 +302,7 @@
           </button>
         </div>
         <div v-if="repoImport.error" class="repo-error">{{ repoImport.error }}</div>
-        <div v-if="repoImport.tasks.length">
+        <div v-if="repoImport.tasks.length" class="repo-task-container">
           <div class="repo-search-row">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="repo-search-icon">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>

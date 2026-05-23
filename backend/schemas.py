@@ -12,6 +12,7 @@ _URL_PATTERN = re.compile(r"^https?://")
 
 class MonitorConfigPayload(BaseModel):
     username: str = Field(default="")
+    network_check_timeout: int = Field(default=2, ge=1, le=30, description="TCP 网络探测超时（秒），检测网络连通性时使用")
     password: str = Field(default="")
     use_global_credentials: bool = Field(
         default=True,
@@ -62,6 +63,7 @@ class MonitorConfigPayload(BaseModel):
     retry_interval: int = Field(default=5, ge=1, le=300, description="重试间隔（秒），指数退避基数")
     log_retention_days: int = Field(default=7, ge=1, le=365)
     screenshot_retention_days: int = Field(default=7, ge=1, le=90)
+    app_port: int = Field(default=50721, ge=1024, le=65535, description="Web 控制台端口，更改需重启生效")
     custom_variables: dict[str, str] = Field(default_factory=dict)
     proxy: str = Field(default="", description="网络代理地址，留空不使用代理")
     block_proxy: bool = Field(
@@ -266,6 +268,7 @@ class SystemSettings(BaseModel):
     log_retention_days: int = Field(default=7, ge=1, le=365, description="日志文件保留天数")
     screenshot_retention_days: int = Field(default=7, ge=1, le=90, description="失败截图保留天数")
     app_port: int = Field(default=50721, ge=1, le=65535, description="Web 控制台端口")
+    network_check_timeout: int = Field(default=2, ge=1, le=30, description="TCP 网络探测超时（秒）")
     proxy: str = Field(default="", description="网络代理地址")
     block_proxy: bool = Field(
         default=True,

@@ -48,6 +48,9 @@ CLAUDE.md
 AGENTS.md
 skills-lock.json
 .sisyphus/
+
+# OpenCode working directory
+.omo/
 # OS
 .DS_Store
 Thumbs.db

@@ -143,10 +143,10 @@
       </section>
     </div>
 
-    <div v-else-if="currentSettingsTab === 'system'" class="settings-panel-grid">
+    <div v-else-if="currentSettingsTab === 'monitor'" class="settings-panel-grid">
       <section class="card settings-panel">
         <div class="card-header">
-          <h2>系统策略</h2>
+          <h2>检测设置</h2>
         </div>
         <div class="card-body">
           <div class="form-group">
@@ -156,6 +156,59 @@
             </div>
             <input id="settings-interval" v-model.number="config.check_interval_minutes" type="number" min="1" max="1440" />
           </div>
+          <div class="form-group">
+            <div class="field-label-row">
+              <label for="settings-network-targets">网络检测目标（逗号分隔）</label>
+              <span
+                class="field-help"
+                tabindex="0"
+                role="note"
+                data-tip="用于检测网络是否连通的目标地址，支持 host 或 host:port 格式，多个目标用英文逗号分隔。任一目标可达即判定网络正常。"
+              >?</span>
+            </div>
+            <input
+              id="settings-network-targets"
+              v-model="config.network_targets"
+              type="text"
+              placeholder="8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
+            />
+          </div>
+          <div class="toggle-group">
+            <div class="toggle-with-help">
+              <label class="toggle toggle-help-inline">
+                <input type="checkbox" v-model="config.network_strict_mode" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">网络检测严格模式</span>
+                <span
+                  class="field-help"
+                  tabindex="0"
+                  role="note"
+                  data-tip="开启后 TCP 和 HTTP 必须同时通过才算联网。如果未认证时误判为网络正常，请打开此开关。开启后会略微增加检测耗时。"
+                >?</span>
+              </label>
+            </div>
+          </div>
+          <div class="form-group">
+            <div class="field-label-row">
+              <label for="settings-network-check-timeout">网络探测超时（秒）</label>
+              <span class="field-help" tabindex="0" role="note" data-tip="TCP 网络连通性探测的超时时间。如果网络较慢或经常误判为断网，可以适当增大此值。默认 2 秒，范围 1~30 秒。">?</span>
+            </div>
+            <input
+              id="settings-network-check-timeout"
+              v-model.number="config.network_check_timeout"
+              type="number"
+              min="1"
+              max="30"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section class="card settings-panel">
+        <div class="card-header">
+          <h2>重试策略</h2>
+        </div>
+        <div class="card-body">
           <div class="form-group">
             <div class="field-label-row">
               <label for="settings-login-timeout">登录请求超时（秒）</label>
@@ -179,6 +232,86 @@
               <input id="settings-retry-interval" v-model.number="config.retry_interval" type="number" min="1" max="300" />
             </div>
           </div>
+        </div>
+      </section>
+
+      <section class="card settings-panel">
+        <div class="card-header">
+          <h2>暂停时段</h2>
+        </div>
+        <div class="card-body">
+          <div class="toggle-group">
+            <div class="toggle-with-help">
+              <label class="toggle toggle-help-inline">
+                <input type="checkbox" v-model="config.pause_enabled" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">启用暂停时段</span>
+                <span
+                  class="field-help"
+                  tabindex="0"
+                  role="note"
+                  data-tip="启用后在设定时段内暂停自动登录和网络检测。适用于深夜校园网维护时段，避免无意义的认证请求。"
+                >?</span>
+              </label>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <div class="field-label-row">
+                <label for="settings-pause-start">暂停开始（小时）</label>
+                <span class="field-help" tabindex="0" role="note" data-tip="从该时刻起停止自动登录。例如设为 0 表示从 0:00 开始暂停检测和登录。">?</span>
+              </div>
+              <input id="settings-pause-start" v-model.number="config.pause_start_hour" type="number" min="0" max="23" />
+            </div>
+            <div class="form-group">
+              <div class="field-label-row">
+                <label for="settings-pause-end">暂停结束（小时）</label>
+                <span class="field-help" tabindex="0" role="note" data-tip="到该时刻恢复自动登录。例如设为 6 表示 6:00 后恢复检测。支持跨越午夜（如暂停 23:00~5:00）。">?</span>
+              </div>
+              <input id="settings-pause-end" v-model.number="config.pause_end_hour" type="number" min="0" max="23" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card settings-panel">
+        <div class="card-header">
+          <h2>代理设置</h2>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <div class="field-label-row">
+              <label for="settings-proxy">网络代理</label>
+              <span class="field-help" tabindex="0" role="note" data-tip="用于远程仓库导入等网络请求的代理地址。留空则不使用代理。支持 HTTP 和 SOCKS5 协议，例如 http://127.0.0.1:7897 或 socks5://127.0.0.1:7890。">?</span>
+            </div>
+            <input
+              id="settings-proxy"
+              v-model.trim="config.proxy"
+              type="text"
+              placeholder="留空不使用代理，例如 http://127.0.0.1:7897"
+            />
+          </div>
+          <div class="toggle-group">
+            <div class="toggle-with-help">
+              <label class="toggle toggle-help-inline">
+                <input type="checkbox" v-model="config.block_proxy" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">屏蔽系统代理 (Block System Proxy)</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="开启后网络检测时忽略系统代理设置，直接连接检测目标。适用于系统开启代理但校园网认证需要直连检测的场景。关闭后则使用系统代理进行网络检测。">?</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div v-else-if="currentSettingsTab === 'system'" class="settings-panel-grid">
+      <section class="card settings-panel">
+        <div class="card-header">
+          <h2>系统策略</h2>
+        </div>
+        <div class="card-body">
+
           <div class="form-row">
             <div class="form-group">
               <div class="field-label-row">
@@ -283,90 +416,27 @@
               </label>
             </div>
           </div>
+
+        </div>
+      </section>
+
+      <section class="card settings-panel">
+        <div class="card-header">
+          <h2>端口设置</h2>
+        </div>
+        <div class="card-body">
           <div class="form-group">
             <div class="field-label-row">
-              <label for="settings-network-targets">网络检测目标（逗号分隔）</label>
-              <span
-                class="field-help"
-                tabindex="0"
-                role="note"
-                data-tip="用于检测网络是否连通的目标地址，支持 host 或 host:port 格式，多个目标用英文逗号分隔。任一目标可达即判定网络正常。"
-              >?</span>
+              <label for="settings-app-port">控制台端口</label>
+              <span class="field-help" tabindex="0" role="note" data-tip="Web 控制台的监听端口。修改后需要重启服务器才能生效。默认 50721，范围 1024~65535。">?</span>
             </div>
             <input
-              id="settings-network-targets"
-              v-model="config.network_targets"
-              type="text"
-              placeholder="8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
+              id="settings-app-port"
+              v-model.number="config.app_port"
+              type="number"
+              min="1024"
+              max="65535"
             />
-          </div>
-          <div class="toggle-group">
-            <div class="toggle-with-help">
-              <label class="toggle toggle-help-inline">
-                <input type="checkbox" v-model="config.network_strict_mode" />
-                <span class="toggle-slider"></span>
-                <span class="toggle-label">网络检测严格模式</span>
-                <span
-                  class="field-help"
-                  tabindex="0"
-                  role="note"
-                  data-tip="开启后 TCP 和 HTTP 必须同时通过才算联网。如果未认证时误判为网络正常，请打开此开关。开启后会略微增加检测耗时。"
-                >?</span>
-              </label>
-            </div>
-          </div>
-          <div class="form-group">
-            <div class="field-label-row">
-              <label for="settings-proxy">网络代理</label>
-              <span class="field-help" tabindex="0" role="note" data-tip="用于远程仓库导入等网络请求的代理地址。留空则不使用代理。支持 HTTP 和 SOCKS5 协议，例如 http://127.0.0.1:7897 或 socks5://127.0.0.1:7890。">?</span>
-            </div>
-            <input
-              id="settings-proxy"
-              v-model.trim="config.proxy"
-              type="text"
-              placeholder="留空不使用代理，例如 http://127.0.0.1:7897"
-            />
-          </div>
-          <div class="toggle-group">
-            <div class="toggle-with-help">
-              <label class="toggle toggle-help-inline">
-                <input type="checkbox" v-model="config.block_proxy" />
-                <span class="toggle-slider"></span>
-                <span class="toggle-label">屏蔽系统代理 (Block System Proxy)</span>
-                <span class="field-help" tabindex="0" role="note" data-tip="开启后网络检测时忽略系统代理设置，直接连接检测目标。适用于系统开启代理但校园网认证需要直连检测的场景。关闭后则使用系统代理进行网络检测。">?</span>
-              </label>
-            </div>
-          </div>
-          <div class="toggle-group">
-            <div class="toggle-with-help">
-              <label class="toggle toggle-help-inline">
-                <input type="checkbox" v-model="config.pause_enabled" />
-                <span class="toggle-slider"></span>
-                <span class="toggle-label">启用暂停时段</span>
-                <span
-                  class="field-help"
-                  tabindex="0"
-                  role="note"
-                  data-tip="启用后在设定时段内暂停自动登录和网络检测。适用于深夜校园网维护时段，避免无意义的认证请求。"
-                >?</span>
-              </label>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <div class="field-label-row">
-                <label for="settings-pause-start">暂停开始（小时）</label>
-                <span class="field-help" tabindex="0" role="note" data-tip="从该时刻起停止自动登录。例如设为 0 表示从 0:00 开始暂停检测和登录。">?</span>
-              </div>
-              <input id="settings-pause-start" v-model.number="config.pause_start_hour" type="number" min="0" max="23" />
-            </div>
-            <div class="form-group">
-              <div class="field-label-row">
-                <label for="settings-pause-end">暂停结束（小时）</label>
-                <span class="field-help" tabindex="0" role="note" data-tip="到该时刻恢复自动登录。例如设为 6 表示 6:00 后恢复检测。支持跨越午夜（如暂停 23:00~5:00）。">?</span>
-              </div>
-              <input id="settings-pause-end" v-model.number="config.pause_end_hour" type="number" min="0" max="23" />
-            </div>
           </div>
         </div>
       </section>
