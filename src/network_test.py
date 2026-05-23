@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-import platform
+import re
 import socket
 import subprocess
 import sys
@@ -14,11 +14,23 @@ from typing import Iterable, Sequence
 import httpx
 
 from src.utils.logging import get_logger
+from src.utils.platform_utils import is_windows, is_macos, is_linux
 
 logger = get_logger("network_test", side="BACKEND")
 
 _executor: ThreadPoolExecutor | None = None
 _thread_local = threading.local()
+_block_proxy = True  # 默认屏蔽系统代理，避免代理影响网络检测
+
+
+def set_block_proxy(enabled: bool) -> None:
+    """设置是否屏蔽系统代理。
+
+    当 enabled=True 时，HTTP 客户端不读取系统代理设置（默认行为）；
+    当 enabled=False 时，允许 HTTP 客户端使用系统代理。
+    """
+    global _block_proxy
+    _block_proxy = enabled
 
 
 def _get_executor() -> ThreadPoolExecutor:
@@ -30,7 +42,8 @@ def _get_executor() -> ThreadPoolExecutor:
 
 def _get_http_client() -> httpx.Client:
     if not hasattr(_thread_local, "client"):
-        _thread_local.client = httpx.Client(trust_env=False)
+        # 根据 _block_proxy 决定是否信任系统代理设置
+        _thread_local.client = httpx.Client(trust_env=not _block_proxy)
     return _thread_local.client
 
 
@@ -61,13 +74,12 @@ def is_local_network_connected() -> bool:
         logger.debug("快速 IP 检测失败: %s", exc)
 
     # 回退：平台特判
-    system = platform.system()
     try:
-        if system == "Windows":
+        if is_windows():
             return _check_windows_adapter()
-        elif system == "Linux":
+        elif is_linux():
             return _check_linux_route()
-        elif system == "Darwin":
+        elif is_macos():
             return _check_macos_service()
     except Exception as exc:
         logger.debug("平台网络检测失败: %s", exc)
@@ -151,10 +163,31 @@ def _check_linux_route() -> bool:
 def _check_macos_service() -> bool:
     """macOS: 检查网络接口是否有实际连接（IP 地址分配）。
 
-    使用 ifconfig 检查常见接口（en0=有线/WiFi, en1=WiFi/有线）是否分配了 IP。
-    仅检查接口名存在不够 — 接口可能存在但未连接。
+    动态获取所有硬件接口列表（而非硬编码 en0/en1），
+    用 networksetup 列出所有端口对应的设备名，
+    再用 ifconfig 逐一检查是否有活跃连接。
     """
-    for iface in ("en0", "en1"):
+    try:
+        # 列出所有硬件端口及其设备名（输出受系统语言影响，设置 LC_ALL=C 强制英文）
+        list_result = subprocess.run(
+            ["networksetup", "-listallhardwareports"],
+            capture_output=True, text=True, timeout=5,
+            env={"LC_ALL": "C"},  # 强制英文输出，便于解析 Device/Port 等关键字
+        )
+        if list_result.returncode != 0:
+            logger.debug("networksetup 执行失败: %s", list_result.stderr)
+            raise RuntimeError("networksetup failed")
+
+        # 解析 "Device: XXX" 行，提取所有硬件设备名
+        devices = re.findall(r"^Device: (.+)$", list_result.stdout, re.MULTILINE)
+        if not devices:
+            logger.debug("未从 networksetup 输出中找到任何设备")
+            return False
+    except Exception as exc:
+        logger.debug("networksetup 检测失败，回退到硬编码接口: %s", exc)
+        devices = ("en0", "en1")  # 回退：常见接口名
+
+    for iface in devices:
         try:
             result = subprocess.run(
                 ["ifconfig", iface],
@@ -166,7 +199,6 @@ def _check_macos_service() -> bool:
             output = result.stdout
             if "status: active" in output:
                 # 进一步确认有 IP 地址
-                import re
                 if re.search(r"inet\s+(?!0\.0\.0\.0)\d+\.\d+\.\d+\.\d+", output):
                     logger.info("检测到活跃的网络接口: %s", iface)
                     return True

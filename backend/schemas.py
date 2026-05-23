@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 
+from src.utils.platform_utils import get_default_ua
 from pydantic import BaseModel, Field, field_validator
 
 VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
@@ -26,12 +27,19 @@ class MonitorConfigPayload(BaseModel):
     browser_timeout: int = Field(default=8000, ge=1000, le=60000)
     login_timeout: int = Field(default=120, ge=10, le=600, description="手动登录 API 请求超时（秒）")
     browser_user_agent: str = Field(
-        default="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+        default_factory=get_default_ua,  # 根据当前平台自动选择默认 UA
     )
     browser_low_resource_mode: bool = False
     browser_disable_web_security: bool = False
     browser_extra_headers_json: str = Field(default="")
+    browser_locale: str = Field(
+        default="zh-CN",
+        description="浏览器语言区域，用于 Playwright 浏览器上下文的 locale 参数",
+    )
+    browser_timezone: str = Field(
+        default="Asia/Shanghai",
+        description="浏览器时区 ID，用于 Playwright 浏览器上下文的 timezone_id 参数",
+    )
     browser_args: str = Field(default="--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees\n--disable-ipc-flooding-protection\n--disable-hang-monitor\n--disable-popup-blocking")
     stealth_mode: bool = Field(default=False, description="注入反检测脚本，隐藏浏览器自动化痕迹")
     pause_enabled: bool = True
@@ -56,6 +64,10 @@ class MonitorConfigPayload(BaseModel):
     screenshot_retention_days: int = Field(default=7, ge=1, le=90)
     custom_variables: dict[str, str] = Field(default_factory=dict)
     proxy: str = Field(default="", description="网络代理地址，留空不使用代理")
+    block_proxy: bool = Field(
+        default=True,
+        description="屏蔽系统代理：开启后网络检测时忽略系统代理设置，直接连接检测目标",
+    )
 
     @field_validator("auth_url")
     @classmethod
@@ -180,14 +192,25 @@ class ProfileSettings(BaseModel):
     browser_timeout: int = Field(default=8000, ge=1000, le=60000)
     login_timeout: int = Field(default=120, ge=10, le=600, description="手动登录 API 请求超时（秒）")
     browser_user_agent: str = Field(
-        default="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+        default_factory=get_default_ua,  # 根据当前平台自动选择默认 UA
     )
     browser_low_resource_mode: bool = False
     browser_disable_web_security: bool = False
     browser_extra_headers_json: str = Field(default="")
     browser_args: str = Field(default="--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees\n--disable-ipc-flooding-protection\n--disable-hang-monitor\n--disable-popup-blocking", description="自定义 Chromium 启动参数，每行一个")
     stealth_mode: bool = Field(default=False, description="注入反检测脚本，隐藏浏览器自动化痕迹")
+    block_proxy: bool = Field(
+        default=True,
+        description="屏蔽系统代理：开启后网络检测时忽略系统代理设置",
+    )
+    browser_locale: str = Field(
+        default="zh-CN",
+        description="浏览器语言区域",
+    )
+    browser_timezone: str = Field(
+        default="Asia/Shanghai",
+        description="浏览器时区 ID",
+    )
     pause_enabled: bool = True
     pause_start_hour: int = Field(default=0, ge=0, le=23)
     pause_end_hour: int = Field(default=6, ge=0, le=23)
@@ -244,6 +267,10 @@ class SystemSettings(BaseModel):
     screenshot_retention_days: int = Field(default=7, ge=1, le=90, description="失败截图保留天数")
     app_port: int = Field(default=50721, ge=1, le=65535, description="Web 控制台端口")
     proxy: str = Field(default="", description="网络代理地址")
+    block_proxy: bool = Field(
+        default=True,
+        description="屏蔽系统代理：开启后网络检测时忽略系统代理设置",
+    )
 
     @field_validator("backend_log_level", "frontend_log_level")
     @classmethod

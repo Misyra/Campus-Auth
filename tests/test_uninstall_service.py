@@ -45,7 +45,7 @@ class TestPerform:
 class TestPlaywrightCacheDir:
 
     def test_windows(self):
-        with patch.object(uninstall, "PLATFORM", "win32"):
+        with patch.object(uninstall, "PLATFORM", "windows"):  # get_platform() 返回 "windows"
             result = uninstall._playwright_cache_dir()
             assert result is not None
             assert "ms-playwright" in str(result)

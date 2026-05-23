@@ -8,7 +8,7 @@ import threading
 import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
-from .network_test import is_local_network_connected, is_network_available
+from .network_test import is_local_network_connected, is_network_available, set_block_proxy
 from .utils import (
     ConfigLoader,
     LoginAttemptHandler,
@@ -125,6 +125,8 @@ class NetworkMonitorCore:
         with self._config_lock:
             self.config = new_config
             self._test_sites_cache = None  # 清除测试站点缓存
+            # 同步 block_proxy 到 network_test 模块，决定 HTTP 客户端是否信任系统代理
+            set_block_proxy(self.config.get("block_proxy", True))
 
     def start_monitoring(self) -> None:
         try:
@@ -154,6 +156,7 @@ class NetworkMonitorCore:
                 auth_url = self.config.get("auth_url", "未设置")
                 username = self.config.get("username", "未设置")
                 isp = self.config.get("isp", "无") or "无"
+                set_block_proxy(self.config.get("block_proxy", True))
             test_sites_info = self._get_test_sites()
             targets_str = ", ".join(f"{h}:{p}" for h, p in test_sites_info)
 
@@ -439,7 +442,8 @@ class NetworkMonitorCore:
 
             next_check = datetime.datetime.now() + datetime.timedelta(seconds=interval)
             self.log_message(
-                f"下次检测: {next_check.strftime('%H:%M:%S')}", logging.DEBUG
+                f"等待 {interval} 秒至下次检测周期（{next_check.strftime('%H:%M:%S')}）",
+                logging.INFO,
             )
             wait_step = min(
                 self.MAX_WAIT_STEP_SECONDS,

@@ -17,6 +17,7 @@ from pathlib import Path
 
 from src.utils.logging import get_logger
 from src.utils.exceptions import DecryptionError
+from src.utils.platform_utils import is_windows  # Windows 平台检测
 
 logger = get_logger("crypto", side="BACKEND")
 
@@ -57,9 +58,23 @@ def _get_or_create_key() -> bytes:
         _KEY_FILE.write_text(base64.urlsafe_b64encode(key).decode("ascii"), encoding="utf-8")
 
         try:
-            _KEY_FILE.chmod(0o600)
+            _KEY_FILE.chmod(0o600)  # POSIX: 仅所有者可读写
         except OSError:
-            pass
+            logger.warning("设置密钥文件权限失败 (chmod): %s", _KEY_FILE)
+
+        # Windows: 用 icacls 限制文件访问
+        if is_windows():
+            try:
+                import subprocess
+                username = os.environ.get("USERNAME", "Users")
+                subprocess.run(
+                    ["icacls", str(_KEY_FILE), "/inheritance:r", "/grant", f"{username}:F"],
+                    capture_output=True, text=True, timeout=10,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                    check=True,
+                )
+            except Exception as exc:
+                logger.warning("设置密钥文件权限失败 (icacls): %s", exc)
 
         _cached_raw_key = key
         return key

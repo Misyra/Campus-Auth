@@ -6,6 +6,8 @@ import re
 import subprocess
 import sys
 import xml.sax.saxutils
+
+from src.utils.platform_utils import get_platform, is_linux, is_macos, is_windows
 from pathlib import Path
 
 from src.utils.logging import get_logger
@@ -18,23 +20,31 @@ class AutoStartService:
 
     def __init__(self, project_root: Path):
         self.project_root = project_root
-        self.platform_name = platform.system().lower()
+        # 使用 platform_utils 获取平台标识，统一跨平台判定
+        self.platform = get_platform()
         self.service_name = "campus-auth"
 
     def _start_command(self) -> str:
-        python_exe = self.project_root / "environment" / "python" / "python.exe"
-        app_entry = self.project_root / "app.py"
-        if python_exe.exists():
-            return f'"{python_exe}" "{app_entry}"'
+        # 优先使用打包可执行文件（环境变量覆盖）
         packaged_executable = os.getenv("CAMPUS_AUTH_START_EXECUTABLE", "").strip()
         if packaged_executable:
             return f'"{packaged_executable}"'
+
+        # 使用 sys.executable（当前 Python 解释器路径，跨平台通用）
         runtime_python = Path(sys.executable).resolve()
+        app_entry = self.project_root / "app.py"
+
+        if is_windows():
+            # Windows 下检查嵌入式 Python（发布包内置）
+            python_exe = self.project_root / "environment" / "python" / "python.exe"
+            if python_exe.exists():
+                return f'"{python_exe}" "{app_entry}"'
+
+        # 当前解释器可用则直接使用
         if runtime_python.exists():
             return f'"{runtime_python}" "{app_entry}"'
-        # macOS/Linux 现代系统优先尝试 python3
-        if not self.platform_name.startswith("win"):
-            return f'python3 "{app_entry}"'
+
+        # 兜底：依赖 PATH 上的 python
         return f'python "{app_entry}"'
 
     def _run(self, cmd: list[str]) -> tuple[bool, str]:
@@ -75,7 +85,7 @@ class AutoStartService:
         )
 
     def status(self) -> dict[str, str | bool]:
-        if self.platform_name == "darwin":
+        if is_macos():
             target = self._mac_plist_path()
             return {
                 "platform": "macOS",
@@ -84,7 +94,7 @@ class AutoStartService:
                 "location": str(target),
             }
 
-        if self.platform_name == "linux":
+        if is_linux():
             target = self._linux_service_path()
             return {
                 "platform": "Linux",
@@ -93,7 +103,7 @@ class AutoStartService:
                 "location": str(target),
             }
 
-        if self.platform_name.startswith("win"):
+        if is_windows():
             target = self._windows_startup_vbs()
             return {
                 "platform": "Windows",
@@ -110,25 +120,25 @@ class AutoStartService:
         }
 
     def enable(self) -> tuple[bool, str]:
-        logger.info("启用开机自启动: platform=%s", self.platform_name)
-        if self.platform_name == "darwin":
+        logger.info("启用开机自启动: platform=%s", self.platform)
+        if is_macos():
             return self._enable_macos()
-        if self.platform_name == "linux":
+        if is_linux():
             return self._enable_linux()
-        if self.platform_name.startswith("win"):
+        if is_windows():
             return self._enable_windows()
-        logger.warning("当前平台不支持开机自启动: %s", self.platform_name)
+        logger.warning("当前平台不支持开机自启动: %s", self.platform)
         return False, "当前平台不支持自动配置开机自启动"
 
     def disable(self) -> tuple[bool, str]:
-        logger.info("禁用开机自启动: platform=%s", self.platform_name)
-        if self.platform_name == "darwin":
+        logger.info("禁用开机自启动: platform=%s", self.platform)
+        if is_macos():
             return self._disable_macos()
-        if self.platform_name == "linux":
+        if is_linux():
             return self._disable_linux()
-        if self.platform_name.startswith("win"):
+        if is_windows():
             return self._disable_windows()
-        logger.warning("当前平台不支持开机自启动: %s", self.platform_name)
+        logger.warning("当前平台不支持开机自启动: %s", self.platform)
         return False, "当前平台不支持自动配置开机自启动"
 
     def _enable_macos(self) -> tuple[bool, str]:
@@ -202,7 +212,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory={self.project_root}
-ExecStart=/bin/bash -lc '{cmd}'
+ExecStart=/bin/sh -lc '{cmd}'
 Restart=always
 RestartSec=5
 

@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import shutil
-import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+from src.utils.platform_utils import get_platform
 
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 USER_DATA_DIR = Path.home() / ".campus_network_auth"
 
-PLATFORM = sys.platform
+PLATFORM = get_platform()  # 使用 platform_utils 获取平台标识（"windows"/"darwin"/"linux"）
 
 
 @dataclass
@@ -123,7 +124,7 @@ def _remove_user_data() -> tuple[bool, str]:
 
 
 def _playwright_cache_dir() -> Path | None:
-    if PLATFORM == "win32":
+    if PLATFORM == "windows":  # get_platform() 返回 "windows"
         return Path.home() / "AppData" / "Local" / "ms-playwright"
     if PLATFORM == "darwin":
         return Path.home() / "Library" / "Caches" / "ms-playwright"
