@@ -46,6 +46,9 @@ export const DEFAULT_CONFIG = {
   screenshot_retention_days: 7,
   custom_variables: {},
   proxy: "",
+  block_proxy: true,
+  browser_locale: "zh-CN",
+  browser_timezone: "Asia/Shanghai",
 };
 
 export const SETTINGS_TABS = [

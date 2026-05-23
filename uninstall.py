@@ -11,13 +11,13 @@
 最后提示用户手动删除项目目录。
 """
 
-import sys
 from pathlib import Path
 
+from src.utils.platform_utils import get_platform
 from backend.uninstall_service import CleanupItem, detect, perform
 
 PROJECT_ROOT = Path(__file__).parent.resolve()
-PLATFORM = sys.platform
+PLATFORM = get_platform()  # 使用 platform_utils 获取平台标识（"windows"/"darwin"/"linux"）
 
 
 def _print_header():
@@ -96,7 +96,7 @@ def main():
     print("请手动删除项目目录：")
     print(f"  {PROJECT_ROOT}")
     print()
-    if PLATFORM == "win32":
+    if PLATFORM == "windows":  # get_platform() 返回 "windows"
         print("在文件管理器中删除，或在终端执行：")
         print(f'  rmdir /s /q "{PROJECT_ROOT}"')
     else:

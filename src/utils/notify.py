@@ -4,14 +4,13 @@
 from __future__ import annotations
 
 import os
-import platform
+import shutil
 import subprocess
 
+from src.utils.platform_utils import is_windows, is_macos, is_linux
 from src.utils.logging import get_logger
 
 logger = get_logger("notify", side="BACKEND")
-
-_SYSTEM = platform.system()
 
 
 def send_notification(title: str, message: str, duration_ms: int = 5000) -> bool:
@@ -21,14 +20,15 @@ def send_notification(title: str, message: str, duration_ms: int = 5000) -> bool
         True 如果通知发送成功
     """
     try:
-        if _SYSTEM == "Windows":
+        # 运行时动态检测平台，避免模块级平台锁定
+        if is_windows():
             return _notify_windows(title, message, duration_ms)
-        elif _SYSTEM == "Darwin":
+        elif is_macos():
             return _notify_macos(title, message)
-        elif _SYSTEM == "Linux":
+        elif is_linux():
             return _notify_linux(title, message, duration_ms)
         else:
-            logger.debug("不支持的操作系统: %s", _SYSTEM)
+            logger.debug("不支持的操作系统")
             return False
     except Exception as exc:
         logger.warning("发送桌面通知失败: %s", exc)
@@ -91,8 +91,10 @@ $toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds({duration_sec})
 
 def _notify_macos(title: str, message: str) -> bool:
     """macOS: 使用 osascript 发送通知"""
-    safe_title = title.replace('"', '\\"')
-    safe_msg = message.replace('"', '\\"')
+    # 先转义反斜杠再转义双引号，防止反斜杠导致双引号逃逸
+    # macOS osascript 不支持通知中的换行符，替换为空格
+    safe_title = title.replace('\\', '\\\\').replace('"', '\\"').replace('\n', ' ')
+    safe_msg = message.replace('\\', '\\\\').replace('"', '\\"').replace('\n', ' ')
     script = f'display notification "{safe_msg}" with title "{safe_title}"'
     result = subprocess.run(
         ["osascript", "-e", script],
@@ -103,6 +105,10 @@ def _notify_macos(title: str, message: str) -> bool:
 
 def _notify_linux(title: str, message: str, duration_ms: int) -> bool:
     """Linux: 使用 notify-send"""
+    # 检查 notify-send 是否已安装，避免因命令不存在而抛出异常
+    if not shutil.which("notify-send"):
+        logger.warning("未找到 notify-send，无法发送 Linux 桌面通知")
+        return False
     duration_sec = max(1, duration_ms // 1000) * 1000
     result = subprocess.run(
         ["notify-send", title, message, "-t", str(duration_sec), "-a", "Campus-Auth"],

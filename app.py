@@ -3,6 +3,7 @@
 
 import argparse
 import atexit
+import errno  # POSIX errno 值，用于跨平台异常处理
 import os
 import signal
 import socket
@@ -17,7 +18,8 @@ _project_root = Path(__file__).resolve().parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from src.playwright_bootstrap import ensure_playwright_ready
+from src.playwright_bootstrap import ensure_playwright_ready  # noqa: E402 — 需要在 sys.path 插入后导入
+from src.utils.platform_utils import is_windows  # noqa: E402 — 同上；跨平台检测：替代 sys.platform == "win32"
 
 
 
@@ -49,8 +51,8 @@ def _is_service_running() -> tuple[bool, int | None]:
             pid_file.unlink(missing_ok=True)
             return False, None
         except OSError as exc:
-            # winerror=5 通常表示 Access is denied，保守地视为存活
-            if getattr(exc, "winerror", None) == 5:
+            # Windows: winerror=5 表示 Access denied；POSIX: errno=EACCES 表示权限不足，均保守视为存活
+            if getattr(exc, "winerror", getattr(exc, "errno", None)) in (5, errno.EACCES):
                 return True, pid
             pid_file.unlink(missing_ok=True)
             return False, None
@@ -133,7 +135,7 @@ def _cmd_stop() -> None:
         return
     try:
         print(f"正在停止服务 (PID: {pid})...")
-        if sys.platform == "win32":
+        if is_windows():
             # Windows: taskkill 发送 WM_CLOSE 实现优雅关闭
             import subprocess as _sp
             _sp.run(
@@ -151,7 +153,7 @@ def _cmd_stop() -> None:
                 print("服务已停止")
                 _cleanup_pid()
                 return
-        if sys.platform == "win32":
+        if is_windows():
             import subprocess as _sp
             _sp.run(
                 ["taskkill", "/F", "/PID", str(pid)],
@@ -303,7 +305,9 @@ def _run_server(no_browser: bool = False, tray: bool = False, no_auto: bool = Fa
         sys.exit(0)
 
     signal.signal(signal.SIGINT, _signal_handler)
-    signal.signal(signal.SIGTERM, _signal_handler)
+    # SIGTERM 在 Windows 上不存在（仅有 SIGINT/SIGBREAK），需要守卫以避免 AttributeError
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, _signal_handler)
 
     stage_begin = time.perf_counter()
     startup_logger.info("启动阶段: 开始检查 Playwright 运行环境")
@@ -353,7 +357,9 @@ def _run_server(no_browser: bool = False, tray: bool = False, no_auto: bool = Fa
             from src.system_tray import SystemTray
 
             tray_icon = SystemTray(
-                port=port, on_exit=lambda: os.kill(os.getpid(), signal.SIGTERM)
+                port=port,
+                # 托盘退出回调：优先发送 SIGTERM 优雅关闭；无 SIGTERM 时直接终止进程（Windows 上 taskkill 替代）
+                on_exit=lambda: os.kill(os.getpid(), signal.SIGTERM) if hasattr(signal, "SIGTERM") else os._exit(0),
             )
             tray_icon.start()
             print("系统托盘已启动，双击图标打开控制台")

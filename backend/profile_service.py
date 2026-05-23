@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import platform
 import re
 import subprocess
 import tempfile
@@ -9,6 +8,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from src.utils.platform_utils import is_windows, is_macos, is_linux
 from src.utils.crypto import save_password_field
 from src.utils.logging import get_logger
 
@@ -32,18 +32,18 @@ def _normalize_isp_to_carrier(isp: str) -> tuple[str, str]:
 
 def detect_gateway_ip() -> str | None:
     """检测当前默认网关 IP（跨平台）"""
-    system = platform.system()
-    profile_logger.debug("正在检测网关 IP，平台: %s", system)
+    # 使用 platform_utils 进行跨平台检测
+    profile_logger.debug("正在检测网关 IP")
 
     try:
-        if system == "Windows":
+        if is_windows():
             result = _detect_gateway_windows()
-        elif system == "Linux":
+        elif is_linux():
             result = _detect_gateway_linux()
-        elif system == "Darwin":
+        elif is_macos():
             result = _detect_gateway_darwin()
         else:
-            profile_logger.warning("不支持的平台: %s", system)
+            profile_logger.warning("不支持的平台")
             return None
 
         if result:
@@ -58,18 +58,18 @@ def detect_gateway_ip() -> str | None:
 
 def detect_wifi_ssid() -> str | None:
     """检测当前连接的 WiFi SSID（跨平台）"""
-    system = platform.system()
-    profile_logger.debug("正在检测 SSID，平台: %s", system)
+    # 使用 platform_utils 进行跨平台检测
+    profile_logger.debug("正在检测 SSID")
 
     try:
-        if system == "Windows":
+        if is_windows():
             result = _detect_ssid_windows()
-        elif system == "Linux":
+        elif is_linux():
             result = _detect_ssid_linux()
-        elif system == "Darwin":
+        elif is_macos():
             result = _detect_ssid_darwin()
         else:
-            profile_logger.warning("不支持的平台: %s", system)
+            profile_logger.warning("不支持的平台")
             return None
 
         if result:
@@ -565,7 +565,6 @@ class ProfileService:
     @staticmethod
     def _try_load_dotenv_fallback(env_config: dict[str, Any]) -> dict[str, Any]:
         """回退：直接读取 .env 文件（旧版用户升级时 dotenv 不再自动加载）"""
-        import os as _os
         from pathlib import Path as _Path
         env_file = _Path.cwd() / ".env"
         if not env_file.exists():

@@ -1,24 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Campus-Auth setup script for macOS/Linux
-# - Create/use project-local venv
-# - Install/update dependencies by requirements hash
-# - Ensure Playwright Chromium is installed
-# - Avoid duplicate start by checking APP_PORT
+# ============================================================
+# Campus-Auth 环境初始化脚本 (macOS/Linux)
+# - 交互式选择启动方式：uv（推荐）或系统 Python
+# - uv 模式：uv sync → uv run playwright install → 启动
+# - 系统 Python 模式：检查版本 → 虚拟环境 → 安装依赖 → 启动
+# - 通过 APP_PORT 检测重复启动
+# ============================================================
 
-PYTHON_VERSION="${PYTHON_VERSION:-3.10}"
-PYTHON_FULL_VERSION="${PYTHON_FULL_VERSION:-3.10.16}"
+# ==================== 配置 ====================
+
+PIP_MIRROR_EXPLICIT=0                # 用户是否显式指定了镜像（env/--pip-mirror）
+[[ -n "${PIP_MIRROR+set}" ]] && PIP_MIRROR_EXPLICIT=1
 PIP_MIRROR="${PIP_MIRROR:-https://mirrors.cernet.edu.cn/pypi/simple}"
-PYTHON_MIRROR="${PYTHON_MIRROR:-https://mirrors.cernet.edu.cn/python}"
 FORCE_REINSTALL="${FORCE_REINSTALL:-0}"
 VERBOSE="${VERBOSE:-0}"
+USE_SYSTEM_PROXY="${USE_SYSTEM_PROXY:-0}"
+LAUNCH_METHOD="${LAUNCH_METHOD:-}"   # uv 或 system，空则自动检测
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_DIR="$PROJECT_ROOT/environment"
 VENV_DIR="$ENV_DIR/python"
-PYTHON_EXE="$VENV_DIR/bin/python3"
-PIP_EXE="$VENV_DIR/bin/pip3"
+VENV_PYTHON="$VENV_DIR/bin/python3"
+VENV_PIP="$VENV_DIR/bin/pip3"
 REQUIREMENTS_FILE="$PROJECT_ROOT/requirements.txt"
 HASH_FILE="$ENV_DIR/.requirements_hash"
 LOG_DIR="$PROJECT_ROOT/logs"
@@ -29,38 +34,106 @@ DUPLICATE_EXIT_DELAY="${CAMPUS_AUTH_DUPLICATE_EXIT_DELAY:-10}"
 
 mkdir -p "$LOG_DIR" "$ENV_DIR"
 
+# ==================== 工具函数 ====================
+
+timestamp() { date "+%Y-%m-%d %H:%M:%S"; }
+
+write_log() {
+  local level="$1" message="$2"
+  local line="[$(timestamp)] [$level] $message"
+  [[ "$VERBOSE" == "1" ]] && echo "$line"
+  echo "$line" >> "$LOG_FILE"
+}
+
+log_info()    { write_log "INFO" "$1"; }
+log_success() { write_log "SUCCESS" "$1"; }
+log_warning() { write_log "WARNING" "$1"; }
+log_error()   { write_log "ERROR" "$1"; }
+
+# ---------- 端口与重复启动检测 ----------
+
+resolve_port() {
+  if [[ -n "${APP_PORT:-}" ]]; then echo "$APP_PORT"; return; fi
+  local env_file="$PROJECT_ROOT/.env"
+  if [[ -f "$env_file" ]]; then
+    local val
+    val="$(grep -E '^APP_PORT=' "$env_file" | tail -n 1 | cut -d '=' -f2- | tr -d '[:space:]' || true)"
+    [[ -n "$val" ]] && echo "$val" && return
+  fi
+  echo "$DEFAULT_PORT"
+}
+
+# 检测 127.0.0.1 上的 TCP 端口是否在监听
+# 优先用 python3，其次 python，最后用 bash /dev/tcp 兜底
+check_port_open() {
+  local port="$1"
+  local py
+  py="$(command -v python3 || command -v python || true)"
+  if [[ -n "$py" ]]; then
+    "$py" -c "
+import socket, sys
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.settimeout(0.6)
+sys.exit(0 if s.connect_ex(('127.0.0.1', $port)) == 0 else 1)
+" 2>/dev/null && return 0
+  fi
+  # bash 兜底（/dev/tcp 需 shell 编译时开启，部分环境不可用）
+  if [[ -r /dev/tcp ]]; then
+    timeout 1 bash -c "echo >/dev/tcp/127.0.0.1/$port" 2>/dev/null && return 0
+  fi
+  return 1
+}
+
+wait_before_duplicate_exit() {
+  local delay="$DUPLICATE_EXIT_DELAY"
+  if [[ "$delay" =~ ^[0-9]+$ ]] && (( delay > 0 )); then
+    log_info "${delay}s 后自动退出..."
+    sleep "$delay"
+  fi
+}
+
+# ---------- usage 帮助 ----------
+
 usage() {
   cat <<'EOF'
-Usage: ./setup_env.sh [options]
+用法: ./setup_env.sh [选项]
 
-Options:
-  --python-version <ver>    Python version (default: 3.10)
-  --python-mirror <url>     Python download mirror URL
-  --pip-mirror <url>        Pip mirror URL
-  --force-reinstall         Force reinstall dependencies
-  --no-auto                 Skip auto-login and auto-start (recovery mode)
-  --verbose                 Print logs to terminal
-  -h, --help                Show help
+选项:
+  --method <uv|system>      启动方式（默认交互式选择）
+  --pip-mirror <url>        pip 镜像源地址（仅系统 Python 模式有效）
+  --force-reinstall         强制重新安装依赖
+  --no-auto                 跳过自动登录和自动启动（恢复模式）
+  --verbose                 输出日志到终端
+  --use-system-proxy        使用系统 HTTP_PROXY/HTTPS_PROXY 代理
+  -h, --help                显示帮助
 
-Environment:
-  CAMPUS_AUTH_DUPLICATE_EXIT_DELAY   Delay seconds before exit on duplicate start (default: 10)
+环境变量:
+  CAMPUS_AUTH_DUPLICATE_EXIT_DELAY   检测到重复启动时延迟退出秒数（默认: 10）
+
+示例:
+  ./setup_env.sh                              交互式模式
+  ./setup_env.sh --method uv --no-auto        非交互式，使用 uv
+  LAUNCH_METHOD=system ./setup_env.sh         通过环境变量指定
 EOF
 }
+
+# ==================== 命令行参数解析 ====================
 
 NO_AUTO=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --python-version)
-      PYTHON_VERSION="${2:-$PYTHON_VERSION}"
-      shift 2
-      ;;
-    --python-mirror)
-      PYTHON_MIRROR="${2:-$PYTHON_MIRROR}"
-      shift 2
+    --method)
+      if [[ $# -ge 2 ]]; then
+        case "$2" in
+          uv|system) LAUNCH_METHOD="$2" ;;
+          *) echo "无效 --method 参数: $2（请使用 uv 或 system）"; exit 1 ;;
+        esac
+      fi
+      shift 2 || shift
       ;;
     --pip-mirror)
-      PIP_MIRROR="${2:-$PIP_MIRROR}"
-      shift 2
+      [[ $# -ge 2 ]] && PIP_MIRROR="$2" && PIP_MIRROR_EXPLICIT=1
+      shift 2 || shift
       ;;
     --force-reinstall)
       FORCE_REINSTALL="1"
@@ -74,346 +147,328 @@ while [[ $# -gt 0 ]]; do
       VERBOSE="1"
       shift
       ;;
+    --use-system-proxy)
+      USE_SYSTEM_PROXY="1"
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
       ;;
     *)
-      echo "Unknown option: $1"
+      echo "未知参数: $1"
       usage
       exit 1
       ;;
   esac
 done
 
-timestamp() {
-  date "+%Y-%m-%d %H:%M:%S"
-}
 
-write_log() {
-  local level="$1"
-  local message="$2"
-  local line="[$(timestamp)] [$level] $message"
-  if [[ "$VERBOSE" == "1" ]]; then
-    echo "$line"
-  fi
-  echo "$line" >> "$LOG_FILE"
-}
 
-log_info() { write_log "INFO" "$1"; }
-log_success() { write_log "SUCCESS" "$1"; }
-log_warning() { write_log "WARNING" "$1"; }
-log_error() { write_log "ERROR" "$1"; }
+# ==================== 交互式选择 ====================
 
-resolve_port() {
-  if [[ -n "${APP_PORT:-}" ]]; then
-    echo "$APP_PORT"
-    return
-  fi
-
-  local env_file="$PROJECT_ROOT/.env"
-  if [[ -f "$env_file" ]]; then
-    local val
-    val="$(grep -E '^APP_PORT=' "$env_file" | tail -n 1 | cut -d '=' -f2- | tr -d '[:space:]' || true)"
-    if [[ -n "$val" ]]; then
-      echo "$val"
-      return
-    fi
-  fi
-
-  echo "$DEFAULT_PORT"
-}
-
-is_service_running() {
-  local port="$1"
-  "$PYTHON_EXE" - "$port" <<'PY'
-import socket
-import sys
-
-port = int(sys.argv[1])
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-    sock.settimeout(0.6)
-    sys.exit(0 if sock.connect_ex(("127.0.0.1", port)) == 0 else 1)
-PY
-}
-
-wait_before_duplicate_exit() {
-  local delay="$DUPLICATE_EXIT_DELAY"
-  if [[ "$delay" =~ ^[0-9]+$ ]] && (( delay > 0 )); then
-    log_info "${delay} 秒后自动退出"
-    sleep "$delay"
-  fi
-}
-
-calculate_hash() {
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$REQUIREMENTS_FILE" | awk '{print $1}'
-  else
-    shasum -a 256 "$REQUIREMENTS_FILE" | awk '{print $1}'
-  fi
-}
-
-FALLBACK_PIP_MIRRORS=(
-  "https://mirrors.aliyun.com/pypi/simple"
-  "https://pypi.org/simple"
-)
-
-get_mirror_candidates() {
-  local mirrors=("$PIP_MIRROR")
-  for m in "${FALLBACK_PIP_MIRRORS[@]}"; do
-    local dup=0
-    for existing in "${mirrors[@]}"; do
-      [[ "$m" == "$existing" ]] && dup=1 && break
-    done
-    (( dup == 0 )) && mirrors+=("$m")
-  done
-  printf '%s\n' "${mirrors[@]}"
-}
-
-run_pip_with_mirror() {
-  local stage="$1"
-  shift
-  while IFS= read -r mirror; do
-    log_info "[$stage] 尝试镜像源: $mirror"
-    if "$PYTHON_EXE" -m pip "$@" --progress-bar=on -i "$mirror" 2>/dev/null; then
-      log_success "[$stage] 镜像成功: $mirror"
-      return 0
-    fi
-    log_warning "[$stage] 镜像失败: $mirror"
-  done < <(get_mirror_candidates)
-  log_error "[$stage] 所有镜像均失败"
+is_interactive() {
+  [[ -t 0 ]] && return 0
   return 1
 }
 
-get_platform_info() {
-  local os arch
-  os="$(uname -s)"
-  arch="$(uname -m)"
+detect_uv() {
+  command -v uv >/dev/null 2>&1
+}
 
-  case "$os" in
-    Linux)
-      case "$arch" in
-        x86_64)  echo "x86_64-unknown-linux-gnu" ;;
-        aarch64) echo "aarch64-unknown-linux-gnu" ;;
-        *)       log_error "不支持的 Linux 架构: $arch"; exit 1 ;;
-      esac
-      ;;
-    Darwin)
-      case "$arch" in
-        x86_64)  echo "x86_64-apple-darwin" ;;
-        arm64)   echo "aarch64-apple-darwin" ;;
-        *)       log_error "不支持的 macOS 架构: $arch"; exit 1 ;;
-      esac
-      ;;
-    *)
-      log_error "不支持的操作系统: $os"
-      exit 1
-      ;;
+detect_python3() {
+  command -v python3 &>/dev/null && echo "python3" && return 0
+  command -v python &>/dev/null && echo "python" && return 0
+  return 1
+}
+
+get_python_version() {
+  local py_cmd="$1"
+  "$py_cmd" --version 2>&1 | awk '{print $2}'
+}
+
+select_launch_method() {
+  local has_uv
+  detect_uv && has_uv=true || has_uv=false
+
+  local py_cmd py_ver py_status
+  py_cmd="$(detect_python3)" && py_ver="$(get_python_version "$py_cmd")" || py_ver=""
+
+  if [[ -n "$py_ver" ]]; then
+    py_status="检测到 Python $py_ver"
+  else
+    py_status="未检测到（请先安装 Python 3.10+）"
+  fi
+
+  # 所有菜单文字用 >&2 输出到终端，避免被 $() 捕获
+  echo "" >&2
+  echo "================================================================" >&2
+  echo " Campus-Auth 启动方式选择" >&2
+  echo "================================================================" >&2
+  echo "" >&2
+  if $has_uv; then
+    echo "  [1] 使用 uv (推荐)        uv: $(uv --version 2>&1)" >&2
+  else
+    echo "  [1] 使用 uv (推荐)        uv: 未安装（可自动安装）" >&2
+  fi
+  echo "" >&2
+  echo "  [2] 使用系统 Python        $py_status" >&2
+  echo "" >&2
+  echo "================================================================" >&2
+  echo "" >&2
+
+  echo "  [0] 退出" >&2
+  echo "" >&2
+
+  local default=1
+  local choice
+  read -p "请选择 [0/1/2] (默认: ${default}): " choice
+  choice="${choice:-$default}"
+
+  case "$choice" in
+    0|q|Q) echo "quit" ;;
+    1) echo "uv" ;;
+    2) echo "system" ;;
+    *) echo "uv" ;;
   esac
 }
 
-download_embed_python() {
-  local platform="$1"
-  local version="$PYTHON_FULL_VERSION"
-  local filename="cpython-${version}-${platform}-install_only.tar.gz"
+# ==================== uv 模式 ====================
 
-  local temp_dir="$PROJECT_ROOT/temp"
-  mkdir -p "$temp_dir"
-  local tar_path="$temp_dir/$filename"
-
-  # 构建候选下载地址
-  local candidates=(
-    "${PYTHON_MIRROR}/${version}/${filename}"
-    "https://mirrors.cernet.edu.cn/python/${version}/${filename}"
-    "https://mirrors.aliyun.com/python/${version}/${filename}"
-    "https://github.com/indygreg/python-build-standalone/releases/download/${version}/${filename}"
-  )
-
-  log_info "下载 Python ${version} (${platform})..."
-  for url in "${candidates[@]}"; do
-    log_info "尝试下载: $url"
-    if curl -fSL --connect-timeout 15 --max-time 300 -o "$tar_path" "$url" 2>/dev/null; then
-      log_success "Python 下载完成"
-      echo "$tar_path"
-      return 0
-    fi
-    log_warning "下载失败，尝试下一个源..."
-  done
-
-  log_error "Python 下载失败：所有下载源均不可用"
-  return 1
-}
-
-install_embed_python() {
-  local platform
-  platform="$(get_platform_info)"
-
-  local tar_path
-  tar_path="$(download_embed_python "$platform")" || return 1
-
-  log_info "解压 Python 到: $VENV_DIR"
-  mkdir -p "$VENV_DIR"
-  tar -xzf "$tar_path" -C "$VENV_DIR" --strip-components=1
-
-  log_info "清理临时文件..."
-  rm -f "$tar_path"
-
-  # 确保 pip 可用
-  if [[ ! -x "$PIP_EXE" ]]; then
-    log_info "安装 pip..."
-    "$PYTHON_EXE" -m ensurepip --upgrade 2>/dev/null || true
-  fi
-
-  log_success "Python 嵌入式环境安装完成"
-}
-
-check_python_version() {
-  if [[ ! -x "$PYTHON_EXE" ]]; then
-    return 1
-  fi
-  local py_ver
-  py_ver="$($PYTHON_EXE --version 2>&1 || true)"
-  if [[ "$py_ver" == *"$PYTHON_VERSION"* ]]; then
+try_fallback_system_python() {
+  local reason="$1"
+  log_warning "$reason"
+  if is_interactive; then
+    echo ""
+    local answer
+    read -p "是否尝试使用系统 Python 方式? (Y/n/B 返回): " answer
+    answer="${answer:-Y}"
+    case "$answer" in
+      [Bb]) return 2 ;;  # 返回主菜单
+      [Nn]) return 1 ;;  # 取消
+      *)                 # 确认回退
+        log_info "已切换到系统 Python 方式"
+        LAUNCH_METHOD="system"
+        return 0
+        ;;
+    esac
+  else
+    log_warning "非交互模式，自动回退到系统 Python 方式"
+    LAUNCH_METHOD="system"
     return 0
   fi
-  return 1
 }
 
-ensure_python() {
-  if check_python_version && [[ "$FORCE_REINSTALL" != "1" ]]; then
-    local py_ver
-    py_ver="$($PYTHON_EXE --version 2>&1 || true)"
-    log_success "Python 已就绪 (版本: $py_ver)"
-    return
+ensure_uv_installed() {
+  if detect_uv; then
+    log_success "uv 已就绪: $(uv --version 2>&1)"
+    return 0
   fi
 
-  log_info "安装 Python ${PYTHON_VERSION} 嵌入式环境..."
-  install_embed_python
+  log_warning "系统中未检测到 uv"
+  echo ""
+  local answer
+  read -p "是否自动安装 uv? (Y/n/B 返回): " answer
+  answer="${answer:-Y}"
 
-  if ! check_python_version; then
-    log_error "Python 安装失败，请检查网络连接或手动安装 Python ${PYTHON_VERSION}+"
+  case "$answer" in
+    [Bb]) return 2 ;;                              # 返回主菜单
+    [Nn])
+      local fb_rc=0; try_fallback_system_python "已取消 uv 安装" || fb_rc=$?
+      [[ $fb_rc -eq 2 ]] && return 2               # 返回主菜单
+      [[ $fb_rc -eq 0 ]] && return 1               # 已切到 system，让上层继续
+      exit 1
+      ;;
+    *) ;;                                           # 安装
+  esac
+
+  log_info "正在安装 uv (curl -LsSf https://astral.sh/uv/install.sh)..."
+  if curl -LsSf https://astral.sh/uv/install.sh | sh; then
+    # 加载 shell 配置文件，使 uv 进入 PATH
+    if [[ -f "$HOME/.cargo/env" ]]; then
+      source "$HOME/.cargo/env"
+    fi
+    export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+
+    if detect_uv; then
+      log_success "uv 安装成功: $(uv --version 2>&1)"
+      return 0
+    fi
+  fi
+
+  try_fallback_system_python "uv 自动安装失败" && return 1
+  log_error "请手动安装 uv:"
+  log_error "  curl -LsSf https://astral.sh/uv/install.sh | sh"
+  exit 1
+}
+
+setup_with_uv() {
+  log_info "========== 使用 uv 方式 =========="
+  local rc=0; ensure_uv_installed || rc=$?
+  [[ $rc -eq 2 ]] && return 2           # 返回主菜单
+  [[ "$LAUNCH_METHOD" != "uv" ]] && return 1  # 已回退到 system
+
+  # pyproject.toml 已配置清华源，只在用户显式指定镜像时传入
+  if (( PIP_MIRROR_EXPLICIT )); then
+    export UV_INDEX_URL="$PIP_MIRROR"
+    log_info "uv 镜像源: $UV_INDEX_URL（用户指定）"
+  fi
+
+  log_info ">>> 同步依赖 (uv sync)..."
+  local sync_ok=true
+  if [[ "$VERBOSE" == "1" ]]; then
+    uv sync || sync_ok=false
+  else
+    uv sync 2>/dev/null || sync_ok=false
+  fi
+
+  if ! $sync_ok; then
+    local fb2_rc=0; try_fallback_system_python "uv sync 失败（网络问题或依赖错误）" || fb2_rc=$?
+    [[ $fb2_rc -eq 2 ]] && return 2     # 返回主菜单
+    [[ $fb2_rc -eq 0 ]] && return 1     # 已回退到 system
+    log_error "uv sync 失败，已取消"
+    exit 1
+  fi
+  log_success "依赖同步完成"
+
+  log_info ">>> 安装 Playwright Chromium 浏览器..."
+  local pw_host="${PLAYWRIGHT_DOWNLOAD_HOST:-https://npmmirror.com/mirrors/playwright}"
+  if PLAYWRIGHT_DOWNLOAD_HOST="$pw_host" uv run playwright install chromium 2>/dev/null; then
+    log_success "Playwright 浏览器安装完成"
+  else
+    log_warning "Playwright 浏览器安装失败，但可继续启动"
+  fi
+}
+
+# ==================== 系统 Python 模式 ====================
+
+check_system_python() {
+  local py_cmd
+  py_cmd="$(detect_python3)"
+  if [[ -z "$py_cmd" ]]; then
+    log_error "系统中未检测到 python3 或 python"
+    log_error "请先安装 Python 3.10+ (推荐 https://www.python.org/downloads/)"
     exit 1
   fi
 
   local py_ver
-  py_ver="$($PYTHON_EXE --version 2>&1 || true)"
-  log_success "Python 已就绪 (版本: $py_ver)"
+  py_ver="$(get_python_version "$py_cmd")"
+  local major_minor
+  major_minor="$(echo "$py_ver" | cut -d. -f1,2)"
+
+  log_info "系统 Python 版本: $py_ver"
+
+  if [[ "$major_minor" == "3.10" ]]; then
+    log_success "Python 版本符合推荐要求"
+    return 0
+  fi
+
+  # 不是 3.10，弹出兼容性警告
+  echo ""
+  log_warning "=============================================="
+  log_warning "  Python $py_ver 可能与项目不完全兼容"
+  log_warning "  项目推荐使用 Python 3.10"
+  log_warning "  requires-python = \">=3.10\""
+  log_warning "=============================================="
+  echo ""
+
+  # 非交互模式自动继续，交互模式让用户决定
+  if is_interactive; then
+    local answer
+    read -p "检测到 Python $major_minor，可能存在兼容问题。是否继续? (Y/n/B 返回): " answer
+    answer="${answer:-Y}"
+    case "$answer" in
+      [Bb]) return 2 ;;                                 # 返回主菜单
+      [Nn]) log_info "已取消，请安装 Python 3.10 后重试"; exit 0 ;;
+      *) ;;                                              # 继续
+    esac
+  else
+    log_warning "Python $major_minor 不是推荐版本，但将继续 (非交互模式)"
+  fi
 }
 
-ensure_pip() {
-  if [[ ! -x "$PYTHON_EXE" ]]; then
-    log_error "Python 不可用: $PYTHON_EXE"
+setup_with_system_python() {
+  log_info "========== 使用系统 Python 方式 =========="
+  local rc=0; check_system_python || rc=$?
+  [[ $rc -eq 2 ]] && return 2  # 返回主菜单
+
+  local system_python
+  system_python="$(detect_python3)"
+
+  # 创建虚拟环境
+  if [[ -d "$VENV_DIR" ]]; then
+    log_info "虚拟环境已存在: $VENV_DIR"
+    if [[ "$FORCE_REINSTALL" == "1" ]]; then
+      log_info "FORCE_REINSTALL 已设置，重新创建虚拟环境..."
+      rm -rf "$VENV_DIR"
+    fi
+  fi
+
+  if [[ ! -d "$VENV_DIR" ]]; then
+    log_info ">>> 创建虚拟环境: $VENV_DIR"
+    "$system_python" -m venv "$VENV_DIR"
+    log_success "虚拟环境创建完成"
+  fi
+
+  if [[ ! -x "$VENV_PYTHON" ]]; then
+    log_error "虚拟环境 Python 不可用: $VENV_PYTHON"
     exit 1
   fi
 
-  "$PYTHON_EXE" -m ensurepip --upgrade >/dev/null 2>&1 || true
-  run_pip_with_mirror "基础工具" install --upgrade pip setuptools wheel || true
-  local pip_ver
-  pip_ver="$($PYTHON_EXE -m pip --version 2>&1 || true)"
-  log_success "Pip 已就绪 (版本: $pip_ver)"
-}
+  # 升级 pip
+  log_info ">>> 升级 pip..."
+  if [[ "$VERBOSE" == "1" ]]; then
+    "$VENV_PYTHON" -m pip install --upgrade pip setuptools wheel -i "$PIP_MIRROR" || true
+  else
+    "$VENV_PYTHON" -m pip install --upgrade pip setuptools wheel -i "$PIP_MIRROR" >/dev/null 2>&1 || true
+  fi
 
-install_dependencies_if_needed() {
+  # 安装项目依赖
   if [[ ! -f "$REQUIREMENTS_FILE" ]]; then
     log_error "requirements.txt 不存在: $REQUIREMENTS_FILE"
     exit 1
   fi
 
-  local current_hash
-  current_hash="$(calculate_hash)"
-  local last_hash=""
-  if [[ -f "$HASH_FILE" ]]; then
-    last_hash="$(tr -d '[:space:]' < "$HASH_FILE")"
-  fi
-
-  log_info "当前哈希: ${current_hash:0:8}..."
-  if [[ -n "$last_hash" ]]; then
-    log_info "读取到哈希值: ${last_hash:0:8}..."
-  fi
-
-  if [[ "$FORCE_REINSTALL" == "1" || -z "$last_hash" || "$current_hash" != "$last_hash" ]]; then
-    log_info ">>> 开始安装依赖..."
-    run_pip_with_mirror "项目依赖" install -r "$REQUIREMENTS_FILE"
-    printf "%s" "$current_hash" > "$HASH_FILE"
-    log_success "依赖安装完成"
+  log_info ">>> 安装项目依赖..."
+  if [[ "$VERBOSE" == "1" ]]; then
+    "$VENV_PYTHON" -m pip install -r "$REQUIREMENTS_FILE" -i "$PIP_MIRROR"
   else
-    log_success "依赖已是最新，跳过安装"
+    "$VENV_PYTHON" -m pip install -r "$REQUIREMENTS_FILE" -i "$PIP_MIRROR" >/dev/null 2>&1
   fi
-}
+  log_success "依赖安装完成"
 
-has_playwright_chromium() {
-  "$PYTHON_EXE" - <<'PY'
-import os
-from pathlib import Path
-import sys
-
-try:
-    from playwright.sync_api import sync_playwright
-except Exception:
-    sys.exit(1)
-
-with sync_playwright() as p:
-    exe = p.chromium.executable_path
-    if not (exe and Path(exe).exists()):
-        sys.exit(1)
-    # 同时检查 chromium_headless_shell 是否存在
-    chromium_dir = Path(exe).resolve().parent.parent
-    rev = chromium_dir.name.replace('chromium-', '')
-    headless = chromium_dir.parent / f'chromium_headless_shell-{rev}'
-    sys.exit(0 if headless.is_dir() else 1)
-PY
-}
-
-ensure_playwright() {
-  if has_playwright_chromium; then
-    log_success "Playwright 浏览器已安装"
-    return
-  fi
-
+  # 安装 Playwright 浏览器
+  log_info ">>> 安装 Playwright Chromium 浏览器..."
   local pw_host="${PLAYWRIGHT_DOWNLOAD_HOST:-https://npmmirror.com/mirrors/playwright}"
-  log_info ">>> 安装 Playwright 浏览器..."
-  log_info "Playwright 镜像: $pw_host"
-  PLAYWRIGHT_DOWNLOAD_HOST="$pw_host" "$PYTHON_EXE" -m playwright install chromium
-  log_success "Playwright 安装完成"
+  if PLAYWRIGHT_DOWNLOAD_HOST="$pw_host" "$VENV_PYTHON" -m playwright install chromium 2>/dev/null; then
+    log_success "Playwright 浏览器安装完成"
+  else
+    log_warning "Playwright 浏览器安装失败，但可继续启动"
+  fi
 }
 
-main() {
-  log_info "========================================"
-  log_info "Campus-Auth 环境初始化脚本 (macOS/Linux)"
-  log_info "========================================"
-  log_info "项目根目录: $PROJECT_ROOT"
-  log_info "ENV 目录: $ENV_DIR"
-  log_info "Python 版本: ${PYTHON_VERSION}"
-  log_info "Python 镜像源: $PYTHON_MIRROR"
-  log_info "Pip 镜像源: $PIP_MIRROR"
+# ==================== 启动应用 ====================
 
-  local port
-  port="$(resolve_port)"
-  if is_service_running "$port"; then
-    log_success "检测到服务已在运行: http://127.0.0.1:$port"
-    log_info "请勿重复启动"
-    wait_before_duplicate_exit
-    exit 0
+launch_app() {
+  local port="$1"
+
+  log_info ""
+  log_info "================================================"
+  log_info "  环境初始化完成!"
+  log_info "================================================"
+
+  if [[ "$LAUNCH_METHOD" == "uv" ]]; then
+    log_info "  启动命令: uv run app.py"
+  else
+    log_info "  Python 路径: $VENV_PYTHON"
+    log_info "  Pip 路径:   $VENV_PIP"
+    log_info "  启动命令:   $VENV_PYTHON app.py"
   fi
-
-  ensure_python
-  ensure_pip
-  install_dependencies_if_needed
-  ensure_playwright
-
-  log_success "环境初始化完成！"
+  log_info "  日志文件: $LOG_FILE"
   log_info ""
-  log_info "Python 路径: $PYTHON_EXE"
-  log_info "Pip 路径: $PIP_EXE"
-  log_info ""
-  log_info "使用方法:"
-  log_info "  运行项目: $PYTHON_EXE app.py"
-  log_info "  安装新依赖: $PYTHON_EXE -m pip install <包名> -i $PIP_MIRROR"
-  log_info "  查看已安装包: $PYTHON_EXE -m pip list"
-  log_info ""
-  log_info "日志文件: $LOG_FILE"
 
-  if is_service_running "$port"; then
+  # 再次检查端口（服务可能在上次检查后已被其他进程启动）
+  if check_port_open "$port"; then
     log_success "检测到服务已在运行: http://127.0.0.1:$port"
     log_info "已跳过重复启动"
     wait_before_duplicate_exit
@@ -421,27 +476,108 @@ main() {
   fi
 
   log_info ">>> 启动应用..."
-  env \
-    "CAMPUS_AUTH_PROJECT_ROOT=$PROJECT_ROOT" \
-    "AUTO_INSTALL_PLAYWRIGHT=false" \
-    "$PYTHON_EXE" "$PROJECT_ROOT/app.py" --no-browser $NO_AUTO &
+
+  if [[ "$LAUNCH_METHOD" == "uv" ]]; then
+    env \
+      "CAMPUS_AUTH_PROJECT_ROOT=$PROJECT_ROOT" \
+      "AUTO_INSTALL_PLAYWRIGHT=false" \
+      uv run "$PROJECT_ROOT/app.py" --no-browser $NO_AUTO &
+  else
+    env \
+      "CAMPUS_AUTH_PROJECT_ROOT=$PROJECT_ROOT" \
+      "AUTO_INSTALL_PLAYWRIGHT=false" \
+      "$VENV_PYTHON" "$PROJECT_ROOT/app.py" --no-browser $NO_AUTO &
+  fi
   APP_PID=$!
 
   # 等待服务就绪后打开浏览器
   for i in $(seq 1 15); do
     sleep 1
-    if is_service_running "$port"; then
+    if check_port_open "$port"; then
       log_success "服务已启动: http://127.0.0.1:$port"
-      if command -v open >/dev/null 2>&1; then
-        open "http://127.0.0.1:$port"
-      elif command -v xdg-open >/dev/null 2>&1; then
-        xdg-open "http://127.0.0.1:$port"
-      fi
+      case "$(uname -s)" in
+        Darwin)
+          open "http://127.0.0.1:$port" ;;
+        Linux*)
+          command -v xdg-open &>/dev/null && xdg-open "http://127.0.0.1:$port" || true ;;
+      esac
       break
     fi
   done
 
   wait $APP_PID
+}
+
+# ==================== 主流程 ====================
+
+main() {
+  log_info "================================================"
+  log_info "  Campus-Auth 环境初始化脚本 (macOS/Linux)"
+  log_info "================================================"
+  log_info "项目根目录: $PROJECT_ROOT"
+
+  local port
+  port="$(resolve_port)"
+
+  # 检查是否已有实例运行
+  if check_port_open "$port"; then
+    log_success "检测到服务已在运行: http://127.0.0.1:$port"
+    log_info "请勿重复启动"
+    wait_before_duplicate_exit
+    exit 0
+  fi
+
+  # 交互选择 + 执行的循环，子菜单按 B 返回时重新选择
+  while true; do
+    # 确定启动方法
+    if [[ -z "$LAUNCH_METHOD" ]]; then
+      if is_interactive; then
+        LAUNCH_METHOD="$(select_launch_method)"
+        [[ "$LAUNCH_METHOD" == "quit" ]] && log_info "已退出" && exit 0
+      else
+        # 非交互模式，检测到 uv 就用 uv，否则用系统 Python
+        if detect_uv; then
+          LAUNCH_METHOD="uv"
+        else
+          LAUNCH_METHOD="system"
+        fi
+        log_info "非交互模式，自动选择: $LAUNCH_METHOD"
+      fi
+    fi
+
+    log_info "启动方式: $LAUNCH_METHOD"
+
+    if [[ "$LAUNCH_METHOD" == "uv" ]]; then
+      local rc=0; setup_with_uv || rc=$?
+      if [[ $rc -eq 2 ]]; then
+        LAUNCH_METHOD=""  # 返回主菜单，清空选择
+        continue
+      fi
+      if [[ "$LAUNCH_METHOD" == "system" ]]; then
+        # 已回退到 system，继续走下面的 system 分支
+        :
+      else
+        launch_app "$port"
+        break
+      fi
+    fi
+
+    if [[ "$LAUNCH_METHOD" == "system" ]]; then
+      local rc2=0; setup_with_system_python || rc2=$?
+      if [[ $rc2 -eq 2 ]]; then
+        LAUNCH_METHOD=""  # 返回主菜单
+        continue
+      fi
+      launch_app "$port"
+      break
+    fi
+
+    # 未知方式，重新选择
+    if [[ -n "$LAUNCH_METHOD" ]]; then
+      log_error "未知的启动方式: $LAUNCH_METHOD"
+    fi
+    LAUNCH_METHOD=""
+  done
 }
 
 main "$@"

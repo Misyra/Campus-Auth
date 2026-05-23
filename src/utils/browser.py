@@ -84,8 +84,8 @@ class BrowserContextManager:
                 ctx_opts: dict = {
                     "viewport": {"width": 1280, "height": 720},
                     "extra_http_headers": extra_headers,
-                    "locale": "zh-CN",
-                    "timezone_id": "Asia/Shanghai",
+                    "locale": self.browser_settings.get("locale", "zh-CN"),  # 从配置中读取语言区域
+                    "timezone_id": self.browser_settings.get("timezone_id", "Asia/Shanghai"),  # 从配置中读取时区
                     "has_touch": False,
                     "color_scheme": "light",
                     "ignore_https_errors": True,

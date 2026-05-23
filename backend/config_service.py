@@ -94,6 +94,8 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
     browser_disable_web_security = global_profile.browser_disable_web_security
     browser_extra_headers_json = global_profile.browser_extra_headers_json
     browser_args = global_profile.browser_args
+    browser_locale = global_profile.browser_locale  # 浏览器语言区域
+    browser_timezone = global_profile.browser_timezone  # 浏览器时区 ID
     pause_enabled = global_profile.pause_enabled
     pause_start_hour = global_profile.pause_start_hour
     pause_end_hour = global_profile.pause_end_hour
@@ -119,6 +121,8 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
         browser_disable_web_security=browser_disable_web_security,
         browser_extra_headers_json=browser_extra_headers_json,
         browser_args=browser_args,
+        browser_locale=browser_locale,
+        browser_timezone=browser_timezone,
         pause_enabled=pause_enabled,
         pause_start_hour=pause_start_hour,
         pause_end_hour=pause_end_hour,
@@ -136,6 +140,7 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
         screenshot_retention_days=sys.screenshot_retention_days,
         custom_variables=custom_variables,
         proxy=sys.proxy,
+        block_proxy=sys.block_proxy,
     )
 
 
@@ -209,6 +214,9 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
         browser_disable_web_security = profile.browser_disable_web_security
         browser_extra_headers_json = profile.browser_extra_headers_json
         browser_args = profile.browser_args
+        block_proxy = profile.block_proxy  # 屏蔽系统代理
+        browser_locale = profile.browser_locale  # 浏览器语言区域
+        browser_timezone = profile.browser_timezone  # 浏览器时区 ID
         pause_enabled = profile.pause_enabled
         pause_start_hour = profile.pause_start_hour
         pause_end_hour = profile.pause_end_hour
@@ -227,6 +235,9 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
         browser_disable_web_security = global_profile.browser_disable_web_security
         browser_extra_headers_json = global_profile.browser_extra_headers_json
         browser_args = global_profile.browser_args
+        block_proxy = global_profile.block_proxy  # 屏蔽系统代理
+        browser_locale = global_profile.browser_locale  # 浏览器语言区域
+        browser_timezone = global_profile.browser_timezone  # 浏览器时区 ID
         pause_enabled = global_profile.pause_enabled
         pause_start_hour = global_profile.pause_start_hour
         pause_end_hour = global_profile.pause_end_hour
@@ -252,6 +263,8 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
         browser_disable_web_security=browser_disable_web_security,
         browser_extra_headers_json=browser_extra_headers_json,
         browser_args=browser_args,
+        browser_locale=browser_locale,
+        browser_timezone=browser_timezone,
         pause_enabled=pause_enabled,
         pause_start_hour=pause_start_hour,
         pause_end_hour=pause_end_hour,
@@ -269,6 +282,7 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
         screenshot_retention_days=sys.screenshot_retention_days,
         custom_variables=custom_variables,
         proxy=sys.proxy,
+        block_proxy=block_proxy,
     )
 
 
@@ -312,6 +326,8 @@ def build_runtime_config(payload: MonitorConfigPayload, sys: SystemSettings | No
     )
     browser["browser_args"] = payload.browser_args.strip()
     browser["stealth_mode"] = payload.stealth_mode
+    browser["locale"] = payload.browser_locale.strip()  # 浏览器语言区域
+    browser["timezone_id"] = payload.browser_timezone.strip()  # 浏览器时区 ID
 
     pause = base.setdefault("pause_login", {})
     pause["enabled"] = payload.pause_enabled
@@ -340,6 +356,7 @@ def build_runtime_config(payload: MonitorConfigPayload, sys: SystemSettings | No
     base["log_retention_days"] = payload.log_retention_days
     base["screenshot_retention_days"] = payload.screenshot_retention_days
     base["custom_variables"] = payload.custom_variables
+    base["block_proxy"] = payload.block_proxy  # 屏蔽系统代理
 
     # 重试策略从系统设置读取
     if sys:
@@ -394,6 +411,7 @@ def save_config_combined(
     sys.log_retention_days = payload.log_retention_days
     sys.screenshot_retention_days = payload.screenshot_retention_days
     sys.proxy = payload.proxy.strip()
+    sys.block_proxy = payload.block_proxy  # 屏蔽系统代理
 
     data.system = sys
 
@@ -410,6 +428,8 @@ def save_config_combined(
         glob.browser_disable_web_security = payload.browser_disable_web_security
         glob.browser_extra_headers_json = _normalize_headers_json(payload.browser_extra_headers_json)
         glob.browser_args = payload.browser_args.strip()
+        glob.browser_locale = payload.browser_locale.strip()  # 浏览器语言区域
+        glob.browser_timezone = payload.browser_timezone.strip()  # 浏览器时区 ID
         glob.pause_enabled = payload.pause_enabled
         glob.pause_start_hour = payload.pause_start_hour
         glob.pause_end_hour = payload.pause_end_hour

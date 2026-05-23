@@ -11,6 +11,8 @@ import os
 import subprocess
 import sys
 import threading
+
+from src.utils.platform_utils import is_windows, is_macos
 from pathlib import Path
 from typing import Callable
 
@@ -54,9 +56,9 @@ def _has_chromium() -> bool:
     # （后者会加载 ~15-20MB 的 Python 绑定并启动一个 Playwright 实例）
     _search_locations = []
     # 标准 ms-playwright 缓存目录
-    if sys.platform == "win32":
+    if is_windows():  # Windows 平台
         _search_locations.append(Path.home() / "AppData" / "Local" / "ms-playwright")
-    elif sys.platform == "darwin":
+    elif is_macos():  # macOS 平台
         _search_locations.append(Path.home() / "Library" / "Caches" / "ms-playwright")
     else:
         _search_locations.append(Path.home() / ".cache" / "ms-playwright")
