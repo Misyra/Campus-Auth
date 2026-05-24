@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.utils import ConfigLoader, ConfigValidator
+from src.utils import ConfigValidator
 from src.utils.env import build_login_env_vars
 from src.utils.logging import LogConfigCenter, get_logger
 from src.version import get_project_version
@@ -73,7 +73,7 @@ async def lifespan(app_instance):
                         settings_path, settings_path.exists(),
                         settings_path.stat().st_size if settings_path.exists() else 0)
     try:
-        env_config = ConfigLoader.load_config_from_env()
+        env_config = {}
         profile_service.migrate_config(env_config)
         service.reload_config()
         # 诊断：打印加载后的关键配置
@@ -1345,7 +1345,7 @@ app.mount("/temp", StaticFiles(directory=TEMP_DIR), name="temp")
 def run() -> None:
     import uvicorn
 
-    config = ConfigLoader.load_config_from_env()
+    config = {}
 
     # 优先从 settings.json 读取系统设置（Web 控制台可修改）
     try:

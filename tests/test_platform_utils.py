@@ -7,7 +7,6 @@ from src.utils.platform_utils import (
     __all__,
     get_default_ua,
     get_platform,
-    is_fallback,
     is_linux,
     is_macos,
     is_windows,
@@ -82,25 +81,6 @@ class TestIsLinux:
             assert is_linux() is False
 
 
-class TestIsFallback:
-    """测试 is_fallback() 未知平台兜底"""
-
-    def test_win32_returns_false(self):
-        with patch.object(sys, "platform", "win32"):
-            assert is_fallback() is False
-
-    def test_darwin_returns_false(self):
-        with patch.object(sys, "platform", "darwin"):
-            assert is_fallback() is False
-
-    def test_linux_returns_false(self):
-        with patch.object(sys, "platform", "linux"):
-            assert is_fallback() is False
-
-    def test_unknown_platform_returns_true(self):
-        with patch.object(sys, "platform", "freebsd"):
-            assert is_fallback() is True
-
 
 class TestGetDefaultUa:
     """测试 get_default_ua() 返回平台对应的 UA 字符串"""
@@ -130,5 +110,5 @@ class TestAllExports:
     """测试 __all__ 正确导出全部 6 个函数"""
 
     def test_all_exports_all_functions(self):
-        expected = {"get_platform", "is_windows", "is_macos", "is_linux", "is_fallback", "get_default_ua"}
+        expected = {"get_platform", "is_windows", "is_macos", "is_linux", "get_default_ua"}
         assert set(__all__) == expected

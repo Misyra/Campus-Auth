@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 from .network_test import is_local_network_connected, is_network_available, set_block_proxy
 from .utils import (
-    ConfigLoader,
     LoginAttemptHandler,
     TimeUtils,
     get_runtime_stats,
@@ -48,7 +47,7 @@ class NetworkMonitorCore:
         log_callback: Optional[Callable[[str, str, str], None]] = None,
         thread_done: Optional[threading.Event] = None,
     ) -> None:
-        self.config = config or ConfigLoader.load_config_from_env()
+        self.config = config if config is not None else {}
         self.log_callback = log_callback
 
         # 线程完成事件：由 MonitorService 传入，用于安全等待线程实际结束

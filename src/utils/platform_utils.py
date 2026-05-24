@@ -11,7 +11,7 @@
 
 import sys
 
-__all__ = ["get_platform", "is_windows", "is_macos", "is_linux", "is_fallback", "get_default_ua"]
+__all__ = ["get_platform", "is_windows", "is_macos", "is_linux", "get_default_ua"]
 
 
 def get_platform() -> str:
@@ -39,11 +39,6 @@ def is_linux() -> bool:
     return sys.platform in ("linux", "linux2")
 
 
-def is_fallback() -> bool:
-    """当前是否为以上三类之外的操作系统（兜底处理）"""
-    return sys.platform not in ("win32", "darwin", "linux", "linux2")
-
-
 # 各平台默认的 Chrome 125 User-Agent 字符串
 _WINDOWS_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -65,7 +60,7 @@ _LINUX_UA = (
 def get_default_ua() -> str:
     """返回当前操作系统对应的默认 Chrome 125 User-Agent 字符串
 
-    对于不受支持的平台（is_fallback 为 True），统一返回 Linux 版本的 UA。
+    对于不受支持平台，统一返回 Linux 版本的 UA。
     """
     platform = get_platform()
     if platform == "windows":
