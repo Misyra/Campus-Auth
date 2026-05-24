@@ -1,5 +1,5 @@
 from .browser import BrowserContextManager
-from .config import ConfigLoader, ConfigValidator
+from .config import ConfigValidator
 from .crypto import decrypt_password, encrypt_password, mask_password
 from .exceptions import LoginCancelledError
 from .logging import (
@@ -22,7 +22,6 @@ __all__ = [
     "LoginCancelledError",
     "TimeUtils",
     "get_runtime_stats",
-    "ConfigLoader",
     "ConfigValidator",
     "BrowserContextManager",
     "LoginAttemptHandler",

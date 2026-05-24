@@ -402,23 +402,6 @@ uv run ruff format .
 
 ### 常用调试入口
 
-#### 配置加载
-
-```python
-from src.utils import ConfigLoader
-
-config = ConfigLoader.load_config_from_env()
-```
-
-#### 配置管理（单例缓存）
-
-```python
-from src.utils import ConfigManager
-
-config = ConfigManager.get_config()
-config = ConfigManager.reload_config()
-```
-
 #### 日志
 
 ```python

@@ -317,11 +317,9 @@ def _run_server(no_browser: bool = False, tray: bool = False, no_auto: bool = Fa
         time.perf_counter() - stage_begin,
     )
 
-    from src.utils import ConfigLoader
-
     stage_begin = time.perf_counter()
     startup_logger.info("启动阶段: 开始加载运行配置")
-    config = ConfigLoader.load_config_from_env()
+    config = {}
     startup_logger.info(
         "启动阶段: 运行配置加载完成，耗时 %.3fs",
         time.perf_counter() - stage_begin,
