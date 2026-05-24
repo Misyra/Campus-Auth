@@ -302,7 +302,7 @@ def _run_server(no_browser: bool = False, tray: bool = False, no_auto: bool = Fa
         except Exception:
             pass
         _cleanup_pid()
-        sys.exit(0)
+        os._exit(0)
 
     signal.signal(signal.SIGINT, _signal_handler)
     # SIGTERM 在 Windows 上不存在（仅有 SIGINT/SIGBREAK），需要守卫以避免 AttributeError
