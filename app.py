@@ -206,9 +206,9 @@ def _run_login_then_exit(config: dict, logger) -> None:
         data = ps.load()
 
         # 构建运行时配置
-        from backend.config_service import build_runtime_config, load_ui_config
-        ui_config = load_ui_config(ps)
-        runtime_config = build_runtime_config(ui_config, data.system)
+        from backend.config_service import build_runtime_config, load_runtime_config
+        payload = load_runtime_config(ps)
+        runtime_config = build_runtime_config(payload, data.system)
     except Exception as exc:
         print(f"加载配置失败: {exc}")
         sys.exit(1)
@@ -216,7 +216,7 @@ def _run_login_then_exit(config: dict, logger) -> None:
     retry_settings = runtime_config.get("retry_settings", {})
     raw = retry_settings.get("max_retries", 3)
     max_retries = max(0, min(raw, 10))
-    retry_interval = runtime_config.get("retry_interval", 5)
+    retry_interval = int(retry_settings.get("retry_interval", 5))
 
     handler = LoginAttemptHandler(runtime_config)
 
