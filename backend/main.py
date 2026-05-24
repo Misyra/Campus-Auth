@@ -29,7 +29,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.utils import ConfigValidator
-from src.utils.browser import STEALTH_INIT_SCRIPT
+from src.utils.browser import STEALTH_INIT_SCRIPT  # noqa: E402 — entire import block is below mimetypes
 from src.utils.env import build_login_env_vars
 from src.utils.logging import LogConfigCenter, get_logger
 from src.version import get_project_version
