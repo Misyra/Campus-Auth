@@ -10,6 +10,55 @@ import threading
 from .exceptions import LoginCancelledError
 from .logging import setup_logger
 
+# 浏览器反检测初始化脚本（stealth_mode 用）
+# 隐藏 webdriver / 模拟 plugins / 模拟 chrome / 覆盖 languages / 清除 Playwright 痕迹
+STEALTH_INIT_SCRIPT = """
+// 隐藏 webdriver 标志
+Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+
+// 模拟真实的 plugins 对象
+const makePlugin = (name, desc, filename) => ({
+    name, description: desc, filename,
+    length: 1,
+    item: () => null,
+    namedItem: () => null,
+});
+const fakePlugins = {
+    0: makePlugin('Chrome PDF Plugin', 'Portable Document Format', 'internal-pdf-viewer'),
+    1: makePlugin('Chrome PDF Viewer', '', 'mhjfbmdgcfjbbpaeojofohoefgiehjai'),
+    2: makePlugin('Native Client', '', 'internal-nacl-plugin'),
+    length: 3,
+    item: function(i) { return this[i] || null; },
+    namedItem: function(name) {
+        for (let i = 0; i < this.length; i++) {
+            if (this[i].name === name) return this[i];
+        }
+        return null;
+    },
+    refresh: function() {},
+    [Symbol.iterator]: function*() {
+        for (let i = 0; i < this.length; i++) yield this[i];
+    },
+};
+Object.defineProperty(navigator, 'plugins', {get: () => fakePlugins});
+
+// 模拟 chrome 对象
+window.chrome = {
+    runtime: { connect: function(){}, sendMessage: function(){} },
+    loadTimes: function() { return {}; },
+    csi: function() { return {}; },
+};
+
+// 覆盖 languages
+Object.defineProperty(navigator, 'languages', {
+    get: () => ['zh-CN', 'zh', 'en-US', 'en'],
+});
+
+// 隐藏 Playwright 注入的属性
+delete window.__playwright;
+delete window.__pw_manual;
+"""
+
 
 class BrowserContextManager:
     """浏览器上下文管理器 - 使用异步上下文管理器确保资源正确释放"""
@@ -102,52 +151,7 @@ class BrowserContextManager:
             self.page = await self.context.new_page()
             # 反检测脚本（默认关闭，需在方案设置中启用 stealth_mode）
             if self.browser_settings.get("stealth_mode", False):
-                await self.page.add_init_script("""
-                // 隐藏 webdriver 标志
-                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-
-                // 模拟真实的 plugins 对象
-                const makePlugin = (name, desc, filename) => ({
-                    name, description: desc, filename,
-                    length: 1,
-                    item: () => null,
-                    namedItem: () => null,
-                });
-                const fakePlugins = {
-                    0: makePlugin('Chrome PDF Plugin', 'Portable Document Format', 'internal-pdf-viewer'),
-                    1: makePlugin('Chrome PDF Viewer', '', 'mhjfbmdgcfjbbpaeojofohoefgiehjai'),
-                    2: makePlugin('Native Client', '', 'internal-nacl-plugin'),
-                    length: 3,
-                    item: function(i) { return this[i] || null; },
-                    namedItem: function(name) {
-                        for (let i = 0; i < this.length; i++) {
-                            if (this[i].name === name) return this[i];
-                        }
-                        return null;
-                    },
-                    refresh: function() {},
-                    [Symbol.iterator]: function*() {
-                        for (let i = 0; i < this.length; i++) yield this[i];
-                    },
-                };
-                Object.defineProperty(navigator, 'plugins', {get: () => fakePlugins});
-
-                // 模拟 chrome 对象
-                window.chrome = {
-                    runtime: { connect: function(){}, sendMessage: function(){} },
-                    loadTimes: function() { return {}; },
-                    csi: function() { return {}; },
-                };
-
-                // 覆盖 languages
-                Object.defineProperty(navigator, 'languages', {
-                    get: () => ['zh-CN', 'zh', 'en-US', 'en'],
-                });
-
-                // 隐藏 Playwright 注入的属性
-                delete window.__playwright;
-                delete window.__pw_manual;
-            """)
+                await self.page.add_init_script(STEALTH_INIT_SCRIPT)
             self.logger.info("浏览器启动完成")
 
         except Exception as e:

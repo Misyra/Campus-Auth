@@ -8,7 +8,7 @@ from .logging import (
     setup_logger,
 )
 from .login import LoginAttemptHandler
-from .time import TimeUtils, get_runtime_stats
+from .time_utils import TimeUtils, get_runtime_stats
 
 
 def str_to_bool(value: str) -> bool:

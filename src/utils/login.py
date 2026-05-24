@@ -16,7 +16,7 @@ from .browser import BrowserContextManager
 from .env import build_login_env_vars
 from .exceptions import LoginCancelledError
 from .logging import setup_logger
-from .time import TimeUtils
+from .time_utils import TimeUtils
 
 if False:  # Type-only import to avoid circular dependency at runtime
     from ..task_executor import TaskManager

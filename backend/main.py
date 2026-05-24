@@ -29,6 +29,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.utils import ConfigValidator
+from src.utils.browser import STEALTH_INIT_SCRIPT
 from src.utils.env import build_login_env_vars
 from src.utils.logging import LogConfigCenter, get_logger
 from src.version import get_project_version
@@ -268,52 +269,7 @@ class DebugSession:
 
         # 反检测脚本（默认关闭，需在方案设置中启用 stealth_mode）
         if not safe_mode and runtime_config.get("browser_settings", {}).get("stealth_mode", False):
-            await self.page.add_init_script("""
-                // 隐藏 webdriver 标志
-                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-
-                // 模拟真实的 plugins 对象
-                const makePlugin = (name, desc, filename) => ({
-                    name, description: desc, filename,
-                    length: 1,
-                    item: () => null,
-                    namedItem: () => null,
-                });
-                const fakePlugins = {
-                    0: makePlugin('Chrome PDF Plugin', 'Portable Document Format', 'internal-pdf-viewer'),
-                    1: makePlugin('Chrome PDF Viewer', '', 'mhjfbmdgcfjbbpaeojofohoefgiehjai'),
-                    2: makePlugin('Native Client', '', 'internal-nacl-plugin'),
-                    length: 3,
-                    item: function(i) { return this[i] || null; },
-                    namedItem: function(name) {
-                        for (let i = 0; i < this.length; i++) {
-                            if (this[i].name === name) return this[i];
-                        }
-                        return null;
-                    },
-                    refresh: function() {},
-                    [Symbol.iterator]: function*() {
-                        for (let i = 0; i < this.length; i++) yield this[i];
-                    },
-                };
-                Object.defineProperty(navigator, 'plugins', {get: () => fakePlugins});
-
-                // 模拟 chrome 对象
-                window.chrome = {
-                    runtime: { connect: function(){}, sendMessage: function(){} },
-                    loadTimes: function() { return {}; },
-                    csi: function() { return {}; },
-                };
-
-                // 覆盖 languages
-                Object.defineProperty(navigator, 'languages', {
-                    get: () => ['zh-CN', 'zh', 'en-US', 'en'],
-                });
-
-                // 隐藏 Playwright 注入的属性
-                delete window.__playwright;
-                delete window.__pw_manual;
-            """)
+            await self.page.add_init_script(STEALTH_INIT_SCRIPT)
 
         if url:
             await self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
