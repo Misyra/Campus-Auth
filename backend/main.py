@@ -1345,18 +1345,16 @@ app.mount("/temp", StaticFiles(directory=TEMP_DIR), name="temp")
 def run() -> None:
     import uvicorn
 
-    config = {}
-
     # 优先从 settings.json 读取系统设置（Web 控制台可修改）
     try:
         sys_settings = profile_service.load().system
-        log_level = sys_settings.backend_log_level or config.get("logging", {}).get("level", "WARNING")
+        log_level = sys_settings.backend_log_level or "WARNING"
         access_log_enabled = bool(sys_settings.access_log)
         log_retention = max(1, sys_settings.log_retention_days)
         sc_retention = max(1, sys_settings.screenshot_retention_days)
     except Exception:
-        log_level = config.get("logging", {}).get("level", "WARNING")
-        access_log_enabled = bool(config.get("access_log", False))
+        log_level = "WARNING"
+        access_log_enabled = False
         log_retention = 7
         sc_retention = 7
 
