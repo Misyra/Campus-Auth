@@ -141,69 +141,9 @@ python app.py --autostart disable
 
 首次使用时系统会通过初始化向导引导你填写配置，所有配置统一存储在 `settings.json` 中。
 
-### 核心配置项
+### 高级配置
 
-#### 认证配置
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `USERNAME` | - | 校园网用户名，必填。 |
-| `PASSWORD` | - | 校园网密码，必填，支持加密存储。 |
-| `LOGIN_URL` | `http://172.29.0.2` | 认证页面地址。 |
-| `ISP` | 空 | 运营商关键字，可填移动、联通、电信或自定义关键字。 |
-
-#### 服务配置
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `APP_PORT` | `50721` | Web 控制台端口。 |
-
-#### 监控配置
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `AUTO_START_MONITORING` | `false` | 启动后是否自动开始网络监控。 |
-| `MONITOR_INTERVAL` | `300` | 网络检测间隔，单位秒。 |
-| `PING_TARGETS` | `8.8.8.8:53,114.114.114.114:53,www.baidu.com:443` | 探测目标列表。 |
-| `MAX_CONSECUTIVE_FAILURES` | `3` | 连续登录失败次数上限。 |
-| `RETRY_MAX_RETRIES` | `3` | 登录重试最大次数。 |
-| `RETRY_INTERVAL` | `5` | 重试间隔，单位秒。 |
-
-#### 暂停时段
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `PAUSE_LOGIN_ENABLED` | `true` | 是否启用暂停登录时段。 |
-| `PAUSE_LOGIN_START_HOUR` | `0` | 暂停开始小时，0 到 23。 |
-| `PAUSE_LOGIN_END_HOUR` | `6` | 暂停结束小时，0 到 23。 |
-
-#### 浏览器配置
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `BROWSER_HEADLESS` | `true` | 是否使用无头模式。 |
-| `BROWSER_TIMEOUT` | `8000` | 浏览器操作超时时间，单位毫秒。 |
-| `BROWSER_LOW_RESOURCE_MODE` | `false` | 是否启用低资源模式（屏蔽图片、字体、媒体）。 |
-| `BROWSER_USER_AGENT` | 内置默认值 | 自定义 User-Agent。 |
-| `BROWSER_EXTRA_HEADERS_JSON` | 空 | 额外请求头，JSON 格式。 |
-| `BROWSER_DISABLE_WEB_SECURITY` | `false` | 禁用浏览器同源策略。 |
-
-#### 系统配置
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `MINIMIZE_TO_TRAY` | `true` | 是否最小化到系统托盘。 |
-| `CUSTOM_VARIABLES` | `{}` | 自定义变量，JSON 格式，可在任务模板中引用。 |
-| `AUTO_OPEN_BROWSER` | `false` | 启动后是否自动打开浏览器（可通过 Web 控制台设置覆盖）。 |
-
-#### Playwright 配置
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `AUTO_INSTALL_PLAYWRIGHT` | `true` | 是否自动安装 Chromium。 |
-| `PLAYWRIGHT_DOWNLOAD_HOST` | `https://npmmirror.com/mirrors/playwright` | Playwright 下载镜像源。 |
-
-#### settings.json 专有配置
+项目的所有配置现已统一通过 Web 控制台管理，配置数据存储在项目目录下的 `settings.json` 文件中。首次使用时，Web 控制台的初始化向导会引导你完成配置。如需高级配置（端口、代理等），可直接编辑 `settings.json` 或通过 Web 控制台"设置"页面操作。
 
 以下配置仅通过 Web 控制台或直接编辑 `settings.json` 设置，不支持环境变量：
 
