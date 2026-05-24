@@ -194,7 +194,7 @@ def _cmd_autostart(action: str) -> None:
 # ==================== 登录成功后退出 ====================
 
 
-def _run_login_then_exit(config: dict, logger) -> None:
+def _run_login_then_exit(logger) -> None:
     """登录成功后退出模式：循环重试登录，直到成功后退出进程。"""
     from src.utils import LoginAttemptHandler
 
@@ -317,13 +317,7 @@ def _run_server(no_browser: bool = False, tray: bool = False, no_auto: bool = Fa
         time.perf_counter() - stage_begin,
     )
 
-    stage_begin = time.perf_counter()
-    startup_logger.info("启动阶段: 开始加载运行配置")
-    config = {}
-    startup_logger.info(
-        "启动阶段: 运行配置加载完成，耗时 %.3fs",
-        time.perf_counter() - stage_begin,
-    )
+
     # 优先从 settings.json 读取（Web 控制台可修改），回退到 .env
     auto_open_browser = None
     try:
@@ -334,13 +328,13 @@ def _run_server(no_browser: bool = False, tray: bool = False, no_auto: bool = Fa
         login_then_exit = bool(_sys_settings.login_then_exit)
         auto_open_browser = bool(_sys_settings.auto_open_browser)
     except Exception:
-        minimize_to_tray = tray or bool(config.get("minimize_to_tray", False))
+        minimize_to_tray = tray or False
         login_then_exit = False
 
     # 登录成功后退出模式：循环重试直到登录成功，成功后退出进程
     # --no-auto 可跳过此模式，用于 login_then_exit 开启后无法进入 Web 控制台的恢复场景
     if login_then_exit and not no_auto:
-        _run_login_then_exit(config, startup_logger)
+        _run_login_then_exit(startup_logger)
         # 登录成功会 sys.exit(0)，不会到达这里；失败超限则回退到正常启动
 
     # 通过环境变量传递 --no-auto 标志给后端，跳过 auto_start
