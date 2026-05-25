@@ -6,9 +6,10 @@ export const uiMethods = {
     // 仅显示 Toast，不记录到通知历史（用于非关键信息如网络测试结果）
     this.toast = { success, message, leaving: false };
     if (this._toastTimer) clearTimeout(this._toastTimer);
+    if (this._toastLeavingTimer) clearTimeout(this._toastLeavingTimer);
     this._toastTimer = setTimeout(() => {
       this.toast.leaving = true;
-      setTimeout(() => {
+      this._toastLeavingTimer = setTimeout(() => {
         this.toast.message = '';
         this.toast.leaving = false;
       }, 300);
@@ -23,9 +24,10 @@ export const uiMethods = {
 
     this.toast = { success, message, leaving: false };
     if (this._toastTimer) clearTimeout(this._toastTimer);
+    if (this._toastLeavingTimer) clearTimeout(this._toastLeavingTimer);
     this._toastTimer = setTimeout(() => {
       this.toast.leaving = true;
-      setTimeout(() => {
+      this._toastLeavingTimer = setTimeout(() => {
         this.toast.message = '';
         this.toast.leaving = false;
       }, 300);

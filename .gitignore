@@ -49,6 +49,9 @@ AGENTS.md
 skills-lock.json
 .sisyphus/
 
+# Test files
+tests/
+
 # OpenCode working directory
 .omo/
 # OS

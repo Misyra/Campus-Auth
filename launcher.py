@@ -463,6 +463,12 @@ def install_python():
 
         try:
             with zipfile.ZipFile(zip_path, "r") as z:
+                PYTHON_DIR_RESOLVED = PYTHON_DIR.resolve()
+                for member in z.namelist():
+                    member_path = (PYTHON_DIR / member).resolve()
+                    if not str(member_path).startswith(str(PYTHON_DIR_RESOLVED)):
+                        log_error(f"解压路径穿越风险: {member}")
+                        return False
                 z.extractall(PYTHON_DIR)
             log_success("Python 解压完成")
         except Exception as e:
@@ -663,15 +669,19 @@ def install_playwright():
         env["PLAYWRIGHT_DOWNLOAD_HOST"] = download_host
         log_info(f"Playwright 镜像: {download_host}")
 
-        proc = subprocess.Popen(
-            [str(PYTHON_EXE), "-m", "playwright", "install", "chromium"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            env=env,
-        )
+        try:
+            result = subprocess.run(
+                [str(PYTHON_EXE), "-m", "playwright", "install", "chromium"],
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=600,
+            )
+        except subprocess.TimeoutExpired:
+            log_error("Playwright 安装超时 (10分钟)")
+            return False
 
-        for line in proc.stdout:
+        for line in result.stdout.splitlines():
             line = line.strip()
             if not line or "DeprecationWarning" in line or "trace-deprecation" in line:
                 continue
@@ -679,19 +689,13 @@ def install_playwright():
                 continue
             log_info(f"[Playwright] {line}")
 
-        proc.wait(timeout=600)
-
-        if proc.returncode == 0:
+        if result.returncode == 0:
             log_progress("Playwright", "安装完成", 100)
             log_success("Playwright 安装完成")
             return True
         else:
-            log_error(f"Playwright 安装失败 (exit code: {proc.returncode})")
+            log_error(f"Playwright 安装失败 (exit code: {result.returncode})")
             return False
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        log_error("Playwright 安装超时 (10分钟)")
-        return False
     except Exception as e:
         log_error(f"Playwright 安装异常: {e}")
         return False

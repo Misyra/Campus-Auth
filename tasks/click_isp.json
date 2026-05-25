@@ -43,7 +43,7 @@
       "description": "选择运营商（点击式自定义下拉框）",
       "selector": "[class*='service'], [class*='select'], [id*='service'], [id*='select'], [class*='isp'], [id*='isp']",
       "value": "{{ISP}}",
-      "option_selector": "[class*='option'], [class*='item'], li, [class*='dropdown'] > div, [class*='dropdown'] > span",
+      "option_selector": ".option, .item, [role='option']",
       "timeout": 10000
     },
     {
