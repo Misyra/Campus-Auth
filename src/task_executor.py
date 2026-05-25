@@ -395,14 +395,22 @@ class StepHandler(ABC):
                 if frame_element:
                     frame = await frame_element.content_frame()
                     if frame:
-                        logger.info("[frame] 使用 frame (content_frame): %s", frame_selector)
+                        logger.info(
+                            "[frame] 使用 frame (content_frame): %s", frame_selector
+                        )
                         return frame
                     else:
-                        logger.warning("[frame] content_frame() 返回 None: %s", frame_selector)
+                        logger.warning(
+                            "[frame] content_frame() 返回 None: %s", frame_selector
+                        )
                 else:
-                    logger.warning("[frame] CSS 选择器未匹配到 frame 元素: %s", frame_selector)
+                    logger.warning(
+                        "[frame] CSS 选择器未匹配到 frame 元素: %s", frame_selector
+                    )
             except Exception as e:
-                logger.warning("[frame] 验证 frame 元素时出错: %s, 错误: %s", frame_selector, e)
+                logger.warning(
+                    "[frame] 验证 frame 元素时出错: %s, 错误: %s", frame_selector, e
+                )
             return page
         except Exception as e:
             logger.warning("[frame] 无法定位 frame '%s': %s", frame_selector, e)
@@ -1088,12 +1096,14 @@ class TaskExecutor:
             # 等待表单元素出现（最长 5s），覆盖 SPA 门户延迟渲染的场景
             # 如果页面没有表单元素，静默跳过，不阻塞流程
             try:
-                await page.wait_for_selector('input,textarea', timeout=5000)
+                await page.wait_for_selector("input,textarea", timeout=5000)
             except Exception:
                 pass
 
             # reveal_hidden: 强制显示所有隐藏输入框，让后续 fill() 可以直接操作
-            if self.config.reveal_hidden and any(s.type != StepType.EVAL for s in self.config.steps):
+            if self.config.reveal_hidden and any(
+                s.type != StepType.EVAL for s in self.config.steps
+            ):
                 count = await self._reveal_hidden_inputs(page)
 
             for i, step in enumerate(self.config.steps):

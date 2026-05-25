@@ -41,7 +41,6 @@ def _get_executor() -> ThreadPoolExecutor:
         return _executor
 
 
-
 def is_local_network_connected() -> bool:
     """检查本地网络是否有实际连接（有线或无线）。
 
@@ -51,7 +50,11 @@ def is_local_network_connected() -> bool:
     try:
         hostname = socket.gethostname()
         ip_list = socket.gethostbyname_ex(hostname)[2]
-        non_loopback = [ip for ip in ip_list if not ip.startswith("127.") and not ip.startswith("169.254.")]
+        non_loopback = [
+            ip
+            for ip in ip_list
+            if not ip.startswith("127.") and not ip.startswith("169.254.")
+        ]
         if non_loopback:
             logger.info("本地网络已连接，IP: %s", ", ".join(non_loopback))
             return True
@@ -83,13 +86,23 @@ def _check_windows_adapter() -> bool:
     # 优先使用 PowerShell（结构化输出，不受系统语言影响）
     try:
         result = subprocess.run(
-            ["powershell", "-NoProfile", "-Command",
-             "Get-NetAdapter | Select-Object -ExpandProperty Status"],
-            capture_output=True, text=True, timeout=5,
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "Get-NetAdapter | Select-Object -ExpandProperty Status",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         if result.returncode == 0:
-            statuses = [line.strip().lower() for line in result.stdout.splitlines() if line.strip()]
+            statuses = [
+                line.strip().lower()
+                for line in result.stdout.splitlines()
+                if line.strip()
+            ]
             if "up" in statuses:
                 logger.info("检测到已连接的网络适配器 (PowerShell)")
                 return True
@@ -102,7 +115,9 @@ def _check_windows_adapter() -> bool:
     try:
         result = subprocess.run(
             ["netsh", "interface", "show", "interface"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         if result.returncode != 0:
@@ -110,8 +125,15 @@ def _check_windows_adapter() -> bool:
             return False
 
         # 已知的"已连接"多语言映射
-        connected_keywords = {"connected", "已连接", "接続済み", "connecté",
-                              "verbunden", "подключено", "conectado"}
+        connected_keywords = {
+            "connected",
+            "已连接",
+            "接続済み",
+            "connecté",
+            "verbunden",
+            "подключено",
+            "conectado",
+        }
         for line in result.stdout.splitlines():
             parts = line.split()
             if len(parts) >= 4 and parts[1].lower() in connected_keywords:
@@ -156,7 +178,9 @@ def _check_macos_service() -> bool:
         # 列出所有硬件端口及其设备名（输出受系统语言影响，设置 LC_ALL=C 强制英文）
         list_result = subprocess.run(
             ["networksetup", "-listallhardwareports"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
             env={"LC_ALL": "C"},  # 强制英文输出，便于解析 Device/Port 等关键字
         )
         if list_result.returncode != 0:
@@ -176,7 +200,9 @@ def _check_macos_service() -> bool:
         try:
             result = subprocess.run(
                 ["ifconfig", iface],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if result.returncode != 0:
                 continue
@@ -236,7 +262,9 @@ def is_network_available_http(
         start = time.perf_counter()
         try:
             with httpx.Client(trust_env=not _block_proxy) as client:
-                resp = client.get(url, timeout=timeout, follow_redirects=follow_redirects)
+                resp = client.get(
+                    url, timeout=timeout, follow_redirects=follow_redirects
+                )
             elapsed = (time.perf_counter() - start) * 1000
             if 200 <= resp.status_code < 300:
                 return (url, True, f"HTTP {resp.status_code} ({elapsed:.0f}ms)")
@@ -269,8 +297,12 @@ def is_network_available(
         return False
 
     urls_list = list(test_urls or ())
-    logger.info("开始网络检测 (TCP目标=%d, HTTP目标=%d, require_both=%s)",
-                len(test_sites or ()), len(urls_list), require_both)
+    logger.info(
+        "开始网络检测 (TCP目标=%d, HTTP目标=%d, require_both=%s)",
+        len(test_sites or ()),
+        len(urls_list),
+        require_both,
+    )
     socket_ok = is_network_available_socket(test_sites=test_sites, timeout=timeout)
     if require_both:
         # 严格模式：TCP + HTTP 双重验证
@@ -280,7 +312,9 @@ def is_network_available(
             return False
         # 不跟重定向：portal 重定向到登录页 = 未认证 = 判定失败
         http_ok = is_network_available_http(
-            test_urls=urls_list, timeout=max(timeout, 2.0), follow_redirects=False,
+            test_urls=urls_list,
+            timeout=max(timeout, 2.0),
+            follow_redirects=False,
         )
         result = http_ok
     else:
@@ -288,12 +322,16 @@ def is_network_available(
         if socket_ok:
             logger.info("网络检测完成: TCP=通 → 网络正常")
             return True
-        http_ok = is_network_available_http(test_urls=urls_list, timeout=max(timeout, 2.0))
+        http_ok = is_network_available_http(
+            test_urls=urls_list, timeout=max(timeout, 2.0)
+        )
         result = http_ok
-    logger.info("网络检测完成: TCP=%s HTTP=%s → %s",
-                "通" if socket_ok else "断",
-                "通" if http_ok else "断",
-                "网络正常" if result else "网络异常")
+    logger.info(
+        "网络检测完成: TCP=%s HTTP=%s → %s",
+        "通" if socket_ok else "断",
+        "通" if http_ok else "断",
+        "网络正常" if result else "网络异常",
+    )
     return result
 
 

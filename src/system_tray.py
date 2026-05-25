@@ -19,8 +19,11 @@ class SystemTray:
             try:
                 import cairosvg
                 import io
+
                 # 使用 as_uri() 生成跨平台文件 URI（Windows: file:///C:/...，POSIX: file:///...）
-                png_data = cairosvg.svg2png(url=icon_path.as_uri(), output_width=64, output_height=64)
+                png_data = cairosvg.svg2png(
+                    url=icon_path.as_uri(), output_width=64, output_height=64
+                )
                 return Image.open(io.BytesIO(png_data))
             except Exception:
                 pass

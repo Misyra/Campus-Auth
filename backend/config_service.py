@@ -290,14 +290,18 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
     )
 
 
-def build_runtime_config(payload: MonitorConfigPayload, sys: SystemSettings | None = None) -> dict[str, Any]:
+def build_runtime_config(
+    payload: MonitorConfigPayload, sys: SystemSettings | None = None
+) -> dict[str, Any]:
     """从 MonitorConfigPayload 构建运行时配置字典。
 
     Args:
         payload: 前端传来的合并配置
         sys: settings.json 中的系统设置（用于读取重试策略等非 UI 字段）
     """
-    config_logger.debug("构建运行时配置: user=%s, url=%s", payload.username, payload.auth_url)
+    config_logger.debug(
+        "构建运行时配置: user=%s, url=%s", payload.username, payload.auth_url
+    )
     base: dict[str, Any] = {"password": ""}
 
     base["username"] = payload.username.strip()
@@ -378,9 +382,9 @@ def _save_password_field(raw: str, existing_encrypted: str) -> str:
     return save_password_field(raw, existing_encrypted)
 
 
-
 def save_config_combined(
-    payload: MonitorConfigPayload, profile_service: ProfileService,
+    payload: MonitorConfigPayload,
+    profile_service: ProfileService,
 ) -> None:
     """原子化保存全局设置（system + default 方案）。
 
@@ -398,7 +402,8 @@ def save_config_combined(
     sys.password = _save_password_field(pwd_raw, sys.password)
     config_logger.info(
         "保存系统设置: 用户=%s (旧=%s), 密码=%s",
-        sys.username, old_user,
+        sys.username,
+        old_user,
         "已更新" if (pwd_raw and not pwd_raw.startswith("•")) else "保留",
     )
 
@@ -433,7 +438,9 @@ def save_config_combined(
         glob.browser_user_agent = payload.browser_user_agent.strip()
         glob.browser_low_resource_mode = payload.browser_low_resource_mode
         glob.browser_disable_web_security = payload.browser_disable_web_security
-        glob.browser_extra_headers_json = _normalize_headers_json(payload.browser_extra_headers_json)
+        glob.browser_extra_headers_json = _normalize_headers_json(
+            payload.browser_extra_headers_json
+        )
         glob.browser_args = payload.browser_args.strip()
         glob.browser_locale = payload.browser_locale.strip()  # 浏览器语言区域
         glob.browser_timezone = payload.browser_timezone.strip()  # 浏览器时区 ID

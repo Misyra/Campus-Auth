@@ -62,6 +62,7 @@ def resolve_port() -> int:
     if settings_file.exists():
         try:
             import json
+
             data = json.loads(settings_file.read_text(encoding="utf-8"))
             system = data.get("system", {})
             app_port = system.get("app_port")
@@ -232,8 +233,12 @@ def check_python_environment():
                     log_warning(
                         f"Python 版本不匹配: 检测到 {detected}, 期望 {PYTHON_VERSION}"
                     )
-                    return {"exe_exists": True, "can_run": True,
-                            "version": version_output, "version_mismatch": True}
+                    return {
+                        "exe_exists": True,
+                        "can_run": True,
+                        "version": version_output,
+                        "version_mismatch": True,
+                    }
             return {"exe_exists": True, "can_run": True, "version": version_output}
         else:
             log_warning(f"Python 无法正常运行: {result.stderr}")
@@ -387,7 +392,11 @@ def _download_file(url: str, destination: Path) -> None:
                     bar = "#" * (pct // 2) + "-" * (50 - pct // 2)
                     size_mb = downloaded / (1024 * 1024)
                     total_mb = total / (1024 * 1024)
-                    print(f"\r  [{bar}] {pct}%  {size_mb:.1f}/{total_mb:.1f} MB", end="", flush=True)
+                    print(
+                        f"\r  [{bar}] {pct}%  {size_mb:.1f}/{total_mb:.1f} MB",
+                        end="",
+                        flush=True,
+                    )
         if total:
             print()
 

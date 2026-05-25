@@ -89,18 +89,22 @@ def _detect_gateway_windows() -> str | None:
     失败时回退到 ipconfig + 多语言字节匹配。
     """
     creationflags = (
-        subprocess.CREATE_NO_WINDOW
-        if hasattr(subprocess, "CREATE_NO_WINDOW")
-        else 0
+        subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
     )
 
     # 优先使用 PowerShell（结构化输出，不受语言影响）
     try:
         result = subprocess.run(
-            ["powershell", "-NoProfile", "-Command",
-             "Get-NetRoute -DestinationPrefix '0.0.0.0/0' | "
-             "Select-Object -First 1 -ExpandProperty NextHop"],
-            capture_output=True, text=True, timeout=5,
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "Get-NetRoute -DestinationPrefix '0.0.0.0/0' | "
+                "Select-Object -First 1 -ExpandProperty NextHop",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
             creationflags=creationflags,
         )
         if result.returncode == 0:
@@ -121,7 +125,9 @@ def _detect_gateway_windows() -> str | None:
             timeout=5,
             creationflags=creationflags,
         )
-        profile_logger.debug("ipconfig 返回码: %d, 输出长度: %d", result.returncode, len(result.stdout))
+        profile_logger.debug(
+            "ipconfig 返回码: %d, 输出长度: %d", result.returncode, len(result.stdout)
+        )
 
         output = result.stdout
 
@@ -129,11 +135,11 @@ def _detect_gateway_windows() -> str | None:
         # 已知的"默认网关"多语言字节序列
         gateway_patterns = [
             rb"\xc4\xac\xc8\xcf\xcd\xf8\xb9\xd8",  # "默认网关" GBK
-            rb"Default\s+Gateway",                    # English
-            rb"Standardgateway",                      # German
-            rb"Passerelle\s+par\s+d\xc3\xa9faut",    # French (UTF-8)
-            rb"Gateway\s+predefinito",                # Italian
-            rb"Puerta\s+de\s+enlace\s+predeterminada", # Spanish
+            rb"Default\s+Gateway",  # English
+            rb"Standardgateway",  # German
+            rb"Passerelle\s+par\s+d\xc3\xa9faut",  # French (UTF-8)
+            rb"Gateway\s+predefinito",  # Italian
+            rb"Puerta\s+de\s+enlace\s+predeterminada",  # Spanish
             rb"\xe3\x83\x87\xe3\x83\x95\xe3\x82\xa9\xe3\x83\xab\xe3\x83\x88\xe3\x82\xb2\xe3\x83\xbc\xe3\x83\x88\xe3\x82\xa6\xe3\x82\xa7\xe3\x82\xa4",  # "デフォルトゲートウェイ" UTF-8
             rb"\xec\x98\xa4\xeb\xa5\xb8 \xea\xb2\x8c\xec\x9d\xb4\xed\x8a\xb8\xec\x9b\xa8\xec\x9d\xb4",  # "오른 게이트웨이" UTF-8
         ]
@@ -218,6 +224,7 @@ def _detect_ssid_windows() -> str | None:
 
         # 使用系统默认编码解码（中文 Windows 为 GBK，英文为 cp1252）
         import locale
+
         encoding = locale.getpreferredencoding(False) or "utf-8"
 
         pattern = re.compile(rb"^\s*SSID\s*:\s*(.+)$", re.MULTILINE)
@@ -304,7 +311,9 @@ def _detect_ssid_darwin() -> str | None:
         # 先获取 Wi-Fi 硬件端口名
         result = subprocess.run(
             ["networksetup", "-listallhardwareports"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         wifi_device = None
         lines = result.stdout.splitlines()
@@ -318,7 +327,9 @@ def _detect_ssid_darwin() -> str | None:
         if wifi_device:
             result = subprocess.run(
                 ["networksetup", "-getairportnetwork", wifi_device],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if result.returncode == 0:
                 output = result.stdout.strip()
@@ -543,7 +554,8 @@ class ProfileService:
         # 已有有效用户名和密码 → 绝不覆盖
         if data.system.username and data.system.password:
             profile_logger.info(
-                "已有完整配置 (用户=%s), 跳过迁移", data.system.username)
+                "已有完整配置 (用户=%s), 跳过迁移", data.system.username
+            )
             return
 
         # system 为全默认且 .env 有配置 → 补充
@@ -551,13 +563,11 @@ class ProfileService:
             env_user = env_config.get("username", "")
             env_pass = env_config.get("password", "")
             if env_user or env_pass:
-                profile_logger.info(
-                    "从 .env 补充系统设置 (用户=%s)", env_user)
+                profile_logger.info("从 .env 补充系统设置 (用户=%s)", env_user)
                 data.system = self._build_system_from_env(env_config)
                 self.save(data)
             else:
-                profile_logger.info(
-                    ".env 中无有效凭证，保持 settings.json 不变")
+                profile_logger.info(".env 中无有效凭证，保持 settings.json 不变")
             return
 
         profile_logger.info("配置迁移: 无需操作")
@@ -566,6 +576,7 @@ class ProfileService:
     def _try_load_dotenv_fallback(env_config: dict[str, Any]) -> dict[str, Any]:
         """回退：直接读取 .env 文件（旧版用户升级时 dotenv 不再自动加载）"""
         from pathlib import Path as _Path
+
         env_file = _Path.cwd() / ".env"
         if not env_file.exists():
             return env_config
@@ -590,8 +601,8 @@ class ProfileService:
                     env_config["isp"] = value
             if env_config.get("username"):
                 profile_logger.info(
-                    "从 .env 文件回退读取配置成功: 用户=%s",
-                    env_config["username"])
+                    "从 .env 文件回退读取配置成功: 用户=%s", env_config["username"]
+                )
             return env_config
         except Exception as exc:
             profile_logger.debug(".env 回退读取失败: %s", exc)
@@ -614,7 +625,9 @@ class ProfileService:
             access_log=bool(config.get("access_log", False)),
             minimize_to_tray=bool(config.get("minimize_to_tray", True)),
             max_retries=int(config.get("retry_settings", {}).get("max_retries", 3)),
-            retry_interval=int(config.get("retry_settings", {}).get("retry_interval", 5)),
+            retry_interval=int(
+                config.get("retry_settings", {}).get("retry_interval", 5)
+            ),
             app_port=int(config.get("app_port", 50721)),
         )
 

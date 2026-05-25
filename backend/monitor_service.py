@@ -29,18 +29,21 @@ from .schemas import LogEntry, MonitorConfigPayload, MonitorStatusResponse
 
 # ── Actor model: typed command dispatch ──
 
+
 @dataclass
 class MonitorCommand:
     """Command dispatched from API thread to queue consumer thread."""
+
     type: str  # "start" | "stop" | "login" | "reload" | "profile_switch" | "shutdown"
     data: dict = field(default_factory=dict)
     response_event: threading.Event | None = None  # caller waits on this
-    response_data: Any = None                      # set by consumer
+    response_data: Any = None  # set by consumer
 
 
 @dataclass
 class StatusSnapshot:
     """Lock-free snapshot of monitor state, read directly by API handlers."""
+
     monitoring: bool = False
     last_network_ok: bool = False
     start_time: float | None = None
@@ -51,6 +54,7 @@ class StatusSnapshot:
 
 
 # ── WebSocket Manager (unchanged) ──
+
 
 class WebSocketManager:
     """WebSocket 管理器 - 实时日志推送"""
@@ -109,6 +113,7 @@ service_logger = get_logger("backend.monitor_service", side="BACKEND")
 
 # ── MonitorService (refactored to Actor model) ──
 
+
 class MonitorService:
     def __init__(
         self, project_root: Path, profile_service: ProfileService | None = None
@@ -148,7 +153,9 @@ class MonitorService:
         self._login_in_progress: bool = False
 
         # Start queue consumer daemon thread
-        self._consumer_thread = threading.Thread(target=self._queue_consumer, daemon=True)
+        self._consumer_thread = threading.Thread(
+            target=self._queue_consumer, daemon=True
+        )
         self._consumer_thread.start()
 
     # ── Queue consumer (runs in dedicated daemon thread) ──
@@ -246,9 +253,7 @@ class MonitorService:
             # Cleanup: close temporary browser / event loop
             if core._login_handler and core._loop:
                 try:
-                    core._loop.run_until_complete(
-                        core._login_handler.close_browser()
-                    )
+                    core._loop.run_until_complete(core._login_handler.close_browser())
                 except Exception:
                     pass
                 core._login_handler = None
@@ -500,7 +505,9 @@ class MonitorService:
 
         config = self._runtime_config.copy()
         self._cmd_queue.put(
-            MonitorCommand(type="start", data={"config": config, "safe_mode": self.safe_mode})
+            MonitorCommand(
+                type="start", data={"config": config, "safe_mode": self.safe_mode}
+            )
         )
 
         return True, "监控已启动"

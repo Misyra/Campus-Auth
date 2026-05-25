@@ -39,6 +39,7 @@ def _candidate_hosts() -> list[str]:
 
 def _is_enabled() -> bool:
     from src.utils import str_to_bool
+
     return str_to_bool(os.getenv("AUTO_INSTALL_PLAYWRIGHT", "true"))
 
 
@@ -65,10 +66,14 @@ def _has_chromium() -> bool:
     # 包内 .local-browsers（部分安装方式）
     try:
         import importlib.util as _ilu
+
         _spec = _ilu.find_spec("playwright")
         if _spec and _spec.submodule_search_locations:
             _search_locations.append(
-                Path(_spec.submodule_search_locations[0]) / "driver" / "package" / ".local-browsers"
+                Path(_spec.submodule_search_locations[0])
+                / "driver"
+                / "package"
+                / ".local-browsers"
             )
     except Exception:
         pass
@@ -129,7 +134,6 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
             return False
 
         try:
-
             if log:
                 log("正在安装 Playwright Chromium 浏览器内核...")
 
