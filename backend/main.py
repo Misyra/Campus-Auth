@@ -91,6 +91,8 @@ async def lifespan(app_instance):
         startup_logger.warning("配置迁移失败: %s", exc)
 
     service.boot()
+    # 启动 WebSocket 广播队列消费任务（在 service.boot() 中也尝试启动，但加在这里确保成功）
+    ws_drain_task = asyncio.create_task(service._ws_drain_loop())
     _cleanup_old_backups()
     startup_logger.info(
         "FastAPI 启动: 完成，耗时 %.3fs",
@@ -98,6 +100,11 @@ async def lifespan(app_instance):
     )
     yield
     startup_logger.info("FastAPI 关闭: 正在停止服务...")
+    ws_drain_task.cancel()
+    try:
+        await ws_drain_task
+    except asyncio.CancelledError:
+        pass
     if _debug["session"]:
         await _debug["session"].close()
     # 清理临时调试截图
