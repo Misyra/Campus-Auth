@@ -295,13 +295,6 @@ def _run_server(no_browser: bool = False, tray: bool = False, no_auto: bool = Fa
     atexit.register(_cleanup_pid)
 
     def _signal_handler(signum, _frame):
-        print("\n收到停止信号，正在关闭...")
-        try:
-            from backend.main import service
-            service.stop_monitoring()
-        except Exception:
-            pass
-        _cleanup_pid()
         os._exit(0)
 
     signal.signal(signal.SIGINT, _signal_handler)

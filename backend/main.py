@@ -64,10 +64,8 @@ DEBUG_DIR.mkdir(parents=True, exist_ok=True)
 @asynccontextmanager
 async def lifespan(app_instance):
     """应用生命周期管理"""
-    loop = asyncio.get_running_loop()
-    start = loop.time()
-    startup_logger.info("FastAPI 启动: 开始设置事件循环与服务引导")
-    service.set_event_loop(loop)
+    start = time.perf_counter()
+    startup_logger.info("FastAPI 启动: 开始设置服务引导")
 
     # 迁移：从 .env 创建或补充 settings.json
     settings_path = PROJECT_ROOT / "settings.json"
@@ -96,7 +94,7 @@ async def lifespan(app_instance):
     _cleanup_old_backups()
     startup_logger.info(
         "FastAPI 启动: 完成，耗时 %.3fs",
-        asyncio.get_running_loop().time() - start,
+        time.perf_counter() - start,
     )
     yield
     startup_logger.info("FastAPI 关闭: 正在停止服务...")
@@ -1083,40 +1081,12 @@ def shutdown_server() -> ActionResponse:
     api_logger.warning("Shutdown requested")
     import threading
 
-    def _cleanup_pid_file():
-        try:
-            pid_dir = Path.home() / ".campus_network_auth"
-            pid_file = pid_dir / "campus_network_auth.pid"
-            pid_file.unlink(missing_ok=True)
-        except Exception:
-            pass
-
-    def _force_exit_after_timeout(timeout_seconds=1):
-        time.sleep(timeout_seconds)
-        os._exit(0)
-
     def _do_shutdown():
-        import time as _time
-
         try:
             service.stop_monitoring()
         except Exception:
             pass
-
-        try:
-            if _tray_icon_ref:
-                _tray_icon_ref.stop()
-        except Exception:
-            pass
-
-        _time.sleep(0.5)
-
-        _cleanup_pid_file()
-        watchdog = threading.Thread(
-            target=_force_exit_after_timeout, args=(0.5,), daemon=True
-        )
-        watchdog.start()
-        os._exit(0)  # 直接终止整个进程（在 daemon thread 中必须使用 os._exit 而非 sys.exit）
+        os._exit(0)
 
     threading.Thread(target=_do_shutdown, daemon=True).start()
 
