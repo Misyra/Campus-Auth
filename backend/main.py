@@ -464,7 +464,7 @@ async def check_update() -> dict:
 
 
 def _compare_versions(a: str, b: str) -> int:
-    """比较语义版本号，a > b 返回 1，a < b 返回 -1，相等返回 0"""
+    """比较语义版本号，a > b 返回 1，a < b 返回 -1，相等时返回 -1（调用方用 > 0 判断有无更新）"""
     try:
         va = [int(x) for x in a.split(".")]
         vb = [int(x) for x in b.split(".")]
@@ -473,6 +473,7 @@ def _compare_versions(a: str, b: str) -> int:
                 return 1
             if x < y:
                 return -1
+        # NOTE: 相等时 len(va) == len(vb) 返回 -1（而非 0），但调用方用 > 0 判断有无更新，不影响结果
         return 1 if len(va) > len(vb) else -1
     except (ValueError, AttributeError):
         return 0
