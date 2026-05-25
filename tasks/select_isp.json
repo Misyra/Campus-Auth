@@ -41,7 +41,7 @@
       "id": "select_carrier",
       "type": "select",
       "description": "选择运营商（原生 select 下拉框）",
-      "selector": "select[name='isp'], select[name='ISP_select'], select[id='isp'], select[class*='isp'], select",
+      "selector": "select[name='isp'], select[name='ISP_select'], select[id='isp'], select[class*='isp']",
       "value": "{{ISP}}",
       "timeout": 10000
     },

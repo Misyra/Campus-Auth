@@ -18,8 +18,12 @@ export const lifecycleMethods = {
     this.isLoading = false;
     this.connectWebSocket();
     this.autoCheckUpdateOnStartup();
-    this.timers.push(setInterval(() => this.fetchStatus(), 30000));  // 30s fallback, WS 实时推送
-    this.timers.push(setInterval(() => this.fetchAutostart(), 12000));
+    this.timers.push(setInterval(() => {
+        if (this._statusPolling) return;
+        this._statusPolling = true;
+        this.fetchStatus().finally(() => { this._statusPolling = false; });
+    }, 30000));  // 30s fallback, WS 实时推送
+    this.timers.push(setInterval(() => this.fetchAutostart(), 60000));
     this.frontendLogger.info('app.init', 'init finished');
   },
   async _waitWebSocketReady(timeoutMs = 2000) {
@@ -235,7 +239,7 @@ export const lifecycleMethods = {
 
     this.ws.onerror = () => {
       this.frontendLogger.error('websocket', 'connection error');
-      this.ws.close();
+      // 不调用 this.ws.close()，浏览器会自动关闭并触发 onclose
     };
   },
 };

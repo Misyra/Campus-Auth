@@ -2982,8 +2982,8 @@
     _restoreAll() {
       if (this._pendingRestore) return;
       this._pendingRestore = true;
-      // requestAnimationFrame 避免在一次微任务中反复重挂
-      requestAnimationFrame(() => {
+      // setTimeout 避免在后台标签页中 rAF 被节流
+      setTimeout(() => {
         this._pendingRestore = false;
         const body = document.body;
         if (!body) return;

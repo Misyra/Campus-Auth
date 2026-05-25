@@ -16,6 +16,10 @@ export const configMethods = {
       this.frontendLogger.info('config', 'config loaded');
     } catch (error) {
       this.frontendLogger.error('config', 'failed to fetch config', error);
+      if (!this._initErrorShown) {
+        this._initErrorShown = true;
+        this.notify(false, '加载配置失败');
+      }
     }
   },
   async saveConfig() {

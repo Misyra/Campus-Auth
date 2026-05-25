@@ -27,6 +27,10 @@ export const taskMethods = {
       this.tasks = data;
     } catch (error) {
       this.frontendLogger.error('tasks', 'failed to fetch tasks', error);
+      if (!this._initErrorShown) {
+        this._initErrorShown = true;
+        this.notify(false, '加载任务列表失败');
+      }
     }
   },
   async fetchActiveTask() {
@@ -35,6 +39,10 @@ export const taskMethods = {
       this.activeTaskId = data.task_id;
     } catch (error) {
       this.frontendLogger.error('tasks', 'failed to fetch active task', error);
+      if (!this._initErrorShown) {
+        this._initErrorShown = true;
+        this.notify(false, '加载活动任务失败');
+      }
     }
   },
   async setActiveTask(taskId) {
@@ -201,6 +209,7 @@ export const taskMethods = {
         await this.fetchTasks();
         if (this.activeTaskId === taskId) {
           this.activeTaskId = 'default';
+          await this.setActiveTask('default');
         }
       } else {
         this.frontendLogger.warn('tasks', '删除任务失败: ' + data.message);

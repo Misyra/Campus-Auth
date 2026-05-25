@@ -22,6 +22,10 @@ export const statusMethods = {
       this.$nextTick(() => this.scrollToBottom());
     } catch (error) {
       this.frontendLogger.error('logs', 'failed to fetch logs', error);
+      if (!this._initErrorShown) {
+        this._initErrorShown = true;
+        this.notify(false, '加载日志失败');
+      }
     }
   },
 };

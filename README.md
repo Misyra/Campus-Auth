@@ -313,6 +313,7 @@ Campus-Auth/
 
 ```text
 GET  /api/health             # 健康检查，返回状态和版本
+GET  /api/check-update       # 检查 GitHub 更新版本
 POST /api/shutdown           # 关闭服务（停止监控、托盘、进程）
 ```
 
@@ -322,6 +323,8 @@ POST /api/shutdown           # 关闭服务（停止监控、托盘、进程）
 GET  /api/config             # 获取当前配置
 PUT  /api/config             # 保存配置
 GET  /api/init-status        # 初始化状态（是否已设置账号密码）
+GET  /api/safe-mode          # 获取安全模式状态
+POST /api/safe-mode          # 切换安全模式
 ```
 
 ### 配置方案
@@ -355,12 +358,16 @@ POST /api/actions/test-network   # 测试网络连通性
 ### 任务管理
 
 ```text
-GET    /api/tasks               # 列出所有任务
-GET    /api/tasks/{id}          # 获取指定任务
-PUT    /api/tasks/{id}          # 创建/更新任务
-DELETE /api/tasks/{id}          # 删除任务（default 不可删除）
-GET    /api/tasks/active        # 获取当前活动任务
-POST   /api/tasks/active/{id}   # 设置活动任务
+GET    /api/tasks                    # 列出所有任务
+GET    /api/tasks/{id}               # 获取指定任务
+PUT    /api/tasks/{id}               # 创建/更新任务
+DELETE /api/tasks/{id}               # 删除任务（default 不可删除）
+GET    /api/tasks/active             # 获取当前活动任务
+POST   /api/tasks/active/{id}        # 设置活动任务
+GET    /api/repo/fetch?url=...       # 代理获取远程任务仓库索引
+GET    /api/repo/task?url=...        # 代理获取远程单个任务配置
+GET    /api/tools/task-recorder.user.js  # 下载任务录制器脚本
+GET    /api/docs/task-writing-guide  # 下载任务编写指南
 ```
 
 ### 日志
@@ -382,6 +389,33 @@ POST /api/autostart/disable  # 禁用自启动
 
 ```text
 GET  /debug/{filename}       # 调试截图文件访问
+```
+
+### 调试
+
+```text
+POST /api/debug/start          # 启动调试会话，打开浏览器并加载任务
+POST /api/debug/next           # 执行下一步骤
+POST /api/debug/run-all        # 执行所有剩余步骤
+POST /api/debug/stop           # 停止调试会话并关闭浏览器
+GET  /api/debug/status         # 获取调试会话状态
+```
+
+### 卸载
+
+```text
+GET  /api/uninstall/detect    # 检测可清理的外部残留项目
+POST /api/uninstall           # 执行卸载清理
+```
+
+### 配置备份
+
+```text
+GET    /api/backup/list               # 列出所有备份
+POST   /api/backup/create             # 创建当前配置的备份
+POST   /api/backup/restore/{filename} # 从备份恢复配置
+GET    /api/backup/download/{filename} # 下载备份文件
+DELETE /api/backup/{filename}         # 删除备份
 ```
 
 ## 开发与调试
