@@ -137,7 +137,7 @@ class BrowserContextManager:
                     "timezone_id": self.browser_settings.get("timezone_id", "Asia/Shanghai"),  # 从配置中读取时区
                     "has_touch": False,
                     "color_scheme": "light",
-                    "ignore_https_errors": True,
+                    "ignore_https_errors": self.browser_settings.get("ignore_https_errors", True),
                 }
                 if ua:
                     ctx_opts["user_agent"] = ua
