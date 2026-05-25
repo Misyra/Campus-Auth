@@ -144,6 +144,9 @@ class MonitorService:
         # Guard against duplicate WS drain loop startup
         self._drain_started = False
 
+        # Login concurrency guard — prevents duplicate browser processes
+        self._login_in_progress: bool = False
+
         # Start queue consumer daemon thread
         self._consumer_thread = threading.Thread(target=self._queue_consumer, daemon=True)
         self._consumer_thread.start()
@@ -428,6 +431,10 @@ class MonitorService:
             self.start_monitoring()
 
     @property
+    def login_in_progress(self) -> bool:
+        return self._login_in_progress
+
+    @property
     def _is_monitoring(self) -> bool:
         """Read monitoring state from lock-free snapshot."""
         return self._status_snapshot.monitoring
@@ -539,36 +546,40 @@ class MonitorService:
         )
 
     def run_manual_login(self) -> tuple[bool, str]:
-        service_logger.info("Manual login requested")
-        runtime_config = self._runtime_config.copy()
+        self._login_in_progress = True
+        try:
+            service_logger.info("Manual login requested")
+            runtime_config = self._runtime_config.copy()
 
-        cmd = MonitorCommand(
-            type="login",
-            data={"config": runtime_config, "safe_mode": self.safe_mode},
-            response_event=threading.Event(),
-        )
-        self._cmd_queue.put(cmd)
+            cmd = MonitorCommand(
+                type="login",
+                data={"config": runtime_config, "safe_mode": self.safe_mode},
+                response_event=threading.Event(),
+            )
+            self._cmd_queue.put(cmd)
 
-        # Wait for consumer to execute login (with timeout)
-        login_timeout = getattr(self._ui_config, "login_timeout", 120)
-        cmd.response_event.wait(timeout=login_timeout)
+            # Wait for consumer to execute login (with timeout)
+            login_timeout = getattr(self._ui_config, "login_timeout", 120)
+            cmd.response_event.wait(timeout=login_timeout)
 
-        if cmd.response_data is None:
-            return False, "手动登录超时"
+            if cmd.response_data is None:
+                return False, "手动登录超时"
 
-        success, message = cmd.response_data
-        if success:
-            # Sync status to running monitor core if active
-            core = self._monitor_core
-            if core is not None and core.monitoring:
-                core.last_network_ok = True
-            self._update_status_snapshot()
-            service_logger.info("Manual login succeeded")
-            return True, f"手动登录成功：{message}"
+            success, message = cmd.response_data
+            if success:
+                # Sync status to running monitor core if active
+                core = self._monitor_core
+                if core is not None and core.monitoring:
+                    core.last_network_ok = True
+                self._update_status_snapshot()
+                service_logger.info("Manual login succeeded")
+                return True, f"手动登录成功：{message}"
 
-        log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
-        service_logger.warning("Manual login failed: %s", log_msg)
-        return False, f"手动登录失败：{message}"
+            log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
+            service_logger.warning("Manual login failed: %s", log_msg)
+            return False, f"手动登录失败：{message}"
+        finally:
+            self._login_in_progress = False
 
     def test_network(self) -> tuple[bool, str]:
         service_logger.info("手动网络测试")
