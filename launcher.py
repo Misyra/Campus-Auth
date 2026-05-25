@@ -549,6 +549,8 @@ def install_pip():
                         mirror,
                         "--trusted-host",
                         pip_host,
+                        "--proxy",
+                        "",
                     ],
                     capture_output=True,
                     text=True,
