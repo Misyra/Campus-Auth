@@ -4,6 +4,7 @@ import asyncio
 import datetime
 import logging
 import re
+import socket
 import threading
 import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
@@ -189,19 +190,8 @@ class NetworkMonitorCore:
         was_monitoring = self.monitoring
         self.monitoring = False
 
-        # 关闭登录浏览器（使用独立的事件循环，避免与监控线程的事件循环冲突）
-        if self._login_handler:
-            close_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(close_loop)
-            try:
-                close_loop.run_until_complete(
-                    self._login_handler.close_browser()
-                )
-            except Exception:
-                pass
-            finally:
-                close_loop.close()
-            self._login_handler = None
+        # 清除登录处理器引用，浏览器会在 attempt_login 返回后被清理
+        self._login_handler = None
 
         # 标记 loop 已停止，防止 attempt_login 并发使用
         self._loop_stopped = True
@@ -269,6 +259,28 @@ class NetworkMonitorCore:
         self.login_attempt_count = 0
         return "give_up"
 
+    def _is_auth_url_reachable(self) -> bool:
+        """检查认证地址的 TCP 可达性。
+
+        返回 False 时表示认证地址不可达，应跳过登录尝试。
+        无认证地址配置时返回 True（兼容模式）。
+        """
+        auth_url = self.config.get("auth_url", "")
+        if not auth_url:
+            return True
+        from urllib.parse import urlparse
+        try:
+            parsed = urlparse(auth_url)
+            host = parsed.hostname
+            port = parsed.port or (443 if parsed.scheme == "https" else 80)
+            if not host:
+                return True
+            sock = socket.create_connection((host, port), timeout=3)
+            sock.close()
+            return True
+        except Exception:
+            return False
+
     def _login_recovery_loop(self) -> str:
         """登录恢复内层循环。
 
@@ -302,6 +314,16 @@ class NetworkMonitorCore:
 
             # 2. 检查配置方案是否切换（内部有 60s 冷却）
             self._check_profile_switch()
+
+            # 2.5 前置检查认证地址可达性，避免无效的浏览器启动
+            if not self._is_auth_url_reachable():
+                self.log_message(
+                    f"认证地址 {self.config.get('auth_url', '?')} 不可达，跳过登录重试",
+                    logging.WARNING,
+                )
+                self.login_attempt_count = 0
+                self.last_network_ok = False
+                return "net_disconnect"
 
             # 3. 执行登录
             login_ok, login_msg = self.attempt_login()
