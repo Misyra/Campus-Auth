@@ -235,6 +235,8 @@ class TaskConfig:
         if self.metadata:
             result["metadata"] = self.metadata
         result["reveal_hidden"] = self.reveal_hidden
+        if self.step_delay != 0.5:
+            result["step_delay"] = self.step_delay
         return result
 
 
@@ -1301,7 +1303,8 @@ class TaskExecutor:
                 strict_mode,
             )
 
-            result = is_network_available(
+            result = await asyncio.to_thread(
+                is_network_available,
                 test_sites=test_sites,
                 timeout=timeout,
                 require_both=strict_mode,
