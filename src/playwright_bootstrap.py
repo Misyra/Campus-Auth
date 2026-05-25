@@ -134,6 +134,10 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
                 log("正在安装 Playwright Chromium 浏览器内核...")
 
             for host in _candidate_hosts():
+                # NOTE: os.environ 在此处修改是安全的，因为：
+                # 1. ensure_playwright_ready() 仅在服务启动时由主线程调用一次
+                # 2. 此时尚无其他工作线程读取 os.environ
+                # 3. _BOOTSTRAP_LOCK + _BOOTSTRAP_DONE 防止并发/重复执行
                 os.environ["PLAYWRIGHT_DOWNLOAD_HOST"] = host
                 if log:
                     log(f"尝试下载源: {host}")

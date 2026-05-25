@@ -5,6 +5,7 @@ import json
 import logging
 import mimetypes
 import os
+import tempfile
 import re
 import time
 from collections import deque
@@ -1244,7 +1245,20 @@ def restore_backup(filename: str) -> ActionResponse:
         raise HTTPException(status_code=400, detail=f"备份文件结构不合法: {exc}")
 
     try:
-        settings_path.write_bytes(backup_path.read_bytes())
+        # 原子写入：先写入临时文件，再 rename 替换旧文件
+        _tmp_fd, _tmp_path = tempfile.mkstemp(
+            dir=settings_path.parent, suffix=".tmp", prefix="settings."
+        )
+        try:
+            with os.fdopen(_tmp_fd, "w", encoding="utf-8") as f:
+                f.write(backup_path.read_text(encoding="utf-8"))
+            os.replace(_tmp_path, settings_path)
+        except Exception:
+            try:
+                os.unlink(_tmp_path)
+            except OSError:
+                pass
+            raise
         # 清除 ProfileService 缓存，强制从磁盘重新读取
         profile_service.invalidate_cache()
         service.reload_config()

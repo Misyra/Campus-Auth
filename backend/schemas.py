@@ -59,7 +59,7 @@ class MonitorConfigPayload(BaseModel):
     minimize_to_tray: bool = True
     auto_open_browser: bool = False
     login_then_exit: bool = False
-    max_retries: int = Field(default=3, ge=1, le=5, description="登录重试最大次数")
+    max_retries: int = Field(default=3, ge=0, le=10, description="登录重试最大次数")
     retry_interval: int = Field(default=5, ge=1, le=300, description="重试间隔（秒），指数退避基数")
     log_retention_days: int = Field(default=7, ge=1, le=365)
     screenshot_retention_days: int = Field(default=7, ge=1, le=90)
