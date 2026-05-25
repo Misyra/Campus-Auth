@@ -10,25 +10,25 @@ from typing import Dict, Any, Tuple
 
 class TimeUtils:
     """时间相关工具类"""
-    
+
     @staticmethod
     def is_in_pause_period(pause_config: Dict[str, Any]) -> bool:
         """
         检查当前时间是否在暂停时段内
-        
+
         参数:
             pause_config: 暂停配置字典
-            
+
         返回:
             bool: 是否在暂停时段
         """
-        if not pause_config.get('enabled', True):
+        if not pause_config.get("enabled", True):
             return False
-            
+
         current_hour = datetime.datetime.now().hour
-        start_hour = pause_config.get('start_hour', 0)
-        end_hour = pause_config.get('end_hour', 6)
-        
+        start_hour = pause_config.get("start_hour", 0)
+        end_hour = pause_config.get("end_hour", 6)
+
         # start_hour == end_hour 时视为全天暂停（如 "全天不检测" 场景）
         if start_hour == end_hour:
             return True
@@ -45,11 +45,11 @@ class TimeUtils:
 def get_runtime_stats(start_time: float, check_count: int) -> Tuple[str, str]:
     """
     获取运行时统计信息
-    
+
     参数:
         start_time: 开始时间戳
         check_count: 检测次数
-        
+
     返回:
         Tuple[str, str]: (运行时间字符串, 统计信息字符串)
     """
@@ -61,7 +61,7 @@ def get_runtime_stats(start_time: float, check_count: int) -> Tuple[str, str]:
         runtime_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
     else:
         runtime_str = "00:00:00"
-    
+
     stats_str = f"检测次数: {check_count}"
-    
+
     return runtime_str, stats_str

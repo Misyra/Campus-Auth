@@ -24,13 +24,15 @@ if False:  # Type-only import to avoid circular dependency at runtime
     from ..task_executor import TaskManager
 
 # Shared regex pattern for stripping screenshot paths from log messages
-SCREENSHOT_URL_PATTERN = r'\s*截图[:：]\s*/\S+\.(?:png|jpg|jpeg|webp|gif)'
+SCREENSHOT_URL_PATTERN = r"\s*截图[:：]\s*/\S+\.(?:png|jpg|jpeg|webp|gif)"
 
 
 class LoginAttemptHandler:
     """登录尝试处理器 - 统一登录逻辑（解决循环依赖）"""
 
-    def __init__(self, config: Dict[str, Any], cancel_event: threading.Event | None = None):
+    def __init__(
+        self, config: Dict[str, Any], cancel_event: threading.Event | None = None
+    ):
         """
         初始化登录处理器
 
@@ -40,14 +42,14 @@ class LoginAttemptHandler:
         """
         self.config = config
         self.cancel_event = cancel_event
-        self.logger = setup_logger(
-            f"{__name__}_login", config.get("logging", {})
-        )
+        self.logger = setup_logger(f"{__name__}_login", config.get("logging", {}))
         self._browser_ctx: BrowserContextManager | None = None
         self._task_manager: TaskManager | None = None
         self._project_root: Path | None = None
 
-    async def attempt_login(self, skip_pause_check: bool = False, reuse_browser: bool = False) -> tuple[bool, str]:
+    async def attempt_login(
+        self, skip_pause_check: bool = False, reuse_browser: bool = False
+    ) -> tuple[bool, str]:
         """
         尝试登录校园网（统一实现）
 
@@ -72,7 +74,9 @@ class LoginAttemptHandler:
                     return False, msg
 
             # 使用延迟导入避免循环依赖
-            return await self._perform_login_with_auth_class(reuse_browser=reuse_browser)
+            return await self._perform_login_with_auth_class(
+                reuse_browser=reuse_browser
+            )
 
         except LoginCancelledError:
             self.logger.info("登录操作已取消")
@@ -82,9 +86,13 @@ class LoginAttemptHandler:
             self.logger.error(error_msg)
             return False, error_msg
 
-    async def _perform_login_with_auth_class(self, *, reuse_browser: bool = False) -> tuple[bool, str]:
+    async def _perform_login_with_auth_class(
+        self, *, reuse_browser: bool = False
+    ) -> tuple[bool, str]:
         """使用活动任务执行登录。"""
-        task_result = await self._perform_login_with_active_task(reuse_browser=reuse_browser)
+        task_result = await self._perform_login_with_active_task(
+            reuse_browser=reuse_browser
+        )
         if task_result is not None:
             return task_result
 
@@ -92,7 +100,9 @@ class LoginAttemptHandler:
         self.logger.error(f"❌ {error_msg}")
         return False, error_msg
 
-    async def _perform_login_with_active_task(self, *, reuse_browser: bool = False) -> tuple[bool, str] | None:
+    async def _perform_login_with_active_task(
+        self, *, reuse_browser: bool = False
+    ) -> tuple[bool, str] | None:
         """执行当前活动任务；返回 None 表示未找到可执行任务。
 
         reuse_browser=True 时，失败后保留浏览器供下次重试复用。
@@ -126,10 +136,16 @@ class LoginAttemptHandler:
             isp = self.config.get("isp", "")
             self.logger.info(
                 "登录开始 → 任务=%s URL=%s 用户=%s 运营商=%s %d个步骤",
-                active_task_id, login_url, username, isp or "无", len(task.steps))
+                active_task_id,
+                login_url,
+                username,
+                isp or "无",
+                len(task.steps),
+            )
 
             env_vars = build_login_env_vars(
-                self.config, task.url, self.config.get("custom_variables", {}))
+                self.config, task.url, self.config.get("custom_variables", {})
+            )
 
             if self.cancel_event and self.cancel_event.is_set():
                 return False, "登录已取消"
@@ -141,7 +157,10 @@ class LoginAttemptHandler:
                 browser_manager = self._browser_ctx
                 # 健康检查：验证浏览器是否仍然存活
                 try:
-                    if not browser_manager.browser or not browser_manager.browser.is_connected():
+                    if (
+                        not browser_manager.browser
+                        or not browser_manager.browser.is_connected()
+                    ):
                         raise RuntimeError("浏览器进程已断开")
                     if browser_manager.page and browser_manager.page.is_closed():
                         raise RuntimeError("浏览器页面已关闭")
@@ -159,10 +178,14 @@ class LoginAttemptHandler:
                 await self.close_browser()
                 self.logger.info("启动浏览器...")
                 browser_start = _time.perf_counter()
-                browser_manager = BrowserContextManager(self.config, cancel_event=self.cancel_event)
+                browser_manager = BrowserContextManager(
+                    self.config, cancel_event=self.cancel_event
+                )
                 await browser_manager.__aenter__()
                 self._browser_ctx = browser_manager
-                self.logger.info("浏览器就绪 (%.1fs)", _time.perf_counter() - browser_start)
+                self.logger.info(
+                    "浏览器就绪 (%.1fs)", _time.perf_counter() - browser_start
+                )
 
             if browser_manager is None:
                 raise RuntimeError("浏览器实例应在复用或新建分支中初始化")
@@ -183,18 +206,24 @@ class LoginAttemptHandler:
                 if not browser_manager.page:
                     raise RuntimeError("浏览器页面初始化失败")
 
-                browser_timeout = self.config.get("browser_settings", {}).get("timeout", 10000)
+                browser_timeout = self.config.get("browser_settings", {}).get(
+                    "timeout", 10000
+                )
 
                 # 构建网络检测配置，传递给 TaskExecutor 用于成功判断
                 network_test_config = self._build_network_test_config()
 
                 executor = TaskExecutor(
-                    task, env_vars, default_timeout=browser_timeout,
+                    task,
+                    env_vars,
+                    default_timeout=browser_timeout,
                     network_test_config=network_test_config,
                 )
                 # 使用 expect_dialog 上下文管理器监听页面 alert/confirm/prompt，
                 # 自动清理监听器，避免浏览器复用时监听器泄漏
-                async with browser_manager.page.expect_dialog(timeout=30000) as dialog_info:
+                async with browser_manager.page.expect_dialog(
+                    timeout=30000
+                ) as dialog_info:
                     success, message = await executor.execute(browser_manager.page)
 
                 try:
@@ -210,7 +239,7 @@ class LoginAttemptHandler:
                     await asyncio.sleep(2)  # 登录成功后等待，让页面完成跳转和状态更新
                     await self.close_browser()
                     return True, message
-                log_msg = re.sub(SCREENSHOT_URL_PATTERN, '', message)
+                log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
                 self.logger.error("登录失败 (总耗时 %.1fs): %s", total, log_msg)
                 if not reuse_browser:
                     await self.close_browser()
@@ -258,7 +287,9 @@ class LoginAttemptHandler:
 
     async def _create_new_browser(self) -> BrowserContextManager:
         """创建新的浏览器实例（提取为方法，供复用路径调用）"""
-        browser_manager = BrowserContextManager(self.config, cancel_event=self.cancel_event)
+        browser_manager = BrowserContextManager(
+            self.config, cancel_event=self.cancel_event
+        )
         await browser_manager.__aenter__()
         self._browser_ctx = browser_manager
         return browser_manager

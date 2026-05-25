@@ -45,7 +45,9 @@ def _get_or_create_key() -> bytes:
 
         if _KEY_FILE.exists():
             try:
-                key = base64.urlsafe_b64decode(_KEY_FILE.read_text(encoding="utf-8").strip())
+                key = base64.urlsafe_b64decode(
+                    _KEY_FILE.read_text(encoding="utf-8").strip()
+                )
                 if len(key) == 32:
                     _cached_raw_key = key
                     return key
@@ -55,7 +57,9 @@ def _get_or_create_key() -> bytes:
         # 生成新密钥
         logger.info("已生成新加密密钥: %s", _KEY_DIR)
         key = os.urandom(32)
-        _KEY_FILE.write_text(base64.urlsafe_b64encode(key).decode("ascii"), encoding="utf-8")
+        _KEY_FILE.write_text(
+            base64.urlsafe_b64encode(key).decode("ascii"), encoding="utf-8"
+        )
 
         try:
             _KEY_FILE.chmod(0o600)  # POSIX: 仅所有者可读写
@@ -66,10 +70,19 @@ def _get_or_create_key() -> bytes:
         if is_windows():
             try:
                 import subprocess
+
                 username = os.environ.get("USERNAME", "Users")
                 subprocess.run(
-                    ["icacls", str(_KEY_FILE), "/inheritance:r", "/grant", f"{username}:F"],
-                    capture_output=True, text=True, timeout=10,
+                    [
+                        "icacls",
+                        str(_KEY_FILE),
+                        "/inheritance:r",
+                        "/grant",
+                        f"{username}:F",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                     check=True,
                 )
@@ -127,7 +140,7 @@ def decrypt_password(ciphertext: str) -> str:
         # 明文密码，直接返回（向后兼容）
         return ciphertext
 
-    encrypted_data = ciphertext[len(_ENC_PREFIX):]
+    encrypted_data = ciphertext[len(_ENC_PREFIX) :]
 
     # B64: 前缀表示无 cryptography 时的简单混淆，优先路由避免 Fernet 错误
     if encrypted_data.startswith(_OBFUSCATE_PREFIX):
@@ -135,6 +148,7 @@ def decrypt_password(ciphertext: str) -> str:
 
     try:
         from cryptography.fernet import Fernet
+
         key = _derive_fernet_key()
         f = Fernet(key)
         return f.decrypt(encrypted_data.encode("ascii")).decode("utf-8")
@@ -146,8 +160,7 @@ def decrypt_password(ciphertext: str) -> str:
         global _decryption_failed
         _decryption_failed = True
         logger.error(
-            "密码解密失败（可能是密钥变更或数据损坏），"
-            "请在设置页面重新输入密码"
+            "密码解密失败（可能是密钥变更或数据损坏），请在设置页面重新输入密码"
         )
         raise DecryptionError("密码解密失败，请重新输入密码")
 
@@ -231,7 +244,9 @@ def _simple_deobfuscate(ciphertext: str) -> str:
     """简单 base64 反混淆"""
     if ciphertext.startswith(_OBFUSCATE_PREFIX):
         try:
-            return base64.b64decode(ciphertext[len(_OBFUSCATE_PREFIX):]).decode("utf-8")
+            return base64.b64decode(ciphertext[len(_OBFUSCATE_PREFIX) :]).decode(
+                "utf-8"
+            )
         except Exception:
             return ciphertext
     return ciphertext

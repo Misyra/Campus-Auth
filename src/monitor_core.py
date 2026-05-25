@@ -9,7 +9,11 @@ import threading
 import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
-from .network_test import is_local_network_connected, is_network_available, set_block_proxy
+from .network_test import (
+    is_local_network_connected,
+    is_network_available,
+    set_block_proxy,
+)
 from .utils import (
     LoginAttemptHandler,
     TimeUtils,
@@ -243,6 +247,7 @@ class NetworkMonitorCore:
         if not auth_url:
             return True
         from urllib.parse import urlparse
+
         try:
             parsed = urlparse(auth_url)
             host = parsed.hostname
@@ -302,7 +307,7 @@ class NetworkMonitorCore:
             # 3. 执行登录
             login_ok, login_msg = self.attempt_login()
             time.sleep(2)  # 保持与现有行为一致：等待 2s 后再做重试决策，
-                           # 避免在 Portal 尚未完全更新会话状态时立即重试
+            # 避免在 Portal 尚未完全更新会话状态时立即重试
 
             if login_ok:
                 self.login_attempt_count = 0

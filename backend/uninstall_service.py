@@ -11,7 +11,9 @@ from src.utils.platform_utils import get_platform
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 USER_DATA_DIR = Path.home() / ".campus_network_auth"
 
-PLATFORM = get_platform()  # 使用 platform_utils 获取平台标识（"windows"/"darwin"/"linux"）
+PLATFORM = (
+    get_platform()
+)  # 使用 platform_utils 获取平台标识（"windows"/"darwin"/"linux"）
 
 
 @dataclass

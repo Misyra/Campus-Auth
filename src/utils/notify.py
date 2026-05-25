@@ -37,9 +37,11 @@ def send_notification(title: str, message: str, duration_ms: int = 5000) -> bool
 
 def _notify_windows(title: str, message: str, duration_ms: int) -> bool:
     """Windows: 使用 PowerShell Toast 通知"""
+
     # PowerShell 双引号上下文中需要转义: `, ", $
     def _escape_ps(s: str) -> str:
         return s.replace("`", "``").replace('"', '`"').replace("$", "`$")
+
     safe_title = _escape_ps(title)
     safe_msg = _escape_ps(message)
     duration_sec = max(1, duration_ms // 1000)
@@ -60,13 +62,17 @@ $toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds({duration_sec})
             [
                 "powershell",
                 "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-Command", ps_script,
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                ps_script,
             ],
             capture_output=True,
             text=True,
             timeout=10,
-            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
+            creationflags=subprocess.CREATE_NO_WINDOW
+            if hasattr(subprocess, "CREATE_NO_WINDOW")
+            else 0,
         )
         if result.returncode == 0:
             logger.debug("Windows 通知已发送: %s", title)
@@ -80,7 +86,9 @@ $toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds({duration_sec})
             ["msg", os.environ.get("USERNAME", "*"), f"{title}: {message}"],
             capture_output=True,
             timeout=5,
-            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
+            creationflags=subprocess.CREATE_NO_WINDOW
+            if hasattr(subprocess, "CREATE_NO_WINDOW")
+            else 0,
         )
         return True
     except Exception:
@@ -93,12 +101,14 @@ def _notify_macos(title: str, message: str) -> bool:
     """macOS: 使用 osascript 发送通知"""
     # 先转义反斜杠再转义双引号，防止反斜杠导致双引号逃逸
     # macOS osascript 不支持通知中的换行符，替换为空格
-    safe_title = title.replace('\\', '\\\\').replace('"', '\\"').replace('\n', ' ')
-    safe_msg = message.replace('\\', '\\\\').replace('"', '\\"').replace('\n', ' ')
+    safe_title = title.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
+    safe_msg = message.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
     script = f'display notification "{safe_msg}" with title "{safe_title}"'
     result = subprocess.run(
         ["osascript", "-e", script],
-        capture_output=True, text=True, timeout=5,
+        capture_output=True,
+        text=True,
+        timeout=5,
     )
     return result.returncode == 0
 
@@ -112,6 +122,8 @@ def _notify_linux(title: str, message: str, duration_ms: int) -> bool:
     duration_sec = max(1, duration_ms // 1000) * 1000
     result = subprocess.run(
         ["notify-send", title, message, "-t", str(duration_sec), "-a", "Campus-Auth"],
-        capture_output=True, text=True, timeout=5,
+        capture_output=True,
+        text=True,
+        timeout=5,
     )
     return result.returncode == 0

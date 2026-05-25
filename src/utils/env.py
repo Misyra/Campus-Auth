@@ -5,10 +5,23 @@ from typing import Any
 
 
 _ENV_DENYLIST = {
-    "PATH", "PYTHONPATH", "HOME", "USER", "USERNAME",
-    "SYSTEMROOT", "TEMP", "TMP", "PATHEXT", "COMSPEC", "WINDIR",
-    "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH", "DISPLAY", "SHELL",
-    "LANG", "LC_ALL",
+    "PATH",
+    "PYTHONPATH",
+    "HOME",
+    "USER",
+    "USERNAME",
+    "SYSTEMROOT",
+    "TEMP",
+    "TMP",
+    "PATHEXT",
+    "COMSPEC",
+    "WINDIR",
+    "LD_LIBRARY_PATH",
+    "DYLD_LIBRARY_PATH",
+    "DISPLAY",
+    "SHELL",
+    "LANG",
+    "LC_ALL",
 }
 
 

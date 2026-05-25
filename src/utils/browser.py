@@ -74,9 +74,7 @@ class BrowserContextManager:
         self.config = config
         self.cancel_event = cancel_event
         self.browser_settings = config.get("browser_settings", {})
-        self.logger = setup_logger(
-            f"{__name__}_browser", config.get("logging", {})
-        )
+        self.logger = setup_logger(f"{__name__}_browser", config.get("logging", {}))
 
         # 浏览器相关属性
         self.playwright = None
@@ -113,18 +111,21 @@ class BrowserContextManager:
 
             if safe_mode:
                 self.logger.info("启动浏览器 (安全模式, headless=%s)", headless)
-                self.browser = await self.playwright.chromium.launch(
-                    headless=headless
-                )
+                self.browser = await self.playwright.chromium.launch(headless=headless)
                 self.context = await self.browser.new_context(
                     viewport={"width": 1280, "height": 720},
                 )
             else:
-                low_resource = bool(self.browser_settings.get("low_resource_mode", False))
+                low_resource = bool(
+                    self.browser_settings.get("low_resource_mode", False)
+                )
                 browser_args = self._get_browser_args()
                 self.logger.info(
                     "启动浏览器 (headless=%s, low_resource=%s, args=%d)",
-                    headless, low_resource, len(browser_args))
+                    headless,
+                    low_resource,
+                    len(browser_args),
+                )
                 self.browser = await self.playwright.chromium.launch(
                     headless=headless, args=browser_args
                 )
@@ -133,11 +134,17 @@ class BrowserContextManager:
                 ctx_opts: dict = {
                     "viewport": {"width": 1280, "height": 720},
                     "extra_http_headers": extra_headers,
-                    "locale": self.browser_settings.get("locale", "zh-CN"),  # 从配置中读取语言区域
-                    "timezone_id": self.browser_settings.get("timezone_id", "Asia/Shanghai"),  # 从配置中读取时区
+                    "locale": self.browser_settings.get(
+                        "locale", "zh-CN"
+                    ),  # 从配置中读取语言区域
+                    "timezone_id": self.browser_settings.get(
+                        "timezone_id", "Asia/Shanghai"
+                    ),  # 从配置中读取时区
                     "has_touch": False,
                     "color_scheme": "light",
-                    "ignore_https_errors": self.browser_settings.get("ignore_https_errors", True),
+                    "ignore_https_errors": self.browser_settings.get(
+                        "ignore_https_errors", True
+                    ),
                 }
                 if ua:
                     ctx_opts["user_agent"] = ua
@@ -191,7 +198,9 @@ class BrowserContextManager:
         try:
             custom_headers = json.loads(raw_headers)
             if isinstance(custom_headers, dict):
-                return {str(k): str(v) for k, v in custom_headers.items() if k is not None}
+                return {
+                    str(k): str(v) for k, v in custom_headers.items() if k is not None
+                }
             self.logger.warning("浏览器自定义请求头必须是 JSON 对象，已忽略")
         except Exception as exc:
             self.logger.warning(f"解析浏览器自定义请求头失败，已忽略: {exc}")

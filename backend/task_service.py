@@ -21,15 +21,23 @@ def _check_dangerous_steps(task_data: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         step_type = step.get("type", "")
         if step_type in _DANGEROUS_STEP_TYPES:
-            desc = step.get("description", step.get("id", f"步骤{i+1}"))
+            desc = step.get("description", step.get("id", f"步骤{i + 1}"))
             extra = step.get("extra", {})
-            code = step.get("script") or step.get("code") or extra.get("script") or extra.get("code") or ""
-            warnings.append({
-                "step_index": i + 1,
-                "step_type": step_type,
-                "description": desc,
-                "code": str(code)[:2000],
-            })
+            code = (
+                step.get("script")
+                or step.get("code")
+                or extra.get("script")
+                or extra.get("code")
+                or ""
+            )
+            warnings.append(
+                {
+                    "step_index": i + 1,
+                    "step_type": step_type,
+                    "description": desc,
+                    "code": str(code)[:2000],
+                }
+            )
     return warnings
 
 

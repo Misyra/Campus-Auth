@@ -54,7 +54,11 @@ class AutoStartService:
             if proc.returncode == 0:
                 logger.debug("命令成功: %s", (proc.stdout or "").strip()[:200])
                 return True, (proc.stdout or "").strip()
-            logger.warning("命令失败 (code=%d): %s", proc.returncode, (proc.stderr or proc.stdout or "").strip()[:200])
+            logger.warning(
+                "命令失败 (code=%d): %s",
+                proc.returncode,
+                (proc.stderr or proc.stdout or "").strip()[:200],
+            )
             return False, (proc.stderr or proc.stdout or "").strip()
         except Exception as exc:
             logger.error("命令异常: %s -> %s", " ".join(cmd), exc)
@@ -223,7 +227,9 @@ WantedBy=default.target
         logger.info("Linux service 已写入: %s", service_path)
 
         self._run(["systemctl", "--user", "daemon-reload"])
-        ok, msg = self._run(["systemctl", "--user", "enable", "--now", self.service_name])
+        ok, msg = self._run(
+            ["systemctl", "--user", "enable", "--now", self.service_name]
+        )
         if ok:
             logger.info("Linux systemd enable 成功")
             return True, f"已启用 Linux 开机自启动: {service_path}"
@@ -241,7 +247,7 @@ WantedBy=default.target
     @staticmethod
     def _has_cjk_chars(path: str) -> bool:
         """检查路径是否包含中日韩(CJK)统一表意文字。"""
-        return bool(re.search(r'[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]', path))
+        return bool(re.search(r"[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]", path))
 
     def _enable_windows(self) -> tuple[bool, str]:
         project_root_str = str(self.project_root)
@@ -298,7 +304,10 @@ WshShell.Run Chr(34) & targetExe & Chr(34) & " " & Chr(34) & "{app_py}" & Chr(34
         else:
             packaged = os.getenv("CAMPUS_AUTH_START_EXECUTABLE", "").strip()
             if not packaged:
-                return False, "未找到可用的 Python 解释器或打包可执行文件，无法创建自启动脚本"
+                return (
+                    False,
+                    "未找到可用的 Python 解释器或打包可执行文件，无法创建自启动脚本",
+                )
             content = f'''Set WshShell = CreateObject("WScript.Shell")
 WshShell.Environment("PROCESS")("CAMPUS_AUTH_AUTO_OPEN_BROWSER") = "false"
 

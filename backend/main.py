@@ -61,6 +61,7 @@ FRONTEND_DIR = PROJECT_ROOT / "frontend"
 DEBUG_DIR = PROJECT_ROOT / "debug"
 DEBUG_DIR.mkdir(parents=True, exist_ok=True)
 
+
 @asynccontextmanager
 async def lifespan(app_instance):
     """应用生命周期管理"""
@@ -69,9 +70,12 @@ async def lifespan(app_instance):
 
     # 迁移：从 .env 创建或补充 settings.json
     settings_path = PROJECT_ROOT / "settings.json"
-    startup_logger.info("settings.json 路径: %s (存在=%s, 大小=%d)",
-                        settings_path, settings_path.exists(),
-                        settings_path.stat().st_size if settings_path.exists() else 0)
+    startup_logger.info(
+        "settings.json 路径: %s (存在=%s, 大小=%d)",
+        settings_path,
+        settings_path.exists(),
+        settings_path.stat().st_size if settings_path.exists() else 0,
+    )
     try:
         env_config = {}
         profile_service.migrate_config(env_config)
@@ -110,6 +114,7 @@ async def lifespan(app_instance):
     # 清理临时调试截图
     try:
         import shutil
+
         if TEMP_DIR.exists():
             shutil.rmtree(TEMP_DIR, ignore_errors=True)
     except Exception:
@@ -125,6 +130,7 @@ app = FastAPI(
     version=get_project_version(PROJECT_ROOT),
     lifespan=lifespan,
 )
+
 
 # ==================== CORS 配置 ====================
 def _resolve_port() -> int:
@@ -142,6 +148,7 @@ def _resolve_port() -> int:
     if settings_path.exists():
         try:
             import json as _json
+
             data = _json.loads(settings_path.read_text(encoding="utf-8"))
             app_port = data.get("system", {}).get("app_port")
             if app_port is not None:
@@ -152,6 +159,7 @@ def _resolve_port() -> int:
             pass
 
     return 50721
+
 
 _cors_port = _resolve_port()
 app.add_middleware(
@@ -235,16 +243,12 @@ class DebugSession:
                     custom = _json.loads(raw_headers)
                     if isinstance(custom, dict):
                         extra_headers = {
-                            str(k): str(v)
-                            for k, v in custom.items()
-                            if k is not None
+                            str(k): str(v) for k, v in custom.items() if k is not None
                         }
                 except Exception as exc:
                     api_logger.debug("自定义请求头 JSON 解析失败: %s", exc)
 
-            self._browser = await self._pw.chromium.launch(
-                headless=False, args=args
-            )
+            self._browser = await self._pw.chromium.launch(headless=False, args=args)
             ctx_opts: dict = {
                 "viewport": {"width": 1280, "height": 720},
                 "locale": "zh-CN",
@@ -274,7 +278,9 @@ class DebugSession:
         self.page = await self._context.new_page()
 
         # 反检测脚本（默认关闭，需在方案设置中启用 stealth_mode）
-        if not safe_mode and runtime_config.get("browser_settings", {}).get("stealth_mode", False):
+        if not safe_mode and runtime_config.get("browser_settings", {}).get(
+            "stealth_mode", False
+        ):
             await self.page.add_init_script(STEALTH_INIT_SCRIPT)
 
         if url:
@@ -404,7 +410,6 @@ async def request_logging_middleware(request: Request, call_next):
         raise
 
 
-
 @app.websocket("/ws/logs")
 async def websocket_logs(websocket: WebSocket):
     ws_logger.info("WebSocket connecting: /ws/logs")
@@ -452,7 +457,10 @@ async def check_update() -> dict:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
                 "https://api.github.com/repos/Misyra/Campus-Auth/releases/latest",
-                headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "Campus-Auth"},
+                headers={
+                    "Accept": "application/vnd.github.v3+json",
+                    "User-Agent": "Campus-Auth",
+                },
             )
         data = resp.json()
         tag = data.get("tag_name", "").lstrip("v")
@@ -465,7 +473,12 @@ async def check_update() -> dict:
             "published_at": data.get("published_at", ""),
         }
     except Exception as e:
-        return {"current": current, "latest": None, "has_update": False, "error": str(e)}
+        return {
+            "current": current,
+            "latest": None,
+            "has_update": False,
+            "error": str(e),
+        }
 
 
 def _compare_versions(a: str, b: str) -> int:
@@ -679,7 +692,9 @@ def _normalize_repo_url(url: str) -> str:
         return f"https://raw.githubusercontent.com/{m.group(1)}/{m.group(2)}/{m.group(3)}/{m.group(4)}"
     m = re.match(r"https?://gitee\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+)", url)
     if m:
-        return f"https://gitee.com/{m.group(1)}/{m.group(2)}/raw/{m.group(3)}/{m.group(4)}"
+        return (
+            f"https://gitee.com/{m.group(1)}/{m.group(2)}/raw/{m.group(3)}/{m.group(4)}"
+        )
     return url
 
 
@@ -717,13 +732,17 @@ def repo_fetch_index(url: str = Query(..., description="索引 JSON 地址")) ->
         resp = _repo_get(url)
         data = resp.json()
         if not isinstance(data, list):
-            raise HTTPException(status_code=422, detail="索引格式不正确，应为 JSON 数组")
+            raise HTTPException(
+                status_code=422, detail="索引格式不正确，应为 JSON 数组"
+            )
         api_logger.info("远程索引获取成功: %d 个任务", len(data))
         return data
     except _requests.HTTPError as exc:
         status = exc.response.status_code if exc.response is not None else 502
         api_logger.error("远程索引获取失败: HTTP %s (%s)", status, url)
-        raise HTTPException(status_code=status, detail=f"远程返回错误: {status} ({url})") from exc
+        raise HTTPException(
+            status_code=status, detail=f"远程返回错误: {status} ({url})"
+        ) from exc
     except Exception as exc:
         api_logger.error("远程索引获取失败: %s (%s)", exc, url)
         raise HTTPException(status_code=502, detail=f"获取索引失败: {exc}") from exc
@@ -741,13 +760,17 @@ def repo_fetch_task(url: str = Query(..., description="任务 JSON 地址")) -> 
         resp = _repo_get(url)
         data = resp.json()
         if not isinstance(data, dict):
-            raise HTTPException(status_code=422, detail="任务格式不正确，应为 JSON 对象")
+            raise HTTPException(
+                status_code=422, detail="任务格式不正确，应为 JSON 对象"
+            )
         api_logger.info("远程任务下载成功: %s", data.get("name", "未命名"))
         return data
     except _requests.HTTPError as exc:
         status = exc.response.status_code if exc.response is not None else 502
         api_logger.error("远程任务下载失败: HTTP %s (%s)", status, url)
-        raise HTTPException(status_code=status, detail=f"远程返回错误: {status} ({url})") from exc
+        raise HTTPException(
+            status_code=status, detail=f"远程返回错误: {status} ({url})"
+        ) from exc
     except Exception as exc:
         api_logger.error("远程任务下载失败: %s (%s)", exc, url)
         raise HTTPException(status_code=502, detail=f"获取任务失败: {exc}") from exc
@@ -793,7 +816,8 @@ async def debug_start(request: Request) -> dict:
     # 构建环境变量（复用 service 的运行时配置）
     runtime_config = service.get_runtime_config()
     env_vars = build_login_env_vars(
-        runtime_config, task.url, runtime_config.get("custom_variables", {}))
+        runtime_config, task.url, runtime_config.get("custom_variables", {})
+    )
 
     # 解析任务 URL
     url = task.url or ""
@@ -803,7 +827,9 @@ async def debug_start(request: Request) -> dict:
     # 创建并启动会话（在锁外执行，失败时自动清理）
     session = DebugSession()
     try:
-        await session.start(runtime_config, url if url else None, safe_mode=service.safe_mode)
+        await session.start(
+            runtime_config, url if url else None, safe_mode=service.safe_mode
+        )
 
         steps_info = [
             {
@@ -817,8 +843,12 @@ async def debug_start(request: Request) -> dict:
 
         from src.task_executor import TaskExecutor
 
-        browser_timeout = runtime_config.get("browser_settings", {}).get("timeout", 10000)
-        executor = TaskExecutor(task, env_vars, screenshot_dir=TEMP_DIR, default_timeout=browser_timeout)
+        browser_timeout = runtime_config.get("browser_settings", {}).get(
+            "timeout", 10000
+        )
+        executor = TaskExecutor(
+            task, env_vars, screenshot_dir=TEMP_DIR, default_timeout=browser_timeout
+        )
 
         # 所有资源就绪后，在锁内更新 _debug
         async with _debug_lock:
@@ -844,9 +874,7 @@ async def debug_start(request: Request) -> dict:
                 "_debug_gen": gen,
                 "_timer_task": None,
             }
-            _debug["_timer_task"] = asyncio.create_task(
-                _debug_timeout_watcher(gen)
-            )
+            _debug["_timer_task"] = asyncio.create_task(_debug_timeout_watcher(gen))
             _debug["screenshot_url"] = await _take_debug_screenshot(session.page)
     except Exception:
         await session.close()
@@ -914,14 +942,22 @@ async def debug_stop() -> dict:
             if _debug["session"]:
                 await _debug["session"].close()
             _debug = {
-                "session": None, "task_id": None, "executor": None,
-                "current_step": 0, "steps": [], "results": [],
-                "screenshot_url": None, "running": False,
-                "_last_activity": 0.0, "_debug_gen": 0, "_timer_task": None,
+                "session": None,
+                "task_id": None,
+                "executor": None,
+                "current_step": 0,
+                "steps": [],
+                "results": [],
+                "screenshot_url": None,
+                "running": False,
+                "_last_activity": 0.0,
+                "_debug_gen": 0,
+                "_timer_task": None,
             }
     # 清理临时调试截图
     try:
         import shutil
+
         if TEMP_DIR.exists():
             shutil.rmtree(TEMP_DIR, ignore_errors=True)
             TEMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -1058,7 +1094,9 @@ def detect_network_profile() -> dict:
 
     api_logger.info(
         "网络检测结果: gateway=%s, ssid=%s, matched=%s",
-        gateway, ssid, matched_id,
+        gateway,
+        ssid,
+        matched_id,
     )
     return {
         "gateway_ip": gateway,
@@ -1166,11 +1204,15 @@ def list_backups() -> list[dict]:
     backups = []
     for f in sorted(_BACKUP_DIR.glob("settings_*.json"), reverse=True):
         stat = f.stat()
-        backups.append({
-            "filename": f.name,
-            "size": stat.st_size,
-            "created": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
-        })
+        backups.append(
+            {
+                "filename": f.name,
+                "size": stat.st_size,
+                "created": datetime.fromtimestamp(stat.st_mtime).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
+            }
+        )
     return backups
 
 
