@@ -5,7 +5,7 @@ import re
 import socket
 import subprocess
 import sys
-import atexit
+
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -19,7 +19,7 @@ from src.utils.platform_utils import is_windows, is_macos, is_linux
 logger = get_logger("network_test", side="BACKEND")
 
 _executor: ThreadPoolExecutor | None = None
-_thread_local = threading.local()
+_executor_lock = threading.Lock()
 _block_proxy = True  # 默认屏蔽系统代理，避免代理影响网络检测
 
 
@@ -35,26 +35,11 @@ def set_block_proxy(enabled: bool) -> None:
 
 def _get_executor() -> ThreadPoolExecutor:
     global _executor
-    if _executor is None:
-        _executor = ThreadPoolExecutor(max_workers=5)
-    return _executor
+    with _executor_lock:
+        if _executor is None or _executor._shutdown:
+            _executor = ThreadPoolExecutor(max_workers=5)
+        return _executor
 
-
-def _get_http_client() -> httpx.Client:
-    if not hasattr(_thread_local, "client"):
-        # 根据 _block_proxy 决定是否信任系统代理设置
-        _thread_local.client = httpx.Client(trust_env=not _block_proxy)
-    return _thread_local.client
-
-
-def _cleanup_resources() -> None:
-    global _executor
-    if _executor is not None:
-        _executor.shutdown(wait=False, cancel_futures=True)
-        _executor = None
-
-
-atexit.register(_cleanup_resources)
 
 
 def is_local_network_connected() -> bool:
@@ -250,8 +235,8 @@ def is_network_available_http(
         """在独立线程中检测单个 URL。返回 (url, success, detail)。"""
         start = time.perf_counter()
         try:
-            client = _get_http_client()
-            resp = client.get(url, timeout=timeout, follow_redirects=follow_redirects)
+            with httpx.Client(trust_env=not _block_proxy) as client:
+                resp = client.get(url, timeout=timeout, follow_redirects=follow_redirects)
             elapsed = (time.perf_counter() - start) * 1000
             if 200 <= resp.status_code < 300:
                 return (url, True, f"HTTP {resp.status_code} ({elapsed:.0f}ms)")
