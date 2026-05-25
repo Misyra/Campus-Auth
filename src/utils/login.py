@@ -12,6 +12,8 @@ import threading
 from pathlib import Path
 from typing import Any, Dict
 
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
 from .browser import BrowserContextManager
 from .env import build_login_env_vars
 from .exceptions import LoginCancelledError
@@ -42,7 +44,6 @@ class LoginAttemptHandler:
             f"{__name__}_login", config.get("logging", {})
         )
         self._browser_ctx: BrowserContextManager | None = None
-        self._dialog_handler = None
         self._task_manager: TaskManager | None = None
         self._project_root: Path | None = None
 
@@ -187,24 +188,22 @@ class LoginAttemptHandler:
                 # 构建网络检测配置，传递给 TaskExecutor 用于成功判断
                 network_test_config = self._build_network_test_config()
 
-                # 监听页面 alert/confirm/prompt，记录内容并延迟关闭让用户看到
-                # 复用浏览器时先移除旧监听器，避免重复叠加
-                if self._dialog_handler is not None:
-                    browser_manager.page.remove_listener("dialog", self._dialog_handler)
-
-                async def _handle_dialog(dialog):
-                    self.logger.info("页面弹窗 [%s]: %s", dialog.type, dialog.message)
-                    await asyncio.sleep(1.5)  # 延迟关闭，让页面有时间处理弹窗
-                    await dialog.accept()
-
-                self._dialog_handler = _handle_dialog
-                browser_manager.page.on("dialog", self._dialog_handler)
-
                 executor = TaskExecutor(
                     task, env_vars, default_timeout=browser_timeout,
                     network_test_config=network_test_config,
                 )
-                success, message = await executor.execute(browser_manager.page)
+                # 使用 expect_dialog 上下文管理器监听页面 alert/confirm/prompt，
+                # 自动清理监听器，避免浏览器复用时监听器泄漏
+                async with browser_manager.page.expect_dialog(timeout=30000) as dialog_info:
+                    success, message = await executor.execute(browser_manager.page)
+
+                try:
+                    dialog = await dialog_info.value
+                    self.logger.info("页面弹窗 [%s]: %s", dialog.type, dialog.message)
+                    await asyncio.sleep(1.5)
+                    await dialog.accept()
+                except PlaywrightTimeoutError:
+                    pass
                 total = _time.perf_counter() - phase_start
                 if success:
                     self.logger.info("登录成功 (总耗时 %.1fs): %s", total, message)
@@ -276,5 +275,4 @@ class LoginAttemptHandler:
             except Exception as exc:
                 self.logger.debug("浏览器关闭时异常 (非关键): %s", exc)
             self._browser_ctx = None
-            self._dialog_handler = None
             self.logger.info("浏览器已关闭")
