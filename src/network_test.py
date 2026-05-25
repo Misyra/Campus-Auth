@@ -66,7 +66,7 @@ def is_local_network_connected() -> bool:
     try:
         hostname = socket.gethostname()
         ip_list = socket.gethostbyname_ex(hostname)[2]
-        non_loopback = [ip for ip in ip_list if not ip.startswith("127.")]
+        non_loopback = [ip for ip in ip_list if not ip.startswith("127.") and not ip.startswith("169.254.")]
         if non_loopback:
             logger.info("本地网络已连接，IP: %s", ", ".join(non_loopback))
             return True

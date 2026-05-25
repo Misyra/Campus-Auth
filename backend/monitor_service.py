@@ -365,6 +365,11 @@ class MonitorService:
                     pass
                 core._loop = None
         if success:
+            # 同步状态到运行中的监控核心（如果监控在运行）
+            if self._monitor_core and self._monitor_core.monitoring:
+                self._monitor_core.last_network_ok = True
+            # 推送更新到前端 WebSocket（在锁外调用，避免死锁）
+            self._push_status()
             service_logger.info("Manual login succeeded")
             return True, f"手动登录成功：{message}"
         log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)

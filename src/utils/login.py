@@ -168,13 +168,16 @@ class LoginAttemptHandler:
             try:
                 if reuse_browser:
                     try:
-                        await browser_manager.page.evaluate("1")
+                        await browser_manager.page.evaluate("1", timeout=5000)
                     except Exception:
                         self.logger.warning("浏览器实例已失效，重新创建")
+                        if self.cancel_event and self.cancel_event.is_set():
+                            self.logger.warning("登录已被取消，跳过浏览器重建")
+                            raise RuntimeError("登录已被取消")
                         await self.close_browser()
                         browser_manager = await self._create_new_browser()
-                        if browser_manager is None:
-                            raise RuntimeError("浏览器实例应在复用或新建分支中初始化")
+                if browser_manager is None:
+                    raise RuntimeError("浏览器实例应在复用或新建分支中初始化")
 
                 if not browser_manager.page:
                     raise RuntimeError("浏览器页面初始化失败")
