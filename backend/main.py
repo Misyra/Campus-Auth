@@ -559,6 +559,11 @@ def stop_monitoring() -> ActionResponse:
 
 @app.post("/api/actions/login", response_model=ActionResponse)
 def manual_login() -> ActionResponse:
+    if service.login_in_progress:
+        raise HTTPException(
+            status_code=409,
+            detail={"success": False, "message": "登录操作正在进行中，请稍后再试"},
+        )
     ok, message = service.run_manual_login()
     api_logger.info("Manual login requested -> success=%s, message=%s", ok, message)
     return ActionResponse(success=ok, message=message)
