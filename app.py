@@ -3,7 +3,6 @@
 
 import argparse
 import atexit
-import errno  # POSIX errno 值，用于跨平台异常处理
 import os
 import signal
 import socket
@@ -67,7 +66,12 @@ def _get_process_name(pid: int) -> str | None:
             if result.returncode != 0 or not result.stdout.strip():
                 return None
             # CSV: "image_name","pid","session_name","session#","mem_usage"
-            return result.stdout.strip().split(",")[0].strip('"').strip() or None
+            # 注意：tasklist 在 PID 不存在时返回本地化的"无匹配进程"消息而非空输出，
+            # 这也会被 CSV 解析。通过检查第二字段是否为数字区分。
+            fields = result.stdout.strip().split(",")
+            if len(fields) < 2 or not fields[1].strip('"').strip().isdigit():
+                return None
+            return fields[0].strip('"').strip() or None
         else:
             result = subprocess.run(
                 ["ps", "-p", str(pid), "-o", "comm="],
@@ -94,35 +98,26 @@ def _is_service_running() -> tuple[bool, int | None]:
         pid_file.unlink(missing_ok=True)
         return False, None
 
-    if proc_name is not None:
-        actual_name = _get_process_name(pid)
-        if actual_name is None or _normalize_proc_name(actual_name) != _normalize_proc_name(proc_name):
-            pid_file.unlink(missing_ok=True)
-            return False, None
+    proc_alive = _get_process_name(pid)
+    if proc_alive is None:
+        # 进程不存在（tasklist/ps 查无此 PID）
+        pid_file.unlink(missing_ok=True)
+        return False, None
+
+    if proc_name is not None and _normalize_proc_name(proc_alive) != _normalize_proc_name(proc_name):
+        # PID 存在但进程名不匹配（PID 已被回收重用）
+        pid_file.unlink(missing_ok=True)
+        return False, None
 
     try:
         os.kill(pid, 0)
-    except PermissionError:
-        # Windows 下可能因权限导致探活失败，此时保守地认为进程仍在运行
-        return True, pid
+    except (PermissionError, OSError, SystemError):
+        # os.kill(pid,0) 在 Windows 下不可靠（跨会话/Integrity Level 探活会抛异常）
+        # 但 _get_process_name 已验证 PID 存在且进程名正确，保守视为存活
+        pass
     except ProcessLookupError:
         pid_file.unlink(missing_ok=True)
         return False, None
-    except OSError as exc:
-        # Windows: winerror=5 表示 Access denied，winerror=87 表示 Invalid parameter
-        # （跨会话/Integrity Level 探活），POSIX: errno=EACCES 表示权限不足，均保守视为存活
-        if getattr(exc, "winerror", getattr(exc, "errno", None)) in (
-            5,
-            87,
-            errno.EACCES,
-        ):
-            return True, pid
-        pid_file.unlink(missing_ok=True)
-        return False, None
-    except SystemError:
-        # CPython 下跨进程 os.kill(pid,0) 可能将 OSError 包装为 SystemError
-        # （常见于跨会话/Integrity Level 探活），保守视为进程存活
-        return True, pid
     return True, pid
 
 
