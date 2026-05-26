@@ -285,7 +285,7 @@ pidFile = WshShell.ExpandEnvironmentStrings("%USERPROFILE%") & "\\.campus_networ
 
 If fso.FileExists(pidFile) Then
     Set file = fso.OpenTextFile(pidFile, 1)
-    pid = Trim(file.ReadAll)
+    pid = Trim(file.ReadLine)
     file.Close
     
     ' Check if the process is still alive
@@ -317,7 +317,7 @@ pidFile = WshShell.ExpandEnvironmentStrings("%USERPROFILE%") & "\\.campus_networ
 
 If fso.FileExists(pidFile) Then
     Set file = fso.OpenTextFile(pidFile, 1)
-    pid = Trim(file.ReadAll)
+    pid = Trim(file.ReadLine)
     file.Close
     
     ' Check if the process is still alive

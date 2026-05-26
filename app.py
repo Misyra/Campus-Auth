@@ -7,6 +7,7 @@ import errno  # POSIX errno 值，用于跨平台异常处理
 import os
 import signal
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -31,36 +32,92 @@ def _get_pid_file() -> Path:
     return pid_dir / "campus_network_auth.pid"
 
 
+def _read_pid_file() -> tuple[int | None, str | None, str | None]:
+    """读取 PID 文件。返回 (pid, process_name, create_time) 或 (None, None, None)。"""
+    pid_file = _get_pid_file()
+    if not pid_file.exists():
+        return None, None, None
+    try:
+        text = pid_file.read_text(encoding="utf-8").strip()
+        if not text:
+            return None, None, None
+        lines = text.splitlines()
+        pid = int(lines[0].strip())
+        if pid <= 0:
+            return None, None, None
+        if len(lines) >= 2:
+            parts = lines[1].split("|", 1)
+            name = parts[0].strip() or None
+            timestamp = parts[1].strip() if len(parts) > 1 and parts[1].strip() else None
+            return pid, name, timestamp
+        return pid, None, None
+    except (ValueError, OSError):
+        return None, None, None
+
+
+def _get_process_name(pid: int) -> str | None:
+    try:
+        if sys.platform == "win32":
+            result = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                capture_output=True, text=True, timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW
+                if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
+            )
+            if result.returncode != 0 or not result.stdout.strip():
+                return None
+            # CSV: "image_name","pid","session_name","session#","mem_usage"
+            return result.stdout.strip().split(",")[0].strip('"').strip() or None
+        else:
+            result = subprocess.run(
+                ["ps", "-p", str(pid), "-o", "comm="],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode != 0 or not result.stdout.strip():
+                return None
+            return result.stdout.strip() or None
+    except Exception:
+        return None
+
+
+def _normalize_proc_name(name: str) -> str:
+    return name.lower().rstrip(".exe")
+
+
 def _is_service_running() -> tuple[bool, int | None]:
     pid_file = _get_pid_file()
     if not pid_file.exists():
         return False, None
-    try:
-        pid = int(pid_file.read_text(encoding="utf-8").strip())
-        if pid <= 0:
-            pid_file.unlink(missing_ok=True)
-            return False, None
-        try:
-            os.kill(pid, 0)
-        except PermissionError:
-            # Windows 下可能因权限导致探活失败，此时保守地认为进程仍在运行
-            return True, pid
-        except ProcessLookupError:
-            pid_file.unlink(missing_ok=True)
-            return False, None
-        except OSError as exc:
-            # Windows: winerror=5 表示 Access denied；POSIX: errno=EACCES 表示权限不足，均保守视为存活
-            if getattr(exc, "winerror", getattr(exc, "errno", None)) in (
-                5,
-                errno.EACCES,
-            ):
-                return True, pid
-            pid_file.unlink(missing_ok=True)
-            return False, None
-        return True, pid
-    except (ValueError, SystemError):
+
+    pid, proc_name, _ = _read_pid_file()
+    if pid is None:
         pid_file.unlink(missing_ok=True)
         return False, None
+
+    if proc_name is not None:
+        actual_name = _get_process_name(pid)
+        if actual_name is None or _normalize_proc_name(actual_name) != _normalize_proc_name(proc_name):
+            pid_file.unlink(missing_ok=True)
+            return False, None
+
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        # Windows 下可能因权限导致探活失败，此时保守地认为进程仍在运行
+        return True, pid
+    except ProcessLookupError:
+        pid_file.unlink(missing_ok=True)
+        return False, None
+    except OSError as exc:
+        # Windows: winerror=5 表示 Access denied；POSIX: errno=EACCES 表示权限不足，均保守视为存活
+        if getattr(exc, "winerror", getattr(exc, "errno", None)) in (
+            5,
+            errno.EACCES,
+        ):
+            return True, pid
+        pid_file.unlink(missing_ok=True)
+        return False, None
+    return True, pid
 
 
 def _is_local_port_in_use(port: int) -> bool:
@@ -70,7 +127,14 @@ def _is_local_port_in_use(port: int) -> bool:
 
 
 def _write_pid() -> None:
-    _get_pid_file().write_text(str(os.getpid()), encoding="utf-8")
+    pid_file = _get_pid_file()
+    proc_name = os.path.basename(sys.executable)
+    start_time = time.strftime("%Y-%m-%d %H:%M:%S")
+    content = f"{os.getpid()}\n{proc_name}|{start_time}"
+    # 原子写入: 临时文件 + 重命名
+    tmp = pid_file.with_suffix(".pid.tmp")
+    tmp.write_text(content, encoding="utf-8")
+    tmp.replace(pid_file)
 
 
 def _cleanup_pid() -> None:
@@ -117,6 +181,8 @@ def _open_browser(port: int, setting: bool | None = None) -> None:
 
 
 def _cmd_status() -> None:
+    pid_file = _get_pid_file()
+    had_pid_file = pid_file.exists()
     running, pid = _is_service_running()
     from backend.main import _resolve_port
 
@@ -126,6 +192,9 @@ def _cmd_status() -> None:
         print(f"服务正在运行 (PID: {pid})")
     elif _is_local_port_in_use(port):
         print(f"服务疑似正在运行 (端口: {port})")
+    elif had_pid_file:
+        # _is_service_running() 清理了残留 PID 文件（进程已死或身份不匹配）
+        print("服务未运行 (残留 PID 文件已清理)")
     else:
         print("服务未运行")
 
@@ -135,17 +204,28 @@ def _cmd_stop() -> None:
     if not running or pid is None:
         print("服务未运行")
         return
+
+    # 进程身份验证：新格式 PID 文件中记录的进程名必须匹配实际运行进程
+    stored_pid, proc_name, _ = _read_pid_file()
+    if proc_name is not None:
+        actual_name = _get_process_name(pid)
+        if actual_name is None or _normalize_proc_name(actual_name) != _normalize_proc_name(proc_name):
+            print(
+                f"警告: PID 文件记录的进程名 '{proc_name}' 与实际进程 "
+                f"'{actual_name or 'N/A'}' 不匹配，跳过停服操作"
+            )
+            _cleanup_pid()
+            return
+
     try:
         print(f"正在停止服务 (PID: {pid})...")
         if is_windows():
             # Windows: taskkill 发送 WM_CLOSE 实现优雅关闭
-            import subprocess as _sp
-
-            _sp.run(
+            subprocess.run(
                 ["taskkill", "/PID", str(pid)],
                 capture_output=True,
-                creationflags=_sp.CREATE_NO_WINDOW
-                if hasattr(_sp, "CREATE_NO_WINDOW")
+                creationflags=subprocess.CREATE_NO_WINDOW
+                if hasattr(subprocess, "CREATE_NO_WINDOW")
                 else 0,
             )
         else:
@@ -159,13 +239,11 @@ def _cmd_stop() -> None:
                 _cleanup_pid()
                 return
         if is_windows():
-            import subprocess as _sp
-
-            _sp.run(
+            subprocess.run(
                 ["taskkill", "/F", "/PID", str(pid)],
                 capture_output=True,
-                creationflags=_sp.CREATE_NO_WINDOW
-                if hasattr(_sp, "CREATE_NO_WINDOW")
+                creationflags=subprocess.CREATE_NO_WINDOW
+                if hasattr(subprocess, "CREATE_NO_WINDOW")
                 else 0,
             )
             print("服务已强制停止")
@@ -309,6 +387,7 @@ def _run_server(
     atexit.register(_cleanup_pid)
 
     def _signal_handler(signum, _frame):
+        _cleanup_pid()
         os._exit(0)
 
     signal.signal(signal.SIGINT, _signal_handler)
@@ -360,7 +439,7 @@ def _run_server(
                 # 托盘退出回调：优先发送 SIGTERM 优雅关闭；无 SIGTERM 时直接终止进程（Windows 上 taskkill 替代）
                 on_exit=lambda: os.kill(os.getpid(), signal.SIGTERM)
                 if hasattr(signal, "SIGTERM")
-                else os._exit(0),
+                else _cleanup_pid() or os._exit(0),
             )
             tray_icon.start()
             print("系统托盘已启动，双击图标打开控制台")
