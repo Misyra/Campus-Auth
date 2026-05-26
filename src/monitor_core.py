@@ -7,6 +7,7 @@ import re
 import socket
 import threading
 import time
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 from .network_test import (
@@ -24,6 +25,13 @@ from .utils.notify import send_notification
 
 if TYPE_CHECKING:
     from backend.profile_service import ProfileService
+
+
+class RecoveryResult(str, Enum):
+    LOGIN_OK = "login_ok"
+    GIVE_UP = "give_up"
+    BREAK = "break"
+    NET_DISCONNECT = "net_disconnect"
 
 
 class NetworkMonitorCore:
@@ -229,7 +237,7 @@ class NetworkMonitorCore:
             wait = intervals[idx]
             self.log_message(f"{wait} 秒后重试登录...", logging.DEBUG)
             if not self._wait_interruptible(wait, step=5):
-                return "break"
+                return RecoveryResult.BREAK
             return "retry"
         # 超过最大重试次数，放弃本次网络检测周期
         self.log_message(
@@ -237,7 +245,7 @@ class NetworkMonitorCore:
             logging.WARNING,
         )
         self.login_attempt_count = 0
-        return "give_up"
+        return RecoveryResult.GIVE_UP
 
     def _is_auth_url_reachable(self) -> bool:
         """检查认证地址的 TCP 可达性。
@@ -291,7 +299,7 @@ class NetworkMonitorCore:
                 )
                 self.login_attempt_count = 0
                 self.last_network_ok = False
-                return "net_disconnect"
+                return RecoveryResult.NET_DISCONNECT
 
             # 2. 检查配置方案是否切换（内部有 60s 冷却）
             self._check_profile_switch()
@@ -304,7 +312,7 @@ class NetworkMonitorCore:
                 )
                 self.login_attempt_count = 0
                 self.last_network_ok = False
-                return "net_disconnect"
+                return RecoveryResult.NET_DISCONNECT
 
             # 3. 执行登录
             login_ok, login_msg = self.attempt_login()
@@ -314,7 +322,7 @@ class NetworkMonitorCore:
             if login_ok:
                 self.login_attempt_count = 0
                 self.last_network_ok = True
-                return "login_ok"
+                return RecoveryResult.LOGIN_OK
 
             # 4. 登录失败，记录并判断是否重试
             self.login_attempt_count += 1
@@ -333,17 +341,17 @@ class NetworkMonitorCore:
 
             failed_count = self.login_attempt_count
             action = self._login_retry_or_break()
-            if action == "break":
-                return "break"
-            if action == "give_up":
+            if action == RecoveryResult.BREAK:
+                return RecoveryResult.BREAK
+            if action == RecoveryResult.GIVE_UP:
                 send_notification(
                     "Campus-Auth 登录失败",
                     f"连续 {failed_count} 次登录失败，等待下次检测周期",
                 )
-                return "give_up"
+                return RecoveryResult.GIVE_UP
             # action == "retry" → 继续内层循环，不做网络检测
 
-        return "break"
+        return RecoveryResult.BREAK
 
     def monitor_network(self) -> None:
         consecutive_failures = 0
@@ -426,19 +434,19 @@ class NetworkMonitorCore:
                     # 进入登录恢复内层循环
                     # 内层不做 is_network_available()，只做快速物理连接检查 + 登录重试
                     recovery_result = self._login_recovery_loop()
-                    if recovery_result == "login_ok":
+                    if recovery_result == RecoveryResult.LOGIN_OK:
                         consecutive_failures = 0
                         self.login_attempt_count = 0
                         self.last_network_ok = True
                         self.log_message(
                             f"[#{self.network_check_count}] 登录成功，网络已恢复"
                         )
-                    elif recovery_result == "break":
+                    elif recovery_result == RecoveryResult.BREAK:
                         break
-                    elif recovery_result == "net_disconnect":
+                    elif recovery_result == RecoveryResult.NET_DISCONNECT:
                         consecutive_failures = 0
                         # fall through to interval wait
-                    # "give_up" → fall through to interval wait
+                    # RecoveryResult.GIVE_UP → fall through to interval wait
 
             next_check = datetime.datetime.now() + datetime.timedelta(seconds=interval)
             self.log_message(
