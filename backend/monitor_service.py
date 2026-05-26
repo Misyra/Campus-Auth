@@ -244,19 +244,9 @@ class MonitorService:
             service_logger.exception("Manual login failed with exception")
             cmd.response_data = (False, str(exc))
         finally:
-            # Cleanup: close temporary browser / event loop
-            if core._login_handler and core._loop:
-                try:
-                    core._loop.run_until_complete(core._login_handler.close_browser())
-                except Exception:
-                    pass
-                core._login_handler = None
-            if core._loop:
-                try:
-                    core._loop.close()
-                except Exception:
-                    pass
-                core._loop = None
+            # 清理：attempt_login() 内部已关闭事件循环和浏览器，
+            # 此处仅需置空 handler 防止悬空引用
+            core._login_handler = None
 
         if cmd.response_event:
             cmd.response_event.set()
@@ -588,6 +578,8 @@ class MonitorService:
         monitor_cfg = config.get("monitor", {})
         targets = monitor_cfg.get("ping_targets", [])
         strict_mode = monitor_cfg.get("strict_mode", True)
+        # 注：此处 host:port 解析逻辑与 monitor_core._build_test_sites() 和
+        # login._build_network_test_config() 相似但超时/返回类型不同，暂不提取共享函数。
         # 解析 host:port 为 (host, port) 元组列表
         test_sites: list[tuple[str, int]] = []
         for item in targets:

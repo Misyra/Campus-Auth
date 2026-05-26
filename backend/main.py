@@ -824,42 +824,42 @@ async def debug_start(request: Request) -> dict:
     for k, v in env_vars.items():
         url = url.replace("{{" + k + "}}", v)
 
-    # 创建并启动会话（在锁外执行，失败时自动清理）
-    session = DebugSession()
-    try:
-        await session.start(
-            runtime_config, url if url else None, safe_mode=service.safe_mode
-        )
+    async with _debug_lock:
+        # 修复：整个会话创建放在锁内，防止并发请求泄漏 Playwright 进程
+        if _debug["session"]:
+            await _debug["session"].close()
+        if _debug["_timer_task"] and not _debug["_timer_task"].done():
+            _debug["_timer_task"].cancel()
+            try:
+                await _debug["_timer_task"]
+            except asyncio.CancelledError:
+                pass
 
-        steps_info = [
-            {
-                "index": i,
-                "id": step.id,
-                "type": step.type,
-                "description": step.description or step.type,
-            }
-            for i, step in enumerate(task.steps)
-        ]
+        session = DebugSession()
+        try:
+            await session.start(
+                runtime_config, url if url else None, safe_mode=service.safe_mode
+            )
 
-        from src.task_executor import TaskExecutor
+            steps_info = [
+                {
+                    "index": i,
+                    "id": step.id,
+                    "type": step.type,
+                    "description": step.description or step.type,
+                }
+                for i, step in enumerate(task.steps)
+            ]
 
-        browser_timeout = runtime_config.get("browser_settings", {}).get(
-            "timeout", 10000
-        )
-        executor = TaskExecutor(
-            task, env_vars, screenshot_dir=TEMP_DIR, default_timeout=browser_timeout
-        )
+            from src.task_executor import TaskExecutor
 
-        # 所有资源就绪后，在锁内更新 _debug
-        async with _debug_lock:
-            if _debug["session"]:
-                await _debug["session"].close()
-            if _debug["_timer_task"] and not _debug["_timer_task"].done():
-                _debug["_timer_task"].cancel()
-                try:
-                    await _debug["_timer_task"]
-                except asyncio.CancelledError:
-                    pass
+            browser_timeout = runtime_config.get("browser_settings", {}).get(
+                "timeout", 10000
+            )
+            executor = TaskExecutor(
+                task, env_vars, screenshot_dir=TEMP_DIR, default_timeout=browser_timeout
+            )
+
             gen = _debug["_debug_gen"] + 1
             _debug = {
                 "session": session,
@@ -876,9 +876,9 @@ async def debug_start(request: Request) -> dict:
             }
             _debug["_timer_task"] = asyncio.create_task(_debug_timeout_watcher(gen))
             _debug["screenshot_url"] = await _take_debug_screenshot(session.page)
-    except Exception:
-        await session.close()
-        raise
+        except Exception:
+            await session.close()
+            raise
 
     api_logger.info("Debug session started for task %s", task_id)
     return _debug_response()
@@ -1115,14 +1115,12 @@ def toggle_auto_switch(enabled: str = Query(default="true")) -> ActionResponse:
     return ActionResponse(success=True, message=f"自动切换已{state}")
 
 
-# 系统托盘引用（由 app.py 中设置，用于 shutdown 时正确停止）
-_tray_icon_ref = None
-
-
 def _set_tray_icon(tray_icon):
-    """设置系统托盘实例引用"""
-    global _tray_icon_ref
-    _tray_icon_ref = tray_icon
+    """保留给将来系统托盘集成使用。
+    
+    当前 app.py 启动时调用此函数注册托盘实例，但 shutdown
+    流程已改用独立线程直接停止，不再需要 _tray_icon_ref。
+    """
 
 
 @app.post("/api/shutdown", response_model=ActionResponse)
@@ -1136,6 +1134,9 @@ def shutdown_server() -> ActionResponse:
             service.stop_monitoring()
         except Exception:
             pass
+        # 故意使用 os._exit(0) 而非 sys.exit(0)：sys.exit() 在 daemon 线程中仅退出该线程，
+        # 不会终止进程；os._exit(0) 是 Windows 上唯一可靠的立即退出方式。
+        # 日志已由 _DateRotatingFileHandler.emit() 即时写入，无需额外刷盘。
         os._exit(0)
 
     threading.Thread(target=_do_shutdown, daemon=True).start()

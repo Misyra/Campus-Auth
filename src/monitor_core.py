@@ -162,6 +162,8 @@ class NetworkMonitorCore:
                 self.monitor_network()
             except KeyboardInterrupt:
                 self.log_message("收到中断信号，停止监控", logging.WARNING)
+            # 注：此处捕获 Exception 后调用 stop_monitoring()，会更新 StatusSnapshot 并推送
+            # WebSocket 状态变化，前端可见 monitoring=false。非静默退出。
             except Exception as exc:
                 self.log_message(f"监控异常: {exc}", logging.ERROR)
             finally:
@@ -468,6 +470,8 @@ class NetworkMonitorCore:
         if not raw_targets:
             raw_targets = self.DEFAULT_PING_TARGETS.copy()
 
+        # 注：此处 host:port 解析逻辑与 monitor_service.test_network() 和
+        # login._build_network_test_config() 相似但超时/返回类型不同，暂不提取共享函数。
         parsed: list[tuple[str, int]] = []
         for item in raw_targets:
             host = item

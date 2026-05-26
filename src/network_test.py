@@ -6,7 +6,6 @@ import socket
 import subprocess
 import sys
 
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Iterable, Sequence
@@ -18,8 +17,7 @@ from src.utils.platform_utils import is_windows, is_macos, is_linux
 
 logger = get_logger("network_test", side="BACKEND")
 
-_executor: ThreadPoolExecutor | None = None
-_executor_lock = threading.Lock()
+_executor = ThreadPoolExecutor(max_workers=5)
 _block_proxy = True  # 默认屏蔽系统代理，避免代理影响网络检测
 
 
@@ -31,14 +29,6 @@ def set_block_proxy(enabled: bool) -> None:
     """
     global _block_proxy
     _block_proxy = enabled
-
-
-def _get_executor() -> ThreadPoolExecutor:
-    global _executor
-    with _executor_lock:
-        if _executor is None or _executor._shutdown:
-            _executor = ThreadPoolExecutor(max_workers=5)
-        return _executor
 
 
 def is_local_network_connected() -> bool:
@@ -236,8 +226,7 @@ def is_network_available_socket(
             elapsed = (time.perf_counter() - start) * 1000
             return (f"{host}:{port}", False, f"{type(exc).__name__}")
 
-    executor = _get_executor()
-    futures = {executor.submit(_connect_one, h, p): (h, p) for h, p in targets}
+    futures = {_executor.submit(_connect_one, h, p): (h, p) for h, p in targets}
     for future in as_completed(futures):
         label, ok, detail = future.result()
         if ok:
@@ -273,8 +262,7 @@ def is_network_available_http(
             elapsed = (time.perf_counter() - start) * 1000
             return (url, False, f"{type(exc).__name__}: {exc}")
 
-    executor = _get_executor()
-    futures = {executor.submit(_check_one, url): url for url in urls}
+    futures = {_executor.submit(_check_one, url): url for url in urls}
     for future in as_completed(futures):
         url, ok, detail = future.result()
         if ok:
