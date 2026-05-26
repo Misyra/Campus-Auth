@@ -50,7 +50,6 @@ from .schemas import (
 )
 from .task_service import TaskService
 from backend.debug_session import (
-    DebugSession,
     _debug_gen,
     _next_debug_gen,
     debug_to_response,
