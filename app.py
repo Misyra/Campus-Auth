@@ -109,14 +109,20 @@ def _is_service_running() -> tuple[bool, int | None]:
         pid_file.unlink(missing_ok=True)
         return False, None
     except OSError as exc:
-        # Windows: winerror=5 表示 Access denied；POSIX: errno=EACCES 表示权限不足，均保守视为存活
+        # Windows: winerror=5 表示 Access denied，winerror=87 表示 Invalid parameter
+        # （跨会话/Integrity Level 探活），POSIX: errno=EACCES 表示权限不足，均保守视为存活
         if getattr(exc, "winerror", getattr(exc, "errno", None)) in (
             5,
+            87,
             errno.EACCES,
         ):
             return True, pid
         pid_file.unlink(missing_ok=True)
         return False, None
+    except SystemError:
+        # CPython 下跨进程 os.kill(pid,0) 可能将 OSError 包装为 SystemError
+        # （常见于跨会话/Integrity Level 探活），保守视为进程存活
+        return True, pid
     return True, pid
 
 
