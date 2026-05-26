@@ -81,6 +81,8 @@ class LoginAttemptHandler:
         except LoginCancelledError:
             self.logger.info("登录操作已取消")
             return False, "登录已取消"
+        # 注：except Exception 不捕获 KeyboardInterrupt/SystemExit（它们继承 BaseException），
+        # 也不捕获 Python 3.9+ 的 asyncio.CancelledError，因此不会阻塞进程退出。
         except Exception as e:
             error_msg = f"登录过程中发生错误: {str(e)}"
             self.logger.error(error_msg)
@@ -265,6 +267,8 @@ class LoginAttemptHandler:
         if isinstance(targets, str):
             targets = [item.strip() for item in targets.split(",") if item.strip()]
 
+        # 注：此处 host:port 解析逻辑与 monitor_service.test_network() 和
+        # monitor_core._build_test_sites() 相似但超时/返回类型不同，暂不提取共享函数。
         test_sites = []
         for item in targets:
             host = item
