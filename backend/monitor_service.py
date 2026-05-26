@@ -61,22 +61,18 @@ class WebSocketManager:
 
     def __init__(self):
         self._connections: list[WebSocket] = []
-        self._lock = asyncio.Lock()
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
-        async with self._lock:
-            self._connections.append(websocket)
+        self._connections.append(websocket)
 
     async def disconnect(self, websocket: WebSocket):
-        async with self._lock:
-            if websocket in self._connections:
-                self._connections.remove(websocket)
+        if websocket in self._connections:
+            self._connections.remove(websocket)
 
     async def broadcast(self, message: str):
         """广播消息（直接发送，保证实时性）"""
-        async with self._lock:
-            connections = self._connections.copy()
+        connections = self._connections.copy()
 
         if not connections:
             return
@@ -86,16 +82,14 @@ class WebSocketManager:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # 清理断开连接
-        async with self._lock:
-            for ws, result in zip(connections, results):
-                if isinstance(result, Exception) and ws in self._connections:
-                    self._connections.remove(ws)
+        for ws, result in zip(connections, results):
+            if isinstance(result, Exception) and ws in self._connections:
+                self._connections.remove(ws)
 
     async def close_all(self):
         """关闭所有 WebSocket 连接"""
-        async with self._lock:
-            connections = self._connections.copy()
-            self._connections.clear()
+        connections = self._connections.copy()
+        self._connections.clear()
 
         for ws in connections:
             try:
