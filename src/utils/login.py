@@ -12,8 +12,6 @@ import threading
 from pathlib import Path
 from typing import Any, Dict
 
-from playwright.async_api import TimeoutError as PlaywrightTimeoutError
-
 from .browser import BrowserContextManager
 from .env import build_login_env_vars
 from .exceptions import LoginCancelledError
@@ -222,20 +220,18 @@ class LoginAttemptHandler:
                     default_timeout=browser_timeout,
                     network_test_config=network_test_config,
                 )
-                # 使用 expect_dialog 上下文管理器监听页面 alert/confirm/prompt，
-                # 自动清理监听器，避免浏览器复用时监听器泄漏
-                async with browser_manager.page.expect_dialog(
-                    timeout=30000
-                ) as dialog_info:
-                    success, message = await executor.execute(browser_manager.page)
-
-                try:
-                    dialog = await dialog_info.value
+                # 监听页面 alert/confirm/prompt，记录内容并延迟关闭让用户看到
+                # 每次执行后清理监听器，避免浏览器复用时监听器泄漏
+                async def _handle_dialog(dialog):
                     self.logger.info("页面弹窗 [%s]: %s", dialog.type, dialog.message)
-                    await asyncio.sleep(1.5)
+                    await asyncio.sleep(1.5)  # 延迟关闭，让页面有时间处理弹窗
                     await dialog.accept()
-                except PlaywrightTimeoutError:
-                    pass
+
+                browser_manager.page.on("dialog", _handle_dialog)
+                try:
+                    success, message = await executor.execute(browser_manager.page)
+                finally:
+                    browser_manager.page.remove_listener("dialog", _handle_dialog)
                 total = _time.perf_counter() - phase_start
                 if success:
                     self.logger.info("登录成功 (总耗时 %.1fs): %s", total, message)
