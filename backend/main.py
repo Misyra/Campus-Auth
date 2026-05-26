@@ -1103,6 +1103,10 @@ def shutdown_server() -> ActionResponse:
         # 故意使用 os._exit(0) 而非 sys.exit(0)：sys.exit() 在 daemon 线程中仅退出该线程，
         # 不会终止进程；os._exit(0) 是 Windows 上唯一可靠的立即退出方式。
         # 日志已由 _DateRotatingFileHandler.emit() 即时写入，无需额外刷盘。
+        try:
+            (Path.home() / ".campus_network_auth" / "campus_network_auth.pid").unlink(missing_ok=True)
+        except Exception:
+            pass
         os._exit(0)
 
     threading.Thread(target=_do_shutdown, daemon=True).start()
