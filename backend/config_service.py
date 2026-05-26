@@ -3,6 +3,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from src.utils.config_helpers import (
+    assign_profile_fields,
+    extract_profile_fields,
+    PROFILE_FIELDS,
+)
 from src.utils.crypto import decrypt_password, mask_password, save_password_field
 from src.utils.logging import get_logger
 from src.utils.exceptions import DecryptionError
@@ -68,82 +73,22 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
     sys = data.system
     config_logger.debug("加载 UI 配置（全局）: active_profile=%s", data.active_profile)
 
-    # 账号密码：始终使用全局
-    username = sys.username
-    password = mask_password(sys.password)
-
-    # 认证地址：始终使用全局
-    auth_url = sys.auth_url
-
-    # 任务：全局状态不绑定特定任务
-    active_task = ""
-
-    # 运营商：始终使用全局
-    carrier = sys.carrier
-    carrier_custom = sys.carrier_custom
-
-    # 高级设置：始终从 default 方案读取
     global_profile = data.profiles.get("default", ProfileSettings())
-    check_interval_minutes = global_profile.check_interval_minutes
-    auto_start = global_profile.auto_start
-    headless = global_profile.headless
-    browser_timeout = global_profile.browser_timeout
-    login_timeout = global_profile.login_timeout
-    browser_user_agent = global_profile.browser_user_agent
-    browser_low_resource_mode = global_profile.browser_low_resource_mode
-    browser_disable_web_security = global_profile.browser_disable_web_security
-    browser_extra_headers_json = global_profile.browser_extra_headers_json
-    browser_args = global_profile.browser_args
-    browser_locale = global_profile.browser_locale  # 浏览器语言区域
-    browser_timezone = global_profile.browser_timezone  # 浏览器时区 ID
-    pause_enabled = global_profile.pause_enabled
-    pause_start_hour = global_profile.pause_start_hour
-    pause_end_hour = global_profile.pause_end_hour
-    network_targets = _normalize_targets(global_profile.network_targets)
-    network_strict_mode = global_profile.network_strict_mode
-    custom_variables = global_profile.custom_variables
 
-    return MonitorConfigPayload(
-        username=username,
-        password=password,
-        use_global_credentials=True,
-        auth_url=auth_url,
-        active_task=active_task,
-        carrier=carrier,
-        carrier_custom=carrier_custom,
-        check_interval_minutes=check_interval_minutes,
-        auto_start=auto_start,
-        headless=headless,
-        browser_timeout=browser_timeout,
-        login_timeout=login_timeout,
-        browser_user_agent=browser_user_agent,
-        browser_low_resource_mode=browser_low_resource_mode,
-        browser_disable_web_security=browser_disable_web_security,
-        browser_extra_headers_json=browser_extra_headers_json,
-        browser_args=browser_args,
-        browser_locale=browser_locale,
-        browser_timezone=browser_timezone,
-        pause_enabled=pause_enabled,
-        pause_start_hour=pause_start_hour,
-        pause_end_hour=pause_end_hour,
-        network_targets=network_targets,
-        network_strict_mode=network_strict_mode,
-        backend_log_level=_normalize_level(sys.backend_log_level),
-        frontend_log_level=_normalize_level(sys.frontend_log_level),
-        access_log=sys.access_log,
-        minimize_to_tray=sys.minimize_to_tray,
-        auto_open_browser=sys.auto_open_browser,
-        login_then_exit=sys.login_then_exit,
-        max_retries=sys.max_retries,
-        retry_interval=sys.retry_interval,
-        log_retention_days=sys.log_retention_days,
-        screenshot_retention_days=sys.screenshot_retention_days,
-        custom_variables=custom_variables,
-        proxy=sys.proxy,
-        block_proxy=sys.block_proxy,
-        app_port=sys.app_port,
-        network_check_timeout=sys.network_check_timeout,
-    )
+    # 合并 sys 和 default 方案字段；重叠字段以 sys 为准（始终显示全局值）
+    pld = {}
+    pld.update(extract_profile_fields(global_profile.__dict__, PROFILE_FIELDS))
+    pld.update(extract_profile_fields(sys.__dict__, PROFILE_FIELDS))
+
+    # UI 专属覆盖
+    pld["password"] = mask_password(sys.password)
+    pld["active_task"] = ""
+    pld["use_global_credentials"] = True
+    pld["network_targets"] = _normalize_targets(global_profile.network_targets)
+    pld["backend_log_level"] = _normalize_level(sys.backend_log_level)
+    pld["frontend_log_level"] = _normalize_level(sys.frontend_log_level)
+
+    return MonitorConfigPayload(**pld)
 
 
 def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload:
@@ -157,137 +102,81 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
     profile = data.profiles.get(data.active_profile)
     config_logger.debug("加载运行时配置: profile=%s", data.active_profile)
 
-    # 账号密码：方案独立 > 全局
-    # 注意：运行时配置使用解密后的明文密码，不做掩码处理
-    # 掩码仅在 load_ui_config 中用于前端展示
+    # 从系统设置作为基础
+    pld = extract_profile_fields(sys.__dict__, PROFILE_FIELDS)
+
+    # 账号密码：方案独立 > 全局；运行时使用解密明文
     use_global = True
     if profile and not profile.use_global_credentials and profile.username:
-        username = profile.username
+        pld["username"] = profile.username
         use_global = False
         raw_pwd = profile.password or ""
         if raw_pwd.startswith("ENC:"):
-            password = _safe_decrypt(raw_pwd)
+            pld["password"] = _safe_decrypt(raw_pwd)
         elif raw_pwd.startswith("•"):
-            # 掩码值，从全局密码解密
             if sys.password:
-                password = _safe_decrypt(sys.password)
+                pld["password"] = _safe_decrypt(sys.password)
             else:
                 config_logger.warning(
                     "方案 '%s' 密码为掩码但全局密码为空，无法解析",
                     data.active_profile,
                 )
-                password = ""
+                pld["password"] = ""
         elif raw_pwd:
-            password = raw_pwd
+            pld["password"] = raw_pwd
         else:
-            password = _safe_decrypt(sys.password) if sys.password else ""
+            pld["password"] = _safe_decrypt(sys.password) if sys.password else ""
     else:
-        username = sys.username
-        password = _safe_decrypt(sys.password) if sys.password else ""
+        pld["username"] = sys.username
+        pld["password"] = _safe_decrypt(sys.password) if sys.password else ""
+    pld["use_global_credentials"] = use_global
 
     # 认证地址：跟随全局或使用方案独立值
     if not profile or profile.use_global_auth_url:
-        auth_url = sys.auth_url
+        pld["auth_url"] = sys.auth_url
     else:
-        auth_url = profile.auth_url
+        pld["auth_url"] = profile.auth_url
 
     # 任务：跟随全局或使用方案独立任务
     if not profile or profile.use_global_task:
-        active_task = ""
+        pld["active_task"] = ""
     else:
-        active_task = profile.active_task
+        pld["active_task"] = profile.active_task
+
     # 运营商：跟随全局账号密码开关
     if not profile or profile.use_global_credentials:
-        carrier = sys.carrier
-        carrier_custom = sys.carrier_custom
+        pld["carrier"] = sys.carrier
+        pld["carrier_custom"] = sys.carrier_custom
     else:
-        carrier = profile.carrier
-        carrier_custom = profile.carrier_custom
+        pld["carrier"] = profile.carrier
+        pld["carrier_custom"] = profile.carrier_custom
 
-    # 高级设置：use_global_advanced 时使用 default 方案的值，否则使用方案独立值
-    if profile and not profile.use_global_advanced:
-        check_interval_minutes = profile.check_interval_minutes
-        auto_start = profile.auto_start
-        headless = profile.headless
-        browser_timeout = profile.browser_timeout
-        login_timeout = profile.login_timeout
-        browser_user_agent = profile.browser_user_agent
-        browser_low_resource_mode = profile.browser_low_resource_mode
-        browser_disable_web_security = profile.browser_disable_web_security
-        browser_extra_headers_json = profile.browser_extra_headers_json
-        browser_args = profile.browser_args
-        block_proxy = profile.block_proxy  # 屏蔽系统代理
-        browser_locale = profile.browser_locale  # 浏览器语言区域
-        browser_timezone = profile.browser_timezone  # 浏览器时区 ID
-        pause_enabled = profile.pause_enabled
-        pause_start_hour = profile.pause_start_hour
-        pause_end_hour = profile.pause_end_hour
-        network_targets = _normalize_targets(profile.network_targets)
-        network_strict_mode = profile.network_strict_mode
-        custom_variables = profile.custom_variables
-    else:
-        global_profile = data.profiles.get("default", ProfileSettings())
-        check_interval_minutes = global_profile.check_interval_minutes
-        auto_start = global_profile.auto_start
-        headless = global_profile.headless
-        browser_timeout = global_profile.browser_timeout
-        login_timeout = global_profile.login_timeout
-        browser_user_agent = global_profile.browser_user_agent
-        browser_low_resource_mode = global_profile.browser_low_resource_mode
-        browser_disable_web_security = global_profile.browser_disable_web_security
-        browser_extra_headers_json = global_profile.browser_extra_headers_json
-        browser_args = global_profile.browser_args
-        block_proxy = global_profile.block_proxy  # 屏蔽系统代理
-        browser_locale = global_profile.browser_locale  # 浏览器语言区域
-        browser_timezone = global_profile.browser_timezone  # 浏览器时区 ID
-        pause_enabled = global_profile.pause_enabled
-        pause_start_hour = global_profile.pause_start_hour
-        pause_end_hour = global_profile.pause_end_hour
-        network_targets = _normalize_targets(global_profile.network_targets)
-        network_strict_mode = global_profile.network_strict_mode
-        custom_variables = global_profile.custom_variables
-
-    return MonitorConfigPayload(
-        username=username,
-        password=password,
-        use_global_credentials=use_global,
-        auth_url=auth_url,
-        active_task=active_task,
-        carrier=carrier,
-        carrier_custom=carrier_custom,
-        check_interval_minutes=check_interval_minutes,
-        auto_start=auto_start,
-        headless=headless,
-        browser_timeout=browser_timeout,
-        login_timeout=login_timeout,
-        browser_user_agent=browser_user_agent,
-        browser_low_resource_mode=browser_low_resource_mode,
-        browser_disable_web_security=browser_disable_web_security,
-        browser_extra_headers_json=browser_extra_headers_json,
-        browser_args=browser_args,
-        browser_locale=browser_locale,
-        browser_timezone=browser_timezone,
-        pause_enabled=pause_enabled,
-        pause_start_hour=pause_start_hour,
-        pause_end_hour=pause_end_hour,
-        network_targets=network_targets,
-        network_strict_mode=network_strict_mode,
-        backend_log_level=_normalize_level(sys.backend_log_level),
-        frontend_log_level=_normalize_level(sys.frontend_log_level),
-        access_log=sys.access_log,
-        minimize_to_tray=sys.minimize_to_tray,
-        auto_open_browser=sys.auto_open_browser,
-        login_then_exit=sys.login_then_exit,
-        max_retries=sys.max_retries,
-        retry_interval=sys.retry_interval,
-        log_retention_days=sys.log_retention_days,
-        screenshot_retention_days=sys.screenshot_retention_days,
-        custom_variables=custom_variables,
-        proxy=sys.proxy,
-        block_proxy=block_proxy,
-        app_port=sys.app_port,
-        network_check_timeout=sys.network_check_timeout,
+    # 高级设置：从活动方案或 default 方案提取非凭证字段
+    adv_source = (
+        profile
+        if profile and not profile.use_global_advanced
+        else data.profiles.get("default", ProfileSettings())
     )
+    _CREDENTIAL_KEYS = {
+        "username", "password", "auth_url", "active_task",
+        "carrier", "carrier_custom", "use_global_credentials",
+        "backend_log_level", "frontend_log_level",
+    }
+    pld.update(
+        {
+            k: v
+            for k, v in extract_profile_fields(
+                adv_source.__dict__, PROFILE_FIELDS
+            ).items()
+            if k not in _CREDENTIAL_KEYS
+        }
+    )
+
+    pld["network_targets"] = _normalize_targets(pld.get("network_targets", ""))
+    pld["backend_log_level"] = _normalize_level(sys.backend_log_level)
+    pld["frontend_log_level"] = _normalize_level(sys.frontend_log_level)
+
+    return MonitorConfigPayload(**pld)
 
 
 def build_runtime_config(
@@ -359,13 +248,19 @@ def build_runtime_config(
     frontend_logging = base.setdefault("frontend_logging", {})
     frontend_logging["level"] = frontend_level
 
-    base["access_log"] = payload.access_log
-    base["minimize_to_tray"] = payload.minimize_to_tray
-    base["login_then_exit"] = payload.login_then_exit
-    base["log_retention_days"] = payload.log_retention_days
-    base["screenshot_retention_days"] = payload.screenshot_retention_days
-    base["custom_variables"] = payload.custom_variables
-    base["block_proxy"] = payload.block_proxy  # 屏蔽系统代理
+    assign_profile_fields(
+        base,
+        payload.model_dump(),
+        [
+            "access_log",
+            "minimize_to_tray",
+            "login_then_exit",
+            "log_retention_days",
+            "screenshot_retention_days",
+            "custom_variables",
+            "block_proxy",
+        ],
+    )
 
     # 重试策略从系统设置读取
     if sys:
@@ -407,49 +302,66 @@ def save_config_combined(
         "已更新" if (pwd_raw and not pwd_raw.startswith("•")) else "保留",
     )
 
+    # 直接映射的系统字段（无归一化处理）
+    pld = payload.model_dump()
+    assign_profile_fields(
+        sys.__dict__,
+        pld,
+        [
+            "access_log",
+            "minimize_to_tray",
+            "auto_open_browser",
+            "login_then_exit",
+            "max_retries",
+            "retry_interval",
+            "log_retention_days",
+            "screenshot_retention_days",
+            "block_proxy",
+            "network_check_timeout",
+            "app_port",
+        ],
+    )
+    # 需要归一化处理的系统字段
     sys.auth_url = payload.auth_url.strip()
     sys.carrier = str(payload.carrier or "无").strip()
     sys.carrier_custom = str(payload.carrier_custom or "").strip()
     sys.backend_log_level = _normalize_level(payload.backend_log_level)
     sys.frontend_log_level = _normalize_level(payload.frontend_log_level)
-    sys.access_log = payload.access_log
-    sys.minimize_to_tray = payload.minimize_to_tray
-    sys.auto_open_browser = payload.auto_open_browser
-    sys.login_then_exit = payload.login_then_exit
-    sys.max_retries = payload.max_retries
-    sys.retry_interval = payload.retry_interval
-    sys.log_retention_days = payload.log_retention_days
-    sys.screenshot_retention_days = payload.screenshot_retention_days
     sys.proxy = payload.proxy.strip()
-    sys.block_proxy = payload.block_proxy  # 屏蔽系统代理
-    sys.network_check_timeout = payload.network_check_timeout
-    sys.app_port = payload.app_port
 
     data.system = sys
 
     # ── 更新 default 方案的高级设置（始终写入全局）──
     if "default" in data.profiles:
         glob = data.profiles["default"]
-        glob.check_interval_minutes = payload.check_interval_minutes
-        glob.auto_start = payload.auto_start
-        glob.headless = payload.headless
-        glob.browser_timeout = payload.browser_timeout
-        glob.login_timeout = payload.login_timeout
+        # 直接映射的 profile 字段（无归一化处理）
+        assign_profile_fields(
+            glob.__dict__,
+            pld,
+            [
+                "check_interval_minutes",
+                "auto_start",
+                "headless",
+                "browser_timeout",
+                "login_timeout",
+                "browser_low_resource_mode",
+                "browser_disable_web_security",
+                "pause_enabled",
+                "pause_start_hour",
+                "pause_end_hour",
+                "network_strict_mode",
+                "custom_variables",
+            ],
+        )
+        # 需要归一化处理的 profile 字段
         glob.browser_user_agent = payload.browser_user_agent.strip()
-        glob.browser_low_resource_mode = payload.browser_low_resource_mode
-        glob.browser_disable_web_security = payload.browser_disable_web_security
         glob.browser_extra_headers_json = _normalize_headers_json(
             payload.browser_extra_headers_json
         )
         glob.browser_args = payload.browser_args.strip()
         glob.browser_locale = payload.browser_locale.strip()  # 浏览器语言区域
         glob.browser_timezone = payload.browser_timezone.strip()  # 浏览器时区 ID
-        glob.pause_enabled = payload.pause_enabled
-        glob.pause_start_hour = payload.pause_start_hour
-        glob.pause_end_hour = payload.pause_end_hour
         glob.network_targets = _normalize_targets(payload.network_targets)
-        glob.network_strict_mode = payload.network_strict_mode
-        glob.custom_variables = payload.custom_variables
 
     # 活动方案保持不变 —— 设置页面不修改方案独立配置
 

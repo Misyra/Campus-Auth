@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import datetime
 import logging
-import re
 import socket
 import threading
 import time
@@ -21,6 +20,7 @@ from .utils import (
     get_runtime_stats,
     setup_logger,
 )
+from .utils.network_helpers import parse_host_port
 from .utils.notify import send_notification
 
 if TYPE_CHECKING:
@@ -478,22 +478,16 @@ class NetworkMonitorCore:
         if not raw_targets:
             raw_targets = self.DEFAULT_PING_TARGETS.copy()
 
-        # 注：此处 host:port 解析逻辑与 monitor_service.test_network() 和
-        # login._build_network_test_config() 相似但超时/返回类型不同，暂不提取共享函数。
-        parsed: list[tuple[str, int]] = []
+        # 补全缺少端口的项（IPv4 默认 DNS 53，域名默认 HTTPS 443）
+        _targets: list[str] = []
         for item in raw_targets:
-            host = item
-            port = 0
-            if ":" in item:
-                host_part, port_part = item.rsplit(":", 1)
-                if host_part.strip() and port_part.strip().isdigit():
-                    host = host_part.strip()
-                    port = int(port_part.strip())
-            if port <= 0:
-                is_ipv4 = bool(re.fullmatch(r"\d+\.\d+\.\d+\.\d+", host))
-                port = 53 if is_ipv4 else 443
-            parsed.append((host, port))
-        return parsed
+            if ":" not in item:
+                parts = item.split(".")
+                is_ipv4 = len(parts) == 4 and all(p.isdigit() for p in parts)
+                _targets.append(f"{item}:{53 if is_ipv4 else 443}")
+            else:
+                _targets.append(item)
+        return parse_host_port(_targets)
 
     def _check_profile_switch(self) -> None:
         """检测网关 IP 并自动切换方案（带冷却时间）"""

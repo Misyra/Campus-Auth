@@ -21,6 +21,7 @@ from src.network_test import is_network_available
 from src.utils import ConfigValidator
 from src.utils.logging import get_logger
 from src.utils.login import SCREENSHOT_URL_PATTERN
+from src.utils.network_helpers import parse_host_port
 
 from .config_service import build_runtime_config, load_runtime_config, load_ui_config
 from .profile_service import ProfileService
@@ -578,23 +579,8 @@ class MonitorService:
         monitor_cfg = config.get("monitor", {})
         targets = monitor_cfg.get("ping_targets", [])
         strict_mode = monitor_cfg.get("strict_mode", True)
-        # 注：此处 host:port 解析逻辑与 monitor_core._build_test_sites() 和
-        # login._build_network_test_config() 相似但超时/返回类型不同，暂不提取共享函数。
         # 解析 host:port 为 (host, port) 元组列表
-        test_sites: list[tuple[str, int]] = []
-        for item in targets:
-            host = item
-            port = 0
-            if ":" in str(item):
-                host_part, port_part = str(item).rsplit(":", 1)
-                if host_part.strip() and port_part.strip().isdigit():
-                    host = host_part.strip()
-                    port = int(port_part.strip())
-            if port <= 0:
-                import re
-
-                port = 53 if re.fullmatch(r"\d+\.\d+\.\d+\.\d+", host) else 443
-            test_sites.append((host, port))
+        test_sites = parse_host_port(targets)
         self._push_log(
             f"手动网络测试 → 目标={len(test_sites)} 严格模式={'开' if strict_mode else '关'}",
             "INFO",

@@ -8,15 +8,15 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import re
-import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any
+
+from src.utils.file_helpers import atomic_write
 
 from src.utils.logging import get_logger
 
@@ -1456,20 +1456,10 @@ class TaskManager:
             return False
 
         try:
-            # 原子写入：先写临时文件，再 os.replace 原子替换，防止崩溃时损坏任务文件
-            tmp_fd, tmp_path = tempfile.mkstemp(
-                dir=file.parent, suffix=".tmp", prefix="task."
+            atomic_write(
+                file,
+                json.dumps(config, ensure_ascii=False, indent=2),
             )
-            try:
-                with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
-                    f.write(json.dumps(config, ensure_ascii=False, indent=2))
-                os.replace(tmp_path, file)
-            except Exception:
-                try:
-                    os.unlink(tmp_path)
-                except OSError:
-                    pass
-                raise
             return True
         except Exception as e:
             logger.error(f"无法保存任务 {task_id}: {e}")
