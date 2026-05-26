@@ -18,7 +18,6 @@ dependencies = [
     "ddddocr>=1.6.1",
     "onnxruntime<1.21",
     "python-multipart>=0.0.27",
-    "requests>=2.33.1",
     "pysocks>=1.7.1",
 ]
 

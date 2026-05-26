@@ -208,6 +208,7 @@ class MonitorService:
 
     def _handle_stop(self) -> None:
         """Stop monitoring (consumer thread only)."""
+        self._stop_event.set()
         core = self._monitor_core
         thread = self._monitor_thread
 

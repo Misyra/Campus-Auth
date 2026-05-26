@@ -365,10 +365,7 @@ def _run_server(
             tray_icon.start()
             print("系统托盘已启动，双击图标打开控制台")
 
-            # 将托盘实例引用传递给 backend，确保 shutdown 时能正确停止
-            from backend.main import _set_tray_icon
 
-            _set_tray_icon(tray_icon)
         except Exception as e:
             print(f"启动系统托盘失败: {e}")
 
