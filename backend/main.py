@@ -5,10 +5,8 @@ import json
 import logging
 import mimetypes
 import os
-import tempfile
 import re
 import time
-from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -31,7 +29,9 @@ from fastapi.staticfiles import StaticFiles
 
 from src.utils import ConfigValidator
 from src.utils.browser import STEALTH_INIT_SCRIPT  # noqa: E402 — entire import block is below mimetypes
+from src.utils.config_helpers import BACKUP_FILENAME_PATTERN
 from src.utils.env import build_login_env_vars
+from src.utils.file_helpers import atomic_write
 from src.utils.logging import LogConfigCenter, get_logger
 from src.version import get_project_version
 
@@ -49,6 +49,13 @@ from .schemas import (
     ProfilesData,
 )
 from .task_service import TaskService
+from backend.debug_session import (
+    DebugSession,
+    _debug_gen,
+    _next_debug_gen,
+    debug_to_response,
+    empty_debug_session,
+)
 
 _ENV_PROJECT_ROOT = os.getenv("CAMPUS_AUTH_PROJECT_ROOT", "").strip()
 PROJECT_ROOT = (
@@ -109,8 +116,8 @@ async def lifespan(app_instance):
         await ws_drain_task
     except asyncio.CancelledError:
         pass
-    if _debug["session"]:
-        await _debug["session"].close()
+    if _debug_session.session:
+        await _debug_session.session.close()
     # 清理临时调试截图
     try:
         import shutil
@@ -304,39 +311,19 @@ class DebugSession:
         self._context = None
 
 
-_debug: dict = {
-    "session": None,
-    "task_id": None,
-    "executor": None,
-    "current_step": 0,
-    "steps": [],
-    "results": [],
-    "screenshot_url": None,
-    "running": False,
-    "_last_activity": 0.0,
-    "_debug_gen": 0,
-    "_timer_task": None,
-}
+_debug_session = empty_debug_session()
 _debug_lock = asyncio.Lock()
 _debug_exec_sem = asyncio.Semaphore(1)
 
 
 def _debug_response() -> dict:
-    return {
-        "running": _debug["running"],
-        "task_id": _debug["task_id"],
-        "current_step": _debug["current_step"],
-        "total_steps": len(_debug["steps"]),
-        "steps": _debug["steps"],
-        "results": list(_debug["results"]),
-        "screenshot_url": _debug["screenshot_url"],
-    }
+    return debug_to_response(_debug_session)
 
 
 def _require_debug_session():
-    if not _debug["session"] or not _debug["running"]:
+    if not _debug_session.session or not _debug_session.running:
         raise HTTPException(status_code=400, detail="没有活跃的调试会话")
-    return _debug["session"], _debug["executor"], _debug["session"].page
+    return _debug_session.session, _debug_session.executor, _debug_session.session.page
 
 
 async def _debug_timeout_watcher(gen: int, *, timeout_seconds: float = 1800.0) -> None:
@@ -345,27 +332,27 @@ async def _debug_timeout_watcher(gen: int, *, timeout_seconds: float = 1800.0) -
     try:
         while True:
             await asyncio.sleep(check_interval)
-            if gen != _debug["_debug_gen"]:
+            if gen != _debug_gen:
                 return
-            if time.monotonic() - _debug["_last_activity"] > timeout_seconds:
+            if time.monotonic() - _debug_session._last_activity > timeout_seconds:
                 async with _debug_lock:
-                    if gen != _debug["_debug_gen"]:
+                    if gen != _debug_gen:
                         return
                     api_logger.info(
                         "调试会话超时（%ds 无操作），正在关闭浏览器",
                         timeout_seconds,
                     )
-                    if _debug["session"]:
-                        await _debug["session"].close()
-                    _debug["session"] = None
-                    _debug["running"] = False
-                    _debug["executor"] = None
-                    _debug["current_step"] = 0
-                    _debug["steps"] = []
-                    _debug["results"] = []
-                    _debug["screenshot_url"] = None
-                    _debug["_timer_task"] = None
-                    _debug["_last_activity"] = 0.0
+                    if _debug_session.session:
+                        await _debug_session.session.close()
+                    _debug_session.session = None
+                    _debug_session.running = False
+                    _debug_session.executor = None
+                    _debug_session.current_step = 0
+                    _debug_session.steps = []
+                    _debug_session.results.clear()
+                    _debug_session.screenshot_url = None
+                    _debug_session._timer_task = None
+                    _debug_session._last_activity = 0.0
     except asyncio.CancelledError:
         pass
 
@@ -374,7 +361,7 @@ async def _take_debug_screenshot(page, step_label: str = "") -> str | None:
     try:
         TEMP_DIR.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        task_id = (_debug.get("task_id") or "unknown")[:30]
+        task_id = (_debug_session.task_id or "unknown")[:30]
         step_part = f"_{step_label}" if step_label else ""
         filename = f"{task_id}{step_part}_{stamp}.png"
         await page.screenshot(path=str(TEMP_DIR / filename), full_page=True)
@@ -800,7 +787,7 @@ def toggle_safe_mode() -> dict:
 
 @app.post("/api/debug/start")
 async def debug_start(request: Request) -> dict:
-    global _debug
+    global _debug_session
     body = await request.json()
     task_id = body.get("task_id", "")
     if not task_id:
@@ -826,12 +813,12 @@ async def debug_start(request: Request) -> dict:
 
     async with _debug_lock:
         # 修复：整个会话创建放在锁内，防止并发请求泄漏 Playwright 进程
-        if _debug["session"]:
-            await _debug["session"].close()
-        if _debug["_timer_task"] and not _debug["_timer_task"].done():
-            _debug["_timer_task"].cancel()
+        if _debug_session.session:
+            await _debug_session.session.close()
+        if _debug_session._timer_task and not _debug_session._timer_task.done():
+            _debug_session._timer_task.cancel()
             try:
-                await _debug["_timer_task"]
+                await _debug_session._timer_task
             except asyncio.CancelledError:
                 pass
 
@@ -860,22 +847,20 @@ async def debug_start(request: Request) -> dict:
                 task, env_vars, screenshot_dir=TEMP_DIR, default_timeout=browser_timeout
             )
 
-            gen = _debug["_debug_gen"] + 1
-            _debug = {
-                "session": session,
-                "task_id": task_id,
-                "executor": executor,
-                "current_step": 0,
-                "steps": steps_info,
-                "results": deque(maxlen=1000),
-                "screenshot_url": None,
-                "running": True,
-                "_last_activity": time.monotonic(),
-                "_debug_gen": gen,
-                "_timer_task": None,
-            }
-            _debug["_timer_task"] = asyncio.create_task(_debug_timeout_watcher(gen))
-            _debug["screenshot_url"] = await _take_debug_screenshot(session.page)
+            gen = _next_debug_gen()
+            _debug_session = empty_debug_session()
+            _debug_session.session = session
+            _debug_session.task_id = task_id
+            _debug_session.executor = executor
+            _debug_session.steps = steps_info
+            _debug_session.running = True
+            _debug_session._last_activity = time.monotonic()
+            _debug_session._timer_task = asyncio.create_task(
+                _debug_timeout_watcher(gen)
+            )
+            _debug_session.screenshot_url = await _take_debug_screenshot(
+                session.page
+            )
         except Exception:
             await session.close()
             raise
@@ -889,18 +874,18 @@ async def debug_next() -> dict:
     async with _debug_exec_sem:
         async with _debug_lock:
             session, executor, page = _require_debug_session()
-            idx = _debug["current_step"]
+            idx = _debug_session.current_step
 
-            if idx >= len(_debug["steps"]):
+            if idx >= len(_debug_session.steps):
                 return {**_debug_response(), "message": "所有步骤已执行完毕"}
 
         result = await executor.execute_step_at(page, idx)
 
         async with _debug_lock:
-            _debug["results"].append(result)
-            _debug["screenshot_url"] = result.get("screenshot_url")
-            _debug["current_step"] = idx + 1
-            _debug["_last_activity"] = time.monotonic()
+            _debug_session.results.append(result)
+            _debug_session.screenshot_url = result.get("screenshot_url")
+            _debug_session.current_step = idx + 1
+            _debug_session._last_activity = time.monotonic()
             return _debug_response()
 
 
@@ -909,51 +894,41 @@ async def debug_run_all() -> dict:
     async with _debug_exec_sem:
         async with _debug_lock:
             session, executor, page = _require_debug_session()
-            from_idx = _debug["current_step"]
+            from_idx = _debug_session.current_step
 
-            if from_idx >= len(_debug["steps"]):
+            if from_idx >= len(_debug_session.steps):
                 return {**_debug_response(), "message": "所有步骤已执行完毕"}
 
         agg = await executor.execute_remaining(page, from_idx)
 
         async with _debug_lock:
-            _debug["results"].extend(agg["results"])
-            _debug["current_step"] = len(_debug["steps"])
-            _debug["_last_activity"] = time.monotonic()
+            _debug_session.results.extend(agg["results"])
+            _debug_session.current_step = len(_debug_session.steps)
+            _debug_session._last_activity = time.monotonic()
 
             if agg["results"]:
-                _debug["screenshot_url"] = agg["results"][-1].get("screenshot_url")
+                _debug_session.screenshot_url = agg["results"][-1].get(
+                    "screenshot_url"
+                )
 
             return _debug_response()
 
 
 @app.post("/api/debug/stop")
 async def debug_stop() -> dict:
-    global _debug
+    global _debug_session
     async with _debug_exec_sem:
         async with _debug_lock:
-            timer = _debug.get("_timer_task")
+            timer = _debug_session._timer_task
             if timer and not timer.done():
                 timer.cancel()
                 try:
                     await timer
                 except asyncio.CancelledError:
                     pass
-            if _debug["session"]:
-                await _debug["session"].close()
-            _debug = {
-                "session": None,
-                "task_id": None,
-                "executor": None,
-                "current_step": 0,
-                "steps": [],
-                "results": [],
-                "screenshot_url": None,
-                "running": False,
-                "_last_activity": 0.0,
-                "_debug_gen": 0,
-                "_timer_task": None,
-            }
+            if _debug_session.session:
+                await _debug_session.session.close()
+            _debug_session = empty_debug_session()
     # 清理临时调试截图
     try:
         import shutil
@@ -1245,7 +1220,7 @@ def restore_backup(filename: str) -> ActionResponse:
         raise HTTPException(status_code=404, detail="备份文件不存在")
 
     # 安全校验：文件名格式 settings_YYYYMMDD_HHMMSS[_ffffff][_autosave].json
-    if not re.match(r"^settings_\d{8}_\d{6}(_\d{6})?(_autosave)?\.json$", filename):
+    if not re.match(BACKUP_FILENAME_PATTERN, filename):
         raise HTTPException(status_code=400, detail="无效的备份文件名")
 
     # 恢复前先自动创建当前配置的备份
@@ -1271,20 +1246,7 @@ def restore_backup(filename: str) -> ActionResponse:
         raise HTTPException(status_code=400, detail=f"备份文件结构不合法: {exc}")
 
     try:
-        # 原子写入：先写入临时文件，再 rename 替换旧文件
-        _tmp_fd, _tmp_path = tempfile.mkstemp(
-            dir=settings_path.parent, suffix=".tmp", prefix="settings."
-        )
-        try:
-            with os.fdopen(_tmp_fd, "w", encoding="utf-8") as f:
-                f.write(backup_path.read_text(encoding="utf-8"))
-            os.replace(_tmp_path, settings_path)
-        except Exception:
-            try:
-                os.unlink(_tmp_path)
-            except OSError:
-                pass
-            raise
+        atomic_write(settings_path, backup_path.read_text(encoding="utf-8"))
         # 清除 ProfileService 缓存，强制从磁盘重新读取
         profile_service.invalidate_cache()
         service.reload_config()
@@ -1299,7 +1261,7 @@ def restore_backup(filename: str) -> ActionResponse:
 @app.get("/api/backup/download/{filename}")
 def download_backup(filename: str):
     """下载备份文件"""
-    if not re.match(r"^settings_\d{8}_\d{6}(_\d{6})?(_autosave)?\.json$", filename):
+    if not re.match(BACKUP_FILENAME_PATTERN, filename):
         raise HTTPException(status_code=400, detail="无效的备份文件名")
     backup_path = _BACKUP_DIR / filename
     if not backup_path.exists():
@@ -1314,7 +1276,7 @@ def download_backup(filename: str):
 @app.delete("/api/backup/{filename}", response_model=ActionResponse)
 def delete_backup(filename: str) -> ActionResponse:
     """删除备份"""
-    if not re.match(r"^settings_\d{8}_\d{6}(_\d{6})?(_autosave)?\.json$", filename):
+    if not re.match(BACKUP_FILENAME_PATTERN, filename):
         raise HTTPException(status_code=400, detail="无效的备份文件名")
 
     backup_path = _BACKUP_DIR / filename

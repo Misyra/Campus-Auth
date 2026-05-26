@@ -18,6 +18,7 @@ from .browser import BrowserContextManager
 from .env import build_login_env_vars
 from .exceptions import LoginCancelledError
 from .logging import setup_logger
+from .network_helpers import parse_host_port
 from .time_utils import TimeUtils
 
 if False:  # Type-only import to avoid circular dependency at runtime
@@ -260,28 +261,12 @@ class LoginAttemptHandler:
 
     def _build_network_test_config(self) -> dict:
         """构建网络检测配置，供 TaskExecutor 成功判断使用。"""
-        import re
-
         monitor = self.config.get("monitor", {})
         targets = monitor.get("ping_targets", [])
         if isinstance(targets, str):
             targets = [item.strip() for item in targets.split(",") if item.strip()]
 
-        # 注：此处 host:port 解析逻辑与 monitor_service.test_network() 和
-        # monitor_core._build_test_sites() 相似但超时/返回类型不同，暂不提取共享函数。
-        test_sites = []
-        for item in targets:
-            host = item
-            port = 0
-            if ":" in item:
-                host_part, port_part = item.rsplit(":", 1)
-                if host_part.strip() and port_part.strip().isdigit():
-                    host = host_part.strip()
-                    port = int(port_part.strip())
-            if port <= 0:
-                is_ipv4 = bool(re.fullmatch(r"\d+\.\d+\.\d+\.\d+", host))
-                port = 53 if is_ipv4 else 443
-            test_sites.append((host, port))
+        test_sites = parse_host_port(targets)
 
         return {
             "test_sites": test_sites if test_sites else None,

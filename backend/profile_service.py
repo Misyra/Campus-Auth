@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import os
 import re
 import subprocess
-import tempfile
 import threading
 from pathlib import Path
 from typing import Any
 
+from src.utils.file_helpers import atomic_write
 from src.utils.platform_utils import is_windows, is_macos, is_linux
 from src.utils.crypto import save_password_field
 from src.utils.logging import get_logger
@@ -377,19 +376,7 @@ class ProfileService:
     def _save_unsafe(self, data: ProfilesData) -> None:
         """原子写入 settings.json（不加锁，由调用者持有锁）"""
         content = data.model_dump_json(indent=2)
-        tmp_fd, tmp_path = tempfile.mkstemp(
-            dir=self._settings_path.parent, suffix=".tmp", prefix="settings."
-        )
-        try:
-            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
-                f.write(content)
-            os.replace(tmp_path, self._settings_path)
-        except Exception:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-            raise
+        atomic_write(self._settings_path, content)
 
         self._data = data
         profile_logger.info("settings.json 已保存")
