@@ -469,7 +469,7 @@ async def check_update() -> dict:
 
 
 def _compare_versions(a: str, b: str) -> int:
-    """比较语义版本号，a > b 返回 1，a < b 返回 -1，相等时返回 -1（调用方用 > 0 判断有无更新）"""
+    """比较语义版本号，a > b 返回 1，a < b 返回 -1，相等时返回 0"""
     try:
         va = [int(x) for x in a.split(".")]
         vb = [int(x) for x in b.split(".")]
@@ -478,8 +478,7 @@ def _compare_versions(a: str, b: str) -> int:
                 return 1
             if x < y:
                 return -1
-        # NOTE: 相等时 len(va) == len(vb) 返回 -1（而非 0），但调用方用 > 0 判断有无更新，不影响结果
-        return 1 if len(va) > len(vb) else -1
+        return 1 if len(va) > len(vb) else -1 if len(va) < len(vb) else 0
     except (ValueError, AttributeError):
         return 0
 
@@ -696,21 +695,22 @@ def _get_configured_proxy() -> str:
 
 def _repo_get(url: str):
     """请求远程 JSON，使用配置的代理（如有）"""
-    import requests as _requests
+    import httpx
 
     headers = {"User-Agent": "Campus-Auth"}
     proxy = _get_configured_proxy()
-    proxies = {"http": proxy, "https": proxy} if proxy else None
+    proxies = {"http": proxy, "https": proxy} if proxy else {}
 
-    resp = _requests.get(url, headers=headers, timeout=15, proxies=proxies)
-    resp.raise_for_status()
-    return resp
+    with httpx.Client(proxies=proxies, timeout=httpx.Timeout(15)) as client:
+        resp = client.get(url, headers=headers)
+        resp.raise_for_status()
+        return resp
 
 
 @app.get("/api/repo/fetch")
 def repo_fetch_index(url: str = Query(..., description="索引 JSON 地址")) -> list:
     """代理获取任务仓库索引，避免前端跨域问题"""
-    import requests as _requests
+    import httpx
 
     url = _normalize_repo_url(url)
     api_logger.info("获取远程索引: %s", url)
@@ -724,7 +724,7 @@ def repo_fetch_index(url: str = Query(..., description="索引 JSON 地址")) ->
             )
         api_logger.info("远程索引获取成功: %d 个任务", len(data))
         return data
-    except _requests.HTTPError as exc:
+    except httpx.HTTPStatusError as exc:
         status = exc.response.status_code if exc.response is not None else 502
         api_logger.error("远程索引获取失败: HTTP %s (%s)", status, url)
         raise HTTPException(
@@ -738,7 +738,7 @@ def repo_fetch_index(url: str = Query(..., description="索引 JSON 地址")) ->
 @app.get("/api/repo/task")
 def repo_fetch_task(url: str = Query(..., description="任务 JSON 地址")) -> dict:
     """代理获取单个任务配置"""
-    import requests as _requests
+    import httpx
 
     url = _normalize_repo_url(url)
     api_logger.info("下载远程任务: %s", url)
@@ -752,7 +752,7 @@ def repo_fetch_task(url: str = Query(..., description="任务 JSON 地址")) -> 
             )
         api_logger.info("远程任务下载成功: %s", data.get("name", "未命名"))
         return data
-    except _requests.HTTPError as exc:
+    except httpx.HTTPStatusError as exc:
         status = exc.response.status_code if exc.response is not None else 502
         api_logger.error("远程任务下载失败: HTTP %s (%s)", status, url)
         raise HTTPException(
@@ -1088,14 +1088,6 @@ def toggle_auto_switch(enabled: str = Query(default="true")) -> ActionResponse:
     state = "开启" if enabled_bool else "关闭"
     api_logger.info("Auto-switch %s", state)
     return ActionResponse(success=True, message=f"自动切换已{state}")
-
-
-def _set_tray_icon(tray_icon):
-    """保留给将来系统托盘集成使用。
-    
-    当前 app.py 启动时调用此函数注册托盘实例，但 shutdown
-    流程已改用独立线程直接停止，不再需要 _tray_icon_ref。
-    """
 
 
 @app.post("/api/shutdown", response_model=ActionResponse)
