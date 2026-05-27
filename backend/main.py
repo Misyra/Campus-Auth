@@ -725,9 +725,9 @@ async def debug_start(request: Request) -> dict:
     for k, v in env_vars.items():
         url = url.replace("{{" + k + "}}", v)
 
-    browser_timeout = runtime_config.get("browser_settings", {}).get(
-        "timeout", 10000
-    )
+    browser_settings = runtime_config.get("browser_settings", {})
+    browser_timeout = browser_settings.get("timeout", 8) * 1000  # 秒 → 毫秒
+    navigation_timeout = browser_settings.get("navigation_timeout", 15) * 1000  # 秒 → 毫秒
 
     # 构建 Worker 启动数据
     worker_data = {
@@ -737,6 +737,7 @@ async def debug_start(request: Request) -> dict:
         "env_vars": env_vars,
         "screenshot_dir": str(TEMP_DIR),
         "default_timeout": browser_timeout,
+        "navigation_timeout": navigation_timeout,
     }
 
     async with _debug_lock:

@@ -539,10 +539,17 @@
         <div class="card-body">
           <div class="form-group">
             <div class="field-label-row">
-              <label for="settings-browser-timeout">页面操作超时（毫秒）</label>
+              <label for="settings-browser-timeout">页面操作超时（秒）</label>
               <span class="field-help" tabindex="0" role="note" data-tip="任务执行时每个浏览器步骤（点击、输入、等待元素加载等）的最长等待时间。超时则该步骤失败，不影响整体登录流程的其他步骤。">?</span>
             </div>
-            <input id="settings-browser-timeout" v-model.number="config.browser_timeout" type="number" min="1000" max="60000" />
+            <input id="settings-browser-timeout" v-model.number="config.browser_timeout" type="number" min="1" max="60" />
+          </div>
+          <div class="form-group">
+            <div class="field-label-row">
+              <label for="settings-browser-navigation-timeout">打开登录页面超时（秒）</label>
+              <span class="field-help" tabindex="0" role="note" data-tip="自动导航到登录页面的超时时间。校园网 DNS 劫持/重定向链较长时可适当调大。">?</span>
+            </div>
+            <input id="settings-browser-navigation-timeout" v-model.number="config.browser_navigation_timeout" type="number" min="3" max="60" />
           </div>
           <div class="toggle-group">
             <div class="toggle-with-help">

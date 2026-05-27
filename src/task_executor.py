@@ -1075,11 +1075,13 @@ class TaskExecutor:
         env_vars: dict[str, str] | None = None,
         screenshot_dir: Path | str | None = None,
         default_timeout: int | None = None,
+        navigation_timeout: int | None = None,
         monitor_config: dict[str, Any] | None = None,
     ):
         self.config = config
         self.env_vars = env_vars or {}
         self.default_timeout = default_timeout or self.DEFAULT_STEP_TIMEOUT
+        self.navigation_timeout = navigation_timeout or 15000
         self.resolver = VariableResolver(config, self.env_vars)
         self.registry = StepExecutorRegistry()
         self._step_results: list[dict[str, Any]] = []
@@ -1179,10 +1181,8 @@ class TaskExecutor:
         if not url:
             url = self.env_vars.get("LOGIN_URL", "").strip()
         if url:
-            # 导航超时：取配置值与 15s 的较大者，覆盖 DNS 劫持/重定向链较长的场景
-            nav_timeout = max(self.default_timeout, 15000)
-            logger.info(f"自动导航到任务URL: {url} (超时 {nav_timeout}ms)")
-            await page.goto(url, wait_until="load", timeout=nav_timeout)
+            logger.info(f"自动导航到任务URL: {url} (超时 {self.navigation_timeout}ms)")
+            await page.goto(url, wait_until="load", timeout=self.navigation_timeout)
             await self._wait_url_stable(page)
 
     async def _wait_url_stable(self, page, timeout_ms: int = 3000):

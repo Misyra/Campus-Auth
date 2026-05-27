@@ -179,14 +179,15 @@ class LoginAttemptHandler:
                 if not browser_manager.page:
                     raise RuntimeError("浏览器页面初始化失败")
 
-                browser_timeout = self.config.get("browser_settings", {}).get(
-                    "timeout", 10000
-                )
+                browser_settings = self.config.get("browser_settings", {})
+                browser_timeout = browser_settings.get("timeout", 8) * 1000  # 秒 → 毫秒
+                navigation_timeout = browser_settings.get("navigation_timeout", 15) * 1000  # 秒 → 毫秒
 
                 executor = TaskExecutor(
                     task,
                     env_vars,
                     default_timeout=browser_timeout,
+                    navigation_timeout=navigation_timeout,
                     monitor_config=self.config.get("monitor", {}),
                 )
                 # 监听页面 alert/confirm/prompt，记录内容并延迟关闭让用户看到

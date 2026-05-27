@@ -219,6 +219,7 @@ def build_runtime_config(
     browser = base.setdefault("browser_settings", {})
     browser["headless"] = payload.headless
     browser["timeout"] = payload.browser_timeout
+    browser["navigation_timeout"] = payload.browser_navigation_timeout
     browser["user_agent"] = payload.browser_user_agent.strip()
     browser["low_resource_mode"] = payload.browser_low_resource_mode
     browser["disable_web_security"] = payload.browser_disable_web_security
@@ -358,6 +359,7 @@ def save_config_combined(
                 "auto_start",
                 "headless",
                 "browser_timeout",
+                "browser_navigation_timeout",
                 "login_timeout",
                 "browser_low_resource_mode",
                 "browser_disable_web_security",

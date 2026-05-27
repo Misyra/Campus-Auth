@@ -382,6 +382,7 @@ class PlaywrightWorker:
         env_vars = data.get("env_vars", {})
         screenshot_dir = data.get("screenshot_dir", "")
         default_timeout = data.get("default_timeout", 10000)
+        navigation_timeout = data.get("navigation_timeout", 15000)
 
         # 检查浏览器健康状态，不健康则重建
         if not await self._health_check():
@@ -413,6 +414,7 @@ class PlaywrightWorker:
                     env_vars,
                     screenshot_dir=Path(screenshot_dir) if screenshot_dir else None,
                     default_timeout=default_timeout,
+                    navigation_timeout=navigation_timeout,
                 )
                 self._debug_executor = executor
             except Exception as e:
