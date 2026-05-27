@@ -144,5 +144,5 @@ class BrowserContextManager:
 
         # 如果有异常，记录但不抑制
         if exc_type:
-            self.logger.error(f"浏览器操作异常: {exc_type.__name__}: {exc_val}")
+            self.logger.error("浏览器操作异常: %s: %.200s", exc_type.__name__, exc_val)
         return False  # 将异常传播给调用者（不抑制）

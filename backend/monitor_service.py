@@ -261,7 +261,10 @@ class MonitorService:
             else:
                 cmd.response_data = (False, result.error or "登录失败")
         except Exception as exc:
-            service_logger.exception("Manual login failed with exception")
+            service_logger.exception(
+                "手动登录异常 (username=%s, url=%s)",
+                config.get("username", "?"), config.get("auth_url", "?"),
+            )
             cmd.response_data = (False, str(exc))
 
         if cmd.response_event:

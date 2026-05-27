@@ -46,7 +46,7 @@ def is_local_network_connected() -> bool:
             if not ip.startswith("127.") and not ip.startswith("169.254.")
         ]
         if non_loopback:
-            logger.info("本地网络已连接，IP: %s", ", ".join(non_loopback))
+            logger.debug("本地网络已连接，IP: %s", ", ".join(non_loopback))
             return True
     except Exception as exc:
         logger.debug("快速 IP 检测失败: %s", exc)

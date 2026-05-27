@@ -27,7 +27,7 @@ config_logger = get_logger("backend.config_service", side="BACKEND")
 def _safe_decrypt(ciphertext: str) -> str:
     """解密密码，失败时返回空字符串并记录警告。"""
     if not ciphertext:
-        config_logger.warning("_safe_decrypt 收到空密码，返回空字符串")
+        config_logger.warning("_safe_decrypt 收到空密码，返回空字符串 (调用栈: %s)", __name__)
         return ""
     try:
         return decrypt_password(ciphertext)
