@@ -236,7 +236,9 @@ def build_runtime_config(
     monitor["ping_targets"] = [
         item.strip() for item in payload.network_targets.split(",") if item.strip()
     ]
-    monitor["strict_mode"] = payload.network_strict_mode
+    monitor["enable_tcp_check"] = payload.enable_tcp_check
+    monitor["enable_http_check"] = payload.enable_http_check
+    monitor["check_auth_url"] = payload.check_auth_url
     monitor["network_check_timeout"] = payload.network_check_timeout
 
     backend_level = _normalize_level(payload.backend_log_level)
@@ -349,7 +351,9 @@ def save_config_combined(
                 "pause_enabled",
                 "pause_start_hour",
                 "pause_end_hour",
-                "network_strict_mode",
+                "enable_tcp_check",
+                "enable_http_check",
+                "check_auth_url",
                 "custom_variables",
             ],
         )

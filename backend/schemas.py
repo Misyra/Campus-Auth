@@ -60,9 +60,17 @@ class MonitorConfigPayload(BaseModel):
     network_targets: str = Field(
         default="8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
     )
-    network_strict_mode: bool = Field(
+    enable_tcp_check: bool = Field(
         default=True,
-        description="网络检测严格模式：开启后 TCP 和 HTTP 必须同时通过才算联网成功",
+        description="启用 TCP 探测检测网络连通性",
+    )
+    enable_http_check: bool = Field(
+        default=True,
+        description="启用 HTTP 探测检测网络连通性",
+    )
+    check_auth_url: bool = Field(
+        default=True,
+        description="登录前检测认证地址是否可达，不可达则跳过登录",
     )
     backend_log_level: str = Field(default="INFO")
     frontend_log_level: str = Field(default="INFO")
@@ -245,9 +253,17 @@ class ProfileSettings(BaseModel):
     network_targets: str = Field(
         default="8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
     )
-    network_strict_mode: bool = Field(
+    enable_tcp_check: bool = Field(
         default=True,
-        description="网络检测严格模式：开启后 TCP 和 HTTP 必须同时通过才算联网成功",
+        description="启用 TCP 探测检测网络连通性",
+    )
+    enable_http_check: bool = Field(
+        default=True,
+        description="启用 HTTP 探测检测网络连通性",
+    )
+    check_auth_url: bool = Field(
+        default=True,
+        description="登录前检测认证地址是否可达，不可达则跳过登录",
     )
     custom_variables: dict[str, str] = Field(default_factory=dict)
 
@@ -299,7 +315,7 @@ class SystemSettings(BaseModel):
     screenshot_retention_days: int = Field(
         default=7, ge=1, le=90, description="失败截图保留天数"
     )
-    app_port: int = Field(default=50721, ge=1, le=65535, description="Web 控制台端口")
+    app_port: int = Field(default=50721, ge=1024, le=65535, description="Web 控制台端口")
     network_check_timeout: int = Field(
         default=2, ge=1, le=30, description="TCP 网络探测超时（秒）"
     )

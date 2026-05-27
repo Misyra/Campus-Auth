@@ -281,7 +281,8 @@ class LoginAttemptHandler:
         return {
             "test_sites": test_sites if test_sites else None,
             "timeout": monitor.get("network_check_timeout", 2),
-            "strict_mode": monitor.get("strict_mode", True),
+            "enable_tcp_check": monitor.get("enable_tcp_check", True),
+            "enable_http_check": monitor.get("enable_http_check", True),
         }
 
     async def _create_new_browser(self) -> BrowserContextManager:
