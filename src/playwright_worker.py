@@ -489,14 +489,23 @@ class PlaywrightWorker:
 
         # 关闭调试页面
         if self._debug_page is not None:
-            if self._debug_page is self._page:
-                self._page = None
+            same_as_main = self._debug_page is self._page
             try:
                 if not self._debug_page.is_closed():
                     await self._debug_page.close()
             except Exception as e:
                 logger.warning("关闭调试页面异常: %s", e)
             self._debug_page = None
+
+            # 如果调试页面就是主页面，关闭后需要创建一个新页面，
+            # 避免后续 browser 操作（_handle_debug_start / BrowserContextManager）因 _page 为空而失败
+            if same_as_main:
+                self._page = None
+                try:
+                    if self._context is not None and not self._context.is_closed():
+                        self._page = await self._context.new_page()
+                except Exception:
+                    logger.warning("创建替代页面失败，_page 保持 None")
 
         logger.info("调试会话已停止，Worker 内部状态已清理")
         return WorkerResponse(success=True, data="调试会话已停止")

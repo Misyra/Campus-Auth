@@ -681,16 +681,25 @@ class TestPlaywrightWorkerHandlerDebugStop:
 
     @pytest.mark.asyncio
     async def test_debug_stop_same_as_main_page(self, worker: PlaywrightWorker):
-        """_debug_page 与 _page 相同时同时清除两者。"""
+        """_debug_page 与 _page 相同时，关闭后创建替代页面。"""
         page_mock = MagicMock()
         page_mock.is_closed.return_value = False
         page_mock.close = AsyncMock()
         worker._page = page_mock
         worker._debug_page = page_mock
 
+        # 需要有 context 才能创建替代页面
+        ctx_mock = MagicMock()
+        ctx_mock.is_closed.return_value = False
+        new_page_mock = MagicMock()
+        ctx_mock.new_page = AsyncMock(return_value=new_page_mock)
+        worker._context = ctx_mock
+
         result = await worker._handle_debug_stop()
         assert result.success
-        assert worker._page is None
+        # 应创建替代页面而非置为 None
+        assert worker._page is not None
+        assert worker._page is new_page_mock
         assert worker._debug_page is None
 
     @pytest.mark.asyncio
