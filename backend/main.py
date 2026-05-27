@@ -758,12 +758,6 @@ async def debug_start(request: Request) -> dict:
 
         session = DebugSession()
         try:
-            # DebugSession.start() 通过 asyncio.to_thread 提交到 Worker，
-            # Worker 线程内启动浏览器、导航、创建 TaskExecutor（page 安全）
-            await session.start(
-                runtime_config, url if url else None, safe_mode=service.safe_mode
-            )
-
             steps_info = [
                 {
                     "index": i,
@@ -784,13 +778,16 @@ async def debug_start(request: Request) -> dict:
             _debug_session._timer_task = asyncio.create_task(
                 _debug_timeout_watcher(gen)
             )
-            # TaskExecutor 在 Worker 线程内创建，API 线程不再持有引用
             _debug_session.executor = None
-            # Worker 返回的初始截图 URL
+
+            # 单次提交完整 worker_data 到 Worker
             response = await asyncio.to_thread(
                 lambda: get_worker().submit(CMD_DEBUG_START, data=worker_data)
             )
-            if response.success and isinstance(response.data, dict):
+            if not response.success:
+                raise RuntimeError(f"调试会话启动失败: {response.error}")
+            session.page = True
+            if isinstance(response.data, dict):
                 _debug_session.screenshot_url = response.data.get("screenshot_url")
         except Exception:
             await session.close()
@@ -842,52 +839,57 @@ async def debug_next() -> dict:
 
 @app.post("/api/debug/run-all")
 async def debug_run_all() -> dict:
-    async with _debug_exec_sem:
-        async with _debug_lock:
-            _require_debug_session()
-            from_idx = _debug_session.current_step
+    async with _debug_lock:
+        _require_debug_session()
+        from_idx = _debug_session.current_step
 
-            if from_idx >= len(_debug_session.steps):
-                return {**_debug_response(), "message": "所有步骤已执行完毕"}
+        if from_idx >= len(_debug_session.steps):
+            return {**_debug_response(), "message": "所有步骤已执行完毕"}
 
-        worker = get_worker()
-        results: list[dict] = []
-        all_success = True
+    worker = get_worker()
+    results: list[dict] = []
+    all_success = True
 
-        # 逐步骤通过 Worker 执行，TaskExecutor 在 Worker 线程内操作 page
-        for i in range(from_idx, len(_debug_session.steps)):
+    # 逐步骤执行，每步之间释放信号量允许 debug_stop/debug_next 插入
+    for i in range(from_idx, len(_debug_session.steps)):
+        async with _debug_exec_sem:
+            # 检查会话是否仍有效（可能被 debug_stop 关闭）
+            async with _debug_lock:
+                if not _debug_session.running:
+                    all_success = False
+                    break
+
             response = await asyncio.to_thread(
                 lambda idx=i: worker.submit(
                     CMD_DEBUG_STEP, data={"step_index": idx}
                 )
             )
-            if not response.success:
-                # Worker 级错误（非步骤失败）
-                results.append(
-                    {
-                        "step_index": i,
-                        "success": False,
-                        "message": response.error or "步骤执行异常",
-                        "screenshot_url": None,
-                    }
-                )
-                all_success = False
-                break
-
-            step_result = response.data
-            results.append(step_result)
-            if not step_result.get("success", False):
-                all_success = False
-                break
-
-        async with _debug_lock:
-            _debug_session.results.extend(results)
-            _debug_session.current_step = (
-                len(_debug_session.steps) if all_success else from_idx + len(results)
+        if not response.success:
+            results.append(
+                {
+                    "step_index": i,
+                    "success": False,
+                    "message": response.error or "步骤执行异常",
+                    "screenshot_url": None,
+                }
             )
-            _debug_session._last_activity = time.monotonic()
-            if results:
-                _debug_session.screenshot_url = results[-1].get("screenshot_url")
+            all_success = False
+            break
+
+        step_result = response.data
+        results.append(step_result)
+        if not step_result.get("success", False):
+            all_success = False
+            break
+
+    async with _debug_lock:
+        _debug_session.results.extend(results)
+        _debug_session.current_step = (
+            len(_debug_session.steps) if all_success else from_idx + len(results)
+        )
+        _debug_session._last_activity = time.monotonic()
+        if results:
+            _debug_session.screenshot_url = results[-1].get("screenshot_url")
             return _debug_response()
 
 
