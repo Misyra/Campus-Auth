@@ -41,7 +41,7 @@ class LoginAttemptHandler:
         """
         self.config = config
         self.cancel_event = cancel_event
-        self.logger = setup_logger(f"{__name__}_login", config.get("logging", {}))
+        self.logger = setup_logger(__name__, config.get("logging", {}))
         self._browser_ctx: BrowserContextManager | None = None
         self._task_manager: TaskManager | None = None
         self._project_root: Path | None = None
@@ -283,10 +283,13 @@ class LoginAttemptHandler:
         """关闭浏览器（登录成功或监控停止时调用）"""
         if self._browser_ctx:
             try:
-                # NOTE: __aexit__(None, None, None) 在此处是正确用法：
-                # 这是显式清理调用，不传播异常。触发清理的异常已由外层
-                # except 块处理并重抛。__aexit__ 在 exc_type=None 时
-                # 跳过日志记录，行为符合预期。
+                # 实际关闭 Worker 中的浏览器进程（同线程安全）
+                from src.playwright_worker import get_worker
+
+                worker = get_worker()
+                await worker.close_browser()
+
+                # 释放本地引用
                 await self._browser_ctx.__aexit__(None, None, None)
             except Exception as exc:
                 self.logger.debug("浏览器关闭时异常 (非关键): %s", exc)
