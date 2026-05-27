@@ -20,6 +20,7 @@ export const appOptions = {
       currentSettingsTab: 'account',
       settingsTabs: SETTINGS_TABS,
       config: { ...DEFAULT_CONFIG },
+      defaultPortalUrls: DEFAULT_CONFIG.portal_check_urls,
       frontendLogger: createFrontendLogger('INFO'),
       isLoading: true,
       status: {
