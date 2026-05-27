@@ -349,7 +349,6 @@ class PlaywrightWorker:
             )
             success, message = await handler.attempt_login(
                 skip_pause_check=data.get("skip_pause_check", False),
-                reuse_browser=data.get("reuse_browser", False),
             )
             return WorkerResponse(success=success, data=message)
         except Exception as e:

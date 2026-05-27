@@ -46,14 +46,13 @@ class LoginAttemptHandler:
         self._project_root: Path | None = None
 
     async def attempt_login(
-        self, skip_pause_check: bool = False, reuse_browser: bool = False
+        self, skip_pause_check: bool = False
     ) -> tuple[bool, str]:
         """
         尝试登录校园网（统一实现）
 
         参数:
             skip_pause_check: 是否跳过暂停时间检查
-            reuse_browser: 是否复用已打开的浏览器（监控重试时使用）
 
         返回:
             tuple[bool, str]: (是否成功, 详细信息)
@@ -87,9 +86,7 @@ class LoginAttemptHandler:
                         return False, msg
 
             # 使用延迟导入避免循环依赖
-            return await self._perform_login_with_auth_class(
-                reuse_browser=reuse_browser
-            )
+            return await self._perform_login_with_auth_class()
 
         except LoginCancelledError:
             self.logger.info("登录操作已取消")
@@ -101,13 +98,9 @@ class LoginAttemptHandler:
             self.logger.error(error_msg)
             return False, error_msg
 
-    async def _perform_login_with_auth_class(
-        self, *, reuse_browser: bool = False
-    ) -> tuple[bool, str]:
+    async def _perform_login_with_auth_class(self) -> tuple[bool, str]:
         """使用活动任务执行登录。"""
-        task_result = await self._perform_login_with_active_task(
-            reuse_browser=reuse_browser
-        )
+        task_result = await self._perform_login_with_active_task()
         if task_result is not None:
             return task_result
 
@@ -115,13 +108,8 @@ class LoginAttemptHandler:
         self.logger.error(f"❌ {error_msg}")
         return False, error_msg
 
-    async def _perform_login_with_active_task(
-        self, *, reuse_browser: bool = False
-    ) -> tuple[bool, str] | None:
-        """执行当前活动任务；返回 None 表示未找到可执行任务。
-
-        reuse_browser=True 时，失败后保留浏览器供下次重试复用。
-        """
+    async def _perform_login_with_active_task(self) -> tuple[bool, str] | None:
+        """执行当前活动任务；返回 None 表示未找到可执行任务。"""
         import time as _time
         from ..task_executor import TaskExecutor, TaskManager
 
@@ -167,57 +155,24 @@ class LoginAttemptHandler:
 
             browser_manager: BrowserContextManager | None = None
 
-            # 复用或创建浏览器
-            if reuse_browser and self._browser_ctx is not None:
-                browser_manager = self._browser_ctx
-                # 健康检查：验证浏览器是否仍然存活
-                try:
-                    if (
-                        not browser_manager.browser
-                        or not browser_manager.browser.is_connected()
-                    ):
-                        raise RuntimeError("浏览器进程已断开")
-                    if browser_manager.page and browser_manager.page.is_closed():
-                        raise RuntimeError("浏览器页面已关闭")
-                except Exception as exc:
-                    self.logger.warning("浏览器健康检查失败，将重新启动: %s", exc)
-                    await self.close_browser()
-                    browser_manager = None
-                    reuse_browser = False
-
-                if browser_manager is not None:
-                    self.logger.info("复用浏览器...")
-
-            if not reuse_browser or self._browser_ctx is None:
-                # 不复用：关闭旧的（如果有），新建
+            # 创建新浏览器实例
+            if self._browser_ctx is not None:
                 await self.close_browser()
-                self.logger.info("启动浏览器...")
-                browser_start = _time.perf_counter()
-                browser_manager = BrowserContextManager(
-                    self.config, cancel_event=self.cancel_event
-                )
-                await browser_manager.__aenter__()
-                self._browser_ctx = browser_manager
-                self.logger.info(
-                    "浏览器就绪 (%.1fs)", _time.perf_counter() - browser_start
-                )
+
+            self.logger.info("启动浏览器...")
+            browser_start = _time.perf_counter()
+            browser_manager = BrowserContextManager(
+                self.config, cancel_event=self.cancel_event
+            )
+            await browser_manager.__aenter__()
+            self._browser_ctx = browser_manager
+            self.logger.info(
+                "浏览器就绪 (%.1fs)", _time.perf_counter() - browser_start
+            )
 
             if browser_manager is None:
                 raise RuntimeError("浏览器实例应在复用或新建分支中初始化")
             try:
-                if reuse_browser:
-                    try:
-                        await browser_manager.page.evaluate("1", timeout=5000)
-                    except Exception:
-                        self.logger.warning("浏览器实例已失效，重新创建")
-                        if self.cancel_event and self.cancel_event.is_set():
-                            self.logger.warning("登录已被取消，跳过浏览器重建")
-                            raise RuntimeError("登录已被取消")
-                        await self.close_browser()
-                        browser_manager = await self._create_new_browser()
-                if browser_manager is None:
-                    raise RuntimeError("浏览器实例应在复用或新建分支中初始化")
-
                 if not browser_manager.page:
                     raise RuntimeError("浏览器页面初始化失败")
 
@@ -254,8 +209,7 @@ class LoginAttemptHandler:
                     return True, message
                 log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
                 self.logger.error("登录失败 (总耗时 %.1fs): %s", total, log_msg)
-                if not reuse_browser:
-                    await self.close_browser()
+                # 浏览器关闭逻辑由调用方（monitor_core）根据重试次数决定
                 return False, message
             except Exception:
                 await self.close_browser()
