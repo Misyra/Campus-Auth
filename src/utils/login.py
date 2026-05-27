@@ -17,7 +17,6 @@ from .env import build_login_env_vars
 from .exceptions import LoginCancelledError
 from .logging import setup_logger
 from .network_helpers import parse_host_port
-from .time_utils import TimeUtils
 
 if False:  # Type-only import to avoid circular dependency at runtime
     from ..task_executor import TaskManager
@@ -60,17 +59,32 @@ class LoginAttemptHandler:
             tuple[bool, str]: (是否成功, 详细信息)
         """
         try:
-            # 检查当前时间是否在暂停登录时段（如果没有跳过检查）
+            # 使用统一的登录前决策（暂停时段、网络状态等）
             if not skip_pause_check:
-                pause_config = self.config.get("pause_login", {})
+                from src.network_decision import should_attempt_login
 
-                if TimeUtils.is_in_pause_period(pause_config):
-                    current_hour = datetime.datetime.now().hour
-                    start_hour = pause_config.get("start_hour", 0)
-                    end_hour = pause_config.get("end_hour", 6)
-                    msg = f"当前时间 {current_hour}:xx 在暂停登录时段（{start_hour}点-{end_hour}点），跳过登录"
-                    self.logger.info(msg)
-                    return False, msg
+                should_login, reason = should_attempt_login(self.config)
+                if not should_login:
+                    if reason == "pause_period":
+                        pause_config = self.config.get("pause_login", {})
+                        current_hour = datetime.datetime.now().hour
+                        start_hour = pause_config.get("start_hour", 0)
+                        end_hour = pause_config.get("end_hour", 6)
+                        msg = f"当前时间 {current_hour}:xx 在暂停登录时段（{start_hour}点-{end_hour}点），跳过登录"
+                        self.logger.info(msg)
+                        return False, msg
+                    elif reason == "network_disconnected":
+                        msg = "物理网络未连接，跳过登录"
+                        self.logger.info(msg)
+                        return False, msg
+                    elif reason == "auth_url_unreachable":
+                        msg = f"认证地址 {self.config.get('auth_url', '?')} 不可达，跳过登录"
+                        self.logger.info(msg)
+                        return False, msg
+                    elif reason == "network_ok":
+                        msg = "网络正常，无需登录"
+                        self.logger.info(msg)
+                        return False, msg
 
             # 使用延迟导入避免循环依赖
             return await self._perform_login_with_auth_class(
