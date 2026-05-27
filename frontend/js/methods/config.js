@@ -13,9 +13,9 @@ export const configMethods = {
       if (updateSnapshot) {
         this.savedConfigSnapshot = JSON.stringify(this.config);
       }
-      this.frontendLogger.info('config', 'config loaded');
+      this.frontendLogger.info('config', '配置已加载');
     } catch (error) {
-      this.frontendLogger.error('config', 'failed to fetch config', error);
+      this.frontendLogger.error('config', '获取配置失败', error);
       if (!this._initErrorShown) {
         this._initErrorShown = true;
         this.notify(false, '加载配置失败');
@@ -54,7 +54,7 @@ export const configMethods = {
       }
     } catch (error) {
       const msg = error?.response?.data?.detail || '保存失败';
-      this.frontendLogger.error('config', 'save config failed', error);
+      this.frontendLogger.error('config', '保存配置失败', error);
       this.notify(false, msg);
     } finally {
       this.busy.save = false;

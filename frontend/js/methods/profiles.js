@@ -8,7 +8,7 @@ export const profileMethods = {
       this.activeProfileId = data.active_profile || 'default';
       this.autoSwitch = data.auto_switch !== false;
     } catch (error) {
-      this.frontendLogger.error('profiles', 'failed to fetch profiles', error);
+      this.frontendLogger.error('profiles', '获取方案列表失败', error);
     }
   },
   showProfileEditor(profileId) {
@@ -119,7 +119,7 @@ export const profileMethods = {
       this.editorDetectResult = { gateway_ip: data.gateway_ip, ssid: data.ssid };
     } catch (error) {
       this.editorDetectResult = { gateway_ip: null, ssid: null };
-      this.frontendLogger.error('profiles', 'editor network detect failed', error);
+      this.frontendLogger.error('profiles', '编辑器网络检测失败', error);
     } finally {
       this.busy.editorDetect = false;
     }
@@ -133,7 +133,7 @@ export const profileMethods = {
       return data;
     } catch (error) {
       this.detectResult = { gateway_ip: null, ssid: null, matched_profile_id: null };
-      this.frontendLogger.error('profiles', 'network detect failed', error);
+      this.frontendLogger.error('profiles', '网络检测失败', error);
       return null;
     } finally {
       this.busy.detect = false;

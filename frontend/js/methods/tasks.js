@@ -26,7 +26,7 @@ export const taskMethods = {
       const { data } = await this.$api.get('/api/tasks');
       this.tasks = data;
     } catch (error) {
-      this.frontendLogger.error('tasks', 'failed to fetch tasks', error);
+      this.frontendLogger.error('tasks', '获取任务列表失败', error);
       if (!this._initErrorShown) {
         this._initErrorShown = true;
         this.notify(false, '加载任务列表失败');
@@ -38,7 +38,7 @@ export const taskMethods = {
       const { data } = await this.$api.get('/api/tasks/active');
       this.activeTaskId = data.task_id;
     } catch (error) {
-      this.frontendLogger.error('tasks', 'failed to fetch active task', error);
+      this.frontendLogger.error('tasks', '获取活动任务失败', error);
       if (!this._initErrorShown) {
         this._initErrorShown = true;
         this.notify(false, '加载活动任务失败');
@@ -47,7 +47,7 @@ export const taskMethods = {
   },
   async setActiveTask(taskId) {
     try {
-      this.frontendLogger.info('tasks', `set active task: ${taskId}`);
+      this.frontendLogger.info('tasks', `设置活动任务: ${taskId}`);
       const { data } = await this.$api.post(`/api/tasks/active/${taskId}`);
       if (data.success) {
         this.activeTaskId = taskId;
@@ -155,7 +155,7 @@ export const taskMethods = {
     }
 
     try {
-      this.frontendLogger.info('tasks', `save task: ${this.editingTask.id}`);
+      this.frontendLogger.info('tasks', `保存任务: ${this.editingTask.id}`);
       const { data } = await this.$api.put(`/api/tasks/${this.editingTask.id}`, config);
       if (data.success) {
         this.frontendLogger.info('tasks', data.message || '任务保存成功');
@@ -166,7 +166,7 @@ export const taskMethods = {
         this.notify(false, data.message);
       }
     } catch (error) {
-      this.frontendLogger.error('tasks', 'save task failed', error);
+      this.frontendLogger.error('tasks', '保存任务失败', error);
       this.notify(false, error?.response?.data?.detail || error.message || '保存失败');
     }
   },
@@ -321,7 +321,7 @@ export const taskMethods = {
     try {
       const { data } = await this.$api.post('/api/debug/start', { task_id: taskId });
       this.debugSession = data;
-      this.frontendLogger.info('debug', `started for task ${taskId}`);
+      this.frontendLogger.info('debug', `开始调试任务 ${taskId}`);
     } catch (error) {
       const msg = error?.response?.data?.detail || '启动调试失败';
       this.frontendLogger.error('debug', '启动调试失败: ' + msg);

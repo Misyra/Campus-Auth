@@ -4,7 +4,7 @@ export const autostartMethods = {
       const { data } = await this.$api.get('/api/autostart/status');
       this.autostart = data;
     } catch (error) {
-      this.frontendLogger.warn('autostart', 'fetch autostart failed', error);
+      this.frontendLogger.warn('autostart', '获取自启动状态失败', error);
       if (error?.response?.status === 404) {
         this.autostart = {
           platform: '-',

@@ -39,14 +39,14 @@ export const actionMethods = {
     this.busy.monitor = true;
     try {
       const url = this.status.monitoring ? '/api/monitor/stop' : '/api/monitor/start';
-      this.frontendLogger.info('monitor', `request ${url}`);
+      this.frontendLogger.info('monitor', `请求 ${url}`);
       const { data } = await this.$api.post(url);
-      this.frontendLogger.info('monitor', 'monitor toggled: ' + data.message);
+      this.frontendLogger.info('monitor', '监控状态切换: ' + data.message);
       this.toastOnly(data.success, data.message);
       await this.fetchStatus();
     } catch (error) {
       const msg = error?.response?.data?.detail || '操作失败';
-      this.frontendLogger.error('monitor', 'toggle monitor failed', msg);
+      this.frontendLogger.error('monitor', '切换监控失败', msg);
       this.notify(false, msg);
     } finally {
       this.busy.monitor = false;
@@ -55,13 +55,13 @@ export const actionMethods = {
   async manualLogin() {
     this.busy.action = true;
     try {
-      this.frontendLogger.info('action', 'manual login requested');
+      this.frontendLogger.info('action', '手动登录请求');
       const loginTimeoutMs = (this.config.login_timeout || 120) * 1000;
       const { data } = await this.$api.post('/api/actions/login', null, { timeout: loginTimeoutMs });
       this.notify(data.success, this.stripScreenshotHint(data.message));
     } catch (error) {
       const msg = error?.response?.data?.detail || '手动登录失败';
-      this.frontendLogger.error('action', 'manual login failed', msg);
+      this.frontendLogger.error('action', '手动登录失败', msg);
       this.notify(false, this.stripScreenshotHint(msg));
     } finally {
       this.busy.action = false;
@@ -70,13 +70,13 @@ export const actionMethods = {
   async testNetwork() {
     this.busy.action = true;
     try {
-      this.frontendLogger.info('action', 'network test requested');
+      this.frontendLogger.info('action', '手动网络测试');
       const { data } = await this.$api.post('/api/actions/test-network');
       // 网络测试结果只显示 toast，不记录通知历史
       this.toastOnly(data.success, data.message);
     } catch (error) {
       const msg = error?.response?.data?.detail || '网络测试失败';
-      this.frontendLogger.error('action', 'network test failed', msg);
+      this.frontendLogger.error('action', '网络测试失败', msg);
       this.toastOnly(false, msg);
     } finally {
       this.busy.action = false;
