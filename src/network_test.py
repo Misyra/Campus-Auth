@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 import socket
+import ssl
 import subprocess
 import sys
 
@@ -242,6 +243,17 @@ def is_network_available_http(
     timeout: float = 2.0,
     follow_redirects: bool = True,
 ) -> bool:
+    """通过 HTTP(S) 请求检测网络连通性。
+
+    Design rationale — intentionally disables SSL verification (verify=False):
+    campus network captive portals intercept HTTPS traffic with self-signed
+    certificates. The purpose is to check connectivity, not TLS security.
+    This aligns with Playwright's ignore_https_errors=True in browser.py.
+
+    In follow_redirects=False mode, 200<=status<300 is connectivity OK; 302
+    redirects from portals are NOT okay (triggers login). Note: portals
+    returning 200 with login HTML (no redirect) are a known limitation.
+    """
     urls = list(test_urls or ("https://www.baidu.com", "https://www.qq.com"))
     if len(urls) == 0:
         return False
@@ -250,7 +262,7 @@ def is_network_available_http(
         """在独立线程中检测单个 URL。返回 (url, success, detail)。"""
         start = time.perf_counter()
         try:
-            with httpx.Client(trust_env=not _block_proxy) as client:
+            with httpx.Client(verify=False, trust_env=not _block_proxy) as client:
                 resp = client.get(
                     url, timeout=timeout, follow_redirects=follow_redirects
                 )
@@ -260,6 +272,11 @@ def is_network_available_http(
             return (url, False, f"HTTP {resp.status_code} ({elapsed:.0f}ms)")
         except Exception as exc:
             elapsed = (time.perf_counter() - start) * 1000
+            # SSL 证书验证失败（校园网门户 HTTPS 劫持自签名证书）降级为 DEBUG
+            if isinstance(exc, ssl.SSLError) or "CERTIFICATE_VERIFY_FAILED" in str(exc):
+                logger.debug("SSL 证书验证失败 (预期行为): %s — %s", url, exc)
+            else:
+                logger.info("HTTP 请求异常: %s — %s", url, exc)
             return (url, False, f"{type(exc).__name__}: {exc}")
 
     futures = {_executor.submit(_check_one, url): url for url in urls}
