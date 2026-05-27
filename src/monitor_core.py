@@ -143,7 +143,7 @@ class NetworkMonitorCore:
             self.network_check_count = 0
             self.login_attempt_count = 0
             self.last_network_ok = None
-            self.status_detail = "正在启动"
+            self.status_detail = "正在启动监控"
             self._test_sites_cache = None  # 重置缓存
 
             interval = self.config.get("monitor", {}).get(
@@ -187,7 +187,7 @@ class NetworkMonitorCore:
         self._stop_event.set()
         was_monitoring = self.monitoring
         self.monitoring = False
-        self.status_detail = "监控已停止"
+        self.status_detail = "已停止"
 
         # 清除登录处理器引用，浏览器会在 attempt_login 返回后被清理
         self._login_handler = None
@@ -250,7 +250,7 @@ class NetworkMonitorCore:
         idx = self.login_attempt_count - 1
         if idx < len(intervals):
             wait = intervals[idx]
-            self.status_detail = f"等待重试（{wait}秒后）"
+            self.status_detail = f"网络异常：等待重试（{wait}秒后）"
             self.log_message(f"{wait} 秒后重试登录...", logging.DEBUG)
             if not self._wait_interruptible(wait, step=5):
                 return RecoveryResult.BREAK
@@ -310,6 +310,7 @@ class NetworkMonitorCore:
             # 2.6 检查是否还有重试机会（登录前检查，避免多执行一次）
             max_retries, _ = self._get_retry_config()
             if self.login_attempt_count >= max_retries:
+                self.status_detail = f"网络异常：已达到最大重试次数（{max_retries}次）"
                 self.log_message(
                     f"已达到最大重试次数 ({max_retries})，等待下次检测周期",
                     logging.WARNING,
@@ -331,7 +332,7 @@ class NetworkMonitorCore:
                 return RecoveryResult.GIVE_UP
 
             # 3. 执行登录
-            self.status_detail = "正在登录"
+            self.status_detail = "网络异常：正在登录"
             login_ok, login_msg = self.attempt_login()
             time.sleep(2)  # 保持与现有行为一致：等待 2s 后再做重试决策，
             # 避免在 Portal 尚未完全更新会话状态时立即重试
@@ -350,7 +351,7 @@ class NetworkMonitorCore:
                 f"登录失败 (第{self.login_attempt_count}/{max_retries}次)",
                 logging.ERROR,
             )
-            self.status_detail = f"登录失败（第{self.login_attempt_count}/{max_retries}次）"
+            self.status_detail = f"网络异常：登录失败（第{self.login_attempt_count}/{max_retries}次）"
 
             # 浏览器关闭策略：前2次复用，第3次及以后关闭
             if self.login_attempt_count >= 2:
@@ -408,7 +409,7 @@ class NetworkMonitorCore:
                     pause_config = self.config.get("pause_login", {})
                     start_hour = pause_config.get("start_hour", 0)
                     end_hour = pause_config.get("end_hour", 6)
-                    self.status_detail = f"暂停时段（{start_hour}:00-{end_hour}:00）"
+                    self.status_detail = f"网络异常：暂停时段（{start_hour}:00-{end_hour}:00）"
                     self.log_message(
                         f"暂停时段 ({start_hour}:00-{end_hour}:00)，跳过检测",
                         logging.INFO,
@@ -426,7 +427,7 @@ class NetworkMonitorCore:
                         f"[#{self.network_check_count}] 网络正常，无需登录", logging.INFO
                     )
                 elif reason == "network_disconnected":
-                    self.status_detail = "物理网络断开"
+                    self.status_detail = "网络异常：物理网络断开"
                     self.log_message(
                         f"[#{self.network_check_count}] 物理网络未连接（WiFi/网线断开），跳过登录，等待下次检测",
                         logging.WARNING,
@@ -434,7 +435,7 @@ class NetworkMonitorCore:
                     self.login_attempt_count = 0
                     self.last_network_ok = False
                 elif reason == "auth_url_unreachable":
-                    self.status_detail = "认证地址不可达"
+                    self.status_detail = "网络异常：认证地址不可达"
                     self.log_message(
                         f"[#{self.network_check_count}] 认证地址不可达，跳过登录",
                         logging.WARNING,
@@ -444,7 +445,7 @@ class NetworkMonitorCore:
                 # fall through to interval wait
             else:
                 # 执行登录（网络不可用但可以尝试认证）
-                self.status_detail = "正在登录"
+                self.status_detail = "网络异常：正在登录"
                 recovery_result = self._login_recovery_loop()
                 if recovery_result == RecoveryResult.LOGIN_OK:
                     self.login_attempt_count = 0
@@ -456,13 +457,17 @@ class NetworkMonitorCore:
                 elif recovery_result == RecoveryResult.BREAK:
                     break
                 elif recovery_result == RecoveryResult.NET_DISCONNECT:
-                    self.status_detail = "物理网络断开"
+                    self.status_detail = "网络异常：物理网络断开"
                 elif recovery_result == RecoveryResult.GIVE_UP:
-                    self.status_detail = "登录失败，等待下次检测"
+                    self.status_detail = "网络异常：登录失败，等待下次检测"
                 # RecoveryResult.GIVE_UP → 跳出，进入正常检测间隔等待
 
             next_check = datetime.datetime.now() + datetime.timedelta(seconds=interval)
-            self.status_detail = f"等待下次检测（{next_check.strftime('%H:%M:%S')}）"
+            # 根据网络状态设置等待文案
+            if self.last_network_ok:
+                self.status_detail = f"网络正常：等待下次检测（{next_check.strftime('%H:%M:%S')}）"
+            else:
+                self.status_detail = f"网络异常：等待下次检测（{next_check.strftime('%H:%M:%S')}）"
             self.log_message(
                 f"等待 {interval} 秒至下次检测周期（{next_check.strftime('%H:%M:%S')}）",
                 logging.INFO,

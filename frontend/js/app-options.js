@@ -29,7 +29,7 @@ export const appOptions = {
         last_check_time: null,
         runtime_seconds: 0,
         network_connected: false,
-        status_detail: '监控已停止',
+        status_detail: '已停止',
       },
       logs: [],
       appVersion: 'unknown',
@@ -163,8 +163,8 @@ export const appOptions = {
       return 'connected';
     },
     networkStatusText() {
-      if (!this.status.monitoring) return '监控已停止';
-      return this.status.status_detail || '正常';
+      if (!this.status.monitoring) return '已停止';
+      return this.status.status_detail || '正在启动';
     },
     filteredRepoTasks() {
       const q = this.repoImport.searchQuery.trim().toLowerCase();
