@@ -315,14 +315,14 @@ class NetworkMonitorCore:
             self._check_profile_switch()
 
             # 2.5 前置检查认证地址可达性，避免无效的浏览器启动
-            if not is_auth_url_reachable(self.config.get("auth_url", "")):
+            check_auth_url = self.config.get("monitor", {}).get("check_auth_url", True)
+            if check_auth_url and not is_auth_url_reachable(self.config.get("auth_url", "")):
                 self.log_message(
-                    f"认证地址 {self.config.get('auth_url', '?')} 不可达，跳过登录重试",
+                    f"认证地址 {self.config.get('auth_url', '?')} 不可达，等待下次检测周期",
                     logging.WARNING,
                 )
-                self.login_attempt_count = 0
-                self.network_state = NetworkState.DISCONNECTED
-                return RecoveryResult.NET_DISCONNECT
+                self.status_detail = "网络异常：认证地址不可达"
+                return RecoveryResult.GIVE_UP
 
             # 2.6 检查是否还有重试机会（登录前检查，避免多执行一次）
             if self.login_attempt_count >= max_retries:
