@@ -99,14 +99,14 @@ class TestShouldAttemptLogin:
         assert ok is False
         assert reason == "network_disconnected"
 
+    @patch("src.network_decision.is_network_available", return_value=False)
     @patch("src.network_decision.is_auth_url_reachable", return_value=False)
     @patch("src.network_decision.is_local_network_connected", return_value=True)
     @patch("src.network_decision.is_in_pause_period", return_value=False)
-    def test_auth_url_unreachable(self, *mocks):
-        """认证地址不可达应跳过登录"""
+    def test_auth_url_unreachable_still_checks_network(self, *mocks):
+        """认证地址不可达不影响网络判断，仍由网络探测决定是否登录"""
         ok, reason = should_attempt_login(self._make_config())
-        assert ok is False
-        assert reason == "auth_url_unreachable"
+        assert ok is True  # 网络不可用，应尝试登录（认证地址检查在登录前进行）
 
     @patch("src.network_decision.is_network_available", return_value=True)
     @patch("src.network_decision.is_auth_url_reachable", return_value=True)
@@ -118,13 +118,3 @@ class TestShouldAttemptLogin:
         assert ok is False
         assert reason == "network_ok"
 
-    @patch("src.network_decision.is_network_available", return_value=False)
-    @patch("src.network_decision.is_auth_url_reachable", return_value=True)
-    @patch("src.network_decision.is_local_network_connected", return_value=True)
-    @patch("src.network_decision.is_in_pause_period", return_value=False)
-    def test_skip_auth_url_check(self, *mocks):
-        """关闭认证地址检查时应跳过可达性检测"""
-        config = self._make_config()
-        config["monitor"]["check_auth_url"] = False
-        ok, reason = should_attempt_login(config)
-        assert ok is True
