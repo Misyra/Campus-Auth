@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import logging
+import ssl
+
 from unittest.mock import MagicMock, patch
 
 from src.network_test import (
     _check_macos_service,
     is_network_available,
+    is_network_available_http,
     is_local_network_connected,
-    set_block_proxy,
 )
 
 
@@ -113,3 +116,86 @@ class TestCheckMacosService:
                 ]
                 # 降级后只检查 en0、en1
                 assert len(ifconfig_calls) == 2
+
+
+class TestSslProbe:
+    """SSL 证书错误与 HTTP 探测器测试"""
+
+    def test_http_probe_ssl_cert_error_returns_false(self):
+        """SSL 证书错误时 is_network_available_http 应返回 False 而非崩溃"""
+        with patch('src.network_test.httpx.Client') as mock_client:
+            mock_client.return_value.__enter__.side_effect = ssl.SSLError("certificate verify failed")
+            result = is_network_available_http(
+                test_urls=["https://test.example.com"],
+                timeout=0.5,
+            )
+        assert result is False
+
+    def test_http_probe_ssl_redirect_returns_false(self):
+        """302 重定向（认证门户）不应被视为网络连通"""
+        with patch('src.network_test.httpx.Client') as mock_client:
+            mock_response = MagicMock()
+            mock_response.status_code = 302
+            # httpx.Client() → ctx_mgr, ctx_mgr.__enter__() → client, client.get() → resp
+            mock_client_instance = MagicMock()
+            mock_client_instance.get.return_value = mock_response
+            mock_client.return_value.__enter__.return_value = mock_client_instance
+            result = is_network_available_http(
+                test_urls=["https://test.example.com"],
+                timeout=0.5,
+                follow_redirects=False,
+            )
+        assert result is False
+
+    def test_http_probe_ssl_200_returns_true(self):
+        """HTTP 200 响应应被视为网络连通"""
+        with patch('src.network_test.httpx.Client') as mock_client:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_client_instance = MagicMock()
+            mock_client_instance.get.return_value = mock_response
+            mock_client.return_value.__enter__.return_value = mock_client_instance
+            result = is_network_available_http(
+                test_urls=["https://test.example.com"],
+                timeout=0.5,
+            )
+        assert result is True
+
+    def test_http_probe_ssl_error_logged_at_debug(self, caplog):
+        """SSL 证书验证错误应在 DEBUG 级别记录"""
+        with patch('src.network_test.httpx.Client') as mock_client:
+            mock_client.return_value.__enter__.side_effect = ssl.SSLError("certificate verify failed")
+            with caplog.at_level(logging.DEBUG, logger="network_test"):
+                is_network_available_http(
+                    test_urls=["https://test.example.com"],
+                    timeout=0.5,
+                )
+        # 筛选 SSL 证书验证专用日志（不含后续 INFO 中的 "SSLError" 字样）
+        ssl_records = [r for r in caplog.records if "证书验证失败" in r.getMessage()]
+        assert len(ssl_records) > 0, "SSL 证书验证错误日志应出现在记录中"
+        assert all(r.levelno == logging.DEBUG for r in ssl_records), "SSL 证书验证错误应在 DEBUG 级别记录"
+
+    def test_http_strict_mode_ssl_error_returns_false(self):
+        """严格模式下 HTTP 探测失败（SSL 错误）时 is_network_available 应返回 False"""
+        with patch('src.network_test.is_network_available_http', return_value=False):
+            with patch('src.network_test.is_network_available_socket', return_value=True):
+                with patch('src.network_test.is_local_network_connected', return_value=True):
+                    result = is_network_available(require_both=True)
+        assert result is False
+
+    def test_http_probe_verify_false_no_console_warning(self, caplog):
+        """verify=False 不应产生 InsecureRequestWarning 等 SSL 警告"""
+        with patch('src.network_test.httpx.Client') as mock_client:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_client_instance = MagicMock()
+            mock_client_instance.get.return_value = mock_response
+            mock_client.return_value.__enter__.return_value = mock_client_instance
+            with caplog.at_level(logging.DEBUG, logger="network_test"):
+                result = is_network_available_http(
+                    test_urls=["https://test.example.com"],
+                    timeout=0.5,
+                )
+        assert result is True
+        # httpx 使用 httpcore 而非 urllib3，不应产生 InsecureRequestWarning
+        assert "InsecureRequest" not in caplog.text
