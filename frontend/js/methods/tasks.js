@@ -296,21 +296,24 @@ export const taskMethods = {
     input.click();
   },
 
-  async fetchSafeMode() {
+  async fetchPureMode() {
     try {
-      const { data } = await this.$api.get('/api/safe-mode');
-      this.safeMode = data.enabled;
+      const { data } = await this.$api.get('/api/pure-mode');
+      this.pureMode = data.enabled;
     } catch { /* ignore */ }
   },
 
-  async toggleSafeMode() {
+  async togglePureMode() {
+    // v-model 已同步更新 pureMode，此处调用 API 持久化到后端
     try {
-      const { data } = await this.$api.post('/api/safe-mode');
-      this.safeMode = data.enabled;
+      const { data } = await this.$api.post('/api/pure-mode');
+      // 以后端返回值为准，确保前后端状态一致
+      this.pureMode = data.enabled;
       this.frontendLogger.info('tasks', `纯净模式已${data.enabled ? '开启' : '关闭'}`);
       this.toastOnly(true, `纯净模式已${data.enabled ? '开启' : '关闭'}`);
     } catch (error) {
-      this.safeMode = !this.safeMode;
+      // API 失败，回滚 UI 状态
+      this.pureMode = !this.pureMode;
       this.frontendLogger.error('tasks', '切换纯净模式失败', error);
       this.toastOnly(false, '切换纯净模式失败');
     }

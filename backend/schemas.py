@@ -48,6 +48,12 @@ class MonitorConfigPayload(BaseModel):
         default="Asia/Shanghai",
         description="浏览器时区 ID，用于 Playwright 浏览器上下文的 timezone_id 参数",
     )
+    browser_viewport_width: int = Field(
+        default=1280, ge=320, le=3840, description="浏览器视口宽度"
+    )
+    browser_viewport_height: int = Field(
+        default=720, ge=240, le=2160, description="浏览器视口高度"
+    )
     browser_args: str = Field(
         default="--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees\n--disable-ipc-flooding-protection\n--disable-hang-monitor\n--disable-popup-blocking"
     )
@@ -247,6 +253,12 @@ class ProfileSettings(BaseModel):
         default="Asia/Shanghai",
         description="浏览器时区 ID",
     )
+    browser_viewport_width: int = Field(
+        default=1280, ge=320, le=3840, description="浏览器视口宽度"
+    )
+    browser_viewport_height: int = Field(
+        default=720, ge=240, le=2160, description="浏览器视口高度"
+    )
     pause_enabled: bool = True
     pause_start_hour: int = Field(default=0, ge=0, le=23)
     pause_end_hour: int = Field(default=6, ge=0, le=23)
@@ -306,8 +318,8 @@ class SystemSettings(BaseModel):
     login_then_exit: bool = Field(default=False, description="登录成功后退出软件")
     max_retries: int = Field(default=3, ge=0, le=10)
     retry_interval: int = Field(default=5, ge=1, le=300, description="重试间隔（秒）")
-    safe_mode: bool = Field(
-        default=False, description="安全模式：不注入浏览器自定义参数"
+    pure_mode: bool = Field(
+        default=False, description="纯净模式：使用 Chromium 原始设置，不注入自定义参数"
     )
     log_retention_days: int = Field(
         default=7, ge=1, le=365, description="日志文件保留天数"

@@ -229,6 +229,8 @@ def build_runtime_config(
     browser["stealth_mode"] = payload.stealth_mode
     browser["locale"] = payload.browser_locale.strip()  # 浏览器语言区域
     browser["timezone_id"] = payload.browser_timezone.strip()  # 浏览器时区 ID
+    browser["viewport_width"] = payload.browser_viewport_width
+    browser["viewport_height"] = payload.browser_viewport_height
 
     pause = base.setdefault("pause_login", {})
     pause["enabled"] = payload.pause_enabled

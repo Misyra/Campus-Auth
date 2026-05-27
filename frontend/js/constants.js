@@ -51,6 +51,8 @@ export const DEFAULT_CONFIG = {
   block_proxy: true,
   browser_locale: "zh-CN",
   browser_timezone: "Asia/Shanghai",
+  browser_viewport_width: 1280,
+  browser_viewport_height: 720,
   network_check_timeout: 2,
   app_port: 50721,
 };

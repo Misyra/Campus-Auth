@@ -565,30 +565,33 @@ class PlaywrightWorker:
         """启动 Chromium 浏览器。
 
         根据配置创建浏览器实例、上下文和页面。
-        支持 headless/safe_mode/自定义启动参数/低资源模式/反检测脚本。
+        支持 headless/pure_mode/自定义启动参数/低资源模式/反检测脚本。
         逻辑参考 BrowserContextManager._start_browser() 但直接管理 Worker 内状态。
         """
         from playwright.async_api import async_playwright
 
         browser_settings = config.get("browser_settings", {})
         headless = browser_settings.get("headless", True)
-        safe_mode = browser_settings.get("safe_mode", False)
+        pure_mode = browser_settings.get("pure_mode", False)
 
         logger.info(
-            "启动浏览器 (headless=%s, safe_mode=%s)",
+            "启动浏览器 (headless=%s, pure_mode=%s)",
             headless,
-            safe_mode,
+            pure_mode,
         )
 
         self._playwright = await async_playwright().start()
 
-        if safe_mode:
-            # 安全模式：纯净 Chromium，无扩展无自定义参数
+        if pure_mode:
+            # 纯净模式：原始 Chromium，无扩展无自定义参数
             self._browser = await self._playwright.chromium.launch(
                 headless=headless
             )
             self._context = await self._browser.new_context(
-                viewport={"width": 1280, "height": 720},
+                viewport={
+                    "width": browser_settings.get("viewport_width", 1280),
+                    "height": browser_settings.get("viewport_height", 720),
+                },
             )
         else:
             # 构建浏览器启动参数
@@ -624,7 +627,10 @@ class PlaywrightWorker:
 
             # 构建上下文选项
             ctx_opts: dict[str, Any] = {
-                "viewport": {"width": 1280, "height": 720},
+                "viewport": {
+                    "width": browser_settings.get("viewport_width", 1280),
+                    "height": browser_settings.get("viewport_height", 720),
+                },
                 "locale": browser_settings.get("locale", "zh-CN"),
                 "timezone_id": browser_settings.get(
                     "timezone_id", "Asia/Shanghai"

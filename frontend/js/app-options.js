@@ -87,7 +87,7 @@ export const appOptions = {
         screenshot_url: null,
       },
       debugLoading: false,
-      safeMode: false,
+      pureMode: false,
       profiles: {},
       activeProfileId: 'default',
       autoSwitch: true,
