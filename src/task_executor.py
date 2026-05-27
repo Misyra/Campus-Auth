@@ -1346,16 +1346,15 @@ class TaskExecutor:
         return False, message
 
     async def _capture_screenshot(self, page) -> str | None:
-        """捕获截图 → 指定目录或 debug/{date}/ 目录"""
+        """捕获截图 → 指定目录或 logs/{date}/screenshots/ 目录"""
         try:
             if self._screenshot_dir:
                 out_dir = self._screenshot_dir
                 url_prefix = "/temp"
             else:
-                out_dir = (
-                    self.PROJECT_ROOT / "debug" / datetime.now().strftime("%Y-%m-%d")
-                )
-                url_prefix = f"/debug/{out_dir.name}"
+                date_str = datetime.now().strftime("%Y-%m-%d")
+                out_dir = self.PROJECT_ROOT / "logs" / date_str / "screenshots"
+                url_prefix = f"/logs/{date_str}/screenshots"
             out_dir.mkdir(parents=True, exist_ok=True)
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
             task_id = self.config.task_id or "unknown"

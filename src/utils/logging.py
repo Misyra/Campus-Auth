@@ -118,7 +118,7 @@ def setup_logger(name: str, config: Dict[str, Any] | None = None) -> logging.Log
 
 
 class _DateRotatingFileHandler(logging.Handler):
-    """按日期自动切换的日志处理器 — 当前日志写入 YYYY-MM-DD.log"""
+    """按日期自动切换的日志处理器 — 当前日志写入 {log_dir}/YYYY-MM-DD/app.log"""
 
     def __init__(
         self,
@@ -137,12 +137,14 @@ class _DateRotatingFileHandler(logging.Handler):
         if formatter:
             self.setFormatter(formatter)
 
-    def _get_log_path(self) -> str:
+    def _get_log_path(self) -> tuple[str, str]:
+        """返回 (日期目录路径, 日志文件路径)"""
         date_str = datetime.now().strftime("%Y-%m-%d")
-        return os.path.join(self._log_dir, f"{date_str}.log")
+        date_dir = os.path.join(self._log_dir, date_str)
+        return date_dir, os.path.join(date_dir, "app.log")
 
     def _open_file(self, path: str) -> None:
-        os.makedirs(self._log_dir, exist_ok=True)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         if self._stream:
             try:
                 self._stream.close()
@@ -157,20 +159,14 @@ class _DateRotatingFileHandler(logging.Handler):
                 if today != self._current_date or self._stream is None:
                     if today != self._current_date:
                         self._current_date = today
-                    path = self._get_log_path()
+                    _, path = self._get_log_path()
                     self._open_file(path)
 
-                # 每小时运行一次过期日志清理
+                # 每小时运行一次过期日期目录清理
                 now = time.time()
                 if now - self._last_cleanup > 3600:
                     self._last_cleanup = now
-                    cutoff = now - self._retention * 86400
-                    for f in Path(self._log_dir).glob("*.log"):
-                        try:
-                            if f.stat().st_mtime < cutoff:
-                                f.unlink()
-                        except OSError:
-                            pass
+                    self._cleanup_old_dirs(now)
 
                 if self._stream is not None:
                     msg = self.format(record)
@@ -179,6 +175,22 @@ class _DateRotatingFileHandler(logging.Handler):
             except Exception as exc:
                 print(f"[LOG ERROR] 写入日志文件失败: {exc}", file=sys.stderr)
                 self.handleError(record)
+
+    def _cleanup_old_dirs(self, now: float) -> None:
+        """清理超过保留天数的日期目录（含其中的 app.log 和 screenshots/）"""
+        cutoff = now - self._retention * 86400
+        base = Path(self._log_dir)
+        if not base.exists():
+            return
+        for d in base.iterdir():
+            if not d.is_dir() or not d.name[:4].isdigit():
+                continue
+            try:
+                if d.stat().st_mtime < cutoff:
+                    import shutil
+                    shutil.rmtree(d)
+            except OSError:
+                pass
 
     def close(self) -> None:
         with self._emit_lock:
@@ -191,32 +203,35 @@ class _DateRotatingFileHandler(logging.Handler):
         super().close()
 
 
-def cleanup_debug_screenshots(debug_dir: str, retention_days: int) -> int:
-    """清理 debug/ 下按日期命名的子目录中的过期截图，并删除空目录
+def cleanup_old_screenshots(log_dir: str, retention_days: int) -> int:
+    """清理 logs/{YYYY-MM-DD}/screenshots/ 下的过期截图
 
-    目录结构: debug/{YYYY-MM-DD}/*.png
+    目录结构: logs/{YYYY-MM-DD}/screenshots/*.png
+    过期日期目录由 _DateRotatingFileHandler 统一清理，此函数仅清理截图文件。
     """
-    base = Path(debug_dir)
+    base = Path(log_dir)
     if not base.exists():
         return 0
 
     cutoff = time.time() - retention_days * 86400
     deleted = 0
-    for subdir in sorted(base.iterdir()):
-        if not subdir.is_dir():
+    for date_dir in sorted(base.iterdir()):
+        if not date_dir.is_dir() or not date_dir.name[:4].isdigit():
             continue
-        if not subdir.name[:4].isdigit():
+        sc_dir = date_dir / "screenshots"
+        if not sc_dir.exists():
             continue
-        for f in subdir.glob("*.png"):
+        for f in sc_dir.glob("*.png"):
             try:
                 if f.stat().st_mtime < cutoff:
                     f.unlink()
                     deleted += 1
             except OSError:
                 pass
+        # 清理空的 screenshots 目录
         try:
-            if not any(subdir.iterdir()):
-                subdir.rmdir()
+            if not any(sc_dir.iterdir()):
+                sc_dir.rmdir()
         except OSError:
             pass
     return deleted
