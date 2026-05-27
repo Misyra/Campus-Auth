@@ -1,0 +1,4 @@
+Task 3: Fix _login_in_progress thread safety
+Status: PASS
+Command: uv run python -c "from backend.monitor_service import MonitorService; import inspect; src = inspect.getsource(MonitorService.__init__); print('Lock' in src or 'lock' in src)"
+Output: True

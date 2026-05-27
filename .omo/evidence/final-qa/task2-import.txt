@@ -1,0 +1,8 @@
+Task 2 - Import resolution check
+========================================
+Expected: python -c "from src.utils.time_utils import TimeUtils, get_runtime_stats; print('OK')" → OK
+
+Actual result:
+  OK ✓
+
+Verdict: PASS - Import resolves correctly

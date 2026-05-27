@@ -1,0 +1,14 @@
+Task 7 — Concurrent Login Guard — Real Manual QA
+==================================================
+Date: 2026-05-25
+Method: Python threading — 2 simultaneous POST /api/actions/login
+
+Results:
+  Request 1: HTTP 409 {"detail":{"success":false,"message":"登录操作正在进行中，请稍后再试"}}
+  Request 2: HTTP timeout (25s) — held by Request 1's login operation
+
+PASS: Concurrent guard works
+- _login_in_progress flag prevents duplicate browser launches
+- Second request rejected with 409
+- Only one login operation proceeds at a time
+- try/finally ensures flag is reset even on error

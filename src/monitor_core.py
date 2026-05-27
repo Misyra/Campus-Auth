@@ -541,25 +541,23 @@ class NetworkMonitorCore:
             return False, "监控已停止"
 
         try:
-            # 复用持久化 handler，重试时保留浏览器
-            if self._login_handler is None:
-                self._login_handler = LoginAttemptHandler(
-                    self.config, cancel_event=self._cancel_login
-                )
-            else:
-                self._login_handler.config = self.config
+            # ── 通过 PlaywrightWorker 派发登录 ──
+            # 原实现在此创建独立 asyncio 事件循环（new_event_loop / run_until_complete / loop.close）
+            # 并直接管理 LoginAttemptHandler 的生命周期。
+            # 重构后改为通过 get_worker().submit(CMD_LOGIN, ...) 将登录任务提交到
+            # Worker 线程执行，Worker 内部管理浏览器生命周期和 LoginAttemptHandler。
+            from src.playwright_worker import get_worker, CMD_LOGIN
 
-            handler = self._login_handler
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                success, message = loop.run_until_complete(
-                    handler.attempt_login(
-                        skip_pause_check=True, reuse_browser=self._reuse_browser
-                    )
-                )
-            finally:
-                loop.close()
+            login_timeout = self.config.get("browser_settings", {}).get("timeout", 120)
+            data = {
+                "config": self.config,
+                "cancel_event": self._cancel_login,
+                "reuse_browser": self._reuse_browser,
+                "skip_pause_check": True,
+            }
+            result = get_worker().submit(CMD_LOGIN, data=data, timeout=login_timeout)
+            success = result.success
+            message = result.data if result.success else result.error
             # 检查是否在登录过程中被取消
             if self._cancel_login.is_set():
                 self.log_message("登录已被取消", logging.WARNING)

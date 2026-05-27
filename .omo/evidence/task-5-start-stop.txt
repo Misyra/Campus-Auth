@@ -1,0 +1,4 @@
+Task 5: PlaywrightWorker full logic — Start/Stop
+Status: PASS
+Command: PlaywrightWorker().start() → .stop(timeout=5)
+Output: alive=True → alive=False

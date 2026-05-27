@@ -1,0 +1,35 @@
+Edge Cases — Real Manual QA
+=============================
+Date: 2026-05-25
+Method: curl (Invoke-WebRequest) against running app
+
+Tested Edge Cases:
+
+1. Start → immediate stop → immediate start (within 500ms)
+   Result: PASS — all 3 cycles complete, no crash, no hang
+   - Start: 200
+   - Stop: 200
+   - Start: 200
+   - Status: monitoring=true
+
+2. Shutdown while monitor is running
+   Result: PASS — shutdown command processed, app exits cleanly
+   - Monitor was running (status: monitoring=true)
+   - POST /api/shutdown → connection closed (server shutdown)
+   - Port freed within 5s
+
+3. POST to non-existent endpoint → 404, no crash
+   Result: PASS — {"detail": "Not Found"} returned, server continues fine
+   - GET /api/nonexistent → 404
+   - Subsequent health check → 200 (server alive)
+
+4. GET /api/status before any monitor actions → monitoring=false
+   Result: PASS — initial state correctly shows monitoring=false
+   - GET /api/status → {"monitoring":false, ...}
+
+5. Rapid start/stop (3 cycles within 334ms)
+   Result: PASS — all 6 API calls (3 start, 3 stop) returned 200, no crash
+   - Total time: 334ms
+   - Final status queryable, no error state
+
+All 5 edge cases: PASS

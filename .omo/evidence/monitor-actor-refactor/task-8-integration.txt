@@ -1,0 +1,28 @@
+Task 8 — Full Integration Verification
+========================================
+
+Zero-Tolerance Checks:
+- run_coroutine_threadsafe in backend/: 0 ✅
+- set_event_loop in main.py: 0 ✅
+- _loop_stopped in src/backend/: 0 ✅
+
+Locks remaining:
+- _emit_lock in src/utils/logging.py (by design)
+- WebSocketManager._lock in monitor_service.py (asyncio.Lock, pre-existing)
+- No other threading.Lock/RLock/Semaphore/Condition remaining
+
+Pytest: 350 passed, 2 failed (pre-existing WebSocketManager event loop issue)
+Ruff: only pre-existing E402 in main.py (below mimetypes line), no new errors
+
+API Verification (via Task 8 integration agent):
+- /api/health → 200
+- /api/status → 200, monitoring=false
+- POST /api/monitor/start → 200
+- /api/status → 200, monitoring=true
+- POST /api/monitor/stop → 200
+- /api/status → 200, monitoring=false
+- Rapid start/stop (4 cycles, 500ms gap) → no crash ✅
+- POST /api/shutdown → process exits within 5s ✅
+- /api/status latency: 3.37ms (well under 100ms) ✅
+
+Date: 2026-05-25

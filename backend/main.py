@@ -28,12 +28,17 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.utils import ConfigValidator
-from src.utils.browser import STEALTH_INIT_SCRIPT  # noqa: E402 — entire import block is below mimetypes
 from src.utils.config_helpers import BACKUP_FILENAME_PATTERN
 from src.utils.env import build_login_env_vars
 from src.utils.file_helpers import atomic_write
 from src.utils.logging import LogConfigCenter, get_logger
-from src.playwright_worker import cleanup_orphan_browsers
+from src.playwright_worker import (
+    CMD_DEBUG_START,
+    CMD_DEBUG_STEP,
+    CMD_DEBUG_STOP,
+    cleanup_orphan_browsers,
+    get_worker,
+)
 from src.version import get_project_version
 
 from .autostart_service import AutoStartService
@@ -200,118 +205,41 @@ from datetime import datetime
 
 
 class DebugSession:
-    """调试会话：管理浏览器生命周期 + 单步执行"""
+    """调试会话（简化版）：浏览器生命周期由 PlaywrightWorker 管理。
+
+    不再直接调用 async_playwright() 管理浏览器实例，
+    所有浏览器操作通过 Worker 的命令队列提交执行。
+    TaskExecutor 在 Worker 线程内创建和运行，确保 page 对象线程安全。
+    """
 
     def __init__(self):
-        self._pw = None
-        self._browser = None
-        self._context = None
-        self.page = None
+        self.page = None  # 向后兼容标记，实际 page 由 Worker 管理
 
     async def start(
         self, runtime_config: dict, url: str | None, safe_mode: bool = False
     ) -> None:
-        from playwright.async_api import async_playwright
-
-        self._pw = await async_playwright().start()
-
-        if safe_mode:
-            # 安全模式：不注入任何自定义参数，使用 Chromium 默认设置
-            self._browser = await self._pw.chromium.launch(headless=False)
-            self._context = await self._browser.new_context(
-                viewport={"width": 1280, "height": 720},
-            )
-        else:
-            browser_settings = runtime_config.get("browser_settings", {})
-
-            args = [
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--memory-pressure-off",
-            ]
-            if browser_settings.get("disable_web_security", False):
-                args.append("--disable-web-security")
-            if browser_settings.get("low_resource_mode", False):
-                args.append("--blink-settings=imagesEnabled=false")
-            # 用户自定义参数
-            custom_args = str(browser_settings.get("browser_args", "") or "").strip()
-            if custom_args:
-                for flag in custom_args.splitlines():
-                    flag = flag.strip()
-                    if flag and flag not in args:
-                        args.append(flag)
-
-            extra_headers: dict = {}
-            raw_headers = str(
-                browser_settings.get("extra_headers_json", "") or ""
-            ).strip()
-            if raw_headers:
-                try:
-                    import json as _json
-
-                    custom = _json.loads(raw_headers)
-                    if isinstance(custom, dict):
-                        extra_headers = {
-                            str(k): str(v) for k, v in custom.items() if k is not None
-                        }
-                except Exception as exc:
-                    api_logger.debug("自定义请求头 JSON 解析失败: %s", exc)
-
-            self._browser = await self._pw.chromium.launch(headless=False, args=args)
-            ctx_opts: dict = {
-                "viewport": {"width": 1280, "height": 720},
-                "locale": "zh-CN",
-                "timezone_id": "Asia/Shanghai",
-                "has_touch": False,
-                "color_scheme": "light",
-                "ignore_https_errors": True,
-            }
-            if extra_headers:
-                ctx_opts["extra_http_headers"] = extra_headers
-            user_agent = (browser_settings.get("user_agent") or "").strip()
-            if user_agent:
-                ctx_opts["user_agent"] = user_agent
-            self._context = await self._browser.new_context(**ctx_opts)
-
-            if browser_settings.get("low_resource_mode", False):
-                _blocked_types = {"image", "font", "media"}
-
-                async def _block_resources(route):
-                    if route.request.resource_type in _blocked_types:
-                        await route.abort()
-                    else:
-                        await route.continue_()
-
-                await self._context.route("**/*", _block_resources)
-
-        self.page = await self._context.new_page()
-
-        # 反检测脚本（默认关闭，需在方案设置中启用 stealth_mode）
-        if not safe_mode and runtime_config.get("browser_settings", {}).get(
-            "stealth_mode", False
-        ):
-            await self.page.add_init_script(STEALTH_INIT_SCRIPT)
-
-        if url:
-            await self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        """启动调试会话 — 委托 Worker 处理浏览器初始化。"""
+        data = {
+            "config": runtime_config,
+            "task_url": url or "",
+            "safe_mode": safe_mode,
+        }
+        response = await asyncio.to_thread(
+            lambda: get_worker().submit(CMD_DEBUG_START, data=data)
+        )
+        if not response.success:
+            raise RuntimeError(f"调试会话启动失败: {response.error}")
+        self.page = True  # 标记已启动
 
     async def close(self) -> None:
-        for resource in [self.page, self._context, self._browser]:
-            if resource:
-                try:
-                    await resource.close()
-                except Exception:
-                    pass
-        if self._pw:
-            try:
-                await self._pw.stop()
-            except Exception:
-                pass
+        """关闭调试会话 — 委托 Worker 关闭浏览器页面。"""
+        try:
+            await asyncio.to_thread(
+                lambda: get_worker().submit(CMD_DEBUG_STOP)
+            )
+        except Exception:
+            pass
         self.page = None
-        self._pw = None
-        self._browser = None
-        self._context = None
 
 
 _debug_session = empty_debug_session()
@@ -323,10 +251,13 @@ def _debug_response() -> dict:
     return debug_to_response(_debug_session)
 
 
-def _require_debug_session():
-    if not _debug_session.session or not _debug_session.running:
+def _require_debug_session() -> None:
+    """验证调试会话处于活跃状态。
+
+    page 和 TaskExecutor 现在由 Worker 线程管理，不再从 API 线程直接访问。
+    """
+    if not _debug_session.running:
         raise HTTPException(status_code=400, detail="没有活跃的调试会话")
-    return _debug_session.session, _debug_session.executor, _debug_session.session.page
 
 
 async def _debug_timeout_watcher(gen: int, *, timeout_seconds: float = 1800.0) -> None:
@@ -358,20 +289,6 @@ async def _debug_timeout_watcher(gen: int, *, timeout_seconds: float = 1800.0) -
                     _debug_session._last_activity = 0.0
     except asyncio.CancelledError:
         pass
-
-
-async def _take_debug_screenshot(page, step_label: str = "") -> str | None:
-    try:
-        TEMP_DIR.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        task_id = (_debug_session.task_id or "unknown")[:30]
-        step_part = f"_{step_label}" if step_label else ""
-        filename = f"{task_id}{step_part}_{stamp}.png"
-        await page.screenshot(path=str(TEMP_DIR / filename), full_page=True)
-        return f"/temp/{filename}"
-    except Exception as exc:
-        api_logger.debug("调试截图失败: %s", exc)
-        return None
 
 
 @app.middleware("http")
@@ -814,8 +731,22 @@ async def debug_start(request: Request) -> dict:
     for k, v in env_vars.items():
         url = url.replace("{{" + k + "}}", v)
 
+    browser_timeout = runtime_config.get("browser_settings", {}).get(
+        "timeout", 10000
+    )
+
+    # 构建 Worker 启动数据
+    worker_data = {
+        "config": runtime_config,
+        "task_url": url if url else "",
+        "task_data": task.to_dict(),
+        "env_vars": env_vars,
+        "screenshot_dir": str(TEMP_DIR),
+        "default_timeout": browser_timeout,
+    }
+
     async with _debug_lock:
-        # 修复：整个会话创建放在锁内，防止并发请求泄漏 Playwright 进程
+        # 修复：整个会话创建放在锁内，防止并发请求泄漏浏览器进程
         if _debug_session.session:
             await _debug_session.session.close()
         if _debug_session._timer_task and not _debug_session._timer_task.done():
@@ -827,6 +758,8 @@ async def debug_start(request: Request) -> dict:
 
         session = DebugSession()
         try:
+            # DebugSession.start() 通过 asyncio.to_thread 提交到 Worker，
+            # Worker 线程内启动浏览器、导航、创建 TaskExecutor（page 安全）
             await session.start(
                 runtime_config, url if url else None, safe_mode=service.safe_mode
             )
@@ -841,29 +774,24 @@ async def debug_start(request: Request) -> dict:
                 for i, step in enumerate(task.steps)
             ]
 
-            from src.task_executor import TaskExecutor
-
-            browser_timeout = runtime_config.get("browser_settings", {}).get(
-                "timeout", 10000
-            )
-            executor = TaskExecutor(
-                task, env_vars, screenshot_dir=TEMP_DIR, default_timeout=browser_timeout
-            )
-
             gen = _next_debug_gen()
             _debug_session = empty_debug_session()
             _debug_session.session = session
             _debug_session.task_id = task_id
-            _debug_session.executor = executor
             _debug_session.steps = steps_info
             _debug_session.running = True
             _debug_session._last_activity = time.monotonic()
             _debug_session._timer_task = asyncio.create_task(
                 _debug_timeout_watcher(gen)
             )
-            _debug_session.screenshot_url = await _take_debug_screenshot(
-                session.page
+            # TaskExecutor 在 Worker 线程内创建，API 线程不再持有引用
+            _debug_session.executor = None
+            # Worker 返回的初始截图 URL
+            response = await asyncio.to_thread(
+                lambda: get_worker().submit(CMD_DEBUG_START, data=worker_data)
             )
+            if response.success and isinstance(response.data, dict):
+                _debug_session.screenshot_url = response.data.get("screenshot_url")
         except Exception:
             await session.close()
             raise
@@ -876,13 +804,33 @@ async def debug_start(request: Request) -> dict:
 async def debug_next() -> dict:
     async with _debug_exec_sem:
         async with _debug_lock:
-            session, executor, page = _require_debug_session()
+            _require_debug_session()
             idx = _debug_session.current_step
 
             if idx >= len(_debug_session.steps):
                 return {**_debug_response(), "message": "所有步骤已执行完毕"}
 
-        result = await executor.execute_step_at(page, idx)
+        # 通过 Worker 执行单步调试，TaskExecutor 在 Worker 线程内操作 page
+        response = await asyncio.to_thread(
+            lambda: get_worker().submit(
+                CMD_DEBUG_STEP, data={"step_index": idx}
+            )
+        )
+        if not response.success:
+            async with _debug_lock:
+                _debug_session.results.append(
+                    {
+                        "step_index": idx,
+                        "success": False,
+                        "message": response.error or "步骤执行失败",
+                        "screenshot_url": None,
+                    }
+                )
+                _debug_session.current_step = idx + 1
+                _debug_session._last_activity = time.monotonic()
+                return _debug_response()
+
+        result = response.data
 
         async with _debug_lock:
             _debug_session.results.append(result)
@@ -896,24 +844,50 @@ async def debug_next() -> dict:
 async def debug_run_all() -> dict:
     async with _debug_exec_sem:
         async with _debug_lock:
-            session, executor, page = _require_debug_session()
+            _require_debug_session()
             from_idx = _debug_session.current_step
 
             if from_idx >= len(_debug_session.steps):
                 return {**_debug_response(), "message": "所有步骤已执行完毕"}
 
-        agg = await executor.execute_remaining(page, from_idx)
+        worker = get_worker()
+        results: list[dict] = []
+        all_success = True
+
+        # 逐步骤通过 Worker 执行，TaskExecutor 在 Worker 线程内操作 page
+        for i in range(from_idx, len(_debug_session.steps)):
+            response = await asyncio.to_thread(
+                lambda idx=i: worker.submit(
+                    CMD_DEBUG_STEP, data={"step_index": idx}
+                )
+            )
+            if not response.success:
+                # Worker 级错误（非步骤失败）
+                results.append(
+                    {
+                        "step_index": i,
+                        "success": False,
+                        "message": response.error or "步骤执行异常",
+                        "screenshot_url": None,
+                    }
+                )
+                all_success = False
+                break
+
+            step_result = response.data
+            results.append(step_result)
+            if not step_result.get("success", False):
+                all_success = False
+                break
 
         async with _debug_lock:
-            _debug_session.results.extend(agg["results"])
-            _debug_session.current_step = len(_debug_session.steps)
+            _debug_session.results.extend(results)
+            _debug_session.current_step = (
+                len(_debug_session.steps) if all_success else from_idx + len(results)
+            )
             _debug_session._last_activity = time.monotonic()
-
-            if agg["results"]:
-                _debug_session.screenshot_url = agg["results"][-1].get(
-                    "screenshot_url"
-                )
-
+            if results:
+                _debug_session.screenshot_url = results[-1].get("screenshot_url")
             return _debug_response()
 
 

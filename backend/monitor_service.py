@@ -17,6 +17,7 @@ from typing import Any
 from fastapi import WebSocket
 
 from src.monitor_core import NetworkMonitorCore
+from src.playwright_worker import get_worker, CMD_LOGIN
 from src.network_test import is_network_available
 from src.utils import ConfigValidator
 from src.utils.logging import get_logger
@@ -236,21 +237,21 @@ class MonitorService:
         if safe_mode:
             config.setdefault("browser_settings", {})["safe_mode"] = True
 
-        core = NetworkMonitorCore(
-            config=config,
-            log_callback=self._push_log,
-            thread_done=threading.Event(),
-        )
+        # 通过 Worker 派发登录，替代临时 NetworkMonitorCore 实例
+        login_timeout = getattr(self._ui_config, "login_timeout", 120)
         try:
-            success, message = core.attempt_login()
-            cmd.response_data = (success, message)
+            result = get_worker().submit(
+                CMD_LOGIN,
+                data={"config": config, "safe_mode": safe_mode},
+                timeout=login_timeout,
+            )
+            if result.success:
+                cmd.response_data = (True, result.data)
+            else:
+                cmd.response_data = (False, result.error or "登录失败")
         except Exception as exc:
             service_logger.exception("Manual login failed with exception")
             cmd.response_data = (False, str(exc))
-        finally:
-            # 清理：attempt_login() 内部已关闭事件循环和浏览器，
-            # 此处仅需置空 handler 防止悬空引用
-            core._login_handler = None
 
         if cmd.response_event:
             cmd.response_event.set()

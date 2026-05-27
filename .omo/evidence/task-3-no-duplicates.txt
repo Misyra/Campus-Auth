@@ -1,0 +1,12 @@
+=== QA Evidence: No duplicate inline scripts ===
+
+Verification method: Searched for "Object.defineProperty(navigator.*webdriver"
+- This string appears in the inline script and would match old duplicates
+
+Result: Only 1 match found (in src/utils/browser.py:17)
+  - That's inside the STEALTH_INIT_SCRIPT constant definition — the single source of truth
+  - NO matches in backend/main.py (inline script was replaced with constant reference)
+
+Both callers now reference the constant:
+  src/utils/browser.py:154  add_init_script(STEALTH_INIT_SCRIPT)
+  backend/main.py:272       add_init_script(STEALTH_INIT_SCRIPT)

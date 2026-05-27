@@ -23,6 +23,7 @@ import subprocess
 import sys
 import threading
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 
@@ -36,6 +37,8 @@ CMD_DEBUG_START = "debug_start"  # 启动调试会话
 CMD_DEBUG_STEP = "debug_step"  # 调试下一步
 CMD_DEBUG_STOP = "debug_stop"  # 停止调试会话
 CMD_BROWSER_HEALTH_CHECK = "browser_health_check"  # 浏览器健康检查
+CMD_BROWSER_ACQUIRE = "browser_acquire"  # 获取/确保浏览器就绪（供外部线程使用 submit 调用）
+CMD_BROWSER_RELEASE = "browser_release"  # 释放浏览器引用（浏览器常驻 Worker 不实际关闭）
 CMD_SHUTDOWN = "shutdown"  # 关闭 Worker
 
 
@@ -84,6 +87,7 @@ class PlaywrightWorker:
         self._context: Any = None
         self._page: Any = None
         self._debug_page: Any = None
+        self._debug_executor: Any = None  # TaskExecutor 实例，调试步骤执行时在 Worker 线程内使用
 
         # 取消事件桥接: threading.Event → asyncio.Event
         # _cancel_async 由 _bridge_cancel 在检测到外部的
@@ -291,6 +295,10 @@ class PlaywrightWorker:
                 result = await self._handle_debug_step(cmd.data)
             elif cmd.type == CMD_DEBUG_STOP:
                 result = await self._handle_debug_stop()
+            elif cmd.type == CMD_BROWSER_ACQUIRE:
+                result = await self._handle_browser_acquire(cmd.data)
+            elif cmd.type == CMD_BROWSER_RELEASE:
+                result = await self._handle_browser_release()
             elif cmd.type == CMD_BROWSER_HEALTH_CHECK:
                 result = await self._handle_health_check()
             elif cmd.type == CMD_SHUTDOWN:
@@ -355,10 +363,20 @@ class PlaywrightWorker:
     async def _handle_debug_start(self, data: dict) -> WorkerResponse:
         """启动调试会话。
 
-        在共享浏览器（或新浏览器）中打开调试页面。
-        加载指定的任务 URL，存储调试页面引用供后续命令使用。
+        在 Worker 线程内管理浏览器生命周期：
+        1. 健康检查 → 不健康则重建浏览器
+        2. 导航到任务 URL
+        3. 创建 TaskExecutor（线程安全 — 所有 Playwright 操作在 Worker 线程内执行）
+        4. 初始截图并返回 URL
         """
+        from src.task_executor import TaskConfig, TaskExecutor
+
         config = data.get("config", {})
+        task_url = data.get("task_url", "")
+        task_data = data.get("task_data", {})
+        env_vars = data.get("env_vars", {})
+        screenshot_dir = data.get("screenshot_dir", "")
+        default_timeout = data.get("default_timeout", 10000)
 
         # 检查浏览器健康状态，不健康则重建
         if not await self._health_check():
@@ -372,24 +390,63 @@ class PlaywrightWorker:
 
         # 保存调试页面引用
         self._debug_page = self._page
+        self._debug_executor = None
 
         # 加载任务页面
-        task_url = data.get("task_url", "")
         if task_url:
             try:
-                await self._page.goto(task_url, timeout=30000)
+                await self._page.goto(task_url, wait_until="domcontentloaded", timeout=30000)
             except Exception as e:
                 logger.warning("调试页面加载失败: %s", e)
 
+        # 创建 TaskExecutor（在 Worker 线程内，page 对象安全）
+        if task_data:
+            try:
+                task_config = TaskConfig.from_dict(task_data)
+                executor = TaskExecutor(
+                    task_config,
+                    env_vars,
+                    screenshot_dir=Path(screenshot_dir) if screenshot_dir else None,
+                    default_timeout=default_timeout,
+                )
+                self._debug_executor = executor
+            except Exception as e:
+                logger.error("创建 TaskExecutor 失败: %s", e)
+                return WorkerResponse(
+                    success=False, error=f"创建任务执行器失败: {e}"
+                )
+
+        # 初始截图
+        screenshot_url = None
+        if self._debug_page and not self._debug_page.is_closed():
+            try:
+                from datetime import datetime
+
+                stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                task_id = (
+                    (task_data.get("task_id") or "debug")
+                    if isinstance(task_data, dict)
+                    else "debug"
+                )
+                filename = f"{task_id}_init_{stamp}.png"
+                ss_dir = Path(screenshot_dir) if screenshot_dir else Path(".")
+                ss_dir.mkdir(parents=True, exist_ok=True)
+                local_path = str(ss_dir / filename)
+                await self._debug_page.screenshot(path=local_path, full_page=True)
+                screenshot_url = f"/temp/{filename}"
+            except Exception as e:
+                logger.warning("初始截图失败: %s", e)
+
         return WorkerResponse(
-            success=True, data="调试会话已启动，浏览器页面已就绪"
+            success=True,
+            data={"screenshot_url": screenshot_url},
         )
 
     async def _handle_debug_step(self, data: dict) -> WorkerResponse:
         """执行调试下一步。
 
-        当前为桩实现（返回成功），后续 Wave 3 接入 TaskExecutor
-        逐步骤执行任务。
+        在 Worker 线程内调用 TaskExecutor.execute_step_at()，
+        page 对象仅在 Worker 线程内访问，避免跨线程竞争。
         """
         if self._debug_page is None:
             return WorkerResponse(
@@ -400,18 +457,38 @@ class PlaywrightWorker:
             return WorkerResponse(
                 success=False, error="调试页面已关闭"
             )
+        if self._debug_executor is None:
+            return WorkerResponse(
+                success=False, error="调试执行器未创建，请重新启动调试"
+            )
 
         step_index = data.get("step_index", 0)
         logger.info("调试下一步: step_index=%d", step_index)
-        # TODO: Wave 3 接入 TaskExecutor 逐步骤执行
-        return WorkerResponse(
-            success=True, data=f"调试步骤 {step_index} 已执行"
-        )
+
+        try:
+            # TaskExecutor.execute_step_at 在 Worker 线程内执行，
+            # page 对象安全访问，无需额外同步
+            result = await self._debug_executor.execute_step_at(
+                self._debug_page, step_index
+            )
+            return WorkerResponse(
+                success=result.get("success", False),
+                data=result,
+            )
+        except Exception as e:
+            logger.exception("调试步骤执行异常 (step_index=%d)", step_index)
+            return WorkerResponse(
+                success=False,
+                error=f"调试步骤执行异常: {e}",
+            )
 
     async def _handle_debug_stop(self) -> WorkerResponse:
-        """停止调试会话并关闭调试页面。"""
+        """停止调试会话并清理 Worker 内部状态。"""
+        # 清除调试执行器引用
+        self._debug_executor = None
+
+        # 关闭调试页面
         if self._debug_page is not None:
-            # 如果调试页面与主页面是同一个引用，需要同时清理
             if self._debug_page is self._page:
                 self._page = None
             try:
@@ -421,12 +498,41 @@ class PlaywrightWorker:
                 logger.warning("关闭调试页面异常: %s", e)
             self._debug_page = None
 
+        logger.info("调试会话已停止，Worker 内部状态已清理")
         return WorkerResponse(success=True, data="调试会话已停止")
 
     async def _handle_health_check(self) -> WorkerResponse:
         """处理浏览器健康检查命令。"""
         healthy = await self._health_check()
         return WorkerResponse(success=healthy, data=healthy)
+
+    async def _handle_browser_acquire(self, data: dict) -> WorkerResponse:
+        """处理浏览器获取命令（从 submit 队列派发）。
+
+        外部线程（非 Worker 事件循环）通过 submit(CMD_BROWSER_ACQUIRE)
+        调用此方法，确保 Worker 中的浏览器已就绪。
+        """
+        config = data.get("config", {})
+        await self.ensure_browser(config)
+        return WorkerResponse(success=True, data="Browser ready")
+
+    async def _handle_browser_release(self) -> WorkerResponse:
+        """处理浏览器释放命令。
+
+        浏览器常驻 Worker 生命周期内，不会实际关闭。
+        仅用于释放 BrowserContextManager 的引用计数。
+        """
+        return WorkerResponse(success=True, data="Browser released (alive in Worker)")
+
+    async def ensure_browser(self, config: dict) -> None:
+        """确保浏览器已就绪（可从 Worker 事件循环内直接调用）。
+
+        此方法供同线程调用者使用（如 BrowserContextManager），
+        外部调用应使用 CMD_BROWSER_ACQUIRE 命令通过 submit 队列派发。
+        """
+        if not await self._health_check():
+            await self._close_browser()
+            await self._start_browser(config)
 
     # ── 浏览器生命周期管理 ──
 
@@ -557,6 +663,9 @@ class PlaywrightWorker:
         仅记录 warning；其余异常记录为 ERROR。
         逻辑参考 BrowserContextManager._cleanup_browser() 的固定版本。
         """
+        # 清除调试执行器
+        self._debug_executor = None
+
         # 关闭调试页面
         if self._debug_page is not None:
             try:
@@ -619,6 +728,9 @@ class PlaywrightWorker:
         相比 _close_browser 更激进：跳过所有健康检查，直接关闭并置空引用。
         """
         logger.info("开始强制清理浏览器资源...")
+
+        # 清除调试执行器
+        self._debug_executor = None
 
         # 关闭调试页面
         if self._debug_page is not None:

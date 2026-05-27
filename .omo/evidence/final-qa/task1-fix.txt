@@ -1,0 +1,15 @@
+Task 1 - sys.exit(0) replacement check
+========================================
+Expected: line ~305 shows os._exit(0), lines 262/292 show sys.exit(0)
+
+Actual results (Select-String -Path app.py -Pattern "sys\.exit|os\._exit"):
+Line 187: sys.exit(0 if ok else 1)
+Line 191: sys.exit(0 if ok else 1)
+Line 214: sys.exit(1)
+Line 262: sys.exit(0)
+Line 292: sys.exit(0)
+Line 305: os._exit(0)  ← CORRECT: os._exit(0) per fix
+Line 338: (comment)
+Line 354: os._exit(0) (in on_exit lambda)
+
+Verdict: PASS - Line 305 correctly uses os._exit(0)

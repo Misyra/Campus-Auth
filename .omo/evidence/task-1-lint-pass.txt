@@ -1,0 +1,12 @@
+Task 1: Lint + Regression Check
+Date: 2026-05-24
+Result: PASS
+
+Commands:
+  1. uv run ruff check app.py → clean (exit 0)
+  2. uv run pytest tests/ → 337 passed, 0 failed
+
+Verification:
+  - app.py:305: sys.exit(0) → os._exit(0) in _signal_handler
+  - app.py:262, 292: sys.exit(0) unchanged (correct)
+  - import os already at line 7

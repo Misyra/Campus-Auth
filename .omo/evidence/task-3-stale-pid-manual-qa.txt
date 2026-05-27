@@ -1,0 +1,17 @@
+=== Test 1: Stale PID (non-existent, old format) ===
+PID file content: 99999999
+Status output: 服务疑似正在运行 (端口: 50721)
+PID file exists: False
+
+=== Test 2: Stale PID (non-existent, new format) ===
+Status output: 服务疑似正在运行 (端口: 50721)
+PID file exists: False
+
+=== Test 3: Real process (explorer.exe, name matches) ===
+Status output: 服务正在运行 (PID: 11340)
+PID file exists: True
+
+=== Test 4: Real PID but name mismatch ===
+Status output: 服务疑似正在运行 (端口: 50721)
+PID file exists: False
+

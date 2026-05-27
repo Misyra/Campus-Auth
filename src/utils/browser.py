@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-浏览器上下文管理器
+浏览器上下文管理器 — Worker 代理模式
+
+浏览器生命周期现由 PlaywrightWorker（src/playwright_worker.py）管理。
+BrowserContextManager 作为轻量代理:
+
+- __aenter__: 通过 Worker 确保浏览器已就绪，获取浏览器对象引用
+- __aexit__: 通知 Worker 释放引用（浏览器常驻 Worker 不实际关闭）
+- Worker 线程内浏览器对象可通过 Worker 的内部状态直接访问（同线程安全）
+
+原始的直接管理路径（_start_browser / _cleanup_browser）已弃用，
+仅保留为降级回退的桩方法。
 """
 
 import json
@@ -82,89 +92,73 @@ class BrowserContextManager:
         self.context = None
         self.page = None
 
+        # Worker 管理模式标志 — True 时表示浏览器由 Worker 管理生命周期
+        self._worker_managed = False
+
     def _is_cancelled(self) -> bool:
         return self.cancel_event is not None and self.cancel_event.is_set()
 
     async def __aenter__(self):
-        """异步上下文管理器入口"""
+        """异步上下文管理器入口 — 通过 Worker 获取浏览器
+
+        Worker 管理浏览器生命周期，不再直接调用 _start_browser()。
+        从 Worker 获取浏览器对象引用（同线程安全，因为 LoginAttemptHandler
+        始终在 Worker 的事件循环线程中执行）。
+        """
         if self._is_cancelled():
             raise LoginCancelledError("浏览器启动已取消")
-        await self._start_browser()
+
+        from src.playwright_worker import get_worker
+
+        worker = get_worker()
+        # 确保 Worker 中的浏览器已就绪（直接调用，同一事件循环线程）
+        await worker.ensure_browser(self.config)
+
+        # 从 Worker 获取浏览器对象引用（同线程，安全）
+        self._worker_managed = True
+        self.playwright = worker._playwright
+        self.browser = worker._browser
+        self.context = worker._context
+        self.page = worker._page
+
+        self.logger.info("浏览器已通过 Worker 就绪")
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """异步上下文管理器出口 - 确保资源总是被释放"""
-        await self._cleanup_browser()
+        """异步上下文管理器出口 - 通知 Worker 释放浏览器引用
+
+        浏览器常驻 Worker 生命周期内，不会实际关闭。
+        向 Worker 提交 CMD_BROWSER_RELEASE（fire-and-forget）即可。
+        """
+        self._worker_managed = True
+
+        # 通知 Worker 释放引用（无需等待结果）
+        from src.playwright_worker import get_worker, CMD_BROWSER_RELEASE
+
+        worker = get_worker()
+        worker.submit(CMD_BROWSER_RELEASE, wait=False)
+
+        # 清空本地引用
+        self.playwright = None
+        self.browser = None
+        self.context = None
+        self.page = None
+
         # 如果有异常，记录但不抑制
         if exc_type:
             self.logger.error(f"浏览器操作异常: {exc_type.__name__}: {exc_val}")
         return False  # 不抑制异常
 
     async def _start_browser(self) -> None:
-        """启动浏览器（内部方法）"""
-        try:
-            from playwright.async_api import async_playwright
-
-            self.playwright = await async_playwright().start()
-            headless = self.browser_settings.get("headless", True)
-            safe_mode = self.browser_settings.get("safe_mode", False)
-
-            if safe_mode:
-                self.logger.info("启动浏览器 (安全模式, headless=%s)", headless)
-                self.browser = await self.playwright.chromium.launch(headless=headless)
-                self.context = await self.browser.new_context(
-                    viewport={"width": 1280, "height": 720},
-                )
-            else:
-                low_resource = bool(
-                    self.browser_settings.get("low_resource_mode", False)
-                )
-                browser_args = self._get_browser_args()
-                self.logger.info(
-                    "启动浏览器 (headless=%s, low_resource=%s, args=%d)",
-                    headless,
-                    low_resource,
-                    len(browser_args),
-                )
-                self.browser = await self.playwright.chromium.launch(
-                    headless=headless, args=browser_args
-                )
-                extra_headers = self._get_extra_http_headers()
-                ua = (self.browser_settings.get("user_agent") or "").strip()
-                ctx_opts: dict = {
-                    "viewport": {"width": 1280, "height": 720},
-                    "extra_http_headers": extra_headers,
-                    "locale": self.browser_settings.get(
-                        "locale", "zh-CN"
-                    ),  # 从配置中读取语言区域
-                    "timezone_id": self.browser_settings.get(
-                        "timezone_id", "Asia/Shanghai"
-                    ),  # 从配置中读取时区
-                    "has_touch": False,
-                    "color_scheme": "light",
-                    "ignore_https_errors": self.browser_settings.get(
-                        "ignore_https_errors", True
-                    ),
-                }
-                if ua:
-                    ctx_opts["user_agent"] = ua
-                    self.logger.info("使用自定义 UA: %s...", ua[:80])
-                if extra_headers:
-                    self.logger.info("注入自定义请求头: %d 项", len(extra_headers))
-                self.context = await self.browser.new_context(**ctx_opts)
-                if low_resource:
-                    await self.context.route("**/*", self._handle_low_resource_request)
-
-            self.page = await self.context.new_page()
-            # 反检测脚本（默认关闭，需在方案设置中启用 stealth_mode）
-            if self.browser_settings.get("stealth_mode", False):
-                await self.page.add_init_script(STEALTH_INIT_SCRIPT)
-            self.logger.info("浏览器启动完成")
-
-        except Exception as e:
-            self.logger.error("启动浏览器失败: %s", e)
-            await self._cleanup_browser()
-            raise
+        """[已弃用] 浏览器生命周期现由 Worker 管理，此方法不再使用"""
+        self.logger.warning(
+            "_start_browser 已弃用，浏览器由 PlaywrightWorker 管理"
+        )
+        # 若 Worker 管理标志已设置但此方法仍被调用（降级回退），
+        # 输出警告后直接返回，不执行任何浏览器操作
+        if self._worker_managed:
+            return
+        self.logger.warning("_start_browser 被调用但 Worker 不可用（空操作）")
 
     def _get_browser_args(self) -> list[str]:
         """获取浏览器启动参数：基础优化 + 用户自定义"""
@@ -216,64 +210,15 @@ class BrowserContextManager:
         await route.continue_()
 
     async def _cleanup_browser(self) -> None:
-        """清理浏览器资源（内部方法）"""
-        cleanup_errors = []
-
-        # 关闭页面：页面可能因浏览器断开而自动关闭，
-        # TargetClosedError 属于正常清理场景，其余异常记录为 ERROR
-        try:
-            if self.page:
-                await self.page.close()
-                self.page = None
-        except Exception as e:
-            err_msg = str(e).lower()
-            if "target closed" in err_msg or "connection closed" in err_msg:
-                self.logger.warning(f"关闭页面时连接已断开（正常）: {e}")
-            else:
-                self.logger.error(f"关闭页面异常: {e}")
-                cleanup_errors.append(f"关闭页面失败: {e}")
-
-        # 关闭上下文：与 page 采用相同的异常处理策略
-        try:
-            if self.context:
-                await self.context.close()
-                self.context = None
-        except Exception as e:
-            err_msg = str(e).lower()
-            if "target closed" in err_msg or "connection closed" in err_msg:
-                self.logger.warning(f"关闭上下文时连接已断开（正常）: {e}")
-            else:
-                self.logger.error(f"关闭上下文异常: {e}")
-                cleanup_errors.append(f"关闭上下文失败: {e}")
-
-        # 关闭浏览器：先通过 is_connected() 健康检查，
-        # 确认浏览器实例仍存活再发起关闭，避免对已断开的实例误操作
-        try:
-            if self.browser and self.browser.is_connected():
-                await self.browser.close()
-                self.browser = None
-            elif self.browser:
-                # 浏览器已断开，无需 close 操作
-                self.logger.debug("浏览器已断开连接，跳过 close")
-                self.browser = None
-        except Exception as e:
-            # is_connected() 通过后仍失败属于意外异常
-            self.logger.error(f"关闭浏览器异常: {e}")
-            cleanup_errors.append(f"关闭浏览器失败: {e}")
-
-        # 停止 Playwright 服务
-        try:
-            if self.playwright:
-                await self.playwright.stop()
-                self.playwright = None
-        except Exception as e:
-            self.logger.error(f"停止 Playwright 失败: {e}")
-            cleanup_errors.append(f"停止 Playwright 失败: {e}")
-
-        # 汇总所有意外异常，记录为 warning（仍不抛出以避免中断调用方）
-        if cleanup_errors:
-            self.logger.warning(
-                f"浏览器资源清理时出现错误: {'; '.join(cleanup_errors)}"
-            )
-        else:
-            self.logger.debug("浏览器资源已完全清理")
+        """[已弃用] 浏览器清理由 Worker 管理，此方法不再使用"""
+        self.logger.warning(
+            "_cleanup_browser 已弃用，浏览器由 PlaywrightWorker 管理"
+        )
+        # 若 Worker 管理标志已设置，清空本地引用后直接返回
+        if self._worker_managed:
+            self.playwright = None
+            self.browser = None
+            self.context = None
+            self.page = None
+            return
+        self.logger.warning("_cleanup_browser 被调用但 Worker 不可用（空操作）")
