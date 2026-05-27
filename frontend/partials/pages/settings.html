@@ -164,7 +164,7 @@
                 class="field-help"
                 tabindex="0"
                 role="note"
-                data-tip="用于 TCP 探测的目标地址，支持 host 或 host:port 格式，多个目标用英文逗号分隔。任一目标可达即判定网络正常。"
+                data-tip="用于 TCP 检测的目标地址，支持 host 或 host:port 格式，多个目标用英文逗号分隔。任一目标可达即判定网络正常。"
               >?</span>
             </div>
             <input
@@ -176,8 +176,8 @@
           </div>
           <div class="form-group">
             <div class="field-label-row">
-              <label for="settings-network-check-timeout">探测超时（秒）</label>
-              <span class="field-help" tabindex="0" role="note" data-tip="网络探测的超时时间。如果网络较慢或经常误判为断网，可以适当增大此值。默认 2 秒，范围 1~30 秒。">?</span>
+              <label for="settings-network-check-timeout">检测超时（秒）</label>
+              <span class="field-help" tabindex="0" role="note" data-tip="网络检测的超时时间。如果网络较慢或经常误判为断网，可以适当增大此值。默认 2 秒，范围 1~30 秒。">?</span>
             </div>
             <input
               id="settings-network-check-timeout"
@@ -192,7 +192,7 @@
 
       <section class="card settings-panel">
         <div class="card-header">
-          <h2>探测方式</h2>
+          <h2>检测方式</h2>
           <span class="field-help" tabindex="0" role="note" data-tip="至少启用一种。多种同时启用时并发执行，必须全部通过才算联网正常。">?</span>
         </div>
         <div class="card-body">
@@ -201,7 +201,7 @@
               <label class="toggle toggle-help-inline">
                 <input type="checkbox" v-model="config.enable_tcp_check" />
                 <span class="toggle-slider"></span>
-                <span class="toggle-label">TCP 探测</span>
+                <span class="toggle-label">TCP 检测</span>
                 <span class="field-help" tabindex="0" role="note" data-tip="通过 TCP 连接外部站点（如 8.8.8.8:53）检测网络连通性。适用于大多数校园网。">?</span>
               </label>
             </div>
@@ -209,7 +209,7 @@
               <label class="toggle toggle-help-inline">
                 <input type="checkbox" v-model="config.enable_http_check" />
                 <span class="toggle-slider"></span>
-                <span class="toggle-label">HTTP 探测</span>
+                <span class="toggle-label">HTTP 检测</span>
                 <span class="field-help" tabindex="0" role="note" data-tip="通过 HTTP 请求外部站点检测网络连通性。">?</span>
               </label>
             </div>
@@ -217,14 +217,14 @@
               <label class="toggle toggle-help-inline">
                 <input type="checkbox" v-model="portalCheckEnabled" />
                 <span class="toggle-slider"></span>
-                <span class="toggle-label">Captive Portal 探测</span>
+                <span class="toggle-label">Captive Portal 检测</span>
                 <span class="field-help" tabindex="0" role="note" data-tip="通过访问 captive portal 检测地址判断网络是否需要认证。能准确识别被门户劫持的网络。">?</span>
               </label>
             </div>
           </div>
           <div v-if="portalCheckEnabled" class="form-group">
             <div class="field-label-row">
-              <label for="settings-portal-urls">Portal 探测地址</label>
+              <label for="settings-portal-urls">Portal 检测地址</label>
               <span class="field-help" tabindex="0" role="note" data-tip="每行一个，格式：URL|预期内容。响应内容包含预期文本则判定网络正常。">?</span>
             </div>
             <textarea

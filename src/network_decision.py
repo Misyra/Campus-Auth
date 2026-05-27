@@ -32,9 +32,9 @@ def is_network_available(
 
     enable_portal = bool(portal_checks)
 
-    # 所有探测都未启用时，视为网络正常（不做额外判断）
+    # 所有检测都未启用时，视为网络正常（不做额外判断）
     if not enable_tcp and not enable_http and not enable_portal:
-        logger.info("所有网络探测均未启用，跳过网络可用性检测")
+        logger.warning("所有网络检测均未启用（TCP/HTTP/Captive Portal），请在设置中启用至少一种检测方式")
         return True
 
     urls_list = list(test_urls or ())
@@ -48,7 +48,7 @@ def is_network_available(
         len(portal_checks or ()),
     )
 
-    # 所有启用的探测并发执行，降低总检测延时
+    # 所有启用的检测并发执行，降低总检测延时
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     socket_ok = http_ok = portal_ok = True
@@ -78,7 +78,7 @@ def is_network_available(
             try:
                 ok = future.result()
             except Exception as exc:
-                logger.debug("探测 %s 异常: %s", kind, exc)
+                logger.debug("检测 %s 异常: %s", kind, exc)
                 ok = False
             if kind == "tcp":
                 socket_ok = ok
@@ -87,7 +87,7 @@ def is_network_available(
             elif kind == "portal":
                 portal_ok = ok
 
-    # 所有启用的探测必须都通过才判定网络正常
+    # 所有启用的检测必须都通过才判定网络正常
     result = (
         (socket_ok or not enable_tcp)
         and (http_ok or not enable_http)
@@ -149,7 +149,7 @@ def should_attempt_login(config: dict) -> tuple[bool, str]:
         logger.warning("物理网络未连接，跳过登录")
         return (False, "network_disconnected")
 
-    # 3. 网络可用性检查（根据配置选择探测方式）
+    # 3. 网络可用性检查（根据配置选择检测方式）
     monitor_config = config.get("monitor", {})
     enable_tcp = monitor_config.get("enable_tcp_check", True)
     enable_http = monitor_config.get("enable_http_check", True)

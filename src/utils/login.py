@@ -16,7 +16,6 @@ from .browser import BrowserContextManager
 from .env import build_login_env_vars
 from .exceptions import LoginCancelledError
 from .logging import setup_logger
-from .network_helpers import parse_host_port
 
 if False:  # Type-only import to avoid circular dependency at runtime
     from ..task_executor import TaskManager
@@ -186,14 +185,11 @@ class LoginAttemptHandler:
                     "timeout", 10000
                 )
 
-                # 构建网络检测配置，传递给 TaskExecutor 用于成功判断
-                network_test_config = self._build_network_test_config()
-
                 executor = TaskExecutor(
                     task,
                     env_vars,
                     default_timeout=browser_timeout,
-                    network_test_config=network_test_config,
+                    monitor_config=self.config.get("monitor", {}),
                 )
                 # 监听页面 alert/confirm/prompt，记录内容并延迟关闭让用户看到
                 # 每次执行后清理监听器，避免浏览器复用时监听器泄漏
@@ -229,22 +225,6 @@ class LoginAttemptHandler:
             total = _time.perf_counter() - phase_start
             self.logger.error("登录异常 (总耗时 %.1fs): %s", total, e)
             return False, f"任务执行异常: {e}"
-
-    def _build_network_test_config(self) -> dict:
-        """构建网络检测配置，供 TaskExecutor 成功判断使用。"""
-        monitor = self.config.get("monitor", {})
-        targets = monitor.get("ping_targets", [])
-        if isinstance(targets, str):
-            targets = [item.strip() for item in targets.split(",") if item.strip()]
-
-        test_sites = parse_host_port(targets)
-
-        return {
-            "test_sites": test_sites if test_sites else None,
-            "timeout": monitor.get("network_check_timeout", 2),
-            "enable_tcp_check": monitor.get("enable_tcp_check", True),
-            "enable_http_check": monitor.get("enable_http_check", True),
-        }
 
     async def close_browser(self) -> None:
         """关闭浏览器（登录成功或监控停止时调用）"""
