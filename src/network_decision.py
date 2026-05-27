@@ -102,12 +102,13 @@ def is_auth_url_reachable(auth_url: str) -> bool:
 
 
 def should_attempt_login(config: dict) -> tuple[bool, str]:
-    """编排完整的登录前检查流程。
+    """判断网络是否异常、是否需要尝试登录。
+
+    仅检查网络连通性，不检查认证地址可达性（认证地址检查在登录前进行）。
 
     返回 (should_login, reason) 元组：
         (False, "pause_period")          — 当前处于暂停时段
         (False, "network_disconnected")  — 物理网络未连接
-        (False, "auth_url_unreachable")  — 认证地址不可达
         (False, "network_ok")            — 网络正常，无需登录
         (True, "")                       — 网络异常，可以尝试登录
     """
@@ -122,15 +123,8 @@ def should_attempt_login(config: dict) -> tuple[bool, str]:
         logger.warning("物理网络未连接，跳过登录")
         return (False, "network_disconnected")
 
-    # 3. 认证地址可达性检查（可配置关闭）
+    # 3. 网络可用性检查（根据配置选择探测方式）
     monitor_config = config.get("monitor", {})
-    check_auth_url = monitor_config.get("check_auth_url", True)
-    auth_url = config.get("auth_url", "")
-    if check_auth_url and not is_auth_url_reachable(auth_url):
-        logger.warning("认证地址不可达，跳过登录")
-        return (False, "auth_url_unreachable")
-
-    # 4. 网络可用性检查（根据配置选择探测方式）
     enable_tcp = monitor_config.get("enable_tcp_check", True)
     enable_http = monitor_config.get("enable_http_check", True)
     test_sites = monitor_config.get("ping_targets", None)
@@ -151,7 +145,7 @@ def should_attempt_login(config: dict) -> tuple[bool, str]:
         logger.info("网络正常，无需登录")
         return (False, "network_ok")
 
-    # 5. 网络异常，可以尝试登录
+    # 4. 网络异常，可以尝试登录
     logger.info("网络异常，准备登录")
     return (True, "")
 
