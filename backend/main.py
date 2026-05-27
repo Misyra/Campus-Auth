@@ -218,13 +218,13 @@ class DebugSession:
         self.page = None  # 向后兼容标记，实际 page 由 Worker 管理
 
     async def start(
-        self, runtime_config: dict, url: str | None, safe_mode: bool = False
+        self, runtime_config: dict, url: str | None, pure_mode: bool = False
     ) -> None:
         """启动调试会话 — 委托 Worker 处理浏览器初始化。"""
         data = {
             "config": runtime_config,
             "task_url": url or "",
-            "safe_mode": safe_mode,
+            "pure_mode": pure_mode,
         }
         response = await asyncio.to_thread(
             lambda: get_worker().submit(CMD_DEBUG_START, data=data)
@@ -682,23 +682,23 @@ def repo_fetch_task(url: str = Query(..., description="任务 JSON 地址")) -> 
         raise HTTPException(status_code=502, detail=f"获取任务失败: {exc}") from exc
 
 
-# ==================== 安全模式 API ====================
+# ==================== 纯净模式 API ====================
 
 
-@app.get("/api/safe-mode")
-def get_safe_mode() -> dict:
-    return {"enabled": service.safe_mode}
+@app.get("/api/pure-mode")
+def get_pure_mode() -> dict:
+    return {"enabled": service.pure_mode}
 
 
-@app.post("/api/safe-mode")
-def toggle_safe_mode() -> dict:
+@app.post("/api/pure-mode")
+def toggle_pure_mode() -> dict:
     try:
-        new_value = service.toggle_safe_mode()
-        api_logger.info("Safe mode toggled -> %s", new_value)
+        new_value = service.toggle_pure_mode()
+        api_logger.info("纯净模式已切换 -> %s", new_value)
         return {"enabled": new_value}
     except Exception as exc:
-        api_logger.error("切换安全模式失败: %s", exc)
-        raise HTTPException(status_code=500, detail=f"切换安全模式失败: {exc}")
+        api_logger.error("切换纯净模式失败: %s", exc)
+        raise HTTPException(status_code=500, detail=f"切换纯净模式失败: {exc}")
 
 
 # ==================== 调试 API ====================

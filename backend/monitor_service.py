@@ -129,7 +129,7 @@ class MonitorService:
         self._monitor_core: NetworkMonitorCore | None = None
         self._monitor_thread: threading.Thread | None = None
         self._thread_done = threading.Event()
-        self.safe_mode: bool = self._profile_service.load().system.safe_mode
+        self.pure_mode: bool = self._profile_service.load().system.pure_mode
 
         # Actor model: command dispatch queue (replaces RLock + cross-thread asyncio)
         self._cmd_queue: queue.Queue[MonitorCommand] = queue.Queue(maxsize=50)
@@ -196,9 +196,9 @@ class MonitorService:
             self._push_log("监控线程已在运行，忽略重复启动", level="WARNING", source="backend.monitor_service")
             return
         config = cmd.data.get("config", self._runtime_config.copy())
-        safe_mode = cmd.data.get("safe_mode", self.safe_mode)
-        if safe_mode:
-            config.setdefault("browser_settings", {})["safe_mode"] = True
+        pure_mode = cmd.data.get("pure_mode", self.pure_mode)
+        if pure_mode:
+            config.setdefault("browser_settings", {})["pure_mode"] = True
         self._thread_done.clear()
         core = NetworkMonitorCore(
             config=config,
@@ -240,10 +240,10 @@ class MonitorService:
     def _handle_login(self, cmd: MonitorCommand) -> None:
         """执行一次性登录尝试（仅在消费者线程中调用）。"""
         config = cmd.data.get("config", self._runtime_config.copy())
-        safe_mode = cmd.data.get("safe_mode", self.safe_mode)
+        pure_mode = cmd.data.get("pure_mode", self.pure_mode)
         skip_pause_check = cmd.data.get("skip_pause_check", False)
-        if safe_mode:
-            config.setdefault("browser_settings", {})["safe_mode"] = True
+        if pure_mode:
+            config.setdefault("browser_settings", {})["pure_mode"] = True
 
         # 通过 Worker 派发登录，替代临时 NetworkMonitorCore 实例
         login_timeout = getattr(self._ui_config, "login_timeout", 120)
@@ -252,7 +252,7 @@ class MonitorService:
                 CMD_LOGIN,
                 data={
                     "config": config,
-                    "safe_mode": safe_mode,
+                    "pure_mode": pure_mode,
                     "skip_pause_check": skip_pause_check,
                 },
                 timeout=login_timeout,
@@ -282,9 +282,9 @@ class MonitorService:
 
         self._handle_stop()
 
-        safe_mode = cmd.data.get("safe_mode", self.safe_mode)
-        if safe_mode:
-            new_config.setdefault("browser_settings", {})["safe_mode"] = True
+        pure_mode = cmd.data.get("pure_mode", self.pure_mode)
+        if pure_mode:
+            new_config.setdefault("browser_settings", {})["pure_mode"] = True
 
         self._thread_done.clear()
         core = NetworkMonitorCore(
@@ -488,7 +488,7 @@ class MonitorService:
                     data={
                         "profile": profile_name,
                         "config": self._runtime_config.copy(),
-                        "safe_mode": self.safe_mode,
+                        "pure_mode": self.pure_mode,
                     },
                 )
             )
@@ -510,7 +510,7 @@ class MonitorService:
         config = self._runtime_config.copy()
         self._cmd_queue.put(
             MonitorCommand(
-                type="start", data={"config": config, "safe_mode": self.safe_mode}
+                type="start", data={"config": config, "pure_mode": self.pure_mode}
             )
         )
 
@@ -565,7 +565,7 @@ class MonitorService:
                 type="login",
                 data={
                     "config": runtime_config,
-                    "safe_mode": self.safe_mode,
+                    "pure_mode": self.pure_mode,
                     "skip_pause_check": True,
                 },
                 response_event=threading.Event(),
@@ -641,14 +641,14 @@ class MonitorService:
             return snapshot
         return snapshot[-limit:]
 
-    def toggle_safe_mode(self) -> bool:
-        """切换安全模式，返回新值"""
+    def toggle_pure_mode(self) -> bool:
+        """切换纯净模式，返回新值"""
         with self._login_lock:
-            new_value = not self.safe_mode
+            new_value = not self.pure_mode
             data = self._profile_service.load()
-            data.system.safe_mode = new_value
+            data.system.pure_mode = new_value
             self._profile_service.save(data)
-            self.safe_mode = new_value
+            self.pure_mode = new_value
             return new_value
 
     def get_runtime_config(self) -> dict:

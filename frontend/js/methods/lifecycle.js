@@ -12,7 +12,7 @@ export const lifecycleMethods = {
       this.fetchTasks(),
       this.fetchActiveTask(),
       this.fetchProfiles(),
-      this.fetchSafeMode(),
+      this.fetchPureMode(),
       this.fetchBackups(),
     ]);
     this.isLoading = false;

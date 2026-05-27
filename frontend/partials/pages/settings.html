@@ -600,20 +600,37 @@
           <div class="toggle-group">
             <div class="toggle-with-help">
               <label class="toggle toggle-help-inline">
-                <input type="checkbox" v-model="safeMode" @change="toggleSafeMode()" />
+                <input type="checkbox" v-model="pureMode" @change="togglePureMode()" />
                 <span class="toggle-slider"></span>
                 <span class="toggle-label">纯净模式</span>
                 <span class="field-help" tabindex="0" role="note" data-tip="使用 Chromium 原始设置启动浏览器，不注入任何自定义参数（UA、请求头、启动参数等）。适用于认证系统检测浏览器指纹的场景，可降低被识别为自动化工具的风险。">?</span>
               </label>
             </div>
           </div>
-          <div v-if="safeMode" class="browser-safe-info">
+          <div v-if="pureMode" class="browser-safe-info">
             <p>纯净模式已开启，浏览器使用 Chromium 原始设置。关闭后可自定义以下高级选项。</p>
           </div>
-          <div v-if="!safeMode" class="browser-safe-info" style="border-color: rgba(255, 152, 0, 0.3); background: rgba(255, 152, 0, 0.06);">
+          <div v-if="!pureMode" class="browser-safe-info" style="border-color: rgba(255, 152, 0, 0.3); background: rgba(255, 152, 0, 0.06);">
             <p>纯净模式适配大部分环境。如果登录异常或无法打开网页，请尝试修改下方参数。</p>
           </div>
-          <template v-if="!safeMode">
+          <template v-if="!pureMode">
+            <div class="form-group">
+              <div class="field-label-row">
+                <label>浏览器视口尺寸</label>
+                <span class="field-help" tabindex="0" role="note" data-tip="浏览器窗口的宽度和高度（像素）。部分校园网认证页面在小分辨率下可能显示异常。">?</span>
+              </div>
+              <div style="display:flex;gap:12px;align-items:center;">
+                <div style="display:flex;align-items:center;gap:4px;">
+                  <label for="settings-vp-w" style="font-size:12px;color:var(--text-secondary);">宽</label>
+                  <input id="settings-vp-w" v-model.number="config.browser_viewport_width" type="number" min="320" max="3840" style="width:100px;" />
+                </div>
+                <span style="color:var(--text-secondary);">×</span>
+                <div style="display:flex;align-items:center;gap:4px;">
+                  <label for="settings-vp-h" style="font-size:12px;color:var(--text-secondary);">高</label>
+                  <input id="settings-vp-h" v-model.number="config.browser_viewport_height" type="number" min="240" max="2160" style="width:100px;" />
+                </div>
+              </div>
+            </div>
             <div class="form-group">
               <div class="field-label-row">
                 <label for="settings-browser-args">自定义浏览器参数</label>
