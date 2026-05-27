@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import datetime
 import logging
 import threading
@@ -554,8 +553,7 @@ class NetworkMonitorCore:
                 # 方案可能在检测后被删除，回退缓存状态
                 self._last_profile_id = self._profile_service.load().active_profile
                 self.log_message(f"方案切换失败: {msg}", logging.WARNING)
-
-            if self._on_profile_switch:
+            elif self._on_profile_switch:
                 self._on_profile_switch(profile_name)
 
     def attempt_login(self) -> tuple[bool, str]:
@@ -601,9 +599,6 @@ class NetworkMonitorCore:
             else:
                 self.log_message(f"登录失败 ✗ {message}", logging.ERROR)
             return success, message
-        except asyncio.TimeoutError as exc:
-            self.log_message(f"登录超时: {exc}", logging.WARNING)
-            return False, f"登录超时: {exc}"
         except ConnectionError as exc:
             self.log_message(f"登录连接错误: {exc}", logging.WARNING)
             return False, f"连接错误: {exc}"

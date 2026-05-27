@@ -496,7 +496,7 @@ class MonitorService:
                 )
             )
             self._push_log(
-                "监控已按新方案重启",
+                "监控正在按新方案重启",
                 level="INFO",
                 source="backend.monitor_service",
             )
