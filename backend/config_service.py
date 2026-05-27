@@ -70,7 +70,7 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
     不随活动方案变化。方案独立的覆盖值在方案页面单独管理。
     """
     data = profile_service.load()
-    sys = data.system
+    sys_cfg = data.system
     config_logger.debug("加载 UI 配置（全局）: active_profile=%s", data.active_profile)
 
     global_profile = data.profiles.get("default", ProfileSettings())
@@ -78,15 +78,15 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
     # 合并 sys 和 default 方案字段；重叠字段以 sys 为准（始终显示全局值）
     pld = {}
     pld.update(extract_profile_fields(global_profile.__dict__, PROFILE_FIELDS))
-    pld.update(extract_profile_fields(sys.__dict__, PROFILE_FIELDS))
+    pld.update(extract_profile_fields(sys_cfg.__dict__, PROFILE_FIELDS))
 
     # UI 专属覆盖
-    pld["password"] = mask_password(sys.password)
+    pld["password"] = mask_password(sys_cfg.password)
     pld["active_task"] = ""
     pld["use_global_credentials"] = True
     pld["network_targets"] = _normalize_targets(global_profile.network_targets)
-    pld["backend_log_level"] = _normalize_level(sys.backend_log_level)
-    pld["frontend_log_level"] = _normalize_level(sys.frontend_log_level)
+    pld["backend_log_level"] = _normalize_level(sys_cfg.backend_log_level)
+    pld["frontend_log_level"] = _normalize_level(sys_cfg.frontend_log_level)
 
     return MonitorConfigPayload(**pld)
 
@@ -98,12 +98,12 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
     确保运行时实际生效的配置与方案设置一致。
     """
     data = profile_service.load()
-    sys = data.system
+    sys_cfg = data.system
     profile = data.profiles.get(data.active_profile)
     config_logger.debug("加载运行时配置: profile=%s", data.active_profile)
 
     # 从系统设置作为基础
-    pld = extract_profile_fields(sys.__dict__, PROFILE_FIELDS)
+    pld = extract_profile_fields(sys_cfg.__dict__, PROFILE_FIELDS)
 
     # 账号密码：方案独立 > 全局；运行时使用解密明文
     use_global = True
@@ -114,8 +114,8 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
         if raw_pwd.startswith("ENC:"):
             pld["password"] = _safe_decrypt(raw_pwd)
         elif raw_pwd.startswith("•"):
-            if sys.password:
-                pld["password"] = _safe_decrypt(sys.password)
+            if sys_cfg.password:
+                pld["password"] = _safe_decrypt(sys_cfg.password)
             else:
                 config_logger.warning(
                     "方案 '%s' 密码为掩码但全局密码为空，无法解析",
@@ -125,15 +125,19 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
         elif raw_pwd:
             pld["password"] = raw_pwd
         else:
-            pld["password"] = _safe_decrypt(sys.password) if sys.password else ""
+            config_logger.warning(
+                "方案 '%s' 使用独立账号但密码为空，回退到全局密码",
+                data.active_profile,
+            )
+            pld["password"] = _safe_decrypt(sys_cfg.password) if sys_cfg.password else ""
     else:
-        pld["username"] = sys.username
-        pld["password"] = _safe_decrypt(sys.password) if sys.password else ""
+        pld["username"] = sys_cfg.username
+        pld["password"] = _safe_decrypt(sys_cfg.password) if sys_cfg.password else ""
     pld["use_global_credentials"] = use_global
 
     # 认证地址：跟随全局或使用方案独立值
     if not profile or profile.use_global_auth_url:
-        pld["auth_url"] = sys.auth_url
+        pld["auth_url"] = sys_cfg.auth_url
     else:
         pld["auth_url"] = profile.auth_url
 
@@ -143,10 +147,10 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
     else:
         pld["active_task"] = profile.active_task
 
-    # 运营商：跟随全局账号密码开关
+    # 运营商：跟随 use_global_credentials 标志
     if not profile or profile.use_global_credentials:
-        pld["carrier"] = sys.carrier
-        pld["carrier_custom"] = sys.carrier_custom
+        pld["carrier"] = sys_cfg.carrier
+        pld["carrier_custom"] = sys_cfg.carrier_custom
     else:
         pld["carrier"] = profile.carrier
         pld["carrier_custom"] = profile.carrier_custom
@@ -157,7 +161,7 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
         if profile and not profile.use_global_advanced
         else data.profiles.get("default", ProfileSettings())
     )
-    _CREDENTIAL_KEYS = {
+    _PROTECTED_KEYS = {
         "username", "password", "auth_url", "active_task",
         "carrier", "carrier_custom", "use_global_credentials",
         "backend_log_level", "frontend_log_level",
@@ -168,13 +172,13 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
             for k, v in extract_profile_fields(
                 adv_source.__dict__, PROFILE_FIELDS
             ).items()
-            if k not in _CREDENTIAL_KEYS
+            if k not in _PROTECTED_KEYS
         }
     )
 
     pld["network_targets"] = _normalize_targets(pld.get("network_targets", ""))
-    pld["backend_log_level"] = _normalize_level(sys.backend_log_level)
-    pld["frontend_log_level"] = _normalize_level(sys.frontend_log_level)
+    pld["backend_log_level"] = _normalize_level(sys_cfg.backend_log_level)
+    pld["frontend_log_level"] = _normalize_level(sys_cfg.frontend_log_level)
 
     return MonitorConfigPayload(**pld)
 
@@ -274,9 +278,6 @@ def build_runtime_config(
     return base
 
 
-def _save_password_field(raw: str, existing_encrypted: str) -> str:
-    """处理前端提交的密码：委托给 save_password_field"""
-    return save_password_field(raw, existing_encrypted)
 
 
 def save_config_combined(
@@ -289,17 +290,17 @@ def save_config_combined(
     方案页面的独立设置通过 /api/profiles/{id} 单独保存。
     """
     data = profile_service.load()
-    sys = data.system
+    sys_cfg = data.system
     active_id = data.active_profile
 
     # ── 更新系统设置（始终写入全局）──
     pwd_raw = payload.password.strip()
-    old_user = sys.username
-    sys.username = payload.username.strip()
-    sys.password = _save_password_field(pwd_raw, sys.password)
+    old_user = sys_cfg.username
+    sys_cfg.username = payload.username.strip()
+    sys_cfg.password = save_password_field(pwd_raw, sys_cfg.password)
     config_logger.info(
         "保存系统设置: 用户=%s (旧=%s), 密码=%s",
-        sys.username,
+        sys_cfg.username,
         old_user,
         "已更新" if (pwd_raw and not pwd_raw.startswith("•")) else "保留",
     )
@@ -307,7 +308,7 @@ def save_config_combined(
     # 直接映射的系统字段（无归一化处理）
     pld = payload.model_dump()
     assign_profile_fields(
-        sys.__dict__,
+        sys_cfg.__dict__,
         pld,
         [
             "access_log",
@@ -324,14 +325,14 @@ def save_config_combined(
         ],
     )
     # 需要归一化处理的系统字段
-    sys.auth_url = payload.auth_url.strip()
-    sys.carrier = str(payload.carrier or "无").strip()
-    sys.carrier_custom = str(payload.carrier_custom or "").strip()
-    sys.backend_log_level = _normalize_level(payload.backend_log_level)
-    sys.frontend_log_level = _normalize_level(payload.frontend_log_level)
-    sys.proxy = payload.proxy.strip()
+    sys_cfg.auth_url = payload.auth_url.strip()
+    sys_cfg.carrier = str(payload.carrier or "无").strip()
+    sys_cfg.carrier_custom = str(payload.carrier_custom or "").strip()
+    sys_cfg.backend_log_level = _normalize_level(payload.backend_log_level)
+    sys_cfg.frontend_log_level = _normalize_level(payload.frontend_log_level)
+    sys_cfg.proxy = payload.proxy.strip()
 
-    data.system = sys
+    data.system = sys_cfg
 
     # ── 更新 default 方案的高级设置（始终写入全局）──
     if "default" in data.profiles:
@@ -373,8 +374,8 @@ def save_config_combined(
     profile_service.save(data)
     config_logger.info(
         "配置已原子保存: system(user=%s, pwd=%s, auth=%s), active_profile=%s",
-        sys.username,
-        "ENC" if sys.password else "空",
-        sys.auth_url,
+        sys_cfg.username,
+        "ENC" if sys_cfg.password else "空",
+        sys_cfg.auth_url,
         active_id,
     )

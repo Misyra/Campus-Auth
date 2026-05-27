@@ -1,8 +1,9 @@
-import logging
 import os
 import tempfile
 
-logger = logging.getLogger(__name__)
+from src.utils.logging import get_logger
+
+logger = get_logger("file_helpers", side="BACKEND")
 
 
 def atomic_write(

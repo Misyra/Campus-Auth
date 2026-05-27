@@ -66,7 +66,7 @@ class NetworkMonitorCore:
         self.login_attempt_count = 0
         self.start_time: Optional[float] = None
         self.last_check_time: Optional[datetime.datetime] = None
-        # Last known connectivity result for UI status.
+        # 上次网络连通性检测结果（用于 UI 状态显示）
         self.last_network_ok: Optional[bool] = None
 
         self._stop_requested = False
@@ -378,7 +378,7 @@ class NetworkMonitorCore:
                     self.last_network_ok = False
                 # fall through to interval wait
             else:
-                # Execute login (network is down but login is possible)
+                # 执行登录（网络不可用但可以尝试认证）
                 recovery_result = self._login_recovery_loop()
                 if recovery_result == RecoveryResult.LOGIN_OK:
                     self.login_attempt_count = 0
@@ -390,7 +390,7 @@ class NetworkMonitorCore:
                     break
                 elif recovery_result == RecoveryResult.NET_DISCONNECT:
                     pass
-                # RecoveryResult.GIVE_UP → fall through to interval wait
+                # RecoveryResult.GIVE_UP → 跳出，进入正常检测间隔等待
 
             next_check = datetime.datetime.now() + datetime.timedelta(seconds=interval)
             self.log_message(

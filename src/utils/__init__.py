@@ -8,7 +8,7 @@ from .logging import (
     setup_logger,
 )
 from .login import LoginAttemptHandler
-from .time_utils import TimeUtils, get_runtime_stats
+from .time_utils import get_runtime_stats, is_in_pause_period
 
 
 def str_to_bool(value: str) -> bool:
@@ -21,8 +21,8 @@ __all__ = [
     "get_logger",
     "LogConfigCenter",
     "LoginCancelledError",
-    "TimeUtils",
     "get_runtime_stats",
+    "is_in_pause_period",
     "ConfigValidator",
     "BrowserContextManager",
     "LoginAttemptHandler",

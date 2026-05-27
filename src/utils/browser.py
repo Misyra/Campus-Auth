@@ -84,7 +84,7 @@ class BrowserContextManager:
         self.config = config
         self.cancel_event = cancel_event
         self.browser_settings = config.get("browser_settings", {})
-        self.logger = setup_logger(f"{__name__}_browser", config.get("logging", {}))
+        self.logger = setup_logger("browser", config.get("logging", {}))
 
         # 浏览器相关属性
         self.playwright = None
@@ -130,8 +130,6 @@ class BrowserContextManager:
         浏览器常驻 Worker 生命周期内，不会实际关闭。
         向 Worker 提交 CMD_BROWSER_RELEASE（fire-and-forget）即可。
         """
-        self._worker_managed = True
-
         # 通知 Worker 释放引用（无需等待结果）
         from src.playwright_worker import get_worker, CMD_BROWSER_RELEASE
 
@@ -147,78 +145,4 @@ class BrowserContextManager:
         # 如果有异常，记录但不抑制
         if exc_type:
             self.logger.error(f"浏览器操作异常: {exc_type.__name__}: {exc_val}")
-        return False  # 不抑制异常
-
-    async def _start_browser(self) -> None:
-        """[已弃用] 浏览器生命周期现由 Worker 管理，此方法不再使用"""
-        self.logger.warning(
-            "_start_browser 已弃用，浏览器由 PlaywrightWorker 管理"
-        )
-        # 若 Worker 管理标志已设置但此方法仍被调用（降级回退），
-        # 输出警告后直接返回，不执行任何浏览器操作
-        if self._worker_managed:
-            return
-        self.logger.warning("_start_browser 被调用但 Worker 不可用（空操作）")
-
-    def _get_browser_args(self) -> list[str]:
-        """获取浏览器启动参数：基础优化 + 用户自定义"""
-        args = [
-            "--no-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-gpu",
-            "--memory-pressure-off",
-        ]
-        if self.browser_settings.get("disable_web_security", False):
-            args.append("--disable-web-security")
-        if self.browser_settings.get("low_resource_mode", False):
-            args.append("--blink-settings=imagesEnabled=false")
-        # 用户自定义参数
-        custom = str(self.browser_settings.get("browser_args", "") or "").strip()
-        if custom:
-            for flag in custom.splitlines():
-                flag = flag.strip()
-                if flag and flag not in args:
-                    args.append(flag)
-        return args
-
-    def _get_extra_http_headers(self) -> dict[str, str]:
-        """返回用户自定义请求头"""
-        raw_headers = str(
-            self.browser_settings.get("extra_headers_json", "") or ""
-        ).strip()
-        if not raw_headers:
-            return {}
-
-        try:
-            custom_headers = json.loads(raw_headers)
-            if isinstance(custom_headers, dict):
-                return {
-                    str(k): str(v) for k, v in custom_headers.items() if k is not None
-                }
-            self.logger.warning("浏览器自定义请求头必须是 JSON 对象，已忽略")
-        except Exception as exc:
-            self.logger.warning(f"解析浏览器自定义请求头失败，已忽略: {exc}")
-        return {}
-
-    async def _handle_low_resource_request(self, route) -> None:
-        request = route.request
-        # 低资源模式：屏蔽图片、字体、媒体文件，减少内存和带宽消耗
-        blocked_types = {"image", "font", "media"}
-        if request.resource_type in blocked_types:
-            await route.abort()
-            return
-        await route.continue_()
-
-    async def _cleanup_browser(self) -> None:
-        """[已弃用] 浏览器清理由 Worker 管理，此方法不再使用"""
-        self.logger.warning(
-            "_cleanup_browser 已弃用，浏览器由 PlaywrightWorker 管理"
-        )
-        # 若 Worker 管理标志已设置，清空本地引用后直接返回
-        if self._worker_managed:
-            self.playwright = None
-            self.browser = None
-            self.context = None
-            self.page = None
-            return
-        self.logger.warning("_cleanup_browser 被调用但 Worker 不可用（空操作）")
+        return False  # 将异常传播给调用者（不抑制）

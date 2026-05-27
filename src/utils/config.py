@@ -5,7 +5,6 @@
 """
 
 from typing import Tuple
-from .logging import get_logger  # noqa: F401 — intentionally kept for future use
 
 
 class ConfigValidator:

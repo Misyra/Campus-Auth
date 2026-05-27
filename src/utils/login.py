@@ -21,7 +21,7 @@ from .network_helpers import parse_host_port
 if False:  # Type-only import to avoid circular dependency at runtime
     from ..task_executor import TaskManager
 
-# Shared regex pattern for stripping screenshot paths from log messages
+# 用于从日志消息中移除截图路径的正则表达式
 SCREENSHOT_URL_PATTERN = r"\s*截图[:：]\s*/\S+\.(?:png|jpg|jpeg|webp|gif)"
 
 
@@ -40,7 +40,7 @@ class LoginAttemptHandler:
         """
         self.config = config
         self.cancel_event = cancel_event
-        self.logger = setup_logger(__name__, config.get("logging", {}))
+        self.logger = setup_logger("login", config.get("logging", {}))
         self._browser_ctx: BrowserContextManager | None = None
         self._task_manager: TaskManager | None = None
         self._project_root: Path | None = None

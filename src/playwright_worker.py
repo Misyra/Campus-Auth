@@ -537,15 +537,15 @@ class PlaywrightWorker:
         return WorkerResponse(success=True, data="Browser released (alive in Worker)")
 
     async def close_browser(self) -> None:
-        """Close the browser and release all resources.
+        """关闭浏览器并释放所有资源。
 
-        Safe to call from within the Worker's event loop (same thread).
-        External callers should use submit(CMD_BROWSER_CLOSE) instead.
+        可从 Worker 事件循环内（同一线程）安全调用。
+        外部调用者应使用 submit(CMD_BROWSER_CLOSE)。
         """
         await self._close_browser()
 
     async def _handle_browser_close(self) -> WorkerResponse:
-        """Handle CMD_BROWSER_CLOSE — actually close the browser process."""
+        """处理 CMD_BROWSER_CLOSE —— 实际关闭浏览器进程。"""
         await self._close_browser()
         return WorkerResponse(success=True, data="Browser closed")
 

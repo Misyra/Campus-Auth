@@ -36,9 +36,8 @@ def build_login_env_vars(
     if auth_url:
         env_vars["LOGIN_URL"] = auth_url
 
-    # Inject runtime config vars BEFORE task_url resolution,
-    # so that {{USERNAME}}/{{PASSWORD}}/{{ISP}} in task_url resolve
-    # to the campus-auth config values instead of OS env or staying unresolved.
+    # 在解析 task_url 之前注入运行时配置变量，
+    # 确保 task_url 中的 {{USERNAME}}/{{PASSWORD}}/{{ISP}} 解析为校园网配置值
     isp = runtime_config.get("isp", "")
     if isp:
         env_vars["ISP"] = isp
@@ -56,7 +55,7 @@ def build_login_env_vars(
             if k.upper() not in _ENV_DENYLIST:
                 env_vars[k] = v
 
-    # Resolve task_url template AFTER all vars are injected
+    # 在所有变量注入后解析 task_url 模板
     if task_url:
         resolved_url = task_url
         for k, v in env_vars.items():

@@ -104,28 +104,22 @@ export const lifecycleMethods = {
         this.appVersion = data.version;
         return;
       }
+    } catch {
+      // health 接口不可用，尝试 openapi 回退
+    }
 
+    try {
       const openapiResp = await fetch('/openapi.json', { cache: 'no-cache' });
       if (openapiResp.ok) {
         const schema = await openapiResp.json();
         this.appVersion = schema?.info?.version || 'unknown';
         return;
       }
-
-      this.appVersion = 'unknown';
     } catch {
-      try {
-        const openapiResp = await fetch('/openapi.json', { cache: 'no-cache' });
-        if (openapiResp.ok) {
-          const schema = await openapiResp.json();
-          this.appVersion = schema?.info?.version || 'unknown';
-          return;
-        }
-      } catch {
-        // ignore fallback fetch error
-      }
-      this.appVersion = 'unknown';
+      // openapi 回退也不可用
     }
+
+    this.appVersion = 'unknown';
   },
   async checkUpdate() {
     this.updateLoading = true;

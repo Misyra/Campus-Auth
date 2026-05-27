@@ -49,7 +49,7 @@ class TaskService:
         return is_valid_task_id(task_id)
 
     def list_tasks(self) -> list[dict[str, str]]:
-        task_logger.debug("Listing tasks")
+        task_logger.debug("列出任务")
         return self.task_manager.list_tasks()
 
     def get_task(self, task_id: str) -> dict[str, Any] | None:
@@ -82,9 +82,9 @@ class TaskService:
 
         success = self.task_manager.save_task(task_id, config)
         if success:
-            task_logger.info("Task saved: %s", task_id)
+            task_logger.info("任务已保存: %s", task_id)
             return True, "任务保存成功"
-        task_logger.error("Task save failed: %s", task_id)
+        task_logger.error("任务保存失败: %s", task_id)
         return False, "任务保存失败"
 
     def delete_task(self, task_id: str) -> tuple[bool, str]:

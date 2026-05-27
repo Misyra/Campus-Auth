@@ -22,7 +22,7 @@ def parse_host_port(targets: list[str]) -> list[tuple[str, int]]:
     for item in targets:
         if ":" not in item:
             raise ValueError(
-                f"Malformed target '{item}': missing port (use host:port format)"
+                f"格式错误 '{item}'：缺少端口号（请使用 host:port 格式）"
             )
 
         host_part, port_part = item.rsplit(":", 1)
@@ -30,17 +30,17 @@ def parse_host_port(targets: list[str]) -> list[tuple[str, int]]:
         port_str = port_part.strip()
 
         if not host:
-            raise ValueError(f"Malformed target '{item}': empty host")
+            raise ValueError(f"'{item}' 中主机名为空")
 
         if not port_str.isdigit():
             raise ValueError(
-                f"Invalid port '{port_part}' in target '{item}': not a number"
+                f"'{item}' 中的端口 '{port_part}' 不是数字"
             )
 
         port = int(port_str)
         if not (1 <= port <= 65535):
             raise ValueError(
-                f"Invalid port '{port}' in target '{item}': out of range (1-65535)"
+                f"'{item}' 中的端口 {port} 超出范围（1-65535）"
             )
 
         result.append((host, port))
