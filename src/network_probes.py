@@ -242,14 +242,13 @@ def is_network_available_http(
 ) -> bool:
     """通过 HTTP(S) 请求检测网络连通性。
 
-    Design rationale — intentionally disables SSL verification (verify=False):
-    campus network captive portals intercept HTTPS traffic with self-signed
-    certificates. The purpose is to check connectivity, not TLS security.
-    This aligns with Playwright's ignore_https_errors=True in browser.py.
+    设计说明：故意禁用 SSL 验证（verify=False），因为校园网认证门户
+    会用自签名证书拦截 HTTPS 流量。目的是检测连通性，而非验证 TLS 安全性。
+    这与 browser.py 中的 ignore_https_errors=True 一致。
 
-    In follow_redirects=False mode, 200<=status<300 is connectivity OK; 302
-    redirects from portals are NOT okay (triggers login). Note: portals
-    returning 200 with login HTML (no redirect) are a known limitation.
+    在 follow_redirects=False 模式下，200<=status<300 表示连通正常；
+    门户的 302 重定向不算正常（会触发登录）。注意：门户返回 200 且内容为
+    登录页面（无重定向）是已知的检测限制。
     """
     urls = list(test_urls or ("https://www.baidu.com", "https://www.qq.com"))
     if len(urls) == 0:

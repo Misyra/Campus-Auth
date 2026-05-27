@@ -148,7 +148,7 @@ export const profileMethods = {
         this.frontendLogger.info('profiles', data.message);
         this.toastOnly(true, data.message);
       } else {
-        this.frontendLogger.warn('profiles', '切换自动切换失败: ' + data.message);
+        this.frontendLogger.warn('profiles', '自动切换设置失败: ' + data.message);
         this.notify(false, data.message);
       }
     } catch (error) {

@@ -80,7 +80,7 @@ $toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds({duration_sec})
     except Exception:
         pass
 
-    # PowerShell 方案失败时回退到 msg（仅显示在命令行）
+    # PowerShell 方案失败时回退到 msg（仅 Windows Pro/Enterprise 可用）
     try:
         subprocess.run(
             ["msg", os.environ.get("USERNAME", "*"), f"{title}: {message}"],
@@ -91,6 +91,8 @@ $toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds({duration_sec})
             else 0,
         )
         return True
+    except FileNotFoundError:
+        logger.debug("msg 命令不可用（仅 Windows Pro/Enterprise 支持）")
     except Exception:
         pass
 

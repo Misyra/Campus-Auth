@@ -73,7 +73,8 @@ class SystemTray:
             self.icon = None
 
     def update_status(self, monitoring: bool):
-        if not self.icon:
+        icon = self.icon
+        if not icon:
             return
         status_text = "运行中" if monitoring else "已停止"
-        self.icon.title = f"Campus-Auth 校园网认证 - {status_text}"
+        icon.title = f"Campus-Auth 校园网认证 - {status_text}"

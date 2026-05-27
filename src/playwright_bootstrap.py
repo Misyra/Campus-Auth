@@ -1,8 +1,8 @@
-"""Playwright bootstrap helpers.
+"""Playwright 引导辅助模块。
 
-Current strategy:
-- Dependency installation is handled by startup scripts (`uv sync`).
-- Here we only ensure Chromium browser is present for Playwright.
+当前策略：
+- 依赖安装由启动脚本处理（`uv sync`）。
+- 此处仅确保 Chromium 浏览器已安装。
 """
 
 from __future__ import annotations
@@ -105,7 +105,7 @@ def _has_chromium() -> bool:
 
 
 def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
-    """Ensure playwright package is importable and chromium is installed."""
+    """确保 playwright 包可导入且 Chromium 已安装。"""
     global _BOOTSTRAP_DONE
 
     with _BOOTSTRAP_LOCK:

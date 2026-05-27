@@ -100,8 +100,7 @@ def _derive_fernet_key() -> bytes:
         return _cached_fernet_key
 
     raw_key = _get_or_create_key()
-    # Fernet 密钥 = 32 字节 URL-safe base64 编码的字符串
-    # 内部 = 16 字节 signing key + 16 字节 encryption key (共 32 字节 → base64 后 44 字符)
+    # Fernet 密钥格式：32 字节原始数据（16 签名 + 16 加密）→ URL-safe base64 编码 → 44 字符字符串
     signing_key = hashlib.sha256(raw_key + b":signing").digest()[:16]
     encryption_key = hashlib.sha256(raw_key + b":encryption").digest()[:16]
     _cached_fernet_key = base64.urlsafe_b64encode(signing_key + encryption_key)

@@ -10,7 +10,7 @@ from src.network_probes import (
     is_network_available_http,
 )
 from src.utils.logging import get_logger
-from src.utils.time_utils import TimeUtils
+from src.utils.time_utils import is_in_pause_period
 
 logger = get_logger("network_decision", side="BACKEND")
 
@@ -112,7 +112,7 @@ def should_attempt_login(config: dict) -> tuple[bool, str]:
     """
     # 1. 暂停时段检查
     pause_config = config.get("pause_login", {})
-    if TimeUtils.is_in_pause_period(pause_config):
+    if is_in_pause_period(pause_config):
         logger.info("暂停时段，跳过登录")
         return (False, "pause_period")
 
@@ -158,7 +158,7 @@ def check_campus_network_status() -> str:
     logger.info("正在检测校园网状态...")
 
     if not is_local_network_connected():
-        return "未连接到校园网（未获取到有效IP）"
+        return "未检测到本地网络连接（未获取到有效IP）"
 
     if is_network_available():
         return "已连接校园网并可访问互联网"

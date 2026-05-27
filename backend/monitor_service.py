@@ -29,22 +29,22 @@ from .profile_service import ProfileService
 from .schemas import LogEntry, MonitorConfigPayload, MonitorStatusResponse
 
 
-# ── Actor model: typed command dispatch ──
+# ── Actor 模型：类型化命令派发 ──
 
 
 @dataclass
 class MonitorCommand:
-    """Command dispatched from API thread to queue consumer thread."""
+    """从 API 线程派发到队列消费者线程的命令。"""
 
     type: str  # "start" | "stop" | "login" | "reload" | "profile_switch" | "shutdown"
     data: dict = field(default_factory=dict)
-    response_event: threading.Event | None = None  # caller waits on this
-    response_data: Any = None  # set by consumer
+    response_event: threading.Event | None = None  # 调用方在此事件上等待
+    response_data: Any = None  # 由消费者设置
 
 
 @dataclass
 class StatusSnapshot:
-    """Lock-free snapshot of monitor state, read directly by API handlers."""
+    """基于引用替换的监控状态快照，由 API 处理器直接读取。"""
 
     monitoring: bool = False
     last_network_ok: bool = False
@@ -55,7 +55,7 @@ class StatusSnapshot:
     snapshot_time: float = 0.0
 
 
-# ── WebSocket Manager (unchanged) ──
+# ── WebSocket 管理器 ──
 
 
 class WebSocketManager:
@@ -107,7 +107,7 @@ ws_manager = WebSocketManager()
 service_logger = get_logger("backend.monitor_service", side="BACKEND")
 
 
-# ── MonitorService (refactored to Actor model) ──
+# ── MonitorService（Actor 模型重构）──
 
 
 class MonitorService:
@@ -138,14 +138,14 @@ class MonitorService:
         # Lock-free status snapshot — written by consumer, read by API threads
         self._status_snapshot = StatusSnapshot()
 
-        # WebSocket broadcast queue — fed by _push_log / _queue_status_broadcast,
-        # drained asynchronously from the main event loop
+        # WebSocket 广播队列 —— 由 _push_log / _queue_status_broadcast 写入，
+        # 从主事件循环异步排空
         self._ws_broadcast_queue: deque[dict] = deque(maxlen=200)
 
         # Guard against duplicate WS drain loop startup
         self._drain_started = False
 
-        # Login concurrency guard — 防止同时启动多个浏览器进程
+        # 登录并发控制 —— 防止同时提交多个登录任务到 Worker
         # 使用 Lock 保护 check-then-set 操作，避免竞态条件
         self._login_in_progress: bool = False
         self._login_lock: threading.Lock = threading.Lock()
@@ -156,13 +156,13 @@ class MonitorService:
         )
         self._consumer_thread.start()
 
-    # ── Queue consumer (runs in dedicated daemon thread) ──
+    # ── 队列消费者（在专用守护线程中运行）──
 
     def _queue_consumer(self) -> None:
-        """Dedicated thread: pull commands from _cmd_queue and execute them.
+        """专用线程：从 _cmd_queue 拉取命令并执行。
 
-        The consumer thread runs for the entire process lifetime.
-        Only the "shutdown" command breaks the loop.
+        消费者线程在整个进程生命周期内运行，
+        仅 "shutdown" 命令会跳出循环。
         """
         while not self._shutdown_event.is_set():
             try:
@@ -185,12 +185,16 @@ class MonitorService:
                     self._handle_stop()
                     break
             except Exception:
-                service_logger.exception("Queue command failed: %s", cmd.type)
+                service_logger.exception("队列命令执行失败: %s", cmd.type)
             finally:
                 self._cmd_queue.task_done()
 
     def _handle_start(self, cmd: MonitorCommand) -> None:
-        """Start monitoring (consumer thread only)."""
+        """启动监控（仅在消费者线程中调用）。"""
+        # 二次检查：防止重复启动
+        if self._monitor_thread and self._monitor_thread.is_alive():
+            self._push_log("监控线程已在运行，忽略重复启动", level="WARNING", source="backend.monitor_service")
+            return
         config = cmd.data.get("config", self._runtime_config.copy())
         safe_mode = cmd.data.get("safe_mode", self.safe_mode)
         if safe_mode:
@@ -214,7 +218,7 @@ class MonitorService:
         self._update_status_snapshot()
 
     def _handle_stop(self) -> None:
-        """Stop monitoring (consumer thread only)."""
+        """停止监控（仅在消费者线程中调用）。"""
         core = self._monitor_core
         thread = self._monitor_thread
 
@@ -234,7 +238,7 @@ class MonitorService:
         self._update_status_snapshot()
 
     def _handle_login(self, cmd: MonitorCommand) -> None:
-        """Execute a one-shot login attempt (consumer thread only)."""
+        """执行一次性登录尝试（仅在消费者线程中调用）。"""
         config = cmd.data.get("config", self._runtime_config.copy())
         safe_mode = cmd.data.get("safe_mode", self.safe_mode)
         skip_pause_check = cmd.data.get("skip_pause_check", False)
@@ -271,7 +275,7 @@ class MonitorService:
             self._monitor_core.update_config(new_config)
 
     def _handle_profile_switch(self, cmd: MonitorCommand) -> None:
-        """Stop current monitoring and start with a new profile's config."""
+        """停止当前监控并使用新方案配置重新启动。"""
         new_config = cmd.data.get("config", {})
         if not new_config:
             return
@@ -302,7 +306,7 @@ class MonitorService:
         )
         self._update_status_snapshot()
 
-    # ── Logging / snapshot bridge ──
+    # ── 日志 / 状态快照桥接 ──
 
     def _push_log(
         self, message: str, level: str = "INFO", source: str = "monitor"
@@ -370,7 +374,7 @@ class MonitorService:
                     snapshot_time=time.time(),
                 )
             except Exception:
-                service_logger.exception("Status snapshot update failed")
+                service_logger.exception("状态快照更新失败")
                 return
         else:
             self._status_snapshot = StatusSnapshot(snapshot_time=time.time())
@@ -378,19 +382,19 @@ class MonitorService:
         self._queue_status_broadcast()
 
     def _queue_status_broadcast(self) -> None:
-        """Put current status onto the WS broadcast queue."""
+        """将当前状态放入 WS 广播队列。"""
         try:
             status = self.get_status()
             self._ws_broadcast_queue.append(
                 {"type": "status", "data": status.model_dump()}
             )
         except Exception:
-            service_logger.exception("Status broadcast queue failed")
+            service_logger.exception("状态广播队列失败")
 
-    # ── WebSocket drain (main event loop) ──
+    # ── WebSocket 排空（主事件循环）──
 
     async def _ws_drain_loop(self) -> None:
-        """Background asyncio task: periodically drain WS broadcast queue.
+        """后台 asyncio 任务：定期排空 WS 广播队列。
 
         Runs until the asyncio task is cancelled (by lifespan shutdown).
         """
@@ -416,7 +420,7 @@ class MonitorService:
                 break
             await ws_manager.broadcast(json.dumps(data))
 
-    # ── Public API (called from API threads / main.py) ──
+    # ── 公共 API（从 API 线程 / main.py 调用）──
 
     def boot(self) -> None:
         # --no-auto 启动标志：跳过 login_then_exit 和 auto_start，用于恢复设置
@@ -495,7 +499,7 @@ class MonitorService:
             )
 
     def start_monitoring(self) -> tuple[bool, str]:
-        service_logger.info("Start monitoring requested")
+        service_logger.info("收到启动监控请求")
         if self._is_monitoring:
             return False, "监控已在运行中"
 
@@ -513,11 +517,8 @@ class MonitorService:
         return True, "监控已启动"
 
     def _on_profile_switch(self, profile_name: str) -> None:
-        """自动切换方案时的回调（从监控线程调用）。
-
-        Reloads config files and sends a reload command to the queue consumer,
-        which will hot-update the running NetworkMonitorCore.
-        """
+        """自动切换方案时的回调（从监控线程调用）。"""
+        self.reload_config()
         new_url = self._runtime_config.get("auth_url", "")
         new_user = self._runtime_config.get("username", "")
         self._push_log(
@@ -525,10 +526,9 @@ class MonitorService:
             level="INFO",
             source="backend.monitor_service",
         )
-        self.reload_config()
 
     def stop_monitoring(self) -> tuple[bool, str]:
-        service_logger.info("Stop monitoring requested")
+        service_logger.info("收到停止监控请求")
         if not self._is_monitoring:
             return False, "监控未运行"
 
@@ -643,12 +643,13 @@ class MonitorService:
 
     def toggle_safe_mode(self) -> bool:
         """切换安全模式，返回新值"""
-        new_value = not self.safe_mode
-        data = self._profile_service.load()
-        data.system.safe_mode = new_value
-        self._profile_service.save(data)
-        self.safe_mode = new_value
-        return new_value
+        with self._login_lock:
+            new_value = not self.safe_mode
+            data = self._profile_service.load()
+            data.system.safe_mode = new_value
+            self._profile_service.save(data)
+            self.safe_mode = new_value
+            return new_value
 
     def get_runtime_config(self) -> dict:
         """线程安全地获取运行时配置副本"""

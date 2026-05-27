@@ -10,6 +10,7 @@ import asyncio
 import json
 import re
 import threading
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -44,9 +45,7 @@ _FORCE_INPUT_JS = """(el, params) => {
   el.dispatchEvent(new InputEvent('beforeinput',
     {bubbles:true, inputType:'insertText', data:val}));
   // 4. 设置值（原生 setter 绕过 React/Vue 的 getter/setter 劫持）
-  const nativeSet = Object.getOwnPropertyDescriptor(
-    HTMLInputElement.prototype, 'value').set;
-    nativeSet.call(el, val);
+  nativeSet.call(el, val);
   // 5. input — 所有框架都监听此事件更新状态
   el.dispatchEvent(new InputEvent('input',
     {bubbles:true, inputType:'insertText', data:val}));
@@ -315,11 +314,11 @@ class VariableResolver:
         self._cache.clear()
 
     def resolve_for_js(self, value: str) -> str:
-        """Resolve variables with JSON-safe encoding for JavaScript embedding.
+        """解析变量并进行 JSON 安全编码，用于 JavaScript 嵌入。
 
-        Unlike resolve(), this method JSON-encodes resolved values so they can
-        be safely embedded in JavaScript code without syntax errors.
-        Example: password "admin'123" → '"admin\'123"' (valid JS string literal)
+        与 resolve() 不同，此方法将解析后的值进行 JSON 编码，
+        确保可以安全嵌入 JavaScript 代码而不会产生语法错误。
+        示例：password "admin'123" → '"admin\'123"'（合法的 JS 字符串字面量）
         """
         if not isinstance(value, str) or "{{" not in value:
             return value
@@ -348,10 +347,9 @@ class StepHandler(ABC):
     async def execute(
         self, page, step: StepConfig, resolver: VariableResolver
     ) -> tuple[bool, str]:
-        """执行步骤
+        """执行步骤。
 
-        Returns:
-            (success, message)
+        返回：(success, message)
         """
         pass
 
@@ -760,8 +758,7 @@ class EvalHandler(StepHandler):
     async def execute(
         self, page, step: StepConfig, resolver: VariableResolver
     ) -> tuple[bool, str]:
-        # Use JS-safe variable resolution to prevent syntax errors from
-        # special characters in passwords, usernames, etc.
+        # 使用 JS 安全的变量解析，防止密码等特殊字符导致语法错误
         script = step.script or ""
         if not script:
             return False, "eval 步骤需要 script 字段"
@@ -825,7 +822,7 @@ class SleepHandler(StepHandler):
         self, page, step: StepConfig, resolver: VariableResolver
     ) -> tuple[bool, str]:
         params = self.resolve_params(step, resolver)
-        duration = params.get("duration", 1000)
+        duration = int(params.get("duration", 1000))
 
         if duration > self.MAX_SLEEP_MS:
             logger.warning(
@@ -1052,6 +1049,7 @@ class TaskExecutor:
     PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
     DEFAULT_STEP_TIMEOUT = 10000
+    DEFAULT_TASK_TIMEOUT = 30000
 
     def __init__(
         self,
@@ -1076,10 +1074,8 @@ class TaskExecutor:
         Returns:
             (success, message)
         """
-        import time as _time
-
-        task_start = _time.perf_counter()
-        task_timeout_ms = self.config.timeout or 30000
+        task_start = time.perf_counter()
+        task_timeout_ms = self.config.timeout or self.DEFAULT_TASK_TIMEOUT
         task_deadline = task_start + task_timeout_ms / 1000
         logger.info(
             "任务开始 [%s], %d 个步骤, 超时 %dms",
@@ -1103,20 +1099,20 @@ class TaskExecutor:
             if self.config.reveal_hidden and any(
                 s.type != StepType.EVAL for s in self.config.steps
             ):
-                count = await self._reveal_hidden_inputs(page)
+                await self._reveal_hidden_inputs(page)
 
             for i, step in enumerate(self.config.steps):
                 # 任务超时检查
-                remaining_s = task_deadline - _time.perf_counter()
+                remaining_s = task_deadline - time.perf_counter()
                 if remaining_s <= 0:
                     return await self._handle_failure(
                         page, None, f"任务超时 ({task_timeout_ms}ms)"
                     )
                 if i > 0:
                     await asyncio.sleep(self.config.step_delay)
-                step_start = _time.perf_counter()
+                step_start = time.perf_counter()
                 success, message = await self._execute_step(page, step)
-                step_elapsed = (_time.perf_counter() - step_start) * 1000
+                step_elapsed = (time.perf_counter() - step_start) * 1000
                 status = "OK" if success else "FAIL"
                 logger.info(
                     "  步骤[%d/%d] %s (%s) → %s (%.0fms)%s",
@@ -1143,12 +1139,12 @@ class TaskExecutor:
             if not await self._check_success(page):
                 return await self._handle_failure(page, None, "成功条件不满足")
 
-            total_elapsed = (_time.perf_counter() - task_start) * 1000
+            total_elapsed = (time.perf_counter() - task_start) * 1000
             logger.info("任务成功 [%s] 总耗时 %.0fms", self.config.name, total_elapsed)
             return await self._handle_success(page)
 
         except Exception as e:
-            total_elapsed = (_time.perf_counter() - task_start) * 1000
+            total_elapsed = (time.perf_counter() - task_start) * 1000
             logger.error(
                 "任务异常 [%s] 耗时 %.0fms: %s", self.config.name, total_elapsed, e
             )
@@ -1171,20 +1167,19 @@ class TaskExecutor:
 
     async def _wait_url_stable(self, page, timeout_ms: int = 3000):
         """等待 URL 稳定，处理 JS 重定向链（最多 5 跳）"""
-        import time as _time
 
-        deadline = _time.perf_counter() + timeout_ms / 1000
+        deadline = time.perf_counter() + timeout_ms / 1000
         last_url = page.url
         redirects = 0
         max_redirects = 5
-        while _time.perf_counter() < deadline and redirects < max_redirects:
+        while time.perf_counter() < deadline and redirects < max_redirects:
             await asyncio.sleep(0.5)
             current = page.url
             if current != last_url:
                 logger.info(f"URL 重定向: {last_url} → {current}")
                 last_url = current
                 redirects += 1
-                deadline = max(deadline, _time.perf_counter() + timeout_ms / 1000)
+                deadline = max(deadline, time.perf_counter() + timeout_ms / 1000)
 
     async def _reveal_hidden_inputs(self, page) -> int:
         """强制显示所有隐藏的表单输入框。

@@ -80,7 +80,7 @@ async def lifespan(app_instance):
     start = time.perf_counter()
     startup_logger.info("FastAPI 启动: 开始设置服务引导")
 
-    # 迁移：从 .env 创建或补充 settings.json
+    # 迁移：从 .env 文件创建或补充 settings.json（支持旧版升级）
     settings_path = PROJECT_ROOT / "settings.json"
     startup_logger.info(
         "settings.json 路径: %s (存在=%s, 大小=%d)",
@@ -89,8 +89,6 @@ async def lifespan(app_instance):
         settings_path.stat().st_size if settings_path.exists() else 0,
     )
     try:
-        env_config = {}
-        profile_service.migrate_config(env_config)
         service.reload_config()
         # 诊断：打印加载后的关键配置
         config = service.get_config()
@@ -126,12 +124,16 @@ async def lifespan(app_instance):
         pass
     if _debug_session.session:
         await _debug_session.session.close()
-    # 清理临时调试截图
+    # 清理临时调试截图（保留目录本身，仅删除内部文件）
     try:
         import shutil
 
         if TEMP_DIR.exists():
-            shutil.rmtree(TEMP_DIR, ignore_errors=True)
+            for item in TEMP_DIR.iterdir():
+                if item.is_file():
+                    item.unlink(missing_ok=True)
+                elif item.is_dir():
+                    shutil.rmtree(item, ignore_errors=True)
     except Exception:
         pass
     service.stop_monitoring()
@@ -252,10 +254,7 @@ def _debug_response() -> dict:
 
 
 def _require_debug_session() -> None:
-    """验证调试会话处于活跃状态。
-
-    page 和 TaskExecutor 现在由 Worker 线程管理，不再从 API 线程直接访问。
-    """
+    """验证调试会话处于活跃状态。"""
     if not _debug_session.running:
         raise HTTPException(status_code=400, detail="没有活跃的调试会话")
 
@@ -890,7 +889,7 @@ async def debug_run_all() -> dict:
         _debug_session._last_activity = time.monotonic()
         if results:
             _debug_session.screenshot_url = results[-1].get("screenshot_url")
-            return _debug_response()
+        return _debug_response()
 
 
 @app.post("/api/debug/stop")

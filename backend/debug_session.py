@@ -10,23 +10,22 @@ sessions) rather than being a dataclass field.
 from __future__ import annotations
 
 import asyncio
+import itertools
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
 
 # ---------------------------------------------------------------------------
-# Module-level generation counter (shared across all debug sessions)
+# 模块级代数计数器（所有调试会话共享，线程安全）
 # ---------------------------------------------------------------------------
 
-_debug_gen: int = 0
+_debug_gen = itertools.count(1)
 
 
 def _next_debug_gen() -> int:
-    """Return the next generation number and increment the counter."""
-    global _debug_gen
-    _debug_gen += 1
-    return _debug_gen
+    """返回下一个代数编号（线程安全）。"""
+    return next(_debug_gen)
 
 
 # ---------------------------------------------------------------------------
