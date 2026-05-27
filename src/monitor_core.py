@@ -368,9 +368,7 @@ class NetworkMonitorCore:
             )
             self.status_detail = f"网络异常：登录失败（第{self.login_attempt_count}/{max_retries}次）"
 
-            # 浏览器关闭策略：前2次复用，第3次及以后关闭
-            if self.login_attempt_count >= 2:
-                self._close_browser_if_needed()
+            # 浏览器已由 login.py 在失败时关闭，下次重试 ensure_browser 自动重建
 
             if self.login_attempt_count == 2:
                 send_notification(
@@ -584,6 +582,7 @@ class NetworkMonitorCore:
                 "config": self.config,
                 "cancel_event": self._cancel_login,
                 "skip_pause_check": True,
+                "close_on_failure": False,  # 自动监控重试时复用浏览器
             }
             result = get_worker().submit(CMD_LOGIN, data=data, timeout=login_timeout)
             success = result.success

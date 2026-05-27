@@ -29,7 +29,10 @@ class LoginAttemptHandler:
     """登录尝试处理器 - 统一登录逻辑（解决循环依赖）"""
 
     def __init__(
-        self, config: Dict[str, Any], cancel_event: threading.Event | None = None
+        self,
+        config: Dict[str, Any],
+        cancel_event: threading.Event | None = None,
+        close_on_failure: bool = True,
     ):
         """
         初始化登录处理器
@@ -37,9 +40,12 @@ class LoginAttemptHandler:
         参数:
             config: 配置字典
             cancel_event: 取消事件，设置后中断登录操作
+            close_on_failure: 登录失败时是否关闭浏览器（默认 True）。
+                自动监控重试时设为 False 以复用浏览器，手动登录保持 True。
         """
         self.config = config
         self.cancel_event = cancel_event
+        self.close_on_failure = close_on_failure
         self.logger = setup_logger("login", config.get("logging", {}))
         self._browser_ctx: BrowserContextManager | None = None
         self._task_manager: TaskManager | None = None
@@ -209,7 +215,8 @@ class LoginAttemptHandler:
                     return True, message
                 log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
                 self.logger.error("登录失败 (总耗时 %.1fs): %s", total, log_msg)
-                # 浏览器关闭逻辑由调用方（monitor_core）根据重试次数决定
+                if self.close_on_failure:
+                    await self.close_browser()
                 return False, message
             except Exception:
                 await self.close_browser()
