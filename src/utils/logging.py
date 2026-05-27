@@ -203,40 +203,6 @@ class _DateRotatingFileHandler(logging.Handler):
         super().close()
 
 
-def cleanup_old_screenshots(log_dir: str, retention_days: int) -> int:
-    """清理 logs/{YYYY-MM-DD}/screenshots/ 下的过期截图
-
-    目录结构: logs/{YYYY-MM-DD}/screenshots/*.png
-    过期日期目录由 _DateRotatingFileHandler 统一清理，此函数仅清理截图文件。
-    """
-    base = Path(log_dir)
-    if not base.exists():
-        return 0
-
-    cutoff = time.time() - retention_days * 86400
-    deleted = 0
-    for date_dir in sorted(base.iterdir()):
-        if not date_dir.is_dir() or not date_dir.name[:4].isdigit():
-            continue
-        sc_dir = date_dir / "screenshots"
-        if not sc_dir.exists():
-            continue
-        for f in sc_dir.glob("*.png"):
-            try:
-                if f.stat().st_mtime < cutoff:
-                    f.unlink()
-                    deleted += 1
-            except OSError:
-                pass
-        # 清理空的 screenshots 目录
-        try:
-            if not any(sc_dir.iterdir()):
-                sc_dir.rmdir()
-        except OSError:
-            pass
-    return deleted
-
-
 class LogConfigCenter:
     """
     日志配置中心（单例模式）

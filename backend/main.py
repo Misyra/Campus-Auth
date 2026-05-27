@@ -1283,12 +1283,10 @@ def run() -> None:
         log_level = sys_settings.backend_log_level or "WARNING"
         access_log_enabled = bool(sys_settings.access_log)
         log_retention = max(1, sys_settings.log_retention_days)
-        sc_retention = max(1, sys_settings.screenshot_retention_days)
     except Exception:
         log_level = "WARNING"
         access_log_enabled = False
         log_retention = 7
-        sc_retention = 7
 
     # 使用日志配置中心统一配置
     log_center = LogConfigCenter.get_instance()
@@ -1310,16 +1308,6 @@ def run() -> None:
             old_log = log_dir / old_name
             if old_log.exists():
                 old_log.unlink(missing_ok=True)
-    except Exception:
-        pass
-
-    # 自动清理过期截图（logs/{YYYY-MM-DD}/screenshots/）
-    try:
-        from src.utils.logging import cleanup_old_screenshots
-
-        n = cleanup_old_screenshots(str(log_dir), sc_retention)
-        if n:
-            startup_logger.info("清理过期截图: %d 张", n)
     except Exception:
         pass
 

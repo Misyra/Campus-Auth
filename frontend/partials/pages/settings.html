@@ -370,16 +370,9 @@
             <div class="form-group">
               <div class="field-label-row">
                 <label for="settings-log-retention">日志保留天数</label>
-                <span class="field-help" tabindex="0" role="note" data-tip="日志按天生成独立文件，超过设定天数的旧日志会自动清理。设为 7 可平衡排查需求与磁盘占用。">?</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="日志和失败截图按天归档，超过设定天数的整日归档（含日志和截图）会自动清理。设为 7 可平衡排查需求与磁盘占用。">?</span>
               </div>
               <input id="settings-log-retention" v-model.number="config.log_retention_days" type="number" min="1" max="365" />
-            </div>
-            <div class="form-group">
-              <div class="field-label-row">
-                <label for="settings-sc-retention">截图保留天数</label>
-                <span class="field-help" tabindex="0" role="note" data-tip="登录失败时自动保存的截图和调试截图的保留天数，过期自动删除。">?</span>
-              </div>
-              <input id="settings-sc-retention" v-model.number="config.screenshot_retention_days" type="number" min="1" max="90" />
             </div>
           </div>
           <div class="toggle-group">
