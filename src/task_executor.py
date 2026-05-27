@@ -31,20 +31,21 @@ TASK_ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 _FORCE_INPUT_JS = """(el, params) => {
   const val = params.val;
   const doClear = params.doClear;
+  // 原生 setter 绕过 React/Vue 的 getter/setter 劫持（声明在块外，doClear=false 时仍可用）
+  const nativeSet = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype, 'value').set;
   el.removeAttribute('readonly');
   el.removeAttribute('disabled');
   // 1. focus — 触发页面 JS 的显隐切换/占位收起
   el.dispatchEvent(new FocusEvent('focus', {bubbles:true}));
   // 2. 清空
   if (doClear) {
-    const nativeSet = Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype, 'value').set;
     nativeSet.call(el, '');
   }
   // 3. beforeinput — React 17+ 受控组件需要
   el.dispatchEvent(new InputEvent('beforeinput',
     {bubbles:true, inputType:'insertText', data:val}));
-  // 4. 设置值（原生 setter 绕过 React/Vue 的 getter/setter 劫持）
+  // 4. 设置值
   nativeSet.call(el, val);
   // 5. input — 所有框架都监听此事件更新状态
   el.dispatchEvent(new InputEvent('input',
@@ -1178,8 +1179,10 @@ class TaskExecutor:
         if not url:
             url = self.env_vars.get("LOGIN_URL", "").strip()
         if url:
-            logger.info(f"自动导航到任务URL: {url}")
-            await page.goto(url, wait_until="load", timeout=30000)
+            # 导航超时：取配置值与 15s 的较大者，覆盖 DNS 劫持/重定向链较长的场景
+            nav_timeout = max(self.default_timeout, 15000)
+            logger.info(f"自动导航到任务URL: {url} (超时 {nav_timeout}ms)")
+            await page.goto(url, wait_until="load", timeout=nav_timeout)
             await self._wait_url_stable(page)
 
     async def _wait_url_stable(self, page, timeout_ms: int = 3000):

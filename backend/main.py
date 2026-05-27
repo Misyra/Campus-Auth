@@ -447,6 +447,9 @@ def save_config(payload: MonitorConfigPayload) -> ActionResponse:
     except ValueError as exc:
         api_logger.warning("Config update rejected: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        api_logger.error("Config save failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"配置保存失败: {exc}") from exc
 
 
 @app.get("/api/status", response_model=MonitorStatusResponse)

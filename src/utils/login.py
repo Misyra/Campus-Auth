@@ -175,8 +175,6 @@ class LoginAttemptHandler:
                 "浏览器就绪 (%.1fs)", _time.perf_counter() - browser_start
             )
 
-            if browser_manager is None:
-                raise RuntimeError("浏览器实例应在复用或新建分支中初始化")
             try:
                 if not browser_manager.page:
                     raise RuntimeError("浏览器页面初始化失败")
