@@ -77,7 +77,8 @@ def is_network_available(
             kind = futures[future]
             try:
                 ok = future.result()
-            except Exception:
+            except Exception as exc:
+                logger.debug("探测 %s 异常: %s", kind, exc)
                 ok = False
             if kind == "tcp":
                 socket_ok = ok
@@ -121,7 +122,8 @@ def is_auth_url_reachable(auth_url: str) -> bool:
         with socket.create_connection((host, port), timeout=3):
             pass
         return True
-    except Exception:
+    except Exception as exc:
+        logger.debug("认证地址不可达 %s: %s", auth_url, exc)
         return False
 
 
@@ -139,7 +141,7 @@ def should_attempt_login(config: dict) -> tuple[bool, str]:
     # 1. 暂停时段检查
     pause_config = config.get("pause_login", {})
     if is_in_pause_period(pause_config):
-        logger.info("暂停时段，跳过登录")
+        logger.info("暂停时段，跳过登录 (配置: %s)", pause_config)
         return (False, "pause_period")
 
     # 2. 物理网络检查
@@ -167,7 +169,7 @@ def should_attempt_login(config: dict) -> tuple[bool, str]:
         portal_checks=monitor_config.get("portal_check_urls", None),
         skip_local_check=True,
     ):
-        logger.info("网络正常，无需登录")
+        logger.info("网络正常，无需登录 (TCP=%s, HTTP=%s)", enable_tcp, enable_http)
         return (False, "network_ok")
 
     # 4. 网络异常，可以尝试登录
@@ -179,9 +181,11 @@ def check_campus_network_status() -> str:
     logger.info("正在检测校园网状态...")
 
     if not is_local_network_connected():
-        return "未检测到本地网络连接（未获取到有效IP）"
+        result = "未检测到本地网络连接（未获取到有效IP）"
+    elif is_network_available(skip_local_check=True):
+        result = "已连接校园网并可访问互联网"
+    else:
+        result = "已连接校园网，但无法访问互联网，需要认证"
 
-    if is_network_available(skip_local_check=True):
-        return "已连接校园网并可访问互联网"
-
-    return "已连接校园网，但无法访问互联网，需要认证"
+    logger.info("校园网状态: %s", result)
+    return result

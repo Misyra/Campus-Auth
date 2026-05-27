@@ -456,7 +456,7 @@ class InputHandler(StepHandler):
         ctx = await self._resolve_frame(page, step)
         candidates = self._parse_selectors(selector)
         masked = "***" if any(k in step.description.lower() for k in ("密码", "password", "pwd")) else value
-        logger.info(
+        logger.debug(
             "[input] 候选选择器 %d 个: %s, value=%s, clear=%s, timeout=%dms",
             len(candidates), candidates, masked, clear, timeout,
         )
@@ -468,14 +468,14 @@ class InputHandler(StepHandler):
                 loc = ctx.locator(candidate).first
                 await loc.wait_for(state="visible", timeout=wait_timeout)
                 await loc.fill(value, timeout=timeout)
-                logger.info("[input] 普通 fill 成功 → %s", candidate)
+                logger.debug("[input] 普通 fill 成功 → %s", candidate)
                 return True, ""
             except Exception:
                 logger.debug("[input] 普通 fill 候选失败: %s", candidate)
                 continue
 
         # 策略2: 自动降级到强制输入（隐藏/不可交互的输入框）
-        logger.info("[input] 所有候选均未匹配可见元素，降级到强制输入模式")
+        logger.debug("[input] 所有候选均未匹配可见元素，降级到强制输入模式")
         return await self._force_input(ctx, selector, value, clear, timeout)
 
     async def _force_input(
@@ -498,7 +498,7 @@ class InputHandler(StepHandler):
                     _FORCE_INPUT_JS,
                     {"val": value, "doClear": clear},
                 )
-                logger.info("[input] 强制输入成功 → %s (attached)", candidate)
+                logger.debug("[input] 强制输入成功 → %s (attached)", candidate)
                 return True, ""
             except Exception:
                 logger.debug("[input] 强制输入候选失败: %s", candidate)
@@ -526,7 +526,7 @@ class ClickHandler(StepHandler):
 
         ctx = await self._resolve_frame(page, step)
         candidates = self._parse_selectors(selector)
-        logger.info(
+        logger.debug(
             "[click] 候选选择器 %d 个: %s, timeout=%dms",
             len(candidates), candidates, timeout,
         )
@@ -538,20 +538,20 @@ class ClickHandler(StepHandler):
                 loc = ctx.locator(candidate).first
                 await loc.wait_for(state="visible", timeout=wait_timeout)
                 await loc.click(timeout=timeout)
-                logger.info("[click] 普通 click 成功 → %s", candidate)
+                logger.debug("[click] 普通 click 成功 → %s", candidate)
                 return True, ""
             except Exception:
                 logger.debug("[click] 普通 click 候选失败: %s", candidate)
                 continue
 
         # 策略2: 自动降级到 force click（隐藏/不可交互的元素用 JS click）
-        logger.info("[click] 所有候选均未匹配可见元素，降级到 force click")
+        logger.debug("[click] 所有候选均未匹配可见元素，降级到 force click")
         for candidate in candidates:
             try:
                 loc = ctx.locator(candidate).first
                 await loc.wait_for(state="attached", timeout=timeout)
                 await loc.dispatch_event("click")
-                logger.info("[click] force click 成功 → %s (attached)", candidate)
+                logger.debug("[click] force click 成功 → %s (attached)", candidate)
                 return True, ""
             except Exception:
                 logger.debug("[click] force click 候选失败: %s", candidate)
@@ -579,22 +579,22 @@ class SelectHandler(StepHandler):
             return False, "选择步骤需要 selector"
 
         if not value:
-            logger.info("[select] value 为空，跳过选择步骤")
+            logger.debug("[select] value 为空，跳过选择步骤")
             return True, ""
 
         ctx = await self._resolve_frame(page, step)
-        logger.info("[select] selector=%s, value=%s, timeout=%dms", selector, value, timeout)
+        logger.debug("[select] selector=%s, value=%s, timeout=%dms", selector, value, timeout)
 
         element = await self._find_element(ctx, selector, timeout)
         if not element:
-            logger.info("[select] 未找到选择元素，跳过: %s", selector)
+            logger.warning("[select] 未找到选择元素: %s", selector)
             if step.required:
                 return False, f"选择元素未找到: {selector}"
             return True, ""
 
         selected = await self._select_with_fallback(element, value, timeout)
         if not selected:
-            logger.info("[select] 未匹配到选项，跳过: %s", value)
+            logger.warning("[select] 未匹配到选项: %s", value)
             if step.required:
                 return False, f"选择选项未匹配: {value}"
         return True, ""
@@ -720,8 +720,9 @@ class WaitHandler(StepHandler):
             return False, "等待步骤需要 selector"
 
         ctx = await self._resolve_frame(page, step)
-        logger.info(f"[wait] selector={selector}, timeout={timeout}")
+        logger.info("[wait] selector=%s, timeout=%d", selector, timeout)
         await ctx.locator(selector).first.wait_for(timeout=timeout)
+        logger.info("[wait] 元素已出现: %s", selector)
         return True, ""
 
 
@@ -747,15 +748,16 @@ class WaitUrlHandler(StepHandler):
         except re.error:
             return False, f"wait_url 步骤的 pattern 不是有效的正则表达式: {pattern}"
 
-        logger.info(f"[wait_url] pattern={pattern}")
+        logger.info("[wait_url] pattern=%s", pattern)
         deadline = asyncio.get_running_loop().time() + timeout / 1000
         while True:
             current_url = page.url
             if compiled.search(current_url):
-                logger.info(f"[wait_url] URL 已匹配: {current_url}")
+                logger.info("[wait_url] URL 已匹配: %s", current_url)
                 return True, ""
             remaining = deadline - asyncio.get_running_loop().time()
             if remaining <= 0:
+                logger.warning("[wait_url] 超时，当前URL: %s", current_url)
                 return False, f"等待 URL 匹配 '{pattern}' 超时，当前: {current_url}"
             await asyncio.sleep(min(0.2, remaining))
 
@@ -778,12 +780,12 @@ class EvalHandler(StepHandler):
         resolved_script = resolver.resolve_for_js(script)
 
         store_as = step.store_as
-        logger.info(f"[eval] store_as={store_as}")
+        logger.debug("[eval] store_as=%s", store_as)
         result = await page.evaluate(resolved_script)
 
         if store_as:
             resolver.set_runtime_var(store_as, result)
-            logger.info(f"[eval] 结果存储到变量 {store_as}: {result}")
+            logger.debug("[eval] 结果存储到变量 %s: %.80s", store_as, result)
 
         return True, ""
 
@@ -816,7 +818,7 @@ class ScreenshotHandler(StepHandler):
             safe_name = Path(path).name
             path = str(date_dir / safe_name)
 
-        logger.info(f"[screenshot] path={path}")
+        logger.debug("[screenshot] path=%s", path)
         await page.screenshot(path=path, full_page=True)
         return True, ""
 
@@ -905,7 +907,7 @@ class OcrHandler(StepHandler):
         except Exception as e:
             return False, f"验证码识别失败: {e}"
 
-        logger.info("[ocr] 识别结果: '%s'", result)
+        logger.debug("[ocr] 识别结果: '%s'", result)
 
         # 存储到变量
         if store_as:
@@ -1241,8 +1243,6 @@ class TaskExecutor:
         if not handler:
             return False, f"未知的步骤类型: {step.type}"
 
-        logger.info(f"执行步骤 [{step.id}]: {step.description or step.type}")
-
         try:
             return await handler.execute(page, step, self.resolver)
         except Exception as e:
@@ -1314,7 +1314,7 @@ class TaskExecutor:
 
             logger.info(
                 "验证网络连通性 (targets=%s, timeout=%ss, TCP=%s, HTTP=%s)",
-                test_sites,
+                test_sites or "默认",
                 timeout,
                 enable_tcp,
                 enable_http,

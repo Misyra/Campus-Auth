@@ -163,13 +163,12 @@ class NetworkMonitorCore:
             test_sites_info = self._get_test_sites()
             targets_str = ", ".join(f"{h}:{p}" for h, p in test_sites_info)
 
-            self.log_message("=" * self.LOG_DIVIDER_LENGTH)
-            self.log_message("网络监控已启动")
-            self.log_message(f"检测间隔: {interval}s | 检测目标: {targets_str}")
-            self.log_message(f"认证地址: {auth_url}")
-            self.log_message(f"账号: {username}")
-            self.log_message(f"运营商: {isp}")
-            self.log_message("=" * self.LOG_DIVIDER_LENGTH)
+            self.log_message(
+                f"{'=' * self.LOG_DIVIDER_LENGTH}\n"
+                f"网络监控已启动 | 检测间隔: {interval}s | 目标: {targets_str}\n"
+                f"认证地址: {auth_url} | 账号: {username} | 运营商: {isp}\n"
+                f"{'=' * self.LOG_DIVIDER_LENGTH}"
+            )
 
             try:
                 self.monitor_network()
@@ -265,7 +264,7 @@ class NetworkMonitorCore:
         if idx < len(intervals):
             wait = intervals[idx]
             self.status_detail = f"网络异常：等待重试（{wait}秒后）"
-            self.log_message(f"{wait} 秒后重试登录...", logging.DEBUG)
+            self.log_message(f"{wait} 秒后重试登录...", logging.INFO)
             if not self._wait_interruptible(wait, step=5):
                 return RecoveryResult.BREAK
             return "retry"
@@ -476,12 +475,16 @@ class NetworkMonitorCore:
             # 根据网络状态设置等待文案
             if self.network_state == NetworkState.CONNECTED:
                 self.status_detail = f"网络正常：等待下次检测（{next_check.strftime('%H:%M:%S')}）"
+                self.log_message(
+                    f"等待 {interval} 秒至下次检测周期（{next_check.strftime('%H:%M:%S')}）",
+                    logging.DEBUG,
+                )
             else:
                 self.status_detail = f"网络异常：等待下次检测（{next_check.strftime('%H:%M:%S')}）"
-            self.log_message(
-                f"等待 {interval} 秒至下次检测周期（{next_check.strftime('%H:%M:%S')}）",
-                logging.INFO,
-            )
+                self.log_message(
+                    f"等待 {interval} 秒至下次检测周期（{next_check.strftime('%H:%M:%S')}）",
+                    logging.INFO,
+                )
             wait_step = min(
                 self.MAX_WAIT_STEP_SECONDS,
                 max(self.MIN_WAIT_STEP_SECONDS, interval // 10),
@@ -537,9 +540,11 @@ class NetworkMonitorCore:
         if matched_id and matched_id != self._last_profile_id:
             profile = data.profiles.get(matched_id)
             profile_name = profile.name if profile else matched_id
+            old_profile = data.profiles.get(self._last_profile_id)
+            old_name = old_profile.name if old_profile else (self._last_profile_id or "无")
 
             self.log_message(
-                f"检测到网络环境变化，切换方案: {profile_name}",
+                f"检测到网络环境变化，方案切换: {old_name} -> {profile_name}",
                 logging.INFO,
             )
 
@@ -597,10 +602,10 @@ class NetworkMonitorCore:
                 self.log_message(f"登录失败 ✗ {message}", logging.ERROR)
             return success, message
         except asyncio.TimeoutError as exc:
-            self.log_message(f"登录超时: {exc}", logging.ERROR)
+            self.log_message(f"登录超时: {exc}", logging.WARNING)
             return False, f"登录超时: {exc}"
         except ConnectionError as exc:
-            self.log_message(f"登录连接错误: {exc}", logging.ERROR)
+            self.log_message(f"登录连接错误: {exc}", logging.WARNING)
             return False, f"连接错误: {exc}"
         except RuntimeError as exc:
             self.log_message(f"登录运行时错误: {exc}", logging.ERROR)

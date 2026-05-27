@@ -31,7 +31,7 @@ def send_notification(title: str, message: str, duration_ms: int = 5000) -> bool
             logger.debug("不支持的操作系统")
             return False
     except Exception as exc:
-        logger.warning("发送桌面通知失败: %s", exc)
+        logger.warning("发送桌面通知失败: %.200s", exc)
         return False
 
 

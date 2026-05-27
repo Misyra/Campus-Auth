@@ -26,8 +26,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger("playwright_worker", side="BACKEND")
 
 
 # ── 命令类型常量 ──

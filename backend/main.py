@@ -335,7 +335,7 @@ async def websocket_logs(websocket: WebSocket):
                             source="frontend",
                         )
             except (json.JSONDecodeError, KeyError):
-                pass
+                ws_logger.debug("WS 消息解析失败: %.100s", raw)
     except WebSocketDisconnect:
         ws_logger.info("WebSocket disconnected: /ws/logs")
         await ws_manager.disconnect(websocket)
@@ -442,7 +442,7 @@ def save_config(payload: MonitorConfigPayload) -> ActionResponse:
         LogConfigCenter.get_instance().set_level(payload.backend_log_level)
         # 同步更新 MonitorService 运行时配置
         service.reload_config()
-        api_logger.info("Config updated")
+        api_logger.info("配置已保存 -> success=True")
         return ActionResponse(success=True, message="配置保存成功")
     except ValueError as exc:
         api_logger.warning("Config update rejected: %s", exc)
@@ -1209,12 +1209,13 @@ def restore_backup(filename: str) -> ActionResponse:
         raise HTTPException(status_code=400, detail=f"备份文件结构不合法: {exc}")
 
     try:
+        old_active = profile_service.load().active_profile
         atomic_write(settings_path, backup_path.read_text(encoding="utf-8"))
         # 清除 ProfileService 缓存，强制从磁盘重新读取
         profile_service.invalidate_cache()
         service.reload_config()
         _cleanup_old_backups()
-        api_logger.info("配置已从备份恢复: %s", filename)
+        api_logger.info("配置已从备份恢复: %s (原活动方案: %s)", filename, old_active)
         return ActionResponse(success=True, message="配置已从备份恢复，请刷新页面查看")
     except Exception as exc:
         api_logger.error("恢复备份失败: %s", exc)
@@ -1273,7 +1274,7 @@ def run() -> None:
         access_log_enabled = bool(sys_settings.access_log)
         log_retention = max(1, sys_settings.log_retention_days)
     except Exception:
-        startup_logger.debug("读取日志配置失败，使用默认值", exc_info=True)
+        startup_logger.warning("读取日志配置失败，使用默认值", exc_info=True)
         log_level = "WARNING"
         access_log_enabled = False
         log_retention = 7

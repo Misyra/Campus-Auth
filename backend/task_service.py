@@ -49,8 +49,9 @@ class TaskService:
         return is_valid_task_id(task_id)
 
     def list_tasks(self) -> list[dict[str, str]]:
-        task_logger.debug("列出任务")
-        return self.task_manager.list_tasks()
+        tasks = self.task_manager.list_tasks()
+        task_logger.debug("列出任务: %d 个", len(tasks))
+        return tasks
 
     def get_task(self, task_id: str) -> dict[str, Any] | None:
         task_id = normalize_task_id(task_id)
