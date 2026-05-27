@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import re
 import socket
 import ssl
@@ -16,6 +17,7 @@ from src.utils.platform_utils import is_windows, is_macos, is_linux
 logger = get_logger("network_probes", side="BACKEND")
 
 _executor = ThreadPoolExecutor(max_workers=5)
+atexit.register(_executor.shutdown, wait=False, cancel_futures=True)
 _block_proxy = True  # 默认屏蔽系统代理，避免代理影响网络检测
 
 

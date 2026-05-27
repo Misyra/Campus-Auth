@@ -381,16 +381,16 @@ class ProfileService:
             self._save_unsafe(data)
 
     def get_active_profile(self) -> ProfileSettings:
-        """获取当前活动方案的设置"""
+        """获取当前活动方案的设置（返回值由 load() 深拷贝保护，无需再次拷贝）"""
         data = self.load()
         profile_id = data.active_profile
         profile = data.profiles.get(profile_id)
         if profile:
-            return profile.model_copy(deep=True)
+            return profile
         # 如果活动方案不存在，返回第一个或默认
         if data.profiles:
             first_id = next(iter(data.profiles))
-            return data.profiles[first_id].model_copy(deep=True)
+            return data.profiles[first_id]
         return ProfileSettings()
 
     def get_active_profile_id(self) -> str:

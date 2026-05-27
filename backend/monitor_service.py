@@ -144,9 +144,6 @@ class MonitorService:
         # 从主事件循环异步排空
         self._ws_broadcast_queue: deque[dict] = deque(maxlen=200)
 
-        # Guard against duplicate WS drain loop startup
-        self._drain_started = False
-
         # 登录并发控制 —— 防止同时提交多个登录任务到 Worker
         # 使用 Lock 保护 check-then-set 操作，避免竞态条件
         self._login_in_progress: bool = False
@@ -437,13 +434,7 @@ class MonitorService:
             service_logger.info("--no-auto 模式：跳过自动启动监控")
             return
 
-        # Start the async WS drain loop if a running loop is available
-        if not self._drain_started:
-            try:
-                asyncio.ensure_future(self._ws_drain_loop())
-                self._drain_started = True
-            except RuntimeError:
-                pass
+        # WS drain loop 由 main.py lifespan 统一启动和管理生命周期
 
         if self._ui_config.auto_start:
             self.start_monitoring()

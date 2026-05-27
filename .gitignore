@@ -10,7 +10,6 @@ wheels/
 
 # Virtual environments
 .venv
-uv.lock
 
 # Task active state (local user preference)
 tasks/active.txt
@@ -50,8 +49,6 @@ AGENTS.md
 skills-lock.json
 .sisyphus/
 
-# Test files
-tests/
 
 # OpenCode working directory
 .omo/

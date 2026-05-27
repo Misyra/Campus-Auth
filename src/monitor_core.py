@@ -245,15 +245,22 @@ class NetworkMonitorCore:
         intervals = [retry_interval * (2**i) for i in range(max_retries)]
         return max_retries, intervals
 
-    def _login_retry_or_break(self) -> str:
+    def _login_retry_or_break(
+        self, max_retries: int | None = None, intervals: list[int] | None = None
+    ) -> str:
         """登录失败后决定重试还是放弃。
+
+        Args:
+            max_retries: 缓存的最大重试次数（避免重复调用 _get_retry_config）
+            intervals: 缓存的重试间隔列表
 
         Returns:
             "retry"   — 短暂等待后应重试（continue）
             "break"   — 监控已停止（break）
             "give_up" — 超过最大重试次数，应等待正常检测间隔（fall through）
         """
-        max_retries, intervals = self._get_retry_config()
+        if max_retries is None or intervals is None:
+            max_retries, intervals = self._get_retry_config()
         idx = self.login_attempt_count - 1
         if idx < len(intervals):
             wait = intervals[idx]
@@ -291,6 +298,9 @@ class NetworkMonitorCore:
         ~10ms）+ 登录重试，不做 is_network_available()，确保 retry 间隔准确。
         """
         while self.monitoring:
+            # 缓存本轮迭代的重试配置（避免循环内重复调用 _get_retry_config）
+            max_retries, retry_intervals = self._get_retry_config()
+
             # 1. 快速检查物理网络连接（~10ms，非 TCP 探测）
             if not is_local_network_connected():
                 self.log_message(
@@ -315,7 +325,6 @@ class NetworkMonitorCore:
                 return RecoveryResult.NET_DISCONNECT
 
             # 2.6 检查是否还有重试机会（登录前检查，避免多执行一次）
-            max_retries, _ = self._get_retry_config()
             if self.login_attempt_count >= max_retries:
                 self.status_detail = f"网络异常：已达到最大重试次数（{max_retries}次）"
                 self.log_message(
@@ -353,7 +362,6 @@ class NetworkMonitorCore:
             # 4. 登录失败，记录并判断是否重试
             self.login_attempt_count += 1
             self.network_state = NetworkState.DISCONNECTED
-            max_retries, _ = self._get_retry_config()
             self.log_message(
                 f"登录失败 (第{self.login_attempt_count}/{max_retries}次)",
                 logging.ERROR,
@@ -371,7 +379,7 @@ class NetworkMonitorCore:
                 )
 
             failed_count = self.login_attempt_count
-            action = self._login_retry_or_break()
+            action = self._login_retry_or_break(max_retries, retry_intervals)
             if action == RecoveryResult.BREAK:
                 return RecoveryResult.BREAK
             if action == RecoveryResult.GIVE_UP:

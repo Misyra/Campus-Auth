@@ -93,8 +93,8 @@ def is_auth_url_reachable(auth_url: str) -> bool:
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
         if not host:
             return True
-        sock = socket.create_connection((host, port), timeout=3)
-        sock.close()
+        with socket.create_connection((host, port), timeout=3):
+            pass
         return True
     except Exception:
         return False

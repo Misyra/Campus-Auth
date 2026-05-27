@@ -239,15 +239,6 @@ class LoginAttemptHandler:
             "enable_http_check": monitor.get("enable_http_check", True),
         }
 
-    async def _create_new_browser(self) -> BrowserContextManager:
-        """创建新的浏览器实例（提取为方法，供复用路径调用）"""
-        browser_manager = BrowserContextManager(
-            self.config, cancel_event=self.cancel_event
-        )
-        await browser_manager.__aenter__()
-        self._browser_ctx = browser_manager
-        return browser_manager
-
     async def close_browser(self) -> None:
         """关闭浏览器（登录成功或监控停止时调用）"""
         if self._browser_ctx:

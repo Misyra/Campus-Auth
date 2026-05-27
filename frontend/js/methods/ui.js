@@ -2,8 +2,11 @@ export const uiMethods = {
   setFrontendLogLevel(level) {
     this.frontendLogger.setLevel(level);
   },
-  toastOnly(success, message) {
-    // 仅显示 Toast，不记录到通知历史（用于非关键信息如网络测试结果）
+  /** 从 API 错误中提取用户可读的错误消息 */
+  getApiError(error, fallback = '操作失败，请重试') {
+    return error?.response?.data?.detail || error?.message || fallback;
+  },
+  _showToast(success, message) {
     this.toast = { success, message, leaving: false };
     if (this._toastTimer) clearTimeout(this._toastTimer);
     if (this._toastLeavingTimer) clearTimeout(this._toastLeavingTimer);
@@ -15,23 +18,15 @@ export const uiMethods = {
       }, 300);
     }, 3000);
   },
+  toastOnly(success, message) {
+    this._showToast(success, message);
+  },
   notify(success, message) {
-    // 记录通知历史 + Toast（用于重要事件）
     const entry = { success, message, time: new Date().toLocaleTimeString() };
     this.notifications.unshift(entry);
     if (this.notifications.length > 30) this.notifications.length = 30;
     this.unreadNotifications++;
-
-    this.toast = { success, message, leaving: false };
-    if (this._toastTimer) clearTimeout(this._toastTimer);
-    if (this._toastLeavingTimer) clearTimeout(this._toastLeavingTimer);
-    this._toastTimer = setTimeout(() => {
-      this.toast.leaving = true;
-      this._toastLeavingTimer = setTimeout(() => {
-        this.toast.message = '';
-        this.toast.leaving = false;
-      }, 300);
-    }, 3000);
+    this._showToast(success, message);
   },
   nextWizardStep() {
     if (this.wizardStep < 4) {

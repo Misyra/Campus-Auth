@@ -12,6 +12,7 @@ class SystemTray:
         self.on_exit = on_exit
         self.icon = None
         self._thread = None
+        self._monitoring = False
 
     def _load_icon(self) -> Image.Image:
         icon_path = Path(__file__).parent.parent / "frontend" / "tray-icon.svg"
@@ -29,6 +30,9 @@ class SystemTray:
                 pass
         return Image.new("RGBA", (64, 64), (34, 211, 238, 255))
 
+    def _get_status_label(self, item) -> str:
+        return f"状态: {'运行中' if self._monitoring else '已停止'}"
+
     def _create_menu(self) -> pystray.Menu:
         return pystray.Menu(
             pystray.MenuItem(
@@ -37,7 +41,7 @@ class SystemTray:
                 default=True,
             ),
             pystray.MenuItem(
-                "状态: 运行中",
+                self._get_status_label,
                 lambda: None,
                 enabled=False,
             ),
@@ -73,6 +77,7 @@ class SystemTray:
             self.icon = None
 
     def update_status(self, monitoring: bool):
+        self._monitoring = monitoring
         icon = self.icon
         if not icon:
             return
