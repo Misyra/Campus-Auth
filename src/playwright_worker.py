@@ -875,6 +875,7 @@ class PlaywrightWorker:
 
 _worker: PlaywrightWorker | None = None
 """模块级全局 Worker 实例，首次调用 get_worker() 时创建。"""
+_worker_lock = threading.Lock()
 
 
 def get_worker() -> PlaywrightWorker:
@@ -885,8 +886,10 @@ def get_worker() -> PlaywrightWorker:
     """
     global _worker  # noqa: PLW0603
     if _worker is None:
-        _worker = PlaywrightWorker()
-        _worker.start()
+        with _worker_lock:
+            if _worker is None:
+                _worker = PlaywrightWorker()
+                _worker.start()
     return _worker
 
 
