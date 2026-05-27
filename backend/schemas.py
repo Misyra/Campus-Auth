@@ -31,9 +31,12 @@ class _BrowserFieldsMixin(BaseModel):
     """浏览器相关共享字段"""
 
     headless: bool = True
-    browser_timeout: int = Field(default=8000, ge=1000, le=60000)
+    browser_timeout: int = Field(default=8, ge=1, le=60, description="页面操作超时（秒）")
     login_timeout: int = Field(
-        default=120, ge=10, le=600, description="手动登录 API 请求超时（秒）"
+        default=60, ge=10, le=600, description="手动登录 API 请求超时（秒）"
+    )
+    browser_navigation_timeout: int = Field(
+        default=15, ge=3, le=60, description="打开登录页面超时（秒）"
     )
     browser_user_agent: str = Field(default_factory=get_default_ua)
     browser_low_resource_mode: bool = False

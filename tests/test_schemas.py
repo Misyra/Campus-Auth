@@ -152,16 +152,16 @@ class TestCustomVariablesValidator:
 
 class TestConstrainedFields:
     def test_browser_timeout_valid(self):
-        m = MonitorConfigPayload(browser_timeout=5000)
-        assert m.browser_timeout == 5000
+        m = MonitorConfigPayload(browser_timeout=5)
+        assert m.browser_timeout == 5
 
     def test_browser_timeout_too_low(self):
         with pytest.raises(ValidationError):
-            MonitorConfigPayload(browser_timeout=999)
+            MonitorConfigPayload(browser_timeout=0)
 
     def test_browser_timeout_too_high(self):
         with pytest.raises(ValidationError):
-            MonitorConfigPayload(browser_timeout=60001)
+            MonitorConfigPayload(browser_timeout=61)
 
     def test_app_port_valid(self):
         m = MonitorConfigPayload(app_port=8080)
@@ -433,7 +433,7 @@ class TestMonitorConfigPayloadFull:
             auth_url="http://10.0.0.1/login",
             check_interval_seconds=600,
             headless=False,
-            browser_timeout=10000,
+            browser_timeout=10,
             pause_enabled=False,
             enable_tcp_check=True,
             enable_http_check=False,
