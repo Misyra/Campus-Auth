@@ -77,7 +77,6 @@ class NetworkMonitorCore:
 
         # 持久化登录处理器，重试时复用浏览器
         self._login_handler: Optional[LoginAttemptHandler] = None
-        self._reuse_browser = False
 
         # 自动切换相关
         self._profile_service: Optional[ProfileService] = None
@@ -136,7 +135,6 @@ class NetworkMonitorCore:
             self._stop_requested = False
             self._cancel_login.clear()
             self._stop_event.clear()
-            self._reuse_browser = True
             self.start_time = time.time()
             self.network_check_count = 0
             self.login_attempt_count = 0
@@ -196,6 +194,22 @@ class NetworkMonitorCore:
             self.log_message(f"监控已停止，运行时长: {runtime}")
             self.log_message(f"检测次数: {self.network_check_count}")
             self.log_message("=" * self.LOG_DIVIDER_LENGTH)
+
+    def _close_browser_if_needed(self) -> None:
+        """关闭浏览器实例（通过 Worker 命令队列）"""
+        try:
+            from src.playwright_worker import get_worker, CMD_BROWSER_CLOSE
+
+            worker = get_worker()
+            if worker:
+                self.log_message("关闭浏览器实例")
+                result = worker.submit(CMD_BROWSER_CLOSE, timeout=5)
+                if not result.success:
+                    self.log_message(
+                        f"关闭浏览器失败: {result.error}", logging.WARNING
+                    )
+        except Exception as e:
+            self.log_message(f"关闭浏览器时出错: {e}", logging.WARNING)
 
     def _wait_interruptible(self, seconds: int, step: int = 5) -> bool:
         remaining = max(0, seconds)
@@ -286,6 +300,29 @@ class NetworkMonitorCore:
                 self.last_network_ok = False
                 return RecoveryResult.NET_DISCONNECT
 
+            # 2.6 检查是否还有重试机会（登录前检查，避免多执行一次）
+            max_retries, _ = self._get_retry_config()
+            if self.login_attempt_count >= max_retries:
+                self.log_message(
+                    f"已达到最大重试次数 ({max_retries})，等待下次检测周期",
+                    logging.WARNING,
+                )
+                interval = int(
+                    self.config.get("monitor", {}).get(
+                        "interval", self.DEFAULT_INTERVAL_SECONDS
+                    )
+                )
+                next_check = datetime.datetime.now() + datetime.timedelta(
+                    seconds=interval
+                )
+                send_notification(
+                    "Campus-Auth 登录失败",
+                    f"连续 {self.login_attempt_count} 次登录失败，"
+                    f"{interval}秒后重试（{next_check.strftime('%H:%M:%S')}）",
+                )
+                self.login_attempt_count = 0
+                return RecoveryResult.GIVE_UP
+
             # 3. 执行登录
             login_ok, login_msg = self.attempt_login()
             time.sleep(2)  # 保持与现有行为一致：等待 2s 后再做重试决策，
@@ -305,6 +342,10 @@ class NetworkMonitorCore:
                 logging.ERROR,
             )
 
+            # 浏览器关闭策略：前2次复用，第3次及以后关闭
+            if self.login_attempt_count >= 2:
+                self._close_browser_if_needed()
+
             if self.login_attempt_count == 2:
                 send_notification(
                     "Campus-Auth 登录失败",
@@ -316,9 +357,18 @@ class NetworkMonitorCore:
             if action == RecoveryResult.BREAK:
                 return RecoveryResult.BREAK
             if action == RecoveryResult.GIVE_UP:
+                interval = int(
+                    self.config.get("monitor", {}).get(
+                        "interval", self.DEFAULT_INTERVAL_SECONDS
+                    )
+                )
+                next_check = datetime.datetime.now() + datetime.timedelta(
+                    seconds=interval
+                )
                 send_notification(
                     "Campus-Auth 登录失败",
-                    f"连续 {failed_count} 次登录失败，等待下次检测周期",
+                    f"连续 {failed_count} 次登录失败，"
+                    f"{interval}秒后重试（{next_check.strftime('%H:%M:%S')}）",
                 )
                 return RecoveryResult.GIVE_UP
             # action == "retry" → 继续内层循环，不做网络检测
@@ -496,7 +546,6 @@ class NetworkMonitorCore:
             data = {
                 "config": self.config,
                 "cancel_event": self._cancel_login,
-                "reuse_browser": self._reuse_browser,
                 "skip_pause_check": True,
             }
             result = get_worker().submit(CMD_LOGIN, data=data, timeout=login_timeout)
@@ -510,21 +559,16 @@ class NetworkMonitorCore:
                 self.log_message(f"登录成功 ✓ {message}")
             else:
                 self.log_message(f"登录失败 ✗ {message}", logging.ERROR)
-                self._reuse_browser = False  # 失败后重置，下次重新创建浏览器实例
             return success, message
         except asyncio.TimeoutError as exc:
             self.log_message(f"登录超时: {exc}", logging.ERROR)
-            self._reuse_browser = False  # 失败后重置
             return False, f"登录超时: {exc}"
         except ConnectionError as exc:
             self.log_message(f"登录连接错误: {exc}", logging.ERROR)
-            self._reuse_browser = False  # 失败后重置
             return False, f"连接错误: {exc}"
         except RuntimeError as exc:
             self.log_message(f"登录运行时错误: {exc}", logging.ERROR)
-            self._reuse_browser = False  # 失败后重置
             return False, f"运行时错误: {exc}"
         except Exception as exc:
             self.log_message(f"登录执行异常: {exc}", logging.ERROR)
-            self._reuse_browser = False  # 失败后重置
             return False, str(exc)
