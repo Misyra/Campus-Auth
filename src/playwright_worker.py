@@ -664,7 +664,11 @@ class PlaywrightWorker:
         # 反检测脚本（默认关闭，需在方案设置中启用 stealth_mode）
         if browser_settings.get("stealth_mode", False):
             from src.utils.browser import STEALTH_INIT_SCRIPT
-            await self._page.add_init_script(STEALTH_INIT_SCRIPT)
+            script = STEALTH_INIT_SCRIPT
+            custom = browser_settings.get("stealth_custom_script", "").strip()
+            if custom:
+                script += "\n\n// ── 用户自定义反检测脚本 ──\n" + custom
+            await self._page.add_init_script(script)
 
         logger.info("浏览器启动完成")
 

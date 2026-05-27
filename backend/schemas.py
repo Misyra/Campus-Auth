@@ -45,6 +45,9 @@ class _BrowserFieldsMixin(BaseModel):
     stealth_mode: bool = Field(
         default=False, description="注入反检测脚本，隐藏浏览器自动化痕迹"
     )
+    stealth_custom_script: str = Field(
+        default="", description="自定义反检测 JavaScript 脚本，stealth_mode 开启时追加执行"
+    )
     browser_locale: str = Field(default="zh-CN", description="浏览器语言区域")
     browser_timezone: str = Field(default="Asia/Shanghai", description="浏览器时区 ID")
     browser_viewport_width: int = Field(

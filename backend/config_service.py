@@ -227,6 +227,7 @@ def build_runtime_config(
     )
     browser["browser_args"] = payload.browser_args.strip()
     browser["stealth_mode"] = payload.stealth_mode
+    browser["stealth_custom_script"] = payload.stealth_custom_script.strip()
     browser["locale"] = payload.browser_locale.strip()  # 浏览器语言区域
     browser["timezone_id"] = payload.browser_timezone.strip()  # 浏览器时区 ID
     browser["viewport_width"] = payload.browser_viewport_width
@@ -355,6 +356,8 @@ def save_config_combined(
                 "enable_tcp_check",
                 "enable_http_check",
                 "check_auth_url",
+                "stealth_mode",
+                "stealth_custom_script",
                 "custom_variables",
             ],
         )

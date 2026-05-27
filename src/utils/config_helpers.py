@@ -34,6 +34,7 @@ PROFILE_FIELDS: list[str] = [
     "browser_extra_headers_json",
     "browser_args",
     "stealth_mode",
+    "stealth_custom_script",
     "browser_locale",
     "browser_timezone",
     "pause_enabled",
