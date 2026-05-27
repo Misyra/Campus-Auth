@@ -111,33 +111,32 @@ export const profileMethods = {
       this.notify(false, '切换方案失败');
     }
   },
-  async detectNetworkForEditor() {
-    this.busy.editorDetect = true;
-    this.editorDetectResult = null;
+  async _detectNetwork(busyParent, busyKey, resultKey, errorLabel, fallback, fullData) {
+    busyParent[busyKey] = true;
+    this[resultKey] = null;
     try {
       const { data } = await this.$api.post('/api/profiles/detect');
-      this.editorDetectResult = { gateway_ip: data.gateway_ip, ssid: data.ssid };
+      this[resultKey] = fullData ? data : { gateway_ip: data.gateway_ip, ssid: data.ssid };
+      return fullData ? data : null;
     } catch (error) {
-      this.editorDetectResult = { gateway_ip: null, ssid: null };
-      this.frontendLogger.error('profiles', '编辑器网络检测失败', error);
-    } finally {
-      this.busy.editorDetect = false;
-    }
-  },
-  async detectNetwork() {
-    this.busy.detect = true;
-    this.detectResult = null;
-    try {
-      const { data } = await this.$api.post('/api/profiles/detect');
-      this.detectResult = data;
-      return data;
-    } catch (error) {
-      this.detectResult = { gateway_ip: null, ssid: null, matched_profile_id: null };
-      this.frontendLogger.error('profiles', '网络检测失败', error);
+      this[resultKey] = fallback;
+      this.frontendLogger.error('profiles', errorLabel, error);
       return null;
     } finally {
-      this.busy.detect = false;
+      busyParent[busyKey] = false;
     }
+  },
+  async detectNetworkForEditor() {
+    return this._detectNetwork(
+      this.busy, 'editorDetect', 'editorDetectResult', '编辑器网络检测失败',
+      { gateway_ip: null, ssid: null }, false,
+    );
+  },
+  async detectNetwork() {
+    return this._detectNetwork(
+      this.busy, 'detect', 'detectResult', '网络检测失败',
+      { gateway_ip: null, ssid: null, matched_profile_id: null }, true,
+    );
   },
   async toggleAutoSwitch() {
     const newState = !this.autoSwitch;

@@ -21,9 +21,10 @@ def is_network_available(
     timeout: float = 1.5,
     enable_tcp: bool = True,
     enable_http: bool = True,
+    skip_local_check: bool = False,
 ) -> bool:
     # 物理网络预检查：无实际连接时直接跳过，避免徒增功耗
-    if not is_local_network_connected():
+    if not skip_local_check and not is_local_network_connected():
         logger.warning("物理网络未连接，跳过 TCP/HTTP 检测")
         return False
 
@@ -145,6 +146,7 @@ def should_attempt_login(config: dict) -> tuple[bool, str]:
         timeout=monitor_config.get("network_check_timeout", 1.5),
         enable_tcp=enable_tcp,
         enable_http=enable_http,
+        skip_local_check=True,
     ):
         logger.info("网络正常，无需登录")
         return (False, "network_ok")
@@ -160,7 +162,7 @@ def check_campus_network_status() -> str:
     if not is_local_network_connected():
         return "未检测到本地网络连接（未获取到有效IP）"
 
-    if is_network_available():
+    if is_network_available(skip_local_check=True):
         return "已连接校园网并可访问互联网"
 
     return "已连接校园网，但无法访问互联网，需要认证"

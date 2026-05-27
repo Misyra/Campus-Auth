@@ -689,79 +689,17 @@ class PlaywrightWorker:
             logger.warning("浏览器健康检查异常", exc_info=True)
             return False
 
-    async def _close_browser(self) -> None:
-        """关闭浏览器并释放所有资源。
+    async def _cleanup_browser(self, graceful: bool = True) -> None:
+        """统一的浏览器资源清理方法。
 
-        按 page → context → browser → playwright 顺序关闭。
-        TargetClosedError / ConnectionClosedError 视为正常清理场景，
-        仅记录 warning；其余异常记录为 ERROR。
-        逻辑参考 BrowserContextManager._cleanup_browser() 的固定版本。
+        按 debug_page → page → context → browser → playwright 顺序关闭。
+
+        参数:
+            graceful: True 时区分日志级别（"target closed" → WARNING，其他 → ERROR）；
+                      False 时异常全部静默（用于崩溃恢复等场景）。
         """
-        # 清除调试执行器
-        self._debug_executor = None
-
-        # 关闭调试页面
-        if self._debug_page is not None:
-            try:
-                if not self._debug_page.is_closed():
-                    await self._debug_page.close()
-            except Exception:
-                pass
-            self._debug_page = None
-
-        # 关闭主页面：页面可能因浏览器断开而自动关闭，
-        # TargetClosedError 属于正常清理场景
-        try:
-            if self._page:
-                await self._page.close()
-        except Exception as e:
-            err_msg = str(e).lower()
-            if "target closed" in err_msg or "connection closed" in err_msg:
-                logger.warning("关闭页面时连接已断开（正常）: %s", e)
-            else:
-                logger.error("关闭页面异常: %s", e)
-        self._page = None
-
-        # 关闭上下文：与 page 采用相同异常处理策略
-        try:
-            if self._context:
-                await self._context.close()
-        except Exception as e:
-            err_msg = str(e).lower()
-            if "target closed" in err_msg or "connection closed" in err_msg:
-                logger.warning("关闭上下文时连接已断开（正常）: %s", e)
-            else:
-                logger.error("关闭上下文异常: %s", e)
-        self._context = None
-
-        # 关闭浏览器：先通过 is_connected() 健康检查，
-        # 确认浏览器实例仍存活再发起关闭，避免对已断开的实例误操作
-        try:
-            if self._browser and self._browser.is_connected():
-                await self._browser.close()
-            elif self._browser:
-                logger.debug("浏览器已断开连接，跳过 close")
-        except Exception as e:
-            logger.error("关闭浏览器异常: %s", e)
-        self._browser = None
-
-        # 停止 Playwright 服务
-        try:
-            if self._playwright:
-                await self._playwright.stop()
-        except Exception as e:
-            logger.error("停止 Playwright 失败: %s", e)
-        self._playwright = None
-
-        logger.info("浏览器资源已清理")
-
-    async def _force_cleanup(self) -> None:
-        """强制清理所有浏览器资源。
-
-        在 Worker 关闭或浏览器崩溃恢复时调用。
-        相比 _close_browser 更激进：跳过所有健康检查，直接关闭并置空引用。
-        """
-        logger.info("开始强制清理浏览器资源...")
+        if not graceful:
+            logger.info("开始强制清理浏览器资源...")
 
         # 清除调试执行器
         self._debug_executor = None
@@ -780,36 +718,66 @@ class PlaywrightWorker:
             try:
                 if not self._page.is_closed():
                     await self._page.close()
-            except Exception:
-                pass
-            self._page = None
+            except Exception as e:
+                if graceful:
+                    err_msg = str(e).lower()
+                    if "target closed" in err_msg or "connection closed" in err_msg:
+                        logger.warning("关闭页面时连接已断开（正常）: %s", e)
+                    else:
+                        logger.error("关闭页面异常: %s", e)
+        self._page = None
 
         # 关闭上下文
         if self._context is not None:
             try:
                 await self._context.close()
-            except Exception:
-                pass
-            self._context = None
+            except Exception as e:
+                if graceful:
+                    err_msg = str(e).lower()
+                    if "target closed" in err_msg or "connection closed" in err_msg:
+                        logger.warning("关闭上下文时连接已断开（正常）: %s", e)
+                    else:
+                        logger.error("关闭上下文异常: %s", e)
+        self._context = None
 
         # 关闭浏览器
         if self._browser is not None:
             try:
                 if self._browser.is_connected():
                     await self._browser.close()
-            except Exception:
-                pass
-            self._browser = None
+                elif graceful:
+                    logger.debug("浏览器已断开连接，跳过 close")
+            except Exception as e:
+                if graceful:
+                    logger.error("关闭浏览器异常: %s", e)
+        self._browser = None
 
-        # 停止 Playwright
+        # 停止 Playwright 服务
         if self._playwright is not None:
             try:
                 await self._playwright.stop()
-            except Exception:
-                pass
-            self._playwright = None
+            except Exception as e:
+                if graceful:
+                    logger.error("停止 Playwright 失败: %s", e)
+        self._playwright = None
 
-        logger.info("强制清理完成")
+        logger.info("浏览器资源已清理" if graceful else "强制清理完成")
+
+    async def _close_browser(self) -> None:
+        """关闭浏览器并释放所有资源（优雅模式）。
+
+        TargetClosedError / ConnectionClosedError 视为正常清理场景，
+        仅记录 warning；其余异常记录为 ERROR。
+        """
+        await self._cleanup_browser(graceful=True)
+
+    async def _force_cleanup(self) -> None:
+        """强制清理所有浏览器资源。
+
+        在 Worker 关闭或浏览器崩溃恢复时调用。
+        所有异常静默处理，确保清理流程不会因单个资源关闭失败而中断。
+        """
+        await self._cleanup_browser(graceful=False)
 
     # ── 辅助方法 ──
 

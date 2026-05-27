@@ -6,9 +6,13 @@ import logging
 import mimetypes
 import os
 import re
+import shutil
+import threading
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+import httpx
 
 # Windows 上 mimetypes 模块可能无法正确识别 .js 的 MIME 类型，
 # 导致 type="module" 脚本因返回 text/plain 而被浏览器拒绝加载
@@ -126,8 +130,6 @@ async def lifespan(app_instance):
         await _debug_session.session.close()
     # 清理临时调试截图（保留目录本身，仅删除内部文件）
     try:
-        import shutil
-
         if TEMP_DIR.exists():
             for item in TEMP_DIR.iterdir():
                 if item.is_file():
@@ -135,7 +137,7 @@ async def lifespan(app_instance):
                 elif item.is_dir():
                     shutil.rmtree(item, ignore_errors=True)
     except Exception:
-        pass
+        logger.debug("临时目录清理失败", exc_info=True)
     service.stop_monitoring()
     startup_logger.info("监控服务已停止")
     await ws_manager.close_all()
@@ -164,16 +166,14 @@ def _resolve_port() -> int:
     settings_path = PROJECT_ROOT / "settings.json"
     if settings_path.exists():
         try:
-            import json as _json
-
-            data = _json.loads(settings_path.read_text(encoding="utf-8"))
+            data = json.loads(settings_path.read_text(encoding="utf-8"))
             app_port = data.get("system", {}).get("app_port")
             if app_port is not None:
                 port = int(app_port)
                 if 1 <= port <= 65535:
                     return port
         except Exception:
-            pass
+            logger.debug("从 settings.json 读取端口失败", exc_info=True)
 
     return 50721
 
@@ -240,7 +240,7 @@ class DebugSession:
                 lambda: get_worker().submit(CMD_DEBUG_STOP)
             )
         except Exception:
-            pass
+            logger.debug("关闭调试会话 Worker 提交失败", exc_info=True)
         self.page = None
 
 
@@ -356,8 +356,6 @@ def health() -> dict[str, str]:
 
 @app.get("/api/check-update")
 async def check_update() -> dict:
-    import httpx
-
     current = get_project_version(PROJECT_ROOT)
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -614,8 +612,6 @@ def _get_configured_proxy() -> str:
 
 def _repo_get(url: str):
     """请求远程 JSON，使用配置的代理（如有）"""
-    import httpx
-
     headers = {"User-Agent": "Campus-Auth"}
     proxy = _get_configured_proxy()
     proxies = {"http": proxy, "https": proxy} if proxy else {}
@@ -629,8 +625,6 @@ def _repo_get(url: str):
 @app.get("/api/repo/fetch")
 def repo_fetch_index(url: str = Query(..., description="索引 JSON 地址")) -> list:
     """代理获取任务仓库索引，避免前端跨域问题"""
-    import httpx
-
     url = _normalize_repo_url(url)
     api_logger.info("获取远程索引: %s", url)
 
@@ -657,8 +651,6 @@ def repo_fetch_index(url: str = Query(..., description="索引 JSON 地址")) ->
 @app.get("/api/repo/task")
 def repo_fetch_task(url: str = Query(..., description="任务 JSON 地址")) -> dict:
     """代理获取单个任务配置"""
-    import httpx
-
     url = _normalize_repo_url(url)
     api_logger.info("下载远程任务: %s", url)
 
@@ -909,13 +901,11 @@ async def debug_stop() -> dict:
             _debug_session = empty_debug_session()
     # 清理临时调试截图
     try:
-        import shutil
-
         if TEMP_DIR.exists():
             shutil.rmtree(TEMP_DIR, ignore_errors=True)
             TEMP_DIR.mkdir(parents=True, exist_ok=True)
     except Exception:
-        pass
+        api_logger.debug("调试临时目录清理失败", exc_info=True)
     api_logger.info("Debug session stopped")
     return {"running": False, "message": "调试会话已关闭"}
 
@@ -1072,20 +1062,19 @@ def toggle_auto_switch(enabled: str = Query(default="true")) -> ActionResponse:
 def shutdown_server() -> ActionResponse:
     """关闭服务器"""
     api_logger.warning("Shutdown requested")
-    import threading
 
     def _do_shutdown():
         try:
             service.stop_monitoring()
         except Exception:
-            pass
+            api_logger.debug("关闭监控服务失败", exc_info=True)
         # 故意使用 os._exit(0) 而非 sys.exit(0)：sys.exit() 在 daemon 线程中仅退出该线程，
         # 不会终止进程；os._exit(0) 是 Windows 上唯一可靠的立即退出方式。
         # 日志已由 _DateRotatingFileHandler.emit() 即时写入，无需额外刷盘。
         try:
             (Path.home() / ".campus_network_auth" / "campus_network_auth.pid").unlink(missing_ok=True)
         except Exception:
-            pass
+            api_logger.debug("PID 文件清理失败", exc_info=True)
         os._exit(0)
 
     threading.Thread(target=_do_shutdown, daemon=True).start()
@@ -1205,7 +1194,7 @@ def restore_backup(filename: str) -> ActionResponse:
         try:
             auto_backup.write_bytes(settings_path.read_bytes())
         except Exception:
-            pass
+            api_logger.debug("设置备份失败", exc_info=True)
 
     try:
         backup_data = json.loads(backup_path.read_text(encoding="utf-8"))
@@ -1284,6 +1273,7 @@ def run() -> None:
         access_log_enabled = bool(sys_settings.access_log)
         log_retention = max(1, sys_settings.log_retention_days)
     except Exception:
+        startup_logger.debug("读取日志配置失败，使用默认值", exc_info=True)
         log_level = "WARNING"
         access_log_enabled = False
         log_retention = 7
@@ -1309,17 +1299,16 @@ def run() -> None:
             if old_log.exists():
                 old_log.unlink(missing_ok=True)
     except Exception:
-        pass
+        startup_logger.debug("旧日志清理失败", exc_info=True)
 
     # 清理旧版 debug/ 目录（一次性迁移，后续可移除）
     old_debug = PROJECT_ROOT / "debug"
     if old_debug.exists():
-        import shutil
         try:
             shutil.rmtree(old_debug)
             startup_logger.info("已清理旧版 debug/ 目录")
         except Exception:
-            pass
+            startup_logger.debug("旧版 debug 目录清理失败", exc_info=True)
 
     global _access_log_enabled
     _access_log_enabled = access_log_enabled

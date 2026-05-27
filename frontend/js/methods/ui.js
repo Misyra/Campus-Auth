@@ -2,10 +2,6 @@ export const uiMethods = {
   setFrontendLogLevel(level) {
     this.frontendLogger.setLevel(level);
   },
-  /** 从 API 错误中提取用户可读的错误消息 */
-  getApiError(error, fallback = '操作失败，请重试') {
-    return error?.response?.data?.detail || error?.message || fallback;
-  },
   _showToast(success, message) {
     this.toast = { success, message, leaving: false };
     if (this._toastTimer) clearTimeout(this._toastTimer);
@@ -74,7 +70,7 @@ export const uiMethods = {
       this.toastOnly(false, '变量名必须以字母或下划线开头，只能包含字母、数字和下划线');
       // 恢复原值
       this.$nextTick(() => {
-        const input = document.querySelector('.custom-var-item input[var-key="' + oldKey + '"]');
+        const input = document.querySelector('.custom-var-item input[data-var-key="' + oldKey + '"]');
         if (input) input.value = oldKey;
       });
       return;

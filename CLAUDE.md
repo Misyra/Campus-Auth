@@ -132,3 +132,4 @@ All config lives in `settings.json` (gitignored). Structure: `{ auto_switch, act
 - All routes are in `backend/main.py` — there is no route splitting across files.
 - `src/utils/time_utils.py` was renamed from `time.py` to avoid shadowing stdlib `time`.
 - 本项目仅本地运行，安全类问题（API 无鉴权、CORS 全开等）属于设计决策，不属于代码审查范围。
+- 依赖版本以 `pyproject.toml` 为权威来源，版本锁定要严格（精确到 patch 或窄范围），避免依赖不一致导致 bug。`requirements.txt` 是面向用户运行的简化清单，只列必要运行依赖，不包含开发工具。
