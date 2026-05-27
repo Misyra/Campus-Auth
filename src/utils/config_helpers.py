@@ -23,7 +23,7 @@ PROFILE_FIELDS: list[str] = [
     "active_task",
     "carrier",
     "carrier_custom",
-    "check_interval_minutes",
+    "check_interval_seconds",
     "auto_start",
     "headless",
     "browser_timeout",

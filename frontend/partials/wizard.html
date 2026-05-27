@@ -116,9 +116,9 @@
         <p class="description">配置自动监控和登录的行为。</p>
 
         <div class="form-group">
-          <label>检测间隔（分钟）</label>
-          <input v-model.number="config.check_interval_minutes" type="number" min="1" max="1440" />
-          <span class="hint">每隔多久检测一次网络状态，建议 3-10 分钟</span>
+          <label>检测间隔（秒）</label>
+          <input v-model.number="config.check_interval_seconds" type="number" min="10" max="86400" />
+          <span class="hint">每隔多久检测一次网络状态，建议 180-600 秒（3-10 分钟）</span>
         </div>
 
         <div class="form-row">
@@ -173,7 +173,7 @@
           </div>
           <div class="summary-item">
             <span class="label">检测间隔</span>
-            <span class="value">{{ config.check_interval_minutes }} 分钟</span>
+            <span class="value">{{ config.check_interval_seconds }} 秒</span>
           </div>
           <div class="summary-item">
             <span class="label">自动监控</span>

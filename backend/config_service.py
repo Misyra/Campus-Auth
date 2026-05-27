@@ -239,7 +239,7 @@ def build_runtime_config(
     pause["end_hour"] = payload.pause_end_hour
 
     monitor = base.setdefault("monitor", {})
-    monitor["interval"] = payload.check_interval_minutes * 60
+    monitor["interval"] = payload.check_interval_seconds
     monitor["ping_targets"] = [
         item.strip() for item in payload.network_targets.split(",") if item.strip()
     ]
@@ -343,7 +343,7 @@ def save_config_combined(
             glob.__dict__,
             pld,
             [
-                "check_interval_minutes",
+                "check_interval_seconds",
                 "auto_start",
                 "headless",
                 "browser_timeout",
