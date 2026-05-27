@@ -380,7 +380,7 @@ class MonitorService:
                 return
         else:
             self._status_snapshot = StatusSnapshot(
-                snapshot_time=time.time(), status_detail="监控已停止"
+                snapshot_time=time.time(), status_detail="已停止"
             )
 
         self._queue_status_broadcast()
