@@ -51,10 +51,21 @@ class TestIsInPausePeriod:
             mock_dt.datetime.now.return_value = mock_now
             assert is_in_pause_period(config) is False
 
-    def test_missing_keys(self):
-        """配置缺少字段时应安全处理"""
+    def test_missing_keys_in_pause(self):
+        """空配置默认启用暂停（0-6 点），凌晨 3 点应在暂停内"""
         config = {}
-        assert is_in_pause_period(config) is False
+        mock_now = datetime.datetime(2025, 1, 1, 3, 0, 0)
+        with patch("src.utils.time_utils.datetime") as mock_dt:
+            mock_dt.datetime.now.return_value = mock_now
+            assert is_in_pause_period(config) is True
+
+    def test_missing_keys_outside_pause(self):
+        """空配置默认启用暂停（0-6 点），中午 12 点应不在暂停内"""
+        config = {}
+        mock_now = datetime.datetime(2025, 1, 1, 12, 0, 0)
+        with patch("src.utils.time_utils.datetime") as mock_dt:
+            mock_dt.datetime.now.return_value = mock_now
+            assert is_in_pause_period(config) is False
 
 
 class TestGetRuntimeStats:

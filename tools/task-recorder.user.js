@@ -1476,7 +1476,7 @@
             }
           }
         } catch (_) {}
-        hiddenWarning = `⚠️ 检测到隐藏输入框！真实输入框 ${hiddenRealSelector} 已自动识别，导出时将使用 force 模式。`;
+        hiddenWarning = `⚠️ 检测到隐藏输入框！真实输入框 ${hiddenRealSelector} 已自动识别，执行器会自动处理。`;
       }
     }
 
@@ -2061,7 +2061,7 @@
     prompt += `任务编写规范请参考 Campus-Auth 项目中的 doc/task-writing-guide.md 文档。\n\n`;
     prompt += `页面地址: ${url}\n`;
     prompt += `> **重要：不要填写 url 字段。** 任务 JSON 的 url 字段请留空或使用 "{{LOGIN_URL}}"，由用户自行在 Campus-Auth 系统设置中配置认证地址。硬编码 URL 会导致任务无法通用。\n`;
-    prompt += `> **新增配置：** 请在任务 JSON 顶层添加 \`"reveal_hidden": true\`，执行器会在填写前自动显示所有隐藏输入框，无需 force 或 click 占位。\n\n`;
+    prompt += `> **隐藏输入框：** 执行器会在普通 fill/click 失败后自动降级到强制模式处理隐藏输入框，通常无需额外配置。如果自动降级不生效，再添加 \`"reveal_hidden": true\`。\n\n`;
     prompt += `> **version 字段：** 请在任务 JSON 顶层添加 \`"version": "3.7.0"\` 字段，标识此任务适用的 Campus-Auth 版本。\n`;
 
     // on_success / on_failure 建议
@@ -2108,7 +2108,7 @@
     const hiddenSteps = state.steps.filter(s => s.hiddenRealSelector);
     if (hiddenSteps.length > 0) {
       prompt += `## ⚠️ 隐藏输入框检测\n\n`;
-      prompt += `以下步骤的真实输入框是隐藏的。请在任务 JSON 中设置 \`"reveal_hidden": true\`，执行器会自动显示所有隐藏输入框并用普通 fill 填入，无需 click 占位或 force 字段：\n\n`;
+      prompt += `以下步骤的真实输入框是隐藏的。执行器会在普通 fill 失败后自动降级到强制模式处理，通常无需额外配置。如果自动降级不生效，可在任务 JSON 顶层添加 \`"reveal_hidden": true\`：\n\n`;
       for (const hs of hiddenSteps) {
         prompt += `### ${STEP_TYPES[hs.type]?.label || hs.type}: 真实输入框 \`${hs.hiddenRealSelector}\`\n`;
         if (hs.tipSelector) {
@@ -2496,7 +2496,7 @@
           <h5 style="color:#667eea;margin:14px 0 6px;">四、功能开关</h5>
           <ul style="margin:4px 0;padding-left:18px;">
             <li><b style="color:#fff;">🔁 多步录制</b> — 开启后每次点击/Enter 记录一步，不会自动停止，适合连续录制多个步骤。关闭后每次只记录一步。</li>
-            <li><b style="color:#fff;">🔍 隐藏检测</b> — 开启后，当点击容器 <code>div</code> 或 <code>readonly</code> 占位元素时，自动扫描内部 <code>display:none</code> 的隐藏输入框（常见于深澜/Sangfor 和杭州康工 HK Posi 认证页面）。检测到后导出自动在任务 JSON 顶层添加 <code>"reveal_hidden": true</code>，执行器会自动显示所有隐藏输入框。</li>
+            <li><b style="color:#fff;">🔍 隐藏检测</b> — 开启后，当点击容器 <code>div</code> 或 <code>readonly</code> 占位元素时，自动扫描内部 <code>display:none</code> 的隐藏输入框（常见于深澜/Sangfor 和杭州康工 HK Posi 认证页面）。检测到后会记录隐藏输入框的选择器信息，导出时提示 AI 生成正确的 selector。</li>
           </ul>
 
           <h5 style="color:#667eea;margin:14px 0 6px;">五、键盘快捷键</h5>
