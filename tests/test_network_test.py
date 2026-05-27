@@ -43,21 +43,21 @@ class TestSetBlockProxy:
 
     def test_block_proxy_default_is_true(self):
         """默认 _block_proxy 应为 True"""
-        import src.network_test as nt
-        nt.set_block_proxy(True)
-        assert nt._block_proxy is True
+        import src.network_probes as np
+        np.set_block_proxy(True)
+        assert np._block_proxy is True
 
     def test_block_proxy_true_sets_flag(self):
         """set_block_proxy(True) → _block_proxy = True"""
-        import src.network_test as nt
-        nt.set_block_proxy(True)
-        assert nt._block_proxy is True
+        import src.network_probes as np
+        np.set_block_proxy(True)
+        assert np._block_proxy is True
 
     def test_block_proxy_false_sets_flag(self):
         """set_block_proxy(False) → _block_proxy = False"""
-        import src.network_test as nt
-        nt.set_block_proxy(False)
-        assert nt._block_proxy is False
+        import src.network_probes as np
+        np.set_block_proxy(False)
+        assert np._block_proxy is False
 
 
 class TestCheckMacosService:
@@ -72,8 +72,8 @@ class TestCheckMacosService:
             MagicMock(returncode=0, stdout=""),
             MagicMock(returncode=0, stdout=""),
         ]
-        with patch("src.network_test.subprocess.run", mock_run):
-            with patch("src.network_test.is_macos", return_value=True):
+        with patch("src.network_probes.subprocess.run", mock_run):
+            with patch("src.network_probes.is_macos", return_value=True):
                 _check_macos_service()
                 # 验证 networksetup 被调用
                 networksetup_call = mock_run.call_args_list[0]
@@ -89,8 +89,8 @@ class TestCheckMacosService:
             MagicMock(returncode=0, stdout=""),
             MagicMock(returncode=0, stdout=""),
         ]
-        with patch("src.network_test.subprocess.run", mock_run):
-            with patch("src.network_test.is_macos", return_value=True):
+        with patch("src.network_probes.subprocess.run", mock_run):
+            with patch("src.network_probes.is_macos", return_value=True):
                 _check_macos_service()
                 # 应调用 ifconfig 三次（各设备一次），而非仅 en0/en1
                 ifconfig_calls = [
@@ -107,8 +107,8 @@ class TestCheckMacosService:
             MagicMock(returncode=0, stdout=""),
             MagicMock(returncode=0, stdout=""),
         ]
-        with patch("src.network_test.subprocess.run", mock_run):
-            with patch("src.network_test.is_macos", return_value=True):
+        with patch("src.network_probes.subprocess.run", mock_run):
+            with patch("src.network_probes.is_macos", return_value=True):
                 _check_macos_service()
                 ifconfig_calls = [
                     call for call in mock_run.call_args_list
@@ -123,7 +123,7 @@ class TestSslProbe:
 
     def test_http_probe_ssl_cert_error_returns_false(self):
         """SSL 证书错误时 is_network_available_http 应返回 False 而非崩溃"""
-        with patch('src.network_test.httpx.Client') as mock_client:
+        with patch('src.network_probes.httpx.Client') as mock_client:
             mock_client.return_value.__enter__.side_effect = ssl.SSLError("certificate verify failed")
             result = is_network_available_http(
                 test_urls=["https://test.example.com"],
@@ -133,7 +133,7 @@ class TestSslProbe:
 
     def test_http_probe_ssl_redirect_returns_false(self):
         """302 重定向（认证门户）不应被视为网络连通"""
-        with patch('src.network_test.httpx.Client') as mock_client:
+        with patch('src.network_probes.httpx.Client') as mock_client:
             mock_response = MagicMock()
             mock_response.status_code = 302
             # httpx.Client() → ctx_mgr, ctx_mgr.__enter__() → client, client.get() → resp
@@ -149,7 +149,7 @@ class TestSslProbe:
 
     def test_http_probe_ssl_200_returns_true(self):
         """HTTP 200 响应应被视为网络连通"""
-        with patch('src.network_test.httpx.Client') as mock_client:
+        with patch('src.network_probes.httpx.Client') as mock_client:
             mock_response = MagicMock()
             mock_response.status_code = 200
             mock_client_instance = MagicMock()
@@ -163,9 +163,9 @@ class TestSslProbe:
 
     def test_http_probe_ssl_error_logged_at_debug(self, caplog):
         """SSL 证书验证错误应在 DEBUG 级别记录"""
-        with patch('src.network_test.httpx.Client') as mock_client:
+        with patch('src.network_probes.httpx.Client') as mock_client:
             mock_client.return_value.__enter__.side_effect = ssl.SSLError("certificate verify failed")
-            with caplog.at_level(logging.DEBUG, logger="network_test"):
+            with caplog.at_level(logging.DEBUG, logger="network_probes"):
                 is_network_available_http(
                     test_urls=["https://test.example.com"],
                     timeout=0.5,
@@ -177,21 +177,21 @@ class TestSslProbe:
 
     def test_http_strict_mode_ssl_error_returns_false(self):
         """严格模式下 HTTP 探测失败（SSL 错误）时 is_network_available 应返回 False"""
-        with patch('src.network_test.is_network_available_http', return_value=False):
-            with patch('src.network_test.is_network_available_socket', return_value=True):
-                with patch('src.network_test.is_local_network_connected', return_value=True):
+        with patch('src.network_decision.is_network_available_http', return_value=False):
+            with patch('src.network_decision.is_network_available_socket', return_value=True):
+                with patch('src.network_decision.is_local_network_connected', return_value=True):
                     result = is_network_available(require_both=True)
         assert result is False
 
     def test_http_probe_verify_false_no_console_warning(self, caplog):
         """verify=False 不应产生 InsecureRequestWarning 等 SSL 警告"""
-        with patch('src.network_test.httpx.Client') as mock_client:
+        with patch('src.network_probes.httpx.Client') as mock_client:
             mock_response = MagicMock()
             mock_response.status_code = 200
             mock_client_instance = MagicMock()
             mock_client_instance.get.return_value = mock_response
             mock_client.return_value.__enter__.return_value = mock_client_instance
-            with caplog.at_level(logging.DEBUG, logger="network_test"):
+            with caplog.at_level(logging.DEBUG, logger="network_probes"):
                 result = is_network_available_http(
                     test_urls=["https://test.example.com"],
                     timeout=0.5,

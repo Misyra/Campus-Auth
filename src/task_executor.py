@@ -1298,7 +1298,7 @@ class TaskExecutor:
         网络检测失败 → 判定任务失败（认证未生效，可能密码错误或运营商不匹配）
         """
         try:
-            from src.network_test import is_network_available
+            from src.network_decision import is_network_available
 
             await asyncio.sleep(2)  # 等待页面响应登录请求后再检测网络
 
