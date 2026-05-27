@@ -422,6 +422,7 @@ class NetworkMonitorCore:
                     continue
                 elif reason == "network_ok":
                     self.login_attempt_count = 0
+                    self.last_network_ok = True
                     self.status_detail = "网络正常"
                     self.log_message(
                         f"[#{self.network_check_count}] 网络正常，无需登录", logging.INFO
