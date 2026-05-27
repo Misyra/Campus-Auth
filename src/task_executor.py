@@ -192,7 +192,7 @@ class TaskConfig:
     metadata: dict[str, Any] = field(
         default_factory=dict
     )  # 用户自定义元数据，执行器不使用
-    reveal_hidden: bool = True  # 执行前默认显示所有隐藏输入框
+    reveal_hidden: bool = False  # 默认关闭，由每个步骤的 force 降级自动处理隐藏输入框
     step_delay: float = 0.5
 
     @classmethod
@@ -208,7 +208,7 @@ class TaskConfig:
             on_success=data.get("on_success", {}),
             on_failure=data.get("on_failure", {}),
             metadata=data.get("metadata", {}),
-            reveal_hidden=data.get("reveal_hidden", True),
+            reveal_hidden=data.get("reveal_hidden", False),
             step_delay=float(data.get("step_delay", 0.5)),
         )
 
@@ -229,7 +229,8 @@ class TaskConfig:
             result["on_failure"] = self.on_failure
         if self.metadata:
             result["metadata"] = self.metadata
-        result["reveal_hidden"] = self.reveal_hidden
+        if self.reveal_hidden:
+            result["reveal_hidden"] = True
         if self.step_delay != 0.5:
             result["step_delay"] = self.step_delay
         return result
@@ -423,12 +424,13 @@ class StepHandler(ABC):
             try:
                 locator = ctx.locator(candidate)
                 await locator.first.wait_for(state="visible", timeout=timeout)
+                logger.info("[find] 选择器命中: %s", candidate)
                 return locator.first
             except Exception:
-                logger.debug("选择器未匹配: %s", candidate)
+                logger.debug("[find] 选择器未匹配: %s", candidate)
                 continue
 
-        logger.warning("所有选择器均未匹配: %s", selector)
+        logger.warning("[find] 所有选择器均未匹配: %s", selector)
         return None
 
 
@@ -452,26 +454,28 @@ class InputHandler(StepHandler):
             return False, "输入步骤需要 selector"
 
         ctx = await self._resolve_frame(page, step)
-        logger.info("输入 → %s (clear=%s)", selector, clear)
+        candidates = self._parse_selectors(selector)
+        masked = "***" if any(k in step.description.lower() for k in ("密码", "password", "pwd")) else value
+        logger.info(
+            "[input] 候选选择器 %d 个: %s, value=%s, clear=%s, timeout=%dms",
+            len(candidates), candidates, masked, clear, timeout,
+        )
 
         # 策略1: 快速尝试普通 fill（使用步骤 timeout 的 15%，最少 1500ms）
-        candidates = self._parse_selectors(selector)
         wait_timeout = max(1500, int(timeout * 0.15))
         for candidate in candidates:
             try:
                 loc = ctx.locator(candidate).first
                 await loc.wait_for(state="visible", timeout=wait_timeout)
-                if clear:
-                    await loc.fill("", timeout=timeout)
                 await loc.fill(value, timeout=timeout)
-                logger.info("输入完成(普通) → %s", candidate)
+                logger.info("[input] 普通 fill 成功 → %s", candidate)
                 return True, ""
             except Exception:
-                logger.debug("普通 fill 候选失败: %s", candidate)
+                logger.debug("[input] 普通 fill 候选失败: %s", candidate)
                 continue
 
         # 策略2: 自动降级到强制输入（隐藏/不可交互的输入框）
-        logger.info("普通 fill 失败，自动降级到强制输入模式")
+        logger.info("[input] 所有候选均未匹配可见元素，降级到强制输入模式")
         return await self._force_input(ctx, selector, value, clear, timeout)
 
     async def _force_input(
@@ -494,13 +498,13 @@ class InputHandler(StepHandler):
                     _FORCE_INPUT_JS,
                     {"val": value, "doClear": clear},
                 )
-                logger.info("强制输入完成 → %s", candidate)
+                logger.info("[input] 强制输入成功 → %s (attached)", candidate)
                 return True, ""
             except Exception:
-                logger.debug("force_input 候选失败: %s", candidate)
+                logger.debug("[input] 强制输入候选失败: %s", candidate)
                 continue
 
-        return False, f"force_input 未找到可用的输入元素: {selector}"
+        return False, f"强制输入未找到可用元素: {selector}"
 
 
 class ClickHandler(StepHandler):
@@ -521,32 +525,36 @@ class ClickHandler(StepHandler):
             return False, "点击步骤需要 selector"
 
         ctx = await self._resolve_frame(page, step)
-        logger.info("点击 → %s", selector)
-
-        # 策略1: 快速尝试普通 click（3s 超时）
         candidates = self._parse_selectors(selector)
+        logger.info(
+            "[click] 候选选择器 %d 个: %s, timeout=%dms",
+            len(candidates), candidates, timeout,
+        )
+
+        # 策略1: 快速尝试普通 click（使用步骤 timeout 的 15%，最少 1500ms）
+        wait_timeout = max(1500, int(timeout * 0.15))
         for candidate in candidates:
             try:
                 loc = ctx.locator(candidate).first
-                await loc.wait_for(state="visible", timeout=1500)
+                await loc.wait_for(state="visible", timeout=wait_timeout)
                 await loc.click(timeout=timeout)
-                logger.info("点击完成(普通) → %s", candidate)
+                logger.info("[click] 普通 click 成功 → %s", candidate)
                 return True, ""
             except Exception:
-                logger.debug("普通 click 候选失败: %s", candidate)
+                logger.debug("[click] 普通 click 候选失败: %s", candidate)
                 continue
 
         # 策略2: 自动降级到 force click（隐藏/不可交互的元素用 JS click）
-        logger.info("普通 click 失败，自动降级到 force click")
+        logger.info("[click] 所有候选均未匹配可见元素，降级到 force click")
         for candidate in candidates:
             try:
                 loc = ctx.locator(candidate).first
                 await loc.wait_for(state="attached", timeout=timeout)
                 await loc.dispatch_event("click")
-                logger.info("点击完成(force) → %s", candidate)
+                logger.info("[click] force click 成功 → %s (attached)", candidate)
                 return True, ""
             except Exception:
-                logger.debug("force click 候选失败: %s", candidate)
+                logger.debug("[click] force click 候选失败: %s", candidate)
                 continue
 
         return False, f"未找到可点击的元素: {selector}"
@@ -575,18 +583,18 @@ class SelectHandler(StepHandler):
             return True, ""
 
         ctx = await self._resolve_frame(page, step)
-        logger.info(f"[select] selector={selector}, value={value}")
+        logger.info("[select] selector=%s, value=%s, timeout=%dms", selector, value, timeout)
 
         element = await self._find_element(ctx, selector, timeout)
         if not element:
-            logger.info(f"[select] 未找到选择元素，跳过: {selector}")
+            logger.info("[select] 未找到选择元素，跳过: %s", selector)
             if step.required:
                 return False, f"选择元素未找到: {selector}"
             return True, ""
 
         selected = await self._select_with_fallback(element, value, timeout)
         if not selected:
-            logger.info(f"[select] 未匹配到运营商选项，跳过: {value}")
+            logger.info("[select] 未匹配到选项，跳过: %s", value)
             if step.required:
                 return False, f"选择选项未匹配: {value}"
         return True, ""
@@ -596,9 +604,10 @@ class SelectHandler(StepHandler):
         try:
             result = await element.select_option(value, timeout=timeout)
             if result:
+                logger.info("[select] 精确匹配成功: value=%s", value)
                 return True
         except Exception:
-            pass
+            logger.debug("[select] 精确匹配失败: value=%s, 尝试模糊匹配", value)
 
         option_texts = []
         try:
@@ -608,6 +617,7 @@ class SelectHandler(StepHandler):
         except Exception:
             option_texts = []
 
+        logger.info("[select] 可用选项: %s", option_texts)
         normalized_target = value.strip().lower()
         for text in option_texts:
             current = str(text or "").strip()
@@ -618,6 +628,7 @@ class SelectHandler(StepHandler):
                 try:
                     result = await element.select_option(label=current, timeout=timeout)
                     if result:
+                        logger.info("[select] 模糊匹配成功: '%s' 匹配选项 '%s'", value, current)
                         return True
                 except Exception:
                     continue
@@ -649,10 +660,8 @@ class ClickSelectHandler(StepHandler):
 
         ctx = await self._resolve_frame(page, step)
         logger.info(
-            "[click_select] trigger=%s, value=%s, option_sel=%s",
-            selector,
-            value,
-            option_selector or "(auto)",
+            "[click_select] trigger=%s, value=%s, option_sel=%s, timeout=%dms",
+            selector, value, option_selector or "(auto)", timeout,
         )
 
         trigger = await self._find_element(ctx, selector, timeout)
@@ -663,6 +672,7 @@ class ClickSelectHandler(StepHandler):
             return True, ""
 
         await trigger.click(timeout=timeout)
+        logger.info("[click_select] 触发器已点击，等待 500ms 后查找选项")
         await page.wait_for_timeout(500)
 
         clicked = await self._click_option(ctx, value, option_selector, timeout)
@@ -677,16 +687,18 @@ class ClickSelectHandler(StepHandler):
     ) -> bool:
         try:
             if option_selector:
-                # 限定容器内搜索，更精准
                 container = ctx.locator(option_selector).first
                 option = container.get_by_text(text, exact=False).first
+                logger.debug("[click_select] 在容器 '%s' 内搜索选项 '%s'", option_selector, text)
             else:
                 option = ctx.get_by_text(text, exact=False).first
+                logger.debug("[click_select] 全局搜索选项 '%s'", text)
             await option.wait_for(state="visible", timeout=timeout)
             await option.click(timeout=timeout)
-            logger.info("[click_select] 点击选项: %s", text)
+            logger.info("[click_select] 选项点击成功: '%s'", text)
             return True
         except Exception:
+            logger.debug("[click_select] 选项未找到或点击失败: '%s'", text)
             return False
 
 
@@ -872,6 +884,7 @@ class OcrHandler(StepHandler):
 
         timeout = step.timeout or 10000
         ctx = await self._resolve_frame(page, step)
+        logger.info("[ocr] selector=%s, target=%s, old=%s", selector, target_selector or "(无)", old)
 
         # 查找验证码图片元素
         element = await self._find_element(ctx, selector, timeout)
@@ -881,6 +894,7 @@ class OcrHandler(StepHandler):
         # 截取验证码图片
         try:
             img_bytes = await element.screenshot()
+            logger.debug("[ocr] 验证码截图成功, %d bytes", len(img_bytes))
         except Exception as e:
             return False, f"验证码截图失败: {e}"
 
@@ -891,11 +905,12 @@ class OcrHandler(StepHandler):
         except Exception as e:
             return False, f"验证码识别失败: {e}"
 
-        logger.info("[ocr] 识别结果: %s", result)
+        logger.info("[ocr] 识别结果: '%s'", result)
 
         # 存储到变量
         if store_as:
             resolver.set_runtime_var(store_as, result)
+            logger.info("[ocr] 结果已存入变量 %s", store_as)
 
         # 自动填入目标输入框
         if target_selector:
@@ -904,15 +919,15 @@ class OcrHandler(StepHandler):
                 return False, f"未找到验证码输入框: {target_selector}"
             try:
                 await target.fill(result, timeout=timeout)
-                logger.info("[ocr] 填入验证码成功(普通): %s", target_selector)
+                logger.info("[ocr] 普通 fill 成功 → %s, 值='%s'", target_selector, result)
             except Exception:
-                logger.info("[ocr] 普通 fill 失败，降级到强制输入: %s", target_selector)
+                logger.info("[ocr] 普通 fill 失败，降级到强制输入 → %s", target_selector)
                 await target.wait_for(state="attached", timeout=timeout)
                 await target.evaluate(
                     _FORCE_INPUT_JS,
                     {"val": result, "doClear": False},
                 )
-                logger.info("[ocr] 强制输入完成 → %s", target_selector)
+                logger.info("[ocr] 强制输入成功 → %s, 值='%s'", target_selector, result)
 
         return True, result
 
@@ -1182,17 +1197,17 @@ class TaskExecutor:
                 deadline = max(deadline, time.perf_counter() + timeout_ms / 1000)
 
     async def _reveal_hidden_inputs(self, page) -> int:
-        """强制显示所有隐藏的表单输入框。
+        """强制显示所有隐藏的表单输入框（含同源 iframe）。
         通过 JS 将 display:none / visibility:hidden / opacity:0 的 input 变为可见，
         后续 fill()/click() 可直接操作，无需 force 降级。覆盖 text/password/checkbox/radio 等。"""
         logger.info("[reveal] 强制显示隐藏输入框")
-        count = await page.evaluate("""
+        reveal_js = """
             () => {
                 const inputs = document.querySelectorAll('input,textarea');
                 let count = 0;
                 inputs.forEach(el => {
                     try {
-                        if (el.type === 'hidden') return;  // 跳过 type=hidden 元数据字段
+                        if (el.type === 'hidden') return;
                         const s = getComputedStyle(el);
                         const hidden = s.display === 'none'
                             || s.visibility === 'hidden'
@@ -1207,9 +1222,18 @@ class TaskExecutor:
                 });
                 return count;
             }
-        """)
-        logger.info("[reveal] 已强制显示 %d 个隐藏输入框", count)
-        return count
+        """
+        total = 0
+        # 主文档
+        total += await page.evaluate(reveal_js)
+        # 同源 iframe
+        for frame in page.frames[1:]:
+            try:
+                total += await frame.evaluate(reveal_js)
+            except Exception:
+                pass  # 跨域 frame 会抛错，静默跳过
+        logger.info("[reveal] 已强制显示 %d 个隐藏输入框", total)
+        return total
 
     async def _execute_step(self, page, step: StepConfig) -> tuple[bool, str]:
         """执行单个步骤"""
