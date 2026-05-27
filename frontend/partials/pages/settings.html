@@ -164,7 +164,7 @@
                 class="field-help"
                 tabindex="0"
                 role="note"
-                data-tip="用于检测网络是否连通的目标地址，支持 host 或 host:port 格式，多个目标用英文逗号分隔。任一目标可达即判定网络正常。"
+                data-tip="用于 TCP 探测的目标地址，支持 host 或 host:port 格式，多个目标用英文逗号分隔。任一目标可达即判定网络正常。"
               >?</span>
             </div>
             <input
@@ -174,6 +174,28 @@
               placeholder="8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
             />
           </div>
+          <div class="form-group">
+            <div class="field-label-row">
+              <label for="settings-network-check-timeout">探测超时（秒）</label>
+              <span class="field-help" tabindex="0" role="note" data-tip="网络探测的超时时间。如果网络较慢或经常误判为断网，可以适当增大此值。默认 2 秒，范围 1~30 秒。">?</span>
+            </div>
+            <input
+              id="settings-network-check-timeout"
+              v-model.number="config.network_check_timeout"
+              type="number"
+              min="1"
+              max="30"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section class="card settings-panel">
+        <div class="card-header">
+          <h2>探测方式</h2>
+          <span class="field-help" tabindex="0" role="note" data-tip="至少启用一种。多种同时启用时并发执行，必须全部通过才算联网正常。">?</span>
+        </div>
+        <div class="card-body">
           <div class="toggle-group">
             <div class="toggle-with-help">
               <label class="toggle toggle-help-inline">
@@ -188,19 +210,19 @@
                 <input type="checkbox" v-model="config.enable_http_check" />
                 <span class="toggle-slider"></span>
                 <span class="toggle-label">HTTP 探测</span>
-                <span class="field-help" tabindex="0" role="note" data-tip="通过 HTTP 请求外部站点检测网络连通性。开启后会略微增加检测耗时。">?</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="通过 HTTP 请求外部站点检测网络连通性。">?</span>
               </label>
             </div>
             <div class="toggle-with-help">
               <label class="toggle toggle-help-inline">
-                <input type="checkbox" :checked="config.portal_check_urls && config.portal_check_urls.trim()" @change="config.portal_check_urls = $event.target.checked ? (config.portal_check_urls || defaultPortalUrls) : ''" />
+                <input type="checkbox" v-model="portalCheckEnabled" />
                 <span class="toggle-slider"></span>
                 <span class="toggle-label">Captive Portal 探测</span>
-                <span class="field-help" tabindex="0" role="note" data-tip="通过访问 captive portal 检测地址判断网络是否需要认证。能准确识别被门户劫持的网络。可在下方自定义探测地址和预期内容。">?</span>
+                <span class="field-help" tabindex="0" role="note" data-tip="通过访问 captive portal 检测地址判断网络是否需要认证。能准确识别被门户劫持的网络。">?</span>
               </label>
             </div>
           </div>
-          <div v-if="config.portal_check_urls && config.portal_check_urls.trim()" class="form-group">
+          <div v-if="portalCheckEnabled" class="form-group">
             <div class="field-label-row">
               <label for="settings-portal-urls">Portal 探测地址</label>
               <span class="field-help" tabindex="0" role="note" data-tip="每行一个，格式：URL|预期内容。响应内容包含预期文本则判定网络正常。">?</span>
@@ -213,28 +235,13 @@
               class="monospace-textarea"
             ></textarea>
           </div>
-          <div class="toggle-group">
-            <div class="toggle-with-help">
-              <label class="toggle toggle-help-inline">
-                <input type="checkbox" v-model="config.check_auth_url" />
-                <span class="toggle-slider"></span>
-                <span class="toggle-label">认证地址可达性检查</span>
-                <span class="field-help" tabindex="0" role="note" data-tip="登录前检测认证页面是否可达。如果校园网通过重定向方式跳转到认证页面（无法直接 ping 通），请关闭此选项。">?</span>
-              </label>
-            </div>
-          </div>
-          <div class="form-group">
-            <div class="field-label-row">
-              <label for="settings-network-check-timeout">网络探测超时（秒）</label>
-              <span class="field-help" tabindex="0" role="note" data-tip="TCP 网络连通性探测的超时时间。如果网络较慢或经常误判为断网，可以适当增大此值。默认 2 秒，范围 1~30 秒。">?</span>
-            </div>
-            <input
-              id="settings-network-check-timeout"
-              v-model.number="config.network_check_timeout"
-              type="number"
-              min="1"
-              max="30"
-            />
+          <div class="toggle-with-help">
+            <label class="toggle toggle-help-inline">
+              <input type="checkbox" v-model="config.check_auth_url" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">认证地址可达性检查</span>
+              <span class="field-help" tabindex="0" role="note" data-tip="登录前检测认证页面是否可达。如果校园网通过重定向方式跳转到认证页面（无法直接 ping 通），请关闭此选项。">?</span>
+            </label>
           </div>
         </div>
       </section>
