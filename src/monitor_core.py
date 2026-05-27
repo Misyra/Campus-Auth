@@ -452,14 +452,6 @@ class NetworkMonitorCore:
                     )
                     self.login_attempt_count = 0
                     self.network_state = NetworkState.DISCONNECTED
-                elif reason == "auth_url_unreachable":
-                    self.status_detail = "网络异常：认证地址不可达"
-                    self.log_message(
-                        f"[#{self.network_check_count}] 认证地址不可达，跳过登录",
-                        logging.WARNING,
-                    )
-                    self.login_attempt_count = 0
-                    self.network_state = NetworkState.DISCONNECTED
                 # fall through to interval wait
             else:
                 # 执行登录（网络不可用但可以尝试认证）
