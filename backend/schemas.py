@@ -130,7 +130,6 @@ class MonitorConfigPayload(_BrowserFieldsMixin, _MonitorFieldsMixin, _SharedVali
         default=5, ge=1, le=300, description="重试间隔（秒），指数退避基数"
     )
     log_retention_days: int = Field(default=7, ge=1, le=365)
-    screenshot_retention_days: int = Field(default=7, ge=1, le=90)
     app_port: int = Field(
         default=50721, ge=1024, le=65535, description="Web 控制台端口，更改需重启生效"
     )
@@ -239,10 +238,7 @@ class SystemSettings(BaseModel):
         default=False, description="纯净模式：使用 Chromium 原始设置，不注入自定义参数"
     )
     log_retention_days: int = Field(
-        default=7, ge=1, le=365, description="日志文件保留天数"
-    )
-    screenshot_retention_days: int = Field(
-        default=7, ge=1, le=90, description="失败截图保留天数"
+        default=7, ge=1, le=365, description="日志与截图保留天数"
     )
     app_port: int = Field(default=50721, ge=1024, le=65535, description="Web 控制台端口")
     network_check_timeout: int = Field(

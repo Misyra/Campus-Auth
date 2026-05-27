@@ -52,7 +52,6 @@ PROFILE_FIELDS: list[str] = [
     "max_retries",
     "retry_interval",
     "log_retention_days",
-    "screenshot_retention_days",
     "custom_variables",
     "proxy",
     "block_proxy",
