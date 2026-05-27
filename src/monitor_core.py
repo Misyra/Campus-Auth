@@ -29,6 +29,13 @@ class RecoveryResult(str, Enum):
     NET_DISCONNECT = "net_disconnect"
 
 
+class NetworkState(str, Enum):
+    """网络状态枚举，用于区分首次检测和已知状态"""
+    UNKNOWN = "unknown"          # 首次检测，状态未知
+    CONNECTED = "connected"      # 网络正常
+    DISCONNECTED = "disconnected"  # 网络异常
+
+
 class NetworkMonitorCore:
     """网络监控核心类"""
 
@@ -67,7 +74,7 @@ class NetworkMonitorCore:
         self.start_time: Optional[float] = None
         self.last_check_time: Optional[datetime.datetime] = None
         # 上次网络连通性检测结果（用于 UI 状态显示）
-        self.last_network_ok: Optional[bool] = None
+        self.network_state: NetworkState = NetworkState.UNKNOWN
 
         self._stop_requested = False
         self._cancel_login = threading.Event()
@@ -106,7 +113,7 @@ class NetworkMonitorCore:
             if self.last_check_time
             else None,
             "start_time": self.start_time,
-            "last_network_ok": self.last_network_ok,
+            "network_state": self.network_state.value,
             "status_detail": self.status_detail,
         }
 
@@ -142,7 +149,7 @@ class NetworkMonitorCore:
             self.start_time = time.time()
             self.network_check_count = 0
             self.login_attempt_count = 0
-            self.last_network_ok = None
+            self.network_state = NetworkState.UNKNOWN
             self.status_detail = "正在启动监控"
             self._test_sites_cache = None  # 重置缓存
 
@@ -291,7 +298,7 @@ class NetworkMonitorCore:
                     logging.WARNING,
                 )
                 self.login_attempt_count = 0
-                self.last_network_ok = False
+                self.network_state = NetworkState.DISCONNECTED
                 return RecoveryResult.NET_DISCONNECT
 
             # 2. 检查配置方案是否切换（内部有 60s 冷却）
@@ -304,7 +311,7 @@ class NetworkMonitorCore:
                     logging.WARNING,
                 )
                 self.login_attempt_count = 0
-                self.last_network_ok = False
+                self.network_state = NetworkState.DISCONNECTED
                 return RecoveryResult.NET_DISCONNECT
 
             # 2.6 检查是否还有重试机会（登录前检查，避免多执行一次）
@@ -339,13 +346,13 @@ class NetworkMonitorCore:
 
             if login_ok:
                 self.login_attempt_count = 0
-                self.last_network_ok = True
+                self.network_state = NetworkState.CONNECTED
                 self.status_detail = "网络正常"
                 return RecoveryResult.LOGIN_OK
 
             # 4. 登录失败，记录并判断是否重试
             self.login_attempt_count += 1
-            self.last_network_ok = False
+            self.network_state = NetworkState.DISCONNECTED
             max_retries, _ = self._get_retry_config()
             self.log_message(
                 f"登录失败 (第{self.login_attempt_count}/{max_retries}次)",
@@ -400,7 +407,7 @@ class NetworkMonitorCore:
             self.network_check_count += 1
             self.last_check_time = datetime.datetime.now()
             # 首次检测显示"正在检测网络"，后续检测根据上次结果显示
-            if self.last_network_ok is None:
+            if self.network_state == NetworkState.UNKNOWN:
                 self.status_detail = "正在检测网络"
             targets_str = ", ".join(f"{h}:{p}" for h, p in test_sites)
             self.log_message(f"[#{self.network_check_count}] 网络检测 → {targets_str}")
@@ -424,6 +431,7 @@ class NetworkMonitorCore:
                     continue
                 elif reason == "network_ok":
                     self.login_attempt_count = 0
+                    self.network_state = NetworkState.CONNECTED
                     self.status_detail = "网络正常"
                     self.log_message(
                         f"[#{self.network_check_count}] 网络正常，无需登录", logging.INFO
@@ -435,7 +443,7 @@ class NetworkMonitorCore:
                         logging.WARNING,
                     )
                     self.login_attempt_count = 0
-                    self.last_network_ok = False
+                    self.network_state = NetworkState.DISCONNECTED
                 elif reason == "auth_url_unreachable":
                     self.status_detail = "网络异常：认证地址不可达"
                     self.log_message(
@@ -443,7 +451,7 @@ class NetworkMonitorCore:
                         logging.WARNING,
                     )
                     self.login_attempt_count = 0
-                    self.last_network_ok = False
+                    self.network_state = NetworkState.DISCONNECTED
                 # fall through to interval wait
             else:
                 # 执行登录（网络不可用但可以尝试认证）
@@ -451,7 +459,7 @@ class NetworkMonitorCore:
                 recovery_result = self._login_recovery_loop()
                 if recovery_result == RecoveryResult.LOGIN_OK:
                     self.login_attempt_count = 0
-                    self.last_network_ok = True
+                    self.network_state = NetworkState.CONNECTED
                     self.status_detail = "网络正常"
                     self.log_message(
                         f"[#{self.network_check_count}] 登录成功，网络已恢复"
@@ -460,13 +468,15 @@ class NetworkMonitorCore:
                     break
                 elif recovery_result == RecoveryResult.NET_DISCONNECT:
                     self.status_detail = "网络异常：物理网络断开"
+                    self.network_state = NetworkState.DISCONNECTED
                 elif recovery_result == RecoveryResult.GIVE_UP:
                     self.status_detail = "网络异常：登录失败，等待下次检测"
+                    self.network_state = NetworkState.DISCONNECTED
                 # RecoveryResult.GIVE_UP → 跳出，进入正常检测间隔等待
 
             next_check = datetime.datetime.now() + datetime.timedelta(seconds=interval)
             # 根据网络状态设置等待文案
-            if self.last_network_ok:
+            if self.network_state == NetworkState.CONNECTED:
                 self.status_detail = f"网络正常：等待下次检测（{next_check.strftime('%H:%M:%S')}）"
             else:
                 self.status_detail = f"网络异常：等待下次检测（{next_check.strftime('%H:%M:%S')}）"
