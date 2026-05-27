@@ -28,6 +28,8 @@ export const appOptions = {
         login_attempt_count: 0,
         last_check_time: null,
         runtime_seconds: 0,
+        network_connected: false,
+        status_detail: '监控已停止',
       },
       logs: [],
       appVersion: 'unknown',
@@ -159,6 +161,10 @@ export const appOptions = {
       if (!this.status.monitoring) return 'idle';
       if (this.status.network_connected === false) return 'disconnected';
       return 'connected';
+    },
+    networkStatusText() {
+      if (!this.status.monitoring) return '监控已停止';
+      return this.status.status_detail || '正常';
     },
     filteredRepoTasks() {
       const q = this.repoImport.searchQuery.trim().toLowerCase();

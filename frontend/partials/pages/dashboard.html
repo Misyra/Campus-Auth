@@ -1,9 +1,7 @@
 <div v-if="currentPage === 'dashboard'" class="page-content fade-in">
   <div v-if="status.monitoring" class="network-status-banner" :class="networkStatus">
     <span class="status-dot"></span>
-    <span v-if="networkStatus === 'connected'">网络已连接</span>
-    <span v-else-if="networkStatus === 'disconnected'">网络已断开 · 正在尝试认证...</span>
-    <span v-else>监控已停止</span>
+    <span>{{ networkStatusText }}</span>
   </div>
 
   <div class="stats-grid">

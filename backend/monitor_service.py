@@ -53,6 +53,7 @@ class StatusSnapshot:
     login_attempt_count: int = 0
     last_check_time: str | None = None
     snapshot_time: float = 0.0
+    status_detail: str = "正常"
 
 
 # ── WebSocket 管理器 ──
@@ -372,12 +373,15 @@ class MonitorService:
                     login_attempt_count=int(snap.get("login_attempt_count", 0)),
                     last_check_time=snap.get("last_check_time"),
                     snapshot_time=time.time(),
+                    status_detail=snap.get("status_detail", "正常"),
                 )
             except Exception:
                 service_logger.exception("状态快照更新失败")
                 return
         else:
-            self._status_snapshot = StatusSnapshot(snapshot_time=time.time())
+            self._status_snapshot = StatusSnapshot(
+                snapshot_time=time.time(), status_detail="监控已停止"
+            )
 
         self._queue_status_broadcast()
 
@@ -550,6 +554,7 @@ class MonitorService:
             last_check_time=snap.last_check_time,
             runtime_seconds=runtime_seconds,
             network_connected=snap.monitoring and snap.last_network_ok,
+            status_detail=snap.status_detail,
         )
 
     def run_manual_login(self) -> tuple[bool, str]:
