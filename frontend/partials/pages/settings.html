@@ -590,6 +590,19 @@
               </label>
             </div>
           </div>
+          <div v-show="config.stealth_mode" class="form-group">
+            <div class="field-label-row">
+              <label for="settings-stealth-custom">自定义反检测脚本</label>
+              <span class="field-help" tabindex="0" role="note" data-tip="在内置反检测脚本之后追加执行的自定义 JavaScript 代码。可用于注入额外的指纹伪装或覆盖内置行为。留空则仅使用内置脚本。">?</span>
+            </div>
+            <textarea
+              id="settings-stealth-custom"
+              v-model="config.stealth_custom_script"
+              rows="6"
+              placeholder="// 示例：覆盖 WebGL 渲染器信息&#10;// const getParameter = WebGLRenderingContext.prototype.getParameter;&#10;// WebGLRenderingContext.prototype.getParameter = function(param) {&#10;//   if (param === 37445) return 'Intel Inc.';&#10;//   if (param === 37446) return 'Intel Iris OpenGL Engine';&#10;//   return getParameter.call(this, param);&#10;// };"
+              style="font-family: monospace; font-size: 12px; resize: vertical;"
+            ></textarea>
+          </div>
         </div>
       </section>
 
