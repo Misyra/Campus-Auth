@@ -1,5 +1,0 @@
-=== QA Evidence: Regression tests pass ===
-
-Command: uv run pytest tests/ -v
-Result: 337 passed, 2 warnings in 42.74s
-All project tests pass. No regressions.

@@ -1,2 +1,0 @@
-18	E402	module-import-not-at-top-of-file
-Found 18 errors.

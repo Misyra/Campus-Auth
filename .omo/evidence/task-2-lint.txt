@@ -1,4 +1,0 @@
-Task 2: Fix _cleanup_browser exception swallowing — Ruff lint
-Status: PASS
-Command: uv run ruff check src/utils/browser.py
-Output: All checks passed!

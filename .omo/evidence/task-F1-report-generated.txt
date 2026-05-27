@@ -1,3 +1,0 @@
-F1 report generated at .omo/reports/code-review-remaining.md
-Generated: 2026-05-24
-Content: 9 remaining issues (2 critical, 3 major, 4 minor) across the Campus-Auth codebase

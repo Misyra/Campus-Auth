@@ -1,4 +1,0 @@
-Task 5: PlaywrightWorker full logic — Ruff lint
-Status: PASS
-Command: uv run ruff check src/playwright_worker.py
-Output: All checks passed!

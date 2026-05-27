@@ -1,4 +1,0 @@
-Task 2: Fix _cleanup_browser exception swallowing — is_connected() check
-Status: PASS
-Command: uv run python -c "from src.utils.browser import BrowserContextManager; import inspect; src = inspect.getsource(BrowserContextManager._cleanup_browser); print('is_connected' in src)"
-Output: True
