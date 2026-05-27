@@ -54,6 +54,7 @@ class StatusSnapshot:
     last_check_time: str | None = None
     snapshot_time: float = 0.0
     status_detail: str = "正常"
+    network_state: str = "unknown"
 
 
 # ── WebSocket 管理器 ──
@@ -365,15 +366,19 @@ class MonitorService:
         if core is not None:
             try:
                 snap = core.snapshot()
+                # 将 network_state 枚举转换为 network_connected 布尔值
+                network_state = snap.get("network_state", "unknown")
+                network_connected = network_state == "connected"
                 self._status_snapshot = StatusSnapshot(
                     monitoring=core.monitoring,
-                    last_network_ok=bool(snap.get("last_network_ok")),
+                    last_network_ok=network_connected,
                     start_time=snap.get("start_time"),
                     network_check_count=int(snap.get("network_check_count", 0)),
                     login_attempt_count=int(snap.get("login_attempt_count", 0)),
                     last_check_time=snap.get("last_check_time"),
                     snapshot_time=time.time(),
                     status_detail=snap.get("status_detail", "正常"),
+                    network_state=network_state,
                 )
             except Exception:
                 service_logger.exception("状态快照更新失败")
@@ -555,6 +560,7 @@ class MonitorService:
             runtime_seconds=runtime_seconds,
             network_connected=snap.monitoring and snap.last_network_ok,
             status_detail=snap.status_detail,
+            network_state=snap.network_state,
         )
 
     def run_manual_login(self) -> tuple[bool, str]:

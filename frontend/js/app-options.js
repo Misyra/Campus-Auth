@@ -30,6 +30,7 @@ export const appOptions = {
         runtime_seconds: 0,
         network_connected: false,
         status_detail: '已停止',
+        network_state: 'unknown',
       },
       logs: [],
       appVersion: 'unknown',
@@ -159,8 +160,8 @@ export const appOptions = {
     },
     networkStatus() {
       if (!this.status.monitoring) return 'idle';
-      // 首次检测中（last_network_ok 为 null）显示为检测中状态
-      if (this.status.status_detail === '正在检测网络') return 'checking';
+      // 首次检测中（network_state 为 unknown）显示为检测中状态
+      if (this.status.network_state === 'unknown') return 'checking';
       if (this.status.network_connected === false) return 'disconnected';
       return 'connected';
     },

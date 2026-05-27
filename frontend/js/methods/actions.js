@@ -39,7 +39,7 @@ export const actionMethods = {
     this.busy.monitor = true;
     try {
       const url = this.status.monitoring ? '/api/monitor/stop' : '/api/monitor/start';
-      this.frontendLogger.info('monitor', `请求 ${url}`);
+      this.frontendLogger.info('monitor', `POST ${url}`);
       const { data } = await this.$api.post(url);
       this.frontendLogger.info('monitor', '监控状态切换: ' + data.message);
       this.toastOnly(data.success, data.message);
