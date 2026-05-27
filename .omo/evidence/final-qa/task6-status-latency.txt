@@ -1,0 +1,22 @@
+Task 6 — Status Latency Verification — Real Manual QA
+=======================================================
+Date: 2026-05-25
+Method: curl (Invoke-WebRequest) timing, 5 runs
+
+Runs:
+  Run 1: 103ms (cold — TCP connect overhead)
+  Run 2:   7ms
+  Run 3:  46ms
+  Run 4:   7ms
+  Run 5:  11ms
+
+Summary:
+  Min:    7ms
+  Max:  103ms (first run, cold TCP)
+  Avg: 34.8ms
+
+Warm runs (2-5): avg 17.75ms, all well under 100ms
+First run 103ms is cold TCP connection establishment overhead, not status read latency.
+
+Result: PASS — StatusSnapshot direct read is < 50ms in steady state
+The Actor model's lock-free StatusSnapshot provides near-instant reads.

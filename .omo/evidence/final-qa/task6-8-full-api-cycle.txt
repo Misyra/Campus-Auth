@@ -1,0 +1,17 @@
+Task 6 & 8 — Full API Cycle Verification — Real Manual QA
+============================================================
+Date: 2026-05-25
+Method: curl (Invoke-WebRequest) against running app
+
+Sequence:
+1. GET /api/health → 200 {"status":"ok","version":"3.7.0"} PASS
+2. GET /api/status → 200 {"monitoring":false,...} PASS
+3. POST /api/monitor/start → 200 {"success":true} PASS
+4. GET /api/status → 200 {"monitoring":true,...} PASS
+5. POST /api/monitor/stop → 200 {"success":true} PASS
+6. GET /api/status → 200 {"monitoring":false,...} PASS
+
+Result: 6/6 PASS
+- Start/stop commands execute successfully via Actor model
+- Status reflects correct state after each command (direct StatusSnapshot read)
+- No timeout, no crash, no stale state

@@ -1,0 +1,15 @@
+=== Task 5 — Task templates (#11, #12) ===
+
+[✅ #11] No bare ', select' in select_isp.json
+  All occurrences of "select" are either:
+  - CSS selectors (select[name='isp'], select[id='isp'], etc.)
+  - Step type "select" at line 42
+  - English words in descriptions
+  No trailing bare ', select' found.
+
+[✅ #12] 'li' removed from click_isp.json option_selector
+  option_selector at line 46: ".option, .item, [role='option']"
+  No standalone 'li' value present. The 'li' in long eval scripts is
+  part of CSS selectors in JS code, not a standalone step value.
+
+VERDICT: PASS

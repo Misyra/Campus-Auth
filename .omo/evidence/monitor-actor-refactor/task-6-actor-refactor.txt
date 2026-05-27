@@ -1,0 +1,43 @@
+# Task 6: Actor Model Refactoring - QA Evidence
+
+## Files Modified
+- `backend/monitor_service.py` (full rewrite)
+- `backend/main.py` (+4 lines: ws_drain_task creation + cancellation in lifespan)
+
+## Verification: Forbidden Patterns
+
+```
+run_coroutine_threadsafe: 0 matches ✓
+self._loop:              0 matches ✓
+self._lock:              0 matches ✓
+set_event_loop:          0 matches ✓  (MonitorService method removed)
+```
+
+## Ruff Check
+`uv run ruff check backend/monitor_service.py --quiet` → no output (clean) ✓
+
+## Test Results
+`uv run pytest tests/ -v` → 350 passed, 2 failed
+- 2 failures are pre-existing WebSocket event-loop state issues (isolated run: all 12 pass)
+- All 10 MonitorService tests pass ✓
+- All 340 other project tests pass ✓
+
+## Architecture Change Summary
+
+| Old Pattern | New Pattern |
+|-------------|-------------|
+| `self._lock` (RLock) | `queue.Queue[MonitorCommand]` command dispatch |
+| `self._loop` + `set_event_loop()` | REMOVED entirely |
+| `asyncio.run_coroutine_threadsafe()` in `_push_log`/`_push_status` | `deque` broadcast queue + async `drain_ws_queue()` |
+| `_push_status()` → broadcast via WS | `_update_status_snapshot()` → `StatusSnapshot` + queue broadcast |
+| `get_status()` acquires RLock, reads `core.snapshot()` | Lock-free `StatusSnapshot` read |
+| `run_manual_login()` creates full `NetworkMonitorCore` inline | Queue command with `response_event` |
+| `_monitor_core.update_config()` called directly | Queue "reload" command → consumer calls update |
+| API thread joins monitor thread | Consumer thread joins monitor thread |
+
+## New Types Added
+- `MonitorCommand` dataclass (typed command dispatch)
+- `StatusSnapshot` dataclass (lock-free status reads)
+- `MonitorService._ws_drain_loop()` (background asyncio task)
+- `MonitorService.drain_ws_queue()` (deque drain method)
+- `MonitorService._queue_consumer()` (daemon thread for command processing)

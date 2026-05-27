@@ -1,0 +1,12 @@
+Task 2 - Stdlib time intact check
+========================================
+Expected: import time still works when used directly
+
+Actual result:
+  python -c "import time; print(time.time()); print('stdlib time intact')"
+  Output: 1779629098.9139776
+          stdlib time intact ✓
+
+Additional check: app.py line 12 uses 'import time' (stdlib), not shadowed by time_utils
+
+Verdict: PASS - stdlib time is intact

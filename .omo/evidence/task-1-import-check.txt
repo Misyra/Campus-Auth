@@ -1,0 +1,4 @@
+Task 1: PlaywrightWorker module skeleton — Import check
+Status: PASS
+Command: uv run python -c "from src.playwright_worker import PlaywrightWorker, WorkerCommand, WorkerResponse; print('OK')"
+Output: OK

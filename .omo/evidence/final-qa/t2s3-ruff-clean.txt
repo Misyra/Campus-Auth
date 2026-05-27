@@ -1,0 +1,7 @@
+=== Task 2, Scenario 3: Ruff check on tests/test_network_test.py ===
+Command: uv run ruff check tests/test_network_test.py
+
+Output:
+All checks passed!
+
+Result: PASS — no lint errors or warnings

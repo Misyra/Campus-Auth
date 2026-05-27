@@ -1,0 +1,13 @@
+=== Task 3 — ui.js (#2 toast timer) ===
+
+[✅ #2] _toastLeavingTimer tracked in both toastOnly and notify
+  Line 9:  if (this._toastLeavingTimer) clearTimeout(this._toastLeavingTimer);
+  Line 12: this._toastLeavingTimer = setTimeout(() => {  (inside toastOnly)
+  Line 27: if (this._toastLeavingTimer) clearTimeout(this._toastLeavingTimer);
+  Line 30: this._toastLeavingTimer = setTimeout(() => {  (inside notify)
+
+[✅ #2] Inner setTimeout stored in _toastLeavingTimer (not anonymous)
+  Both branches assign to this._toastLeavingTimer before the inner setTimeout,
+  so the timer ID is trackable for proper cleanup.
+
+VERDICT: PASS

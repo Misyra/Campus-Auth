@@ -1,0 +1,24 @@
+task-2-stdlib-time-verified.txt
+===============================
+Verification: stdlib `import time` statements are unchanged
+
+Files using `import time` (stdlib) — all confirmed unchanged:
+
+  app.py:12                     → import time            ✓
+  src/monitor_core.py:8         → import time            ✓
+  src/utils/logging.py:6        → import time            ✓
+  src/network_test.py:10        → import time            ✓
+  backend/main.py:9,1141        → import time / import time as _time  ✓
+  backend/monitor_service.py:10 → import time            ✓
+  tests/test_shutdown.py:7      → import time            ✓
+  tests/test_logging.py:7       → import time            ✓
+  tests/test_debug_session.py:6 → import time            ✓
+  tests/test_monitor_core.py:5  → import time            ✓
+
+  src/utils/task_executor.py    → no import time (no change needed)  ✓
+
+NOTES:
+- src/utils/login.py:99 has `import time as _time` (stdlib alias, not from .time)
+- All stdlib `import time` statements are unaffected by the rename
+
+Date: 2026-05-24

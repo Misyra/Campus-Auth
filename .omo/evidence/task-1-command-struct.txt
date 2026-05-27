@@ -1,0 +1,4 @@
+Task 1: PlaywrightWorker module skeleton — Command struct
+Status: PASS
+Command: uv run python -c "from src.playwright_worker import WorkerCommand; cmd = WorkerCommand(type='login', data={}); print(cmd.type)"
+Output: login

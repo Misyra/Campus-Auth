@@ -1,0 +1,14 @@
+=== Shutdown Verification ===
+Date: 2026-05-25
+
+Sequence:
+1. GET /api/monitor/stop (ensure monitoring stopped first) -> 200
+2. POST /api/shutdown -> 200 {"success":true,"message":"正在关闭..."}
+3. Wait 5 seconds
+4. GET /api/health -> Connection refused
+
+Result: Process terminated successfully within 5 seconds.
+PASS: Shutdown works correctly.
+
+PIDs before: 3004, 34144, 38016
+PIDs after:  3004 (background job monitor, not app)

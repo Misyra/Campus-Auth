@@ -1,0 +1,16 @@
+Task 3 - STEALTH_INIT_SCRIPT constant exists
+========================================
+Expected: Select-String STEALTH_INIT_SCRIPT src/utils/browser.py → shows definition
+
+Actual results:
+  Line 15:  STEALTH_INIT_SCRIPT = """ ... """  (multi-line string constant)
+  Line 154: await self.page.add_init_script(STEALTH_INIT_SCRIPT)
+
+  Constant is defined and used. Inside the constant:
+    - navigator.webdriver override
+    - fake plugins
+    - fake chrome runtime
+    - languages override
+    - Playwright fingerprint cleanup
+
+Verdict: PASS - Constant exists and is referenced

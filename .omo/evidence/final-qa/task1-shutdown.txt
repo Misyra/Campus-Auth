@@ -1,0 +1,16 @@
+Task 1 — /api/shutdown Timing Test — Real Manual QA
+=====================================================
+Date: 2026-05-25
+Method: curl (Invoke-WebRequest) with timing
+
+Steps:
+1. POST /api/shutdown → connection reset after 73ms
+   (Expected: server closes connection immediately upon shutdown)
+2. Wait 4s
+3. Check port 50721 → Free (process exited)
+
+Result: PASS
+- Response: 73ms (well under 3s limit)
+- Process exit: within 5s total
+- Shutdown sends command to queue, returns immediately (non-blocking)
+- Consumer thread handles cleanup asynchronously

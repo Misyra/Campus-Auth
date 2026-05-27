@@ -1,0 +1,24 @@
+=== Task 2, Scenario 2: Full test suite (16 tests) ===
+Command: uv run pytest tests/test_network_test.py -v
+
+Output:
+tests/test_network_test.py::TestIsLocalNetworkConnected::test_returns_bool PASSED
+tests/test_network_test.py::TestIsNetworkAvailable::test_returns_bool PASSED
+tests/test_network_test.py::TestIsNetworkAvailable::test_with_empty_sites_uses_defaults PASSED
+tests/test_network_test.py::TestIsNetworkAvailable::test_with_invalid_site PASSED
+tests/test_network_test.py::TestSetBlockProxy::test_block_proxy_default_is_true PASSED
+tests/test_network_test.py::TestSetBlockProxy::test_block_proxy_true_sets_flag PASSED
+tests/test_network_test.py::TestSetBlockProxy::test_block_proxy_false_sets_flag PASSED
+tests/test_network_test.py::TestCheckMacosService::test_uses_networksetup_not_hardcoded_en0_en1 PASSED
+tests/test_network_test.py::TestCheckMacosService::test_networksetup_output_parsed_for_device_names PASSED
+tests/test_network_test.py::TestCheckMacosService::test_networksetup_failure_uses_en0_en1_fallback PASSED
+tests/test_network_test.py::TestSslProbe::test_http_probe_ssl_cert_error_returns_false PASSED
+tests/test_network_test.py::TestSslProbe::test_http_probe_ssl_redirect_returns_false PASSED
+tests/test_network_test.py::TestSslProbe::test_http_probe_ssl_200_returns_true PASSED
+tests/test_network_test.py::TestSslProbe::test_http_probe_ssl_error_logged_at_debug PASSED
+tests/test_network_test.py::TestSslProbe::test_http_strict_mode_ssl_error_returns_false PASSED
+tests/test_network_test.py::TestSslProbe::test_http_probe_verify_false_no_console_warning PASSED
+
+============================= 16 passed in 1.23s ==============================
+
+Result: PASS — all 16 tests passed

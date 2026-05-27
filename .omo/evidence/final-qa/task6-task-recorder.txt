@@ -1,0 +1,13 @@
+=== Task 6 — task-recorder (#10 rAF) ===
+
+[✅ #10] setTimeout used instead of requestAnimationFrame
+  Line 1516: setTimeout(() => {
+  Line 1602: setTimeout(() => {
+  Line 2803: setTimeout(() => {
+  Line 2986: setTimeout(() => {
+  Line 2985: // setTimeout 避免在后台标签页中 rAF 被节流
+
+  grep for "requestAnimationFrame": 0 matches — no remaining rAF calls.
+  Comment on line 2985 documents the rationale for the fix.
+
+VERDICT: PASS

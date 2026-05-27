@@ -1,0 +1,22 @@
+=== Task 1 — launcher.py (#1 Playwright, #5 Zip Slip) ===
+
+[✅ #1] subprocess.run used instead of Popen
+  Found at lines: 103, 219, 256, 402, 544, 673
+
+[✅ #1] capture_output=True in Playwright install call
+  Found at lines: 105, 221, 258, 414, 553, 675
+
+[✅ #5] Zip Slip check exists (namelist + PYTHON_DIR_RESOLVED)
+  Line 466: PYTHON_DIR_RESOLVED = PYTHON_DIR.resolve()
+  Line 467: for member in z.namelist():
+  Line 469: if not str(member_path).startswith(str(PYTHON_DIR_RESOLVED)):
+
+[✅ #1] No remaining proc.kill() or 'for line in proc.stdout'
+  grep returned 0 matches — clean.
+
+[✅] Launcher tests: 8/8 PASS
+  cmd: uv run pytest tests/test_launcher.py -v
+  Result: 8 passed in 0.24s
+  Tests: TestInstallPythonZipSlip (4/4), TestInstallPlaywright (4/4)
+
+VERDICT: PASS

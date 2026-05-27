@@ -1,0 +1,9 @@
+=== QA Evidence: STEALTH_INIT_SCRIPT constant created ===
+
+File: src/utils/browser.py
+- Module-level constant STEALTH_INIT_SCRIPT defined after imports (line 13-44)
+- Contains exact browser anti-detection script (stealth init)
+- Script content: hides webdriver, simulates plugins/chrome object,
+  overrides languages, deletes Playwright traces
+- Constant verified present via grep: Select-String "STEALTH_INIT_SCRIPT" src/utils/browser.py
+- Result: Found at line 13 (definition) and line 154 (usage in _start_browser())

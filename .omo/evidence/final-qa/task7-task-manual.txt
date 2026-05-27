@@ -1,0 +1,11 @@
+=== Task 7 — doc/task-manual.md (#4 frame) ===
+
+[✅ #4] No remaining frame_locator references
+  grep for "frame_locator": 0 matches — all removed.
+
+[✅ #4] content_frame present (correct API)
+  Line 126: "先调用 page.query_selector(frame_selector) 定位 iframe 元素，
+            再调用 element.content_frame() 获取 frame 对象"
+  grep for "content_frame": 1 match — correct Playwright API documented.
+
+VERDICT: PASS

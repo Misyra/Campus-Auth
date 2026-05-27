@@ -284,7 +284,7 @@ def _cmd_autostart(action: str) -> None:
 
 def _run_login_then_exit(logger) -> None:
     """登录成功后退出模式：循环重试登录，直到成功后退出进程。"""
-    from src.utils import LoginAttemptHandler
+    from src.playwright_worker import get_worker, CMD_LOGIN
 
     print("登录成功后退出模式：正在登录...")
 
@@ -308,10 +308,6 @@ def _run_login_then_exit(logger) -> None:
     max_retries = max(1, min(raw, 10))
     retry_interval = int(retry_settings.get("retry_interval", 5))
 
-    handler = LoginAttemptHandler(runtime_config)
-
-    import asyncio
-
     attempt = 0
     while True:
         attempt += 1
@@ -324,25 +320,13 @@ def _run_login_then_exit(logger) -> None:
         success = False
         message = ""
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                success, message = loop.run_until_complete(
-                    handler.attempt_login(skip_pause_check=True)
-                )
-            finally:
-                # 取消待处理任务，避免 loop.close() 因未完成任务而报错
-                pending = asyncio.all_tasks(loop)
-                for task in pending:
-                    task.cancel()
-                if pending:
-                    try:
-                        loop.run_until_complete(
-                            asyncio.gather(*pending, return_exceptions=True)
-                        )
-                    except Exception:
-                        pass
-                loop.close()
+            # 通过 PlaywrightWorker 提交登录任务（替代原来的 asyncio.new_event_loop() 模式）
+            result = get_worker().submit(CMD_LOGIN, data={
+                "config": runtime_config,
+                "skip_pause_check": True,
+            }, timeout=120)
+            success = result.success
+            message = result.data if result.success else result.error or "登录失败"
         except Exception as exc:
             message = f"登录异常: {exc}"
 
