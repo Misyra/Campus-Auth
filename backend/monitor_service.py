@@ -144,8 +144,10 @@ class MonitorService:
         # Guard against duplicate WS drain loop startup
         self._drain_started = False
 
-        # Login concurrency guard — prevents duplicate browser processes
+        # Login concurrency guard — 防止同时启动多个浏览器进程
+        # 使用 Lock 保护 check-then-set 操作，避免竞态条件
         self._login_in_progress: bool = False
+        self._login_lock: threading.Lock = threading.Lock()
 
         # Start queue consumer daemon thread
         self._consumer_thread = threading.Thread(
@@ -539,7 +541,10 @@ class MonitorService:
         )
 
     def run_manual_login(self) -> tuple[bool, str]:
-        self._login_in_progress = True
+        with self._login_lock:
+            if self._login_in_progress:
+                return False, "登录操作正在进行中"
+            self._login_in_progress = True
         try:
             service_logger.info("Manual login requested")
             runtime_config = self._runtime_config.copy()
@@ -572,7 +577,8 @@ class MonitorService:
             service_logger.warning("Manual login failed: %s", log_msg)
             return False, f"手动登录失败：{message}"
         finally:
-            self._login_in_progress = False
+            with self._login_lock:
+                self._login_in_progress = False
 
     def test_network(self) -> tuple[bool, str]:
         service_logger.info("手动网络测试")

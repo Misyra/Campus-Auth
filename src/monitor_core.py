@@ -568,16 +568,21 @@ class NetworkMonitorCore:
                 self.log_message(f"登录成功 ✓ {message}")
             else:
                 self.log_message(f"登录失败 ✗ {message}", logging.ERROR)
+                self._reuse_browser = False  # 失败后重置，下次重新创建浏览器实例
             return success, message
         except asyncio.TimeoutError as exc:
             self.log_message(f"登录超时: {exc}", logging.ERROR)
+            self._reuse_browser = False  # 失败后重置
             return False, f"登录超时: {exc}"
         except ConnectionError as exc:
             self.log_message(f"登录连接错误: {exc}", logging.ERROR)
+            self._reuse_browser = False  # 失败后重置
             return False, f"连接错误: {exc}"
         except RuntimeError as exc:
             self.log_message(f"登录运行时错误: {exc}", logging.ERROR)
+            self._reuse_browser = False  # 失败后重置
             return False, f"运行时错误: {exc}"
         except Exception as exc:
             self.log_message(f"登录执行异常: {exc}", logging.ERROR)
+            self._reuse_browser = False  # 失败后重置
             return False, str(exc)

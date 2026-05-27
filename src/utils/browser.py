@@ -219,36 +219,58 @@ class BrowserContextManager:
         """清理浏览器资源（内部方法）"""
         cleanup_errors = []
 
-        # 按顺序清理资源
+        # 关闭页面：页面可能因浏览器断开而自动关闭，
+        # TargetClosedError 属于正常清理场景，其余异常记录为 ERROR
         try:
             if self.page:
                 await self.page.close()
                 self.page = None
         except Exception as e:
-            cleanup_errors.append(f"关闭页面失败: {e}")
+            err_msg = str(e).lower()
+            if "target closed" in err_msg or "connection closed" in err_msg:
+                self.logger.warning(f"关闭页面时连接已断开（正常）: {e}")
+            else:
+                self.logger.error(f"关闭页面异常: {e}")
+                cleanup_errors.append(f"关闭页面失败: {e}")
 
+        # 关闭上下文：与 page 采用相同的异常处理策略
         try:
             if self.context:
                 await self.context.close()
                 self.context = None
         except Exception as e:
-            cleanup_errors.append(f"关闭上下文失败: {e}")
+            err_msg = str(e).lower()
+            if "target closed" in err_msg or "connection closed" in err_msg:
+                self.logger.warning(f"关闭上下文时连接已断开（正常）: {e}")
+            else:
+                self.logger.error(f"关闭上下文异常: {e}")
+                cleanup_errors.append(f"关闭上下文失败: {e}")
 
+        # 关闭浏览器：先通过 is_connected() 健康检查，
+        # 确认浏览器实例仍存活再发起关闭，避免对已断开的实例误操作
         try:
-            if self.browser:
+            if self.browser and self.browser.is_connected():
                 await self.browser.close()
                 self.browser = None
+            elif self.browser:
+                # 浏览器已断开，无需 close 操作
+                self.logger.debug("浏览器已断开连接，跳过 close")
+                self.browser = None
         except Exception as e:
+            # is_connected() 通过后仍失败属于意外异常
+            self.logger.error(f"关闭浏览器异常: {e}")
             cleanup_errors.append(f"关闭浏览器失败: {e}")
 
+        # 停止 Playwright 服务
         try:
             if self.playwright:
                 await self.playwright.stop()
                 self.playwright = None
         except Exception as e:
-            cleanup_errors.append(f"停止playwright失败: {e}")
+            self.logger.error(f"停止 Playwright 失败: {e}")
+            cleanup_errors.append(f"停止 Playwright 失败: {e}")
 
-        # 如果有清理错误，记录但不抛出异常
+        # 汇总所有意外异常，记录为 warning（仍不抛出以避免中断调用方）
         if cleanup_errors:
             self.logger.warning(
                 f"浏览器资源清理时出现错误: {'; '.join(cleanup_errors)}"
