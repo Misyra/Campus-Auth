@@ -133,7 +133,7 @@ class MonitorService:
 
         # Actor model: command dispatch queue (replaces RLock + cross-thread asyncio)
         self._cmd_queue: queue.Queue[MonitorCommand] = queue.Queue(maxsize=50)
-        self._stop_event = threading.Event()
+        self._shutdown_event = threading.Event()
 
         # Lock-free status snapshot — written by consumer, read by API threads
         self._status_snapshot = StatusSnapshot()
@@ -159,8 +159,12 @@ class MonitorService:
     # ── Queue consumer (runs in dedicated daemon thread) ──
 
     def _queue_consumer(self) -> None:
-        """Dedicated thread: pull commands from _cmd_queue and execute them."""
-        while not self._stop_event.is_set():
+        """Dedicated thread: pull commands from _cmd_queue and execute them.
+
+        The consumer thread runs for the entire process lifetime.
+        Only the "shutdown" command breaks the loop.
+        """
+        while not self._shutdown_event.is_set():
             try:
                 cmd = self._cmd_queue.get(timeout=0.1)
             except queue.Empty:
@@ -211,7 +215,6 @@ class MonitorService:
 
     def _handle_stop(self) -> None:
         """Stop monitoring (consumer thread only)."""
-        self._stop_event.set()
         core = self._monitor_core
         thread = self._monitor_thread
 
@@ -234,6 +237,7 @@ class MonitorService:
         """Execute a one-shot login attempt (consumer thread only)."""
         config = cmd.data.get("config", self._runtime_config.copy())
         safe_mode = cmd.data.get("safe_mode", self.safe_mode)
+        skip_pause_check = cmd.data.get("skip_pause_check", False)
         if safe_mode:
             config.setdefault("browser_settings", {})["safe_mode"] = True
 
@@ -242,7 +246,11 @@ class MonitorService:
         try:
             result = get_worker().submit(
                 CMD_LOGIN,
-                data={"config": config, "safe_mode": safe_mode},
+                data={
+                    "config": config,
+                    "safe_mode": safe_mode,
+                    "skip_pause_check": skip_pause_check,
+                },
                 timeout=login_timeout,
             )
             if result.success:
@@ -382,8 +390,11 @@ class MonitorService:
     # ── WebSocket drain (main event loop) ──
 
     async def _ws_drain_loop(self) -> None:
-        """Background asyncio task: periodically drain WS broadcast queue."""
-        while not self._stop_event.is_set():
+        """Background asyncio task: periodically drain WS broadcast queue.
+
+        Runs until the asyncio task is cancelled (by lifespan shutdown).
+        """
+        while True:
             try:
                 await asyncio.sleep(0.05)
                 await self.drain_ws_queue()
@@ -552,7 +563,11 @@ class MonitorService:
 
             cmd = MonitorCommand(
                 type="login",
-                data={"config": runtime_config, "safe_mode": self.safe_mode},
+                data={
+                    "config": runtime_config,
+                    "safe_mode": self.safe_mode,
+                    "skip_pause_check": True,
+                },
                 response_event=threading.Event(),
             )
             self._cmd_queue.put(cmd)
@@ -586,11 +601,17 @@ class MonitorService:
         config = self._runtime_config.copy()
         monitor_cfg = config.get("monitor", {})
         targets = monitor_cfg.get("ping_targets", [])
-        strict_mode = monitor_cfg.get("strict_mode", True)
+        enable_tcp = monitor_cfg.get("enable_tcp_check", True)
+        enable_http = monitor_cfg.get("enable_http_check", True)
         # 解析 host:port 为 (host, port) 元组列表
         test_sites = parse_host_port(targets)
+        mode_desc = []
+        if enable_tcp:
+            mode_desc.append("TCP")
+        if enable_http:
+            mode_desc.append("HTTP")
         self._push_log(
-            f"手动网络测试 → 目标={len(test_sites)} 严格模式={'开' if strict_mode else '关'}",
+            f"手动网络测试 → 目标={len(test_sites)} 检测方式={'+'.join(mode_desc) or '无'}",
             "INFO",
             "network",
         )
@@ -598,7 +619,8 @@ class MonitorService:
             ok = is_network_available(
                 test_sites=test_sites if test_sites else None,
                 timeout=2,
-                require_both=strict_mode,
+                enable_tcp=enable_tcp,
+                enable_http=enable_http,
             )
             if ok:
                 self._push_log("手动测试结果: 网络正常", "INFO", "network")
