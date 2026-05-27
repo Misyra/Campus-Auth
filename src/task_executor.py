@@ -1137,7 +1137,7 @@ class TaskExecutor:
                     return await self._handle_failure(page, step, message)
 
             if not await self._check_success(page):
-                return await self._handle_failure(page, None, "成功条件不满足")
+                return await self._handle_failure(page, None, "网络验证未通过")
 
             total_elapsed = (time.perf_counter() - task_start) * 1000
             logger.info("任务成功 [%s] 总耗时 %.0fms", self.config.name, total_elapsed)
@@ -1277,15 +1277,11 @@ class TaskExecutor:
         return True
 
     async def _network_detection_check(self) -> bool:
-        """通过网络连通性检测判断任务是否成功。
-
-        网络检测成功 → 判定任务成功（登录已生效）
-        网络检测失败 → 判定任务失败（认证未生效，可能密码错误或运营商不匹配）
-        """
+        """任务步骤全部通过后，验证网络是否已恢复连通。"""
         try:
             from src.network_decision import is_network_available
 
-            await asyncio.sleep(2)  # 等待页面响应登录请求后再检测网络
+            await asyncio.sleep(2)  # 等待 Portal 处理认证请求
 
             test_sites = self.network_test_config.get("test_sites")
             timeout = self.network_test_config.get("timeout", 2)
@@ -1293,7 +1289,7 @@ class TaskExecutor:
             enable_http = self.network_test_config.get("enable_http_check", True)
 
             logger.info(
-                "开始网络检测兜底 (test_sites=%s, timeout=%s, TCP=%s, HTTP=%s)",
+                "验证网络连通性 (targets=%s, timeout=%ss, TCP=%s, HTTP=%s)",
                 test_sites,
                 timeout,
                 enable_tcp,
@@ -1309,14 +1305,14 @@ class TaskExecutor:
             )
 
             if result:
-                logger.info("网络检测成功，判定任务成功")
+                logger.info("网络已恢复，登录认证生效")
             else:
-                logger.warning("网络检测失败，判定任务失败")
+                logger.warning("网络仍不可达，登录认证未生效")
 
             return result
 
         except Exception as e:
-            logger.error("网络检测兜底异常，判定为失败: %s", e)
+            logger.error("网络验证异常: %s", e)
             return False
 
     async def _handle_success(self, page) -> tuple[bool, str]:
