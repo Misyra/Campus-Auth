@@ -10,6 +10,8 @@ export const LOG_LEVELS = {
   CRITICAL: 50,
 };
 
+export const BROWSER_ARGS_DEFAULT = "--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees\n--disable-ipc-flooding-protection\n--disable-hang-monitor\n--disable-popup-blocking";
+
 export const DEFAULT_CONFIG = {
   username: "",
   password: "",
@@ -29,7 +31,7 @@ export const DEFAULT_CONFIG = {
   browser_low_resource_mode: true,
   browser_disable_web_security: false,
   browser_extra_headers_json: "",
-  browser_args: "--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees\n--disable-ipc-flooding-protection\n--disable-hang-monitor\n--disable-popup-blocking",
+  browser_args: BROWSER_ARGS_DEFAULT,
   stealth_mode: false,
   pause_enabled: true,
   pause_start_hour: 0,
@@ -90,7 +92,7 @@ export const DEFAULT_PROFILE_SETTINGS = {
   browser_low_resource_mode: true,
   browser_disable_web_security: false,
   browser_extra_headers_json: '',
-  browser_args: "--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees\n--disable-ipc-flooding-protection\n--disable-hang-monitor\n--disable-popup-blocking",
+  browser_args: BROWSER_ARGS_DEFAULT,
   stealth_mode: false,
   pause_enabled: true,
   pause_start_hour: 0,

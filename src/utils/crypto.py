@@ -184,10 +184,7 @@ def mask_password(value: str) -> str:
     """密码脱敏：返回掩码用于前端显示"""
     if not value:
         return ""
-    if is_encrypted(value):
-        return "••••••••"  # 加密存储，不泄露长度
-    # 明文密码，用等长点号掩码
-    return "•" * min(len(value), 8)
+    return "••••••••"  # 统一长度掩码，不泄露密码长度
 
 
 def save_password_field(raw: str | None, existing_encrypted: str) -> str:
