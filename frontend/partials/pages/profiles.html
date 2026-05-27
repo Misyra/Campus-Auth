@@ -350,8 +350,8 @@
           <div v-if="!editingProfile.use_global_advanced">
           <div class="form-row">
             <div class="form-group">
-              <label>检测间隔（分钟）</label>
-              <input v-model.number="editingProfile.check_interval_minutes" type="number" min="1" max="1440" />
+              <label>检测间隔（秒）</label>
+              <input v-model.number="editingProfile.check_interval_seconds" type="number" min="10" max="86400" />
             </div>
             <div class="form-group">
               <label>网络检测目标</label>

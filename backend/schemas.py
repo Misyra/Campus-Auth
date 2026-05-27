@@ -65,7 +65,7 @@ class _MonitorFieldsMixin(BaseModel):
     active_task: str = Field(default="")
     carrier: str = Field(default="无")
     carrier_custom: str = Field(default="")
-    check_interval_minutes: int = Field(default=5, ge=1, le=1440)
+    check_interval_seconds: int = Field(default=300, ge=10, le=86400, description="检测间隔（秒）")
     auto_start: bool = False
     pause_enabled: bool = True
     pause_start_hour: int = Field(default=0, ge=0, le=23)

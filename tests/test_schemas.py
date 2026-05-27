@@ -141,10 +141,10 @@ class TestConstrainedFields:
             MonitorConfigPayload(app_port=65536)
 
     def test_check_interval_boundary(self):
-        m = MonitorConfigPayload(check_interval_minutes=1)
-        assert m.check_interval_minutes == 1
-        m2 = MonitorConfigPayload(check_interval_minutes=1440)
-        assert m2.check_interval_minutes == 1440
+        m = MonitorConfigPayload(check_interval_seconds=10)
+        assert m.check_interval_seconds == 10
+        m2 = MonitorConfigPayload(check_interval_seconds=86400)
+        assert m2.check_interval_seconds == 86400
 
     def test_pause_hours_boundary(self):
         m = MonitorConfigPayload(pause_start_hour=0, pause_end_hour=23)
@@ -172,5 +172,5 @@ class TestProfileSettingsDefaults:
         assert p.name == "默认方案"
         assert p.use_global_credentials is True
         assert p.headless is True
-        assert p.check_interval_minutes == 5
+        assert p.check_interval_seconds == 300
         assert p.pause_enabled is True

@@ -102,7 +102,7 @@ async def lifespan(app_instance):
             "已设置" if config.password else "(空)",
             f"'{config.auth_url}'" if config.auth_url else "(空)",
             config.carrier,
-            config.check_interval_minutes,
+            config.check_interval_seconds,
             config.auto_start,
         )
     except Exception as exc:
@@ -431,7 +431,7 @@ def save_config(payload: MonitorConfigPayload) -> ActionResponse:
         ok, error = ConfigValidator.validate_gui_config(
             payload.username,
             payload.password,
-            str(payload.check_interval_minutes),
+            str(payload.check_interval_seconds),
         )
         if not ok:
             raise ValueError(error)
