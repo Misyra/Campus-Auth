@@ -157,6 +157,7 @@ class MonitorStatusResponse(BaseModel):
     last_check_time: str | None
     runtime_seconds: int
     network_connected: bool = False
+    status_detail: str = "正常"
 
 
 class LogEntry(BaseModel):

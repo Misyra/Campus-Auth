@@ -230,10 +230,21 @@ body {
   transition: all 0.3s ease;
 }
 
+.network-status-banner .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 .network-status-banner.connected {
   background: rgba(16, 185, 129, 0.08);
   border-color: rgba(16, 185, 129, 0.2);
   color: var(--success);
+}
+
+.network-status-banner.connected .status-dot {
+  background: var(--success);
 }
 
 .network-status-banner.disconnected {
@@ -242,10 +253,19 @@ body {
   color: var(--error);
 }
 
+.network-status-banner.disconnected .status-dot {
+  background: var(--error);
+  animation: pulse 2s infinite;
+}
+
 .network-status-banner.idle {
   background: rgba(148, 163, 184, 0.08);
   border-color: rgba(148, 163, 184, 0.15);
   color: var(--text-secondary);
+}
+
+.network-status-banner.idle .status-dot {
+  background: var(--text-secondary);
 }
 
 .network-status-banner .status-icon {
