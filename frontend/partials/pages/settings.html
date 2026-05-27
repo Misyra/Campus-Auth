@@ -548,6 +548,28 @@
               </label>
             </div>
           </div>
+          <div class="form-group">
+            <div class="field-label-row">
+              <label for="settings-browser-locale">浏览器语言 (Locale)</label>
+              <span class="field-help" tabindex="0" role="note" data-tip="设置浏览器语言，用于 Playwright 浏览器上下文的 locale 参数。部分认证页面会根据语言显示不同内容。默认为 zh-CN。">?</span>
+            </div>
+            <input id="settings-browser-locale" v-model.trim="config.browser_locale" type="text" placeholder="zh-CN" />
+          </div>
+          <div class="form-group">
+            <div class="field-label-row">
+              <label for="settings-browser-timezone">浏览器时区 (Timezone)</label>
+              <span class="field-help" tabindex="0" role="note" data-tip="设置浏览器时区，用于 Playwright 浏览器上下文的 timezone_id 参数。部分认证系统会检测时区设置。默认为 Asia/Shanghai。">?</span>
+            </div>
+            <input id="settings-browser-timezone" v-model.trim="config.browser_timezone" type="text" placeholder="Asia/Shanghai" />
+          </div>
+        </div>
+      </section>
+
+      <section class="card settings-panel">
+        <div class="card-header">
+          <h2>安全与反检测</h2>
+        </div>
+        <div class="card-body">
           <div class="toggle-group">
             <div class="toggle-with-help">
               <label class="toggle toggle-help-inline">
@@ -567,20 +589,6 @@
                 <span class="field-help" tabindex="0" role="note" data-tip="注入脚本隐藏浏览器自动化痕迹（navigator.webdriver、plugins 等）。部分认证页面可能因此脚本而显示异常，一般请保持关闭。">?</span>
               </label>
             </div>
-          </div>
-          <div class="form-group">
-            <div class="field-label-row">
-              <label for="settings-browser-locale">浏览器语言 (Locale)</label>
-              <span class="field-help" tabindex="0" role="note" data-tip="设置浏览器语言，用于 Playwright 浏览器上下文的 locale 参数。部分认证页面会根据语言显示不同内容。默认为 zh-CN。">?</span>
-            </div>
-            <input id="settings-browser-locale" v-model.trim="config.browser_locale" type="text" placeholder="zh-CN" />
-          </div>
-          <div class="form-group">
-            <div class="field-label-row">
-              <label for="settings-browser-timezone">浏览器时区 (Timezone)</label>
-              <span class="field-help" tabindex="0" role="note" data-tip="设置浏览器时区，用于 Playwright 浏览器上下文的 timezone_id 参数。部分认证系统会检测时区设置。默认为 Asia/Shanghai。">?</span>
-            </div>
-            <input id="settings-browser-timezone" v-model.trim="config.browser_timezone" type="text" placeholder="Asia/Shanghai" />
           </div>
         </div>
       </section>
