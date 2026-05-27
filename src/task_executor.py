@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -841,16 +842,19 @@ class OcrHandler(StepHandler):
     """验证码识别步骤处理器"""
 
     _ocr_instances: dict[bool, Any] = {}
+    _ocr_lock = threading.Lock()
 
     @classmethod
     def _get_ocr(cls, old: bool = False):
         if old not in cls._ocr_instances:
-            try:
-                import ddddocr
+            with cls._ocr_lock:
+                if old not in cls._ocr_instances:
+                    try:
+                        import ddddocr
 
-                cls._ocr_instances[old] = ddddocr.DdddOcr(old=old, show_ad=False)
-            except ImportError:
-                raise StepError("ddddocr 未安装，请运行: uv add ddddocr")
+                        cls._ocr_instances[old] = ddddocr.DdddOcr(old=old, show_ad=False)
+                    except ImportError:
+                        raise StepError("ddddocr 未安装，请运行: uv add ddddocr")
         return cls._ocr_instances[old]
 
     @property
@@ -956,7 +960,7 @@ class TaskValidator:
     """任务验证器"""
 
     REQUIRED_STEP_FIELDS = {"id", "type"}
-    VALID_STEP_TYPES = {t.value for t in StepType} | {"navigate", "custom_js"}
+    VALID_STEP_TYPES = {t.value for t in StepType} | {"custom_js"}
 
     @classmethod
     def validate(cls, config: dict[str, Any]) -> tuple[bool, list[str]]:
@@ -1008,11 +1012,6 @@ class TaskValidator:
             errors.append(f"{prefix} 未知的步骤类型: '{step_type}'")
 
         # 根据类型验证特定字段
-        if step_type == "navigate":
-            # navigate 已废弃：统一使用任务的 url 字段自动导航
-            errors.append(f"{prefix} (navigate) 已废弃，请使用任务的 url 字段")
-            return errors
-
         if step_type == StepType.INPUT:
             if not step.get("selector"):
                 errors.append(f"{prefix} (input) 需要 'selector' 字段")
@@ -1113,15 +1112,6 @@ class TaskExecutor:
                     return await self._handle_failure(
                         page, None, f"任务超时 ({task_timeout_ms}ms)"
                     )
-                # 跳过 navigate 步骤，已由 _auto_navigate 统一处理
-                if step.type == "navigate":
-                    logger.info(
-                        "  步骤[%d/%d] %s (navigate) → 跳过，已自动导航",
-                        i + 1,
-                        len(self.config.steps),
-                        step.id,
-                    )
-                    continue
                 if i > 0:
                     await asyncio.sleep(self.config.step_delay)
                 step_start = _time.perf_counter()
@@ -1304,20 +1294,23 @@ class TaskExecutor:
 
             test_sites = self.network_test_config.get("test_sites")
             timeout = self.network_test_config.get("timeout", 2)
-            strict_mode = self.network_test_config.get("strict_mode", True)
+            enable_tcp = self.network_test_config.get("enable_tcp_check", True)
+            enable_http = self.network_test_config.get("enable_http_check", True)
 
             logger.info(
-                "开始网络检测兜底 (test_sites=%s, timeout=%s, strict_mode=%s)",
+                "开始网络检测兜底 (test_sites=%s, timeout=%s, TCP=%s, HTTP=%s)",
                 test_sites,
                 timeout,
-                strict_mode,
+                enable_tcp,
+                enable_http,
             )
 
             result = await asyncio.to_thread(
                 is_network_available,
                 test_sites=test_sites,
                 timeout=timeout,
-                require_both=strict_mode,
+                enable_tcp=enable_tcp,
+                enable_http=enable_http,
             )
 
             if result:
