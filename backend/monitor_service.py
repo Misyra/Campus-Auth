@@ -18,7 +18,7 @@ from fastapi import WebSocket
 
 from src.monitor_core import NetworkMonitorCore
 from src.playwright_worker import get_worker, CMD_LOGIN
-from src.network_test import is_network_available
+from src.network_decision import is_network_available
 from src.utils import ConfigValidator
 from src.utils.logging import get_logger
 from src.utils.login import SCREENSHOT_URL_PATTERN
