@@ -1,8 +1,0 @@
-=== Task 1, Scenario 1: Verify verify=False in httpx.Client() ===
-File: src/network_test.py
-Expected: httpx.Client(verify=False, ...) exists
-
-Line 248 (comment): Design rationale — intentionally disables SSL verification (verify=False):
-Line 265 (code):     with httpx.Client(verify=False, trust_env=not _block_proxy) as client:
-
-Result: PASS — verify=False present in httpx.Client() call at line 265

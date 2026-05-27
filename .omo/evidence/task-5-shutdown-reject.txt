@@ -1,4 +1,0 @@
-Task 5: PlaywrightWorker full logic — Shutdown reject
-Status: PASS
-Command: w.stop(timeout=5) → w.submit('login', timeout=2)
-Output: success=False, error present=True

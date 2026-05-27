@@ -1,4 +1,0 @@
-Task 4: Fix orphaned browser on shutdown — lifespan cleanup
-Status: PASS
-Command: uv run python -c "from backend.main import lifespan; import inspect; src = inspect.getsource(lifespan); print('worker' in src.lower())"
-Output: True

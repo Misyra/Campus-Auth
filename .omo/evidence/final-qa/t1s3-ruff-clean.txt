@@ -1,7 +1,0 @@
-=== Task 1, Scenario 3: Ruff check on src/network_test.py ===
-Command: uv run ruff check src/network_test.py
-
-Output:
-All checks passed!
-
-Result: PASS — no lint errors or warnings

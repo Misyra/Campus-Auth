@@ -1,4 +1,0 @@
-Task 3: Fix reuse_browser never resets
-Status: PASS
-Command: uv run python -c "from src.monitor_core import NetworkMonitorCore; import inspect; src = inspect.getsource(NetworkMonitorCore.attempt_login); print('reuse_browser' in src)"
-Output: True

@@ -1,4 +1,0 @@
-Task 4: Fix orphaned browser on shutdown — cleanup_orphan_browsers importable
-Status: PASS
-Command: uv run python -c "from src.playwright_worker import cleanup_orphan_browsers; print('OK')"
-Output: OK
