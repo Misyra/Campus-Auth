@@ -39,6 +39,7 @@ CMD_DEBUG_STOP = "debug_stop"  # 停止调试会话
 CMD_BROWSER_HEALTH_CHECK = "browser_health_check"  # 浏览器健康检查
 CMD_BROWSER_ACQUIRE = "browser_acquire"  # 获取/确保浏览器就绪（供外部线程使用 submit 调用）
 CMD_BROWSER_RELEASE = "browser_release"  # 释放浏览器引用（浏览器常驻 Worker 不实际关闭）
+CMD_BROWSER_CLOSE = "browser_close"  # 实际关闭浏览器进程
 CMD_SHUTDOWN = "shutdown"  # 关闭 Worker
 
 
@@ -299,6 +300,8 @@ class PlaywrightWorker:
                 result = await self._handle_browser_acquire(cmd.data)
             elif cmd.type == CMD_BROWSER_RELEASE:
                 result = await self._handle_browser_release()
+            elif cmd.type == CMD_BROWSER_CLOSE:
+                result = await self._handle_browser_close()
             elif cmd.type == CMD_BROWSER_HEALTH_CHECK:
                 result = await self._handle_health_check()
             elif cmd.type == CMD_SHUTDOWN:
@@ -532,6 +535,19 @@ class PlaywrightWorker:
         仅用于释放 BrowserContextManager 的引用计数。
         """
         return WorkerResponse(success=True, data="Browser released (alive in Worker)")
+
+    async def close_browser(self) -> None:
+        """Close the browser and release all resources.
+
+        Safe to call from within the Worker's event loop (same thread).
+        External callers should use submit(CMD_BROWSER_CLOSE) instead.
+        """
+        await self._close_browser()
+
+    async def _handle_browser_close(self) -> WorkerResponse:
+        """Handle CMD_BROWSER_CLOSE — actually close the browser process."""
+        await self._close_browser()
+        return WorkerResponse(success=True, data="Browser closed")
 
     async def ensure_browser(self, config: dict) -> None:
         """确保浏览器已就绪（可从 Worker 事件循环内直接调用）。

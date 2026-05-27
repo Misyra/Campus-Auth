@@ -932,3 +932,27 @@ class TestPlaywrightWorkerEdgeCases:
             worker.submit(CMD_LOGIN, wait=True)
         assert captured[0].response_event is not None
         assert isinstance(captured[0].response_event, threading.Event)
+
+
+# ═══════════════════════════════════════════════════════════════
+# close_browser 公共方法测试（TDD RED 阶段）
+# ═══════════════════════════════════════════════════════════════
+
+
+class TestPlaywrightWorkerCloseBrowser:
+    """close_browser — 公共关闭浏览器接口。"""
+
+    @pytest.mark.asyncio
+    async def test_close_browser_method_exists(self, worker: PlaywrightWorker):
+        """close_browser 方法存在且是异步可调用。"""
+        assert hasattr(worker, "close_browser"), "close_browser 方法不存在"
+        assert asyncio.iscoroutinefunction(
+            worker.close_browser
+        ), "close_browser 必须是异步函数"
+
+    @pytest.mark.asyncio
+    async def test_close_browser_calls_internal_close(self, worker: PlaywrightWorker):
+        """close_browser 委托给 _close_browser。"""
+        worker._close_browser = AsyncMock()
+        await worker.close_browser()
+        worker._close_browser.assert_awaited_once()
