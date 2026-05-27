@@ -1,6 +1,6 @@
 export const lifecycleMethods = {
   async init() {
-    this.frontendLogger.info('app.init', 'start init');
+    this.frontendLogger.info('app.init', '开始初始化');
     this.isLoading = true;
     await Promise.all([
       this.fetchConfig(true),
@@ -24,7 +24,7 @@ export const lifecycleMethods = {
         this.fetchStatus().finally(() => { this._statusPolling = false; });
     }, 30000));  // 30s fallback, WS 实时推送
     this.timers.push(setInterval(() => this.fetchAutostart(), 60000));
-    this.frontendLogger.info('app.init', 'init finished');
+    this.frontendLogger.info('app.init', '初始化完成');
   },
   async _waitWebSocketReady(timeoutMs = 2000) {
     if (!this.ws) return false;
@@ -174,13 +174,13 @@ export const lifecycleMethods = {
     }
 
     this.ws = new WebSocket(wsUrl);
-    this.frontendLogger.info('websocket', `connecting ${wsUrl}`);
+    this.frontendLogger.info('websocket', `正在连接 ${wsUrl}`);
 
     this.ws.onopen = () => {
       this.wsRetryCount = 0;
       this.wsReconnecting = false;
       this.frontendLogger.setWebSocket(this.ws);
-      this.frontendLogger.info('websocket', 'connected');
+      this.frontendLogger.info('websocket', '已连接');
     };
 
     this.ws.onmessage = (event) => {
@@ -209,13 +209,13 @@ export const lifecycleMethods = {
           }
         }
       } catch (e) {
-        this.frontendLogger.error('websocket', 'message parse error', e);
+        this.frontendLogger.error('websocket', '消息解析错误', e);
       }
     };
 
     this.ws.onclose = () => {
       this.frontendLogger.setWebSocket(null);
-      this.frontendLogger.warn('websocket', 'connection closed');
+      this.frontendLogger.warn('websocket', '连接已关闭');
       if (this._wsDestroyed) return;
       if (this.wsRetryCount >= this.wsMaxRetries) {
         this.wsReconnecting = false;
@@ -232,7 +232,7 @@ export const lifecycleMethods = {
     };
 
     this.ws.onerror = () => {
-      this.frontendLogger.error('websocket', 'connection error');
+      this.frontendLogger.error('websocket', '连接错误');
       // 不调用 this.ws.close()，浏览器会自动关闭并触发 onclose
     };
   },

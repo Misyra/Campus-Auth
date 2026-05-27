@@ -6,7 +6,7 @@ export const statusMethods = {
       this.fetchStatusFailCount = 0;
     } catch (error) {
       this.fetchStatusFailCount = (this.fetchStatusFailCount || 0) + 1;
-      this.frontendLogger.warn('status', 'fetch status failed', error);
+      this.frontendLogger.warn('status', '获取状态失败', error);
       if (this.fetchStatusFailCount >= 3) {
         this.frontendLogger.error('status', '无法连接到服务器，已连续失败 3 次');
         this.notify(false, '无法连接到服务器，请检查后端是否已关闭');
@@ -21,7 +21,7 @@ export const statusMethods = {
       this.logs = data.filter(l => this._shouldShowLog(l.level));
       this.$nextTick(() => this.scrollToBottom());
     } catch (error) {
-      this.frontendLogger.error('logs', 'failed to fetch logs', error);
+      this.frontendLogger.error('logs', '获取日志失败', error);
       if (!this._initErrorShown) {
         this._initErrorShown = true;
         this.notify(false, '加载日志失败');
