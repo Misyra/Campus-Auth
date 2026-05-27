@@ -159,12 +159,14 @@ export const appOptions = {
     },
     networkStatus() {
       if (!this.status.monitoring) return 'idle';
+      // 首次检测中（last_network_ok 为 null）显示为检测中状态
+      if (this.status.status_detail === '正在检测网络') return 'checking';
       if (this.status.network_connected === false) return 'disconnected';
       return 'connected';
     },
     networkStatusText() {
       if (!this.status.monitoring) return '已停止';
-      return this.status.status_detail || '正在启动';
+      return this.status.status_detail || '正在启动监控';
     },
     filteredRepoTasks() {
       const q = this.repoImport.searchQuery.trim().toLowerCase();
