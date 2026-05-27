@@ -170,6 +170,14 @@ export const appOptions = {
       if (!this.status.monitoring) return '已停止';
       return this.status.status_detail || '正在启动监控';
     },
+    portalCheckEnabled: {
+      get() {
+        return !!(this.config.portal_check_urls && this.config.portal_check_urls.trim());
+      },
+      set(val) {
+        this.config.portal_check_urls = val ? (this.config.portal_check_urls || this.defaultPortalUrls) : '';
+      },
+    },
     filteredRepoTasks() {
       const q = this.repoImport.searchQuery.trim().toLowerCase();
       if (!q) return this.repoImport.tasks;
