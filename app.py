@@ -19,6 +19,7 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from src.playwright_bootstrap import ensure_playwright_ready  # noqa: E402 — 需要在 sys.path 插入后导入
+from src.playwright_worker import cleanup_orphan_browsers  # noqa: E402 — 同上
 from src.utils.platform_utils import is_windows  # noqa: E402 — 同上；跨平台检测：替代 sys.platform == "win32"
 
 
@@ -348,6 +349,8 @@ def _run_login_then_exit(logger) -> None:
         if success:
             print(f"登录成功: {message}")
             print("登录完成，正在退出...")
+            # 清理可能残留的浏览器进程
+            cleanup_orphan_browsers()
             _cleanup_pid()
             sys.exit(0)
 
@@ -357,6 +360,8 @@ def _run_login_then_exit(logger) -> None:
             break
 
     # 超过最大重试次数，回退到正常启动
+    # 在回退之前清理可能残留的浏览器进程
+    cleanup_orphan_browsers()
     print(f"已重试 {max_retries} 次均失败，回退到正常模式启动服务器")
     logger.warning(
         "login_then_exit 登录失败（已重试 %d 次），回退到正常模式启动服务器",

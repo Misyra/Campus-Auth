@@ -33,6 +33,7 @@ from src.utils.config_helpers import BACKUP_FILENAME_PATTERN
 from src.utils.env import build_login_env_vars
 from src.utils.file_helpers import atomic_write
 from src.utils.logging import LogConfigCenter, get_logger
+from src.playwright_worker import cleanup_orphan_browsers
 from src.version import get_project_version
 
 from .autostart_service import AutoStartService
@@ -104,6 +105,9 @@ async def lifespan(app_instance):
     # 启动 WebSocket 广播队列消费任务（在 service.boot() 中也尝试启动，但加在这里确保成功）
     ws_drain_task = asyncio.create_task(service._ws_drain_loop())
     _cleanup_old_backups()
+    # 启动时清理上次运行残留的孤儿 Chromium Worker 浏览器进程
+    # 避免因前次 os._exit(0) 导致浏览器进程被孤立
+    cleanup_orphan_browsers()
     startup_logger.info(
         "FastAPI 启动: 完成，耗时 %.3fs",
         time.perf_counter() - start,
