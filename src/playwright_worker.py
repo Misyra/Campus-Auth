@@ -345,7 +345,9 @@ class PlaywrightWorker:
 
         try:
             handler = LoginAttemptHandler(
-                config=config, cancel_event=cancel_event
+                config=config,
+                cancel_event=cancel_event,
+                close_on_failure=data.get("close_on_failure", True),
             )
             success, message = await handler.attempt_login(
                 skip_pause_check=data.get("skip_pause_check", False),
