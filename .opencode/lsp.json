@@ -1,7 +1,0 @@
-{
-  "lsp": {
-    "ruff": { "disabled": false },
-    "typescript": { "disabled": false },
-    "pyright": { "disabled": false }
-  }
-}
