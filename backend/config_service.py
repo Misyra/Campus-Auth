@@ -246,6 +246,17 @@ def build_runtime_config(
     monitor["enable_tcp_check"] = payload.enable_tcp_check
     monitor["enable_http_check"] = payload.enable_http_check
     monitor["check_auth_url"] = payload.check_auth_url
+    # 解析 portal 探测 URL 列表
+    portal_entries = []
+    for line in payload.portal_check_urls.splitlines():
+        line = line.strip()
+        if "|" in line:
+            url, _, expected = line.partition("|")
+            url = url.strip()
+            expected = expected.strip()
+            if url and expected:
+                portal_entries.append((url, expected))
+    monitor["portal_check_urls"] = portal_entries
     monitor["network_check_timeout"] = payload.network_check_timeout
 
     backend_level = _normalize_level(payload.backend_log_level)
@@ -356,6 +367,7 @@ def save_config_combined(
                 "enable_tcp_check",
                 "enable_http_check",
                 "check_auth_url",
+                "portal_check_urls",
                 "stealth_mode",
                 "stealth_custom_script",
                 "custom_variables",

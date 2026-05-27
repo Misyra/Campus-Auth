@@ -35,6 +35,10 @@ export const configMethods = {
     } else if (!this.config.password && !confirm('密码为空，自动认证将无法工作。\n\n确定要继续保存吗？')) {
       return;
     }
+    if (!this.config.enable_tcp_check && !this.config.enable_http_check && !(this.config.portal_check_urls && this.config.portal_check_urls.trim())) {
+      this.notify(false, '至少需要启用一种网络探测方式（TCP / HTTP / Captive Portal）');
+      return;
+    }
 
     this.busy.save = true;
     try {

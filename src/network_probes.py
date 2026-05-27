@@ -237,6 +237,63 @@ def is_network_available_socket(
     return False
 
 
+def is_network_available_portal(
+    portal_checks: Sequence[tuple[str, str]] | None = None,
+    timeout: float = 3.0,
+) -> bool:
+    """通过 captive portal 探测 URL 检测网络连通性。
+
+    访问配置的 captive portal 检测地址，验证响应内容是否包含预期的"正常"标识。
+    如果被重定向到登录页面或返回非预期内容，说明需要认证。
+
+    参数:
+        portal_checks: (URL, 预期内容) 元组列表，为 None 时使用内置默认值
+        timeout: 单个请求超时秒数
+
+    返回 True 表示至少有一个探测 URL 返回了预期内容（网络正常）。
+    """
+    if portal_checks is None:
+        portal_checks = [
+            ("http://captive.apple.com/hotspot-detect.html", "Success"),
+            ("http://www.msftconnecttest.com/connecttest.txt", "Microsoft Connect Test"),
+            ("http://detectportal.firefox.com/success.txt", "success"),
+        ]
+    if not portal_checks:
+        return True
+
+    def _check_portal(url: str, expected: str) -> tuple[str, bool, str]:
+        start = time.perf_counter()
+        try:
+            with httpx.Client(
+                verify=False, trust_env=not _block_proxy, follow_redirects=True
+            ) as client:
+                resp = client.get(url, timeout=timeout)
+            elapsed = (time.perf_counter() - start) * 1000
+            body = resp.text.strip()
+            if expected in body:
+                return (url, True, f"HTTP {resp.status_code} ({elapsed:.0f}ms)")
+            return (
+                url,
+                False,
+                f"HTTP {resp.status_code} 内容不匹配 ({elapsed:.0f}ms)",
+            )
+        except Exception as exc:
+            elapsed = (time.perf_counter() - start) * 1000
+            return (url, False, f"{type(exc).__name__} ({elapsed:.0f}ms)")
+
+    futures = {
+        _executor.submit(_check_portal, url, exp): url for url, exp in portal_checks
+    }
+    for future in as_completed(futures):
+        url, ok, detail = future.result()
+        if ok:
+            logger.info("Captive portal 探测成功: %s → %s", url, detail)
+            return True
+        logger.info("Captive portal 探测失败: %s — %s", url, detail)
+    logger.warning("所有 captive portal 探测均未通过 (%d 个)", len(portal_checks))
+    return False
+
+
 def is_network_available_http(
     test_urls: Iterable[str] | None = None,
     timeout: float = 2.0,

@@ -78,6 +78,12 @@ class _MonitorFieldsMixin(BaseModel):
     check_auth_url: bool = Field(
         default=True, description="登录前检测认证地址是否可达，不可达则跳过登录"
     )
+    portal_check_urls: str = Field(
+        default="http://captive.apple.com/hotspot-detect.html|Success\n"
+        "http://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test\n"
+        "http://detectportal.firefox.com/success.txt|success",
+        description="Captive portal 探测地址，每行一个：URL|预期内容，留空不启用",
+    )
     block_proxy: bool = Field(
         default=True, description="屏蔽系统代理：开启后网络检测时忽略系统代理设置"
     )

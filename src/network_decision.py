@@ -8,6 +8,7 @@ from src.network_probes import (
     is_local_network_connected,
     is_network_available_socket,
     is_network_available_http,
+    is_network_available_portal,
 )
 from src.utils.logging import get_logger
 from src.utils.time_utils import is_in_pause_period
@@ -21,6 +22,7 @@ def is_network_available(
     timeout: float = 1.5,
     enable_tcp: bool = True,
     enable_http: bool = True,
+    portal_checks: Sequence[tuple[str, str]] | None = None,
     skip_local_check: bool = False,
 ) -> bool:
     # 物理网络预检查：无实际连接时直接跳过，避免徒增功耗
@@ -28,52 +30,74 @@ def is_network_available(
         logger.warning("物理网络未连接，跳过 TCP/HTTP 检测")
         return False
 
-    # 两种探测都未启用时，视为网络正常（不做额外判断）
-    if not enable_tcp and not enable_http:
-        logger.info("TCP 和 HTTP 探测均未启用，跳过网络可用性检测")
+    enable_portal = bool(portal_checks)
+
+    # 所有探测都未启用时，视为网络正常（不做额外判断）
+    if not enable_tcp and not enable_http and not enable_portal:
+        logger.info("所有网络探测均未启用，跳过网络可用性检测")
         return True
 
     urls_list = list(test_urls or ())
     logger.info(
-        "开始网络检测 (TCP=%s, HTTP=%s, TCP目标=%d, HTTP目标=%d)",
+        "开始网络检测 (TCP=%s, HTTP=%s, Portal=%s, TCP目标=%d, HTTP目标=%d, Portal目标=%d)",
         "开" if enable_tcp else "关",
         "开" if enable_http else "关",
+        "开" if enable_portal else "关",
         len(test_sites or ()),
         len(urls_list),
+        len(portal_checks or ()),
     )
 
-    # TCP 探测
-    socket_ok = True
-    if enable_tcp:
-        socket_ok = is_network_available_socket(test_sites=test_sites, timeout=timeout)
-        # 两种都启用时，TCP 失败可直接判定断网，跳过 HTTP 省时间
-        if enable_http and not socket_ok:
-            logger.info("网络检测完成: TCP=断 → 直接判定网络异常，跳过 HTTP")
-            return False
+    # 所有启用的探测并发执行，降低总检测延时
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    # HTTP 探测
-    http_ok = True
-    if enable_http:
-        http_ok = is_network_available_http(
-            test_urls=urls_list,
-            timeout=max(timeout, 2.0),
-            # 两个都启用时，HTTP 不跟重定向（portal 302 = 未认证 = 失败）
-            # 只启用 HTTP 时，跟重定向（允许 portal 重定向后返回 200）
-            follow_redirects=not enable_tcp,
-        )
+    socket_ok = http_ok = portal_ok = True
 
-    # 两种都启用 → 必须都通过（TCP 失败已提前返回）；只启用一种 → 那种通过即可
-    if enable_tcp and enable_http:
-        result = http_ok  # TCP 已通过才能到这里
-    elif enable_tcp:
-        result = socket_ok
-    else:
-        result = http_ok
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futures = {}
+        if enable_tcp:
+            futures[pool.submit(
+                is_network_available_socket, test_sites=test_sites, timeout=timeout
+            )] = "tcp"
+        if enable_http:
+            futures[pool.submit(
+                is_network_available_http,
+                test_urls=urls_list,
+                timeout=max(timeout, 2.0),
+                follow_redirects=not enable_tcp,
+            )] = "http"
+        if enable_portal:
+            futures[pool.submit(
+                is_network_available_portal,
+                portal_checks=portal_checks,
+                timeout=max(timeout, 3.0),
+            )] = "portal"
+
+        for future in as_completed(futures):
+            kind = futures[future]
+            try:
+                ok = future.result()
+            except Exception:
+                ok = False
+            if kind == "tcp":
+                socket_ok = ok
+            elif kind == "http":
+                http_ok = ok
+            elif kind == "portal":
+                portal_ok = ok
+
+    # 所有启用的探测必须都通过才判定网络正常
+    result = (
+        (socket_ok or not enable_tcp)
+        and (http_ok or not enable_http)
+        and (portal_ok or not enable_portal)
+    )
 
     logger.info(
-        "网络检测完成: TCP=%s HTTP=%s → %s",
+        "网络检测完成: TCP=%s HTTP=%s Portal=%s → %s",
         "通" if socket_ok else ("关" if not enable_tcp else "断"),
         "通" if http_ok else ("关" if not enable_http else "断"),
+        "通" if portal_ok else ("关" if not enable_portal else "断"),
         "网络正常" if result else "网络异常",
     )
     return result
@@ -140,6 +164,7 @@ def should_attempt_login(config: dict) -> tuple[bool, str]:
         timeout=monitor_config.get("network_check_timeout", 1.5),
         enable_tcp=enable_tcp,
         enable_http=enable_http,
+        portal_checks=monitor_config.get("portal_check_urls", None),
         skip_local_check=True,
     ):
         logger.info("网络正常，无需登录")

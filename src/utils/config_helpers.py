@@ -44,6 +44,7 @@ PROFILE_FIELDS: list[str] = [
     "enable_tcp_check",
     "enable_http_check",
     "check_auth_url",
+    "portal_check_urls",
     "backend_log_level",
     "frontend_log_level",
     "access_log",

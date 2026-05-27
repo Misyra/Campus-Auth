@@ -41,6 +41,7 @@ export const DEFAULT_CONFIG = {
   enable_tcp_check: true,
   enable_http_check: true,
   check_auth_url: true,
+  portal_check_urls: "http://captive.apple.com/hotspot-detect.html|Success\nhttp://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test\nhttp://detectportal.firefox.com/success.txt|success",
   backend_log_level: "INFO",
   frontend_log_level: "INFO",
   access_log: false,
