@@ -73,8 +73,8 @@ class _MonitorFieldsMixin(BaseModel):
     network_targets: str = Field(
         default="8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
     )
-    enable_tcp_check: bool = Field(default=True, description="启用 TCP 探测检测网络连通性")
-    enable_http_check: bool = Field(default=True, description="启用 HTTP 探测检测网络连通性")
+    enable_tcp_check: bool = Field(default=True, description="启用 TCP 检测网络连通性")
+    enable_http_check: bool = Field(default=True, description="启用 HTTP 检测网络连通性")
     check_auth_url: bool = Field(
         default=True, description="登录前检测认证地址是否可达，不可达则跳过登录"
     )
@@ -82,7 +82,7 @@ class _MonitorFieldsMixin(BaseModel):
         default="http://captive.apple.com/hotspot-detect.html|Success\n"
         "http://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test\n"
         "http://detectportal.firefox.com/success.txt|success",
-        description="Captive portal 探测地址，每行一个：URL|预期内容，留空不启用",
+        description="Captive portal 检测地址，每行一个：URL|预期内容，留空不启用",
     )
     block_proxy: bool = Field(
         default=True, description="屏蔽系统代理：开启后网络检测时忽略系统代理设置"
@@ -164,7 +164,7 @@ class MonitorConfigPayload(
     _BrowserValidatorsMixin,
 ):
     network_check_timeout: int = Field(
-        default=2, ge=1, le=30, description="TCP 网络探测超时（秒），检测网络连通性时使用"
+        default=2, ge=1, le=30, description="TCP 网络检测超时（秒），检测网络连通性时使用"
     )
     use_global_credentials: bool = Field(
         default=True, description="当前是否使用全局凭证（前端只读，后端填充）"
@@ -255,7 +255,7 @@ class SystemSettings(_SystemFieldsMixin, _SharedValidatorsMixin):
         default=False, description="纯净模式：使用 Chromium 原始设置，不注入自定义参数"
     )
     network_check_timeout: int = Field(
-        default=2, ge=1, le=30, description="TCP 网络探测超时（秒）"
+        default=2, ge=1, le=30, description="TCP 网络检测超时（秒）"
     )
     block_proxy: bool = Field(
         default=True, description="屏蔽系统代理：开启后网络检测时忽略系统代理设置"

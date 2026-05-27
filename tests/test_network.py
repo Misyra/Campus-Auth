@@ -195,7 +195,7 @@ class TestIsNetworkAvailableHttp:
 
 class TestIsNetworkAvailablePortal:
     def test_success(self):
-        """portal 探测成功应返回 True"""
+        """portal 检测成功应返回 True"""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.text = "Success"
@@ -225,7 +225,7 @@ class TestIsNetworkAvailablePortal:
             assert result is False
 
     def test_empty_checks_returns_true(self):
-        """空检查列表应返回 True（不启用探测）"""
+        """空检查列表应返回 True（不启用检测）"""
         result = is_network_available_portal(portal_checks=[], timeout=3.0)
         assert result is True
 
@@ -354,7 +354,7 @@ class TestShouldAttemptLogin:
 
 class TestIsNetworkAvailable:
     def test_all_disabled_returns_true(self):
-        """所有探测都未启用时应返回 True"""
+        """所有检测都未启用时应返回 True"""
         result = is_network_available(
             enable_tcp=False, enable_http=False, portal_checks=None,
             skip_local_check=True,
@@ -371,7 +371,7 @@ class TestIsNetworkAvailable:
     @patch("src.network_decision.is_network_available_http", return_value=True)
     @patch("src.network_decision.is_local_network_connected", return_value=True)
     def test_all_pass(self, *mocks):
-        """所有探测通过应返回 True"""
+        """所有检测通过应返回 True"""
         result = is_network_available(
             test_sites=[("8.8.8.8", 53)],
             test_urls=["https://www.baidu.com"],
@@ -384,7 +384,7 @@ class TestIsNetworkAvailable:
     @patch("src.network_decision.is_network_available_http", return_value=True)
     @patch("src.network_decision.is_local_network_connected", return_value=True)
     def test_tcp_fail_http_pass(self, *mocks):
-        """TCP 失败但 HTTP 通过时应返回 False（所有启用的探测必须都通过）"""
+        """TCP 失败但 HTTP 通过时应返回 False（所有启用的检测必须都通过）"""
         result = is_network_available(
             test_sites=[("8.8.8.8", 53)],
             test_urls=["https://www.baidu.com"],

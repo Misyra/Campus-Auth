@@ -241,7 +241,7 @@ def is_network_available_portal(
     portal_checks: Sequence[tuple[str, str]] | None = None,
     timeout: float = 3.0,
 ) -> bool:
-    """通过 captive portal 探测 URL 检测网络连通性。
+    """通过 captive portal 检测 URL 检测网络连通性。
 
     访问配置的 captive portal 检测地址，验证响应内容是否包含预期的"正常"标识。
     如果被重定向到登录页面或返回非预期内容，说明需要认证。
@@ -250,7 +250,7 @@ def is_network_available_portal(
         portal_checks: (URL, 预期内容) 元组列表，为 None 时使用内置默认值
         timeout: 单个请求超时秒数
 
-    返回 True 表示至少有一个探测 URL 返回了预期内容（网络正常）。
+    返回 True 表示至少有一个检测 URL 返回了预期内容（网络正常）。
     """
     if portal_checks is None:
         portal_checks = [
@@ -287,10 +287,10 @@ def is_network_available_portal(
     for future in as_completed(futures):
         url, ok, detail = future.result()
         if ok:
-            logger.info("Captive portal 探测成功: %s → %s", url, detail)
+            logger.info("Captive portal 检测成功: %s → %s", url, detail)
             return True
-        logger.info("Captive portal 探测失败: %s — %s", url, detail)
-    logger.warning("所有 captive portal 探测均未通过 (%d 个)", len(portal_checks))
+        logger.info("Captive portal 检测失败: %s — %s", url, detail)
+    logger.warning("所有 captive portal 检测均未通过 (%d 个)", len(portal_checks))
     return False
 
 

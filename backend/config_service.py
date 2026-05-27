@@ -246,7 +246,7 @@ def build_runtime_config(
     monitor["enable_tcp_check"] = payload.enable_tcp_check
     monitor["enable_http_check"] = payload.enable_http_check
     monitor["check_auth_url"] = payload.check_auth_url
-    # 解析 portal 探测 URL 列表
+    # 解析 portal 检测 URL 列表
     portal_entries = []
     for line in payload.portal_check_urls.splitlines():
         line = line.strip()

@@ -36,7 +36,7 @@ export const configMethods = {
       return;
     }
     if (!this.config.enable_tcp_check && !this.config.enable_http_check && !(this.config.portal_check_urls && this.config.portal_check_urls.trim())) {
-      this.notify(false, '至少需要启用一种网络探测方式（TCP / HTTP / Captive Portal）');
+      this.notify(false, '至少需要启用一种网络检测方式（TCP / HTTP / Captive Portal）');
       return;
     }
 

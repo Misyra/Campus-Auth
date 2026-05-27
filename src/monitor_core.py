@@ -291,7 +291,7 @@ class NetworkMonitorCore:
         Design rationale:
         方法是独立循环而非内联在 monitor_network() 中的原因：
         原设计是在 monitor_network() 的单层 while 循环中通过 continue 回绕到
-        循环顶部，导致每次 retry 都重新执行 is_network_available()（TCP 探测
+        循环顶部，导致每次 retry 都重新执行 is_network_available()（TCP 检测
         耗时 2-8s），使配置的 retry_interval（如 5s）实际被拉长到 12-20s。
         提取为独立方法后，内层只做快速物理连接检查（is_local_network_connected,
         ~10ms）+ 登录重试，不做 is_network_available()，确保 retry 间隔准确。
@@ -300,7 +300,7 @@ class NetworkMonitorCore:
             # 缓存本轮迭代的重试配置（避免循环内重复调用 _get_retry_config）
             max_retries, retry_intervals = self._get_retry_config()
 
-            # 1. 快速检查物理网络连接（~10ms，非 TCP 探测）
+            # 1. 快速检查物理网络连接（~10ms，非 TCP 检测）
             if not is_local_network_connected():
                 self.log_message(
                     "物理网络未连接，停止重试，等待下次检测周期",

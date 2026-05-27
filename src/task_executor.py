@@ -1074,7 +1074,7 @@ class TaskExecutor:
         env_vars: dict[str, str] | None = None,
         screenshot_dir: Path | str | None = None,
         default_timeout: int | None = None,
-        network_test_config: dict[str, Any] | None = None,
+        monitor_config: dict[str, Any] | None = None,
     ):
         self.config = config
         self.env_vars = env_vars or {}
@@ -1083,7 +1083,7 @@ class TaskExecutor:
         self.registry = StepExecutorRegistry()
         self._step_results: list[dict[str, Any]] = []
         self._screenshot_dir = Path(screenshot_dir) if screenshot_dir else None
-        self.network_test_config = network_test_config
+        self.monitor_config = monitor_config
 
     async def execute(self, page) -> tuple[bool, str]:
         """执行任务
@@ -1296,7 +1296,7 @@ class TaskExecutor:
         }
 
     async def _check_success(self, page) -> bool:
-        if self.network_test_config:
+        if self.monitor_config:
             return await self._network_detection_check()
         return True
 
@@ -1307,17 +1307,41 @@ class TaskExecutor:
 
             await asyncio.sleep(2)  # 等待 Portal 处理认证请求
 
-            test_sites = self.network_test_config.get("test_sites")
-            timeout = self.network_test_config.get("timeout", 2)
-            enable_tcp = self.network_test_config.get("enable_tcp_check", True)
-            enable_http = self.network_test_config.get("enable_http_check", True)
+            cfg = self.monitor_config
+            enable_tcp = cfg.get("enable_tcp_check", True)
+            enable_http = cfg.get("enable_http_check", True)
+            timeout = cfg.get("network_check_timeout", 2)
+
+            # 解析 portal 检测 URL
+            portal_checks = None
+            portal_raw = cfg.get("portal_check_urls", "")
+            if isinstance(portal_raw, str) and portal_raw.strip():
+                portal_checks = []
+                for line in portal_raw.splitlines():
+                    line = line.strip()
+                    if "|" in line:
+                        url, _, expected = line.partition("|")
+                        url, expected = url.strip(), expected.strip()
+                        if url and expected:
+                            portal_checks.append((url, expected))
+            elif isinstance(portal_raw, list) and portal_raw:
+                portal_checks = [
+                    (e[0], e[1]) for e in portal_raw if len(e) >= 2 and e[0] and e[1]
+                ]
+
+            # 解析 TCP 检测目标
+            from src.utils.network_helpers import parse_host_port
+            targets = cfg.get("ping_targets", [])
+            if isinstance(targets, str):
+                targets = [t.strip() for t in targets.split(",") if t.strip()]
+            test_sites = parse_host_port(targets) or None
 
             logger.info(
-                "验证网络连通性 (targets=%s, timeout=%ss, TCP=%s, HTTP=%s)",
-                test_sites or "默认",
+                "验证网络连通性 (网络检测方式: TCP=%s, HTTP=%s, Portal=%s, 超时=%ss)",
+                "开" if enable_tcp else "关",
+                "开" if enable_http else "关",
+                "开" if bool(portal_checks) else "关",
                 timeout,
-                enable_tcp,
-                enable_http,
             )
 
             result = await asyncio.to_thread(
@@ -1326,6 +1350,7 @@ class TaskExecutor:
                 timeout=timeout,
                 enable_tcp=enable_tcp,
                 enable_http=enable_http,
+                portal_checks=portal_checks,
             )
 
             if result:
