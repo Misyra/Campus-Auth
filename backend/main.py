@@ -70,8 +70,8 @@ PROJECT_ROOT = (
 )
 
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
-DEBUG_DIR = PROJECT_ROOT / "debug"
-DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+LOGS_DIR = PROJECT_ROOT / "logs"
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @asynccontextmanager
@@ -1270,7 +1270,7 @@ TEMP_DIR = PROJECT_ROOT / "temp"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
-app.mount("/debug", StaticFiles(directory=DEBUG_DIR), name="debug")
+app.mount("/logs", StaticFiles(directory=LOGS_DIR), name="logs")
 app.mount("/temp", StaticFiles(directory=TEMP_DIR), name="temp")
 
 
@@ -1296,30 +1296,42 @@ def run() -> None:
     # 压制 PIL 库的 DEBUG 日志，避免启动时大量 "Importing XxxImagePlugin" 刷屏
     logging.getLogger("PIL").setLevel(logging.WARNING)
 
-    # 启用日志持久化到文件（按天存储，自动清理过期日志和截图）
+    # 启用日志持久化到文件（按天目录存储，自动清理过期目录）
     log_dir = PROJECT_ROOT / "logs"
     try:
         # 文件始终记录完整日志，不受前后端日志级别限制
         log_center.add_file_handler(str(log_dir), retention_days=log_retention)
-        today_log = log_dir / f"{datetime.now().strftime('%Y-%m-%d')}.log"
+        today_dir = log_dir / datetime.now().strftime("%Y-%m-%d")
+        today_log = today_dir / "app.log"
         print(f"[Campus-Auth] 日志文件: {today_log}")
         startup_logger.info("日志文件: %s", today_log)
-        # 清理旧版日志文件，避免混淆
-        old_log = log_dir / "campus_auth.log"
-        if old_log.exists():
-            old_log.unlink(missing_ok=True)
+        # 清理旧版日志文件（扁平结构），迁移到新结构后可移除
+        for old_name in ("campus_auth.log",):
+            old_log = log_dir / old_name
+            if old_log.exists():
+                old_log.unlink(missing_ok=True)
     except Exception:
         pass
 
-    # 自动清理过期的调试截图（按日期子目录）
+    # 自动清理过期截图（logs/{YYYY-MM-DD}/screenshots/）
     try:
-        from src.utils.logging import cleanup_debug_screenshots
+        from src.utils.logging import cleanup_old_screenshots
 
-        n = cleanup_debug_screenshots(str(DEBUG_DIR), sc_retention)
+        n = cleanup_old_screenshots(str(log_dir), sc_retention)
         if n:
             startup_logger.info("清理过期截图: %d 张", n)
     except Exception:
         pass
+
+    # 清理旧版 debug/ 目录（一次性迁移，后续可移除）
+    old_debug = PROJECT_ROOT / "debug"
+    if old_debug.exists():
+        import shutil
+        try:
+            shutil.rmtree(old_debug)
+            startup_logger.info("已清理旧版 debug/ 目录")
+        except Exception:
+            pass
 
     global _access_log_enabled
     _access_log_enabled = access_log_enabled
