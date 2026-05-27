@@ -67,12 +67,7 @@ class TaskError(Exception):
 class StepError(TaskError):
     """步骤执行错误"""
 
-    def __init__(
-        self, message: str, step_id: str | None = None, step_type: str | None = None
-    ):
-        super().__init__(message)
-        self.step_id = step_id
-        self.step_type = step_type
+    pass
 
 
 class StepType(str, Enum):
@@ -365,6 +360,11 @@ class StepHandler(ABC):
             params[key] = resolver.resolve(value)
         return params
 
+    @staticmethod
+    def _parse_selectors(selector: str) -> list[str]:
+        """解析逗号分隔的候选选择器列表"""
+        return [s.strip() for s in selector.split(",") if s.strip()]
+
     async def _resolve_frame(self, page, step: StepConfig):
         """解析 frame 上下文，返回实际操作的 page 或 frame 对象"""
         frame_selector = step.frame
@@ -417,7 +417,7 @@ class StepHandler(ABC):
 
     async def _find_element(self, ctx, selector: str, timeout: int):
         """查找元素（支持多个候选选择器，兼容 Page 和 FrameLocator）"""
-        candidates = [s.strip() for s in selector.split(",") if s.strip()]
+        candidates = self._parse_selectors(selector)
 
         for candidate in candidates:
             try:
@@ -455,7 +455,7 @@ class InputHandler(StepHandler):
         logger.info("输入 → %s (clear=%s)", selector, clear)
 
         # 策略1: 快速尝试普通 fill（使用步骤 timeout 的 15%，最少 1500ms）
-        candidates = [s.strip() for s in selector.split(",") if s.strip()]
+        candidates = self._parse_selectors(selector)
         wait_timeout = max(1500, int(timeout * 0.15))
         for candidate in candidates:
             try:
@@ -484,7 +484,7 @@ class InputHandler(StepHandler):
         事件序列（模拟真实用户操作）：
           focus → (clear) → beforeinput → set value → input → keyup → change → blur
         """
-        candidates = [s.strip() for s in selector.split(",") if s.strip()]
+        candidates = self._parse_selectors(selector)
 
         for candidate in candidates:
             try:
@@ -524,7 +524,7 @@ class ClickHandler(StepHandler):
         logger.info("点击 → %s", selector)
 
         # 策略1: 快速尝试普通 click（3s 超时）
-        candidates = [s.strip() for s in selector.split(",") if s.strip()]
+        candidates = self._parse_selectors(selector)
         for candidate in candidates:
             try:
                 loc = ctx.locator(candidate).first

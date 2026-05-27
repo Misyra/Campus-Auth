@@ -85,7 +85,7 @@ class _MonitorFieldsMixin(BaseModel):
 
 
 class _SharedValidatorsMixin:
-    """MonitorConfigPayload 与 ProfileSettings 共享的验证器"""
+    """包含 auth_url 的模型共享的验证器"""
 
     @field_validator("auth_url")
     @classmethod
@@ -94,6 +94,10 @@ class _SharedValidatorsMixin:
         if v and not _URL_PATTERN.match(v):
             raise ValueError("认证地址必须以 http:// 或 https:// 开头")
         return v
+
+
+class _BrowserValidatorsMixin:
+    """包含浏览器请求头字段的模型共享的验证器"""
 
     @field_validator("browser_extra_headers_json")
     @classmethod
@@ -110,33 +114,27 @@ class _SharedValidatorsMixin:
         return v
 
 
-# ── 主要模型 ──
+class _SystemFieldsMixin(BaseModel):
+    """SystemSettings 与 MonitorConfigPayload 共享的系统配置字段"""
 
-
-class MonitorConfigPayload(_BrowserFieldsMixin, _MonitorFieldsMixin, _SharedValidatorsMixin):
-    username: str = Field(default="")
-    network_check_timeout: int = Field(
-        default=2, ge=1, le=30, description="TCP 网络探测超时（秒），检测网络连通性时使用"
-    )
-    password: str = Field(default="")
-    use_global_credentials: bool = Field(
-        default=True, description="当前是否使用全局凭证（前端只读，后端填充）"
-    )
+    username: str = Field(default="", description="全局校园网用户名")
+    password: str = Field(default="", description="全局校园网密码（ENC: 加密）")
+    auth_url: str = Field(default="", description="全局认证地址")
+    carrier: str = Field(default="无", description="全局运营商")
+    carrier_custom: str = Field(default="", description="自定义运营商关键字")
     backend_log_level: str = Field(default="INFO")
     frontend_log_level: str = Field(default="INFO")
-    access_log: bool = False
-    minimize_to_tray: bool = True
-    auto_open_browser: bool = False
-    login_then_exit: bool = False
-    max_retries: int = Field(default=3, ge=0, le=10, description="登录重试最大次数")
-    retry_interval: int = Field(
-        default=5, ge=1, le=300, description="重试间隔（秒），指数退避基数"
+    access_log: bool = Field(default=False, description="Uvicorn HTTP 请求日志")
+    minimize_to_tray: bool = Field(default=True, description="最小化到系统托盘")
+    auto_open_browser: bool = Field(default=False, description="启动后自动打开浏览器")
+    login_then_exit: bool = Field(default=False, description="登录成功后退出软件")
+    max_retries: int = Field(default=3, ge=0, le=10)
+    retry_interval: int = Field(default=5, ge=1, le=300, description="重试间隔（秒）")
+    log_retention_days: int = Field(
+        default=7, ge=1, le=365, description="日志与截图保留天数"
     )
-    log_retention_days: int = Field(default=7, ge=1, le=365)
-    app_port: int = Field(
-        default=50721, ge=1024, le=65535, description="Web 控制台端口，更改需重启生效"
-    )
-    proxy: str = Field(default="", description="网络代理地址，留空不使用代理")
+    app_port: int = Field(default=50721, ge=1024, le=65535, description="Web 控制台端口")
+    proxy: str = Field(default="", description="网络代理地址")
 
     @field_validator("backend_log_level", "frontend_log_level")
     @classmethod
@@ -147,6 +145,24 @@ class MonitorConfigPayload(_BrowserFieldsMixin, _MonitorFieldsMixin, _SharedVali
                 f"无效的日志级别: {v}，可选值: {', '.join(VALID_LOG_LEVELS)}"
             )
         return v
+
+
+# ── 主要模型 ──
+
+
+class MonitorConfigPayload(
+    _BrowserFieldsMixin,
+    _MonitorFieldsMixin,
+    _SystemFieldsMixin,
+    _SharedValidatorsMixin,
+    _BrowserValidatorsMixin,
+):
+    network_check_timeout: int = Field(
+        default=2, ge=1, le=30, description="TCP 网络探测超时（秒），检测网络连通性时使用"
+    )
+    use_global_credentials: bool = Field(
+        default=True, description="当前是否使用全局凭证（前端只读，后端填充）"
+    )
 
     @field_validator("custom_variables")
     @classmethod
@@ -197,7 +213,12 @@ class AutoStartStatusResponse(BaseModel):
     location: str
 
 
-class ProfileSettings(_BrowserFieldsMixin, _MonitorFieldsMixin, _SharedValidatorsMixin):
+class ProfileSettings(
+    _BrowserFieldsMixin,
+    _MonitorFieldsMixin,
+    _SharedValidatorsMixin,
+    _BrowserValidatorsMixin,
+):
     """Profile-specific non-sensitive settings stored in settings.json"""
 
     name: str = Field(default="默认方案")
@@ -221,46 +242,18 @@ class ProfileSettings(_BrowserFieldsMixin, _MonitorFieldsMixin, _SharedValidator
     )
 
 
-class SystemSettings(BaseModel):
+class SystemSettings(_SystemFieldsMixin, _SharedValidatorsMixin):
     """全局系统配置（原 .env 中的业务配置）"""
 
-    username: str = Field(default="", description="全局校园网用户名")
-    password: str = Field(default="", description="全局校园网密码（ENC: 加密）")
-    auth_url: str = Field(default="", description="全局认证地址")
-    carrier: str = Field(default="无", description="全局运营商")
-    carrier_custom: str = Field(default="", description="自定义运营商关键字")
-    backend_log_level: str = Field(default="INFO")
-    frontend_log_level: str = Field(default="INFO")
-    access_log: bool = Field(default=False, description="Uvicorn HTTP 请求日志")
-    minimize_to_tray: bool = Field(default=True, description="最小化到系统托盘")
-    auto_open_browser: bool = Field(default=False, description="启动后自动打开浏览器")
-    login_then_exit: bool = Field(default=False, description="登录成功后退出软件")
-    max_retries: int = Field(default=3, ge=0, le=10)
-    retry_interval: int = Field(default=5, ge=1, le=300, description="重试间隔（秒）")
     pure_mode: bool = Field(
         default=False, description="纯净模式：使用 Chromium 原始设置，不注入自定义参数"
     )
-    log_retention_days: int = Field(
-        default=7, ge=1, le=365, description="日志与截图保留天数"
-    )
-    app_port: int = Field(default=50721, ge=1024, le=65535, description="Web 控制台端口")
     network_check_timeout: int = Field(
         default=2, ge=1, le=30, description="TCP 网络探测超时（秒）"
     )
-    proxy: str = Field(default="", description="网络代理地址")
     block_proxy: bool = Field(
         default=True, description="屏蔽系统代理：开启后网络检测时忽略系统代理设置"
     )
-
-    @field_validator("backend_log_level", "frontend_log_level")
-    @classmethod
-    def validate_log_level(cls, v: str) -> str:
-        v = v.upper().strip()
-        if v and v not in VALID_LOG_LEVELS:
-            raise ValueError(
-                f"无效的日志级别: {v}，可选值: {', '.join(VALID_LOG_LEVELS)}"
-            )
-        return v
 
 
 class ProfilesData(BaseModel):
