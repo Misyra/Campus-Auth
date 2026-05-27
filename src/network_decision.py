@@ -19,47 +19,60 @@ def is_network_available(
     test_sites: Sequence[tuple[str, int]] | None = None,
     test_urls: Iterable[str] | None = None,
     timeout: float = 1.5,
-    require_both: bool = False,
+    enable_tcp: bool = True,
+    enable_http: bool = True,
 ) -> bool:
     # 物理网络预检查：无实际连接时直接跳过，避免徒增功耗
     if not is_local_network_connected():
         logger.warning("物理网络未连接，跳过 TCP/HTTP 检测")
         return False
 
+    # 两种探测都未启用时，视为网络正常（不做额外判断）
+    if not enable_tcp and not enable_http:
+        logger.info("TCP 和 HTTP 探测均未启用，跳过网络可用性检测")
+        return True
+
     urls_list = list(test_urls or ())
     logger.info(
-        "开始网络检测 (TCP目标=%d, HTTP目标=%d, require_both=%s)",
+        "开始网络检测 (TCP=%s, HTTP=%s, TCP目标=%d, HTTP目标=%d)",
+        "开" if enable_tcp else "关",
+        "开" if enable_http else "关",
         len(test_sites or ()),
         len(urls_list),
-        require_both,
     )
-    socket_ok = is_network_available_socket(test_sites=test_sites, timeout=timeout)
-    if require_both:
-        # 严格模式：TCP + HTTP 双重验证
-        # TCP 已失败则直接判定断网，跳过 HTTP 省时间
-        if not socket_ok:
-            logger.info("网络检测完成: TCP=断 → 严格模式直接判定网络异常，跳过 HTTP")
+
+    # TCP 探测
+    socket_ok = True
+    if enable_tcp:
+        socket_ok = is_network_available_socket(test_sites=test_sites, timeout=timeout)
+        # 两种都启用时，TCP 失败可直接判定断网，跳过 HTTP 省时间
+        if enable_http and not socket_ok:
+            logger.info("网络检测完成: TCP=断 → 直接判定网络异常，跳过 HTTP")
             return False
-        # 不跟重定向：portal 重定向到登录页 = 未认证 = 判定失败
+
+    # HTTP 探测
+    http_ok = True
+    if enable_http:
         http_ok = is_network_available_http(
             test_urls=urls_list,
             timeout=max(timeout, 2.0),
-            follow_redirects=False,
+            # 两个都启用时，HTTP 不跟重定向（portal 302 = 未认证 = 失败）
+            # 只启用 HTTP 时，跟重定向（允许 portal 重定向后返回 200）
+            follow_redirects=not enable_tcp,
         )
-        result = http_ok
+
+    # 两种都启用 → 必须都通过（TCP 失败已提前返回）；只启用一种 → 那种通过即可
+    if enable_tcp and enable_http:
+        result = http_ok  # TCP 已通过才能到这里
+    elif enable_tcp:
+        result = socket_ok
     else:
-        # TCP 成功即可，跳过 HTTP 检测节省时间
-        if socket_ok:
-            logger.info("网络检测完成: TCP=通 → 网络正常")
-            return True
-        http_ok = is_network_available_http(
-            test_urls=urls_list, timeout=max(timeout, 2.0)
-        )
         result = http_ok
+
     logger.info(
         "网络检测完成: TCP=%s HTTP=%s → %s",
-        "通" if socket_ok else "断",
-        "通" if http_ok else "断",
+        "通" if socket_ok else ("关" if not enable_tcp else "断"),
+        "通" if http_ok else ("关" if not enable_http else "断"),
         "网络正常" if result else "网络异常",
     )
     return result
@@ -108,14 +121,31 @@ def should_attempt_login(config: dict) -> tuple[bool, str]:
         logger.warning("物理网络未连接，跳过登录")
         return (False, "network_disconnected")
 
-    # 3. 认证地址可达性检查
+    # 3. 认证地址可达性检查（可配置关闭）
+    monitor_config = config.get("monitor", {})
+    check_auth_url = monitor_config.get("check_auth_url", True)
     auth_url = config.get("auth_url", "")
-    if not is_auth_url_reachable(auth_url):
+    if check_auth_url and not is_auth_url_reachable(auth_url):
         logger.warning("认证地址不可达，跳过登录")
         return (False, "auth_url_unreachable")
 
-    # 4. 网络可用性检查
-    if is_network_available():
+    # 4. 网络可用性检查（根据配置选择探测方式）
+    enable_tcp = monitor_config.get("enable_tcp_check", True)
+    enable_http = monitor_config.get("enable_http_check", True)
+    test_sites = monitor_config.get("ping_targets", None)
+    # ping_targets 是 list[str]，需要转为 list[tuple[str, int]]
+    if test_sites and isinstance(test_sites[0], str):
+        from src.utils.network_helpers import parse_host_port
+        test_sites = parse_host_port(test_sites)
+    test_urls = monitor_config.get("test_urls", None)
+
+    if is_network_available(
+        test_sites=test_sites,
+        test_urls=test_urls,
+        timeout=monitor_config.get("network_check_timeout", 1.5),
+        enable_tcp=enable_tcp,
+        enable_http=enable_http,
+    ):
         logger.info("网络正常，无需登录")
         return (False, "network_ok")
 
