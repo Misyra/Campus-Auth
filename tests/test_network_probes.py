@@ -1,7 +1,7 @@
-"""网络模块综合测试
+"""网络检测模块综合测试
 
-合并原 test_network_decision.py，并新增 network_probes.py 和
-network_decision.py 更多函数的测试。
+合并原 test_network.py 和 test_network_test.py。
+覆盖 network_probes、network_decision 的全部函数，以及 network_test 向后兼容模块。
 """
 from __future__ import annotations
 
@@ -29,6 +29,7 @@ from src.network_probes import (
 # network_probes — set_block_proxy
 # =====================================================================
 
+
 class TestSetBlockProxy:
     def test_set_true(self):
         set_block_proxy(True)
@@ -41,23 +42,22 @@ class TestSetBlockProxy:
         assert np._block_proxy is False
 
     def teardown_method(self):
-        set_block_proxy(True)  # 恢复默认
+        set_block_proxy(True)
 
 
 # =====================================================================
 # network_probes — is_local_network_connected
 # =====================================================================
 
+
 class TestIsLocalNetworkConnected:
     def test_connected_with_non_loopback_ip(self):
-        """有非回环 IP 时应返回 True"""
         with patch("src.network_probes.socket") as mock_socket:
             mock_socket.gethostname.return_value = "myhost"
             mock_socket.gethostbyname_ex.return_value = ("myhost", [], ["192.168.1.100"])
             assert is_local_network_connected() is True
 
     def test_only_loopback_ip(self):
-        """仅有回环 IP 时应尝试平台回退"""
         with patch("src.network_probes.socket") as mock_socket:
             mock_socket.gethostname.return_value = "localhost"
             mock_socket.gethostbyname_ex.return_value = ("localhost", [], ["127.0.0.1"])
@@ -67,7 +67,6 @@ class TestIsLocalNetworkConnected:
                 assert is_local_network_connected() is False
 
     def test_apipa_ip_only(self):
-        """仅有 APIPA IP (169.254.x.x) 时应尝试平台回退"""
         with patch("src.network_probes.socket") as mock_socket:
             mock_socket.gethostname.return_value = "host"
             mock_socket.gethostbyname_ex.return_value = ("host", [], ["169.254.1.1"])
@@ -77,7 +76,6 @@ class TestIsLocalNetworkConnected:
                 assert is_local_network_connected() is False
 
     def test_exception_in_gethostbyname(self):
-        """gethostbyname_ex 异常时应尝试平台回退"""
         with patch("src.network_probes.socket") as mock_socket:
             mock_socket.gethostname.return_value = "host"
             mock_socket.gethostbyname_ex.side_effect = OSError("fail")
@@ -91,9 +89,9 @@ class TestIsLocalNetworkConnected:
 # network_probes — is_network_available_socket
 # =====================================================================
 
+
 class TestIsNetworkAvailableSocket:
     def test_success(self):
-        """至少一个目标连接成功应返回 True"""
         mock_conn = MagicMock()
         mock_conn.__enter__ = MagicMock(return_value=mock_conn)
         mock_conn.__exit__ = MagicMock(return_value=False)
@@ -104,7 +102,6 @@ class TestIsNetworkAvailableSocket:
             assert result is True
 
     def test_all_fail(self):
-        """所有目标连接失败应返回 False"""
         with patch("src.network_probes.socket.create_connection", side_effect=TimeoutError):
             result = is_network_available_socket(
                 test_sites=[("8.8.8.8", 53), ("1.1.1.1", 53)], timeout=0.1
@@ -112,7 +109,6 @@ class TestIsNetworkAvailableSocket:
             assert result is False
 
     def test_one_success_one_fail(self):
-        """一个成功一个失败应返回 True"""
         call_count = [0]
         def side_effect(*args, **kwargs):
             call_count[0] += 1
@@ -134,9 +130,9 @@ class TestIsNetworkAvailableSocket:
 # network_probes — is_network_available_http
 # =====================================================================
 
+
 class TestIsNetworkAvailableHttp:
     def test_success_200(self):
-        """HTTP 200 应返回 True"""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_client = MagicMock()
@@ -150,7 +146,6 @@ class TestIsNetworkAvailableHttp:
             assert result is True
 
     def test_redirect_302(self):
-        """HTTP 302 应返回 False（门户重定向）"""
         mock_resp = MagicMock()
         mock_resp.status_code = 302
         mock_client = MagicMock()
@@ -164,7 +159,6 @@ class TestIsNetworkAvailableHttp:
             assert result is False
 
     def test_connection_error(self):
-        """连接异常应返回 False"""
         mock_client = MagicMock()
         mock_client.get.side_effect = ConnectionError("fail")
         mock_client.__enter__ = MagicMock(return_value=mock_client)
@@ -176,8 +170,6 @@ class TestIsNetworkAvailableHttp:
             assert result is False
 
     def test_empty_urls_uses_defaults(self):
-        """空 URL 列表会回退到默认 URL（baidu/qq）"""
-        # [] 是 falsy，会回退到默认 URL 列表
         mock_client = MagicMock()
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -193,9 +185,9 @@ class TestIsNetworkAvailableHttp:
 # network_probes — is_network_available_portal
 # =====================================================================
 
+
 class TestIsNetworkAvailablePortal:
     def test_success(self):
-        """portal 检测成功应返回 True"""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.text = "Success"
@@ -210,7 +202,6 @@ class TestIsNetworkAvailablePortal:
             assert result is True
 
     def test_content_mismatch(self):
-        """内容不匹配应返回 False"""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.text = "Login page"
@@ -225,12 +216,10 @@ class TestIsNetworkAvailablePortal:
             assert result is False
 
     def test_empty_checks_returns_true(self):
-        """空检查列表应返回 True（不启用检测）"""
         result = is_network_available_portal(portal_checks=[], timeout=3.0)
         assert result is True
 
     def test_connection_error(self):
-        """连接异常应返回 False"""
         mock_client = MagicMock()
         mock_client.get.side_effect = ConnectionError("fail")
         mock_client.__enter__ = MagicMock(return_value=mock_client)
@@ -245,6 +234,7 @@ class TestIsNetworkAvailablePortal:
 # =====================================================================
 # network_decision — is_auth_url_reachable
 # =====================================================================
+
 
 class TestIsAuthUrlReachable:
     def test_empty_url_returns_true(self):
@@ -290,6 +280,7 @@ class TestIsAuthUrlReachable:
 # =====================================================================
 # network_decision — should_attempt_login
 # =====================================================================
+
 
 class TestShouldAttemptLogin:
     def _make_config(self, **overrides):
@@ -352,9 +343,9 @@ class TestShouldAttemptLogin:
 # network_decision — is_network_available
 # =====================================================================
 
+
 class TestIsNetworkAvailable:
     def test_all_disabled_returns_true(self):
-        """所有检测都未启用时应返回 True"""
         result = is_network_available(
             enable_tcp=False, enable_http=False, portal_checks=None,
             skip_local_check=True,
@@ -363,7 +354,6 @@ class TestIsNetworkAvailable:
 
     @patch("src.network_decision.is_local_network_connected", return_value=False)
     def test_local_disconnected_returns_false(self, mock_local):
-        """物理网络断开时应返回 False"""
         result = is_network_available(skip_local_check=False)
         assert result is False
 
@@ -371,7 +361,6 @@ class TestIsNetworkAvailable:
     @patch("src.network_decision.is_network_available_http", return_value=True)
     @patch("src.network_decision.is_local_network_connected", return_value=True)
     def test_all_pass(self, *mocks):
-        """所有检测通过应返回 True"""
         result = is_network_available(
             test_sites=[("8.8.8.8", 53)],
             test_urls=["https://www.baidu.com"],
@@ -384,7 +373,6 @@ class TestIsNetworkAvailable:
     @patch("src.network_decision.is_network_available_http", return_value=True)
     @patch("src.network_decision.is_local_network_connected", return_value=True)
     def test_tcp_fail_http_pass(self, *mocks):
-        """TCP 失败但 HTTP 通过时应返回 False（所有启用的检测必须都通过）"""
         result = is_network_available(
             test_sites=[("8.8.8.8", 53)],
             test_urls=["https://www.baidu.com"],
@@ -396,7 +384,6 @@ class TestIsNetworkAvailable:
     @patch("src.network_decision.is_network_available_socket", return_value=True)
     @patch("src.network_decision.is_local_network_connected", return_value=True)
     def test_tcp_only(self, *mocks):
-        """仅启用 TCP 时，TCP 通过应返回 True"""
         result = is_network_available(
             test_sites=[("8.8.8.8", 53)],
             enable_tcp=True, enable_http=False,
@@ -405,7 +392,6 @@ class TestIsNetworkAvailable:
         assert result is True
 
     def test_skip_local_check(self):
-        """skip_local_check=True 时应跳过物理网络检查"""
         with patch("src.network_decision.is_network_available_socket", return_value=True):
             result = is_network_available(
                 test_sites=[("8.8.8.8", 53)],
@@ -418,6 +404,7 @@ class TestIsNetworkAvailable:
 # =====================================================================
 # network_decision — check_campus_network_status
 # =====================================================================
+
 
 class TestCheckCampusNetworkStatus:
     @patch("src.network_decision.is_local_network_connected", return_value=False)
@@ -436,3 +423,41 @@ class TestCheckCampusNetworkStatus:
     def test_connected_but_no_internet(self, *mocks):
         result = check_campus_network_status()
         assert "无法访问互联网" in result
+
+
+# =====================================================================
+# network_test — 向后兼容模块
+# =====================================================================
+
+
+class TestNetworkTestImports:
+    def test_import_all_symbols(self):
+        from src.network_test import (
+            _check_macos_service,
+            is_local_network_connected,
+            is_network_available_http,
+            is_network_available_socket,
+            set_block_proxy,
+            check_campus_network_status,
+            is_auth_url_reachable,
+            is_network_available,
+            should_attempt_login,
+        )
+        assert callable(is_local_network_connected)
+        assert callable(is_network_available_http)
+        assert callable(is_network_available_socket)
+        assert callable(set_block_proxy)
+        assert callable(check_campus_network_status)
+        assert callable(is_auth_url_reachable)
+        assert callable(is_network_available)
+        assert callable(should_attempt_login)
+
+    def test_all_list(self):
+        import src.network_test as nt
+        assert hasattr(nt, "__all__")
+        assert len(nt.__all__) == 9
+
+    def test_functions_match_original(self):
+        from src.network_test import is_network_available
+        from src.network_decision import is_network_available as original
+        assert is_network_available is original
