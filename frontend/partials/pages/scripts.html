@@ -112,10 +112,13 @@
             <li><code>CAMPUS_URL</code> — 认证地址</li>
           </ul>
 
-          <h4>输出格式</h4>
-          <p>脚本必须通过 stdout 输出 JSON：</p>
-          <pre>{"success": true, "message": "登录成功"}</pre>
-          <pre>{"success": false, "message": "失败原因"}</pre>
+          <h4>输出说明</h4>
+          <p>脚本只需发送请求，<strong>登录是否成功由系统网络检测自动判断</strong>，无需脚本自行判断。</p>
+          <ul>
+            <li>脚本正常退出（exit 0）= 执行成功</li>
+            <li>脚本报错退出（exit 非 0）= 执行失败</li>
+            <li><code>print()</code> 输出会记录到日志，方便调试</li>
+          </ul>
 
           <h4>可用 HTTP 库</h4>
           <ul>
@@ -126,18 +129,18 @@
 
           <h4>示例（httpx）</h4>
           <pre>#!/usr/bin/env python3
-import os, json, httpx
+import os, httpx
 
 resp = httpx.post(os.environ["CAMPUS_URL"], data={
     "username": os.environ["CAMPUS_USERNAME"],
     "password": os.environ["CAMPUS_PASSWORD"],
     "operator": os.environ.get("CAMPUS_ISP", ""),
 })
-print(json.dumps({"success": resp.is_success, "message": resp.text[:200]}))</pre>
+print(f"HTTP {resp.status_code}")</pre>
 
           <h4>示例（urllib 标准库）</h4>
           <pre>#!/usr/bin/env python3
-import os, json, urllib.request, urllib.parse
+import os, urllib.request, urllib.parse
 
 data = urllib.parse.urlencode({
     "username": os.environ["CAMPUS_USERNAME"],
@@ -145,7 +148,7 @@ data = urllib.parse.urlencode({
 }).encode()
 req = urllib.request.Request(os.environ["CAMPUS_URL"], data=data)
 with urllib.request.urlopen(req, timeout=10) as resp:
-    print(json.dumps({"success": True, "message": "登录成功"}))</pre>
+    print(f"HTTP {resp.status}")</pre>
 
           <h4>注意事项</h4>
           <ul>

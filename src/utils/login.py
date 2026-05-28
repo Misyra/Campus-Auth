@@ -240,7 +240,11 @@ class LoginAttemptHandler:
     async def _execute_script_task(
         self, task: Any, phase_start: float
     ) -> tuple[bool, str]:
-        """执行 Python 脚本任务（无浏览器）。"""
+        """执行 Python 脚本任务（无浏览器）。
+
+        脚本只负责发请求，登录是否成功通过网络检测判断。
+        """
+        from ..network_decision import check_network_status
         from ..script_runner import ScriptRunner
 
         self.logger.info(
@@ -255,24 +259,33 @@ class LoginAttemptHandler:
             self.config, None, self.config.get("custom_variables", {})
         )
 
-        # 脚本超时配置，默认 60 秒
         timeout = self.config.get("monitor", {}).get("script_timeout", 60)
-
         runner = ScriptRunner(task.script_path, timeout=timeout)
 
-        # 在线程池中执行子进程，避免阻塞事件循环
+        # 在线程池中执行子进程
         loop = asyncio.get_running_loop()
-        success, message = await loop.run_in_executor(
+        ran_ok, script_output = await loop.run_in_executor(
             None, runner.run, env_vars
         )
 
-        total = time.perf_counter() - phase_start
-        if success:
-            self.logger.info("脚本登录成功 (总耗时 %.1fs): %s", total, message)
-        else:
-            self.logger.error("脚本登录失败 (总耗时 %.1fs): %s", total, message)
+        if not ran_ok:
+            total = time.perf_counter() - phase_start
+            self.logger.error("脚本执行失败 (总耗时 %.1fs): %s", total, script_output)
+            return False, f"脚本执行失败: {script_output}"
 
-        return success, message
+        # 脚本执行完成，等待 2s 后进行网络检测
+        self.logger.info("脚本已执行，等待网络验证...")
+        await asyncio.sleep(2)
+
+        net_ok, net_msg = check_network_status(self.config)
+
+        total = time.perf_counter() - phase_start
+        if net_ok:
+            self.logger.info("登录成功 (总耗时 %.1fs): 网络已连通", total)
+            return True, "登录成功"
+        else:
+            self.logger.warning("登录可能失败 (总耗时 %.1fs): %s", total, net_msg)
+            return False, f"网络未连通: {net_msg}"
 
     async def close_browser(self) -> None:
         """关闭浏览器（登录成功或监控停止时调用）"""

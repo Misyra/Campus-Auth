@@ -2,7 +2,6 @@
 # name: HTTP 登录测试
 # description: 使用 urllib 发送 POST 请求登录校园网，无需第三方库
 import os
-import json
 import urllib.request
 import urllib.parse
 
@@ -13,12 +12,12 @@ isp = os.environ.get("CAMPUS_ISP", "")
 login_url = os.environ.get("CAMPUS_URL", "")
 
 if not login_url:
-    print(json.dumps({"success": False, "message": "CAMPUS_URL 未设置，请先在设置中配置认证地址"}))
-    exit(0)
+    print("CAMPUS_URL 未设置，请先在设置中配置认证地址")
+    exit(1)
 
 if not username:
-    print(json.dumps({"success": False, "message": "CAMPUS_USERNAME 未设置，请先在设置中配置用户名"}))
-    exit(0)
+    print("CAMPUS_USERNAME 未设置，请先在设置中配置用户名")
+    exit(1)
 
 # 构建 POST 数据（根据实际校园网认证接口调整字段名）
 post_data = urllib.parse.urlencode({
@@ -34,12 +33,10 @@ try:
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     with urllib.request.urlopen(req, timeout=5) as resp:
-        body = resp.read().decode("utf-8", errors="replace")
-        if resp.status == 200:
-            print(json.dumps({"success": True, "message": f"登录成功 (HTTP {resp.status})"}))
-        else:
-            print(json.dumps({"success": False, "message": f"HTTP {resp.status}"}))
+        print(f"HTTP {resp.status}")
 except urllib.error.HTTPError as e:
-    print(json.dumps({"success": False, "message": f"HTTP {e.code}: {e.reason}"}))
+    print(f"HTTP {e.code}: {e.reason}")
+    exit(1)
 except Exception as e:
-    print(json.dumps({"success": False, "message": str(e)}))
+    print(str(e))
+    exit(1)

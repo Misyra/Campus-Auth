@@ -138,9 +138,12 @@ export const scriptMethods = {
   loadScriptTemplate() {
     if (!this.editingTask) return;
     this.editingTask.content = `#!/usr/bin/env python3
-"""自定义登录脚本示例"""
+"""自定义登录脚本示例
+
+脚本只需发送登录请求，登录是否成功由系统网络检测自动判断。
+脚本正常退出（exit 0）= 执行成功，脚本报错退出 = 执行失败。
+"""
 import os
-import json
 
 # 从环境变量获取登录参数
 username = os.environ["CAMPUS_USERNAME"]
@@ -159,10 +162,7 @@ resp = httpx.post(login_url, data={
     "password": password,
     "operator": isp,
 }, timeout=30)
-if resp.is_success:
-    print(json.dumps({"success": True, "message": "登录成功"}))
-else:
-    print(json.dumps({"success": False, "message": f"HTTP {resp.status_code}"}))
+print(f"HTTP {resp.status_code}")
 
 # ── 方式 2: requests（已安装） ──
 # import requests
@@ -171,10 +171,7 @@ else:
 #     "password": password,
 #     "operator": isp,
 # }, timeout=30)
-# if resp.ok:
-#     print(json.dumps({"success": True, "message": "登录成功"}))
-# else:
-#     print(json.dumps({"success": False, "message": f"HTTP {resp.status_code}"}))
+# print(f"HTTP {resp.status_code}")
 
 # ── 方式 3: urllib（标准库，无需安装） ──
 # import urllib.request, urllib.parse
@@ -185,7 +182,7 @@ else:
 # }).encode()
 # req = urllib.request.Request(login_url, data=data)
 # with urllib.request.urlopen(req, timeout=30) as resp:
-#     print(json.dumps({"success": True, "message": "登录成功"}))
+#     print(f"HTTP {resp.status}")
 `;
   },
 

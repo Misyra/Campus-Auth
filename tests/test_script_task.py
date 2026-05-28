@@ -203,34 +203,28 @@ class TestScriptRunner:
     """ScriptRunner 子进程执行"""
 
     def test_run_success(self, tmp_path: Path):
-        """脚本输出 success=true 时返回 True"""
+        """脚本正常退出（exit 0）返回 True"""
         script = tmp_path / "ok.py"
-        script.write_text(
-            'import json\nprint(json.dumps({"success": True, "message": "登录成功"}))\n',
-            encoding="utf-8",
-        )
+        script.write_text('print("HTTP 200")\n', encoding="utf-8")
 
         runner = ScriptRunner(script, timeout=10)
         ok, msg = runner.run({"LOGIN_URL": "http://test", "USERNAME": "u"})
 
         assert ok is True
-        assert "登录成功" in msg
+        assert "HTTP 200" in msg
 
     def test_run_failure(self, tmp_path: Path):
-        """脚本输出 success=false 时返回 False"""
+        """脚本非零退出返回 False"""
         script = tmp_path / "fail.py"
-        script.write_text(
-            'import json\nprint(json.dumps({"success": False, "message": "密码错误"}))\n',
-            encoding="utf-8",
-        )
+        script.write_text('import sys\nprint("连接超时")\nsys.exit(1)\n', encoding="utf-8")
 
         runner = ScriptRunner(script, timeout=10)
         ok, msg = runner.run({})
 
         assert ok is False
-        assert "密码错误" in msg
+        assert "连接超时" in msg
 
-    def test_run_nonzero_exit(self, tmp_path: Path):
+    def test_run_nonzero_exit_no_output(self, tmp_path: Path):
         """脚本非零退出且无输出时返回失败"""
         script = tmp_path / "crash.py"
         script.write_text('import sys\nsys.exit(1)\n', encoding="utf-8")
@@ -252,8 +246,8 @@ class TestScriptRunner:
         assert ok is False
         assert "超时" in msg
 
-    def test_run_non_json_output_success(self, tmp_path: Path):
-        """脚本输出非 JSON 但 returncode=0 时返回成功"""
+    def test_run_stdout_recorded(self, tmp_path: Path):
+        """脚本 stdout 作为输出信息返回"""
         script = tmp_path / "text.py"
         script.write_text('print("all good")\n', encoding="utf-8")
 
@@ -263,35 +257,20 @@ class TestScriptRunner:
         assert ok is True
         assert "all good" in msg
 
-    def test_run_non_json_output_failure(self, tmp_path: Path):
-        """脚本输出非 JSON 且 returncode!=0 时返回失败"""
-        script = tmp_path / "err.py"
-        script.write_text(
-            'import sys\nprint("oops")\nsys.exit(1)\n',
-            encoding="utf-8",
-        )
-
-        runner = ScriptRunner(script, timeout=10)
-        ok, msg = runner.run({})
-
-        assert ok is False
-        assert "oops" in msg
-
-    def test_run_mixed_output_extracts_json(self, tmp_path: Path):
-        """stdout 混入其他 print 时仍能提取 JSON"""
+    def test_run_mixed_output(self, tmp_path: Path):
+        """脚本多行 print 输出取全部"""
         script = tmp_path / "mixed.py"
         script.write_text(textwrap.dedent("""\
-            import json
             print("调试信息")
-            print("你好")
-            print(json.dumps({"success": True, "message": "登录成功"}))
+            print("HTTP 200")
         """), encoding="utf-8")
 
         runner = ScriptRunner(script, timeout=10)
         ok, msg = runner.run({})
 
         assert ok is True
-        assert "登录成功" in msg
+        assert "调试信息" in msg
+        assert "HTTP 200" in msg
 
     def test_env_vars_passed(self, tmp_path: Path):
         """环境变量正确传递到子进程（CAMPUS_ 前缀）"""
