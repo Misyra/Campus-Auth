@@ -21,11 +21,14 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 _debug_gen = itertools.count(1)
+_current_gen: int = 0
 
 
 def _next_debug_gen() -> int:
     """返回下一个代数编号（线程安全）。"""
-    return next(_debug_gen)
+    global _current_gen
+    _current_gen = next(_debug_gen)
+    return _current_gen
 
 
 # ---------------------------------------------------------------------------

@@ -10,6 +10,7 @@ import shutil
 import threading
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -60,7 +61,7 @@ from .schemas import (
 )
 from .task_service import TaskService
 from backend.debug_session import (
-    _debug_gen,
+    _current_gen,
     _next_debug_gen,
     debug_to_response,
     empty_debug_session,
@@ -203,8 +204,6 @@ _access_log_enabled = False
 
 # ==================== 调试会话 ====================
 
-from datetime import datetime
-
 
 class DebugSession:
     """调试会话（简化版）：浏览器生命周期由 PlaywrightWorker 管理。
@@ -253,6 +252,17 @@ def _debug_response() -> dict:
     return debug_to_response(_debug_session)
 
 
+async def _cancel_debug_timer() -> None:
+    """取消调试会话的超时定时器（如存在）。"""
+    timer = _debug_session._timer_task
+    if timer and not timer.done():
+        timer.cancel()
+        try:
+            await timer
+        except asyncio.CancelledError:
+            pass
+
+
 def _require_debug_session() -> None:
     """验证调试会话处于活跃状态。"""
     if not _debug_session.running:
@@ -265,11 +275,11 @@ async def _debug_timeout_watcher(gen: int, *, timeout_seconds: float = 1800.0) -
     try:
         while True:
             await asyncio.sleep(check_interval)
-            if gen != _debug_gen:
+            if gen != _current_gen:
                 return
             if time.monotonic() - _debug_session._last_activity > timeout_seconds:
                 async with _debug_lock:
-                    if gen != _debug_gen:
+                    if gen != _current_gen:
                         return
                     api_logger.info(
                         "调试会话超时（%ds 无操作），正在关闭浏览器",
@@ -390,12 +400,16 @@ def _compare_versions(a: str, b: str) -> int:
     try:
         va = [int(x) for x in a.split(".")]
         vb = [int(x) for x in b.split(".")]
+        # 补齐较短版本号的缺失段为 0
+        max_len = max(len(va), len(vb))
+        va.extend([0] * (max_len - len(va)))
+        vb.extend([0] * (max_len - len(vb)))
         for x, y in zip(va, vb):
             if x > y:
                 return 1
             if x < y:
                 return -1
-        return 1 if len(va) > len(vb) else -1 if len(va) < len(vb) else 0
+        return 0
     except (ValueError, AttributeError):
         return 0
 
@@ -478,11 +492,6 @@ def stop_monitoring() -> ActionResponse:
 
 @app.post("/api/actions/login", response_model=ActionResponse)
 def manual_login() -> ActionResponse:
-    if service.login_in_progress:
-        raise HTTPException(
-            status_code=409,
-            detail={"success": False, "message": "登录操作正在进行中，请稍后再试"},
-        )
     ok, message = service.run_manual_login()
     api_logger.info("Manual login requested -> success=%s, message=%s", ok, message)
     return ActionResponse(success=ok, message=message)
@@ -625,56 +634,43 @@ def _repo_get(url: str):
         return resp
 
 
-@app.get("/api/repo/fetch")
-def repo_fetch_index(url: str = Query(..., description="索引 JSON 地址")) -> list:
-    """代理获取任务仓库索引，避免前端跨域问题"""
+def _repo_fetch_json(url: str, expected_type: type, label: str):
+    """通用的远程 JSON 获取：校验类型 + 统一异常处理。"""
     url = _normalize_repo_url(url)
-    api_logger.info("获取远程索引: %s", url)
-
+    api_logger.info("获取远程%s: %s", label, url)
     try:
         resp = _repo_get(url)
         data = resp.json()
-        if not isinstance(data, list):
+        if not isinstance(data, expected_type):
+            type_name = "JSON 数组" if expected_type is list else "JSON 对象"
             raise HTTPException(
-                status_code=422, detail="索引格式不正确，应为 JSON 数组"
+                status_code=422, detail=f"{label}格式不正确，应为 {type_name}"
             )
-        api_logger.info("远程索引获取成功: %d 个任务", len(data))
+        api_logger.info("远程%s获取成功", label)
         return data
     except httpx.HTTPStatusError as exc:
         status = exc.response.status_code if exc.response is not None else 502
-        api_logger.error("远程索引获取失败: HTTP %s (%s)", status, url)
+        api_logger.error("远程%s获取失败: HTTP %s (%s)", label, status, url)
         raise HTTPException(
             status_code=status, detail=f"远程返回错误: {status} ({url})"
         ) from exc
+    except HTTPException:
+        raise
     except Exception as exc:
-        api_logger.error("远程索引获取失败: %s (%s)", exc, url)
-        raise HTTPException(status_code=502, detail=f"获取索引失败: {exc}") from exc
+        api_logger.error("远程%s获取失败: %s (%s)", label, exc, url)
+        raise HTTPException(status_code=502, detail=f"获取{label}失败: {exc}") from exc
+
+
+@app.get("/api/repo/fetch")
+def repo_fetch_index(url: str = Query(..., description="索引 JSON 地址")) -> list:
+    """代理获取任务仓库索引，避免前端跨域问题"""
+    return _repo_fetch_json(url, list, "索引")
 
 
 @app.get("/api/repo/task")
 def repo_fetch_task(url: str = Query(..., description="任务 JSON 地址")) -> dict:
     """代理获取单个任务配置"""
-    url = _normalize_repo_url(url)
-    api_logger.info("下载远程任务: %s", url)
-
-    try:
-        resp = _repo_get(url)
-        data = resp.json()
-        if not isinstance(data, dict):
-            raise HTTPException(
-                status_code=422, detail="任务格式不正确，应为 JSON 对象"
-            )
-        api_logger.info("远程任务下载成功: %s", data.get("name", "未命名"))
-        return data
-    except httpx.HTTPStatusError as exc:
-        status = exc.response.status_code if exc.response is not None else 502
-        api_logger.error("远程任务下载失败: HTTP %s (%s)", status, url)
-        raise HTTPException(
-            status_code=status, detail=f"远程返回错误: {status} ({url})"
-        ) from exc
-    except Exception as exc:
-        api_logger.error("远程任务下载失败: %s (%s)", exc, url)
-        raise HTTPException(status_code=502, detail=f"获取任务失败: {exc}") from exc
+    return _repo_fetch_json(url, dict, "任务")
 
 
 # ==================== 纯净模式 API ====================
@@ -744,12 +740,7 @@ async def debug_start(request: Request) -> dict:
         # 修复：整个会话创建放在锁内，防止并发请求泄漏浏览器进程
         if _debug_session.session:
             await _debug_session.session.close()
-        if _debug_session._timer_task and not _debug_session._timer_task.done():
-            _debug_session._timer_task.cancel()
-            try:
-                await _debug_session._timer_task
-            except asyncio.CancelledError:
-                pass
+        await _cancel_debug_timer()
 
         session = DebugSession()
         try:
@@ -859,6 +850,12 @@ async def debug_run_all() -> dict:
                     CMD_DEBUG_STEP, data={"step_index": idx}
                 )
             )
+
+        # 步骤执行期间可能被 debug_stop 关闭，提前退出
+        if not _debug_session.running:
+            all_success = False
+            break
+
         if not response.success:
             results.append(
                 {
@@ -893,13 +890,7 @@ async def debug_stop() -> dict:
     global _debug_session
     async with _debug_exec_sem:
         async with _debug_lock:
-            timer = _debug_session._timer_task
-            if timer and not timer.done():
-                timer.cancel()
-                try:
-                    await timer
-                except asyncio.CancelledError:
-                    pass
+            await _cancel_debug_timer()
             if _debug_session.session:
                 await _debug_session.session.close()
             _debug_session = empty_debug_session()
@@ -1012,27 +1003,22 @@ def set_active_profile(profile_id: str) -> ActionResponse:
     return ActionResponse(success=ok, message=message)
 
 
+def _safe_detect(func, label: str, default=None):
+    """安全执行检测函数，异常时记录日志并返回默认值。"""
+    try:
+        return func()
+    except Exception as exc:
+        api_logger.error("%s检测异常: %s", label, exc, exc_info=True)
+        return default
+
+
 @app.post("/api/profiles/detect")
 def detect_network_profile() -> dict:
     from .profile_service import detect_gateway_ip, detect_wifi_ssid
 
-    try:
-        gateway = detect_gateway_ip()
-    except Exception as exc:
-        api_logger.error("网关检测异常: %s", exc, exc_info=True)
-        gateway = None
-
-    try:
-        ssid = detect_wifi_ssid()
-    except Exception as exc:
-        api_logger.error("SSID 检测异常: %s", exc, exc_info=True)
-        ssid = None
-
-    try:
-        matched_id = profile_service.detect_matching_profile()
-    except Exception as exc:
-        api_logger.error("方案匹配异常: %s", exc, exc_info=True)
-        matched_id = None
+    gateway = _safe_detect(detect_gateway_ip, "网关")
+    ssid = _safe_detect(detect_wifi_ssid, "SSID")
+    matched_id = _safe_detect(profile_service.detect_matching_profile, "方案匹配")
 
     data = profile_service.load()
     matched_name = None
@@ -1072,6 +1058,11 @@ def shutdown_server() -> ActionResponse:
             service.stop_monitoring()
         except Exception:
             api_logger.debug("关闭监控服务失败", exc_info=True)
+        try:
+            from src.playwright_worker import get_worker
+            get_worker().stop(timeout=3)
+        except Exception:
+            api_logger.debug("关闭 PlaywrightWorker 失败", exc_info=True)
         # 故意使用 os._exit(0) 而非 sys.exit(0)：sys.exit() 在 daemon 线程中仅退出该线程，
         # 不会终止进程；os._exit(0) 是 Windows 上唯一可靠的立即退出方式。
         # 日志已由 _DateRotatingFileHandler.emit() 即时写入，无需额外刷盘。

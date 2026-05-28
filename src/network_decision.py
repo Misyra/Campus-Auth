@@ -157,7 +157,11 @@ def should_attempt_login(config: dict) -> tuple[bool, str]:
     # ping_targets 是 list[str]，需要转为 list[tuple[str, int]]
     if test_sites and isinstance(test_sites[0], str):
         from src.utils.network_helpers import parse_host_port
-        test_sites = parse_host_port(test_sites)
+        try:
+            test_sites = parse_host_port(test_sites)
+        except ValueError:
+            logger.warning("ping_targets 配置格式错误，跳过 TCP 检测")
+            test_sites = None
     test_urls = monitor_config.get("test_urls", None)
 
     if is_network_available(
