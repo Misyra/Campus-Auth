@@ -23,7 +23,7 @@ from src.version import get_project_version
 
 from .constants import FRONTEND_DIR, LOGS_DIR, PROJECT_ROOT, TEMP_DIR
 from .container import ServiceContainer
-from .routers import backup, config, debug, monitor, profiles, repo, system, tasks, tools
+from .routers import backup, config, debug, monitor, profiles, repo, scripts, system, tasks, tools
 
 http_logger = get_logger("backend.http", side="BACKEND")
 startup_logger = get_logger("backend.startup", side="BACKEND")
@@ -211,6 +211,7 @@ app.include_router(backup.router)
 app.include_router(repo.router)
 app.include_router(system.router)
 app.include_router(tools.router)
+app.include_router(scripts.router)
 
 
 # ==================== 首页和静态文件 ====================

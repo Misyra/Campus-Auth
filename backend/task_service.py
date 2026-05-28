@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from src.task_executor import TaskManager, is_valid_task_id, normalize_task_id
+from src.task_executor import TaskManager, ScriptTaskInfo, is_valid_task_id, normalize_task_id
 from src.utils.logging import get_logger
 
 task_logger = get_logger("backend.task_service", side="BACKEND")
@@ -60,26 +60,46 @@ class TaskService:
         task_logger.debug("列出任务: %d 个", len(tasks))
         return tasks
 
+    def list_scripts(self) -> list[dict[str, str]]:
+        """只列出 .py 脚本任务。"""
+        tasks = self.task_manager.list_script_tasks()
+        task_logger.debug("列出脚本任务: %d 个", len(tasks))
+        return tasks
+
     def get_task(self, task_id: str) -> dict[str, Any] | None:
         task_id = self._validate_task_id(task_id) or ""
         if not task_id:
             return None
         task_logger.debug("Loading task %s", task_id)
         task = self.task_manager.load_task(task_id)
-        if task:
-            result = task.to_dict()
-            result["id"] = task_id
-            return result
-        return None
+        if task is None:
+            return None
+        if isinstance(task, ScriptTaskInfo):
+            return {
+                "id": task_id,
+                "name": task.name,
+                "description": task.description,
+                "type": "script",
+                "content": task.script_path.read_text(encoding="utf-8"),
+            }
+        result = task.to_dict()
+        result["id"] = task_id
+        result["type"] = "browser"
+        return result
 
     def save_task(self, task_id: str, config: dict[str, Any]) -> tuple[bool, str]:
         task_id = self._validate_task_id(task_id) or ""
         if not task_id:
             return False, _INVALID_TASK_ID_MSG
 
+        task_type = config.get("type", "browser")
+
+        if task_type == "script":
+            return self._save_script_task(task_id, config)
+
+        # 浏览器任务
         if not config.get("name"):
             return False, "任务名称不能为空"
-
         if not config.get("steps"):
             return False, "至少需要一个执行步骤"
 
@@ -94,6 +114,20 @@ class TaskService:
             return True, "任务保存成功"
         task_logger.error("任务保存失败: %s", task_id)
         return False, "任务保存失败"
+
+    def _save_script_task(self, task_id: str, config: dict[str, Any]) -> tuple[bool, str]:
+        """保存 Python 脚本任务。"""
+        content = config.get("content", "")
+        if not content.strip():
+            return False, "脚本内容不能为空"
+
+        success = self.task_manager.save_task(
+            task_id, {"content": content}, task_type="script"
+        )
+        if success:
+            task_logger.info("脚本任务已保存: %s", task_id)
+            return True, "脚本任务保存成功"
+        return False, "脚本任务保存失败"
 
     def delete_task(self, task_id: str) -> tuple[bool, str]:
         task_id = normalize_task_id(task_id)  # delete 不校验格式，仅规范化

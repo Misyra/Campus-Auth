@@ -240,6 +240,16 @@ class TaskConfig:
         return result
 
 
+@dataclass
+class ScriptTaskInfo:
+    """Python 脚本任务信息（不含 Playwright 步骤，直接通过子进程执行）"""
+
+    task_id: str = ""
+    name: str = "未命名脚本任务"
+    description: str = ""
+    script_path: Path = field(default_factory=Path)
+
+
 class VariableResolver:
     """变量解析器"""
 
@@ -1422,17 +1432,36 @@ def is_valid_task_id(task_id: str | None) -> bool:
 
 
 class TaskManager:
-    """任务管理器"""
+    """任务管理器（支持 .json 浏览器任务和 .py 脚本任务）"""
 
     def __init__(self, tasks_dir: Path):
         self.tasks_dir = tasks_dir
         self.tasks_dir.mkdir(parents=True, exist_ok=True)
 
+    # ── 路径工具 ──
+
     def _safe_task_path(self, task_id: str) -> Path | None:
+        """返回任务文件路径（.json 优先，其次 .py）；都不存在时返回 .json 路径。"""
         normalized = normalize_task_id(task_id)
         if not is_valid_task_id(normalized):
             return None
+        base = self.tasks_dir.absolute()
+        for ext in (".json", ".py"):
+            candidate = (self.tasks_dir / f"{normalized}{ext}").absolute()
+            try:
+                candidate.relative_to(base)
+            except ValueError:
+                return None
+            if candidate.exists():
+                return candidate
+        # 都不存在时返回 .json 路径（供 save_task 使用）
+        return (self.tasks_dir / f"{normalized}.json").absolute()
 
+    def _safe_json_path(self, task_id: str) -> Path | None:
+        """返回 .json 路径（不检查存在性）。"""
+        normalized = normalize_task_id(task_id)
+        if not is_valid_task_id(normalized):
+            return None
         base = self.tasks_dir.absolute()
         candidate = (self.tasks_dir / f"{normalized}.json").absolute()
         try:
@@ -1441,30 +1470,119 @@ class TaskManager:
             return None
         return candidate
 
+    def _safe_script_path(self, task_id: str) -> Path | None:
+        """返回 .py 路径（不检查存在性）。"""
+        normalized = normalize_task_id(task_id)
+        if not is_valid_task_id(normalized):
+            return None
+        base = self.tasks_dir.absolute()
+        candidate = (self.tasks_dir / f"{normalized}.py").absolute()
+        try:
+            candidate.relative_to(base)
+        except ValueError:
+            return None
+        return candidate
+
+    @staticmethod
+    def _is_script_file(path: Path) -> bool:
+        return path.suffix.lower() == ".py"
+
+    @staticmethod
+    def _extract_script_metadata(file: Path) -> dict[str, str]:
+        """从 Python 脚本的前 10 行注释中提取 name 和 description。
+
+        支持格式：
+            # name: 任务名称
+            # description: 任务描述
+        或者使用模块级 docstring 的第一行作为 name。
+        """
+        name = file.stem
+        description = ""
+        try:
+            lines = file.read_text(encoding="utf-8").splitlines()[:10]
+            for line in lines:
+                stripped = line.strip()
+                if stripped.lower().startswith("# name:"):
+                    name = stripped.split(":", 1)[1].strip()
+                elif stripped.lower().startswith("# description:"):
+                    description = stripped.split(":", 1)[1].strip()
+            # 如果没找到 name 注释，尝试 docstring
+            if name == file.stem:
+                for line in lines:
+                    stripped = line.strip()
+                    if stripped.startswith('"""') or stripped.startswith("'''"):
+                        doc = stripped.strip("\"'").strip()
+                        if doc:
+                            name = doc.split("\n")[0][:80]
+                        break
+        except Exception:
+            pass
+        return {"name": name, "description": description}
+
+    # ── CRUD ──
+
     def list_tasks(self) -> list[dict[str, str]]:
-        tasks = []
-        for file in self.tasks_dir.glob("*.json"):
-            # 跳过任务 ID 格式无效的文件（如含连字符的文件名）
+        """列出所有任务（.json + .py），返回结果含 type 字段。"""
+        tasks: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for ext in ("*.json", "*.py"):
+            for file in self.tasks_dir.glob(ext):
+                if not is_valid_task_id(file.stem):
+                    continue
+                if file.stem in seen:
+                    continue
+                seen.add(file.stem)
+                try:
+                    if self._is_script_file(file):
+                        meta = self._extract_script_metadata(file)
+                        tasks.append({
+                            "id": file.stem,
+                            "name": meta["name"],
+                            "description": meta["description"],
+                            "type": "script",
+                        })
+                    else:
+                        config = json.loads(file.read_text(encoding="utf-8"))
+                        tasks.append({
+                            "id": file.stem,
+                            "name": config.get("name", file.stem),
+                            "description": config.get("description", ""),
+                            "type": "browser",
+                        })
+                except Exception as e:
+                    logger.warning(f"无法读取任务文件 {file}: {e}")
+        return tasks
+
+    def list_script_tasks(self) -> list[dict[str, str]]:
+        """只列出 .py 脚本任务。"""
+        tasks: list[dict[str, str]] = []
+        for file in self.tasks_dir.glob("*.py"):
             if not is_valid_task_id(file.stem):
                 continue
             try:
-                config = json.loads(file.read_text(encoding="utf-8"))
-                tasks.append(
-                    {
-                        "id": file.stem,
-                        "name": config.get("name", file.stem),
-                        "description": config.get("description", ""),
-                    }
-                )
+                meta = self._extract_script_metadata(file)
+                tasks.append({
+                    "id": file.stem,
+                    "name": meta["name"],
+                    "description": meta["description"],
+                })
             except Exception as e:
-                logger.warning(f"无法读取任务文件 {file}: {e}")
+                logger.warning(f"无法读取脚本文件 {file}: {e}")
         return tasks
 
-    def load_task(self, task_id: str) -> TaskConfig | None:
+    def load_task(self, task_id: str) -> TaskConfig | ScriptTaskInfo | None:
         file = self._safe_task_path(task_id)
         if file is None or not file.exists():
             return None
         try:
+            if self._is_script_file(file):
+                meta = self._extract_script_metadata(file)
+                return ScriptTaskInfo(
+                    task_id=task_id,
+                    name=meta["name"],
+                    description=meta["description"],
+                    script_path=file,
+                )
             data = json.loads(file.read_text(encoding="utf-8"))
             config = TaskConfig.from_dict(data)
             config.task_id = task_id
@@ -1473,17 +1591,27 @@ class TaskManager:
             logger.error(f"无法加载任务 {task_id}: {e}")
             return None
 
-    def save_task(self, task_id: str, config: dict[str, Any]) -> bool:
-        """保存任务（带验证）"""
-        # 验证任务
+    def save_task(self, task_id: str, config: dict[str, Any], task_type: str = "browser") -> bool:
+        """保存任务（支持 browser 和 script 两种类型）。"""
+        if task_type == "script":
+            return self._save_script_task(task_id, config)
+
+        # 浏览器任务：带验证
         is_valid, errors = TaskValidator.validate(config)
         if not is_valid:
             logger.error(f"任务验证失败: {errors}")
             return False
 
-        file = self._safe_task_path(task_id)
+        file = self._safe_json_path(task_id)
         if file is None:
             return False
+        # 如果存在同名 .py 文件，先删除（避免冲突）
+        py_file = self._safe_script_path(task_id)
+        if py_file and py_file.exists():
+            try:
+                py_file.unlink()
+            except Exception:
+                pass
 
         try:
             atomic_write(
@@ -1495,18 +1623,44 @@ class TaskManager:
             logger.error(f"无法保存任务 {task_id}: {e}")
             return False
 
+    def _save_script_task(self, task_id: str, config: dict[str, Any]) -> bool:
+        """保存 Python 脚本任务。"""
+        script_content = config.get("content", "")
+        if not script_content.strip():
+            logger.error("脚本内容不能为空")
+            return False
+
+        file = self._safe_script_path(task_id)
+        if file is None:
+            return False
+        # 如果存在同名 .json 文件，先删除（避免冲突）
+        json_file = self._safe_json_path(task_id)
+        if json_file and json_file.exists():
+            try:
+                json_file.unlink()
+            except Exception:
+                pass
+
+        try:
+            atomic_write(file, script_content)
+            return True
+        except Exception as e:
+            logger.error(f"无法保存脚本任务 {task_id}: {e}")
+            return False
+
     def delete_task(self, task_id: str) -> bool:
         if task_id == "default":
             return False
-        file = self._safe_task_path(task_id)
-        if file is None:
+        normalized = normalize_task_id(task_id)
+        if not is_valid_task_id(normalized):
             return False
-        try:
-            file.unlink(missing_ok=True)
-            return True
-        except Exception as e:
-            logger.error(f"无法删除任务 {task_id}: {e}")
-            return False
+        for ext in (".json", ".py"):
+            file = self.tasks_dir / f"{normalized}{ext}"
+            try:
+                file.unlink(missing_ok=True)
+            except Exception as e:
+                logger.error(f"无法删除任务文件 {file}: {e}")
+        return True
 
     def get_active_task(self) -> str:
         config_file = self.tasks_dir / "active.txt"
@@ -1518,8 +1672,10 @@ class TaskManager:
         normalized = normalize_task_id(task_id)
         if not is_valid_task_id(normalized):
             return False
-        file = self._safe_task_path(normalized)
-        if file is None or not file.exists():
+        # 检查任一格式存在即可
+        json_exists = (self.tasks_dir / f"{normalized}.json").exists()
+        py_exists = (self.tasks_dir / f"{normalized}.py").exists()
+        if not json_exists and not py_exists:
             return False
         config_file = self.tasks_dir / "active.txt"
         try:

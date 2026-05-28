@@ -9,6 +9,7 @@ import datetime
 import os
 import re
 import threading
+import time
 from pathlib import Path
 from typing import Any, Dict
 
@@ -122,7 +123,7 @@ class LoginAttemptHandler:
     async def _perform_login_with_active_task(self) -> tuple[bool, str] | None:
         """执行当前活动任务；返回 None 表示未找到可执行任务。"""
         import time as _time
-        from ..task_executor import TaskExecutor, TaskManager
+        from ..task_executor import TaskExecutor, TaskManager, ScriptTaskInfo
 
         phase_start = _time.perf_counter()
         try:
@@ -145,6 +146,11 @@ class LoginAttemptHandler:
                 self.logger.warning("未找到活动任务: %s", active_task_id)
                 return None
 
+            # ========== 脚本任务分支 ==========
+            if isinstance(task, ScriptTaskInfo):
+                return await self._execute_script_task(task, phase_start)
+
+            # ========== 浏览器任务 ==========
             login_url = self.config.get("auth_url", "")
             username = self.config.get("username", "")
             isp = self.config.get("isp", "")
@@ -230,6 +236,43 @@ class LoginAttemptHandler:
             total = _time.perf_counter() - phase_start
             self.logger.error("登录异常 (总耗时 %.1fs): %s", total, e)
             return False, f"任务执行异常: {e}"
+
+    async def _execute_script_task(
+        self, task: Any, phase_start: float
+    ) -> tuple[bool, str]:
+        """执行 Python 脚本任务（无浏览器）。"""
+        from ..script_runner import ScriptRunner
+
+        self.logger.info(
+            "脚本任务开始 → 任务=%s 脚本=%s",
+            task.task_id, task.script_path,
+        )
+
+        if self.cancel_event and self.cancel_event.is_set():
+            return False, "登录已取消"
+
+        env_vars = build_login_env_vars(
+            self.config, None, self.config.get("custom_variables", {})
+        )
+
+        # 脚本超时配置，默认 60 秒
+        timeout = self.config.get("monitor", {}).get("script_timeout", 60)
+
+        runner = ScriptRunner(task.script_path, timeout=timeout)
+
+        # 在线程池中执行子进程，避免阻塞事件循环
+        loop = asyncio.get_running_loop()
+        success, message = await loop.run_in_executor(
+            None, runner.run, env_vars
+        )
+
+        total = time.perf_counter() - phase_start
+        if success:
+            self.logger.info("脚本登录成功 (总耗时 %.1fs): %s", total, message)
+        else:
+            self.logger.error("脚本登录失败 (总耗时 %.1fs): %s", total, message)
+
+        return success, message
 
     async def close_browser(self) -> None:
         """关闭浏览器（登录成功或监控停止时调用）"""

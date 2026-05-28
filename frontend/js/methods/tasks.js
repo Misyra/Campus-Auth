@@ -65,6 +65,13 @@ export const taskMethods = {
     if (taskId) {
       try {
         const { data } = await this.$api.get(`/api/tasks/${taskId}`);
+        // 脚本任务跳转到脚本编辑器
+        if (data.type === 'script') {
+          this.showScriptEditor(taskId);
+          this.currentPage = 'scripts';
+          return;
+        }
+        this.editingTaskType = 'browser';
         this.editingTask = {
           id: taskId,
           name: data.name,
@@ -79,6 +86,7 @@ export const taskMethods = {
         this.toastOnly(false, '加载任务失败');
       }
     } else {
+      this.editingTaskType = 'browser';
       this.editingTask = {
         id: '',
         name: '',
