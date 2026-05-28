@@ -15,10 +15,9 @@ import pytest
 from backend.monitor_service import (
     MonitorCommand,
     StatusSnapshot,
-    WebSocketManager,
     MonitorService,
-    ws_manager,
 )
+from backend.ws_manager import WebSocketManager
 
 
 # =====================================================================
