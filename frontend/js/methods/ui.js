@@ -54,10 +54,8 @@ export const uiMethods = {
     this.config.custom_variables[key] = '';
   },
   removeCustomVar(key) {
-    if (this.config.custom_variables && this.config.custom_variables.hasOwnProperty(key)) {
-      const newVars = { ...this.config.custom_variables };
-      delete newVars[key];
-      this.config.custom_variables = newVars;
+    if (this.config.custom_variables && key in this.config.custom_variables) {
+      delete this.config.custom_variables[key];
     }
   },
   updateCustomVarKey(oldKey, newKey) {
@@ -96,6 +94,15 @@ export const uiMethods = {
     if (!logViewer) return true;
     return logViewer.scrollTop + logViewer.clientHeight >= logViewer.scrollHeight - 5;
   },
+  _appendLogs(entries) {
+    const LOG_MAX_ENTRIES = 300;
+    const wasAtBottom = this._isViewerAtBottom();
+    this.logs.push(...entries);
+    if (this.logs.length > LOG_MAX_ENTRIES) {
+      this.logs = this.logs.slice(-LOG_MAX_ENTRIES);
+    }
+    this.$nextTick(() => this.scrollLogToBottom(wasAtBottom));
+  },
   scrollLogToBottom(wasAtBottom) {
     // 智能滚动：仅在用户本来就在底部时自动滚动
     // wasAtBottom 在内容追加前捕获，避免新内容撑高 scrollHeight 导致误判
@@ -105,9 +112,7 @@ export const uiMethods = {
       this.newLogCount = (this.newLogCount || 0) + 1;
       return;
     }
-    if (wasAtBottom === undefined) {
-      wasAtBottom = logViewer.scrollTop + logViewer.clientHeight >= logViewer.scrollHeight - 5;
-    }
+    if (wasAtBottom === undefined) wasAtBottom = this._isViewerAtBottom();
     if (wasAtBottom) {
       logViewer.scrollTop = logViewer.scrollHeight;
       this.newLogCount = 0;

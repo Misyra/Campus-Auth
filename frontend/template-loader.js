@@ -1,15 +1,13 @@
 (function () {
+  const MAX_INCLUDE_DEPTH = 12;
+
   async function fetchInclude(el) {
-    var src = el.getAttribute('data-include');
-    if (!src) {
-      return;
-    }
+    const src = el.getAttribute('data-include');
+    if (!src) return;
 
     try {
-      var res = await fetch(src, { cache: 'no-cache' });
-      if (!res.ok) {
-        throw new Error('HTTP ' + res.status);
-      }
+      const res = await fetch(src, { cache: 'no-cache' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
       el.innerHTML = await res.text();
       el.removeAttribute('data-include');
     } catch (err) {
@@ -20,25 +18,17 @@
   }
 
   async function includeRecursively(root) {
-    if (!root) {
-      return;
-    }
+    if (!root) return;
 
-    for (var i = 0; i < 12; i += 1) {
-      var nodes = root.querySelectorAll('[data-include]');
-      if (!nodes.length) {
-        return;
-      }
-      var tasks = [];
-      nodes.forEach(function (node) {
-        tasks.push(fetchInclude(node));
-      });
-      await Promise.all(tasks);
+    for (let i = 0; i < MAX_INCLUDE_DEPTH; i += 1) {
+      const nodes = root.querySelectorAll('[data-include]');
+      if (!nodes.length) return;
+      await Promise.all(Array.from(nodes, node => fetchInclude(node)));
     }
   }
 
   window.loadFrontendPartials = async function () {
-    var appRoot = document.getElementById('app');
+    const appRoot = document.getElementById('app');
     await includeRecursively(appRoot);
   };
 })();

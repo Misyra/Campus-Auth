@@ -334,32 +334,26 @@ export const taskMethods = {
     }
   },
 
-  async debugNextStep() {
+  async _debugAction(endpoint, errorMsg) {
     this.busy.debug = true;
     try {
-      const { data } = await this.$api.post('/api/debug/next');
+      const { data } = await this.$api.post(endpoint);
       this.debugSession = data;
     } catch (error) {
-      const msg = error?.response?.data?.detail || '执行步骤失败';
-      this.frontendLogger.error('debug', '执行步骤失败: ' + msg);
+      const msg = error?.response?.data?.detail || errorMsg;
+      this.frontendLogger.error('debug', errorMsg + ': ' + msg);
       this.notify(false, msg);
     } finally {
       this.busy.debug = false;
     }
   },
 
-  async debugRunAll() {
-    this.busy.debug = true;
-    try {
-      const { data } = await this.$api.post('/api/debug/run-all');
-      this.debugSession = data;
-    } catch (error) {
-      const msg = error?.response?.data?.detail || '执行失败';
-      this.frontendLogger.error('debug', '执行全部失败: ' + msg);
-      this.notify(false, msg);
-    } finally {
-      this.busy.debug = false;
-    }
+  debugNextStep() {
+    return this._debugAction('/api/debug/next', '执行步骤失败');
+  },
+
+  debugRunAll() {
+    return this._debugAction('/api/debug/run-all', '执行全部失败');
   },
 
   async debugStop() {
@@ -400,8 +394,7 @@ export const taskMethods = {
     // 'custom' 保留当前 URL 不动
   },
 
-  showRepoImport() {
-    this.repoImport.visible = true;
+  _resetRepoImport() {
     this.repoImport.error = '';
     this.repoImport.tasks = [];
     this.repoImport.searchQuery = '';
@@ -409,12 +402,14 @@ export const taskMethods = {
     this.repoImport.disclaimer = null;
   },
 
+  showRepoImport() {
+    this.repoImport.visible = true;
+    this._resetRepoImport();
+  },
+
   closeRepoImport() {
     this.repoImport.visible = false;
-    this.repoImport.tasks = [];
-    this.repoImport.searchQuery = '';
-    this.repoImport.error = '';
-    this.repoImport.disclaimer = null;
+    this._resetRepoImport();
   },
 
   async fetchRepoIndex() {

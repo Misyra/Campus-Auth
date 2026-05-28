@@ -69,17 +69,12 @@ export const lifecycleMethods = {
       const logMessage = `${message}，请前往“关于”页面下载`;
       this.frontendLogger.warn('update', logMessage);
       if (!wsReady) {
-        const wasAtBottom = this._isViewerAtBottom();
-        this.logs.push({
+        this._appendLogs([{
           timestamp: new Date().toISOString(),
           level: 'WARNING',
           source: 'frontend',
           message: `[update] ${logMessage}`,
-        });
-        if (this.logs.length > 300) {
-          this.logs = this.logs.slice(-300);
-        }
-        this.$nextTick(() => this.scrollLogToBottom(wasAtBottom));
+        }]);
       }
     } catch (error) {
       this.frontendLogger.debug('update', '启动自动检查更新失败', error);
@@ -190,22 +185,12 @@ export const lifecycleMethods = {
           this.status = { ...this.status, ...data.data };
         } else if (data.type === 'log') {
           if (this._shouldShowLog(data.data.level)) {
-            const wasAtBottom = this._isViewerAtBottom();
-            this.logs.push(data.data);
-            if (this.logs.length > 300) {
-              this.logs = this.logs.slice(-300);
-            }
-            this.$nextTick(() => this.scrollLogToBottom(wasAtBottom));
+            this._appendLogs([data.data]);
           }
         } else if (data.type === 'log_batch') {
           if (Array.isArray(data.data)) {
             const filtered = data.data.filter(d => this._shouldShowLog(d.level));
-            const wasAtBottom = this._isViewerAtBottom();
-            this.logs.push(...filtered);
-            if (this.logs.length > 300) {
-              this.logs = this.logs.slice(-300);
-            }
-            this.$nextTick(() => this.scrollLogToBottom(wasAtBottom));
+            if (filtered.length) this._appendLogs(filtered);
           }
         }
       } catch (e) {

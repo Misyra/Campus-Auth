@@ -30,9 +30,8 @@ export const configMethods = {
     if (!this.config.username && !confirm('账号为空，自动认证将无法工作。\n\n确定要继续保存吗？')) {
       return;
     }
-    if (this.config.password && this.config.password.startsWith('•')) {
-      // 密码是掩码，说明服务端已有加密密码，无需警告
-    } else if (!this.config.password && !confirm('密码为空，自动认证将无法工作。\n\n确定要继续保存吗？')) {
+    const passwordIsMasked = this.config.password && this.config.password.startsWith('•');
+    if (!passwordIsMasked && !this.config.password && !confirm('密码为空，自动认证将无法工作。\n\n确定要继续保存吗？')) {
       return;
     }
     if (!this.config.enable_tcp_check && !this.config.enable_http_check && !(this.config.portal_check_urls && this.config.portal_check_urls.trim())) {
