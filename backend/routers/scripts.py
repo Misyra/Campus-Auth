@@ -78,10 +78,9 @@ def run_script(
     # 从 monitor_service 获取运行时配置来构建环境变量
     try:
         services = request.app.state.services
-        config = services.monitor_service.get_config()
-        config_dict = config.model_dump()
+        runtime_config = services.monitor_service.get_runtime_config()
         env_vars = build_login_env_vars(
-            config_dict, None, config_dict.get("custom_variables", {})
+            runtime_config, None, runtime_config.get("custom_variables", {})
         )
     except Exception:
         env_vars = {}
