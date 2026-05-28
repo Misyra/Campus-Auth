@@ -77,8 +77,8 @@ class ServiceContainer:
         # 关闭调试会话
         await self.debug_manager.close()
 
-        # 停止监控
-        self.monitor_service.stop_monitoring()
+        # 完全关闭监控服务（停止监控 + 终止消费者线程）
+        self.monitor_service.shutdown()
 
         # 关闭 WebSocket 连接
         await self.ws_manager.close_all()

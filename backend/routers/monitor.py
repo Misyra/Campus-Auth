@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.utils.logging import get_logger
 
@@ -85,5 +85,4 @@ def toggle_pure_mode(
         return {"enabled": new_value}
     except Exception as exc:
         api_logger.error("切换纯净模式失败: %s", exc)
-        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=f"切换纯净模式失败: {exc}")
