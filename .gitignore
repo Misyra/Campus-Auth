@@ -49,6 +49,9 @@ AGENTS.md
 skills-lock.json
 .sisyphus/
 
+# Pyright
+pyrightconfig.json
+
 
 # OpenCode working directory
 .omo/
