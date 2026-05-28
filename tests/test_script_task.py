@@ -277,6 +277,22 @@ class TestScriptRunner:
         assert ok is False
         assert "oops" in msg
 
+    def test_run_mixed_output_extracts_json(self, tmp_path: Path):
+        """stdout 混入其他 print 时仍能提取 JSON"""
+        script = tmp_path / "mixed.py"
+        script.write_text(textwrap.dedent("""\
+            import json
+            print("调试信息")
+            print("你好")
+            print(json.dumps({"success": True, "message": "登录成功"}))
+        """), encoding="utf-8")
+
+        runner = ScriptRunner(script, timeout=10)
+        ok, msg = runner.run({})
+
+        assert ok is True
+        assert "登录成功" in msg
+
     def test_env_vars_passed(self, tmp_path: Path):
         """环境变量正确传递到子进程（CAMPUS_ 前缀）"""
         script = tmp_path / "env.py"
