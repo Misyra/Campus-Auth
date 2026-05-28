@@ -465,20 +465,6 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
       "type": "click",
       "description": "点击登录",
       "selector": "input[name='0MKKey'], button[type='submit'], #login-btn"
-    },
-    {
-      "id": "s5",
-      "type": "wait",
-      "description": "等待结果",
-      "selector": ".success, .error, #msg",
-      "timeout": 10000
-    },
-    {
-      "id": "s6",
-      "type": "eval",
-      "description": "检查登录结果",
-      "script": "() => { const text = document.body.innerText; return text.includes('成功') || text.includes('已连接'); }",
-      "store_as": "login_success"
     }
   ],
   "on_success": { "message": "登录成功" },
@@ -499,8 +485,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
   "steps": [
     { "id": "s1", "type": "input", "selector": "#username", "value": "{{USERNAME}}" },
     { "id": "s2", "type": "input", "selector": "#password", "value": "{{PASSWORD}}" },
-    { "id": "s3", "type": "click", "selector": "#login-btn" },
-    { "id": "s4", "type": "sleep", "duration": 3000 }
+    { "id": "s3", "type": "click", "selector": "#login-btn" }
   ],
   "on_success": { "message": "登录成功" },
   "on_failure": { "message": "登录失败", "screenshot": true }
@@ -525,8 +510,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
       "selector": "#captcha-img",
       "target_selector": "#captcha-input"
     },
-    { "id": "s4", "type": "click", "selector": "#login-btn" },
-    { "id": "s5", "type": "sleep", "duration": 3000 }
+    { "id": "s4", "type": "click", "selector": "#login-btn" }
   ],
   "on_success": { "message": "登录成功" },
   "on_failure": { "message": "登录失败", "screenshot": true }
@@ -564,8 +548,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
       "description": "在 iframe 中点击登录",
       "selector": "#login-btn",
       "frame": "mainFrame"
-    },
-    { "id": "s4", "type": "sleep", "duration": 3000 }
+    }
   ],
   "on_success": { "message": "登录成功" },
   "on_failure": { "message": "登录失败", "screenshot": true }
@@ -604,8 +587,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
       "type": "click",
       "description": "点击登录按钮",
       "selector": "#login_button"
-    },
-    { "id": "s4", "type": "sleep", "duration": 3000 }
+    }
   ],
   "on_success": { "message": "登录成功" },
   "on_failure": { "message": "登录失败", "screenshot": true }
