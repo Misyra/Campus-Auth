@@ -72,10 +72,6 @@
   gap: 16px;
 }
 
-.settings-panel-grid--browser {
-  grid-template-columns: 1fr 1fr;
-}
-
 .settings-panel-grid--task {
   grid-template-columns: 1fr;
 }
@@ -624,10 +620,6 @@
 }
 
 @media (max-width: 768px) {
-  .settings-panel-grid--browser {
-    grid-template-columns: 1fr;
-  }
-
   .backup-table-header,
   .backup-row {
     grid-template-columns: 1fr 90px 50px 130px;
