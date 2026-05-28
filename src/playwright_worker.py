@@ -106,6 +106,7 @@ class PlaywrightWorker:
         创建 daemon Thread，线程内部运行持久 asyncio 事件循环，
         通过 _worker_ready 事件等待循环就绪后再返回。
         """
+        self._stop_event.clear()
         self._worker_ready.clear()
         self._consumer_thread = threading.Thread(
             target=self._worker_entry,
@@ -149,6 +150,18 @@ class PlaywrightWorker:
                     self._loop.call_soon_threadsafe(self._loop.stop)
                 self._consumer_thread.join(timeout=3)
 
+        # 排干队列中残留的命令，通知等待方 Worker 已关闭
+        while True:
+            try:
+                pending = self._cmd_queue.get_nowait()
+            except queue.Empty:
+                break
+            if pending.response_event is not None:
+                pending.response_data = WorkerResponse(
+                    success=False, error="Worker 已关闭，命令未执行"
+                )
+                pending.response_event.set()
+
     def is_alive(self) -> bool:
         """检查 Worker 消费者线程是否存活。"""
         return self._consumer_thread is not None and self._consumer_thread.is_alive()
@@ -185,7 +198,10 @@ class PlaywrightWorker:
             data=data or {},
             response_event=threading.Event() if wait else None,
         )
-        self._cmd_queue.put(cmd)
+        try:
+            self._cmd_queue.put(cmd, timeout=10)
+        except queue.Full:
+            return WorkerResponse(success=False, error="命令队列已满，提交超时")
 
         # 通过 run_coroutine_threadsafe 唤醒 Worker 的事件循环，
         # 使 _async_run 立即处理新放入的命令
@@ -381,8 +397,8 @@ class PlaywrightWorker:
         task_data = data.get("task_data", {})
         env_vars = data.get("env_vars", {})
         screenshot_dir = data.get("screenshot_dir", "")
-        default_timeout = data.get("default_timeout", 10000)
-        navigation_timeout = data.get("navigation_timeout", 15000)
+        default_timeout = data.get("default_timeout", TaskExecutor.DEFAULT_STEP_TIMEOUT)
+        navigation_timeout = data.get("navigation_timeout", TaskExecutor.DEFAULT_NAVIGATION_TIMEOUT)
 
         # 检查浏览器健康状态，不健康则重建
         if not await self._health_check():

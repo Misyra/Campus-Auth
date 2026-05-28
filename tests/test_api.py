@@ -229,7 +229,7 @@ class TestCompareVersions:
     def test_different_lengths(self):
         from backend.main import _compare_versions
         assert _compare_versions("1.0.0.1", "1.0.0") == 1
-        assert _compare_versions("1.0", "1.0.0") == -1
+        assert _compare_versions("1.0", "1.0.0") == 0  # 1.0 等价于 1.0.0
 
     def test_invalid_input(self):
         from backend.main import _compare_versions
