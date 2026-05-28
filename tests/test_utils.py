@@ -369,9 +369,10 @@ class TestIsLinux:
             assert is_linux() is True
 
     def test_linux2(self):
+        # Python 3.10+ 不再返回 "linux2"，应返回 False
         with patch("src.utils.platform_utils.sys") as mock_sys:
             mock_sys.platform = "linux2"
-            assert is_linux() is True
+            assert is_linux() is False
 
     def test_false(self):
         with patch("src.utils.platform_utils.sys") as mock_sys:

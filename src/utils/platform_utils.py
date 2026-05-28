@@ -36,7 +36,7 @@ def is_macos() -> bool:
 
 def is_linux() -> bool:
     """当前是否为 Linux 系统"""
-    return sys.platform in ("linux", "linux2")
+    return sys.platform == "linux"
 
 
 # 各平台默认的 Chrome 125 User-Agent 字符串

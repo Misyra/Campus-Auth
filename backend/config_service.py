@@ -190,6 +190,9 @@ def build_runtime_config(
 ) -> dict[str, Any]:
     """从 MonitorConfigPayload 构建运行时配置字典。
 
+    ⚠ 返回字典包含明文 password 字段，切勿整体记录到日志中。
+    仅可安全记录 username、auth_url 等非敏感字段。
+
     Args:
         payload: 前端传来的合并配置
         sys: settings.json 中的系统设置（用于读取重试策略等非 UI 字段）
