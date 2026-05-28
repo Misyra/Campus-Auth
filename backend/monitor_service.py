@@ -14,9 +14,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from fastapi import WebSocket
+from typing import TYPE_CHECKING
 
 from src.monitor_core import NetworkMonitorCore
+
+if TYPE_CHECKING:
+    from fastapi import WebSocket
 from src.playwright_worker import get_worker, CMD_LOGIN
 from src.network_decision import is_network_available
 from src.utils import ConfigValidator
@@ -27,6 +30,7 @@ from src.utils.network_helpers import parse_host_port
 from .config_service import build_runtime_config, load_runtime_config, load_ui_config
 from .profile_service import ProfileService
 from .schemas import LogEntry, MonitorConfigPayload, MonitorStatusResponse
+from .ws_manager import WebSocketManager
 
 
 # ── Actor 模型：类型化命令派发 ──
@@ -57,61 +61,6 @@ class StatusSnapshot:
     network_state: str = "unknown"
 
 
-# ── WebSocket 管理器 ──
-
-
-class WebSocketManager:
-    """WebSocket 管理器 - 实时日志推送"""
-
-    def __init__(self):
-        self._connections: list[WebSocket] = []
-        self._lock = asyncio.Lock()
-
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        async with self._lock:
-            self._connections.append(websocket)
-
-    async def disconnect(self, websocket: WebSocket):
-        async with self._lock:
-            if websocket in self._connections:
-                self._connections.remove(websocket)
-
-    async def broadcast(self, message: str):
-        """广播消息（直接发送，保证实时性）"""
-        async with self._lock:
-            connections = self._connections.copy()
-
-        if not connections:
-            return
-
-        # 并发发送给所有连接
-        tasks = [self._send_safe(ws, message) for ws in connections]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # 清理断开连接
-        async with self._lock:
-            for ws, result in zip(connections, results):
-                if isinstance(result, Exception) and ws in self._connections:
-                    self._connections.remove(ws)
-
-    async def close_all(self):
-        """关闭所有 WebSocket 连接"""
-        async with self._lock:
-            connections = self._connections.copy()
-            self._connections.clear()
-
-        for ws in connections:
-            try:
-                await ws.close(code=1001, reason="Server shutting down")
-            except Exception:
-                pass
-
-    async def _send_safe(self, ws: WebSocket, message: str):
-        await ws.send_text(message)
-
-
-ws_manager = WebSocketManager()
 service_logger = get_logger("backend.monitor_service", side="BACKEND")
 
 
@@ -120,10 +69,14 @@ service_logger = get_logger("backend.monitor_service", side="BACKEND")
 
 class MonitorService:
     def __init__(
-        self, project_root: Path, profile_service: ProfileService | None = None
+        self,
+        project_root: Path,
+        profile_service: ProfileService | None = None,
+        ws_manager: WebSocketManager | None = None,
     ):
         self.project_root = project_root
         self._profile_service = profile_service or ProfileService(project_root)
+        self._ws_manager = ws_manager
 
         # State (previously guarded by RLock)
         self._logs: deque[LogEntry] = deque(maxlen=1200)
@@ -433,7 +386,8 @@ class MonitorService:
                 data = self._ws_broadcast_queue.popleft()
             except IndexError:
                 break
-            await ws_manager.broadcast(json.dumps(data))
+            if self._ws_manager:
+                await self._ws_manager.broadcast(json.dumps(data))
 
     # ── 公共 API（从 API 线程 / main.py 调用）──
 

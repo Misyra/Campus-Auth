@@ -45,46 +45,60 @@ def client(tmp_path):
         encoding="utf-8",
     )
 
-    with patch("backend.main.PROJECT_ROOT", tmp_path), \
-         patch("backend.main.FRONTEND_DIR", tmp_path / "frontend"), \
-         patch("backend.main.LOGS_DIR", tmp_path / "logs"):
-        # 创建前端目录
-        (tmp_path / "frontend").mkdir(exist_ok=True)
-        (tmp_path / "frontend" / "index.html").write_text("<html></html>")
+    # 创建前端目录
+    (tmp_path / "frontend").mkdir(exist_ok=True)
+    (tmp_path / "frontend" / "index.html").write_text("<html></html>")
+    (tmp_path / "logs").mkdir(exist_ok=True)
+    (tmp_path / "temp").mkdir(exist_ok=True)
+    (tmp_path / "backups").mkdir(exist_ok=True)
+
+    with patch("backend.constants.PROJECT_ROOT", tmp_path), \
+         patch("backend.constants.FRONTEND_DIR", tmp_path / "frontend"), \
+         patch("backend.constants.LOGS_DIR", tmp_path / "logs"), \
+         patch("backend.constants.TEMP_DIR", tmp_path / "temp"), \
+         patch("backend.constants.BACKUP_DIR", tmp_path / "backups"):
 
         from backend.main import app
-        from backend import main as main_module
 
-        # 重新初始化服务
-        main_module.profile_service = MagicMock()
-        main_module.service = MagicMock()
+        # 创建 mock 服务容器
+        mock_services = MagicMock()
 
-        # 模拟 get_config 返回
-        from backend.schemas import MonitorConfigPayload
-        main_module.service.get_config.return_value = MonitorConfigPayload(
+        # 模拟 monitor_service
+        from backend.schemas import MonitorConfigPayload, MonitorStatusResponse
+        mock_services.monitor_service.get_config.return_value = MonitorConfigPayload(
             username="testuser",
             password="••••••••",
             auth_url="http://10.0.0.1",
         )
-
-        # 模拟 get_status 返回
-        from backend.schemas import MonitorStatusResponse
-        main_module.service.get_status.return_value = MonitorStatusResponse(
+        mock_services.monitor_service.get_status.return_value = MonitorStatusResponse(
             monitoring=False,
             network_check_count=0,
             login_attempt_count=0,
             last_check_time=None,
             runtime_seconds=0,
         )
+        mock_services.monitor_service.list_logs.return_value = []
+        mock_services.monitor_service.start_monitoring.return_value = (True, "监控已启动")
+        mock_services.monitor_service.stop_monitoring.return_value = (True, "监控已停止")
+        mock_services.monitor_service.login_in_progress = False
+        mock_services.monitor_service.run_manual_login.return_value = (True, "手动登录成功")
 
-        # 模拟 list_logs 返回
-        main_module.service.list_logs.return_value = []
+        # 模拟 profile_service
+        mock_services.profile_service = MagicMock()
 
-        # 模拟 start/stop_monitoring 返回
-        main_module.service.start_monitoring.return_value = (True, "监控已启动")
-        main_module.service.stop_monitoring.return_value = (True, "监控已停止")
-        main_module.service.login_in_progress = False
-        main_module.service.run_manual_login.return_value = (True, "手动登录成功")
+        # 模拟 task_service
+        mock_services.task_service = MagicMock()
+
+        # 模拟 autostart_service
+        mock_services.autostart_service = MagicMock()
+
+        # 模拟 debug_manager
+        mock_services.debug_manager = MagicMock()
+
+        # 模拟 ws_manager
+        mock_services.ws_manager = MagicMock()
+
+        app.state.services = mock_services
 
         test_client = TestClient(app)
         yield test_client
@@ -209,33 +223,33 @@ class TestLoginEndpoint:
 
 
 # =====================================================================
-# 版本比较（_compare_versions）
+# 版本比较（compare_versions）
 # =====================================================================
 
 
 class TestCompareVersions:
     def test_equal(self):
-        from backend.main import _compare_versions
-        assert _compare_versions("1.0.0", "1.0.0") == 0
+        from src.version import compare_versions
+        assert compare_versions("1.0.0", "1.0.0") == 0
 
     def test_greater(self):
-        from backend.main import _compare_versions
-        assert _compare_versions("1.1.0", "1.0.0") == 1
+        from src.version import compare_versions
+        assert compare_versions("1.1.0", "1.0.0") == 1
 
     def test_less(self):
-        from backend.main import _compare_versions
-        assert _compare_versions("1.0.0", "1.1.0") == -1
+        from src.version import compare_versions
+        assert compare_versions("1.0.0", "1.1.0") == -1
 
     def test_different_lengths(self):
-        from backend.main import _compare_versions
-        assert _compare_versions("1.0.0.1", "1.0.0") == 1
-        assert _compare_versions("1.0", "1.0.0") == 0  # 1.0 等价于 1.0.0
+        from src.version import compare_versions
+        assert compare_versions("1.0.0.1", "1.0.0") == 1
+        assert compare_versions("1.0", "1.0.0") == 0  # 1.0 等价于 1.0.0
 
     def test_invalid_input(self):
-        from backend.main import _compare_versions
-        assert _compare_versions("invalid", "1.0.0") == 0
-        assert _compare_versions("1.0.0", "invalid") == 0
+        from src.version import compare_versions
+        assert compare_versions("invalid", "1.0.0") == 0
+        assert compare_versions("1.0.0", "invalid") == 0
 
     def test_major_version_diff(self):
-        from backend.main import _compare_versions
-        assert _compare_versions("2.0.0", "1.9.9") == 1
+        from src.version import compare_versions
+        assert compare_versions("2.0.0", "1.9.9") == 1

@@ -35,3 +35,22 @@ def get_project_version(project_root: Path | None = None) -> str:
             return match.group(1)
 
     return "unknown"
+
+
+def compare_versions(a: str, b: str) -> int:
+    """比较语义版本号，a > b 返回 1，a < b 返回 -1，相等时返回 0"""
+    try:
+        va = [int(x) for x in a.split(".")]
+        vb = [int(x) for x in b.split(".")]
+        # 补齐较短版本号的缺失段为 0
+        max_len = max(len(va), len(vb))
+        va.extend([0] * (max_len - len(va)))
+        vb.extend([0] * (max_len - len(vb)))
+        for x, y in zip(va, vb):
+            if x > y:
+                return 1
+            if x < y:
+                return -1
+        return 0
+    except (ValueError, AttributeError):
+        return 0

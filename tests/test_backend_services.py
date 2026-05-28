@@ -19,11 +19,8 @@ from backend.config_service import (
     build_runtime_config,
     save_config_combined,
 )
-from backend.profile_service import (
-    ProfileService,
-    detect_gateway_ip,
-    detect_wifi_ssid,
-)
+from backend.profile_service import ProfileService
+from src.network_detect import detect_gateway_ip, detect_wifi_ssid
 from backend.schemas import (
     MonitorConfigPayload,
     ProfileSettings,
@@ -709,63 +706,63 @@ class TestProfileService:
 
 
 class TestDetectGatewayIp:
-    @patch("backend.profile_service.is_windows", return_value=True)
-    @patch("backend.profile_service._detect_gateway_windows", return_value="192.168.1.1")
+    @patch("src.network_detect.is_windows", return_value=True)
+    @patch("src.network_detect._detect_gateway_windows", return_value="192.168.1.1")
     def test_windows(self, mock_win, mock_is_win):
         assert detect_gateway_ip() == "192.168.1.1"
 
-    @patch("backend.profile_service.is_windows", return_value=False)
-    @patch("backend.profile_service.is_linux", return_value=True)
-    @patch("backend.profile_service._detect_gateway_linux", return_value="10.0.0.1")
+    @patch("src.network_detect.is_windows", return_value=False)
+    @patch("src.network_detect.is_linux", return_value=True)
+    @patch("src.network_detect._detect_gateway_linux", return_value="10.0.0.1")
     def test_linux(self, mock_linux, mock_is_linux, mock_is_win):
         assert detect_gateway_ip() == "10.0.0.1"
 
-    @patch("backend.profile_service.is_windows", return_value=False)
-    @patch("backend.profile_service.is_linux", return_value=False)
-    @patch("backend.profile_service.is_macos", return_value=True)
-    @patch("backend.profile_service._detect_gateway_darwin", return_value="172.16.0.1")
+    @patch("src.network_detect.is_windows", return_value=False)
+    @patch("src.network_detect.is_linux", return_value=False)
+    @patch("src.network_detect.is_macos", return_value=True)
+    @patch("src.network_detect._detect_gateway_darwin", return_value="172.16.0.1")
     def test_macos(self, mock_darwin, mock_is_mac, mock_is_linux, mock_is_win):
         assert detect_gateway_ip() == "172.16.0.1"
 
-    @patch("backend.profile_service.is_windows", return_value=False)
-    @patch("backend.profile_service.is_linux", return_value=False)
-    @patch("backend.profile_service.is_macos", return_value=False)
+    @patch("src.network_detect.is_windows", return_value=False)
+    @patch("src.network_detect.is_linux", return_value=False)
+    @patch("src.network_detect.is_macos", return_value=False)
     def test_unsupported_platform(self, mock_is_mac, mock_is_linux, mock_is_win):
         assert detect_gateway_ip() is None
 
-    @patch("backend.profile_service.is_windows", return_value=True)
-    @patch("backend.profile_service._detect_gateway_windows", side_effect=Exception("fail"))
+    @patch("src.network_detect.is_windows", return_value=True)
+    @patch("src.network_detect._detect_gateway_windows", side_effect=Exception("fail"))
     def test_exception_returns_none(self, mock_win, mock_is_win):
         assert detect_gateway_ip() is None
 
 
 class TestDetectWifiSsid:
-    @patch("backend.profile_service.is_windows", return_value=True)
-    @patch("backend.profile_service._detect_ssid_windows", return_value="MyWiFi")
+    @patch("src.network_detect.is_windows", return_value=True)
+    @patch("src.network_detect._detect_ssid_windows", return_value="MyWiFi")
     def test_windows(self, mock_win, mock_is_win):
         assert detect_wifi_ssid() == "MyWiFi"
 
-    @patch("backend.profile_service.is_windows", return_value=False)
-    @patch("backend.profile_service.is_linux", return_value=True)
-    @patch("backend.profile_service._detect_ssid_linux", return_value="LinuxWiFi")
+    @patch("src.network_detect.is_windows", return_value=False)
+    @patch("src.network_detect.is_linux", return_value=True)
+    @patch("src.network_detect._detect_ssid_linux", return_value="LinuxWiFi")
     def test_linux(self, mock_linux, mock_is_linux, mock_is_win):
         assert detect_wifi_ssid() == "LinuxWiFi"
 
-    @patch("backend.profile_service.is_windows", return_value=False)
-    @patch("backend.profile_service.is_linux", return_value=False)
-    @patch("backend.profile_service.is_macos", return_value=True)
-    @patch("backend.profile_service._detect_ssid_darwin", return_value="MacWiFi")
+    @patch("src.network_detect.is_windows", return_value=False)
+    @patch("src.network_detect.is_linux", return_value=False)
+    @patch("src.network_detect.is_macos", return_value=True)
+    @patch("src.network_detect._detect_ssid_darwin", return_value="MacWiFi")
     def test_macos(self, mock_darwin, mock_is_mac, mock_is_linux, mock_is_win):
         assert detect_wifi_ssid() == "MacWiFi"
 
-    @patch("backend.profile_service.is_windows", return_value=False)
-    @patch("backend.profile_service.is_linux", return_value=False)
-    @patch("backend.profile_service.is_macos", return_value=False)
+    @patch("src.network_detect.is_windows", return_value=False)
+    @patch("src.network_detect.is_linux", return_value=False)
+    @patch("src.network_detect.is_macos", return_value=False)
     def test_unsupported_platform(self, mock_is_mac, mock_is_linux, mock_is_win):
         assert detect_wifi_ssid() is None
 
-    @patch("backend.profile_service.is_windows", return_value=True)
-    @patch("backend.profile_service._detect_ssid_windows", side_effect=Exception("fail"))
+    @patch("src.network_detect.is_windows", return_value=True)
+    @patch("src.network_detect._detect_ssid_windows", side_effect=Exception("fail"))
     def test_exception_returns_none(self, mock_win, mock_is_win):
         assert detect_wifi_ssid() is None
 
