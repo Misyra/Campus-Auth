@@ -65,28 +65,34 @@ class LoginAttemptHandler:
         try:
             # 使用统一的登录前决策（暂停时段、网络状态等）
             if not skip_pause_check:
-                from src.network_decision import should_attempt_login
+                from src.network_decision import check_network_status, check_pause
 
-                should_login, reason = should_attempt_login(self.config)
-                if not should_login:
-                    if reason == "pause_period":
-                        pause_config = self.config.get("pause_login", {})
-                        current_hour = datetime.datetime.now().hour
-                        start_hour = pause_config.get("start_hour", 0)
-                        end_hour = pause_config.get("end_hour", 6)
-                        msg = f"当前时间 {current_hour}:xx 在暂停登录时段（{start_hour}点-{end_hour}点），跳过登录"
-                        self.logger.info(msg)
-                        return False, msg
-                    elif reason == "network_disconnected":
+                is_paused, _ = check_pause(self.config)
+                if is_paused:
+                    pause_config = self.config.get("pause_login", {})
+                    current_hour = datetime.datetime.now().hour
+                    start_hour = pause_config.get("start_hour", 0)
+                    end_hour = pause_config.get("end_hour", 6)
+                    msg = f"当前时间 {current_hour}:xx 在暂停登录时段（{start_hour}点-{end_hour}点），跳过登录"
+                    self.logger.info(msg)
+                    return False, msg
+
+                net_ok, _ = check_network_status(self.config)
+                if net_ok:
+                    msg = "网络正常，无需登录"
+                    self.logger.info(msg)
+                    return False, msg
+
+                # 网络异常，检查登录前置条件
+                from src.network_decision import check_login_prerequisites
+                prereq_ok, prereq_reason = check_login_prerequisites(self.config)
+                if not prereq_ok:
+                    if prereq_reason == "local_disconnected":
                         msg = "物理网络未连接，跳过登录"
                         self.logger.info(msg)
                         return False, msg
-                    elif reason == "auth_url_unreachable":
+                    elif prereq_reason == "auth_url_unreachable":
                         msg = f"认证地址 {self.config.get('auth_url', '?')} 不可达，跳过登录"
-                        self.logger.info(msg)
-                        return False, msg
-                    elif reason == "network_ok":
-                        msg = "网络正常，无需登录"
                         self.logger.info(msg)
                         return False, msg
 

@@ -34,9 +34,12 @@ const _SHARED_DEFAULTS = {
   pause_start_hour: 0,
   pause_end_hour: 6,
   network_targets: "8.8.8.8:53,114.114.114.114:53,www.baidu.com:443",
+  http_targets: "https://www.baidu.com,https://www.qq.com",
+  enable_local_check: true,
   enable_tcp_check: true,
   enable_http_check: true,
   check_auth_url: true,
+  auth_url_targets: "",
   custom_variables: {},
 };
 
