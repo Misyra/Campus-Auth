@@ -4,7 +4,7 @@
 配置加载和验证工具类
 """
 
-from typing import Tuple
+from __future__ import annotations
 
 
 class ConfigValidator:
@@ -13,7 +13,7 @@ class ConfigValidator:
     @staticmethod
     def validate_gui_config(
         username: str, password: str, check_interval: str
-    ) -> Tuple[bool, str]:
+    ) -> tuple[bool, str]:
         """
         验证GUI配置是否有效
 
@@ -59,7 +59,7 @@ class ConfigValidator:
         return True, ""
 
     @staticmethod
-    def validate_env_config(config: dict) -> Tuple[bool, str]:
+    def validate_env_config(config: dict) -> tuple[bool, str]:
         """
         验证环境配置是否完整
 

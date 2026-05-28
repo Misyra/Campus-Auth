@@ -24,6 +24,9 @@ from src.utils.logging import get_logger
 
 logger = get_logger("task_executor", side="BACKEND")
 
+# 项目根目录（模块级，避免各处重复计算）
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
 # 任务ID验证正则
 TASK_ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 
@@ -794,7 +797,7 @@ class EvalHandler(StepHandler):
 class ScreenshotHandler(StepHandler):
     """截图处理器 — 运行时截图存入 debug/{date}/ 目录"""
 
-    PROJECT_ROOT = Path(__file__).resolve().parents[1]
+    # 使用模块级 PROJECT_ROOT
 
     @property
     def step_type(self) -> str:
@@ -806,7 +809,7 @@ class ScreenshotHandler(StepHandler):
         params = self.resolve_params(step, resolver)
         path = params.get("path", "")
 
-        date_dir = self.PROJECT_ROOT / "debug" / datetime.now().strftime("%Y-%m-%d")
+        date_dir = PROJECT_ROOT / "debug" / datetime.now().strftime("%Y-%m-%d")
         date_dir.mkdir(parents=True, exist_ok=True)
 
         if not path:
@@ -1027,21 +1030,12 @@ class TaskValidator:
             errors.append(f"{prefix} 未知的步骤类型: '{step_type}'")
 
         # 根据类型验证特定字段
-        if step_type == StepType.INPUT:
-            if not step.get("selector"):
-                errors.append(f"{prefix} (input) 需要 'selector' 字段")
-
-        if step_type == StepType.CLICK and not step.get("selector"):
-            errors.append(f"{prefix} (click) 需要 'selector' 字段")
-
-        if step_type == StepType.SELECT and not step.get("selector"):
-            errors.append(f"{prefix} (select) 需要 'selector' 字段")
-
-        if step_type == StepType.CLICK_SELECT and not step.get("selector"):
-            errors.append(f"{prefix} (click_select) 需要 'selector' 字段")
-
-        if step_type == StepType.WAIT and not step.get("selector"):
-            errors.append(f"{prefix} (wait) 需要 'selector' 字段")
+        _SELECTOR_REQUIRED = {
+            StepType.INPUT, StepType.CLICK, StepType.SELECT,
+            StepType.CLICK_SELECT, StepType.WAIT,
+        }
+        if step_type in _SELECTOR_REQUIRED and not step.get("selector"):
+            errors.append(f"{prefix} ({step_type}) 需要 'selector' 字段")
 
         if step_type == StepType.WAIT_URL and not step.get("pattern"):
             errors.append(f"{prefix} (wait_url) 需要 'pattern' 字段")
@@ -1064,10 +1058,11 @@ class TaskValidator:
 class TaskExecutor:
     """任务执行器"""
 
-    PROJECT_ROOT = Path(__file__).resolve().parents[1]
+    # 使用模块级 PROJECT_ROOT
 
     DEFAULT_STEP_TIMEOUT = 10000
     DEFAULT_TASK_TIMEOUT = 30000
+    DEFAULT_NAVIGATION_TIMEOUT = 15000
 
     def __init__(
         self,
@@ -1081,7 +1076,7 @@ class TaskExecutor:
         self.config = config
         self.env_vars = env_vars or {}
         self.default_timeout = default_timeout or self.DEFAULT_STEP_TIMEOUT
-        self.navigation_timeout = navigation_timeout or 15000
+        self.navigation_timeout = navigation_timeout or self.DEFAULT_NAVIGATION_TIMEOUT
         self.resolver = VariableResolver(config, self.env_vars)
         self.registry = StepExecutorRegistry()
         self._step_results: list[dict[str, Any]] = []
@@ -1401,7 +1396,7 @@ class TaskExecutor:
                 url_prefix = "/temp"
             else:
                 date_str = datetime.now().strftime("%Y-%m-%d")
-                out_dir = self.PROJECT_ROOT / "logs" / date_str / "screenshots"
+                out_dir = PROJECT_ROOT / "logs" / date_str / "screenshots"
                 url_prefix = f"/logs/{date_str}/screenshots"
             out_dir.mkdir(parents=True, exist_ok=True)
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")

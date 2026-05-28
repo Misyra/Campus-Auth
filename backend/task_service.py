@@ -11,6 +11,9 @@ task_logger = get_logger("backend.task_service", side="BACKEND")
 # 危险步骤类型：包含任意 JS 执行
 _DANGEROUS_STEP_TYPES = {"eval", "custom_js"}
 
+# 任务 ID 校验失败的统一错误消息
+_INVALID_TASK_ID_MSG = "任务ID必须以字母开头，且只能包含字母、数字和下划线"
+
 
 def _check_dangerous_steps(task_data: dict[str, Any]) -> list[dict[str, Any]]:
     """检查任务中的危险步骤，返回详细信息列表（含代码内容）"""
@@ -45,8 +48,12 @@ class TaskService:
     def __init__(self, project_root: Path):
         self.task_manager = TaskManager(project_root / "tasks")
 
-    def _is_valid_task_id(self, task_id: str) -> bool:
-        return is_valid_task_id(task_id)
+    def _validate_task_id(self, task_id: str) -> str | None:
+        """规范化并校验任务 ID，返回规范化后的 ID；无效则返回 None。"""
+        task_id = normalize_task_id(task_id)
+        if not is_valid_task_id(task_id):
+            return None
+        return task_id
 
     def list_tasks(self) -> list[dict[str, str]]:
         tasks = self.task_manager.list_tasks()
@@ -54,8 +61,8 @@ class TaskService:
         return tasks
 
     def get_task(self, task_id: str) -> dict[str, Any] | None:
-        task_id = normalize_task_id(task_id)
-        if not self._is_valid_task_id(task_id):
+        task_id = self._validate_task_id(task_id) or ""
+        if not task_id:
             return None
         task_logger.debug("Loading task %s", task_id)
         task = self.task_manager.load_task(task_id)
@@ -66,9 +73,9 @@ class TaskService:
         return None
 
     def save_task(self, task_id: str, config: dict[str, Any]) -> tuple[bool, str]:
-        task_id = normalize_task_id(task_id)
-        if not self._is_valid_task_id(task_id):
-            return False, "任务ID必须以字母开头，且只能包含字母、数字和下划线"
+        task_id = self._validate_task_id(task_id) or ""
+        if not task_id:
+            return False, _INVALID_TASK_ID_MSG
 
         if not config.get("name"):
             return False, "任务名称不能为空"
@@ -89,7 +96,7 @@ class TaskService:
         return False, "任务保存失败"
 
     def delete_task(self, task_id: str) -> tuple[bool, str]:
-        task_id = normalize_task_id(task_id)
+        task_id = normalize_task_id(task_id)  # delete 不校验格式，仅规范化
         if task_id == "default":
             return False, "不能删除默认任务"
 
@@ -104,9 +111,9 @@ class TaskService:
         return self.task_manager.get_active_task()
 
     def set_active_task(self, task_id: str) -> tuple[bool, str]:
-        task_id = normalize_task_id(task_id)
-        if not self._is_valid_task_id(task_id):
-            return False, "任务ID必须以字母开头，且只能包含字母、数字和下划线"
+        task_id = self._validate_task_id(task_id) or ""
+        if not task_id:
+            return False, _INVALID_TASK_ID_MSG
 
         if not self.task_manager.load_task(task_id):
             return False, "任务不存在"

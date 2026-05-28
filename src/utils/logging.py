@@ -43,8 +43,10 @@ class SideFilter(logging.Filter):
 
 
 def _normalize_level(level: str | None, default: str = "INFO") -> str:
+    from backend.schemas import VALID_LOG_LEVELS
+
     raw = str(level or default).upper().strip()
-    return raw if raw in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"} else default
+    return raw if raw in VALID_LOG_LEVELS else default
 
 
 def _level_value(level: str | None, default: str = "INFO") -> int:

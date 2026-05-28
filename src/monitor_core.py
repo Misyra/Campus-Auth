@@ -135,6 +135,14 @@ class NetworkMonitorCore:
         # 同步 block_proxy 到 network_test 模块，决定 HTTP 客户端是否信任系统代理
         set_block_proxy(self.config.get("block_proxy", True))
 
+    def _get_monitor_interval(self) -> int:
+        """获取当前配置的检测间隔（秒）。"""
+        return int(
+            self.config.get("monitor", {}).get(
+                "interval", self.DEFAULT_INTERVAL_SECONDS
+            )
+        )
+
     def start_monitoring(self) -> None:
         try:
             if self.monitoring:
@@ -152,9 +160,7 @@ class NetworkMonitorCore:
             self.status_detail = "正在启动监控"
             self._test_sites_cache = None  # 重置缓存
 
-            interval = self.config.get("monitor", {}).get(
-                "interval", self.DEFAULT_INTERVAL_SECONDS
-            )
+            interval = self._get_monitor_interval()
             auth_url = self.config.get("auth_url", "未设置")
             username = self.config.get("username", "未设置")
             isp = self.config.get("isp", "无") or "无"
@@ -329,11 +335,7 @@ class NetworkMonitorCore:
                     f"已达到最大重试次数 ({max_retries})，等待下次检测周期",
                     logging.WARNING,
                 )
-                interval = int(
-                    self.config.get("monitor", {}).get(
-                        "interval", self.DEFAULT_INTERVAL_SECONDS
-                    )
-                )
+                interval = self._get_monitor_interval()
                 next_check = datetime.datetime.now() + datetime.timedelta(
                     seconds=interval
                 )
@@ -379,11 +381,7 @@ class NetworkMonitorCore:
             if action == RecoveryResult.BREAK:
                 return RecoveryResult.BREAK
             if action == RecoveryResult.GIVE_UP:
-                interval = int(
-                    self.config.get("monitor", {}).get(
-                        "interval", self.DEFAULT_INTERVAL_SECONDS
-                    )
-                )
+                interval = self._get_monitor_interval()
                 next_check = datetime.datetime.now() + datetime.timedelta(
                     seconds=interval
                 )
@@ -400,11 +398,7 @@ class NetworkMonitorCore:
     def monitor_network(self) -> None:
         while self.monitoring:
             # 每次循环重新读取 interval 和 test_sites，支持运行时方案切换
-            interval = int(
-                self.config.get("monitor", {}).get(
-                    "interval", self.DEFAULT_INTERVAL_SECONDS
-                )
-            )
+            interval = self._get_monitor_interval()
             # 重新读取测试站点（方案切换后可能已更新）
             test_sites = self._get_test_sites()
 

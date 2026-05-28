@@ -12,12 +12,8 @@ export const LOG_LEVELS = {
 
 export const BROWSER_ARGS_DEFAULT = "--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees\n--disable-ipc-flooding-protection\n--disable-hang-monitor\n--disable-popup-blocking";
 
-export const DEFAULT_CONFIG = {
-  username: "",
-  password: "",
-  use_global_credentials: true,
-  auth_url: "",
-  active_task: "",
+// 浏览器与监控参数的共享默认值（DEFAULT_CONFIG 和 DEFAULT_PROFILE_SETTINGS 共用）
+const _SHARED_DEFAULTS = {
   carrier: "无",
   carrier_custom: "",
   check_interval_seconds: 300,
@@ -28,7 +24,6 @@ export const DEFAULT_CONFIG = {
   login_timeout: 60,
   max_retries: 3,
   retry_interval: 5,
-  browser_user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
   browser_low_resource_mode: true,
   browser_disable_web_security: false,
   browser_extra_headers_json: "",
@@ -42,6 +37,17 @@ export const DEFAULT_CONFIG = {
   enable_tcp_check: true,
   enable_http_check: true,
   check_auth_url: true,
+  custom_variables: {},
+};
+
+export const DEFAULT_CONFIG = {
+  ..._SHARED_DEFAULTS,
+  username: "",
+  password: "",
+  use_global_credentials: true,
+  auth_url: "",
+  active_task: "",
+  browser_user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
   portal_check_urls: "http://captive.apple.com/hotspot-detect.html|Success\nhttp://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test\nhttp://detectportal.firefox.com/success.txt|success",
   backend_log_level: "INFO",
   frontend_log_level: "INFO",
@@ -50,7 +56,6 @@ export const DEFAULT_CONFIG = {
   auto_open_browser: false,
   login_then_exit: false,
   log_retention_days: 7,
-  custom_variables: {},
   proxy: "",
   block_proxy: true,
   browser_locale: "zh-CN",
@@ -70,6 +75,7 @@ export const SETTINGS_TABS = [
 ];
 
 export const DEFAULT_PROFILE_SETTINGS = {
+  ..._SHARED_DEFAULTS,
   name: '',
   match_gateway_ip: '',
   match_ssid: '',
@@ -81,29 +87,5 @@ export const DEFAULT_PROFILE_SETTINGS = {
   use_global_task: true,
   auth_url: '',
   active_task: '',
-  carrier: '无',
-  carrier_custom: '',
-  check_interval_seconds: 300,
-  auto_start: false,
-  headless: true,
-  browser_timeout: 8,
-  browser_navigation_timeout: 15,
-  login_timeout: 60,
-  max_retries: 3,
-  retry_interval: 5,
   browser_user_agent: '',
-  browser_low_resource_mode: true,
-  browser_disable_web_security: false,
-  browser_extra_headers_json: '',
-  browser_args: BROWSER_ARGS_DEFAULT,
-  stealth_mode: false,
-  stealth_custom_script: "",
-  pause_enabled: true,
-  pause_start_hour: 0,
-  pause_end_hour: 6,
-  network_targets: '8.8.8.8:53,114.114.114.114:53,www.baidu.com:443',
-  enable_tcp_check: true,
-  enable_http_check: true,
-  check_auth_url: true,
-  custom_variables: {},
 };
