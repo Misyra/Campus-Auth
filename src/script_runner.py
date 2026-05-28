@@ -86,17 +86,10 @@ class ScriptRunner:
             val = os.environ.get(key)
             if val:
                 safe[key] = val
-        username = env_vars.get("USERNAME", "")
-        password = env_vars.get("PASSWORD", "")
-        isp = env_vars.get("ISP", "")
-        login_url = env_vars.get("LOGIN_URL", "")
-        if username:
-            safe["CAMPUS_USERNAME"] = username
-        if password:
-            safe["CAMPUS_PASSWORD"] = password
-        if isp:
-            safe["CAMPUS_ISP"] = isp
-        if login_url:
-            safe["CAMPUS_URL"] = login_url
+        # 始终传递，即使为空（脚本用 os.environ.get 安全访问）
+        safe["CAMPUS_USERNAME"] = env_vars.get("USERNAME", "")
+        safe["CAMPUS_PASSWORD"] = env_vars.get("PASSWORD", "")
+        safe["CAMPUS_ISP"] = env_vars.get("ISP", "")
+        safe["CAMPUS_URL"] = env_vars.get("LOGIN_URL", "")
         safe["PYTHONIOENCODING"] = "utf-8"
         return safe
