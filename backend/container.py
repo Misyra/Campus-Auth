@@ -9,7 +9,6 @@ from pathlib import Path
 from src.playwright_worker import cleanup_orphan_browsers
 
 from .autostart_service import AutoStartService
-from .constants import BACKUP_DIR, LOGS_DIR, TEMP_DIR
 from .debug_manager import DebugSessionManager
 from .monitor_service import MonitorService
 from .profile_service import ProfileService
@@ -26,11 +25,14 @@ class ServiceContainer:
 
     def __init__(self, project_root: Path):
         self.project_root = project_root
+        self._temp_dir = project_root / "temp"
+        self._logs_dir = project_root / "logs"
+        self._backup_dir = project_root / "backups"
 
         # 创建必要的目录
-        TEMP_DIR.mkdir(parents=True, exist_ok=True)
-        LOGS_DIR.mkdir(parents=True, exist_ok=True)
-        BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+        self._temp_dir.mkdir(parents=True, exist_ok=True)
+        self._logs_dir.mkdir(parents=True, exist_ok=True)
+        self._backup_dir.mkdir(parents=True, exist_ok=True)
 
         # 初始化服务
         self.ws_manager = WebSocketManager()
@@ -83,8 +85,8 @@ class ServiceContainer:
 
         # 清理临时目录
         try:
-            if TEMP_DIR.exists():
-                for item in TEMP_DIR.iterdir():
+            if self._temp_dir.exists():
+                for item in self._temp_dir.iterdir():
                     if item.is_file():
                         item.unlink(missing_ok=True)
                     elif item.is_dir():
