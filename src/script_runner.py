@@ -74,8 +74,9 @@ class ScriptRunner:
             logger.error("脚本无输出 (%.1fs), returncode=%d", elapsed, result.returncode)
             return False, f"脚本无输出 (exit code {result.returncode})"
 
-        try:
-            output = json.loads(stdout)
+        # 从 stdout 中提取 JSON 对象（从最后一行往前找）
+        output = self._extract_json(stdout)
+        if output is not None:
             success = bool(output.get("success", False))
             message = str(output.get("message", ""))
             if success:
@@ -83,12 +84,26 @@ class ScriptRunner:
             else:
                 logger.warning("脚本登录失败 (%.1fs): %s", elapsed, message)
             return success, message
-        except json.JSONDecodeError:
-            # stdout 不是 JSON，从 returncode 推断结果
-            logger.warning("脚本输出非 JSON (%.1fs): %s", elapsed, stdout[:200])
-            if result.returncode == 0:
-                return True, stdout[:500]
-            return False, f"脚本输出解析失败: {stdout[:200]}"
+
+        # 无 JSON，从 returncode 推断
+        logger.warning("脚本输出无 JSON (%.1fs): %s", elapsed, stdout[:200])
+        if result.returncode == 0:
+            return True, stdout[:500]
+        return False, f"脚本输出解析失败: {stdout[:200]}"
+
+    @staticmethod
+    def _extract_json(stdout: str) -> dict | None:
+        """从 stdout 中提取 JSON 对象（从最后一行往前找）。"""
+        for line in reversed(stdout.splitlines()):
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("{") and line.endswith("}"):
+                try:
+                    return json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+        return None
 
     @staticmethod
     def _build_safe_env(env_vars: dict[str, str]) -> dict[str, str]:
