@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import atexit
 import socket
+from concurrent.futures import ThreadPoolExecutor
 from typing import Iterable, Sequence
 from urllib.parse import urlparse
 
@@ -14,6 +16,10 @@ from src.utils.logging import get_logger
 from src.utils.time_utils import is_in_pause_period
 
 logger = get_logger("network_decision", side="BACKEND")
+
+# 复用模块级线程池，避免每次调用都创建/销毁线程
+_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="net_check")
+atexit.register(_executor.shutdown, wait=False)
 
 
 # ── 公共 API：三个职责清晰的检查函数 ──
@@ -137,43 +143,43 @@ def is_network_available(
         len(portal_checks or ()),
     )
 
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from concurrent.futures import as_completed
 
     socket_ok = http_ok = portal_ok = True
 
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        futures = {}
-        if enable_tcp:
-            futures[pool.submit(
-                is_network_available_socket, test_sites=test_sites, timeout=timeout
-            )] = "tcp"
-        if enable_http:
-            futures[pool.submit(
-                is_network_available_http,
-                test_urls=urls_list,
-                timeout=max(timeout, 2.0),
-                follow_redirects=not enable_tcp,
-            )] = "http"
-        if enable_portal:
-            futures[pool.submit(
-                is_network_available_portal,
-                portal_checks=portal_checks,
-                timeout=max(timeout, 3.0),
-            )] = "portal"
+    pool = _executor
+    futures = {}
+    if enable_tcp:
+        futures[pool.submit(
+            is_network_available_socket, test_sites=test_sites, timeout=timeout
+        )] = "tcp"
+    if enable_http:
+        futures[pool.submit(
+            is_network_available_http,
+            test_urls=urls_list,
+            timeout=max(timeout, 2.0),
+            follow_redirects=not enable_tcp,
+        )] = "http"
+    if enable_portal:
+        futures[pool.submit(
+            is_network_available_portal,
+            portal_checks=portal_checks,
+            timeout=max(timeout, 3.0),
+        )] = "portal"
 
-        for future in as_completed(futures):
-            kind = futures[future]
-            try:
-                ok = future.result()
-            except Exception as exc:
-                logger.debug("检测 %s 异常: %s", kind, exc)
-                ok = False
-            if kind == "tcp":
-                socket_ok = ok
-            elif kind == "http":
-                http_ok = ok
-            elif kind == "portal":
-                portal_ok = ok
+    for future in as_completed(futures):
+        kind = futures[future]
+        try:
+            ok = future.result()
+        except Exception as exc:
+            logger.debug("检测 %s 异常: %s", kind, exc)
+            ok = False
+        if kind == "tcp":
+            socket_ok = ok
+        elif kind == "http":
+            http_ok = ok
+        elif kind == "portal":
+            portal_ok = ok
 
     result = (
         (socket_ok or not enable_tcp)

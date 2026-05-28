@@ -27,7 +27,7 @@ _ENC_PREFIX = "ENC:"
 
 _cached_raw_key: bytes | None = None
 _cached_fernet_key: bytes | None = None
-_decryption_failed: bool = False
+_decryption_failed = threading.Event()
 _key_lock = threading.Lock()
 
 
@@ -156,8 +156,7 @@ def decrypt_password(ciphertext: str) -> str:
         return _simple_deobfuscate(encrypted_data)
     except Exception:
         # 解密失败：可能是密钥变更，记录错误并抛出异常
-        global _decryption_failed
-        _decryption_failed = True
+        _decryption_failed.set()
         logger.error(
             "密码解密失败（可能是密钥变更或数据损坏），请在设置页面重新输入密码"
         )
@@ -171,13 +170,12 @@ def is_encrypted(value: str) -> bool:
 
 def has_decryption_error() -> bool:
     """检查是否有解密失败记录"""
-    return _decryption_failed
+    return _decryption_failed.is_set()
 
 
 def clear_decryption_error() -> None:
     """清除解密失败标记（重新输入密码后调用）"""
-    global _decryption_failed
-    _decryption_failed = False
+    _decryption_failed.clear()
 
 
 def mask_password(value: str) -> str:

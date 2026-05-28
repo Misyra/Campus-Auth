@@ -378,6 +378,16 @@ def _run_server(
 
     def _signal_handler(signum, _frame):
         _cleanup_pid()
+        try:
+            from src.playwright_worker import get_worker
+            get_worker().stop(timeout=3)
+        except Exception:
+            pass
+        try:
+            from src.playwright_worker import cleanup_orphan_browsers
+            cleanup_orphan_browsers()
+        except Exception:
+            pass
         os._exit(0)
 
     signal.signal(signal.SIGINT, _signal_handler)

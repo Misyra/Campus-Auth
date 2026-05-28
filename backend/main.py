@@ -64,6 +64,15 @@ async def lifespan(app_instance):
     except Exception as exc:
         startup_logger.warning("配置迁移失败: %s", exc)
 
+    # 检查 cryptography 库是否可用
+    try:
+        import cryptography  # noqa: F401
+    except ImportError:
+        startup_logger.warning(
+            "cryptography 库未安装，密码仅使用 Base64 编码存储（非加密），"
+            "建议安装: pip install cryptography"
+        )
+
     await services.startup()
 
     startup_logger.info(
@@ -174,11 +183,12 @@ async def websocket_logs(websocket: WebSocket):
                 msg = json.loads(raw)
                 if msg.get("type") == "frontend_log":
                     d = msg.get("data", {})
-                    message_text = d.get("message", "")
+                    message_text = str(d.get("message", ""))[:10000]
+                    scope = str(d.get("scope", "?"))[:200]
                     if message_text:
                         monitor_svc._push_log(
-                            message=f"[{d.get('scope', '?')}] {message_text}",
-                            level=d.get("level", "INFO"),
+                            message=f"[{scope}] {message_text}",
+                            level=str(d.get("level", "INFO"))[:20],
                             source="frontend",
                         )
             except (json.JSONDecodeError, KeyError):

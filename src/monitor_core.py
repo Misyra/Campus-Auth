@@ -353,8 +353,8 @@ class NetworkMonitorCore:
             # 3. 执行登录
             self.status_detail = "网络异常：正在登录"
             login_ok, login_msg = self.attempt_login()
-            time.sleep(2)  # 保持与现有行为一致：等待 2s 后再做重试决策，
-            # 避免在 Portal 尚未完全更新会话状态时立即重试
+            # 等待 2s 后再做重试决策，避免 Portal 尚未完全更新会话状态时立即重试
+            self._stop_event.wait(timeout=2)
 
             if login_ok:
                 self.login_attempt_count = 0

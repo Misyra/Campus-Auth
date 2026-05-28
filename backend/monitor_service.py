@@ -16,7 +16,7 @@ from typing import Any
 
 from typing import TYPE_CHECKING
 
-from src.monitor_core import NetworkMonitorCore
+from src.monitor_core import NetworkMonitorCore, NetworkState
 
 if TYPE_CHECKING:
     from fastapi import WebSocket
@@ -107,6 +107,7 @@ class MonitorService:
         # 使用 Lock 保护 check-then-set 操作，避免竞态条件
         self._login_in_progress: bool = False
         self._login_lock: threading.Lock = threading.Lock()
+        self._pure_mode_lock: threading.Lock = threading.Lock()
 
         # Start queue consumer daemon thread
         self._consumer_thread = threading.Thread(
@@ -139,6 +140,8 @@ class MonitorService:
                     self._handle_reload(cmd)
                 elif cmd.type == "profile_switch":
                     self._handle_profile_switch(cmd)
+                elif cmd.type == "profile_reload":
+                    self._handle_profile_reload(cmd)
                 elif cmd.type == "shutdown":
                     self._handle_stop()
                     break
@@ -225,6 +228,8 @@ class MonitorService:
                 config.get("username", "?"), config.get("auth_url", "?"),
             )
             cmd.response_data = (False, str(exc))
+        finally:
+            self._login_in_progress = False
 
         if cmd.response_event:
             cmd.response_event.set()
@@ -266,6 +271,30 @@ class MonitorService:
             "监控已按新方案重启", level="INFO", source="backend.monitor_service"
         )
         self._update_status_snapshot()
+
+    def _handle_profile_reload(self, cmd: MonitorCommand) -> None:
+        """自动切换方案后重载配置（仅在消费者线程中调用）。"""
+        profile_name = cmd.data.get("profile_name", "")
+        # 直接在消费者线程中重载配置（不通过队列，避免递归入队）
+        self._ui_config = load_ui_config(self._profile_service)
+        self._runtime_config = build_runtime_config(
+            load_runtime_config(self._profile_service),
+            self._profile_service.load().system,
+        )
+        if self._monitor_core and self._monitor_core.monitoring:
+            self._cmd_queue.put(
+                MonitorCommand(
+                    type="reload",
+                    data={"config": self._runtime_config.copy()},
+                )
+            )
+        new_url = self._runtime_config.get("auth_url", "")
+        new_user = self._runtime_config.get("username", "")
+        self._push_log(
+            f"自动切换方案 → {profile_name} (认证={new_url}, 用户={new_user})",
+            level="INFO",
+            source="backend.monitor_service",
+        )
 
     # ── 日志 / 状态快照桥接 ──
 
@@ -481,13 +510,11 @@ class MonitorService:
 
     def _on_profile_switch(self, profile_name: str) -> None:
         """自动切换方案时的回调（从监控线程调用）。"""
-        self.reload_config()
-        new_url = self._runtime_config.get("auth_url", "")
-        new_user = self._runtime_config.get("username", "")
-        self._push_log(
-            f"自动切换方案 → {profile_name} (认证={new_url}, 用户={new_user})",
-            level="INFO",
-            source="backend.monitor_service",
+        self._cmd_queue.put(
+            MonitorCommand(
+                type="profile_reload",
+                data={"profile_name": profile_name},
+            )
         )
 
     def stop_monitoring(self) -> tuple[bool, str]:
@@ -557,30 +584,30 @@ class MonitorService:
                 response_event=threading.Event(),
             )
             self._cmd_queue.put(cmd)
+        except Exception:
+            self._login_in_progress = False
+            raise
 
-            # Wait for consumer to execute login (with timeout)
-            login_timeout = getattr(self._ui_config, "login_timeout", 120)
-            cmd.response_event.wait(timeout=login_timeout)
+        # Wait for consumer to execute login (with timeout)
+        login_timeout = getattr(self._ui_config, "login_timeout", 120)
+        cmd.response_event.wait(timeout=login_timeout)
 
-            if cmd.response_data is None:
-                return False, "手动登录超时"
+        if cmd.response_data is None:
+            return False, "手动登录超时"
 
-            success, message = cmd.response_data
-            if success:
-                # Sync status to running monitor core if active
-                core = self._monitor_core
-                if core is not None and core.monitoring:
-                    core.last_network_ok = True
-                self._update_status_snapshot()
-                service_logger.info("Manual login succeeded")
-                return True, f"手动登录成功：{message}"
+        success, message = cmd.response_data
+        if success:
+            # Sync status to running monitor core if active
+            core = self._monitor_core
+            if core is not None and core.monitoring:
+                core.network_state = NetworkState.CONNECTED
+            self._update_status_snapshot()
+            service_logger.info("Manual login succeeded")
+            return True, f"手动登录成功：{message}"
 
-            log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
-            service_logger.warning("Manual login failed: %s", log_msg)
-            return False, f"手动登录失败：{message}"
-        finally:
-            with self._login_lock:
-                self._login_in_progress = False
+        log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
+        service_logger.warning("Manual login failed: %s", log_msg)
+        return False, f"手动登录失败：{message}"
 
     def test_network(self) -> tuple[bool, str]:
         service_logger.info("手动网络测试")
@@ -633,7 +660,7 @@ class MonitorService:
 
     def toggle_pure_mode(self) -> bool:
         """切换纯净模式，返回新值"""
-        with self._login_lock:
+        with self._pure_mode_lock:
             new_value = not self.pure_mode
             data = self._profile_service.load()
             data.system.pure_mode = new_value

@@ -130,6 +130,11 @@ export const taskMethods = {
       this.toastOnly(false, '请输入任务ID');
       return;
     }
+    if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(this.editingTask.id)) {
+      this.frontendLogger.warn('tasks', '保存任务被拒绝: ID 格式无效');
+      this.toastOnly(false, '任务ID必须以字母开头，且只能包含字母、数字和下划线');
+      return;
+    }
     let config;
     try {
       config = JSON.parse(this.editingTask.json);
@@ -440,6 +445,10 @@ export const taskMethods = {
   },
 
   async confirmRepoImport(task) {
+    if (this._repoDisclaimerTimer) {
+      clearInterval(this._repoDisclaimerTimer);
+      this._repoDisclaimerTimer = null;
+    }
     this.repoImport.disclaimer = task;
     this.repoImport.disclaimerCountdown = 3;
     const timer = setInterval(() => {

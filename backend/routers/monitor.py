@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.utils.logging import get_logger
@@ -48,10 +50,10 @@ def stop_monitoring(
 
 
 @router.post("/api/actions/login", response_model=ActionResponse)
-def manual_login(
+async def manual_login(
     svc: MonitorService = Depends(get_monitor_service),
 ) -> ActionResponse:
-    ok, message = svc.run_manual_login()
+    ok, message = await asyncio.to_thread(svc.run_manual_login)
     api_logger.info("Manual login requested -> success=%s, message=%s", ok, message)
     return ActionResponse(success=ok, message=message)
 

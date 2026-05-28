@@ -139,6 +139,11 @@ def shutdown_server(
         except Exception:
             api_logger.debug("关闭 PlaywrightWorker 失败", exc_info=True)
         try:
+            from src.playwright_worker import cleanup_orphan_browsers
+            cleanup_orphan_browsers()
+        except Exception:
+            api_logger.debug("清理孤儿浏览器失败", exc_info=True)
+        try:
             (Path.home() / ".campus_network_auth" / "campus_network_auth.pid").unlink(missing_ok=True)
         except Exception:
             api_logger.debug("PID 文件清理失败", exc_info=True)

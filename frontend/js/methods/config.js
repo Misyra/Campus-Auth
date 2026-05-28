@@ -65,7 +65,7 @@ export const configMethods = {
   },
   resetConfig() {
     if (!confirm('确定要恢复默认设置吗？当前修改将丢失。')) return;
-    this.config = { ...DEFAULT_CONFIG };
+    this.config = structuredClone(DEFAULT_CONFIG);
     this.savedConfigSnapshot = JSON.stringify(this.config);
     this.frontendLogger.info('config', '已恢复默认设置，请点击保存以生效');
   },
@@ -99,6 +99,7 @@ export const configMethods = {
   },
   async restoreBackup(filename) {
     if (!confirm(`确定要从 ${filename} 恢复配置吗？当前配置将被覆盖。`)) return;
+    await this.createBackup();
     try {
       const { data } = await this.$api.post(`/api/backup/restore/${filename}`);
       if (data.success) {
