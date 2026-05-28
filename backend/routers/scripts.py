@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from src.script_runner import ScriptRunner
@@ -61,7 +63,7 @@ def delete_script(
 
 
 @router.post("/api/scripts/{task_id}/run", response_model=ActionResponse)
-def run_script(
+async def run_script(
     request: Request,
     task_id: str,
     task_svc: TaskService = Depends(get_task_service),
@@ -82,11 +84,21 @@ def run_script(
         env_vars = build_login_env_vars(
             runtime_config, None, runtime_config.get("custom_variables", {})
         )
-    except Exception:
-        env_vars = {}
+    except Exception as exc:
+        api_logger.warning("获取运行时配置失败: %s", exc)
+        return ActionResponse(success=False, message=f"获取配置失败: {exc}")
 
-    runner = ScriptRunner(script_path, timeout=60)
-    success, message = runner.run(env_vars)
+    # 从配置读取脚本超时，默认 60 秒
+    try:
+        timeout = runtime_config.get("monitor", {}).get("script_timeout", 60)
+    except Exception:
+        timeout = 60
+
+    runner = ScriptRunner(script_path, timeout=timeout)
+
+    # 在线程池中执行，避免阻塞事件循环
+    loop = asyncio.get_running_loop()
+    success, message = await loop.run_in_executor(None, runner.run, env_vars)
 
     api_logger.info("Run script %s -> success=%s, message=%s", task_id, success, message)
     return ActionResponse(success=success, message=message)
