@@ -4,6 +4,7 @@ import os
 import sys
 import threading
 import time
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
@@ -313,3 +314,41 @@ class LogConfigCenter:
             root.info("=" * 54)
         except Exception as e:
             root.warning("无法启用文件日志 %s: %s", log_dir, e)
+
+
+class WebSocketLogHandler(logging.Handler):
+    """将 Python 日志记录转发到 WebSocket 广播队列，使前端能显示完整后端日志。
+
+    用法：
+        handler = WebSocketLogHandler(broadcast_queue)
+        logging.getLogger().addHandler(handler)
+    """
+
+    # 不转发这些 logger 的日志，避免回声或与 _push_log 重复
+    _EXCLUDED_LOGGERS = frozenset({
+        "backend.ws_manager",
+        "backend.monitor_service",
+    })
+
+    def __init__(self, broadcast_queue: deque[dict]):
+        super().__init__()
+        self._queue = broadcast_queue
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if record.name in self._EXCLUDED_LOGGERS:
+            return
+        try:
+            msg = self.format(record)
+            stamp = datetime.fromtimestamp(record.created).strftime("%Y-%m-%d %H:%M:%S")
+            side = getattr(record, "side", "BACKEND")
+            self._queue.append({
+                "type": "log",
+                "data": {
+                    "timestamp": stamp,
+                    "level": record.levelname,
+                    "source": f"{side}.{record.name}",
+                    "message": msg,
+                },
+            })
+        except Exception:
+            self.handleError(record)
