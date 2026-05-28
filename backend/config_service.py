@@ -85,6 +85,7 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
     pld["active_task"] = ""
     pld["use_global_credentials"] = True
     pld["network_targets"] = _normalize_targets(global_profile.network_targets)
+    pld["http_targets"] = _normalize_targets(getattr(global_profile, "http_targets", ""))
     pld["backend_log_level"] = _normalize_level(sys_cfg.backend_log_level)
     pld["frontend_log_level"] = _normalize_level(sys_cfg.frontend_log_level)
 
@@ -177,6 +178,7 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
     )
 
     pld["network_targets"] = _normalize_targets(pld.get("network_targets", ""))
+    pld["http_targets"] = _normalize_targets(pld.get("http_targets", ""))
     pld["backend_log_level"] = _normalize_level(sys_cfg.backend_log_level)
     pld["frontend_log_level"] = _normalize_level(sys_cfg.frontend_log_level)
 
@@ -246,7 +248,14 @@ def build_runtime_config(
     ]
     monitor["enable_tcp_check"] = payload.enable_tcp_check
     monitor["enable_http_check"] = payload.enable_http_check
+    monitor["enable_local_check"] = payload.enable_local_check
+    monitor["test_urls"] = [
+        item.strip() for item in payload.http_targets.split(",") if item.strip()
+    ]
     monitor["check_auth_url"] = payload.check_auth_url
+    monitor["auth_url_targets"] = [
+        item.strip() for item in payload.auth_url_targets.split(",") if item.strip()
+    ]
     # 解析 portal 检测 URL 列表
     portal_entries = []
     for line in payload.portal_check_urls.splitlines():
@@ -368,7 +377,9 @@ def save_config_combined(
                 "pause_end_hour",
                 "enable_tcp_check",
                 "enable_http_check",
+                "enable_local_check",
                 "check_auth_url",
+                "auth_url_targets",
                 "portal_check_urls",
                 "stealth_mode",
                 "stealth_custom_script",
@@ -384,6 +395,7 @@ def save_config_combined(
         glob.browser_locale = payload.browser_locale.strip()  # 浏览器语言区域
         glob.browser_timezone = payload.browser_timezone.strip()  # 浏览器时区 ID
         glob.network_targets = _normalize_targets(payload.network_targets)
+        glob.http_targets = _normalize_targets(payload.http_targets)
 
     # 活动方案保持不变 —— 设置页面不修改方案独立配置
 

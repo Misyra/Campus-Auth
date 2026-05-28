@@ -7,8 +7,8 @@ import time
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
-from .network_decision import is_auth_url_reachable, should_attempt_login
-from .network_probes import is_local_network_connected, set_block_proxy
+from .network_decision import check_login_prerequisites, check_network_status, check_pause
+from .network_probes import set_block_proxy
 from .utils import (
     LoginAttemptHandler,
     get_runtime_stats,
@@ -166,11 +166,23 @@ class NetworkMonitorCore:
             isp = self.config.get("isp", "无") or "无"
             set_block_proxy(self.config.get("block_proxy", True))
             test_sites_info = self._get_test_sites()
-            targets_str = ", ".join(f"{h}:{p}" for h, p in test_sites_info)
+
+            # 构建检测方式摘要
+            monitor_cfg = self.config.get("monitor", {})
+            modes = []
+            if monitor_cfg.get("enable_tcp_check", True):
+                modes.append(f"TCP({len(test_sites_info)})")
+            if monitor_cfg.get("enable_http_check", True):
+                http_urls = monitor_cfg.get("test_urls", [])
+                modes.append(f"HTTP({len(http_urls)})")
+            portal_checks = monitor_cfg.get("portal_check_urls")
+            if portal_checks:
+                modes.append(f"Portal({len(portal_checks)})")
+            modes_str = " + ".join(modes) if modes else "无"
 
             self.log_message(
                 f"{'=' * self.LOG_DIVIDER_LENGTH}\n"
-                f"网络监控已启动 | 检测间隔: {interval}s | 目标: {targets_str}\n"
+                f"网络监控已启动 | 检测间隔: {interval}s | 方式: {modes_str}\n"
                 f"认证地址: {auth_url} | 账号: {username} | 运营商: {isp}\n"
                 f"{'=' * self.LOG_DIVIDER_LENGTH}"
             )
@@ -284,49 +296,40 @@ class NetworkMonitorCore:
     def _login_recovery_loop(self) -> str:
         """登录恢复内层循环。
 
-        在外层检测到网络异常后调用，只做登录重试，不做网络检测。
-        使用 is_local_network_connected() 做快速物理连接检查（~10ms）。
+        在外层检测到网络异常后调用，执行登录前置检查 + 登录重试。
+        不做网络状态检测（TCP/HTTP/Portal），确保 retry 间隔准确。
 
         Returns:
             "login_ok"         — 登录成功，外层应重置计数器
             "give_up"          — 超过最大重试次数，外层应等待正常检测间隔
             "break"            — 监控已停止
             "net_disconnect"   — 物理网络断开，外层应等待正常检测间隔
-
-        Design rationale:
-        方法是独立循环而非内联在 monitor_network() 中的原因：
-        原设计是在 monitor_network() 的单层 while 循环中通过 continue 回绕到
-        循环顶部，导致每次 retry 都重新执行 is_network_available()（TCP 检测
-        耗时 2-8s），使配置的 retry_interval（如 5s）实际被拉长到 12-20s。
-        提取为独立方法后，内层只做快速物理连接检查（is_local_network_connected,
-        ~10ms）+ 登录重试，不做 is_network_available()，确保 retry 间隔准确。
         """
         while self.monitoring:
             # 缓存本轮迭代的重试配置（避免循环内重复调用 _get_retry_config）
             max_retries, retry_intervals = self._get_retry_config()
 
-            # 1. 快速检查物理网络连接（~10ms，非 TCP 检测）
-            if not is_local_network_connected():
-                self.log_message(
-                    "物理网络未连接，停止重试，等待下次检测周期",
-                    logging.WARNING,
-                )
-                self.login_attempt_count = 0
-                self.network_state = NetworkState.DISCONNECTED
-                return RecoveryResult.NET_DISCONNECT
+            # 1. 登录前置检查（物理网络 + 认证地址）
+            prereq_ok, prereq_reason = check_login_prerequisites(self.config)
+            if not prereq_ok:
+                if prereq_reason == "local_disconnected":
+                    self.log_message(
+                        "物理网络未连接，停止重试，等待下次检测周期",
+                        logging.WARNING,
+                    )
+                    self.login_attempt_count = 0
+                    self.network_state = NetworkState.DISCONNECTED
+                    return RecoveryResult.NET_DISCONNECT
+                elif prereq_reason == "auth_url_unreachable":
+                    self.log_message(
+                        f"认证地址 {self.config.get('auth_url', '?')} 不可达，等待下次检测周期",
+                        logging.WARNING,
+                    )
+                    self.status_detail = "网络异常：认证地址不可达"
+                    return RecoveryResult.GIVE_UP
 
             # 2. 检查配置方案是否切换（内部有 60s 冷却）
             self._check_profile_switch()
-
-            # 2.5 前置检查认证地址可达性，避免无效的浏览器启动
-            check_auth_url = self.config.get("monitor", {}).get("check_auth_url", True)
-            if check_auth_url and not is_auth_url_reachable(self.config.get("auth_url", "")):
-                self.log_message(
-                    f"认证地址 {self.config.get('auth_url', '?')} 不可达，等待下次检测周期",
-                    logging.WARNING,
-                )
-                self.status_detail = "网络异常：认证地址不可达"
-                return RecoveryResult.GIVE_UP
 
             # 2.6 检查是否还有重试机会（登录前检查，避免多执行一次）
             if self.login_attempt_count >= max_retries:
@@ -410,41 +413,37 @@ class NetworkMonitorCore:
             targets_str = ", ".join(f"{h}:{p}" for h, p in test_sites)
             self.log_message(f"[#{self.network_check_count}] 网络检测 → {targets_str}")
 
-            should_login, reason = should_attempt_login(self.config)
-            if not should_login:
-                if reason == "pause_period":
-                    pause_config = self.config.get("pause_login", {})
-                    start_hour = pause_config.get("start_hour", 0)
-                    end_hour = pause_config.get("end_hour", 6)
-                    self.status_detail = f"网络异常：暂停时段（{start_hour}:00-{end_hour}:00）"
-                    self.log_message(
-                        f"暂停时段 ({start_hour}:00-{end_hour}:00)，跳过检测",
-                        logging.INFO,
-                    )
-                    if not self._wait_interruptible(
-                        self.PAUSE_CHECK_INTERVAL_SECONDS,
-                        step=self.PAUSE_CHECK_STEP_SECONDS,
-                    ):
-                        break
-                    continue
-                elif reason == "network_ok":
-                    self.login_attempt_count = 0
-                    self.network_state = NetworkState.CONNECTED
-                    self.status_detail = "网络正常"
-                    self.log_message(
-                        f"[#{self.network_check_count}] 网络正常，无需登录", logging.INFO
-                    )
-                elif reason == "network_disconnected":
-                    self.status_detail = "网络异常：物理网络断开"
-                    self.log_message(
-                        f"[#{self.network_check_count}] 物理网络未连接（WiFi/网线断开），跳过登录，等待下次检测",
-                        logging.WARNING,
-                    )
-                    self.login_attempt_count = 0
-                    self.network_state = NetworkState.DISCONNECTED
-                # fall through to interval wait
+            # 1. 暂停时段检查
+            is_paused, _ = check_pause(self.config)
+            if is_paused:
+                pause_config = self.config.get("pause_login", {})
+                start_hour = pause_config.get("start_hour", 0)
+                end_hour = pause_config.get("end_hour", 6)
+                self.status_detail = f"网络异常：暂停时段（{start_hour}:00-{end_hour}:00）"
+                self.log_message(
+                    f"暂停时段 ({start_hour}:00-{end_hour}:00)，跳过检测",
+                    logging.INFO,
+                )
+                if not self._wait_interruptible(
+                    self.PAUSE_CHECK_INTERVAL_SECONDS,
+                    step=self.PAUSE_CHECK_STEP_SECONDS,
+                ):
+                    break
+                continue
+
+            # 2. 网络状态检测 (TCP/HTTP/Portal)
+            net_ok, net_reason = check_network_status(self.config)
+            if net_ok:
+                self.login_attempt_count = 0
+                self.network_state = NetworkState.CONNECTED
+                self.status_detail = "网络正常"
+                self.log_message(
+                    f"[#{self.network_check_count}] 网络正常，无需登录", logging.INFO
+                )
+            elif net_reason == "all_disabled":
+                self.log_message("所有网络检测均未启用，跳过", logging.WARNING)
             else:
-                # 执行登录（网络不可用但可以尝试认证）
+                # 3. 网络异常，进入登录恢复
                 self.status_detail = "网络异常：正在登录"
                 recovery_result = self._login_recovery_loop()
                 if recovery_result == RecoveryResult.LOGIN_OK:

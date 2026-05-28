@@ -16,6 +16,102 @@ from src.utils.time_utils import is_in_pause_period
 logger = get_logger("network_decision", side="BACKEND")
 
 
+# ── 公共 API：三个职责清晰的检查函数 ──
+
+
+def check_pause(config: dict) -> tuple[bool, str]:
+    """暂停时段检查。
+
+    Returns:
+        (True, "pause_period") — 当前处于暂停时段，应跳过检测
+        (False, "")            — 不在暂停时段，可以继续
+    """
+    pause_config = config.get("pause_login", {})
+    if is_in_pause_period(pause_config):
+        logger.info("暂停时段，跳过检测 (配置: %s)", pause_config)
+        return (True, "pause_period")
+    return (False, "")
+
+
+def check_network_status(config: dict) -> tuple[bool, str]:
+    """网络状态检测 (TCP / HTTP / Captive Portal)。
+
+    仅做网络连通性检测，不做物理网络检查和认证地址检查。
+    由监控循环调用，决定是否需要触发登录。
+
+    Returns:
+        (True, "network_ok")      — 网络正常，无需登录
+        (False, "all_disabled")   — 所有检测方式均未启用
+        (False, "network_down")   — 网络异常，应触发登录
+    """
+    monitor_config = config.get("monitor", {})
+    enable_tcp = monitor_config.get("enable_tcp_check", True)
+    enable_http = monitor_config.get("enable_http_check", True)
+    portal_checks = monitor_config.get("portal_check_urls", None)
+    enable_portal = bool(portal_checks)
+
+    # 所有检测都未启用
+    if not enable_tcp and not enable_http and not enable_portal:
+        logger.warning("所有网络检测均未启用（TCP/HTTP/Portal），请在设置中启用至少一种")
+        return (False, "all_disabled")
+
+    test_sites = monitor_config.get("ping_targets", None)
+    if test_sites and isinstance(test_sites[0], str):
+        from src.utils.network_helpers import parse_host_port
+        try:
+            test_sites = parse_host_port(test_sites)
+        except ValueError:
+            logger.warning("ping_targets 配置格式错误，跳过 TCP 检测")
+            test_sites = None
+
+    test_urls = monitor_config.get("test_urls", None)
+
+    ok = is_network_available(
+        test_sites=test_sites,
+        test_urls=test_urls,
+        timeout=monitor_config.get("network_check_timeout", 1.5),
+        enable_tcp=enable_tcp,
+        enable_http=enable_http,
+        portal_checks=portal_checks,
+    )
+
+    if ok:
+        return (True, "network_ok")
+    return (False, "network_down")
+
+
+def check_login_prerequisites(config: dict) -> tuple[bool, str]:
+    """登录前置检查：物理网络 + 认证地址可达性。
+
+    在确定网络异常、准备登录之前调用，避免无效的浏览器启动。
+
+    Returns:
+        (True, "")                        — 前置条件满足，可以登录
+        (False, "local_disconnected")     — 物理网络未连接
+        (False, "auth_url_unreachable")   — 认证地址不可达
+    """
+    monitor_config = config.get("monitor", {})
+
+    # 物理网络连接检查
+    if monitor_config.get("enable_local_check", True):
+        if not is_local_network_connected():
+            logger.warning("物理网络未连接，跳过登录")
+            return (False, "local_disconnected")
+
+    # 认证地址可达性检查
+    if monitor_config.get("check_auth_url", True):
+        auth_url = config.get("auth_url", "")
+        extra_targets = monitor_config.get("auth_url_targets")
+        if not _is_auth_url_reachable(auth_url, extra_targets=extra_targets):
+            logger.info("认证地址不可达，跳过登录")
+            return (False, "auth_url_unreachable")
+
+    return (True, "")
+
+
+# ── 内部实现 ──
+
+
 def is_network_available(
     test_sites: Sequence[tuple[str, int]] | None = None,
     test_urls: Iterable[str] | None = None,
@@ -23,18 +119,11 @@ def is_network_available(
     enable_tcp: bool = True,
     enable_http: bool = True,
     portal_checks: Sequence[tuple[str, str]] | None = None,
-    skip_local_check: bool = False,
 ) -> bool:
-    # 物理网络预检查：无实际连接时直接跳过，避免徒增功耗
-    if not skip_local_check and not is_local_network_connected():
-        logger.warning("物理网络未连接，跳过 TCP/HTTP 检测")
-        return False
-
+    """底层网络状态检测，不包含物理网络检查。"""
     enable_portal = bool(portal_checks)
 
-    # 所有检测都未启用时，视为网络正常（不做额外判断）
     if not enable_tcp and not enable_http and not enable_portal:
-        logger.warning("所有网络检测均未启用（TCP/HTTP/Captive Portal），请在设置中启用至少一种检测方式")
         return True
 
     urls_list = list(test_urls or ())
@@ -48,7 +137,6 @@ def is_network_available(
         len(portal_checks or ()),
     )
 
-    # 所有启用的检测并发执行，降低总检测延时
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     socket_ok = http_ok = portal_ok = True
@@ -87,7 +175,6 @@ def is_network_available(
             elif kind == "portal":
                 portal_ok = ok
 
-    # 所有启用的检测必须都通过才判定网络正常
     result = (
         (socket_ok or not enable_tcp)
         and (http_ok or not enable_http)
@@ -96,97 +183,71 @@ def is_network_available(
 
     logger.info(
         "网络检测完成: TCP=%s HTTP=%s Portal=%s → %s",
-        "通" if socket_ok else ("关" if not enable_tcp else "断"),
-        "通" if http_ok else ("关" if not enable_http else "断"),
-        "通" if portal_ok else ("关" if not enable_portal else "断"),
+        "关" if not enable_tcp else ("通" if socket_ok else "断"),
+        "关" if not enable_http else ("通" if http_ok else "断"),
+        "关" if not enable_portal else ("通" if portal_ok else "断"),
         "网络正常" if result else "网络异常",
     )
     return result
 
 
-def is_auth_url_reachable(auth_url: str) -> bool:
-    """检查认证地址的 TCP 可达性。
+def _is_auth_url_reachable(
+    auth_url: str,
+    extra_targets: Sequence[str] | None = None,
+) -> bool:
+    """检查认证地址及附加目标的 TCP 可达性。
 
-    返回 False 时表示认证地址不可达，应跳过登录尝试。
-    无认证地址配置时返回 True（兼容模式）。
+    有自定义目标时只检测自定义目标，否则检测认证地址本身。
+    任一目标可达即返回 True。
     """
-    if not auth_url:
+    if not auth_url and not extra_targets:
         return True
 
-    try:
-        parsed = urlparse(auth_url)
-        host = parsed.hostname
-        port = parsed.port or (443 if parsed.scheme == "https" else 80)
-        if not host:
-            return True
-        with socket.create_connection((host, port), timeout=3):
-            pass
-        return True
-    except Exception as exc:
-        logger.debug("认证地址不可达 %s: %s", auth_url, exc)
-        return False
+    def _check_host_port(host: str, port: int, label: str) -> bool:
+        try:
+            with socket.create_connection((host, port), timeout=3):
+                logger.debug("认证可达性检测通过: %s", label)
+                return True
+        except Exception as exc:
+            logger.debug("认证可达性检测失败: %s — %s", label, exc)
+            return False
 
-
-def should_attempt_login(config: dict) -> tuple[bool, str]:
-    """判断网络是否异常、是否需要尝试登录。
-
-    仅检查网络连通性，不检查认证地址可达性（认证地址检查在登录前进行）。
-
-    返回 (should_login, reason) 元组：
-        (False, "pause_period")          — 当前处于暂停时段
-        (False, "network_disconnected")  — 物理网络未连接
-        (False, "network_ok")            — 网络正常，无需登录
-        (True, "")                       — 网络异常，可以尝试登录
-    """
-    # 1. 暂停时段检查
-    pause_config = config.get("pause_login", {})
-    if is_in_pause_period(pause_config):
-        logger.info("暂停时段，跳过登录 (配置: %s)", pause_config)
-        return (False, "pause_period")
-
-    # 2. 物理网络检查
-    if not is_local_network_connected():
-        logger.warning("物理网络未连接，跳过登录")
-        return (False, "network_disconnected")
-
-    # 3. 网络可用性检查（根据配置选择检测方式）
-    monitor_config = config.get("monitor", {})
-    enable_tcp = monitor_config.get("enable_tcp_check", True)
-    enable_http = monitor_config.get("enable_http_check", True)
-    test_sites = monitor_config.get("ping_targets", None)
-    # ping_targets 是 list[str]，需要转为 list[tuple[str, int]]
-    if test_sites and isinstance(test_sites[0], str):
+    if extra_targets:
         from src.utils.network_helpers import parse_host_port
         try:
-            test_sites = parse_host_port(test_sites)
+            targets = parse_host_port(list(extra_targets))
         except ValueError:
-            logger.warning("ping_targets 配置格式错误，跳过 TCP 检测")
-            test_sites = None
-    test_urls = monitor_config.get("test_urls", None)
+            logger.warning("auth_url_targets 格式错误，跳过附加目标检测")
+            targets = []
+        for host, port in targets:
+            if _check_host_port(host, port, f"{host}:{port}"):
+                return True
+        logger.info("自定义检测目标均不可达")
+        return False
 
-    if is_network_available(
-        test_sites=test_sites,
-        test_urls=test_urls,
-        timeout=monitor_config.get("network_check_timeout", 1.5),
-        enable_tcp=enable_tcp,
-        enable_http=enable_http,
-        portal_checks=monitor_config.get("portal_check_urls", None),
-        skip_local_check=True,
-    ):
-        logger.info("网络正常，无需登录 (TCP=%s, HTTP=%s)", enable_tcp, enable_http)
-        return (False, "network_ok")
+    if auth_url:
+        try:
+            parsed = urlparse(auth_url)
+            host = parsed.hostname
+            if not host:
+                return True
+            port = parsed.port or (443 if parsed.scheme == "https" else 80)
+            if _check_host_port(host, port, auth_url):
+                return True
+        except Exception as exc:
+            logger.debug("认证地址解析失败 %s: %s", auth_url, exc)
 
-    # 4. 网络异常，可以尝试登录
-    logger.info("网络异常，准备登录")
-    return (True, "")
+    logger.info("认证地址不可达")
+    return False
 
 
 def check_campus_network_status() -> str:
+    """校园网状态检测（供 API 调用）。"""
     logger.info("正在检测校园网状态...")
 
     if not is_local_network_connected():
         result = "未检测到本地网络连接（未获取到有效IP）"
-    elif is_network_available(skip_local_check=True):
+    elif is_network_available():
         result = "已连接校园网并可访问互联网"
     else:
         result = "已连接校园网，但无法访问互联网，需要认证"

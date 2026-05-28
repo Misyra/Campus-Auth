@@ -109,10 +109,22 @@ class _MonitorFieldsMixin(_ClampMixin):
     network_targets: str = Field(
         default="8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
     )
+    http_targets: str = Field(
+        default="https://www.baidu.com,https://www.qq.com",
+        description="HTTP 检测目标地址，逗号分隔",
+    )
     enable_tcp_check: bool = Field(default=True, description="启用 TCP 检测网络连通性")
     enable_http_check: bool = Field(default=True, description="启用 HTTP 检测网络连通性")
+    enable_local_check: bool = Field(
+        default=True,
+        description="物理网络连接检查：未连接 WiFi/网线时跳过登录",
+    )
     check_auth_url: bool = Field(
         default=True, description="登录前检测认证地址是否可达，不可达则跳过登录"
+    )
+    auth_url_targets: str = Field(
+        default="",
+        description="认证地址可达性附加检测目标，逗号分隔的 host:port，留空则仅检测认证地址本身",
     )
     portal_check_urls: str = Field(
         default="http://captive.apple.com/hotspot-detect.html|Success\n"

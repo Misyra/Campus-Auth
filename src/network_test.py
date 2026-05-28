@@ -8,9 +8,10 @@ from src.network_probes import (
 )
 from src.network_decision import (
     check_campus_network_status,
-    is_auth_url_reachable,
+    check_login_prerequisites,
+    check_network_status,
+    check_pause,
     is_network_available,
-    should_attempt_login,
 )
 
 __all__ = [
@@ -20,7 +21,8 @@ __all__ = [
     "is_network_available_socket",
     "set_block_proxy",
     "check_campus_network_status",
-    "is_auth_url_reachable",
+    "check_login_prerequisites",
+    "check_network_status",
+    "check_pause",
     "is_network_available",
-    "should_attempt_login",
 ]

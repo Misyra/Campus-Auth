@@ -91,8 +91,8 @@ class TestAttemptLogin:
             mock_dt.datetime.now.return_value.minute = 0
 
             with patch(
-                "src.network_decision.should_attempt_login",
-                return_value=(False, "pause_period"),
+                "src.network_decision.check_pause",
+                return_value=(True, "pause_period"),
             ):
                 ok, msg = await handler.attempt_login(skip_pause_check=False)
                 assert ok is False
@@ -104,8 +104,14 @@ class TestAttemptLogin:
         handler = LoginAttemptHandler(config={})
 
         with patch(
-            "src.network_decision.should_attempt_login",
-            return_value=(False, "network_disconnected"),
+            "src.network_decision.check_pause",
+            return_value=(False, ""),
+        ), patch(
+            "src.network_decision.check_network_status",
+            return_value=(False, "network_down"),
+        ), patch(
+            "src.network_decision.check_login_prerequisites",
+            return_value=(False, "local_disconnected"),
         ):
             ok, msg = await handler.attempt_login(skip_pause_check=False)
             assert ok is False
@@ -118,7 +124,13 @@ class TestAttemptLogin:
         handler = LoginAttemptHandler(config=config)
 
         with patch(
-            "src.network_decision.should_attempt_login",
+            "src.network_decision.check_pause",
+            return_value=(False, ""),
+        ), patch(
+            "src.network_decision.check_network_status",
+            return_value=(False, "network_down"),
+        ), patch(
+            "src.network_decision.check_login_prerequisites",
             return_value=(False, "auth_url_unreachable"),
         ):
             ok, msg = await handler.attempt_login(skip_pause_check=False)
@@ -131,8 +143,11 @@ class TestAttemptLogin:
         handler = LoginAttemptHandler(config={})
 
         with patch(
-            "src.network_decision.should_attempt_login",
-            return_value=(False, "network_ok"),
+            "src.network_decision.check_pause",
+            return_value=(False, ""),
+        ), patch(
+            "src.network_decision.check_network_status",
+            return_value=(True, "network_ok"),
         ):
             ok, msg = await handler.attempt_login(skip_pause_check=False)
             assert ok is False
@@ -146,8 +161,14 @@ class TestAttemptLogin:
         handler = LoginAttemptHandler(config={}, cancel_event=event)
 
         with patch(
-            "src.network_decision.should_attempt_login",
-            return_value=(True, "ok"),
+            "src.network_decision.check_pause",
+            return_value=(False, ""),
+        ), patch(
+            "src.network_decision.check_network_status",
+            return_value=(False, "network_down"),
+        ), patch(
+            "src.network_decision.check_login_prerequisites",
+            return_value=(True, ""),
         ):
             ok, msg = await handler.attempt_login(skip_pause_check=False)
             # 取消事件已设置，最终会返回取消或失败
@@ -172,7 +193,7 @@ class TestAttemptLogin:
         handler = LoginAttemptHandler(config={})
 
         with patch(
-            "src.network_decision.should_attempt_login",
+            "src.network_decision.check_pause",
             side_effect=RuntimeError("test error"),
         ):
             ok, msg = await handler.attempt_login(skip_pause_check=False)
