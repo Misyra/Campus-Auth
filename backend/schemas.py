@@ -4,7 +4,7 @@ import json
 import re
 
 from src.utils.platform_utils import get_default_ua
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 _URL_PATTERN = re.compile(r"^https?://")
@@ -27,7 +27,40 @@ _BROWSER_ARGS_DEFAULT = (
 # ── 共享字段 mixin（消除 MonitorConfigPayload 与 ProfileSettings 之间的重复） ──
 
 
-class _BrowserFieldsMixin(BaseModel):
+class _ClampMixin(BaseModel):
+    """自动将越界的数值字段钳制到合法范围，而非校验失败。"""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _clamp_numeric_fields(cls, data: dict) -> dict:
+        if not isinstance(data, dict):
+            return data
+        for name, field_info in cls.model_fields.items():
+            if name not in data:
+                continue
+            meta = field_info.metadata
+            if not meta:
+                continue
+            ge_val = le_val = None
+            for m in meta:
+                if hasattr(m, "ge") and m.ge is not None:
+                    ge_val = m.ge
+                if hasattr(m, "le") and m.le is not None:
+                    le_val = m.le
+            if ge_val is None and le_val is None:
+                continue
+            try:
+                v = int(data[name])
+            except (ValueError, TypeError):
+                continue
+            if ge_val is not None and v < ge_val:
+                data[name] = ge_val
+            elif le_val is not None and v > le_val:
+                data[name] = le_val
+        return data
+
+
+class _BrowserFieldsMixin(_ClampMixin):
     """浏览器相关共享字段"""
 
     headless: bool = True
@@ -61,7 +94,7 @@ class _BrowserFieldsMixin(BaseModel):
     )
 
 
-class _MonitorFieldsMixin(BaseModel):
+class _MonitorFieldsMixin(_ClampMixin):
     """监控与网络检测相关共享字段"""
 
     auth_url: str = Field(default="")
@@ -123,7 +156,7 @@ class _BrowserValidatorsMixin:
         return v
 
 
-class _SystemFieldsMixin(BaseModel):
+class _SystemFieldsMixin(_ClampMixin):
     """SystemSettings 与 MonitorConfigPayload 共享的系统配置字段"""
 
     username: str = Field(default="", description="全局校园网用户名")
