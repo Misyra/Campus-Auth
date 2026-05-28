@@ -15,7 +15,7 @@ from .profile_service import ProfileService
 from .task_service import TaskService
 from .ws_manager import WebSocketManager
 
-from src.utils.logging import get_logger
+from src.utils.logging import WebSocketLogHandler, get_logger
 
 container_logger = get_logger("backend.container", side="BACKEND")
 
@@ -51,6 +51,13 @@ class ServiceContainer:
         """启动服务。"""
         # 清理孤儿浏览器进程
         cleanup_orphan_browsers()
+
+        # 注册 WebSocket 日志处理器 — 将 Python 日志转发到前端
+        import logging
+        ws_handler = WebSocketLogHandler(self.monitor_service._ws_broadcast_queue)
+        ws_handler.setLevel(logging.DEBUG)
+        ws_handler.setFormatter(logging.Formatter("%(name)s | %(message)s"))
+        logging.getLogger().addHandler(ws_handler)
 
         # 启动监控服务
         self.monitor_service.boot()
