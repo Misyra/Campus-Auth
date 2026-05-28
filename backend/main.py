@@ -222,10 +222,12 @@ app.mount("/temp", StaticFiles(directory=TEMP_DIR), name="temp")
 def run() -> None:
     import uvicorn
 
-    services = ServiceContainer(PROJECT_ROOT)
+    from .profile_service import ProfileService
+
+    profile_service = ProfileService(PROJECT_ROOT)
 
     try:
-        sys_settings = services.profile_service.load().system
+        sys_settings = profile_service.load().system
         log_level = sys_settings.backend_log_level or "WARNING"
         access_log_enabled = bool(sys_settings.access_log)
         log_retention = max(1, sys_settings.log_retention_days)

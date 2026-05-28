@@ -155,7 +155,7 @@ def shutdown_server(
 @router.get("/api/uninstall/detect")
 def uninstall_detect() -> list[dict]:
     """检测可清理的外部残留项目"""
-    from backend.uninstall_service import detect
+    from ..uninstall_service import detect
 
     items = detect()
     return [
@@ -173,7 +173,7 @@ def uninstall_detect() -> list[dict]:
 @router.post("/api/uninstall")
 def uninstall_perform(payload: dict) -> dict:
     """执行卸载清理"""
-    from backend.uninstall_service import perform
+    from ..uninstall_service import perform
 
     keys = payload.get("keys", [])
     api_logger.warning("Uninstall requested, keys=%s", keys)

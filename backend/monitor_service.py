@@ -498,6 +498,27 @@ class MonitorService:
         self._cmd_queue.put(MonitorCommand(type="stop"))
         return True, "监控已停止"
 
+    def shutdown(self) -> None:
+        """完全关闭 MonitorService：停止监控 + 终止消费者线程。"""
+        # 停止监控（如果正在运行）
+        if self._is_monitoring:
+            self._cmd_queue.put(MonitorCommand(type="stop"))
+
+        # 设置关闭事件，通知消费者线程退出循环
+        self._shutdown_event.set()
+
+        # 发送 shutdown 命令确保消费者能立即处理退出
+        try:
+            self._cmd_queue.put_nowait(MonitorCommand(type="shutdown"))
+        except queue.Full:
+            pass
+
+        # 等待消费者线程结束
+        if self._consumer_thread and self._consumer_thread.is_alive():
+            self._consumer_thread.join(timeout=5)
+
+        service_logger.info("MonitorService 已关闭")
+
     def get_status(self) -> MonitorStatusResponse:
         """Lock-free status read directly from StatusSnapshot."""
         snap = self._status_snapshot

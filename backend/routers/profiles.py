@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.utils.logging import get_logger
 
@@ -70,7 +70,6 @@ def get_profile(
     data = profile_svc.load()
     profile = data.profiles.get(profile_id)
     if not profile:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="方案不存在")
     return {
         "profile_id": profile_id,
