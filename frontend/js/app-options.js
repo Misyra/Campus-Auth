@@ -6,6 +6,7 @@ import { configMethods } from './methods/config.js';
 import { formatterMethods } from './methods/formatters.js';
 import { lifecycleMethods } from './methods/lifecycle.js';
 import { profileMethods } from './methods/profiles.js';
+import { scriptMethods } from './methods/scripts.js';
 import { statusMethods } from './methods/status.js';
 import { taskMethods } from './methods/tasks.js';
 import { uiMethods } from './methods/ui.js';
@@ -77,7 +78,9 @@ export const appOptions = {
       tasks: [],
       activeTaskId: 'default',
       editingTask: null,
+      editingTaskType: 'browser', // 'browser' | 'script'
       jsonError: '',
+      scripts: [],
       savedConfigSnapshot: '',
       dangerConfirm: null,
       dangerCountdown: 0,
@@ -129,6 +132,7 @@ export const appOptions = {
         dashboard: '仪表盘',
         settings: '设置',
         tasks: '任务管理',
+        scripts: 'Python 脚本',
         profiles: '配置方案',
         'profile-edit': this.editingProfile?.id ? '编辑方案' : '新建方案',
         about: '关于',
@@ -240,6 +244,7 @@ export const appOptions = {
     ...actionMethods,
     ...autostartMethods,
     ...taskMethods,
+    ...scriptMethods,
     ...profileMethods,
   },
 };

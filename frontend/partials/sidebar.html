@@ -68,6 +68,19 @@
 
     <button
       class="nav-item"
+      :class="{ active: currentPage === 'scripts' }"
+      @click="currentPage = 'scripts'; fetchScripts()"
+      title="Python 脚本"
+    >
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="16 18 22 12 16 6"/>
+        <polyline points="8 6 2 12 8 18"/>
+      </svg>
+      <span>脚本</span>
+    </button>
+
+    <button
+      class="nav-item"
       :class="{ active: currentPage === 'about' }"
       @click="currentPage = 'about'"
       title="关于"

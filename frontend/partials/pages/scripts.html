@@ -1,0 +1,160 @@
+<div v-if="currentPage === 'scripts'" class="page-content fade-in">
+  <div class="tasks-grid">
+    <div class="card">
+      <div class="card-header">
+        <h2>Python 脚本</h2>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-sm" @click="importScript()" title="从文件导入脚本">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            导入
+          </button>
+          <button class="btn btn-sm btn-primary" @click="showScriptEditor(null)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            新建脚本
+          </button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div v-if="!scripts.length" class="empty-state">
+          <p>暂无 Python 脚本</p>
+          <p class="hint">编写 Python 脚本直接发送 HTTP 请求登录，无需浏览器，资源占用更低</p>
+        </div>
+        <div v-else class="task-list">
+          <div v-for="script in scripts" :key="script.id" class="task-item" :class="{ active: activeTaskId === script.id }">
+            <div class="task-info">
+              <h3>
+                {{ script.name }}
+                <span class="task-badge script">脚本</span>
+              </h3>
+              <p v-if="script.description" class="task-desc">{{ script.description }}</p>
+            </div>
+            <div class="task-actions">
+              <button class="btn btn-sm" @click="setActiveScript(script.id)" :disabled="activeTaskId === script.id">
+                {{ activeTaskId === script.id ? '当前使用' : '使用' }}
+              </button>
+              <button class="btn btn-sm" @click="showScriptEditor(script.id)">编辑</button>
+              <button class="btn btn-sm" @click="runScript(script.id)" title="手动执行此脚本测试">运行</button>
+              <button class="btn btn-sm" @click="exportScript(script.id)" title="导出为 .py 文件">导出</button>
+              <button class="btn btn-sm btn-danger" @click="deleteScript(script.id)">删除</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="editingTask" class="card task-editor">
+      <div class="card-header">
+        <h2>{{ editingTask._isNew ? '新建脚本' : '编辑脚本' }}</h2>
+        <button class="btn btn-icon-only" @click="editingTask = null">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="card-body">
+        <div class="form-group">
+          <label>脚本ID</label>
+          <input v-model="editingTask.id" type="text" placeholder="my_script" :disabled="!editingTask._isNew" />
+          <span class="hint">必须以字母开头，且只能包含字母、数字和下划线</span>
+        </div>
+        <div class="form-group">
+          <label>名称</label>
+          <input v-model="editingTask.name" type="text" placeholder="我的登录脚本" />
+        </div>
+        <div class="form-group">
+          <label>描述</label>
+          <input v-model="editingTask.description" type="text" placeholder="脚本描述（可选）" />
+        </div>
+        <div class="form-group">
+          <label>Python 脚本</label>
+          <textarea
+            v-model="editingTask.content"
+            rows="18"
+            placeholder="#!/usr/bin/env python3&#10;import os, json&#10;&#10;username = os.environ['LOGIN_USERNAME']&#10;..."
+            class="script-editor"
+          ></textarea>
+          <span class="hint">
+            脚本通过环境变量获取参数，通过 stdout 输出 JSON 结果
+          </span>
+        </div>
+        <div class="task-editor-actions">
+          <button class="btn btn-secondary" @click="loadScriptTemplate()">加载示例模板</button>
+        </div>
+      </div>
+      <div class="card-footer">
+        <button class="btn btn-secondary" @click="editingTask = null">取消</button>
+        <button class="btn btn-primary" @click="saveScript()">保存脚本</button>
+      </div>
+    </div>
+
+    <div v-else class="card">
+      <div class="card-header">
+        <h2>脚本说明</h2>
+      </div>
+      <div class="card-body">
+        <div class="help-content">
+          <h4>工作原理</h4>
+          <p>Python 脚本在子进程中执行，通过 HTTP 请求直接登录校园网，无需启动浏览器，资源占用极低。</p>
+
+          <h4>环境变量</h4>
+          <ul>
+            <li><code>CAMPUS_USERNAME</code> — 用户名</li>
+            <li><code>CAMPUS_PASSWORD</code> — 密码</li>
+            <li><code>CAMPUS_ISP</code> — 运营商（可能为空）</li>
+            <li><code>CAMPUS_URL</code> — 认证地址</li>
+          </ul>
+
+          <h4>输出格式</h4>
+          <p>脚本必须通过 stdout 输出 JSON：</p>
+          <pre>{"success": true, "message": "登录成功"}</pre>
+          <pre>{"success": false, "message": "失败原因"}</pre>
+
+          <h4>可用 HTTP 库</h4>
+          <ul>
+            <li><code>httpx</code> — 已安装，推荐使用，支持 HTTP/2</li>
+            <li><code>requests</code> — 已安装，最常用的 HTTP 库</li>
+            <li><code>urllib.request</code> — Python 标准库，无需安装任何依赖</li>
+          </ul>
+
+          <h4>示例（httpx）</h4>
+          <pre>#!/usr/bin/env python3
+import os, json, httpx
+
+resp = httpx.post(os.environ["CAMPUS_URL"], data={
+    "username": os.environ["CAMPUS_USERNAME"],
+    "password": os.environ["CAMPUS_PASSWORD"],
+    "operator": os.environ.get("CAMPUS_ISP", ""),
+})
+print(json.dumps({"success": resp.is_success, "message": resp.text[:200]}))</pre>
+
+          <h4>示例（urllib 标准库）</h4>
+          <pre>#!/usr/bin/env python3
+import os, json, urllib.request, urllib.parse
+
+data = urllib.parse.urlencode({
+    "username": os.environ["CAMPUS_USERNAME"],
+    "password": os.environ["CAMPUS_PASSWORD"],
+}).encode()
+req = urllib.request.Request(os.environ["CAMPUS_URL"], data=data)
+with urllib.request.urlopen(req, timeout=10) as resp:
+    print(json.dumps({"success": True, "message": "登录成功"}))</pre>
+
+          <h4>注意事项</h4>
+          <ul>
+            <li>脚本超时默认 60 秒</li>
+            <li>脚本设为活动任务后，自动监控会使用脚本登录</li>
+            <li>stderr 输出会记录到日志，不影响结果判断</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

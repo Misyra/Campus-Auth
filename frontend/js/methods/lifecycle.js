@@ -10,6 +10,7 @@ export const lifecycleMethods = {
       this.fetchAutostart(),
       this.checkInitStatus(),
       this.fetchTasks(),
+      this.fetchScripts(),
       this.fetchActiveTask(),
       this.fetchProfiles(),
       this.fetchPureMode(),
