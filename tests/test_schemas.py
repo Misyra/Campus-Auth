@@ -156,24 +156,24 @@ class TestConstrainedFields:
         assert m.browser_timeout == 5
 
     def test_browser_timeout_too_low(self):
-        with pytest.raises(ValidationError):
-            MonitorConfigPayload(browser_timeout=0)
+        m = MonitorConfigPayload(browser_timeout=0)
+        assert m.browser_timeout == 1  # 自动钳制到下限
 
     def test_browser_timeout_too_high(self):
-        with pytest.raises(ValidationError):
-            MonitorConfigPayload(browser_timeout=61)
+        m = MonitorConfigPayload(browser_timeout=61)
+        assert m.browser_timeout == 60  # 自动钳制到上限
 
     def test_app_port_valid(self):
         m = MonitorConfigPayload(app_port=8080)
         assert m.app_port == 8080
 
     def test_app_port_too_low(self):
-        with pytest.raises(ValidationError):
-            MonitorConfigPayload(app_port=1023)
+        m = MonitorConfigPayload(app_port=1023)
+        assert m.app_port == 1024  # 自动钳制到下限
 
     def test_app_port_too_high(self):
-        with pytest.raises(ValidationError):
-            MonitorConfigPayload(app_port=65536)
+        m = MonitorConfigPayload(app_port=65536)
+        assert m.app_port == 65535  # 自动钳制到上限
 
     def test_check_interval_boundary(self):
         m = MonitorConfigPayload(check_interval_seconds=10)
@@ -191,16 +191,16 @@ class TestConstrainedFields:
         assert m.login_timeout == 120
 
     def test_login_timeout_too_low(self):
-        with pytest.raises(ValidationError):
-            MonitorConfigPayload(login_timeout=5)
+        m = MonitorConfigPayload(login_timeout=5)
+        assert m.login_timeout == 10  # 自动钳制到下限
 
     def test_network_check_timeout_valid(self):
         m = MonitorConfigPayload(network_check_timeout=5)
         assert m.network_check_timeout == 5
 
     def test_network_check_timeout_too_high(self):
-        with pytest.raises(ValidationError):
-            MonitorConfigPayload(network_check_timeout=31)
+        m = MonitorConfigPayload(network_check_timeout=31)
+        assert m.network_check_timeout == 30  # 自动钳制到上限
 
     def test_browser_viewport_valid(self):
         m = MonitorConfigPayload(browser_viewport_width=1920, browser_viewport_height=1080)
@@ -208,12 +208,12 @@ class TestConstrainedFields:
         assert m.browser_viewport_height == 1080
 
     def test_browser_viewport_too_low(self):
-        with pytest.raises(ValidationError):
-            MonitorConfigPayload(browser_viewport_width=100)
+        m = MonitorConfigPayload(browser_viewport_width=100)
+        assert m.browser_viewport_width == 320  # 自动钳制到下限
 
     def test_browser_viewport_too_high(self):
-        with pytest.raises(ValidationError):
-            MonitorConfigPayload(browser_viewport_width=5000)
+        m = MonitorConfigPayload(browser_viewport_width=5000)
+        assert m.browser_viewport_width == 3840  # 自动钳制到上限
 
 
 # =====================================================================
