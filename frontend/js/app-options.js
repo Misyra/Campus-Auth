@@ -127,6 +127,9 @@ export const appOptions = {
     activeTask() {
       return this.tasks.find(t => t.id === this.activeTaskId) || null;
     },
+    browserTasks() {
+      return this.tasks.filter(t => t.type !== 'script');
+    },
     pageTitle() {
       const titles = {
         dashboard: '仪表盘',
