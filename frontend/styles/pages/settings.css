@@ -18,7 +18,6 @@
   padding: 6px;
   border: 1px solid var(--border-accent);
   background: rgba(30, 41, 59, 0.6);
-  backdrop-filter: blur(12px);
   border-radius: 14px;
 }
 
@@ -317,7 +316,6 @@
   pointer-events: none;
   transition: opacity 0.2s ease, transform 0.2s ease;
   z-index: 200;
-  backdrop-filter: blur(12px);
 }
 
 .field-help:hover::after,

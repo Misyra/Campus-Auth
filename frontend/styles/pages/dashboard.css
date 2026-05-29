@@ -13,7 +13,6 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  backdrop-filter: blur(10px);
   transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
