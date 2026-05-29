@@ -1,12 +1,14 @@
 import { api, SETTINGS_TABS } from './constants.js';
 import { createFrontendLogger } from './logger.js';
 import { actionMethods } from './methods/actions.js';
+import { appearanceMethods } from './methods/appearance.js';
 import { autostartMethods } from './methods/autostart.js';
 import { configMethods } from './methods/config.js';
 import { formatterMethods } from './methods/formatters.js';
 import { lifecycleMethods } from './methods/lifecycle.js';
 import { profileMethods } from './methods/profiles.js';
 import { scriptMethods } from './methods/scripts.js';
+import { shortcutMethods } from './methods/shortcuts.js';
 import { statusMethods } from './methods/status.js';
 import { taskMethods } from './tasks/index.js';
 import { uiMethods } from './methods/ui.js';
@@ -24,6 +26,7 @@ import { uiData } from './data/ui.js';
 import { websocketData } from './data/websocket.js';
 import { timerData } from './data/timers.js';
 import { statusData } from './data/status.js';
+import { appearanceData } from './data/appearance.js';
 
 export const appOptions = {
   data() {
@@ -41,6 +44,7 @@ export const appOptions = {
       ...websocketData(),
       ...timerData(),
       ...statusData(),
+      ...appearanceData(),
 
       // 全局共享状态
       settingsTabs: SETTINGS_TABS,
@@ -153,6 +157,10 @@ export const appOptions = {
     document.getElementById('app').style.display = '';
     this.$api = api;
     this.init();
+    // 应用保存的外观设置
+    this.applyAppearance();
+    // 初始化快捷键
+    this.initShortcuts();
   },
   beforeUnmount() {
     this._wsDestroyed = true;
@@ -163,6 +171,8 @@ export const appOptions = {
     if (this._toastLeavingTimer) clearTimeout(this._toastLeavingTimer);
     this.timers.forEach((t) => clearInterval(t));
     if (this.ws) this.ws.close();
+    // 清理快捷键
+    this.destroyShortcuts();
   },
   methods: {
     ...uiMethods,
@@ -175,5 +185,7 @@ export const appOptions = {
     ...taskMethods,
     ...scriptMethods,
     ...profileMethods,
+    ...appearanceMethods,
+    ...shortcutMethods,
   },
 };
