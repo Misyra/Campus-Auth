@@ -66,38 +66,57 @@ export const appearanceMethods = {
     return `#${(1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1)}`;
   },
 
-  // 选择背景图片
-  selectBackgroundImage() {
+  // 选择背景图片（上传到服务器）
+  async selectBackgroundImage() {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    input.onchange = (e) => {
+
+    input.onchange = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
 
-      // 限制文件大小（10MB）
-      if (file.size > 10 * 1024 * 1024) {
-        this.toastOnly(false, '图片大小不能超过 10MB');
+      if (file.size > 5 * 1024 * 1024) {
+        this.toastOnly(false, '图片大小不能超过 5MB');
         return;
       }
 
-      const reader = new FileReader();
-      reader.onerror = () => {
-        this.toastOnly(false, '图片读取失败');
-      };
-      reader.onload = (event) => {
-        this.appearance.background_url = event.target.result;
-        this.$nextTick(() => this.applyAppearance());
+      try {
+        // 上传到服务器
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const { data } = await this.$api.post('/api/background/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+
+        // 删除旧背景
+        if (this.appearance.background_filename) {
+          this.$api.delete(`/api/background/${this.appearance.background_filename}`).catch(() => {});
+        }
+
+        this.appearance.background_url = data.url;
+        this.appearance.background_filename = data.filename;
+        this.applyAppearance();
         this.toastOnly(true, '背景图片已设置');
-      };
-      reader.readAsDataURL(file);
+      } catch (err) {
+        console.error('上传背景图片失败:', err);
+        this.toastOnly(false, '上传失败: ' + (err.response?.data?.detail || err.message));
+      }
     };
+
     input.click();
   },
 
   // 清除背景图片
-  clearBackgroundImage() {
+  async clearBackgroundImage() {
+    if (this.appearance.background_filename) {
+      try {
+        await this.$api.delete(`/api/background/${this.appearance.background_filename}`);
+      } catch {}
+    }
     this.appearance.background_url = '';
+    this.appearance.background_filename = '';
     this.applyAppearance();
   },
 

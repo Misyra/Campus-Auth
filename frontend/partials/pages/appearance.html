@@ -7,41 +7,40 @@
     </div>
 
     <form @submit.prevent="saveAppearance">
-      <div class="appearance-grid">
-        <!-- 左列：背景和主题 -->
-        <div class="appearance-col">
-          <!-- 背景图片卡片 -->
-          <div class="card appearance-card">
-            <div class="appearance-card-header">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                <circle cx="8.5" cy="8.5" r="1.5"/>
-                <polyline points="21 15 16 10 5 21"/>
-              </svg>
-              <h3>背景图片</h3>
-            </div>
-            <div class="appearance-card-body">
-              <!-- 预览 -->
-              <div class="appearance-bg-preview">
-                <div v-if="appearance.background_url" class="appearance-bg-preview-img">
-                  <img :src="appearance.background_url" alt="背景预览" />
-                  <button type="button" class="appearance-bg-remove" @click="clearBackgroundImage" title="移除背景">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
-                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                  </button>
-                </div>
-                <div v-else class="appearance-bg-preview-empty" @click="selectBackgroundImage">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:40px;height:40px;">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                    <circle cx="8.5" cy="8.5" r="1.5"/>
-                    <polyline points="21 15 16 10 5 21"/>
+      <!-- 背景图片卡片 - 全宽 -->
+      <div class="card appearance-card appearance-bg-card">
+        <div class="appearance-card-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+          <h3>背景图片</h3>
+        </div>
+        <div class="appearance-card-body">
+          <div class="appearance-bg-layout">
+            <!-- 预览 -->
+            <div class="appearance-bg-preview">
+              <div v-if="appearance.background_url" class="appearance-bg-preview-img">
+                <img :src="appearance.background_url" alt="背景预览" />
+                <button type="button" class="appearance-bg-remove" @click="clearBackgroundImage" title="移除背景">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                   </svg>
-                  <span>点击选择图片</span>
-                  <span class="text-muted" style="font-size:11px;">支持 JPG、PNG、GIF，最大 5MB</span>
-                </div>
+                </button>
               </div>
-              <!-- 控制滑块 -->
+              <div v-else class="appearance-bg-preview-empty" @click="selectBackgroundImage">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:40px;height:40px;">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+                <span>点击选择图片</span>
+                <span class="text-muted" style="font-size:11px;">支持 JPG、PNG、GIF，最大 5MB</span>
+              </div>
+            </div>
+            <!-- 控制滑块 -->
+            <div class="appearance-bg-controls">
               <div v-if="appearance.background_url" class="appearance-sliders">
                 <div class="appearance-slider-item">
                   <label>模糊</label>
@@ -54,87 +53,87 @@
                   <span>{{ Math.round(appearance.background_opacity * 100) }}%</span>
                 </div>
               </div>
-              <button v-if="!appearance.background_url" type="button" class="btn btn-secondary btn-sm" @click="selectBackgroundImage" style="width:100%;">
+              <button v-if="!appearance.background_url" type="button" class="btn btn-secondary btn-sm" @click="selectBackgroundImage">
                 选择图片
               </button>
             </div>
           </div>
+        </div>
+      </div>
 
-          <!-- 动态背景卡片 -->
-          <div class="card appearance-card">
-            <div class="appearance-card-header">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;">
-                <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
-              </svg>
-              <h3>动态背景</h3>
+      <!-- 三列设置区 -->
+      <div class="appearance-settings-grid">
+        <!-- 主题色卡片 -->
+        <div class="card appearance-card">
+          <div class="appearance-card-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 2a10 10 0 0 1 0 20"/>
+            </svg>
+            <h3>主题色</h3>
+          </div>
+          <div class="appearance-card-body">
+            <div class="appearance-colors">
+              <button
+                v-for="color in getAccentColors()"
+                :key="color.value"
+                type="button"
+                class="appearance-color-btn"
+                :class="{ active: appearance.accent_color === color.value }"
+                :style="{ background: color.value }"
+                @click="appearance.accent_color = color.value"
+                :title="color.label"
+              >
+                <svg v-if="appearance.accent_color === color.value" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" style="width:14px;height:14px;">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </button>
             </div>
-            <div class="appearance-card-body">
-              <label class="toggle">
-                <input type="checkbox" v-model="appearance.animate_gradient" />
-                <span class="toggle-slider"></span>
-                <span class="toggle-label">启用渐变动画</span>
-              </label>
-              <p class="form-hint">背景颜色会缓慢流动变化</p>
+            <div class="appearance-custom-color">
+              <label>自定义</label>
+              <input type="color" v-model="appearance.accent_color" />
+              <span>{{ appearance.accent_color }}</span>
             </div>
           </div>
         </div>
 
-        <!-- 右列：主题色和字体 -->
-        <div class="appearance-col">
-          <!-- 主题色卡片 -->
-          <div class="card appearance-card">
-            <div class="appearance-card-header">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M12 2a10 10 0 0 1 0 20"/>
-              </svg>
-              <h3>主题色</h3>
+        <!-- 字体大小卡片 -->
+        <div class="card appearance-card">
+          <div class="appearance-card-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;">
+              <polyline points="4 7 4 4 20 4 20 7"/>
+              <line x1="9" y1="20" x2="15" y2="20"/>
+              <line x1="12" y1="4" x2="12" y2="20"/>
+            </svg>
+            <h3>字体大小</h3>
+          </div>
+          <div class="appearance-card-body">
+            <div class="appearance-slider-item">
+              <label>大小</label>
+              <input type="range" v-model.number="appearance.font_size" min="12" max="18" step="1" />
+              <span>{{ appearance.font_size }}px</span>
             </div>
-            <div class="appearance-card-body">
-              <div class="appearance-colors">
-                <button
-                  v-for="color in getAccentColors()"
-                  :key="color.value"
-                  type="button"
-                  class="appearance-color-btn"
-                  :class="{ active: appearance.accent_color === color.value }"
-                  :style="{ background: color.value }"
-                  @click="appearance.accent_color = color.value"
-                  :title="color.label"
-                >
-                  <svg v-if="appearance.accent_color === color.value" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" style="width:14px;height:14px;">
-                    <polyline points="20 6 9 17 4 12"/>
-                  </svg>
-                </button>
-              </div>
-              <div class="appearance-custom-color">
-                <label>自定义</label>
-                <input type="color" v-model="appearance.accent_color" />
-                <span>{{ appearance.accent_color }}</span>
-              </div>
+            <div class="appearance-font-preview" :style="{ fontSize: appearance.font_size + 'px' }">
+              预览文字 ABCabc 123
             </div>
           </div>
+        </div>
 
-          <!-- 字体大小卡片 -->
-          <div class="card appearance-card">
-            <div class="appearance-card-header">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;">
-                <polyline points="4 7 4 4 20 4 20 7"/>
-                <line x1="9" y1="20" x2="15" y2="20"/>
-                <line x1="12" y1="4" x2="12" y2="20"/>
-              </svg>
-              <h3>字体大小</h3>
-            </div>
-            <div class="appearance-card-body">
-              <div class="appearance-slider-item">
-                <label>大小</label>
-                <input type="range" v-model.number="appearance.font_size" min="12" max="18" step="1" />
-                <span>{{ appearance.font_size }}px</span>
-              </div>
-              <div class="appearance-font-preview" :style="{ fontSize: appearance.font_size + 'px' }">
-                预览文字 ABCabc 123
-              </div>
-            </div>
+        <!-- 动态背景卡片 -->
+        <div class="card appearance-card">
+          <div class="appearance-card-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;">
+              <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+            </svg>
+            <h3>动态背景</h3>
+          </div>
+          <div class="appearance-card-body">
+            <label class="toggle">
+              <input type="checkbox" v-model="appearance.animate_gradient" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">启用渐变动画</span>
+            </label>
+            <p class="form-hint">背景颜色会缓慢流动变化</p>
           </div>
         </div>
       </div>
