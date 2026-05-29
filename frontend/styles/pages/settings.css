@@ -632,28 +632,63 @@
 
 /* ==================== 外观设置 ==================== */
 
-.appearance-bg-preview {
-  margin-bottom: 16px;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  border: 1px solid var(--border);
+/* 背景图片左右布局 */
+.appearance-bg-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
 }
 
-.appearance-bg-preview img {
-  width: 100%;
-  height: 200px;
-  object-fit: cover;
-  display: block;
-}
-
-.appearance-bg-preview .btn {
-  margin: 12px;
+.appearance-bg-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .appearance-bg-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 预览区域 - 16:9 比例 */
+.appearance-bg-preview {
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg-glass-light);
+}
+
+.appearance-bg-preview-img {
+  width: 100%;
+  height: 100%;
+}
+
+.appearance-bg-preview-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.appearance-bg-preview-empty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .appearance-bg-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 .appearance-colors {
