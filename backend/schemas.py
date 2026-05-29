@@ -6,6 +6,8 @@ import re
 from src.utils.platform_utils import get_default_ua
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from .constants import DEFAULT_NETWORK_TARGETS, DEFAULT_HTTP_TARGETS
+
 VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 _URL_PATTERN = re.compile(r"^https?://")
 
@@ -107,10 +109,10 @@ class _MonitorFieldsMixin(_ClampMixin):
     pause_start_hour: int = Field(default=0, ge=0, le=23)
     pause_end_hour: int = Field(default=6, ge=0, le=23)
     network_targets: str = Field(
-        default="8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
+        default=DEFAULT_NETWORK_TARGETS
     )
     http_targets: str = Field(
-        default="https://www.baidu.com,https://www.qq.com",
+        default=DEFAULT_HTTP_TARGETS,
         description="HTTP 检测目标地址，逗号分隔",
     )
     enable_tcp_check: bool = Field(default=True, description="启用 TCP 检测网络连通性")

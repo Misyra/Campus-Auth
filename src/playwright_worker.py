@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from src.utils.logging import get_logger
+from src.utils.platform_utils import CREATE_NO_WINDOW_FLAG
 
 logger = get_logger("playwright_worker", side="BACKEND")
 
@@ -917,40 +918,34 @@ def cleanup_orphan_browsers() -> None:
 
 
 def _cleanup_windows() -> None:
-    """Windows 平台: 通过 wmic 查找并终止 Playwright Chromium 进程"""
+    """Windows 平台: 通过 PowerShell 查找并终止 Playwright Chromium 进程"""
     try:
-        # 使用 wmic 获取所有 chrome.exe 的 PID 和执行路径
+        # 使用 PowerShell Get-CimInstance 获取所有 chrome.exe 的 PID 和执行路径
         result = subprocess.run(
             [
-                "wmic",
-                "process",
-                "where",
-                "name='chrome.exe'",
-                "get",
-                "processid,executablepath",
-                "/format:csv",
+                "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+                "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | "
+                "Select-Object ProcessId,ExecutablePath | ConvertTo-Csv -NoTypeInformation",
             ],
             capture_output=True,
             text=True,
-            timeout=10,
-            creationflags=subprocess.CREATE_NO_WINDOW
-            if hasattr(subprocess, "CREATE_NO_WINDOW")
-            else 0,
+            timeout=15,
+            creationflags=CREATE_NO_WINDOW_FLAG,
         )
         if result.returncode != 0 or not result.stdout.strip():
             return
 
         pids_to_kill: list[str] = []
-        for line in result.stdout.strip().splitlines()[1:]:  # 跳过 CSV 表头
+        for line in result.stdout.strip().splitlines():
             line = line.strip()
-            if not line:
+            if not line or line.startswith("#") or "ProcessId" in line:
                 continue
-            # CSV 格式: Node,ExecutablePath,ProcessId
-            parts = line.split(",")
-            if len(parts) < 3:
+            # CSV 格式: "ProcessId","ExecutablePath"
+            parts = line.split(",", 1)
+            if len(parts) < 2:
                 continue
-            exe_path = parts[1].strip().strip('"') if len(parts) > 1 else ""
-            pid_str = parts[2].strip().strip('"') if len(parts) > 2 else ""
+            pid_str = parts[0].strip().strip('"')
+            exe_path = parts[1].strip().strip('"')
             # 仅匹配 Playwright 管理的 Chromium（路径包含 ms-playwright）
             if "ms-playwright" in exe_path.lower() and pid_str.isdigit():
                 pids_to_kill.append(pid_str)
@@ -967,9 +962,7 @@ def _cleanup_windows() -> None:
                     capture_output=True,
                     text=True,
                     timeout=5,
-                    creationflags=subprocess.CREATE_NO_WINDOW
-                    if hasattr(subprocess, "CREATE_NO_WINDOW")
-                    else 0,
+                    creationflags=CREATE_NO_WINDOW_FLAG,
                 )
                 logger.debug("已终止 Chromium 进程 PID=%s", pid)
             except Exception:

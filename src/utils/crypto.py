@@ -15,13 +15,14 @@ import os
 import threading
 from pathlib import Path
 
+from backend.constants import AUTH_DATA_DIR
 from src.utils.logging import get_logger
 from src.utils.exceptions import DecryptionError
 from src.utils.platform_utils import is_windows  # Windows 平台检测
 
 logger = get_logger("crypto", side="BACKEND")
 
-_KEY_DIR = Path.home() / ".campus_network_auth"
+_KEY_DIR = AUTH_DATA_DIR
 _KEY_FILE = _KEY_DIR / ".enc_key"
 _ENC_PREFIX = "ENC:"
 

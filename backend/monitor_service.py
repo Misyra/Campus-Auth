@@ -150,14 +150,8 @@ class MonitorService:
             finally:
                 self._cmd_queue.task_done()
 
-    def _handle_start(self, cmd: MonitorCommand) -> None:
-        """启动监控（仅在消费者线程中调用）。"""
-        # 二次检查：防止重复启动
-        if self._monitor_thread and self._monitor_thread.is_alive():
-            self._push_log("监控线程已在运行，忽略重复启动", level="WARNING", source="backend.monitor_service")
-            return
-        config = cmd.data.get("config", self._runtime_config.copy())
-        pure_mode = cmd.data.get("pure_mode", self.pure_mode)
+    def _start_monitor_core(self, config: dict, pure_mode: bool) -> None:
+        """创建并启动监控核心（在消费者线程中调用，供 _handle_start 和 _handle_profile_switch 复用）。"""
         if pure_mode:
             config.setdefault("browser_settings", {})["pure_mode"] = True
         self._thread_done.clear()
@@ -174,6 +168,16 @@ class MonitorService:
         self._monitor_core = core
         self._monitor_thread = thread
         thread.start()
+
+    def _handle_start(self, cmd: MonitorCommand) -> None:
+        """启动监控（仅在消费者线程中调用）。"""
+        # 二次检查：防止重复启动
+        if self._monitor_thread and self._monitor_thread.is_alive():
+            self._push_log("监控线程已在运行，忽略重复启动", level="WARNING", source="backend.monitor_service")
+            return
+        config = cmd.data.get("config", self._runtime_config.copy())
+        pure_mode = cmd.data.get("pure_mode", self.pure_mode)
+        self._start_monitor_core(config, pure_mode)
 
         self._push_log("监控线程已启动", level="INFO", source="backend.monitor_service")
         self._update_status_snapshot()
@@ -249,23 +253,7 @@ class MonitorService:
         self._handle_stop()
 
         pure_mode = cmd.data.get("pure_mode", self.pure_mode)
-        if pure_mode:
-            new_config.setdefault("browser_settings", {})["pure_mode"] = True
-
-        self._thread_done.clear()
-        core = NetworkMonitorCore(
-            config=new_config,
-            log_callback=self._push_log,
-            thread_done=self._thread_done,
-        )
-        core.set_profile_service(
-            self._profile_service, on_switch=self._on_profile_switch
-        )
-        thread = threading.Thread(target=core.start_monitoring, daemon=True)
-
-        self._monitor_core = core
-        self._monitor_thread = thread
-        thread.start()
+        self._start_monitor_core(new_config, pure_mode)
 
         self._push_log(
             "监控已按新方案重启", level="INFO", source="backend.monitor_service"
@@ -275,12 +263,12 @@ class MonitorService:
     def _handle_profile_reload(self, cmd: MonitorCommand) -> None:
         """自动切换方案后重载配置（仅在消费者线程中调用）。"""
         profile_name = cmd.data.get("profile_name", "")
-        # 直接在消费者线程中重载配置（不通过队列，避免递归入队）
-        self._ui_config = load_ui_config(self._profile_service)
-        self._runtime_config = build_runtime_config(
-            load_runtime_config(self._profile_service),
-            self._profile_service.load().system,
-        )
+        try:
+            # 直接在消费者线程中重载配置（不通过队列，避免递归入队）
+            self._reload_config_internal()
+        except Exception:
+            service_logger.exception("自动切换方案配置加载失败: %s", profile_name)
+            return
         if self._monitor_core and self._monitor_core.monitoring:
             self._cmd_queue.put(
                 MonitorCommand(
@@ -443,13 +431,17 @@ class MonitorService:
     def get_config(self) -> MonitorConfigPayload:
         return self._ui_config.model_copy(deep=True)
 
-    def reload_config(self) -> None:
-        """重新加载配置（从 settings.json），并通过队列推送到运行中的监控"""
+    def _reload_config_internal(self) -> None:
+        """从 settings.json 重新加载 UI 和运行时配置（内部方法，由 reload_config 和 _handle_profile_reload 复用）。"""
         self._ui_config = load_ui_config(self._profile_service)
         self._runtime_config = build_runtime_config(
             load_runtime_config(self._profile_service),
             self._profile_service.load().system,
         )
+
+    def reload_config(self) -> None:
+        """重新加载配置（从 settings.json），并通过队列推送到运行中的监控"""
+        self._reload_config_internal()
 
         # Consumer handles the hot-update on the monitor core
         if self._is_monitoring:
@@ -593,6 +585,7 @@ class MonitorService:
         cmd.response_event.wait(timeout=login_timeout)
 
         if cmd.response_data is None:
+            self._login_in_progress = False
             return False, "手动登录超时"
 
         success, message = cmd.response_data

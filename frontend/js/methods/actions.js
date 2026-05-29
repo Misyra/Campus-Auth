@@ -1,3 +1,5 @@
+import { extractApiError } from './utils.js';
+
 export const actionMethods = {
   async openUninstall() {
     this.uninstall.visible = true;
@@ -8,7 +10,7 @@ export const actionMethods = {
       const { data } = await this.$api.get('/api/uninstall/detect');
       this.uninstall.items = data.map(it => ({ ...it, checked: it.exists }));
     } catch (error) {
-      const msg = error?.response?.data?.detail || '检测失败';
+      const msg = extractApiError(error, '检测失败');
       this.toastOnly(false, msg);
       this.uninstall.visible = false;
     } finally {
@@ -29,7 +31,7 @@ export const actionMethods = {
       this.uninstall.results = data.results || [];
       this.toastOnly(data.success, data.success ? '清理完成' : '部分项目清理失败');
     } catch (error) {
-      const msg = error?.response?.data?.detail || '卸载失败';
+      const msg = extractApiError(error, '卸载失败');
       this.toastOnly(false, msg);
     } finally {
       this.busy.uninstall = false;
@@ -45,7 +47,7 @@ export const actionMethods = {
       this.toastOnly(data.success, data.message);
       await this.fetchStatus();
     } catch (error) {
-      const msg = error?.response?.data?.detail || '操作失败';
+      const msg = extractApiError(error, '操作失败');
       this.frontendLogger.error('monitor', '切换监控失败', msg);
       this.notify(false, msg);
     } finally {
@@ -60,7 +62,7 @@ export const actionMethods = {
       const { data } = await this.$api.post('/api/actions/login', null, { timeout: loginTimeoutMs });
       this.notify(data.success, this.stripScreenshotHint(data.message));
     } catch (error) {
-      const msg = error?.response?.data?.detail || '手动登录失败';
+      const msg = extractApiError(error, '手动登录失败');
       this.frontendLogger.error('action', '手动登录失败', msg);
       this.notify(false, this.stripScreenshotHint(msg));
     } finally {
@@ -75,7 +77,7 @@ export const actionMethods = {
       // 网络测试结果只显示 toast，不记录通知历史
       this.toastOnly(data.success, data.message);
     } catch (error) {
-      const msg = error?.response?.data?.detail || '网络测试失败';
+      const msg = extractApiError(error, '网络测试失败');
       this.frontendLogger.error('action', '网络测试失败', msg);
       this.toastOnly(false, msg);
     } finally {

@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends
 from src.utils.logging import get_logger
 from src.version import compare_versions, get_project_version
 
-from ..constants import PROJECT_ROOT
+from ..constants import AUTH_DATA_DIR, PROJECT_ROOT
 from ..deps import get_autostart_service, get_monitor_service
 from ..monitor_service import MonitorService
 from ..schemas import ActionResponse, AutoStartStatusResponse
@@ -144,7 +144,7 @@ def shutdown_server(
         except Exception:
             api_logger.debug("清理孤儿浏览器失败", exc_info=True)
         try:
-            (Path.home() / ".campus_network_auth" / "campus_network_auth.pid").unlink(missing_ok=True)
+            (AUTH_DATA_DIR / "campus_network_auth.pid").unlink(missing_ok=True)
         except Exception:
             api_logger.debug("PID 文件清理失败", exc_info=True)
         os._exit(0)

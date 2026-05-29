@@ -183,6 +183,19 @@ class AutoStartService:
         plist_path.write_text(content, encoding="utf-8")
         logger.info("macOS plist 已写入: %s", plist_path)
 
+        # 优先使用新版 API (macOS 10.10+)，失败则回退到旧版 load/unload
+        uid = os.getuid()
+        gui_domain = f"gui/{uid}"
+
+        # 尝试卸载旧配置（忽略错误）
+        self._run(["launchctl", "bootout", gui_domain, str(plist_path)])
+        ok, msg = self._run(["launchctl", "bootstrap", gui_domain, str(plist_path)])
+        if ok:
+            logger.info("macOS launchctl bootstrap 成功")
+            return True, f"已启用 macOS 开机自启动: {plist_path}"
+
+        # 回退到旧版 API
+        logger.debug("launchctl bootstrap 失败，回退到 load/unload: %s", msg)
         self._run(["launchctl", "unload", str(plist_path)])
         ok, msg = self._run(["launchctl", "load", str(plist_path)])
         if ok:
@@ -195,7 +208,12 @@ class AutoStartService:
         plist_path = self._mac_plist_path()
         if plist_path.exists():
             logger.info("macOS 移除 plist: %s", plist_path)
-            self._run(["launchctl", "unload", str(plist_path)])
+            # 优先使用新版 API bootout，失败则回退到 unload
+            uid = os.getuid()
+            gui_domain = f"gui/{uid}"
+            ok, _ = self._run(["launchctl", "bootout", gui_domain, str(plist_path)])
+            if not ok:
+                self._run(["launchctl", "unload", str(plist_path)])
             plist_path.unlink(missing_ok=True)
         else:
             logger.debug("macOS plist 不存在: %s", plist_path)
@@ -245,9 +263,42 @@ WantedBy=default.target
         return True, "已关闭 Linux 开机自启动"
 
     @staticmethod
+    def _build_vbs_content(run_command: str) -> str:
+        """生成 Windows 自启动 VBScript 内容。
+
+        Args:
+            run_command: VBScript 中用于启动程序的两行代码
+                （targetExe 赋值 + WshShell.Run 调用）。
+        """
+        return f'''Set WshShell = CreateObject("WScript.Shell")
+WshShell.Environment("PROCESS")("CAMPUS_AUTH_AUTO_OPEN_BROWSER") = "false"
+
+' Check if already running
+Set fso = CreateObject("Scripting.FileSystemObject")
+pidFile = WshShell.ExpandEnvironmentStrings("%USERPROFILE%") & "\\.campus_network_auth\\campus_network_auth.pid"
+
+If fso.FileExists(pidFile) Then
+    Set file = fso.OpenTextFile(pidFile, 1)
+    pid = Trim(file.ReadLine)
+    file.Close
+
+    ' Check if the process is still alive
+    On Error Resume Next
+    Set objWMIService = GetObject("winmgmts:\\\\.\\root\\cimv2")
+    Set colProcessList = objWMIService.ExecQuery("Select * from Win32_Process where ProcessId = " & pid)
+    If colProcessList.Count > 0 Then
+        WScript.Quit
+    End If
+    On Error GoTo 0
+End If
+
+{run_command}
+'''
+
+    @staticmethod
     def _has_cjk_chars(path: str) -> bool:
         """检查路径是否包含中日韩(CJK)统一表意文字。"""
-        return bool(re.search(r"[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]", path))
+        return bool(re.search(r"[一-鿿㐀-䶿豈-﫿]", path))
 
     def _enable_windows(self) -> tuple[bool, str]:
         project_root_str = str(self.project_root)
@@ -276,31 +327,10 @@ WantedBy=default.target
         app_py = self.project_root / "app.py"
 
         if python_exe.exists():
-            content = f'''Set WshShell = CreateObject("WScript.Shell")
-WshShell.Environment("PROCESS")("CAMPUS_AUTH_AUTO_OPEN_BROWSER") = "false"
-
-' Check if already running
-Set fso = CreateObject("Scripting.FileSystemObject")
-pidFile = WshShell.ExpandEnvironmentStrings("%USERPROFILE%") & "\\.campus_network_auth\\campus_network_auth.pid"
-
-If fso.FileExists(pidFile) Then
-    Set file = fso.OpenTextFile(pidFile, 1)
-    pid = Trim(file.ReadLine)
-    file.Close
-    
-    ' Check if the process is still alive
-    On Error Resume Next
-    Set objWMIService = GetObject("winmgmts:\\\\.\\root\\cimv2")
-    Set colProcessList = objWMIService.ExecQuery("Select * from Win32_Process where ProcessId = " & pid)
-    If colProcessList.Count > 0 Then
-        WScript.Quit
-    End If
-    On Error GoTo 0
-End If
-
-targetExe = "{python_exe}"
-WshShell.Run Chr(34) & targetExe & Chr(34) & " " & Chr(34) & "{app_py}" & Chr(34) & " --no-browser", 0, False
-'''
+            run_command = (
+                f'targetExe = "{python_exe}"\n'
+                f'WshShell.Run Chr(34) & targetExe & Chr(34) & " " & Chr(34) & "{app_py}" & Chr(34) & " --no-browser", 0, False'
+            )
         else:
             packaged = os.getenv("CAMPUS_AUTH_START_EXECUTABLE", "").strip()
             if not packaged:
@@ -308,31 +338,12 @@ WshShell.Run Chr(34) & targetExe & Chr(34) & " " & Chr(34) & "{app_py}" & Chr(34
                     False,
                     "未找到可用的 Python 解释器或打包可执行文件，无法创建自启动脚本",
                 )
-            content = f'''Set WshShell = CreateObject("WScript.Shell")
-WshShell.Environment("PROCESS")("CAMPUS_AUTH_AUTO_OPEN_BROWSER") = "false"
+            run_command = (
+                f'targetExe = "{packaged}"\n'
+                f'WshShell.Run Chr(34) & targetExe & Chr(34) & " --no-browser", 0, False'
+            )
 
-' Check if already running
-Set fso = CreateObject("Scripting.FileSystemObject")
-pidFile = WshShell.ExpandEnvironmentStrings("%USERPROFILE%") & "\\.campus_network_auth\\campus_network_auth.pid"
-
-If fso.FileExists(pidFile) Then
-    Set file = fso.OpenTextFile(pidFile, 1)
-    pid = Trim(file.ReadLine)
-    file.Close
-    
-    ' Check if the process is still alive
-    On Error Resume Next
-    Set objWMIService = GetObject("winmgmts:\\\\.\\root\\cimv2")
-    Set colProcessList = objWMIService.ExecQuery("Select * from Win32_Process where ProcessId = " & pid)
-    If colProcessList.Count > 0 Then
-        WScript.Quit
-    End If
-    On Error GoTo 0
-End If
-
-targetExe = "{packaged}"
-WshShell.Run Chr(34) & targetExe & Chr(34) & " --no-browser", 0, False
-'''
+        content = self._build_vbs_content(run_command)
 
         try:
             startup_vbs.write_text(content, encoding="utf-8")

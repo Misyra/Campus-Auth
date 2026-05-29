@@ -1,3 +1,5 @@
+import { extractApiError } from './utils.js';
+
 export const scriptMethods = {
   async fetchScripts() {
     try {
@@ -20,7 +22,7 @@ export const scriptMethods = {
         };
         this.editingTaskType = 'script';
       }).catch((error) => {
-        this.notify(false, error?.response?.data?.detail || '加载脚本失败');
+        this.notify(false, extractApiError(error, '加载脚本失败'));
       });
     } else {
       this.editingTaskType = 'script';
@@ -67,7 +69,7 @@ export const scriptMethods = {
         this.notify(false, data.message);
       }
     } catch (error) {
-      this.notify(false, error?.response?.data?.detail || error.message || '保存失败');
+      this.notify(false, extractApiError(error, '保存失败'));
     }
   },
 
@@ -82,7 +84,7 @@ export const scriptMethods = {
         this.notify(false, data.message);
       }
     } catch (error) {
-      this.notify(false, error?.response?.data?.detail || '删除失败');
+      this.notify(false, extractApiError(error, '删除失败'));
     }
   },
 
@@ -91,7 +93,7 @@ export const scriptMethods = {
       const { data } = await this.$api.post(`/api/scripts/${taskId}/run`);
       this.notify(data.success, data.message);
     } catch (error) {
-      this.notify(false, error?.response?.data?.detail || '执行失败');
+      this.notify(false, extractApiError(error, '执行失败'));
     }
   },
 
@@ -105,7 +107,7 @@ export const scriptMethods = {
       a.click();
       URL.revokeObjectURL(url);
     }).catch((error) => {
-      this.notify(false, error?.response?.data?.detail || '导出失败');
+      this.notify(false, extractApiError(error, '导出失败'));
     });
   },
 
@@ -196,7 +198,7 @@ print(f"HTTP {resp.status_code}")
         this.notify(false, data.message);
       }
     } catch (error) {
-      this.notify(false, error?.response?.data?.detail || '设置失败');
+      this.notify(false, extractApiError(error, '设置失败'));
     }
   },
 };

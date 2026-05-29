@@ -1,4 +1,5 @@
 import { DEFAULT_PROFILE_SETTINGS } from '../constants.js';
+import { extractApiError } from './utils.js';
 
 export const profileMethods = {
   async fetchProfiles() {
@@ -68,7 +69,7 @@ export const profileMethods = {
         this.notify(false, data.message);
       }
     } catch (error) {
-      const msg = error?.response?.data?.detail || '保存失败';
+      const msg = extractApiError(error, '保存失败');
       this.frontendLogger.error('profiles', '方案保存异常: ' + msg, error);
       this.notify(false, msg);
     }

@@ -9,9 +9,13 @@
 所有函数均为无状态、无副作用的纯函数，导入模块不会触发 I/O、日志或配置访问。
 """
 
+import subprocess
 import sys
 
-__all__ = ["get_platform", "is_windows", "is_macos", "is_linux", "get_default_ua"]
+# subprocess.CREATE_NO_WINDOW 仅在 Windows 上可用（Python 3.7+）
+CREATE_NO_WINDOW_FLAG: int = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+__all__ = ["get_platform", "is_windows", "is_macos", "is_linux", "get_default_ua", "CREATE_NO_WINDOW_FLAG"]
 
 
 def get_platform() -> str:

@@ -290,3 +290,71 @@ class TestPerform:
         results = perform(["userdata"])
         assert len(results) == 1
         assert results[0].key == "userdata"
+
+
+# ─────────────────────────────────────────────────────────────────────
+#  _build_vbs_content (autostart_service.py)
+# ─────────────────────────────────────────────────────────────────────
+
+
+class TestBuildVbsContent:
+    def test_contains_pid_check(self):
+        """生成的 VBScript 应包含 PID 检查逻辑"""
+        svc = AutoStartService(project_root=Path("/test"))
+        content = svc._build_vbs_content('WshShell.Run "test.exe"')
+        assert "campus_network_auth.pid" in content
+        assert "Win32_Process" in content
+
+    def test_contains_env_var(self):
+        """生成的 VBScript 应设置 CAMPUS_AUTH_AUTO_OPEN_BROWSER=false"""
+        svc = AutoStartService(project_root=Path("/test"))
+        content = svc._build_vbs_content('WshShell.Run "test.exe"')
+        assert "CAMPUS_AUTH_AUTO_OPEN_BROWSER" in content
+        assert "false" in content
+
+    def test_contains_run_command(self):
+        """生成的 VBScript 应包含传入的运行命令"""
+        svc = AutoStartService(project_root=Path("/test"))
+        run_cmd = 'WshShell.Run "C:\\test\\app.exe" --no-browser'
+        content = svc._build_vbs_content(run_cmd)
+        assert run_cmd in content
+
+    def test_different_commands_produce_different_content(self):
+        """不同命令应产生不同的 VBScript 内容"""
+        svc = AutoStartService(project_root=Path("/test"))
+        content1 = svc._build_vbs_content('WshShell.Run "a.exe"')
+        content2 = svc._build_vbs_content('WshShell.Run "b.exe"')
+        assert content1 != content2
+
+
+# ─────────────────────────────────────────────────────────────────────
+#  macOS launchctl 新版 API
+# ─────────────────────────────────────────────────────────────────────
+
+
+class TestMacosLaunchctl:
+    @pytest.mark.skipif(os.name == "nt", reason="os.getuid 不存在于 Windows")
+    def test_enable_macos_uses_bootstrap(self, tmp_path):
+        """启用 macOS 自启动应使用 launchctl bootstrap"""
+        svc = AutoStartService(project_root=tmp_path)
+        with patch.object(svc, "_run", return_value=(True, "")) as mock_run:
+            with patch.object(svc, "_mac_plist_path", return_value=tmp_path / "test.plist"):
+                with patch("backend.autostart_service.is_macos", return_value=True):
+                    with patch("backend.autostart_service.get_platform", return_value="darwin"):
+                        svc._enable_macos()
+                        calls = [str(c) for c in mock_run.call_args_list]
+                        assert any("bootstrap" in str(c) for c in calls)
+
+    @pytest.mark.skipif(os.name == "nt", reason="os.getuid 不存在于 Windows")
+    def test_disable_macos_uses_bootout(self, tmp_path):
+        """禁用 macOS 自启动应使用 launchctl bootout"""
+        svc = AutoStartService(project_root=tmp_path)
+        plist = tmp_path / "test.plist"
+        plist.write_text("test", encoding="utf-8")
+        with patch.object(svc, "_run", return_value=(True, "")) as mock_run:
+            with patch.object(svc, "_mac_plist_path", return_value=plist):
+                with patch("backend.autostart_service.is_macos", return_value=True):
+                    with patch("backend.autostart_service.get_platform", return_value="darwin"):
+                        svc._disable_macos()
+                        calls = [str(c) for c in mock_run.call_args_list]
+                        assert any("bootout" in str(c) for c in calls)

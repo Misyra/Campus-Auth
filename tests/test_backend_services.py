@@ -699,10 +699,47 @@ class TestProfileService:
             result = service.detect_matching_profile()
             assert result == "gw_match"
 
+    def test_update_modifies_data(self, service):
+        """update() 应在锁内执行读-改-写"""
+        data = service.load()
+        data.profiles["default"] = ProfileSettings(name="原始")
+        service.save(data)
 
-# =====================================================================
-# detect_gateway_ip / detect_wifi_ssid
-# =====================================================================
+        def modifier(d: ProfilesData):
+            d.profiles["default"] = ProfileSettings(name="通过update修改")
+
+        service.update(modifier)
+        loaded = service.load()
+        assert loaded.profiles["default"].name == "通过update修改"
+
+    def test_update_creates_file_if_missing(self, tmp_path):
+        """update() 在 settings.json 不存在时应创建文件"""
+        service = ProfileService(tmp_path)
+
+        def modifier(d: ProfilesData):
+            d.profiles["new"] = ProfileSettings(name="新建方案")
+
+        service.update(modifier)
+        assert (tmp_path / "settings.json").exists()
+        loaded = service.load()
+        assert "new" in loaded.profiles
+
+    def test_update_preserves_other_fields(self, service):
+        """update() 不应丢失未修改的字段"""
+        data = ProfilesData(
+            auto_switch=True,
+            profiles={"default": ProfileSettings(name="默认", headless=False)},
+        )
+        service.save(data)
+
+        def modifier(d: ProfilesData):
+            d.system.username = "admin"
+
+        service.update(modifier)
+        loaded = service.load()
+        assert loaded.auto_switch is True
+        assert loaded.profiles["default"].headless is False
+        assert loaded.system.username == "admin"
 
 
 class TestDetectGatewayIp:
