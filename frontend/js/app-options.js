@@ -201,7 +201,7 @@ export const appOptions = {
     },
   },
   watch: {
-    currentPage() {
+    currentPage(newPage) {
       // 页面切换时清理待处理的危险确认对话框，避免 Promise 永久挂起
       if (this.dangerConfirm) {
         this.dangerConfirm.resolve(false);
@@ -211,6 +211,10 @@ export const appOptions = {
           clearInterval(this._dangerTimer);
           this._dangerTimer = null;
         }
+      }
+      // 返回日志页面时自动滚动到底部（v-if 重建 DOM 后需等待下一帧）
+      if (newPage === 'dashboard' && this.autoScroll) {
+        this.$nextTick(() => this.scrollToBottom());
       }
     },
   },
