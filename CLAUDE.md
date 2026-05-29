@@ -59,7 +59,7 @@ FastAPI application. Routes split across 10 router files under `backend/routers/
 |------|---------|
 | `main.py` | FastAPI app, lifespan management, CORS, WebSocket, static files, middleware |
 | `routers/` | 10 个路由文件：monitor, config, tasks, profiles, debug, backup, repo, system, tools, scripts |
-| `monitor_service.py` | Monitor start/stop, WebSocket broadcast, login trigger (Actor model — message queue to background thread) |
+| `monitor_service.py` | Monitor start/stop, WebSocket broadcast, login trigger (Actor model — message queue to background thread). Public properties: `ws_broadcast_queue`, `logs` |
 | `profile_service.py` | Multi-network profile CRUD, gateway IP / WiFi SSID detection, auto-switch |
 | `config_service.py` | Config read/write, init status |
 | `task_service.py` | Task CRUD, active task, danger step detection |
@@ -74,7 +74,7 @@ FastAPI application. Routes split across 10 router files under `backend/routers/
 | `monitor_core.py` | Network monitoring loop, profile auto-switch, login trigger with retry/backoff |
 | `network_decision.py` | Decision layer: `should_attempt_login()`, `is_auth_url_reachable()` |
 | `network_probes.py` | TCP socket + HTTP probes, local network detection |
-| `playwright_worker.py` | Actor model worker thread — all Playwright ops run in a dedicated thread via command queue (`submit()` → `WorkerCommand` → `WorkerResponse`) |
+| `playwright_worker.py` | Actor model worker thread — all Playwright ops run in a dedicated thread via command queue (`submit()` → `WorkerCommand` → `WorkerResponse`). Default submit timeout: 300s (`_DEFAULT_SUBMIT_TIMEOUT`) |
 | `playwright_bootstrap.py` | Playwright/Chromium install check and auto-download |
 | `system_tray.py` | System tray icon + menu (pystray) |
 
@@ -82,11 +82,11 @@ FastAPI application. Routes split across 10 router files under `backend/routers/
 
 | File | Purpose |
 |------|---------|
-| `browser.py` | `BrowserManager` — browser lifecycle, health check, context creation |
+| `browser.py` | `BrowserContextManager` — Worker proxy for browser lifecycle. `__aenter__` ensures browser ready, `__aexit__` notifies Worker to release |
 | `login.py` | `build_login_env_vars()`, login retry logic |
-| `crypto.py` | Password encrypt/decrypt (Fernet). `ENC:` prefix in settings.json |
-| `logging.py` | `get_logger()`, `LogBuffer` (ring buffer 1200 entries), WebSocket handler, `LogConfigCenter` |
-| `config.py` | `ConfigValidator` — input validation |
+| `crypto.py` | Password encrypt/decrypt (Fernet). `ENC:` prefix in settings.json. Precise exception handling for `InvalidToken`/`InvalidSignature` |
+| `logging.py` | `get_logger()`, `LogBuffer` (ring buffer 1200 entries), WebSocket handler, `LogConfigCenter`. Thread-safe root logger configuration with double-checked locking |
+| `config.py` | `ConfigValidator` — input validation (GUI config + env config with URL format check) |
 | `notify.py` | Cross-platform desktop notifications |
 | `time_utils.py` | Time utilities |
 | `network_helpers.py` | Host:port parsing helpers |
@@ -119,11 +119,13 @@ All config lives in `settings.json` (gitignored). Structure: `{ auto_switch, act
 
 ## Key Patterns
 
-- **Actor model threading**: `PlaywrightWorker` and `MonitorService` use message queues to isolate browser ops and monitoring loops in dedicated threads. External code calls `submit()` and optionally waits for `WorkerResponse`.
+- **Actor model threading**: `PlaywrightWorker` and `MonitorService` use message queues to isolate browser ops and monitoring loops in dedicated threads. External code calls `submit()` and optionally waits for `WorkerResponse`. Default timeout: 300s.
 - **Step handler registry**: New task step types = subclass `StepHandler`, register in `StepExecutorRegistry`.
 - **Variable resolution**: `{{VAR_NAME}}` resolves through env vars → task variables → runtime vars.
 - **Network detection**: Layered — `network_probes.py` (TCP/HTTP probes) → `network_decision.py` (decision logic) → `monitor_core.py` (monitoring loop).
 - **Frontend API calls**: Functions in `js/methods/` call backend endpoints defined in `backend/main.py`.
+- **Exception handling**: Distinguish expected business exceptions (TimeoutError, OSError) from programming bugs. Use `logger.exception` for unexpected errors to preserve stack traces.
+- **Thread safety**: `_root_configured` flag uses double-checked locking. `_runtime_config` deep-copies nested `browser_settings` to prevent cross-contamination.
 
 ## Important Notes
 
@@ -135,3 +137,7 @@ All config lives in `settings.json` (gitignored). Structure: `{ auto_switch, act
 - `src/utils/time_utils.py` was renamed from `time.py` to avoid shadowing stdlib `time`.
 - 本项目仅本地运行，安全类问题（API 无鉴权、CORS 全开等）属于设计决策，不属于代码审查范围。
 - 依赖版本以 `pyproject.toml` 为权威来源，版本锁定要严格（精确到 patch 或窄范围），避免依赖不一致导致 bug。`requirements.txt` 是面向用户运行的简化清单，只列必要运行依赖，不包含开发工具。
+- `get_worker()` supports automatic recovery — if the Worker thread has stopped, it will be recreated on next call.
+- `_runtime_config` must be deep-copied (specifically `browser_settings`) before modification to prevent `pure_mode` contamination.
+- Frontend `getLogClass()` uses `item.level` field (not Chinese keywords) for log styling.
+- `fetch('/openapi.json')` uses `AbortController` with 5s timeout to prevent initialization blocking.

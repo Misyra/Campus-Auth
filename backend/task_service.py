@@ -75,12 +75,17 @@ class TaskService:
         if task is None:
             return None
         if isinstance(task, ScriptTaskInfo):
+            try:
+                content = task.script_path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                task_logger.error("读取脚本文件失败 %s: %s", task.script_path, exc)
+                return None
             return {
                 "id": task_id,
                 "name": task.name,
                 "description": task.description,
                 "type": "script",
-                "content": task.script_path.read_text(encoding="utf-8"),
+                "content": content,
             }
         result = task.to_dict()
         result["id"] = task_id

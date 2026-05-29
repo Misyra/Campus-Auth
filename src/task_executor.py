@@ -1117,8 +1117,8 @@ class TaskExecutor:
             # 如果页面没有表单元素，静默跳过，不阻塞流程
             try:
                 await page.wait_for_selector("input,textarea", timeout=5000)
-            except Exception:
-                pass
+            except TimeoutError:
+                pass  # 表单元素未出现，非致命，继续执行
 
             # reveal_hidden: 强制显示所有隐藏输入框，让后续 fill() 可以直接操作
             if self.config.reveal_hidden and any(
@@ -1168,12 +1168,21 @@ class TaskExecutor:
             logger.info("任务成功 [%s] 总耗时 %.0fms", self.config.name, total_elapsed)
             return await self._handle_success(page)
 
-        except Exception as e:
+        except (TimeoutError, OSError) as e:
             total_elapsed = (time.perf_counter() - task_start) * 1000
             logger.error(
                 "任务异常 [%s] 耗时 %.0fms: %s", self.config.name, total_elapsed, e
             )
             return await self._handle_failure(page, None, str(e))
+        except Exception as e:
+            total_elapsed = (time.perf_counter() - task_start) * 1000
+            logger.exception(
+                "任务未知异常 [%s] 耗时 %.0fms", self.config.name, total_elapsed
+            )
+            try:
+                return await self._handle_failure(page, None, f"内部错误: {e}")
+            except Exception:
+                return (False, f"内部错误: {e}")
 
     async def _auto_navigate(self, page) -> None:
         """自动导航到任务URL（优先任务 url，回退到 LOGIN_URL）

@@ -1,5 +1,46 @@
 # 更新日志
 
+## v3.7.2
+
+### 代码审查修复
+
+共修复 25 项问题，涉及 15 个文件。
+
+#### 高优先级修复（可靠性/性能）
+
+- **修复 pure_mode 配置污染**：`_runtime_config` 浅拷贝导致 `browser_settings` 嵌套字典被意外修改，影响后续非 pure_mode 登录场景
+- **修复 Worker 单例无法恢复**：`get_worker()` 现在检测 Worker 线程存活状态，停止后自动重建
+- **修复 submit() 永久阻塞**：添加默认超时 300s（`_DEFAULT_SUBMIT_TIMEOUT`），防止 Worker 崩溃时调用线程挂起
+- **修复 fetch 初始化阻塞**：`/openapi.json` 请求添加 5 秒 AbortController 超时
+- **收窄异常捕获范围**：`wait_for_selector` 只捕获 `TimeoutError`，`execute()` 分离业务异常与编程 bug
+- **修复 read_text() 未捕获异常**：脚本文件读取失败时返回 None 而非 500 崩溃
+- **添加端口配置日志**：`_resolve_port` 配置解析失败时记录 warning 而非静默回退
+- **添加 WebSocket 异常日志**：通信异常时记录完整堆栈
+
+#### 中优先级修复（代码质量）
+
+- **消除 utils → backend 反向依赖**：`VALID_LOG_LEVELS` 直接定义在 `logging.py`
+- **添加线程安全**：`_root_configured` 使用双检锁模式
+- **统一日志级别判断**：前端 `getLogClass()` 改用 `item.level` 字段
+- **统一日志级别常量**：`_shouldShowLog` 使用 `LOG_LEVELS` 替代硬编码
+- **修复 checkInitStatus 向导抑制**：区分网络错误和服务端错误
+- **添加 auto_open_browser 默认值**：配置加载失败时显式设为 False
+- **改进异常日志**：`close_browser` 异常从 DEBUG 提升为 WARNING
+- **添加 chmod exc_info**：密钥文件权限失败时保留完整错误信息
+- **修复 __aexit__ 格式化异常**：添加 try/except 防止二次异常
+- **更新过时注释**：browser.py 文档与实现保持一致
+- **清理 _toastLeavingTimer**：beforeUnmount 中添加定时器清理
+- **添加 URL 格式验证**：`validate_env_config` 检查 auth_url 协议前缀
+- **返回缓存副本**：`_get_test_sites` 返回 list 副本防止缓存污染
+- **暴露公共属性**：MonitorService 添加 `ws_broadcast_queue`、`logs` property
+
+### 测试
+
+- 更新 `test_caching` 测试适配副本返回语义
+- 全部 747 个测试通过
+
+---
+
 ## v3.7.1
 
 ### 新增功能

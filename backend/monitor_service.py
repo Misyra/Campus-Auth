@@ -152,8 +152,6 @@ class MonitorService:
 
     def _start_monitor_core(self, config: dict, pure_mode: bool) -> None:
         """创建并启动监控核心（在消费者线程中调用，供 _handle_start 和 _handle_profile_switch 复用）。"""
-        if pure_mode:
-            config.setdefault("browser_settings", {})["pure_mode"] = True
         self._thread_done.clear()
         core = NetworkMonitorCore(
             config=config,
@@ -175,8 +173,12 @@ class MonitorService:
         if self._monitor_thread and self._monitor_thread.is_alive():
             self._push_log("监控线程已在运行，忽略重复启动", level="WARNING", source="backend.monitor_service")
             return
-        config = cmd.data.get("config", self._runtime_config.copy())
+        config = cmd.data.get("config", self._runtime_config)
         pure_mode = cmd.data.get("pure_mode", self.pure_mode)
+        if config is self._runtime_config:
+            config = {**self._runtime_config, "browser_settings": dict(self._runtime_config.get("browser_settings", {}))}
+        if pure_mode:
+            config.setdefault("browser_settings", {})["pure_mode"] = True
         self._start_monitor_core(config, pure_mode)
 
         self._push_log("监控线程已启动", level="INFO", source="backend.monitor_service")
@@ -204,9 +206,11 @@ class MonitorService:
 
     def _handle_login(self, cmd: MonitorCommand) -> None:
         """执行一次性登录尝试（仅在消费者线程中调用）。"""
-        config = cmd.data.get("config", self._runtime_config.copy())
+        config = cmd.data.get("config", self._runtime_config)
         pure_mode = cmd.data.get("pure_mode", self.pure_mode)
         skip_pause_check = cmd.data.get("skip_pause_check", False)
+        if config is self._runtime_config:
+            config = {**self._runtime_config, "browser_settings": dict(self._runtime_config.get("browser_settings", {}))}
         if pure_mode:
             config.setdefault("browser_settings", {})["pure_mode"] = True
 
@@ -422,6 +426,16 @@ class MonitorService:
     @property
     def login_in_progress(self) -> bool:
         return self._login_in_progress
+
+    @property
+    def ws_broadcast_queue(self) -> deque[dict]:
+        """WebSocket 广播队列（供 WebSocketLogHandler 使用）"""
+        return self._ws_broadcast_queue
+
+    @property
+    def logs(self) -> deque[LogEntry]:
+        """日志存储"""
+        return self._logs
 
     @property
     def _is_monitoring(self) -> bool:

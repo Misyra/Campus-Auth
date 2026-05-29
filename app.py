@@ -416,6 +416,7 @@ def _run_server(
     except Exception:
         minimize_to_tray = tray or False
         login_then_exit = False
+        auto_open_browser = False
 
     # 登录成功后退出模式：循环重试直到登录成功，成功后退出进程
     # --no-auto 可跳过此模式，用于 login_then_exit 开启后无法进入 Web 控制台的恢复场景

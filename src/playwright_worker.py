@@ -45,6 +45,11 @@ CMD_BROWSER_CLOSE = "browser_close"  # 实际关闭浏览器进程
 CMD_SHUTDOWN = "shutdown"  # 关闭 Worker
 
 
+# ── 常量 ──
+
+_DEFAULT_SUBMIT_TIMEOUT = 300  # submit() 默认超时：5 分钟
+
+
 # ── 数据结构 ──
 
 
@@ -172,7 +177,7 @@ class PlaywrightWorker:
         cmd_type: str,
         data: dict | None = None,
         wait: bool = True,
-        timeout: float | None = None,
+        timeout: float | None = _DEFAULT_SUBMIT_TIMEOUT,
     ) -> WorkerResponse:
         """提交命令到 Worker 队列。
 
@@ -886,12 +891,17 @@ def get_worker() -> PlaywrightWorker:
     """获取全局 PlaywrightWorker 单例。
 
     首次调用时创建实例并自动 start()。
-    后续调用返回已有实例。
+    后续调用返回已有实例；若实例已停止则自动重建。
     """
     global _worker  # noqa: PLW0603
-    if _worker is None:
+    if _worker is None or not _worker.is_alive():
         with _worker_lock:
-            if _worker is None:
+            if _worker is None or not _worker.is_alive():
+                if _worker is not None:
+                    try:
+                        _worker.stop()
+                    except Exception:
+                        pass
                 _worker = PlaywrightWorker()
                 _worker.start()
     return _worker

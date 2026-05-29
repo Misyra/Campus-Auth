@@ -115,8 +115,10 @@ def _resolve_port() -> int:
                 port = int(app_port)
                 if 1 <= port <= 65535:
                     return port
-        except Exception:
-            pass
+        except (json.JSONDecodeError, ValueError, OSError) as exc:
+            logging.getLogger("backend.main").warning(
+                "读取 settings.json 端口配置失败，使用默认端口 50721: %s", exc
+            )
 
     return 50721
 
@@ -196,6 +198,7 @@ async def websocket_logs(websocket: WebSocket):
     except WebSocketDisconnect:
         await ws_mgr.disconnect(websocket)
     except Exception:
+        logging.getLogger("backend.main").exception("WebSocket 通信异常")
         await ws_mgr.disconnect(websocket)
 
 

@@ -55,8 +55,8 @@ class ServiceContainer:
         # 注册 WebSocket 日志处理器 — 将 Python 日志转发到前端并存入 _logs
         import logging
         ws_handler = WebSocketLogHandler(
-            self.monitor_service._ws_broadcast_queue,
-            log_store=self.monitor_service._logs,
+            self.monitor_service.ws_broadcast_queue,
+            log_store=self.monitor_service.logs,
         )
         ws_handler.setLevel(logging.DEBUG)
         ws_handler.setFormatter(logging.Formatter("%(name)s | %(message)s"))

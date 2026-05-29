@@ -413,7 +413,13 @@ class TestMonitorCoreGetTestSites:
         core = NetworkMonitorCore()
         sites1 = core._get_test_sites()
         sites2 = core._get_test_sites()
-        assert sites1 is sites2
+        # 每次返回副本，值相同但不是同一对象
+        assert sites1 == sites2
+        assert sites1 is not sites2
+        # 修改副本不影响缓存
+        sites1.clear()
+        sites3 = core._get_test_sites()
+        assert len(sites3) > 0
 
 
 class TestMonitorCoreWaitInterruptible:
