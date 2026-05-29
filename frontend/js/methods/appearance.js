@@ -20,6 +20,7 @@ export const appearanceMethods = {
   // 应用外观设置到页面
   applyAppearance() {
     const root = document.documentElement;
+    const body = document.body;
 
     // 背景图片
     if (this.appearance.background_url) {
@@ -37,7 +38,6 @@ export const appearanceMethods = {
     // 主题色
     if (this.appearance.accent_color) {
       root.style.setProperty('--accent', this.appearance.accent_color);
-      // 计算 hover 色（稍微暗一点）
       root.style.setProperty('--accent-hover', this.adjustColor(this.appearance.accent_color, -20));
     }
 
@@ -48,6 +48,13 @@ export const appearanceMethods = {
 
     // 主题
     root.setAttribute('data-theme', this.appearance.theme);
+
+    // 动态渐变背景
+    if (this.appearance.animate_gradient) {
+      body.classList.add('animate-gradient');
+    } else {
+      body.classList.remove('animate-gradient');
+    }
   },
 
   // 颜色调整辅助函数

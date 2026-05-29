@@ -65,12 +65,51 @@ body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: var(--font-size-base);
   background:
-    radial-gradient(ellipse 80% 60% at 10% 20%, rgba(34, 211, 238, 0.06) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 50% at 90% 80%, rgba(167, 139, 250, 0.05) 0%, transparent 60%),
+    radial-gradient(ellipse 80% 60% at var(--gradient-1-x, 10%) var(--gradient-1-y, 20%), var(--gradient-1-color, rgba(34, 211, 238, 0.06)) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at var(--gradient-2-x, 90%) var(--gradient-2-y, 80%), var(--gradient-2-color, rgba(167, 139, 250, 0.05)) 0%, transparent 60%),
     var(--bg-primary);
   color: var(--text-primary);
   min-height: 100vh;
   display: flex;
+}
+
+/* 动态渐变动画 */
+@keyframes gradientShift {
+  0% {
+    --gradient-1-x: 10%;
+    --gradient-1-y: 20%;
+    --gradient-2-x: 90%;
+    --gradient-2-y: 80%;
+  }
+  25% {
+    --gradient-1-x: 80%;
+    --gradient-1-y: 10%;
+    --gradient-2-x: 20%;
+    --gradient-2-y: 90%;
+  }
+  50% {
+    --gradient-1-x: 90%;
+    --gradient-1-y: 70%;
+    --gradient-2-x: 10%;
+    --gradient-2-y: 30%;
+  }
+  75% {
+    --gradient-1-x: 20%;
+    --gradient-1-y: 80%;
+    --gradient-2-x: 80%;
+    --gradient-2-y: 20%;
+  }
+  100% {
+    --gradient-1-x: 10%;
+    --gradient-1-y: 20%;
+    --gradient-2-x: 90%;
+    --gradient-2-y: 80%;
+  }
+}
+
+/* 启用动态渐变 */
+body.animate-gradient {
+  animation: gradientShift 30s ease-in-out infinite;
 }
 
 ::selection {

@@ -94,6 +94,7 @@ export const DEFAULT_APPEARANCE = {
   accent_color: '#22d3ee',
   font_size: 14,
   theme: 'dark', // dark | light
+  animate_gradient: false, // 动态渐变背景
 };
 
 // 预设主题色
