@@ -2,7 +2,6 @@
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  backdrop-filter: var(--blur-md);
   box-shadow: var(--shadow);
   transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
@@ -410,7 +409,6 @@
   border-radius: 12px;
   padding: 16px;
   margin-top: 20px;
-  backdrop-filter: blur(4px);
 }
 
 .info-box h4 {
@@ -455,7 +453,6 @@
   border-radius: 12px;
   background: rgba(30, 41, 59, 0.9);
   border: 1px solid var(--border);
-  backdrop-filter: blur(16px) saturate(1.2);
   box-shadow: var(--shadow-lg);
   animation: slideIn 0.3s ease;
   z-index: 1000;
@@ -497,7 +494,6 @@
   align-items: center;
   justify-content: center;
   cursor: zoom-out;
-  backdrop-filter: blur(4px);
 }
 
 .fullscreen-img {

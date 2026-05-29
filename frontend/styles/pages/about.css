@@ -318,7 +318,6 @@
   align-items: center;
   justify-content: center;
   z-index: 200;
-  backdrop-filter: blur(4px);
 }
 
 .uninstall-modal {

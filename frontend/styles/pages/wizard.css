@@ -24,7 +24,6 @@
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(20px) saturate(1.2);
 }
 
 .wizard-header {
@@ -129,7 +128,6 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 16px;
-  backdrop-filter: blur(4px);
 }
 
 .config-summary h4 {
