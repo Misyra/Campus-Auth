@@ -1,3 +1,5 @@
+import { TIMING } from '../constants.js';
+
 export const uiMethods = {
   setFrontendLogLevel(level) {
     this.frontendLogger.setLevel(level);
@@ -11,8 +13,8 @@ export const uiMethods = {
       this._toastLeavingTimer = setTimeout(() => {
         this.toast.message = '';
         this.toast.leaving = false;
-      }, 300);
-    }, 3000);
+      }, TIMING.TOAST_LEAVE_DELAY);
+    }, TIMING.TOAST_DURATION);
   },
   toastOnly(success, message) {
     this._showToast(success, message);
@@ -20,7 +22,7 @@ export const uiMethods = {
   notify(success, message) {
     const entry = { success, message, time: new Date().toLocaleTimeString() };
     this.notifications.unshift(entry);
-    if (this.notifications.length > 30) this.notifications.length = 30;
+    if (this.notifications.length > TIMING.NOTIFICATION_MAX) this.notifications.length = TIMING.NOTIFICATION_MAX;
     this.unreadNotifications++;
     this._showToast(success, message);
   },

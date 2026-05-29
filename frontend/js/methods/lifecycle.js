@@ -1,4 +1,4 @@
-import { LOG_LEVELS } from '../constants.js';
+import { LOG_LEVELS, TIMING } from '../constants.js';
 
 export const lifecycleMethods = {
   async init() {
@@ -25,8 +25,8 @@ export const lifecycleMethods = {
         if (this._statusPolling) return;
         this._statusPolling = true;
         this.fetchStatus().finally(() => { this._statusPolling = false; });
-    }, 30000));  // 30s fallback, WS 实时推送
-    this.timers.push(setInterval(() => this.fetchAutostart(), 60000));
+    }, TIMING.STATUS_POLL_INTERVAL));  // 30s fallback, WS 实时推送
+    this.timers.push(setInterval(() => this.fetchAutostart(), TIMING.AUTOSTART_POLL_INTERVAL));
     this.frontendLogger.info('app.init', '初始化完成');
   },
   async _waitWebSocketReady(timeoutMs = 2000) {

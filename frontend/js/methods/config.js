@@ -12,6 +12,7 @@ export const configMethods = {
       };
       this.setFrontendLogLevel(this.config.frontend_log_level || 'INFO');
       if (updateSnapshot) {
+        this._configDirty = false;
         this.savedConfigSnapshot = JSON.stringify(this.config);
       }
       this.frontendLogger.info('config', '配置已加载');
@@ -50,6 +51,7 @@ export const configMethods = {
       this.setFrontendLogLevel(this.config.frontend_log_level || 'INFO');
       if (data.success) {
         this.frontendLogger.info('config', data.message || '配置保存成功');
+        this._configDirty = false;
         this.savedConfigSnapshot = JSON.stringify(this.config);
         await this.fetchProfiles();
       } else {
@@ -67,6 +69,7 @@ export const configMethods = {
   resetConfig() {
     if (!confirm('确定要恢复默认设置吗？当前修改将丢失。')) return;
     this.config = structuredClone(DEFAULT_CONFIG);
+    this._configDirty = false;
     this.savedConfigSnapshot = JSON.stringify(this.config);
     this.frontendLogger.info('config', '已恢复默认设置，请点击保存以生效');
   },

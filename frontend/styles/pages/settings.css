@@ -377,8 +377,8 @@
 }
 
 /* 自定义变量样式 */
-.settings-panel .custom-vars-header {
-  display: flex !important;
+.settings-panel .card-body .custom-vars-header {
+  display: flex;
   align-items: center;
   padding: 0 12px 8px;
   border-bottom: 1px solid var(--border-accent);
@@ -387,35 +387,35 @@
   color: var(--text-muted);
 }
 
-.settings-panel .header-name {
+.settings-panel .card-body .header-name {
   width: 180px;
   flex-shrink: 0;
 }
 
-.settings-panel .header-separator {
+.settings-panel .card-body .header-separator {
   width: 24px;
   flex-shrink: 0;
   text-align: center;
 }
 
-.settings-panel .header-value {
+.settings-panel .card-body .header-value {
   flex: 1;
 }
 
-.settings-panel .header-action {
+.settings-panel .card-body .header-action {
   width: 36px;
   flex-shrink: 0;
 }
 
-.settings-panel .custom-vars-list {
-  display: flex !important;
+.settings-panel .card-body .custom-vars-list {
+  display: flex;
   flex-direction: column;
   gap: 6px;
   margin: 8px 0;
 }
 
-.settings-panel .custom-var-item {
-  display: flex !important;
+.settings-panel .card-body .custom-var-item {
+  display: flex;
   align-items: center;
   gap: 4px;
   padding: 8px 12px;
@@ -424,24 +424,24 @@
   border-radius: var(--radius-md);
 }
 
-.settings-panel .var-name-col {
+.settings-panel .card-body .var-name-col {
   width: 180px;
   flex-shrink: 0;
 }
 
-.settings-panel .var-name-col input {
+.settings-panel .custom-var-item .var-name-col input {
   width: 100%;
-  margin: 0 !important;
+  margin: 0;
   padding: 7px 10px;
-  background: rgba(8, 15, 30, 0.65) !important;
-  border: 1px solid var(--border-accent-hover) !important;
+  background: rgba(8, 15, 30, 0.65);
+  border: 1px solid var(--border-accent-hover);
   border-radius: 6px;
   color: #e2e8f0;
   font-size: 13px;
   box-sizing: border-box;
 }
 
-.settings-panel .var-separator {
+.settings-panel .card-body .var-separator {
   width: 24px;
   flex-shrink: 0;
   text-align: center;
@@ -451,24 +451,24 @@
   font-size: 14px;
 }
 
-.settings-panel .var-value-col {
+.settings-panel .card-body .var-value-col {
   flex: 1;
   min-width: 0;
 }
 
-.settings-panel .var-value-col input {
+.settings-panel .custom-var-item .var-value-col input {
   width: 100%;
-  margin: 0 !important;
+  margin: 0;
   padding: 7px 10px;
-  background: rgba(8, 15, 30, 0.65) !important;
-  border: 1px solid var(--border-accent-hover) !important;
+  background: rgba(8, 15, 30, 0.65);
+  border: 1px solid var(--border-accent-hover);
   border-radius: 6px;
   color: #e2e8f0;
   font-size: 13px;
   box-sizing: border-box;
 }
 
-.settings-panel .btn-delete-var {
+.settings-panel .card-body .btn-delete-var {
   width: 32px;
   height: 32px;
   padding: 0;
@@ -480,7 +480,7 @@
   justify-content: center;
 }
 
-.settings-panel .btn-delete-var svg {
+.settings-panel .card-body .btn-delete-var svg {
   width: 14px;
   height: 14px;
 }
