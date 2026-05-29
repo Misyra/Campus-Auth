@@ -46,6 +46,9 @@
   --blur-sm: blur(4px);
   --blur-md: blur(10px);
   --blur-lg: blur(20px);
+
+  /* 字体大小（可通过外观设置动态修改） */
+  --font-size-base: 14px;
 }
 
 * {
@@ -60,6 +63,7 @@
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: var(--font-size-base);
   background:
     radial-gradient(ellipse 80% 60% at 10% 20%, rgba(34, 211, 238, 0.06) 0%, transparent 60%),
     radial-gradient(ellipse 60% 50% at 90% 80%, rgba(167, 139, 250, 0.05) 0%, transparent 60%),

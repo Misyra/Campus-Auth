@@ -83,6 +83,28 @@ export const SETTINGS_TABS = [
   { id: 'system', label: '系统与日志', hint: '日志、自启动与配置备份' },
   { id: 'browser', label: '浏览器设置', hint: '请求头、图片与浏览器参数' },
   { id: 'tasks', label: '任务设置', hint: '活动任务与模板入口' },
+  { id: 'appearance', label: '外观', hint: '背景、主题色与字体' },
+];
+
+// 外观设置默认值
+export const DEFAULT_APPEARANCE = {
+  background_url: '',
+  background_blur: 10,
+  background_opacity: 0.3,
+  accent_color: '#22d3ee',
+  font_size: 14,
+  theme: 'dark', // dark | light
+};
+
+// 预设主题色
+export const ACCENT_COLORS = [
+  { value: '#22d3ee', label: '青色' },
+  { value: '#3b82f6', label: '蓝色' },
+  { value: '#8b5cf6', label: '紫色' },
+  { value: '#ec4899', label: '粉色' },
+  { value: '#f59e0b', label: '橙色' },
+  { value: '#10b981', label: '绿色' },
+  { value: '#ef4444', label: '红色' },
 ];
 
 export const DEFAULT_PROFILE_SETTINGS = {
