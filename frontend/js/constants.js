@@ -83,7 +83,6 @@ export const SETTINGS_TABS = [
   { id: 'system', label: '系统与日志', hint: '日志、自启动与配置备份' },
   { id: 'browser', label: '浏览器设置', hint: '请求头、图片与浏览器参数' },
   { id: 'tasks', label: '任务设置', hint: '活动任务与模板入口' },
-  { id: 'appearance', label: '外观', hint: '背景、主题色与字体' },
 ];
 
 // 外观设置默认值
