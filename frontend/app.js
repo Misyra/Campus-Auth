@@ -36,8 +36,8 @@ function detectPerformance() {
   requestAnimationFrame(measure);
 }
 
-// 页面加载时开始检测
-detectPerformance();
+// 页面加载 5 秒后开始检测，留出加载时间
+setTimeout(detectPerformance, 5000);
 
 async function bootstrapApp() {
   await ensurePartialsReady();
