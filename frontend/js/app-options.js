@@ -139,6 +139,12 @@ export const appOptions = {
       },
       deep: true,
     },
+    appearance: {
+      handler() {
+        this.applyAppearance();
+      },
+      deep: true,
+    },
     currentPage(newPage) {
       if (this.dangerConfirm) {
         this.dangerConfirm.resolve(false);
