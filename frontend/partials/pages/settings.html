@@ -999,6 +999,25 @@
         </div>
       </section>
 
+      <!-- 动态背景 -->
+      <section class="card settings-panel">
+        <div class="card-header">
+          <h2>动态背景</h2>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <div class="toggle">
+              <label class="toggle-label">
+                <input type="checkbox" v-model="appearance.animate_gradient" />
+                <span class="toggle-slider"></span>
+              </label>
+              <span>启用动态渐变背景</span>
+            </div>
+            <p class="form-hint">背景颜色会缓慢变化，增加视觉动感</p>
+          </div>
+        </div>
+      </section>
+
       <!-- 操作按钮 -->
       <div class="settings-float-save">
         <button type="button" class="btn btn-secondary" @click="resetAppearance">恢复默认</button>
