@@ -6,6 +6,7 @@ export function configData() {
     config: { ...DEFAULT_CONFIG },
     defaultPortalUrls: DEFAULT_CONFIG.portal_check_urls,
     savedConfigSnapshot: '',
+    _configDirty: false,
     dangerConfirm: null,
     dangerCountdown: 0,
   };

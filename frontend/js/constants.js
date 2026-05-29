@@ -2,6 +2,14 @@ export const api = window.axios.create({
   timeout: 10000,
 });
 
+export const TIMING = {
+  STATUS_POLL_INTERVAL: 30000,    // 状态轮询间隔（ms）
+  AUTOSTART_POLL_INTERVAL: 60000, // 自启动轮询间隔（ms）
+  TOAST_DURATION: 3000,           // Toast 显示时长（ms）
+  TOAST_LEAVE_DELAY: 300,         // Toast 离场动画时长（ms）
+  NOTIFICATION_MAX: 30,           // 通知最大条数
+};
+
 export const LOG_LEVELS = {
   DEBUG: 10,
   INFO: 20,

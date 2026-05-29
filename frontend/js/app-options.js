@@ -8,7 +8,7 @@ import { lifecycleMethods } from './methods/lifecycle.js';
 import { profileMethods } from './methods/profiles.js';
 import { scriptMethods } from './methods/scripts.js';
 import { statusMethods } from './methods/status.js';
-import { taskMethods } from './methods/tasks.js';
+import { taskMethods } from './tasks/index.js';
 import { uiMethods } from './methods/ui.js';
 
 // 按功能域拆分的数据模块
@@ -77,8 +77,7 @@ export const appOptions = {
       return true;
     },
     configDirty() {
-      if (!this.savedConfigSnapshot) return false;
-      return JSON.stringify(this.config) !== this.savedConfigSnapshot;
+      return this._configDirty;
     },
     filteredLogs() {
       let result = this.logs;
@@ -125,6 +124,16 @@ export const appOptions = {
     },
   },
   watch: {
+    config: {
+      handler() {
+        if (!this.savedConfigSnapshot) {
+          this._configDirty = false;
+          return;
+        }
+        this._configDirty = JSON.stringify(this.config) !== this.savedConfigSnapshot;
+      },
+      deep: true,
+    },
     currentPage(newPage) {
       if (this.dangerConfirm) {
         this.dangerConfirm.resolve(false);
