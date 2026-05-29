@@ -866,7 +866,13 @@
 /* 外观页面卡片 - 更透明以显示背景 */
 body.has-custom-bg .appearance-card {
   background: rgba(15, 23, 42, 0.5);
-  backdrop-filter: blur(12px);
+  backdrop-filter: none;
+}
+
+/* 有背景图片时，去掉所有卡片毛玻璃 */
+body.has-custom-bg .card {
+  backdrop-filter: none;
+  background: rgba(15, 23, 42, 0.6);
 }
 
 .appearance-colors {
