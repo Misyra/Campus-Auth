@@ -863,6 +863,12 @@
   }
 }
 
+/* 外观页面卡片 - 更透明以显示背景 */
+body.has-custom-bg .appearance-card {
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(12px);
+}
+
 .appearance-colors {
   display: flex;
   flex-wrap: wrap;
