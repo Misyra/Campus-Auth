@@ -101,6 +101,8 @@ Vue 3 SPA served as static files by FastAPI. **No build tool** — uses UMD Vue 
 - `app.js` — Vue app entry, mounts after partials loaded
 - `template-loader.js` — Fetches HTML partials, injects into DOM before Vue mount
 - `js/app-options.js` — Vue options (data, computed, methods, lifecycle for all pages)
+- `js/data/` — Data modules split by domain (dashboard, config, tasks, scripts, debug, profiles, repo, uninstall, ui, websocket, timers, status)
+- `js/components.js` — Reusable Vue components (GlassCard, FormGroup, ToggleSwitch, StatusDot, LoadingSpinner, EmptyState)
 - `js/methods/` — Business logic modules (actions, config, profiles, tasks, ui, etc.)
 - `partials/pages/` — HTML templates: dashboard, settings, tasks, profiles, about
 - `vendor/` — Vendored UMD: `vue.global.prod.js`, `axios.min.js`
