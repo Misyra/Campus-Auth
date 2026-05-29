@@ -1,4 +1,4 @@
-import { api, DEFAULT_CONFIG, SETTINGS_TABS } from './constants.js';
+import { api, SETTINGS_TABS } from './constants.js';
 import { createFrontendLogger } from './logger.js';
 import { actionMethods } from './methods/actions.js';
 import { autostartMethods } from './methods/autostart.js';
@@ -11,116 +11,41 @@ import { statusMethods } from './methods/status.js';
 import { taskMethods } from './methods/tasks.js';
 import { uiMethods } from './methods/ui.js';
 
+// 按功能域拆分的数据模块
+import { dashboardData } from './data/dashboard.js';
+import { configData } from './data/config.js';
+import { taskData } from './data/tasks.js';
+import { scriptData } from './data/scripts.js';
+import { debugData } from './data/debug.js';
+import { profileData } from './data/profiles.js';
+import { repoData } from './data/repo.js';
+import { uninstallData } from './data/uninstall.js';
+import { uiData } from './data/ui.js';
+import { websocketData } from './data/websocket.js';
+import { timerData } from './data/timers.js';
+import { statusData } from './data/status.js';
+
 export const appOptions = {
   data() {
     return {
-      currentPage: 'dashboard',
-      ws: null,
-      showWizard: false,
-      wizardStep: 1,
-      currentSettingsTab: 'account',
+      // 各功能域数据
+      ...dashboardData(),
+      ...configData(),
+      ...taskData(),
+      ...scriptData(),
+      ...debugData(),
+      ...profileData(),
+      ...repoData(),
+      ...uninstallData(),
+      ...uiData(),
+      ...websocketData(),
+      ...timerData(),
+      ...statusData(),
+
+      // 全局共享状态
       settingsTabs: SETTINGS_TABS,
-      config: { ...DEFAULT_CONFIG },
-      defaultPortalUrls: DEFAULT_CONFIG.portal_check_urls,
       frontendLogger: createFrontendLogger('INFO'),
-      isLoading: true,
-      status: {
-        monitoring: false,
-        network_check_count: 0,
-        login_attempt_count: 0,
-        last_check_time: null,
-        runtime_seconds: 0,
-        network_connected: false,
-        status_detail: '已停止',
-        network_state: 'unknown',
-      },
-      logs: [],
       appVersion: 'unknown',
-      autostart: {
-        platform: '-',
-        enabled: false,
-        method: '-',
-        location: '',
-      },
-      busy: {
-        save: false,
-        monitor: false,
-        action: false,
-        autostart: false,
-        detect: false,
-        editorDetect: false,
-        debug: false,
-        backup: false,
-        uninstall: false,
-      },
-      backups: [],
-      toast: {
-        success: true,
-        message: '',
-        leaving: false,
-      },
-      timers: [],
-      _wsDestroyed: false,
-      _wsRetryTimer: null,
-      _dangerTimer: null,
-      _repoDisclaimerTimer: null,
-      _toastTimer: null,
-      newLogCount: 0,
-      fetchStatusFailCount: 0,
-      wsReconnecting: false,
-      wsRetryCount: 0,
-      wsMaxRetries: 5,
-      notifications: [],
-      unreadNotifications: 0,
-      showNotifications: false,
-      logFilter: { level: '', search: '' },
-      autoScroll: true,
-      tasks: [],
-      activeTaskId: 'default',
-      editingTask: null,
-      editingTaskType: 'browser', // 'browser' | 'script'
-      jsonError: '',
-      scripts: [],
-      savedConfigSnapshot: '',
-      dangerConfirm: null,
-      dangerCountdown: 0,
-      debugSession: {
-        running: false,
-        task_id: null,
-        current_step: 0,
-        total_steps: 0,
-        steps: [],
-        results: [],
-        screenshot_url: null,
-      },
-      debugLoading: false,
-      pureMode: false,
-      profiles: {},
-      activeProfileId: 'default',
-      autoSwitch: true,
-      editingProfile: null,
-      detectResult: null,
-      editorDetectResult: null,
-      fullscreenSrc: '',
-      updateInfo: null,
-      updateLoading: false,
-      repoImport: {
-        visible: false,
-        url: 'https://github.com/Misyra/campus-auth-tasks/blob/master/index.json',
-        source: 'github',
-        loading: false,
-        error: '',
-        tasks: [],
-        searchQuery: '',
-        disclaimer: null,
-        disclaimerCountdown: 0,
-      },
-      uninstall: {
-        visible: false,
-        scanning: false,
-        items: [],
-        results: null,
-      },
     };
   },
   computed: {
@@ -168,7 +93,6 @@ export const appOptions = {
     },
     networkStatus() {
       if (!this.status.monitoring) return 'idle';
-      // 首次检测中（network_state 为 unknown）显示为检测中状态
       if (this.status.network_state === 'unknown') return 'checking';
       if (this.status.network_connected === false) return 'disconnected';
       return 'connected';
@@ -202,7 +126,6 @@ export const appOptions = {
   },
   watch: {
     currentPage(newPage) {
-      // 页面切换时清理待处理的危险确认对话框，避免 Promise 永久挂起
       if (this.dangerConfirm) {
         this.dangerConfirm.resolve(false);
         this.dangerConfirm = null;
@@ -212,7 +135,6 @@ export const appOptions = {
           this._dangerTimer = null;
         }
       }
-      // 返回日志页面时自动滚动到底部（v-if 重建 DOM 后需等待下一帧）
       if (newPage === 'dashboard' && this.autoScroll) {
         this.$nextTick(() => this.scrollToBottom());
       }
@@ -225,22 +147,13 @@ export const appOptions = {
   },
   beforeUnmount() {
     this._wsDestroyed = true;
-    if (this._wsRetryTimer) {
-      clearTimeout(this._wsRetryTimer);
-    }
-    if (this._dangerTimer) {
-      clearInterval(this._dangerTimer);
-    }
-    if (this._repoDisclaimerTimer) {
-      clearInterval(this._repoDisclaimerTimer);
-    }
-    if (this._toastTimer) {
-      clearTimeout(this._toastTimer);
-    }
+    if (this._wsRetryTimer) clearTimeout(this._wsRetryTimer);
+    if (this._dangerTimer) clearInterval(this._dangerTimer);
+    if (this._repoDisclaimerTimer) clearInterval(this._repoDisclaimerTimer);
+    if (this._toastTimer) clearTimeout(this._toastTimer);
+    if (this._toastLeavingTimer) clearTimeout(this._toastLeavingTimer);
     this.timers.forEach((t) => clearInterval(t));
-    if (this.ws) {
-      this.ws.close();
-    }
+    if (this.ws) this.ws.close();
   },
   methods: {
     ...uiMethods,

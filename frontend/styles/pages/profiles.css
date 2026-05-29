@@ -91,7 +91,7 @@
 .detect-banner-icon {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -311,7 +311,7 @@
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 4px;
-  background: rgba(15, 23, 42, 0.6);
+  background: var(--bg-glass);
   color: var(--text-secondary);
   font-family: var(--font-mono);
   border: 1px solid var(--border);
@@ -541,7 +541,7 @@
   max-width: min(380px, calc(100vw - 80px));
   padding: 14px 16px;
   border-radius: 12px;
-  border: 1px solid rgba(56, 189, 248, 0.3);
+  border: 1px solid var(--border-accent-strong);
   background: rgba(8, 15, 30, 0.95);
   color: #e6f1ff;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);

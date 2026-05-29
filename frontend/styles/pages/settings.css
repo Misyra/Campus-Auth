@@ -16,7 +16,7 @@
   width: 100%;
   gap: 8px;
   padding: 6px;
-  border: 1px solid rgba(56, 189, 248, 0.15);
+  border: 1px solid var(--border-accent);
   background: rgba(30, 41, 59, 0.6);
   backdrop-filter: blur(12px);
   border-radius: 14px;
@@ -217,7 +217,7 @@
   padding: 10px 14px;
   background: rgba(34, 211, 238, 0.05);
   border: 1px solid rgba(34, 211, 238, 0.12);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   line-height: 1.6;
 }
 
@@ -305,7 +305,7 @@
   max-width: min(380px, calc(100vw - 80px));
   padding: 14px 16px;
   border-radius: 12px;
-  border: 1px solid rgba(56, 189, 248, 0.3);
+  border: 1px solid var(--border-accent-strong);
   background: rgba(8, 15, 30, 0.95);
   color: #e6f1ff;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
@@ -381,7 +381,7 @@
   display: flex !important;
   align-items: center;
   padding: 0 12px 8px;
-  border-bottom: 1px solid rgba(56, 189, 248, 0.15);
+  border-bottom: 1px solid var(--border-accent);
   margin-bottom: 8px;
   font-size: 12px;
   color: var(--text-muted);
@@ -421,7 +421,7 @@
   padding: 8px 12px;
   background: rgba(15, 23, 42, 0.4);
   border: 1px solid rgba(56, 189, 248, 0.12);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .settings-panel .var-name-col {
@@ -434,7 +434,7 @@
   margin: 0 !important;
   padding: 7px 10px;
   background: rgba(8, 15, 30, 0.65) !important;
-  border: 1px solid rgba(56, 189, 248, 0.25) !important;
+  border: 1px solid var(--border-accent-hover) !important;
   border-radius: 6px;
   color: #e2e8f0;
   font-size: 13px;
@@ -461,7 +461,7 @@
   margin: 0 !important;
   padding: 7px 10px;
   background: rgba(8, 15, 30, 0.65) !important;
-  border: 1px solid rgba(56, 189, 248, 0.25) !important;
+  border: 1px solid var(--border-accent-hover) !important;
   border-radius: 6px;
   color: #e2e8f0;
   font-size: 13px;
@@ -546,7 +546,7 @@
   grid-template-columns: 1fr 160px 70px 170px;
   gap: 8px;
   padding: 8px 12px;
-  border-bottom: 1px solid rgba(56, 189, 248, 0.15);
+  border-bottom: 1px solid var(--border-accent);
   font-size: 12px;
   color: var(--text-muted);
   font-weight: 600;

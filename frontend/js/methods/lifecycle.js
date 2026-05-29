@@ -1,3 +1,5 @@
+import { LOG_LEVELS } from '../constants.js';
+
 export const lifecycleMethods = {
   async init() {
     this.frontendLogger.info('app.init', '开始初始化');
@@ -89,8 +91,13 @@ export const lifecycleMethods = {
         this.frontendLogger.error('init', '密码解密失败，请在设置页面重新输入密码');
         this.notify(false, '密码解密失败，请在设置页面重新输入密码');
       }
-    } catch {
-      this.showWizard = false;
+    } catch (error) {
+      // 网络错误（无 response）时保持 showWizard 不变
+      // 服务端明确返回错误时才抑制向导
+      if (error?.response?.status) {
+        this.showWizard = false;
+      }
+      this.frontendLogger.warn('init', '检查初始化状态失败', error);
     }
   },
   async fetchAppVersion() {
@@ -105,7 +112,14 @@ export const lifecycleMethods = {
     }
 
     try {
-      const openapiResp = await fetch('/openapi.json', { cache: 'no-cache' });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      let openapiResp;
+      try {
+        openapiResp = await fetch('/openapi.json', { cache: 'no-cache', signal: controller.signal });
+      } finally {
+        clearTimeout(timeoutId);
+      }
       if (openapiResp.ok) {
         const schema = await openapiResp.json();
         this.appVersion = schema?.info?.version || 'unknown';
@@ -154,9 +168,9 @@ export const lifecycleMethods = {
     // 根据前端日志级别过滤 WebSocket 日志显示
     // 完整日志始终写入文件，前端仅按级别展示
     const frontendLevel = (this.config.frontend_log_level || 'INFO').toUpperCase();
-    const levels = { DEBUG: 0, INFO: 1, WARNING: 2, ERROR: 3, CRITICAL: 4 };
-    const msgLevel = levels[String(level || '').toUpperCase()] ?? 1;
-    const minLevel = levels[frontendLevel] ?? 2;
+    const levels = LOG_LEVELS;
+    const msgLevel = levels[String(level || '').toUpperCase()] ?? 20;
+    const minLevel = levels[frontendLevel] ?? 30;
     return msgLevel >= minLevel;
   },
   connectWebSocket() {

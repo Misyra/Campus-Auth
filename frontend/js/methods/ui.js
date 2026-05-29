@@ -95,7 +95,7 @@ export const uiMethods = {
     return logViewer.scrollTop + logViewer.clientHeight >= logViewer.scrollHeight - 5;
   },
   _appendLogs(entries) {
-    const LOG_MAX_ENTRIES = 300;
+    const LOG_MAX_ENTRIES = 100; // 降低上限，减少 DOM 元素数量
     const wasAtBottom = this._isViewerAtBottom();
     this.logs.push(...entries);
     if (this.logs.length > LOG_MAX_ENTRIES) {

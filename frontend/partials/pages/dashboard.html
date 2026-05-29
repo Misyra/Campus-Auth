@@ -155,7 +155,7 @@
               <span class="log-time">{{ formatLogTime(item.timestamp) }}</span>
               <span class="log-time">{{ formatLogMeta(item) }}</span>
               <div class="log-content">
-                <span class="log-message" :class="getLogClass(item.message)">{{ stripScreenshotHint(item.message) }}</span>
+                <span class="log-message" :class="getLogClass(item)">{{ stripScreenshotHint(item.message) }}</span>
                 <div v-if="extractScreenshotUrl(item.message)" class="log-screenshot-wrap">
                   <img
                     :src="extractScreenshotUrl(item.message)"

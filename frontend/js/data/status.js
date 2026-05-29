@@ -1,0 +1,33 @@
+// 状态相关数据
+export function statusData() {
+  return {
+    status: {
+      monitoring: false,
+      network_check_count: 0,
+      login_attempt_count: 0,
+      last_check_time: null,
+      runtime_seconds: 0,
+      network_connected: false,
+      status_detail: '已停止',
+      network_state: 'unknown',
+    },
+    autostart: {
+      platform: '-',
+      enabled: false,
+      method: '-',
+      location: '',
+    },
+    busy: {
+      save: false,
+      monitor: false,
+      action: false,
+      autostart: false,
+      detect: false,
+      editorDetect: false,
+      debug: false,
+      backup: false,
+      uninstall: false,
+    },
+    backups: [],
+  };
+}

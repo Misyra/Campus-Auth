@@ -1,8 +1,8 @@
 .card {
-  background: rgba(30, 41, 59, 0.6);
+  background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  backdrop-filter: blur(12px) saturate(1.1);
+  border-radius: var(--radius-xl);
+  backdrop-filter: var(--blur-md);
   box-shadow: var(--shadow);
   transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
@@ -44,7 +44,7 @@
   gap: 8px;
   padding: 10px 20px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-secondary);
   color: var(--text-primary);
   font-size: 14px;
@@ -159,7 +159,7 @@
   color: var(--text-secondary);
   font-size: 14px;
   font-weight: 500;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.2s ease;
   width: 100%;
@@ -191,7 +191,7 @@
   justify-content: center;
   gap: 6px;
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   font-weight: 500;
   background: rgba(239, 68, 68, 0.1);
@@ -218,7 +218,7 @@
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   font-weight: 500;
   min-height: 40px;
@@ -262,9 +262,9 @@
 .form-group textarea {
   width: 100%;
   padding: 12px 14px;
-  background: rgba(15, 23, 42, 0.7);
+  background: var(--bg-glass);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: 14px;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
@@ -274,7 +274,7 @@
 .form-group input:hover,
 .form-group select:hover,
 .form-group textarea:hover {
-  background: rgba(15, 23, 42, 0.85);
+  background: var(--bg-glass-heavy);
 }
 
 .form-group input:focus,

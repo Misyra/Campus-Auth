@@ -31,11 +31,13 @@ export const formatterMethods = {
     const text = String(message || '');
     return text.replace(/\s*[\[(]?\s*截图[:：]\s*\/(?:logs|debug|temp)\/\S+\.(?:png|jpg|jpeg|webp|gif)\s*[\])]?/gi, '').trim();
   },
-  getLogClass(message) {
-    const text = this.stripScreenshotHint(message);
-    if (text.includes('错误') || text.includes('✗') || text.includes('EXCEPTION')) return 'error';
-    if (text.includes('异常') || text.includes('警告') || text.includes('失败')) return 'warning';
-    if (text.includes('成功') || text.includes('✓')) return 'success';
+  getLogClass(item) {
+    const level = String(item?.level || '').toUpperCase();
+    if (level === 'ERROR' || level === 'CRITICAL') return 'error';
+    if (level === 'WARNING') return 'warning';
+    // 成功消息没有专门的 level，保留关键词匹配作为补充
+    const text = this.stripScreenshotHint(item?.message || item || '');
+    if (text.includes('成功') || text.includes('✓') || text.includes('success')) return 'success';
     return '';
   },
 };
