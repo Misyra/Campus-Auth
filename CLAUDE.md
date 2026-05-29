@@ -53,16 +53,18 @@ uv run pytest -k "test_name"
 
 ### Backend (`backend/`)
 
-FastAPI application. **All routes live in a single file** `main.py` (~1300 lines, 50+ endpoints). Services are module-level globals initialized at import time.
+FastAPI application. Routes split across 10 router files under `backend/routers/`. Services managed by `ServiceContainer`.
 
 | File | Purpose |
 |------|---------|
-| `main.py` | FastAPI app, all API routes, DebugSession, lifespan management |
+| `main.py` | FastAPI app, lifespan management, CORS, WebSocket, static files, middleware |
+| `routers/` | 10 个路由文件：monitor, config, tasks, profiles, debug, backup, repo, system, tools, scripts |
 | `monitor_service.py` | Monitor start/stop, WebSocket broadcast, login trigger (Actor model — message queue to background thread) |
 | `profile_service.py` | Multi-network profile CRUD, gateway IP / WiFi SSID detection, auto-switch |
 | `config_service.py` | Config read/write, init status |
 | `task_service.py` | Task CRUD, active task, danger step detection |
 | `schemas.py` | Pydantic models (`MonitorConfigPayload`, `ProfileSettings`, `ProfilesData`, etc.) |
+| `constants.py` | Shared constants (`PROJECT_ROOT`, `AUTH_DATA_DIR`, `DEFAULT_NETWORK_TARGETS`, etc.) |
 
 ### Core Logic (`src/`)
 

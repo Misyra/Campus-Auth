@@ -24,7 +24,7 @@ const _SHARED_DEFAULTS = {
   login_timeout: 60,
   max_retries: 3,
   retry_interval: 5,
-  browser_low_resource_mode: true,
+  browser_low_resource_mode: false,
   browser_disable_web_security: false,
   browser_extra_headers_json: "",
   browser_args: BROWSER_ARGS_DEFAULT,

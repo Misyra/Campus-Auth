@@ -8,11 +8,6 @@ from __future__ import annotations
 
 from typing import Any
 
-# 备份文件名正则，与 backend/main.py 中 3 处备份路由的 inline 校验保持一致
-BACKUP_FILENAME_PATTERN: str = (
-    r"^settings_\d{8}_\d{6}(_\d{6})?(_autosave)?\.json$"
-)
-
 # 配置文件中跨 load_ui_config / load_runtime_config / build_runtime_config /
 # save_config_combined 四函数重复出现的所有字段名
 # 源自 MonitorConfigPayload / ProfileSettings 交集

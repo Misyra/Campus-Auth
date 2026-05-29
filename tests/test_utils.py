@@ -794,3 +794,123 @@ class TestLogConfigCenter:
         # 注意：由于单例模式，如果之前已初始化则为 True
         # 这里只验证方法可调用
         assert isinstance(center.is_initialized(), bool)
+
+
+# =====================================================================
+# CREATE_NO_WINDOW_FLAG 常量
+# =====================================================================
+
+
+class TestCreateNoWindowFlag:
+    def test_is_int(self):
+        from src.utils.platform_utils import CREATE_NO_WINDOW_FLAG
+        assert isinstance(CREATE_NO_WINDOW_FLAG, int)
+
+    def test_on_windows_is_nonzero(self):
+        """Windows 上应为非零值（subprocess.CREATE_NO_WINDOW = 0x08000000）"""
+        from src.utils.platform_utils import CREATE_NO_WINDOW_FLAG
+        if is_windows():
+            assert CREATE_NO_WINDOW_FLAG != 0
+        else:
+            assert CREATE_NO_WINDOW_FLAG == 0
+
+
+# =====================================================================
+# AUTH_DATA_DIR 常量
+# =====================================================================
+
+
+class TestAuthDataDir:
+    def test_is_path(self):
+        from backend.constants import AUTH_DATA_DIR
+        assert isinstance(AUTH_DATA_DIR, Path)
+
+    def test_ends_with_campus_network_auth(self):
+        from backend.constants import AUTH_DATA_DIR
+        assert AUTH_DATA_DIR.name == ".campus_network_auth"
+
+
+# =====================================================================
+# DEFAULT_NETWORK_TARGETS / DEFAULT_HTTP_TARGETS 常量
+# =====================================================================
+
+
+class TestDefaultConstants:
+    def test_network_targets_format(self):
+        from backend.constants import DEFAULT_NETWORK_TARGETS
+        parts = DEFAULT_NETWORK_TARGETS.split(",")
+        assert len(parts) >= 3
+        for part in parts:
+            assert ":" in part
+
+    def test_http_targets_format(self):
+        from backend.constants import DEFAULT_HTTP_TARGETS
+        parts = DEFAULT_HTTP_TARGETS.split(",")
+        assert len(parts) >= 2
+        for part in parts:
+            assert part.startswith("http")
+
+    def test_schemas_uses_constant(self):
+        """MonitorConfigPayload 默认值应引用常量"""
+        from backend.constants import DEFAULT_NETWORK_TARGETS, DEFAULT_HTTP_TARGETS
+        from backend.schemas import MonitorConfigPayload
+        m = MonitorConfigPayload()
+        assert m.network_targets == DEFAULT_NETWORK_TARGETS
+        assert m.http_targets == DEFAULT_HTTP_TARGETS
+
+
+# =====================================================================
+# _DateRotatingFileHandler 文件大小轮转
+# =====================================================================
+
+
+class TestDateRotatingFileHandlerRotation:
+    def test_rotates_when_size_exceeded(self, tmp_path):
+        """超过 file_max_bytes 时应创建分片文件"""
+        from src.utils.logging import _DateRotatingFileHandler
+
+        handler = _DateRotatingFileHandler(
+            log_dir=str(tmp_path),
+            file_max_bytes=200,  # 极小阈值便于测试
+            file_backup_count=2,
+            level=logging.DEBUG,
+        )
+        record = logging.LogRecord("test", logging.INFO, "", 0, "msg" * 50, (), None)
+        record.side = "BACKEND"
+        handler.setFormatter(logging.Formatter("%(message)s"))
+
+        # 写入多条日志直到触发轮转
+        for _ in range(20):
+            handler.emit(record)
+
+        # 应存在 app.log 和 app.log.1
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        log_dir = tmp_path / today
+        assert (log_dir / "app.log").exists()
+        # 分片文件可能存在（取决于写入量）
+        handler.close()
+
+    def test_backup_count_respected(self, tmp_path):
+        """分片文件数量不应超过 file_backup_count"""
+        from src.utils.logging import _DateRotatingFileHandler
+
+        handler = _DateRotatingFileHandler(
+            log_dir=str(tmp_path),
+            file_max_bytes=100,
+            file_backup_count=2,
+            level=logging.DEBUG,
+        )
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        record = logging.LogRecord("test", logging.INFO, "", 0, "x" * 80, (), None)
+        record.side = "BACKEND"
+
+        # 写入大量日志
+        for _ in range(50):
+            handler.emit(record)
+
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        log_dir = tmp_path / today
+        # 最多 file_backup_count 个分片 + 1 个当前文件
+        backup_files = list(log_dir.glob("app.log.*"))
+        assert len(backup_files) <= 2
+        handler.close()

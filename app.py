@@ -18,7 +18,8 @@ _project_root = Path(__file__).resolve().parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from src.playwright_bootstrap import ensure_playwright_ready  # noqa: E402 — 需要在 sys.path 插入后导入
+from backend.constants import AUTH_DATA_DIR  # noqa: E402 — 需要在 sys.path 插入后导入
+from src.playwright_bootstrap import ensure_playwright_ready  # noqa: E402 — 同上
 from src.playwright_worker import cleanup_orphan_browsers  # noqa: E402 — 同上
 from src.utils.platform_utils import is_windows  # noqa: E402 — 同上；跨平台检测：替代 sys.platform == "win32"
 
@@ -27,9 +28,8 @@ from src.utils.platform_utils import is_windows  # noqa: E402 — 同上；跨�
 
 
 def _get_pid_file() -> Path:
-    pid_dir = Path.home() / ".campus_network_auth"
-    pid_dir.mkdir(exist_ok=True)
-    return pid_dir / "campus_network_auth.pid"
+    AUTH_DATA_DIR.mkdir(exist_ok=True)
+    return AUTH_DATA_DIR / "campus_network_auth.pid"
 
 
 def _read_pid_file() -> tuple[int | None, str | None, str | None]:
@@ -466,10 +466,32 @@ def _run_server(
             tray_icon.stop()
 
 
+# ==================== 全局异常钩子 ====================
+
+
+def _setup_exception_hooks() -> None:
+    """设置全局异常钩子，确保线程内未捕获异常被记录到日志。"""
+    import threading
+    from src.utils.logging import get_logger
+
+    _hook_logger = get_logger("uncaught", side="APP")
+
+    def _threading_excepthook(args: threading.ExceptHookArgs) -> None:
+        _hook_logger.error(
+            "线程 %s 未捕获异常",
+            args.thread.name if args.thread else "unknown",
+            exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+        )
+
+    threading.excepthook = _threading_excepthook
+
+
 # ==================== 入口 ====================
 
 
 def main() -> None:
+    _setup_exception_hooks()
+
     parser = argparse.ArgumentParser(
         description="Campus-Auth 校园网自动认证",
         formatter_class=argparse.RawDescriptionHelpFormatter,

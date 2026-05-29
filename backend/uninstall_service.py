@@ -6,10 +6,11 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from .constants import AUTH_DATA_DIR
 from src.utils.platform_utils import get_platform
 
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
-USER_DATA_DIR = Path.home() / ".campus_network_auth"
+USER_DATA_DIR = AUTH_DATA_DIR
 
 PLATFORM = (
     get_platform()

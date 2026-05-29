@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from src.network_detect import detect_gateway_ip, detect_wifi_ssid
 from src.utils.file_helpers import atomic_write
@@ -63,6 +63,17 @@ class ProfileService:
     def save(self, data: ProfilesData) -> None:
         """原子写入 settings.json"""
         with self._lock:
+            self._save_unsafe(data)
+
+    def update(self, func: Callable[[ProfilesData], None]) -> None:
+        """原子化读-改-写操作。
+
+        持锁执行 load → func(data) → save，确保并发安全。
+        func 在锁内调用，应快速返回，不要做 I/O 或网络操作。
+        """
+        with self._lock:
+            data = self._load_unsafe()
+            func(data)
             self._save_unsafe(data)
 
     def get_active_profile(self) -> ProfileSettings:

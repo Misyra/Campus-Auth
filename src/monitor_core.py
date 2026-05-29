@@ -7,6 +7,7 @@ import time
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
+from backend.constants import DEFAULT_NETWORK_TARGETS
 from .network_decision import check_login_prerequisites, check_network_status, check_pause
 from .network_probes import set_block_proxy
 from .utils import (
@@ -50,7 +51,7 @@ class NetworkMonitorCore:
 
     # 类常量：网络检测配置
     NETWORK_CHECK_TIMEOUT_SECONDS = 2
-    DEFAULT_PING_TARGETS = ["8.8.8.8:53", "114.114.114.114:53", "www.baidu.com:443"]
+    DEFAULT_PING_TARGETS = DEFAULT_NETWORK_TARGETS.split(",")
 
     # 类常量：自动切换检测冷却
     GATEWAY_CHECK_COOLDOWN_SECONDS = 60
@@ -93,7 +94,12 @@ class NetworkMonitorCore:
         self._last_profile_id: Optional[str] = None
         self._last_gateway_check_time: float = 0
 
-    def log_message(self, message: str, level: int = logging.INFO) -> None:
+    def log_message(self, message: str, level: int = logging.INFO, exc_info: bool = False) -> None:
+        if exc_info:
+            import traceback
+            tb = traceback.format_exc()
+            if tb and tb != "NoneType: None\n":
+                message = f"{message}\n{tb}"
         if self.log_callback:
             self.log_callback(
                 message,
@@ -101,7 +107,7 @@ class NetworkMonitorCore:
                 "monitor.core",
             )
         else:
-            self.logger.log(level, message)
+            self.logger.log(level, message, exc_info=exc_info)
 
     def snapshot(self) -> Dict[str, Any]:
         return {
@@ -194,7 +200,7 @@ class NetworkMonitorCore:
             # 注：此处捕获 Exception 后调用 stop_monitoring()，会更新 StatusSnapshot 并推送
             # WebSocket 状态变化，前端可见 monitoring=false。非静默退出。
             except Exception as exc:
-                self.log_message(f"监控异常: {exc}", logging.ERROR)
+                self.log_message(f"监控异常: {exc}", logging.ERROR, exc_info=True)
             finally:
                 self.stop_monitoring()
         finally:
@@ -596,8 +602,8 @@ class NetworkMonitorCore:
             self.log_message(f"登录连接错误: {exc}", logging.WARNING)
             return False, f"连接错误: {exc}"
         except RuntimeError as exc:
-            self.log_message(f"登录运行时错误: {exc}", logging.ERROR)
+            self.log_message(f"登录运行时错误: {exc}", logging.ERROR, exc_info=True)
             return False, f"运行时错误: {exc}"
         except Exception as exc:
-            self.log_message(f"登录执行异常: {exc}", logging.ERROR)
+            self.log_message(f"登录执行异常: {exc}", logging.ERROR, exc_info=True)
             return False, str(exc)

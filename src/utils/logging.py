@@ -92,6 +92,10 @@ def configure_root_logger(
     console_handler.addFilter(context_filter)
     root.addHandler(console_handler)
 
+    # 压制第三方库的 DEBUG 日志，避免文件日志膨胀
+    for noisy in ("httpcore", "httpx", "urllib3", "http.client"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
     _root_configured = True
     return root
 
@@ -129,6 +133,8 @@ class _DateRotatingFileHandler(logging.Handler):
         retention_days: int = 7,
         level: int = logging.INFO,
         formatter: logging.Formatter | None = None,
+        file_max_bytes: int = 5 * 1024 * 1024,
+        file_backup_count: int = 3,
     ):
         super().__init__(level=level)
         self._log_dir = log_dir
@@ -137,6 +143,9 @@ class _DateRotatingFileHandler(logging.Handler):
         self._last_cleanup: float = 0
         self._stream = None
         self._emit_lock = threading.Lock()
+        self._file_max_bytes = file_max_bytes
+        self._file_backup_count = file_backup_count
+        self._bytes_written: int = 0
         if formatter:
             self.setFormatter(formatter)
 
@@ -154,6 +163,9 @@ class _DateRotatingFileHandler(logging.Handler):
             except Exception:
                 pass
         self._stream = open(path, "a", encoding="utf-8")
+        self._bytes_written = 0
+        if os.path.exists(path):
+            self._bytes_written = os.path.getsize(path)
 
     def emit(self, record: logging.LogRecord) -> None:
         with self._emit_lock:
@@ -175,9 +187,37 @@ class _DateRotatingFileHandler(logging.Handler):
                     msg = self.format(record)
                     self._stream.write(msg + "\n")
                     self._stream.flush()
+                    self._bytes_written += len(msg.encode("utf-8")) + 1
+                    if self._bytes_written >= self._file_max_bytes:
+                        self._rotate_file()
             except Exception as exc:
                 print(f"[LOG ERROR] 写入日志文件失败: {exc}", file=sys.stderr)
                 self.handleError(record)
+
+    def _rotate_file(self) -> None:
+        """当日志文件超过大小上限时，滚动备份并重新打开"""
+        try:
+            if self._stream:
+                self._stream.close()
+                self._stream = None
+
+            _, path = self._get_log_path()
+
+            # 从大到小遍历，将 app.log.N-1 -> app.log.N
+            for i in range(self._file_backup_count - 1, 0, -1):
+                src = f"{path}.{i}"
+                dst = f"{path}.{i + 1}"
+                if os.path.exists(src):
+                    os.replace(src, dst)
+
+            # 将 app.log -> app.log.1
+            if os.path.exists(path):
+                os.replace(path, f"{path}.1")
+
+            self._stream = open(path, "a", encoding="utf-8")
+            self._bytes_written = 0
+        except Exception as exc:
+            print(f"[LOG ERROR] 日志轮转失败: {exc}", file=sys.stderr)
 
     def _cleanup_old_dirs(self, now: float) -> None:
         """清理超过保留天数的日期目录（含其中的 app.log 和 screenshots/）"""
@@ -295,8 +335,6 @@ class LogConfigCenter:
                 return
 
         try:
-            if root.level > logging.DEBUG and root.level != logging.NOTSET:
-                root.setLevel(logging.DEBUG)
             file_handler = _DateRotatingFileHandler(
                 log_dir=log_dir,
                 retention_days=retention_days,
@@ -305,6 +343,8 @@ class LogConfigCenter:
                     "%(asctime)s | %(levelname)s | %(side)s | %(name)s | %(message)s",
                     colored=False,
                 ),
+                file_max_bytes=self._config.get("file_max_bytes", 5 * 1024 * 1024),
+                file_backup_count=self._config.get("file_backup_count", 3),
             )
             file_handler.addFilter(SideFilter(side="BACKEND"))
             root.addHandler(file_handler)

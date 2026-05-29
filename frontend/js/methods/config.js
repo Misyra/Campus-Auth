@@ -1,4 +1,5 @@
 import { DEFAULT_CONFIG } from '../constants.js';
+import { extractApiError } from './utils.js';
 
 export const configMethods = {
   async fetchConfig(updateSnapshot = false) {
@@ -56,7 +57,7 @@ export const configMethods = {
         this.notify(false, data.message);
       }
     } catch (error) {
-      const msg = error?.response?.data?.detail || '保存失败';
+      const msg = extractApiError(error, '保存失败');
       this.frontendLogger.error('config', '保存配置失败', error);
       this.notify(false, msg);
     } finally {
@@ -90,7 +91,7 @@ export const configMethods = {
         this.notify(false, data.message);
       }
     } catch (error) {
-      const msg = error?.response?.data?.detail || '创建备份失败';
+      const msg = extractApiError(error, '创建备份失败');
       this.frontendLogger.error('backup', '备份创建异常: ' + msg, error);
       this.notify(false, msg);
     } finally {
@@ -113,7 +114,7 @@ export const configMethods = {
         this.notify(false, data.message);
       }
     } catch (error) {
-      const msg = error?.response?.data?.detail || '恢复备份失败';
+      const msg = extractApiError(error, '恢复备份失败');
       this.frontendLogger.error('backup', '备份恢复异常: ' + msg, error);
       this.notify(false, msg);
     }
@@ -140,7 +141,7 @@ export const configMethods = {
         this.notify(false, data.message);
       }
     } catch (error) {
-      const msg = error?.response?.data?.detail || '删除备份失败';
+      const msg = extractApiError(error, '删除备份失败');
       this.frontendLogger.error('backup', '备份删除异常: ' + msg, error);
       this.notify(false, msg);
     }

@@ -1,3 +1,5 @@
+import { extractApiError } from './utils.js';
+
 const DANGEROUS_STEP_TYPES = new Set(['eval', 'custom_js']);
 
 function detectDangerousSteps(config) {
@@ -180,7 +182,7 @@ export const taskMethods = {
       }
     } catch (error) {
       this.frontendLogger.error('tasks', '保存任务失败', error);
-      this.notify(false, error?.response?.data?.detail || error.message || '保存失败');
+      this.notify(false, extractApiError(error, '保存失败'));
     }
   },
   showDangerConfirm(dangers) {
@@ -339,7 +341,7 @@ export const taskMethods = {
       this.debugSession = data;
       this.frontendLogger.info('debug', `开始调试任务 ${taskId}`);
     } catch (error) {
-      const msg = error?.response?.data?.detail || '启动调试失败';
+      const msg = extractApiError(error, '启动调试失败');
       this.frontendLogger.error('debug', '启动调试失败: ' + msg);
       this.notify(false, msg);
     } finally {
@@ -353,7 +355,7 @@ export const taskMethods = {
       const { data } = await this.$api.post(endpoint);
       this.debugSession = data;
     } catch (error) {
-      const msg = error?.response?.data?.detail || errorMsg;
+      const msg = extractApiError(error, errorMsg);
       this.frontendLogger.error('debug', errorMsg + ': ' + msg);
       this.notify(false, msg);
     } finally {
@@ -443,7 +445,7 @@ export const taskMethods = {
       }
       this.repoImport.tasks = data;
     } catch (e) {
-      const msg = e?.response?.data?.detail || '加载失败，请检查地址是否正确';
+      const msg = extractApiError(e, '加载失败，请检查地址是否正确');
       this.repoImport.error = msg;
       this.frontendLogger.error('tasks', '获取远程索引失败', msg);
       this.notify(false, `获取远程索引失败: ${msg}`);
@@ -504,7 +506,7 @@ export const taskMethods = {
       this.frontendLogger.info('tasks', `已从仓库导入: ${task.name}`);
       this.notify(true, `已导入「${task.name}」，请在右侧编辑器内确认后保存`);
     } catch (e) {
-      const msg = e?.response?.data?.detail || '下载任务失败';
+      const msg = extractApiError(e, '下载任务失败');
       this.frontendLogger.error('tasks', '远程任务下载失败', msg);
       this.notify(false, `远程任务下载失败: ${msg}`);
     }

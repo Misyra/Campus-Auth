@@ -12,6 +12,7 @@ from src.utils.crypto import decrypt_password, mask_password, save_password_fiel
 from src.utils.logging import get_logger
 from src.utils.exceptions import DecryptionError
 
+from .constants import DEFAULT_NETWORK_TARGETS
 from .profile_service import ProfileService
 from .schemas import (
     VALID_LOG_LEVELS,
@@ -44,7 +45,7 @@ def _normalize_level(raw: str, default: str = "WARNING") -> str:
 def _normalize_targets(raw: str) -> str:
     parts = [item.strip() for item in str(raw or "").split(",") if item.strip()]
     if not parts:
-        return "8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
+        return DEFAULT_NETWORK_TARGETS
     return ",".join(parts)
 
 
