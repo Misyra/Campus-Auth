@@ -141,7 +141,9 @@ export const appOptions = {
     },
     appearance: {
       handler() {
-        this.applyAppearance();
+        // 防抖：避免频繁操作 DOM 导致卡顿
+        if (this._appearanceTimer) clearTimeout(this._appearanceTimer);
+        this._appearanceTimer = setTimeout(() => this.applyAppearance(), 100);
       },
       deep: true,
     },
@@ -176,6 +178,7 @@ export const appOptions = {
     if (this._repoDisclaimerTimer) clearInterval(this._repoDisclaimerTimer);
     if (this._toastTimer) clearTimeout(this._toastTimer);
     if (this._toastLeavingTimer) clearTimeout(this._toastLeavingTimer);
+    if (this._appearanceTimer) clearTimeout(this._appearanceTimer);
     this.timers.forEach((t) => clearInterval(t));
     if (this.ws) this.ws.close();
     // 清理快捷键
