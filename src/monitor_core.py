@@ -491,11 +491,11 @@ class NetworkMonitorCore:
                 break
 
     def _get_test_sites(self) -> list[tuple[str, int]]:
-        """获取测试站点列表（带缓存）"""
+        """获取测试站点列表（带缓存，返回副本避免调用方污染缓存）"""
         if self._test_sites_cache is not None:
-            return self._test_sites_cache
+            return list(self._test_sites_cache)
         self._test_sites_cache = self._build_test_sites()
-        return self._test_sites_cache
+        return list(self._test_sites_cache)
 
     def _build_test_sites(self) -> list[tuple[str, int]]:
         """构建测试站点列表"""

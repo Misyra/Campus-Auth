@@ -43,11 +43,12 @@ class SideFilter(logging.Filter):
         return True
 
 
-def _normalize_level(level: str | None, default: str = "INFO") -> str:
-    from backend.schemas import VALID_LOG_LEVELS
+_VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 
+
+def _normalize_level(level: str | None, default: str = "INFO") -> str:
     raw = str(level or default).upper().strip()
-    return raw if raw in VALID_LOG_LEVELS else default
+    return raw if raw in _VALID_LOG_LEVELS else default
 
 
 def _level_value(level: str | None, default: str = "INFO") -> int:
@@ -62,6 +63,7 @@ def _formatter(pattern: str, colored: bool = False) -> logging.Formatter:
 
 # 全局标记：根 logger 是否已完成首次配置
 _root_configured = False
+_root_configured_lock = threading.Lock()
 
 
 def configure_root_logger(
@@ -75,28 +77,32 @@ def configure_root_logger(
     if _root_configured:
         return root
 
-    level = _level_value(config.get("level", "INFO"))
-    pattern = str(
-        config.get(
-            "format",
-            "%(asctime)s | %(levelname)s | %(side)s | %(name)s | %(message)s",
+    with _root_configured_lock:
+        if _root_configured:
+            return root
+
+        level = _level_value(config.get("level", "INFO"))
+        pattern = str(
+            config.get(
+                "format",
+                "%(asctime)s | %(levelname)s | %(side)s | %(name)s | %(message)s",
+            )
         )
-    )
-    root.setLevel(level)
+        root.setLevel(level)
 
-    context_filter = SideFilter(side=side)
+        context_filter = SideFilter(side=side)
 
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(level)
-    console_handler.setFormatter(_formatter(pattern, colored=True))
-    console_handler.addFilter(context_filter)
-    root.addHandler(console_handler)
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(level)
+        console_handler.setFormatter(_formatter(pattern, colored=True))
+        console_handler.addFilter(context_filter)
+        root.addHandler(console_handler)
 
-    # 压制第三方库的 DEBUG 日志，避免文件日志膨胀
-    for noisy in ("httpcore", "httpx", "urllib3", "http.client"):
-        logging.getLogger(noisy).setLevel(logging.WARNING)
+        # 压制第三方库的 DEBUG 日志，避免文件日志膨胀
+        for noisy in ("httpcore", "httpx", "urllib3", "http.client"):
+            logging.getLogger(noisy).setLevel(logging.WARNING)
 
-    _root_configured = True
+        _root_configured = True
     return root
 
 
@@ -363,7 +369,7 @@ class WebSocketLogHandler(logging.Handler):
     避免刷新前端后丢失 Python logging 系统产生的日志。
 
     用法：
-        handler = WebSocketLogHandler(broadcast_queue, log_store=monitor_service._logs)
+        handler = WebSocketLogHandler(broadcast_queue, log_store=monitor_service.logs)
         logging.getLogger().addHandler(handler)
     """
 

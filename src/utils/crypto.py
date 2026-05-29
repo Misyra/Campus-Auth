@@ -65,7 +65,7 @@ def _get_or_create_key() -> bytes:
         try:
             _KEY_FILE.chmod(0o600)  # POSIX: 仅所有者可读写
         except OSError:
-            logger.warning("设置密钥文件权限失败 (chmod): %s", _KEY_FILE)
+            logger.warning("设置密钥文件权限失败 (chmod): %s", _KEY_FILE, exc_info=True)
 
         # Windows: 用 icacls 限制文件访问
         if is_windows():
@@ -147,7 +147,8 @@ def decrypt_password(ciphertext: str) -> str:
         return _simple_deobfuscate(encrypted_data)
 
     try:
-        from cryptography.fernet import Fernet
+        from cryptography.fernet import Fernet, InvalidToken
+        from cryptography.exceptions import InvalidSignature
 
         key = _derive_fernet_key()
         f = Fernet(key)
@@ -155,13 +156,13 @@ def decrypt_password(ciphertext: str) -> str:
     except ImportError:
         logger.warning("cryptography 库未安装，尝试 Base64 反混淆")
         return _simple_deobfuscate(encrypted_data)
-    except Exception:
+    except (InvalidToken, InvalidSignature, ValueError, OSError) as e:
         # 解密失败：可能是密钥变更，记录错误并抛出异常
         _decryption_failed.set()
         logger.error(
             "密码解密失败（可能是密钥变更或数据损坏），请在设置页面重新输入密码"
         )
-        raise DecryptionError("密码解密失败，请重新输入密码")
+        raise DecryptionError("密码解密失败，请重新输入密码") from e
 
 
 def is_encrypted(value: str) -> bool:

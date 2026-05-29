@@ -9,9 +9,6 @@ BrowserContextManager 作为轻量代理:
 - __aenter__: 通过 Worker 确保浏览器已就绪，获取浏览器对象引用
 - __aexit__: 通知 Worker 释放引用（浏览器常驻 Worker 不实际关闭）
 - Worker 线程内浏览器对象可通过 Worker 的内部状态直接访问（同线程安全）
-
-原始的直接管理路径（_start_browser / _cleanup_browser）已弃用，
-仅保留为降级回退的桩方法。
 """
 
 import json
@@ -144,5 +141,8 @@ class BrowserContextManager:
 
         # 如果有异常，记录但不抑制
         if exc_type:
-            self.logger.error("浏览器操作异常: %s: %.200s", exc_type.__name__, exc_val)
+            try:
+                self.logger.error("浏览器操作异常: %s: %.200s", exc_type.__name__, exc_val)
+            except Exception:
+                self.logger.error("浏览器操作异常: %s (详情无法格式化)", exc_type.__name__)
         return False  # 将异常传播给调用者（不抑制）

@@ -80,4 +80,7 @@ class ConfigValidator:
         if not auth_url:
             return False, "缺少认证地址"
 
+        if not auth_url.startswith(("http://", "https://")):
+            return False, "认证地址必须以 http:// 或 https:// 开头"
+
         return True, ""

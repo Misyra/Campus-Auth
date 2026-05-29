@@ -181,7 +181,11 @@ class LoginAttemptHandler:
             browser_manager = BrowserContextManager(
                 self.config, cancel_event=self.cancel_event
             )
-            await browser_manager.__aenter__()
+            try:
+                await browser_manager.__aenter__()
+            except Exception:
+                # __aenter__ 失败时无需 __aexit__（Playwright 未初始化）
+                raise
             self._browser_ctx = browser_manager
             self.logger.info(
                 "浏览器就绪 (%.1fs)", _time.perf_counter() - browser_start
@@ -300,6 +304,6 @@ class LoginAttemptHandler:
                 # 释放本地引用
                 await self._browser_ctx.__aexit__(None, None, None)
             except Exception as exc:
-                self.logger.debug("浏览器关闭时异常 (非关键): %s", exc)
+                self.logger.warning("浏览器关闭时异常: %s", exc)
             self._browser_ctx = None
             self.logger.info("浏览器已关闭")
