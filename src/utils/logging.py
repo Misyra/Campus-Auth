@@ -359,8 +359,11 @@ class LogConfigCenter:
 class WebSocketLogHandler(logging.Handler):
     """将 Python 日志记录转发到 WebSocket 广播队列，使前端能显示完整后端日志。
 
+    同时将日志存入 log_store（deque），使 /api/logs 能返回完整后端日志，
+    避免刷新前端后丢失 Python logging 系统产生的日志。
+
     用法：
-        handler = WebSocketLogHandler(broadcast_queue)
+        handler = WebSocketLogHandler(broadcast_queue, log_store=monitor_service._logs)
         logging.getLogger().addHandler(handler)
     """
 
@@ -370,9 +373,10 @@ class WebSocketLogHandler(logging.Handler):
         "backend.monitor_service",
     })
 
-    def __init__(self, broadcast_queue: deque[dict]):
+    def __init__(self, broadcast_queue: deque[dict], log_store: deque | None = None):
         super().__init__()
         self._queue = broadcast_queue
+        self._log_store = log_store
 
     def emit(self, record: logging.LogRecord) -> None:
         if record.name in self._EXCLUDED_LOGGERS:
@@ -381,14 +385,16 @@ class WebSocketLogHandler(logging.Handler):
             msg = self.format(record)
             stamp = datetime.fromtimestamp(record.created).strftime("%Y-%m-%d %H:%M:%S")
             side = getattr(record, "side", "BACKEND")
-            self._queue.append({
-                "type": "log",
-                "data": {
-                    "timestamp": stamp,
-                    "level": record.levelname,
-                    "source": f"{side}.{record.name}",
-                    "message": msg,
-                },
-            })
+            log_data = {
+                "timestamp": stamp,
+                "level": record.levelname,
+                "source": f"{side}.{record.name}",
+                "message": msg,
+            }
+            self._queue.append({"type": "log", "data": log_data})
+            if self._log_store is not None:
+                from backend.schemas import LogEntry
+
+                self._log_store.append(LogEntry(**log_data))
         except Exception:
             self.handleError(record)

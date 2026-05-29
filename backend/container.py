@@ -52,9 +52,12 @@ class ServiceContainer:
         # 清理孤儿浏览器进程
         cleanup_orphan_browsers()
 
-        # 注册 WebSocket 日志处理器 — 将 Python 日志转发到前端
+        # 注册 WebSocket 日志处理器 — 将 Python 日志转发到前端并存入 _logs
         import logging
-        ws_handler = WebSocketLogHandler(self.monitor_service._ws_broadcast_queue)
+        ws_handler = WebSocketLogHandler(
+            self.monitor_service._ws_broadcast_queue,
+            log_store=self.monitor_service._logs,
+        )
         ws_handler.setLevel(logging.DEBUG)
         ws_handler.setFormatter(logging.Formatter("%(name)s | %(message)s"))
         logging.getLogger().addHandler(ws_handler)
