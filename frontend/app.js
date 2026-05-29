@@ -11,6 +11,34 @@ import {
 
 const { createApp } = window.Vue;
 
+// 性能检测：帧率低于 30fps 时禁用毛玻璃效果
+function detectPerformance() {
+  let frameCount = 0;
+  let lastTime = performance.now();
+  const CHECK_DURATION = 2000; // 检测 2 秒
+
+  function measure() {
+    frameCount++;
+    const now = performance.now();
+    const elapsed = now - lastTime;
+
+    if (elapsed >= CHECK_DURATION) {
+      const fps = Math.round((frameCount * 1000) / elapsed);
+      if (fps < 30) {
+        document.documentElement.classList.add('no-backdrop-filter');
+        console.log(`[性能检测] 帧率 ${fps}fps < 30fps，已禁用毛玻璃效果`);
+      }
+      return; // 检测完成，停止测量
+    }
+    requestAnimationFrame(measure);
+  }
+
+  requestAnimationFrame(measure);
+}
+
+// 页面加载时开始检测
+detectPerformance();
+
 async function bootstrapApp() {
   await ensurePartialsReady();
 
