@@ -694,7 +694,7 @@
 }
 
 /* 自定义背景样式 */
-.has-custom-bg body::before {
+body.has-custom-bg::before {
   content: '';
   position: fixed;
   inset: 0;

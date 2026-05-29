@@ -24,15 +24,15 @@ export const appearanceMethods = {
 
     // 背景图片
     if (this.appearance.background_url) {
-      root.style.setProperty('--bg-image', `url(${this.appearance.background_url})`);
-      root.style.setProperty('--bg-blur', `blur(${this.appearance.background_blur}px)`);
-      root.style.setProperty('--bg-opacity', this.appearance.background_opacity);
-      root.classList.add('has-custom-bg');
+      body.style.setProperty('--bg-image', `url(${this.appearance.background_url})`);
+      body.style.setProperty('--bg-blur', `blur(${this.appearance.background_blur}px)`);
+      body.style.setProperty('--bg-opacity', this.appearance.background_opacity);
+      body.classList.add('has-custom-bg');
     } else {
-      root.classList.remove('has-custom-bg');
-      root.style.removeProperty('--bg-image');
-      root.style.removeProperty('--bg-blur');
-      root.style.removeProperty('--bg-opacity');
+      body.classList.remove('has-custom-bg');
+      body.style.removeProperty('--bg-image');
+      body.style.removeProperty('--bg-blur');
+      body.style.removeProperty('--bg-opacity');
     }
 
     // 主题色
