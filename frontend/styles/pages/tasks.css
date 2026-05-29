@@ -20,6 +20,7 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   transition: all 0.25s ease;
+  cursor: default;
 }
 
 .task-item:hover {
@@ -31,6 +32,31 @@
 .task-item.active {
   border-color: var(--accent);
   background: rgba(34, 211, 238, 0.05);
+}
+
+/* 拖拽样式 */
+.task-drag-handle {
+  cursor: grab;
+  color: var(--text-muted);
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.task-drag-handle:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.task-item.dragging {
+  opacity: 0.5;
+  border-color: var(--accent);
+}
+
+.task-item.drag-over {
+  border-color: var(--accent);
+  border-style: dashed;
+  background: rgba(34, 211, 238, 0.08);
 }
 
 .task-info {

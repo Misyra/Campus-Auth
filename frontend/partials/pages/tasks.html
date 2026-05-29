@@ -42,7 +42,23 @@
           <p>暂无任务配置</p>
         </div>
         <div v-else class="task-list">
-          <div v-for="task in browserTasks" :key="task.id" class="task-item" :class="{ active: activeTaskId === task.id }">
+          <div
+            v-for="(task, index) in browserTasks"
+            :key="task.id"
+            class="task-item"
+            :class="{ active: activeTaskId === task.id }"
+            draggable="true"
+            @dragstart="onDragStart($event, index, 'browserTasks')"
+            @dragover="onDragOver($event, index, 'browserTasks')"
+            @dragleave="onDragLeave($event)"
+            @drop="onDrop($event, index, 'browserTasks')"
+            @dragend="onDragEnd($event)"
+          >
+            <div class="task-drag-handle" title="拖拽排序">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+                <line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/>
+              </svg>
+            </div>
             <div class="task-info">
               <h3>{{ task.name }}</h3>
             </div>

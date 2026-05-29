@@ -4,6 +4,7 @@ import { actionMethods } from './methods/actions.js';
 import { appearanceMethods } from './methods/appearance.js';
 import { autostartMethods } from './methods/autostart.js';
 import { configMethods } from './methods/config.js';
+import { dragMethods } from './methods/drag.js';
 import { formatterMethods } from './methods/formatters.js';
 import { lifecycleMethods } from './methods/lifecycle.js';
 import { profileMethods } from './methods/profiles.js';
@@ -187,5 +188,6 @@ export const appOptions = {
     ...profileMethods,
     ...appearanceMethods,
     ...shortcutMethods,
+    ...dragMethods,
   },
 };
