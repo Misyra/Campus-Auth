@@ -2,6 +2,13 @@
 
 ## v3.7.2
 
+### 前端优化
+
+- **拆分 data()**：将 app-options.js 中 110+ 个属性按功能域拆分为 12 个独立模块（dashboard, config, tasks, scripts, debug, profiles, repo, uninstall, ui, websocket, timers, status）
+- **CSS 变量统一**：扩展设计令牌（bg-glass, border-accent, shadow-accent, blur 等），统一各页面硬编码颜色值，添加毛玻璃效果降级规则
+- **可复用组件**：新增 GlassCard, FormGroup, ToggleSwitch, StatusDot, LoadingSpinner, EmptyState 全局组件
+- **日志优化**：日志列表上限从 300 降低到 100，减少 DOM 元素数量
+
 ### 代码审查修复
 
 共修复 25 项问题，涉及 15 个文件。
