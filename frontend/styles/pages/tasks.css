@@ -16,7 +16,7 @@
   align-items: center;
   gap: 12px;
   padding: 16px;
-  background: rgba(15, 23, 42, 0.6);
+  background: var(--bg-glass);
   border: 1px solid var(--border);
   border-radius: 10px;
   transition: all 0.25s ease;
@@ -64,7 +64,7 @@
   width: 100%;
   min-height: 300px;
   padding: 12px;
-  background: rgba(15, 23, 42, 0.7);
+  background: var(--bg-glass);
   border: 1px solid var(--border);
   border-radius: 10px;
   color: var(--text-primary);
@@ -119,9 +119,9 @@
 }
 
 .help-content pre {
-  background: rgba(15, 23, 42, 0.6);
+  background: var(--bg-glass);
   padding: 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
   overflow-x: auto;
@@ -221,7 +221,7 @@
 .danger-step-code {
   margin: 0;
   padding: 12px 14px;
-  background: rgba(15, 23, 42, 0.5);
+  background: var(--bg-glass-light);
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
   line-height: 1.6;
@@ -330,7 +330,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(15, 23, 42, 0.6);
+  background: var(--bg-glass);
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
@@ -360,7 +360,7 @@
   align-items: flex-start;
   gap: 8px;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid transparent;
   transition: all 0.2s;
 }
@@ -522,8 +522,8 @@
   gap: 5px;
   padding: 6px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: rgba(15, 23, 42, 0.5);
+  border-radius: var(--radius-md);
+  background: var(--bg-glass-light);
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
@@ -535,7 +535,7 @@
 .repo-source-btn:hover {
   border-color: var(--border-hover);
   color: var(--text-primary);
-  background: rgba(15, 23, 42, 0.8);
+  background: var(--bg-glass-heavy);
 }
 
 .repo-source-btn.active {
@@ -554,9 +554,9 @@
 .repo-url-input {
   flex: 1;
   padding: 12px 14px;
-  background: rgba(15, 23, 42, 0.7);
+  background: var(--bg-glass);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: 13px;
   font-family: 'JetBrains Mono', monospace;
@@ -574,7 +574,7 @@
   padding: 10px 14px;
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.2);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--error);
   font-size: 13px;
   margin-bottom: 12px;
@@ -602,9 +602,9 @@
 .repo-search-input {
   width: 100%;
   padding: 9px 12px 9px 36px;
-  background: rgba(15, 23, 42, 0.7);
+  background: var(--bg-glass);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: 13px;
   transition: border-color 0.2s;
@@ -672,7 +672,7 @@
   padding: 8px 18px;
   background: rgba(34, 211, 238, 0.08);
   border: 1px solid rgba(34, 211, 238, 0.25);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   transition: all 0.2s;
   margin-top: 4px;
 }
@@ -688,7 +688,7 @@
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
-  background: rgba(15, 23, 42, 0.5);
+  background: var(--bg-glass-light);
   border: 1px solid var(--border);
   border-radius: 10px;
   transition: all 0.2s;
@@ -696,7 +696,7 @@
 
 .repo-task-item:hover {
   border-color: var(--border-hover);
-  background: rgba(15, 23, 42, 0.7);
+  background: var(--bg-glass);
 }
 
 .repo-task-info {
@@ -810,7 +810,7 @@
   color: var(--text-muted);
   background: rgba(245, 158, 11, 0.06);
   border: 1px solid rgba(245, 158, 11, 0.15);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 10px 14px;
   margin: 0;
   line-height: 1.6;
