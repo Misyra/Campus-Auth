@@ -75,16 +75,20 @@ export const appearanceMethods = {
       const file = e.target.files[0];
       if (!file) return;
 
-      // 限制文件大小（5MB）
-      if (file.size > 5 * 1024 * 1024) {
-        this.toastOnly(false, '图片大小不能超过 5MB');
+      // 限制文件大小（10MB）
+      if (file.size > 10 * 1024 * 1024) {
+        this.toastOnly(false, '图片大小不能超过 10MB');
         return;
       }
 
       const reader = new FileReader();
+      reader.onerror = () => {
+        this.toastOnly(false, '图片读取失败');
+      };
       reader.onload = (event) => {
         this.appearance.background_url = event.target.result;
-        this.applyAppearance();
+        this.$nextTick(() => this.applyAppearance());
+        this.toastOnly(true, '背景图片已设置');
       };
       reader.readAsDataURL(file);
     };
