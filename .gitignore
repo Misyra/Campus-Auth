@@ -62,6 +62,9 @@ Thumbs.db
 # Temporary files
 temp/
 
+# User background images
+tools/background/
+
 # Source assets
 1.png
 logo.png
