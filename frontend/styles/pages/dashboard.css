@@ -138,14 +138,14 @@
   overflow-y: auto;
   max-height: calc(100vh - 340px);
   min-height: 200px;
-}
-
-.has-banner .log-viewer {
-  max-height: calc(100vh - 395px);
   font-family: 'JetBrains Mono', monospace;
   font-size: 13px;
   will-change: scroll-position;
   -webkit-overflow-scrolling: touch;
+}
+
+.has-banner .log-viewer {
+  max-height: calc(100vh - 415px);
 }
 
 .log-viewer::-webkit-scrollbar {
