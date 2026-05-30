@@ -32,8 +32,7 @@ Campus-Auth 主要解决三个场景：
 ### 推荐环境
 
 - Python 3.10 或更高版本。
-- Windows 用户建议优先使用仓库自带的启动器或发布包。
-- 如果是源码运行，推荐使用 uv 管理依赖。
+- 推荐使用 uv 管理依赖。
 
 ### 端口与访问地址
 
@@ -44,19 +43,6 @@ http://127.0.0.1:50721
 如果你修改了 `APP_PORT`，则以实际端口为准。
 
 ## 快速开始
-
-### 方式一：直接使用 Windows 发布包
-
-适合不想自己配置 Python 环境的用户。
-
-1. 下载并解压发布包。
-2. 直接运行生成的可执行文件，或使用目录内的启动脚本。
-3. 首次启动后打开浏览器访问控制台地址。
-4. 按初始化向导填写账号、密码、认证地址等信息。
-
-### 方式二：源码运行
-
-适合开发、调试和二次定制。
 
 安装依赖：
 
@@ -74,21 +60,6 @@ uv run app.py
 
 ```powershell
 .\environment\python\python.exe app.py
-```
-
-### 方式三：使用 Windows 启动器自动准备环境
-
-如果本机环境不完整，`launcher.py` 会尝试检查并准备 Python、依赖和 Playwright 相关运行条件。
-
-```powershell
-python launcher.py
-```
-
-常用参数：
-
-```powershell
-python launcher.py --python-version 3.10 --pip-mirror https://mirrors.tuna.tsinghua.edu.cn/simple
-python launcher.py --force-reinstall --verbose
 ```
 
 ## 首次使用流程
@@ -204,7 +175,6 @@ python app.py --autostart disable
 ```text
 Campus-Auth/
 ├── app.py                    # 统一启动入口
-├── launcher.py               # Windows 启动器（自动准备环境）
 ├── pyproject.toml            # 项目元数据与依赖配置
 ├── requirements.txt          # 依赖列表（兼容 pip）
 ├── settings.json             # 多网络配置方案数据
@@ -362,8 +332,6 @@ matched = service.match_profile(gateway_ip, ssid)
 ```env
 PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
 ```
-
-如果你使用的是发布包，也建议确认启动日志里是否已经完成浏览器准备。
 
 ### 服务提示已启动
 
