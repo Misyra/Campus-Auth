@@ -13,6 +13,7 @@ wheels/
 
 # Task active state (local user preference)
 tasks/active.txt
+tasks/.order.json
 
 # Embedded Python environment (auto-downloaded)
 environment/
