@@ -2,11 +2,11 @@
   /* 背景色 */
   --bg-primary: #0f172a;
   --bg-secondary: #1e293b;
-  --bg-card: rgba(30, 41, 59, 0.8);
+  --bg-card: rgba(15, 23, 42, 0.45);
   --bg-hover: rgba(51, 65, 85, 0.5);
-  --bg-glass: rgba(15, 23, 42, 0.65);
-  --bg-glass-light: rgba(15, 23, 42, 0.4);
-  --bg-glass-heavy: rgba(15, 23, 42, 0.85);
+  --bg-glass: rgba(15, 23, 42, 0.35);
+  --bg-glass-light: rgba(15, 23, 42, 0.25);
+  --bg-glass-heavy: rgba(15, 23, 42, 0.65);
 
   /* 边框色 */
   --border: rgba(148, 163, 184, 0.1);
@@ -71,45 +71,6 @@ body {
   color: var(--text-primary);
   min-height: 100vh;
   display: flex;
-}
-
-/* 动态渐变动画 */
-@keyframes gradientShift {
-  0% {
-    --gradient-1-x: 10%;
-    --gradient-1-y: 20%;
-    --gradient-2-x: 90%;
-    --gradient-2-y: 80%;
-  }
-  25% {
-    --gradient-1-x: 80%;
-    --gradient-1-y: 10%;
-    --gradient-2-x: 20%;
-    --gradient-2-y: 90%;
-  }
-  50% {
-    --gradient-1-x: 90%;
-    --gradient-1-y: 70%;
-    --gradient-2-x: 10%;
-    --gradient-2-y: 30%;
-  }
-  75% {
-    --gradient-1-x: 20%;
-    --gradient-1-y: 80%;
-    --gradient-2-x: 80%;
-    --gradient-2-y: 20%;
-  }
-  100% {
-    --gradient-1-x: 10%;
-    --gradient-1-y: 20%;
-    --gradient-2-x: 90%;
-    --gradient-2-y: 80%;
-  }
-}
-
-/* 启用动态渐变 */
-body.animate-gradient {
-  animation: gradientShift 30s ease-in-out infinite;
 }
 
 ::selection {
@@ -425,11 +386,11 @@ textarea.json-valid {
   }
 }
 
-/* 性能检测降级（需要 JS 添加 class） */
-.no-backdrop-filter * {
+/* 禁用毛玻璃效果 */
+body.no-backdrop-filter * {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-.no-backdrop-filter .glass-card {
-  background: var(--bg-secondary);
+body.no-backdrop-filter .card {
+  background: var(--bg-card) !important;
 }

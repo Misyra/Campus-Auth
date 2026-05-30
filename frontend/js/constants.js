@@ -88,13 +88,30 @@ export const SETTINGS_TABS = [
 // 外观设置默认值
 export const DEFAULT_APPEARANCE = {
   background_url: '',
+  background_filename: '',
   background_blur: 10,
   background_opacity: 0.3,
+  background_color: '#0f172a',
+  card_opacity: 0.45,
+  border_intensity: 1.0,
+  sidebar_opacity: 0.95,
+  sidebar_color: '',
+  sidebar_accent: '',
+  backdrop_filter: true, // 毛玻璃效果
   accent_color: '#22d3ee',
-  font_size: 14,
+  zoom: 100,
   theme: 'dark', // dark | light
-  animate_gradient: false, // 动态渐变背景
 };
+
+// 预设背景色
+export const BG_COLORS = [
+  { value: '#0f172a', label: '深空蓝' },
+  { value: '#111827', label: '墨石黑' },
+  { value: '#1a1a2e', label: '暗夜紫' },
+  { value: '#16213e', label: '藏青' },
+  { value: '#1b2838', label: 'Steam 暗' },
+  { value: '#0d1117', label: 'GitHub 暗' },
+];
 
 // 预设主题色
 export const ACCENT_COLORS = [

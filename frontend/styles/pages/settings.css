@@ -633,7 +633,7 @@
 /* ==================== 外观设置 ==================== */
 
 .appearance-page {
-  max-width: 900px;
+  width: 100%;
 }
 
 .appearance-header {
@@ -646,19 +646,6 @@
   margin: 0 0 4px;
 }
 
-/* 双列网格 */
-.appearance-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.appearance-col {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
 /* 卡片样式 */
 .appearance-card {
   overflow: hidden;
@@ -668,7 +655,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 16px 20px;
+  padding: 14px 20px;
   border-bottom: 1px solid var(--border);
   color: var(--text-secondary);
 }
@@ -684,14 +671,34 @@
   padding: 16px 20px;
 }
 
-/* 背景预览 - 16:9 */
-.appearance-bg-preview {
-  aspect-ratio: 16 / 9;
+/* 背景图片卡片 - 全宽 */
+.appearance-bg-card {
+  margin-bottom: 16px;
+}
+
+/* 背景图片左右布局 */
+.appearance-bg-layout {
+  display: flex;
+  gap: 24px;
+}
+
+.appearance-bg-layout .appearance-bg-preview {
+  flex: 1;
+  min-width: 0;
+  height: 220px;
   border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid var(--border);
   background: var(--bg-glass-light);
-  margin-bottom: 12px;
+  margin: 0;
+}
+
+.appearance-bg-layout .appearance-bg-controls {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .appearance-bg-preview-img {
@@ -753,14 +760,14 @@
 .appearance-sliders {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .appearance-slider-item {
   display: grid;
-  grid-template-columns: 40px 1fr 40px;
+  grid-template-columns: 36px 1fr 44px;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .appearance-slider-item label {
@@ -776,16 +783,24 @@
   font-family: 'JetBrains Mono', monospace;
 }
 
+/* 三列设置网格 */
+.appearance-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
 /* 主题色选择 */
 .appearance-colors {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 16px;
 }
 
 .appearance-color-btn {
-  aspect-ratio: 1;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   border: 3px solid transparent;
   cursor: pointer;
@@ -793,6 +808,7 @@
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
 .appearance-color-btn:hover {
@@ -814,23 +830,37 @@
   border: 1px solid var(--border);
 }
 
-.appearance-custom-color label {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin: 0;
-}
-
-.appearance-custom-color input[type="color"] {
+.appearance-custom-swatch {
   width: 32px;
   height: 32px;
-  border: none;
-  border-radius: 6px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.15);
   cursor: pointer;
-  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
-.appearance-custom-color span {
-  font-size: 12px;
+.appearance-custom-swatch:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: scale(1.1);
+}
+
+.appearance-custom-color .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.appearance-custom-hex {
+  font-size: 13px;
   color: var(--text-secondary);
   font-family: 'JetBrains Mono', monospace;
 }
@@ -846,6 +876,22 @@
   text-align: center;
 }
 
+/* 视觉效果卡片 - 合并后的开关组 */
+.appearance-visual-effects {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.appearance-visual-effects .toggle {
+  margin-top: 8px;
+}
+
+.appearance-visual-effects .form-hint {
+  margin-top: -4px;
+  margin-bottom: 4px;
+}
+
 /* 操作按钮 */
 .appearance-actions {
   display: flex;
@@ -857,59 +903,24 @@
 }
 
 /* 响应式 */
-@media (max-width: 700px) {
-  .appearance-grid {
-    grid-template-columns: 1fr;
+@media (max-width: 900px) {
+  .appearance-settings-grid {
+    grid-template-columns: 1fr 1fr;
   }
 }
 
-/* 外观页面卡片 - 更透明以显示背景 */
-body.has-custom-bg .appearance-card {
-  background: rgba(15, 23, 42, 0.5);
-  backdrop-filter: none;
-}
+@media (max-width: 700px) {
+  .appearance-settings-grid {
+    grid-template-columns: 1fr;
+  }
 
-/* 有背景图片时，去掉所有卡片毛玻璃 */
-body.has-custom-bg .card {
-  backdrop-filter: none;
-  background: rgba(15, 23, 42, 0.6);
-}
+  .appearance-bg-layout {
+    flex-direction: column;
+  }
 
-.appearance-colors {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.appearance-color-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 3px solid transparent;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-}
-
-.appearance-color-btn:hover {
-  transform: scale(1.1);
-}
-
-.appearance-color-btn.active {
-  border-color: var(--text-primary);
-  box-shadow: 0 0 12px rgba(255, 255, 255, 0.2);
-}
-
-.appearance-font-preview {
-  margin-top: 12px;
-  padding: 16px;
-  background: var(--bg-glass-light);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  color: var(--text-primary);
+  .appearance-bg-layout .appearance-bg-controls {
+    width: 100%;
+  }
 }
 
 /* 自定义背景样式 */

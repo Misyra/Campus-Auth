@@ -11,6 +11,59 @@ import {
 
 const { createApp } = window.Vue;
 
+// Vue 挂载前先应用外观设置，避免刷新后背景图闪烁或失效
+function applyAppearanceEarly() {
+  try {
+    const saved = localStorage.getItem('appearance');
+    if (!saved) return;
+    const appearance = JSON.parse(saved);
+    const root = document.documentElement;
+    const body = document.body;
+
+    if (appearance.background_url) {
+      body.style.setProperty('--bg-image', `url(${appearance.background_url})`);
+      body.style.setProperty('--bg-blur', `blur(${appearance.background_blur || 10}px)`);
+      body.style.setProperty('--bg-opacity', appearance.background_opacity || 0.3);
+      body.classList.add('has-custom-bg');
+    }
+
+    if (appearance.accent_color) {
+      root.style.setProperty('--accent', appearance.accent_color);
+    }
+    if (appearance.zoom) {
+      document.querySelector('.content-wrapper')?.style.setProperty('zoom', appearance.zoom / 100);
+    }
+    if (appearance.theme) {
+      root.setAttribute('data-theme', appearance.theme);
+    }
+    if (appearance.backdrop_filter === false) {
+      body.classList.add('no-backdrop-filter');
+    }
+    if (appearance.background_color) {
+      root.style.setProperty('--bg-primary', appearance.background_color);
+    }
+    if (appearance.card_opacity != null) {
+      const bgHex = appearance.background_color || '#0f172a';
+      const num = parseInt(bgHex.replace('#', ''), 16);
+      const r = (num >> 16) & 255, g = (num >> 8) & 255, b = num & 255;
+      root.style.setProperty('--bg-card', `rgba(${r}, ${g}, ${b}, ${appearance.card_opacity})`);
+    }
+    if (appearance.sidebar_opacity != null) {
+      root.style.setProperty('--sidebar-opacity', appearance.sidebar_opacity);
+    }
+    if (appearance.sidebar_accent) {
+      root.style.setProperty('--sidebar-accent', appearance.sidebar_accent);
+    }
+    if (appearance.sidebar_color) {
+      const num = parseInt(appearance.sidebar_color.replace('#', ''), 16);
+      const r = (num >> 16) & 255, g = (num >> 8) & 255, b = num & 255;
+      root.style.setProperty('--sidebar-bg-1', `rgba(${r}, ${g}, ${b}, var(--sidebar-opacity, 0.95))`);
+      root.style.setProperty('--sidebar-bg-2', `rgba(${r}, ${g}, ${b}, calc(var(--sidebar-opacity, 0.95) + 0.03))`);
+    }
+  } catch {}
+}
+applyAppearanceEarly();
+
 // 性能检测：帧率低于 30fps 时禁用毛玻璃效果
 function detectPerformance() {
   let frameCount = 0;

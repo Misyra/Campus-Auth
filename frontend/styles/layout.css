@@ -1,6 +1,6 @@
 .sidebar {
   width: 240px;
-  background: linear-gradient(180deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98));
+  background: linear-gradient(180deg, var(--sidebar-bg-1, rgba(30, 41, 59, 0.95)), var(--sidebar-bg-2, rgba(15, 23, 42, 0.98)));
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;

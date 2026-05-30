@@ -172,10 +172,10 @@
 }
 
 .nav-item.active {
-  background: linear-gradient(135deg, rgba(34, 211, 238, 0.12), rgba(167, 139, 250, 0.08));
-  color: var(--accent);
-  border: 1px solid rgba(34, 211, 238, 0.2);
-  box-shadow: 0 0 20px rgba(34, 211, 238, 0.08);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--sidebar-accent, var(--accent)) 12%, transparent), rgba(167, 139, 250, 0.08));
+  color: var(--sidebar-accent, var(--accent));
+  border: 1px solid color-mix(in srgb, var(--sidebar-accent, var(--accent)) 20%, transparent);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--sidebar-accent, var(--accent)) 8%, transparent);
 }
 
 .nav-icon {
