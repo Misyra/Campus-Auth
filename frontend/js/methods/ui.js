@@ -49,7 +49,7 @@ export const uiMethods = {
     // 生成默认变量名
     let index = 1;
     let key = `var_${index}`;
-    while (this.config.custom_variables.hasOwnProperty(key)) {
+    while (Object.hasOwn(this.config.custom_variables, key)) {
       index++;
       key = `var_${index}`;
     }
@@ -75,7 +75,7 @@ export const uiMethods = {
       });
       return;
     }
-    if (this.config.custom_variables.hasOwnProperty(newKey)) {
+    if (Object.hasOwn(this.config.custom_variables, newKey)) {
       this.frontendLogger.warn('config', '自定义变量名已存在: ' + newKey);
       this.toastOnly(false, '变量名已存在');
       return;

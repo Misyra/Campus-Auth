@@ -81,8 +81,14 @@ class ScriptRunner:
     @staticmethod
     def _build_safe_env(env_vars: dict[str, str]) -> dict[str, str]:
         """构建子进程安全环境变量。"""
+        import platform
         safe: dict[str, str] = {}
-        for key in ("PATH", "SystemRoot", "TEMP", "TMP", "HOME", "USER", "ComSpec", "windir"):
+        base_keys = {"PATH", "HOME", "USER", "TEMP", "TMP"}
+        if platform.system() == "Windows":
+            base_keys.update({"SystemRoot", "ComSpec", "windir"})
+        else:
+            base_keys.update({"LANG", "LC_ALL", "SHELL", "XDG_RUNTIME_DIR"})
+        for key in base_keys:
             val = os.environ.get(key)
             if val:
                 safe[key] = val

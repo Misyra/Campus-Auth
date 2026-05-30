@@ -52,7 +52,7 @@ async def upload_background(file: UploadFile) -> dict:
 
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(400, "文件大小不能超过 10MB")
+        raise HTTPException(400, "文件大小不能超过 5MB")
 
     filename = f"{uuid.uuid4().hex}{ext}"
     filepath = BG_DIR / filename
@@ -64,16 +64,23 @@ async def upload_background(file: UploadFile) -> dict:
 @router.get("/api/background/{filename}")
 async def get_background(filename: str):
     """获取背景图片"""
-    filepath = BG_DIR / filename
+    safe_name = Path(filename).name
+    if safe_name != filename or not safe_name:
+        raise HTTPException(status_code=400, detail="无效的文件名")
+    filepath = BG_DIR / safe_name
     if not filepath.exists():
-        raise HTTPException(404, "图片不存在")
+        raise HTTPException(status_code=404, detail="图片不存在")
     return FileResponse(filepath)
 
 
 @router.delete("/api/background/{filename}")
 async def delete_background(filename: str) -> dict:
     """删除背景图片"""
-    filepath = BG_DIR / filename
-    if filepath.exists():
-        filepath.unlink()
-    return {"success": True}
+    safe_name = Path(filename).name
+    if safe_name != filename or not safe_name:
+        raise HTTPException(status_code=400, detail="无效的文件名")
+    filepath = BG_DIR / safe_name
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="文件不存在")
+    filepath.unlink()
+    return {"success": True, "message": "背景图片已删除"}

@@ -24,7 +24,10 @@ import sys
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from playwright.async_api import Route
 
 from src.utils.logging import get_logger
 from src.utils.platform_utils import CREATE_NO_WINDOW_FLAG
@@ -867,7 +870,7 @@ class PlaywrightWorker:
             logger.warning("解析自定义请求头失败: %s", exc)
         return {}
 
-    async def _handle_low_resource_request(self, route) -> None:
+    async def _handle_low_resource_request(self, route: "Route") -> None:
         """低资源模式请求处理。
 
         拦截图片、字体、媒体资源请求并中止，减少内存和带宽消耗。

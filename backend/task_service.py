@@ -96,8 +96,8 @@ class TaskService:
             if json_path.exists():
                 import json as _json
                 result["raw_json"] = _json.loads(json_path.read_text(encoding="utf-8"))
-        except Exception:
-            pass
+        except Exception as e:
+            task_logger.warning("读取任务原始 JSON 失败 (task_id=%s): %s", task_id, e)
         return result
 
     def save_task(self, task_id: str, config: dict[str, Any]) -> tuple[bool, str]:
