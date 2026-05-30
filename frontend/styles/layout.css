@@ -63,7 +63,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 20px 32px;
-  background: rgba(30, 41, 59, 0.85);
+  background: var(--sidebar-bg-1, rgba(30, 41, 59, 0.95));
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;

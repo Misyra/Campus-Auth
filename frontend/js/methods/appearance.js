@@ -160,11 +160,6 @@ export const appearanceMethods = {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
 
-        // 删除旧背景
-        if (this.appearance.background_filename) {
-          this.$api.delete(`/api/background/${this.appearance.background_filename}`).catch(() => {});
-        }
-
         this.appearance.background_url = data.url;
         this.appearance.background_filename = data.filename;
         this.applyAppearance();
