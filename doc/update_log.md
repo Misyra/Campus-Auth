@@ -1,5 +1,101 @@
 # 更新日志
 
+## v4.0.0
+
+### 新增功能
+
+- **Python 脚本任务**：支持通过 Python 脚本直接 HTTP 登录，无需启动 Playwright 浏览器，大幅降低资源占用。脚本运行端点使用运行时配置获取正确的登录参数，输出混合文本时仍能正确提取 JSON
+- **Captive Portal 网络探测方式**：新增 `is_network_available_portal()` 函数，支持自定义 URL 和预期内容，与 TCP/HTTP 探测并发执行
+- **反检测模式自定义脚本**：新增 `stealth_custom_script` 字段，支持在内置反检测脚本后追加自定义 JavaScript
+- **外观设置大幅扩展**：新增动态渐变背景、背景图片上传（保存到服务器，上传时自动清理旧文件）、主题色选择、缩放、毛玻璃效果（含性能降级检测）、侧边栏颜色/透明度/高亮色自定义、卡片透明度、边框可见度等。外观设置独立为导航页面
+- **任务和脚本拖拽排序**：支持拖拽调整顺序
+- **前端日志面板显示完整后端日志**：打通前端日志到后端链路，刷新时保留 Python logging 系统产生的日志
+
+### 架构重构
+
+- **PlaywrightWorker 线程模型**：所有浏览器操作（任务执行、调试会话、手动登录）统一收归 Worker 线程，实现完整生命周期管理、健康检查、命令队列和浏览器复用。`get_worker()` 支持自动恢复，添加双重检查锁防止并发创建
+- **MonitorService Actor 模型**：`queue.Queue` 命令通道替代直接跨线程调用，拉式日志广播，消除 `asyncio.Lock`。移除 `_loop/_loop_stopped` 暴露，简化 `attempt_login` task 追踪
+- **网络检测模块拆分**：抽取 `network_probes.py`（TCP/HTTP/Portal 探测）、`network_decision.py`（三个独立检查函数：`check_pause`、`check_network_status`、`check_login_prerequisites`）为独立模块，与 `monitor_core.py` 解耦
+- **后端架构全面重构**：`ServiceContainer` 统一管理服务依赖，实现高内聚低耦合。`config_service`、`task_service`、`profile_service`、`monitor_service` 职责清晰分离
+- **消除跨模块代码重复**：`schemas.py` 提取 Mixin（`_BrowserFieldsMixin`、`_MonitorFieldsMixin`、`_SharedValidatorsMixin`），统一常量和工具方法
+- **safe_mode 重命名为 pure_mode**，新增视口配置项（viewport width/height）
+
+### 监控与状态
+
+- **监控状态详细化**：支持暂停时段、登录重试次数、网络连接状态等详细状态文案，前端实时展示
+- **NetworkState 枚举**：替代 `last_network_ok` 布尔值，状态语义更清晰
+- **日志与截图目录统一**：`logs/YYYY-MM-DD/app.log` + `logs/YYYY-MM-DD/screenshots/`，合并保留天数为单一设置
+
+### 浏览器与任务
+
+- **网络检测配置重构**：支持独立勾选 TCP/HTTP/Portal 检测方式，检测间隔从分钟改为秒（最低 10 秒）
+- **认证地址检查优化**：仅在登录前检查可达性，不影响网络状态判断；不可达时放弃而非重置计数
+- **浏览器复用前检查页面存活状态**，修复连续登录失败问题
+- **登录失败后浏览器关闭策略分离手动/自动场景**
+- **任务执行器优化**：`reveal_hidden` 默认关闭、详细日志、iframe 支持、Captive Portal 支持
+- **任务编辑器显示原始 JSON 文件内容**，任务页面与脚本页面隔离显示
+- **浏览器设置页重构**：单列布局，"安全与反检测"独立分区
+
+### 前端优化
+
+- **拆分 data()**：将 `app-options.js` 中 110+ 个属性按功能域拆分为 12 个独立模块
+- **CSS 变量统一**：扩展设计令牌，统一各页面硬编码颜色值
+- **可复用组件**：新增 GlassCard、FormGroup、ToggleSwitch、StatusDot、LoadingSpinner、EmptyState 全局组件
+- **设置页重构为 5 标签页**：账号、网络与监控、系统与日志、浏览器、任务
+- **日志自动滚动修复**：返回日志页面时自动滚动到最新日志，网络监控横幅出现时日志窗口不再溢出
+- **前端日志消息统一为中文**
+- **顶栏背景共用侧边栏变量**
+
+### 代码审查修复
+
+共修复 60+ 项问题，涉及可靠性、线程安全和代码质量。
+
+#### 高优先级修复
+
+- **修复 pure_mode 配置污染**：`_runtime_config` 浅拷贝导致 `browser_settings` 嵌套字典被意外修改
+- **修复 Worker 单例无法恢复**：`get_worker()` 检测 Worker 线程存活状态，停止后自动重建
+- **修复 submit() 永久阻塞**：添加默认超时 300s
+- **修复 fetch 初始化阻塞**：`/openapi.json` 请求添加 5 秒 AbortController 超时
+- **修复 debug_start 并发竞态**：`POST /api/actions/login` 添加并发守卫，防止多浏览器实例
+- **修复消费者线程停止后永久死亡**及手动登录网络检测问题
+- **修复调试会话双重启动**与 `run_all` 信号量阻塞
+- **修复 `_cleanup_browser` 异常吞没**、`reuse_browser` 不重置、关闭时浏览器残留
+- **修复 `_handle_debug_stop`**：创建替代页面而非清空 `_page`
+- **修复 network_test TOCTOU** 和 thread-local httpx 缓存泄漏
+- **修复 login.py dialog handler 泄漏**：恢复 `page.on("dialog")` 方式并确保每次清理
+- **修复 DateRotatingFileHandler close/emit 竞态**，简化 deferred-open
+- **HTTP 探测跳过 SSL 证书验证**：避免校园网门户自签名证书误判网络异常
+- **过滤 APIPA 地址**、浏览器健康检查超时等多处 WiFi 断连修复
+
+#### 中优先级修复
+
+- **PID 锁文件稳健化**：进程身份验证 + 退出清理 + VBS 兼容
+- **跨平台探活修复**：处理 `os.kill(pid,0)` 的 CPython SystemError 和 WinError 87
+- **收窄异常捕获范围**：`wait_for_selector` 只捕获 `TimeoutError`，分离业务异常与编程 bug
+- **添加线程安全**：`_root_configured` 使用双检锁模式，`OcrHandler` 添加锁保护
+- **消除 utils → backend 反向依赖**：`VALID_LOG_LEVELS` 直接定义在 `logging.py`
+- **统一日志级别判断**：前端 `getLogClass()` 改用 `item.level` 字段
+- **settings.json 数值越界时自动钳制**而非校验失败
+- **signal handler 简化**：统一使用 `os._exit(0)`
+- **移除 requests 依赖**，移除 WebSocketManager `asyncio.Lock`
+- **前端 `beforeUnmount` 添加定时器清理**
+- **pip 安装子进程添加 `--proxy` 空值参数**，避免 Windows 注册表代理导致安装失败
+
+### 测试
+
+- 全面扩展测试覆盖，新增 PlaywrightWorker、网络探测层、决策层、任务执行器等模块测试
+- 测试数量从 281 增至 747，全部通过
+
+### 工程化
+
+- **ruff format 全项目格式化**
+- **删除 ConfigLoader 类及级联死代码**，移除独立卸载脚本 `uninstall.py`
+- **time.py 重命名为 time_utils.py** 避免遮蔽标准库
+- **API 文档迁移**至 `doc/api-doc.md`，README 精简
+- **pyrightconfig.json、CLAUDE.md、.omo 等加入 gitignore**
+
+---
+
 ## v3.7.2
 
 ### 前端优化
