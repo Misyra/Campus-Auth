@@ -854,11 +854,11 @@ class SleepHandler(StepHandler):
 
         if duration > self.MAX_SLEEP_MS:
             logger.warning(
-                f"[sleep] duration={duration}ms 超过上限 {self.MAX_SLEEP_MS}ms，已截断"
+                "[sleep] duration=%sms 超过上限 %sms，已截断", duration, self.MAX_SLEEP_MS
             )
             duration = self.MAX_SLEEP_MS
 
-        logger.info(f"[sleep] duration={duration}ms")
+        logger.info("[sleep] duration=%sms", duration)
         await page.wait_for_timeout(duration)
         return True, ""
 
@@ -1195,7 +1195,7 @@ class TaskExecutor:
         if not url:
             url = self.env_vars.get("LOGIN_URL", "").strip()
         if url:
-            logger.info(f"自动导航到任务URL: {url} (超时 {self.navigation_timeout}ms)")
+            logger.info("自动导航到任务URL: %s (超时 %sms)", url, self.navigation_timeout)
             await page.goto(url, wait_until="load", timeout=self.navigation_timeout)
             await self._wait_url_stable(page)
 
@@ -1210,7 +1210,7 @@ class TaskExecutor:
             await asyncio.sleep(0.5)
             current = page.url
             if current != last_url:
-                logger.info(f"URL 重定向: {last_url} → {current}")
+                logger.info("URL 重定向: %s → %s", last_url, current)
                 last_url = current
                 redirects += 1
                 deadline = max(deadline, time.perf_counter() + timeout_ms / 1000)
@@ -1263,7 +1263,7 @@ class TaskExecutor:
         try:
             return await handler.execute(page, step, self.resolver)
         except Exception as e:
-            logger.error(f"步骤 [{step.id}] 执行失败: {e}")
+            logger.error("步骤 [%s] 执行失败: %s", step.id, e)
             return False, str(e)
 
     async def execute_step_at(self, page, step_index: int) -> dict[str, Any]:
@@ -1384,7 +1384,7 @@ class TaskExecutor:
     async def _handle_success(self, page) -> tuple[bool, str]:
         """处理成功情况"""
         message = self.config.on_success.get("message", "任务执行成功")
-        logger.info(f"任务执行成功: {message}")
+        logger.info("任务执行成功: %s", message)
         return True, message
 
     async def _handle_failure(
@@ -1404,7 +1404,7 @@ class TaskExecutor:
             message += f" 截图: {screenshot_url}"
 
         # 日志只输出不含截图 URL 的部分，避免上层重复打印时出现两张截图
-        logger.error(f"任务执行失败: {base_message}: {reason}")
+        logger.error("任务执行失败: %s: %s", base_message, reason)
         return False, message
 
     async def _capture_screenshot(self, page) -> str | None:
@@ -1425,7 +1425,7 @@ class TaskExecutor:
             await page.screenshot(path=local_path, full_page=True)
             return f"{url_prefix}/{filename}"
         except Exception as e:
-            logger.warning(f"截图失败: {e}")
+            logger.warning("截图失败: %s", e)
             return None
 
 
@@ -1551,7 +1551,7 @@ class TaskManager:
             )
             return True
         except Exception as e:
-            logger.error(f"保存排序配置失败: {e}")
+            logger.error("保存排序配置失败: %s", e)
             return False
 
     def _sort_by_order(self, tasks: list[dict], order_key: str) -> list[dict]:
@@ -1592,7 +1592,7 @@ class TaskManager:
                             "type": "browser",
                         })
                 except Exception as e:
-                    logger.warning(f"无法读取任务文件 {file}: {e}")
+                    logger.warning("无法读取任务文件 %s: %s", file, e)
         return self._sort_by_order(tasks, "all")
 
     def list_script_tasks(self) -> list[dict[str, str]]:
@@ -1609,7 +1609,7 @@ class TaskManager:
                     "description": meta["description"],
                 })
             except Exception as e:
-                logger.warning(f"无法读取脚本文件 {file}: {e}")
+                logger.warning("无法读取脚本文件 %s: %s", file, e)
         return self._sort_by_order(tasks, "scripts")
 
     def load_task(self, task_id: str) -> TaskConfig | ScriptTaskInfo | None:
@@ -1630,7 +1630,7 @@ class TaskManager:
             config.task_id = task_id
             return config
         except Exception as e:
-            logger.error(f"无法加载任务 {task_id}: {e}")
+            logger.error("无法加载任务 %s: %s", task_id, e)
             return None
 
     def save_task(self, task_id: str, config: dict[str, Any], task_type: str = "browser") -> bool:
@@ -1641,7 +1641,7 @@ class TaskManager:
         # 浏览器任务：带验证
         is_valid, errors = TaskValidator.validate(config)
         if not is_valid:
-            logger.error(f"任务验证失败: {errors}")
+            logger.error("任务验证失败: %s", errors)
             return False
 
         file = self._safe_json_path(task_id)
@@ -1662,7 +1662,7 @@ class TaskManager:
             )
             return True
         except Exception as e:
-            logger.error(f"无法保存任务 {task_id}: {e}")
+            logger.error("无法保存任务 %s: %s", task_id, e)
             return False
 
     def _save_script_task(self, task_id: str, config: dict[str, Any]) -> bool:
@@ -1687,7 +1687,7 @@ class TaskManager:
             atomic_write(file, script_content)
             return True
         except Exception as e:
-            logger.error(f"无法保存脚本任务 {task_id}: {e}")
+            logger.error("无法保存脚本任务 %s: %s", task_id, e)
             return False
 
     def delete_task(self, task_id: str) -> bool:
@@ -1701,7 +1701,7 @@ class TaskManager:
             try:
                 file.unlink(missing_ok=True)
             except Exception as e:
-                logger.error(f"无法删除任务文件 {file}: {e}")
+                logger.error("无法删除任务文件 %s: %s", file, e)
         return True
 
     def get_active_task(self) -> str:
@@ -1724,5 +1724,5 @@ class TaskManager:
             config_file.write_text(normalized, encoding="utf-8")
             return True
         except Exception as e:
-            logger.error(f"无法设置活动任务: {e}")
+            logger.error("无法设置活动任务: %s", e)
             return False

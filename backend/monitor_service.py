@@ -277,7 +277,7 @@ class MonitorService:
             self._cmd_queue.put(
                 MonitorCommand(
                     type="reload",
-                    data={"config": self._runtime_config.copy()},
+                    data={"config": self._copy_runtime_config()},
                 )
             )
         new_url = self._runtime_config.get("auth_url", "")
@@ -306,22 +306,8 @@ class MonitorService:
         self._logs.append(entry)
 
         # 同步写入 Python 日志系统 → 自动持久化到文件
-        log_level = (
-            getattr(logging, level_name, logging.INFO)
-            if hasattr(logging, level_name)
-            else logging.INFO
-        )
-        record = service_logger.makeRecord(
-            service_logger.name,
-            log_level,
-            "(monitor_service)",
-            0,
-            "[%s] %s",
-            (source_name, message),
-            None,
-        )
-        record.side = "FRONTEND" if source_name == "frontend" else "BACKEND"
-        service_logger.handle(record)
+        log_level = getattr(logging, level_name, logging.INFO)
+        service_logger.log(log_level, "[%s] %s", source_name, message)
 
         # 监控相关日志 → 更新状态快照
         if source_name in ("monitor.core", "monitor", "network"):
@@ -453,6 +439,13 @@ class MonitorService:
             self._profile_service.load().system,
         )
 
+    def _copy_runtime_config(self) -> dict:
+        """深拷贝运行时配置，防止 browser_settings 等嵌套字典被意外修改。"""
+        config = self._runtime_config.copy()
+        if "browser_settings" in config:
+            config["browser_settings"] = dict(config["browser_settings"])
+        return config
+
     def reload_config(self) -> None:
         """重新加载配置（从 settings.json），并通过队列推送到运行中的监控"""
         self._reload_config_internal()
@@ -462,7 +455,7 @@ class MonitorService:
             self._cmd_queue.put(
                 MonitorCommand(
                     type="reload",
-                    data={"config": self._runtime_config.copy()},
+                    data={"config": self._copy_runtime_config()},
                 )
             )
 
@@ -485,7 +478,7 @@ class MonitorService:
                     type="profile_switch",
                     data={
                         "profile": profile_name,
-                        "config": self._runtime_config.copy(),
+                        "config": self._copy_runtime_config(),
                         "pure_mode": self.pure_mode,
                     },
                 )
@@ -505,7 +498,7 @@ class MonitorService:
         if not valid:
             return False, f"配置无效: {error}"
 
-        config = self._runtime_config.copy()
+        config = self._copy_runtime_config()
         self._cmd_queue.put(
             MonitorCommand(
                 type="start", data={"config": config, "pure_mode": self.pure_mode}
@@ -578,7 +571,7 @@ class MonitorService:
             self._login_in_progress = True
         try:
             service_logger.info("Manual login requested")
-            runtime_config = self._runtime_config.copy()
+            runtime_config = self._copy_runtime_config()
 
             cmd = MonitorCommand(
                 type="login",
@@ -618,7 +611,7 @@ class MonitorService:
 
     def test_network(self) -> tuple[bool, str]:
         service_logger.info("手动网络测试")
-        config = self._runtime_config.copy()
+        config = self._copy_runtime_config()
         monitor_cfg = config.get("monitor", {})
         targets = monitor_cfg.get("ping_targets", [])
         enable_tcp = monitor_cfg.get("enable_tcp_check", True)
@@ -677,4 +670,4 @@ class MonitorService:
 
     def get_runtime_config(self) -> dict:
         """线程安全地获取运行时配置副本"""
-        return self._runtime_config.copy()
+        return self._copy_runtime_config()

@@ -77,7 +77,7 @@ export const shortcutMethods = {
         this.saveConfig();
       }
     } else if (this.currentPage === 'tasks' && this.editingTask) {
-      this.saveEditingTask();
+      this.saveTask();
     } else if (this.currentPage === 'scripts') {
       // 脚本保存由 scripts 模块处理
     }
