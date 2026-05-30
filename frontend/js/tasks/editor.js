@@ -12,12 +12,13 @@ export const editorTaskMethods = {
           return;
         }
         this.editingTaskType = 'browser';
+        const displayData = data.raw_json || data;
         this.editingTask = {
           id: taskId,
           name: data.name,
           description: data.description,
           url: data.url,
-          json: JSON.stringify(data, null, 2),
+          json: JSON.stringify(displayData, null, 2),
           _isNew: false,
         };
         this.jsonError = '';
