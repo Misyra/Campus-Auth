@@ -93,42 +93,31 @@ export const uiMethods = {
   },
   _isViewerAtBottom() {
     const logViewer = document.querySelector('.log-viewer');
-    if (!logViewer) return true;
-    return logViewer.scrollTop + logViewer.clientHeight >= logViewer.scrollHeight - 5;
+    if (!logViewer || logViewer.scrollHeight === 0) return true;
+    return logViewer.scrollTop + logViewer.clientHeight >= logViewer.scrollHeight - 50;
   },
   _appendLogs(entries) {
-    const LOG_MAX_ENTRIES = 100; // 降低上限，减少 DOM 元素数量
-    const wasAtBottom = this._isViewerAtBottom();
+    const LOG_MAX_ENTRIES = 100;
     this.logs.push(...entries);
     if (this.logs.length > LOG_MAX_ENTRIES) {
       this.logs = this.logs.slice(-LOG_MAX_ENTRIES);
     }
-    this.$nextTick(() => this.scrollLogToBottom(wasAtBottom));
-  },
-  scrollLogToBottom(wasAtBottom) {
-    // 智能滚动：仅在用户本来就在底部时自动滚动
-    // wasAtBottom 在内容追加前捕获，避免新内容撑高 scrollHeight 导致误判
-    const logViewer = document.querySelector('.log-viewer');
-    if (!logViewer) return;
-    if (!this.autoScroll) {
-      this.newLogCount = (this.newLogCount || 0) + 1;
-      return;
-    }
-    if (wasAtBottom === undefined) wasAtBottom = this._isViewerAtBottom();
-    if (wasAtBottom) {
-      logViewer.scrollTop = logViewer.scrollHeight;
-      this.newLogCount = 0;
-    } else {
-      this.newLogCount = (this.newLogCount || 0) + 1;
-    }
+    this.$nextTick(() => {
+      if (this.autoScroll) {
+        const logViewer = document.querySelector('.log-viewer');
+        if (logViewer) logViewer.scrollTop = logViewer.scrollHeight;
+      }
+    });
   },
   scrollToBottom() {
-    // 手动点击"新消息"按钮时滚动
     const logViewer = document.querySelector('.log-viewer');
     if (logViewer) {
-      logViewer.scrollTop = logViewer.scrollHeight;
+      logViewer.scrollTo({ top: logViewer.scrollHeight, behavior: 'smooth' });
       this.newLogCount = 0;
     }
+  },
+  onLogScroll() {
+    if (this._isViewerAtBottom()) this.newLogCount = 0;
   },
   openFullscreen(src) {
     this.fullscreenSrc = src;

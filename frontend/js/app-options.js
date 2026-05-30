@@ -68,6 +68,7 @@ export const appOptions = {
         scripts: 'Python 脚本',
         profiles: '配置方案',
         'profile-edit': this.editingProfile?.id ? '编辑方案' : '新建方案',
+        appearance: '外观设置',
         about: '关于',
       };
       return titles[this.currentPage] || '仪表盘';
@@ -158,7 +159,10 @@ export const appOptions = {
         }
       }
       if (newPage === 'dashboard' && this.autoScroll) {
-        this.$nextTick(() => this.scrollToBottom());
+        this.$nextTick(() => {
+          const logViewer = document.querySelector('.log-viewer');
+          if (logViewer) logViewer.scrollTop = logViewer.scrollHeight;
+        });
       }
     },
   },
