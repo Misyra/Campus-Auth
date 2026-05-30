@@ -58,6 +58,14 @@ async def upload_background(file: UploadFile) -> dict:
     filepath = BG_DIR / filename
     filepath.write_bytes(content)
 
+    # 清理旧的背景图片，只保留新上传的
+    for old_file in BG_DIR.iterdir():
+        if old_file.name != filename:
+            try:
+                old_file.unlink()
+            except OSError:
+                pass
+
     return {"filename": filename, "url": f"/api/background/{filename}"}
 
 
