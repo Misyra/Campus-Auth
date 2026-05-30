@@ -45,6 +45,7 @@ logs/
 .agents/
 .worktrees/
 CLAUDE.md
+CODE_REVIEW_FIX.md
 AGENTS.md
 skills-lock.json
 .sisyphus/
