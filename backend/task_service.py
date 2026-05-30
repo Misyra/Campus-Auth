@@ -90,6 +90,14 @@ class TaskService:
         result = task.to_dict()
         result["id"] = task_id
         result["type"] = "browser"
+        # 附加原始文件内容供编辑器使用
+        try:
+            json_path = self.task_manager.tasks_dir / f"{task_id}.json"
+            if json_path.exists():
+                import json as _json
+                result["raw_json"] = _json.loads(json_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
         return result
 
     def save_task(self, task_id: str, config: dict[str, Any]) -> tuple[bool, str]:
@@ -163,3 +171,13 @@ class TaskService:
             return True, "活动任务已设置"
         task_logger.error("Set active task failed: %s", task_id)
         return False, "设置活动任务失败"
+
+    def save_task_order(self, order: dict[str, list[str]]) -> tuple[bool, str]:
+        """保存任务排序配置。"""
+        if not isinstance(order, dict):
+            return False, "排序数据格式无效"
+        success = self.task_manager.save_order(order)
+        if success:
+            task_logger.info("任务排序已保存")
+            return True, "排序保存成功"
+        return False, "排序保存失败"

@@ -1,0 +1,11 @@
+{
+  "all": [
+    "default",
+    "hust",
+    "nnuzc",
+    "test_http_login"
+  ],
+  "scripts": [
+    "test_http_login"
+  ]
+}

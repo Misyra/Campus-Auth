@@ -1,76 +1,113 @@
-// 拖拽排序支持
+// 拖拽排序支持 — 实时交换模式
+let _dragState = null;
+let _allowDrag = false;
+let _swapCooldown = false;
+
 export const dragMethods = {
-  // 拖拽状态
-  _dragState: null,
-
-  // 开始拖拽
-  onDragStart(e, index, listName) {
-    this._dragState = {
-      index,
-      listName,
-      startY: e.clientY,
-    };
-    e.dataTransfer.effectAllowed = 'move';
-    e.target.classList.add('dragging');
-
-    // 设置拖拽图像
-    const ghost = e.target.cloneNode(true);
-    ghost.style.opacity = '0.5';
-    ghost.style.position = 'absolute';
-    ghost.style.left = '-9999px';
-    document.body.appendChild(ghost);
-    e.dataTransfer.setDragImage(ghost, 0, 0);
-    setTimeout(() => document.body.removeChild(ghost), 0);
+  onHandleMouseDown(e) {
+    _allowDrag = true;
+    const item = e.currentTarget.closest('.task-item');
+    if (item) item.setAttribute('draggable', 'true');
   },
 
-  // 拖拽经过
+  onHandleMouseUp(e) {
+    const item = e.currentTarget.closest('.task-item');
+    if (item && !_dragState) item.removeAttribute('draggable');
+  },
+
+  handleDragStart(e, index, listName) {
+    if (!_allowDrag) {
+      e.preventDefault();
+      return;
+    }
+
+    const filtered = this[listName];
+    if (!filtered || !filtered[index]) return;
+
+    _dragState = {
+      taskId: filtered[index].id,
+      listName,
+      currentIndex: index,
+    };
+
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', '');
+    e.target.classList.add('dragging');
+  },
+
   onDragOver(e, index, listName) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
 
-    if (!this._dragState || this._dragState.listName !== listName) return;
-    if (this._dragState.index === index) return;
+    if (!_dragState || _dragState.listName !== listName || _swapCooldown) return;
 
-    const target = e.currentTarget;
-    target.classList.add('drag-over');
+    const filtered = this[listName];
+    if (!filtered || !filtered[index]) return;
+    if (filtered[index].id === _dragState.taskId) return;
+
+    // 判断是否越过目标中线
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    const crossed = (_dragState.currentIndex < index && e.clientY > midY) ||
+                    (_dragState.currentIndex > index && e.clientY < midY);
+
+    if (!crossed) return;
+
+    // 实时交换
+    _swapCooldown = true;
+    setTimeout(() => { _swapCooldown = false; }, 120);
+
+    if (listName === 'browserTasks') {
+      const from = this.tasks.findIndex(t => t.id === _dragState.taskId);
+      if (from === -1) return;
+      const item = this.tasks.splice(from, 1)[0];
+      let to = this.tasks.findIndex(t => t.id === filtered[index].id);
+      if (_dragState.currentIndex < index) to++;
+      this.tasks.splice(to, 0, item);
+      _dragState.currentIndex = to;
+    } else {
+      const from = filtered.findIndex(t => t.id === _dragState.taskId);
+      if (from === -1) return;
+      const item = filtered.splice(from, 1)[0];
+      let to = filtered.findIndex(t => t.id === filtered[index].id);
+      if (_dragState.currentIndex < index) to++;
+      filtered.splice(to, 0, item);
+      _dragState.currentIndex = to;
+    }
   },
 
-  // 拖拽离开
   onDragLeave(e) {
-    e.currentTarget.classList.remove('drag-over');
+    // 不需要处理
   },
 
-  // 放置
   onDrop(e, index, listName) {
     e.preventDefault();
-    e.currentTarget.classList.remove('drag-over');
-
-    if (!this._dragState || this._dragState.listName !== listName) return;
-
-    const fromIndex = this._dragState.index;
-    const toIndex = index;
-
-    if (fromIndex === toIndex) return;
-
-    // 获取列表
-    const list = this[listName];
-    if (!list) return;
-
-    // 移动元素
-    const item = list.splice(fromIndex, 1)[0];
-    list.splice(toIndex, 0, item);
-
-    this._dragState = null;
+    if (!_dragState || _dragState.listName !== listName) return;
+    _dragState = null;
+    this._persistOrder();
   },
 
-  // 拖拽结束
   onDragEnd(e) {
     e.target.classList.remove('dragging');
-    this._dragState = null;
+    e.target.removeAttribute('draggable');
+    _dragState = null;
+    _allowDrag = false;
+    _swapCooldown = false;
 
-    // 清理所有 drag-over 样式
-    document.querySelectorAll('.drag-over').forEach(el => {
-      el.classList.remove('drag-over');
+    document.querySelectorAll('.drop-before, .drop-after').forEach(el => {
+      el.classList.remove('drop-before', 'drop-after');
     });
+  },
+
+  async _persistOrder() {
+    try {
+      const order = {
+        all: this.tasks.map(t => t.id),
+        scripts: this.scripts.map(t => t.id),
+      };
+      await this.$api.post('/api/tasks/order', order);
+    } catch {
+      // 静默处理
+    }
   },
 };

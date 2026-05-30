@@ -70,3 +70,13 @@ def set_active_task(
         "Set active task %s -> success=%s, message=%s", task_id, ok, message
     )
     return ActionResponse(success=ok, message=message)
+
+
+@router.post("/api/tasks/order", response_model=ActionResponse)
+def save_task_order(
+    payload: dict,
+    task_svc: TaskService = Depends(get_task_service),
+) -> ActionResponse:
+    ok, message = task_svc.save_task_order(payload)
+    api_logger.info("Save task order -> success=%s, message=%s", ok, message)
+    return ActionResponse(success=ok, message=message)
