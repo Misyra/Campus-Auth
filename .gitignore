@@ -41,6 +41,9 @@ logs/
 *.swp
 *.swo
 
+# 启动器（本地使用，不随仓库分发）
+launcher.py
+
 # Claude Code
 .claude/
 .agents/
