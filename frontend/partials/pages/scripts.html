@@ -27,12 +27,26 @@
           <p class="hint">编写 Python 脚本直接发送 HTTP 请求登录，无需浏览器，资源占用更低</p>
         </div>
         <div v-else class="task-list">
-          <div v-for="script in scripts" :key="script.id" class="task-item" :class="{ active: activeTaskId === script.id }">
+          <div
+            v-for="(script, index) in scripts"
+            :key="script.id"
+            class="task-item"
+            :class="{ active: activeTaskId === script.id }"
+            @dragstart="handleDragStart($event, index, 'scripts')"
+            @dragover="onDragOver($event, index, 'scripts')"
+            @dragleave="onDragLeave($event)"
+            @drop="onDrop($event, index, 'scripts')"
+            @dragend="onDragEnd($event)"
+          >
+            <div class="task-drag-handle" title="拖拽排序"
+              @mousedown="onHandleMouseDown($event)"
+              @mouseup="onHandleMouseUp($event)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+                <line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/>
+              </svg>
+            </div>
             <div class="task-info">
-              <h3>
-                {{ script.name }}
-                <span class="task-badge script">脚本</span>
-              </h3>
+              <h3>{{ script.name }}</h3>
               <p v-if="script.description" class="task-desc">{{ script.description }}</p>
             </div>
             <div class="task-actions">

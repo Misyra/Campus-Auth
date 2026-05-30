@@ -1530,6 +1530,39 @@ class TaskManager:
 
     # ── CRUD ──
 
+    def _order_file(self) -> Path:
+        return self.tasks_dir / ".order.json"
+
+    def load_order(self) -> dict[str, list[str]]:
+        """读取排序配置。"""
+        path = self._order_file()
+        if path.exists():
+            try:
+                return json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        return {}
+
+    def save_order(self, order: dict[str, list[str]]) -> bool:
+        """保存排序配置。"""
+        try:
+            self._order_file().write_text(
+                json.dumps(order, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"保存排序配置失败: {e}")
+            return False
+
+    def _sort_by_order(self, tasks: list[dict], order_key: str) -> list[dict]:
+        """按排序配置对任务列表排序，未在排序中的排到末尾。"""
+        order = self.load_order()
+        id_order = order.get(order_key, [])
+        if not id_order:
+            return tasks
+        order_map = {tid: i for i, tid in enumerate(id_order)}
+        return sorted(tasks, key=lambda t: order_map.get(t["id"], len(id_order)))
+
     def list_tasks(self) -> list[dict[str, str]]:
         """列出所有任务（.json + .py），返回结果含 type 字段。"""
         tasks: list[dict[str, str]] = []
@@ -1560,7 +1593,7 @@ class TaskManager:
                         })
                 except Exception as e:
                     logger.warning(f"无法读取任务文件 {file}: {e}")
-        return tasks
+        return self._sort_by_order(tasks, "all")
 
     def list_script_tasks(self) -> list[dict[str, str]]:
         """只列出 .py 脚本任务。"""
@@ -1577,7 +1610,7 @@ class TaskManager:
                 })
             except Exception as e:
                 logger.warning(f"无法读取脚本文件 {file}: {e}")
-        return tasks
+        return self._sort_by_order(tasks, "scripts")
 
     def load_task(self, task_id: str) -> TaskConfig | ScriptTaskInfo | None:
         file = self._safe_task_path(task_id)

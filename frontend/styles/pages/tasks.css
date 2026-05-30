@@ -41,6 +41,9 @@
   padding: 4px;
   border-radius: 4px;
   transition: all 0.2s;
+  flex-shrink: 0;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .task-drag-handle:hover {
@@ -49,15 +52,10 @@
 }
 
 .task-item.dragging {
-  opacity: 0.5;
-  border-color: var(--accent);
+  opacity: 0.4;
+  transform: scale(0.98);
 }
 
-.task-item.drag-over {
-  border-color: var(--accent);
-  border-style: dashed;
-  background: rgba(34, 211, 238, 0.08);
-}
 
 .task-info {
   flex: 1;
@@ -75,6 +73,15 @@
 .task-info p {
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.task-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 4px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .task-actions {
