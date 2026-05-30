@@ -327,7 +327,7 @@ matched = service.match_profile(gateway_ip, ssid)
 
 ### Playwright 或 Chromium 下载失败
 
-项目会优先使用环境变量里配置的下载源，其次使用默认镜像地址。如果网络环境比较特殊，可以手动设置：
+项目会自动尝试多个镜像源下载 Playwright 和 Chromium。如果下载仍然失败，可以手动设置环境变量指定下载源：
 
 ```env
 PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
