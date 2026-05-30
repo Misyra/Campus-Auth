@@ -41,8 +41,9 @@ logs/
 *.swp
 *.swo
 
-# 启动器（本地使用，不随仓库分发）
+# 本地工具（不随仓库分发）
 launcher.py
+package_zip.ps1
 
 # Claude Code
 .claude/
