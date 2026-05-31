@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Campus-Auth 任务录制器
 // @namespace    https://github.com/Misyra/Campus-Auth
-// @version      3.7.1
+// @version      3.8.0  ← 同步修改下方 VERSION 常量
 // @description  可视化选取校园网登录页面元素，自动生成任务 JSON 或结构化文档
 // @author       Misyra
 // @match        http://*/*
@@ -18,6 +18,8 @@
   "use strict";
 
   // ==================== 配置 ====================
+
+  const VERSION = "3.8.0"; // 同步修改顶部 @version
 
   const STEP_TYPES = {
     username: { category: "basic", label: "账号输入框", icon: "👤", color: "#4CAF50", primary: true, hint: "点击页面上真实的账号输入框（不是旁边的文字标签），支持自动检测隐藏输入框" },
@@ -854,16 +856,12 @@
       if (parseFloat(s.opacity) <= 0) return true;
       const r = el.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) return true;
+      // clip 已废弃但校园网门户仍在使用，保留检测
       if (s.clip === "rect(0px, 0px, 0px, 0px)" || s.clip === "rect(0, 0, 0, 0)") return true;
       if (typeof s.clipPath === "string" && s.clipPath.includes("inset(100%")) return true;
       if (r.left < -1000 || r.top < -1000) return true;
+      if (el.offsetParent === null && s.position !== "fixed") return true;
     } catch (_) {}
-    if (el.offsetParent === null) {
-      try {
-        const s = getComputedStyle(el);
-        if (s.position !== "fixed") return true;
-      } catch (_) { return true; }
-    }
     return false;
   }
 
@@ -877,7 +875,6 @@
     }
 
     const info = getElementInfo(el);
-    const best = info.selectors[0] || {};
     const tag = `<span class="ca-tt-tag">&lt;${info.tag}&gt;</span>`;
     const id = info.attrs.id ? ` <span class="ca-tt-id">#${info.attrs.id}</span>` : "";
     const cls = info.attrs.class
@@ -909,7 +906,7 @@
         <div style="display:flex;align-items:center;justify-content:space-between;">
           <div>
             <h3>🎬 Campus-Auth 任务录制器</h3>
-            <small>v3.7.1 — 选取元素，生成任务配置</small>
+            <small>v${VERSION} — 选取元素，生成任务配置</small>
           </div>
           <button id="ca-btn-help" style="width:26px;height:26px;border-radius:50%;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;cursor:pointer;font-size:14px;font-weight:bold;line-height:1;" title="使用说明">?</button>
         </div>
@@ -1431,6 +1428,33 @@
     return best;
   }
 
+  // 检测隐藏输入框信息（addStepFromElement 和 addManualFillStep 共用）
+  // 返回 { hiddenRealSelector, hiddenRealHTML, hiddenRealTag, hiddenRealRelation }
+  function _detectHiddenInputInfo(el, type) {
+    const result = { hiddenRealSelector: null, hiddenRealHTML: "", hiddenRealTag: "", hiddenRealRelation: "" };
+    const isInputStep = type === "username" || type === "password" || type === "captcha_input";
+    if (!isInputStep || !state.hiddenDetectionEnabled) return result;
+
+    result.hiddenRealSelector = detectHiddenRealInput(el, type);
+    if (!result.hiddenRealSelector) return result;
+
+    try {
+      const hiddenEl = document.querySelector(result.hiddenRealSelector);
+      if (hiddenEl) {
+        result.hiddenRealHTML = hiddenEl.outerHTML.substring(0, 2000);
+        result.hiddenRealTag = hiddenEl.tagName.toLowerCase();
+        if (hiddenEl.parentElement === el.parentElement) {
+          result.hiddenRealRelation = `同一 <${el.parentElement.tagName.toLowerCase()}> 内的兄弟元素`;
+        } else if (el.parentElement && el.parentElement.contains(hiddenEl)) {
+          result.hiddenRealRelation = `点击元素所在 <${el.parentElement.tagName.toLowerCase()}> 的子元素`;
+        } else {
+          result.hiddenRealRelation = `位于容器内，与点击元素不同分支`;
+        }
+      }
+    } catch (_) {}
+    return result;
+  }
+
   function addStepFromElement(type, el, info, description) {
     let tipSelector = null;
     if (el.tagName === "LABEL" && el.htmlFor) {
@@ -1450,35 +1474,11 @@
     }
 
     const selectorCandidates = info.selectors.map(s => s.value);
-    let hiddenRealSelector = null;
-    let hiddenRealHTML = "";
-    let hiddenRealTag = "";
-    let hiddenRealRelation = "";
-    let hiddenWarning = "";
-    const isInputStep = type === "username" || type === "password" || type === "captcha_input";
-
-    if (isInputStep && state.hiddenDetectionEnabled) {
-      hiddenRealSelector = detectHiddenRealInput(el, type);
-      if (hiddenRealSelector) {
-        // 尝试在 DOM 中定位隐藏的真实输入框，获取其 HTML 和与点击元素的关系
-        try {
-          const hiddenEl = document.querySelector(hiddenRealSelector);
-          if (hiddenEl) {
-            hiddenRealHTML = hiddenEl.outerHTML.substring(0, 2000);
-            hiddenRealTag = hiddenEl.tagName.toLowerCase();
-            // 分析关系：是否在同一父元素内
-            if (hiddenEl.parentElement === el.parentElement) {
-              hiddenRealRelation = `同一 <${el.parentElement.tagName.toLowerCase()}> 内的兄弟元素`;
-            } else if (el.parentElement && el.parentElement.contains(hiddenEl)) {
-              hiddenRealRelation = `点击元素所在 <${el.parentElement.tagName.toLowerCase()}> 的子元素`;
-            } else {
-              hiddenRealRelation = `位于容器内，与点击元素不同分支`;
-            }
-          }
-        } catch (_) {}
-        hiddenWarning = `⚠️ 检测到隐藏输入框！真实输入框 ${hiddenRealSelector} 已自动识别，执行器会自动处理。`;
-      }
-    }
+    const hiddenInfo = _detectHiddenInputInfo(el, type);
+    const { hiddenRealSelector, hiddenRealHTML, hiddenRealTag, hiddenRealRelation } = hiddenInfo;
+    const hiddenWarning = hiddenRealSelector
+      ? `⚠️ 检测到隐藏输入框！真实输入框 ${hiddenRealSelector} 已自动识别，执行器会自动处理。`
+      : "";
 
     if (!tipSelector && hiddenRealSelector && hiddenRealSelector !== bestSelector) {
       tipSelector = bestSelector;
@@ -1543,33 +1543,11 @@
       return;
     }
 
-    const isInputStep = type === "username" || type === "password" || type === "captcha_input";
-    let hiddenRealSelector = null;
-    let hiddenRealHTML = "";
-    let hiddenRealTag = "";
-    let hiddenRealRelation = "";
-    let hiddenWarning = "";
-
-    if (isInputStep && state.hiddenDetectionEnabled) {
-      hiddenRealSelector = detectHiddenRealInput(el, type);
-      if (hiddenRealSelector) {
-        try {
-          const hiddenEl = document.querySelector(hiddenRealSelector);
-          if (hiddenEl) {
-            hiddenRealHTML = hiddenEl.outerHTML.substring(0, 2000);
-            hiddenRealTag = hiddenEl.tagName.toLowerCase();
-            if (hiddenEl.parentElement === el.parentElement) {
-              hiddenRealRelation = `同一 <${el.parentElement.tagName.toLowerCase()}> 内的兄弟元素`;
-            } else if (el.parentElement && el.parentElement.contains(hiddenEl)) {
-              hiddenRealRelation = `点击元素所在 <${el.parentElement.tagName.toLowerCase()}> 的子元素`;
-            } else {
-              hiddenRealRelation = `位于容器内，与点击元素不同分支`;
-            }
-          }
-        } catch (_) {}
-        hiddenWarning = `⚠️ 检测到隐藏输入框！真实输入框 ${hiddenRealSelector} 已自动识别`;
-      }
-    }
+    const hiddenInfo = _detectHiddenInputInfo(el, type);
+    const { hiddenRealSelector, hiddenRealHTML, hiddenRealTag, hiddenRealRelation } = hiddenInfo;
+    const hiddenWarning = hiddenRealSelector
+      ? `⚠️ 检测到隐藏输入框！真实输入框 ${hiddenRealSelector} 已自动识别`
+      : "";
 
     const step = {
       type,
@@ -1817,10 +1795,8 @@
 
     overlay.querySelector("#ca-captcha-cancel").addEventListener("click", () => {
       overlay.remove();
-      state.recording = false;
-      state.currentStepType = null;
-      state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
-      setStatus("已取消验证码选择");
+      state.recording = true;
+      setStatus("已取消验证码类型选择，可继续点击验证码输入框或按 Esc 停止", "recording");
     });
     overlay.querySelector("#ca-captcha-ok").addEventListener("click", () => {
       const captchaType = overlay.querySelector("#ca-captcha-type").value;
@@ -1899,7 +1875,7 @@
     });
   }
 
-  function showEvalModal(el, info) {
+  function showEvalModal(_el, _info) {
     const overlay = document.createElement("div");
     overlay.className = "ca-modal-overlay";
     overlay.innerHTML = `
@@ -1939,7 +1915,7 @@
     });
   }
 
-  function showSleepModal(el, info) {
+  function showSleepModal(_el, _info) {
     const overlay = document.createElement("div");
     overlay.className = "ca-modal-overlay";
     overlay.innerHTML = `
@@ -1975,7 +1951,7 @@
     });
   }
 
-  function showScreenshotModal(el, info) {
+  function showScreenshotModal(_el, _info) {
     const overlay = document.createElement("div");
     overlay.className = "ca-modal-overlay";
     overlay.innerHTML = `
@@ -2013,7 +1989,7 @@
     });
   }
 
-  function showWaitUrlModal(el, info) {
+  function showWaitUrlModal(_el, _info) {
     const overlay = document.createElement("div");
     overlay.className = "ca-modal-overlay";
     overlay.innerHTML = `
@@ -2062,7 +2038,7 @@
     prompt += `页面地址: ${url}\n`;
     prompt += `> **重要：不要填写 url 字段。** 任务 JSON 的 url 字段请留空或使用 "{{LOGIN_URL}}"，由用户自行在 Campus-Auth 系统设置中配置认证地址。硬编码 URL 会导致任务无法通用。\n`;
     prompt += `> **隐藏输入框：** 执行器会在普通 fill/click 失败后自动降级到强制模式处理隐藏输入框，通常无需额外配置。如果自动降级不生效，再添加 \`"reveal_hidden": true\`。\n\n`;
-    prompt += `> **version 字段：** 请在任务 JSON 顶层添加 \`"version": "3.7.1"\` 字段，标识此任务适用的 Campus-Auth 版本。\n`;
+    prompt += `> **version 字段：** 请在任务 JSON 顶层添加 \`"version": "${VERSION}"\` 字段，标识此任务适用的 Campus-Auth 版本。\n`;
 
     // on_success / on_failure 建议
     prompt += `## 建议添加 on_success / on_failure 字段\n\n`;
@@ -2557,7 +2533,7 @@
           </ul>
 
           <p style="margin-top:16px;padding-top:12px;border-top:1px solid #333;font-size:11px;color:#666;text-align:center;">
-            Campus-Auth 任务录制器 v3.7.1 · <a href="https://github.com/Misyra/Campus-Auth" target="_blank" style="color:#667eea;">GitHub</a>
+            Campus-Auth 任务录制器 v${VERSION} · <a href="https://github.com/Misyra/Campus-Auth" target="_blank" style="color:#667eea;">GitHub</a>
           </p>
         </div>
       </div>
@@ -2572,27 +2548,19 @@
 
   let _revealedInputs = []; // { el, selector, type, labelText }
 
-  function revealHiddenInputsForRecorder() {
-    if (_revealedInputs.length > 0) return; // 已经显示
-    _revealedInputs = [];
-
-    const inputs = document.querySelectorAll('input');
-    inputs.forEach(el => {
+  // 扫描指定文档中的隐藏输入框，强制显示并记录到 _revealedInputs
+  function _scanDocForHiddenInputs(doc) {
+    doc.querySelectorAll('input').forEach(el => {
       try {
         const s = getComputedStyle(el);
         if (s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) <= 0) {
-          // 排除提交/按钮类
           if (el.type === 'submit' || el.type === 'button' || el.type === 'hidden') return;
-          // 强制显示
           el.style.setProperty('display', 'inline-block', 'important');
           el.style.setProperty('visibility', 'visible', 'important');
           el.style.setProperty('opacity', '1', 'important');
           el.dataset.caRevealed = '1';
-          // 高亮
           el.classList.add('ca-revealed-highlight');
-          // 浮动标签
           addRevealLabel(el);
-          // 记录
           const tag = el.tagName.toLowerCase();
           let sel = '';
           if (el.id) sel = '#' + CSS.escape(el.id);
@@ -2607,37 +2575,18 @@
         }
       } catch (_) {}
     });
+  }
 
-    // Also scan inside all iframes/frames
+  function revealHiddenInputsForRecorder() {
+    if (_revealedInputs.length > 0) return; // 已经显示
+    _revealedInputs = [];
+
+    _scanDocForHiddenInputs(document);
+
+    // 扫描同源 iframe/frame 内的隐藏输入框
     document.querySelectorAll("iframe, frame").forEach(frame => {
       try {
-        if (!frame.contentDocument) return;
-        const frameInputs = frame.contentDocument.querySelectorAll("input");
-        frameInputs.forEach(el => {
-          try {
-            const s = getComputedStyle(el);
-            if (s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) <= 0) {
-              if (el.type === 'submit' || el.type === 'button' || el.type === 'hidden') return;
-              el.style.setProperty('display', 'inline-block', 'important');
-              el.style.setProperty('visibility', 'visible', 'important');
-              el.style.setProperty('opacity', '1', 'important');
-              el.dataset.caRevealed = '1';
-              el.classList.add('ca-revealed-highlight');
-              addRevealLabel(el);
-              const tag = el.tagName.toLowerCase();
-              let sel = '';
-              if (el.id) sel = '#' + CSS.escape(el.id);
-              else if (el.name) sel = tag + '[name="' + CSS.escape(el.name) + '"]';
-              else sel = tag + (el.type ? '[type="' + el.type + '"]' : '');
-              _revealedInputs.push({
-                el,
-                selector: sel,
-                inputType: el.type || 'text',
-                labelText: el.name || el.id || el.placeholder || el.type || 'input',
-              });
-            }
-          } catch (_) {}
-        });
+        if (frame.contentDocument) _scanDocForHiddenInputs(frame.contentDocument);
       } catch (_) {} // cross-origin iframe, skip
     });
 
@@ -3060,13 +3009,6 @@
     _globalListenersAttached = true;
   }
 
-  function removeGlobalListeners() {
-    document.removeEventListener("mouseover", onHover, true);
-    document.removeEventListener("click", onClick, true);
-    document.removeEventListener("keydown", onKeyDown, true);
-    detachAllFrameListeners();
-    _globalListenersAttached = false;
-  }
 
   // ==================== 启动 ====================
 
