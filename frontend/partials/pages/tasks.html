@@ -91,26 +91,27 @@
       </div>
       <div class="card-body">
         <div class="form-group">
-          <label>任务ID</label>
-          <input v-model="editingTask.id" type="text" placeholder="task_id" :disabled="!editingTask._isNew" />
+          <label for="task-id">任务ID</label>
+          <input id="task-id" v-model="editingTask.id" type="text" placeholder="task_id" :disabled="!editingTask._isNew" />
           <span class="hint">必须以字母开头，且只能包含字母、数字和下划线</span>
         </div>
         <div class="form-group">
-          <label>任务名称</label>
-          <input v-model="editingTask.name" type="text" placeholder="我的登录任务" />
+          <label for="task-name">任务名称</label>
+          <input id="task-name" v-model="editingTask.name" type="text" placeholder="我的登录任务" />
         </div>
         <div class="form-group">
-          <label>描述</label>
-          <input v-model="editingTask.description" type="text" placeholder="任务描述" />
+          <label for="task-desc">描述</label>
+          <input id="task-desc" v-model="editingTask.description" type="text" placeholder="任务描述" />
         </div>
         <div class="form-group">
-          <label>认证地址</label>
-          <input v-model="editingTask.url" type="text" placeholder="不填则使用系统设置的认证地址" />
+          <label for="task-url">认证地址</label>
+          <input id="task-url" v-model="editingTask.url" type="text" placeholder="不填则使用系统设置的认证地址" />
           <span class="hint">留空默认使用系统认证地址（等同于 <code v-pre>{{LOGIN_URL}}</code>）</span>
         </div>
         <div class="form-group">
-          <label>JSON 配置</label>
+          <label for="task-json">JSON 配置</label>
           <textarea
+            id="task-json"
             v-model="editingTask.json"
             rows="12"
             placeholder="任务JSON配置"

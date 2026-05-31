@@ -281,6 +281,10 @@ export const editorTaskMethods = {
     }
     this.repoImport.disclaimer = task;
     this.repoImport.disclaimerCountdown = 3;
+    this.$nextTick(() => {
+      const modal = document.querySelector('.repo-disclaimer-modal');
+      if (modal) this._trapFocus(modal);
+    });
     const timer = setInterval(() => {
       this.repoImport.disclaimerCountdown--;
       if (this.repoImport.disclaimerCountdown <= 0) {
@@ -292,6 +296,7 @@ export const editorTaskMethods = {
   },
 
   cancelRepoDisclaimer() {
+    this._releaseFocusTrap();
     if (this._repoDisclaimerTimer) {
       clearInterval(this._repoDisclaimerTimer);
       this._repoDisclaimerTimer = null;
@@ -301,6 +306,7 @@ export const editorTaskMethods = {
   },
 
   async acceptRepoDisclaimer() {
+    this._releaseFocusTrap();
     if (this._repoDisclaimerTimer) {
       clearInterval(this._repoDisclaimerTimer);
       this._repoDisclaimerTimer = null;
