@@ -6,5 +6,6 @@ export function dashboardData() {
     autoScroll: true,
     newLogCount: 0,
     fetchStatusFailCount: 0,
+    loginHistory: [],
   };
 }

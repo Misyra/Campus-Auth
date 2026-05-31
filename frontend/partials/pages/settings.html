@@ -508,6 +508,26 @@
 
       <section class="card settings-panel">
         <div class="card-header">
+          <h2>开机自启动</h2>
+        </div>
+        <div class="card-body">
+          <p class="form-help-text" style="margin-bottom:12px;">
+            {{ autostart.enabled ? '已启用' : '未启用' }}
+            <span v-if="autostart.method !== '-'"> · {{ autostart.method }}</span>
+          </p>
+          <div class="action-buttons" style="flex-direction:row;gap:8px;">
+            <button class="btn btn-sm" type="button" @click="enableAutostart" :disabled="busy.autostart || autostart.enabled">
+              启用
+            </button>
+            <button class="btn btn-sm" type="button" @click="disableAutostart" :disabled="busy.autostart || !autostart.enabled">
+              关闭
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card settings-panel">
+        <div class="card-header">
           <h2>端口设置</h2>
         </div>
         <div class="card-body">

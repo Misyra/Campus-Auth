@@ -85,6 +85,21 @@
   gap: 16px;
 }
 
+.dashboard-left {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.history-card {
+  flex: 1;
+}
+
+.history-card .card-body {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
 .action-buttons {
   display: flex;
   flex-direction: column;
@@ -100,24 +115,6 @@
   width: 18px;
   height: 18px;
   flex-shrink: 0;
-}
-
-.autostart-section {
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border);
-}
-
-.autostart-section h3 {
-  font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-
-.info-text {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin-bottom: 12px;
 }
 
 .log-card {
@@ -230,4 +227,105 @@
 
 .log-message.error {
   color: var(--error);
+}
+
+/* 登录历史卡片 */
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.history-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.history-list::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.15);
+  border-radius: 2px;
+}
+
+.history-item {
+  display: flex;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border-left: 3px solid transparent;
+  transition: background 0.2s;
+}
+
+.history-item.success {
+  border-left-color: var(--success);
+}
+
+.history-item.failed {
+  border-left-color: var(--error);
+}
+
+.history-item:hover {
+  background: var(--bg-hover);
+}
+
+.history-status {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.history-status svg {
+  width: 16px;
+  height: 16px;
+}
+
+.history-item.success .history-status {
+  color: var(--success);
+}
+
+.history-item.failed .history-status {
+  color: var(--error);
+}
+
+.history-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.history-time {
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.history-duration {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.history-profile {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.history-error {
+  font-size: 0.75rem;
+  color: var(--error);
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

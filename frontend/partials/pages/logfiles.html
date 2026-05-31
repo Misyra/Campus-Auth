@@ -1,0 +1,72 @@
+<div v-if="currentPage === 'logs'" class="page-content fade-in">
+  <div class="card logfiles-card">
+    <div class="card-header">
+      <h2>日志文件查看器</h2>
+      <button class="btn btn-icon-only" @click="refreshLogFiles" title="刷新文件列表" aria-label="刷新文件列表">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <polyline points="23 4 23 10 17 10"/>
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+      </button>
+    </div>
+    <div class="card-body logfiles-body">
+      <!-- 日期选择 -->
+      <div class="logfiles-toolbar">
+        <div class="logfiles-date-tabs">
+          <button
+            v-for="group in logFileGroups" :key="group.date"
+            class="logfiles-date-tab"
+            :class="{ active: logViewer.date === group.date }"
+            @click="selectLogFileDate(group.date)"
+          >{{ group.date }}</button>
+          <span v-if="!logFileGroups.length" class="logfiles-empty-hint">暂无日志文件</span>
+        </div>
+        <div v-if="logViewer.date" class="logfiles-controls">
+          <select v-model="logViewer.file" @change="fetchLogFileContent" class="logfiles-select">
+            <option v-for="f in currentLogFiles" :key="f.name" :value="f.name">
+              {{ f.name }} ({{ formatFileSize(f.size) }})
+            </option>
+          </select>
+          <div class="log-filter-chips">
+            <button class="log-filter-chip" :class="{ active: !logViewer.level }" @click="logViewer.level = ''; fetchLogFileContent()">全部</button>
+            <button class="log-filter-chip" :class="{ active: logViewer.level === 'INFO' }" @click="logViewer.level = 'INFO'; fetchLogFileContent()">INFO</button>
+            <button class="log-filter-chip" :class="{ active: logViewer.level === 'WARNING' }" @click="logViewer.level = 'WARNING'; fetchLogFileContent()">WARN</button>
+            <button class="log-filter-chip" :class="{ active: logViewer.level === 'ERROR' }" @click="logViewer.level = 'ERROR'; fetchLogFileContent()">ERROR</button>
+            <button class="log-filter-chip" :class="{ active: logViewer.level === 'DEBUG' }" @click="logViewer.level = 'DEBUG'; fetchLogFileContent()">DEBUG</button>
+          </div>
+          <div class="logfiles-search-wrap">
+            <input v-model="logViewer.search" @keyup.enter="fetchLogFileContent" type="text" placeholder="搜索日志..." class="log-search" aria-label="搜索日志" />
+            <button v-if="logViewer.search" class="btn btn-icon-only logfiles-search-clear" @click="logViewer.search = ''; fetchLogFileContent()" title="清除搜索">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 日志内容 -->
+      <div ref="logFileViewer" class="logfiles-content">
+        <div v-if="logViewer.loading" class="logfiles-loading">
+          <span class="spinner"></span> 加载中...
+        </div>
+        <div v-else-if="!logViewer.lines.length && logViewer.date" class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+          <span>{{ logViewer.search || logViewer.level ? '无匹配日志' : '无日志数据' }}</span>
+        </div>
+        <div v-else-if="logViewer.lines.length" class="log-entries">
+          <div v-for="(line, idx) in logViewer.lines" :key="idx" class="log-entry">
+            <span class="log-time">{{ line.timestamp ? line.timestamp.substring(11, 19) : '' }}</span>
+            <span class="log-meta" v-if="line.level">[{{ line.level }}] [{{ line.logger }}]</span>
+            <span class="log-message" :class="getLogFileClass(line.level)">{{ line.message }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

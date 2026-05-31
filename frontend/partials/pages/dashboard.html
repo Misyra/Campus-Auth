@@ -61,47 +61,79 @@
   </div>
 
   <div class="dashboard-grid">
-    <div class="card">
-      <div class="card-header">
-        <h2>快捷操作</h2>
-      </div>
-      <div class="card-body">
-        <div class="action-buttons">
-          <button class="btn btn-secondary" @click="manualLogin" :disabled="busy.action" title="立即执行一次登录认证，不影响自动监控">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
-              <polyline points="10 17 15 12 10 7"/>
-              <line x1="15" y1="12" x2="3" y2="12"/>
-            </svg>
-            手动登录
-          </button>
-          <button class="btn btn-secondary" @click="testNetwork" :disabled="busy.action" title="检测当前网络连接是否正常">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
-              <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
-              <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
-              <circle cx="12" cy="20" r="1"/>
-            </svg>
-            网络测试
-          </button>
+    <div class="dashboard-left">
+      <div class="card">
+        <div class="card-header">
+          <h2>快捷操作</h2>
         </div>
-
-        <div class="autostart-section">
-          <h3>开机自启动</h3>
-          <p class="info-text">
-            {{ autostart.enabled ? '已启用' : '未启用' }}
-            <span v-if="autostart.method !== '-'"> · {{ autostart.method }}</span>
-          </p>
+        <div class="card-body">
           <div class="action-buttons">
-            <button class="btn btn-sm" @click="enableAutostart" :disabled="busy.autostart || autostart.enabled">
-              启用
+            <button class="btn btn-secondary" @click="manualLogin" :disabled="busy.action" title="立即执行一次登录认证，不影响自动监控">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+                <polyline points="10 17 15 12 10 7"/>
+                <line x1="15" y1="12" x2="3" y2="12"/>
+              </svg>
+              手动登录
             </button>
-            <button class="btn btn-sm" @click="disableAutostart" :disabled="busy.autostart || !autostart.enabled">
-              关闭
+            <button class="btn btn-secondary" @click="testNetwork" :disabled="busy.action" title="检测当前网络连接是否正常">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+                <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+                <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+                <circle cx="12" cy="20" r="1"/>
+              </svg>
+              网络测试
             </button>
           </div>
         </div>
       </div>
+
+      <!-- 登录历史 -->
+      <div class="card history-card">
+      <div class="card-header">
+        <h2>登录历史</h2>
+        <button class="btn btn-icon-only" @click="fetchLoginHistory" title="刷新" aria-label="刷新登录历史">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <polyline points="23 4 23 10 17 10"/>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          </svg>
+        </button>
+      </div>
+      <div class="card-body">
+        <div v-if="!loginHistory.length" class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <span>暂无登录记录</span>
+        </div>
+        <div v-else class="history-list">
+          <div v-for="item in loginHistory" :key="item.id" class="history-item" :class="item.success ? 'success' : 'failed'">
+            <div class="history-status">
+              <svg v-if="item.success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="15" y1="9" x2="9" y2="15"/>
+                <line x1="9" y1="9" x2="15" y2="15"/>
+              </svg>
+            </div>
+            <div class="history-info">
+              <div class="history-row">
+                <span class="history-time">{{ item.timestamp }}</span>
+                <span class="history-duration">{{ item.duration_ms }}ms</span>
+              </div>
+              <div class="history-row">
+                <span class="history-profile">{{ item.profile_name || '默认方案' }}</span>
+              </div>
+              <span v-if="item.error" class="history-error">{{ item.error }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
     </div>
 
     <div class="card log-card">
