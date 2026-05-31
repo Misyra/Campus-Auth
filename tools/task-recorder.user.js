@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Campus-Auth 任务录制器
 // @namespace    https://github.com/Misyra/Campus-Auth
-// @version      3.8.0  ← 同步修改下方 VERSION 常量
+// @version      3.8.0
 // @description  可视化选取校园网登录页面元素，自动生成任务 JSON 或结构化文档
 // @author       Misyra
 // @match        http://*/*
@@ -125,27 +125,65 @@
   // ==================== 样式注入 ====================
 
   GM_addStyle(`
+    /* ====== CSS 变量 ====== */
+    #ca-recorder-panel {
+      --ca-bg: #1a1a2e;
+      --ca-card: #2a2a3e;
+      --ca-card-hover: #333;
+      --ca-card-active: #2a2a5e;
+      --ca-text: #e0e0e0;
+      --ca-text-dim: #aaa;
+      --ca-text-muted: #888;
+      --ca-border: #444;
+      --ca-divider: #333;
+      --ca-primary: #667eea;
+      --ca-primary-grad: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      --ca-success: #4CAF50;
+      --ca-danger: #e74c3c;
+      --ca-warning: #FF9800;
+      --ca-step-username: #4CAF50;
+      --ca-step-password: #2196F3;
+      --ca-step-carrier: #FF9800;
+      --ca-step-captcha: #9C27B0;
+      --ca-step-submit: #F44336;
+      --ca-step-checkbox: #FF5722;
+      --ca-step-detect: #00BCD4;
+      --ca-step-click: #607D8B;
+      --ca-step-wait: #795548;
+    }
+    /* ====== 面板主体 ====== */
     #ca-recorder-panel {
       position: fixed; top: 10px; right: 10px; z-index: 2147483647;
       width: 360px; max-height: 90vh; overflow-y: auto;
-      background: #1a1a2e; color: #e0e0e0; border-radius: 12px;
+      background: var(--ca-bg); color: var(--ca-text); border-radius: 12px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.5);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 14px; line-height: 1.5;
     }
     #ca-recorder-panel * { box-sizing: border-box; }
+    /* ====== 头部 ====== */
     #ca-recorder-panel .ca-header {
-      padding: 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 16px; background: var(--ca-primary-grad);
       border-radius: 12px 12px 0 0; cursor: move; user-select: none;
     }
     #ca-recorder-panel .ca-header h3 { margin: 0; font-size: 16px; color: #fff; }
     #ca-recorder-panel .ca-header small { color: rgba(255,255,255,0.7); }
+    #ca-recorder-panel .ca-header-bar {
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    #ca-recorder-panel .ca-help-btn {
+      width: 26px; height: 26px; border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1);
+      color: #fff; cursor: pointer; font-size: 14px; font-weight: bold; line-height: 1;
+    }
+    /* ====== 内容区 ====== */
     #ca-recorder-panel .ca-body { padding: 12px 16px; }
     #ca-recorder-panel .ca-section { margin-bottom: 12px; }
     #ca-recorder-panel .ca-section-title {
-      font-size: 12px; text-transform: uppercase; color: #888;
+      font-size: 12px; text-transform: uppercase; color: var(--ca-text-muted);
       letter-spacing: 1px; margin-bottom: 8px;
     }
+    /* ====== 按钮 ====== */
     #ca-recorder-panel .ca-btn {
       display: inline-flex; align-items: center; gap: 6px;
       padding: 8px 14px; border: none; border-radius: 8px;
@@ -153,35 +191,43 @@
       transition: all 0.2s;
     }
     #ca-recorder-panel .ca-btn:hover { transform: translateY(-1px); filter: brightness(1.1); }
-    #ca-recorder-panel .ca-btn-primary { background: #667eea; color: #fff; }
-    #ca-recorder-panel .ca-btn-success { background: #4CAF50; color: #fff; }
-    #ca-recorder-panel .ca-btn-danger { background: #e74c3c; color: #fff; }
-    #ca-recorder-panel .ca-btn-secondary { background: #333; color: #ccc; }
+    #ca-recorder-panel .ca-btn-primary { background: var(--ca-primary); color: #fff; }
+    #ca-recorder-panel .ca-btn-success { background: var(--ca-success); color: #fff; }
+    #ca-recorder-panel .ca-btn-danger { background: var(--ca-danger); color: #fff; }
+    #ca-recorder-panel .ca-btn-secondary { background: var(--ca-card); color: #ccc; }
     #ca-recorder-panel .ca-btn-sm { padding: 4px 10px; font-size: 12px; }
     #ca-recorder-panel .ca-btn-block { width: 100%; justify-content: center; }
     #ca-recorder-panel .ca-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    /* ====== 步骤网格 ====== */
     #ca-recorder-panel .ca-step-grid {
       display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;
     }
     #ca-recorder-panel .ca-step-btn {
       display: flex; align-items: center; gap: 6px;
-      padding: 8px 10px; background: #2a2a3e; border: 2px solid transparent;
+      padding: 8px 10px; background: var(--ca-card); border: 2px solid transparent;
       border-radius: 8px; cursor: pointer; color: #ddd; font-size: 13px;
       transition: all 0.2s;
     }
     #ca-recorder-panel .ca-step-btn:hover { background: #3a3a4e; }
-    #ca-recorder-panel .ca-step-btn.active { border-color: #667eea; background: #2a2a5e; }
+    #ca-recorder-panel .ca-step-btn.active { border-color: var(--ca-primary); background: var(--ca-card-active); }
     #ca-recorder-panel .ca-more-btn { border-color: #555; }
-    #ca-recorder-panel .ca-more-btn:hover { border-color: #667eea; }
+    #ca-recorder-panel .ca-more-btn:hover { border-color: var(--ca-primary); }
+    #ca-recorder-panel .ca-more-container { grid-column: 1 / -1; margin-top: 2px; }
     #ca-recorder-panel .ca-step-btn .ca-icon { font-size: 16px; }
+    #ca-recorder-panel .ca-grid-sep {
+      grid-column: 1 / -1; height: 1px; background: var(--ca-divider); margin: 2px 0;
+    }
+    /* ====== 已录制列表 ====== */
     #ca-recorder-panel .ca-recorded-list { list-style: none; padding: 0; margin: 0; }
     #ca-recorder-panel .ca-recorded-item {
       display: flex; align-items: center; gap: 8px;
       padding: 8px 10px; margin-bottom: 4px;
-      background: #2a2a3e; border-radius: 8px; font-size: 12px;
+      background: var(--ca-card); border-radius: 8px; font-size: 12px;
+      cursor: pointer;
     }
+    #ca-recorder-panel .ca-recorded-item:hover { background: var(--ca-card-hover); }
     #ca-recorder-panel .ca-recorded-item .ca-idx {
-      background: #667eea; color: #fff; border-radius: 50%;
+      background: var(--ca-primary); color: #fff; border-radius: 50%;
       width: 20px; height: 20px; display: flex; align-items: center;
       justify-content: center; font-size: 11px; flex-shrink: 0;
     }
@@ -191,46 +237,96 @@
       text-overflow: ellipsis;
     }
     #ca-recorder-panel .ca-recorded-item .ca-info .ca-selector {
-      color: #888; font-size: 11px; white-space: nowrap;
+      color: var(--ca-text-muted); font-size: 11px; white-space: nowrap;
       overflow: hidden; text-overflow: ellipsis; max-width: 200px;
     }
+    #ca-recorder-panel .ca-recorded-item .ca-del {
+      background: none; border: none; color: var(--ca-danger); cursor: pointer;
+      font-size: 16px; padding: 0 4px;
+    }
+    /* ====== 底部 ====== */
     #ca-recorder-panel .ca-footer {
-      padding: 12px 16px; border-top: 1px solid #333; text-align: center;
+      padding: 12px 16px; border-top: 1px solid var(--ca-divider); text-align: center;
       font-size: 12px; color: #666;
     }
     #ca-recorder-panel .ca-footer a {
-      color: #667eea; text-decoration: none; display: inline-flex;
+      color: var(--ca-primary); text-decoration: none; display: inline-flex;
       align-items: center; gap: 4px;
     }
     #ca-recorder-panel .ca-footer a:hover { text-decoration: underline; }
     #ca-recorder-panel .ca-footer svg { width: 14px; height: 14px; }
-    #ca-recorder-panel .ca-recorded-item .ca-del {
-      background: none; border: none; color: #e74c3c; cursor: pointer;
-      font-size: 16px; padding: 0 4px;
-    }
+    #ca-recorder-panel .ca-footer-sep { margin: 0 6px; }
+    /* ====== 操作栏 & 状态 ====== */
     #ca-recorder-panel .ca-actions { display: flex; gap: 6px; margin-top: 8px; }
+    #ca-recorder-panel .ca-actions-end { justify-content: flex-end; }
     #ca-recorder-panel .ca-status {
-      padding: 8px 12px; background: #2a2a3e; border-radius: 8px;
+      padding: 8px 12px; background: var(--ca-card); border-radius: 8px;
       font-size: 12px; text-align: center; margin-top: 8px;
     }
     #ca-recorder-panel .ca-status.recording { background: #3a1a1a; color: #ff6b6b; animation: ca-pulse 1.5s infinite; }
     @keyframes ca-pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+    /* ====== 工具栏开关 ====== */
+    #ca-recorder-panel .ca-toolbar { display: flex; gap: 4px; margin-bottom: 8px; }
+    #ca-recorder-panel .ca-toggle {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;
+      padding: 6px 8px; background: var(--ca-card); border: 1px solid var(--ca-border);
+      border-radius: 8px; cursor: pointer; color: var(--ca-text-muted); font-size: 12px;
+      transition: all 0.2s; user-select: none;
+    }
+    #ca-recorder-panel .ca-toggle:hover { background: var(--ca-card-hover); }
+    #ca-recorder-panel .ca-toggle.active {
+      background: var(--ca-card-active); border-color: var(--ca-primary); color: #aab;
+      box-shadow: 0 0 6px rgba(102,126,234,0.25);
+    }
+    /* ====== 快捷键提示栏 ====== */
+    #ca-recorder-panel .ca-shortcut-bar {
+      font-size: 11px; color: #666; margin-bottom: 4px;
+    }
+    #ca-recorder-panel .ca-shortcut-link {
+      cursor: pointer; color: var(--ca-primary); margin-left: 6px; text-decoration: underline;
+    }
+    /* ====== 帮助详情 ====== */
+    #ca-recorder-panel .ca-help-detail {
+      display: none; font-size: 11px; color: var(--ca-text-muted);
+      background: #1f1f30; border-radius: 6px; padding: 8px 10px;
+      margin-bottom: 8px; line-height: 1.6;
+    }
+    /* ====== 通用表单控件（模态框 & 编辑弹窗共用） ====== */
     #ca-recorder-panel .ca-modal-overlay {
       position: fixed; inset: 0; background: rgba(0,0,0,0.6);
       z-index: 2147483646; display: flex; align-items: center; justify-content: center;
     }
     #ca-recorder-panel .ca-modal {
-      background: #1a1a2e; border-radius: 12px; padding: 20px;
-      width: 400px; max-width: 90vw; color: #e0e0e0;
+      background: var(--ca-bg); border-radius: 12px; padding: 20px;
+      width: 400px; max-width: 90vw; color: var(--ca-text);
     }
     #ca-recorder-panel .ca-modal h4 { margin: 0 0 12px; }
-    #ca-recorder-panel .ca-modal label { display: block; margin-bottom: 4px; font-size: 13px; color: #aaa; }
-    #ca-recorder-panel .ca-modal input, #ca-recorder-panel .ca-modal textarea, #ca-recorder-panel .ca-modal select {
-      width: 100%; padding: 8px 10px; background: #2a2a3e; border: 1px solid #444;
-      border-radius: 6px; color: #e0e0e0; font-size: 13px; margin-bottom: 10px;
+    #ca-recorder-panel .ca-modal label,
+    #ca-recorder-panel .ca-step-edit-modal label {
+      display: block; margin-bottom: 4px; font-size: 13px; color: var(--ca-text-dim);
     }
-    #ca-recorder-panel .ca-modal textarea { min-height: 60px; resize: vertical; }
-    #ca-recorder-panel .ca-modal .ca-modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+    #ca-recorder-panel .ca-step-edit-modal label { font-size: 12px; color: var(--ca-text-muted); }
+    #ca-recorder-panel .ca-form-input {
+      width: 100%; padding: 8px 10px; background: var(--ca-card); border: 1px solid var(--ca-border);
+      border-radius: 6px; color: var(--ca-text); font-size: 13px; margin-bottom: 10px;
+    }
+    #ca-recorder-panel textarea.ca-form-input { min-height: 60px; resize: vertical; }
+    #ca-recorder-panel .ca-modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+    #ca-recorder-panel .ca-step-edit-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+      z-index: 2147483646; display: flex; align-items: center; justify-content: center;
+    }
+    #ca-recorder-panel .ca-step-edit-modal {
+      background: var(--ca-bg); border-radius: 12px; padding: 20px;
+      width: 380px; max-width: 90vw; color: var(--ca-text);
+    }
+    #ca-recorder-panel .ca-step-edit-modal h4 { margin: 0 0 14px; font-size: 15px; }
+    /* ====== 选择器验证状态 ====== */
+    #ca-recorder-panel .ca-selector-status { font-size: 11px; margin-bottom: 8px; min-height: 16px; }
+    #ca-recorder-panel .ca-selector-ok { color: var(--ca-success); }
+    #ca-recorder-panel .ca-selector-warn { color: var(--ca-danger); }
+    #ca-recorder-panel .ca-step-meta { font-size: 11px; color: #666; margin-bottom: 8px; }
+    /* ====== 提示框 ====== */
     #ca-tooltip {
       position: fixed; z-index: 2147483645; pointer-events: none;
       background: rgba(26,26,46,0.95); color: #e0e0e0;
@@ -243,40 +339,10 @@
     #ca-tooltip .ca-tt-id { color: #4CAF50; }
     #ca-tooltip .ca-tt-class { color: #FF9800; }
     #ca-tooltip .ca-tt-hint { color: #888; font-size: 11px; margin-top: 4px; }
+    /* ====== 元素高亮 ====== */
     .ca-highlight { outline: 3px solid #667eea !important; outline-offset: 2px !important; background: rgba(102,126,234,0.1) !important; }
     .ca-highlight-selected { outline: 3px solid #4CAF50 !important; outline-offset: 2px !important; background: rgba(76,175,80,0.1) !important; }
-    #ca-recorder-panel .ca-recorded-item { cursor: pointer; }
-    #ca-recorder-panel .ca-recorded-item:hover { background: #333; }
-    #ca-recorder-panel .ca-step-edit-overlay {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.5);
-      z-index: 2147483646; display: flex; align-items: center; justify-content: center;
-    }
-    #ca-recorder-panel .ca-step-edit-modal {
-      background: #1a1a2e; border-radius: 12px; padding: 20px;
-      width: 380px; max-width: 90vw; color: #e0e0e0;
-    }
-    #ca-recorder-panel .ca-step-edit-modal h4 { margin: 0 0 14px; font-size: 15px; }
-    #ca-recorder-panel .ca-step-edit-modal label { display: block; margin-bottom: 4px; font-size: 12px; color: #888; }
-    #ca-recorder-panel .ca-step-edit-modal select,
-    #ca-recorder-panel .ca-step-edit-modal input,
-    #ca-recorder-panel .ca-step-edit-modal textarea {
-      width: 100%; padding: 8px 10px; background: #2a2a3e; border: 1px solid #444;
-      border-radius: 6px; color: #e0e0e0; font-size: 13px; margin-bottom: 10px;
-    }
-    #ca-recorder-panel .ca-step-edit-modal textarea { min-height: 50px; resize: vertical; }
-    #ca-recorder-panel .ca-step-edit-modal .ca-modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
-    #ca-recorder-panel .ca-toolbar { display: flex; gap: 4px; margin-bottom: 8px; }
-    #ca-recorder-panel .ca-toggle {
-      flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;
-      padding: 6px 8px; background: #2a2a3e; border: 1px solid #444;
-      border-radius: 8px; cursor: pointer; color: #888; font-size: 12px;
-      transition: all 0.2s; user-select: none;
-    }
-    #ca-recorder-panel .ca-toggle:hover { background: #333; }
-    #ca-recorder-panel .ca-toggle.active {
-      background: #2a2a5e; border-color: #667eea; color: #aab; box-shadow: 0 0 6px rgba(102,126,234,0.25);
-    }
-    /* 隐藏输入框高亮 */
+    /* ====== 隐藏输入框揭示 ====== */
     .ca-revealed-highlight {
       outline: 3px dashed #4CAF50 !important; outline-offset: 3px !important;
       background: rgba(76,175,80,0.1) !important; cursor: pointer !important;
@@ -291,7 +357,7 @@
       white-space: nowrap; z-index: 2147483646; pointer-events: none;
       transform: translateY(-110%);
     }
-    /* 揭示面板 */
+    /* ====== 揭示面板 ====== */
     #ca-reveal-panel {
       position: fixed; left: 10px; top: 10px; z-index: 2147483646;
       width: 260px; max-height: 60vh; overflow-y: auto;
@@ -303,6 +369,10 @@
     #ca-reveal-panel .ca-rv-header {
       padding: 10px 12px; background: #2e7d32; border-radius: 12px 12px 0 0;
       font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px;
+    }
+    #ca-reveal-panel .ca-rv-count {
+      background: #fff; color: #2e7d32; padding: 0 6px;
+      border-radius: 10px; font-size: 11px;
     }
     #ca-reveal-panel .ca-rv-item {
       display: flex; align-items: center; gap: 8px; padding: 8px 12px;
@@ -322,7 +392,7 @@
       transition: all 0.15s;
     }
     #ca-reveal-panel .ca-rv-btn:hover { background: #4CAF50; color: #fff; }
-    /* 高亮输入框点击后的步骤选择弹窗 */
+    /* ====== 揭示弹窗 ====== */
     .ca-reveal-popup {
       position: fixed; z-index: 2147483647;
       background: #1a1a2e; color: #e0e0e0; border-radius: 10px;
@@ -343,6 +413,38 @@
     .ca-reveal-popup .ca-rpop-actions button:hover { background: #3a3a5e; border-color: #667eea; }
     .ca-reveal-popup .ca-rpop-actions button[data-rpop-type="dismiss"] { color: #888; border-color: transparent; }
     .ca-reveal-popup .ca-rpop-actions button[data-rpop-type="dismiss"]:hover { color: #e74c3c; }
+    /* ====== 帮助弹窗专用 ====== */
+    #ca-recorder-panel .ca-help-modal { width: 600px; max-height: 82vh; overflow-y: auto; padding: 24px; }
+    #ca-recorder-panel .ca-help-header {
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;
+    }
+    #ca-recorder-panel .ca-help-header h4 { margin: 0; font-size: 18px; }
+    #ca-recorder-panel .ca-help-close {
+      background: none; border: none; color: var(--ca-text-muted); cursor: pointer; font-size: 20px;
+    }
+    #ca-recorder-panel .ca-help-body { line-height: 1.8; color: #ccc; }
+    #ca-recorder-panel .ca-help-h5 { color: var(--ca-primary); margin: 14px 0 6px; }
+    #ca-recorder-panel .ca-help-list { margin: 4px 0; padding-left: 18px; }
+    #ca-recorder-panel .ca-help-list-sm { margin: 0 0 8px; padding-left: 18px; font-size: 12px; }
+    #ca-recorder-panel .ca-help-table { width: 100%; font-size: 12px; border-collapse: collapse; margin: 4px 0; }
+    #ca-recorder-panel .ca-help-table th,
+    #ca-recorder-panel .ca-help-table td { padding: 3px 6px; }
+    #ca-recorder-panel .ca-help-table-header { color: var(--ca-text-dim); }
+    #ca-recorder-panel .ca-help-key { color: #fff; }
+    #ca-recorder-panel .ca-help-footer {
+      margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--ca-divider);
+      font-size: 11px; color: #666; text-align: center;
+    }
+    /* ====== 浮动入口按钮 ====== */
+    .ca-entry-btn {
+      position: fixed; bottom: 20px; right: 20px;
+      width: 48px; height: 48px; border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; cursor: pointer; z-index: 2147483647;
+      box-shadow: 0 4px 16px rgba(102,126,234,0.4);
+      transition: transform 0.2s; user-select: none;
+    }
   `);
 
   // ==================== 选择器生成 ====================
@@ -903,12 +1005,12 @@
     state.panel.id = "ca-recorder-panel";
     state.panel.innerHTML = `
       <div class="ca-header" id="ca-drag-handle">
-        <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div class="ca-header-bar">
           <div>
             <h3>🎬 Campus-Auth 任务录制器</h3>
             <small>v${VERSION} — 选取元素，生成任务配置</small>
           </div>
-          <button id="ca-btn-help" style="width:26px;height:26px;border-radius:50%;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;cursor:pointer;font-size:14px;font-weight:bold;line-height:1;" title="使用说明">?</button>
+          <button id="ca-btn-help" class="ca-help-btn" title="使用说明">?</button>
         </div>
       </div>
       <div class="ca-body">
@@ -922,21 +1024,21 @@
             <span class="ca-toggle active" id="ca-toggle-detect" title="开启后自动检测容器内 display:none 的隐藏输入框">🔍 隐藏检测</span>
             <span class="ca-toggle" id="ca-toggle-reveal" title="强制显示页面上所有 display:none 的输入框，让你能直接看到并点选">👁️ 显示隐藏</span>
           </div>
-          <div style="font-size:11px;color:#666;margin-bottom:4px;">💡 <b>Esc</b> 取消  |  <b>Enter</b> 无 click 记录元素
-            <span id="ca-help-toggle" style="cursor:pointer;color:#667eea;margin-left:6px;text-decoration:underline;">详细说明 ▾</span>
+          <div class="ca-shortcut-bar">💡 <b>Esc</b> 取消  |  <b>Enter</b> 无 click 记录元素
+            <span id="ca-help-toggle" class="ca-shortcut-link">详细说明 ▾</span>
           </div>
-          <div id="ca-help-detail" style="display:none;font-size:11px;color:#888;background:#1f1f30;border-radius:6px;padding:8px 10px;margin-bottom:8px;line-height:1.6;">
+          <div id="ca-help-detail" class="ca-help-detail">
             <b>🖱️ 点击</b> — 记录元素并重放 click 给页面（下拉框会展开/按钮会触发）<br>
             <b>⏎ Enter</b> — 仅记录元素，<b>不</b>发送 click 给页面（悬停菜单、下拉选项不会关闭）<br>
             <b>Esc</b> — 取消当前录制<br>
             <b>🔁 多步录制</b> — 开启后每次点击/Enter 记录一步，不会自动停止，需手动 Esc<br>
-            <b>🔍 隐藏检测</b> — 开启后自动扫描容器内 <code style="color:#FF9800;">display:none</code> 的真实输入框<br>
+            <b>🔍 隐藏检测</b> — 开启后自动扫描容器内 <code style="color:var(--ca-warning);">display:none</code> 的真实输入框<br>
             <b>👁️ 显示隐藏</b> — 强制显示页面上所有隐藏的输入框，让你直接看到并点选真实输入框<br>
-            <span style="color:#4CAF50;">👤 账号</span> — 点账号输入框 | <span style="color:#2196F3;">🔒 密码</span> — 点密码框 | <span style="color:#FF9800;">📶 运营商</span> — 点下拉框<br>
-            <span style="color:#9C27B0;">🖼️ 验证码</span> — 先点图片再点输入框 | <span style="color:#F44336;">🚀 提交</span> — 点登录按钮<br>
-            <span style="color:#FF5722;">☑️ 勾选</span> — 点复选框/协议 | <span style="color:#00BCD4;">🔍 智能检测</span> — 点输入框后打字记录真实元素，点击其他自动识别<br>
-            <span style="color:#607D8B;">👆 点击</span> — 任意元素仅点击 | <span style="color:#00BCD4;">⚙️ JS</span> — 执行自定义代码<br>
-            <span style="color:#667eea;">💡 点击列表中的步骤可编辑类型和备注</span><br>
+            <span style="color:var(--ca-step-username);">👤 账号</span> — 点账号输入框 | <span style="color:var(--ca-step-password);">🔒 密码</span> — 点密码框 | <span style="color:var(--ca-step-carrier);">📶 运营商</span> — 点下拉框<br>
+            <span style="color:var(--ca-step-captcha);">🖼️ 验证码</span> — 先点图片再点输入框 | <span style="color:var(--ca-step-submit);">🚀 提交</span> — 点登录按钮<br>
+            <span style="color:var(--ca-step-checkbox);">☑️ 勾选</span> — 点复选框/协议 | <span style="color:var(--ca-step-detect);">🔍 智能检测</span> — 点输入框后打字记录真实元素，点击其他自动识别<br>
+            <span style="color:var(--ca-step-click);">👆 点击</span> — 任意元素仅点击 | <span style="color:var(--ca-step-detect);">⚙️ JS</span> — 执行自定义代码<br>
+            <span style="color:var(--ca-primary);">💡 点击列表中的步骤可编辑类型和备注</span><br>
           </div>
         </div>
         <div class="ca-section">
@@ -948,7 +1050,7 @@
           </div>
         </div>
         <div class="ca-status" id="ca-status">选择步骤类型后点击页面元素</div>
-        <div class="ca-actions" style="margin-top:12px;">
+        <div class="ca-actions ca-actions-end" style="margin-top:12px;">
           <button class="ca-btn ca-btn-primary" id="ca-btn-copy-prompt">📋 复制 AI 提示词</button>
           <button class="ca-btn ca-btn-danger ca-btn-sm" id="ca-btn-close" style="margin-left:auto;">✕</button>
         </div>
@@ -958,7 +1060,7 @@
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
           Misyra/Campus-Auth
         </a>
-        <span style="margin:0 6px;">·</span>
+        <span class="ca-footer-sep">·</span>
         <span>MIT License</span>
       </div>
     `;
@@ -982,7 +1084,7 @@
     for (const [key, cfg] of primaryEntries) {
       if (lastCategory && cfg.category !== lastCategory) {
         const sep = document.createElement("div");
-        sep.style.cssText = "grid-column:1/-1;height:1px;background:#333;margin:2px 0;";
+        sep.className = "ca-grid-sep";
         grid.appendChild(sep);
       }
       lastCategory = cfg.category;
@@ -996,11 +1098,10 @@
       moreToggle.innerHTML = `<span class="ca-icon">📋</span><span id="ca-more-label">更多<span class="ca-more-arrow"> ▾</span></span>`;
       const moreContainer = document.createElement("div");
       moreContainer.id = "ca-more-container";
+      moreContainer.className = "ca-more-container";
       moreContainer.style.display = "none";
-      moreContainer.style.gridColumn = "1 / -1";
-      moreContainer.style.marginTop = "2px";
       const sep = document.createElement("div");
-      sep.style.cssText = "grid-column:1/-1;height:1px;background:#444;margin:2px 0 6px;";
+      sep.className = "ca-grid-sep";
       moreContainer.appendChild(sep);
       for (const [key, cfg] of secondaryEntries) {
         moreContainer.appendChild(createStepBtn(key, cfg));
@@ -1208,13 +1309,13 @@
       <div class="ca-step-edit-modal">
         <h4>✏️ 编辑步骤 ${idx + 1}</h4>
         <label>步骤类型</label>
-        <select id="ca-edit-type">${typeOptions}</select>
+        <select class="ca-form-input" id="ca-edit-type">${typeOptions}</select>
         <label>描述 / 备注</label>
-        <input type="text" id="ca-edit-desc" value="${escHtml(step.description || "")}" placeholder="描述这个步骤的作用" />
+        <input class="ca-form-input" type="text" id="ca-edit-desc" value="${escHtml(step.description || "")}" placeholder="描述这个步骤的作用" />
         <label>选择器</label>
-        <input type="text" id="ca-edit-selector" value="${escHtml(step.bestSelector || "")}" placeholder="CSS 选择器" />
-        <div id="ca-edit-selector-status" style="font-size:11px;margin-bottom:8px;min-height:16px;"></div>
-        <div style="font-size:11px;color:#666;margin-bottom:8px;">${step.hiddenRealSelector ? `⚠️ 隐藏输入框: ${escHtml(step.hiddenRealSelector)}` : `标签: &lt;${step.tag}&gt;`}</div>
+        <input class="ca-form-input" type="text" id="ca-edit-selector" value="${escHtml(step.bestSelector || "")}" placeholder="CSS 选择器" />
+        <div id="ca-edit-selector-status" class="ca-selector-status"></div>
+        <div class="ca-step-meta">${step.hiddenRealSelector ? `⚠️ 隐藏输入框: ${escHtml(step.hiddenRealSelector)}` : `标签: &lt;${step.tag}&gt;`}</div>
         <div class="ca-modal-actions">
           <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-edit-cancel">取消</button>
           <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-edit-save">保存</button>
@@ -1236,12 +1337,12 @@
       try {
         const match = document.querySelector(val);
         if (match) {
-          statusEl.innerHTML = `<span style="color:#4CAF50;">✅ 匹配到 &lt;${match.tagName.toLowerCase()}&gt;</span>`;
+          statusEl.innerHTML = `<span class="ca-selector-ok">✅ 匹配到 &lt;${match.tagName.toLowerCase()}&gt;</span>`;
         } else {
-          statusEl.innerHTML = `<span style="color:#e74c3c;">⚠️ 未匹配到任何元素</span>`;
+          statusEl.innerHTML = `<span class="ca-selector-warn">⚠️ 未匹配到任何元素</span>`;
         }
       } catch (e) {
-        statusEl.innerHTML = `<span style="color:#e74c3c;">❌ 选择器语法错误: ${escHtml(e.message)}</span>`;
+        statusEl.innerHTML = `<span class="ca-selector-warn">❌ 选择器语法错误: ${escHtml(e.message)}</span>`;
       }
     };
     selectorInput.addEventListener("input", validateSelector);
@@ -1780,11 +1881,11 @@
       <div class="ca-modal">
         <h4>🖼️ 验证码设置</h4>
         <label>验证码类型</label>
-        <select id="ca-captcha-type">
+        <select class="ca-form-input" id="ca-captcha-type">
           ${CAPTCHA_TYPES.map(t => `<option value="${t.value}">${t.label}</option>`).join("")}
         </select>
         <label>自定义描述（可选）</label>
-        <input type="text" id="ca-captcha-desc" placeholder="如：四位数字验证码" />
+        <input class="ca-form-input" type="text" id="ca-captcha-desc" placeholder="如：四位数字验证码" />
         <div class="ca-modal-actions">
           <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-captcha-cancel">取消</button>
           <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-captcha-ok">确定</button>
@@ -1825,10 +1926,10 @@
       <div class="ca-modal">
         <h4>${STEP_TYPES[type]?.icon || "📝"} ${STEP_TYPES[type]?.label || type}</h4>
         <label>步骤描述</label>
-        <input type="text" id="ca-custom-desc" placeholder="描述这个步骤的作用" />
-        ${type === "click" ? "" : `<label>填入的值（如需要）</label><input type="text" id="ca-custom-value" placeholder="留空则不填入" />`}
+        <input class="ca-form-input" type="text" id="ca-custom-desc" placeholder="描述这个步骤的作用" />
+        ${type === "click" ? "" : `<label>填入的值（如需要）</label><input class="ca-form-input" type="text" id="ca-custom-value" placeholder="留空则不填入" />`}
         <label>自定义选择器（可选，留空则自动检测）</label>
-        <input type="text" id="ca-custom-selector" placeholder="CSS 选择器" value="${escHtml(info.selectors[0]?.value || "")}" />
+        <input class="ca-form-input" type="text" id="ca-custom-selector" placeholder="CSS 选择器" value="${escHtml(info.selectors[0]?.value || "")}" />
         <div class="ca-modal-actions">
           <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-custom-cancel">取消</button>
           <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-custom-ok">确定</button>
@@ -1882,9 +1983,9 @@
       <div class="ca-modal">
         <h4>⚙️ 执行 JavaScript</h4>
         <label>JS 代码（在页面上下文中执行）</label>
-        <textarea id="ca-eval-code" placeholder="document.querySelector('#btn').click();"></textarea>
+        <textarea class="ca-form-input" id="ca-eval-code" placeholder="document.querySelector('#btn').click();"></textarea>
         <label>步骤描述（可选）</label>
-        <input type="text" id="ca-eval-desc" placeholder="执行自定义脚本" />
+        <input class="ca-form-input" type="text" id="ca-eval-desc" placeholder="执行自定义脚本" />
         <div class="ca-modal-actions">
           <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-eval-cancel">取消</button>
           <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-eval-ok">确定</button>
@@ -1922,9 +2023,9 @@
       <div class="ca-modal">
         <h4>⏳ 延时等待</h4>
         <label>等待时长（毫秒）</label>
-        <input type="number" id="ca-sleep-duration" placeholder="1000" value="1000" min="100" />
+        <input class="ca-form-input" type="number" id="ca-sleep-duration" placeholder="1000" value="1000" min="100" />
         <label>描述（可选）</label>
-        <input type="text" id="ca-sleep-desc" placeholder="等待页面加载" />
+        <input class="ca-form-input" type="text" id="ca-sleep-desc" placeholder="等待页面加载" />
         <div class="ca-modal-actions">
           <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-sleep-cancel">取消</button>
           <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-sleep-ok">确定</button>
@@ -1958,9 +2059,9 @@
       <div class="ca-modal">
         <h4>📸 页面截图</h4>
         <label>截图路径/名称（可选）</label>
-        <input type="text" id="ca-screenshot-path" placeholder="debug/screenshot.png" />
+        <input class="ca-form-input" type="text" id="ca-screenshot-path" placeholder="debug/screenshot.png" />
         <label>描述（可选）</label>
-        <input type="text" id="ca-screenshot-desc" placeholder="页面截图" />
+        <input class="ca-form-input" type="text" id="ca-screenshot-desc" placeholder="页面截图" />
         <div class="ca-modal-actions">
           <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-screenshot-cancel">取消</button>
           <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-screenshot-ok">确定</button>
@@ -1996,11 +2097,11 @@
       <div class="ca-modal">
         <h4>🔗 等待URL</h4>
         <label>URL 正则表达式</label>
-        <input type="text" id="ca-waiturl-pattern" placeholder=".*success.*" />
+        <input class="ca-form-input" type="text" id="ca-waiturl-pattern" placeholder=".*success.*" />
         <label>超时（毫秒）</label>
-        <input type="number" id="ca-waiturl-timeout" placeholder="10000" value="10000" min="1000" />
+        <input class="ca-form-input" type="number" id="ca-waiturl-timeout" placeholder="10000" value="10000" min="1000" />
         <label>描述（可选）</label>
-        <input type="text" id="ca-waiturl-desc" placeholder="等待 URL 匹配" />
+        <input class="ca-form-input" type="text" id="ca-waiturl-desc" placeholder="等待 URL 匹配" />
         <div class="ca-modal-actions">
           <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-waiturl-cancel">取消</button>
           <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-waiturl-ok">确定</button>
@@ -2427,83 +2528,83 @@
     overlay.className = "ca-modal-overlay";
     overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
     overlay.innerHTML = `
-      <div class="ca-modal" style="width:600px;max-height:82vh;overflow-y:auto;padding:24px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-          <h4 style="margin:0;font-size:18px;">📖 Campus-Auth 任务录制器 — 使用说明</h4>
-          <button id="ca-help-close" style="background:none;border:none;color:#888;cursor:pointer;font-size:20px;">✕</button>
+      <div class="ca-modal ca-help-modal">
+        <div class="ca-help-header">
+          <h4>📖 Campus-Auth 任务录制器 — 使用说明</h4>
+          <button id="ca-help-close" class="ca-help-close">✕</button>
         </div>
 
-        <div style="line-height:1.8;color:#ccc;">
+        <div class="ca-help-body">
 
-          <h5 style="color:#667eea;margin:14px 0 6px;">一、启动与关闭</h5>
-          <ul style="margin:4px 0;padding-left:18px;">
-            <li>快捷键 <b style="color:#fff;">Ctrl+Shift+E</b> 打开或关闭录制器面板</li>
+          <h5 class="ca-help-h5">一、启动与关闭</h5>
+          <ul class="ca-help-list">
+            <li>快捷键 <b class="ca-help-key">Ctrl+Shift+E</b> 打开或关闭录制器面板</li>
             <li>页面右下角浮动按钮 🎬 也可点击打开</li>
             <li>面板可拖拽（按住顶部蓝色标题栏移动）</li>
           </ul>
 
-          <h5 style="color:#667eea;margin:14px 0 6px;">二、基本录制流程</h5>
-          <ol style="margin:4px 0;padding-left:18px;">
+          <h5 class="ca-help-h5">二、基本录制流程</h5>
+          <ol class="ca-help-list">
             <li>点击面板中的步骤类型按钮（如「账号输入框」），点击页面目标元素录制</li>
             <li>重复以上步骤，依次录完账号、密码、运营商、提交等所有步骤</li>
-            <li>点击 <b style="color:#fff;">📋 复制 AI 提示词</b>，将提示词发送给 AI 即可生成完整的任务 JSON</li>
+            <li>点击 <b class="ca-help-key">📋 复制 AI 提示词</b>，将提示词发送给 AI 即可生成完整的任务 JSON</li>
           </ol>
 
-          <h5 style="color:#667eea;margin:14px 0 6px;">三、步骤类型说明</h5>
-          <table style="width:100%;font-size:12px;border-collapse:collapse;margin:4px 0;">
-            <tr style="color:#aaa;"><td style="padding:3px 6px;">按钮</td><td style="padding:3px 6px;">用途</td><td style="padding:3px 6px;">导出为</td></tr>
-            <tr><td style="padding:3px 6px;">👤 账号输入框</td><td style="padding:3px 6px;">点击用户名输入区域</td><td style="padding:3px 6px;"><code>input</code> + {{USERNAME}}</td></tr>
-            <tr><td style="padding:3px 6px;">🔒 密码输入框</td><td style="padding:3px 6px;">点击密码输入区域</td><td style="padding:3px 6px;"><code>input</code> + {{PASSWORD}}</td></tr>
-            <tr><td style="padding:3px 6px;"> 运营商选择</td><td style="padding:3px 6px;">点下拉框/按钮组（自动识别原生/自定义/按钮组）</td><td style="padding:3px 6px;"><code>select</code> / <code>click_select</code> + {{ISP}}</td></tr>
-            <tr><td style="padding:3px 6px;">🖼️ 验证码图片</td><td style="padding:3px 6px;">点击验证码图片</td><td style="padding:3px 6px;"><code>ocr</code> 步骤（与验证码输入框合并）</td></tr>
-            <tr><td style="padding:3px 6px;">✏️ 验证码输入</td><td style="padding:3px 6px;">点击验证码输入框</td><td style="padding:3px 6px;"><code>ocr</code> 识别 + 填入</td></tr>
-            <tr><td style="padding:3px 6px;">🚀 提交按钮</td><td style="padding:3px 6px;">点击登录/提交按钮</td><td style="padding:3px 6px;"><code>click</code> 步骤</td></tr>
-            <tr><td style="padding:3px 6px;">☑️ 勾选/协议</td><td style="padding:3px 6px;">点击复选框/用户协议勾选框</td><td style="padding:3px 6px;"><code>click</code> 步骤</td></tr>
-            <tr><td style="padding:3px 6px;">🔍 智能检测</td><td style="padding:3px 6px;">打字自动识别账号/密码，点击自动识别勾选/提交/下拉框/图片等</td><td style="padding:3px 6px;">自动分类为对应步骤类型</td></tr>
-            <tr><td style="padding:3px 6px;">👆 点击元素</td><td style="padding:3px 6px;">点击任意元素</td><td style="padding:3px 6px;"><code>click</code> 步骤</td></tr>
-            <tr><td style="padding:3px 6px;">⏳ 等待元素</td><td style="padding:3px 6px;">等待某元素出现</td><td style="padding:3px 6px;"><code>wait</code> 步骤</td></tr>
-            <tr><td style="padding:3px 6px;">⚙️ 执行JS</td><td style="padding:3px 6px;">输入 JS 代码</td><td style="padding:3px 6px;"><code>eval</code> 步骤</td></tr>
-            <tr><td style="padding:3px 6px;">📝 自定义</td><td style="padding:3px 6px;">自定义描述与选择器</td><td style="padding:3px 6px;">通用步骤</td></tr>
-            <tr><td style="padding:3px 6px;">⏳ 延时等待</td><td style="padding:3px 6px;">页面不操作仅等待指定时间</td><td style="padding:3px 6px;"><code>sleep</code> 步骤</td></tr>
-            <tr><td style="padding:3px 6px;">📸 页面截图</td><td style="padding:3px 6px;">截取当前页面状态用于调试</td><td style="padding:3px 6px;"><code>screenshot</code> 步骤</td></tr>
-            <tr><td style="padding:3px 6px;">🔗 等待URL</td><td style="padding:3px 6px;">等待浏览器 URL 匹配正则</td><td style="padding:3px 6px;"><code>wait_url</code> 步骤</td></tr>
+          <h5 class="ca-help-h5">三、步骤类型说明</h5>
+          <table class="ca-help-table">
+            <tr class="ca-help-table-header"><th>按钮</th><th>用途</th><th>导出为</th></tr>
+            <tr><td>👤 账号输入框</td><td>点击用户名输入区域</td><td><code>input</code> + {{USERNAME}}</td></tr>
+            <tr><td>🔒 密码输入框</td><td>点击密码输入区域</td><td><code>input</code> + {{PASSWORD}}</td></tr>
+            <tr><td> 运营商选择</td><td>点下拉框/按钮组（自动识别原生/自定义/按钮组）</td><td><code>select</code> / <code>click_select</code> + {{ISP}}</td></tr>
+            <tr><td>🖼️ 验证码图片</td><td>点击验证码图片</td><td><code>ocr</code> 步骤（与验证码输入框合并）</td></tr>
+            <tr><td>✏️ 验证码输入</td><td>点击验证码输入框</td><td><code>ocr</code> 识别 + 填入</td></tr>
+            <tr><td>🚀 提交按钮</td><td>点击登录/提交按钮</td><td><code>click</code> 步骤</td></tr>
+            <tr><td>☑️ 勾选/协议</td><td>点击复选框/用户协议勾选框</td><td><code>click</code> 步骤</td></tr>
+            <tr><td>🔍 智能检测</td><td>打字自动识别账号/密码，点击自动识别勾选/提交/下拉框/图片等</td><td>自动分类为对应步骤类型</td></tr>
+            <tr><td>👆 点击元素</td><td>点击任意元素</td><td><code>click</code> 步骤</td></tr>
+            <tr><td>⏳ 等待元素</td><td>等待某元素出现</td><td><code>wait</code> 步骤</td></tr>
+            <tr><td>⚙️ 执行JS</td><td>输入 JS 代码</td><td><code>eval</code> 步骤</td></tr>
+            <tr><td>📝 自定义</td><td>自定义描述与选择器</td><td>通用步骤</td></tr>
+            <tr><td>⏳ 延时等待</td><td>页面不操作仅等待指定时间</td><td><code>sleep</code> 步骤</td></tr>
+            <tr><td>📸 页面截图</td><td>截取当前页面状态用于调试</td><td><code>screenshot</code> 步骤</td></tr>
+            <tr><td>🔗 等待URL</td><td>等待浏览器 URL 匹配正则</td><td><code>wait_url</code> 步骤</td></tr>
           </table>
 
-          <h5 style="color:#667eea;margin:14px 0 6px;">四、功能开关</h5>
-          <ul style="margin:4px 0;padding-left:18px;">
-            <li><b style="color:#fff;">🔁 多步录制</b> — 开启后每次点击/Enter 记录一步，不会自动停止，适合连续录制多个步骤。关闭后每次只记录一步。</li>
-            <li><b style="color:#fff;">🔍 隐藏检测</b> — 开启后，当点击容器 <code>div</code> 或 <code>readonly</code> 占位元素时，自动扫描内部 <code>display:none</code> 的隐藏输入框（常见于深澜/Sangfor 和杭州康工 HK Posi 认证页面）。检测到后会记录隐藏输入框的选择器信息，导出时提示 AI 生成正确的 selector。</li>
+          <h5 class="ca-help-h5">四、功能开关</h5>
+          <ul class="ca-help-list">
+            <li><b class="ca-help-key">🔁 多步录制</b> — 开启后每次点击/Enter 记录一步，不会自动停止，适合连续录制多个步骤。关闭后每次只记录一步。</li>
+            <li><b class="ca-help-key">🔍 隐藏检测</b> — 开启后，当点击容器 <code>div</code> 或 <code>readonly</code> 占位元素时，自动扫描内部 <code>display:none</code> 的隐藏输入框（常见于深澜/Sangfor 和杭州康工 HK Posi 认证页面）。检测到后会记录隐藏输入框的选择器信息，导出时提示 AI 生成正确的 selector。</li>
           </ul>
 
-          <h5 style="color:#667eea;margin:14px 0 6px;">五、键盘快捷键</h5>
-          <table style="width:100%;font-size:12px;border-collapse:collapse;margin:4px 0;">
-            <tr style="color:#aaa;"><td style="padding:3px 6px;">按键</td><td style="padding:3px 6px;">功能</td><td style="padding:3px 6px;">说明</td></tr>
-            <tr><td style="padding:3px 6px;"><b style="color:#fff;">Ctrl+Shift+E</b></td><td style="padding:3px 6px;">打开/关闭面板</td><td style="padding:3px 6px;">全局快捷键</td></tr>
-            <tr><td style="padding:3px 6px;"><b style="color:#fff;">Esc</b></td><td style="padding:3px 6px;">取消当前录制</td><td style="padding:3px 6px;">清除选中状态，停止录制</td></tr>
-            <tr><td style="padding:3px 6px;"><b style="color:#fff;">Enter</b></td><td style="padding:3px 6px;">无 click 记录</td><td style="padding:3px 6px;">记录悬停元素但不发送 click 给页面（下拉菜单保持打开）</td></tr>
+          <h5 class="ca-help-h5">五、键盘快捷键</h5>
+          <table class="ca-help-table">
+            <tr class="ca-help-table-header"><th>按键</th><th>功能</th><th>说明</th></tr>
+            <tr><td><b class="ca-help-key">Ctrl+Shift+E</b></td><td>打开/关闭面板</td><td>全局快捷键</td></tr>
+            <tr><td><b class="ca-help-key">Esc</b></td><td>取消当前录制</td><td>清除选中状态，停止录制</td></tr>
+            <tr><td><b class="ca-help-key">Enter</b></td><td>无 click 记录</td><td>记录悬停元素但不发送 click 给页面（下拉菜单保持打开）</td></tr>
           </table>
 
-          <h5 style="color:#667eea;margin:14px 0 6px;">六、典型场景</h5>
+          <h5 class="ca-help-h5">六、典型场景</h5>
 
-          <p style="margin:4px 0;"><b style="color:#fff;">场景 A：普通账号密码登录</b></p>
-          <ol style="margin:0 0 8px;padding-left:18px;font-size:12px;">
+          <p style="margin:4px 0;"><b class="ca-help-key">场景 A：普通账号密码登录</b></p>
+          <ol class="ca-help-list-sm">
             <li>点「账号输入框」→ 点页面上账号框</li>
             <li>点「密码输入框」→ 点页面上密码框</li>
             <li>点「提交按钮」→ 点页面登录按钮</li>
             <li>点「📋 复制 AI 提示词」→ 将提示词发送给 AI 生成任务 JSON</li>
           </ol>
 
-          <p style="margin:4px 0;"><b style="color:#fff;">场景 B：运营商选择</b></p>
-          <ol style="margin:0 0 8px;padding-left:18px;font-size:12px;">
+          <p style="margin:4px 0;"><b class="ca-help-key">场景 B：运营商选择</b></p>
+          <ol class="ca-help-list-sm">
             <li>点「运营商选择」→ 点目标元素</li>
             <li>原生 <code>&lt;select&gt;</code> 直接完成</li>
             <li>按钮组（如「中国移动」「中国电信」并排按钮）→ 自动检测所有选项，一次完成</li>
             <li>自定义 div 下拉框 → 自动提示"点运营商选项"，点选项后合并为一步</li>
           </ol>
 
-          <p style="margin:4px 0;"><b style="color:#fff;">场景 C：隐藏输入框模式（深澜/HK Posi）</b></p>
-          <ol style="margin:0 0 8px;padding-left:18px;font-size:12px;">
-            <li>确保 <b style="color:#fff;">🔍 隐藏检测</b> 已开启</li>
+          <p style="margin:4px 0;"><b class="ca-help-key">场景 C：隐藏输入框模式（深澜/HK Posi）</b></p>
+          <ol class="ca-help-list-sm">
+            <li>确保 <b class="ca-help-key">🔍 隐藏检测</b> 已开启</li>
             <li>点「账号输入框」→ 点页面上账号占位区域（div 容器或 readonly tip）</li>
             <li>录制器自动检测隐藏的真实输入框，列表中显示 ⚠️ 标记</li>
             <li>点「密码输入框」→ 同样操作</li>
@@ -2512,28 +2613,28 @@
 
           <!-- 场景 D 已移除：原「完成登录」+ 框选模式已被 AI 提示词方式取代 -->
 
-          <h5 style="color:#667eea;margin:14px 0 6px;">七、获取任务 JSON</h5>
-          <ul style="margin:4px 0;padding-left:18px;">
-            <li>录制完成后点击 <b style="color:#fff;">📋 复制 AI 提示词</b>，将录制到的元素信息（选择器、类型、属性等）以结构化提示词形式复制到剪贴板</li>
+          <h5 class="ca-help-h5">七、获取任务 JSON</h5>
+          <ul class="ca-help-list">
+            <li>录制完成后点击 <b class="ca-help-key">📋 复制 AI 提示词</b>，将录制到的元素信息（选择器、类型、属性等）以结构化提示词形式复制到剪贴板</li>
             <li>将提示词发送给 AI（ChatGPT、Claude 等），AI 会参考 <code>doc/task-writing-guide.md</code> 规范生成完整的任务 JSON</li>
             <li>也可以将提示词粘贴到 Campus-Auth 的 Issue 或社区中，方便其他人帮助创建任务</li>
           </ul>
 
-          <h5 style="color:#667eea;margin:14px 0 6px;">八、选择器优先级</h5>
+          <h5 class="ca-help-h5">八、选择器优先级</h5>
           <p style="margin:4px 0;font-size:12px;">录制器按以下优先级生成选择器：<code>#id</code> &gt; <code>[name="..."]</code> &gt; <code>[type="..."]</code> &gt; <code>[placeholder="..."]</code> &gt; 文本内容 &gt; CSS 路径 &gt; XPath。多个选择器候选会全部保留在 JSON 中，执行时依次尝试。</p>
 
-          <h5 style="color:#667eea;margin:14px 0 6px;">九、技巧与注意事项</h5>
-          <ul style="margin:4px 0;padding-left:18px;font-size:12px;">
-            <li>录制状态会<b style="color:#fff;">自动保存</b>到油猴存储，刷新页面后自动恢复（2 小时内有效）</li>
-            <li>如果元素在 <b style="color:#fff;">iframe</b> 内部，录制器会自动检测并记录 iframe 信息</li>
-            <li>连续录制多个步骤时建议开启 <b style="color:#fff;">🔁 多步录制</b></li>
-            <li>下拉菜单内的选项建议用 <b style="color:#fff;">Enter</b> 键选取（点击会关闭菜单）</li>
-            <li>如果浮层按钮/面板被页面 JS 冲掉，录制器会<b style="color:#fff;">自动恢复</b>（DOM 守护）</li>
+          <h5 class="ca-help-h5">九、技巧与注意事项</h5>
+          <ul class="ca-help-list-sm">
+            <li>录制状态会<b class="ca-help-key">自动保存</b>到油猴存储，刷新页面后自动恢复（2 小时内有效）</li>
+            <li>如果元素在 <b class="ca-help-key">iframe</b> 内部，录制器会自动检测并记录 iframe 信息</li>
+            <li>连续录制多个步骤时建议开启 <b class="ca-help-key">🔁 多步录制</b></li>
+            <li>下拉菜单内的选项建议用 <b class="ca-help-key">Enter</b> 键选取（点击会关闭菜单）</li>
+            <li>如果浮层按钮/面板被页面 JS 冲掉，录制器会<b class="ca-help-key">自动恢复</b>（DOM 守护）</li>
             <li>可在列表中点击 ✕ 删除不需要的步骤</li>
           </ul>
 
-          <p style="margin-top:16px;padding-top:12px;border-top:1px solid #333;font-size:11px;color:#666;text-align:center;">
-            Campus-Auth 任务录制器 v${VERSION} · <a href="https://github.com/Misyra/Campus-Auth" target="_blank" style="color:#667eea;">GitHub</a>
+          <p class="ca-help-footer">
+            Campus-Auth 任务录制器 v${VERSION} · <a href="https://github.com/Misyra/Campus-Auth" target="_blank" style="color:var(--ca-primary);">GitHub</a>
           </p>
         </div>
       </div>
@@ -2769,7 +2870,7 @@
     panel.id = 'ca-reveal-panel';
     panel.innerHTML = `
       <div class="ca-rv-header">
-        <span>👁️</span> 隐藏输入框 <span id="ca-rv-count" style="background:#fff;color:#2e7d32;padding:0 6px;border-radius:10px;font-size:11px;">${_revealedInputs.length}</span>
+        <span>👁️</span> 隐藏输入框 <span id="ca-rv-count" class="ca-rv-count">${_revealedInputs.length}</span>
       </div>
       <div id="ca-rv-list"></div>
     `;
@@ -3040,26 +3141,10 @@
   const entryBtn = document.createElement("div");
   entryBtn.innerHTML = "🎬";
   entryBtn.title = "Campus-Auth 任务录制器 (Ctrl+Shift+E)";
-  Object.assign(entryBtn.style, {
-    position: "fixed",
-    bottom: "20px",
-    right: "20px",
-    width: "48px",
-    height: "48px",
-    borderRadius: "50%",
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "24px",
-    cursor: "pointer",
-    zIndex: "2147483647",
-    boxShadow: "0 4px 16px rgba(102,126,234,0.4)",
-    transition: "transform 0.2s",
-    userSelect: "none",
-  });
+  entryBtn.className = "ca-entry-btn";
   entryBtn.addEventListener("mouseenter", () => (entryBtn.style.transform = "scale(1.1)"));
   entryBtn.addEventListener("mouseleave", () => (entryBtn.style.transform = "scale(1)"));
+
   entryBtn.addEventListener("click", () => (state.active ? deactivate() : activate()));
   document.body.appendChild(entryBtn);
 
