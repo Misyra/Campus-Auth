@@ -89,6 +89,7 @@ export const SETTINGS_TABS = [
 export const DEFAULT_APPEARANCE = {
   background_url: '',
   background_filename: '',
+  wallpaper_api_url: '',
   background_blur: 10,
   background_opacity: 0.3,
   background_color: '#0f172a',

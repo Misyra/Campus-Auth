@@ -2,7 +2,7 @@
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  backdrop-filter: var(--blur-md);
+  backdrop-filter: var(--card-blur, var(--blur-md));
   box-shadow: var(--shadow);
   transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }

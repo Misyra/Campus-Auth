@@ -701,6 +701,16 @@
   justify-content: center;
 }
 
+.appearance-bg-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.appearance-sliders + .appearance-bg-actions {
+  margin-top: 24px;
+}
+
 .appearance-bg-preview-img {
   width: 100%;
   height: 100%;
@@ -936,18 +946,239 @@ body.has-custom-bg::before {
   z-index: -1;
 }
 
-/* 浅色主题 */
+/* 随机壁纸弹窗 */
+.random-wallpaper-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  backdrop-filter: blur(4px);
+}
+
+.random-wallpaper-modal {
+  background: var(--bg-card, #1e293b);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  width: 420px;
+  max-width: 90vw;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.random-wallpaper-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+}
+
+.random-wallpaper-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.random-wallpaper-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.random-wallpaper-modal .form-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.random-wallpaper-modal .form-input:focus {
+  border-color: var(--accent);
+}
+
+.random-wallpaper-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ═══ 浅色主题 ═══ */
 [data-theme="light"] {
-  --bg-primary: #f8fafc;
-  --bg-secondary: #ffffff;
-  --bg-card: rgba(255, 255, 255, 0.9);
-  --bg-hover: rgba(241, 245, 249, 0.8);
-  --bg-glass: rgba(255, 255, 255, 0.85);
-  --bg-glass-light: rgba(255, 255, 255, 0.7);
-  --bg-glass-heavy: rgba(255, 255, 255, 0.95);
-  --border: rgba(148, 163, 184, 0.2);
-  --border-hover: rgba(148, 163, 184, 0.35);
-  --text-primary: #0f172a;
+  /* 主内容区 — 仅文本和阴影，背景/卡片/边框由 JS 控制 */
+  --bg-primary: #eef2f7;
+  --bg-secondary: #e4e9f0;
+  --bg-hover: rgba(226, 232, 240, 0.7);
+  --bg-glass: rgba(255, 255, 255, 0.8);
+  --bg-glass-light: rgba(255, 255, 255, 0.6);
+  --bg-glass-heavy: rgba(255, 255, 255, 0.9);
+  --text-primary: #1e293b;
   --text-secondary: #475569;
   --text-muted: #94a3b8;
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.07), 0 4px 6px -4px rgba(0, 0, 0, 0.03);
+  --shadow-accent: 0 0 10px rgba(34, 211, 238, 0.12);
+}
+
+/* 侧边栏 */
+[data-theme="light"] .sidebar {
+  border-right-color: rgba(148, 163, 184, 0.18);
+}
+
+[data-theme="light"] .sidebar .nav-item {
+  color: #64748b;
+}
+
+[data-theme="light"] .sidebar .nav-item:hover {
+  color: #1e293b;
+  background: rgba(148, 163, 184, 0.12);
+}
+
+[data-theme="light"] .sidebar .nav-item.active {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, transparent), rgba(59, 130, 246, 0.06));
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+[data-theme="light"] .sidebar-footer {
+  border-top-color: rgba(148, 163, 184, 0.18);
+}
+
+[data-theme="light"] .sidebar-footer .status-text {
+  color: #64748b;
+}
+
+[data-theme="light"] .logo-text {
+  background: linear-gradient(135deg, var(--accent), #6366f1);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* 顶栏 */
+[data-theme="light"] .top-bar {
+  border-bottom-color: rgba(148, 163, 184, 0.18);
+}
+
+/* 仪表盘 */
+[data-theme="light"] .stat-card {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+[data-theme="light"] .stat-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .log-entry:hover {
+  background: rgba(148, 163, 184, 0.1);
+}
+
+/* 设置页 */
+[data-theme="light"] .mini-stat {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+/* 通用组件 */
+[data-theme="light"] .card {
+  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+[data-theme="light"] .info-box {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+/* 脚本编辑器 */
+[data-theme="light"] .script-editor,
+[data-theme="light"] textarea.script-editor {
+  background: rgba(255, 255, 255, 0.85);
+  color: #1e293b;
+  border-color: rgba(148, 163, 184, 0.22);
+}
+
+/* 弹窗 */
+[data-theme="light"] .uninstall-modal,
+[data-theme="light"] .danger-modal,
+[data-theme="light"] .repo-modal,
+[data-theme="light"] .repo-disclaimer-modal,
+[data-theme="light"] .debug-panel,
+[data-theme="light"] .random-wallpaper-modal {
+  background: #f1f5f9;
+  border-color: rgba(148, 163, 184, 0.22);
+}
+
+/* 方案页 */
+[data-theme="light"] .profiles-topbar {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+[data-theme="light"] .profiles-status-icon.off {
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .profile-card {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+[data-theme="light"] .profile-card:hover {
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .editor-collapsible-title {
+  background: rgba(148, 163, 184, 0.1);
+}
+
+[data-theme="light"] .editor-collapsible-title:hover {
+  background: rgba(148, 163, 184, 0.18);
+}
+
+/* 任务页 */
+[data-theme="light"] .task-step,
+[data-theme="light"] .task-card {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+[data-theme="light"] .task-editor-section {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+[data-theme="light"] .task-debug-panel {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+/* 输入框 */
+[data-theme="light"] input[type="text"],
+[data-theme="light"] input[type="number"],
+[data-theme="light"] input[type="password"],
+[data-theme="light"] input[type="url"],
+[data-theme="light"] select,
+[data-theme="light"] textarea {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(148, 163, 184, 0.25);
+  color: #1e293b;
+}
+
+[data-theme="light"] input:focus,
+[data-theme="light"] select:focus,
+[data-theme="light"] textarea:focus {
+  border-color: var(--accent);
 }
