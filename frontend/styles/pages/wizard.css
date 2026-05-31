@@ -11,7 +11,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-top);
   padding: 20px;
 }
 
@@ -24,7 +24,7 @@
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(20px) saturate(1.2);
+  backdrop-filter: var(--blur-lg) saturate(1.2);
 }
 
 .wizard-header {
@@ -74,7 +74,7 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--text-muted);
-  transition: all 0.3s ease;
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .step.active .step-number {

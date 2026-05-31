@@ -79,7 +79,9 @@ export const editorTaskMethods = {
         clearInterval(this._dangerTimer);
         this._dangerTimer = null;
       }
-      this.dangerConfirm = { dangers, resolve };
+      // resolve 存储到非响应式属性，避免 Vue 代理函数对象
+      this._dangerResolve = resolve;
+      this.dangerConfirm = { dangers };
       this.dangerCountdown = 5;
       const timer = setInterval(() => {
         this.dangerCountdown--;
@@ -96,11 +98,12 @@ export const editorTaskMethods = {
       clearInterval(this._dangerTimer);
       this._dangerTimer = null;
     }
-    if (this.dangerConfirm) {
-      this.dangerConfirm.resolve(allow);
-      this.dangerConfirm = null;
-      this.dangerCountdown = 0;
+    if (this._dangerResolve) {
+      this._dangerResolve(allow);
+      this._dangerResolve = null;
     }
+    this.dangerConfirm = null;
+    this.dangerCountdown = 0;
   },
   async duplicateTask(taskId) {
     try {

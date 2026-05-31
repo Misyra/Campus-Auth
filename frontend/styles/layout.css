@@ -7,8 +7,8 @@
   padding: 24px 16px;
   position: fixed;
   height: 100vh;
-  z-index: 100;
-  backdrop-filter: blur(20px);
+  z-index: var(--z-sidebar);
+  backdrop-filter: var(--blur-lg);
 }
 
 .sidebar-header {
@@ -67,8 +67,8 @@
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
-  z-index: 50;
-  backdrop-filter: blur(16px) saturate(1.2);
+  z-index: var(--z-sticky);
+  backdrop-filter: var(--blur-lg) saturate(1.2);
 }
 
 .page-title {
