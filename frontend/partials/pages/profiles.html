@@ -207,13 +207,13 @@
         <div class="editor-section-label">基本信息</div>
         <div class="form-row">
           <div class="form-group">
-            <label>方案 ID</label>
-            <input v-model="editingProfile.id" type="text" placeholder="dorm" :disabled="!editingProfile._isNew" />
+            <label for="prof-id">方案 ID</label>
+            <input id="prof-id" v-model="editingProfile.id" type="text" placeholder="dorm" :disabled="!editingProfile._isNew" />
             <span class="hint">字母、数字、下划线</span>
           </div>
           <div class="form-group">
-            <label>方案名称</label>
-            <input v-model="editingProfile.name" type="text" placeholder="宿舍 WiFi" />
+            <label for="prof-name">方案名称</label>
+            <input id="prof-name" v-model="editingProfile.name" type="text" placeholder="宿舍 WiFi" />
           </div>
         </div>
       </div>
@@ -247,12 +247,12 @@
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>网关 IP</label>
-            <input v-model.trim="editingProfile.match_gateway_ip" type="text" placeholder="192.168.1.1" />
+            <label for="prof-gateway">网关 IP</label>
+            <input id="prof-gateway" v-model.trim="editingProfile.match_gateway_ip" type="text" placeholder="192.168.1.1" />
           </div>
           <div class="form-group">
-            <label>WiFi 名称（SSID）</label>
-            <input v-model.trim="editingProfile.match_ssid" type="text" placeholder="Campus-Dorm-5G" />
+            <label for="prof-ssid">WiFi 名称（SSID）</label>
+            <input id="prof-ssid" v-model.trim="editingProfile.match_ssid" type="text" placeholder="Campus-Dorm-5G" />
           </div>
         </div>
       </div>
@@ -271,12 +271,13 @@
         <div v-if="!editingProfile.use_global_credentials" style="margin-top:8px;">
           <div class="form-row">
             <div class="form-group">
-              <label>独立账号</label>
-              <input v-model.trim="editingProfile.username" type="text" placeholder="留空使用全局" />
+              <label for="prof-username">独立账号</label>
+              <input id="prof-username" v-model.trim="editingProfile.username" type="text" placeholder="留空使用全局" />
             </div>
             <div class="form-group">
-              <label>独立密码</label>
+              <label for="prof-password">独立密码</label>
               <input
+                id="prof-password"
                 v-model="editingProfile.password"
                 type="password"
                 :placeholder="editingProfile.password && editingProfile.password.startsWith('•') ? '已保存，清空可更新' : '留空使用全局'"
@@ -286,8 +287,8 @@
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>运营商</label>
-              <select v-model="editingProfile.carrier">
+              <label for="prof-carrier">运营商</label>
+              <select id="prof-carrier" v-model="editingProfile.carrier">
                 <option>移动</option>
                 <option>联通</option>
                 <option>电信</option>
@@ -296,8 +297,8 @@
               </select>
             </div>
             <div v-if="editingProfile.carrier === '自定义'" class="form-group">
-              <label>自定义运营商</label>
-              <input v-model.trim="editingProfile.carrier_custom" type="text" placeholder="校园专网" />
+              <label for="prof-carrier-custom">自定义运营商</label>
+              <input id="prof-carrier-custom" v-model.trim="editingProfile.carrier_custom" type="text" placeholder="校园专网" />
             </div>
           </div>
         </div>
@@ -315,8 +316,8 @@
           </label>
         </div>
         <div v-if="!editingProfile.use_global_auth_url" class="form-group">
-          <label>认证地址</label>
-          <input v-model.trim="editingProfile.auth_url" type="text" placeholder="http://" />
+          <label for="prof-auth-url">认证地址</label>
+          <input id="prof-auth-url" v-model.trim="editingProfile.auth_url" type="text" placeholder="http://" />
         </div>
         <div class="toggle-group" style="margin-bottom: 12px;">
           <label class="toggle compact">
@@ -327,8 +328,8 @@
           </label>
         </div>
         <div v-if="!editingProfile.use_global_task" class="form-group">
-          <label>执行任务</label>
-          <select v-model="editingProfile.active_task">
+          <label for="prof-task">执行任务</label>
+          <select id="prof-task" v-model="editingProfile.active_task">
             <option value="">默认任务</option>
             <option v-for="t in tasks" :key="t.id" :value="t.id">{{ t.name || t.id }}</option>
           </select>
@@ -350,16 +351,16 @@
           <div v-if="!editingProfile.use_global_advanced">
           <div class="form-row">
             <div class="form-group">
-              <label>检测间隔（秒）</label>
-              <input v-model.number="editingProfile.check_interval_seconds" type="number" min="10" max="86400" />
+              <label for="prof-interval">检测间隔（秒）</label>
+              <input id="prof-interval" v-model.number="editingProfile.check_interval_seconds" type="number" min="10" max="86400" />
             </div>
             <div class="form-group">
-              <label>网络检测目标</label>
-              <input v-model="editingProfile.network_targets" type="text" placeholder="8.8.8.8:53,..." />
+              <label for="prof-net-targets">网络检测目标</label>
+              <input id="prof-net-targets" v-model="editingProfile.network_targets" type="text" placeholder="8.8.8.8:53,..." />
             </div>
             <div class="form-group">
-              <label>HTTP 检测目标</label>
-              <input v-model="editingProfile.http_targets" type="text" placeholder="https://www.baidu.com,..." />
+              <label for="prof-http-targets">HTTP 检测目标</label>
+              <input id="prof-http-targets" v-model="editingProfile.http_targets" type="text" placeholder="https://www.baidu.com,..." />
             </div>
           </div>
           <div class="toggle-row">
@@ -385,8 +386,8 @@
             </label>
           </div>
           <div v-if="editingProfile.check_auth_url" class="form-group">
-            <label>认证检测目标</label>
-            <input v-model="editingProfile.auth_url_targets" type="text" placeholder="留空仅检测认证地址，例如 dns.school.edu:53" />
+            <label for="prof-auth-targets">认证检测目标</label>
+            <input id="prof-auth-targets" v-model="editingProfile.auth_url_targets" type="text" placeholder="留空仅检测认证地址，例如 dns.school.edu:53" />
           </div>
           <div class="toggle-row">
             <label class="toggle compact">
@@ -397,12 +398,12 @@
           </div>
           <div v-if="editingProfile.pause_enabled" class="form-row">
             <div class="form-group">
-              <label>暂停开始</label>
-              <input v-model.number="editingProfile.pause_start_hour" type="number" min="0" max="23" />
+              <label for="prof-pause-start">暂停开始</label>
+              <input id="prof-pause-start" v-model.number="editingProfile.pause_start_hour" type="number" min="0" max="23" />
             </div>
             <div class="form-group">
-              <label>暂停结束</label>
-              <input v-model.number="editingProfile.pause_end_hour" type="number" min="0" max="23" />
+              <label for="prof-pause-end">暂停结束</label>
+              <input id="prof-pause-end" v-model.number="editingProfile.pause_end_hour" type="number" min="0" max="23" />
             </div>
           </div>
 
@@ -412,30 +413,30 @@
           <div class="form-row">
             <div class="form-group">
               <div class="field-label-row">
-                <label>页面操作超时（秒）</label>
+                <label for="prof-step-timeout">页面操作超时（秒）</label>
                 <span class="field-help" tabindex="0" role="note" data-tip="任务执行时每个浏览器步骤（点击、输入、等待元素等）的超时时间。">?</span>
               </div>
-              <input v-model.number="editingProfile.browser_timeout" type="number" min="1" max="60" />
+              <input id="prof-step-timeout" v-model.number="editingProfile.browser_timeout" type="number" min="1" max="60" />
             </div>
             <div class="form-group">
               <div class="field-label-row">
-                <label>打开登录页面超时（秒）</label>
+                <label for="prof-nav-timeout">打开登录页面超时（秒）</label>
                 <span class="field-help" tabindex="0" role="note" data-tip="自动导航到登录页面的超时时间。校园网 DNS 劫持/重定向链较长时可适当调大。">?</span>
               </div>
-              <input v-model.number="editingProfile.browser_navigation_timeout" type="number" min="3" max="60" />
+              <input id="prof-nav-timeout" v-model.number="editingProfile.browser_navigation_timeout" type="number" min="3" max="60" />
             </div>
             <div class="form-group">
               <div class="field-label-row">
-                <label>登录请求超时（秒）</label>
+                <label for="prof-login-timeout">登录请求超时（秒）</label>
                 <span class="field-help" tabindex="0" role="note" data-tip="手动登录时前端等待后端响应的最长时间。">?</span>
               </div>
-              <input v-model.number="editingProfile.login_timeout" type="number" min="10" max="600" />
+              <input id="prof-login-timeout" v-model.number="editingProfile.login_timeout" type="number" min="10" max="600" />
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>用户代理</label>
-              <input v-model.trim="editingProfile.browser_user_agent" type="text" placeholder="留空使用默认" />
+              <label for="prof-ua">用户代理</label>
+              <input id="prof-ua" v-model.trim="editingProfile.browser_user_agent" type="text" placeholder="留空使用默认" />
             </div>
           </div>
           <div class="toggle-row">
@@ -461,8 +462,9 @@
             </label>
           </div>
           <div class="form-group">
-            <label>自定义请求头（JSON）</label>
+            <label for="prof-headers">自定义请求头（JSON）</label>
             <textarea
+              id="prof-headers"
               v-model.trim="editingProfile.browser_extra_headers_json"
               rows="3"
               spellcheck="false"

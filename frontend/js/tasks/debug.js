@@ -7,6 +7,10 @@ export const debugTaskMethods = {
       const { data } = await this.$api.post('/api/debug/start', { task_id: taskId });
       this.debugSession = data;
       this.frontendLogger.info('debug', `开始调试任务 ${taskId}`);
+      this.$nextTick(() => {
+        const overlay = document.querySelector('.debug-overlay');
+        if (overlay) this._trapFocus(overlay);
+      });
     } catch (error) {
       const msg = extractApiError(error, '启动调试失败');
       this.frontendLogger.error('debug', '启动调试失败: ' + msg);
@@ -39,6 +43,7 @@ export const debugTaskMethods = {
   },
 
   async debugStop() {
+    this._releaseFocusTrap();
     try {
       const { data } = await this.$api.post('/api/debug/stop');
       this.debugSession = {

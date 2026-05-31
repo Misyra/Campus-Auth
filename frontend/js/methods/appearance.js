@@ -198,10 +198,15 @@ export const appearanceMethods = {
     this.randomWallpaperDialog.url = this.appearance.wallpaper_api_url || 'https://t.alcy.cc/pc';
     this.randomWallpaperDialog.loading = false;
     this.randomWallpaperDialog.visible = true;
+    this.$nextTick(() => {
+      const overlay = document.querySelector('.random-wallpaper-overlay');
+      if (overlay) this._trapFocus(overlay);
+    });
   },
 
   // 关闭随机壁纸对话框
   closeRandomWallpaperDialog() {
+    this._releaseFocusTrap();
     this.randomWallpaperDialog.visible = false;
   },
 

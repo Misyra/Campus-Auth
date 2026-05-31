@@ -78,8 +78,8 @@
         <p class="description">选择您使用的网络运营商，如果您不确定，可以选择"无"。</p>
 
         <div class="form-group">
-          <label>运营商</label>
-          <select v-model="config.carrier">
+          <label for="wiz-carrier">运营商</label>
+          <select id="wiz-carrier" v-model="config.carrier">
             <option>无</option>
             <option>移动</option>
             <option>联通</option>
@@ -90,8 +90,9 @@
         </div>
 
         <div v-if="config.carrier === '自定义'" class="form-group">
-          <label>自定义运营商关键字</label>
+          <label for="wiz-carrier-custom">自定义运营商关键字</label>
           <input
+            id="wiz-carrier-custom"
             v-model.trim="config.carrier_custom"
             type="text"
             placeholder="例如：校园专网、宿舍网、移动(新)"
@@ -116,20 +117,20 @@
         <p class="description">配置自动监控和登录的行为。</p>
 
         <div class="form-group">
-          <label>检测间隔（秒）</label>
-          <input v-model.number="config.check_interval_seconds" type="number" min="10" max="86400" />
+          <label for="wiz-interval">检测间隔（秒）</label>
+          <input id="wiz-interval" v-model.number="config.check_interval_seconds" type="number" min="10" max="86400" />
           <span class="hint">每隔多久检测一次网络状态，建议 180-600 秒（3-10 分钟）</span>
         </div>
 
         <div class="form-row">
           <div class="form-group">
-            <label>暂停开始时间</label>
-            <input v-model.number="config.pause_start_hour" type="number" min="0" max="23" />
+            <label for="wiz-pause-start">暂停开始时间</label>
+            <input id="wiz-pause-start" v-model.number="config.pause_start_hour" type="number" min="0" max="23" />
             <span class="hint">开始暂停的小时（0-23）</span>
           </div>
           <div class="form-group">
-            <label>暂停结束时间</label>
-            <input v-model.number="config.pause_end_hour" type="number" min="0" max="23" />
+            <label for="wiz-pause-end">暂停结束时间</label>
+            <input id="wiz-pause-end" v-model.number="config.pause_end_hour" type="number" min="0" max="23" />
             <span class="hint">结束暂停的小时（0-23）</span>
           </div>
         </div>
