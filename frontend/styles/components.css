@@ -404,7 +404,7 @@
 }
 
 .info-box {
-  background: rgba(15, 23, 42, 0.5);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 16px;
@@ -452,7 +452,7 @@
   gap: 10px;
   padding: 14px 20px;
   border-radius: var(--radius-lg);
-  background: rgba(30, 41, 59, 0.9);
+  background: var(--bg-modal);
   border: 1px solid var(--border);
   backdrop-filter: var(--blur-lg) saturate(1.2);
   box-shadow: var(--shadow-lg);

@@ -3,6 +3,8 @@
   --bg-primary: #0f172a;
   --bg-secondary: #1e293b;
   --bg-card: rgba(15, 23, 42, 0.45);
+  --bg-card-elevated: rgba(30, 41, 59, 0.7);
+  --bg-modal: rgba(30, 41, 59, 0.9);
   --bg-hover: rgba(51, 65, 85, 0.5);
   --bg-glass: rgba(15, 23, 42, 0.35);
   --bg-glass-light: rgba(15, 23, 42, 0.25);
@@ -83,6 +85,24 @@
 
 [v-cloak] {
   display: none;
+}
+
+/* skip-to-content 链接 */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 16px;
+  z-index: 9999;
+  padding: 8px 16px;
+  background: var(--accent);
+  color: var(--bg-primary);
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: 16px;
 }
 
 body {
@@ -185,6 +205,17 @@ body {
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
+}
+
+/* 通用 hover 上浮效果 */
+.hover-lift {
+  transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+}
+
+.hover-lift:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 /* 无障碍：减少动画 */

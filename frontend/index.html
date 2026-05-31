@@ -26,11 +26,12 @@
     <link rel="stylesheet" href="/static/styles/responsive.css" />
   </head>
   <body>
+    <a href="#main-content" class="skip-link">跳到主内容</a>
     <div id="app" style="display:none">
       <div data-include="/static/partials/wizard.html"></div>
       <div data-include="/static/partials/sidebar.html"></div>
 
-      <main class="main-content">
+      <main id="main-content" class="main-content">
         <div data-include="/static/partials/topbar.html"></div>
         <div class="content-wrapper">
           <div data-include="/static/partials/pages/dashboard.html"></div>

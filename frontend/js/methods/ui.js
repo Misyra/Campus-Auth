@@ -1,6 +1,37 @@
 import { TIMING, LIMITS } from '../constants.js';
 
 export const uiMethods = {
+  // 弹窗焦点陷阱：将焦点限制在指定容器内
+  _trapFocus(container) {
+    if (!container) return;
+    const focusable = container.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusable.length) focusable[0].focus();
+    this._focusTrapHandler = (e) => {
+      if (e.key === 'Escape') {
+        this._releaseFocusTrap();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', this._focusTrapHandler);
+  },
+  _releaseFocusTrap() {
+    if (this._focusTrapHandler) {
+      document.removeEventListener('keydown', this._focusTrapHandler);
+      this._focusTrapHandler = null;
+    }
+  },
   setFrontendLogLevel(level) {
     this.frontendLogger.setLevel(level);
   },
@@ -92,7 +123,7 @@ export const uiMethods = {
     this.config.custom_variables = newVars;
   },
   _isViewerAtBottom() {
-    const logViewer = document.querySelector('.log-viewer');
+    const logViewer = this.$refs?.logViewer;
     if (!logViewer || logViewer.scrollHeight === 0) return true;
     return logViewer.scrollTop + logViewer.clientHeight >= logViewer.scrollHeight - LIMITS.SCROLL_BOTTOM_THRESHOLD;
   },
@@ -103,13 +134,13 @@ export const uiMethods = {
     }
     this.$nextTick(() => {
       if (this.autoScroll) {
-        const logViewer = document.querySelector('.log-viewer');
+        const logViewer = this.$refs?.logViewer;
         if (logViewer) logViewer.scrollTop = logViewer.scrollHeight;
       }
     });
   },
   scrollToBottom() {
-    const logViewer = document.querySelector('.log-viewer');
+    const logViewer = this.$refs?.logViewer;
     if (logViewer) {
       logViewer.scrollTo({ top: logViewer.scrollHeight, behavior: 'smooth' });
       this.newLogCount = 0;

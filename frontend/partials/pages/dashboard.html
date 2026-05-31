@@ -139,7 +139,7 @@
           </div>
           <input v-model="logFilter.search" type="text" placeholder="搜索日志..." class="log-search" aria-label="搜索日志" />
         </div>
-        <div class="log-viewer" @scroll="onLogScroll">
+        <div ref="logViewer" class="log-viewer" @scroll="onLogScroll">
           <div v-if="!filteredLogs.length" class="empty-state">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>

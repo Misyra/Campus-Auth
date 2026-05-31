@@ -18,8 +18,8 @@ export const configMethods = {
       this.frontendLogger.info('config', '配置已加载');
     } catch (error) {
       this.frontendLogger.error('config', '获取配置失败', error);
-      if (!this._initErrorShown) {
-        this._initErrorShown = true;
+      if (this._initErrorCount < 2) {
+        this._initErrorCount++;
         this.notify(false, '加载配置失败');
       }
     }

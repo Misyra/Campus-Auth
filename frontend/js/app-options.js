@@ -132,11 +132,14 @@ export const appOptions = {
   watch: {
     config: {
       handler() {
-        if (!this.savedConfigSnapshot) {
-          this._configDirty = false;
-          return;
-        }
-        this._configDirty = JSON.stringify(this.config) !== this.savedConfigSnapshot;
+        if (this._configDirtyTimer) clearTimeout(this._configDirtyTimer);
+        this._configDirtyTimer = setTimeout(() => {
+          if (!this.savedConfigSnapshot) {
+            this._configDirty = false;
+            return;
+          }
+          this._configDirty = JSON.stringify(this.config) !== this.savedConfigSnapshot;
+        }, 150);
       },
       deep: true,
     },
@@ -164,7 +167,7 @@ export const appOptions = {
       }
       if (newPage === 'dashboard' && this.autoScroll) {
         this.$nextTick(() => {
-          const logViewer = document.querySelector('.log-viewer');
+          const logViewer = this.$refs?.logViewer;
           if (logViewer) logViewer.scrollTop = logViewer.scrollHeight;
         });
       }

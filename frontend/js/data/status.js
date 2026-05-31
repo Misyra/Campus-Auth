@@ -1,6 +1,8 @@
 // 状态相关数据
 export function statusData() {
   return {
+    _initErrorCount: 0, // 初始化错误计数（避免多模块竞态）
+    _statusPolling: false, // 状态轮询锁
     status: {
       monitoring: false,
       network_check_count: 0,

@@ -23,11 +23,7 @@
   cursor: default;
 }
 
-.task-item:hover {
-  border-color: var(--border-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
+/* .task-item:hover 由 hover-lift 类处理 */
 
 .task-item.active {
   border-color: var(--accent);
@@ -176,7 +172,7 @@
 }
 
 .danger-modal {
-  background: rgba(30, 41, 59, 0.9);
+  background: var(--bg-modal);
   border: 1px solid rgba(239, 68, 68, 0.3);
   border-radius: var(--radius-3xl);
   width: min(640px, calc(100vw - 48px));
@@ -311,7 +307,7 @@
 }
 
 .debug-panel {
-  background: rgba(30, 41, 59, 0.95);
+  background: var(--bg-modal);
   border: 1px solid rgba(34, 211, 238, 0.2);
   border-radius: var(--radius-3xl);
   width: min(900px, calc(100vw - 48px));
@@ -493,7 +489,7 @@
 }
 
 .repo-modal {
-  background: rgba(30, 41, 59, 0.95);
+  background: var(--bg-modal);
   border: 1px solid var(--border);
   border-radius: var(--radius-3xl);
   width: min(600px, calc(100vw - 48px));
@@ -617,7 +613,7 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--bg-card, #1e293b);
+  background: var(--bg-modal);
   margin-bottom: 12px;
 }
 
@@ -777,7 +773,7 @@
 /* ==================== 免责声明弹窗 ==================== */
 
 .repo-disclaimer-modal {
-  background: rgba(30, 41, 59, 0.95);
+  background: var(--bg-modal);
   border: 1px solid rgba(245, 158, 11, 0.3);
   border-radius: var(--radius-3xl);
   width: min(520px, calc(100vw - 48px));
