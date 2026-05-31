@@ -287,6 +287,7 @@
   z-index: var(--z-sticky);
   display: flex;
   justify-content: flex-end;
+  gap: 12px;
   margin-top: 24px;
 }
 
@@ -325,6 +326,22 @@
 .settings-panel .card-body h4 {
   font-size: 16px;
   margin-bottom: 10px;
+}
+
+/* 系统策略内部分组标题 */
+.settings-section-heading {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 12px;
+}
+
+.settings-section-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+  margin: 20px 0;
 }
 
 /* 自定义变量样式 */

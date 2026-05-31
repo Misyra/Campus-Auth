@@ -82,6 +82,14 @@
   .form-row {
     grid-template-columns: 1fr;
   }
+
+  .debug-body {
+    grid-template-columns: 1fr;
+  }
+
+  .debug-screenshot-container {
+    min-height: 200px;
+  }
 }
 
 @media (max-width: 720px) {
