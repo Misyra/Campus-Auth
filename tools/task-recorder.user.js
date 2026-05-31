@@ -417,6 +417,11 @@
     #ca-recorder-panel .ca-help-h5 { color: var(--ca-primary); margin: 14px 0 6px; }
     #ca-recorder-panel .ca-help-list { margin: 4px 0; padding-left: 18px; }
     #ca-recorder-panel .ca-help-list-sm { margin: 0 0 8px; padding-left: 18px; font-size: 12px; }
+    #ca-recorder-panel .ca-help-tip {
+      background: rgba(102,126,234,0.08); border-left: 3px solid var(--ca-primary);
+      padding: 8px 12px; margin: 8px 0; border-radius: 0 6px 6px 0;
+      font-size: 12px; line-height: 1.6;
+    }
     #ca-recorder-panel .ca-help-table { width: 100%; font-size: 12px; border-collapse: collapse; margin: 4px 0; }
     #ca-recorder-panel .ca-help-table th,
     #ca-recorder-panel .ca-help-table td { padding: 3px 6px; }
@@ -2503,38 +2508,62 @@
 
         <div class="ca-help-body">
 
-          <h5 class="ca-help-h5">快速开始</h5>
+          <div class="ca-help-tip">
+            <b>推荐：使用「🔍 智能检测」模式</b><br>
+            点击「智能检测」后，直接在页面的账号、密码输入框中<b>随意输入内容</b>，录制器自动识别并记录。
+            点击按钮、复选框、下拉框也会自动归类。按 <b class="ca-help-key">Esc</b> 结束。
+          </div>
+
+          <h5 class="ca-help-h5">录制流程</h5>
           <ol class="ca-help-list">
-            <li>选择步骤类型（如「账号输入框」），点击页面元素录制</li>
+            <li>选择步骤类型，点击页面目标元素录制（或使用「智能检测」自动识别）</li>
             <li>依次录完账号、密码、运营商、提交等步骤</li>
             <li>点击 <b class="ca-help-key">📋 复制 AI 提示词</b>，发送给 AI 生成任务 JSON</li>
           </ol>
 
-          <h5 class="ca-help-h5">快捷键</h5>
+          <h5 class="ca-help-h5">步骤类型</h5>
           <table class="ca-help-table">
-            <tr class="ca-help-table-header"><th>按键</th><th>功能</th></tr>
-            <tr><td><b class="ca-help-key">Ctrl+Shift+E</b></td><td>打开/关闭面板</td></tr>
-            <tr><td><b class="ca-help-key">Esc</b></td><td>取消录制，清除选中状态</td></tr>
-            <tr><td><b class="ca-help-key">Enter</b></td><td>仅记录元素，不发送 click（下拉菜单保持打开）</td></tr>
+            <tr class="ca-help-table-header"><th>类型</th><th>操作方式</th><th>说明</th></tr>
+            <tr><td>👤 账号</td><td>点击输入框</td><td>导出为 <code>input</code> + {{USERNAME}}</td></tr>
+            <tr><td>🔒 密码</td><td>点击输入框</td><td>导出为 <code>input</code> + {{PASSWORD}}</td></tr>
+            <tr><td> 运营商</td><td>点击下拉框/按钮</td><td>原生 select 一步完成；自定义下拉需再点选项；按钮组自动检测</td></tr>
+            <tr><td>🖼️ 验证码</td><td>先点图片再点输入框</td><td>合并为 <code>ocr</code> 步骤</td></tr>
+            <tr><td>🚀 提交</td><td>点击按钮</td><td>导出为 <code>click</code> 步骤</td></tr>
+            <tr><td>☑️ 勾选</td><td>点击复选框</td><td>录制勾选/取消操作</td></tr>
+            <tr><td>🔍 智能检测</td><td>打字或点击</td><td>自动识别账号/密码/勾选/提交/下拉框，最省力</td></tr>
+            <tr><td>👆 点击</td><td>点击任意元素</td><td>仅记录 click，不填值</td></tr>
+            <tr><td>⏳ 等待</td><td>悬停后按 Enter</td><td>等待目标元素出现</td></tr>
+            <tr><td>⚙️ 执行JS</td><td>弹窗输入代码</td><td>在页面上下文中执行自定义脚本</td></tr>
           </table>
 
           <h5 class="ca-help-h5">功能开关</h5>
           <ul class="ca-help-list">
-            <li><b class="ca-help-key">🔁 多步录制</b> — 连续记录多个步骤，手动 Esc 停止</li>
-            <li><b class="ca-help-key">🔍 隐藏检测</b> — 自动扫描容器内 <code>display:none</code> 的隐藏输入框（深澜/HK Posi 等）</li>
-            <li><b class="ca-help-key">👁️ 显示隐藏</b> — 强制显示所有隐藏输入框，直接点选</li>
+            <li><b class="ca-help-key">🔁 多步录制</b> — 连续记录多个步骤不中断，适合批量录制</li>
+            <li><b class="ca-help-key">🔍 隐藏检测</b> — 自动扫描容器内 <code>display:none</code> 的隐藏输入框（深澜/HK Posi 等认证页面常见）。点击占位区域即可，录制器自动定位真实输入框</li>
+            <li><b class="ca-help-key">👁️ 显示隐藏</b> — 强制显示页面上所有隐藏输入框，绿色虚线高亮，可直接点选</li>
           </ul>
 
+          <h5 class="ca-help-h5">快捷键</h5>
+          <table class="ca-help-table">
+            <tr class="ca-help-table-header"><th>按键</th><th>功能</th></tr>
+            <tr><td><b class="ca-help-key">Ctrl+Shift+E</b></td><td>打开/关闭录制器面板</td></tr>
+            <tr><td><b class="ca-help-key">Esc</b></td><td>取消当前录制 / 退出智能检测模式</td></tr>
+            <tr><td><b class="ca-help-key">Enter</b></td><td>仅记录元素，不发送 click（悬停下拉菜单不会关闭）</td></tr>
+          </table>
+
           <h5 class="ca-help-h5">典型场景</h5>
-          <p style="margin:4px 0;font-size:12px;"><b class="ca-help-key">普通登录：</b>依次点「账号」→「密码」→「提交」→「复制 AI 提示词」</p>
-          <p style="margin:4px 0;font-size:12px;"><b class="ca-help-key">运营商选择：</b>点「运营商」→ 点目标元素。原生 select 一步完成；按钮组自动检测选项；自定义下拉框需再点一个选项</p>
-          <p style="margin:4px 0;font-size:12px;"><b class="ca-help-key">隐藏输入框：</b>开启「隐藏检测」，点占位区域（div/readonly），录制器自动识别真实输入框并标记 ⚠️</p>
+          <p style="margin:4px 0;font-size:12px;"><b class="ca-help-key">普通登录：</b>用「智能检测」在账号框输入任意内容 → Tab 到密码框输入 → 点击登录按钮 → 按 Esc → 复制 AI 提示词</p>
+          <p style="margin:4px 0;font-size:12px;"><b class="ca-help-key">运营商选择：</b>点「运营商」→ 点下拉框/按钮组。原生 select 自动完成；自定义下拉框需再点一个选项作为示例</p>
+          <p style="margin:4px 0;font-size:12px;"><b class="ca-help-key">隐藏输入框（深澜/HK Posi）：</b>开启「隐藏检测」，点页面上的占位区域（div 或 readonly 框），录制器自动识别隐藏的真实输入框并标记 ⚠️</p>
+          <p style="margin:4px 0;font-size:12px;"><b class="ca-help-key">多步骤复杂页面：</b>开启「多步录制」+「智能检测」，依次操作页面上所有表单元素，最后按 Esc 统一结束</p>
 
           <h5 class="ca-help-h5">注意事项</h5>
           <ul class="ca-help-list-sm">
-            <li>录制状态自动保存，刷新页面可恢复（2 小时内有效）</li>
-            <li>下拉菜单选项建议用 <b class="ca-help-key">Enter</b> 键选取（点击会关闭菜单）</li>
+            <li>录制状态自动保存到油猴存储，刷新页面可恢复（2 小时内有效）</li>
+            <li>面板可拖拽（按住顶部蓝色标题栏移动）</li>
             <li>列表中点击步骤可编辑类型和备注，点 ✕ 删除</li>
+            <li>下拉菜单内的选项建议用 <b class="ca-help-key">Enter</b> 键选取（点击会关闭菜单导致选项消失）</li>
+            <li>如果元素在 iframe 内部，录制器会自动检测并记录 iframe 信息</li>
             <li>选择器优先级：<code>#id</code> &gt; <code>[name]</code> &gt; <code>[type]</code> &gt; <code>[placeholder]</code> &gt; 文本 &gt; XPath</li>
           </ul>
 
