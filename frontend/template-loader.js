@@ -11,7 +11,10 @@
       el.innerHTML = await res.text();
       el.removeAttribute('data-include');
     } catch (err) {
-      el.innerHTML = '<div class="include-error">模板加载失败: ' + src + '</div>';
+      const errDiv = document.createElement('div');
+      errDiv.className = 'include-error';
+      errDiv.textContent = '模板加载失败: ' + src;
+      el.replaceChildren(errDiv);
       el.removeAttribute('data-include');
       console.error('[template-loader] failed:', src, err);
     }

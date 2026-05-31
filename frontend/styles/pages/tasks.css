@@ -18,8 +18,8 @@
   padding: 16px;
   background: var(--bg-glass);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  transition: all 0.25s ease;
+  border-radius: var(--radius-md);
+  transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
   cursor: default;
 }
 
@@ -39,8 +39,8 @@
   cursor: grab;
   color: var(--text-muted);
   padding: 4px;
-  border-radius: 4px;
-  transition: all 0.2s;
+  border-radius: var(--radius-xs);
+  transition: color 0.2s ease, background 0.2s ease;
   flex-shrink: 0;
   user-select: none;
   -webkit-user-select: none;
@@ -101,7 +101,7 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   color: var(--text-primary);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   resize: vertical;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
@@ -147,7 +147,7 @@
   background: var(--bg-primary);
   padding: 2px 6px;
   border-radius: 4px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 
@@ -155,7 +155,7 @@
   background: var(--bg-glass);
   padding: 12px;
   border-radius: var(--radius-md);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   overflow-x: auto;
   margin-top: 8px;
@@ -167,11 +167,11 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(6px);
+  backdrop-filter: var(--blur-sm);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 200;
+  z-index: var(--z-modal);
   animation: fadeIn 0.2s ease;
 }
 
@@ -185,7 +185,7 @@
   flex-direction: column;
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
   animation: slideIn 0.25s ease;
-  backdrop-filter: blur(16px);
+  backdrop-filter: var(--blur-lg);
 }
 
 .danger-modal-header {
@@ -241,7 +241,7 @@
   border-radius: 6px;
   font-size: 11px;
   font-weight: 600;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   background: rgba(245, 158, 11, 0.15);
   color: var(--warning);
 }
@@ -255,7 +255,7 @@
   margin: 0;
   padding: 12px 14px;
   background: var(--bg-glass-light);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.6;
   color: var(--text-primary);
@@ -273,13 +273,13 @@
   border-top: 1px solid var(--border);
 }
 
-.danger-confirm-btn {
-  background: linear-gradient(135deg, var(--error), #dc2626) !important;
+.btn.danger-confirm-btn {
+  background: linear-gradient(135deg, var(--error), #dc2626);
   box-shadow: 0 0 16px rgba(239, 68, 68, 0.25);
 }
 
-.danger-confirm-btn:disabled {
-  background: var(--bg-primary) !important;
+.btn.danger-confirm-btn:disabled {
+  background: var(--bg-primary);
   color: var(--text-muted);
   cursor: not-allowed;
   opacity: 0.7;
@@ -306,7 +306,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 150;
+  z-index: var(--z-overlay);
   animation: debugFadeIn 0.2s ease;
 }
 
@@ -319,7 +319,7 @@
   display: flex;
   flex-direction: column;
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(16px);
+  backdrop-filter: var(--blur-lg);
 }
 
 .debug-header {
@@ -340,7 +340,7 @@
 }
 
 .debug-step-counter {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   color: var(--accent);
   background: rgba(34, 211, 238, 0.1);
@@ -395,7 +395,7 @@
   padding: 8px 10px;
   border-radius: var(--radius-md);
   border: 1px solid transparent;
-  transition: all 0.2s;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
 }
 
 .debug-step-item.success {
@@ -441,7 +441,7 @@
   border-radius: 4px;
   font-size: 10px;
   font-weight: 600;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   background: rgba(148, 163, 184, 0.15);
   color: var(--text-secondary);
   flex-shrink: 0;
@@ -484,11 +484,11 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(6px);
+  backdrop-filter: var(--blur-sm);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 200;
+  z-index: var(--z-modal);
   animation: fadeIn 0.2s ease;
 }
 
@@ -501,7 +501,7 @@
   display: flex;
   flex-direction: column;
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(16px);
+  backdrop-filter: var(--blur-lg);
   animation: slideIn 0.25s ease;
 }
 
@@ -561,7 +561,7 @@
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
   white-space: nowrap;
 }
 
@@ -592,7 +592,7 @@
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: 13px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   transition: border-color 0.2s;
   resize: vertical;
   min-height: 60px;
@@ -706,7 +706,7 @@
   background: rgba(34, 211, 238, 0.08);
   border: 1px solid rgba(34, 211, 238, 0.25);
   border-radius: var(--radius-md);
-  transition: all 0.2s;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
   margin-top: 4px;
 }
 
@@ -724,7 +724,7 @@
   background: var(--bg-glass-light);
   border: 1px solid var(--border);
   border-radius: 10px;
-  transition: all 0.2s;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
 }
 
 .repo-task-item:hover {
@@ -785,7 +785,7 @@
   display: flex;
   flex-direction: column;
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(16px);
+  backdrop-filter: var(--blur-lg);
   animation: slideIn 0.25s ease;
 }
 
@@ -857,13 +857,13 @@
   border-top: 1px solid var(--border);
 }
 
-.repo-disclaimer-accept {
-  background: linear-gradient(135deg, var(--warning), #d97706) !important;
+.btn.repo-disclaimer-accept {
+  background: linear-gradient(135deg, var(--warning), #d97706);
   box-shadow: 0 0 16px rgba(245, 158, 11, 0.2);
 }
 
-.repo-disclaimer-accept:disabled {
-  background: var(--bg-primary) !important;
+.btn.repo-disclaimer-accept:disabled {
+  background: var(--bg-primary);
   color: var(--text-muted);
   cursor: not-allowed;
   opacity: 0.7;

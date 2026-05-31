@@ -14,12 +14,12 @@
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   width: 100%;
-  gap: 8px;
+  gap: var(--space-sm);
   padding: 6px;
   border: 1px solid var(--border-accent);
   background: rgba(30, 41, 59, 0.6);
-  backdrop-filter: blur(12px);
-  border-radius: 14px;
+  backdrop-filter: var(--blur-md);
+  border-radius: var(--radius-lg);
 }
 
 .settings-tab {
@@ -35,7 +35,7 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 .settings-tab span {
@@ -63,7 +63,8 @@
 .settings-form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-md);
+  padding-bottom: var(--space-md);
 }
 
 .settings-panel-grid {
@@ -277,60 +278,13 @@
   margin-left: 2px;
 }
 
-.field-help {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 15px;
-  height: 15px;
-  border-radius: 999px;
-  border: 1px solid rgba(34, 211, 238, 0.45);
-  background: rgba(34, 211, 238, 0.14);
-  color: var(--accent);
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1;
-  cursor: help;
-  isolation: isolate;
-}
-
-.field-help::after {
-  content: attr(data-tip);
-  position: absolute;
-  left: calc(100% + 12px);
-  top: 50%;
-  transform: translateY(-50%) translateX(4px);
-  width: max-content;
-  max-width: min(380px, calc(100vw - 80px));
-  padding: 14px 16px;
-  border-radius: 12px;
-  border: 1px solid var(--border-accent-strong);
-  background: rgba(8, 15, 30, 0.95);
-  color: #e6f1ff;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.7;
-  white-space: normal;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  z-index: 200;
-  backdrop-filter: blur(12px);
-}
-
-.field-help:hover::after,
-.field-help:focus-visible::after {
-  opacity: 1;
-  transform: translateY(-50%) translateX(0);
-}
+/* .field-help 已统一定义在 components.css 中 */
 
 /* ---- 悬浮保存按钮 ---- */
 .settings-float-save {
   position: sticky;
   bottom: 20px;
-  z-index: 50;
+  z-index: var(--z-sticky);
   display: flex;
   justify-content: flex-end;
   margin-top: 24px;
@@ -339,7 +293,7 @@
 .settings-float-save .btn {
   min-width: 150px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-  transition: all 0.25s ease;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 
 .settings-float-save .btn:hover {
@@ -360,10 +314,7 @@
   50% { box-shadow: 0 4px 28px rgba(245, 158, 11, 0.45); }
 }
 
-/* 底部留白 */
-.settings-form {
-  padding-bottom: 16px;
-}
+/* 底部留白已合并到上方 .settings-form */
 
 .settings-panel .card-body p {
   margin: 0;
@@ -436,7 +387,7 @@
   background: rgba(8, 15, 30, 0.65);
   border: 1px solid var(--border-accent-hover);
   border-radius: 6px;
-  color: #e2e8f0;
+  color: var(--text-primary);
   font-size: 13px;
   box-sizing: border-box;
 }
@@ -445,7 +396,7 @@
   width: 24px;
   flex-shrink: 0;
   text-align: center;
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-weight: 500;
   user-select: none;
   font-size: 14px;
@@ -463,7 +414,7 @@
   background: rgba(8, 15, 30, 0.65);
   border: 1px solid var(--border-accent-hover);
   border-radius: 6px;
-  color: #e2e8f0;
+  color: var(--text-primary);
   font-size: 13px;
   box-sizing: border-box;
 }
@@ -487,7 +438,7 @@
 
 .settings-panel .form-help-text {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--text-secondary);
   margin-bottom: 12px;
 }
 
@@ -496,7 +447,7 @@
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 11px;
-  color: #22d3ee;
+  color: var(--accent);
 }
 
 .browser-safe-info {
@@ -573,7 +524,7 @@
 }
 
 .backup-col-name {
-  font-family: var(--font-mono, 'Cascadia Code', 'Consolas', monospace);
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-primary);
   overflow: hidden;
@@ -738,7 +689,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
   backdrop-filter: blur(4px);
 }
 
@@ -758,7 +709,7 @@
   color: var(--text-muted);
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
 }
 
 .appearance-bg-preview-empty:hover {
@@ -790,7 +741,7 @@
   font-size: 12px;
   color: var(--text-secondary);
   text-align: right;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 /* 三列设置网格 */
@@ -817,7 +768,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease, transform 0.2s ease;
   flex-shrink: 0;
 }
 
@@ -849,7 +800,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease, transform 0.2s ease;
   flex-shrink: 0;
 }
 
@@ -872,7 +823,7 @@
 .appearance-custom-hex {
   font-size: 13px;
   color: var(--text-secondary);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 /* 字体预览 */
@@ -954,8 +905,8 @@ body.has-custom-bg::before {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 200;
-  backdrop-filter: blur(4px);
+  z-index: var(--z-modal);
+  backdrop-filter: var(--blur-sm);
 }
 
 .random-wallpaper-modal {
@@ -1036,11 +987,11 @@ body.has-custom-bg::before {
 }
 
 [data-theme="light"] .sidebar .nav-item {
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 [data-theme="light"] .sidebar .nav-item:hover {
-  color: #1e293b;
+  color: var(--text-primary);
   background: rgba(148, 163, 184, 0.12);
 }
 
@@ -1055,7 +1006,7 @@ body.has-custom-bg::before {
 }
 
 [data-theme="light"] .sidebar-footer .status-text {
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 [data-theme="light"] .logo-text {
@@ -1104,7 +1055,7 @@ body.has-custom-bg::before {
 [data-theme="light"] .script-editor,
 [data-theme="light"] textarea.script-editor {
   background: rgba(255, 255, 255, 0.85);
-  color: #1e293b;
+  color: var(--text-primary);
   border-color: rgba(148, 163, 184, 0.22);
 }
 
@@ -1174,7 +1125,7 @@ body.has-custom-bg::before {
 [data-theme="light"] textarea {
   background: rgba(255, 255, 255, 0.8);
   border-color: rgba(148, 163, 184, 0.25);
-  color: #1e293b;
+  color: var(--text-primary);
 }
 
 [data-theme="light"] input:focus,

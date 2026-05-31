@@ -35,7 +35,7 @@
 
 .version {
   color: var(--accent);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 14px;
   margin-bottom: 8px;
 }
@@ -242,7 +242,7 @@
   color: var(--text-primary);
   text-decoration: none;
   font-weight: 500;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
   min-height: 40px;
 }
 
@@ -269,7 +269,7 @@
 
 .qq-group strong {
   color: var(--accent);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 /* 卸载区域 */
@@ -317,8 +317,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 200;
-  backdrop-filter: blur(4px);
+  z-index: var(--z-modal);
+  backdrop-filter: var(--blur-sm);
 }
 
 .uninstall-modal {
@@ -361,18 +361,7 @@
   font-size: 14px;
 }
 
-.spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
+/* .spinner 和 @keyframes spin 已统一定义在 base.css 中 */
 
 .uninstall-modal-body {
   padding: 16px 20px;
@@ -432,7 +421,7 @@
 .uninstall-item-path {
   font-size: 12px;
   color: var(--text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -50,7 +50,7 @@
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
   min-height: 40px;
   white-space: nowrap;
   text-decoration: none;
@@ -120,10 +120,9 @@
   height: 18px;
 }
 
-.btn-active {
-  background: rgba(34, 211, 238, 0.15) !important;
-  color: var(--accent) !important;
-  border-radius: var(--radius-md);
+.btn.btn-active {
+  background: rgba(34, 211, 238, 0.15);
+  color: var(--accent);
 }
 
 .btn-danger {
@@ -161,7 +160,7 @@
   font-weight: 500;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, color 0.2s ease;
   width: 100%;
   text-align: left;
 }
@@ -198,7 +197,7 @@
   color: var(--error);
   border: 1px solid rgba(239, 68, 68, 0.2);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
   min-height: 40px;
 }
 
@@ -313,7 +312,7 @@
 .form-group textarea {
   min-height: 140px;
   resize: vertical;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   line-height: 1.5;
 }
 
@@ -368,7 +367,7 @@
   border-radius: 50%;
   top: 2px;
   left: 2px;
-  transition: all 0.2s ease;
+  transition: transform 0.2s ease, background 0.2s ease;
 }
 
 .toggle input:checked + .toggle-slider {
@@ -455,10 +454,10 @@
   border-radius: 12px;
   background: rgba(30, 41, 59, 0.9);
   border: 1px solid var(--border);
-  backdrop-filter: blur(16px) saturate(1.2);
+  backdrop-filter: var(--blur-lg) saturate(1.2);
   box-shadow: var(--shadow-lg);
   animation: slideIn 0.3s ease;
-  z-index: 1000;
+  z-index: var(--z-toast);
   transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
@@ -487,11 +486,61 @@
   color: var(--error);
 }
 
+/* ========== Field Help Tooltip ========== */
+.field-help {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  border: 1px solid rgba(34, 211, 238, 0.45);
+  background: rgba(34, 211, 238, 0.14);
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+  isolation: isolate;
+}
+
+.field-help::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%) translateX(4px);
+  width: max-content;
+  max-width: min(380px, calc(100vw - 80px));
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-accent-strong);
+  background: rgba(8, 15, 30, 0.95);
+  color: #e6f1ff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.7;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: var(--z-modal);
+  backdrop-filter: var(--blur-md);
+}
+
+.field-help:hover::after,
+.field-help:focus-visible::after {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+
 /* ========== Fullscreen Image Overlay ========== */
 .fullscreen-overlay {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: var(--z-top);
   background: rgba(0, 0, 0, 0.85);
   display: flex;
   align-items: center;

@@ -152,8 +152,9 @@ export const appOptions = {
       deep: true,
     },
     currentPage(newPage) {
-      if (this.dangerConfirm) {
-        this.dangerConfirm.resolve(false);
+      if (this._dangerResolve) {
+        this._dangerResolve(false);
+        this._dangerResolve = null;
         this.dangerConfirm = null;
         this.dangerCountdown = 0;
         if (this._dangerTimer) {

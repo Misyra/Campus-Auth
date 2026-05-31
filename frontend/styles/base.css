@@ -37,15 +37,37 @@
   --shadow-accent: 0 0 10px rgba(34, 211, 238, 0.2);
 
   /* 圆角 */
+  --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 16px;
 
+  /* 间距 */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
   /* 毛玻璃效果 */
   --blur-sm: blur(4px);
-  --blur-md: blur(10px);
-  --blur-lg: blur(20px);
+  --blur-md: blur(8px);
+  --blur-lg: blur(12px);
+  --card-blur: var(--blur-md);
+
+  /* 字体 */
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  /* z-index 层级 */
+  --z-base: 1;
+  --z-dropdown: 10;
+  --z-sticky: 50;
+  --z-sidebar: 100;
+  --z-overlay: 150;
+  --z-modal: 200;
+  --z-toast: 300;
+  --z-top: 400;
 
   /* 字体大小（可通过外观设置动态修改） */
   --font-size-base: 14px;
@@ -62,7 +84,7 @@
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: var(--font-size-base);
   background:
     radial-gradient(ellipse 80% 60% at var(--gradient-1-x, 10%) var(--gradient-1-y, 20%), var(--gradient-1-color, rgba(34, 211, 238, 0.06)) 0%, transparent 60%),
@@ -190,7 +212,7 @@ body {
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: 12px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .log-toolbar .log-search:focus {
@@ -207,7 +229,7 @@ body {
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: border-color 0.15s ease, color 0.15s ease;
 }
 
 .log-filter-chip:hover {
@@ -238,7 +260,7 @@ body {
   cursor: pointer;
   box-shadow: var(--shadow);
   animation: fadeIn 0.2s ease;
-  z-index: 10;
+  z-index: var(--z-dropdown);
 }
 
 .new-logs-btn:hover {
@@ -255,8 +277,8 @@ body {
   border-radius: var(--radius-lg);
   margin-bottom: 16px;
   border: 1px solid;
-  backdrop-filter: blur(10px);
-  transition: all 0.3s ease;
+  backdrop-filter: var(--blur-md);
+  transition: border-color 0.3s ease, background 0.3s ease, color 0.3s ease;
 }
 
 .network-status-banner .status-dot {
@@ -353,17 +375,17 @@ body {
   border-radius: var(--radius-sm);
   color: var(--error);
   font-size: 12px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   word-break: break-all;
-  backdrop-filter: blur(4px);
+  backdrop-filter: var(--blur-sm);
 }
 
 textarea.json-invalid {
-  border-color: var(--error) !important;
+  border-color: var(--error);
 }
 
 textarea.json-valid {
-  border-color: var(--success) !important;
+  border-color: var(--success);
 }
 
 /* 通用毛玻璃卡片 */
@@ -371,7 +393,7 @@ textarea.json-valid {
   background: var(--bg-glass);
   border: 1px solid var(--border-accent);
   border-radius: var(--radius-lg);
-  backdrop-filter: var(--blur-md);
+  backdrop-filter: var(--card-blur);
   box-shadow: var(--shadow);
 }
 
