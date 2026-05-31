@@ -89,4 +89,12 @@ export const actionMethods = {
       this.busy.action = false;
     }
   },
+  async fetchLoginHistory() {
+    try {
+      const { data } = await this.$api.get('/api/login-history', { params: { limit: 30 } });
+      this.loginHistory = data;
+    } catch (error) {
+      this.frontendLogger.error('history', '获取登录历史失败', error);
+    }
+  },
 };

@@ -10,6 +10,7 @@ from src.playwright_worker import cleanup_orphan_browsers
 
 from .autostart_service import AutoStartService
 from .debug_manager import DebugSessionManager
+from .login_history_service import LoginHistoryService
 from .monitor_service import MonitorService
 from .profile_service import ProfileService
 from .task_service import TaskService
@@ -37,8 +38,11 @@ class ServiceContainer:
         # 初始化服务
         self.ws_manager = WebSocketManager()
         self.profile_service = ProfileService(project_root)
+        from .constants import AUTH_DATA_DIR
+        self.login_history_service = LoginHistoryService(AUTH_DATA_DIR)
         self.monitor_service = MonitorService(
-            project_root, self.profile_service, self.ws_manager
+            project_root, self.profile_service, self.ws_manager,
+            login_history_service=self.login_history_service,
         )
         self.task_service = TaskService(project_root)
         self.autostart_service = AutoStartService(project_root)

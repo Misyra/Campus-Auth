@@ -17,6 +17,7 @@ export const lifecycleMethods = {
       this.fetchProfiles(),
       this.fetchPureMode(),
       this.fetchBackups(),
+      this.fetchLoginHistory(),
     ]);
     this.isLoading = false;
     this.connectWebSocket();

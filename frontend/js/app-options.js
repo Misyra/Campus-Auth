@@ -13,6 +13,7 @@ import { shortcutMethods } from './methods/shortcuts.js';
 import { statusMethods } from './methods/status.js';
 import { taskMethods } from './tasks/index.js';
 import { uiMethods } from './methods/ui.js';
+import { logFileMethods } from './methods/logfiles.js';
 
 // 按功能域拆分的数据模块
 import { dashboardData } from './data/dashboard.js';
@@ -28,6 +29,7 @@ import { websocketData } from './data/websocket.js';
 import { timerData } from './data/timers.js';
 import { statusData } from './data/status.js';
 import { appearanceData } from './data/appearance.js';
+import { logFileData } from './data/logfiles.js';
 
 export const appOptions = {
   data() {
@@ -46,6 +48,7 @@ export const appOptions = {
       ...timerData(),
       ...statusData(),
       ...appearanceData(),
+      ...logFileData(),
 
       // 全局共享状态
       settingsTabs: SETTINGS_TABS,
@@ -69,6 +72,7 @@ export const appOptions = {
         profiles: '配置方案',
         'profile-edit': this.editingProfile?.id ? '编辑方案' : '新建方案',
         appearance: '外观设置',
+        logs: '日志查看器',
         about: '关于',
       };
       return titles[this.currentPage] || '仪表盘';
@@ -128,6 +132,10 @@ export const appOptions = {
     uninstallCheckedCount() {
       return this.uninstall.items.filter(it => it.exists && it.checked).length;
     },
+    currentLogFiles() {
+      const group = this.logFileGroups.find(g => g.date === this.logViewer.date);
+      return group?.files || [];
+    },
   },
   watch: {
     config: {
@@ -171,6 +179,9 @@ export const appOptions = {
           if (logViewer) logViewer.scrollTop = logViewer.scrollHeight;
         });
       }
+      if (newPage === 'logs' && !this.logFileGroups.length) {
+        this.fetchLogFileGroups();
+      }
     },
   },
   mounted() {
@@ -209,5 +220,6 @@ export const appOptions = {
     ...appearanceMethods,
     ...shortcutMethods,
     ...dragMethods,
+    ...logFileMethods,
   },
 };

@@ -73,10 +73,12 @@ class MonitorService:
         project_root: Path,
         profile_service: ProfileService | None = None,
         ws_manager: WebSocketManager | None = None,
+        login_history_service=None,
     ):
         self.project_root = project_root
         self._profile_service = profile_service or ProfileService(project_root)
         self._ws_manager = ws_manager
+        self._login_history = login_history_service
 
         # State (previously guarded by RLock)
         self._logs: deque[LogEntry] = deque(maxlen=1200)
@@ -216,6 +218,9 @@ class MonitorService:
 
         # 通过 Worker 派发登录，替代临时 NetworkMonitorCore 实例
         login_timeout = getattr(self._ui_config, "login_timeout", 120)
+        start_time = time.perf_counter()
+        success = False
+        error_msg = ""
         try:
             result = get_worker().submit(
                 CMD_LOGIN,
@@ -228,16 +233,35 @@ class MonitorService:
             )
             if result.success:
                 cmd.response_data = (True, result.data)
+                success = True
             else:
-                cmd.response_data = (False, result.error or "登录失败")
+                error_msg = result.error or "登录失败"
+                cmd.response_data = (False, error_msg)
         except Exception as exc:
             service_logger.exception(
                 "手动登录异常 (username=%s, url=%s)",
                 config.get("username", "?"), config.get("auth_url", "?"),
             )
-            cmd.response_data = (False, str(exc))
+            error_msg = str(exc)
+            cmd.response_data = (False, error_msg)
         finally:
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
             self._login_in_progress = False
+            # 记录登录历史
+            if self._login_history is not None:
+                try:
+                    profile_name = ""
+                    active = self._profile_service.get_active_profile()
+                    if active:
+                        profile_name = getattr(active, "name", "")
+                    self._login_history.add(
+                        success=success,
+                        duration_ms=duration_ms,
+                        profile_name=profile_name,
+                        error=error_msg,
+                    )
+                except Exception:
+                    pass
 
         if cmd.response_event:
             cmd.response_event.set()
