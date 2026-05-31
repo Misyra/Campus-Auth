@@ -282,15 +282,6 @@
     #ca-recorder-panel .ca-shortcut-bar {
       font-size: 11px; color: #666; margin-bottom: 4px;
     }
-    #ca-recorder-panel .ca-shortcut-link {
-      cursor: pointer; color: var(--ca-primary); margin-left: 6px; text-decoration: underline;
-    }
-    /* ====== 帮助详情 ====== */
-    #ca-recorder-panel .ca-help-detail {
-      display: none; font-size: 11px; color: var(--ca-text-muted);
-      background: #1f1f30; border-radius: 6px; padding: 8px 10px;
-      margin-bottom: 8px; line-height: 1.6;
-    }
     /* ====== 通用表单控件（模态框 & 编辑弹窗共用） ====== */
     #ca-recorder-panel .ca-modal-overlay {
       position: fixed; inset: 0; background: rgba(0,0,0,0.6);
@@ -1024,22 +1015,7 @@
             <span class="ca-toggle active" id="ca-toggle-detect" title="开启后自动检测容器内 display:none 的隐藏输入框">🔍 隐藏检测</span>
             <span class="ca-toggle" id="ca-toggle-reveal" title="强制显示页面上所有 display:none 的输入框，让你能直接看到并点选">👁️ 显示隐藏</span>
           </div>
-          <div class="ca-shortcut-bar">💡 <b>Esc</b> 取消  |  <b>Enter</b> 无 click 记录元素
-            <span id="ca-help-toggle" class="ca-shortcut-link">详细说明 ▾</span>
-          </div>
-          <div id="ca-help-detail" class="ca-help-detail">
-            <b>🖱️ 点击</b> — 记录元素并重放 click 给页面（下拉框会展开/按钮会触发）<br>
-            <b>⏎ Enter</b> — 仅记录元素，<b>不</b>发送 click 给页面（悬停菜单、下拉选项不会关闭）<br>
-            <b>Esc</b> — 取消当前录制<br>
-            <b>🔁 多步录制</b> — 开启后每次点击/Enter 记录一步，不会自动停止，需手动 Esc<br>
-            <b>🔍 隐藏检测</b> — 开启后自动扫描容器内 <code style="color:var(--ca-warning);">display:none</code> 的真实输入框<br>
-            <b>👁️ 显示隐藏</b> — 强制显示页面上所有隐藏的输入框，让你直接看到并点选真实输入框<br>
-            <span style="color:var(--ca-step-username);">👤 账号</span> — 点账号输入框 | <span style="color:var(--ca-step-password);">🔒 密码</span> — 点密码框 | <span style="color:var(--ca-step-carrier);">📶 运营商</span> — 点下拉框<br>
-            <span style="color:var(--ca-step-captcha);">🖼️ 验证码</span> — 先点图片再点输入框 | <span style="color:var(--ca-step-submit);">🚀 提交</span> — 点登录按钮<br>
-            <span style="color:var(--ca-step-checkbox);">☑️ 勾选</span> — 点复选框/协议 | <span style="color:var(--ca-step-detect);">🔍 智能检测</span> — 点输入框后打字记录真实元素，点击其他自动识别<br>
-            <span style="color:var(--ca-step-click);">👆 点击</span> — 任意元素仅点击 | <span style="color:var(--ca-step-detect);">⚙️ JS</span> — 执行自定义代码<br>
-            <span style="color:var(--ca-primary);">💡 点击列表中的步骤可编辑类型和备注</span><br>
-          </div>
+          <div class="ca-shortcut-bar">💡 <b>Esc</b> 取消  |  <b>Enter</b> 无 click 记录元素  |  点击 <b>?</b> 查看完整说明</div>
         </div>
         <div class="ca-section">
           <div class="ca-section-title">已录制步骤</div>
@@ -1219,15 +1195,6 @@
     });
     state.panel.querySelector("#ca-btn-close").addEventListener("click", deactivate);
     state.panel.querySelector("#ca-btn-help").addEventListener("click", showHelpModal);
-
-    // 帮助详情展开/折叠
-    const helpToggle = state.panel.querySelector("#ca-help-toggle");
-    const helpDetail = state.panel.querySelector("#ca-help-detail");
-    helpToggle.addEventListener("click", () => {
-      const open = helpDetail.style.display === "block";
-      helpDetail.style.display = open ? "none" : "block";
-      helpToggle.textContent = open ? "详细说明 ▾" : "详细说明 ▴";
-    });
 
     // 拖拽
     makeDraggable(state.panel, state.panel.querySelector("#ca-drag-handle"));
@@ -2530,107 +2497,45 @@
     overlay.innerHTML = `
       <div class="ca-modal ca-help-modal">
         <div class="ca-help-header">
-          <h4>📖 Campus-Auth 任务录制器 — 使用说明</h4>
+          <h4>📖 任务录制器 — 使用说明</h4>
           <button id="ca-help-close" class="ca-help-close">✕</button>
         </div>
 
         <div class="ca-help-body">
 
-          <h5 class="ca-help-h5">一、启动与关闭</h5>
-          <ul class="ca-help-list">
-            <li>快捷键 <b class="ca-help-key">Ctrl+Shift+E</b> 打开或关闭录制器面板</li>
-            <li>页面右下角浮动按钮 🎬 也可点击打开</li>
-            <li>面板可拖拽（按住顶部蓝色标题栏移动）</li>
-          </ul>
-
-          <h5 class="ca-help-h5">二、基本录制流程</h5>
+          <h5 class="ca-help-h5">快速开始</h5>
           <ol class="ca-help-list">
-            <li>点击面板中的步骤类型按钮（如「账号输入框」），点击页面目标元素录制</li>
-            <li>重复以上步骤，依次录完账号、密码、运营商、提交等所有步骤</li>
-            <li>点击 <b class="ca-help-key">📋 复制 AI 提示词</b>，将提示词发送给 AI 即可生成完整的任务 JSON</li>
+            <li>选择步骤类型（如「账号输入框」），点击页面元素录制</li>
+            <li>依次录完账号、密码、运营商、提交等步骤</li>
+            <li>点击 <b class="ca-help-key">📋 复制 AI 提示词</b>，发送给 AI 生成任务 JSON</li>
           </ol>
 
-          <h5 class="ca-help-h5">三、步骤类型说明</h5>
+          <h5 class="ca-help-h5">快捷键</h5>
           <table class="ca-help-table">
-            <tr class="ca-help-table-header"><th>按钮</th><th>用途</th><th>导出为</th></tr>
-            <tr><td>👤 账号输入框</td><td>点击用户名输入区域</td><td><code>input</code> + {{USERNAME}}</td></tr>
-            <tr><td>🔒 密码输入框</td><td>点击密码输入区域</td><td><code>input</code> + {{PASSWORD}}</td></tr>
-            <tr><td> 运营商选择</td><td>点下拉框/按钮组（自动识别原生/自定义/按钮组）</td><td><code>select</code> / <code>click_select</code> + {{ISP}}</td></tr>
-            <tr><td>🖼️ 验证码图片</td><td>点击验证码图片</td><td><code>ocr</code> 步骤（与验证码输入框合并）</td></tr>
-            <tr><td>✏️ 验证码输入</td><td>点击验证码输入框</td><td><code>ocr</code> 识别 + 填入</td></tr>
-            <tr><td>🚀 提交按钮</td><td>点击登录/提交按钮</td><td><code>click</code> 步骤</td></tr>
-            <tr><td>☑️ 勾选/协议</td><td>点击复选框/用户协议勾选框</td><td><code>click</code> 步骤</td></tr>
-            <tr><td>🔍 智能检测</td><td>打字自动识别账号/密码，点击自动识别勾选/提交/下拉框/图片等</td><td>自动分类为对应步骤类型</td></tr>
-            <tr><td>👆 点击元素</td><td>点击任意元素</td><td><code>click</code> 步骤</td></tr>
-            <tr><td>⏳ 等待元素</td><td>等待某元素出现</td><td><code>wait</code> 步骤</td></tr>
-            <tr><td>⚙️ 执行JS</td><td>输入 JS 代码</td><td><code>eval</code> 步骤</td></tr>
-            <tr><td>📝 自定义</td><td>自定义描述与选择器</td><td>通用步骤</td></tr>
-            <tr><td>⏳ 延时等待</td><td>页面不操作仅等待指定时间</td><td><code>sleep</code> 步骤</td></tr>
-            <tr><td>📸 页面截图</td><td>截取当前页面状态用于调试</td><td><code>screenshot</code> 步骤</td></tr>
-            <tr><td>🔗 等待URL</td><td>等待浏览器 URL 匹配正则</td><td><code>wait_url</code> 步骤</td></tr>
+            <tr class="ca-help-table-header"><th>按键</th><th>功能</th></tr>
+            <tr><td><b class="ca-help-key">Ctrl+Shift+E</b></td><td>打开/关闭面板</td></tr>
+            <tr><td><b class="ca-help-key">Esc</b></td><td>取消录制，清除选中状态</td></tr>
+            <tr><td><b class="ca-help-key">Enter</b></td><td>仅记录元素，不发送 click（下拉菜单保持打开）</td></tr>
           </table>
 
-          <h5 class="ca-help-h5">四、功能开关</h5>
+          <h5 class="ca-help-h5">功能开关</h5>
           <ul class="ca-help-list">
-            <li><b class="ca-help-key">🔁 多步录制</b> — 开启后每次点击/Enter 记录一步，不会自动停止，适合连续录制多个步骤。关闭后每次只记录一步。</li>
-            <li><b class="ca-help-key">🔍 隐藏检测</b> — 开启后，当点击容器 <code>div</code> 或 <code>readonly</code> 占位元素时，自动扫描内部 <code>display:none</code> 的隐藏输入框（常见于深澜/Sangfor 和杭州康工 HK Posi 认证页面）。检测到后会记录隐藏输入框的选择器信息，导出时提示 AI 生成正确的 selector。</li>
+            <li><b class="ca-help-key">🔁 多步录制</b> — 连续记录多个步骤，手动 Esc 停止</li>
+            <li><b class="ca-help-key">🔍 隐藏检测</b> — 自动扫描容器内 <code>display:none</code> 的隐藏输入框（深澜/HK Posi 等）</li>
+            <li><b class="ca-help-key">👁️ 显示隐藏</b> — 强制显示所有隐藏输入框，直接点选</li>
           </ul>
 
-          <h5 class="ca-help-h5">五、键盘快捷键</h5>
-          <table class="ca-help-table">
-            <tr class="ca-help-table-header"><th>按键</th><th>功能</th><th>说明</th></tr>
-            <tr><td><b class="ca-help-key">Ctrl+Shift+E</b></td><td>打开/关闭面板</td><td>全局快捷键</td></tr>
-            <tr><td><b class="ca-help-key">Esc</b></td><td>取消当前录制</td><td>清除选中状态，停止录制</td></tr>
-            <tr><td><b class="ca-help-key">Enter</b></td><td>无 click 记录</td><td>记录悬停元素但不发送 click 给页面（下拉菜单保持打开）</td></tr>
-          </table>
+          <h5 class="ca-help-h5">典型场景</h5>
+          <p style="margin:4px 0;font-size:12px;"><b class="ca-help-key">普通登录：</b>依次点「账号」→「密码」→「提交」→「复制 AI 提示词」</p>
+          <p style="margin:4px 0;font-size:12px;"><b class="ca-help-key">运营商选择：</b>点「运营商」→ 点目标元素。原生 select 一步完成；按钮组自动检测选项；自定义下拉框需再点一个选项</p>
+          <p style="margin:4px 0;font-size:12px;"><b class="ca-help-key">隐藏输入框：</b>开启「隐藏检测」，点占位区域（div/readonly），录制器自动识别真实输入框并标记 ⚠️</p>
 
-          <h5 class="ca-help-h5">六、典型场景</h5>
-
-          <p style="margin:4px 0;"><b class="ca-help-key">场景 A：普通账号密码登录</b></p>
-          <ol class="ca-help-list-sm">
-            <li>点「账号输入框」→ 点页面上账号框</li>
-            <li>点「密码输入框」→ 点页面上密码框</li>
-            <li>点「提交按钮」→ 点页面登录按钮</li>
-            <li>点「📋 复制 AI 提示词」→ 将提示词发送给 AI 生成任务 JSON</li>
-          </ol>
-
-          <p style="margin:4px 0;"><b class="ca-help-key">场景 B：运营商选择</b></p>
-          <ol class="ca-help-list-sm">
-            <li>点「运营商选择」→ 点目标元素</li>
-            <li>原生 <code>&lt;select&gt;</code> 直接完成</li>
-            <li>按钮组（如「中国移动」「中国电信」并排按钮）→ 自动检测所有选项，一次完成</li>
-            <li>自定义 div 下拉框 → 自动提示"点运营商选项"，点选项后合并为一步</li>
-          </ol>
-
-          <p style="margin:4px 0;"><b class="ca-help-key">场景 C：隐藏输入框模式（深澜/HK Posi）</b></p>
-          <ol class="ca-help-list-sm">
-            <li>确保 <b class="ca-help-key">🔍 隐藏检测</b> 已开启</li>
-            <li>点「账号输入框」→ 点页面上账号占位区域（div 容器或 readonly tip）</li>
-            <li>录制器自动检测隐藏的真实输入框，列表中显示 ⚠️ 标记</li>
-            <li>点「密码输入框」→ 同样操作</li>
-            <li>录制器自动检测隐藏的真实输入框，提示词中会包含 reveal_hidden 配置和隐藏输入框信息</li>
-          </ol>
-
-          <!-- 场景 D 已移除：原「完成登录」+ 框选模式已被 AI 提示词方式取代 -->
-
-          <h5 class="ca-help-h5">七、获取任务 JSON</h5>
-          <ul class="ca-help-list">
-            <li>录制完成后点击 <b class="ca-help-key">📋 复制 AI 提示词</b>，将录制到的元素信息（选择器、类型、属性等）以结构化提示词形式复制到剪贴板</li>
-            <li>将提示词发送给 AI（ChatGPT、Claude 等），AI 会参考 <code>doc/task-writing-guide.md</code> 规范生成完整的任务 JSON</li>
-            <li>也可以将提示词粘贴到 Campus-Auth 的 Issue 或社区中，方便其他人帮助创建任务</li>
-          </ul>
-
-          <h5 class="ca-help-h5">八、选择器优先级</h5>
-          <p style="margin:4px 0;font-size:12px;">录制器按以下优先级生成选择器：<code>#id</code> &gt; <code>[name="..."]</code> &gt; <code>[type="..."]</code> &gt; <code>[placeholder="..."]</code> &gt; 文本内容 &gt; CSS 路径 &gt; XPath。多个选择器候选会全部保留在 JSON 中，执行时依次尝试。</p>
-
-          <h5 class="ca-help-h5">九、技巧与注意事项</h5>
+          <h5 class="ca-help-h5">注意事项</h5>
           <ul class="ca-help-list-sm">
-            <li>录制状态会<b class="ca-help-key">自动保存</b>到油猴存储，刷新页面后自动恢复（2 小时内有效）</li>
-            <li>如果元素在 <b class="ca-help-key">iframe</b> 内部，录制器会自动检测并记录 iframe 信息</li>
-            <li>连续录制多个步骤时建议开启 <b class="ca-help-key">🔁 多步录制</b></li>
-            <li>下拉菜单内的选项建议用 <b class="ca-help-key">Enter</b> 键选取（点击会关闭菜单）</li>
-            <li>如果浮层按钮/面板被页面 JS 冲掉，录制器会<b class="ca-help-key">自动恢复</b>（DOM 守护）</li>
-            <li>可在列表中点击 ✕ 删除不需要的步骤</li>
+            <li>录制状态自动保存，刷新页面可恢复（2 小时内有效）</li>
+            <li>下拉菜单选项建议用 <b class="ca-help-key">Enter</b> 键选取（点击会关闭菜单）</li>
+            <li>列表中点击步骤可编辑类型和备注，点 ✕ 删除</li>
+            <li>选择器优先级：<code>#id</code> &gt; <code>[name]</code> &gt; <code>[type]</code> &gt; <code>[placeholder]</code> &gt; 文本 &gt; XPath</li>
           </ul>
 
           <p class="ca-help-footer">
@@ -2656,6 +2561,13 @@
         const s = getComputedStyle(el);
         if (s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) <= 0) {
           if (el.type === 'submit' || el.type === 'button' || el.type === 'hidden') return;
+          // 保存原始内联样式，恢复时还原
+          el.dataset.caOrigDisplay = el.style.getPropertyValue('display');
+          el.dataset.caOrigDisplayImportant = el.style.getPropertyPriority('display');
+          el.dataset.caOrigVisibility = el.style.getPropertyValue('visibility');
+          el.dataset.caOrigVisibilityImportant = el.style.getPropertyPriority('visibility');
+          el.dataset.caOrigOpacity = el.style.getPropertyValue('opacity');
+          el.dataset.caOrigOpacityImportant = el.style.getPropertyPriority('opacity');
           el.style.setProperty('display', 'inline-block', 'important');
           el.style.setProperty('visibility', 'visible', 'important');
           el.style.setProperty('opacity', '1', 'important');
@@ -2707,9 +2619,21 @@
   function hideRevealedInputs() {
     _revealedInputs.forEach(({ el }) => {
       try {
-        el.style.removeProperty('display');
-        el.style.removeProperty('visibility');
-        el.style.removeProperty('opacity');
+        // 还原扫描前保存的原始内联样式
+        const restoreProp = (prop, origProp, origImportant) => {
+          const val = el.dataset[origProp];
+          const imp = el.dataset[origImportant];
+          if (val) {
+            el.style.setProperty(prop, val, imp || '');
+          } else {
+            el.style.removeProperty(prop);
+          }
+          delete el.dataset[origProp];
+          delete el.dataset[origImportant];
+        };
+        restoreProp('display', 'caOrigDisplay', 'caOrigDisplayImportant');
+        restoreProp('visibility', 'caOrigVisibility', 'caOrigVisibilityImportant');
+        restoreProp('opacity', 'caOrigOpacity', 'caOrigOpacityImportant');
         el.classList.remove('ca-revealed-highlight');
         delete el.dataset.caRevealed;
       } catch (_) {}
