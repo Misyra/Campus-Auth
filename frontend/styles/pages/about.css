@@ -1,5 +1,5 @@
 .about-container {
-  max-width: 800px;
+  max-width: 960px;
   margin: 0 auto;
 }
 
@@ -332,7 +332,7 @@
   background: var(--bg-modal);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  width: 480px;
+  width: 540px;
   max-width: 90vw;
   max-height: 80vh;
   display: flex;
