@@ -56,7 +56,7 @@
   --blur-sm: blur(4px);
   --blur-md: blur(8px);
   --blur-lg: blur(12px);
-  --card-blur: var(--blur-md);
+  --card-blur: none;
 
   /* 字体 */
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
