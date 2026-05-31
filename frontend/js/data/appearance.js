@@ -16,5 +16,6 @@ export function appearanceData() {
 
   return {
     appearance,
+    randomWallpaperDialog: { visible: false, url: '', loading: false },
   };
 }

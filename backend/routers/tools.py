@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
+import httpx
 from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
@@ -59,6 +60,58 @@ async def upload_background(file: UploadFile) -> dict:
     filepath.write_bytes(content)
 
     # 清理旧的背景图片，只保留新上传的
+    for old_file in BG_DIR.iterdir():
+        if old_file.name != filename:
+            try:
+                old_file.unlink()
+            except OSError:
+                pass
+
+    return {"filename": filename, "url": f"/api/background/{filename}"}
+
+
+@router.post("/api/background/fetch-url")
+async def fetch_background_url(body: dict) -> dict:
+    """从远程 URL 下载图片并保存到本地"""
+    url = body.get("url", "").strip()
+    if not url:
+        raise HTTPException(400, "请提供图片 URL")
+
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(400, f"下载图片失败: {exc}")
+
+    content_type = resp.headers.get("content-type", "")
+    if "image" not in content_type and not url.lower().endswith(
+        (".jpg", ".jpeg", ".png", ".gif", ".webp")
+    ):
+        raise HTTPException(400, f"URL 返回的不是图片 (Content-Type: {content_type})")
+
+    # 从 Content-Type 或 URL 推断扩展名
+    ext_map = {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/gif": ".gif",
+        "image/webp": ".webp",
+    }
+    ext = ext_map.get(content_type.split(";")[0].strip(), "")
+    if not ext:
+        ext = Path(url.split("?")[0]).suffix.lower() or ".jpg"
+    if ext not in ALLOWED_EXTENSIONS:
+        ext = ".jpg"
+
+    content = resp.content
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(400, "图片大小超过 5MB 限制")
+
+    filename = f"{uuid.uuid4().hex}{ext}"
+    filepath = BG_DIR / filename
+    filepath.write_bytes(content)
+
+    # 清理旧的背景图片
     for old_file in BG_DIR.iterdir():
         if old_file.name != filename:
             try:

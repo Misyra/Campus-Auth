@@ -144,7 +144,10 @@ export const appOptions = {
       handler() {
         // 防抖：避免频繁操作 DOM 导致卡顿
         if (this._appearanceTimer) clearTimeout(this._appearanceTimer);
-        this._appearanceTimer = setTimeout(() => this.applyAppearance(), 100);
+        this._appearanceTimer = setTimeout(() => {
+          this.applyAppearance();
+          localStorage.setItem('appearance', JSON.stringify(this.appearance));
+        }, 100);
       },
       deep: true,
     },
