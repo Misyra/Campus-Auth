@@ -65,7 +65,7 @@
         <span v-if="detectResult.gateway_ip">网关 {{ detectResult.gateway_ip }}</span>
         <span v-if="detectResult.gateway_ip && detectResult.ssid"> · </span>
         <span v-if="detectResult.ssid">SSID "{{ detectResult.ssid }}"</span>
-        <span v-if="!detectResult.gateway_ip && !detectResult.ssid">未能获取网络信息</span>
+        <span v-if="!detectResult.gateway_ip && !detectResult.ssid">未能获取网络信息，请确保已连接到校园网络</span>
       </span>
     </div>
     <button class="btn btn-icon-only btn-sm" @click="detectResult = null" title="关闭">
@@ -102,7 +102,7 @@
         <span class="guide-step-num">3</span>
         <div class="guide-step-content">
           <strong>开启自动切换</strong>
-          <p>连接新网络时自动应用对应方案，无需手动操作</p>
+          <p>在页面顶部开启自动切换开关，连接新网络时自动应用对应方案</p>
         </div>
       </div>
     </div>
@@ -172,7 +172,7 @@
             </svg>
             {{ info.active_task }}
           </span>
-          <span v-if="!info.match_gateway_ip && !info.match_ssid" class="profile-tag muted">手动切换</span>
+          <span v-if="!info.match_gateway_ip && !info.match_ssid" class="profile-tag muted">无匹配规则</span>
         </div>
       </div>
       <div class="profile-card-actions" @click.stop>

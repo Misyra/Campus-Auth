@@ -644,14 +644,14 @@
           </div>
           <div class="form-group">
             <div class="field-label-row">
-              <label for="settings-browser-locale">浏览器语言 (Locale)</label>
+              <label for="settings-browser-locale">浏览器语言（Locale）</label>
               <span class="field-help" tabindex="0" role="note" data-tip="设置浏览器语言，用于 Playwright 浏览器上下文的 locale 参数。部分认证页面会根据语言显示不同内容。默认为 zh-CN。">?</span>
             </div>
             <input id="settings-browser-locale" v-model.trim="config.browser_locale" type="text" placeholder="zh-CN" />
           </div>
           <div class="form-group">
             <div class="field-label-row">
-              <label for="settings-browser-timezone">浏览器时区 (Timezone)</label>
+              <label for="settings-browser-timezone">浏览器时区（Timezone）</label>
               <span class="field-help" tabindex="0" role="note" data-tip="设置浏览器时区，用于 Playwright 浏览器上下文的 timezone_id 参数。部分认证系统会检测时区设置。默认为 Asia/Shanghai。">?</span>
             </div>
             <input id="settings-browser-timezone" v-model.trim="config.browser_timezone" type="text" placeholder="Asia/Shanghai" />
@@ -718,7 +718,7 @@
           <div v-if="pureMode" class="browser-safe-info">
             <p>纯净模式已开启，浏览器使用 Chromium 原始设置。关闭后可自定义以下高级选项。</p>
           </div>
-          <div v-if="!pureMode" class="browser-safe-info" style="border-color: rgba(255, 152, 0, 0.3); background: rgba(255, 152, 0, 0.06);">
+          <div v-if="!pureMode" class="browser-safe-info browser-safe-info--warning">
             <p>纯净模式适配大部分环境。如果登录异常或无法打开网页，请尝试修改下方参数。</p>
           </div>
           <template v-if="!pureMode">
@@ -727,15 +727,15 @@
                 <label>浏览器视口尺寸</label>
                 <span class="field-help" tabindex="0" role="note" data-tip="浏览器窗口的宽度和高度（像素）。部分校园网认证页面在小分辨率下可能显示异常。">?</span>
               </div>
-              <div style="display:flex;gap:12px;align-items:center;">
-                <div style="display:flex;align-items:center;gap:4px;">
-                  <label for="settings-vp-w" style="font-size:12px;color:var(--text-secondary);">宽</label>
-                  <input id="settings-vp-w" v-model.number="config.browser_viewport_width" type="number" min="320" max="3840" style="width:100px;" />
+              <div class="viewport-input-row">
+                <div class="viewport-input-group">
+                  <label for="settings-vp-w" class="viewport-label">宽</label>
+                  <input id="settings-vp-w" v-model.number="config.browser_viewport_width" type="number" min="320" max="3840" class="viewport-input" />
                 </div>
-                <span style="color:var(--text-secondary);">×</span>
-                <div style="display:flex;align-items:center;gap:4px;">
-                  <label for="settings-vp-h" style="font-size:12px;color:var(--text-secondary);">高</label>
-                  <input id="settings-vp-h" v-model.number="config.browser_viewport_height" type="number" min="240" max="2160" style="width:100px;" />
+                <span class="viewport-separator">×</span>
+                <div class="viewport-input-group">
+                  <label for="settings-vp-h" class="viewport-label">高</label>
+                  <input id="settings-vp-h" v-model.number="config.browser_viewport_height" type="number" min="240" max="2160" class="viewport-input" />
                 </div>
               </div>
             </div>
