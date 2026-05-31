@@ -16,7 +16,7 @@
 }
 
 .wizard-container {
-  background: rgba(30, 41, 59, 0.85);
+  background: var(--bg-modal);
   border: 1px solid var(--border);
   border-radius: 20px;
   width: 100%;
@@ -125,7 +125,7 @@
 }
 
 .config-summary {
-  background: rgba(15, 23, 42, 0.5);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 16px;

@@ -9,7 +9,7 @@
   margin-bottom: 16px;
   gap: 16px;
   flex-wrap: wrap;
-  background: rgba(30, 41, 59, 0.5);
+  background: var(--bg-card-elevated);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   backdrop-filter: blur(8px);
@@ -218,7 +218,7 @@
   justify-content: space-between;
   gap: 16px;
   padding: 14px 18px;
-  background: rgba(30, 41, 59, 0.7);
+  background: var(--bg-card-elevated);
   border-radius: 10px;
   border: 1px solid var(--border);
   transition: border-color 0.25s, background 0.25s, box-shadow 0.25s, transform 0.25s;

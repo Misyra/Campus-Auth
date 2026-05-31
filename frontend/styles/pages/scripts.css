@@ -3,7 +3,7 @@
   width: 100%;
   min-height: 400px;
   padding: 12px;
-  background: rgba(15, 23, 42, 0.85);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 10px;
   color: var(--text-primary);

@@ -49,7 +49,7 @@ export const appearanceMethods = {
     }
 
     // 页面缩放 — 只缩放内容区域，顶栏和侧边栏不受影响
-    const wrapper = document.querySelector('.content-wrapper');
+    const wrapper = document.querySelector('.content-wrapper'); // 无 ref 可用，保留 querySelector
     if (wrapper) {
       const scale = (this.appearance.zoom || 100) / 100;
       wrapper.style.zoom = scale;

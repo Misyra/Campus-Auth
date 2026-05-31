@@ -83,6 +83,10 @@ export const editorTaskMethods = {
       this._dangerResolve = resolve;
       this.dangerConfirm = { dangers };
       this.dangerCountdown = 5;
+      this.$nextTick(() => {
+        const overlay = document.querySelector('.danger-overlay');
+        if (overlay) this._trapFocus(overlay);
+      });
       const timer = setInterval(() => {
         this.dangerCountdown--;
         if (this.dangerCountdown <= 0) {
@@ -94,6 +98,7 @@ export const editorTaskMethods = {
     });
   },
   confirmDanger(allow) {
+    this._releaseFocusTrap();
     if (this._dangerTimer) {
       clearInterval(this._dangerTimer);
       this._dangerTimer = null;
@@ -230,9 +235,14 @@ export const editorTaskMethods = {
   showRepoImport() {
     this.repoImport.visible = true;
     this._resetRepoImport();
+    this.$nextTick(() => {
+      const overlay = document.querySelector('.repo-overlay');
+      if (overlay) this._trapFocus(overlay);
+    });
   },
 
   closeRepoImport() {
+    this._releaseFocusTrap();
     this.repoImport.visible = false;
     this._resetRepoImport();
   },

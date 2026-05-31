@@ -6,7 +6,7 @@
 }
 
 .stat-card {
-  background: rgba(30, 41, 59, 0.5);
+  background: var(--bg-card-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 20px;
