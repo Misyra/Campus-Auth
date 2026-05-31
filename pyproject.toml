@@ -25,6 +25,7 @@ dependencies = [
 dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=0.25.0",
+    "psutil>=7.2.2",
 ]
 build = [
     "nuitka>=2.5.7",

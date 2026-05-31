@@ -868,19 +868,52 @@ class OcrHandler(StepHandler):
 
     _ocr_instances: dict[bool, Any] = {}
     _ocr_lock = threading.Lock()
+    _cleanup_timers: dict[bool, threading.Timer] = {}
+    _IDLE_TIMEOUT = 300  # 空闲超时：5 分钟未使用则卸载模型
 
     @classmethod
     def _get_ocr(cls, old: bool = False):
-        if old not in cls._ocr_instances:
-            with cls._ocr_lock:
-                if old not in cls._ocr_instances:
-                    try:
-                        import ddddocr
+        # 取消已有的清理定时器（还在用，不需要清理了）
+        cls._cancel_cleanup(old)
 
-                        cls._ocr_instances[old] = ddddocr.DdddOcr(old=old, show_ad=False)
-                    except ImportError:
-                        raise StepError("ddddocr 未安装，请运行: uv add ddddocr")
-        return cls._ocr_instances[old]
+        with cls._ocr_lock:
+            if old in cls._ocr_instances:
+                return cls._ocr_instances[old]
+
+            try:
+                import ddddocr
+
+                instance = ddddocr.DdddOcr(old=old, show_ad=False)
+            except ImportError:
+                raise StepError("ddddocr 未安装，请运行: uv add ddddocr")
+            cls._ocr_instances[old] = instance
+            return instance
+
+    @classmethod
+    def schedule_cleanup(cls, old: bool = False):
+        """OCR 使用完毕后调用，启动定时清理"""
+        cls._cancel_cleanup(old)
+        timer = threading.Timer(cls._IDLE_TIMEOUT, cls._do_cleanup, args=[old])
+        timer.daemon = True
+        timer.start()
+        cls._cleanup_timers[old] = timer
+
+    @classmethod
+    def _cancel_cleanup(cls, old: bool):
+        timer = cls._cleanup_timers.pop(old, None)
+        if timer is not None:
+            timer.cancel()
+
+    @classmethod
+    def _do_cleanup(cls, old: bool):
+        """定时器回调：卸载 OCR 模型释放内存"""
+        with cls._ocr_lock:
+            if old in cls._ocr_instances:
+                del cls._ocr_instances[old]
+                logger.info("[ocr] 模型已卸载 (old=%s)，空闲超过 %ds", old, cls._IDLE_TIMEOUT)
+        cls._cleanup_timers.pop(old, None)
+        import gc
+        gc.collect()
 
     @property
     def step_type(self) -> str:
@@ -919,6 +952,7 @@ class OcrHandler(StepHandler):
             ocr = self._get_ocr(old=old)
             result = ocr.classification(img_bytes)
         except Exception as e:
+            self.schedule_cleanup(old)
             return False, f"验证码识别失败: {e}"
 
         logger.debug("[ocr] 识别结果: '%s'", result)
@@ -932,6 +966,7 @@ class OcrHandler(StepHandler):
         if target_selector:
             target = await self._find_element(ctx, target_selector, timeout)
             if not target:
+                self.schedule_cleanup(old)
                 return False, f"未找到验证码输入框: {target_selector}"
             try:
                 await target.fill(result, timeout=timeout)
@@ -945,6 +980,7 @@ class OcrHandler(StepHandler):
                 )
                 logger.info("[ocr] 强制输入成功 → %s, 值='%s'", target_selector, result)
 
+        self.schedule_cleanup(old)
         return True, result
 
 
