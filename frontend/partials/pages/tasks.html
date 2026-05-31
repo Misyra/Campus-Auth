@@ -82,7 +82,7 @@
 
     <div v-if="editingTask" class="card task-editor">
       <div class="card-header">
-        <h2>{{ editingTask.id ? '编辑任务' : '新建任务' }}</h2>
+        <h2>{{ editingTask._isNew ? '新建任务' : '编辑任务' }}</h2>
         <button class="btn btn-icon-only" @click="editingTask = null">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>

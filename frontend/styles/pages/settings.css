@@ -757,7 +757,7 @@
 
 .appearance-slider-item {
   display: grid;
-  grid-template-columns: 36px 1fr 44px;
+  grid-template-columns: 48px 1fr 44px;
   align-items: center;
   gap: 12px;
 }
