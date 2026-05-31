@@ -33,6 +33,13 @@
   margin-bottom: 8px;
 }
 
+.about-subtitle {
+  font-size: 20px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
 .version {
   color: var(--accent);
   font-family: var(--font-mono);

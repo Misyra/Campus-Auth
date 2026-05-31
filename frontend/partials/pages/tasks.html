@@ -62,6 +62,7 @@
             </div>
             <div class="task-info">
               <h3>{{ task.name }}</h3>
+              <p v-if="task.description" class="task-desc">{{ task.description }}</p>
             </div>
             <div class="task-actions">
               <button class="btn btn-sm" @click="setActiveTask(task.id)" :disabled="activeTaskId === task.id">
@@ -260,7 +261,7 @@
         </button>
         <button class="btn btn-sm" @click="debugRunAll()"
                 :disabled="busy.debug || debugSession.current_step >= debugSession.total_steps">
-          运行剩余
+          自动执行剩余
         </button>
         <button class="btn btn-sm btn-danger" @click="debugStop()">停止并关闭</button>
       </div>

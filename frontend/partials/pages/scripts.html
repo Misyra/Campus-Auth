@@ -30,7 +30,7 @@
           <div
             v-for="(script, index) in scripts"
             :key="script.id"
-            class="task-item"
+            class="task-item hover-lift"
             :class="{ active: activeTaskId === script.id }"
             @dragstart="handleDragStart($event, index, 'scripts')"
             @dragover="onDragOver($event, index, 'scripts')"
@@ -54,7 +54,7 @@
                 {{ activeTaskId === script.id ? '当前使用' : '使用' }}
               </button>
               <button class="btn btn-sm" @click="showScriptEditor(script.id)">编辑</button>
-              <button class="btn btn-sm" @click="runScript(script.id)" title="手动执行此脚本测试">运行</button>
+              <button class="btn btn-sm" @click="runScript(script.id)" title="立即执行此脚本">运行</button>
               <button class="btn btn-sm" @click="exportScript(script.id)" title="导出为 .py 文件">导出</button>
               <button class="btn btn-sm btn-danger" @click="deleteScript(script.id)">删除</button>
             </div>
