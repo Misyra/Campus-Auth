@@ -35,6 +35,7 @@ export const formatterMethods = {
     const level = String(item?.level || '').toUpperCase();
     if (level === 'ERROR' || level === 'CRITICAL') return 'error';
     if (level === 'WARNING') return 'warning';
+    if (level === 'SUCCESS') return 'success';
     // 成功消息没有专门的 level，保留关键词匹配作为补充
     const text = this.stripScreenshotHint(item?.message || item || '');
     if (text.includes('成功') || text.includes('✓') || text.includes('success')) return 'success';

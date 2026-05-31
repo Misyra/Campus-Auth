@@ -324,7 +324,7 @@
 .uninstall-modal {
   background: var(--bg-card, #1e293b);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-xl);
   width: 480px;
   max-width: 90vw;
   max-height: 80vh;

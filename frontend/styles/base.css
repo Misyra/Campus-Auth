@@ -39,9 +39,11 @@
   /* 圆角 */
   --radius-xs: 4px;
   --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 16px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 14px;
+  --radius-3xl: 16px;
 
   /* 间距 */
   --space-xs: 4px;
@@ -222,7 +224,7 @@ body {
 
 .log-filter-chip {
   padding: 4px 10px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   font-size: 11px;
   font-weight: 600;
   border: 1px solid var(--border);

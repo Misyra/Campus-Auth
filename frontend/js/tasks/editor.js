@@ -132,8 +132,9 @@ export const editorTaskMethods = {
       this.toastOnly(false, '复制任务失败');
     }
   },
-  exportTask(taskId) {
-    this.$api.get(`/api/tasks/${taskId}`).then(({ data }) => {
+  async exportTask(taskId) {
+    try {
+      const { data } = await this.$api.get(`/api/tasks/${taskId}`);
       const json = JSON.stringify(data, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -143,10 +144,10 @@ export const editorTaskMethods = {
       a.click();
       URL.revokeObjectURL(url);
       this.frontendLogger.info('tasks', '任务已导出');
-    }).catch((error) => {
+    } catch (error) {
       this.frontendLogger.error('tasks', '导出任务失败: ' + taskId, error);
       this.toastOnly(false, '导出失败');
-    });
+    }
   },
   importTask() {
     const input = document.createElement('input');
@@ -185,7 +186,9 @@ export const editorTaskMethods = {
     try {
       const { data } = await this.$api.get('/api/pure-mode');
       this.pureMode = data.enabled;
-    } catch { /* ignore */ }
+    } catch {
+      // 纯净模式查询失败，保持默认值
+    }
   },
 
   async togglePureMode() {

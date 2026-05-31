@@ -1,3 +1,5 @@
+import { TIMING } from '../constants.js';
+
 // 拖拽排序支持 — 实时交换模式
 let _dragState = null;
 let _allowDrag = false;
@@ -55,7 +57,7 @@ export const dragMethods = {
 
     // 实时交换
     _swapCooldown = true;
-    setTimeout(() => { _swapCooldown = false; }, 120);
+    setTimeout(() => { _swapCooldown = false; }, TIMING.DRAG_SWAP_COOLDOWN);
 
     if (listName === 'browserTasks') {
       const from = this.tasks.findIndex(t => t.id === _dragState.taskId);

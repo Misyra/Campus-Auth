@@ -178,7 +178,7 @@
 .danger-modal {
   background: rgba(30, 41, 59, 0.9);
   border: 1px solid rgba(239, 68, 68, 0.3);
-  border-radius: 16px;
+  border-radius: var(--radius-3xl);
   width: min(640px, calc(100vw - 48px));
   max-height: calc(100vh - 80px);
   display: flex;
@@ -313,7 +313,7 @@
 .debug-panel {
   background: rgba(30, 41, 59, 0.95);
   border: 1px solid rgba(34, 211, 238, 0.2);
-  border-radius: 16px;
+  border-radius: var(--radius-3xl);
   width: min(900px, calc(100vw - 48px));
   max-height: calc(100vh - 60px);
   display: flex;
@@ -495,7 +495,7 @@
 .repo-modal {
   background: rgba(30, 41, 59, 0.95);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-3xl);
   width: min(600px, calc(100vw - 48px));
   max-height: calc(100vh - 80px);
   display: flex;
@@ -779,7 +779,7 @@
 .repo-disclaimer-modal {
   background: rgba(30, 41, 59, 0.95);
   border: 1px solid rgba(245, 158, 11, 0.3);
-  border-radius: 16px;
+  border-radius: var(--radius-3xl);
   width: min(520px, calc(100vw - 48px));
   max-height: calc(100vh - 80px);
   display: flex;

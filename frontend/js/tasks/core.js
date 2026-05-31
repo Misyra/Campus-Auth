@@ -83,16 +83,18 @@ export const coreTaskMethods = {
       this.toastOnly(false, 'JSON 格式错误: ' + e.message);
       return;
     }
-    config.name = this.editingTask.name || config.name;
-    config.description = this.editingTask.description || config.description;
-    config.url = this.editingTask.url || config.url || '{{LOGIN_URL}}';
+    // 使用副本避免突变原始解析结果
+    const payload = { ...config };
+    payload.name = this.editingTask.name || config.name;
+    payload.description = this.editingTask.description || config.description;
+    payload.url = this.editingTask.url || config.url || '{{LOGIN_URL}}';
 
     // 清理已废弃字段
-    delete config.version;
-    delete config.source;
+    delete payload.version;
+    delete payload.source;
 
     // 客户端检测危险步骤
-    const dangers = detectDangerousSteps(config);
+    const dangers = detectDangerousSteps(payload);
     if (dangers.length > 0) {
       const confirmed = await this.showDangerConfirm(dangers);
       if (!confirmed) return;
@@ -100,7 +102,7 @@ export const coreTaskMethods = {
 
     try {
       this.frontendLogger.info('tasks', `保存任务: ${this.editingTask.id}`);
-      const { data } = await this.$api.put(`/api/tasks/${this.editingTask.id}`, config);
+      const { data } = await this.$api.put(`/api/tasks/${this.editingTask.id}`, payload);
       if (data.success) {
         this.frontendLogger.info('tasks', data.message || '任务保存成功');
         this.editingTask = null;

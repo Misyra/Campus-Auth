@@ -78,6 +78,7 @@ export const configMethods = {
       const { data } = await this.$api.get('/api/backup/list');
       this.backups = data;
     } catch {
+      // 备份列表获取失败，初始化为空数组
       this.backups = [];
     }
   },

@@ -1,4 +1,4 @@
-import { TIMING } from '../constants.js';
+import { TIMING, LIMITS } from '../constants.js';
 
 export const uiMethods = {
   setFrontendLogLevel(level) {
@@ -94,13 +94,12 @@ export const uiMethods = {
   _isViewerAtBottom() {
     const logViewer = document.querySelector('.log-viewer');
     if (!logViewer || logViewer.scrollHeight === 0) return true;
-    return logViewer.scrollTop + logViewer.clientHeight >= logViewer.scrollHeight - 50;
+    return logViewer.scrollTop + logViewer.clientHeight >= logViewer.scrollHeight - LIMITS.SCROLL_BOTTOM_THRESHOLD;
   },
   _appendLogs(entries) {
-    const LOG_MAX_ENTRIES = 100;
     this.logs.push(...entries);
-    if (this.logs.length > LOG_MAX_ENTRIES) {
-      this.logs = this.logs.slice(-LOG_MAX_ENTRIES);
+    if (this.logs.length > LIMITS.LOG_MAX_ENTRIES) {
+      this.logs = this.logs.slice(-LIMITS.LOG_MAX_ENTRIES);
     }
     this.$nextTick(() => {
       if (this.autoScroll) {

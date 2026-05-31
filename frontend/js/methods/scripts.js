@@ -10,9 +10,10 @@ export const scriptMethods = {
     }
   },
 
-  showScriptEditor(taskId) {
+  async showScriptEditor(taskId) {
     if (taskId) {
-      this.$api.get(`/api/scripts/${taskId}`).then(({ data }) => {
+      try {
+        const { data } = await this.$api.get(`/api/scripts/${taskId}`);
         this.editingTask = {
           id: taskId,
           name: data.name || '',
@@ -21,9 +22,9 @@ export const scriptMethods = {
           _isNew: false,
         };
         this.editingTaskType = 'script';
-      }).catch((error) => {
+      } catch (error) {
         this.notify(false, extractApiError(error, '加载脚本失败'));
-      });
+      }
     } else {
       this.editingTaskType = 'script';
       this.editingTask = {
@@ -97,8 +98,9 @@ export const scriptMethods = {
     }
   },
 
-  exportScript(taskId) {
-    this.$api.get(`/api/scripts/${taskId}`).then(({ data }) => {
+  async exportScript(taskId) {
+    try {
+      const { data } = await this.$api.get(`/api/scripts/${taskId}`);
       const blob = new Blob([data.content || ''], { type: 'text/x-python' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -106,9 +108,9 @@ export const scriptMethods = {
       a.download = `${taskId}.py`;
       a.click();
       URL.revokeObjectURL(url);
-    }).catch((error) => {
+    } catch (error) {
       this.notify(false, extractApiError(error, '导出失败'));
-    });
+    }
   },
 
   importScript() {

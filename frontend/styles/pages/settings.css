@@ -31,7 +31,7 @@
   gap: 1px;
   padding: 6px 10px;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -132,7 +132,7 @@
 
 .mini-stat {
   padding: 16px;
-  border-radius: 14px;
+  border-radius: var(--radius-xl);
   border: 1px solid var(--border);
   background: rgba(15, 23, 42, 0.35);
   transition: border-color 0.25s ease, transform 0.25s ease;
@@ -912,7 +912,7 @@ body.has-custom-bg::before {
 .random-wallpaper-modal {
   background: var(--bg-card, #1e293b);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-xl);
   width: 420px;
   max-width: 90vw;
   padding: 24px;

@@ -60,7 +60,9 @@ function applyAppearanceEarly() {
       root.style.setProperty('--sidebar-bg-1', `rgba(${r}, ${g}, ${b}, var(--sidebar-opacity, 0.95))`);
       root.style.setProperty('--sidebar-bg-2', `rgba(${r}, ${g}, ${b}, calc(var(--sidebar-opacity, 0.95) + 0.03))`);
     }
-  } catch {}
+  } catch {
+    // 外观设置应用失败（localStorage 不可用或数据损坏），忽略
+  }
 }
 applyAppearanceEarly();
 
