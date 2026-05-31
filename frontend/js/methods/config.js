@@ -69,8 +69,7 @@ export const configMethods = {
   resetConfig() {
     if (!confirm('确定要恢复默认设置吗？当前修改将丢失。')) return;
     this.config = structuredClone(DEFAULT_CONFIG);
-    this._configDirty = false;
-    this.savedConfigSnapshot = JSON.stringify(this.config);
+    this._configDirty = true;
     this.frontendLogger.info('config', '已恢复默认设置，请点击保存以生效');
   },
   async fetchBackups() {
