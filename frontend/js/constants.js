@@ -107,7 +107,7 @@ export const DEFAULT_APPEARANCE = {
   sidebar_opacity: 0.95,
   sidebar_color: '',
   sidebar_accent: '',
-  backdrop_filter: true, // 毛玻璃效果
+  backdrop_filter: false, // 毛玻璃效果
   accent_color: '#22d3ee',
   zoom: 100,
   theme: 'dark', // dark | light
