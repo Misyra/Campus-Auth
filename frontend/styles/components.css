@@ -352,7 +352,7 @@
   width: 44px;
   height: 24px;
   background: var(--bg-primary);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   position: relative;
   transition: background 0.2s ease;
   border: 1px solid var(--border);
@@ -406,7 +406,7 @@
 .info-box {
   background: rgba(15, 23, 42, 0.5);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 16px;
   margin-top: 20px;
   backdrop-filter: blur(4px);
@@ -451,7 +451,7 @@
   align-items: center;
   gap: 10px;
   padding: 14px 20px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: rgba(30, 41, 59, 0.9);
   border: 1px solid var(--border);
   backdrop-filter: var(--blur-lg) saturate(1.2);
@@ -514,7 +514,7 @@
   width: max-content;
   max-width: min(380px, calc(100vw - 80px));
   padding: 14px 16px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-accent-strong);
   background: rgba(8, 15, 30, 0.95);
   color: #e6f1ff;

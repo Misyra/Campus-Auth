@@ -29,7 +29,7 @@ export const lifecycleMethods = {
     this.timers.push(setInterval(() => this.fetchAutostart(), TIMING.AUTOSTART_POLL_INTERVAL));
     this.frontendLogger.info('app.init', '初始化完成');
   },
-  async _waitWebSocketReady(timeoutMs = 2000) {
+  async _waitWebSocketReady(timeoutMs = TIMING.WS_READY_TIMEOUT) {
     if (!this.ws) return false;
     if (this.ws.readyState === WebSocket.OPEN) return true;
     if (this.ws.readyState === WebSocket.CLOSING || this.ws.readyState === WebSocket.CLOSED) {
@@ -108,12 +108,12 @@ export const lifecycleMethods = {
         return;
       }
     } catch {
-      // health 接口不可用，尝试 openapi 回退
+      // health 接口不可用，继续尝试 openapi 回退
     }
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), TIMING.OPENAPI_TIMEOUT);
       let openapiResp;
       try {
         openapiResp = await fetch('/openapi.json', { cache: 'no-cache', signal: controller.signal });
@@ -126,7 +126,7 @@ export const lifecycleMethods = {
         return;
       }
     } catch {
-      // openapi 回退也不可用
+      // openapi 回退也不可用，版本设为 unknown
     }
 
     this.appVersion = 'unknown';

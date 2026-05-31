@@ -1,4 +1,4 @@
-import { DEFAULT_APPEARANCE, ACCENT_COLORS, BG_COLORS } from '../constants.js';
+import { DEFAULT_APPEARANCE, ACCENT_COLORS, BG_COLORS, LIMITS } from '../constants.js';
 
 export const appearanceMethods = {
   // 保存外观设置
@@ -166,7 +166,7 @@ export const appearanceMethods = {
       const file = e.target.files[0];
       if (!file) return;
 
-      if (file.size > 5 * 1024 * 1024) {
+      if (file.size > LIMITS.FILE_UPLOAD_MAX) {
         this.toastOnly(false, '图片大小不能超过 5MB');
         return;
       }
@@ -240,7 +240,9 @@ export const appearanceMethods = {
     if (this.appearance.background_filename) {
       try {
         await this.$api.delete(`/api/background/${this.appearance.background_filename}`);
-      } catch {}
+      } catch {
+        // 删除旧背景图失败（可能已不存在），继续清理本地引用
+      }
     }
     this.appearance.background_url = '';
     this.appearance.background_filename = '';

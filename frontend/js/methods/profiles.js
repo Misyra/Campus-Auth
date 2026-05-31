@@ -12,20 +12,21 @@ export const profileMethods = {
       this.frontendLogger.error('profiles', '获取方案列表失败', error);
     }
   },
-  showProfileEditor(profileId) {
+  async showProfileEditor(profileId) {
     this.editorDetectResult = null;
     if (profileId && this.profiles[profileId]) {
-      this.$api.get(`/api/profiles/${profileId}`).then(({ data }) => {
+      try {
+        const { data } = await this.$api.get(`/api/profiles/${profileId}`);
         this.editingProfile = {
           id: profileId,
           ...data.settings,
           _isNew: false,
         };
         this.currentPage = 'profile-edit';
-      }).catch(() => {
+      } catch {
         this.frontendLogger.error('profiles', '加载方案失败: ' + profileId);
         this.notify(false, '加载方案失败');
-      });
+      }
     } else {
       this.editingProfile = {
         id: '',

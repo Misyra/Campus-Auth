@@ -10,7 +10,7 @@
   gap: 16px;
   flex-wrap: wrap;
   background: rgba(30, 41, 59, 0.5);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   backdrop-filter: blur(8px);
 }
