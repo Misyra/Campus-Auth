@@ -14,7 +14,7 @@ from ..constants import PROJECT_ROOT
 router = APIRouter()
 
 # 背景图片目录
-BG_DIR = PROJECT_ROOT / "tools" / "background"
+BG_DIR = PROJECT_ROOT / "frontend" / "background"
 BG_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
