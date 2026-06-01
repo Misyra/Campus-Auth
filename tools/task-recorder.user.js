@@ -779,11 +779,11 @@
   //
   // 校园网认证页面常见的两种隐藏输入框模式：
   //
-  // 模式1 — 深澜/Sangfor：可见的 type=text 假占位 + 隐藏的 type=password (display:none)
+  // 模式1 — 可见的 type=text 假占位 + 隐藏的 type=password (display:none)
   //   <input type="text" name="pwdLabel" placeholder="密码">
   //   <input type="password" id="password" style="display:none;">
   //
-  // 模式2 — 杭州康工 HK Posi：可见的 readonly tip + 隐藏的真实输入框
+  // 模式2 — readonly 占位框 + 隐藏的真实输入框
   //   <input class="input_tip" readonly value="用户名Username" style="display:block;">
   //   <input class="input" name="username" id="username" style="display:none;" type="text">
   //
@@ -792,7 +792,7 @@
   // 搜索策略：
   //   1. 如果点击的元素本身隐藏 → 直接返回自身（force 模式填入）
   //   2. 在容器内搜索匹配目标类型的隐藏 input
-  //   3. 在父元素内搜索（处理嵌套 div 如 HK Posi 的 userNameDiv）
+  //   3. 在父元素内搜索（处理嵌套 div 结构）
   //
   // 判断元素是否是验证码相关（防止把验证码输入框误判为 hidden real input）
   function isElementCaptcha(el) {
@@ -862,7 +862,7 @@
       searchRoots.push(parent);
     }
 
-    // 深澜/Sangfor 模式：密码步骤点中的是 type="text" 假占位，真实密码框可能被
+    // 假占位模式：密码步骤点中的是 type="text" 假占位，真实密码框可能被
     // 门户 JS 切换可见性。此时忽略可见性搜索 input[type="password"]。
     // 优先在同一父元素内搜索（避免容器内有多个 password 输入框时选错）
     const clickedIsTextDecoy = needPassword && el.tagName === "INPUT" && el.type === "text";
@@ -913,7 +913,7 @@
     }
 
     // 兜底：在容器内搜索所有隐藏 input（不限类型），适用于 type 属性缺失的情况
-    // 如果用户已经点击了正确类型的 input，不需要兜底（Dr.com 上误判 captcha 的根因）
+    // 如果用户已经点击了正确类型的 input，不需要兜底（避免误判验证码输入框）
     const clickedIsCorrectType = el.tagName === "INPUT" && (
       (needPassword && el.type === "password") ||
       (!needPassword && (el.type === "text" || el.type === "" || !el.type))
@@ -2539,7 +2539,7 @@
           <h5 class="ca-help-h5">功能开关</h5>
           <ul class="ca-help-list">
             <li><b class="ca-help-key">🔁 多步录制</b> — 连续记录多个步骤不中断，适合批量录制</li>
-            <li><b class="ca-help-key">🔍 隐藏检测</b> — 自动扫描容器内 <code>display:none</code> 的隐藏输入框（深澜/HK Posi 等认证页面常见）。点击占位区域即可，录制器自动定位真实输入框</li>
+            <li><b class="ca-help-key">🔍 隐藏检测</b> — 自动扫描容器内 <code>display:none</code> 的隐藏输入框（部分认证页面常见）。点击占位区域即可，录制器自动定位真实输入框</li>
             <li><b class="ca-help-key">👁️ 显示隐藏</b> — 强制显示页面上所有隐藏输入框，绿色虚线高亮，可直接点选</li>
           </ul>
 
@@ -2554,7 +2554,7 @@
           <h5 class="ca-help-h5">典型场景</h5>
           <p style="margin:4px 0;font-size:12px;"><b class="ca-help-key">普通登录：</b>用「智能检测」在账号框输入任意内容 → Tab 到密码框输入 → 点击登录按钮 → 按 Esc → 复制 AI 提示词</p>
           <p style="margin:4px 0;font-size:12px;"><b class="ca-help-key">运营商选择：</b>点「运营商」→ 点下拉框/按钮组。原生 select 自动完成；自定义下拉框需再点一个选项作为示例</p>
-          <p style="margin:4px 0;font-size:12px;"><b class="ca-help-key">隐藏输入框（深澜/HK Posi）：</b>开启「隐藏检测」，点页面上的占位区域（div 或 readonly 框），录制器自动识别隐藏的真实输入框并标记 ⚠️</p>
+          <p style="margin:4px 0;font-size:12px;"><b class="ca-help-key">隐藏输入框：</b>开启「隐藏检测」，点页面上的占位区域（div 或 readonly 框），录制器自动识别隐藏的真实输入框并标记 ⚠️</p>
           <p style="margin:4px 0;font-size:12px;"><b class="ca-help-key">多步骤复杂页面：</b>开启「多步录制」+「智能检测」，依次操作页面上所有表单元素，最后按 Esc 统一结束</p>
 
           <h5 class="ca-help-h5">注意事项</h5>
@@ -2963,7 +2963,7 @@
 
   // ==================== DOM 守护：防止页面框架清空注入元素 ====================
 
-  // 深澜/Sangfor 等门户在 document-idle 后仍会操作 body.innerHTML，
+  // 部分门户在 document-idle 后仍会操作 body.innerHTML，
   // 导致浮动按钮和面板被移除。用 MutationObserver + 定时轮询双保险守护。
   const domGuard = {
     _elems: new Set(),    // 需要守护的 DOM 元素

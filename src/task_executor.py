@@ -57,7 +57,7 @@ _FORCE_INPUT_JS = """(el, params) => {
   el.dispatchEvent(new KeyboardEvent('keyup', {bubbles:true}));
   // 7. change
   el.dispatchEvent(new Event('change', {bubbles:true}));
-  // 8. blur — 触发校验/同步（如深澜双输入框的值同步）
+  // 8. blur — 触发校验/同步（如双输入框的值同步）
   el.dispatchEvent(new FocusEvent('blur', {bubbles:true}));
 }"""
 
