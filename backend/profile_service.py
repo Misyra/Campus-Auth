@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import threading
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -42,10 +43,44 @@ class ProfileService:
                 self._data = ProfilesData.model_validate_json(raw)
                 return self._data.model_copy(deep=True)
             except Exception as exc:
-                profile_logger.error("加载 settings.json 失败: %s", exc)
+                profile_logger.exception("加载 settings.json 失败")
+                # 备份损坏文件
+                if self._settings_path.exists():
+                    corrupt_name = f"settings.corrupt.{int(time.time())}.json"
+                    corrupt_path = self._settings_path.parent / corrupt_name
+                    try:
+                        self._settings_path.rename(corrupt_path)
+                        profile_logger.info("已备份损坏文件到: %s", corrupt_path)
+                    except OSError as rename_err:
+                        profile_logger.warning("备份损坏文件失败: %s", rename_err)
+                # 尝试从 backups/ 恢复最新备份
+                restored = self._try_restore_from_backup()
+                if restored:
+                    self._data = restored
+                    profile_logger.info("已从备份恢复配置")
+                    return self._data.model_copy(deep=True)
+                # 无备份可用，使用空默认值
+                profile_logger.warning("无可用备份，将使用空配置")
 
         self._data = ProfilesData()
         return self._data.model_copy(deep=True)
+
+    def _try_restore_from_backup(self) -> ProfilesData | None:
+        """尝试从 backups/ 目录恢复最新有效备份"""
+        from backend.constants import BACKUP_DIR
+        if not BACKUP_DIR.exists():
+            return None
+        backups = sorted(BACKUP_DIR.glob("settings_*.json"), reverse=True)
+        for backup_path in backups:
+            try:
+                raw = backup_path.read_text(encoding="utf-8")
+                data = ProfilesData.model_validate_json(raw)
+                profile_logger.info("从备份恢复: %s", backup_path.name)
+                return data
+            except Exception:
+                profile_logger.debug("备份 %s 校验失败，跳过", backup_path.name)
+                continue
+        return None
 
     def _save_unsafe(self, data: ProfilesData) -> None:
         """原子写入 settings.json（不加锁，由调用者持有锁）"""

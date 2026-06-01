@@ -336,9 +336,14 @@ class LogConfigCenter:
     def add_file_handler(self, log_dir: str, retention_days: int = 7) -> None:
         """添加按日期存储的日志处理器（始终记录全部级别）"""
         root = logging.getLogger()
-        for handler in root.handlers:
+        for handler in list(root.handlers):
             if isinstance(handler, _DateRotatingFileHandler):
-                return
+                if str(handler._log_dir) == str(log_dir):
+                    return  # 相同目录，无需替换
+                # 不同目录，移除旧 handler
+                root.removeHandler(handler)
+                handler.close()
+                break
 
         try:
             file_handler = _DateRotatingFileHandler(
@@ -379,6 +384,8 @@ class WebSocketLogHandler(logging.Handler):
         "backend.monitor_service",
     })
 
+    _LogEntry: type | None = None  # 延迟初始化，避免循环导入
+
     def __init__(self, broadcast_queue: deque[dict], log_store: deque | None = None):
         super().__init__()
         self._queue = broadcast_queue
@@ -399,8 +406,9 @@ class WebSocketLogHandler(logging.Handler):
             }
             self._queue.append({"type": "log", "data": log_data})
             if self._log_store is not None:
-                from backend.schemas import LogEntry
-
-                self._log_store.append(LogEntry(**log_data))
+                if WebSocketLogHandler._LogEntry is None:
+                    from backend.schemas import LogEntry
+                    WebSocketLogHandler._LogEntry = LogEntry
+                self._log_store.append(WebSocketLogHandler._LogEntry(**log_data))
         except Exception:
             self.handleError(record)

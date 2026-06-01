@@ -147,6 +147,8 @@ def shutdown_server(
             (AUTH_DATA_DIR / "campus_network_auth.pid").unlink(missing_ok=True)
         except Exception:
             api_logger.debug("PID 文件清理失败", exc_info=True)
+        import logging as _logging
+        _logging.shutdown()
         os._exit(0)
 
     threading.Thread(target=_do_shutdown, daemon=True).start()

@@ -95,20 +95,15 @@ def restore_backup(
             api_logger.debug("设置备份失败", exc_info=True)
 
     try:
-        backup_data = json.loads(backup_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        api_logger.error("备份文件不是有效 JSON: %s — %s", filename, exc)
-        raise HTTPException(status_code=400, detail=f"备份文件格式损坏: {exc}")
-
-    try:
-        ProfilesData.model_validate(backup_data)
+        backup_content = backup_path.read_text(encoding="utf-8")
+        ProfilesData.model_validate_json(backup_content)
     except Exception as exc:
-        api_logger.error("备份文件 schema 校验失败: %s — %s", filename, exc)
-        raise HTTPException(status_code=400, detail=f"备份文件结构不合法: {exc}")
+        api_logger.error("备份文件校验失败: %s — %s", filename, exc)
+        raise HTTPException(status_code=400, detail=f"备份文件格式错误: {exc}")
 
     try:
         old_active = profile_svc.load().active_profile
-        atomic_write(settings_path, backup_path.read_text(encoding="utf-8"))
+        atomic_write(settings_path, backup_content)
         profile_svc.invalidate_cache()
         monitor_svc.reload_config()
         _cleanup_old_backups()

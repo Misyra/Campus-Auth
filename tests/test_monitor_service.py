@@ -179,7 +179,7 @@ class TestMonitorServiceInit:
 
         svc = MonitorService(MagicMock())
         assert svc._logs.maxlen == 1200
-        assert svc._login_in_progress is False
+        assert svc._login_in_progress.is_set() is False
         assert svc.pure_mode is False
 
 
@@ -603,7 +603,7 @@ class TestRunManualLogin:
         mock_load_ui.return_value = mock_ui_config
 
         svc = MonitorService(MagicMock())
-        svc._login_in_progress = True
+        svc._login_in_progress.set()
         ok, msg = svc.run_manual_login()
         assert ok is False
         assert "进行中" in msg
@@ -718,7 +718,7 @@ class TestLoginInProgress:
 
         svc = MonitorService(MagicMock())
         assert svc.login_in_progress is False
-        svc._login_in_progress = True
+        svc._login_in_progress.set()
         assert svc.login_in_progress is True
 
 

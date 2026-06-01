@@ -36,18 +36,7 @@ def atomic_write(
         with os.fdopen(tmp_fd, "w", encoding=encoding, errors="replace") as f:
             f.write(content)
 
-        try:
-            os.replace(tmp_path, path)
-        except PermissionError:
-            logger.warning(
-                "os.replace 权限错误 (%s)，回退到直接写入", path
-            )
-            with open(path, "w", encoding=encoding, errors="replace") as f:
-                f.write(content)
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
+        os.replace(tmp_path, path)
     except Exception:
         try:
             os.unlink(tmp_path)

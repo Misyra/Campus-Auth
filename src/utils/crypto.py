@@ -13,9 +13,11 @@ import base64
 import hashlib
 import os
 import threading
+import time
 from pathlib import Path
 
 from backend.constants import AUTH_DATA_DIR
+from src.utils.file_helpers import atomic_write
 from src.utils.logging import get_logger
 from src.utils.exceptions import DecryptionError
 from src.utils.platform_utils import is_windows  # Windows 平台检测
@@ -53,14 +55,21 @@ def _get_or_create_key() -> bytes:
                     _cached_raw_key = key
                     return key
             except Exception as exc:
-                logger.warning("密钥文件读取失败，将生成新密钥: %s", exc)
+                logger.error("读取加密密钥失败: %s", exc)
+                # 备份损坏的密钥文件
+                if _KEY_FILE.exists():
+                    backup_path = _KEY_FILE.with_suffix(f".bak.{int(time.time())}")
+                    try:
+                        _KEY_FILE.rename(backup_path)
+                        logger.info("已备份损坏的密钥文件到: %s", backup_path)
+                    except OSError as backup_err:
+                        logger.warning("备份密钥文件失败: %s", backup_err)
+                logger.warning("将生成新密钥，此前加密的密码将无法解密")
 
         # 生成新密钥
-        logger.info("已生成新加密密钥: %s", _KEY_DIR)
         key = os.urandom(32)
-        _KEY_FILE.write_text(
-            base64.urlsafe_b64encode(key).decode("ascii"), encoding="utf-8"
-        )
+        encoded_key = base64.urlsafe_b64encode(key).decode("ascii")
+        atomic_write(str(_KEY_FILE), encoded_key, encoding="utf-8")
 
         try:
             _KEY_FILE.chmod(0o600)  # POSIX: 仅所有者可读写

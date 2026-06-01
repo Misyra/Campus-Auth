@@ -82,7 +82,7 @@ $toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds({duration_sec})
 
     # PowerShell 方案失败时回退到 msg（仅 Windows Pro/Enterprise 可用）
     try:
-        subprocess.run(
+        result = subprocess.run(
             ["msg", os.environ.get("USERNAME", "*"), f"{title}: {message}"],
             capture_output=True,
             timeout=5,
@@ -90,7 +90,7 @@ $toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds({duration_sec})
             if hasattr(subprocess, "CREATE_NO_WINDOW")
             else 0,
         )
-        return True
+        return result.returncode == 0
     except FileNotFoundError:
         logger.debug("msg 命令不可用（仅 Windows Pro/Enterprise 支持）")
     except Exception:

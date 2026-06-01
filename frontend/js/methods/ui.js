@@ -159,6 +159,14 @@ export const uiMethods = {
     if (!confirm('确定要退出应用吗？')) return;
     try {
       this.busy.monitor = true;
+      // 后端 shutdown 是异步的，WS 可能在 POST 响应返回前就断开
+      // 必须在 POST 之前设置，否则 onclose 会触发无意义的重连
+      this._wsDestroyed = true;
+      if (this.ws) {
+        this.ws.onclose = null;
+        this.ws.onerror = null;
+        this.ws.close();
+      }
       await this.$api.post('/api/shutdown');
       // 尝试关闭窗口，浏览器可能拦截
       setTimeout(() => {

@@ -106,9 +106,9 @@ class MonitorService:
         self._ws_broadcast_queue: deque[dict] = deque(maxlen=200)
 
         # 登录并发控制 —— 防止同时提交多个登录任务到 Worker
-        # 使用 Lock 保护 check-then-set 操作，避免竞态条件
-        self._login_in_progress: bool = False
+        self._login_in_progress = threading.Event()
         self._login_lock: threading.Lock = threading.Lock()
+        self._reload_lock: threading.Lock = threading.Lock()
         self._pure_mode_lock: threading.Lock = threading.Lock()
 
         # Start queue consumer daemon thread
@@ -246,7 +246,7 @@ class MonitorService:
             cmd.response_data = (False, error_msg)
         finally:
             duration_ms = int((time.perf_counter() - start_time) * 1000)
-            self._login_in_progress = False
+            self._login_in_progress.clear()
             # 记录登录历史
             if self._login_history is not None:
                 try:
@@ -435,7 +435,7 @@ class MonitorService:
 
     @property
     def login_in_progress(self) -> bool:
-        return self._login_in_progress
+        return self._login_in_progress.is_set()
 
     @property
     def ws_broadcast_queue(self) -> deque[dict]:
@@ -453,15 +453,17 @@ class MonitorService:
         return self._status_snapshot.monitoring
 
     def get_config(self) -> MonitorConfigPayload:
-        return self._ui_config.model_copy(deep=True)
+        with self._reload_lock:
+            return self._ui_config.model_copy(deep=True)
 
     def _reload_config_internal(self) -> None:
         """从 settings.json 重新加载 UI 和运行时配置（内部方法，由 reload_config 和 _handle_profile_reload 复用）。"""
-        self._ui_config = load_ui_config(self._profile_service)
-        self._runtime_config = build_runtime_config(
-            load_runtime_config(self._profile_service),
-            self._profile_service.load().system,
-        )
+        with self._reload_lock:
+            self._ui_config = load_ui_config(self._profile_service)
+            self._runtime_config = build_runtime_config(
+                load_runtime_config(self._profile_service),
+                self._profile_service.load().system,
+            )
 
     def _copy_runtime_config(self) -> dict:
         """深拷贝运行时配置，防止 browser_settings 等嵌套字典被意外修改。"""
@@ -590,9 +592,9 @@ class MonitorService:
 
     def run_manual_login(self) -> tuple[bool, str]:
         with self._login_lock:
-            if self._login_in_progress:
+            if self._login_in_progress.is_set():
                 return False, "登录操作正在进行中"
-            self._login_in_progress = True
+            self._login_in_progress.set()
         try:
             service_logger.info("Manual login requested")
             runtime_config = self._copy_runtime_config()
@@ -608,7 +610,7 @@ class MonitorService:
             )
             self._cmd_queue.put(cmd)
         except Exception:
-            self._login_in_progress = False
+            self._login_in_progress.clear()
             raise
 
         # Wait for consumer to execute login (with timeout)
@@ -616,7 +618,7 @@ class MonitorService:
         cmd.response_event.wait(timeout=login_timeout)
 
         if cmd.response_data is None:
-            self._login_in_progress = False
+            self._login_in_progress.clear()
             return False, "手动登录超时"
 
         success, message = cmd.response_data

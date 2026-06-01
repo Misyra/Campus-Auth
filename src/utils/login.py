@@ -230,7 +230,8 @@ class LoginAttemptHandler:
                     await self.close_browser()
                 return False, message
             except Exception:
-                await self.close_browser()
+                if self.close_on_failure:
+                    await self.close_browser()
                 raise
 
         except LoginCancelledError:
