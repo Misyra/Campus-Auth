@@ -5,5 +5,9 @@
  * @returns {string}
  */
 export function extractApiError(error, fallback = '操作失败') {
-  return error?.response?.data?.detail || error?.message || fallback;
+  const detail = error?.response?.data?.detail;
+  if (Array.isArray(detail)) {
+    return detail.map(d => d.msg || d.detail || String(d)).join('; ') || fallback;
+  }
+  return detail || error?.message || fallback;
 }

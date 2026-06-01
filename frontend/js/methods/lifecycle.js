@@ -19,6 +19,7 @@ export const lifecycleMethods = {
       this.fetchBackups(),
       this.fetchLoginHistory(),
     ]);
+    this._initErrorCount = 0;
     this.isLoading = false;
     this.connectWebSocket();
     this.autoCheckUpdateOnStartup();

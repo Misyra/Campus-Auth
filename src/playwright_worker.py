@@ -140,7 +140,13 @@ class PlaywrightWorker:
         self._stop_event.set()
 
         # 放入 SHUTDOWN 命令确保事件循环能正常退出
-        self._cmd_queue.put(WorkerCommand(type=CMD_SHUTDOWN))
+        try:
+            self._cmd_queue.put_nowait(WorkerCommand(type=CMD_SHUTDOWN))
+        except queue.Full:
+            logger.warning("命令队列已满，强制停止 Worker")
+            if self._loop is not None and self._loop.is_running():
+                self._loop.call_soon_threadsafe(self._loop.stop)
+            return
 
         # 通过 run_coroutine_threadsafe 唤醒 Worker 的事件循环
         # 这是唯一允许的跨线程 asyncio 调用

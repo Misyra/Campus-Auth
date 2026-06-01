@@ -8,6 +8,8 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from src.utils.file_helpers import atomic_write
+
 from pydantic import BaseModel
 
 from src.utils.logging import get_logger
@@ -109,9 +111,10 @@ class LoginHistoryService:
                             kept.append(line)
                     except Exception:
                         kept.append(line)
-            with open(self._history_path, "w", encoding="utf-8") as f:
-                for line in kept:
-                    f.write(line + "\n")
+            content = "\n".join(kept)
+            if kept:
+                content += "\n"
+            atomic_write(str(self._history_path), content, encoding="utf-8")
             removed = len(kept)
             if removed > 0:
                 logger.debug("登录历史清理完成，保留 %d 条记录", removed)

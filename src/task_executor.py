@@ -35,8 +35,10 @@ _FORCE_INPUT_JS = """(el, params) => {
   const val = params.val;
   const doClear = params.doClear;
   // 原生 setter 绕过 React/Vue 的 getter/setter 劫持（声明在块外，doClear=false 时仍可用）
-  const nativeSet = Object.getOwnPropertyDescriptor(
-    HTMLInputElement.prototype, 'value').set;
+  const proto = el.tagName === 'TEXTAREA'
+    ? HTMLTextAreaElement.prototype
+    : HTMLInputElement.prototype;
+  const nativeSet = Object.getOwnPropertyDescriptor(proto, 'value').set;
   el.removeAttribute('readonly');
   el.removeAttribute('disabled');
   // 1. focus — 触发页面 JS 的显隐切换/占位收起

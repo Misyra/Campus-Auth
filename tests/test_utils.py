@@ -279,16 +279,17 @@ class TestAtomicWrite:
         atomic_write(str(target), "校园网认证")
         assert target.read_text(encoding="utf-8") == "校园网认证"
 
-    def test_permission_error_fallback(self, tmp_path):
+    def test_permission_error_propagates(self, tmp_path):
         target = tmp_path / "test.txt"
-        original_replace = os.replace
 
         def mock_replace(src, dst):
             raise PermissionError("mocked")
 
         with patch("src.utils.file_helpers.os.replace", side_effect=mock_replace):
-            atomic_write(str(target), "fallback content")
-        assert target.read_text(encoding="utf-8") == "fallback content"
+            with pytest.raises(PermissionError, match="mocked"):
+                atomic_write(str(target), "content")
+        # 临时文件应被清理
+        assert not list(tmp_path.glob("tmp.*"))
 
     def test_cleanup_on_write_error(self, tmp_path):
         target = tmp_path / "test.txt"

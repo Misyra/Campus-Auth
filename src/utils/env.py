@@ -66,12 +66,12 @@ def build_login_env_vars(
 
     # 在所有变量注入后解析 task_url 模板
     if task_url:
+        # 将 denylist 中的运行时变量显式写入 os.environ，确保模板替换不被跳过
+        for k, v in env_vars.items():
+            if k.upper() in _ENV_DENYLIST_UPPER:
+                os.environ[k] = v
         resolved_url = task_url
         for k, v in env_vars.items():
-            # 跳过未覆盖的系统环境变量（PATH, TEMP 等），防止 URL 模板注入；
-            # 如果 runtime_config 已显式覆盖（如 USERNAME），则保留其模板解析能力
-            if k.upper() in _ENV_DENYLIST_UPPER and os.environ.get(k) == v:
-                continue
             resolved_url = resolved_url.replace("{{" + k + "}}", v)
         env_vars["LOGIN_URL"] = resolved_url
 
