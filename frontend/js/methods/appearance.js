@@ -255,6 +255,16 @@ export const appearanceMethods = {
     this.applyAppearance();
   },
 
+  // 打开背景图放大预览
+  openBgLightbox() {
+    this.bgLightbox.visible = true;
+  },
+
+  // 关闭背景图放大预览
+  closeBgLightbox() {
+    this.bgLightbox.visible = false;
+  },
+
   // 获取预设主题色列表
   getAccentColors() {
     return ACCENT_COLORS;
