@@ -69,7 +69,7 @@ Thumbs.db
 temp/
 
 # User background images
-tools/background/
+frontend/background/
 
 # Source assets
 1.png

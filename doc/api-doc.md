@@ -160,6 +160,7 @@
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/api/background/upload` | 上传背景图片（支持 JPG/PNG/GIF/WebP，最大 5MB） |
+| POST | `/api/background/fetch-url` | 从远程 URL 下载图片并保存 |
 | GET | `/api/background/{filename}` | 获取背景图片 |
 | DELETE | `/api/background/{filename}` | 删除背景图片 |
 

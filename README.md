@@ -14,7 +14,7 @@ Campus-Auth 主要解决三个场景：
 
 ### 主要特性
 
-- Web 控制台：初始化向导、仪表盘、设置页、任务页、配置方案页、关于页。
+- Web 控制台：初始化向导、仪表盘、设置页、任务页、Python 脚本页、日志页、外观页、配置方案页、关于页。
 - 多网络配置方案：为不同网络环境创建独立配置，支持按网关 IP 或 WiFi SSID 自动切换。
 - 自动监控：定时探测网络可用性，异常时自动触发认证。
 - 自动登录：基于 Playwright 的浏览器自动化，按任务定义执行登录流程。
@@ -217,8 +217,12 @@ Campus-Auth/
 │   │   ├── dashboard.html    # 仪表盘
 │   │   ├── settings.html     # 设置页
 │   │   ├── tasks.html        # 任务管理
+│   │   ├── scripts.html      # Python 脚本
+│   │   ├── logfiles.html     # 日志查看器
+│   │   ├── appearance.html   # 外观设置
 │   │   ├── profiles.html     # 配置方案
 │   │   └── about.html        # 关于页
+│   ├── background/           # 用户背景图片（gitignore）
 │   └── styles/               # 样式文件
 ├── tasks/                    # 任务模板
 ├── tests/                    # 测试
