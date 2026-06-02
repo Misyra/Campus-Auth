@@ -102,7 +102,8 @@ export const appOptions = {
         const q = this.logFilter.search.toLowerCase();
         result = result.filter(l => l.message.toLowerCase().includes(q));
       }
-      return result;
+      // P1-FE-4: 预计算截图 URL，避免模板中重复调用 extractScreenshotUrl
+      return result.map(item => ({ ...item, _screenshot: this.extractScreenshotUrl(item.message) }));
     },
     networkStatus() {
       if (!this.status.monitoring) return 'idle';
@@ -205,6 +206,7 @@ export const appOptions = {
     if (this._toastTimer) clearTimeout(this._toastTimer);
     if (this._toastLeavingTimer) clearTimeout(this._toastLeavingTimer);
     if (this._appearanceTimer) clearTimeout(this._appearanceTimer);
+    if (this._logScrollRaf) cancelAnimationFrame(this._logScrollRaf);
     this.timers.forEach((t) => clearInterval(t));
     if (this.ws) this.ws.close();
     // 清理快捷键
