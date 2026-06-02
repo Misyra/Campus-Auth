@@ -13,6 +13,7 @@ from .debug_manager import DebugSessionManager
 from .login_history_service import LoginHistoryService
 from .monitor_service import MonitorService
 from .profile_service import ProfileService
+from .scheduler_service import SchedulerService
 from .task_service import TaskService
 from .ws_manager import WebSocketManager
 
@@ -45,6 +46,9 @@ class ServiceContainer:
             login_history_service=self.login_history_service,
         )
         self.task_service = TaskService(project_root)
+        self.scheduler_service = SchedulerService(
+            project_root, self.task_service, self.monitor_service
+        )
         self.autostart_service = AutoStartService(project_root)
         self.debug_manager = DebugSessionManager(project_root)
 
@@ -69,6 +73,9 @@ class ServiceContainer:
         # 启动监控服务
         self.monitor_service.boot()
 
+        # 启动定时任务调度器
+        self.scheduler_service.start()
+
         # 启动 WebSocket drain loop
         self._ws_drain_task = asyncio.create_task(
             self.monitor_service._ws_drain_loop()
@@ -79,6 +86,9 @@ class ServiceContainer:
     async def shutdown(self):
         """关闭服务。"""
         container_logger.info("服务容器开始关闭...")
+
+        # 停止定时任务调度器
+        self.scheduler_service.stop()
 
         # 取消 WebSocket drain loop
         if self._ws_drain_task:

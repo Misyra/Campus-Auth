@@ -86,6 +86,7 @@ class TaskService:
                 "description": task.description,
                 "type": "script",
                 "content": content,
+                "binary_path": task.binary_path,
             }
         result = task.to_dict()
         result["id"] = task_id
@@ -129,14 +130,18 @@ class TaskService:
         return False, "任务保存失败"
 
     def _save_script_task(self, task_id: str, config: dict[str, Any]) -> tuple[bool, str]:
-        """保存 Python 脚本任务。"""
+        """保存自定义脚本任务。"""
         content = config.get("content", "")
         if not content.strip():
             return False, "脚本内容不能为空"
 
-        success = self.task_manager.save_task(
-            task_id, {"content": content}, task_type="script"
-        )
+        save_data = {
+            "content": content,
+            "name": config.get("name", ""),
+            "description": config.get("description", ""),
+            "binary_path": config.get("binary_path", ""),
+        }
+        success = self.task_manager.save_task(task_id, save_data, task_type="script")
         if success:
             task_logger.info("脚本任务已保存: %s", task_id)
             return True, "脚本任务保存成功"
