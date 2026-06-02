@@ -238,6 +238,10 @@ class MonitorService:
             if result.success:
                 cmd.response_data = (True, result.data)
                 success = True
+                # 统一在消费者线程设置 network_state（BE-7 修复）
+                core = self._monitor_core
+                if core is not None and core.monitoring:
+                    core.network_state = NetworkState.CONNECTED
             else:
                 error_msg = result.error or "登录失败"
                 cmd.response_data = (False, error_msg)
@@ -491,12 +495,16 @@ class MonitorService:
 
         # Consumer handles the hot-update on the monitor core
         if self._is_monitoring:
-            self._cmd_queue.put(
-                MonitorCommand(
-                    type="reload",
-                    data={"config": self._copy_runtime_config()},
+            try:
+                self._cmd_queue.put_nowait(
+                    MonitorCommand(
+                        type="reload",
+                        data={"config": self._copy_runtime_config()},
+                    )
                 )
-            )
+            except queue.Full:
+                service_logger.warning("命令队列已满，跳过 reload 命令入队")
+                return
 
         service_logger.info("Config reloaded from settings.json")
 
@@ -512,16 +520,20 @@ class MonitorService:
         )
 
         if self._is_monitoring:
-            self._cmd_queue.put(
-                MonitorCommand(
-                    type="profile_switch",
-                    data={
-                        "profile": profile_name,
-                        "config": self._copy_runtime_config(),
-                        "pure_mode": self.pure_mode,
-                    },
+            try:
+                self._cmd_queue.put_nowait(
+                    MonitorCommand(
+                        type="profile_switch",
+                        data={
+                            "profile": profile_name,
+                            "config": self._copy_runtime_config(),
+                            "pure_mode": self.pure_mode,
+                        },
+                    )
                 )
-            )
+            except queue.Full:
+                service_logger.warning("命令队列已满，跳过 profile_switch 命令入队")
+                return
             self._push_log(
                 "监控正在按新方案重启",
                 level="INFO",
@@ -538,29 +550,40 @@ class MonitorService:
             return False, f"配置无效: {error}"
 
         config = self._copy_runtime_config()
-        self._cmd_queue.put(
-            MonitorCommand(
-                type="start", data={"config": config, "pure_mode": self.pure_mode}
+        try:
+            self._cmd_queue.put_nowait(
+                MonitorCommand(
+                    type="start", data={"config": config, "pure_mode": self.pure_mode}
+                )
             )
-        )
+        except queue.Full:
+            service_logger.warning("命令队列已满，跳过 start 命令入队")
+            return False, "队列已满"
 
         return True, "监控已启动"
 
     def _on_profile_switch(self, profile_name: str) -> None:
         """自动切换方案时的回调（从监控线程调用）。"""
-        self._cmd_queue.put(
-            MonitorCommand(
-                type="profile_reload",
-                data={"profile_name": profile_name},
+        try:
+            self._cmd_queue.put_nowait(
+                MonitorCommand(
+                    type="profile_reload",
+                    data={"profile_name": profile_name},
+                )
             )
-        )
+        except queue.Full:
+            service_logger.warning("命令队列已满，跳过 profile_reload 命令入队")
 
     def stop_monitoring(self) -> tuple[bool, str]:
         service_logger.info("收到停止监控请求")
         if not self._is_monitoring:
             return False, "监控未运行"
 
-        self._cmd_queue.put(MonitorCommand(type="stop"))
+        try:
+            self._cmd_queue.put_nowait(MonitorCommand(type="stop"))
+        except queue.Full:
+            service_logger.warning("命令队列已满，跳过 stop 命令入队")
+            return False, "队列已满"
         return True, "监控已停止"
 
     def shutdown(self) -> None:
@@ -608,6 +631,7 @@ class MonitorService:
             if self._login_in_progress.is_set():
                 return False, "登录操作正在进行中"
             self._login_in_progress.set()
+        cmd_in_queue = False
         try:
             service_logger.info("Manual login requested")
             runtime_config = self._copy_runtime_config()
@@ -621,9 +645,16 @@ class MonitorService:
                 },
                 response_event=threading.Event(),
             )
-            self._cmd_queue.put(cmd)
+            try:
+                self._cmd_queue.put_nowait(cmd)
+                cmd_in_queue = True
+            except queue.Full:
+                service_logger.warning("命令队列已满，跳过 login 命令入队")
+                self._login_in_progress.clear()
+                return False, "队列已满"
         except Exception:
-            self._login_in_progress.clear()
+            if not cmd_in_queue:
+                self._login_in_progress.clear()
             raise
 
         # Wait for consumer to execute login (with timeout)
@@ -631,15 +662,12 @@ class MonitorService:
         cmd.response_event.wait(timeout=login_timeout)
 
         if cmd.response_data is None:
-            self._login_in_progress.clear()
+            # 超时分支不清除 _login_in_progress，由消费者 finally 统一清除
             return False, "手动登录超时"
 
         success, message = cmd.response_data
         if success:
-            # Sync status to running monitor core if active
-            core = self._monitor_core
-            if core is not None and core.monitoring:
-                core.network_state = NetworkState.CONNECTED
+            # network_state 已由消费者 _handle_login 统一赋值，无需 API 线程操作
             self._update_status_snapshot()
             service_logger.info("Manual login succeeded")
             return True, f"手动登录成功：{message}"

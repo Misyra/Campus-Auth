@@ -44,15 +44,16 @@ class ProfileService:
                 return self._data.model_copy(deep=True)
             except Exception as exc:
                 profile_logger.exception("加载 settings.json 失败")
-                # 备份损坏文件
-                if self._settings_path.exists():
-                    corrupt_name = f"settings.corrupt.{int(time.time())}.json"
-                    corrupt_path = self._settings_path.parent / corrupt_name
-                    try:
-                        self._settings_path.rename(corrupt_path)
-                        profile_logger.info("已备份损坏文件到: %s", corrupt_path)
-                    except OSError as rename_err:
-                        profile_logger.warning("备份损坏文件失败: %s", rename_err)
+                # 备份损坏文件（EAFP：直接尝试 rename，避免 TOCTOU 竞态）
+                corrupt_name = f"settings.corrupt.{int(time.time())}.json"
+                corrupt_path = self._settings_path.parent / corrupt_name
+                try:
+                    self._settings_path.rename(corrupt_path)
+                    profile_logger.info("已备份损坏文件到: %s", corrupt_path)
+                except FileNotFoundError:
+                    pass
+                except OSError as rename_err:
+                    profile_logger.warning("备份损坏文件失败: %s", rename_err)
                 # 尝试从 backups/ 恢复最新备份
                 restored = self._try_restore_from_backup()
                 if restored:
