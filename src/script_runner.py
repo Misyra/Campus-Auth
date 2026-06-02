@@ -58,6 +58,7 @@ class ScriptRunner:
 
     脚本自行硬编码账号密码等参数，通过 stdout 输出信息。
     成功与否由网络检测判断，脚本只需发请求。
+    支持 .py 文件和 JSON 格式（包含 content 字段）。
     """
 
     def __init__(
@@ -69,20 +70,52 @@ class ScriptRunner:
         self.script_path = script_path
         self.timeout = timeout
         self.binary_path = binary_path or get_default_binary()
+        self._script_content: str | None = None
+
+    def _load_script_content(self) -> str | None:
+        """从 JSON 文件加载脚本内容。"""
+        if self._script_content is not None:
+            return self._script_content
+
+        if self.script_path.suffix.lower() == ".json":
+            try:
+                import json
+                data = json.loads(self.script_path.read_text(encoding="utf-8"))
+                self._script_content = data.get("content", "")
+                return self._script_content
+            except Exception as e:
+                logger.error("无法读取脚本 JSON %s: %s", self.script_path, e)
+                return None
+        # .py 文件直接返回 None，由 _build_cmd 处理
+        return None
 
     def _build_cmd(self) -> list[str]:
         """构建执行命令。"""
         script = str(self.script_path)
         binary = self.binary_path.lower()
 
-        # Shell 类型使用 -c 参数
+        # JSON 格式脚本：从 content 字段读取命令内容
+        content = self._load_script_content()
+        if content is not None:
+            if platform.system() == "Windows":
+                if "powershell" in binary or "pwsh" in binary:
+                    return [self.binary_path, "-NoProfile", "-WindowStyle", "Hidden", "-Command", content]
+                elif "cmd" in binary:
+                    return [self.binary_path, "/c", content]
+            else:
+                shell_names = ["bash", "sh", "zsh", "fish"]
+                if any(shell in binary for shell in shell_names):
+                    return [self.binary_path, "-c", content]
+            # Python 或其他解释器：用 -c 执行内容
+            return [self.binary_path, "-c", content]
+
+        # .py 或其他文件：按原逻辑处理
         if platform.system() == "Windows":
             if "powershell" in binary or "pwsh" in binary:
-                return [self.binary_path, "-File", script]
+                return [self.binary_path, "-NoProfile", "-WindowStyle", "Hidden", "-Command", f"& '{script}'"]
             elif "cmd" in binary:
                 return [self.binary_path, "/c", script]
         else:
-            # Linux/macOS Shell
             shell_names = ["bash", "sh", "zsh", "fish"]
             if any(shell in binary for shell in shell_names):
                 return [self.binary_path, script]
@@ -103,17 +136,22 @@ class ScriptRunner:
         env = _build_minimal_env()
         cmd = self._build_cmd()
 
+        # Windows 下隐藏窗口
+        kwargs = {
+            "capture_output": True,
+            "text": True,
+            "timeout": self.timeout,
+            "cwd": str(self.script_path.parent),
+            "encoding": "utf-8",
+            "errors": "replace",
+        }
+        if platform.system() == "Windows":
+            kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
+        else:
+            kwargs["env"] = env
+
         try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=self.timeout,
-                env=env,
-                cwd=str(self.script_path.parent),
-                encoding="utf-8",
-                errors="replace",
-            )
+            result = subprocess.run(cmd, **kwargs)
         except subprocess.TimeoutExpired:
             logger.error("脚本执行超时 (%ds): %s", self.timeout, self.script_path)
             return False, f"脚本执行超时 ({self.timeout}s)"
@@ -145,7 +183,7 @@ def _build_minimal_env() -> dict[str, str]:
     safe: dict[str, str] = {}
     base_keys = {"PATH", "HOME", "USER", "TEMP", "TMP"}
     if platform.system() == "Windows":
-        base_keys.update({"SystemRoot", "ComSpec", "windir"})
+        base_keys.update({"SystemRoot", "ComSpec", "windir", "USERPROFILE", "APPDATA", "LOCALAPPDATA"})
     else:
         base_keys.update({"LANG", "LC_ALL", "SHELL", "XDG_RUNTIME_DIR"})
     for key in base_keys:
