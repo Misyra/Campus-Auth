@@ -18,6 +18,14 @@ logger = get_logger("script_runner", side="BACKEND")
 DEFAULT_TIMEOUT = 60
 
 
+def _escape_ps_single_quote(s: str) -> str:
+    """转义 PowerShell 单引号字符串中的单引号（' → ''）。
+
+    PowerShell 单引号字符串规则：内部单引号用两个连续单引号转义。
+    """
+    return s.replace("'", "''")
+
+
 def get_default_binary() -> str:
     """获取默认执行二进制（当前运行的 Python）。"""
     return sys.executable
@@ -113,7 +121,7 @@ class ScriptRunner:
         # .py 或其他文件：按原逻辑处理
         if platform.system() == "Windows":
             if "powershell" in binary or "pwsh" in binary:
-                return [self.binary_path, "-NoProfile", "-WindowStyle", "Hidden", "-Command", f"& '{script}'"]
+                return [self.binary_path, "-NoProfile", "-WindowStyle", "Hidden", "-Command", f"& '{_escape_ps_single_quote(script)}'"]
             elif "cmd" in binary:
                 return [self.binary_path, "/c", script]
         else:
