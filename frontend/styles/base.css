@@ -21,6 +21,7 @@
   --text-primary: #f1f5f9;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
+  --text-on-accent: #ffffff;
 
   /* 主题色 */
   --accent: #22d3ee;
@@ -58,10 +59,13 @@
   --blur-sm: blur(4px);
   --blur-md: blur(8px);
   --blur-lg: blur(12px);
-  --card-blur: none;
 
   /* 字体 */
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  /* 动画/布局尺寸 */
+  --collapse-anim-max: 300px;
+  --editor-min-height: 300px;
 
   /* z-index 层级 */
   --z-base: 1;
@@ -443,7 +447,7 @@ textarea.json-valid {
   background: var(--bg-glass);
   border: 1px solid var(--border-accent);
   border-radius: var(--radius-lg);
-  backdrop-filter: var(--card-blur);
+  backdrop-filter: none;
   box-shadow: var(--shadow);
 }
 

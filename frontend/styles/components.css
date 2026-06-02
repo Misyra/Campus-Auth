@@ -2,7 +2,7 @@
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  backdrop-filter: var(--card-blur, var(--blur-md));
+  backdrop-filter: var(--blur-md);
   box-shadow: var(--shadow);
   transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
 }
@@ -254,7 +254,7 @@
 
 .nav-more-enter-to,
 .nav-more-leave-from {
-  max-height: 300px;
+  max-height: var(--collapse-anim-max);
   opacity: 1;
 }
 
@@ -753,7 +753,7 @@
   width: 18px;
   height: 18px;
   left: 2px;
-  background-color: white;
+  background-color: var(--text-on-accent);
   border-radius: 50%;
   transition: transform 0.2s ease;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
@@ -814,7 +814,7 @@
   height: 16px;
   border-radius: 50%;
   background: var(--error);
-  color: #fff;
+  color: var(--text-on-accent);
   font-size: 10px;
   display: flex;
   align-items: center;
@@ -899,3 +899,20 @@
 .notification-item-body {
   color: var(--text-secondary);
 }
+
+/* 工具类: SVG sizing */
+.icon-xs { width: 11px; height: 11px; }
+.icon-sm { width: 14px; height: 14px; }
+.icon-md { width: 16px; height: 16px; }
+.icon-lg { width: 20px; height: 20px; }
+.icon-xl { width: 24px; height: 24px; }
+
+/* 工具类: flex/gap */
+.flex-row { display: flex; align-items: center; }
+.gap-xs { gap: 4px; }
+.gap-sm { gap: 6px; }
+.gap-md { gap: 8px; }
+.gap-lg { gap: 12px; }
+
+/* 工具类: alignment */
+.ms-auto { margin-left: auto; }

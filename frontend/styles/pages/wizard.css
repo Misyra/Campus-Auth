@@ -87,7 +87,7 @@
 .step.completed .step-number {
   background: var(--success);
   border-color: var(--success);
-  color: white;
+  color: var(--text-on-accent);
 }
 
 .step-label {

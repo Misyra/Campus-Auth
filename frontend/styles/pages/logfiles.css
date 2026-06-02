@@ -51,7 +51,7 @@
 
 .logfiles-date-tab.active {
   background: var(--primary);
-  color: #fff;
+  color: var(--text-on-accent);
   border-color: var(--primary);
 }
 

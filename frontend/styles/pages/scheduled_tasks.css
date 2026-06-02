@@ -59,12 +59,12 @@
   border-bottom: 1px solid var(--border);
 }
 
-.form-row {
+.form-section .form-row {
   display: flex;
   gap: 12px;
 }
 
-.form-row .form-group {
+.form-section .form-row .form-group {
   margin-bottom: 0;
 }
 
@@ -78,13 +78,8 @@
   gap: 12px;
 }
 
-.history-item {
-  padding: 12px;
-  border-radius: var(--radius-md);
-  background: var(--bg-glass);
-  border: 1px solid var(--border);
-}
-
+/* .history-item 基础样式来自 dashboard.css */
+/* 以下为定时任务历史的修饰符 */
 .history-item.success {
   border-left: 3px solid var(--success);
 }
