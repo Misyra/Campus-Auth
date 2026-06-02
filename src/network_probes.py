@@ -264,6 +264,7 @@ def is_network_available_portal(
     def _check_portal(url: str, expected: str) -> tuple[str, bool, str]:
         start = time.perf_counter()
         try:
+            logger.debug("已禁用 SSL 验证以兼容校园网自签证书 (portal)")
             with httpx.Client(
                 verify=False, trust_env=not _block_proxy, follow_redirects=True
             ) as client:
@@ -317,6 +318,7 @@ def is_network_available_http(
         """在独立线程中检测单个 URL。返回 (url, success, detail)。"""
         start = time.perf_counter()
         try:
+            logger.debug("已禁用 SSL 验证以兼容校园网自签证书 (http)")
             with httpx.Client(verify=False, trust_env=not _block_proxy) as client:
                 resp = client.get(
                     url, timeout=timeout, follow_redirects=follow_redirects

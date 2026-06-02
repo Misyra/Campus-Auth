@@ -162,6 +162,12 @@ class StepConfig:
         extra_fields = {
             k: v for k, v in data.items() if k not in cls.__dataclass_fields__
         }
+        if extra_fields:
+            logger.warning(
+                "[StepConfig] 步骤 %s 包含未知字段（可能为 typo）: %s",
+                data.get("id", "?"),
+                ", ".join(sorted(extra_fields.keys())),
+            )
         # 合并数据中自带的 extra 和不在 dataclass 中的字段
         merged_extra = {**data.get("extra", {}), **extra_fields}
         return cls(**base_fields, extra=merged_extra)

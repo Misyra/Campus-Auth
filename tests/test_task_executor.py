@@ -84,6 +84,29 @@ class TestStepConfig:
         step = StepConfig.from_dict(data)
         assert step.extra["custom_param"] == 42
 
+    def test_from_dict_warns_on_typo(self):
+        """未知字段应触发 warning 日志（帮助用户发现 typo）"""
+        from unittest.mock import patch as _patch
+
+        data = {
+            "id": "s1",
+            "type": "click",
+            "selector": "#btn",
+            "selctor": "#wrong",  # typo: selctor → selector
+            "unwanted": True,
+        }
+        with _patch("src.task_executor.logger") as mock_logger:
+            step = StepConfig.from_dict(data)
+            mock_logger.warning.assert_called_once()
+            args, kwargs = mock_logger.warning.call_args
+            # 日志消息应包含所有未知字段名
+            msg = args[0] % args[1:] if len(args) > 1 else args[0]
+            assert "selctor" in msg
+            assert "unwanted" in msg
+        # 未知字段仍收入 extra（行为不变）
+        assert step.extra["selctor"] == "#wrong"
+        assert step.extra["unwanted"] is True
+
     def test_to_dict_basic(self):
         step = StepConfig(id="s1", type="input", selector="#user", value="admin")
         d = step.to_dict()
