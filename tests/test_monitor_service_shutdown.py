@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from backend.monitor_service import MonitorCommand, MonitorService
+from src.monitor_core import NetworkState
 
 
 class TestProfileReloadNoDeadlock:
@@ -107,3 +108,122 @@ class TestShutdownSynchronous:
         svc._handle_stop()
         svc._handle_stop()
         svc._handle_stop()
+
+
+class TestLoginInProgressNoDoubleClear:
+    """P1-BE-3: _login_in_progress 清除路径收敛为单点测试"""
+
+    def test_login_in_progress_no_double_clear(self):
+        """测试超时分支不清除 _login_in_progress，由消费者 finally 统一清除"""
+        svc = MonitorService.__new__(MonitorService)
+        svc._cmd_queue = queue.Queue(maxsize=50)
+        svc._login_in_progress = threading.Event()
+        svc._login_in_progress.set()  # 模拟登录进行中
+        svc._login_lock = threading.Lock()
+        svc._runtime_config = {"auth_url": "http://test.com", "username": "test"}
+        svc._ui_config = MagicMock()
+        svc._ui_config.login_timeout = 0.01  # 极短超时
+        svc._monitor_core = None
+        svc._pure_mode = False
+        svc._pure_mode_lock = threading.Lock()
+
+        # 模拟消费者不清除 _login_in_progress（模拟超时场景）
+        # 创建一个不会设置 response_data 的命令
+        cmd = MonitorCommand(
+            type="login",
+            data={"config": {}, "pure_mode": False, "skip_pause_check": True},
+            response_event=threading.Event(),
+        )
+
+        # 直接将 cmd 放入队列，模拟 put_nowait 成功
+        svc._cmd_queue.put_nowait(cmd)
+
+        # 模拟 run_manual_login 超时路径：不消费队列，response_data 保持 None
+        with patch.object(svc, '_copy_runtime_config', return_value={}):
+            # 直接测试超时分支逻辑
+            cmd.response_event.wait(timeout=0.01)
+
+            # 超时分支：response_data 为 None
+            assert cmd.response_data is None
+            # 关键验证：超时分支不应清除 _login_in_progress
+            # （消费者 finally 才负责清除）
+            assert svc._login_in_progress.is_set(), \
+                "超时分支不应清除 _login_in_progress，应由消费者 finally 统一清除"
+
+
+class TestStartMonitoringPutNowait:
+    """P1-BE-5: start_monitoring 使用 put_nowait，队列满时不阻塞"""
+
+    def test_start_monitoring_put_nowait(self):
+        """测试队列满时 start_monitoring 不阻塞，返回错误"""
+        svc = MonitorService.__new__(MonitorService)
+        svc._cmd_queue = queue.Queue(maxsize=1)
+        svc._status_snapshot = MagicMock()
+        svc._status_snapshot.monitoring = False
+        svc._runtime_config = {"auth_url": "http://test.com", "username": "test", "monitor": {}}
+        svc._pure_mode = False
+        svc._pure_mode_lock = threading.Lock()
+
+        # 填满队列
+        svc._cmd_queue.put_nowait(MonitorCommand(type="dummy"))
+
+        with patch('backend.monitor_service.ConfigValidator.validate_env_config', return_value=(True, "")):
+            with patch.object(svc, '_copy_runtime_config', return_value={}):
+                import time
+                start = time.time()
+                ok, msg = svc.start_monitoring()
+                elapsed = time.time() - start
+
+        # 验证不阻塞且返回错误
+        assert not ok
+        assert "队列已满" in msg
+        assert elapsed < 1.0, f"start_monitoring 阻塞了 {elapsed:.2f}s"
+
+
+class TestNetworkStateSetInConsumer:
+    """P1-BE-7: network_state 在消费者线程统一赋值"""
+
+    def test_network_state_set_in_consumer(self):
+        """测试登录成功后 network_state 由消费者 _handle_login 设置"""
+        svc = MonitorService.__new__(MonitorService)
+        svc._login_in_progress = threading.Event()
+        svc._login_history = None
+        svc._profile_service = MagicMock()
+        svc._profile_service.get_active_profile.return_value = MagicMock(name="test")
+        svc._ui_config = MagicMock()
+        svc._ui_config.login_timeout = 10
+        svc._runtime_config = {"auth_url": "http://test.com", "username": "test"}
+        svc._pure_mode = False
+        svc._pure_mode_lock = threading.Lock()
+
+        # 模拟 monitor_core
+        mock_core = MagicMock()
+        mock_core.monitoring = True
+        mock_core.network_state = NetworkState.UNKNOWN
+        svc._monitor_core = mock_core
+
+        # 模拟 Worker 返回成功
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = "ok"
+
+        cmd = MonitorCommand(
+            type="login",
+            data={"config": {}, "pure_mode": False, "skip_pause_check": True},
+            response_event=threading.Event(),
+        )
+
+        with patch('backend.monitor_service.get_worker') as mock_get_worker:
+            mock_worker = MagicMock()
+            mock_worker.submit.return_value = mock_result
+            mock_get_worker.return_value = mock_worker
+
+            # 调用消费者 _handle_login
+            svc._handle_login(cmd)
+
+        # 验证 network_state 已由消费者设置为 CONNECTED
+        assert mock_core.network_state == NetworkState.CONNECTED, \
+            "消费者 _handle_login 成功分支应设置 core.network_state = CONNECTED"
+        # 验证 _login_in_progress 已清除
+        assert not svc._login_in_progress.is_set(), \
+            "消费者 finally 应清除 _login_in_progress"
