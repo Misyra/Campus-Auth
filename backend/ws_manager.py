@@ -62,4 +62,10 @@ class WebSocketManager:
                 pass
 
     async def _send_safe(self, ws: WebSocket, message: str):
-        await ws.send_text(message)
+        try:
+            await asyncio.wait_for(ws.send_text(message), timeout=5.0)
+        except asyncio.TimeoutError:
+            ws_logger.warning("WebSocket 发送超时，断开连接")
+            async with self._lock:
+                if ws in self._connections:
+                    self._connections.remove(ws)

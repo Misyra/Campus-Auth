@@ -100,11 +100,6 @@ class LoginAttemptHandler:
             # 使用延迟导入避免循环依赖
             return await self._perform_login_with_auth_class()
 
-        except LoginCancelledError:
-            self.logger.info("登录操作已取消")
-            return False, "登录已取消"
-        # 注：except Exception 不捕获 KeyboardInterrupt/SystemExit（它们继承 BaseException），
-        # 也不捕获 Python 3.9+ 的 asyncio.CancelledError，因此不会阻塞进程退出。
         except Exception as e:
             error_msg = f"登录过程中发生错误: {str(e)}"
             self.logger.error(error_msg)
@@ -122,10 +117,9 @@ class LoginAttemptHandler:
 
     async def _perform_login_with_active_task(self) -> tuple[bool, str] | None:
         """执行当前活动任务；返回 None 表示未找到可执行任务。"""
-        import time as _time
         from ..task_executor import TaskExecutor, TaskManager, ScriptTaskInfo
 
-        phase_start = _time.perf_counter()
+        phase_start = time.perf_counter()
         try:
             if self._task_manager is None:
                 root_override = os.getenv("CAMPUS_AUTH_PROJECT_ROOT", "").strip()
@@ -177,7 +171,7 @@ class LoginAttemptHandler:
                 await self.close_browser()
 
             self.logger.info("启动浏览器...")
-            browser_start = _time.perf_counter()
+            browser_start = time.perf_counter()
             browser_manager = BrowserContextManager(
                 self.config, cancel_event=self.cancel_event
             )
@@ -188,7 +182,7 @@ class LoginAttemptHandler:
                 raise
             self._browser_ctx = browser_manager
             self.logger.info(
-                "浏览器就绪 (%.1fs)", _time.perf_counter() - browser_start
+                "浏览器就绪 (%.1fs)", time.perf_counter() - browser_start
             )
 
             try:
@@ -218,7 +212,7 @@ class LoginAttemptHandler:
                     success, message = await executor.execute(browser_manager.page)
                 finally:
                     browser_manager.page.remove_listener("dialog", _handle_dialog)
-                total = _time.perf_counter() - phase_start
+                total = time.perf_counter() - phase_start
                 if success:
                     self.logger.info("登录成功 (总耗时 %.1fs): %s", total, message)
                     await asyncio.sleep(2)  # 登录成功后等待，让页面完成跳转和状态更新
@@ -238,7 +232,7 @@ class LoginAttemptHandler:
             self.logger.info("登录已取消")
             return False, "登录已取消"
         except Exception as e:
-            total = _time.perf_counter() - phase_start
+            total = time.perf_counter() - phase_start
             self.logger.error("登录异常 (总耗时 %.1fs): %s", total, e)
             return False, f"任务执行异常: {e}"
 

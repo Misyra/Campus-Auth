@@ -15,6 +15,7 @@ from src.version import compare_versions, get_project_version
 from ..constants import AUTH_DATA_DIR, PROJECT_ROOT
 from ..deps import get_autostart_service, get_monitor_service
 from ..monitor_service import MonitorService
+from ..scheduler_service import detect_available_shells, get_default_shell
 from ..schemas import ActionResponse, AutoStartStatusResponse
 
 router = APIRouter()
@@ -41,6 +42,7 @@ async def check_update() -> dict:
                     "User-Agent": "Campus-Auth",
                 },
             )
+        resp.raise_for_status()
         data = resp.json()
         tag = data.get("tag_name", "").lstrip("v")
         return {
@@ -85,6 +87,17 @@ def get_init_status(
 
 
 # ── 自动启动 ──
+
+
+@router.get("/api/shells")
+def list_shells() -> dict:
+    """获取系统可用的 Shell 列表。"""
+    shells = detect_available_shells()
+    default_shell = get_default_shell()
+    return {
+        "shells": shells,
+        "default": default_shell,
+    }
 
 
 @router.get("/api/autostart/status", response_model=AutoStartStatusResponse)

@@ -132,8 +132,8 @@ class LoginHistoryService:
             if kept:
                 content += "\n"
             atomic_write(str(self._history_path), content, encoding="utf-8")
-            removed = len(kept)
-            if removed > 0:
-                logger.debug("登录历史清理完成，保留 %d 条记录", removed)
+            kept_count = len(kept)
+            if kept_count > 0:
+                logger.debug("登录历史清理完成，保留 %d 条记录", kept_count)
         except Exception:
             logger.warning("清理登录历史失败", exc_info=True)

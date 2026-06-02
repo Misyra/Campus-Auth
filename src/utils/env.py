@@ -39,6 +39,7 @@ def build_login_env_vars(
     task_url: str | None = None,
     custom_variables: dict[str, str] | None = None,
 ) -> dict[str, str]:
+    """构建登录环境变量，用于任务模板替换。"""
     env_vars = dict(os.environ)
 
     auth_url = runtime_config.get("auth_url", "")
@@ -66,10 +67,6 @@ def build_login_env_vars(
 
     # 在所有变量注入后解析 task_url 模板
     if task_url:
-        # 将 denylist 中的运行时变量显式写入 os.environ，确保模板替换不被跳过
-        for k, v in env_vars.items():
-            if k.upper() in _ENV_DENYLIST_UPPER:
-                os.environ[k] = v
         resolved_url = task_url
         for k, v in env_vars.items():
             resolved_url = resolved_url.replace("{{" + k + "}}", v)
