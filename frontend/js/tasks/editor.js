@@ -73,12 +73,23 @@ export const editorTaskMethods = {
       this.toastOnly(false, 'JSON 格式错误，无法格式化');
     }
   },
+  _cancelDangerConfirm(reason) {
+    this._releaseFocusTrap();
+    if (this._dangerTimer) {
+      clearInterval(this._dangerTimer);
+      this._dangerTimer = null;
+    }
+    if (this._dangerResolve) {
+      this._dangerResolve(false);
+      this._dangerResolve = null;
+    }
+    this.dangerConfirm = null;
+    this.dangerCountdown = 0;
+  },
   showDangerConfirm(dangers) {
     return new Promise((resolve) => {
-      if (this._dangerTimer) {
-        clearInterval(this._dangerTimer);
-        this._dangerTimer = null;
-      }
+      // 清理旧状态，避免泄漏
+      this._cancelDangerConfirm('reenter');
       // resolve 存储到非响应式属性，避免 Vue 代理函数对象
       this._dangerResolve = resolve;
       this.dangerConfirm = { dangers };
@@ -185,6 +196,8 @@ export const editorTaskMethods = {
           this.frontendLogger.warn('tasks', '导入失败: 文件不是有效 JSON: ' + e.message);
           this.toastOnly(false, '文件不是有效的 JSON');
         }
+        input.value = '';
+        input.onchange = null;
       };
       reader.readAsText(file);
     };

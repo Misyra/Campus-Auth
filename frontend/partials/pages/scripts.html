@@ -31,6 +31,7 @@
             v-for="(script, index) in scripts"
             :key="script.id"
             class="task-item hover-lift"
+            data-draggable-list
             :class="{ active: activeTaskId === script.id }"
             @dragstart="handleDragStart($event, index, 'scripts')"
             @dragover="onDragOver($event, index, 'scripts')"
