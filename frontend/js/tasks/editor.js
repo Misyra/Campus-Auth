@@ -165,7 +165,11 @@ export const editorTaskMethods = {
       reader.onload = (ev) => {
         try {
           const data = JSON.parse(ev.target.result);
-          const id = file.name.replace(/\.json$/, '').replace(/[^A-Za-z0-9_]/g, '_');
+          let id = file.name.replace(/\.json$/, '').replace(/[^A-Za-z0-9_]/g, '_');
+          // 确保 ID 以字母开头（HTML ID 规范）
+          if (/^[0-9]/.test(id)) {
+            id = 'task_' + id;
+          }
           this.editingTask = {
             id: id,
             name: data.name || '',
