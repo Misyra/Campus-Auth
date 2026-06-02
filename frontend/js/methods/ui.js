@@ -152,7 +152,12 @@ export const uiMethods = {
     }
   },
   onLogScroll() {
-    if (this._isViewerAtBottom()) this.newLogCount = 0;
+    // P1-FE-5: 用 requestAnimationFrame 节流，避免每次 scroll 事件都执行
+    if (this._logScrollRaf) return;
+    this._logScrollRaf = requestAnimationFrame(() => {
+      this._logScrollRaf = null;
+      if (this._isViewerAtBottom()) this.newLogCount = 0;
+    });
   },
   openFullscreen(src) {
     this.fullscreenSrc = src;

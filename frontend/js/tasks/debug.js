@@ -6,6 +6,8 @@ export const debugTaskMethods = {
     try {
       const { data } = await this.$api.post('/api/debug/start', { task_id: taskId });
       this.debugSession = data;
+      // P1-FE-6: 构建 Map 加速步骤结果查询
+      this._resultByIndex = new Map((data.results || []).map(r => [r.step_index, r]));
       this.frontendLogger.info('debug', `开始调试任务 ${taskId}`);
       this.$nextTick(() => {
         const overlay = document.querySelector('.debug-overlay');
@@ -25,6 +27,8 @@ export const debugTaskMethods = {
     try {
       const { data } = await this.$api.post(endpoint);
       this.debugSession = data;
+      // P1-FE-6: 构建 Map 加速步骤结果查询
+      this._resultByIndex = new Map((data.results || []).map(r => [r.step_index, r]));
     } catch (error) {
       const msg = extractApiError(error, errorMsg);
       this.frontendLogger.error('debug', errorMsg + ': ' + msg);
@@ -59,7 +63,8 @@ export const debugTaskMethods = {
   },
 
   getDebugStepResult(index) {
-    return this.debugSession.results.find(r => r.step_index === index) || null;
+    // P1-FE-6: 用 Map O(1) 查询替代 Array.find O(n)
+    return this._resultByIndex?.get(index) || null;
   },
 
   getDebugStepStatus(index) {
