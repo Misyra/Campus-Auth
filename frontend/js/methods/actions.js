@@ -97,4 +97,17 @@ export const actionMethods = {
       this.frontendLogger.error('history', '获取登录历史失败', error);
     }
   },
+  async clearLoginHistory() {
+    if (!this.loginHistory.length) return;
+    if (!confirm(`确定要清空所有 ${this.loginHistory.length} 条登录记录吗？此操作不可撤销。`)) return;
+    try {
+      const { data } = await this.$api.delete('/api/login-history');
+      this.loginHistory = [];
+      this.toastOnly(data.success, data.message);
+    } catch (error) {
+      const msg = extractApiError(error, '清空登录历史失败');
+      this.frontendLogger.error('history', '清空登录历史失败', msg);
+      this.toastOnly(false, msg);
+    }
+  },
 };

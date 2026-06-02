@@ -92,6 +92,23 @@ class LoginHistoryService:
             logger.warning("读取登录历史失败", exc_info=True)
             return []
 
+    def clear(self) -> int:
+        """清空所有登录历史记录，返回删除的记录数。"""
+        if not self._history_path.exists():
+            return 0
+        try:
+            count = 0
+            with open(self._history_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        count += 1
+            atomic_write(str(self._history_path), "", encoding="utf-8")
+            logger.info("登录历史已清空，共删除 %d 条记录", count)
+            return count
+        except Exception:
+            logger.warning("清空登录历史失败", exc_info=True)
+            return 0
+
     def _cleanup_old(self, max_age_days: int = 30) -> None:
         """清理超过 max_age_days 天的旧记录。"""
         if not self._history_path.exists():

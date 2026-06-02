@@ -92,11 +92,11 @@
           <textarea
             v-model="editingTask.content"
             rows="18"
-            placeholder="#!/usr/bin/env python3&#10;import os, json&#10;&#10;username = os.environ['LOGIN_USERNAME']&#10;..."
+            placeholder="#!/usr/bin/env python3&#10;import httpx&#10;&#10;resp = httpx.post('http://...', data={...})&#10;..."
             class="script-editor"
           ></textarea>
           <span class="hint">
-            脚本通过环境变量获取参数，通过 stdout 输出 JSON 结果
+            脚本直接硬编码账号密码等参数，通过 stdout 输出信息
           </span>
         </div>
         <div class="task-editor-actions">
@@ -118,13 +118,8 @@
           <h4>工作原理</h4>
           <p>Python 脚本在子进程中执行，通过 HTTP 请求直接登录校园网，无需启动浏览器，资源占用极低。</p>
 
-          <h4>环境变量</h4>
-          <ul>
-            <li><code>CAMPUS_USERNAME</code> — 用户名</li>
-            <li><code>CAMPUS_PASSWORD</code> — 密码</li>
-            <li><code>CAMPUS_ISP</code> — 运营商（可能为空）</li>
-            <li><code>CAMPUS_URL</code> — 认证地址</li>
-          </ul>
+          <h4>编写方式</h4>
+          <p>直接在脚本中硬编码认证地址、账号、密码等参数，不依赖环境变量。</p>
 
           <h4>输出说明</h4>
           <p>脚本只需发送请求，<strong>登录是否成功由系统网络检测自动判断</strong>，无需脚本自行判断。</p>
@@ -137,30 +132,29 @@
           <h4>可用 HTTP 库</h4>
           <ul>
             <li><code>httpx</code> — 已安装，推荐使用，支持 HTTP/2</li>
-            <li><code>requests</code> — 已安装，最常用的 HTTP 库</li>
             <li><code>urllib.request</code> — Python 标准库，无需安装任何依赖</li>
           </ul>
 
           <h4>示例（httpx）</h4>
           <pre>#!/usr/bin/env python3
-import os, httpx
+import httpx
 
-resp = httpx.post(os.environ["CAMPUS_URL"], data={
-    "username": os.environ["CAMPUS_USERNAME"],
-    "password": os.environ["CAMPUS_PASSWORD"],
-    "operator": os.environ.get("CAMPUS_ISP", ""),
+resp = httpx.post("http://10.0.0.1/login", data={
+    "username": "your_username",
+    "password": "your_password",
+    "operator": "cmcc",
 })
 print(f"HTTP {resp.status_code}")</pre>
 
           <h4>示例（urllib 标准库）</h4>
           <pre>#!/usr/bin/env python3
-import os, urllib.request, urllib.parse
+import urllib.request, urllib.parse
 
 data = urllib.parse.urlencode({
-    "username": os.environ["CAMPUS_USERNAME"],
-    "password": os.environ["CAMPUS_PASSWORD"],
+    "username": "your_username",
+    "password": "your_password",
 }).encode()
-req = urllib.request.Request(os.environ["CAMPUS_URL"], data=data)
+req = urllib.request.Request("http://10.0.0.1/login", data=data)
 with urllib.request.urlopen(req, timeout=10) as resp:
     print(f"HTTP {resp.status}")</pre>
 
