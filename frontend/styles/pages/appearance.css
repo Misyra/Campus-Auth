@@ -445,7 +445,7 @@ body.has-custom-bg::before {
   box-sizing: border-box;
 }
 
-.random-wallpaper-modal .form-input:focus {
+.random-wallpaper-modal .form-input:focus-visible {
   border-color: var(--accent);
 }
 

@@ -105,7 +105,7 @@
   text-decoration: none;
 }
 
-.skip-link:focus {
+.skip-link:focus-visible {
   top: 16px;
 }
 
@@ -118,6 +118,7 @@ body {
     var(--bg-primary);
   color: var(--text-primary);
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
 }
 
@@ -148,6 +149,7 @@ body {
   display: flex;
   width: 100%;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .page-content {
@@ -263,7 +265,7 @@ body {
   font-family: var(--font-mono);
 }
 
-.log-toolbar .log-search:focus {
+.log-toolbar .log-search:focus-visible {
   outline: none;
   border-color: var(--accent);
 }

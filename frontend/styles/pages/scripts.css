@@ -15,7 +15,7 @@
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.script-editor:focus {
+.script-editor:focus-visible {
   outline: none;
   border-color: #a855f7;
   box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.15);
