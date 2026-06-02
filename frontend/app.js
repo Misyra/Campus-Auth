@@ -8,6 +8,7 @@ import {
   LoadingSpinner,
   EmptyState,
 } from './js/components.js';
+import { ICONS } from './js/icons.js';
 
 const { createApp } = window.Vue;
 
@@ -106,6 +107,11 @@ async function bootstrapApp() {
   app.component('status-dot', StatusDot);
   app.component('loading-spinner', LoadingSpinner);
   app.component('empty-state', EmptyState);
+
+  // 注册图标组件
+  for (const [name, component] of Object.entries(ICONS)) {
+    app.component(name, component);
+  }
 
   app.mount('#app');
 }

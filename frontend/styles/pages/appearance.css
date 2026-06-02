@@ -1,0 +1,456 @@
+/* ==================== 外观设置 ==================== */
+
+.appearance-page {
+  width: 100%;
+}
+
+.appearance-header {
+  margin-bottom: 24px;
+}
+
+.appearance-header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+/* 卡片样式 */
+.appearance-card {
+  overflow: hidden;
+}
+
+.appearance-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.appearance-card-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.appearance-card-body {
+  padding: 16px 20px;
+}
+
+/* 背景图片卡片 - 全宽 */
+.appearance-bg-card {
+  margin-bottom: 16px;
+}
+
+/* 背景图片左右布局 */
+.appearance-bg-layout {
+  display: flex;
+  gap: 24px;
+}
+
+.appearance-bg-layout .appearance-bg-preview {
+  flex: 1;
+  min-width: 0;
+  height: 220px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg-glass-light);
+  margin: 0;
+}
+
+.appearance-bg-layout .appearance-bg-controls {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.appearance-bg-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.appearance-sliders + .appearance-bg-actions {
+  margin-top: 24px;
+}
+
+.appearance-bg-preview-img {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  cursor: pointer;
+}
+
+.appearance-bg-preview-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.appearance-bg-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+  backdrop-filter: blur(4px);
+}
+
+.appearance-bg-remove:hover {
+  background: var(--error);
+  transform: scale(1.1);
+}
+
+.appearance-bg-preview-empty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.appearance-bg-preview-empty:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+/* 预览缩放图标 */
+.appearance-bg-preview-zoom {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+}
+
+.appearance-bg-preview-img:hover .appearance-bg-preview-zoom {
+  opacity: 1;
+}
+
+/* 背景图放大预览 lightbox */
+.bg-lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+  cursor: zoom-out;
+}
+
+.bg-lightbox-content {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+
+.bg-lightbox-content img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.bg-lightbox-close {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.7);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, transform 0.2s ease;
+  backdrop-filter: blur(4px);
+}
+
+.bg-lightbox-close:hover {
+  background: var(--error);
+  transform: scale(1.1);
+}
+
+/* 滑块控制 */
+.appearance-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.appearance-slider-item {
+  display: grid;
+  grid-template-columns: 48px 1fr 44px;
+  align-items: center;
+  gap: 12px;
+}
+
+.appearance-slider-item label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.appearance-slider-item span {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+/* 三列设置网格 */
+.appearance-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+/* 主题色选择 */
+.appearance-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.appearance-color-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.appearance-color-btn:hover {
+  transform: scale(1.15);
+}
+
+.appearance-color-btn.active {
+  border-color: var(--text-primary);
+  box-shadow: var(--shadow-accent);
+}
+
+.appearance-custom-color {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-glass-light);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.appearance-custom-swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--border-hover);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.appearance-custom-swatch:hover {
+  border-color: var(--border-accent-strong);
+  transform: scale(1.1);
+}
+
+.appearance-custom-color .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.appearance-custom-hex {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+/* 字体预览 */
+.appearance-font-preview {
+  margin-top: 12px;
+  padding: 14px;
+  background: var(--bg-glass-light);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  text-align: center;
+}
+
+/* 视觉效果卡片 - 合并后的开关组 */
+.appearance-visual-effects {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.appearance-visual-effects .toggle {
+  margin-top: 8px;
+}
+
+.appearance-visual-effects .form-hint {
+  margin-top: -4px;
+  margin-bottom: 4px;
+}
+
+/* 操作按钮 */
+.appearance-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+/* 响应式 */
+@media (max-width: 900px) {
+  .appearance-settings-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .appearance-settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .appearance-bg-layout {
+    flex-direction: column;
+  }
+
+  .appearance-bg-layout .appearance-bg-controls {
+    width: 100%;
+  }
+}
+
+/* 自定义背景样式 */
+body.has-custom-bg::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: var(--bg-image);
+  background-size: cover;
+  background-position: center;
+  filter: var(--bg-blur);
+  opacity: var(--bg-opacity, 0.3);
+  z-index: -1;
+}
+
+/* 随机壁纸弹窗 */
+.random-wallpaper-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+  backdrop-filter: var(--blur-sm);
+}
+
+.random-wallpaper-modal {
+  background: var(--bg-modal);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  width: 420px;
+  max-width: 90vw;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.random-wallpaper-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+}
+
+.random-wallpaper-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.random-wallpaper-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.random-wallpaper-modal .form-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.random-wallpaper-modal .form-input:focus {
+  border-color: var(--accent);
+}
+
+.random-wallpaper-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

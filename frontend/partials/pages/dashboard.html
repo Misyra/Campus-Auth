@@ -4,6 +4,21 @@
     <span>{{ networkStatusText }}</span>
   </div>
 
+  <!-- 骨架屏：数据加载完成前显示 -->
+  <template v-if="isLoading">
+    <div class="skeleton-grid">
+      <div class="skeleton-card skeleton-shimmer"></div>
+      <div class="skeleton-card skeleton-shimmer"></div>
+      <div class="skeleton-card skeleton-shimmer"></div>
+      <div class="skeleton-card skeleton-shimmer"></div>
+    </div>
+    <div class="skeleton-row">
+      <div class="skeleton-card skeleton-shimmer" style="height:200px;"></div>
+      <div class="skeleton-card skeleton-shimmer" style="height:300px;"></div>
+    </div>
+  </template>
+
+  <template v-else>
   <div class="stats-grid">
     <div class="stat-card">
       <div class="stat-icon green">
@@ -215,4 +230,5 @@
       </div>
     </div>
   </div>
+  </template>
 </div>

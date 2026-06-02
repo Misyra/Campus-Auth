@@ -18,6 +18,8 @@ export const lifecycleMethods = {
       this.fetchPureMode(),
       this.fetchBackups(),
       this.fetchLoginHistory(),
+      this.loadScheduledTasks(),
+      this.fetchShells(),
     ]);
     this._initErrorCount = 0;
     this.isLoading = false;
@@ -193,6 +195,13 @@ export const lifecycleMethods = {
       this.wsReconnecting = false;
       this.frontendLogger.setWebSocket(this.ws);
       this.frontendLogger.info('websocket', '已连接');
+
+      // 重连后重新获取状态，补偿断连期间可能错过的更新
+      if (this._wsWasConnected) {
+        this.fetchStatus();
+        this.fetchLoginHistory();
+      }
+      this._wsWasConnected = true;
     };
 
     this.ws.onmessage = (event) => {

@@ -2,6 +2,33 @@ export const api = window.axios.create({
   timeout: 10000,
 });
 
+// 请求重试配置
+const RETRY_CONFIG = {
+  maxRetries: 2,
+  retryDelay: 1000,
+  retryableStatuses: [408, 429, 500, 502, 503, 504],
+};
+
+// 响应拦截器：对网络错误和 5xx 状态码自动重试
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const config = error.config;
+    if (!config || config.__retryCount >= RETRY_CONFIG.maxRetries) {
+      return Promise.reject(error);
+    }
+    const status = error?.response?.status;
+    const isNetworkError = !error.response;
+    const isRetryable = isNetworkError || RETRY_CONFIG.retryableStatuses.includes(status);
+    if (!isRetryable) return Promise.reject(error);
+
+    config.__retryCount = (config.__retryCount || 0) + 1;
+    const delay = RETRY_CONFIG.retryDelay * Math.pow(2, config.__retryCount - 1);
+    await new Promise(r => setTimeout(r, delay));
+    return api(config);
+  }
+);
+
 export const TIMING = {
   STATUS_POLL_INTERVAL: 30000,    // 状态轮询间隔（ms）
   AUTOSTART_POLL_INTERVAL: 60000, // 自启动轮询间隔（ms）
@@ -84,6 +111,7 @@ export const DEFAULT_CONFIG = {
   browser_viewport_height: 720,
   network_check_timeout: 2,
   app_port: 50721,
+  shell_path: "",
 };
 
 export const SETTINGS_TABS = [
