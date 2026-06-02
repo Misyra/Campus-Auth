@@ -108,7 +108,7 @@
       <div class="card history-card">
       <div class="card-header">
         <h2>登录历史</h2>
-        <div style="display:flex;gap:6px;align-items:center;">
+        <div class="flex-row gap-sm">
           <button class="btn btn-icon-only" @click="fetchLoginHistory" title="刷新" aria-label="刷新登录历史">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <polyline points="23 4 23 10 17 10"/>
@@ -162,7 +162,7 @@
     <div class="card log-card">
       <div class="card-header">
         <h2>实时日志</h2>
-        <div style="display:flex;gap:6px;align-items:center;">
+        <div class="flex-row gap-sm">
           <button class="btn btn-icon-only" :class="{ 'btn-active': autoScroll }" @click="autoScroll = !autoScroll" :title="autoScroll ? '自动滚动：开' : '自动滚动：关'" :aria-label="autoScroll ? '关闭自动滚动' : '开启自动滚动'">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path v-if="autoScroll" d="M12 19V5M5 12l7-7 7 7"/>

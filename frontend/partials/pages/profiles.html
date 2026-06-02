@@ -22,7 +22,7 @@
         <span class="toggle-label">自动切换</span>
       </label>
       <button class="btn btn-sm" @click="detectNetwork()" :disabled="busy.detect" title="检测当前网络环境">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
           <circle cx="12" cy="12" r="10"/>
           <line x1="2" y1="12" x2="22" y2="12"/>
           <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
@@ -30,7 +30,7 @@
         {{ busy.detect ? '检测中...' : '检测网络' }}
       </button>
       <button class="btn btn-sm btn-primary" @click="showProfileEditor(null)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
           <line x1="12" y1="5" x2="12" y2="19"/>
           <line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
@@ -69,7 +69,7 @@
       </span>
     </div>
     <button class="btn btn-icon-only btn-sm" @click="detectResult = null" title="关闭">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
         <line x1="18" y1="6" x2="6" y2="18"/>
         <line x1="6" y1="6" x2="18" y2="18"/>
       </svg>
@@ -141,7 +141,7 @@
         </div>
         <div class="profile-card-meta">
           <span v-if="info.match_gateway_ip" class="profile-tag">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-xs">
               <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
               <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
               <line x1="6" y1="6" x2="6.01" y2="6"/>
@@ -150,7 +150,7 @@
             {{ info.match_gateway_ip }}
           </span>
           <span v-if="info.match_ssid" class="profile-tag">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-xs">
               <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
               <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
               <line x1="12" y1="20" x2="12.01" y2="20"/>
@@ -159,14 +159,14 @@
           </span>
           <span v-if="info.carrier && info.carrier !== '无'" class="profile-tag">{{ info.carrier === '自定义' ? info.carrier_custom : info.carrier }}</span>
           <span v-if="!info.use_global_auth_url && info.auth_url" class="profile-tag">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-xs">
               <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
               <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
             </svg>
             自定义地址
           </span>
           <span v-if="!info.use_global_task && info.active_task" class="profile-tag">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-xs">
               <polyline points="4 17 10 11 4 5"/>
               <line x1="12" y1="19" x2="20" y2="19"/>
             </svg>
@@ -190,7 +190,7 @@
 <div v-if="currentPage === 'profile-edit'" class="page-content">
   <div class="profile-editor-topbar">
     <button class="btn btn-sm" @click="currentPage = 'profiles'">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
         <line x1="19" y1="12" x2="5" y2="12"/>
         <polyline points="12 19 5 12 12 5"/>
       </svg>
@@ -226,7 +226,7 @@
         </div>
         <div class="editor-network-detect">
           <button class="btn btn-sm" @click="detectNetworkForEditor()" :disabled="busy.editorDetect">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
               <circle cx="12" cy="12" r="10"/>
               <line x1="2" y1="12" x2="22" y2="12"/>
               <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
