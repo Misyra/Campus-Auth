@@ -46,6 +46,7 @@
             v-for="(task, index) in browserTasks"
             :key="task.id"
             class="task-item hover-lift"
+            data-draggable-list
             :class="{ active: activeTaskId === task.id }"
             @dragstart="handleDragStart($event, index, 'browserTasks')"
             @dragover="onDragOver($event, index, 'browserTasks')"

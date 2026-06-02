@@ -180,6 +180,8 @@ export const scriptMethods = {
           _isNew: true,
         };
         this.currentPage = 'scripts';
+        input.value = '';
+        input.onchange = null;
       };
       reader.readAsText(file);
     };

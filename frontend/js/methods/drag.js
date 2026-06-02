@@ -8,13 +8,13 @@ let _swapCooldown = false;
 export const dragMethods = {
   onHandleMouseDown(e) {
     _allowDrag = true;
-    const item = e.currentTarget.closest('.task-item');
+    const item = e.currentTarget.closest('[data-draggable-list]');
     if (item) item.setAttribute('draggable', 'true');
   },
 
   onHandleMouseUp(e) {
-    const item = e.currentTarget.closest('.task-item');
-    if (item && !_dragState) item.removeAttribute('draggable');
+    const item = e.currentTarget.closest('[data-draggable-list]');
+    if (item) item.removeAttribute('draggable');
   },
 
   handleDragStart(e, index, listName) {
