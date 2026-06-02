@@ -92,7 +92,7 @@ def save_profile(
         data = profile_svc.load()
         if data.active_profile == profile_id:
             try:
-                monitor_svc.apply_profile(payload.name)
+                monitor_svc.apply_profile(profile_id)
             except Exception as exc:
                 api_logger.warning("Apply profile failed: %s", exc)
     return ActionResponse(success=ok, message=message)
