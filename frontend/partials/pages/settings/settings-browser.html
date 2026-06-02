@@ -139,8 +139,8 @@
           <div class="field-label-row">
             <label for="settings-browser-args">自定义浏览器参数</label>
             <span class="field-help" tabindex="0" role="note" data-tip="每行填写一个 Chromium 启动参数，会与程序内置的基础参数合并。留空则仅使用基础参数。">?</span>
-            <button class="btn btn-sm btn-secondary" type="button" style="margin-left:auto;" @click="config.browser_args = '--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees'">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;">
+            <button class="btn btn-sm btn-secondary ms-auto" type="button" @click="config.browser_args = '--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees'">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
                 <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
               </svg>
               加载推荐参数

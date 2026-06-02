@@ -11,7 +11,7 @@ export const lifecycleMethods = {
   async init() {
     this.frontendLogger.info('app.init', '开始初始化');
     this.isLoading = true;
-    await Promise.all([
+    const initResults = await Promise.allSettled([
       this.fetchConfig(true),
       this.fetchStatus(),
       this.fetchLogs(),
@@ -28,6 +28,10 @@ export const lifecycleMethods = {
       this.loadScheduledTasks(),
       this.fetchShells(),
     ]);
+    const rejectedCount = initResults.filter(r => r.status === 'rejected').length;
+    if (rejectedCount > 0) {
+      this.frontendLogger.warn('app.init', `部分初始化失败: ${rejectedCount} 项`);
+    }
     this._initErrorCount = 0;
     this.isLoading = false;
     this.connectWebSocket();
@@ -83,6 +87,8 @@ export const lifecycleMethods = {
       const logMessage = `${message}，请前往“关于”页面下载`;
       this.frontendLogger.warn('update', logMessage);
       if (!wsReady) {
+        // 二次读取 readyState，补偿 T1→T2 期间 WS 可能已连接的竞态
+        if (this.ws?.readyState === WebSocket.OPEN) return;
         this._appendLogs([{
           timestamp: new Date().toISOString(),
           level: 'WARNING',

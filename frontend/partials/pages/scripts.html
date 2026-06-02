@@ -3,9 +3,9 @@
     <div class="card">
       <div class="card-header">
         <h2>自定义脚本</h2>
-        <div style="display:flex;gap:6px;">
+        <div class="flex-row gap-sm">
           <button class="btn btn-sm" @click="importScript()" title="从文件导入脚本">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="7 10 12 15 17 10"/>
               <line x1="12" y1="15" x2="12" y2="3"/>
@@ -13,7 +13,7 @@
             导入
           </button>
           <button class="btn btn-sm btn-primary" @click="showScriptEditor(null)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
               <line x1="12" y1="5" x2="12" y2="19"/>
               <line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
@@ -42,7 +42,7 @@
             <div class="task-drag-handle" title="拖拽排序"
               @mousedown="onHandleMouseDown($event)"
               @mouseup="onHandleMouseUp($event)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
                 <line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/>
               </svg>
             </div>

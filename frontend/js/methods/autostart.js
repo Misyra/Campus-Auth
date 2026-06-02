@@ -1,5 +1,7 @@
 export const autostartMethods = {
   async fetchAutostart() {
+    if (this._autostartInFlight) return;
+    this._autostartInFlight = true;
     try {
       const { data } = await this.$api.get('/api/autostart/status');
       this.autostart = data;
@@ -13,6 +15,8 @@ export const autostartMethods = {
           location: '',
         };
       }
+    } finally {
+      this._autostartInFlight = false;
     }
   },
   async _toggleAutostart(enable) {
