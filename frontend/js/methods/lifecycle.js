@@ -1,6 +1,13 @@
 import { LOG_LEVELS, TIMING } from '../constants.js';
 
 export const lifecycleMethods = {
+  // 封装初始化错误计数，达到阈值后静默（避免多模块竞态读写 _initErrorCount）
+  _recordInitError(msg) {
+    if (this._initErrorCount < 2) {
+      this._initErrorCount++;
+      this.notify(false, msg);
+    }
+  },
   async init() {
     this.frontendLogger.info('app.init', '开始初始化');
     this.isLoading = true;

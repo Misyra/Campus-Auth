@@ -18,10 +18,7 @@ export const configMethods = {
       this.frontendLogger.info('config', '配置已加载');
     } catch (error) {
       this.frontendLogger.error('config', '获取配置失败', error);
-      if (this._initErrorCount < 2) {
-        this._initErrorCount++;
-        this.notify(false, '加载配置失败');
-      }
+      this._recordInitError('加载配置失败');
     }
   },
   async saveConfig() {
@@ -51,8 +48,8 @@ export const configMethods = {
       this.setFrontendLogLevel(this.config.frontend_log_level || 'INFO');
       if (data.success) {
         this.frontendLogger.info('config', data.message || '配置保存成功');
-        this._configDirty = false;
-        this.savedConfigSnapshot = JSON.stringify(this.config);
+        // 用后端规范化值刷新 config 并重置 savedConfigSnapshot，确保 dirty tracking 一致
+        await this.fetchConfig(true);
         await this.fetchProfiles();
       } else {
         this.frontendLogger.warn('config', '保存配置被拒绝: ' + data.message);
