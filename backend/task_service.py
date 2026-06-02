@@ -61,7 +61,7 @@ class TaskService:
         return tasks
 
     def list_scripts(self) -> list[dict[str, str]]:
-        """只列出 .py 脚本任务。"""
+        """列出所有自定义脚本任务。"""
         tasks = self.task_manager.list_script_tasks()
         task_logger.debug("列出脚本任务: %d 个", len(tasks))
         return tasks
@@ -75,11 +75,24 @@ class TaskService:
         if task is None:
             return None
         if isinstance(task, ScriptTaskInfo):
-            try:
-                content = task.script_path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError) as exc:
-                task_logger.error("读取脚本文件失败 %s: %s", task.script_path, exc)
-                return None
+            # 读取脚本内容
+            content = ""
+            if task.script_path.suffix.lower() == ".json":
+                # JSON 格式：从 content 字段读取
+                try:
+                    import json as _json
+                    data = _json.loads(task.script_path.read_text(encoding="utf-8"))
+                    content = data.get("content", "")
+                except (OSError, UnicodeDecodeError, _json.JSONDecodeError) as exc:
+                    task_logger.error("读取脚本 JSON 失败 %s: %s", task.script_path, exc)
+                    return None
+            else:
+                # .py 文件：直接读取
+                try:
+                    content = task.script_path.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError) as exc:
+                    task_logger.error("读取脚本文件失败 %s: %s", task.script_path, exc)
+                    return None
             return {
                 "id": task_id,
                 "name": task.name,
