@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from src.script_runner import ScriptRunner
+from src.script_runner import ScriptRunner, _build_minimal_env
 from src.task_executor import ScriptTaskInfo, TaskManager
 
 
@@ -208,7 +208,7 @@ class TestScriptRunner:
         script.write_text('print("HTTP 200")\n', encoding="utf-8")
 
         runner = ScriptRunner(script, timeout=10)
-        ok, msg = runner.run({"LOGIN_URL": "http://test", "USERNAME": "u"})
+        ok, msg = runner.run()
 
         assert ok is True
         assert "HTTP 200" in msg
@@ -219,7 +219,7 @@ class TestScriptRunner:
         script.write_text('import sys\nprint("连接超时")\nsys.exit(1)\n', encoding="utf-8")
 
         runner = ScriptRunner(script, timeout=10)
-        ok, msg = runner.run({})
+        ok, msg = runner.run()
 
         assert ok is False
         assert "连接超时" in msg
@@ -230,7 +230,7 @@ class TestScriptRunner:
         script.write_text('import sys\nsys.exit(1)\n', encoding="utf-8")
 
         runner = ScriptRunner(script, timeout=10)
-        ok, msg = runner.run({})
+        ok, msg = runner.run()
 
         assert ok is False
         assert "无输出" in msg
@@ -241,7 +241,7 @@ class TestScriptRunner:
         script.write_text('import time\ntime.sleep(100)\n', encoding="utf-8")
 
         runner = ScriptRunner(script, timeout=1)
-        ok, msg = runner.run({})
+        ok, msg = runner.run()
 
         assert ok is False
         assert "超时" in msg
@@ -252,7 +252,7 @@ class TestScriptRunner:
         script.write_text('print("all good")\n', encoding="utf-8")
 
         runner = ScriptRunner(script, timeout=10)
-        ok, msg = runner.run({})
+        ok, msg = runner.run()
 
         assert ok is True
         assert "all good" in msg
@@ -266,69 +266,35 @@ class TestScriptRunner:
         """), encoding="utf-8")
 
         runner = ScriptRunner(script, timeout=10)
-        ok, msg = runner.run({})
+        ok, msg = runner.run()
 
         assert ok is True
         assert "调试信息" in msg
         assert "HTTP 200" in msg
 
-    def test_env_vars_passed(self, tmp_path: Path):
-        """环境变量正确传递到子进程（CAMPUS_ 前缀）"""
-        script = tmp_path / "env.py"
-        script.write_text(textwrap.dedent("""\
-            import os, json
-            u = os.environ.get("CAMPUS_USERNAME", "")
-            p = os.environ.get("CAMPUS_PASSWORD", "")
-            url = os.environ.get("CAMPUS_URL", "")
-            isp = os.environ.get("CAMPUS_ISP", "")
-            print(json.dumps({"success": True, "message": f"{u}|{p}|{url}|{isp}"}))
-        """), encoding="utf-8")
-
-        runner = ScriptRunner(script, timeout=10)
-        # 传入 build_login_env_vars 产出的 key（USERNAME/PASSWORD/ISP/LOGIN_URL）
-        ok, msg = runner.run({
-            "USERNAME": "student01",
-            "PASSWORD": "pass123",
-            "LOGIN_URL": "http://10.0.0.1/login",
-            "ISP": "cmcc",
-        })
-
-        assert ok is True
-        assert "student01" in msg
-        assert "pass123" in msg
-        assert "http://10.0.0.1/login" in msg
-        assert "cmcc" in msg
-
     def test_env_isolation(self, tmp_path: Path):
-        """子进程不应继承宿主进程的全部环境变量"""
+        """子进程只接收最小系统环境变量，不继承宿主全部环境"""
         script = tmp_path / "isolated.py"
         script.write_text(textwrap.dedent("""\
             import os, json
-            # 检查是否泄露了宿主的 HOME（Windows 上通常是 USERPROFILE）
-            home = os.environ.get("HOME", "")
-            userprofile = os.environ.get("USERPROFILE", "")
-            has_extra = bool(home or userprofile)
-            print(json.dumps({"success": not has_extra, "message": f"home={home} userprofile={userprofile}"}))
+            path = os.environ.get("PATH", "")
+            has_path = bool(path)
+            print(json.dumps({"success": has_path, "message": f"has_path={has_path}"}))
         """), encoding="utf-8")
 
         runner = ScriptRunner(script, timeout=10)
-        ok, msg = runner.run({"LOGIN_URL": "http://test"})
+        ok, msg = runner.run()
 
-        # USERPROFILE 不在安全环境变量中，不应被传递
-        assert "userprofile=" in msg.lower()
+        assert ok is True
+        assert "has_path=True" in msg
 
-    def test_build_safe_env_basic(self):
-        """_build_safe_env 包含 CAMPUS_* 和基本系统变量"""
-        env = ScriptRunner._build_safe_env({
-            "USERNAME": "u",
-            "PASSWORD": "p",
-            "LOGIN_URL": "http://x",
-            "SOME_OTHER": "ignored",
-        })
+    def test_build_minimal_env(self):
+        """_build_minimal_env 只包含基本系统变量，不含业务变量"""
+        env = _build_minimal_env()
 
-        assert env["CAMPUS_USERNAME"] == "u"
-        assert env["CAMPUS_PASSWORD"] == "p"
-        assert env["CAMPUS_URL"] == "http://x"
-        assert "SOME_OTHER" not in env
         assert "PATH" in env
         assert "PYTHONIOENCODING" in env
+        # 不应包含任何 CAMPUS_* 业务变量
+        assert "CAMPUS_USERNAME" not in env
+        assert "CAMPUS_PASSWORD" not in env
+        assert "CAMPUS_URL" not in env
