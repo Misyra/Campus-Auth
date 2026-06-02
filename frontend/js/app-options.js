@@ -8,6 +8,7 @@ import { dragMethods } from './methods/drag.js';
 import { formatterMethods } from './methods/formatters.js';
 import { lifecycleMethods } from './methods/lifecycle.js';
 import { profileMethods } from './methods/profiles.js';
+import { scheduledTasksMethods } from './methods/scheduled_tasks.js';
 import { scriptMethods } from './methods/scripts.js';
 import { shortcutMethods } from './methods/shortcuts.js';
 import { statusMethods } from './methods/status.js';
@@ -30,6 +31,7 @@ import { timerData } from './data/timers.js';
 import { statusData } from './data/status.js';
 import { appearanceData } from './data/appearance.js';
 import { logFileData } from './data/logfiles.js';
+import { scheduledTasksData } from './data/scheduled_tasks.js';
 
 export const appOptions = {
   data() {
@@ -49,6 +51,7 @@ export const appOptions = {
       ...statusData(),
       ...appearanceData(),
       ...logFileData(),
+      ...scheduledTasksData(),
 
       // 全局共享状态
       settingsTabs: SETTINGS_TABS,
@@ -68,7 +71,8 @@ export const appOptions = {
         dashboard: '仪表盘',
         settings: '设置',
         tasks: '任务管理',
-        scripts: 'Python 脚本',
+        scripts: '自定义脚本',
+        scheduled_tasks: '定时任务',
         profiles: '配置方案',
         'profile-edit': this.editingProfile?.id ? '编辑方案' : '新建方案',
         appearance: '外观设置',
@@ -216,6 +220,7 @@ export const appOptions = {
     ...autostartMethods,
     ...taskMethods,
     ...scriptMethods,
+    ...scheduledTasksMethods,
     ...profileMethods,
     ...appearanceMethods,
     ...shortcutMethods,

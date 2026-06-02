@@ -9,5 +9,7 @@ export function configData() {
     _configDirty: false,
     dangerConfirm: null,
     dangerCountdown: 0,
+    availableShells: [],
+    defaultShell: '',
   };
 }

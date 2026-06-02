@@ -57,6 +57,7 @@
 
   .logo-text,
   .nav-item span,
+  .nav-more-arrow,
   .status-badge {
     display: none;
   }
@@ -64,6 +65,12 @@
   .nav-item {
     justify-content: center;
     padding: 12px;
+  }
+
+  .nav-more-menu {
+    margin: 4px 0;
+    padding: 4px 0;
+    border-left: none;
   }
 
   .main-content {
