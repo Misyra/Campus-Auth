@@ -91,6 +91,7 @@ class PlaywrightWorker:
         self._consumer_thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._worker_ready = threading.Event()
+        self._restart_lock = threading.Lock()  # 防止并发重启消费者线程
 
         # 浏览器状态（仅从事件循环线程访问，无需锁保护）
         self._playwright: Any = None
@@ -207,6 +208,20 @@ class PlaywrightWorker:
             return WorkerResponse(
                 success=False, error="Worker 已关闭，不接受新命令"
             )
+
+        # 检测消费者线程是否存活，若已死亡则尝试重启
+        if not self.is_alive():
+            with self._restart_lock:
+                # 双重检查：获取锁后再次确认线程状态
+                if not self.is_alive() and not self._stop_event.is_set():
+                    logger.warning("检测到消费者线程已死亡，尝试重启")
+                    try:
+                        self.start()
+                    except Exception:
+                        logger.exception("重启消费者线程失败")
+                        return WorkerResponse(
+                            success=False, error="消费者线程已死亡且重启失败"
+                        )
 
         cmd = WorkerCommand(
             type=cmd_type,
