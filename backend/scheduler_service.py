@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from src.utils.logging import get_logger
+from src.utils.shell_policy import ShellCommandPolicy
 
 scheduler_logger = get_logger("backend.scheduler", side="BACKEND")
 
@@ -311,6 +312,10 @@ class SchedulerService:
         if not shell_path:
             shell_path = get_default_shell()
 
+        # 使用 ShellCommandPolicy 进行安全校验和执行
+        available = [s["path"] for s in detect_available_shells()]
+        policy = ShellCommandPolicy(allowlist=available)
+
         try:
             # 根据 shell 类型构建命令
             if sys.platform == "win32":
@@ -325,29 +330,19 @@ class SchedulerService:
                 # Linux/macOS: 使用 -c 参数
                 cmd_args = [shell_path, "-c", command]
 
-            proc = await asyncio.create_subprocess_exec(
-                *cmd_args,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            returncode, stdout_str, stderr_str = await policy.run(
+                cmd_args, timeout=timeout,
             )
 
-            try:
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-            except asyncio.TimeoutError:
-                proc.kill()
-                await proc.wait()
-                return False, f"命令执行超时 ({timeout}s)"
-
-            stdout_str = stdout.decode("utf-8", errors="replace").strip()
-            stderr_str = stderr.decode("utf-8", errors="replace").strip()
-
-            if proc.returncode == 0:
+            if returncode == 0:
                 output = stdout_str[:500] or "(无输出)"
                 return True, output
             else:
-                output = stderr_str[:500] or stdout_str[:500] or f"退出码: {proc.returncode}"
+                output = stderr_str[:500] or stdout_str[:500] or f"退出码: {returncode}"
                 return False, output
 
+        except PermissionError as e:
+            return False, str(e)
         except Exception as e:
             return False, f"执行异常: {e}"
 
