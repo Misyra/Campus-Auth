@@ -101,10 +101,6 @@ class PlaywrightWorker:
         self._debug_page: Any = None
         self._debug_executor: Any = None  # TaskExecutor 实例，调试步骤执行时在 Worker 线程内使用
 
-        # 取消事件桥接: threading.Event → asyncio.Event
-        # _cancel_async 由 _bridge_cancel 在检测到外部的
-        # threading.Event 被设置时同步设置，供长时间操作检查
-        self._cancel_async: asyncio.Event | None = None
         # _wake_event 用于立即唤醒 _async_run 协程处理新命令
         self._wake_event: asyncio.Event | None = None
 
@@ -293,7 +289,6 @@ class PlaywrightWorker:
         - 同时使用 0.5s 超时兜底，防止漏掉信号
         - 收到 CMD_SHUTDOWN 后退出循环，触发事件循环停止
         """
-        self._cancel_async = asyncio.Event()
         wake_event = asyncio.Event()
         self._wake_event = wake_event
 
@@ -382,14 +377,6 @@ class PlaywrightWorker:
         config = data.get("config", {})
         cancel_event: threading.Event | None = data.get("cancel_event")
 
-        # 启动取消事件桥接：将 threading.Event 同步到 asyncio.Event
-        bridge_task: asyncio.Task | None = None
-        if cancel_event is not None:
-            self._cancel_async.clear()
-            bridge_task = asyncio.create_task(
-                self._bridge_cancel(cancel_event)
-            )
-
         try:
             handler = LoginAttemptHandler(
                 config=config,
@@ -403,13 +390,6 @@ class PlaywrightWorker:
         except Exception as e:
             logger.exception("登录执行异常")
             return WorkerResponse(success=False, error=str(e))
-        finally:
-            if bridge_task is not None:
-                bridge_task.cancel()
-                try:
-                    await bridge_task
-                except asyncio.CancelledError:
-                    pass
 
     async def _handle_debug_start(self, data: dict) -> WorkerResponse:
         """启动调试会话。
@@ -836,25 +816,6 @@ class PlaywrightWorker:
         await self._cleanup_browser(graceful=False)
 
     # ── 辅助方法 ──
-
-    async def _bridge_cancel(
-        self, cancel_threading: threading.Event
-    ) -> None:
-        """桥接 threading.Event 到 asyncio.Event。
-
-        后台协程，每 0.1 秒轮询外部的 threading.Event。
-        当检测到外部取消信号时，设置 self._cancel_async，
-        使长时间运行的异步操作能够感知取消信号。
-        """
-        try:
-            while not self._cancel_async.is_set():
-                if cancel_threading.is_set():
-                    self._cancel_async.set()
-                    logger.debug("取消信号已桥接到 asyncio.Event")
-                    break
-                await asyncio.sleep(0.1)
-        except asyncio.CancelledError:
-            pass
 
     async def _wake_async(self) -> None:
         """唤醒事件循环。
