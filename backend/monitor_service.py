@@ -188,6 +188,10 @@ class MonitorService:
 
     def _handle_stop(self) -> None:
         """停止监控（仅在消费者线程中调用）。"""
+        # 幂等保护：如果已经停止，直接返回
+        if self._monitor_core is None and self._monitor_thread is None:
+            return
+
         core = self._monitor_core
         thread = self._monitor_thread
 
@@ -298,12 +302,15 @@ class MonitorService:
             service_logger.exception("自动切换方案配置加载失败: %s", profile_name)
             return
         if self._monitor_core and self._monitor_core.monitoring:
-            self._cmd_queue.put(
-                MonitorCommand(
-                    type="reload",
-                    data={"config": self._copy_runtime_config()},
+            try:
+                self._cmd_queue.put_nowait(
+                    MonitorCommand(
+                        type="reload",
+                        data={"config": self._copy_runtime_config()},
+                    )
                 )
-            )
+            except queue.Full:
+                service_logger.warning("命令队列已满，跳过 reload 命令入队")
         new_url = self._runtime_config.get("auth_url", "")
         new_user = self._runtime_config.get("username", "")
         self._push_log(
@@ -552,9 +559,9 @@ class MonitorService:
 
     def shutdown(self) -> None:
         """完全关闭 MonitorService：停止监控 + 终止消费者线程。"""
-        # 停止监控（如果正在运行）
+        # 直接同步调用 _handle_stop() 停止监控（不通过队列，避免超时）
         if self._is_monitoring:
-            self._cmd_queue.put(MonitorCommand(type="stop"))
+            self._handle_stop()
 
         # 设置关闭事件，通知消费者线程退出循环
         self._shutdown_event.set()
