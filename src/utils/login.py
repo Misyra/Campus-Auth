@@ -185,6 +185,9 @@ class LoginAttemptHandler:
                 "浏览器就绪 (%.1fs)", time.perf_counter() - browser_start
             )
 
+            # 成功标志：默认 False，executor 返回成功时设为 True
+            # finally 中据此决策是否关闭浏览器
+            success = False
             try:
                 if not browser_manager.page:
                     raise RuntimeError("浏览器页面初始化失败")
@@ -216,17 +219,14 @@ class LoginAttemptHandler:
                 if success:
                     self.logger.info("登录成功 (总耗时 %.1fs): %s", total, message)
                     await asyncio.sleep(2)  # 登录成功后等待，让页面完成跳转和状态更新
-                    await self.close_browser()
                     return True, message
                 log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
                 self.logger.error("登录失败 (总耗时 %.1fs): %s", total, log_msg)
-                if self.close_on_failure:
-                    await self.close_browser()
                 return False, message
-            except Exception:
-                if self.close_on_failure:
+            finally:
+                # 单一关闭点：成功时始终关闭，失败/异常时按 close_on_failure 决策
+                if success or self.close_on_failure:
                     await self.close_browser()
-                raise
 
         except LoginCancelledError:
             self.logger.info("登录已取消")

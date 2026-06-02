@@ -821,6 +821,35 @@ class TestCreateNoWindowFlag:
 # =====================================================================
 
 
+# =====================================================================
+# LoginAttemptHandler.close_browser 幂等性
+# =====================================================================
+
+
+class TestLoginAttemptHandlerCloseIdempotent:
+    def test_close_browser_idempotent(self):
+        """多次调用 close_browser 不应报错（幂等）"""
+        from src.utils.login import LoginAttemptHandler
+
+        handler = LoginAttemptHandler(config={}, close_on_failure=True)
+        # _browser_ctx 为 None 时，close_browser 应安全返回
+        import asyncio
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(handler.close_browser())
+            loop.run_until_complete(handler.close_browser())
+            # 两次调用后 _browser_ctx 仍为 None
+            assert handler._browser_ctx is None
+        finally:
+            loop.close()
+
+
+# =====================================================================
+# AUTH_DATA_DIR 常量
+# =====================================================================
+
+
 class TestAuthDataDir:
     def test_is_path(self):
         from backend.constants import AUTH_DATA_DIR
