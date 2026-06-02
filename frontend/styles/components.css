@@ -132,8 +132,8 @@
   padding: 8px;
   background: transparent;
   border: none;
-  min-height: 36px;
-  min-width: 36px;
+  min-height: 44px;
+  min-width: 44px;
 }
 
 .btn-icon-only svg {
@@ -351,9 +351,9 @@
   background: var(--bg-glass-heavy);
 }
 
-.form-group input:focus,
-.form-group select:focus,
-.form-group textarea:focus {
+.form-group input:focus-visible,
+.form-group select:focus-visible,
+.form-group textarea:focus-visible {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12), 0 0 16px rgba(34, 211, 238, 0.06);
@@ -369,7 +369,7 @@
   background-size: 12px;
 }
 
-.form-group select:focus {
+.form-group select:focus-visible {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2322d3ee' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3Epolyline points='6 9 12 15 18'%3E/svg%3E");
 }
 
@@ -613,6 +613,19 @@
 .field-help:hover::after,
 .field-help:focus-visible::after {
   opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+
+/* 向左翻转提示框，用于右侧空间不足时 */
+.field-help--flip::after {
+  left: auto;
+  right: calc(100% + 12px);
+  max-width: min(280px, calc(100vw - 80px));
+  transform: translateY(-50%) translateX(-4px);
+}
+
+.field-help--flip:hover::after,
+.field-help--flip:focus-visible::after {
   transform: translateY(-50%) translateX(0);
 }
 

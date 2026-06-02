@@ -134,6 +134,7 @@
   flex: 1;
   overflow-y: auto;
   max-height: calc(100vh - 340px);
+  max-height: calc(100dvh - 340px);
   min-height: 200px;
   font-family: var(--font-mono);
   font-size: 13px;
@@ -142,6 +143,7 @@
 
 .has-banner .log-viewer {
   max-height: calc(100vh - 415px);
+  max-height: calc(100dvh - 415px);
 }
 
 .log-viewer::-webkit-scrollbar {
