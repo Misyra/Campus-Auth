@@ -182,6 +182,11 @@ async def websocket_logs(websocket: WebSocket):
     try:
         while True:
             raw = await websocket.receive_text()
+            # WebSocket 消息大小预检，防止超大消息导致内存问题
+            if len(raw) > 65536:
+                ws_logger.warning("WebSocket 消息过大 (%d bytes)，断开连接", len(raw))
+                await ws_mgr.disconnect(websocket)
+                return
             try:
                 msg = json.loads(raw)
                 if msg.get("type") == "frontend_log":
@@ -297,6 +302,7 @@ def run() -> None:
         reload=False,
         log_level="info",
         access_log=False,
+        ws_max_size=65536,
     )
 
 

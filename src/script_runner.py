@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 from src.utils.logging import get_logger
+from src.utils.shell_policy import ShellCommandPolicy
 
 logger = get_logger("script_runner", side="BACKEND")
 
@@ -136,14 +137,13 @@ class ScriptRunner:
         env = _build_minimal_env()
         cmd = self._build_cmd()
 
+        # 使用 ShellCommandPolicy 进行安全校验和执行
+        available = [b["path"] for b in detect_available_binaries()]
+        policy = ShellCommandPolicy(allowlist=available)
+
         # Windows 下隐藏窗口
-        kwargs = {
-            "capture_output": True,
-            "text": True,
-            "timeout": self.timeout,
+        kwargs: dict = {
             "cwd": str(self.script_path.parent),
-            "encoding": "utf-8",
-            "errors": "replace",
         }
         if platform.system() == "Windows":
             kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
@@ -151,30 +151,25 @@ class ScriptRunner:
             kwargs["env"] = env
 
         try:
-            result = subprocess.run(cmd, **kwargs)
-        except subprocess.TimeoutExpired:
-            logger.error("脚本执行超时 (%ds): %s", self.timeout, self.script_path)
-            return False, f"脚本执行超时 ({self.timeout}s)"
-        except FileNotFoundError:
-            logger.error("执行二进制不存在: %s", self.binary_path)
-            return False, f"执行二进制不存在: {self.binary_path}"
-        except Exception as e:
-            elapsed = time.perf_counter() - start
-            logger.error("脚本执行异常 (%.1fs): %s", elapsed, e)
-            return False, f"脚本执行异常: {e}"
+            returncode, stdout_str, stderr_str = policy.run_sync(
+                cmd, timeout=self.timeout, **kwargs,
+            )
+        except PermissionError as e:
+            logger.error("脚本执行被拒绝: %s", e)
+            return False, str(e)
 
         elapsed = time.perf_counter() - start
 
-        if result.stderr.strip():
-            logger.info("脚本 stderr: %s", result.stderr.strip()[:500])
+        if stderr_str:
+            logger.info("脚本 stderr: %s", stderr_str[:500])
 
-        output = result.stdout.strip()[:500] or f"(无输出, exit code {result.returncode})"
+        output = stdout_str[:500] or f"(无输出, exit code {returncode})"
 
-        if result.returncode == 0:
+        if returncode == 0:
             logger.info("脚本执行完成 (%.1fs): %s", elapsed, output)
             return True, output
         else:
-            logger.warning("脚本执行失败 (%.1fs, exit %d): %s", elapsed, result.returncode, output)
+            logger.warning("脚本执行失败 (%.1fs, exit %d): %s", elapsed, returncode, output)
             return False, output
 
 

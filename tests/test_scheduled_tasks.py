@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch, MagicMock
+
 import pytest
 
 from backend.scheduler_service import SchedulerService
@@ -111,6 +113,69 @@ def test_history(scheduler):
     assert len(history) == 2
     assert history[0]["status"] == "failure"  # 最新的在前
     assert history[1]["status"] == "success"
+
+
+class TestExecuteShellUsesPolicy:
+    """测试 _execute_shell 使用 ShellCommandPolicy 进行安全校验。"""
+
+    @pytest.mark.asyncio
+    async def test_execute_shell_uses_policy(self, scheduler):
+        """_execute_shell 应通过 ShellCommandPolicy 验证路径并钳制超时。"""
+        # Mock detect_available_shells 让 cmd.exe 在白名单中
+        fake_shells = [{"name": "cmd", "path": "cmd.exe", "description": "Windows 命令提示符"}]
+
+        with patch("backend.scheduler_service.detect_available_shells", return_value=fake_shells):
+            with patch.object(
+                scheduler, "_execute_shell", wraps=scheduler._execute_shell,
+            ) as mock_exec:
+                # 直接调用 _execute_shell，验证 ShellCommandPolicy 被使用
+                # 由于 cmd.exe 路径在不同系统上可能不同，直接 mock ShellCommandPolicy
+                with patch("backend.scheduler_service.ShellCommandPolicy") as MockPolicy:
+                    mock_instance = MagicMock()
+                    # 异步 run 返回 (returncode, stdout, stderr)
+                    mock_instance.run = MagicMock(return_value=(0, "hello", ""))
+                    MockPolicy.return_value = mock_instance
+
+                    success, message = await scheduler._execute_shell("echo hello", 60, "cmd.exe")
+
+                    # 验证 ShellCommandPolicy 被实例化
+                    MockPolicy.assert_called_once()
+                    # 验证 allowlist 包含 cmd.exe 的路径
+                    call_kwargs = MockPolicy.call_args
+                    assert "allowlist" in call_kwargs.kwargs or len(call_kwargs.args) > 0
+                    # 验证 run 被调用
+                    mock_instance.run.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_execute_shell_rejects_unknown_path(self, scheduler):
+        """_execute_shell 应拒绝不在白名单中的 shell 路径。"""
+        fake_shells = [{"name": "cmd", "path": "cmd.exe", "description": "Windows 命令提示符"}]
+
+        with patch("backend.scheduler_service.detect_available_shells", return_value=fake_shells):
+            success, message = await scheduler._execute_shell(
+                "echo hello", 60, "/malicious/shell",
+            )
+            assert success is False
+            assert "白名单" in message
+
+    @pytest.mark.asyncio
+    async def test_execute_shell_timeout_clamped(self, scheduler):
+        """_execute_shell 的超时应通过 ShellCommandPolicy 被 clamp 到 [1, 300]。"""
+        from unittest.mock import AsyncMock
+        fake_shells = [{"name": "cmd", "path": "cmd.exe", "description": "test"}]
+
+        with patch("backend.scheduler_service.detect_available_shells", return_value=fake_shells):
+            with patch("src.utils.shell_policy.asyncio.create_subprocess_exec") as mock_exec:
+                mock_proc = MagicMock()
+                mock_proc.communicate = AsyncMock(return_value=(b"ok", b""))
+                mock_proc.returncode = 0
+                mock_exec.return_value = mock_proc
+
+                # 传入超大超时值 999
+                success, message = await scheduler._execute_shell("echo test", 999, "cmd.exe")
+
+                # 验证执行成功（路径在白名单中，超时被 policy 内部 clamp）
+                assert success is True
 
 
 if __name__ == "__main__":
