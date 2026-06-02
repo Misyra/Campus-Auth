@@ -1,6 +1,7 @@
 import logging
 import logging.handlers
 import os
+import shutil
 import sys
 import threading
 import time
@@ -236,7 +237,6 @@ class _DateRotatingFileHandler(logging.Handler):
                 continue
             try:
                 if d.stat().st_mtime < cutoff:
-                    import shutil
                     shutil.rmtree(d)
             except OSError:
                 pass

@@ -244,12 +244,13 @@ class TaskConfig:
 
 @dataclass
 class ScriptTaskInfo:
-    """Python 脚本任务信息（不含 Playwright 步骤，直接通过子进程执行）"""
+    """自定义脚本任务信息（不含 Playwright 步骤，直接通过子进程执行）"""
 
     task_id: str = ""
     name: str = "未命名脚本任务"
     description: str = ""
     script_path: Path = field(default_factory=Path)
+    binary_path: str = ""  # 执行二进制路径，为空则使用 Python 解释器
 
 
 class VariableResolver:
@@ -1504,31 +1505,57 @@ class TaskManager:
         # 都不存在时返回 .json 路径（供 save_task 使用）
         return (self.tasks_dir / f"{normalized}.json").absolute()
 
-    def _safe_json_path(self, task_id: str) -> Path | None:
-        """返回 .json 路径（不检查存在性）。"""
+    def _safe_path(self, task_id: str, suffix: str) -> Path | None:
+        """返回安全的任务文件路径（不检查存在性）。
+
+        Args:
+            task_id: 任务 ID
+            suffix: 文件后缀（如 ".json"、".py"、".meta.json"）
+        """
         normalized = normalize_task_id(task_id)
         if not is_valid_task_id(normalized):
             return None
         base = self.tasks_dir.absolute()
-        candidate = (self.tasks_dir / f"{normalized}.json").absolute()
+        candidate = (self.tasks_dir / f"{normalized}{suffix}").absolute()
         try:
             candidate.relative_to(base)
         except ValueError:
             return None
         return candidate
 
+    def _safe_json_path(self, task_id: str) -> Path | None:
+        """返回 .json 路径（不检查存在性）。"""
+        return self._safe_path(task_id, ".json")
+
     def _safe_script_path(self, task_id: str) -> Path | None:
         """返回 .py 路径（不检查存在性）。"""
-        normalized = normalize_task_id(task_id)
-        if not is_valid_task_id(normalized):
-            return None
-        base = self.tasks_dir.absolute()
-        candidate = (self.tasks_dir / f"{normalized}.py").absolute()
+        return self._safe_path(task_id, ".py")
+
+    def _safe_meta_path(self, task_id: str) -> Path | None:
+        """返回 .meta.json 路径（不检查存在性）。"""
+        return self._safe_path(task_id, ".meta.json")
+
+    def _read_meta(self, task_id: str) -> dict[str, str]:
+        """读取脚本元数据文件。"""
+        meta_path = self._safe_meta_path(task_id)
+        if meta_path and meta_path.exists():
+            try:
+                return json.loads(meta_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        return {}
+
+    def _write_meta(self, task_id: str, meta: dict[str, str]) -> bool:
+        """写入脚本元数据文件。"""
+        meta_path = self._safe_meta_path(task_id)
+        if meta_path is None:
+            return False
         try:
-            candidate.relative_to(base)
-        except ValueError:
-            return None
-        return candidate
+            atomic_write(meta_path, json.dumps(meta, ensure_ascii=False, indent=2))
+            return True
+        except Exception as e:
+            logger.error("无法保存脚本元数据 %s: %s", task_id, e)
+            return False
 
     @staticmethod
     def _is_script_file(path: Path) -> bool:
@@ -1584,8 +1611,9 @@ class TaskManager:
     def save_order(self, order: dict[str, list[str]]) -> bool:
         """保存排序配置。"""
         try:
-            self._order_file().write_text(
-                json.dumps(order, ensure_ascii=False, indent=2), encoding="utf-8"
+            atomic_write(
+                str(self._order_file()),
+                json.dumps(order, ensure_ascii=False, indent=2),
             )
             return True
         except Exception as e:
@@ -1634,17 +1662,28 @@ class TaskManager:
         return self._sort_by_order(tasks, "all")
 
     def list_script_tasks(self) -> list[dict[str, str]]:
-        """只列出 .py 脚本任务。"""
+        """列出所有自定义脚本任务（.py 文件）。"""
         tasks: list[dict[str, str]] = []
         for file in self.tasks_dir.glob("*.py"):
             if not is_valid_task_id(file.stem):
                 continue
             try:
-                meta = self._extract_script_metadata(file)
+                # 优先从 .meta.json 读取，其次从脚本注释提取
+                file_meta = self._read_meta(file.stem)
+                if file_meta:
+                    name = file_meta.get("name", file.stem)
+                    description = file_meta.get("description", "")
+                    binary_path = file_meta.get("binary_path", "")
+                else:
+                    comment_meta = self._extract_script_metadata(file)
+                    name = comment_meta["name"]
+                    description = comment_meta["description"]
+                    binary_path = ""
                 tasks.append({
                     "id": file.stem,
-                    "name": meta["name"],
-                    "description": meta["description"],
+                    "name": name,
+                    "description": description,
+                    "binary_path": binary_path,
                 })
             except Exception as e:
                 logger.warning("无法读取脚本文件 %s: %s", file, e)
@@ -1656,12 +1695,23 @@ class TaskManager:
             return None
         try:
             if self._is_script_file(file):
-                meta = self._extract_script_metadata(file)
+                # 优先从 .meta.json 读取，其次从脚本注释提取
+                file_meta = self._read_meta(task_id)
+                if file_meta:
+                    name = file_meta.get("name", file.stem)
+                    description = file_meta.get("description", "")
+                    binary_path = file_meta.get("binary_path", "")
+                else:
+                    comment_meta = self._extract_script_metadata(file)
+                    name = comment_meta["name"]
+                    description = comment_meta["description"]
+                    binary_path = ""
                 return ScriptTaskInfo(
                     task_id=task_id,
-                    name=meta["name"],
-                    description=meta["description"],
+                    name=name,
+                    description=description,
                     script_path=file,
+                    binary_path=binary_path,
                 )
             data = json.loads(file.read_text(encoding="utf-8"))
             config = TaskConfig.from_dict(data)
@@ -1704,7 +1754,7 @@ class TaskManager:
             return False
 
     def _save_script_task(self, task_id: str, config: dict[str, Any]) -> bool:
-        """保存 Python 脚本任务。"""
+        """保存自定义脚本任务。"""
         script_content = config.get("content", "")
         if not script_content.strip():
             logger.error("脚本内容不能为空")
@@ -1723,6 +1773,13 @@ class TaskManager:
 
         try:
             atomic_write(file, script_content)
+            # 保存元数据到 .meta.json
+            meta = {
+                "name": config.get("name", task_id),
+                "description": config.get("description", ""),
+                "binary_path": config.get("binary_path", ""),
+            }
+            self._write_meta(task_id, meta)
             return True
         except Exception as e:
             logger.error("无法保存脚本任务 %s: %s", task_id, e)
@@ -1734,7 +1791,7 @@ class TaskManager:
         normalized = normalize_task_id(task_id)
         if not is_valid_task_id(normalized):
             return False
-        for ext in (".json", ".py"):
+        for ext in (".json", ".py", ".meta.json"):
             file = self.tasks_dir / f"{normalized}{ext}"
             try:
                 file.unlink(missing_ok=True)

@@ -11,7 +11,6 @@ from backend.constants import DEFAULT_NETWORK_TARGETS
 from .network_decision import check_login_prerequisites, check_network_status, check_pause
 from .network_probes import set_block_proxy
 from .utils import (
-    LoginAttemptHandler,
     get_runtime_stats,
     setup_logger,
 )
@@ -81,9 +80,6 @@ class NetworkMonitorCore:
         self._stop_event = threading.Event()
         self._test_sites_cache: Optional[list[tuple[str, int]]] = None
         self.logger = setup_logger("monitor", self.config.get("logging", {}))
-
-        # 持久化登录处理器，重试时复用浏览器
-        self._login_handler: Optional[LoginAttemptHandler] = None
 
         # 状态详情
         self.status_detail: str = "正常"
@@ -217,9 +213,6 @@ class NetworkMonitorCore:
         was_monitoring = self.monitoring
         self.monitoring = False
         self.status_detail = "已停止"
-
-        # 清除登录处理器引用，浏览器会在 attempt_login 返回后被清理
-        self._login_handler = None
 
         if was_monitoring and self.start_time:
             runtime, stats = get_runtime_stats(

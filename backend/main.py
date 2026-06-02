@@ -23,10 +23,11 @@ from src.version import get_project_version
 
 from .constants import FRONTEND_DIR, LOGS_DIR, PROJECT_ROOT, TEMP_DIR
 from .container import ServiceContainer
-from .routers import backup, config, debug, history, logfiles, monitor, profiles, repo, scripts, system, tasks, tools
+from .routers import backup, config, debug, history, logfiles, monitor, profiles, repo, scheduled_tasks, scripts, system, tasks, tools
 
 http_logger = get_logger("backend.http", side="BACKEND")
 startup_logger = get_logger("backend.startup", side="BACKEND")
+ws_logger = get_logger("backend.ws", side="BACKEND")
 
 
 # ==================== 生命周期管理 ====================
@@ -116,7 +117,7 @@ def _resolve_port() -> int:
                 if 1 <= port <= 65535:
                     return port
         except (json.JSONDecodeError, ValueError, OSError) as exc:
-            logging.getLogger("backend.main").warning(
+            startup_logger.warning(
                 "读取 settings.json 端口配置失败，使用默认端口 50721: %s", exc
             )
 
@@ -194,11 +195,11 @@ async def websocket_logs(websocket: WebSocket):
                             source="frontend",
                         )
             except (json.JSONDecodeError, KeyError):
-                pass
+                ws_logger.debug("WebSocket 消息解析失败", exc_info=True)
     except WebSocketDisconnect:
         await ws_mgr.disconnect(websocket)
     except Exception:
-        logging.getLogger("backend.main").exception("WebSocket 通信异常")
+        ws_logger.exception("WebSocket 通信异常")
         await ws_mgr.disconnect(websocket)
 
 
@@ -215,6 +216,7 @@ app.include_router(repo.router)
 app.include_router(system.router)
 app.include_router(tools.router)
 app.include_router(scripts.router)
+app.include_router(scheduled_tasks.router)
 app.include_router(history.router)
 app.include_router(logfiles.router)
 

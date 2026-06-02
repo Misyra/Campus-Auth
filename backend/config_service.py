@@ -24,6 +24,13 @@ from .schemas import (
 
 config_logger = get_logger("backend.config_service", side="BACKEND")
 
+# 运行时配置中不应被方案高级设置覆盖的字段
+_PROTECTED_KEYS = frozenset({
+    "username", "password", "auth_url", "active_task",
+    "carrier", "carrier_custom", "use_global_credentials",
+    "backend_log_level", "frontend_log_level",
+})
+
 
 def _safe_decrypt(ciphertext: str) -> str:
     """解密密码，失败时返回空字符串并记录警告。"""
@@ -163,11 +170,6 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
         if profile and not profile.use_global_advanced
         else data.profiles.get("default", ProfileSettings())
     )
-    _PROTECTED_KEYS = {
-        "username", "password", "auth_url", "active_task",
-        "carrier", "carrier_custom", "use_global_credentials",
-        "backend_log_level", "frontend_log_level",
-    }
     pld.update(
         {
             k: v
@@ -187,7 +189,7 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
 
 
 def build_runtime_config(
-    payload: MonitorConfigPayload, sys: SystemSettings | None = None
+    payload: MonitorConfigPayload, system_settings: SystemSettings | None = None
 ) -> dict[str, Any]:
     """从 MonitorConfigPayload 构建运行时配置字典。
 
@@ -196,7 +198,7 @@ def build_runtime_config(
 
     Args:
         payload: 前端传来的合并配置
-        sys: settings.json 中的系统设置（用于读取重试策略等非 UI 字段）
+        system_settings: settings.json 中的系统设置（用于读取重试策略等非 UI 字段）
     """
     config_logger.debug(
         "构建运行时配置: user=%s, url=%s", payload.username, payload.auth_url
@@ -207,8 +209,8 @@ def build_runtime_config(
     raw_password = payload.password.strip()
     if raw_password and not raw_password.startswith("•"):
         base["password"] = raw_password
-    elif sys:
-        base["password"] = _safe_decrypt(sys.password) if sys.password else ""
+    elif system_settings:
+        base["password"] = _safe_decrypt(system_settings.password) if system_settings.password else ""
 
     base["auth_url"] = payload.auth_url.strip()
     base["active_task"] = payload.active_task.strip()
@@ -296,10 +298,10 @@ def build_runtime_config(
     )
 
     # 重试策略从系统设置读取
-    if sys:
+    if system_settings:
         base["retry_settings"] = {
-            "max_retries": sys.max_retries,
-            "retry_interval": sys.retry_interval,
+            "max_retries": system_settings.max_retries,
+            "retry_interval": system_settings.retry_interval,
         }
 
     return base

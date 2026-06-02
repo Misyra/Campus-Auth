@@ -21,6 +21,16 @@ ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
 
+def _cleanup_old_backgrounds(exclude_filename: str) -> None:
+    """清理旧的背景图片，保留指定文件。"""
+    for old_file in BG_DIR.iterdir():
+        if old_file.name != exclude_filename:
+            try:
+                old_file.unlink()
+            except OSError:
+                pass
+
+
 @router.get("/api/tools/task-recorder.user.js")
 def download_task_recorder():
     """下载任务录制器用户脚本"""
@@ -59,13 +69,7 @@ async def upload_background(file: UploadFile) -> dict:
     filepath = BG_DIR / filename
     filepath.write_bytes(content)
 
-    # 清理旧的背景图片，只保留新上传的
-    for old_file in BG_DIR.iterdir():
-        if old_file.name != filename:
-            try:
-                old_file.unlink()
-            except OSError:
-                pass
+    _cleanup_old_backgrounds(filename)
 
     return {"filename": filename, "url": f"/api/background/{filename}"}
 
@@ -111,13 +115,7 @@ async def fetch_background_url(body: dict) -> dict:
     filepath = BG_DIR / filename
     filepath.write_bytes(content)
 
-    # 清理旧的背景图片
-    for old_file in BG_DIR.iterdir():
-        if old_file.name != filename:
-            try:
-                old_file.unlink()
-            except OSError:
-                pass
+    _cleanup_old_backgrounds(filename)
 
     return {"filename": filename, "url": f"/api/background/{filename}"}
 

@@ -313,11 +313,12 @@ class DebugSessionManager:
                 if self._session.session:
                     await self._session.session.close()
                 self._session = empty_debug_session()
-        # 清理临时调试截图
+        # 清理临时调试截图（仅删除文件，保留目录结构）
         try:
             if self._temp_dir.exists():
-                shutil.rmtree(self._temp_dir, ignore_errors=True)
-                self._temp_dir.mkdir(parents=True, exist_ok=True)
+                for item in self._temp_dir.iterdir():
+                    if item.is_file():
+                        item.unlink(missing_ok=True)
         except Exception:
             api_logger.debug("调试临时目录清理失败", exc_info=True)
         api_logger.info("Debug session stopped")
