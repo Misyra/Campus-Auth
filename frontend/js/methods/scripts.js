@@ -31,7 +31,7 @@ export const scriptMethods = {
         id: '',
         name: '',
         description: '',
-        content: '#!/usr/bin/env python3\n"""自定义登录脚本"""\nimport os, json\n\n',
+        content: '#!/usr/bin/env python3\n"""自定义登录脚本"""\nimport httpx\n\n',
         _isNew: true,
       };
     }
@@ -147,13 +147,14 @@ export const scriptMethods = {
 脚本只需发送登录请求，登录是否成功由系统网络检测自动判断。
 脚本正常退出（exit 0）= 执行成功，脚本报错退出 = 执行失败。
 """
-import os
 
-# 从环境变量获取登录参数
-username = os.environ["CAMPUS_USERNAME"]
-password = os.environ["CAMPUS_PASSWORD"]
-isp = os.environ.get("CAMPUS_ISP", "")
-login_url = os.environ["CAMPUS_URL"]
+# ============================================================
+# 直接硬编码认证参数（按实际情况修改）
+# ============================================================
+LOGIN_URL = "http://10.0.0.1/login"
+USERNAME = "your_username"
+PASSWORD = "your_password"
+ISP = "cmcc"  # 运营商：cmcc / unicom / telecom，无则留空
 
 # ============================================================
 # 以下三种方式任选其一，按需取消注释
@@ -161,30 +162,21 @@ login_url = os.environ["CAMPUS_URL"]
 
 # ── 方式 1: httpx（已安装，推荐） ──
 import httpx
-resp = httpx.post(login_url, data={
-    "username": username,
-    "password": password,
-    "operator": isp,
+resp = httpx.post(LOGIN_URL, data={
+    "username": USERNAME,
+    "password": PASSWORD,
+    "operator": ISP,
 }, timeout=30)
 print(f"HTTP {resp.status_code}")
 
-# ── 方式 2: requests（已安装） ──
-# import requests
-# resp = requests.post(login_url, data={
-#     "username": username,
-#     "password": password,
-#     "operator": isp,
-# }, timeout=30)
-# print(f"HTTP {resp.status_code}")
-
-# ── 方式 3: urllib（标准库，无需安装） ──
+# ── 方式 2: urllib（标准库，无需安装） ──
 # import urllib.request, urllib.parse
 # data = urllib.parse.urlencode({
-#     "username": username,
-#     "password": password,
-#     "operator": isp,
+#     "username": USERNAME,
+#     "password": PASSWORD,
+#     "operator": ISP,
 # }).encode()
-# req = urllib.request.Request(login_url, data=data)
+# req = urllib.request.Request(LOGIN_URL, data=data)
 # with urllib.request.urlopen(req, timeout=30) as resp:
 #     print(f"HTTP {resp.status}")
 `;
