@@ -23,10 +23,7 @@ export const statusMethods = {
       this.$nextTick(() => this.scrollToBottom());
     } catch (error) {
       this.frontendLogger.error('logs', '获取日志失败', error);
-      if (this._initErrorCount < 2) {
-        this._initErrorCount++;
-        this.notify(false, '加载日志失败');
-      }
+      this._recordInitError('加载日志失败');
     }
   },
 };

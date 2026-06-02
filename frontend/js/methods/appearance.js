@@ -3,8 +3,7 @@ import { DEFAULT_APPEARANCE, ACCENT_COLORS, BG_COLORS, LIMITS } from '../constan
 export const appearanceMethods = {
   // 保存外观设置
   saveAppearance() {
-    localStorage.setItem('appearance', JSON.stringify(this.appearance));
-    this.applyAppearance();
+    // 持久化和 applyAppearance 由 app-options.js 中的 watcher 统一负责（100ms 防抖）
     this.toastOnly(true, '外观设置已保存');
   },
 

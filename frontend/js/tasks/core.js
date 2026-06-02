@@ -29,10 +29,7 @@ export const coreTaskMethods = {
       this.tasks = data;
     } catch (error) {
       this.frontendLogger.error('tasks', '获取任务列表失败', error);
-      if (this._initErrorCount < 2) {
-        this._initErrorCount++;
-        this.notify(false, '加载任务列表失败');
-      }
+      this._recordInitError('加载任务列表失败');
     }
   },
   async fetchActiveTask() {
@@ -41,10 +38,7 @@ export const coreTaskMethods = {
       this.activeTaskId = data.task_id;
     } catch (error) {
       this.frontendLogger.error('tasks', '获取活动任务失败', error);
-      if (this._initErrorCount < 2) {
-        this._initErrorCount++;
-        this.notify(false, '加载活动任务失败');
-      }
+      this._recordInitError('加载活动任务失败');
     }
   },
   async setActiveTask(taskId) {
