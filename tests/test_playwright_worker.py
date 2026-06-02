@@ -131,5 +131,5 @@ class TestSubmitAliveCheck:
             # 等待所有完成
             concurrent.futures.wait(futures)
 
-        # 验证只重启了一次（或极少次数，因为有锁保护）
-        assert restart_count <= 2, f"重启次数过多: {restart_count}"
+        # 验证只重启了一次（有锁保护，严格等于 1）
+        assert restart_count == 1, f"重启次数应为 1，实际: {restart_count}"
