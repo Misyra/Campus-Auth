@@ -191,6 +191,10 @@ class _SystemFieldsMixin(_ClampMixin):
     )
     app_port: int = Field(default=50721, ge=1024, le=65535, description="Web 控制台端口")
     proxy: str = Field(default="", description="网络代理地址")
+    shell_path: str = Field(
+        default="",
+        description="自定义 Shell 路径（留空使用系统默认）"
+    )
 
     @field_validator("backend_log_level", "frontend_log_level")
     @classmethod

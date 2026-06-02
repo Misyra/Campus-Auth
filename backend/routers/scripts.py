@@ -1,4 +1,4 @@
-"""脚本任务路由 — 自定义 Python 脚本的 CRUD 和手动执行。"""
+"""自定义脚本路由 — 自定义脚本的 CRUD 和手动执行。"""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from src.script_runner import ScriptRunner
+from src.script_runner import ScriptRunner, detect_available_binaries
 from src.utils.logging import get_logger
 
 from ..deps import get_task_service
@@ -21,8 +21,14 @@ api_logger = get_logger("backend.api", side="BACKEND")
 def list_scripts(
     task_svc: TaskService = Depends(get_task_service),
 ) -> list[dict[str, str]]:
-    """列出所有 .py 脚本任务。"""
+    """列出所有自定义脚本任务。"""
     return task_svc.list_scripts()
+
+
+@router.get("/api/scripts/binaries")
+def list_binaries() -> list[dict[str, str]]:
+    """获取系统可用的执行二进制列表。"""
+    return detect_available_binaries()
 
 
 @router.get("/api/scripts/{task_id}")
@@ -43,7 +49,7 @@ def save_script(
     payload: dict,
     task_svc: TaskService = Depends(get_task_service),
 ) -> ActionResponse:
-    """保存脚本任务。"""
+    """保存自定义脚本任务。"""
     payload["type"] = "script"
     ok, message = task_svc.save_task(task_id, payload)
     api_logger.info("Save script %s -> success=%s, message=%s", task_id, ok, message)
@@ -83,7 +89,8 @@ async def run_script(
     except Exception:
         timeout = 60
 
-    runner = ScriptRunner(script_path, timeout=timeout)
+    binary_path = task.get("binary_path", "")
+    runner = ScriptRunner(script_path, timeout=timeout, binary_path=binary_path)
 
     loop = asyncio.get_running_loop()
     success, message = await loop.run_in_executor(None, runner.run)
