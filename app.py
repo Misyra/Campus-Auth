@@ -110,6 +110,14 @@ def _is_service_running() -> tuple[bool, int | None]:
         pid_file.unlink(missing_ok=True)
         return False, None
 
+    # 进程名匹配，进一步验证端口是否在监听（防止 PID 被同名进程复用导致误判）
+    from backend.main import _resolve_port
+    port = _resolve_port()
+    if not _is_local_port_in_use(port):
+        # 进程存在但未监听端口 → 不是本应用实例，清理残留 PID 文件
+        pid_file.unlink(missing_ok=True)
+        return False, None
+
     try:
         os.kill(pid, 0)
     except (PermissionError, OSError, SystemError):

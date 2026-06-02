@@ -31,7 +31,7 @@ _ENC_PREFIX = "ENC:"
 _cached_raw_key: bytes | None = None
 _cached_fernet_key: bytes | None = None
 _decryption_failed = threading.Event()
-_key_lock = threading.Lock()
+_key_lock = threading.RLock()
 
 
 def _get_or_create_key() -> bytes:
