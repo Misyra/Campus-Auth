@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import signal
 import threading
 from pathlib import Path
 
@@ -162,7 +163,7 @@ def shutdown_server(
             api_logger.debug("PID 文件清理失败", exc_info=True)
         import logging as _logging
         _logging.shutdown()
-        os._exit(0)
+        os.kill(os.getpid(), signal.SIGTERM)
 
     threading.Thread(target=_do_shutdown, daemon=True).start()
 
