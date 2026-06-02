@@ -260,25 +260,17 @@ class LoginAttemptHandler:
         if self.cancel_event and self.cancel_event.is_set():
             return False, "登录已取消"
 
-        env_vars = build_login_env_vars(
-            self.config, None, self.config.get("custom_variables", {})
-        )
-
         timeout = self.config.get("monitor", {}).get("script_timeout", 60)
         runner = ScriptRunner(task.script_path, timeout=timeout)
 
-        # 在线程池中执行子进程
         loop = asyncio.get_running_loop()
-        ran_ok, script_output = await loop.run_in_executor(
-            None, runner.run, env_vars
-        )
+        ran_ok, script_output = await loop.run_in_executor(None, runner.run)
 
         if not ran_ok:
             total = time.perf_counter() - phase_start
             self.logger.error("脚本执行失败 (总耗时 %.1fs): %s", total, script_output)
             return False, f"脚本执行失败: {script_output}"
 
-        # 脚本执行完成，等待 2s 后进行网络检测
         self.logger.info("脚本已执行，等待网络验证...")
         await asyncio.sleep(2)
 
