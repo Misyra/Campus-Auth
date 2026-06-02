@@ -91,7 +91,7 @@
 
 .task-editor textarea {
   width: 100%;
-  min-height: 300px;
+  min-height: var(--editor-min-height, 300px);
   padding: 12px;
   background: var(--bg-glass);
   border: 1px solid var(--border);

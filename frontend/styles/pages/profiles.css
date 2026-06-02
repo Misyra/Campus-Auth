@@ -518,7 +518,7 @@
   margin-top: 4px;
 }
 
-.toggle-row {
+.profile-editor-card .toggle-row {
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
