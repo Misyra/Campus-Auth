@@ -18,6 +18,7 @@ from typing import Callable
 
 _BOOTSTRAP_LOCK = threading.Lock()
 _BOOTSTRAP_DONE = False
+_BOOTSTRAP_SKIPPED = False  # 用户禁用 auto-install，跳过验证
 
 
 def _candidate_hosts() -> list[str]:
@@ -106,14 +107,19 @@ def _has_chromium() -> bool:
 
 def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
     """确保 playwright 包可导入且 Chromium 已安装。"""
-    global _BOOTSTRAP_DONE
+    global _BOOTSTRAP_DONE, _BOOTSTRAP_SKIPPED
 
     with _BOOTSTRAP_LOCK:
         if _BOOTSTRAP_DONE:
             return True
 
+        if _BOOTSTRAP_SKIPPED:
+            return True
+
         if not _is_enabled():
-            _BOOTSTRAP_DONE = True
+            _BOOTSTRAP_SKIPPED = True
+            if log:
+                log("AUTO_INSTALL_PLAYWRIGHT 已禁用，跳过 Chromium 验证")
             return True
 
         # 快速路径：直接检查 chromium 是否已安装，避免导入 playwright（~15-20MB）
@@ -164,3 +170,13 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
             if log:
                 log(f"Playwright 初始化失败: {exc}")
             return False
+
+
+def is_bootstrap_skipped() -> bool:
+    """检查 bootstrap 是否被用户禁用（跳过验证）。"""
+    return _BOOTSTRAP_SKIPPED
+
+
+def is_bootstrap_done() -> bool:
+    """检查 bootstrap 是否已完成验证。"""
+    return _BOOTSTRAP_DONE
