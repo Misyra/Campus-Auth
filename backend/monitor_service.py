@@ -92,7 +92,7 @@ class MonitorService:
         self._monitor_core: NetworkMonitorCore | None = None
         self._monitor_thread: threading.Thread | None = None
         self._thread_done = threading.Event()
-        self.pure_mode: bool = self._profile_service.load().system.pure_mode
+        self._pure_mode: bool = self._profile_service.load().system.pure_mode
 
         # Actor model: command dispatch queue (replaces RLock + cross-thread asyncio)
         self._cmd_queue: queue.Queue[MonitorCommand] = queue.Queue(maxsize=50)
@@ -455,6 +455,12 @@ class MonitorService:
         return self._logs
 
     @property
+    def pure_mode(self) -> bool:
+        """线程安全地读取纯净模式标志。"""
+        with self._pure_mode_lock:
+            return self._pure_mode
+
+    @property
     def _is_monitoring(self) -> bool:
         """Read monitoring state from lock-free snapshot."""
         return self._status_snapshot.monitoring
@@ -694,11 +700,11 @@ class MonitorService:
     def toggle_pure_mode(self) -> bool:
         """切换纯净模式，返回新值"""
         with self._pure_mode_lock:
-            new_value = not self.pure_mode
+            new_value = not self._pure_mode
             data = self._profile_service.load()
             data.system.pure_mode = new_value
             self._profile_service.save(data)
-            self.pure_mode = new_value
+            self._pure_mode = new_value
             return new_value
 
     def get_runtime_config(self) -> dict:

@@ -697,6 +697,54 @@ class TestTogglePureMode:
         assert svc.pure_mode is True
         mock_ps.save.assert_called_once()
 
+    @patch("backend.monitor_service.build_runtime_config", return_value={})
+    @patch("backend.monitor_service.load_runtime_config", return_value={})
+    @patch("backend.monitor_service.load_ui_config")
+    @patch("backend.monitor_service.ProfileService")
+    def test_pure_mode_read_write_thread_safe(self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
+        """读写线程安全：2 线程同时读/写 1000 次，无异常且值始终为 bool。"""
+        mock_ps = MagicMock()
+        mock_ps_cls.return_value = mock_ps
+        mock_data = MagicMock()
+        mock_data.system.pure_mode = False
+        mock_ps.load.return_value = mock_data
+        mock_ui_config = MagicMock()
+        mock_ui_config.auto_start = False
+        mock_load_ui.return_value = mock_ui_config
+
+        svc = MonitorService(MagicMock())
+        errors: list[Exception] = []
+        values_seen: list[bool] = []
+
+        def reader() -> None:
+            try:
+                for _ in range(1000):
+                    val = svc.pure_mode
+                    assert isinstance(val, bool), f"非 bool 值: {val!r}"
+                    values_seen.append(val)
+            except Exception as exc:
+                errors.append(exc)
+
+        def writer() -> None:
+            try:
+                for _ in range(1000):
+                    svc.toggle_pure_mode()
+            except Exception as exc:
+                errors.append(exc)
+
+        t_read = threading.Thread(target=reader)
+        t_write = threading.Thread(target=writer)
+        t_read.start()
+        t_write.start()
+        t_read.join(timeout=10)
+        t_write.join(timeout=10)
+
+        assert not errors, f"线程执行出错: {errors}"
+        # 所有读取到的值都应该是 bool（True 或 False）
+        assert all(isinstance(v, bool) for v in values_seen)
+        # 最终值应与 toggle 次数一致（1000 次 toggle → False）
+        assert svc.pure_mode is False
+
 
 # =====================================================================
 # MonitorService.login_in_progress
