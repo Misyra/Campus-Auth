@@ -184,7 +184,14 @@ export const lifecycleMethods = {
     clearTimeout(this._wsRetryTimer);
 
     if (this.ws) {
-      this.ws.close();
+      // 清理旧回调，防止快速重连时旧 onclose 切断新连接
+      const oldWs = this.ws;
+      if (this.frontendLogger) {
+        this.frontendLogger.setWebSocket(null);
+      }
+      oldWs.onclose = null;
+      oldWs.onerror = null;
+      oldWs.close();
     }
 
     this.ws = new WebSocket(wsUrl);
