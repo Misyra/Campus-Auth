@@ -746,3 +746,38 @@ class TestGetConfig:
         # 修改返回值不应影响内部状态
         config["key"] = "modified"
         assert svc._runtime_config.get("key") == "value"
+
+
+# =====================================================================
+# save_profile 路由 apply_profile 参数验证
+# =====================================================================
+
+
+class TestSaveProfileApplyId:
+    """验证 save_profile 路由传递 profile_id 而非 payload.name 给 apply_profile。"""
+
+    def test_apply_profile_uses_id_not_name(self):
+        from backend.routers.profiles import save_profile
+        from backend.schemas import ProfileSettings
+
+        mock_profile_svc = MagicMock()
+        mock_monitor_svc = MagicMock()
+
+        # save_profile 返回成功
+        mock_profile_svc.save_profile.return_value = (True, "OK")
+        # active_profile 等于传入的 profile_id，触发 apply_profile 分支
+        mock_data = MagicMock()
+        mock_data.active_profile = "my_profile_id"
+        mock_profile_svc.load.return_value = mock_data
+
+        # payload.name 与 profile_id 不同 —— 这是 bug 的核心
+        payload = ProfileSettings(name="完全不同的展示名")
+        save_profile(
+            profile_id="my_profile_id",
+            payload=payload,
+            profile_svc=mock_profile_svc,
+            monitor_svc=mock_monitor_svc,
+        )
+
+        # apply_profile 应该用 profile_id，而非 payload.name
+        mock_monitor_svc.apply_profile.assert_called_once_with("my_profile_id")
