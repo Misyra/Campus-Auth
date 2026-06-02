@@ -1,42 +1,21 @@
 #!/usr/bin/env python3
 # name: HTTP 登录测试
-# description: 使用 urllib 发送 POST 请求登录校园网，无需第三方库
-import os
-import urllib.request
-import urllib.parse
+# description: 使用 httpx 发送 POST 请求登录校园网
+import httpx
 
-# 从环境变量获取登录参数
-username = os.environ.get("CAMPUS_USERNAME", "")
-password = os.environ.get("CAMPUS_PASSWORD", "")
-isp = os.environ.get("CAMPUS_ISP", "")
-login_url = os.environ.get("CAMPUS_URL", "")
-
-if not login_url:
-    print("CAMPUS_URL 未设置，请先在设置中配置认证地址")
-    exit(1)
-
-if not username:
-    print("CAMPUS_USERNAME 未设置，请先在设置中配置用户名")
-    exit(1)
-
-# 构建 POST 数据（根据实际校园网认证接口调整字段名）
-post_data = urllib.parse.urlencode({
-    "username": username,
-    "password": password,
-    "operator": isp,
-}).encode("utf-8")
+# 按实际情况修改以下参数
+LOGIN_URL = "http://10.0.0.1/login"
+USERNAME = "your_username"
+PASSWORD = "your_password"
+ISP = "cmcc"  # 运营商：cmcc / unicom / telecom，无则留空
 
 try:
-    req = urllib.request.Request(
-        login_url,
-        data=post_data,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-    )
-    with urllib.request.urlopen(req, timeout=5) as resp:
-        print(f"HTTP {resp.status}")
-except urllib.error.HTTPError as e:
-    print(f"HTTP {e.code}: {e.reason}")
-    exit(1)
+    resp = httpx.post(LOGIN_URL, data={
+        "username": USERNAME,
+        "password": PASSWORD,
+        "operator": ISP,
+    }, timeout=30)
+    print(f"HTTP {resp.status_code}")
 except Exception as e:
     print(str(e))
     exit(1)
