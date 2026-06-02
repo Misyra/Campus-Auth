@@ -1,0 +1,318 @@
+<div v-if="currentPage === 'scheduled_tasks'" class="page-content fade-in">
+  <!-- 任务列表 -->
+  <div class="card">
+    <div class="card-header">
+      <h2>定时任务</h2>
+      <button class="btn btn-sm btn-primary" @click="openCreateScheduledTask">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        新建定时任务
+      </button>
+    </div>
+    <div class="card-body">
+      <div v-if="!scheduledTasks.length" class="empty-state">
+        <p>暂无定时任务</p>
+        <p class="hint">定时任务会在指定时间自动执行脚本或浏览器任务</p>
+      </div>
+      <div v-else class="task-list">
+        <div v-for="task in scheduledTasks" :key="task.id" class="task-item hover-lift scheduled-task-item" :class="{ disabled: !task.enabled }">
+          <div class="task-info">
+            <h3>{{ task.name }}</h3>
+            <p class="task-desc">
+              <span class="scheduled-task-type" :class="'badge-' + task.type">{{ formatTaskType(task.type) }}</span>
+              <span v-if="task.target_id"> · {{ task.target_id }}</span>
+              · 每天 {{ formatScheduleTime(task.schedule) }}
+              <span v-if="task.timeout"> · 超时 {{ task.timeout }}s</span>
+              <span v-if="task.last_run">
+                · 上次: <span :class="task.last_status === 'success' ? 'text-success' : 'text-danger'">{{ task.last_status === 'success' ? '成功' : '失败' }}</span>
+              </span>
+            </p>
+          </div>
+          <div class="task-actions">
+            <button class="btn btn-sm" @click="runScheduledTask(task.id)" title="手动执行">运行</button>
+            <button class="btn btn-sm" @click="loadScheduledTaskHistory(task.id)" title="执行历史">历史</button>
+            <button class="btn btn-sm" @click="openEditScheduledTask(task)" title="编辑">编辑</button>
+            <button class="btn btn-sm btn-danger" @click="deleteScheduledTask(task.id)">删除</button>
+          </div>
+          <div class="task-toggle">
+            <toggle-switch
+              :model-value="task.enabled !== false"
+              @update:model-value="toggleScheduledTask(task.id)"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新建/编辑定时任务弹窗 -->
+  <div v-if="showScheduledTaskModal" class="modal-overlay" @click.self="closeScheduledTaskModal">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3>{{ editingScheduledTask ? '编辑定时任务' : '新建定时任务' }}</h3>
+        <button class="btn btn-icon-only" @click="closeScheduledTaskModal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <!-- 基本信息 -->
+        <div class="form-section">
+          <div class="form-section-title">基本信息</div>
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="scheduled-task-name">任务名称</label>
+              <input id="scheduled-task-name" v-model="scheduledTaskForm.name" type="text" placeholder="输入任务名称" />
+            </div>
+            <div class="form-group flex-1">
+              <label for="scheduled-task-desc">描述</label>
+              <input id="scheduled-task-desc" v-model="scheduledTaskForm.description" type="text" placeholder="可选" />
+            </div>
+          </div>
+        </div>
+
+        <!-- 任务配置 -->
+        <div class="form-section">
+          <div class="form-section-title">任务配置</div>
+          <div class="form-row">
+            <div class="form-group" style="min-width: 140px;">
+              <label for="scheduled-task-type">任务类型</label>
+              <select id="scheduled-task-type" v-model="scheduledTaskForm.type">
+                <option value="script">自定义脚本</option>
+                <option value="browser">浏览器任务</option>
+              </select>
+            </div>
+            <div class="form-group flex-1">
+              <label for="scheduled-task-target">{{ scheduledTaskForm.type === 'script' ? '选择脚本' : '选择浏览器任务' }}</label>
+              <select
+                v-if="scheduledTaskForm.type === 'script'"
+                id="scheduled-task-target"
+                v-model="scheduledTaskForm.target_id"
+              >
+                <option value="">请选择...</option>
+                <option v-for="script in scripts" :key="script.id" :value="script.id">
+                  {{ script.name }}{{ script.binary_path ? ' (' + getBinaryName(script.binary_path) + ')' : '' }}
+                </option>
+              </select>
+              <select
+                v-else
+                id="scheduled-task-target"
+                v-model="scheduledTaskForm.target_id"
+              >
+                <option value="">请选择...</option>
+                <option v-for="task in browserTasks" :key="task.id" :value="task.id">{{ task.name }}</option>
+              </select>
+              <span class="hint">{{ scheduledTaskForm.type === 'script' ? '在「自定义脚本」页面创建和管理脚本' : '浏览器任务会自动打开网页并执行登录等自动化操作' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 执行设置 -->
+        <div class="form-section">
+          <div class="form-section-title">执行设置</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="scheduled-task-time">执行时间</label>
+              <input
+                id="scheduled-task-time"
+                type="time"
+                :value="formatTimeValue(scheduledTaskForm.schedule.hour, scheduledTaskForm.schedule.minute)"
+                @input="onTimeChange($event)"
+              />
+            </div>
+            <div class="form-group">
+              <label for="scheduled-task-timeout">超时（秒）</label>
+              <input id="scheduled-task-timeout" v-model.number="scheduledTaskForm.timeout" type="number" min="5" max="3600" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="closeScheduledTaskModal">取消</button>
+        <button class="btn btn-primary" @click="saveScheduledTask" :disabled="scheduledTaskFormLoading">
+          {{ scheduledTaskFormLoading ? '保存中...' : '保存' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 执行历史弹窗 -->
+  <div v-if="selectedScheduledTaskId" class="modal-overlay" @click.self="closeScheduledTaskHistory">
+    <div class="modal-container modal-lg">
+      <div class="modal-header">
+        <h3>执行历史</h3>
+        <button class="btn btn-icon-only" @click="closeScheduledTaskHistory">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div v-if="scheduledTaskHistoryLoading" class="loading-state">
+          <div class="spinner"></div>
+          <p>加载中...</p>
+        </div>
+
+        <div v-else-if="!scheduledTaskHistory.length" class="empty-state">
+          <p>暂无执行记录</p>
+        </div>
+
+        <div v-else class="history-list">
+          <div v-for="(record, index) in scheduledTaskHistory" :key="index" class="history-item" :class="record.status">
+            <div class="history-header">
+              <span class="history-status" :class="record.status">
+                {{ record.status === 'success' ? '成功' : '失败' }}
+              </span>
+              <span class="history-time">{{ record.timestamp.replace('T', ' ').substring(0, 19) }}</span>
+              <span class="history-duration">{{ record.duration }}s</span>
+            </div>
+            <div class="history-message">{{ record.message }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="closeScheduledTaskHistory">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.scheduled-task-type {
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.badge-script {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+}
+
+.badge-browser {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.task-item.disabled {
+  opacity: 0.6;
+}
+
+.scheduled-task-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.scheduled-task-item .task-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.scheduled-task-item .task-actions {
+  flex-shrink: 0;
+}
+
+.scheduled-task-item .task-toggle {
+  flex-shrink: 0;
+  padding-left: 16px;
+  border-left: 1px solid var(--border);
+}
+
+.form-section {
+  margin-bottom: 20px;
+}
+
+.form-section:last-child {
+  margin-bottom: 0;
+}
+
+.form-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.form-row .form-group {
+  margin-bottom: 0;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.history-item {
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-glass);
+  border: 1px solid var(--border);
+}
+
+.history-item.success {
+  border-left: 3px solid var(--success);
+}
+
+.history-item.failure {
+  border-left: 3px solid var(--error);
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.history-status {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.history-status.success {
+  color: var(--success);
+}
+
+.history-status.failure {
+  color: var(--error);
+}
+
+.history-time {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.history-duration {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.history-message {
+  font-size: 13px;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+</style>

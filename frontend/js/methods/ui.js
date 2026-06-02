@@ -72,6 +72,11 @@ export const uiMethods = {
   setSettingsTab(tabId) {
     this.currentSettingsTab = tabId;
   },
+  // 导航到指定页面
+  navigateTo(page) {
+    this.currentPage = page;
+    this.showMoreNav = false;
+  },
   addCustomVar() {
     // 确保 custom_variables 是对象
     if (!this.config.custom_variables || typeof this.config.custom_variables !== 'object') {

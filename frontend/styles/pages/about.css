@@ -1,6 +1,15 @@
 .about-container {
   max-width: 960px;
   margin: 0 auto;
+  /* 技术徽章品牌色 */
+  --tech-python: #3776ab;
+  --tech-fastapi: #009688;
+  --tech-pyinstaller: #b0b0b0;
+  --tech-websockets: #6495ed;
+  --tech-pydantic: #e63e12;
+  --tech-playwright: #2eaa55;
+  --tech-uv: var(--accent);
+  --tech-ddddocr: #a855f7;
 }
 
 .about-hero {
@@ -130,51 +139,51 @@
 }
 
 .tech-badge.python {
-  background: rgba(55, 118, 171, 0.2);
-  color: #3776ab;
-  border: 1px solid rgba(55, 118, 171, 0.3);
+  background: color-mix(in srgb, var(--tech-python) 20%, transparent);
+  color: var(--tech-python);
+  border: 1px solid color-mix(in srgb, var(--tech-python) 30%, transparent);
 }
 
 .tech-badge.fastapi {
-  background: rgba(0, 150, 136, 0.2);
-  color: #009688;
-  border: 1px solid rgba(0, 150, 136, 0.3);
+  background: color-mix(in srgb, var(--tech-fastapi) 20%, transparent);
+  color: var(--tech-fastapi);
+  border: 1px solid color-mix(in srgb, var(--tech-fastapi) 30%, transparent);
 }
 
 .tech-badge.pyinstaller {
-  background: rgba(51, 51, 51, 0.2);
-  color: #b0b0b0;
-  border: 1px solid rgba(51, 51, 51, 0.3);
+  background: color-mix(in srgb, var(--tech-pyinstaller) 20%, transparent);
+  color: var(--tech-pyinstaller);
+  border: 1px solid color-mix(in srgb, var(--tech-pyinstaller) 30%, transparent);
 }
 
 .tech-badge.websockets {
-  background: rgba(100, 149, 237, 0.2);
-  color: #6495ed;
-  border: 1px solid rgba(100, 149, 237, 0.3);
+  background: color-mix(in srgb, var(--tech-websockets) 20%, transparent);
+  color: var(--tech-websockets);
+  border: 1px solid color-mix(in srgb, var(--tech-websockets) 30%, transparent);
 }
 
 .tech-badge.pydantic {
-  background: rgba(230, 62, 18, 0.2);
-  color: #e63e12;
-  border: 1px solid rgba(230, 62, 18, 0.3);
+  background: color-mix(in srgb, var(--tech-pydantic) 20%, transparent);
+  color: var(--tech-pydantic);
+  border: 1px solid color-mix(in srgb, var(--tech-pydantic) 30%, transparent);
 }
 
 .tech-badge.playwright {
-  background: rgba(51, 85, 51, 0.2);
-  color: #2eaa55;
-  border: 1px solid rgba(46, 170, 85, 0.3);
+  background: color-mix(in srgb, var(--tech-playwright) 20%, transparent);
+  color: var(--tech-playwright);
+  border: 1px solid color-mix(in srgb, var(--tech-playwright) 30%, transparent);
 }
 
 .tech-badge.uv {
-  background: rgba(34, 211, 238, 0.2);
-  color: var(--accent);
-  border: 1px solid rgba(34, 211, 238, 0.3);
+  background: color-mix(in srgb, var(--tech-uv) 20%, transparent);
+  color: var(--tech-uv);
+  border: 1px solid color-mix(in srgb, var(--tech-uv) 30%, transparent);
 }
 
 .tech-badge.ddddocr {
-  background: rgba(147, 51, 234, 0.2);
-  color: #a855f7;
-  border: 1px solid rgba(168, 85, 247, 0.3);
+  background: color-mix(in srgb, var(--tech-ddddocr) 20%, transparent);
+  color: var(--tech-ddddocr);
+  border: 1px solid color-mix(in srgb, var(--tech-ddddocr) 30%, transparent);
 }
 
 .feature-list {

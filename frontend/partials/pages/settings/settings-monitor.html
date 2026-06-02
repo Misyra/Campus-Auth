@@ -1,0 +1,253 @@
+<div v-else-if="currentSettingsTab === 'monitor'" class="settings-panel-grid">
+  <section class="card settings-panel">
+    <div class="card-header">
+      <h2>检测设置</h2>
+    </div>
+    <div class="card-body">
+      <div class="form-group">
+        <div class="field-label-row">
+          <label for="settings-interval">检测间隔（秒）</label>
+          <span class="field-help" tabindex="0" role="note" data-tip="每隔多久检测一次网络连通性。检测到断网时自动触发浏览器登录流程。建议 180~600 秒，过短会增加资源占用。">?</span>
+        </div>
+        <input id="settings-interval" v-model.number="config.check_interval_seconds" type="number" min="10" max="86400" />
+      </div>
+      <div class="form-group">
+        <div class="field-label-row">
+          <label for="settings-network-check-timeout">检测超时（秒）</label>
+          <span class="field-help" tabindex="0" role="note" data-tip="网络检测的超时时间。如果网络较慢或经常误判为断网，可以适当增大此值。默认 2 秒，范围 1~30 秒。">?</span>
+        </div>
+        <input
+          id="settings-network-check-timeout"
+          v-model.number="config.network_check_timeout"
+          type="number"
+          min="1"
+          max="30"
+        />
+      </div>
+      <div class="toggle-group">
+        <div class="toggle-with-help">
+          <label class="toggle toggle-help-inline">
+            <input type="checkbox" v-model="config.block_proxy" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">屏蔽系统代理</span>
+            <span class="field-help" tabindex="0" role="note" data-tip="开启后网络检测时忽略系统代理设置，直接连接检测目标。适用于系统开启代理但校园网认证需要直连检测的场景。关闭后则使用系统代理进行网络检测。">?</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card settings-panel settings-panel--wide">
+    <div class="card-header">
+      <h2>网络检测方式</h2>
+      <span class="field-help" tabindex="0" role="note" data-tip="网络状态检测用于判断当前网络是否可用，多种方式并发执行，必须全部通过才算联网正常。登录前检测在触发自动登录前执行额外检查。">?</span>
+    </div>
+    <div class="card-body">
+      <div class="settings-detect-columns">
+      <!-- 左列：网络状态检测 -->
+      <div class="settings-detect-col">
+        <h4 class="settings-detect-heading">网络状态检测</h4>
+
+        <!-- TCP 检测 -->
+        <div class="toggle-group">
+          <div class="toggle-with-help">
+            <label class="toggle toggle-help-inline">
+              <input type="checkbox" v-model="config.enable_tcp_check" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">TCP 检测</span>
+              <span class="field-help" tabindex="0" role="note" data-tip="通过 TCP 连接外部站点（如 8.8.8.8:53）检测网络连通性。适用于大多数校园网。">?</span>
+            </label>
+          </div>
+        </div>
+        <div v-if="config.enable_tcp_check" class="form-group" style="margin-top: -4px;">
+          <div class="field-label-row">
+            <label for="settings-network-targets">TCP 检测目标</label>
+            <span
+              class="field-help"
+              tabindex="0"
+              role="note"
+              data-tip="支持 host 或 host:port 格式，多个目标用英文逗号分隔。任一目标可达即判定 TCP 连通。"
+            >?</span>
+          </div>
+          <input
+            id="settings-network-targets"
+            v-model="config.network_targets"
+            type="text"
+            placeholder="8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
+          />
+        </div>
+
+        <!-- HTTP 检测 -->
+        <div class="toggle-group" style="margin-top: 12px;">
+          <div class="toggle-with-help">
+            <label class="toggle toggle-help-inline">
+              <input type="checkbox" v-model="config.enable_http_check" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">HTTP 检测</span>
+              <span class="field-help" tabindex="0" role="note" data-tip="通过 HTTP 请求外部站点检测网络连通性。">?</span>
+            </label>
+          </div>
+        </div>
+        <div v-if="config.enable_http_check" class="form-group" style="margin-top: -4px;">
+          <div class="field-label-row">
+            <label for="settings-http-targets">HTTP 检测目标</label>
+            <span
+              class="field-help"
+              tabindex="0"
+              role="note"
+              data-tip="HTTP(S) URL 地址，多个目标用英文逗号分隔。任一目标返回 2xx 状态码即判定网络正常。"
+            >?</span>
+          </div>
+          <input
+            id="settings-http-targets"
+            v-model="config.http_targets"
+            type="text"
+            placeholder="https://www.baidu.com,https://www.qq.com"
+          />
+        </div>
+
+        <!-- Captive Portal 检测 -->
+        <div class="toggle-group" style="margin-top: 12px;">
+          <div class="toggle-with-help">
+            <label class="toggle toggle-help-inline">
+              <input type="checkbox" v-model="portalCheckEnabled" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">Captive Portal 检测</span>
+              <span class="field-help" tabindex="0" role="note" data-tip="通过访问 captive portal 检测地址判断网络是否需要认证。能准确识别被门户劫持的网络。">?</span>
+            </label>
+          </div>
+        </div>
+        <div v-if="portalCheckEnabled" class="form-group" style="margin-top: -4px;">
+          <div class="field-label-row">
+            <label for="settings-portal-urls">Portal 检测地址</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="每行一个，格式：URL|预期内容。响应内容包含预期文本则判定网络正常。">?</span>
+          </div>
+          <textarea
+            id="settings-portal-urls"
+            v-model="config.portal_check_urls"
+            rows="3"
+            placeholder="http://captive.apple.com/hotspot-detect.html|Success"
+            class="monospace-textarea"
+          ></textarea>
+        </div>
+      </div>
+
+      <!-- 右列：登录前检测 -->
+      <div class="settings-detect-col">
+        <h4 class="settings-detect-heading">登录前检测 <span class="field-help" tabindex="0" role="note" data-tip="在登录任务执行前进行检测，不通过则跳过本次登录，避免无意义的浏览器操作。如果出现误判（网络正常却被跳过），可以关闭此栏所有选项。">?</span></h4>
+
+        <!-- 物理网络检查 -->
+        <div class="toggle-group">
+          <div class="toggle-with-help">
+            <label class="toggle toggle-help-inline">
+              <input type="checkbox" v-model="config.enable_local_check" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">物理网络连接检查</span>
+              <span class="field-help" tabindex="0" role="note" data-tip="检测本机是否连接 WiFi 或网线。未连接时跳过后续登录，避免无意义的尝试。如果已连接网络但显示无连接，可能是误判，请关闭此选项。">?</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 登录网址检测 -->
+        <div class="toggle-group" style="margin-top: 12px;">
+          <div class="toggle-with-help">
+            <label class="toggle toggle-help-inline">
+              <input type="checkbox" v-model="config.check_auth_url" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">登录网址可达性检测</span>
+              <span class="field-help" tabindex="0" role="note" data-tip="自动登录前检测登录网址是否可达，不可达则跳过本次登录。手动登录不受此限制。如果校园网通过重定向方式跳转到认证页面（无法直接 ping 通），请关闭此选项。">?</span>
+            </label>
+          </div>
+        </div>
+        <div v-if="config.check_auth_url" class="form-group" style="margin-top: -4px;">
+          <div class="field-label-row">
+            <label for="settings-auth-url-targets">检测目标</label>
+            <span
+              class="field-help"
+              tabindex="0"
+              role="note"
+              data-tip="自定义检测目标（host:port 格式，逗号分隔），填入后替代认证地址检测。任一目标可达即判定网络可用。留空则默认检测认证地址本身。"
+            >?</span>
+          </div>
+          <input
+            id="settings-auth-url-targets"
+            v-model="config.auth_url_targets"
+            type="text"
+            :placeholder="config.auth_url_targets ? '' : (config.auth_url || '留空则检测认证地址')"
+          />
+        </div>
+      </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card settings-panel">
+    <div class="card-header">
+      <h2>重试策略</h2>
+    </div>
+    <div class="card-body">
+      <div class="form-group">
+        <div class="field-label-row">
+          <label for="settings-login-timeout">登录请求超时（秒）</label>
+          <span class="field-help" tabindex="0" role="note" data-tip="点击「手动登录」后，前端等待后端完成登录流程的最长时间。超时后前端会提示失败，但后端可能仍在执行。自动登录不受此限制。">?</span>
+        </div>
+        <input id="settings-login-timeout" v-model.number="config.login_timeout" type="number" min="10" max="600" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <div class="field-label-row">
+            <label for="settings-max-retries">最大登录重试次数</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="登录失败后最多重试几次，超出后等待下次网络检测周期再试。监控模式上限 5 次，登录成功后退出模式上限 3 次。">?</span>
+          </div>
+          <input id="settings-max-retries" v-model.number="config.max_retries" type="number" min="1" max="5" />
+        </div>
+        <div class="form-group">
+          <div class="field-label-row">
+            <label for="settings-retry-interval">重试间隔（秒）</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="登录失败后等待的基础秒数。实际等待时间按指数退避计算：首次 0 秒，第二次以此间隔 ×1，第三次 ×2，以此类推。">?</span>
+          </div>
+          <input id="settings-retry-interval" v-model.number="config.retry_interval" type="number" min="1" max="300" />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card settings-panel">
+    <div class="card-header">
+      <h2>暂停时段</h2>
+    </div>
+    <div class="card-body">
+      <div class="toggle-group">
+        <div class="toggle-with-help">
+          <label class="toggle toggle-help-inline">
+            <input type="checkbox" v-model="config.pause_enabled" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">启用暂停时段</span>
+            <span
+              class="field-help"
+              tabindex="0"
+              role="note"
+              data-tip="启用后在设定时段内暂停自动登录和网络检测。适用于深夜校园网维护时段，避免无意义的认证请求。"
+            >?</span>
+          </label>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <div class="field-label-row">
+            <label for="settings-pause-start">暂停开始（小时）</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="从该时刻起停止自动登录。例如设为 0 表示从 0:00 开始暂停检测和登录。">?</span>
+          </div>
+          <input id="settings-pause-start" v-model.number="config.pause_start_hour" type="number" min="0" max="23" />
+        </div>
+        <div class="form-group">
+          <div class="field-label-row">
+            <label for="settings-pause-end">暂停结束（小时）</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="到该时刻恢复自动登录。例如设为 6 表示 6:00 后恢复检测。支持跨越午夜（如暂停 23:00~5:00）。">?</span>
+          </div>
+          <input id="settings-pause-end" v-model.number="config.pause_end_hour" type="number" min="0" max="23" />
+        </div>
+      </div>
+    </div>
+  </section>
+</div>

@@ -1,0 +1,210 @@
+<div v-else-if="currentSettingsTab === 'browser'" class="settings-panel-grid">
+  <section class="card settings-panel">
+    <div class="card-header">
+      <h2>基本设置</h2>
+    </div>
+    <div class="card-body">
+      <div class="form-group">
+        <div class="field-label-row">
+          <label for="settings-browser-timeout">页面操作超时（秒）</label>
+          <span class="field-help" tabindex="0" role="note" data-tip="任务执行时每个浏览器步骤（点击、输入、等待元素加载等）的最长等待时间。超时则该步骤失败，不影响整体登录流程的其他步骤。">?</span>
+        </div>
+        <input id="settings-browser-timeout" v-model.number="config.browser_timeout" type="number" min="1" max="60" />
+      </div>
+      <div class="form-group">
+        <div class="field-label-row">
+          <label for="settings-browser-navigation-timeout">打开登录页面超时（秒）</label>
+          <span class="field-help" tabindex="0" role="note" data-tip="自动导航到登录页面的超时时间。校园网 DNS 劫持/重定向链较长时可适当调大。">?</span>
+        </div>
+        <input id="settings-browser-navigation-timeout" v-model.number="config.browser_navigation_timeout" type="number" min="3" max="60" />
+      </div>
+      <div class="toggle-group">
+        <div class="toggle-with-help">
+          <label class="toggle toggle-help-inline">
+            <input type="checkbox" v-model="config.headless" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">无头浏览器模式</span>
+            <span class="field-help" tabindex="0" role="note" data-tip="开启后浏览器在后台运行，不显示窗口。关闭可观察浏览器操作过程，便于调试登录问题。">?</span>
+          </label>
+        </div>
+      </div>
+      <div class="toggle-group">
+        <div class="toggle-with-help">
+          <label class="toggle toggle-help-inline">
+            <input type="checkbox" v-model="config.browser_low_resource_mode" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">低资源模式（禁用图片）</span>
+            <span class="field-help" tabindex="0" role="note" data-tip="拦截页面中的图片资源请求，减少带宽消耗和内存占用。对登录流程无影响，建议保持开启。">?</span>
+          </label>
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="field-label-row">
+          <label for="settings-browser-locale">浏览器语言（Locale）</label>
+          <span class="field-help" tabindex="0" role="note" data-tip="设置浏览器语言，用于 Playwright 浏览器上下文的 locale 参数。部分认证页面会根据语言显示不同内容。默认为 zh-CN。">?</span>
+        </div>
+        <input id="settings-browser-locale" v-model.trim="config.browser_locale" type="text" placeholder="zh-CN" />
+      </div>
+      <div class="form-group">
+        <div class="field-label-row">
+          <label for="settings-browser-timezone">浏览器时区（Timezone）</label>
+          <span class="field-help" tabindex="0" role="note" data-tip="设置浏览器时区，用于 Playwright 浏览器上下文的 timezone_id 参数。部分认证系统会检测时区设置。默认为 Asia/Shanghai。">?</span>
+        </div>
+        <input id="settings-browser-timezone" v-model.trim="config.browser_timezone" type="text" placeholder="Asia/Shanghai" />
+      </div>
+    </div>
+  </section>
+
+  <section class="card settings-panel">
+    <div class="card-header">
+      <h2>安全与反检测</h2>
+    </div>
+    <div class="card-body">
+      <div class="toggle-group">
+        <div class="toggle-with-help">
+          <label class="toggle toggle-help-inline">
+            <input type="checkbox" v-model="config.browser_disable_web_security" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">禁用同源策略</span>
+            <span class="field-help" tabindex="0" role="note" data-tip="关闭浏览器的同源安全策略（CORS）。仅在认证页面因跨域请求被拦截而登录失败时才需要启用，一般情况请保持关闭。">?</span>
+          </label>
+        </div>
+      </div>
+      <div class="toggle-group">
+        <div class="toggle-with-help">
+          <label class="toggle toggle-help-inline">
+            <input type="checkbox" v-model="config.stealth_mode" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">反检测模式</span>
+            <span class="field-help" tabindex="0" role="note" data-tip="注入脚本隐藏浏览器自动化痕迹（navigator.webdriver、plugins 等）。部分认证页面可能因此脚本而显示异常，一般请保持关闭。">?</span>
+          </label>
+        </div>
+      </div>
+      <div v-show="config.stealth_mode" class="form-group">
+        <div class="field-label-row">
+          <label for="settings-stealth-custom">自定义反检测脚本</label>
+          <span class="field-help" tabindex="0" role="note" data-tip="在内置反检测脚本之后追加执行的自定义 JavaScript 代码。可用于注入额外的指纹伪装或覆盖内置行为。留空则仅使用内置脚本。">?</span>
+        </div>
+        <textarea
+          id="settings-stealth-custom"
+          v-model="config.stealth_custom_script"
+          rows="6"
+          placeholder="// 示例：覆盖 WebGL 渲染器信息&#10;// const getParameter = WebGLRenderingContext.prototype.getParameter;&#10;// WebGLRenderingContext.prototype.getParameter = function(param) {&#10;//   if (param === 37445) return 'Intel Inc.';&#10;//   if (param === 37446) return 'Intel Iris OpenGL Engine';&#10;//   return getParameter.call(this, param);&#10;// };"
+          style="font-family: monospace; font-size: 12px; resize: vertical;"
+        ></textarea>
+      </div>
+    </div>
+  </section>
+
+  <section class="card settings-panel">
+    <div class="card-header">
+      <h2>纯净模式与高级设置</h2>
+    </div>
+    <div class="card-body">
+      <div class="toggle-group">
+        <div class="toggle-with-help">
+          <label class="toggle toggle-help-inline">
+            <input type="checkbox" v-model="pureMode" @change="togglePureMode()" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">纯净模式</span>
+            <span class="field-help" tabindex="0" role="note" data-tip="使用 Chromium 原始设置启动浏览器，不注入任何自定义参数（UA、请求头、启动参数等）。适用于认证系统检测浏览器指纹的场景，可降低被识别为自动化工具的风险。">?</span>
+          </label>
+        </div>
+      </div>
+      <div v-if="pureMode" class="browser-safe-info">
+        <p>纯净模式已开启，浏览器使用 Chromium 原始设置。关闭后可自定义以下高级选项。</p>
+      </div>
+      <div v-if="!pureMode" class="browser-safe-info browser-safe-info--warning">
+        <p>纯净模式适配大部分环境。如果登录异常或无法打开网页，请尝试修改下方参数。</p>
+      </div>
+      <template v-if="!pureMode">
+        <div class="form-group">
+          <div class="field-label-row">
+            <label>浏览器视口尺寸</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="浏览器窗口的宽度和高度（像素）。部分校园网认证页面在小分辨率下可能显示异常。">?</span>
+          </div>
+          <div class="viewport-input-row">
+            <div class="viewport-input-group">
+              <label for="settings-vp-w" class="viewport-label">宽</label>
+              <input id="settings-vp-w" v-model.number="config.browser_viewport_width" type="number" min="320" max="3840" class="viewport-input" />
+            </div>
+            <span class="viewport-separator">×</span>
+            <div class="viewport-input-group">
+              <label for="settings-vp-h" class="viewport-label">高</label>
+              <input id="settings-vp-h" v-model.number="config.browser_viewport_height" type="number" min="240" max="2160" class="viewport-input" />
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <div class="field-label-row">
+            <label for="settings-browser-args">自定义浏览器参数</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="每行填写一个 Chromium 启动参数，会与程序内置的基础参数合并。留空则仅使用基础参数。">?</span>
+            <button class="btn btn-sm btn-secondary" type="button" style="margin-left:auto;" @click="config.browser_args = '--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees'">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+              </svg>
+              加载推荐参数
+            </button>
+          </div>
+          <textarea
+            id="settings-browser-args"
+            v-model.trim="config.browser_args"
+            rows="4"
+            spellcheck="false"
+            placeholder="--disable-blink-features=AutomationControlled&#10;--disable-software-rasterizer&#10;--disable-extensions"
+          ></textarea>
+          <span class="hint">每行一个参数。如果登录时被识别为自动化工具或页面无法正常加载，可点击「加载推荐参数」尝试。</span>
+        </div>
+        <div class="form-group">
+          <div class="field-label-row">
+            <label for="settings-browser-ua">用户代理</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="浏览器的 User-Agent 字符串。留空使用 Chromium 默认值，仅在认证系统对 UA 有特殊要求时再修改。">?</span>
+          </div>
+          <input id="settings-browser-ua" v-model.trim="config.browser_user_agent" type="text" placeholder="留空使用 Chromium 默认值" />
+        </div>
+        <div class="form-group">
+          <div class="field-label-row">
+            <label for="settings-browser-headers">自定义请求头（JSON）</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="填写 JSON 对象格式的请求头，会注入浏览器所有请求中。常用于设置 Referer、Cookie 等自定义头。">?</span>
+          </div>
+          <textarea
+            id="settings-browser-headers"
+            v-model.trim="config.browser_extra_headers_json"
+            rows="4"
+            spellcheck="false"
+            placeholder='{"Referer":"http://..."}'
+          ></textarea>
+        </div>
+      </template>
+    </div>
+  </section>
+</div>
+
+<!-- 悬浮保存按钮 -->
+<div class="settings-float-save">
+  <button
+    class="btn btn-lg btn-secondary"
+    type="button"
+    @click="resetConfig"
+    :disabled="busy.save"
+  >
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+      <polyline points="1 4 1 10 7 10"/>
+      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+    </svg>
+    恢复默认
+  </button>
+  <button
+    class="btn btn-lg"
+    :class="configDirty ? 'btn-warning' : 'btn-primary'"
+    type="submit"
+    :disabled="busy.save"
+  >
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+      <polyline points="17 21 17 13 7 13 7 21"/>
+      <polyline points="7 3 7 8 15 8"/>
+    </svg>
+    {{ busy.save ? '保存中...' : '保存配置' }}
+  </button>
+</div>

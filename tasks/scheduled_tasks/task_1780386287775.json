@@ -1,0 +1,15 @@
+{
+  "name": "你好",
+  "description": "1",
+  "type": "script",
+  "target_id": "test_http_login",
+  "command": "",
+  "shell_path": "",
+  "enabled": true,
+  "schedule": {
+    "hour": 8,
+    "minute": 0
+  },
+  "timeout": 60,
+  "id": "task_1780386287775"
+}
