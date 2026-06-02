@@ -72,6 +72,17 @@ export const configMethods = {
     this._configDirty = true;
     this.frontendLogger.info('config', '已恢复默认设置，请点击保存以生效');
   },
+  async fetchShells() {
+    try {
+      const { data } = await this.$api.get('/api/shells');
+      this.availableShells = data.shells || [];
+      this.defaultShell = data.default || '';
+    } catch (error) {
+      this.frontendLogger.warn('config', '获取 Shell 列表失败', error);
+      this.availableShells = [];
+      this.defaultShell = '';
+    }
+  },
   async fetchBackups() {
     try {
       const { data } = await this.$api.get('/api/backup/list');

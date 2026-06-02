@@ -1,6 +1,8 @@
-import { extractApiError } from './utils.js';
+import { extractApiError, getBinaryName } from './utils.js';
 
 export const scriptMethods = {
+  getBinaryName,
+
   async fetchScripts() {
     try {
       const { data } = await this.$api.get('/api/scripts');
@@ -10,17 +12,39 @@ export const scriptMethods = {
     }
   },
 
+  async fetchAvailableBinaries() {
+    try {
+      const { data } = await this.$api.get('/api/scripts/binaries');
+      this.availableBinaries = data;
+    } catch (error) {
+      this.frontendLogger.error('scripts', '获取可用二进制列表失败', error);
+    }
+  },
+
   async showScriptEditor(taskId) {
+    // 确保二进制列表已加载
+    if (!this.availableBinaries.length) {
+      await this.fetchAvailableBinaries();
+    }
+
     if (taskId) {
       try {
         const { data } = await this.$api.get(`/api/scripts/${taskId}`);
+        const binaryPath = data.binary_path || '';
+        // 检查是否是自定义路径
+        const isCustom = binaryPath && !this.availableBinaries.some(b => b.path === binaryPath);
         this.editingTask = {
           id: taskId,
           name: data.name || '',
           description: data.description || '',
           content: data.content || '',
+          binary_path: isCustom ? '__custom__' : binaryPath,
+          _customBinary: isCustom ? binaryPath : '',
           _isNew: false,
         };
+        if (isCustom) {
+          this.editingTask.binary_path = '__custom__';
+        }
         this.editingTaskType = 'script';
       } catch (error) {
         this.notify(false, extractApiError(error, '加载脚本失败'));
@@ -32,8 +56,18 @@ export const scriptMethods = {
         name: '',
         description: '',
         content: '#!/usr/bin/env python3\n"""自定义登录脚本"""\nimport httpx\n\n',
+        binary_path: '',
+        _customBinary: '',
         _isNew: true,
       };
+    }
+  },
+
+  onBinarySelectChange() {
+    if (this.editingTask.binary_path === '__custom__') {
+      this.editingTask._customBinary = this.editingTask._customBinary || '';
+    } else {
+      this.editingTask._customBinary = '';
     }
   },
 
@@ -54,10 +88,17 @@ export const scriptMethods = {
       return;
     }
 
+    // 处理二进制路径
+    let binaryPath = this.editingTask.binary_path;
+    if (binaryPath === '__custom__') {
+      binaryPath = this.editingTask._customBinary || '';
+    }
+
     const payload = {
       name: this.editingTask.name || id,
       description: this.editingTask.description || '',
       content: this.editingTask.content,
+      binary_path: binaryPath,
     };
 
     try {
@@ -101,7 +142,7 @@ export const scriptMethods = {
   async exportScript(taskId) {
     try {
       const { data } = await this.$api.get(`/api/scripts/${taskId}`);
-      const blob = new Blob([data.content || ''], { type: 'text/x-python' });
+      const blob = new Blob([data.content || ''], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -116,20 +157,22 @@ export const scriptMethods = {
   importScript() {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.py';
+    input.accept = '.py,.sh,.bat,.exe,.txt';
     input.onchange = (e) => {
       const file = e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
       reader.onload = (ev) => {
         const content = ev.target.result;
-        const id = file.name.replace(/\.py$/, '').replace(/[^A-Za-z0-9_]/g, '_');
+        const id = file.name.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_]/g, '_');
         this.editingTaskType = 'script';
         this.editingTask = {
           id: id,
           name: '',
           description: '',
           content: content,
+          binary_path: '',
+          _customBinary: '',
           _isNew: true,
         };
         this.currentPage = 'scripts';

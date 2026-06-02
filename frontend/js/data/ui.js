@@ -2,6 +2,7 @@
 export function uiData() {
   return {
     currentPage: 'dashboard',
+    showMoreNav: false,
     showWizard: false,
     wizardStep: 1,
     currentSettingsTab: 'account',

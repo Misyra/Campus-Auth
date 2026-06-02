@@ -2,7 +2,7 @@
   <div class="tasks-grid">
     <div class="card">
       <div class="card-header">
-        <h2>Python 脚本</h2>
+        <h2>自定义脚本</h2>
         <div style="display:flex;gap:6px;">
           <button class="btn btn-sm" @click="importScript()" title="从文件导入脚本">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
@@ -23,8 +23,8 @@
       </div>
       <div class="card-body">
         <div v-if="!scripts.length" class="empty-state">
-          <p>暂无 Python 脚本</p>
-          <p class="hint">编写 Python 脚本直接发送 HTTP 请求登录，无需浏览器，资源占用更低</p>
+          <p>暂无自定义脚本</p>
+          <p class="hint">支持 Python、Shell 或任意可执行程序，无需浏览器，资源占用更低</p>
         </div>
         <div v-else class="task-list">
           <div
@@ -47,7 +47,11 @@
             </div>
             <div class="task-info">
               <h3>{{ script.name }}</h3>
-              <p v-if="script.description" class="task-desc">{{ script.description }}</p>
+              <p class="task-desc">
+                <span v-if="script.binary_path" class="binary-badge">{{ getBinaryName(script.binary_path) }}</span>
+                <span v-else class="binary-badge binary-default">Python</span>
+                <span v-if="script.description"> · {{ script.description }}</span>
+              </p>
             </div>
             <div class="task-actions">
               <button class="btn btn-sm" @click="setActiveScript(script.id)" :disabled="activeTaskId === script.id">
@@ -55,7 +59,7 @@
               </button>
               <button class="btn btn-sm" @click="showScriptEditor(script.id)">编辑</button>
               <button class="btn btn-sm" @click="runScript(script.id)" title="立即执行此脚本">运行</button>
-              <button class="btn btn-sm" @click="exportScript(script.id)" title="导出为 .py 文件">导出</button>
+              <button class="btn btn-sm" @click="exportScript(script.id)" title="导出脚本文件">导出</button>
               <button class="btn btn-sm btn-danger" @click="deleteScript(script.id)">删除</button>
             </div>
           </div>
@@ -88,7 +92,27 @@
           <input v-model="editingTask.description" type="text" placeholder="脚本描述（可选）" />
         </div>
         <div class="form-group">
-          <label>Python 脚本</label>
+          <label>执行程序</label>
+          <div class="binary-input-group">
+            <select v-model="editingTask.binary_path" @change="onBinarySelectChange">
+              <option value="">选择执行程序...</option>
+              <option v-for="bin in availableBinaries" :key="bin.path" :value="bin.path">
+                {{ bin.name }} - {{ bin.path }}
+              </option>
+              <option value="__custom__">自定义路径...</option>
+            </select>
+            <input
+              v-if="editingTask.binary_path === '__custom__'"
+              v-model="editingTask._customBinary"
+              type="text"
+              placeholder="输入可执行文件的完整路径"
+              class="mt-2"
+            />
+          </div>
+          <span class="hint">选择执行此脚本的程序，默认使用当前 Python 解释器</span>
+        </div>
+        <div class="form-group">
+          <label>脚本内容</label>
           <textarea
             v-model="editingTask.content"
             rows="18"
@@ -115,11 +139,16 @@
       </div>
       <div class="card-body">
         <div class="help-content">
-          <h4>工作原理</h4>
-          <p>Python 脚本在子进程中执行，通过 HTTP 请求直接登录校园网，无需启动浏览器，资源占用极低。</p>
+          <h4>执行程序</h4>
+          <p>每个脚本可以指定不同的执行程序：</p>
+          <ul>
+            <li><strong>Python</strong>（默认）— 使用 Python 解释器执行，推荐使用 httpx 或 urllib</li>
+            <li><strong>Shell</strong> — 使用 bash/cmd/powershell 执行 shell 脚本</li>
+            <li><strong>自定义</strong> — 任意可执行文件（.exe、.bat 等）</li>
+          </ul>
 
-          <h4>编写方式</h4>
-          <p>直接在脚本中硬编码认证地址、账号、密码等参数，不依赖环境变量。</p>
+          <h4>工作原理</h4>
+          <p>脚本在子进程中执行，通过 HTTP 请求直接登录校园网，无需启动浏览器，资源占用极低。</p>
 
           <h4>输出说明</h4>
           <p>脚本只需发送请求，<strong>登录是否成功由系统网络检测自动判断</strong>，无需脚本自行判断。</p>
@@ -129,13 +158,7 @@
             <li><code>print()</code> 输出会记录到日志，方便调试</li>
           </ul>
 
-          <h4>可用 HTTP 库</h4>
-          <ul>
-            <li><code>httpx</code> — 已安装，推荐使用，支持 HTTP/2</li>
-            <li><code>urllib.request</code> — Python 标准库，无需安装任何依赖</li>
-          </ul>
-
-          <h4>示例（httpx）</h4>
+          <h4>示例（Python httpx）</h4>
           <pre>#!/usr/bin/env python3
 import httpx
 
@@ -146,17 +169,12 @@ resp = httpx.post("http://10.0.0.1/login", data={
 })
 print(f"HTTP {resp.status_code}")</pre>
 
-          <h4>示例（urllib 标准库）</h4>
-          <pre>#!/usr/bin/env python3
-import urllib.request, urllib.parse
-
-data = urllib.parse.urlencode({
-    "username": "your_username",
-    "password": "your_password",
-}).encode()
-req = urllib.request.Request("http://10.0.0.1/login", data=data)
-with urllib.request.urlopen(req, timeout=10) as resp:
-    print(f"HTTP {resp.status}")</pre>
+          <h4>示例（Shell curl）</h4>
+          <pre>#!/bin/bash
+curl -s -X POST "http://10.0.0.1/login" \
+  -d "username=your_username" \
+  -d "password=your_password" \
+  -d "operator=cmcc"</pre>
 
           <h4>注意事项</h4>
           <ul>
@@ -169,3 +187,30 @@ with urllib.request.urlopen(req, timeout=10) as resp:
     </div>
   </div>
 </div>
+
+<style>
+.binary-badge {
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+  font-family: var(--font-mono);
+}
+
+.binary-default {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.binary-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mt-2 {
+  margin-top: 8px;
+}
+</style>
