@@ -172,16 +172,21 @@ class TestSafeDecrypt:
     def test_decrypt_encrypted_value(self):
         """应能解密 ENC: 前缀的值"""
         encrypted = encrypt_password("test123")
-        result = _safe_decrypt(encrypted)
+        result, has_error = _safe_decrypt(encrypted)
         assert result == "test123"
+        assert has_error is False
 
     def test_decrypt_empty_string(self):
         """空字符串应返回空字符串"""
-        assert _safe_decrypt("") == ""
+        result, has_error = _safe_decrypt("")
+        assert result == ""
+        assert has_error is False
 
     def test_decrypt_plaintext_passthrough(self):
         """无 ENC: 前缀的明文应原样返回"""
-        assert _safe_decrypt("plaintext") == "plaintext"
+        result, has_error = _safe_decrypt("plaintext")
+        assert result == "plaintext"
+        assert has_error is False
 
 
 class TestNormalizeLevelService:

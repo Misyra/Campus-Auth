@@ -146,13 +146,29 @@ class TestNormalizeProcName:
         assert _normalize_proc_name("Python.EXE") == "python"
 
     def test_no_exe_suffix(self):
-        """rstrip('.exe') 会逐字符剥离，验证实际行为。"""
+        """无 .exe 后缀时原样返回（小写）。"""
         from app import _normalize_proc_name
 
-        # rstrip('.exe') 剥离末尾属于 {'.', 'e', 'x'} 的字符
-        # "node" → 剥离 'e' → "nod"（'d' 不在集合中，停止）
         result = _normalize_proc_name("node")
-        assert result == "nod"
+        assert result == "node"
+
+    def test_chrome_exe(self):
+        """正确去除 .exe 后缀。"""
+        from app import _normalize_proc_name
+
+        assert _normalize_proc_name("chrome.exe") == "chrome"
+
+    def test_axe_no_suffix(self):
+        """末尾含 e/x 但非 .exe 后缀时不去除。"""
+        from app import _normalize_proc_name
+
+        assert _normalize_proc_name("axe") == "axe"
+
+    def test_exe_only(self):
+        """仅 .exe 后缀时去除。"""
+        from app import _normalize_proc_name
+
+        assert _normalize_proc_name(".exe") == ""
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -494,7 +510,7 @@ class TestRunLoginThenExit:
             patch("src.playwright_worker.CMD_LOGIN", "login"),
             patch("backend.profile_service.ProfileService", return_value=mock_ps),
             patch("backend.config_service.build_runtime_config", return_value={"retry_settings": {"max_retries": 3}}),
-            patch("backend.config_service.load_runtime_config", return_value={}),
+            patch("backend.config_service.load_runtime_config", return_value=(MagicMock(), False)),
             patch("app.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
@@ -519,7 +535,7 @@ class TestRunLoginThenExit:
             patch("backend.config_service.build_runtime_config", return_value={
                 "retry_settings": {"max_retries": 3, "retry_interval": 1}
             }),
-            patch("backend.config_service.load_runtime_config", return_value={}),
+            patch("backend.config_service.load_runtime_config", return_value=(MagicMock(), False)),
             patch("app.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
@@ -543,7 +559,7 @@ class TestRunLoginThenExit:
             patch("backend.config_service.build_runtime_config", return_value={
                 "retry_settings": {"max_retries": 2, "retry_interval": 0}
             }),
-            patch("backend.config_service.load_runtime_config", return_value={}),
+            patch("backend.config_service.load_runtime_config", return_value=(MagicMock(), False)),
             patch("app.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):

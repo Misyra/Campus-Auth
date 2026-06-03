@@ -86,7 +86,7 @@ def _get_process_name(pid: int) -> str | None:
 
 
 def _normalize_proc_name(name: str) -> str:
-    return name.lower().rstrip(".exe")
+    return name.lower().removesuffix(".exe")
 
 
 def _is_service_running() -> tuple[bool, int | None]:
@@ -305,7 +305,9 @@ def _run_login_then_exit(logger) -> None:
         # 构建运行时配置
         from backend.config_service import build_runtime_config, load_runtime_config
 
-        payload = load_runtime_config(ps)
+        payload, has_decrypt_error = load_runtime_config(ps)
+        if has_decrypt_error:
+            print("警告: 部分密码解密失败，可能需要重新配置密码")
         runtime_config = build_runtime_config(payload, data.system)
     except Exception as exc:
         print(f"加载配置失败: {exc}")

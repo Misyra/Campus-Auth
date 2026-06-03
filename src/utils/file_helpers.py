@@ -43,6 +43,8 @@ def atomic_write(
     try:
         with os.fdopen(tmp_fd, "w", encoding=encoding, errors=errors) as f:
             f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
 
         os.replace(tmp_path, path)
     except Exception:
