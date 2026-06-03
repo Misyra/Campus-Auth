@@ -48,6 +48,12 @@ function applyAppearanceEarly() {
       const num = parseInt(bgHex.replace('#', ''), 16);
       const r = (num >> 16) & 255, g = (num >> 8) & 255, b = num & 255;
       root.style.setProperty('--bg-card', `rgba(${r}, ${g}, ${b}, ${appearance.card_opacity})`);
+      // 提前设置卡片毛玻璃 blur，避免页面切换时延迟渲染
+      if (appearance.backdrop_filter !== false && appearance.card_opacity > 0) {
+        root.style.setProperty('--card-blur', `blur(${Math.round(appearance.card_opacity * 20)}px)`);
+      } else {
+        root.style.setProperty('--card-blur', 'none');
+      }
     }
     if (appearance.sidebar_opacity != null) {
       root.style.setProperty('--sidebar-opacity', appearance.sidebar_opacity);
