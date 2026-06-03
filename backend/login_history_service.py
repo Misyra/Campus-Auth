@@ -25,6 +25,7 @@ class LoginHistoryEntry(BaseModel):
     success: bool
     duration_ms: int = 0
     profile_name: str = ""
+    task_name: str = ""
     error: str = ""
 
 
@@ -44,6 +45,7 @@ class LoginHistoryService:
         success: bool,
         duration_ms: int = 0,
         profile_name: str = "",
+        task_name: str = "",
         error: str = "",
     ) -> None:
         """追加一条登录记录。"""
@@ -54,6 +56,7 @@ class LoginHistoryService:
             success=success,
             duration_ms=duration_ms,
             profile_name=profile_name,
+            task_name=task_name,
             error=error[:200] if error else "",
         )
         need_cleanup = False

@@ -66,6 +66,8 @@ export const actionMethods = {
       const loginTimeoutMs = (this.config.login_timeout || 120) * 1000;
       const { data } = await this.$api.post('/api/actions/login', null, { timeout: loginTimeoutMs });
       this.notify(data.success, this.stripScreenshotHint(data.message));
+      // 登录完成后刷新登录历史
+      this.fetchLoginHistory();
     } catch (error) {
       const msg = extractApiError(error, '手动登录失败');
       this.frontendLogger.error('action', '手动登录失败', msg);

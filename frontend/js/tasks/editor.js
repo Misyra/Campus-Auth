@@ -93,7 +93,7 @@ export const editorTaskMethods = {
       // resolve 存储到非响应式属性，避免 Vue 代理函数对象
       this._dangerResolve = resolve;
       this.dangerConfirm = { dangers };
-      this.dangerCountdown = 5;
+      this.dangerCountdown = 3;
       this.$nextTick(() => {
         const overlay = document.querySelector('.danger-overlay');
         if (overlay) this._trapFocus(overlay);
@@ -102,7 +102,6 @@ export const editorTaskMethods = {
         this.dangerCountdown--;
         if (this.dangerCountdown <= 0) {
           clearInterval(timer);
-          this._cancelDangerConfirm('timeout');
         }
       }, 1000);
       this._dangerTimer = timer;

@@ -117,6 +117,7 @@ class StepConfig:
     # ocr 步骤专用
     target_selector: str | None = None  # 验证码输入框选择器
     old: bool = False  # 是否使用旧版 OCR 模型
+    char_range: str | int | None = None  # OCR 识别字符范围（0-7 或自定义字符串）
     # 扩展参数
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -139,6 +140,7 @@ class StepConfig:
         "option_selector": None,
         "target_selector": None,
         "old": False,
+        "char_range": None,
         "extra": {},
     }
 
