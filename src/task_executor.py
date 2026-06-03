@@ -304,7 +304,8 @@ class VariableResolver:
 
             # 按优先级查找变量
             if var_name in self.runtime_vars:
-                resolved = str(self.runtime_vars[var_name])
+                raw = self.runtime_vars[var_name]
+                resolved = json.dumps(raw, ensure_ascii=False) if not isinstance(raw, str) else raw
             elif var_name in self.env_vars:
                 resolved = str(self.env_vars[var_name])
             elif var_name in self.config.variables:
@@ -312,6 +313,7 @@ class VariableResolver:
                     self.config.variables[var_name], depth + 1, visited | {var_name}
                 )
             else:
+                logger.warning("[VariableResolver] 未解析的变量: %s", match.group(0))
                 return match.group(0)  # 保留原样
 
             # 递归解析
@@ -637,7 +639,8 @@ class SelectHandler(StepHandler):
             option_texts = await element.evaluate(
                 "(sel) => Array.from(sel.options || []).map(o => (o.textContent || '').trim())"
             )
-        except Exception:
+        except Exception as e:
+            logger.debug("[select] 获取选项列表失败: %s", e)
             option_texts = []
 
         logger.info("[select] 可用选项: %s", option_texts)
@@ -744,7 +747,12 @@ class WaitHandler(StepHandler):
 
         ctx = await self._resolve_frame(page, step)
         logger.info("[wait] selector=%s, timeout=%d", selector, timeout)
-        await ctx.locator(selector).first.wait_for(timeout=timeout)
+        try:
+            await ctx.locator(selector).first.wait_for(timeout=timeout)
+        except TimeoutError:
+            return False, f"等待元素超时 ({timeout}ms): {selector}"
+        except Exception as e:
+            return False, f"等待元素失败: {selector}, 错误: {e}"
         logger.info("[wait] 元素已出现: %s", selector)
         return True, ""
 
@@ -804,7 +812,10 @@ class EvalHandler(StepHandler):
 
         store_as = step.store_as
         logger.debug("[eval] store_as=%s", store_as)
-        result = await page.evaluate(resolved_script)
+        try:
+            result = await page.evaluate(resolved_script)
+        except Exception as e:
+            return False, f"JavaScript 执行失败: {e}"
 
         if store_as:
             resolver.set_runtime_var(store_as, result)
@@ -956,7 +967,7 @@ class OcrHandler(StepHandler):
         except Exception as e:
             return False, f"验证码截图失败: {e}"
 
-        # OCR 识别
+        # OCR 识别（识别失败也需要 schedule_cleanup）
         try:
             ocr = self._get_ocr(old=old)
             result = ocr.classification(img_bytes)
@@ -964,33 +975,35 @@ class OcrHandler(StepHandler):
             self.schedule_cleanup(old)
             return False, f"验证码识别失败: {e}"
 
-        logger.debug("[ocr] 识别结果: '%s'", result)
+        # 识别成功后用 try/finally 确保 schedule_cleanup
+        try:
+            logger.debug("[ocr] 识别结果: '%s'", result)
 
-        # 存储到变量
-        if store_as:
-            resolver.set_runtime_var(store_as, result)
-            logger.info("[ocr] 结果已存入变量 %s", store_as)
+            # 存储到变量
+            if store_as:
+                resolver.set_runtime_var(store_as, result)
+                logger.info("[ocr] 结果已存入变量 %s", store_as)
 
-        # 自动填入目标输入框
-        if target_selector:
-            target = await self._find_element(ctx, target_selector, timeout)
-            if not target:
-                self.schedule_cleanup(old)
-                return False, f"未找到验证码输入框: {target_selector}"
-            try:
-                await target.fill(result, timeout=timeout)
-                logger.info("[ocr] 普通 fill 成功 → %s, 值='%s'", target_selector, result)
-            except Exception:
-                logger.info("[ocr] 普通 fill 失败，降级到强制输入 → %s", target_selector)
-                await target.wait_for(state="attached", timeout=timeout)
-                await target.evaluate(
-                    _FORCE_INPUT_JS,
-                    {"val": result, "doClear": False},
-                )
-                logger.info("[ocr] 强制输入成功 → %s, 值='%s'", target_selector, result)
+            # 自动填入目标输入框
+            if target_selector:
+                target = await self._find_element(ctx, target_selector, timeout)
+                if not target:
+                    return False, f"未找到验证码输入框: {target_selector}"
+                try:
+                    await target.fill(result, timeout=timeout)
+                    logger.info("[ocr] 普通 fill 成功 → %s, 值='%s'", target_selector, result)
+                except Exception:
+                    logger.info("[ocr] 普通 fill 失败，降级到强制输入 → %s", target_selector)
+                    await target.wait_for(state="attached", timeout=timeout)
+                    await target.evaluate(
+                        _FORCE_INPUT_JS,
+                        {"val": result, "doClear": False},
+                    )
+                    logger.info("[ocr] 强制输入成功 → %s, 值='%s'", target_selector, result)
 
-        self.schedule_cleanup(old)
-        return True, result
+            return True, result
+        finally:
+            self.schedule_cleanup(old)
 
 
 class StepExecutorRegistry:
@@ -1181,7 +1194,7 @@ class TaskExecutor:
                 if i > 0:
                     await asyncio.sleep(self.config.step_delay)
                 step_start = time.perf_counter()
-                success, message = await self._execute_step(page, step)
+                success, message = await self._execute_step(page, step, task_deadline)
                 step_elapsed = (time.perf_counter() - step_start) * 1000
                 status = "OK" if success else "FAIL"
                 logger.info(
@@ -1299,17 +1312,47 @@ class TaskExecutor:
         logger.info("[reveal] 已强制显示 %d 个隐藏输入框", total)
         return total
 
-    async def _execute_step(self, page, step: StepConfig) -> tuple[bool, str]:
-        """执行单个步骤"""
+    async def _execute_step(
+        self, page, step: StepConfig, task_deadline: float | None = None
+    ) -> tuple[bool, str]:
+        """执行单个步骤。
+
+        Args:
+            task_deadline: 任务截止时间（perf_counter），用于截断步骤超时/时长，
+                          防止 sleep 等长耗时步骤超过任务总超时。
+                          仅在主执行流程中传入，调试模式不传。
+        """
         handler = self.registry.get(step.type)
         if not handler:
             return False, f"未知的步骤类型: {step.type}"
 
+        # 截断步骤超时/时长，防止超过任务总超时
+        original_timeout = step.timeout
+        original_duration = step.duration
+        if task_deadline is not None:
+            remaining_ms = max(0, int((task_deadline - time.perf_counter()) * 1000))
+            effective_timeout = step.timeout or 10000
+            if remaining_ms < effective_timeout:
+                logger.debug(
+                    "[timeout] 步骤 %s 超时从 %sms 截断到 %dms",
+                    step.id, effective_timeout, remaining_ms,
+                )
+                step.timeout = remaining_ms
+            if step.type == StepType.SLEEP and remaining_ms < step.duration:
+                logger.debug(
+                    "[timeout] 步骤 %s 时长从 %sms 截断到 %dms",
+                    step.id, step.duration, remaining_ms,
+                )
+                step.duration = remaining_ms
+
         try:
             return await handler.execute(page, step, self.resolver)
         except Exception as e:
-            logger.error("步骤 [%s] 执行失败: %s", step.id, e)
+            logger.error("步骤 [%s/%s] 执行失败: %s", step.id, step.type, e)
             return False, str(e)
+        finally:
+            step.timeout = original_timeout
+            step.duration = original_duration
 
     async def execute_step_at(self, page, step_index: int) -> dict[str, Any]:
         """执行单个步骤（调试模式），返回结果字典"""
