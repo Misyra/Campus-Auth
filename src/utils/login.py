@@ -24,6 +24,9 @@ if False:  # Type-only import to avoid circular dependency at runtime
 # 用于从日志消息中移除截图路径的正则表达式
 SCREENSHOT_URL_PATTERN = r"\s*截图[:：]\s*/\S+\.(?:png|jpg|jpeg|webp|gif)"
 
+# 登录成功后等待页面完成跳转和状态更新的时间（秒）
+LOGIN_SUCCESS_SETTLE_SECONDS = 2
+
 
 class LoginAttemptHandler:
     """登录尝试处理器 - 统一登录逻辑（解决循环依赖）"""
@@ -175,11 +178,7 @@ class LoginAttemptHandler:
             browser_manager = BrowserContextManager(
                 self.config, cancel_event=self.cancel_event
             )
-            try:
-                await browser_manager.__aenter__()
-            except Exception:
-                # __aenter__ 失败时无需 __aexit__（Playwright 未初始化）
-                raise
+            await browser_manager.__aenter__()
             self._browser_ctx = browser_manager
             self.logger.info(
                 "浏览器就绪 (%.1fs)", time.perf_counter() - browser_start
@@ -218,7 +217,7 @@ class LoginAttemptHandler:
                 total = time.perf_counter() - phase_start
                 if success:
                     self.logger.info("登录成功 (总耗时 %.1fs): %s", total, message)
-                    await asyncio.sleep(2)  # 登录成功后等待，让页面完成跳转和状态更新
+                    await asyncio.sleep(LOGIN_SUCCESS_SETTLE_SECONDS)  # 登录成功后等待，让页面完成跳转和状态更新
                     return True, message
                 log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
                 self.logger.error("登录失败 (总耗时 %.1fs): %s", total, log_msg)
@@ -266,7 +265,7 @@ class LoginAttemptHandler:
             return False, f"脚本执行失败: {script_output}"
 
         self.logger.info("脚本已执行，等待网络验证...")
-        await asyncio.sleep(2)
+        await asyncio.sleep(LOGIN_SUCCESS_SETTLE_SECONDS)
 
         net_ok, net_msg = check_network_status(self.config)
 

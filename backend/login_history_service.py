@@ -55,6 +55,7 @@ class LoginHistoryService:
             profile_name=profile_name,
             error=error[:200] if error else "",
         )
+        need_cleanup = False
         with self._lock:
             try:
                 with open(self._history_path, "a", encoding="utf-8") as f:
@@ -63,9 +64,12 @@ class LoginHistoryService:
                 self._write_count += 1
                 # 每 50 次写入概率性清理旧记录
                 if self._write_count % 50 == 0:
-                    self._cleanup_old(max_age_days=30)
+                    need_cleanup = True
             except Exception:
                 logger.warning("写入登录历史失败", exc_info=True)
+        # 锁外执行清理 I/O，避免长时间持锁阻塞其他 add() 调用
+        if need_cleanup:
+            self._cleanup_old(max_age_days=30)
 
     def list_recent(self, limit: int = 50) -> list[LoginHistoryEntry]:
         """读取最近 N 条登录记录（从新到旧）。"""

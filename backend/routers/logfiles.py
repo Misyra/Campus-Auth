@@ -69,7 +69,7 @@ def _validate_filename(filename: str) -> None:
 def _safe_resolve(date: str, filename: str) -> Path:
     """安全解析路径，确保在 LOGS_DIR 内。"""
     target = (LOGS_DIR / date / filename).resolve()
-    if not str(target).startswith(str(LOGS_DIR.resolve())):
+    if not target.is_relative_to(LOGS_DIR.resolve()):
         raise HTTPException(400, "路径越界")
     return target
 

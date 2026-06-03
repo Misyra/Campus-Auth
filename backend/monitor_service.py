@@ -32,6 +32,10 @@ from .profile_service import ProfileService
 from .schemas import LogEntry, MonitorConfigPayload, MonitorStatusResponse
 from .ws_manager import WebSocketManager
 
+# ── 常量 ──
+
+# WS 广播队列排空间隔（秒）
+WS_DRAIN_INTERVAL_SECONDS = 0.05
 
 # ── Actor 模型：类型化命令派发 ──
 
@@ -269,7 +273,7 @@ class MonitorService:
                         error=error_msg,
                     )
                 except Exception:
-                    pass
+                    service_logger.debug("记录登录历史失败", exc_info=True)
 
         if cmd.response_event:
             cmd.response_event.set()
@@ -410,7 +414,7 @@ class MonitorService:
         """
         while True:
             try:
-                await asyncio.sleep(0.05)
+                await asyncio.sleep(WS_DRAIN_INTERVAL_SECONDS)
                 await self.drain_ws_queue()
             except asyncio.CancelledError:
                 break

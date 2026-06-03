@@ -1,6 +1,7 @@
 import logging
 import logging.handlers
 import os
+import re
 import shutil
 import sys
 import threading
@@ -233,7 +234,7 @@ class _DateRotatingFileHandler(logging.Handler):
         if not base.exists():
             return
         for d in base.iterdir():
-            if not d.is_dir() or not d.name[:4].isdigit():
+            if not d.is_dir() or not re.match(r"^\d{4}-\d{2}-\d{2}$", d.name):
                 continue
             try:
                 if d.stat().st_mtime < cutoff:
