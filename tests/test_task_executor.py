@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -304,6 +305,39 @@ class TestVariableResolver:
         result = resolver.resolve_for_js("{{UNKNOWN}}")
         assert result == '""'
 
+    def test_resolve_unknown_var_logs_warning(self):
+        """未知变量应触发 warning 日志"""
+        resolver = VariableResolver(self._make_config(), {})
+        with patch("src.task_executor.logger") as mock_logger:
+            resolver.resolve("{{UNKNOWN}}")
+            mock_logger.warning.assert_called_once()
+            assert "UNKNOWN" in str(mock_logger.warning.call_args)
+
+    def test_resolve_runtime_var_none(self):
+        resolver = VariableResolver(self._make_config(), {})
+        resolver.set_runtime_var("VAL", None)
+        assert resolver.resolve("{{VAL}}") == "null"
+
+    def test_resolve_runtime_var_bool(self):
+        resolver = VariableResolver(self._make_config(), {})
+        resolver.set_runtime_var("FLAG", True)
+        assert resolver.resolve("{{FLAG}}") == "true"
+
+    def test_resolve_runtime_var_list(self):
+        resolver = VariableResolver(self._make_config(), {})
+        resolver.set_runtime_var("ITEMS", [1, 2, 3])
+        assert resolver.resolve("{{ITEMS}}") == "[1, 2, 3]"
+
+    def test_resolve_runtime_var_dict(self):
+        resolver = VariableResolver(self._make_config(), {})
+        resolver.set_runtime_var("OBJ", {"key": "value"})
+        assert resolver.resolve("{{OBJ}}") == '{"key": "value"}'
+
+    def test_resolve_runtime_var_string_unchanged(self):
+        resolver = VariableResolver(self._make_config(), {})
+        resolver.set_runtime_var("STR", "hello")
+        assert resolver.resolve("{{STR}}") == "hello"
+
 
 # =====================================================================
 # StepHandler 子类
@@ -406,6 +440,22 @@ class TestWaitHandler:
         ok, msg = await handler.execute(MagicMock(), step, resolver)
         assert ok is False
 
+    @pytest.mark.asyncio
+    async def test_execute_timeout(self):
+        """等待超时应返回中文错误信息"""
+        handler = WaitHandler()
+        step = StepConfig(id="s1", type="wait", selector="#missing", timeout=100)
+        resolver = VariableResolver(TaskConfig(), {})
+
+        mock_page = MagicMock()
+        mock_locator = MagicMock()
+        mock_locator.first.wait_for = AsyncMock(side_effect=TimeoutError())
+        mock_page.locator.return_value = mock_locator
+
+        ok, msg = await handler.execute(mock_page, step, resolver)
+        assert ok is False
+        assert "超时" in msg
+
 
 class TestWaitUrlHandler:
     def test_step_type(self):
@@ -468,6 +518,20 @@ class TestEvalHandler:
         assert ok is True
         assert resolver.runtime_vars["result"] == 42
 
+    @pytest.mark.asyncio
+    async def test_execute_js_error(self):
+        """JS 执行异常应返回明确错误信息"""
+        handler = EvalHandler()
+        step = StepConfig(id="s1", type="eval", script="throw new Error('test')")
+        resolver = VariableResolver(TaskConfig(), {})
+
+        mock_page = MagicMock()
+        mock_page.evaluate = AsyncMock(side_effect=Exception("SyntaxError"))
+
+        ok, msg = await handler.execute(mock_page, step, resolver)
+        assert ok is False
+        assert "JavaScript" in msg
+
 
 class TestSleepHandler:
     def test_step_type(self):
@@ -516,6 +580,47 @@ class TestSleepHandler:
 class TestScreenshotHandler:
     def test_step_type(self):
         assert ScreenshotHandler().step_type == StepType.SCREENSHOT
+
+
+
+class TestOcrHandler:
+    @pytest.mark.asyncio
+    async def test_execute_cleanup_on_target_error(self):
+        """target.evaluate 异常时 schedule_cleanup 仍应被调用"""
+        handler = OcrHandler()
+        step = StepConfig(
+            id="s1", type="ocr", selector="#captcha", store_as="code",
+            extra={"target_selector": "#captcha_input"},
+        )
+        resolver = VariableResolver(TaskConfig(), {})
+
+        mock_page = MagicMock()
+        mock_element = AsyncMock()
+        mock_element.screenshot = AsyncMock(return_value=b"fake_img")
+
+        mock_target = AsyncMock()
+        mock_target.fill = AsyncMock(side_effect=Exception("fill failed"))
+        mock_target.wait_for = AsyncMock()
+        mock_target.evaluate = AsyncMock(side_effect=Exception("evaluate failed"))
+
+        async def mock_find(ctx, sel, timeout):
+            if sel == "#captcha":
+                return mock_element
+            return mock_target
+
+        handler._find_element = mock_find
+
+        with patch.object(handler, "_get_ocr") as mock_get_ocr, \
+             patch.object(handler, "schedule_cleanup") as mock_cleanup:
+            mock_ocr = MagicMock()
+            mock_ocr.classification.return_value = "abc123"
+            mock_get_ocr.return_value = mock_ocr
+
+            # force input 异常会从 execute() 冒泡（try/finally 保证清理但不吞异常）
+            with pytest.raises(Exception, match="evaluate failed"):
+                await handler.execute(mock_page, step, resolver)
+            # 关键验证：schedule_cleanup 一定被调用
+            mock_cleanup.assert_called_once()
 
 
 # =====================================================================
@@ -863,3 +968,46 @@ class TestTaskExecutor:
         assert executor.resolver is not None
         assert executor.resolver.resolve("{{X}}") == "1"
         assert executor.resolver.resolve("{{Y}}") == "2"
+
+    @pytest.mark.asyncio
+    async def test_execute_step_timeout_truncation(self):
+        """步骤超时应被截断到任务剩余时间"""
+        config = TaskConfig(
+            name="test",
+            timeout=5000,
+            steps=[StepConfig(id="s1", type="eval", script="return 1", timeout=10000)],
+        )
+        executor = TaskExecutor(config)
+        mock_page = MagicMock()
+        mock_page.evaluate = AsyncMock(return_value=1)
+
+        step = config.steps[0]
+        assert step.timeout == 10000
+        # deadline = 5.0s, perf_counter = 4.5s → 剩余 500ms
+        task_deadline = time.perf_counter() + 0.5
+        success, _ = await executor._execute_step(mock_page, step, task_deadline)
+        assert success is True
+        # 执行后恢复原值
+        assert step.timeout == 10000
+
+    @pytest.mark.asyncio
+    async def test_execute_step_sleep_duration_truncation(self):
+        """sleep 步骤时长应被截断到任务剩余时间"""
+        config = TaskConfig(
+            name="test",
+            timeout=5000,
+            steps=[StepConfig(id="s1", type="sleep", duration=300000)],
+        )
+        executor = TaskExecutor(config)
+        mock_page = MagicMock()
+        mock_page.wait_for_timeout = AsyncMock()
+
+        step = config.steps[0]
+        task_deadline = time.perf_counter() + 1.0
+        success, _ = await executor._execute_step(mock_page, step, task_deadline)
+        assert success is True
+        # 验证 wait_for_timeout 被调用的时长不超过剩余时间（约 1000ms）
+        call_args = mock_page.wait_for_timeout.call_args[0][0]
+        assert call_args <= 1100  # 允许少量误差
+        # 验证 duration 恢复原值
+        assert step.duration == 300000
