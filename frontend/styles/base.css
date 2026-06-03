@@ -153,16 +153,14 @@ body {
 }
 
 .page-content {
-  animation: pageEnter 0.3s ease;
+  animation: pageEnter 0.25s ease;
 }
 
 @keyframes pageEnter {
   from {
-    opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(6px);
   }
   to {
-    opacity: 1;
     transform: translateY(0);
   }
 }
@@ -183,8 +181,8 @@ body {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { transform: translateY(10px); }
+  to { transform: translateY(0); }
 }
 
 @keyframes slideIn {
@@ -449,7 +447,8 @@ textarea.json-valid {
   background: var(--bg-glass);
   border: 1px solid var(--border-accent);
   border-radius: var(--radius-lg);
-  backdrop-filter: none;
+  -webkit-backdrop-filter: var(--card-blur, none);
+  backdrop-filter: var(--card-blur, none);
   box-shadow: var(--shadow);
 }
 

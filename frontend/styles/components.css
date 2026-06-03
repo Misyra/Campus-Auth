@@ -2,9 +2,13 @@
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  backdrop-filter: var(--blur-md);
+  -webkit-backdrop-filter: var(--card-blur, var(--blur-md));
+  backdrop-filter: var(--card-blur, var(--blur-md));
   box-shadow: var(--shadow);
   transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+  /* 提示浏览器提前准备 backdrop-filter 合成层 */
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 .card:hover {
