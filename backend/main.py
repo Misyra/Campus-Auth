@@ -105,7 +105,7 @@ def _resolve_port() -> int:
             if 1 <= port <= 65535:
                 return port
         except ValueError:
-            pass
+            startup_logger.warning("端口解析失败，使用默认 50721", exc_info=True)
 
     settings_path = PROJECT_ROOT / "settings.json"
     if settings_path.exists():

@@ -50,7 +50,7 @@ class AutoStartService:
     def _run(self, cmd: list[str]) -> tuple[bool, str]:
         try:
             logger.debug("执行命令: %s", " ".join(cmd))
-            proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            proc = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=30)
             if proc.returncode == 0:
                 logger.debug("命令成功: %s", (proc.stdout or "").strip()[:200])
                 return True, (proc.stdout or "").strip()
@@ -60,6 +60,9 @@ class AutoStartService:
                 (proc.stderr or proc.stdout or "").strip()[:200],
             )
             return False, (proc.stderr or proc.stdout or "").strip()
+        except subprocess.TimeoutExpired:
+            logger.error("命令超时 (30s): %s", " ".join(cmd))
+            return False, f"命令执行超时 (30s): {' '.join(cmd)}"
         except Exception as exc:
             logger.error("命令异常: %s -> %s", " ".join(cmd), exc)
             return False, str(exc)

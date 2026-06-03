@@ -77,12 +77,12 @@ def restore_backup(
     monitor_svc: MonitorService = Depends(get_monitor_service),
 ) -> ActionResponse:
     """从备份恢复配置"""
+    if not re.match(BACKUP_FILENAME_PATTERN, filename):
+        raise HTTPException(status_code=400, detail="无效的备份文件名")
+
     backup_path = BACKUP_DIR / filename
     if not backup_path.exists():
         raise HTTPException(status_code=404, detail="备份文件不存在")
-
-    if not re.match(BACKUP_FILENAME_PATTERN, filename):
-        raise HTTPException(status_code=400, detail="无效的备份文件名")
 
     # 恢复前先自动创建当前配置的备份
     settings_path = PROJECT_ROOT / "settings.json"

@@ -59,7 +59,7 @@ class WebSocketManager:
             try:
                 await ws.close(code=1001, reason="Server shutting down")
             except Exception:
-                pass
+                ws_logger.debug("ws close 失败", exc_info=True)
 
     async def _send_safe(self, ws: WebSocket, message: str):
         try:

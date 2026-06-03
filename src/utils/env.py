@@ -4,6 +4,7 @@ import os
 from typing import Any
 
 
+# Windows 保留环境变量 + Unix/Python 内置变量，防止 runtime vars 与系统变量冲突
 _ENV_DENYLIST = {
     "PATH",
     "PYTHONPATH",

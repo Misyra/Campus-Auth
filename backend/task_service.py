@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -80,10 +81,9 @@ class TaskService:
             if task.script_path.suffix.lower() == ".json":
                 # JSON 格式：从 content 字段读取
                 try:
-                    import json as _json
-                    data = _json.loads(task.script_path.read_text(encoding="utf-8"))
+                    data = json.loads(task.script_path.read_text(encoding="utf-8"))
                     content = data.get("content", "")
-                except (OSError, UnicodeDecodeError, _json.JSONDecodeError) as exc:
+                except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
                     task_logger.error("读取脚本 JSON 失败 %s: %s", task.script_path, exc)
                     return None
             else:
@@ -108,10 +108,9 @@ class TaskService:
         try:
             json_path = self.task_manager.tasks_dir / f"{task_id}.json"
             if json_path.exists():
-                import json as _json
-                result["raw_json"] = _json.loads(json_path.read_text(encoding="utf-8"))
-        except Exception as e:
-            task_logger.warning("读取任务原始 JSON 失败 (task_id=%s): %s", task_id, e)
+                result["raw_json"] = json.loads(json_path.read_text(encoding="utf-8"))
+        except Exception:
+            task_logger.warning("读取任务原始 JSON 失败 (task_id=%s)", task_id, exc_info=True)
         return result
 
     def save_task(self, task_id: str, config: dict[str, Any]) -> tuple[bool, str]:

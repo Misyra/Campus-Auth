@@ -93,8 +93,8 @@ def save_profile(
         if data.active_profile == profile_id:
             try:
                 monitor_svc.apply_profile(profile_id)
-            except Exception as exc:
-                api_logger.warning("Apply profile failed: %s", exc)
+            except Exception:
+                api_logger.warning("Apply profile failed", exc_info=True)
     return ActionResponse(success=ok, message=message)
 
 
@@ -126,8 +126,8 @@ def set_active_profile(
         profile_name = profile.name if profile else profile_id
         try:
             monitor_svc.apply_profile(profile_name)
-        except Exception as exc:
-            api_logger.warning("Apply profile failed: %s", exc)
+        except Exception:
+            api_logger.warning("Apply profile failed", exc_info=True)
     return ActionResponse(success=ok, message=message)
 
 
