@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from src.utils.logging import LogConfigCenter, get_logger
 from src.version import get_project_version
 
-from .constants import FRONTEND_DIR, LOGS_DIR, PROJECT_ROOT, TEMP_DIR
+from .constants import DEBUG_DIR, FRONTEND_DIR, LOGS_DIR, PROJECT_ROOT, TEMP_DIR
 from .container import ServiceContainer
 from .routers import backup, config, debug, history, logfiles, monitor, profiles, repo, scheduled_tasks, scripts, system, tasks, tools
 
@@ -236,6 +236,7 @@ def index() -> FileResponse:
 
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 app.mount("/logs", StaticFiles(directory=LOGS_DIR), name="logs")
+app.mount("/debug", StaticFiles(directory=DEBUG_DIR), name="debug")
 app.mount("/temp", StaticFiles(directory=TEMP_DIR), name="temp")
 
 
@@ -280,15 +281,8 @@ def run() -> None:
     except Exception:
         startup_logger.debug("旧日志清理失败", exc_info=True)
 
-    import shutil
-
-    old_debug = PROJECT_ROOT / "debug"
-    if old_debug.exists():
-        try:
-            shutil.rmtree(old_debug)
-            startup_logger.info("已清理旧版 debug/ 目录")
-        except Exception:
-            startup_logger.debug("旧版 debug 目录清理失败", exc_info=True)
+    # 确保 debug 目录存在（用于保存验证码截图等）
+    DEBUG_DIR.mkdir(parents=True, exist_ok=True)
 
     global _access_log_enabled
     _access_log_enabled = access_log_enabled

@@ -149,7 +149,7 @@
                 <span class="history-duration">{{ item.duration_ms }}ms</span>
               </div>
               <div class="history-row">
-                <span class="history-profile">{{ item.profile_name || '默认方案' }}</span>
+                <span class="history-profile">{{ item.task_name || item.profile_name || '默认方案' }}</span>
               </div>
               <span v-if="item.error" class="history-error">{{ item.error }}</span>
             </div>

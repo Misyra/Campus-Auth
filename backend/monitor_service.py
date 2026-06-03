@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from fastapi import WebSocket
 from src.playwright_worker import get_worker, CMD_LOGIN
 from src.network_decision import is_network_available
+from src.task_executor import TaskManager
 from src.utils import ConfigValidator
 from src.utils.logging import get_logger
 from src.utils.login import SCREENSHOT_URL_PATTERN
@@ -84,6 +85,7 @@ class MonitorService:
         self._profile_service = profile_service or ProfileService(project_root)
         self._ws_manager = ws_manager
         self._login_history = login_history_service
+        self._task_manager = TaskManager(project_root / "tasks")
 
         # State (previously guarded by RLock)
         self._logs: deque[LogEntry] = deque(maxlen=1200)
@@ -274,10 +276,20 @@ class MonitorService:
                     active = self._profile_service.get_active_profile()
                     if active:
                         profile_name = getattr(active, "name", "")
+                    # 获取活动任务名称
+                    task_name = ""
+                    try:
+                        task_id = self._task_manager.get_active_task()
+                        task = self._task_manager.load_task(task_id)
+                        if task:
+                            task_name = getattr(task, "name", task_id)
+                    except Exception:
+                        pass
                     self._login_history.add(
                         success=success,
                         duration_ms=duration_ms,
                         profile_name=profile_name,
+                        task_name=task_name,
                         error=error_msg,
                     )
                 except Exception:
