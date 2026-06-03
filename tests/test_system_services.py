@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -155,13 +156,13 @@ class TestAutoStartEnableDisable:
 class TestAutoStartRun:
     def test_success(self, tmp_path):
         svc = AutoStartService(tmp_path)
-        ok, msg = svc._run(["echo", "hello"])
+        ok, msg = svc._run([sys.executable, "-c", "print('hello')"])
         assert ok is True
         assert "hello" in msg
 
     def test_failure(self, tmp_path):
         svc = AutoStartService(tmp_path)
-        ok, msg = svc._run(["python", "-c", "import sys; sys.exit(1)"])
+        ok, msg = svc._run([sys.executable, "-c", "import sys; sys.exit(1)"])
         assert ok is False
 
     def test_exception(self, tmp_path):
