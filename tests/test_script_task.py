@@ -17,87 +17,69 @@ from src.task_executor import ScriptTaskInfo, TaskManager
 
 
 class TestTaskManagerScriptScan:
-    """TaskManager 对 .py 文件的扫描和加载"""
+    """TaskManager 对脚本文件的扫描和加载"""
 
-    def test_list_tasks_includes_script(self, tmp_path: Path):
-        """list_tasks 应同时返回 .json 和 .py 任务，含 type 字段"""
-        # 创建 .json 任务
-        (tmp_path / "browser_task.json").write_text(
+    def test_list_tasks_separates_by_dir(self, tmp_path: Path):
+        """list_tasks 只返回 browser/ 目录的任务，list_script_tasks 只返回 scripts/ 目录"""
+        tm = TaskManager(tmp_path)
+        # 浏览器任务在 browser/
+        (tmp_path / "browser" / "browser_task.json").write_text(
             json.dumps({"name": "浏览器任务", "steps": [{"id": "s1", "type": "input", "selector": "#x"}]}),
             encoding="utf-8",
         )
-        # 创建 .py 脚本
-        (tmp_path / "my_script.py").write_text(
-            '# name: 我的脚本\n# description: 测试\nprint("hello")',
+        # 脚本在 scripts/
+        (tmp_path / "scripts" / "my_script.json").write_text(
+            json.dumps({"type": "script", "name": "我的脚本", "content": 'print("hello")'}),
             encoding="utf-8",
         )
 
+        browser_tasks = tm.list_tasks()
+        script_tasks = tm.list_script_tasks()
+
+        assert len(browser_tasks) == 1
+        assert browser_tasks[0]["id"] == "browser_task"
+        assert len(script_tasks) == 1
+        assert script_tasks[0]["id"] == "my_script"
+
+    def test_list_script_tasks_json_and_py(self, tmp_path: Path):
+        """list_script_tasks 同时返回 .json 和 .py 脚本"""
         tm = TaskManager(tmp_path)
-        tasks = tm.list_tasks()
-
-        ids = {t["id"] for t in tasks}
-        assert "browser_task" in ids
-        assert "my_script" in ids
-
-        browser = next(t for t in tasks if t["id"] == "browser_task")
-        script = next(t for t in tasks if t["id"] == "my_script")
-
-        assert browser["type"] == "browser"
-        assert script["type"] == "script"
-
-    def test_list_tasks_deduplication(self, tmp_path: Path):
-        """同名 .json 和 .py 只出现一次（.json 优先）"""
-        (tmp_path / "foo.json").write_text(
-            json.dumps({"name": "Foo JSON", "steps": [{"id": "s1", "type": "input", "selector": "#x"}]}),
+        (tmp_path / "scripts" / "a.json").write_text(
+            json.dumps({"type": "script", "name": "A", "content": 'print("a")'}),
             encoding="utf-8",
         )
-        (tmp_path / "foo.py").write_text('print("hello")', encoding="utf-8")
+        (tmp_path / "scripts" / "b.py").write_text('print("b")', encoding="utf-8")
 
-        tm = TaskManager(tmp_path)
-        tasks = tm.list_tasks()
-
-        foo_tasks = [t for t in tasks if t["id"] == "foo"]
-        assert len(foo_tasks) == 1
-        assert foo_tasks[0]["type"] == "browser"
-
-    def test_list_script_tasks_only_py(self, tmp_path: Path):
-        """list_script_tasks 只返回 .py 任务"""
-        (tmp_path / "a.json").write_text(
-            json.dumps({"name": "A", "steps": [{"id": "s1", "type": "input", "selector": "#x"}]}),
-            encoding="utf-8",
-        )
-        (tmp_path / "b.py").write_text('print("b")', encoding="utf-8")
-
-        tm = TaskManager(tmp_path)
         scripts = tm.list_script_tasks()
 
-        assert len(scripts) == 1
-        assert scripts[0]["id"] == "b"
+        ids = {s["id"] for s in scripts}
+        assert "a" in ids
+        assert "b" in ids
 
     def test_load_script_task(self, tmp_path: Path):
-        """load_task 对 .py 文件返回 ScriptTaskInfo"""
-        (tmp_path / "login.py").write_text(
+        """load_task 对 scripts/ 下的 .py 文件返回 ScriptTaskInfo"""
+        tm = TaskManager(tmp_path)
+        (tmp_path / "scripts" / "login.py").write_text(
             '# name: 登录脚本\n# description: HTTP 登录\nprint("ok")',
             encoding="utf-8",
         )
 
-        tm = TaskManager(tmp_path)
         task = tm.load_task("login")
 
         assert isinstance(task, ScriptTaskInfo)
         assert task.task_id == "login"
         assert task.name == "登录脚本"
         assert task.description == "HTTP 登录"
-        assert task.script_path == tmp_path / "login.py"
+        assert task.script_path == tmp_path / "scripts" / "login.py"
 
     def test_load_script_metadata_from_docstring(self, tmp_path: Path):
         """没有 # name 注释时，从 docstring 提取名称"""
-        (tmp_path / "test.py").write_text(
+        tm = TaskManager(tmp_path)
+        (tmp_path / "scripts" / "test.py").write_text(
             '"""校园网自动登录"""\nimport os\n',
             encoding="utf-8",
         )
 
-        tm = TaskManager(tmp_path)
         task = tm.load_task("test")
 
         assert isinstance(task, ScriptTaskInfo)
@@ -105,9 +87,9 @@ class TestTaskManagerScriptScan:
 
     def test_load_script_metadata_fallback_to_stem(self, tmp_path: Path):
         """没有注释和 docstring 时，使用文件名"""
-        (tmp_path / "my_task.py").write_text('print("hi")', encoding="utf-8")
-
         tm = TaskManager(tmp_path)
+        (tmp_path / "scripts" / "my_task.py").write_text('print("hi")', encoding="utf-8")
+
         task = tm.load_task("my_task")
 
         assert isinstance(task, ScriptTaskInfo)
@@ -118,57 +100,50 @@ class TestTaskManagerScriptCRUD:
     """TaskManager 脚本任务的增删改"""
 
     def test_save_script_task(self, tmp_path: Path):
-        """save_task task_type='script' 写入 .py 文件"""
+        """save_task task_type='script' 写入 scripts/ 子目录"""
         tm = TaskManager(tmp_path)
 
-        ok = tm.save_task("test", {"content": 'print("hello")'}, task_type="script")
+        ok = tm.save_task("test", {"content": 'print("hello")'}, task_type="scripts")
         assert ok is True
-        assert (tmp_path / "test.py").exists()
-        assert (tmp_path / "test.py").read_text(encoding="utf-8") == 'print("hello")'
+        script_file = tmp_path / "scripts" / "test.json"
+        assert script_file.exists()
+        data = json.loads(script_file.read_text(encoding="utf-8"))
+        assert data["content"] == 'print("hello")'
+        assert data["type"] == "script"
 
-    def test_save_script_removes_conflict_json(self, tmp_path: Path):
-        """保存脚本时删除同名 .json 文件"""
-        (tmp_path / "dup.json").write_text(
-            json.dumps({"name": "dup", "steps": [{"id": "s1", "type": "input", "selector": "#x"}]}),
-            encoding="utf-8",
-        )
-        tm = TaskManager(tmp_path)
-        tm.save_task("dup", {"content": 'print("dup")'}, task_type="script")
-
-        assert not (tmp_path / "dup.json").exists()
-        assert (tmp_path / "dup.py").exists()
-
-    def test_save_browser_removes_conflict_py(self, tmp_path: Path):
-        """保存浏览器任务时删除同名 .py 文件"""
-        (tmp_path / "dup.py").write_text('print("dup")', encoding="utf-8")
+    def test_save_browser_and_script_independent(self, tmp_path: Path):
+        """浏览器任务和脚本任务可以同名，分别存在不同子目录"""
         tm = TaskManager(tmp_path)
         tm.save_task("dup", {
-            "name": "dup",
+            "name": "浏览器 dup",
             "steps": [{"id": "s1", "type": "input", "selector": "#x"}],
         })
+        tm.save_task("dup", {"content": 'print("dup")'}, task_type="scripts")
 
-        assert not (tmp_path / "dup.py").exists()
-        assert (tmp_path / "dup.json").exists()
+        assert (tmp_path / "browser" / "dup.json").exists()
+        assert (tmp_path / "scripts" / "dup.json").exists()
 
     def test_save_script_empty_content_fails(self, tmp_path: Path):
         """空内容保存失败"""
         tm = TaskManager(tmp_path)
-        ok = tm.save_task("test", {"content": ""}, task_type="script")
+        ok = tm.save_task("test", {"content": ""}, task_type="scripts")
         assert ok is False
-        ok = tm.save_task("test", {"content": "   \n  "}, task_type="script")
+        ok = tm.save_task("test", {"content": "   \n  "}, task_type="scripts")
         assert ok is False
 
-    def test_delete_task_removes_both(self, tmp_path: Path):
-        """delete_task 同时删除 .json 和 .py"""
-        (tmp_path / "x.json").write_text("{}", encoding="utf-8")
-        (tmp_path / "x.py").write_text('print("x")', encoding="utf-8")
-
+    def test_delete_task_removes_from_both_dirs(self, tmp_path: Path):
+        """delete_task 从两个子目录中删除"""
         tm = TaskManager(tmp_path)
+        browser_dir = tmp_path / "browser"
+        scripts_dir = tmp_path / "scripts"
+        (browser_dir / "x.json").write_text("{}", encoding="utf-8")
+        (scripts_dir / "x.json").write_text('{"type":"script","content":"print()"}', encoding="utf-8")
+
         ok = tm.delete_task("x")
 
         assert ok is True
-        assert not (tmp_path / "x.json").exists()
-        assert not (tmp_path / "x.py").exists()
+        assert not (browser_dir / "x.json").exists()
+        assert not (scripts_dir / "x.json").exists()
 
     def test_delete_nonexistent_returns_true(self, tmp_path: Path):
         """删除不存在的任务返回 True（无操作成功）"""
@@ -181,10 +156,12 @@ class TestTaskManagerScriptCRUD:
         assert tm.delete_task("default") is False
 
     def test_set_active_task_script(self, tmp_path: Path):
-        """set_active_task 支持 .py 脚本"""
-        (tmp_path / "s.py").write_text('print("s")', encoding="utf-8")
-
+        """set_active_task 支持 scripts/ 下的脚本"""
         tm = TaskManager(tmp_path)
+        (tmp_path / "scripts" / "s.json").write_text(
+            '{"type":"script","content":"print()"}', encoding="utf-8"
+        )
+
         ok = tm.set_active_task("s")
 
         assert ok is True

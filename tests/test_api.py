@@ -35,9 +35,9 @@ def client(tmp_path):
         }),
         encoding="utf-8",
     )
-    tasks_dir = tmp_path / "tasks"
-    tasks_dir.mkdir()
-    (tasks_dir / "default.json").write_text(
+    browser_dir = tmp_path / "tasks" / "browser"
+    browser_dir.mkdir(parents=True)
+    (browser_dir / "default.json").write_text(
         json.dumps({
             "name": "默认任务",
             "steps": [{"id": "s1", "type": "click", "selector": "#btn"}],

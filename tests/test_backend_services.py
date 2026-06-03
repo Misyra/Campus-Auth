@@ -109,26 +109,24 @@ class TestCheckDangerousSteps:
 class TestTaskService:
     @pytest.fixture
     def service(self, tmp_path):
-        tasks_dir = tmp_path / "tasks"
-        tasks_dir.mkdir()
         return TaskService(tmp_path)
 
     @pytest.fixture
     def service_with_tasks(self, tmp_path):
-        tasks_dir = tmp_path / "tasks"
-        tasks_dir.mkdir()
+        browser_dir = tmp_path / "tasks" / "browser"
+        browser_dir.mkdir(parents=True)
         default_task = {
             "name": "默认任务",
             "steps": [{"id": "s1", "type": "click", "selector": "#btn"}],
         }
-        (tasks_dir / "default.json").write_text(
+        (browser_dir / "default.json").write_text(
             json.dumps(default_task, ensure_ascii=False), encoding="utf-8"
         )
         custom_task = {
             "name": "自定义任务",
             "steps": [{"id": "s1", "type": "eval", "script": "return 1"}],
         }
-        (tasks_dir / "custom_task.json").write_text(
+        (browser_dir / "custom_task.json").write_text(
             json.dumps(custom_task, ensure_ascii=False), encoding="utf-8"
         )
         return TaskService(tmp_path)

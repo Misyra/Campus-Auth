@@ -134,10 +134,13 @@ class LoginAttemptHandler:
                 self._task_manager = TaskManager(self._project_root / "tasks")
 
             task_manager = self._task_manager
-            active_task_id = self.config.get("active_task", "").strip()
-            if not active_task_id:
-                active_task_id = task_manager.get_active_task().strip() or "default"
-            task = task_manager.load_task(active_task_id)
+            profile_task_id = self.config.get("active_task", "").strip()
+            if profile_task_id:
+                active_task_id = profile_task_id
+                task = task_manager.load_task(profile_task_id)
+            else:
+                active_task_id = task_manager.get_active_task() or "default"
+                task = task_manager.load_active_task()
 
             if not task:
                 self.logger.warning("未找到活动任务: %s", active_task_id)

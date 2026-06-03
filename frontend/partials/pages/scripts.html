@@ -98,10 +98,18 @@
             <select v-model="editingTask.binary_path" @change="onBinarySelectChange">
               <option value="">选择执行程序...</option>
               <option v-for="bin in availableBinaries" :key="bin.path" :value="bin.path">
-                {{ bin.name }} - {{ bin.path }}
+                {{ bin.name }}
               </option>
+              <option value="__custom_python__">Python (自定义环境)</option>
               <option value="__custom__">自定义路径...</option>
             </select>
+            <input
+              v-if="editingTask.binary_path === '__custom_python__'"
+              v-model="editingTask._customPythonBinary"
+              type="text"
+              placeholder="输入 Python 解释器的完整路径"
+              class="mt-2"
+            />
             <input
               v-if="editingTask.binary_path === '__custom__'"
               v-model="editingTask._customBinary"

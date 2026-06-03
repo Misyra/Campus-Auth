@@ -31,20 +31,33 @@ export const scriptMethods = {
       try {
         const { data } = await this.$api.get(`/api/scripts/${taskId}`);
         const binaryPath = data.binary_path || '';
-        // 检查是否是自定义路径
-        const isCustom = binaryPath && !this.availableBinaries.some(b => b.path === binaryPath);
+        const realBinaries = this.availableBinaries.filter(b => b.path !== '__custom_python__');
+        const isKnownBinary = binaryPath && realBinaries.some(b => b.path === binaryPath);
+
+        let selectValue = binaryPath;
+        let customBinary = '';
+        let customPythonBinary = '';
+
+        if (!isKnownBinary && binaryPath) {
+          if (binaryPath.toLowerCase().includes('python')) {
+            selectValue = '__custom_python__';
+            customPythonBinary = binaryPath;
+          } else {
+            selectValue = '__custom__';
+            customBinary = binaryPath;
+          }
+        }
+
         this.editingTask = {
           id: taskId,
           name: data.name || '',
           description: data.description || '',
           content: data.content || '',
-          binary_path: isCustom ? '__custom__' : binaryPath,
-          _customBinary: isCustom ? binaryPath : '',
+          binary_path: selectValue,
+          _customBinary: customBinary,
+          _customPythonBinary: customPythonBinary,
           _isNew: false,
         };
-        if (isCustom) {
-          this.editingTask.binary_path = '__custom__';
-        }
         this.editingTaskType = 'script';
       } catch (error) {
         this.notify(false, extractApiError(error, '加载脚本失败'));
@@ -58,6 +71,7 @@ export const scriptMethods = {
         content: '#!/usr/bin/env python3\n"""自定义登录脚本"""\nimport httpx\n\n',
         binary_path: '',
         _customBinary: '',
+        _customPythonBinary: '',
         _isNew: true,
       };
     }
@@ -68,6 +82,11 @@ export const scriptMethods = {
       this.editingTask._customBinary = this.editingTask._customBinary || '';
     } else {
       this.editingTask._customBinary = '';
+    }
+    if (this.editingTask.binary_path === '__custom_python__') {
+      this.editingTask._customPythonBinary = this.editingTask._customPythonBinary || '';
+    } else {
+      this.editingTask._customPythonBinary = '';
     }
   },
 
@@ -92,6 +111,8 @@ export const scriptMethods = {
     let binaryPath = this.editingTask.binary_path;
     if (binaryPath === '__custom__') {
       binaryPath = this.editingTask._customBinary || '';
+    } else if (binaryPath === '__custom_python__') {
+      binaryPath = this.editingTask._customPythonBinary || '';
     }
 
     const payload = {
@@ -177,6 +198,7 @@ export const scriptMethods = {
           content: content,
           binary_path: '',
           _customBinary: '',
+          _customPythonBinary: '',
           _isNew: true,
         };
         this.currentPage = 'scripts';

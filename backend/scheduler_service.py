@@ -75,7 +75,7 @@ class SchedulerService:
 
     def __init__(self, project_root: Path, task_service: Any = None, monitor_service: Any = None):
         self.project_root = project_root
-        self.tasks_dir = project_root / "tasks" / "scheduled_tasks"
+        self.tasks_dir = project_root / "tasks" / "scheduled"
         self.history_dir = self.tasks_dir / "history"
         self.tasks_dir.mkdir(parents=True, exist_ok=True)
         self.history_dir.mkdir(parents=True, exist_ok=True)
@@ -237,9 +237,9 @@ class SchedulerService:
         if not task or task.get("type") != "script":
             return False, f"脚本任务不存在: {script_id}"
 
-        script_path = self.task_service.task_manager.tasks_dir / f"{script_id}.py"
-        if not script_path.exists():
-            return False, f"脚本文件不存在: {script_path}"
+        script_path = self.task_service.task_manager._safe_task_path(script_id, task_type="scripts")
+        if not script_path or not script_path.exists():
+            return False, f"脚本文件不存在: {script_id}"
 
         from src.script_runner import ScriptRunner
         runner = ScriptRunner(

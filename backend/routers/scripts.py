@@ -78,16 +78,9 @@ async def run_script(
     if not task or task.get("type") != "script":
         raise HTTPException(status_code=404, detail="脚本任务不存在")
 
-    # 查找脚本文件（优先 .json，其次 .py）
-    tasks_dir = task_svc.task_manager.tasks_dir
-    json_path = tasks_dir / f"{task_id}.json"
-    py_path = tasks_dir / f"{task_id}.py"
-
-    if json_path.exists():
-        script_path = json_path
-    elif py_path.exists():
-        script_path = py_path
-    else:
+    # 通过 TaskManager 安全路径查找脚本文件
+    script_path = task_svc.task_manager._safe_task_path(task_id, task_type="scripts")
+    if not script_path or not script_path.exists():
         return ActionResponse(success=False, message="脚本文件不存在")
 
     # 从配置读取脚本超时，默认 60 秒
