@@ -322,16 +322,13 @@ class SchedulerService:
 
         try:
             # 根据 shell 类型构建命令
-            if sys.platform == "win32":
-                # Windows: 使用 /c 参数
-                if "powershell" in shell_path.lower() or "pwsh" in shell_path.lower():
-                    # PowerShell 使用 -Command 参数
-                    cmd_args = [shell_path, "-Command", command]
-                else:
-                    # cmd.exe 使用 /c 参数
-                    cmd_args = [shell_path, "/c", command]
+            shell_lower = shell_path.lower()
+            if "powershell" in shell_lower or "pwsh" in shell_lower:
+                cmd_args = [shell_path, "-Command", command]
+            elif sys.platform == "win32" and "cmd" in shell_lower:
+                cmd_args = [shell_path, "/c", command]
             else:
-                # Linux/macOS: 使用 -c 参数
+                # bash / zsh / fish / git-bash 等 POSIX shell
                 cmd_args = [shell_path, "-c", command]
 
             returncode, stdout_str, stderr_str = await policy.run(

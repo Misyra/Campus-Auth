@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import platform
 import subprocess
 import sys
 from typing import Callable
@@ -118,6 +119,9 @@ class ShellCommandPolicy:
 
         self._audit(argv, effective_timeout)
 
+        if platform.system() == "Windows":
+            kwargs.setdefault("creationflags", 0x08000000)  # CREATE_NO_WINDOW
+
         proc = await asyncio.create_subprocess_exec(
             *argv,
             stdout=kwargs.pop("stdout", asyncio.subprocess.PIPE),
@@ -175,6 +179,8 @@ class ShellCommandPolicy:
             "encoding": "utf-8",
             "errors": "replace",
         }
+        if platform.system() == "Windows":
+            run_kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
         run_kwargs.update(kwargs)
 
         try:

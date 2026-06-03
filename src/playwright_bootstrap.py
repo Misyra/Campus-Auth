@@ -45,12 +45,10 @@ def _is_enabled() -> bool:
 
 
 def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    kwargs: dict = {"capture_output": True, "text": True, "check": False}
+    if is_windows():
+        kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
+    return subprocess.run(cmd, **kwargs)
 
 
 def _has_chromium() -> bool:
