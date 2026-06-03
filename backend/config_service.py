@@ -32,16 +32,19 @@ _PROTECTED_KEYS = frozenset({
 })
 
 
-def _safe_decrypt(ciphertext: str) -> str:
-    """解密密码，失败时返回空字符串并记录警告。"""
+def _safe_decrypt(ciphertext: str) -> tuple[str, bool]:
+    """解密密码。
+
+    返回:
+        (解密结果, 是否有错误): 错误时返回 ("", True)
+    """
     if not ciphertext:
-        config_logger.warning("_safe_decrypt 收到空密码，返回空字符串 (调用栈: %s)", __name__)
-        return ""
+        return ("", False)
     try:
-        return decrypt_password(ciphertext)
+        return (decrypt_password(ciphertext), False)
     except DecryptionError:
         config_logger.error("密码解密失败，使用空密码")
-        return ""
+        return ("", True)
 
 
 def _normalize_level(raw: str, default: str = "WARNING") -> str:
@@ -100,11 +103,14 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
     return MonitorConfigPayload(**pld)
 
 
-def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload:
+def load_runtime_config(profile_service: ProfileService) -> tuple[MonitorConfigPayload, bool]:
     """加载运行时配置 —— 根据活动方案的 use_global_* 标志合并全局与方案独立值。
 
     与 load_ui_config 不同，此函数会按活动方案的覆盖标志来决定使用全局值还是方案独立值，
     确保运行时实际生效的配置与方案设置一致。
+
+    返回:
+        (配置, 是否有解密错误): 解密错误时配置中密码为空字符串
     """
     data = profile_service.load()
     sys_cfg = data.system
@@ -115,16 +121,21 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
     pld = extract_profile_fields(sys_cfg.__dict__, PROFILE_FIELDS)
 
     # 账号密码：方案独立 > 全局；运行时使用解密明文
+    any_error = False
     use_global = True
     if profile and not profile.use_global_credentials and profile.username:
         pld["username"] = profile.username
         use_global = False
         raw_pwd = profile.password or ""
         if raw_pwd.startswith("ENC:"):
-            pld["password"] = _safe_decrypt(raw_pwd)
+            pwd, err = _safe_decrypt(raw_pwd)
+            pld["password"] = pwd
+            any_error = any_error or err
         elif raw_pwd.startswith("•"):
             if sys_cfg.password:
-                pld["password"] = _safe_decrypt(sys_cfg.password)
+                pwd, err = _safe_decrypt(sys_cfg.password)
+                pld["password"] = pwd
+                any_error = any_error or err
             else:
                 config_logger.warning(
                     "方案 '%s' 密码为掩码但全局密码为空，无法解析",
@@ -138,10 +149,20 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
                 "方案 '%s' 使用独立账号但密码为空，回退到全局密码",
                 data.active_profile,
             )
-            pld["password"] = _safe_decrypt(sys_cfg.password) if sys_cfg.password else ""
+            if sys_cfg.password:
+                pwd, err = _safe_decrypt(sys_cfg.password)
+                pld["password"] = pwd
+                any_error = any_error or err
+            else:
+                pld["password"] = ""
     else:
         pld["username"] = sys_cfg.username
-        pld["password"] = _safe_decrypt(sys_cfg.password) if sys_cfg.password else ""
+        if sys_cfg.password:
+            pwd, err = _safe_decrypt(sys_cfg.password)
+            pld["password"] = pwd
+            any_error = any_error or err
+        else:
+            pld["password"] = ""
     pld["use_global_credentials"] = use_global
 
     # 认证地址：跟随全局或使用方案独立值
@@ -185,7 +206,7 @@ def load_runtime_config(profile_service: ProfileService) -> MonitorConfigPayload
     pld["backend_log_level"] = _normalize_level(sys_cfg.backend_log_level)
     pld["frontend_log_level"] = _normalize_level(sys_cfg.frontend_log_level)
 
-    return MonitorConfigPayload(**pld)
+    return (MonitorConfigPayload(**pld), any_error)
 
 
 def build_runtime_config(
@@ -210,7 +231,8 @@ def build_runtime_config(
     if raw_password and not raw_password.startswith("•"):
         base["password"] = raw_password
     elif system_settings:
-        base["password"] = _safe_decrypt(system_settings.password) if system_settings.password else ""
+        pwd, _ = _safe_decrypt(system_settings.password) if system_settings.password else ("", False)
+        base["password"] = pwd
 
     base["auth_url"] = payload.auth_url.strip()
     base["active_task"] = payload.active_task.strip()

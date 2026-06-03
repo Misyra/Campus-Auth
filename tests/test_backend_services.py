@@ -317,15 +317,16 @@ class TestLoadRuntimeConfig:
         return ProfileService(tmp_path)
 
     def test_returns_payload(self, profile_service):
-        config = load_runtime_config(profile_service)
+        config, has_error = load_runtime_config(profile_service)
         assert isinstance(config, MonitorConfigPayload)
+        assert isinstance(has_error, bool)
 
     def test_uses_profile_credentials(self, profile_service):
-        config = load_runtime_config(profile_service)
+        config, _ = load_runtime_config(profile_service)
         assert config.username == "campus_user"
 
     def test_uses_profile_auth_url(self, profile_service):
-        config = load_runtime_config(profile_service)
+        config, _ = load_runtime_config(profile_service)
         assert config.auth_url == "http://campus.url"
 
 

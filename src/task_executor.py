@@ -12,7 +12,7 @@ import re
 import threading
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -1326,33 +1326,32 @@ class TaskExecutor:
         if not handler:
             return False, f"未知的步骤类型: {step.type}"
 
-        # 截断步骤超时/时长，防止超过任务总超时
-        original_timeout = step.timeout
-        original_duration = step.duration
+        # 创建副本而非修改原对象，避免并发安全问题
+        effective_step = step
         if task_deadline is not None:
             remaining_ms = max(0, int((task_deadline - time.perf_counter()) * 1000))
             effective_timeout = step.timeout or 10000
+            overrides = {}
             if remaining_ms < effective_timeout:
                 logger.debug(
                     "[timeout] 步骤 %s 超时从 %sms 截断到 %dms",
                     step.id, effective_timeout, remaining_ms,
                 )
-                step.timeout = remaining_ms
+                overrides['timeout'] = remaining_ms
             if step.type == StepType.SLEEP and remaining_ms < step.duration:
                 logger.debug(
                     "[timeout] 步骤 %s 时长从 %sms 截断到 %dms",
                     step.id, step.duration, remaining_ms,
                 )
-                step.duration = remaining_ms
+                overrides['duration'] = remaining_ms
+            if overrides:
+                effective_step = replace(step, **overrides)
 
         try:
-            return await handler.execute(page, step, self.resolver)
+            return await handler.execute(page, effective_step, self.resolver)
         except Exception as e:
             logger.error("步骤 [%s/%s] 执行失败: %s", step.id, step.type, e)
             return False, str(e)
-        finally:
-            step.timeout = original_timeout
-            step.duration = original_duration
 
     async def execute_step_at(self, page, step_index: int) -> dict[str, Any]:
         """执行单个步骤（调试模式），返回结果字典"""

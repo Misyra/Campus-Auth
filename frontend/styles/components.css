@@ -929,3 +929,37 @@
 
 /* 工具类: alignment */
 .ms-auto { margin-left: auto; }
+
+/* 危险按钮幽灵样式 */
+.btn-danger-ghost {
+    background: transparent;
+    color: var(--color-danger, #ef4444);
+    border: 1px solid var(--color-danger, #ef4444);
+    transition: all 0.2s ease;
+}
+.btn-danger-ghost:hover {
+    background: var(--color-danger, #ef4444);
+    color: white;
+}
+
+/* 等宽文本区域 */
+.monospace-textarea {
+    font-family: var(--font-mono, 'Consolas', 'Monaco', monospace);
+    font-size: 0.875rem;
+}
+
+/* 卡片副标题 */
+.card-header-sub {
+    font-size: 0.85rem;
+    color: var(--text-secondary, #94a3b8);
+    margin-top: 2px;
+}
+
+/* 旋转动画 */
+.spin {
+    animation: spin 1s linear infinite;
+}
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}

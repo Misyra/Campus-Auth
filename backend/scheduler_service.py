@@ -83,6 +83,7 @@ class SchedulerService:
         self.monitor_service = monitor_service
         self._running = False
         self._task: asyncio.Task | None = None
+        self._running_tasks: set[asyncio.Task] = set()
         # 缓存 Shell 安全策略实例（可用 shell 列表不会在运行时变化）
         self._shell_policy = ShellCommandPolicy(
             allowlist=[s["path"] for s in detect_available_shells()]
@@ -361,7 +362,19 @@ class SchedulerService:
         if self._task:
             self._task.cancel()
             self._task = None
+        for task in self._running_tasks:
+            task.cancel()
+        self._running_tasks.clear()
         scheduler_logger.info("定时任务调度器已停止")
+
+    def _on_task_done(self, task: asyncio.Task) -> None:
+        """任务完成回调：清理引用并记录异常。"""
+        self._running_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            scheduler_logger.error("定时任务执行异常: %s", exc)
 
     async def _scheduler_loop(self):
         """调度器主循环，每分钟检查一次。"""
@@ -407,4 +420,6 @@ class SchedulerService:
             # 执行任务
             task_id = task.get("id", "")
             scheduler_logger.info("触发定时任务: %s", task_id)
-            asyncio.create_task(self.execute_task(task_id))
+            task_obj = asyncio.create_task(self.execute_task(task_id))
+            self._running_tasks.add(task_obj)
+            task_obj.add_done_callback(self._on_task_done)

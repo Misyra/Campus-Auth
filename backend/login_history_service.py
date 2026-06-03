@@ -36,6 +36,7 @@ class LoginHistoryService:
         self._data_dir.mkdir(parents=True, exist_ok=True)
         self._history_path = data_dir / "login_history.jsonl"
         self._lock = threading.Lock()
+        self._cleanup_lock = threading.Lock()
         self._write_count = 0
 
     def add(
@@ -67,9 +68,10 @@ class LoginHistoryService:
                     need_cleanup = True
             except Exception:
                 logger.warning("写入登录历史失败", exc_info=True)
-        # 锁外执行清理 I/O，避免长时间持锁阻塞其他 add() 调用
+        # 锁外使用独立锁序列化清理，不阻塞新写入
         if need_cleanup:
-            self._cleanup_old(max_age_days=30)
+            with self._cleanup_lock:
+                self._cleanup_old(max_age_days=30)
 
     def list_recent(self, limit: int = 50) -> list[LoginHistoryEntry]:
         """读取最近 N 条登录记录（从新到旧）。"""

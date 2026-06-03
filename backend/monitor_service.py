@@ -89,8 +89,11 @@ class MonitorService:
         self._logs: deque[LogEntry] = deque(maxlen=1200)
 
         self._ui_config = load_ui_config(self._profile_service)
+        runtime_payload, has_decrypt_error = load_runtime_config(self._profile_service)
+        if has_decrypt_error:
+            service_logger.warning("部分密码解密失败，可能需要重新配置密码")
         self._runtime_config = build_runtime_config(
-            load_runtime_config(self._profile_service),
+            runtime_payload,
             self._profile_service.load().system,
         )
 
@@ -486,8 +489,11 @@ class MonitorService:
         """从 settings.json 重新加载 UI 和运行时配置（内部方法，由 reload_config 和 _handle_profile_reload 复用）。"""
         with self._reload_lock:
             self._ui_config = load_ui_config(self._profile_service)
+            runtime_payload, has_decrypt_error = load_runtime_config(self._profile_service)
+            if has_decrypt_error:
+                service_logger.warning("配置重载时部分密码解密失败")
             self._runtime_config = build_runtime_config(
-                load_runtime_config(self._profile_service),
+                runtime_payload,
                 self._profile_service.load().system,
             )
 
