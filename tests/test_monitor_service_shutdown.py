@@ -67,8 +67,8 @@ class TestProfileReloadNoDeadlock:
 class TestShutdownSynchronous:
     """shutdown 同步等待测试"""
 
-    def test_shutdown_calls_handle_stop_synchronously(self):
-        """测试 shutdown 直接同步调用 _handle_stop"""
+    def test_shutdown_sends_stop_through_queue(self):
+        """测试 shutdown 通过队列发送 stop 命令"""
         svc = MonitorService.__new__(MonitorService)
         svc._cmd_queue = queue.Queue(maxsize=50)
         svc._shutdown_event = threading.Event()
@@ -81,19 +81,22 @@ class TestShutdownSynchronous:
         svc._consumer_thread = MagicMock()
         svc._consumer_thread.is_alive.return_value = False
 
-        # 记录 _handle_stop 是否被调用
-        handle_stop_called = threading.Event()
+        # 模拟消费者处理 stop 命令
+        def consume_stop():
+            cmd = svc._cmd_queue.get(timeout=5)
+            assert cmd.type == "stop"
+            if cmd.response_event:
+                cmd.response_event.set()
 
-        def mock_handle_stop():
-            handle_stop_called.set()
-
-        svc._handle_stop = mock_handle_stop
+        consumer = threading.Thread(target=consume_stop)
+        consumer.start()
 
         # 调用 shutdown
         svc.shutdown()
 
-        # 验证 _handle_stop 被调用
-        assert handle_stop_called.is_set(), "shutdown 应该调用 _handle_stop"
+        consumer.join(timeout=5)
+        # 验证 shutdown_event 已设置
+        assert svc._shutdown_event.is_set(), "shutdown 应设置 _shutdown_event"
 
     def test_handle_stop_idempotent(self):
         """测试 _handle_stop 幂等性"""

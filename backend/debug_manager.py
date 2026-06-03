@@ -119,9 +119,11 @@ class DebugSessionManager:
                             "调试会话超时（%ds 无操作），正在关闭浏览器",
                             timeout_seconds,
                         )
-                        if self._session.session:
-                            await self._session.session.close()
-                        self._session = empty_debug_session()
+                        try:
+                            if self._session.session:
+                                await self._session.session.close()
+                        finally:
+                            self._session = empty_debug_session()
         except asyncio.CancelledError:
             pass
 
@@ -330,6 +332,8 @@ class DebugSessionManager:
 
     async def close(self):
         """关闭调试会话（用于 lifespan 清理）。"""
-        if self._session.session:
-            await self._session.session.close()
-        self._session = empty_debug_session()
+        try:
+            if self._session.session:
+                await self._session.session.close()
+        finally:
+            self._session = empty_debug_session()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import datetime
 import json
 import logging
@@ -140,6 +141,8 @@ class MonitorService:
                     self._handle_start(cmd)
                 elif cmd.type == "stop":
                     self._handle_stop()
+                    if cmd.response_event:
+                        cmd.response_event.set()
                 elif cmd.type == "login":
                     self._handle_login(cmd)
                 elif cmd.type == "reload":
@@ -206,6 +209,8 @@ class MonitorService:
             thread.join(timeout=8)
             if thread.is_alive():
                 self._thread_done.wait(timeout=10)
+            if thread.is_alive():
+                service_logger.warning("监控线程在超时后仍未结束")
 
         self._monitor_core = None
         self._monitor_thread = None
@@ -275,8 +280,8 @@ class MonitorService:
                 except Exception:
                     service_logger.debug("记录登录历史失败", exc_info=True)
 
-        if cmd.response_event:
-            cmd.response_event.set()
+            if cmd.response_event:
+                cmd.response_event.set()
 
     def _handle_reload(self, cmd: MonitorCommand) -> None:
         """Hot-update config on a running monitor (consumer thread only)."""
@@ -487,11 +492,8 @@ class MonitorService:
             )
 
     def _copy_runtime_config(self) -> dict:
-        """深拷贝运行时配置，防止 browser_settings 等嵌套字典被意外修改。"""
-        config = self._runtime_config.copy()
-        if "browser_settings" in config:
-            config["browser_settings"] = dict(config["browser_settings"])
-        return config
+        """深拷贝运行时配置，防止嵌套字典被意外修改。"""
+        return copy.deepcopy(self._runtime_config)
 
     def reload_config(self) -> None:
         """重新加载配置（从 settings.json），并通过队列推送到运行中的监控"""
@@ -592,9 +594,15 @@ class MonitorService:
 
     def shutdown(self) -> None:
         """完全关闭 MonitorService：停止监控 + 终止消费者线程。"""
-        # 直接同步调用 _handle_stop() 停止监控（不通过队列，避免超时）
-        if self._is_monitoring:
-            self._handle_stop()
+        # 通过队列发送 stop 命令（消费者执行 _handle_stop 后设置 response_event）
+        try:
+            cmd = MonitorCommand(type="stop", response_event=threading.Event())
+            self._cmd_queue.put(cmd, timeout=3)
+            cmd.response_event.wait(timeout=15)
+        except queue.Full:
+            # 队列满时直接调用 _handle_stop() 作为回退
+            if self._is_monitoring:
+                self._handle_stop()
 
         # 设置关闭事件，通知消费者线程退出循环
         self._shutdown_event.set()

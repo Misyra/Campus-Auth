@@ -40,7 +40,7 @@ def _safe_decrypt(ciphertext: str) -> str:
     try:
         return decrypt_password(ciphertext)
     except DecryptionError:
-        config_logger.warning("密码解密失败，使用空密码")
+        config_logger.error("密码解密失败，使用空密码")
         return ""
 
 

@@ -169,6 +169,7 @@ export const appOptions = {
     },
     currentPage(newPage) {
       if (this._dangerResolve) {
+        this._releaseFocusTrap();
         this._dangerResolve(false);
         this._dangerResolve = null;
         this.dangerConfirm = null;
@@ -207,6 +208,7 @@ export const appOptions = {
     if (this._toastLeavingTimer) clearTimeout(this._toastLeavingTimer);
     if (this._appearanceTimer) clearTimeout(this._appearanceTimer);
     if (this._logScrollRaf) cancelAnimationFrame(this._logScrollRaf);
+    if (this._configDirtyTimer) clearTimeout(this._configDirtyTimer);
     this.timers.forEach((t) => clearInterval(t));
     if (this.ws) this.ws.close();
     // 清理快捷键

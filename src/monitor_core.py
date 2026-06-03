@@ -564,6 +564,11 @@ class NetworkMonitorCore:
             self.log_message("监控已停止，跳过登录", logging.WARNING)
             return False, "监控已停止"
 
+        from src.utils.crypto import has_decryption_error
+        if has_decryption_error():
+            self.log_message("密码解密失败，跳过登录（请在设置页面重新输入密码）", logging.ERROR)
+            return False, "密码解密失败，请在设置页面重新输入密码"
+
         try:
             # ── 通过 PlaywrightWorker 派发登录 ──
             # 原实现在此创建独立 asyncio 事件循环（new_event_loop / run_until_complete / loop.close）

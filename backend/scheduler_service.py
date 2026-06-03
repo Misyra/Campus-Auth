@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from src.task_executor import is_valid_task_id
 from src.utils.logging import get_logger
 from src.utils.shell_policy import ShellCommandPolicy
 
@@ -82,13 +83,15 @@ class SchedulerService:
         self.monitor_service = monitor_service
         self._running = False
         self._task: asyncio.Task | None = None
+        # 缓存 Shell 安全策略实例（可用 shell 列表不会在运行时变化）
+        self._shell_policy = ShellCommandPolicy(
+            allowlist=[s["path"] for s in detect_available_shells()]
+        )
 
     @staticmethod
     def _validate_task_id(task_id: str) -> bool:
-        """校验 task_id 是否安全（不含路径分隔符）。"""
-        if not task_id or "/" in task_id or "\\" in task_id or ".." in task_id:
-            return False
-        return True
+        """校验 task_id 是否安全且格式有效。"""
+        return is_valid_task_id(task_id)
 
     def list_tasks(self) -> list[dict[str, Any]]:
         """列出所有定时任务。"""
@@ -270,17 +273,19 @@ class SchedulerService:
             config = self.monitor_service.get_runtime_config()
             pure_mode = config.get("browser_settings", {}).get("pure_mode", False)
 
-            # 获取 Worker 并提交登录命令
+            # 获取 Worker 并提交登录命令（通过线程池避免阻塞事件循环）
             worker = get_worker()
-            result = worker.submit(
-                CMD_LOGIN,
-                data={
-                    "config": config,
-                    "pure_mode": pure_mode,
-                    "skip_pause_check": True,  # 定时任务跳过暂停检查
-                },
-                wait=True,
-                timeout=_timeout,
+            result = await asyncio.to_thread(
+                lambda: worker.submit(
+                    CMD_LOGIN,
+                    data={
+                        "config": config,
+                        "pure_mode": pure_mode,
+                        "skip_pause_check": True,  # 定时任务跳过暂停检查
+                    },
+                    wait=True,
+                    timeout=_timeout,
+                )
             )
 
             if result.success:
@@ -312,9 +317,8 @@ class SchedulerService:
         if not shell_path:
             shell_path = get_default_shell()
 
-        # 使用 ShellCommandPolicy 进行安全校验和执行
-        available = [s["path"] for s in detect_available_shells()]
-        policy = ShellCommandPolicy(allowlist=available)
+        # 使用缓存的 ShellCommandPolicy 进行安全校验和执行
+        policy = self._shell_policy
 
         try:
             # 根据 shell 类型构建命令
