@@ -152,14 +152,13 @@ class ScriptRunner:
             available.append(self.binary_path)
         policy = ShellCommandPolicy(allowlist=available)
 
-        # Windows 下隐藏窗口
+        # Windows 下隐藏窗口 + 统一传入最小环境（含 PYTHONIOENCODING=utf-8）
         kwargs: dict = {
             "cwd": str(self.script_path.parent),
+            "env": env,
         }
         if platform.system() == "Windows":
             kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
-        else:
-            kwargs["env"] = env
 
         try:
             returncode, stdout_str, stderr_str = policy.run_sync(
@@ -174,7 +173,8 @@ class ScriptRunner:
         if stderr_str:
             logger.info("脚本 stderr: %s", stderr_str[:500])
 
-        output = stdout_str[:500] or f"(无输出, exit code {returncode})"
+        # 优先用 stdout，其次 stderr，最后兜底提示
+        output = stdout_str[:500] or stderr_str[:500] or f"(无输出, exit code {returncode})"
 
         if returncode == 0:
             logger.info("脚本执行完成 (%.1fs): %s", elapsed, output)

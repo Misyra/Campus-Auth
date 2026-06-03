@@ -462,6 +462,7 @@ class TestEnsurePlaywrightReady:
     def teardown_method(self):
         import src.playwright_bootstrap as pb
         pb._BOOTSTRAP_DONE = False
+        pb._BOOTSTRAP_SKIPPED = False
 
     @patch.dict(os.environ, {"AUTO_INSTALL_PLAYWRIGHT": "false"})
     def test_disabled_returns_true(self):
