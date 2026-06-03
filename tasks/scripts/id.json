@@ -1,0 +1,7 @@
+{
+  "type": "script",
+  "name": "测试",
+  "description": "",
+  "binary_path": "E:\\Campus-Auth\\environment\\python\\python.exe",
+  "content": "#!/usr/bin/env python3\n\"\"\"自定义登录脚本\"\"\"\nimport httpx\nprint(\"200ok\")\n"
+}

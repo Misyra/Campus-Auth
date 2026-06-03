@@ -134,10 +134,8 @@ class DebugSessionManager:
         if not task_id:
             raise HTTPException(status_code=400, detail="缺少 task_id")
 
-        from src.task_executor import TaskManager
-
-        tm = TaskManager(self._project_root / "tasks")
-        task = tm.load_task(task_id)
+        task_svc = request.app.state.services.task_service
+        task = task_svc.task_manager.load_task(task_id)
         if not task:
             raise HTTPException(status_code=404, detail="任务不存在")
 

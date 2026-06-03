@@ -147,6 +147,9 @@ class ScriptRunner:
 
         # 使用 ShellCommandPolicy 进行安全校验和执行
         available = [b["path"] for b in detect_available_binaries()]
+        # 确保当前 runner 自身的 binary_path 在白名单中（支持自定义 Python 路径）
+        if self.binary_path not in available:
+            available.append(self.binary_path)
         policy = ShellCommandPolicy(allowlist=available)
 
         # Windows 下隐藏窗口

@@ -789,8 +789,8 @@ class TestTaskIdHelpers:
 class TestTaskManager:
     def test_list_tasks(self, tmp_path):
         mgr = TaskManager(tmp_path)
-        # 创建一个有效任务文件
-        task_file = tmp_path / "test_task.json"
+        # 创建一个有效任务文件（浏览器任务在 browser/ 子目录）
+        task_file = tmp_path / "browser" / "test_task.json"
         task_file.write_text(
             json.dumps({"name": "测试", "steps": []}),
             encoding="utf-8",
@@ -801,9 +801,10 @@ class TestTaskManager:
 
     def test_list_tasks_skips_invalid_ids(self, tmp_path):
         mgr = TaskManager(tmp_path)
+        browser_dir = tmp_path / "browser"
         # 含连字符的文件名应被跳过
-        (tmp_path / "my-task.json").write_text('{"name":"x","steps":[]}', encoding="utf-8")
-        (tmp_path / "valid_task.json").write_text('{"name":"y","steps":[]}', encoding="utf-8")
+        (browser_dir / "my-task.json").write_text('{"name":"x","steps":[]}', encoding="utf-8")
+        (browser_dir / "valid_task.json").write_text('{"name":"y","steps":[]}', encoding="utf-8")
         tasks = mgr.list_tasks()
         assert len(tasks) == 1
         assert tasks[0]["id"] == "valid_task"
@@ -815,7 +816,7 @@ class TestTaskManager:
             "url": "http://test.com",
             "steps": [{"id": "s1", "type": "click", "selector": "#btn"}],
         }
-        (tmp_path / "my_task.json").write_text(
+        (tmp_path / "browser" / "my_task.json").write_text(
             json.dumps(data, ensure_ascii=False), encoding="utf-8"
         )
         config = mgr.load_task("my_task")
@@ -839,7 +840,7 @@ class TestTaskManager:
         }
         ok = mgr.save_task("new_task", data)
         assert ok is True
-        assert (tmp_path / "new_task.json").exists()
+        assert (tmp_path / "browser" / "new_task.json").exists()
 
     def test_save_task_invalid(self, tmp_path):
         mgr = TaskManager(tmp_path)
@@ -848,10 +849,10 @@ class TestTaskManager:
 
     def test_delete_task(self, tmp_path):
         mgr = TaskManager(tmp_path)
-        (tmp_path / "to_delete.json").write_text('{"name":"x","steps":[]}', encoding="utf-8")
+        (tmp_path / "browser" / "to_delete.json").write_text('{"name":"x","steps":[]}', encoding="utf-8")
         ok = mgr.delete_task("to_delete")
         assert ok is True
-        assert not (tmp_path / "to_delete.json").exists()
+        assert not (tmp_path / "browser" / "to_delete.json").exists()
 
     def test_delete_default_returns_false(self, tmp_path):
         mgr = TaskManager(tmp_path)
@@ -860,7 +861,6 @@ class TestTaskManager:
     def test_delete_nonexistent(self, tmp_path):
         """删除不存在的任务：file.unlink(missing_ok=True) 会返回 True"""
         mgr = TaskManager(tmp_path)
-        # missing_ok=True 意味着文件不存在也算成功
         assert mgr.delete_task("nonexistent") is True
 
     def test_get_active_task_default(self, tmp_path):
@@ -869,7 +869,7 @@ class TestTaskManager:
 
     def test_set_active_task(self, tmp_path):
         mgr = TaskManager(tmp_path)
-        (tmp_path / "my_task.json").write_text('{"name":"x","steps":[]}', encoding="utf-8")
+        (tmp_path / "browser" / "my_task.json").write_text('{"name":"x","steps":[]}', encoding="utf-8")
         ok = mgr.set_active_task("my_task")
         assert ok is True
         assert mgr.get_active_task() == "my_task"

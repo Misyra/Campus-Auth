@@ -106,8 +106,8 @@ class TaskService:
         result["type"] = "browser"
         # 附加原始文件内容供编辑器使用
         try:
-            json_path = self.task_manager.tasks_dir / f"{task_id}.json"
-            if json_path.exists():
+            json_path = self.task_manager._safe_json_path(task_id, task_type="browser")
+            if json_path and json_path.exists():
                 result["raw_json"] = json.loads(json_path.read_text(encoding="utf-8"))
         except Exception:
             task_logger.warning("读取任务原始 JSON 失败 (task_id=%s)", task_id, exc_info=True)
@@ -153,7 +153,7 @@ class TaskService:
             "description": config.get("description", ""),
             "binary_path": config.get("binary_path", ""),
         }
-        success = self.task_manager.save_task(task_id, save_data, task_type="script")
+        success = self.task_manager.save_task(task_id, save_data, task_type="scripts")
         if success:
             task_logger.info("脚本任务已保存: %s", task_id)
             return True, "脚本任务保存成功"
