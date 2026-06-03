@@ -152,7 +152,15 @@
 <li><code>eval</code> - 执行JS（支持返回值存储到变量）</li>
             <li><code>screenshot</code> - 保存截图</li>
             <li><code>sleep</code> - 等待指定时间</li>
-            <li><code>ocr</code> - 验证码识别（ddddocr），截图识别图片文字并填入输入框</li>
+            <li><code>ocr</code> - 验证码识别（ddddocr），截图识别图片文字并可选填入输入框
+              <ul>
+                <li><code>selector</code> - 验证码图片/Canvas 选择器（必填）</li>
+                <li><code>target_selector</code> - 验证码输入框选择器（可选，设置后自动填入识别结果）</li>
+                <li><code>store_as</code> - 将识别结果存入变量（可选，配合 eval 步骤做二次处理）</li>
+                <li><code>char_range</code> - 限定 OCR 识别的字符范围，提高准确度（可选）。数字 <code>0</code>~<code>7</code> 使用内置字符集，或传入自定义字符串如 <code>"0123456789"</code></li>
+                <li><code>old</code> - 使用旧版模型（可选，默认 false）</li>
+              </ul>
+            </li>
           </ul>
           <h4>公共字段</h4>
           <ul>
@@ -177,6 +185,29 @@
     }
   ]
 }</pre>
+          <h4>OCR 验证码示例</h4>
+          <p>普通图片验证码（识别后直接填入输入框）：</p>
+          <pre v-pre>{
+  "type": "ocr",
+  "selector": "#captchaImg",
+  "target_selector": "#captchaInput",
+  "char_range": "0123456789"
+}</pre>
+          <p>数学运算验证码（识别图片 → 存变量 → eval 计算结果）：</p>
+          <pre v-pre>[
+  {
+    "type": "ocr",
+    "selector": "#captchaCanvas",
+    "store_as": "captcha_expr",
+    "char_range": "0123456789+-*/=xX÷",
+    "old": true
+  },
+  {
+    "type": "eval",
+    "script": "() => { let expr = '{{captcha_expr}}'; /* 计算逻辑 */ }",
+    "store_as": "captcha_result"
+  }
+]</pre>
         </div>
       </div>
     </div>

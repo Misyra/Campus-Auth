@@ -112,6 +112,11 @@ class StepConfig:
     duration: int = 1000  # sleep duration in ms
     frame: str | None = None  # frame 选择器（URL、name 或 CSS 选择器）
     required: bool = False  # 当为 True 时，元素/选项未找到则返回失败
+    # click_select 步骤专用
+    option_selector: str | None = None  # 选项容器选择器
+    # ocr 步骤专用
+    target_selector: str | None = None  # 验证码输入框选择器
+    old: bool = False  # 是否使用旧版 OCR 模型
     # 扩展参数
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -131,6 +136,9 @@ class StepConfig:
         "duration": 1000,
         "frame": None,
         "required": False,
+        "option_selector": None,
+        "target_selector": None,
+        "old": False,
         "extra": {},
     }
 
@@ -603,8 +611,9 @@ class SelectHandler(StepHandler):
         if not selector:
             return False, "选择步骤需要 selector"
 
-        if not value:
-            logger.debug("[select] value 为空，跳过选择步骤")
+        # value 为空或包含未解析变量时跳过
+        if not value or "{{" in value:
+            logger.debug("[select] value 为空或包含未解析变量，跳过: %s", value)
             return True, ""
 
         ctx = await self._resolve_frame(page, step)
@@ -680,8 +689,9 @@ class ClickSelectHandler(StepHandler):
 
         if not selector:
             return False, "click_select 步骤需要 selector"
-        if not value:
-            logger.info("[click_select] value 为空，跳过")
+        # value 为空或包含未解析变量时跳过
+        if not value or "{{" in value:
+            logger.info("[click_select] value 为空或包含未解析变量，跳过: %s", value)
             return True, ""
 
         ctx = await self._resolve_frame(page, step)
@@ -821,7 +831,9 @@ class EvalHandler(StepHandler):
             resolver.set_runtime_var(store_as, result)
             logger.debug("[eval] 结果存储到变量 %s: %.80s", store_as, result)
 
-        return True, ""
+        # 返回结果值，用于日志显示
+        result_str = str(result) if result is not None else ""
+        return True, result_str[:100] if result_str else ""
 
 
 class ScreenshotHandler(StepHandler):
@@ -947,13 +959,14 @@ class OcrHandler(StepHandler):
         store_as = params.get("store_as")
         target_selector = params.get("target_selector", "")
         old = params.get("old", False)
+        char_range = params.get("char_range")
 
         if not selector:
             return False, "ocr 步骤需要 selector（验证码图片选择器）"
 
         timeout = step.timeout or 10000
         ctx = await self._resolve_frame(page, step)
-        logger.info("[ocr] selector=%s, target=%s, old=%s", selector, target_selector or "(无)", old)
+        logger.info("[ocr] selector=%s, target=%s, old=%s, char_range=%s", selector, target_selector or "(无)", old, char_range)
 
         # 查找验证码图片元素
         element = await self._find_element(ctx, selector, timeout)
@@ -967,9 +980,32 @@ class OcrHandler(StepHandler):
         except Exception as e:
             return False, f"验证码截图失败: {e}"
 
+        # 保存验证码截图到 debug 目录
+        screenshot_url = ""
+        try:
+            date_dir = PROJECT_ROOT / "debug" / datetime.now().strftime("%Y-%m-%d")
+            date_dir.mkdir(parents=True, exist_ok=True)
+            task_id = resolver.config.task_id or "unknown"
+            step_id = step.id or "ocr"
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            filename = f"{task_id}_{step_id}_{stamp}.png"
+            local_path = date_dir / filename
+            local_path.write_bytes(img_bytes)
+            screenshot_url = f"/debug/{datetime.now().strftime('%Y-%m-%d')}/{filename}"
+            logger.info("[ocr] 验证码截图已保存: %s", screenshot_url)
+        except Exception as e:
+            logger.warning("[ocr] 保存验证码截图失败: %s", e)
+
         # OCR 识别（识别失败也需要 schedule_cleanup）
         try:
-            ocr = self._get_ocr(old=old)
+            if char_range is not None:
+                # 有字符范围限制时创建独立实例，避免 set_ranges 污染缓存实例
+                import ddddocr
+                ocr = ddddocr.DdddOcr(old=old, show_ad=False)
+                ocr.set_ranges(char_range)
+                logger.debug("[ocr] set_ranges(%s)", char_range)
+            else:
+                ocr = self._get_ocr(old=old)
             result = ocr.classification(img_bytes)
         except Exception as e:
             self.schedule_cleanup(old)
@@ -1001,7 +1037,11 @@ class OcrHandler(StepHandler):
                     )
                     logger.info("[ocr] 强制输入成功 → %s, 值='%s'", target_selector, result)
 
-            return True, result
+            # 返回结果，包含截图 URL
+            message = result
+            if screenshot_url:
+                message += f" 截图: {screenshot_url}"
+            return True, message
         finally:
             self.schedule_cleanup(old)
 
