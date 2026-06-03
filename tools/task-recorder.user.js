@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Campus-Auth 任务录制器
 // @namespace    https://github.com/Misyra/Campus-Auth
-// @version      3.8.0
+// @version      3.9.3
 // @description  可视化选取校园网登录页面元素，自动生成任务 JSON 或结构化文档
 // @author       Misyra
 // @match        http://*/*
@@ -19,7 +19,7 @@
 
   // ==================== 配置 ====================
 
-  const VERSION = "3.8.0"; // 同步修改顶部 @version
+  const VERSION = "3.9.3"; // 同步修改顶部 @version
 
   const STEP_TYPES = {
     username: { category: "basic", label: "账号输入框", icon: "👤", color: "#4CAF50", primary: true, hint: "点击页面上真实的账号输入框（不是旁边的文字标签），支持自动检测隐藏输入框" },
@@ -40,10 +40,10 @@
   };
 
   const CAPTCHA_TYPES = [
-    { value: "4digit", label: "4位纯数字" },
-    { value: "4char", label: "4位字母+数字" },
-    { value: "math", label: "数学运算 (如 1+2=?)" },
-    { value: "other", label: "其他（请描述）" },
+    { value: "4digit", label: "4位纯数字", charRange: "纯数字" },
+    { value: "4char", label: "4位字母+数字", charRange: "字母和数字" },
+    { value: "math", label: "数学运算 (如 1+2=?)", charRange: "数字和 +-*/=xX÷ 运算符" },
+    { value: "other", label: "其他（请描述）", charRange: "" },
   ];
 
   // ==================== 状态 ====================
@@ -803,6 +803,26 @@
       || name.includes("verify") || id.includes("verify");
   }
 
+  // 检测元素是否是数学验证码（文本形式的算式）
+  // 支持多种常见格式：
+  //   - "48 - 18 = ?"  "3+5=?"  "12 × 3 = ?"
+  //   - "48 - 18 ="  "3+5="
+  //   - "48 - 18"  "3+5"（无等号）
+  //   - "计算: 48 - 18 = ?"（带前缀文字）
+  function isMathCaptchaElement(el) {
+    const tag = el.tagName.toLowerCase();
+    // 图片/canvas/svg 元素不是数学验证码
+    if (tag === "img" || tag === "canvas" || tag === "svg") return false;
+    // 检查文本内容是否包含数学算式
+    const text = (el.textContent || el.innerText || "").trim();
+    if (!text) return false;
+    // 匹配常见数学验证码格式：数字 运算符 数字，可选等号和问号
+    // 支持运算符：+ - × ÷ * /
+    // 支持有无空格、有无等号、有无问号
+    return /\d+\s*[+\-×÷*\/]\s*\d+/.test(text);
+  }
+
+
   function detectHiddenRealInput(el, stepType) {
     // 策略1: 所选元素本身隐藏（理论不可达，但做防御）
     if (isElementHidden(el) && stepType !== "click" && stepType !== "submit") {
@@ -1420,6 +1440,14 @@
     const type = state.currentStepType;
 
     if (type === "captcha_img") {
+      // 检测是否是数学验证码（文本形式）
+      if (isMathCaptchaElement(el)) {
+        // 数学验证码：记录为验证码容器，等待用户点击输入框
+        addStepFromElement(type, el, info, "数学验证码容器");
+        selectStepType("captcha_input");
+        setStatus("已记录数学验证码容器，现在点击验证码输入框", "recording");
+        return;
+      }
       // 验证码图片：记录后提示选输入框
       addStepFromElement(type, el, info, "验证码图片");
       selectStepType("captcha_input");
@@ -1677,6 +1705,13 @@
       selectStepType("captcha_input");
       return;
     }
+    // 数学验证码（文本形式，如 "48 - 18 = ?"）
+    if (isMathCaptchaElement(el)) {
+      addStepFromElement("captcha_img", el, info, "数学验证码容器");
+      selectStepType("captcha_input");
+      setStatus("已检测到数学验证码，请点击验证码输入框", "recording");
+      return;
+    }
     // input/select → 不处理 click，留给 input/change 事件捕获变动后的真实元素
     if (tag === "input" || tag === "select" || tag === "textarea") return;
     if (tag === "label" && el.htmlFor) return;
@@ -1856,6 +1891,8 @@
         <select class="ca-form-input" id="ca-captcha-type">
           ${CAPTCHA_TYPES.map(t => `<option value="${t.value}">${t.label}</option>`).join("")}
         </select>
+        <label>OCR 字符范围 <span style="color:#999;font-size:12px">（限定识别字符，提高准确度）</span></label>
+        <input class="ca-form-input" type="text" id="ca-captcha-char-range" placeholder="如：纯数字、字母和数字、数字和运算符" />
         <label>自定义描述（可选）</label>
         <input class="ca-form-input" type="text" id="ca-captcha-desc" placeholder="如：四位数字验证码" />
         <div class="ca-modal-actions">
@@ -1866,6 +1903,17 @@
     `;
     state.panel.appendChild(overlay);
 
+    // 切换类型时自动填入默认字符范围
+    const typeSelect = overlay.querySelector("#ca-captcha-type");
+    const charRangeInput = overlay.querySelector("#ca-captcha-char-range");
+    typeSelect.addEventListener("change", () => {
+      const t = CAPTCHA_TYPES.find(c => c.value === typeSelect.value);
+      if (t && t.charRange !== "") charRangeInput.value = String(t.charRange);
+    });
+    // 初始化：填入第一个类型的默认值
+    const initType = CAPTCHA_TYPES[0];
+    if (initType && initType.charRange !== "") charRangeInput.value = String(initType.charRange);
+
     overlay.querySelector("#ca-captcha-cancel").addEventListener("click", () => {
       overlay.remove();
       state.recording = true;
@@ -1874,19 +1922,22 @@
     overlay.querySelector("#ca-captcha-ok").addEventListener("click", () => {
       const captchaType = overlay.querySelector("#ca-captcha-type").value;
       const customDesc = overlay.querySelector("#ca-captcha-desc").value.trim();
+      const charRange = charRangeInput.value.trim();
       overlay.remove();
 
       const desc = customDesc || CAPTCHA_TYPES.find(t => t.value === captchaType)?.label || captchaType;
       addStepFromElement("captcha_input", el, info, `验证码输入: ${desc}`);
 
-      // 记录验证码类型到最近的 captcha_img 步骤
+      // 记录验证码类型和字符范围到最近的 captcha_img 步骤
       const imgStep = [...state.steps].reverse().find(s => s.type === "captcha_img");
       if (imgStep) {
         imgStep.captchaType = captchaType;
+        if (charRange) imgStep.charRange = charRange;
       }
       const inputStep = state.steps[state.steps.length - 1];
       if (inputStep) {
         inputStep.captchaType = captchaType;
+        if (charRange) inputStep.charRange = charRange;
       }
     });
   }
@@ -2128,7 +2179,9 @@
     prompt += `| username | input | value: {{USERNAME}} |\n`;
     prompt += `| password | input | value: {{PASSWORD}}（执行器自动处理隐藏输入框，无需 force 字段） |\n`;
     prompt += `| carrier | select / click_select / click_select(按钮组) | value: {{ISP}}（原生 select → select，自定义 div → click_select，按钮组 → click_select 按文本匹配） |\n`;
-    prompt += `| captcha_img + captcha_input | ocr | 合并为一个 ocr 步骤，selector=图片, target_selector=输入框 |\n`;
+    prompt += `| captcha_img + captcha_input (普通图片验证码) | ocr | 合并为一个 ocr 步骤，selector=图片, target_selector=输入框 |\n`;
+    prompt += `| captcha_img + captcha_input (文本数学验证码) | eval | 直接读取文本算式并计算结果填入（如 <div>48-18=?</div>） |\n`;
+    prompt += `| captcha_img + captcha_input (图片数学验证码) | ocr + eval | 两步：ocr 识别图片存入变量 store_as，eval 从变量计算结果并填入（如 canvas/img 显示算式图片） |\n`;
     prompt += `| submit | click | — |\n`;
     prompt += `| checkbox | click | 勾选复选框/用户协议 |\n`;
     prompt += `| smart_detect | 自动分类 | 智能检测模式：自动识别账号/密码/勾选/提交/点击等 |\n`;
@@ -2174,14 +2227,97 @@
     }
 
     // 如果有验证码，补充说明
-    const captchaSteps = state.steps.filter(s => s.type === "captcha_input" && s.captchaType);
+    const captchaSteps = state.steps.filter(s => (s.type === "captcha_input" || s.type === "eval") && s.captchaType);
     if (captchaSteps.length > 0) {
-      prompt += `## 验证码说明\n\n`;
+      prompt += `## 验证码处理指南\n\n`;
       for (const cs of captchaSteps) {
         const label = CAPTCHA_TYPES.find(t => t.value === cs.captchaType)?.label || cs.captchaType;
-        prompt += `- 验证码类型: ${label}\n`;
+        prompt += `### 验证码类型: ${label}\n\n`;
         if (cs.captchaType === "math") {
-          prompt += `- 如果识别率不高，可尝试切换 ocr 步骤的 old 参数（true/false）\n`;
+          // 检查验证码图片元素是文本还是图片
+          const imgStep = [...state.steps].reverse().find(s => s.type === "captcha_img");
+          const imgTag = imgStep?.tag?.toLowerCase() || "";
+          const captchaSelector = imgStep?.bestSelector || "";
+          const inputSelector = cs.bestSelector || "";
+
+          if (imgTag === "img" || imgTag === "canvas" || imgTag === "svg") {
+            const charRangeDesc = imgStep?.charRange || "数字和 +-*/=xX÷ 运算符";
+            prompt += `**图片形式数学验证码**（需要 OCR + eval 两步）\n\n`;
+            prompt += `第一步：ocr 步骤识别图片\n`;
+            prompt += `\n`;
+            prompt += `char_range 参数（限定识别字符，提高准确度）：\n`;
+            prompt += `| 值 | 字符集 |\n`;
+            prompt += `|---|--------|\n`;
+            prompt += `| 0 | 纯数字 0-9 |\n`;
+            prompt += `| 1 | 纯小写英文 a-z |\n`;
+            prompt += `| 2 | 纯大写英文 A-Z |\n`;
+            prompt += `| 3 | 大写 + 小写英文 |\n`;
+            prompt += `| 4 | 小写英文 + 数字 |\n`;
+            prompt += `| 5 | 大写英文 + 数字 |\n`;
+            prompt += `| 6 | 大写 + 小写英文 + 数字 |\n`;
+            prompt += `| 7 | 默认字符库 |\n`;
+            prompt += `| 字符串 | 自定义字符集，如 "0123456789"、"0123456789+-*/=xX÷" |\n`;
+            prompt += `\n`;
+            prompt += `\`\`\`json\n`;
+            prompt += `{\n`;
+            prompt += `  "id": "ocr_captcha",\n`;
+            prompt += `  "type": "ocr",\n`;
+            prompt += `  "selector": "${captchaSelector}",\n`;
+            prompt += `  "store_as": "captcha_expr",\n`;
+            prompt += `  "char_range": "0123456789+-*/=xX÷",\n`;
+            prompt += `  "old": true\n`;
+            prompt += `}\n`;
+            prompt += `\`\`\`\n\n`;
+            prompt += `字符范围说明：${charRangeDesc}\n\n`;
+            prompt += `第二步：eval 步骤计算结果并填入\n`;
+            prompt += `\n`;
+            prompt += `eval 脚本采用多重匹配策略：\n`;
+            prompt += `1. 字符修正（x→*, o→0, l→1, ÷→/, 中文数字→阿拉伯数字）\n`;
+            prompt += `2. 末尾运算符修复：如 "2217-" 尝试拆分为 "22-17"\n`;
+            prompt += `3. 标准匹配：数字 运算符 数字\n`;
+            prompt += `4. 宽松匹配兜底：分别提取数字和运算符，按出现顺序组合（处理运算符完全丢失，如 "2217"）\n`;
+            prompt += `\n`;
+            prompt += `\`\`\`json\n`;
+            prompt += `{\n`;
+            prompt += `  "id": "solve_captcha",\n`;
+            prompt += `  "type": "eval",\n`;
+            prompt += `  "script": "() => { let expr = '{{captcha_expr}}'; const cnMap={'一':'1','二':'2','三':'3','四':'4','五':'5','六':'6','七':'7','八':'8','九':'9','零':'0'}; expr=expr.replace(/[xX]/g,'*').replace(/[oO]/g,'0').replace(/[lI|]/g,'1').replace(/记/g,'1').replace(/÷/g,'/').replace(/[一二三四五六七八九零]/g,c=>cnMap[c]||c); const tail=expr.match(/^(\\\\d+)([+\\\\-*\\\\/])$/); if(tail){const n=tail[1],op=tail[2];const mid=Math.ceil(n.length/2);expr=n.slice(0,mid)+op+n.slice(mid);} let m=expr.match(/(\\\\d+)\\\\s*([+\\\\-*\\\\/])\\\\s*(\\\\d+)/); if(!m){const ops=expr.match(/[+\\\\-*\\\\/]/g);const nums=expr.match(/\\\\d+/g);if(nums&&nums.length>=2&&ops&&ops.length>=1)m=[null,nums[0],ops[0],nums[1]];} if(!m)return'NO_MATCH:'+expr; const a=parseInt(m[1]),b=parseInt(m[3]),op=m[2]; let r; if(op==='+')r=a+b; else if(op==='-')r=a-b; else if(op==='*')r=a*b; else r=b!==0?Math.floor(a/b):0; const v=r.toString(); const el=document.querySelector('${inputSelector}'); if(el){el.value=v;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));} return v; }",\n`;
+            prompt += `  "store_as": "captcha_result"\n`;
+            prompt += `}\n`;
+            prompt += `\`\`\`\n\n`;
+            prompt += `**OCR 常见错误及修正策略**：\n`;
+            prompt += `- 字符误识别：\`x\`/\`X\`→\`*\`、\`o\`/\`O\`→\`0\`、\`l\`/\`I\`/\`|\`→\`1\`、\`÷\`→\`/\`、中文数字→阿拉伯数字\n`;
+            prompt += `- 运算符错位：\`22-17\`→\`2217-\`（运算符跑到末尾），脚本自动拆分数字并插入运算符\n`;
+            prompt += `- 运算符丢失：\`22-17\`→\`2217\`，宽松匹配兜底提取数字和运算符重组\n`;
+          } else {
+            prompt += `**文本形式数学验证码**（直接用 eval 步骤）\n\n`;
+            prompt += `\`\`\`json\n`;
+            prompt += `{\n`;
+            prompt += `  "id": "solve_captcha",\n`;
+            prompt += `  "type": "eval",\n`;
+            prompt += `  "script": "() => { const exprElem = document.querySelector('${captchaSelector}'); if (!exprElem) return 'NO_ELEM'; const text = (exprElem.textContent || exprElem.innerText || '').trim(); if (!text) return 'NO_TEXT'; const match = text.match(/(\\\\d+)\\\\s*([+\\\\-*\\\\/])\\\\s*(\\\\d+)/); if (!match) return 'NO_MATCH:' + text; const a = parseInt(match[1]); const b = parseInt(match[3]); const op = match[2]; let result; if (op === '+') result = a + b; else if (op === '-') result = a - b; else if (op === '*') result = a * b; else if (op === '/') result = b !== 0 ? Math.floor(a / b) : 0; else result = 0; const finalResult = result.toString(); const input = document.querySelector('${inputSelector}'); if (input) { input.value = finalResult; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); } return finalResult; }",\n`;
+            prompt += `  "store_as": "captcha_result"\n`;
+            prompt += `}\n`;
+            prompt += `\`\`\`\n`;
+          }
+        } else {
+          // 非 math 类型：普通图片验证码，ocr 识别后直接填入输入框
+          const imgStep = [...state.steps].reverse().find(ss => ss.type === "captcha_img");
+          const captchaSelector = imgStep?.bestSelector || "";
+          const inputSelector = cs.bestSelector || "";
+          const charRangeDesc = imgStep?.charRange || cs.charRange || "";
+          // 自然语言 → ddddocr set_ranges 示例值
+          const rangeExamples = { "纯数字": "0", "字母和数字": "6" };
+          const charRangeExample = charRangeDesc ? (rangeExamples[charRangeDesc] || `"根据描述选择 ddddocr set_ranges 参数或自定义字符字符串"`) : null;
+          const charRangeLine = charRangeExample ? `,\n  "char_range": ${charRangeExample}` : "";
+          prompt += `\`\`\`json\n`;
+          prompt += `{\n`;
+          prompt += `  "id": "ocr_captcha",\n`;
+          prompt += `  "type": "ocr",\n`;
+          prompt += `  "selector": "${captchaSelector}",\n`;
+          prompt += `  "target_selector": "${inputSelector}"${charRangeLine}\n`;
+          prompt += `}\n`;
+          prompt += `\`\`\`\n`;
         }
       }
       prompt += `\n`;
@@ -2294,6 +2430,19 @@
       }
       if (s.captchaType) {
         prompt += `- 验证码类型: ${CAPTCHA_TYPES.find(t => t.value === s.captchaType)?.label || s.captchaType}\n`;
+        if (s.charRange !== undefined && s.charRange !== "") {
+          prompt += `- OCR 字符范围 (char_range): ${s.charRange}\n`;
+        }
+        if (s.captchaType === "math") {
+          // 检查验证码图片元素是文本还是图片
+          const imgStep = [...state.steps].reverse().find(ss => ss.type === "captcha_img");
+          const imgTag = imgStep?.tag?.toLowerCase() || "";
+          if (imgTag === "img" || imgTag === "canvas" || imgTag === "svg") {
+            prompt += `- ⚠️ 图片形式数学验证码：需要 ocr + eval 两步（ocr 识别存变量，eval 计算填结果）\n`;
+          } else {
+            prompt += `- 文本形式数学验证码：直接用 eval 步骤读取并计算\n`;
+          }
+        }
       }
       if (s.type === "eval" && (s.code || s.script)) {
         prompt += `- JS 代码:\n\`\`\`js\n${s.script || s.code}\n\`\`\`\n`;

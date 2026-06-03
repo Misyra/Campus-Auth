@@ -1,0 +1,78 @@
+{
+  "name": "测试2",
+  "description": "适用于含数学运算验证码的校园网认证页面，运营商为按钮组形式，需勾选用户协议。",
+  "url": "{{LOGIN_URL}}",
+  "timeout": 30000,
+  "variables": {
+    "username": "{{USERNAME}}",
+    "password": "{{PASSWORD}}",
+    "isp": "{{ISP}}"
+  },
+  "steps": [
+    {
+      "id": "select_isp",
+      "type": "click_select",
+      "description": "选择运营商（按钮组）",
+      "selector": ".isp-btn",
+      "value": "{{isp}}",
+      "option_selector": "",
+      "timeout": 10000
+    },
+    {
+      "id": "input_username",
+      "type": "input",
+      "description": "输入账号",
+      "selector": "#username",
+      "value": "{{username}}",
+      "clear": true,
+      "timeout": 10000
+    },
+    {
+      "id": "input_password",
+      "type": "input",
+      "description": "输入密码",
+      "selector": "#password",
+      "value": "{{password}}",
+      "clear": true,
+      "timeout": 10000
+    },
+    {
+      "id": "ocr_captcha",
+      "type": "ocr",
+      "description": "识别数学验证码图片",
+      "selector": "#captchaCanvas",
+      "store_as": "captcha_expr",
+      "char_range": "0123456789+-*/=xX÷",
+      "old": false,
+      "timeout": 15000
+    },
+    {
+      "id": "solve_captcha",
+      "type": "eval",
+      "description": "计算数学验证码结果并填入",
+      "script": "() => { let expr = '{{captcha_expr}}'; const cnMap={'一':'1','二':'2','三':'3','四':'4','五':'5','六':'6','七':'7','八':'8','九':'9','零':'0'}; expr = expr.replace(/[xX]/g, '*').replace(/[oO]/g, '0').replace(/[lI|]/g, '1').replace(/记/g, '1').replace(/÷/g, '/').replace(/[一二三四五六七八九零]/g, c => cnMap[c] || c); const tail = expr.match(/^(\\d+)([+\\-*\\/])$/); if (tail) { const n = tail[1], op = tail[2]; const mid = Math.ceil(n.length / 2); expr = n.slice(0, mid) + op + n.slice(mid); } let match = expr.match(/(\\d+)\\s*([+\\-*\\/])\\s*(\\d+)/); if (!match) { const ops = expr.match(/[+\\-*\\/]/g); const nums = expr.match(/\\d+/g); if (nums && nums.length >= 2 && ops && ops.length >= 1) match = [null, nums[0], ops[0], nums[1]]; } if (!match) return 'NO_MATCH:' + expr; const a = parseInt(match[1]); const b = parseInt(match[3]); const op = match[2]; let result; if (op === '+') result = a + b; else if (op === '-') result = a - b; else if (op === '*') result = a * b; else if (op === '/') result = b !== 0 ? Math.floor(a / b) : 0; else result = 0; const finalResult = result.toString(); const input = document.querySelector('#captchaInput'); if (input) { input.value = finalResult; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); } return finalResult; }",
+      "store_as": "captcha_result"
+    },
+    {
+      "id": "agree_checkbox",
+      "type": "click",
+      "description": "勾选用户协议",
+      "selector": "#agreeCheck",
+      "timeout": 5000
+    },
+    {
+      "id": "click_login",
+      "type": "click",
+      "description": "点击登录按钮",
+      "selector": "#loginBtn, .login-btn, button:has-text('登录')",
+      "timeout": 10000
+    }
+  ],
+  "on_success": {
+    "message": "登录成功，网络已连通"
+  },
+  "on_failure": {
+    "message": "登录失败，请检查账号/密码/运营商或验证码",
+    "screenshot": true
+  }
+}
