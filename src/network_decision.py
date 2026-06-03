@@ -62,6 +62,8 @@ def check_network_status(config: dict) -> tuple[bool, str]:
         return (False, "all_disabled")
 
     test_sites = monitor_config.get("ping_targets", None)
+    if isinstance(test_sites, str):
+        test_sites = [s.strip() for s in test_sites.split(",") if s.strip()]
     if test_sites and isinstance(test_sites[0], str):
         from src.utils.network_helpers import parse_host_port
         try:

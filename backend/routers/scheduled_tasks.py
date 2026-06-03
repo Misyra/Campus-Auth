@@ -76,7 +76,7 @@ def create_scheduled_task(payload: dict, request: Request) -> ActionResponse:
             "hour": schedule.get("hour", 0),
             "minute": schedule.get("minute", 0),
         },
-        "timeout": payload.get("timeout", 60),
+        "timeout": max(5, min(3600, int(payload.get("timeout", 60)))),
     }
 
     ok, message = scheduler.save_task(task_id, config)
@@ -121,7 +121,7 @@ def update_scheduled_task(task_id: str, payload: dict, request: Request) -> Acti
             "hour": schedule.get("hour", 0),
             "minute": schedule.get("minute", 0),
         },
-        "timeout": payload.get("timeout", existing.get("timeout", 60)),
+        "timeout": max(5, min(3600, int(payload.get("timeout", existing.get("timeout", 60))))),
         "last_run": existing.get("last_run"),
         "last_status": existing.get("last_status"),
     }

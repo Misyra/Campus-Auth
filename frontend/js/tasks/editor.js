@@ -102,7 +102,7 @@ export const editorTaskMethods = {
         this.dangerCountdown--;
         if (this.dangerCountdown <= 0) {
           clearInterval(timer);
-          this.dangerCountdown = 0;
+          this._cancelDangerConfirm('timeout');
         }
       }, 1000);
       this._dangerTimer = timer;
