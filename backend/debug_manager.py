@@ -22,7 +22,7 @@ from src.playwright_worker import (
     CMD_DEBUG_STOP,
     get_worker,
 )
-from src.utils.env import build_login_env_vars
+from src.utils.env import build_login_template_vars
 from src.utils.logging import get_logger
 
 from .debug_session import (
@@ -139,15 +139,15 @@ class DebugSessionManager:
         if not task:
             raise HTTPException(status_code=404, detail="任务不存在")
 
-        # 构建环境变量（复用 service 的运行时配置）
+        # 构建模板变量（复用 service 的运行时配置）
         runtime_config = monitor_service.get_runtime_config()
-        env_vars = build_login_env_vars(
+        template_vars = build_login_template_vars(
             runtime_config, task.url, runtime_config.get("custom_variables", {})
         )
 
         # 解析任务 URL
         url = task.url or ""
-        for k, v in env_vars.items():
+        for k, v in template_vars.items():
             url = url.replace("{{" + k + "}}", v)
 
         browser_settings = runtime_config.get("browser_settings", {})
@@ -159,7 +159,7 @@ class DebugSessionManager:
             "config": runtime_config,
             "task_url": url if url else "",
             "task_data": task.to_dict(),
-            "env_vars": env_vars,
+            "template_vars": template_vars,
             "screenshot_dir": str(self._temp_dir),
             "default_timeout": browser_timeout,
             "navigation_timeout": navigation_timeout,

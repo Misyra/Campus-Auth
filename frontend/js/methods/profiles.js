@@ -141,6 +141,8 @@ export const profileMethods = {
     );
   },
   async toggleAutoSwitch() {
+    if (this._autoSwitchInFlight) return;
+    this._autoSwitchInFlight = true;
     const newState = !this.autoSwitch;
     try {
       const { data } = await this.$api.post(`/api/profiles/auto-switch?enabled=${newState}`);
@@ -155,6 +157,8 @@ export const profileMethods = {
     } catch (error) {
       this.frontendLogger.error('profiles', '切换自动切换异常', error);
       this.toastOnly(false, '切换自动切换失败');
+    } finally {
+      this._autoSwitchInFlight = false;
     }
   },
 };

@@ -405,7 +405,7 @@ class PlaywrightWorker:
         config = data.get("config", {})
         task_url = data.get("task_url", "")
         task_data = data.get("task_data", {})
-        env_vars = data.get("env_vars", {})
+        template_vars = data.get("template_vars", data.get("env_vars", {}))
         screenshot_dir = data.get("screenshot_dir", "")
         default_timeout = data.get("default_timeout", TaskExecutor.DEFAULT_STEP_TIMEOUT)
         navigation_timeout = data.get("navigation_timeout", TaskExecutor.DEFAULT_NAVIGATION_TIMEOUT)
@@ -437,7 +437,7 @@ class PlaywrightWorker:
                 task_config = TaskConfig.from_dict(task_data)
                 executor = TaskExecutor(
                     task_config,
-                    env_vars,
+                    template_vars,
                     screenshot_dir=Path(screenshot_dir) if screenshot_dir else None,
                     default_timeout=default_timeout,
                     navigation_timeout=navigation_timeout,
@@ -931,6 +931,7 @@ def _cleanup_windows() -> None:
             return
 
         pids_to_kill: list[str] = []
+        empty_path_pids: list[str] = []
         for line in result.stdout.strip().splitlines():
             line = line.strip()
             if not line or line.startswith("#") or "ProcessId" in line:
@@ -941,9 +942,33 @@ def _cleanup_windows() -> None:
                 continue
             pid_str = parts[0].strip().strip('"')
             exe_path = parts[1].strip().strip('"')
-            # 仅匹配 Playwright 管理的 Chromium（路径包含 ms-playwright）
-            if "ms-playwright" in exe_path.lower() and pid_str.isdigit():
+            if not pid_str.isdigit():
+                continue
+            if exe_path and "ms-playwright" in exe_path.lower():
                 pids_to_kill.append(pid_str)
+            elif not exe_path:
+                # 标准用户下 ExecutablePath 可能为空，记录备用
+                empty_path_pids.append(pid_str)
+
+        # 如果没有精确匹配的进程，但有空路径的 chrome.exe，尝试通过命令行参数匹配
+        if not pids_to_kill and empty_path_pids:
+            for pid in empty_path_pids:
+                try:
+                    cmd_result = subprocess.run(
+                        [
+                            "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+                            f"(Get-CimInstance Win32_Process -Filter \"ProcessId={pid}\").CommandLine",
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                        creationflags=CREATE_NO_WINDOW_FLAG,
+                    )
+                    cmdline = (cmd_result.stdout or "").strip().lower()
+                    if "ms-playwright" in cmdline:
+                        pids_to_kill.append(pid)
+                except Exception:
+                    pass
 
         if not pids_to_kill:
             logger.debug("未发现孤儿 Playwright Chromium 进程")

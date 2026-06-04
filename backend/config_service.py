@@ -414,6 +414,8 @@ def save_config_combined(
                 "stealth_mode",
                 "stealth_custom_script",
                 "custom_variables",
+                "browser_viewport_width",
+                "browser_viewport_height",
             ],
         )
         # 需要归一化处理的 profile 字段

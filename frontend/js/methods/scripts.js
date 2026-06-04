@@ -167,7 +167,9 @@ export const scriptMethods = {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${taskId}.py`;
+      // 根据 binary_path 推断文件扩展名
+      const ext = this._inferScriptExtension(data.binary_path, data.content);
+      a.download = `${taskId}${ext}`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
@@ -178,7 +180,7 @@ export const scriptMethods = {
   importScript() {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.py,.sh,.bat,.exe,.txt';
+    input.accept = '.py,.sh,.bat,.ps1,.txt';
     input.onchange = (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -265,5 +267,24 @@ print(f"HTTP {resp.status_code}")
     } catch (error) {
       this.toastOnly(false, extractApiError(error, '设置失败'));
     }
+  },
+
+  // 根据 binary_path 和脚本内容推断导出文件扩展名
+  _inferScriptExtension(binaryPath, content) {
+    if (binaryPath) {
+      const base = binaryPath.split(/[/\\]/).pop().toLowerCase();
+      if (base.startsWith('python') || base === 'py' || base.endsWith('.exe') && base.includes('python')) return '.py';
+      if (base === 'bash' || base === 'sh' || base === 'zsh') return '.sh';
+      if (base === 'cmd' || base === 'cmd.exe' || base === 'bat') return '.bat';
+      if (base === 'powershell' || base === 'pwsh') return '.ps1';
+    }
+    // 从 shebang 推断
+    if (content) {
+      const firstLine = content.split('\n')[0];
+      if (firstLine.includes('python')) return '.py';
+      if (firstLine.includes('bash') || firstLine.includes('sh')) return '.sh';
+      if (firstLine.includes('powershell') || firstLine.includes('pwsh')) return '.ps1';
+    }
+    return '.py';
   },
 };
