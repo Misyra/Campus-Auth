@@ -38,7 +38,7 @@ def get_scheduled_task(task_id: str, request: Request) -> dict[str, Any]:
 
 
 @router.post("/api/scheduled-tasks", response_model=ActionResponse)
-def create_scheduled_task(payload: dict, request: Request) -> ActionResponse:
+async def create_scheduled_task(payload: dict, request: Request) -> ActionResponse:
     """创建定时任务。"""
     scheduler = _get_scheduler(request)
 
@@ -88,7 +88,7 @@ def create_scheduled_task(payload: dict, request: Request) -> ActionResponse:
 
 
 @router.put("/api/scheduled-tasks/{task_id}", response_model=ActionResponse)
-def update_scheduled_task(task_id: str, payload: dict, request: Request) -> ActionResponse:
+async def update_scheduled_task(task_id: str, payload: dict, request: Request) -> ActionResponse:
     """更新定时任务。"""
     scheduler = _get_scheduler(request)
 
@@ -159,7 +159,7 @@ async def run_scheduled_task(task_id: str, request: Request) -> ActionResponse:
 
 
 @router.post("/api/scheduled-tasks/{task_id}/toggle", response_model=ActionResponse)
-def toggle_scheduled_task(task_id: str, request: Request) -> ActionResponse:
+async def toggle_scheduled_task(task_id: str, request: Request) -> ActionResponse:
     """启用/禁用定时任务。"""
     scheduler = _get_scheduler(request)
     task = scheduler.get_task(task_id)
