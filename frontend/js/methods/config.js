@@ -34,7 +34,7 @@ export const configMethods = {
       return;
     }
     if (!this.config.enable_tcp_check && !this.config.enable_http_check && !(this.config.portal_check_urls && this.config.portal_check_urls.trim())) {
-      this.notify(false, '至少需要启用一种网络检测方式（TCP / HTTP / Captive Portal）');
+      this.toastOnly(false, '至少需要启用一种网络检测方式（TCP / HTTP / Captive Portal）');
       return;
     }
 
@@ -53,12 +53,12 @@ export const configMethods = {
         await this.fetchProfiles();
       } else {
         this.frontendLogger.warn('config', '保存配置被拒绝: ' + data.message);
-        this.notify(false, data.message);
+        this.toastOnly(false, data.message);
       }
     } catch (error) {
       const msg = extractApiError(error, '保存失败');
       this.frontendLogger.error('config', '保存配置失败', error);
-      this.notify(false, msg);
+      this.toastOnly(false, msg);
     } finally {
       this.busy.save = false;
     }
@@ -95,16 +95,16 @@ export const configMethods = {
       const { data } = await this.$api.post('/api/backup/create');
       if (data.success) {
         this.frontendLogger.info('backup', '备份创建成功: ' + data.message);
-        this.notify(true, data.message);
+        this.toastOnly(true, data.message);
         await this.fetchBackups();
       } else {
         this.frontendLogger.warn('backup', '备份创建失败: ' + data.message);
-        this.notify(false, data.message);
+        this.toastOnly(false, data.message);
       }
     } catch (error) {
       const msg = extractApiError(error, '创建备份失败');
       this.frontendLogger.error('backup', '备份创建异常: ' + msg, error);
-      this.notify(false, msg);
+      this.toastOnly(false, msg);
     } finally {
       this.busy.backup = false;
     }
@@ -116,18 +116,18 @@ export const configMethods = {
       const { data } = await this.$api.post(`/api/backup/restore/${filename}`);
       if (data.success) {
         this.frontendLogger.info('backup', '备份恢复成功: ' + filename);
-        this.notify(true, data.message);
+        this.toastOnly(true, data.message);
         await this.fetchConfig(true);
         await this.fetchProfiles();
         await this.fetchBackups();
       } else {
         this.frontendLogger.warn('backup', '备份恢复失败: ' + data.message);
-        this.notify(false, data.message);
+        this.toastOnly(false, data.message);
       }
     } catch (error) {
       const msg = extractApiError(error, '恢复备份失败');
       this.frontendLogger.error('backup', '备份恢复异常: ' + msg, error);
-      this.notify(false, msg);
+      this.toastOnly(false, msg);
     }
   },
   exportBackup(filename) {
@@ -149,12 +149,12 @@ export const configMethods = {
         await this.fetchBackups();
       } else {
         this.frontendLogger.warn('backup', '备份删除失败: ' + data.message);
-        this.notify(false, data.message);
+        this.toastOnly(false, data.message);
       }
     } catch (error) {
       const msg = extractApiError(error, '删除备份失败');
       this.frontendLogger.error('backup', '备份删除异常: ' + msg, error);
-      this.notify(false, msg);
+      this.toastOnly(false, msg);
     }
   },
 };

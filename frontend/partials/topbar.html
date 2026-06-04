@@ -24,12 +24,16 @@
           <button class="btn btn-text btn-xs" @click="notifications = []">清空</button>
         </div>
         <div v-if="!notifications.length" class="notification-empty">暂无通知</div>
-        <div v-for="n in notifications" :key="n.time + n.message" class="notification-item">
+        <div v-for="n in notifications" :key="n.time + n.message" class="notification-item" :class="n.success ? 'notify-success' : 'notify-error'">
           <div class="notification-item-header">
-            <span :style="{color: n.success ? 'var(--success)' : 'var(--error)'}">{{ n.success ? '✓' : '✗' }}</span>
+            <span class="notify-icon" v-if="n.icon" v-html="n.icon"></span>
+            <span class="notify-label" v-if="n.label">{{ n.label }}</span>
             <span class="time">{{ n.time }}</span>
           </div>
-          <div class="notification-item-body">{{ n.message }}</div>
+          <div class="notification-item-body">
+            {{ n.message }}
+            <a v-if="n.action" class="notify-action" @click.prevent="navigateTo(n.action.page); showNotifications = false">{{ n.action.label }}</a>
+          </div>
         </div>
       </div>
     </div>

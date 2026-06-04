@@ -5,13 +5,13 @@ export const statusMethods = {
       this.status = data;
       if (this.fetchStatusFailCount > 0) {
         this.fetchStatusFailCount = 0;
-        this.notify(true, '已重新连接到服务器');
+        this.notify(true, '已重新连接到服务器', 'network');
       }
     } catch (error) {
       this.fetchStatusFailCount = (this.fetchStatusFailCount || 0) + 1;
       this.frontendLogger.warn('status', '获取状态失败', error);
       if (this.fetchStatusFailCount === 1) {
-        this.notify(false, '无法连接到服务器，请检查后端是否已关闭');
+        this.notify(false, '无法连接到服务器，请检查后端是否已关闭', 'network');
       }
     }
   },

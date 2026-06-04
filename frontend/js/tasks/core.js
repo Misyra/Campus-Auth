@@ -50,11 +50,11 @@ export const coreTaskMethods = {
         this.frontendLogger.info('tasks', `活动任务已设置: ${taskId}`);
       } else {
         this.frontendLogger.warn('tasks', '设置活动任务失败: ' + data.message);
-        this.notify(false, data.message);
+        this.toastOnly(false, data.message);
       }
     } catch (error) {
       this.frontendLogger.error('tasks', '设置活动任务异常', error);
-      this.notify(false, '设置活动任务失败');
+      this.toastOnly(false, '设置活动任务失败');
     }
   },
   async saveTask() {
@@ -103,11 +103,11 @@ export const coreTaskMethods = {
         this.jsonError = '';
         await this.fetchTasks();
       } else {
-        this.notify(false, data.message);
+        this.toastOnly(false, data.message);
       }
     } catch (error) {
       this.frontendLogger.error('tasks', '保存任务失败', error);
-      this.notify(false, extractApiError(error, '保存失败'));
+      this.toastOnly(false, extractApiError(error, '保存失败'));
     }
   },
   async deleteTask(taskId) {
@@ -124,11 +124,11 @@ export const coreTaskMethods = {
         }
       } else {
         this.frontendLogger.warn('tasks', '删除任务失败: ' + data.message);
-        this.notify(false, data.message);
+        this.toastOnly(false, data.message);
       }
     } catch (error) {
       this.frontendLogger.error('tasks', '删除任务异常', error);
-      this.notify(false, '删除任务失败');
+      this.toastOnly(false, '删除任务失败');
     }
   },
 };

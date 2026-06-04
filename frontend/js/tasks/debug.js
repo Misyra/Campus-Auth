@@ -16,7 +16,7 @@ export const debugTaskMethods = {
     } catch (error) {
       const msg = extractApiError(error, '启动调试失败');
       this.frontendLogger.error('debug', '启动调试失败: ' + msg);
-      this.notify(false, msg);
+      this.toastOnly(false, msg);
     } finally {
       this.debugLoading = false;
     }
@@ -32,7 +32,7 @@ export const debugTaskMethods = {
     } catch (error) {
       const msg = extractApiError(error, errorMsg);
       this.frontendLogger.error('debug', errorMsg + ': ' + msg);
-      this.notify(false, msg);
+      this.toastOnly(false, msg);
     } finally {
       this.busy.debug = false;
     }
@@ -55,10 +55,10 @@ export const debugTaskMethods = {
         total_steps: 0, steps: [], results: [], screenshot_url: null,
       };
       this.frontendLogger.info('debug', '调试已停止');
-      this.notify(true, data.message || '调试已停止');
+      this.toastOnly(true, data.message || '调试已停止');
     } catch (error) {
       this.frontendLogger.error('debug', '停止调试失败', error);
-      this.notify(false, '停止调试失败');
+      this.toastOnly(false, '停止调试失败');
     }
   },
 

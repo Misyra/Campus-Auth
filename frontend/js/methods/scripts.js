@@ -60,7 +60,7 @@ export const scriptMethods = {
         };
         this.editingTaskType = 'script';
       } catch (error) {
-        this.notify(false, extractApiError(error, '加载脚本失败'));
+        this.toastOnly(false, extractApiError(error, '加载脚本失败'));
       }
     } else {
       this.editingTaskType = 'script';
@@ -95,15 +95,15 @@ export const scriptMethods = {
 
     const id = this.editingTask.id.trim();
     if (!id) {
-      this.notify(false, '脚本ID不能为空');
+      this.toastOnly(false, '脚本ID不能为空');
       return;
     }
     if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(id)) {
-      this.notify(false, '脚本ID必须以字母开头，且只能包含字母、数字和下划线');
+      this.toastOnly(false, '脚本ID必须以字母开头，且只能包含字母、数字和下划线');
       return;
     }
     if (!this.editingTask.content.trim()) {
-      this.notify(false, '脚本内容不能为空');
+      this.toastOnly(false, '脚本内容不能为空');
       return;
     }
 
@@ -127,12 +127,12 @@ export const scriptMethods = {
       if (data.success) {
         this.editingTask = null;
         await this.fetchScripts();
-        this.notify(true, data.message);
+        this.toastOnly(true, data.message);
       } else {
-        this.notify(false, data.message);
+        this.toastOnly(false, data.message);
       }
     } catch (error) {
-      this.notify(false, extractApiError(error, '保存失败'));
+      this.toastOnly(false, extractApiError(error, '保存失败'));
     }
   },
 
@@ -142,21 +142,21 @@ export const scriptMethods = {
       const { data } = await this.$api.delete(`/api/scripts/${taskId}`);
       if (data.success) {
         await this.fetchScripts();
-        this.notify(true, data.message);
+        this.toastOnly(true, data.message);
       } else {
-        this.notify(false, data.message);
+        this.toastOnly(false, data.message);
       }
     } catch (error) {
-      this.notify(false, extractApiError(error, '删除失败'));
+      this.toastOnly(false, extractApiError(error, '删除失败'));
     }
   },
 
   async runScript(taskId) {
     try {
       const { data } = await this.$api.post(`/api/scripts/${taskId}/run`);
-      this.notify(data.success, data.message);
+      this.toastOnly(data.success, data.message);
     } catch (error) {
-      this.notify(false, extractApiError(error, '执行失败'));
+      this.toastOnly(false, extractApiError(error, '执行失败'));
     }
   },
 
@@ -171,7 +171,7 @@ export const scriptMethods = {
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      this.notify(false, extractApiError(error, '导出失败'));
+      this.toastOnly(false, extractApiError(error, '导出失败'));
     }
   },
 
@@ -258,12 +258,12 @@ print(f"HTTP {resp.status_code}")
       const { data } = await this.$api.post(`/api/tasks/active/${taskId}`);
       if (data.success) {
         this.activeTaskId = taskId;
-        this.notify(true, `已将「${taskId}」设为活动任务`);
+        this.toastOnly(true, `已将「${taskId}」设为活动任务`);
       } else {
-        this.notify(false, data.message);
+        this.toastOnly(false, data.message);
       }
     } catch (error) {
-      this.notify(false, extractApiError(error, '设置失败'));
+      this.toastOnly(false, extractApiError(error, '设置失败'));
     }
   },
 };

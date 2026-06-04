@@ -284,7 +284,7 @@ export const editorTaskMethods = {
       const msg = extractApiError(e, '加载失败，请检查地址是否正确');
       this.repoImport.error = msg;
       this.frontendLogger.error('tasks', '获取远程索引失败', msg);
-      this.notify(false, `获取远程索引失败: ${msg}`);
+      this.toastOnly(false, `获取远程索引失败: ${msg}`);
     } finally {
       this.repoImport.loading = false;
     }
@@ -346,11 +346,11 @@ export const editorTaskMethods = {
       this.closeRepoImport();
       this.currentPage = 'tasks';
       this.frontendLogger.info('tasks', `已从仓库导入: ${task.name}`);
-      this.notify(true, `已导入「${task.name}」，请在右侧编辑器内确认后保存`);
+      this.toastOnly(true, `已导入「${task.name}」，请在右侧编辑器内确认后保存`);
     } catch (e) {
       const msg = extractApiError(e, '下载任务失败');
       this.frontendLogger.error('tasks', '远程任务下载失败', msg);
-      this.notify(false, `远程任务下载失败: ${msg}`);
+      this.toastOnly(false, `远程任务下载失败: ${msg}`);
     }
   },
 };

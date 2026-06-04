@@ -50,8 +50,38 @@ export const uiMethods = {
   toastOnly(success, message) {
     this._showToast(success, message);
   },
-  notify(success, message) {
-    const entry = { success, message, time: new Date().toLocaleTimeString() };
+  // 通知分类图标（内联 SVG）
+  _notifyCategoryIcon(category) {
+    const icons = {
+      login: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+      monitor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
+      network: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+      update: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+      security: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+    };
+    return icons[category] || '';
+  },
+  _formatNotifyTime() {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2, '0');
+    const m = String(now.getMinutes()).padStart(2, '0');
+    const s = String(now.getSeconds()).padStart(2, '0');
+    return `${now.getMonth() + 1}/${now.getDate()} ${h}:${m}:${s}`;
+  },
+  _notifyCategoryLabel(category) {
+    const labels = { login: '登录', monitor: '监控', network: '网络', update: '更新', security: '安全' };
+    return labels[category] || '';
+  },
+  notify(success, message, category, action) {
+    const entry = {
+      success,
+      message,
+      time: this._formatNotifyTime(),
+      category: category || '',
+      icon: this._notifyCategoryIcon(category),
+      label: this._notifyCategoryLabel(category),
+      action: action || null,
+    };
     this.notifications.unshift(entry);
     if (this.notifications.length > TIMING.NOTIFICATION_MAX) this.notifications.length = TIMING.NOTIFICATION_MAX;
     this.unreadNotifications++;

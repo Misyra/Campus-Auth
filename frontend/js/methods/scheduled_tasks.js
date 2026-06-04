@@ -61,12 +61,12 @@ export const scheduledTasksMethods = {
 
     // 验证
     if (!form.name.trim()) {
-      this.notify(false, '请输入任务名称');
+      this.toastOnly(false, '请输入任务名称');
       return;
     }
 
     if (!form.target_id) {
-      this.notify(false, '请选择目标任务');
+      this.toastOnly(false, '请选择目标任务');
       return;
     }
 
@@ -81,7 +81,7 @@ export const scheduledTasksMethods = {
         ? await this.$api.put(url, form)
         : await this.$api.post(url, form);
 
-      this.notify(result.success, result.message);
+      this.toastOnly(result.success, result.message);
 
       if (result.success) {
         this.closeScheduledTaskModal();
@@ -89,7 +89,7 @@ export const scheduledTasksMethods = {
       }
     } catch (e) {
       const msg = extractApiError(e, '保存失败');
-      this.notify(false, msg);
+      this.toastOnly(false, msg);
     } finally {
       this.scheduledTaskFormLoading = false;
     }
@@ -101,14 +101,14 @@ export const scheduledTasksMethods = {
 
     try {
       const { data: result } = await this.$api.delete(`/api/scheduled-tasks/${taskId}`);
-      this.notify(result.success, result.message);
+      this.toastOnly(result.success, result.message);
 
       if (result.success) {
         await this.loadScheduledTasks();
       }
     } catch (e) {
       const msg = extractApiError(e, '删除失败');
-      this.notify(false, msg);
+      this.toastOnly(false, msg);
     }
   },
 
@@ -116,14 +116,14 @@ export const scheduledTasksMethods = {
   async toggleScheduledTask(taskId) {
     try {
       const { data: result } = await this.$api.post(`/api/scheduled-tasks/${taskId}/toggle`);
-      this.notify(result.success, result.message);
+      this.toastOnly(result.success, result.message);
 
       if (result.success) {
         await this.loadScheduledTasks();
       }
     } catch (e) {
       const msg = extractApiError(e, '操作失败');
-      this.notify(false, msg);
+      this.toastOnly(false, msg);
     }
   },
 
@@ -131,13 +131,13 @@ export const scheduledTasksMethods = {
   async runScheduledTask(taskId) {
     try {
       const { data: result } = await this.$api.post(`/api/scheduled-tasks/${taskId}/run`);
-      this.notify(result.success, result.message);
+      this.toastOnly(result.success, result.message);
 
       // 刷新列表（更新最后执行时间）
       await this.loadScheduledTasks();
     } catch (e) {
       const msg = extractApiError(e, '执行失败');
-      this.notify(false, msg);
+      this.toastOnly(false, msg);
     }
   },
 
