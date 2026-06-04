@@ -929,11 +929,9 @@
 }
 
 .notification-item.notify-success .notify-icon,
-.notification-item.notify-success .notify-label,
-.notification-item.notify-success .time { color: var(--success); }
+.notification-item.notify-success .notify-label { color: var(--success); }
 .notification-item.notify-error .notify-icon,
-.notification-item.notify-error .notify-label,
-.notification-item.notify-error .time { color: var(--error); }
+.notification-item.notify-error .notify-label { color: var(--error); }
 .notification-item.notify-success .notification-item-body { color: var(--success); }
 .notification-item.notify-error .notification-item-body { color: var(--error); }
 
