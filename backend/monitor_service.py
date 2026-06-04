@@ -473,6 +473,22 @@ class MonitorService:
         return self._login_in_progress.is_set()
 
     @property
+    def login_recovery_in_progress(self) -> bool:
+        """监控是否正在进行登录恢复重试。"""
+        core = self._monitor_core
+        return core is not None and core._login_recovery_in_progress.is_set()
+
+    def wait_for_login_recovery(self, timeout: float = 300) -> None:
+        """等待监控登录恢复循环结束（供定时任务使用）。
+
+        如果监控正在进行登录重试，阻塞直到重试循环结束或超时。
+        """
+        core = self._monitor_core
+        if core is None or not core.monitoring:
+            return
+        core._login_recovery_in_progress.wait(timeout=timeout)
+
+    @property
     def ws_broadcast_queue(self) -> deque[dict]:
         """WebSocket 广播队列（供 WebSocketLogHandler 使用）"""
         return self._ws_broadcast_queue

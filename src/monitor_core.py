@@ -78,6 +78,8 @@ class NetworkMonitorCore:
         self._stop_requested = False
         self._cancel_login = threading.Event()
         self._stop_event = threading.Event()
+        # 登录恢复进行中标志（供定时任务等待）
+        self._login_recovery_in_progress = threading.Event()
         self._test_sites_cache: Optional[list[tuple[str, int]]] = None
         self.logger = setup_logger("monitor", self.config.get("logging", {}))
 
@@ -304,6 +306,14 @@ class NetworkMonitorCore:
             "break"            — 监控已停止
             "net_disconnect"   — 物理网络断开，外层应等待正常检测间隔
         """
+        self._login_recovery_in_progress.set()
+        try:
+            return self._login_recovery_inner()
+        finally:
+            self._login_recovery_in_progress.clear()
+
+    def _login_recovery_inner(self) -> str:
+        """登录恢复实际逻辑（由 _login_recovery_loop 包装，管理标志位）。"""
         while self.monitoring:
             # 缓存本轮迭代的重试配置（避免循环内重复调用 _get_retry_config）
             max_retries, retry_intervals = self._get_retry_config()
