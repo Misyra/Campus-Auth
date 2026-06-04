@@ -1,5 +1,0 @@
-{
-  "name": "HTTP 登录测试",
-  "description": "使用 httpx 发送 POST 请求登录校园网",
-  "binary_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
-}
