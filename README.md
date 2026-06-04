@@ -175,83 +175,153 @@ python app.py --autostart disable
 ```text
 Campus-Auth/
 ├── app.py                    # 统一启动入口
+├── launcher.py               # Windows 分发入口点（PyInstaller 打包）
+├── setup_env.sh              # macOS/Linux 安装脚本
 ├── pyproject.toml            # 项目元数据与依赖配置
 ├── requirements.txt          # 依赖列表（兼容 pip）
-├── settings.json             # 多网络配置方案数据
+├── settings.json             # 多网络配置方案数据（gitignored）
+├── Campus-Auth-Setup.spec    # PyInstaller 打包配置
+├── package_zip.ps1           # 发布打包脚本
 ├── backend/                  # 后端服务
 │   ├── main.py               # FastAPI 主应用
+│   ├── container.py          # ServiceContainer 依赖注入
 │   ├── config_service.py     # 配置读写与初始化状态
 │   ├── profile_service.py    # 多网络配置方案管理
-│   ├── monitor_service.py    # 网络监控与认证触发
+│   ├── monitor_service.py    # 网络监控与认证触发（Actor 模型）
 │   ├── task_service.py       # 任务读写与活动任务管理
+│   ├── scheduler_service.py  # 定时任务调度
+│   ├── login_history_service.py # 登录历史记录
 │   ├── autostart_service.py  # 开机自启动管理
 │   ├── uninstall_service.py  # 卸载功能服务
-│   └── schemas.py            # Pydantic 数据模型
+│   ├── debug_manager.py      # 调试会话管理
+│   ├── debug_session.py      # 调试会话状态
+│   ├── deps.py               # FastAPI 依赖注入
+│   ├── ws_manager.py         # WebSocket 连接管理
+│   ├── schemas.py            # Pydantic 数据模型
+│   ├── constants.py          # 共享常量
+│   └── routers/              # API 路由（13 个文件）
+│       ├── monitor.py        # 监控控制
+│       ├── config.py         # 配置管理
+│       ├── tasks.py          # 任务管理
+│       ├── profiles.py       # 配置方案
+│       ├── debug.py          # 调试会话
+│       ├── backup.py         # 配置备份
+│       ├── repo.py           # 仓库代理
+│       ├── system.py         # 系统管理
+│       ├── tools.py          # 工具下载
+│       ├── scripts.py        # 脚本管理
+│       ├── scheduled_tasks.py # 定时任务
+│       ├── history.py        # 登录历史
+│       └── logfiles.py       # 日志文件管理
 ├── src/                      # 核心逻辑与工具模块
 │   ├── task_executor.py      # 任务执行器（按 JSON 步骤执行）
 │   ├── monitor_core.py       # 监控核心（网络探测与自动切换）
-│   ├── network_test.py       # 网络连通性检测
+│   ├── network_decision.py   # 网络决策层
+│   ├── network_probes.py     # 网络探测（TCP/HTTP/Portal）
+│   ├── network_detect.py     # 网络检测工具
+│   ├── network_test.py       # 网络测试工具
+│   ├── playwright_worker.py  # Playwright Actor 模型工作线程
 │   ├── playwright_bootstrap.py # Playwright 运行环境准备
+│   ├── script_runner.py      # 自定义脚本执行器
 │   ├── system_tray.py        # 系统托盘集成
 │   ├── version.py            # 版本号读取
 │   └── utils/                # 工具模块
-│       ├── config.py         # 配置加载与管理
-│       ├── logging.py        # 日志系统
-│       ├── crypto.py         # 密码加密
-│       ├── browser.py        # 浏览器上下文管理
+│       ├── browser.py        # 浏览器上下文管理与反检测脚本
 │       ├── login.py          # 登录尝试处理
-│       ├── time_utils.py     # 时间工具
+│       ├── env.py            # 登录环境变量构建
+│       ├── crypto.py         # 密码加密（Fernet）
+│       ├── logging.py        # 日志系统（文件、WebSocket、控制台）
+│       ├── config.py         # 配置校验
+│       ├── config_helpers.py # 配置辅助函数
 │       ├── notify.py         # 跨平台桌面通知
-│       └── exceptions.py     # 异常处理
-├── frontend/                 # 前端控制台
+│       ├── time_utils.py     # 时间工具
+│       ├── network_helpers.py # 网络辅助函数
+│       ├── file_helpers.py   # 文件操作（原子写入）
+│       ├── platform_utils.py # 平台检测工具
+│       ├── repo_proxy.py     # 远程仓库代理
+│       ├── shell_policy.py   # 脚本命令安全策略
+│       └── exceptions.py     # 自定义异常
+├── frontend/                 # 前端控制台（Vue 3 SPA，无构建步骤）
 │   ├── index.html            # 入口页面
 │   ├── app.js                # Vue 应用主文件
 │   ├── template-loader.js    # 模板加载器
 │   ├── js/                   # JavaScript 模块
-│   │   ├── methods/          # 业务方法（按功能拆分）
 │   │   ├── app-options.js    # Vue 应用配置
 │   │   ├── bootstrap.js      # 应用初始化
+│   │   ├── components.js     # 可复用组件
 │   │   ├── constants.js      # 常量定义
-│   │   └── logger.js         # 前端日志
-│   ├── partials/pages/       # 页面模板
-│   │   ├── dashboard.html    # 仪表盘
-│   │   ├── settings.html     # 设置页
-│   │   ├── tasks.html        # 任务管理
-│   │   ├── scripts.html      # Python 脚本
-│   │   ├── logfiles.html     # 日志查看器
-│   │   ├── appearance.html   # 外观设置
-│   │   ├── profiles.html     # 配置方案
-│   │   └── about.html        # 关于页
-│   ├── background/           # 用户背景图片（gitignore）
-│   └── styles/               # 样式文件
-├── tasks/                    # 任务模板
-├── tests/                    # 测试
+│   │   ├── icons.js          # 图标定义
+│   │   ├── logger.js         # 前端日志
+│   │   ├── data/             # 数据模块（16 个文件）
+│   │   ├── methods/          # 业务方法（17 个文件）
+│   │   └── tasks/            # 任务管理模块（4 个文件）
+│   ├── partials/             # HTML 模板
+│   │   ├── pages/            # 页面模板（10 个页面）
+│   │   │   └── settings/     # 设置子页面（5 个标签页）
+│   │   ├── sidebar.html      # 侧边栏
+│   │   ├── topbar.html       # 顶栏
+│   │   ├── toast.html        # 通知提示
+│   │   └── wizard.html       # 初始化向导
+│   ├── styles/               # CSS 样式
+│   │   ├── base.css          # 基础样式
+│   │   ├── components.css    # 组件样式
+│   │   ├── layout.css        # 布局样式
+│   │   ├── responsive.css    # 响应式样式
+│   │   └── pages/            # 页面样式（10 个文件）
+│   ├── vendor/               # 第三方库（Vue 3, Axios）
+│   └── background/           # 用户背景图片（gitignored）
+├── tasks/                    # 任务定义
+│   ├── browser/              # 浏览器任务
+│   ├── scheduled/            # 定时任务
+│   └── scripts/              # 脚本任务
+├── tests/                    # 测试（39 个文件）
 ├── doc/                      # 文档
+│   ├── api-doc.md            # API 接口文档
 │   ├── task-manual.md        # 任务开发参考
-│   └── task-writing-guide.md # 任务编写指南
+│   ├── task-writing-guide.md # 任务编写指南
+│   ├── custom-script-guide.md # 自定义脚本指南
+│   └── update_log.md         # 更新日志
 ├── tools/                    # 辅助工具
 │   └── task-recorder.user.js # Tampermonkey 任务录制脚本
-├── logs/                     # 日志与截图（按日期归档）
+├── debug/                    # 调试截图（按日期归档）
+├── logs/                     # 日志文件（按日期归档）
+├── temp/                     # 临时文件
 └── release/                  # 发布产物
 ```
 
 ### 主要模块说明
 
+**入口与启动：**
 - `app.py`：统一启动入口，负责服务启动、状态查询、自启动控制和浏览器打开。
+- `launcher.py`：Windows 分发入口点，下载嵌入式 Python、安装依赖、启动服务。
+- `setup_env.sh`：macOS/Linux 安装脚本，支持 uv 和系统 Python 两种模式。
+
+**后端服务：**
 - `backend/main.py`：FastAPI 主应用，提供 HTTP API 和 WebSocket。
+- `backend/container.py`：ServiceContainer 依赖注入，统一管理服务生命周期。
 - `backend/config_service.py`：配置读写、初始化状态管理。
 - `backend/profile_service.py`：多网络配置方案管理，网关/SSID 检测，自动切换。
-- `backend/monitor_service.py`：网络监控、认证触发、WebSocket 日志广播。
+- `backend/monitor_service.py`：网络监控、认证触发、WebSocket 日志广播（Actor 模型）。
 - `backend/task_service.py`：任务读写、活动任务管理、危险步骤检测。
+- `backend/scheduler_service.py`：定时任务调度服务。
+- `backend/login_history_service.py`：登录历史记录服务。
 - `backend/autostart_service.py`：跨平台开机自启动（Windows VBS / macOS LaunchAgent / Linux systemd）。
 - `backend/uninstall_service.py`：卸载功能，扫描并清理程序文件、配置、日志等。
+
+**核心逻辑：**
 - `src/task_executor.py`：任务执行器，负责按 JSON 步骤逐条执行浏览器操作。
 - `src/monitor_core.py`：监控核心，网络探测循环与 Profile 自动切换。
-- `src/network_test.py`：网络连通性检测（TCP 探测 + HTTP 探测，自动降级）。
-- `src/playwright_bootstrap.py`：Playwright 运行环境检查与自动安装。
-- `src/system_tray.py`：系统托盘图标与菜单。
-- `src/utils/notify.py`：跨平台桌面通知（登录成功/失败提醒）。
-- `src/utils/`：工具模块集（配置、日志、加密、浏览器、重试等）。
+- `src/network_decision.py`：网络决策层，封装暂停检查、网络状态检查、登录前置检查。
+- `src/network_probes.py`：网络探测实现（TCP/HTTP/Portal），并发执行。
+- `src/playwright_worker.py`：Playwright Actor 模型工作线程，所有浏览器操作统一收归。
+- `src/script_runner.py`：自定义脚本执行器，支持 Python/PowerShell/cmd 等外部程序。
+
+**工具模块：**
+- `src/utils/browser.py`：浏览器上下文管理与反检测脚本注入。
+- `src/utils/login.py`：登录尝试处理，浏览器任务和脚本任务编排。
+- `src/utils/crypto.py`：密码加密（Fernet），密钥管理。
+- `src/utils/logging.py`：日志系统（文件轮转、WebSocket 推送、控制台输出）。
+- `src/utils/shell_policy.py`：脚本命令安全验证。
 
 ## 技术栈
 

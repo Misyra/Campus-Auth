@@ -73,8 +73,9 @@ class ServiceContainer:
         # 启动监控服务
         self.monitor_service.boot()
 
-        # 启动定时任务调度器
-        self.scheduler_service.start()
+        # 启动定时任务调度器（仅在存在启用的任务时启动）
+        if self.scheduler_service.has_enabled_tasks():
+            self.scheduler_service.start()
 
         # 启动 WebSocket drain loop
         self._ws_drain_task = asyncio.create_task(

@@ -81,6 +81,9 @@ def create_scheduled_task(payload: dict, request: Request) -> ActionResponse:
 
     ok, message = scheduler.save_task(task_id, config)
     api_logger.info("Create scheduled task %s -> success=%s, message=%s", task_id, ok, message)
+    # 新建任务默认启用，确保调度器在运行
+    if ok and config.get("enabled", True):
+        scheduler.start()
     return ActionResponse(success=ok, message=message)
 
 
@@ -128,6 +131,9 @@ def update_scheduled_task(task_id: str, payload: dict, request: Request) -> Acti
 
     ok, message = scheduler.save_task(task_id, config)
     api_logger.info("Update scheduled task %s -> success=%s, message=%s", task_id, ok, message)
+    # 更新后任务启用时，确保调度器在运行
+    if ok and config.get("enabled", True):
+        scheduler.start()
     return ActionResponse(success=ok, message=message)
 
 
@@ -164,6 +170,9 @@ def toggle_scheduled_task(task_id: str, request: Request) -> ActionResponse:
     ok, message = scheduler.save_task(task_id, task)
     status = "启用" if task["enabled"] else "禁用"
     api_logger.info("Toggle scheduled task %s -> %s", task_id, status)
+    # 启用任务时确保调度器在运行
+    if ok and task["enabled"]:
+        scheduler.start()
     return ActionResponse(success=ok, message=f"定时任务已{status}")
 
 

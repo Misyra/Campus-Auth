@@ -94,6 +94,19 @@ class SchedulerService:
         """校验 task_id 是否安全且格式有效。"""
         return is_valid_task_id(task_id)
 
+    def has_enabled_tasks(self) -> bool:
+        """检查是否存在启用的定时任务。"""
+        for file in self.tasks_dir.glob("*.json"):
+            if file.name.startswith("."):
+                continue
+            try:
+                data = json.loads(file.read_text(encoding="utf-8"))
+                if data.get("enabled", False):
+                    return True
+            except Exception:
+                continue
+        return False
+
     def list_tasks(self) -> list[dict[str, Any]]:
         """列出所有定时任务。"""
         tasks = []
@@ -267,6 +280,13 @@ class SchedulerService:
         if not self.monitor_service:
             return False, "监控服务未初始化，无法执行浏览器任务"
 
+        # 等待监控登录恢复完成，避免重复执行
+        if self.monitor_service.login_in_progress or self.monitor_service.login_recovery_in_progress:
+            scheduler_logger.info("监控正在登录，等待完成后再执行定时任务")
+            await asyncio.get_running_loop().run_in_executor(
+                None, self.monitor_service.wait_for_login_recovery
+            )
+
         try:
             from src.playwright_worker import get_worker, CMD_LOGIN
 
@@ -383,6 +403,11 @@ class SchedulerService:
 
         while self._running:
             try:
+                # 没有启用的任务时自动退出
+                if not self.has_enabled_tasks():
+                    scheduler_logger.info("没有启用的定时任务，调度器自动退出")
+                    break
+
                 now = datetime.now()
                 current_minute = now.hour * 60 + now.minute
 
@@ -391,8 +416,8 @@ class SchedulerService:
                     last_checked_minute = current_minute
                     await self._check_and_execute(now)
 
-                # 等待到下一分钟
-                await asyncio.sleep(1)
+                # 每 30 秒检查一次，减少无意义唤醒
+                await asyncio.sleep(30)
 
             except asyncio.CancelledError:
                 break
@@ -400,6 +425,7 @@ class SchedulerService:
                 scheduler_logger.error("调度器循环异常: %s", e)
                 await asyncio.sleep(5)
 
+        self._running = False
         scheduler_logger.info("调度器循环已退出")
 
     async def _check_and_execute(self, now: datetime):

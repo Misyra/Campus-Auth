@@ -15,6 +15,9 @@
 - [任务管理](#任务管理)
 - [脚本管理](#脚本管理)
 - [日志](#日志)
+- [日志文件](#日志文件)
+- [登录历史](#登录历史)
+- [定时任务](#定时任务)
 - [自启动](#自启动)
 - [配置备份](#配置备份)
 - [卸载](#卸载)
@@ -105,6 +108,33 @@
 |------|------|------|
 | GET | `/api/logs?limit=200` | 获取历史日志（内存缓冲区，最多 1200 条） |
 | WS | `/ws/logs` | WebSocket 实时日志流 |
+
+## 日志文件
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/logfiles/list` | 列出所有日志文件，按日期分组（最新在前） |
+| GET | `/api/logfiles/content?date=YYYY-MM-DD&file=app.log&level=&search=&limit=2000` | 获取日志文件内容，支持按级别过滤和关键词搜索 |
+
+## 登录历史
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/login-history?limit=30` | 获取最近的登录历史记录（limit 范围 1~500，默认 30） |
+| DELETE | `/api/login-history` | 清空所有登录历史记录 |
+
+## 定时任务
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/scheduled-tasks` | 列出所有定时任务 |
+| GET | `/api/scheduled-tasks/{task_id}` | 获取定时任务详情 |
+| POST | `/api/scheduled-tasks` | 创建定时任务（type: script/browser/shell） |
+| PUT | `/api/scheduled-tasks/{task_id}` | 更新定时任务 |
+| DELETE | `/api/scheduled-tasks/{task_id}` | 删除定时任务 |
+| POST | `/api/scheduled-tasks/{task_id}/run` | 手动执行定时任务 |
+| POST | `/api/scheduled-tasks/{task_id}/toggle` | 启用/禁用定时任务 |
+| GET | `/api/scheduled-tasks/{task_id}/history` | 获取定时任务执行历史 |
 
 ## 自启动
 
