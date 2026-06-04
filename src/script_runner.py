@@ -56,12 +56,14 @@ def detect_available_binaries() -> list[dict[str, str]]:
             ("cmd", "cmd.exe", "Windows 命令提示符"),
             ("powershell", "powershell.exe", "Windows PowerShell"),
             ("pwsh", "pwsh.exe", "PowerShell 7+"),
+            ("git-bash", "bash.exe", "Git Bash"),
         ]
     else:
         candidates = [
             ("bash", "bash", "Bourne Again Shell"),
             ("sh", "sh", "POSIX Shell"),
             ("zsh", "zsh", "Z Shell"),
+            ("fish", "fish", "Friendly Interactive Shell"),
         ]
 
     for name, exe, desc in candidates:

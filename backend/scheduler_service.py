@@ -366,7 +366,7 @@ class SchedulerService:
             if self.monitor_service:
                 try:
                     config = self.monitor_service.get_runtime_config()
-                    shell_path = config.get("system", {}).get("shell_path", "")
+                    shell_path = config.get("shell_path", "")
                 except Exception:
                     pass
 

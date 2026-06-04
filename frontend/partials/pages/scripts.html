@@ -118,7 +118,8 @@
               class="mt-2"
             />
           </div>
-          <span class="hint">选择执行此脚本的程序，默认使用当前 Python 解释器</span>
+          <span class="hint" v-if="editingTask.binary_path && editingTask.binary_path !== '__custom__' && editingTask.binary_path !== '__custom_python__'">当前: {{ editingTask.binary_path }}</span>
+          <span class="hint" v-else>选择执行此脚本的程序，默认使用当前 Python 解释器</span>
         </div>
         <div class="form-group">
           <label>脚本内容</label>

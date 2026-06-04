@@ -160,15 +160,23 @@
         </div>
         <select
           id="settings-shell"
-          v-model="config.shell_path"
+          v-model="shellPathMode"
         >
           <option value="">自动检测（推荐）</option>
           <option v-for="shell in availableShells" :key="shell.path" :value="shell.path">
             {{ shell.name }} - {{ shell.description }}
           </option>
+          <option value="__custom__">自定义路径...</option>
         </select>
-        <span class="hint" v-if="config.shell_path">当前: {{ config.shell_path }}</span>
-        <span class="hint" v-else>默认: {{ defaultShell }}</span>
+        <input
+          v-if="shellPathMode === '__custom__'"
+          v-model.trim="config.shell_path"
+          type="text"
+          placeholder="输入 Shell 可执行文件的完整路径"
+          class="mt-2"
+        />
+        <span class="hint" v-if="config.shell_path && shellPathMode !== '__custom__'">当前: {{ config.shell_path }}</span>
+        <span class="hint" v-else-if="!config.shell_path">默认: {{ defaultShell }}</span>
       </div>
     </div>
   </section>
