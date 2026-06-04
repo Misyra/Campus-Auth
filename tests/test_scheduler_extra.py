@@ -106,9 +106,10 @@ class TestSchedulerServiceCRUD:
         (tmp_path / "tasks" / "scheduled" / "bad.json").write_text("not json", encoding="utf-8")
         assert scheduler.get_task("bad") is None
 
-    def test_delete_task_with_history(self, scheduler: SchedulerService, tmp_path: Path):
+    @pytest.mark.asyncio
+    async def test_delete_task_with_history(self, scheduler: SchedulerService, tmp_path: Path):
         scheduler.save_task("del_task", {"name": "待删", "type": "shell", "command": "echo del", "schedule": {"hour": 0, "minute": 0}})
-        scheduler._add_history("del_task", "success", "ok", 1.0)
+        await scheduler._add_history("del_task", "success", "ok", 1.0)
         ok, _ = scheduler.delete_task("del_task")
         assert ok is True
         assert scheduler.get_task("del_task") is None
@@ -139,28 +140,32 @@ class TestSchedulerHistory:
     def scheduler(self, tmp_path: Path) -> SchedulerService:
         return SchedulerService(tmp_path)
 
-    def test_add_history_creates_file(self, scheduler: SchedulerService, tmp_path: Path):
-        scheduler._add_history("test", "success", "ok", 1.0)
+    @pytest.mark.asyncio
+    async def test_add_history_creates_file(self, scheduler: SchedulerService, tmp_path: Path):
+        await scheduler._add_history("test", "success", "ok", 1.0)
         history_file = tmp_path / "tasks" / "scheduled" / "history" / "test.json"
         assert history_file.exists()
 
-    def test_add_history_max_size(self, scheduler: SchedulerService):
+    @pytest.mark.asyncio
+    async def test_add_history_max_size(self, scheduler: SchedulerService):
         for i in range(MAX_HISTORY_SIZE + 10):
-            scheduler._add_history("test", "success", f"run {i}", 1.0)
+            await scheduler._add_history("test", "success", f"run {i}", 1.0)
         history = scheduler.get_history("test")
         assert len(history) == MAX_HISTORY_SIZE
         # 最新的在前
         assert history[0]["message"] == f"run {MAX_HISTORY_SIZE + 9}"
 
-    def test_add_history_truncates_message(self, scheduler: SchedulerService):
+    @pytest.mark.asyncio
+    async def test_add_history_truncates_message(self, scheduler: SchedulerService):
         long_msg = "x" * 1000
-        scheduler._add_history("test", "success", long_msg, 1.0)
+        await scheduler._add_history("test", "success", long_msg, 1.0)
         history = scheduler.get_history("test")
         assert len(history[0]["message"]) == 500
 
-    def test_add_history_invalid_id(self, scheduler: SchedulerService):
+    @pytest.mark.asyncio
+    async def test_add_history_invalid_id(self, scheduler: SchedulerService):
         # 不应抛异常
-        scheduler._add_history("123bad", "success", "ok", 1.0)
+        await scheduler._add_history("123bad", "success", "ok", 1.0)
 
     def test_get_history_empty(self, scheduler: SchedulerService):
         assert scheduler.get_history("nonexistent") == []
@@ -174,9 +179,10 @@ class TestSchedulerHistory:
         (history_dir / "bad.json").write_text("not json", encoding="utf-8")
         assert scheduler.get_history("bad") == []
 
-    def test_get_history_returns_runs_list(self, scheduler: SchedulerService):
-        scheduler._add_history("test", "success", "ok", 1.0)
-        scheduler._add_history("test", "failure", "err", 0.5)
+    @pytest.mark.asyncio
+    async def test_get_history_returns_runs_list(self, scheduler: SchedulerService):
+        await scheduler._add_history("test", "success", "ok", 1.0)
+        await scheduler._add_history("test", "failure", "err", 0.5)
         history = scheduler.get_history("test")
         assert len(history) == 2
         assert history[0]["status"] == "failure"

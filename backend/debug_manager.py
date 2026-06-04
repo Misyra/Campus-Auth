@@ -214,9 +214,10 @@ class DebugSessionManager:
         async with self._exec_sem:
             async with self._lock:
                 self._require_debug_session()
-                idx = self._session.current_step
+                session = self._session
+                idx = session.current_step
 
-                if idx >= len(self._session.steps):
+                if idx >= len(session.steps):
                     return {**self._debug_response(), "message": "所有步骤已执行完毕"}
 
             response = await asyncio.to_thread(
@@ -226,7 +227,9 @@ class DebugSessionManager:
             )
             if not response.success:
                 async with self._lock:
-                    self._session.results.append(
+                    if self._session is not session:
+                        return self._debug_response()
+                    session.results.append(
                         {
                             "step_index": idx,
                             "success": False,
@@ -234,36 +237,39 @@ class DebugSessionManager:
                             "screenshot_url": None,
                         }
                     )
-                    self._session.current_step = idx + 1
-                    self._session._last_activity = time.monotonic()
+                    session.current_step = idx + 1
+                    session._last_activity = time.monotonic()
                     return self._debug_response()
 
             result = response.data
 
             async with self._lock:
-                self._session.results.append(result)
-                self._session.screenshot_url = result.get("screenshot_url")
-                self._session.current_step = idx + 1
-                self._session._last_activity = time.monotonic()
+                if self._session is not session:
+                    return self._debug_response()
+                session.results.append(result)
+                session.screenshot_url = result.get("screenshot_url")
+                session.current_step = idx + 1
+                session._last_activity = time.monotonic()
                 return self._debug_response()
 
     async def run_all(self) -> dict:
         """执行所有步骤。"""
         async with self._lock:
             self._require_debug_session()
-            from_idx = self._session.current_step
+            session = self._session
+            from_idx = session.current_step
 
-            if from_idx >= len(self._session.steps):
+            if from_idx >= len(session.steps):
                 return {**self._debug_response(), "message": "所有步骤已执行完毕"}
 
         worker = get_worker()
         results: list[dict] = []
         all_success = True
 
-        for i in range(from_idx, len(self._session.steps)):
+        for i in range(from_idx, len(session.steps)):
             async with self._exec_sem:
                 async with self._lock:
-                    if not self._session.running:
+                    if self._session is not session or not session.running:
                         all_success = False
                         break
 
@@ -273,7 +279,7 @@ class DebugSessionManager:
                     )
                 )
 
-            if not self._session.running:
+            if self._session is not session or not session.running:
                 all_success = False
                 break
 
@@ -296,13 +302,15 @@ class DebugSessionManager:
                 break
 
         async with self._lock:
-            self._session.results.extend(results)
-            self._session.current_step = (
-                len(self._session.steps) if all_success else from_idx + len(results)
+            if self._session is not session:
+                return self._debug_response()
+            session.results.extend(results)
+            session.current_step = (
+                len(session.steps) if all_success else from_idx + len(results)
             )
-            self._session._last_activity = time.monotonic()
+            session._last_activity = time.monotonic()
             if results:
-                self._session.screenshot_url = results[-1].get("screenshot_url")
+                session.screenshot_url = results[-1].get("screenshot_url")
             return self._debug_response()
 
     async def stop(self) -> dict:

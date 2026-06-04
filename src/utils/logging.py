@@ -165,12 +165,14 @@ class _DateRotatingFileHandler(logging.Handler):
 
     def _open_file(self, path: str) -> None:
         os.makedirs(os.path.dirname(path), exist_ok=True)
+        # 先打开新流，成功后再关闭旧流，避免 open() 失败时丢失日志流
+        new_stream = open(path, "a", encoding="utf-8")
         if self._stream:
             try:
                 self._stream.close()
             except Exception:
                 pass
-        self._stream = open(path, "a", encoding="utf-8")
+        self._stream = new_stream
         self._bytes_written = 0
         if os.path.exists(path):
             self._bytes_written = os.path.getsize(path)

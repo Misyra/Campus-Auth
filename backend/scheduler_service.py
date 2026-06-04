@@ -183,30 +183,39 @@ class SchedulerService:
             scheduler_logger.error("读取执行历史失败 %s: %s", task_id, e)
             return []
 
-    def _add_history(self, task_id: str, status: str, message: str, duration: float):
-        """添加执行历史记录。"""
+    async def _add_history(self, task_id: str, status: str, message: str, duration: float):
+        """添加执行历史记录（async，使用 asyncio.Lock 保护并发写入）。"""
         if not self._validate_task_id(task_id):
             return
-        history_file = self.history_dir / f"{task_id}.json"
-        try:
-            if history_file.exists():
-                data = json.loads(history_file.read_text(encoding="utf-8"))
-            else:
-                data = {"runs": []}
+        # 惰性创建锁，确保在事件循环中初始化
+        if not hasattr(self, "_history_lock"):
+            self._history_lock = asyncio.Lock()
+        async with self._history_lock:
+            history_file = self.history_dir / f"{task_id}.json"
+            try:
+                if history_file.exists():
+                    data = json.loads(history_file.read_text(encoding="utf-8"))
+                else:
+                    data = {"runs": []}
 
-            data["runs"].insert(0, {
-                "timestamp": datetime.now().isoformat(),
-                "status": status,
-                "message": message[:500],
-                "duration": round(duration, 2),
-            })
+                data["runs"].insert(0, {
+                    "timestamp": datetime.now().isoformat(),
+                    "status": status,
+                    "message": message[:500],
+                    "duration": round(duration, 2),
+                })
 
-            # 保留最近 N 条
-            data["runs"] = data["runs"][:MAX_HISTORY_SIZE]
+                # 保留最近 N 条
+                data["runs"] = data["runs"][:MAX_HISTORY_SIZE]
 
-            history_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-        except Exception as e:
-            scheduler_logger.error("保存执行历史失败 %s: %s", task_id, e)
+                from src.utils.file_helpers import atomic_write
+                atomic_write(
+                    str(history_file),
+                    json.dumps(data, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+            except Exception as e:
+                scheduler_logger.error("保存执行历史失败 %s: %s", task_id, e)
 
     async def execute_task(self, task_id: str) -> tuple[bool, str]:
         """执行定时任务。"""
@@ -233,7 +242,7 @@ class SchedulerService:
             success, message = False, f"执行异常: {e}"
 
         duration = time.perf_counter() - start
-        self._add_history(task_id, "success" if success else "failure", message, duration)
+        await self._add_history(task_id, "success" if success else "failure", message, duration)
 
         # 更新最后执行时间
         task["last_run"] = datetime.now().isoformat()
