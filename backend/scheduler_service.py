@@ -73,7 +73,7 @@ def get_default_shell() -> str:
 class SchedulerService:
     """定时任务调度服务。"""
 
-    def __init__(self, project_root: Path, task_service: Any = None, monitor_service: Any = None):
+    def __init__(self, project_root: Path, task_service: Any = None, monitor_service: Any = None, login_history: Any = None):
         self.project_root = project_root
         self.tasks_dir = project_root / "tasks" / "scheduled"
         self.history_dir = self.tasks_dir / "history"
@@ -81,6 +81,7 @@ class SchedulerService:
         self.history_dir.mkdir(parents=True, exist_ok=True)
         self.task_service = task_service
         self.monitor_service = monitor_service
+        self._login_history = login_history
         self._running = False
         self._task: asyncio.Task | None = None
         self._running_tasks: set[asyncio.Task] = set()
@@ -287,6 +288,7 @@ class SchedulerService:
                 None, self.monitor_service.wait_for_login_recovery
             )
 
+        start_time = time.perf_counter()
         try:
             from src.playwright_worker import get_worker, CMD_LOGIN
 
@@ -309,17 +311,50 @@ class SchedulerService:
                 )
             )
 
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
+            task_name = task.get("name", task_id)
             if result.success:
+                self._record_login_history(True, duration_ms, task_name)
                 return True, result.data if isinstance(result.data, str) else "浏览器任务执行成功"
             else:
-                return False, result.error or "浏览器任务执行失败"
+                error_msg = result.error or "浏览器任务执行失败"
+                self._record_login_history(False, duration_ms, task_name, error_msg)
+                return False, error_msg
 
         except ImportError as e:
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
             scheduler_logger.warning("浏览器任务执行缺少依赖: %s", e)
+            self._record_login_history(False, duration_ms, task.get("name", task_id), str(e))
             return False, "浏览器任务执行需要 Playwright 环境，请确保已安装"
         except Exception as e:
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
             scheduler_logger.error("浏览器任务执行异常: %s", e)
+            self._record_login_history(False, duration_ms, task.get("name", task_id), str(e))
             return False, f"浏览器任务执行异常: {e}"
+
+    def _record_login_history(
+        self, success: bool, duration_ms: int, task_name: str = "", error: str = ""
+    ) -> None:
+        """记录登录历史（如果 login_history 服务可用）。"""
+        if self._login_history is None:
+            return
+        try:
+            profile_name = ""
+            if self.monitor_service:
+                try:
+                    config = self.monitor_service.get_runtime_config()
+                    profile_name = config.get("profile_name", "")
+                except Exception:
+                    scheduler_logger.debug("获取方案名称失败", exc_info=True)
+            self._login_history.add(
+                success=success,
+                duration_ms=duration_ms,
+                profile_name=profile_name,
+                task_name=task_name,
+                error=error,
+            )
+        except Exception:
+            scheduler_logger.debug("记录登录历史失败", exc_info=True)
 
     async def _execute_shell(self, command: str, timeout: int, shell_path: str = "") -> tuple[bool, str]:
         """执行 Shell 命令。"""

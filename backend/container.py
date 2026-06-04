@@ -47,7 +47,8 @@ class ServiceContainer:
         )
         self.task_service = TaskService(project_root)
         self.scheduler_service = SchedulerService(
-            project_root, self.task_service, self.monitor_service
+            project_root, self.task_service, self.monitor_service,
+            login_history=self.login_history_service,
         )
         self.autostart_service = AutoStartService(project_root)
         self.debug_manager = DebugSessionManager(project_root)

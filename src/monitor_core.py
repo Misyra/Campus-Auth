@@ -60,9 +60,11 @@ class NetworkMonitorCore:
         config: Optional[Dict[str, Any]] = None,
         log_callback: Optional[Callable[[str, str, str], None]] = None,
         thread_done: Optional[threading.Event] = None,
+        login_history: Any = None,
     ) -> None:
         self.config = config if config is not None else {}
         self.log_callback = log_callback
+        self._login_history = login_history
 
         # 线程完成事件：由 MonitorService 传入，用于安全等待线程实际结束
         self._thread_done: Optional[threading.Event] = thread_done
@@ -581,10 +583,6 @@ class NetworkMonitorCore:
 
         try:
             # ── 通过 PlaywrightWorker 派发登录 ──
-            # 原实现在此创建独立 asyncio 事件循环（new_event_loop / run_until_complete / loop.close）
-            # 并直接管理 LoginAttemptHandler 的生命周期。
-            # 重构后改为通过 get_worker().submit(CMD_LOGIN, ...) 将登录任务提交到
-            # Worker 线程执行，Worker 内部管理浏览器生命周期和 LoginAttemptHandler。
             from src.playwright_worker import get_worker, CMD_LOGIN
 
             login_timeout = self.config.get("browser_settings", {}).get("timeout", 120)
@@ -594,7 +592,9 @@ class NetworkMonitorCore:
                 "skip_pause_check": True,
                 "close_on_failure": False,  # 自动监控重试时复用浏览器
             }
+            start_time = time.perf_counter()
             result = get_worker().submit(CMD_LOGIN, data=data, timeout=login_timeout)
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
             success = result.success
             message = result.data if result.success else result.error
             # 检查是否在登录过程中被取消
@@ -605,13 +605,35 @@ class NetworkMonitorCore:
                 self.log_message(f"登录成功 ✓ {message}")
             else:
                 self.log_message(f"登录失败 ✗ {message}", logging.ERROR)
+            # 记录登录历史
+            self._record_login_history(success, duration_ms, str(message) if not success else "")
             return success, message
         except ConnectionError as exc:
             self.log_message(f"登录连接错误: {exc}", logging.WARNING)
+            self._record_login_history(False, 0, f"连接错误: {exc}")
             return False, f"连接错误: {exc}"
         except RuntimeError as exc:
             self.log_message(f"登录运行时错误: {exc}", logging.ERROR, exc_info=True)
+            self._record_login_history(False, 0, f"运行时错误: {exc}")
             return False, f"运行时错误: {exc}"
         except Exception as exc:
             self.log_message(f"登录执行异常: {exc}", logging.ERROR, exc_info=True)
+            self._record_login_history(False, 0, str(exc))
             return False, str(exc)
+
+    def _record_login_history(
+        self, success: bool, duration_ms: int, error: str = ""
+    ) -> None:
+        """记录登录历史（如果 login_history 服务可用）。"""
+        if self._login_history is None:
+            return
+        try:
+            self._login_history.add(
+                success=success,
+                duration_ms=duration_ms,
+                profile_name=self.config.get("profile_name", ""),
+                task_name=self.config.get("active_task", ""),
+                error=error,
+            )
+        except Exception:
+            self.log_message("记录登录历史失败", logging.DEBUG)
