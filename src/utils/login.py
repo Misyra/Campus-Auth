@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from .browser import BrowserContextManager
-from .env import build_login_env_vars
+from .env import build_login_template_vars
 from .exceptions import LoginCancelledError
 from .logging import setup_logger
 
@@ -163,7 +163,7 @@ class LoginAttemptHandler:
                 len(task.steps),
             )
 
-            env_vars = build_login_env_vars(
+            template_vars = build_login_template_vars(
                 self.config, task.url, self.config.get("custom_variables", {})
             )
 
@@ -200,7 +200,7 @@ class LoginAttemptHandler:
 
                 executor = TaskExecutor(
                     task,
-                    env_vars,
+                    template_vars,
                     default_timeout=browser_timeout,
                     navigation_timeout=navigation_timeout,
                     monitor_config=self.config.get("monitor", {}),

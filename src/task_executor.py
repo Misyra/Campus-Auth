@@ -221,6 +221,7 @@ class TaskConfig:
     def from_dict(cls, data: dict[str, Any]) -> TaskConfig:
         """从字典创建任务配置"""
         return cls(
+            task_id=data.get("task_id", ""),
             name=data.get("name", "未命名任务"),
             description=data.get("description", ""),
             url=data.get("url", ""),
@@ -237,6 +238,7 @@ class TaskConfig:
     def to_dict(self) -> dict[str, Any]:
         """序列化为紧凑字典，跳过空值和默认值"""
         result: dict[str, Any] = {
+            "task_id": self.task_id,
             "name": self.name,
             "description": self.description,
             "url": self.url,
@@ -275,9 +277,9 @@ class VariableResolver:
     MAX_DEPTH = 8
     TEMPLATE_PATTERN = re.compile(r"\{\{(\w+)\}\}")
 
-    def __init__(self, config: TaskConfig, env_vars: dict[str, str]):
+    def __init__(self, config: TaskConfig, template_vars: dict[str, str]):
         self.config = config
-        self.env_vars = env_vars
+        self.template_vars = template_vars
         self.runtime_vars: dict[str, Any] = {
             "url": config.url,
             "name": config.name,
@@ -316,8 +318,8 @@ class VariableResolver:
             if var_name in self.runtime_vars:
                 raw = self.runtime_vars[var_name]
                 resolved = json.dumps(raw, ensure_ascii=False) if not isinstance(raw, str) else raw
-            elif var_name in self.env_vars:
-                resolved = str(self.env_vars[var_name])
+            elif var_name in self.template_vars:
+                resolved = str(self.template_vars[var_name])
             elif var_name in self.config.variables:
                 resolved = self.resolve(
                     self.config.variables[var_name], depth + 1, visited | {var_name}
@@ -1177,17 +1179,17 @@ class TaskExecutor:
     def __init__(
         self,
         config: TaskConfig,
-        env_vars: dict[str, str] | None = None,
+        template_vars: dict[str, str] | None = None,
         screenshot_dir: Path | str | None = None,
         default_timeout: int | None = None,
         navigation_timeout: int | None = None,
         monitor_config: dict[str, Any] | None = None,
     ):
         self.config = config
-        self.env_vars = env_vars or {}
+        self.template_vars = template_vars or {}
         self.default_timeout = default_timeout or self.DEFAULT_STEP_TIMEOUT
         self.navigation_timeout = navigation_timeout or self.DEFAULT_NAVIGATION_TIMEOUT
-        self.resolver = VariableResolver(config, self.env_vars)
+        self.resolver = VariableResolver(config, self.template_vars)
         self.registry = StepExecutorRegistry()
         self._step_results: list[dict[str, Any]] = []
         self._screenshot_dir = Path(screenshot_dir) if screenshot_dir else None
@@ -1293,7 +1295,7 @@ class TaskExecutor:
         """
         url = self.resolver.resolve(self.config.url) if self.config.url else ""
         if not url:
-            url = self.env_vars.get("LOGIN_URL", "").strip()
+            url = self.template_vars.get("LOGIN_URL", "").strip()
         if url:
             logger.info("自动导航到任务URL: %s (超时 %sms)", url, self.navigation_timeout)
             await page.goto(url, wait_until="load", timeout=self.navigation_timeout)
@@ -1451,7 +1453,7 @@ class TaskExecutor:
         try:
             from src.network_decision import is_network_available
 
-            await asyncio.sleep(2)  # 等待 Portal 处理认证请求
+            await asyncio.sleep(5)  # 等待 Portal 处理认证请求
 
             cfg = self.monitor_config
             enable_tcp = cfg.get("enable_tcp_check", True)

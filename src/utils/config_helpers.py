@@ -59,6 +59,9 @@ PROFILE_FIELDS: list[str] = [
     "network_check_timeout",
     "use_global_credentials",
     "shell_path",
+    "browser_viewport_width",
+    "browser_viewport_height",
+    "browser_navigation_timeout",
 ]
 
 

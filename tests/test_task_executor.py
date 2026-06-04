@@ -964,7 +964,7 @@ class TestTaskExecutor:
 
     def test_resolver_initialized(self):
         config = TaskConfig(name="test", variables={"X": "1"})
-        executor = TaskExecutor(config, env_vars={"Y": "2"})
+        executor = TaskExecutor(config, template_vars={"Y": "2"})
         assert executor.resolver is not None
         assert executor.resolver.resolve("{{X}}") == "1"
         assert executor.resolver.resolve("{{Y}}") == "2"

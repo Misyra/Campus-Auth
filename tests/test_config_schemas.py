@@ -76,7 +76,7 @@ class TestValidateGuiConfig:
 
     def test_interval_too_large(self):
         ok, msg = ConfigValidator.validate_gui_config(
-            username="testuser", password="testpass", check_interval="2000"
+            username="testuser", password="testpass", check_interval="90000"
         )
         assert ok is False
 

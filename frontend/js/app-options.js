@@ -10,7 +10,7 @@ import { lifecycleMethods } from './methods/lifecycle.js';
 import { profileMethods } from './methods/profiles.js';
 import { scheduledTasksMethods } from './methods/scheduled_tasks.js';
 import { scriptMethods } from './methods/scripts.js';
-import { shortcutMethods } from './methods/shortcuts.js';
+
 import { statusMethods } from './methods/status.js';
 import { taskMethods } from './tasks/index.js';
 import { uiMethods } from './methods/ui.js';
@@ -206,8 +206,6 @@ export const appOptions = {
     this.init();
     // 应用保存的外观设置
     this.applyAppearance();
-    // 初始化快捷键
-    this.initShortcuts();
   },
   beforeUnmount() {
     this._wsDestroyed = true;
@@ -221,8 +219,6 @@ export const appOptions = {
     if (this._configDirtyTimer) clearTimeout(this._configDirtyTimer);
     this.timers.forEach((t) => clearInterval(t));
     if (this.ws) this.ws.close();
-    // 清理快捷键
-    this.destroyShortcuts();
   },
   methods: {
     ...uiMethods,
@@ -237,7 +233,7 @@ export const appOptions = {
     ...scheduledTasksMethods,
     ...profileMethods,
     ...appearanceMethods,
-    ...shortcutMethods,
+
     ...dragMethods,
     ...logFileMethods,
   },

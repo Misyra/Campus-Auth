@@ -51,8 +51,8 @@ class ConfigValidator:
             interval_int = int(check_interval)
             if interval_int < 1:
                 return False, "检测间隔必须大于0"
-            if interval_int > 1440:  # 24小时
-                return False, "检测间隔不能超过1440分钟（24小时）"
+            if interval_int > 86400:  # 24小时
+                return False, "检测间隔不能超过86400秒（24小时）"
         except ValueError:
             return False, "检测间隔必须是正整数"
 

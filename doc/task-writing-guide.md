@@ -394,7 +394,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
 ### 变量解析优先级
 
 1. 运行时变量（`eval` 的 `store_as`）
-2. 环境变量 + 自定义变量（系统环境 + config 覆盖；自定义变量由 `build_login_env_vars()` 合并进 `env_vars` 字典，不单独成级）
+2. 模板变量 + 自定义变量（运行时配置 + 自定义变量，由 `build_login_template_vars()` 合并为 `template_vars` 字典，不单独成级）
 3. 任务文件内 `variables` 字段
 
 未找到的变量会原样保留在输出中（不会报错）。
