@@ -102,17 +102,6 @@ export const appearanceMethods = {
       _p('--border-accent', `rgba(56, 189, 248, ${0.15 * bi})`);
     }
 
-    // 文字颜色
-    if (isLight) {
-      _p('--text-primary', '#1e293b');
-      _p('--text-secondary', '#475569');
-      _p('--text-muted', '#94a3b8');
-    } else {
-      _p('--text-primary', '#f1f5f9');
-      _p('--text-secondary', '#94a3b8');
-      _p('--text-muted', '#64748b');
-    }
-
     // 侧边栏透明度
     _p('--sidebar-opacity', this.appearance.sidebar_opacity);
 

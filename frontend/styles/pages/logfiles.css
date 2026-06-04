@@ -147,7 +147,7 @@
 }
 
 .logfiles-content .log-meta {
-  color: var(--text-secondary);
+  color: var(--text-muted);
   flex-shrink: 0;
   font-size: 0.75rem;
 }
