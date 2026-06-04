@@ -54,7 +54,7 @@ export const actionMethods = {
     } catch (error) {
       const msg = extractApiError(error, '操作失败');
       this.frontendLogger.error('monitor', '切换监控失败', msg);
-      this.notify(false, msg);
+      this.notify(false, msg, 'monitor');
     } finally {
       this.busy.monitor = false;
     }
@@ -65,13 +65,13 @@ export const actionMethods = {
       this.frontendLogger.info('action', '手动登录请求');
       const loginTimeoutMs = (this.config.login_timeout || 120) * 1000;
       const { data } = await this.$api.post('/api/actions/login', null, { timeout: loginTimeoutMs });
-      this.notify(data.success, this.stripScreenshotHint(data.message));
+      this.notify(data.success, this.stripScreenshotHint(data.message), 'login');
       // 登录完成后刷新登录历史
       this.fetchLoginHistory();
     } catch (error) {
       const msg = extractApiError(error, '手动登录失败');
       this.frontendLogger.error('action', '手动登录失败', msg);
-      this.notify(false, this.stripScreenshotHint(msg));
+      this.notify(false, this.stripScreenshotHint(msg), 'login');
     } finally {
       this.busy.action = false;
     }

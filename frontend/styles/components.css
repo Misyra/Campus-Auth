@@ -908,13 +908,43 @@
   margin-bottom: 4px;
 }
 
+.notification-item-header .notify-icon {
+  display: flex;
+  align-items: center;
+}
+
+.notification-item-header .notify-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .notification-item-header .time {
   color: var(--text-muted);
   font-size: 11px;
+  margin-left: auto;
 }
 
 .notification-item-body {
   color: var(--text-secondary);
+}
+
+.notification-item.notify-success .notify-icon,
+.notification-item.notify-success .notify-label { color: var(--success); }
+.notification-item.notify-error .notify-icon,
+.notification-item.notify-error .notify-label { color: var(--error); }
+.notification-item.notify-success .notification-item-body { color: var(--success); }
+.notification-item.notify-error .notification-item-body { color: var(--error); }
+
+.notify-action {
+  margin-left: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  opacity: 0.8;
+}
+
+.notify-action:hover {
+  opacity: 1;
 }
 
 /* 工具类: SVG sizing */

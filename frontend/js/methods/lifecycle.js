@@ -82,7 +82,7 @@ export const lifecycleMethods = {
       const current = data.current ? `（当前 v${data.current}）` : '';
       const message = `发现新版本 ${latest}${current}`;
 
-      this.notify(true, message);
+      this.notify(true, message, 'update', { label: '前往下载', page: 'about' });
       const wsReady = await this._waitWebSocketReady();
       const logMessage = `${message}，请前往“关于”页面下载`;
       this.frontendLogger.warn('update', logMessage);
@@ -106,7 +106,7 @@ export const lifecycleMethods = {
       this.showWizard = !data.initialized;
       if (data.password_decryption_failed) {
         this.frontendLogger.error('init', '密码解密失败，请在设置页面重新输入密码');
-        this.notify(false, '密码解密失败，请在设置页面重新输入密码');
+        this.notify(false, '密码解密失败，请在设置页面重新输入密码', 'security');
       }
     } catch (error) {
       // 网络错误（无 response）时保持 showWizard 不变
@@ -171,12 +171,12 @@ export const lifecycleMethods = {
         this.frontendLogger.info('lifecycle', '配置完成');
       } else {
         this.frontendLogger.warn('lifecycle', '向导保存失败: ' + data.message);
-        this.notify(false, data.message);
+        this.toastOnly(false, data.message);
       }
     } catch (error) {
       const msg = error?.response?.data?.detail || '保存失败';
       this.frontendLogger.error('lifecycle', '向导保存异常: ' + msg, error);
-      this.notify(false, msg);
+      this.toastOnly(false, msg);
     } finally {
       this.busy.save = false;
     }
@@ -251,7 +251,7 @@ export const lifecycleMethods = {
       if (this.wsRetryCount >= this.wsMaxRetries) {
         this.wsReconnecting = false;
         this.frontendLogger.error('websocket', '连接断开，重试次数已耗尽');
-        this.notify(false, '与服务器的连接已断开，请刷新页面');
+        this.notify(false, '与服务器的连接已断开，请刷新页面', 'network');
         return;
       }
       this.wsReconnecting = true;

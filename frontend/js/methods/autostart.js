@@ -30,15 +30,15 @@ export const autostartMethods = {
         this.toastOnly(true, data.message);
       } else {
         this.frontendLogger.warn('autostart', `${label}自启动失败: ${data.message}`);
-        this.notify(false, data.message);
+        this.toastOnly(false, data.message);
       }
     } catch (error) {
       if (error?.response?.status === 404) {
         this.frontendLogger.warn('autostart', '后端不支持开机自启动');
-        this.notify(false, '当前后端版本不支持开机自启动，请重启后端');
+        this.toastOnly(false, '当前后端版本不支持开机自启动，请重启后端');
       } else {
         this.frontendLogger.error('autostart', `${label}自启动异常`, error);
-        this.notify(false, `${label}自启动失败`);
+        this.toastOnly(false, `${label}自启动失败`);
       }
     } finally {
       await this.fetchAutostart();
