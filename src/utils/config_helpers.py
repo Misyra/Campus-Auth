@@ -58,6 +58,7 @@ PROFILE_FIELDS: list[str] = [
     "app_port",
     "network_check_timeout",
     "use_global_credentials",
+    "shell_path",
 ]
 
 

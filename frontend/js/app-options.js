@@ -141,6 +141,16 @@ export const appOptions = {
       const group = this.logFileGroups.find(g => g.date === this.logViewer.date);
       return group?.files || [];
     },
+    shellPathMode: {
+      get() {
+        if (!this.config.shell_path) return '';
+        if (this.availableShells.some(s => s.path === this.config.shell_path)) return this.config.shell_path;
+        return '__custom__';
+      },
+      set(val) {
+        if (val !== '__custom__') this.config.shell_path = val;
+      },
+    },
   },
   watch: {
     config: {

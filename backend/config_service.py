@@ -316,6 +316,7 @@ def build_runtime_config(
             "log_retention_days",
             "custom_variables",
             "block_proxy",
+            "shell_path",
         ],
     )
 
@@ -372,6 +373,7 @@ def save_config_combined(
             "block_proxy",
             "network_check_timeout",
             "app_port",
+            "shell_path",
         ],
     )
     # 需要归一化处理的系统字段
