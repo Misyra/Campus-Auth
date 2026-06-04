@@ -613,7 +613,10 @@ class MonitorService:
                 )
             )
         except queue.Full:
-            service_logger.warning("命令队列已满，跳过 profile_reload 命令入队")
+            service_logger.warning(
+                "命令队列已满(qsize=%d)，跳过 profile_reload 命令入队",
+                self._cmd_queue.qsize(),
+            )
 
     def stop_monitoring(self) -> tuple[bool, str]:
         service_logger.info("收到停止监控请求")

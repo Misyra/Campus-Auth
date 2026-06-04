@@ -78,9 +78,7 @@ sys.exit(0 if s.connect_ex(('127.0.0.1', $port)) == 0 else 1)
 " 2>/dev/null && return 0
   fi
   # bash 兜底（/dev/tcp 需 shell 编译时开启，部分环境不可用）
-  if [[ -r /dev/tcp ]]; then
-    timeout 1 bash -c "echo >/dev/tcp/127.0.0.1/$port" 2>/dev/null && return 0
-  fi
+  timeout 1 bash -c "echo >/dev/tcp/127.0.0.1/$port" 2>/dev/null && return 0
   return 1
 }
 

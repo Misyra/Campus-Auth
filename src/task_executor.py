@@ -1492,9 +1492,12 @@ class TaskExecutor:
                 timeout,
             )
 
+            test_urls = cfg.get("test_urls", None)
+
             result = await asyncio.to_thread(
                 is_network_available,
                 test_sites=test_sites,
+                test_urls=test_urls,
                 timeout=timeout,
                 enable_tcp=enable_tcp,
                 enable_http=enable_http,

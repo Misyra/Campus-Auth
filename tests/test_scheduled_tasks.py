@@ -91,7 +91,8 @@ def test_delete_task(scheduler):
     assert scheduler.get_task(task_id) is None
 
 
-def test_history(scheduler):
+@pytest.mark.asyncio
+async def test_history(scheduler):
     """测试执行历史。"""
     task_id = "history_task"
     scheduler.save_task(task_id, {
@@ -105,8 +106,8 @@ def test_history(scheduler):
     })
 
     # 添加历史记录
-    scheduler._add_history(task_id, "success", "执行成功", 1.5)
-    scheduler._add_history(task_id, "failure", "执行失败", 0.5)
+    await scheduler._add_history(task_id, "success", "执行成功", 1.5)
+    await scheduler._add_history(task_id, "failure", "执行失败", 0.5)
 
     # 获取历史
     history = scheduler.get_history(task_id)

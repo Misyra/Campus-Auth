@@ -284,15 +284,16 @@ class LoginAttemptHandler:
         """关闭浏览器（登录成功或监控停止时调用）"""
         if self._browser_ctx:
             try:
-                # 实际关闭 Worker 中的浏览器进程（同线程安全）
                 from src.playwright_worker import get_worker
-
                 worker = get_worker()
                 await worker.close_browser()
-
-                # 释放本地引用
-                await self._browser_ctx.__aexit__(None, None, None)
             except Exception as exc:
                 self.logger.warning("浏览器关闭时异常: %s", exc)
-            self._browser_ctx = None
-            self.logger.info("浏览器已关闭")
+            finally:
+                # 确保 __aexit__ 始终执行，释放本地引用
+                try:
+                    await self._browser_ctx.__aexit__(None, None, None)
+                except Exception:
+                    pass
+                self._browser_ctx = None
+                self.logger.info("浏览器已关闭")

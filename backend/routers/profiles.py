@@ -102,11 +102,27 @@ def save_profile(
 def delete_profile(
     profile_id: str,
     profile_svc: ProfileService = Depends(get_profile_service),
+    monitor_svc: MonitorService = Depends(get_monitor_service),
 ) -> ActionResponse:
+    # 删除前记录方案名，用于日志
+    data = profile_svc.load()
+    profile = data.profiles.get(profile_id)
+    profile_name = profile.name if profile else profile_id
+    was_active = data.active_profile == profile_id
+
     ok, message = profile_svc.delete_profile(profile_id)
     api_logger.info(
         "Delete profile %s -> success=%s, message=%s", profile_id, ok, message
     )
+    # 删除活动方案后通知监控重载配置
+    if ok and was_active:
+        try:
+            new_data = profile_svc.load()
+            new_profile = new_data.profiles.get(new_data.active_profile)
+            new_name = new_profile.name if new_profile else new_data.active_profile
+            monitor_svc.apply_profile(new_name)
+        except Exception:
+            api_logger.warning("删除方案后 apply_profile 失败", exc_info=True)
     return ActionResponse(success=ok, message=message)
 
 

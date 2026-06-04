@@ -85,6 +85,8 @@
 
       <transition name="nav-more">
         <div class="nav-more-menu" v-show="showMoreNav">
+        <!-- 注意：以下子页面使用 currentPage 赋值而非 navigateTo()，以保持下拉菜单展开，
+             便于用户看到当前选中的子页面并快速切换。主导航项才使用 navigateTo() 关闭菜单。 -->
         <button
           class="nav-item"
           :class="{ active: currentPage === 'profiles' || currentPage === 'profile-edit' }"

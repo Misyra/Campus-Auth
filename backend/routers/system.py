@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
-import signal
 import threading
-from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from src.utils.logging import get_logger
 from src.version import compare_versions, get_project_version
@@ -142,7 +141,9 @@ def shutdown_server(
     """关闭服务器"""
     api_logger.warning("Shutdown requested")
 
-    def _do_shutdown():
+    loop = asyncio.get_event_loop()
+
+    def _do_shutdown(shutdown_loop: asyncio.AbstractEventLoop):
         try:
             svc.stop_monitoring()
         except Exception:
@@ -161,11 +162,20 @@ def shutdown_server(
             (AUTH_DATA_DIR / "campus_network_auth.pid").unlink(missing_ok=True)
         except Exception:
             api_logger.debug("PID 文件清理失败", exc_info=True)
+        # 调度 services.shutdown() 到事件循环，确保 lifespan 清理逻辑执行
+        try:
+            from backend.main import app as _app
+            future = asyncio.run_coroutine_threadsafe(
+                _app.state.services.shutdown(), shutdown_loop
+            )
+            future.result(timeout=10)
+        except Exception:
+            api_logger.debug("services.shutdown() 执行失败", exc_info=True)
         import logging as _logging
         _logging.shutdown()
-        os.kill(os.getpid(), signal.SIGTERM)
+        os._exit(0)
 
-    threading.Thread(target=_do_shutdown, daemon=True).start()
+    threading.Thread(target=_do_shutdown, args=(loop,), daemon=True).start()
 
     return ActionResponse(success=True, message="服务器正在关闭...")
 
@@ -197,6 +207,8 @@ def uninstall_perform(payload: dict) -> dict:
     from ..uninstall_service import perform
 
     keys = payload.get("keys", [])
+    if not isinstance(keys, list):
+        raise HTTPException(400, "keys 必须是列表")
     api_logger.warning("Uninstall requested, keys=%s", keys)
     results = perform(keys)
     return {

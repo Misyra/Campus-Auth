@@ -529,36 +529,39 @@ class NetworkMonitorCore:
         if not self._profile_service:
             return
 
-        now = time.time()
-        if now - self._last_gateway_check_time < self.GATEWAY_CHECK_COOLDOWN_SECONDS:
-            return
+        try:
+            now = time.time()
+            if now - self._last_gateway_check_time < self.GATEWAY_CHECK_COOLDOWN_SECONDS:
+                return
 
-        self._last_gateway_check_time = now
+            self._last_gateway_check_time = now
 
-        data = self._profile_service.load()
-        if not data.auto_switch:
-            return
+            data = self._profile_service.load()
+            if not data.auto_switch:
+                return
 
-        matched_id = self._profile_service.detect_matching_profile()
-        if matched_id and matched_id != self._last_profile_id:
-            profile = data.profiles.get(matched_id)
-            profile_name = profile.name if profile else matched_id
-            old_profile = data.profiles.get(self._last_profile_id)
-            old_name = old_profile.name if old_profile else (self._last_profile_id or "无")
+            matched_id = self._profile_service.detect_matching_profile()
+            if matched_id and matched_id != self._last_profile_id:
+                profile = data.profiles.get(matched_id)
+                profile_name = profile.name if profile else matched_id
+                old_profile = data.profiles.get(self._last_profile_id)
+                old_name = old_profile.name if old_profile else (self._last_profile_id or "无")
 
-            self.log_message(
-                f"检测到网络环境变化，方案切换: {old_name} -> {profile_name}",
-                logging.INFO,
-            )
+                self.log_message(
+                    f"检测到网络环境变化，方案切换: {old_name} -> {profile_name}",
+                    logging.INFO,
+                )
 
-            self._last_profile_id = matched_id
-            ok, msg = self._profile_service.set_active_profile(matched_id)
-            if not ok:
-                # 方案可能在检测后被删除，回退缓存状态
-                self._last_profile_id = self._profile_service.load().active_profile
-                self.log_message(f"方案切换失败: {msg}", logging.WARNING)
-            elif self._on_profile_switch:
-                self._on_profile_switch(profile_name)
+                self._last_profile_id = matched_id
+                ok, msg = self._profile_service.set_active_profile(matched_id)
+                if not ok:
+                    # 方案可能在检测后被删除，回退缓存状态
+                    self._last_profile_id = self._profile_service.load().active_profile
+                    self.log_message(f"方案切换失败: {msg}", logging.WARNING)
+                elif self._on_profile_switch:
+                    self._on_profile_switch(profile_name)
+        except Exception as exc:
+            self.log_message(f"方案切换检测异常: {exc}", logging.WARNING)
 
     def attempt_login(self) -> tuple[bool, str]:
         active_task = self.config.get("active_task", "") or "default"
