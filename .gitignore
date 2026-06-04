@@ -73,6 +73,9 @@ temp/
 # User background images
 frontend/background/
 
+# 流程图（本地参考，不随仓库分发）
+doc/diagrams/
+
 # Source assets
 1.png
 logo.png
