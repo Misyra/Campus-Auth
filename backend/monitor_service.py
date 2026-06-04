@@ -171,6 +171,7 @@ class MonitorService:
             config=config,
             log_callback=self._push_log,
             thread_done=self._thread_done,
+            login_history=self._login_history,
         )
         core.set_profile_service(
             self._profile_service, on_switch=self._on_profile_switch

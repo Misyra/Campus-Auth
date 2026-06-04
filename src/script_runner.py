@@ -6,6 +6,7 @@ import os
 import platform
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -17,17 +18,26 @@ logger = get_logger("script_runner", side="BACKEND")
 # 默认脚本超时（秒）
 DEFAULT_TIMEOUT = 60
 
-
-def _escape_ps_single_quote(s: str) -> str:
-    """转义 PowerShell 单引号字符串中的单引号（' → ''）。
-
-    PowerShell 单引号字符串规则：内部单引号用两个连续单引号转义。
-    """
-    return s.replace("'", "''")
+# 解释器 → 临时文件后缀映射
+_BINARY_EXT_MAP = {
+    "python": ".py", "python3": ".py",
+    "node": ".js",
+    "ruby": ".rb",
+    "php": ".php",
+    "perl": ".pl", "raku": ".raku",
+    "lua": ".lua",
+    "r": ".R", "rscript": ".R",
+    "cmd": ".bat",
+    "powershell": ".ps1", "pwsh": ".ps1",
+    "bash": ".sh", "sh": ".sh", "zsh": ".sh", "fish": ".fish",
+}
 
 
 def get_default_binary() -> str:
     """获取默认执行二进制（当前运行的 Python）。"""
+    if getattr(sys, 'frozen', False):
+        import shutil
+        return shutil.which("python") or shutil.which("python3") or ""
     return sys.executable
 
 
@@ -82,55 +92,75 @@ class ScriptRunner:
         self._script_content: str | None = None
 
     def _load_script_content(self) -> str | None:
-        """从 JSON 文件加载脚本内容。"""
+        """从 JSON 文件加载脚本内容。
+
+        .json 文件解析失败时抛出 ValueError，避免静默降级为 .py 执行。
+        """
         if self._script_content is not None:
             return self._script_content
 
         if self.script_path.suffix.lower() == ".json":
+            import json
             try:
-                import json
                 data = json.loads(self.script_path.read_text(encoding="utf-8"))
-                self._script_content = data.get("content", "")
-                return self._script_content
             except Exception as e:
-                logger.error("无法读取脚本 JSON %s: %s", self.script_path, e)
-                return None
+                raise ValueError(f"JSON 脚本格式错误或编码不支持: {e}") from e
+            self._script_content = data.get("content", "")
+            return self._script_content
+
         # .py 文件直接返回 None，由 _build_cmd 处理
         return None
 
-    def _build_cmd(self) -> list[str]:
-        """构建执行命令。"""
-        script = str(self.script_path)
-        binary = self.binary_path.lower()
+    def _build_cmd(self, script_file: str | None = None) -> list[str]:
+        """构建执行命令。
 
-        # JSON 格式脚本：从 content 字段读取命令内容
+        Args:
+            script_file: 可选，指定要执行的脚本文件路径。
+                         为 None 时使用 self.script_path（仅文件脚本）。
+        """
+        exe_name = Path(self.binary_path).stem.lower()
+
+        # 指定了脚本文件（临时文件或普通文件）：统一按文件执行
+        if script_file is not None:
+            if platform.system() == "Windows":
+                if exe_name in ("powershell", "pwsh"):
+                    return [self.binary_path, "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", script_file]
+                elif exe_name == "cmd":
+                    return [self.binary_path, "/c", f'call "{script_file}"']
+            else:
+                if exe_name in ("bash", "sh", "zsh", "fish"):
+                    return [self.binary_path, script_file]
+            return [self.binary_path, script_file]
+
+        script = str(self.script_path)
+
+        # JSON 格式脚本：不应该走到这里（应通过 script_file 参数传入临时文件）
         content = self._load_script_content()
         if content is not None:
-            if platform.system() == "Windows":
-                if "powershell" in binary or "pwsh" in binary:
-                    return [self.binary_path, "-NoProfile", "-WindowStyle", "Hidden", "-Command", content]
-                elif "cmd" in binary:
-                    return [self.binary_path, "/c", content]
-            else:
-                shell_names = ["bash", "sh", "zsh", "fish"]
-                if any(shell in binary for shell in shell_names):
-                    return [self.binary_path, "-c", content]
-            # Python 或其他解释器：用 -c 执行内容
-            return [self.binary_path, "-c", content]
+            raise RuntimeError("JSON 内容脚本必须通过临时文件执行，请使用 run() 方法")
 
-        # .py 或其他文件：按原逻辑处理
+        # .py 或其他文件
         if platform.system() == "Windows":
-            if "powershell" in binary or "pwsh" in binary:
-                return [self.binary_path, "-NoProfile", "-WindowStyle", "Hidden", "-Command", f"& '{_escape_ps_single_quote(script)}'"]
-            elif "cmd" in binary:
-                return [self.binary_path, "/c", script]
+            if exe_name in ("powershell", "pwsh"):
+                return [self.binary_path, "-NoProfile", "-WindowStyle", "Hidden", "-File", script]
+            elif exe_name == "cmd":
+                return [self.binary_path, "/c", f'call "{script}"']
         else:
-            shell_names = ["bash", "sh", "zsh", "fish"]
-            if any(shell in binary for shell in shell_names):
+            if exe_name in ("bash", "sh", "zsh", "fish"):
                 return [self.binary_path, script]
 
-        # 默认：将脚本路径作为参数传递
         return [self.binary_path, script]
+
+    def _content_temp_file(self, content: str) -> str:
+        """将 JSON 内容写入临时文件，返回文件路径。"""
+        exe_name = Path(self.binary_path).stem.lower()
+        ext = _BINARY_EXT_MAP.get(exe_name, "")
+        tf = tempfile.NamedTemporaryFile(
+            "w", suffix=ext, delete=False, encoding="utf-8",
+        )
+        tf.write(content)
+        tf.close()
+        return tf.name
 
     def run(self) -> tuple[bool, str]:
         """执行脚本并返回 (执行是否成功, 输出信息)。
@@ -143,22 +173,31 @@ class ScriptRunner:
 
         start = time.perf_counter()
         env = _build_minimal_env()
-        cmd = self._build_cmd()
+        temp_path: str | None = None
+
+        try:
+            content = self._load_script_content()
+        except ValueError as e:
+            logger.error("脚本加载失败: %s", e)
+            return False, str(e)
+
+        if content is not None:
+            # JSON 内容脚本：写入临时文件执行，绕过命令行引号转义问题
+            temp_path = self._content_temp_file(content)
+            cmd = self._build_cmd(script_file=temp_path)
+        else:
+            cmd = self._build_cmd()
 
         # 使用 ShellCommandPolicy 进行安全校验和执行
         available = [b["path"] for b in detect_available_binaries()]
-        # 确保当前 runner 自身的 binary_path 在白名单中（支持自定义 Python 路径）
         if self.binary_path not in available:
             available.append(self.binary_path)
         policy = ShellCommandPolicy(allowlist=available)
 
-        # Windows 下隐藏窗口 + 统一传入最小环境（含 PYTHONIOENCODING=utf-8）
-        kwargs: dict = {
-            "cwd": str(self.script_path.parent),
-            "env": env,
-        }
-        if platform.system() == "Windows":
-            kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
+        kwargs: dict = {"env": env}
+        # JSON 内容脚本（临时文件）不设 cwd，文件脚本设 cwd 为脚本所在目录
+        if temp_path is None:
+            kwargs["cwd"] = str(self.script_path.parent)
 
         try:
             returncode, stdout_str, stderr_str = policy.run_sync(
@@ -167,13 +206,18 @@ class ScriptRunner:
         except PermissionError as e:
             logger.error("脚本执行被拒绝: %s", e)
             return False, str(e)
+        finally:
+            if temp_path is not None:
+                try:
+                    os.unlink(temp_path)
+                except OSError:
+                    pass
 
         elapsed = time.perf_counter() - start
 
         if stderr_str:
             logger.info("脚本 stderr: %s", stderr_str[:500])
 
-        # 优先用 stdout，其次 stderr，最后兜底提示
         output = stdout_str[:500] or stderr_str[:500] or f"(无输出, exit code {returncode})"
 
         if returncode == 0:
@@ -189,7 +233,7 @@ def _build_minimal_env() -> dict[str, str]:
     safe: dict[str, str] = {}
     base_keys = {"PATH", "HOME", "USER", "TEMP", "TMP"}
     if platform.system() == "Windows":
-        base_keys.update({"SystemRoot", "ComSpec", "windir", "USERPROFILE", "APPDATA", "LOCALAPPDATA"})
+        base_keys.update({"SystemRoot", "SystemDrive", "ComSpec", "windir", "USERPROFILE", "APPDATA", "LOCALAPPDATA"})
     else:
         base_keys.update({"LANG", "LC_ALL", "SHELL", "XDG_RUNTIME_DIR"})
     for key in base_keys:

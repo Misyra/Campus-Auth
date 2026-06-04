@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from src.script_runner import (
     ScriptRunner,
     get_default_binary,
@@ -82,14 +84,22 @@ class TestScriptRunnerBuildCmd:
         assert cmd[0] == sys.executable
         assert str(script) in cmd
 
-    def test_json_script_with_content(self, tmp_path: Path):
+    def test_json_content_raises_without_script_file(self, tmp_path: Path):
+        """JSON 内容脚本不传 script_file 应抛出 RuntimeError。"""
         script = tmp_path / "test.json"
         script.write_text(json.dumps({"content": 'print("hi")'}), encoding="utf-8")
         runner = ScriptRunner(script, binary_path=sys.executable)
-        cmd = runner._build_cmd()
-        # Python 解释器用 -c 执行内容
-        assert "-c" in cmd
-        assert 'print("hi")' in cmd
+        with pytest.raises(RuntimeError, match="临时文件"):
+            runner._build_cmd()
+
+    def test_json_content_with_script_file(self, tmp_path: Path):
+        """传入 script_file 时应构建正确的文件执行命令。"""
+        script = tmp_path / "test.json"
+        script.write_text(json.dumps({"content": 'print("hi")'}), encoding="utf-8")
+        runner = ScriptRunner(script, binary_path=sys.executable)
+        cmd = runner._build_cmd(script_file="/tmp/test.py")
+        assert "/tmp/test.py" in cmd
+        assert "-c" not in cmd
 
     def test_json_script_caches_content(self, tmp_path: Path):
         script = tmp_path / "test.json"
@@ -110,12 +120,13 @@ class TestScriptRunnerBuildCmd:
         content = runner._load_script_content()
         assert content == ""
 
-    def test_invalid_json_returns_none(self, tmp_path: Path):
+    def test_invalid_json_raises_value_error(self, tmp_path: Path):
+        """格式错误的 JSON 应抛出 ValueError，不再静默降级。"""
         script = tmp_path / "bad.json"
         script.write_text("not json {{{", encoding="utf-8")
         runner = ScriptRunner(script, binary_path=sys.executable)
-        content = runner._load_script_content()
-        assert content is None
+        with pytest.raises(ValueError, match="JSON 脚本格式错误"):
+            runner._load_script_content()
 
     @patch("src.script_runner.platform.system", return_value="Windows")
     def test_cmd_binary_on_windows(self, _mock_sys, tmp_path: Path):
@@ -125,6 +136,8 @@ class TestScriptRunnerBuildCmd:
         cmd = runner._build_cmd()
         assert cmd[0] == "C:\\Windows\\cmd.exe"
         assert "/c" in cmd
+        # CMD 应使用 call 规避路径特殊字符问题
+        assert "call" in cmd[2]
 
     @patch("src.script_runner.platform.system", return_value="Linux")
     def test_bash_binary_on_linux(self, _mock_sys, tmp_path: Path):
@@ -158,3 +171,22 @@ class TestScriptRunnerRunExtra:
         ok, msg = runner.run()
         assert ok is True
         assert len(msg) <= 500
+
+    def test_json_content_run_uses_temp_file(self, tmp_path: Path):
+        """JSON 内容脚本应通过临时文件执行，避免引号问题。"""
+        script = tmp_path / "test.json"
+        script.write_text(json.dumps({"content": 'print("hello from json")'}), encoding="utf-8")
+        runner = ScriptRunner(script, binary_path=sys.executable)
+        ok, msg = runner.run()
+        assert ok is True
+        assert "hello from json" in msg
+
+    def test_json_content_with_double_quotes(self, tmp_path: Path):
+        """JSON 内容包含双引号时应正确执行（验证临时文件方案）。"""
+        script = tmp_path / "test.json"
+        content = 'print("It works!")'
+        script.write_text(json.dumps({"content": content}), encoding="utf-8")
+        runner = ScriptRunner(script, binary_path=sys.executable)
+        ok, msg = runner.run()
+        assert ok is True
+        assert "It works!" in msg
