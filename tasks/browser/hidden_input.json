@@ -2,7 +2,6 @@
   "name": "隐藏输入框任务",
   "description": "适用于隐藏输入框的认证页面，执行前强制显示所有隐藏输入框",
   "metadata": {
-    "type": "builtin",
     "created": "2025-01-01"
   },
   "url": "{{LOGIN_URL}}",

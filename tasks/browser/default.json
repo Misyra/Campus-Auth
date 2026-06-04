@@ -2,7 +2,6 @@
   "name": "通用登录",
   "description": "通用校园网认证任务：语义识别表单、智能判断结果，兼容大多数认证页面",
   "metadata": {
-    "type": "builtin",
     "created": "2025-01-01"
   },
   "url": "{{LOGIN_URL}}",
