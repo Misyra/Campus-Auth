@@ -16,6 +16,7 @@ tasks/active.txt
 tasks/.order.json
 tasks/scheduled/
 tasks/scripts/
+tasks/browser/test2.json
 
 # Embedded Python environment (auto-downloaded)
 environment/
