@@ -32,7 +32,15 @@ class AutoStartService:
 
         app_entry = self.project_root / "app.py"
 
-        # 当前解释器可用则直接使用（uv run / venv / 系统 Python 均适用）
+        # 优先使用项目 .venv 中的 Python（uv/venv 均适用）
+        if is_windows():
+            venv_python = self.project_root / ".venv" / "Scripts" / "python.exe"
+        else:
+            venv_python = self.project_root / ".venv" / "bin" / "python3"
+        if venv_python.exists():
+            return f'"{venv_python}" "{app_entry}"'
+
+        # 当前解释器可用则直接使用
         runtime_python = Path(sys.executable).resolve()
         if runtime_python.exists():
             return f'"{runtime_python}" "{app_entry}"'
