@@ -64,6 +64,10 @@ class ProfileService:
                 profile_logger.warning("无可用备份，将使用空配置")
 
         self._data = ProfilesData()
+        self._data.profiles.setdefault("default", ProfileSettings())
+        profile_logger.warning(
+            "settings.json 缺失或不可用，已初始化空配置 + default 方案，请确认是否被误删"
+        )
         return self._data.model_copy(deep=True)
 
     def _try_restore_from_backup(self) -> ProfilesData | None:

@@ -387,47 +387,49 @@ def save_config_combined(
     data.system = sys_cfg
 
     # ── 更新 default 方案的高级设置（始终写入全局）──
-    if "default" in data.profiles:
-        glob = data.profiles["default"]
-        # 直接映射的 profile 字段（无归一化处理）
-        assign_profile_fields(
-            glob.__dict__,
-            pld,
-            [
-                "check_interval_seconds",
-                "auto_start",
-                "headless",
-                "browser_timeout",
-                "browser_navigation_timeout",
-                "login_timeout",
-                "browser_low_resource_mode",
-                "browser_disable_web_security",
-                "pause_enabled",
-                "pause_start_hour",
-                "pause_end_hour",
-                "enable_tcp_check",
-                "enable_http_check",
-                "enable_local_check",
-                "check_auth_url",
-                "auth_url_targets",
-                "portal_check_urls",
-                "stealth_mode",
-                "stealth_custom_script",
-                "custom_variables",
-                "browser_viewport_width",
-                "browser_viewport_height",
-            ],
-        )
-        # 需要归一化处理的 profile 字段
-        glob.browser_user_agent = payload.browser_user_agent.strip()
-        glob.browser_extra_headers_json = _normalize_headers_json(
-            payload.browser_extra_headers_json
-        )
-        glob.browser_args = payload.browser_args.strip()
-        glob.browser_locale = payload.browser_locale.strip()  # 浏览器语言区域
-        glob.browser_timezone = payload.browser_timezone.strip()  # 浏览器时区 ID
-        glob.network_targets = _normalize_targets(payload.network_targets)
-        glob.http_targets = _normalize_targets(payload.http_targets)
+    if "default" not in data.profiles:
+        data.profiles["default"] = ProfileSettings()
+        config_logger.info("自动初始化 default 方案（settings.json 中无 default 键）")
+    glob = data.profiles["default"]
+    # 直接映射的 profile 字段（无归一化处理）
+    assign_profile_fields(
+        glob.__dict__,
+        pld,
+        [
+            "check_interval_seconds",
+            "auto_start",
+            "headless",
+            "browser_timeout",
+            "browser_navigation_timeout",
+            "login_timeout",
+            "browser_low_resource_mode",
+            "browser_disable_web_security",
+            "pause_enabled",
+            "pause_start_hour",
+            "pause_end_hour",
+            "enable_tcp_check",
+            "enable_http_check",
+            "enable_local_check",
+            "check_auth_url",
+            "auth_url_targets",
+            "portal_check_urls",
+            "stealth_mode",
+            "stealth_custom_script",
+            "custom_variables",
+            "browser_viewport_width",
+            "browser_viewport_height",
+        ],
+    )
+    # 需要归一化处理的 profile 字段
+    glob.browser_user_agent = payload.browser_user_agent.strip()
+    glob.browser_extra_headers_json = _normalize_headers_json(
+        payload.browser_extra_headers_json
+    )
+    glob.browser_args = payload.browser_args.strip()
+    glob.browser_locale = payload.browser_locale.strip()  # 浏览器语言区域
+    glob.browser_timezone = payload.browser_timezone.strip()  # 浏览器时区 ID
+    glob.network_targets = _normalize_targets(payload.network_targets)
+    glob.http_targets = _normalize_targets(payload.http_targets)
 
     # 活动方案保持不变 —— 设置页面不修改方案独立配置
 

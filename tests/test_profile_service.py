@@ -50,6 +50,7 @@ class TestCorruptRenameEAFP:
         # _load_unsafe 应该优雅处理文件不存在的情况
         result = svc._load_unsafe()
 
-        # 验证返回空默认值
+        # 验证返回包含 default 方案的默认值
         assert result is not None
-        assert result.profiles == {}
+        assert "default" in result.profiles
+        assert len(result.profiles) == 1
