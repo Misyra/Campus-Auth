@@ -17,7 +17,6 @@ Playwright Worker — Actor 模型浏览器自动化工作线程
 from __future__ import annotations
 
 import asyncio
-import logging
 import queue
 import subprocess
 import sys

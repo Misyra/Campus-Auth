@@ -4,7 +4,6 @@ import asyncio
 import copy
 import datetime
 import json
-import logging
 import os
 import queue
 import re
@@ -365,9 +364,9 @@ class MonitorService:
         )
         self._logs.append(entry)
 
-        # 同步写入 Python 日志系统 → 自动持久化到文件
-        log_level = getattr(logging, level_name, logging.INFO)
-        service_logger.log(log_level, "[%s] %s", source_name, message)
+        # 同步写入日志系统 → 自动持久化到文件
+        log_func = getattr(service_logger, level_name.lower(), service_logger.info)
+        log_func("[{}] {}", source_name, message)
 
         # 监控相关日志 → 更新状态快照
         if source_name in ("monitor.core", "monitor", "network"):

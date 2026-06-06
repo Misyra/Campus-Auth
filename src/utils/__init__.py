@@ -4,6 +4,7 @@ from .crypto import decrypt_password, encrypt_password, mask_password
 from .exceptions import LoginCancelledError
 from .logging import (
     LogConfigCenter,
+    WebSocketLogHandler,
     get_logger,
     setup_logger,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "setup_logger",
     "get_logger",
     "LogConfigCenter",
+    "WebSocketLogHandler",
     "LoginCancelledError",
     "get_runtime_stats",
     "is_in_pause_period",
