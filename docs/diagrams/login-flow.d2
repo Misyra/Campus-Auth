@@ -1,0 +1,43 @@
+direction: down
+
+classes: {
+  start: { shape: oval; style.fill: "#e3f2fd"; style.stroke: "#1976d2" }
+  process: { shape: rectangle; style.fill: "#fff"; style.stroke: "#424242" }
+  decision: { shape: diamond; style.fill: "#fff3e0"; style.stroke: "#f57c00" }
+  browser: { shape: rectangle; style.fill: "#e8eaf6"; style.stroke: "#3f51b5" }
+  ok: { shape: rectangle; style.fill: "#e8f5e9"; style.stroke: "#388e3c" }
+  fail: { shape: rectangle; style.fill: "#ffebee"; style.stroke: "#c62828" }
+}
+
+# ── 入口 ──
+entry: "执行登录\n(attempt_login)" { class: start }
+load-task: "加载活动任务" { class: process }
+task-type: "任务类型？" { class: decision }
+
+# ── 执行任务 ──
+run-script: "执行脚本\n子进程调用" { class: process }
+run-browser: "执行浏览器任务\n→ 任务执行流程图" { class: browser }
+wait-settle: "等待 2s\n会话稳定" { class: process }
+close-browser: "关闭浏览器" { class: process }
+
+# ── 网络验证（公共） ──
+net-check: "网络检测验证" { class: decision }
+
+# ── 最终结果 ──
+login-success: "登录成功" { class: ok }
+login-fail: "登录失败" { class: fail }
+
+# ── 流程 ──
+entry -> load-task
+load-task -> task-type
+
+task-type -> run-script: "脚本任务"
+task-type -> run-browser: "浏览器任务"
+
+run-script -> net-check
+run-browser -> wait-settle: "步骤完成"
+wait-settle -> net-check
+
+net-check -> close-browser: "网络正常"
+net-check -> login-fail: "网络异常"
+close-browser -> login-success
