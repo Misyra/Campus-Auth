@@ -10,7 +10,6 @@ dependencies = [
     "uvicorn>=0.35.0,<1.0",
     "pydantic>=2.11.7,<3.0",
     "httpx>=0.28.1,<1.0",
-    "websockets>=16.0,<17.0",
     "pystray>=0.19.5",
     "Pillow>=10.0.0",
     "cairosvg>=2.7.0",
@@ -18,7 +17,7 @@ dependencies = [
     "ddddocr>=1.6.1",
     "onnxruntime<1.21",
     "python-multipart>=0.0.27",
-    "pysocks>=1.7.1",
+    "loguru>=0.7.0",
 ]
 
 [project.optional-dependencies]
