@@ -3,31 +3,31 @@ name = "campus-auth"
 version = "4.0.2"
 description = "校园网自动认证工具，前后端分离（FastAPI + Web UI）"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
-    "playwright>=1.57.0,<1.58.0",
-    "fastapi>=0.116.1,<1.0",
-    "uvicorn>=0.35.0,<1.0",
-    "pydantic>=2.11.7,<3.0",
-    "httpx>=0.28.1,<1.0",
-    "pystray>=0.19.5",
-    "Pillow>=10.0.0",
-    "cairosvg>=2.7.0",
-    "cryptography>=42.0.0",
-    "ddddocr>=1.6.1",
-    "onnxruntime<1.21",
-    "python-multipart>=0.0.27",
-    "loguru>=0.7.0",
+    "playwright",
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "httpx",
+    "pystray",
+    "Pillow",
+    "cairosvg",
+    "cryptography",
+    "ddddocr",
+    "onnxruntime",
+    "python-multipart",
+    "loguru",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=9.0.3",
-    "pytest-asyncio>=0.25.0",
-    "psutil>=7.2.2",
+    "pytest",
+    "pytest-asyncio",
+    "psutil",
 ]
 build = [
-    "pyinstaller>=6.19.0",
+    "pyinstaller",
 ]
 
 [tool.uv]

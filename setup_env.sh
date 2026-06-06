@@ -196,7 +196,7 @@ select_launch_method() {
   if [[ -n "$py_ver" ]]; then
     py_status="检测到 Python $py_ver"
   else
-    py_status="未检测到（请先安装 Python 3.10+）"
+    py_status="未检测到（请先安装 Python 3.12+）"
   fi
 
   # 所有菜单文字用 >&2 输出到终端，避免被 $() 捕获
@@ -364,7 +364,7 @@ check_system_python() {
   py_cmd="$(detect_python3)"
   if [[ -z "$py_cmd" ]]; then
     log_error "系统中未检测到 python3 或 python"
-    log_error "请先安装 Python 3.10+ (推荐 https://www.python.org/downloads/)"
+    log_error "请先安装 Python 3.12+ (推荐 https://www.python.org/downloads/)"
     exit 1
   fi
 
@@ -375,28 +375,33 @@ check_system_python() {
 
   log_info "系统 Python 版本: $py_ver"
 
-  if [[ "$major_minor" == "3.10" ]]; then
+  # 检查版本 >= 3.12
+  local major minor
+  major="$(echo "$major_minor" | cut -d. -f1)"
+  minor="$(echo "$major_minor" | cut -d. -f2)"
+
+  if [[ "$major" -gt 3 ]] || [[ "$major" -eq 3 && "$minor" -ge 12 ]]; then
     log_success "Python 版本符合推荐要求"
     return 0
   fi
 
-  # 不是 3.10，弹出兼容性警告
+  # 版本低于 3.12，弹出兼容性警告
   echo ""
   log_warning "=============================================="
-  log_warning "  Python $py_ver 可能与项目不完全兼容"
-  log_warning "  项目推荐使用 Python 3.10"
-  log_warning "  requires-python = \">=3.10\""
+  log_warning "  Python $py_ver 低于项目最低要求"
+  log_warning "  项目需要 Python 3.12 或更高版本"
+  log_warning "  requires-python = \">=3.12\""
   log_warning "=============================================="
   echo ""
 
   # 非交互模式自动继续，交互模式让用户决定
   if is_interactive; then
     local answer
-    read -p "检测到 Python $major_minor，可能存在兼容问题。是否继续? (Y/n/B 返回): " answer
+    read -p "检测到 Python $major_minor，版本过低。是否继续? (Y/n/B 返回): " answer
     answer="${answer:-Y}"
     case "$answer" in
       [Bb]) return 2 ;;                                 # 返回主菜单
-      [Nn]) log_info "已取消，请安装 Python 3.10 后重试"; exit 0 ;;
+      [Nn]) log_info "已取消，请安装 Python 3.12 后重试"; exit 0 ;;
       *) ;;                                              # 继续
     esac
   else
