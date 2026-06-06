@@ -30,19 +30,18 @@ class AutoStartService:
         if packaged_executable:
             return f'"{packaged_executable}"'
 
-        # 使用 sys.executable（当前 Python 解释器路径，跨平台通用）
-        runtime_python = Path(sys.executable).resolve()
         app_entry = self.project_root / "app.py"
+
+        # 当前解释器可用则直接使用（uv run / venv / 系统 Python 均适用）
+        runtime_python = Path(sys.executable).resolve()
+        if runtime_python.exists():
+            return f'"{runtime_python}" "{app_entry}"'
 
         if is_windows():
             # Windows 下检查嵌入式 Python（发布包内置）
             python_exe = self.project_root / "environment" / "python" / "python.exe"
             if python_exe.exists():
                 return f'"{python_exe}" "{app_entry}"'
-
-        # 当前解释器可用则直接使用
-        if runtime_python.exists():
-            return f'"{runtime_python}" "{app_entry}"'
 
         # 兜底：依赖 PATH 上的 python
         return f'python "{app_entry}"'
@@ -326,25 +325,13 @@ End If
             logger.error("创建启动文件夹失败: %s", exc)
             return False, f"创建启动文件夹失败: {exc}"
 
-        python_exe = self.project_root / "environment" / "python" / "python.exe"
-        app_py = self.project_root / "app.py"
-
-        if python_exe.exists():
-            run_command = (
-                f'targetExe = "{python_exe}"\n'
-                f'WshShell.Run Chr(34) & targetExe & Chr(34) & " " & Chr(34) & "{app_py}" & Chr(34) & " --no-browser", 0, False'
-            )
-        else:
-            packaged = os.getenv("CAMPUS_AUTH_START_EXECUTABLE", "").strip()
-            if not packaged:
-                return (
-                    False,
-                    "未找到可用的 Python 解释器或打包可执行文件，无法创建自启动脚本",
-                )
-            run_command = (
-                f'targetExe = "{packaged}"\n'
-                f'WshShell.Run Chr(34) & targetExe & Chr(34) & " --no-browser", 0, False'
-            )
+        # 复用 _start_command() 获取启动命令（自动处理 uv/venv/嵌入式 Python）
+        # VBS 字符串中双引号用 "" 转义
+        start_cmd_escaped = self._start_command().replace('"', '""')
+        run_command = (
+            f'targetCmd = "{start_cmd_escaped} --no-browser"\n'
+            f'WshShell.Run targetCmd, 0, False'
+        )
 
         content = self._build_vbs_content(run_command)
 
