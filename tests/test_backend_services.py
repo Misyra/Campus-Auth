@@ -592,6 +592,7 @@ class TestProfileService:
         assert "字母" in msg or "下划线" in msg
 
     def test_save_profile_first_auto_active(self, service):
+        service._data = ProfilesData()
         settings = ProfileSettings(name="唯一方案")
         service.save_profile("only", settings)
         data = service.load()
