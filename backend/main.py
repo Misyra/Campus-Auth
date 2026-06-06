@@ -234,6 +234,10 @@ def index() -> FileResponse:
     return FileResponse(FRONTEND_DIR / "index.html")
 
 
+# 确保挂载目录存在（发布版本解压后这些目录可能不存在）
+for _dir in (LOGS_DIR, DEBUG_DIR, TEMP_DIR):
+    _dir.mkdir(parents=True, exist_ok=True)
+
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 app.mount("/logs", StaticFiles(directory=LOGS_DIR), name="logs")
 app.mount("/debug", StaticFiles(directory=DEBUG_DIR), name="debug")
@@ -280,9 +284,6 @@ def run() -> None:
                 old_log.unlink(missing_ok=True)
     except Exception:
         startup_logger.debug("旧日志清理失败", exc_info=True)
-
-    # 确保 debug 目录存在（用于保存验证码截图等）
-    DEBUG_DIR.mkdir(parents=True, exist_ok=True)
 
     global _access_log_enabled
     _access_log_enabled = access_log_enabled

@@ -16,6 +16,7 @@ PIP_MIRROR_EXPLICIT=0                # 用户是否显式指定了镜像（env/-
 PIP_MIRROR="${PIP_MIRROR:-https://mirrors.cernet.edu.cn/pypi/simple}"
 FORCE_REINSTALL="${FORCE_REINSTALL:-0}"
 VERBOSE="${VERBOSE:-0}"
+PLAYWRIGHT_READY=0
 USE_SYSTEM_PROXY="${USE_SYSTEM_PROXY:-0}"
 LAUNCH_METHOD="${LAUNCH_METHOD:-}"   # uv 或 system，空则自动检测
 
@@ -313,12 +314,19 @@ setup_with_uv() {
   fi
 
   log_info ">>> 同步依赖 (uv sync)..."
-  local sync_ok=true
-  if [[ "$VERBOSE" == "1" ]]; then
-    uv sync || sync_ok=false
-  else
-    uv sync 2>/dev/null || sync_ok=false
+
+  # 检测系统 Python，避免 uv 使用内嵌 Python（可能缺少 venv 模块）
+  local uv_py_flag=()
+  local sys_py
+  sys_py="$(detect_python3 || true)"
+  if [[ -n "$sys_py" ]]; then
+    uv_py_flag=(--python "$sys_py")
+    log_info "uv 将使用系统 Python: $(command -v "$sys_py")"
   fi
+
+  local sync_ok=true
+  # 始终显示 uv 输出（uv 自带清晰的进度信息）
+  uv sync "${uv_py_flag[@]}" || sync_ok=false
 
   if ! $sync_ok; then
     local fb2_rc=0; try_fallback_system_python "uv sync 失败（网络问题或依赖错误）" || fb2_rc=$?
@@ -327,12 +335,23 @@ setup_with_uv() {
     log_error "uv sync 失败，已取消"
     exit 1
   fi
+
+  # 验证虚拟环境已创建
+  if [[ ! -d "$PROJECT_ROOT/.venv" ]]; then
+    local fb3_rc=0; try_fallback_system_python "uv sync 完成但 .venv 未创建" || fb3_rc=$?
+    [[ $fb3_rc -eq 2 ]] && return 2
+    [[ $fb3_rc -eq 0 ]] && return 1
+    log_error "虚拟环境创建失败，已取消"
+    exit 1
+  fi
+
   log_success "依赖同步完成"
 
   log_info ">>> 安装 Playwright Chromium 浏览器..."
   local pw_host="${PLAYWRIGHT_DOWNLOAD_HOST:-https://npmmirror.com/mirrors/playwright}"
-  if PLAYWRIGHT_DOWNLOAD_HOST="$pw_host" uv run playwright install chromium 2>/dev/null; then
+  if PLAYWRIGHT_DOWNLOAD_HOST="$pw_host" uv run playwright install chromium; then
     log_success "Playwright 浏览器安装完成"
+    PLAYWRIGHT_READY=1
   else
     log_warning "Playwright 浏览器安装失败，但可继续启动"
   fi
@@ -415,11 +434,7 @@ setup_with_system_python() {
 
   # 升级 pip
   log_info ">>> 升级 pip..."
-  if [[ "$VERBOSE" == "1" ]]; then
-    "$VENV_PYTHON" -m pip install --upgrade pip setuptools wheel -i "$PIP_MIRROR" || true
-  else
-    "$VENV_PYTHON" -m pip install --upgrade pip setuptools wheel -i "$PIP_MIRROR" >/dev/null 2>&1 || true
-  fi
+  "$VENV_PYTHON" -m pip install --upgrade pip setuptools wheel -i "$PIP_MIRROR" --progress-bar off || true
 
   # 安装项目依赖
   if [[ ! -f "$REQUIREMENTS_FILE" ]]; then
@@ -428,18 +443,15 @@ setup_with_system_python() {
   fi
 
   log_info ">>> 安装项目依赖..."
-  if [[ "$VERBOSE" == "1" ]]; then
-    "$VENV_PYTHON" -m pip install -r "$REQUIREMENTS_FILE" -i "$PIP_MIRROR"
-  else
-    "$VENV_PYTHON" -m pip install -r "$REQUIREMENTS_FILE" -i "$PIP_MIRROR" >/dev/null 2>&1
-  fi
+  "$VENV_PYTHON" -m pip install -r "$REQUIREMENTS_FILE" -i "$PIP_MIRROR" --progress-bar off
   log_success "依赖安装完成"
 
   # 安装 Playwright 浏览器
   log_info ">>> 安装 Playwright Chromium 浏览器..."
   local pw_host="${PLAYWRIGHT_DOWNLOAD_HOST:-https://npmmirror.com/mirrors/playwright}"
-  if PLAYWRIGHT_DOWNLOAD_HOST="$pw_host" "$VENV_PYTHON" -m playwright install chromium 2>/dev/null; then
+  if PLAYWRIGHT_DOWNLOAD_HOST="$pw_host" "$VENV_PYTHON" -m playwright install chromium; then
     log_success "Playwright 浏览器安装完成"
+    PLAYWRIGHT_READY=1
   else
     log_warning "Playwright 浏览器安装失败，但可继续启动"
   fi
@@ -475,15 +487,21 @@ launch_app() {
 
   log_info ">>> 启动应用..."
 
+  # Playwright 已由脚本安装成功时禁用 app.py 的自动安装，否则保留让 app.py 兜底
+  local pw_env="AUTO_INSTALL_PLAYWRIGHT=true"
+  if [[ "$PLAYWRIGHT_READY" == "1" ]]; then
+    pw_env="AUTO_INSTALL_PLAYWRIGHT=false"
+  fi
+
   if [[ "$LAUNCH_METHOD" == "uv" ]]; then
     env \
       "CAMPUS_AUTH_PROJECT_ROOT=$PROJECT_ROOT" \
-      "AUTO_INSTALL_PLAYWRIGHT=false" \
+      "$pw_env" \
       uv run "$PROJECT_ROOT/app.py" --no-browser $NO_AUTO &
   else
     env \
       "CAMPUS_AUTH_PROJECT_ROOT=$PROJECT_ROOT" \
-      "AUTO_INSTALL_PLAYWRIGHT=false" \
+      "$pw_env" \
       "$VENV_PYTHON" "$PROJECT_ROOT/app.py" --no-browser $NO_AUTO &
   fi
   APP_PID=$!
