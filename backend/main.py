@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import mimetypes
 import os
 import time
@@ -267,6 +266,9 @@ def run() -> None:
 
     log_center = LogConfigCenter.get_instance()
     log_center.initialize({"level": log_level}, side="BACKEND")
+
+    # 压制第三方库的 DEBUG 日志
+    import logging
     logging.getLogger("PIL").setLevel(logging.WARNING)
 
     log_dir = LOGS_DIR
@@ -288,6 +290,7 @@ def run() -> None:
     global _access_log_enabled
     _access_log_enabled = access_log_enabled
 
+    # 压制 uvicorn access 日志
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
     uvicorn.run(

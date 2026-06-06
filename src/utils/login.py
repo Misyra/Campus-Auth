@@ -49,7 +49,7 @@ class LoginAttemptHandler:
         self.config = config
         self.cancel_event = cancel_event
         self.close_on_failure = close_on_failure
-        self.logger = setup_logger("login", config.get("logging", {}))
+        self.logger = setup_logger("login")
         self._browser_ctx: BrowserContextManager | None = None
         self._task_manager: TaskManager | None = None
         self._project_root: Path | None = None

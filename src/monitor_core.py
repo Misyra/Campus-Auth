@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import datetime
-import logging
 import threading
 import time
 from enum import Enum
@@ -83,7 +82,7 @@ class NetworkMonitorCore:
         # 登录恢复进行中标志（供定时任务等待）
         self._login_recovery_in_progress = threading.Event()
         self._test_sites_cache: Optional[list[tuple[str, int]]] = None
-        self.logger = setup_logger("monitor", self.config.get("logging", {}))
+        self.logger = setup_logger("monitor")
 
         # 状态详情
         self.status_detail: str = "正常"
@@ -94,7 +93,7 @@ class NetworkMonitorCore:
         self._last_profile_id: Optional[str] = None
         self._last_gateway_check_time: float = 0
 
-    def log_message(self, message: str, level: int = logging.INFO, exc_info: bool = False) -> None:
+    def log_message(self, message: str, level: str = "INFO", exc_info: bool = False) -> None:
         if exc_info:
             import traceback
             tb = traceback.format_exc()
@@ -103,11 +102,15 @@ class NetworkMonitorCore:
         if self.log_callback:
             self.log_callback(
                 message,
-                logging.getLevelName(level),
+                level,
                 "monitor.core",
             )
         else:
-            self.logger.log(level, message, exc_info=exc_info)
+            log_func = getattr(self.logger, level.lower(), self.logger.info)
+            if exc_info:
+                log_func(message)
+            else:
+                log_func(message)
 
     def snapshot(self) -> Dict[str, Any]:
         return {
@@ -135,7 +138,7 @@ class NetworkMonitorCore:
 
     def update_config(self, new_config: Dict[str, Any]) -> None:
         """热更新运行时配置（方案切换时调用）"""
-        self.log_message("运行时配置已更新 (热更新)", logging.INFO)
+        self.log_message("运行时配置已更新 (热更新)", "INFO")
         self.config = new_config
         self._test_sites_cache = None  # 清除测试站点缓存
         # 同步 block_proxy 到 network_test 模块，决定 HTTP 客户端是否信任系统代理
@@ -152,7 +155,7 @@ class NetworkMonitorCore:
     def start_monitoring(self) -> None:
         try:
             if self.monitoring:
-                self.log_message("监控已在运行中", logging.WARNING)
+                self.log_message("监控已在运行中", "WARNING")
                 return
 
             self.monitoring = True
@@ -196,11 +199,11 @@ class NetworkMonitorCore:
             try:
                 self.monitor_network()
             except KeyboardInterrupt:
-                self.log_message("收到中断信号，停止监控", logging.WARNING)
+                self.log_message("收到中断信号，停止监控", "WARNING")
             # 注：此处捕获 Exception 后调用 stop_monitoring()，会更新 StatusSnapshot 并推送
             # WebSocket 状态变化，前端可见 monitoring=false。非静默退出。
             except Exception as exc:
-                self.log_message(f"监控异常: {exc}", logging.ERROR, exc_info=True)
+                self.log_message(f"监控异常: {exc}", "ERROR", exc_info=True)
             finally:
                 self.stop_monitoring()
         finally:
@@ -238,10 +241,10 @@ class NetworkMonitorCore:
                 result = worker.submit(CMD_BROWSER_CLOSE, timeout=5)
                 if not result.success:
                     self.log_message(
-                        f"关闭浏览器失败: {result.error}", logging.WARNING
+                        f"关闭浏览器失败: {result.error}", "WARNING"
                     )
         except Exception as e:
-            self.log_message(f"关闭浏览器时出错: {e}", logging.WARNING)
+            self.log_message(f"关闭浏览器时出错: {e}", "WARNING")
 
     def _wait_interruptible(self, seconds: int, step: int = 5) -> bool:
         remaining = max(0, seconds)
@@ -284,14 +287,14 @@ class NetworkMonitorCore:
         if idx < len(intervals):
             wait = intervals[idx]
             self.status_detail = f"网络异常：等待重试（{wait}秒后）"
-            self.log_message(f"{wait} 秒后重试登录...", logging.INFO)
+            self.log_message(f"{wait} 秒后重试登录...", "INFO")
             if not self._wait_interruptible(wait, step=5):
                 return RecoveryResult.BREAK
             return "retry"
         # 超过最大重试次数，放弃本次网络检测周期
         self.log_message(
             f"连续登录失败 {self.login_attempt_count} 次，等待下次检测周期",
-            logging.WARNING,
+            "WARNING",
         )
         self.login_attempt_count = 0
         return RecoveryResult.GIVE_UP
@@ -326,7 +329,7 @@ class NetworkMonitorCore:
                 if prereq_reason == "local_disconnected":
                     self.log_message(
                         "物理网络未连接，停止重试，等待下次检测周期",
-                        logging.WARNING,
+                        "WARNING",
                     )
                     self.login_attempt_count = 0
                     self.network_state = NetworkState.DISCONNECTED
@@ -334,7 +337,7 @@ class NetworkMonitorCore:
                 elif prereq_reason == "auth_url_unreachable":
                     self.log_message(
                         f"认证地址 {self.config.get('auth_url', '?')} 不可达，等待下次检测周期",
-                        logging.WARNING,
+                        "WARNING",
                     )
                     self.status_detail = "网络异常：认证地址不可达"
                     return RecoveryResult.GIVE_UP
@@ -347,7 +350,7 @@ class NetworkMonitorCore:
                 self.status_detail = f"网络异常：已达到最大重试次数（{max_retries}次）"
                 self.log_message(
                     f"已达到最大重试次数 ({max_retries})，等待下次检测周期",
-                    logging.WARNING,
+                    "WARNING",
                 )
                 interval = self._get_monitor_interval()
                 next_check = datetime.datetime.now() + datetime.timedelta(
@@ -378,7 +381,7 @@ class NetworkMonitorCore:
             self.network_state = NetworkState.DISCONNECTED
             self.log_message(
                 f"登录失败 (第{self.login_attempt_count}/{max_retries}次)",
-                logging.ERROR,
+                "ERROR",
             )
             self.status_detail = f"网络异常：登录失败（第{self.login_attempt_count}/{max_retries}次）"
 
@@ -433,7 +436,7 @@ class NetworkMonitorCore:
                 self.status_detail = f"网络异常：暂停时段（{start_hour}:00-{end_hour}:00）"
                 self.log_message(
                     f"暂停时段 ({start_hour}:00-{end_hour}:00)，跳过检测",
-                    logging.INFO,
+                    "INFO",
                 )
                 if not self._wait_interruptible(
                     self.PAUSE_CHECK_INTERVAL_SECONDS,
@@ -449,10 +452,10 @@ class NetworkMonitorCore:
                 self.network_state = NetworkState.CONNECTED
                 self.status_detail = "网络正常"
                 self.log_message(
-                    f"[#{self.network_check_count}] 网络正常，无需登录", logging.INFO
+                    f"[#{self.network_check_count}] 网络正常，无需登录", "INFO"
                 )
             elif net_reason == "all_disabled":
-                self.log_message("所有网络检测均未启用，跳过", logging.WARNING)
+                self.log_message("所有网络检测均未启用，跳过", "WARNING")
             else:
                 # 3. 网络异常，进入登录恢复
                 self.status_detail = "网络异常：正在登录"
@@ -480,13 +483,13 @@ class NetworkMonitorCore:
                 self.status_detail = f"网络正常：等待下次检测（{next_check.strftime('%H:%M:%S')}）"
                 self.log_message(
                     f"等待 {interval} 秒至下次检测周期（{next_check.strftime('%H:%M:%S')}）",
-                    logging.DEBUG,
+                    "DEBUG",
                 )
             else:
                 self.status_detail = f"网络异常：等待下次检测（{next_check.strftime('%H:%M:%S')}）"
                 self.log_message(
                     f"等待 {interval} 秒至下次检测周期（{next_check.strftime('%H:%M:%S')}）",
-                    logging.INFO,
+                    "INFO",
                 )
             wait_step = min(
                 self.MAX_WAIT_STEP_SECONDS,
@@ -549,7 +552,7 @@ class NetworkMonitorCore:
 
                 self.log_message(
                     f"检测到网络环境变化，方案切换: {old_name} -> {profile_name}",
-                    logging.INFO,
+                    "INFO",
                 )
 
                 self._last_profile_id = matched_id
@@ -557,11 +560,11 @@ class NetworkMonitorCore:
                 if not ok:
                     # 方案可能在检测后被删除，回退缓存状态
                     self._last_profile_id = self._profile_service.load().active_profile
-                    self.log_message(f"方案切换失败: {msg}", logging.WARNING)
+                    self.log_message(f"方案切换失败: {msg}", "WARNING")
                 elif self._on_profile_switch:
                     self._on_profile_switch(profile_name)
         except Exception as exc:
-            self.log_message(f"方案切换检测异常: {exc}", logging.WARNING)
+            self.log_message(f"方案切换检测异常: {exc}", "WARNING")
 
     def attempt_login(self) -> tuple[bool, str]:
         active_task = self.config.get("active_task", "") or "default"
@@ -576,12 +579,12 @@ class NetworkMonitorCore:
         )
 
         if self._stop_event.is_set():
-            self.log_message("监控已停止，跳过登录", logging.WARNING)
+            self.log_message("监控已停止，跳过登录", "WARNING")
             return False, "监控已停止"
 
         from src.utils.crypto import has_decryption_error
         if has_decryption_error():
-            self.log_message("密码解密失败，跳过登录（请在设置页面重新输入密码）", logging.ERROR)
+            self.log_message("密码解密失败，跳过登录（请在设置页面重新输入密码）", "ERROR")
             return False, "密码解密失败，请在设置页面重新输入密码"
 
         try:
@@ -602,25 +605,25 @@ class NetworkMonitorCore:
             message = result.data if result.success else result.error
             # 检查是否在登录过程中被取消
             if self._cancel_login.is_set():
-                self.log_message("登录已被取消", logging.WARNING)
+                self.log_message("登录已被取消", "WARNING")
                 return False, "登录已被取消"
             if success:
                 self.log_message(f"登录成功 ✓ {message}")
             else:
-                self.log_message(f"登录失败 ✗ {message}", logging.ERROR)
+                self.log_message(f"登录失败 ✗ {message}", "ERROR")
             # 记录登录历史
             self._record_login_history(success, duration_ms, str(message) if not success else "")
             return success, message
         except ConnectionError as exc:
-            self.log_message(f"登录连接错误: {exc}", logging.WARNING)
+            self.log_message(f"登录连接错误: {exc}", "WARNING")
             self._record_login_history(False, 0, f"连接错误: {exc}")
             return False, f"连接错误: {exc}"
         except RuntimeError as exc:
-            self.log_message(f"登录运行时错误: {exc}", logging.ERROR, exc_info=True)
+            self.log_message(f"登录运行时错误: {exc}", "ERROR", exc_info=True)
             self._record_login_history(False, 0, f"运行时错误: {exc}")
             return False, f"运行时错误: {exc}"
         except Exception as exc:
-            self.log_message(f"登录执行异常: {exc}", logging.ERROR, exc_info=True)
+            self.log_message(f"登录执行异常: {exc}", "ERROR", exc_info=True)
             self._record_login_history(False, 0, str(exc))
             return False, str(exc)
 
@@ -639,4 +642,4 @@ class NetworkMonitorCore:
                 error=error,
             )
         except Exception:
-            self.log_message("记录登录历史失败", logging.DEBUG)
+            self.log_message("记录登录历史失败", "DEBUG")

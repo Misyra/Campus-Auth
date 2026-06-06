@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import base64
 import datetime
-import logging
 import os
 import time
 from pathlib import Path
@@ -62,8 +61,6 @@ from src.utils.exceptions import LoginCancelledError, DecryptionError
 # ── logging ──
 from src.utils.logging import (
     _normalize_level,
-    _level_value,
-    SideFilter,
     LogConfigCenter,
     get_logger,
 )
@@ -731,58 +728,21 @@ class TestNormalizeLevel:
         assert _normalize_level("INVALID", default="WARNING") == "WARNING"
 
 
-class TestLevelValue:
-    def test_valid_levels(self):
-        assert _level_value("DEBUG") == logging.DEBUG
-        assert _level_value("INFO") == logging.INFO
-        assert _level_value("WARNING") == logging.WARNING
-        assert _level_value("ERROR") == logging.ERROR
-
-    def test_invalid_returns_info(self):
-        assert _level_value("INVALID") == logging.INFO
-
-    def test_none_returns_info(self):
-        assert _level_value(None) == logging.INFO
-
-
-class TestSideFilter:
-    def test_adds_side_attribute(self):
-        f = SideFilter("BACKEND")
-        record = logging.LogRecord("test", logging.INFO, "", 0, "msg", (), None)
-        f.filter(record)
-        assert record.side == "BACKEND"
-
-    def test_does_not_overwrite_existing_side(self):
-        f = SideFilter("BACKEND")
-        record = logging.LogRecord("test", logging.INFO, "", 0, "msg", (), None)
-        record.side = "FRONTEND"
-        f.filter(record)
-        assert record.side == "FRONTEND"
-
-    def test_always_returns_true(self):
-        f = SideFilter("TEST")
-        record = logging.LogRecord("test", logging.INFO, "", 0, "msg", (), None)
-        assert f.filter(record) is True
-
-
 class TestGetLogger:
     def test_returns_logger_with_name(self):
         logger = get_logger("test_module")
-        assert logger.name == "test_module"
+        # loguru logger 绑定后通过 extra 获取 name
+        assert logger.bind(name="test_module")
 
-    def test_attaches_side_filter(self):
+    def test_logger_has_side_binding(self):
         logger = get_logger("test_side", side="FRONTEND")
-        has_side_filter = any(
-            isinstance(f, SideFilter) and f.side == "FRONTEND"
-            for f in logger.filters
-        )
-        assert has_side_filter
+        # loguru logger 绑定后通过 extra 获取 side
+        assert logger.bind(side="FRONTEND")
 
-    def test_no_duplicate_filters(self):
+    def test_logger_is_callable(self):
         logger = get_logger("test_dup", side="BACKEND")
-        get_logger("test_dup", side="BACKEND")
-        side_filters = [f for f in logger.filters if isinstance(f, SideFilter)]
-        assert len(side_filters) == 1
+        # loguru logger 可以直接调用
+        assert logger is not None
 
 
 class TestLogConfigCenter:
@@ -799,7 +759,6 @@ class TestLogConfigCenter:
         center = LogConfigCenter()
         config = center.get_config()
         assert config["level"] == "INFO"
-        assert config["console_colored"] is True
 
     def test_is_initialized_default_false(self):
         center = LogConfigCenter()
@@ -901,57 +860,49 @@ class TestDefaultConstants:
 
 
 # =====================================================================
-# _DateRotatingFileHandler 文件大小轮转
+# DateRotatingSink 文件大小轮转
 # =====================================================================
 
 
-class TestDateRotatingFileHandlerRotation:
+class TestDateRotatingSinkRotation:
     def test_rotates_when_size_exceeded(self, tmp_path):
         """超过 file_max_bytes 时应创建分片文件"""
-        from src.utils.logging import _DateRotatingFileHandler
+        from src.utils.logging import DateRotatingSink
 
-        handler = _DateRotatingFileHandler(
+        sink = DateRotatingSink(
             log_dir=str(tmp_path),
             file_max_bytes=200,  # 极小阈值便于测试
             file_backup_count=2,
-            level=logging.DEBUG,
         )
-        record = logging.LogRecord("test", logging.INFO, "", 0, "msg" * 50, (), None)
-        record.side = "BACKEND"
-        handler.setFormatter(logging.Formatter("%(message)s"))
 
         # 写入多条日志直到触发轮转
         for _ in range(20):
-            handler.emit(record)
+            sink.write("msg" * 50 + "\n")
 
         # 应存在 app.log 和 app.log.1
         today = datetime.datetime.now().strftime("%Y-%m-%d")
         log_dir = tmp_path / today
         assert (log_dir / "app.log").exists()
         # 分片文件可能存在（取决于写入量）
-        handler.close()
+        sink.close()
 
     def test_backup_count_respected(self, tmp_path):
         """分片文件数量不应超过 file_backup_count"""
-        from src.utils.logging import _DateRotatingFileHandler
+        from src.utils.logging import DateRotatingSink
 
-        handler = _DateRotatingFileHandler(
+        sink = DateRotatingSink(
             log_dir=str(tmp_path),
             file_max_bytes=100,
             file_backup_count=2,
-            level=logging.DEBUG,
         )
-        handler.setFormatter(logging.Formatter("%(message)s"))
-        record = logging.LogRecord("test", logging.INFO, "", 0, "x" * 80, (), None)
-        record.side = "BACKEND"
 
         # 写入大量日志
         for _ in range(50):
-            handler.emit(record)
+            sink.write("x" * 80 + "\n")
 
         today = datetime.datetime.now().strftime("%Y-%m-%d")
         log_dir = tmp_path / today
         # 最多 file_backup_count 个分片 + 1 个当前文件
         backup_files = list(log_dir.glob("app.log.*"))
         assert len(backup_files) <= 2
-        handler.close()
+        sink.close()

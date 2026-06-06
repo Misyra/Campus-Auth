@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import datetime
-import logging
 import re
 import threading
 import time
@@ -522,7 +521,7 @@ class TestLogMessageExcInfo:
         """默认不附加堆栈"""
         callback = MagicMock()
         core = NetworkMonitorCore(log_callback=callback)
-        core.log_message("test", logging.INFO)
+        core.log_message("test", "INFO")
         args = callback.call_args[0]
         assert "Traceback" not in args[0]
 
@@ -533,7 +532,7 @@ class TestLogMessageExcInfo:
         try:
             raise ValueError("test error")
         except ValueError:
-            core.log_message("出错了", logging.ERROR, exc_info=True)
+            core.log_message("出错了", "ERROR", exc_info=True)
         args = callback.call_args[0]
         assert "出错了" in args[0]
         assert "ValueError" in args[0]
@@ -543,7 +542,7 @@ class TestLogMessageExcInfo:
         """无活跃异常时不应附加无意义的堆栈"""
         callback = MagicMock()
         core = NetworkMonitorCore(log_callback=callback)
-        core.log_message("正常消息", logging.INFO, exc_info=True)
+        core.log_message("正常消息", "INFO", exc_info=True)
         args = callback.call_args[0]
         assert "Traceback" not in args[0]
 

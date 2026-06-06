@@ -81,7 +81,7 @@ class BrowserContextManager:
         self.config = config
         self.cancel_event = cancel_event
         self.browser_settings = config.get("browser_settings", {})
-        self.logger = setup_logger("browser", config.get("logging", {}))
+        self.logger = setup_logger("browser")
 
         # 浏览器相关属性
         self.playwright = None

@@ -1,9 +1,10 @@
 """登录模板变量构建工具"""
 
-import logging
 from typing import Any
 
-logger = logging.getLogger("env")
+from src.utils.logging import get_logger
+
+logger = get_logger("env", side="BACKEND")
 
 
 # Windows 保留环境变量 + Unix/Python 内置变量，防止 runtime vars 与系统变量冲突

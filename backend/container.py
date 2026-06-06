@@ -17,7 +17,7 @@ from .scheduler_service import SchedulerService
 from .task_service import TaskService
 from .ws_manager import WebSocketManager
 
-from src.utils.logging import WebSocketLogHandler, get_logger
+from src.utils.logging import WebSocketSink, get_logger
 
 container_logger = get_logger("backend.container", side="BACKEND")
 
@@ -61,15 +61,18 @@ class ServiceContainer:
         # 清理孤儿浏览器进程
         cleanup_orphan_browsers()
 
-        # 注册 WebSocket 日志处理器 — 将 Python 日志转发到前端并存入 _logs
-        import logging
-        ws_handler = WebSocketLogHandler(
+        # 注册 WebSocket 日志 sink — 将 loguru 日志转发到前端并存入 _logs
+        from loguru import logger
+        ws_sink = WebSocketSink(
             self.monitor_service.ws_broadcast_queue,
             log_store=self.monitor_service.logs,
         )
-        ws_handler.setLevel(logging.DEBUG)
-        ws_handler.setFormatter(logging.Formatter("%(name)s | %(message)s"))
-        logging.getLogger().addHandler(ws_handler)
+        logger.add(
+            ws_sink.write,
+            format="{name} | {message}",
+            level="DEBUG",
+            filter=lambda record: record["extra"].get("side") == "BACKEND",
+        )
 
         # 启动监控服务
         self.monitor_service.boot()
