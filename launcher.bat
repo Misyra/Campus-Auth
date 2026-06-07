@@ -81,12 +81,12 @@ if not exist "%UV_DIR%" mkdir "%UV_DIR%"
 set "ARCHIVE=%UV_DIR%\uv.zip"
 set "GITHUB_URL=https://github.com/astral-sh/uv/releases/download/%UV_VERSION%/%UV_FILENAME%"
 
-:: 尝试镜像站
+:: 尝试镜像站（使用 curl，Windows 10+ 自带）
 set "MIRRORS=https://ghfast.top/ https://gh-proxy.com/ https://ghproxy.net/"
 
 for %%M in (%MIRRORS%) do (
     echo   尝试: %%M
-    powershell -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%%M%GITHUB_URL%' -OutFile '%ARCHIVE%' -UseBasicParsing }" >nul 2>&1
+    curl -fsSL --connect-timeout 10 --max-time 120 -o "%ARCHIVE%" "%%M%GITHUB_URL%" >nul 2>&1
     if exist "%ARCHIVE%" (
         goto :extract_uv
     )
@@ -94,7 +94,7 @@ for %%M in (%MIRRORS%) do (
 
 :: 回退到 GitHub
 echo   尝试: GitHub 直连
-powershell -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%GITHUB_URL%' -OutFile '%ARCHIVE%' -UseBasicParsing }" >nul 2>&1
+curl -fsSL --connect-timeout 10 --max-time 120 -o "%ARCHIVE%" "%GITHUB_URL%" >nul 2>&1
 if not exist "%ARCHIVE%" (
     echo 错误：所有下载源均失败
     echo 请手动安装 uv: https://docs.astral.sh/uv/
@@ -103,7 +103,7 @@ if not exist "%ARCHIVE%" (
 
 :extract_uv
 echo 正在解压...
-powershell -Command "& { Expand-Archive -Path '%ARCHIVE%' -DestinationPath '%UV_DIR%' -Force }"
+tar -xf "%ARCHIVE%" -C "%UV_DIR%"
 del "%ARCHIVE%" >nul 2>&1
 
 if not exist "%UV_DIR%\uv.exe" (
