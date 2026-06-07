@@ -9,14 +9,14 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from src.network_decision import (
+from app.network.decision import (
     check_pause,
     check_network_status,
     check_login_prerequisites,
     is_network_available,
     check_campus_network_status,
 )
-from src.network_probes import (
+from app.network.probes import (
     set_block_proxy,
     is_local_network_connected,
     is_network_available_socket,
@@ -33,11 +33,11 @@ from src.network_probes import (
 class TestSetBlockProxy:
     def test_sets_flag(self):
         set_block_proxy(True)
-        from src.network_probes import _block_proxy
+        from app.network.probes import _block_proxy
         assert _block_proxy is True
 
     def test_default_is_true(self):
-        from src.network_probes import _block_proxy
+        from app.network.probes import _block_proxy
         assert _block_proxy is True
 
 
@@ -48,43 +48,43 @@ class TestSetBlockProxy:
 
 class TestIsLocalNetworkConnected:
     def test_returns_true_when_ip_found(self):
-        with patch("src.network_probes.socket.gethostname", return_value="test"):
+        with patch('app.network.probes.socket.gethostname', return_value='test'):
             with patch(
-                "src.network_probes.socket.gethostbyname_ex",
+                "app.network.probes.socket.gethostbyname_ex",
                 return_value=("test", [], ["192.168.1.100"]),
             ):
                 assert is_local_network_connected() is True
 
     def test_returns_false_on_loopback_only(self):
-        with patch("src.network_probes.socket.gethostname", return_value="test"):
+        with patch('app.network.probes.socket.gethostname', return_value='test'):
             with patch(
-                "src.network_probes.socket.gethostbyname_ex",
+                "app.network.probes.socket.gethostbyname_ex",
                 return_value=("test", [], ["127.0.0.1"]),
             ):
-                with patch("src.network_probes.is_windows", return_value=False):
-                    with patch("src.network_probes.is_linux", return_value=False):
-                        with patch("src.network_probes.is_macos", return_value=False):
+                with patch('app.network.probes.is_windows', return_value=False):
+                    with patch('app.network.probes.is_linux', return_value=False):
+                        with patch('app.network.probes.is_macos', return_value=False):
                             assert is_local_network_connected() is False
 
     def test_returns_false_on_exception(self):
         with patch(
-            "src.network_probes.socket.gethostbyname_ex",
+            "app.network.probes.socket.gethostbyname_ex",
             side_effect=Exception("fail"),
         ):
-            with patch("src.network_probes.is_windows", return_value=False):
-                with patch("src.network_probes.is_linux", return_value=False):
-                    with patch("src.network_probes.is_macos", return_value=False):
+            with patch('app.network.probes.is_windows', return_value=False):
+                with patch('app.network.probes.is_linux', return_value=False):
+                    with patch('app.network.probes.is_macos', return_value=False):
                         assert is_local_network_connected() is False
 
     def test_returns_false_for_169_254(self):
-        with patch("src.network_probes.socket.gethostname", return_value="test"):
+        with patch('app.network.probes.socket.gethostname', return_value='test'):
             with patch(
-                "src.network_probes.socket.gethostbyname_ex",
+                "app.network.probes.socket.gethostbyname_ex",
                 return_value=("test", [], ["169.254.1.1"]),
             ):
-                with patch("src.network_probes.is_windows", return_value=False):
-                    with patch("src.network_probes.is_linux", return_value=False):
-                        with patch("src.network_probes.is_macos", return_value=False):
+                with patch('app.network.probes.is_windows', return_value=False):
+                    with patch('app.network.probes.is_linux', return_value=False):
+                        with patch('app.network.probes.is_macos', return_value=False):
                             assert is_local_network_connected() is False
 
 
@@ -95,7 +95,7 @@ class TestIsLocalNetworkConnected:
 
 class TestIsNetworkAvailableSocket:
     def test_success_on_first_target(self):
-        with patch("src.network_probes.socket.create_connection") as mock_conn:
+        with patch('app.network.probes.socket.create_connection') as mock_conn:
             mock_conn.return_value.__enter__ = lambda s: s
             mock_conn.return_value.__exit__ = lambda s, *a: None
             result = is_network_available_socket(
@@ -105,7 +105,7 @@ class TestIsNetworkAvailableSocket:
 
     def test_failure_all_targets(self):
         with patch(
-            "src.network_probes.socket.create_connection",
+            "app.network.probes.socket.create_connection",
             side_effect=TimeoutError,
         ):
             result = is_network_available_socket(
@@ -127,7 +127,7 @@ class TestIsNetworkAvailableSocket:
             return m
 
         with patch(
-            "src.network_probes.socket.create_connection",
+            "app.network.probes.socket.create_connection",
             side_effect=side_effect,
         ):
             result = is_network_available_socket(
@@ -145,7 +145,7 @@ class TestIsNetworkAvailableHttp:
     def test_success_200(self):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        with patch("src.network_probes.httpx.Client") as MockClient:
+        with patch('app.network.probes.httpx.Client') as MockClient:
             instance = MockClient.return_value.__enter__.return_value
             instance.get.return_value = mock_resp
             result = is_network_available_http(
@@ -156,7 +156,7 @@ class TestIsNetworkAvailableHttp:
     def test_failure_500(self):
         mock_resp = MagicMock()
         mock_resp.status_code = 500
-        with patch("src.network_probes.httpx.Client") as MockClient:
+        with patch('app.network.probes.httpx.Client') as MockClient:
             instance = MockClient.return_value.__enter__.return_value
             instance.get.return_value = mock_resp
             result = is_network_available_http(
@@ -165,7 +165,7 @@ class TestIsNetworkAvailableHttp:
             assert result is False
 
     def test_connection_error(self):
-        with patch("src.network_probes.httpx.Client") as MockClient:
+        with patch('app.network.probes.httpx.Client') as MockClient:
             instance = MockClient.return_value.__enter__.return_value
             instance.get.side_effect = Exception("connection error")
             result = is_network_available_http(
@@ -175,7 +175,7 @@ class TestIsNetworkAvailableHttp:
 
     def test_empty_urls_uses_defaults(self):
         """空列表回退到默认 URL，实际发送请求"""
-        with patch("src.network_probes.httpx.Client") as MockClient:
+        with patch('app.network.probes.httpx.Client') as MockClient:
             mock_resp = MagicMock()
             mock_resp.status_code = 200
             instance = MockClient.return_value.__enter__.return_value
@@ -194,7 +194,7 @@ class TestIsNetworkAvailablePortal:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.text = "Success"
-        with patch("src.network_probes.httpx.Client") as MockClient:
+        with patch('app.network.probes.httpx.Client') as MockClient:
             instance = MockClient.return_value.__enter__.return_value
             instance.get.return_value = mock_resp
             result = is_network_available_portal(
@@ -206,7 +206,7 @@ class TestIsNetworkAvailablePortal:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.text = "Login Page"
-        with patch("src.network_probes.httpx.Client") as MockClient:
+        with patch('app.network.probes.httpx.Client') as MockClient:
             instance = MockClient.return_value.__enter__.return_value
             instance.get.return_value = mock_resp
             result = is_network_available_portal(
@@ -219,7 +219,7 @@ class TestIsNetworkAvailablePortal:
         assert result is True
 
     def test_connection_error(self):
-        with patch("src.network_probes.httpx.Client") as MockClient:
+        with patch('app.network.probes.httpx.Client') as MockClient:
             instance = MockClient.return_value.__enter__.return_value
             instance.get.side_effect = Exception("timeout")
             result = is_network_available_portal(
@@ -234,10 +234,10 @@ class TestIsNetworkAvailablePortal:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.text = "Success"
-        with patch("src.network_probes.httpx.Client") as MockClient:
+        with patch('app.network.probes.httpx.Client') as MockClient:
             instance = MockClient.return_value.__enter__.return_value
             instance.get.return_value = mock_resp
-            with patch("src.network_probes.logger") as mock_logger:
+            with patch('app.network.probes.logger') as mock_logger:
                 is_network_available_portal(
                     portal_checks=[("http://test.com", "Success")], timeout=3.0
                 )
@@ -256,13 +256,13 @@ class TestIsNetworkAvailablePortal:
 
 
 class TestCheckPause:
-    @patch("src.network_decision.is_in_pause_period", return_value=True)
+    @patch('app.network.decision.is_in_pause_period', return_value=True)
     def test_in_pause_period(self, *mocks):
         is_paused, reason = check_pause({"pause_login": {"enabled": True}})
         assert is_paused is True
         assert reason == "pause_period"
 
-    @patch("src.network_decision.is_in_pause_period", return_value=False)
+    @patch('app.network.decision.is_in_pause_period', return_value=False)
     def test_not_in_pause_period(self, *mocks):
         is_paused, reason = check_pause({"pause_login": {"enabled": False}})
         assert is_paused is False
@@ -289,13 +289,13 @@ class TestCheckNetworkStatus:
         config["monitor"].update(overrides)
         return config
 
-    @patch("src.network_decision.is_network_available", return_value=True)
+    @patch('app.network.decision.is_network_available', return_value=True)
     def test_network_ok(self, *mocks):
         ok, reason = check_network_status(self._make_config())
         assert ok is True
         assert reason == "network_ok"
 
-    @patch("src.network_decision.is_network_available", return_value=False)
+    @patch('app.network.decision.is_network_available', return_value=False)
     def test_network_down(self, *mocks):
         ok, reason = check_network_status(self._make_config())
         assert ok is False
@@ -331,28 +331,28 @@ class TestCheckLoginPrerequisites:
         config.update(overrides)
         return config
 
-    @patch("src.network_decision._is_auth_url_reachable", return_value=True)
-    @patch("src.network_decision.is_local_network_connected", return_value=True)
+    @patch('app.network.decision._is_auth_url_reachable', return_value=True)
+    @patch('app.network.decision.is_local_network_connected', return_value=True)
     def test_all_pass(self, *mocks):
         ok, reason = check_login_prerequisites(self._make_config())
         assert ok is True
         assert reason == ""
 
-    @patch("src.network_decision.is_local_network_connected", return_value=False)
+    @patch('app.network.decision.is_local_network_connected', return_value=False)
     def test_local_disconnected(self, *mocks):
         ok, reason = check_login_prerequisites(self._make_config())
         assert ok is False
         assert reason == "local_disconnected"
 
-    @patch("src.network_decision._is_auth_url_reachable", return_value=False)
-    @patch("src.network_decision.is_local_network_connected", return_value=True)
+    @patch('app.network.decision._is_auth_url_reachable', return_value=False)
+    @patch('app.network.decision.is_local_network_connected', return_value=True)
     def test_auth_url_unreachable(self, *mocks):
         ok, reason = check_login_prerequisites(self._make_config())
         assert ok is False
         assert reason == "auth_url_unreachable"
 
-    @patch("src.network_decision._is_auth_url_reachable", return_value=False)
-    @patch("src.network_decision.is_local_network_connected", return_value=False)
+    @patch('app.network.decision._is_auth_url_reachable', return_value=False)
+    @patch('app.network.decision.is_local_network_connected', return_value=False)
     def test_local_check_disabled(self, *mocks):
         ok, reason = check_login_prerequisites(self._make_config(
             monitor={"enable_local_check": False},
@@ -360,8 +360,8 @@ class TestCheckLoginPrerequisites:
         assert ok is False
         assert reason == "auth_url_unreachable"
 
-    @patch("src.network_decision._is_auth_url_reachable", return_value=True)
-    @patch("src.network_decision.is_local_network_connected", return_value=True)
+    @patch('app.network.decision._is_auth_url_reachable', return_value=True)
+    @patch('app.network.decision.is_local_network_connected', return_value=True)
     def test_auth_url_check_disabled(self, *mocks):
         ok, reason = check_login_prerequisites(self._make_config(
             monitor={"check_auth_url": False},
@@ -369,8 +369,8 @@ class TestCheckLoginPrerequisites:
         assert ok is True
         assert reason == ""
 
-    @patch("src.network_decision._is_auth_url_reachable", return_value=False)
-    @patch("src.network_decision.is_local_network_connected", return_value=False)
+    @patch('app.network.decision._is_auth_url_reachable', return_value=False)
+    @patch('app.network.decision.is_local_network_connected', return_value=False)
     def test_both_disabled(self, *mocks):
         ok, reason = check_login_prerequisites(self._make_config(
             monitor={"enable_local_check": False, "check_auth_url": False},
@@ -386,47 +386,47 @@ class TestCheckLoginPrerequisites:
 
 class TestIsAuthUrlReachable:
     def test_empty_url_returns_true(self):
-        from src.network_decision import _is_auth_url_reachable
+        from app.network.decision import _is_auth_url_reachable
         assert _is_auth_url_reachable("") is True
 
     def test_no_hostname_returns_true(self):
-        from src.network_decision import _is_auth_url_reachable
+        from app.network.decision import _is_auth_url_reachable
         assert _is_auth_url_reachable("http://") is True
 
     def test_successful_connection(self):
-        from src.network_decision import _is_auth_url_reachable
-        with patch("src.network_decision.socket.create_connection") as mock_conn:
+        from app.network.decision import _is_auth_url_reachable
+        with patch('app.network.decision.socket.create_connection') as mock_conn:
             mock_conn.return_value.__enter__ = lambda s: s
             mock_conn.return_value.__exit__ = lambda s, *a: None
             assert _is_auth_url_reachable("http://10.0.0.1:8080/login") is True
             mock_conn.assert_called_once_with(("10.0.0.1", 8080), timeout=3)
 
     def test_connection_refused(self):
-        from src.network_decision import _is_auth_url_reachable
-        with patch("src.network_decision.socket.create_connection", side_effect=ConnectionRefusedError):
+        from app.network.decision import _is_auth_url_reachable
+        with patch('app.network.decision.socket.create_connection', side_effect=ConnectionRefusedError):
             assert _is_auth_url_reachable("http://10.0.0.1/login") is False
 
     def test_timeout(self):
-        from src.network_decision import _is_auth_url_reachable
-        with patch("src.network_decision.socket.create_connection", side_effect=TimeoutError):
+        from app.network.decision import _is_auth_url_reachable
+        with patch('app.network.decision.socket.create_connection', side_effect=TimeoutError):
             assert _is_auth_url_reachable("http://10.0.0.1/login") is False
 
     def test_dns_failure(self):
-        from src.network_decision import _is_auth_url_reachable
-        with patch("src.network_decision.socket.create_connection", side_effect=socket.gaierror):
+        from app.network.decision import _is_auth_url_reachable
+        with patch('app.network.decision.socket.create_connection', side_effect=socket.gaierror):
             assert _is_auth_url_reachable("http://nonexistent.local/login") is False
 
     def test_https_default_port(self):
-        from src.network_decision import _is_auth_url_reachable
-        with patch("src.network_decision.socket.create_connection") as mock_conn:
+        from app.network.decision import _is_auth_url_reachable
+        with patch('app.network.decision.socket.create_connection') as mock_conn:
             mock_conn.return_value.__enter__ = lambda s: s
             mock_conn.return_value.__exit__ = lambda s, *a: None
             _is_auth_url_reachable("https://example.com/auth")
             mock_conn.assert_called_once_with(("example.com", 443), timeout=3)
 
     def test_http_default_port(self):
-        from src.network_decision import _is_auth_url_reachable
-        with patch("src.network_decision.socket.create_connection") as mock_conn:
+        from app.network.decision import _is_auth_url_reachable
+        with patch('app.network.decision.socket.create_connection') as mock_conn:
             mock_conn.return_value.__enter__ = lambda s: s
             mock_conn.return_value.__exit__ = lambda s, *a: None
             _is_auth_url_reachable("http://example.com/auth")
@@ -445,8 +445,8 @@ class TestIsNetworkAvailable:
         )
         assert result is True
 
-    @patch("src.network_decision.is_network_available_socket", return_value=True)
-    @patch("src.network_decision.is_network_available_http", return_value=True)
+    @patch('app.network.decision.is_network_available_socket', return_value=True)
+    @patch('app.network.decision.is_network_available_http', return_value=True)
     def test_all_pass(self, *mocks):
         result = is_network_available(
             test_sites=[("8.8.8.8", 53)],
@@ -455,8 +455,8 @@ class TestIsNetworkAvailable:
         )
         assert result is True
 
-    @patch("src.network_decision.is_network_available_socket", return_value=False)
-    @patch("src.network_decision.is_network_available_http", return_value=True)
+    @patch('app.network.decision.is_network_available_socket', return_value=False)
+    @patch('app.network.decision.is_network_available_http', return_value=True)
     def test_tcp_fail_http_pass(self, *mocks):
         result = is_network_available(
             test_sites=[("8.8.8.8", 53)],
@@ -465,7 +465,7 @@ class TestIsNetworkAvailable:
         )
         assert result is False
 
-    @patch("src.network_decision.is_network_available_socket", return_value=True)
+    @patch('app.network.decision.is_network_available_socket', return_value=True)
     def test_tcp_only(self, *mocks):
         result = is_network_available(
             test_sites=[("8.8.8.8", 53)],
@@ -480,19 +480,19 @@ class TestIsNetworkAvailable:
 
 
 class TestCheckCampusNetworkStatus:
-    @patch("src.network_decision.is_local_network_connected", return_value=False)
+    @patch('app.network.decision.is_local_network_connected', return_value=False)
     def test_no_local_network(self, mock_local):
         result = check_campus_network_status()
         assert "未检测到" in result
 
-    @patch("src.network_decision.is_network_available", return_value=True)
-    @patch("src.network_decision.is_local_network_connected", return_value=True)
+    @patch('app.network.decision.is_network_available', return_value=True)
+    @patch('app.network.decision.is_local_network_connected', return_value=True)
     def test_fully_connected(self, *mocks):
         result = check_campus_network_status()
         assert "可访问互联网" in result
 
-    @patch("src.network_decision.is_network_available", return_value=False)
-    @patch("src.network_decision.is_local_network_connected", return_value=True)
+    @patch('app.network.decision.is_network_available', return_value=False)
+    @patch('app.network.decision.is_local_network_connected', return_value=True)
     def test_connected_but_no_internet(self, *mocks):
         result = check_campus_network_status()
         assert "无法访问互联网" in result
@@ -505,7 +505,7 @@ class TestCheckCampusNetworkStatus:
 
 class TestNetworkTestImports:
     def test_import_all_symbols(self):
-        from src.network_test import (
+        from app.network.diagnostics import (
             _check_macos_service,
             is_local_network_connected,
             is_network_available_http,
@@ -528,11 +528,11 @@ class TestNetworkTestImports:
         assert callable(is_network_available)
 
     def test_all_list(self):
-        import src.network_test as nt
+        import app.network.diagnostics as nt
         assert hasattr(nt, "__all__")
         assert len(nt.__all__) == 10
 
     def test_functions_match_original(self):
-        from src.network_test import is_network_available
-        from src.network_decision import is_network_available as original
+        from app.network.diagnostics import is_network_available
+        from app.network.decision import is_network_available as original
         assert is_network_available is original

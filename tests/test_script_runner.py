@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from src.script_runner import ScriptRunner
+from app.workers.script_runner import ScriptRunner
 
 
 class TestContentTempFile:

@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.script_runner import (
+from app.workers.script_runner import (
     ScriptRunner,
     get_default_binary,
     detect_available_binaries,
@@ -76,9 +76,9 @@ class TestDetectAvailableBinaries:
 
 
 class TestScriptRunnerBuildCmd:
-    def test_py_file_default_binary(self, tmp_path: Path):
+    @patch('app.workers.script_runner.platform.system', return_value="Windows")
+    def test_py_file_default_binary(self, mock_system, tmp_path: Path):
         script = tmp_path / "test.py"
-        script.write_text('print("hello")')
         runner = ScriptRunner(script, binary_path=sys.executable)
         cmd = runner._build_cmd()
         assert cmd[0] == sys.executable
@@ -128,10 +128,10 @@ class TestScriptRunnerBuildCmd:
         with pytest.raises(ValueError, match="JSON 脚本格式错误"):
             runner._load_script_content()
 
-    @patch("src.script_runner.platform.system", return_value="Windows")
+    @patch('app.workers.script_runner.platform.system', return_value="Windows")
     def test_cmd_binary_on_windows(self, _mock_sys, tmp_path: Path):
         script = tmp_path / "test.py"
-        script.write_text('print("hi")')
+        script.write_text('print("hi")', encoding="utf-8")
         runner = ScriptRunner(script, binary_path="C:\\Windows\\cmd.exe")
         cmd = runner._build_cmd()
         assert cmd[0] == "C:\\Windows\\cmd.exe"
@@ -139,10 +139,10 @@ class TestScriptRunnerBuildCmd:
         # CMD 应使用 call 规避路径特殊字符问题
         assert "call" in cmd[2]
 
-    @patch("src.script_runner.platform.system", return_value="Linux")
+    @patch('app.workers.script_runner.platform.system', return_value="Linux")
     def test_bash_binary_on_linux(self, _mock_sys, tmp_path: Path):
         script = tmp_path / "test.sh"
-        script.write_text('echo hi')
+        script.write_text('echo hi', encoding="utf-8")
         runner = ScriptRunner(script, binary_path="/bin/bash")
         cmd = runner._build_cmd()
         assert cmd[0] == "/bin/bash"
@@ -157,7 +157,7 @@ class TestScriptRunnerBuildCmd:
 class TestScriptRunnerRunExtra:
     def test_empty_binary_path_falls_back_to_default(self, tmp_path: Path):
         script = tmp_path / "test.py"
-        script.write_text('print("hi")')
+        script.write_text('print("hi")', encoding="utf-8")
         runner = ScriptRunner(script, binary_path="")
         # 空字符串会 fallback 到 sys.executable，不应失败
         ok, _ = runner.run()

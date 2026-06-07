@@ -52,19 +52,19 @@ def client(tmp_path):
     (tmp_path / "temp").mkdir(exist_ok=True)
     (tmp_path / "backups").mkdir(exist_ok=True)
 
-    with patch("backend.constants.PROJECT_ROOT", tmp_path), \
-         patch("backend.constants.FRONTEND_DIR", tmp_path / "frontend"), \
-         patch("backend.constants.LOGS_DIR", tmp_path / "logs"), \
-         patch("backend.constants.TEMP_DIR", tmp_path / "temp"), \
-         patch("backend.constants.BACKUP_DIR", tmp_path / "backups"):
+    with patch('app.constants.PROJECT_ROOT', tmp_path), \
+         patch('app.constants.FRONTEND_DIR', tmp_path / "frontend"), \
+         patch('app.constants.LOGS_DIR', tmp_path / "logs"), \
+         patch('app.constants.TEMP_DIR', tmp_path / "temp"), \
+         patch('app.constants.BACKUP_DIR', tmp_path / "backups"):
 
-        from backend.main import app
+        from app.application import app
 
         # 创建 mock 服务容器
         mock_services = MagicMock()
 
         # 模拟 monitor_service
-        from backend.schemas import MonitorConfigPayload, MonitorStatusResponse
+        from app.schemas import MonitorConfigPayload, MonitorStatusResponse
         mock_services.monitor_service.get_config.return_value = MonitorConfigPayload(
             username="testuser",
             password="••••••••",
@@ -229,27 +229,27 @@ class TestLoginEndpoint:
 
 class TestCompareVersions:
     def test_equal(self):
-        from src.version import compare_versions
+        from app.version import compare_versions
         assert compare_versions("1.0.0", "1.0.0") == 0
 
     def test_greater(self):
-        from src.version import compare_versions
+        from app.version import compare_versions
         assert compare_versions("1.1.0", "1.0.0") == 1
 
     def test_less(self):
-        from src.version import compare_versions
+        from app.version import compare_versions
         assert compare_versions("1.0.0", "1.1.0") == -1
 
     def test_different_lengths(self):
-        from src.version import compare_versions
+        from app.version import compare_versions
         assert compare_versions("1.0.0.1", "1.0.0") == 1
         assert compare_versions("1.0", "1.0.0") == 0  # 1.0 等价于 1.0.0
 
     def test_invalid_input(self):
-        from src.version import compare_versions
+        from app.version import compare_versions
         assert compare_versions("invalid", "1.0.0") == 0
         assert compare_versions("1.0.0", "invalid") == 0
 
     def test_major_version_diff(self):
-        from src.version import compare_versions
+        from app.version import compare_versions
         assert compare_versions("2.0.0", "1.9.9") == 1

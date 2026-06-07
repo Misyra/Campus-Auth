@@ -11,15 +11,15 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import ValidationError
 
-from src.utils.config import ConfigValidator
-from backend.config_service import (
+from app.utils.config import ConfigValidator
+from app.services.config import (
     _safe_decrypt,
     _normalize_level,
     _normalize_targets,
     _normalize_headers_json,
 )
-from src.utils.crypto import encrypt_password
-from backend.schemas import (
+from app.utils.crypto import encrypt_password
+from app.schemas import (
     MonitorConfigPayload,
     ProfileSettings,
     LogEntry,

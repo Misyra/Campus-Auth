@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import src.playwright_bootstrap as pb
+import app.workers.playwright_bootstrap as pb
 
 
 class TestBootstrapState:

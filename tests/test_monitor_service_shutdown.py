@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from backend.monitor_service import MonitorCommand, MonitorService
-from src.monitor_core import NetworkState
+from app.services.monitor import MonitorCommand, MonitorService
+from app.core.monitor_core import NetworkState
 
 
 class TestProfileReloadNoDeadlock:
@@ -170,7 +170,7 @@ class TestStartMonitoringPutNowait:
         # 填满队列
         svc._cmd_queue.put_nowait(MonitorCommand(type="dummy"))
 
-        with patch('backend.monitor_service.ConfigValidator.validate_env_config', return_value=(True, "")):
+        with patch('app.services.monitor.ConfigValidator.validate_env_config', return_value=(True, "")):
             with patch.object(svc, '_copy_runtime_config', return_value={}):
                 import time
                 start = time.time()
@@ -216,7 +216,7 @@ class TestNetworkStateSetInConsumer:
             response_event=threading.Event(),
         )
 
-        with patch('backend.monitor_service.get_worker') as mock_get_worker:
+        with patch('app.services.monitor.get_worker') as mock_get_worker:
             mock_worker = MagicMock()
             mock_worker.submit.return_value = mock_result
             mock_get_worker.return_value = mock_worker

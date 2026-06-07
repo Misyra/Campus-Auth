@@ -7,7 +7,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from backend.scheduler_service import SchedulerService, detect_available_shells
+from app.services.scheduler import SchedulerService, detect_available_shells
+
+
+def _run_async(coro):
+    """在当前线程运行异步协程（兼容 Python 3.12+ 无默认事件循环的场景）。"""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            raise RuntimeError
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop.run_until_complete(coro)
 
 
 # =====================================================================
@@ -54,7 +66,7 @@ class TestExecuteShellUsesPolicy:
     def test_rejected_shell_path_returns_failure(self, service, tmp_path):
         """不在白名单的 shell_path 应被拒绝，返回失败消息。"""
         # 直接调用 _execute_shell，shell_path 不在 detect_available_shells 结果中
-        result = asyncio.get_event_loop().run_until_complete(
+        result = _run_async(
             service._execute_shell("echo hello", timeout=10, shell_path="/fake/malicious/shell")
         )
         success, message = result
@@ -70,13 +82,13 @@ class TestExecuteShellUsesPolicy:
 
         shell_path = shells[0]["path"]
 
-        with patch("src.utils.shell_policy.asyncio.create_subprocess_exec") as mock_exec:
+        with patch('app.utils.shell_policy.asyncio.create_subprocess_exec') as mock_exec:
             mock_proc = AsyncMock()
             mock_proc.communicate = AsyncMock(return_value=(b"ok", b""))
             mock_proc.returncode = 0
             mock_exec.return_value = mock_proc
 
-            result = asyncio.get_event_loop().run_until_complete(
+            result = _run_async(
                 service._execute_shell("echo ok", timeout=9999, shell_path=shell_path)
             )
             # 验证 timeout 被 clamp：通过检查 mock 调用参数
@@ -90,14 +102,14 @@ class TestExecuteShellUsesPolicy:
 
         shell_path = shells[0]["path"]
 
-        with patch("src.utils.shell_policy.asyncio.create_subprocess_exec") as mock_exec:
+        with patch('app.utils.shell_policy.asyncio.create_subprocess_exec') as mock_exec:
             mock_proc = AsyncMock()
             mock_proc.communicate = AsyncMock(return_value=(b"ok", b""))
             mock_proc.returncode = 0
             mock_exec.return_value = mock_proc
 
-            with patch("backend.scheduler_service.scheduler_logger") as mock_logger:
-                result = asyncio.get_event_loop().run_until_complete(
+            with patch('app.services.scheduler.scheduler_logger') as mock_logger:
+                result = _run_async(
                     service._execute_shell("echo audit_test", timeout=30, shell_path=shell_path)
                 )
                 success, message = result
@@ -107,7 +119,7 @@ class TestExecuteShellUsesPolicy:
 
     def test_empty_command_returns_failure(self, service):
         """空命令应返回失败。"""
-        result = asyncio.get_event_loop().run_until_complete(
+        result = _run_async(
             service._execute_shell("", timeout=30)
         )
         success, message = result
@@ -117,7 +129,7 @@ class TestExecuteShellUsesPolicy:
     def test_execute_shell_uses_policy_integration(self, service):
         """集成验证：_execute_shell 路径校验经过 ShellCommandPolicy。"""
         # 使用明显不在白名单的路径
-        result = asyncio.get_event_loop().run_until_complete(
+        result = _run_async(
             service._execute_shell("echo test", timeout=30, shell_path="/absolutely/fake/shell")
         )
         success, message = result

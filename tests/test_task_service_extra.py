@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.task_service import TaskService
+from app.services.task import TaskService
 
 
 # =====================================================================

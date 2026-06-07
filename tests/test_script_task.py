@@ -9,8 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from src.script_runner import ScriptRunner, _build_minimal_env
-from src.task_executor import ScriptTaskInfo, TaskManager
+from app.workers.script_runner import ScriptRunner, _build_minimal_env
+from app.tasks.models import ScriptTaskInfo
+from app.tasks.manager import TaskManager
 
 
 # ==================== TaskManager 脚本扫描 ====================

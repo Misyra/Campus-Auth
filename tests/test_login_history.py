@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.login_history_service import LoginHistoryEntry, LoginHistoryService
+from app.services.login_history import LoginHistoryEntry, LoginHistoryService
 
 
 # =====================================================================

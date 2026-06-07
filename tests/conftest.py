@@ -21,7 +21,8 @@ def tmp_pid_dir(tmp_path: Path, monkeypatch):
     """创建临时 PID 目录，monkeypatch AUTH_DATA_DIR 指向它。"""
     pid_dir = tmp_path / "pid_data"
     pid_dir.mkdir()
-    monkeypatch.setattr("app.AUTH_DATA_DIR", pid_dir)
+    monkeypatch.setattr("app.utils.process.AUTH_DATA_DIR", pid_dir)
+    monkeypatch.setattr("main.AUTH_DATA_DIR", pid_dir)
     return pid_dir
 
 

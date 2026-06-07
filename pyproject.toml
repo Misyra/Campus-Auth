@@ -26,9 +26,6 @@ dev = [
     "pytest-asyncio",
     "psutil",
 ]
-build = [
-    "pyinstaller",
-]
 
 [tool.uv]
 python-install-mirror = "https://registry.npmmirror.com/-/binary/python-build-standalone/"

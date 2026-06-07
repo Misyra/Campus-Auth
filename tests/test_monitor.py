@@ -13,8 +13,8 @@ from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
 
-from src.utils.login import LoginAttemptHandler, SCREENSHOT_URL_PATTERN
-from src.monitor_core import (
+from app.utils.login import LoginAttemptHandler, SCREENSHOT_URL_PATTERN
+from app.core.monitor_core import (
     NetworkMonitorCore,
     NetworkState,
     RecoveryResult,
@@ -97,12 +97,12 @@ class TestAttemptLogin:
         config = {"pause_login": {"start_hour": 0, "end_hour": 23}}
         handler = LoginAttemptHandler(config=config)
 
-        with patch("src.utils.login.datetime") as mock_dt:
+        with patch('app.utils.login.datetime') as mock_dt:
             mock_dt.datetime.now.return_value.hour = 3
             mock_dt.datetime.now.return_value.minute = 0
 
             with patch(
-                "src.network_decision.check_pause",
+                "app.network.decision.check_pause",
                 return_value=(True, "pause_period"),
             ):
                 ok, msg = await handler.attempt_login(skip_pause_check=False)
@@ -115,13 +115,13 @@ class TestAttemptLogin:
         handler = LoginAttemptHandler(config={})
 
         with patch(
-            "src.network_decision.check_pause",
+            "app.network.decision.check_pause",
             return_value=(False, ""),
         ), patch(
-            "src.network_decision.check_network_status",
+            "app.network.decision.check_network_status",
             return_value=(False, "network_down"),
         ), patch(
-            "src.network_decision.check_login_prerequisites",
+            "app.network.decision.check_login_prerequisites",
             return_value=(False, "local_disconnected"),
         ):
             ok, msg = await handler.attempt_login(skip_pause_check=False)
@@ -135,13 +135,13 @@ class TestAttemptLogin:
         handler = LoginAttemptHandler(config=config)
 
         with patch(
-            "src.network_decision.check_pause",
+            "app.network.decision.check_pause",
             return_value=(False, ""),
         ), patch(
-            "src.network_decision.check_network_status",
+            "app.network.decision.check_network_status",
             return_value=(False, "network_down"),
         ), patch(
-            "src.network_decision.check_login_prerequisites",
+            "app.network.decision.check_login_prerequisites",
             return_value=(False, "auth_url_unreachable"),
         ):
             ok, msg = await handler.attempt_login(skip_pause_check=False)
@@ -154,10 +154,10 @@ class TestAttemptLogin:
         handler = LoginAttemptHandler(config={})
 
         with patch(
-            "src.network_decision.check_pause",
+            "app.network.decision.check_pause",
             return_value=(False, ""),
         ), patch(
-            "src.network_decision.check_network_status",
+            "app.network.decision.check_network_status",
             return_value=(True, "network_ok"),
         ):
             ok, msg = await handler.attempt_login(skip_pause_check=False)
@@ -172,13 +172,13 @@ class TestAttemptLogin:
         handler = LoginAttemptHandler(config={}, cancel_event=event)
 
         with patch(
-            "src.network_decision.check_pause",
+            "app.network.decision.check_pause",
             return_value=(False, ""),
         ), patch(
-            "src.network_decision.check_network_status",
+            "app.network.decision.check_network_status",
             return_value=(False, "network_down"),
         ), patch(
-            "src.network_decision.check_login_prerequisites",
+            "app.network.decision.check_login_prerequisites",
             return_value=(True, ""),
         ):
             ok, msg = await handler.attempt_login(skip_pause_check=False)
@@ -204,7 +204,7 @@ class TestAttemptLogin:
         handler = LoginAttemptHandler(config={})
 
         with patch(
-            "src.network_decision.check_pause",
+            "app.network.decision.check_pause",
             side_effect=RuntimeError("test error"),
         ):
             ok, msg = await handler.attempt_login(skip_pause_check=False)
@@ -225,7 +225,7 @@ class TestCloseBrowser:
         mock_ctx = AsyncMock()
         handler._browser_ctx = mock_ctx
 
-        with patch("src.playwright_worker.get_worker") as mock_get_worker:
+        with patch('app.workers.playwright_worker.get_worker') as mock_get_worker:
             mock_worker = MagicMock()
             mock_worker.close_browser = AsyncMock()
             mock_get_worker.return_value = mock_worker
@@ -250,7 +250,7 @@ class TestCloseBrowser:
         mock_ctx.__aexit__ = AsyncMock(side_effect=RuntimeError("close error"))
         handler._browser_ctx = mock_ctx
 
-        with patch("src.playwright_worker.get_worker") as mock_get_worker:
+        with patch('app.workers.playwright_worker.get_worker') as mock_get_worker:
             mock_worker = MagicMock()
             mock_worker.close_browser = AsyncMock(side_effect=RuntimeError("fail"))
             mock_get_worker.return_value = mock_worker
@@ -555,5 +555,5 @@ class TestLogMessageExcInfo:
 class TestDefaultPingTargets:
     def test_uses_shared_constant(self):
         """DEFAULT_PING_TARGETS 应与 constants.DEFAULT_NETWORK_TARGETS 一致"""
-        from backend.constants import DEFAULT_NETWORK_TARGETS
+        from app.constants import DEFAULT_NETWORK_TARGETS
         assert NetworkMonitorCore.DEFAULT_PING_TARGETS == DEFAULT_NETWORK_TARGETS.split(",")
