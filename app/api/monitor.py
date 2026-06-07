@@ -36,7 +36,7 @@ def start_monitoring(
     svc: MonitorService = Depends(get_monitor_service),
 ) -> ActionResponse:
     ok, message = svc.start_monitoring()
-    api_logger.info("Monitor start requested -> success={}, message={}", ok, message)
+    api_logger.info("启动监控 -> success={}, message={}", ok, message)
     return ActionResponse(success=ok, message=message)
 
 
@@ -45,7 +45,7 @@ def stop_monitoring(
     svc: MonitorService = Depends(get_monitor_service),
 ) -> ActionResponse:
     ok, message = svc.stop_monitoring()
-    api_logger.info("Monitor stop requested -> success={}, message={}", ok, message)
+    api_logger.info("停止监控 -> success={}, message={}", ok, message)
     return ActionResponse(success=ok, message=message)
 
 
@@ -54,7 +54,7 @@ async def manual_login(
     svc: MonitorService = Depends(get_monitor_service),
 ) -> ActionResponse:
     ok, message = await asyncio.to_thread(svc.run_manual_login)
-    api_logger.info("Manual login requested -> success={}, message={}", ok, message)
+    api_logger.info("手动登录 -> success={}, message={}", ok, message)
     return ActionResponse(success=ok, message=message)
 
 
@@ -63,7 +63,7 @@ def test_network(
     svc: MonitorService = Depends(get_monitor_service),
 ) -> ActionResponse:
     ok, message = svc.test_network()
-    api_logger.info("Network test requested -> success={}, message={}", ok, message)
+    api_logger.info("网络测试 -> success={}, message={}", ok, message)
     return ActionResponse(success=ok, message=message)
 
 

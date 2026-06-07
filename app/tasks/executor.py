@@ -91,14 +91,14 @@ class TaskExecutor:
                 step_elapsed = (time.perf_counter() - step_start) * 1000
                 status = "OK" if success else "FAIL"
                 logger.info(
-                    "  步骤[{}/{}] {} ({}) → {} ({:.0f}ms){}",
+                    "  步骤[{}/{}] {} ({}) -> {} ({:.0f}ms){}",
                     i + 1,
                     len(self.config.steps),
                     step.id,
                     step.type,
                     status,
                     step_elapsed,
-                    f" — {message}" if message else "",
+                    f" -- {message}" if message else "",
                 )
                 self._step_results.append(
                     {
@@ -161,7 +161,7 @@ class TaskExecutor:
             await asyncio.sleep(0.5)
             current = page.url
             if current != last_url:
-                logger.info("URL 重定向: {} → {}", last_url, current)
+                logger.info("URL 重定向: {} -> {}", last_url, current)
                 last_url = current
                 redirects += 1
                 deadline = max(deadline, time.perf_counter() + timeout_ms / 1000)

@@ -14,8 +14,6 @@ dependencies = [
     "Pillow",
     "cairosvg",
     "cryptography",
-    "ddddocr",
-    "onnxruntime",
     "python-multipart",
     "loguru",
     "websockets>=16.0",

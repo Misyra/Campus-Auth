@@ -174,7 +174,7 @@ class DebugSessionManager:
                 await self._close_debug_browser()
                 raise
 
-        api_logger.info("Debug session started for task {}", task_id)
+        api_logger.info("调试会话已启动，任务: {}", task_id)
         return self._debug_response()
 
     async def next_step(self) -> dict:
@@ -296,8 +296,8 @@ class DebugSessionManager:
                     if item.is_file():
                         item.unlink(missing_ok=True)
         except Exception:
-            api_logger.debug("调试临时目录清理失败", exc_info=True)
-        api_logger.info("Debug session stopped")
+            api_logger.warning("调试临时目录清理失败", exc_info=True)
+        api_logger.info("调试会话已停止")
         return {"running": False, "message": "调试会话已关闭"}
 
     def get_status(self) -> dict:

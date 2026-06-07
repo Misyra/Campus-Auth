@@ -121,7 +121,7 @@ class StepHandler(ABC):
                 loc = ctx.locator(candidate).first
                 await loc.wait_for(state="visible", timeout=wait_timeout)
                 await action_fn(loc, timeout)
-                logger.debug("{} 普通操作成功 → {}", label, candidate)
+                logger.debug("{} 普通操作成功 -> {}", label, candidate)
                 return True, ""
             except Exception:
                 logger.debug("{} 普通操作候选失败: {}", label, candidate)
@@ -134,7 +134,7 @@ class StepHandler(ABC):
                 loc = ctx.locator(candidate).first
                 await loc.wait_for(state="attached", timeout=timeout)
                 await fallback_fn(loc, timeout)
-                logger.debug("{} 降级操作成功 → {}", label, candidate)
+                logger.debug("{} 降级操作成功 -> {}", label, candidate)
                 return True, ""
             except Exception:
                 logger.debug("{} 降级操作候选失败: {}", label, candidate)
@@ -272,7 +272,7 @@ class ClickHandler(StepHandler):
             return False, "点击步骤需要 selector"
 
         ctx = await self._resolve_frame(page, step)
-        logger.debug("[click] timeout=%dms", timeout)
+        logger.debug("[click] timeout={}ms", timeout)
 
         async def _normal_click(loc, t):
             await loc.click(timeout=t)
@@ -613,7 +613,7 @@ class OcrHandler(StepHandler):
 
                 instance = ddddocr.DdddOcr(old=old, show_ad=False)
             except ImportError:
-                raise StepError("ddddocr 未安装，请运行: uv add ddddocr")
+                raise StepError("ddddocr 未安装，请在「设置 → 系统与日志」中安装 OCR 依赖")
             cls._ocr_instances[old] = instance
             return instance
 
@@ -724,15 +724,15 @@ class OcrHandler(StepHandler):
                     return False, f"未找到验证码输入框: {target_selector}"
                 try:
                     await target.fill(result, timeout=timeout)
-                    logger.info("[ocr] 普通 fill 成功 → {}, 值='{}'", target_selector, result)
+                    logger.info("[ocr] 普通 fill 成功 -> {}, 值='{}'", target_selector, result)
                 except Exception:
-                    logger.info("[ocr] 普通 fill 失败，降级到强制输入 → {}", target_selector)
+                    logger.info("[ocr] 普通 fill 失败，降级到强制输入 -> {}", target_selector)
                     await target.wait_for(state="attached", timeout=timeout)
                     await target.evaluate(
                         _FORCE_INPUT_JS,
                         {"val": result, "doClear": False},
                     )
-                    logger.info("[ocr] 强制输入成功 → {}, 值='{}'", target_selector, result)
+                    logger.info("[ocr] 强制输入成功 -> {}, 值='{}'", target_selector, result)
 
             # 返回结果，包含截图 URL
             message = result

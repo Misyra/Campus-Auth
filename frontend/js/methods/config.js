@@ -10,7 +10,6 @@ export const configMethods = {
         ...data,
         browser_extra_headers_json: data.browser_extra_headers_json || '',
       };
-      this.setFrontendLogLevel(this.config.frontend_log_level || 'INFO');
       if (updateSnapshot) {
         this._configDirty = false;
         this.savedConfigSnapshot = JSON.stringify(this.config);
@@ -45,7 +44,6 @@ export const configMethods = {
         payload.carrier_custom = '';
       }
       const { data } = await this.$api.put('/api/config', payload);
-      this.setFrontendLogLevel(this.config.frontend_log_level || 'INFO');
       if (data.success) {
         this.frontendLogger.info('config', data.message || '配置保存成功');
         // 用后端规范化值刷新 config 并重置 savedConfigSnapshot，确保 dirty tracking 一致
@@ -155,6 +153,57 @@ export const configMethods = {
       const msg = extractApiError(error, '删除备份失败');
       this.frontendLogger.error('backup', '备份删除异常: ' + msg, error);
       this.toastOnly(false, msg);
+    }
+  },
+  // ── OCR 依赖管理 ──
+  async fetchOcrStatus() {
+    try {
+      const { data } = await this.$api.get('/api/ocr/status');
+      this.ocrStatus = data;
+    } catch {
+      this.ocrStatus = { installed: false, size_mb: 0 };
+    }
+  },
+  async installOcr() {
+    if (!confirm('确定要安装 OCR 依赖吗？\nddddocr + onnxruntime 约占用 ~200MB 磁盘空间。')) return;
+    this.busy.ocr = true;
+    try {
+      const { data } = await this.$api.post('/api/ocr/install');
+      if (data.success) {
+        this.frontendLogger.info('ocr', data.message);
+        this.toastOnly(true, data.message);
+        await this.fetchOcrStatus();
+      } else {
+        this.frontendLogger.warn('ocr', '安装失败: ' + data.message);
+        this.toastOnly(false, data.message);
+      }
+    } catch (error) {
+      const msg = extractApiError(error, '安装失败');
+      this.frontendLogger.error('ocr', '安装异常: ' + msg, error);
+      this.toastOnly(false, msg);
+    } finally {
+      this.busy.ocr = false;
+    }
+  },
+  async uninstallOcr() {
+    if (!confirm('确定要卸载 OCR 依赖吗？\n卸载后 OCR 验证码识别步骤将无法使用。')) return;
+    this.busy.ocr = true;
+    try {
+      const { data } = await this.$api.post('/api/ocr/uninstall');
+      if (data.success) {
+        this.frontendLogger.info('ocr', data.message);
+        this.toastOnly(true, data.message);
+        await this.fetchOcrStatus();
+      } else {
+        this.frontendLogger.warn('ocr', '卸载失败: ' + data.message);
+        this.toastOnly(false, data.message);
+      }
+    } catch (error) {
+      const msg = extractApiError(error, '卸载失败');
+      this.frontendLogger.error('ocr', '卸载异常: ' + msg, error);
+      this.toastOnly(false, msg);
+    } finally {
+      this.busy.ocr = false;
     }
   },
 };

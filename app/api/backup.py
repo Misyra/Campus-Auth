@@ -97,7 +97,7 @@ def restore_backup(
         backup_content = backup_path.read_text(encoding="utf-8")
         ProfilesData.model_validate_json(backup_content)
     except Exception as exc:
-        api_logger.error("备份文件校验失败: {} — {}", filename, exc)
+        api_logger.error("备份文件校验失败: {} -- {}", filename, exc)
         raise HTTPException(status_code=400, detail=f"备份文件格式错误: {exc}")
 
     try:

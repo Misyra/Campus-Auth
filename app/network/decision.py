@@ -185,7 +185,7 @@ def is_network_available(
     )
 
     logger.info(
-        "网络检测完成: TCP={} HTTP={} Portal={} → {}",
+        "网络检测完成: TCP={} HTTP={} Portal={} -> {}",
         "关" if not enable_tcp else ("通" if socket_ok else "断"),
         "关" if not enable_http else ("通" if http_ok else "断"),
         "关" if not enable_portal else ("通" if portal_ok else "断"),
@@ -212,7 +212,7 @@ def _is_auth_url_reachable(
                 logger.debug("认证可达性检测通过: {}", label)
                 return True
         except Exception as exc:
-            logger.debug("认证可达性检测失败: {} — {}", label, exc)
+            logger.debug("认证可达性检测失败: {} -- {}", label, exc)
             return False
 
     if extra_targets:

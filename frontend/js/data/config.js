@@ -11,5 +11,7 @@ export function configData() {
     dangerCountdown: 0,
     availableShells: [],
     defaultShell: '',
+    // OCR 依赖管理
+    ocrStatus: { installed: false, size_mb: 0 },
   };
 }

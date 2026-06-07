@@ -186,6 +186,7 @@
 
 .log-message {
   word-break: break-all;
+  font-family: var(--font-mono);
 }
 
 .log-content {

@@ -29,6 +29,7 @@ export function statusData() {
       debug: false,
       backup: false,
       uninstall: false,
+      ocr: false,
     },
     backups: [],
   };

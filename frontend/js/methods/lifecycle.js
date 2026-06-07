@@ -27,6 +27,7 @@ export const lifecycleMethods = {
       this.fetchLoginHistory(),
       this.loadScheduledTasks(),
       this.fetchShells(),
+      this.fetchOcrStatus(),
     ]);
     const rejectedCount = initResults.filter(r => r.status === 'rejected').length;
     if (rejectedCount > 0) {
@@ -181,14 +182,9 @@ export const lifecycleMethods = {
       this.busy.save = false;
     }
   },
-  _shouldShowLog(level) {
-    // 根据前端日志级别过滤 WebSocket 日志显示
-    // 完整日志始终写入文件，前端仅按级别展示
-    const frontendLevel = (this.config.frontend_log_level || 'INFO').toUpperCase();
-    const levels = LOG_LEVELS;
-    const msgLevel = levels[String(level || '').toUpperCase()] ?? 20;
-    const minLevel = levels[frontendLevel] ?? 30;
-    return msgLevel >= minLevel;
+  _shouldShowLog() {
+    // 日志级别过滤已移除，前端显示所有日志
+    return true;
   },
   connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';

@@ -52,7 +52,7 @@ def save_script(
     """保存自定义脚本任务。"""
     payload["type"] = "script"
     ok, message = task_svc.save_task(task_id, payload)
-    api_logger.info("Save script {} -> success={}, message={}", task_id, ok, message)
+    api_logger.info("保存脚本 {} -> success={}, message={}", task_id, ok, message)
     return ActionResponse(success=ok, message=message)
 
 
@@ -63,7 +63,7 @@ def delete_script(
 ) -> ActionResponse:
     """删除脚本任务。"""
     ok, message = task_svc.delete_task(task_id)
-    api_logger.info("Delete script {} -> success={}, message={}", task_id, ok, message)
+    api_logger.info("删除脚本 {} -> success={}, message={}", task_id, ok, message)
     return ActionResponse(success=ok, message=message)
 
 
@@ -96,5 +96,5 @@ async def run_script(
     loop = asyncio.get_running_loop()
     success, message = await loop.run_in_executor(None, runner.run)
 
-    api_logger.info("Run script {} -> success={}, message={}", task_id, success, message)
+    api_logger.info("运行脚本 {} -> success={}, message={}", task_id, success, message)
     return ActionResponse(success=success, message=message)

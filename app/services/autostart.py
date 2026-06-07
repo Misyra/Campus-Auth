@@ -259,9 +259,9 @@ WantedBy=default.target
             ["systemctl", "--user", "enable", "--now", self.service_name]
         )
         if ok:
-            logger.info("Linux systemd enable 成功")
+            logger.info("Linux systemd 启用成功")
             return True, f"已启用 Linux 开机自启动: {service_path}"
-        logger.error("Linux systemd enable 失败: {}", msg)
+        logger.error("Linux systemd 启用失败: {}", msg)
         return False, f"已写入配置但 systemd 启用失败: {msg}"
 
     def _disable_linux(self) -> tuple[bool, str]:

@@ -112,7 +112,7 @@ class LoginAttemptHandler:
             return task_result
 
         error_msg = "未找到可执行的活动任务，请在任务管理页面配置并激活一个任务"
-        self.logger.error(f"❌ {error_msg}")
+        self.logger.error("{}", error_msg)
         return False, error_msg
 
     async def _perform_login_with_active_task(self) -> tuple[bool, str] | None:
@@ -174,7 +174,7 @@ class LoginAttemptHandler:
         username = self.config.get("username", "")
         isp = self.config.get("isp", "")
         self.logger.info(
-            "登录开始 → 任务=%s URL=%s 用户=%s 运营商=%s %d个步骤",
+            "登录开始 -> 任务={} URL={} 用户={} 运营商={} {}个步骤",
             active_task_id,
             login_url,
             username,
@@ -258,7 +258,7 @@ class LoginAttemptHandler:
         from ..script_runner import ScriptRunner
 
         self.logger.info(
-            "脚本任务开始 → 任务=%s 脚本=%s",
+            "脚本任务开始 -> 任务={} 脚本={}",
             task.task_id, task.script_path,
         )
 

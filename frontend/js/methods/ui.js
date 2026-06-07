@@ -32,9 +32,6 @@ export const uiMethods = {
       this._focusTrapHandler = null;
     }
   },
-  setFrontendLogLevel(level) {
-    this.frontendLogger.setLevel(level);
-  },
   _showToast(success, message) {
     this.toast = { success, message, leaving: false };
     if (this._toastTimer) clearTimeout(this._toastTimer);

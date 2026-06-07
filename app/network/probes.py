@@ -241,7 +241,7 @@ def is_network_available_socket(
         if ok:
             logger.info("TCP 连接成功: {} {}", label, detail)
             return True
-        logger.info("TCP 连接失败: {} — {}", label, detail)
+        logger.info("TCP 连接失败: {} -- {}", label, detail)
     logger.warning("所有 TCP 目标均不可达 ({} 个)", len(targets))
     return False
 
@@ -273,7 +273,6 @@ def is_network_available_portal(
     def _check_portal(url: str, expected: str) -> tuple[str, bool, str]:
         start = time.perf_counter()
         try:
-            logger.debug("已禁用 SSL 验证以兼容校园网自签证书 (portal)")
             with httpx.Client(
                 verify=False, trust_env=not is_block_proxy(), follow_redirects=True
             ) as client:
@@ -297,9 +296,9 @@ def is_network_available_portal(
     for future in as_completed(futures):
         url, ok, detail = future.result()
         if ok:
-            logger.info("Captive portal 检测成功: {} → {}", url, detail)
+            logger.info("Captive portal 检测成功: {} -> {}", url, detail)
             return True
-        logger.info("Captive portal 检测失败: {} — {}", url, detail)
+        logger.info("Captive portal 检测失败: {} -- {}", url, detail)
     logger.warning("所有 captive portal 检测均未通过 ({} 个)", len(portal_checks))
     return False
 
@@ -327,7 +326,6 @@ def is_network_available_http(
         """在独立线程中检测单个 URL。返回 (url, success, detail)。"""
         start = time.perf_counter()
         try:
-            logger.debug("已禁用 SSL 验证以兼容校园网自签证书 (http)")
             with httpx.Client(verify=False, trust_env=not is_block_proxy()) as client:
                 resp = client.get(
                     url, timeout=timeout, follow_redirects=follow_redirects
@@ -340,17 +338,17 @@ def is_network_available_http(
             elapsed = (time.perf_counter() - start) * 1000
             # SSL 证书验证失败（校园网门户 HTTPS 劫持自签名证书）降级为 DEBUG
             if isinstance(exc, ssl.SSLError) or "CERTIFICATE_VERIFY_FAILED" in str(exc):
-                logger.debug("SSL 证书验证失败 (预期行为): {} — {}", url, exc)
+                logger.debug("SSL 证书验证失败 (预期行为): {} -- {}", url, exc)
             else:
-                logger.info("HTTP 请求异常: {} — {}", url, exc)
+                logger.info("HTTP 请求异常: {} -- {}", url, exc)
             return (url, False, f"{type(exc).__name__}: {exc}")
 
     futures = {executor.submit(_check_one, url): url for url in urls}
     for future in as_completed(futures):
         url, ok, detail = future.result()
         if ok:
-            logger.info("HTTP 请求成功: {} → {}", url, detail)
+            logger.info("HTTP 请求成功: {} -> {}", url, detail)
             return True
-        logger.info("HTTP 请求失败: {} — {}", url, detail)
+        logger.info("HTTP 请求失败: {} -- {}", url, detail)
     logger.warning("所有 HTTP 目标均不可达 ({} 个)", len(urls))
     return False

@@ -81,7 +81,7 @@ async def create_scheduled_task(payload: dict, request: Request) -> ActionRespon
     }
 
     ok, message = scheduler.save_task(task_id, config)
-    api_logger.info("Create scheduled task {} -> success={}, message={}", task_id, ok, message)
+    api_logger.info("创建定时任务 {} -> success={}, message={}", task_id, ok, message)
     # 新建任务默认启用，确保调度器在运行
     if ok and config.get("enabled", True):
         scheduler.start()
@@ -131,7 +131,7 @@ async def update_scheduled_task(task_id: str, payload: dict, request: Request) -
     }
 
     ok, message = scheduler.save_task(task_id, config)
-    api_logger.info("Update scheduled task {} -> success={}, message={}", task_id, ok, message)
+    api_logger.info("更新定时任务 {} -> success={}, message={}", task_id, ok, message)
     # 更新后任务启用时，确保调度器在运行
     if ok and config.get("enabled", True):
         scheduler.start()
@@ -143,7 +143,7 @@ def delete_scheduled_task(task_id: str, request: Request) -> ActionResponse:
     """删除定时任务。"""
     scheduler = _get_scheduler(request)
     ok, message = scheduler.delete_task(task_id)
-    api_logger.info("Delete scheduled task {} -> success={}, message={}", task_id, ok, message)
+    api_logger.info("删除定时任务 {} -> success={}, message={}", task_id, ok, message)
     return ActionResponse(success=ok, message=message)
 
 
@@ -155,7 +155,7 @@ async def run_scheduled_task(task_id: str, request: Request) -> ActionResponse:
         return ActionResponse(success=False, message="定时任务不存在")
 
     success, message = await scheduler.execute_task(task_id)
-    api_logger.info("Run scheduled task {} -> success={}, message={}", task_id, success, message)
+    api_logger.info("执行定时任务 {} -> success={}, message={}", task_id, success, message)
     return ActionResponse(success=success, message=message)
 
 
@@ -170,7 +170,7 @@ async def toggle_scheduled_task(task_id: str, request: Request) -> ActionRespons
     task["enabled"] = not task.get("enabled", True)
     ok, message = scheduler.save_task(task_id, task)
     status = "启用" if task["enabled"] else "禁用"
-    api_logger.info("Toggle scheduled task {} -> {}", task_id, status)
+    api_logger.info("切换定时任务 {} -> {}", task_id, status)
     # 启用任务时确保调度器在运行
     if ok and task["enabled"]:
         scheduler.start()

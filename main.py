@@ -224,7 +224,7 @@ def _run_login_then_exit(logger) -> None:
     cleanup_orphan_browsers()
     print(f"已重试 {max_retries} 次均失败，回退到正常模式启动服务器")
     logger.warning(
-        "login_then_exit 登录失败（已重试 %d 次），回退到正常模式启动服务器",
+        "login_then_exit 登录失败（已重试 {} 次），回退到正常模式启动服务器",
         max_retries,
     )
 
@@ -274,7 +274,7 @@ def _run_server(
     startup_logger.info("启动阶段: 开始检查 Playwright 运行环境")
     ensure_playwright_ready(print)
     startup_logger.info(
-        "启动阶段: Playwright 检查完成，耗时 %.3fs",
+        "启动阶段: Playwright 检查完成，耗时 {:.3f}s",
         time.perf_counter() - stage_begin,
     )
 
@@ -331,7 +331,7 @@ def _run_server(
     print(f"日志文件:   {Path.cwd() / 'logs'}")
     print("按 Ctrl+C 停止服务")
     startup_logger.info(
-        "启动阶段: 启动准备完成，总耗时 %.3fs，开始启动 Uvicorn",
+        "启动阶段: 启动准备完成，总耗时 {:.3f}s，开始启动 Uvicorn",
         time.perf_counter() - startup_begin,
     )
 
