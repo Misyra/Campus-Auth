@@ -28,24 +28,30 @@ logger.remove()
 
 # ==================== 格式定义 ====================
 
-_CONSOLE_FORMAT = (
-    "<green>{time:HH:mm:ss}</green> | "
-    "<level>{level: <8}</level> | "
-    "<cyan>{extra[side]}</cyan> | "
-    "<cyan>{name}</cyan> | "
-    "<level>{message}</level>"
-)
+def _console_format(record):
+    side = record["extra"].get("side", "-")
+    record["extra"]["_side"] = side
+    return (
+        "<green>{time:HH:mm:ss}</green> | "
+        "<level>{level: <8}</level> | "
+        "<cyan>{extra[_side]}</cyan> | "
+        "<cyan>{name}</cyan> | "
+        "<level>{message}</level>\n"
+    )
 
-_FILE_FORMAT = (
-    "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[side]} | {name} | {message}"
-)
+
+def _file_format(record):
+    side = record["extra"].get("side", "-")
+    record["extra"]["_side"] = side
+    return "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[_side]} | {name} | {message}\n"
+
 
 _WEBSOCKET_FORMAT = "{name} | {message}"
 
 # 默认添加控制台 handler
 logger.add(
     sys.stdout,
-    format=_CONSOLE_FORMAT,
+    format=_console_format,
     level="DEBUG",
     colorize=True,
 )
@@ -386,7 +392,7 @@ class LogConfigCenter:
 
             self._file_sink_id = logger.add(
                 file_sink.write,
-                format=_FILE_FORMAT,
+                format=_file_format,
                 level="DEBUG",
                 filter=lambda record: record["extra"].get("side") == "BACKEND",
             )
