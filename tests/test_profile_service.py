@@ -1,11 +1,9 @@
 """ProfileService TOCTOU 修复测试"""
 from __future__ import annotations
 
-import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
 
 from app.services.profile import ProfileService
 

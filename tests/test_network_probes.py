@@ -7,7 +7,6 @@ from __future__ import annotations
 import socket
 from unittest.mock import patch, MagicMock
 
-import pytest
 
 from app.network.decision import (
     check_pause,
@@ -499,7 +498,6 @@ class TestCheckCampusNetworkStatus:
 class TestNetworkTestImports:
     def test_import_all_symbols(self):
         from app.network.diagnostics import (
-            _check_macos_service,
             is_local_network_connected,
             is_network_available_http,
             is_network_available_socket,

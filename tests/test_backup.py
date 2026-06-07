@@ -1,12 +1,10 @@
 """backend/routers/backup.py — 备份验证顺序测试"""
 from __future__ import annotations
 
-import pytest
-from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from unittest.mock import MagicMock
 
-from app.api.backup import router, restore_backup
+from app.api.backup import router
 
 
 class TestBackupValidationOrder:

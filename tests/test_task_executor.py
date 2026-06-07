@@ -6,9 +6,7 @@ StepExecutorRegistry, TaskValidator, TaskExecutor, TaskManager 等核心类。
 from __future__ import annotations
 
 import json
-import re
 import time
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -16,10 +14,8 @@ import pytest
 from app.tasks.models import (
     StepConfig,
     TaskConfig,
-    TaskError,
     StepError,
     StepType,
-    TASK_ID_PATTERN,
 )
 from app.tasks.variable_resolver import VariableResolver
 from app.tasks.step_handlers import (
@@ -27,7 +23,6 @@ from app.tasks.step_handlers import (
     InputHandler,
     ClickHandler,
     SelectHandler,
-    ClickSelectHandler,
     WaitHandler,
     WaitUrlHandler,
     EvalHandler,

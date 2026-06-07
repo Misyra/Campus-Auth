@@ -6,13 +6,10 @@ from __future__ import annotations
 
 import os
 import signal
-import socket
-import subprocess
-import sys
 import threading
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 

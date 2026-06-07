@@ -2,12 +2,9 @@
 from __future__ import annotations
 
 import threading
-import time
 from unittest.mock import MagicMock, patch
 
-import pytest
 
-from app.api.system import router
 
 
 class TestShutdownUsesExit:
@@ -47,7 +44,6 @@ class TestShutdownUsesExit:
         mock_monitor = MagicMock()
         mock_monitor.stop_monitoring.return_value = (True, "监控已停止")
 
-        done_event = threading.Event()
         mock_loop = MagicMock()
 
         mock_app = MagicMock()

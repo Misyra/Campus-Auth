@@ -1,10 +1,8 @@
 """Playwright bootstrap 状态管理测试"""
 from __future__ import annotations
 
-import threading
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
 
 import app.workers.playwright_bootstrap as pb
 

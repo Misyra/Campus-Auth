@@ -5,7 +5,6 @@ import queue
 import threading
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from app.services.monitor import MonitorCmdType, MonitorCommand, MonitorService
 from app.core.monitor_core import NetworkState

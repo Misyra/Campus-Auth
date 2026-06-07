@@ -4,13 +4,10 @@
 """
 from __future__ import annotations
 
-import json
-import queue
 import threading
 import time
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock
 
-import pytest
 
 from app.services.monitor import (
     MonitorCmdType,

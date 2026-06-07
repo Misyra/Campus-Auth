@@ -4,9 +4,8 @@ from __future__ import annotations
 import threading
 from unittest.mock import MagicMock, patch
 
-import pytest
 
-from app.workers.playwright_worker import PlaywrightWorker, WorkerResponse
+from app.workers.playwright_worker import PlaywrightWorker
 
 
 class TestSubmitAliveCheck:
@@ -52,7 +51,6 @@ class TestSubmitAliveCheck:
 
         # 记录 start 是否被调用
         start_called = False
-        original_start = worker.start
 
         def mock_start():
             nonlocal start_called
@@ -61,10 +59,10 @@ class TestSubmitAliveCheck:
         worker.start = mock_start
 
         # 模拟队列操作
-        with patch.object(worker._cmd_queue, 'put') as mock_put:
+        with patch.object(worker._cmd_queue, 'put'):
             with patch.object(worker, '_loop') as mock_loop:
                 mock_loop.is_running.return_value = False
-                result = worker.submit("test_cmd", wait=False)
+                worker.submit("test_cmd", wait=False)
 
         # 验证 start() 未被调用
         assert not start_called, "正常路径不应调用 start()"
