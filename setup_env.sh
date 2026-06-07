@@ -147,15 +147,7 @@ if [[ "${1:-}" == "--install-only" ]]; then
     exit 0
 fi
 
+# 启动应用
 echo ""
-echo "=========================================="
-if [[ "$UV_CMD" == "uv" ]]; then
-    echo "🚀 启动命令: uv run main.py"
-else
-    echo "🚀 启动命令: $UV_CMD run main.py"
-    echo "💡 提示: 你也可以将 '.uv' 目录加入 PATH 后直接使用 'uv' 命令"
-fi
-echo "=========================================="
-echo ""
-echo "⚠️ 注意: 如果在 Linux 下运行 Playwright 报错缺少系统依赖，请执行:"
-echo "   sudo $UV_CMD run playwright install-deps chromium"
+echo "🚀 启动 Campus-Auth..."
+exec "$UV_CMD" run main.py "$@"
