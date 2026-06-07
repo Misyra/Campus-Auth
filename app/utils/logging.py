@@ -3,8 +3,8 @@
 提供：
 - get_logger(name, side) — 获取绑定 name 和 side 的 logger
 - LogConfigCenter — 单例配置中心，支持运行时热更新日志级别
-- WebSocketLogHandler — 自定义 sink，将日志推送到前端 WebSocket
-- _DateRotatingFileHandler — 自定义 sink，按日期目录存储日志
+- WebSocketSink — 自定义 sink，将日志推送到前端 WebSocket
+- DateRotatingSink — 自定义 sink，按日期目录存储日志
 """
 
 from __future__ import annotations
@@ -19,7 +19,6 @@ import time
 import zipfile
 from collections import deque
 from datetime import datetime
-from pathlib import Path
 from pathlib import Path
 from typing import Any, Dict
 
@@ -92,16 +91,10 @@ logger.add(_to_std_logging, level="DEBUG", format="{message}")
 # ==================== 日志级别标准化 ====================
 
 VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
-_VALID_LOG_LEVELS = VALID_LOG_LEVELS  # 向后兼容别名
-
-
 def normalize_level(level: str | None, default: str = "INFO") -> str:
     """标准化日志级别名称，无效值返回 default。"""
     raw = str(level or default).upper().strip()
     return raw if raw in VALID_LOG_LEVELS else default
-
-
-_normalize_level = normalize_level  # 向后兼容别名
 
 
 # ==================== 核心接口 ====================
@@ -167,8 +160,6 @@ class WebSocketSink:
             self._log_store.append(WebSocketSink._LogEntry(**log_data))
 
 
-# 为了向后兼容，保留 WebSocketLogHandler 名称
-WebSocketLogHandler = WebSocketSink
 
 
 # ==================== 自定义 sink: 按日期目录存储 ====================
@@ -300,8 +291,6 @@ class DateRotatingSink:
                 print("[logging] 关闭日志流失败", file=sys.stderr)
 
 
-# 为了向后兼容，保留 _DateRotatingFileHandler 名称
-_DateRotatingFileHandler = DateRotatingSink
 
 
 def compress_old_logs(log_dir: str | Path, retention_days: int = 7) -> None:
@@ -413,7 +402,7 @@ class LogConfigCenter:
             self._side = side
 
             # 设置全局日志级别
-            level = _normalize_level(self._config.get("level", "INFO"))
+            level = normalize_level(self._config.get("level", "INFO"))
             logger.level(level)
 
             self._configured = True
@@ -426,7 +415,7 @@ class LogConfigCenter:
 
     def set_level(self, level: str) -> None:
         """动态修改全局日志级别（热更新）"""
-        normalized = _normalize_level(level)
+        normalized = normalize_level(level)
         logger.level(normalized)
         self._config["level"] = normalized
 

@@ -104,10 +104,7 @@ def delete_profile(
     profile_svc: ProfileService = Depends(get_profile_service),
     monitor_svc: MonitorService = Depends(get_monitor_service),
 ) -> ActionResponse:
-    # 删除前记录方案名，用于日志
     data = profile_svc.load()
-    profile = data.profiles.get(profile_id)
-    profile_name = profile.name if profile else profile_id
     was_active = data.active_profile == profile_id
 
     ok, message = profile_svc.delete_profile(profile_id)

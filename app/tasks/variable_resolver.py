@@ -6,7 +6,7 @@ import json
 import re
 from typing import Any
 
-from .models import StepConfig, StepError, TaskConfig
+from .models import StepError, TaskConfig
 
 from app.utils.logging import get_logger
 

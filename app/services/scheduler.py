@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import shutil
 import sys
 import time
 from datetime import datetime
@@ -15,60 +14,15 @@ from app.tasks import is_valid_task_id
 from app.utils.file_helpers import atomic_write
 from app.utils.logging import get_logger
 from app.utils.shell_policy import ShellCommandPolicy
+from app.utils.shell_utils import detect_shells, get_default_shell
 
 scheduler_logger = get_logger("backend.scheduler", side="BACKEND")
 
 # 执行历史最大保留条数
 MAX_HISTORY_SIZE = 50
 
-
-def detect_available_shells() -> list[dict[str, str]]:
-    """检测系统可用的 Shell。"""
-    shells = []
-
-    if sys.platform == "win32":
-        # Windows 系统
-        candidates = [
-            ("cmd", "cmd.exe", "Windows 命令提示符"),
-            ("powershell", "powershell.exe", "Windows PowerShell"),
-            ("pwsh", "pwsh.exe", "PowerShell 7+"),
-            ("git-bash", "bash.exe", "Git Bash"),
-        ]
-        for name, exe, desc in candidates:
-            path = shutil.which(exe)
-            if path:
-                shells.append({"name": name, "path": path, "description": desc})
-    else:
-        # Linux/macOS 系统
-        candidates = [
-            ("bash", "bash", "Bourne Again Shell"),
-            ("sh", "sh", "POSIX Shell"),
-            ("zsh", "zsh", "Z Shell"),
-            ("fish", "fish", "Friendly Interactive Shell"),
-        ]
-        for name, exe, desc in candidates:
-            path = shutil.which(exe)
-            if path:
-                shells.append({"name": name, "path": path, "description": desc})
-
-    return shells
-
-
-def get_default_shell() -> str:
-    """获取默认 Shell 路径。"""
-    if sys.platform == "win32":
-        # Windows 优先使用 PowerShell
-        pwsh = shutil.which("pwsh.exe")
-        if pwsh:
-            return pwsh
-        powershell = shutil.which("powershell.exe")
-        if powershell:
-            return powershell
-        return "cmd.exe"
-    else:
-        # Linux/macOS 使用 SHELL 环境变量或 bash
-        import os
-        return os.environ.get("SHELL", "/bin/bash")
+# 向后兼容：保留旧名称供 API 路由使用
+detect_available_shells = detect_shells
 
 
 class SchedulerService:
@@ -262,7 +216,7 @@ class SchedulerService:
         if not task or task.get("type") != "script":
             return False, f"脚本任务不存在: {script_id}"
 
-        script_path = self.task_service.task_manager._safe_task_path(script_id, task_type="scripts")
+        script_path = self.task_service.get_script_path(script_id)
         if not script_path or not script_path.exists():
             return False, f"脚本文件不存在: {script_id}"
 

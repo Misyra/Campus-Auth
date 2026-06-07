@@ -14,7 +14,6 @@ import hashlib
 import os
 import threading
 import time
-from pathlib import Path
 
 from app.constants import AUTH_DATA_DIR
 from .file_helpers import atomic_write

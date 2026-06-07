@@ -60,7 +60,7 @@ from app.utils.exceptions import LoginCancelledError, DecryptionError
 
 # ── logging ──
 from app.utils.logging import (
-    _normalize_level,
+    normalize_level,
     LogConfigCenter,
     get_logger,
 )
@@ -702,30 +702,30 @@ class TestExceptions:
 
 class TestNormalizeLevel:
     def test_valid_levels(self):
-        assert _normalize_level("DEBUG") == "DEBUG"
-        assert _normalize_level("INFO") == "INFO"
-        assert _normalize_level("WARNING") == "WARNING"
-        assert _normalize_level("ERROR") == "ERROR"
-        assert _normalize_level("CRITICAL") == "CRITICAL"
+        assert normalize_level("DEBUG") == "DEBUG"
+        assert normalize_level("INFO") == "INFO"
+        assert normalize_level("WARNING") == "WARNING"
+        assert normalize_level("ERROR") == "ERROR"
+        assert normalize_level("CRITICAL") == "CRITICAL"
 
     def test_case_insensitive(self):
-        assert _normalize_level("debug") == "DEBUG"
-        assert _normalize_level("info") == "INFO"
-        assert _normalize_level("Warning") == "WARNING"
+        assert normalize_level("debug") == "DEBUG"
+        assert normalize_level("info") == "INFO"
+        assert normalize_level("Warning") == "WARNING"
 
     def test_strips_whitespace(self):
-        assert _normalize_level("  ERROR  ") == "ERROR"
+        assert normalize_level("  ERROR  ") == "ERROR"
 
     def test_invalid_level_returns_default(self):
-        assert _normalize_level("TRACE") == "INFO"
-        assert _normalize_level("INVALID") == "INFO"
+        assert normalize_level("TRACE") == "INFO"
+        assert normalize_level("INVALID") == "INFO"
 
     def test_empty_returns_default(self):
-        assert _normalize_level("") == "INFO"
-        assert _normalize_level(None) == "INFO"
+        assert normalize_level("") == "INFO"
+        assert normalize_level(None) == "INFO"
 
     def test_custom_default(self):
-        assert _normalize_level("INVALID", default="WARNING") == "WARNING"
+        assert normalize_level("INVALID", default="WARNING") == "WARNING"
 
 
 class TestGetLogger:

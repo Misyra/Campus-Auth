@@ -42,7 +42,7 @@
   font-size: 0.8rem;
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.2s;
+  transition: border-color 0.2s, color 0.2s;
 }
 
 .logfiles-date-tab:hover {

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import platform
-import subprocess
 import sys
 import tempfile
 import time
@@ -12,6 +11,7 @@ from pathlib import Path
 
 from app.utils.logging import get_logger
 from app.utils.shell_policy import ShellCommandPolicy
+from app.utils.shell_utils import detect_binaries
 
 logger = get_logger("script_runner", side="BACKEND")
 
@@ -38,37 +38,8 @@ def get_default_binary() -> str:
     return sys.executable
 
 
-def detect_available_binaries() -> list[dict[str, str]]:
-    """检测系统常用的执行二进制。"""
-    import shutil
-    binaries = []
-
-    # Python（当前运行的解释器）
-    if sys.executable:
-        binaries.append({"name": "Python", "path": sys.executable, "description": "当前 Python 解释器"})
-
-    # Shell
-    if platform.system() == "Windows":
-        candidates = [
-            ("cmd", "cmd.exe", "Windows 命令提示符"),
-            ("powershell", "powershell.exe", "Windows PowerShell"),
-            ("pwsh", "pwsh.exe", "PowerShell 7+"),
-            ("git-bash", "bash.exe", "Git Bash"),
-        ]
-    else:
-        candidates = [
-            ("bash", "bash", "Bourne Again Shell"),
-            ("sh", "sh", "POSIX Shell"),
-            ("zsh", "zsh", "Z Shell"),
-            ("fish", "fish", "Friendly Interactive Shell"),
-        ]
-
-    for name, exe, desc in candidates:
-        path = shutil.which(exe)
-        if path:
-            binaries.append({"name": name, "path": path, "description": desc})
-
-    return binaries
+# 向后兼容：保留旧名称供 API 路由使用
+detect_available_binaries = detect_binaries
 
 
 class ScriptRunner:

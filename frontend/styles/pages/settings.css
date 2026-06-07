@@ -479,7 +479,7 @@
   padding: 12px 14px;
   background: rgba(34, 211, 238, 0.06);
   border: 1px solid rgba(34, 211, 238, 0.15);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   margin-top: 4px;
 }
 

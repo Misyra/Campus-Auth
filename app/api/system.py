@@ -15,7 +15,7 @@ from app.version import compare_versions, get_project_version
 from app.constants import AUTH_DATA_DIR, PROJECT_ROOT
 from app.deps import get_autostart_service, get_monitor_service
 from app.services.monitor import MonitorService
-from app.services.scheduler import detect_available_shells, get_default_shell
+from app.utils.shell_utils import detect_shells as detect_available_shells, get_default_shell
 from app.schemas import ActionResponse, AutoStartStatusResponse
 
 router = APIRouter()

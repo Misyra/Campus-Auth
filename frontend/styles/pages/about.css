@@ -254,7 +254,7 @@
   padding: 10px 20px;
   background: var(--bg-primary);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   color: var(--text-primary);
   text-decoration: none;
   font-weight: 500;

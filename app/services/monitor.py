@@ -15,8 +15,6 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from typing import TYPE_CHECKING
-
 from app.constants import (
     MONITOR_THREAD_JOIN_TIMEOUT,
     MONITOR_STOP_TIMEOUT,
@@ -24,8 +22,6 @@ from app.constants import (
 )
 from app.core.monitor_core import NetworkMonitorCore, NetworkState
 
-if TYPE_CHECKING:
-    from fastapi import WebSocket
 from app.workers.playwright_worker import get_worker, CMD_LOGIN
 from app.network.decision import is_network_available
 from app.tasks import TaskManager
@@ -437,7 +433,7 @@ class MonitorService:
 
     # ── WebSocket 排空（主事件循环）──
 
-    async def _ws_drain_loop(self) -> None:
+    async def ws_drain_loop(self) -> None:
         """后台 asyncio 任务：定期排空 WS 广播队列。
 
         Runs until the asyncio task is cancelled (by lifespan shutdown).
@@ -454,7 +450,7 @@ class MonitorService:
     async def drain_ws_queue(self) -> None:
         """Flush pending WS broadcast messages to WebSocket clients.
 
-        Called by the main asyncio event loop (via _ws_drain_loop).
+        Called by the main asyncio event loop (via ws_drain_loop).
         No cross-thread asyncio calls remain in this module.
         """
         while True:
@@ -500,7 +496,7 @@ class MonitorService:
 
     @property
     def ws_broadcast_queue(self) -> deque[dict]:
-        """WebSocket 广播队列（供 WebSocketLogHandler 使用）"""
+        """WebSocket 广播队列（供 WebSocketSink 使用）"""
         return self._ws_broadcast_queue
 
     @property

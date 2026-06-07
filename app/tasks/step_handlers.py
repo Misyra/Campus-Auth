@@ -5,13 +5,12 @@ from __future__ import annotations
 import asyncio
 import re
 import threading
-import time
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .models import StepConfig, StepError, StepType, TaskConfig, PROJECT_ROOT
+from .models import StepConfig, StepError, StepType, PROJECT_ROOT
 from .variable_resolver import VariableResolver
 
 from app.utils.logging import get_logger
@@ -87,6 +86,61 @@ class StepHandler(ABC):
     def _parse_selectors(selector: str) -> list[str]:
         """解析逗号分隔的候选选择器列表"""
         return [s.strip() for s in selector.split(",") if s.strip()]
+
+    async def _try_candidates_with_fallback(
+        self,
+        ctx,
+        selector: str,
+        timeout: int,
+        action_fn,
+        fallback_fn,
+        label: str = "",
+    ) -> tuple[bool, str]:
+        """候选选择器降级通用模式。
+
+        策略1: 快速尝试可见元素（使用 timeout 的 15%，最少 1500ms）
+        策略2: 降级到 attached 元素（使用完整 timeout）
+
+        Args:
+            ctx: page 或 frame 对象
+            selector: 逗号分隔的选择器字符串
+            timeout: 步骤超时（毫秒）
+            action_fn: `(locator, timeout)` → 正常操作回调
+            fallback_fn: `(locator, timeout)` → 降级操作回调
+            label: 日志前缀（如 "[input]"）
+
+        Returns:
+            (success, message)
+        """
+        candidates = self._parse_selectors(selector)
+
+        # 策略1: 快速尝试可见元素
+        wait_timeout = max(1500, int(timeout * 0.15))
+        for candidate in candidates:
+            try:
+                loc = ctx.locator(candidate).first
+                await loc.wait_for(state="visible", timeout=wait_timeout)
+                await action_fn(loc, timeout)
+                logger.debug("{} 普通操作成功 → {}", label, candidate)
+                return True, ""
+            except Exception:
+                logger.debug("{} 普通操作候选失败: {}", label, candidate)
+                continue
+
+        # 策略2: 降级到 attached 元素
+        logger.debug("{} 所有候选均未匹配可见元素，降级操作", label)
+        for candidate in candidates:
+            try:
+                loc = ctx.locator(candidate).first
+                await loc.wait_for(state="attached", timeout=timeout)
+                await fallback_fn(loc, timeout)
+                logger.debug("{} 降级操作成功 → {}", label, candidate)
+                return True, ""
+            except Exception:
+                logger.debug("{} 降级操作候选失败: {}", label, candidate)
+                continue
+
+        return False, f"未找到可用元素: {selector}"
 
     async def _resolve_frame(self, page, step: StepConfig):
         """解析 frame 上下文，返回实际操作的 page 或 frame 对象"""
@@ -176,57 +230,28 @@ class InputHandler(StepHandler):
             return False, "输入步骤需要 selector"
 
         ctx = await self._resolve_frame(page, step)
-        candidates = self._parse_selectors(selector)
         masked = "***" if any(k in step.description.lower() for k in ("密码", "password", "pwd")) else value
         logger.debug(
-            "[input] 候选选择器 %d 个: %s, value=%s, clear=%s, timeout=%dms",
-            len(candidates), candidates, masked, clear, timeout,
+            "[input] value=%s, clear=%s, timeout=%dms",
+            masked, clear, timeout,
         )
 
-        # 策略1: 快速尝试普通 fill（使用步骤 timeout 的 15%，最少 1500ms）
-        wait_timeout = max(1500, int(timeout * 0.15))
-        for candidate in candidates:
-            try:
-                loc = ctx.locator(candidate).first
-                await loc.wait_for(state="visible", timeout=wait_timeout)
-                await loc.fill(value, timeout=timeout)
-                logger.debug("[input] 普通 fill 成功 → {}", candidate)
-                return True, ""
-            except Exception:
-                logger.debug("[input] 普通 fill 候选失败: {}", candidate)
-                continue
+        async def _normal_fill(loc, t):
+            await loc.fill(value, timeout=t)
 
-        # 策略2: 自动降级到强制输入（隐藏/不可交互的输入框）
-        logger.debug("[input] 所有候选均未匹配可见元素，降级到强制输入模式")
-        return await self._force_input(ctx, selector, value, clear, timeout)
+        async def _force_input(loc, t):
+            await loc.evaluate(
+                _FORCE_INPUT_JS,
+                {"val": value, "doClear": clear},
+            )
 
-    async def _force_input(
-        self, ctx, selector: str, value: str, clear: bool, timeout: int
-    ) -> tuple[bool, str]:
-        """强制输入：跳过可见性检查，通过 JS 设置值并模拟完整用户交互事件。
-        适用于 display:none / visibility:hidden / opacity:0 等隐藏输入框。
-        支持逗号分隔的候选选择器，按顺序尝试，取第一个 attached 的元素。
-
-        事件序列（模拟真实用户操作）：
-          focus → (clear) → beforeinput → set value → input → keyup → change → blur
-        """
-        candidates = self._parse_selectors(selector)
-
-        for candidate in candidates:
-            try:
-                el = ctx.locator(candidate).first
-                await el.wait_for(state="attached", timeout=timeout)
-                await el.evaluate(
-                    _FORCE_INPUT_JS,
-                    {"val": value, "doClear": clear},
-                )
-                logger.debug("[input] 强制输入成功 → {} (attached)", candidate)
-                return True, ""
-            except Exception:
-                logger.debug("[input] 强制输入候选失败: {}", candidate)
-                continue
-
+        ok, _msg = await self._try_candidates_with_fallback(
+            ctx, selector, timeout, _normal_fill, _force_input, label="[input]",
+        )
+        if ok:
+            return True, ""
         return False, f"强制输入未找到可用元素: {selector}"
+
 
 
 class ClickHandler(StepHandler):
@@ -247,38 +272,19 @@ class ClickHandler(StepHandler):
             return False, "点击步骤需要 selector"
 
         ctx = await self._resolve_frame(page, step)
-        candidates = self._parse_selectors(selector)
-        logger.debug(
-            "[click] 候选选择器 %d 个: %s, timeout=%dms",
-            len(candidates), candidates, timeout,
+        logger.debug("[click] timeout=%dms", timeout)
+
+        async def _normal_click(loc, t):
+            await loc.click(timeout=t)
+
+        async def _force_click(loc, t):
+            await loc.dispatch_event("click")
+
+        ok, _msg = await self._try_candidates_with_fallback(
+            ctx, selector, timeout, _normal_click, _force_click, label="[click]",
         )
-
-        # 策略1: 快速尝试普通 click（使用步骤 timeout 的 15%，最少 1500ms）
-        wait_timeout = max(1500, int(timeout * 0.15))
-        for candidate in candidates:
-            try:
-                loc = ctx.locator(candidate).first
-                await loc.wait_for(state="visible", timeout=wait_timeout)
-                await loc.click(timeout=timeout)
-                logger.debug("[click] 普通 click 成功 → {}", candidate)
-                return True, ""
-            except Exception:
-                logger.debug("[click] 普通 click 候选失败: {}", candidate)
-                continue
-
-        # 策略2: 自动降级到 force click（隐藏/不可交互的元素用 JS click）
-        logger.debug("[click] 所有候选均未匹配可见元素，降级到 force click")
-        for candidate in candidates:
-            try:
-                loc = ctx.locator(candidate).first
-                await loc.wait_for(state="attached", timeout=timeout)
-                await loc.dispatch_event("click")
-                logger.debug("[click] force click 成功 → {} (attached)", candidate)
-                return True, ""
-            except Exception:
-                logger.debug("[click] force click 候选失败: {}", candidate)
-                continue
-
+        if ok:
+            return True, ""
         return False, f"未找到可点击的元素: {selector}"
 
 
