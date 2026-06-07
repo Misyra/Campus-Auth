@@ -197,7 +197,7 @@ class LoginAttemptHandler:
         await browser_manager.__aenter__()
         self._browser_ctx = browser_manager
         self.logger.info(
-            "浏览器就绪 (%.1fs)", time.perf_counter() - browser_start
+            "浏览器就绪 ({:.1f}s)", time.perf_counter() - browser_start
         )
 
         # 成功标志：默认 False，executor 返回成功时设为 True

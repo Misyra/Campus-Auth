@@ -173,20 +173,20 @@ class StepHandler(ABC):
                     frame = await frame_element.content_frame()
                     if frame:
                         logger.info(
-                            "[frame] 使用 frame (content_frame): %s", frame_selector
+                            "[frame] 使用 frame (content_frame): {}", frame_selector
                         )
                         return frame
                     else:
                         logger.warning(
-                            "[frame] content_frame() 返回 None: %s", frame_selector
+                            "[frame] content_frame() 返回 None: {}", frame_selector
                         )
                 else:
                     logger.warning(
-                        "[frame] CSS 选择器未匹配到 frame 元素: %s", frame_selector
+                        "[frame] CSS 选择器未匹配到 frame 元素: {}", frame_selector
                     )
             except Exception as e:
                 logger.warning(
-                    "[frame] 验证 frame 元素时出错: %s, 错误: %s", frame_selector, e
+                    "[frame] 验证 frame 元素时出错: {}, 错误: {}", frame_selector, e
                 )
             return page
         except Exception as e:
