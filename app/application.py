@@ -307,7 +307,6 @@ def run() -> None:
 
         today_dir = log_dir / datetime.now().strftime("%Y-%m-%d")
         today_log = today_dir / "app.log"
-        print(f"[Campus-Auth] 日志文件: {today_log}")
         startup_logger.info("日志文件: {}", today_log)
         for old_name in ("campus_auth.log",):
             old_log = log_dir / old_name

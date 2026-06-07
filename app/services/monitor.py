@@ -103,14 +103,13 @@ class MonitorService:
         # State (previously guarded by RLock)
         self._logs: deque[LogEntry] = deque(maxlen=1200)
 
-        self._ui_config = load_ui_config(self._profile_service)
-        runtime_payload, has_decrypt_error = load_runtime_config(self._profile_service)
-        if has_decrypt_error:
-            service_logger.warning("部分密码解密失败，可能需要重新配置密码")
-        self._runtime_config = build_runtime_config(
-            runtime_payload,
-            self._profile_service.load().system,
-        )
+        # 锁（必须在 _reload_config_internal 之前初始化）
+        self._login_lock: threading.Lock = threading.Lock()
+        self._reload_lock: threading.Lock = threading.Lock()
+        self._pure_mode_lock: threading.Lock = threading.Lock()
+
+        # 加载配置（复用 _reload_config_internal）
+        self._reload_config_internal()
 
         self._monitor_core: NetworkMonitorCore | None = None
         self._monitor_thread: threading.Thread | None = None
@@ -130,9 +129,6 @@ class MonitorService:
 
         # 登录并发控制 —— 防止同时提交多个登录任务到 Worker
         self._login_in_progress = threading.Event()
-        self._login_lock: threading.Lock = threading.Lock()
-        self._reload_lock: threading.Lock = threading.Lock()
-        self._pure_mode_lock: threading.Lock = threading.Lock()
 
         # Start queue consumer daemon thread
         self._consumer_thread = threading.Thread(

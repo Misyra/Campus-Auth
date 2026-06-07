@@ -31,9 +31,7 @@ class ServiceContainer:
         self._logs_dir = project_root / "logs"
         self._backup_dir = project_root / "backups"
 
-        # 创建必要的目录
-        self._temp_dir.mkdir(parents=True, exist_ok=True)
-        self._logs_dir.mkdir(parents=True, exist_ok=True)
+        # backups 目录（temp/logs 由 application.py 模块级创建）
         self._backup_dir.mkdir(parents=True, exist_ok=True)
 
         # 初始化服务
