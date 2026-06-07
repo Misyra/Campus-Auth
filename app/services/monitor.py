@@ -531,15 +531,17 @@ class MonitorService:
     def _reload_config_internal(self) -> None:
         """从 settings.json 重新加载 UI 和运行时配置（内部方法，由 reload_config 和 _handle_profile_reload 复用）。"""
         with self._reload_lock:
-            self._ui_config = load_ui_config(self._profile_service)
+            # 单次 load，避免多次 load 之间数据版本不一致
+            data = self._profile_service.load()
+            self._ui_config = load_ui_config(self._profile_service, data=data)
             runtime_payload, has_decrypt_error = load_runtime_config(
-                self._profile_service
+                self._profile_service, data=data
             )
             if has_decrypt_error:
                 service_logger.warning("配置重载时部分密码解密失败")
             self._runtime_config = build_runtime_config(
                 runtime_payload,
-                self._profile_service.load().system,
+                data.system,
             )
 
     def _copy_runtime_config(self) -> dict:
@@ -565,13 +567,22 @@ class MonitorService:
 
         service_logger.info("配置已从 settings.json 重载")
 
-    def apply_profile(self, profile_name: str) -> None:
+    def apply_profile(self, profile_id: str) -> None:
         """切换到新方案并通过队列重启监控"""
         self.reload_config()
         new_url = self._runtime_config.get("auth_url", "")
         new_user = self._runtime_config.get("username", "")
+
+        # 解析可读名称用于日志，ID 作为 fallback
+        try:
+            data = self._profile_service.load()
+            profile = data.profiles.get(profile_id)
+            display_name = profile.name if profile else profile_id
+        except Exception:
+            display_name = profile_id
+
         self._push_log(
-            f"切换方案 -> {profile_name} (认证={new_url}, 用户={new_user})",
+            f"切换方案 -> {display_name} (认证={new_url}, 用户={new_user})",
             level="INFO",
             source="backend.monitor_service",
         )
@@ -582,7 +593,7 @@ class MonitorService:
                     MonitorCommand(
                         type=MonitorCmdType.PROFILE_SWITCH,
                         data={
-                            "profile": profile_name,
+                            "profile": profile_id,
                             "config": self._copy_runtime_config(),
                             "pure_mode": self.pure_mode,
                         },
@@ -731,7 +742,8 @@ class MonitorService:
         cmd.response_event.wait(timeout=login_timeout)
 
         if cmd.response_data is None:
-            # 超时分支不清除 _login_in_progress，由消费者 finally 统一清除
+            # 超时也主动清除，防止消费者线程异常时标志永久残留
+            self._login_in_progress.clear()
             return False, "手动登录超时"
 
         success, message = cmd.response_data
@@ -798,9 +810,9 @@ class MonitorService:
         """切换纯净模式，返回新值"""
         with self._pure_mode_lock:
             new_value = not self._pure_mode
-            data = self._profile_service.load()
-            data.system.pure_mode = new_value
-            self._profile_service.save(data)
+            self._profile_service.update(
+                lambda d: setattr(d.system, "pure_mode", new_value)
+            )
             self._pure_mode = new_value
             return new_value
 

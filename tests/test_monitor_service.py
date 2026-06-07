@@ -526,7 +526,7 @@ class TestTogglePureMode:
         new_value = svc.toggle_pure_mode()
         assert new_value is True
         assert svc.pure_mode is True
-        mock_ps.save.assert_called_once()
+        mock_ps.update.assert_called_once()
 
     @patch("app.services.monitor.build_runtime_config", return_value={})
     @patch(

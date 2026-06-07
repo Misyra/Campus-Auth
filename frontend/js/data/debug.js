@@ -12,5 +12,6 @@ export function debugData() {
     },
     debugLoading: false,
     pureMode: false,
+    _pureModeLoading: false,
   };
 }

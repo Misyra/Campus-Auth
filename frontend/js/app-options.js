@@ -220,6 +220,9 @@ export const appOptions = {
     if (this._logScrollRaf) cancelAnimationFrame(this._logScrollRaf);
     if (this._configDirtyTimer) clearTimeout(this._configDirtyTimer);
     this.timers.forEach((t) => clearInterval(t));
+    if (this._visibilityHandler) {
+      document.removeEventListener('visibilitychange', this._visibilityHandler);
+    }
     if (this.ws) this.ws.close();
   },
   methods: {

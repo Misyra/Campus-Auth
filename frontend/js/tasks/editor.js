@@ -213,6 +213,9 @@ export const editorTaskMethods = {
   },
 
   async togglePureMode() {
+    // 防止快速点击导致竞态
+    if (this._pureModeLoading) return;
+    this._pureModeLoading = true;
     // v-model 已同步更新 pureMode，此处调用 API 持久化到后端
     try {
       const { data } = await this.$api.post('/api/pure-mode');
@@ -225,6 +228,8 @@ export const editorTaskMethods = {
       this.pureMode = !this.pureMode;
       this.frontendLogger.error('tasks', '切换纯净模式失败', error);
       this.toastOnly(false, '切换纯净模式失败');
+    } finally {
+      this._pureModeLoading = false;
     }
   },
 

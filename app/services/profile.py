@@ -93,7 +93,7 @@ class ProfileService:
         content = data.model_dump_json(indent=2)
         atomic_write(self._settings_path, content)
 
-        self._data = data
+        self._data = data.model_copy(deep=True)
         profile_logger.info("settings.json 已保存")
 
     def load(self) -> ProfilesData:
