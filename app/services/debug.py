@@ -1,15 +1,13 @@
 """调试会话管理器 — 封装调试会话的状态管理和浏览器生命周期。
 
 从 main.py 提取，解决 DebugSession 命名冲突：
-- DebugBrowserSession: 管理浏览器生命周期（原 main.py 中的 DebugSession 类）
-- DebugSessionManager: 封装锁、信号量、定时器等状态管理
+- DebugSessionManager: 封装锁、信号量、定时器等状态管理，直接管理浏览器生命周期
 - debug_session.DebugSession: dataclass，表示会话状态（保持不变）
 """
 
 from __future__ import annotations
 
 import asyncio
-import shutil
 import time
 from pathlib import Path
 from typing import Any
@@ -33,44 +31,6 @@ from .debug_session import (
 )
 
 api_logger = get_logger("backend.debug_manager", side="BACKEND")
-
-
-class DebugBrowserSession:
-    """调试浏览器会话 — 管理浏览器生命周期。
-
-    浏览器生命周期由 PlaywrightWorker 管理。
-    所有浏览器操作通过 Worker 的命令队列提交执行。
-    TaskExecutor 在 Worker 线程内创建和运行，确保 page 对象线程安全。
-    """
-
-    def __init__(self):
-        self.page = None  # 向后兼容标记，实际 page 由 Worker 管理
-
-    async def start(
-        self, runtime_config: dict, url: str | None, pure_mode: bool = False
-    ) -> None:
-        """启动调试会话 — 委托 Worker 处理浏览器初始化。"""
-        data = {
-            "config": runtime_config,
-            "task_url": url or "",
-            "pure_mode": pure_mode,
-        }
-        response = await asyncio.to_thread(
-            lambda: get_worker().submit(CMD_DEBUG_START, data=data)
-        )
-        if not response.success:
-            raise RuntimeError(f"调试会话启动失败: {response.error}")
-        self.page = True  # 标记已启动
-
-    async def close(self) -> None:
-        """关闭调试会话 — 委托 Worker 关闭浏览器页面。"""
-        try:
-            await asyncio.to_thread(
-                lambda: get_worker().submit(CMD_DEBUG_STOP)
-            )
-        except Exception:
-            api_logger.debug("关闭调试会话 Worker 提交失败", exc_info=True)
-        self.page = None
 
 
 class DebugSessionManager:
@@ -101,6 +61,16 @@ class DebugSessionManager:
         if not self._session.running:
             raise HTTPException(status_code=400, detail="没有活跃的调试会话")
 
+    async def _close_debug_browser(self) -> None:
+        """关闭调试浏览器 — 委托 Worker 处理。"""
+        try:
+            await asyncio.to_thread(
+                lambda: get_worker().submit(CMD_DEBUG_STOP)
+            )
+        except Exception:
+            api_logger.debug("关闭调试会话 Worker 提交失败", exc_info=True)
+        self._session._browser_active = False
+
     async def _debug_timeout_watcher(
         self, gen: int, *, timeout_seconds: float = 1800.0
     ) -> None:
@@ -120,8 +90,8 @@ class DebugSessionManager:
                             timeout_seconds,
                         )
                         try:
-                            if self._session.session:
-                                await self._session.session.close()
+                            if self._session._browser_active:
+                                await self._close_debug_browser()
                         finally:
                             self._session = empty_debug_session()
         except asyncio.CancelledError:
@@ -166,11 +136,10 @@ class DebugSessionManager:
         }
 
         async with self._lock:
-            if self._session.session:
-                await self._session.session.close()
+            if self._session._browser_active:
+                await self._close_debug_browser()
             await self._cancel_debug_timer()
 
-            session = DebugBrowserSession()
             try:
                 steps_info = [
                     {
@@ -184,7 +153,7 @@ class DebugSessionManager:
 
                 gen = _next_debug_gen()
                 self._session = empty_debug_session()
-                self._session.session = session
+                self._session._browser_active = True
                 self._session.task_id = task_id
                 self._session.steps = steps_info
                 self._session.running = True
@@ -199,11 +168,10 @@ class DebugSessionManager:
                 )
                 if not response.success:
                     raise RuntimeError(f"调试会话启动失败: {response.error}")
-                session.page = True
                 if isinstance(response.data, dict):
                     self._session.screenshot_url = response.data.get("screenshot_url")
             except Exception:
-                await session.close()
+                await self._close_debug_browser()
                 raise
 
         api_logger.info("Debug session started for task {}", task_id)
@@ -318,8 +286,8 @@ class DebugSessionManager:
         async with self._exec_sem:
             async with self._lock:
                 await self._cancel_debug_timer()
-                if self._session.session:
-                    await self._session.session.close()
+                if self._session._browser_active:
+                    await self._close_debug_browser()
                 self._session = empty_debug_session()
         # 清理临时调试截图（仅删除文件，保留目录结构）
         try:
@@ -339,7 +307,7 @@ class DebugSessionManager:
     async def close(self):
         """关闭调试会话（用于 lifespan 清理）。"""
         try:
-            if self._session.session:
-                await self._session.session.close()
+            if self._session._browser_active:
+                await self._close_debug_browser()
         finally:
             self._session = empty_debug_session()

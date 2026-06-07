@@ -1,6 +1,6 @@
 """backend/monitor_service.py — 监控服务测试
 
-覆盖 MonitorCommand, StatusSnapshot, WebSocketManager, MonitorService。
+覆盖 MonitorCommand, StatusSnapshot, MonitorService。
 """
 from __future__ import annotations
 
@@ -18,7 +18,23 @@ from app.services.monitor import (
     StatusSnapshot,
     MonitorService,
 )
-from app.ws_manager import WebSocketManager
+
+
+def _make_monitor_service() -> MonitorService:
+    """创建带有 mock 依赖的 MonitorService 实例。"""
+    with (
+        patch("app.services.monitor.build_runtime_config", return_value={}),
+        patch("app.services.monitor.load_runtime_config", return_value=(MagicMock(), False)),
+        patch("app.services.monitor.load_ui_config") as mock_load_ui,
+        patch("app.services.monitor.ProfileService") as mock_ps_cls,
+    ):
+        mock_ps = MagicMock()
+        mock_ps_cls.return_value = mock_ps
+        mock_ps.load.return_value.system.pure_mode = False
+        mock_ui_config = MagicMock()
+        mock_ui_config.auto_start = False
+        mock_load_ui.return_value = mock_ui_config
+        return MonitorService(MagicMock())
 
 
 # =====================================================================
@@ -94,20 +110,8 @@ class TestStatusSnapshot:
 
 
 class TestMonitorServiceInit:
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    def test_init(self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
-        mock_ps = MagicMock()
-        mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
-
-        mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
-        mock_load_ui.return_value = mock_ui_config
-
-        svc = MonitorService(MagicMock())
+    def test_init(self):
+        svc = _make_monitor_service()
         assert svc._logs.maxlen == 1200
         assert svc._login_in_progress.is_set() is False
         assert svc.pure_mode is False
@@ -119,38 +123,16 @@ class TestMonitorServiceInit:
 
 
 class TestPushLog:
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    def test_push_log(self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
-        mock_ps = MagicMock()
-        mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
-        mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
-        mock_load_ui.return_value = mock_ui_config
-
-        svc = MonitorService(MagicMock())
+    def test_push_log(self):
+        svc = _make_monitor_service()
         svc._push_log("测试消息", level="INFO", source="test")
         assert len(svc._logs) == 1
         assert svc._logs[0].message == "测试消息"
         assert svc._logs[0].level == "INFO"
         assert svc._logs[0].source == "test"
 
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    def test_push_log_ws_broadcast(self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
-        mock_ps = MagicMock()
-        mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
-        mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
-        mock_load_ui.return_value = mock_ui_config
-
-        svc = MonitorService(MagicMock())
+    def test_push_log_ws_broadcast(self):
+        svc = _make_monitor_service()
         svc._push_log("test", level="INFO", source="test")
         assert len(svc._ws_broadcast_queue) == 1
         assert svc._ws_broadcast_queue[0]["type"] == "log"
@@ -162,34 +144,12 @@ class TestPushLog:
 
 
 class TestListLogs:
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    def test_list_logs_empty(self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
-        mock_ps = MagicMock()
-        mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
-        mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
-        mock_load_ui.return_value = mock_ui_config
-
-        svc = MonitorService(MagicMock())
+    def test_list_logs_empty(self):
+        svc = _make_monitor_service()
         assert svc.list_logs() == []
 
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    def test_list_logs_limit(self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
-        mock_ps = MagicMock()
-        mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
-        mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
-        mock_load_ui.return_value = mock_ui_config
-
-        svc = MonitorService(MagicMock())
+    def test_list_logs_limit(self):
+        svc = _make_monitor_service()
         for i in range(5):
             svc._push_log(f"msg {i}")
         assert len(svc.list_logs(limit=3)) == 3
@@ -221,36 +181,14 @@ class TestListLogs:
 
 
 class TestGetStatus:
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    def test_get_status_stopped(self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
-        mock_ps = MagicMock()
-        mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
-        mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
-        mock_load_ui.return_value = mock_ui_config
-
-        svc = MonitorService(MagicMock())
+    def test_get_status_stopped(self):
+        svc = _make_monitor_service()
         status = svc.get_status()
         assert status.monitoring is False
         assert status.runtime_seconds == 0
 
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    def test_get_status_running(self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
-        mock_ps = MagicMock()
-        mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
-        mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
-        mock_load_ui.return_value = mock_ui_config
-
-        svc = MonitorService(MagicMock())
+    def test_get_status_running(self):
+        svc = _make_monitor_service()
         svc._status_snapshot = StatusSnapshot(
             monitoring=True,
             last_network_ok=True,
@@ -271,37 +209,15 @@ class TestGetStatus:
 
 
 class TestUpdateStatusSnapshot:
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    def test_update_no_core(self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
-        mock_ps = MagicMock()
-        mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
-        mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
-        mock_load_ui.return_value = mock_ui_config
-
-        svc = MonitorService(MagicMock())
+    def test_update_no_core(self):
+        svc = _make_monitor_service()
         svc._monitor_core = None
         svc._update_status_snapshot()
         assert svc._status_snapshot.monitoring is False
         assert svc._status_snapshot.status_detail == "已停止"
 
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    def test_update_with_core(self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
-        mock_ps = MagicMock()
-        mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
-        mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
-        mock_load_ui.return_value = mock_ui_config
-
-        svc = MonitorService(MagicMock())
+    def test_update_with_core(self):
+        svc = _make_monitor_service()
         mock_core = MagicMock()
         mock_core.monitoring = True
         mock_core.snapshot.return_value = {
@@ -343,37 +259,15 @@ class TestStartStopMonitoring:
         assert ok is True
         assert "已启动" in msg
 
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    def test_start_monitoring_already_running(self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
-        mock_ps = MagicMock()
-        mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
-        mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
-        mock_load_ui.return_value = mock_ui_config
-
-        svc = MonitorService(MagicMock())
+    def test_start_monitoring_already_running(self):
+        svc = _make_monitor_service()
         svc._status_snapshot = StatusSnapshot(monitoring=True)
         ok, msg = svc.start_monitoring()
         assert ok is False
         assert "已在运行" in msg
 
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    def test_stop_monitoring_not_running(self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
-        mock_ps = MagicMock()
-        mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
-        mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
-        mock_load_ui.return_value = mock_ui_config
-
-        svc = MonitorService(MagicMock())
+    def test_stop_monitoring_not_running(self):
+        svc = _make_monitor_service()
         ok, msg = svc.stop_monitoring()
         assert ok is False
         assert "未运行" in msg
@@ -385,19 +279,8 @@ class TestStartStopMonitoring:
 
 
 class TestHandleStartStop:
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    def test_handle_start_duplicate(self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
-        mock_ps = MagicMock()
-        mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
-        mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
-        mock_load_ui.return_value = mock_ui_config
-
-        svc = MonitorService(MagicMock())
+    def test_handle_start_duplicate(self):
+        svc = _make_monitor_service()
         mock_thread = MagicMock()
         mock_thread.is_alive.return_value = True
         svc._monitor_thread = mock_thread
@@ -406,19 +289,8 @@ class TestHandleStartStop:
         # 不应创建新线程
         mock_thread.is_alive.assert_called()
 
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    def test_handle_stop_no_core(self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
-        mock_ps = MagicMock()
-        mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
-        mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
-        mock_load_ui.return_value = mock_ui_config
-
-        svc = MonitorService(MagicMock())
+    def test_handle_stop_no_core(self):
+        svc = _make_monitor_service()
         svc._monitor_core = None
         svc._monitor_thread = None
         svc._handle_stop()
@@ -520,19 +392,8 @@ class TestHandleLogin:
 
 
 class TestRunManualLogin:
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    def test_run_manual_login_in_progress(self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
-        mock_ps = MagicMock()
-        mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
-        mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
-        mock_load_ui.return_value = mock_ui_config
-
-        svc = MonitorService(MagicMock())
+    def test_run_manual_login_in_progress(self):
+        svc = _make_monitor_service()
         svc._login_in_progress.set()
         ok, msg = svc.run_manual_login()
         assert ok is False
@@ -682,19 +543,8 @@ class TestTogglePureMode:
 
 
 class TestLoginInProgress:
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    def test_login_in_progress_property(self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
-        mock_ps = MagicMock()
-        mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
-        mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
-        mock_load_ui.return_value = mock_ui_config
-
-        svc = MonitorService(MagicMock())
+    def test_login_in_progress_property(self):
+        svc = _make_monitor_service()
         assert svc.login_in_progress is False
         svc._login_in_progress.set()
         assert svc.login_in_progress is True
