@@ -19,7 +19,7 @@ class SystemTray:
         self._monitoring = False
 
     def _load_icon(self) -> Image.Image:
-        icon_path = Path(__file__).parent.parent / "frontend" / "tray-icon.svg"
+        icon_path = Path(__file__).parent.parent.parent / "frontend" / "tray-icon.svg"
         if icon_path.exists():
             try:
                 import cairosvg
