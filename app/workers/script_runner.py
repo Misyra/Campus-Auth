@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ntpath
 import os
 import platform
 import sys
@@ -88,7 +89,7 @@ class ScriptRunner:
             script_file: 可选，指定要执行的脚本文件路径。
                          为 None 时使用 self.script_path（仅文件脚本）。
         """
-        exe_name = Path(self.binary_path).stem.lower()
+        exe_name = ntpath.splitext(ntpath.basename(self.binary_path))[0].lower()
 
         # 指定了脚本文件（临时文件或普通文件）：统一按文件执行
         if script_file is not None:
@@ -123,7 +124,7 @@ class ScriptRunner:
 
     def _content_temp_file(self, content: str) -> str:
         """将 JSON 内容写入临时文件，返回文件路径。"""
-        exe_name = Path(self.binary_path).stem.lower()
+        exe_name = ntpath.splitext(ntpath.basename(self.binary_path))[0].lower()
         ext = _BINARY_EXT_MAP.get(exe_name, "")
         tf = tempfile.NamedTemporaryFile(
             "w", suffix=ext, delete=False, encoding="utf-8",
