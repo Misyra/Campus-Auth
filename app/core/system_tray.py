@@ -29,9 +29,13 @@ class SystemTray:
                 png_data = cairosvg.svg2png(
                     url=icon_path.as_uri(), output_width=64, output_height=64
                 )
-                return Image.open(io.BytesIO(png_data))
+                img = Image.open(io.BytesIO(png_data))
+                logger.debug("SVG 图标加载成功: {}x{}, mode={}", img.width, img.height, img.mode)
+                return img
             except Exception:
-                logger.debug("SVG 图标加载失败，使用默认图标", exc_info=True)
+                logger.warning("SVG 图标加载失败，使用默认图标", exc_info=True)
+        else:
+            logger.warning("图标文件不存在: {}", icon_path)
         return Image.new("RGBA", (64, 64), (34, 211, 238, 255))
 
     def _get_status_label(self, item) -> str:
