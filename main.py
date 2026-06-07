@@ -17,11 +17,11 @@ _project_root = Path(__file__).resolve().parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from app.constants import AUTH_DATA_DIR  # noqa: E402
+from app.constants import AUTH_DATA_DIR  # noqa: F401, E402  — 测试 fixture 需要
 from app.workers.playwright_bootstrap import ensure_playwright_ready  # noqa: E402
 from app.workers.playwright_worker import cleanup_orphan_browsers  # noqa: E402
 from app.utils.platform_utils import is_windows  # noqa: E402
-from app.utils.process import (
+from app.utils.process import (  # noqa: E402
     cleanup_pid,
     get_pid_file,
     get_process_name,
