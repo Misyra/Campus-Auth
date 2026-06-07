@@ -1,14 +1,8 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-浏览器上下文管理器 — Worker 代理模式
+"""浏览器上下文管理器 — Worker 代理模式。
 
-浏览器生命周期现由 PlaywrightWorker（src/playwright_worker.py）管理。
-BrowserContextManager 作为轻量代理:
-
+浏览器生命周期由 PlaywrightWorker 管理，BrowserContextManager 作为轻量代理:
 - __aenter__: 通过 Worker 确保浏览器已就绪，获取浏览器对象引用
 - __aexit__: 通知 Worker 释放引用（浏览器常驻 Worker 不实际关闭）
-- Worker 线程内浏览器对象可通过 Worker 的内部状态直接访问（同线程安全）
 """
 
 import threading

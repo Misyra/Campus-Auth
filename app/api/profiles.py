@@ -20,7 +20,7 @@ def _safe_detect(func, label: str, default=None):
     try:
         return func()
     except Exception as exc:
-        api_logger.error("{}检测异常: {}", label, exc, exc_info=True)
+        api_logger.error("{}检测异常: {}", label, exc)
         return default
 
 

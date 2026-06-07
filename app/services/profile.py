@@ -196,9 +196,9 @@ class ProfileService:
         return True, "方案删除成功"
 
     def detect_matching_profile(self) -> str | None:
-        """检测当前网络环境并返回匹配的方案 ID，无匹配返回 None
+        """检测当前网络环境并返回匹配的方案 ID，无匹配返回 None。
 
-        匹配优先级：网关 IP > SSID
+        匹配优先级：网关 IP > SSID（同一次遍历中先检查网关再检查 SSID）。
         """
         gateway = detect_gateway_ip()
         ssid = detect_wifi_ssid()
@@ -206,34 +206,36 @@ class ProfileService:
         profile_logger.debug("检测到网关: {}, SSID: {}", gateway, ssid)
 
         data = self.load()
+        ssid_match_id: str | None = None
 
-        # 优先匹配网关 IP
-        if gateway:
-            for profile_id, settings in data.profiles.items():
-                match_ip = (settings.match_gateway_ip or "").strip()
-                if match_ip and match_ip == gateway:
-                    profile_logger.info(
-                        "网关 {} 匹配方案: {} ({})",
-                        gateway,
-                        profile_id,
-                        settings.name,
-                    )
-                    return profile_id
+        for profile_id, settings in data.profiles.items():
+            # 优先匹配网关 IP（命中即返回）
+            match_ip = (settings.match_gateway_ip or "").strip()
+            if gateway and match_ip and match_ip == gateway:
+                profile_logger.info(
+                    "网关 {} 匹配方案: {} ({})",
+                    gateway,
+                    profile_id,
+                    settings.name,
+                )
+                return profile_id
 
-        # 其次匹配 SSID
-        if ssid:
-            for profile_id, settings in data.profiles.items():
+            # 记录首个 SSID 匹配（优先级低于网关）
+            if ssid_match_id is None:
                 match_ssid = (settings.match_ssid or "").strip()
-                if match_ssid and match_ssid == ssid:
-                    profile_logger.info(
-                        "SSID '{}' 匹配方案: {} ({})",
-                        ssid,
-                        profile_id,
-                        settings.name,
-                    )
-                    return profile_id
+                if ssid and match_ssid and match_ssid == ssid:
+                    ssid_match_id = profile_id
 
-        return None
+        # SSID 匹配（延迟返回，确保网关优先）
+        if ssid_match_id is not None:
+            profile_logger.info(
+                "SSID '{}' 匹配方案: {} ({})",
+                ssid,
+                ssid_match_id,
+                data.profiles[ssid_match_id].name,
+            )
+
+        return ssid_match_id
 
     def set_auto_switch(self, enabled: bool) -> None:
         """设置自动切换开关"""

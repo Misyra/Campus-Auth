@@ -96,25 +96,7 @@ def _cmd_stop() -> None:
     try:
         print(f"正在停止服务 (PID: {pid})...")
         if is_windows():
-            # Windows: taskkill 发送 WM_CLOSE 实现优雅关闭
-            subprocess.run(
-                ["taskkill", "/PID", str(pid)],
-                capture_output=True,
-                creationflags=subprocess.CREATE_NO_WINDOW
-                if hasattr(subprocess, "CREATE_NO_WINDOW")
-                else 0,
-            )
-        else:
-            os.kill(pid, signal.SIGTERM)
-        for _ in range(10):
-            time.sleep(1)
-            try:
-                os.kill(pid, 0)
-            except OSError:
-                print("服务已停止")
-                cleanup_pid()
-                return
-        if is_windows():
+            # Windows: 直接使用 taskkill /F 强制终止（taskkill 无 /F 对控制台程序无效）
             subprocess.run(
                 ["taskkill", "/F", "/PID", str(pid)],
                 capture_output=True,
@@ -122,10 +104,20 @@ def _cmd_stop() -> None:
                 if hasattr(subprocess, "CREATE_NO_WINDOW")
                 else 0,
             )
-            print("服务已强制停止")
         else:
+            os.kill(pid, signal.SIGTERM)
+            # 等待进程退出
+            for _ in range(10):
+                time.sleep(1)
+                try:
+                    os.kill(pid, 0)
+                except OSError:
+                    print("服务已停止")
+                    cleanup_pid()
+                    return
+            # SIGTERM 无效，使用 SIGKILL
             os.kill(pid, signal.SIGKILL)
-            print("服务已强制停止")
+        print("服务已停止")
     except OSError:
         print("服务未运行")
     finally:

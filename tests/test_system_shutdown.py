@@ -8,63 +8,50 @@ from unittest.mock import MagicMock, patch
 
 
 class TestShutdownUsesExit:
-    """shutdown 使用 asyncio.run_coroutine_threadsafe + os._exit"""
+    """shutdown 使用 shutdown_event 触发 lifespan 正常关闭"""
 
-    def test_shutdown_uses_exit_not_sigterm(self):
-        """验证 _do_shutdown 使用 os._exit(0) 而非 os.kill(SIGTERM)"""
+    def test_shutdown_sets_shutdown_event(self):
+        """验证 shutdown 设置 shutdown_event 而非 os._exit"""
         mock_monitor = MagicMock()
         mock_monitor.stop_monitoring.return_value = (True, "监控已停止")
 
-        done_event = threading.Event()
-        mock_loop = MagicMock()
+        mock_request = MagicMock()
+        mock_request.app.state.shutdown_event = MagicMock()
 
-        mock_app = MagicMock()
-        with patch('os._exit') as mock_exit, \
-             patch('asyncio.get_event_loop', return_value=mock_loop), \
-             patch('app.application.app', mock_app), \
-             patch('app.workers.playwright_worker.get_worker') as mock_get_worker, \
-             patch('app.workers.playwright_worker.cleanup_orphan_browsers'), \
-             patch('logging.shutdown'):
+        with patch('app.workers.playwright_worker.get_worker') as mock_get_worker, \
+             patch('app.workers.playwright_worker.cleanup_orphan_browsers'):
 
             mock_worker = MagicMock()
             mock_get_worker.return_value = mock_worker
 
-            mock_exit.side_effect = lambda code: done_event.set()
-
             from app.api.system import shutdown_server
-            shutdown_server(svc=mock_monitor)
+            result = shutdown_server(request=mock_request, svc=mock_monitor)
 
-            done_event.wait(timeout=5)
-
-        # 验证 os._exit(0) 被调用
-        mock_exit.assert_called_once_with(0)
+        # 验证 shutdown_event.set() 被调用
+        mock_request.app.state.shutdown_event.set.assert_called_once()
+        # 验证返回成功响应
+        assert result.success is True
 
     def test_shutdown_cleanup_functions_called(self):
         """测试 shutdown 调用清理函数"""
         mock_monitor = MagicMock()
         mock_monitor.stop_monitoring.return_value = (True, "监控已停止")
 
-        mock_loop = MagicMock()
+        mock_request = MagicMock()
+        mock_request.app.state.shutdown_event = MagicMock()
 
-        mock_app = MagicMock()
-        with patch('os._exit'), \
-             patch('asyncio.get_event_loop', return_value=mock_loop), \
-             patch('app.application.app', mock_app), \
-             patch('app.workers.playwright_worker.get_worker') as mock_get_worker, \
-             patch('app.workers.playwright_worker.cleanup_orphan_browsers') as mock_cleanup, \
-             patch('logging.shutdown'):
+        with patch('app.workers.playwright_worker.get_worker') as mock_get_worker, \
+             patch('app.workers.playwright_worker.cleanup_orphan_browsers') as mock_cleanup:
 
             mock_worker = MagicMock()
             mock_get_worker.return_value = mock_worker
 
             from app.api.system import shutdown_server
-            shutdown_server(svc=mock_monitor)
-
-            # daemon thread 中 os._exit 被 mock，不会真正退出，等待一小段时间
-            import time
-            time.sleep(0.5)
+            shutdown_server(request=mock_request, svc=mock_monitor)
 
         # 验证清理函数被调用
         mock_monitor.stop_monitoring.assert_called_once()
         mock_worker.stop.assert_called_once()
         mock_cleanup.assert_called_once()
+        # 验证 shutdown_event 被设置
+        mock_request.app.state.shutdown_event.set.assert_called_once()

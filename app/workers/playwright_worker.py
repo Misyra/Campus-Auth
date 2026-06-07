@@ -1,5 +1,4 @@
-"""
-Playwright Worker — Actor 模型浏览器自动化工作线程
+"""Playwright Worker — Actor 模型浏览器自动化工作线程。
 
 架构说明:
   PlaywrightWorker 采用与 MonitorService 相同的 Actor 模型:
@@ -7,11 +6,10 @@ Playwright Worker — Actor 模型浏览器自动化工作线程
     - 常驻守护线程运行独立 asyncio 事件循环
     - _async_run() 协程轮询队列并派发命令
     - 所有 Playwright 操作限制在 Worker 线程内执行，避免跨线程竞争
-    - 取消事件桥接: threading.Event → asyncio.Event
 
- 命令派发流程:
-   submit() → queue.put(cmd) → run_coroutine_threadsafe(_wake_async())
-   → _async_run() 被唤醒 → get_nowait() 取出命令 → _dispatch() → handler
+命令派发流程:
+  submit() → queue.put(cmd) → run_coroutine_threadsafe(_wake_async())
+  → _async_run() 被唤醒 → get_nowait() 取出命令 → _dispatch() → handler
 """
 
 from __future__ import annotations

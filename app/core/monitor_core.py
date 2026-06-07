@@ -25,6 +25,7 @@ class RecoveryResult(str, Enum):
     GIVE_UP = "give_up"
     BREAK = "break"
     NET_DISCONNECT = "net_disconnect"
+    PAUSED = "paused"
 
 
 class NetworkState(str, Enum):
@@ -310,6 +311,12 @@ class NetworkMonitorCore:
 
     def _login_recovery_inner(self) -> str:
         """登录恢复实际逻辑（由 _login_recovery_loop 包装，管理标志位）。"""
+        # 暂停时段检查：重试期间跨越暂停时段边界时停止
+        is_paused, _ = check_pause(self.config)
+        if is_paused:
+            self.log_message("当前处于暂停时段，停止登录重试", "INFO")
+            return RecoveryResult.PAUSED
+
         while self.monitoring:
             # 缓存本轮迭代的重试配置（避免循环内重复调用 _get_retry_config）
             max_retries, retry_intervals = self._get_retry_config()

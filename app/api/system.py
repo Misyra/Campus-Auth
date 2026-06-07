@@ -9,7 +9,7 @@ import threading
 from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.utils.logging import get_logger
 from app.utils.platform_utils import CREATE_NO_WINDOW_FLAG
@@ -143,46 +143,41 @@ def disable_autostart(
 
 @router.post("/api/shutdown", response_model=ActionResponse)
 def shutdown_server(
+    request: Request,
     svc: MonitorService = Depends(get_monitor_service),
 ) -> ActionResponse:
-    """关闭服务器"""
+    """关闭服务器 — 通过 shutdown_event 触发 lifespan 正常清理"""
     api_logger.warning("收到关机请求")
 
-    loop = asyncio.get_event_loop()
+    # 停止监控服务
+    try:
+        svc.stop_monitoring()
+    except Exception:
+        api_logger.warning("关闭监控服务失败", exc_info=True)
 
-    def _do_shutdown(shutdown_loop: asyncio.AbstractEventLoop):
-        try:
-            svc.stop_monitoring()
-        except Exception:
-            api_logger.warning("关闭监控服务失败", exc_info=True)
-        try:
-            from app.workers.playwright_worker import get_worker
-            get_worker().stop(timeout=3)
-        except Exception:
-            api_logger.warning("关闭 PlaywrightWorker 失败", exc_info=True)
-        try:
-            from app.workers.playwright_worker import cleanup_orphan_browsers
-            cleanup_orphan_browsers()
-        except Exception:
-            api_logger.warning("清理孤儿浏览器失败", exc_info=True)
-        try:
-            (AUTH_DATA_DIR / "campus_network_auth.pid").unlink(missing_ok=True)
-        except Exception:
-            api_logger.warning("PID 文件清理失败", exc_info=True)
-        # 调度 services.shutdown() 到事件循环，确保 lifespan 清理逻辑执行
-        try:
-            from app.main import app as _app
-            future = asyncio.run_coroutine_threadsafe(
-                _app.state.services.shutdown(), shutdown_loop
-            )
-            future.result(timeout=10)
-        except Exception:
-            api_logger.warning("services.shutdown() 执行失败", exc_info=True)
-        import logging as _logging
-        _logging.shutdown()
-        os._exit(0)
+    # 停止 PlaywrightWorker
+    try:
+        from app.workers.playwright_worker import get_worker
+        get_worker().stop(timeout=3)
+    except Exception:
+        api_logger.warning("关闭 PlaywrightWorker 失败", exc_info=True)
 
-    threading.Thread(target=_do_shutdown, args=(loop,), daemon=True).start()
+    # 清理孤儿浏览器
+    try:
+        from app.workers.playwright_worker import cleanup_orphan_browsers
+        cleanup_orphan_browsers()
+    except Exception:
+        api_logger.warning("清理孤儿浏览器失败", exc_info=True)
+
+    # 清理 PID 文件
+    try:
+        (AUTH_DATA_DIR / "campus_network_auth.pid").unlink(missing_ok=True)
+    except Exception:
+        api_logger.warning("PID 文件清理失败", exc_info=True)
+
+    # 通过 shutdown_event 触发 lifespan 正常关闭
+    if hasattr(request.app.state, 'shutdown_event'):
+        request.app.state.shutdown_event.set()
 
     return ActionResponse(success=True, message="服务器正在关闭...")
 
@@ -197,12 +192,6 @@ def _check_ddddocr_installed() -> bool:
         return True
     except ImportError:
         return False
-
-
-def _get_uv_exe() -> str:
-    """获取 uv 可执行文件路径"""
-    # 优先使用当前环境的 uv
-    return "uv"
 
 
 def _estimate_pkg_size_mb(pkg_name: str) -> float:
@@ -257,7 +246,7 @@ def ocr_install() -> ActionResponse:
 
     api_logger.info("开始安装 ddddocr")
     try:
-        uv_exe = _get_uv_exe()
+        uv_exe = "uv"
         result = subprocess.run(
             [uv_exe, "add", "ddddocr", "onnxruntime"],
             cwd=str(PROJECT_ROOT),
@@ -293,7 +282,7 @@ def ocr_uninstall() -> ActionResponse:
 
     api_logger.info("开始卸载 ddddocr")
     try:
-        uv_exe = _get_uv_exe()
+        uv_exe = "uv"
         result = subprocess.run(
             [uv_exe, "remove", "ddddocr", "onnxruntime"],
             cwd=str(PROJECT_ROOT),

@@ -1,11 +1,7 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-密码加密存储工具
+"""密码加密存储工具。
 
-使用 Fernet 对称加密保护 .env 中的密码字段。
-加密密钥存储在用户目录 ~/.campus_network_auth/ 下，与项目 .env 物理隔离。
-
+使用 Fernet 对称加密保护密码字段。
+加密密钥存储在用户目录 ~/.campus_network_auth/ 下，与项目配置物理隔离。
 加密后的密码以 ENC: 前缀标记，兼容明文密码读取（向后兼容）。
 """
 

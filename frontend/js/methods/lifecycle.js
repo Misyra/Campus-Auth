@@ -32,10 +32,12 @@ export const lifecycleMethods = {
     const rejectedCount = initResults.filter(r => r.status === 'rejected').length;
     if (rejectedCount > 0) {
       this.frontendLogger.warn('app.init', `部分初始化失败: ${rejectedCount} 项`);
+      this.notify(false, `⚠ 部分数据加载失败（${rejectedCount} 项），请刷新重试`);
     }
     this._initErrorCount = 0;
     this.isLoading = false;
     this.connectWebSocket();
+    this._setupVisibilityChange();
     this.autoCheckUpdateOnStartup();
     this.timers.push(setInterval(() => {
         if (this._statusPolling) return;
@@ -258,5 +260,23 @@ export const lifecycleMethods = {
       this.frontendLogger.error('websocket', '连接错误');
       // 不调用 this.ws.close()，浏览器会自动关闭并触发 onclose
     };
+
+    // 应用层 ping/pong，防止校园网代理 60s 无流量切断连接
+    this._wsPingTimer = setInterval(() => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'ping' }));
+      }
+    }, 30000);
+    this.timers.push(this._wsPingTimer);
+  },
+  _setupVisibilityChange() {
+    // 监听页面可见性变化，切回页面时主动重连
+    this._visibilityHandler = () => {
+      if (document.visibilityState === 'visible' && !this.wsConnected) {
+        this.frontendLogger.info('websocket', '页面恢复可见，尝试重连');
+        this.connectWebSocket();
+      }
+    };
+    document.addEventListener('visibilitychange', this._visibilityHandler);
   },
 };
