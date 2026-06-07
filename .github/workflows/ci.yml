@@ -36,7 +36,8 @@ jobs:
         run: ./setup_env.sh --install-only
 
       - name: Add local uv to PATH
-        run: echo "$PWD/.uv" >> $GITHUB_PATH
+        shell: bash
+        run: echo "$GITHUB_WORKSPACE/.uv" >> "$GITHUB_PATH"
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4
@@ -66,6 +67,10 @@ jobs:
         run: |
           chmod +x setup_env.sh
           ./setup_env.sh --install-only
+
+      - name: Add local uv to PATH
+        shell: bash
+        run: echo "$GITHUB_WORKSPACE/.uv" >> "$GITHUB_PATH"
 
       - name: Ruff check
         run: uv run ruff check .
