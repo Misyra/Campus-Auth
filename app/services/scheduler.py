@@ -377,6 +377,8 @@ class SchedulerService:
 
     def stop(self):
         """停止调度器。"""
+        if not self._running:
+            return
         self._running = False
         if self._task:
             self._task.cancel()
