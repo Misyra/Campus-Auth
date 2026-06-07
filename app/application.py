@@ -311,19 +311,6 @@ def run() -> None:
     except Exception:
         startup_logger.debug("旧日志清理失败", exc_info=True)
 
-    # 后台压缩旧日志目录为 zip（不阻塞启动）
-    import threading
-    try:
-        from app.utils.logging import compress_old_logs
-        threading.Thread(
-            target=compress_old_logs,
-            args=(log_dir, log_retention),
-            daemon=True,
-            name="log-compress",
-        ).start()
-    except Exception:
-        startup_logger.debug("日志压缩启动失败", exc_info=True)
-
     global _access_log_enabled
     _access_log_enabled = access_log_enabled
 
