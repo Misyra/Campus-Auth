@@ -116,7 +116,7 @@ class DebugSessionManager:
                         if gen != _current_gen:
                             return
                         api_logger.info(
-                            "调试会话超时（%ds 无操作），正在关闭浏览器",
+                            "调试会话超时（{}s 无操作），正在关闭浏览器",
                             timeout_seconds,
                         )
                         try:
@@ -206,7 +206,7 @@ class DebugSessionManager:
                 await session.close()
                 raise
 
-        api_logger.info("Debug session started for task %s", task_id)
+        api_logger.info("Debug session started for task {}", task_id)
         return self._debug_response()
 
     async def next_step(self) -> dict:

@@ -67,7 +67,7 @@ def build_login_template_vars(
     if custom_variables and isinstance(custom_variables, dict):
         for k, v in custom_variables.items():
             if k.upper() in _ENV_DENYLIST_UPPER:
-                logger.warning("自定义变量 '%s' 与系统保留名冲突，已跳过", k)
+                logger.warning("自定义变量 '{}' 与系统保留名冲突，已跳过", k)
             else:
                 template_vars[k] = v
 

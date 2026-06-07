@@ -156,7 +156,7 @@ class PlaywrightWorker:
             self._consumer_thread.join(timeout=timeout)
             # 超时后强制停止事件循环
             if self._consumer_thread.is_alive():
-                logger.warning("Worker 线程未在 %ds 内退出，强制停止", timeout)
+                logger.warning("Worker 线程未在 {}s 内退出，强制停止", timeout)
                 if self._loop is not None:
                     self._loop.call_soon_threadsafe(self._loop.stop)
                 self._consumer_thread.join(timeout=3)
@@ -354,7 +354,7 @@ class PlaywrightWorker:
 
             cmd.response_data = result
         except Exception as e:
-            logger.exception("命令 %s 执行异常", cmd.type)
+            logger.exception("命令 {} 执行异常", cmd.type)
             cmd.response_data = WorkerResponse(
                 success=False, error=f"命令执行异常: {e}"
             )
@@ -428,7 +428,7 @@ class PlaywrightWorker:
             try:
                 await self._page.goto(task_url, wait_until="domcontentloaded", timeout=30000)
             except Exception as e:
-                logger.warning("调试页面加载失败: %s", e)
+                logger.warning("调试页面加载失败: {}", e)
 
         # 创建 TaskExecutor（在 Worker 线程内，page 对象安全）
         if task_data:
@@ -443,7 +443,7 @@ class PlaywrightWorker:
                 )
                 self._debug_executor = executor
             except Exception as e:
-                logger.error("创建 TaskExecutor 失败: %s", e)
+                logger.error("创建 TaskExecutor 失败: {}", e)
                 return WorkerResponse(
                     success=False, error=f"创建任务执行器失败: {e}"
                 )
@@ -467,7 +467,7 @@ class PlaywrightWorker:
                 await self._debug_page.screenshot(path=local_path, full_page=True)
                 screenshot_url = f"/temp/{filename}"
             except Exception as e:
-                logger.warning("初始截图失败: %s", e)
+                logger.warning("初始截图失败: {}", e)
 
         return WorkerResponse(
             success=True,
@@ -495,7 +495,7 @@ class PlaywrightWorker:
             )
 
         step_index = data.get("step_index", 0)
-        logger.info("调试下一步: step_index=%d", step_index)
+        logger.info("调试下一步: step_index={}", step_index)
 
         try:
             # TaskExecutor.execute_step_at 在 Worker 线程内执行，
@@ -508,7 +508,7 @@ class PlaywrightWorker:
                 data=result,
             )
         except Exception as e:
-            logger.exception("调试步骤执行异常 (step_index=%d)", step_index)
+            logger.exception("调试步骤执行异常 (step_index={})", step_index)
             return WorkerResponse(
                 success=False,
                 error=f"调试步骤执行异常: {e}",
@@ -526,7 +526,7 @@ class PlaywrightWorker:
                 if not self._debug_page.is_closed():
                     await self._debug_page.close()
             except Exception as e:
-                logger.warning("关闭调试页面异常: %s", e)
+                logger.warning("关闭调试页面异常: {}", e)
             self._debug_page = None
 
             # 如果调试页面就是主页面，关闭后需要创建一个新页面，
@@ -609,7 +609,7 @@ class PlaywrightWorker:
         pure_mode = browser_settings.get("pure_mode", False)
 
         logger.info(
-            "启动浏览器 (headless=%s, pure_mode=%s)",
+            "启动浏览器 (headless={}, pure_mode={})",
             headless,
             pure_mode,
         )
@@ -757,9 +757,9 @@ class PlaywrightWorker:
                 if graceful:
                     err_msg = str(e).lower()
                     if "target closed" in err_msg or "connection closed" in err_msg:
-                        logger.warning("关闭页面时连接已断开（正常）: %s", e)
+                        logger.warning("关闭页面时连接已断开（正常）: {}", e)
                     else:
-                        logger.error("关闭页面异常: %s", e)
+                        logger.error("关闭页面异常: {}", e)
         self._page = None
 
         # 关闭上下文
@@ -770,9 +770,9 @@ class PlaywrightWorker:
                 if graceful:
                     err_msg = str(e).lower()
                     if "target closed" in err_msg or "connection closed" in err_msg:
-                        logger.warning("关闭上下文时连接已断开（正常）: %s", e)
+                        logger.warning("关闭上下文时连接已断开（正常）: {}", e)
                     else:
-                        logger.error("关闭上下文异常: %s", e)
+                        logger.error("关闭上下文异常: {}", e)
         self._context = None
 
         # 关闭浏览器
@@ -784,7 +784,7 @@ class PlaywrightWorker:
                     logger.debug("浏览器已断开连接，跳过 close")
             except Exception as e:
                 if graceful:
-                    logger.error("关闭浏览器异常: %s", e)
+                    logger.error("关闭浏览器异常: {}", e)
         self._browser = None
 
         # 停止 Playwright 服务
@@ -793,7 +793,7 @@ class PlaywrightWorker:
                 await self._playwright.stop()
             except Exception as e:
                 if graceful:
-                    logger.error("停止 Playwright 失败: %s", e)
+                    logger.error("停止 Playwright 失败: {}", e)
         self._playwright = None
 
         logger.info("浏览器资源已清理" if graceful else "强制清理完成")
@@ -848,7 +848,7 @@ class PlaywrightWorker:
                 }
             logger.warning("自定义请求头必须是 JSON 对象，已忽略")
         except Exception as exc:
-            logger.warning("解析自定义请求头失败: %s", exc)
+            logger.warning("解析自定义请求头失败: {}", exc)
         return {}
 
     async def _handle_low_resource_request(self, route: "Route") -> None:
@@ -973,7 +973,7 @@ def _cleanup_windows() -> None:
             logger.debug("未发现孤儿 Playwright Chromium 进程")
             return
 
-        logger.info("发现 %d 个孤儿 Playwright Chromium 进程，正在清理...", len(pids_to_kill))
+        logger.info("发现 {} 个孤儿 Playwright Chromium 进程，正在清理...", len(pids_to_kill))
         for pid in pids_to_kill:
             try:
                 subprocess.run(
@@ -983,9 +983,9 @@ def _cleanup_windows() -> None:
                     timeout=5,
                     creationflags=CREATE_NO_WINDOW_FLAG,
                 )
-                logger.debug("已终止 Chromium 进程 PID=%s", pid)
+                logger.debug("已终止 Chromium 进程 PID={}", pid)
             except Exception:
-                logger.warning("终止 Chromium 进程 PID=%s 失败", pid)
+                logger.warning("终止 Chromium 进程 PID={} 失败", pid)
     except Exception:
         logger.warning("扫描孤儿 Chromium 进程时出现异常", exc_info=True)
 
@@ -1020,7 +1020,7 @@ def _cleanup_posix() -> None:
             logger.debug("未发现孤儿 Playwright Chromium 进程")
             return
 
-        logger.info("发现 %d 个孤儿 Playwright Chromium 进程，正在清理...", len(pids_to_kill))
+        logger.info("发现 {} 个孤儿 Playwright Chromium 进程，正在清理...", len(pids_to_kill))
         for pid in pids_to_kill:
             try:
                 subprocess.run(
@@ -1029,8 +1029,8 @@ def _cleanup_posix() -> None:
                     text=True,
                     timeout=5,
                 )
-                logger.debug("已终止 Chromium 进程 PID=%s", pid)
+                logger.debug("已终止 Chromium 进程 PID={}", pid)
             except Exception:
-                logger.warning("终止 Chromium 进程 PID=%s 失败", pid)
+                logger.warning("终止 Chromium 进程 PID={} 失败", pid)
     except Exception:
         logger.warning("扫描孤儿 Chromium 进程时出现异常", exc_info=True)

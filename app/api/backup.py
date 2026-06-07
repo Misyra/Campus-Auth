@@ -63,10 +63,10 @@ def create_backup() -> ActionResponse:
     try:
         backup_path.write_bytes(settings_path.read_bytes())
         _cleanup_old_backups()
-        api_logger.info("备份已创建: %s", backup_path.name)
+        api_logger.info("备份已创建: {}", backup_path.name)
         return ActionResponse(success=True, message=f"备份已创建: {backup_path.name}")
     except Exception as exc:
-        api_logger.error("创建备份失败: %s", exc)
+        api_logger.error("创建备份失败: {}", exc)
         raise HTTPException(status_code=500, detail=f"创建备份失败: {exc}")
 
 
@@ -98,7 +98,7 @@ def restore_backup(
         backup_content = backup_path.read_text(encoding="utf-8")
         ProfilesData.model_validate_json(backup_content)
     except Exception as exc:
-        api_logger.error("备份文件校验失败: %s — %s", filename, exc)
+        api_logger.error("备份文件校验失败: {} — {}", filename, exc)
         raise HTTPException(status_code=400, detail=f"备份文件格式错误: {exc}")
 
     try:
@@ -107,10 +107,10 @@ def restore_backup(
         profile_svc.invalidate_cache()
         monitor_svc.reload_config()
         _cleanup_old_backups()
-        api_logger.info("配置已从备份恢复: %s (原活动方案: %s)", filename, old_active)
+        api_logger.info("配置已从备份恢复: {} (原活动方案: {})", filename, old_active)
         return ActionResponse(success=True, message="配置已从备份恢复，请刷新页面查看")
     except Exception as exc:
-        api_logger.error("恢复备份失败: %s", exc)
+        api_logger.error("恢复备份失败: {}", exc)
         raise HTTPException(status_code=500, detail=f"恢复备份失败: {exc}")
 
 
@@ -137,8 +137,8 @@ def delete_backup(filename: str) -> ActionResponse:
 
     try:
         backup_path.unlink()
-        api_logger.info("备份已删除: %s", filename)
+        api_logger.info("备份已删除: {}", filename)
         return ActionResponse(success=True, message="备份已删除")
     except Exception as exc:
-        api_logger.error("删除备份失败: %s", exc)
+        api_logger.error("删除备份失败: {}", exc)
         raise HTTPException(status_code=500, detail=f"删除备份失败: {exc}")

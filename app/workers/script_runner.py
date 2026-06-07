@@ -177,7 +177,7 @@ class ScriptRunner:
         try:
             content = self._load_script_content()
         except ValueError as e:
-            logger.error("脚本加载失败: %s", e)
+            logger.error("脚本加载失败: {}", e)
             return False, str(e)
 
         if content is not None:
@@ -203,7 +203,7 @@ class ScriptRunner:
                 cmd, timeout=self.timeout, **kwargs,
             )
         except PermissionError as e:
-            logger.error("脚本执行被拒绝: %s", e)
+            logger.error("脚本执行被拒绝: {}", e)
             return False, str(e)
         finally:
             if temp_path is not None:
@@ -215,15 +215,15 @@ class ScriptRunner:
         elapsed = time.perf_counter() - start
 
         if stderr_str:
-            logger.info("脚本 stderr: %s", stderr_str[:500])
+            logger.info("脚本 stderr: {}", stderr_str[:500])
 
         output = stdout_str[:500] or stderr_str[:500] or f"(无输出, exit code {returncode})"
 
         if returncode == 0:
-            logger.info("脚本执行完成 (%.1fs): %s", elapsed, output)
+            logger.info("脚本执行完成 ({:.1f}s): {}", elapsed, output)
             return True, output
         else:
-            logger.warning("脚本执行失败 (%.1fs, exit %d): %s", elapsed, returncode, output)
+            logger.warning("脚本执行失败 ({:.1f}s, exit {}): {}", elapsed, returncode, output)
             return False, output
 
 

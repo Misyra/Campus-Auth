@@ -159,7 +159,7 @@ class MonitorService:
                     self._handle_stop()
                     break
             except Exception:
-                service_logger.exception("队列命令执行失败: %s", cmd.type)
+                service_logger.exception("队列命令执行失败: {}", cmd.type)
             finally:
                 self._cmd_queue.task_done()
 
@@ -261,7 +261,7 @@ class MonitorService:
                 cmd.response_data = (False, error_msg)
         except Exception as exc:
             service_logger.exception(
-                "手动登录异常 (username=%s, url=%s)",
+                "手动登录异常 (username={}, url={})",
                 config.get("username", "?"), config.get("auth_url", "?"),
             )
             error_msg = str(exc)
@@ -327,7 +327,7 @@ class MonitorService:
             # 直接在消费者线程中重载配置（不通过队列，避免递归入队）
             self._reload_config_internal()
         except Exception:
-            service_logger.exception("自动切换方案配置加载失败: %s", profile_name)
+            service_logger.exception("自动切换方案配置加载失败: {}", profile_name)
             return
         if self._monitor_core and self._monitor_core.monitoring:
             try:
@@ -613,7 +613,7 @@ class MonitorService:
             )
         except queue.Full:
             service_logger.warning(
-                "命令队列已满(qsize=%d)，跳过 profile_reload 命令入队",
+                "命令队列已满(qsize={})，跳过 profile_reload 命令入队",
                 self._cmd_queue.qsize(),
             )
 
@@ -722,7 +722,7 @@ class MonitorService:
             return True, f"手动登录成功：{message}"
 
         log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
-        service_logger.warning("Manual login failed: %s", log_msg)
+        service_logger.warning("Manual login failed: {}", log_msg)
         return False, f"手动登录失败：{message}"
 
     def test_network(self) -> tuple[bool, str]:

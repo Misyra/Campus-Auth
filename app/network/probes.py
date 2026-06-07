@@ -46,10 +46,10 @@ def is_local_network_connected() -> bool:
             if not ip.startswith("127.") and not ip.startswith("169.254.")
         ]
         if non_loopback:
-            logger.debug("本地网络已连接，IP: %s", ", ".join(non_loopback))
+            logger.debug("本地网络已连接，IP: {}", ", ".join(non_loopback))
             return True
     except Exception as exc:
-        logger.debug("快速 IP 检测失败: %s", exc)
+        logger.debug("快速 IP 检测失败: {}", exc)
 
     # 回退：平台特判
     try:
@@ -60,7 +60,7 @@ def is_local_network_connected() -> bool:
         elif is_macos():
             return _check_macos_service()
     except Exception as exc:
-        logger.debug("平台网络检测失败: %s", exc)
+        logger.debug("平台网络检测失败: {}", exc)
 
     logger.warning("未检测到本地网络连接")
     return False
@@ -111,7 +111,7 @@ def _check_windows_adapter() -> bool:
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         if result.returncode != 0:
-            logger.debug("netsh 执行失败: %s", result.stderr)
+            logger.debug("netsh 执行失败: {}", result.stderr)
             return False
 
         # 已知的"已连接"多语言映射
@@ -130,7 +130,7 @@ def _check_windows_adapter() -> bool:
                 name = " ".join(parts[3:])
                 lower_name = name.lower()
                 if "loopback" not in lower_name and "tunnel" not in lower_name:
-                    logger.info("检测到已连接的网络接口: %s", name)
+                    logger.info("检测到已连接的网络接口: {}", name)
                     return True
 
         logger.warning("未检测到已连接的网络接口")
@@ -149,10 +149,10 @@ def _check_linux_route() -> bool:
                 if len(fields) >= 3 and fields[1] == "00000000":
                     iface = fields[0]
                     if iface != "lo":
-                        logger.info("检测到默认路由接口: %s", iface)
+                        logger.info("检测到默认路由接口: {}", iface)
                         return True
     except Exception as exc:
-        logger.debug("读取路由表失败: %s", exc)
+        logger.debug("读取路由表失败: {}", exc)
     logger.warning("未检测到默认路由")
     return False
 
@@ -174,7 +174,7 @@ def _check_macos_service() -> bool:
             env={"LC_ALL": "C"},  # 强制英文输出，便于解析 Device/Port 等关键字
         )
         if list_result.returncode != 0:
-            logger.debug("networksetup 执行失败: %s", list_result.stderr)
+            logger.debug("networksetup 执行失败: {}", list_result.stderr)
             raise RuntimeError("networksetup failed")
 
         # 解析 "Device: XXX" 行，提取所有硬件设备名
@@ -183,7 +183,7 @@ def _check_macos_service() -> bool:
             logger.debug("未从 networksetup 输出中找到任何设备")
             return False
     except Exception as exc:
-        logger.debug("networksetup 检测失败，回退到硬编码接口: %s", exc)
+        logger.debug("networksetup 检测失败，回退到硬编码接口: {}", exc)
         devices = ("en0", "en1")  # 回退：常见接口名
 
     for iface in devices:
@@ -201,7 +201,7 @@ def _check_macos_service() -> bool:
             if "status: active" in output:
                 # 进一步确认有 IP 地址
                 if re.search(r"inet\s+(?!0\.0\.0\.0)\d+\.\d+\.\d+\.\d+", output):
-                    logger.info("检测到活跃的网络接口: %s", iface)
+                    logger.info("检测到活跃的网络接口: {}", iface)
                     return True
         except Exception:
             continue
@@ -230,10 +230,10 @@ def is_network_available_socket(
     for future in as_completed(futures):
         label, ok, detail = future.result()
         if ok:
-            logger.info("TCP 连接成功: %s %s", label, detail)
+            logger.info("TCP 连接成功: {} {}", label, detail)
             return True
-        logger.info("TCP 连接失败: %s — %s", label, detail)
-    logger.warning("所有 TCP 目标均不可达 (%d 个)", len(targets))
+        logger.info("TCP 连接失败: {} — {}", label, detail)
+    logger.warning("所有 TCP 目标均不可达 ({} 个)", len(targets))
     return False
 
 
@@ -288,10 +288,10 @@ def is_network_available_portal(
     for future in as_completed(futures):
         url, ok, detail = future.result()
         if ok:
-            logger.info("Captive portal 检测成功: %s → %s", url, detail)
+            logger.info("Captive portal 检测成功: {} → {}", url, detail)
             return True
-        logger.info("Captive portal 检测失败: %s — %s", url, detail)
-    logger.warning("所有 captive portal 检测均未通过 (%d 个)", len(portal_checks))
+        logger.info("Captive portal 检测失败: {} — {}", url, detail)
+    logger.warning("所有 captive portal 检测均未通过 ({} 个)", len(portal_checks))
     return False
 
 
@@ -331,17 +331,17 @@ def is_network_available_http(
             elapsed = (time.perf_counter() - start) * 1000
             # SSL 证书验证失败（校园网门户 HTTPS 劫持自签名证书）降级为 DEBUG
             if isinstance(exc, ssl.SSLError) or "CERTIFICATE_VERIFY_FAILED" in str(exc):
-                logger.debug("SSL 证书验证失败 (预期行为): %s — %s", url, exc)
+                logger.debug("SSL 证书验证失败 (预期行为): {} — {}", url, exc)
             else:
-                logger.info("HTTP 请求异常: %s — %s", url, exc)
+                logger.info("HTTP 请求异常: {} — {}", url, exc)
             return (url, False, f"{type(exc).__name__}: {exc}")
 
     futures = {executor.submit(_check_one, url): url for url in urls}
     for future in as_completed(futures):
         url, ok, detail = future.result()
         if ok:
-            logger.info("HTTP 请求成功: %s → %s", url, detail)
+            logger.info("HTTP 请求成功: {} → {}", url, detail)
             return True
-        logger.info("HTTP 请求失败: %s — %s", url, detail)
-    logger.warning("所有 HTTP 目标均不可达 (%d 个)", len(urls))
+        logger.info("HTTP 请求失败: {} — {}", url, detail)
+    logger.warning("所有 HTTP 目标均不可达 ({} 个)", len(urls))
     return False

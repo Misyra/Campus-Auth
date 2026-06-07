@@ -117,7 +117,7 @@ class StepConfig:
             and not isinstance(data["frame"], str)
         ):
             logger.warning(
-                "[StepConfig] 步骤 %s 的 frame 字段应为字符串，实际为 %s，已忽略",
+                "[StepConfig] 步骤 {} 的 frame 字段应为字符串，实际为 {}，已忽略",
                 data.get("id", "?"),
                 type(data["frame"]).__name__,
             )
@@ -133,7 +133,7 @@ class StepConfig:
         }
         if extra_fields:
             logger.warning(
-                "[StepConfig] 步骤 %s 包含未知字段（可能为 typo）: %s",
+                "[StepConfig] 步骤 {} 包含未知字段（可能为 typo）: {}",
                 data.get("id", "?"),
                 ", ".join(sorted(extra_fields.keys())),
             )

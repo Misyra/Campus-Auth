@@ -44,7 +44,7 @@ async def lifespan(app_instance):
     # 配置迁移和诊断
     settings_path = PROJECT_ROOT / "settings.json"
     startup_logger.info(
-        "settings.json 路径: %s (存在=%s, 大小=%d)",
+        "settings.json 路径: {} (存在={}, 大小={})",
         settings_path,
         settings_path.exists(),
         settings_path.stat().st_size if settings_path.exists() else 0,
@@ -53,7 +53,7 @@ async def lifespan(app_instance):
         services.monitor_service.reload_config()
         config = services.monitor_service.get_config()
         startup_logger.info(
-            "当前配置: 用户=%s, 密码=%s, 认证=%s, 运营商=%s, 间隔=%dmin, 自动监控=%s",
+            "当前配置: 用户={}, 密码={}, 认证={}, 运营商={}, 间隔={}min, 自动监控={}",
             f"'{config.username}'" if config.username else "(空)",
             "已设置" if config.password else "(空)",
             f"'{config.auth_url}'" if config.auth_url else "(空)",
@@ -62,7 +62,7 @@ async def lifespan(app_instance):
             config.auto_start,
         )
     except Exception as exc:
-        startup_logger.warning("配置迁移失败: %s", exc)
+        startup_logger.warning("配置迁移失败: {}", exc)
 
     # 检查 cryptography 库是否可用
     try:
@@ -117,7 +117,7 @@ def _resolve_port() -> int:
                     return port
         except (json.JSONDecodeError, ValueError, OSError) as exc:
             startup_logger.warning(
-                "读取 settings.json 端口配置失败，使用默认端口 50721: %s", exc
+                "读取 settings.json 端口配置失败，使用默认端口 50721: {}", exc
             )
 
     return 50721
@@ -150,7 +150,7 @@ async def request_logging_middleware(request: Request, call_next):
         if _access_log_enabled:
             duration_ms = (time.perf_counter() - start) * 1000
             http_logger.info(
-                "%s %s -> %s (%.1fms)",
+                "{} {} -> {} ({:.1f}ms)",
                 request.method,
                 request.url.path,
                 response.status_code,
@@ -160,7 +160,7 @@ async def request_logging_middleware(request: Request, call_next):
     except Exception:
         duration_ms = (time.perf_counter() - start) * 1000
         http_logger.exception(
-            "%s %s -> EXCEPTION (%.1fms)",
+            "{} {} -> EXCEPTION ({:.1f}ms)",
             request.method,
             request.url.path,
             duration_ms,
@@ -183,7 +183,7 @@ async def websocket_logs(websocket: WebSocket):
             raw = await websocket.receive_text()
             # WebSocket 消息大小预检，防止超大消息导致内存问题
             if len(raw) > 65536:
-                ws_logger.warning("WebSocket 消息过大 (%d bytes)，断开连接", len(raw))
+                ws_logger.warning("WebSocket 消息过大 ({} bytes)，断开连接", len(raw))
                 await ws_mgr.disconnect(websocket)
                 return
             try:
@@ -279,7 +279,7 @@ def run() -> None:
         today_dir = log_dir / datetime.now().strftime("%Y-%m-%d")
         today_log = today_dir / "app.log"
         print(f"[Campus-Auth] 日志文件: {today_log}")
-        startup_logger.info("日志文件: %s", today_log)
+        startup_logger.info("日志文件: {}", today_log)
         for old_name in ("campus_auth.log",):
             old_log = log_dir / old_name
             if old_log.exists():

@@ -29,7 +29,7 @@ def check_pause(config: dict) -> tuple[bool, str]:
     """
     pause_config = config.get("pause_login", {})
     if is_in_pause_period(pause_config):
-        logger.info("暂停时段，跳过检测 (配置: %s)", pause_config)
+        logger.info("暂停时段，跳过检测 (配置: {})", pause_config)
         return (True, "pause_period")
     return (False, "")
 
@@ -131,7 +131,7 @@ def is_network_available(
 
     urls_list = list(test_urls or ())
     logger.info(
-        "开始网络检测 (TCP=%s, HTTP=%s, Portal=%s, TCP目标=%d, HTTP目标=%d, Portal目标=%d)",
+        "开始网络检测 (TCP={}, HTTP={}, Portal={}, TCP目标={}, HTTP目标={}, Portal目标={})",
         "开" if enable_tcp else "关",
         "开" if enable_http else "关",
         "开" if enable_portal else "关",
@@ -169,7 +169,7 @@ def is_network_available(
         try:
             ok = future.result()
         except Exception as exc:
-            logger.debug("检测 %s 异常: %s", kind, exc)
+            logger.debug("检测 {} 异常: {}", kind, exc)
             ok = False
         if kind == "tcp":
             socket_ok = ok
@@ -185,7 +185,7 @@ def is_network_available(
     )
 
     logger.info(
-        "网络检测完成: TCP=%s HTTP=%s Portal=%s → %s",
+        "网络检测完成: TCP={} HTTP={} Portal={} → {}",
         "关" if not enable_tcp else ("通" if socket_ok else "断"),
         "关" if not enable_http else ("通" if http_ok else "断"),
         "关" if not enable_portal else ("通" if portal_ok else "断"),
@@ -209,10 +209,10 @@ def _is_auth_url_reachable(
     def _check_host_port(host: str, port: int, label: str) -> bool:
         try:
             with socket.create_connection((host, port), timeout=3):
-                logger.debug("认证可达性检测通过: %s", label)
+                logger.debug("认证可达性检测通过: {}", label)
                 return True
         except Exception as exc:
-            logger.debug("认证可达性检测失败: %s — %s", label, exc)
+            logger.debug("认证可达性检测失败: {} — {}", label, exc)
             return False
 
     if extra_targets:
@@ -238,7 +238,7 @@ def _is_auth_url_reachable(
             if _check_host_port(host, port, auth_url):
                 return True
         except Exception as exc:
-            logger.debug("认证地址解析失败 %s: %s", auth_url, exc)
+            logger.debug("认证地址解析失败 {}: {}", auth_url, exc)
 
     logger.info("认证地址不可达")
     return False
@@ -255,5 +255,5 @@ def check_campus_network_status() -> str:
     else:
         result = "已连接校园网，但无法访问互联网，需要认证"
 
-    logger.info("校园网状态: %s", result)
+    logger.info("校园网状态: {}", result)
     return result

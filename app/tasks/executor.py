@@ -54,7 +54,7 @@ class TaskExecutor:
         task_timeout_ms = self.config.timeout or self.DEFAULT_TASK_TIMEOUT
         task_deadline = task_start + task_timeout_ms / 1000
         logger.info(
-            "任务开始 [%s], %d 个步骤, 超时 %dms",
+            "任务开始 [{}], {} 个步骤, 超时 {}ms",
             self.config.name,
             len(self.config.steps),
             task_timeout_ms,
@@ -91,7 +91,7 @@ class TaskExecutor:
                 step_elapsed = (time.perf_counter() - step_start) * 1000
                 status = "OK" if success else "FAIL"
                 logger.info(
-                    "  步骤[%d/%d] %s (%s) → %s (%.0fms)%s",
+                    "  步骤[{}/{}] {} ({}) → {} ({:.0f}ms){}",
                     i + 1,
                     len(self.config.steps),
                     step.id,
@@ -116,19 +116,19 @@ class TaskExecutor:
                 return await self._handle_failure(page, None, "网络验证未通过")
 
             total_elapsed = (time.perf_counter() - task_start) * 1000
-            logger.info("任务成功 [%s] 总耗时 %.0fms", self.config.name, total_elapsed)
+            logger.info("任务成功 [{}] 总耗时 {:.0f}ms", self.config.name, total_elapsed)
             return await self._handle_success(page)
 
         except (TimeoutError, OSError) as e:
             total_elapsed = (time.perf_counter() - task_start) * 1000
             logger.error(
-                "任务异常 [%s] 耗时 %.0fms: %s", self.config.name, total_elapsed, e
+                "任务异常 [{}] 耗时 {:.0f}ms: {}", self.config.name, total_elapsed, e
             )
             return await self._handle_failure(page, None, str(e))
         except Exception as e:
             total_elapsed = (time.perf_counter() - task_start) * 1000
             logger.exception(
-                "任务未知异常 [%s] 耗时 %.0fms", self.config.name, total_elapsed
+                "任务未知异常 [{}] 耗时 {:.0f}ms", self.config.name, total_elapsed
             )
             try:
                 return await self._handle_failure(page, None, f"内部错误: {e}")
@@ -146,7 +146,7 @@ class TaskExecutor:
         if not url:
             url = self.template_vars.get("LOGIN_URL", "").strip()
         if url:
-            logger.info("自动导航到任务URL: %s (超时 %sms)", url, self.navigation_timeout)
+            logger.info("自动导航到任务URL: {} (超时 {}ms)", url, self.navigation_timeout)
             await page.goto(url, wait_until="load", timeout=self.navigation_timeout)
             await self._wait_url_stable(page)
 
@@ -161,7 +161,7 @@ class TaskExecutor:
             await asyncio.sleep(0.5)
             current = page.url
             if current != last_url:
-                logger.info("URL 重定向: %s → %s", last_url, current)
+                logger.info("URL 重定向: {} → {}", last_url, current)
                 last_url = current
                 redirects += 1
                 deadline = max(deadline, time.perf_counter() + timeout_ms / 1000)
@@ -202,7 +202,7 @@ class TaskExecutor:
                 total += await frame.evaluate(reveal_js)
             except Exception:
                 pass  # 跨域 frame 会抛错，静默跳过
-        logger.info("[reveal] 已强制显示 %d 个隐藏输入框", total)
+        logger.info("[reveal] 已强制显示 {} 个隐藏输入框", total)
         return total
 
     async def _execute_step(
@@ -227,13 +227,13 @@ class TaskExecutor:
             overrides = {}
             if remaining_ms < effective_timeout:
                 logger.debug(
-                    "[timeout] 步骤 %s 超时从 %sms 截断到 %dms",
+                    "[timeout] 步骤 {} 超时从 {}ms 截断到 {}ms",
                     step.id, effective_timeout, remaining_ms,
                 )
                 overrides['timeout'] = remaining_ms
             if step.type == StepType.SLEEP and remaining_ms < step.duration:
                 logger.debug(
-                    "[timeout] 步骤 %s 时长从 %sms 截断到 %dms",
+                    "[timeout] 步骤 {} 时长从 {}ms 截断到 {}ms",
                     step.id, step.duration, remaining_ms,
                 )
                 overrides['duration'] = remaining_ms
@@ -243,7 +243,7 @@ class TaskExecutor:
         try:
             return await handler.execute(page, effective_step, self.resolver)
         except Exception as e:
-            logger.error("步骤 [%s/%s] 执行失败: %s", step.id, step.type, e)
+            logger.error("步骤 [{}/{}] 执行失败: {}", step.id, step.type, e)
             return False, str(e)
 
     async def execute_step_at(self, page, step_index: int) -> dict[str, Any]:
@@ -334,7 +334,7 @@ class TaskExecutor:
             test_sites = parse_host_port(targets) or None
 
             logger.info(
-                "验证网络连通性 (网络检测方式: TCP=%s, HTTP=%s, Portal=%s, 超时=%ss)",
+                "验证网络连通性 (网络检测方式: TCP={}, HTTP={}, Portal={}, 超时={}s)",
                 "开" if enable_tcp else "关",
                 "开" if enable_http else "关",
                 "开" if bool(portal_checks) else "关",
@@ -361,13 +361,13 @@ class TaskExecutor:
             return result
 
         except Exception as e:
-            logger.error("网络验证异常: %s", e)
+            logger.error("网络验证异常: {}", e)
             return False
 
     async def _handle_success(self, page) -> tuple[bool, str]:
         """处理成功情况"""
         message = self.config.on_success.get("message", "任务执行成功")
-        logger.info("任务执行成功: %s", message)
+        logger.info("任务执行成功: {}", message)
         return True, message
 
     async def _handle_failure(
@@ -387,7 +387,7 @@ class TaskExecutor:
             message += f" 截图: {screenshot_url}"
 
         # 日志只输出不含截图 URL 的部分，避免上层重复打印时出现两张截图
-        logger.error("任务执行失败: %s: %s", base_message, reason)
+        logger.error("任务执行失败: {}: {}", base_message, reason)
         return False, message
 
     async def _capture_screenshot(self, page) -> str | None:
@@ -408,5 +408,5 @@ class TaskExecutor:
             await page.screenshot(path=local_path, full_page=True)
             return f"{url_prefix}/{filename}"
         except Exception as e:
-            logger.warning("截图失败: %s", e)
+            logger.warning("截图失败: {}", e)
             return None

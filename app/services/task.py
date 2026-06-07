@@ -58,20 +58,20 @@ class TaskService:
 
     def list_tasks(self) -> list[dict[str, str]]:
         tasks = self.task_manager.list_tasks()
-        task_logger.debug("列出任务: %d 个", len(tasks))
+        task_logger.debug("列出任务: {} 个", len(tasks))
         return tasks
 
     def list_scripts(self) -> list[dict[str, str]]:
         """列出所有自定义脚本任务。"""
         tasks = self.task_manager.list_script_tasks()
-        task_logger.debug("列出脚本任务: %d 个", len(tasks))
+        task_logger.debug("列出脚本任务: {} 个", len(tasks))
         return tasks
 
     def get_task(self, task_id: str) -> dict[str, Any] | None:
         task_id = self._validate_task_id(task_id) or ""
         if not task_id:
             return None
-        task_logger.debug("Loading task %s", task_id)
+        task_logger.debug("Loading task {}", task_id)
         task = self.task_manager.load_task(task_id)
         if task is None:
             return None
@@ -84,14 +84,14 @@ class TaskService:
                     data = json.loads(task.script_path.read_text(encoding="utf-8"))
                     content = data.get("content", "")
                 except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-                    task_logger.error("读取脚本 JSON 失败 %s: %s", task.script_path, exc)
+                    task_logger.error("读取脚本 JSON 失败 {}: {}", task.script_path, exc)
                     return None
             else:
                 # .py 文件：直接读取
                 try:
                     content = task.script_path.read_text(encoding="utf-8")
                 except (OSError, UnicodeDecodeError) as exc:
-                    task_logger.error("读取脚本文件失败 %s: %s", task.script_path, exc)
+                    task_logger.error("读取脚本文件失败 {}: {}", task.script_path, exc)
                     return None
             return {
                 "id": task_id,
@@ -110,7 +110,7 @@ class TaskService:
             if json_path and json_path.exists():
                 result["raw_json"] = json.loads(json_path.read_text(encoding="utf-8"))
         except Exception:
-            task_logger.warning("读取任务原始 JSON 失败 (task_id=%s)", task_id, exc_info=True)
+            task_logger.warning("读取任务原始 JSON 失败 (task_id={})", task_id, exc_info=True)
         return result
 
     def save_task(self, task_id: str, config: dict[str, Any]) -> tuple[bool, str]:
@@ -132,13 +132,13 @@ class TaskService:
         # 检查危险步骤并记录警告
         warnings = _check_dangerous_steps(config)
         for w in warnings:
-            task_logger.warning("Task %s: %s", task_id, w)
+            task_logger.warning("Task {}: {}", task_id, w)
 
         success = self.task_manager.save_task(task_id, config)
         if success:
-            task_logger.info("任务已保存: %s", task_id)
+            task_logger.info("任务已保存: {}", task_id)
             return True, "任务保存成功"
-        task_logger.error("任务保存失败: %s", task_id)
+        task_logger.error("任务保存失败: {}", task_id)
         return False, "任务保存失败"
 
     def _save_script_task(self, task_id: str, config: dict[str, Any]) -> tuple[bool, str]:
@@ -155,7 +155,7 @@ class TaskService:
         }
         success = self.task_manager.save_task(task_id, save_data, task_type="scripts")
         if success:
-            task_logger.info("脚本任务已保存: %s", task_id)
+            task_logger.info("脚本任务已保存: {}", task_id)
             return True, "脚本任务保存成功"
         return False, "脚本任务保存失败"
 
@@ -166,9 +166,9 @@ class TaskService:
 
         success = self.task_manager.delete_task(task_id)
         if success:
-            task_logger.info("Task deleted: %s", task_id)
+            task_logger.info("Task deleted: {}", task_id)
             return True, "任务删除成功"
-        task_logger.error("Task delete failed: %s", task_id)
+        task_logger.error("Task delete failed: {}", task_id)
         return False, "任务删除失败"
 
     def get_active_task(self) -> str:
@@ -184,9 +184,9 @@ class TaskService:
 
         success = self.task_manager.set_active_task(task_id)
         if success:
-            task_logger.info("Active task set: %s", task_id)
+            task_logger.info("Active task set: {}", task_id)
             return True, "活动任务已设置"
-        task_logger.error("Set active task failed: %s", task_id)
+        task_logger.error("Set active task failed: {}", task_id)
         return False, "设置活动任务失败"
 
     def save_task_order(self, order: dict[str, list[str]]) -> tuple[bool, str]:

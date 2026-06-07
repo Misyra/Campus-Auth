@@ -34,12 +34,12 @@ def detect_gateway_ip() -> str | None:
             return None
 
         if result:
-            logger.info("检测到网关 IP: %s", result)
+            logger.info("检测到网关 IP: {}", result)
         else:
             logger.warning("未能检测到网关 IP")
         return result
     except Exception as exc:
-        logger.error("网关检测异常: %s", exc, exc_info=True)
+        logger.error("网关检测异常: {}", exc, exc_info=True)
         return None
 
 
@@ -59,12 +59,12 @@ def detect_wifi_ssid() -> str | None:
             return None
 
         if result:
-            logger.info("检测到 SSID: %s", result)
+            logger.info("检测到 SSID: {}", result)
         else:
             logger.warning("未能检测到 SSID（可能未连接 WiFi）")
         return result
     except Exception as exc:
-        logger.error("SSID 检测异常: %s", exc, exc_info=True)
+        logger.error("SSID 检测异常: {}", exc, exc_info=True)
         return None
 
 
@@ -99,12 +99,12 @@ def _detect_gateway_windows() -> str | None:
         if result.returncode == 0:
             ip = result.stdout.strip()
             if ip and re.fullmatch(r"\d+\.\d+\.\d+\.\d+", ip) and ip != "0.0.0.0":
-                logger.info("检测到网关 IP (PowerShell): %s", ip)
+                logger.info("检测到网关 IP (PowerShell): {}", ip)
                 return ip
     except FileNotFoundError:
         logger.debug("PowerShell 不可用，回退到 ipconfig")
     except Exception as exc:
-        logger.debug("PowerShell 网关检测失败: %s", exc)
+        logger.debug("PowerShell 网关检测失败: {}", exc)
 
     # 回退：ipconfig + 多语言字节匹配
     try:
@@ -115,7 +115,7 @@ def _detect_gateway_windows() -> str | None:
             creationflags=creationflags,
         )
         logger.debug(
-            "ipconfig 返回码: %d, 输出长度: %d", result.returncode, len(result.stdout)
+            "ipconfig 返回码: {}, 输出长度: {}", result.returncode, len(result.stdout)
         )
 
         output = result.stdout
@@ -144,7 +144,7 @@ def _detect_gateway_windows() -> str | None:
     except subprocess.TimeoutExpired:
         logger.error("ipconfig 执行超时")
     except Exception as exc:
-        logger.error("Windows 网关检测失败: %s", exc, exc_info=True)
+        logger.error("Windows 网关检测失败: {}", exc, exc_info=True)
 
     return None
 
@@ -178,7 +178,7 @@ def _detect_ssid_windows() -> str | None:
             if ssid:
                 return ssid
     except Exception as exc:
-        logger.debug("Windows SSID 检测失败: %s", exc)
+        logger.debug("Windows SSID 检测失败: {}", exc)
 
     return None
 
@@ -199,7 +199,7 @@ def _detect_gateway_linux() -> str | None:
                     if ip != "0.0.0.0":
                         return ip
     except Exception as exc:
-        logger.debug("Linux 网关检测失败: %s", exc)
+        logger.debug("Linux 网关检测失败: {}", exc)
 
     return None
 
@@ -219,7 +219,7 @@ def _detect_ssid_linux() -> str | None:
     except FileNotFoundError:
         pass
     except Exception as exc:
-        logger.debug("Linux SSID 检测失败 (iwgetid): %s", exc)
+        logger.debug("Linux SSID 检测失败 (iwgetid): {}", exc)
 
     # Fallback: nmcli
     try:
@@ -233,7 +233,7 @@ def _detect_ssid_linux() -> str | None:
             if line.startswith("yes:"):
                 return line.split(":", 1)[1].strip()
     except Exception as exc:
-        logger.debug("Linux SSID 检测失败 (nmcli): %s", exc)
+        logger.debug("Linux SSID 检测失败 (nmcli): {}", exc)
 
     return None
 
@@ -258,7 +258,7 @@ def _detect_gateway_darwin() -> str | None:
                     if re.fullmatch(r"\d+\.\d+\.\d+\.\d+", ip) and ip != "0.0.0.0":
                         return ip
     except Exception as exc:
-        logger.debug("macOS 网关检测失败: %s", exc)
+        logger.debug("macOS 网关检测失败: {}", exc)
 
     return None
 
@@ -286,7 +286,7 @@ def _detect_ssid_darwin() -> str | None:
     except FileNotFoundError:
         logger.debug("airport 命令不存在（较新 macOS 版本）")
     except Exception as exc:
-        logger.debug("macOS SSID 检测失败 (airport): %s", exc)
+        logger.debug("macOS SSID 检测失败 (airport): {}", exc)
 
     # 方式 2：networksetup（所有 macOS 版本可用）
     try:
@@ -318,6 +318,6 @@ def _detect_ssid_darwin() -> str | None:
                     if ssid and "not associated" not in ssid.lower():
                         return ssid
     except Exception as exc:
-        logger.debug("macOS SSID 检测失败 (networksetup): %s", exc)
+        logger.debug("macOS SSID 检测失败 (networksetup): {}", exc)
 
     return None

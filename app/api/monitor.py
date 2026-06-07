@@ -36,7 +36,7 @@ def start_monitoring(
     svc: MonitorService = Depends(get_monitor_service),
 ) -> ActionResponse:
     ok, message = svc.start_monitoring()
-    api_logger.info("Monitor start requested -> success=%s, message=%s", ok, message)
+    api_logger.info("Monitor start requested -> success={}, message={}", ok, message)
     return ActionResponse(success=ok, message=message)
 
 
@@ -45,7 +45,7 @@ def stop_monitoring(
     svc: MonitorService = Depends(get_monitor_service),
 ) -> ActionResponse:
     ok, message = svc.stop_monitoring()
-    api_logger.info("Monitor stop requested -> success=%s, message=%s", ok, message)
+    api_logger.info("Monitor stop requested -> success={}, message={}", ok, message)
     return ActionResponse(success=ok, message=message)
 
 
@@ -54,7 +54,7 @@ async def manual_login(
     svc: MonitorService = Depends(get_monitor_service),
 ) -> ActionResponse:
     ok, message = await asyncio.to_thread(svc.run_manual_login)
-    api_logger.info("Manual login requested -> success=%s, message=%s", ok, message)
+    api_logger.info("Manual login requested -> success={}, message={}", ok, message)
     return ActionResponse(success=ok, message=message)
 
 
@@ -63,7 +63,7 @@ def test_network(
     svc: MonitorService = Depends(get_monitor_service),
 ) -> ActionResponse:
     ok, message = svc.test_network()
-    api_logger.info("Network test requested -> success=%s, message=%s", ok, message)
+    api_logger.info("Network test requested -> success={}, message={}", ok, message)
     return ActionResponse(success=ok, message=message)
 
 
@@ -83,8 +83,8 @@ def toggle_pure_mode(
 ) -> dict:
     try:
         new_value = svc.toggle_pure_mode()
-        api_logger.info("纯净模式已切换 -> %s", new_value)
+        api_logger.info("纯净模式已切换 -> {}", new_value)
         return {"enabled": new_value}
     except Exception as exc:
-        api_logger.error("切换纯净模式失败: %s", exc)
+        api_logger.error("切换纯净模式失败: {}", exc)
         raise HTTPException(status_code=500, detail=f"切换纯净模式失败: {exc}")

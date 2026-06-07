@@ -31,7 +31,7 @@ def send_notification(title: str, message: str, duration_ms: int = 5000) -> bool
             logger.debug("不支持的操作系统")
             return False
     except Exception as exc:
-        logger.warning("发送桌面通知失败: %.200s", exc)
+        logger.warning("发送桌面通知失败: {}", str(exc)[:200])
         return False
 
 
@@ -75,7 +75,7 @@ $toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds({duration_sec})
             else 0,
         )
         if result.returncode == 0:
-            logger.debug("Windows 通知已发送: %s", title)
+            logger.debug("Windows 通知已发送: {}", title)
             return True
     except Exception:
         pass

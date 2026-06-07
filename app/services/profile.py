@@ -49,11 +49,11 @@ class ProfileService:
                 corrupt_path = self._settings_path.parent / corrupt_name
                 try:
                     self._settings_path.rename(corrupt_path)
-                    profile_logger.info("已备份损坏文件到: %s", corrupt_path)
+                    profile_logger.info("已备份损坏文件到: {}", corrupt_path)
                 except FileNotFoundError:
                     pass
                 except OSError as rename_err:
-                    profile_logger.warning("备份损坏文件失败: %s", rename_err)
+                    profile_logger.warning("备份损坏文件失败: {}", rename_err)
                 # 尝试从 backups/ 恢复最新备份
                 restored = self._try_restore_from_backup()
                 if restored:
@@ -80,10 +80,10 @@ class ProfileService:
             try:
                 raw = backup_path.read_text(encoding="utf-8")
                 data = ProfilesData.model_validate_json(raw)
-                profile_logger.info("从备份恢复: %s", backup_path.name)
+                profile_logger.info("从备份恢复: {}", backup_path.name)
                 return data
             except Exception:
-                profile_logger.debug("备份 %s 校验失败，跳过", backup_path.name)
+                profile_logger.debug("备份 {} 校验失败，跳过", backup_path.name)
                 continue
         return None
 
@@ -143,7 +143,7 @@ class ProfileService:
 
             data.active_profile = profile_id
             self._save_unsafe(data)
-        profile_logger.info("活动方案已切换: %s", profile_id)
+        profile_logger.info("活动方案已切换: {}", profile_id)
         return True, f"已切换到方案: {data.profiles[profile_id].name}"
 
     def save_profile(
@@ -170,7 +170,7 @@ class ProfileService:
                 data.active_profile = profile_id
 
             self._save_unsafe(data)
-        profile_logger.info("方案已保存: %s (%s)", profile_id, settings.name)
+        profile_logger.info("方案已保存: {} ({})", profile_id, settings.name)
         return True, f"方案 '{settings.name}' 保存成功"
 
     def delete_profile(self, profile_id: str) -> tuple[bool, str]:
@@ -192,7 +192,7 @@ class ProfileService:
                 data.active_profile = next(iter(data.profiles))
 
             self._save_unsafe(data)
-        profile_logger.info("方案已删除: %s", profile_id)
+        profile_logger.info("方案已删除: {}", profile_id)
         return True, "方案删除成功"
 
     def detect_matching_profile(self) -> str | None:
@@ -203,7 +203,7 @@ class ProfileService:
         gateway = detect_gateway_ip()
         ssid = detect_wifi_ssid()
 
-        profile_logger.debug("检测到网关: %s, SSID: %s", gateway, ssid)
+        profile_logger.debug("检测到网关: {}, SSID: {}", gateway, ssid)
 
         data = self.load()
 
@@ -213,7 +213,7 @@ class ProfileService:
                 match_ip = (settings.match_gateway_ip or "").strip()
                 if match_ip and match_ip == gateway:
                     profile_logger.info(
-                        "网关 %s 匹配方案: %s (%s)",
+                        "网关 {} 匹配方案: {} ({})",
                         gateway,
                         profile_id,
                         settings.name,
@@ -226,7 +226,7 @@ class ProfileService:
                 match_ssid = (settings.match_ssid or "").strip()
                 if match_ssid and match_ssid == ssid:
                     profile_logger.info(
-                        "SSID '%s' 匹配方案: %s (%s)",
+                        "SSID '{}' 匹配方案: {} ({})",
                         ssid,
                         profile_id,
                         settings.name,
@@ -241,4 +241,4 @@ class ProfileService:
             data = self._load_unsafe()
             data.auto_switch = enabled
             self._save_unsafe(data)
-        profile_logger.info("自动切换: %s", "开启" if enabled else "关闭")
+        profile_logger.info("自动切换: {}", "开启" if enabled else "关闭")
