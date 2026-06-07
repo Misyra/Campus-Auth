@@ -5,7 +5,6 @@
 """
 from __future__ import annotations
 
-import datetime
 import re
 import threading
 import time
@@ -471,7 +470,6 @@ class TestMonitorCoreLoginRetryOrBreak:
 class TestMonitorCoreStartStop:
     def test_start_sets_flags(self):
         core = NetworkMonitorCore()
-        thread_done = threading.Event()
 
         # 模拟 monitor_network 立即返回
         with patch.object(core, "monitor_network"):

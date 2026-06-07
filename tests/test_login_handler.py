@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import re
 import threading
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, AsyncMock
 
 import pytest
 

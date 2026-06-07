@@ -937,7 +937,7 @@ class TestWebSocketMaxSize:
     @pytest.mark.asyncio
     async def test_websocket_max_size_rejects_oversized(self):
         """超过 65536 字节的消息应断开连接。"""
-        from unittest.mock import AsyncMock, MagicMock
+        from unittest.mock import AsyncMock
 
         # 模拟 WebSocket 和服务
         mock_ws = AsyncMock()
@@ -954,7 +954,6 @@ class TestWebSocketMaxSize:
         mock_services.monitor_service = mock_monitor
 
         # 从 main.py 导入 websocket_logs 处理函数
-        from app.application import app
 
         # 手动模拟 websocket_logs 的逻辑
         # 由于 FastAPI websocket 端点难以直接测试，我们验证代码逻辑
@@ -970,7 +969,7 @@ class TestWebSocketMaxSize:
     @pytest.mark.asyncio
     async def test_websocket_normal_size_accepted(self):
         """正常大小的消息不应触发断开。"""
-        from unittest.mock import AsyncMock, MagicMock
+        from unittest.mock import AsyncMock
 
         mock_ws = AsyncMock()
         normal_msg = '{"type": "frontend_log", "data": {"message": "test", "level": "INFO"}}'

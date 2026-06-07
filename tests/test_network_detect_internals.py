@@ -6,10 +6,8 @@
 
 from __future__ import annotations
 
-import builtins
 from unittest.mock import patch, MagicMock, mock_open
 
-import pytest
 
 import app.network.detect as nd
 

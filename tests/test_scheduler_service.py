@@ -2,8 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -88,7 +87,7 @@ class TestExecuteShellUsesPolicy:
             mock_proc.returncode = 0
             mock_exec.return_value = mock_proc
 
-            result = _run_async(
+            _run_async(
                 service._execute_shell("echo ok", timeout=9999, shell_path=shell_path)
             )
             # 验证 timeout 被 clamp：通过检查 mock 调用参数
@@ -108,7 +107,7 @@ class TestExecuteShellUsesPolicy:
             mock_proc.returncode = 0
             mock_exec.return_value = mock_proc
 
-            with patch('app.services.scheduler.scheduler_logger') as mock_logger:
+            with patch('app.services.scheduler.scheduler_logger'):
                 result = _run_async(
                     service._execute_shell("echo audit_test", timeout=30, shell_path=shell_path)
                 )

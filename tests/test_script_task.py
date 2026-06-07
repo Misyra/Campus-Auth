@@ -7,7 +7,6 @@ import json
 import textwrap
 from pathlib import Path
 
-import pytest
 
 from app.workers.script_runner import ScriptRunner, _build_minimal_env
 from app.tasks.models import ScriptTaskInfo
