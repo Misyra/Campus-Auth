@@ -73,6 +73,15 @@ _download_uv() {
     tar -xzf "$archive" -C "$UV_DIR"
     rm -f "$archive"
 
+    # uv 解压后可能在子目录，找到并移到 UV_DIR
+    if [[ ! -f "$UV_DIR/uv" ]]; then
+        local found
+        found=$(find "$UV_DIR" -name "uv" -type f | head -1)
+        if [[ -n "$found" ]]; then
+            mv "$found" "$UV_DIR/uv"
+        fi
+    fi
+
     chmod +x "$UV_DIR/uv"
     echo "uv 下载完成" >&2
 }
