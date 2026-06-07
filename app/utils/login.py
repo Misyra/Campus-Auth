@@ -1,8 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-登录尝试处理器
-"""
+"""登录尝试处理器。"""
 
 import asyncio
 import datetime

@@ -411,7 +411,7 @@ class TestCmdStop:
             patch("subprocess.run"),
         ):
             _cmd_stop()
-        assert "强制停止" in capsys.readouterr().out
+        assert "服务已停止" in capsys.readouterr().out
 
     def test_process_name_mismatch(self, tmp_pid_dir, capsys):
         from main import _cmd_stop

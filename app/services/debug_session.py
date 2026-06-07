@@ -1,10 +1,9 @@
-"""Debug session state as a typed dataclass.
+"""调试会话状态数据模型。
 
-Replaces the plain-dict pattern for _debug in backend/main.py with
-a proper DebugSession dataclass, factory function, and serializer.
-
-The module-level _debug_gen counter remains standalone (shared across
-sessions) rather than being a dataclass field.
+使用 dataclass 替代原有的 plain-dict 模式，提供:
+- DebugSession 数据类
+- 工厂函数和序列化器
+- 模块级代数计数器（所有会话共享）
 """
 
 from __future__ import annotations

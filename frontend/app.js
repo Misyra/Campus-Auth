@@ -1,13 +1,6 @@
 import { appOptions } from './js/app-options.js';
 import { ensurePartialsReady } from './js/bootstrap.js';
-import {
-  GlassCard,
-  FormGroup,
-  ToggleSwitch,
-  StatusDot,
-  LoadingSpinner,
-  EmptyState,
-} from './js/components.js';
+import { ToggleSwitch } from './js/components.js';
 import { ICONS } from './js/icons.js';
 
 const { createApp } = window.Vue;
@@ -107,12 +100,7 @@ async function bootstrapApp() {
   const app = createApp(appOptions);
 
   // 注册全局组件
-  app.component('glass-card', GlassCard);
-  app.component('form-group', FormGroup);
   app.component('toggle-switch', ToggleSwitch);
-  app.component('status-dot', StatusDot);
-  app.component('loading-spinner', LoadingSpinner);
-  app.component('empty-state', EmptyState);
 
   // 注册图标组件
   for (const [name, component] of Object.entries(ICONS)) {

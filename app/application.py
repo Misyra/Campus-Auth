@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import mimetypes
 import os
@@ -58,6 +59,12 @@ def _cleanup_temp_screenshots() -> None:
 async def lifespan(app_instance):
     """应用生命周期管理"""
     start = time.perf_counter()
+    startup_logger.info("FastAPI 启动: 创建 shutdown_event")
+
+    # 创建 shutdown_event 用于优雅关闭
+    shutdown_event = asyncio.Event()
+    app_instance.state.shutdown_event = shutdown_event
+
     startup_logger.info("FastAPI 启动: 开始设置服务引导")
 
     services = ServiceContainer(PROJECT_ROOT)
@@ -213,7 +220,11 @@ async def websocket_logs(websocket: WebSocket):
                 return
             try:
                 msg = json.loads(raw)
-                if msg.get("type") == "frontend_log":
+                msg_type = msg.get("type")
+                if msg_type == "ping":
+                    # 应用层 ping/pong，防止代理切断空闲连接
+                    await websocket.send_text('{"type":"pong"}')
+                elif msg_type == "frontend_log":
                     d = msg.get("data", {})
                     message_text = str(d.get("message", ""))[:10000]
                     scope = str(d.get("scope", "?"))[:200]

@@ -13,8 +13,8 @@ from app.constants import LOGS_DIR
 
 router = APIRouter()
 
-# 安全校验：只允许 app.log 和 app.log.N（N=1-3）
-_SAFE_FILE_PATTERN = re.compile(r"^app\.log(?:\.\d)?$")
+# 安全校验：只允许 app.log 和 app.log.N（N=1,2,3,...）
+_SAFE_FILE_PATTERN = re.compile(r"^app\.log(?:\.\d+)?$")
 _DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 # 日志行解析正则

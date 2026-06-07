@@ -36,6 +36,8 @@ class _ClampMixin(BaseModel):
     def _clamp_numeric_fields(cls, data: dict) -> dict:
         if not isinstance(data, dict):
             return data
+        from app.utils.logging import get_logger
+        _logger = get_logger("schemas")
         for name, field_info in cls.model_fields.items():
             if name not in data:
                 continue
@@ -55,8 +57,16 @@ class _ClampMixin(BaseModel):
             except (ValueError, TypeError):
                 continue
             if ge_val is not None and v < ge_val:
+                _logger.warning(
+                    "字段 '{}' 值 {} 低于下限 {}，已自动钳制",
+                    name, v, ge_val
+                )
                 data[name] = ge_val
             elif le_val is not None and v > le_val:
+                _logger.warning(
+                    "字段 '{}' 值 {} 超过上限 {}，已自动钳制",
+                    name, v, le_val
+                )
                 data[name] = le_val
         return data
 
