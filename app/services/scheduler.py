@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from app.tasks import is_valid_task_id
+from app.utils.file_helpers import atomic_write
 from app.utils.logging import get_logger
 from app.utils.shell_policy import ShellCommandPolicy
 
@@ -143,7 +144,7 @@ class SchedulerService:
             return False, "无效的任务 ID"
         file = self.tasks_dir / f"{task_id}.json"
         try:
-            file.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+            atomic_write(str(file), json.dumps(config, ensure_ascii=False, indent=2))
             scheduler_logger.info("定时任务已保存: {}", task_id)
             return True, "定时任务保存成功"
         except Exception as e:

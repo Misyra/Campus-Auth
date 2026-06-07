@@ -426,7 +426,7 @@ class TaskManager:
             return False
         config_file = self.tasks_dir / "active.txt"
         try:
-            config_file.write_text(f"{task_type}:{normalized}", encoding="utf-8")
+            atomic_write(str(config_file), f"{task_type}:{normalized}")
             return True
         except Exception as e:
             logger.error("无法设置活动任务: {}", e)

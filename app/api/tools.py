@@ -43,7 +43,7 @@ def download_task_recorder():
 @router.get("/api/docs/task-writing-guide")
 def download_task_writing_guide():
     """下载任务编写指南文档"""
-    doc_path = PROJECT_ROOT / "doc" / "task-writing-guide.md"
+    doc_path = PROJECT_ROOT / "docs" / "task-writing-guide.md"
     if not doc_path.exists():
         raise HTTPException(status_code=404, detail="文档不存在")
     return FileResponse(
