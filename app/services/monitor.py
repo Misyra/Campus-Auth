@@ -223,7 +223,7 @@ class MonitorService:
         self._push_log("监控线程已启动", level="INFO", source="backend.monitor_service")
         self._update_status_snapshot()
 
-    def _handle_stop(self) -> None:
+    def _handle_stop(self, cmd: MonitorCommand | None = None) -> None:
         """停止监控（仅在消费者线程中调用）。"""
         # 幂等保护：如果已经停止，直接返回
         if self._monitor_core is None and self._monitor_thread is None:
