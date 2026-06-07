@@ -12,6 +12,7 @@ from typing import Any
 
 from .models import StepConfig, StepError, StepType, PROJECT_ROOT
 from .variable_resolver import VariableResolver
+from app.constants import TEMP_DIR
 
 from app.utils.logging import get_logger
 
@@ -532,9 +533,7 @@ class EvalHandler(StepHandler):
 
 
 class ScreenshotHandler(StepHandler):
-    """截图处理器 — 运行时截图存入 debug/{date}/ 目录"""
-
-    # 使用模块级 PROJECT_ROOT
+    """截图处理器 — 运行时截图存入 temp/ 目录"""
 
     @property
     def step_type(self) -> str:
@@ -548,16 +547,16 @@ class ScreenshotHandler(StepHandler):
         params = self.resolve_params(step, resolver)
         path = params.get("path", "")
 
-        date_dir = PROJECT_ROOT / "debug" / datetime.now().strftime("%Y-%m-%d")
+        TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
         if not path:
             task_id = resolver.config.task_id or "unknown"
             step_id = step.id or "s0"
-            result = await save_screenshot(page, date_dir, task_id=task_id, step_id=step_id)
+            result = await save_screenshot(page, TEMP_DIR, task_id=task_id, step_id=step_id)
         else:
             # 用户指定了文件名，使用自定义路径
             safe_name = Path(path).name
-            result = await save_screenshot(page, date_dir, prefix=safe_name.rsplit(".", 1)[0])
+            result = await save_screenshot(page, TEMP_DIR, prefix=safe_name.rsplit(".", 1)[0])
 
         if result:
             logger.debug("[screenshot] path={}", result)
