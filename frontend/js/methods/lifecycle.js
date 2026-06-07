@@ -123,6 +123,7 @@ export const lifecycleMethods = {
       const { data } = await this.$api.get('/api/health');
       if (data?.version) {
         this.appVersion = data.version;
+        if (data.python_version) this.pythonVersion = data.python_version;
         return;
       }
     } catch {

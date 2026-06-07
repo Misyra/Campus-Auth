@@ -103,7 +103,7 @@
         </div>
         <p class="ocr-description">
           OCR 用于自动识别验证码图片。仅在任务中使用 <code>ocr</code> 步骤时才需要安装。
-          安装后会占用约 200MB 磁盘空间（含 onnxruntime 运行时）。
+          安装后会占用约 120MB 磁盘空间（含 onnxruntime 运行时）。
         </p>
         <div class="ocr-actions">
           <button v-if="!ocrStatus.installed" class="btn btn-primary btn-sm" @click="installOcr" :disabled="busy.ocr">

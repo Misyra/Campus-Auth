@@ -57,6 +57,7 @@ export const appOptions = {
       settingsTabs: SETTINGS_TABS,
       frontendLogger: createFrontendLogger('INFO'),
       appVersion: 'unknown',
+      pythonVersion: '',
     };
   },
   computed: {

@@ -165,13 +165,13 @@ export const configMethods = {
     }
   },
   async installOcr() {
-    if (!confirm('确定要安装 OCR 依赖吗？\nddddocr + onnxruntime 约占用 ~200MB 磁盘空间。')) return;
+    if (!confirm('确定要安装 OCR 依赖吗？\nddddocr + onnxruntime 约占用 ~120MB 磁盘空间。')) return;
     this.busy.ocr = true;
     try {
       const { data } = await this.$api.post('/api/ocr/install');
       if (data.success) {
         this.frontendLogger.info('ocr', data.message);
-        this.toastOnly(true, data.message);
+        this.toastOnly(true, data.message + '，需重启程序后生效');
         await this.fetchOcrStatus();
       } else {
         this.frontendLogger.warn('ocr', '安装失败: ' + data.message);
@@ -192,7 +192,7 @@ export const configMethods = {
       const { data } = await this.$api.post('/api/ocr/uninstall');
       if (data.success) {
         this.frontendLogger.info('ocr', data.message);
-        this.toastOnly(true, data.message);
+        this.toastOnly(true, data.message + '，需重启程序后生效');
         await this.fetchOcrStatus();
       } else {
         this.frontendLogger.warn('ocr', '卸载失败: ' + data.message);
