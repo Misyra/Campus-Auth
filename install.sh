@@ -1,13 +1,21 @@
 #!/usr/bin/env bash
-# Campus-Auth 环境安装脚本（macOS / Linux）
+# Campus-Auth 安装脚本（macOS / Linux）
+# 用法: ./install.sh [参数]
+#   --install-only  仅安装环境，不启动应用
 set -euo pipefail
 
+# ── 常量 ──────────────────────────────────────────────────
 PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 UV_DIR="$PROJECT_ROOT/.uv"
 UV_VERSION="0.7.3"
+MIRRORS=(
+    "https://ghfast.top/"
+    "https://gh-proxy.com/"
+    "https://ghproxy.net/"
+    ""  # GitHub 官方源
+)
 
 # ── 检测平台和文件名 ──────────────────────────────────────
-
 _detect_uv_filename() {
     local system arch
     system="$(uname -s)"
@@ -29,56 +37,43 @@ _detect_uv_filename() {
             fi
             ;;
         *)
-            echo "错误：不支持的系统 $system" >&2
+            echo "[X] 不支持的系统: $system" >&2
             exit 1
             ;;
     esac
 }
 
 # ── 下载 uv ──────────────────────────────────────────────
-
 _download_uv() {
     local filename="$1"
     local github_url="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${filename}"
-    local mirrors=(
-        "https://ghfast.top/"
-        "https://gh-proxy.com/"
-        "https://ghproxy.net/"
-    )
 
     mkdir -p "$UV_DIR"
     local archive="$UV_DIR/uv.tar.gz"
     local success=0
 
-    # 尝试镜像站
-    for mirror in "${mirrors[@]}"; do
+    for mirror in "${MIRRORS[@]}"; do
         local url="${mirror}${github_url}"
-        echo "  尝试: ${mirror}" >&2
+        if [[ -z "$mirror" ]]; then
+            echo "  尝试: GitHub 官方" >&2
+        else
+            echo "  尝试: ${mirror}" >&2
+        fi
         if curl -fsSL --connect-timeout 10 --max-time 120 -o "$archive" "$url" 2>/dev/null; then
-            # 校验是否为有效的 tar.gz 文件（防止下载到 HTML 错误页）
             if tar -tzf "$archive" &>/dev/null; then
                 success=1
                 break
             else
-                echo "  ⚠️ 下载的文件无效（可能是 HTML 错误页），尝试下一个源..." >&2
+                echo "  [!] 文件无效，尝试下一个源..." >&2
                 rm -f "$archive"
             fi
         fi
     done
 
-    # 回退到 GitHub
     if [[ "$success" -eq 0 ]]; then
-        echo "  尝试: GitHub 直连" >&2
-        if ! curl -fsSL --connect-timeout 10 --max-time 120 -o "$archive" "$github_url"; then
-            echo "错误：所有下载源均失败" >&2
-            echo "请手动安装 uv: https://docs.astral.sh/uv/" >&2
-            exit 1
-        fi
-        if ! tar -tzf "$archive" &>/dev/null; then
-            echo "错误：GitHub 直连下载的文件无效" >&2
-            rm -f "$archive"
-            exit 1
-        fi
+        echo "[X] 所有下载源均失败" >&2
+        echo "    请手动安装 uv: https://docs.astral.sh/uv/" >&2
+        exit 1
     fi
 
     echo "正在解压..." >&2
@@ -95,25 +90,21 @@ _download_uv() {
     fi
 
     chmod +x "$UV_DIR/uv"
-    echo "✅ uv 下载完成" >&2
+    echo "[OK] uv 下载完成" >&2
 }
 
 # ── 查找 uv ──────────────────────────────────────────────
-
 _find_uv() {
-    # 1. 系统 PATH
     if command -v uv &>/dev/null; then
         echo "uv"
         return
     fi
 
-    # 2. 本地目录
     if [[ -x "$UV_DIR/uv" ]]; then
         echo "$UV_DIR/uv"
         return
     fi
 
-    # 3. 下载（提示信息输出到 stderr）
     echo "正在下载 uv ${UV_VERSION}..." >&2
     local filename
     filename="$(_detect_uv_filename)"
@@ -122,32 +113,27 @@ _find_uv() {
 }
 
 # ── 主流程 ───────────────────────────────────────────────
-
 UV_CMD="$(_find_uv)"
 echo "使用 uv: $UV_CMD"
 
 cd "$PROJECT_ROOT"
 
-echo ""
 echo "[1/3] 安装依赖..."
 $UV_CMD sync
 
-echo ""
 echo "[2/3] 安装 Playwright Chromium..."
 $UV_CMD run playwright install chromium || {
-    echo "警告：Playwright Chromium 安装失败"
-    echo "如已安装可忽略，否则手动运行: uv run playwright install chromium"
+    echo "[!] Playwright 安装失败，如已安装可忽略"
+    echo "    手动运行: uv run playwright install chromium"
 }
 
-echo ""
-echo "[3/3] 环境准备完成"
+# 检查 --install-only 参数
+for arg in "$@"; do
+    if [[ "$arg" == "--install-only" ]]; then
+        echo "[OK] 环境准备完成"
+        exit 0
+    fi
+done
 
-# --install-only 模式：只安装依赖，不启动应用
-if [[ "${1:-}" == "--install-only" ]]; then
-    exit 0
-fi
-
-# 启动应用
-echo ""
-echo "🚀 启动 Campus-Auth..."
+echo "[3/3] 启动 Campus-Auth..."
 exec "$UV_CMD" run main.py "$@"
