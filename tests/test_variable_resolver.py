@@ -43,7 +43,9 @@ class TestBasicResolve:
 
     def test_template_vars_resolution(self):
         """模板变量解析。"""
-        resolver = VariableResolver(_make_config(), {"USERNAME": "admin", "PASSWORD": "123"})
+        resolver = VariableResolver(
+            _make_config(), {"USERNAME": "admin", "PASSWORD": "123"}
+        )
         assert resolver.resolve("{{USERNAME}}") == "admin"
         assert resolver.resolve("{{PASSWORD}}") == "123"
 

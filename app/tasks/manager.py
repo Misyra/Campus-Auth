@@ -76,7 +76,11 @@ class TaskManager:
             search_dirs = [(self.scripts_dir, ".json"), (self.scripts_dir, ".py")]
         else:
             # 搜索顺序：browser/*.json → scripts/*.json → scripts/*.py
-            search_dirs = [(self.browser_dir, ".json"), (self.scripts_dir, ".json"), (self.scripts_dir, ".py")]
+            search_dirs = [
+                (self.browser_dir, ".json"),
+                (self.scripts_dir, ".json"),
+                (self.scripts_dir, ".py"),
+            ]
         for subdir, ext in search_dirs:
             candidate = (subdir / f"{normalized}{ext}").absolute()
             try:
@@ -204,12 +208,14 @@ class TaskManager:
                 continue
             try:
                 data = json.loads(file.read_text(encoding="utf-8"))
-                tasks.append({
-                    "id": file.stem,
-                    "name": data.get("name", file.stem),
-                    "description": data.get("description", ""),
-                    "type": "browser",
-                })
+                tasks.append(
+                    {
+                        "id": file.stem,
+                        "name": data.get("name", file.stem),
+                        "description": data.get("description", ""),
+                        "type": "browser",
+                    }
+                )
             except Exception as e:
                 logger.warning("无法读取任务文件 {}: {}", file, e)
         return self._sort_by_order(tasks, "all")
@@ -227,12 +233,14 @@ class TaskManager:
                 continue
             try:
                 data = json.loads(file.read_text(encoding="utf-8"))
-                tasks.append({
-                    "id": file.stem,
-                    "name": data.get("name", file.stem),
-                    "description": data.get("description", ""),
-                    "binary_path": data.get("binary_path", ""),
-                })
+                tasks.append(
+                    {
+                        "id": file.stem,
+                        "name": data.get("name", file.stem),
+                        "description": data.get("description", ""),
+                        "binary_path": data.get("binary_path", ""),
+                    }
+                )
                 seen_ids.add(file.stem)
             except Exception as e:
                 logger.warning("无法读取脚本 JSON {}: {}", file, e)
@@ -252,24 +260,30 @@ class TaskManager:
                     name = comment_meta["name"]
                     description = comment_meta["description"]
                     binary_path = ""
-                tasks.append({
-                    "id": file.stem,
-                    "name": name,
-                    "description": description,
-                    "binary_path": binary_path,
-                })
+                tasks.append(
+                    {
+                        "id": file.stem,
+                        "name": name,
+                        "description": description,
+                        "binary_path": binary_path,
+                    }
+                )
             except Exception as e:
                 logger.warning("无法读取脚本文件 {}: {}", file, e)
 
         return self._sort_by_order(tasks, "scripts")
 
-    def load_task(self, task_id: str, task_type: str = "") -> TaskConfig | ScriptTaskInfo | None:
+    def load_task(
+        self, task_id: str, task_type: str = ""
+    ) -> TaskConfig | ScriptTaskInfo | None:
         file = self._safe_task_path(task_id, task_type=task_type)
         if file is None or not file.exists():
             return None
         try:
             # 根据文件位置判断类型：scripts/ 下的是脚本任务
-            is_script = self.scripts_dir in file.parents or file.parent == self.scripts_dir
+            is_script = (
+                self.scripts_dir in file.parents or file.parent == self.scripts_dir
+            )
 
             if is_script:
                 # 脚本任务
@@ -313,7 +327,9 @@ class TaskManager:
             logger.error("无法加载任务 {}: {}", task_id, e)
             return None
 
-    def save_task(self, task_id: str, config: dict[str, Any], task_type: str = "browser") -> bool:
+    def save_task(
+        self, task_id: str, config: dict[str, Any], task_type: str = "browser"
+    ) -> bool:
         """保存任务（支持 browser 和 script 两种类型）。"""
         if task_type == "scripts":
             return self._save_script_task(task_id, config)

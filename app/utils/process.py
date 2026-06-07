@@ -48,7 +48,9 @@ def read_pid_file() -> tuple[int | None, str | None, str | None]:
         if len(lines) >= 2:
             parts = lines[1].split("|", 1)
             name = parts[0].strip() or None
-            timestamp = parts[1].strip() if len(parts) > 1 and parts[1].strip() else None
+            timestamp = (
+                parts[1].strip() if len(parts) > 1 and parts[1].strip() else None
+            )
             return pid, name, timestamp
         return pid, None, None
     except (ValueError, OSError):
@@ -61,9 +63,12 @@ def get_process_name(pid: int) -> str | None:
         if sys.platform == "win32":
             result = subprocess.run(
                 ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
                 creationflags=subprocess.CREATE_NO_WINDOW
-                if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
+                if hasattr(subprocess, "CREATE_NO_WINDOW")
+                else 0,
             )
             if result.returncode != 0 or not result.stdout.strip():
                 return None
@@ -77,7 +82,9 @@ def get_process_name(pid: int) -> str | None:
         else:
             result = subprocess.run(
                 ["ps", "-p", str(pid), "-o", "comm="],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if result.returncode != 0 or not result.stdout.strip():
                 return None
@@ -108,13 +115,16 @@ def is_service_running() -> tuple[bool, int | None]:
         pid_file.unlink(missing_ok=True)
         return False, None
 
-    if proc_name is not None and normalize_proc_name(proc_alive) != normalize_proc_name(proc_name):
+    if proc_name is not None and normalize_proc_name(proc_alive) != normalize_proc_name(
+        proc_name
+    ):
         # PID 存在但进程名不匹配（PID 已被回收重用）
         pid_file.unlink(missing_ok=True)
         return False, None
 
     # 进程名匹配，进一步验证端口是否在监听（防止 PID 被同名进程复用导致误判）
     from app.application import _resolve_port
+
     port = _resolve_port()
     if not is_local_port_in_use(port):
         # 进程存在但未监听端口 → 不是本应用实例，清理残留 PID 文件

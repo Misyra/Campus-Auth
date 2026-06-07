@@ -85,9 +85,7 @@ def save_profile(
     monitor_svc: MonitorService = Depends(get_monitor_service),
 ) -> ActionResponse:
     ok, message = profile_svc.save_profile(profile_id, payload)
-    api_logger.info(
-        "保存方案 {} -> success={}, message={}", profile_id, ok, message
-    )
+    api_logger.info("保存方案 {} -> success={}, message={}", profile_id, ok, message)
     if ok:
         data = profile_svc.load()
         if data.active_profile == profile_id:
@@ -108,9 +106,7 @@ def delete_profile(
     was_active = data.active_profile == profile_id
 
     ok, message = profile_svc.delete_profile(profile_id)
-    api_logger.info(
-        "删除方案 {} -> success={}, message={}", profile_id, ok, message
-    )
+    api_logger.info("删除方案 {} -> success={}, message={}", profile_id, ok, message)
     # 删除活动方案后通知监控重载配置
     if ok and was_active:
         try:

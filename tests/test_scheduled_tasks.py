@@ -54,15 +54,18 @@ def test_list_tasks(scheduler):
     """测试列出定时任务。"""
     # 创建多个任务
     for i in range(3):
-        scheduler.save_task(f"task_{i}", {
-            "name": f"任务 {i}",
-            "type": "shell",
-            "command": f"echo {i}",
-            "enabled": True,
-            "shell_path": "",
-            "schedule": {"hour": i, "minute": 0},
-            "timeout": 60,
-        })
+        scheduler.save_task(
+            f"task_{i}",
+            {
+                "name": f"任务 {i}",
+                "type": "shell",
+                "command": f"echo {i}",
+                "enabled": True,
+                "shell_path": "",
+                "schedule": {"hour": i, "minute": 0},
+                "timeout": 60,
+            },
+        )
 
     tasks = scheduler.list_tasks()
     assert len(tasks) == 3
@@ -71,15 +74,18 @@ def test_list_tasks(scheduler):
 def test_delete_task(scheduler):
     """测试删除定时任务。"""
     task_id = "to_delete"
-    scheduler.save_task(task_id, {
-        "name": "待删除任务",
-        "type": "shell",
-        "command": "echo delete me",
-        "enabled": True,
-        "shell_path": "",
-        "schedule": {"hour": 0, "minute": 0},
-        "timeout": 60,
-    })
+    scheduler.save_task(
+        task_id,
+        {
+            "name": "待删除任务",
+            "type": "shell",
+            "command": "echo delete me",
+            "enabled": True,
+            "shell_path": "",
+            "schedule": {"hour": 0, "minute": 0},
+            "timeout": 60,
+        },
+    )
 
     # 确认任务存在
     assert scheduler.get_task(task_id) is not None
@@ -96,15 +102,18 @@ def test_delete_task(scheduler):
 async def test_history(scheduler):
     """测试执行历史。"""
     task_id = "history_task"
-    scheduler.save_task(task_id, {
-        "name": "历史任务",
-        "type": "shell",
-        "command": "echo history",
-        "enabled": True,
-        "shell_path": "",
-        "schedule": {"hour": 0, "minute": 0},
-        "timeout": 60,
-    })
+    scheduler.save_task(
+        task_id,
+        {
+            "name": "历史任务",
+            "type": "shell",
+            "command": "echo history",
+            "enabled": True,
+            "shell_path": "",
+            "schedule": {"hour": 0, "minute": 0},
+            "timeout": 60,
+        },
+    )
 
     # 添加历史记录
     await scheduler._add_history(task_id, "success", "执行成功", 1.5)
@@ -124,6 +133,7 @@ class TestExecuteShellUsesPolicy:
     async def test_execute_shell_uses_policy(self, scheduler):
         """_execute_shell 应通过 ShellCommandPolicy 验证路径并钳制超时。"""
         from unittest.mock import AsyncMock
+
         # 直接 mock 缓存的 _shell_policy 实例
         mock_policy = MagicMock()
         mock_policy.run = AsyncMock(return_value=(0, "hello", ""))
@@ -138,11 +148,17 @@ class TestExecuteShellUsesPolicy:
     @pytest.mark.asyncio
     async def test_execute_shell_rejects_unknown_path(self, scheduler):
         """_execute_shell 应拒绝不在白名单中的 shell 路径。"""
-        fake_shells = [{"name": "cmd", "path": "cmd.exe", "description": "Windows 命令提示符"}]
+        fake_shells = [
+            {"name": "cmd", "path": "cmd.exe", "description": "Windows 命令提示符"}
+        ]
 
-        with patch('app.services.scheduler.detect_available_shells', return_value=fake_shells):
+        with patch(
+            "app.services.scheduler.detect_available_shells", return_value=fake_shells
+        ):
             success, message = await scheduler._execute_shell(
-                "echo hello", 60, "/malicious/shell",
+                "echo hello",
+                60,
+                "/malicious/shell",
             )
             assert success is False
             assert "白名单" in message
@@ -151,6 +167,7 @@ class TestExecuteShellUsesPolicy:
     async def test_execute_shell_timeout_clamped(self, scheduler):
         """_execute_shell 的超时应通过 ShellCommandPolicy 被 clamp 到 [1, 300]。"""
         from unittest.mock import AsyncMock
+
         # 直接 mock 缓存的 _shell_policy 实例
         mock_policy = MagicMock()
         mock_policy.run = AsyncMock(return_value=(0, "ok", ""))
@@ -217,30 +234,78 @@ class TestSchedulerServiceCRUD:
         assert scheduler.list_tasks() == []
 
     def test_list_tasks_sorted_by_name(self, scheduler: SchedulerService):
-        scheduler.save_task("b_task", {"name": "Banana", "type": "shell", "command": "echo b", "schedule": {"hour": 1, "minute": 0}})
-        scheduler.save_task("a_task", {"name": "Apple", "type": "shell", "command": "echo a", "schedule": {"hour": 0, "minute": 0}})
+        scheduler.save_task(
+            "b_task",
+            {
+                "name": "Banana",
+                "type": "shell",
+                "command": "echo b",
+                "schedule": {"hour": 1, "minute": 0},
+            },
+        )
+        scheduler.save_task(
+            "a_task",
+            {
+                "name": "Apple",
+                "type": "shell",
+                "command": "echo a",
+                "schedule": {"hour": 0, "minute": 0},
+            },
+        )
         tasks = scheduler.list_tasks()
         assert tasks[0]["name"] == "Apple"
         assert tasks[1]["name"] == "Banana"
 
-    def test_list_tasks_skips_dotfiles(self, scheduler: SchedulerService, tmp_path: Path):
+    def test_list_tasks_skips_dotfiles(
+        self, scheduler: SchedulerService, tmp_path: Path
+    ):
         # 创建正常任务
-        scheduler.save_task("normal", {"name": "正常", "type": "shell", "command": "echo ok", "schedule": {"hour": 0, "minute": 0}})
+        scheduler.save_task(
+            "normal",
+            {
+                "name": "正常",
+                "type": "shell",
+                "command": "echo ok",
+                "schedule": {"hour": 0, "minute": 0},
+            },
+        )
         # 创建隐藏文件
-        (tmp_path / "tasks" / "scheduled" / ".hidden.json").write_text("{}", encoding="utf-8")
+        (tmp_path / "tasks" / "scheduled" / ".hidden.json").write_text(
+            "{}", encoding="utf-8"
+        )
         tasks = scheduler.list_tasks()
         assert len(tasks) == 1
         assert tasks[0]["id"] == "normal"
 
-    def test_list_tasks_skips_malformed_json(self, scheduler: SchedulerService, tmp_path: Path):
-        scheduler.save_task("good", {"name": "好的", "type": "shell", "command": "echo ok", "schedule": {"hour": 0, "minute": 0}})
-        (tmp_path / "tasks" / "scheduled" / "bad.json").write_text("not json", encoding="utf-8")
+    def test_list_tasks_skips_malformed_json(
+        self, scheduler: SchedulerService, tmp_path: Path
+    ):
+        scheduler.save_task(
+            "good",
+            {
+                "name": "好的",
+                "type": "shell",
+                "command": "echo ok",
+                "schedule": {"hour": 0, "minute": 0},
+            },
+        )
+        (tmp_path / "tasks" / "scheduled" / "bad.json").write_text(
+            "not json", encoding="utf-8"
+        )
         tasks = scheduler.list_tasks()
         assert len(tasks) == 1
         assert tasks[0]["id"] == "good"
 
     def test_get_task_returns_id_field(self, scheduler: SchedulerService):
-        scheduler.save_task("my_task", {"name": "测试", "type": "shell", "command": "echo ok", "schedule": {"hour": 0, "minute": 0}})
+        scheduler.save_task(
+            "my_task",
+            {
+                "name": "测试",
+                "type": "shell",
+                "command": "echo ok",
+                "schedule": {"hour": 0, "minute": 0},
+            },
+        )
         task = scheduler.get_task("my_task")
         assert task is not None
         assert task["id"] == "my_task"
@@ -252,12 +317,24 @@ class TestSchedulerServiceCRUD:
         assert scheduler.get_task("123bad") is None
 
     def test_get_task_malformed_json(self, scheduler: SchedulerService, tmp_path: Path):
-        (tmp_path / "tasks" / "scheduled" / "bad.json").write_text("not json", encoding="utf-8")
+        (tmp_path / "tasks" / "scheduled" / "bad.json").write_text(
+            "not json", encoding="utf-8"
+        )
         assert scheduler.get_task("bad") is None
 
     @pytest.mark.asyncio
-    async def test_delete_task_with_history(self, scheduler: SchedulerService, tmp_path: Path):
-        scheduler.save_task("del_task", {"name": "待删", "type": "shell", "command": "echo del", "schedule": {"hour": 0, "minute": 0}})
+    async def test_delete_task_with_history(
+        self, scheduler: SchedulerService, tmp_path: Path
+    ):
+        scheduler.save_task(
+            "del_task",
+            {
+                "name": "待删",
+                "type": "shell",
+                "command": "echo del",
+                "schedule": {"hour": 0, "minute": 0},
+            },
+        )
         await scheduler._add_history("del_task", "success", "ok", 1.0)
         ok, _ = scheduler.delete_task("del_task")
         assert ok is True
@@ -290,7 +367,9 @@ class TestSchedulerHistory:
         return SchedulerService(tmp_path)
 
     @pytest.mark.asyncio
-    async def test_add_history_creates_file(self, scheduler: SchedulerService, tmp_path: Path):
+    async def test_add_history_creates_file(
+        self, scheduler: SchedulerService, tmp_path: Path
+    ):
         await scheduler._add_history("test", "success", "ok", 1.0)
         history_file = tmp_path / "tasks" / "scheduled" / "history" / "test.json"
         assert history_file.exists()
@@ -322,7 +401,9 @@ class TestSchedulerHistory:
     def test_get_history_invalid_id(self, scheduler: SchedulerService):
         assert scheduler.get_history("123bad") == []
 
-    def test_get_history_malformed_json(self, scheduler: SchedulerService, tmp_path: Path):
+    def test_get_history_malformed_json(
+        self, scheduler: SchedulerService, tmp_path: Path
+    ):
         history_dir = tmp_path / "tasks" / "scheduled" / "history"
         history_dir.mkdir(parents=True, exist_ok=True)
         (history_dir / "bad.json").write_text("not json", encoding="utf-8")
@@ -371,4 +452,3 @@ class TestSchedulerStartStop:
     def test_stop_when_not_running(self, tmp_path: Path):
         scheduler = SchedulerService(tmp_path)
         scheduler.stop()  # 不应抛异常
-

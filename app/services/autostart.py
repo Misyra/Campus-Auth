@@ -57,7 +57,9 @@ class AutoStartService:
     def _run(self, cmd: list[str]) -> tuple[bool, str]:
         try:
             logger.debug("执行命令: {}", " ".join(cmd))
-            proc = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=30)
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True, check=False, timeout=30
+            )
             if proc.returncode == 0:
                 logger.debug("命令成功: {}", (proc.stdout or "").strip()[:200])
                 return True, (proc.stdout or "").strip()
@@ -280,7 +282,7 @@ WantedBy=default.target
             run_command: VBScript 中用于启动程序的两行代码
                 （targetExe 赋值 + WshShell.Run 调用）。
         """
-        return f'''Set WshShell = CreateObject("WScript.Shell")
+        return f"""Set WshShell = CreateObject("WScript.Shell")
 WshShell.Environment("PROCESS")("CAMPUS_AUTH_AUTO_OPEN_BROWSER") = "false"
 
 ' Check if already running
@@ -303,7 +305,7 @@ If fso.FileExists(pidFile) Then
 End If
 
 {run_command}
-'''
+"""
 
     @staticmethod
     def _has_cjk_chars(path: str) -> bool:
@@ -338,7 +340,7 @@ End If
         start_cmd_escaped = self._start_command().replace('"', '""')
         run_command = (
             f'targetCmd = "{start_cmd_escaped} --no-browser"\n'
-            f'WshShell.Run targetCmd, 0, False'
+            f"WshShell.Run targetCmd, 0, False"
         )
 
         content = self._build_vbs_content(run_command)

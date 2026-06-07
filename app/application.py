@@ -23,7 +23,21 @@ from app.version import get_project_version
 
 from app.constants import FRONTEND_DIR, LOGS_DIR, PROJECT_ROOT, TEMP_DIR
 from app.container import ServiceContainer
-from app.api import backup, config, debug, history, logfiles, monitor, profiles, repo, scheduled_tasks, scripts, system, tasks, tools
+from app.api import (
+    backup,
+    config,
+    debug,
+    history,
+    logfiles,
+    monitor,
+    profiles,
+    repo,
+    scheduled_tasks,
+    scripts,
+    system,
+    tasks,
+    tools,
+)
 
 http_logger = get_logger("backend.http", side="BACKEND")
 startup_logger = get_logger("backend.startup", side="BACKEND")
@@ -43,7 +57,11 @@ def _cleanup_temp_screenshots() -> None:
         cutoff = _time.time() - _TEMP_SCREENSHOT_MAX_AGE_DAYS * 86400
         removed = 0
         for f in TEMP_DIR.iterdir():
-            if f.is_file() and f.suffix in (".png", ".jpg", ".jpeg") and f.stat().st_mtime < cutoff:
+            if (
+                f.is_file()
+                and f.suffix in (".png", ".jpg", ".jpeg")
+                and f.stat().st_mtime < cutoff
+            ):
                 f.unlink()
                 removed += 1
         if removed:
@@ -298,6 +316,7 @@ def run() -> None:
 
     # 压制第三方库的 DEBUG 日志
     import logging
+
     logging.getLogger("PIL").setLevel(logging.WARNING)
 
     log_dir = LOGS_DIR

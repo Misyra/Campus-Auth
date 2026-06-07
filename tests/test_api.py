@@ -2,6 +2,7 @@
 
 使用 FastAPI TestClient 测试各 API 端点。
 """
+
 from __future__ import annotations
 
 import json
@@ -22,25 +23,29 @@ def client(tmp_path):
     # 设置临时项目根目录
     settings_path = tmp_path / "settings.json"
     settings_path.write_text(
-        json.dumps({
-            "system": {
-                "username": "testuser",
-                "password": "ENC:test",
-                "auth_url": "http://10.0.0.1",
-            },
-            "profiles": {
-                "default": {"name": "默认方案"},
-            },
-        }),
+        json.dumps(
+            {
+                "system": {
+                    "username": "testuser",
+                    "password": "ENC:test",
+                    "auth_url": "http://10.0.0.1",
+                },
+                "profiles": {
+                    "default": {"name": "默认方案"},
+                },
+            }
+        ),
         encoding="utf-8",
     )
     browser_dir = tmp_path / "tasks" / "browser"
     browser_dir.mkdir(parents=True)
     (browser_dir / "default.json").write_text(
-        json.dumps({
-            "name": "默认任务",
-            "steps": [{"id": "s1", "type": "click", "selector": "#btn"}],
-        }),
+        json.dumps(
+            {
+                "name": "默认任务",
+                "steps": [{"id": "s1", "type": "click", "selector": "#btn"}],
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -51,12 +56,13 @@ def client(tmp_path):
     (tmp_path / "temp").mkdir(exist_ok=True)
     (tmp_path / "backups").mkdir(exist_ok=True)
 
-    with patch('app.constants.PROJECT_ROOT', tmp_path), \
-         patch('app.constants.FRONTEND_DIR', tmp_path / "frontend"), \
-         patch('app.constants.LOGS_DIR', tmp_path / "logs"), \
-         patch('app.constants.TEMP_DIR', tmp_path / "temp"), \
-         patch('app.constants.BACKUP_DIR', tmp_path / "backups"):
-
+    with (
+        patch("app.constants.PROJECT_ROOT", tmp_path),
+        patch("app.constants.FRONTEND_DIR", tmp_path / "frontend"),
+        patch("app.constants.LOGS_DIR", tmp_path / "logs"),
+        patch("app.constants.TEMP_DIR", tmp_path / "temp"),
+        patch("app.constants.BACKUP_DIR", tmp_path / "backups"),
+    ):
         from app.application import app
 
         # 创建 mock 服务容器
@@ -64,6 +70,7 @@ def client(tmp_path):
 
         # 模拟 monitor_service
         from app.schemas import MonitorConfigPayload, MonitorStatusResponse
+
         mock_services.monitor_service.get_config.return_value = MonitorConfigPayload(
             username="testuser",
             password="••••••••",
@@ -77,10 +84,19 @@ def client(tmp_path):
             runtime_seconds=0,
         )
         mock_services.monitor_service.list_logs.return_value = []
-        mock_services.monitor_service.start_monitoring.return_value = (True, "监控已启动")
-        mock_services.monitor_service.stop_monitoring.return_value = (True, "监控已停止")
+        mock_services.monitor_service.start_monitoring.return_value = (
+            True,
+            "监控已启动",
+        )
+        mock_services.monitor_service.stop_monitoring.return_value = (
+            True,
+            "监控已停止",
+        )
         mock_services.monitor_service.login_in_progress = False
-        mock_services.monitor_service.run_manual_login.return_value = (True, "手动登录成功")
+        mock_services.monitor_service.run_manual_login.return_value = (
+            True,
+            "手动登录成功",
+        )
 
         # 模拟 profile_service
         mock_services.profile_service = MagicMock()
@@ -229,26 +245,32 @@ class TestLoginEndpoint:
 class TestCompareVersions:
     def test_equal(self):
         from app.version import compare_versions
+
         assert compare_versions("1.0.0", "1.0.0") == 0
 
     def test_greater(self):
         from app.version import compare_versions
+
         assert compare_versions("1.1.0", "1.0.0") == 1
 
     def test_less(self):
         from app.version import compare_versions
+
         assert compare_versions("1.0.0", "1.1.0") == -1
 
     def test_different_lengths(self):
         from app.version import compare_versions
+
         assert compare_versions("1.0.0.1", "1.0.0") == 1
         assert compare_versions("1.0", "1.0.0") == 0  # 1.0 等价于 1.0.0
 
     def test_invalid_input(self):
         from app.version import compare_versions
+
         assert compare_versions("invalid", "1.0.0") == 0
         assert compare_versions("1.0.0", "invalid") == 0
 
     def test_major_version_diff(self):
         from app.version import compare_versions
+
         assert compare_versions("2.0.0", "1.9.9") == 1

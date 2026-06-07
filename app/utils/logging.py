@@ -28,6 +28,7 @@ logger.remove()
 
 # ==================== 格式定义 ====================
 
+
 def _console_format(record):
     side = record["extra"].get("side", "-")
     record["extra"]["_side"] = side
@@ -90,6 +91,8 @@ logger.add(_to_std_logging, level="DEBUG", format="{message}")
 # ==================== 日志级别标准化 ====================
 
 VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+
+
 def normalize_level(level: str | None, default: str = "INFO") -> str:
     """标准化日志级别名称，无效值返回 default。"""
     raw = str(level or default).upper().strip()
@@ -114,10 +117,12 @@ class WebSocketSink:
     """将日志推送到 WebSocket 广播队列和 log_store。"""
 
     # 不转发这些 logger 的日志，避免回声或与 _push_log 重复
-    _EXCLUDED_LOGGERS = frozenset({
-        "backend.ws_manager",
-        "backend.monitor_service",
-    })
+    _EXCLUDED_LOGGERS = frozenset(
+        {
+            "backend.ws_manager",
+            "backend.monitor_service",
+        }
+    )
 
     _LogEntry: type | None = None  # 延迟初始化，避免循环导入
 
@@ -157,8 +162,6 @@ class WebSocketSink:
 
                 WebSocketSink._LogEntry = LogEntry
             self._log_store.append(WebSocketSink._LogEntry(**log_data))
-
-
 
 
 # ==================== 自定义 sink: 按日期目录存储 ====================
@@ -205,6 +208,7 @@ class DateRotatingSink:
                 self._stream.close()
             except Exception:
                 import sys
+
                 print("[logging] 关闭旧日志流失败", file=sys.stderr)
         self._stream = new_stream
         self._bytes_written = 0
@@ -279,7 +283,10 @@ class DateRotatingSink:
                     shutil.rmtree(d)
             except OSError as exc:
                 # 不能用 logger — 本方法由 write() 调用，同属 sink 内部
-                print(f"[LOG ERROR] 清理过期日志目录失败: {d.name}: {exc}", file=sys.stderr)
+                print(
+                    f"[LOG ERROR] 清理过期日志目录失败: {d.name}: {exc}",
+                    file=sys.stderr,
+                )
 
     def close(self) -> None:
         """关闭文件流。"""
@@ -291,11 +298,8 @@ class DateRotatingSink:
             except Exception:
                 # 不能用 logger — 本方法由 write() 调用，同属 sink 内部，调用 logger 会无限递归
                 import sys
+
                 print("[logging] 关闭日志流失败", file=sys.stderr)
-
-
-
-
 
 
 # ==================== 日志配置中心 ====================

@@ -59,7 +59,11 @@ class VariableResolver:
             # 按优先级查找变量
             if var_name in self.runtime_vars:
                 raw = self.runtime_vars[var_name]
-                resolved = json.dumps(raw, ensure_ascii=False) if not isinstance(raw, str) else raw
+                resolved = (
+                    json.dumps(raw, ensure_ascii=False)
+                    if not isinstance(raw, str)
+                    else raw
+                )
             elif var_name in self.template_vars:
                 resolved = str(self.template_vars[var_name])
             elif var_name in self.config.variables:

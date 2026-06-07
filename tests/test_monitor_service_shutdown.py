@@ -1,4 +1,5 @@
 """MonitorService shutdown 和队列行为测试"""
+
 from __future__ import annotations
 
 import queue
@@ -27,14 +28,17 @@ class TestProfileReloadNoDeadlock:
         svc._cmd_queue.put_nowait(MonitorCommand(type=MonitorCmdType.RELOAD))
 
         # 创建命令
-        cmd = MonitorCommand(type=MonitorCmdType.PROFILE_RELOAD, data={"profile_name": "test"})
+        cmd = MonitorCommand(
+            type=MonitorCmdType.PROFILE_RELOAD, data={"profile_name": "test"}
+        )
 
         # 模拟 _reload_config_internal
-        with patch.object(svc, '_reload_config_internal'):
-            with patch.object(svc, '_copy_runtime_config', return_value={}):
-                with patch.object(svc, '_push_log'):
+        with patch.object(svc, "_reload_config_internal"):
+            with patch.object(svc, "_copy_runtime_config", return_value={}):
+                with patch.object(svc, "_push_log"):
                     # 调用 _handle_profile_reload，应该不阻塞
                     import time
+
                     start = time.time()
                     svc._handle_profile_reload(cmd)
                     elapsed = time.time() - start
@@ -50,11 +54,13 @@ class TestProfileReloadNoDeadlock:
         svc._monitor_core = MagicMock()
         svc._monitor_core.monitoring = True
 
-        cmd = MonitorCommand(type=MonitorCmdType.PROFILE_RELOAD, data={"profile_name": "test"})
+        cmd = MonitorCommand(
+            type=MonitorCmdType.PROFILE_RELOAD, data={"profile_name": "test"}
+        )
 
-        with patch.object(svc, '_reload_config_internal'):
-            with patch.object(svc, '_copy_runtime_config', return_value={}):
-                with patch.object(svc, '_push_log'):
+        with patch.object(svc, "_reload_config_internal"):
+            with patch.object(svc, "_copy_runtime_config", return_value={}):
+                with patch.object(svc, "_push_log"):
                     svc._handle_profile_reload(cmd)
 
         # 验证 reload 命令已入队
@@ -141,7 +147,7 @@ class TestLoginInProgressNoDoubleClear:
         svc._cmd_queue.put_nowait(cmd)
 
         # 模拟 run_manual_login 超时路径：不消费队列，response_data 保持 None
-        with patch.object(svc, '_copy_runtime_config', return_value={}):
+        with patch.object(svc, "_copy_runtime_config", return_value={}):
             # 直接测试超时分支逻辑
             cmd.response_event.wait(timeout=0.01)
 
@@ -149,8 +155,9 @@ class TestLoginInProgressNoDoubleClear:
             assert cmd.response_data is None
             # 关键验证：超时分支不应清除 _login_in_progress
             # （消费者 finally 才负责清除）
-            assert svc._login_in_progress.is_set(), \
+            assert svc._login_in_progress.is_set(), (
                 "超时分支不应清除 _login_in_progress，应由消费者 finally 统一清除"
+            )
 
 
 class TestStartMonitoringPutNowait:
@@ -162,16 +169,24 @@ class TestStartMonitoringPutNowait:
         svc._cmd_queue = queue.Queue(maxsize=1)
         svc._status_snapshot = MagicMock()
         svc._status_snapshot.monitoring = False
-        svc._runtime_config = {"auth_url": "http://test.com", "username": "test", "monitor": {}}
+        svc._runtime_config = {
+            "auth_url": "http://test.com",
+            "username": "test",
+            "monitor": {},
+        }
         svc._pure_mode = False
         svc._pure_mode_lock = threading.Lock()
 
         # 填满队列
         svc._cmd_queue.put_nowait(MonitorCommand(type=MonitorCmdType.RELOAD))
 
-        with patch('app.services.monitor.ConfigValidator.validate_env_config', return_value=(True, "")):
-            with patch.object(svc, '_copy_runtime_config', return_value={}):
+        with patch(
+            "app.services.monitor.ConfigValidator.validate_env_config",
+            return_value=(True, ""),
+        ):
+            with patch.object(svc, "_copy_runtime_config", return_value={}):
                 import time
+
                 start = time.time()
                 ok, msg = svc.start_monitoring()
                 elapsed = time.time() - start
@@ -215,7 +230,7 @@ class TestNetworkStateSetInConsumer:
             response_event=threading.Event(),
         )
 
-        with patch('app.services.monitor.get_worker') as mock_get_worker:
+        with patch("app.services.monitor.get_worker") as mock_get_worker:
             mock_worker = MagicMock()
             mock_worker.submit.return_value = mock_result
             mock_get_worker.return_value = mock_worker
@@ -224,8 +239,10 @@ class TestNetworkStateSetInConsumer:
             svc._handle_login(cmd)
 
         # 验证 network_state 已由消费者设置为 CONNECTED
-        assert mock_core.network_state == NetworkState.CONNECTED, \
+        assert mock_core.network_state == NetworkState.CONNECTED, (
             "消费者 _handle_login 成功分支应设置 core.network_state = CONNECTED"
+        )
         # 验证 _login_in_progress 已清除
-        assert not svc._login_in_progress.is_set(), \
+        assert not svc._login_in_progress.is_set(), (
             "消费者 finally 应清除 _login_in_progress"
+        )

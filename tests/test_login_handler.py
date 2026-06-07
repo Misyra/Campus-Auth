@@ -65,7 +65,9 @@ class TestAttemptLoginChecks:
     async def test_skip_pause_check(self):
         """skip_pause_check=True 时跳过所有前置检查。"""
         handler = LoginAttemptHandler(_make_config())
-        with patch.object(handler, "_perform_login_with_auth_class", new_callable=AsyncMock) as mock_login:
+        with patch.object(
+            handler, "_perform_login_with_auth_class", new_callable=AsyncMock
+        ) as mock_login:
             mock_login.return_value = (True, "登录成功")
             ok, msg = await handler.attempt_login(skip_pause_check=True)
             assert ok is True
@@ -82,7 +84,9 @@ class TestAttemptLoginChecks:
 
     @pytest.mark.asyncio
     @patch("app.network.decision.check_pause", return_value=(False, ""))
-    @patch("app.network.decision.check_network_status", return_value=(True, "network_ok"))
+    @patch(
+        "app.network.decision.check_network_status", return_value=(True, "network_ok")
+    )
     async def test_network_ok_skips_login(self, mock_net, mock_pause):
         """网络正常时跳过登录。"""
         handler = LoginAttemptHandler(_make_config())
@@ -92,8 +96,14 @@ class TestAttemptLoginChecks:
 
     @pytest.mark.asyncio
     @patch("app.network.decision.check_pause", return_value=(False, ""))
-    @patch("app.network.decision.check_network_status", return_value=(False, "network_down"))
-    @patch("app.network.decision.check_login_prerequisites", return_value=(False, "local_disconnected"))
+    @patch(
+        "app.network.decision.check_network_status",
+        return_value=(False, "network_down"),
+    )
+    @patch(
+        "app.network.decision.check_login_prerequisites",
+        return_value=(False, "local_disconnected"),
+    )
     async def test_local_disconnected_blocks(self, mock_prereq, mock_net, mock_pause):
         """物理网络断开阻止登录。"""
         handler = LoginAttemptHandler(_make_config())
@@ -103,8 +113,14 @@ class TestAttemptLoginChecks:
 
     @pytest.mark.asyncio
     @patch("app.network.decision.check_pause", return_value=(False, ""))
-    @patch("app.network.decision.check_network_status", return_value=(False, "network_down"))
-    @patch("app.network.decision.check_login_prerequisites", return_value=(False, "auth_url_unreachable"))
+    @patch(
+        "app.network.decision.check_network_status",
+        return_value=(False, "network_down"),
+    )
+    @patch(
+        "app.network.decision.check_login_prerequisites",
+        return_value=(False, "auth_url_unreachable"),
+    )
     async def test_auth_url_unreachable_blocks(self, mock_prereq, mock_net, mock_pause):
         """认证地址不可达阻止登录。"""
         config = _make_config(auth_url="http://auth.example.com")

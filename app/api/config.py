@@ -28,6 +28,7 @@ def get_config(
 def get_default_stealth_script() -> dict:
     """获取默认反检测脚本内容。"""
     from app.utils.browser import STEALTH_INIT_SCRIPT
+
     return {"script": STEALTH_INIT_SCRIPT}
 
 

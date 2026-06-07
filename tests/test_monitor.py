@@ -3,6 +3,7 @@
 合并原 test_login.py 和 test_monitor_core.py。
 覆盖 LoginAttemptHandler、SCREENSHOT_URL_PATTERN、NetworkMonitorCore 等。
 """
+
 from __future__ import annotations
 
 import re
@@ -96,7 +97,7 @@ class TestAttemptLogin:
         config = {"pause_login": {"start_hour": 0, "end_hour": 23}}
         handler = LoginAttemptHandler(config=config)
 
-        with patch('app.utils.login.datetime') as mock_dt:
+        with patch("app.utils.login.datetime") as mock_dt:
             mock_dt.datetime.now.return_value.hour = 3
             mock_dt.datetime.now.return_value.minute = 0
 
@@ -113,15 +114,19 @@ class TestAttemptLogin:
         """物理网络未连接时应跳过登录"""
         handler = LoginAttemptHandler(config={})
 
-        with patch(
-            "app.network.decision.check_pause",
-            return_value=(False, ""),
-        ), patch(
-            "app.network.decision.check_network_status",
-            return_value=(False, "network_down"),
-        ), patch(
-            "app.network.decision.check_login_prerequisites",
-            return_value=(False, "local_disconnected"),
+        with (
+            patch(
+                "app.network.decision.check_pause",
+                return_value=(False, ""),
+            ),
+            patch(
+                "app.network.decision.check_network_status",
+                return_value=(False, "network_down"),
+            ),
+            patch(
+                "app.network.decision.check_login_prerequisites",
+                return_value=(False, "local_disconnected"),
+            ),
         ):
             ok, msg = await handler.attempt_login(skip_pause_check=False)
             assert ok is False
@@ -133,15 +138,19 @@ class TestAttemptLogin:
         config = {"auth_url": "http://10.0.0.1"}
         handler = LoginAttemptHandler(config=config)
 
-        with patch(
-            "app.network.decision.check_pause",
-            return_value=(False, ""),
-        ), patch(
-            "app.network.decision.check_network_status",
-            return_value=(False, "network_down"),
-        ), patch(
-            "app.network.decision.check_login_prerequisites",
-            return_value=(False, "auth_url_unreachable"),
+        with (
+            patch(
+                "app.network.decision.check_pause",
+                return_value=(False, ""),
+            ),
+            patch(
+                "app.network.decision.check_network_status",
+                return_value=(False, "network_down"),
+            ),
+            patch(
+                "app.network.decision.check_login_prerequisites",
+                return_value=(False, "auth_url_unreachable"),
+            ),
         ):
             ok, msg = await handler.attempt_login(skip_pause_check=False)
             assert ok is False
@@ -152,12 +161,15 @@ class TestAttemptLogin:
         """网络正常时应跳过登录"""
         handler = LoginAttemptHandler(config={})
 
-        with patch(
-            "app.network.decision.check_pause",
-            return_value=(False, ""),
-        ), patch(
-            "app.network.decision.check_network_status",
-            return_value=(True, "network_ok"),
+        with (
+            patch(
+                "app.network.decision.check_pause",
+                return_value=(False, ""),
+            ),
+            patch(
+                "app.network.decision.check_network_status",
+                return_value=(True, "network_ok"),
+            ),
         ):
             ok, msg = await handler.attempt_login(skip_pause_check=False)
             assert ok is False
@@ -170,15 +182,19 @@ class TestAttemptLogin:
         event.set()
         handler = LoginAttemptHandler(config={}, cancel_event=event)
 
-        with patch(
-            "app.network.decision.check_pause",
-            return_value=(False, ""),
-        ), patch(
-            "app.network.decision.check_network_status",
-            return_value=(False, "network_down"),
-        ), patch(
-            "app.network.decision.check_login_prerequisites",
-            return_value=(True, ""),
+        with (
+            patch(
+                "app.network.decision.check_pause",
+                return_value=(False, ""),
+            ),
+            patch(
+                "app.network.decision.check_network_status",
+                return_value=(False, "network_down"),
+            ),
+            patch(
+                "app.network.decision.check_login_prerequisites",
+                return_value=(True, ""),
+            ),
         ):
             ok, msg = await handler.attempt_login(skip_pause_check=False)
             # 取消事件已设置，最终会返回取消或失败
@@ -191,7 +207,8 @@ class TestAttemptLogin:
 
         # 不检查暂停，但没有活动任务，应返回失败
         with patch.object(
-            handler, "_perform_login_with_auth_class",
+            handler,
+            "_perform_login_with_auth_class",
             return_value=(False, "未找到可执行的活动任务"),
         ):
             ok, msg = await handler.attempt_login(skip_pause_check=True)
@@ -224,7 +241,7 @@ class TestCloseBrowser:
         mock_ctx = AsyncMock()
         handler._browser_ctx = mock_ctx
 
-        with patch('app.workers.playwright_worker.get_worker') as mock_get_worker:
+        with patch("app.workers.playwright_worker.get_worker") as mock_get_worker:
             mock_worker = MagicMock()
             mock_worker.close_browser = AsyncMock()
             mock_get_worker.return_value = mock_worker
@@ -249,7 +266,7 @@ class TestCloseBrowser:
         mock_ctx.__aexit__ = AsyncMock(side_effect=RuntimeError("close error"))
         handler._browser_ctx = mock_ctx
 
-        with patch('app.workers.playwright_worker.get_worker') as mock_get_worker:
+        with patch("app.workers.playwright_worker.get_worker") as mock_get_worker:
             mock_worker = MagicMock()
             mock_worker.close_browser = AsyncMock(side_effect=RuntimeError("fail"))
             mock_get_worker.return_value = mock_worker
@@ -554,4 +571,7 @@ class TestDefaultPingTargets:
     def test_uses_shared_constant(self):
         """DEFAULT_PING_TARGETS 应与 constants.DEFAULT_NETWORK_TARGETS 一致"""
         from app.constants import DEFAULT_NETWORK_TARGETS
-        assert NetworkMonitorCore.DEFAULT_PING_TARGETS == DEFAULT_NETWORK_TARGETS.split(",")
+
+        assert NetworkMonitorCore.DEFAULT_PING_TARGETS == DEFAULT_NETWORK_TARGETS.split(
+            ","
+        )

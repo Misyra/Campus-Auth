@@ -10,7 +10,12 @@ import re
 import subprocess
 
 from app.utils.logging import get_logger
-from app.utils.platform_utils import is_windows, is_macos, is_linux, CREATE_NO_WINDOW_FLAG
+from app.utils.platform_utils import (
+    is_windows,
+    is_macos,
+    is_linux,
+    CREATE_NO_WINDOW_FLAG,
+)
 
 logger = get_logger("network_detect", side="BACKEND")
 

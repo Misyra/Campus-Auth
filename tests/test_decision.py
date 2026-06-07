@@ -103,7 +103,10 @@ class TestCheckLoginPrerequisites:
     @patch("app.network.decision._is_auth_url_reachable", return_value=True)
     def test_all_pass(self, mock_auth, mock_local):
         """物理网络和认证地址都可达。"""
-        config = {"monitor": {"enable_local_check": True, "check_auth_url": True}, "auth_url": "http://example.com"}
+        config = {
+            "monitor": {"enable_local_check": True, "check_auth_url": True},
+            "auth_url": "http://example.com",
+        }
         ok, reason = check_login_prerequisites(config)
         assert ok is True
         assert reason == ""
@@ -120,7 +123,10 @@ class TestCheckLoginPrerequisites:
     @patch("app.network.decision._is_auth_url_reachable", return_value=False)
     def test_auth_url_unreachable(self, mock_auth, mock_local):
         """认证地址不可达。"""
-        config = {"monitor": {"enable_local_check": True, "check_auth_url": True}, "auth_url": "http://unreachable.com"}
+        config = {
+            "monitor": {"enable_local_check": True, "check_auth_url": True},
+            "auth_url": "http://unreachable.com",
+        }
         ok, reason = check_login_prerequisites(config)
         assert ok is False
         assert reason == "auth_url_unreachable"
@@ -129,7 +135,10 @@ class TestCheckLoginPrerequisites:
     @patch("app.network.decision._is_auth_url_reachable", return_value=True)
     def test_local_check_disabled(self, mock_auth, mock_local):
         """禁用物理网络检查时跳过。"""
-        config = {"monitor": {"enable_local_check": False, "check_auth_url": True}, "auth_url": "http://example.com"}
+        config = {
+            "monitor": {"enable_local_check": False, "check_auth_url": True},
+            "auth_url": "http://example.com",
+        }
         ok, reason = check_login_prerequisites(config)
         assert ok is True
         assert reason == ""
@@ -151,7 +160,9 @@ class TestIsNetworkAvailable:
 
     def test_all_disabled_returns_true(self):
         """所有检测禁用时返回 True（视为正常）。"""
-        result = is_network_available(enable_tcp=False, enable_http=False, portal_checks=None)
+        result = is_network_available(
+            enable_tcp=False, enable_http=False, portal_checks=None
+        )
         assert result is True
 
     @patch("app.network.decision.is_network_available_socket", return_value=True)
@@ -212,6 +223,7 @@ class TestIsAuthUrlReachable:
     def test_empty_url_returns_true(self):
         """空 URL 返回 True（无需检测）。"""
         from app.network.decision import _is_auth_url_reachable
+
         assert _is_auth_url_reachable("") is True
         assert _is_auth_url_reachable("", extra_targets=None) is True
 
@@ -219,6 +231,7 @@ class TestIsAuthUrlReachable:
     def test_reachable_url(self, mock_conn):
         """可达的 URL 返回 True。"""
         from app.network.decision import _is_auth_url_reachable
+
         mock_conn.return_value.__enter__ = MagicMock()
         mock_conn.return_value.__exit__ = MagicMock()
         assert _is_auth_url_reachable("http://example.com:8080/login") is True
@@ -227,12 +240,16 @@ class TestIsAuthUrlReachable:
     def test_unreachable_url(self, mock_conn):
         """不可达的 URL 返回 False。"""
         from app.network.decision import _is_auth_url_reachable
-        assert _is_auth_url_reachable("http://unreachable.example.com:8080/login") is False
+
+        assert (
+            _is_auth_url_reachable("http://unreachable.example.com:8080/login") is False
+        )
 
     @patch("socket.create_connection")
     def test_extra_targets_reachable(self, mock_conn):
         """自定义目标可达时返回 True。"""
         from app.network.decision import _is_auth_url_reachable
+
         mock_conn.return_value.__enter__ = MagicMock()
         mock_conn.return_value.__exit__ = MagicMock()
         assert _is_auth_url_reachable("", extra_targets=["10.0.0.1:8080"]) is True
@@ -241,4 +258,8 @@ class TestIsAuthUrlReachable:
     def test_extra_targets_unreachable(self, mock_conn):
         """自定义目标均不可达时返回 False。"""
         from app.network.decision import _is_auth_url_reachable
-        assert _is_auth_url_reachable("http://x.com", extra_targets=["10.0.0.1:8080"]) is False
+
+        assert (
+            _is_auth_url_reachable("http://x.com", extra_targets=["10.0.0.1:8080"])
+            is False
+        )

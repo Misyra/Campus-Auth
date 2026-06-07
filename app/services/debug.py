@@ -64,9 +64,7 @@ class DebugSessionManager:
     async def _close_debug_browser(self) -> None:
         """关闭调试浏览器 — 委托 Worker 处理。"""
         try:
-            await asyncio.to_thread(
-                lambda: get_worker().submit(CMD_DEBUG_STOP)
-            )
+            await asyncio.to_thread(lambda: get_worker().submit(CMD_DEBUG_STOP))
         except Exception:
             api_logger.debug("关闭调试会话 Worker 提交失败", exc_info=True)
         self._session._browser_active = False
@@ -189,9 +187,7 @@ class DebugSessionManager:
                     return {**self._debug_response(), "message": "所有步骤已执行完毕"}
 
             response = await asyncio.to_thread(
-                lambda: get_worker().submit(
-                    CMD_DEBUG_STEP, data={"step_index": idx}
-                )
+                lambda: get_worker().submit(CMD_DEBUG_STEP, data={"step_index": idx})
             )
             if not response.success:
                 async with self._lock:

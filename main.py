@@ -85,7 +85,9 @@ def _cmd_stop() -> None:
     stored_pid, proc_name, _ = read_pid_file()
     if proc_name is not None:
         actual_name = get_process_name(pid)
-        if actual_name is None or normalize_proc_name(actual_name) != normalize_proc_name(proc_name):
+        if actual_name is None or normalize_proc_name(
+            actual_name
+        ) != normalize_proc_name(proc_name):
             print(
                 f"警告: PID 文件记录的进程名 '{proc_name}' 与实际进程 "
                 f"'{actual_name or 'N/A'}' 不匹配，跳过停服操作"
@@ -189,10 +191,14 @@ def _run_login_then_exit(logger) -> None:
         message = ""
         try:
             # 通过 PlaywrightWorker 提交登录任务（替代原来的 asyncio.new_event_loop() 模式）
-            result = get_worker().submit(CMD_LOGIN, data={
-                "config": runtime_config,
-                "skip_pause_check": True,
-            }, timeout=120)
+            result = get_worker().submit(
+                CMD_LOGIN,
+                data={
+                    "config": runtime_config,
+                    "skip_pause_check": True,
+                },
+                timeout=120,
+            )
             success = result.success
             message = result.data if result.success else result.error or "登录失败"
         except Exception as exc:
@@ -248,6 +254,7 @@ def _run_server(
         cleanup_pid()
         try:
             from app.workers.playwright_worker import get_worker
+
             get_worker().stop(timeout=3)
         except Exception:
             pass
@@ -311,7 +318,6 @@ def _run_server(
             )
             tray_icon.start()
             print("系统托盘已启动，双击图标打开控制台")
-
 
         except Exception as e:
             print(f"启动系统托盘失败: {e}")

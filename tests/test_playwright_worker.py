@@ -1,4 +1,5 @@
 """PlaywrightWorker submit alive 预检测试"""
+
 from __future__ import annotations
 
 import threading
@@ -59,8 +60,8 @@ class TestSubmitAliveCheck:
         worker.start = mock_start
 
         # 模拟队列操作
-        with patch.object(worker._cmd_queue, 'put'):
-            with patch.object(worker, '_loop') as mock_loop:
+        with patch.object(worker._cmd_queue, "put"):
+            with patch.object(worker, "_loop") as mock_loop:
                 mock_loop.is_running.return_value = False
                 worker.submit("test_cmd", wait=False)
 
@@ -120,6 +121,7 @@ class TestSubmitAliveCheck:
 
         # 并发调用 submit
         import concurrent.futures
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             futures = []
             for _ in range(5):

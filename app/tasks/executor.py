@@ -116,7 +116,9 @@ class TaskExecutor:
                 return await self._handle_failure(page, None, "网络验证未通过")
 
             total_elapsed = (time.perf_counter() - task_start) * 1000
-            logger.info("任务成功 [{}] 总耗时 {:.0f}ms", self.config.name, total_elapsed)
+            logger.info(
+                "任务成功 [{}] 总耗时 {:.0f}ms", self.config.name, total_elapsed
+            )
             return await self._handle_success(page)
 
         except (TimeoutError, OSError) as e:
@@ -146,7 +148,9 @@ class TaskExecutor:
         if not url:
             url = self.template_vars.get("LOGIN_URL", "").strip()
         if url:
-            logger.info("自动导航到任务URL: {} (超时 {}ms)", url, self.navigation_timeout)
+            logger.info(
+                "自动导航到任务URL: {} (超时 {}ms)", url, self.navigation_timeout
+            )
             await page.goto(url, wait_until="load", timeout=self.navigation_timeout)
             await self._wait_url_stable(page)
 
@@ -228,15 +232,19 @@ class TaskExecutor:
             if remaining_ms < effective_timeout:
                 logger.debug(
                     "[timeout] 步骤 {} 超时从 {}ms 截断到 {}ms",
-                    step.id, effective_timeout, remaining_ms,
+                    step.id,
+                    effective_timeout,
+                    remaining_ms,
                 )
-                overrides['timeout'] = remaining_ms
+                overrides["timeout"] = remaining_ms
             if step.type == StepType.SLEEP and remaining_ms < step.duration:
                 logger.debug(
                     "[timeout] 步骤 {} 时长从 {}ms 截断到 {}ms",
-                    step.id, step.duration, remaining_ms,
+                    step.id,
+                    step.duration,
+                    remaining_ms,
                 )
-                overrides['duration'] = remaining_ms
+                overrides["duration"] = remaining_ms
             if overrides:
                 effective_step = replace(step, **overrides)
 
@@ -311,11 +319,13 @@ class TaskExecutor:
 
             # 解析 portal 检测 URL
             from app.utils.network_helpers import parse_portal_checks
+
             portal_checks = parse_portal_checks(cfg.get("portal_check_urls", ""))
             portal_checks = portal_checks if portal_checks else None
 
             # 解析 TCP 检测目标
             from app.utils.network_helpers import parse_host_port
+
             targets = cfg.get("ping_targets", [])
             if isinstance(targets, str):
                 targets = [t.strip() for t in targets.split(",") if t.strip()]

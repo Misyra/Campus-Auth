@@ -43,7 +43,9 @@ class ShellCommandPolicy:
             audit_hook: 可选的审计钩子，执行前调用 (argv, timeout)
         """
         # 统一转为小写路径比较（Windows 路径不区分大小写）
-        self._allowlist = {p.lower() if sys.platform == "win32" else p for p in allowlist}
+        self._allowlist = {
+            p.lower() if sys.platform == "win32" else p for p in allowlist
+        }
         self._default_timeout = self._clamp_timeout(default_timeout)
         self._audit_hook = audit_hook
 
@@ -87,7 +89,9 @@ class ShellCommandPolicy:
         if not self._is_allowed(executable):
             return False, 0, f"执行路径不在白名单中: {executable}"
 
-        effective_timeout = self._clamp_timeout(timeout if timeout is not None else self._default_timeout)
+        effective_timeout = self._clamp_timeout(
+            timeout if timeout is not None else self._default_timeout
+        )
         return True, effective_timeout, ""
 
     async def run(
@@ -131,7 +135,9 @@ class ShellCommandPolicy:
         )
 
         try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=effective_timeout)
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=effective_timeout
+            )
         except asyncio.TimeoutError:
             proc.kill()
             await proc.wait()

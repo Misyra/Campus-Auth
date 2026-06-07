@@ -3,6 +3,7 @@
 覆盖 StepConfig, TaskConfig, VariableResolver, StepHandler 子类,
 StepExecutorRegistry, TaskValidator, TaskExecutor, TaskManager 等核心类。
 """
+
 from __future__ import annotations
 
 import json
@@ -91,7 +92,7 @@ class TestStepConfig:
             "selctor": "#wrong",  # typo: selctor → selector
             "unwanted": True,
         }
-        with _patch('app.tasks.models.logger') as mock_logger:
+        with _patch("app.tasks.models.logger") as mock_logger:
             step = StepConfig.from_dict(data)
             mock_logger.warning.assert_called_once()
             args, kwargs = mock_logger.warning.call_args
@@ -303,7 +304,7 @@ class TestVariableResolver:
     def test_resolve_unknown_var_logs_warning(self):
         """未知变量应触发 warning 日志"""
         resolver = VariableResolver(self._make_config(), {})
-        with patch('app.tasks.variable_resolver.logger') as mock_logger:
+        with patch("app.tasks.variable_resolver.logger") as mock_logger:
             resolver.resolve("{{UNKNOWN}}")
             mock_logger.warning.assert_called_once()
             assert "UNKNOWN" in str(mock_logger.warning.call_args)
@@ -577,14 +578,16 @@ class TestScreenshotHandler:
         assert ScreenshotHandler().step_type == StepType.SCREENSHOT
 
 
-
 class TestOcrHandler:
     @pytest.mark.asyncio
     async def test_execute_cleanup_on_target_error(self):
         """target.evaluate 异常时 schedule_cleanup 仍应被调用"""
         handler = OcrHandler()
         step = StepConfig(
-            id="s1", type="ocr", selector="#captcha", store_as="code",
+            id="s1",
+            type="ocr",
+            selector="#captcha",
+            store_as="code",
             extra={"target_selector": "#captcha_input"},
         )
         resolver = VariableResolver(TaskConfig(), {})
@@ -605,8 +608,10 @@ class TestOcrHandler:
 
         handler._find_element = mock_find
 
-        with patch.object(handler, "_get_ocr") as mock_get_ocr, \
-             patch.object(handler, "schedule_cleanup") as mock_cleanup:
+        with (
+            patch.object(handler, "_get_ocr") as mock_get_ocr,
+            patch.object(handler, "schedule_cleanup") as mock_cleanup,
+        ):
             mock_ocr = MagicMock()
             mock_ocr.classification.return_value = "abc123"
             mock_get_ocr.return_value = mock_ocr
@@ -692,7 +697,10 @@ class TestTaskValidator:
         assert any("id" in e for e in errors)
 
     def test_step_invalid_id(self):
-        config = {"name": "测试", "steps": [{"id": "123bad", "type": "click", "selector": "#btn"}]}
+        config = {
+            "name": "测试",
+            "steps": [{"id": "123bad", "type": "click", "selector": "#btn"}],
+        }
         ok, errors = TaskValidator.validate(config)
         assert ok is False
         assert any("格式" in e for e in errors)
@@ -798,8 +806,12 @@ class TestTaskManager:
         mgr = TaskManager(tmp_path)
         browser_dir = tmp_path / "browser"
         # 含连字符的文件名应被跳过
-        (browser_dir / "my-task.json").write_text('{"name":"x","steps":[]}', encoding="utf-8")
-        (browser_dir / "valid_task.json").write_text('{"name":"y","steps":[]}', encoding="utf-8")
+        (browser_dir / "my-task.json").write_text(
+            '{"name":"x","steps":[]}', encoding="utf-8"
+        )
+        (browser_dir / "valid_task.json").write_text(
+            '{"name":"y","steps":[]}', encoding="utf-8"
+        )
         tasks = mgr.list_tasks()
         assert len(tasks) == 1
         assert tasks[0]["id"] == "valid_task"
@@ -844,7 +856,9 @@ class TestTaskManager:
 
     def test_delete_task(self, tmp_path):
         mgr = TaskManager(tmp_path)
-        (tmp_path / "browser" / "to_delete.json").write_text('{"name":"x","steps":[]}', encoding="utf-8")
+        (tmp_path / "browser" / "to_delete.json").write_text(
+            '{"name":"x","steps":[]}', encoding="utf-8"
+        )
         ok = mgr.delete_task("to_delete")
         assert ok is True
         assert not (tmp_path / "browser" / "to_delete.json").exists()
@@ -864,7 +878,9 @@ class TestTaskManager:
 
     def test_set_active_task(self, tmp_path):
         mgr = TaskManager(tmp_path)
-        (tmp_path / "browser" / "my_task.json").write_text('{"name":"x","steps":[]}', encoding="utf-8")
+        (tmp_path / "browser" / "my_task.json").write_text(
+            '{"name":"x","steps":[]}', encoding="utf-8"
+        )
         ok = mgr.set_active_task("my_task")
         assert ok is True
         assert mgr.get_active_task() == "my_task"

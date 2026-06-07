@@ -24,11 +24,19 @@ from app.schemas import (
 config_logger = get_logger("backend.config_service", side="BACKEND")
 
 # 运行时配置中不应被方案高级设置覆盖的字段
-_PROTECTED_KEYS = frozenset({
-    "username", "password", "auth_url", "active_task",
-    "carrier", "carrier_custom", "use_global_credentials",
-    "backend_log_level", "frontend_log_level",
-})
+_PROTECTED_KEYS = frozenset(
+    {
+        "username",
+        "password",
+        "auth_url",
+        "active_task",
+        "carrier",
+        "carrier_custom",
+        "use_global_credentials",
+        "backend_log_level",
+        "frontend_log_level",
+    }
+)
 
 
 def _safe_decrypt(ciphertext: str) -> tuple[str, bool]:
@@ -124,14 +132,22 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
     payload_dict["active_task"] = ""
     payload_dict["use_global_credentials"] = True
     payload_dict["network_targets"] = _normalize_targets(global_profile.network_targets)
-    payload_dict["http_targets"] = _normalize_targets(getattr(global_profile, "http_targets", ""))
-    payload_dict["backend_log_level"] = normalize_level(sys_cfg.backend_log_level, "WARNING")
-    payload_dict["frontend_log_level"] = normalize_level(sys_cfg.frontend_log_level, "WARNING")
+    payload_dict["http_targets"] = _normalize_targets(
+        getattr(global_profile, "http_targets", "")
+    )
+    payload_dict["backend_log_level"] = normalize_level(
+        sys_cfg.backend_log_level, "WARNING"
+    )
+    payload_dict["frontend_log_level"] = normalize_level(
+        sys_cfg.frontend_log_level, "WARNING"
+    )
 
     return MonitorConfigPayload(**payload_dict)
 
 
-def load_runtime_config(profile_service: ProfileService) -> tuple[MonitorConfigPayload, bool]:
+def load_runtime_config(
+    profile_service: ProfileService,
+) -> tuple[MonitorConfigPayload, bool]:
     """加载运行时配置 —— 根据活动方案的 use_global_* 标志合并全局与方案独立值。
 
     与 load_ui_config 不同，此函数会按活动方案的覆盖标志来决定使用全局值还是方案独立值，
@@ -204,15 +220,25 @@ def load_runtime_config(profile_service: ProfileService) -> tuple[MonitorConfigP
         }
     )
 
-    payload_dict["network_targets"] = _normalize_targets(payload_dict.get("network_targets", ""))
-    payload_dict["http_targets"] = _normalize_targets(payload_dict.get("http_targets", ""))
-    payload_dict["backend_log_level"] = normalize_level(sys_cfg.backend_log_level, "WARNING")
-    payload_dict["frontend_log_level"] = normalize_level(sys_cfg.frontend_log_level, "WARNING")
+    payload_dict["network_targets"] = _normalize_targets(
+        payload_dict.get("network_targets", "")
+    )
+    payload_dict["http_targets"] = _normalize_targets(
+        payload_dict.get("http_targets", "")
+    )
+    payload_dict["backend_log_level"] = normalize_level(
+        sys_cfg.backend_log_level, "WARNING"
+    )
+    payload_dict["frontend_log_level"] = normalize_level(
+        sys_cfg.frontend_log_level, "WARNING"
+    )
 
     return (MonitorConfigPayload(**payload_dict), any_error)
 
 
-def _build_credential_config(payload: MonitorConfigPayload, system_settings: SystemSettings | None) -> dict[str, Any]:
+def _build_credential_config(
+    payload: MonitorConfigPayload, system_settings: SystemSettings | None
+) -> dict[str, Any]:
     """构建账号密码相关配置。"""
     cfg: dict[str, Any] = {"password": ""}
     cfg["username"] = payload.username.strip()
@@ -220,7 +246,11 @@ def _build_credential_config(payload: MonitorConfigPayload, system_settings: Sys
     if raw_password and not raw_password.startswith("•"):
         cfg["password"] = raw_password
     elif system_settings:
-        pwd, _ = _safe_decrypt(system_settings.password) if system_settings.password else ("", False)
+        pwd, _ = (
+            _safe_decrypt(system_settings.password)
+            if system_settings.password
+            else ("", False)
+        )
         cfg["password"] = pwd
     return cfg
 
@@ -234,7 +264,9 @@ def _build_browser_config(payload: MonitorConfigPayload) -> dict[str, Any]:
         "user_agent": payload.browser_user_agent.strip(),
         "low_resource_mode": payload.browser_low_resource_mode,
         "disable_web_security": payload.browser_disable_web_security,
-        "extra_headers_json": _normalize_headers_json(payload.browser_extra_headers_json),
+        "extra_headers_json": _normalize_headers_json(
+            payload.browser_extra_headers_json
+        ),
         "browser_args": payload.browser_args.strip(),
         "stealth_mode": payload.stealth_mode,
         "stealth_custom_script": payload.stealth_custom_script.strip(),
@@ -248,15 +280,22 @@ def _build_browser_config(payload: MonitorConfigPayload) -> dict[str, Any]:
 def _build_monitor_config(payload: MonitorConfigPayload) -> dict[str, Any]:
     """构建监控检测相关配置。"""
     from app.utils.network_helpers import parse_portal_checks
+
     return {
         "interval": payload.check_interval_seconds,
-        "ping_targets": [item.strip() for item in payload.network_targets.split(",") if item.strip()],
+        "ping_targets": [
+            item.strip() for item in payload.network_targets.split(",") if item.strip()
+        ],
         "enable_tcp_check": payload.enable_tcp_check,
         "enable_http_check": payload.enable_http_check,
         "enable_local_check": payload.enable_local_check,
-        "test_urls": [item.strip() for item in payload.http_targets.split(",") if item.strip()],
+        "test_urls": [
+            item.strip() for item in payload.http_targets.split(",") if item.strip()
+        ],
         "check_auth_url": payload.check_auth_url,
-        "auth_url_targets": [item.strip() for item in payload.auth_url_targets.split(",") if item.strip()],
+        "auth_url_targets": [
+            item.strip() for item in payload.auth_url_targets.split(",") if item.strip()
+        ],
         "portal_check_urls": parse_portal_checks(payload.portal_check_urls),
         "network_check_timeout": payload.network_check_timeout,
     }
@@ -274,7 +313,9 @@ def build_runtime_config(
         payload: 前端传来的合并配置
         system_settings: settings.json 中的系统设置（用于读取重试策略等非 UI 字段）
     """
-    config_logger.debug("构建运行时配置: user={}, url={}", payload.username, payload.auth_url)
+    config_logger.debug(
+        "构建运行时配置: user={}, url={}", payload.username, payload.auth_url
+    )
 
     # 账号密码
     base = _build_credential_config(payload, system_settings)
@@ -307,13 +348,23 @@ def build_runtime_config(
 
     # 日志级别
     base["logging"] = {"level": normalize_level(payload.backend_log_level, "WARNING")}
-    base["frontend_logging"] = {"level": normalize_level(payload.frontend_log_level, "WARNING")}
+    base["frontend_logging"] = {
+        "level": normalize_level(payload.frontend_log_level, "WARNING")
+    }
 
     # 其他字段
     assign_profile_fields(
-        base, payload.model_dump(),
-        ["access_log", "minimize_to_tray", "login_then_exit", "log_retention_days",
-         "custom_variables", "block_proxy", "shell_path"],
+        base,
+        payload.model_dump(),
+        [
+            "access_log",
+            "minimize_to_tray",
+            "login_then_exit",
+            "log_retention_days",
+            "custom_variables",
+            "block_proxy",
+            "shell_path",
+        ],
     )
 
     # 重试策略从系统设置读取
@@ -326,9 +377,9 @@ def build_runtime_config(
     return base
 
 
-
-
-def _update_system_settings(sys_cfg: SystemSettings, payload: MonitorConfigPayload) -> None:
+def _update_system_settings(
+    sys_cfg: SystemSettings, payload: MonitorConfigPayload
+) -> None:
     """更新系统设置字段。"""
     pwd_raw = payload.password.strip()
     old_user = sys_cfg.username
@@ -336,16 +387,28 @@ def _update_system_settings(sys_cfg: SystemSettings, payload: MonitorConfigPaylo
     sys_cfg.password = save_password_field(pwd_raw, sys_cfg.password)
     config_logger.info(
         "保存系统设置: 用户={} (旧={}), 密码={}",
-        sys_cfg.username, old_user,
+        sys_cfg.username,
+        old_user,
         "已更新" if (pwd_raw and not pwd_raw.startswith("•")) else "保留",
     )
 
     # 直接映射的系统字段
     assign_profile_fields(
-        sys_cfg.__dict__, payload.model_dump(),
-        ["access_log", "minimize_to_tray", "auto_open_browser", "login_then_exit",
-         "max_retries", "retry_interval", "log_retention_days", "block_proxy",
-         "network_check_timeout", "app_port", "shell_path"],
+        sys_cfg.__dict__,
+        payload.model_dump(),
+        [
+            "access_log",
+            "minimize_to_tray",
+            "auto_open_browser",
+            "login_then_exit",
+            "max_retries",
+            "retry_interval",
+            "log_retention_days",
+            "block_proxy",
+            "network_check_timeout",
+            "app_port",
+            "shell_path",
+        ],
     )
     # 需要归一化处理的系统字段
     sys_cfg.auth_url = payload.auth_url.strip()
@@ -356,22 +419,44 @@ def _update_system_settings(sys_cfg: SystemSettings, payload: MonitorConfigPaylo
     sys_cfg.proxy = payload.proxy.strip()
 
 
-def _update_default_profile(glob: ProfileSettings, payload: MonitorConfigPayload) -> None:
+def _update_default_profile(
+    glob: ProfileSettings, payload: MonitorConfigPayload
+) -> None:
     """更新 default 方案的高级设置。"""
     # 直接映射的 profile 字段
     assign_profile_fields(
-        glob.__dict__, payload.model_dump(),
-        ["check_interval_seconds", "auto_start", "headless", "browser_timeout",
-         "browser_navigation_timeout", "login_timeout", "browser_low_resource_mode",
-         "browser_disable_web_security", "pause_enabled", "pause_start_hour",
-         "pause_end_hour", "enable_tcp_check", "enable_http_check",
-         "enable_local_check", "check_auth_url", "auth_url_targets",
-         "portal_check_urls", "stealth_mode", "stealth_custom_script",
-         "custom_variables", "browser_viewport_width", "browser_viewport_height"],
+        glob.__dict__,
+        payload.model_dump(),
+        [
+            "check_interval_seconds",
+            "auto_start",
+            "headless",
+            "browser_timeout",
+            "browser_navigation_timeout",
+            "login_timeout",
+            "browser_low_resource_mode",
+            "browser_disable_web_security",
+            "pause_enabled",
+            "pause_start_hour",
+            "pause_end_hour",
+            "enable_tcp_check",
+            "enable_http_check",
+            "enable_local_check",
+            "check_auth_url",
+            "auth_url_targets",
+            "portal_check_urls",
+            "stealth_mode",
+            "stealth_custom_script",
+            "custom_variables",
+            "browser_viewport_width",
+            "browser_viewport_height",
+        ],
     )
     # 需要归一化处理的 profile 字段
     glob.browser_user_agent = payload.browser_user_agent.strip()
-    glob.browser_extra_headers_json = _normalize_headers_json(payload.browser_extra_headers_json)
+    glob.browser_extra_headers_json = _normalize_headers_json(
+        payload.browser_extra_headers_json
+    )
     glob.browser_args = payload.browser_args.strip()
     glob.browser_locale = payload.browser_locale.strip()
     glob.browser_timezone = payload.browser_timezone.strip()

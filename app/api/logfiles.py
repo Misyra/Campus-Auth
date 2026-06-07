@@ -96,13 +96,15 @@ def list_log_files() -> list[LogFileGroup]:
         for f in sorted(item.iterdir()):
             if f.is_file() and _SAFE_FILE_PATTERN.match(f.name):
                 stat = f.stat()
-                files.append(LogFileInfo(
-                    name=f.name,
-                    size=stat.st_size,
-                    modified=datetime.fromtimestamp(stat.st_mtime).strftime(
-                        "%Y-%m-%d %H:%M:%S"
-                    ),
-                ))
+                files.append(
+                    LogFileInfo(
+                        name=f.name,
+                        size=stat.st_size,
+                        modified=datetime.fromtimestamp(stat.st_mtime).strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        ),
+                    )
+                )
         if files:
             groups.append(LogFileGroup(date=item.name, files=files))
 

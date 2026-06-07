@@ -2,6 +2,7 @@
 
 覆盖 MonitorCommand, StatusSnapshot, MonitorService。
 """
+
 from __future__ import annotations
 
 import threading
@@ -21,7 +22,10 @@ def _make_monitor_service() -> MonitorService:
     """创建带有 mock 依赖的 MonitorService 实例。"""
     with (
         patch("app.services.monitor.build_runtime_config", return_value={}),
-        patch("app.services.monitor.load_runtime_config", return_value=(MagicMock(), False)),
+        patch(
+            "app.services.monitor.load_runtime_config",
+            return_value=(MagicMock(), False),
+        ),
         patch("app.services.monitor.load_ui_config") as mock_load_ui,
         patch("app.services.monitor.ProfileService") as mock_ps_cls,
     ):
@@ -152,10 +156,12 @@ class TestListLogs:
         assert len(svc.list_logs(limit=3)) == 3
         assert svc.list_logs(limit=0) == []
 
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
+    @patch("app.services.monitor.build_runtime_config", return_value={})
+    @patch(
+        "app.services.monitor.load_runtime_config", return_value=(MagicMock(), False)
+    )
+    @patch("app.services.monitor.load_ui_config")
+    @patch("app.services.monitor.ProfileService")
     def test_list_logs_returns_all_when_limit_exceeds(
         self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
     ):
@@ -238,12 +244,19 @@ class TestUpdateStatusSnapshot:
 
 
 class TestStartStopMonitoring:
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    @patch('app.services.monitor.ConfigValidator.validate_env_config', return_value=(True, ""))
-    def test_start_monitoring(self, mock_validate, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
+    @patch("app.services.monitor.build_runtime_config", return_value={})
+    @patch(
+        "app.services.monitor.load_runtime_config", return_value=(MagicMock(), False)
+    )
+    @patch("app.services.monitor.load_ui_config")
+    @patch("app.services.monitor.ProfileService")
+    @patch(
+        "app.services.monitor.ConfigValidator.validate_env_config",
+        return_value=(True, ""),
+    )
+    def test_start_monitoring(
+        self, mock_validate, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+    ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.system.pure_mode = False
@@ -300,12 +313,16 @@ class TestHandleStartStop:
 
 
 class TestHandleLogin:
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    @patch('app.services.monitor.get_worker')
-    def test_handle_login_success(self, mock_get_worker, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
+    @patch("app.services.monitor.build_runtime_config", return_value={})
+    @patch(
+        "app.services.monitor.load_runtime_config", return_value=(MagicMock(), False)
+    )
+    @patch("app.services.monitor.load_ui_config")
+    @patch("app.services.monitor.ProfileService")
+    @patch("app.services.monitor.get_worker")
+    def test_handle_login_success(
+        self, mock_get_worker, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+    ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.system.pure_mode = False
@@ -328,12 +345,16 @@ class TestHandleLogin:
         assert cmd.response_data == (True, "登录成功")
         assert event.is_set()
 
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    @patch('app.services.monitor.get_worker')
-    def test_handle_login_failure(self, mock_get_worker, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
+    @patch("app.services.monitor.build_runtime_config", return_value={})
+    @patch(
+        "app.services.monitor.load_runtime_config", return_value=(MagicMock(), False)
+    )
+    @patch("app.services.monitor.load_ui_config")
+    @patch("app.services.monitor.ProfileService")
+    @patch("app.services.monitor.get_worker")
+    def test_handle_login_failure(
+        self, mock_get_worker, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+    ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.system.pure_mode = False
@@ -356,12 +377,16 @@ class TestHandleLogin:
         assert cmd.response_data == (False, "密码错误")
         assert event.is_set()
 
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    @patch('app.services.monitor.get_worker')
-    def test_handle_login_exception(self, mock_get_worker, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
+    @patch("app.services.monitor.build_runtime_config", return_value={})
+    @patch(
+        "app.services.monitor.load_runtime_config", return_value=(MagicMock(), False)
+    )
+    @patch("app.services.monitor.load_ui_config")
+    @patch("app.services.monitor.ProfileService")
+    @patch("app.services.monitor.get_worker")
+    def test_handle_login_exception(
+        self, mock_get_worker, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+    ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.system.pure_mode = False
@@ -403,12 +428,16 @@ class TestRunManualLogin:
 
 
 class TestNetwork:
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    @patch('app.services.monitor.is_network_available', return_value=True)
-    def test_network_ok(self, mock_net, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
+    @patch("app.services.monitor.build_runtime_config", return_value={})
+    @patch(
+        "app.services.monitor.load_runtime_config", return_value=(MagicMock(), False)
+    )
+    @patch("app.services.monitor.load_ui_config")
+    @patch("app.services.monitor.ProfileService")
+    @patch("app.services.monitor.is_network_available", return_value=True)
+    def test_network_ok(
+        self, mock_net, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+    ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.system.pure_mode = False
@@ -421,12 +450,16 @@ class TestNetwork:
         assert ok is True
         assert "正常" in msg
 
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    @patch('app.services.monitor.is_network_available', return_value=False)
-    def test_network_fail(self, mock_net, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
+    @patch("app.services.monitor.build_runtime_config", return_value={})
+    @patch(
+        "app.services.monitor.load_runtime_config", return_value=(MagicMock(), False)
+    )
+    @patch("app.services.monitor.load_ui_config")
+    @patch("app.services.monitor.ProfileService")
+    @patch("app.services.monitor.is_network_available", return_value=False)
+    def test_network_fail(
+        self, mock_net, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+    ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.system.pure_mode = False
@@ -439,12 +472,18 @@ class TestNetwork:
         assert ok is False
         assert "异常" in msg
 
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    @patch('app.services.monitor.is_network_available', side_effect=RuntimeError("timeout"))
-    def test_network_exception(self, mock_net, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
+    @patch("app.services.monitor.build_runtime_config", return_value={})
+    @patch(
+        "app.services.monitor.load_runtime_config", return_value=(MagicMock(), False)
+    )
+    @patch("app.services.monitor.load_ui_config")
+    @patch("app.services.monitor.ProfileService")
+    @patch(
+        "app.services.monitor.is_network_available", side_effect=RuntimeError("timeout")
+    )
+    def test_network_exception(
+        self, mock_net, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+    ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.system.pure_mode = False
@@ -464,11 +503,15 @@ class TestNetwork:
 
 
 class TestTogglePureMode:
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    def test_toggle_pure_mode(self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
+    @patch("app.services.monitor.build_runtime_config", return_value={})
+    @patch(
+        "app.services.monitor.load_runtime_config", return_value=(MagicMock(), False)
+    )
+    @patch("app.services.monitor.load_ui_config")
+    @patch("app.services.monitor.ProfileService")
+    def test_toggle_pure_mode(
+        self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+    ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_data = MagicMock()
@@ -485,11 +528,15 @@ class TestTogglePureMode:
         assert svc.pure_mode is True
         mock_ps.save.assert_called_once()
 
-    @patch('app.services.monitor.build_runtime_config', return_value={})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    def test_pure_mode_read_write_thread_safe(self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
+    @patch("app.services.monitor.build_runtime_config", return_value={})
+    @patch(
+        "app.services.monitor.load_runtime_config", return_value=(MagicMock(), False)
+    )
+    @patch("app.services.monitor.load_ui_config")
+    @patch("app.services.monitor.ProfileService")
+    def test_pure_mode_read_write_thread_safe(
+        self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+    ):
         """读写线程安全：2 线程同时读/写 1000 次，无异常且值始终为 bool。"""
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
@@ -553,11 +600,15 @@ class TestLoginInProgress:
 
 
 class TestGetConfig:
-    @patch('app.services.monitor.build_runtime_config', return_value={"key": "value"})
-    @patch('app.services.monitor.load_runtime_config', return_value=(MagicMock(), False))
-    @patch('app.services.monitor.load_ui_config')
-    @patch('app.services.monitor.ProfileService')
-    def test_get_runtime_config(self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build):
+    @patch("app.services.monitor.build_runtime_config", return_value={"key": "value"})
+    @patch(
+        "app.services.monitor.load_runtime_config", return_value=(MagicMock(), False)
+    )
+    @patch("app.services.monitor.load_ui_config")
+    @patch("app.services.monitor.ProfileService")
+    def test_get_runtime_config(
+        self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+    ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.system.pure_mode = False

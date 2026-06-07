@@ -7,7 +7,11 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 from app.constants import DEFAULT_NETWORK_TARGETS
-from app.network.decision import check_login_prerequisites, check_network_status, check_pause
+from app.network.decision import (
+    check_login_prerequisites,
+    check_network_status,
+    check_pause,
+)
 from app.network.probes import set_block_proxy
 from app.utils import (
     get_runtime_stats,
@@ -30,8 +34,9 @@ class RecoveryResult(str, Enum):
 
 class NetworkState(str, Enum):
     """网络状态枚举，用于区分首次检测和已知状态"""
-    UNKNOWN = "unknown"          # 首次检测，状态未知
-    CONNECTED = "connected"      # 网络正常
+
+    UNKNOWN = "unknown"  # 首次检测，状态未知
+    CONNECTED = "connected"  # 网络正常
     DISCONNECTED = "disconnected"  # 网络异常
 
 
@@ -93,9 +98,12 @@ class NetworkMonitorCore:
         self._last_profile_id: Optional[str] = None
         self._last_gateway_check_time: float = 0
 
-    def log_message(self, message: str, level: str = "INFO", exc_info: bool = False) -> None:
+    def log_message(
+        self, message: str, level: str = "INFO", exc_info: bool = False
+    ) -> None:
         if exc_info:
             import traceback
+
             tb = traceback.format_exc()
             if tb and tb != "NoneType: None\n":
                 message = f"{message}\n{tb}"
@@ -220,7 +228,9 @@ class NetworkMonitorCore:
             runtime, stats = get_runtime_stats(
                 self.start_time, self.network_check_count
             )
-            self.log_message(f"监控已停止 | 运行时长: {runtime} | 检测次数: {self.network_check_count}")
+            self.log_message(
+                f"监控已停止 | 运行时长: {runtime} | 检测次数: {self.network_check_count}"
+            )
 
     def _close_browser_if_needed(self) -> None:
         """关闭浏览器实例（通过 Worker 命令队列）"""
@@ -232,9 +242,7 @@ class NetworkMonitorCore:
                 self.log_message("关闭浏览器实例")
                 result = worker.submit(CMD_BROWSER_CLOSE, timeout=5)
                 if not result.success:
-                    self.log_message(
-                        f"关闭浏览器失败: {result.error}", "WARNING"
-                    )
+                    self.log_message(f"关闭浏览器失败: {result.error}", "WARNING")
         except Exception as e:
             self.log_message(f"关闭浏览器时出错: {e}", "WARNING")
 
@@ -381,7 +389,9 @@ class NetworkMonitorCore:
                 f"登录失败 (第{self.login_attempt_count}/{max_retries}次)",
                 "ERROR",
             )
-            self.status_detail = f"网络异常：登录失败（第{self.login_attempt_count}/{max_retries}次）"
+            self.status_detail = (
+                f"网络异常：登录失败（第{self.login_attempt_count}/{max_retries}次）"
+            )
 
             # 浏览器已由 login.py 在失败时关闭，下次重试 ensure_browser 自动重建
 
@@ -431,7 +441,9 @@ class NetworkMonitorCore:
                 pause_config = self.config.get("pause_login", {})
                 start_hour = pause_config.get("start_hour", 0)
                 end_hour = pause_config.get("end_hour", 6)
-                self.status_detail = f"网络异常：暂停时段（{start_hour}:00-{end_hour}:00）"
+                self.status_detail = (
+                    f"网络异常：暂停时段（{start_hour}:00-{end_hour}:00）"
+                )
                 self.log_message(
                     f"暂停时段 ({start_hour}:00-{end_hour}:00)，跳过检测",
                     "INFO",
@@ -478,13 +490,17 @@ class NetworkMonitorCore:
             next_check = datetime.datetime.now() + datetime.timedelta(seconds=interval)
             # 根据网络状态设置等待文案
             if self.network_state == NetworkState.CONNECTED:
-                self.status_detail = f"网络正常：等待下次检测（{next_check.strftime('%H:%M:%S')}）"
+                self.status_detail = (
+                    f"网络正常：等待下次检测（{next_check.strftime('%H:%M:%S')}）"
+                )
                 self.log_message(
                     f"等待 {interval} 秒至下次检测周期（{next_check.strftime('%H:%M:%S')}）",
                     "DEBUG",
                 )
             else:
-                self.status_detail = f"网络异常：等待下次检测（{next_check.strftime('%H:%M:%S')}）"
+                self.status_detail = (
+                    f"网络异常：等待下次检测（{next_check.strftime('%H:%M:%S')}）"
+                )
                 self.log_message(
                     f"等待 {interval} 秒至下次检测周期（{next_check.strftime('%H:%M:%S')}）",
                     "INFO",
@@ -532,7 +548,10 @@ class NetworkMonitorCore:
 
         try:
             now = time.time()
-            if now - self._last_gateway_check_time < self.GATEWAY_CHECK_COOLDOWN_SECONDS:
+            if (
+                now - self._last_gateway_check_time
+                < self.GATEWAY_CHECK_COOLDOWN_SECONDS
+            ):
                 return
 
             self._last_gateway_check_time = now
@@ -546,7 +565,9 @@ class NetworkMonitorCore:
                 profile = data.profiles.get(matched_id)
                 profile_name = profile.name if profile else matched_id
                 old_profile = data.profiles.get(self._last_profile_id)
-                old_name = old_profile.name if old_profile else (self._last_profile_id or "无")
+                old_name = (
+                    old_profile.name if old_profile else (self._last_profile_id or "无")
+                )
 
                 self.log_message(
                     f"检测到网络环境变化，方案切换: {old_name} -> {profile_name}",
@@ -581,8 +602,11 @@ class NetworkMonitorCore:
             return False, "监控已停止"
 
         from app.utils.crypto import has_decryption_error
+
         if has_decryption_error():
-            self.log_message("密码解密失败，跳过登录（请在设置页面重新输入密码）", "ERROR")
+            self.log_message(
+                "密码解密失败，跳过登录（请在设置页面重新输入密码）", "ERROR"
+            )
             return False, "密码解密失败，请在设置页面重新输入密码"
 
         try:
@@ -610,7 +634,9 @@ class NetworkMonitorCore:
             else:
                 self.log_message(f"登录失败 {message}", "ERROR")
             # 记录登录历史
-            self._record_login_history(success, duration_ms, str(message) if not success else "")
+            self._record_login_history(
+                success, duration_ms, str(message) if not success else ""
+            )
             return success, message
         except ConnectionError as exc:
             self.log_message(f"登录连接错误: {exc}", "WARNING")

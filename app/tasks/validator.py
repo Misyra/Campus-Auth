@@ -68,8 +68,11 @@ class TaskValidator:
 
         # 根据类型验证特定字段
         _SELECTOR_REQUIRED = {
-            StepType.INPUT, StepType.CLICK, StepType.SELECT,
-            StepType.CLICK_SELECT, StepType.WAIT,
+            StepType.INPUT,
+            StepType.CLICK,
+            StepType.SELECT,
+            StepType.CLICK_SELECT,
+            StepType.WAIT,
         }
         if step_type in _SELECTOR_REQUIRED and not step.get("selector"):
             errors.append(f"{prefix} ({step_type}) 需要 'selector' 字段")

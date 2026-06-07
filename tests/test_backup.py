@@ -1,4 +1,5 @@
 """backend/routers/backup.py — 备份验证顺序测试"""
+
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
@@ -21,6 +22,7 @@ class TestBackupValidationOrder:
         mock_monitor_svc = MagicMock()
 
         from app.deps import get_profile_service, get_monitor_service
+
         app.dependency_overrides[get_profile_service] = lambda: mock_profile_svc
         app.dependency_overrides[get_monitor_service] = lambda: mock_monitor_svc
 
@@ -44,6 +46,7 @@ class TestBackupValidationOrder:
         mock_monitor_svc = MagicMock()
 
         from app.deps import get_profile_service, get_monitor_service
+
         app.dependency_overrides[get_profile_service] = lambda: mock_profile_svc
         app.dependency_overrides[get_monitor_service] = lambda: mock_monitor_svc
 

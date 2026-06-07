@@ -53,7 +53,9 @@ def check_network_status(config: dict) -> tuple[bool, str]:
 
     # 所有检测都未启用
     if not enable_tcp and not enable_http and not enable_portal:
-        logger.warning("所有网络检测均未启用（TCP/HTTP/Portal），请在设置中启用至少一种")
+        logger.warning(
+            "所有网络检测均未启用（TCP/HTTP/Portal），请在设置中启用至少一种"
+        )
         return (False, "all_disabled")
 
     test_sites = monitor_config.get("ping_targets", None)
@@ -61,6 +63,7 @@ def check_network_status(config: dict) -> tuple[bool, str]:
         test_sites = [s.strip() for s in test_sites.split(",") if s.strip()]
     if test_sites and isinstance(test_sites[0], str):
         from app.utils.network_helpers import parse_host_port
+
         try:
             test_sites = parse_host_port(test_sites)
         except ValueError:
@@ -147,22 +150,28 @@ def is_network_available(
     pool = _executor
     futures = {}
     if enable_tcp:
-        futures[pool.submit(
-            is_network_available_socket, test_sites=test_sites, timeout=timeout
-        )] = "tcp"
+        futures[
+            pool.submit(
+                is_network_available_socket, test_sites=test_sites, timeout=timeout
+            )
+        ] = "tcp"
     if enable_http:
-        futures[pool.submit(
-            is_network_available_http,
-            test_urls=urls_list,
-            timeout=max(timeout, 2.0),
-            follow_redirects=not enable_tcp,
-        )] = "http"
+        futures[
+            pool.submit(
+                is_network_available_http,
+                test_urls=urls_list,
+                timeout=max(timeout, 2.0),
+                follow_redirects=not enable_tcp,
+            )
+        ] = "http"
     if enable_portal:
-        futures[pool.submit(
-            is_network_available_portal,
-            portal_checks=portal_checks,
-            timeout=max(timeout, 3.0),
-        )] = "portal"
+        futures[
+            pool.submit(
+                is_network_available_portal,
+                portal_checks=portal_checks,
+                timeout=max(timeout, 3.0),
+            )
+        ] = "portal"
 
     for future in as_completed(futures):
         kind = futures[future]
@@ -217,6 +226,7 @@ def _is_auth_url_reachable(
 
     if extra_targets:
         from app.utils.network_helpers import parse_host_port
+
         try:
             targets = parse_host_port(list(extra_targets))
         except ValueError:

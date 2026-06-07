@@ -2,6 +2,7 @@
 
 覆盖临时文件创建、命令构建等核心逻辑。
 """
+
 from __future__ import annotations
 
 import json
@@ -139,7 +140,7 @@ class TestDetectAvailableBinaries:
 
 
 class TestScriptRunnerBuildCmd:
-    @patch('app.workers.script_runner.platform.system', return_value="Windows")
+    @patch("app.workers.script_runner.platform.system", return_value="Windows")
     def test_py_file_default_binary(self, mock_system, tmp_path: Path):
         script = tmp_path / "test.py"
         runner = ScriptRunner(script, binary_path=sys.executable)
@@ -191,7 +192,7 @@ class TestScriptRunnerBuildCmd:
         with pytest.raises(ValueError, match="JSON 脚本格式错误"):
             runner._load_script_content()
 
-    @patch('app.workers.script_runner.platform.system', return_value="Windows")
+    @patch("app.workers.script_runner.platform.system", return_value="Windows")
     def test_cmd_binary_on_windows(self, _mock_sys, tmp_path: Path):
         script = tmp_path / "test.py"
         script.write_text('print("hi")', encoding="utf-8")
@@ -202,10 +203,10 @@ class TestScriptRunnerBuildCmd:
         # CMD 应使用 call 规避路径特殊字符问题
         assert "call" in cmd[2]
 
-    @patch('app.workers.script_runner.platform.system', return_value="Linux")
+    @patch("app.workers.script_runner.platform.system", return_value="Linux")
     def test_bash_binary_on_linux(self, _mock_sys, tmp_path: Path):
         script = tmp_path / "test.sh"
-        script.write_text('echo hi', encoding="utf-8")
+        script.write_text("echo hi", encoding="utf-8")
         runner = ScriptRunner(script, binary_path="/bin/bash")
         cmd = runner._build_cmd()
         assert cmd[0] == "/bin/bash"
@@ -238,7 +239,9 @@ class TestScriptRunnerRunExtra:
     def test_json_content_run_uses_temp_file(self, tmp_path: Path):
         """JSON 内容脚本应通过临时文件执行，避免引号问题。"""
         script = tmp_path / "test.json"
-        script.write_text(json.dumps({"content": 'print("hello from json")'}), encoding="utf-8")
+        script.write_text(
+            json.dumps({"content": 'print("hello from json")'}), encoding="utf-8"
+        )
         runner = ScriptRunner(script, binary_path=sys.executable)
         ok, msg = runner.run()
         assert ok is True
@@ -253,4 +256,3 @@ class TestScriptRunnerRunExtra:
         ok, msg = runner.run()
         assert ok is True
         assert "It works!" in msg
-

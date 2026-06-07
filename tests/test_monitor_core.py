@@ -3,6 +3,7 @@
 验证自动切换方案回调使用 put_nowait 而非阻塞的 put，
 避免监控线程被阻塞。
 """
+
 from __future__ import annotations
 
 import queue
