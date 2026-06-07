@@ -12,9 +12,12 @@ import subprocess
 import sys
 import threading
 
+from app.utils.logging import get_logger
 from app.utils.platform_utils import is_windows, is_macos
 from pathlib import Path
 from typing import Callable
+
+logger = get_logger("playwright_bootstrap", side="BACKEND")
 
 _BOOTSTRAP_LOCK = threading.Lock()
 _BOOTSTRAP_DONE = False
@@ -75,7 +78,7 @@ def _has_chromium() -> bool:
                 / ".local-browsers"
             )
     except Exception:
-        pass
+        logger.debug("查找 playwright 浏览器路径失败", exc_info=True)
 
     for base_dir in _search_locations:
         if not base_dir.is_dir():
@@ -126,7 +129,7 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
                 _BOOTSTRAP_DONE = True
                 return True
         except Exception:
-            pass
+            logger.debug("快速路径 Chromium 检查失败，回退到慢速路径", exc_info=True)
 
         # 慢速路径：chromium 未找到，需要导入 playwright 来安装
         try:

@@ -377,7 +377,7 @@ class SchedulerService:
                     config = self.monitor_service.get_runtime_config()
                     shell_path = config.get("shell_path", "")
                 except Exception:
-                    pass
+                    scheduler_logger.debug("获取运行时 shell_path 失败", exc_info=True)
 
         if not shell_path:
             shell_path = get_default_shell()

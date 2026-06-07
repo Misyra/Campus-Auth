@@ -7,8 +7,7 @@ from app.utils.platform_utils import get_default_ua
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.constants import DEFAULT_NETWORK_TARGETS, DEFAULT_HTTP_TARGETS
-
-VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+from app.utils.logging import VALID_LOG_LEVELS
 _URL_PATTERN = re.compile(r"^https?://")
 
 # ── 浏览器参数默认值（单一来源） ──

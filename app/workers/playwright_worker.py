@@ -28,6 +28,12 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from playwright.async_api import Route
 
+from app.constants import (
+    WORKER_SUBMIT_TIMEOUT,
+    WORKER_READY_TIMEOUT,
+    WORKER_JOIN_TIMEOUT,
+    WORKER_QUEUE_PUT_TIMEOUT,
+)
 from app.utils.logging import get_logger
 from app.utils.platform_utils import CREATE_NO_WINDOW_FLAG
 
@@ -49,7 +55,7 @@ CMD_SHUTDOWN = "shutdown"  # 关闭 Worker
 
 # ── 常量 ──
 
-_DEFAULT_SUBMIT_TIMEOUT = 300  # submit() 默认超时：5 分钟
+_DEFAULT_SUBMIT_TIMEOUT = WORKER_SUBMIT_TIMEOUT  # submit() 默认超时
 
 
 # ── 数据结构 ──
@@ -120,7 +126,7 @@ class PlaywrightWorker:
         )
         self._consumer_thread.start()
         # 等待事件循环就绪（最多 5 秒）
-        self._worker_ready.wait(timeout=5)
+        self._worker_ready.wait(timeout=WORKER_READY_TIMEOUT)
         if not self._worker_ready.is_set():
             logger.warning("PlaywrightWorker 事件循环启动超时")
 
@@ -159,7 +165,7 @@ class PlaywrightWorker:
                 logger.warning("Worker 线程未在 {}s 内退出，强制停止", timeout)
                 if self._loop is not None:
                     self._loop.call_soon_threadsafe(self._loop.stop)
-                self._consumer_thread.join(timeout=3)
+                self._consumer_thread.join(timeout=WORKER_JOIN_TIMEOUT)
 
         # 排干队列中残留的命令，通知等待方 Worker 已关闭
         while True:
@@ -224,7 +230,7 @@ class PlaywrightWorker:
             response_event=threading.Event() if wait else None,
         )
         try:
-            self._cmd_queue.put(cmd, timeout=10)
+            self._cmd_queue.put(cmd, timeout=WORKER_QUEUE_PUT_TIMEOUT)
         except queue.Full:
             return WorkerResponse(success=False, error="命令队列已满，提交超时")
 
@@ -275,7 +281,7 @@ class PlaywrightWorker:
                 try:
                     loop.close()
                 except Exception:
-                    pass
+                    logger.debug("关闭事件循环失败", exc_info=True)
             self._loop = None
             logger.info("PlaywrightWorker 事件循环已关闭")
 
@@ -322,6 +328,18 @@ class PlaywrightWorker:
 
     # ── 命令派发 ──
 
+    # 命令类型 → (handler 方法名, 是否需要 data 参数)
+    _CMD_ROUTES: dict[str, tuple[str, bool]] = {
+        CMD_LOGIN: ("_handle_login", True),
+        CMD_DEBUG_START: ("_handle_debug_start", True),
+        CMD_DEBUG_STEP: ("_handle_debug_step", True),
+        CMD_DEBUG_STOP: ("_handle_debug_stop", False),
+        CMD_BROWSER_ACQUIRE: ("_handle_browser_acquire", True),
+        CMD_BROWSER_RELEASE: ("_handle_browser_release", False),
+        CMD_BROWSER_CLOSE: ("_handle_browser_close", False),
+        CMD_BROWSER_HEALTH_CHECK: ("_handle_health_check", False),
+    }
+
     async def _dispatch(self, cmd: WorkerCommand) -> None:
         """派发 WorkerCommand 到对应的异步处理函数。
 
@@ -329,22 +347,11 @@ class PlaywrightWorker:
         将返回值设为 cmd.response_data 并通知等待方。
         """
         try:
-            if cmd.type == CMD_LOGIN:
-                result = await self._handle_login(cmd.data)
-            elif cmd.type == CMD_DEBUG_START:
-                result = await self._handle_debug_start(cmd.data)
-            elif cmd.type == CMD_DEBUG_STEP:
-                result = await self._handle_debug_step(cmd.data)
-            elif cmd.type == CMD_DEBUG_STOP:
-                result = await self._handle_debug_stop()
-            elif cmd.type == CMD_BROWSER_ACQUIRE:
-                result = await self._handle_browser_acquire(cmd.data)
-            elif cmd.type == CMD_BROWSER_RELEASE:
-                result = await self._handle_browser_release()
-            elif cmd.type == CMD_BROWSER_CLOSE:
-                result = await self._handle_browser_close()
-            elif cmd.type == CMD_BROWSER_HEALTH_CHECK:
-                result = await self._handle_health_check()
+            route = self._CMD_ROUTES.get(cmd.type)
+            if route:
+                handler_name, needs_data = route
+                handler = getattr(self, handler_name)
+                result = await handler(cmd.data) if needs_data else await handler()
             elif cmd.type == CMD_SHUTDOWN:
                 result = WorkerResponse(success=True, data="Worker 正在关闭")
             else:
@@ -595,106 +602,59 @@ class PlaywrightWorker:
 
     # ── 浏览器生命周期管理 ──
 
-    async def _start_browser(self, config: dict) -> None:
-        """启动 Chromium 浏览器。
+    def _build_launch_args(self, browser_settings: dict) -> list[str]:
+        """构建浏览器启动参数。"""
+        args = [
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+            "--memory-pressure-off",
+        ]
+        if browser_settings.get("disable_web_security", False):
+            args.append("--disable-web-security")
+        if browser_settings.get("low_resource_mode", False):
+            args.append("--blink-settings=imagesEnabled=false")
 
-        根据配置创建浏览器实例、上下文和页面。
-        支持 headless/pure_mode/自定义启动参数/低资源模式/反检测脚本。
-        逻辑参考 BrowserContextManager._start_browser() 但直接管理 Worker 内状态。
-        """
-        from playwright.async_api import async_playwright
+        # 用户自定义浏览器参数
+        custom_args = str(browser_settings.get("browser_args", "") or "").strip()
+        if custom_args:
+            for flag in custom_args.splitlines():
+                flag = flag.strip()
+                if flag and flag not in args:
+                    args.append(flag)
+        return args
 
-        browser_settings = config.get("browser_settings", {})
-        headless = browser_settings.get("headless", True)
-        pure_mode = browser_settings.get("pure_mode", False)
+    def _build_context_options(self, browser_settings: dict) -> dict[str, Any]:
+        """构建浏览器上下文选项。"""
+        ctx_opts: dict[str, Any] = {
+            "viewport": {
+                "width": browser_settings.get("viewport_width", 1280),
+                "height": browser_settings.get("viewport_height", 720),
+            },
+            "locale": browser_settings.get("locale", "zh-CN"),
+            "timezone_id": browser_settings.get("timezone_id", "Asia/Shanghai"),
+            "has_touch": False,
+            "color_scheme": "light",
+            "ignore_https_errors": browser_settings.get("ignore_https_errors", True),
+        }
 
-        logger.info(
-            "启动浏览器 (headless={}, pure_mode={})",
-            headless,
-            pure_mode,
-        )
+        # 自定义 User-Agent
+        ua = (browser_settings.get("user_agent") or "").strip()
+        if ua:
+            ctx_opts["user_agent"] = ua
 
-        self._playwright = await async_playwright().start()
+        # 自定义请求头
+        extra_headers = self._get_extra_http_headers(browser_settings)
+        if extra_headers:
+            ctx_opts["extra_http_headers"] = extra_headers
 
-        if pure_mode:
-            # 纯净模式：原始 Chromium，无扩展无自定义参数
-            self._browser = await self._playwright.chromium.launch(
-                headless=headless
-            )
-            self._context = await self._browser.new_context(
-                viewport={
-                    "width": browser_settings.get("viewport_width", 1280),
-                    "height": browser_settings.get("viewport_height", 720),
-                },
-            )
-        else:
-            # 构建浏览器启动参数
-            launch_args = [
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--memory-pressure-off",
-            ]
-            # 禁用 Web 安全（跨域请求不拦截）
-            if browser_settings.get("disable_web_security", False):
-                launch_args.append("--disable-web-security")
+        return ctx_opts
 
-            # 低资源模式：在 blink 层级禁用图片加载
-            if browser_settings.get("low_resource_mode", False):
-                launch_args.append(
-                    "--blink-settings=imagesEnabled=false"
-                )
-
-            # 用户自定义浏览器参数
-            custom_args = str(
-                browser_settings.get("browser_args", "") or ""
-            ).strip()
-            if custom_args:
-                for flag in custom_args.splitlines():
-                    flag = flag.strip()
-                    if flag and flag not in launch_args:
-                        launch_args.append(flag)
-
-            self._browser = await self._playwright.chromium.launch(
-                headless=headless, args=launch_args
-            )
-
-            # 构建上下文选项
-            ctx_opts: dict[str, Any] = {
-                "viewport": {
-                    "width": browser_settings.get("viewport_width", 1280),
-                    "height": browser_settings.get("viewport_height", 720),
-                },
-                "locale": browser_settings.get("locale", "zh-CN"),
-                "timezone_id": browser_settings.get(
-                    "timezone_id", "Asia/Shanghai"
-                ),
-                "has_touch": False,
-                "color_scheme": "light",
-                "ignore_https_errors": browser_settings.get(
-                    "ignore_https_errors", True
-                ),
-            }
-
-            # 自定义 User-Agent
-            ua = (browser_settings.get("user_agent") or "").strip()
-            if ua:
-                ctx_opts["user_agent"] = ua
-
-            # 自定义请求头
-            extra_headers = self._get_extra_http_headers(browser_settings)
-            if extra_headers:
-                ctx_opts["extra_http_headers"] = extra_headers
-
-            self._context = await self._browser.new_context(**ctx_opts)
-
-            # 低资源模式：路由拦截屏蔽图片/字体/媒体
-            if browser_settings.get("low_resource_mode", False):
-                await self._context.route(
-                    "**/*", self._handle_low_resource_request
-                )
-
-        self._page = await self._context.new_page()
+    async def _apply_stealth_and_routes(self, browser_settings: dict) -> None:
+        """应用反检测脚本和路由拦截。"""
+        # 低资源模式：路由拦截屏蔽图片/字体/媒体
+        if browser_settings.get("low_resource_mode", False):
+            await self._context.route("**/*", self._handle_low_resource_request)
 
         # 反检测脚本（默认关闭，需在方案设置中启用 stealth_mode）
         if browser_settings.get("stealth_mode", False):
@@ -704,6 +664,43 @@ class PlaywrightWorker:
             if custom:
                 script += "\n\n// ── 用户自定义反检测脚本 ──\n" + custom
             await self._page.add_init_script(script)
+
+    async def _start_browser(self, config: dict) -> None:
+        """启动 Chromium 浏览器。
+
+        根据配置创建浏览器实例、上下文和页面。
+        支持 headless/pure_mode/自定义启动参数/低资源模式/反检测脚本。
+        """
+        from playwright.async_api import async_playwright
+
+        browser_settings = config.get("browser_settings", {})
+        headless = browser_settings.get("headless", True)
+        pure_mode = browser_settings.get("pure_mode", False)
+
+        logger.info("启动浏览器 (headless={}, pure_mode={})", headless, pure_mode)
+
+        self._playwright = await async_playwright().start()
+
+        if pure_mode:
+            # 纯净模式：原始 Chromium，无扩展无自定义参数
+            self._browser = await self._playwright.chromium.launch(headless=headless)
+            ctx_opts = {"viewport": {"width": browser_settings.get("viewport_width", 1280),
+                                     "height": browser_settings.get("viewport_height", 720)}}
+            self._context = await self._browser.new_context(**ctx_opts)
+        else:
+            launch_args = self._build_launch_args(browser_settings)
+            self._browser = await self._playwright.chromium.launch(
+                headless=headless, args=launch_args
+            )
+            ctx_opts = self._build_context_options(browser_settings)
+            self._context = await self._browser.new_context(**ctx_opts)
+            await self._apply_stealth_and_routes(browser_settings)
+
+        self._page = await self._context.new_page()
+
+        # 纯净模式下也需要应用反检测脚本（如果启用）
+        if pure_mode and browser_settings.get("stealth_mode", False):
+            await self._apply_stealth_and_routes(browser_settings)
 
         logger.info("浏览器启动完成")
 
@@ -723,6 +720,39 @@ class PlaywrightWorker:
         except Exception:
             logger.warning("浏览器健康检查异常", exc_info=True)
             return False
+
+    @staticmethod
+    def _is_normal_close_error(e: Exception) -> bool:
+        """判断是否为正常的连接关闭错误。"""
+        msg = str(e).lower()
+        return "target closed" in msg or "connection closed" in msg
+
+    async def _close_resource(
+        self, resource: Any, name: str, graceful: bool, has_check: str = ""
+    ) -> None:
+        """统一关闭单个浏览器资源。
+
+        参数:
+            resource: 要关闭的资源对象
+            name: 资源名称（用于日志）
+            graceful: 是否优雅模式
+            has_check: 可选的检查方法名（如 "is_closed", "is_connected"）
+        """
+        if resource is None:
+            return
+        try:
+            # 如果指定了检查方法，先检查
+            if has_check:
+                check_fn = getattr(resource, has_check, None)
+                if check_fn and check_fn():
+                    return
+            await resource.close()
+        except Exception as e:
+            if graceful:
+                if self._is_normal_close_error(e):
+                    logger.warning("关闭 {} 时连接已断开（正常）: {}", name, e)
+                else:
+                    logger.error("关闭 {} 异常: {}", name, e)
 
     async def _cleanup_browser(self, graceful: bool = True) -> None:
         """统一的浏览器资源清理方法。
@@ -745,34 +775,15 @@ class PlaywrightWorker:
                 if not self._debug_page.is_closed():
                     await self._debug_page.close()
             except Exception:
-                pass
+                logger.debug("关闭调试页面失败", exc_info=True)
             self._debug_page = None
 
         # 关闭主页面
-        if self._page is not None:
-            try:
-                if not self._page.is_closed():
-                    await self._page.close()
-            except Exception as e:
-                if graceful:
-                    err_msg = str(e).lower()
-                    if "target closed" in err_msg or "connection closed" in err_msg:
-                        logger.warning("关闭页面时连接已断开（正常）: {}", e)
-                    else:
-                        logger.error("关闭页面异常: {}", e)
+        await self._close_resource(self._page, "页面", graceful, "is_closed")
         self._page = None
 
         # 关闭上下文
-        if self._context is not None:
-            try:
-                await self._context.close()
-            except Exception as e:
-                if graceful:
-                    err_msg = str(e).lower()
-                    if "target closed" in err_msg or "connection closed" in err_msg:
-                        logger.warning("关闭上下文时连接已断开（正常）: {}", e)
-                    else:
-                        logger.error("关闭上下文异常: {}", e)
+        await self._close_resource(self._context, "上下文", graceful)
         self._context = None
 
         # 关闭浏览器
@@ -788,12 +799,7 @@ class PlaywrightWorker:
         self._browser = None
 
         # 停止 Playwright 服务
-        if self._playwright is not None:
-            try:
-                await self._playwright.stop()
-            except Exception as e:
-                if graceful:
-                    logger.error("停止 Playwright 失败: {}", e)
+        await self._close_resource(self._playwright, "Playwright", graceful)
         self._playwright = None
 
         logger.info("浏览器资源已清理" if graceful else "强制清理完成")
@@ -885,7 +891,7 @@ def get_worker() -> PlaywrightWorker:
                     try:
                         _worker.stop()
                     except Exception:
-                        pass
+                        logger.debug("停止旧 Worker 失败", exc_info=True)
                 _worker = PlaywrightWorker()
                 _worker.start()
     return _worker
@@ -967,7 +973,7 @@ def _cleanup_windows() -> None:
                     if "ms-playwright" in cmdline:
                         pids_to_kill.append(pid)
                 except Exception:
-                    pass
+                    logger.debug("获取进程 {} 命令行失败，跳过", pid, exc_info=True)
 
         if not pids_to_kill:
             logger.debug("未发现孤儿 Playwright Chromium 进程")

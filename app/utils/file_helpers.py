@@ -1,5 +1,7 @@
 import os
 import tempfile
+from datetime import datetime
+from pathlib import Path
 
 from .logging import get_logger
 
@@ -53,3 +55,38 @@ def atomic_write(
         except OSError:
             pass
         raise
+
+
+async def save_screenshot(
+    page,
+    output_dir: Path | str,
+    prefix: str = "screenshot",
+    task_id: str = "",
+    step_id: str = "",
+) -> str | None:
+    """统一的页面截图保存函数。
+
+    参数:
+        page: Playwright Page 对象
+        output_dir: 截图输出目录
+        prefix: 文件名前缀
+        task_id: 任务 ID（可选）
+        step_id: 步骤 ID（可选）
+
+    返回:
+        截图文件的本地路径，失败时返回 None
+    """
+    try:
+        out_dir = Path(output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        parts = [p for p in (prefix, task_id, step_id, stamp) if p]
+        filename = "_".join(parts) + ".png"
+        local_path = str(out_dir / filename)
+
+        await page.screenshot(path=local_path, full_page=True)
+        return local_path
+    except Exception as e:
+        logger.warning("截图保存失败: {}", e)
+        return None

@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.services.monitor import MonitorCommand, MonitorService
+from app.services.monitor import MonitorCmdType, MonitorCommand, MonitorService
 
 
 class TestOnProfileSwitchUsesPutNowait:
@@ -30,7 +30,7 @@ class TestOnProfileSwitchUsesPutNowait:
         mock_queue.put_nowait.assert_called_once()
         cmd = mock_queue.put_nowait.call_args[0][0]
         assert isinstance(cmd, MonitorCommand)
-        assert cmd.type == "profile_reload"
+        assert cmd.type == MonitorCmdType.PROFILE_RELOAD
         assert cmd.data["profile_name"] == "TestProfile"
 
         # 确保未调用阻塞的 put

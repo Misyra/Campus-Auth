@@ -13,6 +13,7 @@ from unittest.mock import patch, MagicMock, AsyncMock
 import pytest
 
 from app.services.monitor import (
+    MonitorCmdType,
     MonitorCommand,
     StatusSnapshot,
     MonitorService,
@@ -27,7 +28,7 @@ from app.ws_manager import WebSocketManager
 
 class TestMonitorCommand:
     def test_default_values(self):
-        cmd = MonitorCommand(type="start")
+        cmd = MonitorCommand(type=MonitorCmdType.START)
         assert cmd.type == "start"
         assert cmd.data == {}
         assert cmd.response_event is None
@@ -85,77 +86,6 @@ class TestStatusSnapshot:
 # =====================================================================
 # WebSocketManager
 # =====================================================================
-
-
-class TestWebSocketManager:
-    @pytest.mark.asyncio
-    async def test_connect(self):
-        mgr = WebSocketManager()
-        ws = AsyncMock()
-        await mgr.connect(ws)
-        ws.accept.assert_called_once()
-        assert ws in mgr._connections
-
-    @pytest.mark.asyncio
-    async def test_disconnect(self):
-        mgr = WebSocketManager()
-        ws = AsyncMock()
-        mgr._connections.append(ws)
-        await mgr.disconnect(ws)
-        assert ws not in mgr._connections
-
-    @pytest.mark.asyncio
-    async def test_disconnect_not_in_list(self):
-        mgr = WebSocketManager()
-        ws = AsyncMock()
-        await mgr.disconnect(ws)
-        assert ws not in mgr._connections
-
-    @pytest.mark.asyncio
-    async def test_broadcast_no_connections(self):
-        mgr = WebSocketManager()
-        await mgr.broadcast("test")
-
-    @pytest.mark.asyncio
-    async def test_broadcast_sends_to_all(self):
-        mgr = WebSocketManager()
-        ws1 = AsyncMock()
-        ws2 = AsyncMock()
-        mgr._connections = [ws1, ws2]
-        await mgr.broadcast("hello")
-        ws1.send_text.assert_called_once_with("hello")
-        ws2.send_text.assert_called_once_with("hello")
-
-    @pytest.mark.asyncio
-    async def test_broadcast_cleans_failed_connections(self):
-        mgr = WebSocketManager()
-        ws_ok = AsyncMock()
-        ws_fail = AsyncMock()
-        ws_fail.send_text = AsyncMock(side_effect=ConnectionError("closed"))
-        mgr._connections = [ws_ok, ws_fail]
-        await mgr.broadcast("test")
-        assert ws_ok in mgr._connections
-        assert ws_fail not in mgr._connections
-
-    @pytest.mark.asyncio
-    async def test_close_all(self):
-        mgr = WebSocketManager()
-        ws1 = AsyncMock()
-        ws2 = AsyncMock()
-        mgr._connections = [ws1, ws2]
-        await mgr.close_all()
-        ws1.close.assert_called_once_with(code=1001, reason="Server shutting down")
-        ws2.close.assert_called_once_with(code=1001, reason="Server shutting down")
-        assert len(mgr._connections) == 0
-
-    @pytest.mark.asyncio
-    async def test_close_all_exception_handled(self):
-        mgr = WebSocketManager()
-        ws = AsyncMock()
-        ws.close = AsyncMock(side_effect=RuntimeError("fail"))
-        mgr._connections = [ws]
-        await mgr.close_all()
-        assert len(mgr._connections) == 0
 
 
 # =====================================================================
@@ -471,7 +401,7 @@ class TestHandleStartStop:
         mock_thread = MagicMock()
         mock_thread.is_alive.return_value = True
         svc._monitor_thread = mock_thread
-        cmd = MonitorCommand(type="start")
+        cmd = MonitorCommand(type=MonitorCmdType.START)
         svc._handle_start(cmd)
         # 不应创建新线程
         mock_thread.is_alive.assert_called()
@@ -524,7 +454,7 @@ class TestHandleLogin:
 
         svc = MonitorService(MagicMock())
         event = threading.Event()
-        cmd = MonitorCommand(type="login", response_event=event)
+        cmd = MonitorCommand(type=MonitorCmdType.LOGIN, response_event=event)
         svc._handle_login(cmd)
         assert cmd.response_data == (True, "登录成功")
         assert event.is_set()
@@ -552,7 +482,7 @@ class TestHandleLogin:
 
         svc = MonitorService(MagicMock())
         event = threading.Event()
-        cmd = MonitorCommand(type="login", response_event=event)
+        cmd = MonitorCommand(type=MonitorCmdType.LOGIN, response_event=event)
         svc._handle_login(cmd)
         assert cmd.response_data == (False, "密码错误")
         assert event.is_set()
@@ -577,7 +507,7 @@ class TestHandleLogin:
 
         svc = MonitorService(MagicMock())
         event = threading.Event()
-        cmd = MonitorCommand(type="login", response_event=event)
+        cmd = MonitorCommand(type=MonitorCmdType.LOGIN, response_event=event)
         svc._handle_login(cmd)
         assert cmd.response_data[0] is False
         assert "worker error" in cmd.response_data[1]

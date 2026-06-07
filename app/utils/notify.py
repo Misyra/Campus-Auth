@@ -78,7 +78,7 @@ $toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds({duration_sec})
             logger.debug("Windows 通知已发送: {}", title)
             return True
     except Exception:
-        pass
+        logger.debug("PowerShell 通知发送失败", exc_info=True)
 
     # PowerShell 方案失败时回退到 msg（仅 Windows Pro/Enterprise 可用）
     try:
@@ -94,7 +94,7 @@ $toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds({duration_sec})
     except FileNotFoundError:
         logger.debug("msg 命令不可用（仅 Windows Pro/Enterprise 支持）")
     except Exception:
-        pass
+        logger.debug("msg 通知发送失败", exc_info=True)
 
     return False
 

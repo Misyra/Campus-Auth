@@ -537,25 +537,26 @@ class ScreenshotHandler(StepHandler):
     async def execute(
         self, page, step: StepConfig, resolver: VariableResolver
     ) -> tuple[bool, str]:
+        from app.utils.file_helpers import save_screenshot
+
         params = self.resolve_params(step, resolver)
         path = params.get("path", "")
 
         date_dir = PROJECT_ROOT / "debug" / datetime.now().strftime("%Y-%m-%d")
-        date_dir.mkdir(parents=True, exist_ok=True)
 
         if not path:
             task_id = resolver.config.task_id or "unknown"
             step_id = step.id or "s0"
-            stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-            filename = f"{task_id}_{step_id}_{stamp}.png"
-            path = str(date_dir / filename)
+            result = await save_screenshot(page, date_dir, task_id=task_id, step_id=step_id)
         else:
+            # 用户指定了文件名，使用自定义路径
             safe_name = Path(path).name
-            path = str(date_dir / safe_name)
+            result = await save_screenshot(page, date_dir, prefix=safe_name.rsplit(".", 1)[0])
 
-        logger.debug("[screenshot] path={}", path)
-        await page.screenshot(path=path, full_page=True)
-        return True, ""
+        if result:
+            logger.debug("[screenshot] path={}", result)
+            return True, ""
+        return False, "截图失败"
 
 
 class SleepHandler(StepHandler):

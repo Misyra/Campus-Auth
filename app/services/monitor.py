@@ -11,11 +11,17 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from typing import TYPE_CHECKING
 
+from app.constants import (
+    MONITOR_THREAD_JOIN_TIMEOUT,
+    MONITOR_STOP_TIMEOUT,
+    MONITOR_RELOAD_TIMEOUT,
+)
 from app.core.monitor_core import NetworkMonitorCore, NetworkState
 
 if TYPE_CHECKING:
@@ -41,11 +47,23 @@ WS_DRAIN_INTERVAL_SECONDS = 0.05
 # ── Actor 模型：类型化命令派发 ──
 
 
+class MonitorCmdType(StrEnum):
+    """监控服务命令类型。"""
+
+    START = "start"
+    STOP = "stop"
+    LOGIN = "login"
+    RELOAD = "reload"
+    PROFILE_SWITCH = "profile_switch"
+    PROFILE_RELOAD = "profile_reload"
+    SHUTDOWN = "shutdown"
+
+
 @dataclass
 class MonitorCommand:
     """从 API 线程派发到队列消费者线程的命令。"""
 
-    type: str  # "start" | "stop" | "login" | "reload" | "profile_switch" | "shutdown"
+    type: MonitorCmdType
     data: dict = field(default_factory=dict)
     response_event: threading.Event | None = None  # 调用方在此事件上等待
     response_data: Any = None  # 由消费者设置
@@ -128,6 +146,16 @@ class MonitorService:
 
     # ── 队列消费者（在专用守护线程中运行）──
 
+    # 命令类型 → handler 方法名
+    _CMD_ROUTES: dict[MonitorCmdType, str] = {
+        MonitorCmdType.START: "_handle_start",
+        MonitorCmdType.STOP: "_handle_stop",
+        MonitorCmdType.LOGIN: "_handle_login",
+        MonitorCmdType.RELOAD: "_handle_reload",
+        MonitorCmdType.PROFILE_SWITCH: "_handle_profile_switch",
+        MonitorCmdType.PROFILE_RELOAD: "_handle_profile_reload",
+    }
+
     def _queue_consumer(self) -> None:
         """专用线程：从 _cmd_queue 拉取命令并执行。
 
@@ -141,23 +169,16 @@ class MonitorService:
                 continue
 
             try:
-                if cmd.type == "start":
-                    self._handle_start(cmd)
-                elif cmd.type == "stop":
-                    self._handle_stop()
-                    if cmd.response_event:
-                        cmd.response_event.set()
-                elif cmd.type == "login":
-                    self._handle_login(cmd)
-                elif cmd.type == "reload":
-                    self._handle_reload(cmd)
-                elif cmd.type == "profile_switch":
-                    self._handle_profile_switch(cmd)
-                elif cmd.type == "profile_reload":
-                    self._handle_profile_reload(cmd)
-                elif cmd.type == "shutdown":
+                if cmd.type == MonitorCmdType.SHUTDOWN:
                     self._handle_stop()
                     break
+
+                handler_name = self._CMD_ROUTES.get(cmd.type)
+                if handler_name:
+                    getattr(self, handler_name)(cmd)
+                    # "stop" 命令需要手动通知响应
+                    if cmd.type == MonitorCmdType.STOP and cmd.response_event:
+                        cmd.response_event.set()
             except Exception:
                 service_logger.exception("队列命令执行失败: {}", cmd.type)
             finally:
@@ -181,18 +202,26 @@ class MonitorService:
         self._monitor_thread = thread
         thread.start()
 
-    def _handle_start(self, cmd: MonitorCommand) -> None:
-        """启动监控（仅在消费者线程中调用）。"""
-        # 二次检查：防止重复启动
-        if self._monitor_thread and self._monitor_thread.is_alive():
-            self._push_log("监控线程已在运行，忽略重复启动", level="WARNING", source="backend.monitor_service")
-            return
+    def _prepare_command_config(self, cmd: MonitorCommand) -> tuple[dict, bool]:
+        """从命令数据中提取配置和 pure_mode，统一预处理。
+
+        返回: (config_dict, pure_mode)
+        """
         config = cmd.data.get("config", self._runtime_config)
         pure_mode = cmd.data.get("pure_mode", self.pure_mode)
         if config is self._runtime_config:
             config = {**self._runtime_config, "browser_settings": dict(self._runtime_config.get("browser_settings", {}))}
         if pure_mode:
             config.setdefault("browser_settings", {})["pure_mode"] = True
+        return config, pure_mode
+
+    def _handle_start(self, cmd: MonitorCommand) -> None:
+        """启动监控（仅在消费者线程中调用）。"""
+        # 二次检查：防止重复启动
+        if self._monitor_thread and self._monitor_thread.is_alive():
+            self._push_log("监控线程已在运行，忽略重复启动", level="WARNING", source="backend.monitor_service")
+            return
+        config, pure_mode = self._prepare_command_config(cmd)
         self._start_monitor_core(config, pure_mode)
 
         self._push_log("监控线程已启动", level="INFO", source="backend.monitor_service")
@@ -211,9 +240,9 @@ class MonitorService:
             core.stop_monitoring()
 
         if thread:
-            thread.join(timeout=8)
+            thread.join(timeout=MONITOR_THREAD_JOIN_TIMEOUT)
             if thread.is_alive():
-                self._thread_done.wait(timeout=10)
+                self._thread_done.wait(timeout=MONITOR_STOP_TIMEOUT)
             if thread.is_alive():
                 service_logger.warning("监控线程在超时后仍未结束")
 
@@ -226,13 +255,8 @@ class MonitorService:
 
     def _handle_login(self, cmd: MonitorCommand) -> None:
         """执行一次性登录尝试（仅在消费者线程中调用）。"""
-        config = cmd.data.get("config", self._runtime_config)
-        pure_mode = cmd.data.get("pure_mode", self.pure_mode)
+        config, pure_mode = self._prepare_command_config(cmd)
         skip_pause_check = cmd.data.get("skip_pause_check", False)
-        if config is self._runtime_config:
-            config = {**self._runtime_config, "browser_settings": dict(self._runtime_config.get("browser_settings", {}))}
-        if pure_mode:
-            config.setdefault("browser_settings", {})["pure_mode"] = True
 
         # 通过 Worker 派发登录，替代临时 NetworkMonitorCore 实例
         login_timeout = getattr(self._ui_config, "login_timeout", 120)
@@ -272,24 +296,11 @@ class MonitorService:
             # 记录登录历史
             if self._login_history is not None:
                 try:
-                    profile_name = ""
-                    active = self._profile_service.get_active_profile()
-                    if active:
-                        profile_name = getattr(active, "name", "")
-                    # 获取活动任务名称
-                    task_name = ""
-                    try:
-                        task_id = self._task_manager.get_active_task()
-                        task = self._task_manager.load_task(task_id)
-                        if task:
-                            task_name = getattr(task, "name", task_id)
-                    except Exception:
-                        pass
-                    self._login_history.add(
+                    self._login_history.record(
                         success=success,
                         duration_ms=duration_ms,
-                        profile_name=profile_name,
-                        task_name=task_name,
+                        profile_service=self._profile_service,
+                        task_manager=self._task_manager,
                         error=error_msg,
                     )
                 except Exception:
@@ -333,7 +344,7 @@ class MonitorService:
             try:
                 self._cmd_queue.put_nowait(
                     MonitorCommand(
-                        type="reload",
+                        type=MonitorCmdType.RELOAD,
                         data={"config": self._copy_runtime_config()},
                     )
                 )
@@ -538,7 +549,7 @@ class MonitorService:
             try:
                 self._cmd_queue.put_nowait(
                     MonitorCommand(
-                        type="reload",
+                        type=MonitorCmdType.RELOAD,
                         data={"config": self._copy_runtime_config()},
                     )
                 )
@@ -563,7 +574,7 @@ class MonitorService:
             try:
                 self._cmd_queue.put_nowait(
                     MonitorCommand(
-                        type="profile_switch",
+                        type=MonitorCmdType.PROFILE_SWITCH,
                         data={
                             "profile": profile_name,
                             "config": self._copy_runtime_config(),
@@ -593,7 +604,7 @@ class MonitorService:
         try:
             self._cmd_queue.put_nowait(
                 MonitorCommand(
-                    type="start", data={"config": config, "pure_mode": self.pure_mode}
+                    type=MonitorCmdType.START, data={"config": config, "pure_mode": self.pure_mode}
                 )
             )
         except queue.Full:
@@ -607,7 +618,7 @@ class MonitorService:
         try:
             self._cmd_queue.put_nowait(
                 MonitorCommand(
-                    type="profile_reload",
+                    type=MonitorCmdType.PROFILE_RELOAD,
                     data={"profile_name": profile_name},
                 )
             )
@@ -623,7 +634,7 @@ class MonitorService:
             return False, "监控未运行"
 
         try:
-            self._cmd_queue.put_nowait(MonitorCommand(type="stop"))
+            self._cmd_queue.put_nowait(MonitorCommand(type=MonitorCmdType.STOP))
         except queue.Full:
             service_logger.warning("命令队列已满，跳过 stop 命令入队")
             return False, "队列已满"
@@ -633,9 +644,9 @@ class MonitorService:
         """完全关闭 MonitorService：停止监控 + 终止消费者线程。"""
         # 通过队列发送 stop 命令（消费者执行 _handle_stop 后设置 response_event）
         try:
-            cmd = MonitorCommand(type="stop", response_event=threading.Event())
+            cmd = MonitorCommand(type=MonitorCmdType.STOP, response_event=threading.Event())
             self._cmd_queue.put(cmd, timeout=3)
-            cmd.response_event.wait(timeout=15)
+            cmd.response_event.wait(timeout=MONITOR_RELOAD_TIMEOUT)
         except queue.Full:
             # 队列满时直接调用 _handle_stop() 作为回退
             if self._is_monitoring:
@@ -646,7 +657,7 @@ class MonitorService:
 
         # 发送 shutdown 命令确保消费者能立即处理退出
         try:
-            self._cmd_queue.put_nowait(MonitorCommand(type="shutdown"))
+            self._cmd_queue.put_nowait(MonitorCommand(type=MonitorCmdType.SHUTDOWN))
         except queue.Full:
             pass
 
@@ -686,7 +697,7 @@ class MonitorService:
             runtime_config = self._copy_runtime_config()
 
             cmd = MonitorCommand(
-                type="login",
+                type=MonitorCmdType.LOGIN,
                 data={
                     "config": runtime_config,
                     "pure_mode": self.pure_mode,

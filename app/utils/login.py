@@ -294,6 +294,6 @@ class LoginAttemptHandler:
                 try:
                     await self._browser_ctx.__aexit__(None, None, None)
                 except Exception:
-                    pass
+                    self.logger.warning("浏览器上下文关闭异常", exc_info=True)
                 self._browser_ctx = None
                 self.logger.info("浏览器已关闭")
