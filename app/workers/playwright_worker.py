@@ -658,8 +658,8 @@ class PlaywrightWorker:
         if browser_settings.get("stealth_mode", False):
             from app.utils.browser import STEALTH_INIT_SCRIPT
             custom = browser_settings.get("stealth_custom_script", "").strip()
-            # 有自定义脚本则完全使用，否则使用默认脚本
-            script = custom if custom else STEALTH_INIT_SCRIPT
+            # 有自定义脚本则使用自定义，否则使用默认脚本
+            script = custom or STEALTH_INIT_SCRIPT
             await self._page.add_init_script(script)
 
     async def _start_browser(self, config: dict) -> None:
