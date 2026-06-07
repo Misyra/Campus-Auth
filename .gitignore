@@ -1,5 +1,29 @@
 # 忽略 debug 目录
 debug/
+# 测试覆盖率
+.coverage
+
+# 优化计划（临时文档）
+*OPTIMIZATION_PLAN*.md
+
+# 测试覆盖率
+.coverage
+
+# 优化计划（临时文档）
+*OPTIMIZATION_PLAN*.md
+
+# 测试覆盖率
+.coverage
+
+# 优化计划（临时文档）
+*OPTIMIZATION_PLAN*.md
+
+# 测试覆盖率
+.coverage
+
+# 优化计划（临时文档）
+*OPTIMIZATION_PLAN*.md
+
 # Python-generated files
 __pycache__/
 *.py[oc]
