@@ -70,7 +70,7 @@ async def lifespan(app_instance):
     services = ServiceContainer(PROJECT_ROOT)
     app_instance.state.services = services
 
-    # 配置迁移和诊断
+    # 配置诊断（__init__ 已加载，不重复 reload）
     settings_path = PROJECT_ROOT / "settings.json"
     startup_logger.info(
         "settings.json 路径: {} (存在={}, 大小={})",
@@ -78,20 +78,16 @@ async def lifespan(app_instance):
         settings_path.exists(),
         settings_path.stat().st_size if settings_path.exists() else 0,
     )
-    try:
-        services.monitor_service.reload_config()
-        config = services.monitor_service.get_config()
-        startup_logger.info(
-            "当前配置: 用户={}, 密码={}, 认证={}, 运营商={}, 间隔={}min, 自动监控={}",
-            f"'{config.username}'" if config.username else "(空)",
-            "已设置" if config.password else "(空)",
-            f"'{config.auth_url}'" if config.auth_url else "(空)",
-            config.carrier,
-            config.check_interval_seconds,
-            config.auto_start,
-        )
-    except Exception as exc:
-        startup_logger.error("配置迁移失败: {}", exc)
+    config = services.monitor_service.get_config()
+    startup_logger.info(
+        "当前配置: 用户={}, 密码={}, 认证={}, 运营商={}, 间隔={}min, 自动监控={}",
+        f"'{config.username}'" if config.username else "(空)",
+        "已设置" if config.password else "(空)",
+        f"'{config.auth_url}'" if config.auth_url else "(空)",
+        config.carrier,
+        config.check_interval_seconds,
+        config.auto_start,
+    )
 
     # 检查 cryptography 库是否可用
     try:
