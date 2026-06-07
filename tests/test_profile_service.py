@@ -1,4 +1,5 @@
 """ProfileService TOCTOU 修复测试"""
+
 from __future__ import annotations
 
 from pathlib import Path

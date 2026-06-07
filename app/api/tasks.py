@@ -66,9 +66,7 @@ def set_active_task(
     task_svc: TaskService = Depends(get_task_service),
 ) -> ActionResponse:
     ok, message = task_svc.set_active_task(task_id)
-    api_logger.info(
-        "设置活动任务 {} -> success={}, message={}", task_id, ok, message
-    )
+    api_logger.info("设置活动任务 {} -> success={}, message={}", task_id, ok, message)
     return ActionResponse(success=ok, message=message)
 
 

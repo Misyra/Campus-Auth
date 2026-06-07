@@ -4,6 +4,7 @@
 test_playwright_bootstrap.py、test_playwright_worker.py。
 覆盖桌面通知、浏览器管理、系统托盘、Playwright 引导、Worker 等模块。
 """
+
 from __future__ import annotations
 
 import os
@@ -51,59 +52,59 @@ from app.workers.playwright_worker import (
 
 
 class TestSendNotification:
-    @patch('app.utils.notify.is_windows', return_value=True)
-    @patch('app.utils.notify._notify_windows', return_value=True)
+    @patch("app.utils.notify.is_windows", return_value=True)
+    @patch("app.utils.notify._notify_windows", return_value=True)
     def test_windows(self, mock_win, mock_is_win):
         assert send_notification("标题", "消息") is True
         mock_win.assert_called_once_with("标题", "消息", 5000)
 
-    @patch('app.utils.notify.is_windows', return_value=False)
-    @patch('app.utils.notify.is_macos', return_value=True)
-    @patch('app.utils.notify._notify_macos', return_value=True)
+    @patch("app.utils.notify.is_windows", return_value=False)
+    @patch("app.utils.notify.is_macos", return_value=True)
+    @patch("app.utils.notify._notify_macos", return_value=True)
     def test_macos(self, mock_mac, mock_is_mac, mock_is_win):
         assert send_notification("标题", "消息") is True
         mock_mac.assert_called_once_with("标题", "消息")
 
-    @patch('app.utils.notify.is_windows', return_value=False)
-    @patch('app.utils.notify.is_macos', return_value=False)
-    @patch('app.utils.notify.is_linux', return_value=True)
-    @patch('app.utils.notify._notify_linux', return_value=True)
+    @patch("app.utils.notify.is_windows", return_value=False)
+    @patch("app.utils.notify.is_macos", return_value=False)
+    @patch("app.utils.notify.is_linux", return_value=True)
+    @patch("app.utils.notify._notify_linux", return_value=True)
     def test_linux(self, mock_linux, mock_is_linux, mock_is_mac, mock_is_win):
         assert send_notification("标题", "消息") is True
         mock_linux.assert_called_once_with("标题", "消息", 5000)
 
-    @patch('app.utils.notify.is_windows', return_value=False)
-    @patch('app.utils.notify.is_macos', return_value=False)
-    @patch('app.utils.notify.is_linux', return_value=False)
+    @patch("app.utils.notify.is_windows", return_value=False)
+    @patch("app.utils.notify.is_macos", return_value=False)
+    @patch("app.utils.notify.is_linux", return_value=False)
     def test_unsupported_platform(self, mock_is_linux, mock_is_mac, mock_is_win):
         assert send_notification("标题", "消息") is False
 
-    @patch('app.utils.notify.is_windows', return_value=True)
-    @patch('app.utils.notify._notify_windows', side_effect=Exception("fail"))
+    @patch("app.utils.notify.is_windows", return_value=True)
+    @patch("app.utils.notify._notify_windows", side_effect=Exception("fail"))
     def test_exception_returns_false(self, mock_win, mock_is_win):
         assert send_notification("标题", "消息") is False
 
-    @patch('app.utils.notify.is_windows', return_value=True)
-    @patch('app.utils.notify._notify_windows', return_value=True)
+    @patch("app.utils.notify.is_windows", return_value=True)
+    @patch("app.utils.notify._notify_windows", return_value=True)
     def test_custom_duration(self, mock_win, mock_is_win):
         send_notification("标题", "消息", duration_ms=10000)
         mock_win.assert_called_once_with("标题", "消息", 10000)
 
-    @patch('app.utils.notify.is_windows', return_value=True)
-    @patch('app.utils.notify._notify_windows', return_value=False)
+    @patch("app.utils.notify.is_windows", return_value=True)
+    @patch("app.utils.notify._notify_windows", return_value=False)
     def test_failure_returns_false(self, mock_win, mock_is_win):
         assert send_notification("标题", "消息") is False
 
 
 class TestNotifyWindows:
-    @patch('app.utils.notify.subprocess.run')
+    @patch("app.utils.notify.subprocess.run")
     def test_powershell_success(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0)
         result = _notify_windows("标题", "消息", 5000)
         assert result is True
         mock_run.assert_called_once()
 
-    @patch('app.utils.notify.subprocess.run')
+    @patch("app.utils.notify.subprocess.run")
     def test_powershell_failure_msg_fallback(self, mock_run):
         mock_run.side_effect = [
             MagicMock(returncode=1),
@@ -113,7 +114,7 @@ class TestNotifyWindows:
         assert result is True
         assert mock_run.call_count == 2
 
-    @patch('app.utils.notify.subprocess.run')
+    @patch("app.utils.notify.subprocess.run")
     def test_both_fail(self, mock_run):
         mock_run.side_effect = [
             MagicMock(returncode=1),
@@ -122,13 +123,13 @@ class TestNotifyWindows:
         result = _notify_windows("标题", "消息", 5000)
         assert result is False
 
-    @patch('app.utils.notify.subprocess.run')
+    @patch("app.utils.notify.subprocess.run")
     def test_special_characters(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0)
-        result = _notify_windows("标题`${\"}$", "消息`${\"}$", 5000)
+        result = _notify_windows('标题`${"}$', '消息`${"}$', 5000)
         assert result is True
 
-    @patch('app.utils.notify.subprocess.run')
+    @patch("app.utils.notify.subprocess.run")
     def test_powershell_timeout(self, mock_run):
         mock_run.side_effect = [
             subprocess.TimeoutExpired("powershell", 10),
@@ -139,19 +140,19 @@ class TestNotifyWindows:
 
 
 class TestNotifyMacos:
-    @patch('app.utils.notify.subprocess.run')
+    @patch("app.utils.notify.subprocess.run")
     def test_success(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0)
         result = _notify_macos("标题", "消息")
         assert result is True
 
-    @patch('app.utils.notify.subprocess.run')
+    @patch("app.utils.notify.subprocess.run")
     def test_failure(self, mock_run):
         mock_run.return_value = MagicMock(returncode=1)
         result = _notify_macos("标题", "消息")
         assert result is False
 
-    @patch('app.utils.notify.subprocess.run')
+    @patch("app.utils.notify.subprocess.run")
     def test_special_characters(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0)
         result = _notify_macos('标题"\\', '消息"\\')
@@ -162,27 +163,27 @@ class TestNotifyMacos:
 
 
 class TestNotifyLinux:
-    @patch('app.utils.notify.shutil.which', return_value="/usr/bin/notify-send")
-    @patch('app.utils.notify.subprocess.run')
+    @patch("app.utils.notify.shutil.which", return_value="/usr/bin/notify-send")
+    @patch("app.utils.notify.subprocess.run")
     def test_success(self, mock_run, mock_which):
         mock_run.return_value = MagicMock(returncode=0)
         result = _notify_linux("标题", "消息", 5000)
         assert result is True
 
-    @patch('app.utils.notify.shutil.which', return_value=None)
+    @patch("app.utils.notify.shutil.which", return_value=None)
     def test_no_notify_send(self, mock_which):
         result = _notify_linux("标题", "消息", 5000)
         assert result is False
 
-    @patch('app.utils.notify.shutil.which', return_value="/usr/bin/notify-send")
-    @patch('app.utils.notify.subprocess.run')
+    @patch("app.utils.notify.shutil.which", return_value="/usr/bin/notify-send")
+    @patch("app.utils.notify.subprocess.run")
     def test_failure(self, mock_run, mock_which):
         mock_run.return_value = MagicMock(returncode=1)
         result = _notify_linux("标题", "消息", 5000)
         assert result is False
 
-    @patch('app.utils.notify.shutil.which', return_value="/usr/bin/notify-send")
-    @patch('app.utils.notify.subprocess.run')
+    @patch("app.utils.notify.shutil.which", return_value="/usr/bin/notify-send")
+    @patch("app.utils.notify.subprocess.run")
     def test_duration_conversion(self, mock_run, mock_which):
         mock_run.return_value = MagicMock(returncode=0)
         _notify_linux("标题", "消息", 5000)
@@ -326,8 +327,8 @@ class TestSystemTrayMethods:
         tray._quit(None, None)
         callback.assert_called_once()
 
-    @patch('app.core.system_tray.pystray.Icon')
-    @patch('app.core.system_tray.threading.Thread')
+    @patch("app.core.system_tray.pystray.Icon")
+    @patch("app.core.system_tray.threading.Thread")
     def test_start(self, mock_thread_cls, mock_icon_cls):
         mock_icon = MagicMock()
         mock_icon_cls.return_value = mock_icon
@@ -341,8 +342,8 @@ class TestSystemTrayMethods:
         mock_thread_cls.assert_called_once()
         mock_thread.start.assert_called_once()
 
-    @patch('app.core.system_tray.pystray.Icon')
-    @patch('app.core.system_tray.threading.Thread')
+    @patch("app.core.system_tray.pystray.Icon")
+    @patch("app.core.system_tray.threading.Thread")
     def test_start_already_running(self, mock_thread_cls, mock_icon_cls):
         tray = SystemTray()
         mock_thread = MagicMock()
@@ -409,7 +410,10 @@ class TestCandidateHosts:
         hosts = _candidate_hosts()
         assert hosts[0] == "https://npmmirror.com/mirrors/playwright"
 
-    @patch.dict(os.environ, {"PLAYWRIGHT_DOWNLOAD_HOST": "https://npmmirror.com/mirrors/playwright"})
+    @patch.dict(
+        os.environ,
+        {"PLAYWRIGHT_DOWNLOAD_HOST": "https://npmmirror.com/mirrors/playwright"},
+    )
     def test_no_duplicate_hosts(self):
         hosts = _candidate_hosts()
         assert hosts.count("https://npmmirror.com/mirrors/playwright") == 1
@@ -438,29 +442,41 @@ class TestIsEnabled:
 
 
 class TestHasChromium:
-    @patch('app.workers.playwright_bootstrap.is_windows', return_value=True)
+    @patch("app.workers.playwright_bootstrap.is_windows", return_value=True)
     def test_windows_no_cache_dir(self, mock_is_win):
-        with patch('app.workers.playwright_bootstrap.Path.home', return_value=Path("/nonexistent")):
+        with patch(
+            "app.workers.playwright_bootstrap.Path.home",
+            return_value=Path("/nonexistent"),
+        ):
             with patch("importlib.util.find_spec", return_value=None):
-                with patch.dict("sys.modules", {"playwright.sync_api": None, "playwright": None}):
+                with patch.dict(
+                    "sys.modules", {"playwright.sync_api": None, "playwright": None}
+                ):
                     assert _has_chromium() is False
 
-    @patch('app.workers.playwright_bootstrap.is_windows', return_value=False)
-    @patch('app.workers.playwright_bootstrap.is_macos', return_value=False)
+    @patch("app.workers.playwright_bootstrap.is_windows", return_value=False)
+    @patch("app.workers.playwright_bootstrap.is_macos", return_value=False)
     def test_linux_no_cache_dir(self, mock_is_mac, mock_is_win):
-        with patch('app.workers.playwright_bootstrap.Path.home', return_value=Path("/nonexistent")):
+        with patch(
+            "app.workers.playwright_bootstrap.Path.home",
+            return_value=Path("/nonexistent"),
+        ):
             with patch("importlib.util.find_spec", return_value=None):
-                with patch.dict("sys.modules", {"playwright.sync_api": None, "playwright": None}):
+                with patch.dict(
+                    "sys.modules", {"playwright.sync_api": None, "playwright": None}
+                ):
                     assert _has_chromium() is False
 
 
 class TestEnsurePlaywrightReady:
     def setup_method(self):
         import app.workers.playwright_bootstrap as pb
+
         pb._BOOTSTRAP_DONE = False
 
     def teardown_method(self):
         import app.workers.playwright_bootstrap as pb
+
         pb._BOOTSTRAP_DONE = False
         pb._BOOTSTRAP_SKIPPED = False
 
@@ -468,19 +484,21 @@ class TestEnsurePlaywrightReady:
     def test_disabled_returns_true(self):
         assert ensure_playwright_ready() is True
 
-    @patch('app.workers.playwright_bootstrap._has_chromium', return_value=True)
+    @patch("app.workers.playwright_bootstrap._has_chromium", return_value=True)
     def test_chromium_exists_returns_true(self, mock_chromium):
         assert ensure_playwright_ready() is True
 
     def test_already_done_returns_true(self):
         import app.workers.playwright_bootstrap as pb
+
         pb._BOOTSTRAP_DONE = True
         assert ensure_playwright_ready() is True
 
-    @patch('app.workers.playwright_bootstrap._has_chromium', return_value=False)
-    @patch('app.workers.playwright_bootstrap._is_enabled', return_value=True)
+    @patch("app.workers.playwright_bootstrap._has_chromium", return_value=False)
+    @patch("app.workers.playwright_bootstrap._is_enabled", return_value=True)
     def test_no_playwright_package(self, mock_enabled, mock_chromium):
         import sys
+
         with patch.dict(sys.modules, {"playwright": None}):
             assert ensure_playwright_ready() is False
 
@@ -600,18 +618,20 @@ class TestPlaywrightWorker:
 
 
 class TestCleanupOrphanBrowsers:
-    @patch('app.workers.playwright_worker.sys')
-    @patch('app.workers.playwright_worker._cleanup_windows')
+    @patch("app.workers.playwright_worker.sys")
+    @patch("app.workers.playwright_worker._cleanup_windows")
     def test_windows(self, mock_cleanup, mock_sys):
         mock_sys.platform = "win32"
         from app.workers.playwright_worker import cleanup_orphan_browsers
+
         cleanup_orphan_browsers()
         mock_cleanup.assert_called_once()
 
-    @patch('app.workers.playwright_worker.sys')
-    @patch('app.workers.playwright_worker._cleanup_posix')
+    @patch("app.workers.playwright_worker.sys")
+    @patch("app.workers.playwright_worker._cleanup_posix")
     def test_posix(self, mock_cleanup, mock_sys):
         mock_sys.platform = "linux"
         from app.workers.playwright_worker import cleanup_orphan_browsers
+
         cleanup_orphan_browsers()
         mock_cleanup.assert_called_once()

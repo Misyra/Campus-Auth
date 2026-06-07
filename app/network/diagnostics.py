@@ -1,4 +1,5 @@
 """Backward-compatible shim. All implementations moved to network_probes and network_decision."""
+
 from .probes import (
     _check_macos_service,
     is_local_network_connected,

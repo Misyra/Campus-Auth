@@ -2,6 +2,7 @@
 
 覆盖 PID 管理、进程检测、CLI 命令、信号处理、浏览器控制、主入口等。
 """
+
 from __future__ import annotations
 
 import os
@@ -121,7 +122,7 @@ class TestGetProcessName:
         mock_sys.platform = "win32"
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout='INFO: No tasks are running which match the specified criteria.',
+            stdout="INFO: No tasks are running which match the specified criteria.",
         )
         assert get_process_name(9999) is None
 
@@ -191,7 +192,7 @@ class TestIsServiceRunning:
         from app.utils.process import is_service_running
 
         _write_raw_pid(tmp_pid_dir, "1234\npython.exe|2026-01-01")
-        with patch('app.utils.process.get_process_name', return_value=None):
+        with patch("app.utils.process.get_process_name", return_value=None):
             running, pid = is_service_running()
         assert running is False
         assert pid is None
@@ -203,8 +204,8 @@ class TestIsServiceRunning:
 
         _write_raw_pid(tmp_pid_dir, "1234\npython.exe|2026-01-01")
         with (
-            patch('app.utils.process.get_process_name', return_value="other.exe"),
-            patch('app.utils.process.is_local_port_in_use', return_value=True),
+            patch("app.utils.process.get_process_name", return_value="other.exe"),
+            patch("app.utils.process.is_local_port_in_use", return_value=True),
         ):
             running, pid = is_service_running()
         assert running is False
@@ -214,8 +215,8 @@ class TestIsServiceRunning:
 
         _write_raw_pid(tmp_pid_dir, "1234\npython.exe|2026-01-01")
         with (
-            patch('app.utils.process.get_process_name', return_value="python.exe"),
-            patch('app.utils.process.is_local_port_in_use', return_value=False),
+            patch("app.utils.process.get_process_name", return_value="python.exe"),
+            patch("app.utils.process.is_local_port_in_use", return_value=False),
         ):
             running, pid = is_service_running()
         assert running is False
@@ -225,8 +226,8 @@ class TestIsServiceRunning:
 
         _write_raw_pid(tmp_pid_dir, "1234\npython.exe|2026-01-01")
         with (
-            patch('app.utils.process.get_process_name', return_value="python.exe"),
-            patch('app.utils.process.is_local_port_in_use', return_value=True),
+            patch("app.utils.process.get_process_name", return_value="python.exe"),
+            patch("app.utils.process.is_local_port_in_use", return_value=True),
             patch("os.kill"),
         ):
             running, pid = is_service_running()
@@ -319,8 +320,8 @@ class TestCmdStatus:
 
         _write_raw_pid(tmp_pid_dir, "1234\npython.exe|2026-01-01")
         with (
-            patch('main.is_service_running', return_value=(True, 1234)),
-            patch('main.is_local_port_in_use', return_value=True),
+            patch("main.is_service_running", return_value=(True, 1234)),
+            patch("main.is_local_port_in_use", return_value=True),
         ):
             _cmd_status()
         assert "正在运行" in capsys.readouterr().out
@@ -329,8 +330,8 @@ class TestCmdStatus:
         from main import _cmd_status
 
         with (
-            patch('main.is_service_running', return_value=(False, None)),
-            patch('main.is_local_port_in_use', return_value=True),
+            patch("main.is_service_running", return_value=(False, None)),
+            patch("main.is_local_port_in_use", return_value=True),
         ):
             _cmd_status()
         assert "疑似正在运行" in capsys.readouterr().out
@@ -347,8 +348,8 @@ class TestCmdStatus:
             return False, None
 
         with (
-            patch('main.is_service_running', side_effect=fake_is_service_running),
-            patch('main.is_local_port_in_use', return_value=False),
+            patch("main.is_service_running", side_effect=fake_is_service_running),
+            patch("main.is_local_port_in_use", return_value=False),
         ):
             _cmd_status()
         out = capsys.readouterr().out
@@ -358,8 +359,8 @@ class TestCmdStatus:
         from main import _cmd_status
 
         with (
-            patch('main.is_service_running', return_value=(False, None)),
-            patch('main.is_local_port_in_use', return_value=False),
+            patch("main.is_service_running", return_value=(False, None)),
+            patch("main.is_local_port_in_use", return_value=False),
         ):
             _cmd_status()
         out = capsys.readouterr().out
@@ -378,7 +379,7 @@ class TestCmdStop:
     def test_not_running(self, tmp_pid_dir, capsys):
         from main import _cmd_stop
 
-        with patch('main.is_service_running', return_value=(False, None)):
+        with patch("main.is_service_running", return_value=(False, None)):
             _cmd_stop()
         assert "未运行" in capsys.readouterr().out
 
@@ -387,11 +388,16 @@ class TestCmdStop:
         from main import _cmd_stop
 
         with (
-            patch('main.is_service_running', return_value=(True, 1234)),
-            patch('main.read_pid_file', return_value=(1234, "python.exe", "2026-01-01")),
-            patch('main.get_process_name', return_value="python.exe"),
-            patch('main.normalize_proc_name', side_effect=lambda n: n.lower().removesuffix(".exe")),
-            patch('main.is_windows', return_value=False),
+            patch("main.is_service_running", return_value=(True, 1234)),
+            patch(
+                "main.read_pid_file", return_value=(1234, "python.exe", "2026-01-01")
+            ),
+            patch("main.get_process_name", return_value="python.exe"),
+            patch(
+                "main.normalize_proc_name",
+                side_effect=lambda n: n.lower().removesuffix(".exe"),
+            ),
+            patch("main.is_windows", return_value=False),
             patch("os.kill", side_effect=[None, OSError("process gone")]),
             patch("time.sleep"),
         ):
@@ -405,11 +411,16 @@ class TestCmdStop:
 
         # os.kill(pid, 0) 始终成功 → 优雅停止超时 → taskkill /F
         with (
-            patch('main.is_service_running', return_value=(True, 1234)),
-            patch('main.read_pid_file', return_value=(1234, "python.exe", "2026-01-01")),
-            patch('main.get_process_name', return_value="python.exe"),
-            patch('main.normalize_proc_name', side_effect=lambda n: n.lower().removesuffix(".exe")),
-            patch('main.is_windows', return_value=True),
+            patch("main.is_service_running", return_value=(True, 1234)),
+            patch(
+                "main.read_pid_file", return_value=(1234, "python.exe", "2026-01-01")
+            ),
+            patch("main.get_process_name", return_value="python.exe"),
+            patch(
+                "main.normalize_proc_name",
+                side_effect=lambda n: n.lower().removesuffix(".exe"),
+            ),
+            patch("main.is_windows", return_value=True),
             patch("os.kill", return_value=None),
             patch("time.sleep"),
             patch("subprocess.run"),
@@ -421,10 +432,15 @@ class TestCmdStop:
         from main import _cmd_stop
 
         with (
-            patch('main.is_service_running', return_value=(True, 1234)),
-            patch('main.read_pid_file', return_value=(1234, "python.exe", "2026-01-01")),
-            patch('main.get_process_name', return_value="other.exe"),
-            patch('main.normalize_proc_name', side_effect=lambda n: n.lower().removesuffix(".exe")),
+            patch("main.is_service_running", return_value=(True, 1234)),
+            patch(
+                "main.read_pid_file", return_value=(1234, "python.exe", "2026-01-01")
+            ),
+            patch("main.get_process_name", return_value="other.exe"),
+            patch(
+                "main.normalize_proc_name",
+                side_effect=lambda n: n.lower().removesuffix(".exe"),
+            ),
         ):
             _cmd_stop()
         out = capsys.readouterr().out
@@ -439,7 +455,7 @@ class TestCmdStop:
 class TestCmdAutostart:
     """_cmd_autostart — status/enable/disable。"""
 
-    @patch('app.services.autostart.AutoStartService')
+    @patch("app.services.autostart.AutoStartService")
     def test_status(self, mock_cls, capsys):
         from main import _cmd_autostart
 
@@ -457,7 +473,7 @@ class TestCmdAutostart:
         assert "已启用" in out
         assert "windows" in out
 
-    @patch('app.services.autostart.AutoStartService')
+    @patch("app.services.autostart.AutoStartService")
     def test_enable(self, mock_cls, capsys):
         from main import _cmd_autostart
 
@@ -469,7 +485,7 @@ class TestCmdAutostart:
             _cmd_autostart("enable")
         assert exc_info.value.code == 0
 
-    @patch('app.services.autostart.AutoStartService')
+    @patch("app.services.autostart.AutoStartService")
     def test_disable(self, mock_cls, capsys):
         from main import _cmd_autostart
 
@@ -508,12 +524,18 @@ class TestRunLoginThenExit:
 
         # 所有 local import 需要 patch 到源模块
         with (
-            patch('app.workers.playwright_worker.get_worker', return_value=mock_worker),
-            patch('app.workers.playwright_worker.CMD_LOGIN', "login"),
-            patch('app.services.profile.ProfileService', return_value=mock_ps),
-            patch('app.services.config.build_runtime_config', return_value={"retry_settings": {"max_retries": 3}}),
-            patch('app.services.config.load_runtime_config', return_value=(MagicMock(), False)),
-            patch('main.cleanup_orphan_browsers'),
+            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
+            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
+            patch("app.services.profile.ProfileService", return_value=mock_ps),
+            patch(
+                "app.services.config.build_runtime_config",
+                return_value={"retry_settings": {"max_retries": 3}},
+            ),
+            patch(
+                "app.services.config.load_runtime_config",
+                return_value=(MagicMock(), False),
+            ),
+            patch("main.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
             mock_ps.load.return_value = mock_data
@@ -531,14 +553,20 @@ class TestRunLoginThenExit:
         mock_worker.submit.side_effect = [fail_result, success_result]
 
         with (
-            patch('app.workers.playwright_worker.get_worker', return_value=mock_worker),
-            patch('app.workers.playwright_worker.CMD_LOGIN', "login"),
-            patch('app.services.profile.ProfileService', return_value=mock_ps),
-            patch('app.services.config.build_runtime_config', return_value={
-                "retry_settings": {"max_retries": 3, "retry_interval": 1}
-            }),
-            patch('app.services.config.load_runtime_config', return_value=(MagicMock(), False)),
-            patch('main.cleanup_orphan_browsers'),
+            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
+            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
+            patch("app.services.profile.ProfileService", return_value=mock_ps),
+            patch(
+                "app.services.config.build_runtime_config",
+                return_value={
+                    "retry_settings": {"max_retries": 3, "retry_interval": 1}
+                },
+            ),
+            patch(
+                "app.services.config.load_runtime_config",
+                return_value=(MagicMock(), False),
+            ),
+            patch("main.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
             mock_ps.load.return_value = mock_data
@@ -555,14 +583,20 @@ class TestRunLoginThenExit:
         mock_worker.submit.return_value = fail_result
 
         with (
-            patch('app.workers.playwright_worker.get_worker', return_value=mock_worker),
-            patch('app.workers.playwright_worker.CMD_LOGIN', "login"),
-            patch('app.services.profile.ProfileService', return_value=mock_ps),
-            patch('app.services.config.build_runtime_config', return_value={
-                "retry_settings": {"max_retries": 2, "retry_interval": 0}
-            }),
-            patch('app.services.config.load_runtime_config', return_value=(MagicMock(), False)),
-            patch('main.cleanup_orphan_browsers'),
+            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
+            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
+            patch("app.services.profile.ProfileService", return_value=mock_ps),
+            patch(
+                "app.services.config.build_runtime_config",
+                return_value={
+                    "retry_settings": {"max_retries": 2, "retry_interval": 0}
+                },
+            ),
+            patch(
+                "app.services.config.load_runtime_config",
+                return_value=(MagicMock(), False),
+            ),
+            patch("main.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
             mock_ps.load.return_value = mock_data
@@ -584,8 +618,8 @@ class TestRunServer:
         from main import _run_server
 
         with (
-            patch('main.is_service_running', return_value=(True, 1234)),
-            patch('main.is_local_port_in_use', return_value=True),
+            patch("main.is_service_running", return_value=(True, 1234)),
+            patch("main.is_local_port_in_use", return_value=True),
         ):
             with pytest.raises(SystemExit) as exc_info:
                 _run_server()
@@ -597,15 +631,15 @@ class TestRunServer:
         from main import _run_server
 
         with (
-            patch('main.is_service_running', return_value=(False, None)),
-            patch('main.is_local_port_in_use', return_value=False),
-            patch('main.ensure_playwright_ready'),
-            patch('app.services.profile.ProfileService') as mock_ps_cls,
-            patch('app.application.run'),
-            patch('main._open_browser'),
-            patch('main.atexit.register') as mock_atexit,
-            patch('main.signal.signal'),
-            patch('main.os._exit'),
+            patch("main.is_service_running", return_value=(False, None)),
+            patch("main.is_local_port_in_use", return_value=False),
+            patch("main.ensure_playwright_ready"),
+            patch("app.services.profile.ProfileService") as mock_ps_cls,
+            patch("app.application.run"),
+            patch("main._open_browser"),
+            patch("main.atexit.register") as mock_atexit,
+            patch("main.signal.signal"),
+            patch("main.os._exit"),
             patch.object(time, "sleep"),
         ):
             mock_ps = MagicMock()
@@ -624,17 +658,19 @@ class TestRunServer:
         from main import _run_server
 
         with (
-            patch('main.is_service_running', return_value=(False, None)),
-            patch('main.is_local_port_in_use', return_value=False),
-            patch('main.ensure_playwright_ready'),
-            patch('app.services.profile.ProfileService') as mock_ps_cls,
-            patch('app.application.run'),
-            patch('main._open_browser'),
-            patch('main.atexit.register'),
-            patch('main.signal.signal'),
-            patch('main.os._exit'),
+            patch("main.is_service_running", return_value=(False, None)),
+            patch("main.is_local_port_in_use", return_value=False),
+            patch("main.ensure_playwright_ready"),
+            patch("app.services.profile.ProfileService") as mock_ps_cls,
+            patch("app.application.run"),
+            patch("main._open_browser"),
+            patch("main.atexit.register"),
+            patch("main.signal.signal"),
+            patch("main.os._exit"),
             patch.object(time, "sleep"),
-            patch('app.core.system_tray.SystemTray', side_effect=ImportError("no tray")),
+            patch(
+                "app.core.system_tray.SystemTray", side_effect=ImportError("no tray")
+            ),
         ):
             mock_ps = MagicMock()
             mock_ps.load.return_value.system = MagicMock(
@@ -668,13 +704,13 @@ class TestSignalHandler:
             return handler
 
         with (
-            patch('main.is_service_running', return_value=(False, None)),
-            patch('main.is_local_port_in_use', return_value=False),
-            patch('main.ensure_playwright_ready'),
-            patch('app.services.profile.ProfileService') as mock_ps_cls,
-            patch('app.application.run'),
-            patch('main._open_browser'),
-            patch('main.atexit.register'),
+            patch("main.is_service_running", return_value=(False, None)),
+            patch("main.is_local_port_in_use", return_value=False),
+            patch("main.ensure_playwright_ready"),
+            patch("app.services.profile.ProfileService") as mock_ps_cls,
+            patch("app.application.run"),
+            patch("main._open_browser"),
+            patch("main.atexit.register"),
             patch("os._exit") as mock_exit,
             patch.object(time, "sleep"),
             patch("signal.signal", side_effect=fake_signal),
@@ -691,9 +727,12 @@ class TestSignalHandler:
             # 模拟 SIGINT 触发（仍在 os._exit mock 范围内）
             assert signal.SIGINT in registered
             with (
-                patch('main.cleanup_pid'),
-                patch('app.workers.playwright_worker.get_worker', side_effect=Exception("not init")),
-                patch('app.workers.playwright_worker.cleanup_orphan_browsers'),
+                patch("main.cleanup_pid"),
+                patch(
+                    "app.workers.playwright_worker.get_worker",
+                    side_effect=Exception("not init"),
+                ),
+                patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
             ):
                 registered[signal.SIGINT](signal.SIGINT, None)
             mock_exit.assert_called_with(0)
@@ -709,15 +748,15 @@ class TestSignalHandler:
             return handler
 
         with (
-            patch('main.is_service_running', return_value=(False, None)),
-            patch('main.is_local_port_in_use', return_value=False),
-            patch('main.ensure_playwright_ready'),
-            patch('app.services.profile.ProfileService') as mock_ps_cls,
-            patch('app.application.run'),
-            patch('main._open_browser'),
-            patch('main.atexit.register'),
+            patch("main.is_service_running", return_value=(False, None)),
+            patch("main.is_local_port_in_use", return_value=False),
+            patch("main.ensure_playwright_ready"),
+            patch("app.services.profile.ProfileService") as mock_ps_cls,
+            patch("app.application.run"),
+            patch("main._open_browser"),
+            patch("main.atexit.register"),
             patch("signal.signal", side_effect=fake_signal),
-            patch('main.os._exit'),
+            patch("main.os._exit"),
             patch.object(time, "sleep"),
         ):
             mock_ps = MagicMock()
@@ -734,7 +773,6 @@ class TestSignalHandler:
         # SIGTERM 如果存在也会被注册
         if hasattr(signal, "SIGTERM"):
             assert signal.SIGTERM in registered
-
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -807,8 +845,8 @@ class TestMainArgparse:
 
         with (
             patch("sys.argv", ["app.py", "--status"]),
-            patch('main._setup_exception_hooks'),
-            patch('main._cmd_status') as mock_status,
+            patch("main._setup_exception_hooks"),
+            patch("main._cmd_status") as mock_status,
         ):
             main()
         mock_status.assert_called_once()
@@ -819,8 +857,8 @@ class TestMainArgparse:
 
         with (
             patch("sys.argv", ["app.py", "--stop"]),
-            patch('main._setup_exception_hooks'),
-            patch('main._cmd_stop') as mock_stop,
+            patch("main._setup_exception_hooks"),
+            patch("main._cmd_stop") as mock_stop,
         ):
             main()
         mock_stop.assert_called_once()
@@ -831,7 +869,7 @@ class TestMainArgparse:
 
         with (
             patch("sys.argv", ["app.py", "--help"]),
-            patch('main._setup_exception_hooks'),
+            patch("main._setup_exception_hooks"),
         ):
             with pytest.raises(SystemExit) as exc_info:
                 main()

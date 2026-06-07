@@ -202,7 +202,12 @@ class MonitorService:
         config = cmd.data.get("config", self._runtime_config)
         pure_mode = cmd.data.get("pure_mode", self.pure_mode)
         if config is self._runtime_config:
-            config = {**self._runtime_config, "browser_settings": dict(self._runtime_config.get("browser_settings", {}))}
+            config = {
+                **self._runtime_config,
+                "browser_settings": dict(
+                    self._runtime_config.get("browser_settings", {})
+                ),
+            }
         if pure_mode:
             config.setdefault("browser_settings", {})["pure_mode"] = True
         return config, pure_mode
@@ -211,7 +216,11 @@ class MonitorService:
         """启动监控（仅在消费者线程中调用）。"""
         # 二次检查：防止重复启动
         if self._monitor_thread and self._monitor_thread.is_alive():
-            self._push_log("监控线程已在运行，忽略重复启动", level="WARNING", source="backend.monitor_service")
+            self._push_log(
+                "监控线程已在运行，忽略重复启动",
+                level="WARNING",
+                source="backend.monitor_service",
+            )
             return
         config, pure_mode = self._prepare_command_config(cmd)
         self._start_monitor_core(config, pure_mode)
@@ -278,7 +287,8 @@ class MonitorService:
         except Exception as exc:
             service_logger.exception(
                 "手动登录异常 (username={}, url={})",
-                config.get("username", "?"), config.get("auth_url", "?"),
+                config.get("username", "?"),
+                config.get("auth_url", "?"),
             )
             error_msg = str(exc)
             cmd.response_data = (False, error_msg)
@@ -522,7 +532,9 @@ class MonitorService:
         """从 settings.json 重新加载 UI 和运行时配置（内部方法，由 reload_config 和 _handle_profile_reload 复用）。"""
         with self._reload_lock:
             self._ui_config = load_ui_config(self._profile_service)
-            runtime_payload, has_decrypt_error = load_runtime_config(self._profile_service)
+            runtime_payload, has_decrypt_error = load_runtime_config(
+                self._profile_service
+            )
             if has_decrypt_error:
                 service_logger.warning("配置重载时部分密码解密失败")
             self._runtime_config = build_runtime_config(
@@ -598,7 +610,8 @@ class MonitorService:
         try:
             self._cmd_queue.put_nowait(
                 MonitorCommand(
-                    type=MonitorCmdType.START, data={"config": config, "pure_mode": self.pure_mode}
+                    type=MonitorCmdType.START,
+                    data={"config": config, "pure_mode": self.pure_mode},
                 )
             )
         except queue.Full:
@@ -638,7 +651,9 @@ class MonitorService:
         """完全关闭 MonitorService：停止监控 + 终止消费者线程。"""
         # 通过队列发送 stop 命令（消费者执行 _handle_stop 后设置 response_event）
         try:
-            cmd = MonitorCommand(type=MonitorCmdType.STOP, response_event=threading.Event())
+            cmd = MonitorCommand(
+                type=MonitorCmdType.STOP, response_event=threading.Event()
+            )
             self._cmd_queue.put(cmd, timeout=3)
             cmd.response_event.wait(timeout=MONITOR_RELOAD_TIMEOUT)
         except queue.Full:

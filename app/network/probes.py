@@ -13,7 +13,12 @@ from typing import Iterable, Sequence
 import httpx
 
 from app.utils.logging import get_logger
-from app.utils.platform_utils import is_windows, is_macos, is_linux, CREATE_NO_WINDOW_FLAG
+from app.utils.platform_utils import (
+    is_windows,
+    is_macos,
+    is_linux,
+    CREATE_NO_WINDOW_FLAG,
+)
 
 logger = get_logger("network_probes", side="BACKEND")
 
@@ -264,7 +269,10 @@ def is_network_available_portal(
     if portal_checks is None:
         portal_checks = [
             ("http://captive.apple.com/hotspot-detect.html", "Success"),
-            ("http://www.msftconnecttest.com/connecttest.txt", "Microsoft Connect Test"),
+            (
+                "http://www.msftconnecttest.com/connecttest.txt",
+                "Microsoft Connect Test",
+            ),
             ("http://detectportal.firefox.com/success.txt", "success"),
         ]
     if not portal_checks:

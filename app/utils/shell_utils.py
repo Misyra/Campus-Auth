@@ -43,7 +43,13 @@ def detect_binaries() -> list[dict[str, str]]:
 
     # Python（当前运行的解释器）
     if sys.executable:
-        binaries.append({"name": "Python", "path": sys.executable, "description": "当前 Python 解释器"})
+        binaries.append(
+            {
+                "name": "Python",
+                "path": sys.executable,
+                "description": "当前 Python 解释器",
+            }
+        )
 
     # Shell
     binaries.extend(detect_shells())

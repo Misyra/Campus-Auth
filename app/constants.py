@@ -29,23 +29,23 @@ DEFAULT_HTTP_TARGETS: str = "https://www.baidu.com,https://www.qq.com"
 AUTH_DATA_DIR: Path = Path.home() / ".campus_network_auth"
 
 # ── 超时常量（秒）──
-WORKER_SUBMIT_TIMEOUT = 300          # Worker 命令提交超时
-WORKER_READY_TIMEOUT = 5             # Worker 就绪等待
-WORKER_JOIN_TIMEOUT = 3              # Worker 线程 join
-WORKER_QUEUE_PUT_TIMEOUT = 10        # 命令入队超时
-MONITOR_THREAD_JOIN_TIMEOUT = 8      # 监控线程 join
-MONITOR_STOP_TIMEOUT = 10            # 监控停止等待
-MONITOR_RELOAD_TIMEOUT = 15          # 配置重载等待
-SCHEDULER_POLL_INTERVAL = 30         # 调度器轮询间隔
-PORTAL_WAIT_AFTER_LOGIN = 5          # 登录后等待 Portal 更新
-DEFAULT_STEP_TIMEOUT_MS = 10000      # 步骤默认超时（毫秒）
-DEFAULT_TASK_TIMEOUT_MS = 30000      # 任务默认超时（毫秒）
+WORKER_SUBMIT_TIMEOUT = 300  # Worker 命令提交超时
+WORKER_READY_TIMEOUT = 5  # Worker 就绪等待
+WORKER_JOIN_TIMEOUT = 3  # Worker 线程 join
+WORKER_QUEUE_PUT_TIMEOUT = 10  # 命令入队超时
+MONITOR_THREAD_JOIN_TIMEOUT = 8  # 监控线程 join
+MONITOR_STOP_TIMEOUT = 10  # 监控停止等待
+MONITOR_RELOAD_TIMEOUT = 15  # 配置重载等待
+SCHEDULER_POLL_INTERVAL = 30  # 调度器轮询间隔
+PORTAL_WAIT_AFTER_LOGIN = 5  # 登录后等待 Portal 更新
+DEFAULT_STEP_TIMEOUT_MS = 10000  # 步骤默认超时（毫秒）
+DEFAULT_TASK_TIMEOUT_MS = 30000  # 任务默认超时（毫秒）
 
 # ── 容量常量 ──
-LOG_BUFFER_MAXLEN = 1200             # 日志环形缓冲
-STATUS_LOG_MAXLEN = 200              # 状态日志缓冲
-DEBUG_LOG_MAXLEN = 1000              # 调试日志缓冲
-CMD_QUEUE_MAXSIZE = 50               # 命令队列容量
+LOG_BUFFER_MAXLEN = 1200  # 日志环形缓冲
+STATUS_LOG_MAXLEN = 200  # 状态日志缓冲
+DEBUG_LOG_MAXLEN = 1000  # 调试日志缓冲
+CMD_QUEUE_MAXSIZE = 50  # 命令队列容量
 
 # ── 默认端口 ──
-DEFAULT_APP_PORT = 50721             # 应用默认端口
+DEFAULT_APP_PORT = 50721  # 应用默认端口

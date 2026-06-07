@@ -24,12 +24,19 @@ class TestTaskManagerScriptScan:
         tm = TaskManager(tmp_path)
         # 浏览器任务在 browser/
         (tmp_path / "browser" / "browser_task.json").write_text(
-            json.dumps({"name": "浏览器任务", "steps": [{"id": "s1", "type": "input", "selector": "#x"}]}),
+            json.dumps(
+                {
+                    "name": "浏览器任务",
+                    "steps": [{"id": "s1", "type": "input", "selector": "#x"}],
+                }
+            ),
             encoding="utf-8",
         )
         # 脚本在 scripts/
         (tmp_path / "scripts" / "my_script.json").write_text(
-            json.dumps({"type": "script", "name": "我的脚本", "content": 'print("hello")'}),
+            json.dumps(
+                {"type": "script", "name": "我的脚本", "content": 'print("hello")'}
+            ),
             encoding="utf-8",
         )
 
@@ -88,7 +95,9 @@ class TestTaskManagerScriptScan:
     def test_load_script_metadata_fallback_to_stem(self, tmp_path: Path):
         """没有注释和 docstring 时，使用文件名"""
         tm = TaskManager(tmp_path)
-        (tmp_path / "scripts" / "my_task.py").write_text('print("hi")', encoding="utf-8")
+        (tmp_path / "scripts" / "my_task.py").write_text(
+            'print("hi")', encoding="utf-8"
+        )
 
         task = tm.load_task("my_task")
 
@@ -114,10 +123,13 @@ class TestTaskManagerScriptCRUD:
     def test_save_browser_and_script_independent(self, tmp_path: Path):
         """浏览器任务和脚本任务可以同名，分别存在不同子目录"""
         tm = TaskManager(tmp_path)
-        tm.save_task("dup", {
-            "name": "浏览器 dup",
-            "steps": [{"id": "s1", "type": "input", "selector": "#x"}],
-        })
+        tm.save_task(
+            "dup",
+            {
+                "name": "浏览器 dup",
+                "steps": [{"id": "s1", "type": "input", "selector": "#x"}],
+            },
+        )
         tm.save_task("dup", {"content": 'print("dup")'}, task_type="scripts")
 
         assert (tmp_path / "browser" / "dup.json").exists()
@@ -137,7 +149,9 @@ class TestTaskManagerScriptCRUD:
         browser_dir = tmp_path / "browser"
         scripts_dir = tmp_path / "scripts"
         (browser_dir / "x.json").write_text("{}", encoding="utf-8")
-        (scripts_dir / "x.json").write_text('{"type":"script","content":"print()"}', encoding="utf-8")
+        (scripts_dir / "x.json").write_text(
+            '{"type":"script","content":"print()"}', encoding="utf-8"
+        )
 
         ok = tm.delete_task("x")
 
@@ -193,7 +207,9 @@ class TestScriptRunner:
     def test_run_failure(self, tmp_path: Path):
         """脚本非零退出返回 False"""
         script = tmp_path / "fail.py"
-        script.write_text('import sys\nprint("连接超时")\nsys.exit(1)\n', encoding="utf-8")
+        script.write_text(
+            'import sys\nprint("连接超时")\nsys.exit(1)\n', encoding="utf-8"
+        )
 
         runner = ScriptRunner(script, timeout=10)
         ok, msg = runner.run()
@@ -204,7 +220,7 @@ class TestScriptRunner:
     def test_run_nonzero_exit_no_output(self, tmp_path: Path):
         """脚本非零退出且无输出时返回失败"""
         script = tmp_path / "crash.py"
-        script.write_text('import sys\nsys.exit(1)\n', encoding="utf-8")
+        script.write_text("import sys\nsys.exit(1)\n", encoding="utf-8")
 
         runner = ScriptRunner(script, timeout=10)
         ok, msg = runner.run()
@@ -215,7 +231,7 @@ class TestScriptRunner:
     def test_run_timeout(self, tmp_path: Path):
         """脚本超时返回失败"""
         script = tmp_path / "slow.py"
-        script.write_text('import time\ntime.sleep(100)\n', encoding="utf-8")
+        script.write_text("import time\ntime.sleep(100)\n", encoding="utf-8")
 
         runner = ScriptRunner(script, timeout=1)
         ok, msg = runner.run()
@@ -237,10 +253,13 @@ class TestScriptRunner:
     def test_run_mixed_output(self, tmp_path: Path):
         """脚本多行 print 输出取全部"""
         script = tmp_path / "mixed.py"
-        script.write_text(textwrap.dedent("""\
+        script.write_text(
+            textwrap.dedent("""\
             print("调试信息")
             print("HTTP 200")
-        """), encoding="utf-8")
+        """),
+            encoding="utf-8",
+        )
 
         runner = ScriptRunner(script, timeout=10)
         ok, msg = runner.run()
@@ -252,12 +271,15 @@ class TestScriptRunner:
     def test_env_isolation(self, tmp_path: Path):
         """子进程只接收最小系统环境变量，不继承宿主全部环境"""
         script = tmp_path / "isolated.py"
-        script.write_text(textwrap.dedent("""\
+        script.write_text(
+            textwrap.dedent("""\
             import os, json
             path = os.environ.get("PATH", "")
             has_path = bool(path)
             print(json.dumps({"success": has_path, "message": f"has_path={has_path}"}))
-        """), encoding="utf-8")
+        """),
+            encoding="utf-8",
+        )
 
         runner = ScriptRunner(script, timeout=10)
         ok, msg = runner.run()

@@ -5,6 +5,7 @@ test_platform_utils.py, test_str_to_bool.py, test_network_helpers.py,
 test_version.py, test_time_utils.py，并新增 env.py, exceptions.py,
 logging.py, notify.py 测试。
 """
+
 from __future__ import annotations
 
 import datetime
@@ -69,6 +70,7 @@ from app.utils.logging import (
 # crypto
 # =====================================================================
 
+
 class TestEncryptDecrypt:
     def test_round_trip(self):
         """加密后解密应返回原文"""
@@ -106,7 +108,7 @@ class TestEncryptDecrypt:
 
     def test_special_characters(self):
         """特殊字符密码应正常加解密"""
-        original = '!@#$%^&*()_+-=[]{}|;:\'",.<>?/~`'
+        original = "!@#$%^&*()_+-=[]{}|;:'\",.<>?/~`"
         encrypted = encrypt_password(original)
         assert decrypt_password(encrypted) == original
 
@@ -175,6 +177,7 @@ class TestSavePasswordField:
 # =====================================================================
 # config_helpers
 # =====================================================================
+
 
 class TestExtractProfileFields:
     def test_basic(self):
@@ -248,6 +251,7 @@ class TestAssignProfileFields:
 # file_helpers
 # =====================================================================
 
+
 class TestAtomicWrite:
     def test_basic_write(self, tmp_path):
         target = tmp_path / "test.txt"
@@ -281,7 +285,7 @@ class TestAtomicWrite:
         def mock_replace(src, dst):
             raise PermissionError("mocked")
 
-        with patch('app.utils.file_helpers.os.replace', side_effect=mock_replace):
+        with patch("app.utils.file_helpers.os.replace", side_effect=mock_replace):
             with pytest.raises(PermissionError, match="mocked"):
                 atomic_write(str(target), "content")
         # 临时文件应被清理
@@ -289,7 +293,9 @@ class TestAtomicWrite:
 
     def test_cleanup_on_write_error(self, tmp_path):
         target = tmp_path / "test.txt"
-        with patch('app.utils.file_helpers.os.fdopen', side_effect=IOError("disk full")):
+        with patch(
+            "app.utils.file_helpers.os.fdopen", side_effect=IOError("disk full")
+        ):
             with pytest.raises(IOError, match="disk full"):
                 atomic_write(str(target), "content")
         assert not target.exists()
@@ -320,93 +326,94 @@ class TestAtomicWrite:
 # platform_utils
 # =====================================================================
 
+
 class TestGetPlatform:
     def test_windows(self):
-        with patch('app.utils.platform_utils.sys') as mock_sys:
+        with patch("app.utils.platform_utils.sys") as mock_sys:
             mock_sys.platform = "win32"
             assert get_platform() == "windows"
 
     def test_darwin(self):
-        with patch('app.utils.platform_utils.sys') as mock_sys:
+        with patch("app.utils.platform_utils.sys") as mock_sys:
             mock_sys.platform = "darwin"
             assert get_platform() == "darwin"
 
     def test_linux(self):
-        with patch('app.utils.platform_utils.sys') as mock_sys:
+        with patch("app.utils.platform_utils.sys") as mock_sys:
             mock_sys.platform = "linux"
             assert get_platform() == "linux"
 
     def test_linux2(self):
-        with patch('app.utils.platform_utils.sys') as mock_sys:
+        with patch("app.utils.platform_utils.sys") as mock_sys:
             mock_sys.platform = "linux2"
             assert get_platform() == "linux"
 
     def test_unknown_falls_back_to_linux(self):
-        with patch('app.utils.platform_utils.sys') as mock_sys:
+        with patch("app.utils.platform_utils.sys") as mock_sys:
             mock_sys.platform = "freebsd"
             assert get_platform() == "linux"
 
 
 class TestIsWindows:
     def test_true(self):
-        with patch('app.utils.platform_utils.sys') as mock_sys:
+        with patch("app.utils.platform_utils.sys") as mock_sys:
             mock_sys.platform = "win32"
             assert is_windows() is True
 
     def test_false(self):
-        with patch('app.utils.platform_utils.sys') as mock_sys:
+        with patch("app.utils.platform_utils.sys") as mock_sys:
             mock_sys.platform = "linux"
             assert is_windows() is False
 
 
 class TestIsMacos:
     def test_true(self):
-        with patch('app.utils.platform_utils.sys') as mock_sys:
+        with patch("app.utils.platform_utils.sys") as mock_sys:
             mock_sys.platform = "darwin"
             assert is_macos() is True
 
     def test_false(self):
-        with patch('app.utils.platform_utils.sys') as mock_sys:
+        with patch("app.utils.platform_utils.sys") as mock_sys:
             mock_sys.platform = "win32"
             assert is_macos() is False
 
 
 class TestIsLinux:
     def test_linux(self):
-        with patch('app.utils.platform_utils.sys') as mock_sys:
+        with patch("app.utils.platform_utils.sys") as mock_sys:
             mock_sys.platform = "linux"
             assert is_linux() is True
 
     def test_linux2(self):
         # Python 3.10+ 不再返回 "linux2"，应返回 False
-        with patch('app.utils.platform_utils.sys') as mock_sys:
+        with patch("app.utils.platform_utils.sys") as mock_sys:
             mock_sys.platform = "linux2"
             assert is_linux() is False
 
     def test_false(self):
-        with patch('app.utils.platform_utils.sys') as mock_sys:
+        with patch("app.utils.platform_utils.sys") as mock_sys:
             mock_sys.platform = "win32"
             assert is_linux() is False
 
 
 class TestGetDefaultUa:
     def test_windows_ua(self):
-        with patch('app.utils.platform_utils.get_platform', return_value="windows"):
+        with patch("app.utils.platform_utils.get_platform", return_value="windows"):
             ua = get_default_ua()
             assert "Windows" in ua
 
     def test_macos_ua(self):
-        with patch('app.utils.platform_utils.get_platform', return_value="darwin"):
+        with patch("app.utils.platform_utils.get_platform", return_value="darwin"):
             ua = get_default_ua()
             assert "Macintosh" in ua
 
     def test_linux_ua(self):
-        with patch('app.utils.platform_utils.get_platform', return_value="linux"):
+        with patch("app.utils.platform_utils.get_platform", return_value="linux"):
             ua = get_default_ua()
             assert "Linux" in ua
 
     def test_unknown_platform_falls_back_to_linux(self):
-        with patch('app.utils.platform_utils.get_platform', return_value="freebsd"):
+        with patch("app.utils.platform_utils.get_platform", return_value="freebsd"):
             ua = get_default_ua()
             assert "Linux" in ua
 
@@ -415,12 +422,17 @@ class TestGetDefaultUa:
 # str_to_bool
 # =====================================================================
 
+
 class TestStrToBool:
-    @pytest.mark.parametrize("value", ["true", "True", "TRUE", " true ", "1", "yes", "YES", "on", "ON"])
+    @pytest.mark.parametrize(
+        "value", ["true", "True", "TRUE", " true ", "1", "yes", "YES", "on", "ON"]
+    )
     def test_truthy(self, value):
         assert str_to_bool(value) is True
 
-    @pytest.mark.parametrize("value", ["false", "False", "0", "no", "off", "", "anything", "  "])
+    @pytest.mark.parametrize(
+        "value", ["false", "False", "0", "no", "off", "", "anything", "  "]
+    )
     def test_falsy(self, value):
         assert str_to_bool(value) is False
 
@@ -437,6 +449,7 @@ class TestStrToBool:
 # =====================================================================
 # network_helpers
 # =====================================================================
+
 
 class TestParseHostPort:
     def test_basic(self):
@@ -479,6 +492,7 @@ class TestParseHostPort:
 # version
 # =====================================================================
 
+
 class TestGetProjectVersion:
     def setup_method(self):
         get_project_version.cache_clear()
@@ -507,13 +521,9 @@ class TestGetProjectVersion:
         assert get_project_version(tmp_path) == "unknown"
 
     def test_lru_cache(self, tmp_path):
-        (tmp_path / "pyproject.toml").write_text(
-            '[project]\nversion = "1.0.0"\n'
-        )
+        (tmp_path / "pyproject.toml").write_text('[project]\nversion = "1.0.0"\n')
         v1 = get_project_version(tmp_path)
-        (tmp_path / "pyproject.toml").write_text(
-            '[project]\nversion = "2.0.0"\n'
-        )
+        (tmp_path / "pyproject.toml").write_text('[project]\nversion = "2.0.0"\n')
         v2 = get_project_version(tmp_path)
         assert v1 == "1.0.0"
         assert v2 == "1.0.0"  # 缓存命中
@@ -528,6 +538,7 @@ class TestGetProjectVersion:
 # time_utils
 # =====================================================================
 
+
 class TestIsInPausePeriod:
     def test_disabled(self):
         config = {"enabled": False, "start_hour": 0, "end_hour": 6}
@@ -540,42 +551,42 @@ class TestIsInPausePeriod:
     def test_normal_range_in_pause(self):
         config = {"enabled": True, "start_hour": 0, "end_hour": 6}
         mock_now = datetime.datetime(2025, 1, 1, 3, 0, 0)
-        with patch('app.utils.time_utils.datetime') as mock_dt:
+        with patch("app.utils.time_utils.datetime") as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
             assert is_in_pause_period(config) is True
 
     def test_normal_range_outside_pause(self):
         config = {"enabled": True, "start_hour": 0, "end_hour": 6}
         mock_now = datetime.datetime(2025, 1, 1, 12, 0, 0)
-        with patch('app.utils.time_utils.datetime') as mock_dt:
+        with patch("app.utils.time_utils.datetime") as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
             assert is_in_pause_period(config) is False
 
     def test_cross_midnight_in_pause(self):
         config = {"enabled": True, "start_hour": 23, "end_hour": 6}
         mock_now = datetime.datetime(2025, 1, 1, 2, 0, 0)
-        with patch('app.utils.time_utils.datetime') as mock_dt:
+        with patch("app.utils.time_utils.datetime") as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
             assert is_in_pause_period(config) is True
 
     def test_cross_midnight_outside_pause(self):
         config = {"enabled": True, "start_hour": 23, "end_hour": 6}
         mock_now = datetime.datetime(2025, 1, 1, 12, 0, 0)
-        with patch('app.utils.time_utils.datetime') as mock_dt:
+        with patch("app.utils.time_utils.datetime") as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
             assert is_in_pause_period(config) is False
 
     def test_missing_keys_in_pause(self):
         config = {}
         mock_now = datetime.datetime(2025, 1, 1, 3, 0, 0)
-        with patch('app.utils.time_utils.datetime') as mock_dt:
+        with patch("app.utils.time_utils.datetime") as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
             assert is_in_pause_period(config) is True
 
     def test_missing_keys_outside_pause(self):
         config = {}
         mock_now = datetime.datetime(2025, 1, 1, 12, 0, 0)
-        with patch('app.utils.time_utils.datetime') as mock_dt:
+        with patch("app.utils.time_utils.datetime") as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
             assert is_in_pause_period(config) is False
 
@@ -602,6 +613,7 @@ class TestGetRuntimeStats:
 # =====================================================================
 # env — build_login_template_vars
 # =====================================================================
+
 
 class TestBuildLoginTemplateVars:
     def test_basic_config(self):
@@ -677,6 +689,7 @@ class TestBuildLoginTemplateVars:
 # exceptions（新增）
 # =====================================================================
 
+
 class TestExceptions:
     def test_login_cancelled_error(self):
         """LoginCancelledError 应为 Exception 子类"""
@@ -698,6 +711,7 @@ class TestExceptions:
 # =====================================================================
 # logging — 工具函数（新增）
 # =====================================================================
+
 
 class TestNormalizeLevel:
     def test_valid_levels(self):
@@ -774,11 +788,13 @@ class TestLogConfigCenter:
 class TestCreateNoWindowFlag:
     def test_is_int(self):
         from app.utils.platform_utils import CREATE_NO_WINDOW_FLAG
+
         assert isinstance(CREATE_NO_WINDOW_FLAG, int)
 
     def test_on_windows_is_nonzero(self):
         """Windows 上应为非零值（subprocess.CREATE_NO_WINDOW = 0x08000000）"""
         from app.utils.platform_utils import CREATE_NO_WINDOW_FLAG
+
         if is_windows():
             assert CREATE_NO_WINDOW_FLAG != 0
         else:
@@ -822,10 +838,12 @@ class TestLoginAttemptHandlerCloseIdempotent:
 class TestAuthDataDir:
     def test_is_path(self):
         from app.constants import AUTH_DATA_DIR
+
         assert isinstance(AUTH_DATA_DIR, Path)
 
     def test_ends_with_campus_network_auth(self):
         from app.constants import AUTH_DATA_DIR
+
         assert AUTH_DATA_DIR.name == ".campus_network_auth"
 
 
@@ -837,6 +855,7 @@ class TestAuthDataDir:
 class TestDefaultConstants:
     def test_network_targets_format(self):
         from app.constants import DEFAULT_NETWORK_TARGETS
+
         parts = DEFAULT_NETWORK_TARGETS.split(",")
         assert len(parts) >= 3
         for part in parts:
@@ -844,6 +863,7 @@ class TestDefaultConstants:
 
     def test_http_targets_format(self):
         from app.constants import DEFAULT_HTTP_TARGETS
+
         parts = DEFAULT_HTTP_TARGETS.split(",")
         assert len(parts) >= 2
         for part in parts:
@@ -853,6 +873,7 @@ class TestDefaultConstants:
         """MonitorConfigPayload 默认值应引用常量"""
         from app.constants import DEFAULT_NETWORK_TARGETS, DEFAULT_HTTP_TARGETS
         from app.schemas import MonitorConfigPayload
+
         m = MonitorConfigPayload()
         assert m.network_targets == DEFAULT_NETWORK_TARGETS
         assert m.http_targets == DEFAULT_HTTP_TARGETS

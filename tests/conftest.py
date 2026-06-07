@@ -1,4 +1,5 @@
 """Campus-Auth 测试配置"""
+
 from __future__ import annotations
 
 import sys

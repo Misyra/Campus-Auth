@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.constants import DEFAULT_NETWORK_TARGETS, DEFAULT_HTTP_TARGETS
 from app.utils.logging import VALID_LOG_LEVELS
+
 _URL_PATTERN = re.compile(r"^https?://")
 
 # ── 浏览器参数默认值（单一来源） ──
@@ -37,6 +38,7 @@ class _ClampMixin(BaseModel):
         if not isinstance(data, dict):
             return data
         from app.utils.logging import get_logger
+
         _logger = get_logger("schemas")
         for name, field_info in cls.model_fields.items():
             if name not in data:
@@ -58,14 +60,12 @@ class _ClampMixin(BaseModel):
                 continue
             if ge_val is not None and v < ge_val:
                 _logger.warning(
-                    "字段 '{}' 值 {} 低于下限 {}，已自动钳制",
-                    name, v, ge_val
+                    "字段 '{}' 值 {} 低于下限 {}，已自动钳制", name, v, ge_val
                 )
                 data[name] = ge_val
             elif le_val is not None and v > le_val:
                 _logger.warning(
-                    "字段 '{}' 值 {} 超过上限 {}，已自动钳制",
-                    name, v, le_val
+                    "字段 '{}' 值 {} 超过上限 {}，已自动钳制", name, v, le_val
                 )
                 data[name] = le_val
         return data
@@ -75,7 +75,9 @@ class _BrowserFieldsMixin(_ClampMixin):
     """浏览器相关共享字段"""
 
     headless: bool = True
-    browser_timeout: int = Field(default=8, ge=1, le=60, description="页面操作超时（秒）")
+    browser_timeout: int = Field(
+        default=8, ge=1, le=60, description="页面操作超时（秒）"
+    )
     login_timeout: int = Field(
         default=60, ge=10, le=600, description="手动登录 API 请求超时（秒）"
     )
@@ -93,7 +95,8 @@ class _BrowserFieldsMixin(_ClampMixin):
         default=False, description="注入反检测脚本，隐藏浏览器自动化痕迹"
     )
     stealth_custom_script: str = Field(
-        default="", description="自定义反检测 JavaScript 脚本，stealth_mode 开启时追加执行"
+        default="",
+        description="自定义反检测 JavaScript 脚本，stealth_mode 开启时追加执行",
     )
     browser_locale: str = Field(default="zh-CN", description="浏览器语言区域")
     browser_timezone: str = Field(default="Asia/Shanghai", description="浏览器时区 ID")
@@ -112,20 +115,22 @@ class _MonitorFieldsMixin(_ClampMixin):
     active_task: str = Field(default="")
     carrier: str = Field(default="无")
     carrier_custom: str = Field(default="")
-    check_interval_seconds: int = Field(default=300, ge=10, le=86400, description="检测间隔（秒）")
+    check_interval_seconds: int = Field(
+        default=300, ge=10, le=86400, description="检测间隔（秒）"
+    )
     auto_start: bool = False
     pause_enabled: bool = True
     pause_start_hour: int = Field(default=0, ge=0, le=23)
     pause_end_hour: int = Field(default=6, ge=0, le=23)
-    network_targets: str = Field(
-        default=DEFAULT_NETWORK_TARGETS
-    )
+    network_targets: str = Field(default=DEFAULT_NETWORK_TARGETS)
     http_targets: str = Field(
         default=DEFAULT_HTTP_TARGETS,
         description="HTTP 检测目标地址，逗号分隔",
     )
     enable_tcp_check: bool = Field(default=True, description="启用 TCP 检测网络连通性")
-    enable_http_check: bool = Field(default=True, description="启用 HTTP 检测网络连通性")
+    enable_http_check: bool = Field(
+        default=True, description="启用 HTTP 检测网络连通性"
+    )
     enable_local_check: bool = Field(
         default=True,
         description="物理网络连接检查：未连接 WiFi/网线时跳过登录",
@@ -198,11 +203,12 @@ class _SystemFieldsMixin(_ClampMixin):
     log_retention_days: int = Field(
         default=7, ge=1, le=365, description="日志与截图保留天数"
     )
-    app_port: int = Field(default=50721, ge=1024, le=65535, description="Web 控制台端口")
+    app_port: int = Field(
+        default=50721, ge=1024, le=65535, description="Web 控制台端口"
+    )
     proxy: str = Field(default="", description="网络代理地址")
     shell_path: str = Field(
-        default="",
-        description="自定义 Shell 路径（留空使用系统默认）"
+        default="", description="自定义 Shell 路径（留空使用系统默认）"
     )
 
     @field_validator("backend_log_level", "frontend_log_level")
@@ -227,7 +233,10 @@ class MonitorConfigPayload(
     _BrowserValidatorsMixin,
 ):
     network_check_timeout: int = Field(
-        default=2, ge=1, le=30, description="TCP 网络检测超时（秒），检测网络连通性时使用"
+        default=2,
+        ge=1,
+        le=30,
+        description="TCP 网络检测超时（秒），检测网络连通性时使用",
     )
     use_global_credentials: bool = Field(
         default=True, description="当前是否使用全局凭证（前端只读，后端填充）"
@@ -237,12 +246,15 @@ class MonitorConfigPayload(
     @classmethod
     def validate_custom_variables(cls, v: dict[str, str]) -> dict[str, str]:
         import re
-        _ENV_KEY_PATTERN = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+
+        _ENV_KEY_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
         if len(v) > 50:
             raise ValueError("自定义变量最多 50 个")
         for key, val in v.items():
             if not _ENV_KEY_PATTERN.match(key):
-                raise ValueError(f"变量名格式无效: {key}，须以字母或下划线开头，仅含字母、数字和下划线")
+                raise ValueError(
+                    f"变量名格式无效: {key}，须以字母或下划线开头，仅含字母、数字和下划线"
+                )
             if len(key) > 100:
                 raise ValueError(f"变量名过长（最大 100 字符）: {key}")
             if len(val) > 10000:
@@ -300,18 +312,24 @@ class ProfileSettings(
     )
     match_ssid: str = Field(default="", description="匹配的 WiFi SSID，留空表示不匹配")
     username: str = Field(default="", description="方案独立账号，留空则使用全局账号")
-    password: str = Field(default="", description="方案独立密码（加密存储），留空则使用全局密码")
+    password: str = Field(
+        default="", description="方案独立密码（加密存储），留空则使用全局密码"
+    )
     use_global_credentials: bool = Field(
-        default=True, description="是否使用全局账号密码（true 时忽略 username/password）"
+        default=True,
+        description="是否使用全局账号密码（true 时忽略 username/password）",
     )
     use_global_advanced: bool = Field(
-        default=True, description="是否使用全局高级设置（true 时忽略以下高级字段，使用系统设置中的值）"
+        default=True,
+        description="是否使用全局高级设置（true 时忽略以下高级字段，使用系统设置中的值）",
     )
     use_global_auth_url: bool = Field(
-        default=True, description="是否使用全局认证地址（true 时忽略 auth_url，使用系统设置中的认证地址）"
+        default=True,
+        description="是否使用全局认证地址（true 时忽略 auth_url，使用系统设置中的认证地址）",
     )
     use_global_task: bool = Field(
-        default=True, description="是否使用全局活动任务（true 时忽略 active_task，使用全局任务）"
+        default=True,
+        description="是否使用全局活动任务（true 时忽略 active_task，使用全局任务）",
     )
 
 

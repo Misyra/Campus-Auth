@@ -45,8 +45,12 @@ CMD_DEBUG_START = "debug_start"  # 启动调试会话
 CMD_DEBUG_STEP = "debug_step"  # 调试下一步
 CMD_DEBUG_STOP = "debug_stop"  # 停止调试会话
 CMD_BROWSER_HEALTH_CHECK = "browser_health_check"  # 浏览器健康检查
-CMD_BROWSER_ACQUIRE = "browser_acquire"  # 获取/确保浏览器就绪（供外部线程使用 submit 调用）
-CMD_BROWSER_RELEASE = "browser_release"  # 释放浏览器引用（浏览器常驻 Worker 不实际关闭）
+CMD_BROWSER_ACQUIRE = (
+    "browser_acquire"  # 获取/确保浏览器就绪（供外部线程使用 submit 调用）
+)
+CMD_BROWSER_RELEASE = (
+    "browser_release"  # 释放浏览器引用（浏览器常驻 Worker 不实际关闭）
+)
 CMD_BROWSER_CLOSE = "browser_close"  # 实际关闭浏览器进程
 CMD_SHUTDOWN = "shutdown"  # 关闭 Worker
 
@@ -102,7 +106,9 @@ class PlaywrightWorker:
         self._context: Any = None
         self._page: Any = None
         self._debug_page: Any = None
-        self._debug_executor: Any = None  # TaskExecutor 实例，调试步骤执行时在 Worker 线程内使用
+        self._debug_executor: Any = (
+            None  # TaskExecutor 实例，调试步骤执行时在 Worker 线程内使用
+        )
 
         # _wake_event 用于立即唤醒 _async_run 协程处理新命令
         self._wake_event: asyncio.Event | None = None
@@ -151,9 +157,7 @@ class PlaywrightWorker:
         # 通过 run_coroutine_threadsafe 唤醒 Worker 的事件循环
         # 这是唯一允许的跨线程 asyncio 调用
         if self._loop is not None:
-            asyncio.run_coroutine_threadsafe(
-                self._wake_async(), self._loop
-            )
+            asyncio.run_coroutine_threadsafe(self._wake_async(), self._loop)
 
         # 等待消费者线程正常退出
         if self._consumer_thread:
@@ -204,9 +208,7 @@ class PlaywrightWorker:
         """
         # Worker 已关闭时拒绝新命令（SHUTDOWN 命令走 stop() 路径不经过此检查）
         if self._stop_event.is_set():
-            return WorkerResponse(
-                success=False, error="Worker 已关闭，不接受新命令"
-            )
+            return WorkerResponse(success=False, error="Worker 已关闭，不接受新命令")
 
         # 检测消费者线程是否存活，若已死亡则尝试重启
         if not self.is_alive():
@@ -235,9 +237,7 @@ class PlaywrightWorker:
         # 通过 run_coroutine_threadsafe 唤醒 Worker 的事件循环，
         # 使 _async_run 立即处理新放入的命令
         if self._loop is not None:
-            asyncio.run_coroutine_threadsafe(
-                self._wake_async(), self._loop
-            )
+            asyncio.run_coroutine_threadsafe(self._wake_async(), self._loop)
 
         if not wait:
             return WorkerResponse(success=True)
@@ -412,7 +412,9 @@ class PlaywrightWorker:
         template_vars = data.get("template_vars", data.get("env_vars", {}))
         screenshot_dir = data.get("screenshot_dir", "")
         default_timeout = data.get("default_timeout", TaskExecutor.DEFAULT_STEP_TIMEOUT)
-        navigation_timeout = data.get("navigation_timeout", TaskExecutor.DEFAULT_NAVIGATION_TIMEOUT)
+        navigation_timeout = data.get(
+            "navigation_timeout", TaskExecutor.DEFAULT_NAVIGATION_TIMEOUT
+        )
 
         # 检查浏览器健康状态，不健康则重建
         if not await self._health_check():
@@ -420,9 +422,7 @@ class PlaywrightWorker:
             await self._start_browser(config)
 
         if self._page is None:
-            return WorkerResponse(
-                success=False, error="浏览器页面初始化失败"
-            )
+            return WorkerResponse(success=False, error="浏览器页面初始化失败")
 
         # 保存调试页面引用
         self._debug_page = self._page
@@ -431,7 +431,9 @@ class PlaywrightWorker:
         # 加载任务页面
         if task_url:
             try:
-                await self._page.goto(task_url, wait_until="domcontentloaded", timeout=30000)
+                await self._page.goto(
+                    task_url, wait_until="domcontentloaded", timeout=30000
+                )
             except Exception as e:
                 logger.warning("调试页面加载失败: {}", e)
 
@@ -449,9 +451,7 @@ class PlaywrightWorker:
                 self._debug_executor = executor
             except Exception as e:
                 logger.error("创建 TaskExecutor 失败: {}", e)
-                return WorkerResponse(
-                    success=False, error=f"创建任务执行器失败: {e}"
-                )
+                return WorkerResponse(success=False, error=f"创建任务执行器失败: {e}")
 
         # 初始截图
         screenshot_url = None
@@ -486,14 +486,10 @@ class PlaywrightWorker:
         page 对象仅在 Worker 线程内访问，避免跨线程竞争。
         """
         if self._debug_page is None:
-            return WorkerResponse(
-                success=False, error="调试会话未启动，请先启动调试"
-            )
+            return WorkerResponse(success=False, error="调试会话未启动，请先启动调试")
         if self._debug_page.is_closed():
             self._debug_page = None
-            return WorkerResponse(
-                success=False, error="调试页面已关闭"
-            )
+            return WorkerResponse(success=False, error="调试页面已关闭")
         if self._debug_executor is None:
             return WorkerResponse(
                 success=False, error="调试执行器未创建，请重新启动调试"
@@ -657,6 +653,7 @@ class PlaywrightWorker:
         # 反检测脚本（默认关闭，需在方案设置中启用 stealth_mode）
         if browser_settings.get("stealth_mode", False):
             from app.utils.browser import STEALTH_INIT_SCRIPT
+
             custom = browser_settings.get("stealth_custom_script", "").strip()
             # 有自定义脚本则使用自定义，否则使用默认脚本
             script = custom or STEALTH_INIT_SCRIPT
@@ -681,8 +678,12 @@ class PlaywrightWorker:
         if pure_mode:
             # 纯净模式：原始 Chromium，无扩展无自定义参数
             self._browser = await self._playwright.chromium.launch(headless=headless)
-            ctx_opts = {"viewport": {"width": browser_settings.get("viewport_width", 1280),
-                                     "height": browser_settings.get("viewport_height", 720)}}
+            ctx_opts = {
+                "viewport": {
+                    "width": browser_settings.get("viewport_width", 1280),
+                    "height": browser_settings.get("viewport_height", 720),
+                }
+            }
             self._context = await self._browser.new_context(**ctx_opts)
         else:
             launch_args = self._build_launch_args(browser_settings)
@@ -828,27 +829,21 @@ class PlaywrightWorker:
         if self._wake_event is not None:
             self._wake_event.set()
 
-    def _get_extra_http_headers(
-        self, browser_settings: dict
-    ) -> dict[str, str]:
+    def _get_extra_http_headers(self, browser_settings: dict) -> dict[str, str]:
         """解析自定义 HTTP 请求头。
 
         从 browser_settings 中的 extra_headers_json 字段解析 JSON 对象。
         """
         import json
 
-        raw_headers = str(
-            browser_settings.get("extra_headers_json", "") or ""
-        ).strip()
+        raw_headers = str(browser_settings.get("extra_headers_json", "") or "").strip()
         if not raw_headers:
             return {}
 
         try:
             headers = json.loads(raw_headers)
             if isinstance(headers, dict):
-                return {
-                    str(k): str(v) for k, v in headers.items() if k is not None
-                }
+                return {str(k): str(v) for k, v in headers.items() if k is not None}
             logger.warning("自定义请求头必须是 JSON 对象，已忽略")
         except Exception as exc:
             logger.warning("解析自定义请求头失败: {}", exc)
@@ -920,7 +915,11 @@ def _cleanup_windows() -> None:
         # 使用 PowerShell Get-CimInstance 获取所有 chrome.exe 的 PID 和执行路径
         result = subprocess.run(
             [
-                "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
                 "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | "
                 "Select-Object ProcessId,ExecutablePath | ConvertTo-Csv -NoTypeInformation",
             ],
@@ -958,8 +957,12 @@ def _cleanup_windows() -> None:
                 try:
                     cmd_result = subprocess.run(
                         [
-                            "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
-                            f"(Get-CimInstance Win32_Process -Filter \"ProcessId={pid}\").CommandLine",
+                            "powershell",
+                            "-NoProfile",
+                            "-ExecutionPolicy",
+                            "Bypass",
+                            "-Command",
+                            f'(Get-CimInstance Win32_Process -Filter "ProcessId={pid}").CommandLine',
                         ],
                         capture_output=True,
                         text=True,
@@ -976,7 +979,9 @@ def _cleanup_windows() -> None:
             logger.debug("未发现孤儿 Playwright Chromium 进程")
             return
 
-        logger.info("发现 {} 个孤儿 Playwright Chromium 进程，正在清理...", len(pids_to_kill))
+        logger.info(
+            "发现 {} 个孤儿 Playwright Chromium 进程，正在清理...", len(pids_to_kill)
+        )
         for pid in pids_to_kill:
             try:
                 subprocess.run(
@@ -1023,7 +1028,9 @@ def _cleanup_posix() -> None:
             logger.debug("未发现孤儿 Playwright Chromium 进程")
             return
 
-        logger.info("发现 {} 个孤儿 Playwright Chromium 进程，正在清理...", len(pids_to_kill))
+        logger.info(
+            "发现 {} 个孤儿 Playwright Chromium 进程，正在清理...", len(pids_to_kill)
+        )
         for pid in pids_to_kill:
             try:
                 subprocess.run(

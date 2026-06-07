@@ -61,7 +61,9 @@ async def create_scheduled_task(payload: dict, request: Request) -> ActionRespon
         return ActionResponse(success=False, message="请选择目标任务")
 
     schedule = payload.get("schedule", {})
-    if not isinstance(schedule.get("hour"), int) or not isinstance(schedule.get("minute"), int):
+    if not isinstance(schedule.get("hour"), int) or not isinstance(
+        schedule.get("minute"), int
+    ):
         return ActionResponse(success=False, message="请设置执行时间")
 
     # 构建任务配置
@@ -89,7 +91,9 @@ async def create_scheduled_task(payload: dict, request: Request) -> ActionRespon
 
 
 @router.put("/api/scheduled-tasks/{task_id}", response_model=ActionResponse)
-async def update_scheduled_task(task_id: str, payload: dict, request: Request) -> ActionResponse:
+async def update_scheduled_task(
+    task_id: str, payload: dict, request: Request
+) -> ActionResponse:
     """更新定时任务。"""
     scheduler = _get_scheduler(request)
 
@@ -109,7 +113,9 @@ async def update_scheduled_task(task_id: str, payload: dict, request: Request) -
 
     schedule = payload.get("schedule", existing.get("schedule", {}))
     if "schedule" in payload:
-        if not isinstance(schedule.get("hour"), int) or not isinstance(schedule.get("minute"), int):
+        if not isinstance(schedule.get("hour"), int) or not isinstance(
+            schedule.get("minute"), int
+        ):
             return ActionResponse(success=False, message="请设置执行时间")
 
     # 更新配置
@@ -125,7 +131,9 @@ async def update_scheduled_task(task_id: str, payload: dict, request: Request) -
             "hour": schedule.get("hour", 0),
             "minute": schedule.get("minute", 0),
         },
-        "timeout": max(5, min(3600, int(payload.get("timeout", existing.get("timeout", 60))))),
+        "timeout": max(
+            5, min(3600, int(payload.get("timeout", existing.get("timeout", 60))))
+        ),
         "last_run": existing.get("last_run"),
         "last_status": existing.get("last_status"),
     }
@@ -155,7 +163,9 @@ async def run_scheduled_task(task_id: str, request: Request) -> ActionResponse:
         return ActionResponse(success=False, message="定时任务不存在")
 
     success, message = await scheduler.execute_task(task_id)
-    api_logger.info("执行定时任务 {} -> success={}, message={}", task_id, success, message)
+    api_logger.info(
+        "执行定时任务 {} -> success={}, message={}", task_id, success, message
+    )
     return ActionResponse(success=success, message=message)
 
 

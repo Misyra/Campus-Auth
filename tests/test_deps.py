@@ -2,6 +2,7 @@
 
 覆盖：所有 get_* 函数从 request.app.state.services 正确提取服务实例
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock

@@ -73,6 +73,7 @@ class ProfileService:
     def _try_restore_from_backup(self) -> ProfilesData | None:
         """尝试从 backups/ 目录恢复最新有效备份"""
         from app.constants import BACKUP_DIR
+
         if not BACKUP_DIR.exists():
             return None
         backups = sorted(BACKUP_DIR.glob("settings_*.json"), reverse=True)

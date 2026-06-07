@@ -38,14 +38,19 @@ class ServiceContainer:
         self.ws_manager = WebSocketManager()
         self.profile_service = ProfileService(project_root)
         from app.constants import AUTH_DATA_DIR
+
         self.login_history_service = LoginHistoryService(AUTH_DATA_DIR)
         self.monitor_service = MonitorService(
-            project_root, self.profile_service, self.ws_manager,
+            project_root,
+            self.profile_service,
+            self.ws_manager,
             login_history_service=self.login_history_service,
         )
         self.task_service = TaskService(project_root)
         self.scheduler_service = SchedulerService(
-            project_root, self.task_service, self.monitor_service,
+            project_root,
+            self.task_service,
+            self.monitor_service,
             login_history=self.login_history_service,
         )
         self.autostart_service = AutoStartService(project_root)
@@ -61,6 +66,7 @@ class ServiceContainer:
 
         # 注册 WebSocket 日志 sink — 将 loguru 日志转发到前端并存入 _logs
         from loguru import logger
+
         ws_sink = WebSocketSink(
             self.monitor_service.ws_broadcast_queue,
             log_store=self.monitor_service.logs,
@@ -80,9 +86,7 @@ class ServiceContainer:
             self.scheduler_service.start()
 
         # 启动 WebSocket drain loop
-        self._ws_drain_task = asyncio.create_task(
-            self.monitor_service.ws_drain_loop()
-        )
+        self._ws_drain_task = asyncio.create_task(self.monitor_service.ws_drain_loop())
 
         container_logger.info("服务容器启动完成")
 

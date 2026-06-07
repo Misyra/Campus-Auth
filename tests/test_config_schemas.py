@@ -3,6 +3,7 @@
 合并原 test_config.py 和 test_schemas.py。
 覆盖 ConfigValidator、config_service 工具函数、Pydantic 模型等。
 """
+
 from __future__ import annotations
 
 import json
@@ -33,6 +34,7 @@ from app.schemas import (
 # =====================================================================
 # 第一部分：ConfigValidator（原 test_config.py 前半部分）
 # =====================================================================
+
 
 class TestValidateGuiConfig:
     def test_valid_config(self):
@@ -115,57 +117,70 @@ class TestValidateGuiConfig:
 
 class TestValidateEnvConfig:
     def test_valid_config(self):
-        ok, msg = ConfigValidator.validate_env_config({
-            "username": "testuser",
-            "password": "testpass",
-            "auth_url": "http://10.0.0.1",
-        })
+        ok, msg = ConfigValidator.validate_env_config(
+            {
+                "username": "testuser",
+                "password": "testpass",
+                "auth_url": "http://10.0.0.1",
+            }
+        )
         assert ok is True
 
     def test_missing_username(self):
-        ok, msg = ConfigValidator.validate_env_config({
-            "username": "",
-            "password": "pass",
-            "auth_url": "http://10.0.0.1",
-        })
+        ok, msg = ConfigValidator.validate_env_config(
+            {
+                "username": "",
+                "password": "pass",
+                "auth_url": "http://10.0.0.1",
+            }
+        )
         assert ok is False
 
     def test_missing_auth_url(self):
-        ok, msg = ConfigValidator.validate_env_config({
-            "username": "user",
-            "password": "pass",
-            "auth_url": "",
-        })
+        ok, msg = ConfigValidator.validate_env_config(
+            {
+                "username": "user",
+                "password": "pass",
+                "auth_url": "",
+            }
+        )
         assert ok is False
 
     def test_missing_password(self):
-        ok, msg = ConfigValidator.validate_env_config({
-            "username": "user",
-            "password": "",
-            "auth_url": "http://10.0.0.1",
-        })
+        ok, msg = ConfigValidator.validate_env_config(
+            {
+                "username": "user",
+                "password": "",
+                "auth_url": "http://10.0.0.1",
+            }
+        )
         assert ok is False
 
     def test_all_empty(self):
-        ok, msg = ConfigValidator.validate_env_config({
-            "username": "",
-            "password": "",
-            "auth_url": "",
-        })
+        ok, msg = ConfigValidator.validate_env_config(
+            {
+                "username": "",
+                "password": "",
+                "auth_url": "",
+            }
+        )
         assert ok is False
 
     def test_none_values(self):
-        ok, msg = ConfigValidator.validate_env_config({
-            "username": None,
-            "password": None,
-            "auth_url": None,
-        })
+        ok, msg = ConfigValidator.validate_env_config(
+            {
+                "username": None,
+                "password": None,
+                "auth_url": None,
+            }
+        )
         assert ok is False
 
 
 # =====================================================================
 # 第二部分：config_service 工具函数（原 test_config.py 后半部分）
 # =====================================================================
+
 
 class TestSafeDecrypt:
     def test_decrypt_encrypted_value(self):
@@ -291,6 +306,7 @@ class TestNormalizeHeadersJson:
 # auth_url 验证器
 # ---------------------------------------------------------------------
 
+
 class TestAuthUrlValidator:
     def test_valid_http(self):
         m = MonitorConfigPayload(auth_url="http://10.0.0.1/login")
@@ -327,6 +343,7 @@ class TestAuthUrlValidator:
 # 浏览器请求头 JSON 验证器
 # ---------------------------------------------------------------------
 
+
 class TestHeadersJsonValidator:
     def test_valid_json_object(self):
         m = MonitorConfigPayload(browser_extra_headers_json='{"X-Custom": "value"}')
@@ -352,6 +369,7 @@ class TestHeadersJsonValidator:
 # ---------------------------------------------------------------------
 # 日志级别验证器
 # ---------------------------------------------------------------------
+
 
 class TestLogLevelValidator:
     def test_valid_level(self):
@@ -382,6 +400,7 @@ class TestLogLevelValidator:
 # ---------------------------------------------------------------------
 # 自定义变量验证器
 # ---------------------------------------------------------------------
+
 
 class TestCustomVariablesValidator:
     def test_valid(self):
@@ -414,6 +433,7 @@ class TestCustomVariablesValidator:
 # ---------------------------------------------------------------------
 # 约束字段
 # ---------------------------------------------------------------------
+
 
 class TestConstrainedFields:
     def test_browser_timeout_valid(self):
@@ -468,7 +488,9 @@ class TestConstrainedFields:
         assert m.network_check_timeout == 30  # 自动钳制到上限
 
     def test_browser_viewport_valid(self):
-        m = MonitorConfigPayload(browser_viewport_width=1920, browser_viewport_height=1080)
+        m = MonitorConfigPayload(
+            browser_viewport_width=1920, browser_viewport_height=1080
+        )
         assert m.browser_viewport_width == 1920
         assert m.browser_viewport_height == 1080
 
@@ -484,6 +506,7 @@ class TestConstrainedFields:
 # ---------------------------------------------------------------------
 # LogEntry
 # ---------------------------------------------------------------------
+
 
 class TestLogEntry:
     def test_valid_level(self):
@@ -510,6 +533,7 @@ class TestLogEntry:
 # ---------------------------------------------------------------------
 # ProfileSettings
 # ---------------------------------------------------------------------
+
 
 class TestProfileSettingsDefaults:
     def test_defaults(self):
@@ -549,6 +573,7 @@ class TestProfileSettingsDefaults:
 # SystemSettings
 # ---------------------------------------------------------------------
 
+
 class TestSystemSettings:
     def test_defaults(self):
         s = SystemSettings()
@@ -582,6 +607,7 @@ class TestSystemSettings:
 # ProfilesData
 # ---------------------------------------------------------------------
 
+
 class TestProfilesData:
     def test_defaults(self):
         data = ProfilesData()
@@ -613,6 +639,7 @@ class TestProfilesData:
 # ActionResponse
 # ---------------------------------------------------------------------
 
+
 class TestActionResponse:
     def test_success(self):
         r = ActionResponse(success=True, message="操作成功")
@@ -628,6 +655,7 @@ class TestActionResponse:
 # ---------------------------------------------------------------------
 # MonitorStatusResponse
 # ---------------------------------------------------------------------
+
 
 class TestMonitorStatusResponse:
     def test_defaults(self):
@@ -663,6 +691,7 @@ class TestMonitorStatusResponse:
 # AutoStartStatusResponse
 # ---------------------------------------------------------------------
 
+
 class TestAutoStartStatusResponse:
     def test_basic(self):
         r = AutoStartStatusResponse(
@@ -688,6 +717,7 @@ class TestAutoStartStatusResponse:
 # ---------------------------------------------------------------------
 # MonitorConfigPayload — 完整构造
 # ---------------------------------------------------------------------
+
 
 class TestMonitorConfigPayloadFull:
     def test_full_construct(self):

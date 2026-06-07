@@ -21,16 +21,23 @@ DEFAULT_TIMEOUT = 60
 
 # 解释器 → 临时文件后缀映射
 _BINARY_EXT_MAP = {
-    "python": ".py", "python3": ".py",
+    "python": ".py",
+    "python3": ".py",
     "node": ".js",
     "ruby": ".rb",
     "php": ".php",
-    "perl": ".pl", "raku": ".raku",
+    "perl": ".pl",
+    "raku": ".raku",
     "lua": ".lua",
-    "r": ".R", "rscript": ".R",
+    "r": ".R",
+    "rscript": ".R",
     "cmd": ".bat",
-    "powershell": ".ps1", "pwsh": ".ps1",
-    "bash": ".sh", "sh": ".sh", "zsh": ".sh", "fish": ".fish",
+    "powershell": ".ps1",
+    "pwsh": ".ps1",
+    "bash": ".sh",
+    "sh": ".sh",
+    "zsh": ".sh",
+    "fish": ".fish",
 }
 
 
@@ -72,6 +79,7 @@ class ScriptRunner:
 
         if self.script_path.suffix.lower() == ".json":
             import json
+
             try:
                 data = json.loads(self.script_path.read_text(encoding="utf-8"))
             except Exception as e:
@@ -95,7 +103,16 @@ class ScriptRunner:
         if script_file is not None:
             if platform.system() == "Windows":
                 if exe_name in ("powershell", "pwsh"):
-                    return [self.binary_path, "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", script_file]
+                    return [
+                        self.binary_path,
+                        "-NoProfile",
+                        "-ExecutionPolicy",
+                        "Bypass",
+                        "-WindowStyle",
+                        "Hidden",
+                        "-File",
+                        script_file,
+                    ]
                 elif exe_name == "cmd":
                     return [self.binary_path, "/c", f'call "{script_file}"']
             else:
@@ -113,7 +130,14 @@ class ScriptRunner:
         # .py 或其他文件
         if platform.system() == "Windows":
             if exe_name in ("powershell", "pwsh"):
-                return [self.binary_path, "-NoProfile", "-WindowStyle", "Hidden", "-File", script]
+                return [
+                    self.binary_path,
+                    "-NoProfile",
+                    "-WindowStyle",
+                    "Hidden",
+                    "-File",
+                    script,
+                ]
             elif exe_name == "cmd":
                 return [self.binary_path, "/c", f'call "{script}"']
         else:
@@ -127,7 +151,10 @@ class ScriptRunner:
         exe_name = ntpath.splitext(ntpath.basename(self.binary_path))[0].lower()
         ext = _BINARY_EXT_MAP.get(exe_name, "")
         tf = tempfile.NamedTemporaryFile(
-            "w", suffix=ext, delete=False, encoding="utf-8",
+            "w",
+            suffix=ext,
+            delete=False,
+            encoding="utf-8",
         )
         tf.write(content)
         tf.close()
@@ -172,7 +199,9 @@ class ScriptRunner:
 
         try:
             returncode, stdout_str, stderr_str = policy.run_sync(
-                cmd, timeout=self.timeout, **kwargs,
+                cmd,
+                timeout=self.timeout,
+                **kwargs,
             )
         except PermissionError as e:
             logger.error("脚本执行被拒绝: {}", e)
@@ -189,13 +218,17 @@ class ScriptRunner:
         if stderr_str:
             logger.info("脚本 stderr: {}", stderr_str[:500])
 
-        output = stdout_str[:500] or stderr_str[:500] or f"(无输出, exit code {returncode})"
+        output = (
+            stdout_str[:500] or stderr_str[:500] or f"(无输出, exit code {returncode})"
+        )
 
         if returncode == 0:
             logger.info("脚本执行完成 ({:.1f}s): {}", elapsed, output)
             return True, output
         else:
-            logger.warning("脚本执行失败 ({:.1f}s, exit {}): {}", elapsed, returncode, output)
+            logger.warning(
+                "脚本执行失败 ({:.1f}s, exit {}): {}", elapsed, returncode, output
+            )
             return False, output
 
 
@@ -204,7 +237,17 @@ def _build_minimal_env() -> dict[str, str]:
     safe: dict[str, str] = {}
     base_keys = {"PATH", "HOME", "USER", "TEMP", "TMP"}
     if platform.system() == "Windows":
-        base_keys.update({"SystemRoot", "SystemDrive", "ComSpec", "windir", "USERPROFILE", "APPDATA", "LOCALAPPDATA"})
+        base_keys.update(
+            {
+                "SystemRoot",
+                "SystemDrive",
+                "ComSpec",
+                "windir",
+                "USERPROFILE",
+                "APPDATA",
+                "LOCALAPPDATA",
+            }
+        )
     else:
         base_keys.update({"LANG", "LC_ALL", "SHELL", "XDG_RUNTIME_DIR"})
     for key in base_keys:

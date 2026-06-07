@@ -121,7 +121,7 @@ class TestAuditLog:
             audit_hook=hook,
         )
         # 模拟 subprocess.run 避免真实执行
-        with patch('app.utils.shell_policy.subprocess.run') as mock_run:
+        with patch("app.utils.shell_policy.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
             policy.run_sync(["/bin/sh", "-c", "echo ok"])
 
@@ -148,13 +148,17 @@ class TestAuditLog:
         mock_proc.kill = MagicMock()
         mock_proc.wait = MagicMock()
 
-        with patch('app.utils.shell_policy.asyncio.create_subprocess_exec', return_value=mock_proc):
+        with patch(
+            "app.utils.shell_policy.asyncio.create_subprocess_exec",
+            return_value=mock_proc,
+        ):
             await policy.run(["/bin/sh", "-c", "echo ok"])
 
         hook.assert_called_once()
 
     def test_audit_hook_exception_does_not_propagate(self):
         """审计钩子异常不应影响命令执行。"""
+
         def bad_hook(argv, timeout):
             raise RuntimeError("hook 故障")
 
@@ -162,7 +166,7 @@ class TestAuditLog:
             allowlist=["/bin/sh"],
             audit_hook=bad_hook,
         )
-        with patch('app.utils.shell_policy.subprocess.run') as mock_run:
+        with patch("app.utils.shell_policy.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
             # 不应抛出异常
             code, out, err = policy.run_sync(["/bin/sh", "-c", "echo ok"])
@@ -171,7 +175,7 @@ class TestAuditLog:
     def test_no_hook_still_works(self):
         """不设置审计钩子时命令执行应正常。"""
         policy = ShellCommandPolicy(allowlist=["/bin/sh"], audit_hook=None)
-        with patch('app.utils.shell_policy.subprocess.run') as mock_run:
+        with patch("app.utils.shell_policy.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
             code, out, err = policy.run_sync(["/bin/sh", "-c", "echo ok"])
             assert code == 0
@@ -194,7 +198,7 @@ class TestRunSync:
     def test_success_returns_zero(self):
         """成功执行应返回 returncode=0。"""
         policy = ShellCommandPolicy(allowlist=["/bin/sh"])
-        with patch('app.utils.shell_policy.subprocess.run') as mock_run:
+        with patch("app.utils.shell_policy.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="hello", stderr="")
             code, out, err = policy.run_sync(["/bin/sh", "-c", "echo hello"])
             assert code == 0
@@ -205,7 +209,7 @@ class TestRunSync:
         import subprocess as sp
 
         policy = ShellCommandPolicy(allowlist=["/bin/sh"])
-        with patch('app.utils.shell_policy.subprocess.run') as mock_run:
+        with patch("app.utils.shell_policy.subprocess.run") as mock_run:
             mock_run.side_effect = sp.TimeoutExpired(cmd="/bin/sh", timeout=1)
             code, out, err = policy.run_sync(["/bin/sh", "-c", "sleep 999"])
             assert code == -1
@@ -214,7 +218,7 @@ class TestRunSync:
     def test_file_not_found_returns_minus_one(self):
         """文件不存在应返回 returncode=-1。"""
         policy = ShellCommandPolicy(allowlist=["/nonexistent/bin"])
-        with patch('app.utils.shell_policy.subprocess.run') as mock_run:
+        with patch("app.utils.shell_policy.subprocess.run") as mock_run:
             mock_run.side_effect = FileNotFoundError()
             code, out, err = policy.run_sync(["/nonexistent/bin", "-c", "test"])
             assert code == -1
@@ -247,7 +251,10 @@ class TestRunAsync:
         mock_proc.communicate = AsyncMock(return_value=(b"hello", b""))
         mock_proc.returncode = 0
 
-        with patch('app.utils.shell_policy.asyncio.create_subprocess_exec', return_value=mock_proc):
+        with patch(
+            "app.utils.shell_policy.asyncio.create_subprocess_exec",
+            return_value=mock_proc,
+        ):
             code, out, err = await policy.run(["/bin/sh", "-c", "echo hello"])
             assert code == 0
             assert out == "hello"
@@ -265,8 +272,14 @@ class TestRunAsync:
         mock_proc.kill = MagicMock()
         mock_proc.wait = AsyncMock()
 
-        with patch('app.utils.shell_policy.asyncio.create_subprocess_exec', return_value=mock_proc):
-            with patch('app.utils.shell_policy.asyncio.wait_for', side_effect=_asyncio.TimeoutError()):
+        with patch(
+            "app.utils.shell_policy.asyncio.create_subprocess_exec",
+            return_value=mock_proc,
+        ):
+            with patch(
+                "app.utils.shell_policy.asyncio.wait_for",
+                side_effect=_asyncio.TimeoutError(),
+            ):
                 code, out, err = await policy.run(["/bin/sh", "-c", "sleep 999"])
                 assert code == -1
                 assert "超时" in err

@@ -1,4 +1,5 @@
 """SchedulerService 测试 — 聚焦 _execute_shell 安全策略集成。"""
+
 from __future__ import annotations
 
 import asyncio
@@ -40,9 +41,7 @@ class TestDetectAvailableShells:
             assert "path" in entry
             assert "description" in entry
 
-    @pytest.mark.skipif(
-        __import__("sys").platform != "win32", reason="仅 Windows"
-    )
+    @pytest.mark.skipif(__import__("sys").platform != "win32", reason="仅 Windows")
     def test_windows_finds_cmd(self):
         shells = detect_available_shells()
         names = [s["name"] for s in shells]
@@ -66,11 +65,18 @@ class TestExecuteShellUsesPolicy:
         """不在白名单的 shell_path 应被拒绝，返回失败消息。"""
         # 直接调用 _execute_shell，shell_path 不在 detect_available_shells 结果中
         result = _run_async(
-            service._execute_shell("echo hello", timeout=10, shell_path="/fake/malicious/shell")
+            service._execute_shell(
+                "echo hello", timeout=10, shell_path="/fake/malicious/shell"
+            )
         )
         success, message = result
         assert success is False
-        assert "白名单" in message or "拒绝" in message or "Permission" in message.lower() or "不在" in message
+        assert (
+            "白名单" in message
+            or "拒绝" in message
+            or "Permission" in message.lower()
+            or "不在" in message
+        )
 
     def test_timeout_clamped_to_max(self, service):
         """超时应被 clamp 到 300 秒上限。"""
@@ -81,7 +87,9 @@ class TestExecuteShellUsesPolicy:
 
         shell_path = shells[0]["path"]
 
-        with patch('app.utils.shell_policy.asyncio.create_subprocess_exec') as mock_exec:
+        with patch(
+            "app.utils.shell_policy.asyncio.create_subprocess_exec"
+        ) as mock_exec:
             mock_proc = AsyncMock()
             mock_proc.communicate = AsyncMock(return_value=(b"ok", b""))
             mock_proc.returncode = 0
@@ -101,15 +109,19 @@ class TestExecuteShellUsesPolicy:
 
         shell_path = shells[0]["path"]
 
-        with patch('app.utils.shell_policy.asyncio.create_subprocess_exec') as mock_exec:
+        with patch(
+            "app.utils.shell_policy.asyncio.create_subprocess_exec"
+        ) as mock_exec:
             mock_proc = AsyncMock()
             mock_proc.communicate = AsyncMock(return_value=(b"ok", b""))
             mock_proc.returncode = 0
             mock_exec.return_value = mock_proc
 
-            with patch('app.services.scheduler.scheduler_logger'):
+            with patch("app.services.scheduler.scheduler_logger"):
                 result = _run_async(
-                    service._execute_shell("echo audit_test", timeout=30, shell_path=shell_path)
+                    service._execute_shell(
+                        "echo audit_test", timeout=30, shell_path=shell_path
+                    )
                 )
                 success, message = result
                 assert success is True
@@ -118,9 +130,7 @@ class TestExecuteShellUsesPolicy:
 
     def test_empty_command_returns_failure(self, service):
         """空命令应返回失败。"""
-        result = _run_async(
-            service._execute_shell("", timeout=30)
-        )
+        result = _run_async(service._execute_shell("", timeout=30))
         success, message = result
         assert success is False
         assert "空" in message
@@ -129,9 +139,13 @@ class TestExecuteShellUsesPolicy:
         """集成验证：_execute_shell 路径校验经过 ShellCommandPolicy。"""
         # 使用明显不在白名单的路径
         result = _run_async(
-            service._execute_shell("echo test", timeout=30, shell_path="/absolutely/fake/shell")
+            service._execute_shell(
+                "echo test", timeout=30, shell_path="/absolutely/fake/shell"
+            )
         )
         success, message = result
         assert success is False
         # ShellCommandPolicy 会抛出 PermissionError，被 _execute_shell 捕获
-        assert "白名单" in message or "Permission" in message.lower() or "不在" in message
+        assert (
+            "白名单" in message or "Permission" in message.lower() or "不在" in message
+        )

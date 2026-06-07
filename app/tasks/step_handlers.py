@@ -231,10 +231,16 @@ class InputHandler(StepHandler):
             return False, "输入步骤需要 selector"
 
         ctx = await self._resolve_frame(page, step)
-        masked = "***" if any(k in step.description.lower() for k in ("密码", "password", "pwd")) else value
+        masked = (
+            "***"
+            if any(k in step.description.lower() for k in ("密码", "password", "pwd"))
+            else value
+        )
         logger.debug(
             "[input] value=%s, clear=%s, timeout=%dms",
-            masked, clear, timeout,
+            masked,
+            clear,
+            timeout,
         )
 
         async def _normal_fill(loc, t):
@@ -247,12 +253,16 @@ class InputHandler(StepHandler):
             )
 
         ok, _msg = await self._try_candidates_with_fallback(
-            ctx, selector, timeout, _normal_fill, _force_input, label="[input]",
+            ctx,
+            selector,
+            timeout,
+            _normal_fill,
+            _force_input,
+            label="[input]",
         )
         if ok:
             return True, ""
         return False, f"强制输入未找到可用元素: {selector}"
-
 
 
 class ClickHandler(StepHandler):
@@ -282,7 +292,12 @@ class ClickHandler(StepHandler):
             await loc.dispatch_event("click")
 
         ok, _msg = await self._try_candidates_with_fallback(
-            ctx, selector, timeout, _normal_click, _force_click, label="[click]",
+            ctx,
+            selector,
+            timeout,
+            _normal_click,
+            _force_click,
+            label="[click]",
         )
         if ok:
             return True, ""
@@ -313,7 +328,9 @@ class SelectHandler(StepHandler):
             return True, ""
 
         ctx = await self._resolve_frame(page, step)
-        logger.debug("[select] selector={}, value={}, timeout={}ms", selector, value, timeout)
+        logger.debug(
+            "[select] selector={}, value={}, timeout={}ms", selector, value, timeout
+        )
 
         element = await self._find_element(ctx, selector, timeout)
         if not element:
@@ -359,7 +376,9 @@ class SelectHandler(StepHandler):
                 try:
                     result = await element.select_option(label=current, timeout=timeout)
                     if result:
-                        logger.info("[select] 模糊匹配成功: '{}' 匹配选项 '{}'", value, current)
+                        logger.info(
+                            "[select] 模糊匹配成功: '{}' 匹配选项 '{}'", value, current
+                        )
                         return True
                 except Exception:
                     continue
@@ -393,7 +412,10 @@ class ClickSelectHandler(StepHandler):
         ctx = await self._resolve_frame(page, step)
         logger.info(
             "[click_select] trigger=%s, value=%s, option_sel=%s, timeout=%dms",
-            selector, value, option_selector or "(auto)", timeout,
+            selector,
+            value,
+            option_selector or "(auto)",
+            timeout,
         )
 
         trigger = await self._find_element(ctx, selector, timeout)
@@ -421,7 +443,9 @@ class ClickSelectHandler(StepHandler):
             if option_selector:
                 container = ctx.locator(option_selector).first
                 option = container.get_by_text(text, exact=False).first
-                logger.debug("[click_select] 在容器 '{}' 内搜索选项 '{}'", option_selector, text)
+                logger.debug(
+                    "[click_select] 在容器 '{}' 内搜索选项 '{}'", option_selector, text
+                )
             else:
                 option = ctx.get_by_text(text, exact=False).first
                 logger.debug("[click_select] 全局搜索选项 '{}'", text)
@@ -554,10 +578,14 @@ class ScreenshotHandler(StepHandler):
         if not path:
             task_id = resolver.config.task_id or "unknown"
             step_id = step.id or "s0"
-            result = await save_screenshot(page, date_dir, task_id=task_id, step_id=step_id)
+            result = await save_screenshot(
+                page, date_dir, task_id=task_id, step_id=step_id
+            )
         else:
             safe_name = Path(path).name
-            result = await save_screenshot(page, date_dir, prefix=safe_name.rsplit(".", 1)[0])
+            result = await save_screenshot(
+                page, date_dir, prefix=safe_name.rsplit(".", 1)[0]
+            )
 
         if result:
             # 转为可访问的 URL
@@ -585,7 +613,9 @@ class SleepHandler(StepHandler):
 
         if duration > self.MAX_SLEEP_MS:
             logger.warning(
-                "[sleep] duration={}ms 超过上限 {}ms，已截断", duration, self.MAX_SLEEP_MS
+                "[sleep] duration={}ms 超过上限 {}ms，已截断",
+                duration,
+                self.MAX_SLEEP_MS,
             )
             duration = self.MAX_SLEEP_MS
 
@@ -616,7 +646,9 @@ class OcrHandler(StepHandler):
 
                 instance = ddddocr.DdddOcr(old=old, show_ad=False)
             except ImportError:
-                raise StepError("ddddocr 未安装，请在「设置 → 系统与日志」中安装 OCR 依赖")
+                raise StepError(
+                    "ddddocr 未安装，请在「设置 → 系统与日志」中安装 OCR 依赖"
+                )
             cls._ocr_instances[old] = instance
             return instance
 
@@ -641,9 +673,12 @@ class OcrHandler(StepHandler):
         with cls._ocr_lock:
             if old in cls._ocr_instances:
                 del cls._ocr_instances[old]
-                logger.info("[ocr] 模型已卸载 (old={})，空闲超过 {}s", old, cls._IDLE_TIMEOUT)
+                logger.info(
+                    "[ocr] 模型已卸载 (old={})，空闲超过 {}s", old, cls._IDLE_TIMEOUT
+                )
         cls._cleanup_timers.pop(old, None)
         import gc
+
         gc.collect()
 
     @property
@@ -665,7 +700,13 @@ class OcrHandler(StepHandler):
 
         timeout = step.timeout or 10000
         ctx = await self._resolve_frame(page, step)
-        logger.info("[ocr] selector={}, target={}, old={}, char_range={}", selector, target_selector or "(无)", old, char_range)
+        logger.info(
+            "[ocr] selector={}, target={}, old={}, char_range={}",
+            selector,
+            target_selector or "(无)",
+            old,
+            char_range,
+        )
 
         # 查找验证码图片元素
         element = await self._find_element(ctx, selector, timeout)
@@ -701,6 +742,7 @@ class OcrHandler(StepHandler):
             if char_range is not None:
                 # 有字符范围限制时创建独立实例，避免 set_ranges 污染缓存实例
                 import ddddocr
+
                 ocr = ddddocr.DdddOcr(old=old, show_ad=False)
                 ocr.set_ranges(char_range)
                 logger.debug("[ocr] set_ranges({})", char_range)
@@ -727,15 +769,21 @@ class OcrHandler(StepHandler):
                     return False, f"未找到验证码输入框: {target_selector}"
                 try:
                     await target.fill(result, timeout=timeout)
-                    logger.info("[ocr] 普通 fill 成功 -> {}, 值='{}'", target_selector, result)
+                    logger.info(
+                        "[ocr] 普通 fill 成功 -> {}, 值='{}'", target_selector, result
+                    )
                 except Exception:
-                    logger.info("[ocr] 普通 fill 失败，降级到强制输入 -> {}", target_selector)
+                    logger.info(
+                        "[ocr] 普通 fill 失败，降级到强制输入 -> {}", target_selector
+                    )
                     await target.wait_for(state="attached", timeout=timeout)
                     await target.evaluate(
                         _FORCE_INPUT_JS,
                         {"val": result, "doClear": False},
                     )
-                    logger.info("[ocr] 强制输入成功 -> {}, 值='{}'", target_selector, result)
+                    logger.info(
+                        "[ocr] 强制输入成功 -> {}, 值='{}'", target_selector, result
+                    )
 
             # 返回结果，包含截图 URL
             message = result

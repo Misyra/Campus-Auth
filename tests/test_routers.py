@@ -2,6 +2,7 @@
 
 覆盖：config / monitor / tasks / profiles / history / tools / repo / scripts / scheduled_tasks / debug
 """
+
 from __future__ import annotations
 
 import json
@@ -56,20 +57,24 @@ def client(tmp_path):
 
     # 写入默认任务文件
     (tmp_path / "tasks" / "browser" / "default.json").write_text(
-        json.dumps({
-            "name": "默认任务",
-            "url": "http://10.0.0.1",
-            "steps": [{"id": "s1", "type": "click", "selector": "#btn"}],
-        }, ensure_ascii=False),
+        json.dumps(
+            {
+                "name": "默认任务",
+                "url": "http://10.0.0.1",
+                "steps": [{"id": "s1", "type": "click", "selector": "#btn"}],
+            },
+            ensure_ascii=False,
+        ),
         encoding="utf-8",
     )
 
-    with patch('app.constants.PROJECT_ROOT', tmp_path), \
-         patch('app.constants.FRONTEND_DIR', tmp_path / "frontend"), \
-         patch('app.constants.LOGS_DIR', tmp_path / "logs"), \
-         patch('app.constants.TEMP_DIR', tmp_path / "temp"), \
-         patch('app.constants.BACKUP_DIR', tmp_path / "backups"):
-
+    with (
+        patch("app.constants.PROJECT_ROOT", tmp_path),
+        patch("app.constants.FRONTEND_DIR", tmp_path / "frontend"),
+        patch("app.constants.LOGS_DIR", tmp_path / "logs"),
+        patch("app.constants.TEMP_DIR", tmp_path / "temp"),
+        patch("app.constants.BACKUP_DIR", tmp_path / "backups"),
+    ):
         from app.application import app
 
         mock_services = MagicMock()
@@ -79,13 +84,25 @@ def client(tmp_path):
             username="testuser", password="••••••••", auth_url="http://10.0.0.1"
         )
         mock_services.monitor_service.get_status.return_value = MonitorStatusResponse(
-            monitoring=False, network_check_count=0, login_attempt_count=0,
-            last_check_time=None, runtime_seconds=0,
+            monitoring=False,
+            network_check_count=0,
+            login_attempt_count=0,
+            last_check_time=None,
+            runtime_seconds=0,
         )
         mock_services.monitor_service.list_logs.return_value = []
-        mock_services.monitor_service.start_monitoring.return_value = (True, "监控已启动")
-        mock_services.monitor_service.stop_monitoring.return_value = (True, "监控已停止")
-        mock_services.monitor_service.run_manual_login.return_value = (True, "手动登录成功")
+        mock_services.monitor_service.start_monitoring.return_value = (
+            True,
+            "监控已启动",
+        )
+        mock_services.monitor_service.stop_monitoring.return_value = (
+            True,
+            "监控已停止",
+        )
+        mock_services.monitor_service.run_manual_login.return_value = (
+            True,
+            "手动登录成功",
+        )
         mock_services.monitor_service.test_network.return_value = (True, "网络正常")
         mock_services.monitor_service.pure_mode = False
         mock_services.monitor_service.toggle_pure_mode.return_value = True
@@ -99,10 +116,15 @@ def client(tmp_path):
             profiles={"default": ProfileSettings(name="默认方案")},
         )
         mock_services.profile_service.load.return_value = profile_data
-        mock_services.profile_service.get_active_profile.return_value = ProfileSettings(name="默认方案")
+        mock_services.profile_service.get_active_profile.return_value = ProfileSettings(
+            name="默认方案"
+        )
         mock_services.profile_service.save_profile.return_value = (True, "保存成功")
         mock_services.profile_service.delete_profile.return_value = (True, "删除成功")
-        mock_services.profile_service.set_active_profile.return_value = (True, "切换成功")
+        mock_services.profile_service.set_active_profile.return_value = (
+            True,
+            "切换成功",
+        )
         mock_services.profile_service.detect_matching_profile.return_value = None
         mock_services.profile_service.set_auto_switch.return_value = None
 
@@ -112,7 +134,8 @@ def client(tmp_path):
         ]
         mock_services.task_service.get_active_task.return_value = "default"
         mock_services.task_service.get_task.return_value = {
-            "id": "default", "name": "默认任务",
+            "id": "default",
+            "name": "默认任务",
             "steps": [{"id": "s1", "type": "click", "selector": "#btn"}],
         }
         mock_services.task_service.save_task.return_value = (True, "保存成功")
@@ -127,11 +150,20 @@ def client(tmp_path):
 
         # ── debug_manager ──
         mock_services.debug_manager.get_status.return_value = {
-            "running": False, "task_id": None, "current_step": 0,
-            "total_steps": 0, "steps": [], "results": [], "screenshot_url": None,
+            "running": False,
+            "task_id": None,
+            "current_step": 0,
+            "total_steps": 0,
+            "steps": [],
+            "results": [],
+            "screenshot_url": None,
         }
-        mock_services.debug_manager.stop = AsyncMock(return_value={"running": False, "message": "调试会话已关闭"})
-        mock_services.debug_manager.next_step = AsyncMock(return_value={"running": False})
+        mock_services.debug_manager.stop = AsyncMock(
+            return_value={"running": False, "message": "调试会话已关闭"}
+        )
+        mock_services.debug_manager.next_step = AsyncMock(
+            return_value={"running": False}
+        )
         mock_services.debug_manager.run_all = AsyncMock(return_value={"running": False})
 
         # ── login_history_service ──
@@ -245,7 +277,10 @@ class TestTasksRouter:
     def test_save_task(self, client):
         resp = client.put(
             "/api/tasks/new_task",
-            json={"name": "新任务", "steps": [{"id": "s1", "type": "click", "selector": "#btn"}]},
+            json={
+                "name": "新任务",
+                "steps": [{"id": "s1", "type": "click", "selector": "#btn"}],
+            },
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
@@ -398,7 +433,11 @@ class TestScheduledTasksRouter:
     def test_create_scheduled_task_missing_name(self, client):
         resp = client.post(
             "/api/scheduled-tasks",
-            json={"type": "shell", "command": "echo hello", "schedule": {"hour": 8, "minute": 0}},
+            json={
+                "type": "shell",
+                "command": "echo hello",
+                "schedule": {"hour": 8, "minute": 0},
+            },
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is False
@@ -406,7 +445,11 @@ class TestScheduledTasksRouter:
     def test_create_scheduled_task_invalid_type(self, client):
         resp = client.post(
             "/api/scheduled-tasks",
-            json={"name": "test", "type": "invalid", "schedule": {"hour": 8, "minute": 0}},
+            json={
+                "name": "test",
+                "type": "invalid",
+                "schedule": {"hour": 8, "minute": 0},
+            },
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is False
@@ -414,7 +457,11 @@ class TestScheduledTasksRouter:
     def test_create_scheduled_task_shell_missing_command(self, client):
         resp = client.post(
             "/api/scheduled-tasks",
-            json={"name": "test", "type": "shell", "schedule": {"hour": 8, "minute": 0}},
+            json={
+                "name": "test",
+                "type": "shell",
+                "schedule": {"hour": 8, "minute": 0},
+            },
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is False
@@ -443,14 +490,14 @@ class TestScheduledTasksRouter:
 
 
 class TestRepoRouter:
-    @patch('app.api.repo.repo_fetch_json')
+    @patch("app.api.repo.repo_fetch_json")
     def test_repo_fetch_index(self, mock_fetch, client):
         mock_fetch.return_value = [{"id": "task1", "name": "任务1"}]
         resp = client.get("/api/repo/fetch?url=https://example.com/index.json")
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
 
-    @patch('app.api.repo.repo_fetch_json')
+    @patch("app.api.repo.repo_fetch_json")
     def test_repo_fetch_task(self, mock_fetch, client):
         mock_fetch.return_value = {"name": "任务详情"}
         resp = client.get("/api/repo/task?url=https://example.com/task.json")

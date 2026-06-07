@@ -1,10 +1,8 @@
 """系统关机路由测试"""
+
 from __future__ import annotations
 
-import threading
 from unittest.mock import MagicMock, patch
-
-
 
 
 class TestShutdownUsesExit:
@@ -18,13 +16,15 @@ class TestShutdownUsesExit:
         mock_request = MagicMock()
         mock_request.app.state.shutdown_event = MagicMock()
 
-        with patch('app.workers.playwright_worker.get_worker') as mock_get_worker, \
-             patch('app.workers.playwright_worker.cleanup_orphan_browsers'):
-
+        with (
+            patch("app.workers.playwright_worker.get_worker") as mock_get_worker,
+            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
+        ):
             mock_worker = MagicMock()
             mock_get_worker.return_value = mock_worker
 
             from app.api.system import shutdown_server
+
             result = shutdown_server(request=mock_request, svc=mock_monitor)
 
         # 验证 shutdown_event.set() 被调用
@@ -40,13 +40,17 @@ class TestShutdownUsesExit:
         mock_request = MagicMock()
         mock_request.app.state.shutdown_event = MagicMock()
 
-        with patch('app.workers.playwright_worker.get_worker') as mock_get_worker, \
-             patch('app.workers.playwright_worker.cleanup_orphan_browsers') as mock_cleanup:
-
+        with (
+            patch("app.workers.playwright_worker.get_worker") as mock_get_worker,
+            patch(
+                "app.workers.playwright_worker.cleanup_orphan_browsers"
+            ) as mock_cleanup,
+        ):
             mock_worker = MagicMock()
             mock_get_worker.return_value = mock_worker
 
             from app.api.system import shutdown_server
+
             shutdown_server(request=mock_request, svc=mock_monitor)
 
         # 验证清理函数被调用

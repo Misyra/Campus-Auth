@@ -65,9 +65,7 @@ PROFILE_FIELDS: list[str] = [
 ]
 
 
-def extract_profile_fields(
-    source: dict, field_names: list[str]
-) -> dict[str, Any]:
+def extract_profile_fields(source: dict, field_names: list[str]) -> dict[str, Any]:
     """从 source 字典中提取指定字段，返回新字典。
 
     Args:
@@ -80,9 +78,7 @@ def extract_profile_fields(
     return {name: source[name] for name in field_names if name in source}
 
 
-def assign_profile_fields(
-    target: dict, source: dict, field_names: list[str]
-) -> None:
+def assign_profile_fields(target: dict, source: dict, field_names: list[str]) -> None:
     """将 source 字典中的指定字段原地赋值到 target 字典。
 
     对于 field_names 中每个字段，如果 source 中存在则覆盖 target 中同名键。

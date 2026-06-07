@@ -84,7 +84,9 @@ class TaskService:
                     data = json.loads(task.script_path.read_text(encoding="utf-8"))
                     content = data.get("content", "")
                 except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-                    task_logger.error("读取脚本 JSON 失败 {}: {}", task.script_path, exc)
+                    task_logger.error(
+                        "读取脚本 JSON 失败 {}: {}", task.script_path, exc
+                    )
                     return None
             else:
                 # .py 文件：直接读取
@@ -110,7 +112,9 @@ class TaskService:
             if json_path and json_path.exists():
                 result["raw_json"] = json.loads(json_path.read_text(encoding="utf-8"))
         except Exception:
-            task_logger.warning("读取任务原始 JSON 失败 (task_id={})", task_id, exc_info=True)
+            task_logger.warning(
+                "读取任务原始 JSON 失败 (task_id={})", task_id, exc_info=True
+            )
         return result
 
     def save_task(self, task_id: str, config: dict[str, Any]) -> tuple[bool, str]:
@@ -141,7 +145,9 @@ class TaskService:
         task_logger.error("任务保存失败: {}", task_id)
         return False, "任务保存失败"
 
-    def _save_script_task(self, task_id: str, config: dict[str, Any]) -> tuple[bool, str]:
+    def _save_script_task(
+        self, task_id: str, config: dict[str, Any]
+    ) -> tuple[bool, str]:
         """保存自定义脚本任务。"""
         content = config.get("content", "")
         if not content.strip():

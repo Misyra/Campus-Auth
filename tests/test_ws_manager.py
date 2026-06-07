@@ -2,6 +2,7 @@
 
 覆盖：connect / disconnect / broadcast / close_all / _send_safe / 断开连接清理
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -69,7 +70,9 @@ class TestWebSocketManager:
         await manager.broadcast("hello")
 
     @pytest.mark.asyncio
-    async def test_broadcast_removes_failed_connections(self, manager: WebSocketManager):
+    async def test_broadcast_removes_failed_connections(
+        self, manager: WebSocketManager
+    ):
         ws_ok = AsyncMock()
         ws_fail = AsyncMock()
         ws_fail.send_text.side_effect = Exception("connection lost")

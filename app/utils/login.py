@@ -47,9 +47,7 @@ class LoginAttemptHandler:
         self._task_manager: Any | None = None
         self._project_root: Path | None = None
 
-    async def attempt_login(
-        self, skip_pause_check: bool = False
-    ) -> tuple[bool, str]:
+    async def attempt_login(self, skip_pause_check: bool = False) -> tuple[bool, str]:
         """
         尝试登录校园网（统一实现）
 
@@ -82,6 +80,7 @@ class LoginAttemptHandler:
 
                 # 网络异常，检查登录前置条件
                 from app.network.decision import check_login_prerequisites
+
                 prereq_ok, prereq_reason = check_login_prerequisites(self.config)
                 if not prereq_ok:
                     if prereq_reason == "local_disconnected":
@@ -196,9 +195,7 @@ class LoginAttemptHandler:
         )
         await browser_manager.__aenter__()
         self._browser_ctx = browser_manager
-        self.logger.info(
-            "浏览器就绪 ({:.1f}s)", time.perf_counter() - browser_start
-        )
+        self.logger.info("浏览器就绪 ({:.1f}s)", time.perf_counter() - browser_start)
 
         # 成功标志：默认 False，executor 返回成功时设为 True
         # finally 中据此决策是否关闭浏览器
@@ -209,7 +206,9 @@ class LoginAttemptHandler:
 
             browser_settings = self.config.get("browser_settings", {})
             browser_timeout = browser_settings.get("timeout", 8) * 1000  # 秒 → 毫秒
-            navigation_timeout = browser_settings.get("navigation_timeout", 15) * 1000  # 秒 → 毫秒
+            navigation_timeout = (
+                browser_settings.get("navigation_timeout", 15) * 1000
+            )  # 秒 → 毫秒
 
             executor = TaskExecutor(
                 task,
@@ -218,6 +217,7 @@ class LoginAttemptHandler:
                 navigation_timeout=navigation_timeout,
                 monitor_config=self.config.get("monitor", {}),
             )
+
             # 监听页面 alert/confirm/prompt，记录内容并延迟关闭让用户看到
             # 每次执行后清理监听器，避免浏览器复用时监听器泄漏
             async def _handle_dialog(dialog):
@@ -233,7 +233,9 @@ class LoginAttemptHandler:
             total = time.perf_counter() - phase_start
             if success:
                 self.logger.info("登录成功 (总耗时 {:.1f}s): {}", total, message)
-                await asyncio.sleep(LOGIN_SUCCESS_SETTLE_SECONDS)  # 登录成功后等待，让页面完成跳转和状态更新
+                await asyncio.sleep(
+                    LOGIN_SUCCESS_SETTLE_SECONDS
+                )  # 登录成功后等待，让页面完成跳转和状态更新
                 return True, message
             log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
             self.logger.error("登录失败 (总耗时 {:.1f}s): {}", total, log_msg)
@@ -255,7 +257,8 @@ class LoginAttemptHandler:
 
         self.logger.info(
             "脚本任务开始 -> 任务={} 脚本={}",
-            task.task_id, task.script_path,
+            task.task_id,
+            task.script_path,
         )
 
         if self.cancel_event and self.cancel_event.is_set():
@@ -290,6 +293,7 @@ class LoginAttemptHandler:
         if self._browser_ctx:
             try:
                 from app.workers.playwright_worker import get_worker
+
                 worker = get_worker()
                 await worker.close_browser()
             except Exception as exc:

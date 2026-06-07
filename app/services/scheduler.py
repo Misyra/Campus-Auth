@@ -28,7 +28,13 @@ detect_available_shells = detect_shells
 class SchedulerService:
     """定时任务调度服务。"""
 
-    def __init__(self, project_root: Path, task_service: Any = None, monitor_service: Any = None, login_history: Any = None):
+    def __init__(
+        self,
+        project_root: Path,
+        task_service: Any = None,
+        monitor_service: Any = None,
+        login_history: Any = None,
+    ):
         self.project_root = project_root
         self.tasks_dir = project_root / "tasks" / "scheduled"
         self.history_dir = self.tasks_dir / "history"
@@ -138,7 +144,9 @@ class SchedulerService:
             scheduler_logger.error("读取执行历史失败 {}: {}", task_id, e)
             return []
 
-    async def _add_history(self, task_id: str, status: str, message: str, duration: float):
+    async def _add_history(
+        self, task_id: str, status: str, message: str, duration: float
+    ):
         """添加执行历史记录（async，使用 asyncio.Lock 保护并发写入）。"""
         if not self._validate_task_id(task_id):
             return
@@ -153,17 +161,21 @@ class SchedulerService:
                 else:
                     data = {"runs": []}
 
-                data["runs"].insert(0, {
-                    "timestamp": datetime.now().isoformat(),
-                    "status": status,
-                    "message": message[:500],
-                    "duration": round(duration, 2),
-                })
+                data["runs"].insert(
+                    0,
+                    {
+                        "timestamp": datetime.now().isoformat(),
+                        "status": status,
+                        "message": message[:500],
+                        "duration": round(duration, 2),
+                    },
+                )
 
                 # 保留最近 N 条
                 data["runs"] = data["runs"][:MAX_HISTORY_SIZE]
 
                 from app.utils.file_helpers import atomic_write
+
                 atomic_write(
                     str(history_file),
                     json.dumps(data, ensure_ascii=False, indent=2),
@@ -184,9 +196,13 @@ class SchedulerService:
 
         try:
             if task_type == "script":
-                success, message = await self._execute_script(task.get("target_id", ""), timeout)
+                success, message = await self._execute_script(
+                    task.get("target_id", ""), timeout
+                )
             elif task_type == "browser":
-                success, message = await self._execute_browser_task(task.get("target_id", ""), timeout)
+                success, message = await self._execute_browser_task(
+                    task.get("target_id", ""), timeout
+                )
             elif task_type == "shell":
                 success, message = await self._execute_shell(
                     task.get("command", ""), timeout, task.get("shell_path", "")
@@ -197,14 +213,21 @@ class SchedulerService:
             success, message = False, f"执行异常: {e}"
 
         duration = time.perf_counter() - start
-        await self._add_history(task_id, "success" if success else "failure", message, duration)
+        await self._add_history(
+            task_id, "success" if success else "failure", message, duration
+        )
 
         # 更新最后执行时间
         task["last_run"] = datetime.now().isoformat()
         task["last_status"] = "success" if success else "failure"
         self.save_task(task_id, task)
 
-        scheduler_logger.info("定时任务执行完成 {}: success={}, message={}", task_id, success, message[:100])
+        scheduler_logger.info(
+            "定时任务执行完成 {}: success={}, message={}",
+            task_id,
+            success,
+            message[:100],
+        )
         return success, message
 
     async def _execute_script(self, script_id: str, timeout: int) -> tuple[bool, str]:
@@ -221,6 +244,7 @@ class SchedulerService:
             return False, f"脚本文件不存在: {script_id}"
 
         from app.workers.script_runner import ScriptRunner
+
         runner = ScriptRunner(
             script_path,
             timeout=timeout,
@@ -230,7 +254,9 @@ class SchedulerService:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, runner.run)
 
-    async def _execute_browser_task(self, task_id: str, _timeout: int) -> tuple[bool, str]:
+    async def _execute_browser_task(
+        self, task_id: str, _timeout: int
+    ) -> tuple[bool, str]:
         """执行浏览器任务。
 
         通过 PlaywrightWorker 执行浏览器自动化任务。
@@ -246,7 +272,10 @@ class SchedulerService:
             return False, "监控服务未初始化，无法执行浏览器任务"
 
         # 等待监控登录恢复完成，避免重复执行
-        if self.monitor_service.login_in_progress or self.monitor_service.login_recovery_in_progress:
+        if (
+            self.monitor_service.login_in_progress
+            or self.monitor_service.login_recovery_in_progress
+        ):
             scheduler_logger.info("监控正在登录，等待完成后再执行定时任务")
             await asyncio.get_running_loop().run_in_executor(
                 None, self.monitor_service.wait_for_login_recovery
@@ -279,7 +308,9 @@ class SchedulerService:
             task_name = task.get("name", task_id)
             if result.success:
                 self._record_login_history(True, duration_ms, task_name)
-                return True, result.data if isinstance(result.data, str) else "浏览器任务执行成功"
+                return True, result.data if isinstance(
+                    result.data, str
+                ) else "浏览器任务执行成功"
             else:
                 error_msg = result.error or "浏览器任务执行失败"
                 self._record_login_history(False, duration_ms, task_name, error_msg)
@@ -288,12 +319,16 @@ class SchedulerService:
         except ImportError as e:
             duration_ms = int((time.perf_counter() - start_time) * 1000)
             scheduler_logger.warning("浏览器任务执行缺少依赖: {}", e)
-            self._record_login_history(False, duration_ms, task.get("name", task_id), str(e))
+            self._record_login_history(
+                False, duration_ms, task.get("name", task_id), str(e)
+            )
             return False, "浏览器任务执行需要 Playwright 环境，请确保已安装"
         except Exception as e:
             duration_ms = int((time.perf_counter() - start_time) * 1000)
             scheduler_logger.error("浏览器任务执行异常: {}", e)
-            self._record_login_history(False, duration_ms, task.get("name", task_id), str(e))
+            self._record_login_history(
+                False, duration_ms, task.get("name", task_id), str(e)
+            )
             return False, f"浏览器任务执行异常: {e}"
 
     def _record_login_history(
@@ -320,7 +355,9 @@ class SchedulerService:
         except Exception:
             scheduler_logger.debug("记录登录历史失败", exc_info=True)
 
-    async def _execute_shell(self, command: str, timeout: int, shell_path: str = "") -> tuple[bool, str]:
+    async def _execute_shell(
+        self, command: str, timeout: int, shell_path: str = ""
+    ) -> tuple[bool, str]:
         """执行 Shell 命令。"""
         if not command.strip():
             return False, "命令为空"
@@ -352,7 +389,8 @@ class SchedulerService:
                 cmd_args = [shell_path, "-c", command]
 
             returncode, stdout_str, stderr_str = await policy.run(
-                cmd_args, timeout=timeout,
+                cmd_args,
+                timeout=timeout,
             )
 
             if returncode == 0:

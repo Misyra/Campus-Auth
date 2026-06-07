@@ -1,6 +1,6 @@
 """常量存在性测试"""
-from __future__ import annotations
 
+from __future__ import annotations
 
 
 class TestWSConstant:

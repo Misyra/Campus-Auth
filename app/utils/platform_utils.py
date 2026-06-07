@@ -15,7 +15,14 @@ import sys
 # subprocess.CREATE_NO_WINDOW 仅在 Windows 上可用（Python 3.7+）
 CREATE_NO_WINDOW_FLAG: int = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
-__all__ = ["get_platform", "is_windows", "is_macos", "is_linux", "get_default_ua", "CREATE_NO_WINDOW_FLAG"]
+__all__ = [
+    "get_platform",
+    "is_windows",
+    "is_macos",
+    "is_linux",
+    "get_default_ua",
+    "CREATE_NO_WINDOW_FLAG",
+]
 
 
 def get_platform() -> str:

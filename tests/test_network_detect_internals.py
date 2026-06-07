@@ -15,9 +15,7 @@ import app.network.detect as nd
 # ── 辅助工具 ──
 
 
-def _make_subprocess_result(
-    stdout: str | bytes = "", returncode: int = 0
-) -> MagicMock:
+def _make_subprocess_result(stdout: str | bytes = "", returncode: int = 0) -> MagicMock:
     """构造模拟 subprocess.CompletedProcess 对象。"""
     mock = MagicMock()
     mock.stdout = stdout
@@ -193,8 +191,7 @@ class TestDetectGatewayLinux:
         "builtins.open",
         mock_open(
             read_data=(
-                "Iface\tDestination\tGateway\tFlags\n"
-                "wlan0\t00000000\t0101A8C0\t0003\n"
+                "Iface\tDestination\tGateway\tFlags\nwlan0\t00000000\t0101A8C0\t0003\n"
             )
         ),
     )
@@ -206,8 +203,7 @@ class TestDetectGatewayLinux:
         "builtins.open",
         mock_open(
             read_data=(
-                "Iface\tDestination\tGateway\tFlags\n"
-                "eth0\t0000A8C0\t00000000\t0001\n"
+                "Iface\tDestination\tGateway\tFlags\neth0\t0000A8C0\t00000000\t0001\n"
             )
         ),
     )
@@ -244,11 +240,7 @@ class TestDetectSsidLinux:
         # nmcli -t -f active,ssid dev wifi 仅输出 active 和 ssid 两列
         mock_run.side_effect = [
             FileNotFoundError("iwgetid not found"),
-            _make_subprocess_result(
-                "no:\n"
-                "yes:CampusNet\n"
-                "no:\n"
-            ),
+            _make_subprocess_result("no:\nyes:CampusNet\nno:\n"),
         ]
         assert nd._detect_ssid_linux() == "CampusNet"
 
@@ -301,9 +293,7 @@ class TestDetectGatewayDarwin:
     def test_no_default_route(self, mock_run, *_):
         """netstat 输出中无 default 行时返回 None。"""
         mock_run.return_value = _make_subprocess_result(
-            "Routing tables\n"
-            "\n"
-            "127.0.0.1          127.0.0.1          UH           lo0\n"
+            "Routing tables\n\n127.0.0.1          127.0.0.1          UH           lo0\n"
         )
         assert nd._detect_gateway_darwin() is None
 
@@ -357,6 +347,8 @@ class TestDetectSsidDarwin:
         mock_run.side_effect = [
             FileNotFoundError("airport not found"),
             _make_subprocess_result(hardware_ports),
-            _make_subprocess_result("You are not associated with an AirPort network.\n"),
+            _make_subprocess_result(
+                "You are not associated with an AirPort network.\n"
+            ),
         ]
         assert nd._detect_ssid_darwin() is None

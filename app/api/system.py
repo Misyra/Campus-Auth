@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 import subprocess
-import threading
 from pathlib import Path
 
 import httpx
@@ -18,7 +16,10 @@ from app.version import compare_versions, get_project_version
 from app.constants import AUTH_DATA_DIR, PROJECT_ROOT
 from app.deps import get_autostart_service, get_monitor_service
 from app.services.monitor import MonitorService
-from app.utils.shell_utils import detect_shells as detect_available_shells, get_default_shell
+from app.utils.shell_utils import (
+    detect_shells as detect_available_shells,
+    get_default_shell,
+)
 from app.schemas import ActionResponse, AutoStartStatusResponse
 
 router = APIRouter()
@@ -158,6 +159,7 @@ def shutdown_server(
     # 停止 PlaywrightWorker
     try:
         from app.workers.playwright_worker import get_worker
+
         get_worker().stop(timeout=3)
     except Exception:
         api_logger.warning("关闭 PlaywrightWorker 失败", exc_info=True)
@@ -165,6 +167,7 @@ def shutdown_server(
     # 清理孤儿浏览器
     try:
         from app.workers.playwright_worker import cleanup_orphan_browsers
+
         cleanup_orphan_browsers()
     except Exception:
         api_logger.warning("清理孤儿浏览器失败", exc_info=True)
@@ -176,7 +179,7 @@ def shutdown_server(
         api_logger.warning("PID 文件清理失败", exc_info=True)
 
     # 通过 shutdown_event 触发 lifespan 正常关闭
-    if hasattr(request.app.state, 'shutdown_event'):
+    if hasattr(request.app.state, "shutdown_event"):
         request.app.state.shutdown_event.set()
 
     return ActionResponse(success=True, message="服务器正在关闭...")
@@ -189,6 +192,7 @@ def _check_ddddocr_installed() -> bool:
     """检测 ddddocr 是否已安装"""
     try:
         import ddddocr  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -265,7 +269,9 @@ def ocr_install() -> ActionResponse:
             return ActionResponse(success=False, message=f"安装失败: {error_msg}")
     except subprocess.TimeoutExpired:
         api_logger.error("ddddocr 安装超时")
-        return ActionResponse(success=False, message="安装超时（超过 5 分钟），请检查网络后重试")
+        return ActionResponse(
+            success=False, message="安装超时（超过 5 分钟），请检查网络后重试"
+        )
     except FileNotFoundError:
         api_logger.error("uv 未找到")
         return ActionResponse(success=False, message="未找到 uv 包管理器，请先安装 uv")

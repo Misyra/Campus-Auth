@@ -1,4 +1,5 @@
 """Playwright bootstrap 状态管理测试"""
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -17,7 +18,7 @@ class TestBootstrapState:
 
     def test_bootstrap_disabled_returns_skipped(self):
         """测试禁用 auto-install 时返回 SKIPPED 状态"""
-        with patch.object(pb, '_is_enabled', return_value=False):
+        with patch.object(pb, "_is_enabled", return_value=False):
             result = pb.ensure_playwright_ready()
 
         assert result is True
@@ -26,8 +27,10 @@ class TestBootstrapState:
 
     def test_bootstrap_verified_returns_done(self):
         """测试 Chromium 已安装时返回 DONE 状态"""
-        with patch.object(pb, '_is_enabled', return_value=True), \
-             patch.object(pb, '_has_chromium', return_value=True):
+        with (
+            patch.object(pb, "_is_enabled", return_value=True),
+            patch.object(pb, "_has_chromium", return_value=True),
+        ):
             result = pb.ensure_playwright_ready()
 
         assert result is True
@@ -37,15 +40,17 @@ class TestBootstrapState:
     def test_bootstrap_skipped_then_done(self):
         """测试先跳过再验证的状态变化"""
         # 第一次：禁用
-        with patch.object(pb, '_is_enabled', return_value=False):
+        with patch.object(pb, "_is_enabled", return_value=False):
             pb.ensure_playwright_ready()
 
         assert pb._BOOTSTRAP_SKIPPED is True
         assert pb._BOOTSTRAP_DONE is False
 
         # 第二次：仍然返回 True（因为 SKIPPED）
-        with patch.object(pb, '_is_enabled', return_value=True), \
-             patch.object(pb, '_has_chromium', return_value=True):
+        with (
+            patch.object(pb, "_is_enabled", return_value=True),
+            patch.object(pb, "_has_chromium", return_value=True),
+        ):
             result = pb.ensure_playwright_ready()
 
         # 由于 SKIPPED 为 True，第二次调用直接返回 True
