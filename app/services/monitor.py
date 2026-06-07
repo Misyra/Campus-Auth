@@ -349,7 +349,7 @@ class MonitorService:
         new_url = self._runtime_config.get("auth_url", "")
         new_user = self._runtime_config.get("username", "")
         self._push_log(
-            f"自动切换方案 → {profile_name} (认证={new_url}, 用户={new_user})",
+            f"自动切换方案 -> {profile_name} (认证={new_url}, 用户={new_user})",
             level="INFO",
             source="backend.monitor_service",
         )
@@ -445,7 +445,7 @@ class MonitorService:
             except asyncio.CancelledError:
                 break
             except Exception:
-                service_logger.exception("WS drain loop error")
+                service_logger.exception("WS 排空循环异常")
 
     async def drain_ws_queue(self) -> None:
         """Flush pending WS broadcast messages to WebSocket clients.
@@ -458,8 +458,11 @@ class MonitorService:
                 data = self._ws_broadcast_queue.popleft()
             except IndexError:
                 break
-            if self._ws_manager:
-                await self._ws_manager.broadcast(json.dumps(data))
+            try:
+                if self._ws_manager:
+                    await self._ws_manager.broadcast(json.dumps(data))
+            except Exception:
+                service_logger.exception("WS 广播发送失败")
 
     # ── 公共 API（从 API 线程 / main.py 调用）──
 
@@ -552,7 +555,7 @@ class MonitorService:
                 service_logger.warning("命令队列已满，跳过 reload 命令入队")
                 return
 
-        service_logger.info("Config reloaded from settings.json")
+        service_logger.info("配置已从 settings.json 重载")
 
     def apply_profile(self, profile_name: str) -> None:
         """切换到新方案并通过队列重启监控"""
@@ -560,7 +563,7 @@ class MonitorService:
         new_url = self._runtime_config.get("auth_url", "")
         new_user = self._runtime_config.get("username", "")
         self._push_log(
-            f"切换方案 → {profile_name} (认证={new_url}, 用户={new_user})",
+            f"切换方案 -> {profile_name} (认证={new_url}, 用户={new_user})",
             level="INFO",
             source="backend.monitor_service",
         )
@@ -660,7 +663,7 @@ class MonitorService:
         if self._consumer_thread and self._consumer_thread.is_alive():
             self._consumer_thread.join(timeout=5)
 
-        service_logger.info("MonitorService 已关闭")
+        service_logger.info("监控服务已关闭")
 
     def get_status(self) -> MonitorStatusResponse:
         """Lock-free status read directly from StatusSnapshot."""
@@ -688,7 +691,7 @@ class MonitorService:
             self._login_in_progress.set()
         cmd_in_queue = False
         try:
-            service_logger.info("Manual login requested")
+            service_logger.info("收到手动登录请求")
             runtime_config = self._copy_runtime_config()
 
             cmd = MonitorCommand(
@@ -724,11 +727,11 @@ class MonitorService:
         if success:
             # network_state 已由消费者 _handle_login 统一赋值，无需 API 线程操作
             self._update_status_snapshot()
-            service_logger.info("Manual login succeeded")
+            service_logger.info("手动登录成功")
             return True, f"手动登录成功：{message}"
 
         log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
-        service_logger.warning("Manual login failed: {}", log_msg)
+        service_logger.warning("手动登录失败: {}", log_msg)
         return False, f"手动登录失败：{message}"
 
     def test_network(self) -> tuple[bool, str]:
@@ -749,7 +752,7 @@ class MonitorService:
         if portal_checks:
             mode_desc.append("Portal")
         self._push_log(
-            f"手动网络测试 → 目标={len(test_sites)} 检测方式={'+'.join(mode_desc) or '无'}",
+            f"手动网络测试 -> 目标={len(test_sites)} 检测方式={'+'.join(mode_desc) or '无'}",
             "INFO",
             "network",
         )
@@ -768,7 +771,7 @@ class MonitorService:
                 self._push_log("手动测试结果: 网络异常", "WARNING", "network")
                 return False, "网络连接异常"
         except Exception as exc:
-            service_logger.exception("Network test failed")
+            service_logger.exception("网络测试失败")
             self._push_log(f"手动测试异常: {exc}", "ERROR", "network")
             return False, f"网络测试失败: {exc}"
 

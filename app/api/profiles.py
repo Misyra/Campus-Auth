@@ -86,7 +86,7 @@ def save_profile(
 ) -> ActionResponse:
     ok, message = profile_svc.save_profile(profile_id, payload)
     api_logger.info(
-        "Save profile {} -> success={}, message={}", profile_id, ok, message
+        "保存方案 {} -> success={}, message={}", profile_id, ok, message
     )
     if ok:
         data = profile_svc.load()
@@ -94,7 +94,7 @@ def save_profile(
             try:
                 monitor_svc.apply_profile(profile_id)
             except Exception:
-                api_logger.warning("Apply profile failed", exc_info=True)
+                api_logger.warning("保存方案后应用方案失败", exc_info=True)
     return ActionResponse(success=ok, message=message)
 
 
@@ -109,7 +109,7 @@ def delete_profile(
 
     ok, message = profile_svc.delete_profile(profile_id)
     api_logger.info(
-        "Delete profile {} -> success={}, message={}", profile_id, ok, message
+        "删除方案 {} -> success={}, message={}", profile_id, ok, message
     )
     # 删除活动方案后通知监控重载配置
     if ok and was_active:
@@ -119,7 +119,7 @@ def delete_profile(
             new_name = new_profile.name if new_profile else new_data.active_profile
             monitor_svc.apply_profile(new_name)
         except Exception:
-            api_logger.warning("删除方案后 apply_profile 失败", exc_info=True)
+            api_logger.warning("删除方案后应用方案失败", exc_info=True)
     return ActionResponse(success=ok, message=message)
 
 
@@ -131,7 +131,7 @@ def set_active_profile(
 ) -> ActionResponse:
     ok, message = profile_svc.set_active_profile(profile_id)
     api_logger.info(
-        "Set active profile {} -> success={}, message={}", profile_id, ok, message
+        "设置活动方案 {} -> success={}, message={}", profile_id, ok, message
     )
     if ok:
         data = profile_svc.load()
@@ -140,7 +140,7 @@ def set_active_profile(
         try:
             monitor_svc.apply_profile(profile_name)
         except Exception:
-            api_logger.warning("Apply profile failed", exc_info=True)
+            api_logger.warning("应用方案失败", exc_info=True)
     return ActionResponse(success=ok, message=message)
 
 
@@ -181,5 +181,5 @@ def toggle_auto_switch(
     enabled_bool = enabled.strip().lower() in ("true", "1", "yes", "on")
     profile_svc.set_auto_switch(enabled_bool)
     state = "开启" if enabled_bool else "关闭"
-    api_logger.info("Auto-switch {}", state)
+    api_logger.info("自动切换 {}", state)
     return ActionResponse(success=True, message=f"自动切换已{state}")

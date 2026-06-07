@@ -236,6 +236,7 @@ class DateRotatingSink:
                     if self._bytes_written >= self._file_max_bytes:
                         self._rotate_file()
             except Exception as exc:
+                # 不能用 logger — 本方法是 loguru sink，调用 logger 会触发自身导致无限递归
                 print(f"[LOG ERROR] 写入日志文件失败: {exc}", file=sys.stderr)
 
     def _rotate_file(self) -> None:
@@ -261,6 +262,7 @@ class DateRotatingSink:
             self._stream = open(path, "a", encoding="utf-8")
             self._bytes_written = 0
         except Exception as exc:
+            # 不能用 logger — 本方法由 write() 调用，同属 sink 内部，调用 logger 会无限递归
             print(f"[LOG ERROR] 日志轮转失败: {exc}", file=sys.stderr)
 
     def _cleanup_old_dirs(self, now: float) -> None:
@@ -275,8 +277,9 @@ class DateRotatingSink:
             try:
                 if d.stat().st_mtime < cutoff:
                     shutil.rmtree(d)
-            except OSError:
-                pass
+            except OSError as exc:
+                # 不能用 logger — 本方法由 write() 调用，同属 sink 内部
+                print(f"[LOG ERROR] 清理过期日志目录失败: {d.name}: {exc}", file=sys.stderr)
 
     def close(self) -> None:
         """关闭文件流。"""
@@ -286,6 +289,7 @@ class DateRotatingSink:
                     self._stream.close()
                     self._stream = None
             except Exception:
+                # 不能用 logger — 本方法由 write() 调用，同属 sink 内部，调用 logger 会无限递归
                 import sys
                 print("[logging] 关闭日志流失败", file=sys.stderr)
 
@@ -360,7 +364,11 @@ class LogConfigCenter:
         return get_logger(name, side or self._side)
 
     def set_level(self, level: str) -> None:
-        """动态修改全局日志级别（热更新）"""
+        """动态修改全局日志级别（热更新）。
+
+        影响控制台输出和标准 logging 桥接的最低级别。
+        文件 sink 始终记录 DEBUG 及以上（由 filter 控制 side）。
+        """
         normalized = normalize_level(level)
         logger.level(normalized)
         self._config["level"] = normalized
@@ -396,9 +404,6 @@ class LogConfigCenter:
                 filter=lambda record: record["extra"].get("side") == "BACKEND",
             )
 
-            logger.info("=" * 54)
-            logger.info(">>> Campus-Auth 日志系统启动")
-            logger.info(">>> 日志目录: {} | 保留 {} 天", log_dir, retention_days)
-            logger.info("=" * 54)
+            logger.info("日志系统启动 | 目录: {} | 保留 {} 天", log_dir, retention_days)
         except Exception as e:
             logger.warning("无法启用文件日志 {}: {}", log_dir, e)

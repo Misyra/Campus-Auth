@@ -48,7 +48,7 @@ def _cleanup_temp_screenshots() -> None:
         if removed:
             startup_logger.info("启动时清理 temp 截图: 删除 {} 个过期文件", removed)
     except Exception as exc:
-        startup_logger.debug("清理 temp 截图失败: {}", exc)
+        startup_logger.warning("清理 temp 截图失败: {}", exc)
 
 
 # ==================== 生命周期管理 ====================
@@ -84,7 +84,7 @@ async def lifespan(app_instance):
             config.auto_start,
         )
     except Exception as exc:
-        startup_logger.warning("配置迁移失败: {}", exc)
+        startup_logger.error("配置迁移失败: {}", exc)
 
     # 检查 cryptography 库是否可用
     try:
@@ -279,17 +279,15 @@ def run() -> None:
 
     try:
         sys_settings = profile_service.load().system
-        log_level = sys_settings.backend_log_level or "WARNING"
         access_log_enabled = bool(sys_settings.access_log)
         log_retention = max(1, sys_settings.log_retention_days)
     except Exception:
         startup_logger.warning("读取日志配置失败，使用默认值", exc_info=True)
-        log_level = "WARNING"
         access_log_enabled = False
         log_retention = 7
 
     log_center = LogConfigCenter.get_instance()
-    log_center.initialize({"level": log_level}, side="BACKEND")
+    log_center.initialize({"level": "INFO"}, side="BACKEND")
 
     # 压制第三方库的 DEBUG 日志
     import logging
@@ -309,7 +307,7 @@ def run() -> None:
             if old_log.exists():
                 old_log.unlink(missing_ok=True)
     except Exception:
-        startup_logger.debug("旧日志清理失败", exc_info=True)
+        startup_logger.warning("旧日志清理失败", exc_info=True)
 
     global _access_log_enabled
     _access_log_enabled = access_log_enabled

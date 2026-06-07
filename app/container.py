@@ -121,6 +121,6 @@ class ServiceContainer:
                     elif item.is_dir():
                         shutil.rmtree(item, ignore_errors=True)
         except Exception:
-            container_logger.debug("临时目录清理失败", exc_info=True)
+            container_logger.warning("临时目录清理失败", exc_info=True)
 
         container_logger.info("服务容器已关闭")

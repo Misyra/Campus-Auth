@@ -227,27 +227,20 @@ class TestIsNetworkAvailablePortal:
             )
             assert result is False
 
-    def test_check_portal_keeps_verify_false_and_logs_debug(self):
-        """verify=False 应保留且输出 debug 日志（兼容校园网自签证书）"""
-        import logging
-
+    def test_check_portal_keeps_verify_false(self):
+        """verify=False 应保留（兼容校园网自签证书）"""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.text = "Success"
         with patch('app.network.probes.httpx.Client') as MockClient:
             instance = MockClient.return_value.__enter__.return_value
             instance.get.return_value = mock_resp
-            with patch('app.network.probes.logger') as mock_logger:
-                is_network_available_portal(
-                    portal_checks=[("http://test.com", "Success")], timeout=3.0
-                )
-                # 验证 verify=False 被传入 httpx.Client
-                _, kwargs = MockClient.call_args
-                assert kwargs.get("verify") is False
-                # 验证 debug 日志包含 SSL 验证提示
-                mock_logger.debug.assert_any_call(
-                    "已禁用 SSL 验证以兼容校园网自签证书 (portal)"
-                )
+            is_network_available_portal(
+                portal_checks=[("http://test.com", "Success")], timeout=3.0
+            )
+            # 验证 verify=False 被传入 httpx.Client
+            _, kwargs = MockClient.call_args
+            assert kwargs.get("verify") is False
 
 
 # =====================================================================

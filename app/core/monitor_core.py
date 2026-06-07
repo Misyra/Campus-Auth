@@ -45,7 +45,6 @@ class NetworkMonitorCore:
     PAUSE_CHECK_STEP_SECONDS = 15
     MIN_WAIT_STEP_SECONDS = 5
     MAX_WAIT_STEP_SECONDS = 20
-    LOG_DIVIDER_LENGTH = 50
 
     # 类常量：网络检测配置
     NETWORK_CHECK_TIMEOUT_SECONDS = 2
@@ -107,10 +106,7 @@ class NetworkMonitorCore:
             )
         else:
             log_func = getattr(self.logger, level.lower(), self.logger.info)
-            if exc_info:
-                log_func(message)
-            else:
-                log_func(message)
+            log_func(message)
 
     def snapshot(self) -> Dict[str, Any]:
         return {
@@ -190,10 +186,8 @@ class NetworkMonitorCore:
             modes_str = " + ".join(modes) if modes else "无"
 
             self.log_message(
-                f"{'=' * self.LOG_DIVIDER_LENGTH}\n"
                 f"网络监控已启动 | 检测间隔: {interval}s | 方式: {modes_str}\n"
-                f"认证地址: {auth_url} | 账号: {username} | 运营商: {isp}\n"
-                f"{'=' * self.LOG_DIVIDER_LENGTH}"
+                f"认证地址: {auth_url} | 账号: {username} | 运营商: {isp}"
             )
 
             try:
@@ -225,10 +219,7 @@ class NetworkMonitorCore:
             runtime, stats = get_runtime_stats(
                 self.start_time, self.network_check_count
             )
-            self.log_message("=" * self.LOG_DIVIDER_LENGTH)
-            self.log_message(f"监控已停止，运行时长: {runtime}")
-            self.log_message(f"检测次数: {self.network_check_count}")
-            self.log_message("=" * self.LOG_DIVIDER_LENGTH)
+            self.log_message(f"监控已停止 | 运行时长: {runtime} | 检测次数: {self.network_check_count}")
 
     def _close_browser_if_needed(self) -> None:
         """关闭浏览器实例（通过 Worker 命令队列）"""
@@ -425,7 +416,7 @@ class NetworkMonitorCore:
             if self.network_state == NetworkState.UNKNOWN:
                 self.status_detail = "正在检测网络"
             targets_str = ", ".join(f"{h}:{p}" for h, p in test_sites)
-            self.log_message(f"[#{self.network_check_count}] 网络检测 → {targets_str}")
+            self.log_message(f"[#{self.network_check_count}] 网络检测 -> {targets_str}")
 
             # 1. 暂停时段检查
             is_paused, _ = check_pause(self.config)
@@ -572,7 +563,7 @@ class NetworkMonitorCore:
         username = self.config.get("username", "?")
         isp = self.config.get("isp", "无") or "无"
         self.log_message(
-            f"开始登录认证 → URL={auth_url} "
+            f"开始登录认证 -> URL={auth_url} "
             f"用户={username} "
             f"运营商={isp} "
             f"任务={active_task}"
@@ -608,9 +599,9 @@ class NetworkMonitorCore:
                 self.log_message("登录已被取消", "WARNING")
                 return False, "登录已被取消"
             if success:
-                self.log_message(f"登录成功 ✓ {message}")
+                self.log_message(f"登录成功 {message}")
             else:
-                self.log_message(f"登录失败 ✗ {message}", "ERROR")
+                self.log_message(f"登录失败 {message}", "ERROR")
             # 记录登录历史
             self._record_login_history(success, duration_ms, str(message) if not success else "")
             return success, message
@@ -642,4 +633,4 @@ class NetworkMonitorCore:
                 error=error,
             )
         except Exception:
-            self.log_message("记录登录历史失败", "DEBUG")
+            self.log_message("记录登录历史失败", "WARNING", exc_info=True)

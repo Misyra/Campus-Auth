@@ -132,7 +132,7 @@ class TaskService:
         # 检查危险步骤并记录警告
         warnings = _check_dangerous_steps(config)
         for w in warnings:
-            task_logger.warning("Task {}: {}", task_id, w)
+            task_logger.warning("任务 {}: {}", task_id, w)
 
         success = self.task_manager.save_task(task_id, config)
         if success:
@@ -166,9 +166,9 @@ class TaskService:
 
         success = self.task_manager.delete_task(task_id)
         if success:
-            task_logger.info("Task deleted: {}", task_id)
+            task_logger.info("任务已删除: {}", task_id)
             return True, "任务删除成功"
-        task_logger.error("Task delete failed: {}", task_id)
+        task_logger.error("任务删除失败: {}", task_id)
         return False, "任务删除失败"
 
     def get_active_task(self) -> str:
@@ -184,9 +184,9 @@ class TaskService:
 
         success = self.task_manager.set_active_task(task_id)
         if success:
-            task_logger.info("Active task set: {}", task_id)
+            task_logger.info("活动任务已设置: {}", task_id)
             return True, "活动任务已设置"
-        task_logger.error("Set active task failed: {}", task_id)
+        task_logger.error("设置活动任务失败: {}", task_id)
         return False, "设置活动任务失败"
 
     def get_script_path(self, task_id: str) -> Path | None:

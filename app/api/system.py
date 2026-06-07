@@ -1,15 +1,17 @@
-"""系统管理路由 — 健康检查、更新检测、自动启动、卸载、关机。"""
+"""系统管理路由 — 健康检查、更新检测、自动启动、卸载、关机、OCR 依赖管理。"""
 
 from __future__ import annotations
 
 import asyncio
 import os
+import subprocess
 import threading
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.utils.logging import get_logger
+from app.utils.platform_utils import CREATE_NO_WINDOW_FLAG
 from app.version import compare_versions, get_project_version
 
 from app.constants import AUTH_DATA_DIR, PROJECT_ROOT
@@ -118,7 +120,7 @@ def enable_autostart(
     autostart_svc=Depends(get_autostart_service),
 ) -> ActionResponse:
     ok, message = autostart_svc.enable()
-    api_logger.info("Autostart enable requested -> success={}, message={}", ok, message)
+    api_logger.info("启用自启动 -> success={}, message={}", ok, message)
     return ActionResponse(success=ok, message=message)
 
 
@@ -127,7 +129,7 @@ def disable_autostart(
     autostart_svc=Depends(get_autostart_service),
 ) -> ActionResponse:
     ok, message = autostart_svc.disable()
-    api_logger.info("Autostart disable requested -> success={}, message={}", ok, message)
+    api_logger.info("禁用自启动 -> success={}, message={}", ok, message)
     return ActionResponse(success=ok, message=message)
 
 
@@ -139,7 +141,7 @@ def shutdown_server(
     svc: MonitorService = Depends(get_monitor_service),
 ) -> ActionResponse:
     """关闭服务器"""
-    api_logger.warning("Shutdown requested")
+    api_logger.warning("收到关机请求")
 
     loop = asyncio.get_event_loop()
 
@@ -147,21 +149,21 @@ def shutdown_server(
         try:
             svc.stop_monitoring()
         except Exception:
-            api_logger.debug("关闭监控服务失败", exc_info=True)
+            api_logger.warning("关闭监控服务失败", exc_info=True)
         try:
             from app.workers.playwright_worker import get_worker
             get_worker().stop(timeout=3)
         except Exception:
-            api_logger.debug("关闭 PlaywrightWorker 失败", exc_info=True)
+            api_logger.warning("关闭 PlaywrightWorker 失败", exc_info=True)
         try:
             from app.workers.playwright_worker import cleanup_orphan_browsers
             cleanup_orphan_browsers()
         except Exception:
-            api_logger.debug("清理孤儿浏览器失败", exc_info=True)
+            api_logger.warning("清理孤儿浏览器失败", exc_info=True)
         try:
             (AUTH_DATA_DIR / "campus_network_auth.pid").unlink(missing_ok=True)
         except Exception:
-            api_logger.debug("PID 文件清理失败", exc_info=True)
+            api_logger.warning("PID 文件清理失败", exc_info=True)
         # 调度 services.shutdown() 到事件循环，确保 lifespan 清理逻辑执行
         try:
             from app.main import app as _app
@@ -170,7 +172,7 @@ def shutdown_server(
             )
             future.result(timeout=10)
         except Exception:
-            api_logger.debug("services.shutdown() 执行失败", exc_info=True)
+            api_logger.warning("services.shutdown() 执行失败", exc_info=True)
         import logging as _logging
         _logging.shutdown()
         os._exit(0)
@@ -178,6 +180,119 @@ def shutdown_server(
     threading.Thread(target=_do_shutdown, args=(loop,), daemon=True).start()
 
     return ActionResponse(success=True, message="服务器正在关闭...")
+
+
+# ── OCR 依赖管理 ──
+
+
+def _check_ddddocr_installed() -> bool:
+    """检测 ddddocr 是否已安装"""
+    try:
+        import ddddocr  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _get_uv_exe() -> str:
+    """获取 uv 可执行文件路径"""
+    # 优先使用当前环境的 uv
+    return "uv"
+
+
+@router.get("/api/ocr/status")
+def ocr_status() -> dict:
+    """获取 OCR 依赖安装状态"""
+    installed = _check_ddddocr_installed()
+    size_mb = 0.0
+    if installed:
+        # 估算 ddddocr + onnxruntime 的大小
+        try:
+            import importlib.metadata
+            total = 0
+            for pkg in ("ddddocr", "onnxruntime"):
+                try:
+                    dist = importlib.metadata.distribution(pkg)
+                    if dist._path and dist._path.exists():
+                        for f in dist._path.rglob("*"):
+                            if f.is_file():
+                                total += f.stat().st_size
+                except Exception:
+                    pass
+            size_mb = round(total / (1024 * 1024), 1)
+        except Exception:
+            pass
+    return {
+        "installed": installed,
+        "size_mb": size_mb,
+    }
+
+
+@router.post("/api/ocr/install", response_model=ActionResponse)
+def ocr_install() -> ActionResponse:
+    """安装 ddddocr 依赖"""
+    if _check_ddddocr_installed():
+        return ActionResponse(success=True, message="ddddocr 已安装")
+
+    api_logger.info("开始安装 ddddocr")
+    try:
+        uv_exe = _get_uv_exe()
+        result = subprocess.run(
+            [uv_exe, "add", "ddddocr", "onnxruntime"],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=300,
+            creationflags=CREATE_NO_WINDOW_FLAG,
+        )
+        if result.returncode == 0:
+            api_logger.info("ddddocr 安装成功")
+            # 清除模块缓存，确保下次 import 能找到
+            return ActionResponse(success=True, message="ddddocr 安装成功")
+        else:
+            error_msg = result.stderr.strip() or result.stdout.strip() or "未知错误"
+            api_logger.error("ddddocr 安装失败: {}", error_msg)
+            return ActionResponse(success=False, message=f"安装失败: {error_msg}")
+    except subprocess.TimeoutExpired:
+        api_logger.error("ddddocr 安装超时")
+        return ActionResponse(success=False, message="安装超时（超过 5 分钟），请检查网络后重试")
+    except FileNotFoundError:
+        api_logger.error("uv 未找到")
+        return ActionResponse(success=False, message="未找到 uv 包管理器，请先安装 uv")
+    except Exception as e:
+        api_logger.error("ddddocr 安装异常: {}", e)
+        return ActionResponse(success=False, message=f"安装异常: {e}")
+
+
+@router.post("/api/ocr/uninstall", response_model=ActionResponse)
+def ocr_uninstall() -> ActionResponse:
+    """卸载 ddddocr 依赖"""
+    if not _check_ddddocr_installed():
+        return ActionResponse(success=True, message="ddddocr 未安装，无需卸载")
+
+    api_logger.info("开始卸载 ddddocr")
+    try:
+        uv_exe = _get_uv_exe()
+        result = subprocess.run(
+            [uv_exe, "remove", "ddddocr", "onnxruntime"],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=60,
+            creationflags=CREATE_NO_WINDOW_FLAG,
+        )
+        if result.returncode == 0:
+            api_logger.info("ddddocr 卸载成功")
+            return ActionResponse(success=True, message="ddddocr 已卸载")
+        else:
+            error_msg = result.stderr.strip() or result.stdout.strip() or "未知错误"
+            api_logger.error("ddddocr 卸载失败: {}", error_msg)
+            return ActionResponse(success=False, message=f"卸载失败: {error_msg}")
+    except FileNotFoundError:
+        return ActionResponse(success=False, message="未找到 uv 包管理器")
+    except Exception as e:
+        api_logger.error("ddddocr 卸载异常: {}", e)
+        return ActionResponse(success=False, message=f"卸载异常: {e}")
 
 
 # ── 卸载 ──
@@ -209,7 +324,7 @@ def uninstall_perform(payload: dict) -> dict:
     keys = payload.get("keys", [])
     if not isinstance(keys, list):
         raise HTTPException(400, "keys 必须是列表")
-    api_logger.warning("Uninstall requested, keys={}", keys)
+    api_logger.warning("收到卸载请求, keys={}", keys)
     results = perform(keys)
     return {
         "success": all(r.success for r in results),

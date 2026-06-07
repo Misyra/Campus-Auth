@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.utils import ConfigValidator
-from app.utils.logging import LogConfigCenter, get_logger
+from app.utils.logging import get_logger
 
 from app.services.config import save_config_combined
 from app.deps import get_monitor_service, get_profile_service
@@ -42,15 +42,13 @@ def save_config(
 
         # 原子化保存：系统设置 + 活动方案
         save_config_combined(payload, profile_svc)
-        # 热更新日志级别
-        LogConfigCenter.get_instance().set_level(payload.backend_log_level)
         # 同步更新 MonitorService 运行时配置
         svc.reload_config()
         api_logger.info("配置已保存 -> success=True")
         return ActionResponse(success=True, message="配置保存成功")
     except ValueError as exc:
-        api_logger.warning("Config update rejected: {}", exc)
+        api_logger.warning("配置更新被拒绝: {}", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        api_logger.error("Config save failed: {}", exc, exc_info=True)
+        api_logger.error("配置保存失败: {}", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=f"配置保存失败: {exc}") from exc
