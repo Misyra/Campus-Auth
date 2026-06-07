@@ -95,7 +95,7 @@
   padding: 12px;
   background: var(--bg-glass);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: 13px;
@@ -215,7 +215,7 @@
 .danger-step {
   margin-bottom: 16px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -363,7 +363,7 @@
   justify-content: center;
   background: var(--bg-glass);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -722,7 +722,7 @@
   padding: 14px 16px;
   background: var(--bg-glass-light);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
 }
 

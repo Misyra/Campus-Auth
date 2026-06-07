@@ -4,7 +4,7 @@ from .crypto import decrypt_password, encrypt_password, mask_password
 from .exceptions import LoginCancelledError
 from .logging import (
     LogConfigCenter,
-    WebSocketLogHandler,
+    WebSocketSink,
     get_logger,
 )
 from .login import LoginAttemptHandler
@@ -19,7 +19,7 @@ def str_to_bool(value: str) -> bool:
 __all__ = [
     "get_logger",
     "LogConfigCenter",
-    "WebSocketLogHandler",
+    "WebSocketSink",
     "LoginCancelledError",
     "get_runtime_stats",
     "is_in_pause_period",

@@ -28,6 +28,28 @@ http_logger = get_logger("backend.http", side="BACKEND")
 startup_logger = get_logger("backend.startup", side="BACKEND")
 ws_logger = get_logger("backend.ws", side="BACKEND")
 
+# temp 目录中截图的最大保留天数
+_TEMP_SCREENSHOT_MAX_AGE_DAYS = 7
+
+
+def _cleanup_temp_screenshots() -> None:
+    """启动时清理 temp/ 目录中超过保留天数的截图文件。"""
+    try:
+        if not TEMP_DIR.exists():
+            return
+        import time as _time
+
+        cutoff = _time.time() - _TEMP_SCREENSHOT_MAX_AGE_DAYS * 86400
+        removed = 0
+        for f in TEMP_DIR.iterdir():
+            if f.is_file() and f.suffix in (".png", ".jpg", ".jpeg") and f.stat().st_mtime < cutoff:
+                f.unlink()
+                removed += 1
+        if removed:
+            startup_logger.info("启动时清理 temp 截图: 删除 {} 个过期文件", removed)
+    except Exception as exc:
+        startup_logger.debug("清理 temp 截图失败: {}", exc)
+
 
 # ==================== 生命周期管理 ====================
 
@@ -72,6 +94,9 @@ async def lifespan(app_instance):
             "cryptography 库未安装，密码仅使用 Base64 编码存储（非加密），"
             "建议安装: pip install cryptography"
         )
+
+    # 启动时清理 temp 目录中的旧截图
+    _cleanup_temp_screenshots()
 
     await services.startup()
 

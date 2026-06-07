@@ -5,7 +5,7 @@
   padding: 12px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: 13px;

@@ -13,7 +13,7 @@ from typing import Iterable, Sequence
 import httpx
 
 from app.utils.logging import get_logger
-from app.utils.platform_utils import is_windows, is_macos, is_linux
+from app.utils.platform_utils import is_windows, is_macos, is_linux, CREATE_NO_WINDOW_FLAG
 
 logger = get_logger("network_probes", side="BACKEND")
 
@@ -94,7 +94,7 @@ def _check_windows_adapter() -> bool:
             capture_output=True,
             text=True,
             timeout=5,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            creationflags=CREATE_NO_WINDOW_FLAG,
         )
         if result.returncode == 0:
             statuses = [
@@ -117,7 +117,7 @@ def _check_windows_adapter() -> bool:
             capture_output=True,
             text=True,
             timeout=5,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            creationflags=CREATE_NO_WINDOW_FLAG,
         )
         if result.returncode != 0:
             logger.debug("netsh 执行失败: {}", result.stderr)

@@ -157,7 +157,7 @@ class TaskManager:
                             name = doc.split("\n")[0][:80]
                         break
         except Exception:
-            logger.debug("解析脚本 docstring 失败: {}", path, exc_info=True)
+            logger.debug("解析脚本 docstring 失败: {}", file, exc_info=True)
         return {"name": name, "description": description}
 
     # ── CRUD ──

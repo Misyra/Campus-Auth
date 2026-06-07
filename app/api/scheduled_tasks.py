@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
+from app.deps import get_scheduler_service
 from app.utils.logging import get_logger
 
 from app.schemas import ActionResponse
@@ -17,7 +18,7 @@ api_logger = get_logger("backend.api", side="BACKEND")
 
 def _get_scheduler(request: Request):
     """获取调度器服务实例。"""
-    return request.app.state.services.scheduler_service
+    return get_scheduler_service(request)
 
 
 @router.get("/api/scheduled-tasks")

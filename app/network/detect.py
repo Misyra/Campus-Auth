@@ -10,7 +10,7 @@ import re
 import subprocess
 
 from app.utils.logging import get_logger
-from app.utils.platform_utils import is_windows, is_macos, is_linux
+from app.utils.platform_utils import is_windows, is_macos, is_linux, CREATE_NO_WINDOW_FLAG
 
 logger = get_logger("network_detect", side="BACKEND")
 
@@ -77,9 +77,7 @@ def _detect_gateway_windows() -> str | None:
     优先使用 PowerShell Get-NetRoute（结构化输出，不受系统语言影响），
     失败时回退到 ipconfig + 多语言字节匹配。
     """
-    creationflags = (
-        subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
-    )
+    creationflags = CREATE_NO_WINDOW_FLAG
 
     # 优先使用 PowerShell（结构化输出，不受语言影响）
     try:

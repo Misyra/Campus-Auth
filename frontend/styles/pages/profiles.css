@@ -24,7 +24,7 @@
 .profiles-status-icon {
   width: 40px;
   height: 40px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -73,7 +73,7 @@
   gap: 12px;
   padding: 12px 16px;
   margin-bottom: 16px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   animation: fadeIn 0.3s ease;
   backdrop-filter: blur(8px);
 }
@@ -219,7 +219,7 @@
   gap: 16px;
   padding: 14px 18px;
   background: var(--bg-card-elevated);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   transition: border-color 0.25s, background 0.25s, box-shadow 0.25s, transform 0.25s;
 }
@@ -456,7 +456,7 @@
 .editor-collapsible {
   margin-top: 4px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   transition: border-color 0.25s ease;
 }

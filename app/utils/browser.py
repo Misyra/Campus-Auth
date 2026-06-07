@@ -11,7 +11,6 @@ BrowserContextManager 作为轻量代理:
 - Worker 线程内浏览器对象可通过 Worker 的内部状态直接访问（同线程安全）
 """
 
-import json
 import threading
 
 from .exceptions import LoginCancelledError

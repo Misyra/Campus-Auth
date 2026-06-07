@@ -751,7 +751,7 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, transform 0.2s ease;
   flex-shrink: 0;
   padding: 0;
 }
@@ -969,7 +969,7 @@
     background: transparent;
     color: var(--color-danger, #ef4444);
     border: 1px solid var(--color-danger, #ef4444);
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease;
 }
 .btn-danger-ghost:hover {
     background: var(--color-danger, #ef4444);
@@ -989,11 +989,7 @@
     margin-top: 2px;
 }
 
-/* 旋转动画 */
+/* 旋转动画（@keyframes spin 统一定义在 base.css） */
 .spin {
     animation: spin 1s linear infinite;
-}
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
 }

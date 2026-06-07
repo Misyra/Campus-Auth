@@ -83,7 +83,7 @@ class ServiceContainer:
 
         # 启动 WebSocket drain loop
         self._ws_drain_task = asyncio.create_task(
-            self.monitor_service._ws_drain_loop()
+            self.monitor_service.ws_drain_loop()
         )
 
         container_logger.info("服务容器启动完成")

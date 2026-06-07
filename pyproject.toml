@@ -21,19 +21,15 @@ dependencies = [
     "websockets>=16.0",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "pytest",
-    "pytest-asyncio",
-    "psutil",
-]
-
 [tool.uv]
 python-install-mirror = "https://registry.npmmirror.com/-/binary/python-build-standalone/"
 
 [[tool.uv.index]]
 url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
 default = true
+
+[tool.ruff.lint.per-file-ignores]
+"app/application.py" = ["E402"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -44,4 +40,5 @@ pythonpath = ["."]
 dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
 ]

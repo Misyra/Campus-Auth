@@ -189,6 +189,10 @@ class TaskService:
         task_logger.error("Set active task failed: {}", task_id)
         return False, "设置活动任务失败"
 
+    def get_script_path(self, task_id: str) -> Path | None:
+        """获取脚本任务文件路径（公开接口，封装内部 _safe_task_path）。"""
+        return self.task_manager._safe_task_path(task_id, task_type="scripts")
+
     def save_task_order(self, order: dict[str, list[str]]) -> tuple[bool, str]:
         """保存任务排序配置。"""
         if not isinstance(order, dict):

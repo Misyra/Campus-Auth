@@ -4,14 +4,14 @@ import re
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable
+from typing import Callable
 
 from app.network.detect import detect_gateway_ip, detect_wifi_ssid
 from app.utils.file_helpers import atomic_write
 from app.utils.crypto import save_password_field
 from app.utils.logging import get_logger
 
-from app.schemas import ProfileSettings, ProfilesData, SystemSettings
+from app.schemas import ProfileSettings, ProfilesData
 
 profile_logger = get_logger("backend.profile_service", side="BACKEND")
 
@@ -42,7 +42,7 @@ class ProfileService:
                 raw = self._settings_path.read_text(encoding="utf-8")
                 self._data = ProfilesData.model_validate_json(raw)
                 return self._data.model_copy(deep=True)
-            except Exception as exc:
+            except Exception:
                 profile_logger.exception("加载 settings.json 失败")
                 # 备份损坏文件（EAFP：直接尝试 rename，避免 TOCTOU 竞态）
                 corrupt_name = f"settings.corrupt.{int(time.time())}.json"
