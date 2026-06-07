@@ -12,7 +12,7 @@ from typing import Any
 
 from .models import StepConfig, StepError, StepType, PROJECT_ROOT
 from .variable_resolver import VariableResolver
-from app.constants import TEMP_DIR
+from app.constants import LOGS_DIR
 
 from app.utils.logging import get_logger
 
@@ -533,7 +533,7 @@ class EvalHandler(StepHandler):
 
 
 class ScreenshotHandler(StepHandler):
-    """截图处理器 — 运行时截图存入 temp/ 目录"""
+    """截图处理器 — 运行时截图存入 logs/{date}/screenshots/ 目录"""
 
     @property
     def step_type(self) -> str:
@@ -547,20 +547,24 @@ class ScreenshotHandler(StepHandler):
         params = self.resolve_params(step, resolver)
         path = params.get("path", "")
 
-        TEMP_DIR.mkdir(parents=True, exist_ok=True)
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        date_dir = LOGS_DIR / date_str / "screenshots"
+        date_dir.mkdir(parents=True, exist_ok=True)
 
         if not path:
             task_id = resolver.config.task_id or "unknown"
             step_id = step.id or "s0"
-            result = await save_screenshot(page, TEMP_DIR, task_id=task_id, step_id=step_id)
+            result = await save_screenshot(page, date_dir, task_id=task_id, step_id=step_id)
         else:
-            # 用户指定了文件名，使用自定义路径
             safe_name = Path(path).name
-            result = await save_screenshot(page, TEMP_DIR, prefix=safe_name.rsplit(".", 1)[0])
+            result = await save_screenshot(page, date_dir, prefix=safe_name.rsplit(".", 1)[0])
 
         if result:
-            logger.debug("[screenshot] path={}", result)
-            return True, ""
+            # 转为可访问的 URL
+            filename = Path(result).name
+            url = f"/logs/{date_str}/screenshots/{filename}"
+            logger.debug("[screenshot] path={}", url)
+            return True, url
         return False, "截图失败"
 
 
