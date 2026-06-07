@@ -112,7 +112,7 @@ class LoginAttemptHandler:
 
     async def _perform_login_with_active_task(self) -> tuple[bool, str] | None:
         """执行当前活动任务；返回 None 表示未找到可执行任务。"""
-        from ..task_executor import ScriptTaskInfo
+        from ..tasks.models import ScriptTaskInfo
 
         phase_start = time.perf_counter()
         try:
@@ -149,7 +149,7 @@ class LoginAttemptHandler:
     def _ensure_task_manager(self) -> None:
         """懒初始化 TaskManager。"""
         if self._task_manager is None:
-            from ..task_executor import TaskManager
+            from ..tasks.manager import TaskManager
 
             root_override = os.getenv("CAMPUS_AUTH_PROJECT_ROOT", "").strip()
             self._project_root = (
@@ -163,7 +163,7 @@ class LoginAttemptHandler:
         self, task: Any, active_task_id: str, phase_start: float
     ) -> tuple[bool, str]:
         """执行浏览器任务。"""
-        from ..task_executor import TaskExecutor
+        from ..tasks.executor import TaskExecutor
 
         login_url = self.config.get("auth_url", "")
         username = self.config.get("username", "")
@@ -252,8 +252,8 @@ class LoginAttemptHandler:
 
         脚本只负责发请求，登录是否成功通过网络检测判断。
         """
-        from ..network_decision import check_network_status
-        from ..script_runner import ScriptRunner
+        from ..network.decision import check_network_status
+        from ..workers.script_runner import ScriptRunner
 
         self.logger.info(
             "脚本任务开始 -> 任务={} 脚本={}",
