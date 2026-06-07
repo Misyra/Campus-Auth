@@ -13,7 +13,7 @@ import sys
 import threading
 
 from app.utils.logging import get_logger
-from app.utils.platform_utils import is_windows, is_macos
+from app.utils.platform_utils import is_windows, is_macos, CREATE_NO_WINDOW_FLAG
 from pathlib import Path
 from typing import Callable
 
@@ -50,7 +50,7 @@ def _is_enabled() -> bool:
 def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
     kwargs: dict = {"capture_output": True, "text": True, "check": False}
     if is_windows():
-        kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
+        kwargs["creationflags"] = CREATE_NO_WINDOW_FLAG
     return subprocess.run(cmd, **kwargs)
 
 

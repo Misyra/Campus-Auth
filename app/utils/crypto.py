@@ -19,7 +19,7 @@ from app.constants import AUTH_DATA_DIR
 from .file_helpers import atomic_write
 from .logging import get_logger
 from .exceptions import DecryptionError
-from .platform_utils import is_windows  # Windows 平台检测
+from .platform_utils import is_windows, CREATE_NO_WINDOW_FLAG
 
 logger = get_logger("crypto", side="BACKEND")
 
@@ -92,7 +92,7 @@ def _get_or_create_key() -> bytes:
                     capture_output=True,
                     text=True,
                     timeout=10,
-                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                    creationflags=CREATE_NO_WINDOW_FLAG,
                     check=True,
                 )
             except Exception as exc:
