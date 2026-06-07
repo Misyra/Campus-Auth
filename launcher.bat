@@ -88,7 +88,14 @@ for %%M in (%MIRRORS%) do (
     echo   尝试: %%M
     curl -fsSL --connect-timeout 10 --max-time 120 -o "%ARCHIVE%" "%%M%GITHUB_URL%" >nul 2>&1
     if exist "%ARCHIVE%" (
-        goto :extract_uv
+        :: 校验是否为有效的 zip 文件（防止下载到 HTML 错误页）
+        tar -tf "%ARCHIVE%" >nul 2>&1
+        if !errorlevel! equ 0 (
+            goto :extract_uv
+        ) else (
+            echo   ⚠️ 下载的文件无效，尝试下一个源...
+            del "%ARCHIVE%" >nul 2>&1
+        )
     )
 )
 
@@ -98,6 +105,12 @@ curl -fsSL --connect-timeout 10 --max-time 120 -o "%ARCHIVE%" "%GITHUB_URL%" >nu
 if not exist "%ARCHIVE%" (
     echo 错误：所有下载源均失败
     echo 请手动安装 uv: https://docs.astral.sh/uv/
+    exit /b 1
+)
+tar -tf "%ARCHIVE%" >nul 2>&1
+if !errorlevel! neq 0 (
+    echo 错误：GitHub 直连下载的文件无效
+    del "%ARCHIVE%" >nul 2>&1
     exit /b 1
 )
 
