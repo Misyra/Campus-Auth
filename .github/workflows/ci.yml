@@ -33,6 +33,9 @@ jobs:
           chmod +x setup_env.sh
           ./setup_env.sh --install-only
 
+      - name: Add local uv to PATH
+        run: echo "$PWD/.uv" >> $GITHUB_PATH
+
       - name: Run tests
         run: uv run pytest --tb=short -q
 
