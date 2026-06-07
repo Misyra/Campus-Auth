@@ -52,7 +52,7 @@ _download_uv() {
     # 尝试镜像站
     for mirror in "${mirrors[@]}"; do
         local url="${mirror}${github_url}"
-        echo "  尝试: ${mirror}"
+        echo "  尝试: ${mirror}" >&2
         if curl -fsSL --connect-timeout 10 --max-time 120 -o "$archive" "$url" 2>/dev/null; then
             goto_extract=0
             break
@@ -61,20 +61,20 @@ _download_uv() {
 
     # 回退到 GitHub
     if [[ ! -f "$archive" ]]; then
-        echo "  尝试: GitHub 直连"
+        echo "  尝试: GitHub 直连" >&2
         if ! curl -fsSL --connect-timeout 10 --max-time 120 -o "$archive" "$github_url"; then
-            echo "错误：所有下载源均失败"
-            echo "请手动安装 uv: https://docs.astral.sh/uv/"
+            echo "错误：所有下载源均失败" >&2
+            echo "请手动安装 uv: https://docs.astral.sh/uv/" >&2
             exit 1
         fi
     fi
 
-    echo "正在解压..."
+    echo "正在解压..." >&2
     tar -xzf "$archive" -C "$UV_DIR"
     rm -f "$archive"
 
     chmod +x "$UV_DIR/uv"
-    echo "uv 下载完成"
+    echo "uv 下载完成" >&2
 }
 
 # ── 查找 uv ──────────────────────────────────────────────
@@ -92,8 +92,8 @@ _find_uv() {
         return
     fi
 
-    # 3. 下载
-    echo "正在下载 uv ${UV_VERSION}..."
+    # 3. 下载（提示信息输出到 stderr）
+    echo "正在下载 uv ${UV_VERSION}..." >&2
     local filename
     filename="$(_detect_uv_filename)"
     _download_uv "$filename"
