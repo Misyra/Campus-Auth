@@ -78,6 +78,15 @@ export const configMethods = {
       this.defaultShell = '';
     }
   },
+  async loadDefaultStealthScript() {
+    try {
+      const { data } = await this.$api.get('/api/config/default-stealth-script');
+      this.config.stealth_custom_script = data.script || '';
+      this.frontendLogger.info('config', '已加载默认反检测脚本');
+    } catch (error) {
+      this.frontendLogger.warn('config', '获取默认反检测脚本失败', error);
+    }
+  },
   async fetchBackups() {
     try {
       const { data } = await this.$api.get('/api/backup/list');

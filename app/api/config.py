@@ -24,6 +24,13 @@ def get_config(
     return svc.get_config()
 
 
+@router.get("/api/config/default-stealth-script")
+def get_default_stealth_script() -> dict:
+    """获取默认反检测脚本内容。"""
+    from app.utils.browser import STEALTH_INIT_SCRIPT
+    return {"script": STEALTH_INIT_SCRIPT}
+
+
 @router.put("/api/config", response_model=ActionResponse)
 def save_config(
     payload: MonitorConfigPayload,

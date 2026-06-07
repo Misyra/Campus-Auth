@@ -12,8 +12,7 @@ from .logging import get_logger
 
 # 浏览器反检测初始化脚本（stealth_mode 用）
 # 隐藏 webdriver / 模拟 plugins / 模拟 chrome / 覆盖 languages / 清除 Playwright 痕迹
-STEALTH_INIT_SCRIPT = """
-// 隐藏 webdriver 标志
+STEALTH_INIT_SCRIPT = r"""// 隐藏 webdriver 标志
 Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
 
 // 模拟真实的 plugins 对象
@@ -57,7 +56,7 @@ Object.defineProperty(navigator, 'languages', {
 // 隐藏 Playwright 注入的属性
 delete window.__playwright;
 delete window.__pw_manual;
-"""
+""".lstrip()
 
 
 class BrowserContextManager:
