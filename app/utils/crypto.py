@@ -55,15 +55,15 @@ def _get_or_create_key() -> bytes:
                     _cached_raw_key = key
                     return key
             except Exception as exc:
-                logger.error("读取加密密钥失败: %s", exc)
+                logger.error("读取加密密钥失败: {}", exc)
                 # 备份损坏的密钥文件
                 if _KEY_FILE.exists():
                     backup_path = _KEY_FILE.with_suffix(f".bak.{int(time.time())}")
                     try:
                         _KEY_FILE.rename(backup_path)
-                        logger.info("已备份损坏的密钥文件到: %s", backup_path)
+                        logger.info("已备份损坏的密钥文件到: {}", backup_path)
                     except OSError as backup_err:
-                        logger.warning("备份密钥文件失败: %s", backup_err)
+                        logger.warning("备份密钥文件失败: {}", backup_err)
                 logger.warning("将生成新密钥，此前加密的密码将无法解密")
 
         # 生成新密钥
@@ -74,7 +74,7 @@ def _get_or_create_key() -> bytes:
         try:
             _KEY_FILE.chmod(0o600)  # POSIX: 仅所有者可读写
         except OSError:
-            logger.warning("设置密钥文件权限失败 (chmod): %s", _KEY_FILE, exc_info=True)
+            logger.warning("设置密钥文件权限失败 (chmod): {}", _KEY_FILE, exc_info=True)
 
         # Windows: 用 icacls 限制文件访问
         if is_windows():
@@ -97,7 +97,7 @@ def _get_or_create_key() -> bytes:
                     check=True,
                 )
             except Exception as exc:
-                logger.warning("设置密钥文件权限失败 (icacls): %s", exc)
+                logger.warning("设置密钥文件权限失败 (icacls): {}", exc)
 
         _cached_raw_key = key
         return key

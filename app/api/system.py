@@ -75,7 +75,7 @@ def get_init_status(
     is_initialized = bool(config.username and config.password)
     if not is_initialized:
         api_logger.info(
-            "初始化状态: 未完成 — username=%s, password=%s, auth_url=%s",
+            "初始化状态: 未完成 — username={}, password={}, auth_url={}",
             f"'{config.username}'" if config.username else "空",
             "已设置" if config.password else "空",
             f"'{config.auth_url}'" if config.auth_url else "空",
@@ -118,7 +118,7 @@ def enable_autostart(
     autostart_svc=Depends(get_autostart_service),
 ) -> ActionResponse:
     ok, message = autostart_svc.enable()
-    api_logger.info("Autostart enable requested -> success=%s, message=%s", ok, message)
+    api_logger.info("Autostart enable requested -> success={}, message={}", ok, message)
     return ActionResponse(success=ok, message=message)
 
 
@@ -127,7 +127,7 @@ def disable_autostart(
     autostart_svc=Depends(get_autostart_service),
 ) -> ActionResponse:
     ok, message = autostart_svc.disable()
-    api_logger.info("Autostart disable requested -> success=%s, message=%s", ok, message)
+    api_logger.info("Autostart disable requested -> success={}, message={}", ok, message)
     return ActionResponse(success=ok, message=message)
 
 
@@ -209,7 +209,7 @@ def uninstall_perform(payload: dict) -> dict:
     keys = payload.get("keys", [])
     if not isinstance(keys, list):
         raise HTTPException(400, "keys 必须是列表")
-    api_logger.warning("Uninstall requested, keys=%s", keys)
+    api_logger.warning("Uninstall requested, keys={}", keys)
     results = perform(keys)
     return {
         "success": all(r.success for r in results),

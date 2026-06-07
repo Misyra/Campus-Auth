@@ -82,7 +82,7 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
     """
     data = profile_service.load()
     sys_cfg = data.system
-    config_logger.debug("加载 UI 配置（全局）: active_profile=%s", data.active_profile)
+    config_logger.debug("加载 UI 配置（全局）: active_profile={}", data.active_profile)
 
     global_profile = data.profiles.get("default", ProfileSettings())
 
@@ -115,7 +115,7 @@ def load_runtime_config(profile_service: ProfileService) -> tuple[MonitorConfigP
     data = profile_service.load()
     sys_cfg = data.system
     profile = data.profiles.get(data.active_profile)
-    config_logger.debug("加载运行时配置: profile=%s", data.active_profile)
+    config_logger.debug("加载运行时配置: profile={}", data.active_profile)
 
     # 从系统设置作为基础
     pld = extract_profile_fields(sys_cfg.__dict__, PROFILE_FIELDS)
@@ -138,7 +138,7 @@ def load_runtime_config(profile_service: ProfileService) -> tuple[MonitorConfigP
                 any_error = any_error or err
             else:
                 config_logger.warning(
-                    "方案 '%s' 密码为掩码但全局密码为空，无法解析",
+                    "方案 '{}' 密码为掩码但全局密码为空，无法解析",
                     data.active_profile,
                 )
                 pld["password"] = ""
@@ -146,7 +146,7 @@ def load_runtime_config(profile_service: ProfileService) -> tuple[MonitorConfigP
             pld["password"] = raw_pwd
         else:
             config_logger.warning(
-                "方案 '%s' 使用独立账号但密码为空，回退到全局密码",
+                "方案 '{}' 使用独立账号但密码为空，回退到全局密码",
                 data.active_profile,
             )
             if sys_cfg.password:
@@ -222,7 +222,7 @@ def build_runtime_config(
         system_settings: settings.json 中的系统设置（用于读取重试策略等非 UI 字段）
     """
     config_logger.debug(
-        "构建运行时配置: user=%s, url=%s", payload.username, payload.auth_url
+        "构建运行时配置: user={}, url={}", payload.username, payload.auth_url
     )
     base: dict[str, Any] = {"password": ""}
 
@@ -351,7 +351,7 @@ def save_config_combined(
     sys_cfg.username = payload.username.strip()
     sys_cfg.password = save_password_field(pwd_raw, sys_cfg.password)
     config_logger.info(
-        "保存系统设置: 用户=%s (旧=%s), 密码=%s",
+        "保存系统设置: 用户={} (旧={}), 密码={}",
         sys_cfg.username,
         old_user,
         "已更新" if (pwd_raw and not pwd_raw.startswith("•")) else "保留",
@@ -436,7 +436,7 @@ def save_config_combined(
     # ── 单次写入 ──
     profile_service.save(data)
     config_logger.info(
-        "配置已原子保存: system(user=%s, pwd=%s, auth=%s), active_profile=%s",
+        "配置已原子保存: system(user={}, pwd={}, auth={}), active_profile={}",
         sys_cfg.username,
         "ENC" if sys_cfg.password else "空",
         sys_cfg.auth_url,

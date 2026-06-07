@@ -113,7 +113,7 @@ class LoginHistoryService:
                         if line.strip():
                             count += 1
                 atomic_write(str(self._history_path), "", encoding="utf-8")
-                logger.info("登录历史已清空，共删除 %d 条记录", count)
+                logger.info("登录历史已清空，共删除 {} 条记录", count)
                 return count
             except Exception:
                 logger.warning("清空登录历史失败", exc_info=True)
@@ -144,6 +144,6 @@ class LoginHistoryService:
             atomic_write(str(self._history_path), content, encoding="utf-8")
             kept_count = len(kept)
             if kept_count > 0:
-                logger.debug("登录历史清理完成，保留 %d 条记录", kept_count)
+                logger.debug("登录历史清理完成，保留 {} 条记录", kept_count)
         except Exception:
             logger.warning("清理登录历史失败", exc_info=True)

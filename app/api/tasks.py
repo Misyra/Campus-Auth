@@ -46,7 +46,7 @@ def save_task(
     task_svc: TaskService = Depends(get_task_service),
 ) -> ActionResponse:
     ok, message = task_svc.save_task(task_id, payload)
-    api_logger.info("Save task %s -> success=%s, message=%s", task_id, ok, message)
+    api_logger.info("Save task {} -> success={}, message={}", task_id, ok, message)
     return ActionResponse(success=ok, message=message)
 
 
@@ -56,7 +56,7 @@ def delete_task(
     task_svc: TaskService = Depends(get_task_service),
 ) -> ActionResponse:
     ok, message = task_svc.delete_task(task_id)
-    api_logger.info("Delete task %s -> success=%s, message=%s", task_id, ok, message)
+    api_logger.info("Delete task {} -> success={}, message={}", task_id, ok, message)
     return ActionResponse(success=ok, message=message)
 
 
@@ -67,7 +67,7 @@ def set_active_task(
 ) -> ActionResponse:
     ok, message = task_svc.set_active_task(task_id)
     api_logger.info(
-        "Set active task %s -> success=%s, message=%s", task_id, ok, message
+        "Set active task {} -> success={}, message={}", task_id, ok, message
     )
     return ActionResponse(success=ok, message=message)
 
@@ -78,5 +78,5 @@ def save_task_order(
     task_svc: TaskService = Depends(get_task_service),
 ) -> ActionResponse:
     ok, message = task_svc.save_task_order(payload)
-    api_logger.info("Save task order -> success=%s, message=%s", ok, message)
+    api_logger.info("Save task order -> success={}, message={}", ok, message)
     return ActionResponse(success=ok, message=message)

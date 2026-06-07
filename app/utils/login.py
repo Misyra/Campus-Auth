@@ -143,7 +143,7 @@ class LoginAttemptHandler:
                 task = task_manager.load_active_task()
 
             if not task:
-                self.logger.warning("未找到活动任务: %s", active_task_id)
+                self.logger.warning("未找到活动任务: {}", active_task_id)
                 return None
 
             # ========== 脚本任务分支 ==========
@@ -208,7 +208,7 @@ class LoginAttemptHandler:
                 # 监听页面 alert/confirm/prompt，记录内容并延迟关闭让用户看到
                 # 每次执行后清理监听器，避免浏览器复用时监听器泄漏
                 async def _handle_dialog(dialog):
-                    self.logger.info("页面弹窗 [%s]: %s", dialog.type, dialog.message)
+                    self.logger.info("页面弹窗 [{}]: {}", dialog.type, dialog.message)
                     await asyncio.sleep(1.5)  # 延迟关闭，让页面有时间处理弹窗
                     await dialog.accept()
 
@@ -219,11 +219,11 @@ class LoginAttemptHandler:
                     browser_manager.page.remove_listener("dialog", _handle_dialog)
                 total = time.perf_counter() - phase_start
                 if success:
-                    self.logger.info("登录成功 (总耗时 %.1fs): %s", total, message)
+                    self.logger.info("登录成功 (总耗时 {:.1f}s): {}", total, message)
                     await asyncio.sleep(LOGIN_SUCCESS_SETTLE_SECONDS)  # 登录成功后等待，让页面完成跳转和状态更新
                     return True, message
                 log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
-                self.logger.error("登录失败 (总耗时 %.1fs): %s", total, log_msg)
+                self.logger.error("登录失败 (总耗时 {:.1f}s): {}", total, log_msg)
                 return False, message
             finally:
                 # 单一关闭点：成功时始终关闭，失败/异常时按 close_on_failure 决策
@@ -235,7 +235,7 @@ class LoginAttemptHandler:
             return False, "登录已取消"
         except Exception as e:
             total = time.perf_counter() - phase_start
-            self.logger.error("登录异常 (总耗时 %.1fs): %s", total, e)
+            self.logger.error("登录异常 (总耗时 {:.1f}s): {}", total, e)
             return False, f"任务执行异常: {e}"
 
     async def _execute_script_task(
@@ -264,7 +264,7 @@ class LoginAttemptHandler:
 
         if not ran_ok:
             total = time.perf_counter() - phase_start
-            self.logger.error("脚本执行失败 (总耗时 %.1fs): %s", total, script_output)
+            self.logger.error("脚本执行失败 (总耗时 {:.1f}s): {}", total, script_output)
             return False, f"脚本执行失败: {script_output}"
 
         self.logger.info("脚本已执行，等待网络验证...")
@@ -274,10 +274,10 @@ class LoginAttemptHandler:
 
         total = time.perf_counter() - phase_start
         if net_ok:
-            self.logger.info("登录成功 (总耗时 %.1fs): 网络已连通", total)
+            self.logger.info("登录成功 (总耗时 {:.1f}s): 网络已连通", total)
             return True, "登录成功"
         else:
-            self.logger.warning("登录可能失败 (总耗时 %.1fs): %s", total, net_msg)
+            self.logger.warning("登录可能失败 (总耗时 {:.1f}s): {}", total, net_msg)
             return False, f"网络未连通: {net_msg}"
 
     async def close_browser(self) -> None:
@@ -288,7 +288,7 @@ class LoginAttemptHandler:
                 worker = get_worker()
                 await worker.close_browser()
             except Exception as exc:
-                self.logger.warning("浏览器关闭时异常: %s", exc)
+                self.logger.warning("浏览器关闭时异常: {}", exc)
             finally:
                 # 确保 __aexit__ 始终执行，释放本地引用
                 try:

@@ -121,7 +121,7 @@ class TaskManager:
             atomic_write(meta_path, json.dumps(meta, ensure_ascii=False, indent=2))
             return True
         except Exception as e:
-            logger.error("无法保存脚本元数据 %s: %s", task_id, e)
+            logger.error("无法保存脚本元数据 {}: {}", task_id, e)
             return False
 
     @staticmethod
@@ -184,7 +184,7 @@ class TaskManager:
             )
             return True
         except Exception as e:
-            logger.error("保存排序配置失败: %s", e)
+            logger.error("保存排序配置失败: {}", e)
             return False
 
     def _sort_by_order(self, tasks: list[dict], order_key: str) -> list[dict]:
@@ -211,7 +211,7 @@ class TaskManager:
                     "type": "browser",
                 })
             except Exception as e:
-                logger.warning("无法读取任务文件 %s: %s", file, e)
+                logger.warning("无法读取任务文件 {}: {}", file, e)
         return self._sort_by_order(tasks, "all")
 
     def list_script_tasks(self) -> list[dict[str, str]]:
@@ -235,7 +235,7 @@ class TaskManager:
                 })
                 seen_ids.add(file.stem)
             except Exception as e:
-                logger.warning("无法读取脚本 JSON %s: %s", file, e)
+                logger.warning("无法读取脚本 JSON {}: {}", file, e)
 
         # 2. 扫描 scripts/ 下的 .py 文件（兼容旧格式）
         for file in self.scripts_dir.glob("*.py"):
@@ -259,7 +259,7 @@ class TaskManager:
                     "binary_path": binary_path,
                 })
             except Exception as e:
-                logger.warning("无法读取脚本文件 %s: %s", file, e)
+                logger.warning("无法读取脚本文件 {}: {}", file, e)
 
         return self._sort_by_order(tasks, "scripts")
 
@@ -310,7 +310,7 @@ class TaskManager:
 
             return None
         except Exception as e:
-            logger.error("无法加载任务 %s: %s", task_id, e)
+            logger.error("无法加载任务 {}: {}", task_id, e)
             return None
 
     def save_task(self, task_id: str, config: dict[str, Any], task_type: str = "browser") -> bool:
@@ -321,7 +321,7 @@ class TaskManager:
         # 浏览器任务：带验证
         is_valid, errors = TaskValidator.validate(config)
         if not is_valid:
-            logger.error("任务验证失败: %s", errors)
+            logger.error("任务验证失败: {}", errors)
             return False
 
         file = self._safe_json_path(task_id, task_type="browser")
@@ -335,7 +335,7 @@ class TaskManager:
             )
             return True
         except Exception as e:
-            logger.error("无法保存任务 %s: %s", task_id, e)
+            logger.error("无法保存任务 {}: {}", task_id, e)
             return False
 
     def _save_script_task(self, task_id: str, config: dict[str, Any]) -> bool:
@@ -361,7 +361,7 @@ class TaskManager:
             atomic_write(str(file), json.dumps(save_data, ensure_ascii=False, indent=2))
             return True
         except Exception as e:
-            logger.error("无法保存脚本任务 %s: %s", task_id, e)
+            logger.error("无法保存脚本任务 {}: {}", task_id, e)
             return False
 
     def delete_task(self, task_id: str) -> bool:
@@ -377,7 +377,7 @@ class TaskManager:
                 try:
                     file.unlink(missing_ok=True)
                 except Exception as e:
-                    logger.error("无法删除任务文件 %s: %s", file, e)
+                    logger.error("无法删除任务文件 {}: {}", file, e)
         return True
 
     def _find_task_type(self, task_id: str) -> str | None:
@@ -429,5 +429,5 @@ class TaskManager:
             config_file.write_text(f"{task_type}:{normalized}", encoding="utf-8")
             return True
         except Exception as e:
-            logger.error("无法设置活动任务: %s", e)
+            logger.error("无法设置活动任务: {}", e)
             return False

@@ -49,8 +49,8 @@ def save_config(
         api_logger.info("配置已保存 -> success=True")
         return ActionResponse(success=True, message="配置保存成功")
     except ValueError as exc:
-        api_logger.warning("Config update rejected: %s", exc)
+        api_logger.warning("Config update rejected: {}", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        api_logger.error("Config save failed: %s", exc, exc_info=True)
+        api_logger.error("Config save failed: {}", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=f"配置保存失败: {exc}") from exc

@@ -119,7 +119,7 @@ class SchedulerService:
                 data["id"] = file.stem
                 tasks.append(data)
             except Exception as e:
-                scheduler_logger.error("读取定时任务失败 %s: %s", file, e)
+                scheduler_logger.error("读取定时任务失败 {}: {}", file, e)
         return sorted(tasks, key=lambda t: t.get("name", ""))
 
     def get_task(self, task_id: str) -> dict[str, Any] | None:
@@ -134,7 +134,7 @@ class SchedulerService:
             data["id"] = task_id
             return data
         except Exception as e:
-            scheduler_logger.error("读取定时任务失败 %s: %s", file, e)
+            scheduler_logger.error("读取定时任务失败 {}: {}", file, e)
             return None
 
     def save_task(self, task_id: str, config: dict[str, Any]) -> tuple[bool, str]:
@@ -144,10 +144,10 @@ class SchedulerService:
         file = self.tasks_dir / f"{task_id}.json"
         try:
             file.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
-            scheduler_logger.info("定时任务已保存: %s", task_id)
+            scheduler_logger.info("定时任务已保存: {}", task_id)
             return True, "定时任务保存成功"
         except Exception as e:
-            scheduler_logger.error("保存定时任务失败 %s: %s", task_id, e)
+            scheduler_logger.error("保存定时任务失败 {}: {}", task_id, e)
             return False, f"保存失败: {e}"
 
     def delete_task(self, task_id: str) -> tuple[bool, str]:
@@ -163,10 +163,10 @@ class SchedulerService:
             history_file = self.history_dir / f"{task_id}.json"
             if history_file.exists():
                 history_file.unlink()
-            scheduler_logger.info("定时任务已删除: %s", task_id)
+            scheduler_logger.info("定时任务已删除: {}", task_id)
             return True, "定时任务删除成功"
         except Exception as e:
-            scheduler_logger.error("删除定时任务失败 %s: %s", task_id, e)
+            scheduler_logger.error("删除定时任务失败 {}: {}", task_id, e)
             return False, f"删除失败: {e}"
 
     def get_history(self, task_id: str) -> list[dict[str, Any]]:
@@ -180,7 +180,7 @@ class SchedulerService:
             data = json.loads(history_file.read_text(encoding="utf-8"))
             return data.get("runs", [])
         except Exception as e:
-            scheduler_logger.error("读取执行历史失败 %s: %s", task_id, e)
+            scheduler_logger.error("读取执行历史失败 {}: {}", task_id, e)
             return []
 
     async def _add_history(self, task_id: str, status: str, message: str, duration: float):
@@ -215,7 +215,7 @@ class SchedulerService:
                     encoding="utf-8",
                 )
             except Exception as e:
-                scheduler_logger.error("保存执行历史失败 %s: %s", task_id, e)
+                scheduler_logger.error("保存执行历史失败 {}: {}", task_id, e)
 
     async def execute_task(self, task_id: str) -> tuple[bool, str]:
         """执行定时任务。"""
@@ -249,7 +249,7 @@ class SchedulerService:
         task["last_status"] = "success" if success else "failure"
         self.save_task(task_id, task)
 
-        scheduler_logger.info("定时任务执行完成 %s: success=%s, message=%s", task_id, success, message[:100])
+        scheduler_logger.info("定时任务执行完成 {}: success={}, message={}", task_id, success, message[:100])
         return success, message
 
     async def _execute_script(self, script_id: str, timeout: int) -> tuple[bool, str]:
@@ -332,12 +332,12 @@ class SchedulerService:
 
         except ImportError as e:
             duration_ms = int((time.perf_counter() - start_time) * 1000)
-            scheduler_logger.warning("浏览器任务执行缺少依赖: %s", e)
+            scheduler_logger.warning("浏览器任务执行缺少依赖: {}", e)
             self._record_login_history(False, duration_ms, task.get("name", task_id), str(e))
             return False, "浏览器任务执行需要 Playwright 环境，请确保已安装"
         except Exception as e:
             duration_ms = int((time.perf_counter() - start_time) * 1000)
-            scheduler_logger.error("浏览器任务执行异常: %s", e)
+            scheduler_logger.error("浏览器任务执行异常: {}", e)
             self._record_login_history(False, duration_ms, task.get("name", task_id), str(e))
             return False, f"浏览器任务执行异常: {e}"
 
@@ -438,7 +438,7 @@ class SchedulerService:
             return
         exc = task.exception()
         if exc is not None:
-            scheduler_logger.error("定时任务执行异常: %s", exc)
+            scheduler_logger.error("定时任务执行异常: {}", exc)
 
     async def _scheduler_loop(self):
         """调度器主循环，每分钟检查一次。"""
@@ -466,7 +466,7 @@ class SchedulerService:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                scheduler_logger.error("调度器循环异常: %s", e)
+                scheduler_logger.error("调度器循环异常: {}", e)
                 await asyncio.sleep(5)
 
         self._running = False
@@ -489,7 +489,7 @@ class SchedulerService:
 
             # 执行任务
             task_id = task.get("id", "")
-            scheduler_logger.info("触发定时任务: %s", task_id)
+            scheduler_logger.info("触发定时任务: {}", task_id)
             task_obj = asyncio.create_task(self.execute_task(task_id))
             self._running_tasks.add(task_obj)
             task_obj.add_done_callback(self._on_task_done)

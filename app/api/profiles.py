@@ -20,7 +20,7 @@ def _safe_detect(func, label: str, default=None):
     try:
         return func()
     except Exception as exc:
-        api_logger.error("%s检测异常: %s", label, exc, exc_info=True)
+        api_logger.error("{}检测异常: {}", label, exc, exc_info=True)
         return default
 
 
@@ -86,7 +86,7 @@ def save_profile(
 ) -> ActionResponse:
     ok, message = profile_svc.save_profile(profile_id, payload)
     api_logger.info(
-        "Save profile %s -> success=%s, message=%s", profile_id, ok, message
+        "Save profile {} -> success={}, message={}", profile_id, ok, message
     )
     if ok:
         data = profile_svc.load()
@@ -112,7 +112,7 @@ def delete_profile(
 
     ok, message = profile_svc.delete_profile(profile_id)
     api_logger.info(
-        "Delete profile %s -> success=%s, message=%s", profile_id, ok, message
+        "Delete profile {} -> success={}, message={}", profile_id, ok, message
     )
     # 删除活动方案后通知监控重载配置
     if ok and was_active:
@@ -134,7 +134,7 @@ def set_active_profile(
 ) -> ActionResponse:
     ok, message = profile_svc.set_active_profile(profile_id)
     api_logger.info(
-        "Set active profile %s -> success=%s, message=%s", profile_id, ok, message
+        "Set active profile {} -> success={}, message={}", profile_id, ok, message
     )
     if ok:
         data = profile_svc.load()
@@ -163,7 +163,7 @@ def detect_network_profile(
         matched_name = data.profiles[matched_id].name
 
     api_logger.info(
-        "网络检测结果: gateway=%s, ssid=%s, matched=%s",
+        "网络检测结果: gateway={}, ssid={}, matched={}",
         gateway,
         ssid,
         matched_id,
@@ -184,5 +184,5 @@ def toggle_auto_switch(
     enabled_bool = enabled.strip().lower() in ("true", "1", "yes", "on")
     profile_svc.set_auto_switch(enabled_bool)
     state = "开启" if enabled_bool else "关闭"
-    api_logger.info("Auto-switch %s", state)
+    api_logger.info("Auto-switch {}", state)
     return ActionResponse(success=True, message=f"自动切换已{state}")

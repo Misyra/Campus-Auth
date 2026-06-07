@@ -18,6 +18,7 @@ dependencies = [
     "onnxruntime",
     "python-multipart",
     "loguru",
+    "websockets>=16.0",
 ]
 
 [project.optional-dependencies]

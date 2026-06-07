@@ -142,7 +142,7 @@ class BrowserContextManager:
         # 如果有异常，记录但不抑制
         if exc_type:
             try:
-                self.logger.error("浏览器操作异常: %s: %.200s", exc_type.__name__, exc_val)
+                self.logger.error("浏览器操作异常: {}: {}", exc_type.__name__, str(exc_val)[:200])
             except Exception:
-                self.logger.error("浏览器操作异常: %s (详情无法格式化)", exc_type.__name__)
+                self.logger.error("浏览器操作异常: {} (详情无法格式化)", exc_type.__name__)
         return False  # 将异常传播给调用者（不抑制）

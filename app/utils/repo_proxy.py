@@ -41,7 +41,7 @@ def repo_get(url: str, proxy: str = ""):
 def repo_fetch_json(url: str, expected_type: type, label: str, proxy: str = ""):
     """通用的远程 JSON 获取：校验类型 + 统一异常处理。"""
     url = normalize_repo_url(url)
-    logger.info("获取远程%s: %s", label, url)
+    logger.info("获取远程{}: {}", label, url)
     try:
         resp = repo_get(url, proxy=proxy)
         data = resp.json()
@@ -50,16 +50,16 @@ def repo_fetch_json(url: str, expected_type: type, label: str, proxy: str = ""):
             raise HTTPException(
                 status_code=422, detail=f"{label}格式不正确，应为 {type_name}"
             )
-        logger.info("远程%s获取成功", label)
+        logger.info("远程{}获取成功", label)
         return data
     except httpx.HTTPStatusError as exc:
         status = exc.response.status_code if exc.response is not None else 502
-        logger.error("远程%s获取失败: HTTP %s (%s)", label, status, url)
+        logger.error("远程{}获取失败: HTTP {} ({})", label, status, url)
         raise HTTPException(
             status_code=status, detail=f"远程返回错误: {status} ({url})"
         ) from exc
     except HTTPException:
         raise
     except Exception as exc:
-        logger.error("远程%s获取失败: %s (%s)", label, exc, url)
+        logger.error("远程{}获取失败: {} ({})", label, exc, url)
         raise HTTPException(status_code=502, detail=f"获取{label}失败: {exc}") from exc

@@ -101,7 +101,7 @@ class TestStepConfig:
             mock_logger.warning.assert_called_once()
             args, kwargs = mock_logger.warning.call_args
             # 日志消息应包含所有未知字段名
-            msg = args[0] % args[1:] if len(args) > 1 else args[0]
+            msg = args[0].format(*args[1:]) if len(args) > 1 else args[0]
             assert "selctor" in msg
             assert "unwanted" in msg
         # 未知字段仍收入 extra（行为不变）
