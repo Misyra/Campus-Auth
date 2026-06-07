@@ -104,7 +104,7 @@ async def lifespan(app_instance):
     await services.startup()
 
     startup_logger.info(
-        "FastAPI 启动: 完成，耗时 %.3fs",
+        "FastAPI 启动: 完成，耗时 {:.3f}s",
         time.perf_counter() - start,
     )
     yield
