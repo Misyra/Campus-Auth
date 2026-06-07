@@ -45,8 +45,8 @@ class DebugSession:
     so that stale generation checks work correctly across session boundaries.
     """
 
-    session: Any = None
-    """The DebugSession browser instance or None."""
+    _browser_active: bool = False
+    """Whether the debug browser session is active."""
 
     task_id: str | None = None
     """The task identifier being debugged."""
