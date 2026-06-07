@@ -100,21 +100,25 @@ class TestReadPidFile:
 class TestGetProcessName:
     """_get_process_name — Windows tasklist CSV 解析。"""
 
+    @patch("app.utils.process.sys")
     @patch("subprocess.run")
-    def test_valid_csv_output(self, mock_run):
+    def test_valid_csv_output(self, mock_run, mock_sys):
         from app.utils.process import get_process_name
 
+        mock_sys.platform = "win32"
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout='"python.exe","1234","Console","1","10,000 K"',
         )
         assert get_process_name(1234) == "python.exe"
 
+    @patch("app.utils.process.sys")
     @patch("subprocess.run")
-    def test_no_matching_process(self, mock_run):
+    def test_no_matching_process(self, mock_run, mock_sys):
         """tasklist 在 PID 不存在时返回本地化消息。"""
         from app.utils.process import get_process_name
 
+        mock_sys.platform = "win32"
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout='INFO: No tasks are running which match the specified criteria.',
