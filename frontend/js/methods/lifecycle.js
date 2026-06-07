@@ -262,6 +262,11 @@ export const lifecycleMethods = {
     };
 
     // 应用层 ping/pong，防止校园网代理 60s 无流量切断连接
+    // 清理旧的 ping timer，防止重连时累积
+    if (this._wsPingTimer) {
+      clearInterval(this._wsPingTimer);
+      this.timers = this.timers.filter(t => t !== this._wsPingTimer);
+    }
     this._wsPingTimer = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({ type: 'ping' }));
@@ -272,7 +277,8 @@ export const lifecycleMethods = {
   _setupVisibilityChange() {
     // 监听页面可见性变化，切回页面时主动重连
     this._visibilityHandler = () => {
-      if (document.visibilityState === 'visible' && !this.wsConnected) {
+      if (document.visibilityState === 'visible' && this.ws?.readyState !== WebSocket.OPEN) {
+        this.wsRetryCount = 0; // 重置重试计数，给页面恢复后新的重连机会
         this.frontendLogger.info('websocket', '页面恢复可见，尝试重连');
         this.connectWebSocket();
       }

@@ -114,6 +114,15 @@ class ServiceContainer:
         # 关闭 WebSocket 连接
         await self.ws_manager.close_all()
 
+        # 关闭 Playwright Worker（在所有服务关闭后，避免中断正在执行的任务）
+        try:
+            from app.workers.playwright_worker import shutdown_worker
+
+            shutdown_worker()
+            container_logger.info("Playwright Worker 已关闭")
+        except Exception:
+            container_logger.warning("关闭 Playwright Worker 异常", exc_info=True)
+
         # 清理临时目录
         try:
             if self._temp_dir.exists():

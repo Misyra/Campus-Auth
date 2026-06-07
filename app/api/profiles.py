@@ -111,9 +111,8 @@ def delete_profile(
     if ok and was_active:
         try:
             new_data = profile_svc.load()
-            new_profile = new_data.profiles.get(new_data.active_profile)
-            new_name = new_profile.name if new_profile else new_data.active_profile
-            monitor_svc.apply_profile(new_name)
+            # 统一传 profile_id，apply_profile 内部解析名称用于日志
+            monitor_svc.apply_profile(new_data.active_profile)
         except Exception:
             api_logger.warning("删除方案后应用方案失败", exc_info=True)
     return ActionResponse(success=ok, message=message)
@@ -130,11 +129,9 @@ def set_active_profile(
         "设置活动方案 {} -> success={}, message={}", profile_id, ok, message
     )
     if ok:
-        data = profile_svc.load()
-        profile = data.profiles.get(profile_id)
-        profile_name = profile.name if profile else profile_id
         try:
-            monitor_svc.apply_profile(profile_name)
+            # 统一传 profile_id，apply_profile 内部解析名称用于日志
+            monitor_svc.apply_profile(profile_id)
         except Exception:
             api_logger.warning("应用方案失败", exc_info=True)
     return ActionResponse(success=ok, message=message)

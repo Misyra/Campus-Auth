@@ -156,8 +156,12 @@ class PlaywrightWorker:
 
         # 通过 run_coroutine_threadsafe 唤醒 Worker 的事件循环
         # 这是唯一允许的跨线程 asyncio 调用
-        if self._loop is not None:
-            asyncio.run_coroutine_threadsafe(self._wake_async(), self._loop)
+        loop = self._loop
+        if loop is not None:
+            try:
+                asyncio.run_coroutine_threadsafe(self._wake_async(), loop)
+            except RuntimeError:
+                pass
 
         # 等待消费者线程正常退出
         if self._consumer_thread:
@@ -165,8 +169,9 @@ class PlaywrightWorker:
             # 超时后强制停止事件循环
             if self._consumer_thread.is_alive():
                 logger.warning("Worker 线程未在 {}s 内退出，强制停止", timeout)
-                if self._loop is not None:
-                    self._loop.call_soon_threadsafe(self._loop.stop)
+                loop = self._loop
+                if loop is not None:
+                    loop.call_soon_threadsafe(loop.stop)
                 self._consumer_thread.join(timeout=WORKER_JOIN_TIMEOUT)
 
         # 排干队列中残留的命令，通知等待方 Worker 已关闭
@@ -236,8 +241,12 @@ class PlaywrightWorker:
 
         # 通过 run_coroutine_threadsafe 唤醒 Worker 的事件循环，
         # 使 _async_run 立即处理新放入的命令
-        if self._loop is not None:
-            asyncio.run_coroutine_threadsafe(self._wake_async(), self._loop)
+        loop = self._loop
+        if loop is not None:
+            try:
+                asyncio.run_coroutine_threadsafe(self._wake_async(), loop)
+            except RuntimeError:
+                pass
 
         if not wait:
             return WorkerResponse(success=True)
@@ -436,6 +445,7 @@ class PlaywrightWorker:
                 )
             except Exception as e:
                 logger.warning("调试页面加载失败: {}", e)
+                return WorkerResponse(success=False, error=f"调试页面加载失败: {e}")
 
         # 创建 TaskExecutor（在 Worker 线程内，page 对象安全）
         if task_data:
@@ -854,12 +864,16 @@ class PlaywrightWorker:
 
         拦截图片、字体、媒体资源请求并中止，减少内存和带宽消耗。
         """
-        request = route.request
-        blocked_types = {"image", "font", "media"}
-        if request.resource_type in blocked_types:
-            await route.abort()
-            return
-        await route.continue_()
+        try:
+            request = route.request
+            blocked_types = {"image", "font", "media"}
+            if request.resource_type in blocked_types:
+                await route.abort()
+                return
+            await route.continue_()
+        except Exception as e:
+            # 页面/上下文已关闭时 route 操作会抛异常
+            logger.debug("route 异常已忽略: {}", e)
 
 
 # ── 模块级单例 ──
@@ -887,6 +901,15 @@ def get_worker() -> PlaywrightWorker:
                 _worker = PlaywrightWorker()
                 _worker.start()
     return _worker
+
+
+def shutdown_worker(timeout: float = 5) -> None:
+    """关闭并清理全局 Worker 单例。shutdown 场景专用，不创建新实例。"""
+    global _worker  # noqa: PLW0603
+    with _worker_lock:
+        if _worker is not None and _worker.is_alive():
+            _worker.stop(timeout=timeout)
+        _worker = None
 
 
 # ── 孤儿浏览器清理 ──

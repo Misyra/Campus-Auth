@@ -193,8 +193,8 @@ class LoginAttemptHandler:
         browser_manager = BrowserContextManager(
             self.config, cancel_event=self.cancel_event
         )
+        self._browser_ctx = browser_manager  # 先赋值，确保异常时 close_browser 能清理
         await browser_manager.__aenter__()
-        self._browser_ctx = browser_manager
         self.logger.info("浏览器就绪 ({:.1f}s)", time.perf_counter() - browser_start)
 
         # 成功标志：默认 False，executor 返回成功时设为 True
@@ -299,7 +299,7 @@ class LoginAttemptHandler:
             except Exception as exc:
                 self.logger.warning("浏览器关闭时异常: {}", exc)
             finally:
-                # 确保 __aexit__ 始终执行，释放本地引用
+                # 兜底调用 __aexit__，确保 BrowserContextManager 的清理钩子执行
                 try:
                     await self._browser_ctx.__aexit__(None, None, None)
                 except Exception:

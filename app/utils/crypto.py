@@ -251,6 +251,8 @@ def _simple_deobfuscate(ciphertext: str) -> str:
             return base64.b64decode(ciphertext[len(_OBFUSCATE_PREFIX) :]).decode(
                 "utf-8"
             )
-        except Exception:
-            return ciphertext
+        except Exception as e:
+            _decryption_failed.set()
+            logger.error("Base64 反混淆失败（数据损坏），请在设置页面重新输入密码")
+            raise DecryptionError("密码解混淆失败，请重新输入密码") from e
     return ciphertext

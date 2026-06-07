@@ -17,6 +17,7 @@ from .profile import ProfileService
 from app.schemas import (
     MonitorConfigPayload,
     ProfileSettings,
+    ProfilesData,
     SystemSettings,
 )
 
@@ -110,13 +111,17 @@ def _normalize_headers_json(raw: str) -> str:
     return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
 
 
-def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
+def load_ui_config(
+    profile_service: ProfileService,
+    data: ProfilesData | None = None,
+) -> MonitorConfigPayload:
     """加载 UI 配置 —— 始终返回全局设置。
 
     设置页面展示和修改的都是全局配置（system + default 方案），
     不随活动方案变化。方案独立的覆盖值在方案页面单独管理。
     """
-    data = profile_service.load()
+    if data is None:
+        data = profile_service.load()
     sys_cfg = data.system
     config_logger.debug("加载 UI 配置（全局）: active_profile={}", data.active_profile)
 
@@ -147,6 +152,7 @@ def load_ui_config(profile_service: ProfileService) -> MonitorConfigPayload:
 
 def load_runtime_config(
     profile_service: ProfileService,
+    data: ProfilesData | None = None,
 ) -> tuple[MonitorConfigPayload, bool]:
     """加载运行时配置 —— 根据活动方案的 use_global_* 标志合并全局与方案独立值。
 
@@ -156,7 +162,8 @@ def load_runtime_config(
     返回:
         (配置, 是否有解密错误): 解密错误时配置中密码为空字符串
     """
-    data = profile_service.load()
+    if data is None:
+        data = profile_service.load()
     sys_cfg = data.system
     profile = data.profiles.get(data.active_profile)
     config_logger.debug("加载运行时配置: profile={}", data.active_profile)
@@ -472,25 +479,28 @@ def save_config_combined(
 
     设置页面始终修改全局配置，不涉及活动方案的独立字段。
     方案页面的独立设置通过 /api/profiles/{id} 单独保存。
+    使用 profile_service.update() 保证 load→modify→save 原子性。
     """
-    data = profile_service.load()
-    active_id = data.active_profile
 
-    # 更新系统设置
-    _update_system_settings(data.system, payload)
+    def _apply(data: ProfilesData) -> None:
+        # 更新系统设置
+        _update_system_settings(data.system, payload)
 
-    # 更新 default 方案
-    if "default" not in data.profiles:
-        data.profiles["default"] = ProfileSettings()
-        config_logger.info("自动初始化 default 方案（settings.json 中无 default 键）")
-    _update_default_profile(data.profiles["default"], payload)
+        # 更新 default 方案
+        if "default" not in data.profiles:
+            data.profiles["default"] = ProfileSettings()
+            config_logger.info(
+                "自动初始化 default 方案（settings.json 中无 default 键）"
+            )
+        _update_default_profile(data.profiles["default"], payload)
 
-    # 单次写入
-    profile_service.save(data)
-    config_logger.info(
-        "配置已原子保存: system(user={}, pwd={}, auth={}), active_profile={}",
-        data.system.username,
-        "ENC" if data.system.password else "空",
-        data.system.auth_url,
-        active_id,
-    )
+        # 在锁内写日志，data 就是即将持久化的内容
+        config_logger.info(
+            "配置已原子保存: system(user={}, pwd={}, auth={}), active_profile={}",
+            data.system.username,
+            "ENC" if data.system.password else "空",
+            data.system.auth_url,
+            data.active_profile,
+        )
+
+    profile_service.update(_apply)
