@@ -48,23 +48,35 @@ _download_uv() {
 
     mkdir -p "$UV_DIR"
     local archive="$UV_DIR/uv.tar.gz"
+    local success=0
 
     # 尝试镜像站
     for mirror in "${mirrors[@]}"; do
         local url="${mirror}${github_url}"
         echo "  尝试: ${mirror}" >&2
         if curl -fsSL --connect-timeout 10 --max-time 120 -o "$archive" "$url" 2>/dev/null; then
-            goto_extract=0
-            break
+            # 校验是否为有效的 tar.gz 文件（防止下载到 HTML 错误页）
+            if tar -tzf "$archive" &>/dev/null; then
+                success=1
+                break
+            else
+                echo "  ⚠️ 下载的文件无效（可能是 HTML 错误页），尝试下一个源..." >&2
+                rm -f "$archive"
+            fi
         fi
     done
 
     # 回退到 GitHub
-    if [[ ! -f "$archive" ]]; then
+    if [[ "$success" -eq 0 ]]; then
         echo "  尝试: GitHub 直连" >&2
         if ! curl -fsSL --connect-timeout 10 --max-time 120 -o "$archive" "$github_url"; then
             echo "错误：所有下载源均失败" >&2
             echo "请手动安装 uv: https://docs.astral.sh/uv/" >&2
+            exit 1
+        fi
+        if ! tar -tzf "$archive" &>/dev/null; then
+            echo "错误：GitHub 直连下载的文件无效" >&2
+            rm -f "$archive"
             exit 1
         fi
     fi
@@ -83,7 +95,7 @@ _download_uv() {
     fi
 
     chmod +x "$UV_DIR/uv"
-    echo "uv 下载完成" >&2
+    echo "✅ uv 下载完成" >&2
 }
 
 # ── 查找 uv ──────────────────────────────────────────────
@@ -135,4 +147,15 @@ if [[ "${1:-}" == "--install-only" ]]; then
     exit 0
 fi
 
-echo "启动命令: uv run main.py"
+echo ""
+echo "=========================================="
+if [[ "$UV_CMD" == "uv" ]]; then
+    echo "🚀 启动命令: uv run main.py"
+else
+    echo "🚀 启动命令: $UV_CMD run main.py"
+    echo "💡 提示: 你也可以将 '.uv' 目录加入 PATH 后直接使用 'uv' 命令"
+fi
+echo "=========================================="
+echo ""
+echo "⚠️ 注意: 如果在 Linux 下运行 Playwright 报错缺少系统依赖，请执行:"
+echo "   sudo $UV_CMD run playwright install-deps chromium"
