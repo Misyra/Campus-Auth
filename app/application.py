@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from app.utils.logging import LogConfigCenter, get_logger
 from app.version import get_project_version
 
-from app.constants import DEBUG_DIR, FRONTEND_DIR, LOGS_DIR, PROJECT_ROOT, TEMP_DIR
+from app.constants import FRONTEND_DIR, LOGS_DIR, PROJECT_ROOT, TEMP_DIR
 from app.container import ServiceContainer
 from app.api import backup, config, debug, history, logfiles, monitor, profiles, repo, scheduled_tasks, scripts, system, tasks, tools
 
@@ -234,12 +234,11 @@ def index() -> FileResponse:
 
 
 # 确保挂载目录存在（发布版本解压后这些目录可能不存在）
-for _dir in (LOGS_DIR, DEBUG_DIR, TEMP_DIR):
+for _dir in (LOGS_DIR, TEMP_DIR):
     _dir.mkdir(parents=True, exist_ok=True)
 
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 app.mount("/logs", StaticFiles(directory=LOGS_DIR), name="logs")
-app.mount("/debug", StaticFiles(directory=DEBUG_DIR), name="debug")
 app.mount("/temp", StaticFiles(directory=TEMP_DIR), name="temp")
 
 
@@ -286,6 +285,19 @@ def run() -> None:
                 old_log.unlink(missing_ok=True)
     except Exception:
         startup_logger.debug("旧日志清理失败", exc_info=True)
+
+    # 后台压缩旧日志目录为 zip（不阻塞启动）
+    import threading
+    try:
+        from app.utils.logging import compress_old_logs
+        threading.Thread(
+            target=compress_old_logs,
+            args=(log_dir, log_retention),
+            daemon=True,
+            name="log-compress",
+        ).start()
+    except Exception:
+        startup_logger.debug("日志压缩启动失败", exc_info=True)
 
     global _access_log_enabled
     _access_log_enabled = access_log_enabled

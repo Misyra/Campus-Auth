@@ -16,8 +16,10 @@ import shutil
 import sys
 import threading
 import time
+import zipfile
 from collections import deque
 from datetime import datetime
+from pathlib import Path
 from pathlib import Path
 from typing import Any, Dict
 
@@ -300,6 +302,61 @@ class DateRotatingSink:
 
 # 为了向后兼容，保留 _DateRotatingFileHandler 名称
 _DateRotatingFileHandler = DateRotatingSink
+
+
+def compress_old_logs(log_dir: str | Path, retention_days: int = 7) -> None:
+    """启动时将非今天的日期目录压缩为 zip，删除超过保留天数的 zip。
+
+    - 遍历 log_dir 下的 YYYY-MM-DD 目录，跳过今天
+    - 若同名 .zip 已存在则跳过压缩（幂等）
+    - 每个目录压缩为同名 .zip（保留目录结构），然后删除原目录
+    - 同一轮遍历中清理超过 retention_days 天的 .zip 文件
+    """
+    base = Path(log_dir)
+    if not base.exists():
+        return
+
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    cutoff = time.time() - retention_days * 86400
+    compress_logger = get_logger("logging.compress", side="BACKEND")
+    date_re = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+    for item in sorted(base.iterdir()):
+        name = item.name
+
+        # 日期目录 → 压缩为 zip
+        if item.is_dir() and date_re.match(name):
+            if name == today_str:
+                continue
+            zip_path = base / f"{name}.zip"
+            if zip_path.exists():
+                # zip 已存在，目录残留 → 直接删除目录
+                try:
+                    shutil.rmtree(item)
+                    compress_logger.info("清理已压缩的残留目录: {}", name)
+                except OSError:
+                    pass
+                continue
+            try:
+                compress_logger.info("压缩日志目录: {}", name)
+                with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for file in item.rglob("*"):
+                        if file.is_file():
+                            zf.write(file, f"{name}/{file.relative_to(item)}")
+                shutil.rmtree(item)
+                compress_logger.info("压缩完成: {} → {}", name, zip_path.name)
+            except Exception:
+                compress_logger.exception("压缩日志目录失败: {}", name)
+                zip_path.unlink(missing_ok=True)
+
+        # zip 归档 → 清理过期
+        elif item.suffix == ".zip" and date_re.match(item.stem):
+            try:
+                if item.stat().st_mtime < cutoff:
+                    item.unlink()
+                    compress_logger.info("已清理过期日志 zip: {}", name)
+            except OSError:
+                pass
 
 
 # ==================== 日志配置中心 ====================

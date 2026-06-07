@@ -1,8 +1,10 @@
-"""日志文件查看路由 — 按日期/级别查看历史日志文件。"""
+"""日志文件查看路由 — 按日期/级别查看历史日志文件（支持 zip 归档）。"""
 
 from __future__ import annotations
 
 import re
+import zipfile
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 
@@ -15,6 +17,7 @@ router = APIRouter()
 
 # 安全校验：只允许 app.log 和 app.log.N（N=1-3）
 _SAFE_FILE_PATTERN = re.compile(r"^app\.log(?:\.\d)?$")
+_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 # 日志行解析正则
 # 格式: 2026-06-01 00:04:44 | INFO | BACKEND | backend.module | message
@@ -66,14 +69,6 @@ def _validate_filename(filename: str) -> None:
         raise HTTPException(400, "文件名无效，仅允许 app.log 和 app.log.N")
 
 
-def _safe_resolve(date: str, filename: str) -> Path:
-    """安全解析路径，确保在 LOGS_DIR 内。"""
-    target = (LOGS_DIR / date / filename).resolve()
-    if not target.is_relative_to(LOGS_DIR.resolve()):
-        raise HTTPException(400, "路径越界")
-    return target
-
-
 def _parse_log_line(raw: str) -> LogLine:
     """解析单行日志。"""
     m = _LOG_LINE_PATTERN.match(raw)
@@ -85,54 +80,82 @@ def _parse_log_line(raw: str) -> LogLine:
             logger=m.group(4),
             message=m.group(5),
         )
-    # 未匹配标准格式的行原样返回
     return LogLine(message=raw)
 
 
-def _read_tail(filepath: Path, limit: int = 2000) -> list[str]:
-    """从文件末尾读取最后 limit 行（避免大文件全量读取）。"""
+def _list_dir_files(date_dir: Path) -> list[LogFileInfo]:
+    """列出目录中的日志文件。"""
+    files: list[LogFileInfo] = []
+    for f in sorted(date_dir.iterdir()):
+        if f.is_file() and _SAFE_FILE_PATTERN.match(f.name):
+            stat = f.stat()
+            files.append(LogFileInfo(
+                name=f.name,
+                size=stat.st_size,
+                modified=datetime.fromtimestamp(stat.st_mtime).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
+            ))
+    return files
+
+
+def _list_zip_files(zip_path: Path) -> list[LogFileInfo]:
+    """列出 zip 中的日志文件。"""
+    files: list[LogFileInfo] = []
     try:
-        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-            from collections import deque
-            return list(deque(f, maxlen=limit))
-    except FileNotFoundError:
-        return []
-    except Exception:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            for info in sorted(zf.infolist(), key=lambda i: i.filename):
+                # 路径格式: 2026-06-06/app.log 或 2026-06-06/screenshots/xxx.png
+                parts = info.filename.split("/")
+                if len(parts) == 2 and _SAFE_FILE_PATTERN.match(parts[1]):
+                    files.append(LogFileInfo(
+                        name=parts[1],
+                        size=info.file_size,
+                        modified=datetime(*info.date_time).strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        ),
+                    ))
+    except (zipfile.BadZipFile, OSError):
+        pass
+    return files
+
+
+def _read_from_zip(zip_path: Path, date: str, filename: str) -> list[str]:
+    """从 zip 中读取日志文件内容。"""
+    arcname = f"{date}/{filename}"
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            with zf.open(arcname) as f:
+                return f.read().decode("utf-8", errors="replace").splitlines()
+    except (KeyError, zipfile.BadZipFile, OSError):
         return []
 
 
 @router.get("/api/logfiles/list", response_model=list[LogFileGroup])
 def list_log_files() -> list[LogFileGroup]:
-    """列出所有日志文件，按日期分组（最新在前）。"""
+    """列出所有日志文件（含 zip 归档），按日期分组（最新在前）。"""
     if not LOGS_DIR.exists():
         return []
 
     groups: list[LogFileGroup] = []
-    # 遍历日期目录
-    for date_dir in sorted(LOGS_DIR.iterdir(), reverse=True):
-        if not date_dir.is_dir():
-            continue
-        # 校验目录名格式
-        dir_name = date_dir.name
-        try:
-            datetime.strptime(dir_name, "%Y-%m-%d")
-        except ValueError:
-            continue
+    seen_dates: set[str] = set()
 
-        files: list[LogFileInfo] = []
-        for f in sorted(date_dir.iterdir()):
-            if f.is_file() and _SAFE_FILE_PATTERN.match(f.name):
-                stat = f.stat()
-                files.append(LogFileInfo(
-                    name=f.name,
-                    size=stat.st_size,
-                    modified=datetime.fromtimestamp(stat.st_mtime).strftime(
-                        "%Y-%m-%d %H:%M:%S"
-                    ),
-                ))
+    for item in sorted(LOGS_DIR.iterdir(), reverse=True):
+        # 日期目录
+        if item.is_dir() and _DATE_PATTERN.match(item.name):
+            files = _list_dir_files(item)
+            if files:
+                groups.append(LogFileGroup(date=item.name, files=files))
+                seen_dates.add(item.name)
 
-        if files:
-            groups.append(LogFileGroup(date=dir_name, files=files))
+        # zip 归档
+        elif item.suffix == ".zip" and _DATE_PATTERN.match(item.stem):
+            if item.stem in seen_dates:
+                continue
+            files = _list_zip_files(item)
+            if files:
+                groups.append(LogFileGroup(date=item.stem, files=files))
+                seen_dates.add(item.stem)
 
     return groups
 
@@ -145,27 +168,40 @@ def get_log_file_content(
     search: str = Query(default="", description="搜索关键词"),
     limit: int = Query(default=2000, ge=1, le=10000),
 ) -> LogFileContent:
-    """获取日志文件内容，支持按级别过滤和关键词搜索。"""
+    """获取日志文件内容，支持按级别过滤和关键词搜索（自动从目录或 zip 读取）。"""
     _validate_date(date)
     _validate_filename(file)
 
-    filepath = _safe_resolve(date, file)
-    if not filepath.exists():
-        raise HTTPException(404, f"日志文件不存在: {date}/{file}")
+    # 优先从目录读取，其次从 zip 读取
+    date_dir = LOGS_DIR / date
+    lines: list[str] = []
 
-    raw_lines = _read_tail(filepath, limit=max(limit * 2, 5000))
+    if date_dir.is_dir():
+        filepath = date_dir / file
+        if filepath.exists():
+            try:
+                with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                    lines = list(deque(f, maxlen=max(limit * 2, 5000)))
+            except (FileNotFoundError, OSError):
+                pass
+
+    if not lines:
+        zip_path = LOGS_DIR / f"{date}.zip"
+        if zip_path.exists():
+            lines = _read_from_zip(zip_path, date, file)
+
+    if not lines:
+        raise HTTPException(404, f"日志文件不存在: {date}/{file}")
 
     # 解析并过滤
     parsed: list[LogLine] = []
-    for raw in raw_lines:
+    for raw in lines:
         line = _parse_log_line(raw.rstrip("\n\r"))
 
-        # 级别过滤
         if level and level.upper() in _VALID_LEVELS:
             if line.level != level.upper():
                 continue
 
-        # 关键词搜索
         if search:
             search_lower = search.lower()
             if (
@@ -177,7 +213,6 @@ def get_log_file_content(
 
         parsed.append(line)
 
-    # 取最后 limit 条
     total = len(parsed)
     if total > limit:
         parsed = parsed[-limit:]

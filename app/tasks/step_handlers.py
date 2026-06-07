@@ -670,10 +670,11 @@ class OcrHandler(StepHandler):
         except Exception as e:
             return False, f"验证码截图失败: {e}"
 
-        # 保存验证码截图到 debug 目录
+        # 保存验证码截图到 logs 目录
         screenshot_url = ""
         try:
-            date_dir = PROJECT_ROOT / "debug" / datetime.now().strftime("%Y-%m-%d")
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            date_dir = PROJECT_ROOT / "logs" / date_str / "screenshots"
             date_dir.mkdir(parents=True, exist_ok=True)
             task_id = resolver.config.task_id or "unknown"
             step_id = step.id or "ocr"
@@ -681,7 +682,7 @@ class OcrHandler(StepHandler):
             filename = f"{task_id}_{step_id}_{stamp}.png"
             local_path = date_dir / filename
             local_path.write_bytes(img_bytes)
-            screenshot_url = f"/debug/{datetime.now().strftime('%Y-%m-%d')}/{filename}"
+            screenshot_url = f"/logs/{date_str}/screenshots/{filename}"
             logger.info("[ocr] 验证码截图已保存: {}", screenshot_url)
         except Exception as e:
             logger.warning("[ocr] 保存验证码截图失败: {}", e)
