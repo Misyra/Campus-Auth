@@ -827,9 +827,9 @@
 }
 
 .notification-dropdown {
-  position: absolute;
-  top: 100%;
-  right: 0;
+  position: fixed;
+  top: 68px;
+  right: 32px;
   width: 320px;
   max-height: 400px;
   overflow-y: auto;
@@ -837,7 +837,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
-  z-index: 100;
+  z-index: var(--z-overlay);
   margin-top: 8px;
   animation: dropdownEnter 0.2s ease;
 }
