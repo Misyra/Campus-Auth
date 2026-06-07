@@ -144,11 +144,12 @@ export const appOptions = {
     },
     shellPathMode: {
       get() {
-        if (!this.config.shell_path) return '';
+        if (!this.config.shell_path) return this._shellCustomMode ? '__custom__' : '';
         if (this.availableShells.some(s => s.path === this.config.shell_path)) return this.config.shell_path;
         return '__custom__';
       },
       set(val) {
+        this._shellCustomMode = (val === '__custom__');
         if (val !== '__custom__') this.config.shell_path = val;
       },
     },
