@@ -701,3 +701,38 @@
   display: flex;
   gap: 10px;
 }
+
+/* 反检测脚本操作按钮 */
+.stealth-script-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: var(--radius-sm);
+}
+
+.btn-secondary {
+  background: var(--bg-card-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+}
+
+.btn-ghost:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
