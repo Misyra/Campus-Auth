@@ -14,6 +14,9 @@ jobs:
         python-version: ["3.12", "3.13"]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
+    env:
+      # 测试全部为 mock 形式，无需真实 Chromium；跳过浏览器下载可省 30-60s
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -42,7 +45,9 @@ jobs:
             ~/.cache/ms-playwright
             ~/Library/Caches/ms-playwright
             ~/AppData/Local/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('**/pyproject.toml') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('**/pyproject.toml', '**/uv.lock') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
 
       - name: Run tests
         run: uv run pytest --tb=short -q

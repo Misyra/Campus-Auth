@@ -1,7 +1,6 @@
 """Campus-Auth 测试配置"""
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -14,8 +13,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 # ── 无显示服务器环境（CI）下 mock pystray ─────────────────
-if not os.environ.get("DISPLAY") and sys.platform == "linux":
-    # pystray 在 Linux 下需要 X11，CI 环境中 mock 掉
+# pystray 在 Linux/macOS 上需要 GUI 后端，CI 环境中没有可用显示
+if sys.platform != "win32":
     _pystray_mock = MagicMock()
     sys.modules["pystray"] = _pystray_mock
 
