@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from backend.scheduler_service import SchedulerService
+from app.services.scheduler import SchedulerService
 
 
 @pytest.fixture
@@ -139,7 +139,7 @@ class TestExecuteShellUsesPolicy:
         """_execute_shell 应拒绝不在白名单中的 shell 路径。"""
         fake_shells = [{"name": "cmd", "path": "cmd.exe", "description": "Windows 命令提示符"}]
 
-        with patch("backend.scheduler_service.detect_available_shells", return_value=fake_shells):
+        with patch('app.services.scheduler.detect_available_shells', return_value=fake_shells):
             success, message = await scheduler._execute_shell(
                 "echo hello", 60, "/malicious/shell",
             )

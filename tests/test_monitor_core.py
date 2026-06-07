@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from backend.monitor_service import MonitorCommand, MonitorService
+from app.services.monitor import MonitorCommand, MonitorService
 
 
 class TestOnProfileSwitchUsesPutNowait:

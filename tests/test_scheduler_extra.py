@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.scheduler_service import SchedulerService, get_default_shell, MAX_HISTORY_SIZE
+from app.services.scheduler import SchedulerService, get_default_shell, MAX_HISTORY_SIZE
 
 
 # =====================================================================

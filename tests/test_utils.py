@@ -17,7 +17,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 # ── crypto ──
-from src.utils.crypto import (
+from app.utils.crypto import (
     encrypt_password,
     decrypt_password,
     mask_password,
@@ -26,13 +26,13 @@ from src.utils.crypto import (
 )
 
 # ── config_helpers ──
-from src.utils.config_helpers import extract_profile_fields, assign_profile_fields
+from app.utils.config_helpers import extract_profile_fields, assign_profile_fields
 
 # ── file_helpers ──
-from src.utils.file_helpers import atomic_write
+from app.utils.file_helpers import atomic_write
 
 # ── platform_utils ──
-from src.utils.platform_utils import (
+from app.utils.platform_utils import (
     get_platform,
     is_windows,
     is_macos,
@@ -41,25 +41,25 @@ from src.utils.platform_utils import (
 )
 
 # ── str_to_bool ──
-from src.utils import str_to_bool
+from app.utils import str_to_bool
 
 # ── network_helpers ──
-from src.utils.network_helpers import parse_host_port
+from app.utils.network_helpers import parse_host_port
 
 # ── version ──
-from src.version import get_project_version
+from app.version import get_project_version
 
 # ── time_utils ──
-from src.utils.time_utils import is_in_pause_period, get_runtime_stats
+from app.utils.time_utils import is_in_pause_period, get_runtime_stats
 
 # ── env ──
-from src.utils.env import build_login_template_vars
+from app.utils.env import build_login_template_vars
 
 # ── exceptions ──
-from src.utils.exceptions import LoginCancelledError, DecryptionError
+from app.utils.exceptions import LoginCancelledError, DecryptionError
 
 # ── logging ──
-from src.utils.logging import (
+from app.utils.logging import (
     _normalize_level,
     LogConfigCenter,
     get_logger,
@@ -282,7 +282,7 @@ class TestAtomicWrite:
         def mock_replace(src, dst):
             raise PermissionError("mocked")
 
-        with patch("src.utils.file_helpers.os.replace", side_effect=mock_replace):
+        with patch('app.utils.file_helpers.os.replace', side_effect=mock_replace):
             with pytest.raises(PermissionError, match="mocked"):
                 atomic_write(str(target), "content")
         # 临时文件应被清理
@@ -290,7 +290,7 @@ class TestAtomicWrite:
 
     def test_cleanup_on_write_error(self, tmp_path):
         target = tmp_path / "test.txt"
-        with patch("src.utils.file_helpers.os.fdopen", side_effect=IOError("disk full")):
+        with patch('app.utils.file_helpers.os.fdopen', side_effect=IOError("disk full")):
             with pytest.raises(IOError, match="disk full"):
                 atomic_write(str(target), "content")
         assert not target.exists()
@@ -323,91 +323,91 @@ class TestAtomicWrite:
 
 class TestGetPlatform:
     def test_windows(self):
-        with patch("src.utils.platform_utils.sys") as mock_sys:
+        with patch('app.utils.platform_utils.sys') as mock_sys:
             mock_sys.platform = "win32"
             assert get_platform() == "windows"
 
     def test_darwin(self):
-        with patch("src.utils.platform_utils.sys") as mock_sys:
+        with patch('app.utils.platform_utils.sys') as mock_sys:
             mock_sys.platform = "darwin"
             assert get_platform() == "darwin"
 
     def test_linux(self):
-        with patch("src.utils.platform_utils.sys") as mock_sys:
+        with patch('app.utils.platform_utils.sys') as mock_sys:
             mock_sys.platform = "linux"
             assert get_platform() == "linux"
 
     def test_linux2(self):
-        with patch("src.utils.platform_utils.sys") as mock_sys:
+        with patch('app.utils.platform_utils.sys') as mock_sys:
             mock_sys.platform = "linux2"
             assert get_platform() == "linux"
 
     def test_unknown_falls_back_to_linux(self):
-        with patch("src.utils.platform_utils.sys") as mock_sys:
+        with patch('app.utils.platform_utils.sys') as mock_sys:
             mock_sys.platform = "freebsd"
             assert get_platform() == "linux"
 
 
 class TestIsWindows:
     def test_true(self):
-        with patch("src.utils.platform_utils.sys") as mock_sys:
+        with patch('app.utils.platform_utils.sys') as mock_sys:
             mock_sys.platform = "win32"
             assert is_windows() is True
 
     def test_false(self):
-        with patch("src.utils.platform_utils.sys") as mock_sys:
+        with patch('app.utils.platform_utils.sys') as mock_sys:
             mock_sys.platform = "linux"
             assert is_windows() is False
 
 
 class TestIsMacos:
     def test_true(self):
-        with patch("src.utils.platform_utils.sys") as mock_sys:
+        with patch('app.utils.platform_utils.sys') as mock_sys:
             mock_sys.platform = "darwin"
             assert is_macos() is True
 
     def test_false(self):
-        with patch("src.utils.platform_utils.sys") as mock_sys:
+        with patch('app.utils.platform_utils.sys') as mock_sys:
             mock_sys.platform = "win32"
             assert is_macos() is False
 
 
 class TestIsLinux:
     def test_linux(self):
-        with patch("src.utils.platform_utils.sys") as mock_sys:
+        with patch('app.utils.platform_utils.sys') as mock_sys:
             mock_sys.platform = "linux"
             assert is_linux() is True
 
     def test_linux2(self):
         # Python 3.10+ 不再返回 "linux2"，应返回 False
-        with patch("src.utils.platform_utils.sys") as mock_sys:
+        with patch('app.utils.platform_utils.sys') as mock_sys:
             mock_sys.platform = "linux2"
             assert is_linux() is False
 
     def test_false(self):
-        with patch("src.utils.platform_utils.sys") as mock_sys:
+        with patch('app.utils.platform_utils.sys') as mock_sys:
             mock_sys.platform = "win32"
             assert is_linux() is False
 
 
 class TestGetDefaultUa:
     def test_windows_ua(self):
-        with patch("src.utils.platform_utils.get_platform", return_value="windows"):
+        with patch('app.utils.platform_utils.get_platform', return_value="windows"):
             ua = get_default_ua()
             assert "Windows" in ua
 
     def test_macos_ua(self):
-        with patch("src.utils.platform_utils.get_platform", return_value="darwin"):
+        with patch('app.utils.platform_utils.get_platform', return_value="darwin"):
             ua = get_default_ua()
             assert "Macintosh" in ua
 
     def test_linux_ua(self):
-        with patch("src.utils.platform_utils.get_platform", return_value="linux"):
+        with patch('app.utils.platform_utils.get_platform', return_value="linux"):
             ua = get_default_ua()
             assert "Linux" in ua
 
     def test_unknown_platform_falls_back_to_linux(self):
-        with patch("src.utils.platform_utils.get_platform", return_value="freebsd"):
+        with patch('app.utils.platform_utils.get_platform', return_value="freebsd"):
             ua = get_default_ua()
             assert "Linux" in ua
 
@@ -541,42 +541,42 @@ class TestIsInPausePeriod:
     def test_normal_range_in_pause(self):
         config = {"enabled": True, "start_hour": 0, "end_hour": 6}
         mock_now = datetime.datetime(2025, 1, 1, 3, 0, 0)
-        with patch("src.utils.time_utils.datetime") as mock_dt:
+        with patch('app.utils.time_utils.datetime') as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
             assert is_in_pause_period(config) is True
 
     def test_normal_range_outside_pause(self):
         config = {"enabled": True, "start_hour": 0, "end_hour": 6}
         mock_now = datetime.datetime(2025, 1, 1, 12, 0, 0)
-        with patch("src.utils.time_utils.datetime") as mock_dt:
+        with patch('app.utils.time_utils.datetime') as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
             assert is_in_pause_period(config) is False
 
     def test_cross_midnight_in_pause(self):
         config = {"enabled": True, "start_hour": 23, "end_hour": 6}
         mock_now = datetime.datetime(2025, 1, 1, 2, 0, 0)
-        with patch("src.utils.time_utils.datetime") as mock_dt:
+        with patch('app.utils.time_utils.datetime') as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
             assert is_in_pause_period(config) is True
 
     def test_cross_midnight_outside_pause(self):
         config = {"enabled": True, "start_hour": 23, "end_hour": 6}
         mock_now = datetime.datetime(2025, 1, 1, 12, 0, 0)
-        with patch("src.utils.time_utils.datetime") as mock_dt:
+        with patch('app.utils.time_utils.datetime') as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
             assert is_in_pause_period(config) is False
 
     def test_missing_keys_in_pause(self):
         config = {}
         mock_now = datetime.datetime(2025, 1, 1, 3, 0, 0)
-        with patch("src.utils.time_utils.datetime") as mock_dt:
+        with patch('app.utils.time_utils.datetime') as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
             assert is_in_pause_period(config) is True
 
     def test_missing_keys_outside_pause(self):
         config = {}
         mock_now = datetime.datetime(2025, 1, 1, 12, 0, 0)
-        with patch("src.utils.time_utils.datetime") as mock_dt:
+        with patch('app.utils.time_utils.datetime') as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
             assert is_in_pause_period(config) is False
 
@@ -774,12 +774,12 @@ class TestLogConfigCenter:
 
 class TestCreateNoWindowFlag:
     def test_is_int(self):
-        from src.utils.platform_utils import CREATE_NO_WINDOW_FLAG
+        from app.utils.platform_utils import CREATE_NO_WINDOW_FLAG
         assert isinstance(CREATE_NO_WINDOW_FLAG, int)
 
     def test_on_windows_is_nonzero(self):
         """Windows 上应为非零值（subprocess.CREATE_NO_WINDOW = 0x08000000）"""
-        from src.utils.platform_utils import CREATE_NO_WINDOW_FLAG
+        from app.utils.platform_utils import CREATE_NO_WINDOW_FLAG
         if is_windows():
             assert CREATE_NO_WINDOW_FLAG != 0
         else:
@@ -799,7 +799,7 @@ class TestCreateNoWindowFlag:
 class TestLoginAttemptHandlerCloseIdempotent:
     def test_close_browser_idempotent(self):
         """多次调用 close_browser 不应报错（幂等）"""
-        from src.utils.login import LoginAttemptHandler
+        from app.utils.login import LoginAttemptHandler
 
         handler = LoginAttemptHandler(config={}, close_on_failure=True)
         # _browser_ctx 为 None 时，close_browser 应安全返回
@@ -822,11 +822,11 @@ class TestLoginAttemptHandlerCloseIdempotent:
 
 class TestAuthDataDir:
     def test_is_path(self):
-        from backend.constants import AUTH_DATA_DIR
+        from app.constants import AUTH_DATA_DIR
         assert isinstance(AUTH_DATA_DIR, Path)
 
     def test_ends_with_campus_network_auth(self):
-        from backend.constants import AUTH_DATA_DIR
+        from app.constants import AUTH_DATA_DIR
         assert AUTH_DATA_DIR.name == ".campus_network_auth"
 
 
@@ -837,14 +837,14 @@ class TestAuthDataDir:
 
 class TestDefaultConstants:
     def test_network_targets_format(self):
-        from backend.constants import DEFAULT_NETWORK_TARGETS
+        from app.constants import DEFAULT_NETWORK_TARGETS
         parts = DEFAULT_NETWORK_TARGETS.split(",")
         assert len(parts) >= 3
         for part in parts:
             assert ":" in part
 
     def test_http_targets_format(self):
-        from backend.constants import DEFAULT_HTTP_TARGETS
+        from app.constants import DEFAULT_HTTP_TARGETS
         parts = DEFAULT_HTTP_TARGETS.split(",")
         assert len(parts) >= 2
         for part in parts:
@@ -852,8 +852,8 @@ class TestDefaultConstants:
 
     def test_schemas_uses_constant(self):
         """MonitorConfigPayload 默认值应引用常量"""
-        from backend.constants import DEFAULT_NETWORK_TARGETS, DEFAULT_HTTP_TARGETS
-        from backend.schemas import MonitorConfigPayload
+        from app.constants import DEFAULT_NETWORK_TARGETS, DEFAULT_HTTP_TARGETS
+        from app.schemas import MonitorConfigPayload
         m = MonitorConfigPayload()
         assert m.network_targets == DEFAULT_NETWORK_TARGETS
         assert m.http_targets == DEFAULT_HTTP_TARGETS
@@ -867,7 +867,7 @@ class TestDefaultConstants:
 class TestDateRotatingSinkRotation:
     def test_rotates_when_size_exceeded(self, tmp_path):
         """超过 file_max_bytes 时应创建分片文件"""
-        from src.utils.logging import DateRotatingSink
+        from app.utils.logging import DateRotatingSink
 
         sink = DateRotatingSink(
             log_dir=str(tmp_path),
@@ -888,7 +888,7 @@ class TestDateRotatingSinkRotation:
 
     def test_backup_count_respected(self, tmp_path):
         """分片文件数量不应超过 file_backup_count"""
-        from src.utils.logging import DateRotatingSink
+        from app.utils.logging import DateRotatingSink
 
         sink = DateRotatingSink(
             log_dir=str(tmp_path),

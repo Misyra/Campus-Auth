@@ -13,13 +13,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.task_executor import (
+from app.tasks.models import (
     StepConfig,
     TaskConfig,
     TaskError,
     StepError,
     StepType,
-    VariableResolver,
+    TASK_ID_PATTERN,
+)
+from app.tasks.variable_resolver import VariableResolver
+from app.tasks.step_handlers import (
     StepHandler,
     InputHandler,
     ClickHandler,
@@ -32,13 +35,10 @@ from src.task_executor import (
     SleepHandler,
     OcrHandler,
     StepExecutorRegistry,
-    TaskValidator,
-    TaskExecutor,
-    TaskManager,
-    normalize_task_id,
-    is_valid_task_id,
-    TASK_ID_PATTERN,
 )
+from app.tasks.validator import TaskValidator
+from app.tasks.executor import TaskExecutor
+from app.tasks.manager import TaskManager, normalize_task_id, is_valid_task_id
 
 
 # =====================================================================
@@ -96,7 +96,7 @@ class TestStepConfig:
             "selctor": "#wrong",  # typo: selctor → selector
             "unwanted": True,
         }
-        with _patch("src.task_executor.logger") as mock_logger:
+        with _patch('app.tasks.models.logger') as mock_logger:
             step = StepConfig.from_dict(data)
             mock_logger.warning.assert_called_once()
             args, kwargs = mock_logger.warning.call_args
@@ -308,7 +308,7 @@ class TestVariableResolver:
     def test_resolve_unknown_var_logs_warning(self):
         """未知变量应触发 warning 日志"""
         resolver = VariableResolver(self._make_config(), {})
-        with patch("src.task_executor.logger") as mock_logger:
+        with patch('app.tasks.variable_resolver.logger') as mock_logger:
             resolver.resolve("{{UNKNOWN}}")
             mock_logger.warning.assert_called_once()
             assert "UNKNOWN" in str(mock_logger.warning.call_args)

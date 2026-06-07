@@ -11,6 +11,9 @@ wheels/
 # Virtual environments
 .venv
 
+# 本地 uv 存放目录（launcher.py 自动下载）
+.uv/
+
 # Task active state (local user preference)
 tasks/active.txt
 tasks/.order.json

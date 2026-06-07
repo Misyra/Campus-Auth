@@ -9,7 +9,7 @@ import httpx
 from fastapi import HTTPException
 from unittest.mock import patch, MagicMock
 
-from src.utils.repo_proxy import normalize_repo_url, repo_get, repo_fetch_json
+from app.utils.repo_proxy import normalize_repo_url, repo_get, repo_fetch_json
 
 
 # =====================================================================
@@ -64,7 +64,7 @@ class TestNormalizeRepoUrl:
 
 
 class TestRepoGet:
-    @patch("src.utils.repo_proxy.httpx.Client")
+    @patch('app.utils.repo_proxy.httpx.Client')
     def test_returns_response(self, MockClient):
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -78,7 +78,7 @@ class TestRepoGet:
         assert resp.status_code == 200
         mock_client_instance.get.assert_called_once()
 
-    @patch("src.utils.repo_proxy.httpx.Client")
+    @patch('app.utils.repo_proxy.httpx.Client')
     def test_sends_user_agent(self, MockClient):
         mock_response = MagicMock()
         mock_client_instance = MagicMock()
@@ -91,7 +91,7 @@ class TestRepoGet:
         call_kwargs = mock_client_instance.get.call_args
         assert call_kwargs[1]["headers"]["User-Agent"] == "Campus-Auth"
 
-    @patch("src.utils.repo_proxy.httpx.Client")
+    @patch('app.utils.repo_proxy.httpx.Client')
     def test_passes_proxy(self, MockClient):
         mock_response = MagicMock()
         mock_client_instance = MagicMock()
@@ -105,7 +105,7 @@ class TestRepoGet:
         call_kwargs = MockClient.call_args[1]
         assert call_kwargs["proxy"] == "http://proxy:8080"
 
-    @patch("src.utils.repo_proxy.httpx.Client")
+    @patch('app.utils.repo_proxy.httpx.Client')
     def test_empty_proxy_uses_none(self, MockClient):
         mock_response = MagicMock()
         mock_client_instance = MagicMock()
@@ -125,7 +125,7 @@ class TestRepoGet:
 
 
 class TestRepoFetchJson:
-    @patch("src.utils.repo_proxy.repo_get")
+    @patch('app.utils.repo_proxy.repo_get')
     def test_returns_list(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.json.return_value = [{"id": 1}]
@@ -134,7 +134,7 @@ class TestRepoFetchJson:
         result = repo_fetch_json("https://example.com/index.json", list, "索引")
         assert result == [{"id": 1}]
 
-    @patch("src.utils.repo_proxy.repo_get")
+    @patch('app.utils.repo_proxy.repo_get')
     def test_returns_dict(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"name": "test"}
@@ -143,7 +143,7 @@ class TestRepoFetchJson:
         result = repo_fetch_json("https://example.com/task.json", dict, "任务")
         assert result == {"name": "test"}
 
-    @patch("src.utils.repo_proxy.repo_get")
+    @patch('app.utils.repo_proxy.repo_get')
     def test_type_mismatch_raises_422(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"not": "a list"}
@@ -154,7 +154,7 @@ class TestRepoFetchJson:
         assert exc_info.value.status_code == 422
         assert "格式不正确" in exc_info.value.detail
 
-    @patch("src.utils.repo_proxy.repo_get")
+    @patch('app.utils.repo_proxy.repo_get')
     def test_http_status_error_raises(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.status_code = 404
@@ -166,7 +166,7 @@ class TestRepoFetchJson:
             repo_fetch_json("https://example.com/data.json", dict, "任务")
         assert exc_info.value.status_code == 404
 
-    @patch("src.utils.repo_proxy.repo_get")
+    @patch('app.utils.repo_proxy.repo_get')
     def test_network_error_raises_502(self, mock_get):
         mock_get.side_effect = httpx.ConnectError("Connection refused")
 
@@ -174,7 +174,7 @@ class TestRepoFetchJson:
             repo_fetch_json("https://example.com/data.json", dict, "任务")
         assert exc_info.value.status_code == 502
 
-    @patch("src.utils.repo_proxy.repo_get")
+    @patch('app.utils.repo_proxy.repo_get')
     def test_normalizes_github_url(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.json.return_value = [1, 2, 3]

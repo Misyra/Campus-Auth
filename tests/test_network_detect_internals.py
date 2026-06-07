@@ -11,7 +11,7 @@ from unittest.mock import patch, MagicMock, mock_open
 
 import pytest
 
-import src.network_detect as nd
+import app.network.detect as nd
 
 
 # ── 辅助工具 ──

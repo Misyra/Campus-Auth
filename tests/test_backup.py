@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from unittest.mock import MagicMock
 
-from backend.routers.backup import router, restore_backup
+from app.api.backup import router, restore_backup
 
 
 class TestBackupValidationOrder:
@@ -22,7 +22,7 @@ class TestBackupValidationOrder:
         mock_profile_svc = MagicMock()
         mock_monitor_svc = MagicMock()
 
-        from backend.deps import get_profile_service, get_monitor_service
+        from app.deps import get_profile_service, get_monitor_service
         app.dependency_overrides[get_profile_service] = lambda: mock_profile_svc
         app.dependency_overrides[get_monitor_service] = lambda: mock_monitor_svc
 
@@ -45,7 +45,7 @@ class TestBackupValidationOrder:
         mock_profile_svc = MagicMock()
         mock_monitor_svc = MagicMock()
 
-        from backend.deps import get_profile_service, get_monitor_service
+        from app.deps import get_profile_service, get_monitor_service
         app.dependency_overrides[get_profile_service] = lambda: mock_profile_svc
         app.dependency_overrides[get_monitor_service] = lambda: mock_monitor_svc
 

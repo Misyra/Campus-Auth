@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from backend.profile_service import ProfileService
+from app.services.profile import ProfileService
 
 
 class TestCorruptRenameEAFP:

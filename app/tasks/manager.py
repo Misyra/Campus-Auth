@@ -1,0 +1,433 @@
+"""任务管理器 — 任务文件的 CRUD 操作。"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+from .models import TaskConfig, ScriptTaskInfo, TASK_ID_PATTERN
+from .validator import TaskValidator
+
+from app.utils.file_helpers import atomic_write
+from app.utils.logging import get_logger
+
+logger = get_logger("task_manager", side="BACKEND")
+
+
+def normalize_task_id(task_id: str | None) -> str:
+    if not isinstance(task_id, str):
+        return ""
+    return task_id.strip()
+
+
+def is_valid_task_id(task_id: str | None) -> bool:
+    normalized = normalize_task_id(task_id)
+    return bool(normalized and TASK_ID_PATTERN.fullmatch(normalized))
+
+
+class TaskManager:
+    """任务管理器（浏览器任务、脚本任务分目录存储）"""
+
+    def __init__(self, tasks_dir: Path):
+        self.tasks_dir = tasks_dir
+        self.tasks_dir.mkdir(parents=True, exist_ok=True)
+        self.browser_dir = tasks_dir / "browser"
+        self.scripts_dir = tasks_dir / "scripts"
+        self.browser_dir.mkdir(parents=True, exist_ok=True)
+        self.scripts_dir.mkdir(parents=True, exist_ok=True)
+
+    # ── 路径工具 ──
+
+    def _validate_id(self, task_id: str) -> str | None:
+        """规范化并校验 task_id，无效返回 None。"""
+        normalized = normalize_task_id(task_id)
+        if not is_valid_task_id(normalized):
+            return None
+        return normalized
+
+    def _safe_subdir_path(self, subdir: Path, task_id: str, suffix: str) -> Path | None:
+        """返回子目录下的安全文件路径（不检查存在性）。"""
+        normalized = self._validate_id(task_id)
+        if normalized is None:
+            return None
+        base = self.tasks_dir.absolute()
+        candidate = (subdir / f"{normalized}{suffix}").absolute()
+        try:
+            candidate.relative_to(base)
+        except ValueError:
+            return None
+        return candidate
+
+    def _safe_task_path(self, task_id: str, task_type: str = "") -> Path | None:
+        """返回任务文件路径（跨 browser/scripts 子目录搜索）。
+
+        Args:
+            task_id: 任务 ID
+            task_type: 可选，限定搜索目录 ("browser" 或 "scripts")，为空则搜索全部
+        """
+        normalized = self._validate_id(task_id)
+        if normalized is None:
+            return None
+        base = self.tasks_dir.absolute()
+        if task_type == "browser":
+            search_dirs = [(self.browser_dir, ".json")]
+        elif task_type == "scripts":
+            search_dirs = [(self.scripts_dir, ".json"), (self.scripts_dir, ".py")]
+        else:
+            # 搜索顺序：browser/*.json → scripts/*.json → scripts/*.py
+            search_dirs = [(self.browser_dir, ".json"), (self.scripts_dir, ".json"), (self.scripts_dir, ".py")]
+        for subdir, ext in search_dirs:
+            candidate = (subdir / f"{normalized}{ext}").absolute()
+            try:
+                candidate.relative_to(base)
+            except ValueError:
+                return None
+            if candidate.exists():
+                return candidate
+        # 都不存在时返回对应目录的 .json 路径
+        first_dir = search_dirs[0][0]
+        return (first_dir / f"{normalized}.json").absolute()
+
+    def _safe_json_path(self, task_id: str, task_type: str = "browser") -> Path | None:
+        """返回 .json 路径（根据任务类型选择子目录）。"""
+        subdir = self.scripts_dir if task_type == "scripts" else self.browser_dir
+        return self._safe_subdir_path(subdir, task_id, ".json")
+
+    def _safe_script_path(self, task_id: str) -> Path | None:
+        """返回 scripts/ 下的 .py 路径。"""
+        return self._safe_subdir_path(self.scripts_dir, task_id, ".py")
+
+    def _safe_meta_path(self, task_id: str) -> Path | None:
+        """返回 scripts/ 下的 .meta.json 路径。"""
+        return self._safe_subdir_path(self.scripts_dir, task_id, ".meta.json")
+
+    def _read_meta(self, task_id: str) -> dict[str, str]:
+        """读取脚本元数据文件。"""
+        meta_path = self._safe_meta_path(task_id)
+        if meta_path and meta_path.exists():
+            try:
+                return json.loads(meta_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        return {}
+
+    def _write_meta(self, task_id: str, meta: dict[str, str]) -> bool:
+        """写入脚本元数据文件。"""
+        meta_path = self._safe_meta_path(task_id)
+        if meta_path is None:
+            return False
+        try:
+            atomic_write(meta_path, json.dumps(meta, ensure_ascii=False, indent=2))
+            return True
+        except Exception as e:
+            logger.error("无法保存脚本元数据 %s: %s", task_id, e)
+            return False
+
+    @staticmethod
+    def _is_script_file(path: Path) -> bool:
+        return path.suffix.lower() == ".py"
+
+    @staticmethod
+    def _extract_script_metadata(file: Path) -> dict[str, str]:
+        """从 Python 脚本的前 10 行注释中提取 name 和 description。
+
+        支持格式：
+            # name: 任务名称
+            # description: 任务描述
+        或者使用模块级 docstring 的第一行作为 name。
+        """
+        name = file.stem
+        description = ""
+        try:
+            lines = file.read_text(encoding="utf-8").splitlines()[:10]
+            for line in lines:
+                stripped = line.strip()
+                if stripped.lower().startswith("# name:"):
+                    name = stripped.split(":", 1)[1].strip()
+                elif stripped.lower().startswith("# description:"):
+                    description = stripped.split(":", 1)[1].strip()
+            # 如果没找到 name 注释，尝试 docstring
+            if name == file.stem:
+                for line in lines:
+                    stripped = line.strip()
+                    if stripped.startswith('"""') or stripped.startswith("'''"):
+                        doc = stripped.strip("\"'").strip()
+                        if doc:
+                            name = doc.split("\n")[0][:80]
+                        break
+        except Exception:
+            pass
+        return {"name": name, "description": description}
+
+    # ── CRUD ──
+
+    def _order_file(self) -> Path:
+        return self.tasks_dir / ".order.json"
+
+    def load_order(self) -> dict[str, list[str]]:
+        """读取排序配置。"""
+        path = self._order_file()
+        if path.exists():
+            try:
+                return json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        return {}
+
+    def save_order(self, order: dict[str, list[str]]) -> bool:
+        """保存排序配置。"""
+        try:
+            atomic_write(
+                str(self._order_file()),
+                json.dumps(order, ensure_ascii=False, indent=2),
+            )
+            return True
+        except Exception as e:
+            logger.error("保存排序配置失败: %s", e)
+            return False
+
+    def _sort_by_order(self, tasks: list[dict], order_key: str) -> list[dict]:
+        """按排序配置对任务列表排序，未在排序中的排到末尾。"""
+        order = self.load_order()
+        id_order = order.get(order_key, [])
+        if not id_order:
+            return tasks
+        order_map = {tid: i for i, tid in enumerate(id_order)}
+        return sorted(tasks, key=lambda t: order_map.get(t["id"], len(id_order)))
+
+    def list_tasks(self) -> list[dict[str, str]]:
+        """列出浏览器任务（browser/ 目录下的 .json 文件）。"""
+        tasks: list[dict[str, str]] = []
+        for file in self.browser_dir.glob("*.json"):
+            if not is_valid_task_id(file.stem):
+                continue
+            try:
+                data = json.loads(file.read_text(encoding="utf-8"))
+                tasks.append({
+                    "id": file.stem,
+                    "name": data.get("name", file.stem),
+                    "description": data.get("description", ""),
+                    "type": "browser",
+                })
+            except Exception as e:
+                logger.warning("无法读取任务文件 %s: %s", file, e)
+        return self._sort_by_order(tasks, "all")
+
+    def list_script_tasks(self) -> list[dict[str, str]]:
+        """列出所有自定义脚本任务（scripts/ 目录）。"""
+        tasks: list[dict[str, str]] = []
+        seen_ids: set[str] = set()
+
+        # 1. 扫描 scripts/ 下的 JSON 文件（排除 .meta.json）
+        for file in self.scripts_dir.glob("*.json"):
+            if file.suffix.lower() == ".meta.json":
+                continue
+            if not is_valid_task_id(file.stem):
+                continue
+            try:
+                data = json.loads(file.read_text(encoding="utf-8"))
+                tasks.append({
+                    "id": file.stem,
+                    "name": data.get("name", file.stem),
+                    "description": data.get("description", ""),
+                    "binary_path": data.get("binary_path", ""),
+                })
+                seen_ids.add(file.stem)
+            except Exception as e:
+                logger.warning("无法读取脚本 JSON %s: %s", file, e)
+
+        # 2. 扫描 scripts/ 下的 .py 文件（兼容旧格式）
+        for file in self.scripts_dir.glob("*.py"):
+            if not is_valid_task_id(file.stem) or file.stem in seen_ids:
+                continue
+            try:
+                file_meta = self._read_meta(file.stem)
+                if file_meta:
+                    name = file_meta.get("name", file.stem)
+                    description = file_meta.get("description", "")
+                    binary_path = file_meta.get("binary_path", "")
+                else:
+                    comment_meta = self._extract_script_metadata(file)
+                    name = comment_meta["name"]
+                    description = comment_meta["description"]
+                    binary_path = ""
+                tasks.append({
+                    "id": file.stem,
+                    "name": name,
+                    "description": description,
+                    "binary_path": binary_path,
+                })
+            except Exception as e:
+                logger.warning("无法读取脚本文件 %s: %s", file, e)
+
+        return self._sort_by_order(tasks, "scripts")
+
+    def load_task(self, task_id: str, task_type: str = "") -> TaskConfig | ScriptTaskInfo | None:
+        file = self._safe_task_path(task_id, task_type=task_type)
+        if file is None or not file.exists():
+            return None
+        try:
+            # 根据文件位置判断类型：scripts/ 下的是脚本任务
+            is_script = self.scripts_dir in file.parents or file.parent == self.scripts_dir
+
+            if is_script:
+                # 脚本任务
+                if file.suffix.lower() == ".json":
+                    data = json.loads(file.read_text(encoding="utf-8"))
+                    return ScriptTaskInfo(
+                        task_id=task_id,
+                        name=data.get("name", task_id),
+                        description=data.get("description", ""),
+                        script_path=file,
+                        binary_path=data.get("binary_path", ""),
+                    )
+                # .py 文件（兼容旧格式）
+                if self._is_script_file(file):
+                    file_meta = self._read_meta(task_id)
+                    if file_meta:
+                        name = file_meta.get("name", file.stem)
+                        description = file_meta.get("description", "")
+                        binary_path = file_meta.get("binary_path", "")
+                    else:
+                        comment_meta = self._extract_script_metadata(file)
+                        name = comment_meta["name"]
+                        description = comment_meta["description"]
+                        binary_path = ""
+                    return ScriptTaskInfo(
+                        task_id=task_id,
+                        name=name,
+                        description=description,
+                        script_path=file,
+                        binary_path=binary_path,
+                    )
+            else:
+                # 浏览器任务
+                data = json.loads(file.read_text(encoding="utf-8"))
+                config = TaskConfig.from_dict(data)
+                config.task_id = task_id
+                return config
+
+            return None
+        except Exception as e:
+            logger.error("无法加载任务 %s: %s", task_id, e)
+            return None
+
+    def save_task(self, task_id: str, config: dict[str, Any], task_type: str = "browser") -> bool:
+        """保存任务（支持 browser 和 script 两种类型）。"""
+        if task_type == "scripts":
+            return self._save_script_task(task_id, config)
+
+        # 浏览器任务：带验证
+        is_valid, errors = TaskValidator.validate(config)
+        if not is_valid:
+            logger.error("任务验证失败: %s", errors)
+            return False
+
+        file = self._safe_json_path(task_id, task_type="browser")
+        if file is None:
+            return False
+
+        try:
+            atomic_write(
+                str(file),
+                json.dumps(config, ensure_ascii=False, indent=2),
+            )
+            return True
+        except Exception as e:
+            logger.error("无法保存任务 %s: %s", task_id, e)
+            return False
+
+    def _save_script_task(self, task_id: str, config: dict[str, Any]) -> bool:
+        """保存自定义脚本任务（JSON 格式，存入 scripts/ 目录）。"""
+        script_content = config.get("content", "")
+        if not script_content.strip():
+            logger.error("脚本内容不能为空")
+            return False
+
+        file = self._safe_json_path(task_id, task_type="scripts")
+        if file is None:
+            return False
+
+        save_data = {
+            "type": "script",
+            "name": config.get("name", task_id),
+            "description": config.get("description", ""),
+            "binary_path": config.get("binary_path", ""),
+            "content": script_content,
+        }
+
+        try:
+            atomic_write(str(file), json.dumps(save_data, ensure_ascii=False, indent=2))
+            return True
+        except Exception as e:
+            logger.error("无法保存脚本任务 %s: %s", task_id, e)
+            return False
+
+    def delete_task(self, task_id: str) -> bool:
+        if task_id == "default":
+            return False
+        normalized = normalize_task_id(task_id)
+        if not is_valid_task_id(normalized):
+            return False
+        # 从两个子目录中删除
+        for subdir in (self.browser_dir, self.scripts_dir):
+            for ext in (".json", ".py", ".meta.json"):
+                file = subdir / f"{normalized}{ext}"
+                try:
+                    file.unlink(missing_ok=True)
+                except Exception as e:
+                    logger.error("无法删除任务文件 %s: %s", file, e)
+        return True
+
+    def _find_task_type(self, task_id: str) -> str | None:
+        """查找任务所在的子目录类型，返回 'browser' 或 'scripts'，未找到返回 None。"""
+        normalized = normalize_task_id(task_id)
+        if not is_valid_task_id(normalized):
+            return None
+        for ext in (".json", ".py"):
+            if (self.scripts_dir / f"{normalized}{ext}").exists():
+                return "scripts"
+        for ext in (".json",):
+            if (self.browser_dir / f"{normalized}{ext}").exists():
+                return "browser"
+        return None
+
+    def get_active_task(self) -> str:
+        """返回活动任务 ID（不含类型前缀）。"""
+        config_file = self.tasks_dir / "active.txt"
+        if config_file.exists():
+            raw = config_file.read_text(encoding="utf-8").strip()
+            # 解析 type:id 格式，返回纯 ID
+            if ":" in raw:
+                return raw.split(":", 1)[1]
+            return raw
+        return "default"
+
+    def load_active_task(self) -> TaskConfig | ScriptTaskInfo | None:
+        """加载活动任务（自动解析 type:id 格式）。"""
+        config_file = self.tasks_dir / "active.txt"
+        if not config_file.exists():
+            return self.load_task("default")
+        raw = config_file.read_text(encoding="utf-8").strip()
+        if ":" in raw:
+            task_type, task_id = raw.split(":", 1)
+            if task_type in ("browser", "scripts"):
+                return self.load_task(task_id, task_type=task_type)
+            return self.load_task(task_id)
+        return self.load_task(raw) if raw else self.load_task("default")
+
+    def set_active_task(self, task_id: str) -> bool:
+        normalized = normalize_task_id(task_id)
+        if not is_valid_task_id(normalized):
+            return False
+        task_type = self._find_task_type(normalized)
+        if not task_type:
+            return False
+        config_file = self.tasks_dir / "active.txt"
+        try:
+            config_file.write_text(f"{task_type}:{normalized}", encoding="utf-8")
+            return True
+        except Exception as e:
+            logger.error("无法设置活动任务: %s", e)
+            return False

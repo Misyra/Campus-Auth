@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from backend.deps import (
+from app.deps import (
     get_services,
     get_monitor_service,
     get_profile_service,

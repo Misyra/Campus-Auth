@@ -12,8 +12,8 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from backend.autostart_service import AutoStartService
-from backend.uninstall_service import (
+from app.services.autostart import AutoStartService
+from app.services.uninstall import (
     CleanupItem,
     CleanupResult,
     detect,
@@ -69,9 +69,9 @@ class TestHasCjkChars:
 
 
 class TestAutoStartStatus:
-    @patch("backend.autostart_service.is_macos", return_value=True)
-    @patch("backend.autostart_service.is_linux", return_value=False)
-    @patch("backend.autostart_service.is_windows", return_value=False)
+    @patch('app.services.autostart.is_macos', return_value=True)
+    @patch('app.services.autostart.is_linux', return_value=False)
+    @patch('app.services.autostart.is_windows', return_value=False)
     def test_macos_status(self, mock_win, mock_linux, mock_mac, tmp_path):
         svc = AutoStartService(tmp_path)
         status = svc.status()
@@ -79,18 +79,18 @@ class TestAutoStartStatus:
         assert "enabled" in status
         assert status["method"] == "launchd"
 
-    @patch("backend.autostart_service.is_macos", return_value=False)
-    @patch("backend.autostart_service.is_linux", return_value=True)
-    @patch("backend.autostart_service.is_windows", return_value=False)
+    @patch('app.services.autostart.is_macos', return_value=False)
+    @patch('app.services.autostart.is_linux', return_value=True)
+    @patch('app.services.autostart.is_windows', return_value=False)
     def test_linux_status(self, mock_win, mock_linux, mock_mac, tmp_path):
         svc = AutoStartService(tmp_path)
         status = svc.status()
         assert status["platform"] == "Linux"
         assert status["method"] == "systemd --user"
 
-    @patch("backend.autostart_service.is_macos", return_value=False)
-    @patch("backend.autostart_service.is_linux", return_value=False)
-    @patch("backend.autostart_service.is_windows", return_value=True)
+    @patch('app.services.autostart.is_macos', return_value=False)
+    @patch('app.services.autostart.is_linux', return_value=False)
+    @patch('app.services.autostart.is_windows', return_value=True)
     def test_windows_status(self, mock_win, mock_linux, mock_mac, tmp_path):
         svc = AutoStartService(tmp_path)
         status = svc.status()
@@ -99,27 +99,27 @@ class TestAutoStartStatus:
 
 
 class TestAutoStartEnableDisable:
-    @patch("backend.autostart_service.is_macos", return_value=False)
-    @patch("backend.autostart_service.is_linux", return_value=False)
-    @patch("backend.autostart_service.is_windows", return_value=False)
+    @patch('app.services.autostart.is_macos', return_value=False)
+    @patch('app.services.autostart.is_linux', return_value=False)
+    @patch('app.services.autostart.is_windows', return_value=False)
     def test_unsupported_platform_enable(self, mock_win, mock_linux, mock_mac, tmp_path):
         svc = AutoStartService(tmp_path)
         ok, msg = svc.enable()
         assert ok is False
         assert "不支持" in msg
 
-    @patch("backend.autostart_service.is_macos", return_value=False)
-    @patch("backend.autostart_service.is_linux", return_value=False)
-    @patch("backend.autostart_service.is_windows", return_value=False)
+    @patch('app.services.autostart.is_macos', return_value=False)
+    @patch('app.services.autostart.is_linux', return_value=False)
+    @patch('app.services.autostart.is_windows', return_value=False)
     def test_unsupported_platform_disable(self, mock_win, mock_linux, mock_mac, tmp_path):
         svc = AutoStartService(tmp_path)
         ok, msg = svc.disable()
         assert ok is False
         assert "不支持" in msg
 
-    @patch("backend.autostart_service.is_macos", return_value=False)
-    @patch("backend.autostart_service.is_linux", return_value=False)
-    @patch("backend.autostart_service.is_windows", return_value=True)
+    @patch('app.services.autostart.is_macos', return_value=False)
+    @patch('app.services.autostart.is_linux', return_value=False)
+    @patch('app.services.autostart.is_windows', return_value=True)
     def test_windows_enable_cjk_path(self, mock_win, mock_linux, mock_mac, tmp_path):
         cjk_path = tmp_path / "中文目录"
         cjk_path.mkdir()
@@ -128,25 +128,25 @@ class TestAutoStartEnableDisable:
         assert ok is False
         assert "中文" in msg or "路径" in msg
 
-    @patch("backend.autostart_service.is_macos", return_value=False)
-    @patch("backend.autostart_service.is_linux", return_value=False)
-    @patch("backend.autostart_service.is_windows", return_value=True)
+    @patch('app.services.autostart.is_macos', return_value=False)
+    @patch('app.services.autostart.is_linux', return_value=False)
+    @patch('app.services.autostart.is_windows', return_value=True)
     def test_windows_disable(self, mock_win, mock_linux, mock_mac, tmp_path):
         svc = AutoStartService(tmp_path)
         ok, msg = svc.disable()
         assert ok is True
 
-    @patch("backend.autostart_service.is_macos", return_value=True)
-    @patch("backend.autostart_service.is_linux", return_value=False)
-    @patch("backend.autostart_service.is_windows", return_value=False)
+    @patch('app.services.autostart.is_macos', return_value=True)
+    @patch('app.services.autostart.is_linux', return_value=False)
+    @patch('app.services.autostart.is_windows', return_value=False)
     def test_macos_disable_no_plist(self, mock_win, mock_linux, mock_mac, tmp_path):
         svc = AutoStartService(tmp_path)
         ok, msg = svc.disable()
         assert ok is True
 
-    @patch("backend.autostart_service.is_macos", return_value=False)
-    @patch("backend.autostart_service.is_linux", return_value=True)
-    @patch("backend.autostart_service.is_windows", return_value=False)
+    @patch('app.services.autostart.is_macos', return_value=False)
+    @patch('app.services.autostart.is_linux', return_value=True)
+    @patch('app.services.autostart.is_windows', return_value=False)
     def test_linux_disable(self, mock_win, mock_linux, mock_mac, tmp_path):
         svc = AutoStartService(tmp_path)
         ok, msg = svc.disable()
@@ -200,25 +200,25 @@ class TestCleanupResult:
 
 
 class TestPlaywrightCacheDir:
-    @patch("backend.uninstall_service.PLATFORM", "windows")
+    @patch('app.services.uninstall.PLATFORM', "windows")
     def test_windows(self):
         path = _playwright_cache_dir()
         assert path is not None
         assert "ms-playwright" in str(path)
 
-    @patch("backend.uninstall_service.PLATFORM", "darwin")
+    @patch('app.services.uninstall.PLATFORM', "darwin")
     def test_macos(self):
         path = _playwright_cache_dir()
         assert path is not None
         assert "ms-playwright" in str(path)
 
-    @patch("backend.uninstall_service.PLATFORM", "linux")
+    @patch('app.services.uninstall.PLATFORM', "linux")
     def test_linux(self):
         path = _playwright_cache_dir()
         assert path is not None
         assert "ms-playwright" in str(path)
 
-    @patch("backend.uninstall_service.PLATFORM", "unknown")
+    @patch('app.services.uninstall.PLATFORM', "unknown")
     def test_unknown(self):
         path = _playwright_cache_dir()
         assert path is None
@@ -238,7 +238,7 @@ class TestDirSizeMb:
 
 
 class TestUninstallCheckAutostart:
-    @patch("backend.autostart_service.AutoStartService")
+    @patch('app.services.autostart.AutoStartService')
     def test_enabled(self, mock_svc_class):
         mock_svc = MagicMock()
         mock_svc.status.return_value = {"enabled": True, "location": "/test/path"}
@@ -246,7 +246,7 @@ class TestUninstallCheckAutostart:
         result = _check_autostart()
         assert result["enabled"] is True
 
-    @patch("backend.autostart_service.AutoStartService")
+    @patch('app.services.autostart.AutoStartService')
     def test_disabled(self, mock_svc_class):
         mock_svc = MagicMock()
         mock_svc.status.return_value = {"enabled": False}
@@ -254,20 +254,20 @@ class TestUninstallCheckAutostart:
         result = _check_autostart()
         assert result["enabled"] is False
 
-    @patch("backend.autostart_service.AutoStartService", side_effect=Exception("fail"))
+    @patch('app.services.autostart.AutoStartService', side_effect=Exception("fail"))
     def test_exception_returns_disabled(self, mock_svc_class):
         result = _check_autostart()
         assert result["enabled"] is False
 
 
 class TestDetect:
-    @patch("backend.uninstall_service._check_autostart", return_value={"enabled": False})
+    @patch('app.services.uninstall._check_autostart', return_value={"enabled": False})
     def test_returns_list(self, mock_autostart):
         items = detect()
         assert isinstance(items, list)
         assert len(items) >= 2
 
-    @patch("backend.uninstall_service._check_autostart", return_value={"enabled": True, "location": "/test"})
+    @patch('app.services.uninstall._check_autostart', return_value={"enabled": True, "location": "/test"})
     def test_autostart_enabled(self, mock_autostart):
         items = detect()
         autostart_items = [i for i in items if i.key == "autostart"]
@@ -276,7 +276,7 @@ class TestDetect:
 
 
 class TestPerform:
-    @patch("backend.uninstall_service._remove_autostart", return_value=(True, "已移除"))
+    @patch('app.services.uninstall._remove_autostart', return_value=(True, "已移除"))
     def test_perform_autostart(self, mock_remove):
         results = perform(["autostart"])
         assert len(results) == 1
@@ -286,7 +286,7 @@ class TestPerform:
         results = perform([])
         assert len(results) == 0
 
-    @patch("backend.uninstall_service._remove_user_data", return_value=(True, "已删除"))
+    @patch('app.services.uninstall._remove_user_data', return_value=(True, "已删除"))
     def test_perform_userdata(self, mock_remove):
         results = perform(["userdata"])
         assert len(results) == 1
@@ -340,8 +340,8 @@ class TestMacosLaunchctl:
         svc = AutoStartService(project_root=tmp_path)
         with patch.object(svc, "_run", return_value=(True, "")) as mock_run:
             with patch.object(svc, "_mac_plist_path", return_value=tmp_path / "test.plist"):
-                with patch("backend.autostart_service.is_macos", return_value=True):
-                    with patch("backend.autostart_service.get_platform", return_value="darwin"):
+                with patch('app.services.autostart.is_macos', return_value=True):
+                    with patch('app.services.autostart.get_platform', return_value="darwin"):
                         svc._enable_macos()
                         calls = [str(c) for c in mock_run.call_args_list]
                         assert any("bootstrap" in str(c) for c in calls)
@@ -354,8 +354,8 @@ class TestMacosLaunchctl:
         plist.write_text("test", encoding="utf-8")
         with patch.object(svc, "_run", return_value=(True, "")) as mock_run:
             with patch.object(svc, "_mac_plist_path", return_value=plist):
-                with patch("backend.autostart_service.is_macos", return_value=True):
-                    with patch("backend.autostart_service.get_platform", return_value="darwin"):
+                with patch('app.services.autostart.is_macos', return_value=True):
+                    with patch('app.services.autostart.get_platform', return_value="darwin"):
                         svc._disable_macos()
                         calls = [str(c) for c in mock_run.call_args_list]
                         assert any("bootout" in str(c) for c in calls)

@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 from fastapi import HTTPException
 
-from backend.routers.logfiles import _safe_resolve
+from app.api.logfiles import _safe_resolve
 
 
 class TestSafeResolve:
@@ -26,7 +26,7 @@ class TestSafeResolve:
 
     def test_normal_path_accepted(self, tmp_path, monkeypatch):
         """正常路径应通过校验"""
-        from backend.constants import LOGS_DIR
+        from app.constants import LOGS_DIR
 
         # 创建临时日志目录结构
         date_dir = tmp_path / "2026-01-01"
@@ -34,6 +34,6 @@ class TestSafeResolve:
         log_file = date_dir / "app.log"
         log_file.write_text("test log")
 
-        monkeypatch.setattr("backend.routers.logfiles.LOGS_DIR", tmp_path)
+        monkeypatch.setattr("app.api.logfiles.LOGS_DIR", tmp_path)
         result = _safe_resolve("2026-01-01", "app.log")
         assert result == log_file.resolve()

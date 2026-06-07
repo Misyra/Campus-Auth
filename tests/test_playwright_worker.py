@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.playwright_worker import PlaywrightWorker, WorkerResponse
+from app.workers.playwright_worker import PlaywrightWorker, WorkerResponse
 
 
 class TestSubmitAliveCheck:
