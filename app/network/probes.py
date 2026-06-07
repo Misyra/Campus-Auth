@@ -5,6 +5,7 @@ import re
 import socket
 import ssl
 import subprocess
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Iterable, Sequence
@@ -18,6 +19,7 @@ logger = get_logger("network_probes", side="BACKEND")
 
 executor = ThreadPoolExecutor(max_workers=5)
 atexit.register(executor.shutdown, wait=False, cancel_futures=True)
+_proxy_lock = threading.Lock()
 _block_proxy = True  # 默认屏蔽系统代理，避免代理影响网络检测
 
 
@@ -28,7 +30,14 @@ def set_block_proxy(enabled: bool) -> None:
     当 enabled=False 时，允许 HTTP 客户端使用系统代理。
     """
     global _block_proxy
-    _block_proxy = enabled
+    with _proxy_lock:
+        _block_proxy = enabled
+
+
+def is_block_proxy() -> bool:
+    """获取当前代理屏蔽设置。"""
+    with _proxy_lock:
+        return _block_proxy
 
 
 def is_local_network_connected() -> bool:
@@ -266,7 +275,7 @@ def is_network_available_portal(
         try:
             logger.debug("已禁用 SSL 验证以兼容校园网自签证书 (portal)")
             with httpx.Client(
-                verify=False, trust_env=not _block_proxy, follow_redirects=True
+                verify=False, trust_env=not is_block_proxy(), follow_redirects=True
             ) as client:
                 resp = client.get(url, timeout=timeout)
             elapsed = (time.perf_counter() - start) * 1000
@@ -319,7 +328,7 @@ def is_network_available_http(
         start = time.perf_counter()
         try:
             logger.debug("已禁用 SSL 验证以兼容校园网自签证书 (http)")
-            with httpx.Client(verify=False, trust_env=not _block_proxy) as client:
+            with httpx.Client(verify=False, trust_env=not is_block_proxy()) as client:
                 resp = client.get(
                     url, timeout=timeout, follow_redirects=follow_redirects
                 )

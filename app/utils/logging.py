@@ -89,12 +89,17 @@ logger.add(_to_std_logging, level="DEBUG", format="{message}")
 
 # ==================== 日志级别标准化 ====================
 
-_VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+_VALID_LOG_LEVELS = VALID_LOG_LEVELS  # 向后兼容别名
 
 
-def _normalize_level(level: str | None, default: str = "INFO") -> str:
+def normalize_level(level: str | None, default: str = "INFO") -> str:
+    """标准化日志级别名称，无效值返回 default。"""
     raw = str(level or default).upper().strip()
-    return raw if raw in _VALID_LOG_LEVELS else default
+    return raw if raw in VALID_LOG_LEVELS else default
+
+
+_normalize_level = normalize_level  # 向后兼容别名
 
 
 # ==================== 核心接口 ====================
@@ -207,7 +212,8 @@ class DateRotatingSink:
             try:
                 self._stream.close()
             except Exception:
-                pass
+                import sys
+                print("[logging] 关闭旧日志流失败", file=sys.stderr)
         self._stream = new_stream
         self._bytes_written = 0
         if os.path.exists(path):
@@ -288,7 +294,8 @@ class DateRotatingSink:
                     self._stream.close()
                     self._stream = None
             except Exception:
-                pass
+                import sys
+                print("[logging] 关闭日志流失败", file=sys.stderr)
 
 
 # 为了向后兼容，保留 _DateRotatingFileHandler 名称

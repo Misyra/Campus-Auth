@@ -201,7 +201,7 @@ class TaskExecutor:
             try:
                 total += await frame.evaluate(reveal_js)
             except Exception:
-                pass  # 跨域 frame 会抛错，静默跳过
+                logger.debug("[reveal] 跨域 frame 执行失败，跳过", exc_info=True)
         logger.info("[reveal] 已强制显示 {} 个隐藏输入框", total)
         return total
 
@@ -310,21 +310,9 @@ class TaskExecutor:
             timeout = cfg.get("network_check_timeout", 2)
 
             # 解析 portal 检测 URL
-            portal_checks = None
-            portal_raw = cfg.get("portal_check_urls", "")
-            if isinstance(portal_raw, str) and portal_raw.strip():
-                portal_checks = []
-                for line in portal_raw.splitlines():
-                    line = line.strip()
-                    if "|" in line:
-                        url, _, expected = line.partition("|")
-                        url, expected = url.strip(), expected.strip()
-                        if url and expected:
-                            portal_checks.append((url, expected))
-            elif isinstance(portal_raw, list) and portal_raw:
-                portal_checks = [
-                    (e[0], e[1]) for e in portal_raw if len(e) >= 2 and e[0] and e[1]
-                ]
+            from app.utils.network_helpers import parse_portal_checks
+            portal_checks = parse_portal_checks(cfg.get("portal_check_urls", ""))
+            portal_checks = portal_checks if portal_checks else None
 
             # 解析 TCP 检测目标
             from app.utils.network_helpers import parse_host_port
@@ -392,6 +380,8 @@ class TaskExecutor:
 
     async def _capture_screenshot(self, page) -> str | None:
         """捕获截图 → 指定目录或 logs/{date}/screenshots/ 目录"""
+        from app.utils.file_helpers import save_screenshot
+
         try:
             if self._screenshot_dir:
                 out_dir = self._screenshot_dir
@@ -400,13 +390,13 @@ class TaskExecutor:
                 date_str = datetime.now().strftime("%Y-%m-%d")
                 out_dir = PROJECT_ROOT / "logs" / date_str / "screenshots"
                 url_prefix = f"/logs/{date_str}/screenshots"
-            out_dir.mkdir(parents=True, exist_ok=True)
-            stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+
             task_id = self.config.task_id or "unknown"
-            filename = f"{task_id}_{stamp}.png"
-            local_path = str(out_dir / filename)
-            await page.screenshot(path=local_path, full_page=True)
-            return f"{url_prefix}/{filename}"
+            local_path = await save_screenshot(page, out_dir, task_id=task_id)
+            if local_path:
+                filename = Path(local_path).name
+                return f"{url_prefix}/{filename}"
+            return None
         except Exception as e:
             logger.warning("截图失败: {}", e)
             return None

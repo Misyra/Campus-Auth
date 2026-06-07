@@ -5,6 +5,10 @@ from pathlib import Path
 import pystray
 from PIL import Image
 
+from app.utils.logging import get_logger
+
+logger = get_logger("system_tray", side="BACKEND")
+
 
 class SystemTray:
     def __init__(self, port: int = 50721, on_exit=None):
@@ -27,7 +31,7 @@ class SystemTray:
                 )
                 return Image.open(io.BytesIO(png_data))
             except Exception:
-                pass
+                logger.debug("SVG 图标加载失败，使用默认图标", exc_info=True)
         return Image.new("RGBA", (64, 64), (34, 211, 238, 255))
 
     def _get_status_label(self, item) -> str:

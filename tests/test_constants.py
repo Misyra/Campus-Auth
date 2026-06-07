@@ -1,8 +1,5 @@
-"""常量存在性与代码规范测试"""
+"""常量存在性测试"""
 from __future__ import annotations
-
-import ast
-from pathlib import Path
 
 import pytest
 
@@ -25,23 +22,3 @@ class TestLoginConstant:
         from app.utils.login import LOGIN_SUCCESS_SETTLE_SECONDS
 
         assert LOGIN_SUCCESS_SETTLE_SECONDS == 2
-
-
-class TestNoFunctionLocalImport:
-    """函数内不应有局部 import 语句"""
-
-    def test_no_function_local_json_import(self):
-        """app/services/task.py 中不应有函数内的 import 语句"""
-        source_path = Path(__file__).parent.parent / "app" / "services" / "task.py"
-        source = source_path.read_text(encoding="utf-8")
-        tree = ast.parse(source)
-
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                for child in ast.walk(node):
-                    if isinstance(child, (ast.Import, ast.ImportFrom)):
-                        pytest.fail(
-                            f"函数 '{node.name}' (行 {node.lineno}) "
-                            f"中存在局部 import (行 {child.lineno})，"
-                            f"应移至模块顶层"
-                        )

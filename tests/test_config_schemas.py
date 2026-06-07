@@ -14,10 +14,10 @@ from pydantic import ValidationError
 from app.utils.config import ConfigValidator
 from app.services.config import (
     _safe_decrypt,
-    _normalize_level,
     _normalize_targets,
     _normalize_headers_json,
 )
+from app.utils.logging import normalize_level as _normalize_level
 from app.utils.crypto import encrypt_password
 from app.schemas import (
     MonitorConfigPayload,
@@ -205,12 +205,12 @@ class TestNormalizeLevelService:
         assert _normalize_level("  ERROR  ") == "ERROR"
 
     def test_invalid_returns_default(self):
-        assert _normalize_level("TRACE") == "WARNING"
-        assert _normalize_level("INVALID") == "WARNING"
+        assert _normalize_level("TRACE") == "INFO"
+        assert _normalize_level("INVALID") == "INFO"
 
     def test_empty_returns_default(self):
-        assert _normalize_level("") == "WARNING"
-        assert _normalize_level(None) == "WARNING"
+        assert _normalize_level("") == "INFO"
+        assert _normalize_level(None) == "INFO"
 
     def test_custom_default(self):
         assert _normalize_level("INVALID", default="ERROR") == "ERROR"

@@ -7,12 +7,17 @@ import threading
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from app.utils.file_helpers import atomic_write
 
 from pydantic import BaseModel
 
 from app.utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from app.services.profile import ProfileService
+    from app.tasks.manager import TaskManager
 
 logger = get_logger("backend.login_history", side="BACKEND")
 
@@ -39,6 +44,42 @@ class LoginHistoryService:
         self._lock = threading.Lock()
         self._cleanup_lock = threading.Lock()
         self._write_count = 0
+
+    def record(
+        self,
+        success: bool,
+        duration_ms: int,
+        profile_service: ProfileService | None = None,
+        task_manager: TaskManager | None = None,
+        error: str = "",
+    ) -> None:
+        """记录登录历史，自动从服务对象提取 profile/task 名称。"""
+        profile_name = ""
+        if profile_service is not None:
+            try:
+                active = profile_service.get_active_profile()
+                if active:
+                    profile_name = getattr(active, "name", "")
+            except Exception:
+                pass
+
+        task_name = ""
+        if task_manager is not None:
+            try:
+                task_id = task_manager.get_active_task()
+                task = task_manager.load_task(task_id)
+                if task:
+                    task_name = getattr(task, "name", task_id)
+            except Exception:
+                pass
+
+        self.add(
+            success=success,
+            duration_ms=duration_ms,
+            profile_name=profile_name,
+            task_name=task_name,
+            error=error,
+        )
 
     def add(
         self,

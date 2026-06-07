@@ -109,7 +109,7 @@ class TaskManager:
             try:
                 return json.loads(meta_path.read_text(encoding="utf-8"))
             except Exception:
-                pass
+                logger.debug("读取脚本元数据失败: {}", meta_path, exc_info=True)
         return {}
 
     def _write_meta(self, task_id: str, meta: dict[str, str]) -> bool:
@@ -157,7 +157,7 @@ class TaskManager:
                             name = doc.split("\n")[0][:80]
                         break
         except Exception:
-            pass
+            logger.debug("解析脚本 docstring 失败: {}", path, exc_info=True)
         return {"name": name, "description": description}
 
     # ── CRUD ──
@@ -172,7 +172,7 @@ class TaskManager:
             try:
                 return json.loads(path.read_text(encoding="utf-8"))
             except Exception:
-                pass
+                logger.debug("读取排序配置失败: {}", path, exc_info=True)
         return {}
 
     def save_order(self, order: dict[str, list[str]]) -> bool:

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.monitor import MonitorCommand, MonitorService
+from app.services.monitor import MonitorCmdType, MonitorCommand, MonitorService
 from app.core.monitor_core import NetworkState
 
 
@@ -24,11 +24,11 @@ class TestProfileReloadNoDeadlock:
         svc._monitor_core.monitoring = True
 
         # 填满队列
-        svc._cmd_queue.put_nowait(MonitorCommand(type="dummy1"))
-        svc._cmd_queue.put_nowait(MonitorCommand(type="dummy2"))
+        svc._cmd_queue.put_nowait(MonitorCommand(type=MonitorCmdType.RELOAD))
+        svc._cmd_queue.put_nowait(MonitorCommand(type=MonitorCmdType.RELOAD))
 
         # 创建命令
-        cmd = MonitorCommand(type="profile_reload", data={"profile_name": "test"})
+        cmd = MonitorCommand(type=MonitorCmdType.PROFILE_RELOAD, data={"profile_name": "test"})
 
         # 模拟 _reload_config_internal
         with patch.object(svc, '_reload_config_internal'):
@@ -51,7 +51,7 @@ class TestProfileReloadNoDeadlock:
         svc._monitor_core = MagicMock()
         svc._monitor_core.monitoring = True
 
-        cmd = MonitorCommand(type="profile_reload", data={"profile_name": "test"})
+        cmd = MonitorCommand(type=MonitorCmdType.PROFILE_RELOAD, data={"profile_name": "test"})
 
         with patch.object(svc, '_reload_config_internal'):
             with patch.object(svc, '_copy_runtime_config', return_value={}):
@@ -133,7 +133,7 @@ class TestLoginInProgressNoDoubleClear:
         # 模拟消费者不清除 _login_in_progress（模拟超时场景）
         # 创建一个不会设置 response_data 的命令
         cmd = MonitorCommand(
-            type="login",
+            type=MonitorCmdType.LOGIN,
             data={"config": {}, "pure_mode": False, "skip_pause_check": True},
             response_event=threading.Event(),
         )
@@ -168,7 +168,7 @@ class TestStartMonitoringPutNowait:
         svc._pure_mode_lock = threading.Lock()
 
         # 填满队列
-        svc._cmd_queue.put_nowait(MonitorCommand(type="dummy"))
+        svc._cmd_queue.put_nowait(MonitorCommand(type=MonitorCmdType.RELOAD))
 
         with patch('app.services.monitor.ConfigValidator.validate_env_config', return_value=(True, "")):
             with patch.object(svc, '_copy_runtime_config', return_value={}):
@@ -211,7 +211,7 @@ class TestNetworkStateSetInConsumer:
         mock_result.data = "ok"
 
         cmd = MonitorCommand(
-            type="login",
+            type=MonitorCmdType.LOGIN,
             data={"config": {}, "pure_mode": False, "skip_pause_check": True},
             response_event=threading.Event(),
         )

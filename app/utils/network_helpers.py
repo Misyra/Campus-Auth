@@ -1,5 +1,44 @@
 """网络工具函数"""
 
+from __future__ import annotations
+
+
+def parse_portal_checks(raw: str | list | None) -> list[tuple[str, str]]:
+    """解析 Portal 检测 URL 列表，返回 [(url, expected_text), ...]。
+
+    支持两种格式：
+    - 字符串：每行一个 "url|expected_text"
+    - 列表：[[url, expected_text], ...] 或 [(url, expected_text), ...]
+
+    参数:
+        raw: 原始 Portal 检测配置
+
+    返回: 解析后的 (url, expected_text) 元组列表
+    """
+    if not raw:
+        return []
+
+    if isinstance(raw, str):
+        entries = []
+        for line in raw.splitlines():
+            line = line.strip()
+            if "|" in line:
+                url, _, expected = line.partition("|")
+                url = url.strip()
+                expected = expected.strip()
+                if url and expected:
+                    entries.append((url, expected))
+        return entries
+
+    if isinstance(raw, list):
+        return [
+            (e[0], e[1])
+            for e in raw
+            if isinstance(e, (list, tuple)) and len(e) >= 2 and e[0] and e[1]
+        ]
+
+    return []
+
 
 def parse_host_port(targets: list[str]) -> list[tuple[str, int]]:
     """解析 'host:port' 字符串列表为 (host, port) 元组列表。
