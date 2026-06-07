@@ -18,9 +18,6 @@ from .env import build_login_template_vars
 from .exceptions import LoginCancelledError
 from .logging import get_logger
 
-if False:  # Type-only import to avoid circular dependency at runtime
-    from ..task_executor import TaskManager
-
 # 用于从日志消息中移除截图路径的正则表达式
 SCREENSHOT_URL_PATTERN = r"\s*截图[:：]\s*/\S+\.(?:png|jpg|jpeg|webp|gif)"
 

@@ -233,11 +233,6 @@ export const lifecycleMethods = {
           if (this._shouldShowLog(data.data.level)) {
             this._appendLogs([data.data]);
           }
-        } else if (data.type === 'log_batch') {
-          if (Array.isArray(data.data)) {
-            const filtered = data.data.filter(d => this._shouldShowLog(d.level));
-            if (filtered.length) this._appendLogs(filtered);
-          }
         }
       } catch (e) {
         this.frontendLogger.error('websocket', '消息解析错误', e);

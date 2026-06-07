@@ -418,7 +418,6 @@ class MonitorService:
                 )
             except Exception:
                 service_logger.exception("状态快照更新失败")
-                return
         else:
             self._status_snapshot = StatusSnapshot(
                 snapshot_time=time.time(), status_detail="已停止"
