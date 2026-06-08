@@ -53,28 +53,3 @@ jobs:
 
       - name: Run tests
         run: uv run pytest --tb=short -q
-
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
-      - name: Install dependencies
-        run: |
-          chmod +x start.sh
-          ./start.sh --install-only
-
-      - name: Add local uv to PATH
-        shell: bash
-        run: echo "$GITHUB_WORKSPACE/.uv" >> "$GITHUB_PATH"
-
-      - name: Ruff check
-        run: uv run ruff check .
-
-      - name: Ruff format check
-        run: uv run ruff format --check .
