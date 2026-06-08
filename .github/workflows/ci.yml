@@ -26,15 +26,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies (Windows)
-        if: runner.os == 'Windows'
-        run: .\start.exe --install-only
-
-      - name: Install dependencies (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          chmod +x start.sh
-          ./start.sh --install-only
+      - name: Install dependencies
+        run: uv sync
 
       - name: Add local uv to PATH
         shell: bash
