@@ -1,6 +1,6 @@
-// Campus-Auth 安装程序
+// Campus-Auth 启动程序
 // 自动下载 uv、安装依赖、启动应用
-// 用法: install.exe [--install-only] [其他参数透传给 main.py]
+// 用法: start.exe [--install-only] [其他参数透传给 main.py]
 package main
 
 import (
