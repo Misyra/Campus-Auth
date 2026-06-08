@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Campus-Auth 安装脚本（macOS / Linux）
-# 用法: ./install.sh [参数]
+# Campus-Auth 启动脚本（macOS / Linux）
+# 用法: ./start.sh [参数]
 #   --install-only  仅安装环境，不启动应用
 set -euo pipefail
 

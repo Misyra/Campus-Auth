@@ -176,7 +176,8 @@ python app.py --autostart disable
 Campus-Auth/
 ├── app.py                    # 统一启动入口
 ├── launcher.py               # Windows 分发入口点（PyInstaller 打包）
-├── setup_env.sh              # macOS/Linux 安装脚本
+├── start.go                  # Windows 启动程序源码（编译为 start.exe）
+├── start.sh                  # macOS/Linux 启动脚本
 ├── pyproject.toml            # 项目元数据与依赖配置
 ├── settings.json             # 多网络配置方案数据（gitignored）
 ├── Campus-Auth-Setup.spec    # PyInstaller 打包配置
@@ -293,7 +294,8 @@ Campus-Auth/
 **入口与启动：**
 - `app.py`：统一启动入口，负责服务启动、状态查询、自启动控制和浏览器打开。
 - `launcher.py`：Windows 分发入口点，下载嵌入式 Python、安装依赖、启动服务。
-- `setup_env.sh`：macOS/Linux 安装脚本，支持 uv 和系统 Python 两种模式。
+- `start.go` / `start.exe`：Windows 启动程序，自动下载 uv、安装依赖、启动应用。
+- `start.sh`：macOS/Linux 启动脚本，功能同上。
 
 **后端服务：**
 - `backend/main.py`：FastAPI 主应用，提供 HTTP API 和 WebSocket。

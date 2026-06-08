@@ -28,13 +28,13 @@ jobs:
 
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
-        run: .\install.exe --install-only
+        run: .\start.exe --install-only
 
       - name: Install dependencies (Unix)
         if: runner.os != 'Windows'
         run: |
-          chmod +x install.sh
-          ./install.sh --install-only
+          chmod +x start.sh
+          ./start.sh --install-only
 
       - name: Add local uv to PATH
         shell: bash
@@ -66,8 +66,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          chmod +x install.sh
-          ./install.sh --install-only
+          chmod +x start.sh
+          ./start.sh --install-only
 
       - name: Add local uv to PATH
         shell: bash
