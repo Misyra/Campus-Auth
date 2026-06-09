@@ -584,24 +584,24 @@ body.no-backdrop-filter .card {
 
 /* ═══ 浅色主题 ═══ */
 [data-theme="light"] {
-  /* 基础色 */
-  --bg-primary: #eef2f7;
-  --bg-secondary: #e4e9f0;
-  --bg-hover: rgba(226, 232, 240, 0.7);
-  --bg-glass: rgba(255, 255, 255, 0.8);
-  --bg-glass-light: rgba(255, 255, 255, 0.6);
-  --bg-glass-heavy: rgba(255, 255, 255, 0.9);
-  --bg-card: rgba(255, 255, 255, 0.82);
-  --bg-card-elevated: rgba(255, 255, 255, 0.75);
-  --bg-modal: #f1f5f9;
-  --border: rgba(148, 163, 184, 0.18);
-  --border-hover: rgba(148, 163, 184, 0.3);
+  /* 基础色 — 柔和灰调，避免刺眼 */
+  --bg-primary: #dfe4ec;
+  --bg-secondary: #d5dbe5;
+  --bg-hover: rgba(186, 196, 210, 0.5);
+  --bg-glass: rgba(255, 255, 255, 0.55);
+  --bg-glass-light: rgba(255, 255, 255, 0.4);
+  --bg-glass-heavy: rgba(255, 255, 255, 0.7);
+  --bg-card: rgba(255, 255, 255, 0.6);
+  --bg-card-elevated: rgba(255, 255, 255, 0.55);
+  --bg-modal: #d5dbe5;
+  --border: rgba(100, 116, 139, 0.18);
+  --border-hover: rgba(100, 116, 139, 0.3);
   --text-primary: #1e293b;
   --text-secondary: #475569;
-  --text-muted: #374151;
-  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.07), 0 4px 6px -4px rgba(0, 0, 0, 0.03);
-  --shadow-accent: 0 0 10px rgba(34, 211, 238, 0.12);
+  --text-muted: #64748b;
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.06);
+  --shadow-accent: 0 0 10px rgba(34, 211, 238, 0.15);
 }
 
 [data-theme="light"] .logo-text {
