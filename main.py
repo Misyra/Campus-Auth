@@ -330,7 +330,12 @@ def _run_server(
     )
 
     try:
-        run()
+        try:
+            _al = bool(_sys_settings.access_log)
+            _lr = max(1, int(_sys_settings.log_retention_days))
+        except (AttributeError, TypeError, ValueError):
+            _al, _lr = False, 7
+        run(access_log_enabled=_al, log_retention=_lr)
     finally:
         if tray_icon:
             tray_icon.stop()
