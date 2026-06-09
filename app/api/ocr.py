@@ -13,7 +13,7 @@ from app.utils.logging import get_logger
 from app.utils.platform_utils import CREATE_NO_WINDOW_FLAG
 
 router = APIRouter()
-api_logger = get_logger("backend.api", source="BACKEND")
+api_logger = get_logger("backend.api", source="backend")
 
 
 def _check_ddddocr_installed() -> bool:

@@ -10,7 +10,7 @@ from app.services.task import TaskService
 from app.utils.logging import get_logger
 
 router = APIRouter()
-api_logger = get_logger("backend.api", source="BACKEND")
+api_logger = get_logger("backend.api", source="backend")
 
 
 @router.get("/api/tasks")

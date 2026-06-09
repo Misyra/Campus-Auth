@@ -15,7 +15,7 @@ from collections.abc import Callable
 from .logging import get_logger
 from .platform_utils import CREATE_NO_WINDOW_FLAG
 
-logger = get_logger("shell_policy", source="BACKEND")
+logger = get_logger("shell_policy", source="backend")
 
 # 超时上下限
 _MIN_TIMEOUT = 1

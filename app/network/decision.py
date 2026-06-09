@@ -17,7 +17,7 @@ from .probes import (
     is_network_available_socket,
 )
 
-logger = get_logger("network_decision", source="BACKEND")
+logger = get_logger("network_decision", source="network")
 
 
 # ── 公共 API：三个职责清晰的检查函数 ──

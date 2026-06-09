@@ -12,7 +12,7 @@ from fastapi import HTTPException
 
 from .logging import get_logger
 
-logger = get_logger("repo_proxy", source="BACKEND")
+logger = get_logger("repo_proxy", source="backend")
 
 
 def normalize_repo_url(url: str) -> str:

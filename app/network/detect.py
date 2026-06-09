@@ -17,7 +17,7 @@ from app.utils.platform_utils import (
     is_windows,
 )
 
-logger = get_logger("network_detect", source="BACKEND")
+logger = get_logger("network_detect", source="network")
 
 
 # ── 公共 API ──

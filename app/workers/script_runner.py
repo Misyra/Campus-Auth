@@ -15,7 +15,7 @@ from app.utils.logging import get_logger
 from app.utils.shell_policy import ShellCommandPolicy
 from app.utils.shell_utils import detect_binaries
 
-logger = get_logger("script_runner", source="BACKEND")
+logger = get_logger("script_runner", source="backend")
 
 # 默认脚本超时（秒）
 DEFAULT_TIMEOUT = 60
