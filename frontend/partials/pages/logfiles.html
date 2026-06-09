@@ -34,6 +34,14 @@
             <button class="log-filter-chip" :class="{ active: logViewer.level === 'ERROR' }" @click="logViewer.level = 'ERROR'; fetchLogFileContent()">ERROR</button>
             <button class="log-filter-chip" :class="{ active: logViewer.level === 'DEBUG' }" @click="logViewer.level = 'DEBUG'; fetchLogFileContent()">DEBUG</button>
           </div>
+          <div class="log-filter-chips source-chips">
+            <button class="source-chip" :class="{ active: !logViewer.source }" @click="logViewer.source = ''; fetchLogFileContent()">全部来源</button>
+            <button class="source-chip" :class="{ active: logViewer.source === 'backend' }" @click="logViewer.source = 'backend'; fetchLogFileContent()">后端</button>
+            <button class="source-chip" :class="{ active: logViewer.source === 'network' }" @click="logViewer.source = 'network'; fetchLogFileContent()">网络</button>
+            <button class="source-chip" :class="{ active: logViewer.source === 'task' }" @click="logViewer.source = 'task'; fetchLogFileContent()">任务</button>
+            <button class="source-chip" :class="{ active: logViewer.source === 'frontend' }" @click="logViewer.source = 'frontend'; fetchLogFileContent()">前端</button>
+            <button class="source-chip" :class="{ active: logViewer.source === 'debug' }" @click="logViewer.source = 'debug'; fetchLogFileContent()">调试</button>
+          </div>
           <div class="logfiles-search-wrap">
             <input v-model="logViewer.search" @keyup.enter="fetchLogFileContent" type="text" placeholder="搜索日志..." class="log-search" aria-label="搜索日志" />
             <button v-if="logViewer.search" class="btn btn-icon-only logfiles-search-clear" @click="logViewer.search = ''; fetchLogFileContent()" title="清除搜索">
@@ -57,12 +65,13 @@
             <line x1="16" y1="13" x2="8" y2="13"/>
             <line x1="16" y1="17" x2="8" y2="17"/>
           </svg>
-          <span>{{ logViewer.search || logViewer.level ? '无匹配日志' : '无日志数据' }}</span>
+          <span>{{ logViewer.search || logViewer.level || logViewer.source ? '无匹配日志' : '无日志数据' }}</span>
         </div>
         <div v-else-if="logViewer.lines.length" class="log-entries">
           <div v-for="(line, idx) in logViewer.lines" :key="idx" class="log-entry">
             <span class="log-time">{{ line.timestamp ? line.timestamp.substring(11, 19) : '' }}</span>
-            <span class="log-meta" v-if="line.level">[{{ line.level }}] [{{ line.logger }}]</span>
+            <span v-if="line.level" class="log-level-badge" :class="'level-' + line.level.toLowerCase()">{{ line.level }}</span>
+            <span v-if="line.source" class="log-source-badge" :style="{ background: getSourceColor(line.source) }">{{ getSourceLabel(line.source) }}</span>
             <span class="log-message" :class="getLogFileClass(line.level)">{{ line.message }}</span>
           </div>
         </div>

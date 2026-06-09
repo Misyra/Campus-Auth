@@ -241,6 +241,35 @@ body {
   }
 }
 
+/* 日志级别/来源标签 */
+.log-level-badge,
+.log-source-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.log-level-badge {
+  min-width: 42px;
+  justify-content: center;
+}
+
+.log-level-badge.level-info { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+.log-level-badge.level-warning { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+.log-level-badge.level-error { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+.log-level-badge.level-critical { background: rgba(239, 68, 68, 0.25); color: #f87171; }
+.log-level-badge.level-debug { background: rgba(100, 116, 139, 0.15); color: #94a3b8; }
+
+.log-source-badge {
+  color: #fff;
+}
+
 /* 日志过滤工具栏 */
 .log-toolbar {
   display: flex;

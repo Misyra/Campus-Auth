@@ -6,6 +6,7 @@ export function logFileData() {
       date: '',
       file: 'app.log',
       level: '',
+      source: '',
       search: '',
       lines: [],
       loading: false,

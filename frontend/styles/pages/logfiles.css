@@ -169,6 +169,34 @@
   color: var(--text-muted);
 }
 
+/* 来源筛选 chips */
+.source-chips {
+  flex-wrap: wrap;
+}
+
+.source-chip {
+  padding: 3px 8px;
+  border-radius: var(--radius-lg);
+  font-size: 10px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.source-chip:hover {
+  border-color: var(--border-hover);
+  color: var(--text-secondary);
+}
+
+.source-chip.active {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
 .logfiles-content .empty-state {
   display: flex;
   flex-direction: column;

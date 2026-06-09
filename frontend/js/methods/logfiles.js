@@ -1,3 +1,5 @@
+import { LOG_SOURCES } from '../constants.js';
+
 // 日志文件查看器方法
 export const logFileMethods = {
   async fetchLogFileGroups() {
@@ -35,6 +37,7 @@ export const logFileMethods = {
         limit: 5000,
       };
       if (this.logViewer.level) params.level = this.logViewer.level;
+      if (this.logViewer.source) params.source = this.logViewer.source;
       if (this.logViewer.search) params.search = this.logViewer.search;
       const { data } = await this.$api.get('/api/logfiles/content', { params });
       this.logViewer.lines = data.lines;
@@ -65,5 +68,11 @@ export const logFileMethods = {
     if (l === 'WARNING') return 'log-warning';
     if (l === 'DEBUG') return 'log-debug';
     return '';
+  },
+  getSourceLabel(source) {
+    return LOG_SOURCES[source]?.label || source || '未知';
+  },
+  getSourceColor(source) {
+    return LOG_SOURCES[source]?.color || '#64748b';
   },
 };
