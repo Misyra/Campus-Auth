@@ -306,6 +306,11 @@ body {
   flex-wrap: wrap;
 }
 
+.log-toolbar .custom-select {
+  width: auto;
+  min-width: 90px;
+}
+
 .log-toolbar .log-search {
   flex: 1;
   min-width: 120px;

@@ -69,6 +69,11 @@
   flex-wrap: wrap;
 }
 
+.logfiles-controls .custom-select {
+  width: auto;
+  min-width: 120px;
+}
+
 
 .logfiles-search-wrap {
   position: relative;
