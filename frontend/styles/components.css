@@ -713,40 +713,51 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   border-radius: 999px;
-  border: 1px solid rgba(34, 211, 238, 0.45);
-  background: rgba(34, 211, 238, 0.14);
-  color: var(--accent);
-  font-size: 9px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(148, 163, 184, 0.1);
+  color: rgba(203, 213, 225, 0.8);
+  font-size: 8px;
   font-weight: 700;
   line-height: 1;
   cursor: help;
   isolation: isolate;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.field-help:hover,
+.field-help:focus-visible {
+  border-color: rgba(34, 211, 238, 0.5);
+  background: rgba(34, 211, 238, 0.12);
+  color: var(--accent);
 }
 
 .field-help::after {
   content: attr(data-tip);
   position: absolute;
-  left: calc(100% + 12px);
+  left: calc(100% + 10px);
   top: 50%;
   transform: translateY(-50%) translateX(4px);
   width: max-content;
-  max-width: min(380px, calc(100vw - 80px));
-  padding: 14px 16px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-accent-strong);
-  background: rgba(8, 15, 30, 0.95);
-  color: #e6f1ff;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.7;
+  max-width: min(320px, calc(100vw - 80px));
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  background: rgba(15, 23, 42, 0.96);
+  color: rgba(226, 232, 240, 0.95);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.25),
+    0 0 0 1px rgba(148, 163, 184, 0.06);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.65;
+  letter-spacing: 0.01em;
   white-space: normal;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition: opacity 0.18s ease, transform 0.18s ease;
   z-index: var(--z-modal);
   backdrop-filter: var(--blur-md);
 }
@@ -760,7 +771,7 @@
 /* 向左翻转提示框，用于右侧空间不足时 */
 .field-help--flip::after {
   left: auto;
-  right: calc(100% + 12px);
+  right: calc(100% + 10px);
   max-width: min(280px, calc(100vw - 80px));
   transform: translateY(-50%) translateX(-4px);
 }
