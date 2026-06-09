@@ -318,9 +318,8 @@ class TestHandleLogin:
     )
     @patch("app.services.monitor.load_ui_config")
     @patch("app.services.monitor.ProfileService")
-    @patch("app.services.monitor.get_worker")
     def test_handle_login_success(
-        self, mock_get_worker, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
@@ -335,9 +334,9 @@ class TestHandleLogin:
         mock_result.success = True
         mock_result.data = "登录成功"
         mock_worker.submit.return_value = mock_result
-        mock_get_worker.return_value = mock_worker
+        mock_get_worker = MagicMock(return_value=mock_worker)
 
-        svc = MonitorService(MagicMock())
+        svc = MonitorService(MagicMock(), worker_getter=mock_get_worker)
         event = threading.Event()
         cmd = MonitorCommand(type=MonitorCmdType.LOGIN, response_event=event)
         svc._handle_login(cmd)
@@ -350,9 +349,8 @@ class TestHandleLogin:
     )
     @patch("app.services.monitor.load_ui_config")
     @patch("app.services.monitor.ProfileService")
-    @patch("app.services.monitor.get_worker")
     def test_handle_login_failure(
-        self, mock_get_worker, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
@@ -367,9 +365,9 @@ class TestHandleLogin:
         mock_result.success = False
         mock_result.error = "密码错误"
         mock_worker.submit.return_value = mock_result
-        mock_get_worker.return_value = mock_worker
+        mock_get_worker = MagicMock(return_value=mock_worker)
 
-        svc = MonitorService(MagicMock())
+        svc = MonitorService(MagicMock(), worker_getter=mock_get_worker)
         event = threading.Event()
         cmd = MonitorCommand(type=MonitorCmdType.LOGIN, response_event=event)
         svc._handle_login(cmd)
@@ -382,9 +380,8 @@ class TestHandleLogin:
     )
     @patch("app.services.monitor.load_ui_config")
     @patch("app.services.monitor.ProfileService")
-    @patch("app.services.monitor.get_worker")
     def test_handle_login_exception(
-        self, mock_get_worker, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
@@ -396,9 +393,9 @@ class TestHandleLogin:
 
         mock_worker = MagicMock()
         mock_worker.submit.side_effect = RuntimeError("worker error")
-        mock_get_worker.return_value = mock_worker
+        mock_get_worker = MagicMock(return_value=mock_worker)
 
-        svc = MonitorService(MagicMock())
+        svc = MonitorService(MagicMock(), worker_getter=mock_get_worker)
         event = threading.Event()
         cmd = MonitorCommand(type=MonitorCmdType.LOGIN, response_event=event)
         svc._handle_login(cmd)

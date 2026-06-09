@@ -29,7 +29,7 @@ from app.utils import ConfigValidator
 from app.utils.logging import get_logger
 from app.utils.login import SCREENSHOT_URL_PATTERN
 from app.utils.network_helpers import parse_host_port
-from app.workers.playwright_worker import CMD_LOGIN, get_worker
+from app.workers.playwright_worker import CMD_LOGIN
 from app.ws_manager import WebSocketManager
 
 from .config import build_runtime_config, load_runtime_config, load_ui_config
@@ -93,11 +93,13 @@ class MonitorService:
         profile_service: ProfileService | None = None,
         ws_manager: WebSocketManager | None = None,
         login_history_service=None,
+        worker_getter=None,
     ):
         self.project_root = project_root
         self._profile_service = profile_service or ProfileService(project_root)
         self._ws_manager = ws_manager
         self._login_history = login_history_service
+        self._worker_getter = worker_getter
         self._task_manager = TaskManager(project_root / "tasks")
 
         # State (previously guarded by RLock)
@@ -184,6 +186,7 @@ class MonitorService:
             log_callback=self._push_log,
             thread_done=self._thread_done,
             login_history=self._login_history,
+            worker_getter=self._worker_getter,
         )
         core.set_profile_service(
             self._profile_service, on_switch=self._on_profile_switch
@@ -265,7 +268,7 @@ class MonitorService:
         success = False
         error_msg = ""
         try:
-            result = get_worker().submit(
+            result = self._worker_getter().submit(
                 CMD_LOGIN,
                 data={
                     "config": config,

@@ -3,8 +3,9 @@ from __future__ import annotations
 import datetime
 import threading
 import time
+from collections.abc import Callable
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 from app.constants import DEFAULT_NETWORK_TARGETS
 from app.network.decision import (
@@ -14,8 +15,8 @@ from app.network.decision import (
 )
 from app.network.probes import set_block_proxy
 from app.utils import (
-    get_runtime_stats,
     get_logger,
+    get_runtime_stats,
 )
 from app.utils.network_helpers import parse_host_port
 from app.utils.notify import send_notification
@@ -61,23 +62,25 @@ class NetworkMonitorCore:
 
     def __init__(
         self,
-        config: Optional[Dict[str, Any]] = None,
-        log_callback: Optional[Callable[[str, str, str], None]] = None,
-        thread_done: Optional[threading.Event] = None,
+        config: dict[str, Any] | None = None,
+        log_callback: Callable[[str, str, str], None] | None = None,
+        thread_done: threading.Event | None = None,
         login_history: Any = None,
+        worker_getter: Callable | None = None,
     ) -> None:
         self.config = config if config is not None else {}
         self.log_callback = log_callback
         self._login_history = login_history
+        self._worker_getter = worker_getter
 
         # 线程完成事件：由 MonitorService 传入，用于安全等待线程实际结束
-        self._thread_done: Optional[threading.Event] = thread_done
+        self._thread_done: threading.Event | None = thread_done
 
         self.monitoring = False
         self.network_check_count = 0
         self.login_attempt_count = 0
-        self.start_time: Optional[float] = None
-        self.last_check_time: Optional[datetime.datetime] = None
+        self.start_time: float | None = None
+        self.last_check_time: datetime.datetime | None = None
         # 上次网络连通性检测结果（用于 UI 状态显示）
         self.network_state: NetworkState = NetworkState.UNKNOWN
 
@@ -86,16 +89,16 @@ class NetworkMonitorCore:
         self._stop_event = threading.Event()
         # 登录恢复进行中标志（供定时任务等待）
         self._login_recovery_in_progress = threading.Event()
-        self._test_sites_cache: Optional[list[tuple[str, int]]] = None
+        self._test_sites_cache: list[tuple[str, int]] | None = None
         self.logger = get_logger("monitor")
 
         # 状态详情
         self.status_detail: str = "正常"
 
         # 自动切换相关
-        self._profile_service: Optional[ProfileService] = None
-        self._on_profile_switch: Optional[Callable[[str], None]] = None
-        self._last_profile_id: Optional[str] = None
+        self._profile_service: ProfileService | None = None
+        self._on_profile_switch: Callable[[str], None] | None = None
+        self._last_profile_id: str | None = None
         self._last_gateway_check_time: float = 0
 
     def log_message(
@@ -117,7 +120,7 @@ class NetworkMonitorCore:
             log_func = getattr(self.logger, level.lower(), self.logger.info)
             log_func(message)
 
-    def snapshot(self) -> Dict[str, Any]:
+    def snapshot(self) -> dict[str, Any]:
         return {
             "monitoring": self.monitoring,
             "network_check_count": self.network_check_count,
@@ -133,7 +136,7 @@ class NetworkMonitorCore:
     def set_profile_service(
         self,
         profile_service: ProfileService,
-        on_switch: Optional[Callable[[str], None]] = None,
+        on_switch: Callable[[str], None] | None = None,
     ) -> None:
         """设置 profile 服务用于自动切换"""
         self._profile_service = profile_service
@@ -141,7 +144,7 @@ class NetworkMonitorCore:
         if profile_service:
             self._last_profile_id = profile_service.get_active_profile_id()
 
-    def update_config(self, new_config: Dict[str, Any]) -> None:
+    def update_config(self, new_config: dict[str, Any]) -> None:
         """热更新运行时配置（方案切换时调用）"""
         self.log_message("运行时配置已更新 (热更新)", "INFO")
         self.config = new_config
@@ -235,9 +238,9 @@ class NetworkMonitorCore:
     def _close_browser_if_needed(self) -> None:
         """关闭浏览器实例（通过 Worker 命令队列）"""
         try:
-            from app.workers.playwright_worker import get_worker, CMD_BROWSER_CLOSE
+            from app.workers.playwright_worker import CMD_BROWSER_CLOSE
 
-            worker = get_worker()
+            worker = self._worker_getter()
             if worker:
                 self.log_message("关闭浏览器实例")
                 result = worker.submit(CMD_BROWSER_CLOSE, timeout=5)
@@ -611,7 +614,7 @@ class NetworkMonitorCore:
 
         try:
             # ── 通过 PlaywrightWorker 派发登录 ──
-            from app.workers.playwright_worker import get_worker, CMD_LOGIN
+            from app.workers.playwright_worker import CMD_LOGIN
 
             login_timeout = self.config.get("browser_settings", {}).get("timeout", 120)
             data = {
@@ -621,7 +624,7 @@ class NetworkMonitorCore:
                 "close_on_failure": False,  # 自动监控重试时复用浏览器
             }
             start_time = time.perf_counter()
-            result = get_worker().submit(CMD_LOGIN, data=data, timeout=login_timeout)
+            result = self._worker_getter().submit(CMD_LOGIN, data=data, timeout=login_timeout)
             duration_ms = int((time.perf_counter() - start_time) * 1000)
             success = result.success
             message = result.data if result.success else result.error
