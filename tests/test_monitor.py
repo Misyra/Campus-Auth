@@ -575,3 +575,123 @@ class TestDefaultPingTargets:
             DEFAULT_NETWORK_TARGETS.split(",")
             == NetworkMonitorCore.DEFAULT_PING_TARGETS
         )
+
+
+# ── NetworkMonitorCore 详细逻辑测试 ──
+
+
+class TestMonitorCoreDetailedSnapshot:
+    """snapshot 详细测试。"""
+
+    def test_last_check_time_isoformat(self):
+        """last_check_time 序列化为 ISO 格式。"""
+        from datetime import datetime, timezone
+
+        core = NetworkMonitorCore(config={})
+        core._last_check_time = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        snap = core.snapshot()
+        assert "2026-01-01" in snap["last_check_time"]
+
+
+class TestMonitorCoreDetailedRetryConfig:
+    """retry_config 详细测试。"""
+
+    def test_negative_retries_clamped(self):
+        """负数重试次数被钳制为 0。"""
+        core = NetworkMonitorCore(config={"max_login_retries": -1})
+        cfg = core._get_retry_config()
+        assert cfg.max_retries >= 0
+
+    def test_exponential_backoff(self):
+        """指数退避计算。"""
+        core = NetworkMonitorCore(
+            config={"retry_backoff_base": 2, "retry_backoff_max": 60}
+        )
+        cfg = core._get_retry_config()
+        assert cfg.backoff_base == 2
+        assert cfg.backoff_max == 60
+
+
+class TestMonitorCoreDetailedLoginRetry:
+    """login_retry_or_break 详细测试。"""
+
+    def test_first_attempt_returns_retry(self):
+        """首次尝试返回 retry。"""
+        core = NetworkMonitorCore(config={"max_login_retries": 3})
+        core._login_attempt_count = 0
+        result = core._login_retry_or_break()
+        assert result == RecoveryResult.RETRY
+
+    def test_within_retries_returns_retry(self):
+        """未超过重试次数返回 retry。"""
+        core = NetworkMonitorCore(config={"max_login_retries": 3})
+        core._login_attempt_count = 2
+        result = core._login_retry_or_break()
+        assert result == RecoveryResult.RETRY
+
+    def test_resets_attempt_count_on_give_up(self):
+        """放弃时重置尝试计数。"""
+        core = NetworkMonitorCore(config={"max_login_retries": 1})
+        core._login_attempt_count = 1
+        core._login_retry_or_break()
+        assert core._login_attempt_count == 0
+
+
+class TestMonitorCoreDetailedWaitInterruptible:
+    """wait_interruptible 详细测试。"""
+
+    def test_returns_true_when_not_stopped(self):
+        """未停止时返回 True。"""
+        core = NetworkMonitorCore(config={})
+        core._stop_event = MagicMock()
+        core._stop_event.wait.return_value = False
+        result = core._wait_interruptible(0.01)
+        assert result is True
+
+
+class TestMonitorCoreLogMessage:
+    """log_message 分发逻辑。"""
+
+    def test_uses_callback_when_set(self):
+        """有 callback 时使用 callback。"""
+        core = NetworkMonitorCore(config={})
+        callback = MagicMock()
+        core._log_callback = callback
+        core.log_message("INFO", "测试消息")
+        callback.assert_called_once()
+
+    def test_uses_logger_when_no_callback(self):
+        """无 callback 时使用 logger。"""
+        core = NetworkMonitorCore(config={})
+        core._log_callback = None
+        core._logger = MagicMock()
+        core.log_message("INFO", "测试消息")
+        core._logger.info.assert_called_once()
+
+
+# ── LoginAttemptHandler 详细检查 ──
+
+
+class TestAttemptLoginChecks:
+    """attempt_login 前置检查详细测试。"""
+
+    def test_skip_pause_check(self):
+        """skip_pause_check=True 时跳过所有前置检查。"""
+        from app.utils.login import LoginAttemptHandler
+
+        handler = LoginAttemptHandler.__new__(LoginAttemptHandler)
+        handler._config = {"auth_url": "http://test.com", "username": "test"}
+        handler._ui_config = MagicMock()
+        handler._ui_config.pause_start = "00:00"
+        handler._ui_config.pause_end = "00:00"
+        handler._perform_login_with_auth_class = MagicMock(
+            return_value=(True, "成功")
+        )
+
+        with (
+            patch("app.utils.login.is_in_pause_period", return_value=False),
+            patch("app.utils.login.check_login_prerequisites", return_value=(True, "")),
+        ):
+            ok, msg = handler.attempt_login(skip_pause_check=True)
+
+        handler._perform_login_with_auth_class.assert_called_once()
