@@ -17,12 +17,18 @@ api_logger = get_logger("api", source="backend")
 
 
 def _check_ddddocr_installed() -> bool:
-    """检测 ddddocr 是否已安装"""
-    try:
-        import ddddocr  # noqa: F401
+    """检测 ddddocr 是否已安装（检查 pyproject.toml 中是否有声明）"""
+    import tomllib
 
-        return True
-    except ImportError:
+    pyproject_path = PROJECT_ROOT / "pyproject.toml"
+    if not pyproject_path.exists():
+        return False
+    try:
+        with open(pyproject_path, "rb") as f:
+            data = tomllib.load(f)
+        deps = data.get("project", {}).get("dependencies", [])
+        return any("ddddocr" in dep for dep in deps)
+    except Exception:
         return False
 
 
