@@ -374,12 +374,12 @@
             <label class="toggle compact">
               <input type="checkbox" v-model="editingProfile.check_auth_url" />
               <span class="toggle-slider"></span>
-              <span class="toggle-label">登录前检测登录网址</span>
+              <span class="toggle-label">登录前检查认证页面是否可达</span>
             </label>
           </div>
           <div v-if="editingProfile.check_auth_url" class="form-group">
             <label for="prof-auth-targets">认证检测目标</label>
-            <input id="prof-auth-targets" v-model="editingProfile.auth_url_targets" type="text" placeholder="留空仅检测认证地址，例如 dns.school.edu:53" />
+            <input id="prof-auth-targets" v-model="editingProfile.auth_url_targets" type="text" placeholder="留空仅检测认证地址，多个目标用逗号分隔，如 dns.school.edu:53" />
           </div>
           <div class="toggle-row">
             <label class="toggle compact">
@@ -446,11 +446,13 @@
               <input type="checkbox" v-model="editingProfile.browser_disable_web_security" />
               <span class="toggle-slider"></span>
               <span class="toggle-label">禁用同源策略</span>
+              <span class="field-help" tabindex="0" role="note" data-tip="允许浏览器访问不同域名的资源。如果登录页面需要加载其他域名的资源（如验证码），请开启此选项。">?</span>
             </label>
             <label class="toggle compact">
               <input type="checkbox" v-model="editingProfile.stealth_mode" />
               <span class="toggle-slider"></span>
               <span class="toggle-label">反检测模式</span>
+              <span class="field-help" tabindex="0" role="note" data-tip="隐藏浏览器自动操作特征，降低被识别为工具操作的风险。">?</span>
             </label>
           </div>
           <div class="form-group">

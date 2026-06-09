@@ -96,7 +96,7 @@ curl -X PUT http://localhost:50721/api/scripts/my_script \
 | `type` | string | 是 | 固定值 `"script"` |
 | `name` | string | 否 | 脚本显示名称，默认使用脚本ID |
 | `description` | string | 否 | 脚本描述 |
-| `binary_path` | string | 否 | 执行程序完整路径，留空则使用当前 Python 解释器 |
+| `binary_path` | string | 否 | 执行程序完整路径，留空则使用 Campus-Auth 内置的 Python 解释器 |
 | `content` | string | 是 | 要执行的命令或代码 |
 
 ## 示例
@@ -145,13 +145,13 @@ curl -X PUT http://localhost:50721/api/scripts/my_script \
 }
 ```
 
-### 示例 5: 使用 Python 运行器执行外部脚本
+### 示例 5: 使用 PowerShell 执行外部脚本
 
 ```json
 {
-  "name": "Python 运行器",
-  "description": "使用 Python 执行外部脚本文件",
-  "content": "C:\\Users\\username\\scripts\\login.py",
+  "name": "PowerShell 脚本",
+  "description": "使用 PowerShell 执行外部脚本文件",
+  "content": "C:\\Users\\username\\scripts\\login.ps1",
   "binary_path": "C:\\Program Files\\PowerShell\\7\\pwsh.exe"
 }
 ```
@@ -192,9 +192,11 @@ curl http://localhost:50721/api/logs
 - `TEMP` / `TMP` — 临时目录
 - `PYTHONIOENCODING` — Python 编码（固定为 `utf-8`）
 
+此外，Campus-Auth 还会自动注入登录相关变量（`USERNAME`、`PASSWORD`、`ISP`、`LOGIN_URL`），可在脚本中直接使用。
+
 ### Q: 如何设置脚本超时时间？
 
-**A:** 在系统设置中修改「脚本超时」参数，默认为 60 秒。
+**A:** 在 Web 界面的「系统设置」页面中修改「脚本超时」参数，默认为 60 秒。
 
 ### Q: 脚本可以调用其他程序吗？
 

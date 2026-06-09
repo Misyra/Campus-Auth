@@ -108,7 +108,7 @@
 
       <div v-if="wizardStep === 3" class="wizard-page">
         <h2>监控设置</h2>
-        <p class="description">配置自动监控和登录的行为。</p>
+        <p class="description">配置自动监控和登录的行为，包括检测频率和暂停时段。</p>
 
         <div class="form-group">
           <label for="wiz-interval">检测间隔（秒）</label>
@@ -135,7 +135,7 @@
             <span class="toggle-slider"></span>
             <span class="toggle-label">启用暂停时段</span>
           </label>
-          <span class="hint">在指定时段内不进行自动登录，避免深夜频繁认证</span>
+          <span class="hint">在指定时段内暂停自动登录（网络检测仍正常运行），避免深夜频繁认证</span>
         </div>
 
         <div class="toggle-group">

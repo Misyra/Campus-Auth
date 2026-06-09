@@ -72,7 +72,7 @@ class TestValidateGuiConfig:
         """检测间隔超过 24 小时。"""
         ok, msg = ConfigValidator.validate_gui_config("admin", "password", "86401")
         assert ok is False
-        assert "不能超过86400秒" in msg
+        assert "不能超过 24 小时" in msg
 
     def test_interval_max_valid(self):
         """检测间隔最大有效值 86400。"""

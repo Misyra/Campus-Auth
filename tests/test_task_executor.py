@@ -720,7 +720,7 @@ class TestTaskValidator:
         config = {"name": "测试", "steps": [{"id": "s1", "type": "eval"}]}
         ok, errors = TaskValidator.validate(config)
         assert ok is False
-        assert any("script" in e for e in errors)
+        assert any("脚本" in e for e in errors)
 
     def test_wait_url_missing_pattern(self):
         config = {"name": "测试", "steps": [{"id": "s1", "type": "wait_url"}]}

@@ -279,11 +279,11 @@ class TestNormalizeHeadersJson:
             _normalize_headers_json("not json")
 
     def test_json_array_raises(self):
-        with pytest.raises(ValueError, match="JSON 对象"):
+        with pytest.raises(ValueError, match="格式不正确"):
             _normalize_headers_json("[1, 2, 3]")
 
     def test_json_string_raises(self):
-        with pytest.raises(ValueError, match="JSON 对象"):
+        with pytest.raises(ValueError, match="格式不正确"):
             _normalize_headers_json('"just a string"')
 
     def test_preserves_unicode(self):
@@ -361,7 +361,7 @@ class TestHeadersJsonValidator:
             MonitorConfigPayload(browser_extra_headers_json="not json")
 
     def test_json_array_rejected(self):
-        with pytest.raises(ValidationError, match="JSON 对象"):
+        with pytest.raises(ValidationError, match="格式不正确"):
             MonitorConfigPayload(browser_extra_headers_json="[1, 2, 3]")
 
 

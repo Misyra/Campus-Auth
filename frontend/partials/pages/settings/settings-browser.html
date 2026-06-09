@@ -120,10 +120,10 @@
         </div>
       </div>
       <div v-if="pureMode" class="browser-safe-info">
-        <p>纯净模式已开启，浏览器使用 Chromium 原始设置。关闭后可自定义以下高级选项。</p>
+        <p>纯净模式已开启，浏览器使用默认设置。关闭后可自定义以下高级选项。</p>
       </div>
       <div v-if="!pureMode" class="browser-safe-info browser-safe-info--warning">
-        <p>纯净模式适配大部分环境。如果登录异常或无法打开网页，请尝试修改下方参数。</p>
+        <p>当前为自定义模式。如果登录异常，可尝试开启纯净模式。</p>
       </div>
       <template v-if="!pureMode">
         <div class="form-group">

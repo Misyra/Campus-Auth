@@ -66,7 +66,7 @@ class TaskValidator:
         step_id = step.get("id", "")
         if not isinstance(step_id, str) or not TASK_ID_PATTERN.fullmatch(step_id):
             errors.append(
-                f"{prefix} id '{step_id}' 格式无效，须匹配 ^[A-Za-z][A-Za-z0-9_]*$"
+                f"{prefix} 步骤ID格式无效，须以字母开头且仅包含字母、数字和下划线（如 step_01）"
             )
 
         # 验证步骤类型
@@ -94,7 +94,7 @@ class TaskValidator:
             and not step.get("code")
         ):
             errors.append(
-                f"{prefix} (eval) 需要 'script' 字段（'code' 仍兼容但已废弃）"
+                f"{prefix} 脚本执行步骤需要提供脚本内容"
             )
 
         if step_type == StepType.OCR and not step.get("selector"):

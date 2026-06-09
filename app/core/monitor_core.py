@@ -371,7 +371,7 @@ class NetworkMonitorCore:
                 send_notification(
                     "Campus-Auth 登录失败",
                     f"连续 {self.login_attempt_count} 次登录失败，"
-                    f"{interval}秒后重试（{next_check.strftime('%H:%M:%S')}）",
+                    f"{interval}秒后重试（{next_check.strftime('%H:%M:%S')}），请检查账号密码和认证地址是否正确",
                 )
                 self.login_attempt_count = 0
                 return RecoveryResult.GIVE_UP
@@ -405,7 +405,7 @@ class NetworkMonitorCore:
             if self.login_attempt_count == 2:
                 send_notification(
                     "Campus-Auth 登录失败",
-                    f"自动登录已失败 {self.login_attempt_count} 次，正在重试...",
+                    f"自动登录已失败 {self.login_attempt_count} 次，正在重试（如持续失败请检查设置）...",
                 )
 
             failed_count = self.login_attempt_count
@@ -614,7 +614,7 @@ class NetworkMonitorCore:
             self.log_message(
                 "密码解密失败，跳过登录（请在设置页面重新输入密码）", "ERROR"
             )
-            return False, "密码解密失败，请在设置页面重新输入密码"
+            return False, "密码解密失败（可能是加密密钥变更），请在设置页面重新输入密码"
 
         try:
             # ── 通过 PlaywrightWorker 派发登录 ──

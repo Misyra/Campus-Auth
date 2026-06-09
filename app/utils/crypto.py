@@ -60,7 +60,7 @@ def _get_or_create_key() -> bytes:
                         logger.info("已备份损坏的密钥文件到: {}", backup_path)
                     except OSError as backup_err:
                         logger.warning("备份密钥文件失败: {}", backup_err)
-                logger.warning("将生成新密钥，此前加密的密码将无法解密")
+                logger.warning("将生成新密钥，此前保存的密码将无法自动恢复，请在设置中重新输入密码")
 
         # 生成新密钥
         key = os.urandom(32)
@@ -127,8 +127,8 @@ def encrypt_password(plaintext: str) -> str:
     except ImportError:
         # cryptography 未安装时回退到简单混淆（不推荐，但保证可用）
         logger.warning(
-            "cryptography 库未安装，密码将使用 Base64 编码存储（非真正加密），"
-            "建议安装 cryptography: pip install cryptography"
+            "密码保护功能受限（缺少加密库），"
+            "建议通过 uv add cryptography 安装依赖以启用完整加密保护"
         )
         return _simple_obfuscate(plaintext)
 

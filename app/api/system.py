@@ -154,7 +154,7 @@ def shutdown_server(
     if hasattr(request.app.state, "shutdown_event"):
         request.app.state.shutdown_event.set()
 
-    return ActionResponse(success=True, message="服务器正在关闭...")
+    return ActionResponse(success=True, message="服务器正在关闭，请稍候，页面将自动断开")
 
 
 # ── 卸载 ──

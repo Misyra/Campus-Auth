@@ -91,7 +91,7 @@
 - **ruff format 全项目格式化**
 - **删除 ConfigLoader 类及级联死代码**，移除独立卸载脚本 `uninstall.py`
 - **time.py 重命名为 time_utils.py** 避免遮蔽标准库
-- **API 文档迁移**至 `doc/api-doc.md`，README 精简
+- **API 文档迁移**至 `docs/api-doc.md`，README 精简
 - **pyrightconfig.json、CLAUDE.md、.omo 等加入 gitignore**
 
 ---

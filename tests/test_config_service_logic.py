@@ -163,7 +163,7 @@ class TestNormalizeHeadersJson:
 
     def test_non_dict_json_raises(self):
         """非字典 JSON 抛异常。"""
-        with pytest.raises(ValueError, match="JSON 对象"):
+        with pytest.raises(ValueError, match="格式不正确"):
             _normalize_headers_json('["array"]')
 
     def test_normalized_format(self):

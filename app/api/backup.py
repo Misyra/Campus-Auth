@@ -52,7 +52,7 @@ def create_backup() -> ActionResponse:
     """创建当前配置的备份"""
     settings_path = PROJECT_ROOT / "settings.json"
     if not settings_path.exists():
-        raise HTTPException(status_code=404, detail="settings.json 不存在，无需备份")
+        raise HTTPException(status_code=404, detail="当前没有配置文件可备份，请先完成基本设置")
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_path = BACKUP_DIR / f"settings_{stamp}.json"
@@ -75,7 +75,7 @@ def restore_backup(
 ) -> ActionResponse:
     """从备份恢复配置"""
     if not re.match(BACKUP_FILENAME_PATTERN, filename):
-        raise HTTPException(status_code=400, detail="无效的备份文件名")
+        raise HTTPException(status_code=400, detail="备份文件名格式无效")
 
     backup_path = BACKUP_DIR / filename
     if not backup_path.exists():
@@ -96,7 +96,7 @@ def restore_backup(
         ProfilesData.model_validate_json(backup_content)
     except Exception as exc:
         api_logger.error("备份文件校验失败: {} -- {}", filename, exc)
-        raise HTTPException(status_code=400, detail=f"备份文件格式错误: {exc}") from exc
+        raise HTTPException(status_code=400, detail=f"备份文件内容损坏，无法恢复: {exc}") from exc
 
     try:
         old_active = profile_svc.load().active_profile
@@ -115,7 +115,7 @@ def restore_backup(
 def download_backup(filename: str):
     """下载备份文件"""
     if not re.match(BACKUP_FILENAME_PATTERN, filename):
-        raise HTTPException(status_code=400, detail="无效的备份文件名")
+        raise HTTPException(status_code=400, detail="备份文件名格式无效")
     backup_path = BACKUP_DIR / filename
     if not backup_path.exists():
         raise HTTPException(status_code=404, detail="备份文件不存在")
@@ -126,7 +126,7 @@ def download_backup(filename: str):
 def delete_backup(filename: str) -> ActionResponse:
     """删除备份"""
     if not re.match(BACKUP_FILENAME_PATTERN, filename):
-        raise HTTPException(status_code=400, detail="无效的备份文件名")
+        raise HTTPException(status_code=400, detail="备份文件名格式无效")
 
     backup_path = BACKUP_DIR / filename
     if not backup_path.exists():

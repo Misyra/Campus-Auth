@@ -123,7 +123,7 @@
             class="script-editor"
           ></textarea>
           <span class="hint">
-            脚本直接硬编码账号密码等参数，通过 stdout 输出信息
+            脚本可直接硬编码账号密码等参数，stdout 输出会记录到日志，方便调试
           </span>
         </div>
         <div class="task-editor-actions">
@@ -146,7 +146,7 @@
           <p>每个脚本可以指定不同的执行程序：</p>
           <ul>
             <li><strong>Python</strong>（默认）— 使用 Python 解释器执行，推荐使用 httpx 或 urllib</li>
-            <li><strong>Shell</strong> — 使用 bash/cmd/powershell 执行 shell 脚本</li>
+            <li><strong>Shell</strong> — Windows 上默认使用 cmd，Linux/macOS 上默认使用 bash，也可自定义 shell 路径</li>
             <li><strong>自定义</strong> — 任意可执行文件（.exe、.bat 等）</li>
           </ul>
 

@@ -101,7 +101,7 @@ def ocr_install() -> ActionResponse:
         )
     except FileNotFoundError:
         api_logger.error("uv 未找到")
-        return ActionResponse(success=False, message="未找到 uv 包管理器，请先安装 uv")
+        return ActionResponse(success=False, message="未找到 uv 包管理器，请先通过 https://docs.astral.sh/uv/ 安装")
     except Exception as e:
         api_logger.error("ddddocr 安装异常: {}", e)
         return ActionResponse(success=False, message=f"安装异常: {e}")

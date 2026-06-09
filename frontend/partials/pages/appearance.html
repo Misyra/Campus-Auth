@@ -157,7 +157,7 @@
               <span class="toggle-slider"></span>
               <span class="toggle-label">启用毛玻璃</span>
             </label>
-            <p class="form-hint">卡片背景模糊效果，关闭可提升性能</p>
+            <p class="form-hint">开启后卡片背景会呈现磨砂玻璃般的模糊效果，关闭可提升性能</p>
             <div class="appearance-slider-item" style="margin-top:14px;">
               <label for="card-opacity">透明度</label>
               <input id="card-opacity" type="range" v-model.number="appearance.card_opacity" min="0" max="1" step="0.05" />
@@ -285,7 +285,7 @@
         </svg>
         <h3>随机壁纸</h3>
       </div>
-      <p class="random-wallpaper-hint">输入随机图片 API 或图片直链，每次刷新页面自动更换壁纸</p>
+      <p class="random-wallpaper-hint">输入图片链接地址，每次刷新页面自动更换壁纸（如 https://picsum.photos/1920/1080）</p>
       <input
         type="text"
         class="form-input"
