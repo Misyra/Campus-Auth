@@ -18,7 +18,7 @@ from app.utils.logging import DashboardSink, get_logger
 from app.workers.playwright_worker import cleanup_orphan_browsers, get_worker
 from app.ws_manager import WebSocketManager
 
-container_logger = get_logger("backend.container", source="BACKEND")
+container_logger = get_logger("backend.container", source="backend")
 
 
 class ServiceContainer:

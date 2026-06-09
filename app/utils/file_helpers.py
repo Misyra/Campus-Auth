@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .logging import get_logger
 
-logger = get_logger("file_helpers", source="BACKEND")
+logger = get_logger("file_helpers", source="backend")
 
 
 def atomic_write(

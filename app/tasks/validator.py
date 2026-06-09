@@ -8,7 +8,7 @@ from app.utils.logging import get_logger
 
 from .models import TASK_ID_PATTERN, StepType
 
-logger = get_logger("task_validator", source="BACKEND")
+logger = get_logger("task_validator", source="task")
 
 
 class TaskValidator:

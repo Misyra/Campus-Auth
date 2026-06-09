@@ -18,7 +18,7 @@ from .file_helpers import atomic_write
 from .logging import get_logger
 from .platform_utils import CREATE_NO_WINDOW_FLAG, is_windows
 
-logger = get_logger("crypto", source="BACKEND")
+logger = get_logger("crypto", source="backend")
 
 _KEY_DIR = AUTH_DATA_DIR
 _KEY_FILE = _KEY_DIR / ".enc_key"

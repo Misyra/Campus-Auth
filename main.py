@@ -235,7 +235,7 @@ def _run_server(
 ) -> None:
     from app.utils.logging import get_logger
 
-    startup_logger = get_logger("startup", source="APP")
+    startup_logger = get_logger("startup", source="backend")
     startup_begin = time.perf_counter()
     running, pid = is_service_running()
     from app.application import _resolve_port
@@ -350,7 +350,7 @@ def _setup_exception_hooks() -> None:
 
     from app.utils.logging import get_logger
 
-    _hook_logger = get_logger("uncaught", source="APP")
+    _hook_logger = get_logger("uncaught", source="backend")
 
     def _threading_excepthook(args: threading.ExceptHookArgs) -> None:
         _hook_logger.error(

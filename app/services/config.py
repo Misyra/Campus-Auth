@@ -21,7 +21,7 @@ from app.utils.logging import get_logger, normalize_level
 
 from .profile import ProfileService
 
-config_logger = get_logger("backend.config_service", source="BACKEND")
+config_logger = get_logger("backend.config_service", source="backend")
 
 # 运行时配置中不应被方案高级设置覆盖的字段
 _PROTECTED_KEYS = frozenset(
