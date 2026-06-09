@@ -7,17 +7,17 @@ import ssl
 import subprocess
 import threading
 import time
+from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Iterable, Sequence
 
 import httpx
 
 from app.utils.logging import get_logger
 from app.utils.platform_utils import (
-    is_windows,
-    is_macos,
-    is_linux,
     CREATE_NO_WINDOW_FLAG,
+    is_linux,
+    is_macos,
+    is_windows,
 )
 
 logger = get_logger("network_probes", side="BACKEND")
@@ -157,7 +157,7 @@ def _check_windows_adapter() -> bool:
 def _check_linux_route() -> bool:
     """Linux: 检查是否有默认路由（表示有实际网络连接）。"""
     try:
-        with open("/proc/net/route", "r") as f:
+        with open("/proc/net/route") as f:
             for line in f:
                 fields = line.strip().split()
                 if len(fields) >= 3 and fields[1] == "00000000":
@@ -212,11 +212,9 @@ def _check_macos_service() -> bool:
                 continue
             # 检查是否有 "status: active" 或分配了非 0.0.0.0 的 IP
             output = result.stdout
-            if "status: active" in output:
-                # 进一步确认有 IP 地址
-                if re.search(r"inet\s+(?!0\.0\.0\.0)\d+\.\d+\.\d+\.\d+", output):
-                    logger.info("检测到活跃的网络接口: {}", iface)
-                    return True
+            if "status: active" in output and re.search(r"inet\s+(?!0\.0\.0\.0)\d+\.\d+\.\d+\.\d+", output):
+                logger.info("检测到活跃的网络接口: {}", iface)
+                return True
         except Exception:
             continue
 

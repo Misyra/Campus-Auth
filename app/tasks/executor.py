@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .models import StepConfig, StepType, TaskConfig, PROJECT_ROOT
+from app.utils.logging import get_logger
+
+from .models import PROJECT_ROOT, StepConfig, StepType, TaskConfig
 from .step_handlers import StepExecutorRegistry
 from .variable_resolver import VariableResolver
-
-from app.utils.logging import get_logger
 
 logger = get_logger("task_executor", side="BACKEND")
 
@@ -66,10 +67,8 @@ class TaskExecutor:
 
             # 等待表单元素出现（最长 5s），覆盖 SPA 门户延迟渲染的场景
             # 如果页面没有表单元素，静默跳过，不阻塞流程
-            try:
+            with contextlib.suppress(TimeoutError):
                 await page.wait_for_selector("input,textarea", timeout=5000)
-            except TimeoutError:
-                pass  # 表单元素未出现，非致命，继续执行
 
             # reveal_hidden: 强制显示所有隐藏输入框，让后续 fill() 可以直接操作
             if self.config.reveal_hidden and any(

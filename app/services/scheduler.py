@@ -283,7 +283,7 @@ class SchedulerService:
 
         start_time = time.perf_counter()
         try:
-            from app.workers.playwright_worker import get_worker, CMD_LOGIN
+            from app.workers.playwright_worker import CMD_LOGIN, get_worker
 
             # 获取运行时配置
             config = self.monitor_service.get_runtime_config()
@@ -363,13 +363,12 @@ class SchedulerService:
             return False, "命令为空"
 
         # 如果没有指定 shell，使用全局配置或默认值
-        if not shell_path:
-            if self.monitor_service:
-                try:
-                    config = self.monitor_service.get_runtime_config()
-                    shell_path = config.get("shell_path", "")
-                except Exception:
-                    scheduler_logger.debug("获取运行时 shell_path 失败", exc_info=True)
+        if not shell_path and self.monitor_service:
+            try:
+                config = self.monitor_service.get_runtime_config()
+                shell_path = config.get("shell_path", "")
+            except Exception:
+                scheduler_logger.debug("获取运行时 shell_path 失败", exc_info=True)
 
         if not shell_path:
             shell_path = get_default_shell()

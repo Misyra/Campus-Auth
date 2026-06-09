@@ -18,12 +18,11 @@ class TestResolvePort:
 
     def test_default_port(self):
         """默认端口 50721。"""
-        with patch.dict("os.environ", {"APP_PORT": ""}, clear=False):
-            with patch("app.application.PROJECT_ROOT") as mock_root:
-                # mock settings.json 不存在
-                mock_root.__truediv__ = lambda self, x: Path("/nonexistent/settings.json")
-                port = _resolve_port()
-                assert port == 50721
+        with patch.dict("os.environ", {"APP_PORT": ""}, clear=False), patch("app.application.PROJECT_ROOT") as mock_root:
+            # mock settings.json 不存在
+            mock_root.__truediv__ = lambda self, x: Path("/nonexistent/settings.json")
+            port = _resolve_port()
+            assert port == 50721
 
     def test_env_port(self):
         """环境变量 APP_PORT 覆盖。"""
@@ -33,19 +32,17 @@ class TestResolvePort:
 
     def test_invalid_env_port(self):
         """无效环境变量 APP_PORT 回退到默认值。"""
-        with patch.dict("os.environ", {"APP_PORT": "not_a_number"}):
-            with patch("app.application.PROJECT_ROOT") as mock_root:
-                mock_root.__truediv__ = lambda self, x: Path("/nonexistent/settings.json")
-                port = _resolve_port()
-                assert port == 50721
+        with patch.dict("os.environ", {"APP_PORT": "not_a_number"}), patch("app.application.PROJECT_ROOT") as mock_root:
+            mock_root.__truediv__ = lambda self, x: Path("/nonexistent/settings.json")
+            port = _resolve_port()
+            assert port == 50721
 
     def test_out_of_range_port(self):
         """超出范围的端口回退到默认值。"""
-        with patch.dict("os.environ", {"APP_PORT": "99999"}):
-            with patch("app.application.PROJECT_ROOT") as mock_root:
-                mock_root.__truediv__ = lambda self, x: Path("/nonexistent/settings.json")
-                port = _resolve_port()
-                assert port == 50721
+        with patch.dict("os.environ", {"APP_PORT": "99999"}), patch("app.application.PROJECT_ROOT") as mock_root:
+            mock_root.__truediv__ = lambda self, x: Path("/nonexistent/settings.json")
+            port = _resolve_port()
+            assert port == 50721
 
 
 # ── _cleanup_temp_screenshots ──
@@ -69,16 +66,15 @@ class TestCleanupTempScreenshots:
         new_file = tmp_path / "new_screenshot.png"
         new_file.write_text("new")
 
-        with patch("app.application.TEMP_DIR", tmp_path):
+        with patch("app.application.TEMP_DIR", tmp_path), patch("pathlib.Path.stat") as mock_stat:
             # mock 文件的修改时间
-            with patch("pathlib.Path.stat") as mock_stat:
-                old_stat = MagicMock()
-                old_stat.st_mtime = old_time
-                new_stat = MagicMock()
-                new_stat.st_mtime = time.time()
-                mock_stat.side_effect = lambda: old_stat if "old" in str(self) else new_stat
-                # 直接测试逻辑，不依赖实际文件时间
-                pass
+            old_stat = MagicMock()
+            old_stat.st_mtime = old_time
+            new_stat = MagicMock()
+            new_stat.st_mtime = time.time()
+            mock_stat.side_effect = lambda: old_stat if "old" in str(self) else new_stat
+            # 直接测试逻辑，不依赖实际文件时间
+            pass
 
     def test_skips_non_image_files(self, tmp_path):
         """跳过非图片文件。"""

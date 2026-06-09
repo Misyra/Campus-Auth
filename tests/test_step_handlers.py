@@ -370,7 +370,7 @@ class TestSelectHandler:
         handler = SelectHandler()
         step = StepConfig(id="s1", type="select", selector="#sel", value="opt1")
         page = _make_page()
-        locator = _make_locator(page)
+        _make_locator(page)
 
         ok, msg = await handler.execute(page, step, _make_resolver())
         assert ok is True
@@ -521,7 +521,7 @@ class TestWaitHandler:
         handler = WaitHandler()
         step = StepConfig(id="s1", type="wait", selector="#target")
         page = _make_page()
-        locator = _make_locator(page)
+        _make_locator(page)
 
         ok, msg = await handler.execute(page, step, _make_resolver())
         assert ok is True
@@ -973,7 +973,6 @@ class TestOcrHandler:
 
     def test_do_cleanup_removes_instance(self):
         """_do_cleanup 应清除缓存的 OCR 实例。"""
-        handler = OcrHandler()
         OcrHandler._ocr_instances[False] = MagicMock()
         OcrHandler._do_cleanup(False)
         assert False not in OcrHandler._ocr_instances
@@ -1068,7 +1067,7 @@ class TestTryCandidatesWithFallback:
         """第一个候选可见时应直接成功。"""
         handler = InputHandler()
         page = _make_page()
-        locator = _make_locator(page)
+        _make_locator(page)
 
         action_fn = AsyncMock()
         fallback_fn = AsyncMock()
@@ -1128,8 +1127,6 @@ class TestTryCandidatesWithFallback:
         """多个候选应按顺序尝试。"""
         handler = InputHandler()
         page = _make_page()
-
-        call_log = []
 
         def make_locator_for(name):
             loc = MagicMock()

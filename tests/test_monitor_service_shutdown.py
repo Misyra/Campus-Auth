@@ -32,15 +32,13 @@ class TestProfileReloadNoDeadlock:
         )
 
         # 模拟 _reload_config_internal
-        with patch.object(svc, "_reload_config_internal"):
-            with patch.object(svc, "_copy_runtime_config", return_value={}):
-                with patch.object(svc, "_push_log"):
-                    # 调用 _handle_profile_reload，应该不阻塞
-                    import time
+        with patch.object(svc, "_reload_config_internal"), patch.object(svc, "_copy_runtime_config", return_value={}), patch.object(svc, "_push_log"):
+            # 调用 _handle_profile_reload，应该不阻塞
+            import time
 
-                    start = time.time()
-                    svc._handle_profile_reload(cmd)
-                    elapsed = time.time() - start
+            start = time.time()
+            svc._handle_profile_reload(cmd)
+            elapsed = time.time() - start
 
         # 验证方法在 1 秒内返回（不阻塞）
         assert elapsed < 1.0, f"_handle_profile_reload 阻塞了 {elapsed:.2f}s"
@@ -57,10 +55,8 @@ class TestProfileReloadNoDeadlock:
             type=MonitorCmdType.PROFILE_RELOAD, data={"profile_name": "test"}
         )
 
-        with patch.object(svc, "_reload_config_internal"):
-            with patch.object(svc, "_copy_runtime_config", return_value={}):
-                with patch.object(svc, "_push_log"):
-                    svc._handle_profile_reload(cmd)
+        with patch.object(svc, "_reload_config_internal"), patch.object(svc, "_copy_runtime_config", return_value={}), patch.object(svc, "_push_log"):
+            svc._handle_profile_reload(cmd)
 
         # 验证 reload 命令已入队
         assert svc._cmd_queue.qsize() == 1
@@ -182,13 +178,12 @@ class TestStartMonitoringPutNowait:
         with patch(
             "app.services.monitor.ConfigValidator.validate_env_config",
             return_value=(True, ""),
-        ):
-            with patch.object(svc, "_copy_runtime_config", return_value={}):
-                import time
+        ), patch.object(svc, "_copy_runtime_config", return_value={}):
+            import time
 
-                start = time.time()
-                ok, msg = svc.start_monitoring()
-                elapsed = time.time() - start
+            start = time.time()
+            ok, msg = svc.start_monitoring()
+            elapsed = time.time() - start
 
         # 验证不阻塞且返回错误
         assert not ok

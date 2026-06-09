@@ -26,6 +26,22 @@ python-install-mirror = "https://registry.npmmirror.com/-/binary/python-build-st
 url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
 default = true
 
+[tool.ruff.lint]
+select = ["E", "F", "B", "SIM", "UP", "PT", "RUF", "I"]
+ignore = [
+    "RUF001",  # 字符串中的全角字符（中文项目正常）
+    "RUF002",  # 文档字符串中的全角字符
+    "RUF003",  # 注释中的全角字符
+    "B008",    # FastAPI Depends 在默认参数中使用是标准做法
+    "E501",    # 行长度，改动量大风险高
+    "RUF012",  # 类变量 ClassVar 注解，改动量大
+    "PT019",   # pytest fixture 参数注入风格
+    "PT011",   # pytest.raises 过于宽泛
+    "PT017",   # pytest 断言中使用 in
+    "SIM115",  # 使用 context manager 打开文件（需要保持引用的场景不适合）
+    "RUF006",  # store reference to create_task（事件循环退出后自动清理）
+]
+
 [tool.ruff.lint.per-file-ignores]
 "app/application.py" = ["E402"]
 

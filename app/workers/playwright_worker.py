@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import queue
 import subprocess
 import sys
@@ -27,10 +28,10 @@ if TYPE_CHECKING:
     from playwright.async_api import Route
 
 from app.constants import (
-    WORKER_SUBMIT_TIMEOUT,
-    WORKER_READY_TIMEOUT,
     WORKER_JOIN_TIMEOUT,
     WORKER_QUEUE_PUT_TIMEOUT,
+    WORKER_READY_TIMEOUT,
+    WORKER_SUBMIT_TIMEOUT,
 )
 from app.utils.logging import get_logger
 from app.utils.platform_utils import CREATE_NO_WINDOW_FLAG
@@ -158,10 +159,8 @@ class PlaywrightWorker:
         # 这是唯一允许的跨线程 asyncio 调用
         loop = self._loop
         if loop is not None:
-            try:
+            with contextlib.suppress(RuntimeError):
                 asyncio.run_coroutine_threadsafe(self._wake_async(), loop)
-            except RuntimeError:
-                pass
 
         # 等待消费者线程正常退出
         if self._consumer_thread:
@@ -243,10 +242,8 @@ class PlaywrightWorker:
         # 使 _async_run 立即处理新放入的命令
         loop = self._loop
         if loop is not None:
-            try:
+            with contextlib.suppress(RuntimeError):
                 asyncio.run_coroutine_threadsafe(self._wake_async(), loop)
-            except RuntimeError:
-                pass
 
         if not wait:
             return WorkerResponse(success=True)
@@ -276,7 +273,7 @@ class PlaywrightWorker:
         self._worker_ready.set()
 
         try:
-            loop.create_task(self._async_run())
+            _task = loop.create_task(self._async_run())
             loop.run_forever()
         finally:
             # 事件循环退出后执行强制清理
@@ -324,10 +321,8 @@ class PlaywrightWorker:
                         return
 
                 # 等待唤醒信号或超时
-                try:
+                with contextlib.suppress(TimeoutError):
                     await asyncio.wait_for(wake_event.wait(), timeout=0.5)
-                except asyncio.TimeoutError:
-                    pass
         finally:
             # 停止事件循环，使 _worker_entry() 中的 run_forever() 返回
             if self._loop and not self._loop.is_closed():
@@ -859,7 +854,7 @@ class PlaywrightWorker:
             logger.warning("解析自定义请求头失败: {}", exc)
         return {}
 
-    async def _handle_low_resource_request(self, route: "Route") -> None:
+    async def _handle_low_resource_request(self, route: Route) -> None:
         """低资源模式请求处理。
 
         拦截图片、字体、媒体资源请求并中止，减少内存和带宽消耗。
@@ -889,7 +884,7 @@ def get_worker() -> PlaywrightWorker:
     首次调用时创建实例并自动 start()。
     后续调用返回已有实例；若实例已停止则自动重建。
     """
-    global _worker  # noqa: PLW0603
+    global _worker
     if _worker is None or not _worker.is_alive():
         with _worker_lock:
             if _worker is None or not _worker.is_alive():
@@ -905,7 +900,7 @@ def get_worker() -> PlaywrightWorker:
 
 def shutdown_worker(timeout: float = 5) -> None:
     """关闭并清理全局 Worker 单例。shutdown 场景专用，不创建新实例。"""
-    global _worker  # noqa: PLW0603
+    global _worker
     with _worker_lock:
         if _worker is not None and _worker.is_alive():
             _worker.stop(timeout=timeout)

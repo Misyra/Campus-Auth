@@ -1,3 +1,4 @@
+import contextlib
 import os
 import tempfile
 from datetime import datetime
@@ -50,10 +51,8 @@ def atomic_write(
 
         os.replace(tmp_path, path)
     except Exception:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(tmp_path)
-        except OSError:
-            pass
         raise
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import ntpath
 import os
 import platform
@@ -208,10 +209,8 @@ class ScriptRunner:
             return False, str(e)
         finally:
             if temp_path is not None:
-                try:
+                with contextlib.suppress(OSError):
                     os.unlink(temp_path)
-                except OSError:
-                    pass
 
         elapsed = time.perf_counter() - start
 

@@ -11,10 +11,10 @@ import subprocess
 
 from app.utils.logging import get_logger
 from app.utils.platform_utils import (
-    is_windows,
-    is_macos,
-    is_linux,
     CREATE_NO_WINDOW_FLAG,
+    is_linux,
+    is_macos,
+    is_windows,
 )
 
 logger = get_logger("network_detect", side="BACKEND")
@@ -192,7 +192,7 @@ def _detect_ssid_windows() -> str | None:
 def _detect_gateway_linux() -> str | None:
     """Linux: 解析 /proc/net/route 获取默认网关"""
     try:
-        with open("/proc/net/route", "r") as f:
+        with open("/proc/net/route") as f:
             for line in f:
                 parts = line.strip().split()
                 if len(parts) >= 3 and parts[1] == "00000000":
@@ -302,10 +302,9 @@ def _detect_ssid_darwin() -> str | None:
         wifi_device = None
         lines = result.stdout.splitlines()
         for i, line in enumerate(lines):
-            if "Wi-Fi" in line or "AirPort" in line:
-                if i + 1 < len(lines):
-                    wifi_device = lines[i + 1].split(":")[-1].strip()
-                    break
+            if ("Wi-Fi" in line or "AirPort" in line) and i + 1 < len(lines):
+                wifi_device = lines[i + 1].split(":")[-1].strip()
+                break
 
         if wifi_device:
             result = subprocess.run(

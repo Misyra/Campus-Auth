@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import re
@@ -19,7 +20,7 @@ import time
 from collections import deque
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from loguru import logger
 
@@ -102,7 +103,7 @@ def normalize_level(level: str | None, default: str = "INFO") -> str:
 # ==================== 核心接口 ====================
 
 
-def get_logger(name: str, side: str = "BACKEND") -> "logger":
+def get_logger(name: str, side: str = "BACKEND") -> logger:
     """获取绑定 name 和 side 的 logger。
 
     返回的 logger 支持直接调用 .info()、.warning() 等方法。
@@ -338,13 +339,13 @@ class LogConfigCenter:
         self._file_sink_id: int | None = None
 
     @classmethod
-    def get_instance(cls) -> "LogConfigCenter":
+    def get_instance(cls) -> LogConfigCenter:
         if cls._instance is None:
             cls()
         return cls._instance
 
     def initialize(
-        self, config: Dict[str, Any] | None = None, side: str = "BACKEND"
+        self, config: dict[str, Any] | None = None, side: str = "BACKEND"
     ) -> None:
         """初始化日志配置（仅首次调用有效）"""
         with self._init_lock:
@@ -361,7 +362,7 @@ class LogConfigCenter:
 
             self._configured = True
 
-    def get_logger(self, name: str, side: str | None = None) -> "logger":
+    def get_logger(self, name: str, side: str | None = None) -> logger:
         """获取配置好的日志器"""
         if not self._configured:
             self.initialize()
@@ -377,7 +378,7 @@ class LogConfigCenter:
         logger.level(normalized)
         self._config["level"] = normalized
 
-    def get_config(self) -> Dict[str, Any]:
+    def get_config(self) -> dict[str, Any]:
         return self._config.copy()
 
     def is_initialized(self) -> bool:
@@ -387,10 +388,8 @@ class LogConfigCenter:
         """添加按日期存储的日志 sink（始终记录全部级别）"""
         # 如果已有文件 sink，先移除
         if self._file_sink_id is not None:
-            try:
+            with contextlib.suppress(ValueError):
                 logger.remove(self._file_sink_id)
-            except ValueError:
-                pass
             self._file_sink_id = None
 
         try:

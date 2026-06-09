@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import copy
 import datetime
 import json
@@ -16,24 +17,23 @@ from pathlib import Path
 from typing import Any
 
 from app.constants import (
-    MONITOR_THREAD_JOIN_TIMEOUT,
-    MONITOR_STOP_TIMEOUT,
     MONITOR_RELOAD_TIMEOUT,
+    MONITOR_STOP_TIMEOUT,
+    MONITOR_THREAD_JOIN_TIMEOUT,
 )
 from app.core.monitor_core import NetworkMonitorCore, NetworkState
-
-from app.workers.playwright_worker import get_worker, CMD_LOGIN
 from app.network.decision import is_network_available
+from app.schemas import LogEntry, MonitorConfigPayload, MonitorStatusResponse
 from app.tasks import TaskManager
 from app.utils import ConfigValidator
 from app.utils.logging import get_logger
 from app.utils.login import SCREENSHOT_URL_PATTERN
 from app.utils.network_helpers import parse_host_port
+from app.workers.playwright_worker import CMD_LOGIN, get_worker
+from app.ws_manager import WebSocketManager
 
 from .config import build_runtime_config, load_runtime_config, load_ui_config
 from .profile import ProfileService
-from app.schemas import LogEntry, MonitorConfigPayload, MonitorStatusResponse
-from app.ws_manager import WebSocketManager
 
 # ── 常量 ──
 
@@ -676,10 +676,8 @@ class MonitorService:
         self._shutdown_event.set()
 
         # 发送 shutdown 命令确保消费者能立即处理退出
-        try:
+        with contextlib.suppress(queue.Full):
             self._cmd_queue.put_nowait(MonitorCommand(type=MonitorCmdType.SHUTDOWN))
-        except queue.Full:
-            pass
 
         # 等待消费者线程结束
         if self._consumer_thread and self._consumer_thread.is_alive():

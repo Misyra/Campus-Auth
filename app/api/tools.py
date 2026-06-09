@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import uuid
 from pathlib import Path
 
@@ -25,10 +26,8 @@ def _cleanup_old_backgrounds(exclude_filename: str) -> None:
     """清理旧的背景图片，保留指定文件。"""
     for old_file in BG_DIR.iterdir():
         if old_file.name != exclude_filename:
-            try:
+            with contextlib.suppress(OSError):
                 old_file.unlink()
-            except OSError:
-                pass
 
 
 @router.get("/api/tools/task-recorder.user.js")
@@ -86,7 +85,7 @@ async def fetch_background_url(body: dict) -> dict:
             resp = await client.get(url)
             resp.raise_for_status()
     except httpx.HTTPError as exc:
-        raise HTTPException(400, f"下载图片失败: {exc}")
+        raise HTTPException(400, f"下载图片失败: {exc}") from exc
 
     content_type = resp.headers.get("content-type", "")
     if "image" not in content_type and not url.lower().endswith(

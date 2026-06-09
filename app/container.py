@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import shutil
 from pathlib import Path
-
-from app.workers.playwright_worker import cleanup_orphan_browsers
 
 from app.services.autostart import AutoStartService
 from app.services.debug import DebugSessionManager
@@ -15,9 +14,9 @@ from app.services.monitor import MonitorService
 from app.services.profile import ProfileService
 from app.services.scheduler import SchedulerService
 from app.services.task import TaskService
-from app.ws_manager import WebSocketManager
-
 from app.utils.logging import WebSocketSink, get_logger
+from app.workers.playwright_worker import cleanup_orphan_browsers
+from app.ws_manager import WebSocketManager
 
 container_logger = get_logger("backend.container", side="BACKEND")
 
@@ -100,10 +99,8 @@ class ServiceContainer:
         # 取消 WebSocket drain loop
         if self._ws_drain_task:
             self._ws_drain_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._ws_drain_task
-            except asyncio.CancelledError:
-                pass
 
         # 完全关闭监控服务（停止监控 + 终止消费者线程）
         self.monitor_service.shutdown()

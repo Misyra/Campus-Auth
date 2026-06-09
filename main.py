@@ -3,6 +3,7 @@
 
 import argparse
 import atexit
+import contextlib
 import os
 import signal
 import subprocess
@@ -18,8 +19,6 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from app.constants import AUTH_DATA_DIR  # noqa: F401, E402  — 测试 fixture 需要
-from app.workers.playwright_bootstrap import ensure_playwright_ready  # noqa: E402
-from app.workers.playwright_worker import cleanup_orphan_browsers  # noqa: E402
 from app.utils.platform_utils import is_windows  # noqa: E402
 from app.utils.process import (  # noqa: E402
     cleanup_pid,
@@ -31,7 +30,8 @@ from app.utils.process import (  # noqa: E402
     read_pid_file,
     write_pid,
 )
-
+from app.workers.playwright_bootstrap import ensure_playwright_ready  # noqa: E402
+from app.workers.playwright_worker import cleanup_orphan_browsers  # noqa: E402
 
 # ==================== 浏览器控制 ====================
 
@@ -152,7 +152,7 @@ def _cmd_autostart(action: str) -> None:
 
 def _run_login_then_exit(logger) -> None:
     """登录成功后退出模式：循环重试登录，直到成功后退出进程。"""
-    from app.workers.playwright_worker import get_worker, CMD_LOGIN
+    from app.workers.playwright_worker import CMD_LOGIN, get_worker
 
     print("登录成功后退出模式：正在登录...")
 
@@ -252,16 +252,12 @@ def _run_server(
 
     def _signal_handler(signum, _frame):
         cleanup_pid()
-        try:
+        with contextlib.suppress(Exception):
             from app.workers.playwright_worker import get_worker
 
             get_worker().stop(timeout=3)
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             cleanup_orphan_browsers()
-        except Exception:
-            pass
         os._exit(0)
 
     signal.signal(signal.SIGINT, _signal_handler)
@@ -346,6 +342,7 @@ def _run_server(
 def _setup_exception_hooks() -> None:
     """设置全局异常钩子，确保线程内未捕获异常被记录到日志。"""
     import threading
+
     from app.utils.logging import get_logger
 
     _hook_logger = get_logger("uncaught", side="APP")
