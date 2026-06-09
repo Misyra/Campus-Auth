@@ -183,9 +183,13 @@
 }
 
 .nav-item.active {
+  /* 渐进增强: 第一行为旧浏览器回退值，第二行为 color-mix() 增强值 */
+  background: rgba(167, 139, 250, 0.08);
   background: linear-gradient(135deg, color-mix(in srgb, var(--sidebar-accent, var(--accent)) 12%, transparent), rgba(167, 139, 250, 0.08));
   color: var(--sidebar-accent, var(--accent));
+  border: 1px solid rgba(167, 139, 250, 0.2);
   border: 1px solid color-mix(in srgb, var(--sidebar-accent, var(--accent)) 20%, transparent);
+  box-shadow: 0 0 20px rgba(167, 139, 250, 0.08);
   box-shadow: 0 0 20px color-mix(in srgb, var(--sidebar-accent, var(--accent)) 8%, transparent);
 }
 
