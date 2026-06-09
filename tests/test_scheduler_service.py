@@ -30,6 +30,18 @@ def _run_async(coro):
 class TestDetectAvailableShells:
     """测试系统可用 Shell 检测。"""
 
+def test_history_lock_initialized_at_construct(tmp_path):
+    """_history_lock 应在 __init__ 中初始化，而非惰性创建。"""
+    from app.services.scheduler import SchedulerService
+
+    svc = SchedulerService(tmp_path)
+    assert hasattr(svc, "_history_lock")
+    assert isinstance(svc._history_lock, asyncio.Lock)
+
+
+class TestDetectAvailableShells:
+    """测试系统可用 Shell 检测。"""
+
     def test_returns_list(self):
         shells = detect_available_shells()
         assert isinstance(shells, list)
