@@ -150,7 +150,8 @@ class NetworkMonitorCore:
         self.config = new_config
         self._test_sites_cache = None  # 清除测试站点缓存
         # 同步 block_proxy 到 network_test 模块，决定 HTTP 客户端是否信任系统代理
-        set_block_proxy(self.config.get("block_proxy", True))
+        block_proxy = self.config.get("block_proxy", True)
+        set_block_proxy(block_proxy if block_proxy is not None else True)
 
     def _get_monitor_interval(self) -> int:
         """获取当前配置的检测间隔（秒）。"""
@@ -181,7 +182,8 @@ class NetworkMonitorCore:
             auth_url = self.config.get("auth_url", "未设置")
             username = self.config.get("username", "未设置")
             isp = self.config.get("isp", "无") or "无"
-            set_block_proxy(self.config.get("block_proxy", True))
+            block_proxy = self.config.get("block_proxy", True)
+            set_block_proxy(block_proxy if block_proxy is not None else True)
             test_sites_info = self._get_test_sites()
 
             # 构建检测方式摘要
@@ -377,7 +379,8 @@ class NetworkMonitorCore:
             self.status_detail = "网络异常：正在登录"
             login_ok, login_msg = self.attempt_login()
             # 等待 2s 后再做重试决策，避免 Portal 尚未完全更新会话状态时立即重试
-            self._stop_event.wait(timeout=2)
+            if self._stop_event.wait(timeout=2):
+                return RecoveryResult.BREAK
 
             if login_ok:
                 self.login_attempt_count = 0

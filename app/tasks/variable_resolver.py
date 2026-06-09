@@ -62,7 +62,10 @@ class VariableResolver:
                 if raw is None:
                     resolved = ""
                 elif not isinstance(raw, str):
-                    resolved = json.dumps(raw, ensure_ascii=False)
+                    try:
+                        resolved = json.dumps(raw, ensure_ascii=False)
+                    except TypeError:
+                        resolved = str(raw)
                 else:
                     resolved = raw
             elif var_name in self.template_vars:

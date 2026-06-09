@@ -26,6 +26,10 @@ class TaskValidator:
         """
         errors = []
 
+        if not isinstance(config, dict):
+            errors.append("配置必须是对象")
+            return False, errors
+
         # 验证基本字段
         if not config.get("name"):
             errors.append("任务必须包含 'name' 字段")
@@ -60,7 +64,7 @@ class TaskValidator:
 
         # 验证步骤 ID 格式
         step_id = step.get("id", "")
-        if not TASK_ID_PATTERN.fullmatch(step_id):
+        if not isinstance(step_id, str) or not TASK_ID_PATTERN.fullmatch(step_id):
             errors.append(
                 f"{prefix} id '{step_id}' 格式无效，须匹配 ^[A-Za-z][A-Za-z0-9_]*$"
             )

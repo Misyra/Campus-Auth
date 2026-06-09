@@ -52,7 +52,7 @@ class TaskExecutor:
             (success, message)
         """
         task_start = time.perf_counter()
-        task_timeout_ms = self.config.timeout or self.DEFAULT_TASK_TIMEOUT
+        task_timeout_ms = self.config.timeout if self.config.timeout is not None else self.DEFAULT_TASK_TIMEOUT
         task_deadline = task_start + task_timeout_ms / 1000
         logger.info(
             "任务开始 [{}], {} 个步骤, 超时 {}ms",
@@ -226,7 +226,7 @@ class TaskExecutor:
         effective_step = step
         if task_deadline is not None:
             remaining_ms = max(0, int((task_deadline - time.perf_counter()) * 1000))
-            effective_timeout = step.timeout or 10000
+            effective_timeout = step.timeout if step.timeout is not None else 10000
             overrides = {}
             if remaining_ms < effective_timeout:
                 logger.debug(
@@ -250,7 +250,7 @@ class TaskExecutor:
         try:
             return await handler.execute(page, effective_step, self.resolver)
         except Exception as e:
-            logger.error("步骤 [{}/{}] 执行失败: {}", step.id, step.type, e)
+            logger.exception("步骤 [{}/{}] 执行失败", step.id, step.type)
             return False, str(e)
 
     async def execute_step_at(self, page, step_index: int) -> dict[str, Any]:
@@ -281,6 +281,7 @@ class TaskExecutor:
 
     async def execute_remaining(self, page, from_index: int) -> dict[str, Any]:
         """从指定索引开始执行所有步骤（调试模式）"""
+        from_index = max(0, from_index)
         results = []
         for i in range(from_index, len(self.config.steps)):
             result = await self.execute_step_at(page, i)
@@ -312,11 +313,12 @@ class TaskExecutor:
             cfg = self.monitor_config
 
             # 等待 Portal 处理认证请求（可通过 post_login_delay 配置）
-            post_delay = cfg.get("post_login_delay", 5)
+            # cfg.get(key, default) 在 JSON 值为 null 时返回 None 而非默认值，需显式处理
+            post_delay = cfg.get("post_login_delay") or 5
             await asyncio.sleep(post_delay)
-            enable_tcp = cfg.get("enable_tcp_check", True)
-            enable_http = cfg.get("enable_http_check", True)
-            timeout = cfg.get("network_check_timeout", 2)
+            enable_tcp = cfg.get("enable_tcp_check") if cfg.get("enable_tcp_check") is not None else True
+            enable_http = cfg.get("enable_http_check") if cfg.get("enable_http_check") is not None else True
+            timeout = cfg.get("network_check_timeout") or 2
 
             # 解析 portal 检测 URL
             from app.utils.network_helpers import parse_portal_checks

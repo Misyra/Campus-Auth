@@ -110,6 +110,7 @@ class PlaywrightWorker:
         self._debug_executor: Any = (
             None  # TaskExecutor 实例，调试步骤执行时在 Worker 线程内使用
         )
+        self._last_browser_settings: dict | None = None  # 缓存最近一次浏览器设置
 
         # _wake_event 用于立即唤醒 _async_run 协程处理新命令
         self._wake_event: asyncio.Event | None = None
@@ -542,6 +543,11 @@ class PlaywrightWorker:
                 try:
                     if self._context is not None and not self._context.is_closed():
                         self._page = await self._context.new_page()
+                        # 重新应用反检测脚本和路由拦截（新页面未继承旧页面的设置）
+                        if self._page is not None:
+                            await self._apply_stealth_and_routes(
+                                {"browser_settings": self._last_browser_settings or {}}
+                            )
                 except Exception:
                     logger.warning("创建替代页面失败，_page 保持 None")
 
@@ -673,6 +679,7 @@ class PlaywrightWorker:
         from playwright.async_api import async_playwright
 
         browser_settings = config.get("browser_settings", {})
+        self._last_browser_settings = browser_settings  # 缓存用于页面重建
         headless = browser_settings.get("headless", True)
         pure_mode = browser_settings.get("pure_mode", False)
 
