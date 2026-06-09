@@ -638,3 +638,509 @@ class TestCleanupOrphanBrowsers:
 
         cleanup_orphan_browsers()
         mock_cleanup.assert_called_once()
+
+
+# ── BrowserContextManager._is_cancelled ──
+
+
+class TestIsCancelled:
+    """取消状态检查。"""
+
+    def test_no_event(self):
+        """无 cancel_event 时返回 False。"""
+        mgr = BrowserContextManager({}, cancel_event=None)
+        assert mgr._is_cancelled() is False
+
+    def test_event_not_set(self):
+        """event 未 set 时返回 False。"""
+        event = threading.Event()
+        mgr = BrowserContextManager({}, cancel_event=event)
+        assert mgr._is_cancelled() is False
+
+    def test_event_set(self):
+        """event 已 set 时返回 True。"""
+        event = threading.Event()
+        event.set()
+        mgr = BrowserContextManager({}, cancel_event=event)
+        assert mgr._is_cancelled() is True
+
+
+# ── BrowserContextManager 初始化 ──
+
+
+class TestBrowserContextManagerInit:
+    """初始化逻辑。"""
+
+    def test_basic_init(self):
+        """基本初始化。"""
+        config = {"browser_settings": {"headless": True}}
+        mgr = BrowserContextManager(config)
+        assert mgr.config == config
+        assert mgr.browser_settings == {"headless": True}
+        assert mgr.browser is None
+        assert mgr.context is None
+        assert mgr.page is None
+        assert mgr._worker_managed is False
+
+    def test_empty_config(self):
+        """空配置。"""
+        mgr = BrowserContextManager({})
+        assert mgr.browser_settings == {}
+
+    def test_cancel_event_stored(self):
+        """cancel_event 被保存。"""
+        event = threading.Event()
+        mgr = BrowserContextManager({}, cancel_event=event)
+        assert mgr.cancel_event is event
+
+
+# ── BrowserContextManager.__aexit__ ──
+
+
+class TestBrowserContextManagerAexit:
+    """异步上下文管理器出口。"""
+
+    @pytest.mark.asyncio
+    async def test_returns_false(self):
+        """返回 False（不抑制异常）。"""
+        mgr = BrowserContextManager({})
+        mock_worker = MagicMock()
+        with patch(
+            "app.workers.playwright_worker.get_worker", return_value=mock_worker
+        ):
+            result = await mgr.__aexit__(None, None, None)
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_clears_references(self):
+        """清空引用。"""
+        mgr = BrowserContextManager({})
+        mgr.playwright = MagicMock()
+        mgr.browser = MagicMock()
+        mgr.context = MagicMock()
+        mgr.page = MagicMock()
+
+        mock_worker = MagicMock()
+        with patch(
+            "app.workers.playwright_worker.get_worker", return_value=mock_worker
+        ):
+            await mgr.__aexit__(None, None, None)
+            assert mgr.playwright is None
+            assert mgr.browser is None
+            assert mgr.context is None
+            assert mgr.page is None
+
+    @pytest.mark.asyncio
+    async def test_logs_exception(self):
+        """异常被记录。"""
+        mgr = BrowserContextManager({})
+        mgr.logger = MagicMock()
+
+        mock_worker = MagicMock()
+        with patch(
+            "app.workers.playwright_worker.get_worker", return_value=mock_worker
+        ):
+            await mgr.__aexit__(ValueError, ValueError("test error"), None)
+            mgr.logger.error.assert_called()
+
+
+# ── SystemTray 详细测试 ──
+
+
+class TestLoadIcon:
+    """_load_icon。"""
+
+    @patch("app.core.system_tray.pystray")
+    @patch("app.core.system_tray.Image")
+    def test_fallback_returns_default_icon(self, mock_image, mock_pystray):
+        """cairosvg.svg2png 抛异常时回退到 Image.new 默认图标。"""
+        mock_new = MagicMock()
+        mock_image.new.return_value = mock_new
+
+        mock_cairosvg = MagicMock()
+        mock_cairosvg.svg2png.side_effect = RuntimeError("svg2png failed")
+        with patch.dict("sys.modules", {"cairosvg": mock_cairosvg}):
+            tray = SystemTray()
+            result = tray._load_icon()
+
+        mock_image.new.assert_called_once_with("RGBA", (64, 64), (34, 211, 238, 255))
+        assert result is mock_new
+
+    @patch("app.core.system_tray.pystray")
+    @patch("app.core.system_tray.Image")
+    def test_fallback_when_cairosvg_missing(self, mock_image, mock_pystray):
+        """cairosvg 不可用时回退到默认图标。"""
+        from pathlib import Path as _Path
+
+        mock_new = MagicMock()
+        mock_image.new.return_value = mock_new
+
+        tray = SystemTray()
+
+        fake_path = MagicMock(spec=_Path)
+        fake_path.exists.return_value = True
+        fake_path.as_uri.return_value = "file:///fake/icon.svg"
+
+        with patch("app.core.system_tray.Path") as mock_path_cls:
+            mock_path_cls.return_value.parent.parent.parent.__truediv__ = MagicMock(
+                return_value=fake_path
+            )
+            with patch.dict("sys.modules", {"cairosvg": None}):
+                tray._load_icon()
+
+        mock_image.new.assert_called_once_with("RGBA", (64, 64), (34, 211, 238, 255))
+
+
+class TestGetStatusLabel:
+    """_get_status_label。"""
+
+    @patch("app.core.system_tray.pystray")
+    @patch("app.core.system_tray.Image")
+    def test_monitoring_true(self, mock_image, mock_pystray):
+        """监控中显示"运行中"。"""
+        tray = SystemTray()
+        tray._monitoring = True
+        assert "运行中" in tray._get_status_label(None)
+
+    @patch("app.core.system_tray.pystray")
+    @patch("app.core.system_tray.Image")
+    def test_monitoring_false(self, mock_image, mock_pystray):
+        """停止时显示"已停止"。"""
+        tray = SystemTray()
+        tray._monitoring = False
+        assert "已停止" in tray._get_status_label(None)
+
+
+class TestCreateMenu:
+    """_create_menu。"""
+
+    @patch("app.core.system_tray.pystray")
+    @patch("app.core.system_tray.Image")
+    def test_menu_created(self, mock_image, mock_pystray):
+        """菜单创建成功。"""
+        mock_menu_instance = MagicMock()
+        mock_pystray.Menu.return_value = mock_menu_instance
+        mock_pystray.MenuItem.return_value = MagicMock()
+        mock_pystray.Menu.SEPARATOR = "SEPARATOR"
+
+        tray = SystemTray(port=50721)
+        result = tray._create_menu()
+
+        assert result is mock_menu_instance
+        assert mock_pystray.MenuItem.call_count >= 3
+
+
+class TestQuit:
+    """_quit。"""
+
+    @patch("app.core.system_tray.pystray")
+    @patch("app.core.system_tray.Image")
+    def test_quit_with_icon_and_callback(self, mock_image, mock_pystray):
+        """有 icon 和 on_exit 时两者都被调用。"""
+        on_exit = MagicMock()
+        tray = SystemTray(on_exit=on_exit)
+        tray.icon = MagicMock()
+
+        tray._quit(tray.icon, None)
+
+        tray.icon.stop.assert_called_once()
+        on_exit.assert_called_once()
+
+    @patch("app.core.system_tray.pystray")
+    @patch("app.core.system_tray.Image")
+    def test_quit_without_icon(self, mock_image, mock_pystray):
+        """无 icon 时仅调用 on_exit。"""
+        on_exit = MagicMock()
+        tray = SystemTray(on_exit=on_exit)
+        tray.icon = None
+
+        tray._quit(None, None)
+
+        on_exit.assert_called_once()
+
+    @patch("app.core.system_tray.pystray")
+    @patch("app.core.system_tray.Image")
+    def test_quit_without_callback(self, mock_image, mock_pystray):
+        """无 on_exit 时仅调用 icon.stop。"""
+        tray = SystemTray()
+        tray.icon = MagicMock()
+
+        tray._quit(tray.icon, None)
+
+        tray.icon.stop.assert_called_once()
+
+
+class TestStartStop:
+    """start / stop。"""
+
+    @patch("app.core.system_tray.pystray")
+    @patch("app.core.system_tray.Image")
+    def test_start_creates_icon_and_thread(self, mock_image, mock_pystray):
+        """start 创建 pystray.Icon 并启动后台守护线程。"""
+        import time
+
+        mock_icon_cls = MagicMock()
+        mock_icon_instance = MagicMock()
+        mock_icon_instance.run.side_effect = lambda: time.sleep(2)
+        mock_icon_cls.return_value = mock_icon_instance
+        mock_pystray.Icon = mock_icon_cls
+
+        tray = SystemTray(port=50721)
+
+        mock_img = MagicMock()
+        with patch.object(tray, "_load_icon", return_value=mock_img):
+            tray.start()
+
+        mock_icon_cls.assert_called_once()
+        assert tray.icon is mock_icon_instance
+        assert tray._thread is not None
+        assert tray._thread.daemon is True
+        assert tray._thread.is_alive()
+
+        tray.stop()
+
+    @patch("app.core.system_tray.pystray")
+    @patch("app.core.system_tray.Image")
+    def test_start_idempotent(self, mock_image, mock_pystray):
+        """线程仍存活时重复 start 不会创建新 icon。"""
+        import time
+
+        mock_icon_cls = MagicMock()
+        mock_icon_instance = MagicMock()
+        mock_icon_instance.run.side_effect = lambda: time.sleep(2)
+        mock_icon_cls.return_value = mock_icon_instance
+        mock_pystray.Icon = mock_icon_cls
+
+        tray = SystemTray()
+
+        mock_img = MagicMock()
+        with patch.object(tray, "_load_icon", return_value=mock_img):
+            tray.start()
+            first_thread = tray._thread
+            tray.start()
+
+        mock_icon_cls.assert_called_once()
+        assert tray._thread is first_thread
+
+        tray.stop()
+
+    @patch("app.core.system_tray.pystray")
+    @patch("app.core.system_tray.Image")
+    def test_stop_clears_icon(self, mock_image, mock_pystray):
+        """stop 调用 icon.stop 并清除引用。"""
+        tray = SystemTray()
+        tray.icon = MagicMock()
+
+        tray.stop()
+
+    @patch("app.core.system_tray.pystray")
+    @patch("app.core.system_tray.Image")
+    def test_stop_without_icon(self, mock_image, mock_pystray):
+        """无 icon 时 stop 不报错。"""
+        tray = SystemTray()
+        tray.icon = None
+        tray.stop()
+
+
+class TestUpdateStatus:
+    """update_status。"""
+
+    @patch("app.core.system_tray.pystray")
+    @patch("app.core.system_tray.Image")
+    def test_update_monitoring_true(self, mock_image, mock_pystray):
+        """监控中更新标题为"运行中"。"""
+        tray = SystemTray()
+        mock_icon = MagicMock()
+        tray.icon = mock_icon
+
+        tray.update_status(monitoring=True)
+
+        assert tray._monitoring is True
+        assert "运行中" in mock_icon.title
+
+    @patch("app.core.system_tray.pystray")
+    @patch("app.core.system_tray.Image")
+    def test_update_monitoring_false(self, mock_image, mock_pystray):
+        """停止时更新标题为"已停止"。"""
+        tray = SystemTray()
+        mock_icon = MagicMock()
+        tray.icon = mock_icon
+
+        tray.update_status(monitoring=False)
+
+        assert tray._monitoring is False
+        assert "已停止" in mock_icon.title
+
+    @patch("app.core.system_tray.pystray")
+    @patch("app.core.system_tray.Image")
+    def test_update_no_icon(self, mock_image, mock_pystray):
+        """无 icon 时仅更新 _monitoring 标志，不报错。"""
+        tray = SystemTray()
+        tray.icon = None
+
+        tray.update_status(monitoring=True)
+
+        assert tray._monitoring is True
+
+
+# ── Playwright bootstrap 状态管理 ──
+
+
+class TestBootstrapState:
+    """bootstrap 状态区分测试"""
+
+    def setup_method(self):
+        """每个测试前重置全局状态"""
+        import app.workers.playwright_bootstrap as pb
+
+        pb._BOOTSTRAP_DONE = False
+        pb._BOOTSTRAP_SKIPPED = False
+
+    def test_bootstrap_disabled_returns_skipped(self):
+        """禁用 auto-install 时返回 SKIPPED 状态。"""
+        import app.workers.playwright_bootstrap as pb
+
+        with patch.object(pb, "_is_enabled", return_value=False):
+            result = pb.ensure_playwright_ready()
+
+        assert result is True
+        assert pb._BOOTSTRAP_SKIPPED is True
+        assert pb._BOOTSTRAP_DONE is False
+
+    def test_bootstrap_verified_returns_done(self):
+        """Chromium 已安装时返回 DONE 状态。"""
+        import app.workers.playwright_bootstrap as pb
+
+        with (
+            patch.object(pb, "_is_enabled", return_value=True),
+            patch.object(pb, "_has_chromium", return_value=True),
+        ):
+            result = pb.ensure_playwright_ready()
+
+        assert result is True
+        assert pb._BOOTSTRAP_DONE is True
+        assert pb._BOOTSTRAP_SKIPPED is False
+
+    def test_bootstrap_skipped_then_done(self):
+        """先跳过再验证的状态变化。"""
+        import app.workers.playwright_bootstrap as pb
+
+        with patch.object(pb, "_is_enabled", return_value=False):
+            pb.ensure_playwright_ready()
+
+        assert pb._BOOTSTRAP_SKIPPED is True
+        assert pb._BOOTSTRAP_DONE is False
+
+        with (
+            patch.object(pb, "_is_enabled", return_value=True),
+            patch.object(pb, "_has_chromium", return_value=True),
+        ):
+            result = pb.ensure_playwright_ready()
+
+        assert result is True
+        assert pb._BOOTSTRAP_DONE is False
+
+    def test_is_bootstrap_skipped(self):
+        """is_bootstrap_skipped 查询函数。"""
+        import app.workers.playwright_bootstrap as pb
+
+        assert pb.is_bootstrap_skipped() is False
+        pb._BOOTSTRAP_SKIPPED = True
+        assert pb.is_bootstrap_skipped() is True
+
+    def test_is_bootstrap_done(self):
+        """is_bootstrap_done 查询函数。"""
+        import app.workers.playwright_bootstrap as pb
+
+        assert pb.is_bootstrap_done() is False
+        pb._BOOTSTRAP_DONE = True
+        assert pb.is_bootstrap_done() is True
+
+
+# ── PlaywrightWorker submit alive 预检 ──
+
+
+class TestSubmitAliveCheck:
+    """submit() 方法的 worker alive 预检测试"""
+
+    def test_submit_recovers_dead_worker(self):
+        """submit 检测到消费者线程死亡后自动重启。"""
+        worker = PlaywrightWorker()
+
+        start_called = threading.Event()
+
+        def mock_start():
+            start_called.set()
+            worker._consumer_thread = MagicMock()
+            worker._consumer_thread.is_alive.return_value = True
+            worker._stop_event.clear()
+
+        worker.start = mock_start
+
+        worker._consumer_thread = MagicMock()
+        worker._consumer_thread.is_alive.return_value = False
+        worker._stop_event.clear()
+
+        result = worker.submit("test_cmd", wait=False)
+
+        assert start_called.is_set(), "submit 应该调用 start() 重启线程"
+        assert result.success
+
+    def test_submit_stopped_worker_rejects(self):
+        """已停止的 worker 拒绝新命令。"""
+        worker = PlaywrightWorker()
+        worker._stop_event.set()
+
+        result = worker.submit("test_cmd", wait=False)
+
+        assert not result.success
+        assert "已关闭" in result.error
+
+    def test_submit_restart_failure_returns_error(self):
+        """重启失败时返回错误。"""
+        worker = PlaywrightWorker()
+
+        worker._consumer_thread = MagicMock()
+        worker._consumer_thread.is_alive.return_value = False
+        worker._stop_event.clear()
+
+        def mock_start():
+            raise RuntimeError("重启失败")
+
+        worker.start = mock_start
+
+        result = worker.submit("test_cmd", wait=False)
+
+        assert not result.success
+        assert "重启失败" in result.error
+
+    def test_submit_concurrent_restart_only_one(self):
+        """并发 submit 只有一个执行重启。"""
+        import concurrent.futures
+
+        worker = PlaywrightWorker()
+
+        worker._consumer_thread = MagicMock()
+        worker._consumer_thread.is_alive.return_value = False
+        worker._stop_event.clear()
+
+        restart_count = 0
+        restart_lock = threading.Lock()
+
+        def mock_start():
+            nonlocal restart_count
+            with restart_lock:
+                restart_count += 1
+            worker._consumer_thread.is_alive.return_value = True
+
+        worker.start = mock_start
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            futures = []
+            for _ in range(5):
+                futures.append(
+                    executor.submit(lambda: worker.submit("test_cmd", wait=False))
+                )
+            concurrent.futures.wait(futures)
+
+        assert restart_count == 1, f"重启次数应为 1，实际: {restart_count}"
