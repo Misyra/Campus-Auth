@@ -14,7 +14,7 @@ from app.services.monitor import MonitorService
 from app.services.profile import ProfileService
 from app.services.scheduler import SchedulerService
 from app.services.task import TaskService
-from app.utils.logging import WebSocketSink, get_logger
+from app.utils.logging import LogBroadcastSink, get_logger
 from app.workers.playwright_worker import cleanup_orphan_browsers, get_worker
 from app.ws_manager import WebSocketManager
 
@@ -64,15 +64,12 @@ class ServiceContainer:
         # 清理孤儿浏览器进程
         cleanup_orphan_browsers()
 
-        # 注册 WebSocket 日志 sink — 将 loguru 日志转发到前端并存入 _logs
+        # 注册 WebSocket 广播 sink — 将 loguru 日志自动转发到前端
         from loguru import logger
 
-        ws_sink = WebSocketSink(
-            self.monitor_service.ws_broadcast_queue,
-            log_store=self.monitor_service.logs,
-        )
+        broadcast_sink = LogBroadcastSink(self.monitor_service.ws_broadcast_queue)
         logger.add(
-            ws_sink.write,
+            broadcast_sink.write,
             format="{name} | {message}",
             level="DEBUG",
             filter=lambda record: record["extra"].get("side") == "BACKEND",

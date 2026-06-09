@@ -118,22 +118,22 @@ class TestMonitorServiceInit:
 
 
 # =====================================================================
-# MonitorService._push_log
+# MonitorService.record_log
 # =====================================================================
 
 
-class TestPushLog:
-    def test_push_log(self):
+class TestRecordLog:
+    def test_record_log(self):
         svc = _make_monitor_service()
-        svc._push_log("测试消息", level="INFO", source="test")
+        svc.record_log("测试消息", level="INFO", source="test")
         assert len(svc._logs) == 1
         assert svc._logs[0].message == "测试消息"
         assert svc._logs[0].level == "INFO"
         assert svc._logs[0].source == "test"
 
-    def test_push_log_ws_broadcast(self):
+    def test_record_log_ws_broadcast(self):
         svc = _make_monitor_service()
-        svc._push_log("test", level="INFO", source="test")
+        svc.record_log("test", level="INFO", source="test")
         assert len(svc._ws_broadcast_queue) == 1
         assert svc._ws_broadcast_queue[0]["type"] == "log"
 
@@ -151,7 +151,7 @@ class TestListLogs:
     def test_list_logs_limit(self):
         svc = _make_monitor_service()
         for i in range(5):
-            svc._push_log(f"msg {i}")
+            svc.record_log(f"msg {i}")
         assert len(svc.list_logs(limit=3)) == 3
         assert svc.list_logs(limit=0) == []
 
@@ -173,7 +173,7 @@ class TestListLogs:
 
         svc = MonitorService(MagicMock())
         for i in range(3):
-            svc._push_log(f"msg {i}")
+            svc.record_log(f"msg {i}")
         assert len(svc.list_logs(limit=100)) == 3
 
 
