@@ -380,6 +380,12 @@
   width: 100%;
 }
 
+/* 当下拉菜单展开时，提升所在卡片的层级，避免被后续卡片遮挡 */
+.card:has(.custom-select.open) {
+  position: relative;
+  z-index: 10;
+}
+
 .custom-select-trigger {
   width: 100%;
   padding: 12px 38px 12px 14px;
