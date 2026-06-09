@@ -746,8 +746,8 @@ class TestMonitorConfigPayloadFull:
         assert m.username == ""
         assert m.auth_url == ""
         assert m.headless is True
-        assert m.enable_tcp_check is True
-        assert m.enable_http_check is True
+        assert m.enable_tcp_check is False
+        assert m.enable_http_check is False
 
     def test_carrier_fields(self):
         m = MonitorConfigPayload(carrier="自定义", carrier_custom="校园网")
