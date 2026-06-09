@@ -99,6 +99,9 @@ export const appOptions = {
       if (this.logFilter.level) {
         result = result.filter(l => l.level === this.logFilter.level);
       }
+      if (this.logFilter.source) {
+        result = result.filter(l => l.source === this.logFilter.source);
+      }
       if (this.logFilter.search) {
         const q = this.logFilter.search.toLowerCase();
         result = result.filter(l => l.message.toLowerCase().includes(q));

@@ -192,6 +192,14 @@
             <button class="log-filter-chip" :class="{ active: logFilter.level === 'ERROR' }" @click="logFilter.level = logFilter.level === 'ERROR' ? '' : 'ERROR'">ERROR</button>
             <button class="log-filter-chip" :class="{ active: logFilter.level === 'DEBUG' }" @click="logFilter.level = logFilter.level === 'DEBUG' ? '' : 'DEBUG'">DEBUG</button>
           </div>
+          <div class="log-filter-chips source-chips">
+            <button class="source-chip" :class="{ active: !logFilter.source }" @click="logFilter.source = ''">全部来源</button>
+            <button class="source-chip" :class="{ active: logFilter.source === 'backend' }" @click="logFilter.source = logFilter.source === 'backend' ? '' : 'backend'">后端</button>
+            <button class="source-chip" :class="{ active: logFilter.source === 'network' }" @click="logFilter.source = logFilter.source === 'network' ? '' : 'network'">网络</button>
+            <button class="source-chip" :class="{ active: logFilter.source === 'task' }" @click="logFilter.source = logFilter.source === 'task' ? '' : 'task'">任务</button>
+            <button class="source-chip" :class="{ active: logFilter.source === 'frontend' }" @click="logFilter.source = logFilter.source === 'frontend' ? '' : 'frontend'">前端</button>
+            <button class="source-chip" :class="{ active: logFilter.source === 'debug' }" @click="logFilter.source = logFilter.source === 'debug' ? '' : 'debug'">调试</button>
+          </div>
           <input v-model="logFilter.search" type="text" placeholder="搜索日志..." class="log-search" aria-label="搜索日志" />
         </div>
         <div ref="logViewer" class="log-viewer" @scroll="onLogScroll">
@@ -203,12 +211,13 @@
               <line x1="16" y1="17" x2="8" y2="17"/>
               <polyline points="10 9 9 9 8 9"/>
             </svg>
-            <span>{{ logFilter.search || logFilter.level ? '无匹配日志' : '暂无日志' }}</span>
+            <span>{{ logFilter.search || logFilter.level || logFilter.source ? '无匹配日志' : '暂无日志' }}</span>
           </div>
           <div v-else class="log-entries">
             <div v-for="item in filteredLogs" :key="item.timestamp + item.message" class="log-entry">
               <span class="log-time">{{ formatLogTime(item.timestamp) }}</span>
-              <span class="log-meta">{{ formatLogMeta(item) }}</span>
+              <span v-if="item.level" class="log-level-badge" :class="'level-' + item.level.toLowerCase()">{{ item.level }}</span>
+              <span v-if="item.source" class="log-source-badge" :style="{ background: getSourceColor(item.source) }">{{ getSourceLabel(item.source) }}</span>
               <div class="log-content">
                 <span class="log-message" :class="getLogClass(item)">{{ stripScreenshotHint(item.message) }}</span>
                 <div v-if="extractScreenshotUrl(item.message)" class="log-screenshot-wrap">
