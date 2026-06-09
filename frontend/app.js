@@ -24,9 +24,7 @@ function applyAppearanceEarly() {
     if (appearance.accent_color) {
       root.style.setProperty('--accent', appearance.accent_color);
     }
-    if (appearance.zoom) {
-      document.querySelector('.content-wrapper')?.style.setProperty('zoom', appearance.zoom / 100);
-    }
+    // zoom 在 mounted() 中由 applyAppearance() 统一处理，此处不设置（Vue 挂载前 .content-wrapper 可能不存在）
     if (appearance.theme) {
       root.setAttribute('data-theme', appearance.theme);
     }

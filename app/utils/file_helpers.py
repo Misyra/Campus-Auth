@@ -10,7 +10,7 @@ logger = get_logger("file_helpers", source="backend")
 
 
 def atomic_write(
-    path: str,
+    path: str | Path,
     content: str,
     encoding: str = "utf-8",
     errors: str = "strict",
@@ -36,6 +36,7 @@ def atomic_write(
     if len(prefix) > 5 or len(suffix) > 5:
         raise ValueError("prefix/suffix 长度不能超过 5 字符")
 
+    path = str(path)
     parent = os.path.dirname(path)
     if parent:
         os.makedirs(parent, exist_ok=True)

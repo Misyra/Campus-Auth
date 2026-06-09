@@ -143,7 +143,7 @@ app = FastAPI(
 # ==================== CORS 配置 ====================
 
 
-def _resolve_port() -> int:
+def resolve_port() -> int:
     raw = os.getenv("APP_PORT", "").strip()
     if raw:
         try:
@@ -170,7 +170,7 @@ def _resolve_port() -> int:
     return 50721
 
 
-_cors_port = _resolve_port()
+_cors_port = resolve_port()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -354,7 +354,7 @@ def run(
     uvicorn.run(
         "app.application:app",
         host="127.0.0.1",
-        port=_resolve_port(),
+        port=resolve_port(),
         reload=False,
         log_level="info",
         access_log=False,

@@ -18,7 +18,6 @@ from typing import Any
 from app.constants import (
     MONITOR_RELOAD_TIMEOUT,
     MONITOR_STOP_TIMEOUT,
-    MONITOR_THREAD_JOIN_TIMEOUT,
 )
 from app.core.monitor_core import NetworkMonitorCore, NetworkState
 from app.network.decision import is_network_available
@@ -165,12 +164,11 @@ class MonitorService:
                 handler_name = self._CMD_ROUTES.get(cmd.type)
                 if handler_name:
                     getattr(self, handler_name)(cmd)
-                    # "stop" 命令需要手动通知响应
-                    if cmd.type == MonitorCmdType.STOP and cmd.response_event:
-                        cmd.response_event.set()
             except Exception:
                 service_logger.exception("队列命令执行失败: {}", cmd.type)
             finally:
+                if cmd.response_event:
+                    cmd.response_event.set()
                 self._cmd_queue.task_done()
 
     def _start_monitor_core(self, config: dict, pure_mode: bool) -> None:
@@ -241,9 +239,9 @@ class MonitorService:
             core.stop_monitoring()
 
         if thread:
-            thread.join(timeout=MONITOR_THREAD_JOIN_TIMEOUT)
+            self._thread_done.wait(timeout=MONITOR_STOP_TIMEOUT)
             if thread.is_alive():
-                self._thread_done.wait(timeout=MONITOR_STOP_TIMEOUT)
+                thread.join(timeout=1)
             if thread.is_alive():
                 service_logger.warning("监控线程在超时后仍未结束")
 
@@ -474,6 +472,8 @@ class MonitorService:
         """
         core = self._monitor_core
         if core is None or not core.monitoring:
+            return
+        if not core._login_recovery_in_progress.is_set():
             return
         core._login_recovery_in_progress.wait(timeout=timeout)
 

@@ -37,8 +37,8 @@ class TaskExecutor:
     ):
         self.config = config
         self.template_vars = template_vars or {}
-        self.default_timeout = default_timeout or self.DEFAULT_STEP_TIMEOUT
-        self.navigation_timeout = navigation_timeout or self.DEFAULT_NAVIGATION_TIMEOUT
+        self.default_timeout = default_timeout if default_timeout is not None else self.DEFAULT_STEP_TIMEOUT
+        self.navigation_timeout = navigation_timeout if navigation_timeout is not None else self.DEFAULT_NAVIGATION_TIMEOUT
         self.resolver = VariableResolver(config, self.template_vars)
         self.registry = StepExecutorRegistry()
         self._step_results: list[dict[str, Any]] = []

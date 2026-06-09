@@ -233,7 +233,7 @@ class InputHandler(StepHandler):
         ctx = await self._resolve_frame(page, step)
         masked = (
             "***"
-            if any(k in step.description.lower() for k in ("密码", "password", "pwd"))
+            if any(k in (step.description or "").lower() for k in ("密码", "password", "pwd"))
             else value
         )
         logger.debug(

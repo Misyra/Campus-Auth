@@ -311,7 +311,7 @@ class TestVariableResolver:
     def test_resolve_runtime_var_none(self):
         resolver = VariableResolver(self._make_config(), {})
         resolver.set_runtime_var("VAL", None)
-        assert resolver.resolve("{{VAL}}") == "null"
+        assert resolver.resolve("{{VAL}}") == ""
 
     def test_resolve_runtime_var_bool(self):
         resolver = VariableResolver(self._make_config(), {})

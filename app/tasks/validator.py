@@ -30,7 +30,7 @@ class TaskValidator:
         if not config.get("name"):
             errors.append("任务必须包含 'name' 字段")
 
-        if not config.get("steps"):
+        if "steps" not in config:
             errors.append("任务必须包含 'steps' 字段")
         elif not isinstance(config["steps"], list):
             errors.append("'steps' 必须是数组")
@@ -47,6 +47,10 @@ class TaskValidator:
         """验证单个步骤"""
         errors = []
         prefix = f"steps[{index}]"
+
+        if not isinstance(step, dict):
+            errors.append(f"{prefix} 必须是对象")
+            return errors
 
         # 检查必需字段
         missing = cls.REQUIRED_STEP_FIELDS - set(step.keys())

@@ -68,7 +68,7 @@ class TestDebugSessionManagerInit:
         """project_root 被正确存储。"""
         manager = _make_manager(tmp_path)
         assert manager._project_root == tmp_path
-        assert manager._temp_dir == tmp_path / "temp"
+        assert manager._temp_dir == tmp_path / "temp" / "debug"
 
     def test_lock_and_semaphore_created(self, tmp_path):
         """锁和信号量已创建。"""
@@ -667,32 +667,32 @@ class TestDebugSessionManagerStop:
     async def test_stop_cleans_temp_files(self, tmp_path):
         """停止时清理临时截图文件。"""
         manager = _make_manager(tmp_path)
-        temp_dir = tmp_path / "temp"
-        temp_dir.mkdir()
-        (temp_dir / "screenshot.png").write_bytes(b"fake_image")
-        (temp_dir / "debug.png").write_bytes(b"fake_image")
+        debug_dir = tmp_path / "temp" / "debug"
+        debug_dir.mkdir(parents=True)
+        (debug_dir / "screenshot.png").write_bytes(b"fake_image")
+        (debug_dir / "debug.png").write_bytes(b"fake_image")
 
         await manager.stop()
 
         # 文件应被清理
-        assert not (temp_dir / "screenshot.png").exists()
-        assert not (temp_dir / "debug.png").exists()
+        assert not (debug_dir / "screenshot.png").exists()
+        assert not (debug_dir / "debug.png").exists()
         # 目录本身应保留
-        assert temp_dir.exists()
+        assert debug_dir.exists()
 
     @pytest.mark.asyncio
     async def test_stop_preserves_subdirs_in_temp(self, tmp_path):
         """停止时只清理文件，保留子目录。"""
         manager = _make_manager(tmp_path)
-        temp_dir = tmp_path / "temp"
-        temp_dir.mkdir()
-        sub_dir = temp_dir / "subdir"
+        debug_dir = tmp_path / "temp" / "debug"
+        debug_dir.mkdir(parents=True)
+        sub_dir = debug_dir / "subdir"
         sub_dir.mkdir()
-        (temp_dir / "file.txt").write_text("data")
+        (debug_dir / "file.txt").write_text("data")
 
         await manager.stop()
 
-        assert not (temp_dir / "file.txt").exists()
+        assert not (debug_dir / "file.txt").exists()
         assert sub_dir.exists()
 
 

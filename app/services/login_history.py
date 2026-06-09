@@ -121,12 +121,18 @@ class LoginHistoryService:
         if not self._history_path.exists():
             return []
         try:
-            lines: list[str] = []
-            with open(self._history_path, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line:
-                        lines.append(line)
+            file_size = self._history_path.stat().st_size
+            # 大文件（>5MB）只读取末尾部分
+            if file_size > 5 * 1024 * 1024:
+                approx_bytes = limit * 300  # 估算每行约 300 字节
+                read_size = min(approx_bytes, file_size)
+                with open(self._history_path, encoding="utf-8") as f:
+                    f.seek(max(0, file_size - read_size))
+                    f.readline()  # 跳过可能截断的第一行
+                    lines = [line.strip() for line in f if line.strip()]
+            else:
+                with open(self._history_path, encoding="utf-8") as f:
+                    lines = [line.strip() for line in f if line.strip()]
             # 取最后 limit 条并反转（最新在前）
             recent = lines[-limit:]
             recent.reverse()

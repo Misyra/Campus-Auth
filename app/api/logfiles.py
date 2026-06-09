@@ -132,8 +132,21 @@ def get_log_file_content(
         raise HTTPException(404, f"日志文件不存在: {date}/{file}")
 
     try:
-        with open(filepath, encoding="utf-8", errors="replace") as f:
-            lines = list(deque(f, maxlen=max(limit * 2, 5000)))
+        max_lines = max(limit * 2, 5000)
+        file_size = filepath.stat().st_size
+        # 大文件（>50MB）只读取末尾部分，避免全量加载到内存
+        if file_size > 50 * 1024 * 1024:
+            # 估算每行平均长度（约 200 字节），读取末尾足够行数
+            approx_bytes = max_lines * 200
+            read_size = min(approx_bytes, file_size)
+            with open(filepath, encoding="utf-8", errors="replace") as f:
+                f.seek(max(0, file_size - read_size))
+                # 跳过第一行（可能是截断的）
+                f.readline()
+                lines = list(deque(f, maxlen=max_lines))
+        else:
+            with open(filepath, encoding="utf-8", errors="replace") as f:
+                lines = list(deque(f, maxlen=max_lines))
     except OSError as err:
         raise HTTPException(404, f"日志文件不存在: {date}/{file}") from err
 

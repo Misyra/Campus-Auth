@@ -60,9 +60,9 @@ def _cmd_status() -> None:
     pid_file = get_pid_file()
     had_pid_file = pid_file.exists()
     running, pid = is_service_running()
-    from app.application import _resolve_port
+    from app.application import resolve_port
 
-    port = _resolve_port()
+    port = resolve_port()
 
     if running:
         print(f"服务正在运行 (PID: {pid})")
@@ -238,9 +238,9 @@ def _run_server(
     startup_logger = get_logger("startup", source="backend")
     startup_begin = time.perf_counter()
     running, pid = is_service_running()
-    from app.application import _resolve_port
+    from app.application import resolve_port
 
-    port = _resolve_port()
+    port = resolve_port()
 
     if running or is_local_port_in_use(port):
         print(f"软件已启动 (PID: {pid})，正在打开 Web 控制台...")
