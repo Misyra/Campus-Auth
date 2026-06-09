@@ -90,7 +90,7 @@ class NetworkMonitorCore:
         # 登录恢复进行中标志（供定时任务等待）
         self._login_recovery_in_progress = threading.Event()
         self._test_sites_cache: list[tuple[str, int]] | None = None
-        self.logger = get_logger("monitor")
+        self.logger = get_logger("monitor_core", source="network")
 
         # 状态详情
         self.status_detail: str = "正常"
@@ -114,7 +114,8 @@ class NetworkMonitorCore:
             self.log_callback(
                 message,
                 level,
-                "monitor.core",
+                source="network",
+                name="monitor_core",
             )
         else:
             log_func = getattr(self.logger, level.lower(), self.logger.info)

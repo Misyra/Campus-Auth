@@ -213,7 +213,9 @@ class TestLogMessage:
         callback = MagicMock()
         core.log_callback = callback
         core.log_message("test message", "INFO")
-        callback.assert_called_once_with("test message", "INFO", "monitor.core")
+        callback.assert_called_once_with(
+            "test message", "INFO", source="network", name="monitor_core"
+        )
 
     def test_uses_logger_when_no_callback(self):
         """无 callback 时使用 logger。"""
