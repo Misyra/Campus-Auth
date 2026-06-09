@@ -786,18 +786,25 @@ class TestOpenBrowser:
         """setting=True 时应启动后台线程。"""
         from main import _open_browser
 
-        with patch("time.sleep"):
+        threads = []
+        original_thread = threading.Thread
+
+        def capture_thread(*args, **kwargs):
+            t = original_thread(*args, **kwargs)
+            threads.append(t)
+            return t
+
+        with patch("time.sleep"), patch("threading.Thread", side_effect=capture_thread):
             _open_browser(8080, setting=True)
-        # 后台线程在 sleep 后调用 webbrowser.open
-        # 给线程足够时间执行
-        time.sleep(0.2)
+        # 等待后台线程完成（time.sleep 已被 mock，线程会立即执行）
+        for t in threads:
+            t.join(timeout=2)
 
     def test_setting_false(self, patched_webbrowser):
         """setting=False 时不打开浏览器。"""
         from main import _open_browser
 
         _open_browser(8080, setting=False)
-        time.sleep(0.1)
         patched_webbrowser.assert_not_called()
 
     def test_env_variable_false(self, patched_webbrowser):
@@ -806,7 +813,6 @@ class TestOpenBrowser:
 
         with patch.dict(os.environ, {"CAMPUS_AUTH_AUTO_OPEN_BROWSER": "false"}):
             _open_browser(8080, setting=None)
-        time.sleep(0.1)
         patched_webbrowser.assert_not_called()
 
 
