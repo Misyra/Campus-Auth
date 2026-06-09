@@ -127,9 +127,9 @@ class _MonitorFieldsMixin(_ClampMixin):
         default=DEFAULT_HTTP_TARGETS,
         description="HTTP 检测目标地址，逗号分隔",
     )
-    enable_tcp_check: bool = Field(default=True, description="通过 TCP 端口连接检测目标地址是否可达")
+    enable_tcp_check: bool = Field(default=False, description="通过 TCP 端口连接检测目标地址是否可达")
     enable_http_check: bool = Field(
-        default=True, description="通过 HTTP 请求检测网页是否可正常访问"
+        default=False, description="通过 HTTP 请求检测网页是否可正常访问"
     )
     enable_local_check: bool = Field(
         default=True,
@@ -143,7 +143,7 @@ class _MonitorFieldsMixin(_ClampMixin):
         description="认证地址可达性附加检测目标，逗号分隔的 host:port，留空则仅检测认证地址本身",
     )
     url_check_urls: str = Field(
-        default="",
+        default="http://captive.apple.com/hotspot-detect.html|Success\nhttp://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test\nhttp://detectportal.firefox.com/success.txt|success",
         description="网址响应检测地址，每行一个：URL|预期内容，留空不启用",
     )
     block_proxy: bool = Field(

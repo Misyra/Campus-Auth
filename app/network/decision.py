@@ -49,8 +49,8 @@ def check_network_status(config: dict) -> tuple[bool, str]:
         (False, "network_down")   — 网络异常，应触发登录
     """
     monitor_config = config.get("monitor", {})
-    enable_tcp = monitor_config.get("enable_tcp_check", True)
-    enable_http = monitor_config.get("enable_http_check", True)
+    enable_tcp = monitor_config.get("enable_tcp_check", False)
+    enable_http = monitor_config.get("enable_http_check", False)
     url_checks = monitor_config.get("url_check_urls", None)
     enable_url = bool(url_checks)
 
