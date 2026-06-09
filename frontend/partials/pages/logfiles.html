@@ -55,7 +55,7 @@
             <span class="log-time">{{ line.timestamp ? line.timestamp.substring(11, 19) : '' }}</span>
             <span v-if="line.level" class="log-level-badge" :class="'level-' + line.level.toLowerCase()">{{ line.level }}</span>
             <span v-if="line.source" class="log-source-badge" :class="'source-' + line.source">{{ getSourceLabel(line.source) }}</span>
-            <span v-if="line.name" class="log-module">{{ line.name }}</span>
+            <span v-if="line.name" class="log-name">{{ line.name }}</span>
             <span class="log-message" :class="getLogFileClass(line.level)">{{ line.message }}</span>
           </div>
         </div>
