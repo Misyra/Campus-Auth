@@ -156,7 +156,7 @@
         </svg>
         <div>
           <h3>卸载程序</h3>
-          <p class="uninstall-desc">清理开机自启、用户数据、浏览器缓存等外部残留</p>
+          <p class="uninstall-desc">清理开机自启项、浏览器缓存、Playwright 浏览器等附加组件</p>
         </div>
       </div>
       <button class="btn btn-danger btn-sm" @click="openUninstall" :disabled="busy.uninstall">
@@ -194,7 +194,7 @@
             <span :class="r.success ? 'result-ok' : 'result-fail'">{{ r.success ? 'OK' : 'FAIL' }}</span>
             <span>{{ r.label }}: {{ r.message }}</span>
           </div>
-          <p class="uninstall-final-hint">请关闭本程序，然后手动删除整个项目文件夹即可完成卸载。</p>
+          <p class="uninstall-final-hint">请关闭本程序，然后手动删除整个项目文件夹即可完成卸载。项目路径将显示在上方清理结果中。</p>
         </div>
 
         <div v-else class="uninstall-modal-body">
@@ -211,7 +211,7 @@
             <span v-if="!it.exists" class="uninstall-item-tag">未检测到</span>
           </label>
           <div class="uninstall-hint-box">
-            清理完成后，请先关闭本程序，再手动删除整个项目文件夹即可完成卸载。
+            清理完成后，请先关闭本程序，再手动删除整个项目文件夹即可完成卸载。项目路径将显示在上方列表中。
           </div>
         </div>
 

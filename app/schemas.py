@@ -176,9 +176,9 @@ class _BrowserValidatorsMixin:
         try:
             parsed = json.loads(v)
         except json.JSONDecodeError as e:
-            raise ValueError(f"浏览器请求头 JSON 格式错误: {e}") from e
+            raise ValueError(f"浏览器请求头格式不正确，请确认输入的是合法的 JSON 对象: {e}") from e
         if not isinstance(parsed, dict):
-            raise ValueError("浏览器请求头必须是 JSON 对象")
+            raise ValueError('浏览器请求头格式不正确，应为键值对形式，例如: {"Referer": "https://example.com"}')
         return v
 
 

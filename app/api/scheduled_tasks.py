@@ -67,12 +67,12 @@ async def create_scheduled_task(payload: dict, request: Request) -> ActionRespon
 
     hour, minute = schedule["hour"], schedule["minute"]
     if not (0 <= hour <= 23 and 0 <= minute <= 59):
-        return ActionResponse(success=False, message="执行时间无效：hour 须为 0-23，minute 须为 0-59")
+        return ActionResponse(success=False, message="执行时间无效：小时须为 0-23，分钟须为 0-59")
 
     try:
         timeout = max(5, min(3600, int(payload.get("timeout", 60))))
     except (ValueError, TypeError):
-        return ActionResponse(success=False, message="timeout 值无效")
+        return ActionResponse(success=False, message="超时时间无效，须为 5 到 3600 之间的整数（秒）")
 
     # 构建任务配置
     config = {
@@ -128,12 +128,12 @@ async def update_scheduled_task(
 
     hour, minute = schedule.get("hour", 0), schedule.get("minute", 0)
     if "schedule" in payload and not (0 <= hour <= 23 and 0 <= minute <= 59):
-        return ActionResponse(success=False, message="执行时间无效：hour 须为 0-23，minute 须为 0-59")
+        return ActionResponse(success=False, message="执行时间无效：小时须为 0-23，分钟须为 0-59")
 
     try:
         timeout = max(5, min(3600, int(payload.get("timeout", existing.get("timeout", 60)))))
     except (ValueError, TypeError):
-        return ActionResponse(success=False, message="timeout 值无效")
+        return ActionResponse(success=False, message="超时时间无效，须为 5 到 3600 之间的整数（秒）")
 
     # 更新配置
     config = {

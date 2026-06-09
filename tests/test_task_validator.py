@@ -122,7 +122,7 @@ class TestValidateStep:
         """eval 需要 script。"""
         step = {"id": "s1", "type": "eval"}
         errors = TaskValidator._validate_step(step, 0)
-        assert any("script" in e for e in errors)
+        assert any("脚本" in e for e in errors)
 
     def test_eval_with_code_accepted(self):
         """eval 接受 code（兼容）。"""

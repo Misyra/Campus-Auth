@@ -156,7 +156,7 @@ export const profileMethods = {
       }
     } catch (error) {
       this.frontendLogger.error('profiles', '切换自动切换异常', error);
-      this.toastOnly(false, '切换自动切换失败');
+      this.toastOnly(false, '自动切换设置失败');
     } finally {
       this._autoSwitchInFlight = false;
     }
