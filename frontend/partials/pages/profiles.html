@@ -283,7 +283,7 @@
                 :placeholder="editingProfile.password && editingProfile.password.startsWith('•') ? '已保存，清空可更新' : '留空使用全局'"
                 @focus="$event.target.select()"
               />
-              <span class="hint">本地加密保存，切换方案时不会随方案导出</span>
+              <span class="hint">本地加密保存，配置切换和备份均无法导出</span>
             </div>
           </div>
           <div class="form-row">
