@@ -32,8 +32,8 @@ from app.services.debug_session import (
     debug_to_response,
     empty_debug_session,
 )
-from app.services.profile import ProfileService
 from app.services.login_history import LoginHistoryService
+from app.services.profile import ProfileService
 from app.services.task import TaskService, _check_dangerous_steps
 
 # =====================================================================
