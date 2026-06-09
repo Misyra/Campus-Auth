@@ -18,8 +18,8 @@ from app.network.decision import (
 from app.network.probes import (
     is_local_network_connected,
     is_network_available_http,
-    is_network_available_url,
     is_network_available_socket,
+    is_network_available_url,
     set_block_proxy,
 )
 

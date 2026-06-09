@@ -111,7 +111,7 @@ class SchedulerService:
             return True, "定时任务保存成功"
         except Exception as e:
             scheduler_logger.error("保存定时任务失败 {}: {}", task_id, e)
-            return False, f"保存失败: {e}"
+            return False, f"定时任务保存失败，请检查配置后重试: {e}"
 
     def delete_task(self, task_id: str) -> tuple[bool, str]:
         """删除定时任务。"""
@@ -130,7 +130,7 @@ class SchedulerService:
             return True, "定时任务删除成功"
         except Exception as e:
             scheduler_logger.error("删除定时任务失败 {}: {}", task_id, e)
-            return False, f"删除失败: {e}"
+            return False, f"定时任务删除失败，请稍后重试: {e}"
 
     def get_history(self, task_id: str) -> list[dict[str, Any]]:
         """获取任务执行历史。"""
@@ -205,7 +205,7 @@ class SchedulerService:
                     task.get("command", ""), timeout, task.get("shell_path", "")
                 )
             else:
-                success, message = False, f"未知任务类型: {task_type}"
+                success, message = False, f"不支持的任务类型: {task_type}，当前支持: script、browser、shell"
         except Exception as e:
             success, message = False, f"执行异常: {e}"
 
@@ -319,7 +319,7 @@ class SchedulerService:
             self._record_login_history(
                 False, duration_ms, task.get("name", task_id), str(e)
             )
-            return False, "浏览器任务执行需要 Playwright 环境，请确保已安装"
+            return False, "浏览器任务执行需要额外依赖，请在设置中检查 Playwright 安装状态"
         except Exception as e:
             duration_ms = int((time.perf_counter() - start_time) * 1000)
             scheduler_logger.error("浏览器任务执行异常: {}", e)
@@ -341,7 +341,7 @@ class SchedulerService:
                     config = self.monitor_service.get_runtime_config()
                     profile_name = config.get("profile_name", "")
                 except Exception:
-                    scheduler_logger.debug("获取方案名称失败", exc_info=True)
+                    scheduler_logger.debug("获取运行时方案名称失败（跳过方案记录）", exc_info=True)
             self._login_history.add(
                 success=success,
                 duration_ms=duration_ms,
@@ -350,7 +350,7 @@ class SchedulerService:
                 error=error,
             )
         except Exception:
-            scheduler_logger.debug("记录登录历史失败", exc_info=True)
+            scheduler_logger.debug("定时任务记录登录历史失败: {}", task_name, exc_info=True)
 
     async def _execute_shell(
         self, command: str, timeout: int, shell_path: str = ""
@@ -365,7 +365,7 @@ class SchedulerService:
                 config = self.monitor_service.get_runtime_config()
                 shell_path = config.get("shell_path", "")
             except Exception:
-                scheduler_logger.debug("获取运行时 shell_path 失败", exc_info=True)
+                scheduler_logger.debug("获取运行时 shell_path 失败，使用默认值", exc_info=True)
 
         if not shell_path:
             shell_path = get_default_shell()

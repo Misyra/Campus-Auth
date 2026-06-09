@@ -134,7 +134,7 @@ class PlaywrightWorker:
         # 等待事件循环就绪（最多 5 秒）
         self._worker_ready.wait(timeout=WORKER_READY_TIMEOUT)
         if not self._worker_ready.is_set():
-            logger.warning("PlaywrightWorker 事件循环启动超时")
+            logger.warning("PlaywrightWorker 事件循环启动超时 ({}s)", WORKER_READY_TIMEOUT)
 
     def stop(self, timeout: float = 5) -> None:
         """发送关闭信号并等待线程结束。
@@ -151,7 +151,7 @@ class PlaywrightWorker:
         try:
             self._cmd_queue.put_nowait(WorkerCommand(type=CMD_SHUTDOWN))
         except queue.Full:
-            logger.warning("命令队列已满，强制停止 Worker")
+            logger.warning("命令队列已满 (maxsize={})，强制停止 Worker", self._cmd_queue.maxsize)
             if self._loop is not None and self._loop.is_running():
                 self._loop.call_soon_threadsafe(self._loop.stop)
             return
@@ -812,7 +812,10 @@ class PlaywrightWorker:
         await self._close_resource(self._playwright, "Playwright", graceful)
         self._playwright = None
 
-        logger.info("浏览器资源已清理" if graceful else "强制清理完成")
+        if graceful:
+            logger.info("浏览器资源已清理")
+        else:
+            logger.warning("浏览器资源强制清理完成")
 
     async def _close_browser(self) -> None:
         """关闭浏览器并释放所有资源（优雅模式）。

@@ -149,7 +149,7 @@ class StepHandler(ABC):
         if not isinstance(frame_selector, str):
             if frame_selector is not None:
                 logger.warning(
-                    "[frame] 步骤 %s 的 frame 字段应为字符串，实际为 %s (%s)，将回退到主页面执行",
+                    "[frame] 步骤 {} 的 frame 字段应为字符串，实际为 {} ({})，将回退到主页面执行",
                     step.id,
                     frame_selector,
                     type(frame_selector).__name__,
@@ -237,7 +237,7 @@ class InputHandler(StepHandler):
             else value
         )
         logger.debug(
-            "[input] value=%s, clear=%s, timeout=%dms",
+            "[input] value={}, clear={}, timeout={}ms",
             masked,
             clear,
             timeout,
@@ -365,7 +365,7 @@ class SelectHandler(StepHandler):
             logger.debug("[select] 获取选项列表失败: {}", e)
             option_texts = []
 
-        logger.info("[select] 可用选项: {}", option_texts)
+        logger.debug("[select] 可用选项: {}", option_texts)
         normalized_target = value.strip().lower()
         for text in option_texts:
             current = str(text or "").strip()
@@ -406,12 +406,12 @@ class ClickSelectHandler(StepHandler):
             return False, "click_select 步骤需要 selector"
         # value 为空或包含未解析变量时跳过
         if not value or "{{" in value:
-            logger.info("[click_select] value 为空或包含未解析变量，跳过: {}", value)
+            logger.debug("[click_select] value 为空或包含未解析变量，跳过: {}", value)
             return True, ""
 
         ctx = await self._resolve_frame(page, step)
-        logger.info(
-            "[click_select] trigger=%s, value=%s, option_sel=%s, timeout=%dms",
+        logger.debug(
+            "[click_select] trigger={}, value={}, option_sel={}, timeout={}ms",
             selector,
             value,
             option_selector or "(auto)",
@@ -420,7 +420,7 @@ class ClickSelectHandler(StepHandler):
 
         trigger = await self._find_element(ctx, selector, timeout)
         if not trigger:
-            logger.info("[click_select] 未找到触发器，跳过: {}", selector)
+            logger.debug("[click_select] 未找到触发器，跳过: {}", selector)
             if step.required:
                 return False, f"click_select 触发器未找到: {selector}"
             return True, ""
@@ -431,7 +431,7 @@ class ClickSelectHandler(StepHandler):
 
         clicked = await self._click_option(ctx, value, option_selector, timeout)
         if not clicked:
-            logger.info("[click_select] 未匹配到选项，跳过: {}", value)
+            logger.debug("[click_select] 未匹配到选项，跳过: {}", value)
             if step.required:
                 return False, f"click_select 选项未匹配: {value}"
         return True, ""
@@ -476,7 +476,7 @@ class WaitHandler(StepHandler):
             return False, "等待步骤需要 selector"
 
         ctx = await self._resolve_frame(page, step)
-        logger.info("[wait] selector={}, timeout={}", selector, timeout)
+        logger.debug("[wait] selector={}, timeout={}", selector, timeout)
         try:
             await ctx.locator(selector).first.wait_for(timeout=timeout)
         except TimeoutError:
@@ -509,7 +509,7 @@ class WaitUrlHandler(StepHandler):
         except re.error:
             return False, f"wait_url 步骤的 pattern 不是有效的正则表达式: {pattern}"
 
-        logger.info("[wait_url] pattern={}", pattern)
+        logger.debug("[wait_url] pattern={}", pattern)
         deadline = asyncio.get_running_loop().time() + timeout / 1000
         while True:
             current_url = page.url
@@ -619,7 +619,7 @@ class SleepHandler(StepHandler):
             )
             duration = self.MAX_SLEEP_MS
 
-        logger.info("[sleep] duration={}ms", duration)
+        logger.debug("[sleep] duration={}ms", duration)
         await page.wait_for_timeout(duration)
         return True, ""
 

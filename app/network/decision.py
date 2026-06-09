@@ -13,8 +13,8 @@ from .probes import (
 from .probes import (
     is_local_network_connected,
     is_network_available_http,
-    is_network_available_url,
     is_network_available_socket,
+    is_network_available_url,
 )
 
 logger = get_logger("network_decision", source="network")
@@ -57,7 +57,7 @@ def check_network_status(config: dict) -> tuple[bool, str]:
     # 所有检测都未启用
     if not enable_tcp and not enable_http and not enable_url:
         logger.warning(
-            "所有网络检测均未启用（TCP/HTTP/网址响应），请在设置中启用至少一种"
+            "所有网络检测方式均已关闭，无法判断网络状态。请在设置页面的高级选项中至少启用一种检测方式（TCP 或 HTTP）"
         )
         return (False, "all_disabled")
 
@@ -138,7 +138,7 @@ def is_network_available(
         return True
 
     urls_list = list(test_urls or ())
-    logger.info(
+    logger.debug(
         "开始网络检测 (TCP={}, HTTP={}, 网址响应={}, TCP目标={}, HTTP目标={}, 网址响应目标={})",
         "开" if enable_tcp else "关",
         "开" if enable_http else "关",
@@ -198,7 +198,7 @@ def is_network_available(
         and (url_ok or not enable_url)
     )
 
-    logger.info(
+    logger.debug(
         "网络检测完成: TCP={} HTTP={} 网址响应={} -> {}",
         "关" if not enable_tcp else ("通" if socket_ok else "断"),
         "关" if not enable_http else ("通" if http_ok else "断"),

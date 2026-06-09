@@ -31,7 +31,7 @@ from .debug_session import (
     empty_debug_session,
 )
 
-api_logger = get_logger("debug_manager", source="debug")
+debug_logger = get_logger("debug_manager", source="debug")
 
 
 class DebugSessionManager:
@@ -65,7 +65,7 @@ class DebugSessionManager:
         try:
             await asyncio.to_thread(lambda: get_worker().submit(CMD_DEBUG_STOP))
         except Exception:
-            api_logger.debug("关闭调试会话 Worker 提交失败", exc_info=True)
+            debug_logger.debug("关闭调试会话 Worker 提交失败", exc_info=True)
         self._session._browser_active = False
 
     async def _debug_timeout_watcher(
@@ -82,7 +82,7 @@ class DebugSessionManager:
                     async with self._lock:
                         if gen != _current_gen:
                             return
-                        api_logger.info(
+                        debug_logger.info(
                             "调试会话超时（{}s 无操作），正在关闭浏览器",
                             timeout_seconds,
                         )
@@ -171,7 +171,7 @@ class DebugSessionManager:
                 await self._close_debug_browser()
                 raise
 
-        api_logger.info("调试会话已启动，任务: {}", task_id)
+        debug_logger.info("调试会话已启动，任务: {}", task_id)
         return self._debug_response()
 
     async def next_step(self) -> dict:
@@ -290,8 +290,8 @@ class DebugSessionManager:
                     if item.is_file():
                         item.unlink(missing_ok=True)
         except Exception:
-            api_logger.warning("调试临时目录清理失败", exc_info=True)
-        api_logger.info("调试会话已停止")
+            debug_logger.warning("调试临时目录清理失败", exc_info=True)
+        debug_logger.info("调试会话已停止")
         return {"running": False, "message": "调试会话已关闭"}
 
     def get_status(self) -> dict:

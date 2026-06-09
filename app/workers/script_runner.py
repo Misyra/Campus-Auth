@@ -218,7 +218,7 @@ class ScriptRunner:
         elapsed = time.perf_counter() - start
 
         if stderr_str:
-            logger.info("脚本 stderr: {}", stderr_str[:500])
+            logger.warning("脚本 stderr: {}", stderr_str[:500])
 
         output = (
             stdout_str[:500] or stderr_str[:500] or f"(无输出, exit code {returncode})"

@@ -103,9 +103,9 @@ def _normalize_headers_json(raw: str) -> str:
     try:
         parsed = json.loads(text)
     except json.JSONDecodeError as e:
-        raise ValueError(f"浏览器请求头 JSON 格式错误: {e}") from e
+        raise ValueError(f"浏览器请求头格式不正确，请确认输入的是合法的 JSON 对象: {e}") from e
     if not isinstance(parsed, dict):
-        raise ValueError("浏览器请求头必须是 JSON 对象")
+        raise ValueError('浏览器请求头格式不正确，应为键值对形式，例如: {"Referer": "https://example.com"}')
 
     return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
 
@@ -320,7 +320,7 @@ def build_runtime_config(
         system_settings: settings.json 中的系统设置（用于读取重试策略等非 UI 字段）
     """
     config_logger.debug(
-        "构建运行时配置: user={}, url={}", payload.username, payload.auth_url
+        "构建运行时配置: 用户={}, 认证地址={}", payload.username, payload.auth_url
     )
 
     # 账号密码

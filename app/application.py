@@ -91,7 +91,7 @@ async def lifespan(app_instance):
 
     # 配置诊断（__init__ 已加载，不重复 reload）
     settings_path = PROJECT_ROOT / "settings.json"
-    startup_logger.info(
+    startup_logger.debug(
         "settings.json 路径: {} (存在={}, 大小={})",
         settings_path,
         settings_path.exists(),

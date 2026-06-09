@@ -5,6 +5,39 @@
 
 ## 2026-06-09
 
+### refactor: 日志系统全面优化
+
+**后端日志级别调整：**
+- `app/network/decision.py`：网络检测周期日志（开始/完成）从 INFO 降为 DEBUG，减少 ~90% 常规日志量
+- `app/services/monitor.py`：服务层"收到请求"日志（启停监控、手动登录、网络测试）从 INFO 降为 DEBUG，消除三层重复
+- `app/application.py`：启动时 settings.json 文件元数据日志从 INFO 降为 DEBUG
+- `app/tasks/step_handlers.py`：`[select]` 可用选项列表、`[click_select]` 参数详情从 INFO 降为 DEBUG
+- `app/services/autostart.py`：12 处中间步骤日志（文件路径、写入确认等）从 INFO 降为 DEBUG
+
+**日志级别修正：**
+- `app/workers/playwright_worker.py`：强制清理浏览器资源从 INFO 改为 WARNING；事件循环启动超时补充超时值；队列已满补充容量信息
+- `app/workers/script_runner.py`：脚本 stderr 输出从 INFO 改为 WARNING
+
+**模糊日志补充上下文：**
+- `app/services/login_history.py`：4 条"失败"日志补充文件路径上下文
+- `app/services/scheduler.py`：3 条模糊日志补充任务名/用途说明
+
+**格式与风格统一：**
+- `app/tasks/step_handlers.py`：`%s`/`%d` 旧式格式统一为 `{}` loguru 风格；`[click_select]` 跳过条件、`[wait]`/`[wait_url]`/`[sleep]` 参数日志从 INFO 降为 DEBUG
+- `app/tasks/variable_resolver.py`：`[VariableResolver]` 前缀统一为 `[var]`
+- `app/services/task.py`：唯一一条英文日志 `"Loading task"` 改为中文 `"加载任务"`
+- `app/services/config.py`：运行时配置日志字段标签 `user`/`url` 改为 `用户`/`认证地址`
+- `app/services/debug.py`：logger 变量名 `api_logger` 改为 `debug_logger`（非 API 路由模块）
+
+**source 参数补全：**
+- `app/schemas.py`、`app/utils/browser.py`、`app/utils/login.py`：3 个省略 source 的 logger 补充显式 `source="backend"`
+
+**前端修复：**
+- `frontend/partials/pages/dashboard.html`：`v-for` key 加入 index，防止相同时间戳+消息的条目消失
+- `frontend/js/methods/status.js`：初始加载日志条目数从硬编码 250 改为 `LIMITS.LOG_MAX_ENTRIES`（100），与 WebSocket 追加上限一致
+- `frontend/js/app-options.js`：日志筛选下拉框补充 `CRITICAL` 级别选项
+- `frontend/js/methods/logfiles.js` + `frontend/styles/pages/logfiles.css`：CSS 类名统一为与 Dashboard 一致的 `error`/`warning`/`debug` 裸类名
+
 ### refactor: 后端 Portal → url_check/网址响应 全面重命名
 
 - `app/schemas.py`：`portal_check_urls` → `url_check_urls`，描述改为"网址响应检测地址"
