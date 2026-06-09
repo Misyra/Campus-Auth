@@ -15,7 +15,7 @@ from app.services.profile import ProfileService
 from app.services.scheduler import SchedulerService
 from app.services.task import TaskService
 from app.utils.logging import WebSocketSink, get_logger
-from app.workers.playwright_worker import cleanup_orphan_browsers
+from app.workers.playwright_worker import cleanup_orphan_browsers, get_worker
 from app.ws_manager import WebSocketManager
 
 container_logger = get_logger("backend.container", side="BACKEND")
@@ -44,6 +44,7 @@ class ServiceContainer:
             self.profile_service,
             self.ws_manager,
             login_history_service=self.login_history_service,
+            worker_getter=get_worker,
         )
         self.task_service = TaskService(project_root)
         self.scheduler_service = SchedulerService(
