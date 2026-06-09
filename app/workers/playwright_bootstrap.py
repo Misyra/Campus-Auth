@@ -11,11 +11,11 @@ import os
 import subprocess
 import sys
 import threading
+from collections.abc import Callable
+from pathlib import Path
 
 from app.utils.logging import get_logger
-from app.utils.platform_utils import is_windows, is_macos, CREATE_NO_WINDOW_FLAG
-from pathlib import Path
-from typing import Callable
+from app.utils.platform_utils import CREATE_NO_WINDOW_FLAG, is_macos, is_windows
 
 logger = get_logger("playwright_bootstrap", side="BACKEND")
 

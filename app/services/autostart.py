@@ -6,11 +6,10 @@ import re
 import subprocess
 import sys
 import xml.sax.saxutils
-
-from app.utils.platform_utils import get_platform, is_linux, is_macos, is_windows
 from pathlib import Path
 
 from app.utils.logging import get_logger
+from app.utils.platform_utils import get_platform, is_linux, is_macos, is_windows
 
 logger = get_logger("backend.autostart", side="BACKEND")
 

@@ -120,7 +120,7 @@ class BrowserContextManager:
         向 Worker 提交 CMD_BROWSER_RELEASE（fire-and-forget）即可。
         """
         # 通知 Worker 释放引用（无需等待结果）
-        from app.workers.playwright_worker import get_worker, CMD_BROWSER_RELEASE
+        from app.workers.playwright_worker import CMD_BROWSER_RELEASE, get_worker
 
         worker = get_worker()
         worker.submit(CMD_BROWSER_RELEASE, wait=False)

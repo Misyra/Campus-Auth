@@ -8,9 +8,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 
 from app.deps import get_scheduler_service
-from app.utils.logging import get_logger
-
 from app.schemas import ActionResponse
+from app.utils.logging import get_logger
 
 router = APIRouter()
 api_logger = get_logger("backend.api", side="BACKEND")
@@ -112,11 +111,10 @@ async def update_scheduled_task(
         return ActionResponse(success=False, message="Shell 命令不能为空")
 
     schedule = payload.get("schedule", existing.get("schedule", {}))
-    if "schedule" in payload:
-        if not isinstance(schedule.get("hour"), int) or not isinstance(
-            schedule.get("minute"), int
-        ):
-            return ActionResponse(success=False, message="请设置执行时间")
+    if "schedule" in payload and (not isinstance(schedule.get("hour"), int) or not isinstance(
+        schedule.get("minute"), int
+    )):
+        return ActionResponse(success=False, message="请设置执行时间")
 
     # 更新配置
     config = {

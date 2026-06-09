@@ -6,9 +6,9 @@ import json
 import re
 from typing import Any
 
-from .models import StepError, TaskConfig
-
 from app.utils.logging import get_logger
+
+from .models import StepError, TaskConfig
 
 logger = get_logger("variable_resolver", side="BACKEND")
 

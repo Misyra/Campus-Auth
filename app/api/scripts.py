@@ -6,12 +6,11 @@ import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from app.workers.script_runner import ScriptRunner, detect_available_binaries
-from app.utils.logging import get_logger
-
 from app.deps import get_task_service
 from app.schemas import ActionResponse
 from app.services.task import TaskService
+from app.utils.logging import get_logger
+from app.workers.script_runner import ScriptRunner, detect_available_binaries
 
 router = APIRouter()
 api_logger = get_logger("backend.api", side="BACKEND")

@@ -7,7 +7,7 @@ import re
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from .browser import BrowserContextManager
 from .env import build_login_template_vars
@@ -26,7 +26,7 @@ class LoginAttemptHandler:
 
     def __init__(
         self,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         cancel_event: threading.Event | None = None,
         close_on_failure: bool = True,
     ):
@@ -96,7 +96,7 @@ class LoginAttemptHandler:
             return await self._perform_login_with_auth_class()
 
         except Exception as e:
-            error_msg = f"登录过程中发生错误: {str(e)}"
+            error_msg = f"登录过程中发生错误: {e!s}"
             self.logger.error(error_msg)
             return False, error_msg
 

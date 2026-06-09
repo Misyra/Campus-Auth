@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 import re
 
-from app.utils.platform_utils import get_default_ua
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.constants import DEFAULT_NETWORK_TARGETS, DEFAULT_HTTP_TARGETS
+from app.constants import DEFAULT_HTTP_TARGETS, DEFAULT_NETWORK_TARGETS
 from app.utils.logging import VALID_LOG_LEVELS
+from app.utils.platform_utils import get_default_ua
 
 _URL_PATTERN = re.compile(r"^https?://")
 
