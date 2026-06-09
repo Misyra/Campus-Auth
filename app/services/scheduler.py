@@ -46,6 +46,7 @@ class SchedulerService:
         self._running = False
         self._task: asyncio.Task | None = None
         self._running_tasks: set[asyncio.Task] = set()
+        self._history_lock = asyncio.Lock()
         # 缓存 Shell 安全策略实例（可用 shell 列表不会在运行时变化）
         self._shell_policy = ShellCommandPolicy(
             allowlist=[s["path"] for s in detect_available_shells()]
@@ -150,9 +151,6 @@ class SchedulerService:
         """添加执行历史记录（async，使用 asyncio.Lock 保护并发写入）。"""
         if not self._validate_task_id(task_id):
             return
-        # 惰性创建锁，确保在事件循环中初始化
-        if not hasattr(self, "_history_lock"):
-            self._history_lock = asyncio.Lock()
         async with self._history_lock:
             history_file = self.history_dir / f"{task_id}.json"
             try:
