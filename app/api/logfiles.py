@@ -18,9 +18,9 @@ _SAFE_FILE_PATTERN = re.compile(r"^app\.log(?:\.\d+)?$")
 _DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 # 日志行解析正则
-# 格式: 2026-06-01 00:04:44 | INFO | BACKEND | backend.module | message
+# 格式: [2026-06-01 00:04:44.139][INFO][backend][module] message
 _LOG_LINE_PATTERN = re.compile(
-    r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \| (\w+) \| (\w+) \| ([\w.]+) \| (.+)$"
+    r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\]\[(\w+)\]\[(\w+)\]\[([\w.]+)\] (.+)$"
 )
 
 _VALID_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
