@@ -72,7 +72,4 @@ export const logFileMethods = {
   getSourceLabel(source) {
     return LOG_SOURCES[source]?.label || source || '未知';
   },
-  getSourceColor(source) {
-    return LOG_SOURCES[source]?.color || '#64748b';
-  },
 };
