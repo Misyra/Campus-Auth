@@ -12,10 +12,11 @@ import threading
 import time
 
 from app.constants import AUTH_DATA_DIR
+
+from .exceptions import DecryptionError
 from .file_helpers import atomic_write
 from .logging import get_logger
-from .exceptions import DecryptionError
-from .platform_utils import is_windows, CREATE_NO_WINDOW_FLAG
+from .platform_utils import CREATE_NO_WINDOW_FLAG, is_windows
 
 logger = get_logger("crypto", side="BACKEND")
 
@@ -155,8 +156,8 @@ def decrypt_password(ciphertext: str) -> str:
         return _simple_deobfuscate(encrypted_data)
 
     try:
-        from cryptography.fernet import Fernet, InvalidToken
         from cryptography.exceptions import InvalidSignature
+        from cryptography.fernet import Fernet, InvalidToken
 
         key = _derive_fernet_key()
         f = Fernet(key)
@@ -221,8 +222,8 @@ def save_password_field(raw: str | None, existing_encrypted: str) -> str:
         # 显式置空或掩码 → 尝试保留已有密码
         if not existing_encrypted:
             logger.warning(
-                "密码为空或掩码但无已有加密密码，密码将保持为空！raw={}",
-                repr(raw[:20]),
+                "密码为空或掩码但无已有加密密码，密码将保持为空！长度={}",
+                len(raw) if raw else 0,
             )
         return existing_encrypted or ""
     if raw.startswith("ENC:"):

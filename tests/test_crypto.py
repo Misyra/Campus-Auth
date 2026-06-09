@@ -158,3 +158,27 @@ class TestDecryptionError:
         assert has_decryption_error() is True
         clear_decryption_error()
         assert has_decryption_error() is False
+
+
+# ── 日志安全 ──
+
+
+def test_save_password_field_logs_no_plaintext(caplog):
+    """save_password_field 的 warning 日志不应包含密码明文。"""
+    from app.utils.crypto import save_password_field
+
+    # 测试空密码和掩码两种触发 warning 的场景
+    for raw_value in ("", "••••••••"):
+        caplog.clear()
+        with caplog.at_level("WARNING"):
+            result = save_password_field(raw_value, existing_encrypted="")
+
+        # 结果应为空字符串
+        assert result == ""
+        # 日志中不应包含 raw 原始内容（如 repr 的引号或掩码字符）
+        for record in caplog.records:
+            msg = record.message
+            # 确保不包含 repr(raw[:20]) 的内容
+            assert repr(raw_value[:20]) not in msg, (
+                f"日志泄露了原始输入内容: {msg}"
+            )
