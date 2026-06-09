@@ -273,7 +273,7 @@ class PlaywrightWorker:
         self._worker_ready.set()
 
         try:
-            _task = loop.create_task(self._async_run())
+            loop.create_task(self._async_run())
             loop.run_forever()
         finally:
             # 事件循环退出后执行强制清理
