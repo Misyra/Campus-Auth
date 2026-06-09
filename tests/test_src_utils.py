@@ -459,8 +459,8 @@ class TestHasChromium:
             return_value=Path("/nonexistent"),
         ), patch("importlib.util.find_spec", return_value=None), patch.dict(
             "sys.modules", {"playwright.sync_api": None, "playwright": None}
-                ):
-                    assert _has_chromium() is False
+        ):
+            assert _has_chromium() is False
 
 
 class TestEnsurePlaywrightReady:
