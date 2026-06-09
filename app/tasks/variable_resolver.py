@@ -75,7 +75,7 @@ class VariableResolver:
                     self.config.variables[var_name], depth + 1, visited | {var_name}
                 )
             else:
-                logger.warning("[VariableResolver] 未解析的变量: {}", match.group(0))
+                logger.warning("[var] 未解析的变量: {}", match.group(0))
                 return match.group(0)  # 保留原样
 
             # 递归解析
@@ -110,7 +110,7 @@ class VariableResolver:
             resolved = self.resolve(match.group(0))
             # If variable not found, resolve returns the original pattern
             if resolved == match.group(0):
-                logger.warning("[VariableResolver] 未解析的变量: {}", match.group(0))
+                logger.warning("[var] 未解析的变量: {}", match.group(0))
                 return '""'  # Default to empty string
             return json.dumps(resolved)
 

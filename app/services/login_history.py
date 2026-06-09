@@ -60,7 +60,7 @@ class LoginHistoryService:
                 if active:
                     profile_name = getattr(active, "name", "")
             except Exception:
-                logger.debug("获取当前方案名称失败", exc_info=True)
+                logger.debug("获取当前方案名称失败（跳过方案记录）", exc_info=True)
 
         task_name = ""
         if task_manager is not None:
@@ -70,7 +70,7 @@ class LoginHistoryService:
                 if task:
                     task_name = getattr(task, "name", task_id)
             except Exception:
-                logger.debug("获取当前任务名称失败", exc_info=True)
+                logger.debug("获取当前任务名称失败（跳过任务记录）", exc_info=True)
 
         self.add(
             success=success,
@@ -110,7 +110,7 @@ class LoginHistoryService:
                 if self._write_count % 50 == 0:
                     need_cleanup = True
             except Exception:
-                logger.warning("写入登录历史失败", exc_info=True)
+                logger.warning("写入登录历史失败: {}", self._history_path, exc_info=True)
         # 锁外使用独立锁序列化清理，不阻塞新写入
         if need_cleanup:
             with self._cleanup_lock:
@@ -145,7 +145,7 @@ class LoginHistoryService:
                     continue
             return result
         except Exception:
-            logger.warning("读取登录历史失败", exc_info=True)
+            logger.warning("读取登录历史失败: {}", self._history_path, exc_info=True)
             return []
 
     def clear(self) -> int:
@@ -163,7 +163,7 @@ class LoginHistoryService:
                 logger.info("登录历史已清空，共删除 {} 条记录", count)
                 return count
             except Exception:
-                logger.warning("清空登录历史失败", exc_info=True)
+                logger.warning("清空登录历史失败: {}", self._history_path, exc_info=True)
                 return 0
 
     def _cleanup_old(self, max_age_days: int = 30) -> None:
@@ -193,4 +193,4 @@ class LoginHistoryService:
             if kept_count > 0:
                 logger.debug("登录历史清理完成，保留 {} 条记录", kept_count)
         except Exception:
-            logger.warning("清理登录历史失败", exc_info=True)
+            logger.warning("清理登录历史失败: {}", self._history_path, exc_info=True)

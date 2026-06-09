@@ -42,7 +42,7 @@ class LoginAttemptHandler:
         self.config = config
         self.cancel_event = cancel_event
         self.close_on_failure = close_on_failure
-        self.logger = get_logger("login")
+        self.logger = get_logger("login", source="backend")
         self._browser_ctx: BrowserContextManager | None = None
         self._task_manager: Any | None = None
         self._project_root: Path | None = None
@@ -106,7 +106,7 @@ class LoginAttemptHandler:
         if task_result is not None:
             return task_result
 
-        error_msg = "未找到可执行的活动任务，请在任务管理页面配置并激活一个任务"
+        error_msg = "未找到可执行的任务，请先在任务管理页面创建并启用一个登录任务"
         self.logger.error("{}", error_msg)
         return False, error_msg
 

@@ -67,6 +67,7 @@ export const appOptions = {
         { value: 'INFO', label: 'INFO' },
         { value: 'WARNING', label: 'WARNING' },
         { value: 'ERROR', label: 'ERROR' },
+        { value: 'CRITICAL', label: 'CRITICAL' },
         { value: 'DEBUG', label: 'DEBUG' },
       ],
       logSourceOptions: [

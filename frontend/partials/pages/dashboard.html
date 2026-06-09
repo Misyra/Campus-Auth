@@ -201,7 +201,7 @@
             <span>{{ logFilter.search || logFilter.level || logFilter.source ? '无匹配日志' : '暂无日志' }}</span>
           </div>
           <div v-else class="log-entries">
-            <div v-for="item in filteredLogs" :key="item.timestamp + item.message" class="log-entry">
+            <div v-for="(item, index) in filteredLogs" :key="index + '-' + item.timestamp + '-' + item.message" class="log-entry">
               <span class="log-time">{{ formatLogTime(item.timestamp) }}</span>
               <span v-if="item.level" class="log-level-badge" :class="'level-' + item.level.toLowerCase()">{{ item.level }}</span>
               <span v-if="item.source" class="log-source-badge" :class="'source-' + item.source">{{ getSourceLabel(item.source) }}</span>

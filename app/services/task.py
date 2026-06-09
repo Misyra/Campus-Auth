@@ -13,7 +13,7 @@ task_logger = get_logger("task_service", source="backend")
 _DANGEROUS_STEP_TYPES = {"eval", "custom_js"}
 
 # 任务 ID 校验失败的统一错误消息
-_INVALID_TASK_ID_MSG = "任务ID必须以字母开头，且只能包含字母、数字和下划线"
+_INVALID_TASK_ID_MSG = "任务ID必须以字母开头，且只能包含字母、数字和下划线，例如: my_task_01"
 
 
 def _check_dangerous_steps(task_data: dict[str, Any]) -> list[dict[str, Any]]:
@@ -71,7 +71,7 @@ class TaskService:
         task_id = self._validate_task_id(task_id) or ""
         if not task_id:
             return None
-        task_logger.debug("Loading task {}", task_id)
+        task_logger.debug("加载任务 {}", task_id)
         task = self.task_manager.load_task(task_id)
         if task is None:
             return None
@@ -131,7 +131,7 @@ class TaskService:
         if not config.get("name"):
             return False, "任务名称不能为空"
         if not config.get("steps"):
-            return False, "至少需要一个执行步骤"
+            return False, "至少需要一个执行步骤，请先添加操作步骤"
 
         # 检查危险步骤并记录警告
         warnings = _check_dangerous_steps(config)

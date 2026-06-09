@@ -153,15 +153,15 @@
   white-space: pre-wrap;
 }
 
-.logfiles-content .log-error {
+.logfiles-content .log-message.error {
   color: var(--error);
 }
 
-.logfiles-content .log-warning {
+.logfiles-content .log-message.warning {
   color: var(--warning);
 }
 
-.logfiles-content .log-debug {
+.logfiles-content .log-message.debug {
   color: var(--text-muted);
 }
 

@@ -581,7 +581,7 @@ class MonitorService:
             )
 
     def start_monitoring(self) -> tuple[bool, str]:
-        service_logger.info("收到启动监控请求")
+        service_logger.debug("收到启动监控请求")
         if self._is_monitoring:
             return False, "监控已在运行中"
 
@@ -619,7 +619,7 @@ class MonitorService:
             )
 
     def stop_monitoring(self) -> tuple[bool, str]:
-        service_logger.info("收到停止监控请求")
+        service_logger.debug("收到停止监控请求")
         if not self._is_monitoring:
             return False, "监控未运行"
 
@@ -683,7 +683,7 @@ class MonitorService:
             self._login_in_progress.set()
         cmd_in_queue = False
         try:
-            service_logger.info("收到手动登录请求")
+            service_logger.debug("收到手动登录请求")
             runtime_config = self._copy_runtime_config()
 
             cmd = MonitorCommand(
@@ -728,7 +728,7 @@ class MonitorService:
         return False, f"手动登录失败：{message}"
 
     def test_network(self) -> tuple[bool, str]:
-        service_logger.info("手动网络测试")
+        service_logger.debug("手动网络测试")
         config = self._copy_runtime_config()
         monitor_cfg = config.get("monitor", {})
         targets = monitor_cfg.get("ping_targets", [])

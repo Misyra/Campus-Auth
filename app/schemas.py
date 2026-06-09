@@ -39,7 +39,7 @@ class _ClampMixin(BaseModel):
             return data
         from app.utils.logging import get_logger
 
-        _logger = get_logger("schemas")
+        _logger = get_logger("schemas", source="backend")
         for name, field_info in cls.model_fields.items():
             if name not in data:
                 continue
@@ -79,7 +79,7 @@ class _BrowserFieldsMixin(_ClampMixin):
         default=8, ge=1, le=60, description="页面操作超时（秒）"
     )
     login_timeout: int = Field(
-        default=60, ge=10, le=600, description="手动登录 API 请求超时（秒）"
+        default=60, ge=10, le=600, description="手动登录等待超时（秒）"
     )
     browser_navigation_timeout: int = Field(
         default=15, ge=3, le=60, description="打开登录页面超时（秒）"
@@ -92,11 +92,11 @@ class _BrowserFieldsMixin(_ClampMixin):
         default=_BROWSER_ARGS_DEFAULT, description="自定义 Chromium 启动参数，每行一个"
     )
     stealth_mode: bool = Field(
-        default=False, description="注入反检测脚本，隐藏浏览器自动化痕迹"
+        default=False, description="隐藏浏览器自动操作特征，降低被识别为工具操作的风险"
     )
     stealth_custom_script: str = Field(
         default="",
-        description="自定义反检测 JavaScript 脚本，stealth_mode 开启时追加执行",
+        description="在反检测模式开启时额外执行的自定义 JavaScript 脚本",
     )
     browser_locale: str = Field(default="zh-CN", description="浏览器语言区域")
     browser_timezone: str = Field(default="Asia/Shanghai", description="浏览器时区 ID")
@@ -127,9 +127,9 @@ class _MonitorFieldsMixin(_ClampMixin):
         default=DEFAULT_HTTP_TARGETS,
         description="HTTP 检测目标地址，逗号分隔",
     )
-    enable_tcp_check: bool = Field(default=True, description="启用 TCP 检测网络连通性")
+    enable_tcp_check: bool = Field(default=True, description="通过 TCP 端口连接检测目标地址是否可达")
     enable_http_check: bool = Field(
-        default=True, description="启用 HTTP 检测网络连通性"
+        default=True, description="通过 HTTP 请求检测网页是否可正常访问"
     )
     enable_local_check: bool = Field(
         default=True,
@@ -202,7 +202,7 @@ class _SystemFieldsMixin(_ClampMixin):
         default=7, ge=1, le=365, description="日志与截图保留天数"
     )
     app_port: int = Field(
-        default=50721, ge=1024, le=65535, description="Web 控制台端口"
+        default=50721, ge=1024, le=65535, description="网页界面端口"
     )
     proxy: str = Field(default="", description="网络代理地址")
     shell_path: str = Field(
@@ -336,7 +336,7 @@ class SystemSettings(_SystemFieldsMixin, _SharedValidatorsMixin):
     """全局系统配置（原 .env 中的业务配置）"""
 
     pure_mode: bool = Field(
-        default=False, description="纯净模式：使用 Chromium 原始设置，不注入自定义参数"
+        default=False, description="纯净模式：使用浏览器原始默认设置，不添加额外启动参数"
     )
     network_check_timeout: int = Field(
         default=2, ge=1, le=30, description="TCP 网络检测超时（秒）"

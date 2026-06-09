@@ -64,9 +64,9 @@ export const logFileMethods = {
   },
   getLogFileClass(level) {
     const l = String(level || '').toUpperCase();
-    if (l === 'ERROR' || l === 'CRITICAL') return 'log-error';
-    if (l === 'WARNING') return 'log-warning';
-    if (l === 'DEBUG') return 'log-debug';
+    if (l === 'ERROR' || l === 'CRITICAL') return 'error';
+    if (l === 'WARNING') return 'warning';
+    if (l === 'DEBUG') return 'debug';
     return '';
   },
   getSourceLabel(source) {

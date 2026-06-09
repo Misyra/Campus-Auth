@@ -1,3 +1,5 @@
+import { LIMITS } from '../constants.js';
+
 export const statusMethods = {
   async fetchStatus() {
     try {
@@ -17,7 +19,7 @@ export const statusMethods = {
   },
   async fetchLogs() {
     try {
-      const { data } = await this.$api.get('/api/logs', { params: { limit: 250 } });
+      const { data } = await this.$api.get('/api/logs', { params: { limit: LIMITS.LOG_MAX_ENTRIES } });
       this.logs = data;
       this.$nextTick(() => this.scrollToBottom());
     } catch (error) {
