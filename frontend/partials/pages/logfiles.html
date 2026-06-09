@@ -35,12 +35,12 @@
             <button class="log-filter-chip" :class="{ active: logViewer.level === 'DEBUG' }" @click="logViewer.level = 'DEBUG'; fetchLogFileContent()">DEBUG</button>
           </div>
           <div class="log-filter-chips source-chips">
-            <button class="source-chip" :class="{ active: !logViewer.source }" @click="logViewer.source = ''; fetchLogFileContent()">全部</button>
-            <button class="source-chip" :class="{ active: logViewer.source === 'backend' }" @click="logViewer.source = 'backend'; fetchLogFileContent()">后端</button>
-            <button class="source-chip" :class="{ active: logViewer.source === 'network' }" @click="logViewer.source = 'network'; fetchLogFileContent()">网络</button>
-            <button class="source-chip" :class="{ active: logViewer.source === 'task' }" @click="logViewer.source = 'task'; fetchLogFileContent()">任务</button>
-            <button class="source-chip" :class="{ active: logViewer.source === 'frontend' }" @click="logViewer.source = 'frontend'; fetchLogFileContent()">前端</button>
-            <button class="source-chip" :class="{ active: logViewer.source === 'debug' }" @click="logViewer.source = 'debug'; fetchLogFileContent()">调试</button>
+            <button class="source-chip" :class="{ active: !logViewer.source }" @click="logViewer.source = ''; fetchLogFileContent()">all</button>
+            <button class="source-chip" :class="{ active: logViewer.source === 'backend' }" @click="logViewer.source = 'backend'; fetchLogFileContent()">backend</button>
+            <button class="source-chip" :class="{ active: logViewer.source === 'network' }" @click="logViewer.source = 'network'; fetchLogFileContent()">network</button>
+            <button class="source-chip" :class="{ active: logViewer.source === 'task' }" @click="logViewer.source = 'task'; fetchLogFileContent()">task</button>
+            <button class="source-chip" :class="{ active: logViewer.source === 'frontend' }" @click="logViewer.source = 'frontend'; fetchLogFileContent()">frontend</button>
+            <button class="source-chip" :class="{ active: logViewer.source === 'debug' }" @click="logViewer.source = 'debug'; fetchLogFileContent()">debug</button>
           </div>
           <div class="logfiles-search-wrap">
             <input v-model="logViewer.search" @keyup.enter="fetchLogFileContent" type="text" placeholder="搜索日志..." class="log-search" aria-label="搜索日志" />
