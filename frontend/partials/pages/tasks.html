@@ -1,15 +1,8 @@
 <div v-if="currentPage === 'tasks'" class="page-content fade-in">
   <!-- OCR 依赖提示 -->
-  <div v-if="!ocrStatus.installed" class="alert alert-info alert-dismissible fade-in">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-      <circle cx="12" cy="12" r="10"/>
-      <line x1="12" y1="16" x2="12" y2="12"/>
-      <line x1="12" y1="8" x2="12.01" y2="8"/>
-    </svg>
-    <span>任务中包含验证码识别步骤时，需要先安装 OCR 依赖。</span>
-    <button class="btn btn-sm btn-secondary" @click="navigateTo('settings'); currentSettingsTab = 'tasks'">
-      前往任务设置安装
-    </button>
+  <div v-if="!ocrStatus.installed" class="alert-hint">
+    <span>使用 <code>ocr</code> 步骤需先安装依赖</span>
+    <a href="javascript:void(0)" @click="navigateTo('settings'); currentSettingsTab = 'tasks'">任务设置</a>
   </div>
 
   <div class="tasks-grid">
