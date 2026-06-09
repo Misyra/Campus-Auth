@@ -255,8 +255,9 @@ body {
 }
 
 .log-level-badge {
-  min-width: 42px;
+  min-width: 52px;
   justify-content: center;
+  text-align: center;
 }
 
 .log-level-badge.level-info { color: #60a5fa; }
@@ -264,6 +265,12 @@ body {
 .log-level-badge.level-error { color: #f87171; }
 .log-level-badge.level-critical { color: #f87171; }
 .log-level-badge.level-debug { color: #94a3b8; }
+
+.log-source-badge {
+  min-width: 30px;
+  justify-content: center;
+  text-align: center;
+}
 
 .log-source-badge.source-backend { color: #94a3b8; }
 .log-source-badge.source-network { color: #fbbf24; }
