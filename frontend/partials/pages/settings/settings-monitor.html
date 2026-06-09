@@ -243,7 +243,7 @@
         <div class="form-group">
           <div class="field-label-row">
             <label for="settings-pause-end">暂停结束（小时）</label>
-            <span class="field-help" tabindex="0" role="note" data-tip="到该时刻恢复自动登录。例如设为 6 表示 6:00 后恢复检测。支持跨越午夜（如暂停 23:00~5:00）。">?</span>
+            <span class="field-help" tabindex="0" role="note" data-tip="到该时刻恢复自动登录。例如设为 6 表示 6:00 后恢复检测。支持跨越午夜（如暂停 23:00~5:00）。若与开始时间相同，则全天暂停。">?</span>
           </div>
           <input id="settings-pause-end" v-model.number="config.pause_end_hour" type="number" min="0" max="23" />
         </div>
