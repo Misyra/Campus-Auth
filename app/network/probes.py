@@ -216,6 +216,7 @@ def _check_macos_service() -> bool:
                 logger.info("检测到活跃的网络接口: {}", iface)
                 return True
         except Exception:
+            logger.debug("网络接口检测异常: {}", iface, exc_info=True)
             continue
 
     logger.warning("未检测到活跃的网络接口")
