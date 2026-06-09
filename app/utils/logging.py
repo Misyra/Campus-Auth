@@ -398,7 +398,7 @@ class LogConfigCenter:
                 file_sink.write,
                 format=_file_format,
                 level="DEBUG",
-                filter=lambda record: record["extra"].get("side") == "BACKEND",
+                filter=lambda record: record["extra"].get("source") != "frontend",
             )
 
             logger.info("日志系统启动 | 目录: {} | 保留 {} 天", log_dir, retention_days)

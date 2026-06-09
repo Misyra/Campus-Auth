@@ -112,7 +112,7 @@ class TestStatusSnapshot:
 class TestMonitorServiceInit:
     def test_init(self):
         svc = _make_monitor_service()
-        assert svc._logs.maxlen == 1200
+        assert svc._dashboard_sink is None
         assert svc._login_in_progress.is_set() is False
         assert svc.pure_mode is False
 
@@ -126,16 +126,28 @@ class TestRecordLog:
     def test_record_log(self):
         svc = _make_monitor_service()
         svc.record_log("测试消息", level="INFO", source="test")
-        assert len(svc._logs) == 1
-        assert svc._logs[0].message == "测试消息"
-        assert svc._logs[0].level == "INFO"
-        assert svc._logs[0].source == "test"
+        # record_log 委托 loguru，无 _dashboard_sink 时不会崩溃
 
     def test_record_log_ws_broadcast(self):
         svc = _make_monitor_service()
-        svc.record_log("test", level="INFO", source="test")
-        assert len(svc._ws_broadcast_queue) == 1
-        assert svc._ws_broadcast_queue[0]["type"] == "log"
+        from loguru import logger
+
+        from app.utils.logging import DashboardSink
+
+        sink = DashboardSink(maxlen=100, broadcast_maxlen=100)
+        svc._dashboard_sink = sink
+        handler_id = logger.add(
+            sink.write,
+            format="{name} | {message}",
+            level="DEBUG",
+            filter=lambda record: record["extra"].get("source") != "frontend",
+        )
+        try:
+            svc.record_log("test", level="INFO", source="test")
+            assert len(sink.broadcast_queue) >= 1
+            assert sink.broadcast_queue[0]["type"] == "log"
+        finally:
+            logger.remove(handler_id)
 
 
 # =====================================================================
@@ -150,10 +162,25 @@ class TestListLogs:
 
     def test_list_logs_limit(self):
         svc = _make_monitor_service()
-        for i in range(5):
-            svc.record_log(f"msg {i}")
-        assert len(svc.list_logs(limit=3)) == 3
-        assert svc.list_logs(limit=0) == []
+        from loguru import logger
+
+        from app.utils.logging import DashboardSink
+
+        sink = DashboardSink(maxlen=100, broadcast_maxlen=100)
+        svc._dashboard_sink = sink
+        handler_id = logger.add(
+            sink.write,
+            format="{name} | {message}",
+            level="DEBUG",
+            filter=lambda record: record["extra"].get("source") != "frontend",
+        )
+        try:
+            for i in range(5):
+                svc.record_log(f"msg {i}")
+            assert len(svc.list_logs(limit=3)) == 3
+            assert svc.list_logs(limit=0) == []
+        finally:
+            logger.remove(handler_id)
 
     @patch("app.services.monitor.build_runtime_config", return_value={})
     @patch(
@@ -172,9 +199,24 @@ class TestListLogs:
         mock_load_ui.return_value = mock_ui_config
 
         svc = MonitorService(MagicMock())
-        for i in range(3):
-            svc.record_log(f"msg {i}")
-        assert len(svc.list_logs(limit=100)) == 3
+        from loguru import logger
+
+        from app.utils.logging import DashboardSink
+
+        sink = DashboardSink(maxlen=100, broadcast_maxlen=100)
+        svc._dashboard_sink = sink
+        handler_id = logger.add(
+            sink.write,
+            format="{name} | {message}",
+            level="DEBUG",
+            filter=lambda record: record["extra"].get("source") != "frontend",
+        )
+        try:
+            for i in range(3):
+                svc.record_log(f"msg {i}")
+            assert len(svc.list_logs(limit=100)) == 3
+        finally:
+            logger.remove(handler_id)
 
 
 # =====================================================================

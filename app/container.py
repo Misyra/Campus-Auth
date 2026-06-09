@@ -67,15 +67,15 @@ class ServiceContainer:
         # 注册 Dashboard sink — 内存缓冲 + WebSocket 广播
         from loguru import logger
 
-        dashboard_sink = DashboardSink()
+        dashboard_sink = DashboardSink(maxlen=1200, broadcast_maxlen=200)
         logger.add(
             dashboard_sink.write,
             format="{name} | {message}",
             level="DEBUG",
-            filter=lambda record: record["extra"].get("side") == "BACKEND",
+            filter=lambda record: record["extra"].get("source") != "frontend",
         )
-        # 让 monitor_service 的 drain_ws_queue 从 DashboardSink 的 broadcast_queue 消费
-        self.monitor_service._ws_broadcast_queue = dashboard_sink.broadcast_queue
+        # 注入 DashboardSink 到 MonitorService
+        self.monitor_service._dashboard_sink = dashboard_sink
 
         # 启动监控服务
         self.monitor_service.boot()

@@ -281,7 +281,7 @@ class MonitorStatusResponse(BaseModel):
 class LogEntry(BaseModel):
     timestamp: str
     level: str = "INFO"
-    source: str = "monitor"
+    source: str = "backend"
     message: str
 
     @field_validator("level")

@@ -522,7 +522,7 @@ class TestLogEntry:
 
     def test_default_source(self):
         entry = LogEntry(timestamp="2025-01-01", message="test")
-        assert entry.source == "monitor"
+        assert entry.source == "backend"
 
     def test_custom_source(self):
         entry = LogEntry(timestamp="2025-01-01", source="backend", message="test")

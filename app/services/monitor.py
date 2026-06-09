@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import copy
-import datetime
 import json
 import os
 import queue
@@ -23,7 +22,7 @@ from app.constants import (
 )
 from app.core.monitor_core import NetworkMonitorCore, NetworkState
 from app.network.decision import is_network_available
-from app.schemas import LogEntry, MonitorConfigPayload, MonitorStatusResponse
+from app.schemas import MonitorConfigPayload, MonitorStatusResponse
 from app.tasks import TaskManager
 from app.utils import ConfigValidator
 from app.utils.logging import get_logger
@@ -102,8 +101,8 @@ class MonitorService:
         self._worker_getter = worker_getter
         self._task_manager = TaskManager(project_root / "tasks")
 
-        # State (previously guarded by RLock)
-        self._logs: deque[LogEntry] = deque(maxlen=1200)
+        # DashboardSink — 由 container.startup 注入
+        self._dashboard_sink = None
 
         # 锁（必须在 _reload_config_internal 之前初始化）
         self._login_lock: threading.Lock = threading.Lock()
@@ -125,9 +124,6 @@ class MonitorService:
         # Lock-free status snapshot — written by consumer, read by API threads
         self._status_snapshot = StatusSnapshot()
 
-        # WebSocket 广播队列 —— 由 record_log / _queue_status_broadcast 写入，
-        # 从主事件循环异步排空
-        self._ws_broadcast_queue: deque[dict] = deque(maxlen=200)
 
         # 登录并发控制 —— 防止同时提交多个登录任务到 Worker
         self._login_in_progress = threading.Event()
@@ -368,40 +364,17 @@ class MonitorService:
     # ── 日志 / 状态快照桥接 ──
 
     def record_log(
-        self, message: str, level: str = "INFO", source: str = "monitor"
+        self, message: str, level: str = "INFO", source: str = "backend"
     ) -> None:
-        """Record a log entry + queue WebSocket broadcast (no asyncio cross-thread calls)."""
-        stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        """委托 loguru 统一处理（自动触发所有 sink）。"""
+        bound_logger = get_logger("record", source)
         level_name = str(level or "INFO").upper()
-        source_name = str(source or "monitor")
-        entry = LogEntry(
-            timestamp=stamp,
-            level=level_name,
-            source=source_name,
-            message=message,
-        )
-        self._logs.append(entry)
+        log_func = getattr(bound_logger, level_name.lower(), bound_logger.info)
+        log_func("{}", message)
 
-        # 同步写入日志系统 → 自动持久化到文件
-        log_func = getattr(service_logger, level_name.lower(), service_logger.info)
-        log_func("[{}] {}", source_name, message)
-
-        # 监控相关日志 → 更新状态快照
-        if source_name in ("monitor.core", "monitor", "network"):
+        # 监控相关日志 → 更新状态快照（业务逻辑，不属于日志管道）
+        if source in ("network",):
             self._update_status_snapshot()
-
-        # 排队 WebSocket 广播（主事件循环的 drain_ws_queue 异步消费）
-        self._ws_broadcast_queue.append(
-            {
-                "type": "log",
-                "data": {
-                    "timestamp": stamp,
-                    "level": level_name,
-                    "source": source_name,
-                    "message": message,
-                },
-            }
-        )
 
     def _update_status_snapshot(self) -> None:
         """Read monitor_core state into lock-free StatusSnapshot."""
@@ -436,7 +409,7 @@ class MonitorService:
         """将当前状态放入 WS 广播队列。"""
         try:
             status = self.get_status()
-            self._ws_broadcast_queue.append(
+            self.ws_broadcast_queue.append(
                 {"type": "status", "data": status.model_dump()}
             )
         except Exception:
@@ -459,14 +432,11 @@ class MonitorService:
                 service_logger.exception("WS 排空循环异常")
 
     async def drain_ws_queue(self) -> None:
-        """Flush pending WS broadcast messages to WebSocket clients.
-
-        Called by the main asyncio event loop (via ws_drain_loop).
-        No cross-thread asyncio calls remain in this module.
-        """
+        """Flush pending WS broadcast messages to WebSocket clients."""
+        queue = self.ws_broadcast_queue
         while True:
             try:
-                data = self._ws_broadcast_queue.popleft()
+                data = queue.popleft()
             except IndexError:
                 break
             try:
@@ -509,14 +479,11 @@ class MonitorService:
         core._login_recovery_in_progress.wait(timeout=timeout)
 
     @property
-    def ws_broadcast_queue(self) -> deque[dict]:
-        """WebSocket 广播队列（供 WebSocketSink 使用）"""
-        return self._ws_broadcast_queue
-
-    @property
-    def logs(self) -> deque[LogEntry]:
-        """日志存储"""
-        return self._logs
+    def ws_broadcast_queue(self) -> deque:
+        """WS 广播队列（从 DashboardSink 获取）。"""
+        if self._dashboard_sink is None:
+            return deque(maxlen=200)
+        return self._dashboard_sink.broadcast_queue
 
     @property
     def pure_mode(self) -> bool:
@@ -801,13 +768,11 @@ class MonitorService:
             self.record_log(f"手动测试异常: {exc}", "ERROR", "network")
             return False, f"网络测试失败: {exc}"
 
-    def list_logs(self, limit: int = 200) -> list[LogEntry]:
-        if limit <= 0:
+    def list_logs(self, limit: int = 200) -> list:
+        """返回最近 limit 条日志（从 DashboardSink 读取）。"""
+        if limit <= 0 or self._dashboard_sink is None:
             return []
-        snapshot = list(self._logs)
-        if len(snapshot) <= limit:
-            return snapshot
-        return snapshot[-limit:]
+        return self._dashboard_sink.list_logs(limit=limit)
 
     def toggle_pure_mode(self) -> bool:
         """切换纯净模式，返回新值"""

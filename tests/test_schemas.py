@@ -76,7 +76,7 @@ class TestLogEntry:
         """基本创建。"""
         entry = LogEntry(timestamp="2026-06-01 12:00:00", message="test")
         assert entry.level == "INFO"
-        assert entry.source == "monitor"
+        assert entry.source == "backend"
 
     def test_level_normalized(self):
         """级别标准化为大写。"""
