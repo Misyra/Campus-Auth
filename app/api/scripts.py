@@ -13,7 +13,7 @@ from app.utils.logging import get_logger
 from app.workers.script_runner import ScriptRunner, detect_available_binaries
 
 router = APIRouter()
-api_logger = get_logger("backend.api", source="backend")
+api_logger = get_logger("api", source="backend")
 
 
 @router.get("/api/scripts")

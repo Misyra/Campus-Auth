@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from app.services.profile import ProfileService
     from app.tasks.manager import TaskManager
 
-logger = get_logger("backend.login_history", source="backend")
+logger = get_logger("login_history", source="backend")
 
 
 class LoginHistoryEntry(BaseModel):

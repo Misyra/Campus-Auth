@@ -13,7 +13,7 @@ from app.utils import ConfigValidator
 from app.utils.logging import get_logger
 
 router = APIRouter()
-api_logger = get_logger("backend.api", source="backend")
+api_logger = get_logger("api", source="backend")
 
 
 @router.get("/api/config", response_model=MonitorConfigPayload)

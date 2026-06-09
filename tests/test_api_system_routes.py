@@ -351,6 +351,12 @@ class TestCheckUpdate:
     @patch("httpx.AsyncClient.get", side_effect=Exception("网络错误"))
     def test_check_update_network_error(self, mock_get, client):
         """网络错误时返回错误信息。"""
+        # 清除缓存，确保测试独立
+        import app.api.system as sys_mod
+
+        sys_mod._update_cache = None
+        sys_mod._update_cache_time = 0
+
         test_client, _, _ = client
         resp = test_client.get("/api/check-update")
         assert resp.status_code == 200
