@@ -34,10 +34,10 @@ def _console_format(record):
     source = record["extra"].get("source", "-")
     record["extra"]["_source"] = source
     return (
-        "<green>{time:HH:mm:ss}</green> | "
-        "<level>{level: <8}</level> | "
-        "<cyan>{extra[_source]}</cyan> | "
-        "<cyan>{name}</cyan> | "
+        "<green>[{time:HH:mm:ss.SSS}]</green>"
+        "<level>[{level}]</level>"
+        "<cyan>[{extra[_source]}]</cyan>"
+        "<cyan>[{name}]</cyan> "
         "<level>{message}</level>\n"
     )
 
@@ -45,7 +45,7 @@ def _console_format(record):
 def _file_format(record):
     source = record["extra"].get("source", "-")
     record["extra"]["_source"] = source
-    return "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[_source]} | {name} | {message}\n"
+    return "[{time:YYYY-MM-DD HH:mm:ss.SSS}][{level}][{extra[_source]}][{name}] {message}\n"
 
 
 _WEBSOCKET_FORMAT = "{name} | {message}"
