@@ -97,34 +97,12 @@
   <section class="card settings-panel">
     <div class="card-header">
       <h2>OCR 验证码识别依赖</h2>
-      <span v-if="ocrStatus.installed" class="ocr-status-badge installed">已安装</span>
-      <span v-else class="ocr-status-badge not-installed">未安装</span>
-    </div>
-    <div class="card-body">
-      <p class="ocr-description">
-        OCR 用于自动识别验证码图片。仅在任务中使用 <code>ocr</code> 步骤时才需要安装。
-        安装后会占用约 120MB 磁盘空间（含 onnxruntime 运行时）。
-      </p>
-      <div v-if="ocrStatus.installed && ocrStatus.size_mb > 0" class="ocr-size-hint">
-        当前占用约 {{ ocrStatus.size_mb }} MB
-      </div>
-      <div class="ocr-actions">
-        <button v-if="!ocrStatus.installed" class="btn btn-primary btn-sm" @click="installOcr" :disabled="busy.ocr">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="7 10 12 15 17 10"/>
-            <line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          {{ busy.ocr ? '安装中...' : '安装 OCR 依赖' }}
-        </button>
-        <button v-else class="btn btn-danger-ghost btn-sm" @click="uninstallOcr" :disabled="busy.ocr">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-            <polyline points="3 6 5 6 21 6"/>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-          </svg>
-          {{ busy.ocr ? '卸载中...' : '卸载 OCR 依赖' }}
-        </button>
-      </div>
+      <button v-if="!ocrStatus.installed" class="btn btn-primary btn-sm" type="button" @click="installOcr" :disabled="busy.ocr">
+        {{ busy.ocr ? '安装中...' : '安装 OCR 依赖' }}
+      </button>
+      <button v-else class="btn btn-danger-ghost btn-sm" type="button" @click="uninstallOcr" :disabled="busy.ocr">
+        {{ busy.ocr ? '卸载中...' : '卸载 OCR 依赖' }}
+      </button>
     </div>
   </section>
 
