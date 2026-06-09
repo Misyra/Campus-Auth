@@ -18,8 +18,7 @@ export const statusMethods = {
   async fetchLogs() {
     try {
       const { data } = await this.$api.get('/api/logs', { params: { limit: 250 } });
-      // 按前端日志级别过滤（完整日志已在文件中）
-      this.logs = data.filter(l => this._shouldShowLog(l.level));
+      this.logs = data;
       this.$nextTick(() => this.scrollToBottom());
     } catch (error) {
       this.frontendLogger.error('logs', '获取日志失败', error);
