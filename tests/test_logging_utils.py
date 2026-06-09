@@ -111,7 +111,7 @@ class TestDashboardSink:
         entry = sink.buffer[0]
         assert entry["level"] == "INFO"
         assert entry["source"] == "backend"
-        assert entry["module"] == "test"
+        assert entry["name"] == "test"
         assert entry["message"] == "测试消息"
 
     def test_write_buffer_overflow(self):
