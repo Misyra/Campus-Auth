@@ -11,6 +11,7 @@ from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import httpx
+import psutil
 
 from app.utils.logging import get_logger
 from app.utils.platform_utils import (
@@ -46,182 +47,16 @@ def is_block_proxy() -> bool:
 
 
 def is_local_network_connected() -> bool:
-    """检查本地网络是否有实际连接（有线或无线）。
-
-    优先使用快速 IP 检测，失败时回退到平台特判。
-    """
-    # 优先：快速 IP 检测（~10ms），避免 Windows 上 PowerShell 启动慢
+    """检查本地网络是否有实际连接（有线或无线）。"""
     try:
-        hostname = socket.gethostname()
-        ip_list = socket.gethostbyname_ex(hostname)[2]
-        non_loopback = [
-            ip
-            for ip in ip_list
-            if not ip.startswith("127.") and not ip.startswith("169.254.")
-        ]
-        if non_loopback:
-            logger.debug("本地网络已连接，IP: {}", ", ".join(non_loopback))
-            return True
+        for name, stats in psutil.net_if_stats().items():
+            if stats.isup and name.lower() not in ("lo", "loopback"):
+                logger.debug("网络接口已连接: {} (speed={}Mbps)", name, stats.speed)
+                return True
     except Exception as exc:
-        logger.debug("快速 IP 检测失败: {}", exc)
-
-    # 回退：平台特判
-    try:
-        if is_windows():
-            return _check_windows_adapter()
-        elif is_linux():
-            return _check_linux_route()
-        elif is_macos():
-            return _check_macos_service()
-    except Exception as exc:
-        logger.debug("平台网络检测失败: {}", exc)
+        logger.debug("psutil 网络检测失败: {}", exc)
 
     logger.warning("未检测到本地网络连接")
-    return False
-
-
-def _check_windows_adapter() -> bool:
-    """Windows: 检查网络适配器是否实际连接。
-
-    netsh 输出是本地化的（中文"已连接"、英文"Connected"、日文"接続済み"等），
-    无法穷举所有语言。改用 PowerShell Get-NetAdapter（输出结构化，不依赖语言），
-    失败时回退到 netsh + 多语言匹配。
-    """
-    # 优先使用 PowerShell（结构化输出，不受系统语言影响）
-    try:
-        result = subprocess.run(
-            [
-                "powershell",
-                "-NoProfile",
-                "-Command",
-                "Get-NetAdapter | Select-Object -ExpandProperty Status",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            creationflags=CREATE_NO_WINDOW_FLAG,
-        )
-        if result.returncode == 0:
-            statuses = [
-                line.strip().lower()
-                for line in result.stdout.splitlines()
-                if line.strip()
-            ]
-            if "up" in statuses:
-                logger.info("检测到已连接的网络适配器 (PowerShell)")
-                return True
-            logger.warning("所有网络适配器均未连接 (PowerShell)")
-            return False
-    except FileNotFoundError:
-        logger.debug("PowerShell 不可用，回退到 netsh")
-
-    # 回退：netsh（输出受系统语言影响，尝试常见语言）
-    try:
-        result = subprocess.run(
-            ["netsh", "interface", "show", "interface"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            creationflags=CREATE_NO_WINDOW_FLAG,
-        )
-        if result.returncode != 0:
-            logger.debug("netsh 执行失败: {}", result.stderr)
-            return False
-
-        # 已知的"已连接"多语言映射
-        connected_keywords = {
-            "connected",
-            "已连接",
-            "接続済み",
-            "connecté",
-            "verbunden",
-            "подключено",
-            "conectado",
-        }
-        for line in result.stdout.splitlines():
-            parts = line.split()
-            if len(parts) >= 4 and parts[1].lower() in connected_keywords:
-                name = " ".join(parts[3:])
-                lower_name = name.lower()
-                if "loopback" not in lower_name and "tunnel" not in lower_name:
-                    logger.info("检测到已连接的网络接口: {}", name)
-                    return True
-
-        logger.warning("未检测到已连接的网络接口")
-        return False
-    except FileNotFoundError:
-        logger.debug("netsh 不可用")
-        return False
-
-
-def _check_linux_route() -> bool:
-    """Linux: 检查是否有默认路由（表示有实际网络连接）。"""
-    try:
-        with open("/proc/net/route") as f:
-            for line in f:
-                fields = line.strip().split()
-                if len(fields) >= 3 and fields[1] == "00000000":
-                    iface = fields[0]
-                    if iface != "lo":
-                        logger.info("检测到默认路由接口: {}", iface)
-                        return True
-    except Exception as exc:
-        logger.debug("读取路由表失败: {}", exc)
-    logger.warning("未检测到默认路由")
-    return False
-
-
-def _check_macos_service() -> bool:
-    """macOS: 检查网络接口是否有实际连接（IP 地址分配）。
-
-    动态获取所有硬件接口列表（而非硬编码 en0/en1），
-    用 networksetup 列出所有端口对应的设备名，
-    再用 ifconfig 逐一检查是否有活跃连接。
-    """
-    try:
-        # 列出所有硬件端口及其设备名（输出受系统语言影响，设置 LC_ALL=C 强制英文）
-        list_result = subprocess.run(
-            ["networksetup", "-listallhardwareports"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            env={"LC_ALL": "C"},  # 强制英文输出，便于解析 Device/Port 等关键字
-        )
-        if list_result.returncode != 0:
-            logger.debug("networksetup 执行失败: {}", list_result.stderr)
-            raise RuntimeError("networksetup failed")
-
-        # 解析 "Device: XXX" 行，提取所有硬件设备名
-        devices = re.findall(r"^Device: (.+)$", list_result.stdout, re.MULTILINE)
-        if not devices:
-            logger.debug("未从 networksetup 输出中找到任何设备")
-            return False
-    except Exception as exc:
-        logger.debug("networksetup 检测失败，回退到硬编码接口: {}", exc)
-        devices = ("en0", "en1")  # 回退：常见接口名
-
-    for iface in devices:
-        try:
-            result = subprocess.run(
-                ["ifconfig", iface],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if result.returncode != 0:
-                continue
-            # 检查是否有 "status: active" 或分配了非 0.0.0.0 的 IP
-            output = result.stdout
-            if "status: active" in output and re.search(
-                r"inet\s+(?!0\.0\.0\.0)\d+\.\d+\.\d+\.\d+", output
-            ):
-                logger.info("检测到活跃的网络接口: {}", iface)
-                return True
-        except Exception:
-            logger.debug("网络接口检测异常: {}", iface, exc_info=True)
-            continue
-
-    logger.warning("未检测到活跃的网络接口")
     return False
 
 

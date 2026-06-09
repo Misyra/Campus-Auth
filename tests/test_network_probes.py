@@ -47,52 +47,38 @@ class TestSetBlockProxy:
 
 
 class TestIsLocalNetworkConnected:
-    def test_returns_true_when_ip_found(self):
-        with (
-            patch("app.network.probes.socket.gethostname", return_value="test"),
-            patch(
-                "app.network.probes.socket.gethostbyname_ex",
-                return_value=("test", [], ["192.168.1.100"]),
-            ),
-        ):
+    def test_returns_true_when_interface_up(self):
+        """有活跃的非回环接口时返回 True。"""
+        mock_stats = {
+            "Ethernet": MagicMock(isup=True, speed=1000),
+            "Loopback Pseudo-Interface 1": MagicMock(isup=True, speed=1073),
+        }
+        with patch("app.network.probes.psutil.net_if_stats", return_value=mock_stats):
             assert is_local_network_connected() is True
 
     def test_returns_false_on_loopback_only(self):
-        with (
-            patch("app.network.probes.socket.gethostname", return_value="test"),
-            patch(
-                "app.network.probes.socket.gethostbyname_ex",
-                return_value=("test", [], ["127.0.0.1"]),
-            ),
-            patch("app.network.probes.is_windows", return_value=False),
-            patch("app.network.probes.is_linux", return_value=False),
-            patch("app.network.probes.is_macos", return_value=False),
-        ):
+        """仅有回环接口时返回 False。"""
+        mock_stats = {
+            "lo": MagicMock(isup=True, speed=0),
+        }
+        with patch("app.network.probes.psutil.net_if_stats", return_value=mock_stats):
             assert is_local_network_connected() is False
 
     def test_returns_false_on_exception(self):
-        with (
-            patch(
-                "app.network.probes.socket.gethostbyname_ex",
-                side_effect=Exception("fail"),
-            ),
-            patch("app.network.probes.is_windows", return_value=False),
-            patch("app.network.probes.is_linux", return_value=False),
-            patch("app.network.probes.is_macos", return_value=False),
+        """psutil 抛异常时返回 False。"""
+        with patch(
+            "app.network.probes.psutil.net_if_stats",
+            side_effect=Exception("fail"),
         ):
             assert is_local_network_connected() is False
 
-    def test_returns_false_for_169_254(self):
-        with (
-            patch("app.network.probes.socket.gethostname", return_value="test"),
-            patch(
-                "app.network.probes.socket.gethostbyname_ex",
-                return_value=("test", [], ["169.254.1.1"]),
-            ),
-            patch("app.network.probes.is_windows", return_value=False),
-            patch("app.network.probes.is_linux", return_value=False),
-            patch("app.network.probes.is_macos", return_value=False),
-        ):
+    def test_returns_false_when_all_down(self):
+        """所有接口都 down 时返回 False。"""
+        mock_stats = {
+            "Ethernet": MagicMock(isup=False, speed=0),
+            "Wi-Fi": MagicMock(isup=False, speed=0),
+        }
+        with patch("app.network.probes.psutil.net_if_stats", return_value=mock_stats):
             assert is_local_network_connected() is False
 
 
@@ -560,7 +546,7 @@ class TestNetworkTestImports:
         import app.network.diagnostics as nt
 
         assert hasattr(nt, "__all__")
-        assert len(nt.__all__) == 10
+        assert len(nt.__all__) == 9
 
     def test_functions_match_original(self):
         from app.network.decision import is_network_available as original
