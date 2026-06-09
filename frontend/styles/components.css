@@ -1180,30 +1180,35 @@
 
 /* ── 提示条 ── */
 
-.alert {
+.alert-hint {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  border-radius: var(--radius-lg);
-  font-size: 13px;
-  line-height: 1.5;
-  margin-bottom: 16px;
+  gap: 6px;
+  padding: 6px 12px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-md);
+  background: rgba(34, 211, 238, 0.06);
+  border: 1px solid rgba(34, 211, 238, 0.15);
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
-.alert-info {
-  background: rgba(34, 211, 238, 0.08);
-  border: 1px solid rgba(34, 211, 238, 0.2);
-  color: var(--text-primary);
-}
-
-.alert-info svg {
-  flex-shrink: 0;
+.alert-hint code {
+  font-size: 11px;
+  padding: 1px 4px;
+  background: rgba(34, 211, 238, 0.1);
+  border-radius: 3px;
   color: var(--accent);
 }
 
-.alert-info span {
-  flex: 1;
+.alert-hint a {
+  color: var(--accent);
+  text-decoration: none;
+  margin-left: 2px;
+}
+
+.alert-hint a:hover {
+  text-decoration: underline;
 }
 
 /* ── OCR 状态标签 ── */
