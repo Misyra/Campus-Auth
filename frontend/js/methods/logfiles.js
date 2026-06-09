@@ -70,6 +70,6 @@ export const logFileMethods = {
     return '';
   },
   getSourceLabel(source) {
-    return LOG_SOURCES[source]?.label || source || '未知';
+    return LOG_SOURCES[source]?.label || (source ? source.toUpperCase().slice(0, 3) : '未知');
   },
 };
