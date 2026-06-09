@@ -519,3 +519,70 @@ class TestScriptsRouter:
         # get_task 返回非 script 类型
         resp = client.get("/api/scripts/nonexistent")
         assert resp.status_code == 404
+
+
+# =====================================================================
+# 健康检查（原 test_api.py）
+# =====================================================================
+
+
+class TestHealthEndpoint:
+    def test_health(self, client):
+        response = client.get("/api/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert "version" in data
+
+
+# =====================================================================
+# 初始化状态（原 test_api.py）
+# =====================================================================
+
+
+class TestInitStatusEndpoint:
+    def test_init_status(self, client):
+        response = client.get("/api/init-status")
+        assert response.status_code == 200
+        data = response.json()
+        assert "initialized" in data
+        assert "password_decryption_failed" in data
+
+
+# =====================================================================
+# 版本比较（原 test_api.py）
+# =====================================================================
+
+
+class TestCompareVersions:
+    def test_equal(self):
+        from app.version import compare_versions
+
+        assert compare_versions("1.0.0", "1.0.0") == 0
+
+    def test_greater(self):
+        from app.version import compare_versions
+
+        assert compare_versions("1.1.0", "1.0.0") == 1
+
+    def test_less(self):
+        from app.version import compare_versions
+
+        assert compare_versions("1.0.0", "1.1.0") == -1
+
+    def test_different_lengths(self):
+        from app.version import compare_versions
+
+        assert compare_versions("1.0.0.1", "1.0.0") == 1
+        assert compare_versions("1.0", "1.0.0") == 0  # 1.0 等价于 1.0.0
+
+    def test_invalid_input(self):
+        from app.version import compare_versions
+
+        assert compare_versions("invalid", "1.0.0") == 0
+        assert compare_versions("1.0.0", "invalid") == 0
+
+    def test_major_version_diff(self):
+        from app.version import compare_versions
+
+        assert compare_versions("2.0.0", "1.9.9") == 1

@@ -34,7 +34,7 @@ from app.services.debug_session import (
 )
 from app.services.login_history import LoginHistoryService
 from app.services.profile import ProfileService
-from app.services.task import TaskService, _check_dangerous_steps
+from app.services.task import TaskService, _check_dangerous_steps, _DANGEROUS_STEP_TYPES
 
 # =====================================================================
 # _check_dangerous_steps
@@ -1172,3 +1172,60 @@ class TestLoginHistoryService:
 
         debug_messages = [r.message for r in caplog.records if r.levelname == "DEBUG"]
         assert any("任务名称" in m or "任务" in m for m in debug_messages)
+
+
+# ── ProfileService TOCTOU 修复 ──
+
+
+class TestCorruptRenameEAFP:
+    """P1-BE-6: 损坏文件重命名使用 EAFP 模式，避免 TOCTOU 竞态"""
+
+    def test_corrupt_rename_eafp(self, tmp_path):
+        """测试文件不存在时 rename 抛出 FileNotFoundError 被静默处理。"""
+        settings_path = tmp_path / "settings.json"
+        settings_path.write_text("{invalid json!!!", encoding="utf-8")
+
+        svc = ProfileService.__new__(ProfileService)
+        svc.project_root = tmp_path
+        svc._settings_path = settings_path
+        svc._lock = MagicMock()
+        svc._data = None
+
+        result = svc._load_unsafe()
+
+        assert result is not None
+        corrupt_files = list(tmp_path.glob("settings.corrupt.*.json"))
+        assert len(corrupt_files) == 1, "损坏文件应被重命名为 settings.corrupt.*.json"
+
+    def test_corrupt_rename_file_missing(self, tmp_path):
+        """测试文件在读取和重命名之间被删除时，FileNotFoundError 被静默处理。"""
+        svc = ProfileService.__new__(ProfileService)
+        svc.project_root = tmp_path
+        svc._settings_path = tmp_path / "settings.json"
+        svc._lock = MagicMock()
+        svc._data = None
+
+        result = svc._load_unsafe()
+
+        assert result is not None
+        assert "default" in result.profiles
+        assert len(result.profiles) == 1
+
+
+# ── _DANGEROUS_STEP_TYPES 详细测试 ──
+
+
+class TestDangerousStepTypes:
+    """危险步骤类型常量。"""
+
+    def test_contains_eval(self):
+        """包含 eval。"""
+        assert "eval" in _DANGEROUS_STEP_TYPES
+
+    def test_contains_custom_js(self):
+        """包含 custom_js。"""
+        assert "custom_js" in _DANGEROUS_STEP_TYPES
+
+    def test_not_contains_click(self):
+        """不包含 click。"""
+        assert "click" not in _DANGEROUS_STEP_TYPES
