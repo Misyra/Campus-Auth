@@ -145,7 +145,7 @@ class DashboardSink:
             "timestamp": stamp,
             "level": level,
             "source": source,
-            "module": name,
+            "name": name,
             "message": text,
         }
 
