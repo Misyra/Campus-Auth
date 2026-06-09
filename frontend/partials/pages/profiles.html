@@ -288,13 +288,7 @@
           <div class="form-row">
             <div class="form-group">
               <label for="prof-carrier">运营商</label>
-              <select id="prof-carrier" v-model="editingProfile.carrier">
-                <option>移动</option>
-                <option>联通</option>
-                <option>电信</option>
-                <option>无</option>
-                <option>自定义</option>
-              </select>
+              <custom-select v-model="editingProfile.carrier" :options="carrierOptions"></custom-select>
             </div>
             <div v-if="editingProfile.carrier === '自定义'" class="form-group">
               <label for="prof-carrier-custom">自定义运营商</label>
@@ -329,10 +323,7 @@
         </div>
         <div v-if="!editingProfile.use_global_task" class="form-group">
           <label for="prof-task">执行任务</label>
-          <select id="prof-task" v-model="editingProfile.active_task">
-            <option value="">默认任务</option>
-            <option v-for="t in tasks" :key="t.id" :value="t.id">{{ t.name || t.id }}</option>
-          </select>
+          <custom-select v-model="editingProfile.active_task" :options="taskOptions"></custom-select>
         </div>
       </div>
 

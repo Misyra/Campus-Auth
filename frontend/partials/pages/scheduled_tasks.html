@@ -81,31 +81,20 @@
           <div class="form-row">
             <div class="form-group" style="min-width: 140px;">
               <label for="scheduled-task-type">任务类型</label>
-              <select id="scheduled-task-type" v-model="scheduledTaskForm.type">
-                <option value="script">自定义脚本</option>
-                <option value="browser">浏览器任务</option>
-              </select>
+              <custom-select v-model="scheduledTaskForm.type" :options="scheduledTaskTypeOptions"></custom-select>
             </div>
             <div class="form-group flex-1">
               <label for="scheduled-task-target">{{ scheduledTaskForm.type === 'script' ? '选择脚本' : '选择浏览器任务' }}</label>
-              <select
+              <custom-select
                 v-if="scheduledTaskForm.type === 'script'"
-                id="scheduled-task-target"
                 v-model="scheduledTaskForm.target_id"
-              >
-                <option value="">请选择...</option>
-                <option v-for="script in scripts" :key="script.id" :value="script.id">
-                  {{ script.name }}{{ script.binary_path ? ' (' + getBinaryName(script.binary_path) + ')' : '' }}
-                </option>
-              </select>
-              <select
+                :options="scriptTargetOptions"
+              ></custom-select>
+              <custom-select
                 v-else
-                id="scheduled-task-target"
                 v-model="scheduledTaskForm.target_id"
-              >
-                <option value="">请选择...</option>
-                <option v-for="task in browserTasks" :key="task.id" :value="task.id">{{ task.name }}</option>
-              </select>
+                :options="browserTargetOptions"
+              ></custom-select>
               <span class="hint">{{ scheduledTaskForm.type === 'script' ? '在「自定义脚本」页面创建和管理脚本' : '浏览器任务会自动打开网页并执行登录等自动化操作' }}</span>
             </div>
           </div>

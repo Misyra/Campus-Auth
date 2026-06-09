@@ -162,16 +162,7 @@
           <label for="settings-shell">Shell 路径</label>
           <span class="field-help" tabindex="0" role="note" data-tip="定时任务执行 Shell 命令时使用的 Shell。留空使用系统默认（Windows 优先 PowerShell，Linux/macOS 使用 bash）。">?</span>
         </div>
-        <select
-          id="settings-shell"
-          v-model="shellPathMode"
-        >
-          <option value="">自动检测（推荐）</option>
-          <option v-for="shell in availableShells" :key="shell.path" :value="shell.path">
-            {{ shell.name }} - {{ shell.description }}
-          </option>
-          <option value="__custom__">自定义路径...</option>
-        </select>
+        <custom-select v-model="shellPathMode" :options="shellPathOptions"></custom-select>
         <input
           v-if="shellPathMode === '__custom__'"
           v-model.trim="config.shell_path"

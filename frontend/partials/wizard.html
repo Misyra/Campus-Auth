@@ -79,13 +79,7 @@
 
         <div class="form-group">
           <label for="wiz-carrier">运营商</label>
-          <select id="wiz-carrier" v-model="config.carrier">
-            <option>无</option>
-            <option>移动</option>
-            <option>联通</option>
-            <option>电信</option>
-            <option>自定义</option>
-          </select>
+          <custom-select v-model="config.carrier" :options="carrierOptions"></custom-select>
           <span class="hint">选择与您宽带套餐对应的运营商</span>
         </div>
 

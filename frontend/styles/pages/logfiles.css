@@ -69,25 +69,6 @@
   flex-wrap: wrap;
 }
 
-.logfiles-select {
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 0.8rem;
-  min-width: 140px;
-}
-
-.logfiles-select:hover {
-  border-color: var(--border-hover);
-}
-
-.logfiles-select:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.1);
-}
 
 .logfiles-search-wrap {
   position: relative;
