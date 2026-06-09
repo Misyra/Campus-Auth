@@ -145,7 +145,11 @@ def get_log_file_content(
         if level and level.upper() in _VALID_LEVELS and line.level != level.upper():
             continue
 
-        if source and source.lower() in _VALID_SOURCES and line.source != source.lower():
+        if (
+            source
+            and source.lower() in _VALID_SOURCES
+            and line.source != source.lower()
+        ):
             continue
 
         if search:
