@@ -224,13 +224,12 @@ class TestNetworkStateSetInConsumer:
             response_event=threading.Event(),
         )
 
-        with patch("app.services.monitor.get_worker") as mock_get_worker:
-            mock_worker = MagicMock()
-            mock_worker.submit.return_value = mock_result
-            mock_get_worker.return_value = mock_worker
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = mock_result
+        svc._worker_getter = lambda: mock_worker
 
-            # 调用消费者 _handle_login
-            svc._handle_login(cmd)
+        # 调用消费者 _handle_login
+        svc._handle_login(cmd)
 
         # 验证 network_state 已由消费者设置为 CONNECTED
         assert mock_core.network_state == NetworkState.CONNECTED, (
