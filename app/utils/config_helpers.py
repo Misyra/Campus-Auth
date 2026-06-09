@@ -42,7 +42,7 @@ PROFILE_FIELDS: list[str] = [
     "enable_local_check",
     "check_auth_url",
     "auth_url_targets",
-    "portal_check_urls",
+    "url_check_urls",
     "backend_log_level",
     "frontend_log_level",
     "access_log",

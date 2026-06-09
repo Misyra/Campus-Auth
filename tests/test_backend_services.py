@@ -409,14 +409,14 @@ class TestBuildRuntimeConfig:
         assert monitor["enable_tcp_check"] is True
         assert monitor["enable_http_check"] is False
 
-    def test_portal_check_urls(self):
+    def test_url_check_urls(self):
         payload = MonitorConfigPayload(
-            portal_check_urls="http://test.com|Success\nhttp://other.com|OK"
+            url_check_urls="http://test.com|Success\nhttp://other.com|OK"
         )
         config = build_runtime_config(payload)
-        portal = config["monitor"]["portal_check_urls"]
-        assert len(portal) == 2
-        assert portal[0] == ("http://test.com", "Success")
+        url_check = config["monitor"]["url_check_urls"]
+        assert len(url_check) == 2
+        assert url_check[0] == ("http://test.com", "Success")
 
     def test_retry_settings(self):
         payload = MonitorConfigPayload()

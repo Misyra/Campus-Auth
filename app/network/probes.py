@@ -252,23 +252,23 @@ def is_network_available_socket(
     return False
 
 
-def is_network_available_portal(
-    portal_checks: Sequence[tuple[str, str]] | None = None,
+def is_network_available_url(
+    url_checks: Sequence[tuple[str, str]] | None = None,
     timeout: float = 3.0,
 ) -> bool:
-    """通过 captive portal 检测 URL 检测网络连通性。
+    """通过网址响应检测 URL 检测网络连通性。
 
-    访问配置的 captive portal 检测地址，验证响应内容是否包含预期的"正常"标识。
+    访问配置的网址响应检测地址，验证响应内容是否包含预期的"正常"标识。
     如果被重定向到登录页面或返回非预期内容，说明需要认证。
 
     参数:
-        portal_checks: (URL, 预期内容) 元组列表，为 None 时使用内置默认值
+        url_checks: (URL, 预期内容) 元组列表，为 None 时使用内置默认值
         timeout: 单个请求超时秒数
 
     返回 True 表示至少有一个检测 URL 返回了预期内容（网络正常）。
     """
-    if portal_checks is None:
-        portal_checks = [
+    if url_checks is None:
+        url_checks = [
             ("http://captive.apple.com/hotspot-detect.html", "Success"),
             (
                 "http://www.msftconnecttest.com/connecttest.txt",
@@ -276,10 +276,10 @@ def is_network_available_portal(
             ),
             ("http://detectportal.firefox.com/success.txt", "success"),
         ]
-    if not portal_checks:
+    if not url_checks:
         return True
 
-    def _check_portal(url: str, expected: str) -> tuple[str, bool, str]:
+    def _check_url(url: str, expected: str) -> tuple[str, bool, str]:
         start = time.perf_counter()
         try:
             with httpx.Client(
@@ -300,15 +300,15 @@ def is_network_available_portal(
             return (url, False, f"{type(exc).__name__} ({elapsed:.0f}ms)")
 
     futures = {
-        executor.submit(_check_portal, url, exp): url for url, exp in portal_checks
+        executor.submit(_check_url, url, exp): url for url, exp in url_checks
     }
     for future in as_completed(futures):
         url, ok, detail = future.result()
         if ok:
-            logger.info("Captive portal 检测成功: {} -> {}", url, detail)
+            logger.info("网址响应检测成功: {} -> {}", url, detail)
             return True
-        logger.info("Captive portal 检测失败: {} -- {}", url, detail)
-    logger.warning("所有 captive portal 检测均未通过 ({} 个)", len(portal_checks))
+        logger.info("网址响应检测失败: {} -- {}", url, detail)
+    logger.warning("所有网址响应检测均未通过 ({} 个)", len(url_checks))
     return False
 
 

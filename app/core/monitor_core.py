@@ -195,9 +195,9 @@ class NetworkMonitorCore:
             if monitor_cfg.get("enable_http_check", True):
                 http_urls = monitor_cfg.get("test_urls", [])
                 modes.append(f"HTTP({len(http_urls)})")
-            portal_checks = monitor_cfg.get("portal_check_urls")
-            if portal_checks:
-                modes.append(f"Portal({len(portal_checks)})")
+            url_checks = monitor_cfg.get("url_check_urls")
+            if url_checks:
+                modes.append(f"网址响应({len(url_checks)})")
             modes_str = " + ".join(modes) if modes else "无"
 
             self.log_message(
@@ -309,7 +309,7 @@ class NetworkMonitorCore:
         """登录恢复内层循环。
 
         在外层检测到网络异常后调用，执行登录前置检查 + 登录重试。
-        不做网络状态检测（TCP/HTTP/Portal），确保 retry 间隔准确。
+        不做网络状态检测（TCP/HTTP/网址响应），确保 retry 间隔准确。
 
         Returns:
             "login_ok"         — 登录成功，外层应重置计数器
@@ -379,7 +379,7 @@ class NetworkMonitorCore:
             # 3. 执行登录
             self.status_detail = "网络异常：正在登录"
             login_ok, login_msg = self.attempt_login()
-            # 等待 2s 后再做重试决策，避免 Portal 尚未完全更新会话状态时立即重试
+            # 等待 2s 后再做重试决策，避免网址响应尚未完全更新会话状态时立即重试
             if self._stop_event.wait(timeout=2):
                 return RecoveryResult.BREAK
 
@@ -462,7 +462,7 @@ class NetworkMonitorCore:
                     break
                 continue
 
-            # 2. 网络状态检测 (TCP/HTTP/Portal)
+            # 2. 网络状态检测 (TCP/HTTP/网址响应)
             net_ok, net_reason = check_network_status(self.config)
             if net_ok:
                 self.login_attempt_count = 0

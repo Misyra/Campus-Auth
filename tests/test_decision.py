@@ -75,7 +75,7 @@ class TestCheckNetworkStatus:
             "monitor": {
                 "enable_tcp_check": False,
                 "enable_http_check": False,
-                "portal_check_urls": None,
+                "url_check_urls": None,
             }
         }
         ok, reason = check_network_status(config)
@@ -159,7 +159,7 @@ class TestIsNetworkAvailable:
     def test_all_disabled_returns_true(self):
         """所有检测禁用时返回 True（视为正常）。"""
         result = is_network_available(
-            enable_tcp=False, enable_http=False, portal_checks=None
+            enable_tcp=False, enable_http=False, url_checks=None
         )
         assert result is True
 

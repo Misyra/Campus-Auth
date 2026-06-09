@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 
-def parse_portal_checks(raw: str | list | None) -> list[tuple[str, str]]:
-    """解析 Portal 检测 URL 列表，返回 [(url, expected_text), ...]。
+def parse_url_checks(raw: str | list | None) -> list[tuple[str, str]]:
+    """解析网址响应检测 URL 列表，返回 [(url, expected_text), ...]。
 
     支持两种格式：
     - 字符串：每行一个 "url|expected_text"
     - 列表：[[url, expected_text], ...] 或 [(url, expected_text), ...]
 
     参数:
-        raw: 原始 Portal 检测配置
+        raw: 原始网址响应检测配置
 
     返回: 解析后的 (url, expected_text) 元组列表
     """
