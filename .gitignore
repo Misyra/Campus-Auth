@@ -85,6 +85,9 @@ frontend/background/
 # 流程图（本地参考，不随仓库分发）
 doc/diagrams/
 
+# 审计报告和实施计划（本地参考）
+docs/superpowers/
+
 # Source assets
 1.png
 logo.png
