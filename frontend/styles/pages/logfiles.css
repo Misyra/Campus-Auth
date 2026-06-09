@@ -176,7 +176,7 @@
 }
 
 .source-chips::before {
-  content: '来源';
+  content: 'source';
   font-size: 10px;
   color: var(--text-muted);
   margin-right: 2px;

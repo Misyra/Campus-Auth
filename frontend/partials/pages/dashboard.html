@@ -193,12 +193,12 @@
             <button class="log-filter-chip" :class="{ active: logFilter.level === 'DEBUG' }" @click="logFilter.level = logFilter.level === 'DEBUG' ? '' : 'DEBUG'">DEBUG</button>
           </div>
           <div class="log-filter-chips source-chips">
-            <button class="source-chip" :class="{ active: !logFilter.source }" @click="logFilter.source = ''">全部</button>
-            <button class="source-chip" :class="{ active: logFilter.source === 'backend' }" @click="logFilter.source = logFilter.source === 'backend' ? '' : 'backend'">后端</button>
-            <button class="source-chip" :class="{ active: logFilter.source === 'network' }" @click="logFilter.source = logFilter.source === 'network' ? '' : 'network'">网络</button>
-            <button class="source-chip" :class="{ active: logFilter.source === 'task' }" @click="logFilter.source = logFilter.source === 'task' ? '' : 'task'">任务</button>
-            <button class="source-chip" :class="{ active: logFilter.source === 'frontend' }" @click="logFilter.source = logFilter.source === 'frontend' ? '' : 'frontend'">前端</button>
-            <button class="source-chip" :class="{ active: logFilter.source === 'debug' }" @click="logFilter.source = logFilter.source === 'debug' ? '' : 'debug'">调试</button>
+            <button class="source-chip" :class="{ active: !logFilter.source }" @click="logFilter.source = ''">all</button>
+            <button class="source-chip" :class="{ active: logFilter.source === 'backend' }" @click="logFilter.source = logFilter.source === 'backend' ? '' : 'backend'">backend</button>
+            <button class="source-chip" :class="{ active: logFilter.source === 'network' }" @click="logFilter.source = logFilter.source === 'network' ? '' : 'network'">network</button>
+            <button class="source-chip" :class="{ active: logFilter.source === 'task' }" @click="logFilter.source = logFilter.source === 'task' ? '' : 'task'">task</button>
+            <button class="source-chip" :class="{ active: logFilter.source === 'frontend' }" @click="logFilter.source = logFilter.source === 'frontend' ? '' : 'frontend'">frontend</button>
+            <button class="source-chip" :class="{ active: logFilter.source === 'debug' }" @click="logFilter.source = logFilter.source === 'debug' ? '' : 'debug'">debug</button>
           </div>
           <input v-model="logFilter.search" type="text" placeholder="搜索日志..." class="log-search" aria-label="搜索日志" />
         </div>
