@@ -254,7 +254,7 @@ body {
   line-height: 1.4;
 }
 
-.log-module {
+.log-name {
   color: var(--text-muted);
   flex-shrink: 0;
   min-width: 160px;
