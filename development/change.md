@@ -5,6 +5,15 @@
 
 ## 2026-06-09
 
+### refactor: 合并剩余重复测试文件（network/backend/api）
+
+- 删除 `tests/test_decision.py`、`tests/test_network_probes_utils.py`（已被 `test_network_probes.py` 覆盖）
+- 合并 `tests/test_profile_service.py` + `tests/test_task_service_logic.py` → `tests/test_backend_services.py`
+- 删除 `tests/test_api_tools.py`
+- 重命名 `tests/test_api_logfiles.py` → `tests/test_api_logfiles_routes.py`
+- 合并 `tests/test_api.py` → `tests/test_routers.py`（健康检查、初始化状态、版本比较）
+- 测试文件数：35 → 31
+
 ### fix: 修复 Playwright 关闭报错
 
 - `playwright_worker.py`：修复 `_cleanup_browser` 中对 `AsyncPlaywright` 调用不存在的 `close()` 方法，改为正确的 `stop()`
@@ -1251,3 +1260,13 @@
 #### doc/change.md
 
 - 创建修改日志文件，用于记录项目所有变更
+
+### 2026-06-09
+
+#### tests/ 测试套件全面优化
+
+- **Phase 1**: 删除 23 个纯重复测试文件（254 个重复用例）
+- **Phase 2**: 合并 20 个独立文件的独有测试到综合文件，删除原文件
+- **Phase 3**: 新增 8 个 API 路由测试文件（53 个新用例），覆盖 config/tasks/debug/profiles/monitor/history/repo/autostart
+- **Phase 4**: 清理 conftest.py 未使用 fixtures，合并剩余重复文件
+- **成果**: 80 → 49 文件，1899 → 1584 用例（删除重复 + 新增覆盖），所有测试通过

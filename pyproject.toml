@@ -50,6 +50,10 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "--strict-markers --tb=short"
+filterwarnings = [
+    "ignore:.*AsyncMockMixin.*:RuntimeWarning",
+    "ignore:.*httpx.*:UserWarning",
+]
 
 [dependency-groups]
 dev = [
