@@ -215,14 +215,14 @@ class MonitorService:
             self.record_log(
                 "监控线程已在运行，忽略重复启动",
                 level="WARNING",
-                source="backend.monitor_service",
+                source="backend",
             )
             return
         config, pure_mode = self._prepare_command_config(cmd)
         self._start_monitor_core(config, pure_mode)
 
         self.record_log(
-            "监控线程已启动", level="INFO", source="backend.monitor_service"
+            "监控线程已启动", level="INFO", source="backend"
         )
         self._update_status_snapshot()
 
@@ -249,7 +249,7 @@ class MonitorService:
         self._monitor_thread = None
         self._thread_done.clear()
 
-        self.record_log("监控已停止", level="INFO", source="backend.monitor_service")
+        self.record_log("监控已停止", level="INFO", source="backend")
         self._update_status_snapshot()
 
     def _handle_login(self, cmd: MonitorCommand) -> None:
@@ -327,7 +327,7 @@ class MonitorService:
         self._start_monitor_core(new_config, pure_mode)
 
         self.record_log(
-            "监控已按新方案重启", level="INFO", source="backend.monitor_service"
+            "监控已按新方案重启", level="INFO", source="backend"
         )
         self._update_status_snapshot()
 
@@ -355,7 +355,7 @@ class MonitorService:
         self.record_log(
             f"自动切换方案 -> {profile_name} (认证={new_url}, 用户={new_user})",
             level="INFO",
-            source="backend.monitor_service",
+            source="backend",
         )
 
     # ── 日志 / 状态快照桥接 ──
@@ -555,7 +555,7 @@ class MonitorService:
         self.record_log(
             f"切换方案 -> {display_name} (认证={new_url}, 用户={new_user})",
             level="INFO",
-            source="backend.monitor_service",
+            source="backend",
         )
 
         if self._is_monitoring:
@@ -576,7 +576,7 @@ class MonitorService:
             self.record_log(
                 "监控正在按新方案重启",
                 level="INFO",
-                source="backend.monitor_service",
+                source="backend",
             )
 
     def start_monitoring(self) -> tuple[bool, str]:
