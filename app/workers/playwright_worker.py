@@ -36,7 +36,7 @@ from app.constants import (
 from app.utils.logging import get_logger
 from app.utils.platform_utils import CREATE_NO_WINDOW_FLAG
 
-logger = get_logger("playwright_worker", side="BACKEND")
+logger = get_logger("playwright_worker", source="BACKEND")
 
 
 # ── 命令类型常量 ──

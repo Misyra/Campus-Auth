@@ -12,7 +12,7 @@ from app.utils.logging import get_logger
 from .models import TASK_ID_PATTERN, ScriptTaskInfo, TaskConfig
 from .validator import TaskValidator
 
-logger = get_logger("task_manager", side="BACKEND")
+logger = get_logger("task_manager", source="BACKEND")
 
 
 def normalize_task_id(task_id: str | None) -> str:

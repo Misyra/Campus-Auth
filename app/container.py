@@ -14,11 +14,11 @@ from app.services.monitor import MonitorService
 from app.services.profile import ProfileService
 from app.services.scheduler import SchedulerService
 from app.services.task import TaskService
-from app.utils.logging import LogBroadcastSink, get_logger
+from app.utils.logging import DashboardSink, get_logger
 from app.workers.playwright_worker import cleanup_orphan_browsers, get_worker
 from app.ws_manager import WebSocketManager
 
-container_logger = get_logger("backend.container", side="BACKEND")
+container_logger = get_logger("backend.container", source="BACKEND")
 
 
 class ServiceContainer:
@@ -64,16 +64,18 @@ class ServiceContainer:
         # 清理孤儿浏览器进程
         cleanup_orphan_browsers()
 
-        # 注册 WebSocket 广播 sink — 将 loguru 日志自动转发到前端
+        # 注册 Dashboard sink — 内存缓冲 + WebSocket 广播
         from loguru import logger
 
-        broadcast_sink = LogBroadcastSink(self.monitor_service.ws_broadcast_queue)
+        dashboard_sink = DashboardSink()
         logger.add(
-            broadcast_sink.write,
+            dashboard_sink.write,
             format="{name} | {message}",
             level="DEBUG",
             filter=lambda record: record["extra"].get("side") == "BACKEND",
         )
+        # 让 monitor_service 的 drain_ws_queue 从 DashboardSink 的 broadcast_queue 消费
+        self.monitor_service._ws_broadcast_queue = dashboard_sink.broadcast_queue
 
         # 启动监控服务
         self.monitor_service.boot()

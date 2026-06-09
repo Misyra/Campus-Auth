@@ -149,30 +149,30 @@ class TestStartup:
         return container
 
     @patch("app.container.cleanup_orphan_browsers")
-    @patch("app.container.LogBroadcastSink")
+    @patch("app.container.DashboardSink")
     @patch("loguru.logger")
     def test_startup_calls_cleanup_orphans(
-        self, mock_logger, mock_broadcast_sink, mock_cleanup, container_for_startup
+        self, mock_logger, mock_dashboard_sink, mock_cleanup, container_for_startup
     ):
         """startup 应调用 cleanup_orphan_browsers。"""
         asyncio.run(container_for_startup.startup())
         mock_cleanup.assert_called_once()
 
     @patch("app.container.cleanup_orphan_browsers")
-    @patch("app.container.LogBroadcastSink")
+    @patch("app.container.DashboardSink")
     @patch("loguru.logger")
     def test_startup_boots_monitor(
-        self, mock_logger, mock_broadcast_sink, mock_cleanup, container_for_startup
+        self, mock_logger, mock_dashboard_sink, mock_cleanup, container_for_startup
     ):
         """startup 应调用 monitor_service.boot()。"""
         asyncio.run(container_for_startup.startup())
         container_for_startup.monitor_service.boot.assert_called_once()
 
     @patch("app.container.cleanup_orphan_browsers")
-    @patch("app.container.LogBroadcastSink")
+    @patch("app.container.DashboardSink")
     @patch("loguru.logger")
     def test_startup_starts_scheduler_when_enabled(
-        self, mock_logger, mock_broadcast_sink, mock_cleanup, container_for_startup
+        self, mock_logger, mock_dashboard_sink, mock_cleanup, container_for_startup
     ):
         """当存在启用的定时任务时，startup 应启动调度器。"""
         container_for_startup.scheduler_service.has_enabled_tasks.return_value = True
@@ -180,10 +180,10 @@ class TestStartup:
         container_for_startup.scheduler_service.start.assert_called_once()
 
     @patch("app.container.cleanup_orphan_browsers")
-    @patch("app.container.LogBroadcastSink")
+    @patch("app.container.DashboardSink")
     @patch("loguru.logger")
     def test_startup_skips_scheduler_when_no_enabled_tasks(
-        self, mock_logger, mock_broadcast_sink, mock_cleanup, container_for_startup
+        self, mock_logger, mock_dashboard_sink, mock_cleanup, container_for_startup
     ):
         """没有启用的定时任务时，startup 不应启动调度器。"""
         container_for_startup.scheduler_service.has_enabled_tasks.return_value = False
@@ -191,10 +191,10 @@ class TestStartup:
         container_for_startup.scheduler_service.start.assert_not_called()
 
     @patch("app.container.cleanup_orphan_browsers")
-    @patch("app.container.LogBroadcastSink")
+    @patch("app.container.DashboardSink")
     @patch("loguru.logger")
     def test_startup_creates_ws_drain_task(
-        self, mock_logger, mock_broadcast_sink, mock_cleanup, container_for_startup
+        self, mock_logger, mock_dashboard_sink, mock_cleanup, container_for_startup
     ):
         """startup 应创建 ws_drain_loop 异步任务。"""
         asyncio.run(container_for_startup.startup())

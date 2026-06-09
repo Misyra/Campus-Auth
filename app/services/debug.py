@@ -31,7 +31,7 @@ from .debug_session import (
     empty_debug_session,
 )
 
-api_logger = get_logger("backend.debug_manager", side="BACKEND")
+api_logger = get_logger("backend.debug_manager", source="BACKEND")
 
 
 class DebugSessionManager:

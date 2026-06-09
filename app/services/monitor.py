@@ -80,7 +80,7 @@ class StatusSnapshot:
     network_state: str = "unknown"
 
 
-service_logger = get_logger("backend.monitor_service", side="BACKEND")
+service_logger = get_logger("backend.monitor_service", source="BACKEND")
 
 
 # ── MonitorService（Actor 模型重构）──

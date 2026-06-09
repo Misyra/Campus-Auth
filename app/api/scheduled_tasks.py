@@ -12,7 +12,7 @@ from app.schemas import ActionResponse
 from app.utils.logging import get_logger
 
 router = APIRouter()
-api_logger = get_logger("backend.api", side="BACKEND")
+api_logger = get_logger("backend.api", source="BACKEND")
 
 
 def _get_scheduler(request: Request):

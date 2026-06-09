@@ -10,7 +10,7 @@ from app.utils.logging import get_logger
 
 from .models import StepError, TaskConfig
 
-logger = get_logger("variable_resolver", side="BACKEND")
+logger = get_logger("variable_resolver", source="BACKEND")
 
 
 class VariableResolver:

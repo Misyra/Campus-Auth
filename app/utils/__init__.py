@@ -3,7 +3,7 @@ from .config import ConfigValidator
 from .crypto import decrypt_password, encrypt_password, mask_password
 from .exceptions import LoginCancelledError
 from .logging import (
-    LogBroadcastSink,
+    DashboardSink,
     LogConfigCenter,
     get_logger,
 )
@@ -19,7 +19,7 @@ def str_to_bool(value: str) -> bool:
 __all__ = [
     "BrowserContextManager",
     "ConfigValidator",
-    "LogBroadcastSink",
+    "DashboardSink",
     "LogConfigCenter",
     "LoginAttemptHandler",
     "LoginCancelledError",

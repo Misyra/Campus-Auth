@@ -10,7 +10,7 @@ import subprocess
 from .logging import get_logger
 from .platform_utils import is_linux, is_macos, is_windows
 
-logger = get_logger("notify", side="BACKEND")
+logger = get_logger("notify", source="BACKEND")
 
 
 def send_notification(title: str, message: str, duration_ms: int = 5000) -> bool:

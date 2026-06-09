@@ -20,7 +20,7 @@ from app.utils.platform_utils import (
     is_windows,
 )
 
-logger = get_logger("network_probes", side="BACKEND")
+logger = get_logger("network_probes", source="BACKEND")
 
 executor = ThreadPoolExecutor(max_workers=5)
 atexit.register(executor.shutdown, wait=False, cancel_futures=True)

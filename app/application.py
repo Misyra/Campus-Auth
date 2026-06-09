@@ -40,9 +40,9 @@ from app.container import ServiceContainer
 from app.utils.logging import LogConfigCenter, get_logger
 from app.version import get_project_version
 
-http_logger = get_logger("backend.http", side="BACKEND")
-startup_logger = get_logger("backend.startup", side="BACKEND")
-ws_logger = get_logger("backend.ws", side="BACKEND")
+http_logger = get_logger("backend.http", source="BACKEND")
+startup_logger = get_logger("backend.startup", source="BACKEND")
+ws_logger = get_logger("backend.ws", source="BACKEND")
 
 # temp 目录中截图的最大保留天数
 _TEMP_SCREENSHOT_MAX_AGE_DAYS = 7
@@ -323,7 +323,7 @@ def run(
                 log_retention = 7
 
     log_center = LogConfigCenter.get_instance()
-    log_center.initialize({"level": "INFO"}, side="BACKEND")
+    log_center.initialize({"level": "INFO"}, source="backend")
 
     # 压制第三方库的 DEBUG 日志
     import logging

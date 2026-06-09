@@ -7,7 +7,7 @@ from typing import Any
 from app.tasks import ScriptTaskInfo, TaskManager, is_valid_task_id, normalize_task_id
 from app.utils.logging import get_logger
 
-task_logger = get_logger("backend.task_service", side="BACKEND")
+task_logger = get_logger("backend.task_service", source="BACKEND")
 
 # 危险步骤类型：包含任意 JS 执行
 _DANGEROUS_STEP_TYPES = {"eval", "custom_js"}
