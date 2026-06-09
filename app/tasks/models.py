@@ -186,7 +186,7 @@ class TaskConfig:
             url=data.get("url", ""),
             timeout=data.get("timeout", DEFAULT_TASK_TIMEOUT),
             variables=data.get("variables", {}),
-            steps=[StepConfig.from_dict(s) for s in data.get("steps", [])],
+            steps=[StepConfig.from_dict(s) for s in data.get("steps", []) if isinstance(s, dict)],
             on_success=data.get("on_success", {}),
             on_failure=data.get("on_failure", {}),
             metadata=data.get("metadata", {}),

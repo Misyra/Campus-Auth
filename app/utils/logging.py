@@ -146,13 +146,12 @@ class DashboardSink:
 
         with self._lock:
             self.buffer.append(entry)
-
-        self.broadcast_queue.append(
-            {
-                "type": "log",
-                "data": entry,
-            }
-        )
+            self.broadcast_queue.append(
+                {
+                    "type": "log",
+                    "data": entry,
+                }
+            )
 
     def list_logs(self, limit: int = 200) -> list[dict]:
         """返回最近 limit 条日志（供 dashboard API 读取）。"""

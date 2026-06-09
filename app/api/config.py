@@ -42,7 +42,7 @@ def save_config(
         ok, error = ConfigValidator.validate_gui_config(
             payload.username,
             payload.password,
-            str(payload.check_interval_seconds),
+            payload.check_interval_seconds,
         )
         if not ok:
             raise ValueError(error)

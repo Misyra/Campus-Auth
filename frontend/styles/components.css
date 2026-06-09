@@ -831,9 +831,9 @@
 }
 
 .notification-dropdown {
-  position: fixed;
-  top: 68px;
-  right: 32px;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
   width: 320px;
   max-height: 400px;
   overflow-y: auto;

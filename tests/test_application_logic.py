@@ -8,9 +8,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.application import _cleanup_temp_screenshots, _resolve_port
+from app.application import _cleanup_temp_screenshots, resolve_port
 
-# ── _resolve_port ──
+# ── resolve_port ──
 
 
 class TestResolvePort:
@@ -24,13 +24,13 @@ class TestResolvePort:
         ):
             # mock settings.json 不存在
             mock_root.__truediv__ = lambda self, x: Path("/nonexistent/settings.json")
-            port = _resolve_port()
+            port = resolve_port()
             assert port == 50721
 
     def test_env_port(self):
         """环境变量 APP_PORT 覆盖。"""
         with patch.dict("os.environ", {"APP_PORT": "8080"}):
-            port = _resolve_port()
+            port = resolve_port()
             assert port == 8080
 
     def test_invalid_env_port(self):
@@ -40,7 +40,7 @@ class TestResolvePort:
             patch("app.application.PROJECT_ROOT") as mock_root,
         ):
             mock_root.__truediv__ = lambda self, x: Path("/nonexistent/settings.json")
-            port = _resolve_port()
+            port = resolve_port()
             assert port == 50721
 
     def test_out_of_range_port(self):
@@ -50,7 +50,7 @@ class TestResolvePort:
             patch("app.application.PROJECT_ROOT") as mock_root,
         ):
             mock_root.__truediv__ = lambda self, x: Path("/nonexistent/settings.json")
-            port = _resolve_port()
+            port = resolve_port()
             assert port == 50721
 
 

@@ -44,11 +44,11 @@ class TestValidate:
         assert any("数组" in e for e in errors)
 
     def test_empty_steps(self):
-        """空 steps 数组被拒绝。"""
+        """空 steps 数组是合法的（任务可以没有步骤）。"""
         config = {"name": "test", "steps": []}
         ok, errors = TaskValidator.validate(config)
-        assert ok is False
-        assert any("steps" in e for e in errors)
+        assert ok is True
+        assert errors == []
 
     def test_multiple_errors(self):
         """多个错误。"""

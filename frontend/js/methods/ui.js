@@ -120,7 +120,9 @@ export const uiMethods = {
   },
   removeCustomVar(key) {
     if (this.config.custom_variables && key in this.config.custom_variables) {
-      delete this.config.custom_variables[key];
+      const newVars = { ...this.config.custom_variables };
+      delete newVars[key];
+      this.config.custom_variables = newVars;
     }
   },
   updateCustomVarKey(oldKey, newKey) {

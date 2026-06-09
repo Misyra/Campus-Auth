@@ -47,6 +47,7 @@ class SchedulerService:
         self._task: asyncio.Task | None = None
         self._running_tasks: set[asyncio.Task] = set()
         self._history_lock = asyncio.Lock()
+        self._last_triggered_minute: tuple[int, int] | None = None
         # 缓存 Shell 安全策略实例（可用 shell 列表不会在运行时变化）
         self._shell_policy = ShellCommandPolicy(
             allowlist=[s["path"] for s in detect_available_shells()]
@@ -171,8 +172,6 @@ class SchedulerService:
 
                 # 保留最近 N 条
                 data["runs"] = data["runs"][:MAX_HISTORY_SIZE]
-
-                from app.utils.file_helpers import atomic_write
 
                 atomic_write(
                     str(history_file),
@@ -466,6 +465,11 @@ class SchedulerService:
 
     async def _check_and_execute(self, now: datetime):
         """检查并执行到期的任务。"""
+        current_minute_key = (now.hour, now.minute)
+        if current_minute_key == self._last_triggered_minute:
+            return
+        self._last_triggered_minute = current_minute_key
+
         tasks = self.list_tasks()
         for task in tasks:
             if not task.get("enabled", False):

@@ -65,6 +65,15 @@ async def create_scheduled_task(payload: dict, request: Request) -> ActionRespon
     ):
         return ActionResponse(success=False, message="请设置执行时间")
 
+    hour, minute = schedule["hour"], schedule["minute"]
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        return ActionResponse(success=False, message="执行时间无效：hour 须为 0-23，minute 须为 0-59")
+
+    try:
+        timeout = max(5, min(3600, int(payload.get("timeout", 60))))
+    except (ValueError, TypeError):
+        return ActionResponse(success=False, message="timeout 值无效")
+
     # 构建任务配置
     config = {
         "name": payload.get("name", ""),
@@ -75,10 +84,10 @@ async def create_scheduled_task(payload: dict, request: Request) -> ActionRespon
         "shell_path": payload.get("shell_path", ""),
         "enabled": payload.get("enabled", True),
         "schedule": {
-            "hour": schedule.get("hour", 0),
-            "minute": schedule.get("minute", 0),
+            "hour": hour,
+            "minute": minute,
         },
-        "timeout": max(5, min(3600, int(payload.get("timeout", 60)))),
+        "timeout": timeout,
     }
 
     ok, message = scheduler.save_task(task_id, config)
@@ -117,6 +126,15 @@ async def update_scheduled_task(
     ):
         return ActionResponse(success=False, message="请设置执行时间")
 
+    hour, minute = schedule.get("hour", 0), schedule.get("minute", 0)
+    if "schedule" in payload and not (0 <= hour <= 23 and 0 <= minute <= 59):
+        return ActionResponse(success=False, message="执行时间无效：hour 须为 0-23，minute 须为 0-59")
+
+    try:
+        timeout = max(5, min(3600, int(payload.get("timeout", existing.get("timeout", 60)))))
+    except (ValueError, TypeError):
+        return ActionResponse(success=False, message="timeout 值无效")
+
     # 更新配置
     config = {
         "name": payload.get("name", existing.get("name", "")),
@@ -127,12 +145,10 @@ async def update_scheduled_task(
         "shell_path": payload.get("shell_path", existing.get("shell_path", "")),
         "enabled": payload.get("enabled", existing.get("enabled", True)),
         "schedule": {
-            "hour": schedule.get("hour", 0),
-            "minute": schedule.get("minute", 0),
+            "hour": hour,
+            "minute": minute,
         },
-        "timeout": max(
-            5, min(3600, int(payload.get("timeout", existing.get("timeout", 60))))
-        ),
+        "timeout": timeout,
         "last_run": existing.get("last_run"),
         "last_status": existing.get("last_status"),
     }

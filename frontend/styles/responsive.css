@@ -82,8 +82,8 @@
   }
 
   .notification-dropdown {
-    top: 60px;
-    right: 16px;
+    width: 280px;
+    right: 0;
   }
 
   .content-wrapper {

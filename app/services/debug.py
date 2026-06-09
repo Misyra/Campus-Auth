@@ -39,7 +39,7 @@ class DebugSessionManager:
 
     def __init__(self, project_root: Path):
         self._project_root = project_root
-        self._temp_dir = project_root / "temp"
+        self._temp_dir = project_root / "temp" / "debug"
         self._session = empty_debug_session()
         self._lock = asyncio.Lock()
         self._exec_sem = asyncio.Semaphore(1)
@@ -283,7 +283,7 @@ class DebugSessionManager:
             if self._session._browser_active:
                 await self._close_debug_browser()
             self._session = empty_debug_session()
-        # 清理临时调试截图（仅删除文件，保留目录结构）
+        # 清理临时调试截图（仅删除调试专用子目录中的文件）
         try:
             if self._temp_dir.exists():
                 for item in self._temp_dir.iterdir():

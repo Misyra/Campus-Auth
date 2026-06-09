@@ -11,7 +11,7 @@ class ConfigValidator:
 
     @staticmethod
     def validate_gui_config(
-        username: str, password: str, check_interval: str
+        username: str, password: str, check_interval: str | int
     ) -> tuple[bool, str]:
         """
         验证GUI配置是否有效
@@ -19,7 +19,7 @@ class ConfigValidator:
         参数:
             username: 用户名
             password: 密码
-            check_interval: 检测间隔
+            check_interval: 检测间隔（字符串或整数）
 
         返回:
             tuple[bool, str]: (是否有效, 错误信息)
@@ -45,14 +45,13 @@ class ConfigValidator:
             return False, "密码长度不能少于2位"
 
         # 验证检测间隔
-        check_interval = check_interval.strip()
         try:
             interval_int = int(check_interval)
             if interval_int < 1:
                 return False, "检测间隔必须大于0"
             if interval_int > 86400:  # 24小时
                 return False, "检测间隔不能超过86400秒（24小时）"
-        except ValueError:
+        except (ValueError, TypeError):
             return False, "检测间隔必须是正整数"
 
         return True, ""

@@ -95,18 +95,13 @@ export const appOptions = {
       return this._configDirty;
     },
     filteredLogs() {
-      let result = this.logs;
-      if (this.logFilter.level) {
-        result = result.filter(l => l.level === this.logFilter.level);
-      }
-      if (this.logFilter.source) {
-        result = result.filter(l => l.source === this.logFilter.source);
-      }
-      if (this.logFilter.search) {
-        const q = this.logFilter.search.toLowerCase();
-        result = result.filter(l => l.message.toLowerCase().includes(q));
-      }
-      return result;
+      const { level, source, search } = this.logFilter;
+      const q = search ? search.toLowerCase() : '';
+      return this.logs.filter(l =>
+        (!level || l.level === level) &&
+        (!source || l.source === source) &&
+        (!q || l.message.toLowerCase().includes(q))
+      );
     },
     networkStatus() {
       if (!this.status.monitoring) return 'idle';
