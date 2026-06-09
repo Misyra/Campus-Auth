@@ -1,3 +1,5 @@
+import { LOG_SOURCES } from '../constants.js';
+
 export const formatterMethods = {
   formatDuration(totalSeconds) {
     const sec = Number(totalSeconds || 0);
@@ -16,8 +18,11 @@ export const formatterMethods = {
   },
   formatLogMeta(item) {
     const level = String(item?.level || 'INFO').toUpperCase();
-    const source = String(item?.source || 'monitor');
+    const source = String(item?.source || 'backend');
     return `[${level}] [${source}]`;
+  },
+  getSourceLabel(source) {
+    return LOG_SOURCES[source]?.label || source || '未知';
   },
   extractScreenshotUrl(message) {
     const text = String(message || '');

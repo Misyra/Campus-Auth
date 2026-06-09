@@ -54,6 +54,14 @@ export const LOG_LEVELS = {
   CRITICAL: 50,
 };
 
+export const LOG_SOURCES = {
+  backend: { label: '后端', color: '#64748b' },
+  network: { label: '网络', color: '#f59e0b' },
+  task: { label: '任务', color: '#8b5cf6' },
+  frontend: { label: '前端', color: '#3b82f6' },
+  debug: { label: '调试', color: '#6b7280' },
+};
+
 export const BROWSER_ARGS_DEFAULT = "--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees\n--disable-ipc-flooding-protection\n--disable-hang-monitor\n--disable-popup-blocking";
 
 // 浏览器与监控参数的共享默认值（DEFAULT_CONFIG 和 DEFAULT_PROFILE_SETTINGS 共用）
