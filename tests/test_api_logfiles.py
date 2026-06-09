@@ -101,9 +101,9 @@ class TestParseLogLine:
 
     def test_standard_format(self):
         """标准格式解析。"""
-        raw = "[2026-06-01 00:04:44.139][INFO][backend][module] 这是消息"
+        raw = "[2026-06-01 00:04:44][INFO][backend][module] 这是消息"
         line = _parse_log_line(raw)
-        assert line.timestamp == "2026-06-01 00:04:44.139"
+        assert line.timestamp == "2026-06-01 00:04:44"
         assert line.level == "INFO"
         assert line.source == "backend"
         assert line.name == "module"
@@ -111,14 +111,14 @@ class TestParseLogLine:
 
     def test_error_level(self):
         """ERROR 级别解析。"""
-        raw = "[2026-06-01 12:00:00.000][ERROR][backend][main] 出错了"
+        raw = "[2026-06-01 12:00:00][ERROR][backend][main] 出错了"
         line = _parse_log_line(raw)
         assert line.level == "ERROR"
         assert line.message == "出错了"
 
     def test_warning_level(self):
         """WARNING 级别解析。"""
-        raw = "[2026-06-01 12:00:00.000][WARNING][backend][service] 警告"
+        raw = "[2026-06-01 12:00:00][WARNING][backend][service] 警告"
         line = _parse_log_line(raw)
         assert line.level == "WARNING"
 
@@ -139,7 +139,7 @@ class TestParseLogLine:
 
     def test_multiline_message(self):
         """消息中包含特殊字符。"""
-        raw = "[2026-06-01 00:00:00.000][INFO][backend][mod] key=value, a=b"
+        raw = "[2026-06-01 00:00:00][INFO][backend][mod] key=value, a=b"
         line = _parse_log_line(raw)
         assert line.message == "key=value, a=b"
 
@@ -233,7 +233,7 @@ class TestGetLogFileContent:
 
     def test_basic_content(self, tmp_path):
         """基本内容读取。"""
-        content = "[2026-06-01 00:00:00.000][INFO][backend][mod] hello\n"
+        content = "[2026-06-01 00:00:00][INFO][backend][mod] hello\n"
         self._create_log_file(tmp_path, "2026-06-01", "app.log", content)
 
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
@@ -268,9 +268,9 @@ class TestGetLogFileContent:
     def test_level_filter(self, tmp_path):
         """级别过滤。"""
         content = (
-            "[2026-06-01 00:00:00.000][INFO][backend][mod] info msg\n"
-            "[2026-06-01 00:00:01.000][ERROR][backend][mod] error msg\n"
-            "[2026-06-01 00:00:02.000][INFO][backend][mod] info msg 2\n"
+            "[2026-06-01 00:00:00][INFO][backend][mod] info msg\n"
+            "[2026-06-01 00:00:01][ERROR][backend][mod] error msg\n"
+            "[2026-06-01 00:00:02][INFO][backend][mod] info msg 2\n"
         )
         self._create_log_file(tmp_path, "2026-06-01", "app.log", content)
 
@@ -289,9 +289,9 @@ class TestGetLogFileContent:
     def test_search_filter(self, tmp_path):
         """关键词搜索。"""
         content = (
-            "[2026-06-01 00:00:00.000][INFO][backend][mod] 登录成功\n"
-            "[2026-06-01 00:00:01.000][ERROR][backend][mod] 连接超时\n"
-            "[2026-06-01 00:00:02.000][INFO][backend][mod] 网络正常\n"
+            "[2026-06-01 00:00:00][INFO][backend][mod] 登录成功\n"
+            "[2026-06-01 00:00:01][ERROR][backend][mod] 连接超时\n"
+            "[2026-06-01 00:00:02][INFO][backend][mod] 网络正常\n"
         )
         self._create_log_file(tmp_path, "2026-06-01", "app.log", content)
 
@@ -309,7 +309,7 @@ class TestGetLogFileContent:
 
     def test_search_case_insensitive(self, tmp_path):
         """搜索大小写不敏感。"""
-        content = "[2026-06-01 00:00:00.000][INFO][backend][mod] Hello World\n"
+        content = "[2026-06-01 00:00:00][INFO][backend][mod] Hello World\n"
         self._create_log_file(tmp_path, "2026-06-01", "app.log", content)
 
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
@@ -326,7 +326,7 @@ class TestGetLogFileContent:
     def test_limit_applied(self, tmp_path):
         """限制返回行数。"""
         lines = [
-            f"[2026-06-01 00:00:{i:02d}.000][INFO][backend][mod] msg {i}\n"
+            f"[2026-06-01 00:00:{i:02d}][INFO][backend][mod] msg {i}\n"
             for i in range(100)
         ]
         content = "".join(lines)
