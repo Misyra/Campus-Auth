@@ -749,12 +749,12 @@ class TestGetLogger:
         assert logger.bind(name="test_module")
 
     def test_logger_has_side_binding(self):
-        logger = get_logger("test_side", source="FRONTEND")
+        logger = get_logger("test_side", source="frontend")
         # loguru logger 绑定后通过 extra 获取 source
-        assert logger.bind(source="FRONTEND")
+        assert logger.bind(source="frontend")
 
     def test_logger_is_callable(self):
-        logger = get_logger("test_dup", source="BACKEND")
+        logger = get_logger("test_dup", source="backend")
         # loguru logger 可以直接调用
         assert logger is not None
 

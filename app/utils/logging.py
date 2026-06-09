@@ -100,13 +100,18 @@ def normalize_level(level: str | None, default: str = "INFO") -> str:
 
 # ==================== 核心接口 ====================
 
+VALID_SOURCES = {"backend", "network", "task", "frontend", "debug"}
+
 
 def get_logger(name: str, source: str = "backend") -> logger:
     """获取绑定 name 和 source 的 logger。
 
     返回的 logger 支持直接调用 .info()、.warning() 等方法。
     source 可选值: backend, network, task, frontend, debug
+    非法 source 值自动降级为 "backend"。
     """
+    if source not in VALID_SOURCES:
+        source = "backend"
     return logger.bind(name=name, source=source)
 
 
