@@ -55,11 +55,11 @@ export const LOG_LEVELS = {
 };
 
 export const LOG_SOURCES = {
-  backend: { label: 'back', color: '#64748b' },
-  network: { label: 'net', color: '#f59e0b' },
-  task: { label: 'task', color: '#8b5cf6' },
-  frontend: { label: 'front', color: '#3b82f6' },
-  debug: { label: 'debug', color: '#6b7280' },
+  backend: { label: 'BAK', color: '#64748b' },
+  network: { label: 'NET', color: '#f59e0b' },
+  task: { label: 'TSK', color: '#8b5cf6' },
+  frontend: { label: 'FRT', color: '#3b82f6' },
+  debug: { label: 'DBG', color: '#6b7280' },
 };
 
 export const BROWSER_ARGS_DEFAULT = "--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees\n--disable-ipc-flooding-protection\n--disable-hang-monitor\n--disable-popup-blocking";
