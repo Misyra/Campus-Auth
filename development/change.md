@@ -5,6 +5,40 @@
 
 ## 2026-06-09
 
+### fix: NetworkMonitorCore source 从 monitor.core 改为 network + name monitor_core
+
+- `app/core/monitor_core.py`：logger 初始化改为 `get_logger("monitor_core", source="network")`；`log_message` 中 `self.log_callback` 调用从位置参数 `"monitor.core"` 改为关键字参数 `source="network", name="monitor_core"`
+- 原因：`"monitor.core"` 不是合法的 source 类别，点号导致 CSS 类名 `source-monitor.core` 无效，前端显示异常
+- `tests/test_monitor_core_logic.py`：更新 `test_uses_callback_when_set` 断言匹配新的关键字参数签名
+- 全部 1897 个测试通过
+
+### refactor: LogEntry schema 字段 module → name
+
+- `app/schemas.py`：LogEntry 模型中 `module: str = ""` 改为 `name: str = ""`，与 DashboardSink 和 loguru 内部命名保持一致
+- 测试验证：5 个 LogEntry 相关测试全部通过
+
+### refactor: record_log 解耦 name 和 source
+
+- `app/services/monitor.py`：`record_log` 方法新增 `name` 参数（默认 `"monitor_service"`），将 `get_logger(source, source)` 改为 `get_logger(name, source)`，name（模块标识）和 source（日志类别）不再共用同一值
+- `tests/test_monitor_service.py`：将两处非法 `source="test"` 改为 `source="backend"`，符合 VALID_SOURCES 校验
+- 测试验证：31 个 monitor service 测试全部通过
+
+### fix: get_logger 添加 source 校验，非法值降级为 backend
+
+- `app/utils/logging.py`：添加 `VALID_SOURCES` 常量，`get_logger` 中校验 source 参数，非法值自动降级为 "backend"
+- `tests/test_utils.py`：测试用例中的大写 source 值（FRONTEND/BACKEND）改为合法小写值
+
+### fix: 修复前端日志模块名一直显示 "record" 的问题
+
+- `app/services/monitor.py`：`record_log` 方法中 `get_logger("record", source)` 改为 `get_logger(source, source)`
+- 原因：logger 名称 "record" 无实际意义，会作为 `name` 字段显示在前端日志中
+- 修改后：模块名显示为 source 值（backend / network / monitor.core 等），与其他模块命名规范一致
+
+### refactor: DashboardSink entry 字段 module → name
+
+- `app/utils/logging.py`：DashboardSink.write 的 entry dict 中 `"module"` 改为 `"name"`，与 loguru 内部 `record["name"]` 和 LogLine 模型保持一致
+- `tests/test_logging_utils.py`：断言 `entry["module"]` 改为 `entry["name"]`
+
 ### docs: 代码深度重审 v2 — 发现 v1 修复遗漏和新增问题
 
 - `docs/code-audit-2026-06-09-v2.md`：第二轮深化审计报告
