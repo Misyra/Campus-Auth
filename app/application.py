@@ -299,24 +299,28 @@ app.mount("/temp", StaticFiles(directory=TEMP_DIR), name="temp")
 
 
 def run(
-    access_log_enabled: bool = False,
-    log_retention: int = 7,
+    access_log_enabled: bool | None = None,
+    log_retention: int | None = None,
 ) -> None:
     import uvicorn
 
-    if not access_log_enabled:
-        # 如果调用方未传入日志配置，从 settings.json 读取
+    if access_log_enabled is None or log_retention is None:
+        # 调用方未传入日志配置，从 settings.json 读取
         try:
             from app.services.profile import ProfileService
 
             profile_service = ProfileService(PROJECT_ROOT)
             sys_settings = profile_service.load().system
-            access_log_enabled = bool(sys_settings.access_log)
-            log_retention = max(1, sys_settings.log_retention_days)
+            if access_log_enabled is None:
+                access_log_enabled = bool(sys_settings.access_log)
+            if log_retention is None:
+                log_retention = max(1, sys_settings.log_retention_days)
         except Exception:
             startup_logger.warning("读取日志配置失败，使用默认值", exc_info=True)
-            access_log_enabled = False
-            log_retention = 7
+            if access_log_enabled is None:
+                access_log_enabled = False
+            if log_retention is None:
+                log_retention = 7
 
     log_center = LogConfigCenter.get_instance()
     log_center.initialize({"level": "INFO"}, side="BACKEND")

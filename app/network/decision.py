@@ -242,7 +242,7 @@ def _is_auth_url_reachable(
                 for host, port in targets
             }
             try:
-                for future in as_completed(futures, timeout=5):
+                for future in as_completed(futures, timeout=4):
                     if future.result():
                         # 任一目标可达即取消其余任务
                         for f in futures:
