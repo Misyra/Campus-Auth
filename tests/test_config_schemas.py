@@ -22,6 +22,7 @@ from app.schemas import (
     SystemSettings,
 )
 from app.services.config import (
+    _decrypt_password_field,
     _normalize_headers_json,
     _normalize_targets,
     _safe_decrypt,
@@ -752,3 +753,42 @@ class TestMonitorConfigPayloadFull:
         m = MonitorConfigPayload(carrier="自定义", carrier_custom="校园网")
         assert m.carrier == "自定义"
         assert m.carrier_custom == "校园网"
+
+
+# ── 密码字段解密 ──
+
+
+class TestDecryptPasswordField:
+    """密码字段解密。"""
+
+    def test_encrypted_password(self):
+        """ENC: 前缀密码解密。"""
+        from unittest.mock import patch
+
+        with patch("app.services.config.decrypt_password", return_value="secret"):
+            result, has_error = _decrypt_password_field("ENC:encrypted")
+            assert result == "secret"
+            assert has_error is False
+
+    def test_masked_password_with_fallback(self):
+        """掩码密码使用回退。"""
+        from unittest.mock import patch
+
+        with patch("app.services.config.decrypt_password", return_value="fallback"):
+            result, has_error = _decrypt_password_field(
+                "••••••••", "ENC:fallback_encrypted"
+            )
+            assert result == "fallback"
+            assert has_error is False
+
+    def test_masked_password_no_fallback(self):
+        """掩码密码无回退返回空。"""
+        result, has_error = _decrypt_password_field("••••••••", "")
+        assert result == ""
+        assert has_error is False
+
+    def test_plain_password(self):
+        """明文密码直接返回。"""
+        result, has_error = _decrypt_password_field("mypassword")
+        assert result == "mypassword"
+        assert has_error is False

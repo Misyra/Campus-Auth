@@ -34,27 +34,9 @@ def tmp_pid_dir(tmp_path: Path, monkeypatch):
 
 
 @pytest.fixture
-def patched_signal_handlers():
-    """Mock signal.signal()，记录注册的 handlers。"""
-    handlers: dict[int, object] = {}
-
-    def _fake_signal(signum, handler):
-        handlers[signum] = handler
-        return handler
-
-    with patch("signal.signal", side_effect=_fake_signal):
-        yield handlers
-
-
-@pytest.fixture
 def patched_webbrowser():
     """Mock webbrowser.open() 阻止真实打开浏览器。"""
     with patch("webbrowser.open") as mock_open:
         yield mock_open
 
 
-@pytest.fixture
-def patched_uvicorn_run():
-    """Mock uvicorn.run() 阻止真实启动服务。"""
-    with patch("uvicorn.run") as mock_run:
-        yield mock_run
