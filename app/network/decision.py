@@ -137,7 +137,10 @@ def is_network_available(
     if not enable_tcp and not enable_http and not enable_url:
         return True
 
-    urls_list = list(test_urls or ())
+    # HTTP 检测：配置为空时使用默认 URL
+    _DEFAULT_HTTP_URLS = ("https://www.baidu.com", "https://www.qq.com")
+    urls_list = list(test_urls or _DEFAULT_HTTP_URLS) if enable_http else []
+
     logger.debug(
         "开始网络检测 (TCP={}, HTTP={}, 网址响应={}, TCP目标={}, HTTP目标={}, 网址响应目标={})",
         "开" if enable_tcp else "关",
