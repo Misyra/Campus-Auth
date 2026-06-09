@@ -25,6 +25,8 @@ _LOG_LINE_PATTERN = re.compile(
 
 _VALID_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 _VALID_SOURCES = {"backend", "network", "task", "frontend", "debug"}
+# 完整名称 → 日志文件中的缩写
+_SOURCE_MAP = {"backend": "back", "network": "net", "task": "task", "frontend": "front", "debug": "debug"}
 
 
 class LogFileInfo(BaseModel):
@@ -148,7 +150,7 @@ def get_log_file_content(
         if (
             source
             and source.lower() in _VALID_SOURCES
-            and line.source != source.lower()
+            and line.source != _SOURCE_MAP.get(source.lower(), source.lower())
         ):
             continue
 
