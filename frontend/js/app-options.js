@@ -166,12 +166,12 @@ export const appOptions = {
       if (!this.status.monitoring) return '已停止';
       return this.status.status_detail || '正在启动监控';
     },
-    portalCheckEnabled: {
+    urlCheckEnabled: {
       get() {
-        return !!(this.config.portal_check_urls && this.config.portal_check_urls.trim());
+        return !!(this.config.url_check_urls && this.config.url_check_urls.trim());
       },
       set(val) {
-        this.config.portal_check_urls = val ? (this.config.portal_check_urls || this.defaultPortalUrls) : '';
+        this.config.url_check_urls = val ? (this.config.url_check_urls || this.defaultUrlCheckUrls) : '';
       },
     },
     filteredRepoTasks() {
