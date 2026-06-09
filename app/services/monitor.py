@@ -361,10 +361,11 @@ class MonitorService:
     # ── 日志 / 状态快照桥接 ──
 
     def record_log(
-        self, message: str, level: str = "INFO", source: str = "backend"
+        self, message: str, level: str = "INFO",
+        source: str = "backend", name: str = "monitor_service"
     ) -> None:
         """委托 loguru 统一处理（自动触发所有 sink）。"""
-        bound_logger = get_logger("record", source)
+        bound_logger = get_logger(name, source)
         level_name = str(level or "INFO").upper()
         log_func = getattr(bound_logger, level_name.lower(), bound_logger.info)
         log_func("{}", message)
