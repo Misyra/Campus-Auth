@@ -184,6 +184,10 @@
   flex-shrink: 0;
 }
 
+.log-toolbar .source-chips {
+  flex-wrap: wrap;
+}
+
 .log-message {
   word-break: break-all;
   font-family: var(--font-mono);

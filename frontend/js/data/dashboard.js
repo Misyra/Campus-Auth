@@ -2,7 +2,7 @@
 export function dashboardData() {
   return {
     logs: [],
-    logFilter: { level: '', search: '' },
+    logFilter: { level: '', source: '', search: '' },
     autoScroll: true,
     newLogCount: 0,
     fetchStatusFailCount: 0,
