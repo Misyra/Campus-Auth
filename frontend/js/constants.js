@@ -55,10 +55,10 @@ export const LOG_LEVELS = {
 };
 
 export const LOG_SOURCES = {
-  backend: { label: 'backend', color: '#64748b' },
-  network: { label: 'network', color: '#f59e0b' },
+  backend: { label: 'back', color: '#64748b' },
+  network: { label: 'net', color: '#f59e0b' },
   task: { label: 'task', color: '#8b5cf6' },
-  frontend: { label: 'frontend', color: '#3b82f6' },
+  frontend: { label: 'front', color: '#3b82f6' },
   debug: { label: 'debug', color: '#6b7280' },
 };
 
