@@ -11,40 +11,39 @@ import os
 import subprocess
 import threading
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.utils.notify import (
-    send_notification,
-    _notify_windows,
-    _notify_macos,
-    _notify_linux,
-)
-from app.utils.browser import BrowserContextManager, STEALTH_INIT_SCRIPT
-from app.utils.exceptions import LoginCancelledError
 from app.core.system_tray import SystemTray
+from app.utils.browser import STEALTH_INIT_SCRIPT, BrowserContextManager
+from app.utils.exceptions import LoginCancelledError
+from app.utils.notify import (
+    _notify_linux,
+    _notify_macos,
+    _notify_windows,
+    send_notification,
+)
 from app.workers.playwright_bootstrap import (
     _candidate_hosts,
-    _is_enabled,
     _has_chromium,
+    _is_enabled,
     ensure_playwright_ready,
 )
 from app.workers.playwright_worker import (
-    WorkerCommand,
-    WorkerResponse,
-    PlaywrightWorker,
-    CMD_LOGIN,
+    CMD_BROWSER_ACQUIRE,
+    CMD_BROWSER_CLOSE,
+    CMD_BROWSER_HEALTH_CHECK,
+    CMD_BROWSER_RELEASE,
     CMD_DEBUG_START,
     CMD_DEBUG_STEP,
     CMD_DEBUG_STOP,
-    CMD_BROWSER_HEALTH_CHECK,
-    CMD_BROWSER_ACQUIRE,
-    CMD_BROWSER_RELEASE,
-    CMD_BROWSER_CLOSE,
+    CMD_LOGIN,
     CMD_SHUTDOWN,
+    PlaywrightWorker,
+    WorkerCommand,
+    WorkerResponse,
 )
-
 
 # ─────────────────────────────────────────────────────────────────────
 #  桌面通知 (src/utils/notify.py)

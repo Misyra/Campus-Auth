@@ -7,11 +7,9 @@ import json
 import textwrap
 from pathlib import Path
 
-
-from app.workers.script_runner import ScriptRunner, _build_minimal_env
-from app.tasks.models import ScriptTaskInfo
 from app.tasks.manager import TaskManager
-
+from app.tasks.models import ScriptTaskInfo
+from app.workers.script_runner import ScriptRunner, _build_minimal_env
 
 # ==================== TaskManager 脚本扫描 ====================
 

@@ -5,14 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from app.api.tools import (
     ALLOWED_EXTENSIONS,
     MAX_FILE_SIZE,
     _cleanup_old_backgrounds,
 )
-
 
 # ── 常量 ──
 

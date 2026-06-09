@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from app.services.autostart import AutoStartService
-
 
 # ── _has_cjk_chars ──
 

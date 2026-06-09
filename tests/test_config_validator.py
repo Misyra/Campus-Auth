@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
 from app.utils.config import ConfigValidator
-
 
 # ── validate_gui_config ──
 

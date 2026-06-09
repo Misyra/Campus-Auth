@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.scheduler import SchedulerService, get_default_shell, MAX_HISTORY_SIZE
+from app.services.scheduler import MAX_HISTORY_SIZE, SchedulerService, get_default_shell
 
 
 @pytest.fixture

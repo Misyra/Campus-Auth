@@ -5,13 +5,13 @@
 
 from __future__ import annotations
 
-import pytest
+from unittest.mock import MagicMock, patch
+
 import httpx
+import pytest
 from fastapi import HTTPException
-from unittest.mock import patch, MagicMock
 
-from app.utils.repo_proxy import normalize_repo_url, repo_get, repo_fetch_json
-
+from app.utils.repo_proxy import normalize_repo_url, repo_fetch_json, repo_get
 
 # =====================================================================
 # normalize_repo_url

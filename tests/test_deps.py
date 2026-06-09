@@ -10,14 +10,14 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.deps import (
-    get_services,
-    get_monitor_service,
-    get_profile_service,
-    get_task_service,
     get_autostart_service,
     get_debug_manager,
     get_login_history_service,
+    get_monitor_service,
+    get_profile_service,
     get_scheduler_service,
+    get_services,
+    get_task_service,
 )
 
 

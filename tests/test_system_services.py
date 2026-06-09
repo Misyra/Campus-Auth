@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -17,13 +17,12 @@ from app.services.autostart import AutoStartService
 from app.services.uninstall import (
     CleanupItem,
     CleanupResult,
+    _check_autostart,
+    _dir_size_mb,
+    _playwright_cache_dir,
     detect,
     perform,
-    _playwright_cache_dir,
-    _dir_size_mb,
-    _check_autostart,
 )
-
 
 # ─────────────────────────────────────────────────────────────────────
 #  AutoStartService (backend/autostart_service.py)

@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-import json
-
 import pytest
 from pydantic import ValidationError
 
 from app.schemas import (
     ActionResponse,
-    MonitorStatusResponse,
-    LogEntry,
     AutoStartStatusResponse,
+    LogEntry,
+    MonitorStatusResponse,
     ProfilesData,
-    SystemSettings,
     ProfileSettings,
+    SystemSettings,
 )
-
 
 # ── ActionResponse ──
 

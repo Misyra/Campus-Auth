@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.application import _cleanup_temp_screenshots, _resolve_port
-
 
 # ── _resolve_port ──
 

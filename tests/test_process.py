@@ -2,19 +2,15 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-
-import pytest
+from unittest.mock import patch
 
 from app.utils.process import (
-    normalize_proc_name,
-    read_pid_file,
     get_pid_file,
     is_local_port_in_use,
+    normalize_proc_name,
+    read_pid_file,
 )
-
 
 # ── normalize_proc_name ──
 

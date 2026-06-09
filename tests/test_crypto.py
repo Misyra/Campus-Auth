@@ -2,21 +2,17 @@
 
 from __future__ import annotations
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from app.utils.crypto import (
+    _simple_deobfuscate,
+    _simple_obfuscate,
+    clear_decryption_error,
+    has_decryption_error,
     is_encrypted,
     mask_password,
     save_password_field,
-    _simple_obfuscate,
-    _simple_deobfuscate,
-    has_decryption_error,
-    clear_decryption_error,
-    _OBFUSCATE_PREFIX,
-    _ENC_PREFIX,
 )
-
 
 # ── is_encrypted ──
 

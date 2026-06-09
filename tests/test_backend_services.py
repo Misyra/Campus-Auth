@@ -9,32 +9,31 @@ from __future__ import annotations
 import json
 from collections import deque
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.task import TaskService, _check_dangerous_steps
-from app.services.config import (
-    load_ui_config,
-    load_runtime_config,
-    build_runtime_config,
-    save_config_combined,
-)
-from app.services.profile import ProfileService
 from app.network.detect import detect_gateway_ip, detect_wifi_ssid
 from app.schemas import (
     MonitorConfigPayload,
-    ProfileSettings,
     ProfilesData,
+    ProfileSettings,
     SystemSettings,
+)
+from app.services.config import (
+    build_runtime_config,
+    load_runtime_config,
+    load_ui_config,
+    save_config_combined,
 )
 from app.services.debug_session import (
     DebugSession,
-    empty_debug_session,
-    debug_to_response,
     _next_debug_gen,
+    debug_to_response,
+    empty_debug_session,
 )
-
+from app.services.profile import ProfileService
+from app.services.task import TaskService, _check_dangerous_steps
 
 # =====================================================================
 # _check_dangerous_steps

@@ -2,22 +2,19 @@
 
 from __future__ import annotations
 
-import pytest
-from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from fastapi import HTTPException
 
 from app.api.logfiles import (
+    _parse_log_line,
     _validate_date,
     _validate_filename,
-    _parse_log_line,
-    list_log_files,
     get_log_file_content,
-    LogLine,
+    list_log_files,
 )
-
 
 # ── _validate_date ──
 

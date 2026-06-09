@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import pytest
-
 from app.utils.config_helpers import (
-    extract_profile_fields,
-    assign_profile_fields,
     PROFILE_FIELDS,
+    assign_profile_fields,
+    extract_profile_fields,
 )
-
 
 # ── PROFILE_FIELDS ──
 

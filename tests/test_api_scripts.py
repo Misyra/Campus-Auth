@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
-
 # ── 脚本类型校验 ──
 
 

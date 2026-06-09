@@ -7,8 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.utils.browser import BrowserContextManager, STEALTH_INIT_SCRIPT
-
+from app.utils.browser import STEALTH_INIT_SCRIPT, BrowserContextManager
 
 # ── STEALTH_INIT_SCRIPT ──
 

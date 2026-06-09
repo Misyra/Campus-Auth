@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-import threading
 from unittest.mock import MagicMock
 
-import pytest
-
-from app.core.monitor_core import NetworkMonitorCore, RecoveryResult, NetworkState
-
+from app.core.monitor_core import NetworkMonitorCore, NetworkState, RecoveryResult
 
 # ── fixtures ──
 

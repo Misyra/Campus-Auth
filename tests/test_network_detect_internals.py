@@ -6,11 +6,9 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch, MagicMock, mock_open
-
+from unittest.mock import MagicMock, mock_open, patch
 
 import app.network.detect as nd
-
 
 # ── 辅助工具 ──
 

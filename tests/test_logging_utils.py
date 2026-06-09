@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-from app.utils.logging import normalize_level, VALID_LOG_LEVELS
-
+from app.utils.logging import VALID_LOG_LEVELS, normalize_level
 
 # ── VALID_LOG_LEVELS ──
 

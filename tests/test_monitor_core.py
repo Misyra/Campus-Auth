@@ -9,7 +9,6 @@ from __future__ import annotations
 import queue
 from unittest.mock import MagicMock
 
-
 from app.services.monitor import MonitorCmdType, MonitorCommand, MonitorService
 
 

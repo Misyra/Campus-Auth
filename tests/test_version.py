@@ -2,12 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
-
-from app.version import get_project_version, compare_versions
-
+from app.version import compare_versions, get_project_version
 
 # ── get_project_version ──
 
