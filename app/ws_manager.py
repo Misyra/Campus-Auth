@@ -11,7 +11,7 @@ from fastapi import WebSocket
 
 from app.utils.logging import get_logger
 
-ws_logger = get_logger("backend.ws_manager", source="backend")
+ws_logger = get_logger("ws_manager", source="backend")
 
 
 class WebSocketManager:

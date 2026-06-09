@@ -18,7 +18,7 @@ from app.utils.file_helpers import atomic_write
 from app.utils.logging import get_logger
 
 router = APIRouter()
-api_logger = get_logger("backend.api", source="backend")
+api_logger = get_logger("api", source="backend")
 
 
 def _cleanup_old_backups(max_backups: int = MAX_BACKUPS) -> None:

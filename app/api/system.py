@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -15,7 +16,12 @@ from app.utils.logging import get_logger
 from app.version import compare_versions, get_project_version
 
 router = APIRouter()
-api_logger = get_logger("backend.api", source="backend")
+api_logger = get_logger("api", source="backend")
+
+# 更新检查缓存（避免触发 GitHub API 速率限制）
+_update_cache: dict | None = None
+_update_cache_time: float = 0
+_UPDATE_CACHE_TTL = 12 * 60 * 60  # 12 小时
 
 
 # ── 健康检查 / 更新检测 ──
@@ -32,7 +38,14 @@ def health() -> dict[str, str]:
 
 @router.get("/api/check-update")
 async def check_update() -> dict:
+    global _update_cache, _update_cache_time
+
     current = get_project_version(PROJECT_ROOT)
+
+    # 缓存命中直接返回
+    if _update_cache and (time.monotonic() - _update_cache_time) < _UPDATE_CACHE_TTL:
+        return {**_update_cache, "current": current}
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
@@ -45,7 +58,7 @@ async def check_update() -> dict:
         resp.raise_for_status()
         data = resp.json()
         tag = data.get("tag_name", "").lstrip("v")
-        return {
+        result = {
             "current": current,
             "latest": tag,
             "has_update": compare_versions(tag, current) > 0,
@@ -53,7 +66,19 @@ async def check_update() -> dict:
             "body": data.get("body", ""),
             "published_at": data.get("published_at", ""),
         }
+        # 更新缓存
+        _update_cache = result
+        _update_cache_time = time.monotonic()
+        return result
     except Exception as e:
+        # 请求失败但有旧缓存，返回旧缓存 + 错误信息
+        if _update_cache:
+            return {
+                **_update_cache,
+                "current": current,
+                "cached": True,
+                "error": str(e),
+            }
         return {
             "current": current,
             "latest": None,

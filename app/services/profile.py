@@ -12,7 +12,7 @@ from app.utils.crypto import save_password_field
 from app.utils.file_helpers import atomic_write
 from app.utils.logging import get_logger
 
-profile_logger = get_logger("backend.profile_service", source="backend")
+profile_logger = get_logger("profile_service", source="backend")
 
 _SETTINGS_FILE = "settings.json"
 

@@ -16,7 +16,7 @@ from app.utils.logging import get_logger
 from app.utils.shell_policy import ShellCommandPolicy
 from app.utils.shell_utils import detect_shells, get_default_shell
 
-scheduler_logger = get_logger("backend.scheduler", source="backend")
+scheduler_logger = get_logger("scheduler", source="backend")
 
 # 执行历史最大保留条数
 MAX_HISTORY_SIZE = 50
