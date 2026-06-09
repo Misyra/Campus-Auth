@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import os
 import socket
-import subprocess
 import sys
 import time
 from pathlib import Path
+
+import psutil
 
 from app.constants import AUTH_DATA_DIR
 
@@ -60,36 +61,8 @@ def read_pid_file() -> tuple[int | None, str | None, str | None]:
 def get_process_name(pid: int) -> str | None:
     """获取指定 PID 的进程名。"""
     try:
-        if sys.platform == "win32":
-            result = subprocess.run(
-                ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-                creationflags=subprocess.CREATE_NO_WINDOW
-                if hasattr(subprocess, "CREATE_NO_WINDOW")
-                else 0,
-            )
-            if result.returncode != 0 or not result.stdout.strip():
-                return None
-            # CSV: "image_name","pid","session_name","session#","mem_usage"
-            # 注意：tasklist 在 PID 不存在时返回本地化的"无匹配进程"消息而非空输出，
-            # 这也会被 CSV 解析。通过检查第二字段是否为数字区分。
-            fields = result.stdout.strip().split(",")
-            if len(fields) < 2 or not fields[1].strip('"').strip().isdigit():
-                return None
-            return fields[0].strip('"').strip() or None
-        else:
-            result = subprocess.run(
-                ["ps", "-p", str(pid), "-o", "comm="],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if result.returncode != 0 or not result.stdout.strip():
-                return None
-            return result.stdout.strip() or None
-    except Exception:
+        return psutil.Process(pid).name()
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
         return None
 
 

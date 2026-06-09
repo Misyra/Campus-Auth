@@ -98,38 +98,34 @@ class TestReadPidFile:
 
 
 class TestGetProcessName:
-    """_get_process_name — Windows tasklist CSV 解析。"""
+    """get_process_name — psutil 实现。"""
 
-    @patch("app.utils.process.sys")
-    @patch("subprocess.run")
-    def test_valid_csv_output(self, mock_run, mock_sys):
+    @patch("app.utils.process.psutil.Process")
+    def test_valid_process(self, mock_process_cls):
+        """进程存在时返回进程名。"""
         from app.utils.process import get_process_name
 
-        mock_sys.platform = "win32"
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout='"python.exe","1234","Console","1","10,000 K"',
-        )
+        mock_process_cls.return_value.name.return_value = "python.exe"
         assert get_process_name(1234) == "python.exe"
 
-    @patch("app.utils.process.sys")
-    @patch("subprocess.run")
-    def test_no_matching_process(self, mock_run, mock_sys):
-        """tasklist 在 PID 不存在时返回本地化消息。"""
+    @patch("app.utils.process.psutil.Process")
+    def test_no_such_process(self, mock_process_cls):
+        """进程不存在时返回 None。"""
+        import psutil
+
         from app.utils.process import get_process_name
 
-        mock_sys.platform = "win32"
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="INFO: No tasks are running which match the specified criteria.",
-        )
+        mock_process_cls.side_effect = psutil.NoSuchProcess(9999)
         assert get_process_name(9999) is None
 
-    @patch("subprocess.run")
-    def test_subprocess_exception(self, mock_run):
+    @patch("app.utils.process.psutil.Process")
+    def test_access_denied(self, mock_process_cls):
+        """权限不足时返回 None。"""
+        import psutil
+
         from app.utils.process import get_process_name
 
-        mock_run.side_effect = OSError("fail")
+        mock_process_cls.side_effect = psutil.AccessDenied(1234)
         assert get_process_name(1234) is None
 
 
