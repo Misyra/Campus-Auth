@@ -50,6 +50,17 @@ def download_task_writing_guide():
     )
 
 
+@router.get("/api/docs/task-manual")
+def download_task_manual():
+    """下载任务手册文档"""
+    doc_path = PROJECT_ROOT / "docs" / "task-manual.md"
+    if not doc_path.exists():
+        raise HTTPException(status_code=404, detail="文档文件缺失，可能需要重新安装或更新软件")
+    return FileResponse(
+        doc_path, media_type="text/markdown", filename="task-manual.md"
+    )
+
+
 # ── 背景图片管理 ──
 
 
