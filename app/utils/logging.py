@@ -30,29 +30,25 @@ logger.remove()
 # ==================== 格式定义 ====================
 
 
-def _short_source(source: str) -> str:
-    return _SOURCE_SHORT.get(source, source)
-
-
 def _console_format(record):
-    src = _short_source(record["extra"].get("source", "-"))
-    record["extra"]["_src"] = src
+    source = record["extra"].get("source", "-")
+    record["extra"]["_source"] = source
     return (
         "<green>[{time:HH:mm:ss}]</green>"
         "<level>[{level}]</level>"
-        "<cyan>[{extra[_src]}]</cyan>"
+        "<cyan>[{extra[_source]}]</cyan>"
         "<cyan>[{name}]</cyan> "
         "<level>{message}</level>\n"
     )
 
 
 def _file_format(record):
-    src = _short_source(record["extra"].get("source", "-"))
-    record["extra"]["_src"] = src
-    return "[{time:YYYY-MM-DD HH:mm:ss}][{level}][{extra[_src]}][{name}] {message}\n"
+    source = record["extra"].get("source", "-")
+    record["extra"]["_source"] = source
+    return "[{time:YYYY-MM-DD HH:mm:ss}][{level}][{extra[_source]}][{name}] {message}\n"
 
 
-_SOURCE_SHORT = {"backend": "back", "frontend": "front", "network": "net", "task": "task", "debug": "debug"}
+_WEBSOCKET_FORMAT = "{name} | {message}"
 
 # 默认添加控制台 handler
 logger.add(
