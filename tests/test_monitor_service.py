@@ -125,7 +125,7 @@ class TestMonitorServiceInit:
 class TestRecordLog:
     def test_record_log(self):
         svc = _make_monitor_service()
-        svc.record_log("测试消息", level="INFO", source="test")
+        svc.record_log("测试消息", level="INFO", source="backend")
         # record_log 委托 loguru，无 _dashboard_sink 时不会崩溃
 
     def test_record_log_ws_broadcast(self):
@@ -143,7 +143,7 @@ class TestRecordLog:
             filter=lambda record: record["extra"].get("source") != "frontend",
         )
         try:
-            svc.record_log("test", level="INFO", source="test")
+            svc.record_log("test", level="INFO", source="backend")
             assert len(sink.broadcast_queue) >= 1
             assert sink.broadcast_queue[0]["type"] == "log"
         finally:
