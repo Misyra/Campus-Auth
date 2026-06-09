@@ -9,10 +9,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from app.utils.file_helpers import atomic_write
-
 from pydantic import BaseModel
 
+from app.utils.file_helpers import atomic_write
 from app.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -61,7 +60,7 @@ class LoginHistoryService:
                 if active:
                     profile_name = getattr(active, "name", "")
             except Exception:
-                pass
+                logger.debug("获取当前方案名称失败", exc_info=True)
 
         task_name = ""
         if task_manager is not None:
@@ -71,7 +70,7 @@ class LoginHistoryService:
                 if task:
                     task_name = getattr(task, "name", task_id)
             except Exception:
-                pass
+                logger.debug("获取当前任务名称失败", exc_info=True)
 
         self.add(
             success=success,
@@ -123,7 +122,7 @@ class LoginHistoryService:
             return []
         try:
             lines: list[str] = []
-            with open(self._history_path, "r", encoding="utf-8") as f:
+            with open(self._history_path, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line:
@@ -149,7 +148,7 @@ class LoginHistoryService:
                 return 0
             try:
                 count = 0
-                with open(self._history_path, "r", encoding="utf-8") as f:
+                with open(self._history_path, encoding="utf-8") as f:
                     for line in f:
                         if line.strip():
                             count += 1
@@ -168,7 +167,7 @@ class LoginHistoryService:
         cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
         try:
             kept: list[str] = []
-            with open(self._history_path, "r", encoding="utf-8") as f:
+            with open(self._history_path, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if not line:
