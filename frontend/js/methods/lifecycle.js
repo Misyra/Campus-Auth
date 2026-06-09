@@ -1,4 +1,4 @@
-import { LOG_LEVELS, TIMING } from '../constants.js';
+import { TIMING } from '../constants.js';
 
 export const lifecycleMethods = {
   // 封装初始化错误计数，达到阈值后静默（避免多模块竞态读写 _initErrorCount）
@@ -185,10 +185,6 @@ export const lifecycleMethods = {
       this.busy.save = false;
     }
   },
-  _shouldShowLog() {
-    // 日志级别过滤已移除，前端显示所有日志
-    return true;
-  },
   connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/logs`;
@@ -229,9 +225,7 @@ export const lifecycleMethods = {
         if (data.type === 'status') {
           this.status = { ...this.status, ...data.data };
         } else if (data.type === 'log') {
-          if (this._shouldShowLog(data.data.level)) {
-            this._appendLogs([data.data]);
-          }
+          this._appendLogs([data.data]);
         }
       } catch (e) {
         this.frontendLogger.error('websocket', '消息解析错误', e);
