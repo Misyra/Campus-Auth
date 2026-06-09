@@ -282,7 +282,7 @@ class LogEntry(BaseModel):
     timestamp: str
     level: str = "INFO"
     source: str = "backend"
-    module: str = ""
+    name: str = ""
     message: str
 
     @field_validator("level")
