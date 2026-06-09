@@ -808,8 +808,16 @@ class PlaywrightWorker:
                     logger.error("关闭浏览器异常: {}", e)
         self._browser = None
 
-        # 停止 Playwright 服务
-        await self._close_resource(self._playwright, "Playwright", graceful)
+        # 停止 Playwright 服务（AsyncPlaywright 使用 stop() 而非 close()）
+        if self._playwright is not None:
+            try:
+                await self._playwright.stop()
+            except Exception as e:
+                if graceful:
+                    if self._is_normal_close_error(e):
+                        logger.warning("停止 Playwright 时连接已断开（正常）: {}", e)
+                    else:
+                        logger.error("停止 Playwright 异常: {}", e)
         self._playwright = None
 
         if graceful:

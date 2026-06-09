@@ -5,6 +5,55 @@
 
 ## 2026-06-09
 
+### fix: 修复 Playwright 关闭报错
+
+- `playwright_worker.py`：修复 `_cleanup_browser` 中对 `AsyncPlaywright` 调用不存在的 `close()` 方法，改为正确的 `stop()`
+
+### refactor: 全项目文案审计与优化
+
+对前端 UI、后端消息、项目文档进行全面文案审计，修复描述不清、过于复杂、信息缺失三类问题约 50 处。
+
+**后端消息优化（app/）：**
+- `schemas.py`：6 处描述优化（API 请求超时→等待超时、反检测脚本→自动操作特征、TCP/HTTP 检测区分、Web 控制台→网页界面、Chromium→浏览器、JSON 格式错误→格式不正确）
+- `api/system.py`：服务器关闭消息补充操作指引
+- `api/backup.py`：3 处错误消息优化（settings.json→配置文件、文件名格式、异常信息保留）
+- `api/tools.py`：5 处错误消息优化（录制器脚本缺失、文档缺失、下载失败、非图片格式、非法文件名）
+- `api/ocr.py`：uv 安装提示补充安装链接
+- `api/scheduled_tasks.py`：4 处验证消息优化（hour/minute→小时/分钟、timeout 范围说明）
+- `services/task.py`：2 处优化（任务ID示例、步骤缺失引导）
+- `services/autostart.py`：平台不支持提示补充操作建议
+- `services/scheduler.py`：4 处优化（保存/删除失败、任务类型、Playwright 依赖）
+- `services/config.py`：JSON 格式错误提示优化
+- `utils/config.py`：86400 秒→24 小时
+- `utils/crypto.py`：2 处优化（密钥变更提示、加密库安装指引）
+- `utils/login.py`：活动任务→可执行任务
+- `network/decision.py`：检测未启用提示补充操作路径
+- `tasks/validator.py`：2 处优化（正则表达式→自然语言、eval 字段提示）
+- `core/monitor_core.py`：3 处优化（登录失败补充检查建议、密码解密失败补充原因）
+
+**前端 UI 文案优化（frontend/）：**
+- `profiles.html`：登录前检测→检查认证页面是否可达、补充检测目标格式说明、禁用同源策略/反检测模式补充 tooltip
+- `settings-browser.html`：纯净模式提示文案优化
+- `settings-tasks.html`：任务录制器说明简化、文档链接改为在线链接
+- `settings-monitor.html`：网址响应检测 tooltip 补充区别说明
+- `settings-account.html`：认证地址 tooltip 简化、运营商 tooltip 优化
+- `settings-system.html`：静默启动 tooltip 措辞优化
+- `about.html`：卸载描述优化、补充项目路径指引
+- `wizard.html`：监控设置描述补充、暂停时段说明优化
+- `appearance.html`：毛玻璃效果说明、随机壁纸说明优化
+- `scripts.html`：stdout 说明补充、Shell 平台默认行为说明
+- `scheduled_tasks.html`：历史按钮→查看历史
+- `methods/profiles.js`：切换自动切换失败→自动切换设置失败
+
+**文档优化（docs/）：**
+- `update_log.md`：修复 doc/→docs/ 路径笔误
+- `task-writing-guide.md`：废弃字段加删除线、自动降级描述简化、变量解析优先级重写、成功判断补充超时说明、FAQ 变量设置指引
+- `task-manual.md`：环境变量覆盖顺序改为表格、LOGIN_URL 补充说明、网络检测兜底补充超时
+- `custom-script-guide.md`：Python 运行器示例修正为 PowerShell、binary_path 说明优化、FAQ 补充 Campus-Auth 变量说明、超时设置位置说明
+
+**测试同步更新（tests/）：**
+- `test_config_schemas.py`、`test_config_service_logic.py`、`test_config_validator.py`、`test_task_executor.py`、`test_task_validator.py`：同步更新断言匹配文案
+
 ### refactor: 日志系统全面优化
 
 **后端日志级别调整：**
