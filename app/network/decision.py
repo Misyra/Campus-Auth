@@ -227,6 +227,8 @@ def _is_auth_url_reachable(
             return False
 
     if extra_targets:
+        from concurrent.futures import as_completed
+
         from app.utils.network_helpers import parse_host_port
 
         try:
@@ -234,9 +236,20 @@ def _is_auth_url_reachable(
         except ValueError:
             logger.warning("auth_url_targets 格式错误，跳过附加目标检测")
             targets = []
-        for host, port in targets:
-            if _check_host_port(host, port, f"{host}:{port}"):
-                return True
+        if targets:
+            futures = {
+                _executor.submit(_check_host_port, host, port, f"{host}:{port}"): (host, port)
+                for host, port in targets
+            }
+            try:
+                for future in as_completed(futures, timeout=5):
+                    if future.result():
+                        # 任一目标可达即取消其余任务
+                        for f in futures:
+                            f.cancel()
+                        return True
+            except Exception:
+                logger.debug("附加目标并发检测异常", exc_info=True)
         logger.info("自定义检测目标均不可达")
         return False
 
