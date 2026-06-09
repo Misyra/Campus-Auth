@@ -5,6 +5,21 @@
 
 ## 2026-06-09
 
+### refactor: 后端 Portal → url_check/网址响应 全面重命名
+
+- `app/schemas.py`：`portal_check_urls` → `url_check_urls`，描述改为"网址响应检测地址"
+- `app/utils/network_helpers.py`：`parse_portal_checks()` → `parse_url_checks()`
+- `app/network/probes.py`：`is_network_available_portal()` → `is_network_available_url()`，参数 `portal_checks` → `url_checks`，日志消息改为"网址响应检测"
+- `app/network/decision.py`：全部 portal 相关变量/参数/日志重命名（`enable_portal` → `enable_url`、`portal_ok` → `url_ok` 等）
+- `app/services/config.py`：配置键 `portal_check_urls` → `url_check_urls`，导入 `parse_url_checks`
+- `app/services/monitor.py`：`portal_checks` → `url_checks`，模式描述 "Portal" → "网址响应"
+- `app/core/monitor_core.py`：`portal_checks` → `url_checks`，模式摘要 `Portal(N)` → `网址响应(N)`
+- `app/tasks/executor.py`：`parse_portal_checks` → `parse_url_checks`，`portal_checks` → `url_checks`
+- `app/utils/config_helpers.py`：`PROFILE_FIELDS` 中 `portal_check_urls` → `url_check_urls`
+- 测试文件同步更新（test_backend_services、test_decision、test_network_probes）
+- 保留 `PORTAL_WAIT_AFTER_LOGIN` 常量和 `detectportal.firefox.com` 实际检测 URL 不变
+- 全部 1897 个测试通过
+
 ### fix: logfiles 正则支持点号和连字符，匹配 name 字段
 
 - `app/api/logfiles.py`：`_LOG_LINE_PATTERN` 正则的 source 和 name 匹配模式从 `\w+` / `[\w.]+` 改为 `[\w.-]+`，支持 `monitor.core`、`step-handler` 等含点号或连字符的名称
