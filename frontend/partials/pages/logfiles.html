@@ -27,21 +27,21 @@
               {{ f.name }} ({{ formatFileSize(f.size) }})
             </option>
           </select>
-          <div class="log-filter-chips">
-            <button class="log-filter-chip" :class="{ active: !logViewer.level }" @click="logViewer.level = ''; fetchLogFileContent()">全部</button>
-            <button class="log-filter-chip" :class="{ active: logViewer.level === 'INFO' }" @click="logViewer.level = 'INFO'; fetchLogFileContent()">INFO</button>
-            <button class="log-filter-chip" :class="{ active: logViewer.level === 'WARNING' }" @click="logViewer.level = 'WARNING'; fetchLogFileContent()">WARN</button>
-            <button class="log-filter-chip" :class="{ active: logViewer.level === 'ERROR' }" @click="logViewer.level = 'ERROR'; fetchLogFileContent()">ERROR</button>
-            <button class="log-filter-chip" :class="{ active: logViewer.level === 'DEBUG' }" @click="logViewer.level = 'DEBUG'; fetchLogFileContent()">DEBUG</button>
-          </div>
-          <div class="log-filter-chips source-chips">
-            <button class="source-chip" :class="{ active: !logViewer.source }" @click="logViewer.source = ''; fetchLogFileContent()">all</button>
-            <button class="source-chip" :class="{ active: logViewer.source === 'backend' }" @click="logViewer.source = 'backend'; fetchLogFileContent()">backend</button>
-            <button class="source-chip" :class="{ active: logViewer.source === 'network' }" @click="logViewer.source = 'network'; fetchLogFileContent()">network</button>
-            <button class="source-chip" :class="{ active: logViewer.source === 'task' }" @click="logViewer.source = 'task'; fetchLogFileContent()">task</button>
-            <button class="source-chip" :class="{ active: logViewer.source === 'frontend' }" @click="logViewer.source = 'frontend'; fetchLogFileContent()">frontend</button>
-            <button class="source-chip" :class="{ active: logViewer.source === 'debug' }" @click="logViewer.source = 'debug'; fetchLogFileContent()">debug</button>
-          </div>
+          <select v-model="logViewer.level" @change="fetchLogFileContent" class="log-filter-select" aria-label="级别筛选">
+            <option value="">全部级别</option>
+            <option value="INFO">INFO</option>
+            <option value="WARNING">WARNING</option>
+            <option value="ERROR">ERROR</option>
+            <option value="DEBUG">DEBUG</option>
+          </select>
+          <select v-model="logViewer.source" @change="fetchLogFileContent" class="log-filter-select" aria-label="来源筛选">
+            <option value="">全部来源</option>
+            <option value="backend">backend</option>
+            <option value="network">network</option>
+            <option value="task">task</option>
+            <option value="frontend">frontend</option>
+            <option value="debug">debug</option>
+          </select>
           <div class="logfiles-search-wrap">
             <input v-model="logViewer.search" @keyup.enter="fetchLogFileContent" type="text" placeholder="搜索日志..." class="log-search" aria-label="搜索日志" />
             <button v-if="logViewer.search" class="btn btn-icon-only logfiles-search-clear" @click="logViewer.search = ''; fetchLogFileContent()" title="清除搜索">
