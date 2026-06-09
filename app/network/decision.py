@@ -13,7 +13,7 @@ from .probes import (
 from .probes import (
     is_local_network_connected,
     is_network_available_http,
-    is_network_available_portal,
+    is_network_available_url,
     is_network_available_socket,
 )
 
@@ -38,7 +38,7 @@ def check_pause(config: dict) -> tuple[bool, str]:
 
 
 def check_network_status(config: dict) -> tuple[bool, str]:
-    """网络状态检测 (TCP / HTTP / Captive Portal)。
+    """网络状态检测 (TCP / HTTP / 网址响应)。
 
     仅做网络连通性检测，不做物理网络检查和认证地址检查。
     由监控循环调用，决定是否需要触发登录。
@@ -51,13 +51,13 @@ def check_network_status(config: dict) -> tuple[bool, str]:
     monitor_config = config.get("monitor", {})
     enable_tcp = monitor_config.get("enable_tcp_check", True)
     enable_http = monitor_config.get("enable_http_check", True)
-    portal_checks = monitor_config.get("portal_check_urls", None)
-    enable_portal = bool(portal_checks)
+    url_checks = monitor_config.get("url_check_urls", None)
+    enable_url = bool(url_checks)
 
     # 所有检测都未启用
-    if not enable_tcp and not enable_http and not enable_portal:
+    if not enable_tcp and not enable_http and not enable_url:
         logger.warning(
-            "所有网络检测均未启用（TCP/HTTP/Portal），请在设置中启用至少一种"
+            "所有网络检测均未启用（TCP/HTTP/网址响应），请在设置中启用至少一种"
         )
         return (False, "all_disabled")
 
@@ -81,7 +81,7 @@ def check_network_status(config: dict) -> tuple[bool, str]:
         timeout=monitor_config.get("network_check_timeout", 1.5),
         enable_tcp=enable_tcp,
         enable_http=enable_http,
-        portal_checks=portal_checks,
+        url_checks=url_checks,
     )
 
     if ok:
@@ -129,28 +129,28 @@ def is_network_available(
     timeout: float = 1.5,
     enable_tcp: bool = True,
     enable_http: bool = True,
-    portal_checks: Sequence[tuple[str, str]] | None = None,
+    url_checks: Sequence[tuple[str, str]] | None = None,
 ) -> bool:
     """底层网络状态检测，不包含物理网络检查。"""
-    enable_portal = bool(portal_checks)
+    enable_url = bool(url_checks)
 
-    if not enable_tcp and not enable_http and not enable_portal:
+    if not enable_tcp and not enable_http and not enable_url:
         return True
 
     urls_list = list(test_urls or ())
     logger.info(
-        "开始网络检测 (TCP={}, HTTP={}, Portal={}, TCP目标={}, HTTP目标={}, Portal目标={})",
+        "开始网络检测 (TCP={}, HTTP={}, 网址响应={}, TCP目标={}, HTTP目标={}, 网址响应目标={})",
         "开" if enable_tcp else "关",
         "开" if enable_http else "关",
-        "开" if enable_portal else "关",
+        "开" if enable_url else "关",
         len(test_sites or ()),
         len(urls_list),
-        len(portal_checks or ()),
+        len(url_checks or ()),
     )
 
     from concurrent.futures import as_completed
 
-    socket_ok = http_ok = portal_ok = True
+    socket_ok = http_ok = url_ok = True
 
     pool = _executor
     futures = {}
@@ -169,14 +169,14 @@ def is_network_available(
                 follow_redirects=not enable_tcp,
             )
         ] = "http"
-    if enable_portal:
+    if enable_url:
         futures[
             pool.submit(
-                is_network_available_portal,
-                portal_checks=portal_checks,
+                is_network_available_url,
+                url_checks=url_checks,
                 timeout=max(timeout, 3.0),
             )
-        ] = "portal"
+        ] = "url"
 
     for future in as_completed(futures):
         kind = futures[future]
@@ -189,20 +189,20 @@ def is_network_available(
             socket_ok = ok
         elif kind == "http":
             http_ok = ok
-        elif kind == "portal":
-            portal_ok = ok
+        elif kind == "url":
+            url_ok = ok
 
     result = (
         (socket_ok or not enable_tcp)
         and (http_ok or not enable_http)
-        and (portal_ok or not enable_portal)
+        and (url_ok or not enable_url)
     )
 
     logger.info(
-        "网络检测完成: TCP={} HTTP={} Portal={} -> {}",
+        "网络检测完成: TCP={} HTTP={} 网址响应={} -> {}",
         "关" if not enable_tcp else ("通" if socket_ok else "断"),
         "关" if not enable_http else ("通" if http_ok else "断"),
-        "关" if not enable_portal else ("通" if portal_ok else "断"),
+        "关" if not enable_url else ("通" if url_ok else "断"),
         "网络正常" if result else "网络异常",
     )
     return result

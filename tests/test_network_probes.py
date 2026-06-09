@@ -18,7 +18,7 @@ from app.network.decision import (
 from app.network.probes import (
     is_local_network_connected,
     is_network_available_http,
-    is_network_available_portal,
+    is_network_available_url,
     is_network_available_socket,
     set_block_proxy,
 )
@@ -193,11 +193,11 @@ class TestIsNetworkAvailableHttp:
 
 
 # =====================================================================
-# network_probes — is_network_available_portal
+# network_probes — is_network_available_url
 # =====================================================================
 
 
-class TestIsNetworkAvailablePortal:
+class TestIsNetworkAvailableUrl:
     def test_success_matching_content(self):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -205,8 +205,8 @@ class TestIsNetworkAvailablePortal:
         with patch("app.network.probes.httpx.Client") as MockClient:
             instance = MockClient.return_value.__enter__.return_value
             instance.get.return_value = mock_resp
-            result = is_network_available_portal(
-                portal_checks=[("http://test.com", "Success")], timeout=3.0
+            result = is_network_available_url(
+                url_checks=[("http://test.com", "Success")], timeout=3.0
             )
             assert result is True
 
@@ -217,25 +217,25 @@ class TestIsNetworkAvailablePortal:
         with patch("app.network.probes.httpx.Client") as MockClient:
             instance = MockClient.return_value.__enter__.return_value
             instance.get.return_value = mock_resp
-            result = is_network_available_portal(
-                portal_checks=[("http://test.com", "Success")], timeout=3.0
+            result = is_network_available_url(
+                url_checks=[("http://test.com", "Success")], timeout=3.0
             )
             assert result is False
 
     def test_empty_checks_returns_true(self):
-        result = is_network_available_portal(portal_checks=[], timeout=3.0)
+        result = is_network_available_url(url_checks=[], timeout=3.0)
         assert result is True
 
     def test_connection_error(self):
         with patch("app.network.probes.httpx.Client") as MockClient:
             instance = MockClient.return_value.__enter__.return_value
             instance.get.side_effect = Exception("timeout")
-            result = is_network_available_portal(
-                portal_checks=[("http://test.com", "Success")], timeout=3.0
+            result = is_network_available_url(
+                url_checks=[("http://test.com", "Success")], timeout=3.0
             )
             assert result is False
 
-    def test_check_portal_keeps_verify_false(self):
+    def test_check_url_keeps_verify_false(self):
         """verify=False 应保留（兼容校园网自签证书）"""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -243,8 +243,8 @@ class TestIsNetworkAvailablePortal:
         with patch("app.network.probes.httpx.Client") as MockClient:
             instance = MockClient.return_value.__enter__.return_value
             instance.get.return_value = mock_resp
-            is_network_available_portal(
-                portal_checks=[("http://test.com", "Success")], timeout=3.0
+            is_network_available_url(
+                url_checks=[("http://test.com", "Success")], timeout=3.0
             )
             # 验证 verify=False 被传入 httpx.Client
             _, kwargs = MockClient.call_args
@@ -283,7 +283,7 @@ class TestCheckNetworkStatus:
                 "enable_http_check": True,
                 "ping_targets": None,
                 "test_urls": None,
-                "portal_check_urls": None,
+                "url_check_urls": None,
                 "network_check_timeout": 1.5,
             },
         }
@@ -307,7 +307,7 @@ class TestCheckNetworkStatus:
             self._make_config(
                 enable_tcp_check=False,
                 enable_http_check=False,
-                portal_check_urls=None,
+                url_check_urls=None,
             )
         )
         assert ok is False
@@ -467,7 +467,7 @@ class TestIsNetworkAvailable:
         result = is_network_available(
             enable_tcp=False,
             enable_http=False,
-            portal_checks=None,
+            url_checks=None,
         )
         assert result is True
 

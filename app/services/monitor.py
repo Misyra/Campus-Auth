@@ -734,7 +734,7 @@ class MonitorService:
         targets = monitor_cfg.get("ping_targets", [])
         enable_tcp = monitor_cfg.get("enable_tcp_check", True)
         enable_http = monitor_cfg.get("enable_http_check", True)
-        portal_checks = monitor_cfg.get("portal_check_urls", None)
+        url_checks = monitor_cfg.get("url_check_urls", None)
         # 解析 host:port 为 (host, port) 元组列表
         test_sites = parse_host_port(targets)
         mode_desc = []
@@ -742,8 +742,8 @@ class MonitorService:
             mode_desc.append("TCP")
         if enable_http:
             mode_desc.append("HTTP")
-        if portal_checks:
-            mode_desc.append("Portal")
+        if url_checks:
+            mode_desc.append("网址响应")
         self.record_log(
             f"手动网络测试 -> 目标={len(test_sites)} 检测方式={'+'.join(mode_desc) or '无'}",
             "INFO",
@@ -755,7 +755,7 @@ class MonitorService:
                 timeout=2,
                 enable_tcp=enable_tcp,
                 enable_http=enable_http,
-                portal_checks=portal_checks if portal_checks else None,
+                url_checks=url_checks if url_checks else None,
             )
             if ok:
                 self.record_log("手动测试结果: 网络正常", "INFO", "network")

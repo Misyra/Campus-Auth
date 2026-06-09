@@ -312,7 +312,7 @@ class TaskExecutor:
 
             cfg = self.monitor_config
 
-            # 等待 Portal 处理认证请求（可通过 post_login_delay 配置）
+            # 等待网址响应处理认证请求（可通过 post_login_delay 配置）
             # cfg.get(key, default) 在 JSON 值为 null 时返回 None 而非默认值，需显式处理
             post_delay = cfg.get("post_login_delay") or 5
             await asyncio.sleep(post_delay)
@@ -320,11 +320,11 @@ class TaskExecutor:
             enable_http = cfg.get("enable_http_check") if cfg.get("enable_http_check") is not None else True
             timeout = cfg.get("network_check_timeout") or 2
 
-            # 解析 portal 检测 URL
-            from app.utils.network_helpers import parse_portal_checks
+            # 解析网址响应检测 URL
+            from app.utils.network_helpers import parse_url_checks
 
-            portal_checks = parse_portal_checks(cfg.get("portal_check_urls", ""))
-            portal_checks = portal_checks if portal_checks else None
+            url_checks = parse_url_checks(cfg.get("url_check_urls", ""))
+            url_checks = url_checks if url_checks else None
 
             # 解析 TCP 检测目标
             from app.utils.network_helpers import parse_host_port
@@ -335,10 +335,10 @@ class TaskExecutor:
             test_sites = parse_host_port(targets) or None
 
             logger.info(
-                "验证网络连通性 (网络检测方式: TCP={}, HTTP={}, Portal={}, 超时={}s)",
+                "验证网络连通性 (网络检测方式: TCP={}, HTTP={}, 网址响应={}, 超时={}s)",
                 "开" if enable_tcp else "关",
                 "开" if enable_http else "关",
-                "开" if bool(portal_checks) else "关",
+                "开" if bool(url_checks) else "关",
                 timeout,
             )
 
@@ -351,7 +351,7 @@ class TaskExecutor:
                 timeout=timeout,
                 enable_tcp=enable_tcp,
                 enable_http=enable_http,
-                portal_checks=portal_checks,
+                url_checks=url_checks,
             )
 
             if result:

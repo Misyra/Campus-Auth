@@ -136,17 +136,15 @@ class _MonitorFieldsMixin(_ClampMixin):
         description="物理网络连接检查：未连接 WiFi/网线时跳过登录",
     )
     check_auth_url: bool = Field(
-        default=True, description="登录前检测认证地址是否可达，不可达则跳过登录"
+        default=False, description="登录前检测认证地址是否可达，不可达则跳过登录"
     )
     auth_url_targets: str = Field(
         default="",
         description="认证地址可达性附加检测目标，逗号分隔的 host:port，留空则仅检测认证地址本身",
     )
-    portal_check_urls: str = Field(
-        default="http://captive.apple.com/hotspot-detect.html|Success\n"
-        "http://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test\n"
-        "http://detectportal.firefox.com/success.txt|success",
-        description="Captive portal 检测地址，每行一个：URL|预期内容，留空不启用",
+    url_check_urls: str = Field(
+        default="",
+        description="网址响应检测地址，每行一个：URL|预期内容，留空不启用",
     )
     block_proxy: bool = Field(
         default=True, description="屏蔽系统代理：开启后网络检测时忽略系统代理设置"

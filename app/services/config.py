@@ -285,7 +285,7 @@ def _build_browser_config(payload: MonitorConfigPayload) -> dict[str, Any]:
 
 def _build_monitor_config(payload: MonitorConfigPayload) -> dict[str, Any]:
     """构建监控检测相关配置。"""
-    from app.utils.network_helpers import parse_portal_checks
+    from app.utils.network_helpers import parse_url_checks
 
     return {
         "interval": payload.check_interval_seconds,
@@ -302,7 +302,7 @@ def _build_monitor_config(payload: MonitorConfigPayload) -> dict[str, Any]:
         "auth_url_targets": [
             item.strip() for item in payload.auth_url_targets.split(",") if item.strip()
         ],
-        "portal_check_urls": parse_portal_checks(payload.portal_check_urls),
+        "url_check_urls": parse_url_checks(payload.url_check_urls),
         "network_check_timeout": payload.network_check_timeout,
     }
 
@@ -450,7 +450,7 @@ def _update_default_profile(
             "enable_local_check",
             "check_auth_url",
             "auth_url_targets",
-            "portal_check_urls",
+            "url_check_urls",
             "stealth_mode",
             "stealth_custom_script",
             "custom_variables",
