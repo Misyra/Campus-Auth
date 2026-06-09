@@ -36,12 +36,11 @@ class TestDetectShells:
 
     def test_mocked_shell_found(self):
         """模拟找到 shell。"""
-        with patch("app.utils.shell_utils.shutil.which", return_value="/bin/bash"):
-            with patch("app.utils.shell_utils.sys") as mock_sys:
-                mock_sys.platform = "linux"
-                result = detect_shells()
-                assert len(result) > 0
-                assert any(e["path"] == "/bin/bash" for e in result)
+        with patch("app.utils.shell_utils.shutil.which", return_value="/bin/bash"), patch("app.utils.shell_utils.sys") as mock_sys:
+            mock_sys.platform = "linux"
+            result = detect_shells()
+            assert len(result) > 0
+            assert any(e["path"] == "/bin/bash" for e in result)
 
     def test_mocked_no_shell(self):
         """模拟未找到 shell。"""
@@ -100,11 +99,10 @@ class TestGetDefaultShell:
 
     def test_mocked_pwsh(self):
         """模拟找到 pwsh。"""
-        with patch("app.utils.shell_utils.shutil.which", side_effect=lambda x: "/usr/bin/pwsh" if x == "pwsh.exe" else None):
-            with patch("app.utils.shell_utils.sys") as mock_sys:
-                mock_sys.platform = "win32"
-                result = get_default_shell()
-                assert result == "/usr/bin/pwsh"
+        with patch("app.utils.shell_utils.shutil.which", side_effect=lambda x: "/usr/bin/pwsh" if x == "pwsh.exe" else None), patch("app.utils.shell_utils.sys") as mock_sys:
+            mock_sys.platform = "win32"
+            result = get_default_shell()
+            assert result == "/usr/bin/pwsh"
 
     def test_mocked_powershell(self):
         """模拟找到 powershell。"""
@@ -115,19 +113,17 @@ class TestGetDefaultShell:
                 return "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
             return None
 
-        with patch("app.utils.shell_utils.shutil.which", side_effect=which_side_effect):
-            with patch("app.utils.shell_utils.sys") as mock_sys:
-                mock_sys.platform = "win32"
-                result = get_default_shell()
-                assert "powershell" in result.lower()
+        with patch("app.utils.shell_utils.shutil.which", side_effect=which_side_effect), patch("app.utils.shell_utils.sys") as mock_sys:
+            mock_sys.platform = "win32"
+            result = get_default_shell()
+            assert "powershell" in result.lower()
 
     def test_mocked_cmd_fallback(self):
         """模拟回退到 cmd。"""
-        with patch("app.utils.shell_utils.shutil.which", return_value=None):
-            with patch("app.utils.shell_utils.sys") as mock_sys:
-                mock_sys.platform = "win32"
-                result = get_default_shell()
-                assert result == "cmd.exe"
+        with patch("app.utils.shell_utils.shutil.which", return_value=None), patch("app.utils.shell_utils.sys") as mock_sys:
+            mock_sys.platform = "win32"
+            result = get_default_shell()
+            assert result == "cmd.exe"
 
     def test_mocked_unix_shell_env(self):
         """模拟 Unix SHELL 环境变量。"""

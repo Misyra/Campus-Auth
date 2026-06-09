@@ -95,12 +95,11 @@ class TestStartCommand:
     def test_fallback_to_python(self, tmp_path):
         """无 venv 时回退到 python。"""
         service = AutoStartService(tmp_path)
-        with patch.dict("os.environ", {"CAMPUS_AUTH_START_EXECUTABLE": ""}, clear=False):
+        with patch.dict("os.environ", {"CAMPUS_AUTH_START_EXECUTABLE": ""}, clear=False), patch.object(Path, "exists", return_value=False):
             # 确保 venv 不存在
-            with patch.object(Path, "exists", return_value=False):
-                cmd = service._start_command()
-                assert "python" in cmd.lower()
-                assert "app.py" in cmd
+            cmd = service._start_command()
+            assert "python" in cmd.lower()
+            assert "app.py" in cmd
 
 
 # ── 路径构建 ──

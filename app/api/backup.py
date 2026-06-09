@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
+import contextlib
 import re
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
-from app.utils.file_helpers import atomic_write
-from app.utils.logging import get_logger
-
 from app.constants import BACKUP_DIR, BACKUP_FILENAME_PATTERN, MAX_BACKUPS, PROJECT_ROOT
-from app.deps import get_profile_service, get_monitor_service
+from app.deps import get_monitor_service, get_profile_service
+from app.schemas import ActionResponse, ProfilesData
 from app.services.monitor import MonitorService
 from app.services.profile import ProfileService
-from app.schemas import ActionResponse, ProfilesData
+from app.utils.file_helpers import atomic_write
+from app.utils.logging import get_logger
 
 router = APIRouter()
 api_logger = get_logger("backend.api", side="BACKEND")
@@ -25,10 +25,8 @@ def _cleanup_old_backups(max_backups: int = MAX_BACKUPS) -> None:
     """清理旧备份，仅保留最新的 max_backups 个文件"""
     backups = sorted(BACKUP_DIR.glob("settings_*.json"), reverse=True)
     for old in backups[max_backups:]:
-        try:
+        with contextlib.suppress(OSError):
             old.unlink()
-        except OSError:
-            pass
 
 
 @router.get("/api/backup/list")
@@ -66,7 +64,7 @@ def create_backup() -> ActionResponse:
         return ActionResponse(success=True, message=f"备份已创建: {backup_path.name}")
     except Exception as exc:
         api_logger.error("创建备份失败: {}", exc)
-        raise HTTPException(status_code=500, detail=f"创建备份失败: {exc}")
+        raise HTTPException(status_code=500, detail=f"创建备份失败: {exc}") from exc
 
 
 @router.post("/api/backup/restore/{filename}", response_model=ActionResponse)
@@ -98,7 +96,7 @@ def restore_backup(
         ProfilesData.model_validate_json(backup_content)
     except Exception as exc:
         api_logger.error("备份文件校验失败: {} -- {}", filename, exc)
-        raise HTTPException(status_code=400, detail=f"备份文件格式错误: {exc}")
+        raise HTTPException(status_code=400, detail=f"备份文件格式错误: {exc}") from exc
 
     try:
         old_active = profile_svc.load().active_profile
@@ -110,7 +108,7 @@ def restore_backup(
         return ActionResponse(success=True, message="配置已从备份恢复，请刷新页面查看")
     except Exception as exc:
         api_logger.error("恢复备份失败: {}", exc)
-        raise HTTPException(status_code=500, detail=f"恢复备份失败: {exc}")
+        raise HTTPException(status_code=500, detail=f"恢复备份失败: {exc}") from exc
 
 
 @router.get("/api/backup/download/{filename}")
@@ -140,4 +138,4 @@ def delete_backup(filename: str) -> ActionResponse:
         return ActionResponse(success=True, message="备份已删除")
     except Exception as exc:
         api_logger.error("删除备份失败: {}", exc)
-        raise HTTPException(status_code=500, detail=f"删除备份失败: {exc}")
+        raise HTTPException(status_code=500, detail=f"删除备份失败: {exc}") from exc

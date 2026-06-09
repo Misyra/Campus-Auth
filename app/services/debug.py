@@ -8,20 +8,21 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException, Request
 
+from app.utils.env import build_login_template_vars
+from app.utils.logging import get_logger
 from app.workers.playwright_worker import (
     CMD_DEBUG_START,
     CMD_DEBUG_STEP,
     CMD_DEBUG_STOP,
     get_worker,
 )
-from app.utils.env import build_login_template_vars
-from app.utils.logging import get_logger
 
 from .debug_session import (
     _current_gen,
@@ -51,10 +52,8 @@ class DebugSessionManager:
         timer = self._session._timer_task
         if timer and not timer.done():
             timer.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await timer
-            except asyncio.CancelledError:
-                pass
 
     def _require_debug_session(self) -> None:
         """验证调试会话处于活跃状态。"""
@@ -279,12 +278,11 @@ class DebugSessionManager:
 
     async def stop(self) -> dict:
         """停止调试会话。"""
-        async with self._exec_sem:
-            async with self._lock:
-                await self._cancel_debug_timer()
-                if self._session._browser_active:
-                    await self._close_debug_browser()
-                self._session = empty_debug_session()
+        async with self._exec_sem, self._lock:
+            await self._cancel_debug_timer()
+            if self._session._browser_active:
+                await self._close_debug_browser()
+            self._session = empty_debug_session()
         # 清理临时调试截图（仅删除文件，保留目录结构）
         try:
             if self._temp_dir.exists():

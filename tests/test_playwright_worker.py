@@ -59,10 +59,9 @@ class TestSubmitAliveCheck:
         worker.start = mock_start
 
         # 模拟队列操作
-        with patch.object(worker._cmd_queue, "put"):
-            with patch.object(worker, "_loop") as mock_loop:
-                mock_loop.is_running.return_value = False
-                worker.submit("test_cmd", wait=False)
+        with patch.object(worker._cmd_queue, "put"), patch.object(worker, "_loop") as mock_loop:
+            mock_loop.is_running.return_value = False
+            worker.submit("test_cmd", wait=False)
 
         # 验证 start() 未被调用
         assert not start_called, "正常路径不应调用 start()"

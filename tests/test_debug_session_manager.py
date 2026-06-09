@@ -375,13 +375,13 @@ class TestDebugSessionManagerStart:
         with (
             patch("app.services.debug.get_worker") as mock_get_worker,
             patch("app.services.debug.build_login_template_vars", return_value={}),
-            pytest.raises(RuntimeError, match="启动失败"),
         ):
             mock_worker = MagicMock()
             mock_worker.submit.return_value = _fail_response("浏览器启动失败")
             mock_get_worker.return_value = mock_worker
 
-            await manager.start(mock_request, mock_monitor)
+            with pytest.raises(RuntimeError, match="启动失败"):
+                await manager.start(mock_request, mock_monitor)
 
         # 失败后应已清理浏览器标记
         assert manager._session._browser_active is False

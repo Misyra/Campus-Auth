@@ -1,18 +1,21 @@
 from __future__ import annotations
 
 import socket
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 from urllib.parse import urlparse
+
+from app.utils.logging import get_logger
+from app.utils.time_utils import is_in_pause_period
 
 from .probes import (
     executor as _executor,
+)
+from .probes import (
     is_local_network_connected,
-    is_network_available_socket,
     is_network_available_http,
     is_network_available_portal,
+    is_network_available_socket,
 )
-from app.utils.logging import get_logger
-from app.utils.time_utils import is_in_pause_period
 
 logger = get_logger("network_decision", side="BACKEND")
 
@@ -99,10 +102,9 @@ def check_login_prerequisites(config: dict) -> tuple[bool, str]:
     monitor_config = config.get("monitor", {})
 
     # 物理网络连接检查
-    if monitor_config.get("enable_local_check", True):
-        if not is_local_network_connected():
-            logger.warning("物理网络未连接，跳过登录")
-            return (False, "local_disconnected")
+    if monitor_config.get("enable_local_check", True) and not is_local_network_connected():
+        logger.warning("物理网络未连接，跳过登录")
+        return (False, "local_disconnected")
 
     # 认证地址可达性检查
     if monitor_config.get("check_auth_url", True):

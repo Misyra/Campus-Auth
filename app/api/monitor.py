@@ -6,11 +6,10 @@ import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.utils.logging import get_logger
-
 from app.deps import get_monitor_service
-from app.services.monitor import MonitorService
 from app.schemas import ActionResponse, LogEntry, MonitorStatusResponse
+from app.services.monitor import MonitorService
+from app.utils.logging import get_logger
 
 router = APIRouter()
 api_logger = get_logger("backend.api", side="BACKEND")
@@ -87,4 +86,4 @@ def toggle_pure_mode(
         return {"enabled": new_value}
     except Exception as exc:
         api_logger.error("切换纯净模式失败: {}", exc)
-        raise HTTPException(status_code=500, detail=f"切换纯净模式失败: {exc}")
+        raise HTTPException(status_code=500, detail=f"切换纯净模式失败: {exc}") from exc

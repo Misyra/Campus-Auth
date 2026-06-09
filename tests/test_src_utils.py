@@ -446,12 +446,10 @@ class TestHasChromium:
         with patch(
             "app.workers.playwright_bootstrap.Path.home",
             return_value=Path("/nonexistent"),
+        ), patch("importlib.util.find_spec", return_value=None), patch.dict(
+            "sys.modules", {"playwright.sync_api": None, "playwright": None}
         ):
-            with patch("importlib.util.find_spec", return_value=None):
-                with patch.dict(
-                    "sys.modules", {"playwright.sync_api": None, "playwright": None}
-                ):
-                    assert _has_chromium() is False
+            assert _has_chromium() is False
 
     @patch("app.workers.playwright_bootstrap.is_windows", return_value=False)
     @patch("app.workers.playwright_bootstrap.is_macos", return_value=False)
@@ -459,10 +457,8 @@ class TestHasChromium:
         with patch(
             "app.workers.playwright_bootstrap.Path.home",
             return_value=Path("/nonexistent"),
-        ):
-            with patch("importlib.util.find_spec", return_value=None):
-                with patch.dict(
-                    "sys.modules", {"playwright.sync_api": None, "playwright": None}
+        ), patch("importlib.util.find_spec", return_value=None), patch.dict(
+            "sys.modules", {"playwright.sync_api": None, "playwright": None}
                 ):
                     assert _has_chromium() is False
 

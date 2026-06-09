@@ -10,11 +10,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .models import StepConfig, StepError, StepType, PROJECT_ROOT
-from .variable_resolver import VariableResolver
 from app.constants import LOGS_DIR
-
 from app.utils.logging import get_logger
+
+from .models import PROJECT_ROOT, StepConfig, StepError, StepType
+from .variable_resolver import VariableResolver
 
 logger = get_logger("step_handlers", side="BACKEND")
 
@@ -645,10 +645,10 @@ class OcrHandler(StepHandler):
                 import ddddocr
 
                 instance = ddddocr.DdddOcr(old=old, show_ad=False)
-            except ImportError:
+            except ImportError as err:
                 raise StepError(
                     "ddddocr 未安装，请在「设置 → 系统与日志」中安装 OCR 依赖"
-                )
+                ) from err
             cls._ocr_instances[old] = instance
             return instance
 

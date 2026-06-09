@@ -57,8 +57,8 @@ def _validate_date(date: str) -> None:
     """校验日期格式 YYYY-MM-DD。"""
     try:
         datetime.strptime(date, "%Y-%m-%d")
-    except ValueError:
-        raise HTTPException(400, "日期格式无效，须为 YYYY-MM-DD")
+    except ValueError as err:
+        raise HTTPException(400, "日期格式无效，须为 YYYY-MM-DD") from err
 
 
 def _validate_filename(filename: str) -> None:
@@ -130,19 +130,18 @@ def get_log_file_content(
         raise HTTPException(404, f"日志文件不存在: {date}/{file}")
 
     try:
-        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+        with open(filepath, encoding="utf-8", errors="replace") as f:
             lines = list(deque(f, maxlen=max(limit * 2, 5000)))
-    except OSError:
-        raise HTTPException(404, f"日志文件不存在: {date}/{file}")
+    except OSError as err:
+        raise HTTPException(404, f"日志文件不存在: {date}/{file}") from err
 
     # 解析并过滤
     parsed: list[LogLine] = []
     for raw in lines:
         line = _parse_log_line(raw.rstrip("\n\r"))
 
-        if level and level.upper() in _VALID_LEVELS:
-            if line.level != level.upper():
-                continue
+        if level and level.upper() in _VALID_LEVELS and line.level != level.upper():
+            continue
 
         if search:
             search_lower = search.lower()

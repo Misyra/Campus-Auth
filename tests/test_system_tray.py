@@ -95,7 +95,7 @@ class TestLoadIcon:
             )
             # cairosvg.svg2png 抛异常模拟不可用
             with patch.dict("sys.modules", {"cairosvg": None}):
-                result = tray._load_icon()
+                tray._load_icon()
 
         mock_image.new.assert_called_once_with("RGBA", (64, 64), (34, 211, 238, 255))
 

@@ -34,7 +34,7 @@ def parse_portal_checks(raw: str | list | None) -> list[tuple[str, str]]:
         return [
             (e[0], e[1])
             for e in raw
-            if isinstance(e, (list, tuple)) and len(e) >= 2 and e[0] and e[1]
+            if isinstance(e, list | tuple) and len(e) >= 2 and e[0] and e[1]
         ]
 
     return []
