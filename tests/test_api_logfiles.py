@@ -105,8 +105,8 @@ class TestParseLogLine:
         line = _parse_log_line(raw)
         assert line.timestamp == "2026-06-01 00:04:44"
         assert line.level == "INFO"
-        assert line.side == "BACKEND"
-        assert line.logger == "backend.module"
+        assert line.source == "BACKEND"
+        assert line.name == "backend.module"
         assert line.message == "这是消息"
 
     def test_error_level(self):
@@ -128,8 +128,8 @@ class TestParseLogLine:
         line = _parse_log_line(raw)
         assert line.timestamp == ""
         assert line.level == ""
-        assert line.side == ""
-        assert line.logger == ""
+        assert line.source == ""
+        assert line.name == ""
         assert line.message == "这不是标准日志格式"
 
     def test_empty_line(self):
@@ -237,7 +237,7 @@ class TestGetLogFileContent:
         self._create_log_file(tmp_path, "2026-06-01", "app.log", content)
 
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
-            result = get_log_file_content(date="2026-06-01", file="app.log", level="", search="", limit=2000)
+            result = get_log_file_content(date="2026-06-01", file="app.log", level="", source="", search="", limit=2000)
             assert result.date == "2026-06-01"
             assert result.file == "app.log"
             assert result.total_lines == 1
@@ -248,7 +248,7 @@ class TestGetLogFileContent:
         """文件不存在抛 404。"""
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
             with pytest.raises(HTTPException) as exc_info:
-                get_log_file_content(date="2026-06-01", file="app.log", level="", search="", limit=2000)
+                get_log_file_content(date="2026-06-01", file="app.log", level="", source="", search="", limit=2000)
             assert exc_info.value.status_code == 404
 
     def test_level_filter(self, tmp_path):
@@ -261,7 +261,7 @@ class TestGetLogFileContent:
         self._create_log_file(tmp_path, "2026-06-01", "app.log", content)
 
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
-            result = get_log_file_content(date="2026-06-01", file="app.log", level="ERROR", search="", limit=2000)
+            result = get_log_file_content(date="2026-06-01", file="app.log", level="ERROR", source="", search="", limit=2000)
             assert result.total_lines == 1
             assert result.lines[0].level == "ERROR"
 
@@ -275,7 +275,7 @@ class TestGetLogFileContent:
         self._create_log_file(tmp_path, "2026-06-01", "app.log", content)
 
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
-            result = get_log_file_content(date="2026-06-01", file="app.log", level="", search="超时", limit=2000)
+            result = get_log_file_content(date="2026-06-01", file="app.log", level="", source="", search="超时", limit=2000)
             assert result.total_lines == 1
             assert "超时" in result.lines[0].message
 
@@ -285,7 +285,7 @@ class TestGetLogFileContent:
         self._create_log_file(tmp_path, "2026-06-01", "app.log", content)
 
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
-            result = get_log_file_content(date="2026-06-01", file="app.log", level="", search="hello", limit=2000)
+            result = get_log_file_content(date="2026-06-01", file="app.log", level="", source="", search="hello", limit=2000)
             assert result.total_lines == 1
 
     def test_limit_applied(self, tmp_path):
@@ -295,7 +295,7 @@ class TestGetLogFileContent:
         self._create_log_file(tmp_path, "2026-06-01", "app.log", content)
 
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
-            result = get_log_file_content(date="2026-06-01", file="app.log", level="", search="", limit=10)
+            result = get_log_file_content(date="2026-06-01", file="app.log", level="", source="", search="", limit=10)
             assert result.total_lines == 100
             assert result.returned_lines == 10
 
@@ -303,12 +303,12 @@ class TestGetLogFileContent:
         """无效日期被拒绝。"""
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
             with pytest.raises(HTTPException) as exc_info:
-                get_log_file_content(date="invalid", file="app.log", level="", search="", limit=2000)
+                get_log_file_content(date="invalid", file="app.log", level="", source="", search="", limit=2000)
             assert exc_info.value.status_code == 400
 
     def test_invalid_filename_rejected(self, tmp_path):
         """无效文件名被拒绝。"""
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
             with pytest.raises(HTTPException) as exc_info:
-                get_log_file_content(date="2026-06-01", file="../../etc/passwd", level="", search="", limit=2000)
+                get_log_file_content(date="2026-06-01", file="../../etc/passwd", level="", source="", search="", limit=2000)
             assert exc_info.value.status_code == 400
