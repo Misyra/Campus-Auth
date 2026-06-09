@@ -927,3 +927,327 @@ class TestDateRotatingSinkRotation:
         backup_files = list(log_dir.glob("app.log.*"))
         assert len(backup_files) <= 2
         sink.close()
+
+
+# =====================================================================
+# crypto — _simple_obfuscate / _simple_deobfuscate（从 test_crypto.py 合并）
+# =====================================================================
+
+
+class TestSimpleObfuscate:
+    """简单 Base64 混淆。"""
+
+    def test_roundtrip(self):
+        """混淆 -> 反混淆往返。"""
+        from app.utils.crypto import _simple_deobfuscate, _simple_obfuscate
+
+        original = "test_password_123"
+        obfuscated = _simple_obfuscate(original)
+        assert obfuscated.startswith("ENC:B64:")
+        deobfuscated = _simple_deobfuscate(obfuscated[len("ENC:"):])
+        assert deobfuscated == original
+
+    def test_unicode(self):
+        """Unicode 字符支持。"""
+        from app.utils.crypto import _simple_deobfuscate, _simple_obfuscate
+
+        original = "密码测试"
+        obfuscated = _simple_obfuscate(original)
+        deobfuscated = _simple_deobfuscate(obfuscated[len("ENC:"):])
+        assert deobfuscated == original
+
+    def test_empty_string(self):
+        """空字符串。"""
+        from app.utils.crypto import _simple_obfuscate
+
+        obfuscated = _simple_obfuscate("")
+        assert obfuscated == "ENC:B64:"
+
+    def test_deobfuscate_without_prefix(self):
+        """无 B64: 前缀原样返回。"""
+        from app.utils.crypto import _simple_deobfuscate
+
+        result = _simple_deobfuscate("plaintext")
+        assert result == "plaintext"
+
+
+# ── has_decryption_error / clear_decryption_error ──
+
+
+class TestDecryptionError:
+    """解密错误状态管理。"""
+
+    def test_initial_state(self):
+        """初始状态无解密错误。"""
+        from app.utils.crypto import clear_decryption_error, has_decryption_error
+
+        clear_decryption_error()
+        assert has_decryption_error() is False
+
+    def test_set_and_clear(self):
+        """设置和清除解密错误。"""
+        from app.utils.crypto import (
+            _decryption_failed,
+            clear_decryption_error,
+            has_decryption_error,
+        )
+
+        _decryption_failed.set()
+        assert has_decryption_error() is True
+        clear_decryption_error()
+        assert has_decryption_error() is False
+
+
+# ── 日志安全 ──
+
+
+def test_save_password_field_logs_no_plaintext(caplog):
+    """save_password_field 的 warning 日志不应包含密码明文。"""
+    from app.utils.crypto import save_password_field
+
+    for raw_value in ("", "••••••••"):
+        caplog.clear()
+        with caplog.at_level("WARNING"):
+            result = save_password_field(raw_value, existing_encrypted="")
+
+        assert result == ""
+        for record in caplog.records:
+            msg = record.message
+            assert repr(raw_value[:20]) not in msg, f"日志泄露了原始输入内容: {msg}"
+
+
+# =====================================================================
+# version — compare_versions（从 test_version.py 合并）
+# =====================================================================
+
+
+class TestCompareVersions:
+    """版本比较。"""
+
+    def test_equal(self):
+        """相等。"""
+        from app.version import compare_versions
+
+        assert compare_versions("1.0.0", "1.0.0") == 0
+
+    def test_greater_major(self):
+        """主版本号更大。"""
+        from app.version import compare_versions
+
+        assert compare_versions("2.0.0", "1.0.0") == 1
+
+    def test_less_major(self):
+        """主版本号更小。"""
+        from app.version import compare_versions
+
+        assert compare_versions("1.0.0", "2.0.0") == -1
+
+    def test_greater_minor(self):
+        """次版本号更大。"""
+        from app.version import compare_versions
+
+        assert compare_versions("1.2.0", "1.1.0") == 1
+
+    def test_less_minor(self):
+        """次版本号更小。"""
+        from app.version import compare_versions
+
+        assert compare_versions("1.1.0", "1.2.0") == -1
+
+    def test_greater_patch(self):
+        """补丁版本号更大。"""
+        from app.version import compare_versions
+
+        assert compare_versions("1.0.2", "1.0.1") == 1
+
+    def test_less_patch(self):
+        """补丁版本号更小。"""
+        from app.version import compare_versions
+
+        assert compare_versions("1.0.1", "1.0.2") == -1
+
+    def test_different_lengths(self):
+        """不同长度版本号。"""
+        from app.version import compare_versions
+
+        assert compare_versions("1.0", "1.0.0") == 0
+        assert compare_versions("1.0.0", "1.0") == 0
+        assert compare_versions("1.0.1", "1.0") == 1
+
+    def test_invalid_version_returns_zero(self):
+        """无效版本号返回 0。"""
+        from app.version import compare_versions
+
+        assert compare_versions("invalid", "1.0.0") == 0
+        assert compare_versions("1.0.0", "invalid") == 0
+        assert compare_versions("invalid", "invalid") == 0
+
+    def test_single_segment(self):
+        """单段版本号。"""
+        from app.version import compare_versions
+
+        assert compare_versions("2", "1") == 1
+        assert compare_versions("1", "2") == -1
+        assert compare_versions("1", "1") == 0
+
+
+# =====================================================================
+# logging — VALID_LOG_LEVELS / DashboardSink（从 test_logging_utils.py 合并）
+# =====================================================================
+
+
+class TestValidLogLevels:
+    """有效日志级别。"""
+
+    def test_contains_standard_levels(self):
+        """包含标准级别。"""
+        from app.utils.logging import VALID_LOG_LEVELS
+
+        assert "DEBUG" in VALID_LOG_LEVELS
+        assert "INFO" in VALID_LOG_LEVELS
+        assert "WARNING" in VALID_LOG_LEVELS
+        assert "ERROR" in VALID_LOG_LEVELS
+        assert "CRITICAL" in VALID_LOG_LEVELS
+
+    def test_count(self):
+        """级别数量。"""
+        from app.utils.logging import VALID_LOG_LEVELS
+
+        assert len(VALID_LOG_LEVELS) == 5
+
+
+# ── DashboardSink ──
+
+
+class TestDashboardSink:
+    """DashboardSink 单元测试。"""
+
+    def test_init_default(self):
+        """默认初始化。"""
+        from app.utils.logging import DashboardSink
+
+        sink = DashboardSink()
+        assert sink.buffer.maxlen == 1200
+        assert sink.broadcast_queue.maxlen == 200
+        assert len(sink.buffer) == 0
+        assert len(sink.broadcast_queue) == 0
+
+    def test_init_custom_maxlen(self):
+        """自定义 maxlen。"""
+        from app.utils.logging import DashboardSink
+
+        sink = DashboardSink(maxlen=500)
+        assert sink.buffer.maxlen == 500
+
+    def test_write_appends_to_buffer_and_queue(self):
+        """write 同时写入 buffer 和 broadcast_queue。"""
+        from unittest.mock import MagicMock
+
+        from app.utils.logging import DashboardSink
+
+        sink = DashboardSink(maxlen=10)
+        msg = MagicMock()
+        level_mock = MagicMock()
+        level_mock.name = "INFO"
+        msg.record = {
+            "time": MagicMock(timestamp=lambda: 1700000000.0),
+            "level": level_mock,
+            "extra": {"name": "test", "source": "backend"},
+            "name": "test",
+            "message": "测试消息",
+        }
+        msg.__str__ = lambda self: "测试消息"
+
+        sink.write(msg)
+
+        assert len(sink.buffer) == 1
+        assert len(sink.broadcast_queue) == 1
+        entry = sink.buffer[0]
+        assert entry["level"] == "INFO"
+        assert entry["source"] == "backend"
+        assert entry["name"] == "test"
+        assert entry["message"] == "测试消息"
+
+    def test_write_buffer_overflow(self):
+        """buffer 超出 maxlen 自动淘汰最旧。"""
+        from unittest.mock import MagicMock
+
+        from app.utils.logging import DashboardSink
+
+        sink = DashboardSink(maxlen=3)
+        level_mock = MagicMock()
+        level_mock.name = "INFO"
+        for i in range(5):
+            msg = MagicMock()
+            msg.record = {
+                "time": MagicMock(timestamp=lambda: 1700000000.0),
+                "level": level_mock,
+                "extra": {"name": "test", "source": "backend"},
+                "name": "test",
+                "message": f"msg{i}",
+            }
+            msg.__str__ = lambda self, i=i: f"msg{i}"
+            sink.write(msg)
+
+        assert len(sink.buffer) == 3
+        assert sink.buffer[0]["message"] == "msg2"
+        assert sink.buffer[2]["message"] == "msg4"
+
+    def test_list_logs_returns_last_n(self):
+        """list_logs 返回最近 N 条。"""
+        from app.utils.logging import DashboardSink
+
+        sink = DashboardSink(maxlen=10)
+        for i in range(5):
+            sink.buffer.append({"message": f"msg{i}"})
+
+        result = sink.list_logs(limit=3)
+        assert len(result) == 3
+        assert result[0]["message"] == "msg2"
+
+    def test_list_logs_limit_exceeds_buffer(self):
+        """list_logs limit 超过 buffer 大小时返回全部。"""
+        from app.utils.logging import DashboardSink
+
+        sink = DashboardSink(maxlen=10)
+        sink.buffer.append({"message": "only"})
+        result = sink.list_logs(limit=100)
+        assert len(result) == 1
+
+    def test_thread_safety(self):
+        """多线程并发写入不会崩溃。"""
+        import threading
+        from unittest.mock import MagicMock
+
+        from app.utils.logging import DashboardSink
+
+        sink = DashboardSink(maxlen=1000)
+        errors = []
+
+        level_mock = MagicMock()
+        level_mock.name = "INFO"
+
+        def writer(n):
+            try:
+                for i in range(100):
+                    msg = MagicMock()
+                    msg.record = {
+                        "time": MagicMock(timestamp=lambda: 1700000000.0),
+                        "level": level_mock,
+                        "extra": {"name": "test", "source": "backend"},
+                        "name": "test",
+                        "message": f"t{n}_msg{i}",
+                    }
+                    msg.__str__ = lambda self, n=n, i=i: f"t{n}_msg{i}"
+                    sink.write(msg)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=writer, args=(n,)) for n in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors
+        assert len(sink.buffer) == 400
