@@ -24,6 +24,7 @@ _LOG_LINE_PATTERN = re.compile(
 )
 
 _VALID_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+_VALID_SOURCES = {"backend", "network", "task", "frontend", "debug"}
 
 
 class LogFileInfo(BaseModel):
@@ -40,8 +41,8 @@ class LogFileGroup(BaseModel):
 class LogLine(BaseModel):
     timestamp: str = ""
     level: str = ""
-    side: str = ""
-    logger: str = ""
+    source: str = ""
+    name: str = ""
     message: str = ""
 
 
@@ -74,8 +75,8 @@ def _parse_log_line(raw: str) -> LogLine:
         return LogLine(
             timestamp=m.group(1),
             level=m.group(2),
-            side=m.group(3),
-            logger=m.group(4),
+            source=m.group(3),
+            name=m.group(4),
             message=m.group(5),
         )
     return LogLine(message=raw)
@@ -116,6 +117,7 @@ def get_log_file_content(
     date: str = Query(..., description="日期 YYYY-MM-DD"),
     file: str = Query(default="app.log", description="文件名"),
     level: str = Query(default="", description="级别过滤"),
+    source: str = Query(default="", description="来源过滤"),
     search: str = Query(default="", description="搜索关键词"),
     limit: int = Query(default=2000, ge=1, le=10000),
 ) -> LogFileContent:
@@ -143,11 +145,15 @@ def get_log_file_content(
         if level and level.upper() in _VALID_LEVELS and line.level != level.upper():
             continue
 
+        if source and source.lower() in _VALID_SOURCES and line.source != source.lower():
+            continue
+
         if search:
             search_lower = search.lower()
             if (
                 search_lower not in line.message.lower()
-                and search_lower not in line.logger.lower()
+                and search_lower not in line.name.lower()
+                and search_lower not in line.source.lower()
                 and search_lower not in raw.lower()
             ):
                 continue
