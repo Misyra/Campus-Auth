@@ -125,7 +125,7 @@ class MonitorService:
         # Lock-free status snapshot — written by consumer, read by API threads
         self._status_snapshot = StatusSnapshot()
 
-        # WebSocket 广播队列 —— 由 _push_log / _queue_status_broadcast 写入，
+        # WebSocket 广播队列 —— 由 record_log / _queue_status_broadcast 写入，
         # 从主事件循环异步排空
         self._ws_broadcast_queue: deque[dict] = deque(maxlen=200)
 
@@ -183,7 +183,7 @@ class MonitorService:
         self._thread_done.clear()
         core = NetworkMonitorCore(
             config=config,
-            log_callback=self._push_log,
+            log_callback=self.record_log,
             thread_done=self._thread_done,
             login_history=self._login_history,
             worker_getter=self._worker_getter,
@@ -219,7 +219,7 @@ class MonitorService:
         """启动监控（仅在消费者线程中调用）。"""
         # 二次检查：防止重复启动
         if self._monitor_thread and self._monitor_thread.is_alive():
-            self._push_log(
+            self.record_log(
                 "监控线程已在运行，忽略重复启动",
                 level="WARNING",
                 source="backend.monitor_service",
@@ -228,7 +228,9 @@ class MonitorService:
         config, pure_mode = self._prepare_command_config(cmd)
         self._start_monitor_core(config, pure_mode)
 
-        self._push_log("监控线程已启动", level="INFO", source="backend.monitor_service")
+        self.record_log(
+            "监控线程已启动", level="INFO", source="backend.monitor_service"
+        )
         self._update_status_snapshot()
 
     def _handle_stop(self, cmd: MonitorCommand | None = None) -> None:
@@ -254,7 +256,7 @@ class MonitorService:
         self._monitor_thread = None
         self._thread_done.clear()
 
-        self._push_log("监控已停止", level="INFO", source="backend.monitor_service")
+        self.record_log("监控已停止", level="INFO", source="backend.monitor_service")
         self._update_status_snapshot()
 
     def _handle_login(self, cmd: MonitorCommand) -> None:
@@ -331,7 +333,7 @@ class MonitorService:
         pure_mode = cmd.data.get("pure_mode", self.pure_mode)
         self._start_monitor_core(new_config, pure_mode)
 
-        self._push_log(
+        self.record_log(
             "监控已按新方案重启", level="INFO", source="backend.monitor_service"
         )
         self._update_status_snapshot()
@@ -357,7 +359,7 @@ class MonitorService:
                 service_logger.warning("命令队列已满，跳过 reload 命令入队")
         new_url = self._runtime_config.get("auth_url", "")
         new_user = self._runtime_config.get("username", "")
-        self._push_log(
+        self.record_log(
             f"自动切换方案 -> {profile_name} (认证={new_url}, 用户={new_user})",
             level="INFO",
             source="backend.monitor_service",
@@ -365,7 +367,7 @@ class MonitorService:
 
     # ── 日志 / 状态快照桥接 ──
 
-    def _push_log(
+    def record_log(
         self, message: str, level: str = "INFO", source: str = "monitor"
     ) -> None:
         """Record a log entry + queue WebSocket broadcast (no asyncio cross-thread calls)."""
@@ -584,7 +586,7 @@ class MonitorService:
         except Exception:
             display_name = profile_id
 
-        self._push_log(
+        self.record_log(
             f"切换方案 -> {display_name} (认证={new_url}, 用户={new_user})",
             level="INFO",
             source="backend.monitor_service",
@@ -605,7 +607,7 @@ class MonitorService:
             except queue.Full:
                 service_logger.warning("命令队列已满，跳过 profile_switch 命令入队")
                 return
-            self._push_log(
+            self.record_log(
                 "监控正在按新方案重启",
                 level="INFO",
                 source="backend.monitor_service",
@@ -775,7 +777,7 @@ class MonitorService:
             mode_desc.append("HTTP")
         if portal_checks:
             mode_desc.append("Portal")
-        self._push_log(
+        self.record_log(
             f"手动网络测试 -> 目标={len(test_sites)} 检测方式={'+'.join(mode_desc) or '无'}",
             "INFO",
             "network",
@@ -789,14 +791,14 @@ class MonitorService:
                 portal_checks=portal_checks if portal_checks else None,
             )
             if ok:
-                self._push_log("手动测试结果: 网络正常", "INFO", "network")
+                self.record_log("手动测试结果: 网络正常", "INFO", "network")
                 return True, "网络连接正常"
             else:
-                self._push_log("手动测试结果: 网络异常", "WARNING", "network")
+                self.record_log("手动测试结果: 网络异常", "WARNING", "network")
                 return False, "网络连接异常"
         except Exception as exc:
             service_logger.exception("网络测试失败")
-            self._push_log(f"手动测试异常: {exc}", "ERROR", "network")
+            self.record_log(f"手动测试异常: {exc}", "ERROR", "network")
             return False, f"网络测试失败: {exc}"
 
     def list_logs(self, limit: int = 200) -> list[LogEntry]:

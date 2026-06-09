@@ -222,8 +222,7 @@ def save_password_field(raw: str | None, existing_encrypted: str) -> str:
         # 显式置空或掩码 → 尝试保留已有密码
         if not existing_encrypted:
             logger.warning(
-                "密码为空或掩码但无已有加密密码，密码将保持为空！长度={}",
-                len(raw) if raw else 0,
+                "密码为空或掩码但无已有加密密码，密码将保持为空！",
             )
         return existing_encrypted or ""
     if raw.startswith("ENC:"):

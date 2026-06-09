@@ -211,11 +211,11 @@
               <span class="log-meta">{{ formatLogMeta(item) }}</span>
               <div class="log-content">
                 <span class="log-message" :class="getLogClass(item)">{{ stripScreenshotHint(item.message) }}</span>
-                <div v-if="item._screenshot" class="log-screenshot-wrap">
+                <div v-if="extractScreenshotUrl(item.message)" class="log-screenshot-wrap">
                   <img
-                    :src="item._screenshot"
+                    :src="extractScreenshotUrl(item.message)"
                     class="log-screenshot-preview"
-                    @click="openFullscreen(item._screenshot)"
+                    @click="openFullscreen(extractScreenshotUrl(item.message))"
                     loading="lazy"
                     alt="截图"
                   />

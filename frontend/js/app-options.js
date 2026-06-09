@@ -103,8 +103,7 @@ export const appOptions = {
         const q = this.logFilter.search.toLowerCase();
         result = result.filter(l => l.message.toLowerCase().includes(q));
       }
-      // P1-FE-4: 预计算截图 URL，避免模板中重复调用 extractScreenshotUrl
-      return result.map(item => ({ ...item, _screenshot: this.extractScreenshotUrl(item.message) }));
+      return result;
     },
     networkStatus() {
       if (!this.status.monitoring) return 'idle';

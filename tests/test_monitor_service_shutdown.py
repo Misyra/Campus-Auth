@@ -32,7 +32,7 @@ class TestProfileReloadNoDeadlock:
         )
 
         # 模拟 _reload_config_internal
-        with patch.object(svc, "_reload_config_internal"), patch.object(svc, "_copy_runtime_config", return_value={}), patch.object(svc, "_push_log"):
+        with patch.object(svc, "_reload_config_internal"), patch.object(svc, "_copy_runtime_config", return_value={}), patch.object(svc, "record_log"):
             # 调用 _handle_profile_reload，应该不阻塞
             import time
 
@@ -55,7 +55,7 @@ class TestProfileReloadNoDeadlock:
             type=MonitorCmdType.PROFILE_RELOAD, data={"profile_name": "test"}
         )
 
-        with patch.object(svc, "_reload_config_internal"), patch.object(svc, "_copy_runtime_config", return_value={}), patch.object(svc, "_push_log"):
+        with patch.object(svc, "_reload_config_internal"), patch.object(svc, "_copy_runtime_config", return_value={}), patch.object(svc, "record_log"):
             svc._handle_profile_reload(cmd)
 
         # 验证 reload 命令已入队
@@ -104,7 +104,7 @@ class TestShutdownSynchronous:
         svc._monitor_core = None
         svc._monitor_thread = None
         svc._thread_done = threading.Event()
-        svc._push_log = MagicMock()
+        svc.record_log = MagicMock()
         svc._update_status_snapshot = MagicMock()
 
         # 多次调用不应抛出异常

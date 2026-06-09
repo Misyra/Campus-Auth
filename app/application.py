@@ -244,7 +244,7 @@ async def websocket_logs(websocket: WebSocket):
                     message_text = str(d.get("message", ""))[:10000]
                     scope = str(d.get("scope", "?"))[:200]
                     if message_text:
-                        monitor_svc._push_log(
+                        monitor_svc.record_log(
                             message=f"[{scope}] {message_text}",
                             level=str(d.get("level", "INFO"))[:20],
                             source="frontend",

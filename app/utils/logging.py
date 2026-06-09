@@ -3,7 +3,7 @@
 提供：
 - get_logger(name, side) — 获取绑定 name 和 side 的 logger
 - LogConfigCenter — 单例配置中心，支持运行时热更新日志级别
-- WebSocketSink — 自定义 sink，将日志推送到前端 WebSocket
+- LogBroadcastSink — 自定义 sink，将日志记录追加到 WebSocket 广播队列
 - DateRotatingSink — 自定义 sink，按日期目录存储日志
 """
 
@@ -60,11 +60,9 @@ logger.add(
 
 # ==================== 标准 logging 桥接 ====================
 
+
 # 为了让 pytest caplog 等标准 logging 工具能捕获 loguru 的日志，
 # 添加一个 sink 将日志转发到标准 logging。
-_std_handler_added = False
-
-
 def _to_std_logging(message):
     """将 loguru 消息转发到标准 logging。"""
     record = message.record
@@ -111,58 +109,41 @@ def get_logger(name: str, side: str = "BACKEND") -> logger:
     return logger.bind(name=name, side=side)
 
 
-# ==================== 自定义 sink: WebSocket ====================
+# ==================== 自定义 sink: WebSocket 广播 ====================
 
 
-class WebSocketSink:
-    """将日志推送到 WebSocket 广播队列和 log_store。"""
+class LogBroadcastSink:
+    """轻量 loguru sink — 仅将日志记录追加到 WebSocket 广播队列。
 
-    # 不转发这些 logger 的日志，避免回声或与 _push_log 重复
-    _EXCLUDED_LOGGERS = frozenset(
-        {
-            "backend.ws_manager",
-            "backend.monitor_service",
-        }
-    )
+    不负责内存 log_store（由 MonitorService.record_log() 负责）。
+    """
 
-    _LogEntry: type | None = None  # 延迟初始化，避免循环导入
-
-    def __init__(self, broadcast_queue: deque[dict], log_store: deque | None = None):
+    def __init__(self, broadcast_queue: deque[dict]):
         self._queue = broadcast_queue
-        self._log_store = log_store
 
     def write(self, message):
-        """loguru sink 接口 — 接收格式化后的消息。"""
+        """loguru sink 接口 — 接收格式化后的消息，追加到广播队列。"""
         record = message.record
         name = record["extra"].get("name", record["name"])
-
-        # 过滤排除的 logger
-        if name in self._EXCLUDED_LOGGERS:
-            return
-
         side = record["extra"].get("side", "BACKEND")
         level = record["level"].name
-        text = message.strip()
+        text = str(message).strip()
 
         stamp = datetime.fromtimestamp(record["time"].timestamp()).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
 
-        log_data = {
-            "timestamp": stamp,
-            "level": level,
-            "source": f"{side}.{name}",
-            "message": text,
-        }
-
-        self._queue.append({"type": "log", "data": log_data})
-
-        if self._log_store is not None:
-            if WebSocketSink._LogEntry is None:
-                from app.schemas import LogEntry
-
-                WebSocketSink._LogEntry = LogEntry
-            self._log_store.append(WebSocketSink._LogEntry(**log_data))
+        self._queue.append(
+            {
+                "type": "log",
+                "data": {
+                    "timestamp": stamp,
+                    "level": level,
+                    "source": f"{side}.{name}",
+                    "message": text,
+                },
+            }
+        )
 
 
 # ==================== 自定义 sink: 按日期目录存储 ====================
@@ -203,7 +184,7 @@ class DateRotatingSink:
     def _open_file(self, path: str) -> None:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         # 先打开新流，成功后再关闭旧流，避免 open() 失败时丢失日志流
-        new_stream = open(path, "a", encoding="utf-8")
+        new_stream = open(path, "a", encoding="utf-8", buffering=1)
         if self._stream:
             try:
                 self._stream.close()
@@ -236,7 +217,6 @@ class DateRotatingSink:
                 if self._stream is not None:
                     text = str(message).rstrip("\n") + "\n"
                     self._stream.write(text)
-                    self._stream.flush()
                     self._bytes_written += len(text.encode("utf-8"))
                     if self._bytes_written >= self._file_max_bytes:
                         self._rotate_file()
