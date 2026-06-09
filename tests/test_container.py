@@ -89,7 +89,9 @@ class TestInit:
         """WebSocketManager 应被实例化。"""
         mock_classes["WebSocketManager"].assert_called_once()
 
-    def test_profile_service_created_with_root(self, container, project_root, mock_classes):
+    def test_profile_service_created_with_root(
+        self, container, project_root, mock_classes
+    ):
         """ProfileService 应以 project_root 构造。"""
         mock_classes["ProfileService"].assert_called_once_with(project_root)
 
@@ -97,18 +99,24 @@ class TestInit:
         """LoginHistoryService 应被实例化。"""
         mock_classes["LoginHistoryService"].assert_called_once()
 
-    def test_monitor_service_created_with_dependencies(self, container, project_root, mock_classes):
+    def test_monitor_service_created_with_dependencies(
+        self, container, project_root, mock_classes
+    ):
         """MonitorService 应接收 project_root、profile_service、ws_manager、login_history_service。"""
         mock_classes["MonitorService"].assert_called_once()
         call_args = mock_classes["MonitorService"].call_args
         assert call_args[0][0] == project_root
         assert call_args[1]["login_history_service"] is container.login_history_service
 
-    def test_task_service_created_with_root(self, container, project_root, mock_classes):
+    def test_task_service_created_with_root(
+        self, container, project_root, mock_classes
+    ):
         """TaskService 应以 project_root 构造。"""
         mock_classes["TaskService"].assert_called_once_with(project_root)
 
-    def test_scheduler_service_created_with_deps(self, container, project_root, mock_classes):
+    def test_scheduler_service_created_with_deps(
+        self, container, project_root, mock_classes
+    ):
         """SchedulerService 应接收 project_root、task_service、monitor_service、login_history。"""
         mock_classes["SchedulerService"].assert_called_once()
         call_args = mock_classes["SchedulerService"].call_args
@@ -238,6 +246,7 @@ class TestShutdown:
 
     def test_shutdown_cancels_ws_drain_task(self, container_for_shutdown, project_root):
         """shutdown 应取消 ws_drain_task（如果存在）。"""
+
         async def _run():
             # 创建一个真实的 asyncio task 来模拟 ws_drain_loop
             async def _dummy_loop():
@@ -262,7 +271,9 @@ class TestShutdown:
 
     @patch("app.container.cleanup_orphan_browsers")
     @patch("app.container.shutil")
-    def test_shutdown_cleans_temp_dir(self, mock_shutil, mock_cleanup, container_for_shutdown, project_root):
+    def test_shutdown_cleans_temp_dir(
+        self, mock_shutil, mock_cleanup, container_for_shutdown, project_root
+    ):
         """shutdown 应清理临时目录。"""
         temp_dir = project_root / "temp"
         temp_dir.mkdir()
@@ -284,12 +295,15 @@ class TestShutdown:
         assert not temp_file.exists()
 
     @patch("app.container.cleanup_orphan_browsers")
-    def test_shutdown_handles_temp_dir_not_exist(self, mock_cleanup, container_for_shutdown, project_root):
+    def test_shutdown_handles_temp_dir_not_exist(
+        self, mock_cleanup, container_for_shutdown, project_root
+    ):
         """临时目录不存在时 shutdown 不应报错。"""
         # 确保 temp_dir 不存在
         temp_dir = project_root / "temp"
         if temp_dir.exists():
             import shutil
+
             shutil.rmtree(temp_dir)
 
         # mock shutdown_worker
@@ -298,7 +312,9 @@ class TestShutdown:
         # 不抛异常即通过
 
     @patch("app.container.cleanup_orphan_browsers")
-    def test_shutdown_handles_worker_shutdown_error(self, mock_cleanup, container_for_shutdown):
+    def test_shutdown_handles_worker_shutdown_error(
+        self, mock_cleanup, container_for_shutdown
+    ):
         """Worker 关闭异常时 shutdown 不应崩溃。"""
         with patch(
             "app.workers.playwright_worker.shutdown_worker",
@@ -343,7 +359,9 @@ class TestIntegration:
 
         asyncio.run(_lifecycle())
 
-    def test_all_services_share_same_project_root(self, container, project_root, mock_classes):
+    def test_all_services_share_same_project_root(
+        self, container, project_root, mock_classes
+    ):
         """所有通过容器创建的服务都应基于相同的 project_root。"""
         assert mock_classes["ProfileService"].call_args[0][0] == project_root
         assert mock_classes["TaskService"].call_args[0][0] == project_root

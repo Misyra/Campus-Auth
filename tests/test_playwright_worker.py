@@ -59,7 +59,10 @@ class TestSubmitAliveCheck:
         worker.start = mock_start
 
         # 模拟队列操作
-        with patch.object(worker._cmd_queue, "put"), patch.object(worker, "_loop") as mock_loop:
+        with (
+            patch.object(worker._cmd_queue, "put"),
+            patch.object(worker, "_loop") as mock_loop,
+        ):
             mock_loop.is_running.return_value = False
             worker.submit("test_cmd", wait=False)
 

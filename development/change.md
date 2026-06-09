@@ -5,6 +5,35 @@
 
 ## 2026-06-09
 
+### feat: dashboard 实时日志增加来源筛选 + 级别/来源标签
+
+- `frontend/js/data/dashboard.js`：`logFilter` 新增 `source` 字段
+- `frontend/js/app-options.js`：`filteredLogs` computed 增加 source 过滤逻辑
+- `frontend/partials/pages/dashboard.html`：日志工具栏新增来源筛选 chips，日志条目用 `log-level-badge` + `log-source-badge` 替代原来的 `formatLogMeta` 文本
+- `frontend/styles/pages/dashboard.css`：新增 `.source-chips` 样式
+
+### feat: 重写日志文件查看器 — 来源筛选 + 级别/来源标签 + 视觉优化
+
+- `frontend/js/data/logfiles.js`：`logViewer` 新增 `source` 字段
+- `frontend/js/methods/logfiles.js`：导入 `LOG_SOURCES`，`fetchLogFileContent` 增加 source 参数传递，新增 `getSourceLabel`、`getSourceColor` 方法
+- `frontend/partials/pages/logfiles.html`：日志工具栏新增来源筛选 chips，日志条目用 badge 替代原来的 `[LEVEL] [logger]` 文本，`line.logger` → `line.name`
+- `frontend/styles/pages/logfiles.css`：新增 `.source-chip` 样式
+- `frontend/styles/base.css`：新增 `.log-level-badge`、`.log-source-badge` 全局样式（dashboard 和 logfiles 共享）
+
+### feat: 新增 VirtualScroller 虚拟滚动组件
+
+- `frontend/js/virtual-scroller.js`（新建）：零依赖虚拟滚动组件，支持 `setItems`、`appendItems`、`scrollToBottom`、`destroy`，使用 requestAnimationFrame + DocumentFragment 优化渲染
+
+### refactor: 前端新增 LOG_SOURCES 常量 + formatLogMeta 适配
+
+- `frontend/js/constants.js`：新增 `LOG_SOURCES` 常量（backend/network/task/frontend/debug，含 label 和 color）
+- `frontend/js/methods/formatters.js`：导入 `LOG_SOURCES`，`formatLogMeta` 默认 source 从 `monitor` 改为 `backend`，新增 `getSourceLabel` 方法
+
+### refactor: logfiles API 响应增加 source 字段 + source 查询参数
+
+- `app/api/logfiles.py`：`LogLine` 模型 `side` → `source`、`logger` → `name`；新增 `_VALID_SOURCES` 集合；`_parse_log_line` 使用新字段名；`get_log_file_content` 新增 `source` 查询参数和来源过滤；搜索范围扩展到 `line.name` 和 `line.source`
+- `tests/test_api_logfiles.py`：更新字段断言（`side` → `source`、`logger` → `name`），所有 `get_log_file_content` 调用补充 `source=""` 参数
+
 ### refactor: MonitorService record_log 委托 loguru + 修复 filter 条件
 
 - `app/container.py`：filter 从 `side == "BACKEND"` 修复为 `source != "frontend"`；注入整个 `DashboardSink` 实例到 `monitor_service._dashboard_sink`

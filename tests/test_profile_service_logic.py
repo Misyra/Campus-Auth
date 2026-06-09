@@ -11,9 +11,11 @@ class TestProfileServiceInit:
     def test_import(self):
         """可导入。"""
         from app.services.profile import ProfileService
+
         assert ProfileService is not None
 
     def test_settings_file_constant(self):
         """设置文件常量。"""
         from app.services.profile import _SETTINGS_FILE
+
         assert _SETTINGS_FILE == "settings.json"

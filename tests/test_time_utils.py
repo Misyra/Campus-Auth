@@ -19,8 +19,14 @@ class TestIsInPausePeriod:
 
     def test_same_start_end_means_all_day(self):
         """start == end 表示全天暂停。"""
-        assert is_in_pause_period({"enabled": True, "start_hour": 0, "end_hour": 0}) is True
-        assert is_in_pause_period({"enabled": True, "start_hour": 12, "end_hour": 12}) is True
+        assert (
+            is_in_pause_period({"enabled": True, "start_hour": 0, "end_hour": 0})
+            is True
+        )
+        assert (
+            is_in_pause_period({"enabled": True, "start_hour": 12, "end_hour": 12})
+            is True
+        )
 
     def test_same_day_in_range(self):
         """同一天内在范围内。"""
@@ -28,7 +34,10 @@ class TestIsInPausePeriod:
         mock_now.hour = 3
         with patch("app.utils.time_utils.datetime") as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period({"enabled": True, "start_hour": 0, "end_hour": 6}) is True
+            assert (
+                is_in_pause_period({"enabled": True, "start_hour": 0, "end_hour": 6})
+                is True
+            )
 
     def test_same_day_out_of_range(self):
         """同一天内在范围外。"""
@@ -36,7 +45,10 @@ class TestIsInPausePeriod:
         mock_now.hour = 12
         with patch("app.utils.time_utils.datetime") as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period({"enabled": True, "start_hour": 0, "end_hour": 6}) is False
+            assert (
+                is_in_pause_period({"enabled": True, "start_hour": 0, "end_hour": 6})
+                is False
+            )
 
     def test_cross_day_in_range(self):
         """跨天在范围内。"""
@@ -44,7 +56,10 @@ class TestIsInPausePeriod:
         mock_now.hour = 23
         with patch("app.utils.time_utils.datetime") as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period({"enabled": True, "start_hour": 23, "end_hour": 6}) is True
+            assert (
+                is_in_pause_period({"enabled": True, "start_hour": 23, "end_hour": 6})
+                is True
+            )
 
     def test_cross_day_out_of_range(self):
         """跨天在范围外。"""
@@ -52,7 +67,10 @@ class TestIsInPausePeriod:
         mock_now.hour = 12
         with patch("app.utils.time_utils.datetime") as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period({"enabled": True, "start_hour": 23, "end_hour": 6}) is False
+            assert (
+                is_in_pause_period({"enabled": True, "start_hour": 23, "end_hour": 6})
+                is False
+            )
 
     def test_empty_config(self):
         """空配置默认启用暂停。"""

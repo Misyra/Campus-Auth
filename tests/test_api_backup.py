@@ -18,7 +18,7 @@ class TestCleanupOldBackups:
         """保留最新文件。"""
         # 创建 5 个备份文件
         for i in range(5):
-            (tmp_path / f"settings_2026060{i+1}_000000.json").write_text("{}")
+            (tmp_path / f"settings_2026060{i + 1}_000000.json").write_text("{}")
 
         with patch("app.api.backup.BACKUP_DIR", tmp_path):
             _cleanup_old_backups(max_backups=3)
@@ -34,7 +34,7 @@ class TestCleanupOldBackups:
     def test_fewer_than_max(self, tmp_path):
         """文件数少于最大值时不删除。"""
         for i in range(2):
-            (tmp_path / f"settings_2026060{i+1}_000000.json").write_text("{}")
+            (tmp_path / f"settings_2026060{i + 1}_000000.json").write_text("{}")
 
         with patch("app.api.backup.BACKUP_DIR", tmp_path):
             _cleanup_old_backups(max_backups=5)
@@ -55,7 +55,9 @@ class TestBackupFilenamePattern:
 
     def test_autosave_filename(self):
         """自动保存文件名匹配。"""
-        assert re.match(BACKUP_FILENAME_PATTERN, "settings_20260601_120000_123456_autosave.json")
+        assert re.match(
+            BACKUP_FILENAME_PATTERN, "settings_20260601_120000_123456_autosave.json"
+        )
 
     def test_invalid_prefix(self):
         """无效前缀不匹配。"""

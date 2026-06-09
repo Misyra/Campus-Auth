@@ -39,7 +39,12 @@ class TestStepConfigFromDict:
 
     def test_frame_string_preserved(self):
         """字符串 frame 值保留。"""
-        data = {"id": "s1", "type": "click", "selector": "#btn", "frame": "iframe[name=main]"}
+        data = {
+            "id": "s1",
+            "type": "click",
+            "selector": "#btn",
+            "frame": "iframe[name=main]",
+        }
         step = StepConfig.from_dict(data)
         assert step.frame == "iframe[name=main]"
 
@@ -51,13 +56,24 @@ class TestStepConfigFromDict:
 
     def test_unknown_fields_merged_to_extra(self):
         """未知字段合并到 extra。"""
-        data = {"id": "s1", "type": "click", "selector": "#btn", "custom_field": "value"}
+        data = {
+            "id": "s1",
+            "type": "click",
+            "selector": "#btn",
+            "custom_field": "value",
+        }
         step = StepConfig.from_dict(data)
         assert step.extra["custom_field"] == "value"
 
     def test_extra_field_in_data_merged(self):
         """data 中的 extra 字段与未知字段合并。"""
-        data = {"id": "s1", "type": "click", "selector": "#btn", "extra": {"a": 1}, "b": 2}
+        data = {
+            "id": "s1",
+            "type": "click",
+            "selector": "#btn",
+            "extra": {"a": 1},
+            "b": 2,
+        }
         step = StepConfig.from_dict(data)
         assert step.extra == {"a": 1, "b": 2}
 
@@ -293,7 +309,18 @@ class TestStepType:
 
     def test_all_types_present(self):
         """所有标准步骤类型都存在。"""
-        expected = {"input", "click", "select", "wait", "wait_url", "eval", "screenshot", "sleep", "ocr", "click_select"}
+        expected = {
+            "input",
+            "click",
+            "select",
+            "wait",
+            "wait_url",
+            "eval",
+            "screenshot",
+            "sleep",
+            "ocr",
+            "click_select",
+        }
         actual = {t.value for t in StepType}
         assert actual == expected
 

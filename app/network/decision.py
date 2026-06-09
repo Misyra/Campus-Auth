@@ -102,7 +102,10 @@ def check_login_prerequisites(config: dict) -> tuple[bool, str]:
     monitor_config = config.get("monitor", {})
 
     # 物理网络连接检查
-    if monitor_config.get("enable_local_check", True) and not is_local_network_connected():
+    if (
+        monitor_config.get("enable_local_check", True)
+        and not is_local_network_connected()
+    ):
         logger.warning("物理网络未连接，跳过登录")
         return (False, "local_disconnected")
 
@@ -238,7 +241,10 @@ def _is_auth_url_reachable(
             targets = []
         if targets:
             futures = {
-                _executor.submit(_check_host_port, host, port, f"{host}:{port}"): (host, port)
+                _executor.submit(_check_host_port, host, port, f"{host}:{port}"): (
+                    host,
+                    port,
+                )
                 for host, port in targets
             }
             try:

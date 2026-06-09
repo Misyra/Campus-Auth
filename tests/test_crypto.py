@@ -102,7 +102,9 @@ class TestSavePasswordField:
 
     def test_plain_text_encrypted(self):
         """明文被加密。"""
-        with patch("app.utils.crypto.encrypt_password", return_value="ENC:encrypted") as mock_enc:
+        with patch(
+            "app.utils.crypto.encrypt_password", return_value="ENC:encrypted"
+        ) as mock_enc:
             result = save_password_field("mypassword", "")
             mock_enc.assert_called_once_with("mypassword")
             assert result == "ENC:encrypted"
@@ -119,14 +121,14 @@ class TestSimpleObfuscate:
         original = "test_password_123"
         obfuscated = _simple_obfuscate(original)
         assert obfuscated.startswith("ENC:B64:")
-        deobfuscated = _simple_deobfuscate(obfuscated[len("ENC:"):])
+        deobfuscated = _simple_deobfuscate(obfuscated[len("ENC:") :])
         assert deobfuscated == original
 
     def test_unicode(self):
         """Unicode 字符支持。"""
         original = "密码测试"
         obfuscated = _simple_obfuscate(original)
-        deobfuscated = _simple_deobfuscate(obfuscated[len("ENC:"):])
+        deobfuscated = _simple_deobfuscate(obfuscated[len("ENC:") :])
         assert deobfuscated == original
 
     def test_empty_string(self):
@@ -154,6 +156,7 @@ class TestDecryptionError:
     def test_set_and_clear(self):
         """设置和清除解密错误。"""
         from app.utils.crypto import _decryption_failed
+
         _decryption_failed.set()
         assert has_decryption_error() is True
         clear_decryption_error()
@@ -179,6 +182,4 @@ def test_save_password_field_logs_no_plaintext(caplog):
         for record in caplog.records:
             msg = record.message
             # 确保不包含 repr(raw[:20]) 的内容
-            assert repr(raw_value[:20]) not in msg, (
-                f"日志泄露了原始输入内容: {msg}"
-            )
+            assert repr(raw_value[:20]) not in msg, f"日志泄露了原始输入内容: {msg}"

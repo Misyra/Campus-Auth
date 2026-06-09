@@ -81,21 +81,28 @@ class TestStartCommand:
     def test_env_override(self, tmp_path):
         """环境变量覆盖启动命令。"""
         service = AutoStartService(tmp_path)
-        with patch.dict("os.environ", {"CAMPUS_AUTH_START_EXECUTABLE": "C:\\app\\start.exe"}):
+        with patch.dict(
+            "os.environ", {"CAMPUS_AUTH_START_EXECUTABLE": "C:\\app\\start.exe"}
+        ):
             cmd = service._start_command()
             assert cmd == '"C:\\app\\start.exe"'
 
     def test_env_override_strips_whitespace(self, tmp_path):
         """环境变量去除首尾空格。"""
         service = AutoStartService(tmp_path)
-        with patch.dict("os.environ", {"CAMPUS_AUTH_START_EXECUTABLE": "  C:\\app\\start.exe  "}):
+        with patch.dict(
+            "os.environ", {"CAMPUS_AUTH_START_EXECUTABLE": "  C:\\app\\start.exe  "}
+        ):
             cmd = service._start_command()
             assert cmd == '"C:\\app\\start.exe"'
 
     def test_fallback_to_python(self, tmp_path):
         """无 venv 时回退到 python。"""
         service = AutoStartService(tmp_path)
-        with patch.dict("os.environ", {"CAMPUS_AUTH_START_EXECUTABLE": ""}, clear=False), patch.object(Path, "exists", return_value=False):
+        with (
+            patch.dict("os.environ", {"CAMPUS_AUTH_START_EXECUTABLE": ""}, clear=False),
+            patch.object(Path, "exists", return_value=False),
+        ):
             # 确保 venv 不存在
             cmd = service._start_command()
             assert "python" in cmd.lower()
@@ -140,10 +147,12 @@ class TestStatus:
     def test_windows_enabled(self, tmp_path):
         """Windows 已启用。"""
         service = AutoStartService(tmp_path)
-        with patch("app.services.autostart.is_windows", return_value=True), \
-             patch("app.services.autostart.is_macos", return_value=False), \
-             patch("app.services.autostart.is_linux", return_value=False), \
-             patch.object(service, "_windows_startup_vbs") as mock_path:
+        with (
+            patch("app.services.autostart.is_windows", return_value=True),
+            patch("app.services.autostart.is_macos", return_value=False),
+            patch("app.services.autostart.is_linux", return_value=False),
+            patch.object(service, "_windows_startup_vbs") as mock_path,
+        ):
             mock_path.return_value = MagicMock(exists=MagicMock(return_value=True))
             mock_path.return_value.__str__ = lambda self: "C:\\test\\campus-auth.vbs"
             result = service.status()
@@ -154,10 +163,12 @@ class TestStatus:
     def test_windows_disabled(self, tmp_path):
         """Windows 未启用。"""
         service = AutoStartService(tmp_path)
-        with patch("app.services.autostart.is_windows", return_value=True), \
-             patch("app.services.autostart.is_macos", return_value=False), \
-             patch("app.services.autostart.is_linux", return_value=False), \
-             patch.object(service, "_windows_startup_vbs") as mock_path:
+        with (
+            patch("app.services.autostart.is_windows", return_value=True),
+            patch("app.services.autostart.is_macos", return_value=False),
+            patch("app.services.autostart.is_linux", return_value=False),
+            patch.object(service, "_windows_startup_vbs") as mock_path,
+        ):
             mock_path.return_value = MagicMock(exists=MagicMock(return_value=False))
             mock_path.return_value.__str__ = lambda self: "C:\\test\\campus-auth.vbs"
             result = service.status()
@@ -166,10 +177,12 @@ class TestStatus:
     def test_macos_enabled(self, tmp_path):
         """macOS 已启用。"""
         service = AutoStartService(tmp_path)
-        with patch("app.services.autostart.is_windows", return_value=False), \
-             patch("app.services.autostart.is_macos", return_value=True), \
-             patch("app.services.autostart.is_linux", return_value=False), \
-             patch.object(service, "_mac_plist_path") as mock_path:
+        with (
+            patch("app.services.autostart.is_windows", return_value=False),
+            patch("app.services.autostart.is_macos", return_value=True),
+            patch("app.services.autostart.is_linux", return_value=False),
+            patch.object(service, "_mac_plist_path") as mock_path,
+        ):
             mock_path.return_value = MagicMock(exists=MagicMock(return_value=True))
             mock_path.return_value.__str__ = lambda self: "/test/campus-auth.plist"
             result = service.status()
@@ -179,10 +192,12 @@ class TestStatus:
     def test_linux_enabled(self, tmp_path):
         """Linux 已启用。"""
         service = AutoStartService(tmp_path)
-        with patch("app.services.autostart.is_windows", return_value=False), \
-             patch("app.services.autostart.is_macos", return_value=False), \
-             patch("app.services.autostart.is_linux", return_value=True), \
-             patch.object(service, "_linux_service_path") as mock_path:
+        with (
+            patch("app.services.autostart.is_windows", return_value=False),
+            patch("app.services.autostart.is_macos", return_value=False),
+            patch("app.services.autostart.is_linux", return_value=True),
+            patch.object(service, "_linux_service_path") as mock_path,
+        ):
             mock_path.return_value = MagicMock(exists=MagicMock(return_value=True))
             mock_path.return_value.__str__ = lambda self: "/test/campus-auth.service"
             result = service.status()
@@ -231,9 +246,11 @@ class TestEnableDisable:
     def test_enable_unsupported_platform(self, tmp_path):
         """不支持的平台返回失败。"""
         service = AutoStartService(tmp_path)
-        with patch("app.services.autostart.is_windows", return_value=False), \
-             patch("app.services.autostart.is_macos", return_value=False), \
-             patch("app.services.autostart.is_linux", return_value=False):
+        with (
+            patch("app.services.autostart.is_windows", return_value=False),
+            patch("app.services.autostart.is_macos", return_value=False),
+            patch("app.services.autostart.is_linux", return_value=False),
+        ):
             ok, msg = service.enable()
             assert ok is False
             assert "不支持" in msg
@@ -241,9 +258,11 @@ class TestEnableDisable:
     def test_disable_unsupported_platform(self, tmp_path):
         """不支持的平台返回失败。"""
         service = AutoStartService(tmp_path)
-        with patch("app.services.autostart.is_windows", return_value=False), \
-             patch("app.services.autostart.is_macos", return_value=False), \
-             patch("app.services.autostart.is_linux", return_value=False):
+        with (
+            patch("app.services.autostart.is_windows", return_value=False),
+            patch("app.services.autostart.is_macos", return_value=False),
+            patch("app.services.autostart.is_linux", return_value=False),
+        ):
             ok, msg = service.disable()
             assert ok is False
             assert "不支持" in msg
@@ -253,9 +272,11 @@ class TestEnableDisable:
         cjk_root = tmp_path / "校园网"
         cjk_root.mkdir()
         service = AutoStartService(cjk_root)
-        with patch("app.services.autostart.is_windows", return_value=True), \
-             patch("app.services.autostart.is_macos", return_value=False), \
-             patch("app.services.autostart.is_linux", return_value=False):
+        with (
+            patch("app.services.autostart.is_windows", return_value=True),
+            patch("app.services.autostart.is_macos", return_value=False),
+            patch("app.services.autostart.is_linux", return_value=False),
+        ):
             ok, msg = service.enable()
             assert ok is False
             assert "中文" in msg or "CJK" in msg or "字符" in msg

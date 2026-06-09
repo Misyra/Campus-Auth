@@ -81,7 +81,9 @@ class TestValidateGuiConfig:
 
     def test_whitespace_trimmed(self):
         """首尾空格被去除。"""
-        ok, msg = ConfigValidator.validate_gui_config("  admin  ", "  password  ", "  5  ")
+        ok, msg = ConfigValidator.validate_gui_config(
+            "  admin  ", "  password  ", "  5  "
+        )
         assert ok is True
 
 
@@ -150,6 +152,10 @@ class TestValidateEnvConfig:
 
     def test_empty_username(self):
         """空用户名字符串。"""
-        config = {"username": "", "password": "password", "auth_url": "http://example.com"}
+        config = {
+            "username": "",
+            "password": "password",
+            "auth_url": "http://example.com",
+        }
         ok, msg = ConfigValidator.validate_env_config(config)
         assert ok is False

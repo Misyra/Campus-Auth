@@ -624,7 +624,9 @@ class NetworkMonitorCore:
                 "close_on_failure": False,  # 自动监控重试时复用浏览器
             }
             start_time = time.perf_counter()
-            result = self._worker_getter().submit(CMD_LOGIN, data=data, timeout=login_timeout)
+            result = self._worker_getter().submit(
+                CMD_LOGIN, data=data, timeout=login_timeout
+            )
             duration_ms = int((time.perf_counter() - start_time) * 1000)
             success = result.success
             message = result.data if result.success else result.error

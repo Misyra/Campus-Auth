@@ -347,10 +347,11 @@ class TestMacosLaunchctl:
     def test_enable_macos_uses_bootstrap(self, tmp_path):
         """启用 macOS 自启动应使用 launchctl bootstrap"""
         svc = AutoStartService(project_root=tmp_path)
-        with patch.object(svc, "_run", return_value=(True, "")) as mock_run, patch.object(
-            svc, "_mac_plist_path", return_value=tmp_path / "test.plist"
-        ), patch("app.services.autostart.is_macos", return_value=True), patch(
-            "app.services.autostart.get_platform", return_value="darwin"
+        with (
+            patch.object(svc, "_run", return_value=(True, "")) as mock_run,
+            patch.object(svc, "_mac_plist_path", return_value=tmp_path / "test.plist"),
+            patch("app.services.autostart.is_macos", return_value=True),
+            patch("app.services.autostart.get_platform", return_value="darwin"),
         ):
             svc._enable_macos()
             calls = [str(c) for c in mock_run.call_args_list]
@@ -362,8 +363,11 @@ class TestMacosLaunchctl:
         svc = AutoStartService(project_root=tmp_path)
         plist = tmp_path / "test.plist"
         plist.write_text("test", encoding="utf-8")
-        with patch.object(svc, "_run", return_value=(True, "")) as mock_run, patch.object(svc, "_mac_plist_path", return_value=plist), patch("app.services.autostart.is_macos", return_value=True), patch(
-            "app.services.autostart.get_platform", return_value="darwin"
+        with (
+            patch.object(svc, "_run", return_value=(True, "")) as mock_run,
+            patch.object(svc, "_mac_plist_path", return_value=plist),
+            patch("app.services.autostart.is_macos", return_value=True),
+            patch("app.services.autostart.get_platform", return_value="darwin"),
         ):
             svc._disable_macos()
             calls = [str(c) for c in mock_run.call_args_list]

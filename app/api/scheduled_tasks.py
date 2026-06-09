@@ -111,9 +111,10 @@ async def update_scheduled_task(
         return ActionResponse(success=False, message="Shell 命令不能为空")
 
     schedule = payload.get("schedule", existing.get("schedule", {}))
-    if "schedule" in payload and (not isinstance(schedule.get("hour"), int) or not isinstance(
-        schedule.get("minute"), int
-    )):
+    if "schedule" in payload and (
+        not isinstance(schedule.get("hour"), int)
+        or not isinstance(schedule.get("minute"), int)
+    ):
         return ActionResponse(success=False, message="请设置执行时间")
 
     # 更新配置

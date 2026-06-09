@@ -270,12 +270,15 @@ class TestRunAsync:
         mock_proc.kill = MagicMock()
         mock_proc.wait = AsyncMock()
 
-        with patch(
-            "app.utils.shell_policy.asyncio.create_subprocess_exec",
-            return_value=mock_proc,
-        ), patch(
-            "app.utils.shell_policy.asyncio.wait_for",
-            side_effect=TimeoutError(),
+        with (
+            patch(
+                "app.utils.shell_policy.asyncio.create_subprocess_exec",
+                return_value=mock_proc,
+            ),
+            patch(
+                "app.utils.shell_policy.asyncio.wait_for",
+                side_effect=TimeoutError(),
+            ),
         ):
             code, out, err = await policy.run(["/bin/sh", "-c", "sleep 999"])
             assert code == -1
