@@ -71,7 +71,7 @@
           <div v-for="(line, idx) in logViewer.lines" :key="idx" class="log-entry">
             <span class="log-time">{{ line.timestamp ? line.timestamp.substring(11, 19) : '' }}</span>
             <span v-if="line.level" class="log-level-badge" :class="'level-' + line.level.toLowerCase()">{{ line.level }}</span>
-            <span v-if="line.source" class="log-source-badge" :style="{ background: getSourceColor(line.source) }">{{ getSourceLabel(line.source) }}</span>
+            <span v-if="line.source" class="log-source-badge" :class="'source-' + line.source">{{ getSourceLabel(line.source) }}</span>
             <span class="log-message" :class="getLogFileClass(line.level)">{{ line.message }}</span>
           </div>
         </div>

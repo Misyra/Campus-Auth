@@ -266,9 +266,17 @@ body {
 .log-level-badge.level-critical { background: rgba(239, 68, 68, 0.25); color: #f87171; }
 .log-level-badge.level-debug { background: rgba(100, 116, 139, 0.15); color: #94a3b8; }
 
-.log-source-badge {
-  color: #fff;
-}
+.log-source-badge.source-backend { background: rgba(148, 163, 184, 0.18); color: #cbd5e1; }
+.log-source-badge.source-network { background: rgba(245, 158, 11, 0.18); color: #fbbf24; }
+.log-source-badge.source-task { background: rgba(167, 139, 250, 0.18); color: #c4b5fd; }
+.log-source-badge.source-frontend { background: rgba(96, 165, 250, 0.18); color: #93c5fd; }
+.log-source-badge.source-debug { background: rgba(148, 163, 184, 0.12); color: #94a3b8; }
+
+[data-theme="light"] .log-source-badge.source-backend { background: rgba(100, 116, 139, 0.12); color: #475569; }
+[data-theme="light"] .log-source-badge.source-network { background: rgba(217, 119, 6, 0.12); color: #b45309; }
+[data-theme="light"] .log-source-badge.source-task { background: rgba(139, 92, 246, 0.12); color: #7c3aed; }
+[data-theme="light"] .log-source-badge.source-frontend { background: rgba(37, 99, 235, 0.12); color: #1d4ed8; }
+[data-theme="light"] .log-source-badge.source-debug { background: rgba(100, 116, 139, 0.1); color: #64748b; }
 
 /* 日志过滤工具栏 */
 .log-toolbar {

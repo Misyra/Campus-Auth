@@ -217,7 +217,7 @@
             <div v-for="item in filteredLogs" :key="item.timestamp + item.message" class="log-entry">
               <span class="log-time">{{ formatLogTime(item.timestamp) }}</span>
               <span v-if="item.level" class="log-level-badge" :class="'level-' + item.level.toLowerCase()">{{ item.level }}</span>
-              <span v-if="item.source" class="log-source-badge" :style="{ background: getSourceColor(item.source) }">{{ getSourceLabel(item.source) }}</span>
+              <span v-if="item.source" class="log-source-badge" :class="'source-' + item.source">{{ getSourceLabel(item.source) }}</span>
               <div class="log-content">
                 <span class="log-message" :class="getLogClass(item)">{{ stripScreenshotHint(item.message) }}</span>
                 <div v-if="extractScreenshotUrl(item.message)" class="log-screenshot-wrap">
