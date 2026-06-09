@@ -1,6 +1,6 @@
 import { appOptions } from './js/app-options.js';
 import { ensurePartialsReady } from './js/bootstrap.js';
-import { ToggleSwitch } from './js/components.js';
+import { CustomSelect, ToggleSwitch } from './js/components.js';
 import { ICONS } from './js/icons.js';
 
 const { createApp } = window.Vue;
@@ -99,6 +99,7 @@ async function bootstrapApp() {
 
   // 注册全局组件
   app.component('toggle-switch', ToggleSwitch);
+  app.component('custom-select', CustomSelect);
 
   // 注册图标组件
   for (const [name, component] of Object.entries(ICONS)) {

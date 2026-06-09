@@ -185,21 +185,8 @@
       </div>
       <div class="card-body">
         <div class="log-toolbar">
-          <select v-model="logFilter.level" class="log-filter-select" aria-label="级别筛选">
-            <option value="">全部级别</option>
-            <option value="INFO">INFO</option>
-            <option value="WARNING">WARNING</option>
-            <option value="ERROR">ERROR</option>
-            <option value="DEBUG">DEBUG</option>
-          </select>
-          <select v-model="logFilter.source" class="log-filter-select" aria-label="来源筛选">
-            <option value="">全部来源</option>
-            <option value="backend">BAK</option>
-            <option value="network">NET</option>
-            <option value="task">TSK</option>
-            <option value="frontend">FRT</option>
-            <option value="debug">DBG</option>
-          </select>
+          <custom-select v-model="logFilter.level" :options="logLevelOptions" compact></custom-select>
+          <custom-select v-model="logFilter.source" :options="logSourceOptions" compact></custom-select>
           <input v-model="logFilter.search" type="text" placeholder="搜索日志..." class="log-search" aria-label="搜索日志" />
         </div>
         <div ref="logViewer" class="log-viewer" @scroll="onLogScroll">

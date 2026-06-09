@@ -323,26 +323,6 @@ body {
   border-color: var(--accent);
 }
 
-.log-filter-select {
-  padding: 5px 8px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: 12px;
-  cursor: pointer;
-  min-width: 90px;
-}
-
-.log-filter-select:hover {
-  border-color: var(--border-hover);
-}
-
-.log-filter-select:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.1);
-}
 
 .log-filter-chip {
   padding: 4px 10px;

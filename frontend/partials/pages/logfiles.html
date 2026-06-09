@@ -22,26 +22,9 @@
           <span v-if="!logFileGroups.length" class="logfiles-empty-hint">暂无日志文件</span>
         </div>
         <div v-if="logViewer.date" class="logfiles-controls">
-          <select v-model="logViewer.file" @change="fetchLogFileContent" class="logfiles-select">
-            <option v-for="f in currentLogFiles" :key="f.name" :value="f.name">
-              {{ f.name }} ({{ formatFileSize(f.size) }})
-            </option>
-          </select>
-          <select v-model="logViewer.level" @change="fetchLogFileContent" class="log-filter-select" aria-label="级别筛选">
-            <option value="">全部级别</option>
-            <option value="INFO">INFO</option>
-            <option value="WARNING">WARNING</option>
-            <option value="ERROR">ERROR</option>
-            <option value="DEBUG">DEBUG</option>
-          </select>
-          <select v-model="logViewer.source" @change="fetchLogFileContent" class="log-filter-select" aria-label="来源筛选">
-            <option value="">全部来源</option>
-            <option value="backend">BAK</option>
-            <option value="network">NET</option>
-            <option value="task">TSK</option>
-            <option value="frontend">FRT</option>
-            <option value="debug">DBG</option>
-          </select>
+          <custom-select v-model="logViewer.file" :options="logFileOptions" logfiles @change="fetchLogFileContent"></custom-select>
+          <custom-select v-model="logViewer.level" :options="logLevelOptions" compact @change="fetchLogFileContent"></custom-select>
+          <custom-select v-model="logViewer.source" :options="logSourceOptions" compact @change="fetchLogFileContent"></custom-select>
           <div class="logfiles-search-wrap">
             <input v-model="logViewer.search" @keyup.enter="fetchLogFileContent" type="text" placeholder="搜索日志..." class="log-search" aria-label="搜索日志" />
             <button v-if="logViewer.search" class="btn btn-icon-only logfiles-search-clear" @click="logViewer.search = ''; fetchLogFileContent()" title="清除搜索">

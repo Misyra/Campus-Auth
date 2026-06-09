@@ -55,6 +55,32 @@ export const appOptions = {
 
       // 全局共享状态
       settingsTabs: SETTINGS_TABS,
+      carrierOptions: [
+        { value: '无', label: '无' },
+        { value: '移动', label: '移动' },
+        { value: '联通', label: '联通' },
+        { value: '电信', label: '电信' },
+        { value: '自定义', label: '自定义' },
+      ],
+      logLevelOptions: [
+        { value: '', label: '全部级别' },
+        { value: 'INFO', label: 'INFO' },
+        { value: 'WARNING', label: 'WARNING' },
+        { value: 'ERROR', label: 'ERROR' },
+        { value: 'DEBUG', label: 'DEBUG' },
+      ],
+      logSourceOptions: [
+        { value: '', label: '全部来源' },
+        { value: 'backend', label: 'BAK' },
+        { value: 'network', label: 'NET' },
+        { value: 'task', label: 'TSK' },
+        { value: 'frontend', label: 'FRT' },
+        { value: 'debug', label: 'DBG' },
+      ],
+      scheduledTaskTypeOptions: [
+        { value: 'script', label: '自定义脚本' },
+        { value: 'browser', label: '浏览器任务' },
+      ],
       frontendLogger: createFrontendLogger('INFO'),
       appVersion: 'unknown',
       pythonVersion: '',
@@ -66,6 +92,33 @@ export const appOptions = {
     },
     browserTasks() {
       return this.tasks.filter(t => t.type !== 'script');
+    },
+    taskOptions() {
+      return [
+        { value: '', label: '默认任务' },
+        ...this.tasks.map(t => ({ value: t.id, label: t.name || t.id })),
+      ];
+    },
+    scriptTargetOptions() {
+      return [
+        { value: '', label: '请选择...' },
+        ...this.scripts.map(s => ({
+          value: s.id,
+          label: s.name + (s.binary_path ? ' (' + this.getBinaryName(s.binary_path) + ')' : ''),
+        })),
+      ];
+    },
+    browserTargetOptions() {
+      return [
+        { value: '', label: '请选择...' },
+        ...this.browserTasks.map(t => ({ value: t.id, label: t.name })),
+      ];
+    },
+    logFileOptions() {
+      return this.currentLogFiles.map(f => ({
+        value: f.name,
+        label: f.name + ' (' + this.formatFileSize(f.size) + ')',
+      }));
     },
     pageTitle() {
       const titles = {
@@ -149,6 +202,21 @@ export const appOptions = {
         this._shellCustomMode = (val === '__custom__');
         if (val !== '__custom__') this.config.shell_path = val;
       },
+    },
+    shellPathOptions() {
+      return [
+        { value: '', label: '自动检测（推荐）' },
+        ...this.availableShells.map(s => ({ value: s.path, label: s.name + ' - ' + s.description })),
+        { value: '__custom__', label: '自定义路径...' },
+      ];
+    },
+    binaryOptions() {
+      return [
+        { value: '', label: '选择执行程序...' },
+        ...this.availableBinaries.map(b => ({ value: b.path, label: b.name })),
+        { value: '__custom_python__', label: 'Python (自定义环境)' },
+        { value: '__custom__', label: '自定义路径...' },
+      ];
     },
   },
   watch: {
