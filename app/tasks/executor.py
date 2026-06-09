@@ -309,9 +309,11 @@ class TaskExecutor:
         try:
             from app.network.decision import is_network_available
 
-            await asyncio.sleep(5)  # 等待 Portal 处理认证请求
-
             cfg = self.monitor_config
+
+            # 等待 Portal 处理认证请求（可通过 post_login_delay 配置）
+            post_delay = cfg.get("post_login_delay", 5)
+            await asyncio.sleep(post_delay)
             enable_tcp = cfg.get("enable_tcp_check", True)
             enable_http = cfg.get("enable_http_check", True)
             timeout = cfg.get("network_check_timeout", 2)
