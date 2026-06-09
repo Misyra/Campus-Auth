@@ -21,9 +21,6 @@ export const formatterMethods = {
     const source = String(item?.source || 'backend');
     return `[${level}] [${source}]`;
   },
-  getSourceLabel(source) {
-    return LOG_SOURCES[source]?.label || source || '未知';
-  },
   extractScreenshotUrl(message) {
     const text = String(message || '');
     const match = text.match(/截图[:：]\s*(\/(?:logs|debug|temp)\/\S+\.(?:png|jpg|jpeg|webp|gif))/i);
