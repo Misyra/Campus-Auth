@@ -1246,3 +1246,16 @@
   display: flex;
   gap: 8px;
 }
+
+.ocr-inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-xs {
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  border-radius: var(--radius-sm);
+}
