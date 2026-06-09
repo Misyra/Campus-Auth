@@ -11,9 +11,11 @@ class TestHistoryConstants:
     def test_login_history_entry_importable(self):
         """LoginHistoryEntry 可导入。"""
         from app.services.login_history import LoginHistoryEntry
+
         assert LoginHistoryEntry is not None
 
     def test_login_history_service_importable(self):
         """LoginHistoryService 可导入。"""
         from app.services.login_history import LoginHistoryService
+
         assert LoginHistoryService is not None

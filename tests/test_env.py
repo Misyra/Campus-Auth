@@ -59,7 +59,9 @@ class TestBuildLoginTemplateVars:
             "auth_url": "http://example.com/login",
             "username": "admin",
         }
-        result = build_login_template_vars(config, task_url="http://{{USERNAME}}:{{LOGIN_URL}}")
+        result = build_login_template_vars(
+            config, task_url="http://{{USERNAME}}:{{LOGIN_URL}}"
+        )
         assert result["LOGIN_URL"] == "http://admin:http://example.com/login"
 
     def test_task_url_overrides_login_url(self):

@@ -11,10 +11,12 @@ class TestConfigConstants:
     def test_stealth_script_accessible(self):
         """反检测脚本可访问。"""
         from app.utils.browser import STEALTH_INIT_SCRIPT
+
         assert isinstance(STEALTH_INIT_SCRIPT, str)
         assert len(STEALTH_INIT_SCRIPT) > 0
 
     def test_config_validator_importable(self):
         """ConfigValidator 可导入。"""
         from app.utils import ConfigValidator
+
         assert ConfigValidator is not None

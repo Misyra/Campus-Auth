@@ -48,31 +48,51 @@ class TestSetBlockProxy:
 
 class TestIsLocalNetworkConnected:
     def test_returns_true_when_ip_found(self):
-        with patch("app.network.probes.socket.gethostname", return_value="test"), patch(
-            "app.network.probes.socket.gethostbyname_ex",
-            return_value=("test", [], ["192.168.1.100"]),
+        with (
+            patch("app.network.probes.socket.gethostname", return_value="test"),
+            patch(
+                "app.network.probes.socket.gethostbyname_ex",
+                return_value=("test", [], ["192.168.1.100"]),
+            ),
         ):
             assert is_local_network_connected() is True
 
     def test_returns_false_on_loopback_only(self):
-        with patch("app.network.probes.socket.gethostname", return_value="test"), patch(
-            "app.network.probes.socket.gethostbyname_ex",
-            return_value=("test", [], ["127.0.0.1"]),
-        ), patch("app.network.probes.is_windows", return_value=False), patch("app.network.probes.is_linux", return_value=False), patch("app.network.probes.is_macos", return_value=False):
+        with (
+            patch("app.network.probes.socket.gethostname", return_value="test"),
+            patch(
+                "app.network.probes.socket.gethostbyname_ex",
+                return_value=("test", [], ["127.0.0.1"]),
+            ),
+            patch("app.network.probes.is_windows", return_value=False),
+            patch("app.network.probes.is_linux", return_value=False),
+            patch("app.network.probes.is_macos", return_value=False),
+        ):
             assert is_local_network_connected() is False
 
     def test_returns_false_on_exception(self):
-        with patch(
-            "app.network.probes.socket.gethostbyname_ex",
-            side_effect=Exception("fail"),
-        ), patch("app.network.probes.is_windows", return_value=False), patch("app.network.probes.is_linux", return_value=False), patch("app.network.probes.is_macos", return_value=False):
+        with (
+            patch(
+                "app.network.probes.socket.gethostbyname_ex",
+                side_effect=Exception("fail"),
+            ),
+            patch("app.network.probes.is_windows", return_value=False),
+            patch("app.network.probes.is_linux", return_value=False),
+            patch("app.network.probes.is_macos", return_value=False),
+        ):
             assert is_local_network_connected() is False
 
     def test_returns_false_for_169_254(self):
-        with patch("app.network.probes.socket.gethostname", return_value="test"), patch(
-            "app.network.probes.socket.gethostbyname_ex",
-            return_value=("test", [], ["169.254.1.1"]),
-        ), patch("app.network.probes.is_windows", return_value=False), patch("app.network.probes.is_linux", return_value=False), patch("app.network.probes.is_macos", return_value=False):
+        with (
+            patch("app.network.probes.socket.gethostname", return_value="test"),
+            patch(
+                "app.network.probes.socket.gethostbyname_ex",
+                return_value=("test", [], ["169.254.1.1"]),
+            ),
+            patch("app.network.probes.is_windows", return_value=False),
+            patch("app.network.probes.is_linux", return_value=False),
+            patch("app.network.probes.is_macos", return_value=False),
+        ):
             assert is_local_network_connected() is False
 
 

@@ -32,7 +32,11 @@ class TestProfileReloadNoDeadlock:
         )
 
         # 模拟 _reload_config_internal
-        with patch.object(svc, "_reload_config_internal"), patch.object(svc, "_copy_runtime_config", return_value={}), patch.object(svc, "record_log"):
+        with (
+            patch.object(svc, "_reload_config_internal"),
+            patch.object(svc, "_copy_runtime_config", return_value={}),
+            patch.object(svc, "record_log"),
+        ):
             # 调用 _handle_profile_reload，应该不阻塞
             import time
 
@@ -55,7 +59,11 @@ class TestProfileReloadNoDeadlock:
             type=MonitorCmdType.PROFILE_RELOAD, data={"profile_name": "test"}
         )
 
-        with patch.object(svc, "_reload_config_internal"), patch.object(svc, "_copy_runtime_config", return_value={}), patch.object(svc, "record_log"):
+        with (
+            patch.object(svc, "_reload_config_internal"),
+            patch.object(svc, "_copy_runtime_config", return_value={}),
+            patch.object(svc, "record_log"),
+        ):
             svc._handle_profile_reload(cmd)
 
         # 验证 reload 命令已入队
@@ -175,10 +183,13 @@ class TestStartMonitoringPutNowait:
         # 填满队列
         svc._cmd_queue.put_nowait(MonitorCommand(type=MonitorCmdType.RELOAD))
 
-        with patch(
-            "app.services.monitor.ConfigValidator.validate_env_config",
-            return_value=(True, ""),
-        ), patch.object(svc, "_copy_runtime_config", return_value={}):
+        with (
+            patch(
+                "app.services.monitor.ConfigValidator.validate_env_config",
+                return_value=(True, ""),
+            ),
+            patch.object(svc, "_copy_runtime_config", return_value={}),
+        ):
             import time
 
             start = time.time()

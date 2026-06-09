@@ -35,7 +35,10 @@ class TestSafeDecrypt:
     def test_decrypt_failure(self):
         """解密失败返回空和错误标记。"""
         from app.utils.exceptions import DecryptionError
-        with patch("app.services.config.decrypt_password", side_effect=DecryptionError("fail")):
+
+        with patch(
+            "app.services.config.decrypt_password", side_effect=DecryptionError("fail")
+        ):
             result, has_error = _safe_decrypt("ENC:bad_data")
             assert result == ""
             assert has_error is True
@@ -57,7 +60,9 @@ class TestDecryptPasswordField:
     def test_masked_password_with_fallback(self):
         """掩码密码使用回退。"""
         with patch("app.services.config.decrypt_password", return_value="fallback"):
-            result, has_error = _decrypt_password_field("••••••••", "ENC:fallback_encrypted")
+            result, has_error = _decrypt_password_field(
+                "••••••••", "ENC:fallback_encrypted"
+            )
             assert result == "fallback"
             assert has_error is False
 
@@ -105,18 +110,21 @@ class TestNormalizeTargets:
     def test_empty_returns_default(self):
         """空返回默认值。"""
         from app.constants import DEFAULT_NETWORK_TARGETS
+
         result = _normalize_targets("")
         assert result == DEFAULT_NETWORK_TARGETS
 
     def test_none_returns_default(self):
         """None 返回默认值。"""
         from app.constants import DEFAULT_NETWORK_TARGETS
+
         result = _normalize_targets(None)
         assert result == DEFAULT_NETWORK_TARGETS
 
     def test_whitespace_only_returns_default(self):
         """纯空格返回默认值。"""
         from app.constants import DEFAULT_NETWORK_TARGETS
+
         result = _normalize_targets("  ,  ,  ")
         assert result == DEFAULT_NETWORK_TARGETS
 

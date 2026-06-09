@@ -101,7 +101,11 @@ class TestCreateScheduledTask:
         test_client, _ = client
         resp = test_client.post(
             "/api/scheduled-tasks",
-            json={"type": "shell", "command": "echo", "schedule": {"hour": 0, "minute": 0}},
+            json={
+                "type": "shell",
+                "command": "echo",
+                "schedule": {"hour": 0, "minute": 0},
+            },
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is False
@@ -111,7 +115,11 @@ class TestCreateScheduledTask:
         test_client, _ = client
         resp = test_client.post(
             "/api/scheduled-tasks",
-            json={"name": "test", "type": "invalid", "schedule": {"hour": 0, "minute": 0}},
+            json={
+                "name": "test",
+                "type": "invalid",
+                "schedule": {"hour": 0, "minute": 0},
+            },
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is False
@@ -121,7 +129,11 @@ class TestCreateScheduledTask:
         test_client, _ = client
         resp = test_client.post(
             "/api/scheduled-tasks",
-            json={"name": "test", "type": "shell", "schedule": {"hour": 0, "minute": 0}},
+            json={
+                "name": "test",
+                "type": "shell",
+                "schedule": {"hour": 0, "minute": 0},
+            },
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is False
@@ -131,7 +143,11 @@ class TestCreateScheduledTask:
         test_client, _ = client
         resp = test_client.post(
             "/api/scheduled-tasks",
-            json={"name": "test", "type": "script", "schedule": {"hour": 0, "minute": 0}},
+            json={
+                "name": "test",
+                "type": "script",
+                "schedule": {"hour": 0, "minute": 0},
+            },
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is False
@@ -360,4 +376,3 @@ class TestGetScheduledTaskHistory:
         scheduler.get_task.return_value = None
         resp = test_client.get("/api/scheduled-tasks/nonexistent/history")
         assert resp.status_code == 404
-        

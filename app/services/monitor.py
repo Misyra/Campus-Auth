@@ -124,7 +124,6 @@ class MonitorService:
         # Lock-free status snapshot — written by consumer, read by API threads
         self._status_snapshot = StatusSnapshot()
 
-
         # 登录并发控制 —— 防止同时提交多个登录任务到 Worker
         self._login_in_progress = threading.Event()
 

@@ -107,7 +107,12 @@ class TestCheckDangerousSteps:
         """描述从 description 字段获取。"""
         task_data = {
             "steps": [
-                {"id": "s1", "type": "eval", "description": "自定义描述", "script": "return 1"},
+                {
+                    "id": "s1",
+                    "type": "eval",
+                    "description": "自定义描述",
+                    "script": "return 1",
+                },
             ]
         }
         result = _check_dangerous_steps(task_data)
@@ -115,9 +120,7 @@ class TestCheckDangerousSteps:
 
     def test_non_dict_step_skipped(self):
         """非字典步骤被跳过。"""
-        task_data = {
-            "steps": ["not a dict", 123, None]
-        }
+        task_data = {"steps": ["not a dict", 123, None]}
         result = _check_dangerous_steps(task_data)
         assert result == []
 

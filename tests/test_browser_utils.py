@@ -106,7 +106,9 @@ class TestBrowserContextManagerAexit:
         """返回 False（不抑制异常）。"""
         mgr = BrowserContextManager({})
         mock_worker = MagicMock()
-        with patch("app.workers.playwright_worker.get_worker", return_value=mock_worker):
+        with patch(
+            "app.workers.playwright_worker.get_worker", return_value=mock_worker
+        ):
             result = await mgr.__aexit__(None, None, None)
             assert result is False
 
@@ -120,7 +122,9 @@ class TestBrowserContextManagerAexit:
         mgr.page = MagicMock()
 
         mock_worker = MagicMock()
-        with patch("app.workers.playwright_worker.get_worker", return_value=mock_worker):
+        with patch(
+            "app.workers.playwright_worker.get_worker", return_value=mock_worker
+        ):
             await mgr.__aexit__(None, None, None)
             assert mgr.playwright is None
             assert mgr.browser is None
@@ -134,6 +138,8 @@ class TestBrowserContextManagerAexit:
         mgr.logger = MagicMock()
 
         mock_worker = MagicMock()
-        with patch("app.workers.playwright_worker.get_worker", return_value=mock_worker):
+        with patch(
+            "app.workers.playwright_worker.get_worker", return_value=mock_worker
+        ):
             await mgr.__aexit__(ValueError, ValueError("test error"), None)
             mgr.logger.error.assert_called()

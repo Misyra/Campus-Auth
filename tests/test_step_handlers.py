@@ -261,7 +261,9 @@ class TestInputHandler:
     async def test_clear_param_passed(self):
         """clear 参数应被正确传递。"""
         handler = InputHandler()
-        step = StepConfig(id="s1", type="input", selector="#user", value="admin", clear=False)
+        step = StepConfig(
+            id="s1", type="input", selector="#user", value="admin", clear=False
+        )
         page = _make_page()
         _make_locator(page)
 
@@ -724,7 +726,9 @@ class TestScreenshotHandler:
         step = StepConfig(id="s1", type="screenshot")
         page = _make_page()
 
-        with patch("app.utils.file_helpers.save_screenshot", new_callable=AsyncMock) as mock_save:
+        with patch(
+            "app.utils.file_helpers.save_screenshot", new_callable=AsyncMock
+        ) as mock_save:
             mock_save.return_value = "/logs/2024-01-01/screenshots/test.png"
             ok, msg = await handler.execute(page, step, _make_resolver(task_id="test"))
             assert ok is True
@@ -737,7 +741,9 @@ class TestScreenshotHandler:
         step = StepConfig(id="s1", type="screenshot", path="custom.png")
         page = _make_page()
 
-        with patch("app.utils.file_helpers.save_screenshot", new_callable=AsyncMock) as mock_save:
+        with patch(
+            "app.utils.file_helpers.save_screenshot", new_callable=AsyncMock
+        ) as mock_save:
             mock_save.return_value = "/logs/2024-01-01/screenshots/custom.png"
             ok, msg = await handler.execute(page, step, _make_resolver())
             assert ok is True
@@ -749,7 +755,9 @@ class TestScreenshotHandler:
         step = StepConfig(id="s1", type="screenshot")
         page = _make_page()
 
-        with patch("app.utils.file_helpers.save_screenshot", new_callable=AsyncMock) as mock_save:
+        with patch(
+            "app.utils.file_helpers.save_screenshot", new_callable=AsyncMock
+        ) as mock_save:
             mock_save.return_value = None
             ok, msg = await handler.execute(page, step, _make_resolver())
             assert ok is False
@@ -852,9 +860,7 @@ class TestOcrHandler:
     async def test_ocr_success_with_store_as(self):
         """识别成功且有 store_as 时应存储结果。"""
         handler = OcrHandler()
-        step = StepConfig(
-            id="s1", type="ocr", selector="#captcha", store_as="CAPTCHA"
-        )
+        step = StepConfig(id="s1", type="ocr", selector="#captcha", store_as="CAPTCHA")
         page = _make_page()
         resolver = _make_resolver()
 
@@ -1134,7 +1140,10 @@ class TestTryCandidatesWithFallback:
             loc.first.click = AsyncMock()
             return loc
 
-        locators = {"#first": make_locator_for("#first"), "#second": make_locator_for("#second")}
+        locators = {
+            "#first": make_locator_for("#first"),
+            "#second": make_locator_for("#second"),
+        }
 
         def locator_side_effect(sel):
             return locators[sel]

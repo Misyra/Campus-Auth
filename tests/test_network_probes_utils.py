@@ -38,7 +38,9 @@ class TestBlockProxy:
             set_block_proxy(value)
             results.append(is_block_proxy())
 
-        threads = [threading.Thread(target=worker, args=(i % 2 == 0,)) for i in range(10)]
+        threads = [
+            threading.Thread(target=worker, args=(i % 2 == 0,)) for i in range(10)
+        ]
         for t in threads:
             t.start()
         for t in threads:

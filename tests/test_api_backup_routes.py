@@ -27,7 +27,11 @@ def client(tmp_path):
 
     # 写入默认设置文件
     settings_data = {
-        "system": {"username": "testuser", "password": "ENC:test", "auth_url": "http://10.0.0.1"},
+        "system": {
+            "username": "testuser",
+            "password": "ENC:test",
+            "auth_url": "http://10.0.0.1",
+        },
         "profiles": {"default": {"name": "默认方案"}},
     }
     (tmp_path / "settings.json").write_text(
@@ -78,8 +82,12 @@ class TestListBackups:
     def test_list_with_backups(self, client):
         """有备份时返回列表。"""
         test_client, backup_dir, _ = client
-        (backup_dir / "settings_20260601_120000.json").write_text("{}", encoding="utf-8")
-        (backup_dir / "settings_20260602_120000.json").write_text("{}", encoding="utf-8")
+        (backup_dir / "settings_20260601_120000.json").write_text(
+            "{}", encoding="utf-8"
+        )
+        (backup_dir / "settings_20260602_120000.json").write_text(
+            "{}", encoding="utf-8"
+        )
         resp = test_client.get("/api/backup/list")
         assert resp.status_code == 200
         data = resp.json()
@@ -170,7 +178,9 @@ class TestDownloadBackup:
         """下载存在的备份文件。"""
         test_client, backup_dir, _ = client
         content = '{"test": true}'
-        (backup_dir / "settings_20260601_120000.json").write_text(content, encoding="utf-8")
+        (backup_dir / "settings_20260601_120000.json").write_text(
+            content, encoding="utf-8"
+        )
         resp = test_client.get("/api/backup/download/settings_20260601_120000.json")
         assert resp.status_code == 200
         assert resp.json() == {"test": True}
@@ -197,7 +207,9 @@ class TestDeleteBackup:
     def test_delete_existing(self, client):
         """删除存在的备份。"""
         test_client, backup_dir, _ = client
-        (backup_dir / "settings_20260601_120000.json").write_text("{}", encoding="utf-8")
+        (backup_dir / "settings_20260601_120000.json").write_text(
+            "{}", encoding="utf-8"
+        )
         resp = test_client.delete("/api/backup/settings_20260601_120000.json")
         assert resp.status_code == 200
         assert resp.json()["success"] is True
@@ -225,7 +237,7 @@ class TestCleanupOldBackups:
     def test_keeps_latest_files(self, tmp_path):
         """保留最新文件。"""
         for i in range(5):
-            (tmp_path / f"settings_2026060{i+1}_000000.json").write_text("{}")
+            (tmp_path / f"settings_2026060{i + 1}_000000.json").write_text("{}")
 
         with patch("app.api.backup.BACKUP_DIR", tmp_path):
             _cleanup_old_backups(max_backups=3)
@@ -241,7 +253,7 @@ class TestCleanupOldBackups:
     def test_fewer_than_max(self, tmp_path):
         """文件数少于最大值时不删除。"""
         for i in range(2):
-            (tmp_path / f"settings_2026060{i+1}_000000.json").write_text("{}")
+            (tmp_path / f"settings_2026060{i + 1}_000000.json").write_text("{}")
 
         with patch("app.api.backup.BACKUP_DIR", tmp_path):
             _cleanup_old_backups(max_backups=5)
@@ -262,7 +274,9 @@ class TestBackupFilenamePattern:
 
     def test_autosave_filename(self):
         """自动保存文件名匹配。"""
-        assert re.match(BACKUP_FILENAME_PATTERN, "settings_20260601_120000_123456_autosave.json")
+        assert re.match(
+            BACKUP_FILENAME_PATTERN, "settings_20260601_120000_123456_autosave.json"
+        )
 
     def test_invalid_prefix(self):
         """无效前缀不匹配。"""

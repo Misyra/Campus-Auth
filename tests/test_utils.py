@@ -284,16 +284,20 @@ class TestAtomicWrite:
         def mock_replace(src, dst):
             raise PermissionError("mocked")
 
-        with patch("app.utils.file_helpers.os.replace", side_effect=mock_replace), pytest.raises(PermissionError, match="mocked"):
+        with (
+            patch("app.utils.file_helpers.os.replace", side_effect=mock_replace),
+            pytest.raises(PermissionError, match="mocked"),
+        ):
             atomic_write(str(target), "content")
         # 临时文件应被清理
         assert not list(tmp_path.glob("tmp.*"))
 
     def test_cleanup_on_write_error(self, tmp_path):
         target = tmp_path / "test.txt"
-        with patch(
-            "app.utils.file_helpers.os.fdopen", side_effect=OSError("disk full")
-        ), pytest.raises(IOError, match="disk full"):
+        with (
+            patch("app.utils.file_helpers.os.fdopen", side_effect=OSError("disk full")),
+            pytest.raises(IOError, match="disk full"),
+        ):
             atomic_write(str(target), "content")
         assert not target.exists()
 

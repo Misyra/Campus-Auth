@@ -225,6 +225,7 @@ class TestStartStop:
         mock_icon_instance = MagicMock()
         # 让 run() 阻塞一小段时间，保证线程在断言时仍然存活
         import time
+
         mock_icon_instance.run.side_effect = lambda: time.sleep(2)
         mock_icon_cls.return_value = mock_icon_instance
         mock_pystray.Icon = mock_icon_cls
@@ -254,6 +255,7 @@ class TestStartStop:
         mock_icon_instance = MagicMock()
         # 让 run() 阻塞一小段时间，保证线程在第二次 start 时仍存活
         import time
+
         mock_icon_instance.run.side_effect = lambda: time.sleep(2)
         mock_icon_cls.return_value = mock_icon_instance
         mock_pystray.Icon = mock_icon_cls

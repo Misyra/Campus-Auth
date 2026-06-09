@@ -52,6 +52,7 @@ class TestSnapshot:
     def test_last_check_time_isoformat(self):
         """last_check_time 转换为 ISO 格式。"""
         import datetime
+
         core = _make_core()
         core.last_check_time = datetime.datetime(2026, 6, 1, 12, 0, 0)
         snap = core.snapshot()

@@ -42,7 +42,9 @@ class TestGetProjectVersion:
     def test_version_outside_project_block(self, tmp_path):
         """version 在 [project] 块外被忽略。"""
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('version = "0.0.1"\n\n[project]\nname = "test"\n', encoding="utf-8")
+        pyproject.write_text(
+            'version = "0.0.1"\n\n[project]\nname = "test"\n', encoding="utf-8"
+        )
         get_project_version.cache_clear()
         version = get_project_version(tmp_path)
         assert version == "unknown"

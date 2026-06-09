@@ -85,7 +85,9 @@ class TestLogEntry:
 
     def test_invalid_level_fallback(self):
         """无效级别回退到 INFO。"""
-        entry = LogEntry(timestamp="2026-06-01 12:00:00", level="invalid", message="test")
+        entry = LogEntry(
+            timestamp="2026-06-01 12:00:00", level="invalid", message="test"
+        )
         assert entry.level == "INFO"
 
 

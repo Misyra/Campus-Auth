@@ -110,9 +110,13 @@ class TestDebugSessionManagerGetStatus:
     def test_status_reflects_session_changes(self, tmp_path):
         """状态反映会话变更。"""
         manager = _make_manager(tmp_path)
-        _set_session_running(manager, task_id="my_task", steps=[
-            {"index": 0, "id": "s1", "type": "click", "description": "步骤1"},
-        ])
+        _set_session_running(
+            manager,
+            task_id="my_task",
+            steps=[
+                {"index": 0, "id": "s1", "type": "click", "description": "步骤1"},
+            ],
+        )
         status = manager.get_status()
         assert status["running"] is True
         assert status["task_id"] == "my_task"
@@ -340,7 +344,9 @@ class TestDebugSessionManagerStart:
             patch("app.services.debug.build_login_template_vars", return_value={}),
         ):
             mock_worker = MagicMock()
-            mock_worker.submit.return_value = _ok_response({"screenshot_url": "/temp/s.png"})
+            mock_worker.submit.return_value = _ok_response(
+                {"screenshot_url": "/temp/s.png"}
+            )
             mock_get_worker.return_value = mock_worker
 
             result = await manager.start(mock_request, mock_monitor)
@@ -445,19 +451,24 @@ class TestDebugSessionManagerNextStep:
     async def test_next_step_success(self, tmp_path):
         """成功执行下一步。"""
         manager = _make_manager(tmp_path)
-        _set_session_running(manager, steps=[
-            {"index": 0, "id": "s1", "type": "click", "description": "点击"},
-            {"index": 1, "id": "s2", "type": "input", "description": "输入"},
-        ])
+        _set_session_running(
+            manager,
+            steps=[
+                {"index": 0, "id": "s1", "type": "click", "description": "点击"},
+                {"index": 1, "id": "s2", "type": "input", "description": "输入"},
+            ],
+        )
 
         with patch("app.services.debug.get_worker") as mock_get_worker:
             mock_worker = MagicMock()
-            mock_worker.submit.return_value = _ok_response({
-                "step_index": 0,
-                "success": True,
-                "message": "步骤执行成功",
-                "screenshot_url": "/temp/step0.png",
-            })
+            mock_worker.submit.return_value = _ok_response(
+                {
+                    "step_index": 0,
+                    "success": True,
+                    "message": "步骤执行成功",
+                    "screenshot_url": "/temp/step0.png",
+                }
+            )
             mock_get_worker.return_value = mock_worker
 
             result = await manager.next_step()
@@ -470,9 +481,12 @@ class TestDebugSessionManagerNextStep:
     async def test_next_step_all_done(self, tmp_path):
         """所有步骤执行完毕后返回提示。"""
         manager = _make_manager(tmp_path)
-        session = _set_session_running(manager, steps=[
-            {"index": 0, "id": "s1", "type": "click", "description": "点击"},
-        ])
+        session = _set_session_running(
+            manager,
+            steps=[
+                {"index": 0, "id": "s1", "type": "click", "description": "点击"},
+            ],
+        )
         session.current_step = 1  # 已执行完毕
 
         result = await manager.next_step()
@@ -482,9 +496,12 @@ class TestDebugSessionManagerNextStep:
     async def test_next_step_worker_failure(self, tmp_path):
         """Worker 执行失败时记录失败结果。"""
         manager = _make_manager(tmp_path)
-        _set_session_running(manager, steps=[
-            {"index": 0, "id": "s1", "type": "click", "description": "点击"},
-        ])
+        _set_session_running(
+            manager,
+            steps=[
+                {"index": 0, "id": "s1", "type": "click", "description": "点击"},
+            ],
+        )
 
         with patch("app.services.debug.get_worker") as mock_get_worker:
             mock_worker = MagicMock()
@@ -521,16 +538,23 @@ class TestDebugSessionManagerRunAll:
     async def test_run_all_success(self, tmp_path):
         """成功执行所有步骤。"""
         manager = _make_manager(tmp_path)
-        _set_session_running(manager, steps=[
-            {"index": 0, "id": "s1", "type": "click", "description": "点击"},
-            {"index": 1, "id": "s2", "type": "input", "description": "输入"},
-        ])
+        _set_session_running(
+            manager,
+            steps=[
+                {"index": 0, "id": "s1", "type": "click", "description": "点击"},
+                {"index": 1, "id": "s2", "type": "input", "description": "输入"},
+            ],
+        )
 
         with patch("app.services.debug.get_worker") as mock_get_worker:
             mock_worker = MagicMock()
             mock_worker.submit.side_effect = [
-                _ok_response({"step_index": 0, "success": True, "screenshot_url": "/s0.png"}),
-                _ok_response({"step_index": 1, "success": True, "screenshot_url": "/s1.png"}),
+                _ok_response(
+                    {"step_index": 0, "success": True, "screenshot_url": "/s0.png"}
+                ),
+                _ok_response(
+                    {"step_index": 1, "success": True, "screenshot_url": "/s1.png"}
+                ),
             ]
             mock_get_worker.return_value = mock_worker
 
@@ -544,9 +568,12 @@ class TestDebugSessionManagerRunAll:
     async def test_run_all_all_done(self, tmp_path):
         """已执行完毕时返回提示。"""
         manager = _make_manager(tmp_path)
-        session = _set_session_running(manager, steps=[
-            {"index": 0, "id": "s1", "type": "click", "description": "点击"},
-        ])
+        session = _set_session_running(
+            manager,
+            steps=[
+                {"index": 0, "id": "s1", "type": "click", "description": "点击"},
+            ],
+        )
         session.current_step = 1
 
         result = await manager.run_all()
@@ -556,15 +583,20 @@ class TestDebugSessionManagerRunAll:
     async def test_run_all_stops_on_failure(self, tmp_path):
         """某步骤失败时停止后续执行。"""
         manager = _make_manager(tmp_path)
-        _set_session_running(manager, steps=[
-            {"index": 0, "id": "s1", "type": "click", "description": "点击"},
-            {"index": 1, "id": "s2", "type": "input", "description": "输入"},
-        ])
+        _set_session_running(
+            manager,
+            steps=[
+                {"index": 0, "id": "s1", "type": "click", "description": "点击"},
+                {"index": 1, "id": "s2", "type": "input", "description": "输入"},
+            ],
+        )
 
         with patch("app.services.debug.get_worker") as mock_get_worker:
             mock_worker = MagicMock()
             mock_worker.submit.side_effect = [
-                _ok_response({"step_index": 0, "success": False, "screenshot_url": None}),
+                _ok_response(
+                    {"step_index": 0, "success": False, "screenshot_url": None}
+                ),
             ]
             mock_get_worker.return_value = mock_worker
 
@@ -578,10 +610,13 @@ class TestDebugSessionManagerRunAll:
     async def test_run_all_worker_submit_error(self, tmp_path):
         """Worker 提交失败时停止执行。"""
         manager = _make_manager(tmp_path)
-        _set_session_running(manager, steps=[
-            {"index": 0, "id": "s1", "type": "click", "description": "点击"},
-            {"index": 1, "id": "s2", "type": "input", "description": "输入"},
-        ])
+        _set_session_running(
+            manager,
+            steps=[
+                {"index": 0, "id": "s1", "type": "click", "description": "点击"},
+                {"index": 1, "id": "s2", "type": "input", "description": "输入"},
+            ],
+        )
 
         with patch("app.services.debug.get_worker") as mock_get_worker:
             mock_worker = MagicMock()

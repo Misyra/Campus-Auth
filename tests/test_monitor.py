@@ -571,6 +571,7 @@ class TestDefaultPingTargets:
         """DEFAULT_PING_TARGETS 应与 constants.DEFAULT_NETWORK_TARGETS 一致"""
         from app.constants import DEFAULT_NETWORK_TARGETS
 
-        assert DEFAULT_NETWORK_TARGETS.split(
-            ","
-        ) == NetworkMonitorCore.DEFAULT_PING_TARGETS
+        assert (
+            DEFAULT_NETWORK_TARGETS.split(",")
+            == NetworkMonitorCore.DEFAULT_PING_TARGETS
+        )

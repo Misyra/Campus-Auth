@@ -212,7 +212,9 @@ def _check_macos_service() -> bool:
                 continue
             # 检查是否有 "status: active" 或分配了非 0.0.0.0 的 IP
             output = result.stdout
-            if "status: active" in output and re.search(r"inet\s+(?!0\.0\.0\.0)\d+\.\d+\.\d+\.\d+", output):
+            if "status: active" in output and re.search(
+                r"inet\s+(?!0\.0\.0\.0)\d+\.\d+\.\d+\.\d+", output
+            ):
                 logger.info("检测到活跃的网络接口: {}", iface)
                 return True
         except Exception:

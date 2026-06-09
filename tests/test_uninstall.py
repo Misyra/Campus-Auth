@@ -28,7 +28,9 @@ class TestCleanupItem:
 
     def test_with_path_and_size(self):
         """带路径和大小。"""
-        item = CleanupItem(key="test", label="测试", exists=True, path="/tmp", size_mb=1.5)
+        item = CleanupItem(
+            key="test", label="测试", exists=True, path="/tmp", size_mb=1.5
+        )
         assert item.path == "/tmp"
         assert item.size_mb == 1.5
 
@@ -121,19 +123,24 @@ class TestPerform:
     def test_empty_keys(self):
         """空 keys 返回空结果。"""
         from app.services.uninstall import perform
+
         result = perform([])
         assert result == []
 
     def test_unknown_key_ignored(self):
         """未知 key 被忽略。"""
         from app.services.uninstall import perform
+
         result = perform(["unknown_key"])
         assert result == []
 
     def test_autostart_key(self):
         """autostart key 触发移除。"""
         from app.services.uninstall import perform
-        with patch("app.services.uninstall._remove_autostart", return_value=(True, "ok")):
+
+        with patch(
+            "app.services.uninstall._remove_autostart", return_value=(True, "ok")
+        ):
             result = perform(["autostart"])
             assert len(result) == 1
             assert result[0].key == "autostart"
@@ -142,7 +149,10 @@ class TestPerform:
     def test_userdata_key(self):
         """userdata key 触发删除。"""
         from app.services.uninstall import perform
-        with patch("app.services.uninstall._remove_user_data", return_value=(True, "ok")):
+
+        with patch(
+            "app.services.uninstall._remove_user_data", return_value=(True, "ok")
+        ):
             result = perform(["userdata"])
             assert len(result) == 1
             assert result[0].key == "userdata"
@@ -150,10 +160,18 @@ class TestPerform:
     def test_playwright_key(self):
         """playwright key 触发删除。"""
         from app.services.uninstall import perform
+
         mock_cache = MagicMock()
         mock_cache.exists.return_value = True
-        with patch("app.services.uninstall._playwright_cache_dir", return_value=mock_cache), \
-             patch("app.services.uninstall._remove_playwright_cache", return_value=(True, "ok")):
+        with (
+            patch(
+                "app.services.uninstall._playwright_cache_dir", return_value=mock_cache
+            ),
+            patch(
+                "app.services.uninstall._remove_playwright_cache",
+                return_value=(True, "ok"),
+            ),
+        ):
             result = perform(["playwright"])
             assert len(result) == 1
             assert result[0].key == "playwright"
@@ -161,7 +179,14 @@ class TestPerform:
     def test_multiple_keys(self):
         """多个 key。"""
         from app.services.uninstall import perform
-        with patch("app.services.uninstall._remove_autostart", return_value=(True, "ok")), \
-             patch("app.services.uninstall._remove_user_data", return_value=(True, "ok")):
+
+        with (
+            patch(
+                "app.services.uninstall._remove_autostart", return_value=(True, "ok")
+            ),
+            patch(
+                "app.services.uninstall._remove_user_data", return_value=(True, "ok")
+            ),
+        ):
             result = perform(["autostart", "userdata"])
             assert len(result) == 2
