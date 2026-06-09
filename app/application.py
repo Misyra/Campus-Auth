@@ -18,18 +18,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.utils.logging import LogConfigCenter, get_logger
-from app.version import get_project_version
-
-from app.constants import FRONTEND_DIR, LOGS_DIR, PROJECT_ROOT, TEMP_DIR
-from app.container import ServiceContainer
 from app.api import (
+    autostart,
     backup,
     config,
     debug,
     history,
     logfiles,
     monitor,
+    ocr,
     profiles,
     repo,
     scheduled_tasks,
@@ -38,6 +35,10 @@ from app.api import (
     tasks,
     tools,
 )
+from app.constants import FRONTEND_DIR, LOGS_DIR, PROJECT_ROOT, TEMP_DIR
+from app.container import ServiceContainer
+from app.utils.logging import LogConfigCenter, get_logger
+from app.version import get_project_version
 
 http_logger = get_logger("backend.http", side="BACKEND")
 startup_logger = get_logger("backend.startup", side="BACKEND")
@@ -268,6 +269,8 @@ app.include_router(debug.router)
 app.include_router(backup.router)
 app.include_router(repo.router)
 app.include_router(system.router)
+app.include_router(autostart.router)
+app.include_router(ocr.router)
 app.include_router(tools.router)
 app.include_router(scripts.router)
 app.include_router(scheduled_tasks.router)

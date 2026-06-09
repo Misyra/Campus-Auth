@@ -105,8 +105,8 @@ class TestInitStatus:
 class TestShells:
     """GET /api/shells"""
 
-    @patch("app.api.system.detect_available_shells")
-    @patch("app.api.system.get_default_shell")
+    @patch("app.api.autostart.detect_available_shells")
+    @patch("app.api.autostart.get_default_shell")
     def test_list_shells(self, mock_default, mock_detect, client):
         """返回可用 Shell 列表。"""
         mock_detect.return_value = [
@@ -166,7 +166,7 @@ class TestAutoStart:
 class TestOCR:
     """OCR 相关端点。"""
 
-    @patch("app.api.system._check_ddddocr_installed")
+    @patch("app.api.ocr._check_ddddocr_installed")
     def test_ocr_status_not_installed(self, mock_check, client):
         """ddddocr 未安装时返回状态。"""
         mock_check.return_value = False
@@ -176,8 +176,8 @@ class TestOCR:
         assert resp.json()["installed"] is False
         assert resp.json()["size_mb"] == 0.0
 
-    @patch("app.api.system._check_ddddocr_installed")
-    @patch("app.api.system._estimate_pkg_size_mb")
+    @patch("app.api.ocr._check_ddddocr_installed")
+    @patch("app.api.ocr._estimate_pkg_size_mb")
     def test_ocr_status_installed(self, mock_size, mock_check, client):
         """ddddocr 已安装时返回大小。"""
         mock_check.return_value = True
@@ -188,7 +188,7 @@ class TestOCR:
         assert resp.json()["installed"] is True
         assert resp.json()["size_mb"] > 0
 
-    @patch("app.api.system._check_ddddocr_installed")
+    @patch("app.api.ocr._check_ddddocr_installed")
     def test_ocr_install_already_installed(self, mock_check, client):
         """已安装时直接返回成功。"""
         mock_check.return_value = True
@@ -197,7 +197,7 @@ class TestOCR:
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-    @patch("app.api.system._check_ddddocr_installed")
+    @patch("app.api.ocr._check_ddddocr_installed")
     def test_ocr_uninstall_not_installed(self, mock_check, client):
         """未安装时直接返回成功。"""
         mock_check.return_value = False
@@ -206,7 +206,7 @@ class TestOCR:
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-    @patch("app.api.system._check_ddddocr_installed")
+    @patch("app.api.ocr._check_ddddocr_installed")
     @patch("subprocess.run")
     def test_ocr_install_success(self, mock_run, mock_check, client):
         """安装 ddddocr 成功。"""
@@ -217,7 +217,7 @@ class TestOCR:
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-    @patch("app.api.system._check_ddddocr_installed")
+    @patch("app.api.ocr._check_ddddocr_installed")
     @patch("subprocess.run")
     def test_ocr_install_failure(self, mock_run, mock_check, client):
         """安装 ddddocr 失败。"""
@@ -229,7 +229,7 @@ class TestOCR:
         assert resp.json()["success"] is False
         assert "失败" in resp.json()["message"]
 
-    @patch("app.api.system._check_ddddocr_installed")
+    @patch("app.api.ocr._check_ddddocr_installed")
     @patch("subprocess.run")
     def test_ocr_install_timeout(self, mock_run, mock_check, client):
         """安装超时。"""
@@ -243,7 +243,7 @@ class TestOCR:
         assert resp.json()["success"] is False
         assert "超时" in resp.json()["message"]
 
-    @patch("app.api.system._check_ddddocr_installed")
+    @patch("app.api.ocr._check_ddddocr_installed")
     @patch("subprocess.run")
     def test_ocr_uninstall_success(self, mock_run, mock_check, client):
         """卸载 ddddocr 成功。"""
