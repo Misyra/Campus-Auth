@@ -297,6 +297,22 @@ body {
   border-color: var(--accent);
 }
 
+.log-filter-select {
+  padding: 5px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  min-width: 90px;
+}
+
+.log-filter-select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .log-filter-chip {
   padding: 4px 10px;
   border-radius: var(--radius-lg);
