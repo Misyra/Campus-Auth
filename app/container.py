@@ -70,7 +70,7 @@ class ServiceContainer:
         dashboard_sink = DashboardSink(maxlen=1200, broadcast_maxlen=200)
         logger.add(
             dashboard_sink.write,
-            format="{name} | {message}",
+            format="{message}",
             level="DEBUG",
             filter=lambda record: record["extra"].get("source") != "frontend",
         )

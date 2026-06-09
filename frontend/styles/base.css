@@ -254,6 +254,18 @@ body {
   line-height: 1.4;
 }
 
+.log-module {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  min-width: 160px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
 .log-level-badge {
   min-width: 52px;
   justify-content: center;
