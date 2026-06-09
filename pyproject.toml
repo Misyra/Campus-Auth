@@ -49,6 +49,7 @@ ignore = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
+addopts = "--strict-markers --tb=short"
 
 [dependency-groups]
 dev = [
