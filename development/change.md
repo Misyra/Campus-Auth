@@ -5,6 +5,12 @@
 
 ## 2026-06-09
 
+### fix: logfiles 正则支持点号和连字符，匹配 name 字段
+
+- `app/api/logfiles.py`：`_LOG_LINE_PATTERN` 正则的 source 和 name 匹配模式从 `\w+` / `[\w.]+` 改为 `[\w.-]+`，支持 `monitor.core`、`step-handler` 等含点号或连字符的名称
+- 注释格式统一为 `[source][name]`
+- 测试验证：32 个 logfiles 测试全部通过
+
 ### fix: NetworkMonitorCore source 从 monitor.core 改为 network + name monitor_core
 
 - `app/core/monitor_core.py`：logger 初始化改为 `get_logger("monitor_core", source="network")`；`log_message` 中 `self.log_callback` 调用从位置参数 `"monitor.core"` 改为关键字参数 `source="network", name="monitor_core"`
