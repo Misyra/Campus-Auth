@@ -23,6 +23,16 @@ DEFAULT_STEP_TIMEOUT = 10000
 DEFAULT_TASK_TIMEOUT = 30000
 
 
+def _safe_float(value: Any, default: float) -> float:
+    """安全的 float 转换，异常时返回默认值。"""
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+
 class TaskError(Exception):
     """任务执行错误"""
 
@@ -191,7 +201,7 @@ class TaskConfig:
             on_failure=data.get("on_failure", {}),
             metadata=data.get("metadata", {}),
             reveal_hidden=data.get("reveal_hidden", False),
-            step_delay=float(data.get("step_delay", 0.5)),
+            step_delay=_safe_float(data.get("step_delay"), 0.5),
         )
 
     def to_dict(self) -> dict[str, Any]:

@@ -207,6 +207,9 @@ class ScriptRunner:
         except PermissionError as e:
             logger.error("脚本执行被拒绝: {}", e)
             return False, str(e)
+        except FileNotFoundError as e:
+            logger.error("脚本或解释器不存在: {}", e)
+            return False, f"脚本或解释器不存在: {e}"
         finally:
             if temp_path is not None:
                 with contextlib.suppress(OSError):

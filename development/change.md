@@ -5,6 +5,67 @@
 
 ## 2026-06-09
 
+### docs: 代码深度重审 v2 — 发现 v1 修复遗漏和新增问题
+
+- `docs/code-audit-2026-06-09-v2.md`：第二轮深化审计报告
+- 方法论：方案 A（深化原 7 模块）+ 五道关检查（入口边界、异常路径、调用链、状态机、修复复查）
+- 发现 4 个严重问题：executor.py timeout=0 同类残留 2 处、monitor_core stop 信号忽略、debug 页面重建丢失 stealth、block_proxy null 值反转
+- 发现 10 个中等问题：异常日志丢堆栈、JSON null→TypeError、JSON 序列化异常、execute_remaining 负索引等
+- 发现 11 个低优问题：OCR 实例泄漏、validator 类型检查、ntpath 跨平台等
+- 复查确认 v1 修复的 3 处 `or` 模式只修了 `__init__` 未修 `execute` 和 `_execute_step`
+
+### feat: 自定义下拉选择组件 CustomSelect — 全量替换原生 select
+
+- `frontend/js/components.js`：新增 `CustomSelect` 组件（单选、键盘导航 ↑↓/Enter/Escape、点击外部关闭、入场动画）
+- `frontend/js/app-options.js`：新增 `carrierOptions`、`logLevelOptions`、`logSourceOptions`、`scheduledTaskTypeOptions` 静态选项列表 + `taskOptions`、`scriptTargetOptions`、`browserTargetOptions`、`shellPathOptions`、`binaryOptions`、`logFileOptions` 动态 computed 属性
+- `frontend/app.js`：注册 `custom-select` 全局组件
+- `frontend/styles/components.css`：新增 `.custom-select` 完整样式（trigger、arrow、dropdown、option、compact/logfiles 变体）
+- 全量替换 8 个 HTML 模板中的 17 个原生 `<select>` 为 `<custom-select>`
+- 清理不再使用的 `.log-filter-select` 和 `.logfiles-select` CSS 类
+
+### style: 统一 select 下拉选择样式 — 自定义箭头 + hover/focus + 深色弹出菜单
+
+- `frontend/styles/base.css`：`.log-filter-select` 添加 `appearance: none`、自定义 SVG 箭头、`color-scheme: dark`、hover/focus 效果
+- `frontend/styles/pages/logfiles.css`：`.logfiles-select` 同上处理
+- 所有 select 元素现在风格一致：深色背景、灰色 chevron 箭头、聚焦时青色高亮、原生弹出菜单跟随深色主题
+
+### fix: 全面代码审查修复 — 内存安全、正确性、性能、前端
+
+基于 `docs/code-audit-2026-06-09.md` 审查报告，修复以下问题：
+
+**内存安全**
+- `app/api/tools.py`：upload_background 和 fetch_background_url 改为流式下载，避免超大文件耗尽内存
+
+**正确性**
+- `app/tasks/executor.py`：`default_timeout or 10000` 改为 `is not None` 判断，修复 timeout=0 被忽略
+- `app/tasks/step_handlers.py`：`step.description.lower()` 增加 None 值防护
+- `app/tasks/validator.py`：空步骤列表 `[]` 不再被误判为缺失；非 dict 步骤输入增加类型检查
+- `app/tasks/models.py`：`TaskConfig.from_dict` 过滤非 dict 步骤元素
+- `app/tasks/variable_resolver.py`：None 值解析为空字符串而非 "null"
+- `app/api/scheduled_tasks.py`：hour/minute 增加 0-23/0-59 范围校验；timeout 增加 ValueError 捕获
+- `app/services/monitor.py`：`wait_for_login_recovery` 增加 Event 未 set 时的提前返回；`_queue_consumer` finally 块统一 set response_event；`_handle_stop` 简化等待逻辑
+- `app/services/scheduler.py`：`_check_and_execute` 记录已触发分钟，防止同一分钟内重复触发
+- `app/services/debug.py`：调试截图使用独立子目录 `temp/debug/`，避免清理时影响其他服务
+- `app/utils/file_helpers.py`：`atomic_write` 参数类型改为 `str | Path`，内部统一转换
+- `app/application.py`：`_resolve_port` 重命名为 `resolve_port`，消除跨模块私有函数导入
+
+**性能**
+- `app/api/logfiles.py`：大日志文件（>50MB）只读取末尾部分
+- `app/services/login_history.py`：大历史文件（>5MB）只读取末尾部分
+- `app/utils/logging.py`：`broadcast_queue.append` 移入锁保护
+
+**前端**
+- `frontend/app.js`：移除 `applyAppearanceEarly` 中的 zoom 设置（Vue 挂载前不可靠）
+- `frontend/js/methods/ui.js`：`removeCustomVar` 改用整体替换策略，与 `updateCustomVarKey` 一致
+- `frontend/js/app-options.js`：`filteredLogs` 三次 filter 合并为一次遍历
+- `frontend/styles/components.css`：通知下拉菜单改为 `position: absolute`，修复滚动后脱离按钮
+- `app/utils/config.py`：`validate_gui_config` 接受 `int | str` 类型的 check_interval
+
+**测试更新**
+- 更新 variable_resolver、validator、debug_session 相关测试以匹配新行为
+
+---
+
 ### feat: dashboard 实时日志增加来源筛选 + 级别/来源标签
 
 - `frontend/js/data/dashboard.js`：`logFilter` 新增 `source` 字段
