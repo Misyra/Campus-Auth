@@ -7,7 +7,7 @@ from PIL import Image
 
 from app.utils.logging import get_logger
 
-logger = get_logger("system_tray", side="BACKEND")
+logger = get_logger("system_tray", source="BACKEND")
 
 
 class SystemTray:

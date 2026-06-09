@@ -10,7 +10,7 @@ from typing import Any
 
 from app.utils.logging import get_logger
 
-logger = get_logger("task_models", side="BACKEND")
+logger = get_logger("task_models", source="BACKEND")
 
 # 项目根目录（模块级，避免各处重复计算）
 PROJECT_ROOT = Path(__file__).resolve().parents[2]

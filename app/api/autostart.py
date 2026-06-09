@@ -11,7 +11,7 @@ from app.utils.shell_utils import detect_shells as detect_available_shells
 from app.utils.shell_utils import get_default_shell
 
 router = APIRouter()
-api_logger = get_logger("backend.api", side="BACKEND")
+api_logger = get_logger("backend.api", source="BACKEND")
 
 
 @router.get("/api/shells")

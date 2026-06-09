@@ -16,7 +16,7 @@ from app.utils.logging import get_logger
 from .models import PROJECT_ROOT, StepConfig, StepError, StepType
 from .variable_resolver import VariableResolver
 
-logger = get_logger("step_handlers", side="BACKEND")
+logger = get_logger("step_handlers", source="BACKEND")
 
 # 强制输入 JS 脚本：绕过可见性检查，通过原生 setter 设置值并模拟完整用户交互事件
 _FORCE_INPUT_JS = """(el, params) => {

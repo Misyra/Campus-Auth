@@ -4,7 +4,7 @@ from typing import Any
 
 from .logging import get_logger
 
-logger = get_logger("env", side="BACKEND")
+logger = get_logger("env", source="BACKEND")
 
 
 # Windows 保留环境变量 + Unix/Python 内置变量，防止 runtime vars 与系统变量冲突

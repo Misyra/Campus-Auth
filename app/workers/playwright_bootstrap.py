@@ -17,7 +17,7 @@ from pathlib import Path
 from app.utils.logging import get_logger
 from app.utils.platform_utils import CREATE_NO_WINDOW_FLAG, is_macos, is_windows
 
-logger = get_logger("playwright_bootstrap", side="BACKEND")
+logger = get_logger("playwright_bootstrap", source="BACKEND")
 
 _BOOTSTRAP_LOCK = threading.Lock()
 _BOOTSTRAP_DONE = False

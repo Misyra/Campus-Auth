@@ -1,9 +1,9 @@
 """日志系统 — 基于 loguru 的统一日志配置。
 
 提供：
-- get_logger(name, side) — 获取绑定 name 和 side 的 logger
+- get_logger(name, source) — 获取绑定 name 和 source 的 logger
 - LogConfigCenter — 单例配置中心，支持运行时热更新日志级别
-- LogBroadcastSink — 自定义 sink，将日志记录追加到 WebSocket 广播队列
+- DashboardSink — 自定义 sink，维护内存环形缓冲区 + WebSocket 广播队列
 - DateRotatingSink — 自定义 sink，按日期目录存储日志
 """
 
@@ -31,21 +31,21 @@ logger.remove()
 
 
 def _console_format(record):
-    side = record["extra"].get("side", "-")
-    record["extra"]["_side"] = side
+    source = record["extra"].get("source", "-")
+    record["extra"]["_source"] = source
     return (
         "<green>{time:HH:mm:ss}</green> | "
         "<level>{level: <8}</level> | "
-        "<cyan>{extra[_side]}</cyan> | "
+        "<cyan>{extra[_source]}</cyan> | "
         "<cyan>{name}</cyan> | "
         "<level>{message}</level>\n"
     )
 
 
 def _file_format(record):
-    side = record["extra"].get("side", "-")
-    record["extra"]["_side"] = side
-    return "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[_side]} | {name} | {message}\n"
+    source = record["extra"].get("source", "-")
+    record["extra"]["_source"] = source
+    return "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[_source]} | {name} | {message}\n"
 
 
 _WEBSOCKET_FORMAT = "{name} | {message}"
@@ -101,31 +101,34 @@ def normalize_level(level: str | None, default: str = "INFO") -> str:
 # ==================== 核心接口 ====================
 
 
-def get_logger(name: str, side: str = "BACKEND") -> logger:
-    """获取绑定 name 和 side 的 logger。
+def get_logger(name: str, source: str = "backend") -> logger:
+    """获取绑定 name 和 source 的 logger。
 
     返回的 logger 支持直接调用 .info()、.warning() 等方法。
+    source 可选值: backend, network, task, frontend, debug
     """
-    return logger.bind(name=name, side=side)
+    return logger.bind(name=name, source=source)
 
 
-# ==================== 自定义 sink: WebSocket 广播 ====================
+# ==================== 自定义 sink: Dashboard（内存 + 广播）====================
 
 
-class LogBroadcastSink:
-    """轻量 loguru sink — 仅将日志记录追加到 WebSocket 广播队列。
+class DashboardSink:
+    """loguru sink — 维护内存环形缓冲区 + WebSocket 广播队列。
 
-    不负责内存 log_store（由 MonitorService.record_log() 负责）。
+    替代原 LogBroadcastSink（仅广播）+ MonitorService._logs（仅内存）的双路径。
     """
 
-    def __init__(self, broadcast_queue: deque[dict]):
-        self._queue = broadcast_queue
+    def __init__(self, maxlen: int = 1200, broadcast_maxlen: int = 200):
+        self.buffer: deque[dict] = deque(maxlen=maxlen)
+        self.broadcast_queue: deque[dict] = deque(maxlen=broadcast_maxlen)
+        self._lock = threading.Lock()
 
-    def write(self, message):
-        """loguru sink 接口 — 接收格式化后的消息，追加到广播队列。"""
+    def write(self, message) -> None:
+        """loguru sink 接口 — 接收格式化后的消息。"""
         record = message.record
         name = record["extra"].get("name", record["name"])
-        side = record["extra"].get("side", "BACKEND")
+        source = record["extra"].get("source", "backend")
         level = record["level"].name
         text = str(message).strip()
 
@@ -133,17 +136,28 @@ class LogBroadcastSink:
             "%Y-%m-%d %H:%M:%S"
         )
 
-        self._queue.append(
+        entry = {
+            "timestamp": stamp,
+            "level": level,
+            "source": source,
+            "module": name,
+            "message": text,
+        }
+
+        with self._lock:
+            self.buffer.append(entry)
+
+        self.broadcast_queue.append(
             {
                 "type": "log",
-                "data": {
-                    "timestamp": stamp,
-                    "level": level,
-                    "source": f"{side}.{name}",
-                    "message": text,
-                },
+                "data": entry,
             }
         )
+
+    def list_logs(self, limit: int = 200) -> list[dict]:
+        """返回最近 limit 条日志（供 dashboard API 读取）。"""
+        with self._lock:
+            return list(self.buffer)[-limit:]
 
 
 # ==================== 自定义 sink: 按日期目录存储 ====================
@@ -313,7 +327,7 @@ class LogConfigCenter:
         if self._initialized:
             return
         self._config = self.DEFAULT_CONFIG.copy()
-        self._side = "BACKEND"
+        self._source = "backend"
         self._configured = False
         self._initialized = True
         self._file_sink_id: int | None = None
@@ -325,7 +339,7 @@ class LogConfigCenter:
         return cls._instance
 
     def initialize(
-        self, config: dict[str, Any] | None = None, side: str = "BACKEND"
+        self, config: dict[str, Any] | None = None, source: str = "backend"
     ) -> None:
         """初始化日志配置（仅首次调用有效）"""
         with self._init_lock:
@@ -334,7 +348,7 @@ class LogConfigCenter:
 
             if config:
                 self._config.update(config)
-            self._side = side
+            self._source = source
 
             # 设置全局日志级别
             level = normalize_level(self._config.get("level", "INFO"))
@@ -342,11 +356,11 @@ class LogConfigCenter:
 
             self._configured = True
 
-    def get_logger(self, name: str, side: str | None = None) -> logger:
+    def get_logger(self, name: str, source: str | None = None) -> logger:
         """获取配置好的日志器"""
         if not self._configured:
             self.initialize()
-        return get_logger(name, side or self._side)
+        return get_logger(name, source or self._source)
 
     def set_level(self, level: str) -> None:
         """动态修改全局日志级别（热更新）。

@@ -11,7 +11,7 @@ from app.services.profile import ProfileService
 from app.utils.logging import get_logger
 
 router = APIRouter()
-api_logger = get_logger("backend.api", side="BACKEND")
+api_logger = get_logger("backend.api", source="BACKEND")
 
 
 def _safe_detect(func, label: str, default=None):

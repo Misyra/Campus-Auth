@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from app.utils.logging import VALID_LOG_LEVELS, normalize_level
+import threading
+from unittest.mock import MagicMock
+
+from app.utils.logging import VALID_LOG_LEVELS, DashboardSink, normalize_level
 
 # ── VALID_LOG_LEVELS ──
 
@@ -65,3 +68,119 @@ class TestNormalizeLevel:
         """自定义默认值。"""
         assert normalize_level("INVALID", default="DEBUG") == "DEBUG"
         assert normalize_level("", default="ERROR") == "ERROR"
+
+
+# ── DashboardSink ──
+
+
+class TestDashboardSink:
+    """DashboardSink 单元测试。"""
+
+    def test_init_default(self):
+        """默认初始化。"""
+        sink = DashboardSink()
+        assert sink.buffer.maxlen == 1200
+        assert sink.broadcast_queue.maxlen == 200
+        assert len(sink.buffer) == 0
+        assert len(sink.broadcast_queue) == 0
+
+    def test_init_custom_maxlen(self):
+        """自定义 maxlen。"""
+        sink = DashboardSink(maxlen=500)
+        assert sink.buffer.maxlen == 500
+
+    def test_write_appends_to_buffer_and_queue(self):
+        """write 同时写入 buffer 和 broadcast_queue。"""
+        sink = DashboardSink(maxlen=10)
+        msg = MagicMock()
+        level_mock = MagicMock()
+        level_mock.name = "INFO"
+        msg.record = {
+            "time": MagicMock(timestamp=lambda: 1700000000.0),
+            "level": level_mock,
+            "extra": {"name": "test", "source": "backend"},
+            "name": "test",
+            "message": "测试消息",
+        }
+        msg.__str__ = lambda self: "测试消息"
+
+        sink.write(msg)
+
+        assert len(sink.buffer) == 1
+        assert len(sink.broadcast_queue) == 1
+        entry = sink.buffer[0]
+        assert entry["level"] == "INFO"
+        assert entry["source"] == "backend"
+        assert entry["module"] == "test"
+        assert entry["message"] == "测试消息"
+
+    def test_write_buffer_overflow(self):
+        """buffer 超出 maxlen 自动淘汰最旧。"""
+        sink = DashboardSink(maxlen=3)
+        level_mock = MagicMock()
+        level_mock.name = "INFO"
+        for i in range(5):
+            msg = MagicMock()
+            msg.record = {
+                "time": MagicMock(timestamp=lambda: 1700000000.0),
+                "level": level_mock,
+                "extra": {"name": "test", "source": "backend"},
+                "name": "test",
+                "message": f"msg{i}",
+            }
+            msg.__str__ = lambda self, i=i: f"msg{i}"
+            sink.write(msg)
+
+        assert len(sink.buffer) == 3
+        assert sink.buffer[0]["message"] == "msg2"
+        assert sink.buffer[2]["message"] == "msg4"
+
+    def test_list_logs_returns_last_n(self):
+        """list_logs 返回最近 N 条。"""
+        sink = DashboardSink(maxlen=10)
+        for i in range(5):
+            sink.buffer.append({"message": f"msg{i}"})
+
+        result = sink.list_logs(limit=3)
+        assert len(result) == 3
+        assert result[0]["message"] == "msg2"
+
+    def test_list_logs_limit_exceeds_buffer(self):
+        """list_logs limit 超过 buffer 大小时返回全部。"""
+        sink = DashboardSink(maxlen=10)
+        sink.buffer.append({"message": "only"})
+        result = sink.list_logs(limit=100)
+        assert len(result) == 1
+
+    def test_thread_safety(self):
+        """多线程并发写入不会崩溃。"""
+        sink = DashboardSink(maxlen=1000)
+        errors = []
+
+        level_mock = MagicMock()
+        level_mock.name = "INFO"
+
+        def writer(n):
+            try:
+                for i in range(100):
+                    msg = MagicMock()
+                    msg.record = {
+                        "time": MagicMock(timestamp=lambda: 1700000000.0),
+                        "level": level_mock,
+                        "extra": {"name": "test", "source": "backend"},
+                        "name": "test",
+                        "message": f"t{n}_msg{i}",
+                    }
+                    msg.__str__ = lambda self, n=n, i=i: f"t{n}_msg{i}"
+                    sink.write(msg)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=writer, args=(n,)) for n in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors
+        assert len(sink.buffer) == 400

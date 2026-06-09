@@ -11,7 +11,7 @@ from pathlib import Path
 from app.utils.logging import get_logger
 from app.utils.platform_utils import get_platform, is_linux, is_macos, is_windows
 
-logger = get_logger("backend.autostart", side="BACKEND")
+logger = get_logger("backend.autostart", source="BACKEND")
 
 
 class AutoStartService:

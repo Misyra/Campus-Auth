@@ -15,7 +15,7 @@ from app.utils.logging import get_logger
 from app.version import compare_versions, get_project_version
 
 router = APIRouter()
-api_logger = get_logger("backend.api", side="BACKEND")
+api_logger = get_logger("backend.api", source="BACKEND")
 
 
 # ── 健康检查 / 更新检测 ──

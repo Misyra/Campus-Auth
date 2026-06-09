@@ -16,7 +16,7 @@ from .models import PROJECT_ROOT, StepConfig, StepType, TaskConfig
 from .step_handlers import StepExecutorRegistry
 from .variable_resolver import VariableResolver
 
-logger = get_logger("task_executor", side="BACKEND")
+logger = get_logger("task_executor", source="BACKEND")
 
 
 class TaskExecutor:
