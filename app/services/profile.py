@@ -3,15 +3,14 @@ from __future__ import annotations
 import re
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from app.network.detect import detect_gateway_ip, detect_wifi_ssid
-from app.utils.file_helpers import atomic_write
+from app.schemas import ProfilesData, ProfileSettings
 from app.utils.crypto import save_password_field
+from app.utils.file_helpers import atomic_write
 from app.utils.logging import get_logger
-
-from app.schemas import ProfileSettings, ProfilesData
 
 profile_logger = get_logger("backend.profile_service", side="BACKEND")
 

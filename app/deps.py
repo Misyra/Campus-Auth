@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 from fastapi import Request
 
-from app.services.autostart import AutoStartService
 from app.container import ServiceContainer
+from app.services.autostart import AutoStartService
 from app.services.debug import DebugSessionManager
 from app.services.login_history import LoginHistoryService
 from app.services.monitor import MonitorService
@@ -46,5 +46,5 @@ def get_login_history_service(request: Request) -> LoginHistoryService:
     return request.app.state.services.login_history_service
 
 
-def get_scheduler_service(request: Request) -> "SchedulerService":
+def get_scheduler_service(request: Request) -> SchedulerService:
     return request.app.state.services.scheduler_service

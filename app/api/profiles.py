@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.utils.logging import get_logger
-
 from app.deps import get_monitor_service, get_profile_service
+from app.schemas import ActionResponse, ProfileSettings
 from app.services.monitor import MonitorService
 from app.services.profile import ProfileService
-from app.schemas import ActionResponse, ProfileSettings
+from app.utils.logging import get_logger
 
 router = APIRouter()
 api_logger = get_logger("backend.api", side="BACKEND")

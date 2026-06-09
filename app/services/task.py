@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.tasks import TaskManager, ScriptTaskInfo, is_valid_task_id, normalize_task_id
+from app.tasks import ScriptTaskInfo, TaskManager, is_valid_task_id, normalize_task_id
 from app.utils.logging import get_logger
 
 task_logger = get_logger("backend.task_service", side="BACKEND")

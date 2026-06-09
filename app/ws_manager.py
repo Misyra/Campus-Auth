@@ -45,7 +45,7 @@ class WebSocketManager:
 
         # 清理断开连接
         async with self._lock:
-            for ws, result in zip(connections, results):
+            for ws, result in zip(connections, results, strict=False):
                 if isinstance(result, Exception) and ws in self._connections:
                     self._connections.remove(ws)
 
@@ -64,7 +64,7 @@ class WebSocketManager:
     async def _send_safe(self, ws: WebSocket, message: str):
         try:
             await asyncio.wait_for(ws.send_text(message), timeout=5.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             ws_logger.warning("WebSocket 发送超时，断开连接")
             async with self._lock:
                 if ws in self._connections:

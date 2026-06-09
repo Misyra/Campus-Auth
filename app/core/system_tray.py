@@ -22,8 +22,9 @@ class SystemTray:
         icon_path = Path(__file__).parent.parent.parent / "frontend" / "tray-icon.svg"
         if icon_path.exists():
             try:
-                import cairosvg
                 import io
+
+                import cairosvg
 
                 # 使用 as_uri() 生成跨平台文件 URI（Windows: file:///C:/...，POSIX: file:///...）
                 png_data = cairosvg.svg2png(

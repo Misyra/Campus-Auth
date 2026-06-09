@@ -7,8 +7,8 @@ import os
 import shutil
 import subprocess
 
-from .platform_utils import is_windows, is_macos, is_linux
 from .logging import get_logger
+from .platform_utils import is_linux, is_macos, is_windows
 
 logger = get_logger("notify", side="BACKEND")
 

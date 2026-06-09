@@ -40,6 +40,7 @@ environment/
 
 # User-specific network profiles
 settings.json
+backups/*
 
 # Log files
 *.log

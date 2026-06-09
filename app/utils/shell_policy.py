@@ -10,7 +10,7 @@ import asyncio
 import platform
 import subprocess
 import sys
-from typing import Callable
+from collections.abc import Callable
 
 from .logging import get_logger
 from .platform_utils import CREATE_NO_WINDOW_FLAG
@@ -138,7 +138,7 @@ class ShellCommandPolicy:
             stdout, stderr = await asyncio.wait_for(
                 proc.communicate(), timeout=effective_timeout
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.wait()
             return -1, "", f"命令执行超时 ({effective_timeout}s)"

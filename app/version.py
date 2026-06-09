@@ -46,7 +46,7 @@ def compare_versions(a: str, b: str) -> int:
         max_len = max(len(va), len(vb))
         va.extend([0] * (max_len - len(va)))
         vb.extend([0] * (max_len - len(vb)))
-        for x, y in zip(va, vb):
+        for x, y in zip(va, vb, strict=False):
             if x > y:
                 return 1
             if x < y:

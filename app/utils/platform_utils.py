@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 平台检测工具函数集
 
@@ -16,12 +15,12 @@ import sys
 CREATE_NO_WINDOW_FLAG: int = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 __all__ = [
-    "get_platform",
-    "is_windows",
-    "is_macos",
-    "is_linux",
-    "get_default_ua",
     "CREATE_NO_WINDOW_FLAG",
+    "get_default_ua",
+    "get_platform",
+    "is_linux",
+    "is_macos",
+    "is_windows",
 ]
 
 

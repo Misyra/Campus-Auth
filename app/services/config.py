@@ -3,24 +3,23 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.utils.config_helpers import (
-    assign_profile_fields,
-    extract_profile_fields,
-    PROFILE_FIELDS,
-)
-from app.utils.crypto import decrypt_password, mask_password, save_password_field
-from app.utils.logging import get_logger, normalize_level
-from app.utils.exceptions import DecryptionError
-
 from app.constants import DEFAULT_NETWORK_TARGETS
-from .profile import ProfileService
 from app.schemas import (
     MonitorConfigPayload,
-    ProfileSettings,
     ProfilesData,
+    ProfileSettings,
     SystemSettings,
 )
+from app.utils.config_helpers import (
+    PROFILE_FIELDS,
+    assign_profile_fields,
+    extract_profile_fields,
+)
+from app.utils.crypto import decrypt_password, mask_password, save_password_field
+from app.utils.exceptions import DecryptionError
+from app.utils.logging import get_logger, normalize_level
 
+from .profile import ProfileService
 
 config_logger = get_logger("backend.config_service", side="BACKEND")
 

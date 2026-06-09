@@ -6,11 +6,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .models import TaskConfig, ScriptTaskInfo, TASK_ID_PATTERN
-from .validator import TaskValidator
-
 from app.utils.file_helpers import atomic_write
 from app.utils.logging import get_logger
+
+from .models import TASK_ID_PATTERN, ScriptTaskInfo, TaskConfig
+from .validator import TaskValidator
 
 logger = get_logger("task_manager", side="BACKEND")
 

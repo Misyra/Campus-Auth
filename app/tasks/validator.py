@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from .models import StepType, TASK_ID_PATTERN
-
 from app.utils.logging import get_logger
+
+from .models import TASK_ID_PATTERN, StepType
 
 logger = get_logger("task_validator", side="BACKEND")
 

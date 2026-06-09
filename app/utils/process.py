@@ -15,14 +15,14 @@ from pathlib import Path
 from app.constants import AUTH_DATA_DIR
 
 __all__ = [
+    "cleanup_pid",
     "get_pid_file",
+    "get_process_name",
+    "is_local_port_in_use",
+    "is_service_running",
+    "normalize_proc_name",
     "read_pid_file",
     "write_pid",
-    "cleanup_pid",
-    "get_process_name",
-    "normalize_proc_name",
-    "is_service_running",
-    "is_local_port_in_use",
 ]
 
 
