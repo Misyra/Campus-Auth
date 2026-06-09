@@ -169,7 +169,7 @@
   color: var(--text-muted);
 }
 
-/* 来源筛选 chips */
+/* source filter chips */
 .source-chips {
   flex-wrap: wrap;
   align-items: center;
