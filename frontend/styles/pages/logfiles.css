@@ -172,29 +172,40 @@
 /* 来源筛选 chips */
 .source-chips {
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.source-chips::before {
+  content: '来源';
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-right: 2px;
+  opacity: 0.7;
 }
 
 .source-chip {
-  padding: 3px 8px;
-  border-radius: var(--radius-lg);
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
   font-size: 10px;
-  font-weight: 600;
-  border: 1px solid var(--border);
+  font-weight: 500;
+  border: 1px dashed var(--border);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
 
 .source-chip:hover {
   border-color: var(--border-hover);
   color: var(--text-secondary);
+  border-style: solid;
 }
 
 .source-chip.active {
   background: var(--bg-hover);
   color: var(--text-primary);
   border-color: var(--accent);
+  border-style: solid;
 }
 
 .logfiles-content .empty-state {

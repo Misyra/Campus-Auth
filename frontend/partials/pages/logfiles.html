@@ -35,7 +35,7 @@
             <button class="log-filter-chip" :class="{ active: logViewer.level === 'DEBUG' }" @click="logViewer.level = 'DEBUG'; fetchLogFileContent()">DEBUG</button>
           </div>
           <div class="log-filter-chips source-chips">
-            <button class="source-chip" :class="{ active: !logViewer.source }" @click="logViewer.source = ''; fetchLogFileContent()">全部来源</button>
+            <button class="source-chip" :class="{ active: !logViewer.source }" @click="logViewer.source = ''; fetchLogFileContent()">全部</button>
             <button class="source-chip" :class="{ active: logViewer.source === 'backend' }" @click="logViewer.source = 'backend'; fetchLogFileContent()">后端</button>
             <button class="source-chip" :class="{ active: logViewer.source === 'network' }" @click="logViewer.source = 'network'; fetchLogFileContent()">网络</button>
             <button class="source-chip" :class="{ active: logViewer.source === 'task' }" @click="logViewer.source = 'task'; fetchLogFileContent()">任务</button>
