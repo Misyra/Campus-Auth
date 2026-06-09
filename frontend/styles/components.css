@@ -374,6 +374,35 @@
   border-color: var(--border-hover);
 }
 
+/* ========== Select 下拉弹出菜单美化（::picker(select)） ========== */
+select::picker(select) {
+  appearance: base-select;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+  color-scheme: dark;
+}
+
+/* 下拉选项 */
+select::picker(select) option {
+  padding: 8px 12px;
+  border-radius: calc(var(--radius-md) - 4px);
+  color: var(--text-primary);
+  font-size: 13px;
+  transition: background 0.15s ease;
+}
+
+select::picker(select) option:hover {
+  background: var(--bg-glass-heavy);
+}
+
+select::picker(select) option:checked {
+  background: rgba(34, 211, 238, 0.12);
+  color: var(--accent);
+}
+
 .form-group textarea {
   min-height: 140px;
   resize: vertical;
