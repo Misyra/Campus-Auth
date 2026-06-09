@@ -12,30 +12,29 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.tasks.executor import TaskExecutor
+from app.tasks.manager import TaskManager, is_valid_task_id, normalize_task_id
 from app.tasks.models import (
     StepConfig,
-    TaskConfig,
     StepError,
     StepType,
+    TaskConfig,
 )
-from app.tasks.variable_resolver import VariableResolver
 from app.tasks.step_handlers import (
-    StepHandler,
-    InputHandler,
     ClickHandler,
+    EvalHandler,
+    InputHandler,
+    OcrHandler,
+    ScreenshotHandler,
     SelectHandler,
+    SleepHandler,
+    StepExecutorRegistry,
+    StepHandler,
     WaitHandler,
     WaitUrlHandler,
-    EvalHandler,
-    ScreenshotHandler,
-    SleepHandler,
-    OcrHandler,
-    StepExecutorRegistry,
 )
 from app.tasks.validator import TaskValidator
-from app.tasks.executor import TaskExecutor
-from app.tasks.manager import TaskManager, normalize_task_id, is_valid_task_id
-
+from app.tasks.variable_resolver import VariableResolver
 
 # =====================================================================
 # StepConfig

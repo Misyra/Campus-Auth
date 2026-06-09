@@ -6,24 +6,22 @@
 from __future__ import annotations
 
 import socket
-from unittest.mock import patch, MagicMock
-
+from unittest.mock import MagicMock, patch
 
 from app.network.decision import (
-    check_pause,
-    check_network_status,
-    check_login_prerequisites,
-    is_network_available,
     check_campus_network_status,
+    check_login_prerequisites,
+    check_network_status,
+    check_pause,
+    is_network_available,
 )
 from app.network.probes import (
-    set_block_proxy,
     is_local_network_connected,
-    is_network_available_socket,
     is_network_available_http,
     is_network_available_portal,
+    is_network_available_socket,
+    set_block_proxy,
 )
-
 
 # =====================================================================
 # network_probes — set_block_proxy
@@ -529,15 +527,15 @@ class TestCheckCampusNetworkStatus:
 class TestNetworkTestImports:
     def test_import_all_symbols(self):
         from app.network.diagnostics import (
-            is_local_network_connected,
-            is_network_available_http,
-            is_network_available_socket,
-            set_block_proxy,
             check_campus_network_status,
             check_login_prerequisites,
             check_network_status,
             check_pause,
+            is_local_network_connected,
             is_network_available,
+            is_network_available_http,
+            is_network_available_socket,
+            set_block_proxy,
         )
 
         assert callable(is_local_network_connected)
@@ -557,7 +555,7 @@ class TestNetworkTestImports:
         assert len(nt.__all__) == 10
 
     def test_functions_match_original(self):
-        from app.network.diagnostics import is_network_available
         from app.network.decision import is_network_available as original
+        from app.network.diagnostics import is_network_available
 
         assert is_network_available is original

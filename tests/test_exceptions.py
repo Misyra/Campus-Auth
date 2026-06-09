@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.utils.exceptions import LoginCancelledError, DecryptionError
-
+from app.utils.exceptions import DecryptionError, LoginCancelledError
 
 # ── LoginCancelledError ──
 

@@ -11,25 +11,24 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from app.utils.config import ConfigValidator
-from app.services.config import (
-    _safe_decrypt,
-    _normalize_targets,
-    _normalize_headers_json,
-)
-from app.utils.logging import normalize_level as _normalize_level
-from app.utils.crypto import encrypt_password
 from app.schemas import (
-    MonitorConfigPayload,
-    ProfileSettings,
-    LogEntry,
-    ProfilesData,
-    SystemSettings,
     ActionResponse,
-    MonitorStatusResponse,
     AutoStartStatusResponse,
+    LogEntry,
+    MonitorConfigPayload,
+    MonitorStatusResponse,
+    ProfilesData,
+    ProfileSettings,
+    SystemSettings,
 )
-
+from app.services.config import (
+    _normalize_headers_json,
+    _normalize_targets,
+    _safe_decrypt,
+)
+from app.utils.config import ConfigValidator
+from app.utils.crypto import encrypt_password
+from app.utils.logging import normalize_level as _normalize_level
 
 # =====================================================================
 # 第一部分：ConfigValidator（原 test_config.py 前半部分）

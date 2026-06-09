@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import re
 import threading
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.utils.login import LoginAttemptHandler, SCREENSHOT_URL_PATTERN
-
+from app.utils.login import SCREENSHOT_URL_PATTERN, LoginAttemptHandler
 
 # ── fixtures ──
 

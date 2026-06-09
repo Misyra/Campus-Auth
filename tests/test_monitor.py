@@ -9,17 +9,16 @@ from __future__ import annotations
 import re
 import threading
 import time
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.utils.login import LoginAttemptHandler, SCREENSHOT_URL_PATTERN
 from app.core.monitor_core import (
     NetworkMonitorCore,
     NetworkState,
     RecoveryResult,
 )
-
+from app.utils.login import SCREENSHOT_URL_PATTERN, LoginAttemptHandler
 
 # ── 第一部分：LoginAttemptHandler（原 test_login.py）──
 
@@ -572,6 +571,6 @@ class TestDefaultPingTargets:
         """DEFAULT_PING_TARGETS 应与 constants.DEFAULT_NETWORK_TARGETS 一致"""
         from app.constants import DEFAULT_NETWORK_TARGETS
 
-        assert NetworkMonitorCore.DEFAULT_PING_TARGETS == DEFAULT_NETWORK_TARGETS.split(
+        assert DEFAULT_NETWORK_TARGETS.split(
             ","
-        )
+        ) == NetworkMonitorCore.DEFAULT_PING_TARGETS

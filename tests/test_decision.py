@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch, MagicMock
-
+from unittest.mock import MagicMock, patch
 
 from app.network.decision import (
-    check_pause,
-    check_network_status,
     check_login_prerequisites,
+    check_network_status,
+    check_pause,
     is_network_available,
 )
-
 
 # ── check_pause ──
 

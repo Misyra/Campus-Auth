@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
 
 from app.utils.file_helpers import atomic_write
-
 
 # ── atomic_write ──
 

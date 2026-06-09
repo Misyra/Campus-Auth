@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
 from app.tasks.manager import is_valid_task_id, normalize_task_id
-
 
 # ── is_valid_task_id ──
 

@@ -13,10 +13,10 @@ from unittest.mock import patch
 import pytest
 
 from app.workers.script_runner import (
-    ScriptRunner,
-    get_default_binary,
-    detect_available_binaries,
     DEFAULT_TIMEOUT,
+    ScriptRunner,
+    detect_available_binaries,
+    get_default_binary,
 )
 
 

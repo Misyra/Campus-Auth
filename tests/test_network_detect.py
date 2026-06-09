@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch, MagicMock
-
-import pytest
+from unittest.mock import patch
 
 from app.network.detect import detect_gateway_ip, detect_wifi_ssid
-
 
 # ── detect_gateway_ip ──
 

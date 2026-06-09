@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from app.services.uninstall import (
     CleanupItem,
@@ -13,7 +10,6 @@ from app.services.uninstall import (
     _dir_size_mb,
     _playwright_cache_dir,
 )
-
 
 # ── 数据类 ──
 

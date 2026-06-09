@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
 from unittest.mock import MagicMock
+
+from fastapi.testclient import TestClient
 
 from app.api.backup import router
 
@@ -21,7 +22,7 @@ class TestBackupValidationOrder:
         mock_profile_svc = MagicMock()
         mock_monitor_svc = MagicMock()
 
-        from app.deps import get_profile_service, get_monitor_service
+        from app.deps import get_monitor_service, get_profile_service
 
         app.dependency_overrides[get_profile_service] = lambda: mock_profile_svc
         app.dependency_overrides[get_monitor_service] = lambda: mock_monitor_svc
@@ -45,7 +46,7 @@ class TestBackupValidationOrder:
         mock_profile_svc = MagicMock()
         mock_monitor_svc = MagicMock()
 
-        from app.deps import get_profile_service, get_monitor_service
+        from app.deps import get_monitor_service, get_profile_service
 
         app.dependency_overrides[get_profile_service] = lambda: mock_profile_svc
         app.dependency_overrides[get_monitor_service] = lambda: mock_monitor_svc

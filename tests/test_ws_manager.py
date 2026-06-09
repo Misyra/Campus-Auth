@@ -5,13 +5,11 @@
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
 
 from app.ws_manager import WebSocketManager
-
 
 # =====================================================================
 # WebSocketManager
@@ -120,7 +118,7 @@ class TestWebSocketManager:
     @pytest.mark.asyncio
     async def test_send_safe_timeout_removes(self, manager: WebSocketManager):
         ws = AsyncMock()
-        ws.send_text.side_effect = asyncio.TimeoutError()
+        ws.send_text.side_effect = TimeoutError()
         await manager.connect(ws)
         await manager._send_safe(ws, "test")
         assert ws not in manager._connections

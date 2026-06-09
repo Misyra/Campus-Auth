@@ -13,7 +13,6 @@ import pytest
 
 from app.services.login_history import LoginHistoryEntry, LoginHistoryService
 
-
 # =====================================================================
 # LoginHistoryEntry
 # =====================================================================

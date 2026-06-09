@@ -16,55 +16,54 @@ from unittest.mock import patch
 
 import pytest
 
-# ── crypto ──
-from app.utils.crypto import (
-    encrypt_password,
-    decrypt_password,
-    mask_password,
-    is_encrypted,
-    save_password_field,
-)
-
-# ── config_helpers ──
-from app.utils.config_helpers import extract_profile_fields, assign_profile_fields
-
-# ── file_helpers ──
-from app.utils.file_helpers import atomic_write
-
-# ── platform_utils ──
-from app.utils.platform_utils import (
-    get_platform,
-    is_windows,
-    is_macos,
-    is_linux,
-    get_default_ua,
-)
-
 # ── str_to_bool ──
 from app.utils import str_to_bool
 
-# ── network_helpers ──
-from app.utils.network_helpers import parse_host_port
+# ── config_helpers ──
+from app.utils.config_helpers import assign_profile_fields, extract_profile_fields
 
-# ── version ──
-from app.version import get_project_version
-
-# ── time_utils ──
-from app.utils.time_utils import is_in_pause_period, get_runtime_stats
+# ── crypto ──
+from app.utils.crypto import (
+    decrypt_password,
+    encrypt_password,
+    is_encrypted,
+    mask_password,
+    save_password_field,
+)
 
 # ── env ──
 from app.utils.env import build_login_template_vars
 
 # ── exceptions ──
-from app.utils.exceptions import LoginCancelledError, DecryptionError
+from app.utils.exceptions import DecryptionError, LoginCancelledError
+
+# ── file_helpers ──
+from app.utils.file_helpers import atomic_write
 
 # ── logging ──
 from app.utils.logging import (
-    normalize_level,
     LogConfigCenter,
     get_logger,
+    normalize_level,
 )
 
+# ── network_helpers ──
+from app.utils.network_helpers import parse_host_port
+
+# ── platform_utils ──
+from app.utils.platform_utils import (
+    get_default_ua,
+    get_platform,
+    is_linux,
+    is_macos,
+    is_windows,
+)
+
+# ── time_utils ──
+from app.utils.time_utils import get_runtime_stats, is_in_pause_period
+
+# ── version ──
+from app.version import get_project_version
 
 # =====================================================================
 # crypto
@@ -294,7 +293,7 @@ class TestAtomicWrite:
     def test_cleanup_on_write_error(self, tmp_path):
         target = tmp_path / "test.txt"
         with patch(
-            "app.utils.file_helpers.os.fdopen", side_effect=IOError("disk full")
+            "app.utils.file_helpers.os.fdopen", side_effect=OSError("disk full")
         ):
             with pytest.raises(IOError, match="disk full"):
                 atomic_write(str(target), "content")
@@ -871,7 +870,7 @@ class TestDefaultConstants:
 
     def test_schemas_uses_constant(self):
         """MonitorConfigPayload 默认值应引用常量"""
-        from app.constants import DEFAULT_NETWORK_TARGETS, DEFAULT_HTTP_TARGETS
+        from app.constants import DEFAULT_HTTP_TARGETS, DEFAULT_NETWORK_TARGETS
         from app.schemas import MonitorConfigPayload
 
         m = MonitorConfigPayload()

@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import patch
 
-from app.services.config import (
-    _safe_decrypt,
-    _decrypt_password_field,
-    _normalize_targets,
-    _normalize_headers_json,
-)
+import pytest
 
+from app.services.config import (
+    _decrypt_password_field,
+    _normalize_headers_json,
+    _normalize_targets,
+    _safe_decrypt,
+)
 
 # ── _safe_decrypt ──
 

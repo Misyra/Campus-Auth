@@ -5,7 +5,6 @@ from __future__ import annotations
 import threading
 from unittest.mock import MagicMock, patch
 
-
 from app.workers.playwright_worker import PlaywrightWorker
 
 

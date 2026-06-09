@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-from app.services.task import _check_dangerous_steps, _DANGEROUS_STEP_TYPES
-
+from app.services.task import _DANGEROUS_STEP_TYPES, _check_dangerous_steps
 
 # ── _check_dangerous_steps ──
 

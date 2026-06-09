@@ -7,14 +7,13 @@ from __future__ import annotations
 
 import threading
 import time
-from unittest.mock import patch, MagicMock
-
+from unittest.mock import MagicMock, patch
 
 from app.services.monitor import (
     MonitorCmdType,
     MonitorCommand,
-    StatusSnapshot,
     MonitorService,
+    StatusSnapshot,
 )
 
 

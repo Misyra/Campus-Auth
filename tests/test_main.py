@@ -14,7 +14,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ══════════════════════════════════════════════════════════════════════
 #  辅助工具
 # ══════════════════════════════════════════════════════════════════════
@@ -277,7 +276,7 @@ class TestWritePid:
     """_write_pid — 原子写入。"""
 
     def test_writes_pid_file(self, tmp_pid_dir):
-        from app.utils.process import write_pid, get_pid_file
+        from app.utils.process import get_pid_file, write_pid
 
         write_pid()
         pid_file = get_pid_file()
@@ -338,8 +337,8 @@ class TestCmdStatus:
 
     def test_stale_pid_file(self, tmp_pid_dir, capsys):
         """有残留 PID 文件但进程已死。"""
-        from main import _cmd_status
         from app.utils.process import get_pid_file
+        from main import _cmd_status
 
         _write_raw_pid(tmp_pid_dir, "1234\npython.exe|2026-01-01")
 

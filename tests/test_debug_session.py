@@ -6,11 +6,10 @@ from collections import deque
 
 from app.services.debug_session import (
     DebugSession,
-    empty_debug_session,
-    debug_to_response,
     _next_debug_gen,
+    debug_to_response,
+    empty_debug_session,
 )
-
 
 # ── empty_debug_session ──
 

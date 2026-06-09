@@ -3,19 +3,15 @@
 from __future__ import annotations
 
 import sys
-from unittest.mock import patch
-
-import pytest
 
 from app.utils.platform_utils import (
-    is_windows,
-    is_macos,
-    is_linux,
-    get_platform,
-    get_default_ua,
     CREATE_NO_WINDOW_FLAG,
+    get_default_ua,
+    get_platform,
+    is_linux,
+    is_macos,
+    is_windows,
 )
-
 
 # ── 平台检测 ──
 

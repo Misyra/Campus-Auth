@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,11 +14,10 @@ from fastapi.testclient import TestClient
 from app.schemas import (
     MonitorConfigPayload,
     MonitorStatusResponse,
-    ProfileSettings,
     ProfilesData,
+    ProfileSettings,
     SystemSettings,
 )
-
 
 # =====================================================================
 # 共用 fixture：创建测试客户端

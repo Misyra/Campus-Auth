@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import sys
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-import pytest
-
-from app.utils.shell_utils import detect_shells, detect_binaries, get_default_shell
-
+from app.utils.shell_utils import detect_binaries, detect_shells, get_default_shell
 
 # ── detect_shells ──
 

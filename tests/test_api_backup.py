@@ -3,14 +3,10 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-
-import pytest
+from unittest.mock import patch
 
 from app.api.backup import _cleanup_old_backups
 from app.constants import BACKUP_FILENAME_PATTERN
-
 
 # ── _cleanup_old_backups ──
 

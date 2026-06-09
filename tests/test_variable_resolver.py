@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.tasks.models import TaskConfig, StepError
+from app.tasks.models import StepError, TaskConfig
 from app.tasks.variable_resolver import VariableResolver
-
 
 # ── fixtures ──
 

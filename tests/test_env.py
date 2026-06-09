@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
 from app.utils.env import build_login_template_vars
-
 
 # ── build_login_template_vars ──
 

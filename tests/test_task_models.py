@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-from app.tasks.models import StepConfig, TaskConfig, StepType
-
+from app.tasks.models import StepConfig, StepType, TaskConfig
 
 # ── StepConfig.from_dict ──
 

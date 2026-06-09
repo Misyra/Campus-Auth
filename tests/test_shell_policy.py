@@ -7,8 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.utils.shell_policy import ShellCommandPolicy, _MAX_TIMEOUT, _MIN_TIMEOUT
-
+from app.utils.shell_policy import _MAX_TIMEOUT, _MIN_TIMEOUT, ShellCommandPolicy
 
 # =====================================================================
 # 白名单验证
@@ -262,13 +261,12 @@ class TestRunAsync:
     @pytest.mark.asyncio
     async def test_timeout_returns_minus_one(self):
         """超时应返回 returncode=-1 并 kill 进程。"""
-        import asyncio as _asyncio
         from unittest.mock import AsyncMock
 
         policy = ShellCommandPolicy(allowlist=["/bin/sh"])
 
         mock_proc = MagicMock()
-        mock_proc.communicate = AsyncMock(side_effect=_asyncio.TimeoutError())
+        mock_proc.communicate = AsyncMock(side_effect=TimeoutError())
         mock_proc.kill = MagicMock()
         mock_proc.wait = AsyncMock()
 
@@ -278,7 +276,7 @@ class TestRunAsync:
         ):
             with patch(
                 "app.utils.shell_policy.asyncio.wait_for",
-                side_effect=_asyncio.TimeoutError(),
+                side_effect=TimeoutError(),
             ):
                 code, out, err = await policy.run(["/bin/sh", "-c", "sleep 999"])
                 assert code == -1

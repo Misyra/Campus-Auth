@@ -3,12 +3,8 @@
 from __future__ import annotations
 
 import threading
-from unittest.mock import patch
 
-import pytest
-
-from app.network.probes import set_block_proxy, is_block_proxy
-
+from app.network.probes import is_block_proxy, set_block_proxy
 
 # ── set_block_proxy / is_block_proxy ──
 

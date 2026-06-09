@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import datetime
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-import pytest
-
-from app.utils.time_utils import is_in_pause_period, get_runtime_stats
-
+from app.utils.time_utils import get_runtime_stats, is_in_pause_period
 
 # ── is_in_pause_period ──
 
