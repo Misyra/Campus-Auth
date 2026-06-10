@@ -383,7 +383,7 @@
 /* 当下拉菜单展开时，提升所在卡片的层级，避免被后续卡片遮挡 */
 .card:has(.custom-select.open) {
   position: relative;
-  z-index: 10;
+  z-index: var(--z-dropdown);
 }
 
 .custom-select-trigger {
@@ -596,11 +596,6 @@
 .toggle input:checked + .toggle-slider::after {
   transform: translateX(20px);
   background: var(--bg-primary);
-}
-
-.toggle-label {
-  font-size: 14px;
-  color: var(--text-primary);
 }
 
 .empty-state {
@@ -1121,12 +1116,12 @@
 /* 危险按钮幽灵样式 */
 .btn-danger-ghost {
     background: transparent;
-    color: var(--color-danger, #ef4444);
-    border: 1px solid var(--color-danger, #ef4444);
+    color: var(--error);
+    border: 1px solid var(--error);
     transition: background-color 0.2s ease, color 0.2s ease;
 }
 .btn-danger-ghost:hover {
-    background: var(--color-danger, #ef4444);
+    background: var(--error);
     color: white;
 }
 
@@ -1160,7 +1155,7 @@
   font-family: system-ui;
   color: var(--text-primary);
   background: var(--bg-primary);
-  z-index: 9999;
+  z-index: var(--z-max);
 }
 
 .exit-overlay svg {
@@ -1176,6 +1171,11 @@
   margin: 0;
   color: var(--text-secondary);
   font-size: 14px;
+}
+
+.exit-overlay .btn {
+  margin-top: 12px;
+  min-width: 140px;
 }
 
 /* ── 提示条 ── */
@@ -1211,43 +1211,3 @@
   text-decoration: underline;
 }
 
-/* ── OCR 状态标签 ── */
-
-.ocr-status-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1;
-}
-
-.ocr-status-badge.installed {
-  background: rgba(52, 211, 153, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(52, 211, 153, 0.3);
-}
-
-.ocr-status-badge.not-installed {
-  background: rgba(251, 191, 36, 0.15);
-  color: #fbbf24;
-  border: 1px solid rgba(251, 191, 36, 0.3);
-}
-
-.ocr-description {
-  color: var(--text-secondary);
-  font-size: 13px;
-  margin: 8px 0;
-}
-
-.ocr-size-hint {
-  color: var(--text-tertiary);
-  font-size: 12px;
-  margin-bottom: 8px;
-}
-
-.ocr-actions {
-  display: flex;
-  gap: 8px;
-}

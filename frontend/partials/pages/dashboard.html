@@ -1,4 +1,4 @@
-<div v-if="currentPage === 'dashboard'" class="page-content fade-in" :class="{ 'has-banner': status.monitoring }">
+<div v-if="currentPage === 'dashboard'" class="page-content" :class="{ 'has-banner': status.monitoring }">
   <div v-if="status.monitoring" class="network-status-banner" :class="networkStatus">
     <span class="status-dot"></span>
     <span>{{ networkStatusText }}</span>

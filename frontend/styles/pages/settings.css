@@ -235,7 +235,7 @@
   flex-shrink: 0;
 }
 
-.btn-icon-only {
+.settings-page .btn-icon-only {
   padding: 6px;
   display: inline-flex;
   align-items: center;
@@ -779,30 +779,41 @@
   margin-bottom: 8px;
 }
 
-.btn-sm {
+.settings-page .btn-sm {
   padding: 4px 10px;
   font-size: 12px;
   border-radius: var(--radius-sm);
 }
 
-.btn-secondary {
+.settings-page .btn-secondary {
   background: var(--bg-card-elevated);
   color: var(--text-primary);
   border: 1px solid var(--border);
 }
 
-.btn-secondary:hover {
+.settings-page .btn-secondary:hover {
   background: var(--bg-hover);
   border-color: var(--border-hover);
 }
 
-.btn-ghost {
+.settings-page .btn-ghost {
   background: transparent;
   color: var(--text-secondary);
   border: 1px solid transparent;
 }
 
-.btn-ghost:hover {
+.settings-page .btn-ghost:hover {
   color: var(--text-primary);
   background: var(--bg-hover);
+}
+
+/* Shell 自定义路径输入 */
+.shell-custom-input {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.shell-custom-input input[type="text"] {
+  flex: 1;
 }
