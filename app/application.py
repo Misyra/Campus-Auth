@@ -42,6 +42,7 @@ from app.constants import FRONTEND_DIR, LOGS_DIR, PROJECT_ROOT, TEMP_DIR
 from app.container import ServiceContainer
 from app.utils.logging import LogConfigCenter, get_logger
 from app.version import get_project_version
+from loguru import logger
 
 http_logger = get_logger("http", source="backend")
 startup_logger = get_logger("startup", source="backend")
@@ -373,6 +374,19 @@ def run(
         _access_log_event.set()
     else:
         _access_log_event.clear()
+
+    # 将 uvicorn 的标准 logging 路由到 loguru，确保日志格式统一
+    class _UvicornLogHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            logger.opt(exception=record.exc_info).log(
+                record.levelno, record.getMessage()
+            )
+
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        log = logging.getLogger(name)
+        log.handlers.clear()
+        log.propagate = False
+        log.addHandler(_UvicornLogHandler())
 
     # 使用 Server 实例而非 uvicorn.run()，以便 _wait_shutdown 可通过
     # server.should_exit = True 触发优雅关闭（避免 SIGTERM → os._exit 路径）
