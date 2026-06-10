@@ -414,6 +414,7 @@ def _update_system_settings(
             "network_check_timeout",
             "app_port",
             "shell_path",
+            "lightweight_mode",
         ],
     )
     # 需要归一化处理的系统字段
