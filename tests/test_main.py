@@ -738,6 +738,7 @@ class TestRunServer:
                 minimize_to_tray=False,
                 login_then_exit=False,
                 auto_open_browser=True,
+                lightweight_mode=False,
             )
             mock_ps_cls.return_value = mock_ps
 
@@ -768,6 +769,7 @@ class TestRunServer:
                 minimize_to_tray=True,
                 login_then_exit=False,
                 auto_open_browser=False,
+                lightweight_mode=False,
             )
             mock_ps_cls.return_value = mock_ps
             _run_server()
@@ -799,6 +801,7 @@ class TestRunServer:
                 minimize_to_tray=False,
                 login_then_exit=True,
                 auto_open_browser=True,
+                lightweight_mode=False,
             )
             mock_ps_cls.return_value = mock_ps
 
@@ -841,6 +844,7 @@ class TestSignalHandler:
                 minimize_to_tray=False,
                 login_then_exit=False,
                 auto_open_browser=False,
+                lightweight_mode=False,
             )
             mock_ps_cls.return_value = mock_ps
             _run_server()
@@ -885,6 +889,7 @@ class TestSignalHandler:
                 minimize_to_tray=False,
                 login_then_exit=False,
                 auto_open_browser=False,
+                lightweight_mode=False,
             )
             mock_ps_cls.return_value = mock_ps
             _run_server()
