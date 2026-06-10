@@ -115,6 +115,28 @@ class PlaywrightWorker:
         # _wake_event 用于立即唤醒 _async_run 协程处理新命令
         self._wake_event: asyncio.Event | None = None
 
+    # ── 只读属性（供同线程调用者访问，如 BrowserContextManager）──
+
+    @property
+    def page(self) -> Any:
+        """当前页面引用（仅限 Worker 事件循环线程内访问）"""
+        return self._page
+
+    @property
+    def browser(self) -> Any:
+        """浏览器实例（仅限 Worker 事件循环线程内访问）"""
+        return self._browser
+
+    @property
+    def context(self) -> Any:
+        """浏览器上下文（仅限 Worker 事件循环线程内访问）"""
+        return self._context
+
+    @property
+    def playwright_instance(self) -> Any:
+        """Playwright 实例（仅限 Worker 事件循环线程内访问）"""
+        return self._playwright
+
     # ── 公共生命周期方法 ──
 
     def start(self) -> None:

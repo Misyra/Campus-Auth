@@ -910,10 +910,16 @@ class TestNetworkStateSetInConsumer:
         svc._pure_mode = False
         svc._pure_mode_lock = threading.Lock()
 
-        # 模拟 monitor_core
+        # 模拟 monitor_core（_update_state 需要实际更新属性）
         mock_core = MagicMock()
         mock_core.monitoring = True
         mock_core.network_state = NetworkState.UNKNOWN
+
+        def _fake_update_state(**kwargs):
+            for k, v in kwargs.items():
+                setattr(mock_core, k, v)
+
+        mock_core._update_state = _fake_update_state
         svc._monitor_core = mock_core
 
         # 模拟 Worker 返回成功

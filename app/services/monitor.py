@@ -132,6 +132,25 @@ class MonitorService:
         )
         self._consumer_thread.start()
 
+    # ── 队列入队辅助 ──
+
+    def _enqueue(self, cmd: MonitorCommand, retries: int = 2) -> bool:
+        """尝试将命令入队，带重试。返回 True 表示成功。"""
+        import time as _time
+
+        for i in range(retries):
+            try:
+                self._cmd_queue.put_nowait(cmd)
+                return True
+            except queue.Full:
+                if i < retries - 1:
+                    _time.sleep(0.05)
+                else:
+                    service_logger.warning(
+                        "命令队列已满 (type={})，操作被跳过", cmd.type
+                    )
+        return False
+
     # ── 队列消费者（在专用守护线程中运行）──
 
     # 命令类型 → handler 方法名
@@ -278,7 +297,7 @@ class MonitorService:
                 # 统一在消费者线程设置 network_state（BE-7 修复）
                 core = self._monitor_core
                 if core is not None and core.monitoring:
-                    core.network_state = NetworkState.CONNECTED
+                    core._update_state(network_state=NetworkState.CONNECTED)
             else:
                 error_msg = result.error or "登录失败"
                 cmd.response_data = (False, error_msg)
@@ -341,15 +360,12 @@ class MonitorService:
             service_logger.exception("自动切换方案配置加载失败: {}", profile_name)
             return
         if self._monitor_core and self._monitor_core.monitoring:
-            try:
-                self._cmd_queue.put_nowait(
-                    MonitorCommand(
-                        type=MonitorCmdType.RELOAD,
-                        data={"config": self._copy_runtime_config()},
-                    )
+            self._enqueue(
+                MonitorCommand(
+                    type=MonitorCmdType.RELOAD,
+                    data={"config": self._copy_runtime_config()},
                 )
-            except queue.Full:
-                service_logger.warning("命令队列已满，跳过 reload 命令入队")
+            )
         new_url = self._runtime_config.get("auth_url", "")
         new_user = self._runtime_config.get("username", "")
         self.record_log(
@@ -525,17 +541,13 @@ class MonitorService:
         self._reload_config_internal()
 
         # Consumer handles the hot-update on the monitor core
-        if self._is_monitoring:
-            try:
-                self._cmd_queue.put_nowait(
-                    MonitorCommand(
-                        type=MonitorCmdType.RELOAD,
-                        data={"config": self._copy_runtime_config()},
-                    )
-                )
-            except queue.Full:
-                service_logger.warning("命令队列已满，跳过 reload 命令入队")
-                return
+        if self._is_monitoring and not self._enqueue(
+            MonitorCommand(
+                type=MonitorCmdType.RELOAD,
+                data={"config": self._copy_runtime_config()},
+            )
+        ):
+            return
 
         service_logger.info("配置已从 settings.json 重载")
 
@@ -560,19 +572,16 @@ class MonitorService:
         )
 
         if self._is_monitoring:
-            try:
-                self._cmd_queue.put_nowait(
-                    MonitorCommand(
-                        type=MonitorCmdType.PROFILE_SWITCH,
-                        data={
-                            "profile": profile_id,
-                            "config": self._copy_runtime_config(),
-                            "pure_mode": self.pure_mode,
-                        },
-                    )
+            if not self._enqueue(
+                MonitorCommand(
+                    type=MonitorCmdType.PROFILE_SWITCH,
+                    data={
+                        "profile": profile_id,
+                        "config": self._copy_runtime_config(),
+                        "pure_mode": self.pure_mode,
+                    },
                 )
-            except queue.Full:
-                service_logger.warning("命令队列已满，跳过 profile_switch 命令入队")
+            ):
                 return
             self.record_log(
                 "监控正在按新方案重启",
@@ -590,43 +599,31 @@ class MonitorService:
             return False, f"配置无效: {error}"
 
         config = self._copy_runtime_config()
-        try:
-            self._cmd_queue.put_nowait(
-                MonitorCommand(
-                    type=MonitorCmdType.START,
-                    data={"config": config, "pure_mode": self.pure_mode},
-                )
+        if not self._enqueue(
+            MonitorCommand(
+                type=MonitorCmdType.START,
+                data={"config": config, "pure_mode": self.pure_mode},
             )
-        except queue.Full:
-            service_logger.warning("命令队列已满，跳过 start 命令入队")
+        ):
             return False, "队列已满"
 
         return True, "监控已启动"
 
     def _on_profile_switch(self, profile_name: str) -> None:
         """自动切换方案时的回调（从监控线程调用）。"""
-        try:
-            self._cmd_queue.put_nowait(
-                MonitorCommand(
-                    type=MonitorCmdType.PROFILE_RELOAD,
-                    data={"profile_name": profile_name},
-                )
+        self._enqueue(
+            MonitorCommand(
+                type=MonitorCmdType.PROFILE_RELOAD,
+                data={"profile_name": profile_name},
             )
-        except queue.Full:
-            service_logger.warning(
-                "命令队列已满(qsize={})，跳过 profile_reload 命令入队",
-                self._cmd_queue.qsize(),
-            )
+        )
 
     def stop_monitoring(self) -> tuple[bool, str]:
         service_logger.debug("收到停止监控请求")
         if not self._is_monitoring:
             return False, "监控未运行"
 
-        try:
-            self._cmd_queue.put_nowait(MonitorCommand(type=MonitorCmdType.STOP))
-        except queue.Full:
-            service_logger.warning("命令队列已满，跳过 stop 命令入队")
+        if not self._enqueue(MonitorCommand(type=MonitorCmdType.STOP)):
             return False, "队列已满"
         return True, "监控已停止"
 
@@ -695,13 +692,10 @@ class MonitorService:
                 },
                 response_event=threading.Event(),
             )
-            try:
-                self._cmd_queue.put_nowait(cmd)
-                cmd_in_queue = True
-            except queue.Full:
-                service_logger.warning("命令队列已满，跳过 login 命令入队")
+            if not self._enqueue(cmd):
                 self._login_in_progress.clear()
                 return False, "队列已满"
+            cmd_in_queue = True
         except Exception:
             if not cmd_in_queue:
                 self._login_in_progress.clear()

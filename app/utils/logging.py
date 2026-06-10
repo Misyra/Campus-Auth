@@ -217,6 +217,9 @@ class DateRotatingSink:
 
     def write(self, message):
         """loguru sink 接口 — 接收格式化后的消息。"""
+        needs_cleanup = False
+        cleanup_cutoff = 0.0
+
         with self._emit_lock:
             try:
                 today = datetime.now().strftime("%Y-%m-%d")
@@ -226,11 +229,12 @@ class DateRotatingSink:
                     _, path = self._get_log_path()
                     self._open_file(path)
 
-                # 每小时运行一次过期日期目录清理
+                # 每小时运行一次过期日期目录清理（标记后在锁外执行）
                 now = time.time()
                 if now - self._last_cleanup > 3600:
                     self._last_cleanup = now
-                    self._cleanup_old_dirs(now)
+                    needs_cleanup = True
+                    cleanup_cutoff = now - self._retention * 86400
 
                 if self._stream is not None:
                     text = str(message).rstrip("\n") + "\n"
@@ -241,6 +245,10 @@ class DateRotatingSink:
             except Exception as exc:
                 # 不能用 logger — 本方法是 loguru sink，调用 logger 会触发自身导致无限递归
                 print(f"[LOG ERROR] 写入日志文件失败: {exc}", file=sys.stderr)
+
+        # 锁外执行清理（不影响日志写入性能）
+        if needs_cleanup:
+            self._cleanup_old_dirs(cleanup_cutoff)
 
     def _rotate_file(self) -> None:
         """当日志文件超过大小上限时，滚动备份并重新打开"""
@@ -268,9 +276,8 @@ class DateRotatingSink:
             # 不能用 logger — 本方法由 write() 调用，同属 sink 内部，调用 logger 会无限递归
             print(f"[LOG ERROR] 日志轮转失败: {exc}", file=sys.stderr)
 
-    def _cleanup_old_dirs(self, now: float) -> None:
+    def _cleanup_old_dirs(self, cutoff: float) -> None:
         """清理超过保留天数的日期目录（含其中的 app.log 和 screenshots/）"""
-        cutoff = now - self._retention * 86400
         base = Path(self._log_dir)
         if not base.exists():
             return
