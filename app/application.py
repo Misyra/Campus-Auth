@@ -126,7 +126,9 @@ async def lifespan(app_instance):
         "FastAPI 启动: 完成，耗时 {:.3f}s",
         time.perf_counter() - start,
     )
-    yield
+
+    # 等待 shutdown_event 被设置（由 /api/shutdown 触发）
+    await shutdown_event.wait()
 
     startup_logger.info("FastAPI 关闭: 正在停止服务...")
     await services.shutdown()
