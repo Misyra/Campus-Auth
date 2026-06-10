@@ -5,6 +5,34 @@
 
 ## 2026-06-11
 
+### refactor: 配置切换架构简化，移除运行时热更新
+
+将配置切换从"运行时热更新"模式重构为"停止→切换→重启"模式，大幅简化代码。
+
+**移除的命令类型**：
+- `MonitorCmdType.RELOAD` — 配置热更新
+- `MonitorCmdType.PROFILE_SWITCH` — 方案切换
+- `MonitorCmdType.PROFILE_RELOAD` — 方案重载
+
+**移除的方法**（monitor.py，~130 行）：
+- `_handle_reload()` / `_handle_profile_switch()` / `_handle_profile_reload()` — 3 个命令处理器
+- `_prepare_command_config()` — 配置预处理
+- `_on_profile_switch()` — 方案切换回调
+
+**移除的方法**（monitor_core.py，~20 行）：
+- `update_config()` — 热更新运行时配置
+- `set_profile_service()` 的 `on_switch` 参数
+
+**新增逻辑**：
+- `_profile_switch_requested` 标志位：检测到方案变化时设置，监控循环退出
+- `_start_monitor_core()` 自动重启：监控线程结束后检查标志位，自动重载配置并重启
+
+**收益**：
+- 移除 ~150 行代码
+- 命令类型从 7 种减为 4 种（START/STOP/LOGIN/SHUTDOWN）
+- 配置只在启动时加载一次，运行期间不变
+- 消除深拷贝、热更新、回调等复杂机制
+
 ### fix: 修复 Windows SSID 十六进制编码解码问题
 
 `detect.py`：当 WiFi 名称包含非 ASCII 字符（中文、日文、特殊符号等）时，`netsh` 可能输出十六进制编码的 SSID（如 `4369616C6C6F...`）。添加十六进制检测和 UTF-8 解码逻辑，正确还原原始 SSID。

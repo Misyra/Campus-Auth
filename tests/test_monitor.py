@@ -351,20 +351,6 @@ class TestMonitorCoreSnapshot:
         assert snap["network_state"] == "connected"
 
 
-class TestMonitorCoreUpdateConfig:
-    def test_update_config(self):
-        core = NetworkMonitorCore(config={"old": "value"})
-        new_config = {"new": "value"}
-        core.update_config(new_config)
-        assert core.config == new_config
-
-    def test_update_config_clears_cache(self):
-        core = NetworkMonitorCore()
-        core._test_sites_cache = [("8.8.8.8", 53)]
-        core.update_config({})
-        assert core._test_sites_cache is None
-
-
 class TestMonitorCoreGetRetryConfig:
     def test_default_config(self):
         core = NetworkMonitorCore()

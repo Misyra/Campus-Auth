@@ -99,9 +99,9 @@ class NetworkMonitorCore:
 
         # 自动切换相关
         self._profile_service: ProfileService | None = None
-        self._on_profile_switch: Callable[[str], None] | None = None
         self._last_profile_id: str | None = None
         self._last_gateway_check_time: float = 0
+        self._profile_switch_requested: bool = False
 
     def log_message(
         self, message: str, level: str = "INFO", exc_info: bool = False
@@ -147,25 +147,11 @@ class NetworkMonitorCore:
                 "status_detail": self.status_detail,
             }
 
-    def set_profile_service(
-        self,
-        profile_service: ProfileService,
-        on_switch: Callable[[str], None] | None = None,
-    ) -> None:
+    def set_profile_service(self, profile_service: ProfileService) -> None:
         """设置 profile 服务用于自动切换"""
         self._profile_service = profile_service
-        self._on_profile_switch = on_switch
         if profile_service:
             self._last_profile_id = profile_service.get_active_profile_id()
-
-    def update_config(self, new_config: dict[str, Any]) -> None:
-        """热更新运行时配置（方案切换时调用）"""
-        self.log_message("运行时配置已更新 (热更新)", "INFO")
-        self.config = new_config
-        self._test_sites_cache = None  # 清除测试站点缓存
-        # 同步 block_proxy 到 network_test 模块，决定 HTTP 客户端是否信任系统代理
-        block_proxy = self.config.get("block_proxy", True)
-        set_block_proxy(block_proxy if block_proxy is not None else True)
 
     def _get_monitor_interval(self) -> int:
         """获取当前配置的检测间隔（秒）。"""
@@ -585,7 +571,10 @@ class NetworkMonitorCore:
         return parse_host_port(_targets)
 
     def _check_profile_switch(self) -> None:
-        """检测网关 IP 并自动切换方案（带冷却时间）"""
+        """检测网关 IP 并自动切换方案（带冷却时间）。
+
+        检测到方案变化时设置标志位并停止监控循环，由外部重启。
+        """
         if not self._profile_service:
             return
 
@@ -623,8 +612,10 @@ class NetworkMonitorCore:
                     # 方案可能在检测后被删除，回退缓存状态
                     self._last_profile_id = self._profile_service.load().active_profile
                     self.log_message(f"方案切换失败: {msg}", "WARNING")
-                elif self._on_profile_switch:
-                    self._on_profile_switch(profile_name)
+                else:
+                    # 方案切换成功，设置标志位并停止监控循环
+                    self._profile_switch_requested = True
+                    self._stop_event.set()
         except Exception as exc:
             self.log_message(f"方案切换检测异常: {exc}", "WARNING")
 

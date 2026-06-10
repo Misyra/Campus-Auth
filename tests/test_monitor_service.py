@@ -702,68 +702,6 @@ class TestSaveProfileApplyId:
 # ── MonitorService shutdown 和队列行为测试（原 test_monitor_service_shutdown.py）──
 
 
-class TestProfileReloadNoDeadlock:
-    """_handle_profile_reload 队列满时不阻塞测试"""
-
-    def test_profile_reload_no_self_deadlock(self):
-        """测试队列满时 _handle_profile_reload 不会阻塞"""
-        # 创建 MonitorService 实例
-        svc = MonitorService.__new__(MonitorService)
-        svc._cmd_queue = queue.Queue(maxsize=2)  # 小队列便于测试
-        svc._runtime_config = {"auth_url": "http://test.com", "username": "test"}
-        svc._monitor_core = MagicMock()
-        svc._monitor_core.monitoring = True
-
-        # 填满队列
-        svc._cmd_queue.put_nowait(MonitorCommand(type=MonitorCmdType.RELOAD))
-        svc._cmd_queue.put_nowait(MonitorCommand(type=MonitorCmdType.RELOAD))
-
-        # 创建命令
-        cmd = MonitorCommand(
-            type=MonitorCmdType.PROFILE_RELOAD, data={"profile_name": "test"}
-        )
-
-        # 模拟 _reload_config_internal
-        with (
-            patch.object(svc, "_reload_config_internal"),
-            patch.object(svc, "_copy_runtime_config", return_value={}),
-            patch.object(svc, "record_log"),
-        ):
-            # 调用 _handle_profile_reload，应该不阻塞
-            import time
-
-            start = time.time()
-            svc._handle_profile_reload(cmd)
-            elapsed = time.time() - start
-
-        # 验证方法在 1 秒内返回（不阻塞）
-        assert elapsed < 1.0, f"_handle_profile_reload 阻塞了 {elapsed:.2f}s"
-
-    def test_profile_reload_queue_not_full(self):
-        """测试队列未满时正常入队"""
-        svc = MonitorService.__new__(MonitorService)
-        svc._cmd_queue = queue.Queue(maxsize=50)
-        svc._runtime_config = {"auth_url": "http://test.com", "username": "test"}
-        svc._monitor_core = MagicMock()
-        svc._monitor_core.monitoring = True
-
-        cmd = MonitorCommand(
-            type=MonitorCmdType.PROFILE_RELOAD, data={"profile_name": "test"}
-        )
-
-        with (
-            patch.object(svc, "_reload_config_internal"),
-            patch.object(svc, "_copy_runtime_config", return_value={}),
-            patch.object(svc, "record_log"),
-        ):
-            svc._handle_profile_reload(cmd)
-
-        # 验证 reload 命令已入队
-        assert svc._cmd_queue.qsize() == 1
-        queued_cmd = svc._cmd_queue.get_nowait()
-        assert queued_cmd.type == "reload"
-
-
 class TestShutdownSynchronous:
     """shutdown 同步等待测试"""
 
@@ -874,7 +812,7 @@ class TestStartMonitoringPutNowait:
         svc._start_stop_lock = threading.Lock()
 
         # 填满队列
-        svc._cmd_queue.put_nowait(MonitorCommand(type=MonitorCmdType.RELOAD))
+        svc._cmd_queue.put_nowait(MonitorCommand(type=MonitorCmdType.START))
 
         with (
             patch(
