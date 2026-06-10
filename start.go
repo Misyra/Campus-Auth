@@ -8,13 +8,20 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 )
 
 const (
-	uvVersion  = "0.7.3"
-	uvFilename = "uv-x86_64-pc-windows-msvc.zip"
-	githubURL  = "https://github.com/astral-sh/uv/releases/download/" + uvVersion + "/" + uvFilename
+	uvVersion = "0.7.3"
 )
+
+// getUvFilename 根据系统架构返回对应的 uv 文件名
+func getUvFilename() string {
+	if runtime.GOARCH == "arm64" {
+		return "uv-aarch64-pc-windows-msvc.zip"
+	}
+	return "uv-x86_64-pc-windows-msvc.zip"
+}
 
 var mirrors = []string{
 	"https://ghfast.top/",
@@ -44,11 +51,15 @@ func main() {
 
 	// 解析参数
 	installOnly := false
+	noPause := false
 	var extraArgs []string
 	for _, arg := range os.Args[1:] {
-		if arg == "--install-only" {
+		switch arg {
+		case "--install-only":
 			installOnly = true
-		} else {
+		case "--no-pause":
+			noPause = true
+		default:
 			extraArgs = append(extraArgs, arg)
 		}
 	}
@@ -63,7 +74,7 @@ func main() {
 		fmt.Printf("[X] 依赖安装失败: %v\n", err)
 		fmt.Println("    手动运行: uv sync")
 		fmt.Println("    如 uv.lock 损坏: uv lock --upgrade")
-		pause()
+		pause(noPause)
 		os.Exit(1)
 	}
 
@@ -85,7 +96,7 @@ func main() {
 	args := append([]string{"run", "main.py"}, extraArgs...)
 	if err := runCommand(uvCmd, args...); err != nil {
 		fmt.Printf("[X] 启动失败: %v\n", err)
-		pause()
+		pause(noPause)
 		os.Exit(1)
 	}
 }
@@ -119,7 +130,10 @@ func downloadUv(uvDir, uvExe string) error {
 		return fmt.Errorf("需要 tar 命令（Windows 10 1803+ 自带）\n    请手动安装 uv: https://docs.astral.sh/uv/")
 	}
 
-	fmt.Printf("正在下载 uv %s...\n", uvVersion)
+	uvFilename := getUvFilename()
+	githubURL := "https://github.com/astral-sh/uv/releases/download/" + uvVersion + "/" + uvFilename
+
+	fmt.Printf("正在下载 uv %s (%s)...\n", uvVersion, runtime.GOARCH)
 
 	if err := os.MkdirAll(uvDir, 0755); err != nil {
 		return fmt.Errorf("创建目录失败: %v", err)
@@ -188,12 +202,15 @@ func runCommand(name string, args ...string) error {
 // fatal 输出错误信息并退出
 func fatal(format string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
-	pause()
 	os.Exit(1)
 }
 
-// pause 等待用户按键
-func pause() {
+// pause 等待用户按键（CI 环境或 noPause=true 时跳过）
+func pause(noPause bool) {
+	// 检测 CI 环境变量
+	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" || noPause {
+		return
+	}
 	fmt.Print("\n按回车键继续...")
 	fmt.Scanln()
 }
