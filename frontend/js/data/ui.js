@@ -5,6 +5,7 @@ export function uiData() {
     showMoreNav: false,
     showWizard: false,
     wizardStep: 1,
+    agreedToTerms: false,
     currentSettingsTab: 'account',
     isLoading: true,
     fullscreenSrc: '',

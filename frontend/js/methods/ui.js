@@ -85,6 +85,11 @@ export const uiMethods = {
     this._showToast(success, message);
   },
   nextWizardStep() {
+    // 第 1 步需要同意协议
+    if (this.wizardStep === 1 && !this.agreedToTerms) {
+      this.toastOnly(false, '请先阅读并同意使用协议');
+      return;
+    }
     if (this.wizardStep < 4) {
       this.wizardStep++;
     }

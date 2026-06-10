@@ -138,10 +138,13 @@ export const appOptions = {
     },
     canProceed() {
       if (this.wizardStep === 1) {
-        return this.config.username && this.config.password && this.config.auth_url;
+        return this.agreedToTerms;
       }
-      if (this.wizardStep === 2 && this.config.carrier === '自定义') {
-        return !!(this.config.carrier_custom && this.config.carrier_custom.trim());
+      if (this.wizardStep === 2) {
+        if (this.config.carrier === '自定义') {
+          return this.config.username && this.config.password && this.config.auth_url && !!(this.config.carrier_custom && this.config.carrier_custom.trim());
+        }
+        return this.config.username && this.config.password && this.config.auth_url;
       }
       return true;
     },

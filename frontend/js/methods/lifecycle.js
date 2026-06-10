@@ -170,6 +170,7 @@ export const lifecycleMethods = {
       const { data } = await this.$api.put('/api/config', this.config);
       if (data.success) {
         this.showWizard = false;
+        this.agreedToTerms = false;
         // 从 API 重新加载配置以获取服务端规范化后的值，确保快照一致
         await this.fetchConfig(true);
         this.frontendLogger.info('lifecycle', '配置完成');
