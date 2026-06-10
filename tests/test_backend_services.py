@@ -203,7 +203,7 @@ class TestTaskService:
 
     def test_delete_nonexistent(self, service):
         ok, msg = service.delete_task("nonexistent")
-        assert ok is True
+        assert ok is False
 
     def test_get_active_task_default(self, service):
         assert service.get_active_task() == "default"
