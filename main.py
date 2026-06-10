@@ -360,17 +360,17 @@ def _run_server(
                 else cleanup_pid() or os._exit(0),
             )
             tray_icon.start()
-            print("系统托盘已启动，双击图标打开控制台")
+            startup_logger.info("系统托盘已启动，双击图标打开控制台")
 
         except Exception as e:
-            print(f"启动系统托盘失败: {e}")
+            startup_logger.warning("启动系统托盘失败: {}", e)
 
     if not no_browser:
         _open_browser(port, setting=auto_open_browser)
 
-    print(f"Web 控制台: http://127.0.0.1:{port}")
-    print(f"日志文件:   {Path.cwd() / 'logs'}")
-    print("按 Ctrl+C 停止服务")
+    startup_logger.info("Web 控制台: http://127.0.0.1:{}", port)
+    startup_logger.info("日志文件:   {}", Path.cwd() / "logs")
+    startup_logger.info("按 Ctrl+C 停止服务")
     startup_logger.info(
         "启动阶段: 启动准备完成，总耗时 {:.3f}s，开始启动 Uvicorn",
         time.perf_counter() - startup_begin,
