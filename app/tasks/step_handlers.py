@@ -231,9 +231,12 @@ class InputHandler(StepHandler):
             return False, "输入步骤需要 selector"
 
         ctx = await self._resolve_frame(page, step)
+        _PASSWORD_KEYWORDS = ("密码", "口令", "password", "passwd", "pwd")
+        desc_lower = (step.description or "").lower()
+        id_lower = (step.id or "").lower()
         masked = (
             "***"
-            if any(k in (step.description or "").lower() for k in ("密码", "password", "pwd"))
+            if any(k in desc_lower or k in id_lower for k in _PASSWORD_KEYWORDS)
             else value
         )
         logger.debug(
