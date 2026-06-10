@@ -60,7 +60,7 @@ def _cmd_status() -> None:
     pid_file = get_pid_file()
     had_pid_file = pid_file.exists()
     running, pid = is_service_running()
-    from app.application import resolve_port
+    from app.utils.ports import resolve_port
 
     port = resolve_port()
 
@@ -251,7 +251,7 @@ def _run_server(
     startup_logger = get_logger("startup", source="backend")
     startup_begin = time.perf_counter()
     running, pid = is_service_running()
-    from app.application import resolve_port
+    from app.utils.ports import resolve_port
 
     port = resolve_port()
 

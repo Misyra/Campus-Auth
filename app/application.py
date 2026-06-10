@@ -167,31 +167,7 @@ app = FastAPI(
 # ==================== CORS 配置 ====================
 
 
-def resolve_port() -> int:
-    raw = os.getenv("APP_PORT", "").strip()
-    if raw:
-        try:
-            port = int(raw)
-            if 1 <= port <= 65535:
-                return port
-        except ValueError:
-            startup_logger.warning("端口解析失败，使用默认 50721", exc_info=True)
-
-    settings_path = PROJECT_ROOT / "settings.json"
-    if settings_path.exists():
-        try:
-            data = json.loads(settings_path.read_text(encoding="utf-8"))
-            app_port = data.get("system", {}).get("app_port")
-            if app_port is not None:
-                port = int(app_port)
-                if 1 <= port <= 65535:
-                    return port
-        except (json.JSONDecodeError, ValueError, OSError) as exc:
-            startup_logger.warning(
-                "读取 settings.json 端口配置失败，使用默认端口 50721: {}", exc
-            )
-
-    return 50721
+from app.utils.ports import resolve_port  # noqa: F401 — 向后兼容重导出
 
 
 _cors_port = resolve_port()
