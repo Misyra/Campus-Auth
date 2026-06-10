@@ -157,10 +157,10 @@ class TestTaskManagerScriptCRUD:
         assert not (browser_dir / "x.json").exists()
         assert not (scripts_dir / "x.json").exists()
 
-    def test_delete_nonexistent_returns_true(self, tmp_path: Path):
-        """删除不存在的任务返回 True（无操作成功）"""
+    def test_delete_nonexistent_returns_false(self, tmp_path: Path):
+        """删除不存在的任务返回 False"""
         tm = TaskManager(tmp_path)
-        assert tm.delete_task("nonexistent") is True
+        assert tm.delete_task("nonexistent") is False
 
     def test_delete_default_returns_false(self, tmp_path: Path):
         """default 任务不可删除"""
