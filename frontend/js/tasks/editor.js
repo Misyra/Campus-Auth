@@ -157,7 +157,7 @@ export const editorTaskMethods = {
       a.href = url;
       a.download = `${taskId}.json`;
       a.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
       this.frontendLogger.info('tasks', '任务已导出');
     } catch (error) {
       this.frontendLogger.error('tasks', '导出任务失败: ' + taskId, error);
@@ -338,7 +338,10 @@ export const editorTaskMethods = {
 
     try {
       const { data } = await this.$api.get(`/api/repo/task?url=${encodeURIComponent(task.url)}`);
-      const id = (task.id || data.name || 'imported').replace(/[^A-Za-z0-9_]/g, '_');
+      let id = (task.id || data.name || 'imported').replace(/[^A-Za-z0-9_]/g, '_');
+      if (/^[0-9]/.test(id)) {
+        id = 'task_' + id;
+      }
       this.editingTask = {
         id: id,
         name: data.name || task.name || '',

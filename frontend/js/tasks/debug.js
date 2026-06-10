@@ -50,15 +50,18 @@ export const debugTaskMethods = {
     this._releaseFocusTrap();
     try {
       const { data } = await this.$api.post('/api/debug/stop');
-      this.debugSession = {
-        running: false, task_id: null, current_step: 0,
-        total_steps: 0, steps: [], results: [], screenshot_url: null,
-      };
       this.frontendLogger.info('debug', '调试已停止');
       this.toastOnly(true, data.message || '调试已停止');
     } catch (error) {
       this.frontendLogger.error('debug', '停止调试失败', error);
       this.toastOnly(false, '停止调试失败');
+    } finally {
+      // 无论 API 成功失败都重置本地状态（调试会话已不可用）
+      this.debugSession = {
+        running: false, task_id: null, current_step: 0,
+        total_steps: 0, steps: [], results: [], screenshot_url: null,
+      };
+      this._resultByIndex = new Map();
     }
   },
 
