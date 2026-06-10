@@ -374,8 +374,9 @@ def run(
     else:
         _access_log_event.clear()
 
-    # 压制 uvicorn access 日志
+    # 压制 uvicorn 日志（生命周期消息通过 loguru 统一输出，避免格式不一致）
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn").setLevel(logging.WARNING)
 
     # 使用 Server 实例而非 uvicorn.run()，以便 _wait_shutdown 可通过
     # server.should_exit = True 触发优雅关闭（避免 SIGTERM → os._exit 路径）
