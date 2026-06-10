@@ -8,7 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.application import _cleanup_temp_screenshots, resolve_port
+from app.application import _cleanup_temp_screenshots
+from app.utils.ports import resolve_port
 
 # ── resolve_port ──
 
@@ -20,7 +21,7 @@ class TestResolvePort:
         """默认端口 50721。"""
         with (
             patch.dict("os.environ", {"APP_PORT": ""}, clear=False),
-            patch("app.application.PROJECT_ROOT") as mock_root,
+            patch("app.utils.ports.PROJECT_ROOT") as mock_root,
         ):
             # mock settings.json 不存在
             mock_root.__truediv__ = lambda self, x: Path("/nonexistent/settings.json")
@@ -37,7 +38,7 @@ class TestResolvePort:
         """无效环境变量 APP_PORT 回退到默认值。"""
         with (
             patch.dict("os.environ", {"APP_PORT": "not_a_number"}),
-            patch("app.application.PROJECT_ROOT") as mock_root,
+            patch("app.utils.ports.PROJECT_ROOT") as mock_root,
         ):
             mock_root.__truediv__ = lambda self, x: Path("/nonexistent/settings.json")
             port = resolve_port()
@@ -47,7 +48,7 @@ class TestResolvePort:
         """超出范围的端口回退到默认值。"""
         with (
             patch.dict("os.environ", {"APP_PORT": "99999"}),
-            patch("app.application.PROJECT_ROOT") as mock_root,
+            patch("app.utils.ports.PROJECT_ROOT") as mock_root,
         ):
             mock_root.__truediv__ = lambda self, x: Path("/nonexistent/settings.json")
             port = resolve_port()

@@ -96,7 +96,7 @@ def is_service_running() -> tuple[bool, int | None]:
         return False, None
 
     # 进程名匹配，进一步验证端口是否在监听（防止 PID 被同名进程复用导致误判）
-    from app.application import resolve_port
+    from app.utils.ports import resolve_port
 
     port = resolve_port()
     if not is_local_port_in_use(port):
