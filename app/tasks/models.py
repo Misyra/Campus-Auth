@@ -23,6 +23,14 @@ DEFAULT_STEP_TIMEOUT = 10000
 DEFAULT_TASK_TIMEOUT = 30000
 
 
+def _is_valid_step(s: Any) -> bool:
+    """检查 step 是否为有效的 dict，非 dict 的 step 记录警告。"""
+    if isinstance(s, dict):
+        return True
+    logger.warning("steps 中包含非对象元素，已跳过: {}", type(s).__name__)
+    return False
+
+
 def _safe_float(value: Any, default: float) -> float:
     """安全的 float 转换，异常时返回默认值。"""
     if value is None:
@@ -196,7 +204,7 @@ class TaskConfig:
             url=data.get("url", ""),
             timeout=data.get("timeout", DEFAULT_TASK_TIMEOUT),
             variables=data.get("variables", {}),
-            steps=[StepConfig.from_dict(s) for s in data.get("steps", []) if isinstance(s, dict)],
+            steps=[StepConfig.from_dict(s) for s in data.get("steps", []) if _is_valid_step(s)],
             on_success=data.get("on_success", {}),
             on_failure=data.get("on_failure", {}),
             metadata=data.get("metadata", {}),
