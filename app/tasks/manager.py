@@ -386,15 +386,18 @@ class TaskManager:
         normalized = normalize_task_id(task_id)
         if not is_valid_task_id(normalized):
             return False
+        deleted = False
         # 从两个子目录中删除
         for subdir in (self.browser_dir, self.scripts_dir):
             for ext in (".json", ".py", ".meta.json"):
                 file = subdir / f"{normalized}{ext}"
-                try:
-                    file.unlink(missing_ok=True)
-                except Exception as e:
-                    logger.error("无法删除任务文件 {}: {}", file, e)
-        return True
+                if file.exists():
+                    try:
+                        file.unlink()
+                        deleted = True
+                    except Exception as e:
+                        logger.error("无法删除任务文件 {}: {}", file, e)
+        return deleted
 
     def _find_task_type(self, task_id: str) -> str | None:
         """查找任务所在的子目录类型，返回 'browser' 或 'scripts'，未找到返回 None。"""
