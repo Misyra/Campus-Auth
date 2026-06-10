@@ -90,6 +90,29 @@ export const uiMethods = {
       this.toastOnly(false, '请先阅读并同意使用协议');
       return;
     }
+    // 第 2 步验证账号信息
+    if (this.wizardStep === 2) {
+      if (!this.config.username) {
+        this.toastOnly(false, '请输入账号');
+        return;
+      }
+      if (!this.config.password) {
+        this.toastOnly(false, '请输入密码');
+        return;
+      }
+      if (this.config.password.length < 2) {
+        this.toastOnly(false, '密码长度不能少于2位');
+        return;
+      }
+      if (!this.config.auth_url) {
+        this.toastOnly(false, '请输入认证地址');
+        return;
+      }
+      if (this.config.carrier === '自定义' && (!this.config.carrier_custom || !this.config.carrier_custom.trim())) {
+        this.toastOnly(false, '请输入自定义运营商关键字');
+        return;
+      }
+    }
     if (this.wizardStep < 4) {
       this.wizardStep++;
     }
@@ -216,7 +239,7 @@ export const uiMethods = {
       this._showExitOverlay();
     } catch (error) {
       this.frontendLogger.error('app', '退出应用失败', error);
-      this.notify(false, '退出失败，请手动关闭窗口');
+      this._showExitOverlay();
     } finally {
       this.busy.monitor = false;
     }
@@ -229,8 +252,13 @@ export const uiMethods = {
         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
         <polyline points="22 4 12 14.01 9 11.01"/>
       </svg>
-      <h2>应用已退出</h2>
-      <p>后端已关闭，你可以关闭此标签页</p>`;
+      <h2>已安全退出</h2>
+      <p>后端服务已关闭</p>
+      <button class="btn btn-primary" onclick="window.open('','_self').close()">关闭页面</button>`;
     document.body.appendChild(overlay);
+    setTimeout(() => {
+      window.open('', '_self');
+      window.close();
+    }, 100);
   },
 };
