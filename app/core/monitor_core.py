@@ -412,27 +412,27 @@ class NetworkMonitorCore:
                 return RecoveryResult.LOGIN_OK
 
             # 4. 登录失败，记录并判断是否重试
+            # += 1 是 read-modify-write，需要锁保护；之后的读取在同一线程内，无需锁
             with self._state_lock:
                 self.login_attempt_count += 1
-                attempt = self.login_attempt_count
             self._update_state(network_state=NetworkState.DISCONNECTED)
             self.log_message(
-                f"登录失败 (第{attempt}/{max_retries}次)",
+                f"登录失败 (第{self.login_attempt_count}/{max_retries}次)",
                 "ERROR",
             )
             self._update_state(
-                status_detail=f"网络异常：登录失败（第{attempt}/{max_retries}次）"
+                status_detail=f"网络异常：登录失败（第{self.login_attempt_count}/{max_retries}次）"
             )
 
             # 浏览器已由 login.py 在失败时关闭，下次重试 ensure_browser 自动重建
 
-            if attempt == 2:
+            if self.login_attempt_count == 2:
                 send_notification(
                     "Campus-Auth 登录失败",
-                    f"自动登录已失败 {attempt} 次，正在重试（如持续失败请检查设置）...",
+                    f"自动登录已失败 {self.login_attempt_count} 次，正在重试（如持续失败请检查设置）...",
                 )
 
-            failed_count = attempt
+            failed_count = self.login_attempt_count
             action = self._login_retry_or_break(max_retries, retry_intervals)
             if action == RecoveryResult.BREAK:
                 return RecoveryResult.BREAK
