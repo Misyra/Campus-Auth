@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import mimetypes
 import os
+import signal
 import time
 from contextlib import asynccontextmanager
 
@@ -127,8 +129,21 @@ async def lifespan(app_instance):
         time.perf_counter() - start,
     )
 
-    # 等待 shutdown_event 被设置（由 /api/shutdown 触发）
-    await shutdown_event.wait()
+    # 创建后台任务等待 shutdown_event，当事件被设置时触发应用关闭
+    async def _wait_shutdown():
+        await shutdown_event.wait()
+        # 通过向 uvicorn 发送信号来触发关闭
+        import signal
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    shutdown_waiter = asyncio.create_task(_wait_shutdown())
+
+    yield
+
+    # 取消等待任务
+    shutdown_waiter.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await shutdown_waiter
 
     startup_logger.info("FastAPI 关闭: 正在停止服务...")
     await services.shutdown()
