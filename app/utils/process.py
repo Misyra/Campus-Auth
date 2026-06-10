@@ -23,6 +23,7 @@ __all__ = [
     "is_service_running",
     "normalize_proc_name",
     "read_pid_file",
+    "read_pid_mode",
     "write_pid",
 ]
 
@@ -96,13 +97,16 @@ def is_service_running() -> tuple[bool, int | None]:
         return False, None
 
     # 进程名匹配，进一步验证端口是否在监听（防止 PID 被同名进程复用导致误判）
-    from app.utils.ports import resolve_port
+    # 轻量模式下不监听端口，跳过端口检查
+    mode = read_pid_mode()
+    if mode != "lightweight":
+        from app.utils.ports import resolve_port
 
-    port = resolve_port()
-    if not is_local_port_in_use(port):
-        # 进程存在但未监听端口 → 不是本应用实例，清理残留 PID 文件
-        pid_file.unlink(missing_ok=True)
-        return False, None
+        port = resolve_port()
+        if not is_local_port_in_use(port):
+            # 进程存在但未监听端口 → 不是本应用实例，清理残留 PID 文件
+            pid_file.unlink(missing_ok=True)
+            return False, None
 
     try:
         os.kill(pid, 0)
@@ -123,12 +127,18 @@ def is_local_port_in_use(port: int) -> bool:
         return sock.connect_ex(("127.0.0.1", port)) == 0
 
 
-def write_pid() -> None:
-    """写入当前进程的 PID 文件。"""
+def write_pid(mode: str | None = None) -> None:
+    """写入当前进程的 PID 文件。
+
+    Args:
+        mode: 运行模式标记，如 "lightweight" 或 "full"。存入 PID 文件第三行。
+    """
     pid_file = get_pid_file()
     proc_name = os.path.basename(sys.executable)
     start_time = time.strftime("%Y-%m-%d %H:%M:%S")
     content = f"{os.getpid()}\n{proc_name}|{start_time}"
+    if mode:
+        content += f"\n{mode}"
     # 原子写入: 临时文件 + 重命名
     tmp = pid_file.with_suffix(".pid.tmp")
     tmp.write_text(content, encoding="utf-8")
@@ -138,3 +148,18 @@ def write_pid() -> None:
 def cleanup_pid() -> None:
     """清理 PID 文件。"""
     get_pid_file().unlink(missing_ok=True)
+
+
+def read_pid_mode() -> str | None:
+    """读取 PID 文件中记录的运行模式。返回模式字符串或 None。"""
+    pid_file = get_pid_file()
+    if not pid_file.exists():
+        return None
+    try:
+        lines = pid_file.read_text(encoding="utf-8").strip().splitlines()
+        if len(lines) >= 3:
+            mode = lines[2].strip()
+            return mode or None
+        return None
+    except (OSError, IndexError):
+        return None

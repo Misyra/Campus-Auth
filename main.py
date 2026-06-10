@@ -28,6 +28,7 @@ from app.utils.process import (  # noqa: E402
     is_service_running,
     normalize_proc_name,
     read_pid_file,
+    read_pid_mode,
     write_pid,
 )
 from app.workers.playwright_bootstrap import ensure_playwright_ready  # noqa: E402
@@ -65,7 +66,9 @@ def _cmd_status() -> None:
     port = resolve_port()
 
     if running:
-        print(f"服务正在运行 (PID: {pid})")
+        mode = read_pid_mode()
+        mode_label = " (轻量模式)" if mode == "lightweight" else ""
+        print(f"服务正在运行{mode_label} (PID: {pid})")
     elif is_local_port_in_use(port):
         print(f"服务疑似正在运行 (端口: {port})")
     elif had_pid_file:
@@ -94,6 +97,9 @@ def _cmd_stop() -> None:
             )
             cleanup_pid()
             return
+
+    # 清理轻量模式触发文件
+    (AUTH_DATA_DIR / ".start-web").unlink(missing_ok=True)
 
     try:
         print(f"正在停止服务 (PID: {pid})...")
@@ -260,6 +266,34 @@ def _run_server(
         webbrowser.open(f"http://127.0.0.1:{port}")
         sys.exit(0)
 
+    # 优先从 settings.json 读取（Web 控制台可修改），回退到 .env
+    auto_open_browser = None
+    lightweight_mode = False
+    try:
+        from app.services.profile import ProfileService
+
+        _ps = ProfileService(Path(__file__).parent.resolve())
+        _sys_settings = _ps.load().system
+        minimize_to_tray = tray or bool(_sys_settings.minimize_to_tray)
+        login_then_exit = bool(_sys_settings.login_then_exit)
+        auto_open_browser = bool(_sys_settings.auto_open_browser)
+        lightweight_mode = bool(getattr(_sys_settings, "lightweight_mode", False))
+    except Exception:
+        minimize_to_tray = tray or False
+        login_then_exit = False
+        # auto_open_browser 保持 None，让 _open_browser 走环境变量默认值
+
+    # 轻量模式：仅启动监控，不加载 FastAPI
+    if lightweight_mode:
+        _run_lightweight(
+            startup_logger,
+            port=port,
+            no_browser=no_browser,
+            minimize_to_tray=minimize_to_tray,
+            auto_open_browser=auto_open_browser,
+        )
+        return
+
     write_pid()
     atexit.register(cleanup_pid)
 
@@ -319,21 +353,6 @@ def _run_server(
         time.perf_counter() - stage_begin,
     )
 
-    # 优先从 settings.json 读取（Web 控制台可修改），回退到 .env
-    auto_open_browser = None
-    try:
-        from app.services.profile import ProfileService
-
-        _ps = ProfileService(Path(__file__).parent.resolve())
-        _sys_settings = _ps.load().system
-        minimize_to_tray = tray or bool(_sys_settings.minimize_to_tray)
-        login_then_exit = bool(_sys_settings.login_then_exit)
-        auto_open_browser = bool(_sys_settings.auto_open_browser)
-    except Exception:
-        minimize_to_tray = tray or False
-        login_then_exit = False
-        # auto_open_browser 保持 None，让 _open_browser 走环境变量默认值
-
     # 登录成功后退出模式：仅自启动时生效，循环重试直到登录成功，成功后退出进程
     # --no-auto 可跳过此模式，用于 login_then_exit 开启后无法进入 Web 控制台的恢复场景
     is_autostart = os.environ.get("CAMPUS_AUTH_AUTOSTART") == "1"
@@ -386,6 +405,131 @@ def _run_server(
     finally:
         if tray_icon:
             tray_icon.stop()
+
+
+# ==================== 轻量模式 ====================
+
+
+def _run_lightweight(
+    logger,
+    port: int,
+    no_browser: bool = False,
+    minimize_to_tray: bool = False,
+    auto_open_browser: bool | None = None,
+) -> None:
+    """轻量模式：仅启动监控，不加载 FastAPI。"""
+    from app.container import ServiceContainer
+
+    write_pid(mode="lightweight")
+
+    project_root = Path(__file__).parent.resolve()
+    container = ServiceContainer(project_root)
+
+    # 启动监控（不启动 Web 服务和调度器）
+    cleanup_orphan_browsers()
+    container.engine.boot()
+    # 调度器也可以启动（线程化实现，无需 asyncio 事件循环）
+    if container.engine.has_enabled_tasks():
+        container.engine.start_scheduler()
+
+    logger.info("轻量模式启动完成，监控已启动")
+    logger.info("运行 `python main.py` 或 `python main.py --serve` 打开 Web 控制台")
+
+    def _cleanup():
+        container.engine.shutdown()
+        cleanup_pid()
+
+    atexit.register(_cleanup)
+
+    # 系统托盘
+    tray_icon = None
+    if minimize_to_tray:
+        try:
+            from app.core.system_tray import SystemTray
+
+            tray_icon = SystemTray(
+                port=port,
+                on_exit=lambda: os.kill(os.getpid(), signal.SIGTERM)
+                if hasattr(signal, "SIGTERM")
+                else os._exit(0),
+            )
+            tray_icon.start()
+        except Exception:
+            pass
+
+    # 等待控制文件触发
+    trigger_file = AUTH_DATA_DIR / ".start-web"
+    trigger_file.unlink(missing_ok=True)
+
+    try:
+        while True:
+            time.sleep(1)
+            if trigger_file.exists():
+                trigger_file.unlink(missing_ok=True)
+                logger.info("收到 Web 服务启动请求，正在加载...")
+                _start_web_from_lightweight(container, port, logger)
+                break
+    except KeyboardInterrupt:
+        logger.info("收到退出信号，正在关闭...")
+    finally:
+        if tray_icon:
+            tray_icon.stop()
+
+
+def _start_web_from_lightweight(container, port: int, logger) -> None:
+    """从轻量模式过渡到完整模式。"""
+    write_pid(mode="full")
+
+    # Playwright 检查
+    logger.info("启动阶段: 检查 Playwright 运行环境")
+    ensure_playwright_ready(print)
+
+    # 加载配置
+    try:
+        _sys_settings = container.profile_service.load().system
+        _al = bool(_sys_settings.access_log)
+        _lr = max(1, int(_sys_settings.log_retention_days))
+    except (AttributeError, TypeError, ValueError):
+        _al, _lr = False, 7
+
+    from app.application import run
+
+    run(access_log_enabled=_al, log_retention=_lr, existing_container=container)
+
+
+def _cmd_serve() -> None:
+    """触发轻量模式进程启动 Web 服务。"""
+    running, pid = is_service_running()
+    if not running:
+        print("服务未运行，请先启动软件")
+        sys.exit(1)
+
+    mode = read_pid_mode()
+    if mode != "lightweight":
+        print("服务已在完整模式下运行")
+        from app.utils.ports import resolve_port
+
+        webbrowser.open(f"http://127.0.0.1:{resolve_port()}")
+        return
+
+    # 写入触发文件
+    trigger_file = AUTH_DATA_DIR / ".start-web"
+    trigger_file.write_text("start", encoding="utf-8")
+    print("已发送 Web 服务启动请求，稍候...")
+
+    # 等待端口就绪
+    from app.utils.ports import resolve_port
+
+    port = resolve_port()
+    for _ in range(30):
+        time.sleep(1)
+        if is_local_port_in_use(port):
+            print(f"Web 服务已启动: http://127.0.0.1:{port}")
+            webbrowser.open(f"http://127.0.0.1:{port}")
+            return
+
+    print("Web 服务启动超时，请检查日志")
+    sys.exit(1)
 
 
 # ==================== 全局异常钩子 ====================
@@ -451,6 +595,11 @@ def main() -> None:
         choices=["status", "enable", "disable"],
         help="管理开机自启动 (status/enable/disable)",
     )
+    parser.add_argument(
+        "--serve",
+        action="store_true",
+        help="触发轻量模式进程启动 Web 服务",
+    )
 
     args = parser.parse_args()
 
@@ -460,6 +609,10 @@ def main() -> None:
 
     if args.stop:
         _cmd_stop()
+        return
+
+    if args.serve:
+        _cmd_serve()
         return
 
     if args.autostart:
