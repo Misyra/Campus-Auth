@@ -127,12 +127,15 @@ class ShellCommandPolicy:
         if platform.system() == "Windows":
             kwargs.setdefault("creationflags", CREATE_NO_WINDOW_FLAG)
 
-        proc = await asyncio.create_subprocess_exec(
-            *argv,
-            stdout=kwargs.pop("stdout", asyncio.subprocess.PIPE),
-            stderr=kwargs.pop("stderr", asyncio.subprocess.PIPE),
-            **kwargs,
-        )
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *argv,
+                stdout=kwargs.pop("stdout", asyncio.subprocess.PIPE),
+                stderr=kwargs.pop("stderr", asyncio.subprocess.PIPE),
+                **kwargs,
+            )
+        except FileNotFoundError:
+            return -1, "", f"执行文件不存在: {executable}"
 
         try:
             stdout, stderr = await asyncio.wait_for(
