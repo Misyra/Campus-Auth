@@ -24,7 +24,7 @@ def client(tmp_path):
         patch("app.constants.LOGS_DIR", tmp_path / "logs"),
         patch("app.constants.TEMP_DIR", tmp_path / "temp"),
     ):
-        from app.application import app
+        from app.application import create_app
 
         mock_services = MagicMock()
 
@@ -64,6 +64,7 @@ def client(tmp_path):
             return_value={"running": False, "message": "调试会话已关闭"}
         )
 
+        app = create_app()
         app.state.services = mock_services
 
         test_client = TestClient(app)

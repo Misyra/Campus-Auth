@@ -22,7 +22,7 @@ def client(tmp_path):
         patch("app.constants.LOGS_DIR", tmp_path / "logs"),
         patch("app.constants.TEMP_DIR", tmp_path / "temp"),
     ):
-        from app.application import app
+        from app.application import create_app
 
         mock_services = MagicMock()
         mock_scheduler = MagicMock()
@@ -36,6 +36,7 @@ def client(tmp_path):
         mock_scheduler.get_history.return_value = []
         mock_scheduler.execute_task = MagicMock(return_value=(True, "执行成功"))
 
+        app = create_app()
         app.state.services = mock_services
 
         test_client = TestClient(app)

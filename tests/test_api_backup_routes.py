@@ -47,7 +47,7 @@ def client(tmp_path):
         patch("app.api.backup.BACKUP_DIR", backup_dir),
         patch("app.api.backup.PROJECT_ROOT", tmp_path),
     ):
-        from app.application import app
+        from app.application import create_app
 
         mock_services = MagicMock()
 
@@ -60,6 +60,7 @@ def client(tmp_path):
         mock_services.profile_service.invalidate_cache = MagicMock()
         mock_services.engine.reload_config = MagicMock()
 
+        app = create_app()
         app.state.services = mock_services
 
         test_client = TestClient(app)

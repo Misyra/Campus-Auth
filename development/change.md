@@ -5,6 +5,50 @@
 
 ## 2026-06-11
 
+### refactor: ServiceContainer + API 路由使用 ScheduleEngine
+
+将 `ServiceContainer` 从使用 `MonitorService` + `SchedulerService` 双服务重构为使用统一的 `ScheduleEngine`。
+
+**container.py 变更**：
+- 移除 `MonitorService` 和 `SchedulerService` 的导入和实例化
+- 新增 `self.engine = ScheduleEngine(...)` 统一引擎实例
+- 新增 `monitor_service` / `scheduler_service` 属性别名，返回 `self.engine`，保持 API 路由兼容
+- 提取 `start_web_services()` 幂等方法（DashboardSink + WS drain loop），`startup()` 调用它
+- `startup()` 使用 `self.engine.start_scheduler()` 替代 `self.scheduler_service.start()`
+- `shutdown()` 使用同步 `self.engine.stop_scheduler()` 替代异步 `await self.scheduler_service.stop()`
+- 移除 `SchedulerService` 的 `task_service` 参数（引擎内部自行创建 `TaskManager`）
+
+**deps.py 变更**：
+- `get_monitor_service()` 返回 `request.app.state.services.engine`（类型 `ScheduleEngine`）
+- `get_scheduler_service()` 返回 `request.app.state.services.engine`（类型 `ScheduleEngine`）
+- 移除 `TYPE_CHECKING` 块中的 `SchedulerService` 导入
+
+**API 路由变更**（6 个文件）：
+- `config.py` / `monitor.py` / `backup.py` / `debug.py` / `profiles.py` / `system.py`：`MonitorService` 类型注解改为 `ScheduleEngine`
+
+**scheduled_tasks.py 变更**：
+- `scheduler.start()` 改为 `scheduler.start_scheduler()`
+- `await scheduler.execute_task(task_id)` 改为 `await asyncio.to_thread(scheduler.execute_task, task_id)`（引擎方法已同步化）
+
+**测试变更**（14 个文件）：
+- mock 目标从 `mock_services.monitor_service` / `mock_services.scheduler_service` 统一为 `mock_services.engine`
+
+### refactor: application.py 工厂模式，延迟加载 FastAPI
+
+将 `app/application.py` 从模块级立即创建 FastAPI 实例改为工厂函数 `create_app()` 延迟创建，支持轻量模式。
+
+**application.py 变更**：
+- 模块级保留：`mimetypes.add_type`、logger 创建、`_cleanup_temp_screenshots()`、`resolve_port` 重导出、`_access_log_event`、`app = None` 占位符
+- 移除模块级：`from fastapi import ...`、`from app.api import ...`、`app = FastAPI(...)`、CORS/中间件/路由注册/静态文件挂载
+- 新增 `create_app(existing_container=None)` 工厂函数，内部延迟导入 FastAPI 及所有依赖
+- `lifespan` 定义在 `create_app()` 内部，支持 `existing_container` 参数（轻量模式→完整模式转换）
+- `run()` 调用 `create_app()` 获取实例，传入 `uvicorn.Config`（实例而非字符串引用）
+- `run()` 通过 `global app` 将创建的实例设为模块级变量，保持 `main.py` 信号处理器兼容
+
+**测试变更**（13 个文件）：
+- `from app.application import app` 改为 `from app.application import create_app` + `app = create_app()`
+- `test_container.py`：patch 目标从 `MonitorService` + `SchedulerService` 改为 `ScheduleEngine`，更新断言
+
 ### refactor: 配置切换架构简化，移除运行时热更新
 
 将配置切换从"运行时热更新"模式重构为"停止→切换→重启"模式，大幅简化代码。
