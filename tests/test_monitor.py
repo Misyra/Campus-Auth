@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 import threading
 import time
+from datetime import UTC
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -585,10 +586,10 @@ class TestMonitorCoreDetailedSnapshot:
 
     def test_last_check_time_isoformat(self):
         """last_check_time 序列化为 ISO 格式。"""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         core = NetworkMonitorCore(config={})
-        core.last_check_time = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        core.last_check_time = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
         snap = core.snapshot()
         assert "2026-01-01" in snap["last_check_time"]
 
