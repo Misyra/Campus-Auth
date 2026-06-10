@@ -15,10 +15,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from app.constants import (
-    MONITOR_RELOAD_TIMEOUT,
-    MONITOR_STOP_TIMEOUT,
-)
+from app.constants import MONITOR_STOP_TIMEOUT
 from app.core.monitor_core import NetworkMonitorCore, NetworkState
 from app.network.decision import is_network_available
 from app.schemas import MonitorConfigPayload, MonitorStatusResponse
@@ -47,9 +44,6 @@ class MonitorCmdType(StrEnum):
     START = "start"
     STOP = "stop"
     LOGIN = "login"
-    RELOAD = "reload"
-    PROFILE_SWITCH = "profile_switch"
-    PROFILE_RELOAD = "profile_reload"
     SHUTDOWN = "shutdown"
 
 
@@ -159,9 +153,6 @@ class MonitorService:
         MonitorCmdType.START: "_handle_start",
         MonitorCmdType.STOP: "_handle_stop",
         MonitorCmdType.LOGIN: "_handle_login",
-        MonitorCmdType.RELOAD: "_handle_reload",
-        MonitorCmdType.PROFILE_SWITCH: "_handle_profile_switch",
-        MonitorCmdType.PROFILE_RELOAD: "_handle_profile_reload",
     }
 
     def _queue_consumer(self) -> None:
@@ -192,7 +183,10 @@ class MonitorService:
                 self._cmd_queue.task_done()
 
     def _start_monitor_core(self, config: dict, pure_mode: bool) -> None:
-        """创建并启动监控核心（在消费者线程中调用，供 _handle_start 和 _handle_profile_switch 复用）。"""
+        """创建并启动监控核心（在消费者线程中调用）。
+
+        监控线程结束后检查是否因方案切换退出，如果是则自动重启。
+        """
         self._thread_done.clear()
         core = NetworkMonitorCore(
             config=config,
@@ -201,32 +195,26 @@ class MonitorService:
             login_history=self._login_history,
             worker_getter=self._worker_getter,
         )
-        core.set_profile_service(
-            self._profile_service, on_switch=self._on_profile_switch
-        )
-        thread = threading.Thread(target=core.start_monitoring, daemon=True)
+        core.set_profile_service(self._profile_service)
+
+        def _run():
+            core.start_monitoring()
+            # 监控结束后检查是否因方案切换退出
+            if core._profile_switch_requested:
+                # 方案已在 _check_profile_switch 中持久化，重载配置后重启
+                self._reload_config_internal()
+                self._enqueue(
+                    MonitorCommand(
+                        type=MonitorCmdType.START,
+                        data={"pure_mode": self.pure_mode},
+                    )
+                )
+
+        thread = threading.Thread(target=_run, daemon=True)
 
         self._monitor_core = core
         self._monitor_thread = thread
         thread.start()
-
-    def _prepare_command_config(self, cmd: MonitorCommand) -> tuple[dict, bool]:
-        """从命令数据中提取配置和 pure_mode，统一预处理。
-
-        返回: (config_dict, pure_mode)
-        """
-        config = cmd.data.get("config", self._runtime_config)
-        pure_mode = cmd.data.get("pure_mode", self.pure_mode)
-        if config is self._runtime_config:
-            config = {
-                **self._runtime_config,
-                "browser_settings": dict(
-                    self._runtime_config.get("browser_settings", {})
-                ),
-            }
-        if pure_mode:
-            config.setdefault("browser_settings", {})["pure_mode"] = True
-        return config, pure_mode
 
     def _handle_start(self, cmd: MonitorCommand) -> None:
         """启动监控（仅在消费者线程中调用）。"""
@@ -238,7 +226,10 @@ class MonitorService:
                 source="backend",
             )
             return
-        config, pure_mode = self._prepare_command_config(cmd)
+        config = self._copy_runtime_config()
+        pure_mode = cmd.data.get("pure_mode", self.pure_mode)
+        if pure_mode:
+            config.setdefault("browser_settings", {})["pure_mode"] = True
         self._start_monitor_core(config, pure_mode)
 
         self.record_log(
@@ -274,7 +265,10 @@ class MonitorService:
 
     def _handle_login(self, cmd: MonitorCommand) -> None:
         """执行一次性登录尝试（仅在消费者线程中调用）。"""
-        config, pure_mode = self._prepare_command_config(cmd)
+        config = self._copy_runtime_config()
+        pure_mode = self.pure_mode
+        if pure_mode:
+            config.setdefault("browser_settings", {})["pure_mode"] = True
         skip_pause_check = cmd.data.get("skip_pause_check", False)
 
         # 通过 Worker 派发登录，替代临时 NetworkMonitorCore 实例
@@ -328,52 +322,6 @@ class MonitorService:
 
             if cmd.response_event:
                 cmd.response_event.set()
-
-    def _handle_reload(self, cmd: MonitorCommand) -> None:
-        """Hot-update config on a running monitor (consumer thread only)."""
-        new_config = cmd.data.get("config")
-        if new_config and self._monitor_core and self._monitor_core.monitoring:
-            self._monitor_core.update_config(new_config)
-
-    def _handle_profile_switch(self, cmd: MonitorCommand) -> None:
-        """停止当前监控并使用新方案配置重新启动。"""
-        new_config = cmd.data.get("config", {})
-        if not new_config:
-            return
-
-        self._handle_stop()
-
-        pure_mode = cmd.data.get("pure_mode", self.pure_mode)
-        self._start_monitor_core(new_config, pure_mode)
-
-        self.record_log(
-            "监控已按新方案重启", level="INFO", source="backend"
-        )
-        self._update_status_snapshot()
-
-    def _handle_profile_reload(self, cmd: MonitorCommand) -> None:
-        """自动切换方案后重载配置（仅在消费者线程中调用）。"""
-        profile_name = cmd.data.get("profile_name", "")
-        try:
-            # 直接在消费者线程中重载配置（不通过队列，避免递归入队）
-            self._reload_config_internal()
-        except Exception:
-            service_logger.exception("自动切换方案配置加载失败: {}", profile_name)
-            return
-        if self._monitor_core and self._monitor_core.monitoring:
-            self._enqueue(
-                MonitorCommand(
-                    type=MonitorCmdType.RELOAD,
-                    data={"config": self._copy_runtime_config()},
-                )
-            )
-        new_url = self._runtime_config.get("auth_url", "")
-        new_user = self._runtime_config.get("username", "")
-        self.record_log(
-            f"自动切换方案 -> {profile_name} (认证={new_url}, 用户={new_user})",
-            level="INFO",
-            source="backend",
-        )
 
     # ── 日志 / 状态快照桥接 ──
 
@@ -516,7 +464,7 @@ class MonitorService:
             return self._ui_config.model_copy(deep=True)
 
     def _reload_config_internal(self) -> None:
-        """从 settings.json 重新加载 UI 和运行时配置（内部方法，由 reload_config 和 _handle_profile_reload 复用）。"""
+        """从 settings.json 重新加载 UI 和运行时配置。"""
         with self._reload_lock:
             # 单次 load，避免多次 load 之间数据版本不一致
             data = self._profile_service.load()
@@ -536,25 +484,20 @@ class MonitorService:
         return copy.deepcopy(self._runtime_config)
 
     def reload_config(self) -> None:
-        """重新加载配置（从 settings.json），并通过队列推送到运行中的监控"""
+        """重新加载配置并重启监控（如果正在运行）。"""
+        was_monitoring = self._is_monitoring
+        if was_monitoring:
+            self._handle_stop()
         self._reload_config_internal()
-
-        # Consumer handles the hot-update on the monitor core
-        if self._is_monitoring and not self._enqueue(
-            MonitorCommand(
-                type=MonitorCmdType.RELOAD,
-                data={"config": self._copy_runtime_config()},
-            )
-        ):
-            return
-
+        if was_monitoring:
+            self._enqueue(MonitorCommand(type=MonitorCmdType.START))
         service_logger.info("配置已从 settings.json 重载")
 
     def apply_profile(self, profile_id: str) -> None:
-        """切换到新方案并通过队列重启监控"""
-        self.reload_config()
-        new_url = self._runtime_config.get("auth_url", "")
-        new_user = self._runtime_config.get("username", "")
+        """切换到新方案：停止监控 → 重载配置 → 重启监控。"""
+        was_monitoring = self._is_monitoring
+        if was_monitoring:
+            self._handle_stop()
 
         # 解析可读名称用于日志，ID 作为 fallback
         try:
@@ -564,24 +507,16 @@ class MonitorService:
         except Exception:
             display_name = profile_id
 
+        new_url = self._runtime_config.get("auth_url", "")
+        new_user = self._runtime_config.get("username", "")
         self.record_log(
             f"切换方案 -> {display_name} (认证={new_url}, 用户={new_user})",
             level="INFO",
             source="backend",
         )
 
-        if self._is_monitoring:
-            if not self._enqueue(
-                MonitorCommand(
-                    type=MonitorCmdType.PROFILE_SWITCH,
-                    data={
-                        "profile": profile_id,
-                        "config": self._copy_runtime_config(),
-                        "pure_mode": self.pure_mode,
-                    },
-                )
-            ):
-                return
+        if was_monitoring:
+            self._enqueue(MonitorCommand(type=MonitorCmdType.START))
             self.record_log(
                 "监控正在按新方案重启",
                 level="INFO",
@@ -598,25 +533,10 @@ class MonitorService:
             if not valid:
                 return False, f"配置无效: {error}"
 
-            config = self._copy_runtime_config()
-            if not self._enqueue(
-                MonitorCommand(
-                    type=MonitorCmdType.START,
-                    data={"config": config, "pure_mode": self.pure_mode},
-                )
-            ):
+            if not self._enqueue(MonitorCommand(type=MonitorCmdType.START)):
                 return False, "队列已满"
 
             return True, "监控已启动"
-
-    def _on_profile_switch(self, profile_name: str) -> None:
-        """自动切换方案时的回调（从监控线程调用）。"""
-        self._enqueue(
-            MonitorCommand(
-                type=MonitorCmdType.PROFILE_RELOAD,
-                data={"profile_name": profile_name},
-            )
-        )
 
     def stop_monitoring(self) -> tuple[bool, str]:
         service_logger.debug("收到停止监控请求")
@@ -636,7 +556,7 @@ class MonitorService:
                 type=MonitorCmdType.STOP, response_event=threading.Event()
             )
             self._cmd_queue.put(cmd, timeout=3)
-            cmd.response_event.wait(timeout=MONITOR_RELOAD_TIMEOUT)
+            cmd.response_event.wait(timeout=MONITOR_STOP_TIMEOUT)
         except queue.Full:
             # 队列满时不直接调用 _handle_stop()（仅限消费者线程），
             # 而是直接停止监控核心并等待监控线程结束
@@ -690,15 +610,10 @@ class MonitorService:
         cmd_in_queue = False
         try:
             service_logger.debug("收到手动登录请求")
-            runtime_config = self._copy_runtime_config()
 
             cmd = MonitorCommand(
                 type=MonitorCmdType.LOGIN,
-                data={
-                    "config": runtime_config,
-                    "pure_mode": self.pure_mode,
-                    "skip_pause_check": True,
-                },
+                data={"skip_pause_check": True},
                 response_event=threading.Event(),
             )
             if not self._enqueue(cmd):
