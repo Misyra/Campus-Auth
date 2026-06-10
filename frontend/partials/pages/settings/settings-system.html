@@ -37,7 +37,7 @@
               class="field-help"
               tabindex="0"
               role="note"
-              data-tip="启动后自动登录，登录成功后退出软件。登录失败会自动重试（最多 3 次），超限后回退到正常启动进入 Web 控制台。适用于搭配开机自启使用，只需认证一次、不需要持续监控的场景。"
+              data-tip="仅在开机自启动时生效：先检测网络，已连接则直接退出；未连接则自动登录，成功后退出软件。登录失败会自动重试（最多 3 次），超限后回退到正常启动进入 Web 控制台。手动启动程序时不会触发此行为。"
             >?</span>
           </label>
         </div>
@@ -131,13 +131,21 @@
           <span class="field-help" tabindex="0" role="note" data-tip="定时任务执行 Shell 命令时使用的 Shell。留空使用系统默认（Windows 优先 PowerShell，Linux/macOS 使用 bash）。">?</span>
         </div>
         <custom-select v-model="shellPathMode" :options="shellPathOptions"></custom-select>
-        <input
-          v-if="shellPathMode === '__custom__'"
-          v-model.trim="config.shell_path"
-          type="text"
-          placeholder="输入 Shell 可执行文件的完整路径"
-          class="mt-2"
-        />
+        <div v-if="shellPathMode === '__custom__' || shellCustomMode" class="shell-custom-input">
+          <input
+            v-model.trim="config.shell_path"
+            type="text"
+            placeholder="输入 Shell 可执行文件的完整路径"
+          />
+          <button type="button" class="btn btn-sm btn-secondary" @click="$refs.shellFileInput.click()">浏览...</button>
+          <input
+            ref="shellFileInput"
+            type="file"
+            accept=".exe,.bat,.cmd,.ps1,.sh"
+            style="display:none"
+            @change="onShellFileSelected"
+          />
+        </div>
         <span class="hint" v-if="config.shell_path && shellPathMode !== '__custom__'">当前: {{ config.shell_path }}</span>
         <span class="hint" v-else-if="!config.shell_path">默认: {{ defaultShell }}</span>
       </div>

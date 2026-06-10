@@ -67,6 +67,12 @@ export const configMethods = {
     this._configDirty = true;
     this.frontendLogger.info('config', '已恢复默认设置，请点击保存以生效');
   },
+  onShellFileSelected(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    this.config.shell_path = file.path || file.name;
+    e.target.value = '';
+  },
   async fetchShells() {
     try {
       const { data } = await this.$api.get('/api/shells');

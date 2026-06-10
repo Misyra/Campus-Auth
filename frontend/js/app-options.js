@@ -64,7 +64,7 @@ export const appOptions = {
       ],
       loginActionOptions: [
         { value: false, label: '保持监控（推荐）' },
-        { value: true, label: '退出程序' },
+        { value: true, label: '自启动时登录后退出' },
       ],
       logLevelOptions: [
         { value: '', label: '全部级别' },
@@ -89,6 +89,7 @@ export const appOptions = {
       frontendLogger: createFrontendLogger('INFO'),
       appVersion: 'unknown',
       pythonVersion: '',
+      shellCustomMode: false,
     };
   },
   computed: {
@@ -211,12 +212,13 @@ export const appOptions = {
     },
     shellPathMode: {
       get() {
-        if (!this.config.shell_path) return this._shellCustomMode ? '__custom__' : '';
+        if (this.shellCustomMode) return '__custom__';
+        if (!this.config.shell_path) return '';
         if (this.availableShells.some(s => s.path === this.config.shell_path)) return this.config.shell_path;
         return '__custom__';
       },
       set(val) {
-        this._shellCustomMode = (val === '__custom__');
+        this.shellCustomMode = (val === '__custom__');
         if (val !== '__custom__') this.config.shell_path = val;
       },
     },
