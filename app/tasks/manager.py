@@ -227,7 +227,7 @@ class TaskManager:
 
         # 1. 扫描 scripts/ 下的 JSON 文件（排除 .meta.json）
         for file in self.scripts_dir.glob("*.json"):
-            if file.suffix.lower() == ".meta.json":
+            if file.name.lower().endswith(".meta.json"):
                 continue
             if not is_valid_task_id(file.stem):
                 continue
