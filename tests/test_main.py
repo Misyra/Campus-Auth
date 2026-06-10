@@ -744,7 +744,7 @@ class TestRunServer:
             _run_server()
             mock_atexit.assert_called()
 
-    def test_tray_failure_graceful(self, tmp_pid_dir, capsys):
+    def test_tray_failure_graceful(self, tmp_pid_dir, caplog):
         """系统托盘启动失败时降级，不阻塞主流程。"""
         from main import _run_server
 
@@ -772,8 +772,7 @@ class TestRunServer:
             mock_ps_cls.return_value = mock_ps
             _run_server()
 
-        out = capsys.readouterr().out
-        assert "启动系统托盘失败" in out
+        assert "启动系统托盘失败" in caplog.text
 
     def test_login_then_exit_without_autostart_skipped(self, tmp_pid_dir):
         """login_then_exit=True 但无自启动环境变量时，不触发登录。"""
