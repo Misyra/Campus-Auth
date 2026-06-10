@@ -27,9 +27,8 @@ def mock_classes():
         patch("app.container.WebSocketManager") as mock_ws_cls,
         patch("app.container.ProfileService") as mock_profile_cls,
         patch("app.container.LoginHistoryService") as mock_lh_cls,
-        patch("app.container.MonitorService") as mock_monitor_cls,
+        patch("app.container.ScheduleEngine") as mock_engine_cls,
         patch("app.container.TaskService") as mock_task_cls,
-        patch("app.container.SchedulerService") as mock_sched_cls,
         patch("app.container.AutoStartService") as mock_autostart_cls,
         patch("app.container.DebugSessionManager") as mock_debug_cls,
     ):
@@ -37,9 +36,8 @@ def mock_classes():
             "WebSocketManager": mock_ws_cls,
             "ProfileService": mock_profile_cls,
             "LoginHistoryService": mock_lh_cls,
-            "MonitorService": mock_monitor_cls,
+            "ScheduleEngine": mock_engine_cls,
             "TaskService": mock_task_cls,
-            "SchedulerService": mock_sched_cls,
             "AutoStartService": mock_autostart_cls,
             "DebugSessionManager": mock_debug_cls,
         }
@@ -53,7 +51,7 @@ def container(project_root: Path, mock_classes: dict):
     c = ServiceContainer(project_root)
 
     # ws_drain_loop 必须返回协程，否则 asyncio.create_task 会失败
-    c.monitor_service.ws_drain_loop = AsyncMock()
+    c.engine.ws_drain_loop = AsyncMock()
 
     c._mock_classes = mock_classes
     return c
@@ -99,12 +97,12 @@ class TestInit:
         """LoginHistoryService 应被实例化。"""
         mock_classes["LoginHistoryService"].assert_called_once()
 
-    def test_monitor_service_created_with_dependencies(
+    def test_engine_created_with_dependencies(
         self, container, project_root, mock_classes
     ):
-        """MonitorService 应接收 project_root、profile_service、ws_manager、login_history_service。"""
-        mock_classes["MonitorService"].assert_called_once()
-        call_args = mock_classes["MonitorService"].call_args
+        """ScheduleEngine 应接收 project_root、profile_service、ws_manager、login_history_service。"""
+        mock_classes["ScheduleEngine"].assert_called_once()
+        call_args = mock_classes["ScheduleEngine"].call_args
         assert call_args[0][0] == project_root
         assert call_args[1]["login_history_service"] is container.login_history_service
 
@@ -114,14 +112,9 @@ class TestInit:
         """TaskService 应以 project_root 构造。"""
         mock_classes["TaskService"].assert_called_once_with(project_root)
 
-    def test_scheduler_service_created_with_deps(
-        self, container, project_root, mock_classes
-    ):
-        """SchedulerService 应接收 project_root、task_service、monitor_service、login_history。"""
-        mock_classes["SchedulerService"].assert_called_once()
-        call_args = mock_classes["SchedulerService"].call_args
-        assert call_args[0][0] == project_root
-        assert call_args[1]["login_history"] is container.login_history_service
+    def test_scheduler_service_is_engine_alias(self, container):
+        """scheduler_service 属性应返回 engine 实例。"""
+        assert container.scheduler_service is container.engine
 
     def test_autostart_service_created(self, container, project_root, mock_classes):
         """AutoStartService 应以 project_root 构造。"""
@@ -136,9 +129,10 @@ class TestInit:
         assert hasattr(container, "ws_manager")
         assert hasattr(container, "profile_service")
         assert hasattr(container, "login_history_service")
-        assert hasattr(container, "monitor_service")
+        assert hasattr(container, "engine")
+        assert hasattr(container, "monitor_service")  # 向后兼容别名
+        assert hasattr(container, "scheduler_service")  # 向后兼容别名
         assert hasattr(container, "task_service")
-        assert hasattr(container, "scheduler_service")
         assert hasattr(container, "autostart_service")
         assert hasattr(container, "debug_manager")
 
@@ -152,8 +146,8 @@ class TestStartup:
     @pytest.fixture
     def container_for_startup(self, container):
         """为 startup 测试配置 mock 行为。"""
-        container.scheduler_service.has_enabled_tasks = MagicMock(return_value=False)
-        container.scheduler_service.start = MagicMock()
+        container.engine.has_enabled_tasks = MagicMock(return_value=False)
+        container.engine.start_scheduler = MagicMock()
         return container
 
     @patch("app.container.cleanup_orphan_browsers")
@@ -172,9 +166,9 @@ class TestStartup:
     def test_startup_boots_monitor(
         self, mock_logger, mock_dashboard_sink, mock_cleanup, container_for_startup
     ):
-        """startup 应调用 monitor_service.boot()。"""
+        """startup 应调用 engine.boot()。"""
         asyncio.run(container_for_startup.startup())
-        container_for_startup.monitor_service.boot.assert_called_once()
+        container_for_startup.engine.boot.assert_called_once()
 
     @patch("app.container.cleanup_orphan_browsers")
     @patch("app.container.DashboardSink")
@@ -183,9 +177,9 @@ class TestStartup:
         self, mock_logger, mock_dashboard_sink, mock_cleanup, container_for_startup
     ):
         """当存在启用的定时任务时，startup 应启动调度器。"""
-        container_for_startup.scheduler_service.has_enabled_tasks.return_value = True
+        container_for_startup.engine.has_enabled_tasks.return_value = True
         asyncio.run(container_for_startup.startup())
-        container_for_startup.scheduler_service.start.assert_called_once()
+        container_for_startup.engine.start_scheduler.assert_called_once()
 
     @patch("app.container.cleanup_orphan_browsers")
     @patch("app.container.DashboardSink")
@@ -194,9 +188,9 @@ class TestStartup:
         self, mock_logger, mock_dashboard_sink, mock_cleanup, container_for_startup
     ):
         """没有启用的定时任务时，startup 不应启动调度器。"""
-        container_for_startup.scheduler_service.has_enabled_tasks.return_value = False
+        container_for_startup.engine.has_enabled_tasks.return_value = False
         asyncio.run(container_for_startup.startup())
-        container_for_startup.scheduler_service.start.assert_not_called()
+        container_for_startup.engine.start_scheduler.assert_not_called()
 
     @patch("app.container.cleanup_orphan_browsers")
     @patch("app.container.DashboardSink")
@@ -218,8 +212,8 @@ class TestShutdown:
     @pytest.fixture
     def container_for_shutdown(self, container):
         """为 shutdown 测试配置 mock 行为。"""
-        container.scheduler_service.stop = AsyncMock()
-        container.monitor_service.shutdown = MagicMock()
+        container.engine.stop_scheduler = MagicMock()
+        container.engine.shutdown = MagicMock()
         container.debug_manager.close = AsyncMock()
         container.ws_manager.close_all = AsyncMock()
         return container
@@ -227,12 +221,12 @@ class TestShutdown:
     def test_shutdown_stops_scheduler(self, container_for_shutdown):
         """shutdown 应停止调度器。"""
         asyncio.run(container_for_shutdown.shutdown())
-        container_for_shutdown.scheduler_service.stop.assert_awaited_once()
+        container_for_shutdown.engine.stop_scheduler.assert_called_once()
 
     def test_shutdown_calls_monitor_shutdown(self, container_for_shutdown):
-        """shutdown 应调用 monitor_service.shutdown()。"""
+        """shutdown 应调用 engine.shutdown()。"""
         asyncio.run(container_for_shutdown.shutdown())
-        container_for_shutdown.monitor_service.shutdown.assert_called_once()
+        container_for_shutdown.engine.shutdown.assert_called_once()
 
     def test_shutdown_closes_debug_manager(self, container_for_shutdown):
         """shutdown 应关闭调试会话管理器。"""
@@ -346,9 +340,9 @@ class TestShutdown:
 class TestIntegration:
     def test_startup_then_shutdown(self, container):
         """完整的 startup → shutdown 生命周期不应抛异常。"""
-        container.scheduler_service.has_enabled_tasks = MagicMock(return_value=False)
-        container.scheduler_service.start = MagicMock()
-        container.scheduler_service.stop = AsyncMock()
+        container.engine.has_enabled_tasks = MagicMock(return_value=False)
+        container.engine.start_scheduler = MagicMock()
+        container.engine.stop_scheduler = MagicMock()
         container.debug_manager.close = AsyncMock()
         container.ws_manager.close_all = AsyncMock()
 
@@ -367,5 +361,4 @@ class TestIntegration:
         assert mock_classes["TaskService"].call_args[0][0] == project_root
         assert mock_classes["AutoStartService"].call_args[0][0] == project_root
         assert mock_classes["DebugSessionManager"].call_args[0][0] == project_root
-        assert mock_classes["MonitorService"].call_args[0][0] == project_root
-        assert mock_classes["SchedulerService"].call_args[0][0] == project_root
+        assert mock_classes["ScheduleEngine"].call_args[0][0] == project_root

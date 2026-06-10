@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.deps import get_monitor_service, get_profile_service
 from app.schemas import ActionResponse, ProfileSettings
-from app.services.monitor import MonitorService
+from app.services.engine import ScheduleEngine
 from app.services.profile import ProfileService
 from app.utils.logging import get_logger
 
@@ -81,7 +81,7 @@ def save_profile(
     profile_id: str,
     payload: ProfileSettings,
     profile_svc: ProfileService = Depends(get_profile_service),
-    monitor_svc: MonitorService = Depends(get_monitor_service),
+    monitor_svc: ScheduleEngine = Depends(get_monitor_service),
 ) -> ActionResponse:
     ok, message = profile_svc.save_profile(profile_id, payload)
     api_logger.info("保存方案 {} -> success={}, message={}", profile_id, ok, message)
@@ -99,7 +99,7 @@ def save_profile(
 def delete_profile(
     profile_id: str,
     profile_svc: ProfileService = Depends(get_profile_service),
-    monitor_svc: MonitorService = Depends(get_monitor_service),
+    monitor_svc: ScheduleEngine = Depends(get_monitor_service),
 ) -> ActionResponse:
     ok, message = profile_svc.delete_profile(profile_id)
     api_logger.info("删除方案 {} -> success={}, message={}", profile_id, ok, message)
@@ -117,7 +117,7 @@ def delete_profile(
 def set_active_profile(
     profile_id: str,
     profile_svc: ProfileService = Depends(get_profile_service),
-    monitor_svc: MonitorService = Depends(get_monitor_service),
+    monitor_svc: ScheduleEngine = Depends(get_monitor_service),
 ) -> ActionResponse:
     ok, message = profile_svc.set_active_profile(profile_id)
     api_logger.info(

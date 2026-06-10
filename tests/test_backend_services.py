@@ -959,7 +959,7 @@ class TestWebSocketMaxSize:
 
         mock_services = MagicMock()
         mock_services.ws_manager = mock_ws_mgr
-        mock_services.monitor_service = mock_monitor
+        mock_services.engine = mock_monitor
 
         # 从 main.py 导入 websocket_logs 处理函数
 

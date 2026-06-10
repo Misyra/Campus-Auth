@@ -26,7 +26,7 @@ def client(tmp_path):
 
         mock_services = MagicMock()
         mock_scheduler = MagicMock()
-        mock_services.scheduler_service = mock_scheduler
+        mock_services.engine = mock_scheduler
 
         # 默认 get_task 返回 None（任务不存在）
         mock_scheduler.get_task.return_value = None
@@ -34,7 +34,7 @@ def client(tmp_path):
         mock_scheduler.save_task.return_value = (True, "保存成功")
         mock_scheduler.delete_task.return_value = (True, "删除成功")
         mock_scheduler.get_history.return_value = []
-        mock_scheduler.execute_task = AsyncMock(return_value=(True, "执行成功"))
+        mock_scheduler.execute_task = MagicMock(return_value=(True, "执行成功"))
 
         app.state.services = mock_services
 
@@ -177,7 +177,7 @@ class TestCreateScheduledTask:
             },
         )
         assert resp.status_code == 200
-        scheduler.start.assert_called()
+        scheduler.start_scheduler.assert_called()
 
 
 # ── 更新定时任务 ──
@@ -328,7 +328,7 @@ class TestRunScheduledTask:
         """手动执行存在的任务成功。"""
         test_client, scheduler = client
         scheduler.get_task.return_value = {"id": "task1", "name": "test"}
-        scheduler.execute_task = AsyncMock(return_value=(True, "执行成功"))
+        scheduler.execute_task = MagicMock(return_value=(True, "执行成功"))
         resp = test_client.post("/api/scheduled-tasks/task1/run")
         assert resp.status_code == 200
         assert resp.json()["success"] is True
@@ -345,7 +345,7 @@ class TestRunScheduledTask:
         """后台执行时立即返回成功，实际结果通过执行历史查看。"""
         test_client, scheduler = client
         scheduler.get_task.return_value = {"id": "task1", "name": "test"}
-        scheduler.execute_task = AsyncMock(return_value=(False, "执行超时"))
+        scheduler.execute_task = MagicMock(return_value=(False, "执行超时"))
         resp = test_client.post("/api/scheduled-tasks/task1/run")
         assert resp.status_code == 200
         assert resp.json()["success"] is True

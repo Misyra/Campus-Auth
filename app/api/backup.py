@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 from app.constants import BACKUP_DIR, BACKUP_FILENAME_PATTERN, MAX_BACKUPS, PROJECT_ROOT
 from app.deps import get_monitor_service, get_profile_service
 from app.schemas import ActionResponse, ProfilesData
-from app.services.monitor import MonitorService
+from app.services.engine import ScheduleEngine
 from app.services.profile import ProfileService
 from app.utils.file_helpers import atomic_write
 from app.utils.logging import get_logger
@@ -71,7 +71,7 @@ def create_backup() -> ActionResponse:
 def restore_backup(
     filename: str,
     profile_svc: ProfileService = Depends(get_profile_service),
-    monitor_svc: MonitorService = Depends(get_monitor_service),
+    monitor_svc: ScheduleEngine = Depends(get_monitor_service),
 ) -> ActionResponse:
     """从备份恢复配置"""
     if not re.match(BACKUP_FILENAME_PATTERN, filename):

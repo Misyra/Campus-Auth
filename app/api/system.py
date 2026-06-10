@@ -11,7 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from app.constants import AUTH_DATA_DIR, PROJECT_ROOT
 from app.deps import get_monitor_service
 from app.schemas import ActionResponse
-from app.services.monitor import MonitorService
+from app.services.engine import ScheduleEngine
 from app.utils.logging import get_logger
 from app.version import compare_versions, get_project_version
 
@@ -92,7 +92,7 @@ async def check_update() -> dict:
 
 @router.get("/api/init-status")
 def get_init_status(
-    svc: MonitorService = Depends(get_monitor_service),
+    svc: ScheduleEngine = Depends(get_monitor_service),
 ) -> dict:
     from app.utils.crypto import has_decryption_error
 
@@ -118,7 +118,7 @@ def get_init_status(
 def shutdown_server(
     request: Request,
     bg_tasks: BackgroundTasks,
-    svc: MonitorService = Depends(get_monitor_service),
+    svc: ScheduleEngine = Depends(get_monitor_service),
 ) -> ActionResponse:
     """关闭服务器 — 通过 shutdown_event 触发 lifespan 正常清理"""
     api_logger.warning("收到关机请求")

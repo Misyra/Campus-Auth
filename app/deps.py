@@ -2,28 +2,23 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from fastapi import Request
 
 from app.container import ServiceContainer
 from app.services.autostart import AutoStartService
 from app.services.debug import DebugSessionManager
+from app.services.engine import ScheduleEngine
 from app.services.login_history import LoginHistoryService
-from app.services.monitor import MonitorService
 from app.services.profile import ProfileService
 from app.services.task import TaskService
-
-if TYPE_CHECKING:
-    from app.services.scheduler import SchedulerService
 
 
 def get_services(request: Request) -> ServiceContainer:
     return request.app.state.services
 
 
-def get_monitor_service(request: Request) -> MonitorService:
-    return request.app.state.services.monitor_service
+def get_monitor_service(request: Request) -> ScheduleEngine:
+    return request.app.state.services.engine
 
 
 def get_profile_service(request: Request) -> ProfileService:
@@ -46,5 +41,5 @@ def get_login_history_service(request: Request) -> LoginHistoryService:
     return request.app.state.services.login_history_service
 
 
-def get_scheduler_service(request: Request) -> SchedulerService:
-    return request.app.state.services.scheduler_service
+def get_scheduler_service(request: Request) -> ScheduleEngine:
+    return request.app.state.services.engine

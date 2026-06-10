@@ -29,17 +29,17 @@ def client(tmp_path):
         mock_services = MagicMock()
 
         # monitor_service
-        mock_services.monitor_service.get_config.return_value = MonitorConfigPayload(
+        mock_services.engine.get_config.return_value = MonitorConfigPayload(
             username="testuser", password="••••••••", auth_url="http://10.0.0.1"
         )
-        mock_services.monitor_service.get_status.return_value = MonitorStatusResponse(
+        mock_services.engine.get_status.return_value = MonitorStatusResponse(
             monitoring=False,
             network_check_count=0,
             login_attempt_count=0,
             last_check_time=None,
             runtime_seconds=0,
         )
-        mock_services.monitor_service.list_logs.return_value = []
+        mock_services.engine.list_logs.return_value = []
 
         # autostart_service
         mock_services.autostart_service.status.return_value = {
