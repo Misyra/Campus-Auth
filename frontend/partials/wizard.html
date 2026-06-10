@@ -9,12 +9,12 @@
     <div class="wizard-steps">
       <div class="step" :class="{ active: wizardStep === 1, completed: wizardStep > 1 }">
         <span class="step-number">1</span>
-        <span class="step-label">账号配置</span>
+        <span class="step-label">使用协议</span>
       </div>
       <div class="step-line" :class="{ completed: wizardStep > 1 }"></div>
       <div class="step" :class="{ active: wizardStep === 2, completed: wizardStep > 2 }">
         <span class="step-number">2</span>
-        <span class="step-label">运营商设置</span>
+        <span class="step-label">账号与运营商</span>
       </div>
       <div class="step-line" :class="{ completed: wizardStep > 2 }"></div>
       <div class="step" :class="{ active: wizardStep === 3, completed: wizardStep > 3 }">
@@ -29,9 +29,44 @@
     </div>
 
     <div class="wizard-content">
+      <!-- 第 1 步：使用协议 -->
       <div v-if="wizardStep === 1" class="wizard-page">
-        <h2>账号配置</h2>
-        <p class="description">请输入您的校园网账号和密码，这些信息将用于自动登录认证。</p>
+        <h2>使用协议与免责声明</h2>
+        <p class="description">请仔细阅读以下协议内容，同意后方可继续使用本软件。</p>
+
+        <div class="terms-content">
+          <h4>使用协议</h4>
+          <p>本软件（Campus-Auth）是一款校园网自动认证工具，仅供学习和个人使用。使用本软件前，请您仔细阅读并理解以下条款：</p>
+          <ul>
+            <li>本软件按"现状"提供，不作任何明示或暗示的保证。</li>
+            <li>用户应自行承担使用本软件的一切风险和后果。</li>
+            <li>用户应遵守所在学校和网络服务提供商的相关规定。</li>
+            <li>用户不得将本软件用于任何非法用途或违反相关法律法规的行为。</li>
+            <li>本软件开发者不对因使用本软件而产生的任何直接或间接损失承担责任。</li>
+          </ul>
+
+          <h4>免责声明</h4>
+          <ul>
+            <li>本软件不保证在所有网络环境下均能正常工作。</li>
+            <li>因网络环境变化、学校政策调整等原因导致软件无法使用，开发者不承担责任。</li>
+            <li>用户因使用本软件导致的账号异常、网络服务中断等问题，开发者不承担责任。</li>
+            <li>本软件可能因系统更新、依赖变更等原因需要调整，开发者保留随时修改或终止软件的权利。</li>
+          </ul>
+        </div>
+
+        <div class="terms-checkbox">
+          <label class="toggle">
+            <input type="checkbox" v-model="agreedToTerms" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">我已阅读并同意《使用协议》和《免责声明》</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- 第 2 步：账号与运营商配置 -->
+      <div v-if="wizardStep === 2" class="wizard-page">
+        <h2>账号与运营商配置</h2>
+        <p class="description">请输入您的校园网账号信息，并选择网络运营商。</p>
 
         <form @submit.prevent="nextWizardStep" autocomplete="on">
           <div class="form-group">
@@ -70,29 +105,24 @@
             />
             <span class="hint">校园网认证页面的网址，例如 http://auth.school.edu.cn</span>
           </div>
+
+          <div class="form-group">
+            <label for="wiz-carrier">运营商</label>
+            <custom-select v-model="config.carrier" :options="carrierOptions"></custom-select>
+            <span class="hint">选择与您宽带套餐对应的运营商</span>
+          </div>
+
+          <div v-if="config.carrier === '自定义'" class="form-group">
+            <label for="wiz-carrier-custom">自定义运营商关键字</label>
+            <input
+              id="wiz-carrier-custom"
+              v-model.trim="config.carrier_custom"
+              type="text"
+              placeholder="例如：校园专网、宿舍网、移动(新)"
+            />
+            <span class="hint">将按关键字匹配登录页的运营商选项</span>
+          </div>
         </form>
-      </div>
-
-      <div v-if="wizardStep === 2" class="wizard-page">
-        <h2>运营商设置</h2>
-        <p class="description">选择您使用的网络运营商，如果您不确定，可以选择"无"。</p>
-
-        <div class="form-group">
-          <label for="wiz-carrier">运营商</label>
-          <custom-select v-model="config.carrier" :options="carrierOptions"></custom-select>
-          <span class="hint">选择与您宽带套餐对应的运营商</span>
-        </div>
-
-        <div v-if="config.carrier === '自定义'" class="form-group">
-          <label for="wiz-carrier-custom">自定义运营商关键字</label>
-          <input
-            id="wiz-carrier-custom"
-            v-model.trim="config.carrier_custom"
-            type="text"
-            placeholder="例如：校园专网、宿舍网、移动(新)"
-          />
-          <span class="hint">将按关键字匹配登录页的运营商选项</span>
-        </div>
 
         <div class="info-box">
           <h4>运营商说明</h4>
@@ -106,6 +136,7 @@
         </div>
       </div>
 
+      <!-- 第 3 步：监控设置 -->
       <div v-if="wizardStep === 3" class="wizard-page">
         <h2>监控设置</h2>
         <p class="description">配置自动监控和登录的行为，包括检测频率和暂停时段。</p>
@@ -146,8 +177,27 @@
           </label>
           <span class="hint">程序启动后自动开始检测网络状态</span>
         </div>
+
+        <div class="toggle-group">
+          <label class="toggle">
+            <input type="checkbox" v-model="config.headless" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">无头模式</span>
+          </label>
+          <span class="hint">不显示浏览器窗口，减少资源占用。关闭后可以看到浏览器操作过程</span>
+        </div>
+
+        <div class="form-group">
+          <label for="wiz-login-action">登录成功后行为</label>
+          <select id="wiz-login-action" v-model="config.login_then_exit">
+            <option :value="false">保持监控（推荐）</option>
+            <option :value="true">退出程序</option>
+          </select>
+          <span class="hint">登录成功后是继续监控网络状态，还是退出程序</span>
+        </div>
       </div>
 
+      <!-- 第 4 步：完成 -->
       <div v-if="wizardStep === 4" class="wizard-page">
         <h2>配置完成</h2>
         <p class="description">您已完成基本配置，可以开始使用了！</p>
@@ -169,6 +219,14 @@
           <div class="summary-item">
             <span class="label">检测间隔</span>
             <span class="value">{{ config.check_interval_seconds }} 秒</span>
+          </div>
+          <div class="summary-item">
+            <span class="label">无头模式</span>
+            <span class="value">{{ config.headless ? '是' : '否' }}</span>
+          </div>
+          <div class="summary-item">
+            <span class="label">登录后行为</span>
+            <span class="value">{{ config.login_then_exit ? '退出程序' : '保持监控' }}</span>
           </div>
           <div class="summary-item">
             <span class="label">自动监控</span>
