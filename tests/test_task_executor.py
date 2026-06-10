@@ -867,9 +867,9 @@ class TestTaskManager:
         assert mgr.delete_task("default") is False
 
     def test_delete_nonexistent(self, tmp_path):
-        """删除不存在的任务：file.unlink(missing_ok=True) 会返回 True"""
+        """删除不存在的任务应返回 False"""
         mgr = TaskManager(tmp_path)
-        assert mgr.delete_task("nonexistent") is True
+        assert mgr.delete_task("nonexistent") is False
 
     def test_get_active_task_default(self, tmp_path):
         mgr = TaskManager(tmp_path)
