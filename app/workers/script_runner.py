@@ -190,6 +190,9 @@ class ScriptRunner:
         # 使用 ShellCommandPolicy 进行安全校验和执行
         available = [b["path"] for b in detect_available_binaries()]
         if self.binary_path not in available:
+            logger.warning(
+                "binary_path 不在系统已知列表中，已自动添加: {}", self.binary_path
+            )
             available.append(self.binary_path)
         policy = ShellCommandPolicy(allowlist=available)
 
@@ -210,6 +213,9 @@ class ScriptRunner:
         except FileNotFoundError as e:
             logger.error("脚本或解释器不存在: {}", e)
             return False, f"脚本或解释器不存在: {e}"
+        except Exception as e:
+            logger.error("脚本执行异常: {}", e)
+            return False, f"执行异常: {e}"
         finally:
             if temp_path is not None:
                 with contextlib.suppress(OSError):
