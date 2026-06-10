@@ -107,6 +107,13 @@ export const scriptMethods = {
       return;
     }
 
+    // 脚本内容大小限制（100KB）
+    const maxSize = 100 * 1024;
+    if (new TextEncoder().encode(this.editingTask.content).length > maxSize) {
+      this.toastOnly(false, `脚本内容超过大小限制（最大 ${maxSize / 1024}KB）`);
+      return;
+    }
+
     // 处理二进制路径
     let binaryPath = this.editingTask.binary_path;
     if (binaryPath === '__custom__') {
@@ -171,7 +178,7 @@ export const scriptMethods = {
       const ext = this._inferScriptExtension(data.binary_path, data.content);
       a.download = `${taskId}${ext}`;
       a.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (error) {
       this.toastOnly(false, extractApiError(error, '导出失败'));
     }
@@ -192,6 +199,16 @@ export const scriptMethods = {
         if (/^[0-9]/.test(id)) {
           id = 'sc_' + id;
         }
+
+        // 检查 ID 是否已存在
+        if (this.scripts && this.scripts.some(s => s.id === id)) {
+          if (!confirm(`脚本「${id}」已存在，是否覆盖？`)) {
+            input.value = '';
+            input.onchange = null;
+            return;
+          }
+        }
+
         this.editingTaskType = 'script';
         this.editingTask = {
           id: id,

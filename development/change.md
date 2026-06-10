@@ -3,6 +3,31 @@
 本文档记录项目的所有变更，包括文档更新、代码修改、配置调整等。
 
 
+## 2026-06-10
+
+### fix: 脚本内容大小限制 + 导入 ID 冲突检查 + 导出 URL 释放修复
+
+- `app/services/task.py`：`_save_script_task` 新增 100KB 脚本内容大小限制（UTF-8 编码计算）
+- `frontend/js/methods/scripts.js`：`saveScript()` 前端同步添加 100KB 大小校验
+- `frontend/js/methods/scripts.js`：`importScript()` 导入时检查 ID 是否已存在，存在则弹窗确认覆盖
+- `frontend/js/methods/scripts.js`：`exportScript()` `revokeObjectURL` 延迟 1 秒释放，修复部分浏览器下载失败
+
+### fix: 线程安全与架构改进
+
+全面审查系统架构和线程安全，修复 3 个实际 bug + 2 个架构改进：
+
+**Bug 修复：**
+1. `monitor_core.py`：`snapshot()` 与监控线程之间的竞态 — 引入 `_state_lock` + `_update_state()` 方法，所有状态字段读写均通过锁保护
+2. `logging.py`：`DateRotatingSink.write()` 在持锁期间执行 `_cleanup_old_dirs()`（含 `shutil.rmtree`）— 将清理操作移到锁外执行
+3. `application.py`：`_access_log_enabled` 全局变量无同步保护 — 改用 `threading.Event`
+
+**架构改进：**
+4. `playwright_worker.py`：添加 `page`/`browser`/`context`/`playwright_instance` 只读属性，替代 `BrowserContextManager` 对私有字段的直接访问
+5. `monitor.py`：添加 `_enqueue()` 统一入队辅助方法（带重试），替代分散的 `put_nowait` + `except queue.Full` 模式
+
+**涉及文件：** `app/core/monitor_core.py`、`app/utils/logging.py`、`app/application.py`、`app/workers/playwright_worker.py`、`app/utils/browser.py`、`app/services/monitor.py`、`tests/test_monitor_service.py`
+
+
 ## 2026-06-09
 
 ### refactor: 合并剩余重复测试文件（network/backend/api）
