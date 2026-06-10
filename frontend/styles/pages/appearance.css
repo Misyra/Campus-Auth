@@ -162,7 +162,7 @@
 .bg-lightbox-overlay {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: var(--z-max);
   background: rgba(0, 0, 0, 0.85);
   display: flex;
   align-items: center;
@@ -337,6 +337,13 @@
 
 .appearance-visual-effects .toggle {
   margin-top: 8px;
+}
+
+.form-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  margin-bottom: 0;
 }
 
 .appearance-visual-effects .form-hint {

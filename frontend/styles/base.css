@@ -21,6 +21,7 @@
   --text-primary: #f1f5f9;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
+  --text-tertiary: #475569;
   --text-on-accent: #ffffff;
 
   /* 主题色 */
@@ -76,6 +77,7 @@
   --z-modal: 200;
   --z-toast: 300;
   --z-top: 400;
+  --z-max: 9999;
 
   /* 字体大小（可通过外观设置动态修改） */
   --font-size-base: 14px;
