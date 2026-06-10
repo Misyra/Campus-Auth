@@ -1270,3 +1270,19 @@
 - **Phase 3**: 新增 8 个 API 路由测试文件（53 个新用例），覆盖 config/tasks/debug/profiles/monitor/history/repo/autostart
 - **Phase 4**: 清理 conftest.py 未使用 fixtures，合并剩余重复文件
 - **成果**: 80 → 49 文件，1899 → 1584 用例（删除重复 + 新增覆盖），所有测试通过
+
+#### 测试警告修复
+
+- 抑制 StarletteDeprecationWarning（httpx 兼容性，继承自 UserWarning）
+- 抑制 RuntimeWarning（Python 3.12 AsyncMockMixin 内部问题）
+- 在 pyproject.toml 添加 filterwarnings 配置
+- 最终状态：1584 passed, 2 skipped, 0 warnings
+
+### 2026-06-09
+
+#### psutil 简化进程管理和网络检测
+
+- `get_process_name()`: 用 `psutil.Process(pid).name()` 替代 tasklist/ps subprocess（~30 行 → 5 行）
+- `is_local_network_connected()`: 用 `psutil.net_if_stats()` 替代 socket + 平台特判（~140 行 → 10 行）
+- 删除 `_check_windows_adapter`、`_check_linux_route`、`_check_macos_service`
+- 新增 psutil 依赖
