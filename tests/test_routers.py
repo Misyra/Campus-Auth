@@ -74,7 +74,7 @@ def client(tmp_path):
         patch("app.constants.TEMP_DIR", tmp_path / "temp"),
         patch("app.constants.BACKUP_DIR", tmp_path / "backups"),
     ):
-        from app.application import app
+        from app.application import create_app
 
         mock_services = MagicMock()
 
@@ -180,6 +180,7 @@ def client(tmp_path):
         # ── ws_manager ──
         mock_services.ws_manager = MagicMock()
 
+        app = create_app()
         app.state.services = mock_services
 
         test_client = TestClient(app)
