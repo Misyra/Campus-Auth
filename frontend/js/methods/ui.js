@@ -212,28 +212,25 @@ export const uiMethods = {
         this.ws.close();
       }
       await this.$api.post('/api/shutdown');
-      // 尝试关闭窗口，浏览器可能拦截
-      setTimeout(() => {
-        window.close();
-        // 如果窗口没关成（浏览器拦截），显示提示
-        setTimeout(() => {
-          const overlay = document.createElement('div');
-          overlay.className = 'exit-overlay';
-          overlay.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-              <polyline points="22 4 12 14.01 9 11.01"/>
-            </svg>
-            <h2>应用已退出</h2>
-            <p>后端已关闭，你可以关闭此标签页</p>`;
-          document.body.appendChild(overlay);
-        }, 500);
-      }, 1000);
+      // 显示退出提示页面
+      this._showExitOverlay();
     } catch (error) {
       this.frontendLogger.error('app', '退出应用失败', error);
       this.notify(false, '退出失败，请手动关闭窗口');
     } finally {
       this.busy.monitor = false;
     }
+  },
+  _showExitOverlay() {
+    const overlay = document.createElement('div');
+    overlay.className = 'exit-overlay';
+    overlay.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+        <polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>
+      <h2>应用已退出</h2>
+      <p>后端已关闭，你可以关闭此标签页</p>`;
+    document.body.appendChild(overlay);
   },
 };
