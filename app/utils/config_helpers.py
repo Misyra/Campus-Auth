@@ -8,10 +8,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.schemas import ProfileSettings
+from app.utils.logging import get_logger
+
 # 配置文件中跨 load_ui_config / load_runtime_config / build_runtime_config /
 # save_config_combined 四函数重复出现的所有字段名
 # 源自 MonitorConfigPayload / ProfileSettings 交集
-PROFILE_FIELDS: list[str] = [
+PROFILE_FIELDS: list[str] = [  # 常量，不应在运行时修改
     "username",
     "password",
     "auth_url",
@@ -90,3 +93,27 @@ def assign_profile_fields(target: dict, source: dict, field_names: list[str]) ->
     for name in field_names:
         if name in source:
             target[name] = source[name]
+
+
+def validate_profile_fields() -> None:
+    """验证 PROFILE_FIELDS 与 ProfileSettings 模型字段是否同步。
+
+    在服务启动时调用，检测两者不一致时记录警告日志。
+    """
+    model_fields = set(ProfileSettings.model_fields.keys())
+    hardcoded = set(PROFILE_FIELDS)
+
+    only_in_model = model_fields - hardcoded
+    only_in_hardcoded = hardcoded - model_fields
+
+    logger = get_logger("config_helpers", source="backend")
+    if only_in_model:
+        logger.warning(
+            "PROFILE_FIELDS 缺少以下 ProfileSettings 字段: {}",
+            sorted(only_in_model),
+        )
+    if only_in_hardcoded:
+        logger.warning(
+            "PROFILE_FIELDS 中以下字段不在 ProfileSettings 中: {}",
+            sorted(only_in_hardcoded),
+        )

@@ -96,6 +96,7 @@ class PlaywrightWorker:
     def __init__(self) -> None:
         self._cmd_queue: queue.Queue[WorkerCommand] = queue.Queue(maxsize=50)
         self._stop_event = threading.Event()
+        self._shutdown_permanent = threading.Event()  # 永久关闭标志，stop() 设置后不可重置
         self._consumer_thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._worker_ready = threading.Event()
@@ -168,6 +169,7 @@ class PlaywrightWorker:
             timeout: 等待线程结束的超时秒数
         """
         self._stop_event.set()
+        self._shutdown_permanent.set()
 
         # 放入 SHUTDOWN 命令确保事件循环能正常退出
         try:
@@ -234,14 +236,18 @@ class PlaywrightWorker:
             WorkerResponse 对象
         """
         # Worker 已关闭时拒绝新命令（SHUTDOWN 命令走 stop() 路径不经过此检查）
-        if self._stop_event.is_set():
+        if self._stop_event.is_set() or self._shutdown_permanent.is_set():
             return WorkerResponse(success=False, error="Worker 已关闭，不接受新命令")
 
         # 检测消费者线程是否存活，若已死亡则尝试重启
         if not self.is_alive():
             with self._restart_lock:
-                # 双重检查：获取锁后再次确认线程状态
-                if not self.is_alive() and not self._stop_event.is_set():
+                # 三重检查：获取锁后再次确认线程状态和关闭标志
+                if (
+                    not self.is_alive()
+                    and not self._stop_event.is_set()
+                    and not self._shutdown_permanent.is_set()
+                ):
                     logger.warning("检测到消费者线程已死亡，尝试重启")
                     try:
                         self.start()
@@ -709,30 +715,35 @@ class PlaywrightWorker:
 
         self._playwright = await async_playwright().start()
 
-        if pure_mode:
-            # 纯净模式：原始 Chromium，无扩展无自定义参数
-            self._browser = await self._playwright.chromium.launch(headless=headless)
-            ctx_opts = {
-                "viewport": {
-                    "width": browser_settings.get("viewport_width", 1280),
-                    "height": browser_settings.get("viewport_height", 720),
+        try:
+            if pure_mode:
+                # 纯净模式：原始 Chromium，无扩展无自定义参数
+                self._browser = await self._playwright.chromium.launch(headless=headless)
+                ctx_opts = {
+                    "viewport": {
+                        "width": browser_settings.get("viewport_width", 1280),
+                        "height": browser_settings.get("viewport_height", 720),
+                    }
                 }
-            }
-            self._context = await self._browser.new_context(**ctx_opts)
-        else:
-            launch_args = self._build_launch_args(browser_settings)
-            self._browser = await self._playwright.chromium.launch(
-                headless=headless, args=launch_args
-            )
-            ctx_opts = self._build_context_options(browser_settings)
-            self._context = await self._browser.new_context(**ctx_opts)
-            await self._apply_stealth_and_routes(browser_settings)
+                self._context = await self._browser.new_context(**ctx_opts)
+            else:
+                launch_args = self._build_launch_args(browser_settings)
+                self._browser = await self._playwright.chromium.launch(
+                    headless=headless, args=launch_args
+                )
+                ctx_opts = self._build_context_options(browser_settings)
+                self._context = await self._browser.new_context(**ctx_opts)
+                await self._apply_stealth_and_routes(browser_settings)
 
-        self._page = await self._context.new_page()
+            self._page = await self._context.new_page()
 
-        # 纯净模式下也需要应用反检测脚本（如果启用）
-        if pure_mode and browser_settings.get("stealth_mode", False):
-            await self._apply_stealth_and_routes(browser_settings)
+            # 纯净模式下也需要应用反检测脚本（如果启用）
+            if pure_mode and browser_settings.get("stealth_mode", False):
+                await self._apply_stealth_and_routes(browser_settings)
+        except Exception:
+            logger.warning("浏览器启动中间步骤失败，回滚已创建的资源", exc_info=True)
+            await self._close_browser()
+            raise
 
         logger.info("浏览器启动完成")
 
@@ -933,6 +944,7 @@ def get_worker() -> PlaywrightWorker:
                         _worker.stop()
                     except Exception:
                         logger.debug("停止旧 Worker 失败", exc_info=True)
+                cleanup_orphan_browsers()
                 _worker = PlaywrightWorker()
                 _worker.start()
     return _worker

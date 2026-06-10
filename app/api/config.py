@@ -9,7 +9,6 @@ from app.schemas import ActionResponse, MonitorConfigPayload
 from app.services.config import save_config_combined
 from app.services.monitor import MonitorService
 from app.services.profile import ProfileService
-from app.utils import ConfigValidator
 from app.utils.logging import get_logger
 
 router = APIRouter()
@@ -38,19 +37,27 @@ def save_config(
     profile_svc: ProfileService = Depends(get_profile_service),
 ) -> ActionResponse:
     try:
-        # 校验关键字段
-        ok, error = ConfigValidator.validate_gui_config(
-            payload.username,
-            payload.password,
-            payload.check_interval_seconds,
-        )
-        if not ok:
-            raise ValueError(error)
+        # 备份当前配置，用于 reload 失败时回滚
+        import copy
+
+        backup_data = copy.deepcopy(profile_svc.load())
 
         # 原子化保存：系统设置 + 活动方案
         save_config_combined(payload, profile_svc)
+
         # 同步更新 MonitorService 运行时配置
-        svc.reload_config()
+        try:
+            svc.reload_config()
+        except Exception as reload_exc:
+            # reload 失败：回滚磁盘配置并重新加载
+            api_logger.error("配置重载失败，正在回滚: {}", reload_exc, exc_info=True)
+            try:
+                profile_svc.update(lambda data: data.__dict__.update(backup_data.__dict__))
+                svc.reload_config()
+            except Exception:
+                api_logger.error("回滚失败", exc_info=True)
+            raise reload_exc
+
         api_logger.info("配置已保存 -> success=True")
         return ActionResponse(success=True, message="配置保存成功")
     except ValueError as exc:

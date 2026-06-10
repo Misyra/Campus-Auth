@@ -226,7 +226,7 @@ class TaskExecutor:
         effective_step = step
         if task_deadline is not None:
             remaining_ms = max(0, int((task_deadline - time.perf_counter()) * 1000))
-            effective_timeout = step.timeout if step.timeout is not None else 10000
+            effective_timeout = step.timeout if step.timeout is not None else self.default_timeout
             overrides = {}
             if remaining_ms < effective_timeout:
                 logger.debug(
@@ -300,7 +300,7 @@ class TaskExecutor:
             "message": "所有步骤执行完成",
         }
 
-    async def _check_success(self, page) -> bool:
+    async def _check_success(self, _page) -> bool:
         if self.monitor_config:
             return await self._network_detection_check()
         return True
@@ -362,7 +362,7 @@ class TaskExecutor:
             return result
 
         except Exception as e:
-            logger.error("网络验证异常: {}", e)
+            logger.exception("网络验证异常: {}", e)
             return False
 
     async def _handle_success(self, page) -> tuple[bool, str]:

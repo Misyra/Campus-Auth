@@ -62,6 +62,7 @@ package_zip.ps1
 .worktrees/
 CLAUDE.md
 CODE_REVIEW_FIX.md
+CODE_REVIEW_REPORT.md
 AGENTS.md
 skills-lock.json
 .sisyphus/

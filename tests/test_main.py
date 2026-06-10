@@ -599,6 +599,102 @@ class TestRunLoginThenExit:
             _run_login_then_exit(mock_logger)
             mock_logger.warning.assert_called_once()
 
+    def test_network_already_connected_exits(self, tmp_pid_dir):
+        """网络已连接时应直接退出，不启动浏览器登录。"""
+        from main import _run_login_then_exit
+
+        mock_worker, mock_ps, mock_data = self._make_mocks()
+
+        with (
+            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
+            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
+            patch("app.services.profile.ProfileService", return_value=mock_ps),
+            patch(
+                "app.services.config.build_runtime_config",
+                return_value={"retry_settings": {"max_retries": 3}},
+            ),
+            patch(
+                "app.services.config.load_runtime_config",
+                return_value=(MagicMock(), False),
+            ),
+            patch(
+                "app.network.decision.check_network_status",
+                return_value=(True, "network_ok"),
+            ),
+        ):
+            mock_ps.load.return_value = mock_data
+            with pytest.raises(SystemExit) as exc_info:
+                _run_login_then_exit(MagicMock())
+            assert exc_info.value.code == 0
+            # 不应调用登录
+            mock_worker.submit.assert_not_called()
+
+    def test_network_down_proceeds_with_login(self, tmp_pid_dir):
+        """网络未连接时应继续尝试登录。"""
+        from main import _run_login_then_exit
+
+        mock_worker, mock_ps, mock_data = self._make_mocks()
+        success_result = MagicMock(success=True, data="ok")
+        mock_worker.submit.return_value = success_result
+
+        with (
+            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
+            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
+            patch("app.services.profile.ProfileService", return_value=mock_ps),
+            patch(
+                "app.services.config.build_runtime_config",
+                return_value={"retry_settings": {"max_retries": 3}},
+            ),
+            patch(
+                "app.services.config.load_runtime_config",
+                return_value=(MagicMock(), False),
+            ),
+            patch(
+                "app.network.decision.check_network_status",
+                return_value=(False, "network_down"),
+            ),
+            patch("main.cleanup_orphan_browsers"),
+            patch("time.sleep"),
+        ):
+            mock_ps.load.return_value = mock_data
+            with pytest.raises(SystemExit) as exc_info:
+                _run_login_then_exit(MagicMock())
+            assert exc_info.value.code == 0
+            mock_worker.submit.assert_called_once()
+
+    def test_network_check_exception_proceeds(self, tmp_pid_dir):
+        """网络检测异常时应降级继续尝试登录。"""
+        from main import _run_login_then_exit
+
+        mock_worker, mock_ps, mock_data = self._make_mocks()
+        success_result = MagicMock(success=True, data="ok")
+        mock_worker.submit.return_value = success_result
+
+        with (
+            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
+            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
+            patch("app.services.profile.ProfileService", return_value=mock_ps),
+            patch(
+                "app.services.config.build_runtime_config",
+                return_value={"retry_settings": {"max_retries": 3}},
+            ),
+            patch(
+                "app.services.config.load_runtime_config",
+                return_value=(MagicMock(), False),
+            ),
+            patch(
+                "app.network.decision.check_network_status",
+                side_effect=RuntimeError("probe failed"),
+            ),
+            patch("main.cleanup_orphan_browsers"),
+            patch("time.sleep"),
+        ):
+            mock_ps.load.return_value = mock_data
+            with pytest.raises(SystemExit) as exc_info:
+                _run_login_then_exit(MagicMock())
+            assert exc_info.value.code == 0
+            mock_worker.submit.assert_called_once()
+
 
 # ══════════════════════════════════════════════════════════════════════
 #  TestRunServer
@@ -678,6 +774,37 @@ class TestRunServer:
 
         out = capsys.readouterr().out
         assert "启动系统托盘失败" in out
+
+    def test_login_then_exit_without_autostart_skipped(self, tmp_pid_dir):
+        """login_then_exit=True 但无自启动环境变量时，不触发登录。"""
+        from main import _run_server
+
+        with (
+            patch("main.is_service_running", return_value=(False, None)),
+            patch("main.is_local_port_in_use", return_value=False),
+            patch("main.ensure_playwright_ready"),
+            patch("app.services.profile.ProfileService") as mock_ps_cls,
+            patch("app.application.run"),
+            patch("main._open_browser"),
+            patch("main.atexit.register"),
+            patch("main.signal.signal"),
+            patch("main.os._exit"),
+            patch.object(time, "sleep"),
+            patch("main._run_login_then_exit") as mock_lte,
+            patch.dict(os.environ, {}, clear=False),
+        ):
+            # 确保 CAMPUS_AUTH_AUTOSTART 不存在
+            os.environ.pop("CAMPUS_AUTH_AUTOSTART", None)
+            mock_ps = MagicMock()
+            mock_ps.load.return_value.system = MagicMock(
+                minimize_to_tray=False,
+                login_then_exit=True,
+                auto_open_browser=True,
+            )
+            mock_ps_cls.return_value = mock_ps
+
+            _run_server()
+            mock_lte.assert_not_called()
 
 
 # ══════════════════════════════════════════════════════════════════════

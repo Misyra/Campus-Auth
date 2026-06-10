@@ -16,6 +16,8 @@ class TestShutdownUsesExit:
         mock_request = MagicMock()
         mock_request.app.state.shutdown_event = MagicMock()
 
+        mock_bg_tasks = MagicMock()
+
         with (
             patch("app.workers.playwright_worker.get_worker") as mock_get_worker,
             patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
@@ -25,10 +27,12 @@ class TestShutdownUsesExit:
 
             from app.api.system import shutdown_server
 
-            result = shutdown_server(request=mock_request, svc=mock_monitor)
+            result = shutdown_server(
+                request=mock_request, bg_tasks=mock_bg_tasks, svc=mock_monitor
+            )
 
-        # 验证 shutdown_event.set() 被调用
-        mock_request.app.state.shutdown_event.set.assert_called_once()
+        # 验证通过 BackgroundTasks 调度了 shutdown_event.set()
+        mock_bg_tasks.add_task.assert_called_once()
         # 验证返回成功响应
         assert result.success is True
 
@@ -39,6 +43,8 @@ class TestShutdownUsesExit:
 
         mock_request = MagicMock()
         mock_request.app.state.shutdown_event = MagicMock()
+
+        mock_bg_tasks = MagicMock()
 
         with (
             patch("app.workers.playwright_worker.get_worker") as mock_get_worker,
@@ -51,11 +57,13 @@ class TestShutdownUsesExit:
 
             from app.api.system import shutdown_server
 
-            shutdown_server(request=mock_request, svc=mock_monitor)
+            shutdown_server(
+                request=mock_request, bg_tasks=mock_bg_tasks, svc=mock_monitor
+            )
 
         # 验证清理函数被调用
         mock_monitor.stop_monitoring.assert_called_once()
         mock_worker.stop.assert_called_once()
         mock_cleanup.assert_called_once()
-        # 验证 shutdown_event 被设置
-        mock_request.app.state.shutdown_event.set.assert_called_once()
+        # 验证通过 BackgroundTasks 调度了 shutdown_event
+        mock_bg_tasks.add_task.assert_called_once()

@@ -433,13 +433,13 @@ class TestSchedulerStartStop:
         scheduler = SchedulerService(tmp_path)
         scheduler.start()
         assert scheduler._running is True
-        scheduler.stop()
+        await scheduler.stop()
 
     @pytest.mark.asyncio
     async def test_stop_clears_running(self, tmp_path: Path):
         scheduler = SchedulerService(tmp_path)
         scheduler.start()
-        scheduler.stop()
+        await scheduler.stop()
         assert scheduler._running is False
 
     @pytest.mark.asyncio
@@ -447,8 +447,9 @@ class TestSchedulerStartStop:
         scheduler = SchedulerService(tmp_path)
         scheduler.start()
         scheduler.start()  # 不应抛异常
-        scheduler.stop()
+        await scheduler.stop()
 
-    def test_stop_when_not_running(self, tmp_path: Path):
+    @pytest.mark.asyncio
+    async def test_stop_when_not_running(self, tmp_path: Path):
         scheduler = SchedulerService(tmp_path)
-        scheduler.stop()  # 不应抛异常
+        await scheduler.stop()  # 不应抛异常

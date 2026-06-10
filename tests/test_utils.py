@@ -146,9 +146,9 @@ class TestSavePasswordField:
         """raw=None 时应返回原加密值"""
         assert save_password_field(None, "ENC:existing") == "ENC:existing"
 
-    def test_empty_raw_returns_existing(self):
-        """raw 为空字符串时应返回原加密值"""
-        assert save_password_field("", "ENC:existing") == "ENC:existing"
+    def test_empty_raw_clears_password(self):
+        """raw 为空字符串时应清除密码"""
+        assert save_password_field("", "ENC:existing") == ""
 
     def test_mask_preserves_existing(self):
         """raw 为掩码时应保留原加密值"""
@@ -311,16 +311,16 @@ class TestAtomicWrite:
             os.chdir(old_cwd)
 
     def test_atomic_write_prefix_length_limit(self, tmp_path):
-        """prefix 长度超过 5 字符时应抛出 ValueError"""
+        """prefix 长度超过 20 字符时应抛出 ValueError"""
         target = tmp_path / "test.txt"
         with pytest.raises(ValueError, match="prefix/suffix"):
-            atomic_write(str(target), "content", prefix="toolongprefix")
+            atomic_write(str(target), "content", prefix="x" * 21)
 
     def test_atomic_write_suffix_length_limit(self, tmp_path):
-        """suffix 长度超过 5 字符时应抛出 ValueError"""
+        """suffix 长度超过 20 字符时应抛出 ValueError"""
         target = tmp_path / "test.txt"
         with pytest.raises(ValueError, match="prefix/suffix"):
-            atomic_write(str(target), "content", suffix=".toolongsuffix")
+            atomic_write(str(target), "content", suffix="x" * 21)
 
 
 # =====================================================================

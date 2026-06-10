@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from app.deps import get_scheduler_service
 from app.schemas import ActionResponse
@@ -171,17 +171,29 @@ def delete_scheduled_task(task_id: str, request: Request) -> ActionResponse:
 
 
 @router.post("/api/scheduled-tasks/{task_id}/run", response_model=ActionResponse)
-async def run_scheduled_task(task_id: str, request: Request) -> ActionResponse:
-    """手动执行定时任务。"""
+async def run_scheduled_task(
+    task_id: str,
+    request: Request,
+    bg_tasks: BackgroundTasks,
+) -> ActionResponse:
+    """手动执行定时任务（异步后台执行，避免 HTTP 连接长时间阻塞）。"""
     scheduler = _get_scheduler(request)
     if not scheduler.get_task(task_id):
         return ActionResponse(success=False, message="定时任务不存在")
 
-    success, message = await scheduler.execute_task(task_id)
-    api_logger.info(
-        "执行定时任务 {} -> success={}, message={}", task_id, success, message
-    )
-    return ActionResponse(success=success, message=message)
+    # 后台执行，不阻塞 HTTP 响应
+    async def _execute():
+        try:
+            success, message = await scheduler.execute_task(task_id)
+            api_logger.info(
+                "后台定时任务 {} -> success={}, message={}", task_id, success, message
+            )
+        except Exception as e:
+            api_logger.error("后台定时任务执行异常 {}: {}", task_id, e, exc_info=True)
+
+    bg_tasks.add_task(_execute)
+    api_logger.info("定时任务 {} 已提交后台执行", task_id)
+    return ActionResponse(success=True, message="任务已提交后台执行，请查看执行历史获取结果")
 
 
 @router.post("/api/scheduled-tasks/{task_id}/toggle", response_model=ActionResponse)

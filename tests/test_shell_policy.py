@@ -67,8 +67,8 @@ class TestTimeoutClamp:
     """测试超时值钳制逻辑。"""
 
     def test_default_timeout_clamped(self):
-        """默认超时应被钳制到 [1, 300] 范围。"""
-        policy = ShellCommandPolicy(allowlist=["/bin/sh"], default_timeout=500)
+        """默认超时应被钳制到 [1, 3600] 范围。"""
+        policy = ShellCommandPolicy(allowlist=["/bin/sh"], default_timeout=9999)
         assert policy._default_timeout == _MAX_TIMEOUT
 
     def test_negative_timeout_clamped_to_min(self):
@@ -84,7 +84,7 @@ class TestTimeoutClamp:
     def test_prepare_clamps_runtime_timeout(self):
         """validate_and_prepare 应钳制运行时传入的超时。"""
         policy = ShellCommandPolicy(allowlist=["/bin/sh"], default_timeout=60)
-        ok, timeout, _ = policy.validate_and_prepare("/bin/sh", timeout=999)
+        ok, timeout, _ = policy.validate_and_prepare("/bin/sh", timeout=9999)
         assert ok is True
         assert timeout == _MAX_TIMEOUT
 

@@ -871,6 +871,7 @@ class TestStartMonitoringPutNowait:
         }
         svc._pure_mode = False
         svc._pure_mode_lock = threading.Lock()
+        svc._start_stop_lock = threading.Lock()
 
         # 填满队列
         svc._cmd_queue.put_nowait(MonitorCommand(type=MonitorCmdType.RELOAD))

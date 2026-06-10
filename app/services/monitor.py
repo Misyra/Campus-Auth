@@ -107,6 +107,7 @@ class MonitorService:
         self._login_lock: threading.Lock = threading.Lock()
         self._reload_lock: threading.Lock = threading.Lock()
         self._pure_mode_lock: threading.Lock = threading.Lock()
+        self._start_stop_lock: threading.Lock = threading.Lock()
 
         # 加载配置（复用 _reload_config_internal）
         self._reload_config_internal()
@@ -488,16 +489,14 @@ class MonitorService:
         如果监控正在进行登录重试，阻塞直到重试循环结束或超时。
         """
         core = self._monitor_core
-        if core is None or not core.monitoring:
-            return
-        if not core._login_recovery_in_progress.is_set():
-            return
-        core._login_recovery_in_progress.wait(timeout=timeout)
+        if core is not None:
+            core._login_recovery_in_progress.wait(timeout=timeout)
 
     @property
     def ws_broadcast_queue(self) -> deque:
         """WS 广播队列（从 DashboardSink 获取）。"""
         if self._dashboard_sink is None:
+            service_logger.debug("DashboardSink 未注册，广播消息被丢弃")
             return deque(maxlen=200)
         return self._dashboard_sink.broadcast_queue
 
@@ -591,23 +590,24 @@ class MonitorService:
 
     def start_monitoring(self) -> tuple[bool, str]:
         service_logger.debug("收到启动监控请求")
-        if self._is_monitoring:
-            return False, "监控已在运行中"
+        with self._start_stop_lock:
+            if self._is_monitoring:
+                return False, "监控已在运行中"
 
-        valid, error = ConfigValidator.validate_env_config(self._runtime_config)
-        if not valid:
-            return False, f"配置无效: {error}"
+            valid, error = ConfigValidator.validate_env_config(self._runtime_config)
+            if not valid:
+                return False, f"配置无效: {error}"
 
-        config = self._copy_runtime_config()
-        if not self._enqueue(
-            MonitorCommand(
-                type=MonitorCmdType.START,
-                data={"config": config, "pure_mode": self.pure_mode},
-            )
-        ):
-            return False, "队列已满"
+            config = self._copy_runtime_config()
+            if not self._enqueue(
+                MonitorCommand(
+                    type=MonitorCmdType.START,
+                    data={"config": config, "pure_mode": self.pure_mode},
+                )
+            ):
+                return False, "队列已满"
 
-        return True, "监控已启动"
+            return True, "监控已启动"
 
     def _on_profile_switch(self, profile_name: str) -> None:
         """自动切换方案时的回调（从监控线程调用）。"""
@@ -620,12 +620,13 @@ class MonitorService:
 
     def stop_monitoring(self) -> tuple[bool, str]:
         service_logger.debug("收到停止监控请求")
-        if not self._is_monitoring:
-            return False, "监控未运行"
+        with self._start_stop_lock:
+            if not self._is_monitoring:
+                return False, "监控未运行"
 
-        if not self._enqueue(MonitorCommand(type=MonitorCmdType.STOP)):
-            return False, "队列已满"
-        return True, "监控已停止"
+            if not self._enqueue(MonitorCommand(type=MonitorCmdType.STOP)):
+                return False, "队列已满"
+            return True, "监控已停止"
 
     def shutdown(self) -> None:
         """完全关闭 MonitorService：停止监控 + 终止消费者线程。"""
@@ -637,9 +638,17 @@ class MonitorService:
             self._cmd_queue.put(cmd, timeout=3)
             cmd.response_event.wait(timeout=MONITOR_RELOAD_TIMEOUT)
         except queue.Full:
-            # 队列满时直接调用 _handle_stop() 作为回退
-            if self._is_monitoring:
-                self._handle_stop()
+            # 队列满时不直接调用 _handle_stop()（仅限消费者线程），
+            # 而是直接停止监控核心并等待监控线程结束
+            if self._monitor_core is not None:
+                with contextlib.suppress(Exception):
+                    self._monitor_core.stop_monitoring()
+            if self._monitor_thread is not None and self._monitor_thread.is_alive():
+                self._thread_done.wait(timeout=MONITOR_STOP_TIMEOUT)
+                if self._monitor_thread.is_alive():
+                    self._monitor_thread.join(timeout=1)
+            self._monitor_core = None
+            self._monitor_thread = None
 
         # 设置关闭事件，通知消费者线程退出循环
         self._shutdown_event.set()

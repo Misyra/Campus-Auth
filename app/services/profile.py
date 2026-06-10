@@ -64,6 +64,7 @@ class ProfileService:
 
         self._data = ProfilesData()
         self._data.profiles.setdefault("default", ProfileSettings())
+        self._save_unsafe(self._data)
         profile_logger.warning(
             "settings.json 缺失或不可用，已初始化空配置 + default 方案，请确认是否被误删"
         )

@@ -111,9 +111,9 @@ class LoginHistoryService:
                     need_cleanup = True
             except Exception:
                 logger.warning("写入登录历史失败: {}", self._history_path, exc_info=True)
-        # 锁外使用独立锁序列化清理，不阻塞新写入
+        # 清理也需在 _lock 下执行，防止清理时的写回覆盖并发写入的新记录
         if need_cleanup:
-            with self._cleanup_lock:
+            with self._lock:
                 self._cleanup_old(max_age_days=30)
 
     def list_recent(self, limit: int = 50) -> list[LoginHistoryEntry]:
@@ -124,7 +124,7 @@ class LoginHistoryService:
             file_size = self._history_path.stat().st_size
             # 大文件（>5MB）只读取末尾部分
             if file_size > 5 * 1024 * 1024:
-                approx_bytes = limit * 300  # 估算每行约 300 字节
+                approx_bytes = limit * 500  # 估算每行约 500 字节
                 read_size = min(approx_bytes, file_size)
                 with open(self._history_path, encoding="utf-8") as f:
                     f.seek(max(0, file_size - read_size))

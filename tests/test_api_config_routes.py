@@ -94,10 +94,8 @@ class TestSaveConfig:
     """测试 PUT /api/config 端点。"""
 
     @patch("app.api.config.save_config_combined")
-    @patch("app.api.config.ConfigValidator.validate_gui_config")
-    def test_save_config_success(self, mock_validate, mock_save, client):
+    def test_save_config_success(self, mock_save, client):
         test_client, mock_services = client
-        mock_validate.return_value = (True, "")
         mock_save.return_value = None
 
         payload = {
@@ -108,16 +106,3 @@ class TestSaveConfig:
         resp = test_client.put("/api/config", json=payload)
         assert resp.status_code == 200
         assert resp.json()["success"] is True
-
-    @patch("app.api.config.ConfigValidator.validate_gui_config")
-    def test_save_config_validation_failure(self, mock_validate, client):
-        test_client, _ = client
-        mock_validate.return_value = (False, "用户名不能为空")
-
-        payload = {
-            "username": "",
-            "password": "pass",
-            "auth_url": "http://10.0.0.1",
-        }
-        resp = test_client.put("/api/config", json=payload)
-        assert resp.status_code == 400

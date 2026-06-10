@@ -120,10 +120,18 @@ class BrowserContextManager:
         向 Worker 提交 CMD_BROWSER_RELEASE（fire-and-forget）即可。
         """
         # 通知 Worker 释放引用（无需等待结果）
-        from app.workers.playwright_worker import CMD_BROWSER_RELEASE, get_worker
+        from app.workers.playwright_worker import (
+            WorkerCommand,
+            CMD_BROWSER_RELEASE,
+            get_worker,
+        )
+        import queue as _queue_mod
 
         worker = get_worker()
-        worker.submit(CMD_BROWSER_RELEASE, wait=False)
+        try:
+            worker._cmd_queue.put_nowait(WorkerCommand(type=CMD_BROWSER_RELEASE))
+        except _queue_mod.Full:
+            self.logger.warning("Worker 队列已满，无法发送 CMD_BROWSER_RELEASE")
 
         # 清空本地引用
         self.playwright = None

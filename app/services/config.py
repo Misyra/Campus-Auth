@@ -128,8 +128,8 @@ def load_ui_config(
 
     # 合并 sys 和 default 方案字段；重叠字段以 sys 为准（始终显示全局值）
     payload_dict = {}
-    payload_dict.update(extract_profile_fields(global_profile.__dict__, PROFILE_FIELDS))
-    payload_dict.update(extract_profile_fields(sys_cfg.__dict__, PROFILE_FIELDS))
+    payload_dict.update(extract_profile_fields(global_profile.model_dump(), PROFILE_FIELDS))
+    payload_dict.update(extract_profile_fields(sys_cfg.model_dump(), PROFILE_FIELDS))
 
     # UI 专属覆盖
     payload_dict["password"] = mask_password(sys_cfg.password)
@@ -168,7 +168,7 @@ def load_runtime_config(
     config_logger.debug("加载运行时配置: profile={}", data.active_profile)
 
     # 从系统设置作为基础
-    payload_dict = extract_profile_fields(sys_cfg.__dict__, PROFILE_FIELDS)
+    payload_dict = extract_profile_fields(sys_cfg.model_dump(), PROFILE_FIELDS)
 
     # 账号密码：方案独立 > 全局；运行时使用解密明文
     any_error = False
@@ -220,7 +220,7 @@ def load_runtime_config(
         {
             k: v
             for k, v in extract_profile_fields(
-                adv_source.__dict__, PROFILE_FIELDS
+                adv_source.model_dump(), PROFILE_FIELDS
             ).items()
             if k not in _PROTECTED_KEYS
         }

@@ -101,16 +101,12 @@ def delete_profile(
     profile_svc: ProfileService = Depends(get_profile_service),
     monitor_svc: MonitorService = Depends(get_monitor_service),
 ) -> ActionResponse:
-    data = profile_svc.load()
-    was_active = data.active_profile == profile_id
-
     ok, message = profile_svc.delete_profile(profile_id)
     api_logger.info("删除方案 {} -> success={}, message={}", profile_id, ok, message)
-    # 删除活动方案后通知监控重载配置
-    if ok and was_active:
+    # 删除成功后始终通知监控重载配置（安全做法，避免 TOCTOU 竞态）
+    if ok:
         try:
             new_data = profile_svc.load()
-            # 统一传 profile_id，apply_profile 内部解析名称用于日志
             monitor_svc.apply_profile(new_data.active_profile)
         except Exception:
             api_logger.warning("删除方案后应用方案失败", exc_info=True)

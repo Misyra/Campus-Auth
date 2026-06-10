@@ -92,6 +92,8 @@ def _get_or_create_key() -> bytes:
                     creationflags=CREATE_NO_WINDOW_FLAG,
                     check=True,
                 )
+            except subprocess.TimeoutExpired:
+                logger.warning("设置密钥文件权限超时 (icacls)")
             except Exception as exc:
                 logger.warning("设置密钥文件权限失败 (icacls): {}", exc)
 
@@ -218,13 +220,12 @@ def save_password_field(raw: str | None, existing_encrypted: str) -> str:
     if raw is None:
         # 未传密码 → 无操作，保留原值。不发警告（合法场景）
         return existing_encrypted or ""
-    if raw == "" or raw.startswith("•"):
-        # 显式置空或掩码 → 尝试保留已有密码
-        if not existing_encrypted:
-            logger.warning(
-                "密码为空或掩码但无已有加密密码，密码将保持为空！",
-            )
+    if raw.startswith("•"):
+        # 掩码 → 保留已有密码
         return existing_encrypted or ""
+    if raw == "":
+        # 显式置空 → 清除密码
+        return ""
     if raw.startswith("ENC:"):
         # 已是加密值（来自已保存的方案）→ 原样返回
         return raw

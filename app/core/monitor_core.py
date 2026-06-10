@@ -47,7 +47,6 @@ class NetworkMonitorCore:
     # 类常量：监控配置
     DEFAULT_INTERVAL_SECONDS = 300
     MAX_CONSECUTIVE_LOGIN_FAILURES = 3
-    LOGIN_RETRY_INTERVALS = [5, 30, 60]
     PAUSE_CHECK_INTERVAL_SECONDS = 300
     PAUSE_CHECK_STEP_SECONDS = 15
     MIN_WAIT_STEP_SECONDS = 5
@@ -474,7 +473,7 @@ class NetworkMonitorCore:
                 start_hour = pause_config.get("start_hour", 0)
                 end_hour = pause_config.get("end_hour", 6)
                 self._update_state(
-                    status_detail=f"网络异常：暂停时段（{start_hour}:00-{end_hour}:00）"
+                    status_detail=f"暂停时段（{start_hour}:00-{end_hour}:00），跳过检测"
                 )
                 self.log_message(
                     f"暂停时段 ({start_hour}:00-{end_hour}:00)，跳过检测",
@@ -525,6 +524,9 @@ class NetworkMonitorCore:
                         status_detail="网络异常：登录失败，等待下次检测",
                         network_state=NetworkState.DISCONNECTED,
                     )
+                elif recovery_result == RecoveryResult.PAUSED:
+                    self.log_message("登录恢复因暂停时段被跳过")
+                    continue
                 # RecoveryResult.GIVE_UP → 跳出，进入正常检测间隔等待
 
             next_check = datetime.datetime.now() + datetime.timedelta(seconds=interval)
