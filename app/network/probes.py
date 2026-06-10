@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import atexit
-import re
 import socket
 import ssl
-import subprocess
 import threading
 import time
 from collections.abc import Iterable, Sequence
@@ -14,12 +12,6 @@ import httpx
 import psutil
 
 from app.utils.logging import get_logger
-from app.utils.platform_utils import (
-    CREATE_NO_WINDOW_FLAG,
-    is_linux,
-    is_macos,
-    is_windows,
-)
 
 logger = get_logger("network_probes", source="network")
 

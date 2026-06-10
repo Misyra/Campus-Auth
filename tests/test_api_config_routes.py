@@ -7,7 +7,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from app.schemas import MonitorConfigPayload, MonitorStatusResponse, ProfilesData, ProfileSettings, SystemSettings
+from app.schemas import (
+    MonitorConfigPayload,
+    MonitorStatusResponse,
+    ProfilesData,
+    ProfileSettings,
+    SystemSettings,
+)
 
 
 @pytest.fixture
