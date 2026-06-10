@@ -153,6 +153,11 @@ class TaskService:
         if not content.strip():
             return False, "脚本内容不能为空"
 
+        # 脚本内容大小限制（100KB）
+        max_size = 100 * 1024
+        if len(content.encode("utf-8")) > max_size:
+            return False, f"脚本内容超过大小限制（最大 {max_size // 1024}KB）"
+
         save_data = {
             "content": content,
             "name": config.get("name", ""),
