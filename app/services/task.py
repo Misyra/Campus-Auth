@@ -171,7 +171,9 @@ class TaskService:
         return False, "脚本任务保存失败"
 
     def delete_task(self, task_id: str) -> tuple[bool, str]:
-        task_id = normalize_task_id(task_id)  # delete 不校验格式，仅规范化
+        task_id = self._validate_task_id(task_id) or ""
+        if not task_id:
+            return False, _INVALID_TASK_ID_MSG
         if task_id == "default":
             return False, "不能删除默认任务"
 
@@ -179,8 +181,7 @@ class TaskService:
         if success:
             task_logger.info("任务已删除: {}", task_id)
             return True, "任务删除成功"
-        task_logger.error("任务删除失败: {}", task_id)
-        return False, "任务删除失败"
+        return False, "任务不存在或删除失败"
 
     def get_active_task(self) -> str:
         return self.task_manager.get_active_task()

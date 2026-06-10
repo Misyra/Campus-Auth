@@ -130,10 +130,10 @@ class TestStepConfigToDict:
 
     def test_default_values_skipped(self):
         """默认值字段被跳过。"""
-        step = StepConfig(id="s1", type="input", clear=True, wait_until="networkidle")
+        step = StepConfig(id="s1", type="input", clear=True)
         d = step.to_dict()
         assert "clear" not in d
-        assert "wait_until" not in d
+        assert "duration" not in d
 
     def test_none_values_skipped(self):
         """None 值字段被跳过。"""

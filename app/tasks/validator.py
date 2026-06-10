@@ -40,9 +40,16 @@ class TaskValidator:
             errors.append("'steps' 必须是数组")
         else:
             # 验证每个步骤
+            seen_ids: set[str] = set()
             for i, step in enumerate(config["steps"]):
                 step_errors = cls._validate_step(step, i)
                 errors.extend(step_errors)
+                # 检查步骤 ID 重复
+                if isinstance(step, dict):
+                    sid = step.get("id", "")
+                    if sid and sid in seen_ids:
+                        errors.append(f"steps[{i}] 步骤ID '{sid}' 重复")
+                    seen_ids.add(sid)
 
         return len(errors) == 0, errors
 
@@ -99,5 +106,10 @@ class TaskValidator:
 
         if step_type == StepType.OCR and not step.get("selector"):
             errors.append(f"{prefix} (ocr) 需要 'selector' 字段（验证码图片选择器）")
+
+        # 验证 timeout 值
+        timeout = step.get("timeout")
+        if timeout is not None and (not isinstance(timeout, (int, float)) or timeout <= 0):
+            errors.append(f"{prefix} timeout 必须为正数，当前值: {timeout}")
 
         return errors

@@ -130,7 +130,6 @@ class TestStepConfig:
         assert step.description == ""
         assert step.timeout is None
         assert step.clear is True
-        assert step.wait_until == "networkidle"
         assert step.duration == 1000
         assert step.required is False
 

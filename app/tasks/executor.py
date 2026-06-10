@@ -405,10 +405,16 @@ class TaskExecutor:
                 url_prefix = f"/logs/{date_str}/screenshots"
 
             task_id = self.config.task_id or "unknown"
-            local_path = await save_screenshot(page, out_dir, task_id=task_id)
+            local_path = await asyncio.wait_for(
+                save_screenshot(page, out_dir, task_id=task_id),
+                timeout=5,
+            )
             if local_path:
                 filename = Path(local_path).name
                 return f"{url_prefix}/{filename}"
+            return None
+        except asyncio.TimeoutError:
+            logger.warning("截图超时（5s），已跳过")
             return None
         except Exception as e:
             logger.warning("截图失败: {}", e)
