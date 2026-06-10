@@ -1286,3 +1286,24 @@
 - `is_local_network_connected()`: 用 `psutil.net_if_stats()` 替代 socket + 平台特判（~140 行 → 10 行）
 - 删除 `_check_windows_adapter`、`_check_linux_route`、`_check_macos_service`
 - 新增 psutil 依赖
+
+### 2026-06-10
+
+#### 任务概览卡片布局优化
+
+**调整内容：**
+- 将"导入、文件、刷新、分享"四个快捷操作按钮从分割线上方移到分割线下方
+- 保留"管理任务"主按钮在分割线上方右侧，与当前任务信息同行显示
+- 新增 `.task-overview-actions` 容器，使用 flex 布局排列四个按钮，支持自动换行
+
+**修改文件：**
+- `frontend/partials/pages/settings/settings-tasks.html`：重构 HTML 结构，将四个按钮从 `.task-overview-right` 分离到独立的 `.task-overview-actions` 容器
+- `frontend/styles/pages/settings.css`：添加 `.task-overview-actions` 样式（`display: flex`、`gap: 8px`、`flex-wrap: wrap`）
+
+**布局效果：**
+- 分割线上方：当前任务名称/描述 + 管理任务按钮（左右布局）
+- 分割线下方：导入、文件、刷新、分享四个按钮（水平排列，空间不足时自动换行）
+
+**设计目的：**
+- 视觉层次更清晰，主要操作（管理任务）与次要操作（导入/刷新等）分离
+- 按钮分组更合理，功能相关的按钮放在一起
