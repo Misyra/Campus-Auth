@@ -5,6 +5,28 @@
 
 ## 2026-06-11
 
+### feat: 轻量模式 + ScheduleEngine 统一架构重构
+
+将 `MonitorService`（707 行）+ `SchedulerService`（524 行）合并为统一的 `ScheduleEngine`（~730 行），支持轻量模式启动。
+
+**架构变更**：
+- 新建 `app/services/engine.py` — ScheduleEngine，Actor 模型（消息队列 + 消费者线程）+ 调度线程（定时任务检查）
+- 删除 `app/services/monitor.py` 和 `app/services/scheduler.py`
+- 新建 `app/utils/ports.py` — 提取 `resolve_port()` 避免轻量模式间接加载 FastAPI
+- `app/ws_manager.py` — `WebSocket` 改为 `TYPE_CHECKING` 延迟导入
+- `app/application.py` — 重构为工厂模式，FastAPI 延迟加载
+- `app/container.py` — 使用 ScheduleEngine，`monitor_service`/`scheduler_service` 为属性别名
+
+**轻量模式**：
+- 新增 `lightweight_mode` 配置字段（`_SystemFieldsMixin`）
+- `main.py` 新增轻量模式启动路径（不加载 FastAPI，仅运行监控 + 定时任务）
+- 新增 `--serve` CLI 命令，通过控制文件 `.start-web` 按需加载 Web 服务
+- PID 文件记录运行模式（`full` / `lightweight`）
+
+**内存收益**：空闲监控模式降低约 12MB（~25%），从 ~48MB 降至 ~36MB。
+
+---
+
 ### refactor: ServiceContainer + API 路由使用 ScheduleEngine
 
 将 `ServiceContainer` 从使用 `MonitorService` + `SchedulerService` 双服务重构为使用统一的 `ScheduleEngine`。
