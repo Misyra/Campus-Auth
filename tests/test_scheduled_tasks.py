@@ -7,7 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.scheduler import MAX_HISTORY_SIZE, SchedulerService, get_default_shell
+from app.services.engine import MAX_HISTORY_SIZE, ScheduleEngine
+from app.utils.shell_utils import get_default_shell
 
 
 @pytest.fixture
@@ -19,7 +20,7 @@ def project_root(tmp_path):
 @pytest.fixture
 def scheduler(project_root):
     """创建调度器实例。"""
-    return SchedulerService(project_root)
+    return ScheduleEngine(project_root)
 
 
 def test_save_and_get_task(scheduler):
@@ -98,8 +99,7 @@ def test_delete_task(scheduler):
     assert scheduler.get_task(task_id) is None
 
 
-@pytest.mark.asyncio
-async def test_history(scheduler):
+def test_history(scheduler):
     """测试执行历史。"""
     task_id = "history_task"
     scheduler.save_task(
@@ -116,8 +116,8 @@ async def test_history(scheduler):
     )
 
     # 添加历史记录
-    await scheduler._add_history(task_id, "success", "执行成功", 1.5)
-    await scheduler._add_history(task_id, "failure", "执行失败", 0.5)
+    scheduler._add_history_sync(task_id, "success", "执行成功", 1.5)
+    scheduler._add_history_sync(task_id, "failure", "执行失败", 0.5)
 
     # 获取历史
     history = scheduler.get_history(task_id)
@@ -127,35 +127,31 @@ async def test_history(scheduler):
 
 
 class TestExecuteShellUsesPolicy:
-    """测试 _execute_shell 使用 ShellCommandPolicy 进行安全校验。"""
+    """测试 _execute_shell_sync 使用 ShellCommandPolicy 进行安全校验。"""
 
-    @pytest.mark.asyncio
-    async def test_execute_shell_uses_policy(self, scheduler):
-        """_execute_shell 应通过 ShellCommandPolicy 验证路径并钳制超时。"""
-        from unittest.mock import AsyncMock
-
+    def test_execute_shell_uses_policy(self, scheduler):
+        """_execute_shell_sync 应通过 ShellCommandPolicy 验证路径并钳制超时。"""
         # 直接 mock 缓存的 _shell_policy 实例
         mock_policy = MagicMock()
-        mock_policy.run = AsyncMock(return_value=(0, "hello", ""))
+        mock_policy.run_sync = MagicMock(return_value=(0, "hello", ""))
         scheduler._shell_policy = mock_policy
 
-        success, message = await scheduler._execute_shell("echo hello", 60, "cmd.exe")
+        success, message = scheduler._execute_shell_sync("echo hello", 60, "cmd.exe")
 
-        # 验证 run 被调用
-        mock_policy.run.assert_called_once()
+        # 验证 run_sync 被调用
+        mock_policy.run_sync.assert_called_once()
         assert success is True
 
-    @pytest.mark.asyncio
-    async def test_execute_shell_rejects_unknown_path(self, scheduler):
-        """_execute_shell 应拒绝不在白名单中的 shell 路径。"""
+    def test_execute_shell_rejects_unknown_path(self, scheduler):
+        """_execute_shell_sync 应拒绝不在白名单中的 shell 路径。"""
         fake_shells = [
             {"name": "cmd", "path": "cmd.exe", "description": "Windows 命令提示符"}
         ]
 
         with patch(
-            "app.services.scheduler.detect_available_shells", return_value=fake_shells
+            "app.services.engine.detect_available_shells", return_value=fake_shells
         ):
-            success, message = await scheduler._execute_shell(
+            success, message = scheduler._execute_shell_sync(
                 "echo hello",
                 60,
                 "/malicious/shell",
@@ -163,23 +159,20 @@ class TestExecuteShellUsesPolicy:
             assert success is False
             assert "白名单" in message
 
-    @pytest.mark.asyncio
-    async def test_execute_shell_timeout_clamped(self, scheduler):
-        """_execute_shell 的超时应通过 ShellCommandPolicy 被 clamp 到 [1, 300]。"""
-        from unittest.mock import AsyncMock
-
+    def test_execute_shell_timeout_clamped(self, scheduler):
+        """_execute_shell_sync 的超时应通过 ShellCommandPolicy 被 clamp 到 [1, 300]。"""
         # 直接 mock 缓存的 _shell_policy 实例
         mock_policy = MagicMock()
-        mock_policy.run = AsyncMock(return_value=(0, "ok", ""))
+        mock_policy.run_sync = MagicMock(return_value=(0, "ok", ""))
         scheduler._shell_policy = mock_policy
 
         # 传入超大超时值 999
-        success, message = await scheduler._execute_shell("echo test", 999, "cmd.exe")
+        success, message = scheduler._execute_shell_sync("echo test", 999, "cmd.exe")
 
         # 验证执行成功
         assert success is True
-        # 验证 run 被调用
-        mock_policy.run.assert_called_once()
+        # 验证 run_sync 被调用
+        mock_policy.run_sync.assert_called_once()
 
 
 class TestGetDefaultShell:
@@ -203,37 +196,37 @@ class TestMaxHistorySize:
 
 
 # =====================================================================
-# SchedulerService._validate_task_id
+# ScheduleEngine._validate_task_id
 # =====================================================================
 
 
 class TestValidateTaskId:
     def test_valid_ids(self):
-        assert SchedulerService._validate_task_id("my_task") is True
-        assert SchedulerService._validate_task_id("task123") is True
-        assert SchedulerService._validate_task_id("A") is True
+        assert ScheduleEngine._validate_task_id("my_task") is True
+        assert ScheduleEngine._validate_task_id("task123") is True
+        assert ScheduleEngine._validate_task_id("A") is True
 
     def test_invalid_ids(self):
-        assert SchedulerService._validate_task_id("") is False
-        assert SchedulerService._validate_task_id("123bad") is False
-        assert SchedulerService._validate_task_id("my-task") is False
-        assert SchedulerService._validate_task_id("my task") is False
+        assert ScheduleEngine._validate_task_id("") is False
+        assert ScheduleEngine._validate_task_id("123bad") is False
+        assert ScheduleEngine._validate_task_id("my-task") is False
+        assert ScheduleEngine._validate_task_id("my task") is False
 
 
 # =====================================================================
-# SchedulerService CRUD 补充
+# ScheduleEngine CRUD 补充
 # =====================================================================
 
 
-class TestSchedulerServiceCRUD:
+class TestScheduleEngineCRUD:
     @pytest.fixture
-    def scheduler(self, tmp_path: Path) -> SchedulerService:
-        return SchedulerService(tmp_path)
+    def scheduler(self, tmp_path: Path) -> ScheduleEngine:
+        return ScheduleEngine(tmp_path)
 
-    def test_list_tasks_empty(self, scheduler: SchedulerService):
+    def test_list_tasks_empty(self, scheduler: ScheduleEngine):
         assert scheduler.list_tasks() == []
 
-    def test_list_tasks_sorted_by_name(self, scheduler: SchedulerService):
+    def test_list_tasks_sorted_by_name(self, scheduler: ScheduleEngine):
         scheduler.save_task(
             "b_task",
             {
@@ -257,7 +250,7 @@ class TestSchedulerServiceCRUD:
         assert tasks[1]["name"] == "Banana"
 
     def test_list_tasks_skips_dotfiles(
-        self, scheduler: SchedulerService, tmp_path: Path
+        self, scheduler: ScheduleEngine, tmp_path: Path
     ):
         # 创建正常任务
         scheduler.save_task(
@@ -278,7 +271,7 @@ class TestSchedulerServiceCRUD:
         assert tasks[0]["id"] == "normal"
 
     def test_list_tasks_skips_malformed_json(
-        self, scheduler: SchedulerService, tmp_path: Path
+        self, scheduler: ScheduleEngine, tmp_path: Path
     ):
         scheduler.save_task(
             "good",
@@ -296,7 +289,7 @@ class TestSchedulerServiceCRUD:
         assert len(tasks) == 1
         assert tasks[0]["id"] == "good"
 
-    def test_get_task_returns_id_field(self, scheduler: SchedulerService):
+    def test_get_task_returns_id_field(self, scheduler: ScheduleEngine):
         scheduler.save_task(
             "my_task",
             {
@@ -310,21 +303,20 @@ class TestSchedulerServiceCRUD:
         assert task is not None
         assert task["id"] == "my_task"
 
-    def test_get_task_nonexistent(self, scheduler: SchedulerService):
+    def test_get_task_nonexistent(self, scheduler: ScheduleEngine):
         assert scheduler.get_task("nonexistent") is None
 
-    def test_get_task_invalid_id(self, scheduler: SchedulerService):
+    def test_get_task_invalid_id(self, scheduler: ScheduleEngine):
         assert scheduler.get_task("123bad") is None
 
-    def test_get_task_malformed_json(self, scheduler: SchedulerService, tmp_path: Path):
+    def test_get_task_malformed_json(self, scheduler: ScheduleEngine, tmp_path: Path):
         (tmp_path / "tasks" / "scheduled" / "bad.json").write_text(
             "not json", encoding="utf-8"
         )
         assert scheduler.get_task("bad") is None
 
-    @pytest.mark.asyncio
-    async def test_delete_task_with_history(
-        self, scheduler: SchedulerService, tmp_path: Path
+    def test_delete_task_with_history(
+        self, scheduler: ScheduleEngine, tmp_path: Path
     ):
         scheduler.save_task(
             "del_task",
@@ -335,7 +327,7 @@ class TestSchedulerServiceCRUD:
                 "schedule": {"hour": 0, "minute": 0},
             },
         )
-        await scheduler._add_history("del_task", "success", "ok", 1.0)
+        scheduler._add_history_sync("del_task", "success", "ok", 1.0)
         ok, _ = scheduler.delete_task("del_task")
         assert ok is True
         assert scheduler.get_task("del_task") is None
@@ -343,15 +335,15 @@ class TestSchedulerServiceCRUD:
         history_file = tmp_path / "tasks" / "scheduled" / "history" / "del_task.json"
         assert not history_file.exists()
 
-    def test_delete_task_nonexistent(self, scheduler: SchedulerService):
+    def test_delete_task_nonexistent(self, scheduler: ScheduleEngine):
         ok, _ = scheduler.delete_task("nonexistent")
         assert ok is False
 
-    def test_delete_task_invalid_id(self, scheduler: SchedulerService):
+    def test_delete_task_invalid_id(self, scheduler: ScheduleEngine):
         ok, _ = scheduler.delete_task("123bad")
         assert ok is False
 
-    def test_save_task_invalid_id(self, scheduler: SchedulerService):
+    def test_save_task_invalid_id(self, scheduler: ScheduleEngine):
         ok, _ = scheduler.save_task("123bad", {"name": "test"})
         assert ok is False
 
@@ -363,56 +355,51 @@ class TestSchedulerServiceCRUD:
 
 class TestSchedulerHistory:
     @pytest.fixture
-    def scheduler(self, tmp_path: Path) -> SchedulerService:
-        return SchedulerService(tmp_path)
+    def scheduler(self, tmp_path: Path) -> ScheduleEngine:
+        return ScheduleEngine(tmp_path)
 
-    @pytest.mark.asyncio
-    async def test_add_history_creates_file(
-        self, scheduler: SchedulerService, tmp_path: Path
+    def test_add_history_creates_file(
+        self, scheduler: ScheduleEngine, tmp_path: Path
     ):
-        await scheduler._add_history("test", "success", "ok", 1.0)
+        scheduler._add_history_sync("test", "success", "ok", 1.0)
         history_file = tmp_path / "tasks" / "scheduled" / "history" / "test.json"
         assert history_file.exists()
 
-    @pytest.mark.asyncio
-    async def test_add_history_max_size(self, scheduler: SchedulerService):
+    def test_add_history_max_size(self, scheduler: ScheduleEngine):
         for i in range(MAX_HISTORY_SIZE + 10):
-            await scheduler._add_history("test", "success", f"run {i}", 1.0)
+            scheduler._add_history_sync("test", "success", f"run {i}", 1.0)
         history = scheduler.get_history("test")
         assert len(history) == MAX_HISTORY_SIZE
         # 最新的在前
         assert history[0]["message"] == f"run {MAX_HISTORY_SIZE + 9}"
 
-    @pytest.mark.asyncio
-    async def test_add_history_truncates_message(self, scheduler: SchedulerService):
+    def test_add_history_truncates_message(self, scheduler: ScheduleEngine):
         long_msg = "x" * 1000
-        await scheduler._add_history("test", "success", long_msg, 1.0)
+        scheduler._add_history_sync("test", "success", long_msg, 1.0)
         history = scheduler.get_history("test")
         assert len(history[0]["message"]) == 500
 
-    @pytest.mark.asyncio
-    async def test_add_history_invalid_id(self, scheduler: SchedulerService):
+    def test_add_history_invalid_id(self, scheduler: ScheduleEngine):
         # 不应抛异常
-        await scheduler._add_history("123bad", "success", "ok", 1.0)
+        scheduler._add_history_sync("123bad", "success", "ok", 1.0)
 
-    def test_get_history_empty(self, scheduler: SchedulerService):
+    def test_get_history_empty(self, scheduler: ScheduleEngine):
         assert scheduler.get_history("nonexistent") == []
 
-    def test_get_history_invalid_id(self, scheduler: SchedulerService):
+    def test_get_history_invalid_id(self, scheduler: ScheduleEngine):
         assert scheduler.get_history("123bad") == []
 
     def test_get_history_malformed_json(
-        self, scheduler: SchedulerService, tmp_path: Path
+        self, scheduler: ScheduleEngine, tmp_path: Path
     ):
         history_dir = tmp_path / "tasks" / "scheduled" / "history"
         history_dir.mkdir(parents=True, exist_ok=True)
         (history_dir / "bad.json").write_text("not json", encoding="utf-8")
         assert scheduler.get_history("bad") == []
 
-    @pytest.mark.asyncio
-    async def test_get_history_returns_runs_list(self, scheduler: SchedulerService):
-        await scheduler._add_history("test", "success", "ok", 1.0)
-        await scheduler._add_history("test", "failure", "err", 0.5)
+    def test_get_history_returns_runs_list(self, scheduler: ScheduleEngine):
+        scheduler._add_history_sync("test", "success", "ok", 1.0)
+        scheduler._add_history_sync("test", "failure", "err", 0.5)
         history = scheduler.get_history("test")
         assert len(history) == 2
         assert history[0]["status"] == "failure"
@@ -428,28 +415,24 @@ class TestSchedulerHistory:
 
 
 class TestSchedulerStartStop:
-    @pytest.mark.asyncio
-    async def test_start_sets_running(self, tmp_path: Path):
-        scheduler = SchedulerService(tmp_path)
-        scheduler.start()
-        assert scheduler._running is True
-        await scheduler.stop()
+    def test_start_sets_running(self, tmp_path: Path):
+        scheduler = ScheduleEngine(tmp_path)
+        scheduler.start_scheduler()
+        assert scheduler._scheduler_running is True
+        scheduler.stop_scheduler()
 
-    @pytest.mark.asyncio
-    async def test_stop_clears_running(self, tmp_path: Path):
-        scheduler = SchedulerService(tmp_path)
-        scheduler.start()
-        await scheduler.stop()
-        assert scheduler._running is False
+    def test_stop_clears_running(self, tmp_path: Path):
+        scheduler = ScheduleEngine(tmp_path)
+        scheduler.start_scheduler()
+        scheduler.stop_scheduler()
+        assert scheduler._scheduler_running is False
 
-    @pytest.mark.asyncio
-    async def test_double_start_no_error(self, tmp_path: Path):
-        scheduler = SchedulerService(tmp_path)
-        scheduler.start()
-        scheduler.start()  # 不应抛异常
-        await scheduler.stop()
+    def test_double_start_no_error(self, tmp_path: Path):
+        scheduler = ScheduleEngine(tmp_path)
+        scheduler.start_scheduler()
+        scheduler.start_scheduler()  # 不应抛异常
+        scheduler.stop_scheduler()
 
-    @pytest.mark.asyncio
-    async def test_stop_when_not_running(self, tmp_path: Path):
-        scheduler = SchedulerService(tmp_path)
-        await scheduler.stop()  # 不应抛异常
+    def test_stop_when_not_running(self, tmp_path: Path):
+        scheduler = ScheduleEngine(tmp_path)
+        scheduler.stop_scheduler()  # 不应抛异常
