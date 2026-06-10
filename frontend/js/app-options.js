@@ -62,6 +62,10 @@ export const appOptions = {
         { value: '电信', label: '电信' },
         { value: '自定义', label: '自定义' },
       ],
+      loginActionOptions: [
+        { value: false, label: '保持监控（推荐）' },
+        { value: true, label: '退出程序' },
+      ],
       logLevelOptions: [
         { value: '', label: '全部级别' },
         { value: 'INFO', label: 'INFO' },

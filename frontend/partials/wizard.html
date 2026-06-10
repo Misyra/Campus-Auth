@@ -189,10 +189,7 @@
 
         <div class="form-group">
           <label for="wiz-login-action">登录成功后行为</label>
-          <select id="wiz-login-action" v-model="config.login_then_exit">
-            <option :value="false">保持监控（推荐）</option>
-            <option :value="true">退出程序</option>
-          </select>
+          <custom-select v-model="config.login_then_exit" :options="loginActionOptions"></custom-select>
           <span class="hint">登录成功后是继续监控网络状态，还是退出程序</span>
         </div>
       </div>
