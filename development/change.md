@@ -5,6 +5,41 @@
 
 ## 2026-06-10
 
+### fix: 浏览器任务模块与自定义脚本模块全面 Bug 修复
+
+对浏览器任务模块和自定义脚本模块进行全面代码审查，修复 9 个确认 Bug + 9 个潜在问题 + 代码质量改进，共 21 项修复。
+
+**脚本模块修复（7 项）：**
+1. `manager.py`：`.meta.json` 文件过滤失效（`Path.suffix` 只返回最后一个后缀，改用 `name.endswith`）
+2. `script_runner.py`：`ScriptRunner.run()` 增加 `except Exception` 兜底，防止未处理异常向上传播
+3. `script_runner.py`：`binary_path` 不在系统已知列表时记录 warning 日志
+4. `shell_policy.py`：`ShellCommandPolicy.run()` 异步方法捕获 `FileNotFoundError`，与 `run_sync` 行为一致
+5. `task.py` + `scripts.js`：脚本内容增加 100KB 大小限制（前后端双重校验）
+6. `scripts.js`：导入脚本时检查 ID 冲突，存在同名脚本需用户确认覆盖
+7. `scripts.js`：导出脚本时 `revokeObjectURL` 延迟释放，避免下载被中断
+
+**任务模块确认 Bug 修复（5 项）：**
+8. `manager.py`：`delete_task` 返回实际删除结果，不存在的任务返回 `False`
+9. `models.py`：`TaskConfig.from_dict` 遇到非 dict 的 step 时记录 warning 而非静默丢弃
+10. `editor.js`：仓库导入任务 ID 确保以字母开头，避免后端校验失败
+11. `debug.js`：`debugStop` 使用 `finally` 确保本地状态重置，API 失败时也不遗留脏状态
+12. `step_handlers.py`：扩展密码关键词检测范围，增加 `step.id` 匹配和更多中文关键词
+
+**潜在问题与代码质量修复（6 项）：**
+13. `models.py`：`StepConfig._DEFAULTS` 改为动态生成（`_field_defaults()`），消除手动维护不同步风险
+14. `validator.py`：`TaskValidator` 增加步骤 ID 重复检测
+15. `validator.py`：`TaskValidator` 增加 timeout 正数验证
+16. `step_handlers.py`：`ClickSelectHandler` 等待时间改为可配置（`step.extra.select_delay`，默认 500ms）
+17. `executor.py`：`_capture_screenshot` 增加 5 秒超时保护，防止浏览器异常时截图挂起
+18. `models.py`：移除 `StepConfig` 未使用的 `wait_until` 字段
+
+**前端修复（2 项）：**
+19. `tasks.html`：移除帮助文档中已废弃的 `navigate` 步骤类型条目
+20. `editor.js`：导出任务时延迟释放 ObjectURL，避免下载被中断
+
+**服务层修复（1 项）：**
+21. `task.py`：`TaskService.delete_task` 增加 ID 格式校验，与 `save_task` 保持一致
+
 ### fix: 脚本内容大小限制 + 导入 ID 冲突检查 + 导出 URL 释放修复
 
 - `app/services/task.py`：`_save_script_task` 新增 100KB 脚本内容大小限制（UTF-8 编码计算）

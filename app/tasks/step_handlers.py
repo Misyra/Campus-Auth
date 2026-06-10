@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 import threading
+import time
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
@@ -114,6 +115,7 @@ class StepHandler(ABC):
             (success, message)
         """
         candidates = self._parse_selectors(selector)
+        deadline = time.perf_counter() + timeout / 1000
 
         # 策略1: 快速尝试可见元素
         wait_timeout = max(1500, int(timeout * 0.15))
@@ -128,13 +130,16 @@ class StepHandler(ABC):
                 logger.debug("{} 普通操作候选失败: {}", label, candidate)
                 continue
 
-        # 策略2: 降级到 attached 元素
+        # 策略2: 降级到 attached 元素（使用共享截止时间）
         logger.debug("{} 所有候选均未匹配可见元素，降级操作", label)
         for candidate in candidates:
+            remaining = max(500, int((deadline - time.perf_counter()) * 1000))
+            if remaining <= 0:
+                break
             try:
                 loc = ctx.locator(candidate).first
-                await loc.wait_for(state="attached", timeout=timeout)
-                await fallback_fn(loc, timeout)
+                await loc.wait_for(state="attached", timeout=remaining)
+                await fallback_fn(loc, remaining)
                 logger.debug("{} 降级操作成功 -> {}", label, candidate)
                 return True, ""
             except Exception:

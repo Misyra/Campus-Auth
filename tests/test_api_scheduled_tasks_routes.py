@@ -342,14 +342,14 @@ class TestRunScheduledTask:
         assert resp.json()["success"] is False
 
     def test_run_failure(self, client):
-        """执行失败时返回失败消息。"""
+        """后台执行时立即返回成功，实际结果通过执行历史查看。"""
         test_client, scheduler = client
         scheduler.get_task.return_value = {"id": "task1", "name": "test"}
         scheduler.execute_task = AsyncMock(return_value=(False, "执行超时"))
         resp = test_client.post("/api/scheduled-tasks/task1/run")
         assert resp.status_code == 200
-        assert resp.json()["success"] is False
-        assert "超时" in resp.json()["message"]
+        assert resp.json()["success"] is True
+        assert "已提交后台执行" in resp.json()["message"]
 
 
 # ── 获取执行历史 ──

@@ -15,7 +15,7 @@ from app.utils.logging import get_logger
 
 logger = get_logger("network_probes", source="network")
 
-executor = ThreadPoolExecutor(max_workers=5)
+executor = ThreadPoolExecutor(max_workers=10)
 atexit.register(executor.shutdown, wait=False, cancel_futures=True)
 _proxy_lock = threading.Lock()
 _block_proxy = True  # 默认屏蔽系统代理，避免代理影响网络检测

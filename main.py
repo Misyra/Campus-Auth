@@ -263,15 +263,48 @@ def _run_server(
     write_pid()
     atexit.register(cleanup_pid)
 
-    def _signal_handler(signum, _frame):
-        cleanup_pid()
-        with contextlib.suppress(Exception):
-            from app.workers.playwright_worker import shutdown_worker
+    # 信号处理器：优先让 uvicorn 优雅关闭，仅在超时时强制退出
+    _shutdown_initiated = False
 
-            shutdown_worker(timeout=3)
+    def _signal_handler(signum, _frame):
+        nonlocal _shutdown_initiated
+
+        if _shutdown_initiated:
+            # 第二次信号：强制退出
+            cleanup_pid()
+            os._exit(1)
+
+        _shutdown_initiated = True
+        cleanup_pid()
+
+        # 尝试通知 uvicorn Server 优雅关闭
+        _server = None
         with contextlib.suppress(Exception):
-            cleanup_orphan_browsers()
-        os._exit(0)
+            from app.application import app as _fastapi_app
+            _server = getattr(_fastapi_app.state, "_uvicorn_server", None)
+
+        if _server is not None:
+            _server.should_exit = True
+            # 启动超时守护线程：如果 uvicorn 在 15 秒内未关闭，强制退出
+            def _force_exit_timer():
+                import time as _time
+                _time.sleep(15)
+                with contextlib.suppress(Exception):
+                    from app.workers.playwright_worker import shutdown_worker
+                    shutdown_worker(timeout=3)
+                with contextlib.suppress(Exception):
+                    cleanup_orphan_browsers()
+                os._exit(1)
+
+            threading.Thread(target=_force_exit_timer, daemon=True).start()
+        else:
+            # 无法获取 server 引用，回退到直接清理 + 强制退出
+            with contextlib.suppress(Exception):
+                from app.workers.playwright_worker import shutdown_worker
+                shutdown_worker(timeout=3)
+            with contextlib.suppress(Exception):
+                cleanup_orphan_browsers()
+            os._exit(0)
 
     signal.signal(signal.SIGINT, _signal_handler)
     # SIGTERM 在 Windows 上不存在（仅有 SIGINT/SIGBREAK），需要守卫以避免 AttributeError

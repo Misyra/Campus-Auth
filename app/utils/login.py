@@ -1,9 +1,11 @@
 """登录尝试处理器。"""
 
 import asyncio
+import contextlib
 import datetime
 import os
 import re
+import sys
 import threading
 import time
 from pathlib import Path
@@ -72,7 +74,7 @@ class LoginAttemptHandler:
                     self.logger.info(msg)
                     return False, msg
 
-                net_ok, _ = check_network_status(self.config)
+                net_ok, _ = await asyncio.to_thread(check_network_status, self.config)
                 if net_ok:
                     msg = "网络正常，无需登录"
                     self.logger.info(msg)
@@ -194,7 +196,14 @@ class LoginAttemptHandler:
             self.config, cancel_event=self.cancel_event
         )
         self._browser_ctx = browser_manager  # 先赋值，确保异常时 close_browser 能清理
-        await browser_manager.__aenter__()
+        try:
+            await browser_manager.__aenter__()
+        except Exception:
+            # __aenter__ 失败时手动调用 __aexit__ 释放已获取的资源
+            self._browser_ctx = None
+            with contextlib.suppress(Exception):
+                await browser_manager.__aexit__(*sys.exc_info())
+            raise
         self.logger.info("浏览器就绪 ({:.1f}s)", time.perf_counter() - browser_start)
 
         # 成功标志：默认 False，executor 返回成功时设为 True
@@ -278,7 +287,7 @@ class LoginAttemptHandler:
         self.logger.info("脚本已执行，等待网络验证...")
         await asyncio.sleep(LOGIN_SUCCESS_SETTLE_SECONDS)
 
-        net_ok, net_msg = check_network_status(self.config)
+        net_ok, net_msg = await asyncio.to_thread(check_network_status, self.config)
 
         total = time.perf_counter() - phase_start
         if net_ok:
@@ -295,14 +304,13 @@ class LoginAttemptHandler:
                 from app.workers.playwright_worker import get_worker
 
                 worker = get_worker()
-                await worker.close_browser()
+                await self._browser_ctx.__aexit__(None, None, None)
             except Exception as exc:
-                self.logger.warning("浏览器关闭时异常: {}", exc)
+                self.logger.warning("浏览器上下文关闭异常: {}", exc)
             finally:
-                # 兜底调用 __aexit__，确保 BrowserContextManager 的清理钩子执行
                 try:
-                    await self._browser_ctx.__aexit__(None, None, None)
-                except Exception:
-                    self.logger.warning("浏览器上下文关闭异常", exc_info=True)
+                    await worker.close_browser()
+                except Exception as exc:
+                    self.logger.warning("浏览器关闭时异常: {}", exc)
                 self._browser_ctx = None
                 self.logger.info("浏览器已关闭")

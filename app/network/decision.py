@@ -188,6 +188,11 @@ def is_network_available(
         except Exception as exc:
             logger.debug("检测 {} 异常: {}", kind, exc)
             ok = False
+        if not ok:
+            for f in futures:
+                if not f.done():
+                    f.cancel()
+            return False
         if kind == "tcp":
             socket_ok = ok
         elif kind == "http":

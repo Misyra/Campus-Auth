@@ -59,6 +59,9 @@ class ServiceContainer:
         # WebSocket drain loop 任务
         self._ws_drain_task: asyncio.Task | None = None
 
+        # loguru DashboardSink handler ID（用于 shutdown 时移除）
+        self._log_handler_id: int | None = None
+
     async def startup(self):
         """启动服务。"""
         # 清理孤儿浏览器进程
@@ -68,7 +71,7 @@ class ServiceContainer:
         from loguru import logger
 
         dashboard_sink = DashboardSink(maxlen=1200, broadcast_maxlen=200)
-        logger.add(
+        self._log_handler_id = logger.add(
             dashboard_sink.write,
             format="{message}",
             level="DEBUG",
@@ -93,8 +96,16 @@ class ServiceContainer:
         """关闭服务。"""
         container_logger.info("服务容器开始关闭...")
 
-        # 停止定时任务调度器
-        self.scheduler_service.stop()
+        # 移除 DashboardSink loguru handler，防止重复注册（测试/重启场景）
+        if self._log_handler_id is not None:
+            from loguru import logger as _loguru_logger
+
+            with contextlib.suppress(Exception):
+                _loguru_logger.remove(self._log_handler_id)
+            self._log_handler_id = None
+
+        # 停止定时任务调度器（等待运行中的任务完成）
+        await self.scheduler_service.stop()
 
         # 取消 WebSocket drain loop
         if self._ws_drain_task:

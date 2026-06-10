@@ -37,6 +37,7 @@ class _ClampMixin(BaseModel):
     def _clamp_numeric_fields(cls, data: dict) -> dict:
         if not isinstance(data, dict):
             return data
+        data = dict(data)
         from app.utils.logging import get_logger
 
         _logger = get_logger("schemas", source="backend")
@@ -336,7 +337,7 @@ class SystemSettings(_SystemFieldsMixin, _SharedValidatorsMixin):
     """全局系统配置（原 .env 中的业务配置）"""
 
     pure_mode: bool = Field(
-        default=False, description="纯净模式：使用浏览器原始默认设置，不添加额外启动参数"
+        default=True, description="纯净模式：使用浏览器原始默认设置，不添加额外启动参数"
     )
     network_check_timeout: int = Field(
         default=2, ge=1, le=30, description="TCP 网络检测超时（秒）"

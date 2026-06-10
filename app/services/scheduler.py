@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import sys
 import time
@@ -48,6 +49,9 @@ class SchedulerService:
         self._running_tasks: set[asyncio.Task] = set()
         self._history_lock = asyncio.Lock()
         self._last_triggered_minute: tuple[int, int] | None = None
+        # 注意：使用 (hour, minute) 元组进行分钟级去重。如果系统时钟回拨，
+        # 同一分钟可能被重复触发或永远跳过。当前不做额外处理。 
+        self._has_enabled_cache: tuple[float, bool] | None = None
         # 缓存 Shell 安全策略实例（可用 shell 列表不会在运行时变化）
         self._shell_policy = ShellCommandPolicy(
             allowlist=[s["path"] for s in detect_available_shells()]
@@ -60,15 +64,20 @@ class SchedulerService:
 
     def has_enabled_tasks(self) -> bool:
         """检查是否存在启用的定时任务。"""
+        now = time.time()
+        if self._has_enabled_cache is not None and (now - self._has_enabled_cache[0]) < 5:
+            return self._has_enabled_cache[1]
         for file in self.tasks_dir.glob("*.json"):
             if file.name.startswith("."):
                 continue
             try:
                 data = json.loads(file.read_text(encoding="utf-8"))
                 if data.get("enabled", False):
+                    self._has_enabled_cache = (now, True)
                     return True
             except Exception:
                 continue
+        self._has_enabled_cache = (now, False)
         return False
 
     def list_tasks(self) -> list[dict[str, Any]]:
@@ -214,10 +223,12 @@ class SchedulerService:
             task_id, "success" if success else "failure", message, duration
         )
 
-        # 更新最后执行时间
-        task["last_run"] = datetime.now().isoformat()
-        task["last_status"] = "success" if success else "failure"
-        self.save_task(task_id, task)
+        # 更新最后执行时间（重新读取配置，避免覆盖用户在执行期间的修改）
+        fresh_task = self.get_task(task_id)
+        if fresh_task is not None:
+            fresh_task["last_run"] = datetime.now().isoformat()
+            fresh_task["last_status"] = "success" if success else "failure"
+            self.save_task(task_id, fresh_task)
 
         scheduler_logger.info(
             "定时任务执行完成 {}: success={}, message={}",
@@ -282,24 +293,38 @@ class SchedulerService:
         try:
             from app.workers.playwright_worker import CMD_LOGIN, get_worker
 
-            # 获取运行时配置
-            config = self.monitor_service.get_runtime_config()
-            pure_mode = config.get("browser_settings", {}).get("pure_mode", False)
+            # 获取登录锁，防止与监控核心的登录流程并发
+            # 使用 _login_lock + _login_in_progress 确保互斥
+            acquired = False
+            with self.monitor_service._login_lock:
+                if self.monitor_service._login_in_progress.is_set():
+                    scheduler_logger.info("获取登录锁时发现登录正在进行，跳过本次执行")
+                    return False, "登录操作正在进行中，定时任务跳过"
+                self.monitor_service._login_in_progress.set()
+                acquired = True
 
-            # 获取 Worker 并提交登录命令（通过线程池避免阻塞事件循环）
-            worker = get_worker()
-            result = await asyncio.to_thread(
-                lambda: worker.submit(
-                    CMD_LOGIN,
-                    data={
-                        "config": config,
-                        "pure_mode": pure_mode,
-                        "skip_pause_check": True,  # 定时任务跳过暂停检查
-                    },
-                    wait=True,
-                    timeout=_timeout,
+            try:
+                # 获取运行时配置
+                config = self.monitor_service.get_runtime_config()
+                pure_mode = config.get("browser_settings", {}).get("pure_mode", False)
+
+                # 获取 Worker 并提交登录命令（通过线程池避免阻塞事件循环）
+                worker = get_worker()
+                result = await asyncio.to_thread(
+                    lambda: worker.submit(
+                        CMD_LOGIN,
+                        data={
+                            "config": config,
+                            "pure_mode": pure_mode,
+                            "skip_pause_check": True,  # 定时任务跳过暂停检查
+                        },
+                        wait=True,
+                        timeout=_timeout,
+                    )
                 )
-            )
+            finally:
+                if acquired:
+                    self.monitor_service._login_in_progress.clear()
 
             duration_ms = int((time.perf_counter() - start_time) * 1000)
             task_name = task.get("name", task_id)
@@ -403,22 +428,29 @@ class SchedulerService:
 
     def start(self):
         """启动调度器。"""
-        if self._running:
+        # 检查调度器任务是否实际存活（而非仅检查 _running 标志）
+        if self._running and self._task is not None and not self._task.done():
             return
         self._running = True
         self._task = asyncio.create_task(self._scheduler_loop())
         scheduler_logger.info("定时任务调度器已启动")
 
-    def stop(self):
-        """停止调度器。"""
+    async def stop(self):
+        """停止调度器，等待运行中的任务完成。"""
         if not self._running:
             return
         self._running = False
         if self._task:
             self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._task
             self._task = None
-        for task in self._running_tasks:
+        # 取消并等待所有运行中的任务
+        running = list(self._running_tasks)
+        for task in running:
             task.cancel()
+        if running:
+            await asyncio.gather(*running, return_exceptions=True)
         self._running_tasks.clear()
         scheduler_logger.info("定时任务调度器已停止")
 

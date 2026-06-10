@@ -100,15 +100,15 @@ async def lifespan(app_instance):
         settings_path.exists(),
         settings_path.stat().st_size if settings_path.exists() else 0,
     )
-    config = services.monitor_service.get_config()
+    cfg = services.monitor_service.get_config()
     startup_logger.info(
         "当前配置: 用户={}, 密码={}, 认证={}, 运营商={}, 间隔={}min, 自动监控={}",
-        f"'{config.username}'" if config.username else "(空)",
-        "已设置" if config.password else "(空)",
-        f"'{config.auth_url}'" if config.auth_url else "(空)",
-        config.carrier,
-        config.check_interval_seconds,
-        config.auto_start,
+        f"'{cfg.username}'" if cfg.username else "(空)",
+        "已设置" if cfg.password else "(空)",
+        f"'{cfg.auth_url}'" if cfg.auth_url else "(空)",
+        cfg.carrier,
+        cfg.check_interval_seconds,
+        cfg.auto_start,
     )
 
     # 检查 cryptography 库是否可用
@@ -133,9 +133,14 @@ async def lifespan(app_instance):
     # 创建后台任务等待 shutdown_event，当事件被设置时触发应用关闭
     async def _wait_shutdown():
         await shutdown_event.wait()
-        # 通过向 uvicorn 发送信号来触发关闭
-        import signal
-        os.kill(os.getpid(), signal.SIGTERM)
+        # 通过设置 uvicorn Server.should_exit 触发优雅关闭，
+        # 而非发送 SIGTERM（后者会被 main.py 的信号处理器拦截并 os._exit）
+        _server = getattr(app.state, "_uvicorn_server", None)
+        if _server is not None:
+            _server.should_exit = True
+        else:
+            # 回退：发送 SIGTERM（仅在无法获取 server 引用时）
+            os.kill(os.getpid(), signal.SIGTERM)
 
     shutdown_waiter = asyncio.create_task(_wait_shutdown())
 
@@ -372,7 +377,9 @@ def run(
     # 压制 uvicorn access 日志
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
-    uvicorn.run(
+    # 使用 Server 实例而非 uvicorn.run()，以便 _wait_shutdown 可通过
+    # server.should_exit = True 触发优雅关闭（避免 SIGTERM → os._exit 路径）
+    uv_config = uvicorn.Config(
         "app.application:app",
         host="127.0.0.1",
         port=resolve_port(),
@@ -381,6 +388,9 @@ def run(
         access_log=False,
         ws_max_size=65536,
     )
+    uv_server = uvicorn.Server(uv_config)
+    app.state._uvicorn_server = uv_server
+    uv_server.run()
 
 
 if __name__ == "__main__":

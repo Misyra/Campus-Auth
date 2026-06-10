@@ -180,6 +180,11 @@ class AutoStartService:
         <string>-lc</string>
         <string>{escaped_cmd}</string>
     </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>CAMPUS_AUTH_AUTOSTART</key>
+        <string>1</string>
+    </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
@@ -245,6 +250,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory={self.project_root}
+Environment=CAMPUS_AUTH_AUTOSTART=1
 ExecStart=/bin/sh -lc '{cmd}'
 Restart=always
 RestartSec=5
@@ -283,6 +289,7 @@ WantedBy=default.target
         """
         return f"""Set WshShell = CreateObject("WScript.Shell")
 WshShell.Environment("PROCESS")("CAMPUS_AUTH_AUTO_OPEN_BROWSER") = "false"
+WshShell.Environment("PROCESS")("CAMPUS_AUTH_AUTOSTART") = "1"
 
 ' Check if already running
 Set fso = CreateObject("Scripting.FileSystemObject")

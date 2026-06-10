@@ -6,7 +6,7 @@ import os
 import time
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from app.constants import AUTH_DATA_DIR, PROJECT_ROOT
 from app.deps import get_monitor_service
@@ -117,6 +117,7 @@ def get_init_status(
 @router.post("/api/shutdown", response_model=ActionResponse)
 def shutdown_server(
     request: Request,
+    bg_tasks: BackgroundTasks,
     svc: MonitorService = Depends(get_monitor_service),
 ) -> ActionResponse:
     """关闭服务器 — 通过 shutdown_event 触发 lifespan 正常清理"""
@@ -151,10 +152,16 @@ def shutdown_server(
         api_logger.warning("PID 文件清理失败", exc_info=True)
 
     # 通过 shutdown_event 触发 lifespan 正常关闭
-    if hasattr(request.app.state, "shutdown_event"):
-        request.app.state.shutdown_event.set()
+    # 使用 BackgroundTasks 确保 HTTP 响应发送后再触发 shutdown
+    bg_tasks.add_task(_trigger_shutdown_event, request)
 
     return ActionResponse(success=True, message="服务器正在关闭，请稍候，页面将自动断开")
+
+
+def _trigger_shutdown_event(request: Request) -> None:
+    """在 HTTP 响应发送后触发 shutdown_event"""
+    if hasattr(request.app.state, "shutdown_event"):
+        request.app.state.shutdown_event.set()
 
 
 # ── 卸载 ──

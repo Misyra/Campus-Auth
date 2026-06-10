@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import Any
 
 from app.utils.logging import get_logger
 from app.utils.shell_policy import ShellCommandPolicy
@@ -69,6 +70,7 @@ class ScriptRunner:
         self.timeout = timeout
         self.binary_path = binary_path or get_default_binary()
         self._script_content: str | None = None
+        self._cache_available_binaries: list[dict[str, Any]] | None = None
 
     def _load_script_content(self) -> str | None:
         """从 JSON 文件加载脚本内容。
@@ -188,7 +190,9 @@ class ScriptRunner:
             cmd = self._build_cmd()
 
         # 使用 ShellCommandPolicy 进行安全校验和执行
-        available = [b["path"] for b in detect_available_binaries()]
+        if self._cache_available_binaries is None:
+            self._cache_available_binaries = detect_available_binaries()
+        available = [b["path"] for b in self._cache_available_binaries]
         if self.binary_path not in available:
             logger.warning(
                 "binary_path 不在系统已知列表中，已自动添加: {}", self.binary_path

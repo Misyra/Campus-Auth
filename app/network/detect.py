@@ -155,11 +155,7 @@ def _detect_gateway_windows() -> str | None:
 def _detect_ssid_windows() -> str | None:
     """Windows: 解析 netsh wlan show interfaces 获取当前 WiFi SSID。"""
     try:
-        creationflags = (
-            subprocess.CREATE_NO_WINDOW
-            if hasattr(subprocess, "CREATE_NO_WINDOW")
-            else 0
-        )
+        creationflags = CREATE_NO_WINDOW_FLAG
         result = subprocess.run(
             ["netsh", "wlan", "show", "interfaces"],
             capture_output=True,

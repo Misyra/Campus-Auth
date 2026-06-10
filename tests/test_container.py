@@ -218,7 +218,7 @@ class TestShutdown:
     @pytest.fixture
     def container_for_shutdown(self, container):
         """为 shutdown 测试配置 mock 行为。"""
-        container.scheduler_service.stop = MagicMock()
+        container.scheduler_service.stop = AsyncMock()
         container.monitor_service.shutdown = MagicMock()
         container.debug_manager.close = AsyncMock()
         container.ws_manager.close_all = AsyncMock()
@@ -227,7 +227,7 @@ class TestShutdown:
     def test_shutdown_stops_scheduler(self, container_for_shutdown):
         """shutdown 应停止调度器。"""
         asyncio.run(container_for_shutdown.shutdown())
-        container_for_shutdown.scheduler_service.stop.assert_called_once()
+        container_for_shutdown.scheduler_service.stop.assert_awaited_once()
 
     def test_shutdown_calls_monitor_shutdown(self, container_for_shutdown):
         """shutdown 应调用 monitor_service.shutdown()。"""
@@ -348,7 +348,7 @@ class TestIntegration:
         """完整的 startup → shutdown 生命周期不应抛异常。"""
         container.scheduler_service.has_enabled_tasks = MagicMock(return_value=False)
         container.scheduler_service.start = MagicMock()
-        container.scheduler_service.stop = MagicMock()
+        container.scheduler_service.stop = AsyncMock()
         container.debug_manager.close = AsyncMock()
         container.ws_manager.close_all = AsyncMock()
 

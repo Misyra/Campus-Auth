@@ -19,7 +19,7 @@ logger = get_logger("shell_policy", source="backend")
 
 # 超时上下限
 _MIN_TIMEOUT = 1
-_MAX_TIMEOUT = 300
+_MAX_TIMEOUT = 3600
 
 
 class ShellCommandPolicy:
