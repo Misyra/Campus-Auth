@@ -9,10 +9,9 @@ from pathlib import Path
 
 from app.services.autostart import AutoStartService
 from app.services.debug import DebugSessionManager
+from app.services.engine import ScheduleEngine
 from app.services.login_history import LoginHistoryService
-from app.services.monitor import MonitorService
 from app.services.profile import ProfileService
-from app.services.scheduler import SchedulerService
 from app.services.task import TaskService
 from app.utils.logging import DashboardSink, get_logger
 from app.workers.playwright_worker import cleanup_orphan_browsers, get_worker
@@ -29,74 +28,75 @@ class ServiceContainer:
         self._temp_dir = project_root / "temp"
         self._logs_dir = project_root / "logs"
         self._backup_dir = project_root / "backups"
-
-        # backups 目录（temp/logs 由 application.py 模块级创建）
         self._backup_dir.mkdir(parents=True, exist_ok=True)
 
-        # 初始化服务
+        # 基础服务
         self.ws_manager = WebSocketManager()
         self.profile_service = ProfileService(project_root)
         from app.constants import AUTH_DATA_DIR
 
         self.login_history_service = LoginHistoryService(AUTH_DATA_DIR)
-        self.monitor_service = MonitorService(
+        self.task_service = TaskService(project_root)
+        self.autostart_service = AutoStartService(project_root)
+        self.debug_manager = DebugSessionManager(project_root)
+
+        # 统一引擎（替代 MonitorService + SchedulerService）
+        self.engine = ScheduleEngine(
             project_root,
             self.profile_service,
             self.ws_manager,
             login_history_service=self.login_history_service,
             worker_getter=get_worker,
         )
-        self.task_service = TaskService(project_root)
-        self.scheduler_service = SchedulerService(
-            project_root,
-            self.task_service,
-            self.monitor_service,
-            login_history=self.login_history_service,
-        )
-        self.autostart_service = AutoStartService(project_root)
-        self.debug_manager = DebugSessionManager(project_root)
 
-        # WebSocket drain loop 任务
         self._ws_drain_task: asyncio.Task | None = None
-
-        # loguru DashboardSink handler ID（用于 shutdown 时移除）
         self._log_handler_id: int | None = None
+        self._web_services_started = False
+
+    # ── 属性别名（保持 API 路由兼容）──
+
+    @property
+    def monitor_service(self) -> ScheduleEngine:
+        return self.engine
+
+    @property
+    def scheduler_service(self) -> ScheduleEngine:
+        return self.engine
+
+    # ── 生命周期 ──
 
     async def startup(self):
-        """启动服务。"""
-        # 清理孤儿浏览器进程
+        """启动所有服务。"""
         cleanup_orphan_browsers()
+        self.start_web_services()
+        self.engine.boot()
+        if self.engine.has_enabled_tasks():
+            self.engine.start_scheduler()
+        container_logger.info("服务容器启动完成")
 
-        # 注册 Dashboard sink — 内存缓冲 + WebSocket 广播
+    def start_web_services(self):
+        """启动 Web 相关服务（DashboardSink + WS drain loop）。幂等。"""
+        if self._web_services_started:
+            return
         from loguru import logger
 
-        dashboard_sink = DashboardSink(maxlen=1200, broadcast_maxlen=200)
-        self._log_handler_id = logger.add(
-            dashboard_sink.write,
-            format="{message}",
-            level="DEBUG",
-            filter=lambda record: record["extra"].get("source") != "frontend",
-        )
-        # 注入 DashboardSink 到 MonitorService
-        self.monitor_service._dashboard_sink = dashboard_sink
-
-        # 启动监控服务
-        self.monitor_service.boot()
-
-        # 启动定时任务调度器（仅在存在启用的任务时启动）
-        if self.scheduler_service.has_enabled_tasks():
-            self.scheduler_service.start()
-
-        # 启动 WebSocket drain loop
-        self._ws_drain_task = asyncio.create_task(self.monitor_service.ws_drain_loop())
-
-        container_logger.info("服务容器启动完成")
+        if self._log_handler_id is None:
+            dashboard_sink = DashboardSink(maxlen=1200, broadcast_maxlen=200)
+            self._log_handler_id = logger.add(
+                dashboard_sink.write,
+                format="{message}",
+                level="DEBUG",
+                filter=lambda record: record["extra"].get("source") != "frontend",
+            )
+            self.engine._dashboard_sink = dashboard_sink
+        self._ws_drain_task = asyncio.create_task(self.engine.ws_drain_loop())
+        self._web_services_started = True
+        container_logger.info("Web 服务已启动")
 
     async def shutdown(self):
         """关闭服务。"""
         container_logger.info("服务容器开始关闭...")
 
-        # 移除 DashboardSink loguru handler，防止重复注册（测试/重启场景）
         if self._log_handler_id is not None:
             from loguru import logger as _loguru_logger
 
@@ -104,25 +104,18 @@ class ServiceContainer:
                 _loguru_logger.remove(self._log_handler_id)
             self._log_handler_id = None
 
-        # 停止定时任务调度器（等待运行中的任务完成）
-        await self.scheduler_service.stop()
+        self.engine.stop_scheduler()
 
-        # 取消 WebSocket drain loop
         if self._ws_drain_task:
             self._ws_drain_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._ws_drain_task
 
-        # 完全关闭监控服务（停止监控 + 终止消费者线程）
-        self.monitor_service.shutdown()
+        self.engine.shutdown()
 
-        # 关闭调试会话
         await self.debug_manager.close()
-
-        # 关闭 WebSocket 连接
         await self.ws_manager.close_all()
 
-        # 关闭 Playwright Worker（在所有服务关闭后，避免中断正在执行的任务）
         try:
             from app.workers.playwright_worker import shutdown_worker
 
@@ -131,7 +124,6 @@ class ServiceContainer:
         except Exception:
             container_logger.warning("关闭 Playwright Worker 异常", exc_info=True)
 
-        # 清理临时目录
         try:
             if self._temp_dir.exists():
                 for item in self._temp_dir.iterdir():

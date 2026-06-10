@@ -79,33 +79,33 @@ def client(tmp_path):
         mock_services = MagicMock()
 
         # ── monitor_service ──
-        mock_services.monitor_service.get_config.return_value = MonitorConfigPayload(
+        mock_services.engine.get_config.return_value = MonitorConfigPayload(
             username="testuser", password="••••••••", auth_url="http://10.0.0.1"
         )
-        mock_services.monitor_service.get_status.return_value = MonitorStatusResponse(
+        mock_services.engine.get_status.return_value = MonitorStatusResponse(
             monitoring=False,
             network_check_count=0,
             login_attempt_count=0,
             last_check_time=None,
             runtime_seconds=0,
         )
-        mock_services.monitor_service.list_logs.return_value = []
-        mock_services.monitor_service.start_monitoring.return_value = (
+        mock_services.engine.list_logs.return_value = []
+        mock_services.engine.start_monitoring.return_value = (
             True,
             "监控已启动",
         )
-        mock_services.monitor_service.stop_monitoring.return_value = (
+        mock_services.engine.stop_monitoring.return_value = (
             True,
             "监控已停止",
         )
-        mock_services.monitor_service.run_manual_login.return_value = (
+        mock_services.engine.run_manual_login.return_value = (
             True,
             "手动登录成功",
         )
-        mock_services.monitor_service.test_network.return_value = (True, "网络正常")
-        mock_services.monitor_service.pure_mode = False
-        mock_services.monitor_service.toggle_pure_mode.return_value = True
-        mock_services.monitor_service.get_runtime_config.return_value = {
+        mock_services.engine.test_network.return_value = (True, "网络正常")
+        mock_services.engine.pure_mode = False
+        mock_services.engine.toggle_pure_mode.return_value = True
+        mock_services.engine.get_runtime_config.return_value = {
             "monitor": {"script_timeout": 60}
         }
 
@@ -170,13 +170,12 @@ def client(tmp_path):
         mock_services.login_history_service.list_recent.return_value = []
         mock_services.login_history_service.clear.return_value = 0
 
-        # ── scheduler_service ──
-        mock_services.scheduler_service = MagicMock()
-        mock_services.scheduler_service.list_tasks.return_value = []
-        mock_services.scheduler_service.get_task.return_value = None
-        mock_services.scheduler_service.save_task.return_value = (True, "保存成功")
-        mock_services.scheduler_service.delete_task.return_value = (True, "删除成功")
-        mock_services.scheduler_service.get_history.return_value = []
+        # ── scheduler（engine 已在上方初始化，追加 scheduler 相关 mock）──
+        mock_services.engine.list_tasks.return_value = []
+        mock_services.engine.get_task.return_value = None
+        mock_services.engine.save_task.return_value = (True, "保存成功")
+        mock_services.engine.delete_task.return_value = (True, "删除成功")
+        mock_services.engine.get_history.return_value = []
 
         # ── ws_manager ──
         mock_services.ws_manager = MagicMock()

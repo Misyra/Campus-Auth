@@ -29,10 +29,10 @@ def client(tmp_path):
         mock_services = MagicMock()
 
         # monitor_service
-        mock_services.monitor_service.get_config.return_value = MonitorConfigPayload(
+        mock_services.engine.get_config.return_value = MonitorConfigPayload(
             username="testuser", password="••••••••", auth_url="http://10.0.0.1"
         )
-        mock_services.monitor_service.get_runtime_config.return_value = {
+        mock_services.engine.get_runtime_config.return_value = {
             "monitor": {"script_timeout": 60}
         }
 
@@ -78,7 +78,7 @@ class TestInitStatus:
     def test_initialized(self, client):
         """已初始化时返回 True。"""
         test_client, mock_services, _ = client
-        mock_services.monitor_service.get_config.return_value = MonitorConfigPayload(
+        mock_services.engine.get_config.return_value = MonitorConfigPayload(
             username="testuser", password="secret", auth_url="http://10.0.0.1"
         )
         with patch("app.utils.crypto.has_decryption_error", return_value=False):
@@ -90,7 +90,7 @@ class TestInitStatus:
     def test_not_initialized(self, client):
         """未初始化时返回 False。"""
         test_client, mock_services, _ = client
-        mock_services.monitor_service.get_config.return_value = MonitorConfigPayload(
+        mock_services.engine.get_config.return_value = MonitorConfigPayload(
             username="", password="", auth_url=""
         )
         with patch("app.utils.crypto.has_decryption_error", return_value=False):

@@ -58,7 +58,7 @@ def client(tmp_path):
         )
         mock_services.profile_service.load.return_value = profile_data
         mock_services.profile_service.invalidate_cache = MagicMock()
-        mock_services.monitor_service.reload_config = MagicMock()
+        mock_services.engine.reload_config = MagicMock()
 
         app.state.services = mock_services
 

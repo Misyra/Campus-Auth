@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.deps import get_monitor_service, get_profile_service
 from app.schemas import ActionResponse, MonitorConfigPayload
 from app.services.config import save_config_combined
-from app.services.monitor import MonitorService
+from app.services.engine import ScheduleEngine
 from app.services.profile import ProfileService
 from app.utils.logging import get_logger
 
@@ -17,7 +17,7 @@ api_logger = get_logger("api", source="backend")
 
 @router.get("/api/config", response_model=MonitorConfigPayload)
 def get_config(
-    svc: MonitorService = Depends(get_monitor_service),
+    svc: ScheduleEngine = Depends(get_monitor_service),
 ) -> MonitorConfigPayload:
     return svc.get_config()
 
@@ -33,7 +33,7 @@ def get_default_stealth_script() -> dict:
 @router.put("/api/config", response_model=ActionResponse)
 def save_config(
     payload: MonitorConfigPayload,
-    svc: MonitorService = Depends(get_monitor_service),
+    svc: ScheduleEngine = Depends(get_monitor_service),
     profile_svc: ProfileService = Depends(get_profile_service),
 ) -> ActionResponse:
     try:

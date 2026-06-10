@@ -37,13 +37,13 @@ class TestDeps:
     @pytest.fixture
     def services(self):
         svc = MagicMock()
-        svc.monitor_service = MagicMock(name="MonitorService")
+        svc.engine = MagicMock(name="ScheduleEngine")
         svc.profile_service = MagicMock(name="ProfileService")
         svc.task_service = MagicMock(name="TaskService")
         svc.autostart_service = MagicMock(name="AutoStartService")
         svc.debug_manager = MagicMock(name="DebugSessionManager")
         svc.login_history_service = MagicMock(name="LoginHistoryService")
-        svc.scheduler_service = MagicMock(name="SchedulerService")
+        svc.scheduler_service = MagicMock(name="SchedulerService")  # 向后兼容别名
         return svc
 
     def test_get_services(self, services):
@@ -52,7 +52,7 @@ class TestDeps:
 
     def test_get_monitor_service(self, services):
         request = _make_request(services)
-        assert get_monitor_service(request) is services.monitor_service
+        assert get_monitor_service(request) is services.engine
 
     def test_get_profile_service(self, services):
         request = _make_request(services)
@@ -76,4 +76,4 @@ class TestDeps:
 
     def test_get_scheduler_service(self, services):
         request = _make_request(services)
-        assert get_scheduler_service(request) is services.scheduler_service
+        assert get_scheduler_service(request) is services.engine

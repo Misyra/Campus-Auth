@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from typing import Any
 
@@ -94,7 +95,7 @@ async def create_scheduled_task(payload: dict, request: Request) -> ActionRespon
     api_logger.info("创建定时任务 {} -> success={}, message={}", task_id, ok, message)
     # 新建任务默认启用，确保调度器在运行
     if ok and config.get("enabled", True):
-        scheduler.start()
+        scheduler.start_scheduler()
     return ActionResponse(success=ok, message=message)
 
 
@@ -157,7 +158,7 @@ async def update_scheduled_task(
     api_logger.info("更新定时任务 {} -> success={}, message={}", task_id, ok, message)
     # 更新后任务启用时，确保调度器在运行
     if ok and config.get("enabled", True):
-        scheduler.start()
+        scheduler.start_scheduler()
     return ActionResponse(success=ok, message=message)
 
 
@@ -184,7 +185,7 @@ async def run_scheduled_task(
     # 后台执行，不阻塞 HTTP 响应
     async def _execute():
         try:
-            success, message = await scheduler.execute_task(task_id)
+            success, message = await asyncio.to_thread(scheduler.execute_task, task_id)
             api_logger.info(
                 "后台定时任务 {} -> success={}, message={}", task_id, success, message
             )
@@ -210,7 +211,7 @@ async def toggle_scheduled_task(task_id: str, request: Request) -> ActionRespons
     api_logger.info("切换定时任务 {} -> {}", task_id, status)
     # 启用任务时确保调度器在运行
     if ok and task["enabled"]:
-        scheduler.start()
+        scheduler.start_scheduler()
     return ActionResponse(success=ok, message=f"定时任务已{status}")
 
 
