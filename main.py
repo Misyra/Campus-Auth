@@ -151,11 +151,10 @@ def _cmd_autostart(action: str) -> None:
 
 
 def _run_login_then_exit(logger) -> None:
-    """登录成功后退出模式：循环重试登录，直到成功后退出进程。"""
+    """登录成功后退出模式：先检测网络，已连接则直接退出；否则循环重试登录。"""
     from app.workers.playwright_worker import CMD_LOGIN, get_worker
 
-    print("登录成功后退出模式：正在登录...")
-
+    # 加载配置
     try:
         from app.services.profile import ProfileService
 
@@ -172,6 +171,20 @@ def _run_login_then_exit(logger) -> None:
     except Exception as exc:
         print(f"加载配置失败: {exc}")
         sys.exit(1)
+
+    # 先检测网络状态，已连接则无需登录，直接退出
+    try:
+        from app.network.decision import check_network_status
+
+        network_ok, reason = check_network_status(runtime_config)
+        if network_ok:
+            print("网络已连接，无需登录，正在退出...")
+            cleanup_pid()
+            sys.exit(0)
+        print(f"网络未连接 ({reason})，开始登录...")
+    except Exception as exc:
+        logger.debug("网络检测异常，继续尝试登录: {}", exc)
+        print("网络检测异常，开始登录...")
 
     retry_settings = runtime_config.get("retry_settings", {})
     raw = retry_settings.get("max_retries", 3)
@@ -253,9 +266,9 @@ def _run_server(
     def _signal_handler(signum, _frame):
         cleanup_pid()
         with contextlib.suppress(Exception):
-            from app.workers.playwright_worker import get_worker
+            from app.workers.playwright_worker import shutdown_worker
 
-            get_worker().stop(timeout=3)
+            shutdown_worker(timeout=3)
         with contextlib.suppress(Exception):
             cleanup_orphan_browsers()
         os._exit(0)
@@ -288,9 +301,10 @@ def _run_server(
         login_then_exit = False
         # auto_open_browser 保持 None，让 _open_browser 走环境变量默认值
 
-    # 登录成功后退出模式：循环重试直到登录成功，成功后退出进程
+    # 登录成功后退出模式：仅自启动时生效，循环重试直到登录成功，成功后退出进程
     # --no-auto 可跳过此模式，用于 login_then_exit 开启后无法进入 Web 控制台的恢复场景
-    if login_then_exit and not no_auto:
+    is_autostart = os.environ.get("CAMPUS_AUTH_AUTOSTART") == "1"
+    if login_then_exit and is_autostart and not no_auto:
         _run_login_then_exit(startup_logger)
         # 登录成功会 sys.exit(0)，不会到达这里；失败超限则回退到正常启动
 
