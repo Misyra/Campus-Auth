@@ -6,8 +6,10 @@
 from __future__ import annotations
 
 import asyncio
+from typing import TYPE_CHECKING
 
-from fastapi import WebSocket
+if TYPE_CHECKING:
+    from fastapi import WebSocket
 
 from app.utils.logging import get_logger
 
