@@ -170,6 +170,19 @@ def _detect_ssid_windows() -> str | None:
         match = pattern.search(output)
         if match:
             raw = match.group(1).strip()
+
+            # 检查是否为十六进制编码的 SSID（包含非 ASCII 字符时 netsh 可能输出十六进制形式）
+            try:
+                ssid_hex = raw.decode("ascii")
+                if re.fullmatch(r"[0-9A-Fa-f]+", ssid_hex) and len(ssid_hex) % 2 == 0:
+                    ssid_bytes = bytes.fromhex(ssid_hex)
+                    ssid = ssid_bytes.decode("utf-8")
+                    if ssid and any(c.isprintable() for c in ssid):
+                        return ssid
+            except (ValueError, UnicodeDecodeError):
+                pass
+
+            # 正常解码
             try:
                 ssid = raw.decode(encoding)
             except (UnicodeDecodeError, LookupError):
