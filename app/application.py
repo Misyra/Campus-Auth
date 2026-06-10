@@ -1,7 +1,5 @@
 """FastAPI 应用入口 — 工厂模式：create_app() 延迟加载 FastAPI。"""
 
-from __future__ import annotations
-
 import asyncio
 import contextlib
 import json
