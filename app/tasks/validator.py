@@ -109,7 +109,7 @@ class TaskValidator:
 
         # 验证 timeout 值
         timeout = step.get("timeout")
-        if timeout is not None and (not isinstance(timeout, (int, float)) or timeout <= 0):
+        if timeout is not None and (not isinstance(timeout, int | float) or timeout <= 0):
             errors.append(f"{prefix} timeout 必须为正数，当前值: {timeout}")
 
         return errors

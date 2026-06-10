@@ -413,7 +413,7 @@ class TaskExecutor:
                 filename = Path(local_path).name
                 return f"{url_prefix}/{filename}"
             return None
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("截图超时（5s），已跳过")
             return None
         except Exception as e:
