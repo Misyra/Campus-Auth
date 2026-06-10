@@ -76,6 +76,9 @@ class NetworkMonitorCore:
         # 线程完成事件：由 MonitorService 传入，用于安全等待线程实际结束
         self._thread_done: threading.Event | None = thread_done
 
+        # 状态锁：保护 snapshot() 读取的状态字段，防止跨线程竞态
+        self._state_lock = threading.Lock()
+
         self.monitoring = False
         self.network_check_count = 0
         self.login_attempt_count = 0
@@ -121,18 +124,29 @@ class NetworkMonitorCore:
             log_func = getattr(self.logger, level.lower(), self.logger.info)
             log_func(message)
 
+    def _update_state(self, **kwargs: Any) -> None:
+        """线程安全地更新状态字段。
+
+        用法: self._update_state(monitoring=True, status_detail="...")
+        """
+        with self._state_lock:
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+
     def snapshot(self) -> dict[str, Any]:
-        return {
-            "monitoring": self.monitoring,
-            "network_check_count": self.network_check_count,
-            "login_attempt_count": self.login_attempt_count,
-            "last_check_time": self.last_check_time.isoformat()
-            if self.last_check_time
-            else None,
-            "start_time": self.start_time,
-            "network_state": self.network_state.value,
-            "status_detail": self.status_detail,
-        }
+        """线程安全地获取状态快照。"""
+        with self._state_lock:
+            return {
+                "monitoring": self.monitoring,
+                "network_check_count": self.network_check_count,
+                "login_attempt_count": self.login_attempt_count,
+                "last_check_time": self.last_check_time.isoformat()
+                if self.last_check_time
+                else None,
+                "start_time": self.start_time,
+                "network_state": self.network_state.value,
+                "status_detail": self.status_detail,
+            }
 
     def set_profile_service(
         self,
@@ -168,16 +182,18 @@ class NetworkMonitorCore:
                 self.log_message("监控已在运行中", "WARNING")
                 return
 
-            self.monitoring = True
             self._stop_requested = False
             self._cancel_login.clear()
             self._stop_event.clear()
-            self.start_time = time.time()
-            self.network_check_count = 0
-            self.login_attempt_count = 0
-            self.network_state = NetworkState.UNKNOWN
-            self.status_detail = "正在启动监控"
             self._test_sites_cache = None  # 重置缓存
+            self._update_state(
+                monitoring=True,
+                start_time=time.time(),
+                network_check_count=0,
+                login_attempt_count=0,
+                network_state=NetworkState.UNKNOWN,
+                status_detail="正在启动监控",
+            )
 
             interval = self._get_monitor_interval()
             auth_url = self.config.get("auth_url", "未设置")
@@ -220,22 +236,22 @@ class NetworkMonitorCore:
                 self._thread_done.set()
 
     def stop_monitoring(self) -> None:
-        if not self.monitoring and self._stop_requested:
-            return
+        with self._state_lock:
+            if not self.monitoring and self._stop_requested:
+                return
+            was_monitoring = self.monitoring
+            start_time = self.start_time
+            check_count = self.network_check_count
 
         self._stop_requested = True
         self._cancel_login.set()
         self._stop_event.set()
-        was_monitoring = self.monitoring
-        self.monitoring = False
-        self.status_detail = "已停止"
+        self._update_state(monitoring=False, status_detail="已停止")
 
-        if was_monitoring and self.start_time:
-            runtime, stats = get_runtime_stats(
-                self.start_time, self.network_check_count
-            )
+        if was_monitoring and start_time:
+            runtime, stats = get_runtime_stats(start_time, check_count)
             self.log_message(
-                f"监控已停止 | 运行时长: {runtime} | 检测次数: {self.network_check_count}"
+                f"监控已停止 | 运行时长: {runtime} | 检测次数: {check_count}"
             )
 
     def _close_browser_if_needed(self) -> None:
@@ -292,7 +308,7 @@ class NetworkMonitorCore:
         idx = self.login_attempt_count - 1
         if idx < len(intervals):
             wait = intervals[idx]
-            self.status_detail = f"网络异常：等待重试（{wait}秒后）"
+            self._update_state(status_detail=f"网络异常：等待重试（{wait}秒后）")
             self.log_message(f"{wait} 秒后重试登录...", "INFO")
             if not self._wait_interruptible(wait, step=5):
                 return RecoveryResult.BREAK
@@ -302,7 +318,7 @@ class NetworkMonitorCore:
             f"连续登录失败 {self.login_attempt_count} 次，等待下次检测周期",
             "WARNING",
         )
-        self.login_attempt_count = 0
+        self._update_state(login_attempt_count=0)
         return RecoveryResult.GIVE_UP
 
     def _login_recovery_loop(self) -> str:
@@ -343,15 +359,17 @@ class NetworkMonitorCore:
                         "物理网络未连接，停止重试，等待下次检测周期",
                         "WARNING",
                     )
-                    self.login_attempt_count = 0
-                    self.network_state = NetworkState.DISCONNECTED
+                    self._update_state(
+                        login_attempt_count=0,
+                        network_state=NetworkState.DISCONNECTED,
+                    )
                     return RecoveryResult.NET_DISCONNECT
                 elif prereq_reason == "auth_url_unreachable":
                     self.log_message(
                         f"认证地址 {self.config.get('auth_url', '?')} 不可达，等待下次检测周期",
                         "WARNING",
                     )
-                    self.status_detail = "网络异常：认证地址不可达"
+                    self._update_state(status_detail="网络异常：认证地址不可达")
                     return RecoveryResult.GIVE_UP
 
             # 2. 检查配置方案是否切换（内部有 60s 冷却）
@@ -359,7 +377,9 @@ class NetworkMonitorCore:
 
             # 2.6 检查是否还有重试机会（登录前检查，避免多执行一次）
             if self.login_attempt_count >= max_retries:
-                self.status_detail = f"网络异常：已达到最大重试次数（{max_retries}次）"
+                self._update_state(
+                    status_detail=f"网络异常：已达到最大重试次数（{max_retries}次）"
+                )
                 self.log_message(
                     f"已达到最大重试次数 ({max_retries})，等待下次检测周期",
                     "WARNING",
@@ -373,31 +393,33 @@ class NetworkMonitorCore:
                     f"连续 {self.login_attempt_count} 次登录失败，"
                     f"{interval}秒后重试（{next_check.strftime('%H:%M:%S')}），请检查账号密码和认证地址是否正确",
                 )
-                self.login_attempt_count = 0
+                self._update_state(login_attempt_count=0)
                 return RecoveryResult.GIVE_UP
 
             # 3. 执行登录
-            self.status_detail = "网络异常：正在登录"
+            self._update_state(status_detail="网络异常：正在登录")
             login_ok, login_msg = self.attempt_login()
             # 等待 2s 后再做重试决策，避免网址响应尚未完全更新会话状态时立即重试
             if self._stop_event.wait(timeout=2):
                 return RecoveryResult.BREAK
 
             if login_ok:
-                self.login_attempt_count = 0
-                self.network_state = NetworkState.CONNECTED
-                self.status_detail = "网络正常"
+                self._update_state(
+                    login_attempt_count=0,
+                    network_state=NetworkState.CONNECTED,
+                    status_detail="网络正常",
+                )
                 return RecoveryResult.LOGIN_OK
 
             # 4. 登录失败，记录并判断是否重试
             self.login_attempt_count += 1
-            self.network_state = NetworkState.DISCONNECTED
+            self._update_state(network_state=NetworkState.DISCONNECTED)
             self.log_message(
                 f"登录失败 (第{self.login_attempt_count}/{max_retries}次)",
                 "ERROR",
             )
-            self.status_detail = (
-                f"网络异常：登录失败（第{self.login_attempt_count}/{max_retries}次）"
+            self._update_state(
+                status_detail=f"网络异常：登录失败（第{self.login_attempt_count}/{max_retries}次）"
             )
 
             # 浏览器已由 login.py 在失败时关闭，下次重试 ensure_browser 自动重建
@@ -434,13 +456,14 @@ class NetworkMonitorCore:
             # 重新读取测试站点（方案切换后可能已更新）
             test_sites = self._get_test_sites()
 
-            self.network_check_count += 1
-            self.last_check_time = datetime.datetime.now()
-            # 首次检测显示"正在检测网络"，后续检测根据上次结果显示
-            if self.network_state == NetworkState.UNKNOWN:
-                self.status_detail = "正在检测网络"
+            with self._state_lock:
+                self.network_check_count += 1
+                self.last_check_time = datetime.datetime.now()
+                check_num = self.network_check_count
+                if self.network_state == NetworkState.UNKNOWN:
+                    self.status_detail = "正在检测网络"
             targets_str = ", ".join(f"{h}:{p}" for h, p in test_sites)
-            self.log_message(f"[#{self.network_check_count}] 网络检测 -> {targets_str}")
+            self.log_message(f"[#{check_num}] 网络检测 -> {targets_str}")
 
             # 1. 暂停时段检查
             is_paused, _ = check_pause(self.config)
@@ -448,8 +471,8 @@ class NetworkMonitorCore:
                 pause_config = self.config.get("pause_login", {})
                 start_hour = pause_config.get("start_hour", 0)
                 end_hour = pause_config.get("end_hour", 6)
-                self.status_detail = (
-                    f"网络异常：暂停时段（{start_hour}:00-{end_hour}:00）"
+                self._update_state(
+                    status_detail=f"网络异常：暂停时段（{start_hour}:00-{end_hour}:00）"
                 )
                 self.log_message(
                     f"暂停时段 ({start_hour}:00-{end_hour}:00)，跳过检测",
@@ -465,53 +488,62 @@ class NetworkMonitorCore:
             # 2. 网络状态检测 (TCP/HTTP/网址响应)
             net_ok, net_reason = check_network_status(self.config)
             if net_ok:
-                self.login_attempt_count = 0
-                self.network_state = NetworkState.CONNECTED
-                self.status_detail = "网络正常"
+                self._update_state(
+                    login_attempt_count=0,
+                    network_state=NetworkState.CONNECTED,
+                    status_detail="网络正常",
+                )
                 self.log_message(
-                    f"[#{self.network_check_count}] 网络正常，无需登录", "INFO"
+                    f"[#{check_num}] 网络正常，无需登录", "INFO"
                 )
             elif net_reason == "all_disabled":
                 self.log_message("所有网络检测均未启用，跳过", "WARNING")
             else:
                 # 3. 网络异常，进入登录恢复
-                self.status_detail = "网络异常：正在登录"
+                self._update_state(status_detail="网络异常：正在登录")
                 recovery_result = self._login_recovery_loop()
                 if recovery_result == RecoveryResult.LOGIN_OK:
-                    self.login_attempt_count = 0
-                    self.network_state = NetworkState.CONNECTED
-                    self.status_detail = "网络正常"
+                    self._update_state(
+                        login_attempt_count=0,
+                        network_state=NetworkState.CONNECTED,
+                        status_detail="网络正常",
+                    )
                     self.log_message(
-                        f"[#{self.network_check_count}] 登录成功，网络已恢复"
+                        f"[#{check_num}] 登录成功，网络已恢复"
                     )
                 elif recovery_result == RecoveryResult.BREAK:
                     break
                 elif recovery_result == RecoveryResult.NET_DISCONNECT:
-                    self.status_detail = "网络异常：物理网络断开"
-                    self.network_state = NetworkState.DISCONNECTED
+                    self._update_state(
+                        status_detail="网络异常：物理网络断开",
+                        network_state=NetworkState.DISCONNECTED,
+                    )
                 elif recovery_result == RecoveryResult.GIVE_UP:
-                    self.status_detail = "网络异常：登录失败，等待下次检测"
-                    self.network_state = NetworkState.DISCONNECTED
+                    self._update_state(
+                        status_detail="网络异常：登录失败，等待下次检测",
+                        network_state=NetworkState.DISCONNECTED,
+                    )
                 # RecoveryResult.GIVE_UP → 跳出，进入正常检测间隔等待
 
             next_check = datetime.datetime.now() + datetime.timedelta(seconds=interval)
             # 根据网络状态设置等待文案
-            if self.network_state == NetworkState.CONNECTED:
-                self.status_detail = (
-                    f"网络正常：等待下次检测（{next_check.strftime('%H:%M:%S')}）"
-                )
-                self.log_message(
-                    f"等待 {interval} 秒至下次检测周期（{next_check.strftime('%H:%M:%S')}）",
-                    "DEBUG",
-                )
-            else:
-                self.status_detail = (
-                    f"网络异常：等待下次检测（{next_check.strftime('%H:%M:%S')}）"
-                )
-                self.log_message(
-                    f"等待 {interval} 秒至下次检测周期（{next_check.strftime('%H:%M:%S')}）",
-                    "INFO",
-                )
+            with self._state_lock:
+                if self.network_state == NetworkState.CONNECTED:
+                    self.status_detail = (
+                        f"网络正常：等待下次检测（{next_check.strftime('%H:%M:%S')}）"
+                    )
+                    self.log_message(
+                        f"等待 {interval} 秒至下次检测周期（{next_check.strftime('%H:%M:%S')}）",
+                        "DEBUG",
+                    )
+                else:
+                    self.status_detail = (
+                        f"网络异常：等待下次检测（{next_check.strftime('%H:%M:%S')}）"
+                    )
+                    self.log_message(
+                        f"等待 {interval} 秒至下次检测周期（{next_check.strftime('%H:%M:%S')}）",
+                        "INFO",
+                    )
             wait_step = min(
                 self.MAX_WAIT_STEP_SECONDS,
                 max(self.MIN_WAIT_STEP_SECONDS, interval // 10),

@@ -8,6 +8,7 @@ import json
 import mimetypes
 import os
 import signal
+import threading
 import time
 from contextlib import asynccontextmanager
 
@@ -203,7 +204,7 @@ app.add_middleware(
 # ==================== 中间件 ====================
 
 
-_access_log_enabled = False
+_access_log_event = threading.Event()  # 默认未 set（即关闭）
 
 
 @app.middleware("http")
@@ -211,7 +212,7 @@ async def request_logging_middleware(request: Request, call_next):
     start = time.perf_counter()
     try:
         response = await call_next(request)
-        if _access_log_enabled:
+        if _access_log_event.is_set():
             duration_ms = (time.perf_counter() - start) * 1000
             http_logger.info(
                 "{} {} -> {} ({:.1f}ms)",
@@ -362,8 +363,11 @@ def run(
     except Exception:
         startup_logger.warning("旧日志清理失败", exc_info=True)
 
-    global _access_log_enabled
-    _access_log_enabled = access_log_enabled
+    global _access_log_event
+    if access_log_enabled:
+        _access_log_event.set()
+    else:
+        _access_log_event.clear()
 
     # 压制 uvicorn access 日志
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
