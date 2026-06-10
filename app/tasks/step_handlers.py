@@ -429,8 +429,9 @@ class ClickSelectHandler(StepHandler):
             return True, ""
 
         await trigger.click(timeout=timeout)
-        logger.info("[click_select] 触发器已点击，等待 500ms 后查找选项")
-        await page.wait_for_timeout(500)
+        select_delay = step.extra.get("select_delay", 500) if step.extra else 500
+        logger.info("[click_select] 触发器已点击，等待 {}ms 后查找选项", select_delay)
+        await page.wait_for_timeout(select_delay)
 
         clicked = await self._click_option(ctx, value, option_selector, timeout)
         if not clicked:

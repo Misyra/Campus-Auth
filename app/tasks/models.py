@@ -84,7 +84,6 @@ class StepConfig:
     script: str | None = None
     store_as: str | None = None
     clear: bool = True
-    wait_until: str = "networkidle"
     path: str | None = None
     duration: int = 1000  # sleep duration in ms
     frame: str | None = None  # frame 选择器（URL、name 或 CSS 选择器）
@@ -98,28 +97,20 @@ class StepConfig:
     # 扩展参数
     extra: dict[str, Any] = field(default_factory=dict)
 
-    # 字段默认值映射，to_dict 时跳过与默认值相同的字段
-    _DEFAULTS = {
-        "description": "",
-        "timeout": None,
-        "url": None,
-        "selector": None,
-        "value": None,
-        "pattern": None,
-        "script": None,
-        "store_as": None,
-        "clear": True,
-        "wait_until": "networkidle",
-        "path": None,
-        "duration": 1000,
-        "frame": None,
-        "required": False,
-        "option_selector": None,
-        "target_selector": None,
-        "old": False,
-        "char_range": None,
-        "extra": {},
-    }
+    @classmethod
+    def _field_defaults(cls) -> dict[str, Any]:
+        """动态获取字段默认值，用于 to_dict 时跳过默认值。"""
+        from dataclasses import MISSING, fields
+
+        defaults = {}
+        for f in fields(cls):
+            if f.name in ("id", "type", "extra"):
+                continue
+            if f.default is not MISSING:
+                defaults[f.name] = f.default
+            elif f.default_factory is not MISSING:
+                defaults[f.name] = f.default_factory()
+        return defaults
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> StepConfig:
@@ -162,14 +153,14 @@ class StepConfig:
     def to_dict(self) -> dict[str, Any]:
         """序列化为紧凑字典，跳过默认值和 None，合并 extra 回顶层"""
         result: dict[str, Any] = {"id": self.id, "type": self.type}
+        defaults = self._field_defaults()
         for field_name in self.__dataclass_fields__:
             if field_name in ("id", "type", "extra"):
                 continue
             value = getattr(self, field_name)
-            default = self._DEFAULTS.get(field_name)
+            default = defaults.get(field_name)
             if value is not None and value != default:
                 result[field_name] = value
-        # 把 extra 里的扩展字段合并回顶层
         if self.extra:
             result.update(self.extra)
         return result
