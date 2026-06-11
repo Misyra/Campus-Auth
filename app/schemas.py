@@ -302,6 +302,8 @@ class SystemSettings(_SystemFieldsMixin):
     block_proxy: bool = Field(
         default=True, description="屏蔽系统代理：开启后网络检测时忽略系统代理设置"
     )
+    # 新增：source 级别配置
+    source_levels: dict[str, str] = {}
 
 
 class ProfilesData(BaseModel):
