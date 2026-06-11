@@ -621,23 +621,55 @@ class TestPlaywrightWorker:
 
 
 class TestCleanupOrphanBrowsers:
-    @patch("app.workers.playwright_worker.sys")
-    @patch("app.workers.playwright_worker._cleanup_windows")
-    def test_windows(self, mock_cleanup, mock_sys):
-        mock_sys.platform = "win32"
+    def test_kills_matching_processes(self):
+        """匹配 ms-playwright + chrom 的进程应被终止。"""
         from app.workers.playwright_worker import cleanup_orphan_browsers
 
-        cleanup_orphan_browsers()
-        mock_cleanup.assert_called_once()
+        mock_proc = MagicMock()
+        mock_proc.info = {
+            "pid": 1234,
+            "exe": "C:/ms-playwright/chromium-1234/chrome.exe",
+            "cmdline": ["chrome.exe", "--headless"],
+        }
 
-    @patch("app.workers.playwright_worker.sys")
-    @patch("app.workers.playwright_worker._cleanup_posix")
-    def test_posix(self, mock_cleanup, mock_sys):
-        mock_sys.platform = "linux"
+        with patch("psutil.process_iter", return_value=[mock_proc]):
+            cleanup_orphan_browsers()
+
+        mock_proc.kill.assert_called_once()
+
+    def test_ignores_non_matching_processes(self):
+        """不匹配的进程不应被终止。"""
         from app.workers.playwright_worker import cleanup_orphan_browsers
 
-        cleanup_orphan_browsers()
-        mock_cleanup.assert_called_once()
+        mock_proc = MagicMock()
+        mock_proc.info = {
+            "pid": 5678,
+            "exe": "C:/Program Files/Google/Chrome/chrome.exe",
+            "cmdline": ["chrome.exe"],
+        }
+
+        with patch("psutil.process_iter", return_value=[mock_proc]):
+            cleanup_orphan_browsers()
+
+        mock_proc.kill.assert_not_called()
+
+    def test_handles_no_such_process(self):
+        """进程已消失时不应抛异常。"""
+        import psutil as real_psutil
+
+        from app.workers.playwright_worker import cleanup_orphan_browsers
+
+        mock_proc = MagicMock()
+        mock_proc.info = {
+            "pid": 9999,
+            "exe": "C:/ms-playwright/chromium-1234/chrome.exe",
+            "cmdline": [],
+        }
+        mock_proc.kill.side_effect = real_psutil.NoSuchProcess(9999)
+
+        with patch("psutil.process_iter", return_value=[mock_proc]):
+            # 不应抛异常
+            cleanup_orphan_browsers()
 
 
 # ── BrowserContextManager._is_cancelled ──
