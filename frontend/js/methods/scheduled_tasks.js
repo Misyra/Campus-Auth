@@ -1,8 +1,7 @@
-import { getBinaryName, extractApiError, safeApiCall } from './utils.js';
+import { extractApiError, safeApiCall } from './utils.js';
 
 // 定时任务相关方法
 export const scheduledTasksMethods = {
-  getBinaryName,
   // 加载定时任务列表
   async loadScheduledTasks() {
     try {
