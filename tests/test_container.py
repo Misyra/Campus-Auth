@@ -31,6 +31,11 @@ def mock_classes():
         patch("app.container.ScheduleEngine") as mock_engine_cls,
         patch("app.container.TaskService") as mock_task_cls,
         patch("app.container.AutoStartService") as mock_autostart_cls,
+        patch("app.container.RuntimeConfigProvider") as mock_cp_cls,
+        patch("app.container.TaskRegistry") as mock_tr_cls,
+        patch("app.container.TaskHistoryStore") as mock_ths_cls,
+        patch("app.container.TaskExecutor") as mock_te_cls,
+        patch("app.container.TaskFacade") as mock_tf_cls,
         patch("app.services.debug.DebugSessionManager") as mock_debug_cls,
     ):
         yield {
@@ -41,6 +46,11 @@ def mock_classes():
             "ScheduleEngine": mock_engine_cls,
             "TaskService": mock_task_cls,
             "AutoStartService": mock_autostart_cls,
+            "RuntimeConfigProvider": mock_cp_cls,
+            "TaskRegistry": mock_tr_cls,
+            "TaskHistoryStore": mock_ths_cls,
+            "TaskExecutor": mock_te_cls,
+            "TaskFacade": mock_tf_cls,
             "DebugSessionManager": mock_debug_cls,
         }
 
@@ -139,6 +149,11 @@ class TestInit:
         assert hasattr(container, "task_service")
         assert hasattr(container, "autostart_service")
         assert hasattr(container, "debug_manager")
+        assert hasattr(container, "config_provider")
+        assert hasattr(container, "task_registry")
+        assert hasattr(container, "task_history_store")
+        assert hasattr(container, "task_executor")
+        assert hasattr(container, "task_facade")
 
 
 # =====================================================================
@@ -150,8 +165,8 @@ class TestStartup:
     @pytest.fixture
     def container_for_startup(self, container):
         """为 startup 测试配置 mock 行为。"""
-        container.scheduled_task_service.has_enabled_tasks = MagicMock(return_value=False)
-        container.scheduled_task_service.start_scheduler = MagicMock()
+        container.task_registry.has_enabled_tasks = MagicMock(return_value=False)
+        container.engine.start_scheduler = MagicMock()
         return container
 
     @patch("app.workers.playwright_worker.cleanup_orphan_browsers")
@@ -181,9 +196,9 @@ class TestStartup:
         self, mock_logger, mock_dashboard_sink, mock_cleanup, container_for_startup
     ):
         """当存在启用的定时任务时，startup 应启动调度器。"""
-        container_for_startup.scheduled_task_service.has_enabled_tasks.return_value = True
+        container_for_startup.task_registry.has_enabled_tasks.return_value = True
         asyncio.run(container_for_startup.startup())
-        container_for_startup.scheduled_task_service.start_scheduler.assert_called_once()
+        container_for_startup.engine.start_scheduler.assert_called_once()
 
     @patch("app.workers.playwright_worker.cleanup_orphan_browsers")
     @patch("app.container.DashboardSink")
@@ -192,9 +207,9 @@ class TestStartup:
         self, mock_logger, mock_dashboard_sink, mock_cleanup, container_for_startup
     ):
         """没有启用的定时任务时，startup 不应启动调度器。"""
-        container_for_startup.scheduled_task_service.has_enabled_tasks.return_value = False
+        container_for_startup.task_registry.has_enabled_tasks.return_value = False
         asyncio.run(container_for_startup.startup())
-        container_for_startup.scheduled_task_service.start_scheduler.assert_not_called()
+        container_for_startup.engine.start_scheduler.assert_not_called()
 
     @patch("app.workers.playwright_worker.cleanup_orphan_browsers")
     @patch("app.container.DashboardSink")
