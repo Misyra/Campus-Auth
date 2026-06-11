@@ -1,4 +1,4 @@
-"""ScheduleEngine 测试 — 聚焦 _execute_shell 安全策略集成。"""
+"""ScheduledTaskService 测试 — 聚焦 _execute_shell 安全策略集成。"""
 
 from __future__ import annotations
 
@@ -7,7 +7,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.engine import ScheduleEngine, detect_available_shells
+from app.services.scheduled_task import ScheduledTaskService
+from app.tasks import TaskManager
+from app.utils.shell_utils import detect_shells as detect_available_shells
 
 
 
@@ -18,7 +20,12 @@ from app.services.engine import ScheduleEngine, detect_available_shells
 
 def test_history_lock_initialized_at_construct(tmp_path):
     """_history_lock 应在 __init__ 中初始化，而非惰性创建。"""
-    svc = ScheduleEngine(tmp_path)
+    task_manager = TaskManager(tmp_path / "tasks")
+    svc = ScheduledTaskService(
+        tmp_path,
+        task_manager=task_manager,
+        worker_getter=lambda: None,
+    )
     assert hasattr(svc, "_history_lock")
     assert hasattr(svc._history_lock, "acquire")
 
@@ -54,7 +61,12 @@ class TestExecuteShellUsesPolicy:
 
     @pytest.fixture
     def service(self, tmp_path):
-        svc = ScheduleEngine(tmp_path)
+        task_manager = TaskManager(tmp_path / "tasks")
+        svc = ScheduledTaskService(
+            tmp_path,
+            task_manager=task_manager,
+            worker_getter=lambda: None,
+        )
         return svc
 
     def test_rejected_shell_path_returns_failure(self, service, tmp_path):
@@ -102,7 +114,7 @@ class TestExecuteShellUsesPolicy:
         ) as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout=b"ok", stderr=b"")
 
-            with patch("app.services.engine.engine_logger"):
+            with patch("app.services.scheduled_task.scheduled_task_logger"):
                 result = service._execute_shell_sync(
                     "echo audit_test", timeout=30, shell_path=shell_path
                 )

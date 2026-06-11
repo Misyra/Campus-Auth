@@ -36,7 +36,8 @@ def _make_monitor_service() -> ScheduleEngine:
         mock_ui_config = MagicMock()
         mock_ui_config.auto_start = False
         mock_load_ui.return_value = mock_ui_config
-        return ScheduleEngine(MagicMock())
+        mock_st = MagicMock()
+        return ScheduleEngine(MagicMock(), scheduled_task_service=mock_st)
 
 
 # =====================================================================
@@ -676,6 +677,7 @@ class TestShutdownSynchronous:
         svc._scheduler_running = False
         svc._running_task_threads = []
         svc._running_tasks_lock = threading.Lock()
+        svc._scheduled_task_service = MagicMock()
 
         # 模拟引擎处理 shutdown 命令
         def consume_shutdown():
@@ -916,34 +918,26 @@ class TestLoginInProgressConsumerDead:
 
 
 class TestTaskCacheClear:
-    """任务变更时应清除 has_enabled_tasks 缓存。"""
+    """任务变更时应清除 has_enabled_tasks 缓存（委托 ScheduledTaskService）。"""
 
-    def test_save_task_clears_cache(self):
-        """测试 save_task 清除 has_enabled_tasks 缓存。"""
+    def test_save_task_delegates_to_service(self):
+        """测试 save_task 委托给 ScheduledTaskService。"""
         svc = _make_monitor_service()
-        svc._has_enabled_cache = (time.time(), False)
+        mock_st = MagicMock()
+        mock_st.save_task.return_value = (True, "成功")
+        svc._scheduled_task_service = mock_st
 
-        import tempfile
-        from pathlib import Path
-        with tempfile.TemporaryDirectory() as tmpdir:
-            svc._scheduler_tasks_dir = Path(tmpdir)
-            svc.save_task("test_task", {"enabled": True, "name": "test"})
+        svc.save_task("test_task", {"enabled": True, "name": "test"})
 
-        assert svc._has_enabled_cache is None, "save_task 应清除缓存"
+        mock_st.save_task.assert_called_once_with("test_task", {"enabled": True, "name": "test"})
 
-    def test_delete_task_clears_cache(self):
-        """测试 delete_task 清除 has_enabled_tasks 缓存。"""
+    def test_delete_task_delegates_to_service(self):
+        """测试 delete_task 委托给 ScheduledTaskService。"""
         svc = _make_monitor_service()
-        svc._has_enabled_cache = (time.time(), True)
+        mock_st = MagicMock()
+        mock_st.delete_task.return_value = (True, "成功")
+        svc._scheduled_task_service = mock_st
 
-        import tempfile
-        from pathlib import Path
-        with tempfile.TemporaryDirectory() as tmpdir:
-            svc._scheduler_tasks_dir = Path(tmpdir)
-            svc._scheduler_history_dir = Path(tmpdir) / "history"
-            svc._scheduler_history_dir.mkdir()
-            task_file = Path(tmpdir) / "test_task.json"
-            task_file.write_text('{"enabled": true}')
-            svc.delete_task("test_task")
+        svc.delete_task("test_task")
 
-        assert svc._has_enabled_cache is None, "delete_task 应清除缓存"
+        mock_st.delete_task.assert_called_once_with("test_task")

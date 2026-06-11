@@ -27,6 +27,7 @@ def client(tmp_path):
         mock_services = MagicMock()
         mock_scheduler = MagicMock()
         mock_services.engine = mock_scheduler
+        mock_services.scheduled_task_service = mock_scheduler
 
         # 默认 get_task 返回 None（任务不存在）
         mock_scheduler.get_task.return_value = None

@@ -27,6 +27,7 @@ def mock_classes():
         patch("app.container.WebSocketManager") as mock_ws_cls,
         patch("app.container.ProfileService") as mock_profile_cls,
         patch("app.container.LoginHistoryService") as mock_lh_cls,
+        patch("app.container.ScheduledTaskService") as mock_st_cls,
         patch("app.container.ScheduleEngine") as mock_engine_cls,
         patch("app.container.TaskService") as mock_task_cls,
         patch("app.container.AutoStartService") as mock_autostart_cls,
@@ -36,6 +37,7 @@ def mock_classes():
             "WebSocketManager": mock_ws_cls,
             "ProfileService": mock_profile_cls,
             "LoginHistoryService": mock_lh_cls,
+            "ScheduledTaskService": mock_st_cls,
             "ScheduleEngine": mock_engine_cls,
             "TaskService": mock_task_cls,
             "AutoStartService": mock_autostart_cls,
@@ -133,6 +135,7 @@ class TestInit:
         assert hasattr(container, "engine")
         assert hasattr(container, "monitor_service")  # 向后兼容别名
         assert hasattr(container, "scheduler_service")  # 向后兼容别名
+        assert hasattr(container, "scheduled_task_service")
         assert hasattr(container, "task_service")
         assert hasattr(container, "autostart_service")
         assert hasattr(container, "debug_manager")
@@ -147,8 +150,8 @@ class TestStartup:
     @pytest.fixture
     def container_for_startup(self, container):
         """为 startup 测试配置 mock 行为。"""
-        container.engine.has_enabled_tasks = MagicMock(return_value=False)
-        container.engine.start_scheduler = MagicMock()
+        container.scheduled_task_service.has_enabled_tasks = MagicMock(return_value=False)
+        container.scheduled_task_service.start_scheduler = MagicMock()
         return container
 
     @patch("app.workers.playwright_worker.cleanup_orphan_browsers")
@@ -178,9 +181,9 @@ class TestStartup:
         self, mock_logger, mock_dashboard_sink, mock_cleanup, container_for_startup
     ):
         """当存在启用的定时任务时，startup 应启动调度器。"""
-        container_for_startup.engine.has_enabled_tasks.return_value = True
+        container_for_startup.scheduled_task_service.has_enabled_tasks.return_value = True
         asyncio.run(container_for_startup.startup())
-        container_for_startup.engine.start_scheduler.assert_called_once()
+        container_for_startup.scheduled_task_service.start_scheduler.assert_called_once()
 
     @patch("app.workers.playwright_worker.cleanup_orphan_browsers")
     @patch("app.container.DashboardSink")
@@ -189,9 +192,9 @@ class TestStartup:
         self, mock_logger, mock_dashboard_sink, mock_cleanup, container_for_startup
     ):
         """没有启用的定时任务时，startup 不应启动调度器。"""
-        container_for_startup.engine.has_enabled_tasks.return_value = False
+        container_for_startup.scheduled_task_service.has_enabled_tasks.return_value = False
         asyncio.run(container_for_startup.startup())
-        container_for_startup.engine.start_scheduler.assert_not_called()
+        container_for_startup.scheduled_task_service.start_scheduler.assert_not_called()
 
     @patch("app.workers.playwright_worker.cleanup_orphan_browsers")
     @patch("app.container.DashboardSink")
@@ -213,7 +216,7 @@ class TestShutdown:
     @pytest.fixture
     def container_for_shutdown(self, container):
         """为 shutdown 测试配置 mock 行为。"""
-        container.engine.stop_scheduler = MagicMock()
+        container.scheduled_task_service.stop_scheduler = MagicMock()
         container.engine.shutdown = MagicMock()
         container.debug_manager.close = AsyncMock()
         container.ws_manager.close_all = AsyncMock()
@@ -222,7 +225,7 @@ class TestShutdown:
     def test_shutdown_stops_scheduler(self, container_for_shutdown):
         """shutdown 应停止调度器。"""
         asyncio.run(container_for_shutdown.shutdown())
-        container_for_shutdown.engine.stop_scheduler.assert_called_once()
+        container_for_shutdown.scheduled_task_service.stop_scheduler.assert_called_once()
 
     def test_shutdown_calls_monitor_shutdown(self, container_for_shutdown):
         """shutdown 应调用 engine.shutdown()。"""
@@ -341,9 +344,9 @@ class TestShutdown:
 class TestIntegration:
     def test_startup_then_shutdown(self, container):
         """完整的 startup → shutdown 生命周期不应抛异常。"""
-        container.engine.has_enabled_tasks = MagicMock(return_value=False)
-        container.engine.start_scheduler = MagicMock()
-        container.engine.stop_scheduler = MagicMock()
+        container.scheduled_task_service.has_enabled_tasks = MagicMock(return_value=False)
+        container.scheduled_task_service.start_scheduler = MagicMock()
+        container.scheduled_task_service.stop_scheduler = MagicMock()
         container.debug_manager.close = AsyncMock()
         container.ws_manager.close_all = AsyncMock()
 

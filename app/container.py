@@ -11,6 +11,7 @@ from app.services.autostart import AutoStartService
 from app.services.engine import ScheduleEngine
 from app.services.login_history import LoginHistoryService
 from app.services.profile import ProfileService
+from app.services.scheduled_task import ScheduledTaskService
 from app.services.task import TaskService
 from app.utils.logging import DashboardSink, get_logger
 from app.ws_manager import WebSocketManager
@@ -38,13 +39,32 @@ class ServiceContainer:
         self.autostart_service = AutoStartService(project_root)
         self._debug_manager = None  # 延迟初始化，避免轻量模式加载 FastAPI
 
+        # 定时任务服务（先于 engine 创建，engine 需要引用它）
+        self.scheduled_task_service = ScheduledTaskService(
+            project_root,
+            task_manager=self.task_service.task_manager,
+            worker_getter=lambda: __import__(
+                "app.workers.playwright_worker", fromlist=["get_worker"]
+            ).get_worker(),
+            login_history=self.login_history_service,
+            profile_service=self.profile_service,
+        )
+
         # 统一引擎（替代 MonitorService + SchedulerService）
         self.engine = ScheduleEngine(
             project_root,
             self.profile_service,
             self.ws_manager,
             login_history_service=self.login_history_service,
-            worker_getter=lambda: __import__('app.workers.playwright_worker', fromlist=['get_worker']).get_worker(),
+            worker_getter=lambda: __import__(
+                "app.workers.playwright_worker", fromlist=["get_worker"]
+            ).get_worker(),
+            scheduled_task_service=self.scheduled_task_service,
+        )
+
+        # 延迟设置 get_runtime_config（engine 需要在之后创建）
+        self.scheduled_task_service._get_runtime_config = (
+            lambda: self.engine.get_runtime_config()
         )
 
         self._ws_drain_task: asyncio.Task | None = None
@@ -67,6 +87,7 @@ class ServiceContainer:
         """延迟初始化 DebugSessionManager（避免轻量模式加载 FastAPI）。"""
         if self._debug_manager is None:
             from app.services.debug import DebugSessionManager
+
             self._debug_manager = DebugSessionManager(self.project_root)
         return self._debug_manager
 
@@ -75,11 +96,12 @@ class ServiceContainer:
     async def startup(self):
         """启动所有服务。"""
         from app.workers.playwright_worker import cleanup_orphan_browsers
+
         cleanup_orphan_browsers()
         self.start_web_services()
         self.engine.boot()
-        if self.engine.has_enabled_tasks():
-            self.engine.start_scheduler()
+        if self.scheduled_task_service.has_enabled_tasks():
+            self.scheduled_task_service.start_scheduler()
         container_logger.info("服务容器启动完成")
 
     def start_web_services(self):
@@ -111,6 +133,7 @@ class ServiceContainer:
 
         if self._log_handler_id is not None:
             from loguru import logger as _loguru_logger
+
             with contextlib.suppress(Exception):
                 _loguru_logger.remove(self._log_handler_id)
             self._log_handler_id = None
@@ -138,7 +161,7 @@ class ServiceContainer:
                 _loguru_logger.remove(self._log_handler_id)
             self._log_handler_id = None
 
-        self.engine.stop_scheduler()
+        self.scheduled_task_service.stop_scheduler()
 
         if self._ws_drain_task:
             self._ws_drain_task.cancel()
