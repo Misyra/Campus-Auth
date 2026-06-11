@@ -1,4 +1,4 @@
-import { extractApiError, getBinaryName } from './utils.js';
+import { extractApiError, getBinaryName, safeApiCall } from './utils.js';
 
 export const scriptMethods = {
   getBinaryName,
@@ -168,20 +168,17 @@ export const scriptMethods = {
   },
 
   async exportScript(taskId) {
-    try {
-      const { data } = await this.$api.get(`/api/scripts/${taskId}`);
-      const blob = new Blob([data.content || ''], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      // 根据 binary_path 推断文件扩展名
-      const ext = this._inferScriptExtension(data.binary_path, data.content);
-      a.download = `${taskId}${ext}`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (error) {
-      this.toastOnly(false, extractApiError(error, '导出失败'));
-    }
+    const resp = await safeApiCall.call(this, () => this.$api.get(`/api/scripts/${taskId}`), '导出失败');
+    if (!resp) return;
+    const data = resp.data;
+    const blob = new Blob([data.content || ''], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const ext = this._inferScriptExtension(data.binary_path, data.content);
+    a.download = `${taskId}${ext}`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   },
 
   importScript() {
