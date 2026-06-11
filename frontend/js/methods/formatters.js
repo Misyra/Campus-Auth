@@ -45,3 +45,54 @@ export const formatterMethods = {
     return '';
   },
 };
+
+/**
+ * 格式化定时任务调度时间。
+ * @param {{hour: number, minute: number}} schedule
+ * @returns {string} 格式如 "08:30"
+ */
+export function formatScheduleTime(schedule) {
+  if (!schedule) return '';
+  const hour = String(schedule.hour ?? 0).padStart(2, '0');
+  const minute = String(schedule.minute ?? 0).padStart(2, '0');
+  return `${hour}:${minute}`;
+}
+
+/**
+ * 格式化任务超时时间（秒 → 分钟）。
+ * @param {number} seconds
+ * @returns {string}
+ */
+export function formatTimeValue(seconds) {
+  if (!seconds) return '-';
+  if (seconds < 60) return `${seconds}秒`;
+  return `${Math.round(seconds / 60)}分钟`;
+}
+
+/**
+ * HEX 颜色转 RGB 对象。
+ * @param {string} hex
+ * @returns {{r: number, g: number, b: number} | null}
+ */
+export function hexToRgb(hex) {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16),
+  } : null;
+}
+
+/**
+ * 调整颜色亮度。
+ * @param {string} hex - HEX 颜色值
+ * @param {number} amount - 调整量（正数变亮，负数变暗）
+ * @returns {string} 调整后的 HEX 颜色值
+ */
+export function adjustColor(hex, amount) {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = Math.max(0, Math.min(255, (num >> 16) + amount));
+  const g = Math.max(0, Math.min(255, ((num >> 8) & 0x00FF) + amount));
+  const b = Math.max(0, Math.min(255, (num & 0x0000FF) + amount));
+  return `#${(1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1)}`;
+}

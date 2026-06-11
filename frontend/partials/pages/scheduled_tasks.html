@@ -109,7 +109,7 @@
               <input
                 id="scheduled-task-time"
                 type="time"
-                :value="formatTimeValue(scheduledTaskForm.schedule.hour, scheduledTaskForm.schedule.minute)"
+                :value="formatScheduleTime(scheduledTaskForm.schedule)"
                 @input="onTimeChange($event)"
               />
             </div>

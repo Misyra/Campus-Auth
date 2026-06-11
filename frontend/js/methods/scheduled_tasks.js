@@ -1,4 +1,5 @@
 import { extractApiError, safeApiCall } from './utils.js';
+import { formatScheduleTime, formatTimeValue } from './formatters.js';
 
 // 定时任务相关方法
 export const scheduledTasksMethods = {
@@ -148,14 +149,6 @@ export const scheduledTasksMethods = {
     this.scheduledTaskHistory = [];
   },
 
-  // 格式化时间
-  formatScheduleTime(schedule) {
-    if (!schedule) return '';
-    const hour = String(schedule.hour ?? 0).padStart(2, '0');
-    const minute = String(schedule.minute ?? 0).padStart(2, '0');
-    return `${hour}:${minute}`;
-  },
-
   // 格式化任务类型
   formatTaskType(type) {
     const types = {
@@ -163,11 +156,6 @@ export const scheduledTasksMethods = {
       browser: '浏览器任务',
     };
     return types[type] || type;
-  },
-
-  // 格式化时间为 HH:MM 格式
-  formatTimeValue(hour, minute) {
-    return `${String(hour ?? 0).padStart(2, '0')}:${String(minute ?? 0).padStart(2, '0')}`;
   },
 
   // 处理时间变化
