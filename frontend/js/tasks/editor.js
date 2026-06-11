@@ -1,4 +1,4 @@
-import { extractApiError, pickFile } from '../methods/utils.js';
+import { extractApiError, pickFile, downloadBlob, safeApiCall } from '../methods/utils.js';
 
 export const editorTaskMethods = {
   async showTaskEditor(taskId) {
@@ -148,21 +148,10 @@ export const editorTaskMethods = {
     }
   },
   async exportTask(taskId) {
-    try {
-      const { data } = await this.$api.get(`/api/tasks/${taskId}`);
-      const json = JSON.stringify(data, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${taskId}.json`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      this.frontendLogger.info('tasks', '任务已导出');
-    } catch (error) {
-      this.frontendLogger.error('tasks', '导出任务失败: ' + taskId, error);
-      this.toastOnly(false, '导出失败');
-    }
+    const resp = await safeApiCall.call(this, () => this.$api.get(`/api/tasks/${taskId}`), '导出失败');
+    if (!resp) return;
+    downloadBlob(JSON.stringify(resp.data, null, 2), `${taskId}.json`, 'application/json');
+    this.frontendLogger.info('tasks', '任务已导出');
   },
   async importTask() {
     const file = await pickFile('.json');

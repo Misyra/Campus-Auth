@@ -57,3 +57,19 @@ export function pickFile(accept = '') {
     input.click();
   });
 }
+
+/**
+ * 触发浏览器下载 Blob 数据。
+ * @param {BlobPart} data - 要下载的数据
+ * @param {string} filename - 文件名
+ * @param {string} mimeType - MIME 类型（默认 'application/octet-stream'）
+ */
+export function downloadBlob(data, filename, mimeType = 'application/octet-stream') {
+  const blob = new Blob([data], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

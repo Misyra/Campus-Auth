@@ -1,4 +1,4 @@
-import { extractApiError, getBinaryName, safeApiCall, pickFile } from './utils.js';
+import { extractApiError, getBinaryName, safeApiCall, pickFile, downloadBlob } from './utils.js';
 
 export const scriptMethods = {
   getBinaryName,
@@ -171,14 +171,8 @@ export const scriptMethods = {
     const resp = await safeApiCall.call(this, () => this.$api.get(`/api/scripts/${taskId}`), '导出失败');
     if (!resp) return;
     const data = resp.data;
-    const blob = new Blob([data.content || ''], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
     const ext = this._inferScriptExtension(data.binary_path, data.content);
-    a.download = `${taskId}${ext}`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    downloadBlob(data.content || '', `${taskId}${ext}`, 'text/plain');
   },
 
   async importScript() {
