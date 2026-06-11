@@ -72,7 +72,7 @@ class EngineCmdType(StrEnum):
 
 @dataclass
 class EngineCommand:
-    """从 API 线程派发到队列消费者线程的命令。"""
+    """从 API 线程派发到队列引擎线程的命令。"""
 
     type: EngineCmdType
     data: dict = field(default_factory=dict)
@@ -141,7 +141,6 @@ class ScheduleEngine:
         self._reload_config_internal()
 
         self._monitor_core: NetworkMonitorCore | None = None
-        self._thread_done = threading.Event()
         self._pure_mode: bool = self._profile_service.load().system.pure_mode
 
         # Actor model: command dispatch queue
@@ -434,7 +433,6 @@ class ScheduleEngine:
         core = NetworkMonitorCore(
             config=config,
             log_callback=self.record_log,
-            thread_done=self._thread_done,
             login_history=self._login_history,
             worker_getter=self._worker_getter,
         )
@@ -466,7 +464,7 @@ class ScheduleEngine:
         cmd.response_data = (True, "登录已提交")
 
     def _handle_reload(self, cmd: EngineCommand) -> None:
-        """重载配置并重启监控（仅在消费者线程中调用）。"""
+        """重载配置并重启监控（仅在引擎线程中调用）。"""
         was_monitoring = self._is_monitoring
         if was_monitoring:
             self._handle_stop()
@@ -476,7 +474,7 @@ class ScheduleEngine:
         engine_logger.info("配置已从 settings.json 重载")
 
     def _handle_apply_profile(self, cmd: EngineCommand) -> None:
-        """切换方案并重启监控（仅在消费者线程中调用）。"""
+        """切换方案并重启监控（仅在引擎线程中调用）。"""
         profile_id = cmd.data.get("profile_id", "")
         was_monitoring = self._is_monitoring
         if was_monitoring:
@@ -677,7 +675,7 @@ class ScheduleEngine:
     def reload_config(self) -> None:
         """重新加载配置并重启监控（如果正在运行）。
 
-        通过队列派发到消费者线程执行，确保线程安全。
+        通过队列派发到引擎线程执行，确保线程安全。
         """
         cmd = EngineCommand(
             type=EngineCmdType.RELOAD,
@@ -688,12 +686,12 @@ class ScheduleEngine:
             return
         # 等待消费者完成（最多 30 秒，避免无限阻塞 API 线程）
         if not cmd.response_event.wait(timeout=30):
-            engine_logger.warning("配置重载超时（30s），消费者线程可能繁忙")
+            engine_logger.warning("配置重载超时（30s），引擎线程可能繁忙")
 
     def apply_profile(self, profile_id: str) -> None:
         """切换到新方案：停止监控 → 重载配置 → 重启监控。
 
-        通过队列派发到消费者线程执行，确保线程安全。
+        通过队列派发到引擎线程执行，确保线程安全。
         """
         cmd = EngineCommand(
             type=EngineCmdType.APPLY_PROFILE,
@@ -705,7 +703,7 @@ class ScheduleEngine:
             return
         # 等待消费者完成（最多 30 秒）
         if not cmd.response_event.wait(timeout=30):
-            engine_logger.warning("方案切换超时（30s），消费者线程可能繁忙")
+            engine_logger.warning("方案切换超时（30s），引擎线程可能繁忙")
 
     def start_monitoring(self) -> tuple[bool, str]:
         engine_logger.debug("收到启动监控请求")
