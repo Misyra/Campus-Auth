@@ -16,54 +16,35 @@ router = APIRouter()
 api_logger = get_logger("api", source="backend")
 
 
-def _validate_schedule_payload(
-    payload: dict,
-    existing: dict | None = None,
-    *,
-    is_update: bool = False,
-) -> tuple[bool, str, dict | None]:
-    """验证定时任务 payload。
+def _validate_create_payload(payload: dict) -> tuple[bool, str, dict | None]:
+    """验证创建定时任务的 payload。
 
     Args:
-        payload: 前端传入的任务配置
-        existing: 已有任务配置（更新时传入，允许字段缺失）
-        is_update: 是否为更新模式（更新时仅验证 payload 中显式传入的字段）
+        payload: 前端传入的任务配置，所有必填字段必须存在
 
     Returns:
         (是否有效, 错误消息, 规范化后的配置字典)
     """
-
-    def _get(key, default=None):
-        if key in payload:
-            return payload[key]
-        if existing is not None:
-            return existing.get(key, default)
-        return default
-
     # ── 名称验证 ──
-    name = _get("name", "")
-    if (is_update and "name" in payload and not name) or (not is_update and not name):
+    name = payload.get("name", "")
+    if not name:
         return False, "任务名称不能为空", None
 
     # ── 类型验证 ──
-    task_type = _get("type", "")
-    if (is_update and "type" in payload or not is_update) and task_type not in (
-        "script",
-        "browser",
-        "shell",
-    ):
+    task_type = payload.get("type", "")
+    if task_type not in ("script", "browser", "shell"):
         return False, "无效的任务类型", None
 
     # ── 类型关联字段验证 ──
-    if task_type == "shell" and not _get("command"):
+    if task_type == "shell" and not payload.get("command"):
         return False, "Shell 命令不能为空", None
 
-    if task_type in ("script", "browser") and not _get("target_id"):
+    if task_type in ("script", "browser") and not payload.get("target_id"):
         return False, "请选择目标任务", None
 
     # ── 时间验证 ──
-    schedule = _get("schedule", {})
-    if (is_update and "schedule" in payload or not is_update) and (
+    schedule = payload.get("schedule", {})
+    if (
         not isinstance(schedule.get("hour"), int)
         or not isinstance(schedule.get("minute"), int)
     ):
@@ -71,34 +52,56 @@ def _validate_schedule_payload(
 
     hour = schedule.get("hour", 0)
     minute = schedule.get("minute", 0)
-    if (is_update and "schedule" in payload or not is_update) and not (
-        0 <= hour <= 23 and 0 <= minute <= 59
-    ):
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
         return False, "执行时间无效：小时须为 0-23，分钟须为 0-59", None
 
     # ── 超时验证 ──
     try:
-        timeout = max(5, min(3600, int(_get("timeout", 60))))
+        timeout = max(5, min(3600, int(payload.get("timeout", 60))))
     except (ValueError, TypeError):
         return False, "超时时间无效，须为 5 到 3600 之间的整数（秒）", None
 
     config = {
         "name": name,
-        "description": _get("description", ""),
+        "description": payload.get("description", ""),
         "type": task_type,
-        "target_id": _get("target_id", ""),
-        "command": _get("command", ""),
-        "shell_path": _get("shell_path", ""),
-        "enabled": _get("enabled", True),
+        "target_id": payload.get("target_id", ""),
+        "command": payload.get("command", ""),
+        "shell_path": payload.get("shell_path", ""),
+        "enabled": payload.get("enabled", True),
         "schedule": {"hour": hour, "minute": minute},
         "timeout": timeout,
     }
 
-    if existing is not None:
-        config["last_run"] = existing.get("last_run")
-        config["last_status"] = existing.get("last_status")
-
     return True, "", config
+
+
+def _validate_update_payload(
+    payload: dict, existing: dict
+) -> tuple[bool, str, dict | None]:
+    """验证更新定时任务的 payload。
+
+    用 existing 填充 payload 的缺失字段后，调用 _validate_create_payload 做完整验证。
+
+    Args:
+        payload: 前端传入的更新字段（允许部分字段缺失）
+        existing: 已有的任务配置
+
+    Returns:
+        (是否有效, 错误消息, 规范化后的配置字典)
+    """
+    # 合并：payload 优先，缺失字段从 existing 取
+    merged = {**existing, **payload}
+
+    # schedule 是嵌套字段，需要单独合并
+    if "schedule" in payload:
+        merged["schedule"] = {**existing.get("schedule", {}), **payload["schedule"]}
+
+    # 保留历史记录字段
+    merged["last_run"] = existing.get("last_run")
+    merged["last_status"] = existing.get("last_status")
+
+    return _validate_create_payload(merged)
 
 
 @router.get("/api/scheduled-tasks")
@@ -127,7 +130,7 @@ async def create_scheduled_task(payload: dict, request: Request) -> ActionRespon
     task_id = f"task_{uuid.uuid4().hex[:12]}"
 
     # 验证并规范化配置
-    valid, message, config = _validate_schedule_payload(payload, is_update=False)
+    valid, message, config = _validate_create_payload(payload)
     if not valid:
         return ActionResponse(success=False, message=message)
 
@@ -150,10 +153,8 @@ async def update_scheduled_task(
     if not existing:
         return ActionResponse(success=False, message="定时任务不存在")
 
-    # 验证并规范化配置（更新模式：仅校验 payload 中显式传入的字段）
-    valid, message, config = _validate_schedule_payload(
-        payload, existing=existing, is_update=True
-    )
+    # 验证并规范化配置（更新模式：payload 缺失字段从 existing 填充）
+    valid, message, config = _validate_update_payload(payload, existing)
     if not valid:
         return ActionResponse(success=False, message=message)
 
