@@ -11,10 +11,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from app.utils.logging import get_logger
-
-scheduled_task_logger = get_logger("scheduled_task", source="backend")
-
 
 class ScheduledTaskService:
     """向后兼容的委托层 — 内部调用 TaskRegistry / TaskExecutor / TaskHistoryStore。"""
@@ -51,14 +47,6 @@ class ScheduledTaskService:
         if executor is not None:
             self._executor = executor
 
-        # 调度器状态（已迁移至 Engine，保留字段以兼容外部访问）
-        self._scheduler_running = False
-
-    @property
-    def scheduler_running(self) -> bool:
-        """调度器是否正在运行（已迁移至 Engine，始终返回 False）。"""
-        return False
-
     # ── CRUD（委托给 TaskRegistry）──
 
     def has_enabled_tasks(self) -> bool:
@@ -91,32 +79,8 @@ class ScheduledTaskService:
         """获取任务执行历史。"""
         return self._history_store.get_history(task_id)
 
-    def _add_history_sync(
-        self, task_id: str, status: str, message: str, duration: float
-    ) -> None:
-        """添加执行历史记录。"""
-        self._history_store.add_record(task_id, status, message, duration)
-
     # ── 执行（委托给 TaskExecutor）──
 
     def execute_task(self, task_id: str) -> tuple[bool, str]:
         """执行定时任务。"""
         return self._executor.execute_task(task_id)
-
-    # ── 调度器生命周期（已迁移至 Engine，保留空操作以兼容）──
-
-    def start_scheduler(self) -> None:
-        """启动定时任务调度（已迁移至 Engine，空操作）。"""
-        scheduled_task_logger.debug(
-            "start_scheduler 调用已忽略（调度状态由 Engine 管理）"
-        )
-
-    def stop_scheduler(self) -> None:
-        """停止调度器（已迁移至 Engine，空操作）。"""
-        scheduled_task_logger.debug(
-            "stop_scheduler 调用已忽略（调度状态由 Engine 管理）"
-        )
-
-    def check_and_execute(self) -> None:
-        """检查并执行到期的定时任务（已迁移至 Engine，空操作）。"""
-        pass

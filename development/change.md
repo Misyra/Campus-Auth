@@ -5,6 +5,37 @@
 
 ## 2026-06-11
 
+### refactor: 清理残留死代码（第二轮）
+
+删除 ScheduledTaskService 的死方法、engine/container 中的死引用、测试中的过时 mock。
+
+**scheduled_task.py：**
+- 删除 `_scheduler_running` 字段、`scheduler_running` 属性
+- 删除 `start_scheduler()`、`stop_scheduler()`、`check_and_execute()` 方法
+- 删除 `_add_history_sync()` 方法（生产代码无调用者，仅测试使用）
+- 删除 `import get_logger` 和 `scheduled_task_logger`
+
+**engine.py：**
+- 删除 `__init__` 中的 `scheduled_task_service=None` 参数
+- 删除 `self._scheduled_task_service` 赋值
+- 删除 `shutdown()` 中的 `self._scheduled_task_service.stop_scheduler()` 调用
+
+**container.py：**
+- 删除 `ScheduledTaskService` 导入和实例化
+- 删除传给 engine 的 `scheduled_task_service=` 参数
+- 删除 `shutdown()` 中的 `self.scheduled_task_service.stop_scheduler()` 调用
+
+**测试清理：**
+- `test_container.py`：删除 `ScheduledTaskService` mock、`scheduled_task_service` 断言，shutdown 测试改用 engine.start_scheduler
+- `test_monitor_service.py`：删除 `scheduled_task_service=mock_st` 参数和 `svc._scheduled_task_service` 设置
+- `test_scheduled_tasks.py`：`_add_history_sync` 调用改为 `scheduler._history_store.add_record()`
+
+**shell_policy.py：**
+- 模块文档 `scheduler_service` 改为 `TaskExecutor 和 ScriptRunner`
+- `run()` docstring 删除 `scheduler_service` 引用
+
+**测试结果：** 1617 passed, 2 skipped
+
 ### refactor: 清理死代码 + 修复 _runtime_config Bug
 
 删除多处已迁移至新架构的死代码，修复 `_runtime_config` 在 config_provider 路径下未初始化的 Bug。

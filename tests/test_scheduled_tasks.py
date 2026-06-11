@@ -124,8 +124,8 @@ def test_history(scheduler):
     )
 
     # 添加历史记录
-    scheduler._add_history_sync(task_id, "success", "执行成功", 1.5)
-    scheduler._add_history_sync(task_id, "failure", "执行失败", 0.5)
+    scheduler._history_store.add_record(task_id, "success", "执行成功", 1.5)
+    scheduler._history_store.add_record(task_id, "failure", "执行失败", 0.5)
 
     # 获取历史
     history = scheduler.get_history(task_id)
@@ -324,7 +324,7 @@ class TestScheduleEngineCRUD:
                 "schedule": {"hour": 0, "minute": 0},
             },
         )
-        scheduler._add_history_sync("del_task", "success", "ok", 1.0)
+        scheduler._history_store.add_record("del_task", "success", "ok", 1.0)
         ok, _ = scheduler.delete_task("del_task")
         assert ok is True
         assert scheduler.get_task("del_task") is None
@@ -362,13 +362,13 @@ class TestSchedulerHistory:
     def test_add_history_creates_file(
         self, scheduler: ScheduledTaskService, tmp_path: Path
     ):
-        scheduler._add_history_sync("test", "success", "ok", 1.0)
+        scheduler._history_store.add_record("test", "success", "ok", 1.0)
         history_file = tmp_path / "tasks" / "scheduled" / "history" / "test.json"
         assert history_file.exists()
 
     def test_add_history_max_size(self, scheduler: ScheduledTaskService):
         for i in range(MAX_HISTORY_SIZE + 10):
-            scheduler._add_history_sync("test", "success", f"run {i}", 1.0)
+            scheduler._history_store.add_record("test", "success", f"run {i}", 1.0)
         history = scheduler.get_history("test")
         assert len(history) == MAX_HISTORY_SIZE
         # 最新的在前
@@ -376,13 +376,13 @@ class TestSchedulerHistory:
 
     def test_add_history_truncates_message(self, scheduler: ScheduledTaskService):
         long_msg = "x" * 1000
-        scheduler._add_history_sync("test", "success", long_msg, 1.0)
+        scheduler._history_store.add_record("test", "success", long_msg, 1.0)
         history = scheduler.get_history("test")
         assert len(history[0]["message"]) == 500
 
     def test_add_history_invalid_id(self, scheduler: ScheduledTaskService):
         # 不应抛异常
-        scheduler._add_history_sync("123bad", "success", "ok", 1.0)
+        scheduler._history_store.add_record("123bad", "success", "ok", 1.0)
 
     def test_get_history_empty(self, scheduler: ScheduledTaskService):
         assert scheduler.get_history("nonexistent") == []
@@ -399,8 +399,8 @@ class TestSchedulerHistory:
         assert scheduler.get_history("bad") == []
 
     def test_get_history_returns_runs_list(self, scheduler: ScheduledTaskService):
-        scheduler._add_history_sync("test", "success", "ok", 1.0)
-        scheduler._add_history_sync("test", "failure", "err", 0.5)
+        scheduler._history_store.add_record("test", "success", "ok", 1.0)
+        scheduler._history_store.add_record("test", "failure", "err", 0.5)
         history = scheduler.get_history("test")
         assert len(history) == 2
         assert history[0]["status"] == "failure"

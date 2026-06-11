@@ -1,7 +1,7 @@
 """统一 shell 命令执行的安全策略。
 
 提供 ShellCommandPolicy 类，用于验证执行路径白名单、超时上限钳制、
-执行前审计日志。scheduler_service 和 script_runner 共享此策略。
+执行前审计日志。TaskExecutor 和 ScriptRunner 共享此策略。
 """
 
 from __future__ import annotations
@@ -101,7 +101,7 @@ class ShellCommandPolicy:
         timeout: int | None = None,
         **kwargs,
     ) -> tuple[int, str, str]:
-        """异步执行命令（用于 scheduler_service 的 asyncio 场景）。
+        """异步执行命令（用于 asyncio 场景）。
 
         Args:
             argv: 完整命令参数列表，第一个元素为执行路径
