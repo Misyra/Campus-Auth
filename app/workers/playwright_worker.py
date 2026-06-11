@@ -17,8 +17,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import queue
-import subprocess
-import sys
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -34,7 +32,6 @@ from app.constants import (
     WORKER_SUBMIT_TIMEOUT,
 )
 from app.utils.logging import get_logger
-from app.utils.platform_utils import CREATE_NO_WINDOW_FLAG
 
 logger = get_logger("playwright_worker", source="backend")
 
@@ -963,154 +960,31 @@ def shutdown_worker(timeout: float = 5) -> None:
 
 
 def cleanup_orphan_browsers() -> None:
-    """清理孤儿 Chromium 浏览器进程
+    """清理孤儿 Playwright Chromium 进程。
 
     扫描并杀掉由 Campus-Auth 启动但已失去 Python 父进程的 Chromium 实例。
-    仅清理 Playwright 管理的浏览器（可执行路径包含 "ms-playwright"），
+    仅清理 Playwright 管理的浏览器（可执行路径或命令行包含 "ms-playwright"），
     不会误杀用户自行安装的 Chrome/Edge/Brave 等浏览器。
-
-    平台差异:
-    - Windows: 使用 wmic 枚举进程, taskkill 终止
-    - Linux/macOS: 使用 ps 枚举进程, kill 终止
     """
-    if sys.platform == "win32":
-        _cleanup_windows()
+    import psutil
+
+    killed = 0
+    for proc in psutil.process_iter(['pid', 'exe', 'cmdline']):
+        try:
+            info = proc.info
+            exe = (info.get('exe') or '').lower()
+            cmdline = ' '.join(info.get('cmdline') or []).lower()
+            if ('ms-playwright' in exe or 'ms-playwright' in cmdline) and \
+               ('chrom' in exe or 'chrom' in cmdline):
+                proc.kill()
+                killed += 1
+                logger.debug("已终止孤儿 Chromium PID={}", info['pid'])
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+        except Exception:
+            logger.debug("终止进程异常", exc_info=True)
+
+    if killed:
+        logger.info("已终止 {} 个孤儿 Chromium 进程", killed)
     else:
-        _cleanup_posix()
-
-
-def _cleanup_windows() -> None:
-    """Windows 平台: 通过 PowerShell 查找并终止 Playwright Chromium 进程"""
-    try:
-        # 使用 PowerShell Get-CimInstance 获取所有 chrome.exe 的 PID 和执行路径
-        result = subprocess.run(
-            [
-                "powershell",
-                "-NoProfile",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | "
-                "Select-Object ProcessId,ExecutablePath | ConvertTo-Csv -NoTypeInformation",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            creationflags=CREATE_NO_WINDOW_FLAG,
-        )
-        if result.returncode != 0 or not result.stdout.strip():
-            return
-
-        pids_to_kill: list[str] = []
-        empty_path_pids: list[str] = []
-        for line in result.stdout.strip().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "ProcessId" in line:
-                continue
-            # CSV 格式: "ProcessId","ExecutablePath"
-            parts = line.split(",", 1)
-            if len(parts) < 2:
-                continue
-            pid_str = parts[0].strip().strip('"')
-            exe_path = parts[1].strip().strip('"')
-            if not pid_str.isdigit():
-                continue
-            if exe_path and "ms-playwright" in exe_path.lower():
-                pids_to_kill.append(pid_str)
-            elif not exe_path:
-                # 标准用户下 ExecutablePath 可能为空，记录备用
-                empty_path_pids.append(pid_str)
-
-        # 如果没有精确匹配的进程，但有空路径的 chrome.exe，尝试通过命令行参数匹配
-        if not pids_to_kill and empty_path_pids:
-            for pid in empty_path_pids:
-                try:
-                    cmd_result = subprocess.run(
-                        [
-                            "powershell",
-                            "-NoProfile",
-                            "-ExecutionPolicy",
-                            "Bypass",
-                            "-Command",
-                            f'(Get-CimInstance Win32_Process -Filter "ProcessId={pid}").CommandLine',
-                        ],
-                        capture_output=True,
-                        text=True,
-                        timeout=5,
-                        creationflags=CREATE_NO_WINDOW_FLAG,
-                    )
-                    cmdline = (cmd_result.stdout or "").strip().lower()
-                    if "ms-playwright" in cmdline:
-                        pids_to_kill.append(pid)
-                except Exception:
-                    logger.debug("获取进程 {} 命令行失败，跳过", pid, exc_info=True)
-
-        if not pids_to_kill:
-            logger.debug("未发现孤儿 Playwright Chromium 进程")
-            return
-
-        logger.info(
-            "发现 {} 个孤儿 Playwright Chromium 进程，正在清理...", len(pids_to_kill)
-        )
-        for pid in pids_to_kill:
-            try:
-                subprocess.run(
-                    ["taskkill", "/F", "/PID", pid],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                    creationflags=CREATE_NO_WINDOW_FLAG,
-                )
-                logger.debug("已终止 Chromium 进程 PID={}", pid)
-            except Exception:
-                logger.warning("终止 Chromium 进程 PID={} 失败", pid)
-    except Exception:
-        logger.warning("扫描孤儿 Chromium 进程时出现异常", exc_info=True)
-
-
-def _cleanup_posix() -> None:
-    """Linux/macOS 平台: 通过 ps 查找并终止 Playwright Chromium 进程"""
-    try:
-        result = subprocess.run(
-            ["ps", "-eo", "pid=,args="],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode != 0 or not result.stdout.strip():
-            return
-
-        pids_to_kill: list[str] = []
-        for line in result.stdout.strip().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            # 格式: "PID ARGS"
-            parts = line.split(None, 1)
-            if len(parts) < 2:
-                continue
-            pid_str, args = parts[0], parts[1]
-            # 仅匹配 Playwright 管理的 Chromium（路径包含 ms-playwright）
-            if "ms-playwright" in args.lower() and "chrom" in args.lower():
-                pids_to_kill.append(pid_str)
-
-        if not pids_to_kill:
-            logger.debug("未发现孤儿 Playwright Chromium 进程")
-            return
-
-        logger.info(
-            "发现 {} 个孤儿 Playwright Chromium 进程，正在清理...", len(pids_to_kill)
-        )
-        for pid in pids_to_kill:
-            try:
-                subprocess.run(
-                    ["kill", "-9", pid],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                logger.debug("已终止 Chromium 进程 PID={}", pid)
-            except Exception:
-                logger.warning("终止 Chromium 进程 PID={} 失败", pid)
-    except Exception:
-        logger.warning("扫描孤儿 Chromium 进程时出现异常", exc_info=True)
+        logger.debug("未发现孤儿 Playwright Chromium 进程")
