@@ -80,6 +80,15 @@ class StatusSnapshot:
 logger = get_logger("engine", source="backend")
 
 
+@dataclass
+class _LoginRetryState:
+    """登录重试状态。"""
+
+    count: int = 0
+    last_attempt: float = 0.0
+    config: tuple[int, list[int]] | None = None  # (max_retries, intervals)
+
+
 # ── ScheduleEngine ──
 
 
@@ -152,9 +161,7 @@ class ScheduleEngine:
         self._engine_running = False
         self._next_network_check: float = 0
         self._monitor_check_interval: int = 300
-        self._login_retry_count: int = 0
-        self._last_login_attempt: float = 0
-        self._login_retry_config: tuple | None = None
+        self._login_retry = _LoginRetryState()
 
         # 统一引擎线程
         self._engine_thread = threading.Thread(target=self._engine_loop, daemon=True)
@@ -241,11 +248,11 @@ class ScheduleEngine:
             if self._is_monitoring:
                 candidates.append(float(self._next_network_check))
 
-            if self._login_retry_count > 0 and self._login_retry_config:
-                _, intervals = self._login_retry_config
-                idx = self._login_retry_count - 1
+            if self._login_retry.count > 0 and self._login_retry.config:
+                _, intervals = self._login_retry.config
+                idx = self._login_retry.count - 1
                 if idx < len(intervals):
-                    candidates.append(float(self._last_login_attempt + intervals[idx]))
+                    candidates.append(float(self._login_retry.last_attempt + intervals[idx]))
 
             if self._scheduler_running:
                 candidates.append(self._next_schedule_tick)
@@ -279,11 +286,11 @@ class ScheduleEngine:
             self._monitor_check_interval = interval
 
             if result.get("need_login", False):
-                self._login_retry_config = self._get_retry_config()
-                self._login_retry_count = 0
+                self._login_retry.config = self._get_retry_config()
+                self._login_retry.count = 0
                 self._do_async_login()
             else:
-                self._login_retry_count = 0
+                self._login_retry.count = 0
 
             self._next_network_check = time.time() + interval
             self._update_status_snapshot()
@@ -293,25 +300,25 @@ class ScheduleEngine:
 
     def _login_retry_needed(self, now: float) -> bool:
         """检查是否需要登录重试。"""
-        if self._login_retry_count == 0 or not self._login_retry_config:
+        if self._login_retry.count == 0 or not self._login_retry.config:
             return False
         if self._login_in_progress.is_set():
             return False
-        max_retries, intervals = self._login_retry_config
-        if self._login_retry_count >= max_retries:
+        max_retries, intervals = self._login_retry.config
+        if self._login_retry.count >= max_retries:
             return False
-        idx = self._login_retry_count - 1
+        idx = self._login_retry.count - 1
         if idx >= len(intervals):
             return False
-        return now >= self._last_login_attempt + intervals[idx]
+        return now >= self._login_retry.last_attempt + intervals[idx]
 
     def _do_async_login(self) -> None:
         """提交登录到 executor 的 login_pool。"""
         if self._login_in_progress.is_set():
             return
         self._login_in_progress.set()
-        self._last_login_attempt = time.time()
-        self._login_retry_count += 1
+        self._login_retry.last_attempt = time.time()
+        self._login_retry.count += 1
 
         executor = getattr(self, "_task_executor", None)
         if executor:
@@ -344,7 +351,7 @@ class ScheduleEngine:
                 if result.success:
                     if self._monitor_core:
                         self._monitor_core.update_status_after_login(True)
-                    self._login_retry_count = 0
+                    self._login_retry.count = 0
                 else:
                     if self._monitor_core:
                         self._monitor_core.update_status_after_login(
@@ -412,7 +419,7 @@ class ScheduleEngine:
         core.init_monitoring()  # 只初始化，不启动循环
         self._monitor_core = core
         self._next_network_check = time.time()  # 立即执行第一次检测
-        self._login_retry_count = 0
+        self._login_retry.count = 0
         self._update_status_snapshot()
         self.record_log("监控已启动（统一引擎驱动）", level="INFO", source="backend")
 
@@ -424,7 +431,7 @@ class ScheduleEngine:
 
         core.stop_monitoring()
         self._monitor_core = None
-        self._login_retry_count = 0
+        self._login_retry.count = 0
         self._next_network_check = 0
 
         self.record_log("监控已停止", level="INFO", source="backend")

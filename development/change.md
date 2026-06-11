@@ -5,6 +5,23 @@
 
 ## 2026-06-12
 
+### refactor: 统一常量定义，消除重复声明
+
+消除 `DEFAULT_STEP_TIMEOUT` / `DEFAULT_TASK_TIMEOUT` 和 `VALID_LOG_LEVELS` / `VALID_SOURCES` 的重复定义，遵循 Single Source of Truth 原则。
+
+**PR-A：统一 timeout 常量来源**
+- `app/constants.py`：唯一来源，使用 `_MS` 后缀消除单位歧义
+- `app/tasks/models.py`：删除本地定义，从 `app.constants` 导入
+- `app/tasks/browser_runner.py`：删除类属性，从 `app.constants` 导入
+- `app/tasks/__init__.py`：更新导入来源
+- `app/workers/playwright_worker.py`：更新引用
+
+**PR-B：统一日志常量来源**
+- `app/utils/logging.py`：唯一来源，改为 `frozenset` 保证不可变
+- `app/api/logfiles.py`：删除本地定义，从 `app.utils.logging` 导入
+
+**测试结果：** 43 passed
+
 ### fix: 搜索模式与浏览模式分离，修复搜索功能失效问题
 
 `app/api/logfiles.py`：重构 `get_log_file_content()` 函数，将搜索模式与浏览模式分离。
@@ -78,6 +95,25 @@
 
 **测试结果：** 1617 passed, 2 skipped
 
+### refactor: 封装 LoginRetryState dataclass
+
+`app/services/engine.py`：将登录重试状态封装为独立的 dataclass。
+
+**问题：**
+- `_login_retry_count`、`_last_login_attempt`、`_login_retry_config` 三个字段描述同一个状态机
+- 字段分散，扩展困难
+
+**修改内容：**
+- 新增 `_LoginRetryState` dataclass（模块顶部）
+  - `count: int` — 重试计数
+  - `last_attempt: float` — 上次尝试时间
+  - `config: tuple[int, list[int]] | None` — 重试配置 (max_retries, intervals)
+- `__init__` 中替换三个字段为 `self._login_retry = _LoginRetryState()`
+- 全局替换所有引用（6 个方法）
+- 更新测试文件中的引用（`tests/test_monitor_service.py`）
+
+**测试结果：** 1631 passed, 2 skipped（1 个已有失败与本次修改无关）
+
 
 
 ### docs: 日志系统优化设计文档和实现计划 (P0 + P1)
@@ -114,6 +150,18 @@
 - 最佳实践指南
 
 **文件位置：** `development/log_system_architecture.md`
+
+### fix: 截图文件名 task_id 回退逻辑优化
+
+截图文件名中 task_id 为空时回退到任务名而非 "unknown"，提升可读性。
+
+**修改文件：**
+- `app/tasks/step_handlers.py`：ScreenshotHandler 和 OcrHandler 的 task_id 回退逻辑
+- `app/tasks/browser_runner.py`：`_capture_screenshot` 的 task_id 回退逻辑
+
+**变更：** `task_id or "unknown"` → `task_id or config.name or "unknown"`
+
+**测试结果：** 196 passed（86 + 110）
 
 
 ## 2026-06-11

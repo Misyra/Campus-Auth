@@ -3,11 +3,11 @@
 重新导出所有公开接口，保持向后兼容。
 """
 
+from app.constants import DEFAULT_STEP_TIMEOUT_MS, DEFAULT_TASK_TIMEOUT_MS
+
 from .browser_runner import TaskExecutor
 from .manager import TaskManager, is_valid_task_id, normalize_task_id
 from .models import (
-    DEFAULT_STEP_TIMEOUT,
-    DEFAULT_TASK_TIMEOUT,
     PROJECT_ROOT,
     TASK_ID_PATTERN,
     ScriptTaskInfo,
@@ -35,8 +35,8 @@ from .validator import TaskValidator
 from .variable_resolver import VariableResolver
 
 __all__ = [
-    "DEFAULT_STEP_TIMEOUT",
-    "DEFAULT_TASK_TIMEOUT",
+    "DEFAULT_STEP_TIMEOUT_MS",
+    "DEFAULT_TASK_TIMEOUT_MS",
     "PROJECT_ROOT",
     "TASK_ID_PATTERN",
     "ClickHandler",
