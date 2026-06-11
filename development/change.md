@@ -5,6 +5,26 @@
 
 ## 2026-06-11
 
+### refactor: 简化 schemas.py mixin 层次
+
+从 `app/schemas.py` 删除 `_ClampMixin`，内联 `_SharedValidatorsMixin` 和 `_BrowserValidatorsMixin`，mixin 从 5 个减到 3 个。
+
+**删除 `_ClampMixin`：**
+- 移除自动钳制越界数值的 `model_validator`，依赖 Pydantic `Field(ge=, le=)` 原生验证抛出 `ValidationError`
+- `_BrowserFieldsMixin`、`_MonitorFieldsMixin`、`_SystemFieldsMixin` 改为直接继承 `BaseModel`
+
+**内联验证器：**
+- `validate_auth_url` 从 `_SharedValidatorsMixin` 移入 `_MonitorFieldsMixin` 和 `_SystemFieldsMixin`
+- `validate_headers_json` 从 `_BrowserValidatorsMixin` 移入 `_BrowserFieldsMixin`
+
+**模型继承简化：**
+- `MonitorConfigPayload`：5 个 mixin → 3 个（`_BrowserFieldsMixin`, `_MonitorFieldsMixin`, `_SystemFieldsMixin`）
+- `ProfileSettings`：4 个 mixin → 2 个（`_BrowserFieldsMixin`, `_MonitorFieldsMixin`）
+- `SystemSettings`：2 个 mixin → 1 个（`_SystemFieldsMixin`）
+
+**测试适配：**
+- 8 个验证自动钳制行为的测试用例改为验证 `ValidationError`
+
 ### refactor: 消除重复逻辑
 
 统一网络检测目标解析、添加 API 路由日志公共函数、合并 config.py 的两个 load 函数。

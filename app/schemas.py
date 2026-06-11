@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 from app.constants import DEFAULT_HTTP_TARGETS, DEFAULT_NETWORK_TARGETS
 from app.utils.logging import VALID_LOG_LEVELS
@@ -29,50 +29,7 @@ _BROWSER_ARGS_DEFAULT = (
 # ── 共享字段 mixin（消除 MonitorConfigPayload 与 ProfileSettings 之间的重复） ──
 
 
-class _ClampMixin(BaseModel):
-    """自动将越界的数值字段钳制到合法范围，而非校验失败。"""
-
-    @model_validator(mode="before")
-    @classmethod
-    def _clamp_numeric_fields(cls, data: dict) -> dict:
-        if not isinstance(data, dict):
-            return data
-        data = dict(data)
-        from app.utils.logging import get_logger
-
-        _logger = get_logger("schemas", source="backend")
-        for name, field_info in cls.model_fields.items():
-            if name not in data:
-                continue
-            meta = field_info.metadata
-            if not meta:
-                continue
-            ge_val = le_val = None
-            for m in meta:
-                if hasattr(m, "ge") and m.ge is not None:
-                    ge_val = m.ge
-                if hasattr(m, "le") and m.le is not None:
-                    le_val = m.le
-            if ge_val is None and le_val is None:
-                continue
-            try:
-                v = int(data[name])
-            except (ValueError, TypeError):
-                continue
-            if ge_val is not None and v < ge_val:
-                _logger.warning(
-                    "字段 '{}' 值 {} 低于下限 {}，已自动钳制", name, v, ge_val
-                )
-                data[name] = ge_val
-            elif le_val is not None and v > le_val:
-                _logger.warning(
-                    "字段 '{}' 值 {} 超过上限 {}，已自动钳制", name, v, le_val
-                )
-                data[name] = le_val
-        return data
-
-
-class _BrowserFieldsMixin(_ClampMixin):
+class _BrowserFieldsMixin(BaseModel):
     """浏览器相关共享字段"""
 
     headless: bool = True
@@ -108,8 +65,22 @@ class _BrowserFieldsMixin(_ClampMixin):
         default=720, ge=240, le=2160, description="浏览器视口高度"
     )
 
+    @field_validator("browser_extra_headers_json")
+    @classmethod
+    def validate_headers_json(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            return ""
+        try:
+            parsed = json.loads(v)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"浏览器请求头格式不正确，请确认输入的是合法的 JSON 对象: {e}") from e
+        if not isinstance(parsed, dict):
+            raise ValueError('浏览器请求头格式不正确，应为键值对形式，例如: {"Referer": "https://example.com"}')
+        return v
 
-class _MonitorFieldsMixin(_ClampMixin):
+
+class _MonitorFieldsMixin(BaseModel):
     """监控与网络检测相关共享字段"""
 
     auth_url: str = Field(default="")
@@ -152,10 +123,6 @@ class _MonitorFieldsMixin(_ClampMixin):
     )
     custom_variables: dict[str, str] = Field(default_factory=dict)
 
-
-class _SharedValidatorsMixin:
-    """包含 auth_url 的模型共享的验证器"""
-
     @field_validator("auth_url")
     @classmethod
     def validate_auth_url(cls, v: str) -> str:
@@ -165,25 +132,7 @@ class _SharedValidatorsMixin:
         return v
 
 
-class _BrowserValidatorsMixin:
-    """包含浏览器请求头字段的模型共享的验证器"""
-
-    @field_validator("browser_extra_headers_json")
-    @classmethod
-    def validate_headers_json(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            return ""
-        try:
-            parsed = json.loads(v)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"浏览器请求头格式不正确，请确认输入的是合法的 JSON 对象: {e}") from e
-        if not isinstance(parsed, dict):
-            raise ValueError('浏览器请求头格式不正确，应为键值对形式，例如: {"Referer": "https://example.com"}')
-        return v
-
-
-class _SystemFieldsMixin(_ClampMixin):
+class _SystemFieldsMixin(BaseModel):
     """SystemSettings 与 MonitorConfigPayload 共享的系统配置字段"""
 
     username: str = Field(default="", description="全局校园网用户名")
@@ -214,6 +163,14 @@ class _SystemFieldsMixin(_ClampMixin):
         default="", description="自定义 Shell 路径（留空使用系统默认）"
     )
 
+    @field_validator("auth_url")
+    @classmethod
+    def validate_auth_url(cls, v: str) -> str:
+        v = v.strip()
+        if v and not _URL_PATTERN.match(v):
+            raise ValueError("认证地址必须以 http:// 或 https:// 开头")
+        return v
+
     @field_validator("backend_log_level", "frontend_log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:
@@ -232,8 +189,6 @@ class MonitorConfigPayload(
     _BrowserFieldsMixin,
     _MonitorFieldsMixin,
     _SystemFieldsMixin,
-    _SharedValidatorsMixin,
-    _BrowserValidatorsMixin,
 ):
     network_check_timeout: int = Field(
         default=2,
@@ -305,8 +260,6 @@ class AutoStartStatusResponse(BaseModel):
 class ProfileSettings(
     _BrowserFieldsMixin,
     _MonitorFieldsMixin,
-    _SharedValidatorsMixin,
-    _BrowserValidatorsMixin,
 ):
     """Profile-specific non-sensitive settings stored in settings.json"""
 
@@ -337,7 +290,7 @@ class ProfileSettings(
     )
 
 
-class SystemSettings(_SystemFieldsMixin, _SharedValidatorsMixin):
+class SystemSettings(_SystemFieldsMixin):
     """全局系统配置（原 .env 中的业务配置）"""
 
     pure_mode: bool = Field(
