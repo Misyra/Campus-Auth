@@ -734,6 +734,8 @@ class ScheduleEngine:
 
     def shutdown(self) -> None:
         """完全关闭 ScheduleEngine：停止监控 + 停止调度器 + 终止引擎线程。"""
+        if self._shutdown_event.is_set():
+            return
         # 停止调度器并等待运行中的任务线程完成
         self.stop_scheduler()
 
