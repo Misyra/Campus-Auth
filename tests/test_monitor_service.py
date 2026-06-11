@@ -36,8 +36,7 @@ def _make_monitor_service() -> ScheduleEngine:
         mock_ui_config = MagicMock()
         mock_ui_config.auto_start = False
         mock_load_ui.return_value = mock_ui_config
-        mock_st = MagicMock()
-        return ScheduleEngine(MagicMock(), scheduled_task_service=mock_st)
+        return ScheduleEngine(MagicMock())
 
 
 # =====================================================================
@@ -677,7 +676,6 @@ class TestShutdownSynchronous:
         svc._scheduler_running = False
         svc._running_task_threads = []
         svc._running_tasks_lock = threading.Lock()
-        svc._scheduled_task_service = MagicMock()
 
         # 模拟引擎处理 shutdown 命令
         def consume_shutdown():

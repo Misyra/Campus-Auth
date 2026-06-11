@@ -97,7 +97,6 @@ class ScheduleEngine:
         task_executor=None,
         task_facade=None,
         config_provider=None,
-        scheduled_task_service=None,
     ):
         self.project_root = project_root
         self._profile_service = profile_service or ProfileService(project_root)
@@ -110,9 +109,6 @@ class ScheduleEngine:
         self._task_executor = task_executor
         self._task_facade = task_facade
         self._config_provider = config_provider
-
-        # 向后兼容
-        self._scheduled_task_service = scheduled_task_service
 
         # 调度状态（从 ScheduledTaskService 搬入）
         self._scheduler_running = False
@@ -724,9 +720,6 @@ class ScheduleEngine:
         executor = getattr(self, "_task_executor", None)
         if executor:
             executor.shutdown(wait=False)
-        # 向后兼容：停止 ScheduledTaskService 调度器
-        if self._scheduled_task_service:
-            self._scheduled_task_service.stop_scheduler()
 
         # 直接停止监控核心（不等待 response，避免阻塞）
         if self._monitor_core is not None:

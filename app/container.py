@@ -12,7 +12,6 @@ from app.services.config_provider import RuntimeConfigProvider
 from app.services.engine import ScheduleEngine
 from app.services.login_history import LoginHistoryService
 from app.services.profile import ProfileService
-from app.services.scheduled_task import ScheduledTaskService
 from app.services.task import TaskService
 from app.services.task_executor import TaskExecutor
 from app.services.task_facade import TaskFacade
@@ -71,15 +70,6 @@ class ServiceContainer:
             history_store=self.task_history_store,
         )
 
-        # 向后兼容：ScheduledTaskService 委托层
-        self.scheduled_task_service = ScheduledTaskService(
-            project_root,
-            registry=self.task_registry,
-            executor=self.task_executor,
-            history_store=self.task_history_store,
-            task_manager=self.task_service.task_manager,
-        )
-
         # 统一引擎（替代 MonitorService + SchedulerService）
         self.engine = ScheduleEngine(
             project_root,
@@ -93,7 +83,6 @@ class ServiceContainer:
             task_executor=self.task_executor,
             task_facade=self.task_facade,
             config_provider=self.config_provider,
-            scheduled_task_service=self.scheduled_task_service,
         )
 
         self._ws_drain_task: asyncio.Task | None = None
@@ -185,8 +174,6 @@ class ServiceContainer:
             with contextlib.suppress(Exception):
                 _loguru_logger.remove(self._log_handler_id)
             self._log_handler_id = None
-
-        self.scheduled_task_service.stop_scheduler()
 
         if self._ws_drain_task:
             self._ws_drain_task.cancel()
