@@ -5,6 +5,20 @@
 
 ## 2026-06-11
 
+### fix: 修复 test_routers.py 定时任务 mock 未指向 engine.tasks
+
+`test_routers.py` 的 `TestScheduledTasksRouter` 中 3 个测试因 mock 路径不匹配而失败。
+
+**问题：**
+- 路由代码通过 `engine.tasks.save_task()` / `engine.tasks.delete_task()` 调用
+- 测试 fixture 将 mock 设置在 `mock_services.engine.save_task`（缺少 `.tasks` 中间层）
+- MagicMock 自动创建的 `engine.tasks.save_task()` 返回新 MagicMock 而非 tuple，导致 `ValueError: not enough values to unpack`
+
+**修复：**
+- `tests/test_routers.py`：将 `mock_services.engine.list_tasks/get_task/save_task/delete_task/get_history` 改为 `mock_services.engine.tasks.list_tasks/get_task/save_task/delete_task/get_history`
+
+**测试结果：** 1627 passed, 2 skipped
+
 ### refactor: API 路由改用 engine.tasks (Facade)
 
 定时任务 API 路由不再直接访问 `ScheduledTaskService`，改为通过 `engine.tasks` (TaskFacade) 访问。

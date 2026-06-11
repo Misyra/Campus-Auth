@@ -89,6 +89,10 @@ class ServiceContainer:
             worker_getter=lambda: __import__(
                 "app.workers.playwright_worker", fromlist=["get_worker"]
             ).get_worker(),
+            task_registry=self.task_registry,
+            task_executor=self.task_executor,
+            task_facade=self.task_facade,
+            config_provider=self.config_provider,
             scheduled_task_service=self.scheduled_task_service,
         )
 

@@ -95,6 +95,10 @@ class ScheduleEngine:
         ws_manager: WebSocketManager | None = None,
         login_history_service=None,
         worker_getter=None,
+        task_registry=None,
+        task_executor=None,
+        task_facade=None,
+        config_provider=None,
         scheduled_task_service=None,
     ):
         self.project_root = project_root
@@ -102,7 +106,19 @@ class ScheduleEngine:
         self._ws_manager = ws_manager
         self._login_history = login_history_service
         self._worker_getter = worker_getter
+
+        # 新组件注入
+        self._task_registry = task_registry
+        self._task_executor = task_executor
+        self._task_facade = task_facade
+        self._config_provider = config_provider
+
+        # 向后兼容
         self._scheduled_task_service = scheduled_task_service
+
+        # 调度状态（从 ScheduledTaskService 搬入）
+        self._scheduler_running = False
+        self._next_schedule_tick = 0.0
 
         # DashboardSink — 由 container.startup 注入
         self._dashboard_sink = None
@@ -212,11 +228,8 @@ class ScheduleEngine:
                     self._do_async_login()
 
                 # 定时任务
-                if (
-                    self._scheduled_task_service
-                    and self._scheduled_task_service.scheduler_running
-                ):
-                    self._check_scheduled_tasks()
+                if self._scheduler_running and now >= self._next_schedule_tick:
+                    self._run_schedule_tick()
             except Exception:
                 engine_logger.exception("引擎循环异常，继续运行")
                 time.sleep(1)
@@ -239,13 +252,8 @@ class ScheduleEngine:
                 if idx < len(intervals):
                     candidates.append(float(self._last_login_attempt + intervals[idx]))
 
-            if (
-                self._scheduled_task_service
-                and self._scheduled_task_service.scheduler_running
-            ):
-                from app.services.scheduled_task import SCHEDULER_CHECK_INTERVAL
-
-                candidates.append(now + float(SCHEDULER_CHECK_INTERVAL))
+            if self._scheduler_running:
+                candidates.append(self._next_schedule_tick)
         except (TypeError, ValueError, AttributeError):
             # 异常时回退到默认唤醒时间
             return now + 5
@@ -306,13 +314,21 @@ class ScheduleEngine:
         return now >= self._last_login_attempt + intervals[idx]
 
     def _do_async_login(self) -> None:
-        """在独立线程中执行登录（不阻塞引擎循环）。"""
+        """提交登录到 executor 的 login_pool。"""
         if self._login_in_progress.is_set():
             return
         self._login_in_progress.set()
         self._last_login_attempt = time.time()
         self._login_retry_count += 1
 
+        executor = getattr(self, "_task_executor", None)
+        if executor:
+            executor.execute_login_async()
+            self._login_in_progress.clear()
+            self._update_status_snapshot()
+            return
+
+        # 回退：旧的独立线程登录（_task_executor 未注入时）
         def _login_thread():
             try:
                 config = self._copy_runtime_config()
@@ -368,6 +384,21 @@ class ScheduleEngine:
         """检查并执行到期的定时任务（委托 ScheduledTaskService）。"""
         if self._scheduled_task_service:
             self._scheduled_task_service.check_and_execute()
+
+    def _run_schedule_tick(self) -> None:
+        """执行定时任务调度（使用 TaskRegistry + TaskExecutor）。"""
+        from datetime import datetime
+
+        now = datetime.now()
+        registry = getattr(self, "_task_registry", None)
+        executor = getattr(self, "_task_executor", None)
+        if registry:
+            due_tasks = registry.get_due_tasks(now.hour, now.minute)
+            for task_id in due_tasks:
+                if executor:
+                    executor.execute_task_async(task_id)
+        # 计算下一个整分钟
+        self._next_schedule_tick = (int(time.time() // 60) * 60) + 60
 
     def _handle_start(self, cmd: EngineCommand) -> None:
         """启动监控（在引擎循环中调用）。"""
@@ -585,12 +616,25 @@ class ScheduleEngine:
     def _is_monitoring(self) -> bool:
         return self._monitor_core is not None and self._monitor_core.monitoring
 
+    @property
+    def tasks(self):
+        """定时任务 Facade（供 API 路由使用）。"""
+        return self._task_facade
+
     def get_config(self) -> MonitorConfigPayload:
+        if self._config_provider:
+            return self._config_provider.get_ui_config()
         with self._reload_lock:
             return self._ui_config.model_copy(deep=True)
 
     def _reload_config_internal(self) -> None:
         """从 settings.json 重新加载 UI 和运行时配置。"""
+        if self._config_provider:
+            self._config_provider.reload()
+            self._ui_config = self._config_provider.get_ui_config()
+            self._runtime_snapshot = self._config_provider.get_runtime_config()
+            return
+        # 回退：原有逻辑
         with self._reload_lock:
             # 单次 load，避免多次 load 之间数据版本不一致
             data = self._profile_service.load()
@@ -676,7 +720,12 @@ class ScheduleEngine:
         """完全关闭 ScheduleEngine：停止监控 + 停止调度器 + 终止引擎线程。"""
         if self._shutdown_event.is_set():
             return
-        # 停止调度器并等待运行中的任务线程完成
+        # 停止调度器
+        self._scheduler_running = False
+        executor = getattr(self, "_task_executor", None)
+        if executor:
+            executor.shutdown(wait=False)
+        # 向后兼容：停止 ScheduledTaskService 调度器
         if self._scheduled_task_service:
             self._scheduled_task_service.stop_scheduler()
 
@@ -822,49 +871,68 @@ class ScheduleEngine:
 
     def get_runtime_config(self) -> dict:
         """线程安全地获取运行时配置副本"""
+        if self._config_provider:
+            return self._config_provider.get_runtime_config()
         return self._copy_runtime_config()
 
-    # ── 定时任务服务（委托 ScheduledTaskService）──
+    # ── 定时任务服务（委托 TaskFacade / ScheduledTaskService）──
 
     @property
     def scheduled_task_service(self):
-        """获取定时任务服务实例。"""
+        """获取定时任务服务实例（向后兼容）。"""
         return self._scheduled_task_service
 
-    # 以下方法保留为向后兼容的委托调用
+    @property
+    def scheduler_running(self) -> bool:
+        """调度器是否正在运行。"""
+        return self._scheduler_running
+
+    # 以下方法保留为向后兼容的委托调用，优先使用 TaskFacade
 
     def has_enabled_tasks(self) -> bool:
         """检查是否存在启用的定时任务（委托）。"""
+        if self._task_facade:
+            return self._task_facade.has_enabled_tasks()
         if self._scheduled_task_service:
             return self._scheduled_task_service.has_enabled_tasks()
         return False
 
     def list_tasks(self) -> list[dict[str, Any]]:
         """列出所有定时任务（委托）。"""
+        if self._task_facade:
+            return self._task_facade.list_tasks()
         if self._scheduled_task_service:
             return self._scheduled_task_service.list_tasks()
         return []
 
     def get_task(self, task_id: str) -> dict[str, Any] | None:
         """获取定时任务详情（委托）。"""
+        if self._task_facade:
+            return self._task_facade.get_task(task_id)
         if self._scheduled_task_service:
             return self._scheduled_task_service.get_task(task_id)
         return None
 
     def save_task(self, task_id: str, config: dict[str, Any]) -> tuple[bool, str]:
         """保存定时任务（委托）。"""
+        if self._task_facade:
+            return self._task_facade.save_task(task_id, config)
         if self._scheduled_task_service:
             return self._scheduled_task_service.save_task(task_id, config)
         return False, "定时任务服务未初始化"
 
     def delete_task(self, task_id: str) -> tuple[bool, str]:
         """删除定时任务（委托）。"""
+        if self._task_facade:
+            return self._task_facade.delete_task(task_id)
         if self._scheduled_task_service:
             return self._scheduled_task_service.delete_task(task_id)
         return False, "定时任务服务未初始化"
 
     def get_history(self, task_id: str) -> list[dict[str, Any]]:
         """获取任务执行历史（委托）。"""
+        if self._task_facade:
+            return self._task_facade.get_history(task_id)
         if self._scheduled_task_service:
             return self._scheduled_task_service.get_history(task_id)
         return []
@@ -880,16 +948,22 @@ class ScheduleEngine:
 
     def execute_task(self, task_id: str) -> tuple[bool, str]:
         """执行定时任务（委托）。"""
+        if self._task_facade:
+            self._task_facade.execute_task(task_id)
+            return True, "任务已提交"
         if self._scheduled_task_service:
             return self._scheduled_task_service.execute_task(task_id)
         return False, "定时任务服务未初始化"
 
     def start_scheduler(self) -> None:
-        """启动定时任务调度（委托）。"""
-        if self._scheduled_task_service:
-            self._scheduled_task_service.start_scheduler()
+        """启动定时任务调度。"""
+        if self._scheduler_running:
+            return
+        self._scheduler_running = True
+        self._next_schedule_tick = (int(time.time() // 60) * 60) + 60
+        engine_logger.info("定时任务调度器已启动")
 
     def stop_scheduler(self) -> None:
-        """停止调度器（委托）。"""
-        if self._scheduled_task_service:
-            self._scheduled_task_service.stop_scheduler()
+        """停止定时任务调度。"""
+        self._scheduler_running = False
+        engine_logger.info("定时任务调度器已停止")
