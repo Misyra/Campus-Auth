@@ -10,7 +10,7 @@ import re
 import subprocess
 
 from app.utils.logging import get_logger
-from app.utils.platform_utils import (
+from app.utils.platform import (
     CREATE_NO_WINDOW_FLAG,
     is_linux,
     is_macos,

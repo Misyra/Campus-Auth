@@ -19,7 +19,7 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from app.constants import AUTH_DATA_DIR  # noqa: E402  — 测试 fixture 需要
-from app.utils.platform_utils import is_windows  # noqa: E402
+from app.utils.platform import is_windows  # noqa: E402
 from app.utils.process import (  # noqa: E402
     cleanup_pid,
     get_pid_file,

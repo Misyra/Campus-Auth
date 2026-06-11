@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.utils.file_helpers import atomic_write
+from app.utils.files import atomic_write
 from app.utils.logging import get_logger
 
 from .models import TASK_ID_PATTERN, ScriptTaskInfo, TaskConfig

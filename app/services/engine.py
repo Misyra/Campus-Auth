@@ -25,7 +25,7 @@ from app.schemas import MonitorConfigPayload, MonitorStatusResponse
 from app.utils import ConfigValidator
 from app.utils.logging import get_logger
 from app.utils.login import SCREENSHOT_URL_PATTERN
-from app.utils.network_helpers import parse_ping_targets
+from app.utils.network import parse_ping_targets
 from app.services.websocket_manager import WebSocketManager
 
 from .profile import ProfileService

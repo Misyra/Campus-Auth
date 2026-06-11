@@ -7,13 +7,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.constants import AUTH_DATA_DIR, PROJECT_ROOT
-from app.utils.platform_utils import get_platform
+from app.utils.platform import get_platform
 
 USER_DATA_DIR = AUTH_DATA_DIR
 
 PLATFORM = (
     get_platform()
-)  # 使用 platform_utils 获取平台标识（"windows"/"darwin"/"linux"）
+)  # 使用 platform 获取平台标识（"windows"/"darwin"/"linux"）
 
 
 @dataclass

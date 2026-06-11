@@ -14,9 +14,9 @@ import time
 from app.constants import AUTH_DATA_DIR
 
 from .exceptions import DecryptionError
-from .file_helpers import atomic_write
+from .files import atomic_write
 from .logging import get_logger
-from .platform_utils import CREATE_NO_WINDOW_FLAG, is_windows
+from .platform import CREATE_NO_WINDOW_FLAG, is_windows
 
 logger = get_logger("crypto", source="backend")
 

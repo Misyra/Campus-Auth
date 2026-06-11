@@ -37,8 +37,8 @@ from app.utils.env import build_login_template_vars
 # ── exceptions ──
 from app.utils.exceptions import DecryptionError, LoginCancelledError
 
-# ── file_helpers ──
-from app.utils.file_helpers import atomic_write
+# ── files ──
+from app.utils.files import atomic_write
 
 # ── logging ──
 from app.utils.logging import (
@@ -47,11 +47,11 @@ from app.utils.logging import (
     normalize_level,
 )
 
-# ── network_helpers ──
-from app.utils.network_helpers import parse_host_port
+# ── network ──
+from app.utils.network import parse_host_port
 
-# ── platform_utils ──
-from app.utils.platform_utils import (
+# ── platform ──
+from app.utils.platform import (
     get_default_ua,
     get_platform,
     is_linux,
@@ -247,7 +247,7 @@ class TestAssignProfileFields:
 
 
 # =====================================================================
-# file_helpers
+# files
 # =====================================================================
 
 
@@ -285,7 +285,7 @@ class TestAtomicWrite:
             raise PermissionError("mocked")
 
         with (
-            patch("app.utils.file_helpers.os.replace", side_effect=mock_replace),
+            patch("app.utils.files.os.replace", side_effect=mock_replace),
             pytest.raises(PermissionError, match="mocked"),
         ):
             atomic_write(str(target), "content")
@@ -295,7 +295,7 @@ class TestAtomicWrite:
     def test_cleanup_on_write_error(self, tmp_path):
         target = tmp_path / "test.txt"
         with (
-            patch("app.utils.file_helpers.os.fdopen", side_effect=OSError("disk full")),
+            patch("app.utils.files.os.fdopen", side_effect=OSError("disk full")),
             pytest.raises(IOError, match="disk full"),
         ):
             atomic_write(str(target), "content")
@@ -324,97 +324,97 @@ class TestAtomicWrite:
 
 
 # =====================================================================
-# platform_utils
+# platform
 # =====================================================================
 
 
 class TestGetPlatform:
     def test_windows(self):
-        with patch("app.utils.platform_utils.sys") as mock_sys:
+        with patch("app.utils.platform.sys") as mock_sys:
             mock_sys.platform = "win32"
             assert get_platform() == "windows"
 
     def test_darwin(self):
-        with patch("app.utils.platform_utils.sys") as mock_sys:
+        with patch("app.utils.platform.sys") as mock_sys:
             mock_sys.platform = "darwin"
             assert get_platform() == "darwin"
 
     def test_linux(self):
-        with patch("app.utils.platform_utils.sys") as mock_sys:
+        with patch("app.utils.platform.sys") as mock_sys:
             mock_sys.platform = "linux"
             assert get_platform() == "linux"
 
     def test_linux2(self):
-        with patch("app.utils.platform_utils.sys") as mock_sys:
+        with patch("app.utils.platform.sys") as mock_sys:
             mock_sys.platform = "linux2"
             assert get_platform() == "linux"
 
     def test_unknown_falls_back_to_linux(self):
-        with patch("app.utils.platform_utils.sys") as mock_sys:
+        with patch("app.utils.platform.sys") as mock_sys:
             mock_sys.platform = "freebsd"
             assert get_platform() == "linux"
 
 
 class TestIsWindows:
     def test_true(self):
-        with patch("app.utils.platform_utils.sys") as mock_sys:
+        with patch("app.utils.platform.sys") as mock_sys:
             mock_sys.platform = "win32"
             assert is_windows() is True
 
     def test_false(self):
-        with patch("app.utils.platform_utils.sys") as mock_sys:
+        with patch("app.utils.platform.sys") as mock_sys:
             mock_sys.platform = "linux"
             assert is_windows() is False
 
 
 class TestIsMacos:
     def test_true(self):
-        with patch("app.utils.platform_utils.sys") as mock_sys:
+        with patch("app.utils.platform.sys") as mock_sys:
             mock_sys.platform = "darwin"
             assert is_macos() is True
 
     def test_false(self):
-        with patch("app.utils.platform_utils.sys") as mock_sys:
+        with patch("app.utils.platform.sys") as mock_sys:
             mock_sys.platform = "win32"
             assert is_macos() is False
 
 
 class TestIsLinux:
     def test_linux(self):
-        with patch("app.utils.platform_utils.sys") as mock_sys:
+        with patch("app.utils.platform.sys") as mock_sys:
             mock_sys.platform = "linux"
             assert is_linux() is True
 
     def test_linux2(self):
         # Python 3.10+ 不再返回 "linux2"，应返回 False
-        with patch("app.utils.platform_utils.sys") as mock_sys:
+        with patch("app.utils.platform.sys") as mock_sys:
             mock_sys.platform = "linux2"
             assert is_linux() is False
 
     def test_false(self):
-        with patch("app.utils.platform_utils.sys") as mock_sys:
+        with patch("app.utils.platform.sys") as mock_sys:
             mock_sys.platform = "win32"
             assert is_linux() is False
 
 
 class TestGetDefaultUa:
     def test_windows_ua(self):
-        with patch("app.utils.platform_utils.get_platform", return_value="windows"):
+        with patch("app.utils.platform.get_platform", return_value="windows"):
             ua = get_default_ua()
             assert "Windows" in ua
 
     def test_macos_ua(self):
-        with patch("app.utils.platform_utils.get_platform", return_value="darwin"):
+        with patch("app.utils.platform.get_platform", return_value="darwin"):
             ua = get_default_ua()
             assert "Macintosh" in ua
 
     def test_linux_ua(self):
-        with patch("app.utils.platform_utils.get_platform", return_value="linux"):
+        with patch("app.utils.platform.get_platform", return_value="linux"):
             ua = get_default_ua()
             assert "Linux" in ua
 
     def test_unknown_platform_falls_back_to_linux(self):
-        with patch("app.utils.platform_utils.get_platform", return_value="freebsd"):
+        with patch("app.utils.platform.get_platform", return_value="freebsd"):
             ua = get_default_ua()
             assert "Linux" in ua
 
@@ -448,7 +448,7 @@ class TestStrToBool:
 
 
 # =====================================================================
-# network_helpers
+# network
 # =====================================================================
 
 
@@ -788,13 +788,13 @@ class TestLogConfigCenter:
 
 class TestCreateNoWindowFlag:
     def test_is_int(self):
-        from app.utils.platform_utils import CREATE_NO_WINDOW_FLAG
+        from app.utils.platform import CREATE_NO_WINDOW_FLAG
 
         assert isinstance(CREATE_NO_WINDOW_FLAG, int)
 
     def test_on_windows_is_nonzero(self):
         """Windows 上应为非零值（subprocess.CREATE_NO_WINDOW = 0x08000000）"""
-        from app.utils.platform_utils import CREATE_NO_WINDOW_FLAG
+        from app.utils.platform import CREATE_NO_WINDOW_FLAG
 
         if is_windows():
             assert CREATE_NO_WINDOW_FLAG != 0

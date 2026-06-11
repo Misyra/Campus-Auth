@@ -13,7 +13,7 @@ import sys
 from collections.abc import Callable
 
 from .logging import get_logger
-from .platform_utils import CREATE_NO_WINDOW_FLAG
+from .platform import CREATE_NO_WINDOW_FLAG
 
 logger = get_logger("shell_policy", source="backend")
 

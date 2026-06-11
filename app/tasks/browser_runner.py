@@ -321,13 +321,13 @@ class TaskExecutor:
             timeout = cfg.get("network_check_timeout") or 2
 
             # 解析网址响应检测 URL
-            from app.utils.network_helpers import parse_url_checks
+            from app.utils.network import parse_url_checks
 
             url_checks = parse_url_checks(cfg.get("url_check_urls", ""))
             url_checks = url_checks if url_checks else None
 
             # 解析 TCP 检测目标
-            from app.utils.network_helpers import parse_ping_targets
+            from app.utils.network import parse_ping_targets
 
             test_sites = parse_ping_targets(cfg.get("ping_targets", [])) or None
 
@@ -390,7 +390,7 @@ class TaskExecutor:
 
     async def _capture_screenshot(self, page) -> str | None:
         """捕获截图 → 指定目录或 logs/{date}/screenshots/ 目录"""
-        from app.utils.file_helpers import save_screenshot
+        from app.utils.files import save_screenshot
 
         try:
             if self._screenshot_dir:
