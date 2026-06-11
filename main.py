@@ -165,7 +165,7 @@ def _run_login_then_exit(logger) -> None:
         data = ps.load()
 
         # 构建运行时配置
-        from app.services.config import build_runtime_config, load_runtime_config
+        from app.services.config_service import build_runtime_config, load_runtime_config
 
         payload, has_decrypt_error = load_runtime_config(ps)
         if has_decrypt_error:

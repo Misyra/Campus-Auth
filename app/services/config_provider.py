@@ -9,7 +9,7 @@ from typing import Any
 from app.schemas import MonitorConfigPayload
 from app.utils.logging import get_logger
 
-from .config import build_runtime_config, load_runtime_config, load_ui_config
+from .config_service import build_runtime_config, load_runtime_config, load_ui_config
 from .profile import ProfileService
 
 provider_logger = get_logger("config_provider", source="backend")

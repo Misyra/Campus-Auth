@@ -20,7 +20,7 @@ from app.schemas import (
     ProfileSettings,
     SystemSettings,
 )
-from app.services.config import (
+from app.services.config_service import (
     build_runtime_config,
     load_runtime_config,
     load_ui_config,

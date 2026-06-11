@@ -523,11 +523,11 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config.build_runtime_config",
+                "app.services.config_service.build_runtime_config",
                 return_value={"retry_settings": {"max_retries": 3}},
             ),
             patch(
-                "app.services.config.load_runtime_config",
+                "app.services.config_service.load_runtime_config",
                 return_value=(MagicMock(), False),
             ),
             patch("main.cleanup_orphan_browsers"),
@@ -552,13 +552,13 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config.build_runtime_config",
+                "app.services.config_service.build_runtime_config",
                 return_value={
                     "retry_settings": {"max_retries": 3, "retry_interval": 1}
                 },
             ),
             patch(
-                "app.services.config.load_runtime_config",
+                "app.services.config_service.load_runtime_config",
                 return_value=(MagicMock(), False),
             ),
             patch("main.cleanup_orphan_browsers"),
@@ -582,13 +582,13 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config.build_runtime_config",
+                "app.services.config_service.build_runtime_config",
                 return_value={
                     "retry_settings": {"max_retries": 2, "retry_interval": 0}
                 },
             ),
             patch(
-                "app.services.config.load_runtime_config",
+                "app.services.config_service.load_runtime_config",
                 return_value=(MagicMock(), False),
             ),
             patch("main.cleanup_orphan_browsers"),
@@ -610,11 +610,11 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config.build_runtime_config",
+                "app.services.config_service.build_runtime_config",
                 return_value={"retry_settings": {"max_retries": 3}},
             ),
             patch(
-                "app.services.config.load_runtime_config",
+                "app.services.config_service.load_runtime_config",
                 return_value=(MagicMock(), False),
             ),
             patch(
@@ -642,11 +642,11 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config.build_runtime_config",
+                "app.services.config_service.build_runtime_config",
                 return_value={"retry_settings": {"max_retries": 3}},
             ),
             patch(
-                "app.services.config.load_runtime_config",
+                "app.services.config_service.load_runtime_config",
                 return_value=(MagicMock(), False),
             ),
             patch(
@@ -675,11 +675,11 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config.build_runtime_config",
+                "app.services.config_service.build_runtime_config",
                 return_value={"retry_settings": {"max_retries": 3}},
             ),
             patch(
-                "app.services.config.load_runtime_config",
+                "app.services.config_service.load_runtime_config",
                 return_value=(MagicMock(), False),
             ),
             patch(
