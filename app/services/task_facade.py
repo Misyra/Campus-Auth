@@ -23,10 +23,10 @@ class TaskFacade:
         return self._registry.save_task(task_id, config)
 
     def delete_task(self, task_id: str) -> tuple[bool, str]:
-        ok, msg = self._registry.delete_task(task_id)
-        if ok:
+        success, message = self._registry.delete_task(task_id)
+        if success:
             self._history_store.delete_history(task_id)
-        return ok, msg
+        return success, message
 
     def get_history(self, task_id: str) -> list[dict]:
         return self._history_store.get_history(task_id)

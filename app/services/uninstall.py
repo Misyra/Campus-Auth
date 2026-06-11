@@ -71,18 +71,18 @@ def perform(keys: list[str]) -> list[CleanupResult]:
     results: list[CleanupResult] = []
 
     if "autostart" in keys:
-        ok, msg = _remove_autostart()
-        results.append(CleanupResult("autostart", "移除开机自启", ok, msg))
+        success, message = _remove_autostart()
+        results.append(CleanupResult("autostart", "移除开机自启", success, message))
 
     if "userdata" in keys:
-        ok, msg = _remove_user_data()
-        results.append(CleanupResult("userdata", "删除用户数据", ok, msg))
+        success, message = _remove_user_data()
+        results.append(CleanupResult("userdata", "删除用户数据", success, message))
 
     if "playwright" in keys:
         pw_cache = _playwright_cache_dir()
         if pw_cache:
-            ok, msg = _remove_playwright_cache(pw_cache)
-            results.append(CleanupResult("playwright", "删除 Playwright 缓存", ok, msg))
+            success, message = _remove_playwright_cache(pw_cache)
+            results.append(CleanupResult("playwright", "删除 Playwright 缓存", success, message))
 
     return results
 
@@ -94,8 +94,8 @@ def _check_autostart() -> dict:
     try:
         from app.services.autostart import AutoStartService
 
-        svc = AutoStartService(PROJECT_ROOT)
-        return svc.status()
+        autostart_service = AutoStartService(PROJECT_ROOT)
+        return autostart_service.status()
     except Exception:
         return {
             "enabled": False,
@@ -109,8 +109,8 @@ def _remove_autostart() -> tuple[bool, str]:
     try:
         from app.services.autostart import AutoStartService
 
-        svc = AutoStartService(PROJECT_ROOT)
-        return svc.disable()
+        autostart_service = AutoStartService(PROJECT_ROOT)
+        return autostart_service.disable()
     except Exception as exc:
         return False, f"移除开机自启失败: {exc}"
 
@@ -148,9 +148,9 @@ def _remove_playwright_cache(cache_dir: Path) -> tuple[bool, str]:
 def _dir_size_mb(path: Path) -> float:
     total = 0
     try:
-        for f in path.rglob("*"):
-            if f.is_file():
-                total += f.stat().st_size
+        for file_path in path.rglob("*"):
+            if file_path.is_file():
+                total += file_path.stat().st_size
     except OSError:
         pass
     return total / (1024 * 1024)

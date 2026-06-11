@@ -37,7 +37,7 @@ class TestAutoStartServiceInit:
 
     def test_platform_set(self, tmp_path):
         svc = AutoStartService(tmp_path)
-        assert svc.platform in ("windows", "darwin", "linux")
+        assert svc._platform in ("windows", "darwin", "linux")
 
 
 class TestStartCommand:

@@ -5,6 +5,35 @@
 
 ## 2026-06-11
 
+### style: 统一代码命名规范
+
+统一 `app/services/` 目录下的命名风格，涉及 8 个源文件和 1 个测试文件。
+
+**规则与修改：**
+
+- `except Exception as e` → `except Exception as exc`（全局统一，含 `ImportError`/`PermissionError`/`JSONDecodeError`）
+- `ok, msg` → `success, message`（返回 tuple 解构）
+- 缩写 → 完整词（`cfg` → `credential_config`, `svc` → `autostart_service`, `fn` → `func`, `sys_cfg` → `system_settings`, `glob` → `default_profile`）
+- `engine_logger` → `logger`（模块级 logger 统一）
+- `self._SNAPSHOT_MIN_INTERVAL` → `self._snapshot_min_interval`（实例属性 snake_case）
+- 单字母变量 → 语义变量（`i` → `attempt`, `f` → `file_path`, `s` → `shell`）
+- `_login_thread` → `_do_login`（内部函数名语义化）
+- `ok` → `is_available`（网络检测结果变量）
+- `self.platform` → `self._platform`（私有属性加下划线前缀）
+- `ids` → `task_ids`（语义变量）
+- `uid` → `user_id`（语义变量）
+
+**涉及文件：**
+- `app/services/engine.py`：`engine_logger` → `logger`、`_SNAPSHOT_MIN_INTERVAL` → `_snapshot_min_interval`、`for i` → `for attempt`、`_login_thread` → `_do_login`、`except as e` → `as exc`、`ok` → `is_available`
+- `app/services/task_executor.py`：`fn` → `func`、`s` → `shell`、`except as e` → `as exc`
+- `app/services/task_registry.py`：`except as e` → `as exc`、`for f` → `for file_path`、`ids` → `task_ids`
+- `app/services/scheduled_task.py`：`ok, msg` → `success, message`
+- `app/services/task_facade.py`：`ok, msg` → `success, message`
+- `app/services/config.py`：`sys_cfg` → `system_settings`、`cfg` → `credential_config`、`glob` → `default_profile`、`except as e` → `as exc`
+- `app/services/autostart.py`：`self.platform` → `self._platform`、`uid` → `user_id`、`ok, msg` → `success, message`
+- `app/services/uninstall.py`：`svc` → `autostart_service`、`ok, msg` → `success, message`、`for f` → `for file_path`
+- `tests/test_system_services.py`：`svc.platform` → `svc._platform`
+
 ### refactor: 清理残留死代码（第二轮）
 
 删除 ScheduledTaskService 的死方法、engine/container 中的死引用、测试中的过时 mock。

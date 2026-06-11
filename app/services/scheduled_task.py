@@ -67,11 +67,11 @@ class ScheduledTaskService:
 
     def delete_task(self, task_id: str) -> tuple[bool, str]:
         """删除定时任务。"""
-        ok, msg = self._registry.delete_task(task_id)
-        if ok:
+        success, message = self._registry.delete_task(task_id)
+        if success:
             # 同时删除历史记录
             self._history_store.delete_history(task_id)
-        return ok, msg
+        return success, message
 
     # ── 历史（委托给 TaskHistoryStore）──
 

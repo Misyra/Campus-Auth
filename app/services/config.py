@@ -102,8 +102,8 @@ def _normalize_headers_json(raw: str) -> str:
 
     try:
         parsed = json.loads(text)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"浏览器请求头格式不正确，请确认输入的是合法的 JSON 对象: {e}") from e
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"浏览器请求头格式不正确，请确认输入的是合法的 JSON 对象: {exc}") from exc
     if not isinstance(parsed, dict):
         raise ValueError('浏览器请求头格式不正确，应为键值对形式，例如: {"Referer": "https://example.com"}')
 
@@ -129,7 +129,7 @@ def _build_config_payload(
     """
     if data is None:
         data = profile_service.load()
-    sys_cfg = data.system
+    system_settings = data.system
 
     if apply_overrides:
         profile = data.profiles.get(data.active_profile)
@@ -139,7 +139,7 @@ def _build_config_payload(
         config_logger.debug("加载 UI 配置（全局）: active_profile={}", data.active_profile)
 
     # 从系统设置作为基础
-    payload_dict = extract_profile_fields(sys_cfg.model_dump(), PROFILE_FIELDS)
+    payload_dict = extract_profile_fields(system_settings.model_dump(), PROFILE_FIELDS)
 
     any_error = False
 
@@ -151,21 +151,21 @@ def _build_config_payload(
             use_global = False
             pwd, err = _decrypt_password_field(
                 profile.password or "",
-                fallback_pwd=sys_cfg.password or "",
+                fallback_pwd=system_settings.password or "",
                 label=f"方案 '{data.active_profile}'",
             )
             payload_dict["password"] = pwd
             any_error = err
         else:
-            payload_dict["username"] = sys_cfg.username
-            pwd, err = _decrypt_password_field(sys_cfg.password or "")
+            payload_dict["username"] = system_settings.username
+            pwd, err = _decrypt_password_field(system_settings.password or "")
             payload_dict["password"] = pwd
             any_error = err
         payload_dict["use_global_credentials"] = use_global
 
         # 认证地址：跟随全局或使用方案独立值
         if not profile or profile.use_global_auth_url:
-            payload_dict["auth_url"] = sys_cfg.auth_url
+            payload_dict["auth_url"] = system_settings.auth_url
         else:
             payload_dict["auth_url"] = profile.auth_url
 
@@ -177,8 +177,8 @@ def _build_config_payload(
 
         # 运营商：跟随 use_global_credentials 标志
         if not profile or profile.use_global_credentials:
-            payload_dict["carrier"] = sys_cfg.carrier
-            payload_dict["carrier_custom"] = sys_cfg.carrier_custom
+            payload_dict["carrier"] = system_settings.carrier
+            payload_dict["carrier_custom"] = system_settings.carrier_custom
         else:
             payload_dict["carrier"] = profile.carrier
             payload_dict["carrier_custom"] = profile.carrier_custom
@@ -202,10 +202,10 @@ def _build_config_payload(
         # UI 模式：合并 sys 和 default 方案字段
         global_profile = data.profiles.get("default", ProfileSettings())
         payload_dict.update(extract_profile_fields(global_profile.model_dump(), PROFILE_FIELDS))
-        payload_dict.update(extract_profile_fields(sys_cfg.model_dump(), PROFILE_FIELDS))
+        payload_dict.update(extract_profile_fields(system_settings.model_dump(), PROFILE_FIELDS))
 
         # UI 专属覆盖
-        payload_dict["password"] = mask_password(sys_cfg.password)
+        payload_dict["password"] = mask_password(system_settings.password)
         payload_dict["active_task"] = ""
         payload_dict["use_global_credentials"] = True
 
@@ -217,10 +217,10 @@ def _build_config_payload(
         payload_dict.get("http_targets", "")
     )
     payload_dict["backend_log_level"] = normalize_level(
-        sys_cfg.backend_log_level, "WARNING"
+        system_settings.backend_log_level, "WARNING"
     )
     payload_dict["frontend_log_level"] = normalize_level(
-        sys_cfg.frontend_log_level, "WARNING"
+        system_settings.frontend_log_level, "WARNING"
     )
 
     result = MonitorConfigPayload(**payload_dict)
@@ -260,19 +260,19 @@ def _build_credential_config(
     payload: MonitorConfigPayload, system_settings: SystemSettings | None
 ) -> dict[str, Any]:
     """构建账号密码相关配置。"""
-    cfg: dict[str, Any] = {"password": ""}
-    cfg["username"] = payload.username.strip()
+    credential_config: dict[str, Any] = {"password": ""}
+    credential_config["username"] = payload.username.strip()
     raw_password = payload.password.strip()
     if raw_password and not raw_password.startswith("•"):
-        cfg["password"] = raw_password
+        credential_config["password"] = raw_password
     elif system_settings:
         pwd, _ = (
             _safe_decrypt(system_settings.password)
             if system_settings.password
             else ("", False)
         )
-        cfg["password"] = pwd
-    return cfg
+        credential_config["password"] = pwd
+    return credential_config
 
 
 def _build_browser_config(payload: MonitorConfigPayload) -> dict[str, Any]:
@@ -398,23 +398,23 @@ def build_runtime_config(
 
 
 def _update_system_settings(
-    sys_cfg: SystemSettings, payload: MonitorConfigPayload
+    system_settings: SystemSettings, payload: MonitorConfigPayload
 ) -> None:
     """更新系统设置字段。"""
     pwd_raw = payload.password.strip()
-    old_user = sys_cfg.username
-    sys_cfg.username = payload.username.strip()
-    sys_cfg.password = save_password_field(pwd_raw, sys_cfg.password)
+    old_user = system_settings.username
+    system_settings.username = payload.username.strip()
+    system_settings.password = save_password_field(pwd_raw, system_settings.password)
     config_logger.info(
         "保存系统设置: 用户={} (旧={}), 密码={}",
-        sys_cfg.username,
+        system_settings.username,
         old_user,
         "已更新" if (pwd_raw and not pwd_raw.startswith("•")) else "保留",
     )
 
     # 直接映射的系统字段
     assign_profile_fields(
-        sys_cfg.__dict__,
+        system_settings.__dict__,
         payload.model_dump(),
         [
             "access_log",
@@ -432,21 +432,21 @@ def _update_system_settings(
         ],
     )
     # 需要归一化处理的系统字段
-    sys_cfg.auth_url = payload.auth_url.strip()
-    sys_cfg.carrier = str(payload.carrier or "无").strip()
-    sys_cfg.carrier_custom = str(payload.carrier_custom or "").strip()
-    sys_cfg.backend_log_level = normalize_level(payload.backend_log_level, "WARNING")
-    sys_cfg.frontend_log_level = normalize_level(payload.frontend_log_level, "WARNING")
-    sys_cfg.proxy = payload.proxy.strip()
+    system_settings.auth_url = payload.auth_url.strip()
+    system_settings.carrier = str(payload.carrier or "无").strip()
+    system_settings.carrier_custom = str(payload.carrier_custom or "").strip()
+    system_settings.backend_log_level = normalize_level(payload.backend_log_level, "WARNING")
+    system_settings.frontend_log_level = normalize_level(payload.frontend_log_level, "WARNING")
+    system_settings.proxy = payload.proxy.strip()
 
 
 def _update_default_profile(
-    glob: ProfileSettings, payload: MonitorConfigPayload
+    default_profile: ProfileSettings, payload: MonitorConfigPayload
 ) -> None:
     """更新 default 方案的高级设置。"""
     # 直接映射的 profile 字段
     assign_profile_fields(
-        glob.__dict__,
+        default_profile.__dict__,
         payload.model_dump(),
         [
             "check_interval_seconds",
@@ -474,15 +474,15 @@ def _update_default_profile(
         ],
     )
     # 需要归一化处理的 profile 字段
-    glob.browser_user_agent = payload.browser_user_agent.strip()
-    glob.browser_extra_headers_json = _normalize_headers_json(
+    default_profile.browser_user_agent = payload.browser_user_agent.strip()
+    default_profile.browser_extra_headers_json = _normalize_headers_json(
         payload.browser_extra_headers_json
     )
-    glob.browser_args = payload.browser_args.strip()
-    glob.browser_locale = payload.browser_locale.strip()
-    glob.browser_timezone = payload.browser_timezone.strip()
-    glob.network_targets = _normalize_targets(payload.network_targets)
-    glob.http_targets = _normalize_targets(payload.http_targets)
+    default_profile.browser_args = payload.browser_args.strip()
+    default_profile.browser_locale = payload.browser_locale.strip()
+    default_profile.browser_timezone = payload.browser_timezone.strip()
+    default_profile.network_targets = _normalize_targets(payload.network_targets)
+    default_profile.http_targets = _normalize_targets(payload.http_targets)
 
 
 def save_config_combined(

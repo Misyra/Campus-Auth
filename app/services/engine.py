@@ -77,7 +77,7 @@ class StatusSnapshot:
     network_state: str = "unknown"
 
 
-engine_logger = get_logger("engine", source="backend")
+logger = get_logger("engine", source="backend")
 
 
 # ── ScheduleEngine ──
@@ -130,7 +130,7 @@ class ScheduleEngine:
 
         # 状态快照限流
         self._last_snapshot_time: float = 0
-        self._SNAPSHOT_MIN_INTERVAL: float = 1.0
+        self._snapshot_min_interval: float = 1.0
 
         # 加载配置（复用 _reload_config_internal）
         self._reload_config_internal()
@@ -164,15 +164,15 @@ class ScheduleEngine:
 
     def _enqueue(self, cmd: EngineCommand, retries: int = 2) -> bool:
         """尝试将命令入队，带重试。返回 True 表示成功。"""
-        for i in range(retries):
+        for attempt in range(retries):
             try:
                 self._cmd_queue.put_nowait(cmd)
                 return True
             except queue.Full:
-                if i < retries - 1:
+                if attempt < retries - 1:
                     time.sleep(0.05)
                 else:
-                    engine_logger.warning(
+                    logger.warning(
                         "命令队列已满 (type={})，操作被跳过", cmd.type
                     )
         return False
@@ -193,7 +193,7 @@ class ScheduleEngine:
     def _engine_loop(self) -> None:
         """统一引擎循环：命令处理 + 网络检测 + 定时任务调度。"""
         self._engine_running = True
-        engine_logger.info("统一引擎循环已启动")
+        logger.info("统一引擎循环已启动")
 
         while not self._shutdown_event.is_set():
             try:
@@ -225,11 +225,11 @@ class ScheduleEngine:
                 if self._scheduler_running and now >= self._next_schedule_tick:
                     self._run_schedule_tick()
             except Exception:
-                engine_logger.exception("引擎循环异常，继续运行")
+                logger.exception("引擎循环异常，继续运行")
                 time.sleep(1)
 
         self._engine_running = False
-        engine_logger.info("统一引擎循环已退出")
+        logger.info("统一引擎循环已退出")
 
     def _calculate_wakeup(self) -> float:
         """计算下次唤醒时间。"""
@@ -264,7 +264,7 @@ class ScheduleEngine:
                 if handler_name:
                     getattr(self, handler_name)(cmd)
         except Exception:
-            engine_logger.exception("命令执行失败: {}", cmd.type)
+            logger.exception("命令执行失败: {}", cmd.type)
         finally:
             if cmd.response_event:
                 cmd.response_event.set()
@@ -290,7 +290,7 @@ class ScheduleEngine:
             self._next_network_check = time.time() + interval
             self._update_status_snapshot()
         except Exception:
-            engine_logger.exception("网络检测异常")
+            logger.exception("网络检测异常")
             self._next_network_check = time.time() + self._monitor_check_interval
 
     def _login_retry_needed(self, now: float) -> bool:
@@ -323,7 +323,7 @@ class ScheduleEngine:
             return
 
         # 回退：旧的独立线程登录（_task_executor 未注入时）
-        def _login_thread():
+        def _do_login():
             try:
                 config = self._copy_runtime_config()
                 pure_mode = self.pure_mode
@@ -352,15 +352,15 @@ class ScheduleEngine:
                         self._monitor_core.update_status_after_login(
                             False, result.error or ""
                         )
-            except Exception as e:
-                engine_logger.exception("异步登录异常")
+            except Exception as exc:
+                logger.exception("异步登录异常")
                 if self._monitor_core:
-                    self._monitor_core.update_status_after_login(False, str(e))
+                    self._monitor_core.update_status_after_login(False, str(exc))
             finally:
                 self._login_in_progress.clear()
                 self._update_status_snapshot()
 
-        threading.Thread(target=_login_thread, daemon=True).start()
+        threading.Thread(target=_do_login, daemon=True).start()
 
     def _get_retry_config(self) -> tuple[int, list[int]]:
         """获取登录重试配置。"""
@@ -445,7 +445,7 @@ class ScheduleEngine:
         self._reload_config_internal()
         if was_monitoring:
             self._handle_start(EngineCommand(type=EngineCmdType.START))
-        engine_logger.info("配置已从 settings.json 重载")
+        logger.info("配置已从 settings.json 重载")
 
     def _handle_apply_profile(self, cmd: EngineCommand) -> None:
         """切换方案并重启监控（仅在引擎线程中调用）。"""
@@ -496,7 +496,7 @@ class ScheduleEngine:
     def _update_status_snapshot(self) -> None:
         """Read monitor_core state into lock-free StatusSnapshot."""
         now = time.time()
-        if now - self._last_snapshot_time < self._SNAPSHOT_MIN_INTERVAL:
+        if now - self._last_snapshot_time < self._snapshot_min_interval:
             return
         self._last_snapshot_time = now
 
@@ -519,7 +519,7 @@ class ScheduleEngine:
                     network_state=network_state,
                 )
             except Exception:
-                engine_logger.exception("状态快照更新失败")
+                logger.exception("状态快照更新失败")
         else:
             self._status_snapshot = StatusSnapshot(
                 snapshot_time=time.time(), status_detail="已停止"
@@ -535,7 +535,7 @@ class ScheduleEngine:
                 {"type": "status", "data": status.model_dump()}
             )
         except Exception:
-            engine_logger.exception("状态广播队列失败")
+            logger.exception("状态广播队列失败")
 
     # ── WebSocket 排空（主事件循环）──
 
@@ -553,7 +553,7 @@ class ScheduleEngine:
             except asyncio.CancelledError:
                 break
             except Exception:
-                engine_logger.exception("WS 排空循环异常")
+                logger.exception("WS 排空循环异常")
 
     async def drain_ws_queue(self) -> None:
         """Flush pending WS broadcast messages to WebSocket clients."""
@@ -569,14 +569,14 @@ class ScheduleEngine:
 
                     await self._ws_manager.broadcast(_json.dumps(data))
             except Exception:
-                engine_logger.exception("WS 广播发送失败")
+                logger.exception("WS 广播发送失败")
 
     # ── 公共 API（监控 — 从 API 线程 / main.py 调用）──
 
     def boot(self) -> None:
         # --no-auto 启动标志：跳过 login_then_exit 和 auto_start，用于恢复设置
         if os.environ.pop("CAMPUS_AUTH_NO_AUTO", None):
-            engine_logger.info("--no-auto 模式：跳过自动启动监控")
+            logger.info("--no-auto 模式：跳过自动启动监控")
             return
 
         # WS drain loop 由 main.py lifespan 统一启动和管理生命周期
@@ -637,7 +637,7 @@ class ScheduleEngine:
                 self._profile_service, data=data
             )
             if has_decrypt_error:
-                engine_logger.warning("配置重载时部分密码解密失败")
+                logger.warning("配置重载时部分密码解密失败")
             self._runtime_config = build_runtime_config(
                 runtime_payload,
                 data.system,
@@ -663,11 +663,11 @@ class ScheduleEngine:
             response_event=threading.Event(),
         )
         if not self._enqueue(cmd):
-            engine_logger.warning("配置重载失败：队列已满")
+            logger.warning("配置重载失败：队列已满")
             return
         # 等待消费者完成（最多 30 秒，避免无限阻塞 API 线程）
         if not cmd.response_event.wait(timeout=30):
-            engine_logger.warning("配置重载超时（30s），引擎线程可能繁忙")
+            logger.warning("配置重载超时（30s），引擎线程可能繁忙")
 
     def apply_profile(self, profile_id: str) -> None:
         """切换到新方案：停止监控 → 重载配置 → 重启监控。
@@ -680,14 +680,14 @@ class ScheduleEngine:
             response_event=threading.Event(),
         )
         if not self._enqueue(cmd):
-            engine_logger.warning("方案切换失败：队列已满")
+            logger.warning("方案切换失败：队列已满")
             return
         # 等待消费者完成（最多 30 秒）
         if not cmd.response_event.wait(timeout=30):
-            engine_logger.warning("方案切换超时（30s），引擎线程可能繁忙")
+            logger.warning("方案切换超时（30s），引擎线程可能繁忙")
 
     def start_monitoring(self) -> tuple[bool, str]:
-        engine_logger.debug("收到启动监控请求")
+        logger.debug("收到启动监控请求")
         with self._start_stop_lock:
             if self._is_monitoring:
                 return False, "监控已在运行中"
@@ -702,7 +702,7 @@ class ScheduleEngine:
             return True, "监控已启动"
 
     def stop_monitoring(self) -> tuple[bool, str]:
-        engine_logger.debug("收到停止监控请求")
+        logger.debug("收到停止监控请求")
         with self._start_stop_lock:
             if not self._is_monitoring:
                 return False, "监控未运行"
@@ -738,7 +738,7 @@ class ScheduleEngine:
         if self._engine_thread and self._engine_thread.is_alive():
             self._engine_thread.join(timeout=1)
 
-        engine_logger.info("引擎服务已关闭")
+        logger.info("引擎服务已关闭")
 
     def get_status(self) -> MonitorStatusResponse:
         """Lock-free status read directly from StatusSnapshot."""
@@ -766,7 +766,7 @@ class ScheduleEngine:
             self._login_in_progress.set()
         cmd_in_queue = False
         try:
-            engine_logger.debug("收到手动登录请求")
+            logger.debug("收到手动登录请求")
 
             cmd = EngineCommand(
                 type=EngineCmdType.LOGIN,
@@ -790,7 +790,7 @@ class ScheduleEngine:
             # 超时：检查引擎线程是否存活
             # 如果引擎线程已死，主动清除标志位（防止永久卡住）
             if not self._engine_thread.is_alive():
-                engine_logger.error("引擎线程已退出，主动清除 _login_in_progress")
+                logger.error("引擎线程已退出，主动清除 _login_in_progress")
                 self._login_in_progress.clear()
             return False, "手动登录超时"
 
@@ -798,15 +798,15 @@ class ScheduleEngine:
         if success:
             # network_state 已由消费者 _handle_login 统一赋值，无需 API 线程操作
             self._update_status_snapshot()
-            engine_logger.info("手动登录成功")
+            logger.info("手动登录成功")
             return True, f"手动登录成功：{message}"
 
         log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
-        engine_logger.warning("手动登录失败: {}", log_msg)
+        logger.warning("手动登录失败: {}", log_msg)
         return False, f"手动登录失败：{message}"
 
     def test_network(self) -> tuple[bool, str]:
-        engine_logger.debug("手动网络测试")
+        logger.debug("手动网络测试")
         config = self._copy_runtime_config()
         monitor_cfg = config.get("monitor", {})
         targets = monitor_cfg.get("ping_targets", [])
@@ -827,21 +827,21 @@ class ScheduleEngine:
             "network",
         )
         try:
-            ok = is_network_available(
+            is_available = is_network_available(
                 test_sites=test_sites if test_sites else None,
                 timeout=2,
                 enable_tcp=enable_tcp,
                 enable_http=enable_http,
                 url_checks=url_checks if url_checks else None,
             )
-            if ok:
+            if is_available:
                 self.record_log("手动测试结果: 网络正常", "INFO", "network")
                 return True, "网络连接正常"
             else:
                 self.record_log("手动测试结果: 网络异常", "WARNING", "network")
                 return False, "网络连接异常"
         except Exception as exc:
-            engine_logger.exception("网络测试失败")
+            logger.exception("网络测试失败")
             self.record_log(f"手动测试异常: {exc}", "ERROR", "network")
             return False, f"网络测试失败: {exc}"
 
@@ -887,9 +887,9 @@ class ScheduleEngine:
             return
         self._scheduler_running = True
         self._next_schedule_tick = (int(time.time() // 60) * 60) + 60
-        engine_logger.info("定时任务调度器已启动")
+        logger.info("定时任务调度器已启动")
 
     def stop_scheduler(self) -> None:
         """停止定时任务调度。"""
         self._scheduler_running = False
-        engine_logger.info("定时任务调度器已停止")
+        logger.info("定时任务调度器已停止")
