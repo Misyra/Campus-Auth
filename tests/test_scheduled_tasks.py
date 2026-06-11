@@ -7,7 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.scheduled_task import MAX_HISTORY_SIZE, ScheduledTaskService
+from app.services.scheduled_task import ScheduledTaskService
+from app.services.task_registry import MAX_HISTORY_SIZE, TaskHistoryStore
 from app.services.task_executor import TaskExecutor
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
 from app.tasks import TaskManager
@@ -27,7 +28,6 @@ def scheduler(project_root):
     return ScheduledTaskService(
         project_root,
         task_manager=task_manager,
-        worker_getter=lambda: None,
     )
 
 
@@ -207,24 +207,6 @@ class TestMaxHistorySize:
 
 
 # =====================================================================
-# ScheduledTaskService._validate_task_id
-# =====================================================================
-
-
-class TestValidateTaskId:
-    def test_valid_ids(self):
-        assert ScheduledTaskService._validate_task_id("my_task") is True
-        assert ScheduledTaskService._validate_task_id("task123") is True
-        assert ScheduledTaskService._validate_task_id("A") is True
-
-    def test_invalid_ids(self):
-        assert ScheduledTaskService._validate_task_id("") is False
-        assert ScheduledTaskService._validate_task_id("123bad") is False
-        assert ScheduledTaskService._validate_task_id("my-task") is False
-        assert ScheduledTaskService._validate_task_id("my task") is False
-
-
-# =====================================================================
 # ScheduledTaskService CRUD 补充
 # =====================================================================
 
@@ -236,7 +218,6 @@ class TestScheduleEngineCRUD:
         return ScheduledTaskService(
             tmp_path,
             task_manager=task_manager,
-            worker_getter=lambda: None,
         )
 
     def test_list_tasks_empty(self, scheduler: ScheduledTaskService):
@@ -376,7 +357,6 @@ class TestSchedulerHistory:
         return ScheduledTaskService(
             tmp_path,
             task_manager=task_manager,
-            worker_getter=lambda: None,
         )
 
     def test_add_history_creates_file(
@@ -430,48 +410,3 @@ class TestSchedulerHistory:
             assert "duration" in entry
 
 
-# =====================================================================
-# start / stop
-# =====================================================================
-
-
-class TestSchedulerStartStop:
-    def test_scheduler_running_always_false(self, tmp_path: Path):
-        """调度状态已迁移至 Engine，scheduler_running 始终返回 False。"""
-        task_manager = TaskManager(tmp_path / "tasks")
-        scheduler = ScheduledTaskService(
-            tmp_path,
-            task_manager=task_manager,
-            worker_getter=lambda: None,
-        )
-        assert scheduler.scheduler_running is False
-
-    def test_start_scheduler_is_noop(self, tmp_path: Path):
-        """start_scheduler 是空操作，不改变 scheduler_running。"""
-        task_manager = TaskManager(tmp_path / "tasks")
-        scheduler = ScheduledTaskService(
-            tmp_path,
-            task_manager=task_manager,
-            worker_getter=lambda: None,
-        )
-        scheduler.start_scheduler()
-        assert scheduler.scheduler_running is False
-
-    def test_double_start_no_error(self, tmp_path: Path):
-        task_manager = TaskManager(tmp_path / "tasks")
-        scheduler = ScheduledTaskService(
-            tmp_path,
-            task_manager=task_manager,
-            worker_getter=lambda: None,
-        )
-        scheduler.start_scheduler()
-        scheduler.start_scheduler()  # 不应抛异常
-
-    def test_stop_when_not_running(self, tmp_path: Path):
-        task_manager = TaskManager(tmp_path / "tasks")
-        scheduler = ScheduledTaskService(
-            tmp_path,
-            task_manager=task_manager,
-            worker_getter=lambda: None,
-        )
-        scheduler.stop_scheduler()  # 不应抛异常

@@ -178,15 +178,6 @@ def client(tmp_path):
         mock_services.engine.tasks.delete_task.return_value = (True, "删除成功")
         mock_services.engine.tasks.get_history.return_value = []
 
-        # ── scheduled_task_service ──
-        mock_services.scheduled_task_service = MagicMock()
-        mock_services.scheduled_task_service.list_tasks.return_value = []
-        mock_services.scheduled_task_service.get_task.return_value = None
-        mock_services.scheduled_task_service.save_task.return_value = (True, "保存成功")
-        mock_services.scheduled_task_service.delete_task.return_value = (True, "删除成功")
-        mock_services.scheduled_task_service.get_history.return_value = []
-        mock_services.scheduled_task_service.execute_task.return_value = (True, "执行成功")
-
         # ── ws_manager ──
         mock_services.ws_manager = MagicMock()
 

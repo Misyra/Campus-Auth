@@ -108,10 +108,6 @@ class ServiceContainer:
         return self.engine
 
     @property
-    def scheduler_service(self) -> ScheduleEngine:
-        return self.engine
-
-    @property
     def debug_manager(self):
         """延迟初始化 DebugSessionManager（避免轻量模式加载 FastAPI）。"""
         if self._debug_manager is None:

@@ -124,10 +124,6 @@ class TestInit:
         """TaskService 应以 project_root 构造。"""
         mock_classes["TaskService"].assert_called_once_with(project_root)
 
-    def test_scheduler_service_is_engine_alias(self, container):
-        """scheduler_service 属性应返回 engine 实例。"""
-        assert container.scheduler_service is container.engine
-
     def test_autostart_service_created(self, container, project_root, mock_classes):
         """AutoStartService 应以 project_root 构造。"""
         mock_classes["AutoStartService"].assert_called_once_with(project_root)
@@ -144,7 +140,6 @@ class TestInit:
         assert hasattr(container, "login_history_service")
         assert hasattr(container, "engine")
         assert hasattr(container, "monitor_service")  # 向后兼容别名
-        assert hasattr(container, "scheduler_service")  # 向后兼容别名
         assert hasattr(container, "scheduled_task_service")
         assert hasattr(container, "task_service")
         assert hasattr(container, "autostart_service")
