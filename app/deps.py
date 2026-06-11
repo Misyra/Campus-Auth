@@ -6,11 +6,11 @@ from fastapi import Request
 
 from app.container import ServiceContainer
 from app.services.autostart import AutoStartService
-from app.services.debug import DebugSessionManager
+from app.services.debug_service import DebugSessionManager
 from app.services.engine import ScheduleEngine
-from app.services.login_history import LoginHistoryService
-from app.services.profile import ProfileService
-from app.services.task import TaskService
+from app.services.login_history_service import LoginHistoryService
+from app.services.profile_service import ProfileService
+from app.services.task_service import TaskService
 
 
 def get_services(request: Request) -> ServiceContainer:

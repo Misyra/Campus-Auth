@@ -5,6 +5,18 @@
 
 ## 2026-06-11
 
+### refactor: 统一 utils 文件命名
+
+去掉 `platform_utils`、`file_helpers`、`network_helpers` 的冗余后缀，统一风格。`time_utils` 因与 stdlib `time` 冲突保留不变。
+
+**修改内容：**
+- `app/utils/platform_utils.py` → `app/utils/platform.py`
+- `app/utils/file_helpers.py` → `app/utils/files.py`
+- `app/utils/network_helpers.py` → `app/utils/network.py`
+- 更新全部 import 路径（含 `from app.utils.xxx` 和 `from .xxx` 两种写法）
+- 更新测试中的 mock patch 字符串和注释
+- 涉及 26 个文件
+
 ### refactor: 合并 utils/config.py + config_helpers.py → config_utils.py
 
 将两个配置工具文件合并为一个 `utils/config_utils.py`，减少文件碎片。

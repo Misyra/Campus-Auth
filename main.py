@@ -159,7 +159,7 @@ def _run_login_then_exit(logger) -> None:
 
     # 加载配置
     try:
-        from app.services.profile import ProfileService
+        from app.services.profile_service import ProfileService
 
         ps = ProfileService(Path(__file__).parent.resolve())
         data = ps.load()
@@ -329,7 +329,7 @@ def _run_server(
     # 读取系统设置
     auto_open_browser = None
     try:
-        from app.services.profile import ProfileService
+        from app.services.profile_service import ProfileService
 
         _ps = ProfileService(Path(__file__).parent.resolve())
         _sys_settings = _ps.load().system

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.deps import get_monitor_service, get_profile_service
 from app.schemas import ActionResponse, ProfileSettings
 from app.services.engine import ScheduleEngine
-from app.services.profile import ProfileService
+from app.services.profile_service import ProfileService
 from app.utils.logging import get_logger
 
 router = APIRouter()

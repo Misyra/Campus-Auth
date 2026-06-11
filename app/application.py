@@ -325,7 +325,7 @@ def run(
     if access_log_enabled is None or log_retention is None:
         # 调用方未传入日志配置，从 settings.json 读取
         try:
-            from app.services.profile import ProfileService
+            from app.services.profile_service import ProfileService
 
             profile_service = ProfileService(PROJECT_ROOT)
             sys_settings = profile_service.load().system

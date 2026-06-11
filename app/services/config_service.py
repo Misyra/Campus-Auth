@@ -19,7 +19,7 @@ from app.utils.crypto import decrypt_password, mask_password, save_password_fiel
 from app.utils.exceptions import DecryptionError
 from app.utils.logging import get_logger, normalize_level
 
-from .profile import ProfileService
+from .profile_service import ProfileService
 
 config_logger = get_logger("config_service", source="backend")
 

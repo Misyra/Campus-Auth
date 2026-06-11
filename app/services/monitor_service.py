@@ -17,7 +17,7 @@ from app.utils import get_logger
 from app.utils.network import parse_ping_targets
 
 if TYPE_CHECKING:
-    from app.services.profile import ProfileService
+    from app.services.profile_service import ProfileService
 
 
 class NetworkState(str, Enum):

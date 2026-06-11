@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 
 from app.deps import get_debug_manager, get_monitor_service
-from app.services.debug import DebugSessionManager
+from app.services.debug_service import DebugSessionManager
 from app.services.engine import ScheduleEngine
 
 router = APIRouter()

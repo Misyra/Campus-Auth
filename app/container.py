@@ -10,9 +10,9 @@ from pathlib import Path
 from app.services.autostart import AutoStartService
 from app.services.config_provider import RuntimeConfigProvider
 from app.services.engine import ScheduleEngine
-from app.services.login_history import LoginHistoryService
-from app.services.profile import ProfileService
-from app.services.task import TaskService
+from app.services.login_history_service import LoginHistoryService
+from app.services.profile_service import ProfileService
+from app.services.task_service import TaskService
 from app.services.task_executor import TaskExecutor
 from app.services.task_facade import TaskFacade
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
@@ -100,7 +100,7 @@ class ServiceContainer:
     def debug_manager(self):
         """延迟初始化 DebugSessionManager（避免轻量模式加载 FastAPI）。"""
         if self._debug_manager is None:
-            from app.services.debug import DebugSessionManager
+            from app.services.debug_service import DebugSessionManager
 
             self._debug_manager = DebugSessionManager(self.project_root)
         return self._debug_manager

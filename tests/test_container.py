@@ -35,7 +35,7 @@ def mock_classes():
         patch("app.container.TaskHistoryStore") as mock_ths_cls,
         patch("app.container.TaskExecutor") as mock_te_cls,
         patch("app.container.TaskFacade") as mock_tf_cls,
-        patch("app.services.debug.DebugSessionManager") as mock_debug_cls,
+        patch("app.services.debug_service.DebugSessionManager") as mock_debug_cls,
     ):
         yield {
             "WebSocketManager": mock_ws_cls,
