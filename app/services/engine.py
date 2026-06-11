@@ -66,6 +66,8 @@ class EngineCmdType(StrEnum):
     STOP = "stop"
     LOGIN = "login"
     SHUTDOWN = "shutdown"
+    RELOAD = "reload"
+    APPLY_PROFILE = "apply_profile"
 
 
 @dataclass
@@ -119,6 +121,8 @@ class ScheduleEngine:
 
         # DashboardSink — 由 container.startup 注入
         self._dashboard_sink = None
+        # 固定的空广播队列，避免轻量模式下每次创建临时对象
+        self._empty_broadcast_queue: deque = deque(maxlen=200)
 
         # 锁（必须在 _reload_config_internal 之前初始化）
         self._login_lock: threading.Lock = threading.Lock()
@@ -194,6 +198,8 @@ class ScheduleEngine:
         EngineCmdType.START: "_handle_start",
         EngineCmdType.STOP: "_handle_stop",
         EngineCmdType.LOGIN: "_handle_login",
+        EngineCmdType.RELOAD: "_handle_reload",
+        EngineCmdType.APPLY_PROFILE: "_handle_apply_profile",
     }
 
     def _queue_consumer(self) -> None:
@@ -367,6 +373,50 @@ class ScheduleEngine:
             if cmd.response_event:
                 cmd.response_event.set()
 
+    def _handle_reload(self, cmd: EngineCommand) -> None:
+        """重载配置并重启监控（仅在消费者线程中调用）。"""
+        was_monitoring = self._is_monitoring
+        if was_monitoring:
+            self._handle_stop()
+        self._reload_config_internal()
+        if was_monitoring:
+            self._handle_start(EngineCommand(type=EngineCmdType.START))
+        engine_logger.info("配置已从 settings.json 重载")
+
+    def _handle_apply_profile(self, cmd: EngineCommand) -> None:
+        """切换方案并重启监控（仅在消费者线程中调用）。"""
+        profile_id = cmd.data.get("profile_id", "")
+        was_monitoring = self._is_monitoring
+        if was_monitoring:
+            self._handle_stop()
+
+        # 重载配置（方案已由 API 路由持久化，此处重新读取）
+        self._reload_config_internal()
+
+        # 解析可读名称用于日志
+        try:
+            data = self._profile_service.load()
+            profile = data.profiles.get(profile_id)
+            display_name = profile.name if profile else profile_id
+        except Exception:
+            display_name = profile_id
+
+        new_url = self._runtime_config.get("auth_url", "")
+        new_user = self._runtime_config.get("username", "")
+        self.record_log(
+            f"切换方案 -> {display_name} (认证={new_url}, 用户={new_user})",
+            level="INFO",
+            source="backend",
+        )
+
+        if was_monitoring:
+            self._handle_start(EngineCommand(type=EngineCmdType.START))
+            self.record_log(
+                "监控正在按新方案重启",
+                level="INFO",
+                source="backend",
+            )
+
     # ── 日志 / 状态快照桥接 ──
 
     def record_log(
@@ -492,8 +542,7 @@ class ScheduleEngine:
     def ws_broadcast_queue(self) -> deque:
         """WS 广播队列（从 DashboardSink 获取）。"""
         if self._dashboard_sink is None:
-            engine_logger.debug("DashboardSink 未注册，广播消息被丢弃")
-            return deque(maxlen=200)
+            return self._empty_broadcast_queue
         return self._dashboard_sink.broadcast_queue
 
     @property
@@ -532,44 +581,35 @@ class ScheduleEngine:
         return copy.deepcopy(self._runtime_config)
 
     def reload_config(self) -> None:
-        """重新加载配置并重启监控（如果正在运行）。"""
-        was_monitoring = self._is_monitoring
-        if was_monitoring:
-            self._handle_stop()
-        self._reload_config_internal()
-        if was_monitoring:
-            self._enqueue(EngineCommand(type=EngineCmdType.START))
-        engine_logger.info("配置已从 settings.json 重载")
+        """重新加载配置并重启监控（如果正在运行）。
+
+        通过队列派发到消费者线程执行，确保线程安全。
+        """
+        cmd = EngineCommand(
+            type=EngineCmdType.RELOAD,
+            response_event=threading.Event(),
+        )
+        if not self._enqueue(cmd):
+            engine_logger.warning("配置重载失败：队列已满")
+            return
+        # 等待消费者完成（最多 30 秒，避免无限阻塞 API 线程）
+        cmd.response_event.wait(timeout=30)
 
     def apply_profile(self, profile_id: str) -> None:
-        """切换到新方案：停止监控 → 重载配置 → 重启监控。"""
-        was_monitoring = self._is_monitoring
-        if was_monitoring:
-            self._handle_stop()
+        """切换到新方案：停止监控 → 重载配置 → 重启监控。
 
-        # 解析可读名称用于日志，ID 作为 fallback
-        try:
-            data = self._profile_service.load()
-            profile = data.profiles.get(profile_id)
-            display_name = profile.name if profile else profile_id
-        except Exception:
-            display_name = profile_id
-
-        new_url = self._runtime_config.get("auth_url", "")
-        new_user = self._runtime_config.get("username", "")
-        self.record_log(
-            f"切换方案 -> {display_name} (认证={new_url}, 用户={new_user})",
-            level="INFO",
-            source="backend",
+        通过队列派发到消费者线程执行，确保线程安全。
+        """
+        cmd = EngineCommand(
+            type=EngineCmdType.APPLY_PROFILE,
+            data={"profile_id": profile_id},
+            response_event=threading.Event(),
         )
-
-        if was_monitoring:
-            self._enqueue(EngineCommand(type=EngineCmdType.START))
-            self.record_log(
-                "监控正在按新方案重启",
-                level="INFO",
-                source="backend",
-            )
+        if not self._enqueue(cmd):
+            engine_logger.warning("方案切换失败：队列已满")
+            return
+        # 等待消费者完成（最多 30 秒）
+        cmd.response_event.wait(timeout=30)
 
     def start_monitoring(self) -> tuple[bool, str]:
         engine_logger.debug("收到启动监控请求")
@@ -598,28 +638,17 @@ class ScheduleEngine:
 
     def shutdown(self) -> None:
         """完全关闭 ScheduleEngine：停止监控 + 停止调度器 + 终止消费者线程。"""
-        # 停止调度器
-        self.stop_scheduler()
+        # 停止调度器（不等待任务线程，守护线程会自行退出）
+        if self._scheduler_running:
+            self._scheduler_running = False
+            self._scheduler_stop_event.set()
 
-        # 通过队列发送 stop 命令（消费者执行 _handle_stop 后设置 response_event）
-        try:
-            cmd = EngineCommand(
-                type=EngineCmdType.STOP, response_event=threading.Event()
-            )
-            self._cmd_queue.put(cmd, timeout=3)
-            cmd.response_event.wait(timeout=MONITOR_STOP_TIMEOUT_S)
-        except queue.Full:
-            # 队列满时不直接调用 _handle_stop()（仅限消费者线程），
-            # 而是直接停止监控核心并等待监控线程结束
-            if self._monitor_core is not None:
-                with contextlib.suppress(Exception):
-                    self._monitor_core.stop_monitoring()
-            if self._monitor_thread is not None and self._monitor_thread.is_alive():
-                self._thread_done.wait(timeout=MONITOR_STOP_TIMEOUT_S)
-                if self._monitor_thread.is_alive():
-                    self._monitor_thread.join(timeout=1)
-            self._monitor_core = None
-            self._monitor_thread = None
+        # 直接停止监控核心（不等待 response，避免阻塞）
+        if self._monitor_core is not None:
+            with contextlib.suppress(Exception):
+                self._monitor_core.stop_monitoring()
+        self._monitor_core = None
+        self._monitor_thread = None
 
         # 设置关闭事件，通知消费者线程退出循环
         self._shutdown_event.set()
@@ -628,9 +657,9 @@ class ScheduleEngine:
         with contextlib.suppress(queue.Full):
             self._cmd_queue.put_nowait(EngineCommand(type=EngineCmdType.SHUTDOWN))
 
-        # 等待消费者线程结束
+        # 短超时等待，不阻塞（守护线程会随进程退出）
         if self._consumer_thread and self._consumer_thread.is_alive():
-            self._consumer_thread.join(timeout=5)
+            self._consumer_thread.join(timeout=1)
 
         engine_logger.info("引擎服务已关闭")
 
