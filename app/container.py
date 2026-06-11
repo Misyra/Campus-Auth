@@ -8,11 +8,15 @@ import shutil
 from pathlib import Path
 
 from app.services.autostart import AutoStartService
+from app.services.config_provider import RuntimeConfigProvider
 from app.services.engine import ScheduleEngine
 from app.services.login_history import LoginHistoryService
 from app.services.profile import ProfileService
 from app.services.scheduled_task import ScheduledTaskService
 from app.services.task import TaskService
+from app.services.task_executor import TaskExecutor
+from app.services.task_facade import TaskFacade
+from app.services.task_registry import TaskHistoryStore, TaskRegistry
 from app.utils.logging import DashboardSink, get_logger
 from app.ws_manager import WebSocketManager
 
@@ -39,15 +43,41 @@ class ServiceContainer:
         self.autostart_service = AutoStartService(project_root)
         self._debug_manager = None  # 延迟初始化，避免轻量模式加载 FastAPI
 
-        # 定时任务服务（先于 engine 创建，engine 需要引用它）
-        self.scheduled_task_service = ScheduledTaskService(
-            project_root,
-            task_manager=self.task_service.task_manager,
+        # 配置提供者
+        self.config_provider = RuntimeConfigProvider(self.profile_service)
+
+        # 定时任务注册中心
+        self.task_registry = TaskRegistry(project_root / "tasks" / "scheduled")
+        self.task_history_store = TaskHistoryStore(
+            project_root / "tasks" / "scheduled" / "history"
+        )
+
+        # 任务执行器（双线程池）
+        self.task_executor = TaskExecutor(
+            registry=self.task_registry,
+            history_store=self.task_history_store,
             worker_getter=lambda: __import__(
                 "app.workers.playwright_worker", fromlist=["get_worker"]
             ).get_worker(),
             login_history=self.login_history_service,
             profile_service=self.profile_service,
+            get_runtime_config=self.config_provider.get_runtime_config,
+        )
+
+        # 任务 Facade
+        self.task_facade = TaskFacade(
+            registry=self.task_registry,
+            executor=self.task_executor,
+            history_store=self.task_history_store,
+        )
+
+        # 向后兼容：ScheduledTaskService 委托层
+        self.scheduled_task_service = ScheduledTaskService(
+            project_root,
+            registry=self.task_registry,
+            executor=self.task_executor,
+            history_store=self.task_history_store,
+            task_manager=self.task_service.task_manager,
         )
 
         # 统一引擎（替代 MonitorService + SchedulerService）
@@ -60,11 +90,6 @@ class ServiceContainer:
                 "app.workers.playwright_worker", fromlist=["get_worker"]
             ).get_worker(),
             scheduled_task_service=self.scheduled_task_service,
-        )
-
-        # 延迟设置 get_runtime_config（engine 需要在之后创建）
-        self.scheduled_task_service._get_runtime_config = (
-            lambda: self.engine.get_runtime_config()
         )
 
         self._ws_drain_task: asyncio.Task | None = None
@@ -100,8 +125,8 @@ class ServiceContainer:
         cleanup_orphan_browsers()
         self.start_web_services()
         self.engine.boot()
-        if self.scheduled_task_service.has_enabled_tasks():
-            self.scheduled_task_service.start_scheduler()
+        if self.task_registry.has_enabled_tasks():
+            self.engine.start_scheduler()
         container_logger.info("服务容器启动完成")
 
     def start_web_services(self):
@@ -167,6 +192,8 @@ class ServiceContainer:
             self._ws_drain_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._ws_drain_task
+
+        self.task_executor.shutdown(wait=False)
 
         self.engine.shutdown()
 
