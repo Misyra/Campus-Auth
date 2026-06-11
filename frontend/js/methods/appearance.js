@@ -1,4 +1,5 @@
 import { DEFAULT_APPEARANCE, ACCENT_COLORS, BG_COLORS, LIMITS } from '../constants.js';
+import { pickFile } from './utils.js';
 
 export const appearanceMethods = {
   // 保存外观设置
@@ -157,39 +158,30 @@ export const appearanceMethods = {
 
   // 选择背景图片（上传到服务器）
   async selectBackgroundImage() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
+    const file = await pickFile('image/*');
+    if (!file) return;
 
-    input.onchange = async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
+    if (file.size > LIMITS.FILE_UPLOAD_MAX) {
+      this.toastOnly(false, '图片大小不能超过 5MB');
+      return;
+    }
 
-      if (file.size > LIMITS.FILE_UPLOAD_MAX) {
-        this.toastOnly(false, '图片大小不能超过 5MB');
-        return;
-      }
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
 
-      try {
-        // 上传到服务器
-        const formData = new FormData();
-        formData.append('file', file);
+      const { data } = await this.$api.post('/api/background/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
 
-        const { data } = await this.$api.post('/api/background/upload', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-
-        this.appearance.background_url = data.url;
-        this.appearance.background_filename = data.filename;
-        this.applyAppearance();
-        this.toastOnly(true, '背景图片已设置');
-      } catch (err) {
-        console.error('上传背景图片失败:', err);
-        this.toastOnly(false, '上传失败: ' + (err.response?.data?.detail || err.message));
-      }
-    };
-
-    input.click();
+      this.appearance.background_url = data.url;
+      this.appearance.background_filename = data.filename;
+      this.applyAppearance();
+      this.toastOnly(true, '背景图片已设置');
+    } catch (err) {
+      console.error('上传背景图片失败:', err);
+      this.toastOnly(false, '上传失败: ' + (err.response?.data?.detail || err.message));
+    }
   },
 
   // 打开随机壁纸对话框

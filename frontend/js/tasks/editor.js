@@ -1,4 +1,4 @@
-import { extractApiError } from '../methods/utils.js';
+import { extractApiError, pickFile } from '../methods/utils.js';
 
 export const editorTaskMethods = {
   async showTaskEditor(taskId) {
@@ -164,43 +164,34 @@ export const editorTaskMethods = {
       this.toastOnly(false, '导出失败');
     }
   },
-  importTask() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        try {
-          const data = JSON.parse(ev.target.result);
-          let id = file.name.replace(/\.json$/, '').replace(/[^A-Za-z0-9_]/g, '_');
-          // 确保 ID 以字母开头（HTML ID 规范）
-          if (/^[0-9]/.test(id)) {
-            id = 'task_' + id;
-          }
-          this.editingTask = {
-            id: id,
-            name: data.name || '',
-            description: data.description || '',
-            url: data.url || '',
-            json: JSON.stringify(data, null, 2),
-            _isNew: true,
-          };
-          this.jsonError = '';
-          this.currentPage = 'tasks';
-          this.frontendLogger.info('tasks', '已导入任务配置，请检查后保存');
-        } catch (e) {
-          this.frontendLogger.warn('tasks', '导入失败: 文件不是有效 JSON: ' + e.message);
-          this.toastOnly(false, '文件不是有效的 JSON');
+  async importTask() {
+    const file = await pickFile('.json');
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        let id = file.name.replace(/\.json$/, '').replace(/[^A-Za-z0-9_]/g, '_');
+        if (/^[0-9]/.test(id)) {
+          id = 'task_' + id;
         }
-        input.value = '';
-        input.onchange = null;
-      };
-      reader.readAsText(file);
+        this.editingTask = {
+          id: id,
+          name: data.name || '',
+          description: data.description || '',
+          url: data.url || '',
+          json: JSON.stringify(data, null, 2),
+          _isNew: true,
+        };
+        this.jsonError = '';
+        this.currentPage = 'tasks';
+        this.frontendLogger.info('tasks', '已导入任务配置，请检查后保存');
+      } catch (e) {
+        this.frontendLogger.warn('tasks', '导入失败: 文件不是有效 JSON: ' + e.message);
+        this.toastOnly(false, '文件不是有效的 JSON');
+      }
     };
-    input.click();
+    reader.readAsText(file);
   },
 
   async fetchPureMode() {
