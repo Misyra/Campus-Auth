@@ -21,7 +21,7 @@ from app.schemas import (
     ProfileSettings,
     SystemSettings,
 )
-from app.services.config import (
+from app.services.config_service import (
     _decrypt_password_field,
     _normalize_headers_json,
     _normalize_targets,
@@ -765,7 +765,7 @@ class TestDecryptPasswordField:
         """ENC: 前缀密码解密。"""
         from unittest.mock import patch
 
-        with patch("app.services.config.decrypt_password", return_value="secret"):
+        with patch("app.services.config_service.decrypt_password", return_value="secret"):
             result, has_error = _decrypt_password_field("ENC:encrypted")
             assert result == "secret"
             assert has_error is False
@@ -774,7 +774,7 @@ class TestDecryptPasswordField:
         """掩码密码使用回退。"""
         from unittest.mock import patch
 
-        with patch("app.services.config.decrypt_password", return_value="fallback"):
+        with patch("app.services.config_service.decrypt_password", return_value="fallback"):
             result, has_error = _decrypt_password_field(
                 "••••••••", "ENC:fallback_encrypted"
             )

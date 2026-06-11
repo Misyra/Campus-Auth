@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from app.constants import MONITOR_STOP_TIMEOUT
-from app.core.monitor_core import NetworkMonitorCore
+from app.services.monitor_service import NetworkMonitorCore
 from app.network.decision import is_network_available
 from app.schemas import MonitorConfigPayload, MonitorStatusResponse
 from app.utils import ConfigValidator
@@ -628,7 +628,7 @@ class ScheduleEngine:
             return
         # 无 config_provider 时的回退（仅测试场景）
         import copy
-        from .config import build_runtime_config, load_runtime_config, load_ui_config
+        from .config_service import build_runtime_config, load_runtime_config, load_ui_config
 
         with self._reload_lock:
             data = self._profile_service.load()

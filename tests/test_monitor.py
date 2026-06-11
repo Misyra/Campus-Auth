@@ -1,6 +1,6 @@
 """监控与登录模块综合测试
 
-合并原 test_login.py 和 test_monitor_core.py。
+合并原 test_login.py 和 test_monitor_service.py。
 覆盖 LoginAttemptHandler、SCREENSHOT_URL_PATTERN、NetworkMonitorCore 等。
 """
 
@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.core.monitor_core import (
+from app.services.monitor_service import (
     NetworkMonitorCore,
     NetworkState,
 )

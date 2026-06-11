@@ -5,6 +5,25 @@
 
 ## 2026-06-11
 
+### refactor: services/config.py 重命名为 config_service.py
+
+消除 `services/config.py` 和 `utils/config.py` 的命名冲突。
+
+**修改内容：**
+- 重命名 `app/services/config.py` -> `app/services/config_service.py`
+- 更新 import 路径：`main.py`、`app/api/config.py`、`app/services/config_provider.py`、`app/services/engine.py`
+- 更新测试 mock 路径：`tests/test_main.py`、`tests/test_backend_services.py`、`tests/test_config_schemas.py`、`tests/test_monitor_service.py`
+
+### refactor: monitor_core.py 移动到 services/monitor_service.py，删除 core/ 目录
+
+将 `app/core/monitor_core.py` 移动到 `app/services/monitor_service.py`，NetworkMonitorCore 本质是服务层代码。core/ 目录清空后删除。
+
+**修改内容：**
+- 移动 `app/core/monitor_core.py` -> `app/services/monitor_service.py`
+- 删除 `app/core/` 目录（含 `__pycache__`）
+- 更新 import 路径：`app/services/engine.py`、`tests/test_monitor.py`、`tests/test_monitor_service.py`
+- 更新注释引用：`app/constants.py`、`tests/test_monitor.py`
+
 ### refactor: system_tray.py 移动到 ui/system_tray.py
 
 将 `app/core/system_tray.py` 移动到 `app/ui/system_tray.py`，UI 相关代码不应混在 core/ 目录。
