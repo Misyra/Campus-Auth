@@ -5,6 +5,61 @@
 
 ## 2026-06-11
 
+### fix: reload_config/apply_profile 通过队列派发到消费者线程执行
+
+**问题：**
+- `reload_config` 和 `apply_profile` 从 API 线程直接调用 `_handle_stop()`，违反 Actor 模型线程安全约束
+- `shutdown` 方法通过队列发送 stop 命令后等待响应，增加了不必要的复杂度
+
+**修复内容：**
+
+`app/services/engine.py`：
+- `EngineCmdType` 枚举新增 `RELOAD` 和 `APPLY_PROFILE` 两个命令类型
+- `_CMD_ROUTES` 新增对应的处理器映射
+- 新增 `_handle_reload()`：在消费者线程中执行 stop → reload_config_internal → start
+- 新增 `_handle_apply_profile()`：在消费者线程中执行 stop → reload_config_internal → 日志 → start
+- `reload_config()` 改为通过队列派发 RELOAD 命令，等待消费者完成（30s 超时）
+- `apply_profile()` 改为通过队列派发 APPLY_PROFILE 命令，等待消费者完成（30s 超时）
+- `shutdown()` 简化：直接停止监控核心（不等待队列响应），join 超时从 5s 缩短到 1s
+
+### fix: 修复轻量模式退出无提示 + DashboardSink 未注册时重复创建临时对象
+
+**问题 1：退出时无提示**
+- 轻量模式和完整模式下，按 Ctrl+C 退出时没有打印日志提示
+- 轻量模式下在占位服务器阶段退出时，未执行 `container.shutdown()` 清理
+
+**问题 2：DashboardSink 未注册时重复创建临时对象**
+- `ScheduleEngine.ws_broadcast_queue` 属性在 `_dashboard_sink` 为 `None` 时，每次调用都创建新的 `deque(maxlen=200)`
+- 轻量模式下每次状态更新都会触发，产生不必要的 GC 压力
+
+**修复内容：**
+
+`app/services/engine.py`：
+- `__init__` 新增 `self._empty_broadcast_queue = deque(maxlen=200)` 固定空队列
+- `ws_broadcast_queue` 属性改为返回 `self._empty_broadcast_queue`，移除 debug 日志
+
+`main.py`：
+- `_run_server` 信号处理器新增 `startup_logger.info("收到退出信号，正在关闭...")`
+- `_run_lightweight` 信号处理器新增 `logger.info("收到退出信号，正在关闭...")`
+- `_run_lightweight` 占位服务器阶段退出时，添加 `container.shutdown()` 清理逻辑
+
+### feat: 恢复轻量模式 — 启动时不加载 FastAPI，按需唤醒
+
+修改 `main.py`，实现轻量模式启动路径。完整模式去掉空闲卸载循环（Python import 不支持真正卸载，内存无法回收），直接启动运行。
+
+**改动内容：**
+
+`main.py`：
+- `_run_server` 新增 `lightweight_mode` 配置读取（从 `SystemSettings.lightweight_mode`）
+- 新增 `_run_lightweight()` 函数：仅启动监控引擎（`container.engine.boot()` + `start_scheduler()`），不加载 FastAPI；用户访问 Web 时通过占位服务器唤醒，创建 FastAPI 并启动 uvicorn；空闲 5 分钟后自动卸载 FastAPI，回到占位服务器等待
+- 完整模式去掉空闲卸载循环（Python import 不支持真正卸载），直接启动运行
+- 轻量模式支持系统托盘、浏览器打开、信号处理，与完整模式行为一致
+
+`app/application.py`：
+- `create_app()` 新增 `idle_timeout` 参数，lifespan 内新增 `_idle_check` 异步任务（轻量模式空闲卸载使用）
+- `run()` 新增 `app_instance` 参数，支持外部传入已创建的 FastAPI 实例
+- lifespan 退出时区分正常关闭（停止全部服务）和空闲卸载（仅停止 Web 服务，引擎继续运行）
+
 ### feat: 轻量模式 + ScheduleEngine 统一架构重构
 
 将 `MonitorService`（707 行）+ `SchedulerService`（524 行）合并为统一的 `ScheduleEngine`（~730 行），支持轻量模式启动。

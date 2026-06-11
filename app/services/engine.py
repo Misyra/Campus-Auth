@@ -710,8 +710,12 @@ class ScheduleEngine:
         cmd.response_event.wait(timeout=login_timeout)
 
         if cmd.response_data is None:
-            # 超时也主动清除，防止消费者线程异常时标志永久残留
-            self._login_in_progress.clear()
+            # 超时：检查消费者线程是否存活
+            # 如果消费者线程已死，主动清除标志位（防止永久卡住）
+            if not self._consumer_thread.is_alive():
+                engine_logger.error("消费者线程已退出，主动清除 _login_in_progress")
+                self._login_in_progress.clear()
+            # 消费者线程仍在运行时，由其 finally 块负责清除
             return False, "手动登录超时"
 
         success, message = cmd.response_data
@@ -847,6 +851,7 @@ class ScheduleEngine:
         file = self._scheduler_tasks_dir / f"{task_id}.json"
         try:
             atomic_write(str(file), json.dumps(config, ensure_ascii=False, indent=2))
+            self._has_enabled_cache = None  # 清除缓存，确保调度器感知变更
             engine_logger.info("定时任务已保存: {}", task_id)
             return True, "定时任务保存成功"
         except Exception as e:
@@ -862,6 +867,7 @@ class ScheduleEngine:
             return False, "定时任务不存在"
         try:
             file.unlink()
+            self._has_enabled_cache = None  # 清除缓存，确保调度器感知变更
             # 同时删除历史记录
             history_file = self._scheduler_history_dir / f"{task_id}.json"
             if history_file.exists():
@@ -1186,22 +1192,21 @@ class ScheduleEngine:
         engine_logger.info("定时任务调度器已停止")
 
     def _scheduler_loop(self) -> None:
-        """调度器主循环，运行在独立守护线程中。"""
+        """调度器主循环，运行在独立守护线程中。
+
+        调度器持续运行直到 stop_scheduler() 被调用，
+        不再因无启用任务而自动退出（避免任务变更后调度器无法响应）。
+        """
         engine_logger.info("调度器循环已启动")
         last_checked_minute = -1
 
         while self._scheduler_running and not self._scheduler_stop_event.is_set():
             try:
-                # 没有启用的任务时自动退出
-                if not self.has_enabled_tasks():
-                    engine_logger.info("没有启用的定时任务，调度器自动退出")
-                    break
-
                 now = datetime.now()
                 current_minute = now.hour * 60 + now.minute
 
-                # 每分钟只检查一次
-                if current_minute != last_checked_minute:
+                # 每分钟只检查一次，且仅在有启用任务时执行
+                if current_minute != last_checked_minute and self.has_enabled_tasks():
                     last_checked_minute = current_minute
                     self._check_and_execute(now)
 
