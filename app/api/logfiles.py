@@ -84,6 +84,21 @@ def _parse_log_line(raw: str) -> LogLine:
     return LogLine(message=raw)
 
 
+def read_tail(
+    filepath: Path,
+    limit: int,
+) -> list[LogLine]:
+    """读取日志文件末尾 N 行（浏览模式）。"""
+    try:
+        with open(filepath, encoding="utf-8", errors="replace") as f:
+            lines = list(deque(f, maxlen=limit))
+    except OSError as err:
+        logger.error("读取日志文件失败: {} — {}", filepath, err)
+        return []
+
+    return [_parse_log_line(raw.rstrip("\n\r")) for raw in lines]
+
+
 def scan_file(
     filepath: Path,
     level: str,

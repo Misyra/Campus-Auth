@@ -5,6 +5,35 @@
 
 ## 2026-06-12
 
+### feat: 添加 scan_file() 函数用于全文扫描日志
+
+在 `app/api/logfiles.py` 中新增 `scan_file()` 函数，用于全文扫描日志文件并返回匹配的行。
+
+**函数签名：**
+- `scan_file(filepath, level, source, search, limit, max_scan_lines=500_000) -> list[LogLine]`
+
+**功能：**
+- 全文扫描日志文件，逐行解析并过滤
+- 支持按级别（level）、来源（source）、关键词（search）过滤
+- 关键词搜索大小写不敏感，搜索范围覆盖 message、name、source 和原始行
+- 限制最大扫描行数为 50 万行，超过时记录 warning 日志
+- 超过 limit 时返回最后 N 条匹配结果
+- 文件读取失败时记录 error 日志并返回空列表
+- 使用 loguru 记录日志
+
+**新增导入：**
+- `from pathlib import Path`
+- `from loguru import logger`
+
+**测试：**
+- `tests/test_api_logfiles_routes.py`：新增 `TestScanFile` 类（4 个测试用例）
+  - `test_scan_file_by_keyword` — 按关键词搜索
+  - `test_scan_file_by_level` — 按级别过滤
+  - `test_scan_file_by_source` — 按来源过滤
+  - `test_scan_file_limit` — 结果数量限制（返回最后 N 条）
+
+**测试结果：** 36 passed
+
 ### fix: 清理 MonitorService 死代码 + 修复 executor 双重关闭
 
 **monitor_service.py：**
