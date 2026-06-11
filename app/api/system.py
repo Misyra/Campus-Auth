@@ -129,30 +129,15 @@ def shutdown_server(
     except Exception:
         api_logger.warning("关闭监控服务失败", exc_info=True)
 
-    # 停止 PlaywrightWorker
-    try:
-        from app.workers.playwright_worker import get_worker
-
-        get_worker().stop(timeout=3)
-    except Exception:
-        api_logger.warning("关闭 PlaywrightWorker 失败", exc_info=True)
-
-    # 清理孤儿浏览器
-    try:
-        from app.workers.playwright_worker import cleanup_orphan_browsers
-
-        cleanup_orphan_browsers()
-    except Exception:
-        api_logger.warning("清理孤儿浏览器失败", exc_info=True)
-
     # 清理 PID 文件
     try:
         (AUTH_DATA_DIR / "campus_network_auth.pid").unlink(missing_ok=True)
     except Exception:
         api_logger.warning("PID 文件清理失败", exc_info=True)
 
+    # Playwright Worker 和孤儿浏览器清理由 lifespan 的 container.shutdown() 统一处理
+
     # 通过 shutdown_event 触发 lifespan 正常关闭
-    # 使用 BackgroundTasks 确保 HTTP 响应发送后再触发 shutdown
     bg_tasks.add_task(_trigger_shutdown_event, request)
 
     return ActionResponse(success=True, message="服务器正在关闭，请稍候，页面将自动断开")
