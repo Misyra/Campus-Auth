@@ -12,6 +12,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from app.constants import LOGS_DIR
+from app.utils.logging import VALID_LOG_LEVELS, VALID_SOURCES
 
 router = APIRouter()
 
@@ -24,9 +25,6 @@ _DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _LOG_LINE_PATTERN = re.compile(
     r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\[(\w+)\]\[([\w.-]+)\]\[([\w.-]+)\] (.+)$"
 )
-
-_VALID_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
-_VALID_SOURCES = {"backend", "network", "task", "frontend", "debug"}
 
 
 class LogFileInfo(BaseModel):
@@ -127,13 +125,13 @@ def scan_file(
                 line = _parse_log_line(raw.rstrip("\n\r"))
 
                 # 级别过滤
-                if level and level.upper() in _VALID_LEVELS and line.level != level.upper():
+                if level and level.upper() in VALID_LOG_LEVELS and line.level != level.upper():
                     continue
 
                 # 来源过滤
                 if (
                     source
-                    and source.lower() in _VALID_SOURCES
+                    and source.lower() in VALID_SOURCES
                     and line.source != source.lower()
                 ):
                     continue

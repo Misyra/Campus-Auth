@@ -434,6 +434,7 @@ class PlaywrightWorker:
         3. 创建 TaskExecutor（线程安全 — 所有 Playwright 操作在 Worker 线程内执行）
         4. 初始截图并返回 URL
         """
+        from app.constants import DEFAULT_STEP_TIMEOUT_MS
         from app.tasks import TaskConfig, TaskExecutor
 
         config = data.get("config", {})
@@ -441,7 +442,7 @@ class PlaywrightWorker:
         task_data = data.get("task_data", {})
         template_vars = data.get("template_vars", data.get("env_vars", {}))
         screenshot_dir = data.get("screenshot_dir", "")
-        default_timeout = data.get("default_timeout", TaskExecutor.DEFAULT_STEP_TIMEOUT)
+        default_timeout = data.get("default_timeout", DEFAULT_STEP_TIMEOUT_MS)
         navigation_timeout = data.get(
             "navigation_timeout", TaskExecutor.DEFAULT_NAVIGATION_TIMEOUT
         )

@@ -585,7 +585,7 @@ class ScreenshotHandler(StepHandler):
         date_dir.mkdir(parents=True, exist_ok=True)
 
         if not path:
-            task_id = resolver.config.task_id or "unknown"
+            task_id = resolver.config.task_id or resolver.config.name or "unknown"
             step_id = step.id or "s0"
             result = await save_screenshot(
                 page, date_dir, task_id=task_id, step_id=step_id
@@ -735,7 +735,7 @@ class OcrHandler(StepHandler):
             date_str = datetime.now().strftime("%Y-%m-%d")
             date_dir = PROJECT_ROOT / "logs" / date_str / "screenshots"
             date_dir.mkdir(parents=True, exist_ok=True)
-            task_id = resolver.config.task_id or "unknown"
+            task_id = resolver.config.task_id or resolver.config.name or "unknown"
             step_id = step.id or "ocr"
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
             filename = f"{task_id}_{step_id}_{stamp}.png"

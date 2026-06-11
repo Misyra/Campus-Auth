@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from app.constants import DEFAULT_STEP_TIMEOUT_MS, DEFAULT_TASK_TIMEOUT_MS
 from app.utils.logging import get_logger
 
 from .models import PROJECT_ROOT, StepConfig, StepType, TaskConfig
@@ -22,8 +23,6 @@ logger = get_logger("task_executor", source="task")
 class TaskExecutor:
     """任务执行器"""
 
-    DEFAULT_STEP_TIMEOUT = 10000
-    DEFAULT_TASK_TIMEOUT = 30000
     DEFAULT_NAVIGATION_TIMEOUT = 15000
 
     def __init__(
@@ -37,7 +36,7 @@ class TaskExecutor:
     ):
         self.config = config
         self.template_vars = template_vars or {}
-        self.default_timeout = default_timeout if default_timeout is not None else self.DEFAULT_STEP_TIMEOUT
+        self.default_timeout = default_timeout if default_timeout is not None else DEFAULT_STEP_TIMEOUT_MS
         self.navigation_timeout = navigation_timeout if navigation_timeout is not None else self.DEFAULT_NAVIGATION_TIMEOUT
         self.resolver = VariableResolver(config, self.template_vars)
         self.registry = StepExecutorRegistry()
@@ -52,7 +51,7 @@ class TaskExecutor:
             (success, message)
         """
         task_start = time.perf_counter()
-        task_timeout_ms = self.config.timeout if self.config.timeout is not None else self.DEFAULT_TASK_TIMEOUT
+        task_timeout_ms = self.config.timeout if self.config.timeout is not None else DEFAULT_TASK_TIMEOUT_MS
         task_deadline = task_start + task_timeout_ms / 1000
         logger.info(
             "任务开始 [{}], {} 个步骤, 超时 {}ms",
@@ -401,7 +400,7 @@ class TaskExecutor:
                 out_dir = PROJECT_ROOT / "logs" / date_str / "screenshots"
                 url_prefix = f"/logs/{date_str}/screenshots"
 
-            task_id = self.config.task_id or "unknown"
+            task_id = self.config.task_id or self.config.name or "unknown"
             local_path = await asyncio.wait_for(
                 save_screenshot(page, out_dir, task_id=task_id),
                 timeout=5,

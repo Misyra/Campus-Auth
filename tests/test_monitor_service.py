@@ -16,6 +16,7 @@ from app.services.engine import (
     EngineCommand,
     ScheduleEngine,
     StatusSnapshot,
+    _LoginRetryState,
 )
 
 
@@ -795,9 +796,7 @@ class TestNetworkStateSetInConsumer:
         """测试登录成功后 network_state 由异步登录线程通过 update_status_after_login 设置"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._login_in_progress = threading.Event()
-        svc._login_retry_count = 0
-        svc._last_login_attempt = 0
-        svc._login_retry_config = None
+        svc._login_retry = _LoginRetryState(count=0, last_attempt=0, config=None)
         svc._login_history = None
         svc._profile_service = MagicMock()
         svc._ui_config = MagicMock()

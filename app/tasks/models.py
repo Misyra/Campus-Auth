@@ -8,6 +8,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from app.constants import DEFAULT_STEP_TIMEOUT_MS, DEFAULT_TASK_TIMEOUT_MS
 from app.utils.logging import get_logger
 
 logger = get_logger("task_models", source="task")
@@ -17,10 +18,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # 任务ID验证正则
 TASK_ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
-
-# 默认超时配置（毫秒）
-DEFAULT_STEP_TIMEOUT = 10000
-DEFAULT_TASK_TIMEOUT = 30000
 
 
 def _is_valid_step(s: Any) -> bool:
@@ -174,7 +171,7 @@ class TaskConfig:
     name: str = "未命名任务"
     description: str = ""
     url: str = ""
-    timeout: int = DEFAULT_TASK_TIMEOUT
+    timeout: int = DEFAULT_TASK_TIMEOUT_MS
     variables: dict[str, str] = field(default_factory=dict)
     steps: list[StepConfig] = field(default_factory=list)
     on_success: dict[str, Any] = field(default_factory=dict)
@@ -193,7 +190,7 @@ class TaskConfig:
             name=data.get("name", "未命名任务"),
             description=data.get("description", ""),
             url=data.get("url", ""),
-            timeout=data.get("timeout", DEFAULT_TASK_TIMEOUT),
+            timeout=data.get("timeout", DEFAULT_TASK_TIMEOUT_MS),
             variables=data.get("variables", {}),
             steps=[StepConfig.from_dict(s) for s in data.get("steps", []) if _is_valid_step(s)],
             on_success=data.get("on_success", {}),
