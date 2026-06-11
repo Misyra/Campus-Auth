@@ -14,6 +14,7 @@ from app.api.logfiles import (
     _validate_filename,
     get_log_file_content,
     list_log_files,
+    scan_file,
 )
 
 # ── _validate_date ──
@@ -371,3 +372,95 @@ class TestGetLogFileContent:
                     limit=2000,
                 )
             assert exc_info.value.status_code == 400
+
+
+# ── scan_file ──
+
+
+class TestScanFile:
+    """scan_file 全文扫描函数。"""
+
+    def _create_log_file(self, tmp_path: Path, content: str) -> Path:
+        """辅助方法：创建临时日志文件。"""
+        filepath = tmp_path / "app.log"
+        filepath.write_text(content, encoding="utf-8")
+        return filepath
+
+    def test_scan_file_by_keyword(self, tmp_path):
+        """按关键词搜索。"""
+        content = (
+            "[2026-06-01 00:00:00][INFO][backend][mod] 登录成功\n"
+            "[2026-06-01 00:00:01][ERROR][backend][mod] 连接超时\n"
+            "[2026-06-01 00:00:02][INFO][backend][mod] 网络正常\n"
+        )
+        filepath = self._create_log_file(tmp_path, content)
+
+        result = scan_file(
+            filepath=filepath,
+            level="",
+            source="",
+            search="超时",
+            limit=2000,
+        )
+        assert len(result) == 1
+        assert "超时" in result[0].message
+
+    def test_scan_file_by_level(self, tmp_path):
+        """按级别过滤。"""
+        content = (
+            "[2026-06-01 00:00:00][INFO][backend][mod] info msg\n"
+            "[2026-06-01 00:00:01][ERROR][backend][mod] error msg\n"
+            "[2026-06-01 00:00:02][WARNING][backend][mod] warning msg\n"
+            "[2026-06-01 00:00:03][INFO][backend][mod] info msg 2\n"
+        )
+        filepath = self._create_log_file(tmp_path, content)
+
+        result = scan_file(
+            filepath=filepath,
+            level="ERROR",
+            source="",
+            search="",
+            limit=2000,
+        )
+        assert len(result) == 1
+        assert result[0].level == "ERROR"
+
+    def test_scan_file_by_source(self, tmp_path):
+        """按来源过滤。"""
+        content = (
+            "[2026-06-01 00:00:00][INFO][backend][mod] backend msg\n"
+            "[2026-06-01 00:00:01][INFO][network][mod] network msg\n"
+            "[2026-06-01 00:00:02][INFO][backend][mod] backend msg 2\n"
+        )
+        filepath = self._create_log_file(tmp_path, content)
+
+        result = scan_file(
+            filepath=filepath,
+            level="",
+            source="network",
+            search="",
+            limit=2000,
+        )
+        assert len(result) == 1
+        assert result[0].source == "network"
+
+    def test_scan_file_limit(self, tmp_path):
+        """结果数量限制 — 超过 limit 时返回最后 N 条。"""
+        lines = [
+            f"[2026-06-01 00:00:{i:02d}][INFO][backend][mod] msg {i}\n"
+            for i in range(50)
+        ]
+        content = "".join(lines)
+        filepath = self._create_log_file(tmp_path, content)
+
+        result = scan_file(
+            filepath=filepath,
+            level="",
+            source="",
+            search="",
+            limit=10,
+        )
+        # 应返回最后 10 条
+        assert len(result) == 10
+        assert result[0].message == "msg 40"
+        assert result[-1].message == "msg 49"

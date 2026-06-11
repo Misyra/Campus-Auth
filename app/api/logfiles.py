@@ -5,8 +5,10 @@ from __future__ import annotations
 import re
 from collections import deque
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
+from loguru import logger
 from pydantic import BaseModel
 
 from app.constants import LOGS_DIR
@@ -80,6 +82,68 @@ def _parse_log_line(raw: str) -> LogLine:
             message=m.group(5),
         )
     return LogLine(message=raw)
+
+
+def scan_file(
+    filepath: Path,
+    level: str,
+    source: str,
+    search: str,
+    limit: int,
+    max_scan_lines: int = 500_000,
+) -> list[LogLine]:
+    """全文扫描日志文件，按级别、来源、关键词过滤，返回匹配的行。
+
+    超过 limit 时返回最后 N 条匹配结果。
+    """
+    matched: list[LogLine] = []
+
+    try:
+        with open(filepath, encoding="utf-8", errors="replace") as f:
+            for i, raw in enumerate(f):
+                if i >= max_scan_lines:
+                    logger.warning(
+                        "扫描行数达到上限 {}，停止扫描文件 {}",
+                        max_scan_lines,
+                        filepath,
+                    )
+                    break
+
+                line = _parse_log_line(raw.rstrip("\n\r"))
+
+                # 级别过滤
+                if level and level.upper() in _VALID_LEVELS and line.level != level.upper():
+                    continue
+
+                # 来源过滤
+                if (
+                    source
+                    and source.lower() in _VALID_SOURCES
+                    and line.source != source.lower()
+                ):
+                    continue
+
+                # 关键词搜索（大小写不敏感）
+                if search:
+                    search_lower = search.lower()
+                    if (
+                        search_lower not in line.message.lower()
+                        and search_lower not in line.name.lower()
+                        and search_lower not in line.source.lower()
+                        and search_lower not in raw.lower()
+                    ):
+                        continue
+
+                matched.append(line)
+    except OSError as err:
+        logger.error("扫描日志文件失败: {} — {}", filepath, err)
+        return []
+
+    # 超过 limit 时返回最后 N 条
+    if len(matched) > limit:
+        matched = matched[-limit:]
+
+    return matched
 
 
 @router.get("/api/logfiles/list", response_model=list[LogFileGroup])
