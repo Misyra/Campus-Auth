@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from app.services.task_registry import MAX_HISTORY_SIZE, TaskHistoryStore, TaskRegistry
 from app.services.task_executor import TaskExecutor
+from app.services.task_registry import MAX_HISTORY_SIZE, TaskHistoryStore, TaskRegistry
 from app.utils.shell_utils import get_default_shell
 
 
@@ -153,7 +153,9 @@ class TestExecuteShellUsesPolicy:
     def executor(self, project_root):
         """创建 TaskExecutor 实例。"""
         registry = TaskRegistry(project_root / "tasks" / "scheduled")
-        history_store = TaskHistoryStore(project_root / "tasks" / "scheduled" / "history")
+        history_store = TaskHistoryStore(
+            project_root / "tasks" / "scheduled" / "history"
+        )
         return TaskExecutor(
             registry=registry,
             history_store=history_store,
@@ -273,9 +275,7 @@ class TestScheduleEngineCRUD:
         assert tasks[0]["name"] == "Apple"
         assert tasks[1]["name"] == "Banana"
 
-    def test_list_tasks_skips_dotfiles(
-        self, scheduler, tmp_path: Path
-    ):
+    def test_list_tasks_skips_dotfiles(self, scheduler, tmp_path: Path):
         # 创建正常任务
         scheduler.save_task(
             "normal",
@@ -294,9 +294,7 @@ class TestScheduleEngineCRUD:
         assert len(tasks) == 1
         assert tasks[0]["id"] == "normal"
 
-    def test_list_tasks_skips_malformed_json(
-        self, scheduler, tmp_path: Path
-    ):
+    def test_list_tasks_skips_malformed_json(self, scheduler, tmp_path: Path):
         scheduler.save_task(
             "good",
             {
@@ -339,9 +337,7 @@ class TestScheduleEngineCRUD:
         )
         assert scheduler.get_task("bad") is None
 
-    def test_delete_task_with_history(
-        self, scheduler, tmp_path: Path
-    ):
+    def test_delete_task_with_history(self, scheduler, tmp_path: Path):
         scheduler.save_task(
             "del_task",
             {
@@ -395,9 +391,7 @@ class TestSchedulerHistory:
             get_history=history_store.get_history,
         )
 
-    def test_add_history_creates_file(
-        self, scheduler, tmp_path: Path
-    ):
+    def test_add_history_creates_file(self, scheduler, tmp_path: Path):
         scheduler._history_store.add_record("test", "success", "ok", 1.0)
         history_file = tmp_path / "tasks" / "scheduled" / "history" / "test.json"
         assert history_file.exists()
@@ -426,9 +420,7 @@ class TestSchedulerHistory:
     def test_get_history_invalid_id(self, scheduler):
         assert scheduler.get_history("123bad") == []
 
-    def test_get_history_malformed_json(
-        self, scheduler, tmp_path: Path
-    ):
+    def test_get_history_malformed_json(self, scheduler, tmp_path: Path):
         history_dir = tmp_path / "tasks" / "scheduled" / "history"
         history_dir.mkdir(parents=True, exist_ok=True)
         (history_dir / "bad.json").write_text("not json", encoding="utf-8")
@@ -444,5 +436,3 @@ class TestSchedulerHistory:
         for entry in history:
             assert "timestamp" in entry
             assert "duration" in entry
-
-

@@ -12,12 +12,12 @@ from app.services.config_provider import RuntimeConfigProvider
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
 from app.services.profile_service import ProfileService
-from app.services.task_service import TaskService
 from app.services.task_executor import TaskExecutor
 from app.services.task_facade import TaskFacade
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
-from app.utils.logging import DashboardSink, get_logger
+from app.services.task_service import TaskService
 from app.services.websocket_manager import WebSocketManager
+from app.utils.logging import DashboardSink, get_logger
 
 container_logger = get_logger("container", source="backend")
 

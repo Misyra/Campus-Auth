@@ -416,7 +416,6 @@ class TestMonitorCoreGetTestSites:
         assert len(sites3) > 0
 
 
-
 class TestMonitorCoreGetMonitorInterval:
     def test_default_interval(self):
         core = NetworkMonitorCore()
@@ -426,8 +425,6 @@ class TestMonitorCoreGetMonitorInterval:
         config = {"monitor": {"interval": 600}}
         core = NetworkMonitorCore(config=config)
         assert core._get_monitor_interval() == 600
-
-
 
 
 class TestMonitorCoreStopMonitoring:
@@ -523,9 +520,7 @@ class TestMonitorCoreDetailedRetryConfig:
 
     def test_negative_retries_clamped(self):
         """负数重试次数被钳制为最小值 1。"""
-        core = NetworkMonitorCore(
-            config={"retry_settings": {"max_retries": -1}}
-        )
+        core = NetworkMonitorCore(config={"retry_settings": {"max_retries": -1}})
         max_retries, _ = core._get_retry_config()
         assert max_retries >= 1
 
@@ -536,7 +531,6 @@ class TestMonitorCoreDetailedRetryConfig:
         )
         _, intervals = core._get_retry_config()
         assert intervals == [5, 10, 20, 40]
-
 
 
 class TestMonitorCoreLogMessage:

@@ -44,9 +44,8 @@ def _validate_create_payload(payload: dict) -> tuple[bool, str, dict | None]:
 
     # ── 时间验证 ──
     schedule = payload.get("schedule", {})
-    if (
-        not isinstance(schedule.get("hour"), int)
-        or not isinstance(schedule.get("minute"), int)
+    if not isinstance(schedule.get("hour"), int) or not isinstance(
+        schedule.get("minute"), int
     ):
         return False, "请设置执行时间", None
 
@@ -189,7 +188,9 @@ async def run_scheduled_task(
     # 后台执行，不阻塞 HTTP 响应
     async def _execute():
         try:
-            success, message = await asyncio.to_thread(engine.tasks.execute_task, task_id)
+            success, message = await asyncio.to_thread(
+                engine.tasks.execute_task, task_id
+            )
             api_logger.info(
                 "后台定时任务 {} -> success={}, message={}", task_id, success, message
             )

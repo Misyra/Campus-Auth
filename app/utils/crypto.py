@@ -60,7 +60,9 @@ def _get_or_create_key() -> bytes:
                         logger.info("已备份损坏的密钥文件到: {}", backup_path)
                     except OSError as backup_err:
                         logger.warning("备份密钥文件失败: {}", backup_err)
-                logger.warning("将生成新密钥，此前保存的密码将无法自动恢复，请在设置中重新输入密码")
+                logger.warning(
+                    "将生成新密钥，此前保存的密码将无法自动恢复，请在设置中重新输入密码"
+                )
 
         # 生成新密钥
         key = os.urandom(32)

@@ -5,10 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from app.services.task_registry import MAX_HISTORY_SIZE, TaskHistoryStore, TaskRegistry
-
 
 # ── 辅助函数 ──
 
@@ -52,11 +49,19 @@ class TestRegistryInit:
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
         (tasks_dir / "aaa.json").write_text(
-            json.dumps({"name": "任务A", "enabled": True, "schedule": {"hour": 9, "minute": 0}}),
+            json.dumps(
+                {"name": "任务A", "enabled": True, "schedule": {"hour": 9, "minute": 0}}
+            ),
             encoding="utf-8",
         )
         (tasks_dir / "bbb.json").write_text(
-            json.dumps({"name": "任务B", "enabled": False, "schedule": {"hour": 10, "minute": 30}}),
+            json.dumps(
+                {
+                    "name": "任务B",
+                    "enabled": False,
+                    "schedule": {"hour": 10, "minute": 30},
+                }
+            ),
             encoding="utf-8",
         )
 
@@ -98,15 +103,21 @@ class TestRegistryInit:
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
         (tasks_dir / "t1.json").write_text(
-            json.dumps({"name": "T1", "enabled": True, "schedule": {"hour": 8, "minute": 0}}),
+            json.dumps(
+                {"name": "T1", "enabled": True, "schedule": {"hour": 8, "minute": 0}}
+            ),
             encoding="utf-8",
         )
         (tasks_dir / "t2.json").write_text(
-            json.dumps({"name": "T2", "enabled": True, "schedule": {"hour": 8, "minute": 0}}),
+            json.dumps(
+                {"name": "T2", "enabled": True, "schedule": {"hour": 8, "minute": 0}}
+            ),
             encoding="utf-8",
         )
         (tasks_dir / "t3.json").write_text(
-            json.dumps({"name": "T3", "enabled": False, "schedule": {"hour": 8, "minute": 0}}),
+            json.dumps(
+                {"name": "T3", "enabled": False, "schedule": {"hour": 8, "minute": 0}}
+            ),
             encoding="utf-8",
         )
 

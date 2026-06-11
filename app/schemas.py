@@ -74,9 +74,13 @@ class _BrowserFieldsMixin(BaseModel):
         try:
             parsed = json.loads(v)
         except json.JSONDecodeError as e:
-            raise ValueError(f"浏览器请求头格式不正确，请确认输入的是合法的 JSON 对象: {e}") from e
+            raise ValueError(
+                f"浏览器请求头格式不正确，请确认输入的是合法的 JSON 对象: {e}"
+            ) from e
         if not isinstance(parsed, dict):
-            raise ValueError('浏览器请求头格式不正确，应为键值对形式，例如: {"Referer": "https://example.com"}')
+            raise ValueError(
+                '浏览器请求头格式不正确，应为键值对形式，例如: {"Referer": "https://example.com"}'
+            )
         return v
 
 
@@ -99,7 +103,9 @@ class _MonitorFieldsMixin(BaseModel):
         default=DEFAULT_HTTP_TARGETS,
         description="HTTP 检测目标地址，逗号分隔",
     )
-    enable_tcp_check: bool = Field(default=False, description="通过 TCP 端口连接检测目标地址是否可达")
+    enable_tcp_check: bool = Field(
+        default=False, description="通过 TCP 端口连接检测目标地址是否可达"
+    )
     enable_http_check: bool = Field(
         default=False, description="通过 HTTP 请求检测网页是否可正常访问"
     )
@@ -155,9 +161,7 @@ class _SystemFieldsMixin(BaseModel):
     log_retention_days: int = Field(
         default=7, ge=1, le=365, description="日志与截图保留天数"
     )
-    app_port: int = Field(
-        default=50721, ge=1024, le=65535, description="网页界面端口"
-    )
+    app_port: int = Field(default=50721, ge=1024, le=65535, description="网页界面端口")
     proxy: str = Field(default="", description="网络代理地址")
     shell_path: str = Field(
         default="", description="自定义 Shell 路径（留空使用系统默认）"

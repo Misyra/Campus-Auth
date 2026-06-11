@@ -103,9 +103,13 @@ def _normalize_headers_json(raw: str) -> str:
     try:
         parsed = json.loads(text)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"浏览器请求头格式不正确，请确认输入的是合法的 JSON 对象: {exc}") from exc
+        raise ValueError(
+            f"浏览器请求头格式不正确，请确认输入的是合法的 JSON 对象: {exc}"
+        ) from exc
     if not isinstance(parsed, dict):
-        raise ValueError('浏览器请求头格式不正确，应为键值对形式，例如: {"Referer": "https://example.com"}')
+        raise ValueError(
+            '浏览器请求头格式不正确，应为键值对形式，例如: {"Referer": "https://example.com"}'
+        )
 
     return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
 
@@ -136,7 +140,9 @@ def _build_config_payload(
         config_logger.debug("加载运行时配置: profile={}", data.active_profile)
     else:
         profile = None
-        config_logger.debug("加载 UI 配置（全局）: active_profile={}", data.active_profile)
+        config_logger.debug(
+            "加载 UI 配置（全局）: active_profile={}", data.active_profile
+        )
 
     # 从系统设置作为基础
     payload_dict = extract_profile_fields(system_settings.model_dump(), PROFILE_FIELDS)
@@ -201,8 +207,12 @@ def _build_config_payload(
     else:
         # UI 模式：合并 sys 和 default 方案字段
         global_profile = data.profiles.get("default", ProfileSettings())
-        payload_dict.update(extract_profile_fields(global_profile.model_dump(), PROFILE_FIELDS))
-        payload_dict.update(extract_profile_fields(system_settings.model_dump(), PROFILE_FIELDS))
+        payload_dict.update(
+            extract_profile_fields(global_profile.model_dump(), PROFILE_FIELDS)
+        )
+        payload_dict.update(
+            extract_profile_fields(system_settings.model_dump(), PROFILE_FIELDS)
+        )
 
         # UI 专属覆盖
         payload_dict["password"] = mask_password(system_settings.password)
@@ -435,8 +445,12 @@ def _update_system_settings(
     system_settings.auth_url = payload.auth_url.strip()
     system_settings.carrier = str(payload.carrier or "无").strip()
     system_settings.carrier_custom = str(payload.carrier_custom or "").strip()
-    system_settings.backend_log_level = normalize_level(payload.backend_log_level, "WARNING")
-    system_settings.frontend_log_level = normalize_level(payload.frontend_log_level, "WARNING")
+    system_settings.backend_log_level = normalize_level(
+        payload.backend_log_level, "WARNING"
+    )
+    system_settings.frontend_log_level = normalize_level(
+        payload.frontend_log_level, "WARNING"
+    )
     system_settings.proxy = payload.proxy.strip()
 
 

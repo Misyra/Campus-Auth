@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 
 class TaskFacade:
     """定时任务 API 入口 — 包装 Registry + Executor + HistoryStore。"""

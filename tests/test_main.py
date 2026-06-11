@@ -766,9 +766,7 @@ class TestRunServer:
             patch("main.signal.signal"),
             patch("main.os._exit"),
             patch.object(time, "sleep", side_effect=[None, KeyboardInterrupt]),
-            patch(
-                "app.ui.system_tray.SystemTray", side_effect=ImportError("no tray")
-            ),
+            patch("app.ui.system_tray.SystemTray", side_effect=ImportError("no tray")),
         ):
             mock_ps = MagicMock()
             mock_ps.load.return_value.system = MagicMock(

@@ -36,8 +36,14 @@ class TaskExecutor:
     ):
         self.config = config
         self.template_vars = template_vars or {}
-        self.default_timeout = default_timeout if default_timeout is not None else DEFAULT_STEP_TIMEOUT_MS
-        self.navigation_timeout = navigation_timeout if navigation_timeout is not None else self.DEFAULT_NAVIGATION_TIMEOUT
+        self.default_timeout = (
+            default_timeout if default_timeout is not None else DEFAULT_STEP_TIMEOUT_MS
+        )
+        self.navigation_timeout = (
+            navigation_timeout
+            if navigation_timeout is not None
+            else self.DEFAULT_NAVIGATION_TIMEOUT
+        )
         self.resolver = VariableResolver(config, self.template_vars)
         self.registry = StepExecutorRegistry()
         self._step_results: list[dict[str, Any]] = []
@@ -51,7 +57,11 @@ class TaskExecutor:
             (success, message)
         """
         task_start = time.perf_counter()
-        task_timeout_ms = self.config.timeout if self.config.timeout is not None else DEFAULT_TASK_TIMEOUT_MS
+        task_timeout_ms = (
+            self.config.timeout
+            if self.config.timeout is not None
+            else DEFAULT_TASK_TIMEOUT_MS
+        )
         task_deadline = task_start + task_timeout_ms / 1000
         logger.info(
             "任务开始 [{}], {} 个步骤, 超时 {}ms",
@@ -225,7 +235,9 @@ class TaskExecutor:
         effective_step = step
         if task_deadline is not None:
             remaining_ms = max(0, int((task_deadline - time.perf_counter()) * 1000))
-            effective_timeout = step.timeout if step.timeout is not None else self.default_timeout
+            effective_timeout = (
+                step.timeout if step.timeout is not None else self.default_timeout
+            )
             overrides = {}
             if remaining_ms < effective_timeout:
                 logger.debug(
@@ -315,8 +327,16 @@ class TaskExecutor:
             # cfg.get(key, default) 在 JSON 值为 null 时返回 None 而非默认值，需显式处理
             post_delay = cfg.get("post_login_delay") or 5
             await asyncio.sleep(post_delay)
-            enable_tcp = cfg.get("enable_tcp_check") if cfg.get("enable_tcp_check") is not None else True
-            enable_http = cfg.get("enable_http_check") if cfg.get("enable_http_check") is not None else True
+            enable_tcp = (
+                cfg.get("enable_tcp_check")
+                if cfg.get("enable_tcp_check") is not None
+                else True
+            )
+            enable_http = (
+                cfg.get("enable_http_check")
+                if cfg.get("enable_http_check") is not None
+                else True
+            )
             timeout = cfg.get("network_check_timeout") or 2
 
             # 解析网址响应检测 URL

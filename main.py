@@ -165,7 +165,10 @@ def _run_login_then_exit(logger) -> None:
         data = ps.load()
 
         # 构建运行时配置
-        from app.services.config_service import build_runtime_config, load_runtime_config
+        from app.services.config_service import (
+            build_runtime_config,
+            load_runtime_config,
+        )
 
         payload, has_decrypt_error = load_runtime_config(ps)
         if has_decrypt_error:
@@ -246,9 +249,7 @@ def _run_login_then_exit(logger) -> None:
 # ==================== 无 Web 模式 ====================
 
 
-def _run_no_web(
-    logger, minimize_to_tray=False
-) -> None:
+def _run_no_web(logger, minimize_to_tray=False) -> None:
     """无 Web 模式：仅运行网络监控和定时任务，不启动 Web 服务。"""
     from app.container import ServiceContainer
 
@@ -307,7 +308,10 @@ def _run_no_web(
 
 
 def _run_server(
-    no_browser: bool = False, tray: bool = False, no_auto: bool = False, no_web: bool = False
+    no_browser: bool = False,
+    tray: bool = False,
+    no_auto: bool = False,
+    no_web: bool = False,
 ) -> None:
     from app.utils.logging import get_logger
 
@@ -504,8 +508,9 @@ def main() -> None:
     )
     parser.add_argument("--tray", action="store_true", help="启动到系统托盘")
     parser.add_argument(
-        "--no-web", action="store_true",
-        help="不启动 Web 服务，仅运行网络监控和定时任务（自启动默认使用）"
+        "--no-web",
+        action="store_true",
+        help="不启动 Web 服务，仅运行网络监控和定时任务（自启动默认使用）",
     )
     parser.add_argument("--status", action="store_true", help="查看服务状态")
     parser.add_argument("--stop", action="store_true", help="停止服务")
@@ -531,7 +536,12 @@ def main() -> None:
         _cmd_autostart(args.autostart)
         return
 
-    _run_server(no_browser=args.no_browser, tray=args.tray, no_auto=args.no_auto, no_web=args.no_web)
+    _run_server(
+        no_browser=args.no_browser,
+        tray=args.tray,
+        no_auto=args.no_auto,
+        no_web=args.no_web,
+    )
 
 
 if __name__ == "__main__":

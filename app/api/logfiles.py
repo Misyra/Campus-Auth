@@ -125,7 +125,11 @@ def scan_file(
                 line = _parse_log_line(raw.rstrip("\n\r"))
 
                 # 级别过滤
-                if level and level.upper() in VALID_LOG_LEVELS and line.level != level.upper():
+                if (
+                    level
+                    and level.upper() in VALID_LOG_LEVELS
+                    and line.level != level.upper()
+                ):
                     continue
 
                 # 来源过滤

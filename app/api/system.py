@@ -140,7 +140,9 @@ def shutdown_server(
     # 通过 shutdown_event 触发 lifespan 正常关闭
     bg_tasks.add_task(_trigger_shutdown_event, request)
 
-    return ActionResponse(success=True, message="服务器正在关闭，请稍候，页面将自动断开")
+    return ActionResponse(
+        success=True, message="服务器正在关闭，请稍候，页面将自动断开"
+    )
 
 
 def _trigger_shutdown_event(request: Request) -> None:

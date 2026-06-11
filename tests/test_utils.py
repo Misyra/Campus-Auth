@@ -927,6 +927,8 @@ class TestDefaultConstants:
 class TestDateRotatingSinkRotation:
     def test_rotates_when_size_exceeded(self, tmp_path):
         """超过 file_max_bytes 时应创建分片文件"""
+        from unittest.mock import MagicMock
+
         from app.utils.logging import DateRotatingSink
 
         sink = DateRotatingSink(
@@ -935,9 +937,18 @@ class TestDateRotatingSinkRotation:
             file_backup_count=2,
         )
 
+        level_mock = MagicMock()
+        level_mock.name = "INFO"
+
         # 写入多条日志直到触发轮转
         for _ in range(20):
-            sink.write("msg" * 50 + "\n")
+            msg = MagicMock()
+            msg.record = {
+                "extra": {"source": "backend"},
+                "level": level_mock,
+            }
+            msg.__str__ = lambda self: "msg" * 50 + "\n"
+            sink.write(msg)
 
         # 应存在 app.log 和 app.log.1
         today = datetime.datetime.now().strftime("%Y-%m-%d")
@@ -948,6 +959,8 @@ class TestDateRotatingSinkRotation:
 
     def test_backup_count_respected(self, tmp_path):
         """分片文件数量不应超过 file_backup_count"""
+        from unittest.mock import MagicMock
+
         from app.utils.logging import DateRotatingSink
 
         sink = DateRotatingSink(
@@ -956,9 +969,18 @@ class TestDateRotatingSinkRotation:
             file_backup_count=2,
         )
 
+        level_mock = MagicMock()
+        level_mock.name = "INFO"
+
         # 写入大量日志
         for _ in range(50):
-            sink.write("x" * 80 + "\n")
+            msg = MagicMock()
+            msg.record = {
+                "extra": {"source": "backend"},
+                "level": level_mock,
+            }
+            msg.__str__ = lambda self: "x" * 80 + "\n"
+            sink.write(msg)
 
         today = datetime.datetime.now().strftime("%Y-%m-%d")
         log_dir = tmp_path / today
@@ -983,7 +1005,7 @@ class TestSimpleObfuscate:
         original = "test_password_123"
         obfuscated = _simple_obfuscate(original)
         assert obfuscated.startswith("ENC:B64:")
-        deobfuscated = _simple_deobfuscate(obfuscated[len("ENC:"):])
+        deobfuscated = _simple_deobfuscate(obfuscated[len("ENC:") :])
         assert deobfuscated == original
 
     def test_unicode(self):
@@ -992,7 +1014,7 @@ class TestSimpleObfuscate:
 
         original = "密码测试"
         obfuscated = _simple_obfuscate(original)
-        deobfuscated = _simple_deobfuscate(obfuscated[len("ENC:"):])
+        deobfuscated = _simple_deobfuscate(obfuscated[len("ENC:") :])
         assert deobfuscated == original
 
     def test_empty_string(self):
@@ -1153,6 +1175,57 @@ class TestValidLogLevels:
         from app.utils.logging import VALID_LOG_LEVELS
 
         assert len(VALID_LOG_LEVELS) == 5
+
+
+# ── DashboardSink source 级别过滤 ──
+
+
+def test_dashboard_sink_filters_by_source_level():
+    """测试 DashboardSink 根据 source 级别过滤"""
+    from unittest.mock import MagicMock
+
+    from app.utils.logging import DashboardSink, LogConfigCenter
+
+    config = LogConfigCenter()
+    config.initialize()
+    config.set_level("INFO")
+    config.set_source_level("network", "WARNING")
+
+    sink = DashboardSink()
+
+    level_debug = MagicMock()
+    level_debug.name = "DEBUG"
+    level_warning = MagicMock()
+    level_warning.name = "WARNING"
+    level_info = MagicMock()
+    level_info.name = "INFO"
+
+    def make_msg(source, level_mock):
+        msg = MagicMock()
+        msg.record = {
+            "extra": {"source": source, "name": "test"},
+            "level": level_mock,
+            "time": MagicMock(timestamp=lambda: 0),
+            "name": "test",
+        }
+        msg.__str__ = lambda self: "test message"
+        return msg
+
+    # network source 设置为 WARNING，DEBUG 应该被过滤
+    sink.write(make_msg("network", level_debug))
+    assert len(sink.buffer) == 0
+
+    # network source 设置为 WARNING，WARNING 应该通过
+    sink.write(make_msg("network", level_warning))
+    assert len(sink.buffer) == 1
+
+    # backend source 使用全局级别 INFO，DEBUG 应该被过滤
+    sink.write(make_msg("backend", level_debug))
+    assert len(sink.buffer) == 1
+
+    # backend source 使用全局级别 INFO，INFO 应该通过
+    sink.write(make_msg("backend", level_info))
+    assert len(sink.buffer) == 2
 
 
 # ── DashboardSink ──

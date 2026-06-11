@@ -10,7 +10,6 @@ import threading
 import time
 from unittest.mock import MagicMock, patch
 
-from app.services.monitor_service import NetworkState
 from app.services.engine import (
     EngineCmdType,
     EngineCommand,
@@ -187,7 +186,8 @@ class TestListLogs:
 
     @patch("app.services.config_service.build_runtime_config", return_value={})
     @patch(
-        "app.services.config_service.load_runtime_config", return_value=(MagicMock(), False)
+        "app.services.config_service.load_runtime_config",
+        return_value=(MagicMock(), False),
     )
     @patch("app.services.config_service.load_ui_config")
     @patch("app.services.engine.ProfileService")
@@ -290,7 +290,8 @@ class TestUpdateStatusSnapshot:
 class TestStartStopMonitoring:
     @patch("app.services.config_service.build_runtime_config", return_value={})
     @patch(
-        "app.services.config_service.load_runtime_config", return_value=(MagicMock(), False)
+        "app.services.config_service.load_runtime_config",
+        return_value=(MagicMock(), False),
     )
     @patch("app.services.config_service.load_ui_config")
     @patch("app.services.engine.ProfileService")
@@ -368,7 +369,8 @@ class TestHandleStartStop:
 class TestHandleLogin:
     @patch("app.services.config_service.build_runtime_config", return_value={})
     @patch(
-        "app.services.config_service.load_runtime_config", return_value=(MagicMock(), False)
+        "app.services.config_service.load_runtime_config",
+        return_value=(MagicMock(), False),
     )
     @patch("app.services.config_service.load_ui_config")
     @patch("app.services.engine.ProfileService")
@@ -426,7 +428,8 @@ class TestRunManualLogin:
 class TestNetwork:
     @patch("app.services.config_service.build_runtime_config", return_value={})
     @patch(
-        "app.services.config_service.load_runtime_config", return_value=(MagicMock(), False)
+        "app.services.config_service.load_runtime_config",
+        return_value=(MagicMock(), False),
     )
     @patch("app.services.config_service.load_ui_config")
     @patch("app.services.engine.ProfileService")
@@ -448,7 +451,8 @@ class TestNetwork:
 
     @patch("app.services.config_service.build_runtime_config", return_value={})
     @patch(
-        "app.services.config_service.load_runtime_config", return_value=(MagicMock(), False)
+        "app.services.config_service.load_runtime_config",
+        return_value=(MagicMock(), False),
     )
     @patch("app.services.config_service.load_ui_config")
     @patch("app.services.engine.ProfileService")
@@ -470,7 +474,8 @@ class TestNetwork:
 
     @patch("app.services.config_service.build_runtime_config", return_value={})
     @patch(
-        "app.services.config_service.load_runtime_config", return_value=(MagicMock(), False)
+        "app.services.config_service.load_runtime_config",
+        return_value=(MagicMock(), False),
     )
     @patch("app.services.config_service.load_ui_config")
     @patch("app.services.engine.ProfileService")
@@ -501,7 +506,8 @@ class TestNetwork:
 class TestTogglePureMode:
     @patch("app.services.config_service.build_runtime_config", return_value={})
     @patch(
-        "app.services.config_service.load_runtime_config", return_value=(MagicMock(), False)
+        "app.services.config_service.load_runtime_config",
+        return_value=(MagicMock(), False),
     )
     @patch("app.services.config_service.load_ui_config")
     @patch("app.services.engine.ProfileService")
@@ -526,7 +532,8 @@ class TestTogglePureMode:
 
     @patch("app.services.config_service.build_runtime_config", return_value={})
     @patch(
-        "app.services.config_service.load_runtime_config", return_value=(MagicMock(), False)
+        "app.services.config_service.load_runtime_config",
+        return_value=(MagicMock(), False),
     )
     @patch("app.services.config_service.load_ui_config")
     @patch("app.services.engine.ProfileService")
@@ -596,9 +603,13 @@ class TestLoginInProgress:
 
 
 class TestGetConfig:
-    @patch("app.services.config_service.build_runtime_config", return_value={"key": "value"})
     @patch(
-        "app.services.config_service.load_runtime_config", return_value=(MagicMock(), False)
+        "app.services.config_service.build_runtime_config",
+        return_value={"key": "value"},
+    )
+    @patch(
+        "app.services.config_service.load_runtime_config",
+        return_value=(MagicMock(), False),
     )
     @patch("app.services.config_service.load_ui_config")
     @patch("app.services.engine.ProfileService")
@@ -849,6 +860,7 @@ class TestReloadConfigQueueDispatch:
         svc._status_snapshot = StatusSnapshot(monitoring=False)
 
         enqueued = []
+
         def mock_enqueue(cmd, retries=2):
             enqueued.append(cmd.type)
             return True
@@ -870,6 +882,7 @@ class TestApplyProfileQueueDispatch:
         svc._status_snapshot = StatusSnapshot(monitoring=False)
 
         enqueued = []
+
         def mock_enqueue(cmd, retries=2):
             enqueued.append((cmd.type, cmd.data))
             return True
@@ -912,5 +925,3 @@ class TestLoginInProgressConsumerDead:
         )
         assert not ok
         assert "超时" in msg
-
-

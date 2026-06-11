@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -10,8 +9,6 @@ import pytest
 from app.services.task_executor import TaskExecutor
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
 from app.utils.shell_utils import detect_shells as detect_available_shells
-
-
 
 # =====================================================================
 # detect_available_shells
@@ -87,9 +84,7 @@ class TestExecuteShellUsesPolicy:
 
         shell_path = shells[0]["path"]
 
-        with patch(
-            "app.utils.shell_policy.subprocess.run"
-        ) as mock_run:
+        with patch("app.utils.shell_policy.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout=b"ok", stderr=b"")
 
             executor._execute_shell("echo ok", timeout=9999, shell_path=shell_path)
@@ -103,9 +98,7 @@ class TestExecuteShellUsesPolicy:
 
         shell_path = shells[0]["path"]
 
-        with patch(
-            "app.utils.shell_policy.subprocess.run"
-        ) as mock_run:
+        with patch("app.utils.shell_policy.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout=b"ok", stderr=b"")
 
             result = executor._execute_shell(

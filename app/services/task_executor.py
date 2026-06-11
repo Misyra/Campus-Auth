@@ -12,9 +12,9 @@ from __future__ import annotations
 import sys
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
-from datetime import datetime
-from typing import Any, Callable
+from typing import Any
 
 from app.utils.logging import get_logger
 from app.utils.shell_policy import ShellCommandPolicy
@@ -232,11 +232,7 @@ class TaskExecutor:
 
             if result.success:
                 self._record_login_history(True, duration_ms)
-                message = (
-                    result.data
-                    if isinstance(result.data, str)
-                    else "登录成功"
-                )
+                message = result.data if isinstance(result.data, str) else "登录成功"
                 return True, message
             else:
                 error_msg = result.error or "登录失败"
@@ -376,11 +372,7 @@ class TaskExecutor:
                 output = stdout_str[:500] or "(无输出)"
                 return True, output
             else:
-                output = (
-                    stderr_str[:500]
-                    or stdout_str[:500]
-                    or f"退出码: {returncode}"
-                )
+                output = stderr_str[:500] or stdout_str[:500] or f"退出码: {returncode}"
                 return False, output
 
         except PermissionError as exc:
@@ -417,8 +409,6 @@ class TaskExecutor:
             return self._registry.get_script_path(script_id)
         # 回退：尝试通过 tasks_dir 推断
         if hasattr(self._registry, "_tasks_dir"):
-            from pathlib import Path
-
             tasks_dir = self._registry._tasks_dir
             # 定时任务目录结构: tasks/scheduled/ 下无脚本，脚本在 tasks/scripts/
             # 这里需要通过 project_root 推断

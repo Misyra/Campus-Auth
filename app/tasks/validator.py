@@ -100,16 +100,16 @@ class TaskValidator:
             and not step.get("script")
             and not step.get("code")
         ):
-            errors.append(
-                f"{prefix} 脚本执行步骤需要提供脚本内容"
-            )
+            errors.append(f"{prefix} 脚本执行步骤需要提供脚本内容")
 
         if step_type == StepType.OCR and not step.get("selector"):
             errors.append(f"{prefix} (ocr) 需要 'selector' 字段（验证码图片选择器）")
 
         # 验证 timeout 值
         timeout = step.get("timeout")
-        if timeout is not None and (not isinstance(timeout, int | float) or timeout <= 0):
+        if timeout is not None and (
+            not isinstance(timeout, int | float) or timeout <= 0
+        ):
             errors.append(f"{prefix} timeout 必须为正数，当前值: {timeout}")
 
         return errors

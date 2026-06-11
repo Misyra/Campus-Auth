@@ -34,7 +34,11 @@ from app.services.debug_session import (
 )
 from app.services.login_history_service import LoginHistoryService
 from app.services.profile_service import ProfileService
-from app.services.task_service import _DANGEROUS_STEP_TYPES, TaskService, _check_dangerous_steps
+from app.services.task_service import (
+    _DANGEROUS_STEP_TYPES,
+    TaskService,
+    _check_dangerous_steps,
+)
 
 # =====================================================================
 # _check_dangerous_steps
@@ -655,7 +659,10 @@ class TestProfileService:
 
     def test_detect_matching_profile_by_gateway(self, service_with_profiles):
         with (
-            patch("app.services.profile_service.detect_gateway_ip", return_value="10.0.0.1"),
+            patch(
+                "app.services.profile_service.detect_gateway_ip",
+                return_value="10.0.0.1",
+            ),
             patch("app.services.profile_service.detect_wifi_ssid", return_value=None),
         ):
             result = service_with_profiles.detect_matching_profile()
@@ -674,15 +681,22 @@ class TestProfileService:
         service = ProfileService(tmp_path)
         with (
             patch("app.services.profile_service.detect_gateway_ip", return_value=None),
-            patch("app.services.profile_service.detect_wifi_ssid", return_value="MyWiFi"),
+            patch(
+                "app.services.profile_service.detect_wifi_ssid", return_value="MyWiFi"
+            ),
         ):
             result = service.detect_matching_profile()
             assert result == "wifi_profile"
 
     def test_detect_matching_profile_none(self, service_with_profiles):
         with (
-            patch("app.services.profile_service.detect_gateway_ip", return_value="99.99.99.99"),
-            patch("app.services.profile_service.detect_wifi_ssid", return_value="Unknown"),
+            patch(
+                "app.services.profile_service.detect_gateway_ip",
+                return_value="99.99.99.99",
+            ),
+            patch(
+                "app.services.profile_service.detect_wifi_ssid", return_value="Unknown"
+            ),
         ):
             result = service_with_profiles.detect_matching_profile()
             assert result is None
@@ -701,8 +715,13 @@ class TestProfileService:
         )
         service = ProfileService(tmp_path)
         with (
-            patch("app.services.profile_service.detect_gateway_ip", return_value="10.0.0.1"),
-            patch("app.services.profile_service.detect_wifi_ssid", return_value="MyWiFi"),
+            patch(
+                "app.services.profile_service.detect_gateway_ip",
+                return_value="10.0.0.1",
+            ),
+            patch(
+                "app.services.profile_service.detect_wifi_ssid", return_value="MyWiFi"
+            ),
         ):
             result = service.detect_matching_profile()
             assert result == "gw_match"

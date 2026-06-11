@@ -8,7 +8,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from app.constants import DEFAULT_STEP_TIMEOUT_MS, DEFAULT_TASK_TIMEOUT_MS
+from app.constants import DEFAULT_TASK_TIMEOUT_MS
 from app.utils.logging import get_logger
 
 logger = get_logger("task_models", source="task")
@@ -192,7 +192,11 @@ class TaskConfig:
             url=data.get("url", ""),
             timeout=data.get("timeout", DEFAULT_TASK_TIMEOUT_MS),
             variables=data.get("variables", {}),
-            steps=[StepConfig.from_dict(s) for s in data.get("steps", []) if _is_valid_step(s)],
+            steps=[
+                StepConfig.from_dict(s)
+                for s in data.get("steps", [])
+                if _is_valid_step(s)
+            ],
             on_success=data.get("on_success", {}),
             on_failure=data.get("on_failure", {}),
             metadata=data.get("metadata", {}),

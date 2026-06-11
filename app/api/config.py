@@ -42,7 +42,7 @@ def set_source_level(payload: dict):
     try:
         config.set_source_level(source, level)
     except ValueError as e:
-        raise HTTPException(400, str(e))
+        raise HTTPException(400, str(e)) from e
 
     return {"success": True, "message": f"已设置 {source} 级别为 {level}"}
 
@@ -100,7 +100,9 @@ def save_config(
             # reload 失败：回滚磁盘配置并重新加载
             api_logger.error("配置重载失败，正在回滚: {}", reload_exc, exc_info=True)
             try:
-                profile_svc.update(lambda data: data.__dict__.update(backup_data.__dict__))
+                profile_svc.update(
+                    lambda data: data.__dict__.update(backup_data.__dict__)
+                )
                 svc.reload_config()
             except Exception:
                 api_logger.error("回滚失败", exc_info=True)

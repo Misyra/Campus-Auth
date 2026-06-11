@@ -126,9 +126,7 @@ def is_network_available_url(
             elapsed = (time.perf_counter() - start) * 1000
             return (url, False, f"{type(exc).__name__} ({elapsed:.0f}ms)")
 
-    futures = {
-        executor.submit(_check_url, url, exp): url for url, exp in url_checks
-    }
+    futures = {executor.submit(_check_url, url, exp): url for url, exp in url_checks}
     for future in as_completed(futures):
         url, ok, detail = future.result()
         if ok:
