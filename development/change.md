@@ -20,7 +20,29 @@
 - 新增 `_handle_apply_profile()`：在消费者线程中执行 stop → reload_config_internal → 日志 → start
 - `reload_config()` 改为通过队列派发 RELOAD 命令，等待消费者完成（30s 超时）
 - `apply_profile()` 改为通过队列派发 APPLY_PROFILE 命令，等待消费者完成（30s 超时）
-- `shutdown()` 简化：直接停止监控核心（不等待队列响应），join 超时从 5s 缩短到 1s
+- `shutdown()` 恢复调用 `stop_scheduler()`，确保运行中任务线程正确 join
+
+### fix: ScheduleEngine 架构问题修复 — 调度器稳定性、登录标志、缓存一致性
+
+**问题 1：调度器自动退出后无法响应新任务**
+- `_scheduler_loop` 在无启用任务时自动退出，新任务创建后调度器不会自动重启
+
+**问题 2：`_login_in_progress` 永久卡住风险**
+- `run_manual_login` 超时时无条件清除 `_login_in_progress`，但消费者线程可能仍在执行登录
+
+**问题 3：`has_enabled_tasks` 缓存不及时清除**
+- `save_task`/`delete_task` 后缓存未失效，调度器可能读到旧数据
+
+**修复内容：**
+
+`app/services/engine.py`：
+- `_scheduler_loop` 去掉自动退出逻辑，`has_enabled_tasks()` 检查移入分钟变化条件内
+- `run_manual_login` 超时时检查 `consumer_thread.is_alive()`，仅在消费者线程死亡时主动清除标志
+- `save_task`/`delete_task` 成功后清除 `_has_enabled_cache`
+- `reload_config`/`apply_profile` 超时时记录 warning 日志
+
+`tests/test_monitor_service.py`：
+- 新增 5 个测试类验证修复效果（队列派发、调度器不退出、登录标志、缓存清除）
 
 ### fix: 修复轻量模式退出无提示 + DashboardSink 未注册时重复创建临时对象
 
