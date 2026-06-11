@@ -17,7 +17,7 @@ from app.services.task_executor import TaskExecutor
 from app.services.task_facade import TaskFacade
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
 from app.utils.logging import DashboardSink, get_logger
-from app.ws_manager import WebSocketManager
+from app.services.websocket_manager import WebSocketManager
 
 container_logger = get_logger("container", source="backend")
 

@@ -1,4 +1,4 @@
-"""ScheduledTaskService 测试 — 聚焦 shell 安全策略集成。"""
+"""TaskExecutor 测试 — 聚焦 shell 安全策略集成。"""
 
 from __future__ import annotations
 
@@ -7,10 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.scheduled_task import ScheduledTaskService
 from app.services.task_executor import TaskExecutor
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
-from app.tasks import TaskManager
 from app.utils.shell_utils import detect_shells as detect_available_shells
 
 
@@ -21,14 +19,11 @@ from app.utils.shell_utils import detect_shells as detect_available_shells
 
 
 def test_history_store_initialized_at_construct(tmp_path):
-    """_history_store 应在 __init__ 中初始化。"""
-    task_manager = TaskManager(tmp_path / "tasks")
-    svc = ScheduledTaskService(
-        tmp_path,
-        task_manager=task_manager,
-    )
-    assert hasattr(svc, "_history_store")
-    assert hasattr(svc._history_store, "add_record")
+    """TaskRegistry 和 TaskHistoryStore 应可独立创建。"""
+    registry = TaskRegistry(tmp_path / "tasks" / "scheduled")
+    history_store = TaskHistoryStore(tmp_path / "tasks" / "scheduled" / "history")
+    assert hasattr(registry, "list_tasks")
+    assert hasattr(history_store, "add_record")
 
 
 class TestDetectAvailableShells:
