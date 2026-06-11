@@ -5,6 +5,34 @@
 
 ## 2026-06-12
 
+### feat: SystemSettings 添加 source_levels 字段
+
+在 `SystemSettings` 模型中新增 `source_levels` 字段，用于存储各 source 的日志级别配置。
+
+**修改内容：**
+- `app/schemas.py`：在 `SystemSettings` 中添加 `source_levels: dict[str, str] = {}`
+- `tests/test_config_schemas.py`：新增 2 个测试（`test_source_levels`、`test_source_levels_default`）
+
+**测试结果：** 113 passed
+
+### feat: DashboardSink 和 DateRotatingSink 添加 source 级别过滤
+
+在 Sink 层添加根据 source 级别过滤日志的逻辑，使 `LogConfigCenter.should_emit()` 的配置真正生效。
+
+**修改内容：**
+- `app/utils/logging.py`：
+  - `DashboardSink.__init__`：获取 `LogConfigCenter` 实例
+  - `DashboardSink.write`：在处理消息前调用 `should_emit()` 进行 source 级别过滤
+  - `DateRotatingSink.__init__`：获取 `LogConfigCenter` 实例
+  - `DateRotatingSink.write`：在处理消息前调用 `should_emit()` 进行 source 级别过滤
+- `tests/test_utils.py`：
+  - 新增 `test_dashboard_sink_filters_by_source_level` 测试函数（4 个断言）
+  - 更新 `TestDateRotatingSinkRotation`：传入带 record 属性的 mock 对象（适配新的 write 方法）
+
+**测试结果：** 172 passed
+
+### refactor: 统一常量定义，消除重复声明
+
 ### refactor: 统一常量定义，消除重复声明
 
 消除 `DEFAULT_STEP_TIMEOUT` / `DEFAULT_TASK_TIMEOUT` 和 `VALID_LOG_LEVELS` / `VALID_SOURCES` 的重复定义，遵循 Single Source of Truth 原则。

@@ -602,6 +602,20 @@ class TestSystemSettings:
         with pytest.raises(ValidationError):
             SystemSettings(backend_log_level="INVALID")
 
+    def test_source_levels(self):
+        """测试 SystemSettings 支持 source_levels"""
+        settings = SystemSettings(
+            backend_log_level="INFO",
+            source_levels={"network": "DEBUG", "task": "WARNING"},
+        )
+        assert settings.source_levels == {"network": "DEBUG", "task": "WARNING"}
+        assert settings.backend_log_level == "INFO"
+
+    def test_source_levels_default(self):
+        """测试 source_levels 默认为空字典"""
+        settings = SystemSettings()
+        assert settings.source_levels == {}
+
 
 # ---------------------------------------------------------------------
 # ProfilesData
