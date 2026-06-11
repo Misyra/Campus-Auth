@@ -10,7 +10,7 @@ from app.schemas import (
     ProfileSettings,
     SystemSettings,
 )
-from app.utils.config_helpers import (
+from app.utils.config_utils import (
     PROFILE_FIELDS,
     assign_profile_fields,
     extract_profile_fields,

@@ -1,5 +1,5 @@
 from .browser import BrowserContextManager
-from .config import ConfigValidator
+from .config_utils import ConfigValidator
 from .crypto import decrypt_password, encrypt_password, mask_password
 from .exceptions import LoginCancelledError
 from .logging import (

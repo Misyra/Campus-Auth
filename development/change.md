@@ -5,6 +5,24 @@
 
 ## 2026-06-11
 
+### refactor: 合并 utils/config.py + config_helpers.py → config_utils.py
+
+将两个配置工具文件合并为一个 `utils/config_utils.py`，减少文件碎片。
+
+**修改内容：**
+- 新建 `app/utils/config_utils.py`，包含 ConfigValidator + PROFILE_FIELDS + extract/assign/validate 函数
+- 删除 `app/utils/config.py` 和 `app/utils/config_helpers.py`
+- 更新 import：`app/services/config_service.py`、`app/utils/__init__.py`、`tests/test_config_schemas.py`、`tests/test_utils.py`
+
+### refactor: tasks/executor.py 重命名为 browser_runner.py
+
+消除 `tasks/executor.py`（浏览器任务执行器）和 `services/task_executor.py`（调度执行器）的命名冲突。
+
+**修改内容：**
+- 重命名 `app/tasks/executor.py` -> `app/tasks/browser_runner.py`
+- 更新 import 路径：`app/tasks/__init__.py`、`app/utils/login.py`、`tests/test_task_executor.py`
+- 类名 `TaskExecutor` 保持不变
+
 ### refactor: services/config.py 重命名为 config_service.py
 
 消除 `services/config.py` 和 `utils/config.py` 的命名冲突。
