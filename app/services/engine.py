@@ -130,6 +130,13 @@ class ScheduleEngine:
         self._pure_mode_lock: threading.Lock = threading.Lock()
         self._start_stop_lock: threading.Lock = threading.Lock()
 
+        # 运行时配置快照（仅在 reload 时深拷贝，读取零拷贝）
+        self._runtime_snapshot: dict = {}
+
+        # 状态快照限流
+        self._last_snapshot_time: float = 0
+        self._SNAPSHOT_MIN_INTERVAL: float = 1.0
+
         # 加载配置（复用 _reload_config_internal）
         self._reload_config_internal()
 
@@ -579,6 +586,11 @@ class ScheduleEngine:
 
     def _update_status_snapshot(self) -> None:
         """Read monitor_core state into lock-free StatusSnapshot."""
+        now = time.time()
+        if now - self._last_snapshot_time < self._SNAPSHOT_MIN_INTERVAL:
+            return
+        self._last_snapshot_time = now
+
         core = self._monitor_core
         if core is not None:
             try:
@@ -718,9 +730,14 @@ class ScheduleEngine:
                 runtime_payload,
                 data.system,
             )
+            self._runtime_snapshot = copy.deepcopy(self._runtime_config)
 
     def _copy_runtime_config(self) -> dict:
-        """深拷贝运行时配置，防止嵌套字典被意外修改。"""
+        """返回运行时配置快照（仅在 reload 时更新，读取零拷贝）。"""
+        snapshot = getattr(self, "_runtime_snapshot", None)
+        if snapshot is not None:
+            return snapshot
+        # 回退：__new__ 构造（测试场景）未初始化快照，走旧的深拷贝路径
         return copy.deepcopy(self._runtime_config)
 
     def reload_config(self) -> None:
