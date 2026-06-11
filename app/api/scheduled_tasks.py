@@ -16,6 +16,93 @@ router = APIRouter()
 api_logger = get_logger("api", source="backend")
 
 
+def _validate_schedule_payload(
+    payload: dict,
+    existing: dict | None = None,
+    *,
+    is_update: bool = False,
+) -> tuple[bool, str, dict | None]:
+    """验证定时任务 payload。
+
+    Args:
+        payload: 前端传入的任务配置
+        existing: 已有任务配置（更新时传入，允许字段缺失）
+        is_update: 是否为更新模式（更新时仅验证 payload 中显式传入的字段）
+
+    Returns:
+        (是否有效, 错误消息, 规范化后的配置字典)
+    """
+
+    def _get(key, default=None):
+        if key in payload:
+            return payload[key]
+        if existing is not None:
+            return existing.get(key, default)
+        return default
+
+    # ── 名称验证 ──
+    name = _get("name", "")
+    if (is_update and "name" in payload and not name) or (
+        not is_update and not name
+    ):
+        return False, "任务名称不能为空", None
+
+    # ── 类型验证 ──
+    task_type = _get("type", "")
+    if (is_update and "type" in payload or not is_update) and task_type not in (
+        "script",
+        "browser",
+        "shell",
+    ):
+        return False, "无效的任务类型", None
+
+    # ── 类型关联字段验证 ──
+    if task_type == "shell" and not _get("command"):
+        return False, "Shell 命令不能为空", None
+
+    if task_type in ("script", "browser") and not _get("target_id"):
+        return False, "请选择目标任务", None
+
+    # ── 时间验证 ──
+    schedule = _get("schedule", {})
+    if (is_update and "schedule" in payload or not is_update) and (
+        not isinstance(schedule.get("hour"), int)
+        or not isinstance(schedule.get("minute"), int)
+    ):
+        return False, "请设置执行时间", None
+
+    hour = schedule.get("hour", 0)
+    minute = schedule.get("minute", 0)
+    if (is_update and "schedule" in payload or not is_update) and not (
+        0 <= hour <= 23 and 0 <= minute <= 59
+    ):
+        return False, "执行时间无效：小时须为 0-23，分钟须为 0-59", None
+
+    # ── 超时验证 ──
+    try:
+        timeout = max(5, min(3600, int(_get("timeout", 60))))
+    except (ValueError, TypeError):
+        return False, "超时时间无效，须为 5 到 3600 之间的整数（秒）", None
+
+    config = {
+        "name": name,
+        "description": _get("description", ""),
+        "type": task_type,
+        "target_id": _get("target_id", ""),
+        "command": _get("command", ""),
+        "shell_path": _get("shell_path", ""),
+        "enabled": _get("enabled", True),
+        "schedule": {"hour": hour, "minute": minute},
+        "timeout": timeout,
+    }
+
+    if existing is not None:
+        config["last_run"] = existing.get("last_run")
+        config["last_status"] = existing.get("last_status")
+
+    return True, "", config
+
+
 def _get_scheduler(request: Request):
     """获取调度器服务实例。"""
     return get_scheduler_service(request)
@@ -46,50 +133,10 @@ async def create_scheduled_task(payload: dict, request: Request) -> ActionRespon
     # 自动生成唯一 ID
     task_id = f"task_{uuid.uuid4().hex[:12]}"
 
-    # 验证必填字段
-    if not payload.get("name"):
-        return ActionResponse(success=False, message="任务名称不能为空")
-
-    task_type = payload.get("type", "")
-    if task_type not in ("script", "browser", "shell"):
-        return ActionResponse(success=False, message="无效的任务类型")
-
-    if task_type == "shell" and not payload.get("command"):
-        return ActionResponse(success=False, message="Shell 命令不能为空")
-
-    if task_type in ("script", "browser") and not payload.get("target_id"):
-        return ActionResponse(success=False, message="请选择目标任务")
-
-    schedule = payload.get("schedule", {})
-    if not isinstance(schedule.get("hour"), int) or not isinstance(
-        schedule.get("minute"), int
-    ):
-        return ActionResponse(success=False, message="请设置执行时间")
-
-    hour, minute = schedule["hour"], schedule["minute"]
-    if not (0 <= hour <= 23 and 0 <= minute <= 59):
-        return ActionResponse(success=False, message="执行时间无效：小时须为 0-23，分钟须为 0-59")
-
-    try:
-        timeout = max(5, min(3600, int(payload.get("timeout", 60))))
-    except (ValueError, TypeError):
-        return ActionResponse(success=False, message="超时时间无效，须为 5 到 3600 之间的整数（秒）")
-
-    # 构建任务配置
-    config = {
-        "name": payload.get("name", ""),
-        "description": payload.get("description", ""),
-        "type": task_type,
-        "target_id": payload.get("target_id", ""),
-        "command": payload.get("command", ""),
-        "shell_path": payload.get("shell_path", ""),
-        "enabled": payload.get("enabled", True),
-        "schedule": {
-            "hour": hour,
-            "minute": minute,
-        },
-        "timeout": timeout,
-    }
+    # 验证并规范化配置
+    valid, message, config = _validate_schedule_payload(payload, is_update=False)
+    if not valid:
+        return ActionResponse(success=False, message=message)
 
     ok, message = scheduler.save_task(task_id, config)
     api_logger.info("创建定时任务 {} -> success={}, message={}", task_id, ok, message)
@@ -110,49 +157,12 @@ async def update_scheduled_task(
     if not existing:
         return ActionResponse(success=False, message="定时任务不存在")
 
-    # 验证字段
-    if "name" in payload and not payload["name"]:
-        return ActionResponse(success=False, message="任务名称不能为空")
-
-    task_type = payload.get("type", existing.get("type"))
-    if "type" in payload and task_type not in ("script", "browser", "shell"):
-        return ActionResponse(success=False, message="无效的任务类型")
-    if task_type == "shell" and not payload.get("command", existing.get("command")):
-        return ActionResponse(success=False, message="Shell 命令不能为空")
-
-    schedule = payload.get("schedule", existing.get("schedule", {}))
-    if "schedule" in payload and (
-        not isinstance(schedule.get("hour"), int)
-        or not isinstance(schedule.get("minute"), int)
-    ):
-        return ActionResponse(success=False, message="请设置执行时间")
-
-    hour, minute = schedule.get("hour", 0), schedule.get("minute", 0)
-    if "schedule" in payload and not (0 <= hour <= 23 and 0 <= minute <= 59):
-        return ActionResponse(success=False, message="执行时间无效：小时须为 0-23，分钟须为 0-59")
-
-    try:
-        timeout = max(5, min(3600, int(payload.get("timeout", existing.get("timeout", 60)))))
-    except (ValueError, TypeError):
-        return ActionResponse(success=False, message="超时时间无效，须为 5 到 3600 之间的整数（秒）")
-
-    # 更新配置
-    config = {
-        "name": payload.get("name", existing.get("name", "")),
-        "description": payload.get("description", existing.get("description", "")),
-        "type": task_type,
-        "target_id": payload.get("target_id", existing.get("target_id", "")),
-        "command": payload.get("command", existing.get("command", "")),
-        "shell_path": payload.get("shell_path", existing.get("shell_path", "")),
-        "enabled": payload.get("enabled", existing.get("enabled", True)),
-        "schedule": {
-            "hour": hour,
-            "minute": minute,
-        },
-        "timeout": timeout,
-        "last_run": existing.get("last_run"),
-        "last_status": existing.get("last_status"),
-    }
+    # 验证并规范化配置（更新模式：仅校验 payload 中显式传入的字段）
+    valid, message, config = _validate_schedule_payload(
+        payload, existing=existing, is_update=True
+    )
+    if not valid:
+        return ActionResponse(success=False, message=message)
 
     ok, message = scheduler.save_task(task_id, config)
     api_logger.info("更新定时任务 {} -> success={}, message={}", task_id, ok, message)
