@@ -884,30 +884,6 @@ class TestApplyProfileQueueDispatch:
         ), f"apply_profile 应派发 APPLY_PROFILE 命令，实际派发: {enqueued}"
 
 
-class TestSchedulerNoAutoExit:
-    """调度器不应因无启用任务而自动退出。"""
-
-    def test_scheduler_continues_without_enabled_tasks(self):
-        """测试调度器在无启用任务时继续运行。"""
-        svc = _make_monitor_service()
-        svc._scheduler_running = True
-        svc._scheduler_stop_event = threading.Event()
-
-        check_count = [0]
-        def mock_has_enabled():
-            check_count[0] += 1
-            if check_count[0] >= 3:
-                svc._scheduler_stop_event.set()
-            return False
-
-        svc.has_enabled_tasks = mock_has_enabled
-        svc._scheduler_loop()
-
-        assert check_count[0] >= 3, (
-            f"调度器应在无启用任务时继续运行，实际检查次数: {check_count[0]}"
-        )
-
-
 class TestLoginInProgressConsumerDead:
     """引擎线程死亡时，_login_in_progress 应被主动清除。"""
 

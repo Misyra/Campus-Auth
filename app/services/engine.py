@@ -141,7 +141,6 @@ class ScheduleEngine:
         self._reload_config_internal()
 
         self._monitor_core: NetworkMonitorCore | None = None
-        self._monitor_thread: threading.Thread | None = None
         self._thread_done = threading.Event()
         self._pure_mode: bool = self._profile_service.load().system.pure_mode
 
@@ -162,8 +161,6 @@ class ScheduleEngine:
         self._scheduler_history_dir.mkdir(parents=True, exist_ok=True)
 
         self._scheduler_running = False
-        self._scheduler_thread: threading.Thread | None = None
-        self._scheduler_stop_event = threading.Event()
         self._running_task_threads: list[threading.Thread] = []
         self._running_tasks_lock = threading.Lock()
         self._history_lock = threading.Lock()
@@ -183,7 +180,7 @@ class ScheduleEngine:
         self._last_login_attempt: float = 0
         self._login_retry_config: tuple | None = None
 
-        # 统一引擎线程（替代 _consumer_thread + _scheduler_thread + _monitor_thread）
+        # 统一引擎线程
         self._engine_thread = threading.Thread(target=self._engine_loop, daemon=True)
         self._engine_thread.start()
 
@@ -418,69 +415,6 @@ class ScheduleEngine:
             with self._running_tasks_lock:
                 self._running_task_threads.append(t)
             t.start()
-
-    # ── 旧队列消费者（保留用于兼容，待测试通过后清理）──
-
-    def _queue_consumer(self) -> None:
-        """专用线程：从 _cmd_queue 拉取命令并执行。
-
-        消费者线程在整个进程生命周期内运行，
-        仅 "shutdown" 命令会跳出循环。
-        """
-        while not self._shutdown_event.is_set():
-            try:
-                cmd = self._cmd_queue.get(timeout=0.1)
-            except queue.Empty:
-                continue
-
-            try:
-                if cmd.type == EngineCmdType.SHUTDOWN:
-                    self._handle_stop()
-                    break
-
-                handler_name = self._CMD_ROUTES.get(cmd.type)
-                if handler_name:
-                    getattr(self, handler_name)(cmd)
-            except Exception:
-                engine_logger.exception("队列命令执行失败: {}", cmd.type)
-            finally:
-                if cmd.response_event:
-                    cmd.response_event.set()
-                self._cmd_queue.task_done()
-
-    def _start_monitor_core(self, config: dict, pure_mode: bool) -> None:
-        """创建并启动监控核心（在消费者线程中调用）。
-
-        监控线程结束后检查是否因方案切换退出，如果是则自动重启。
-        """
-        self._thread_done.clear()
-        core = NetworkMonitorCore(
-            config=config,
-            log_callback=self.record_log,
-            thread_done=self._thread_done,
-            login_history=self._login_history,
-            worker_getter=self._worker_getter,
-        )
-        core.set_profile_service(self._profile_service)
-
-        def _run():
-            core.start_monitoring()
-            # 监控结束后检查是否因方案切换退出
-            if core._profile_switch_requested:
-                # 方案已在 _check_profile_switch 中持久化，重载配置后重启
-                self._reload_config_internal()
-                self._enqueue(
-                    EngineCommand(
-                        type=EngineCmdType.START,
-                        data={"pure_mode": self.pure_mode},
-                    )
-                )
-
-        thread = threading.Thread(target=_run, daemon=True)
-
-        self._monitor_core = core
-        self._monitor_thread = thread
-        thread.start()
 
     def _handle_start(self, cmd: EngineCommand) -> None:
         """启动监控（在引擎循环中调用）。"""
@@ -1324,67 +1258,6 @@ class ScheduleEngine:
             self._running_task_threads.clear()
 
         engine_logger.info("定时任务调度器已停止")
-
-    def _scheduler_loop(self) -> None:
-        """调度器主循环，运行在独立守护线程中。
-
-        调度器持续运行直到 stop_scheduler() 被调用，
-        不再因无启用任务而自动退出（避免任务变更后调度器无法响应）。
-        """
-        engine_logger.info("调度器循环已启动")
-        last_checked_minute = -1
-
-        while self._scheduler_running and not self._scheduler_stop_event.is_set():
-            try:
-                now = datetime.now()
-                current_minute = now.hour * 60 + now.minute
-
-                # 每分钟只检查一次，且仅在有启用任务时执行
-                if current_minute != last_checked_minute and self.has_enabled_tasks():
-                    last_checked_minute = current_minute
-                    self._check_and_execute(now)
-
-                # 每 30 秒检查一次，减少无意义唤醒
-                if self._scheduler_stop_event.wait(timeout=SCHEDULER_CHECK_INTERVAL):
-                    break
-
-            except Exception as e:
-                engine_logger.error("调度器循环异常: {}", e)
-                if self._scheduler_stop_event.wait(timeout=5):
-                    break
-
-        self._scheduler_running = False
-        engine_logger.info("调度器循环已退出")
-
-    def _check_and_execute(self, now: datetime) -> None:
-        """检查并执行到期的任务。"""
-        current_minute_key = (now.hour, now.minute)
-        if current_minute_key == self._last_triggered_minute:
-            return
-        self._last_triggered_minute = current_minute_key
-
-        tasks = self.list_tasks()
-        for task in tasks:
-            if not task.get("enabled", False):
-                continue
-
-            schedule = task.get("schedule", {})
-            hour = schedule.get("hour", -1)
-            minute = schedule.get("minute", -1)
-
-            # 检查时间是否匹配
-            if now.hour != hour or now.minute != minute:
-                continue
-
-            # 执行任务
-            task_id = task.get("id", "")
-            engine_logger.info("触发定时任务: {}", task_id)
-            t = threading.Thread(
-                target=self._execute_task_wrapper, args=(task_id,), daemon=True
-            )
-            with self._running_tasks_lock:
-                self._running_task_threads.append(t)
-            t.start()
 
     def _execute_task_wrapper(self, task_id: str) -> None:
         """任务执行包装器（在守护线程中运行），负责清理线程引用。"""
