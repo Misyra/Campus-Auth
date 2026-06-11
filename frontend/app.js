@@ -34,29 +34,11 @@ function applyAppearanceEarly() {
     if (appearance.background_color) {
       root.style.setProperty('--bg-primary', appearance.background_color);
     }
-    if (appearance.card_opacity != null) {
-      const bgHex = appearance.background_color || '#0f172a';
-      const num = parseInt(bgHex.replace('#', ''), 16);
-      const r = (num >> 16) & 255, g = (num >> 8) & 255, b = num & 255;
-      root.style.setProperty('--bg-card', `rgba(${r}, ${g}, ${b}, ${appearance.card_opacity})`);
-      // 提前设置卡片毛玻璃 blur，避免页面切换时延迟渲染
-      if (appearance.backdrop_filter !== false && appearance.card_opacity > 0) {
-        root.style.setProperty('--card-blur', `blur(${Math.round(appearance.card_opacity * 20)}px)`);
-      } else {
-        root.style.setProperty('--card-blur', 'none');
-      }
-    }
     if (appearance.sidebar_opacity != null) {
       root.style.setProperty('--sidebar-opacity', appearance.sidebar_opacity);
     }
     if (appearance.sidebar_accent) {
       root.style.setProperty('--sidebar-accent', appearance.sidebar_accent);
-    }
-    if (appearance.sidebar_color) {
-      const num = parseInt(appearance.sidebar_color.replace('#', ''), 16);
-      const r = (num >> 16) & 255, g = (num >> 8) & 255, b = num & 255;
-      root.style.setProperty('--sidebar-bg-1', `rgba(${r}, ${g}, ${b}, var(--sidebar-opacity, 0.95))`);
-      root.style.setProperty('--sidebar-bg-2', `rgba(${r}, ${g}, ${b}, calc(var(--sidebar-opacity, 0.95) + 0.03))`);
     }
   } catch {
     // 外观设置应用失败（localStorage 不可用或数据损坏），忽略
