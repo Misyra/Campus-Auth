@@ -5,6 +5,24 @@
 
 ## 2026-06-11
 
+### refactor: 消除重复逻辑
+
+统一网络检测目标解析、添加 API 路由日志公共函数、合并 config.py 的两个 load 函数。
+
+**统一网络检测目标解析（`parse_ping_targets`）：**
+- `app/utils/network_helpers.py`：新增 `parse_ping_targets()` 函数，统一解析 ping_targets 配置为 (host, port) 列表，支持字符串和列表格式，自动补全缺少端口的项（IPv4:53, 域名:443）
+- `app/core/monitor_core.py`：`_build_test_sites()` 简化为调用 `parse_ping_targets`，删除内联解析和端口补全逻辑；移除不再使用的 `parse_host_port` 导入
+- `app/services/engine.py`：`test_network()` 简化为调用 `parse_ping_targets`；移除不再使用的 `parse_host_port` 导入
+- `app/network/decision.py`：`check_network_status()` 简化为调用 `parse_ping_targets`，删除字符串/列表类型判断和端口补全逻辑
+- `app/tasks/executor.py`：`_network_detection_check()` 简化为调用 `parse_ping_targets`，删除字符串/列表类型判断
+
+**添加 API 路由日志公共函数（`logged_action`）：**
+- `app/api/__init__.py`：新增 `logged_action(ok, message, log_fmt, *args)` 函数，封装 `api_logger.info()` + `ActionResponse()` 的常见模式
+
+**合并 config.py 的两个 load 函数：**
+- `app/services/config.py`：提取 `_build_config_payload(profile_service, data, *, apply_overrides)` 内部函数，统一 `load_ui_config` 和 `load_runtime_config` 的共同逻辑（配置加载、字段提取、归一化）
+- `load_ui_config` 和 `load_runtime_config` 改为薄包装，签名和返回值不变（向后兼容）
+
 ### refactor: 从 engine.py 提取 ScheduledTaskService
 
 将定时任务相关职责从 `ScheduleEngine` 提取到独立的 `ScheduledTaskService` 类，降低 engine.py 的复杂度。

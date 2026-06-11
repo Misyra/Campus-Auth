@@ -61,17 +61,13 @@ def check_network_status(config: dict) -> tuple[bool, str]:
         )
         return (False, "all_disabled")
 
-    test_sites = monitor_config.get("ping_targets", None)
-    if isinstance(test_sites, str):
-        test_sites = [s.strip() for s in test_sites.split(",") if s.strip()]
-    if test_sites and isinstance(test_sites[0], str):
-        from app.utils.network_helpers import parse_host_port
+    from app.utils.network_helpers import parse_ping_targets
 
-        try:
-            test_sites = parse_host_port(test_sites)
-        except ValueError:
-            logger.warning("ping_targets 配置格式错误，跳过 TCP 检测")
-            test_sites = None
+    try:
+        test_sites = parse_ping_targets(monitor_config.get("ping_targets", None))
+    except ValueError:
+        logger.warning("ping_targets 配置格式错误，跳过 TCP 检测")
+        test_sites = None
 
     test_urls = monitor_config.get("test_urls", None)
 
