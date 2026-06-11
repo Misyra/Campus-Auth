@@ -10,7 +10,6 @@ from app.services.debug import DebugSessionManager
 from app.services.engine import ScheduleEngine
 from app.services.login_history import LoginHistoryService
 from app.services.profile import ProfileService
-from app.services.scheduled_task import ScheduledTaskService
 from app.services.task import TaskService
 
 
@@ -40,12 +39,3 @@ def get_debug_manager(request: Request) -> DebugSessionManager:
 
 def get_login_history_service(request: Request) -> LoginHistoryService:
     return request.app.state.services.login_history_service
-
-
-def get_scheduled_task_service(request: Request) -> ScheduledTaskService:
-    return request.app.state.services.scheduled_task_service
-
-
-def get_scheduler_service(request: Request) -> ScheduledTaskService:
-    """向后兼容：返回定时任务服务。"""
-    return request.app.state.services.scheduled_task_service
