@@ -15,7 +15,7 @@ from app.utils.files import atomic_write
 from app.utils.logging import get_logger
 
 if TYPE_CHECKING:
-    from app.services.profile import ProfileService
+    from app.services.profile_service import ProfileService
     from app.tasks.manager import TaskManager
 
 logger = get_logger("login_history", source="backend")

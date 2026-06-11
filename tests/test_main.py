@@ -521,7 +521,7 @@ class TestRunLoginThenExit:
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile.ProfileService", return_value=mock_ps),
+            patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
                 "app.services.config_service.build_runtime_config",
                 return_value={"retry_settings": {"max_retries": 3}},
@@ -550,7 +550,7 @@ class TestRunLoginThenExit:
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile.ProfileService", return_value=mock_ps),
+            patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
                 "app.services.config_service.build_runtime_config",
                 return_value={
@@ -580,7 +580,7 @@ class TestRunLoginThenExit:
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile.ProfileService", return_value=mock_ps),
+            patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
                 "app.services.config_service.build_runtime_config",
                 return_value={
@@ -608,7 +608,7 @@ class TestRunLoginThenExit:
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile.ProfileService", return_value=mock_ps),
+            patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
                 "app.services.config_service.build_runtime_config",
                 return_value={"retry_settings": {"max_retries": 3}},
@@ -640,7 +640,7 @@ class TestRunLoginThenExit:
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile.ProfileService", return_value=mock_ps),
+            patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
                 "app.services.config_service.build_runtime_config",
                 return_value={"retry_settings": {"max_retries": 3}},
@@ -673,7 +673,7 @@ class TestRunLoginThenExit:
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile.ProfileService", return_value=mock_ps),
+            patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
                 "app.services.config_service.build_runtime_config",
                 return_value={"retry_settings": {"max_retries": 3}},
@@ -725,7 +725,7 @@ class TestRunServer:
             patch("main.is_service_running", return_value=(False, None)),
             patch("main.is_local_port_in_use", return_value=False),
             patch("main.ensure_playwright_ready"),
-            patch("app.services.profile.ProfileService") as mock_ps_cls,
+            patch("app.services.profile_service.ProfileService") as mock_ps_cls,
             patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.create_app") as mock_create_app,
             patch("app.application.run"),
@@ -757,7 +757,7 @@ class TestRunServer:
             patch("main.is_service_running", return_value=(False, None)),
             patch("main.is_local_port_in_use", return_value=False),
             patch("main.ensure_playwright_ready"),
-            patch("app.services.profile.ProfileService") as mock_ps_cls,
+            patch("app.services.profile_service.ProfileService") as mock_ps_cls,
             patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.create_app") as mock_create_app,
             patch("app.application.run"),
@@ -792,7 +792,7 @@ class TestRunServer:
             patch("main.is_service_running", return_value=(False, None)),
             patch("main.is_local_port_in_use", return_value=False),
             patch("main.ensure_playwright_ready"),
-            patch("app.services.profile.ProfileService") as mock_ps_cls,
+            patch("app.services.profile_service.ProfileService") as mock_ps_cls,
             patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.create_app") as mock_create_app,
             patch("app.application.run"),
@@ -843,7 +843,7 @@ class TestSignalHandler:
             patch("main.is_service_running", return_value=(False, None)),
             patch("main.is_local_port_in_use", return_value=False),
             patch("main.ensure_playwright_ready"),
-            patch("app.services.profile.ProfileService") as mock_ps_cls,
+            patch("app.services.profile_service.ProfileService") as mock_ps_cls,
             patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.create_app") as mock_create_app,
             patch("app.application.run"),
@@ -892,7 +892,7 @@ class TestSignalHandler:
             patch("main.is_service_running", return_value=(False, None)),
             patch("main.is_local_port_in_use", return_value=False),
             patch("main.ensure_playwright_ready"),
-            patch("app.services.profile.ProfileService") as mock_ps_cls,
+            patch("app.services.profile_service.ProfileService") as mock_ps_cls,
             patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.create_app") as mock_create_app,
             patch("app.application.run"),

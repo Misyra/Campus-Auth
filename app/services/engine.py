@@ -28,7 +28,7 @@ from app.utils.login import SCREENSHOT_URL_PATTERN
 from app.utils.network import parse_ping_targets
 from app.services.websocket_manager import WebSocketManager
 
-from .profile import ProfileService
+from .profile_service import ProfileService
 
 # ── 常量 ──
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 
 from app.deps import get_profile_service
-from app.services.profile import ProfileService
+from app.services.profile_service import ProfileService
 from app.utils.repo_proxy import repo_fetch_json
 
 router = APIRouter()

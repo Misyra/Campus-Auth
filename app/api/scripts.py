@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.deps import get_task_service
 from app.schemas import ActionResponse
-from app.services.task import TaskService
+from app.services.task_service import TaskService
 from app.utils.logging import get_logger
 from app.workers.script_runner import ScriptRunner, detect_available_binaries
 
