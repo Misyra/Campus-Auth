@@ -57,11 +57,6 @@ export const logFileMethods = {
     const group = this.logFileGroups.find(g => g.date === this.logViewer.date);
     return group?.files || [];
   },
-  formatFileSize(bytes) {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  },
   getLogFileClass(level) {
     const l = String(level || '').toUpperCase();
     if (l === 'ERROR' || l === 'CRITICAL') return 'error';
