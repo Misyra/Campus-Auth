@@ -5,6 +5,28 @@
 
 ## 2026-06-11
 
+### refactor: 统一时间/颜色工具函数到 formatters.js
+
+将散落在 `appearance.js` 和 `scheduled_tasks.js` 中的时间格式和颜色工具函数统一到 `formatters.js`。
+
+**`formatters.js` 新增 4 个独立导出函数：**
+- `formatScheduleTime(schedule)` — 格式化定时任务调度时间（{hour, minute} → "08:30"）
+- `formatTimeValue(seconds)` — 格式化任务超时时间（秒 → 分钟/秒）
+- `hexToRgb(hex)` — HEX 颜色转 RGB 对象
+- `adjustColor(hex, amount)` — 调整颜色亮度
+
+**`appearance.js` 变更：**
+- 新增 `import { hexToRgb, adjustColor } from './formatters.js'`
+- 删除 `adjustColor` 和 `hexToRgb` 方法定义
+- `applyAppearance` 中 `this.hexToRgb(...)` → `hexToRgb(...)`，`this.adjustColor(...)` → `adjustColor(...)`
+
+**`scheduled_tasks.js` 变更：**
+- 新增 `import { formatScheduleTime, formatTimeValue } from './formatters.js'`
+- 删除 `formatScheduleTime` 和 `formatTimeValue` 方法定义
+
+**`scheduled_tasks.html` 变更：**
+- `formatTimeValue(hour, minute)` 调用改为 `formatScheduleTime(schedule)`（原 `formatTimeValue` 签名已变）
+
 ### refactor: 统一登录历史记录，消除 engine/monitor_core 重复的 _record_login_history
 
 **问题：**

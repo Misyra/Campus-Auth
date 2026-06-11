@@ -1,4 +1,5 @@
 import { DEFAULT_APPEARANCE, ACCENT_COLORS, BG_COLORS, LIMITS } from '../constants.js';
+import { hexToRgb, adjustColor } from './formatters.js';
 import { pickFile } from './utils.js';
 
 export const appearanceMethods = {
@@ -45,7 +46,7 @@ export const appearanceMethods = {
     // 主题色
     if (this.appearance.accent_color) {
       root.style.setProperty('--accent', this.appearance.accent_color);
-      root.style.setProperty('--accent-hover', this.adjustColor(this.appearance.accent_color, -20));
+      root.style.setProperty('--accent-hover', adjustColor(this.appearance.accent_color, -20));
     }
 
     // 页面缩放 — 只缩放内容区域，顶栏和侧边栏不受影响
@@ -66,7 +67,7 @@ export const appearanceMethods = {
       _p('--bg-primary', '#eef2f7');
       _p('--bg-secondary', '#e4e9f0');
     } else if (this.appearance.background_color) {
-      const bgRgb = this.hexToRgb(this.appearance.background_color);
+      const bgRgb = hexToRgb(this.appearance.background_color);
       if (bgRgb) {
         _p('--bg-primary', this.appearance.background_color);
         _p('--bg-secondary', `rgb(${Math.min(bgRgb.r + 15, 255)}, ${Math.min(bgRgb.g + 15, 255)}, ${Math.min(bgRgb.b + 15, 255)})`);
@@ -85,7 +86,7 @@ export const appearanceMethods = {
     if (isLight) {
       _p('--bg-card', `rgba(255, 255, 255, ${co})`);
     } else {
-      const cardRgb = this.hexToRgb(this.appearance.background_color || '#0f172a');
+      const cardRgb = hexToRgb(this.appearance.background_color || '#0f172a');
       if (cardRgb) {
         _p('--bg-card', `rgba(${cardRgb.r}, ${cardRgb.g}, ${cardRgb.b}, ${co})`);
       }
@@ -109,7 +110,7 @@ export const appearanceMethods = {
     // 侧边栏背景色
     if (this.appearance.sidebar_color) {
       // 用户自定义颜色
-      const sidebarRgb = this.hexToRgb(this.appearance.sidebar_color);
+      const sidebarRgb = hexToRgb(this.appearance.sidebar_color);
       if (sidebarRgb) {
         _p('--sidebar-bg-1', `rgba(${sidebarRgb.r}, ${sidebarRgb.g}, ${sidebarRgb.b}, var(--sidebar-opacity))`);
         _p('--sidebar-bg-2', `rgba(${sidebarRgb.r}, ${sidebarRgb.g}, ${sidebarRgb.b}, calc(var(--sidebar-opacity) + 0.03))`);
@@ -119,7 +120,7 @@ export const appearanceMethods = {
       _p('--sidebar-bg-2', 'rgba(226, 232, 240, calc(var(--sidebar-opacity) + 0.03))');
     } else {
       // 深色主题从背景色推导
-      const bgRgb = this.hexToRgb(this.appearance.background_color || '#0f172a');
+      const bgRgb = hexToRgb(this.appearance.background_color || '#0f172a');
       if (bgRgb) {
         _p('--sidebar-bg-1', `rgba(${Math.min(bgRgb.r + 15, 255)}, ${Math.min(bgRgb.g + 15, 255)}, ${Math.min(bgRgb.b + 15, 255)}, var(--sidebar-opacity))`);
         _p('--sidebar-bg-2', `rgba(${Math.max(bgRgb.r - 10, 0)}, ${Math.max(bgRgb.g - 10, 0)}, ${Math.max(bgRgb.b - 10, 0)}, calc(var(--sidebar-opacity) + 0.03))`);
@@ -132,24 +133,6 @@ export const appearanceMethods = {
     } else {
       root.style.removeProperty('--sidebar-accent');
     }
-  },
-
-  // 颜色调整辅助函数
-  adjustColor(hex, amount) {
-    const num = parseInt(hex.replace('#', ''), 16);
-    const r = Math.max(0, Math.min(255, (num >> 16) + amount));
-    const g = Math.max(0, Math.min(255, ((num >> 8) & 0x00FF) + amount));
-    const b = Math.max(0, Math.min(255, (num & 0x0000FF) + amount));
-    return `#${(1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1)}`;
-  },
-
-  hexToRgb(hex) {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-      r: parseInt(result[1], 16),
-      g: parseInt(result[2], 16),
-      b: parseInt(result[3], 16),
-    } : null;
   },
 
   getBgColors() {
