@@ -8,6 +8,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.services.scheduled_task import MAX_HISTORY_SIZE, ScheduledTaskService
+from app.services.task_executor import TaskExecutor
+from app.services.task_registry import TaskHistoryStore, TaskRegistry
 from app.tasks import TaskManager
 from app.utils.shell_utils import get_default_shell
 
@@ -133,51 +135,54 @@ def test_history(scheduler):
 
 
 class TestExecuteShellUsesPolicy:
-    """测试 _execute_shell_sync 使用 ShellCommandPolicy 进行安全校验。"""
+    """测试 TaskExecutor._execute_shell 使用 ShellCommandPolicy 进行安全校验。"""
 
-    def test_execute_shell_uses_policy(self, scheduler):
-        """_execute_shell_sync 应通过 ShellCommandPolicy 验证路径并钳制超时。"""
-        # 直接 mock 缓存的 _shell_policy 实例
+    @pytest.fixture
+    def executor(self, project_root):
+        """创建 TaskExecutor 实例。"""
+        registry = TaskRegistry(project_root / "tasks" / "scheduled")
+        history_store = TaskHistoryStore(project_root / "tasks" / "scheduled" / "history")
+        return TaskExecutor(
+            registry=registry,
+            history_store=history_store,
+            worker_getter=lambda: None,
+        )
+
+    def test_execute_shell_uses_policy(self, executor):
+        """_execute_shell 应通过 ShellCommandPolicy 验证路径并钳制超时。"""
         mock_policy = MagicMock()
         mock_policy.run_sync = MagicMock(return_value=(0, "hello", ""))
-        scheduler._shell_policy = mock_policy
+        executor._shell_policy = mock_policy
 
-        success, message = scheduler._execute_shell_sync("echo hello", 60, "cmd.exe")
+        success, message = executor._execute_shell("echo hello", 60, "cmd.exe")
 
-        # 验证 run_sync 被调用
         mock_policy.run_sync.assert_called_once()
         assert success is True
 
-    def test_execute_shell_rejects_unknown_path(self, scheduler):
-        """_execute_shell_sync 应拒绝不在白名单中的 shell 路径。"""
-        fake_shells = [
-            {"name": "cmd", "path": "cmd.exe", "description": "Windows 命令提示符"}
-        ]
+    def test_execute_shell_rejects_unknown_path(self, executor):
+        """_execute_shell 应拒绝不在白名单中的 shell 路径。"""
+        success, message = executor._execute_shell(
+            "echo hello",
+            60,
+            "/malicious/shell",
+        )
+        assert success is False
+        assert (
+            "白名单" in message
+            or "拒绝" in message
+            or "Permission" in message.lower()
+            or "不在" in message
+        )
 
-        with patch(
-            "app.services.scheduled_task.detect_shells", return_value=fake_shells
-        ):
-            success, message = scheduler._execute_shell_sync(
-                "echo hello",
-                60,
-                "/malicious/shell",
-            )
-            assert success is False
-            assert "白名单" in message
-
-    def test_execute_shell_timeout_clamped(self, scheduler):
-        """_execute_shell_sync 的超时应通过 ShellCommandPolicy 被 clamp 到 [1, 300]。"""
-        # 直接 mock 缓存的 _shell_policy 实例
+    def test_execute_shell_timeout_clamped(self, executor):
+        """_execute_shell 的超时应通过 ShellCommandPolicy 被 clamp 到 [1, 300]。"""
         mock_policy = MagicMock()
         mock_policy.run_sync = MagicMock(return_value=(0, "ok", ""))
-        scheduler._shell_policy = mock_policy
+        executor._shell_policy = mock_policy
 
-        # 传入超大超时值 999
-        success, message = scheduler._execute_shell_sync("echo test", 999, "cmd.exe")
+        success, message = executor._execute_shell("echo test", 999, "cmd.exe")
 
-        # 验证执行成功
         assert success is True
-        # 验证 run_sync 被调用
         mock_policy.run_sync.assert_called_once()
 
 
@@ -431,18 +436,18 @@ class TestSchedulerHistory:
 
 
 class TestSchedulerStartStop:
-    def test_start_sets_running(self, tmp_path: Path):
+    def test_scheduler_running_always_false(self, tmp_path: Path):
+        """调度状态已迁移至 Engine，scheduler_running 始终返回 False。"""
         task_manager = TaskManager(tmp_path / "tasks")
         scheduler = ScheduledTaskService(
             tmp_path,
             task_manager=task_manager,
             worker_getter=lambda: None,
         )
-        scheduler.start_scheduler()
-        assert scheduler._scheduler_running is True
-        scheduler.stop_scheduler()
+        assert scheduler.scheduler_running is False
 
-    def test_stop_clears_running(self, tmp_path: Path):
+    def test_start_scheduler_is_noop(self, tmp_path: Path):
+        """start_scheduler 是空操作，不改变 scheduler_running。"""
         task_manager = TaskManager(tmp_path / "tasks")
         scheduler = ScheduledTaskService(
             tmp_path,
@@ -450,8 +455,7 @@ class TestSchedulerStartStop:
             worker_getter=lambda: None,
         )
         scheduler.start_scheduler()
-        scheduler.stop_scheduler()
-        assert scheduler._scheduler_running is False
+        assert scheduler.scheduler_running is False
 
     def test_double_start_no_error(self, tmp_path: Path):
         task_manager = TaskManager(tmp_path / "tasks")
@@ -462,7 +466,6 @@ class TestSchedulerStartStop:
         )
         scheduler.start_scheduler()
         scheduler.start_scheduler()  # 不应抛异常
-        scheduler.stop_scheduler()
 
     def test_stop_when_not_running(self, tmp_path: Path):
         task_manager = TaskManager(tmp_path / "tasks")
