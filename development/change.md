@@ -5,6 +5,22 @@
 
 ## 2026-06-11
 
+### refactor: 统一登录历史记录，消除 engine/monitor_core 重复的 _record_login_history
+
+**问题：**
+- `ScheduleEngine._record_login_history()` 和 `NetworkMonitorCore._record_login_history()` 各自有一份手动提取 profile_name/task_name 的逻辑，绕过了 `LoginHistoryService.record()` 已有的自动提取抽象
+
+**修复内容：**
+
+`app/services/engine.py`：
+- `_record_login_history` 方法签名从 `(success, duration_ms, task_name="", error="")` 简化为 `(success, duration_ms, error="")`，删除手动提取 profile_name 的逻辑
+- 内部改为委托 `self._login_history.record(profile_service=self._profile_service, task_manager=self._task_manager)`，自动提取方案和任务名称
+- `_execute_browser_sync` 中 4 处调用点适配新签名（移除 `task_name` 参数）
+
+`app/core/monitor_core.py`：
+- `_record_login_history` 方法内部改为委托 `self._login_history.record(profile_service=self._profile_service)`，自动提取方案名称
+- 删除手动从 `self.config` 读取 `profile_name` 和 `active_task` 的逻辑
+
 ### fix: reload_config/apply_profile 通过队列派发到消费者线程执行
 
 **问题：**
