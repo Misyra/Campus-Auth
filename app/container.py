@@ -50,6 +50,7 @@ class ServiceContainer:
         self._ws_drain_task: asyncio.Task | None = None
         self._log_handler_id: int | None = None
         self._web_services_started = False
+        self._shutdown_done = False
 
     # ── 属性别名（保持 API 路由兼容）──
 
@@ -125,6 +126,9 @@ class ServiceContainer:
 
     async def shutdown(self):
         """关闭服务。"""
+        if self._shutdown_done:
+            return
+        self._shutdown_done = True
         container_logger.info("服务容器开始关闭...")
 
         if self._log_handler_id is not None:
