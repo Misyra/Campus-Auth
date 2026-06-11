@@ -780,6 +780,45 @@ class TestLogConfigCenter:
         # 这里只验证方法可调用
         assert isinstance(center.is_initialized(), bool)
 
+    def test_set_source_level(self):
+        """测试设置 source 级别"""
+        config = LogConfigCenter()
+        config.initialize()
+        config.set_source_level("network", "DEBUG")
+        assert config.get_source_level("network") == "DEBUG"
+
+    def test_get_source_level_default(self):
+        """测试获取未设置的 source 级别返回全局级别"""
+        config = LogConfigCenter()
+        config.initialize()
+        config.set_level("INFO")
+        config._source_levels.clear()
+        assert config.get_source_level("network") == "INFO"
+
+    def test_should_emit_with_source_level(self):
+        """测试 should_emit 过滤逻辑"""
+        config = LogConfigCenter()
+        config.initialize()
+        config.set_level("INFO")
+        config.set_source_level("network", "DEBUG")
+
+        # network source 应该输出 DEBUG
+        assert config.should_emit("network", "DEBUG") is True
+        assert config.should_emit("network", "INFO") is True
+
+        # backend source 使用全局级别 INFO，不应该输出 DEBUG
+        assert config.should_emit("backend", "DEBUG") is False
+        assert config.should_emit("backend", "INFO") is True
+
+    def test_get_all_source_levels(self):
+        """测试获取所有 source 级别配置"""
+        config = LogConfigCenter()
+        config.initialize()
+        config.set_source_level("network", "DEBUG")
+        config.set_source_level("task", "WARNING")
+        levels = config.get_all_source_levels()
+        assert levels == {"network": "DEBUG", "task": "WARNING"}
+
 
 # =====================================================================
 # CREATE_NO_WINDOW_FLAG 常量

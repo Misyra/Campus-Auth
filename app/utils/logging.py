@@ -89,7 +89,7 @@ logger.add(_to_std_logging, level="DEBUG", format="{message}")
 
 # ==================== 日志级别标准化 ====================
 
-VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+VALID_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 
 
 def normalize_level(level: str | None, default: str = "INFO") -> str:
@@ -100,7 +100,7 @@ def normalize_level(level: str | None, default: str = "INFO") -> str:
 
 # ==================== 核心接口 ====================
 
-VALID_SOURCES = {"backend", "network", "task", "frontend", "debug"}
+VALID_SOURCES = frozenset({"backend", "network", "task", "frontend", "debug"})
 
 
 def get_logger(name: str, source: str = "backend") -> logger:
@@ -342,6 +342,8 @@ class LogConfigCenter:
         self._configured = False
         self._initialized = True
         self._file_sink_id: int | None = None
+        # source 级别配置
+        self._source_levels: dict[str, str] = {}
 
     @classmethod
     def get_instance(cls) -> LogConfigCenter:
@@ -415,3 +417,41 @@ class LogConfigCenter:
             logger.info("日志系统启动 | 目录: {} | 保留 {} 天", log_dir, retention_days)
         except Exception as e:
             logger.warning("无法启用文件日志 {}: {}", log_dir, e)
+
+    # ==================== source 级别管理 ====================
+
+    def set_source_level(self, source: str, level: str) -> None:
+        """设置指定 source 的日志级别
+
+        Args:
+            source: 日志来源（backend/network/task/frontend/debug）
+            level: 日志级别（DEBUG/INFO/WARNING/ERROR/CRITICAL）
+        """
+        if source not in VALID_SOURCES:
+            raise ValueError(f"无效的 source: {source}，有效值: {VALID_SOURCES}")
+        normalized = normalize_level(level)
+        self._source_levels[source] = normalized
+
+    def get_source_level(self, source: str) -> str:
+        """获取指定 source 的日志级别
+
+        如果未设置，返回全局级别
+        """
+        return self._source_levels.get(source, self._config.get("level", "INFO"))
+
+    def should_emit(self, source: str, level: str) -> bool:
+        """判断是否应该输出日志
+
+        Args:
+            source: 日志来源
+            level: 日志级别
+        Returns:
+            True 表示应该输出，False 表示应该过滤
+        """
+        source_level = self.get_source_level(source)
+        level_order = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
+        return level_order.get(level, 0) >= level_order.get(source_level, 0)
+
+    def get_all_source_levels(self) -> dict[str, str]:
+        """获取所有 source 级别配置"""
+        return self._source_levels.copy()
