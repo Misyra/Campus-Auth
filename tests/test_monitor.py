@@ -17,7 +17,6 @@ import pytest
 from app.core.monitor_core import (
     NetworkMonitorCore,
     NetworkState,
-    RecoveryResult,
 )
 from app.utils.login import SCREENSHOT_URL_PATTERN, LoginAttemptHandler
 
@@ -279,7 +278,7 @@ class TestCloseBrowser:
 
 
 # =====================================================================
-# NetworkState / RecoveryResult 枚举
+# NetworkState 枚举
 # =====================================================================
 
 
@@ -288,12 +287,6 @@ class TestEnums:
         assert NetworkState.UNKNOWN.value == "unknown"
         assert NetworkState.CONNECTED.value == "connected"
         assert NetworkState.DISCONNECTED.value == "disconnected"
-
-    def test_recovery_result_values(self):
-        assert RecoveryResult.LOGIN_OK == "login_ok"
-        assert RecoveryResult.GIVE_UP == "give_up"
-        assert RecoveryResult.BREAK == "break"
-        assert RecoveryResult.NET_DISCONNECT == "net_disconnect"
 
 
 # =====================================================================
@@ -423,22 +416,6 @@ class TestMonitorCoreGetTestSites:
         assert len(sites3) > 0
 
 
-class TestMonitorCoreWaitInterruptible:
-    def test_immediate_stop(self):
-        """stop 后应立即返回 False"""
-        core = NetworkMonitorCore()
-        core.monitoring = True
-        core._stop_event.set()
-        result = core._wait_interruptible(100, step=1)
-        assert result is False
-
-    def test_zero_seconds(self):
-        """0 秒等待应立即返回"""
-        core = NetworkMonitorCore()
-        core.monitoring = True
-        result = core._wait_interruptible(0, step=1)
-        assert result is True
-
 
 class TestMonitorCoreGetMonitorInterval:
     def test_default_interval(self):
@@ -451,43 +428,6 @@ class TestMonitorCoreGetMonitorInterval:
         assert core._get_monitor_interval() == 600
 
 
-class TestMonitorCoreLoginRetryOrBreak:
-    def test_retry(self):
-        """登录次数未超限时应返回 retry"""
-        core = NetworkMonitorCore()
-        core.monitoring = True
-        core._stop_event.set()  # 阻止实际等待
-        core.login_attempt_count = 1
-        result = core._login_retry_or_break(3, [5, 30, 60])
-        # 因为 _stop_event 已设置，_wait_interruptible 返回 False
-        assert result == RecoveryResult.BREAK
-
-    def test_give_up(self):
-        """超过最大重试次数应返回 give_up"""
-        core = NetworkMonitorCore()
-        core.login_attempt_count = 5
-        result = core._login_retry_or_break(3, [5, 30, 60])
-        assert result == RecoveryResult.GIVE_UP
-
-
-class TestMonitorCoreStartStop:
-    def test_start_sets_flags(self):
-        core = NetworkMonitorCore()
-
-        # 模拟 monitor_network 立即返回
-        with patch.object(core, "monitor_network"):
-            core.start_monitoring()
-            # start_monitoring 结束后 monitoring 应为 False
-            assert core.monitoring is False
-
-    def test_double_start_logs_warning(self):
-        """重复启动应记录警告"""
-        core = NetworkMonitorCore()
-        core.monitoring = True
-        # 不应抛异常
-        core.start_monitoring()
-        # 恢复
-        core.monitoring = False
 
 
 class TestMonitorCoreStopMonitoring:
@@ -499,12 +439,10 @@ class TestMonitorCoreStopMonitoring:
         core.stop_monitoring()
         assert core.monitoring is False
         assert core.status_detail == "已停止"
-        assert core._stop_requested is True
 
     def test_stop_when_not_monitoring(self):
         core = NetworkMonitorCore()
         core.monitoring = False
-        core._stop_requested = False
         # 不应抛异常
         core.stop_monitoring()
 
@@ -599,46 +537,6 @@ class TestMonitorCoreDetailedRetryConfig:
         _, intervals = core._get_retry_config()
         assert intervals == [5, 10, 20, 40]
 
-
-class TestMonitorCoreDetailedLoginRetry:
-    """login_retry_or_break 详细测试。"""
-
-    def test_first_attempt_returns_retry(self):
-        """首次尝试返回 retry。"""
-        core = NetworkMonitorCore(config={})
-        core.monitoring = True
-        core._stop_event.set()  # 阻止实际等待
-        core.login_attempt_count = 1
-        result = core._login_retry_or_break(max_retries=3, intervals=[5, 10, 20])
-        # stop_event 已设置，_wait_interruptible 返回 False → break
-        assert result == RecoveryResult.BREAK
-
-    def test_within_retries_returns_retry(self):
-        """未超过重试次数且未停止时返回 retry。"""
-        core = NetworkMonitorCore(config={})
-        core.monitoring = True
-        core.login_attempt_count = 2
-        core._wait_interruptible = MagicMock(return_value=True)
-        result = core._login_retry_or_break(max_retries=3, intervals=[5, 10, 20])
-        assert result == "retry"
-
-    def test_resets_attempt_count_on_give_up(self):
-        """放弃时重置尝试计数。"""
-        core = NetworkMonitorCore(config={})
-        core.login_attempt_count = 4
-        core._login_retry_or_break(max_retries=3, intervals=[5, 10, 20])
-        assert core.login_attempt_count == 0
-
-
-class TestMonitorCoreDetailedWaitInterruptible:
-    """wait_interruptible 详细测试。"""
-
-    def test_returns_true_when_not_stopped(self):
-        """未停止时返回 True。"""
-        core = NetworkMonitorCore(config={})
-        core.monitoring = True
-        result = core._wait_interruptible(0)
-        assert result is True
 
 
 class TestMonitorCoreLogMessage:

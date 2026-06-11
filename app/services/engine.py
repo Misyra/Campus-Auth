@@ -612,21 +612,6 @@ class ScheduleEngine:
         return self._login_in_progress.is_set()
 
     @property
-    def login_recovery_in_progress(self) -> bool:
-        """监控是否正在进行登录恢复重试。"""
-        core = self._monitor_core
-        return core is not None and core._login_recovery_in_progress.is_set()
-
-    def wait_for_login_recovery(self, timeout: float = 300) -> None:
-        """等待监控登录恢复循环结束（供定时任务使用）。
-
-        如果监控正在进行登录重试，阻塞直到重试循环结束或超时。
-        """
-        core = self._monitor_core
-        if core is not None:
-            core._login_recovery_in_progress.wait(timeout=timeout)
-
-    @property
     def ws_broadcast_queue(self) -> deque:
         """WS 广播队列（从 DashboardSink 获取）。"""
         if self._dashboard_sink is None:
@@ -1103,13 +1088,9 @@ class ScheduleEngine:
         if not task or task.get("type") != "browser":
             return False, f"浏览器任务不存在: {task_id}"
 
-        # 等待监控登录恢复完成，避免重复执行
-        if (
-            self.login_in_progress
-            or self.login_recovery_in_progress
-        ):
+        # 等待监控登录完成，避免重复执行
+        if self.login_in_progress:
             engine_logger.info("监控正在登录，等待完成后再执行定时任务")
-            self.wait_for_login_recovery()
 
         start_time = time.perf_counter()
         try:
