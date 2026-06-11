@@ -351,7 +351,7 @@ def _run_lightweight(
 
 
 def _run_server(
-    no_browser: bool = False, tray: bool = False, no_auto: bool = False
+    no_browser: bool = False, tray: bool = False, no_auto: bool = False, no_web: bool = False
 ) -> None:
     from app.utils.logging import get_logger
 
@@ -427,14 +427,9 @@ def _run_server(
     if no_auto:
         os.environ["CAMPUS_AUTH_NO_AUTO"] = "1"
 
-    # ── 轻量模式：不加载 FastAPI，仅运行监控 ──
-    if lightweight_mode:
-        _run_lightweight(
-            startup_logger, port,
-            no_browser=no_browser,
-            minimize_to_tray=minimize_to_tray,
-            auto_open_browser=auto_open_browser,
-        )
+    # ── 无 Web 模式：CLI --no-web 或 (自启动 + 轻量模式设置) ──
+    if no_web or (is_autostart and lightweight_mode):
+        _run_no_web(startup_logger, minimize_to_tray=minimize_to_tray)
         return
 
     # 创建容器（生命周期独立于 uvicorn）
@@ -599,6 +594,7 @@ def main() -> None:
   python main.py --no-browser       启动但不打开浏览器
   python main.py --no-auto          跳过自动登录和自动启动（用于恢复设置）
   python main.py --tray             启动到系统托盘
+  python main.py --no-web           不启动 Web 服务，仅运行监控和定时任务
   python main.py --status           查看服务状态
   python main.py --stop             停止服务
   python main.py --autostart        查看开机自启动状态
@@ -616,6 +612,10 @@ def main() -> None:
         "用于 login_then_exit 开启后无法进入 Web 控制台的恢复场景",
     )
     parser.add_argument("--tray", action="store_true", help="启动到系统托盘")
+    parser.add_argument(
+        "--no-web", action="store_true",
+        help="不启动 Web 服务，仅运行网络监控和定时任务（自启动默认使用）"
+    )
     parser.add_argument("--status", action="store_true", help="查看服务状态")
     parser.add_argument("--stop", action="store_true", help="停止服务")
     parser.add_argument(
@@ -640,7 +640,7 @@ def main() -> None:
         _cmd_autostart(args.autostart)
         return
 
-    _run_server(no_browser=args.no_browser, tray=args.tray, no_auto=args.no_auto)
+    _run_server(no_browser=args.no_browser, tray=args.tray, no_auto=args.no_auto, no_web=args.no_web)
 
 
 if __name__ == "__main__":
