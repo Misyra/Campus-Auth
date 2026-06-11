@@ -150,7 +150,7 @@ class ServiceContainer:
         try:
             from app.workers.playwright_worker import shutdown_worker
 
-            shutdown_worker()
+            shutdown_worker(timeout=2)
             container_logger.info("Playwright Worker 已关闭")
         except Exception:
             container_logger.warning("关闭 Playwright Worker 异常", exc_info=True)
