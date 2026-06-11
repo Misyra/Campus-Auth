@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.core.system_tray import SystemTray
+from app.ui.system_tray import SystemTray
 from app.utils.browser import STEALTH_INIT_SCRIPT, BrowserContextManager
 from app.utils.exceptions import LoginCancelledError
 from app.utils.notify import (
@@ -326,8 +326,8 @@ class TestSystemTrayMethods:
         tray._quit(None, None)
         callback.assert_called_once()
 
-    @patch("app.core.system_tray.pystray.Icon")
-    @patch("app.core.system_tray.threading.Thread")
+    @patch("app.ui.system_tray.pystray.Icon")
+    @patch("app.ui.system_tray.threading.Thread")
     def test_start(self, mock_thread_cls, mock_icon_cls):
         mock_icon = MagicMock()
         mock_icon_cls.return_value = mock_icon
@@ -341,8 +341,8 @@ class TestSystemTrayMethods:
         mock_thread_cls.assert_called_once()
         mock_thread.start.assert_called_once()
 
-    @patch("app.core.system_tray.pystray.Icon")
-    @patch("app.core.system_tray.threading.Thread")
+    @patch("app.ui.system_tray.pystray.Icon")
+    @patch("app.ui.system_tray.threading.Thread")
     def test_start_already_running(self, mock_thread_cls, mock_icon_cls):
         tray = SystemTray()
         mock_thread = MagicMock()
@@ -782,8 +782,8 @@ class TestBrowserContextManagerAexit:
 class TestLoadIcon:
     """_load_icon。"""
 
-    @patch("app.core.system_tray.pystray")
-    @patch("app.core.system_tray.Image")
+    @patch("app.ui.system_tray.pystray")
+    @patch("app.ui.system_tray.Image")
     def test_fallback_returns_default_icon(self, mock_image, mock_pystray):
         """cairosvg.svg2png 抛异常时回退到 Image.new 默认图标。"""
         mock_new = MagicMock()
@@ -798,8 +798,8 @@ class TestLoadIcon:
         mock_image.new.assert_called_once_with("RGBA", (64, 64), (34, 211, 238, 255))
         assert result is mock_new
 
-    @patch("app.core.system_tray.pystray")
-    @patch("app.core.system_tray.Image")
+    @patch("app.ui.system_tray.pystray")
+    @patch("app.ui.system_tray.Image")
     def test_fallback_when_cairosvg_missing(self, mock_image, mock_pystray):
         """cairosvg 不可用时回退到默认图标。"""
         from pathlib import Path as _Path
@@ -813,7 +813,7 @@ class TestLoadIcon:
         fake_path.exists.return_value = True
         fake_path.as_uri.return_value = "file:///fake/icon.svg"
 
-        with patch("app.core.system_tray.Path") as mock_path_cls:
+        with patch("app.ui.system_tray.Path") as mock_path_cls:
             mock_path_cls.return_value.parent.parent.parent.__truediv__ = MagicMock(
                 return_value=fake_path
             )
@@ -826,16 +826,16 @@ class TestLoadIcon:
 class TestGetStatusLabel:
     """_get_status_label。"""
 
-    @patch("app.core.system_tray.pystray")
-    @patch("app.core.system_tray.Image")
+    @patch("app.ui.system_tray.pystray")
+    @patch("app.ui.system_tray.Image")
     def test_monitoring_true(self, mock_image, mock_pystray):
         """监控中显示"运行中"。"""
         tray = SystemTray()
         tray._monitoring = True
         assert "运行中" in tray._get_status_label(None)
 
-    @patch("app.core.system_tray.pystray")
-    @patch("app.core.system_tray.Image")
+    @patch("app.ui.system_tray.pystray")
+    @patch("app.ui.system_tray.Image")
     def test_monitoring_false(self, mock_image, mock_pystray):
         """停止时显示"已停止"。"""
         tray = SystemTray()
@@ -846,8 +846,8 @@ class TestGetStatusLabel:
 class TestCreateMenu:
     """_create_menu。"""
 
-    @patch("app.core.system_tray.pystray")
-    @patch("app.core.system_tray.Image")
+    @patch("app.ui.system_tray.pystray")
+    @patch("app.ui.system_tray.Image")
     def test_menu_created(self, mock_image, mock_pystray):
         """菜单创建成功。"""
         mock_menu_instance = MagicMock()
@@ -865,8 +865,8 @@ class TestCreateMenu:
 class TestQuit:
     """_quit。"""
 
-    @patch("app.core.system_tray.pystray")
-    @patch("app.core.system_tray.Image")
+    @patch("app.ui.system_tray.pystray")
+    @patch("app.ui.system_tray.Image")
     def test_quit_with_icon_and_callback(self, mock_image, mock_pystray):
         """有 icon 和 on_exit 时两者都被调用。"""
         on_exit = MagicMock()
@@ -878,8 +878,8 @@ class TestQuit:
         tray.icon.stop.assert_called_once()
         on_exit.assert_called_once()
 
-    @patch("app.core.system_tray.pystray")
-    @patch("app.core.system_tray.Image")
+    @patch("app.ui.system_tray.pystray")
+    @patch("app.ui.system_tray.Image")
     def test_quit_without_icon(self, mock_image, mock_pystray):
         """无 icon 时仅调用 on_exit。"""
         on_exit = MagicMock()
@@ -890,8 +890,8 @@ class TestQuit:
 
         on_exit.assert_called_once()
 
-    @patch("app.core.system_tray.pystray")
-    @patch("app.core.system_tray.Image")
+    @patch("app.ui.system_tray.pystray")
+    @patch("app.ui.system_tray.Image")
     def test_quit_without_callback(self, mock_image, mock_pystray):
         """无 on_exit 时仅调用 icon.stop。"""
         tray = SystemTray()
@@ -905,8 +905,8 @@ class TestQuit:
 class TestStartStop:
     """start / stop。"""
 
-    @patch("app.core.system_tray.pystray")
-    @patch("app.core.system_tray.Image")
+    @patch("app.ui.system_tray.pystray")
+    @patch("app.ui.system_tray.Image")
     def test_start_creates_icon_and_thread(self, mock_image, mock_pystray):
         """start 创建 pystray.Icon 并启动后台守护线程。"""
         import time
@@ -931,8 +931,8 @@ class TestStartStop:
 
         tray.stop()
 
-    @patch("app.core.system_tray.pystray")
-    @patch("app.core.system_tray.Image")
+    @patch("app.ui.system_tray.pystray")
+    @patch("app.ui.system_tray.Image")
     def test_start_idempotent(self, mock_image, mock_pystray):
         """线程仍存活时重复 start 不会创建新 icon。"""
         import time
@@ -956,8 +956,8 @@ class TestStartStop:
 
         tray.stop()
 
-    @patch("app.core.system_tray.pystray")
-    @patch("app.core.system_tray.Image")
+    @patch("app.ui.system_tray.pystray")
+    @patch("app.ui.system_tray.Image")
     def test_stop_clears_icon(self, mock_image, mock_pystray):
         """stop 调用 icon.stop 并清除引用。"""
         tray = SystemTray()
@@ -965,8 +965,8 @@ class TestStartStop:
 
         tray.stop()
 
-    @patch("app.core.system_tray.pystray")
-    @patch("app.core.system_tray.Image")
+    @patch("app.ui.system_tray.pystray")
+    @patch("app.ui.system_tray.Image")
     def test_stop_without_icon(self, mock_image, mock_pystray):
         """无 icon 时 stop 不报错。"""
         tray = SystemTray()
@@ -977,8 +977,8 @@ class TestStartStop:
 class TestUpdateStatus:
     """update_status。"""
 
-    @patch("app.core.system_tray.pystray")
-    @patch("app.core.system_tray.Image")
+    @patch("app.ui.system_tray.pystray")
+    @patch("app.ui.system_tray.Image")
     def test_update_monitoring_true(self, mock_image, mock_pystray):
         """监控中更新标题为"运行中"。"""
         tray = SystemTray()
@@ -990,8 +990,8 @@ class TestUpdateStatus:
         assert tray._monitoring is True
         assert "运行中" in mock_icon.title
 
-    @patch("app.core.system_tray.pystray")
-    @patch("app.core.system_tray.Image")
+    @patch("app.ui.system_tray.pystray")
+    @patch("app.ui.system_tray.Image")
     def test_update_monitoring_false(self, mock_image, mock_pystray):
         """停止时更新标题为"已停止"。"""
         tray = SystemTray()
@@ -1003,8 +1003,8 @@ class TestUpdateStatus:
         assert tray._monitoring is False
         assert "已停止" in mock_icon.title
 
-    @patch("app.core.system_tray.pystray")
-    @patch("app.core.system_tray.Image")
+    @patch("app.ui.system_tray.pystray")
+    @patch("app.ui.system_tray.Image")
     def test_update_no_icon(self, mock_image, mock_pystray):
         """无 icon 时仅更新 _monitoring 标志，不报错。"""
         tray = SystemTray()

@@ -5,6 +5,35 @@
 
 ## 2026-06-11
 
+### refactor: system_tray.py 移动到 ui/system_tray.py
+
+将 `app/core/system_tray.py` 移动到 `app/ui/system_tray.py`，UI 相关代码不应混在 core/ 目录。
+
+**修改内容：**
+- 移动 `app/core/system_tray.py` -> `app/ui/system_tray.py`
+- 新增 `app/ui/__init__.py`
+- 更新 import 路径：`main.py`、`tests/test_main.py`、`tests/test_src_utils.py`
+
+### refactor: ws_manager.py 移动到 services/websocket_manager.py
+
+将 `app/ws_manager.py` 移动到 `app/services/websocket_manager.py`，属于长生命周期服务，应在 services/ 目录下。
+
+**修改内容：**
+- 移动 `app/ws_manager.py` -> `app/services/websocket_manager.py`
+- 更新 logger 名称 `ws_manager` -> `websocket_manager`
+- 更新 import 路径：`app/container.py`、`app/services/engine.py`、`tests/test_ws_manager.py`
+
+**测试结果：** 1617 passed, 2 skipped
+
+### refactor: 删除 ScheduledTaskService 委托层
+
+删除 `app/services/scheduled_task.py`，该类是纯转发层，CRUD 委托 TaskRegistry，执行委托 TaskExecutor，无业务价值。API 路由已通过 TaskFacade 访问，无需修改。
+
+**修改内容：**
+- 删除 `app/services/scheduled_task.py`
+- `tests/test_scheduled_tasks.py`：移除 `ScheduledTaskService` 导入，fixture 改为直接使用 `TaskRegistry` + `TaskHistoryStore`
+- `tests/test_scheduler_service.py`：移除 `ScheduledTaskService` 导入，测试改为直接验证 `TaskRegistry` + `TaskExecutor`
+
 ### style: 统一代码命名规范
 
 统一 `app/services/` 目录下的命名风格，涉及 8 个源文件和 1 个测试文件。

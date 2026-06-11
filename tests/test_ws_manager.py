@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.ws_manager import WebSocketManager
+from app.services.websocket_manager import WebSocketManager
 
 # =====================================================================
 # WebSocketManager

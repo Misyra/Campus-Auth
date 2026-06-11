@@ -7,11 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.scheduled_task import ScheduledTaskService
-from app.services.task_registry import MAX_HISTORY_SIZE, TaskHistoryStore
+from app.services.task_registry import MAX_HISTORY_SIZE, TaskHistoryStore, TaskRegistry
 from app.services.task_executor import TaskExecutor
-from app.services.task_registry import TaskHistoryStore, TaskRegistry
-from app.tasks import TaskManager
 from app.utils.shell_utils import get_default_shell
 
 
@@ -23,11 +20,26 @@ def project_root(tmp_path):
 
 @pytest.fixture
 def scheduler(project_root):
-    """创建调度器实例。"""
-    task_manager = TaskManager(project_root / "tasks")
-    return ScheduledTaskService(
-        project_root,
-        task_manager=task_manager,
+    """创建 Registry + HistoryStore 实例（通过 SimpleNamespace 模拟原 ScheduledTaskService 接口）。"""
+    registry = TaskRegistry(project_root / "tasks" / "scheduled")
+    history_store = TaskHistoryStore(project_root / "tasks" / "scheduled" / "history")
+
+    def _delete_task(task_id: str):
+        success, message = registry.delete_task(task_id)
+        if success:
+            history_store.delete_history(task_id)
+        return success, message
+
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        _registry=registry,
+        _history_store=history_store,
+        save_task=registry.save_task,
+        get_task=registry.get_task,
+        list_tasks=registry.list_tasks,
+        delete_task=_delete_task,
+        get_history=history_store.get_history,
     )
 
 
@@ -207,23 +219,38 @@ class TestMaxHistorySize:
 
 
 # =====================================================================
-# ScheduledTaskService CRUD 补充
+# TaskRegistry CRUD 补充
 # =====================================================================
 
 
 class TestScheduleEngineCRUD:
     @pytest.fixture
-    def scheduler(self, tmp_path: Path) -> ScheduledTaskService:
-        task_manager = TaskManager(tmp_path / "tasks")
-        return ScheduledTaskService(
-            tmp_path,
-            task_manager=task_manager,
+    def scheduler(self, tmp_path: Path):
+        registry = TaskRegistry(tmp_path / "tasks" / "scheduled")
+        history_store = TaskHistoryStore(tmp_path / "tasks" / "scheduled" / "history")
+
+        def _delete_task(task_id: str):
+            success, message = registry.delete_task(task_id)
+            if success:
+                history_store.delete_history(task_id)
+            return success, message
+
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            _registry=registry,
+            _history_store=history_store,
+            save_task=registry.save_task,
+            get_task=registry.get_task,
+            list_tasks=registry.list_tasks,
+            delete_task=_delete_task,
+            get_history=history_store.get_history,
         )
 
-    def test_list_tasks_empty(self, scheduler: ScheduledTaskService):
+    def test_list_tasks_empty(self, scheduler):
         assert scheduler.list_tasks() == []
 
-    def test_list_tasks_sorted_by_name(self, scheduler: ScheduledTaskService):
+    def test_list_tasks_sorted_by_name(self, scheduler):
         scheduler.save_task(
             "b_task",
             {
@@ -247,7 +274,7 @@ class TestScheduleEngineCRUD:
         assert tasks[1]["name"] == "Banana"
 
     def test_list_tasks_skips_dotfiles(
-        self, scheduler: ScheduledTaskService, tmp_path: Path
+        self, scheduler, tmp_path: Path
     ):
         # 创建正常任务
         scheduler.save_task(
@@ -268,7 +295,7 @@ class TestScheduleEngineCRUD:
         assert tasks[0]["id"] == "normal"
 
     def test_list_tasks_skips_malformed_json(
-        self, scheduler: ScheduledTaskService, tmp_path: Path
+        self, scheduler, tmp_path: Path
     ):
         scheduler.save_task(
             "good",
@@ -286,7 +313,7 @@ class TestScheduleEngineCRUD:
         assert len(tasks) == 1
         assert tasks[0]["id"] == "good"
 
-    def test_get_task_returns_id_field(self, scheduler: ScheduledTaskService):
+    def test_get_task_returns_id_field(self, scheduler):
         scheduler.save_task(
             "my_task",
             {
@@ -300,20 +327,20 @@ class TestScheduleEngineCRUD:
         assert task is not None
         assert task["id"] == "my_task"
 
-    def test_get_task_nonexistent(self, scheduler: ScheduledTaskService):
+    def test_get_task_nonexistent(self, scheduler):
         assert scheduler.get_task("nonexistent") is None
 
-    def test_get_task_invalid_id(self, scheduler: ScheduledTaskService):
+    def test_get_task_invalid_id(self, scheduler):
         assert scheduler.get_task("123bad") is None
 
-    def test_get_task_malformed_json(self, scheduler: ScheduledTaskService, tmp_path: Path):
+    def test_get_task_malformed_json(self, scheduler, tmp_path: Path):
         (tmp_path / "tasks" / "scheduled" / "bad.json").write_text(
             "not json", encoding="utf-8"
         )
         assert scheduler.get_task("bad") is None
 
     def test_delete_task_with_history(
-        self, scheduler: ScheduledTaskService, tmp_path: Path
+        self, scheduler, tmp_path: Path
     ):
         scheduler.save_task(
             "del_task",
@@ -332,15 +359,15 @@ class TestScheduleEngineCRUD:
         history_file = tmp_path / "tasks" / "scheduled" / "history" / "del_task.json"
         assert not history_file.exists()
 
-    def test_delete_task_nonexistent(self, scheduler: ScheduledTaskService):
+    def test_delete_task_nonexistent(self, scheduler):
         ok, _ = scheduler.delete_task("nonexistent")
         assert ok is False
 
-    def test_delete_task_invalid_id(self, scheduler: ScheduledTaskService):
+    def test_delete_task_invalid_id(self, scheduler):
         ok, _ = scheduler.delete_task("123bad")
         assert ok is False
 
-    def test_save_task_invalid_id(self, scheduler: ScheduledTaskService):
+    def test_save_task_invalid_id(self, scheduler):
         ok, _ = scheduler.save_task("123bad", {"name": "test"})
         assert ok is False
 
@@ -352,21 +379,30 @@ class TestScheduleEngineCRUD:
 
 class TestSchedulerHistory:
     @pytest.fixture
-    def scheduler(self, tmp_path: Path) -> ScheduledTaskService:
-        task_manager = TaskManager(tmp_path / "tasks")
-        return ScheduledTaskService(
-            tmp_path,
-            task_manager=task_manager,
+    def scheduler(self, tmp_path: Path):
+        registry = TaskRegistry(tmp_path / "tasks" / "scheduled")
+        history_store = TaskHistoryStore(tmp_path / "tasks" / "scheduled" / "history")
+
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            _registry=registry,
+            _history_store=history_store,
+            save_task=registry.save_task,
+            get_task=registry.get_task,
+            list_tasks=registry.list_tasks,
+            delete_task=registry.delete_task,
+            get_history=history_store.get_history,
         )
 
     def test_add_history_creates_file(
-        self, scheduler: ScheduledTaskService, tmp_path: Path
+        self, scheduler, tmp_path: Path
     ):
         scheduler._history_store.add_record("test", "success", "ok", 1.0)
         history_file = tmp_path / "tasks" / "scheduled" / "history" / "test.json"
         assert history_file.exists()
 
-    def test_add_history_max_size(self, scheduler: ScheduledTaskService):
+    def test_add_history_max_size(self, scheduler):
         for i in range(MAX_HISTORY_SIZE + 10):
             scheduler._history_store.add_record("test", "success", f"run {i}", 1.0)
         history = scheduler.get_history("test")
@@ -374,31 +410,31 @@ class TestSchedulerHistory:
         # 最新的在前
         assert history[0]["message"] == f"run {MAX_HISTORY_SIZE + 9}"
 
-    def test_add_history_truncates_message(self, scheduler: ScheduledTaskService):
+    def test_add_history_truncates_message(self, scheduler):
         long_msg = "x" * 1000
         scheduler._history_store.add_record("test", "success", long_msg, 1.0)
         history = scheduler.get_history("test")
         assert len(history[0]["message"]) == 500
 
-    def test_add_history_invalid_id(self, scheduler: ScheduledTaskService):
+    def test_add_history_invalid_id(self, scheduler):
         # 不应抛异常
         scheduler._history_store.add_record("123bad", "success", "ok", 1.0)
 
-    def test_get_history_empty(self, scheduler: ScheduledTaskService):
+    def test_get_history_empty(self, scheduler):
         assert scheduler.get_history("nonexistent") == []
 
-    def test_get_history_invalid_id(self, scheduler: ScheduledTaskService):
+    def test_get_history_invalid_id(self, scheduler):
         assert scheduler.get_history("123bad") == []
 
     def test_get_history_malformed_json(
-        self, scheduler: ScheduledTaskService, tmp_path: Path
+        self, scheduler, tmp_path: Path
     ):
         history_dir = tmp_path / "tasks" / "scheduled" / "history"
         history_dir.mkdir(parents=True, exist_ok=True)
         (history_dir / "bad.json").write_text("not json", encoding="utf-8")
         assert scheduler.get_history("bad") == []
 
-    def test_get_history_returns_runs_list(self, scheduler: ScheduledTaskService):
+    def test_get_history_returns_runs_list(self, scheduler):
         scheduler._history_store.add_record("test", "success", "ok", 1.0)
         scheduler._history_store.add_record("test", "failure", "err", 0.5)
         history = scheduler.get_history("test")

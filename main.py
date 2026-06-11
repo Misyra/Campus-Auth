@@ -278,7 +278,7 @@ def _run_no_web(
     tray_icon = None
     if minimize_to_tray:
         try:
-            from app.core.system_tray import SystemTray
+            from app.ui.system_tray import SystemTray
 
             tray_icon = SystemTray(
                 port=0,
@@ -398,7 +398,7 @@ def _run_server(
     tray_icon = None
     if minimize_to_tray:
         try:
-            from app.core.system_tray import SystemTray
+            from app.ui.system_tray import SystemTray
 
             tray_icon = SystemTray(
                 port=port,
