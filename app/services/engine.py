@@ -393,18 +393,11 @@ class ScheduleEngine:
         # 重载配置（方案已由 API 路由持久化，此处重新读取）
         self._reload_config_internal()
 
-        # 解析可读名称用于日志
-        try:
-            data = self._profile_service.load()
-            profile = data.profiles.get(profile_id)
-            display_name = profile.name if profile else profile_id
-        except Exception:
-            display_name = profile_id
-
+        # 直接用 profile_id 记录日志，避免重复 load
         new_url = self._runtime_config.get("auth_url", "")
         new_user = self._runtime_config.get("username", "")
         self.record_log(
-            f"切换方案 -> {display_name} (认证={new_url}, 用户={new_user})",
+            f"切换方案 -> {profile_id} (认证={new_url}, 用户={new_user})",
             level="INFO",
             source="backend",
         )
@@ -593,7 +586,8 @@ class ScheduleEngine:
             engine_logger.warning("配置重载失败：队列已满")
             return
         # 等待消费者完成（最多 30 秒，避免无限阻塞 API 线程）
-        cmd.response_event.wait(timeout=30)
+        if not cmd.response_event.wait(timeout=30):
+            engine_logger.warning("配置重载超时（30s），消费者线程可能繁忙")
 
     def apply_profile(self, profile_id: str) -> None:
         """切换到新方案：停止监控 → 重载配置 → 重启监控。
@@ -609,7 +603,8 @@ class ScheduleEngine:
             engine_logger.warning("方案切换失败：队列已满")
             return
         # 等待消费者完成（最多 30 秒）
-        cmd.response_event.wait(timeout=30)
+        if not cmd.response_event.wait(timeout=30):
+            engine_logger.warning("方案切换超时（30s），消费者线程可能繁忙")
 
     def start_monitoring(self) -> tuple[bool, str]:
         engine_logger.debug("收到启动监控请求")
@@ -638,10 +633,8 @@ class ScheduleEngine:
 
     def shutdown(self) -> None:
         """完全关闭 ScheduleEngine：停止监控 + 停止调度器 + 终止消费者线程。"""
-        # 停止调度器（不等待任务线程，守护线程会自行退出）
-        if self._scheduler_running:
-            self._scheduler_running = False
-            self._scheduler_stop_event.set()
+        # 停止调度器并等待运行中的任务线程完成
+        self.stop_scheduler()
 
         # 直接停止监控核心（不等待 response，避免阻塞）
         if self._monitor_core is not None:

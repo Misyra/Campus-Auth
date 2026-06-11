@@ -10,6 +10,8 @@ import threading
 import time
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.core.monitor_core import NetworkState
 from app.services.engine import (
     EngineCmdType,
@@ -723,14 +725,12 @@ class TestShutdownSynchronous:
         svc._running_task_threads = []
         svc._running_tasks_lock = threading.Lock()
 
-        # 模拟消费者处理 stop 命令
-        def consume_stop():
+        # 模拟消费者处理 shutdown 命令
+        def consume_shutdown():
             cmd = svc._cmd_queue.get(timeout=5)
-            assert cmd.type == "stop"
-            if cmd.response_event:
-                cmd.response_event.set()
+            assert cmd.type == "shutdown"
 
-        consumer = threading.Thread(target=consume_stop)
+        consumer = threading.Thread(target=consume_shutdown)
         consumer.start()
 
         # 调用 shutdown
@@ -739,6 +739,8 @@ class TestShutdownSynchronous:
         consumer.join(timeout=5)
         # 验证 shutdown_event 已设置
         assert svc._shutdown_event.is_set(), "shutdown 应设置 _shutdown_event"
+        # 验证监控核心已清理
+        assert svc._monitor_core is None
 
     def test_handle_stop_idempotent(self):
         """测试 _handle_stop 幂等性"""
@@ -891,3 +893,142 @@ class TestNetworkStateSetInConsumer:
         assert not svc._login_in_progress.is_set(), (
             "消费者 finally 应清除 _login_in_progress"
         )
+
+
+# =====================================================================
+# Task 7: 架构修复验证测试
+# =====================================================================
+
+
+class TestReloadConfigQueueDispatch:
+    """reload_config 应通过队列派发 RELOAD 命令。"""
+
+    def test_reload_config_enqueues_reload_command(self):
+        """测试 reload_config 将 RELOAD 命令放入队列。"""
+        svc = _make_monitor_service()
+        svc._status_snapshot = StatusSnapshot(monitoring=False)
+
+        enqueued = []
+        def mock_enqueue(cmd, retries=2):
+            enqueued.append(cmd.type)
+            return True
+
+        svc._enqueue = mock_enqueue
+        svc.reload_config()
+
+        assert EngineCmdType.RELOAD in enqueued, (
+            f"reload_config 应派发 RELOAD 命令，实际派发: {enqueued}"
+        )
+
+
+class TestApplyProfileQueueDispatch:
+    """apply_profile 应通过队列派发 APPLY_PROFILE 命令。"""
+
+    def test_apply_profile_enqueues_command(self):
+        """测试 apply_profile 将 APPLY_PROFILE 命令放入队列。"""
+        svc = _make_monitor_service()
+        svc._status_snapshot = StatusSnapshot(monitoring=False)
+
+        enqueued = []
+        def mock_enqueue(cmd, retries=2):
+            enqueued.append((cmd.type, cmd.data))
+            return True
+
+        svc._enqueue = mock_enqueue
+        svc.apply_profile("test_profile")
+
+        assert any(
+            t == EngineCmdType.APPLY_PROFILE and d.get("profile_id") == "test_profile"
+            for t, d in enqueued
+        ), f"apply_profile 应派发 APPLY_PROFILE 命令，实际派发: {enqueued}"
+
+
+class TestSchedulerNoAutoExit:
+    """调度器不应因无启用任务而自动退出。"""
+
+    def test_scheduler_continues_without_enabled_tasks(self):
+        """测试调度器在无启用任务时继续运行。"""
+        svc = _make_monitor_service()
+        svc._scheduler_running = True
+        svc._scheduler_stop_event = threading.Event()
+
+        check_count = [0]
+        def mock_has_enabled():
+            check_count[0] += 1
+            if check_count[0] >= 3:
+                svc._scheduler_stop_event.set()
+            return False
+
+        svc.has_enabled_tasks = mock_has_enabled
+        svc._scheduler_loop()
+
+        assert check_count[0] >= 3, (
+            f"调度器应在无启用任务时继续运行，实际检查次数: {check_count[0]}"
+        )
+
+
+class TestLoginInProgressConsumerDead:
+    """消费者线程死亡时，_login_in_progress 应被主动清除。"""
+
+    def test_login_timeout_clears_when_consumer_dead(self):
+        """测试超时且消费者线程已死时，主动清除 _login_in_progress。"""
+        svc = ScheduleEngine.__new__(ScheduleEngine)
+        svc._cmd_queue = queue.Queue(maxsize=50)
+        svc._login_in_progress = threading.Event()
+        svc._login_lock = threading.Lock()
+        svc._runtime_config = {"auth_url": "http://test.com", "username": "test"}
+        svc._ui_config = MagicMock()
+        svc._ui_config.login_timeout = 0.01
+        svc._monitor_core = None
+        svc._pure_mode = False
+        svc._pure_mode_lock = threading.Lock()
+        svc._start_stop_lock = threading.Lock()
+        svc._status_snapshot = MagicMock()
+        svc._status_snapshot.monitoring = False
+
+        # 模拟消费者线程已死亡
+        svc._consumer_thread = MagicMock()
+        svc._consumer_thread.is_alive.return_value = False
+
+        with patch.object(svc, "_copy_runtime_config", return_value={}):
+            ok, msg = svc.run_manual_login()
+
+        assert not svc._login_in_progress.is_set(), (
+            "消费者线程已死时，_login_in_progress 应被主动清除"
+        )
+        assert not ok
+        assert "超时" in msg
+
+
+class TestTaskCacheClear:
+    """任务变更时应清除 has_enabled_tasks 缓存。"""
+
+    def test_save_task_clears_cache(self):
+        """测试 save_task 清除 has_enabled_tasks 缓存。"""
+        svc = _make_monitor_service()
+        svc._has_enabled_cache = (time.time(), False)
+
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmpdir:
+            svc._scheduler_tasks_dir = Path(tmpdir)
+            svc.save_task("test_task", {"enabled": True, "name": "test"})
+
+        assert svc._has_enabled_cache is None, "save_task 应清除缓存"
+
+    def test_delete_task_clears_cache(self):
+        """测试 delete_task 清除 has_enabled_tasks 缓存。"""
+        svc = _make_monitor_service()
+        svc._has_enabled_cache = (time.time(), True)
+
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmpdir:
+            svc._scheduler_tasks_dir = Path(tmpdir)
+            svc._scheduler_history_dir = Path(tmpdir) / "history"
+            svc._scheduler_history_dir.mkdir()
+            task_file = Path(tmpdir) / "test_task.json"
+            task_file.write_text('{"enabled": true}')
+            svc.delete_task("test_task")
+
+        assert svc._has_enabled_cache is None, "delete_task 应清除缓存"
