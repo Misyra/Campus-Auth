@@ -341,7 +341,9 @@ class TestDebugSessionManagerStart:
 
         with (
             patch("app.workers.playwright_worker.get_worker") as mock_get_worker,
-            patch("app.services.debug_service.build_login_template_vars", return_value={}),
+            patch(
+                "app.services.debug_service.build_login_template_vars", return_value={}
+            ),
         ):
             mock_worker = MagicMock()
             mock_worker.submit.return_value = _ok_response(
@@ -380,7 +382,9 @@ class TestDebugSessionManagerStart:
 
         with (
             patch("app.workers.playwright_worker.get_worker") as mock_get_worker,
-            patch("app.services.debug_service.build_login_template_vars", return_value={}),
+            patch(
+                "app.services.debug_service.build_login_template_vars", return_value={}
+            ),
         ):
             mock_worker = MagicMock()
             mock_worker.submit.return_value = _fail_response("浏览器启动失败")
@@ -417,7 +421,9 @@ class TestDebugSessionManagerStart:
 
         with (
             patch("app.workers.playwright_worker.get_worker") as mock_get_worker,
-            patch("app.services.debug_service.build_login_template_vars", return_value={}),
+            patch(
+                "app.services.debug_service.build_login_template_vars", return_value={}
+            ),
         ):
             mock_worker = MagicMock()
             mock_worker.submit.return_value = _ok_response()

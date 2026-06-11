@@ -38,5 +38,3 @@ def patched_webbrowser():
     """Mock webbrowser.open() 阻止真实打开浏览器。"""
     with patch("webbrowser.open") as mock_open:
         yield mock_open
-
-

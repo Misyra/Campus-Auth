@@ -120,12 +120,13 @@ class BrowserContextManager:
         向 Worker 提交 CMD_BROWSER_RELEASE（fire-and-forget）即可。
         """
         # 通知 Worker 释放引用（无需等待结果）
+        import queue as _queue_mod
+
         from app.workers.playwright_worker import (
-            WorkerCommand,
             CMD_BROWSER_RELEASE,
+            WorkerCommand,
             get_worker,
         )
-        import queue as _queue_mod
 
         worker = get_worker()
         try:

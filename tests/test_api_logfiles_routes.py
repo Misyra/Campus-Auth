@@ -482,7 +482,10 @@ class TestReadTail:
 
     def test_read_tail_basic(self, tmp_path):
         """读取末尾行。"""
-        lines = [f"[2026-06-01 00:00:{i:02d}][INFO][backend][mod] msg {i}\n" for i in range(100)]
+        lines = [
+            f"[2026-06-01 00:00:{i:02d}][INFO][backend][mod] msg {i}\n"
+            for i in range(100)
+        ]
         content = "".join(lines)
         filepath = self._create_log_file(tmp_path, content)
 
@@ -521,7 +524,10 @@ class TestBrowseVsSearchMode:
 
     def test_browse_mode_uses_read_tail(self, tmp_path):
         """浏览模式（无过滤条件）应读取末尾行。"""
-        lines = [f"[2026-06-12 10:00:{i:02d}][INFO][backend][test] 日志 {i}\n" for i in range(100)]
+        lines = [
+            f"[2026-06-12 10:00:{i:02d}][INFO][backend][test] 日志 {i}\n"
+            for i in range(100)
+        ]
         content = "".join(lines)
         self._create_log_file(tmp_path, "2026-06-12", "app.log", content)
 

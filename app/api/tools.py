@@ -35,7 +35,9 @@ def download_task_recorder():
     """下载任务录制器用户脚本"""
     script_path = PROJECT_ROOT / "tools" / "task-recorder.user.js"
     if not script_path.exists():
-        raise HTTPException(status_code=404, detail="任务录制器脚本文件缺失，可能需要重新安装或更新软件")
+        raise HTTPException(
+            status_code=404, detail="任务录制器脚本文件缺失，可能需要重新安装或更新软件"
+        )
     return FileResponse(script_path, media_type="text/javascript")
 
 
@@ -44,7 +46,9 @@ def download_task_writing_guide():
     """下载任务编写指南文档"""
     doc_path = PROJECT_ROOT / "docs" / "task-writing-guide.md"
     if not doc_path.exists():
-        raise HTTPException(status_code=404, detail="文档文件缺失，可能需要重新安装或更新软件")
+        raise HTTPException(
+            status_code=404, detail="文档文件缺失，可能需要重新安装或更新软件"
+        )
     return FileResponse(
         doc_path, media_type="text/markdown", filename="task-writing-guide.md"
     )
@@ -55,10 +59,10 @@ def download_task_manual():
     """下载任务手册文档"""
     doc_path = PROJECT_ROOT / "docs" / "task-manual.md"
     if not doc_path.exists():
-        raise HTTPException(status_code=404, detail="文档文件缺失，可能需要重新安装或更新软件")
-    return FileResponse(
-        doc_path, media_type="text/markdown", filename="task-manual.md"
-    )
+        raise HTTPException(
+            status_code=404, detail="文档文件缺失，可能需要重新安装或更新软件"
+        )
+    return FileResponse(doc_path, media_type="text/markdown", filename="task-manual.md")
 
 
 # ── 背景图片管理 ──
@@ -96,13 +100,17 @@ async def fetch_background_url(body: dict) -> dict:
             resp = await client.get(url)
             resp.raise_for_status()
     except httpx.HTTPError as exc:
-        raise HTTPException(400, "下载图片失败，请检查网络连接或确认地址是否正确") from exc
+        raise HTTPException(
+            400, "下载图片失败，请检查网络连接或确认地址是否正确"
+        ) from exc
 
     content_type = resp.headers.get("content-type", "")
     if "image" not in content_type and not url.lower().endswith(
         (".jpg", ".jpeg", ".png", ".gif", ".webp")
     ):
-        raise HTTPException(400, "该地址返回的内容不是图片格式，请确认地址指向的是图片文件")
+        raise HTTPException(
+            400, "该地址返回的内容不是图片格式，请确认地址指向的是图片文件"
+        )
 
     # 从 Content-Type 或 URL 推断扩展名
     ext_map = {

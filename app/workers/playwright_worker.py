@@ -93,7 +93,9 @@ class PlaywrightWorker:
     def __init__(self) -> None:
         self._cmd_queue: queue.Queue[WorkerCommand] = queue.Queue(maxsize=50)
         self._stop_event = threading.Event()
-        self._shutdown_permanent = threading.Event()  # 永久关闭标志，stop() 设置后不可重置
+        self._shutdown_permanent = (
+            threading.Event()
+        )  # 永久关闭标志，stop() 设置后不可重置
         self._consumer_thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._worker_ready = threading.Event()
@@ -154,7 +156,9 @@ class PlaywrightWorker:
         # 等待事件循环就绪（最多 5 秒）
         self._worker_ready.wait(timeout=WORKER_READY_TIMEOUT)
         if not self._worker_ready.is_set():
-            logger.warning("PlaywrightWorker 事件循环启动超时 ({}s)", WORKER_READY_TIMEOUT)
+            logger.warning(
+                "PlaywrightWorker 事件循环启动超时 ({}s)", WORKER_READY_TIMEOUT
+            )
 
     def stop(self, timeout: float = 5) -> None:
         """发送关闭信号并等待线程结束。
@@ -172,7 +176,9 @@ class PlaywrightWorker:
         try:
             self._cmd_queue.put_nowait(WorkerCommand(type=CMD_SHUTDOWN))
         except queue.Full:
-            logger.warning("命令队列已满 (maxsize={})，强制停止 Worker", self._cmd_queue.maxsize)
+            logger.warning(
+                "命令队列已满 (maxsize={})，强制停止 Worker", self._cmd_queue.maxsize
+            )
             if self._loop is not None and self._loop.is_running():
                 self._loop.call_soon_threadsafe(self._loop.stop)
             return
@@ -716,7 +722,9 @@ class PlaywrightWorker:
         try:
             if pure_mode:
                 # 纯净模式：原始 Chromium，无扩展无自定义参数
-                self._browser = await self._playwright.chromium.launch(headless=headless)
+                self._browser = await self._playwright.chromium.launch(
+                    headless=headless
+                )
                 ctx_opts = {
                     "viewport": {
                         "width": browser_settings.get("viewport_width", 1280),
@@ -970,16 +978,17 @@ def cleanup_orphan_browsers() -> None:
     import psutil
 
     killed = 0
-    for proc in psutil.process_iter(['pid', 'exe', 'cmdline']):
+    for proc in psutil.process_iter(["pid", "exe", "cmdline"]):
         try:
             info = proc.info
-            exe = (info.get('exe') or '').lower()
-            cmdline = ' '.join(info.get('cmdline') or []).lower()
-            if ('ms-playwright' in exe or 'ms-playwright' in cmdline) and \
-               ('chrom' in exe or 'chrom' in cmdline):
+            exe = (info.get("exe") or "").lower()
+            cmdline = " ".join(info.get("cmdline") or []).lower()
+            if ("ms-playwright" in exe or "ms-playwright" in cmdline) and (
+                "chrom" in exe or "chrom" in cmdline
+            ):
                 proc.kill()
                 killed += 1
-                logger.debug("已终止孤儿 Chromium PID={}", info['pid'])
+                logger.debug("已终止孤儿 Chromium PID={}", info["pid"])
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
         except Exception:

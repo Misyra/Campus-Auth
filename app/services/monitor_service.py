@@ -214,8 +214,12 @@ class NetworkMonitorCore:
                 f"暂停时段 ({start_hour}:00-{end_hour}:00)，跳过检测", "INFO"
             )
             return {
-                "paused": True, "net_ok": True, "net_reason": "",
-                "need_login": False, "check_num": check_num, "interval": interval,
+                "paused": True,
+                "net_ok": True,
+                "net_reason": "",
+                "need_login": False,
+                "check_num": check_num,
+                "interval": interval,
             }
 
         # 2. 网络状态检测
@@ -353,4 +357,3 @@ class NetworkMonitorCore:
                     pass
         except Exception as exc:
             self.log_message(f"方案切换检测异常: {exc}", "WARNING")
-

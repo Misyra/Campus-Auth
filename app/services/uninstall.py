@@ -11,9 +11,7 @@ from app.utils.platform import get_platform
 
 USER_DATA_DIR = AUTH_DATA_DIR
 
-PLATFORM = (
-    get_platform()
-)  # 使用 platform 获取平台标识（"windows"/"darwin"/"linux"）
+PLATFORM = get_platform()  # 使用 platform 获取平台标识（"windows"/"darwin"/"linux"）
 
 
 @dataclass
@@ -82,7 +80,9 @@ def perform(keys: list[str]) -> list[CleanupResult]:
         pw_cache = _playwright_cache_dir()
         if pw_cache:
             success, message = _remove_playwright_cache(pw_cache)
-            results.append(CleanupResult("playwright", "删除 Playwright 缓存", success, message))
+            results.append(
+                CleanupResult("playwright", "删除 Playwright 缓存", success, message)
+            )
 
     return results
 

@@ -110,7 +110,9 @@ class LoginHistoryService:
                 if self._write_count % 50 == 0:
                     need_cleanup = True
             except Exception:
-                logger.warning("写入登录历史失败: {}", self._history_path, exc_info=True)
+                logger.warning(
+                    "写入登录历史失败: {}", self._history_path, exc_info=True
+                )
         # 清理也需在 _lock 下执行，防止清理时的写回覆盖并发写入的新记录
         if need_cleanup:
             with self._lock:
@@ -163,7 +165,9 @@ class LoginHistoryService:
                 logger.info("登录历史已清空，共删除 {} 条记录", count)
                 return count
             except Exception:
-                logger.warning("清空登录历史失败: {}", self._history_path, exc_info=True)
+                logger.warning(
+                    "清空登录历史失败: {}", self._history_path, exc_info=True
+                )
                 return 0
 
     def _cleanup_old(self, max_age_days: int = 30) -> None:

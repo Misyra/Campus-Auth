@@ -73,6 +73,7 @@ PROFILE_FIELDS: list[str] = [  # 常量，不应在运行时修改
 
 # ── 字段提取 / 赋值 ──────────────────────────────────────────────────
 
+
 def extract_profile_fields(source: dict, field_names: list[str]) -> dict[str, Any]:
     """从 source 字典中提取指定字段，返回新字典。
 
@@ -127,6 +128,7 @@ def validate_profile_fields() -> None:
 
 
 # ── 验证器 ────────────────────────────────────────────────────────────
+
 
 class ConfigValidator:
     """配置验证工具类 - 统一管理配置验证逻辑"""

@@ -205,7 +205,9 @@ class AutoStartService:
 
         # 尝试卸载旧配置（忽略错误）
         self._run(["launchctl", "bootout", gui_domain, str(plist_path)])
-        success, message = self._run(["launchctl", "bootstrap", gui_domain, str(plist_path)])
+        success, message = self._run(
+            ["launchctl", "bootstrap", gui_domain, str(plist_path)]
+        )
         if success:
             logger.debug("macOS launchctl bootstrap 成功")
             return True, f"已启用 macOS 开机自启动: {plist_path}"
@@ -227,7 +229,9 @@ class AutoStartService:
             # 优先使用新版 API bootout，失败则回退到 unload
             user_id = os.getuid()
             gui_domain = f"gui/{user_id}"
-            success, _ = self._run(["launchctl", "bootout", gui_domain, str(plist_path)])
+            success, _ = self._run(
+                ["launchctl", "bootout", gui_domain, str(plist_path)]
+            )
             if not success:
                 self._run(["launchctl", "unload", str(plist_path)])
             plist_path.unlink(missing_ok=True)

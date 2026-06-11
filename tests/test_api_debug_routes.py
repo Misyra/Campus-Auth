@@ -57,9 +57,7 @@ def client(tmp_path):
         mock_services.debug_manager.next_step = AsyncMock(
             return_value={"running": False}
         )
-        mock_services.debug_manager.run_all = AsyncMock(
-            return_value={"running": False}
-        )
+        mock_services.debug_manager.run_all = AsyncMock(return_value={"running": False})
         mock_services.debug_manager.stop = AsyncMock(
             return_value={"running": False, "message": "调试会话已关闭"}
         )

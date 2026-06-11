@@ -41,9 +41,7 @@ class TestShutdownUsesExit:
 
         from app.api.system import shutdown_server
 
-        shutdown_server(
-            request=mock_request, bg_tasks=mock_bg_tasks, svc=mock_monitor
-        )
+        shutdown_server(request=mock_request, bg_tasks=mock_bg_tasks, svc=mock_monitor)
 
         # 验证监控停止和 shutdown_event 调度
         mock_monitor.stop_monitoring.assert_called_once()

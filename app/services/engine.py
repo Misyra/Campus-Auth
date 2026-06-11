@@ -19,14 +19,14 @@ from pathlib import Path
 from typing import Any
 
 from app.constants import MONITOR_STOP_TIMEOUT
-from app.services.monitor_service import NetworkMonitorCore
 from app.network.decision import is_network_available
 from app.schemas import MonitorConfigPayload, MonitorStatusResponse
+from app.services.monitor_service import NetworkMonitorCore
+from app.services.websocket_manager import WebSocketManager
 from app.utils import ConfigValidator
 from app.utils.logging import get_logger
 from app.utils.login import SCREENSHOT_URL_PATTERN
 from app.utils.network import parse_ping_targets
-from app.services.websocket_manager import WebSocketManager
 
 from .profile_service import ProfileService
 
@@ -179,9 +179,7 @@ class ScheduleEngine:
                 if attempt < retries - 1:
                     time.sleep(0.05)
                 else:
-                    logger.warning(
-                        "命令队列已满 (type={})，操作被跳过", cmd.type
-                    )
+                    logger.warning("命令队列已满 (type={})，操作被跳过", cmd.type)
         return False
 
     # ── 队列消费者（在专用守护线程中运行）──
@@ -252,7 +250,9 @@ class ScheduleEngine:
                 _, intervals = self._login_retry.config
                 idx = self._login_retry.count - 1
                 if idx < len(intervals):
-                    candidates.append(float(self._login_retry.last_attempt + intervals[idx]))
+                    candidates.append(
+                        float(self._login_retry.last_attempt + intervals[idx])
+                    )
 
             if self._scheduler_running:
                 candidates.append(self._next_schedule_tick)
@@ -637,7 +637,12 @@ class ScheduleEngine:
             return
         # 无 config_provider 时的回退（仅测试场景）
         import copy
-        from .config_service import build_runtime_config, load_runtime_config, load_ui_config
+
+        from .config_service import (
+            build_runtime_config,
+            load_runtime_config,
+            load_ui_config,
+        )
 
         with self._reload_lock:
             data = self._profile_service.load()

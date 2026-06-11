@@ -128,6 +128,8 @@ class DashboardSink:
         self.buffer: deque[dict] = deque(maxlen=maxlen)
         self.broadcast_queue: deque[dict] = deque(maxlen=broadcast_maxlen)
         self._lock = threading.Lock()
+        # 获取配置中心实例
+        self._config_center = LogConfigCenter.get_instance()
 
     def write(self, message) -> None:
         """loguru sink 接口 — 接收格式化后的消息。"""
@@ -135,6 +137,11 @@ class DashboardSink:
         name = record["extra"].get("name", record["name"])
         source = record["extra"].get("source", "backend")
         level = record["level"].name
+
+        # 根据 source 级别过滤
+        if not self._config_center.should_emit(source, level):
+            return
+
         text = str(message).strip()
 
         stamp = datetime.fromtimestamp(record["time"].timestamp()).strftime(
@@ -192,6 +199,8 @@ class DateRotatingSink:
         self._file_max_bytes = file_max_bytes
         self._file_backup_count = file_backup_count
         self._bytes_written: int = 0
+        # 获取配置中心实例
+        self._config_center = LogConfigCenter.get_instance()
 
     def _get_log_path(self) -> tuple[str, str]:
         """返回 (日期目录路径, 日志文件路径)"""
@@ -217,6 +226,14 @@ class DateRotatingSink:
 
     def write(self, message):
         """loguru sink 接口 — 接收格式化后的消息。"""
+        record = message.record
+        source = record["extra"].get("source", "backend")
+        level = record["level"].name
+
+        # 根据 source 级别过滤
+        if not self._config_center.should_emit(source, level):
+            return
+
         needs_cleanup = False
         cleanup_cutoff = 0.0
 

@@ -5,6 +5,27 @@
 
 ## 2026-06-12
 
+### feat: 完成按 source 设置日志级别功能 (P1)
+
+实现按 source 独立设置日志级别的完整功能，包括后端 API、配置持久化、SINK 层过滤、前端 UI。
+
+**后端变更：**
+
+1. `app/schemas.py`：`SystemSettings` 新增 `source_levels: dict[str, str] = {}` 字段
+2. `app/utils/logging.py`：
+   - `DashboardSink.write`：调用 `LogConfigCenter.should_emit()` 进行 source 级别过滤
+   - `DateRotatingSink.write`：同上
+3. `app/services/config_service.py`：`save_config_combined` 保存 `source_levels` 字段
+4. `app/api/config.py`：新增 `GET /api/log-levels` 和 `POST /api/log-levels/{source}` 端点
+
+**前端变更：**
+
+1. `frontend/js/data/config.js`：新增 `sourceLevels` 数据
+2. `frontend/js/methods/config.js`：新增 `loadSourceLevels`、`setSourceLevel`、`resetSourceLevel` 方法
+3. `frontend/partials/pages/settings/settings-system.html`：新增日志级别配置 UI
+
+**测试结果：** 292 passed
+
 ### feat: SystemSettings 添加 source_levels 字段
 
 在 `SystemSettings` 模型中新增 `source_levels` 字段，用于存储各 source 的日志级别配置。
