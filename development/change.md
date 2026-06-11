@@ -5,6 +5,75 @@
 
 ## 2026-06-11
 
+### refactor: API 路由改用 engine.tasks (Facade)
+
+定时任务 API 路由不再直接访问 `ScheduledTaskService`，改为通过 `engine.tasks` (TaskFacade) 访问。
+
+**deps.py 变更：**
+- 删除 `get_scheduled_task_service` 和 `get_scheduler_service` 两个依赖注入函数
+- 删除 `ScheduledTaskService` 导入
+
+**scheduled_tasks.py 变更：**
+- 导入从 `get_scheduled_task_service` 改为 `get_monitor_service`
+- 所有路由通过 `engine = get_monitor_service(request)` 获取引擎实例
+- CRUD/执行/历史方法通过 `engine.tasks.xxx()` 访问
+- `start_scheduler()` 通过 `engine.start_scheduler()` 访问
+
+**test_deps.py 变更：**
+- 删除 `test_get_scheduler_service` 和 `test_get_scheduled_task_service` 两个测试用例
+- 删除 `get_scheduled_task_service` 和 `get_scheduler_service` 导入
+- `services` fixture 删除 `scheduled_task_service` mock
+
+**test_api_scheduled_tasks_routes.py 变更：**
+- fixture 从 `yield test_client, mock_scheduler` 改为 `yield test_client, mock_tasks, mock_engine`
+- `mock_tasks` 挂载到 `mock_engine.tasks`，所有 CRUD mock 方法移到 `mock_tasks`
+- `start_scheduler` 断言改为验证 `engine.start_scheduler`
+
+**测试结果：** 29 passed
+
+### refactor: ScheduleEngine 注入新组件
+
+修改 `app/services/engine.py`，注入 TaskRegistry、TaskExecutor、TaskFacade、RuntimeConfigProvider，调度逻辑改用新组件。
+
+**核心变更：**
+- 构造函数新增 `task_registry`、`task_executor`、`task_facade`、`config_provider` 可选参数
+- 调度状态（`_scheduler_running`、`_next_schedule_tick`）从 ScheduledTaskService 搬入 Engine
+- `_engine_loop` 定时任务部分改用 `_scheduler_running` + `_next_schedule_tick` 判断
+- `_calculate_wakeup` 定时任务部分改用 `_next_schedule_tick`
+- 新增 `_run_schedule_tick` 方法：使用 `registry.get_due_tasks` + `executor.execute_task_async`
+- `_do_async_login` 优先使用 `executor.execute_login_async`，回退到旧的独立线程登录
+- 配置相关方法（`_reload_config_internal`、`get_config`、`get_runtime_config`）优先使用 `config_provider`
+- 新增 `tasks` 属性（TaskFacade）供 API 路由使用
+- 新增 `scheduler_running` 属性
+- `start_scheduler` / `stop_scheduler` 改为 Engine 内部管理
+- `shutdown` 停止 `_scheduler_running` 并关闭 `_task_executor`
+- 委托方法（`list_tasks`、`get_task`、`save_task`、`delete_task`、`get_history`、`execute_task`、`has_enabled_tasks`）优先使用 `_task_facade`，回退到 `_scheduled_task_service`
+- `container.py` 更新：将 `task_registry`、`task_executor`、`task_facade`、`config_provider` 注入到 ScheduleEngine
+
+**测试结果：** 132 passed（目标测试文件全部通过）
+
+### refactor: ScheduledTaskService 改为委托层
+
+将 `app/services/scheduled_task.py` 重写为向后兼容的委托层，内部调用 TaskRegistry + TaskExecutor + TaskHistoryStore。
+
+**核心变更：**
+- 构造函数新增 `registry`、`executor`、`history_store` 可选参数，未传入时自动创建
+- 保留 `task_manager`、`worker_getter` 等旧参数以兼容现有调用
+- CRUD 方法委托给 `self._registry`（TaskRegistry）
+- 执行方法委托给 `self._executor`（TaskExecutor）
+- 历史方法委托给 `self._history_store`（TaskHistoryStore）
+- `delete_task` 同时清理历史记录（委托 `history_store.delete_history`）
+- 调度相关方法（`start_scheduler`、`stop_scheduler`、`check_and_execute`）改为空操作
+- `scheduler_running` 属性始终返回 False（调度状态由 Engine 管理）
+- 保留 `_validate_task_id` 静态方法和 `MAX_HISTORY_SIZE`、`SCHEDULER_CHECK_INTERVAL` 常量
+
+**文件变化：**
+- `app/services/scheduled_task.py`：从 516 行简化为约 160 行
+- `tests/test_scheduled_tasks.py`：`TestExecuteShellUsesPolicy` 改为测试 `TaskExecutor._execute_shell`；`TestSchedulerStartStop` 适配新的空操作行为
+- `tests/test_scheduler_service.py`：`TestExecuteShellUsesPolicy` 改为测试 `TaskExecutor._execute_shell`；`test_history_lock_initialized_at_construct` 改为检查 `_history_store`
+
+**测试结果：** 67 passed（三个目标测试文件全部通过），全量 1629 passed
+
 ### feat: 添加 TaskFacade
 
 定时任务 API 入口，包装 Registry + Executor + HistoryStore。API 路由不直接访问底层组件，通过 Facade 统一入口，未来扩展点：校验、审计、事件通知。
@@ -22,6 +91,25 @@
 ### feat: 添加 TaskExecutor
 
 创建任务执行中心，实现双线程池和登录去重机制，为后续 engine.py 重构提供独立的任务执行层。
+
+### refactor: 更新 ServiceContainer 创建新组件
+
+更新 `app/container.py`，将新组件（RuntimeConfigProvider、TaskRegistry、TaskHistoryStore、TaskExecutor、TaskFacade）注入到 ServiceContainer 中。
+
+**核心变更：**
+- 导入并创建 `RuntimeConfigProvider`（配置中心，线程安全读写）
+- 导入并创建 `TaskRegistry` + `TaskHistoryStore`（定时任务数据中心）
+- 导入并创建 `TaskExecutor`（双线程池：登录+任务执行）
+- 导入并创建 `TaskFacade`（定时任务 API 入口）
+- `ScheduledTaskService` 改为接收 `registry`、`executor`、`history_store` 作为依赖注入
+- `startup` 使用 `task_registry.has_enabled_tasks()` + `engine.start_scheduler()`
+- `shutdown` 添加 `task_executor.shutdown(wait=False)`
+
+**文件变化：**
+- `app/container.py`：新增导入、创建新组件、更新 startup/shutdown
+- `tests/test_container.py`：mock 新组件、修正 startup 断言
+
+**测试结果：** 31 passed
 
 **新建文件：**
 - `app/services/task_executor.py` — `BoundedExecutor` + `TaskExecutor` 两个类
