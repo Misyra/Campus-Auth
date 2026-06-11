@@ -311,7 +311,13 @@ def run(
     access_log_enabled: bool | None = None,
     log_retention: int | None = None,
     existing_container=None,
+    server_ref: list | None = None,
 ) -> None:
+    """启动 uvicorn Web 服务器。
+
+    Args:
+        server_ref: 若传入，运行后 [0] 为 uvicorn.Server 实例（供外部停止）。
+    """
     global app
 
     import uvicorn
@@ -392,6 +398,8 @@ def run(
     )
     uv_server = uvicorn.Server(uv_config)
     _app.state._uvicorn_server = uv_server
+    if server_ref is not None:
+        server_ref[0] = uv_server
     uv_server.run()
 
 
