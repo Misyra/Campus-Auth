@@ -168,11 +168,17 @@ class ScheduleEngine:
             allowlist=[s["path"] for s in detect_available_shells()]
         )
 
-        # Start queue consumer daemon thread
-        self._consumer_thread = threading.Thread(
-            target=self._queue_consumer, daemon=True
-        )
-        self._consumer_thread.start()
+        # ── 统一引擎状态 ──
+        self._engine_running = False
+        self._next_network_check: float = 0
+        self._monitor_check_interval: int = 300
+        self._login_retry_count: int = 0
+        self._last_login_attempt: float = 0
+        self._login_retry_config: tuple | None = None
+
+        # 统一引擎线程（替代 _consumer_thread + _scheduler_thread + _monitor_thread）
+        self._engine_thread = threading.Thread(target=self._engine_loop, daemon=True)
+        self._engine_thread.start()
 
     # ── 队列入队辅助 ──
 
@@ -201,6 +207,212 @@ class ScheduleEngine:
         EngineCmdType.RELOAD: "_handle_reload",
         EngineCmdType.APPLY_PROFILE: "_handle_apply_profile",
     }
+
+    # ── 统一引擎循环 ──
+
+    def _engine_loop(self) -> None:
+        """统一引擎循环：命令处理 + 网络检测 + 定时任务调度。"""
+        self._engine_running = True
+        engine_logger.info("统一引擎循环已启动")
+
+        while not self._shutdown_event.is_set():
+            try:
+                wakeup_time = self._calculate_wakeup()
+
+                try:
+                    timeout = max(0.01, wakeup_time - time.time())
+                    cmd = self._cmd_queue.get(timeout=timeout)
+                except queue.Empty:
+                    cmd = None
+
+                if cmd is not None:
+                    self._process_command(cmd)
+                    if cmd.type == EngineCmdType.SHUTDOWN:
+                        break
+                    continue
+
+                now = time.time()
+
+                # 网络检测
+                if self._is_monitoring and now >= self._next_network_check:
+                    self._do_network_check()
+
+                # 登录重试
+                if self._login_retry_needed(now):
+                    self._do_async_login()
+
+                # 定时任务
+                if self._scheduler_running:
+                    self._check_scheduled_tasks()
+            except Exception:
+                engine_logger.exception("引擎循环异常，继续运行")
+                time.sleep(1)
+
+        self._engine_running = False
+        engine_logger.info("统一引擎循环已退出")
+
+    def _calculate_wakeup(self) -> float:
+        """计算下次唤醒时间。"""
+        now = time.time()
+        candidates: list[float] = [now + 60]
+
+        try:
+            if self._is_monitoring:
+                candidates.append(float(self._next_network_check))
+
+            if self._login_retry_count > 0 and self._login_retry_config:
+                _, intervals = self._login_retry_config
+                idx = self._login_retry_count - 1
+                if idx < len(intervals):
+                    candidates.append(float(self._last_login_attempt + intervals[idx]))
+
+            if self._scheduler_running:
+                candidates.append(now + float(SCHEDULER_CHECK_INTERVAL))
+        except (TypeError, ValueError, AttributeError):
+            # 异常时回退到默认唤醒时间
+            return now + 5
+
+        return min(candidates)
+
+    def _process_command(self, cmd: EngineCommand) -> None:
+        """处理一个命令。"""
+        try:
+            if cmd.type == EngineCmdType.SHUTDOWN:
+                self._handle_stop()
+            else:
+                handler_name = self._CMD_ROUTES.get(cmd.type)
+                if handler_name:
+                    getattr(self, handler_name)(cmd)
+        except Exception:
+            engine_logger.exception("命令执行失败: {}", cmd.type)
+        finally:
+            if cmd.response_event:
+                cmd.response_event.set()
+            self._cmd_queue.task_done()
+
+    def _do_network_check(self) -> None:
+        """执行一次网络检测。"""
+        if self._monitor_core is None:
+            return
+
+        try:
+            result = self._monitor_core.check_once()
+            interval = int(result.get("interval", self._monitor_check_interval))
+            self._monitor_check_interval = interval
+
+            if result.get("need_login", False):
+                self._login_retry_config = self._get_retry_config()
+                self._login_retry_count = 0
+                self._do_async_login()
+            else:
+                self._login_retry_count = 0
+
+            self._next_network_check = time.time() + interval
+            self._update_status_snapshot()
+        except Exception:
+            engine_logger.exception("网络检测异常")
+            self._next_network_check = time.time() + self._monitor_check_interval
+
+    def _login_retry_needed(self, now: float) -> bool:
+        """检查是否需要登录重试。"""
+        if self._login_retry_count == 0 or not self._login_retry_config:
+            return False
+        if self._login_in_progress.is_set():
+            return False
+        max_retries, intervals = self._login_retry_config
+        if self._login_retry_count >= max_retries:
+            return False
+        idx = self._login_retry_count - 1
+        if idx >= len(intervals):
+            return False
+        return now >= self._last_login_attempt + intervals[idx]
+
+    def _do_async_login(self) -> None:
+        """在独立线程中执行登录（不阻塞引擎循环）。"""
+        if self._login_in_progress.is_set():
+            return
+        self._login_in_progress.set()
+        self._last_login_attempt = time.time()
+        self._login_retry_count += 1
+
+        def _login_thread():
+            try:
+                config = self._copy_runtime_config()
+                pure_mode = self.pure_mode
+                if pure_mode:
+                    config.setdefault("browser_settings", {})["pure_mode"] = True
+                login_timeout = getattr(self._ui_config, "login_timeout", 120)
+
+                from app.workers.playwright_worker import CMD_LOGIN
+
+                result = self._worker_getter().submit(
+                    CMD_LOGIN,
+                    data={
+                        "config": config,
+                        "pure_mode": pure_mode,
+                        "skip_pause_check": False,
+                    },
+                    timeout=login_timeout,
+                )
+
+                if result.success:
+                    if self._monitor_core:
+                        self._monitor_core.update_status_after_login(True)
+                    self._login_retry_count = 0
+                else:
+                    if self._monitor_core:
+                        self._monitor_core.update_status_after_login(
+                            False, result.error or ""
+                        )
+            except Exception as e:
+                engine_logger.exception("异步登录异常")
+                if self._monitor_core:
+                    self._monitor_core.update_status_after_login(False, str(e))
+            finally:
+                self._login_in_progress.clear()
+                self._update_status_snapshot()
+
+        threading.Thread(target=_login_thread, daemon=True).start()
+
+    def _get_retry_config(self) -> tuple[int, list[int]]:
+        """获取登录重试配置。"""
+        try:
+            config = self._copy_runtime_config()
+            retry = config.get("retry_settings", {})
+            max_retries = retry.get("max_retries", 3)
+            interval = retry.get("retry_interval", 30)
+            intervals = [interval] * max_retries
+            return max_retries, intervals
+        except Exception:
+            return 3, [30, 30, 30]
+
+    def _check_scheduled_tasks(self) -> None:
+        """检查并执行到期的定时任务。"""
+        now = datetime.now()
+        current_minute = (now.hour, now.minute)
+        if current_minute == self._last_triggered_minute:
+            return
+        if not self.has_enabled_tasks():
+            return
+        self._last_triggered_minute = current_minute
+
+        tasks = self.list_tasks()
+        for task in tasks:
+            if not task.get("enabled", False):
+                continue
+            schedule = task.get("schedule", {})
+            if now.hour != schedule.get("hour", -1) or now.minute != schedule.get("minute", -1):
+                continue
+            task_id = task.get("id", "")
+            engine_logger.info("触发定时任务: {}", task_id)
+            t = threading.Thread(
+                target=self._execute_task_wrapper, args=(task_id,), daemon=True
+            )
+            with self._running_tasks_lock:
+                self._running_task_threads.append(t)
+            t.start()
+
+    # ── 旧队列消费者（保留用于兼容，待测试通过后清理）──
 
     def _queue_consumer(self) -> None:
         """专用线程：从 _cmd_queue 拉取命令并执行。
@@ -264,114 +476,53 @@ class ScheduleEngine:
         thread.start()
 
     def _handle_start(self, cmd: EngineCommand) -> None:
-        """启动监控（仅在消费者线程中调用）。"""
-        # 二次检查：防止重复启动
-        if self._monitor_thread and self._monitor_thread.is_alive():
+        """启动监控（在引擎循环中调用）。"""
+        if self._monitor_core is not None and self._monitor_core.monitoring:
             self.record_log(
-                "监控线程已在运行，忽略重复启动",
+                "监控已在运行中，忽略重复启动",
                 level="WARNING",
                 source="backend",
             )
             return
+
         config = self._copy_runtime_config()
         pure_mode = cmd.data.get("pure_mode", self.pure_mode)
         if pure_mode:
             config.setdefault("browser_settings", {})["pure_mode"] = True
-        self._start_monitor_core(config, pure_mode)
 
-        self.record_log(
-            "监控线程已启动", level="INFO", source="backend"
+        core = NetworkMonitorCore(
+            config=config,
+            log_callback=self.record_log,
+            thread_done=self._thread_done,
+            login_history=self._login_history,
+            worker_getter=self._worker_getter,
         )
+        core.set_profile_service(self._profile_service)
+        core.init_monitoring()  # 只初始化，不启动循环
+        self._monitor_core = core
+        self._next_network_check = time.time()  # 立即执行第一次检测
+        self._login_retry_count = 0
         self._update_status_snapshot()
+        self.record_log("监控已启动（统一引擎驱动）", level="INFO", source="backend")
 
     def _handle_stop(self, cmd: EngineCommand | None = None) -> None:
-        """停止监控（仅在消费者线程中调用）。"""
-        # 幂等保护：如果已经停止，直接返回
-        if self._monitor_core is None and self._monitor_thread is None:
+        """停止监控。"""
+        core = self._monitor_core
+        if core is None:
             return
 
-        core = self._monitor_core
-        thread = self._monitor_thread
-
-        if core:
-            core.stop_monitoring()
-
-        if thread:
-            self._thread_done.wait(timeout=MONITOR_STOP_TIMEOUT_S)
-            if thread.is_alive():
-                thread.join(timeout=1)
-            if thread.is_alive():
-                engine_logger.warning("监控线程在超时后仍未结束")
-
+        core.stop_monitoring()
         self._monitor_core = None
-        self._monitor_thread = None
-        self._thread_done.clear()
+        self._login_retry_count = 0
+        self._next_network_check = 0
 
         self.record_log("监控已停止", level="INFO", source="backend")
         self._update_status_snapshot()
 
     def _handle_login(self, cmd: EngineCommand) -> None:
-        """执行一次性登录尝试（仅在消费者线程中调用）。"""
-        config = self._copy_runtime_config()
-        pure_mode = self.pure_mode
-        if pure_mode:
-            config.setdefault("browser_settings", {})["pure_mode"] = True
-        skip_pause_check = cmd.data.get("skip_pause_check", False)
-
-        # 通过 Worker 派发登录，替代临时 NetworkMonitorCore 实例
-        login_timeout = getattr(self._ui_config, "login_timeout", 120)
-        start_time = time.perf_counter()
-        success = False
-        error_msg = ""
-        try:
-            # 延迟导入，支持轻量模式（不加载 Playwright 依赖）
-            from app.workers.playwright_worker import CMD_LOGIN
-
-            result = self._worker_getter().submit(
-                CMD_LOGIN,
-                data={
-                    "config": config,
-                    "pure_mode": pure_mode,
-                    "skip_pause_check": skip_pause_check,
-                },
-                timeout=login_timeout,
-            )
-            if result.success:
-                cmd.response_data = (True, result.data)
-                success = True
-                # 统一在消费者线程设置 network_state（BE-7 修复）
-                core = self._monitor_core
-                if core is not None and core.monitoring:
-                    core._update_state(network_state=NetworkState.CONNECTED)
-            else:
-                error_msg = result.error or "登录失败"
-                cmd.response_data = (False, error_msg)
-        except Exception as exc:
-            engine_logger.exception(
-                "手动登录异常 (username={}, url={})",
-                config.get("username", "?"),
-                config.get("auth_url", "?"),
-            )
-            error_msg = str(exc)
-            cmd.response_data = (False, error_msg)
-        finally:
-            duration_ms = int((time.perf_counter() - start_time) * 1000)
-            self._login_in_progress.clear()
-            # 记录登录历史
-            if self._login_history is not None:
-                try:
-                    self._login_history.record(
-                        success=success,
-                        duration_ms=duration_ms,
-                        profile_service=self._profile_service,
-                        task_manager=self._task_manager,
-                        error=error_msg,
-                    )
-                except Exception:
-                    engine_logger.debug("记录登录历史失败", exc_info=True)
-
-            if cmd.response_event:
-                cmd.response_event.set()
+        """执行一次性登录（手动触发，异步执行）。"""
+        self._do_async_login()
+        cmd.response_data = (True, "登录已提交")
 
     def _handle_reload(self, cmd: EngineCommand) -> None:
         """重载配置并重启监控（仅在消费者线程中调用）。"""
@@ -546,8 +697,7 @@ class ScheduleEngine:
 
     @property
     def _is_monitoring(self) -> bool:
-        """Read monitoring state from lock-free snapshot."""
-        return self._status_snapshot.monitoring
+        return self._monitor_core is not None and self._monitor_core.monitoring
 
     def get_config(self) -> MonitorConfigPayload:
         with self._reload_lock:
@@ -632,7 +782,7 @@ class ScheduleEngine:
             return True, "监控已停止"
 
     def shutdown(self) -> None:
-        """完全关闭 ScheduleEngine：停止监控 + 停止调度器 + 终止消费者线程。"""
+        """完全关闭 ScheduleEngine：停止监控 + 停止调度器 + 终止引擎线程。"""
         # 停止调度器并等待运行中的任务线程完成
         self.stop_scheduler()
 
@@ -641,18 +791,17 @@ class ScheduleEngine:
             with contextlib.suppress(Exception):
                 self._monitor_core.stop_monitoring()
         self._monitor_core = None
-        self._monitor_thread = None
 
-        # 设置关闭事件，通知消费者线程退出循环
+        # 设置关闭事件，通知引擎线程退出循环
         self._shutdown_event.set()
 
-        # 发送 shutdown 命令确保消费者能立即处理退出
+        # 发送 shutdown 命令确保引擎能立即处理退出
         with contextlib.suppress(queue.Full):
             self._cmd_queue.put_nowait(EngineCommand(type=EngineCmdType.SHUTDOWN))
 
         # 短超时等待，不阻塞（守护线程会随进程退出）
-        if self._consumer_thread and self._consumer_thread.is_alive():
-            self._consumer_thread.join(timeout=1)
+        if self._engine_thread and self._engine_thread.is_alive():
+            self._engine_thread.join(timeout=1)
 
         engine_logger.info("引擎服务已关闭")
 
@@ -703,12 +852,11 @@ class ScheduleEngine:
         cmd.response_event.wait(timeout=login_timeout)
 
         if cmd.response_data is None:
-            # 超时：检查消费者线程是否存活
-            # 如果消费者线程已死，主动清除标志位（防止永久卡住）
-            if not self._consumer_thread.is_alive():
-                engine_logger.error("消费者线程已退出，主动清除 _login_in_progress")
+            # 超时：检查引擎线程是否存活
+            # 如果引擎线程已死，主动清除标志位（防止永久卡住）
+            if not self._engine_thread.is_alive():
+                engine_logger.error("引擎线程已退出，主动清除 _login_in_progress")
                 self._login_in_progress.clear()
-            # 消费者线程仍在运行时，由其 finally 块负责清除
             return False, "手动登录超时"
 
         success, message = cmd.response_data
@@ -1137,31 +1285,18 @@ class ScheduleEngine:
     # ── 调度器生命周期 ──
 
     def start_scheduler(self) -> None:
-        """启动调度器线程。"""
-        if (
-            self._scheduler_running
-            and self._scheduler_thread is not None
-            and self._scheduler_thread.is_alive()
-        ):
+        """启动定时任务调度（由引擎循环驱动）。"""
+        if self._scheduler_running:
             return
         self._scheduler_running = True
-        self._scheduler_stop_event.clear()
-        self._scheduler_thread = threading.Thread(
-            target=self._scheduler_loop, daemon=True
-        )
-        self._scheduler_thread.start()
-        engine_logger.info("定时任务调度器已启动")
+        self._last_triggered_minute = None
+        engine_logger.info("定时任务调度器已启动（引擎驱动）")
 
     def stop_scheduler(self) -> None:
         """停止调度器，等待运行中的任务线程完成。"""
         if not self._scheduler_running:
             return
         self._scheduler_running = False
-        self._scheduler_stop_event.set()
-
-        if self._scheduler_thread and self._scheduler_thread.is_alive():
-            self._scheduler_thread.join(timeout=10)
-        self._scheduler_thread = None
 
         # 等待所有运行中的任务线程
         with self._running_tasks_lock:

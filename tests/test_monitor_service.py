@@ -314,7 +314,17 @@ class TestStartStopMonitoring:
 
     def test_start_monitoring_already_running(self):
         svc = _make_monitor_service()
-        svc._status_snapshot = StatusSnapshot(monitoring=True)
+        mock_core = MagicMock()
+        mock_core.monitoring = True
+        mock_core.snapshot.return_value = {
+            "network_state": "connected",
+            "start_time": 100.0,
+            "network_check_count": 0,
+            "login_attempt_count": 0,
+            "last_check_time": None,
+            "status_detail": "运行中",
+        }
+        svc._monitor_core = mock_core
         ok, msg = svc.start_monitoring()
         assert ok is False
         assert "已在运行" in msg
@@ -334,18 +344,17 @@ class TestStartStopMonitoring:
 class TestHandleStartStop:
     def test_handle_start_duplicate(self):
         svc = _make_monitor_service()
-        mock_thread = MagicMock()
-        mock_thread.is_alive.return_value = True
-        svc._monitor_thread = mock_thread
+        mock_core = MagicMock()
+        mock_core.monitoring = True
+        svc._monitor_core = mock_core
         cmd = EngineCommand(type=EngineCmdType.START)
         svc._handle_start(cmd)
-        # 不应创建新线程
-        mock_thread.is_alive.assert_called()
+        # 不应创建新监控核心
+        assert svc._monitor_core is mock_core
 
     def test_handle_stop_no_core(self):
         svc = _make_monitor_service()
         svc._monitor_core = None
-        svc._monitor_thread = None
         svc._handle_stop()
         assert svc._monitor_core is None
 
@@ -362,9 +371,10 @@ class TestHandleLogin:
     )
     @patch("app.services.engine.load_ui_config")
     @patch("app.services.engine.ProfileService")
-    def test_handle_login_success(
+    def test_handle_login_submits_async(
         self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
     ):
+        """_handle_login 现在异步执行，立即返回提交状态。"""
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.system.pure_mode = False
@@ -381,71 +391,16 @@ class TestHandleLogin:
         mock_get_worker = MagicMock(return_value=mock_worker)
 
         svc = ScheduleEngine(MagicMock(), worker_getter=mock_get_worker)
-        event = threading.Event()
-        cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=event)
+        svc._shutdown_event.set()  # 停止引擎线程，避免干扰
+        time.sleep(0.1)
+
+        cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
-        assert cmd.response_data == (True, "登录成功")
-        assert event.is_set()
-
-    @patch("app.services.engine.build_runtime_config", return_value={})
-    @patch(
-        "app.services.engine.load_runtime_config", return_value=(MagicMock(), False)
-    )
-    @patch("app.services.engine.load_ui_config")
-    @patch("app.services.engine.ProfileService")
-    def test_handle_login_failure(
-        self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
-    ):
-        mock_ps = MagicMock()
-        mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
-        mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
-        mock_ui_config.login_timeout = 120
-        mock_load_ui.return_value = mock_ui_config
-
-        mock_worker = MagicMock()
-        mock_result = MagicMock()
-        mock_result.success = False
-        mock_result.error = "密码错误"
-        mock_worker.submit.return_value = mock_result
-        mock_get_worker = MagicMock(return_value=mock_worker)
-
-        svc = ScheduleEngine(MagicMock(), worker_getter=mock_get_worker)
-        event = threading.Event()
-        cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=event)
-        svc._handle_login(cmd)
-        assert cmd.response_data == (False, "密码错误")
-        assert event.is_set()
-
-    @patch("app.services.engine.build_runtime_config", return_value={})
-    @patch(
-        "app.services.engine.load_runtime_config", return_value=(MagicMock(), False)
-    )
-    @patch("app.services.engine.load_ui_config")
-    @patch("app.services.engine.ProfileService")
-    def test_handle_login_exception(
-        self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
-    ):
-        mock_ps = MagicMock()
-        mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
-        mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
-        mock_ui_config.login_timeout = 120
-        mock_load_ui.return_value = mock_ui_config
-
-        mock_worker = MagicMock()
-        mock_worker.submit.side_effect = RuntimeError("worker error")
-        mock_get_worker = MagicMock(return_value=mock_worker)
-
-        svc = ScheduleEngine(MagicMock(), worker_getter=mock_get_worker)
-        event = threading.Event()
-        cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=event)
-        svc._handle_login(cmd)
-        assert cmd.response_data[0] is False
-        assert "worker error" in cmd.response_data[1]
-        assert event.is_set()
+        # 异步模式：立即返回提交状态，不等待结果
+        assert cmd.response_data == (True, "登录已提交")
+        # 等待异步登录线程完成
+        time.sleep(0.5)
+        assert not svc._login_in_progress.is_set()
 
 
 # =====================================================================
@@ -716,14 +671,13 @@ class TestShutdownSynchronous:
         svc._monitor_thread = MagicMock()
         svc._monitor_thread.is_alive.return_value = False
         svc._thread_done = threading.Event()
-        svc._consumer_thread = MagicMock()
-        svc._consumer_thread.is_alive.return_value = False
+        svc._engine_thread = MagicMock()
+        svc._engine_thread.is_alive.return_value = False
         svc._scheduler_running = False
-        svc._scheduler_thread = None
         svc._running_task_threads = []
         svc._running_tasks_lock = threading.Lock()
 
-        # 模拟消费者处理 shutdown 命令
+        # 模拟引擎处理 shutdown 命令
         def consume_shutdown():
             cmd = svc._cmd_queue.get(timeout=5)
             assert cmd.type == "shutdown"
@@ -804,8 +758,7 @@ class TestStartMonitoringPutNowait:
         """测试队列满时 start_monitoring 不阻塞，返回错误"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._cmd_queue = queue.Queue(maxsize=1)
-        svc._status_snapshot = MagicMock()
-        svc._status_snapshot.monitoring = False
+        svc._monitor_core = None
         svc._runtime_config = {
             "auth_url": "http://test.com",
             "username": "test",
@@ -825,8 +778,6 @@ class TestStartMonitoringPutNowait:
             ),
             patch.object(svc, "_copy_runtime_config", return_value={}),
         ):
-            import time
-
             start = time.time()
             ok, msg = svc.start_monitoring()
             elapsed = time.time() - start
@@ -838,31 +789,28 @@ class TestStartMonitoringPutNowait:
 
 
 class TestNetworkStateSetInConsumer:
-    """P1-BE-7: network_state 在消费者线程统一赋值"""
+    """P1-BE-7: network_state 在异步登录线程中统一赋值"""
 
-    def test_network_state_set_in_consumer(self):
-        """测试登录成功后 network_state 由消费者 _handle_login 设置"""
+    def test_network_state_set_after_async_login(self):
+        """测试登录成功后 network_state 由异步登录线程通过 update_status_after_login 设置"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._login_in_progress = threading.Event()
+        svc._login_retry_count = 0
+        svc._last_login_attempt = 0
+        svc._login_retry_config = None
         svc._login_history = None
         svc._profile_service = MagicMock()
-        svc._profile_service.get_active_profile.return_value = MagicMock(name="test")
         svc._ui_config = MagicMock()
         svc._ui_config.login_timeout = 10
         svc._runtime_config = {"auth_url": "http://test.com", "username": "test"}
         svc._pure_mode = False
         svc._pure_mode_lock = threading.Lock()
+        svc._login_lock = threading.Lock()
+        svc._update_status_snapshot = MagicMock()
 
-        # 模拟 monitor_core（_update_state 需要实际更新属性）
+        # 模拟 monitor_core
         mock_core = MagicMock()
         mock_core.monitoring = True
-        mock_core.network_state = NetworkState.UNKNOWN
-
-        def _fake_update_state(**kwargs):
-            for k, v in kwargs.items():
-                setattr(mock_core, k, v)
-
-        mock_core._update_state = _fake_update_state
         svc._monitor_core = mock_core
 
         # 模拟 Worker 返回成功
@@ -870,26 +818,21 @@ class TestNetworkStateSetInConsumer:
         mock_result.success = True
         mock_result.data = "ok"
 
-        cmd = EngineCommand(
-            type=EngineCmdType.LOGIN,
-            data={"config": {}, "pure_mode": False, "skip_pause_check": True},
-            response_event=threading.Event(),
-        )
-
         mock_worker = MagicMock()
         mock_worker.submit.return_value = mock_result
         svc._worker_getter = lambda: mock_worker
 
-        # 调用消费者 _handle_login
-        svc._handle_login(cmd)
+        # 调用 _do_async_login
+        svc._do_async_login()
 
-        # 验证 network_state 已由消费者设置为 CONNECTED
-        assert mock_core.network_state == NetworkState.CONNECTED, (
-            "消费者 _handle_login 成功分支应设置 core.network_state = CONNECTED"
-        )
+        # 等待异步线程完成
+        time.sleep(0.5)
+
+        # 验证 update_status_after_login(True) 被调用
+        mock_core.update_status_after_login.assert_called_with(True)
         # 验证 _login_in_progress 已清除
         assert not svc._login_in_progress.is_set(), (
-            "消费者 finally 应清除 _login_in_progress"
+            "异步登录完成后应清除 _login_in_progress"
         )
 
 
@@ -966,10 +909,10 @@ class TestSchedulerNoAutoExit:
 
 
 class TestLoginInProgressConsumerDead:
-    """消费者线程死亡时，_login_in_progress 应被主动清除。"""
+    """引擎线程死亡时，_login_in_progress 应被主动清除。"""
 
-    def test_login_timeout_clears_when_consumer_dead(self):
-        """测试超时且消费者线程已死时，主动清除 _login_in_progress。"""
+    def test_login_timeout_clears_when_engine_dead(self):
+        """测试超时且引擎线程已死时，主动清除 _login_in_progress。"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._cmd_queue = queue.Queue(maxsize=50)
         svc._login_in_progress = threading.Event()
@@ -981,18 +924,16 @@ class TestLoginInProgressConsumerDead:
         svc._pure_mode = False
         svc._pure_mode_lock = threading.Lock()
         svc._start_stop_lock = threading.Lock()
-        svc._status_snapshot = MagicMock()
-        svc._status_snapshot.monitoring = False
 
-        # 模拟消费者线程已死亡
-        svc._consumer_thread = MagicMock()
-        svc._consumer_thread.is_alive.return_value = False
+        # 模拟引擎线程已死亡
+        svc._engine_thread = MagicMock()
+        svc._engine_thread.is_alive.return_value = False
 
         with patch.object(svc, "_copy_runtime_config", return_value={}):
             ok, msg = svc.run_manual_login()
 
         assert not svc._login_in_progress.is_set(), (
-            "消费者线程已死时，_login_in_progress 应被主动清除"
+            "引擎线程已死时，_login_in_progress 应被主动清除"
         )
         assert not ok
         assert "超时" in msg
