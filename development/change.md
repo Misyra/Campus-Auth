@@ -5,6 +5,21 @@
 
 ## 2026-06-11
 
+### refactor: 用 _run_no_web 替换 _run_lightweight，删除占位服务器
+
+删除旧的 `_run_lightweight` 函数和占位服务器相关代码（`_WAKEUP_HTML`、`_start_wakeup_server`），替换为简洁的 `_run_no_web` 函数。
+
+**`main.py` 变更：**
+- 删除 `_run_lightweight` 函数（原轻量模式：启动时不加载 FastAPI，用户访问时按需加载）
+- 删除 `_WAKEUP_HTML` 常量和 `_start_wakeup_server` 函数（占位 HTTP 服务器，用于轻量模式下响应用户访问并触发唤醒）
+- 新增 `_run_no_web` 函数：无 Web 模式，仅运行网络监控和定时任务，不启动 Web 服务
+  - 接受 `logger` 和 `minimize_to_tray` 参数（移除了与 Web 相关的 `port`、`no_browser`、`auto_open_browser` 参数）
+  - 信号处理器更简洁，不再管理 uvicorn server 引用
+  - 系统托盘使用 `port=0` 表示无 Web 端口
+  - 阻塞等待关闭信号，收到后执行 `container.shutdown()` 清理
+
+**调用点：** `_run_server` 中的调用已由 Task 1 预先添加：`if no_web or (is_autostart and lightweight_mode): _run_no_web(...)`
+
 ### refactor: 统一时间/颜色工具函数到 formatters.js
 
 将散落在 `appearance.js` 和 `scheduled_tasks.js` 中的时间格式和颜色工具函数统一到 `formatters.js`。

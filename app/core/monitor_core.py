@@ -161,6 +161,132 @@ class NetworkMonitorCore:
             )
         )
 
+    def init_monitoring(self) -> None:
+        """初始化监控状态（不启动循环，由引擎驱动检测）。"""
+        if self.monitoring:
+            self.log_message("监控已在运行中", "WARNING")
+            return
+
+        self._stop_requested = False
+        self._cancel_login.clear()
+        self._stop_event.clear()
+        self._test_sites_cache = None
+        self._update_state(
+            monitoring=True,
+            start_time=time.time(),
+            network_check_count=0,
+            login_attempt_count=0,
+            network_state=NetworkState.UNKNOWN,
+            status_detail="正在启动监控",
+        )
+
+        interval = self._get_monitor_interval()
+        auth_url = self.config.get("auth_url", "未设置")
+        username = self.config.get("username", "未设置")
+        isp = self.config.get("isp", "无") or "无"
+        block_proxy = self.config.get("block_proxy", True)
+        set_block_proxy(block_proxy if block_proxy is not None else True)
+        test_sites_info = self._get_test_sites()
+
+        monitor_cfg = self.config.get("monitor", {})
+        modes = []
+        if monitor_cfg.get("enable_tcp_check", True):
+            modes.append(f"TCP({len(test_sites_info)})")
+        if monitor_cfg.get("enable_http_check", True):
+            http_urls = monitor_cfg.get("test_urls", [])
+            modes.append(f"HTTP({len(http_urls)})")
+        url_checks = monitor_cfg.get("url_check_urls")
+        if url_checks:
+            modes.append(f"网址响应({len(url_checks)})")
+        modes_str = " + ".join(modes) if modes else "无"
+
+        self.log_message(
+            f"网络监控已启动 | 检测间隔: {interval}s | 方式: {modes_str}\n"
+            f"认证地址: {auth_url} | 账号: {username} | 运营商: {isp}"
+        )
+
+    def check_once(self) -> dict[str, Any]:
+        """执行一次网络检测（不阻塞，不做登录重试）。
+
+        返回:
+            dict: {
+                "paused": bool,
+                "net_ok": bool,
+                "net_reason": str,
+                "need_login": bool,
+                "check_num": int,
+                "interval": int,
+            }
+        """
+        interval = self._get_monitor_interval()
+        test_sites = self._get_test_sites()
+
+        with self._state_lock:
+            self.network_check_count += 1
+            self.last_check_time = datetime.datetime.now()
+            check_num = self.network_check_count
+            if self.network_state == NetworkState.UNKNOWN:
+                self.status_detail = "正在检测网络"
+
+        targets_str = ", ".join(f"{h}:{p}" for h, p in test_sites)
+        self.log_message(f"[#{check_num}] 网络检测 -> {targets_str}")
+
+        # 1. 暂停时段检查
+        is_paused, _ = check_pause(self.config)
+        if is_paused:
+            pause_config = self.config.get("pause_login", {})
+            start_hour = pause_config.get("start_hour", 0)
+            end_hour = pause_config.get("end_hour", 6)
+            self._update_state(
+                status_detail=f"暂停时段（{start_hour}:00-{end_hour}:00），跳过检测"
+            )
+            self.log_message(
+                f"暂停时段 ({start_hour}:00-{end_hour}:00)，跳过检测", "INFO"
+            )
+            return {
+                "paused": True, "net_ok": True, "net_reason": "",
+                "need_login": False, "check_num": check_num, "interval": interval,
+            }
+
+        # 2. 网络状态检测
+        net_ok, net_reason = check_network_status(self.config)
+        if net_ok:
+            self._update_state(
+                login_attempt_count=0,
+                network_state=NetworkState.CONNECTED,
+                status_detail="网络正常",
+            )
+            self.log_message(f"[#{check_num}] 网络正常，无需登录", "INFO")
+        elif net_reason == "all_disabled":
+            self.log_message("所有网络检测均未启用，跳过", "WARNING")
+        else:
+            self._update_state(status_detail="网络异常：待登录")
+
+        return {
+            "paused": False,
+            "net_ok": net_ok,
+            "net_reason": net_reason,
+            "need_login": not net_ok and net_reason != "all_disabled",
+            "check_num": check_num,
+            "interval": interval,
+        }
+
+    def update_status_after_login(self, success: bool, message: str = "") -> None:
+        """登录完成后更新监控状态（由引擎调用）。"""
+        if success:
+            self._update_state(
+                login_attempt_count=0,
+                network_state=NetworkState.CONNECTED,
+                status_detail="网络正常",
+            )
+            self.log_message("登录成功，网络已恢复")
+        else:
+            self._update_state(
+                network_state=NetworkState.DISCONNECTED,
+                status_detail="网络异常：登录失败",
+            )
+            self.log_message(f"登录失败: {message}", "WARNING")
+
     def start_monitoring(self) -> None:
         try:
             if self.monitoring:
