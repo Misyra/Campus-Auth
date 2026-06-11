@@ -26,7 +26,6 @@ def test_history_store_initialized_at_construct(tmp_path):
     svc = ScheduledTaskService(
         tmp_path,
         task_manager=task_manager,
-        worker_getter=lambda: None,
     )
     assert hasattr(svc, "_history_store")
     assert hasattr(svc._history_store, "add_record")

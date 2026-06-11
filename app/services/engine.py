@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import contextlib
-import copy
 import os
 import queue
 import re
@@ -29,7 +28,6 @@ from app.utils.login import SCREENSHOT_URL_PATTERN
 from app.utils.network_helpers import parse_ping_targets
 from app.ws_manager import WebSocketManager
 
-from .config import build_runtime_config, load_runtime_config, load_ui_config
 from .profile import ProfileService
 
 # ── 常量 ──
@@ -380,11 +378,6 @@ class ScheduleEngine:
         except Exception:
             return 3, [30, 30, 30]
 
-    def _check_scheduled_tasks(self) -> None:
-        """检查并执行到期的定时任务（委托 ScheduledTaskService）。"""
-        if self._scheduled_task_service:
-            self._scheduled_task_service.check_and_execute()
-
     def _run_schedule_tick(self) -> None:
         """执行定时任务调度（使用 TaskRegistry + TaskExecutor）。"""
         from datetime import datetime
@@ -622,21 +615,26 @@ class ScheduleEngine:
         return self._task_facade
 
     def get_config(self) -> MonitorConfigPayload:
-        if self._config_provider:
-            return self._config_provider.get_ui_config()
+        provider = getattr(self, "_config_provider", None)
+        if provider:
+            return provider.get_ui_config()
         with self._reload_lock:
             return self._ui_config.model_copy(deep=True)
 
     def _reload_config_internal(self) -> None:
         """从 settings.json 重新加载 UI 和运行时配置。"""
-        if self._config_provider:
-            self._config_provider.reload()
-            self._ui_config = self._config_provider.get_ui_config()
-            self._runtime_snapshot = self._config_provider.get_runtime_config()
+        provider = getattr(self, "_config_provider", None)
+        if provider:
+            provider.reload()
+            self._ui_config = provider.get_ui_config()
+            self._runtime_config = provider.get_runtime_config()
+            self._runtime_snapshot = self._runtime_config
             return
-        # 回退：原有逻辑
+        # 无 config_provider 时的回退（仅测试场景）
+        import copy
+        from .config import build_runtime_config, load_runtime_config, load_ui_config
+
         with self._reload_lock:
-            # 单次 load，避免多次 load 之间数据版本不一致
             data = self._profile_service.load()
             self._ui_config = load_ui_config(self._profile_service, data=data)
             runtime_payload, has_decrypt_error = load_runtime_config(
@@ -652,10 +650,11 @@ class ScheduleEngine:
 
     def _copy_runtime_config(self) -> dict:
         """返回运行时配置快照（仅在 reload 时更新，读取零拷贝）。"""
-        snapshot = getattr(self, "_runtime_snapshot", None)
-        if snapshot is not None:
-            return snapshot
-        # 回退：__new__ 构造（测试场景）未初始化快照，走旧的深拷贝路径
+        provider = getattr(self, "_config_provider", None)
+        if provider:
+            return provider.get_runtime_config()
+        import copy
+
         return copy.deepcopy(self._runtime_config)
 
     def reload_config(self) -> None:
@@ -871,89 +870,23 @@ class ScheduleEngine:
 
     def get_runtime_config(self) -> dict:
         """线程安全地获取运行时配置副本"""
-        if self._config_provider:
-            return self._config_provider.get_runtime_config()
+        provider = getattr(self, "_config_provider", None)
+        if provider:
+            return provider.get_runtime_config()
         return self._copy_runtime_config()
 
-    # ── 定时任务服务（委托 TaskFacade / ScheduledTaskService）──
-
-    @property
-    def scheduled_task_service(self):
-        """获取定时任务服务实例（向后兼容）。"""
-        return self._scheduled_task_service
+    # ── 定时任务调度 ──
 
     @property
     def scheduler_running(self) -> bool:
         """调度器是否正在运行。"""
         return self._scheduler_running
 
-    # 以下方法保留为向后兼容的委托调用，优先使用 TaskFacade
-
     def has_enabled_tasks(self) -> bool:
         """检查是否存在启用的定时任务（委托）。"""
         if self._task_facade:
             return self._task_facade.has_enabled_tasks()
-        if self._scheduled_task_service:
-            return self._scheduled_task_service.has_enabled_tasks()
         return False
-
-    def list_tasks(self) -> list[dict[str, Any]]:
-        """列出所有定时任务（委托）。"""
-        if self._task_facade:
-            return self._task_facade.list_tasks()
-        if self._scheduled_task_service:
-            return self._scheduled_task_service.list_tasks()
-        return []
-
-    def get_task(self, task_id: str) -> dict[str, Any] | None:
-        """获取定时任务详情（委托）。"""
-        if self._task_facade:
-            return self._task_facade.get_task(task_id)
-        if self._scheduled_task_service:
-            return self._scheduled_task_service.get_task(task_id)
-        return None
-
-    def save_task(self, task_id: str, config: dict[str, Any]) -> tuple[bool, str]:
-        """保存定时任务（委托）。"""
-        if self._task_facade:
-            return self._task_facade.save_task(task_id, config)
-        if self._scheduled_task_service:
-            return self._scheduled_task_service.save_task(task_id, config)
-        return False, "定时任务服务未初始化"
-
-    def delete_task(self, task_id: str) -> tuple[bool, str]:
-        """删除定时任务（委托）。"""
-        if self._task_facade:
-            return self._task_facade.delete_task(task_id)
-        if self._scheduled_task_service:
-            return self._scheduled_task_service.delete_task(task_id)
-        return False, "定时任务服务未初始化"
-
-    def get_history(self, task_id: str) -> list[dict[str, Any]]:
-        """获取任务执行历史（委托）。"""
-        if self._task_facade:
-            return self._task_facade.get_history(task_id)
-        if self._scheduled_task_service:
-            return self._scheduled_task_service.get_history(task_id)
-        return []
-
-    def _add_history_sync(
-        self, task_id: str, status: str, message: str, duration: float
-    ) -> None:
-        """添加执行历史记录（委托）。"""
-        if self._scheduled_task_service:
-            self._scheduled_task_service._add_history_sync(
-                task_id, status, message, duration
-            )
-
-    def execute_task(self, task_id: str) -> tuple[bool, str]:
-        """执行定时任务（委托）。"""
-        if self._task_facade:
-            self._task_facade.execute_task(task_id)
-            return True, "任务已提交"
-        if self._scheduled_task_service:
-            return self._scheduled_task_service.execute_task(task_id)
-        return False, "定时任务服务未初始化"
 
     def start_scheduler(self) -> None:
         """启动定时任务调度。"""

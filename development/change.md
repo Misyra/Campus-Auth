@@ -5,6 +5,36 @@
 
 ## 2026-06-11
 
+### refactor: 清理死代码 + 修复 _runtime_config Bug
+
+删除多处已迁移至新架构的死代码，修复 `_runtime_config` 在 config_provider 路径下未初始化的 Bug。
+
+**scheduled_task.py：**
+- 删除 `MAX_HISTORY_SIZE`、`SCHEDULER_CHECK_INTERVAL` 常量
+- 删除 `import threading`、`self._login_in_progress`、`login_in_progress` 属性
+- 删除 `_validate_task_id` 静态方法
+- 精简 `__init__` 签名，移除 `worker_getter`、`login_history`、`profile_service`、`get_runtime_config` 参数
+
+**engine.py：**
+- 删除模块级 `import copy` 和 `from .config import build_runtime_config, load_runtime_config, load_ui_config`
+- 删除 `_check_scheduled_tasks`、`scheduled_task_service` 属性、`list_tasks`、`get_task`、`save_task`、`delete_task`、`get_history`、`_add_history_sync`、`execute_task` 共 9 个死方法
+- 修复 `_reload_config_internal`：config_provider 路径下补设 `self._runtime_config`
+- 回退路径改为局部导入 `copy` 和 config 模块
+- `_copy_runtime_config`、`get_config`、`get_runtime_config` 改用 `getattr` 访问 `_config_provider`，兼容 `__new__` 构造场景
+
+**constants.py：** 删除 `SCHEDULER_POLL_INTERVAL`
+
+**container.py：** 删除 `scheduler_service` 属性
+
+**测试清理：**
+- `test_routers.py`：删除 `scheduled_task_service` mock
+- `test_scheduled_tasks.py`：改用 `task_registry.MAX_HISTORY_SIZE`，删除 `TestValidateTaskId`、`TestSchedulerStartStop`，修复 `worker_getter` 参数
+- `test_monitor_service.py`：patch 路径改为 `app.services.config.*`，删除 `TestTaskCacheClear`
+- `test_container.py`：删除 `scheduler_service` 相关断言
+- `test_scheduler_service.py`：移除 `worker_getter` 参数
+
+**测试结果：** 1618 passed, 2 skipped
+
 ### fix: 修复 test_routers.py 定时任务 mock 未指向 engine.tasks
 
 `test_routers.py` 的 `TestScheduledTasksRouter` 中 3 个测试因 mock 路径不匹配而失败。

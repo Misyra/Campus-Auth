@@ -8,23 +8,12 @@
 
 from __future__ import annotations
 
-import threading
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from app.tasks import is_valid_task_id
 from app.utils.logging import get_logger
 
 scheduled_task_logger = get_logger("scheduled_task", source="backend")
-
-# ── 常量（向后兼容导出）──
-
-# 执行历史最大保留条数
-MAX_HISTORY_SIZE = 50
-
-# 调度器检查间隔（秒）
-SCHEDULER_CHECK_INTERVAL = 30
 
 
 class ScheduledTaskService:
@@ -34,10 +23,6 @@ class ScheduledTaskService:
         self,
         project_root: Path,
         task_manager=None,
-        worker_getter: Callable | None = None,
-        login_history=None,
-        profile_service=None,
-        get_runtime_config: Callable[[], dict] | None = None,
         registry=None,
         executor=None,
         history_store=None,
@@ -45,10 +30,6 @@ class ScheduledTaskService:
         # 依赖注入：优先使用传入的组件，否则自动创建
         self._project_root = project_root
         self._task_manager = task_manager
-        self._worker_getter = worker_getter
-        self._login_history = login_history
-        self._profile_service = profile_service
-        self._get_runtime_config = get_runtime_config
 
         tasks_dir = project_root / "tasks" / "scheduled"
         history_dir = tasks_dir / "history"
@@ -69,40 +50,14 @@ class ScheduledTaskService:
 
         if executor is not None:
             self._executor = executor
-        else:
-            from app.services.task_executor import TaskExecutor
-
-            self._executor = TaskExecutor(
-                registry=self._registry,
-                history_store=self._history_store,
-                worker_getter=worker_getter or (lambda: None),
-                login_history=login_history,
-                profile_service=profile_service,
-                get_runtime_config=get_runtime_config,
-            )
 
         # 调度器状态（已迁移至 Engine，保留字段以兼容外部访问）
         self._scheduler_running = False
-        self._login_in_progress = threading.Event()
-
-    # ── 公开属性 ──
-
-    @property
-    def login_in_progress(self) -> bool:
-        """登录是否正在进行。"""
-        return self._login_in_progress.is_set()
 
     @property
     def scheduler_running(self) -> bool:
         """调度器是否正在运行（已迁移至 Engine，始终返回 False）。"""
         return False
-
-    # ── 静态方法 ──
-
-    @staticmethod
-    def _validate_task_id(task_id: str) -> bool:
-        """校验 task_id 是否安全且格式有效。"""
-        return is_valid_task_id(task_id)
 
     # ── CRUD（委托给 TaskRegistry）──
 

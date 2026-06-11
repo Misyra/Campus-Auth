@@ -22,12 +22,12 @@ from app.services.engine import (
 def _make_monitor_service() -> ScheduleEngine:
     """创建带有 mock 依赖的 ScheduleEngine 实例。"""
     with (
-        patch("app.services.engine.build_runtime_config", return_value={}),
+        patch("app.services.config.build_runtime_config", return_value={}),
         patch(
-            "app.services.engine.load_runtime_config",
+            "app.services.config.load_runtime_config",
             return_value=(MagicMock(), False),
         ),
-        patch("app.services.engine.load_ui_config") as mock_load_ui,
+        patch("app.services.config.load_ui_config") as mock_load_ui,
         patch("app.services.engine.ProfileService") as mock_ps_cls,
     ):
         mock_ps = MagicMock()
@@ -185,11 +185,11 @@ class TestListLogs:
         finally:
             logger.remove(handler_id)
 
-    @patch("app.services.engine.build_runtime_config", return_value={})
+    @patch("app.services.config.build_runtime_config", return_value={})
     @patch(
-        "app.services.engine.load_runtime_config", return_value=(MagicMock(), False)
+        "app.services.config.load_runtime_config", return_value=(MagicMock(), False)
     )
-    @patch("app.services.engine.load_ui_config")
+    @patch("app.services.config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     def test_list_logs_returns_all_when_limit_exceeds(
         self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
@@ -288,11 +288,11 @@ class TestUpdateStatusSnapshot:
 
 
 class TestStartStopMonitoring:
-    @patch("app.services.engine.build_runtime_config", return_value={})
+    @patch("app.services.config.build_runtime_config", return_value={})
     @patch(
-        "app.services.engine.load_runtime_config", return_value=(MagicMock(), False)
+        "app.services.config.load_runtime_config", return_value=(MagicMock(), False)
     )
-    @patch("app.services.engine.load_ui_config")
+    @patch("app.services.config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     @patch(
         "app.services.engine.ConfigValidator.validate_env_config",
@@ -366,11 +366,11 @@ class TestHandleStartStop:
 
 
 class TestHandleLogin:
-    @patch("app.services.engine.build_runtime_config", return_value={})
+    @patch("app.services.config.build_runtime_config", return_value={})
     @patch(
-        "app.services.engine.load_runtime_config", return_value=(MagicMock(), False)
+        "app.services.config.load_runtime_config", return_value=(MagicMock(), False)
     )
-    @patch("app.services.engine.load_ui_config")
+    @patch("app.services.config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     def test_handle_login_submits_async(
         self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
@@ -424,11 +424,11 @@ class TestRunManualLogin:
 
 
 class TestNetwork:
-    @patch("app.services.engine.build_runtime_config", return_value={})
+    @patch("app.services.config.build_runtime_config", return_value={})
     @patch(
-        "app.services.engine.load_runtime_config", return_value=(MagicMock(), False)
+        "app.services.config.load_runtime_config", return_value=(MagicMock(), False)
     )
-    @patch("app.services.engine.load_ui_config")
+    @patch("app.services.config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     @patch("app.services.engine.is_network_available", return_value=True)
     def test_network_ok(
@@ -446,11 +446,11 @@ class TestNetwork:
         assert ok is True
         assert "正常" in msg
 
-    @patch("app.services.engine.build_runtime_config", return_value={})
+    @patch("app.services.config.build_runtime_config", return_value={})
     @patch(
-        "app.services.engine.load_runtime_config", return_value=(MagicMock(), False)
+        "app.services.config.load_runtime_config", return_value=(MagicMock(), False)
     )
-    @patch("app.services.engine.load_ui_config")
+    @patch("app.services.config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     @patch("app.services.engine.is_network_available", return_value=False)
     def test_network_fail(
@@ -468,11 +468,11 @@ class TestNetwork:
         assert ok is False
         assert "异常" in msg
 
-    @patch("app.services.engine.build_runtime_config", return_value={})
+    @patch("app.services.config.build_runtime_config", return_value={})
     @patch(
-        "app.services.engine.load_runtime_config", return_value=(MagicMock(), False)
+        "app.services.config.load_runtime_config", return_value=(MagicMock(), False)
     )
-    @patch("app.services.engine.load_ui_config")
+    @patch("app.services.config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     @patch(
         "app.services.engine.is_network_available", side_effect=RuntimeError("timeout")
@@ -499,11 +499,11 @@ class TestNetwork:
 
 
 class TestTogglePureMode:
-    @patch("app.services.engine.build_runtime_config", return_value={})
+    @patch("app.services.config.build_runtime_config", return_value={})
     @patch(
-        "app.services.engine.load_runtime_config", return_value=(MagicMock(), False)
+        "app.services.config.load_runtime_config", return_value=(MagicMock(), False)
     )
-    @patch("app.services.engine.load_ui_config")
+    @patch("app.services.config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     def test_toggle_pure_mode(
         self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
@@ -524,11 +524,11 @@ class TestTogglePureMode:
         assert svc.pure_mode is True
         mock_ps.update.assert_called_once()
 
-    @patch("app.services.engine.build_runtime_config", return_value={})
+    @patch("app.services.config.build_runtime_config", return_value={})
     @patch(
-        "app.services.engine.load_runtime_config", return_value=(MagicMock(), False)
+        "app.services.config.load_runtime_config", return_value=(MagicMock(), False)
     )
-    @patch("app.services.engine.load_ui_config")
+    @patch("app.services.config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     def test_pure_mode_read_write_thread_safe(
         self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
@@ -596,11 +596,11 @@ class TestLoginInProgress:
 
 
 class TestGetConfig:
-    @patch("app.services.engine.build_runtime_config", return_value={"key": "value"})
+    @patch("app.services.config.build_runtime_config", return_value={"key": "value"})
     @patch(
-        "app.services.engine.load_runtime_config", return_value=(MagicMock(), False)
+        "app.services.config.load_runtime_config", return_value=(MagicMock(), False)
     )
-    @patch("app.services.engine.load_ui_config")
+    @patch("app.services.config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     def test_get_runtime_config(
         self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
@@ -917,27 +917,3 @@ class TestLoginInProgressConsumerDead:
         assert "超时" in msg
 
 
-class TestTaskCacheClear:
-    """任务变更时应清除 has_enabled_tasks 缓存（委托 ScheduledTaskService）。"""
-
-    def test_save_task_delegates_to_service(self):
-        """测试 save_task 委托给 ScheduledTaskService。"""
-        svc = _make_monitor_service()
-        mock_st = MagicMock()
-        mock_st.save_task.return_value = (True, "成功")
-        svc._scheduled_task_service = mock_st
-
-        svc.save_task("test_task", {"enabled": True, "name": "test"})
-
-        mock_st.save_task.assert_called_once_with("test_task", {"enabled": True, "name": "test"})
-
-    def test_delete_task_delegates_to_service(self):
-        """测试 delete_task 委托给 ScheduledTaskService。"""
-        svc = _make_monitor_service()
-        mock_st = MagicMock()
-        mock_st.delete_task.return_value = (True, "成功")
-        svc._scheduled_task_service = mock_st
-
-        svc.delete_task("test_task")
-
-        mock_st.delete_task.assert_called_once_with("test_task")
