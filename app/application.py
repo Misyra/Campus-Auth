@@ -312,13 +312,11 @@ def run(
     log_retention: int | None = None,
     existing_container=None,
     server_ref: list | None = None,
-    app_instance=None,
 ) -> None:
     """启动 uvicorn Web 服务器。
 
     Args:
         server_ref: 若传入，运行后 [0] 为 uvicorn.Server 实例（供外部停止）。
-        app_instance: 已创建的 FastAPI 实例。若为 None，内部调用 create_app()。
     """
     global app
 
@@ -383,11 +381,8 @@ def run(
         log.propagate = False
         log.addHandler(_UvicornLogHandler())
 
-    # 创建 FastAPI 应用（复用外部实例或内部创建）
-    if app_instance is not None:
-        _app = app_instance
-    else:
-        _app = create_app(existing_container=existing_container)
+    # 创建 FastAPI 应用
+    _app = create_app(existing_container=existing_container)
     app = _app
 
     # 使用 Server 实例而非 uvicorn.run()，以便 _wait_shutdown 可通过
