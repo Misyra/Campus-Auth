@@ -1,4 +1,4 @@
-import { getBinaryName, extractApiError } from './utils.js';
+import { getBinaryName, extractApiError, safeApiCall } from './utils.js';
 
 // 定时任务相关方法
 export const scheduledTasksMethods = {
@@ -98,47 +98,33 @@ export const scheduledTasksMethods = {
   // 删除定时任务
   async deleteScheduledTask(taskId) {
     if (!confirm('确定要删除这个定时任务吗？')) return;
-
-    try {
-      const { data: result } = await this.$api.delete(`/api/scheduled-tasks/${taskId}`);
-      this.toastOnly(result.success, result.message);
-
-      if (result.success) {
-        await this.loadScheduledTasks();
-      }
-    } catch (e) {
-      const msg = extractApiError(e, '删除失败');
-      this.toastOnly(false, msg);
+    const resp = await safeApiCall.call(this, () => this.$api.delete(`/api/scheduled-tasks/${taskId}`), '删除失败');
+    if (!resp) return;
+    const result = resp.data;
+    this.toastOnly(result.success, result.message);
+    if (result.success) {
+      await this.loadScheduledTasks();
     }
   },
 
   // 切换定时任务启用状态
   async toggleScheduledTask(taskId) {
-    try {
-      const { data: result } = await this.$api.post(`/api/scheduled-tasks/${taskId}/toggle`);
-      this.toastOnly(result.success, result.message);
-
-      if (result.success) {
-        await this.loadScheduledTasks();
-      }
-    } catch (e) {
-      const msg = extractApiError(e, '操作失败');
-      this.toastOnly(false, msg);
+    const resp = await safeApiCall.call(this, () => this.$api.post(`/api/scheduled-tasks/${taskId}/toggle`), '操作失败');
+    if (!resp) return;
+    const result = resp.data;
+    this.toastOnly(result.success, result.message);
+    if (result.success) {
+      await this.loadScheduledTasks();
     }
   },
 
   // 手动执行定时任务
   async runScheduledTask(taskId) {
-    try {
-      const { data: result } = await this.$api.post(`/api/scheduled-tasks/${taskId}/run`);
-      this.toastOnly(result.success, result.message);
-
-      // 刷新列表（更新最后执行时间）
-      await this.loadScheduledTasks();
-    } catch (e) {
-      const msg = extractApiError(e, '执行失败');
-      this.toastOnly(false, msg);
-    }
+    const resp = await safeApiCall.call(this, () => this.$api.post(`/api/scheduled-tasks/${taskId}/run`), '执行失败');
+    if (!resp) return;
+    const result = resp.data;
+    this.toastOnly(result.success, result.message);
+    await this.loadScheduledTasks();
   },
 
   // 加载执行历史
