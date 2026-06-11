@@ -486,27 +486,17 @@ def _start_wakeup_server(container, port: int, logger, web_wakeup: threading.Eve
     import socket
 
     _started = threading.Event()
+    _server_ref = [None]  # 用列表以便闭包修改
 
     class WakeupHandler(BaseHTTPRequestHandler):
         """返回加载页面，触发 FastAPI 启动。"""
 
         def do_GET(self):
-            # 触发 FastAPI 启动（仅第一次）
-            if not _started.is_set():
-                _started.set()
-                web_wakeup.set()
-                logger.info("检测到 Web 访问，正在唤醒 FastAPI...")
-                threading.Thread(
-                    target=_start_web_from_lightweight,
-                    args=(container, port, logger),
-                    daemon=True,
-                ).start()
-
             # 返回加载页面（自动刷新）
             html = """<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <title>Campus-Auth</title>
-<meta http-equiv="refresh" content="2">
+<meta http-equiv="refresh" content="3">
 <style>
 body{font-family:system-ui;display:flex;justify-content:center;align-items:center;
 height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0}
@@ -527,21 +517,32 @@ border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 20px}
             self.end_headers()
             self.wfile.write(html.encode())
 
+            # 发送完响应后，触发 FastAPI 启动（仅第一次）
+            if not _started.is_set():
+                _started.set()
+                web_wakeup.set()
+                logger.info("检测到 Web 访问，正在唤醒 FastAPI...")
+
+                def _wake():
+                    # 关闭占位服务器释放端口
+                    if _server_ref[0]:
+                        _server_ref[0].server_close()
+                    time.sleep(0.5)
+                    _start_web_from_lightweight(container, port, logger)
+
+                threading.Thread(target=_wake, daemon=True).start()
+
         def log_message(self, format, *args):
             pass  # 静默日志
 
-    # 启动占位服务器（允许端口复用，以便 FastAPI 接管）
+    # 启动占位服务器
     server = HTTPServer(("127.0.0.1", port), WakeupHandler)
-    server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.timeout = 0.5
+    _server_ref[0] = server
+    server.timeout = 1
 
     def _serve():
         while not _started.is_set():
             server.handle_request()
-        # FastAPI 已启动，再处理几个请求让浏览器拿到加载页面
-        for _ in range(10):
-            server.handle_request()
-        server.server_close()
 
     threading.Thread(target=_serve, daemon=True).start()
     logger.info("占位服务器已启动: http://127.0.0.1:{}", port)
