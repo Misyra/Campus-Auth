@@ -472,6 +472,10 @@ def _run_lightweight(
                 trigger_file.unlink(missing_ok=True)
                 if not web_wakeup.is_set():
                     logger.info("收到 Web 服务启动请求，正在加载...")
+                # 等待占位服务器释放端口
+                time.sleep(1)
+                # 在主线程启动 FastAPI（阻塞，直到 uvicorn 退出）
+                _start_web_from_lightweight(container, port, logger)
                 break
     except KeyboardInterrupt:
         logger.info("收到退出信号，正在关闭...")
@@ -517,20 +521,16 @@ border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 20px}
             self.end_headers()
             self.wfile.write(html.encode())
 
-            # 发送完响应后，触发 FastAPI 启动（仅第一次）
+            # 发送完响应后，通知主线程唤醒 FastAPI（仅第一次）
             if not _started.is_set():
                 _started.set()
-                web_wakeup.set()
                 logger.info("检测到 Web 访问，正在唤醒 FastAPI...")
-
-                def _wake():
-                    # 关闭占位服务器释放端口
+                # 关闭占位服务器释放端口
+                def _close_and_wake():
                     if _server_ref[0]:
                         _server_ref[0].server_close()
-                    time.sleep(0.5)
-                    _start_web_from_lightweight(container, port, logger)
-
-                threading.Thread(target=_wake, daemon=True).start()
+                    web_wakeup.set()
+                threading.Thread(target=_close_and_wake, daemon=True).start()
 
         def log_message(self, format, *args):
             pass  # 静默日志
