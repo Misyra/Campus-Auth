@@ -38,7 +38,7 @@ class BoundedExecutor:
         # Semaphore 初始值 = queue_size，控制同时排队的任务数
         self._semaphore = threading.Semaphore(queue_size)
 
-    def submit(self, fn, *args, **kwargs) -> Future:
+    def submit(self, func, *args, **kwargs) -> Future:
         """提交任务到线程池。
 
         Raises:
@@ -47,7 +47,7 @@ class BoundedExecutor:
         if not self._semaphore.acquire(blocking=False):
             raise RuntimeError("任务队列已满，无法提交更多任务")
 
-        future = self._executor.submit(fn, *args, **kwargs)
+        future = self._executor.submit(func, *args, **kwargs)
         # 任务完成或取消时释放信号量
         future.add_done_callback(lambda _: self._semaphore.release())
         return future
@@ -96,7 +96,7 @@ class TaskExecutor:
 
         # Shell 安全策略
         self._shell_policy = ShellCommandPolicy(
-            allowlist=[s["path"] for s in detect_shells()]
+            allowlist=[shell["path"] for shell in detect_shells()]
         )
 
     # ── 异步提交接口 ──
@@ -176,8 +176,8 @@ class TaskExecutor:
                     False,
                     f"不支持的任务类型: {task_type}，当前支持: script、browser、shell",
                 )
-        except Exception as e:
-            success, message = False, f"执行异常: {e}"
+        except Exception as exc:
+            success, message = False, f"执行异常: {exc}"
 
         duration = time.perf_counter() - start
         status = "success" if success else "failure"
@@ -243,16 +243,16 @@ class TaskExecutor:
                 self._record_login_history(False, duration_ms, error=error_msg)
                 return False, error_msg
 
-        except ImportError as e:
+        except ImportError as exc:
             duration_ms = int((time.perf_counter() - start) * 1000)
-            logger.warning("登录执行缺少依赖: {}", e)
-            self._record_login_history(False, duration_ms, error=str(e))
+            logger.warning("登录执行缺少依赖: {}", exc)
+            self._record_login_history(False, duration_ms, error=str(exc))
             return False, "登录需要额外依赖，请检查 Playwright 安装状态"
-        except Exception as e:
+        except Exception as exc:
             duration_ms = int((time.perf_counter() - start) * 1000)
-            logger.error("登录执行异常: {}", e)
-            self._record_login_history(False, duration_ms, error=str(e))
-            return False, f"登录执行异常: {e}"
+            logger.error("登录执行异常: {}", exc)
+            self._record_login_history(False, duration_ms, error=str(exc))
+            return False, f"登录执行异常: {exc}"
 
     # ── 内部执行方法 ──
 
@@ -325,16 +325,16 @@ class TaskExecutor:
                 self._record_login_history(False, duration_ms, error=error_msg)
                 return False, error_msg
 
-        except ImportError as e:
+        except ImportError as exc:
             duration_ms = int((time.perf_counter() - start_time) * 1000)
-            logger.warning("浏览器任务执行缺少依赖: {}", e)
-            self._record_login_history(False, duration_ms, error=str(e))
+            logger.warning("浏览器任务执行缺少依赖: {}", exc)
+            self._record_login_history(False, duration_ms, error=str(exc))
             return False, "浏览器任务需要额外依赖，请检查 Playwright 安装状态"
-        except Exception as e:
+        except Exception as exc:
             duration_ms = int((time.perf_counter() - start_time) * 1000)
-            logger.error("浏览器任务执行异常: {}", e)
-            self._record_login_history(False, duration_ms, error=str(e))
-            return False, f"浏览器任务执行异常: {e}"
+            logger.error("浏览器任务执行异常: {}", exc)
+            self._record_login_history(False, duration_ms, error=str(exc))
+            return False, f"浏览器任务执行异常: {exc}"
 
     def _execute_shell(
         self, command: str, timeout: int, shell_path: str = ""
@@ -383,10 +383,10 @@ class TaskExecutor:
                 )
                 return False, output
 
-        except PermissionError as e:
-            return False, str(e)
-        except Exception as e:
-            return False, f"执行异常: {e}"
+        except PermissionError as exc:
+            return False, str(exc)
+        except Exception as exc:
+            return False, f"执行异常: {exc}"
 
     # ── 辅助方法 ──
 

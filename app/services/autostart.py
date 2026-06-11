@@ -20,7 +20,7 @@ class AutoStartService:
     def __init__(self, project_root: Path):
         self.project_root = project_root
         # 使用 platform_utils 获取平台标识，统一跨平台判定
-        self.platform = get_platform()
+        self._platform = get_platform()
         self.service_name = "campus-auth"
 
     def _start_command(self) -> str:
@@ -135,25 +135,25 @@ class AutoStartService:
         }
 
     def enable(self) -> tuple[bool, str]:
-        logger.info("启用开机自启动: platform={}", self.platform)
+        logger.info("启用开机自启动: platform={}", self._platform)
         if is_macos():
             return self._enable_macos()
         if is_linux():
             return self._enable_linux()
         if is_windows():
             return self._enable_windows()
-        logger.warning("当前平台不支持开机自启动: {}", self.platform)
+        logger.warning("当前平台不支持开机自启动: {}", self._platform)
         return False, "当前操作系统不支持自动配置开机自启动，请手动将程序添加到启动项"
 
     def disable(self) -> tuple[bool, str]:
-        logger.info("禁用开机自启动: platform={}", self.platform)
+        logger.info("禁用开机自启动: platform={}", self._platform)
         if is_macos():
             return self._disable_macos()
         if is_linux():
             return self._disable_linux()
         if is_windows():
             return self._disable_windows()
-        logger.warning("当前平台不支持开机自启动: {}", self.platform)
+        logger.warning("当前平台不支持开机自启动: {}", self._platform)
         return False, "当前操作系统不支持自动配置开机自启动，请手动将程序添加到启动项"
 
     def _enable_macos(self) -> tuple[bool, str]:
@@ -200,35 +200,35 @@ class AutoStartService:
         logger.debug("macOS plist 已写入: {}", plist_path)
 
         # 优先使用新版 API (macOS 10.10+)，失败则回退到旧版 load/unload
-        uid = os.getuid()
-        gui_domain = f"gui/{uid}"
+        user_id = os.getuid()
+        gui_domain = f"gui/{user_id}"
 
         # 尝试卸载旧配置（忽略错误）
         self._run(["launchctl", "bootout", gui_domain, str(plist_path)])
-        ok, msg = self._run(["launchctl", "bootstrap", gui_domain, str(plist_path)])
-        if ok:
+        success, message = self._run(["launchctl", "bootstrap", gui_domain, str(plist_path)])
+        if success:
             logger.debug("macOS launchctl bootstrap 成功")
             return True, f"已启用 macOS 开机自启动: {plist_path}"
 
         # 回退到旧版 API
-        logger.debug("launchctl bootstrap 失败，回退到 load/unload: {}", msg)
+        logger.debug("launchctl bootstrap 失败，回退到 load/unload: {}", message)
         self._run(["launchctl", "unload", str(plist_path)])
-        ok, msg = self._run(["launchctl", "load", str(plist_path)])
-        if ok:
+        success, message = self._run(["launchctl", "load", str(plist_path)])
+        if success:
             logger.debug("macOS launchctl load 成功")
             return True, f"已启用 macOS 开机自启动: {plist_path}"
-        logger.error("macOS launchctl load 失败: {}", msg)
-        return False, f"已写入配置但加载失败: {msg}"
+        logger.error("macOS launchctl load 失败: {}", message)
+        return False, f"已写入配置但加载失败: {message}"
 
     def _disable_macos(self) -> tuple[bool, str]:
         plist_path = self._mac_plist_path()
         if plist_path.exists():
             logger.debug("macOS 移除 plist: {}", plist_path)
             # 优先使用新版 API bootout，失败则回退到 unload
-            uid = os.getuid()
-            gui_domain = f"gui/{uid}"
-            ok, _ = self._run(["launchctl", "bootout", gui_domain, str(plist_path)])
-            if not ok:
+            user_id = os.getuid()
+            gui_domain = f"gui/{user_id}"
+            success, _ = self._run(["launchctl", "bootout", gui_domain, str(plist_path)])
+            if not success:
                 self._run(["launchctl", "unload", str(plist_path)])
             plist_path.unlink(missing_ok=True)
         else:
@@ -262,14 +262,14 @@ WantedBy=default.target
         logger.debug("Linux service 已写入: {}", service_path)
 
         self._run(["systemctl", "--user", "daemon-reload"])
-        ok, msg = self._run(
+        success, message = self._run(
             ["systemctl", "--user", "enable", "--now", self.service_name]
         )
-        if ok:
+        if success:
             logger.debug("Linux systemd 启用成功")
             return True, f"已启用 Linux 开机自启动: {service_path}"
-        logger.error("Linux systemd 启用失败: {}", msg)
-        return False, f"已写入配置但 systemd 启用失败: {msg}"
+        logger.error("Linux systemd 启用失败: {}", message)
+        return False, f"已写入配置但 systemd 启用失败: {message}"
 
     def _disable_linux(self) -> tuple[bool, str]:
         service_path = self._linux_service_path()
