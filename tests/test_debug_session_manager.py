@@ -224,7 +224,7 @@ class TestDebugSessionManagerCloseBrowser:
         manager = _make_manager(tmp_path)
         _set_session_running(manager)
 
-        with patch("app.services.debug.get_worker") as mock_get_worker:
+        with patch("app.workers.playwright_worker.get_worker") as mock_get_worker:
             mock_worker = MagicMock()
             mock_worker.submit.return_value = _ok_response()
             mock_get_worker.return_value = mock_worker
@@ -240,7 +240,7 @@ class TestDebugSessionManagerCloseBrowser:
         manager = _make_manager(tmp_path)
         _set_session_running(manager)
 
-        with patch("app.services.debug.get_worker") as mock_get_worker:
+        with patch("app.workers.playwright_worker.get_worker") as mock_get_worker:
             mock_get_worker.side_effect = RuntimeError("Worker 崩溃")
 
             await manager._close_debug_browser()
@@ -340,7 +340,7 @@ class TestDebugSessionManagerStart:
         }
 
         with (
-            patch("app.services.debug.get_worker") as mock_get_worker,
+            patch("app.workers.playwright_worker.get_worker") as mock_get_worker,
             patch("app.services.debug.build_login_template_vars", return_value={}),
         ):
             mock_worker = MagicMock()
@@ -379,7 +379,7 @@ class TestDebugSessionManagerStart:
         }
 
         with (
-            patch("app.services.debug.get_worker") as mock_get_worker,
+            patch("app.workers.playwright_worker.get_worker") as mock_get_worker,
             patch("app.services.debug.build_login_template_vars", return_value={}),
         ):
             mock_worker = MagicMock()
@@ -416,7 +416,7 @@ class TestDebugSessionManagerStart:
         }
 
         with (
-            patch("app.services.debug.get_worker") as mock_get_worker,
+            patch("app.workers.playwright_worker.get_worker") as mock_get_worker,
             patch("app.services.debug.build_login_template_vars", return_value={}),
         ):
             mock_worker = MagicMock()
@@ -459,7 +459,7 @@ class TestDebugSessionManagerNextStep:
             ],
         )
 
-        with patch("app.services.debug.get_worker") as mock_get_worker:
+        with patch("app.workers.playwright_worker.get_worker") as mock_get_worker:
             mock_worker = MagicMock()
             mock_worker.submit.return_value = _ok_response(
                 {
@@ -503,7 +503,7 @@ class TestDebugSessionManagerNextStep:
             ],
         )
 
-        with patch("app.services.debug.get_worker") as mock_get_worker:
+        with patch("app.workers.playwright_worker.get_worker") as mock_get_worker:
             mock_worker = MagicMock()
             mock_worker.submit.return_value = _fail_response("元素未找到")
             mock_get_worker.return_value = mock_worker
@@ -546,7 +546,7 @@ class TestDebugSessionManagerRunAll:
             ],
         )
 
-        with patch("app.services.debug.get_worker") as mock_get_worker:
+        with patch("app.workers.playwright_worker.get_worker") as mock_get_worker:
             mock_worker = MagicMock()
             mock_worker.submit.side_effect = [
                 _ok_response(
@@ -591,7 +591,7 @@ class TestDebugSessionManagerRunAll:
             ],
         )
 
-        with patch("app.services.debug.get_worker") as mock_get_worker:
+        with patch("app.workers.playwright_worker.get_worker") as mock_get_worker:
             mock_worker = MagicMock()
             mock_worker.submit.side_effect = [
                 _ok_response(
@@ -618,7 +618,7 @@ class TestDebugSessionManagerRunAll:
             ],
         )
 
-        with patch("app.services.debug.get_worker") as mock_get_worker:
+        with patch("app.workers.playwright_worker.get_worker") as mock_get_worker:
             mock_worker = MagicMock()
             mock_worker.submit.return_value = _fail_response("提交异常")
             mock_get_worker.return_value = mock_worker
@@ -652,7 +652,7 @@ class TestDebugSessionManagerStop:
         manager = _make_manager(tmp_path)
         _set_session_running(manager)
 
-        with patch("app.services.debug.get_worker") as mock_get_worker:
+        with patch("app.workers.playwright_worker.get_worker") as mock_get_worker:
             mock_worker = MagicMock()
             mock_worker.submit.return_value = _ok_response()
             mock_get_worker.return_value = mock_worker
@@ -710,7 +710,7 @@ class TestDebugSessionManagerClose:
         manager = _make_manager(tmp_path)
         _set_session_running(manager)
 
-        with patch("app.services.debug.get_worker") as mock_get_worker:
+        with patch("app.workers.playwright_worker.get_worker") as mock_get_worker:
             mock_worker = MagicMock()
             mock_worker.submit.return_value = _ok_response()
             mock_get_worker.return_value = mock_worker
@@ -733,7 +733,7 @@ class TestDebugSessionManagerClose:
         manager = _make_manager(tmp_path)
         _set_session_running(manager)
 
-        with patch("app.services.debug.get_worker") as mock_get_worker:
+        with patch("app.workers.playwright_worker.get_worker") as mock_get_worker:
             mock_get_worker.side_effect = RuntimeError("连接断开")
 
             await manager.close()

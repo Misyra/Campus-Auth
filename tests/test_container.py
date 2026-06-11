@@ -30,7 +30,7 @@ def mock_classes():
         patch("app.container.ScheduleEngine") as mock_engine_cls,
         patch("app.container.TaskService") as mock_task_cls,
         patch("app.container.AutoStartService") as mock_autostart_cls,
-        patch("app.container.DebugSessionManager") as mock_debug_cls,
+        patch("app.services.debug.DebugSessionManager") as mock_debug_cls,
     ):
         yield {
             "WebSocketManager": mock_ws_cls,
@@ -121,7 +121,8 @@ class TestInit:
         mock_classes["AutoStartService"].assert_called_once_with(project_root)
 
     def test_debug_manager_created(self, container, project_root, mock_classes):
-        """DebugSessionManager 应以 project_root 构造。"""
+        """DebugSessionManager 应以 project_root 构造（延迟初始化）。"""
+        _ = container.debug_manager  # 触发延迟初始化
         mock_classes["DebugSessionManager"].assert_called_once_with(project_root)
 
     def test_services_accessible_as_attributes(self, container):
@@ -150,7 +151,7 @@ class TestStartup:
         container.engine.start_scheduler = MagicMock()
         return container
 
-    @patch("app.container.cleanup_orphan_browsers")
+    @patch("app.workers.playwright_worker.cleanup_orphan_browsers")
     @patch("app.container.DashboardSink")
     @patch("loguru.logger")
     def test_startup_calls_cleanup_orphans(
@@ -160,7 +161,7 @@ class TestStartup:
         asyncio.run(container_for_startup.startup())
         mock_cleanup.assert_called_once()
 
-    @patch("app.container.cleanup_orphan_browsers")
+    @patch("app.workers.playwright_worker.cleanup_orphan_browsers")
     @patch("app.container.DashboardSink")
     @patch("loguru.logger")
     def test_startup_boots_monitor(
@@ -170,7 +171,7 @@ class TestStartup:
         asyncio.run(container_for_startup.startup())
         container_for_startup.engine.boot.assert_called_once()
 
-    @patch("app.container.cleanup_orphan_browsers")
+    @patch("app.workers.playwright_worker.cleanup_orphan_browsers")
     @patch("app.container.DashboardSink")
     @patch("loguru.logger")
     def test_startup_starts_scheduler_when_enabled(
@@ -181,7 +182,7 @@ class TestStartup:
         asyncio.run(container_for_startup.startup())
         container_for_startup.engine.start_scheduler.assert_called_once()
 
-    @patch("app.container.cleanup_orphan_browsers")
+    @patch("app.workers.playwright_worker.cleanup_orphan_browsers")
     @patch("app.container.DashboardSink")
     @patch("loguru.logger")
     def test_startup_skips_scheduler_when_no_enabled_tasks(
@@ -192,7 +193,7 @@ class TestStartup:
         asyncio.run(container_for_startup.startup())
         container_for_startup.engine.start_scheduler.assert_not_called()
 
-    @patch("app.container.cleanup_orphan_browsers")
+    @patch("app.workers.playwright_worker.cleanup_orphan_browsers")
     @patch("app.container.DashboardSink")
     @patch("loguru.logger")
     def test_startup_creates_ws_drain_task(
@@ -263,7 +264,7 @@ class TestShutdown:
         asyncio.run(container_for_shutdown.shutdown())
         # 不抛异常即通过
 
-    @patch("app.container.cleanup_orphan_browsers")
+    @patch("app.workers.playwright_worker.cleanup_orphan_browsers")
     @patch("app.container.shutil")
     def test_shutdown_cleans_temp_dir(
         self, mock_shutil, mock_cleanup, container_for_shutdown, project_root
@@ -288,7 +289,7 @@ class TestShutdown:
         # 验证文件被清理 — unlink 被调用（temp_file），rmtree 被调用（temp_subdir）
         assert not temp_file.exists()
 
-    @patch("app.container.cleanup_orphan_browsers")
+    @patch("app.workers.playwright_worker.cleanup_orphan_browsers")
     def test_shutdown_handles_temp_dir_not_exist(
         self, mock_cleanup, container_for_shutdown, project_root
     ):
@@ -305,7 +306,7 @@ class TestShutdown:
             asyncio.run(container_for_shutdown.shutdown())
         # 不抛异常即通过
 
-    @patch("app.container.cleanup_orphan_browsers")
+    @patch("app.workers.playwright_worker.cleanup_orphan_browsers")
     def test_shutdown_handles_worker_shutdown_error(
         self, mock_cleanup, container_for_shutdown
     ):
@@ -317,7 +318,7 @@ class TestShutdown:
             asyncio.run(container_for_shutdown.shutdown())
         # 不抛异常即通过
 
-    @patch("app.container.cleanup_orphan_browsers")
+    @patch("app.workers.playwright_worker.cleanup_orphan_browsers")
     @patch("app.container.shutil.rmtree", side_effect=PermissionError("denied"))
     def test_shutdown_handles_temp_cleanup_error(
         self, mock_rmtree, mock_cleanup, container_for_shutdown, project_root
@@ -347,7 +348,7 @@ class TestIntegration:
         container.ws_manager.close_all = AsyncMock()
 
         async def _lifecycle():
-            with patch("app.container.cleanup_orphan_browsers"):
+            with patch("app.workers.playwright_worker.cleanup_orphan_browsers"):
                 await container.startup()
             await container.shutdown()
 
@@ -360,5 +361,6 @@ class TestIntegration:
         assert mock_classes["ProfileService"].call_args[0][0] == project_root
         assert mock_classes["TaskService"].call_args[0][0] == project_root
         assert mock_classes["AutoStartService"].call_args[0][0] == project_root
+        _ = container.debug_manager  # 触发延迟初始化
         assert mock_classes["DebugSessionManager"].call_args[0][0] == project_root
         assert mock_classes["ScheduleEngine"].call_args[0][0] == project_root
