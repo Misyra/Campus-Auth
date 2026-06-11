@@ -5,6 +5,36 @@
 
 ## 2026-06-12
 
+### fix: 搜索模式与浏览模式分离，修复搜索功能失效问题
+
+`app/api/logfiles.py`：重构 `get_log_file_content()` 函数，将搜索模式与浏览模式分离。
+
+**问题：**
+- 搜索模式仍使用旧的读取末尾 + 过滤逻辑，导致搜索功能失效
+- >50MB 特殊处理逻辑未移除
+
+**修改内容：**
+- 新增 `read_tail()` 函数用于浏览模式读取末尾行
+- 重构 `get_log_file_content()`：搜索模式使用 `scan_file()`，浏览模式使用 `read_tail()`
+- 移除 >50MB 特殊处理逻辑和旧的过滤逻辑
+- 新增 `TestReadTail` 测试类（3 个测试用例）
+- 新增 `TestBrowseVsSearchMode` 集成测试类（4 个测试用例）
+- 更新 `test_limit_applied` 测试用例以匹配新的行为
+
+**测试结果：** 43 passed
+
+### refactor: SHUTDOWN 加入 _CMD_ROUTES，消除硬编码分支
+
+`app/services/engine.py`：将 SHUTDOWN 命令从 `_process_command` 的硬编码 `if` 分支迁移到 `_CMD_ROUTES` 路由表。
+
+**修改内容：**
+- `_CMD_ROUTES` 新增 `EngineCmdType.SHUTDOWN: "_handle_shutdown"`
+- 新增 `_handle_shutdown` 方法（委托 `_handle_stop`）
+- `_process_command` 简化为统一走路由表，删除 `if cmd.type == EngineCmdType.SHUTDOWN` 硬编码分支
+- `_engine_loop` 中 `if cmd.type == EngineCmdType.SHUTDOWN: break` 保留（引擎循环需在收到 SHUTDOWN 后退出）
+
+**测试结果：** 1621 passed, 2 skipped
+
 ### feat: 添加 scan_file() 函数用于全文扫描日志
 
 在 `app/api/logfiles.py` 中新增 `scan_file()` 函数，用于全文扫描日志文件并返回匹配的行。
