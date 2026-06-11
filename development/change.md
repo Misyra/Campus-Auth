@@ -5,6 +5,83 @@
 
 ## 2026-06-11
 
+### feat: 添加 TaskFacade
+
+定时任务 API 入口，包装 Registry + Executor + HistoryStore。API 路由不直接访问底层组件，通过 Facade 统一入口，未来扩展点：校验、审计、事件通知。
+
+**新建文件：**
+- `app/services/task_facade.py` — `TaskFacade` 类
+
+**TaskFacade 方法：**
+- `list_tasks()` / `get_task(task_id)` / `save_task(task_id, config)` — 委托 Registry
+- `delete_task(task_id)` — 委托 Registry 删除，同时委托 HistoryStore 清理历史
+- `get_history(task_id)` — 委托 HistoryStore
+- `execute_task(task_id)` — 委托 Executor 异步执行
+- `has_enabled_tasks()` — 委托 Registry
+
+### feat: 添加 TaskExecutor
+
+创建任务执行中心，实现双线程池和登录去重机制，为后续 engine.py 重构提供独立的任务执行层。
+
+**新建文件：**
+- `app/services/task_executor.py` — `BoundedExecutor` + `TaskExecutor` 两个类
+
+**BoundedExecutor 职责：**
+- 封装 `ThreadPoolExecutor`，用 `Semaphore` 限制待执行任务数量
+- 队列满时 `submit` 抛出 `RuntimeError`，防止任务堆积
+- 任务完成或取消时自动释放信号量
+
+**TaskExecutor 职责：**
+- 双线程池：`login_pool`(1) 登录专用 + `task_pool`(4, queue=50) 定时任务
+- 登录去重：`_login_future` + `_login_lock` 防止重复提交
+- `execute_task_async(task_id)` — 提交到 task_pool
+- `execute_login_async(cancel_event)` — 提交到 login_pool，带去重
+- `execute_task(task_id)` — 同步执行，分发到 `_execute_script`/`_execute_browser`/`_execute_shell`
+- `execute_login(cancel_event)` — 同步登录，通过 PlaywrightWorker 执行
+- 执行完成后自动记录历史（`history_store.add_record`）和更新状态（`registry.update_last_run`）
+- 登录历史通过 `LoginHistoryService.record()` 自动提取方案/任务名称
+- Shell 命令使用 `ShellCommandPolicy` 进行安全校验
+- `shutdown()` 关闭两个线程池
+
+### feat: 添加 RuntimeConfigProvider
+
+创建配置中心，统一配置加载、缓存、线程安全读取，为后续 engine.py 重构提供独立的配置提供者。
+
+**新建文件：**
+- `app/services/config_provider.py` — `RuntimeConfigProvider` 类
+- `tests/test_config_provider.py` — 10 个测试用例，全部通过
+
+**RuntimeConfigProvider 职责：**
+- 从 `ProfileService` 加载配置，内部调用 `load_ui_config`、`load_runtime_config`、`build_runtime_config`
+- 缓存运行时配置（`dict`）和 UI 配置（`MonitorConfigPayload`）
+- `reload()` 使用 `self._lock` 保护，确保线程安全
+- `get_runtime_config()` 返回 `copy.deepcopy()`，防止多线程污染
+- `get_ui_config()` 返回 `model_copy(deep=True)`，防止多线程污染
+- 解密失败时记录 warning 日志
+
+### feat: 添加 TaskRegistry + TaskHistoryStore
+
+创建定时任务数据中心，为后续架构重构提供独立的 CRUD + 缓存 + 调度索引 + 历史记录层。
+
+**新建文件：**
+- `app/services/task_registry.py` — `TaskRegistry` + `TaskHistoryStore` 两个类
+- `tests/test_task_registry.py` — 42 个测试用例，全部通过
+
+**TaskRegistry 职责：**
+- 任务 CRUD（读写 JSON 文件，磁盘不含 `id` 字段）
+- 内存常驻缓存（`_cache: dict[str, dict]`）
+- 调度索引：`_schedule_index: dict[tuple[int, int, int], set[str]]`，O(1) 查找到期任务
+- `save_task` 先移除旧索引再添加新索引，确保索引一致性
+- `delete_task` 同时清理缓存和索引
+- `get_due_tasks` 返回 `set` 副本，防止调用方修改内部集合
+- `update_last_run` 仅更新缓存和磁盘，不触发索引变更
+- 全部方法通过 `threading.RLock` 保证线程安全，返回副本
+
+**TaskHistoryStore 职责：**
+- 执行历史 CRUD（独立于 Registry）
+- `add_record` 线程安全，自动裁剪到 `MAX_HISTORY_SIZE = 50`
+- `delete_history` 删除指定任务的全部历史记录
+
 ### refactor: 简化 schemas.py mixin 层次
 
 从 `app/schemas.py` 删除 `_ClampMixin`，内联 `_SharedValidatorsMixin` 和 `_BrowserValidatorsMixin`，mixin 从 5 个减到 3 个。
