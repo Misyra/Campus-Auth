@@ -13,16 +13,13 @@ import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import HTTPException, Request
+from typing import TYPE_CHECKING
 
 from app.utils.env import build_login_template_vars
 from app.utils.logging import get_logger
-from app.workers.playwright_worker import (
-    CMD_DEBUG_START,
-    CMD_DEBUG_STEP,
-    CMD_DEBUG_STOP,
-    get_worker,
-)
+
+if TYPE_CHECKING:
+    from starlette.requests import Request
 
 from .debug_session import (
     _current_gen,
@@ -58,10 +55,12 @@ class DebugSessionManager:
     def _require_debug_session(self) -> None:
         """验证调试会话处于活跃状态。"""
         if not self._session.running:
+            from fastapi import HTTPException
             raise HTTPException(status_code=400, detail="没有活跃的调试会话")
 
     async def _close_debug_browser(self) -> None:
         """关闭调试浏览器 — 委托 Worker 处理。"""
+        from app.workers.playwright_worker import CMD_DEBUG_STOP, get_worker
         try:
             await asyncio.to_thread(lambda: get_worker().submit(CMD_DEBUG_STOP))
         except Exception:
@@ -96,6 +95,8 @@ class DebugSessionManager:
 
     async def start(self, request: Request, monitor_service: Any) -> dict:
         """启动调试会话。"""
+        from fastapi import HTTPException
+        from app.workers.playwright_worker import CMD_DEBUG_START, get_worker
         body = await request.json()
         task_id = body.get("task_id", "")
         if not task_id:
@@ -176,6 +177,7 @@ class DebugSessionManager:
 
     async def next_step(self) -> dict:
         """执行下一步。"""
+        from app.workers.playwright_worker import CMD_DEBUG_STEP, get_worker
         async with self._exec_sem:
             async with self._lock:
                 self._require_debug_session()
@@ -217,6 +219,7 @@ class DebugSessionManager:
 
     async def run_all(self) -> dict:
         """执行所有步骤。"""
+        from app.workers.playwright_worker import CMD_DEBUG_STEP, get_worker
         async with self._lock:
             self._require_debug_session()
             session = self._session

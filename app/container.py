@@ -8,13 +8,11 @@ import shutil
 from pathlib import Path
 
 from app.services.autostart import AutoStartService
-from app.services.debug import DebugSessionManager
 from app.services.engine import ScheduleEngine
 from app.services.login_history import LoginHistoryService
 from app.services.profile import ProfileService
 from app.services.task import TaskService
 from app.utils.logging import DashboardSink, get_logger
-from app.workers.playwright_worker import cleanup_orphan_browsers, get_worker
 from app.ws_manager import WebSocketManager
 
 container_logger = get_logger("container", source="backend")
@@ -38,7 +36,7 @@ class ServiceContainer:
         self.login_history_service = LoginHistoryService(AUTH_DATA_DIR)
         self.task_service = TaskService(project_root)
         self.autostart_service = AutoStartService(project_root)
-        self.debug_manager = DebugSessionManager(project_root)
+        self._debug_manager = None  # 延迟初始化，避免轻量模式加载 FastAPI
 
         # 统一引擎（替代 MonitorService + SchedulerService）
         self.engine = ScheduleEngine(
@@ -46,7 +44,7 @@ class ServiceContainer:
             self.profile_service,
             self.ws_manager,
             login_history_service=self.login_history_service,
-            worker_getter=get_worker,
+            worker_getter=lambda: __import__('app.workers.playwright_worker', fromlist=['get_worker']).get_worker(),
         )
 
         self._ws_drain_task: asyncio.Task | None = None
@@ -63,10 +61,19 @@ class ServiceContainer:
     def scheduler_service(self) -> ScheduleEngine:
         return self.engine
 
+    @property
+    def debug_manager(self):
+        """延迟初始化 DebugSessionManager（避免轻量模式加载 FastAPI）。"""
+        if self._debug_manager is None:
+            from app.services.debug import DebugSessionManager
+            self._debug_manager = DebugSessionManager(self.project_root)
+        return self._debug_manager
+
     # ── 生命周期 ──
 
     async def startup(self):
         """启动所有服务。"""
+        from app.workers.playwright_worker import cleanup_orphan_browsers
         cleanup_orphan_browsers()
         self.start_web_services()
         self.engine.boot()
@@ -113,7 +120,8 @@ class ServiceContainer:
 
         self.engine.shutdown()
 
-        await self.debug_manager.close()
+        if self._debug_manager is not None:
+            await self._debug_manager.close()
         await self.ws_manager.close_all()
 
         try:
