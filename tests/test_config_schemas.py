@@ -27,7 +27,7 @@ from app.services.config_service import (
     _normalize_targets,
     _safe_decrypt,
 )
-from app.utils.config import ConfigValidator
+from app.utils.config_utils import ConfigValidator
 from app.utils.crypto import encrypt_password
 from app.utils.logging import normalize_level as _normalize_level
 

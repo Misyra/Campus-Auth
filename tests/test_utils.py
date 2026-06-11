@@ -20,7 +20,7 @@ import pytest
 from app.utils import str_to_bool
 
 # ── config_helpers ──
-from app.utils.config_helpers import assign_profile_fields, extract_profile_fields
+from app.utils.config_utils import assign_profile_fields, extract_profile_fields
 
 # ── crypto ──
 from app.utils.crypto import (
