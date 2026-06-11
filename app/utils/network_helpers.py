@@ -79,3 +79,39 @@ def parse_host_port(targets: list[str]) -> list[tuple[str, int]]:
         result.append((host, port))
 
     return result
+
+
+def parse_ping_targets(raw: str | list | None) -> list[tuple[str, int]]:
+    """解析 ping_targets 配置为 (host, port) 列表。
+
+    支持字符串（逗号分隔）和列表两种格式。
+    缺少端口的项自动补全（IPv4:53, 域名:443）。
+
+    Args:
+        raw: 原始配置，可以是逗号分隔字符串、列表或 None
+
+    Returns:
+        解析后的 (host, port) 元组列表
+    """
+    if not raw:
+        return []
+
+    if isinstance(raw, str):
+        items = [t.strip() for t in raw.split(",") if t.strip()]
+    else:
+        items = [str(t).strip() for t in raw if str(t).strip()]
+
+    if not items:
+        return []
+
+    # 补全缺少端口的项
+    targets: list[str] = []
+    for item in items:
+        if ":" not in item:
+            parts = item.split(".")
+            is_ipv4 = len(parts) == 4 and all(p.isdigit() for p in parts)
+            targets.append(f"{item}:{53 if is_ipv4 else 443}")
+        else:
+            targets.append(item)
+
+    return parse_host_port(targets)

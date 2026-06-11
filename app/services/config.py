@@ -110,6 +110,125 @@ def _normalize_headers_json(raw: str) -> str:
     return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
 
 
+def _build_config_payload(
+    profile_service: ProfileService,
+    data: ProfilesData | None = None,
+    *,
+    apply_overrides: bool = False,
+) -> MonitorConfigPayload | tuple[MonitorConfigPayload, bool]:
+    """构建配置 payload 的通用逻辑。
+
+    Args:
+        profile_service: 方案服务
+        data: 已加载的方案数据（为 None 时自动加载）
+        apply_overrides: 是否应用活动方案的覆盖值（运行时配置）
+
+    Returns:
+        apply_overrides=False: MonitorConfigPayload
+        apply_overrides=True: (MonitorConfigPayload, has_decrypt_error)
+    """
+    if data is None:
+        data = profile_service.load()
+    sys_cfg = data.system
+
+    if apply_overrides:
+        profile = data.profiles.get(data.active_profile)
+        config_logger.debug("加载运行时配置: profile={}", data.active_profile)
+    else:
+        profile = None
+        config_logger.debug("加载 UI 配置（全局）: active_profile={}", data.active_profile)
+
+    # 从系统设置作为基础
+    payload_dict = extract_profile_fields(sys_cfg.model_dump(), PROFILE_FIELDS)
+
+    any_error = False
+
+    if apply_overrides:
+        # 账号密码：方案独立 > 全局；运行时使用解密明文
+        use_global = True
+        if profile and not profile.use_global_credentials and profile.username:
+            payload_dict["username"] = profile.username
+            use_global = False
+            pwd, err = _decrypt_password_field(
+                profile.password or "",
+                fallback_pwd=sys_cfg.password or "",
+                label=f"方案 '{data.active_profile}'",
+            )
+            payload_dict["password"] = pwd
+            any_error = err
+        else:
+            payload_dict["username"] = sys_cfg.username
+            pwd, err = _decrypt_password_field(sys_cfg.password or "")
+            payload_dict["password"] = pwd
+            any_error = err
+        payload_dict["use_global_credentials"] = use_global
+
+        # 认证地址：跟随全局或使用方案独立值
+        if not profile or profile.use_global_auth_url:
+            payload_dict["auth_url"] = sys_cfg.auth_url
+        else:
+            payload_dict["auth_url"] = profile.auth_url
+
+        # 任务：跟随全局或使用方案独立任务
+        if not profile or profile.use_global_task:
+            payload_dict["active_task"] = ""
+        else:
+            payload_dict["active_task"] = profile.active_task
+
+        # 运营商：跟随 use_global_credentials 标志
+        if not profile or profile.use_global_credentials:
+            payload_dict["carrier"] = sys_cfg.carrier
+            payload_dict["carrier_custom"] = sys_cfg.carrier_custom
+        else:
+            payload_dict["carrier"] = profile.carrier
+            payload_dict["carrier_custom"] = profile.carrier_custom
+
+        # 高级设置：从活动方案或 default 方案提取非凭证字段
+        adv_source = (
+            profile
+            if profile and not profile.use_global_advanced
+            else data.profiles.get("default", ProfileSettings())
+        )
+        payload_dict.update(
+            {
+                k: v
+                for k, v in extract_profile_fields(
+                    adv_source.model_dump(), PROFILE_FIELDS
+                ).items()
+                if k not in _PROTECTED_KEYS
+            }
+        )
+    else:
+        # UI 模式：合并 sys 和 default 方案字段
+        global_profile = data.profiles.get("default", ProfileSettings())
+        payload_dict.update(extract_profile_fields(global_profile.model_dump(), PROFILE_FIELDS))
+        payload_dict.update(extract_profile_fields(sys_cfg.model_dump(), PROFILE_FIELDS))
+
+        # UI 专属覆盖
+        payload_dict["password"] = mask_password(sys_cfg.password)
+        payload_dict["active_task"] = ""
+        payload_dict["use_global_credentials"] = True
+
+    # 公共归一化
+    payload_dict["network_targets"] = _normalize_targets(
+        payload_dict.get("network_targets", "")
+    )
+    payload_dict["http_targets"] = _normalize_targets(
+        payload_dict.get("http_targets", "")
+    )
+    payload_dict["backend_log_level"] = normalize_level(
+        sys_cfg.backend_log_level, "WARNING"
+    )
+    payload_dict["frontend_log_level"] = normalize_level(
+        sys_cfg.frontend_log_level, "WARNING"
+    )
+
+    result = MonitorConfigPayload(**payload_dict)
+    if apply_overrides:
+        return (result, any_error)
+    return result
+
+
 def load_ui_config(
     profile_service: ProfileService,
     data: ProfilesData | None = None,
@@ -119,34 +238,7 @@ def load_ui_config(
     设置页面展示和修改的都是全局配置（system + default 方案），
     不随活动方案变化。方案独立的覆盖值在方案页面单独管理。
     """
-    if data is None:
-        data = profile_service.load()
-    sys_cfg = data.system
-    config_logger.debug("加载 UI 配置（全局）: active_profile={}", data.active_profile)
-
-    global_profile = data.profiles.get("default", ProfileSettings())
-
-    # 合并 sys 和 default 方案字段；重叠字段以 sys 为准（始终显示全局值）
-    payload_dict = {}
-    payload_dict.update(extract_profile_fields(global_profile.model_dump(), PROFILE_FIELDS))
-    payload_dict.update(extract_profile_fields(sys_cfg.model_dump(), PROFILE_FIELDS))
-
-    # UI 专属覆盖
-    payload_dict["password"] = mask_password(sys_cfg.password)
-    payload_dict["active_task"] = ""
-    payload_dict["use_global_credentials"] = True
-    payload_dict["network_targets"] = _normalize_targets(global_profile.network_targets)
-    payload_dict["http_targets"] = _normalize_targets(
-        getattr(global_profile, "http_targets", "")
-    )
-    payload_dict["backend_log_level"] = normalize_level(
-        sys_cfg.backend_log_level, "WARNING"
-    )
-    payload_dict["frontend_log_level"] = normalize_level(
-        sys_cfg.frontend_log_level, "WARNING"
-    )
-
-    return MonitorConfigPayload(**payload_dict)
+    return _build_config_payload(profile_service, data, apply_overrides=False)
 
 
 def load_runtime_config(
@@ -161,85 +253,7 @@ def load_runtime_config(
     返回:
         (配置, 是否有解密错误): 解密错误时配置中密码为空字符串
     """
-    if data is None:
-        data = profile_service.load()
-    sys_cfg = data.system
-    profile = data.profiles.get(data.active_profile)
-    config_logger.debug("加载运行时配置: profile={}", data.active_profile)
-
-    # 从系统设置作为基础
-    payload_dict = extract_profile_fields(sys_cfg.model_dump(), PROFILE_FIELDS)
-
-    # 账号密码：方案独立 > 全局；运行时使用解密明文
-    any_error = False
-    use_global = True
-    if profile and not profile.use_global_credentials and profile.username:
-        payload_dict["username"] = profile.username
-        use_global = False
-        pwd, err = _decrypt_password_field(
-            profile.password or "",
-            fallback_pwd=sys_cfg.password or "",
-            label=f"方案 '{data.active_profile}'",
-        )
-        payload_dict["password"] = pwd
-        any_error = err
-    else:
-        payload_dict["username"] = sys_cfg.username
-        pwd, err = _decrypt_password_field(sys_cfg.password or "")
-        payload_dict["password"] = pwd
-        any_error = err
-    payload_dict["use_global_credentials"] = use_global
-
-    # 认证地址：跟随全局或使用方案独立值
-    if not profile or profile.use_global_auth_url:
-        payload_dict["auth_url"] = sys_cfg.auth_url
-    else:
-        payload_dict["auth_url"] = profile.auth_url
-
-    # 任务：跟随全局或使用方案独立任务
-    if not profile or profile.use_global_task:
-        payload_dict["active_task"] = ""
-    else:
-        payload_dict["active_task"] = profile.active_task
-
-    # 运营商：跟随 use_global_credentials 标志
-    if not profile or profile.use_global_credentials:
-        payload_dict["carrier"] = sys_cfg.carrier
-        payload_dict["carrier_custom"] = sys_cfg.carrier_custom
-    else:
-        payload_dict["carrier"] = profile.carrier
-        payload_dict["carrier_custom"] = profile.carrier_custom
-
-    # 高级设置：从活动方案或 default 方案提取非凭证字段
-    adv_source = (
-        profile
-        if profile and not profile.use_global_advanced
-        else data.profiles.get("default", ProfileSettings())
-    )
-    payload_dict.update(
-        {
-            k: v
-            for k, v in extract_profile_fields(
-                adv_source.model_dump(), PROFILE_FIELDS
-            ).items()
-            if k not in _PROTECTED_KEYS
-        }
-    )
-
-    payload_dict["network_targets"] = _normalize_targets(
-        payload_dict.get("network_targets", "")
-    )
-    payload_dict["http_targets"] = _normalize_targets(
-        payload_dict.get("http_targets", "")
-    )
-    payload_dict["backend_log_level"] = normalize_level(
-        sys_cfg.backend_log_level, "WARNING"
-    )
-    payload_dict["frontend_log_level"] = normalize_level(
-        sys_cfg.frontend_log_level, "WARNING"
-    )
-
-    return (MonitorConfigPayload(**payload_dict), any_error)
+    return _build_config_payload(profile_service, data, apply_overrides=True)
 
 
 def _build_credential_config(

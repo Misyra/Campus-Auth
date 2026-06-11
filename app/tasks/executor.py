@@ -327,12 +327,9 @@ class TaskExecutor:
             url_checks = url_checks if url_checks else None
 
             # 解析 TCP 检测目标
-            from app.utils.network_helpers import parse_host_port
+            from app.utils.network_helpers import parse_ping_targets
 
-            targets = cfg.get("ping_targets", [])
-            if isinstance(targets, str):
-                targets = [t.strip() for t in targets.split(",") if t.strip()]
-            test_sites = parse_host_port(targets) or None
+            test_sites = parse_ping_targets(cfg.get("ping_targets", [])) or None
 
             logger.info(
                 "验证网络连通性 (网络检测方式: TCP={}, HTTP={}, 网址响应={}, 超时={}s)",

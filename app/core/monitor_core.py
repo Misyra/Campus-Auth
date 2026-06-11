@@ -14,7 +14,7 @@ from app.network.decision import (
 )
 from app.network.probes import set_block_proxy
 from app.utils import get_logger
-from app.utils.network_helpers import parse_host_port
+from app.utils.network_helpers import parse_ping_targets
 
 if TYPE_CHECKING:
     from app.services.profile import ProfileService
@@ -306,24 +306,10 @@ class NetworkMonitorCore:
     def _build_test_sites(self) -> list[tuple[str, int]]:
         """构建测试站点列表"""
         targets = self.config.get("monitor", {}).get("ping_targets", [])
-        if isinstance(targets, str):
-            raw_targets = [item.strip() for item in targets.split(",") if item.strip()]
-        else:
-            raw_targets = [str(item).strip() for item in targets if str(item).strip()]
-
-        if not raw_targets:
-            raw_targets = self.DEFAULT_PING_TARGETS.copy()
-
-        # 补全缺少端口的项（IPv4 默认 DNS 53，域名默认 HTTPS 443）
-        _targets: list[str] = []
-        for item in raw_targets:
-            if ":" not in item:
-                parts = item.split(".")
-                is_ipv4 = len(parts) == 4 and all(p.isdigit() for p in parts)
-                _targets.append(f"{item}:{53 if is_ipv4 else 443}")
-            else:
-                _targets.append(item)
-        return parse_host_port(_targets)
+        result = parse_ping_targets(targets)
+        if not result:
+            result = parse_ping_targets(self.DEFAULT_PING_TARGETS)
+        return result
 
     def _check_profile_switch(self) -> None:
         """检测网关 IP 并自动切换方案（带冷却时间）。

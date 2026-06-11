@@ -26,7 +26,7 @@ from app.schemas import MonitorConfigPayload, MonitorStatusResponse
 from app.utils import ConfigValidator
 from app.utils.logging import get_logger
 from app.utils.login import SCREENSHOT_URL_PATTERN
-from app.utils.network_helpers import parse_host_port
+from app.utils.network_helpers import parse_ping_targets
 from app.ws_manager import WebSocketManager
 
 from .config import build_runtime_config, load_runtime_config, load_ui_config
@@ -772,8 +772,7 @@ class ScheduleEngine:
         enable_tcp = monitor_cfg.get("enable_tcp_check", True)
         enable_http = monitor_cfg.get("enable_http_check", True)
         url_checks = monitor_cfg.get("url_check_urls", None)
-        # 解析 host:port 为 (host, port) 元组列表
-        test_sites = parse_host_port(targets)
+        test_sites = parse_ping_targets(targets)
         mode_desc = []
         if enable_tcp:
             mode_desc.append("TCP")
