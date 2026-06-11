@@ -5,6 +5,22 @@
 
 ## 2026-06-12
 
+### fix: 清理 MonitorService 死代码 + 修复 executor 双重关闭
+
+**monitor_service.py：**
+- 删除 `_stop_event`（`threading.Event`）、`_stop_requested`（`bool`）、`_profile_switch_requested`（`bool`）三个死字段
+- 删除 `__init__` 中的初始化赋值
+- 删除 `init_monitoring()` 中的 `self._stop_requested = False` 和 `self._stop_event.clear()`
+- 删除 `_check_profile_switch()` 中的 `self._profile_switch_requested = True` 和 `self._stop_event.set()`
+
+**engine.py：**
+- 删除 `shutdown()` 中的 `executor.shutdown(wait=False)` 调用
+- executor 生命周期由 Container 管理，Engine 只使用不销毁
+
+**测试结果：** 1617 passed, 2 skipped
+
+
+
 ### docs: 日志系统优化设计文档和实现计划 (P0 + P1)
 
 基于日志系统架构分析，编写设计文档和实现计划：
