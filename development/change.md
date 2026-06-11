@@ -1771,3 +1771,27 @@
 **设计目的：**
 - 视觉层次更清晰，主要操作（管理任务）与次要操作（导入/刷新等）分离
 - 按钮分组更合理，功能相关的按钮放在一起
+
+### refactor: 后端代码深度重构 — 减少重复逻辑、降低复杂度
+
+对后端核心模块进行深度重构，提取公共逻辑、删除死代码、降低单文件行数。
+
+**代码行数变化：**
+
+| 文件 | 重构前 | 重构后 | 变化 |
+|------|--------|--------|------|
+| `app/core/monitor_core.py` | ~831 行 | 362 行 | -56% |
+| `app/services/engine.py` | ~1274 行 | 895 行 | -30% |
+| `app/schemas.py` | ~360 行 | 313 行 | -13% |
+| `app/workers/playwright_worker.py` | ~1117 行 | 990 行 | -11% |
+| `app/services/scheduled_task.py` | 新文件 | 516 行 | 新增 |
+
+**主要变更：**
+- `monitor_core.py`：删除旧的阻塞式监控循环（~200 行死代码），仅保留 `check_once()` 驱动模式
+- `engine.py`：提取 `ScheduledTaskService`（516 行），降低 ScheduleEngine 复杂度
+- `schemas.py`：删除 `_ClampMixin`，内联共享验证器，mixin 从 5 个减到 3 个
+- `engine.py`：统一网络检测目标解析（`parse_ping_targets`），消除 3 处重复解析逻辑
+- `playwright_worker.py`：命令派发字典化、超时常量化、提取 `_cleanup_browser` 辅助方法
+
+**测试结果：** 1574 passed, 2 failed, 2 skipped
+- 2 个失败：`test_src_utils.py::TestCleanupOrphanBrowsers::test_windows` 和 `test_posix`，原因是 `playwright_worker.py` 重构后移除了 `_cleanup_windows` 和 `_cleanup_posix` 属性，测试未同步更新
