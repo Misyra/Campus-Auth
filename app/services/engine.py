@@ -184,6 +184,7 @@ class ScheduleEngine:
         EngineCmdType.START: "_handle_start",
         EngineCmdType.STOP: "_handle_stop",
         EngineCmdType.LOGIN: "_handle_login",
+        EngineCmdType.SHUTDOWN: "_handle_shutdown",
         EngineCmdType.RELOAD: "_handle_reload",
         EngineCmdType.APPLY_PROFILE: "_handle_apply_profile",
     }
@@ -257,12 +258,9 @@ class ScheduleEngine:
     def _process_command(self, cmd: EngineCommand) -> None:
         """处理一个命令。"""
         try:
-            if cmd.type == EngineCmdType.SHUTDOWN:
-                self._handle_stop()
-            else:
-                handler_name = self._CMD_ROUTES.get(cmd.type)
-                if handler_name:
-                    getattr(self, handler_name)(cmd)
+            handler_name = self._CMD_ROUTES.get(cmd.type)
+            if handler_name:
+                getattr(self, handler_name)(cmd)
         except Exception:
             logger.exception("命令执行失败: {}", cmd.type)
         finally:
@@ -431,6 +429,10 @@ class ScheduleEngine:
 
         self.record_log("监控已停止", level="INFO", source="backend")
         self._update_status_snapshot()
+
+    def _handle_shutdown(self, cmd: EngineCommand) -> None:
+        """处理关闭命令。"""
+        self._handle_stop()
 
     def _handle_login(self, cmd: EngineCommand) -> None:
         """执行一次性登录（手动触发，异步执行）。"""
