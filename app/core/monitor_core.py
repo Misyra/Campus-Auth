@@ -690,15 +690,14 @@ class NetworkMonitorCore:
     def _record_login_history(
         self, success: bool, duration_ms: int, error: str = ""
     ) -> None:
-        """记录登录历史（如果 login_history 服务可用）。"""
+        """记录登录历史（委托 LoginHistoryService.record 自动提取方案名称）。"""
         if self._login_history is None:
             return
         try:
-            self._login_history.add(
+            self._login_history.record(
                 success=success,
                 duration_ms=duration_ms,
-                profile_name=self.config.get("profile_name", ""),
-                task_name=self.config.get("active_task", ""),
+                profile_service=self._profile_service,
                 error=error,
             )
         except Exception:

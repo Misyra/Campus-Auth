@@ -1047,54 +1047,43 @@ class ScheduleEngine:
                     self._login_in_progress.clear()
 
             duration_ms = int((time.perf_counter() - start_time) * 1000)
-            task_name = task.get("name", task_id)
             if result.success:
-                self._record_login_history(True, duration_ms, task_name)
+                self._record_login_history(True, duration_ms)
                 return True, result.data if isinstance(
                     result.data, str
                 ) else "浏览器任务执行成功"
             else:
                 error_msg = result.error or "浏览器任务执行失败"
-                self._record_login_history(False, duration_ms, task_name, error_msg)
+                self._record_login_history(False, duration_ms, error=error_msg)
                 return False, error_msg
 
         except ImportError as e:
             duration_ms = int((time.perf_counter() - start_time) * 1000)
             engine_logger.warning("浏览器任务执行缺少依赖: {}", e)
-            self._record_login_history(
-                False, duration_ms, task.get("name", task_id), str(e)
-            )
+            self._record_login_history(False, duration_ms, error=str(e))
             return False, "浏览器任务执行需要额外依赖，请在设置中检查 Playwright 安装状态"
         except Exception as e:
             duration_ms = int((time.perf_counter() - start_time) * 1000)
             engine_logger.error("浏览器任务执行异常: {}", e)
-            self._record_login_history(
-                False, duration_ms, task.get("name", task_id), str(e)
-            )
+            self._record_login_history(False, duration_ms, error=str(e))
             return False, f"浏览器任务执行异常: {e}"
 
     def _record_login_history(
-        self, success: bool, duration_ms: int, task_name: str = "", error: str = ""
+        self, success: bool, duration_ms: int, error: str = ""
     ) -> None:
-        """记录登录历史（如果 login_history 服务可用）。"""
+        """记录登录历史（委托 LoginHistoryService.record 自动提取方案/任务名称）。"""
         if self._login_history is None:
             return
         try:
-            profile_name = ""
-            try:
-                config = self.get_runtime_config()
-                profile_name = config.get("profile_name", "")
-            except Exception:
-                engine_logger.debug("获取运行时方案名称失败（跳过方案记录）", exc_info=True)
-            self._login_history.add(
+            self._login_history.record(
                 success=success,
                 duration_ms=duration_ms,
-                profile_name=profile_name,
-                task_name=task_name,
+                profile_service=self._profile_service,
+                task_manager=self._task_manager,
                 error=error,
             )
         except Exception:
-            engine_logger.debug("定时任务记录登录历史失败: {}", task_name, exc_info=True)
+            engine_logger.debug("记录登录历史失败", exc_info=True)
 
     def _execute_shell_sync(
         self, command: str, timeout: int, shell_path: str = ""
