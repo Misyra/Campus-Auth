@@ -44,6 +44,11 @@ export const formatterMethods = {
     if (text.includes('成功') || text.includes('✓')) return 'success';
     return '';
   },
+  formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  },
 };
 
 /**
