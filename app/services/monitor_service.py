@@ -65,8 +65,6 @@ class NetworkMonitorCore:
         # 上次网络连通性检测结果（用于 UI 状态显示）
         self.network_state: NetworkState = NetworkState.UNKNOWN
 
-        self._stop_requested = False
-        self._stop_event = threading.Event()
         self._test_sites_cache: list[tuple[str, int]] | None = None
         self.logger = get_logger("monitor_core", source="network")
 
@@ -77,7 +75,6 @@ class NetworkMonitorCore:
         self._profile_service: ProfileService | None = None
         self._last_profile_id: str | None = None
         self._last_gateway_check_time: float = 0
-        self._profile_switch_requested: bool = False
 
     def log_message(
         self, message: str, level: str = "INFO", exc_info: bool = False
@@ -143,8 +140,6 @@ class NetworkMonitorCore:
             self.log_message("监控已在运行中", "WARNING")
             return
 
-        self._stop_requested = False
-        self._stop_event.clear()
         self._test_sites_cache = None
         self._update_state(
             monitoring=True,
@@ -355,8 +350,7 @@ class NetworkMonitorCore:
                     self.log_message(f"方案切换失败: {msg}", "WARNING")
                 else:
                     # 方案切换成功，设置标志位并停止监控循环
-                    self._profile_switch_requested = True
-                    self._stop_event.set()
+                    pass
         except Exception as exc:
             self.log_message(f"方案切换检测异常: {exc}", "WARNING")
 

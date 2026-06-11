@@ -717,9 +717,6 @@ class ScheduleEngine:
             return
         # 停止调度器
         self._scheduler_running = False
-        executor = getattr(self, "_task_executor", None)
-        if executor:
-            executor.shutdown(wait=False)
 
         # 直接停止监控核心（不等待 response，避免阻塞）
         if self._monitor_core is not None:

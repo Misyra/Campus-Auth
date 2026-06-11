@@ -3,6 +3,44 @@
 本文档记录项目的所有变更，包括文档更新、代码修改、配置调整等。
 
 
+## 2026-06-12
+
+### docs: 日志系统优化设计文档和实现计划 (P0 + P1)
+
+基于日志系统架构分析，编写设计文档和实现计划：
+
+**P0: 搜索模式与浏览模式分离**
+- 问题：>50MB 文件只读尾部导致搜索失效
+- 方案：搜索模式全文扫描，浏览模式读取尾部
+- 设计文档：`docs/superpowers/specs/2026-06-12-log-search-mode-fix-design.md`
+- 实现计划：`docs/superpowers/plans/2026-06-12-log-search-mode-fix.md`
+
+**P1: 按 source 设置日志级别**
+- 问题：全局日志级别无法单独控制模块输出
+- 方案：支持按 source 设置独立级别，source 级别优先于全局级别
+- 设计文档：`docs/superpowers/specs/2026-06-12-log-source-level-control-design.md`
+- 实现计划：`docs/superpowers/plans/2026-06-12-log-source-level-control.md`
+
+### docs: 生成日志系统架构报告
+
+生成详细的日志系统架构报告，全面记录当前日志系统的设计和实现。
+
+**报告内容：**
+- 核心组件：LogConfigCenter（单例配置中心）、DashboardSink（内存+广播）、DateRotatingSink（按日期存储）
+- 日志流向架构：应用代码 → loguru → 多 sink 分发（控制台/标准logging/文件/内存/WebSocket）
+- 日志级别与来源：5 个有效级别 + 5 个有效来源
+- API 接口：日志文件列表、日志文件内容、WebSocket 实时推送
+- 前端显示：Dashboard 实时日志 + 日志文件查看器
+- 配置与初始化流程
+- 线程安全机制
+- 性能优化策略
+- 错误处理原则
+- 扩展性设计
+- 最佳实践指南
+
+**文件位置：** `development/log_system_architecture.md`
+
+
 ## 2026-06-11
 
 ### refactor: 统一 utils 文件命名
