@@ -433,7 +433,7 @@ def _run_lightweight(
         container.engine.start_scheduler()
 
     logger.info("轻量模式启动完成，监控已启动")
-    logger.info("运行 `python main.py` 或 `python main.py --serve` 打开 Web 控制台")
+    logger.info("访问 http://127.0.0.1:{} 将自动唤醒 Web 控制台", port)
 
     def _cleanup():
         container.engine.shutdown()
@@ -457,23 +457,94 @@ def _run_lightweight(
         except Exception:
             pass
 
-    # 等待控制文件触发
+    # 启动占位 HTTP 服务器：用户访问时自动唤醒 FastAPI
+    web_wakeup = threading.Event()
+    _start_wakeup_server(container, port, logger, web_wakeup)
+
+    # 同时监听控制文件（--serve 命令）
     trigger_file = AUTH_DATA_DIR / ".start-web"
     trigger_file.unlink(missing_ok=True)
 
     try:
         while True:
             time.sleep(1)
-            if trigger_file.exists():
+            if web_wakeup.is_set() or trigger_file.exists():
                 trigger_file.unlink(missing_ok=True)
-                logger.info("收到 Web 服务启动请求，正在加载...")
-                _start_web_from_lightweight(container, port, logger)
+                if not web_wakeup.is_set():
+                    logger.info("收到 Web 服务启动请求，正在加载...")
                 break
     except KeyboardInterrupt:
         logger.info("收到退出信号，正在关闭...")
     finally:
         if tray_icon:
             tray_icon.stop()
+
+
+def _start_wakeup_server(container, port: int, logger, web_wakeup: threading.Event) -> None:
+    """启动占位 HTTP 服务器：用户访问网页时自动唤醒 FastAPI。"""
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    import socket
+
+    _started = threading.Event()
+
+    class WakeupHandler(BaseHTTPRequestHandler):
+        """返回加载页面，触发 FastAPI 启动。"""
+
+        def do_GET(self):
+            # 触发 FastAPI 启动（仅第一次）
+            if not _started.is_set():
+                _started.set()
+                web_wakeup.set()
+                logger.info("检测到 Web 访问，正在唤醒 FastAPI...")
+                threading.Thread(
+                    target=_start_web_from_lightweight,
+                    args=(container, port, logger),
+                    daemon=True,
+                ).start()
+
+            # 返回加载页面（自动刷新）
+            html = """<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>Campus-Auth</title>
+<meta http-equiv="refresh" content="2">
+<style>
+body{font-family:system-ui;display:flex;justify-content:center;align-items:center;
+height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0}
+.box{text-align:center}
+.spinner{width:40px;height:40px;border:3px solid #333;border-top-color:#6c63ff;
+border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 20px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style></head><body>
+<div class="box">
+<div class="spinner"></div>
+<p>正在唤醒 Web 控制台...</p>
+<p style="font-size:0.85em;color:#888">页面将自动刷新</p>
+</div></body></html>"""
+
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(html.encode())))
+            self.end_headers()
+            self.wfile.write(html.encode())
+
+        def log_message(self, format, *args):
+            pass  # 静默日志
+
+    # 启动占位服务器（允许端口复用，以便 FastAPI 接管）
+    server = HTTPServer(("127.0.0.1", port), WakeupHandler)
+    server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.timeout = 0.5
+
+    def _serve():
+        while not _started.is_set():
+            server.handle_request()
+        # FastAPI 已启动，再处理几个请求让浏览器拿到加载页面
+        for _ in range(10):
+            server.handle_request()
+        server.server_close()
+
+    threading.Thread(target=_serve, daemon=True).start()
+    logger.info("占位服务器已启动: http://127.0.0.1:{}", port)
 
 
 def _start_web_from_lightweight(container, port: int, logger) -> None:
@@ -517,13 +588,13 @@ def _cmd_serve() -> None:
     trigger_file.write_text("start", encoding="utf-8")
     print("已发送 Web 服务启动请求，稍候...")
 
-    # 等待端口就绪
+    # 等待模式切换为 full（唤醒服务器可能已占用端口，不能仅靠端口检测）
     from app.utils.ports import resolve_port
 
     port = resolve_port()
     for _ in range(30):
         time.sleep(1)
-        if is_local_port_in_use(port):
+        if read_pid_mode() != "lightweight":
             print(f"Web 服务已启动: http://127.0.0.1:{port}")
             webbrowser.open(f"http://127.0.0.1:{port}")
             return
