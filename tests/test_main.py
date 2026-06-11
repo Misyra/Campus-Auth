@@ -10,7 +10,7 @@ import signal
 import threading
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -726,21 +726,25 @@ class TestRunServer:
             patch("main.is_local_port_in_use", return_value=False),
             patch("main.ensure_playwright_ready"),
             patch("app.services.profile.ProfileService") as mock_ps_cls,
+            patch("app.container.ServiceContainer") as mock_container_cls,
+            patch("app.application.create_app") as mock_create_app,
             patch("app.application.run"),
             patch("main._open_browser"),
             patch("main.atexit.register") as mock_atexit,
             patch("main.signal.signal"),
             patch("main.os._exit"),
-            patch.object(time, "sleep"),
+            patch.object(time, "sleep", side_effect=[None, KeyboardInterrupt]),
         ):
             mock_ps = MagicMock()
             mock_ps.load.return_value.system = MagicMock(
                 minimize_to_tray=False,
                 login_then_exit=False,
                 auto_open_browser=True,
-                lightweight_mode=False,
             )
             mock_ps_cls.return_value = mock_ps
+            mock_create_app.return_value = MagicMock()
+            mock_container_cls.return_value.stop_web_services = AsyncMock()
+            mock_container_cls.return_value.shutdown = AsyncMock()
 
             _run_server()
             mock_atexit.assert_called()
@@ -754,12 +758,14 @@ class TestRunServer:
             patch("main.is_local_port_in_use", return_value=False),
             patch("main.ensure_playwright_ready"),
             patch("app.services.profile.ProfileService") as mock_ps_cls,
+            patch("app.container.ServiceContainer") as mock_container_cls,
+            patch("app.application.create_app") as mock_create_app,
             patch("app.application.run"),
             patch("main._open_browser"),
             patch("main.atexit.register"),
             patch("main.signal.signal"),
             patch("main.os._exit"),
-            patch.object(time, "sleep"),
+            patch.object(time, "sleep", side_effect=[None, KeyboardInterrupt]),
             patch(
                 "app.core.system_tray.SystemTray", side_effect=ImportError("no tray")
             ),
@@ -769,9 +775,11 @@ class TestRunServer:
                 minimize_to_tray=True,
                 login_then_exit=False,
                 auto_open_browser=False,
-                lightweight_mode=False,
             )
             mock_ps_cls.return_value = mock_ps
+            mock_create_app.return_value = MagicMock()
+            mock_container_cls.return_value.stop_web_services = AsyncMock()
+            mock_container_cls.return_value.shutdown = AsyncMock()
             _run_server()
 
         assert "启动系统托盘失败" in caplog.text
@@ -785,12 +793,14 @@ class TestRunServer:
             patch("main.is_local_port_in_use", return_value=False),
             patch("main.ensure_playwright_ready"),
             patch("app.services.profile.ProfileService") as mock_ps_cls,
+            patch("app.container.ServiceContainer") as mock_container_cls,
+            patch("app.application.create_app") as mock_create_app,
             patch("app.application.run"),
             patch("main._open_browser"),
             patch("main.atexit.register"),
             patch("main.signal.signal"),
             patch("main.os._exit"),
-            patch.object(time, "sleep"),
+            patch.object(time, "sleep", side_effect=[None, KeyboardInterrupt]),
             patch("main._run_login_then_exit") as mock_lte,
             patch.dict(os.environ, {}, clear=False),
         ):
@@ -801,9 +811,11 @@ class TestRunServer:
                 minimize_to_tray=False,
                 login_then_exit=True,
                 auto_open_browser=True,
-                lightweight_mode=False,
             )
             mock_ps_cls.return_value = mock_ps
+            mock_create_app.return_value = MagicMock()
+            mock_container_cls.return_value.stop_web_services = AsyncMock()
+            mock_container_cls.return_value.shutdown = AsyncMock()
 
             _run_server()
             mock_lte.assert_not_called()
@@ -832,11 +844,13 @@ class TestSignalHandler:
             patch("main.is_local_port_in_use", return_value=False),
             patch("main.ensure_playwright_ready"),
             patch("app.services.profile.ProfileService") as mock_ps_cls,
+            patch("app.container.ServiceContainer") as mock_container_cls,
+            patch("app.application.create_app") as mock_create_app,
             patch("app.application.run"),
             patch("main._open_browser"),
             patch("main.atexit.register"),
             patch("os._exit") as mock_exit,
-            patch.object(time, "sleep"),
+            patch.object(time, "sleep", side_effect=[None, KeyboardInterrupt]),
             patch("signal.signal", side_effect=fake_signal),
         ):
             mock_ps = MagicMock()
@@ -844,9 +858,11 @@ class TestSignalHandler:
                 minimize_to_tray=False,
                 login_then_exit=False,
                 auto_open_browser=False,
-                lightweight_mode=False,
             )
             mock_ps_cls.return_value = mock_ps
+            mock_create_app.return_value = MagicMock()
+            mock_container_cls.return_value.stop_web_services = AsyncMock()
+            mock_container_cls.return_value.shutdown = AsyncMock()
             _run_server()
 
             # 模拟 SIGINT 触发（仍在 os._exit mock 范围内）
@@ -877,21 +893,25 @@ class TestSignalHandler:
             patch("main.is_local_port_in_use", return_value=False),
             patch("main.ensure_playwright_ready"),
             patch("app.services.profile.ProfileService") as mock_ps_cls,
+            patch("app.container.ServiceContainer") as mock_container_cls,
+            patch("app.application.create_app") as mock_create_app,
             patch("app.application.run"),
             patch("main._open_browser"),
             patch("main.atexit.register"),
             patch("signal.signal", side_effect=fake_signal),
             patch("main.os._exit"),
-            patch.object(time, "sleep"),
+            patch.object(time, "sleep", side_effect=[None, KeyboardInterrupt]),
         ):
             mock_ps = MagicMock()
             mock_ps.load.return_value.system = MagicMock(
                 minimize_to_tray=False,
                 login_then_exit=False,
                 auto_open_browser=False,
-                lightweight_mode=False,
             )
             mock_ps_cls.return_value = mock_ps
+            mock_create_app.return_value = MagicMock()
+            mock_container_cls.return_value.stop_web_services = AsyncMock()
+            mock_container_cls.return_value.shutdown = AsyncMock()
             _run_server()
 
         # SIGINT 一定被注册

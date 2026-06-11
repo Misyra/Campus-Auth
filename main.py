@@ -3,6 +3,7 @@
 
 import argparse
 import atexit
+import asyncio
 import contextlib
 import os
 import signal
@@ -28,7 +29,6 @@ from app.utils.process import (  # noqa: E402
     is_service_running,
     normalize_proc_name,
     read_pid_file,
-    read_pid_mode,
     write_pid,
 )
 from app.workers.playwright_bootstrap import ensure_playwright_ready  # noqa: E402
@@ -66,9 +66,7 @@ def _cmd_status() -> None:
     port = resolve_port()
 
     if running:
-        mode = read_pid_mode()
-        mode_label = " (轻量模式)" if mode == "lightweight" else ""
-        print(f"服务正在运行{mode_label} (PID: {pid})")
+        print(f"服务正在运行 (PID: {pid})")
     elif is_local_port_in_use(port):
         print(f"服务疑似正在运行 (端口: {port})")
     elif had_pid_file:
@@ -266,9 +264,11 @@ def _run_server(
         webbrowser.open(f"http://127.0.0.1:{port}")
         sys.exit(0)
 
-    # 优先从 settings.json 读取（Web 控制台可修改），回退到 .env
+    write_pid()
+    atexit.register(cleanup_pid)
+
+    # 读取系统设置
     auto_open_browser = None
-    lightweight_mode = False
     try:
         from app.services.profile import ProfileService
 
@@ -277,74 +277,30 @@ def _run_server(
         minimize_to_tray = tray or bool(_sys_settings.minimize_to_tray)
         login_then_exit = bool(_sys_settings.login_then_exit)
         auto_open_browser = bool(_sys_settings.auto_open_browser)
-        lightweight_mode = bool(getattr(_sys_settings, "lightweight_mode", False))
     except Exception:
         minimize_to_tray = tray or False
         login_then_exit = False
-        # auto_open_browser 保持 None，让 _open_browser 走环境变量默认值
 
-    # 轻量模式：仅启动监控，不加载 FastAPI
-    if lightweight_mode:
-        _run_lightweight(
-            startup_logger,
-            port=port,
-            no_browser=no_browser,
-            minimize_to_tray=minimize_to_tray,
-            auto_open_browser=auto_open_browser,
-        )
-        return
-
-    write_pid()
-    atexit.register(cleanup_pid)
-
-    # 信号处理器：优先让 uvicorn 优雅关闭，仅在超时时强制退出
+    # 信号处理器
     _shutdown_initiated = False
 
     def _signal_handler(signum, _frame):
         nonlocal _shutdown_initiated
-
         if _shutdown_initiated:
-            # 第二次信号：强制退出
             cleanup_pid()
             os._exit(1)
-
         _shutdown_initiated = True
         cleanup_pid()
-
-        # 尝试通知 uvicorn Server 优雅关闭
-        _server = None
-        with contextlib.suppress(Exception):
-            from app.application import app as _fastapi_app
-            _server = getattr(_fastapi_app.state, "_uvicorn_server", None)
-
-        if _server is not None:
-            _server.should_exit = True
-            # 启动超时守护线程：如果 uvicorn 在 15 秒内未关闭，强制退出
-            def _force_exit_timer():
-                import time as _time
-                _time.sleep(15)
-                with contextlib.suppress(Exception):
-                    from app.workers.playwright_worker import shutdown_worker
-                    shutdown_worker(timeout=3)
-                with contextlib.suppress(Exception):
-                    cleanup_orphan_browsers()
-                os._exit(1)
-
-            threading.Thread(target=_force_exit_timer, daemon=True).start()
+        if _uvicorn_server[0] is not None:
+            _uvicorn_server[0].should_exit = True
         else:
-            # 无法获取 server 引用，回退到直接清理 + 强制退出
-            with contextlib.suppress(Exception):
-                from app.workers.playwright_worker import shutdown_worker
-                shutdown_worker(timeout=3)
-            with contextlib.suppress(Exception):
-                cleanup_orphan_browsers()
             os._exit(0)
 
     signal.signal(signal.SIGINT, _signal_handler)
-    # SIGTERM 在 Windows 上不存在（仅有 SIGINT/SIGBREAK），需要守卫以避免 AttributeError
     if hasattr(signal, "SIGTERM"):
         signal.signal(signal.SIGTERM, _signal_handler)
 
+    # Playwright 检查
     stage_begin = time.perf_counter()
     startup_logger.info("启动阶段: 开始检查 Playwright 运行环境")
     ensure_playwright_ready(print)
@@ -353,19 +309,33 @@ def _run_server(
         time.perf_counter() - stage_begin,
     )
 
-    # 登录成功后退出模式：仅自启动时生效，循环重试直到登录成功，成功后退出进程
-    # --no-auto 可跳过此模式，用于 login_then_exit 开启后无法进入 Web 控制台的恢复场景
+    # 登录成功后退出模式
     is_autostart = os.environ.get("CAMPUS_AUTH_AUTOSTART") == "1"
     if login_then_exit and is_autostart and not no_auto:
         _run_login_then_exit(startup_logger)
-        # 登录成功会 sys.exit(0)，不会到达这里；失败超限则回退到正常启动
 
-    # 通过环境变量传递 --no-auto 标志给后端，跳过 auto_start
     if no_auto:
         os.environ["CAMPUS_AUTH_NO_AUTO"] = "1"
 
-    from app.application import run
+    # 创建容器（生命周期独立于 uvicorn）
+    from app.container import ServiceContainer
+    from app.application import create_app, run
 
+    container = ServiceContainer(Path(__file__).parent.resolve())
+    _app = create_app(existing_container=container)
+
+    # 请求追踪（用于空闲检测）
+    _last_request_time = [time.time()]
+
+    @_app.middleware("http")
+    async def _track_request(request, call_next):
+        _last_request_time[0] = time.time()
+        return await call_next(request)
+
+    # uvicorn server 引用
+    _uvicorn_server = [None]
+
+    # 系统托盘
     tray_icon = None
     if minimize_to_tray:
         try:
@@ -373,14 +343,12 @@ def _run_server(
 
             tray_icon = SystemTray(
                 port=port,
-                # 托盘退出回调：优先发送 SIGTERM 优雅关闭；无 SIGTERM 时直接终止进程（Windows 上 taskkill 替代）
                 on_exit=lambda: os.kill(os.getpid(), signal.SIGTERM)
                 if hasattr(signal, "SIGTERM")
                 else cleanup_pid() or os._exit(0),
             )
             tray_icon.start()
             startup_logger.info("系统托盘已启动，双击图标打开控制台")
-
         except Exception as e:
             startup_logger.warning("启动系统托盘失败: {}", e)
 
@@ -395,109 +363,70 @@ def _run_server(
         time.perf_counter() - startup_begin,
     )
 
+    # ── 空闲卸载循环 ──
+    IDLE_TIMEOUT = 300  # 5 分钟
+
     try:
-        try:
-            _al = bool(_sys_settings.access_log)
-            _lr = max(1, int(_sys_settings.log_retention_days))
-        except (AttributeError, TypeError, ValueError):
-            _al, _lr = False, 7
-        run(access_log_enabled=_al, log_retention=_lr)
-    finally:
-        if tray_icon:
-            tray_icon.stop()
+        while not _shutdown_initiated:
+            # 启动 uvicorn（阻塞）
+            try:
+                _al = bool(_sys_settings.access_log)
+                _lr = max(1, int(_sys_settings.log_retention_days))
+            except (AttributeError, TypeError, ValueError):
+                _al, _lr = False, 7
 
-
-# ==================== 轻量模式 ====================
-
-
-def _run_lightweight(
-    logger,
-    port: int,
-    no_browser: bool = False,
-    minimize_to_tray: bool = False,
-    auto_open_browser: bool | None = None,
-) -> None:
-    """轻量模式：仅启动监控，不加载 FastAPI。"""
-    from app.container import ServiceContainer
-
-    write_pid(mode="lightweight")
-
-    project_root = Path(__file__).parent.resolve()
-    container = ServiceContainer(project_root)
-
-    # 启动监控（不启动 Web 服务和调度器）
-    cleanup_orphan_browsers()
-    container.engine.boot()
-    # 调度器也可以启动（线程化实现，无需 asyncio 事件循环）
-    if container.engine.has_enabled_tasks():
-        container.engine.start_scheduler()
-
-    logger.info("轻量模式启动完成，监控已启动")
-    logger.info("访问 http://127.0.0.1:{} 将自动唤醒 Web 控制台", port)
-
-    def _cleanup():
-        container.engine.shutdown()
-        cleanup_pid()
-
-    atexit.register(_cleanup)
-
-    # 系统托盘
-    tray_icon = None
-    if minimize_to_tray:
-        try:
-            from app.core.system_tray import SystemTray
-
-            tray_icon = SystemTray(
-                port=port,
-                on_exit=lambda: os.kill(os.getpid(), signal.SIGTERM)
-                if hasattr(signal, "SIGTERM")
-                else os._exit(0),
+            _last_request_time[0] = time.time()
+            run(
+                access_log_enabled=_al,
+                log_retention=_lr,
+                existing_container=container,
+                server_ref=_uvicorn_server,
             )
-            tray_icon.start()
-        except Exception:
-            pass
+            # uvicorn 退出（正常关闭或空闲卸载）
 
-    # 启动占位 HTTP 服务器：用户访问时自动唤醒 FastAPI
-    web_wakeup = threading.Event()
-    _start_wakeup_server(container, port, logger, web_wakeup)
-
-    # 同时监听控制文件（--serve 命令）
-    trigger_file = AUTH_DATA_DIR / ".start-web"
-    trigger_file.unlink(missing_ok=True)
-
-    try:
-        while True:
-            time.sleep(1)
-            if web_wakeup.is_set() or trigger_file.exists():
-                trigger_file.unlink(missing_ok=True)
-                if not web_wakeup.is_set():
-                    logger.info("收到 Web 服务启动请求，正在加载...")
-                # 等待占位服务器释放端口
-                time.sleep(1)
-                # 在主线程启动 FastAPI（阻塞，直到 uvicorn 退出）
-                _start_web_from_lightweight(container, port, logger)
+            if _shutdown_initiated:
                 break
+
+            # ── 空闲卸载：停止 Web 服务，启动占位服务器 ──
+            startup_logger.info("Web UI 空闲超过 5 分钟，卸载 FastAPI 释放内存")
+
+            # 在事件循环中清理 Web 服务
+            loop = asyncio.new_event_loop()
+            loop.run_until_complete(container.stop_web_services())
+            loop.close()
+
+            # 启动占位服务器等待用户访问
+            _web_wakeup = threading.Event()
+            _start_wakeup_server(port, startup_logger, _web_wakeup)
+
+            # 等待唤醒信号
+            while not _web_wakeup.is_set() and not _shutdown_initiated:
+                time.sleep(1)
+
+            if _shutdown_initiated:
+                break
+
+            # 用户访问了 → 停止占位服务器，重启 uvicorn
+            startup_logger.info("检测到 Web 访问，正在恢复 Web 控制台...")
+            time.sleep(1)  # 等端口释放
+
     except KeyboardInterrupt:
-        logger.info("收到退出信号，正在关闭...")
+        startup_logger.info("收到退出信号，正在关闭...")
     finally:
         if tray_icon:
             tray_icon.stop()
 
+    # ── 进程退出清理 ──
+    startup_logger.info("正在关闭服务...")
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(container.shutdown())
+    loop.close()
 
-def _start_wakeup_server(container, port: int, logger, web_wakeup: threading.Event) -> None:
-    """启动占位 HTTP 服务器：用户访问网页时自动唤醒 FastAPI。"""
-    from http.server import HTTPServer, BaseHTTPRequestHandler
-    import socket
 
-    _started = threading.Event()
-    _server_ref = [None]  # 用列表以便闭包修改
+# ==================== 占位服务器（空闲时响应用户访问）====================
 
-    class WakeupHandler(BaseHTTPRequestHandler):
-        """返回加载页面，触发 FastAPI 启动。"""
-
-        def do_GET(self):
-            # 返回加载页面（自动刷新）
-            html = """<!DOCTYPE html>
+# 加载页面 HTML（模块级常量，避免重复创建）
+_WAKEUP_HTML = """<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <title>Campus-Auth</title>
 <meta http-equiv="refresh" content="3">
@@ -515,93 +444,46 @@ border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 20px}
 <p style="font-size:0.85em;color:#888">页面将自动刷新</p>
 </div></body></html>"""
 
+
+def _start_wakeup_server(port: int, logger, web_wakeup: threading.Event) -> None:
+    """启动占位 HTTP 服务器：用户访问时返回加载页面并触发唤醒。"""
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+
+    _server_ref = [None]
+
+    class WakeupHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = _WAKEUP_HTML.encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(html.encode())))
+            self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            self.wfile.write(html.encode())
-
-            # 发送完响应后，通知主线程唤醒 FastAPI（仅第一次）
-            if not _started.is_set():
-                _started.set()
-                logger.info("检测到 Web 访问，正在唤醒 FastAPI...")
-                # 关闭占位服务器释放端口
-                def _close_and_wake():
-                    if _server_ref[0]:
-                        _server_ref[0].server_close()
-                    web_wakeup.set()
-                threading.Thread(target=_close_and_wake, daemon=True).start()
+            self.wfile.write(body)
+            # 通知主线程唤醒
+            web_wakeup.set()
+            # 延迟关闭服务器（让响应发完）
+            def _close():
+                time.sleep(0.5)
+                if _server_ref[0]:
+                    _server_ref[0].server_close()
+            threading.Thread(target=_close, daemon=True).start()
 
         def log_message(self, format, *args):
-            pass  # 静默日志
+            pass
 
-    # 启动占位服务器
     server = HTTPServer(("127.0.0.1", port), WakeupHandler)
     _server_ref[0] = server
     server.timeout = 1
 
     def _serve():
-        while not _started.is_set():
-            server.handle_request()
+        try:
+            while not web_wakeup.is_set():
+                server.handle_request()
+        except OSError:
+            pass  # 服务器已关闭
 
     threading.Thread(target=_serve, daemon=True).start()
     logger.info("占位服务器已启动: http://127.0.0.1:{}", port)
-
-
-def _start_web_from_lightweight(container, port: int, logger) -> None:
-    """从轻量模式过渡到完整模式。"""
-    write_pid(mode="full")
-
-    # Playwright 检查
-    logger.info("启动阶段: 检查 Playwright 运行环境")
-    ensure_playwright_ready(print)
-
-    # 加载配置
-    try:
-        _sys_settings = container.profile_service.load().system
-        _al = bool(_sys_settings.access_log)
-        _lr = max(1, int(_sys_settings.log_retention_days))
-    except (AttributeError, TypeError, ValueError):
-        _al, _lr = False, 7
-
-    from app.application import run
-
-    run(access_log_enabled=_al, log_retention=_lr, existing_container=container)
-
-
-def _cmd_serve() -> None:
-    """触发轻量模式进程启动 Web 服务。"""
-    running, pid = is_service_running()
-    if not running:
-        print("服务未运行，请先启动软件")
-        sys.exit(1)
-
-    mode = read_pid_mode()
-    if mode != "lightweight":
-        print("服务已在完整模式下运行")
-        from app.utils.ports import resolve_port
-
-        webbrowser.open(f"http://127.0.0.1:{resolve_port()}")
-        return
-
-    # 写入触发文件
-    trigger_file = AUTH_DATA_DIR / ".start-web"
-    trigger_file.write_text("start", encoding="utf-8")
-    print("已发送 Web 服务启动请求，稍候...")
-
-    # 等待模式切换为 full（唤醒服务器可能已占用端口，不能仅靠端口检测）
-    from app.utils.ports import resolve_port
-
-    port = resolve_port()
-    for _ in range(30):
-        time.sleep(1)
-        if read_pid_mode() != "lightweight":
-            print(f"Web 服务已启动: http://127.0.0.1:{port}")
-            webbrowser.open(f"http://127.0.0.1:{port}")
-            return
-
-    print("Web 服务启动超时，请检查日志")
-    sys.exit(1)
 
 
 # ==================== 全局异常钩子 ====================
@@ -667,12 +549,6 @@ def main() -> None:
         choices=["status", "enable", "disable"],
         help="管理开机自启动 (status/enable/disable)",
     )
-    parser.add_argument(
-        "--serve",
-        action="store_true",
-        help="触发轻量模式进程启动 Web 服务",
-    )
-
     args = parser.parse_args()
 
     if args.status:
@@ -681,10 +557,6 @@ def main() -> None:
 
     if args.stop:
         _cmd_stop()
-        return
-
-    if args.serve:
-        _cmd_serve()
         return
 
     if args.autostart:

@@ -62,7 +62,6 @@ PROFILE_FIELDS: list[str] = [  # 常量，不应在运行时修改
     "network_check_timeout",
     "use_global_credentials",
     "shell_path",
-    "lightweight_mode",
     "browser_viewport_width",
     "browser_viewport_height",
     "browser_navigation_timeout",

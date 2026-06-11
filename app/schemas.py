@@ -209,10 +209,6 @@ class _SystemFieldsMixin(_ClampMixin):
     shell_path: str = Field(
         default="", description="自定义 Shell 路径（留空使用系统默认）"
     )
-    lightweight_mode: bool = Field(
-        default=False,
-        description="轻量模式：启动时不加载 Web 服务，仅运行监控",
-    )
 
     @field_validator("backend_log_level", "frontend_log_level")
     @classmethod

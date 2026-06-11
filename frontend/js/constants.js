@@ -92,7 +92,6 @@ const _SHARED_DEFAULTS = {
   enable_http_check: true,
   check_auth_url: true,
   auth_url_targets: "",
-  lightweight_mode: false,
   custom_variables: {},
 };
 
