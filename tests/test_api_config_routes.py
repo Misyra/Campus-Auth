@@ -61,6 +61,48 @@ def client(tmp_path):
         yield test_client, mock_services
 
 
+class TestLogLevels:
+    """测试日志级别配置 API。"""
+
+    def test_get_log_levels(self, client):
+        """测试获取日志级别配置"""
+        test_client, _ = client
+        response = test_client.get("/api/config/log-levels")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "global_level" in data
+        assert "source_levels" in data
+
+    def test_set_source_level(self, client):
+        """测试设置 source 级别"""
+        test_client, _ = client
+        response = test_client.put(
+            "/api/config/source-level",
+            json={"source": "network", "level": "DEBUG"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+    def test_reset_source_level(self, client):
+        """测试重置 source 级别"""
+        test_client, _ = client
+        # 先设置
+        test_client.put(
+            "/api/config/source-level",
+            json={"source": "network", "level": "DEBUG"},
+        )
+
+        # 再重置
+        response = test_client.delete("/api/config/source-level/network")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+
 class TestGetConfig:
     """测试 GET /api/config 端点。"""
 
