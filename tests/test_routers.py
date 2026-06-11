@@ -170,12 +170,13 @@ def client(tmp_path):
         mock_services.login_history_service.list_recent.return_value = []
         mock_services.login_history_service.clear.return_value = 0
 
-        # ── scheduler（engine 已在上方初始化，追加 scheduler 相关 mock）──
-        mock_services.engine.list_tasks.return_value = []
-        mock_services.engine.get_task.return_value = None
-        mock_services.engine.save_task.return_value = (True, "保存成功")
-        mock_services.engine.delete_task.return_value = (True, "删除成功")
-        mock_services.engine.get_history.return_value = []
+        # ── scheduler（engine.tasks 子对象的 mock）──
+        mock_services.engine.tasks = MagicMock()
+        mock_services.engine.tasks.list_tasks.return_value = []
+        mock_services.engine.tasks.get_task.return_value = None
+        mock_services.engine.tasks.save_task.return_value = (True, "保存成功")
+        mock_services.engine.tasks.delete_task.return_value = (True, "删除成功")
+        mock_services.engine.tasks.get_history.return_value = []
 
         # ── scheduled_task_service ──
         mock_services.scheduled_task_service = MagicMock()
