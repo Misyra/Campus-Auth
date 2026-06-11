@@ -195,6 +195,10 @@ class _SystemFieldsMixin(_ClampMixin):
     frontend_log_level: str = Field(default="INFO")
     access_log: bool = Field(default=False, description="Uvicorn HTTP 请求日志")
     minimize_to_tray: bool = Field(default=True, description="最小化到系统托盘")
+    lightweight_mode: bool = Field(
+        default=False,
+        description="轻量模式：启动时不加载 Web 服务，节省约 35MB 内存；访问网页时自动加载",
+    )
     auto_open_browser: bool = Field(default=False, description="启动后自动打开浏览器")
     login_then_exit: bool = Field(default=False, description="登录成功后退出软件")
     max_retries: int = Field(default=3, ge=0, le=10)

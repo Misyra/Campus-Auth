@@ -405,6 +405,7 @@ def _update_system_settings(
         [
             "access_log",
             "minimize_to_tray",
+            "lightweight_mode",
             "auto_open_browser",
             "login_then_exit",
             "max_retries",

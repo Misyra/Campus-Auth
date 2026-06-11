@@ -2,9 +2,8 @@
 """Campus-Auth 校园网自动认证 - 统一启动入口"""
 
 import argparse
-import atexit
 import asyncio
-import contextlib
+import atexit
 import os
 import signal
 import subprocess
@@ -19,7 +18,7 @@ _project_root = Path(__file__).resolve().parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from app.constants import AUTH_DATA_DIR  # noqa: F401, E402  — 测试 fixture 需要
+from app.constants import AUTH_DATA_DIR  # noqa: E402  — 测试 fixture 需要
 from app.utils.platform_utils import is_windows  # noqa: E402
 from app.utils.process import (  # noqa: E402
     cleanup_pid,
@@ -244,6 +243,110 @@ def _run_login_then_exit(logger) -> None:
     )
 
 
+# ==================== 轻量模式 ====================
+
+
+def _run_lightweight(
+    logger, port, no_browser=False, minimize_to_tray=False, auto_open_browser=None
+) -> None:
+    """轻量模式：启动时不加载 FastAPI，用户访问时按需加载。"""
+    from app.application import create_app, run
+    from app.container import ServiceContainer
+
+    container = ServiceContainer(Path(__file__).parent.resolve())
+    # 仅启动引擎（监控 + 定时任务），不启动 Web 服务
+    container.engine.boot()
+    if container.engine.has_enabled_tasks():
+        container.engine.start_scheduler()
+    logger.info("轻量模式启动: 仅监控，Web 服务未加载")
+
+    # uvicorn server 引用
+    _uvicorn_server = [None]
+
+    # 信号处理器（覆盖 _run_server 的，闭包引用本函数的 _uvicorn_server）
+    _shutdown = False
+
+    def _signal_handler(signum, _frame):
+        nonlocal _shutdown
+        if _shutdown:
+            cleanup_pid()
+            os._exit(1)
+        _shutdown = True
+        logger.info("收到退出信号，正在关闭...")
+        cleanup_pid()
+        if _uvicorn_server[0] is not None:
+            _uvicorn_server[0].should_exit = True
+
+    signal.signal(signal.SIGINT, _signal_handler)
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, _signal_handler)
+
+    # 系统托盘
+    tray_icon = None
+    if minimize_to_tray:
+        try:
+            from app.core.system_tray import SystemTray
+
+            tray_icon = SystemTray(
+                port=port,
+                on_exit=lambda: os.kill(os.getpid(), signal.SIGTERM)
+                if hasattr(signal, "SIGTERM")
+                else cleanup_pid() or os._exit(0),
+            )
+            tray_icon.start()
+        except Exception as e:
+            logger.warning("启动系统托盘失败: {}", e)
+
+    if not no_browser:
+        _open_browser(port, setting=auto_open_browser)
+
+    # 占位服务器等待用户访问
+    _web_wakeup = threading.Event()
+    _start_wakeup_server(port, logger, _web_wakeup)
+
+    while not _web_wakeup.is_set() and not _shutdown:
+        time.sleep(1)
+
+    if _shutdown:
+        logger.info("正在关闭服务...")
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(container.shutdown())
+        loop.close()
+        return
+
+    logger.info("检测到 Web 访问，加载 FastAPI...")
+    time.sleep(0.5)
+
+    # 创建 FastAPI 并启动 uvicorn（阻塞直到关机）
+    _app = create_app(existing_container=container)
+
+    try:
+        try:
+            _sys = container.profile_service.load().system
+            _al = bool(_sys.access_log)
+            _lr = max(1, int(_sys.log_retention_days))
+        except Exception:
+            _al, _lr = False, 7
+
+        run(
+            access_log_enabled=_al,
+            log_retention=_lr,
+            existing_container=container,
+            server_ref=_uvicorn_server,
+            app_instance=_app,
+        )
+    except KeyboardInterrupt:
+        logger.info("收到退出信号，正在关闭...")
+    finally:
+        if tray_icon:
+            tray_icon.stop()
+
+    logger.info("正在关闭服务...")
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(container.shutdown())
+    loop.close()
+
+
 # ==================== 主启动 ====================
 
 
@@ -277,9 +380,15 @@ def _run_server(
         minimize_to_tray = tray or bool(_sys_settings.minimize_to_tray)
         login_then_exit = bool(_sys_settings.login_then_exit)
         auto_open_browser = bool(_sys_settings.auto_open_browser)
+        lightweight_mode = bool(_sys_settings.lightweight_mode)
     except Exception:
+        _sys_settings = None
         minimize_to_tray = tray or False
         login_then_exit = False
+        lightweight_mode = False
+
+    # uvicorn server 引用（信号处理器和完整模式共用）
+    _uvicorn_server = [None]
 
     # 信号处理器
     _shutdown_initiated = False
@@ -290,6 +399,7 @@ def _run_server(
             cleanup_pid()
             os._exit(1)
         _shutdown_initiated = True
+        startup_logger.info("收到退出信号，正在关闭...")
         cleanup_pid()
         if _uvicorn_server[0] is not None:
             _uvicorn_server[0].should_exit = True
@@ -317,23 +427,22 @@ def _run_server(
     if no_auto:
         os.environ["CAMPUS_AUTH_NO_AUTO"] = "1"
 
+    # ── 轻量模式：不加载 FastAPI，仅运行监控 ──
+    if lightweight_mode:
+        _run_lightweight(
+            startup_logger, port,
+            no_browser=no_browser,
+            minimize_to_tray=minimize_to_tray,
+            auto_open_browser=auto_open_browser,
+        )
+        return
+
     # 创建容器（生命周期独立于 uvicorn）
-    from app.container import ServiceContainer
     from app.application import create_app, run
+    from app.container import ServiceContainer
 
     container = ServiceContainer(Path(__file__).parent.resolve())
     _app = create_app(existing_container=container)
-
-    # 请求追踪（用于空闲检测）
-    _last_request_time = [time.time()]
-
-    @_app.middleware("http")
-    async def _track_request(request, call_next):
-        _last_request_time[0] = time.time()
-        return await call_next(request)
-
-    # uvicorn server 引用
-    _uvicorn_server = [None]
 
     # 系统托盘
     tray_icon = None
@@ -363,53 +472,21 @@ def _run_server(
         time.perf_counter() - startup_begin,
     )
 
-    # ── 空闲卸载循环 ──
-    IDLE_TIMEOUT = 300  # 5 分钟
-
     try:
-        while not _shutdown_initiated:
-            # 启动 uvicorn（阻塞）
-            try:
-                _al = bool(_sys_settings.access_log)
-                _lr = max(1, int(_sys_settings.log_retention_days))
-            except (AttributeError, TypeError, ValueError):
-                _al, _lr = False, 7
+        # 启动 uvicorn（阻塞直到关机）
+        try:
+            _al = bool(_sys_settings.access_log)
+            _lr = max(1, int(_sys_settings.log_retention_days))
+        except (AttributeError, TypeError, ValueError):
+            _al, _lr = False, 7
 
-            _last_request_time[0] = time.time()
-            run(
-                access_log_enabled=_al,
-                log_retention=_lr,
-                existing_container=container,
-                server_ref=_uvicorn_server,
-            )
-            # uvicorn 退出（正常关闭或空闲卸载）
-
-            if _shutdown_initiated:
-                break
-
-            # ── 空闲卸载：停止 Web 服务，启动占位服务器 ──
-            startup_logger.info("Web UI 空闲超过 5 分钟，卸载 FastAPI 释放内存")
-
-            # 在事件循环中清理 Web 服务
-            loop = asyncio.new_event_loop()
-            loop.run_until_complete(container.stop_web_services())
-            loop.close()
-
-            # 启动占位服务器等待用户访问
-            _web_wakeup = threading.Event()
-            _start_wakeup_server(port, startup_logger, _web_wakeup)
-
-            # 等待唤醒信号
-            while not _web_wakeup.is_set() and not _shutdown_initiated:
-                time.sleep(1)
-
-            if _shutdown_initiated:
-                break
-
-            # 用户访问了 → 停止占位服务器，重启 uvicorn
-            startup_logger.info("检测到 Web 访问，正在恢复 Web 控制台...")
-            time.sleep(1)  # 等端口释放
-
+        run(
+            access_log_enabled=_al,
+            log_retention=_lr,
+            existing_container=container,
+            server_ref=_uvicorn_server,
+            app_instance=_app,
+        )
     except KeyboardInterrupt:
         startup_logger.info("收到退出信号，正在关闭...")
     finally:
@@ -447,7 +524,7 @@ border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 20px}
 
 def _start_wakeup_server(port: int, logger, web_wakeup: threading.Event) -> None:
     """启动占位 HTTP 服务器：用户访问时返回加载页面并触发唤醒。"""
-    from http.server import HTTPServer, BaseHTTPRequestHandler
+    from http.server import BaseHTTPRequestHandler, HTTPServer
 
     _server_ref = [None]
 
