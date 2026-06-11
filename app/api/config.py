@@ -15,6 +15,54 @@ router = APIRouter()
 api_logger = get_logger("api", source="backend")
 
 
+@router.get("/api/config/log-levels")
+def get_log_levels():
+    """获取日志级别配置"""
+    from app.utils.logging import LogConfigCenter
+
+    config = LogConfigCenter.get_instance()
+    return {
+        "global_level": config.get_config().get("level", "INFO"),
+        "source_levels": config.get_all_source_levels(),
+    }
+
+
+@router.put("/api/config/source-level")
+def set_source_level(payload: dict):
+    """设置 source 级别"""
+    from app.utils.logging import LogConfigCenter
+
+    source = payload.get("source")
+    level = payload.get("level")
+
+    if not source or not level:
+        raise HTTPException(400, "缺少 source 或 level 参数")
+
+    config = LogConfigCenter.get_instance()
+    try:
+        config.set_source_level(source, level)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    return {"success": True, "message": f"已设置 {source} 级别为 {level}"}
+
+
+@router.delete("/api/config/source-level/{source}")
+def reset_source_level(source: str):
+    """重置 source 级别（使用全局级别）"""
+    from app.utils.logging import LogConfigCenter
+
+    config = LogConfigCenter.get_instance()
+    levels = config.get_all_source_levels()
+
+    if source in levels:
+        del levels[source]
+        # 重新设置除了指定 source 之外的所有级别
+        config._source_levels = levels
+
+    return {"success": True, "message": f"已重置 {source} 级别"}
+
+
 @router.get("/api/config", response_model=MonitorConfigPayload)
 def get_config(
     svc: ScheduleEngine = Depends(get_monitor_service),
