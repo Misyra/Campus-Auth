@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.tasks.executor import TaskExecutor
+from app.tasks.browser_runner import TaskExecutor
 from app.tasks.manager import TaskManager, is_valid_task_id, normalize_task_id
 from app.tasks.models import (
     StepConfig,

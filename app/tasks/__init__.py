@@ -3,7 +3,7 @@
 重新导出所有公开接口，保持向后兼容。
 """
 
-from .executor import TaskExecutor
+from .browser_runner import TaskExecutor
 from .manager import TaskManager, is_valid_task_id, normalize_task_id
 from .models import (
     DEFAULT_STEP_TIMEOUT,

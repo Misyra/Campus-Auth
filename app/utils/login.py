@@ -165,7 +165,7 @@ class LoginAttemptHandler:
         self, task: Any, active_task_id: str, phase_start: float
     ) -> tuple[bool, str]:
         """执行浏览器任务。"""
-        from ..tasks.executor import TaskExecutor
+        from ..tasks.browser_runner import TaskExecutor
 
         login_url = self.config.get("auth_url", "")
         username = self.config.get("username", "")
