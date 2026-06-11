@@ -2,7 +2,6 @@ import { api, SETTINGS_TABS } from './constants.js';
 import { createFrontendLogger } from './logger.js';
 import { actionMethods } from './methods/actions.js';
 import { appearanceMethods } from './methods/appearance.js';
-import { autostartMethods } from './methods/autostart.js';
 import { configMethods } from './methods/config.js';
 import { dragMethods } from './methods/drag.js';
 import { formatterMethods } from './methods/formatters.js';
@@ -11,7 +10,6 @@ import { profileMethods } from './methods/profiles.js';
 import { scheduledTasksMethods } from './methods/scheduled_tasks.js';
 import { scriptMethods } from './methods/scripts.js';
 
-import { statusMethods } from './methods/status.js';
 import { taskMethods } from './tasks/index.js';
 import { uiMethods } from './methods/ui.js';
 import { logFileMethods } from './methods/logfiles.js';
@@ -314,9 +312,7 @@ export const appOptions = {
     ...formatterMethods,
     ...lifecycleMethods,
     ...configMethods,
-    ...statusMethods,
     ...actionMethods,
-    ...autostartMethods,
     ...taskMethods,
     ...scriptMethods,
     ...scheduledTasksMethods,
