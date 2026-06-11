@@ -270,4 +270,37 @@ export const configMethods = {
   },
   async enableAutostart() { return this._toggleAutostart(true); },
   async disableAutostart() { return this._toggleAutostart(false); },
+  // ── 日志级别管理 ──
+  async fetchLogLevels() {
+    try {
+      const { data } = await this.$api.get('/api/config/log-levels');
+      this.logLevels = data;
+    } catch (error) {
+      this.frontendLogger.warn('config', '获取日志级别配置失败', error);
+    }
+  },
+  async setSourceLevel(source, level) {
+    try {
+      await this.$api.put('/api/config/source-level', { source, level });
+      this.logLevels.source_levels[source] = level;
+      this.frontendLogger.info('config', `已设置 ${source} 级别为 ${level}`);
+      this.toastOnly(true, `已设置 ${source} 级别为 ${level}`);
+    } catch (error) {
+      const msg = extractApiError(error, '设置失败');
+      this.frontendLogger.error('config', `设置日志级别失败: ${msg}`, error);
+      this.toastOnly(false, msg);
+    }
+  },
+  async resetSourceLevel(source) {
+    try {
+      await this.$api.delete(`/api/config/source-level/${source}`);
+      delete this.logLevels.source_levels[source];
+      this.frontendLogger.info('config', `已重置 ${source} 级别`);
+      this.toastOnly(true, `已重置 ${source} 级别`);
+    } catch (error) {
+      const msg = extractApiError(error, '重置失败');
+      this.frontendLogger.error('config', `重置日志级别失败: ${msg}`, error);
+      this.toastOnly(false, msg);
+    }
+  },
 };
