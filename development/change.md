@@ -5,6 +5,45 @@
 
 ## 2026-06-11
 
+### refactor: 删除 monitor_core.py 约 200 行死代码
+
+`NetworkMonitorCore` 原本的阻塞式监控循环已被 `ScheduleEngine` 的事件驱动模式替代（`check_once()` 驱动），旧的循环代码不再被调用。
+
+**monitor_core.py 删除内容：**
+- 删除旧的阻塞式监控循环方法：`start_monitoring`、`monitor_network`
+- 删除不再使用的登录恢复方法：`attempt_login`、`_login_recovery_loop`、`_login_recovery_inner`、`_login_retry_or_break`、`_wait_interruptible`、`_record_login_history`
+- 删除不再需要的状态属性：`_login_recovery_in_progress`、`_cancel_login`、`_thread_done`
+- 删除 `__init__` 中的 `thread_done` 参数
+- 删除不再使用的类常量：`PAUSE_CHECK_INTERVAL_SECONDS`、`PAUSE_CHECK_STEP_SECONDS`、`MIN_WAIT_STEP_SECONDS`、`MAX_WAIT_STEP_SECONDS`
+- 删除不再使用的 `RecoveryResult` 枚举
+- 删除不再使用的导入：`check_login_prerequisites`、`get_runtime_stats`、`send_notification`
+- 精简 `stop_monitoring()` 为仅状态清理
+- 在 `check_once()` 末尾添加 `_check_profile_switch()` 调用
+
+**engine.py 删除内容：**
+- 删除 `login_recovery_in_progress` 属性
+- 删除 `wait_for_login_recovery` 方法
+- 删除 `_execute_browser_sync` 中对上述属性/方法的引用
+
+**测试清理：**
+- 删除测试已删除方法的测试用例（`TestMonitorCoreWaitInterruptible`、`TestMonitorCoreLoginRetryOrBreak`、`TestMonitorCoreStartStop`、`TestMonitorCoreDetailedLoginRetry`、`TestMonitorCoreDetailedWaitInterruptible`、`TestEnums.test_recovery_result_values`）
+
+
+## 2026-06-11
+
+### perf: 运行时配置快照模式 + 状态快照限流
+
+优化 `app/services/engine.py` 的内存使用和状态更新频率。
+
+**快照模式：**
+- `_copy_runtime_config()` 不再每次读取都做深拷贝，改为在 `_reload_config_internal()` 时做一次深拷贝存为 `_runtime_snapshot`，读取时零拷贝返回
+- `__init__` 初始化 `_runtime_snapshot = {}`
+- `_copy_runtime_config` 使用 `getattr` 回退兼容 `__new__` 构造的测试场景
+
+**状态快照限流：**
+- `__init__` 新增 `_last_snapshot_time` 和 `_SNAPSHOT_MIN_INTERVAL`（1 秒）
+- `_update_status_snapshot()` 开头添加限流检查，避免高频重复更新
+
 ### refactor: 三线程合一 — consumer/monitor/scheduler 统一为事件驱动引擎
 
 将 `_queue_consumer`（命令消费）、`_monitor_thread`（网络监控）、`_scheduler_thread`（定时任务调度）三个独立线程合并为一个统一的 `_engine_loop`。
