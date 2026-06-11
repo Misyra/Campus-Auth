@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
-from app.deps import get_scheduler_service
+from app.deps import get_scheduled_task_service
 from app.schemas import ActionResponse
 from app.utils.logging import get_logger
 
@@ -42,9 +42,7 @@ def _validate_schedule_payload(
 
     # ── 名称验证 ──
     name = _get("name", "")
-    if (is_update and "name" in payload and not name) or (
-        not is_update and not name
-    ):
+    if (is_update and "name" in payload and not name) or (not is_update and not name):
         return False, "任务名称不能为空", None
 
     # ── 类型验证 ──
@@ -103,18 +101,17 @@ def _validate_schedule_payload(
     return True, "", config
 
 
-
 @router.get("/api/scheduled-tasks")
 def list_scheduled_tasks(request: Request) -> list[dict[str, Any]]:
     """列出所有定时任务。"""
-    scheduler = get_scheduler_service(request)
+    scheduler = get_scheduled_task_service(request)
     return scheduler.list_tasks()
 
 
 @router.get("/api/scheduled-tasks/{task_id}")
 def get_scheduled_task(task_id: str, request: Request) -> dict[str, Any]:
     """获取定时任务详情。"""
-    scheduler = get_scheduler_service(request)
+    scheduler = get_scheduled_task_service(request)
     task = scheduler.get_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="定时任务不存在")
@@ -124,7 +121,7 @@ def get_scheduled_task(task_id: str, request: Request) -> dict[str, Any]:
 @router.post("/api/scheduled-tasks", response_model=ActionResponse)
 async def create_scheduled_task(payload: dict, request: Request) -> ActionResponse:
     """创建定时任务。"""
-    scheduler = get_scheduler_service(request)
+    scheduler = get_scheduled_task_service(request)
 
     # 自动生成唯一 ID
     task_id = f"task_{uuid.uuid4().hex[:12]}"
@@ -147,7 +144,7 @@ async def update_scheduled_task(
     task_id: str, payload: dict, request: Request
 ) -> ActionResponse:
     """更新定时任务。"""
-    scheduler = get_scheduler_service(request)
+    scheduler = get_scheduled_task_service(request)
 
     existing = scheduler.get_task(task_id)
     if not existing:
@@ -171,7 +168,7 @@ async def update_scheduled_task(
 @router.delete("/api/scheduled-tasks/{task_id}", response_model=ActionResponse)
 def delete_scheduled_task(task_id: str, request: Request) -> ActionResponse:
     """删除定时任务。"""
-    scheduler = get_scheduler_service(request)
+    scheduler = get_scheduled_task_service(request)
     ok, message = scheduler.delete_task(task_id)
     api_logger.info("删除定时任务 {} -> success={}, message={}", task_id, ok, message)
     return ActionResponse(success=ok, message=message)
@@ -184,7 +181,7 @@ async def run_scheduled_task(
     bg_tasks: BackgroundTasks,
 ) -> ActionResponse:
     """手动执行定时任务（异步后台执行，避免 HTTP 连接长时间阻塞）。"""
-    scheduler = get_scheduler_service(request)
+    scheduler = get_scheduled_task_service(request)
     if not scheduler.get_task(task_id):
         return ActionResponse(success=False, message="定时任务不存在")
 
@@ -200,13 +197,15 @@ async def run_scheduled_task(
 
     bg_tasks.add_task(_execute)
     api_logger.info("定时任务 {} 已提交后台执行", task_id)
-    return ActionResponse(success=True, message="任务已提交后台执行，请查看执行历史获取结果")
+    return ActionResponse(
+        success=True, message="任务已提交后台执行，请查看执行历史获取结果"
+    )
 
 
 @router.post("/api/scheduled-tasks/{task_id}/toggle", response_model=ActionResponse)
 async def toggle_scheduled_task(task_id: str, request: Request) -> ActionResponse:
     """启用/禁用定时任务。"""
-    scheduler = get_scheduler_service(request)
+    scheduler = get_scheduled_task_service(request)
     task = scheduler.get_task(task_id)
     if not task:
         return ActionResponse(success=False, message="定时任务不存在")
@@ -224,7 +223,7 @@ async def toggle_scheduled_task(task_id: str, request: Request) -> ActionRespons
 @router.get("/api/scheduled-tasks/{task_id}/history")
 def get_scheduled_task_history(task_id: str, request: Request) -> list[dict[str, Any]]:
     """获取定时任务执行历史。"""
-    scheduler = get_scheduler_service(request)
+    scheduler = get_scheduled_task_service(request)
     if not scheduler.get_task(task_id):
         raise HTTPException(status_code=404, detail="定时任务不存在")
     return scheduler.get_history(task_id)

@@ -7,7 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.engine import MAX_HISTORY_SIZE, ScheduleEngine
+from app.services.scheduled_task import MAX_HISTORY_SIZE, ScheduledTaskService
+from app.tasks import TaskManager
 from app.utils.shell_utils import get_default_shell
 
 
@@ -20,7 +21,12 @@ def project_root(tmp_path):
 @pytest.fixture
 def scheduler(project_root):
     """创建调度器实例。"""
-    return ScheduleEngine(project_root)
+    task_manager = TaskManager(project_root / "tasks")
+    return ScheduledTaskService(
+        project_root,
+        task_manager=task_manager,
+        worker_getter=lambda: None,
+    )
 
 
 def test_save_and_get_task(scheduler):
@@ -149,7 +155,7 @@ class TestExecuteShellUsesPolicy:
         ]
 
         with patch(
-            "app.services.engine.detect_available_shells", return_value=fake_shells
+            "app.services.scheduled_task.detect_shells", return_value=fake_shells
         ):
             success, message = scheduler._execute_shell_sync(
                 "echo hello",
@@ -196,37 +202,42 @@ class TestMaxHistorySize:
 
 
 # =====================================================================
-# ScheduleEngine._validate_task_id
+# ScheduledTaskService._validate_task_id
 # =====================================================================
 
 
 class TestValidateTaskId:
     def test_valid_ids(self):
-        assert ScheduleEngine._validate_task_id("my_task") is True
-        assert ScheduleEngine._validate_task_id("task123") is True
-        assert ScheduleEngine._validate_task_id("A") is True
+        assert ScheduledTaskService._validate_task_id("my_task") is True
+        assert ScheduledTaskService._validate_task_id("task123") is True
+        assert ScheduledTaskService._validate_task_id("A") is True
 
     def test_invalid_ids(self):
-        assert ScheduleEngine._validate_task_id("") is False
-        assert ScheduleEngine._validate_task_id("123bad") is False
-        assert ScheduleEngine._validate_task_id("my-task") is False
-        assert ScheduleEngine._validate_task_id("my task") is False
+        assert ScheduledTaskService._validate_task_id("") is False
+        assert ScheduledTaskService._validate_task_id("123bad") is False
+        assert ScheduledTaskService._validate_task_id("my-task") is False
+        assert ScheduledTaskService._validate_task_id("my task") is False
 
 
 # =====================================================================
-# ScheduleEngine CRUD 补充
+# ScheduledTaskService CRUD 补充
 # =====================================================================
 
 
 class TestScheduleEngineCRUD:
     @pytest.fixture
-    def scheduler(self, tmp_path: Path) -> ScheduleEngine:
-        return ScheduleEngine(tmp_path)
+    def scheduler(self, tmp_path: Path) -> ScheduledTaskService:
+        task_manager = TaskManager(tmp_path / "tasks")
+        return ScheduledTaskService(
+            tmp_path,
+            task_manager=task_manager,
+            worker_getter=lambda: None,
+        )
 
-    def test_list_tasks_empty(self, scheduler: ScheduleEngine):
+    def test_list_tasks_empty(self, scheduler: ScheduledTaskService):
         assert scheduler.list_tasks() == []
 
-    def test_list_tasks_sorted_by_name(self, scheduler: ScheduleEngine):
+    def test_list_tasks_sorted_by_name(self, scheduler: ScheduledTaskService):
         scheduler.save_task(
             "b_task",
             {
@@ -250,7 +261,7 @@ class TestScheduleEngineCRUD:
         assert tasks[1]["name"] == "Banana"
 
     def test_list_tasks_skips_dotfiles(
-        self, scheduler: ScheduleEngine, tmp_path: Path
+        self, scheduler: ScheduledTaskService, tmp_path: Path
     ):
         # 创建正常任务
         scheduler.save_task(
@@ -271,7 +282,7 @@ class TestScheduleEngineCRUD:
         assert tasks[0]["id"] == "normal"
 
     def test_list_tasks_skips_malformed_json(
-        self, scheduler: ScheduleEngine, tmp_path: Path
+        self, scheduler: ScheduledTaskService, tmp_path: Path
     ):
         scheduler.save_task(
             "good",
@@ -289,7 +300,7 @@ class TestScheduleEngineCRUD:
         assert len(tasks) == 1
         assert tasks[0]["id"] == "good"
 
-    def test_get_task_returns_id_field(self, scheduler: ScheduleEngine):
+    def test_get_task_returns_id_field(self, scheduler: ScheduledTaskService):
         scheduler.save_task(
             "my_task",
             {
@@ -303,20 +314,20 @@ class TestScheduleEngineCRUD:
         assert task is not None
         assert task["id"] == "my_task"
 
-    def test_get_task_nonexistent(self, scheduler: ScheduleEngine):
+    def test_get_task_nonexistent(self, scheduler: ScheduledTaskService):
         assert scheduler.get_task("nonexistent") is None
 
-    def test_get_task_invalid_id(self, scheduler: ScheduleEngine):
+    def test_get_task_invalid_id(self, scheduler: ScheduledTaskService):
         assert scheduler.get_task("123bad") is None
 
-    def test_get_task_malformed_json(self, scheduler: ScheduleEngine, tmp_path: Path):
+    def test_get_task_malformed_json(self, scheduler: ScheduledTaskService, tmp_path: Path):
         (tmp_path / "tasks" / "scheduled" / "bad.json").write_text(
             "not json", encoding="utf-8"
         )
         assert scheduler.get_task("bad") is None
 
     def test_delete_task_with_history(
-        self, scheduler: ScheduleEngine, tmp_path: Path
+        self, scheduler: ScheduledTaskService, tmp_path: Path
     ):
         scheduler.save_task(
             "del_task",
@@ -335,15 +346,15 @@ class TestScheduleEngineCRUD:
         history_file = tmp_path / "tasks" / "scheduled" / "history" / "del_task.json"
         assert not history_file.exists()
 
-    def test_delete_task_nonexistent(self, scheduler: ScheduleEngine):
+    def test_delete_task_nonexistent(self, scheduler: ScheduledTaskService):
         ok, _ = scheduler.delete_task("nonexistent")
         assert ok is False
 
-    def test_delete_task_invalid_id(self, scheduler: ScheduleEngine):
+    def test_delete_task_invalid_id(self, scheduler: ScheduledTaskService):
         ok, _ = scheduler.delete_task("123bad")
         assert ok is False
 
-    def test_save_task_invalid_id(self, scheduler: ScheduleEngine):
+    def test_save_task_invalid_id(self, scheduler: ScheduledTaskService):
         ok, _ = scheduler.save_task("123bad", {"name": "test"})
         assert ok is False
 
@@ -355,17 +366,22 @@ class TestScheduleEngineCRUD:
 
 class TestSchedulerHistory:
     @pytest.fixture
-    def scheduler(self, tmp_path: Path) -> ScheduleEngine:
-        return ScheduleEngine(tmp_path)
+    def scheduler(self, tmp_path: Path) -> ScheduledTaskService:
+        task_manager = TaskManager(tmp_path / "tasks")
+        return ScheduledTaskService(
+            tmp_path,
+            task_manager=task_manager,
+            worker_getter=lambda: None,
+        )
 
     def test_add_history_creates_file(
-        self, scheduler: ScheduleEngine, tmp_path: Path
+        self, scheduler: ScheduledTaskService, tmp_path: Path
     ):
         scheduler._add_history_sync("test", "success", "ok", 1.0)
         history_file = tmp_path / "tasks" / "scheduled" / "history" / "test.json"
         assert history_file.exists()
 
-    def test_add_history_max_size(self, scheduler: ScheduleEngine):
+    def test_add_history_max_size(self, scheduler: ScheduledTaskService):
         for i in range(MAX_HISTORY_SIZE + 10):
             scheduler._add_history_sync("test", "success", f"run {i}", 1.0)
         history = scheduler.get_history("test")
@@ -373,31 +389,31 @@ class TestSchedulerHistory:
         # 最新的在前
         assert history[0]["message"] == f"run {MAX_HISTORY_SIZE + 9}"
 
-    def test_add_history_truncates_message(self, scheduler: ScheduleEngine):
+    def test_add_history_truncates_message(self, scheduler: ScheduledTaskService):
         long_msg = "x" * 1000
         scheduler._add_history_sync("test", "success", long_msg, 1.0)
         history = scheduler.get_history("test")
         assert len(history[0]["message"]) == 500
 
-    def test_add_history_invalid_id(self, scheduler: ScheduleEngine):
+    def test_add_history_invalid_id(self, scheduler: ScheduledTaskService):
         # 不应抛异常
         scheduler._add_history_sync("123bad", "success", "ok", 1.0)
 
-    def test_get_history_empty(self, scheduler: ScheduleEngine):
+    def test_get_history_empty(self, scheduler: ScheduledTaskService):
         assert scheduler.get_history("nonexistent") == []
 
-    def test_get_history_invalid_id(self, scheduler: ScheduleEngine):
+    def test_get_history_invalid_id(self, scheduler: ScheduledTaskService):
         assert scheduler.get_history("123bad") == []
 
     def test_get_history_malformed_json(
-        self, scheduler: ScheduleEngine, tmp_path: Path
+        self, scheduler: ScheduledTaskService, tmp_path: Path
     ):
         history_dir = tmp_path / "tasks" / "scheduled" / "history"
         history_dir.mkdir(parents=True, exist_ok=True)
         (history_dir / "bad.json").write_text("not json", encoding="utf-8")
         assert scheduler.get_history("bad") == []
 
-    def test_get_history_returns_runs_list(self, scheduler: ScheduleEngine):
+    def test_get_history_returns_runs_list(self, scheduler: ScheduledTaskService):
         scheduler._add_history_sync("test", "success", "ok", 1.0)
         scheduler._add_history_sync("test", "failure", "err", 0.5)
         history = scheduler.get_history("test")
@@ -416,23 +432,43 @@ class TestSchedulerHistory:
 
 class TestSchedulerStartStop:
     def test_start_sets_running(self, tmp_path: Path):
-        scheduler = ScheduleEngine(tmp_path)
+        task_manager = TaskManager(tmp_path / "tasks")
+        scheduler = ScheduledTaskService(
+            tmp_path,
+            task_manager=task_manager,
+            worker_getter=lambda: None,
+        )
         scheduler.start_scheduler()
         assert scheduler._scheduler_running is True
         scheduler.stop_scheduler()
 
     def test_stop_clears_running(self, tmp_path: Path):
-        scheduler = ScheduleEngine(tmp_path)
+        task_manager = TaskManager(tmp_path / "tasks")
+        scheduler = ScheduledTaskService(
+            tmp_path,
+            task_manager=task_manager,
+            worker_getter=lambda: None,
+        )
         scheduler.start_scheduler()
         scheduler.stop_scheduler()
         assert scheduler._scheduler_running is False
 
     def test_double_start_no_error(self, tmp_path: Path):
-        scheduler = ScheduleEngine(tmp_path)
+        task_manager = TaskManager(tmp_path / "tasks")
+        scheduler = ScheduledTaskService(
+            tmp_path,
+            task_manager=task_manager,
+            worker_getter=lambda: None,
+        )
         scheduler.start_scheduler()
         scheduler.start_scheduler()  # 不应抛异常
         scheduler.stop_scheduler()
 
     def test_stop_when_not_running(self, tmp_path: Path):
-        scheduler = ScheduleEngine(tmp_path)
+        task_manager = TaskManager(tmp_path / "tasks")
+        scheduler = ScheduledTaskService(
+            tmp_path,
+            task_manager=task_manager,
+            worker_getter=lambda: None,
+        )
         scheduler.stop_scheduler()  # 不应抛异常

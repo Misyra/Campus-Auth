@@ -5,6 +5,45 @@
 
 ## 2026-06-11
 
+### refactor: 从 engine.py 提取 ScheduledTaskService
+
+将定时任务相关职责从 `ScheduleEngine` 提取到独立的 `ScheduledTaskService` 类，降低 engine.py 的复杂度。
+
+**新建文件：**
+- `app/services/scheduled_task.py` — `ScheduledTaskService` 类，包含定时任务 CRUD、执行、历史管理、调度器生命周期
+
+**engine.py 变更：**
+- 删除已迁移到 `ScheduledTaskService` 的所有方法和属性
+- 删除不再需要的导入：`json`、`sys`、`datetime`、`TaskManager`、`is_valid_task_id`、`atomic_write`、`ShellCommandPolicy`、`detect_shells`、`get_default_shell`、`NetworkState`
+- 删除不再使用的常量：`MAX_HISTORY_SIZE`、`SCHEDULER_CHECK_INTERVAL`、`detect_available_shells`
+- 添加 `scheduled_task_service` 构造参数和属性
+- 将 `has_enabled_tasks`、`list_tasks`、`get_task`、`save_task`、`delete_task`、`get_history`、`_add_history_sync`、`execute_task`、`start_scheduler`、`stop_scheduler` 改为委托调用
+- 将 `_check_scheduled_tasks` 改为委托 `ScheduledTaskService.check_and_execute()`
+- engine.py 从约 1274 行降到约 880 行
+
+**container.py 变更：**
+- 导入 `ScheduledTaskService`
+- 创建 `self.scheduled_task_service` 实例
+- 将其传入 `ScheduleEngine` 构造函数
+- 延迟设置 `get_runtime_config` 引用
+- `startup()` 和 `shutdown()` 中的调度器操作改为调用 `scheduled_task_service`
+
+**deps.py 变更：**
+- 添加 `get_scheduled_task_service` 依赖注入函数
+- `get_scheduler_service` 改为返回 `scheduled_task_service`（向后兼容）
+
+**API 路由变更：**
+- `app/api/scheduled_tasks.py` 改为使用 `get_scheduled_task_service`
+
+**测试适配：**
+- 更新 `tests/test_scheduled_tasks.py` — 使用 `ScheduledTaskService` 替代 `ScheduleEngine`
+- 更新 `tests/test_scheduler_service.py` — 使用 `ScheduledTaskService` 替代 `ScheduleEngine`
+- 更新 `tests/test_container.py` — 添加 `ScheduledTaskService` mock
+- 更新 `tests/test_deps.py` — 测试 `get_scheduled_task_service`
+- 更新 `tests/test_routers.py` — 添加 `scheduled_task_service` mock
+- 更新 `tests/test_monitor_service.py` — 适配委托模式
+- 更新 `tests/test_api_scheduled_tasks_routes.py` — 添加 `scheduled_task_service` mock
+
 ### refactor: 删除 monitor_core.py 约 200 行死代码
 
 `NetworkMonitorCore` 原本的阻塞式监控循环已被 `ScheduleEngine` 的事件驱动模式替代（`check_once()` 驱动），旧的循环代码不再被调用。

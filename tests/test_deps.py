@@ -15,6 +15,7 @@ from app.deps import (
     get_login_history_service,
     get_monitor_service,
     get_profile_service,
+    get_scheduled_task_service,
     get_scheduler_service,
     get_services,
     get_task_service,
@@ -43,7 +44,7 @@ class TestDeps:
         svc.autostart_service = MagicMock(name="AutoStartService")
         svc.debug_manager = MagicMock(name="DebugSessionManager")
         svc.login_history_service = MagicMock(name="LoginHistoryService")
-        svc.scheduler_service = MagicMock(name="SchedulerService")  # 向后兼容别名
+        svc.scheduled_task_service = MagicMock(name="ScheduledTaskService")
         return svc
 
     def test_get_services(self, services):
@@ -76,4 +77,8 @@ class TestDeps:
 
     def test_get_scheduler_service(self, services):
         request = _make_request(services)
-        assert get_scheduler_service(request) is services.engine
+        assert get_scheduler_service(request) is services.scheduled_task_service
+
+    def test_get_scheduled_task_service(self, services):
+        request = _make_request(services)
+        assert get_scheduled_task_service(request) is services.scheduled_task_service
