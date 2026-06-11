@@ -10,8 +10,6 @@ import threading
 import time
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.core.monitor_core import NetworkState
 from app.services.engine import (
     EngineCmdType,
