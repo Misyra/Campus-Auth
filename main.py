@@ -243,27 +243,22 @@ def _run_login_then_exit(logger) -> None:
     )
 
 
-# ==================== 轻量模式 ====================
+# ==================== 无 Web 模式 ====================
 
 
-def _run_lightweight(
-    logger, port, no_browser=False, minimize_to_tray=False, auto_open_browser=None
+def _run_no_web(
+    logger, minimize_to_tray=False
 ) -> None:
-    """轻量模式：启动时不加载 FastAPI，用户访问时按需加载。"""
-    from app.application import create_app, run
+    """无 Web 模式：仅运行网络监控和定时任务，不启动 Web 服务。"""
     from app.container import ServiceContainer
 
     container = ServiceContainer(Path(__file__).parent.resolve())
-    # 仅启动引擎（监控 + 定时任务），不启动 Web 服务
     container.engine.boot()
     if container.engine.has_enabled_tasks():
         container.engine.start_scheduler()
-    logger.info("轻量模式启动: 仅监控，Web 服务未加载")
+    logger.info("无 Web 模式启动: 仅监控 + 定时任务")
 
-    # uvicorn server 引用
-    _uvicorn_server = [None]
-
-    # 信号处理器（覆盖 _run_server 的，闭包引用本函数的 _uvicorn_server）
+    # 信号处理器
     _shutdown = False
 
     def _signal_handler(signum, _frame):
@@ -274,8 +269,6 @@ def _run_lightweight(
         _shutdown = True
         logger.info("收到退出信号，正在关闭...")
         cleanup_pid()
-        if _uvicorn_server[0] is not None:
-            _uvicorn_server[0].should_exit = True
 
     signal.signal(signal.SIGINT, _signal_handler)
     if hasattr(signal, "SIGTERM"):
@@ -288,7 +281,7 @@ def _run_lightweight(
             from app.core.system_tray import SystemTray
 
             tray_icon = SystemTray(
-                port=port,
+                port=0,
                 on_exit=lambda: os.kill(os.getpid(), signal.SIGTERM)
                 if hasattr(signal, "SIGTERM")
                 else cleanup_pid() or os._exit(0),
@@ -297,50 +290,13 @@ def _run_lightweight(
         except Exception as e:
             logger.warning("启动系统托盘失败: {}", e)
 
-    if not no_browser:
-        _open_browser(port, setting=auto_open_browser)
-
-    # 占位服务器等待用户访问
-    _web_wakeup = threading.Event()
-    _start_wakeup_server(port, logger, _web_wakeup)
-
-    while not _web_wakeup.is_set() and not _shutdown:
+    # 阻塞等待关闭信号
+    while not _shutdown:
         time.sleep(1)
 
-    if _shutdown:
-        logger.info("正在关闭服务...")
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(container.shutdown())
-        loop.close()
-        return
-
-    logger.info("检测到 Web 访问，加载 FastAPI...")
-    time.sleep(0.5)
-
-    # 创建 FastAPI 并启动 uvicorn（阻塞直到关机）
-    _app = create_app(existing_container=container)
-
-    try:
-        try:
-            _sys = container.profile_service.load().system
-            _al = bool(_sys.access_log)
-            _lr = max(1, int(_sys.log_retention_days))
-        except Exception:
-            _al, _lr = False, 7
-
-        run(
-            access_log_enabled=_al,
-            log_retention=_lr,
-            existing_container=container,
-            server_ref=_uvicorn_server,
-            app_instance=_app,
-        )
-    except KeyboardInterrupt:
-        logger.info("收到退出信号，正在关闭...")
-    finally:
-        if tray_icon:
-            tray_icon.stop()
-
+    # 清理
+    if tray_icon:
+        tray_icon.stop()
     logger.info("正在关闭服务...")
     loop = asyncio.new_event_loop()
     loop.run_until_complete(container.shutdown())
@@ -493,69 +449,6 @@ def _run_server(
     loop = asyncio.new_event_loop()
     loop.run_until_complete(container.shutdown())
     loop.close()
-
-
-# ==================== 占位服务器（空闲时响应用户访问）====================
-
-# 加载页面 HTML（模块级常量，避免重复创建）
-_WAKEUP_HTML = """<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<title>Campus-Auth</title>
-<meta http-equiv="refresh" content="3">
-<style>
-body{font-family:system-ui;display:flex;justify-content:center;align-items:center;
-height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0}
-.box{text-align:center}
-.spinner{width:40px;height:40px;border:3px solid #333;border-top-color:#6c63ff;
-border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 20px}
-@keyframes spin{to{transform:rotate(360deg)}}
-</style></head><body>
-<div class="box">
-<div class="spinner"></div>
-<p>正在唤醒 Web 控制台...</p>
-<p style="font-size:0.85em;color:#888">页面将自动刷新</p>
-</div></body></html>"""
-
-
-def _start_wakeup_server(port: int, logger, web_wakeup: threading.Event) -> None:
-    """启动占位 HTTP 服务器：用户访问时返回加载页面并触发唤醒。"""
-    from http.server import BaseHTTPRequestHandler, HTTPServer
-
-    _server_ref = [None]
-
-    class WakeupHandler(BaseHTTPRequestHandler):
-        def do_GET(self):
-            body = _WAKEUP_HTML.encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            # 通知主线程唤醒
-            web_wakeup.set()
-            # 延迟关闭服务器（让响应发完）
-            def _close():
-                time.sleep(0.5)
-                if _server_ref[0]:
-                    _server_ref[0].server_close()
-            threading.Thread(target=_close, daemon=True).start()
-
-        def log_message(self, format, *args):
-            pass
-
-    server = HTTPServer(("127.0.0.1", port), WakeupHandler)
-    _server_ref[0] = server
-    server.timeout = 1
-
-    def _serve():
-        try:
-            while not web_wakeup.is_set():
-                server.handle_request()
-        except OSError:
-            pass  # 服务器已关闭
-
-    threading.Thread(target=_serve, daemon=True).start()
-    logger.info("占位服务器已启动: http://127.0.0.1:{}", port)
 
 
 # ==================== 全局异常钩子 ====================
