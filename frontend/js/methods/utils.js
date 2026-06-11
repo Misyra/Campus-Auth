@@ -38,3 +38,22 @@ export async function safeApiCall(fn, fallbackMsg = '操作失败') {
     return null;
   }
 }
+
+/**
+ * 打开文件选择对话框。
+ * @param {string} accept - 文件类型过滤（如 '.json', 'image/*'）
+ * @returns {Promise<File|null>} 选择的文件，取消时返回 null
+ */
+export function pickFile(accept = '') {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = accept;
+    input.onchange = (e) => {
+      resolve(e.target.files[0] || null);
+      input.value = '';
+      input.onchange = null;
+    };
+    input.click();
+  });
+}

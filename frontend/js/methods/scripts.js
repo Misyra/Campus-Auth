@@ -1,4 +1,4 @@
-import { extractApiError, getBinaryName, safeApiCall } from './utils.js';
+import { extractApiError, getBinaryName, safeApiCall, pickFile } from './utils.js';
 
 export const scriptMethods = {
   getBinaryName,
@@ -181,49 +181,36 @@ export const scriptMethods = {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   },
 
-  importScript() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.py,.sh,.bat,.ps1,.txt';
-    input.onchange = (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const content = ev.target.result;
-        let id = file.name.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_]/g, '_');
-        // 确保 ID 以字母开头（HTML ID 规范）
-        if (/^[0-9]/.test(id)) {
-          id = 'sc_' + id;
+  async importScript() {
+    const file = await pickFile('.py,.sh,.bat,.ps1,.txt');
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target.result;
+      let id = file.name.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_]/g, '_');
+      if (/^[0-9]/.test(id)) {
+        id = 'sc_' + id;
+      }
+      if (this.scripts && this.scripts.some(s => s.id === id)) {
+        if (!confirm(`脚本「${id}」已存在，是否覆盖？`)) {
+          return;
         }
-
-        // 检查 ID 是否已存在
-        if (this.scripts && this.scripts.some(s => s.id === id)) {
-          if (!confirm(`脚本「${id}」已存在，是否覆盖？`)) {
-            input.value = '';
-            input.onchange = null;
-            return;
-          }
-        }
-
-        this.editingTaskType = 'script';
-        this.editingTask = {
-          id: id,
-          name: '',
-          description: '',
-          content: content,
-          binary_path: '',
-          _customBinary: '',
-          _customPythonBinary: '',
-          _isNew: true,
-        };
-        this.currentPage = 'scripts';
-        input.value = '';
-        input.onchange = null;
+      }
+      this.editingTaskType = 'script';
+      this.editingTask = {
+        id: id,
+        name: '',
+        description: '',
+        content: content,
+        binary_path: '',
+        _customBinary: '',
+        _customPythonBinary: '',
+        _isNew: true,
       };
-      reader.readAsText(file);
+      this.currentPage = 'scripts';
+      this.frontendLogger.info('scripts', '已导入脚本文件，请检查后保存');
     };
-    input.click();
+    reader.readAsText(file);
   },
 
   loadScriptTemplate() {
