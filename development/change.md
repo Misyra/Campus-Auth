@@ -5,6 +5,60 @@
 
 ## 2026-06-11
 
+### refactor: 三线程合一 — consumer/monitor/scheduler 统一为事件驱动引擎
+
+将 `_queue_consumer`（命令消费）、`_monitor_thread`（网络监控）、`_scheduler_thread`（定时任务调度）三个独立线程合并为一个统一的 `_engine_loop`。
+
+**核心变更（`app/services/engine.py`）：**
+
+- `__init__` 新增引擎状态字段：`_engine_running`、`_next_network_check`、`_monitor_check_interval`、`_login_retry_count`、`_last_login_attempt`、`_login_retry_config`
+- `__init__` 末尾用 `_engine_thread` 替代 `_consumer_thread`
+- 新增 `_engine_loop()`：统一引擎循环，集成命令处理 + 网络检测 + 登录重试 + 定时任务调度
+- 新增 `_calculate_wakeup()`：timeout-based 唤醒，计算下次最早需要处理的事件时间
+- 新增 `_process_command()`：从 `_queue_consumer` 提取的命令处理逻辑
+- 新增 `_do_network_check()`：调用 `monitor_core.check_once()` 执行一次网络检测
+- 新增 `_login_retry_needed()`：检查是否需要登录重试
+- 新增 `_do_async_login()`：在独立线程中执行登录，不阻塞引擎循环
+- 新增 `_get_retry_config()`：获取登录重试配置
+- 新增 `_check_scheduled_tasks()`：从 `_scheduler_loop` 迁移的定时任务检查逻辑
+- `_handle_start` 改用 `core.init_monitoring()`（只初始化，不启动循环）
+- `_handle_stop` 简化，不再等待 `_thread_done`（无独立 monitor 线程）
+- `_handle_login` 改为调用 `_do_async_login()`（异步执行）
+- `start_scheduler` / `stop_scheduler` 不再创建/管理独立线程
+- `_is_monitoring` 属性改为直接读取 `_monitor_core.monitoring`
+- `shutdown` 使用 `_engine_thread` 替代 `_consumer_thread`
+- `_calculate_wakeup` 和 `_do_network_check` 添加异常保护，避免 MagicMock 等非预期输入导致引擎崩溃
+
+**保留的方法（待测试通过后清理）：**
+- `_queue_consumer` — 旧消费者循环
+- `_scheduler_loop` — 旧调度器循环
+- `_start_monitor_core` — 旧监控启动
+
+**测试更新（`tests/test_monitor_service.py`）：**
+- `test_start_monitoring_already_running`：改用 `_monitor_core` mock 替代 `_status_snapshot`
+- `test_handle_start_duplicate`：改用 `_monitor_core` mock 替代 `_monitor_thread`
+- `test_handle_stop_no_core`：移除 `_monitor_thread` 设置
+- 3 个 `_handle_login` 测试合并为 1 个 `test_handle_login_submits_async`（验证异步提交行为）
+- `test_shutdown_sends_stop_through_queue`：`_consumer_thread` → `_engine_thread`
+- `test_start_monitoring_put_nowait`：改用 `_monitor_core = None`
+- `test_network_state_set_in_consumer` → `test_network_state_set_after_async_login`（验证 `update_status_after_login` 调用）
+- `test_login_timeout_clears_when_consumer_dead` → `test_login_timeout_clears_when_engine_dead`
+
+**测试结果：** 1587 passed, 2 skipped
+
+### refactor: 添加 check_once/init_monitoring/update_status_after_login 供统一引擎调用
+
+为 `NetworkMonitorCore` 新增三个方法，将网络检测、状态初始化、登录后状态更新从 `monitor_network()` 主循环中解耦，供统一引擎驱动模式调用。
+
+**新增方法（`app/core/monitor_core.py`）：**
+- `init_monitoring()` — 初始化监控状态（重置计数器、事件标志、缓存），记录启动日志，不启动循环
+- `check_once()` — 执行一次网络检测（暂停时段检查 + 网络状态检测），返回结果字典，不阻塞、不做登录重试
+- `update_status_after_login(success, message)` — 登录完成后更新监控状态（由引擎调用）
+
+**未修改的方法：**
+- `start_monitoring()` / `monitor_network()` 保留作为兼容路径
+- `_login_recovery_loop` 等登录重试逻辑暂不改动
+
 ### refactor: 用 _run_no_web 替换 _run_lightweight，删除占位服务器
 
 删除旧的 `_run_lightweight` 函数和占位服务器相关代码（`_WAKEUP_HTML`、`_start_wakeup_server`），替换为简洁的 `_run_no_web` 函数。
