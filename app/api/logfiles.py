@@ -210,55 +210,17 @@ def get_log_file_content(
     if not date_dir.is_dir() or not filepath.exists():
         raise HTTPException(404, f"日志文件不存在: {date}/{file}")
 
-    try:
-        max_lines = max(limit * 2, 5000)
-        file_size = filepath.stat().st_size
-        # 大文件（>50MB）只读取末尾部分，避免全量加载到内存
-        if file_size > 50 * 1024 * 1024:
-            # 估算每行平均长度（约 200 字节），读取末尾足够行数
-            approx_bytes = max_lines * 200
-            read_size = min(approx_bytes, file_size)
-            with open(filepath, encoding="utf-8", errors="replace") as f:
-                f.seek(max(0, file_size - read_size))
-                # 跳过第一行（可能是截断的）
-                f.readline()
-                lines = list(deque(f, maxlen=max_lines))
-        else:
-            with open(filepath, encoding="utf-8", errors="replace") as f:
-                lines = list(deque(f, maxlen=max_lines))
-    except OSError as err:
-        raise HTTPException(404, f"日志文件不存在: {date}/{file}") from err
+    # 判断是否为搜索模式
+    is_search_mode = bool(search or level or source)
 
-    # 解析并过滤
-    parsed: list[LogLine] = []
-    for raw in lines:
-        line = _parse_log_line(raw.rstrip("\n\r"))
-
-        if level and level.upper() in _VALID_LEVELS and line.level != level.upper():
-            continue
-
-        if (
-            source
-            and source.lower() in _VALID_SOURCES
-            and line.source != source.lower()
-        ):
-            continue
-
-        if search:
-            search_lower = search.lower()
-            if (
-                search_lower not in line.message.lower()
-                and search_lower not in line.name.lower()
-                and search_lower not in line.source.lower()
-                and search_lower not in raw.lower()
-            ):
-                continue
-
-        parsed.append(line)
-
-    total = len(parsed)
-    if total > limit:
-        parsed = parsed[-limit:]
+    if is_search_mode:
+        # 搜索模式：全文扫描
+        parsed = scan_file(filepath, level, source, search, limit)
+        total = len(parsed)
+    else:
+        # 浏览模式：读取末尾 N 行
+        parsed = read_tail(filepath, limit)
+        total = len(parsed)
 
     return LogFileContent(
         date=date,

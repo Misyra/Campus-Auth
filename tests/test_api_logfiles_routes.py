@@ -14,6 +14,7 @@ from app.api.logfiles import (
     _validate_filename,
     get_log_file_content,
     list_log_files,
+    read_tail,
     scan_file,
 )
 
@@ -325,7 +326,7 @@ class TestGetLogFileContent:
             assert result.total_lines == 1
 
     def test_limit_applied(self, tmp_path):
-        """限制返回行数。"""
+        """限制返回行数（浏览模式下 total_lines = returned_lines）。"""
         lines = [
             f"[2026-06-01 00:00:{i:02d}][INFO][backend][mod] msg {i}\n"
             for i in range(100)
@@ -342,7 +343,8 @@ class TestGetLogFileContent:
                 search="",
                 limit=10,
             )
-            assert result.total_lines == 100
+            # 浏览模式下 total_lines 等于 returned_lines
+            assert result.total_lines == 10
             assert result.returned_lines == 10
 
     def test_invalid_date_rejected(self, tmp_path):
@@ -464,3 +466,138 @@ class TestScanFile:
         assert len(result) == 10
         assert result[0].message == "msg 40"
         assert result[-1].message == "msg 49"
+
+
+# ── read_tail ──
+
+
+class TestReadTail:
+    """read_tail 读取末尾行函数。"""
+
+    def _create_log_file(self, tmp_path: Path, content: str) -> Path:
+        """辅助方法：创建临时日志文件。"""
+        filepath = tmp_path / "app.log"
+        filepath.write_text(content, encoding="utf-8")
+        return filepath
+
+    def test_read_tail_basic(self, tmp_path):
+        """读取末尾行。"""
+        lines = [f"[2026-06-01 00:00:{i:02d}][INFO][backend][mod] msg {i}\n" for i in range(100)]
+        content = "".join(lines)
+        filepath = self._create_log_file(tmp_path, content)
+
+        result = read_tail(filepath, limit=10)
+        assert len(result) == 10
+        assert result[0].message == "msg 90"
+        assert result[-1].message == "msg 99"
+
+    def test_read_tail_fewer_than_limit(self, tmp_path):
+        """文件行数少于 limit 时返回全部。"""
+        content = "[2026-06-01 00:00:00][INFO][backend][mod] hello\n"
+        filepath = self._create_log_file(tmp_path, content)
+
+        result = read_tail(filepath, limit=100)
+        assert len(result) == 1
+        assert result[0].message == "hello"
+
+    def test_read_tail_file_not_found(self, tmp_path):
+        """文件不存在返回空列表。"""
+        filepath = tmp_path / "nonexistent.log"
+        result = read_tail(filepath, limit=100)
+        assert result == []
+
+
+# ── 搜索模式与浏览模式集成测试 ──
+
+
+class TestBrowseVsSearchMode:
+    """测试搜索模式与浏览模式的分离。"""
+
+    def _create_log_file(self, tmp_path: Path, date: str, filename: str, content: str):
+        """辅助方法：创建日志文件。"""
+        date_dir = tmp_path / date
+        date_dir.mkdir(parents=True, exist_ok=True)
+        (date_dir / filename).write_text(content, encoding="utf-8")
+
+    def test_browse_mode_uses_read_tail(self, tmp_path):
+        """浏览模式（无过滤条件）应读取末尾行。"""
+        lines = [f"[2026-06-12 10:00:{i:02d}][INFO][backend][test] 日志 {i}\n" for i in range(100)]
+        content = "".join(lines)
+        self._create_log_file(tmp_path, "2026-06-12", "app.log", content)
+
+        with patch("app.api.logfiles.LOGS_DIR", tmp_path):
+            result = get_log_file_content(
+                date="2026-06-12",
+                file="app.log",
+                level="",
+                source="",
+                search="",
+                limit=10,
+            )
+        assert result.returned_lines == 10
+        assert result.lines[0].message == "日志 90"
+        assert result.lines[-1].message == "日志 99"
+
+    def test_search_mode_uses_scan_file(self, tmp_path):
+        """搜索模式（有关键词）应全文扫描。"""
+        content = (
+            "[2026-06-12 10:00:00][INFO][backend][test] 普通日志\n"
+            "[2026-06-12 10:00:01][ERROR][network][monitor] 认证失败\n"
+            "[2026-06-12 10:00:02][INFO][backend][test] 普通日志\n"
+        )
+        self._create_log_file(tmp_path, "2026-06-12", "app.log", content)
+
+        with patch("app.api.logfiles.LOGS_DIR", tmp_path):
+            result = get_log_file_content(
+                date="2026-06-12",
+                file="app.log",
+                level="",
+                source="",
+                search="认证失败",
+                limit=100,
+            )
+        assert result.returned_lines == 1
+        assert result.lines[0].message == "认证失败"
+        assert result.lines[0].level == "ERROR"
+
+    def test_level_filter_uses_scan_file(self, tmp_path):
+        """级别过滤应使用全文扫描。"""
+        content = (
+            "[2026-06-12 10:00:00][INFO][backend][test] 普通日志\n"
+            "[2026-06-12 10:00:01][ERROR][backend][test] 错误日志\n"
+            "[2026-06-12 10:00:02][INFO][backend][test] 普通日志\n"
+        )
+        self._create_log_file(tmp_path, "2026-06-12", "app.log", content)
+
+        with patch("app.api.logfiles.LOGS_DIR", tmp_path):
+            result = get_log_file_content(
+                date="2026-06-12",
+                file="app.log",
+                level="ERROR",
+                source="",
+                search="",
+                limit=100,
+            )
+        assert result.returned_lines == 1
+        assert result.lines[0].level == "ERROR"
+
+    def test_source_filter_uses_scan_file(self, tmp_path):
+        """来源过滤应使用全文扫描。"""
+        content = (
+            "[2026-06-12 10:00:00][INFO][backend][test] 后端日志\n"
+            "[2026-06-12 10:00:01][INFO][network][monitor] 网络日志\n"
+            "[2026-06-12 10:00:02][INFO][backend][test] 后端日志\n"
+        )
+        self._create_log_file(tmp_path, "2026-06-12", "app.log", content)
+
+        with patch("app.api.logfiles.LOGS_DIR", tmp_path):
+            result = get_log_file_content(
+                date="2026-06-12",
+                file="app.log",
+                level="",
+                source="network",
+                search="",
+                limit=100,
+            )
+        assert result.returned_lines == 1
+        assert result.lines[0].source == "network"
