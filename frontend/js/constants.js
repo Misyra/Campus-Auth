@@ -46,21 +46,23 @@ export const LIMITS = {
   SCROLL_BOTTOM_THRESHOLD: 50,    // 判断滚动到底部的阈值（px）
 };
 
-export const LOG_LEVELS = {
-  DEBUG: 10,
-  INFO: 20,
-  WARNING: 30,
-  ERROR: 40,
-  CRITICAL: 50,
-};
+// 日志级别选项
+export const LOG_LEVELS = [
+  { value: 'DEBUG', label: 'DEBUG' },
+  { value: 'INFO', label: 'INFO' },
+  { value: 'WARNING', label: 'WARNING' },
+  { value: 'ERROR', label: 'ERROR' },
+  { value: 'CRITICAL', label: 'CRITICAL' },
+];
 
-export const LOG_SOURCES = {
-  backend: { label: 'BAK', color: '#64748b' },
-  network: { label: 'NET', color: '#f59e0b' },
-  task: { label: 'TSK', color: '#8b5cf6' },
-  frontend: { label: 'FRT', color: '#3b82f6' },
-  debug: { label: 'DBG', color: '#6b7280' },
-};
+// 日志来源列表
+export const LOG_SOURCES = [
+  { value: 'backend', label: 'backend', color: '#4fc3f7' },
+  { value: 'network', label: 'network', color: '#81c784' },
+  { value: 'task', label: 'task', color: '#fff176' },
+  { value: 'frontend', label: 'frontend', color: '#ce93d8' },
+  { value: 'debug', label: 'debug', color: '#ffab91' },
+];
 
 export const BROWSER_ARGS_DEFAULT = "--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees\n--disable-ipc-flooding-protection\n--disable-hang-monitor\n--disable-popup-blocking";
 
