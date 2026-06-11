@@ -389,11 +389,10 @@ def _run_server(
         return
 
     # 创建容器（生命周期独立于 uvicorn）
-    from app.application import create_app, run
+    from app.application import run
     from app.container import ServiceContainer
 
     container = ServiceContainer(Path(__file__).parent.resolve())
-    _app = create_app(existing_container=container)
 
     # 系统托盘
     tray_icon = None
@@ -436,7 +435,6 @@ def _run_server(
             log_retention=_lr,
             existing_container=container,
             server_ref=_uvicorn_server,
-            app_instance=_app,
         )
     except KeyboardInterrupt:
         startup_logger.info("收到退出信号，正在关闭...")
