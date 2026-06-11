@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
-from app.utils.file_helpers import atomic_write
+from app.utils.files import atomic_write
 from app.utils.logging import get_logger
 
 if TYPE_CHECKING:

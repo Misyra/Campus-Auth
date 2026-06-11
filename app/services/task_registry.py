@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from app.tasks import is_valid_task_id
-from app.utils.file_helpers import atomic_write
+from app.utils.files import atomic_write
 from app.utils.logging import get_logger
 
 logger = get_logger("task_registry", source="backend")

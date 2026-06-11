@@ -727,7 +727,7 @@ class TestScreenshotHandler:
         page = _make_page()
 
         with patch(
-            "app.utils.file_helpers.save_screenshot", new_callable=AsyncMock
+            "app.utils.files.save_screenshot", new_callable=AsyncMock
         ) as mock_save:
             mock_save.return_value = "/logs/2024-01-01/screenshots/test.png"
             ok, msg = await handler.execute(page, step, _make_resolver(task_id="test"))
@@ -742,7 +742,7 @@ class TestScreenshotHandler:
         page = _make_page()
 
         with patch(
-            "app.utils.file_helpers.save_screenshot", new_callable=AsyncMock
+            "app.utils.files.save_screenshot", new_callable=AsyncMock
         ) as mock_save:
             mock_save.return_value = "/logs/2024-01-01/screenshots/custom.png"
             ok, msg = await handler.execute(page, step, _make_resolver())
@@ -756,7 +756,7 @@ class TestScreenshotHandler:
         page = _make_page()
 
         with patch(
-            "app.utils.file_helpers.save_screenshot", new_callable=AsyncMock
+            "app.utils.files.save_screenshot", new_callable=AsyncMock
         ) as mock_save:
             mock_save.return_value = None
             ok, msg = await handler.execute(page, step, _make_resolver())

@@ -575,7 +575,7 @@ class ScreenshotHandler(StepHandler):
     async def execute(
         self, page, step: StepConfig, resolver: VariableResolver
     ) -> tuple[bool, str]:
-        from app.utils.file_helpers import save_screenshot
+        from app.utils.files import save_screenshot
 
         params = self.resolve_params(step, resolver)
         path = params.get("path", "")

@@ -299,7 +299,7 @@ def _build_browser_config(payload: MonitorConfigPayload) -> dict[str, Any]:
 
 def _build_monitor_config(payload: MonitorConfigPayload) -> dict[str, Any]:
     """构建监控检测相关配置。"""
-    from app.utils.network_helpers import parse_url_checks
+    from app.utils.network import parse_url_checks
 
     return {
         "interval": payload.check_interval_seconds,

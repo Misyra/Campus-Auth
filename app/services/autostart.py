@@ -9,7 +9,7 @@ import xml.sax.saxutils
 from pathlib import Path
 
 from app.utils.logging import get_logger
-from app.utils.platform_utils import get_platform, is_linux, is_macos, is_windows
+from app.utils.platform import get_platform, is_linux, is_macos, is_windows
 
 logger = get_logger("autostart", source="backend")
 
@@ -19,7 +19,7 @@ class AutoStartService:
 
     def __init__(self, project_root: Path):
         self.project_root = project_root
-        # 使用 platform_utils 获取平台标识，统一跨平台判定
+        # 使用 platform 获取平台标识，统一跨平台判定
         self._platform = get_platform()
         self.service_name = "campus-auth"
 

@@ -9,7 +9,7 @@ from pathlib import Path
 from app.network.detect import detect_gateway_ip, detect_wifi_ssid
 from app.schemas import ProfilesData, ProfileSettings
 from app.utils.crypto import save_password_field
-from app.utils.file_helpers import atomic_write
+from app.utils.files import atomic_write
 from app.utils.logging import get_logger
 
 profile_logger = get_logger("profile_service", source="backend")

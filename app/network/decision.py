@@ -61,7 +61,7 @@ def check_network_status(config: dict) -> tuple[bool, str]:
         )
         return (False, "all_disabled")
 
-    from app.utils.network_helpers import parse_ping_targets
+    from app.utils.network import parse_ping_targets
 
     try:
         test_sites = parse_ping_targets(monitor_config.get("ping_targets", None))
@@ -236,7 +236,7 @@ def _is_auth_url_reachable(
     if extra_targets:
         from concurrent.futures import as_completed
 
-        from app.utils.network_helpers import parse_host_port
+        from app.utils.network import parse_host_port
 
         try:
             targets = parse_host_port(list(extra_targets))
