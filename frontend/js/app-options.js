@@ -1,4 +1,4 @@
-import { api, SETTINGS_TABS } from './constants.js';
+import { api, SETTINGS_TABS, LOG_LEVELS, LOG_SOURCES } from './constants.js';
 import { createFrontendLogger } from './logger.js';
 import { actionMethods } from './methods/actions.js';
 import { appearanceMethods } from './methods/appearance.js';
@@ -226,6 +226,12 @@ export const appOptions = {
         ...this.availableShells.map(s => ({ value: s.path, label: s.name + ' - ' + s.description })),
         { value: '__custom__', label: '自定义路径...' },
       ];
+    },
+    logLevelOptions() {
+      return LOG_LEVELS;
+    },
+    logSources() {
+      return LOG_SOURCES;
     },
     binaryOptions() {
       return [
