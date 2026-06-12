@@ -223,7 +223,9 @@ class NetworkMonitorCore:
                 "check_num": check_num,
                 "interval": interval,
                 "result": NetworkCheckResult(
-                    available=None, method="paused", latency_ms=0,
+                    available=None,
+                    method="paused",
+                    latency_ms=0,
                     detail=f"暂停时段（{start_hour}:00-{end_hour}:00）",
                 ),
             }
@@ -254,7 +256,9 @@ class NetworkMonitorCore:
             "interval": interval,
             "result": NetworkCheckResult(
                 available=net_ok,
-                method=net_reason if net_reason in ("tcp", "http", "url") else "local_only",
+                method=net_reason
+                if net_reason in ("tcp", "http", "url")
+                else "local_only",
                 latency_ms=0,
                 detail="" if net_ok else net_reason,
             ),

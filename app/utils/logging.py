@@ -124,7 +124,7 @@ class DashboardSink:
     """
 
     _MAX_MSG_LEN = 2000  # 消息截断上限，防止单条日志携带大量 traceback
-    _MAX_SRC_LEN = 64    # source 字段防异常膨胀
+    _MAX_SRC_LEN = 64  # source 字段防异常膨胀
 
     def __init__(self, maxlen: int = 500, broadcast_maxlen: int = 200):
         self.buffer: deque[dict] = deque(maxlen=maxlen)

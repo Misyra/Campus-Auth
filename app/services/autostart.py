@@ -14,7 +14,9 @@ from app.utils.platform import get_platform, is_linux, is_macos, is_windows
 logger = get_logger("autostart", source="backend")
 
 # 自启动固定参数：轻量监控模式，不弹浏览器，最小化到托盘
-_AUTOSTART_CLI_ARGS = "--startup-action monitor --runtime-mode lightweight --no-browser --tray"
+_AUTOSTART_CLI_ARGS = (
+    "--startup-action monitor --runtime-mode lightweight --no-browser --tray"
+)
 
 
 class AutoStartService:
