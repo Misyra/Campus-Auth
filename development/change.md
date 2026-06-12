@@ -5,6 +5,58 @@
 
 ## 2026-06-12
 
+### refactor: 轻量模式优化，减少资源占用
+
+1. `main.py`：
+   - 轻量模式改用 `while True: time.sleep(86400)` + `try/except KeyboardInterrupt`，修复 Windows 上 Ctrl+C 无法退出的问题
+   - 移除不再使用的 `_shutdown_event` 和 `_wait_for_shutdown()`
+   - 轻量模式移除托盘支持和冗余的 `get_runtime_features()` 调用
+   - `write_pid()` 传入 `runtime_mode` 参数，修复 `read_pid_mode()` 永远返回 None 的问题
+   - 新增 `--force` 参数，强制终止已运行实例并启动新实例
+   - 终止进程改为先 SIGTERM 后 SIGKILL，给进程机会优雅退出
+
+7. `app/utils/process.py`：
+   - PID 文件改为 JSON 格式，保存 `pid`、`create_time`、`proc_name`、`mode`
+   - 新增 `verify_process_identity()` 函数，通过 PID + create_time 验证进程身份
+   - `read_pid_file()` 返回字典而非元组
+
+2. `app/container.py`：
+   - `ServiceContainer.__init__` 新增 `runtime_mode` 参数
+   - 轻量模式下使用 `NullWebSocketManager`，避免 None 检查
+   - `task_executor` 始终创建真实实例（定时任务需要）
+   - `shutdown()` 方法移除冗余的 None 检查
+
+3. `app/services/engine.py`：
+   - `_empty_broadcast_queue` 的 `maxlen` 从 200 减小为 10（轻量模式下仅接收不消费）
+   - 移除 `_ws_manager` 的 None 检查
+
+4. `app/services/websocket_manager.py`：
+   - 新增 `NullWebSocketManager` 类，轻量模式下使用，避免 None 检查
+
+6. `app/ui/system_tray.py`：
+   - `pystray` 和 `PIL` 改为延迟导入，只在 `start()` 方法中才加载，减少模块级内存占用
+   - 使用实例变量 `_pystray` 和 `_Image` 存储导入的模块
+
+7. `app/services/autostart.py`：
+   - 自启动参数移除 `--tray`，轻量模式不再显示托盘
+
+8. `tests/test_container.py`：
+   - 新增轻量模式测试：验证 `ws_manager` 和 `task_executor` 在轻量模式下为 Null Object
+
+9. `tests/test_src_utils.py`：
+   - 更新 SystemTray 相关测试以适配延迟导入
+
+### fix: 修复设置页面开机自启动 toggle 重叠、下拉框不显示值
+
+1. `frontend/partials/pages/settings/settings-system.html`：
+   - 移除"开机自启动" toggle 外多余的 `.form-group` 包装，消除 `.form-group label` 的 `display: block` 与 toggle flex 布局的冲突
+   - "运行模式" custom-select 从 `:value` + `@change` 改为 `v-model`，修复选中值不显示
+   - "全局日志级别" custom-select 同上修复
+   - "显示 HTTP 请求日志" toggle 从"界面行为"分组移至"日志管理"分组
+
+2. `frontend/styles/pages/settings.css`：
+   - `.autostart-method-hint` 从 `padding-left: 56px` 改为 `margin-left: 56px`，适配移除 `.form-group` 后的布局
+
 ### fix: 修复网络探测死锁，修正日志显示，前端超时调整
 
 1. `app/network/probes.py`：

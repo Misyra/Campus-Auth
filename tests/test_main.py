@@ -53,43 +53,43 @@ class TestReadPidFile:
     def test_file_not_exists(self, tmp_pid_dir):
         from app.utils.process import read_pid_file
 
-        assert read_pid_file() == (None, None, None)
+        assert read_pid_file() is None
 
     def test_empty_file(self, tmp_pid_dir):
         from app.utils.process import read_pid_file
 
         _write_raw_pid(tmp_pid_dir, "")
-        assert read_pid_file() == (None, None, None)
+        assert read_pid_file() is None
 
-    def test_single_line_pid(self, tmp_pid_dir):
+    def test_json_format(self, tmp_pid_dir):
+        """JSON 格式。"""
+        import json
+
         from app.utils.process import read_pid_file
 
-        _write_raw_pid(tmp_pid_dir, "1234")
-        pid, name, ts = read_pid_file()
-        assert pid == 1234
-        assert name is None
-        assert ts is None
-
-    def test_two_lines_with_pipe(self, tmp_pid_dir):
-        from app.utils.process import read_pid_file
-
-        _write_raw_pid(tmp_pid_dir, "5678\npython.exe|2026-01-01 12:00:00")
-        pid, name, ts = read_pid_file()
-        assert pid == 5678
-        assert name == "python.exe"
-        assert ts == "2026-01-01 12:00:00"
+        data = {"pid": 1234, "create_time": 1718191234.123, "mode": "lightweight"}
+        _write_raw_pid(tmp_pid_dir, json.dumps(data))
+        result = read_pid_file()
+        assert result is not None
+        assert result["pid"] == 1234
+        assert result["create_time"] == 1718191234.123
+        assert result["mode"] == "lightweight"
 
     def test_invalid_content(self, tmp_pid_dir):
         from app.utils.process import read_pid_file
 
         _write_raw_pid(tmp_pid_dir, "not_a_number")
-        assert read_pid_file() == (None, None, None)
+        assert read_pid_file() is None
 
     def test_negative_pid(self, tmp_pid_dir):
+        """负数 PID。"""
+        import json
+
         from app.utils.process import read_pid_file
 
-        _write_raw_pid(tmp_pid_dir, "-1")
-        assert read_pid_file() == (None, None, None)
+        data = {"pid": -1, "create_time": 1718191234.123}
+        _write_raw_pid(tmp_pid_dir, json.dumps(data))
+        assert read_pid_file() is None
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -184,46 +184,58 @@ class TestIsServiceRunning:
         assert pid is None
 
     def test_pid_file_but_process_dead(self, tmp_pid_dir):
+        """PID 文件存在但进程已死。"""
+        import json
+
         from app.utils.process import is_service_running
 
-        _write_raw_pid(tmp_pid_dir, "1234\npython.exe|2026-01-01")
-        with patch("app.utils.process.get_process_name", return_value=None):
+        data = {"pid": 1234, "create_time": 1718191234.123, "mode": "full"}
+        _write_raw_pid(tmp_pid_dir, json.dumps(data))
+        with patch("app.utils.process.verify_process_identity", return_value=False):
             running, pid = is_service_running()
         assert running is False
         assert pid is None
         # 残留 PID 文件应被清理
         assert not (tmp_pid_dir / "campus_network_auth.pid").exists()
 
-    def test_process_name_mismatch(self, tmp_pid_dir):
+    def test_process_identity_mismatch(self, tmp_pid_dir):
+        """进程身份不匹配（create_time 不同）。"""
+        import json
+
         from app.utils.process import is_service_running
 
-        _write_raw_pid(tmp_pid_dir, "1234\npython.exe|2026-01-01")
-        with (
-            patch("app.utils.process.get_process_name", return_value="other.exe"),
-            patch("app.utils.process.is_local_port_in_use", return_value=True),
-        ):
+        data = {"pid": 1234, "create_time": 1718191234.123, "mode": "full"}
+        _write_raw_pid(tmp_pid_dir, json.dumps(data))
+        with patch("app.utils.process.verify_process_identity", return_value=False):
             running, pid = is_service_running()
         assert running is False
 
     def test_port_not_listening(self, tmp_pid_dir):
+        """完整模式下端口未监听。"""
+        import json
+
         from app.utils.process import is_service_running
 
-        _write_raw_pid(tmp_pid_dir, "1234\npython.exe|2026-01-01")
+        data = {"pid": 1234, "create_time": 1718191234.123, "mode": "full"}
+        _write_raw_pid(tmp_pid_dir, json.dumps(data))
         with (
-            patch("app.utils.process.get_process_name", return_value="python.exe"),
+            patch("app.utils.process.verify_process_identity", return_value=True),
             patch("app.utils.process.is_local_port_in_use", return_value=False),
         ):
             running, pid = is_service_running()
         assert running is False
 
     def test_fully_alive(self, tmp_pid_dir):
+        """进程完全存活。"""
+        import json
+
         from app.utils.process import is_service_running
 
-        _write_raw_pid(tmp_pid_dir, "1234\npython.exe|2026-01-01")
+        data = {"pid": 1234, "create_time": 1718191234.123, "mode": "full"}
+        _write_raw_pid(tmp_pid_dir, json.dumps(data))
         with (
-            patch("app.utils.process.get_process_name", return_value="python.exe"),
+            patch("app.utils.process.verify_process_identity", return_value=True),
             patch("app.utils.process.is_local_port_in_use", return_value=True),
-            patch("os.kill"),
         ):
             running, pid = is_service_running()
         assert running is True
@@ -272,16 +284,17 @@ class TestWritePid:
     """_write_pid — 原子写入。"""
 
     def test_writes_pid_file(self, tmp_pid_dir):
+        import json
+
         from app.utils.process import get_pid_file, write_pid
 
         write_pid()
         pid_file = get_pid_file()
         assert pid_file.exists()
-        content = pid_file.read_text(encoding="utf-8")
-        lines = content.splitlines()
-        assert int(lines[0]) == os.getpid()
-        assert len(lines) == 2
-        assert "|" in lines[1]
+        data = json.loads(pid_file.read_text(encoding="utf-8"))
+        assert data["pid"] == os.getpid()
+        assert "create_time" in data
+        assert "proc_name" in data
 
 
 class TestCleanupPid:
@@ -379,24 +392,15 @@ class TestCmdStop:
         assert "未运行" in capsys.readouterr().out
 
     def test_graceful_stop(self, tmp_pid_dir, capsys):
-        """优雅停止：os.kill(pid, 0) 抛 OSError 表示进程已退出。"""
+        """优雅停止：先 SIGTERM，等待后进程退出。"""
         from main import _cmd_stop
 
         with (
             patch("main.is_service_running", return_value=(True, 1234)),
-            patch(
-                "main.read_pid_file", return_value=(1234, "python.exe", "2026-01-01")
-            ),
-            patch("main.get_process_name", return_value="python.exe"),
-            patch(
-                "main.normalize_proc_name",
-                side_effect=lambda n: n.lower().removesuffix(".exe"),
-            ),
-            patch("main.is_windows", return_value=False),
-            patch("os.kill", side_effect=[None, OSError("process gone")]),
-            patch("time.sleep"),
+            patch("main._terminate_process") as mock_terminate,
         ):
             _cmd_stop()
+        mock_terminate.assert_called_once_with(1234)
         out = capsys.readouterr().out
         assert "已停止" in out
 
@@ -404,42 +408,13 @@ class TestCmdStop:
         """优雅停止超时后强制停止（Windows 路径：taskkill）。"""
         from main import _cmd_stop
 
-        # os.kill(pid, 0) 始终成功 → 优雅停止超时 → taskkill /F
         with (
             patch("main.is_service_running", return_value=(True, 1234)),
-            patch(
-                "main.read_pid_file", return_value=(1234, "python.exe", "2026-01-01")
-            ),
-            patch("main.get_process_name", return_value="python.exe"),
-            patch(
-                "main.normalize_proc_name",
-                side_effect=lambda n: n.lower().removesuffix(".exe"),
-            ),
-            patch("main.is_windows", return_value=True),
-            patch("os.kill", return_value=None),
-            patch("time.sleep"),
-            patch("subprocess.run"),
+            patch("main._terminate_process") as mock_terminate,
         ):
             _cmd_stop()
+        mock_terminate.assert_called_once_with(1234)
         assert "服务已停止" in capsys.readouterr().out
-
-    def test_process_name_mismatch(self, tmp_pid_dir, capsys):
-        from main import _cmd_stop
-
-        with (
-            patch("main.is_service_running", return_value=(True, 1234)),
-            patch(
-                "main.read_pid_file", return_value=(1234, "python.exe", "2026-01-01")
-            ),
-            patch("main.get_process_name", return_value="other.exe"),
-            patch(
-                "main.normalize_proc_name",
-                side_effect=lambda n: n.lower().removesuffix(".exe"),
-            ),
-        ):
-            _cmd_stop()
-        out = capsys.readouterr().out
-        assert "不匹配" in out
 
 
 # ══════════════════════════════════════════════════════════════════════

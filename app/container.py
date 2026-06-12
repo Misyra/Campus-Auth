@@ -11,10 +11,10 @@ from app.services.autostart import AutoStartService
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
 from app.services.profile_service import ProfileService
-from app.services.task_executor import TaskExecutor
+from app.services.task_executor import NullTaskExecutor, TaskExecutor
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
 from app.services.task_service import TaskService
-from app.services.websocket_manager import WebSocketManager
+from app.services.websocket_manager import NullWebSocketManager, WebSocketManager
 from app.utils.logging import DashboardSink, get_logger
 
 container_logger = get_logger("container", source="backend")
@@ -23,15 +23,17 @@ container_logger = get_logger("container", source="backend")
 class ServiceContainer:
     """服务容器 — 统一管理服务实例的创建和访问。"""
 
-    def __init__(self, project_root: Path):
+    def __init__(self, project_root: Path, runtime_mode: str = "full"):
         self.project_root = project_root
         self._temp_dir = project_root / "temp"
         self._logs_dir = project_root / "logs"
         self._backup_dir = project_root / "backups"
         self._backup_dir.mkdir(parents=True, exist_ok=True)
+        self._is_lightweight = runtime_mode == "lightweight"
 
         # 基础服务
-        self.ws_manager = WebSocketManager()
+        # 轻量模式下使用 Null Object，避免 None 检查
+        self.ws_manager = NullWebSocketManager() if self._is_lightweight else WebSocketManager()
         self.profile_service = ProfileService(project_root)
         from app.constants import AUTH_DATA_DIR
 

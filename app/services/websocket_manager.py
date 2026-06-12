@@ -16,6 +16,22 @@ from app.utils.logging import get_logger
 ws_logger = get_logger("websocket_manager", source="backend")
 
 
+class NullWebSocketManager:
+    """空 WebSocket 管理器 — 轻量模式下使用，避免 None 检查。"""
+
+    async def connect(self, websocket: "WebSocket"):
+        pass
+
+    async def disconnect(self, websocket: "WebSocket"):
+        pass
+
+    async def broadcast(self, message: str):
+        pass
+
+    async def close_all(self):
+        pass
+
+
 class WebSocketManager:
     """WebSocket 管理器 - 实时日志推送"""
 
