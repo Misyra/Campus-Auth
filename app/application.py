@@ -128,13 +128,12 @@ def create_app(existing_container=None):
         )
         cfg = services.monitor_service.get_config()
         startup_logger.info(
-            "当前配置: 用户={}, 密码={}, 认证={}, 运营商={}, 间隔={}min, 自动监控={}",
+            "当前配置: 用户={}, 密码={}, 认证={}, 运营商={}, 间隔={}min",
             f"'{cfg.username}'" if cfg.username else "(空)",
             "已设置" if cfg.password else "(空)",
             f"'{cfg.auth_url}'" if cfg.auth_url else "(空)",
             cfg.carrier,
             cfg.check_interval_seconds,
-            cfg.auto_start,
         )
 
         # 检查 cryptography 库是否可用
