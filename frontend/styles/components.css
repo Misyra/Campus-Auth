@@ -1215,35 +1215,53 @@
 .radio-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   margin-top: 4px;
 }
 
 .radio-option {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 10px;
   cursor: pointer;
-  padding: 6px 10px;
-  border-radius: 6px;
-  transition: background 0.15s;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: border-color 0.15s, background 0.15s;
 }
 
 .radio-option:hover {
-  background: var(--hover-bg, rgba(255,255,255,0.05));
+  background: var(--bg-glass);
+  border-color: var(--border-hover, var(--border));
+}
+
+.radio-option:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-bg, rgba(var(--accent-rgb, 99, 102, 241), 0.06));
 }
 
 .radio-option input[type="radio"] {
-  margin: 0;
+  margin: 3px 0 0;
   flex-shrink: 0;
+  accent-color: var(--accent);
+}
+
+.radio-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 .radio-label {
   font-weight: 500;
+  font-size: 13px;
+  color: var(--text-primary);
 }
 
 .radio-desc {
-  font-size: 0.85em;
-  opacity: 0.6;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
 }
 
