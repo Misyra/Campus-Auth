@@ -1037,12 +1037,11 @@ class TestOpenBrowser:
         _open_browser(8080, setting=False)
         patched_webbrowser.assert_not_called()
 
-    def test_env_variable_false(self, patched_webbrowser):
-        """环境变量 CAMPUS_AUTH_AUTO_OPEN_BROWSER=false 时不打开。"""
+    def test_setting_none_not_open(self, patched_webbrowser):
+        """setting=None 时不打开浏览器。"""
         from main import _open_browser
 
-        with patch.dict(os.environ, {"CAMPUS_AUTH_AUTO_OPEN_BROWSER": "false"}):
-            _open_browser(8080, setting=None)
+        _open_browser(8080, setting=None)
         patched_webbrowser.assert_not_called()
 
 

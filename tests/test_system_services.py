@@ -316,11 +316,11 @@ class TestBuildVbsContent:
         assert "Win32_Process" in content
 
     def test_contains_env_var(self):
-        """生成的 VBScript 应设置 CAMPUS_AUTH_AUTO_OPEN_BROWSER=false"""
+        """生成的 VBScript 应设置 CAMPUS_AUTH_AUTOSTART=1"""
         svc = AutoStartService(project_root=Path("/test"))
         content = svc._build_vbs_content('WshShell.Run "test.exe"')
-        assert "CAMPUS_AUTH_AUTO_OPEN_BROWSER" in content
-        assert "false" in content
+        assert "CAMPUS_AUTH_AUTOSTART" in content
+        assert '"1"' in content
 
     def test_contains_run_command(self):
         """生成的 VBScript 应包含传入的运行命令"""
