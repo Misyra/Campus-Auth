@@ -13,6 +13,9 @@ from app.utils.platform import get_platform, is_linux, is_macos, is_windows
 
 logger = get_logger("autostart", source="backend")
 
+# 自启动固定参数：轻量监控模式，不弹浏览器，最小化到托盘
+_AUTOSTART_CLI_ARGS = "--startup-action monitor --runtime-mode lightweight --no-browser --tray"
+
 
 class AutoStartService:
     """管理开机自启动（按平台实现）。"""
@@ -164,7 +167,9 @@ class AutoStartService:
         log_dir = self.project_root / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
 
-        escaped_cmd = xml.sax.saxutils.escape(self._start_command())
+        escaped_cmd = xml.sax.saxutils.escape(
+            f"{self._start_command()} {_AUTOSTART_CLI_ARGS}"
+        )
         escaped_log_out = xml.sax.saxutils.escape(str(log_dir / "autostart.out.log"))
         escaped_log_err = xml.sax.saxutils.escape(str(log_dir / "autostart.err.log"))
 
@@ -246,7 +251,7 @@ class AutoStartService:
 
         # 用单引号包裹命令，确保路径含空格时 systemd 正确解析
         # 如果命令本身含单引号，用 '\'' 转义
-        cmd = self._start_command().replace("'", "'\\''")
+        cmd = f"{self._start_command()} {_AUTOSTART_CLI_ARGS}".replace("'", "'\\''")
         content = f"""[Unit]
 Description=Campus-Auth Auto Network Web Console
 After=network.target
@@ -292,7 +297,6 @@ WantedBy=default.target
                 （targetExe 赋值 + WshShell.Run 调用）。
         """
         return f"""Set WshShell = CreateObject("WScript.Shell")
-WshShell.Environment("PROCESS")("CAMPUS_AUTH_AUTO_OPEN_BROWSER") = "false"
 WshShell.Environment("PROCESS")("CAMPUS_AUTH_AUTOSTART") = "1"
 
 ' Check if already running
@@ -349,7 +353,7 @@ End If
         # VBS 字符串中双引号用 "" 转义
         start_cmd_escaped = self._start_command().replace('"', '""')
         run_command = (
-            f'targetCmd = "{start_cmd_escaped} --no-browser"\n'
+            f'targetCmd = "{start_cmd_escaped} {_AUTOSTART_CLI_ARGS}"\n'
             f"WshShell.Run targetCmd, 0, False"
         )
 
