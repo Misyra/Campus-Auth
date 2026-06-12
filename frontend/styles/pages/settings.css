@@ -341,11 +341,11 @@
 }
 
 .toggle.toggle-help-inline {
-  gap: 8px;
+  gap: 10px;
 }
 
 .toggle.toggle-help-inline .field-help {
-  margin-left: 2px;
+  margin-left: 4px;
 }
 
 /* .field-help 已统一定义在 components.css 中 */
