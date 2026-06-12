@@ -52,18 +52,24 @@
         <div class="radio-group">
           <label class="radio-option">
             <input type="radio" v-model="config.startup_action" value="none" />
-            <span class="radio-label">不自动执行</span>
-            <span class="radio-desc">启动后等待手动开始</span>
+            <div class="radio-text">
+              <span class="radio-label">不自动执行</span>
+              <span class="radio-desc">启动后等待手动开始</span>
+            </div>
           </label>
           <label class="radio-option">
             <input type="radio" v-model="config.startup_action" value="monitor" />
-            <span class="radio-label">启动后开始监控</span>
-            <span class="radio-desc">程序启动后立即开始网络监控</span>
+            <div class="radio-text">
+              <span class="radio-label">启动后开始监控</span>
+              <span class="radio-desc">程序启动后立即开始网络监控</span>
+            </div>
           </label>
           <label class="radio-option">
             <input type="radio" v-model="config.startup_action" value="login_once" />
-            <span class="radio-label">登录成功后退出</span>
-            <span class="radio-desc">执行一次认证后退出程序，适用于开机自动认证场景</span>
+            <div class="radio-text">
+              <span class="radio-label">登录成功后退出</span>
+              <span class="radio-desc">执行一次认证后退出程序，适用于开机自动认证</span>
+            </div>
           </label>
         </div>
       </div>
@@ -72,17 +78,21 @@
         <div class="radio-group">
           <label class="radio-option">
             <input type="radio" v-model="config.runtime_mode" value="full" />
-            <span class="radio-label">完整模式</span>
-            <span class="radio-desc">启动 Web 管理界面，可通过浏览器管理</span>
+            <div class="radio-text">
+              <span class="radio-label">完整模式</span>
+              <span class="radio-desc">启动 Web 管理界面，可通过浏览器管理</span>
+            </div>
           </label>
           <label class="radio-option">
             <input type="radio" v-model="config.runtime_mode" value="lightweight" />
-            <span class="radio-label">轻量模式</span>
-            <span class="radio-desc">仅后台运行监控服务，不启动 Web 管理界面</span>
+            <div class="radio-text">
+              <span class="radio-label">轻量模式</span>
+              <span class="radio-desc">仅后台运行监控服务，不启动 Web 管理界面</span>
+            </div>
           </label>
         </div>
       </div>
-      <div class="toggle-group">
+      <div class="form-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
             <input type="checkbox" :checked="autostart.enabled" @change="autostart.enabled ? disableAutostart() : enableAutostart()" :disabled="busy.autostart" />
