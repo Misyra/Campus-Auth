@@ -390,6 +390,7 @@ body {
   border: 1px solid;
   backdrop-filter: var(--blur-md);
   transition: border-color 0.3s ease, background 0.3s ease, color 0.3s ease;
+  flex-shrink: 0;
 }
 
 .network-status-banner .status-dot {
