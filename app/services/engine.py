@@ -291,7 +291,7 @@ class ScheduleEngine:
                 self._login_retry.count = 0
 
             self._next_network_check = time.time() + interval
-            self._update_status_snapshot()
+            self._update_status_snapshot(force=True)
         except Exception:
             logger.exception("网络检测异常")
             self._next_network_check = time.time() + self._monitor_check_interval
