@@ -28,6 +28,7 @@ export const lifecycleMethods = {
       this.loadScheduledTasks(),
       this.fetchShells(),
       this.fetchOcrStatus(),
+      this.fetchLogLevels(),
     ]);
     const rejectedCount = initResults.filter(r => r.status === 'rejected').length;
     if (rejectedCount > 0) {

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.deps import get_monitor_service, get_profile_service
 from app.schemas import ActionResponse, MonitorConfigPayload
@@ -28,7 +28,7 @@ def get_log_levels():
 
 
 @router.put("/api/config/source-level")
-def set_source_level(payload: dict):
+def set_source_level(payload: dict, request: Request):
     """设置 source 级别"""
     from app.utils.logging import LogConfigCenter
 
@@ -44,23 +44,30 @@ def set_source_level(payload: dict):
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
 
+    _persist_source_levels(request, config)
+
     return {"success": True, "message": f"已设置 {source} 级别为 {level}"}
 
 
 @router.delete("/api/config/source-level/{source}")
-def reset_source_level(source: str):
+def reset_source_level(source: str, request: Request):
     """重置 source 级别（使用全局级别）"""
     from app.utils.logging import LogConfigCenter
 
     config = LogConfigCenter.get_instance()
-    levels = config.get_all_source_levels()
+    config.remove_source_level(source)
 
-    if source in levels:
-        del levels[source]
-        # 重新设置除了指定 source 之外的所有级别
-        config._source_levels = levels
+    _persist_source_levels(request, config)
 
     return {"success": True, "message": f"已重置 {source} 级别"}
+
+
+def _persist_source_levels(request: Request, config):
+    """将 source_levels 持久化到 settings.json"""
+    profile_service = request.app.state.services.profile_service
+    profile_service.update(
+        lambda d: setattr(d.system, "source_levels", config.get_all_source_levels())
+    )
 
 
 @router.get("/api/config", response_model=MonitorConfigPayload)
