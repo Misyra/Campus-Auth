@@ -463,11 +463,7 @@ def _run_full(ctx: ApplicationContext, should_boot_engine: bool, logger, startup
     finally:
         if tray_icon:
             tray_icon.stop()
-
-    logger.info("正在关闭服务...")
-    loop = asyncio.new_event_loop()
-    loop.run_until_complete(container.shutdown())
-    loop.close()
+    # container.shutdown() 由 lifespan 管理，此处不再重复调用
 
 
 # ==================== 主启动 ====================
