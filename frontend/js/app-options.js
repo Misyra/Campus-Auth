@@ -61,8 +61,9 @@ export const appOptions = {
         { value: '自定义', label: '自定义' },
       ],
       loginActionOptions: [
-        { value: false, label: '保持监控（推荐）' },
-        { value: true, label: '自启动时登录后退出' },
+        { value: 'none', label: '不自动执行' },
+        { value: 'monitor', label: '启动后开始监控（推荐）' },
+        { value: 'login_once', label: '登录成功后退出' },
       ],
       logSourceOptions: [
         { value: '', label: '全部来源' },

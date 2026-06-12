@@ -1211,3 +1211,39 @@
   text-decoration: underline;
 }
 
+/* ========== Radio Group ========== */
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.radio-option {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.radio-option:hover {
+  background: var(--hover-bg, rgba(255,255,255,0.05));
+}
+
+.radio-option input[type="radio"] {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.radio-label {
+  font-weight: 500;
+}
+
+.radio-desc {
+  font-size: 0.85em;
+  opacity: 0.6;
+}
+

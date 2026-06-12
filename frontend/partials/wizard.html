@@ -171,15 +171,6 @@
 
         <div class="toggle-group">
           <label class="toggle">
-            <input type="checkbox" v-model="config.auto_start" />
-            <span class="toggle-slider"></span>
-            <span class="toggle-label">启动后自动开始监控</span>
-          </label>
-          <span class="hint">程序启动后自动开始检测网络状态</span>
-        </div>
-
-        <div class="toggle-group">
-          <label class="toggle">
             <input type="checkbox" v-model="config.headless" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">无头模式</span>
@@ -188,9 +179,9 @@
         </div>
 
         <div class="form-group">
-          <label for="wiz-login-action">登录成功后行为</label>
-          <custom-select v-model="config.login_then_exit" :options="loginActionOptions"></custom-select>
-          <span class="hint">登录成功后是继续监控网络状态，还是退出程序</span>
+          <label for="wiz-startup-action">启动行为</label>
+          <custom-select v-model="config.startup_action" :options="loginActionOptions"></custom-select>
+          <span class="hint">程序启动后自动执行的操作</span>
         </div>
       </div>
 
@@ -222,12 +213,8 @@
             <span class="value">{{ config.headless ? '是' : '否' }}</span>
           </div>
           <div class="summary-item">
-            <span class="label">登录后行为</span>
-            <span class="value">{{ config.login_then_exit ? '自启动时登录后退出' : '保持监控' }}</span>
-          </div>
-          <div class="summary-item">
-            <span class="label">自动监控</span>
-            <span class="value">{{ config.auto_start ? '是' : '否' }}</span>
+            <span class="label">启动行为</span>
+            <span class="value">{{ { none: '不自动执行', monitor: '启动后开始监控', login_once: '登录成功后退出' }[config.startup_action] || '不自动执行' }}</span>
           </div>
         </div>
 
