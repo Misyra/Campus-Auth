@@ -867,7 +867,9 @@ class TestRunServer:
             patch("main.signal.signal"),
             patch("main.os._exit"),
             patch.object(time, "sleep", side_effect=[None, KeyboardInterrupt]),
-            patch("main.handle_startup_action", return_value=(MagicMock(), False)) as mock_handle,
+            patch(
+                "main.handle_startup_action", return_value=(MagicMock(), False)
+            ) as mock_handle,
         ):
             mock_ps = MagicMock()
             mock_ps.load.return_value.system = MagicMock(

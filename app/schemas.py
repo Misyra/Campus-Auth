@@ -16,6 +16,7 @@ _URL_PATTERN = re.compile(r"^https?://")
 
 class StartupAction(StrEnum):
     """启动后执行什么动作"""
+
     NONE = "none"
     MONITOR = "monitor"
     LOGIN_ONCE = "login_once"
@@ -23,12 +24,14 @@ class StartupAction(StrEnum):
 
 class RuntimeMode(StrEnum):
     """运行时启用哪些组件"""
+
     FULL = "full"
     LIGHTWEIGHT = "lightweight"
 
 
 class LaunchSource(StrEnum):
     """程序是怎么被启动的（仅用于日志和 UI 体验，不参与业务逻辑）"""
+
     MANUAL = "manual"
     AUTOSTART = "autostart"
     UNKNOWN = "unknown"
@@ -36,6 +39,7 @@ class LaunchSource(StrEnum):
 
 class StartupResult(StrEnum):
     """启动动作执行结果"""
+
     CONTINUE = "continue"
     EXIT = "exit"
 
@@ -378,7 +382,9 @@ class ProfilesData(BaseModel):
     profiles: dict[str, ProfileSettings] = Field(default_factory=dict)
 
 
-def get_runtime_features(mode: RuntimeMode | str, minimize_to_tray: bool, auto_open_browser: bool) -> RuntimeFeatures:
+def get_runtime_features(
+    mode: RuntimeMode | str, minimize_to_tray: bool, auto_open_browser: bool
+) -> RuntimeFeatures:
     """根据运行模式派生特性标志"""
     if mode == RuntimeMode.LIGHTWEIGHT:
         return RuntimeFeatures(

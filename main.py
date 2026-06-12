@@ -261,6 +261,7 @@ def _build_app_config(
     # 从 settings.json 加载
     try:
         from app.services.profile_service import ProfileService
+
         _ps = ProfileService(Path(__file__).parent.resolve())
         _data = _ps.load()
         _sys = _data.system
@@ -288,7 +289,9 @@ def _build_app_config(
     return config
 
 
-def handle_startup_action(ctx: ApplicationContext, logger) -> tuple[StartupResult, bool]:
+def handle_startup_action(
+    ctx: ApplicationContext, logger
+) -> tuple[StartupResult, bool]:
     """第一层状态机：处理启动动作。返回 (结果, 是否需要启动监控引擎)。
 
     注意：should_boot_engine 仅用于完整模式。轻量模式始终自动启动监控。
@@ -313,6 +316,7 @@ def _handle_existing_instance(ctx: ApplicationContext):
     if not running:
         return
     from app.utils.ports import resolve_port
+
     port = resolve_port()
     match ctx.config.runtime_mode:
         case RuntimeMode.FULL:
@@ -356,10 +360,15 @@ def _run_lightweight(ctx: ApplicationContext, logger):
 
     # 系统托盘
     tray_icon = None
-    features = get_runtime_features(ctx.config.runtime_mode, ctx.config.minimize_to_tray, ctx.config.auto_open_browser)
+    features = get_runtime_features(
+        ctx.config.runtime_mode,
+        ctx.config.minimize_to_tray,
+        ctx.config.auto_open_browser,
+    )
     if features.tray_enabled:
         try:
             from app.ui.system_tray import SystemTray
+
             tray_icon = SystemTray(
                 port=0,
                 on_exit=lambda: os.kill(os.getpid(), signal.SIGTERM)
@@ -380,7 +389,9 @@ def _run_lightweight(ctx: ApplicationContext, logger):
     loop.close()
 
 
-def _run_full(ctx: ApplicationContext, should_boot_engine: bool, logger, startup_begin: float):
+def _run_full(
+    ctx: ApplicationContext, should_boot_engine: bool, logger, startup_begin: float
+):
     """完整模式：Web 服务 + 监控 + 定时任务"""
     from app.application import run
     from app.container import ServiceContainer
@@ -392,7 +403,11 @@ def _run_full(ctx: ApplicationContext, should_boot_engine: bool, logger, startup
     if should_boot_engine:
         container.engine.boot()
 
-    features = get_runtime_features(ctx.config.runtime_mode, ctx.config.minimize_to_tray, ctx.config.auto_open_browser)
+    features = get_runtime_features(
+        ctx.config.runtime_mode,
+        ctx.config.minimize_to_tray,
+        ctx.config.auto_open_browser,
+    )
 
     # 信号处理器
     _uvicorn_server = [None]
@@ -420,6 +435,7 @@ def _run_full(ctx: ApplicationContext, should_boot_engine: bool, logger, startup
     if features.tray_enabled:
         try:
             from app.ui.system_tray import SystemTray
+
             tray_icon = SystemTray(
                 port=port,
                 on_exit=lambda: os.kill(os.getpid(), signal.SIGTERM)
@@ -445,6 +461,7 @@ def _run_full(ctx: ApplicationContext, should_boot_engine: bool, logger, startup
     try:
         try:
             from app.services.profile_service import ProfileService
+
             _ps = ProfileService(Path(__file__).parent.resolve())
             _sys = _ps.load().system
             _al = bool(_sys.access_log)
