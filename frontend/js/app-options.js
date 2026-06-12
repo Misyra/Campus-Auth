@@ -1,4 +1,4 @@
-import { api, SETTINGS_TABS, LOG_LEVELS, LOG_SOURCES } from './constants.js';
+import { api, SETTINGS_TABS, LOG_LEVELS } from './constants.js';
 import { createFrontendLogger } from './logger.js';
 import { actionMethods } from './methods/actions.js';
 import { appearanceMethods } from './methods/appearance.js';
@@ -222,9 +222,6 @@ export const appOptions = {
     },
     logLevelOptions() {
       return LOG_LEVELS;
-    },
-    logSources() {
-      return LOG_SOURCES;
     },
     binaryOptions() {
       return [
