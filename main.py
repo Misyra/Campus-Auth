@@ -289,7 +289,10 @@ def _build_app_config(
 
 
 def handle_startup_action(ctx: ApplicationContext, logger) -> tuple[StartupResult, bool]:
-    """第一层状态机：处理启动动作。返回 (结果, 是否需要启动监控引擎)"""
+    """第一层状态机：处理启动动作。返回 (结果, 是否需要启动监控引擎)。
+
+    注意：should_boot_engine 仅用于完整模式。轻量模式始终自动启动监控。
+    """
     match ctx.config.startup_action:
         case StartupAction.NONE:
             return StartupResult.CONTINUE, False
@@ -332,7 +335,7 @@ def _wait_for_shutdown():
 
 
 def _run_lightweight(ctx: ApplicationContext, logger):
-    """轻量模式：仅监控 + 定时任务，无 Web 服务"""
+    """轻量模式：始终启动监控 + 定时任务，无 Web 服务。"""
     from app.container import ServiceContainer
 
     container = ServiceContainer(Path(__file__).parent.resolve())
