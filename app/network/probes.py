@@ -161,8 +161,7 @@ def is_network_available_url(
         start = time.perf_counter()
         try:
             block = is_block_proxy()
-            with _probe_lock:
-                resp = _get_probe_client(block).get(url, timeout=timeout)
+            resp = _get_probe_client(block).get(url, timeout=timeout)
             elapsed = (time.perf_counter() - start) * 1000
             body = resp.text.strip()
             if expected in body:
@@ -211,10 +210,9 @@ def is_network_available_http(
         start = time.perf_counter()
         try:
             block = is_block_proxy()
-            with _probe_lock:
-                resp = _get_probe_client(block).get(
-                    url, timeout=timeout, follow_redirects=follow_redirects
-                )
+            resp = _get_probe_client(block).get(
+                url, timeout=timeout, follow_redirects=follow_redirects
+            )
             elapsed = (time.perf_counter() - start) * 1000
             if 200 <= resp.status_code < 300:
                 return (url, True, f"HTTP {resp.status_code} ({elapsed:.0f}ms)")

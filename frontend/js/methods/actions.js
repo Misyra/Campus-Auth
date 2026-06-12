@@ -80,7 +80,7 @@ export const actionMethods = {
     this.busy.action = true;
     try {
       this.frontendLogger.info('action', '手动网络测试');
-      const { data } = await this.$api.post('/api/actions/test-network');
+      const { data } = await this.$api.post('/api/actions/test-network', null, { timeout: 5000 });
       // 网络测试结果只显示 toast，不记录通知历史
       this.toastOnly(data.success, data.message);
     } catch (error) {
