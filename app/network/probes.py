@@ -120,12 +120,16 @@ def is_network_available_socket(
             return (f"{host}:{port}", False, f"{type(exc).__name__}")
 
     futures = {executor.submit(_connect_one, h, p): (h, p) for h, p in targets}
-    for future in as_completed(futures):
-        label, ok, detail = future.result()
-        if ok:
-            logger.info("TCP 连接成功: {} {}", label, detail)
-            return True
-        logger.info("TCP 连接失败: {} -- {}", label, detail)
+    try:
+        for future in as_completed(futures, timeout=timeout + 2):
+            label, ok, detail = future.result(timeout=1)
+            if ok:
+                logger.info("TCP 连接成功: {} {}", label, detail)
+                return True
+            logger.info("TCP 连接失败: {} -- {}", label, detail)
+    except TimeoutError:
+        logger.warning("TCP 检测超时 ({:.1f}s)", timeout + 2)
+        return False
     logger.warning("所有 TCP 目标均不可达 ({} 个)", len(targets))
     return False
 
@@ -176,12 +180,16 @@ def is_network_available_url(
             return (url, False, f"{type(exc).__name__} ({elapsed:.0f}ms)")
 
     futures = {executor.submit(_check_url, url, exp): url for url, exp in url_checks}
-    for future in as_completed(futures):
-        url, ok, detail = future.result()
-        if ok:
-            logger.info("网址响应检测成功: {} -> {}", url, detail)
-            return True
-        logger.info("网址响应检测失败: {} -- {}", url, detail)
+    try:
+        for future in as_completed(futures, timeout=timeout + 2):
+            url, ok, detail = future.result(timeout=1)
+            if ok:
+                logger.info("网址响应检测成功: {} -> {}", url, detail)
+                return True
+            logger.info("网址响应检测失败: {} -- {}", url, detail)
+    except TimeoutError:
+        logger.warning("网址响应检测超时 ({:.1f}s)", timeout + 2)
+        return False
     logger.warning("所有网址响应检测均未通过 ({} 个)", len(url_checks))
     return False
 
@@ -227,11 +235,15 @@ def is_network_available_http(
             return (url, False, f"{type(exc).__name__}: {exc}")
 
     futures = {executor.submit(_check_one, url): url for url in urls}
-    for future in as_completed(futures):
-        url, ok, detail = future.result()
-        if ok:
-            logger.info("HTTP 请求成功: {} -> {}", url, detail)
-            return True
-        logger.info("HTTP 请求失败: {} -- {}", url, detail)
+    try:
+        for future in as_completed(futures, timeout=timeout + 2):
+            url, ok, detail = future.result(timeout=1)
+            if ok:
+                logger.info("HTTP 请求成功: {} -> {}", url, detail)
+                return True
+            logger.info("HTTP 请求失败: {} -- {}", url, detail)
+    except TimeoutError:
+        logger.warning("HTTP 检测超时 ({:.1f}s)", timeout + 2)
+        return False
     logger.warning("所有 HTTP 目标均不可达 ({} 个)", len(urls))
     return False

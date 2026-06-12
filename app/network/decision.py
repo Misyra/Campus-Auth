@@ -194,24 +194,32 @@ def is_network_available(
             )
         ] = "url"
 
-    for future in as_completed(futures):
-        kind = futures[future]
-        try:
-            ok = future.result()
-        except Exception as exc:
-            logger.debug("检测 {} 异常: {}", kind, exc)
-            ok = False
-        if not ok:
-            for f in futures:
-                if not f.done():
-                    f.cancel()
-            return False
-        if kind == "tcp":
-            socket_ok = ok
-        elif kind == "http":
-            http_ok = ok
-        elif kind == "url":
-            url_ok = ok
+    overall_timeout = max(timeout, 3.0) + 2.0
+    try:
+        for future in as_completed(futures, timeout=overall_timeout):
+            kind = futures[future]
+            try:
+                ok = future.result(timeout=1)
+            except Exception as exc:
+                logger.debug("检测 {} 异常: {}", kind, exc)
+                ok = False
+            if not ok:
+                for f in futures:
+                    if not f.done():
+                        f.cancel()
+                return False
+            if kind == "tcp":
+                socket_ok = ok
+            elif kind == "http":
+                http_ok = ok
+            elif kind == "url":
+                url_ok = ok
+    except TimeoutError:
+        logger.warning("网络检测超时 ({:.1f}s)，视为网络异常", overall_timeout)
+        for f in futures:
+            if not f.done():
+                f.cancel()
+        return False
 
     result = (
         (socket_ok or not enable_tcp)
@@ -270,7 +278,7 @@ def _is_auth_url_reachable(
             }
             try:
                 for future in as_completed(futures, timeout=4):
-                    if future.result():
+                    if future.result(timeout=1):
                         # 任一目标可达即取消其余任务
                         for f in futures:
                             f.cancel()
