@@ -5,6 +5,33 @@
 
 ## 2026-06-12（重构）
 
+### refactor: 前端设置页面 checkbox 改为 radio group，适配 startup_action/runtime_mode
+
+将三个独立 checkbox（auto_start、lightweight_mode、login_then_exit）替换为两组 radio group（startup_action、runtime_mode），与后端 Task 1-7 的迁移保持一致。
+
+**修改内容：**
+
+1. `frontend/js/constants.js`：
+   - `_SHARED_DEFAULTS` 删除 `auto_start: false`
+   - `DEFAULT_CONFIG` 删除 `lightweight_mode: false` 和 `login_then_exit: false`，新增 `startup_action: "none"` 和 `runtime_mode: "full"`
+
+2. `frontend/partials/pages/settings/settings-system.html`：
+   - 删除三个 checkbox（auto_start、lightweight_mode、login_then_exit）
+   - 新增"启动行为"radio group（none/monitor/login_once）
+   - 新增"运行模式"radio group（full/lightweight）
+   - `minimize_to_tray` 添加 `:disabled="config.startup_action === 'login_once'"`
+   - `auto_open_browser`（静默启动）添加 `:disabled="config.runtime_mode === 'lightweight'"`
+
+3. `frontend/styles/components.css`：新增 `.radio-group`、`.radio-option`、`.radio-label`、`.radio-desc` 样式
+
+4. `frontend/partials/wizard.html`：
+   - 删除 auto_start checkbox，startup_action 改用 custom-select
+   - 摘要区域合并为"启动行为"单行显示
+
+5. `frontend/partials/pages/profiles.html`：删除 `auto_start` checkbox（旧字段已不存在）
+
+6. `frontend/js/app-options.js`：`loginActionOptions` 更新为 none/monitor/login_once 三个选项
+
 ### refactor: config_service 适配 startup_action/runtime_mode 新字段
 
 将 `app/services/config_service.py` 中对旧字段（`auto_start`、`lightweight_mode`、`login_then_exit`）的引用替换为新字段（`startup_action`、`runtime_mode`）。
