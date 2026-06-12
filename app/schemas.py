@@ -378,7 +378,7 @@ class ProfilesData(BaseModel):
     profiles: dict[str, ProfileSettings] = Field(default_factory=dict)
 
 
-def get_runtime_features(mode: str, minimize_to_tray: bool, auto_open_browser: bool) -> RuntimeFeatures:
+def get_runtime_features(mode: RuntimeMode | str, minimize_to_tray: bool, auto_open_browser: bool) -> RuntimeFeatures:
     """根据运行模式派生特性标志"""
     if mode == RuntimeMode.LIGHTWEIGHT:
         return RuntimeFeatures(
