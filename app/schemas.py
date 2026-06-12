@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
+from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -10,6 +12,59 @@ from app.utils.logging import VALID_LOG_LEVELS
 from app.utils.platform import get_default_ua
 
 _URL_PATTERN = re.compile(r"^https?://")
+
+
+class StartupAction(StrEnum):
+    """启动后执行什么动作"""
+    NONE = "none"
+    MONITOR = "monitor"
+    LOGIN_ONCE = "login_once"
+
+
+class RuntimeMode(StrEnum):
+    """运行时启用哪些组件"""
+    FULL = "full"
+    LIGHTWEIGHT = "lightweight"
+
+
+class LaunchSource(StrEnum):
+    """程序是怎么被启动的（仅用于日志和 UI 体验，不参与业务逻辑）"""
+    MANUAL = "manual"
+    AUTOSTART = "autostart"
+    UNKNOWN = "unknown"
+
+
+class StartupResult(StrEnum):
+    """启动动作执行结果"""
+    CONTINUE = "continue"
+    EXIT = "exit"
+
+
+@dataclass
+class AppConfig:
+    config_version: int = 2
+    startup_action: StartupAction = StartupAction.NONE
+    runtime_mode: RuntimeMode = RuntimeMode.FULL
+    minimize_to_tray: bool = True
+    auto_open_browser: bool = False
+
+
+@dataclass
+class LaunchContext:
+    source: LaunchSource = LaunchSource.MANUAL
+
+
+@dataclass
+class ApplicationContext:
+    config: AppConfig
+    launch: LaunchContext
+
+
+@dataclass
+class RuntimeFeatures:
+    web_enabled: bool
+    browser_enabled: bool
+    tray_enabled: bool
 
 
 def _validate_auth_url(v: str) -> str:
@@ -102,7 +157,6 @@ class _MonitorFieldsMixin(BaseModel):
     check_interval_seconds: int = Field(
         default=300, ge=10, le=86400, description="检测间隔（秒）"
     )
-    auto_start: bool = False
     pause_enabled: bool = True
     pause_start_hour: int = Field(default=0, ge=0, le=23)
     pause_end_hour: int = Field(default=6, ge=0, le=23)
@@ -154,13 +208,16 @@ class _SystemFieldsMixin(BaseModel):
     backend_log_level: str = Field(default="INFO")
     frontend_log_level: str = Field(default="INFO")
     access_log: bool = Field(default=False, description="Uvicorn HTTP 请求日志")
-    minimize_to_tray: bool = Field(default=True, description="最小化到系统托盘")
-    lightweight_mode: bool = Field(
-        default=False,
-        description="轻量模式：启动时不加载 Web 服务，节省约 35MB 内存；访问网页时自动加载",
+    startup_action: str = Field(
+        default="none",
+        description="启动行为：none=不自动执行, monitor=自动监控, login_once=登录后退出",
     )
+    runtime_mode: str = Field(
+        default="full",
+        description="运行模式：full=完整模式(含Web), lightweight=轻量模式(无Web)",
+    )
+    minimize_to_tray: bool = Field(default=True, description="最小化到系统托盘")
     auto_open_browser: bool = Field(default=False, description="启动后自动打开浏览器")
-    login_then_exit: bool = Field(default=False, description="登录成功后退出软件")
     max_retries: int = Field(default=3, ge=0, le=10)
     retry_interval: int = Field(default=5, ge=1, le=300, description="重试间隔（秒）")
     log_retention_days: int = Field(
@@ -319,3 +376,18 @@ class ProfilesData(BaseModel):
     active_profile: str = Field(default="default")
     system: SystemSettings = Field(default_factory=SystemSettings)
     profiles: dict[str, ProfileSettings] = Field(default_factory=dict)
+
+
+def get_runtime_features(mode: str, minimize_to_tray: bool, auto_open_browser: bool) -> RuntimeFeatures:
+    """根据运行模式派生特性标志"""
+    if mode == RuntimeMode.LIGHTWEIGHT:
+        return RuntimeFeatures(
+            web_enabled=False,
+            browser_enabled=False,
+            tray_enabled=minimize_to_tray,
+        )
+    return RuntimeFeatures(
+        web_enabled=True,
+        browser_enabled=auto_open_browser,
+        tray_enabled=minimize_to_tray,
+    )
