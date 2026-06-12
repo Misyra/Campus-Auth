@@ -418,7 +418,8 @@
   font-size: 12px;
   color: var(--text-muted);
   margin-top: 4px;
-  padding-left: 56px;
+  /* 与 toggle 内容对齐：slider 44px + gap 12px = 56px */
+  margin-left: 56px;
 }
 
 /* 自定义变量样式 */
