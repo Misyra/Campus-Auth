@@ -5,6 +5,28 @@
 
 ## 2026-06-12
 
+### fix: 修复 source_levels 持久化和启动恢复问题
+
+修复 P1 实现中的持久化和启动恢复问题。
+
+**问题：**
+1. `set_source_level` 和 `reset_source_level` API 只修改内存状态，没有写入 `settings.json`
+2. 启动时未从 `settings.json` 恢复 `source_levels`
+3. 前端 `init()` 未调用 `fetchLogLevels()`，用户进入设置页面时看不到真实配置
+4. `reset_source_level` 直接操作私有属性 `_source_levels`
+
+**修复内容：**
+
+1. `app/utils/logging.py`：新增 `LogConfigCenter.remove_source_level()` 方法
+2. `app/api/config.py`：
+   - `set_source_level` 添加 `request` 参数，调用后持久化到 `settings.json`
+   - `reset_source_level` 改用 `config.remove_source_level()`，添加持久化
+   - 新增 `_persist_source_levels()` 辅助函数，通过 `profile_service.update()` 原子写入
+3. `app/application.py`：`run()` 函数中 `log_center.initialize()` 后添加从 `settings.json` 恢复 `source_levels` 的逻辑
+4. `frontend/js/methods/lifecycle.js`：`init()` 的 `Promise.allSettled` 数组中添加 `fetchLogLevels()` 调用
+
+**测试结果：** 1638 passed, 2 skipped
+
 ### feat: 完成按 source 设置日志级别功能 (P1)
 
 实现按 source 独立设置日志级别的完整功能，包括后端 API、配置持久化、SINK 层过滤、前端 UI。
