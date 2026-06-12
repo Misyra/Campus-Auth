@@ -430,4 +430,4 @@ tasks/
 |------|------|
 | `CAMPUS_AUTH_PROJECT_ROOT` | 项目根目录路径 |
 | `CAMPUS_AUTH_START_EXECUTABLE` | 打包可执行文件路径 |
-| `CAMPUS_AUTH_AUTO_OPEN_BROWSER` | 是否自动打开浏览器 |
+| `CAMPUS_AUTH_AUTOSTART` | 标记自启动来源（值为 `1`） |
