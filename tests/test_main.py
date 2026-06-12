@@ -510,7 +510,7 @@ class TestRunLoginThenExit:
         return mock_worker, mock_ps, mock_data
 
     def test_success_first_try(self, tmp_pid_dir):
-        """首次登录成功应 sys.exit(0)。"""
+        """首次登录成功应返回 True。"""
         from main import _run_login_then_exit
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
@@ -534,9 +534,9 @@ class TestRunLoginThenExit:
             patch("time.sleep"),
         ):
             mock_ps.load.return_value = mock_data
-            with pytest.raises(SystemExit) as exc_info:
-                _run_login_then_exit(MagicMock())
-            assert exc_info.value.code == 0
+            mock_ctx = MagicMock()
+            result = _run_login_then_exit(mock_ctx, MagicMock())
+            assert result is True
 
     def test_retry_then_succeed(self, tmp_pid_dir):
         """第一次失败、第二次成功。"""
@@ -565,12 +565,12 @@ class TestRunLoginThenExit:
             patch("time.sleep"),
         ):
             mock_ps.load.return_value = mock_data
-            with pytest.raises(SystemExit) as exc_info:
-                _run_login_then_exit(MagicMock())
-            assert exc_info.value.code == 0
+            mock_ctx = MagicMock()
+            result = _run_login_then_exit(mock_ctx, MagicMock())
+            assert result is True
 
     def test_retries_exhausted(self, tmp_pid_dir):
-        """所有重试均失败，回退到正常模式。"""
+        """所有重试均失败，返回 False。"""
         from main import _run_login_then_exit
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
@@ -595,12 +595,14 @@ class TestRunLoginThenExit:
             patch("time.sleep"),
         ):
             mock_ps.load.return_value = mock_data
+            mock_ctx = MagicMock()
             mock_logger = MagicMock()
-            _run_login_then_exit(mock_logger)
+            result = _run_login_then_exit(mock_ctx, mock_logger)
+            assert result is False
             mock_logger.warning.assert_called_once()
 
     def test_network_already_connected_exits(self, tmp_pid_dir):
-        """网络已连接时应直接退出，不启动浏览器登录。"""
+        """网络已连接时应返回 True，不启动浏览器登录。"""
         from main import _run_login_then_exit
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
@@ -623,9 +625,9 @@ class TestRunLoginThenExit:
             ),
         ):
             mock_ps.load.return_value = mock_data
-            with pytest.raises(SystemExit) as exc_info:
-                _run_login_then_exit(MagicMock())
-            assert exc_info.value.code == 0
+            mock_ctx = MagicMock()
+            result = _run_login_then_exit(mock_ctx, MagicMock())
+            assert result is True
             # 不应调用登录
             mock_worker.submit.assert_not_called()
 
@@ -657,9 +659,9 @@ class TestRunLoginThenExit:
             patch("time.sleep"),
         ):
             mock_ps.load.return_value = mock_data
-            with pytest.raises(SystemExit) as exc_info:
-                _run_login_then_exit(MagicMock())
-            assert exc_info.value.code == 0
+            mock_ctx = MagicMock()
+            result = _run_login_then_exit(mock_ctx, MagicMock())
+            assert result is True
             mock_worker.submit.assert_called_once()
 
     def test_network_check_exception_proceeds(self, tmp_pid_dir):
@@ -690,9 +692,9 @@ class TestRunLoginThenExit:
             patch("time.sleep"),
         ):
             mock_ps.load.return_value = mock_data
-            with pytest.raises(SystemExit) as exc_info:
-                _run_login_then_exit(MagicMock())
-            assert exc_info.value.code == 0
+            mock_ctx = MagicMock()
+            result = _run_login_then_exit(mock_ctx, MagicMock())
+            assert result is True
             mock_worker.submit.assert_called_once()
 
 
@@ -706,25 +708,57 @@ class TestRunServer:
 
     def test_already_running(self, tmp_pid_dir, patched_webbrowser):
         """检测到已运行时打开浏览器并退出。"""
+        from app.schemas import (
+            AppConfig,
+            ApplicationContext,
+            LaunchContext,
+            LaunchSource,
+            RuntimeMode,
+        )
         from main import _run_server
+
+        mock_ctx = MagicMock(spec=ApplicationContext)
+        mock_ctx.config = MagicMock(spec=AppConfig)
+        mock_ctx.config.runtime_mode = RuntimeMode.FULL
+        mock_ctx.launch = MagicMock(spec=LaunchContext)
+        mock_ctx.launch.source = LaunchSource.MANUAL
 
         with (
             patch("main.is_service_running", return_value=(True, 1234)),
             patch("main.is_local_port_in_use", return_value=True),
+            patch("app.utils.ports.resolve_port", return_value=50721),
         ):
             with pytest.raises(SystemExit) as exc_info:
-                _run_server()
+                _run_server(mock_ctx)
             assert exc_info.value.code == 0
         patched_webbrowser.assert_called_once()
 
     def test_writes_pid_and_registers_atexit(self, tmp_pid_dir):
         """正常启动时写入 PID 文件并注册 atexit 清理。"""
+        from app.schemas import (
+            AppConfig,
+            ApplicationContext,
+            LaunchContext,
+            LaunchSource,
+            RuntimeMode,
+            StartupAction,
+        )
         from main import _run_server
+
+        mock_ctx = MagicMock(spec=ApplicationContext)
+        mock_ctx.config = MagicMock(spec=AppConfig)
+        mock_ctx.config.startup_action = StartupAction.NONE
+        mock_ctx.config.runtime_mode = RuntimeMode.FULL
+        mock_ctx.config.minimize_to_tray = False
+        mock_ctx.config.auto_open_browser = True
+        mock_ctx.launch = MagicMock(spec=LaunchContext)
+        mock_ctx.launch.source = LaunchSource.MANUAL
 
         with (
             patch("main.is_service_running", return_value=(False, None)),
             patch("main.is_local_port_in_use", return_value=False),
             patch("main.ensure_playwright_ready"),
+            patch("app.utils.ports.resolve_port", return_value=50721),
             patch("app.services.profile_service.ProfileService") as mock_ps_cls,
             patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.create_app") as mock_create_app,
@@ -737,26 +771,43 @@ class TestRunServer:
         ):
             mock_ps = MagicMock()
             mock_ps.load.return_value.system = MagicMock(
-                minimize_to_tray=False,
-                login_then_exit=False,
-                auto_open_browser=True,
+                access_log=False,
+                log_retention_days=7,
             )
             mock_ps_cls.return_value = mock_ps
             mock_create_app.return_value = MagicMock()
             mock_container_cls.return_value.stop_web_services = AsyncMock()
             mock_container_cls.return_value.shutdown = AsyncMock()
 
-            _run_server()
+            _run_server(mock_ctx)
             mock_atexit.assert_called()
 
     def test_tray_failure_graceful(self, tmp_pid_dir, caplog):
         """系统托盘启动失败时降级，不阻塞主流程。"""
+        from app.schemas import (
+            AppConfig,
+            ApplicationContext,
+            LaunchContext,
+            LaunchSource,
+            RuntimeMode,
+            StartupAction,
+        )
         from main import _run_server
+
+        mock_ctx = MagicMock(spec=ApplicationContext)
+        mock_ctx.config = MagicMock(spec=AppConfig)
+        mock_ctx.config.startup_action = StartupAction.NONE
+        mock_ctx.config.runtime_mode = RuntimeMode.FULL
+        mock_ctx.config.minimize_to_tray = True
+        mock_ctx.config.auto_open_browser = False
+        mock_ctx.launch = MagicMock(spec=LaunchContext)
+        mock_ctx.launch.source = LaunchSource.MANUAL
 
         with (
             patch("main.is_service_running", return_value=(False, None)),
             patch("main.is_local_port_in_use", return_value=False),
             patch("main.ensure_playwright_ready"),
+            patch("app.utils.ports.resolve_port", return_value=50721),
             patch("app.services.profile_service.ProfileService") as mock_ps_cls,
             patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.create_app") as mock_create_app,
@@ -770,26 +821,43 @@ class TestRunServer:
         ):
             mock_ps = MagicMock()
             mock_ps.load.return_value.system = MagicMock(
-                minimize_to_tray=True,
-                login_then_exit=False,
-                auto_open_browser=False,
+                access_log=False,
+                log_retention_days=7,
             )
             mock_ps_cls.return_value = mock_ps
             mock_create_app.return_value = MagicMock()
             mock_container_cls.return_value.stop_web_services = AsyncMock()
             mock_container_cls.return_value.shutdown = AsyncMock()
-            _run_server()
+            _run_server(mock_ctx)
 
         assert "启动系统托盘失败" in caplog.text
 
     def test_login_then_exit_without_autostart_skipped(self, tmp_pid_dir):
-        """login_then_exit=True 但无自启动环境变量时，不触发登录。"""
+        """startup_action=LOGIN_ONCE 时调用 handle_startup_action。"""
+        from app.schemas import (
+            AppConfig,
+            ApplicationContext,
+            LaunchContext,
+            LaunchSource,
+            RuntimeMode,
+            StartupAction,
+        )
         from main import _run_server
+
+        mock_ctx = MagicMock(spec=ApplicationContext)
+        mock_ctx.config = MagicMock(spec=AppConfig)
+        mock_ctx.config.startup_action = StartupAction.LOGIN_ONCE
+        mock_ctx.config.runtime_mode = RuntimeMode.FULL
+        mock_ctx.config.minimize_to_tray = False
+        mock_ctx.config.auto_open_browser = True
+        mock_ctx.launch = MagicMock(spec=LaunchContext)
+        mock_ctx.launch.source = LaunchSource.MANUAL
 
         with (
             patch("main.is_service_running", return_value=(False, None)),
             patch("main.is_local_port_in_use", return_value=False),
             patch("main.ensure_playwright_ready"),
+            patch("app.utils.ports.resolve_port", return_value=50721),
             patch("app.services.profile_service.ProfileService") as mock_ps_cls,
             patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.create_app") as mock_create_app,
@@ -799,24 +867,20 @@ class TestRunServer:
             patch("main.signal.signal"),
             patch("main.os._exit"),
             patch.object(time, "sleep", side_effect=[None, KeyboardInterrupt]),
-            patch("main._run_login_then_exit") as mock_lte,
-            patch.dict(os.environ, {}, clear=False),
+            patch("main.handle_startup_action", return_value=(MagicMock(), False)) as mock_handle,
         ):
-            # 确保 CAMPUS_AUTH_AUTOSTART 不存在
-            os.environ.pop("CAMPUS_AUTH_AUTOSTART", None)
             mock_ps = MagicMock()
             mock_ps.load.return_value.system = MagicMock(
-                minimize_to_tray=False,
-                login_then_exit=True,
-                auto_open_browser=True,
+                access_log=False,
+                log_retention_days=7,
             )
             mock_ps_cls.return_value = mock_ps
             mock_create_app.return_value = MagicMock()
             mock_container_cls.return_value.stop_web_services = AsyncMock()
             mock_container_cls.return_value.shutdown = AsyncMock()
 
-            _run_server()
-            mock_lte.assert_not_called()
+            _run_server(mock_ctx)
+            mock_handle.assert_called_once()
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -826,6 +890,27 @@ class TestRunServer:
 
 class TestSignalHandler:
     """_run_server 内的信号处理器。"""
+
+    def _make_ctx(self):
+        """创建测试用 ApplicationContext。"""
+        from app.schemas import (
+            AppConfig,
+            ApplicationContext,
+            LaunchContext,
+            LaunchSource,
+            RuntimeMode,
+            StartupAction,
+        )
+
+        mock_ctx = MagicMock(spec=ApplicationContext)
+        mock_ctx.config = MagicMock(spec=AppConfig)
+        mock_ctx.config.startup_action = StartupAction.NONE
+        mock_ctx.config.runtime_mode = RuntimeMode.FULL
+        mock_ctx.config.minimize_to_tray = False
+        mock_ctx.config.auto_open_browser = False
+        mock_ctx.launch = MagicMock(spec=LaunchContext)
+        mock_ctx.launch.source = LaunchSource.MANUAL
+        return mock_ctx
 
     def test_sigint_triggers_cleanup(self, tmp_pid_dir):
         """SIGINT 触发 cleanup 和 os._exit(0)。"""
@@ -841,6 +926,7 @@ class TestSignalHandler:
             patch("main.is_service_running", return_value=(False, None)),
             patch("main.is_local_port_in_use", return_value=False),
             patch("main.ensure_playwright_ready"),
+            patch("app.utils.ports.resolve_port", return_value=50721),
             patch("app.services.profile_service.ProfileService") as mock_ps_cls,
             patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.create_app") as mock_create_app,
@@ -853,15 +939,14 @@ class TestSignalHandler:
         ):
             mock_ps = MagicMock()
             mock_ps.load.return_value.system = MagicMock(
-                minimize_to_tray=False,
-                login_then_exit=False,
-                auto_open_browser=False,
+                access_log=False,
+                log_retention_days=7,
             )
             mock_ps_cls.return_value = mock_ps
             mock_create_app.return_value = MagicMock()
             mock_container_cls.return_value.stop_web_services = AsyncMock()
             mock_container_cls.return_value.shutdown = AsyncMock()
-            _run_server()
+            _run_server(self._make_ctx())
 
             # 模拟 SIGINT 触发（仍在 os._exit mock 范围内）
             assert signal.SIGINT in registered
@@ -890,6 +975,7 @@ class TestSignalHandler:
             patch("main.is_service_running", return_value=(False, None)),
             patch("main.is_local_port_in_use", return_value=False),
             patch("main.ensure_playwright_ready"),
+            patch("app.utils.ports.resolve_port", return_value=50721),
             patch("app.services.profile_service.ProfileService") as mock_ps_cls,
             patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.create_app") as mock_create_app,
@@ -902,15 +988,14 @@ class TestSignalHandler:
         ):
             mock_ps = MagicMock()
             mock_ps.load.return_value.system = MagicMock(
-                minimize_to_tray=False,
-                login_then_exit=False,
-                auto_open_browser=False,
+                access_log=False,
+                log_retention_days=7,
             )
             mock_ps_cls.return_value = mock_ps
             mock_create_app.return_value = MagicMock()
             mock_container_cls.return_value.stop_web_services = AsyncMock()
             mock_container_cls.return_value.shutdown = AsyncMock()
-            _run_server()
+            _run_server(self._make_ctx())
 
         # SIGINT 一定被注册
         assert signal.SIGINT in registered
