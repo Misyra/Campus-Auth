@@ -18,7 +18,17 @@ _project_root = Path(__file__).resolve().parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from app.constants import AUTH_DATA_DIR  # noqa: E402  — 测试 fixture 需要
+from app.constants import AUTH_DATA_DIR  # noqa: E402, F401 — 测试 fixture 需要
+from app.schemas import (  # noqa: E402
+    AppConfig,
+    ApplicationContext,
+    LaunchContext,
+    LaunchSource,
+    RuntimeMode,
+    StartupAction,
+    StartupResult,
+    get_runtime_features,
+)
 from app.utils.platform import is_windows  # noqa: E402
 from app.utils.process import (  # noqa: E402
     cleanup_pid,
@@ -37,14 +47,11 @@ from app.workers.playwright_worker import cleanup_orphan_browsers  # noqa: E402
 
 
 def _open_browser(port: int, setting: bool | None = None) -> None:
-    if setting is not None:
-        if not setting:
-            return
-    else:
-        from app.utils import str_to_bool
-
-        if not str_to_bool(os.getenv("CAMPUS_AUTH_AUTO_OPEN_BROWSER", "true")):
-            return
+    """根据配置决定是否打开浏览器。setting=True 打开，False/None 不打开。"""
+    if setting is not None and not setting:
+        return
+    if setting is None:
+        return
 
     def _worker():
         time.sleep(1.2)
@@ -94,9 +101,6 @@ def _cmd_stop() -> None:
             )
             cleanup_pid()
             return
-
-    # 清理轻量模式触发文件
-    (AUTH_DATA_DIR / ".start-web").unlink(missing_ok=True)
 
     try:
         print(f"正在停止服务 (PID: {pid})...")
@@ -153,40 +157,36 @@ def _cmd_autostart(action: str) -> None:
 # ==================== 登录成功后退出 ====================
 
 
-def _run_login_then_exit(logger) -> None:
-    """登录成功后退出模式：先检测网络，已连接则直接退出；否则循环重试登录。"""
+def _run_login_then_exit(ctx: ApplicationContext, logger) -> bool:
+    """登录成功后退出模式。成功返回 True，失败返回 False。"""
     from app.workers.playwright_worker import CMD_LOGIN, get_worker
 
     # 加载配置
     try:
-        from app.services.profile_service import ProfileService
-
-        ps = ProfileService(Path(__file__).parent.resolve())
-        data = ps.load()
-
-        # 构建运行时配置
         from app.services.config_service import (
             build_runtime_config,
             load_runtime_config,
         )
+        from app.services.profile_service import ProfileService
 
+        ps = ProfileService(Path(__file__).parent.resolve())
+        data = ps.load()
         payload, has_decrypt_error = load_runtime_config(ps)
         if has_decrypt_error:
             print("警告: 部分密码解密失败，可能需要重新配置密码")
         runtime_config = build_runtime_config(payload, data.system)
     except Exception as exc:
         print(f"加载配置失败: {exc}")
-        sys.exit(1)
+        return False
 
-    # 先检测网络状态，已连接则无需登录，直接退出
+    # 先检测网络状态，已连接则无需登录
     try:
         from app.network.decision import check_network_status
 
         network_ok, reason = check_network_status(runtime_config)
         if network_ok:
             print("网络已连接，无需登录，正在退出...")
-            cleanup_pid()
-            sys.exit(0)
+            return True
         print(f"网络未连接 ({reason})，开始登录...")
     except Exception as exc:
         logger.debug("网络检测异常，继续尝试登录: {}", exc)
@@ -209,13 +209,9 @@ def _run_login_then_exit(logger) -> None:
         success = False
         message = ""
         try:
-            # 通过 PlaywrightWorker 提交登录任务（替代原来的 asyncio.new_event_loop() 模式）
             result = get_worker().submit(
                 CMD_LOGIN,
-                data={
-                    "config": runtime_config,
-                    "skip_pause_check": True,
-                },
+                data={"config": runtime_config, "skip_pause_check": True},
                 timeout=120,
             )
             success = result.success
@@ -225,49 +221,129 @@ def _run_login_then_exit(logger) -> None:
 
         if success:
             print(f"登录成功: {message}")
-            print("登录完成，正在退出...")
-            # 清理可能残留的浏览器进程
             cleanup_orphan_browsers()
-            cleanup_pid()
-            sys.exit(0)
+            return True
 
         print(f"登录失败 (第 {attempt} 次): {message}")
-
         if max_retries > 0 and attempt >= max_retries:
             break
 
-    # 超过最大重试次数，回退到正常启动
-    # 在回退之前清理可能残留的浏览器进程
     cleanup_orphan_browsers()
-    print(f"已重试 {max_retries} 次均失败，回退到正常模式启动服务器")
-    logger.warning(
-        "login_then_exit 登录失败（已重试 {} 次），回退到正常模式启动服务器",
-        max_retries,
+    print(f"已重试 {max_retries} 次均失败，回退到正常模式")
+    logger.warning("login_once 登录失败（已重试 {} 次），回退到正常模式", max_retries)
+    return False
+
+
+# ==================== 启动辅助函数 ====================
+
+
+def _detect_launch_context() -> LaunchContext:
+    """检测启动来源（仅用于日志和 UI 体验，不参与业务逻辑）"""
+    source = (
+        LaunchSource.AUTOSTART
+        if os.environ.get("CAMPUS_AUTH_AUTOSTART") == "1"
+        else LaunchSource.MANUAL
     )
+    return LaunchContext(source=source)
 
 
-# ==================== 无 Web 模式 ====================
+def _build_app_config(
+    cli_startup_action: str | None = None,
+    cli_runtime_mode: str | None = None,
+    cli_no_browser: bool = False,
+    cli_browser: bool = False,
+    cli_tray: bool = False,
+    cli_no_tray: bool = False,
+) -> AppConfig:
+    """合并 Default → Settings → CLI 为最终 AppConfig"""
+    config = AppConfig()
+
+    # 从 settings.json 加载
+    try:
+        from app.services.profile_service import ProfileService
+        _ps = ProfileService(Path(__file__).parent.resolve())
+        _data = _ps.load()
+        _sys = _data.system
+        config.startup_action = StartupAction(getattr(_sys, "startup_action", "none"))
+        config.runtime_mode = RuntimeMode(getattr(_sys, "runtime_mode", "full"))
+        config.minimize_to_tray = bool(getattr(_sys, "minimize_to_tray", True))
+        config.auto_open_browser = bool(getattr(_sys, "auto_open_browser", False))
+    except Exception:
+        pass  # 使用默认值
+
+    # CLI 覆盖
+    if cli_startup_action is not None:
+        config.startup_action = StartupAction(cli_startup_action)
+    if cli_runtime_mode is not None:
+        config.runtime_mode = RuntimeMode(cli_runtime_mode)
+    if cli_browser:
+        config.auto_open_browser = True
+    if cli_no_browser:
+        config.auto_open_browser = False
+    if cli_tray:
+        config.minimize_to_tray = True
+    if cli_no_tray:
+        config.minimize_to_tray = False
+
+    return config
 
 
-def _run_no_web(logger, minimize_to_tray=False) -> None:
-    """无 Web 模式：仅运行网络监控和定时任务，不启动 Web 服务。"""
+def handle_startup_action(ctx: ApplicationContext, logger) -> tuple[StartupResult, bool]:
+    """第一层状态机：处理启动动作。返回 (结果, 是否需要启动监控引擎)"""
+    match ctx.config.startup_action:
+        case StartupAction.NONE:
+            return StartupResult.CONTINUE, False
+        case StartupAction.MONITOR:
+            return StartupResult.CONTINUE, True
+        case StartupAction.LOGIN_ONCE:
+            success = _run_login_then_exit(ctx, logger)
+            if success:
+                return StartupResult.EXIT, False
+            return StartupResult.CONTINUE, False
+        case _:
+            return StartupResult.CONTINUE, False
+
+
+def _handle_existing_instance(ctx: ApplicationContext):
+    """检测已运行实例，根据模式处理"""
+    running, pid = is_service_running()
+    if not running:
+        return
+    from app.utils.ports import resolve_port
+    port = resolve_port()
+    match ctx.config.runtime_mode:
+        case RuntimeMode.FULL:
+            print(f"服务已运行 (PID: {pid})，正在打开 Web 控制台...")
+            webbrowser.open(f"http://127.0.0.1:{port}")
+        case RuntimeMode.LIGHTWEIGHT:
+            print(f"服务已运行 (PID: {pid})")
+    sys.exit(0)
+
+
+# ==================== 运行模式 ====================
+
+
+_shutdown_event = threading.Event()
+
+
+def _wait_for_shutdown():
+    """阻塞等待关闭信号"""
+    _shutdown_event.wait()
+
+
+def _run_lightweight(ctx: ApplicationContext, logger):
+    """轻量模式：仅监控 + 定时任务，无 Web 服务"""
     from app.container import ServiceContainer
 
     container = ServiceContainer(Path(__file__).parent.resolve())
     container.engine.boot()
     if container.engine.has_enabled_tasks():
         container.engine.start_scheduler()
-    logger.info("无 Web 模式启动: 仅监控 + 定时任务")
+    logger.info("轻量模式启动: 仅监控 + 定时任务")
 
     # 信号处理器
-    _shutdown = False
-
     def _signal_handler(signum, _frame):
-        nonlocal _shutdown
-        if _shutdown:
-            cleanup_pid()
-            os._exit(1)
-        _shutdown = True
+        _shutdown_event.set()
         logger.info("收到退出信号，正在关闭...")
         cleanup_pid()
 
@@ -277,10 +353,10 @@ def _run_no_web(logger, minimize_to_tray=False) -> None:
 
     # 系统托盘
     tray_icon = None
-    if minimize_to_tray:
+    features = get_runtime_features(ctx.config.runtime_mode, ctx.config.minimize_to_tray, ctx.config.auto_open_browser)
+    if features.tray_enabled:
         try:
             from app.ui.system_tray import SystemTray
-
             tray_icon = SystemTray(
                 port=0,
                 on_exit=lambda: os.kill(os.getpid(), signal.SIGTERM)
@@ -291,11 +367,8 @@ def _run_no_web(logger, minimize_to_tray=False) -> None:
         except Exception as e:
             logger.warning("启动系统托盘失败: {}", e)
 
-    # 阻塞等待关闭信号
-    while not _shutdown:
-        time.sleep(1)
+    _wait_for_shutdown()
 
-    # 清理
     if tray_icon:
         tray_icon.stop()
     logger.info("正在关闭服务...")
@@ -304,53 +377,22 @@ def _run_no_web(logger, minimize_to_tray=False) -> None:
     loop.close()
 
 
-# ==================== 主启动 ====================
-
-
-def _run_server(
-    no_browser: bool = False,
-    tray: bool = False,
-    no_auto: bool = False,
-    no_web: bool = False,
-) -> None:
-    from app.utils.logging import get_logger
-
-    startup_logger = get_logger("startup", source="backend")
-    startup_begin = time.perf_counter()
-    running, pid = is_service_running()
+def _run_full(ctx: ApplicationContext, should_boot_engine: bool, logger, startup_begin: float):
+    """完整模式：Web 服务 + 监控 + 定时任务"""
+    from app.application import run
+    from app.container import ServiceContainer
     from app.utils.ports import resolve_port
 
     port = resolve_port()
+    container = ServiceContainer(Path(__file__).parent.resolve())
 
-    if running or is_local_port_in_use(port):
-        print(f"软件已启动 (PID: {pid})，正在打开 Web 控制台...")
-        webbrowser.open(f"http://127.0.0.1:{port}")
-        sys.exit(0)
+    if should_boot_engine:
+        container.engine.boot()
 
-    write_pid()
-    atexit.register(cleanup_pid)
-
-    # 读取系统设置
-    auto_open_browser = None
-    try:
-        from app.services.profile_service import ProfileService
-
-        _ps = ProfileService(Path(__file__).parent.resolve())
-        _sys_settings = _ps.load().system
-        minimize_to_tray = tray or bool(_sys_settings.minimize_to_tray)
-        login_then_exit = bool(_sys_settings.login_then_exit)
-        auto_open_browser = bool(_sys_settings.auto_open_browser)
-        lightweight_mode = bool(_sys_settings.lightweight_mode)
-    except Exception:
-        _sys_settings = None
-        minimize_to_tray = tray or False
-        login_then_exit = False
-        lightweight_mode = False
-
-    # uvicorn server 引用（信号处理器和完整模式共用）
-    _uvicorn_server = [None]
+    features = get_runtime_features(ctx.config.runtime_mode, ctx.config.minimize_to_tray, ctx.config.auto_open_browser)
 
     # 信号处理器
+    _uvicorn_server = [None]
     _shutdown_initiated = False
 
     def _signal_handler(signum, _frame):
@@ -359,7 +401,7 @@ def _run_server(
             cleanup_pid()
             os._exit(1)
         _shutdown_initiated = True
-        startup_logger.info("收到退出信号，正在关闭...")
+        logger.info("收到退出信号，正在关闭...")
         cleanup_pid()
         if _uvicorn_server[0] is not None:
             _uvicorn_server[0].should_exit = True
@@ -370,40 +412,11 @@ def _run_server(
     if hasattr(signal, "SIGTERM"):
         signal.signal(signal.SIGTERM, _signal_handler)
 
-    # Playwright 检查
-    stage_begin = time.perf_counter()
-    startup_logger.info("启动阶段: 开始检查 Playwright 运行环境")
-    ensure_playwright_ready(print)
-    startup_logger.info(
-        "启动阶段: Playwright 检查完成，耗时 {:.3f}s",
-        time.perf_counter() - stage_begin,
-    )
-
-    # 登录成功后退出模式
-    is_autostart = os.environ.get("CAMPUS_AUTH_AUTOSTART") == "1"
-    if login_then_exit and is_autostart and not no_auto:
-        _run_login_then_exit(startup_logger)
-
-    if no_auto:
-        os.environ["CAMPUS_AUTH_NO_AUTO"] = "1"
-
-    # ── 无 Web 模式：CLI --no-web 或 (自启动 + 轻量模式设置) ──
-    if no_web or (is_autostart and lightweight_mode):
-        _run_no_web(startup_logger, minimize_to_tray=minimize_to_tray)
-        return
-
-    # 创建容器（生命周期独立于 uvicorn）
-    from app.application import run
-    from app.container import ServiceContainer
-
-    container = ServiceContainer(Path(__file__).parent.resolve())
-
     # 系统托盘
     tray_icon = None
-    if minimize_to_tray:
+    if features.tray_enabled:
         try:
             from app.ui.system_tray import SystemTray
-
             tray_icon = SystemTray(
                 port=port,
                 on_exit=lambda: os.kill(os.getpid(), signal.SIGTERM)
@@ -411,26 +424,28 @@ def _run_server(
                 else cleanup_pid() or os._exit(0),
             )
             tray_icon.start()
-            startup_logger.info("系统托盘已启动，双击图标打开控制台")
+            logger.info("系统托盘已启动，双击图标打开控制台")
         except Exception as e:
-            startup_logger.warning("启动系统托盘失败: {}", e)
+            logger.warning("启动系统托盘失败: {}", e)
 
-    if not no_browser:
-        _open_browser(port, setting=auto_open_browser)
+    if features.browser_enabled:
+        _open_browser(port, setting=True)
 
-    startup_logger.info("Web 控制台: http://127.0.0.1:{}", port)
-    startup_logger.info("日志文件:   {}", Path.cwd() / "logs")
-    startup_logger.info("按 Ctrl+C 停止服务")
-    startup_logger.info(
+    logger.info("Web 控制台: http://127.0.0.1:{}", port)
+    logger.info("日志文件:   {}", Path.cwd() / "logs")
+    logger.info("按 Ctrl+C 停止服务")
+    logger.info(
         "启动阶段: 启动准备完成，总耗时 {:.3f}s，开始启动 Uvicorn",
         time.perf_counter() - startup_begin,
     )
 
     try:
-        # 启动 uvicorn（阻塞直到关机）
         try:
-            _al = bool(_sys_settings.access_log)
-            _lr = max(1, int(_sys_settings.log_retention_days))
+            from app.services.profile_service import ProfileService
+            _ps = ProfileService(Path(__file__).parent.resolve())
+            _sys = _ps.load().system
+            _al = bool(_sys.access_log)
+            _lr = max(1, int(_sys.log_retention_days))
         except (AttributeError, TypeError, ValueError):
             _al, _lr = False, 7
 
@@ -441,16 +456,61 @@ def _run_server(
             server_ref=_uvicorn_server,
         )
     except KeyboardInterrupt:
-        startup_logger.info("收到退出信号，正在关闭...")
+        logger.info("收到退出信号，正在关闭...")
     finally:
         if tray_icon:
             tray_icon.stop()
 
-    # ── 进程退出清理 ──
-    startup_logger.info("正在关闭服务...")
+    logger.info("正在关闭服务...")
     loop = asyncio.new_event_loop()
     loop.run_until_complete(container.shutdown())
     loop.close()
+
+
+# ==================== 主启动 ====================
+
+
+def _run_server(ctx: ApplicationContext) -> None:
+    """主启动流程：两层正交状态机（StartupAction → RuntimeMode）"""
+    from app.utils.logging import get_logger
+
+    startup_logger = get_logger("startup", source="backend")
+    startup_begin = time.perf_counter()
+
+    # 检测已运行实例
+    _handle_existing_instance(ctx)
+
+    write_pid()
+    atexit.register(cleanup_pid)
+
+    # Playwright 检查
+    stage_begin = time.perf_counter()
+    startup_logger.info("启动阶段: 开始检查 Playwright 运行环境")
+    ensure_playwright_ready(print)
+    startup_logger.info(
+        "启动阶段: Playwright 检查完成，耗时 {:.3f}s",
+        time.perf_counter() - stage_begin,
+    )
+
+    startup_logger.info(
+        "启动来源: {}, 启动动作: {}, 运行模式: {}",
+        ctx.launch.source.value,
+        ctx.config.startup_action.value,
+        ctx.config.runtime_mode.value,
+    )
+
+    # 第一层：启动动作
+    result, should_boot_engine = handle_startup_action(ctx, startup_logger)
+    if result == StartupResult.EXIT:
+        cleanup_pid()
+        return
+
+    # 第二层：运行模式
+    match ctx.config.runtime_mode:
+        case RuntimeMode.LIGHTWEIGHT:
+            _run_lightweight(ctx, startup_logger)
+        case _:
+            _run_full(ctx, should_boot_engine, startup_logger, startup_begin)
 
 
 # ==================== 全局异常钩子 ====================
@@ -483,35 +543,34 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Campus-Auth 校园网自动认证",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-示例:
-  python main.py                    启动 Web 控制台
-  python main.py --no-browser       启动但不打开浏览器
-  python main.py --no-auto          跳过自动登录和自动启动（用于恢复设置）
-  python main.py --tray             启动到系统托盘
-  python main.py --no-web           不启动 Web 服务，仅运行监控和定时任务
-  python main.py --status           查看服务状态
-  python main.py --stop             停止服务
-  python main.py --autostart        查看开机自启动状态
-  python main.py --autostart enable 启用开机自启动
-        """,
+        epilog="""常用示例:
+  python main.py                              启动 Web 控制台
+  python main.py --runtime-mode lightweight   轻量模式（无 Web 界面）
+  python main.py --startup-action monitor     启动后自动开始监控
+  python main.py --startup-action login_once  登录成功后退出
+  python main.py --no-browser                 不自动打开浏览器
+  python main.py --status                     查看运行状态
+  python main.py --stop                       停止后台服务
+  python main.py --autostart                  查看开机自启动状态
+  python main.py --autostart enable           启用开机自启动""",
     )
 
     parser.add_argument(
-        "--no-browser", action="store_true", help="启动后不自动打开浏览器"
+        "--startup-action",
+        choices=["none", "monitor", "login_once"],
+        default=None,
+        help="覆盖启动动作",
     )
     parser.add_argument(
-        "--no-auto",
-        action="store_true",
-        help="跳过自动登录（login_then_exit）和自动启动监控（auto_start），"
-        "用于 login_then_exit 开启后无法进入 Web 控制台的恢复场景",
+        "--runtime-mode",
+        choices=["full", "lightweight"],
+        default=None,
+        help="覆盖运行模式",
     )
-    parser.add_argument("--tray", action="store_true", help="启动到系统托盘")
-    parser.add_argument(
-        "--no-web",
-        action="store_true",
-        help="不启动 Web 服务，仅运行网络监控和定时任务（自启动默认使用）",
-    )
+    parser.add_argument("--browser", action="store_true", help="自动打开浏览器")
+    parser.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
+    parser.add_argument("--tray", action="store_true", help="最小化到系统托盘")
+    parser.add_argument("--no-tray", action="store_true", help="不最小化到系统托盘")
     parser.add_argument("--status", action="store_true", help="查看服务状态")
     parser.add_argument("--stop", action="store_true", help="停止服务")
     parser.add_argument(
@@ -524,6 +583,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # 互斥参数检测
+    if args.browser and args.no_browser:
+        parser.error("--browser 和 --no-browser 不能同时使用")
+    if args.tray and args.no_tray:
+        parser.error("--tray 和 --no-tray 不能同时使用")
+
+    # CLI 命令
     if args.status:
         _cmd_status()
         return
@@ -536,12 +602,19 @@ def main() -> None:
         _cmd_autostart(args.autostart)
         return
 
-    _run_server(
-        no_browser=args.no_browser,
-        tray=args.tray,
-        no_auto=args.no_auto,
-        no_web=args.no_web,
+    # 构建配置和上下文
+    config = _build_app_config(
+        cli_startup_action=args.startup_action,
+        cli_runtime_mode=args.runtime_mode,
+        cli_no_browser=args.no_browser,
+        cli_browser=args.browser,
+        cli_tray=args.tray,
+        cli_no_tray=args.no_tray,
     )
+    launch_ctx = _detect_launch_context()
+    ctx = ApplicationContext(config=config, launch=launch_ctx)
+
+    _run_server(ctx)
 
 
 if __name__ == "__main__":
