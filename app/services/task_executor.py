@@ -23,6 +23,43 @@ from app.utils.shell_utils import detect_shells, get_default_shell
 logger = get_logger("task_executor", source="backend")
 
 
+class NullTaskExecutor:
+    """空任务执行器 — 轻量模式下使用，避免 None 检查。"""
+
+    def has_enabled_tasks(self) -> bool:
+        return False
+
+    def shutdown(self, wait: bool = True) -> None:
+        pass
+
+    def execute_task_async(self, task_id: str) -> Future | None:
+        return None
+
+    def execute_login_async(self, cancel_event=None) -> Future | None:
+        return None
+
+    def execute_task(self, task_id: str) -> tuple[bool, str]:
+        return False, "轻量模式下不支持定时任务"
+
+    def execute_login(self, cancel_event=None) -> Any:
+        return None
+
+    def list_tasks(self) -> list[dict]:
+        return []
+
+    def get_task(self, task_id: str) -> dict | None:
+        return None
+
+    def save_task(self, task_id: str, config: dict) -> tuple[bool, str]:
+        return False, "轻量模式下不支持定时任务"
+
+    def delete_task(self, task_id: str) -> tuple[bool, str]:
+        return False, "轻量模式下不支持定时任务"
+
+    def get_history(self, task_id: str) -> list[dict]:
+        return []
+
+
 class BoundedExecutor:
     """带队列长度限制的线程池执行器。
 

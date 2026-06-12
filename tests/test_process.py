@@ -53,27 +53,21 @@ class TestNormalizeProcName:
 class TestReadPidFile:
     """PID 文件读取。"""
 
-    def test_valid_pid(self, tmp_path):
-        """有效 PID。"""
+    def test_valid_json(self, tmp_path):
+        """有效 JSON 格式。"""
+        import json
+
         pid_file = tmp_path / "test.pid"
-        pid_file.write_text("12345", encoding="utf-8")
+        data = {"pid": 12345, "create_time": 1718191234.123, "mode": "lightweight", "proc_name": "python.exe"}
+        pid_file.write_text(json.dumps(data), encoding="utf-8")
 
         with patch("app.utils.process.get_pid_file", return_value=pid_file):
-            pid, name, timestamp = read_pid_file()
-            assert pid == 12345
-            assert name is None
-            assert timestamp is None
-
-    def test_valid_pid_with_name(self, tmp_path):
-        """带进程名的 PID。"""
-        pid_file = tmp_path / "test.pid"
-        pid_file.write_text("12345\npython.exe|2026-06-01 12:00:00", encoding="utf-8")
-
-        with patch("app.utils.process.get_pid_file", return_value=pid_file):
-            pid, name, timestamp = read_pid_file()
-            assert pid == 12345
-            assert name == "python.exe"
-            assert timestamp == "2026-06-01 12:00:00"
+            result = read_pid_file()
+            assert result is not None
+            assert result["pid"] == 12345
+            assert result["create_time"] == 1718191234.123
+            assert result["mode"] == "lightweight"
+            assert result["proc_name"] == "python.exe"
 
     def test_empty_file(self, tmp_path):
         """空文件。"""
@@ -81,16 +75,26 @@ class TestReadPidFile:
         pid_file.write_text("", encoding="utf-8")
 
         with patch("app.utils.process.get_pid_file", return_value=pid_file):
-            pid, name, timestamp = read_pid_file()
-            assert pid is None
+            result = read_pid_file()
+            assert result is None
 
     def test_nonexistent_file(self, tmp_path):
         """文件不存在。"""
         pid_file = tmp_path / "nonexistent.pid"
 
         with patch("app.utils.process.get_pid_file", return_value=pid_file):
-            pid, name, timestamp = read_pid_file()
-            assert pid is None
+            result = read_pid_file()
+            assert result is None
+
+    def test_invalid_json(self, tmp_path):
+        """无效 JSON。"""
+        pid_file = tmp_path / "test.pid"
+        pid_file.write_text("not json", encoding="utf-8")
+
+        with patch("app.utils.process.get_pid_file", return_value=pid_file):
+            result = read_pid_file()
+            # 旧格式解析失败返回 None
+            assert result is None
 
     def test_invalid_pid(self, tmp_path):
         """无效 PID。"""
@@ -98,47 +102,32 @@ class TestReadPidFile:
         pid_file.write_text("not_a_number", encoding="utf-8")
 
         with patch("app.utils.process.get_pid_file", return_value=pid_file):
-            pid, name, timestamp = read_pid_file()
-            assert pid is None
+            result = read_pid_file()
+            assert result is None
 
     def test_negative_pid(self, tmp_path):
         """负数 PID。"""
+        import json
+
         pid_file = tmp_path / "test.pid"
-        pid_file.write_text("-1", encoding="utf-8")
+        data = {"pid": -1, "create_time": 1718191234.123}
+        pid_file.write_text(json.dumps(data), encoding="utf-8")
 
         with patch("app.utils.process.get_pid_file", return_value=pid_file):
-            pid, name, timestamp = read_pid_file()
-            assert pid is None
+            result = read_pid_file()
+            assert result is None
 
     def test_zero_pid(self, tmp_path):
         """零 PID。"""
+        import json
+
         pid_file = tmp_path / "test.pid"
-        pid_file.write_text("0", encoding="utf-8")
+        data = {"pid": 0, "create_time": 1718191234.123}
+        pid_file.write_text(json.dumps(data), encoding="utf-8")
 
         with patch("app.utils.process.get_pid_file", return_value=pid_file):
-            pid, name, timestamp = read_pid_file()
-            assert pid is None
-
-    def test_pid_only_no_name(self, tmp_path):
-        """仅有 PID 无进程名。"""
-        pid_file = tmp_path / "test.pid"
-        pid_file.write_text("12345\n", encoding="utf-8")
-
-        with patch("app.utils.process.get_pid_file", return_value=pid_file):
-            pid, name, timestamp = read_pid_file()
-            assert pid == 12345
-            assert name is None
-
-    def test_name_without_timestamp(self, tmp_path):
-        """有进程名无时间戳。"""
-        pid_file = tmp_path / "test.pid"
-        pid_file.write_text("12345\npython.exe", encoding="utf-8")
-
-        with patch("app.utils.process.get_pid_file", return_value=pid_file):
-            pid, name, timestamp = read_pid_file()
-            assert pid == 12345
-            assert name == "python.exe"
-            assert timestamp is None
+            result = read_pid_file()
+            assert result is None
 
 
 # ── get_pid_file ──

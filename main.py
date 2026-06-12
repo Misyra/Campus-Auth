@@ -29,7 +29,7 @@ from app.schemas import (  # noqa: E402
     StartupResult,
     get_runtime_features,
 )
-from app.utils.platform import is_windows  # noqa: E402
+from app.utils.platform import CREATE_NO_WINDOW_FLAG, is_windows  # noqa: E402
 from app.utils.process import (  # noqa: E402
     cleanup_pid,
     get_pid_file,
@@ -38,6 +38,7 @@ from app.utils.process import (  # noqa: E402
     is_service_running,
     normalize_proc_name,
     read_pid_file,
+    read_pid_mode,
     write_pid,
 )
 from app.workers.playwright_bootstrap import ensure_playwright_ready  # noqa: E402
@@ -72,7 +73,9 @@ def _cmd_status() -> None:
     port = resolve_port()
 
     if running:
-        print(f"服务正在运行 (PID: {pid})")
+        mode = read_pid_mode()
+        mode_str = f" [{mode}]" if mode else ""
+        print(f"服务正在运行 (PID: {pid}){mode_str}")
     elif is_local_port_in_use(port):
         print(f"服务疑似正在运行 (端口: {port})")
     elif had_pid_file:
@@ -88,49 +91,47 @@ def _cmd_stop() -> None:
         print("服务未运行")
         return
 
-    # 进程身份验证：新格式 PID 文件中记录的进程名必须匹配实际运行进程
-    stored_pid, proc_name, _ = read_pid_file()
-    if proc_name is not None:
-        actual_name = get_process_name(pid)
-        if actual_name is None or normalize_proc_name(
-            actual_name
-        ) != normalize_proc_name(proc_name):
-            print(
-                f"警告: PID 文件记录的进程名 '{proc_name}' 与实际进程 "
-                f"'{actual_name or 'N/A'}' 不匹配，跳过停服操作"
-            )
-            cleanup_pid()
-            return
-
+    print(f"正在停止服务 (PID: {pid})...")
     try:
-        print(f"正在停止服务 (PID: {pid})...")
-        if is_windows():
-            # Windows: 直接使用 taskkill /F 强制终止（taskkill 无 /F 对控制台程序无效）
-            subprocess.run(
-                ["taskkill", "/F", "/PID", str(pid)],
-                capture_output=True,
-                creationflags=subprocess.CREATE_NO_WINDOW
-                if hasattr(subprocess, "CREATE_NO_WINDOW")
-                else 0,
-            )
-        else:
-            os.kill(pid, signal.SIGTERM)
-            # 等待进程退出
-            for _ in range(10):
-                time.sleep(1)
-                try:
-                    os.kill(pid, 0)
-                except OSError:
-                    print("服务已停止")
-                    cleanup_pid()
-                    return
-            # SIGTERM 无效，使用 SIGKILL
-            os.kill(pid, signal.SIGKILL)
+        _terminate_process(pid)
         print("服务已停止")
     except OSError:
         print("服务未运行")
     finally:
         cleanup_pid()
+
+
+def _terminate_process(pid: int) -> None:
+    """终止进程（先 SIGTERM，等待后 SIGKILL）。"""
+    if is_windows():
+        # Windows: 先尝试 taskkill（无 /F），等待后强制终止
+        subprocess.run(
+            ["taskkill", "/PID", str(pid)],
+            capture_output=True,
+            creationflags=CREATE_NO_WINDOW_FLAG,
+        )
+        # 等待进程退出
+        for _ in range(5):
+            time.sleep(1)
+            if get_process_name(pid) is None:
+                return
+        # 仍未退出，强制终止
+        subprocess.run(
+            ["taskkill", "/F", "/PID", str(pid)],
+            capture_output=True,
+            creationflags=CREATE_NO_WINDOW_FLAG,
+        )
+    else:
+        os.kill(pid, signal.SIGTERM)
+        # 等待进程退出
+        for _ in range(5):
+            time.sleep(1)
+            try:
+                os.kill(pid, 0)
+            except OSError:
+                return
+        # SIGTERM 无效，使用 SIGKILL
+        os.kill(pid, signal.SIGKILL)
 
 
 def _cmd_autostart(action: str) -> None:
@@ -310,11 +311,19 @@ def handle_startup_action(
             return StartupResult.CONTINUE, False
 
 
-def _handle_existing_instance(ctx: ApplicationContext):
+def _handle_existing_instance(ctx: ApplicationContext, force: bool = False):
     """检测已运行实例，根据模式处理"""
     running, pid = is_service_running()
     if not running:
         return
+
+    if force:
+        print(f"强制模式：正在终止已运行的实例 (PID: {pid})...")
+        _terminate_process(pid)
+        cleanup_pid()
+        print("已终止，继续启动...")
+        return
+
     from app.utils.ports import resolve_port
 
     port = resolve_port()
@@ -330,63 +339,29 @@ def _handle_existing_instance(ctx: ApplicationContext):
 # ==================== 运行模式 ====================
 
 
-_shutdown_event = threading.Event()
-
-
-def _wait_for_shutdown():
-    """阻塞等待关闭信号"""
-    _shutdown_event.wait()
-
 
 def _run_lightweight(ctx: ApplicationContext, logger):
-    """轻量模式：始终启动监控 + 定时任务，无 Web 服务。"""
+    """轻量模式：始终启动监控 + 定时任务，无 Web 服务、无托盘。"""
     from app.container import ServiceContainer
 
-    container = ServiceContainer(Path(__file__).parent.resolve())
+    container = ServiceContainer(
+        Path(__file__).parent.resolve(), runtime_mode="lightweight"
+    )
     container.engine.boot()
     if container.engine.has_enabled_tasks():
         container.engine.start_scheduler()
-    logger.info("轻量模式启动: 仅监控 + 定时任务")
+    logger.info("轻量模式启动: 仅监控 + 定时任务，按 Ctrl+C 停止")
 
-    # 信号处理器
-    def _signal_handler(signum, _frame):
-        _shutdown_event.set()
+    try:
+        while True:
+            time.sleep(60)  # 长间隔等待，可被 Ctrl+C 中断
+    except KeyboardInterrupt:
         logger.info("收到退出信号，正在关闭...")
-        cleanup_pid()
-
-    signal.signal(signal.SIGINT, _signal_handler)
-    if hasattr(signal, "SIGTERM"):
-        signal.signal(signal.SIGTERM, _signal_handler)
-
-    # 系统托盘
-    tray_icon = None
-    features = get_runtime_features(
-        ctx.config.runtime_mode,
-        ctx.config.minimize_to_tray,
-        ctx.config.auto_open_browser,
-    )
-    if features.tray_enabled:
-        try:
-            from app.ui.system_tray import SystemTray
-
-            tray_icon = SystemTray(
-                port=0,
-                on_exit=lambda: os.kill(os.getpid(), signal.SIGTERM)
-                if hasattr(signal, "SIGTERM")
-                else cleanup_pid() or os._exit(0),
-            )
-            tray_icon.start()
-        except Exception as e:
-            logger.warning("启动系统托盘失败: {}", e)
-
-    _wait_for_shutdown()
-
-    if tray_icon:
-        tray_icon.stop()
-    logger.info("正在关闭服务...")
-    loop = asyncio.new_event_loop()
-    loop.run_until_complete(container.shutdown())
-    loop.close()
+    finally:
+        logger.info("正在关闭服务...")
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(container.shutdown())
+        loop.close()
 
 
 def _run_full(
@@ -486,7 +461,7 @@ def _run_full(
 # ==================== 主启动 ====================
 
 
-def _run_server(ctx: ApplicationContext) -> None:
+def _run_server(ctx: ApplicationContext, force: bool = False) -> None:
     """主启动流程：两层正交状态机（StartupAction → RuntimeMode）"""
     from app.utils.logging import get_logger
 
@@ -494,9 +469,9 @@ def _run_server(ctx: ApplicationContext) -> None:
     startup_begin = time.perf_counter()
 
     # 检测已运行实例
-    _handle_existing_instance(ctx)
+    _handle_existing_instance(ctx, force=force)
 
-    write_pid()
+    write_pid(ctx.config.runtime_mode.value)
     atexit.register(cleanup_pid)
 
     # Playwright 检查
@@ -586,6 +561,7 @@ def main() -> None:
     parser.add_argument("--browser", action="store_true", help="自动打开浏览器")
     parser.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
     parser.add_argument("--tray", action="store_true", help="最小化到系统托盘")
+    parser.add_argument("--force", action="store_true", help="强制启动，清理残留 PID 文件")
     parser.add_argument("--no-tray", action="store_true", help="不最小化到系统托盘")
     parser.add_argument("--status", action="store_true", help="查看服务状态")
     parser.add_argument("--stop", action="store_true", help="停止服务")
@@ -630,7 +606,7 @@ def main() -> None:
     launch_ctx = _detect_launch_context()
     ctx = ApplicationContext(config=config, launch=launch_ctx)
 
-    _run_server(ctx)
+    _run_server(ctx, force=args.force)
 
 
 if __name__ == "__main__":

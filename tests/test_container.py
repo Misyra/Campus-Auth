@@ -141,6 +141,33 @@ class TestInit:
         assert hasattr(container, "task_history_store")
         assert hasattr(container, "task_executor")
 
+    def test_lightweight_mode_uses_null_ws_manager(self, project_root, mock_classes):
+        """轻量模式下应使用 NullWebSocketManager。"""
+        from app.container import ServiceContainer
+        from app.services.websocket_manager import NullWebSocketManager
+
+        container = ServiceContainer(project_root, runtime_mode="lightweight")
+        assert isinstance(container.ws_manager, NullWebSocketManager)
+        mock_classes["WebSocketManager"].assert_not_called()
+
+    def test_lightweight_mode_creates_task_executor(self, project_root, mock_classes):
+        """轻量模式下应创建 TaskExecutor（定时任务需要）。"""
+        from app.container import ServiceContainer
+
+        container = ServiceContainer(project_root, runtime_mode="lightweight")
+        mock_classes["TaskExecutor"].assert_called_once()
+        assert container.task_executor is not None
+
+    def test_full_mode_creates_ws_manager(self, container, mock_classes):
+        """完整模式下应创建 WebSocketManager。"""
+        mock_classes["WebSocketManager"].assert_called_once()
+        assert container.ws_manager is not None
+
+    def test_full_mode_creates_task_executor(self, container, mock_classes):
+        """完整模式下应创建 TaskExecutor。"""
+        mock_classes["TaskExecutor"].assert_called_once()
+        assert container.task_executor is not None
+
 
 # =====================================================================
 # startup

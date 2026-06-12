@@ -120,8 +120,8 @@ class ScheduleEngine:
 
         # DashboardSink — 由 container.startup 注入
         self._dashboard_sink = None
-        # 固定的空广播队列，避免轻量模式下每次创建临时对象
-        self._empty_broadcast_queue: deque = deque(maxlen=200)
+        # 轻量模式下的空广播队列（仅接收不消费，小容量即可）
+        self._empty_broadcast_queue: deque = deque(maxlen=10)
 
         # 锁（必须在 _reload_config_internal 之前初始化）
         self._login_lock: threading.Lock = threading.Lock()
@@ -318,25 +318,23 @@ class ScheduleEngine:
         self._login_retry.last_attempt = time.time()
         self._login_retry.count += 1
 
-        executor = getattr(self, "_task_executor", None)
-        if executor:
-            try:
-                future = executor.execute_login_async()
-            except Exception:
-                self._login_in_progress.clear()
-                self._update_status_snapshot()
-                raise
-            if future is not None:
-                future.add_done_callback(
-                    lambda _: (
-                        self._login_in_progress.clear(),
-                        self._update_status_snapshot(),
-                    )
-                )
-            else:
-                self._login_in_progress.clear()
+        try:
+            future = self._task_executor.execute_login_async()
+        except Exception:
+            self._login_in_progress.clear()
             self._update_status_snapshot()
-            return
+            raise
+        if future is not None:
+            future.add_done_callback(
+                lambda _: (
+                    self._login_in_progress.clear(),
+                    self._update_status_snapshot(),
+                )
+            )
+        else:
+            self._login_in_progress.clear()
+            self._update_status_snapshot()
+        return
 
         # 回退：旧的独立线程登录（_task_executor 未注入时）
         def _do_login():
@@ -398,12 +396,10 @@ class ScheduleEngine:
 
         now = datetime.now()
         registry = getattr(self, "_task_registry", None)
-        executor = getattr(self, "_task_executor", None)
         if registry:
             due_tasks = registry.get_due_tasks(now.hour, now.minute)
             for task_id in due_tasks:
-                if executor:
-                    executor.execute_task_async(task_id)
+                self._task_executor.execute_task_async(task_id)
         # 计算下一个整分钟
         self._next_schedule_tick = (int(time.time() // 60) * 60) + 60
 
@@ -590,10 +586,9 @@ class ScheduleEngine:
             except IndexError:
                 break
             try:
-                if self._ws_manager:
-                    import json as _json
+                import json as _json
 
-                    await self._ws_manager.broadcast(_json.dumps(data))
+                await self._ws_manager.broadcast(_json.dumps(data))
             except Exception:
                 logger.exception("WS 广播发送失败")
 
@@ -884,9 +879,7 @@ class ScheduleEngine:
 
     def has_enabled_tasks(self) -> bool:
         """检查是否存在启用的定时任务（委托）。"""
-        if self._task_executor:
-            return self._task_executor.has_enabled_tasks()
-        return False
+        return self._task_executor.has_enabled_tasks()
 
     def start_scheduler(self) -> None:
         """启动定时任务调度。"""
