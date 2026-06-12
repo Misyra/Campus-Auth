@@ -53,8 +53,9 @@
   margin-left: 240px;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 .top-bar {
@@ -112,4 +113,12 @@
 .content-wrapper {
   flex: 1;
   padding: 24px 32px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* 仪表板页面：填满 content-wrapper，不产生外层滚动 */
+.content-wrapper > .page-content:has(.stats-grid) {
+  height: 100%;
+  overflow: hidden;
 }

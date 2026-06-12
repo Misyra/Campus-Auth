@@ -1,10 +1,7 @@
-/* 仪表板整体布局：填满视口，不滚动 */
+/* 仪表板整体布局：填满容器，不滚动 */
 .page-content:has(.stats-grid) {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 80px);
-  height: calc(100dvh - 80px);
-  overflow: hidden;
 }
 
 .stats-grid {
