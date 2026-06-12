@@ -23,7 +23,7 @@ class StartupAction(StrEnum):
 
 
 class RuntimeMode(StrEnum):
-    """运行时启用哪些组件"""
+    """运行模式"""
 
     FULL = "full"
     LIGHTWEIGHT = "lightweight"
@@ -44,11 +44,19 @@ class StartupResult(StrEnum):
     EXIT = "exit"
 
 
+class LoginResult(StrEnum):
+    """LOGIN_ONCE 登录结果分类"""
+
+    SUCCESS = "success"  # 登录成功，退出进程
+    CONFIG_ERROR = "config_error"  # 配置错误，退出进程
+    TEMPORARY_FAILURE = "temporary_failure"  # 临时失败，继续监控
+
+
 @dataclass
 class AppConfig:
     config_version: int = 2
     startup_action: StartupAction = StartupAction.NONE
-    runtime_mode: RuntimeMode = RuntimeMode.FULL
+    runtime_mode: RuntimeMode = RuntimeMode.FULL  # CLI --runtime-mode 覆盖
     minimize_to_tray: bool = True
     auto_open_browser: bool = False
 
@@ -216,9 +224,8 @@ class _SystemFieldsMixin(BaseModel):
         default="none",
         description="启动行为：none=不自动执行, monitor=自动监控, login_once=登录后退出",
     )
-    runtime_mode: str = Field(
-        default="full",
-        description="运行模式：full=完整模式(含Web), lightweight=轻量模式(无Web)",
+    autostart_lightweight: bool = Field(
+        default=True, description="自启动轻量模式：True=仅监控, False=完整模式(含Web)"
     )
     minimize_to_tray: bool = Field(default=True, description="最小化到系统托盘")
     auto_open_browser: bool = Field(default=False, description="启动后自动打开浏览器")
@@ -322,6 +329,7 @@ class AutoStartStatusResponse(BaseModel):
     enabled: bool
     method: str
     location: str
+    lightweight: bool = True
 
 
 class ProfileSettings(

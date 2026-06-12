@@ -108,7 +108,6 @@ export const DEFAULT_CONFIG = {
   access_log: false,
   minimize_to_tray: true,
   startup_action: "none",
-  runtime_mode: "full",
   auto_open_browser: false,
   log_retention_days: 7,
   proxy: "",

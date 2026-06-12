@@ -54,7 +54,7 @@ PROFILE_FIELDS: list[str] = [  # 常量，不应在运行时修改
     "minimize_to_tray",
     "auto_open_browser",
     "startup_action",
-    "runtime_mode",
+    "autostart_lightweight",
     "max_retries",
     "retry_interval",
     "log_retention_days",

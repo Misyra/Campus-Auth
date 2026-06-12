@@ -120,9 +120,7 @@ def _build_config_payload(
         config_logger.debug("加载运行时配置: profile={}", data.active_profile)
     else:
         profile = None
-        config_logger.debug(
-            "加载 UI 配置（全局）: active_profile={}", data.active_profile
-        )
+        config_logger.debug("加载 UI 配置: profile={}", data.active_profile)
 
     # 从系统设置作为基础
     payload_dict = extract_profile_fields(system_settings.model_dump(), PROFILE_FIELDS)
@@ -339,7 +337,7 @@ def build_runtime_config(
     else:
         base["isp"] = carrier
     base["startup_action"] = payload.startup_action
-    base["runtime_mode"] = payload.runtime_mode
+    base["autostart_lightweight"] = payload.autostart_lightweight
 
     # 浏览器配置
     base["browser_settings"] = _build_browser_config(payload)
@@ -368,7 +366,7 @@ def build_runtime_config(
             "access_log",
             "minimize_to_tray",
             "startup_action",
-            "runtime_mode",
+            "autostart_lightweight",
             "log_retention_days",
             "custom_variables",
             "block_proxy",
@@ -394,20 +392,17 @@ def _update_system_settings(
     old_user = system_settings.username
     system_settings.username = payload.username.strip()
     system_settings.password = save_password_field(pwd_raw, system_settings.password)
-    config_logger.info(
-        "保存系统设置: 用户={} (旧={}), 密码={}",
-        system_settings.username,
-        old_user,
-        "已更新" if (pwd_raw and not pwd_raw.startswith("•")) else "保留",
-    )
+    pwd_status = "已更新" if (pwd_raw and not pwd_raw.startswith("•")) else "保留"
+    config_logger.info("系统设置已保存: 用户={}", system_settings.username)
+    config_logger.debug("密码状态: {}, 旧用户名: {}", pwd_status, old_user)
 
     # 直接映射的系统字段
     field_list = [
         "access_log",
         "minimize_to_tray",
         "startup_action",
+        "autostart_lightweight",
         "auto_open_browser",
-        "runtime_mode",
         "max_retries",
         "retry_interval",
         "log_retention_days",
@@ -505,17 +500,13 @@ def save_config_combined(
         # 更新 default 方案
         if "default" not in data.profiles:
             data.profiles["default"] = ProfileSettings()
-            config_logger.info(
-                "自动初始化 default 方案（settings.json 中无 default 键）"
-            )
+            config_logger.info("已自动初始化默认方案")
         _update_default_profile(data.profiles["default"], payload)
 
         # 在锁内写日志，data 就是即将持久化的内容
         config_logger.info(
-            "配置已原子保存: system(user={}, pwd={}, auth={}), active_profile={}",
+            "配置已保存: 用户={}, 活动方案={}",
             data.system.username,
-            "ENC" if data.system.password else "空",
-            data.system.auth_url,
             data.active_profile,
         )
 
