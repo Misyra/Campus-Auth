@@ -13,7 +13,6 @@ import contextlib
 import logging
 import os
 import re
-import shutil
 import sys
 import threading
 import time
@@ -294,7 +293,7 @@ class DateRotatingSink:
             print(f"[LOG ERROR] 日志轮转失败: {exc}", file=sys.stderr)
 
     def _cleanup_old_dirs(self, cutoff: float) -> None:
-        """清理超过保留天数的日期目录（含其中的 app.log 和 screenshots/）"""
+        """清理超过保留天数的日期目录中的日志文件（保留截图等其他文件）"""
         base = Path(self._log_dir)
         if not base.exists():
             return
@@ -303,7 +302,15 @@ class DateRotatingSink:
                 continue
             try:
                 if d.stat().st_mtime < cutoff:
-                    shutil.rmtree(d)
+                    # 只删除已知日志文件，保留截图等其他文件
+                    for f in d.iterdir():
+                        if f.is_file() and (
+                            f.name == "app.log" or f.name.startswith("app.log.")
+                        ):
+                            f.unlink(missing_ok=True)
+                    # 目录为空则删除
+                    with contextlib.suppress(OSError):
+                        d.rmdir()
             except OSError as exc:
                 # 不能用 logger — 本方法由 write() 调用，同属 sink 内部
                 print(
@@ -468,6 +475,10 @@ class LogConfigCenter:
         source_level = self.get_source_level(source)
         level_order = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
         return level_order.get(level, 0) >= level_order.get(source_level, 0)
+
+    def remove_source_level(self, source: str) -> None:
+        """移除指定 source 的级别配置（回退到全局级别）"""
+        self._source_levels.pop(source, None)
 
     def get_all_source_levels(self) -> dict[str, str]:
         """获取所有 source 级别配置"""

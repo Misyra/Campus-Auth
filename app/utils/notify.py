@@ -8,7 +8,7 @@ import shutil
 import subprocess
 
 from .logging import get_logger
-from .platform import is_linux, is_macos, is_windows
+from .platform import CREATE_NO_WINDOW_FLAG, is_linux, is_macos, is_windows
 
 logger = get_logger("notify", source="backend")
 
@@ -70,9 +70,7 @@ $toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds({duration_sec})
             capture_output=True,
             text=True,
             timeout=10,
-            creationflags=subprocess.CREATE_NO_WINDOW
-            if hasattr(subprocess, "CREATE_NO_WINDOW")
-            else 0,
+            creationflags=CREATE_NO_WINDOW_FLAG,
         )
         if result.returncode == 0:
             logger.debug("Windows 通知已发送: {}", title)
@@ -86,9 +84,7 @@ $toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds({duration_sec})
             ["msg", os.environ.get("USERNAME", "*"), f"{title}: {message}"],
             capture_output=True,
             timeout=5,
-            creationflags=subprocess.CREATE_NO_WINDOW
-            if hasattr(subprocess, "CREATE_NO_WINDOW")
-            else 0,
+            creationflags=CREATE_NO_WINDOW_FLAG,
         )
         return result.returncode == 0
     except FileNotFoundError:

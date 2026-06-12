@@ -322,8 +322,21 @@ class ScheduleEngine:
 
         executor = getattr(self, "_task_executor", None)
         if executor:
-            executor.execute_login_async()
-            self._login_in_progress.clear()
+            try:
+                future = executor.execute_login_async()
+            except Exception:
+                self._login_in_progress.clear()
+                self._update_status_snapshot()
+                raise
+            if future is not None:
+                future.add_done_callback(
+                    lambda _: (
+                        self._login_in_progress.clear(),
+                        self._update_status_snapshot(),
+                    )
+                )
+            else:
+                self._login_in_progress.clear()
             self._update_status_snapshot()
             return
 
@@ -374,7 +387,9 @@ class ScheduleEngine:
             retry = config.get("retry_settings", {})
             max_retries = retry.get("max_retries", 3)
             interval = retry.get("retry_interval", 30)
-            intervals = [interval] * max_retries
+            from app.utils.retry import get_retry_intervals
+
+            intervals = get_retry_intervals(interval, max_retries, exponential=False)
             return max_retries, intervals
         except Exception:
             return 3, [30, 30, 30]
@@ -679,9 +694,11 @@ class ScheduleEngine:
         if not self._enqueue(cmd):
             logger.warning("配置重载失败：队列已满")
             return
-        # 等待消费者完成（最多 30 秒，避免无限阻塞 API 线程）
-        if not cmd.response_event.wait(timeout=30):
-            logger.warning("配置重载超时（30s），引擎线程可能繁忙")
+        # 等待消费者完成（最多 10 秒，避免无限阻塞 API 线程）
+        if not cmd.response_event.wait(timeout=10):
+            logger.warning(
+                "配置重载超时（10s），引擎线程可能繁忙，配置将在引擎空闲后生效"
+            )
 
     def apply_profile(self, profile_id: str) -> None:
         """切换到新方案：停止监控 → 重载配置 → 重启监控。
@@ -696,9 +713,11 @@ class ScheduleEngine:
         if not self._enqueue(cmd):
             logger.warning("方案切换失败：队列已满")
             return
-        # 等待消费者完成（最多 30 秒）
-        if not cmd.response_event.wait(timeout=30):
-            logger.warning("方案切换超时（30s），引擎线程可能繁忙")
+        # 等待消费者完成（最多 10 秒）
+        if not cmd.response_event.wait(timeout=10):
+            logger.warning(
+                "方案切换超时（10s），引擎线程可能繁忙，配置将在引擎空闲后生效"
+            )
 
     def start_monitoring(self) -> tuple[bool, str]:
         logger.debug("收到启动监控请求")

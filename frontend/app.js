@@ -1,9 +1,13 @@
 import { appOptions } from './js/app-options.js';
-import { ensurePartialsReady } from './js/bootstrap.js';
 import { CustomSelect, ToggleSwitch } from './js/components.js';
-import { ICONS } from './js/icons.js';
 
 const { createApp } = window.Vue;
+
+async function ensurePartialsReady() {
+  if (typeof window.loadFrontendPartials === 'function') {
+    await window.loadFrontendPartials();
+  }
+}
 
 // Vue 挂载前先应用外观设置，避免刷新后背景图闪烁或失效
 function applyAppearanceEarly() {
@@ -82,11 +86,6 @@ async function bootstrapApp() {
   // 注册全局组件
   app.component('toggle-switch', ToggleSwitch);
   app.component('custom-select', CustomSelect);
-
-  // 注册图标组件
-  for (const [name, component] of Object.entries(ICONS)) {
-    app.component(name, component);
-  }
 
   app.mount('#app');
 }

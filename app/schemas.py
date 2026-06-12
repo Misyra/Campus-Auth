@@ -11,6 +11,14 @@ from app.utils.platform import get_default_ua
 
 _URL_PATTERN = re.compile(r"^https?://")
 
+
+def _validate_auth_url(v: str) -> str:
+    v = v.strip()
+    if v and not _URL_PATTERN.match(v):
+        raise ValueError("认证地址必须以 http:// 或 https:// 开头")
+    return v
+
+
 # ── 浏览器参数默认值（单一来源） ──
 _BROWSER_ARGS_DEFAULT = (
     "--disable-blink-features=AutomationControlled\n"
@@ -81,7 +89,7 @@ class _BrowserFieldsMixin(BaseModel):
             raise ValueError(
                 '浏览器请求头格式不正确，应为键值对形式，例如: {"Referer": "https://example.com"}'
             )
-        return v
+        return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
 
 
 class _MonitorFieldsMixin(BaseModel):
@@ -132,10 +140,7 @@ class _MonitorFieldsMixin(BaseModel):
     @field_validator("auth_url")
     @classmethod
     def validate_auth_url(cls, v: str) -> str:
-        v = v.strip()
-        if v and not _URL_PATTERN.match(v):
-            raise ValueError("认证地址必须以 http:// 或 https:// 开头")
-        return v
+        return _validate_auth_url(v)
 
 
 class _SystemFieldsMixin(BaseModel):
@@ -170,10 +175,7 @@ class _SystemFieldsMixin(BaseModel):
     @field_validator("auth_url")
     @classmethod
     def validate_auth_url(cls, v: str) -> str:
-        v = v.strip()
-        if v and not _URL_PATTERN.match(v):
-            raise ValueError("认证地址必须以 http:// 或 https:// 开头")
-        return v
+        return _validate_auth_url(v)
 
     @field_validator("backend_log_level", "frontend_log_level")
     @classmethod

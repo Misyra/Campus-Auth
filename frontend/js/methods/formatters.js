@@ -16,11 +16,6 @@ export const formatterMethods = {
     if (!timestamp) return '';
     return timestamp.substring(11, 19);
   },
-  formatLogMeta(item) {
-    const level = String(item?.level || 'INFO').toUpperCase();
-    const source = String(item?.source || 'backend');
-    return `[${level}] [${source}]`;
-  },
   extractScreenshotUrl(message) {
     const text = String(message || '');
     const match = text.match(/截图[:：]\s*(\/(?:logs|debug|temp)\/\S+\.(?:png|jpg|jpeg|webp|gif))/i);

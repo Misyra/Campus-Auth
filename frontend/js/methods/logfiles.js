@@ -53,10 +53,6 @@ export const logFileMethods = {
       this.logViewer.loading = false;
     }
   },
-  getCurrentLogFiles() {
-    const group = this.logFileGroups.find(g => g.date === this.logViewer.date);
-    return group?.files || [];
-  },
   getLogFileClass(level) {
     const l = String(level || '').toUpperCase();
     if (l === 'ERROR' || l === 'CRITICAL') return 'error';

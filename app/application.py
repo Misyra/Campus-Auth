@@ -343,6 +343,15 @@ def run(
     log_center = LogConfigCenter.get_instance()
     log_center.initialize({"level": "INFO"}, source="backend")
 
+    # 从 settings.json 恢复 source 级别配置
+    try:
+        if hasattr(sys_settings, "source_levels") and sys_settings.source_levels:
+            for src, lvl in sys_settings.source_levels.items():
+                with contextlib.suppress(ValueError):
+                    log_center.set_source_level(src, lvl)
+    except NameError:
+        pass  # sys_settings 未加载（读取配置失败时）
+
     # 压制第三方库的 DEBUG 日志
     import logging
 

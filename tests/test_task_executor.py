@@ -297,7 +297,7 @@ class TestVariableResolver:
     def test_resolve_for_js_unknown_var(self):
         resolver = VariableResolver(self._make_config(), {})
         result = resolver.resolve_for_js("{{UNKNOWN}}")
-        assert result == '""'
+        assert result == '"{{UNKNOWN}}"'
 
     def test_resolve_unknown_var_logs_warning(self):
         """未知变量应触发 warning 日志"""

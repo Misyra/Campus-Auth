@@ -291,8 +291,9 @@ class NetworkMonitorCore:
         # 限制 1~5 次，避免网络故障时无限重试或退避时间过长
         max_retries = max(1, min(max_retries, 5))
         retry_interval = int(retry_settings.get("retry_interval", 5))
-        # 生成递增间隔列表：[retry_interval, retry_interval*2, retry_interval*4, ...]
-        intervals = [retry_interval * (2**i) for i in range(max_retries)]
+        from app.utils.retry import get_retry_intervals
+
+        intervals = get_retry_intervals(retry_interval, max_retries, exponential=True)
         return max_retries, intervals
 
     def _get_test_sites(self) -> list[tuple[str, int]]:

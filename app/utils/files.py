@@ -33,9 +33,6 @@ def atomic_write(
         prefix: 临时文件前缀（默认 "tmp."）
         suffix: 临时文件后缀（默认 ".tmp"）
     """
-    if len(prefix) > 20 or len(suffix) > 20:
-        raise ValueError("prefix/suffix 长度不能超过 20 字符")
-
     path = str(path)
     parent = os.path.dirname(path)
     if parent:
