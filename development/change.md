@@ -3,7 +3,52 @@
 本文档记录项目的所有变更，包括文档更新、代码修改、配置调整等。
 
 
+## 2026-06-12（重构）
+
+### refactor: 后端架构重构 — 内存优化与服务层简化
+
+基于 `development/campus-auth-refactor-v2.md` 执行的系统性重构，共完成 7 项任务。
+
+**TASK-01：`/api/health` 补充内存监控**
+- `app/api/system.py`：健康检查端点新增 `memory`（rss_mb/vms_mb）和 `process`（threads/open_files/pid）字段
+- 新增 `psutil` 依赖用于进程内存监控
+
+**TASK-02：DashboardSink 缓冲缩减 + 消息截断**
+- `app/utils/logging.py`：`DashboardSink` 的 `maxlen` 从 1200 降至 500，新增 `_MAX_MSG_LEN=2000` 和 `_MAX_SRC_LEN=64` 截断常量
+- `app/container.py`：同步更新 `DashboardSink` 实例化参数
+
+**TASK-03：httpx Client 全局单例**
+- `app/network/probes.py`：新增 `_get_probe_client(block_proxy)` 全局单例函数，支持代理设置变化时自动重建
+- `is_network_available_url` 和 `is_network_available_http` 改为使用单例 Client + `_probe_lock` 保护
+- `atexit` 注册清理函数
+
+**TASK-05：删除 RuntimeConfigProvider，消除配置三重缓存**
+- 删除 `app/services/config_provider.py`
+- `app/services/engine.py`：移除 `config_provider` 参数，所有配置加载直接通过 `ProfileService` + `config_service` 函数
+- `app/container.py`：移除 `RuntimeConfigProvider` 实例化，`TaskExecutor` 通过延迟绑定获取引擎的 `get_runtime_config`
+- `tests/test_config_provider.py`：删除（对应类已移除）
+- `tests/test_container.py`：移除 `RuntimeConfigProvider` 相关 mock 和断言
+
+**TASK-06：合并 TaskFacade 到 TaskExecutor**
+- `app/services/task_executor.py`：新增 `list_tasks`、`get_task`、`save_task`、`delete_task`、`get_history`、`has_enabled_tasks` 方法
+- `app/services/engine.py`：`tasks` 属性改为返回 `_task_executor`，移除 `_task_facade` 参数
+- 删除 `app/services/task_facade.py`
+- `app/container.py`：移除 `TaskFacade` 导入和实例化
+- `tests/test_container.py`：移除 `TaskFacade` 相关 mock 和断言
+
+**TASK-07：NetworkCheckResult 结构化（增量）**
+- `app/network/decision.py`：新增 `NetworkCheckResult` 数据类（`available`、`method`、`latency_ms`、`detail`）
+- `app/services/monitor_service.py`：`check_once()` 返回值新增 `result: NetworkCheckResult` 字段
+
+**预期效果：**
+- 常态内存：~60MB → ~55MB（-5MB）
+- 架构：配置缓存从 3 处减至 1 处，服务对象从 13 个减至 11 个，调用链缩短一层
+
 ## 2026-06-12
+
+### docs: 生成完整系统架构文档
+
+生成 `development/system-architecture-full.md`，涵盖后端架构（15 个路由器完整端点列表、13 个服务、Actor 模型引擎）、前端架构（零构建 Vue 3 SPA、15 个数据模块、14 个方法模块）、线程模型（6 种线程类型）、数据流、配置系统、任务系统、网络检测、浏览器自动化、日志系统、安全机制、测试架构、CI/CD 及关键设计模式。
 
 ### fix: 修复 source_levels 持久化和启动恢复问题
 

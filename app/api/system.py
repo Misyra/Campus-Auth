@@ -6,6 +6,7 @@ import os
 import time
 
 import httpx
+import psutil
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from app.constants import AUTH_DATA_DIR, PROJECT_ROOT
@@ -28,11 +29,22 @@ _UPDATE_CACHE_TTL = 12 * 60 * 60  # 12 小时
 
 
 @router.get("/api/health")
-def health() -> dict[str, str]:
+def health() -> dict:
+    proc = psutil.Process(os.getpid())
+    mem = proc.memory_info()
     return {
         "status": "ok",
         "version": get_project_version(PROJECT_ROOT),
         "python_version": f"{os.sys.version_info.major}.{os.sys.version_info.minor}.{os.sys.version_info.micro}",
+        "memory": {
+            "rss_mb": round(mem.rss / 1024 / 1024, 1),
+            "vms_mb": round(mem.vms / 1024 / 1024, 1),
+        },
+        "process": {
+            "threads": len(proc.threads()),
+            "open_files": len(proc.open_files()),
+            "pid": proc.pid,
+        },
     }
 
 

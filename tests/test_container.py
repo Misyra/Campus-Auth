@@ -30,11 +30,9 @@ def mock_classes():
         patch("app.container.ScheduleEngine") as mock_engine_cls,
         patch("app.container.TaskService") as mock_task_cls,
         patch("app.container.AutoStartService") as mock_autostart_cls,
-        patch("app.container.RuntimeConfigProvider") as mock_cp_cls,
         patch("app.container.TaskRegistry") as mock_tr_cls,
         patch("app.container.TaskHistoryStore") as mock_ths_cls,
         patch("app.container.TaskExecutor") as mock_te_cls,
-        patch("app.container.TaskFacade") as mock_tf_cls,
         patch("app.services.debug_service.DebugSessionManager") as mock_debug_cls,
     ):
         yield {
@@ -44,11 +42,9 @@ def mock_classes():
             "ScheduleEngine": mock_engine_cls,
             "TaskService": mock_task_cls,
             "AutoStartService": mock_autostart_cls,
-            "RuntimeConfigProvider": mock_cp_cls,
             "TaskRegistry": mock_tr_cls,
             "TaskHistoryStore": mock_ths_cls,
             "TaskExecutor": mock_te_cls,
-            "TaskFacade": mock_tf_cls,
             "DebugSessionManager": mock_debug_cls,
         }
 
@@ -141,11 +137,9 @@ class TestInit:
         assert hasattr(container, "task_service")
         assert hasattr(container, "autostart_service")
         assert hasattr(container, "debug_manager")
-        assert hasattr(container, "config_provider")
         assert hasattr(container, "task_registry")
         assert hasattr(container, "task_history_store")
         assert hasattr(container, "task_executor")
-        assert hasattr(container, "task_facade")
 
 
 # =====================================================================

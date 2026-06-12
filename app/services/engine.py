@@ -104,8 +104,6 @@ class ScheduleEngine:
         worker_getter=None,
         task_registry=None,
         task_executor=None,
-        task_facade=None,
-        config_provider=None,
     ):
         self.project_root = project_root
         self._profile_service = profile_service or ProfileService(project_root)
@@ -116,8 +114,6 @@ class ScheduleEngine:
         # 新组件注入
         self._task_registry = task_registry
         self._task_executor = task_executor
-        self._task_facade = task_facade
-        self._config_provider = config_provider
 
         # 调度状态（从 ScheduledTaskService 搬入）
         self._scheduler_running = False
@@ -136,6 +132,9 @@ class ScheduleEngine:
 
         # 运行时配置快照（仅在 reload 时深拷贝，读取零拷贝）
         self._runtime_snapshot: dict = {}
+        # 配置对象（由 _reload_config_internal 初始化）
+        self._ui_config: MonitorConfigPayload = MonitorConfigPayload()
+        self._runtime_config: dict = {}
 
         # 状态快照限流
         self._last_snapshot_time: float = 0
@@ -631,26 +630,14 @@ class ScheduleEngine:
 
     @property
     def tasks(self):
-        """定时任务 Facade（供 API 路由使用）。"""
-        return self._task_facade
+        """定时任务接口（供 API 路由使用）。"""
+        return self._task_executor
 
     def get_config(self) -> MonitorConfigPayload:
-        provider = getattr(self, "_config_provider", None)
-        if provider:
-            return provider.get_ui_config()
-        with self._reload_lock:
-            return self._ui_config.model_copy(deep=True)
+        return self._ui_config.model_copy(deep=True)
 
     def _reload_config_internal(self) -> None:
         """从 settings.json 重新加载 UI 和运行时配置。"""
-        provider = getattr(self, "_config_provider", None)
-        if provider:
-            provider.reload()
-            self._ui_config = provider.get_ui_config()
-            self._runtime_config = provider.get_runtime_config()
-            self._runtime_snapshot = self._runtime_config
-            return
-        # 无 config_provider 时的回退（仅测试场景）
         import copy
 
         from .config_service import (
@@ -675,9 +662,6 @@ class ScheduleEngine:
 
     def _copy_runtime_config(self) -> dict:
         """返回运行时配置快照（仅在 reload 时更新，读取零拷贝）。"""
-        provider = getattr(self, "_config_provider", None)
-        if provider:
-            return provider.get_runtime_config()
         import copy
 
         return copy.deepcopy(self._runtime_config)
@@ -893,9 +877,6 @@ class ScheduleEngine:
 
     def get_runtime_config(self) -> dict:
         """线程安全地获取运行时配置副本"""
-        provider = getattr(self, "_config_provider", None)
-        if provider:
-            return provider.get_runtime_config()
         return self._copy_runtime_config()
 
     # ── 定时任务调度 ──
@@ -907,8 +888,8 @@ class ScheduleEngine:
 
     def has_enabled_tasks(self) -> bool:
         """检查是否存在启用的定时任务（委托）。"""
-        if self._task_facade:
-            return self._task_facade.has_enabled_tasks()
+        if self._task_executor:
+            return self._task_executor.has_enabled_tasks()
         return False
 
     def start_scheduler(self) -> None:

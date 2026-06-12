@@ -123,7 +123,10 @@ class DashboardSink:
     替代原 LogBroadcastSink（仅广播）+ MonitorService._logs（仅内存）的双路径。
     """
 
-    def __init__(self, maxlen: int = 1200, broadcast_maxlen: int = 200):
+    _MAX_MSG_LEN = 2000  # 消息截断上限，防止单条日志携带大量 traceback
+    _MAX_SRC_LEN = 64    # source 字段防异常膨胀
+
+    def __init__(self, maxlen: int = 500, broadcast_maxlen: int = 200):
         self.buffer: deque[dict] = deque(maxlen=maxlen)
         self.broadcast_queue: deque[dict] = deque(maxlen=broadcast_maxlen)
         self._lock = threading.Lock()
@@ -134,14 +137,14 @@ class DashboardSink:
         """loguru sink 接口 — 接收格式化后的消息。"""
         record = message.record
         name = record["extra"].get("name", record["name"])
-        source = record["extra"].get("source", "backend")
+        source = str(record["extra"].get("source", "backend"))[: self._MAX_SRC_LEN]
         level = record["level"].name
 
         # 根据 source 级别过滤
         if not self._config_center.should_emit(source, level):
             return
 
-        text = str(message).strip()
+        text = str(message).strip()[: self._MAX_MSG_LEN]
 
         stamp = datetime.fromtimestamp(record["time"].timestamp()).strftime(
             "%Y-%m-%d %H:%M:%S"

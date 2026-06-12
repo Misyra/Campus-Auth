@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from app.constants import DEFAULT_NETWORK_TARGETS
 from app.network.decision import (
+    NetworkCheckResult,
     check_network_status,
     check_pause,
 )
@@ -186,6 +187,7 @@ class NetworkMonitorCore:
                 "need_login": bool,
                 "check_num": int,
                 "interval": int,
+                "result": NetworkCheckResult,
             }
         """
         interval = self._get_monitor_interval()
@@ -220,6 +222,10 @@ class NetworkMonitorCore:
                 "need_login": False,
                 "check_num": check_num,
                 "interval": interval,
+                "result": NetworkCheckResult(
+                    available=None, method="paused", latency_ms=0,
+                    detail=f"暂停时段（{start_hour}:00-{end_hour}:00）",
+                ),
             }
 
         # 2. 网络状态检测
@@ -246,6 +252,12 @@ class NetworkMonitorCore:
             "need_login": not net_ok and net_reason != "all_disabled",
             "check_num": check_num,
             "interval": interval,
+            "result": NetworkCheckResult(
+                available=net_ok,
+                method=net_reason if net_reason in ("tcp", "http", "url") else "local_only",
+                latency_ms=0,
+                detail="" if net_ok else net_reason,
+            ),
         }
 
     def update_status_after_login(self, success: bool, message: str = "") -> None:

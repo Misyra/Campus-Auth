@@ -3,6 +3,7 @@ from __future__ import annotations
 import socket
 from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from urllib.parse import urlparse
 
 from app.utils.logging import get_logger
@@ -17,6 +18,17 @@ from .probes import (
     is_network_available_socket,
     is_network_available_url,
 )
+
+
+@dataclass(slots=True)
+class NetworkCheckResult:
+    """单次网络检查的结果，无副作用。"""
+
+    available: bool | None  # None 表示被暂停跳过
+    method: str  # "tcp" / "http" / "url" / "paused" / "local_only" / "all_disabled"
+    latency_ms: float
+    detail: str = ""  # 失败时的附加信息
+
 
 _decision_executor = ThreadPoolExecutor(
     max_workers=3, thread_name_prefix="net-decision"
