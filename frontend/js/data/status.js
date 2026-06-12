@@ -18,6 +18,7 @@ export function statusData() {
       enabled: false,
       method: '-',
       location: '',
+      lightweight: true,
     },
     busy: {
       save: false,

@@ -14,6 +14,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.schemas import LoginResult
+
 # ══════════════════════════════════════════════════════════════════════
 #  辅助工具
 # ══════════════════════════════════════════════════════════════════════
@@ -485,7 +487,7 @@ class TestRunLoginThenExit:
         return mock_worker, mock_ps, mock_data
 
     def test_success_first_try(self, tmp_pid_dir):
-        """首次登录成功应返回 True。"""
+        """首次登录成功应返回 SUCCESS。"""
         from main import _run_login_then_exit
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
@@ -511,10 +513,10 @@ class TestRunLoginThenExit:
             mock_ps.load.return_value = mock_data
             mock_ctx = MagicMock()
             result = _run_login_then_exit(mock_ctx, MagicMock())
-            assert result is True
+            assert result == LoginResult.SUCCESS
 
     def test_retry_then_succeed(self, tmp_pid_dir):
-        """第一次失败、第二次成功。"""
+        """第一次失败、第二次成功。返回 SUCCESS。"""
         from main import _run_login_then_exit
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
@@ -542,10 +544,10 @@ class TestRunLoginThenExit:
             mock_ps.load.return_value = mock_data
             mock_ctx = MagicMock()
             result = _run_login_then_exit(mock_ctx, MagicMock())
-            assert result is True
+            assert result == LoginResult.SUCCESS
 
     def test_retries_exhausted(self, tmp_pid_dir):
-        """所有重试均失败，返回 False。"""
+        """所有重试均失败，返回 TEMPORARY_FAILURE。"""
         from main import _run_login_then_exit
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
@@ -573,11 +575,11 @@ class TestRunLoginThenExit:
             mock_ctx = MagicMock()
             mock_logger = MagicMock()
             result = _run_login_then_exit(mock_ctx, mock_logger)
-            assert result is False
+            assert result == LoginResult.TEMPORARY_FAILURE
             mock_logger.warning.assert_called_once()
 
     def test_network_already_connected_exits(self, tmp_pid_dir):
-        """网络已连接时应返回 True，不启动浏览器登录。"""
+        """网络已连接时应返回 SUCCESS，不启动浏览器登录。"""
         from main import _run_login_then_exit
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
@@ -602,12 +604,12 @@ class TestRunLoginThenExit:
             mock_ps.load.return_value = mock_data
             mock_ctx = MagicMock()
             result = _run_login_then_exit(mock_ctx, MagicMock())
-            assert result is True
+            assert result == LoginResult.SUCCESS
             # 不应调用登录
             mock_worker.submit.assert_not_called()
 
     def test_network_down_proceeds_with_login(self, tmp_pid_dir):
-        """网络未连接时应继续尝试登录。"""
+        """网络未连接时应继续尝试登录，返回 SUCCESS。"""
         from main import _run_login_then_exit
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
@@ -636,11 +638,11 @@ class TestRunLoginThenExit:
             mock_ps.load.return_value = mock_data
             mock_ctx = MagicMock()
             result = _run_login_then_exit(mock_ctx, MagicMock())
-            assert result is True
+            assert result == LoginResult.SUCCESS
             mock_worker.submit.assert_called_once()
 
     def test_network_check_exception_proceeds(self, tmp_pid_dir):
-        """网络检测异常时应降级继续尝试登录。"""
+        """网络检测异常时应降级继续尝试登录，返回 SUCCESS。"""
         from main import _run_login_then_exit
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
@@ -669,7 +671,7 @@ class TestRunLoginThenExit:
             mock_ps.load.return_value = mock_data
             mock_ctx = MagicMock()
             result = _run_login_then_exit(mock_ctx, MagicMock())
-            assert result is True
+            assert result == LoginResult.SUCCESS
             mock_worker.submit.assert_called_once()
 
 

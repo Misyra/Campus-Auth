@@ -23,13 +23,13 @@ container_logger = get_logger("container", source="backend")
 class ServiceContainer:
     """服务容器 — 统一管理服务实例的创建和访问。"""
 
-    def __init__(self, project_root: Path, runtime_mode: str = "full"):
+    def __init__(self, project_root: Path, mode: str = "full"):
         self.project_root = project_root
         self._temp_dir = project_root / "temp"
         self._logs_dir = project_root / "logs"
         self._backup_dir = project_root / "backups"
         self._backup_dir.mkdir(parents=True, exist_ok=True)
-        self._is_lightweight = runtime_mode == "lightweight"
+        self._is_lightweight = mode == "lightweight"
 
         # 基础服务
         # 轻量模式下使用 Null Object，避免 None 检查

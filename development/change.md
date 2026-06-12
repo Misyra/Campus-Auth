@@ -5,6 +5,81 @@
 
 ## 2026-06-12
 
+### refactor: 启动逻辑收敛 — RuntimeMode→AutostartMode + LOGIN_ONCE 失败分类 + 启动摘要
+
+收敛启动概念，消除歧义：
+
+1. **`RuntimeMode` → `AutostartMode`**：
+   - `app/schemas.py`：枚举改名，`AppConfig.runtime_mode` 默认 `FULL`
+   - `_SystemFieldsMixin`：删除 `autostart_mode` 字段（settings.json 不存此值）
+   - `get_runtime_features()` 参数类型更新
+
+2. **简化启动逻辑**：
+   - `main.py`：无参数 → FULL，`--runtime-mode lightweight` → LIGHTWEIGHT
+   - `_build_app_config`：不从 settings.json 读取运行模式，CLI 有参数就覆盖
+   - 删除 `_run_server` 中的 `effective_mode` 计算，直接用 `config.runtime_mode`
+   - `_handle_existing_instance`：直接用 `config.runtime_mode`
+
+3. **LOGIN_ONCE 失败分类**：
+   - `app/schemas.py`：新增 `LoginResult` 枚举（SUCCESS / CONFIG_ERROR / TEMPORARY_FAILURE）
+   - `main.py`：`_run_login_then_exit` 返回 `LoginResult` 而非 `bool`
+   - 配置错误（加载失败、密码解密失败）→ CONFIG_ERROR → 退出进程
+   - 登录重试耗尽 → TEMPORARY_FAILURE → 继续进入监控
+
+4. **启动摘要日志**：
+   - `main.py`：`_run_server` 启动时打印一行摘要（来源、动作、模式、托盘、浏览器）
+
+5. **删除前端"自启动运行模式"下拉框**：
+   - `frontend/.../settings-system.html`：删除下拉框（自启动模式由脚本参数控制）
+   - `frontend/js/app-options.js`：删除 `autostartModeOptions`
+   - `frontend/js/constants.js`：删除 `autostart_mode` 默认值
+
+6. **自启动模式可配置**：
+   - `app/services/autostart.py`：`_AUTOSTART_CLI_ARGS` 常量改为 `_autostart_cli_args(lightweight)` 方法，`enable()` 接受 `lightweight` 参数
+   - `app/api/autostart.py`：新增 `POST /api/autostart/mode` 端点，支持切换自启动模式并重新生成脚本
+   - `app/schemas.py`：`_SystemFieldsMixin` 新增 `autostart_lightweight` 字段，`AutoStartStatusResponse` 新增 `lightweight` 字段
+   - 前端：设置页面自启动区域新增"自启动模式"下拉框（轻量/完整），切换时调用 API 重新生成脚本
+
+7. **关联文件更新**：
+   - `app/utils/config_utils.py`：PROFILE_FIELDS 删除 `autostart_mode`，新增 `autostart_lightweight`
+   - `app/services/config_service.py`：字段列表更新
+   - `app/container.py`：构造参数 `runtime_mode` → `mode`
+   - `tests/test_app/test_main.py`：LoginResult 断言更新
+   - `tests/test_config/test_container.py`：构造参数更新
+
+### style: 日志文本精简，消除冗余和中英文混杂
+
+1. `app/network/probes.py`：
+   - TCP/URL/HTTP 单个探测结果从 INFO 降为 DEBUG，减少正常检测时 3-6 条冗余日志
+
+2. `app/network/decision.py`：
+   - 暂停时段日志拆分为 INFO 摘要 + DEBUG 详情
+   - 网络检测开始/完成的 DEBUG 日志精简参数数量，移除目标数量
+   - `ping_targets`/`auth_url_targets` 等内部键名改为中文描述
+   - 移除"所有检测方式关闭"警告中的操作指引（由 UI 提示）
+
+3. `app/services/engine.py`：
+   - "统一引擎循环"改为"引擎循环"，移除内部架构概念泄露
+   - "监控已启动（统一引擎驱动）"简化为"监控已启动"
+   - "配置已从 settings.json 重载"简化为"配置已重载"
+   - 方案切换详情（认证地址、用户名）降为 DEBUG
+   - 配置重载/方案切换超时日志精简
+   - `_login_in_progress` 变量名改为中文描述
+   - 手动网络测试的检测方式详情降为 DEBUG
+
+4. `main.py`：
+   - 移除"启动阶段:"冗余前缀
+   - 启动参数日志降为 DEBUG，枚举值改为中文
+   - 移除"日志文件"路径和"按 Ctrl+C 停止服务"等非日志信息
+   - 合并重复的"收到退出信号"日志
+   - `login_once` 改为中文描述
+
+5. `app/services/config_service.py`：
+   - UI 配置日志简化，移除"（全局）"标注
+   - 保存系统设置详情降为 DEBUG
+   - "自动初始化 default 方案"简化为"已自动初始化默认方案"
+   - 配置保存日志移除内部数据结构格式
+
 ### refactor: 轻量模式优化，减少资源占用
 
 1. `main.py`：

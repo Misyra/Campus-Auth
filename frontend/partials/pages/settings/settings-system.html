@@ -71,15 +71,15 @@
         </div>
       </div>
       <span v-if="autostart.method !== '-'" class="autostart-method-hint">当前方式：{{ autostart.method }}</span>
-      <div class="form-group">
+      <div class="form-group" v-if="autostart.enabled">
         <div class="field-label-row">
-          <label>运行模式</label>
-          <span class="field-help" tabindex="0" role="note" data-tip="仅在开机自启动时生效。完整模式启动 Web 管理界面，轻量模式仅后台运行监控服务。">?</span>
+          <label>自启动模式</label>
+          <span class="field-help" tabindex="0" role="note" data-tip="轻量模式仅后台监控，不启动 Web 界面；完整模式启动 Web 管理界面。">?</span>
         </div>
         <custom-select
-          v-model="config.runtime_mode"
-          :options="runtimeModeOptions"
-          :disabled="!autostart.enabled"
+          v-model="autostart.lightweight"
+          :options="autostartModeOptions"
+          @change="setAutostartMode"
         ></custom-select>
       </div>
 
@@ -98,7 +98,7 @@
       <div class="toggle-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
-            <input type="checkbox" :checked="!config.auto_open_browser" @change="config.auto_open_browser = !$event.target.checked" :disabled="config.runtime_mode === 'lightweight'" />
+            <input type="checkbox" :checked="!config.auto_open_browser" @change="config.auto_open_browser = !$event.target.checked" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">静默启动</span>
             <span

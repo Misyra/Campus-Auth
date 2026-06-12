@@ -197,7 +197,7 @@ class ScheduleEngine:
     def _engine_loop(self) -> None:
         """统一引擎循环：命令处理 + 网络检测 + 定时任务调度。"""
         self._engine_running = True
-        logger.info("统一引擎循环已启动")
+        logger.info("引擎循环已启动")
 
         while not self._shutdown_event.is_set():
             try:
@@ -233,7 +233,7 @@ class ScheduleEngine:
                 time.sleep(1)
 
         self._engine_running = False
-        logger.info("统一引擎循环已退出")
+        logger.info("引擎循环已退出")
 
     def _calculate_wakeup(self) -> float:
         """计算下次唤醒时间。"""
@@ -407,7 +407,7 @@ class ScheduleEngine:
         """启动监控（在引擎循环中调用）。"""
         if self._monitor_core is not None and self._monitor_core.monitoring:
             self.record_log(
-                "监控已在运行中，忽略重复启动",
+                "监控已在运行中",
                 level="WARNING",
                 source="backend",
             )
@@ -430,7 +430,7 @@ class ScheduleEngine:
         self._next_network_check = time.time()  # 立即执行第一次检测
         self._login_retry.count = 0
         self._update_status_snapshot(force=True)
-        self.record_log("监控已启动（统一引擎驱动）", level="INFO", source="backend")
+        self.record_log("监控已启动", level="INFO", source="backend")
 
     def _handle_stop(self, cmd: EngineCommand | None = None) -> None:
         """停止监控。"""
@@ -463,7 +463,7 @@ class ScheduleEngine:
         self._reload_config_internal()
         if was_monitoring:
             self._handle_start(EngineCommand(type=EngineCmdType.START))
-        logger.info("配置已从 settings.json 重载")
+        logger.info("配置已重载")
 
     def _handle_apply_profile(self, cmd: EngineCommand) -> None:
         """切换方案并重启监控（仅在引擎线程中调用）。"""
@@ -478,11 +478,8 @@ class ScheduleEngine:
         # 直接用 profile_id 记录日志，避免重复 load
         new_url = self._runtime_config.get("auth_url", "")
         new_user = self._runtime_config.get("username", "")
-        self.record_log(
-            f"切换方案 -> {profile_id} (认证={new_url}, 用户={new_user})",
-            level="INFO",
-            source="backend",
-        )
+        self.record_log(f"切换方案: {profile_id}", level="INFO", source="backend")
+        logger.debug("方案详情: 认证={}, 用户={}", new_url, new_user)
 
         if was_monitoring:
             self._handle_start(EngineCommand(type=EngineCmdType.START))
@@ -671,9 +668,7 @@ class ScheduleEngine:
             return
         # 等待消费者完成（最多 10 秒，避免无限阻塞 API 线程）
         if not cmd.response_event.wait(timeout=10):
-            logger.warning(
-                "配置重载超时（10s），引擎线程可能繁忙，配置将在引擎空闲后生效"
-            )
+            logger.warning("配置重载超时，将在引擎空闲后生效")
 
     def apply_profile(self, profile_id: str) -> None:
         """切换到新方案：停止监控 → 重载配置 → 重启监控。
@@ -690,9 +685,7 @@ class ScheduleEngine:
             return
         # 等待消费者完成（最多 10 秒）
         if not cmd.response_event.wait(timeout=10):
-            logger.warning(
-                "方案切换超时（10s），引擎线程可能繁忙，配置将在引擎空闲后生效"
-            )
+            logger.warning("方案切换超时，将在引擎空闲后生效")
 
     def start_monitoring(self) -> tuple[bool, str]:
         logger.debug("收到启动监控请求")
@@ -795,7 +788,7 @@ class ScheduleEngine:
             # 超时：检查引擎线程是否存活
             # 如果引擎线程已死，主动清除标志位（防止永久卡住）
             if not self._engine_thread.is_alive():
-                logger.error("引擎线程已退出，主动清除 _login_in_progress")
+                logger.error("引擎线程已退出，已重置登录状态标志")
                 self._login_in_progress.clear()
             return False, "手动登录超时"
 
@@ -811,7 +804,7 @@ class ScheduleEngine:
         return False, f"手动登录失败：{message}"
 
     def test_network(self) -> tuple[bool, str]:
-        logger.debug("手动网络测试")
+        logger.debug("开始手动网络测试")
         config = self._copy_runtime_config()
         monitor_cfg = config.get("monitor", {})
         targets = monitor_cfg.get("ping_targets", [])
@@ -826,11 +819,8 @@ class ScheduleEngine:
             mode_desc.append("HTTP(2)")
         if url_checks:
             mode_desc.append(f"网址响应({len(url_checks)})")
-        self.record_log(
-            f"手动网络测试 -> 检测方式={'+'.join(mode_desc) or '无'}",
-            "INFO",
-            "network",
-        )
+        self.record_log("开始手动网络测试", "INFO", "network")
+        logger.debug("检测方式: {}", "+".join(mode_desc) or "无")
         try:
             is_available = is_network_available(
                 test_sites=test_sites if test_sites else None,

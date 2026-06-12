@@ -146,7 +146,7 @@ class TestInit:
         from app.container import ServiceContainer
         from app.services.websocket_manager import NullWebSocketManager
 
-        container = ServiceContainer(project_root, runtime_mode="lightweight")
+        container = ServiceContainer(project_root, mode="lightweight")
         assert isinstance(container.ws_manager, NullWebSocketManager)
         mock_classes["WebSocketManager"].assert_not_called()
 
@@ -154,7 +154,7 @@ class TestInit:
         """轻量模式下应创建 TaskExecutor（定时任务需要）。"""
         from app.container import ServiceContainer
 
-        container = ServiceContainer(project_root, runtime_mode="lightweight")
+        container = ServiceContainer(project_root, mode="lightweight")
         mock_classes["TaskExecutor"].assert_called_once()
         assert container.task_executor is not None
 

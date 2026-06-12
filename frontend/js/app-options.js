@@ -223,10 +223,10 @@ export const appOptions = {
     logLevelOptions() {
       return LOG_LEVELS;
     },
-    runtimeModeOptions() {
+    autostartModeOptions() {
       return [
-        { value: 'full', label: '完整模式' },
-        { value: 'lightweight', label: '轻量模式' },
+        { value: true, label: '轻量模式（推荐）' },
+        { value: false, label: '完整模式' },
       ];
     },
     autoStartMonitor: {

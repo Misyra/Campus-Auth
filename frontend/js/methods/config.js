@@ -270,6 +270,21 @@ export const configMethods = {
   },
   async enableAutostart() { return this._toggleAutostart(true); },
   async disableAutostart() { return this._toggleAutostart(false); },
+  async setAutostartMode(lightweight) {
+    try {
+      const { data } = await this.$api.post('/api/autostart/mode', { lightweight });
+      if (data.success) {
+        this.frontendLogger.info('autostart', data.message);
+        this.toastOnly(true, data.message);
+      } else {
+        this.frontendLogger.warn('autostart', `切换自启动模式失败: ${data.message}`);
+        this.toastOnly(false, data.message);
+      }
+    } catch (error) {
+      this.frontendLogger.error('autostart', '切换自启动模式异常', error);
+      this.toastOnly(false, '切换自启动模式失败');
+    }
+  },
   // ── 日志级别管理 ──
   async fetchLogLevels() {
     try {

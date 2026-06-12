@@ -49,7 +49,8 @@ def check_pause(config: dict) -> tuple[bool, str]:
     """
     pause_config = config.get("pause_login", {})
     if is_in_pause_period(pause_config):
-        logger.info("暂停时段，跳过检测 (配置: {})", pause_config)
+        logger.info("暂停时段，跳过检测")
+        logger.debug("暂停配置: {}", pause_config)
         return (True, "pause_period")
     return (False, "")
 
@@ -73,9 +74,7 @@ def check_network_status(config: dict) -> tuple[bool, str]:
 
     # 所有检测都未启用
     if not enable_tcp and not enable_http and not enable_url:
-        logger.warning(
-            "所有网络检测方式均已关闭，无法判断网络状态。请在设置页面的高级选项中至少启用一种检测方式（TCP 或 HTTP）"
-        )
+        logger.warning("所有网络检测方式均已关闭，无法判断网络状态")
         return (False, "all_disabled")
 
     from app.utils.network import parse_ping_targets
@@ -83,7 +82,7 @@ def check_network_status(config: dict) -> tuple[bool, str]:
     try:
         test_sites = parse_ping_targets(monitor_config.get("ping_targets", None))
     except ValueError:
-        logger.warning("ping_targets 配置格式错误，跳过 TCP 检测")
+        logger.warning("网络检测目标配置格式错误，跳过 TCP 检测")
         test_sites = None
 
     test_urls = monitor_config.get("test_urls", None)
@@ -155,13 +154,10 @@ def is_network_available(
     urls_list = list(test_urls or _DEFAULT_HTTP_URLS) if enable_http else []
 
     logger.debug(
-        "开始网络检测 (TCP={}, HTTP={}, 网址响应={}, TCP目标={}, HTTP目标={}, 网址响应目标={})",
+        "开始网络检测 (TCP={}, HTTP={}, URL={})",
         "开" if enable_tcp else "关",
         "开" if enable_http else "关",
         "开" if enable_url else "关",
-        len(test_sites or ()),
-        len(urls_list),
-        len(url_checks or ()),
     )
 
     from concurrent.futures import as_completed
@@ -227,11 +223,16 @@ def is_network_available(
         and (url_ok or not enable_url)
     )
 
+    status_parts = []
+    if enable_tcp:
+        status_parts.append(f"TCP={'通' if socket_ok else '断'}")
+    if enable_http:
+        status_parts.append(f"HTTP={'通' if http_ok else '断'}")
+    if enable_url:
+        status_parts.append(f"URL={'通' if url_ok else '断'}")
     logger.debug(
-        "网络检测完成: TCP={} HTTP={} 网址响应={} -> {}",
-        "关" if not enable_tcp else ("通" if socket_ok else "断"),
-        "关" if not enable_http else ("通" if http_ok else "断"),
-        "关" if not enable_url else ("通" if url_ok else "断"),
+        "网络检测完成: {} -> {}",
+        " ".join(status_parts) if status_parts else "无",
         "网络正常" if result else "网络异常",
     )
     return result
@@ -266,7 +267,7 @@ def _is_auth_url_reachable(
         try:
             targets = parse_host_port(list(extra_targets))
         except ValueError:
-            logger.warning("auth_url_targets 格式错误，跳过附加目标检测")
+            logger.warning("认证地址附加目标格式错误，跳过检测")
             targets = []
         if targets:
             futures = {
