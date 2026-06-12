@@ -20,6 +20,57 @@ atexit.register(executor.shutdown, wait=False, cancel_futures=True)
 _proxy_lock = threading.Lock()
 _block_proxy = True  # 默认屏蔽系统代理，避免代理影响网络检测
 
+# ── httpx 全局单例 ──
+
+_probe_client: httpx.Client | None = None
+_probe_lock = threading.Lock()
+_probe_block_proxy: bool = True  # 记录创建时的代理状态
+
+
+def _get_probe_client(block_proxy: bool) -> httpx.Client:
+    """获取全局复用的探测 Client，线程安全。代理设置变化时自动重建。"""
+    global _probe_client, _probe_block_proxy
+    # 快速路径：无需加锁
+    if (
+        _probe_client is not None
+        and not _probe_client.is_closed
+        and _probe_block_proxy == block_proxy
+    ):
+        return _probe_client
+    # 慢速路径：加锁重建
+    with _probe_lock:
+        if (
+            _probe_client is not None
+            and not _probe_client.is_closed
+            and _probe_block_proxy == block_proxy
+        ):
+            return _probe_client
+        if _probe_client is not None and not _probe_client.is_closed:
+            _probe_client.close()
+        _probe_client = httpx.Client(
+            verify=False,
+            follow_redirects=True,
+            trust_env=not block_proxy,
+            limits=httpx.Limits(
+                max_connections=4,
+                max_keepalive_connections=2,
+                keepalive_expiry=30.0,
+            ),
+        )
+        _probe_block_proxy = block_proxy
+    return _probe_client
+
+
+def _close_probe_client() -> None:
+    global _probe_client
+    with _probe_lock:
+        if _probe_client and not _probe_client.is_closed:
+            _probe_client.close()
+            _probe_client = None
+
+
+atexit.register(_close_probe_client)
+
 
 def set_block_proxy(enabled: bool) -> None:
     """设置是否屏蔽系统代理。
@@ -109,10 +160,9 @@ def is_network_available_url(
     def _check_url(url: str, expected: str) -> tuple[str, bool, str]:
         start = time.perf_counter()
         try:
-            with httpx.Client(
-                verify=False, trust_env=not is_block_proxy(), follow_redirects=True
-            ) as client:
-                resp = client.get(url, timeout=timeout)
+            block = is_block_proxy()
+            with _probe_lock:
+                resp = _get_probe_client(block).get(url, timeout=timeout)
             elapsed = (time.perf_counter() - start) * 1000
             body = resp.text.strip()
             if expected in body:
@@ -160,8 +210,9 @@ def is_network_available_http(
         """在独立线程中检测单个 URL。返回 (url, success, detail)。"""
         start = time.perf_counter()
         try:
-            with httpx.Client(verify=False, trust_env=not is_block_proxy()) as client:
-                resp = client.get(
+            block = is_block_proxy()
+            with _probe_lock:
+                resp = _get_probe_client(block).get(
                     url, timeout=timeout, follow_redirects=follow_redirects
                 )
             elapsed = (time.perf_counter() - start) * 1000

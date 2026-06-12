@@ -99,6 +99,35 @@ class TaskExecutor:
             allowlist=[shell["path"] for shell in detect_shells()]
         )
 
+    # ── 定时任务 CRUD（原 TaskFacade 方法）──
+
+    def list_tasks(self) -> list[dict]:
+        """列出所有定时任务。"""
+        return self._registry.list_tasks()
+
+    def get_task(self, task_id: str) -> dict | None:
+        """获取单个定时任务。"""
+        return self._registry.get_task(task_id)
+
+    def save_task(self, task_id: str, config: dict) -> tuple[bool, str]:
+        """保存定时任务。"""
+        return self._registry.save_task(task_id, config)
+
+    def delete_task(self, task_id: str) -> tuple[bool, str]:
+        """删除定时任务及其历史。"""
+        success, message = self._registry.delete_task(task_id)
+        if success:
+            self._history_store.delete_history(task_id)
+        return success, message
+
+    def get_history(self, task_id: str) -> list[dict]:
+        """获取任务执行历史。"""
+        return self._history_store.get_history(task_id)
+
+    def has_enabled_tasks(self) -> bool:
+        """检查是否存在启用的定时任务。"""
+        return self._registry.has_enabled_tasks()
+
     # ── 异步提交接口 ──
 
     def execute_task_async(self, task_id: str) -> Future:

@@ -8,12 +8,10 @@ import shutil
 from pathlib import Path
 
 from app.services.autostart import AutoStartService
-from app.services.config_provider import RuntimeConfigProvider
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
 from app.services.profile_service import ProfileService
 from app.services.task_executor import TaskExecutor
-from app.services.task_facade import TaskFacade
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
 from app.services.task_service import TaskService
 from app.services.websocket_manager import WebSocketManager
@@ -42,9 +40,6 @@ class ServiceContainer:
         self.autostart_service = AutoStartService(project_root)
         self._debug_manager = None  # 延迟初始化，避免轻量模式加载 FastAPI
 
-        # 配置提供者
-        self.config_provider = RuntimeConfigProvider(self.profile_service)
-
         # 定时任务注册中心
         self.task_registry = TaskRegistry(project_root / "tasks" / "scheduled")
         self.task_history_store = TaskHistoryStore(
@@ -63,14 +58,6 @@ class ServiceContainer:
             worker_getter=_get_worker,
             login_history=self.login_history_service,
             profile_service=self.profile_service,
-            get_runtime_config=self.config_provider.get_runtime_config,
-        )
-
-        # 任务 Facade
-        self.task_facade = TaskFacade(
-            registry=self.task_registry,
-            executor=self.task_executor,
-            history_store=self.task_history_store,
         )
 
         # 统一引擎（替代 MonitorService + SchedulerService）
@@ -82,9 +69,10 @@ class ServiceContainer:
             worker_getter=_get_worker,
             task_registry=self.task_registry,
             task_executor=self.task_executor,
-            task_facade=self.task_facade,
-            config_provider=self.config_provider,
         )
+
+        # 延迟绑定：TaskExecutor 通过引擎获取运行时配置
+        self.task_executor._get_runtime_config = self.engine.get_runtime_config
 
         self._ws_drain_task: asyncio.Task | None = None
         self._log_handler_id: int | None = None
@@ -134,7 +122,7 @@ class ServiceContainer:
         from loguru import logger
 
         if self._log_handler_id is None:
-            dashboard_sink = DashboardSink(maxlen=1200, broadcast_maxlen=200)
+            dashboard_sink = DashboardSink(maxlen=500, broadcast_maxlen=200)
             self._log_handler_id = logger.add(
                 dashboard_sink.write,
                 format="{message}",
