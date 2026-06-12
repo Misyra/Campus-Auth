@@ -338,7 +338,8 @@ def build_runtime_config(
         base["isp"] = ""
     else:
         base["isp"] = carrier
-    base["auto_start_monitoring"] = payload.auto_start
+    base["startup_action"] = payload.startup_action
+    base["runtime_mode"] = payload.runtime_mode
 
     # 浏览器配置
     base["browser_settings"] = _build_browser_config(payload)
@@ -366,7 +367,8 @@ def build_runtime_config(
         [
             "access_log",
             "minimize_to_tray",
-            "login_then_exit",
+            "startup_action",
+            "runtime_mode",
             "log_retention_days",
             "custom_variables",
             "block_proxy",
@@ -403,9 +405,9 @@ def _update_system_settings(
     field_list = [
         "access_log",
         "minimize_to_tray",
-        "lightweight_mode",
+        "startup_action",
         "auto_open_browser",
-        "login_then_exit",
+        "runtime_mode",
         "max_retries",
         "retry_interval",
         "log_retention_days",
@@ -444,7 +446,6 @@ def _update_default_profile(
     # 直接映射的 profile 字段
     field_list = [
         "check_interval_seconds",
-        "auto_start",
         "headless",
         "browser_timeout",
         "browser_navigation_timeout",
