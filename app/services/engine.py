@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import contextlib
-import os
 import queue
 import re
 import threading
