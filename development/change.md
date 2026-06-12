@@ -5,6 +5,16 @@
 
 ## 2026-06-12（重构）
 
+### refactor: config_service 适配 startup_action/runtime_mode 新字段
+
+将 `app/services/config_service.py` 中对旧字段（`auto_start`、`lightweight_mode`、`login_then_exit`）的引用替换为新字段（`startup_action`、`runtime_mode`）。
+
+**修改内容：**
+- `build_runtime_config()`：`payload.auto_start` → `payload.startup_action` + `payload.runtime_mode`
+- `build_runtime_config()` 的 `assign_profile_fields` 调用：`"login_then_exit"` → `"startup_action"` + `"runtime_mode"`
+- `_update_system_settings()` 的 `field_list`：`"lightweight_mode"` → `"startup_action"`，`"login_then_exit"` → `"runtime_mode"`
+- `_update_default_profile()` 的 `field_list`：删除 `"auto_start"` 条目
+
 ### refactor: 后端架构重构 — 内存优化与服务层简化
 
 基于 `development/campus-auth-refactor-v2.md` 执行的系统性重构，共完成 7 项任务。
@@ -2419,3 +2429,16 @@
 
 **测试结果：** 1574 passed, 2 failed, 2 skipped
 - 2 个失败：`test_src_utils.py::TestCleanupOrphanBrowsers::test_windows` 和 `test_posix`，原因是 `playwright_worker.py` 重构后移除了 `_cleanup_windows` 和 `_cleanup_posix` 属性，测试未同步更新
+
+## 2026-06-12（启动配置简化）
+
+### refactor: PROFILE_FIELDS 删除 auto_start/login_then_exit，添加 startup_action/runtime_mode
+
+更新 `app/utils/config_utils.py` 中的 `PROFILE_FIELDS` 常量列表，与 `schemas.py` 中 `ProfileSettings` 的字段变更保持同步。
+
+**修改内容：**
+- 删除 `"auto_start"`（已被 `startup_action` 替代）
+- 删除 `"login_then_exit"`（已被 `runtime_mode` 替代）
+- 添加 `"startup_action"` 和 `"runtime_mode"`（在 `"auto_open_browser"` 之后）
+
+**验证结果：** `python -c` 断言全部通过
