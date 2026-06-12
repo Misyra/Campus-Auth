@@ -34,7 +34,6 @@ def _make_monitor_service() -> ScheduleEngine:
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.system.pure_mode = False
         mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
         mock_load_ui.return_value = mock_ui_config
         return ScheduleEngine(MagicMock())
 
@@ -198,7 +197,7 @@ class TestListLogs:
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.system.pure_mode = False
         mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
+
         mock_load_ui.return_value = mock_ui_config
 
         svc = ScheduleEngine(MagicMock())
@@ -306,7 +305,7 @@ class TestStartStopMonitoring:
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.system.pure_mode = False
         mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
+
         mock_load_ui.return_value = mock_ui_config
 
         svc = ScheduleEngine(MagicMock())
@@ -382,7 +381,7 @@ class TestHandleLogin:
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.system.pure_mode = False
         mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
+
         mock_ui_config.login_timeout = 120
         mock_load_ui.return_value = mock_ui_config
 
@@ -441,7 +440,7 @@ class TestNetwork:
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.system.pure_mode = False
         mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
+
         mock_load_ui.return_value = mock_ui_config
 
         svc = ScheduleEngine(MagicMock())
@@ -464,7 +463,7 @@ class TestNetwork:
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.system.pure_mode = False
         mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
+
         mock_load_ui.return_value = mock_ui_config
 
         svc = ScheduleEngine(MagicMock())
@@ -489,7 +488,7 @@ class TestNetwork:
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.system.pure_mode = False
         mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
+
         mock_load_ui.return_value = mock_ui_config
 
         svc = ScheduleEngine(MagicMock())
@@ -520,7 +519,7 @@ class TestTogglePureMode:
         mock_data.system.pure_mode = False
         mock_ps.load.return_value = mock_data
         mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
+
         mock_load_ui.return_value = mock_ui_config
 
         svc = ScheduleEngine(MagicMock())
@@ -547,7 +546,7 @@ class TestTogglePureMode:
         mock_data.system.pure_mode = False
         mock_ps.load.return_value = mock_data
         mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
+
         mock_load_ui.return_value = mock_ui_config
 
         svc = ScheduleEngine(MagicMock())
@@ -620,7 +619,7 @@ class TestGetConfig:
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.system.pure_mode = False
         mock_ui_config = MagicMock()
-        mock_ui_config.auto_start = False
+
         mock_load_ui.return_value = mock_ui_config
 
         svc = ScheduleEngine(MagicMock())
