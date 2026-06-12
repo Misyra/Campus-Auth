@@ -291,16 +291,4 @@ export const configMethods = {
       this.toastOnly(false, msg);
     }
   },
-  async resetSourceLevel(source) {
-    try {
-      await this.$api.delete(`/api/config/source-level/${source}`);
-      delete this.logLevels.source_levels[source];
-      this.frontendLogger.info('config', `已重置 ${source} 级别`);
-      this.toastOnly(true, `已重置 ${source} 级别`);
-    } catch (error) {
-      const msg = extractApiError(error, '重置失败');
-      this.frontendLogger.error('config', `重置日志级别失败: ${msg}`, error);
-      this.toastOnly(false, msg);
-    }
-  },
 };

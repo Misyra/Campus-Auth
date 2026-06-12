@@ -20,29 +20,13 @@
       <div class="form-group">
         <div class="field-label-row">
           <label>全局日志级别</label>
-          <span class="field-help" tabindex="0" role="note" data-tip="设置所有日志来源的默认级别。低于该级别的日志将被过滤。来源级别的单独设置会覆盖此项。">?</span>
+          <span class="field-help" tabindex="0" role="note" data-tip="设置所有日志来源的默认级别。低于该级别的日志将被过滤。">?</span>
         </div>
         <custom-select
           :options="logLevelOptions"
           :value="logLevels.global_level"
           @change="(val) => setSourceLevel('global', val)"
         ></custom-select>
-      </div>
-      <div class="source-levels-section">
-        <span class="source-levels-label">来源级别</span>
-        <div class="source-level-row" v-for="source in logSources" :key="source.value">
-          <span class="source-name">{{ source.label }}</span>
-          <custom-select
-            :options="logLevelOptions"
-            :value="logLevels.source_levels[source.value] || logLevels.global_level"
-            @change="(val) => setSourceLevel(source.value, val)"
-          ></custom-select>
-          <button
-            class="btn btn-sm btn-secondary"
-            @click="resetSourceLevel(source.value)"
-            :disabled="!logLevels.source_levels[source.value]"
-          >重置</button>
-        </div>
       </div>
 
       <div class="settings-section-divider"></div>

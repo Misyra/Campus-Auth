@@ -29,7 +29,7 @@ def get_log_levels():
 
 @router.put("/api/config/source-level")
 def set_source_level(payload: dict, request: Request):
-    """设置 source 级别"""
+    """设置日志级别。source='global' 时设置全局级别，否则设置来源级别。"""
     from app.utils.logging import LogConfigCenter
 
     source = payload.get("source")
@@ -39,6 +39,11 @@ def set_source_level(payload: dict, request: Request):
         raise HTTPException(400, "缺少 source 或 level 参数")
 
     config = LogConfigCenter.get_instance()
+
+    if source == "global":
+        config.set_level(level)
+        return {"success": True, "message": f"已设置全局级别为 {level}"}
+
     try:
         config.set_source_level(source, level)
     except ValueError as e:
