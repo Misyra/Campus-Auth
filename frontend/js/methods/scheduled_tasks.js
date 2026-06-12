@@ -149,6 +149,12 @@ export const scheduledTasksMethods = {
     this.scheduledTaskHistory = [];
   },
 
+  // 格式化调度时间
+  formatScheduleTime,
+
+  // 格式化超时时间
+  formatTimeValue,
+
   // 格式化任务类型
   formatTaskType(type) {
     const types = {
