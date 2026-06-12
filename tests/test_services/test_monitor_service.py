@@ -392,7 +392,12 @@ class TestHandleLogin:
         mock_worker.submit.return_value = mock_result
         mock_get_worker = MagicMock(return_value=mock_worker)
 
-        svc = ScheduleEngine(MagicMock(), worker_getter=mock_get_worker)
+        mock_task_executor = MagicMock()
+        mock_task_executor.execute_login_async.return_value = None
+
+        svc = ScheduleEngine(
+            MagicMock(), worker_getter=mock_get_worker, task_executor=mock_task_executor
+        )
         svc._shutdown_event.set()  # 停止引擎线程，避免干扰
         time.sleep(0.1)
 
@@ -802,47 +807,22 @@ class TestStartMonitoringPutNowait:
 class TestNetworkStateSetInConsumer:
     """P1-BE-7: network_state 在异步登录线程中统一赋值"""
 
-    def test_network_state_set_after_async_login(self):
-        """测试登录成功后 network_state 由异步登录线程通过 update_status_after_login 设置"""
+    def test_do_async_login_delegates_to_task_executor(self):
+        """_do_async_login 应委托给 task_executor.execute_login_async"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._login_in_progress = threading.Event()
         svc._login_retry = _LoginRetryState(count=0, last_attempt=0, config=None)
-        svc._login_history = None
-        svc._profile_service = MagicMock()
-        svc._ui_config = MagicMock()
-        svc._ui_config.login_timeout = 10
-        svc._runtime_config = {"auth_url": "http://test.com", "username": "test"}
-        svc._pure_mode = False
-        svc._pure_mode_lock = threading.Lock()
-        svc._login_lock = threading.Lock()
         svc._update_status_snapshot = MagicMock()
 
-        # 模拟 monitor_core
-        mock_core = MagicMock()
-        mock_core.monitoring = True
-        svc._monitor_core = mock_core
+        mock_task_executor = MagicMock()
+        mock_task_executor.execute_login_async.return_value = None
+        svc._task_executor = mock_task_executor
 
-        # 模拟 Worker 返回成功
-        mock_result = MagicMock()
-        mock_result.success = True
-        mock_result.data = "ok"
-
-        mock_worker = MagicMock()
-        mock_worker.submit.return_value = mock_result
-        svc._worker_getter = lambda: mock_worker
-
-        # 调用 _do_async_login
         svc._do_async_login()
 
-        # 等待异步线程完成
-        time.sleep(0.5)
-
-        # 验证 update_status_after_login(True) 被调用
-        mock_core.update_status_after_login.assert_called_with(True)
-        # 验证 _login_in_progress 已清除
-        assert not svc._login_in_progress.is_set(), (
-            "异步登录完成后应清除 _login_in_progress"
-        )
+        mock_task_executor.execute_login_async.assert_called_once()
+        # future 为 None 时，_login_in_progress 应被清除
+        assert not svc._login_in_progress.is_set()
 
 
 # =====================================================================
