@@ -526,6 +526,16 @@
   height: 10px;
 }
 
+.custom-select.disabled .custom-select-trigger {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.custom-select.disabled .custom-select-arrow {
+  opacity: 0.5;
+}
+
 .form-group textarea {
   min-height: 140px;
   resize: vertical;

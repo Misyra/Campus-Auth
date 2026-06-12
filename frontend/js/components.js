@@ -9,6 +9,7 @@ export const CustomSelect = {
     placeholder: { type: String, default: '请选择...' },
     compact: { type: Boolean, default: false },
     logfiles: { type: Boolean, default: false },
+    disabled: { type: Boolean, default: false },
   },
   emits: ['update:modelValue', 'change'],
   data() {
@@ -22,6 +23,7 @@ export const CustomSelect = {
   },
   methods: {
     toggle() {
+      if (this.disabled) return;
       this.open = !this.open;
       if (this.open) {
         this.activeIndex = this.options.findIndex(o => o.value === this.modelValue);
@@ -92,7 +94,7 @@ export const CustomSelect = {
     document.removeEventListener('mousedown', this.onDocClick);
   },
   template: `
-    <div class="custom-select" :class="{ open, compact, logfiles }">
+    <div class="custom-select" :class="{ open, compact, logfiles, disabled }">
       <button
         ref="trigger"
         type="button"
