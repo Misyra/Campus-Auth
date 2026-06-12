@@ -433,7 +433,7 @@ class ScheduleEngine:
         self._monitor_core = core
         self._next_network_check = time.time()  # 立即执行第一次检测
         self._login_retry.count = 0
-        self._update_status_snapshot()
+        self._update_status_snapshot(force=True)
         self.record_log("监控已启动（统一引擎驱动）", level="INFO", source="backend")
 
     def _handle_stop(self, cmd: EngineCommand | None = None) -> None:
@@ -448,7 +448,7 @@ class ScheduleEngine:
         self._next_network_check = 0
 
         self.record_log("监控已停止", level="INFO", source="backend")
-        self._update_status_snapshot()
+        self._update_status_snapshot(force=True)
 
     def _handle_shutdown(self, cmd: EngineCommand) -> None:
         """处理关闭命令。"""
@@ -515,10 +515,14 @@ class ScheduleEngine:
         if source in ("network",):
             self._update_status_snapshot()
 
-    def _update_status_snapshot(self) -> None:
-        """Read monitor_core state into lock-free StatusSnapshot."""
+    def _update_status_snapshot(self, force: bool = False) -> None:
+        """Read monitor_core state into lock-free StatusSnapshot.
+
+        Args:
+            force: 跳过节流，立即更新（用于状态切换等关键场景）。
+        """
         now = time.time()
-        if now - self._last_snapshot_time < self._snapshot_min_interval:
+        if not force and now - self._last_snapshot_time < self._snapshot_min_interval:
             return
         self._last_snapshot_time = now
 
