@@ -223,6 +223,29 @@ export const appOptions = {
     logLevelOptions() {
       return LOG_LEVELS;
     },
+    runtimeModeOptions() {
+      return [
+        { value: 'full', label: '完整模式' },
+        { value: 'lightweight', label: '轻量模式' },
+      ];
+    },
+    autoStartMonitor: {
+      get() { return this.config.startup_action !== 'none'; },
+      set(val) {
+        if (!val) {
+          this.config.startup_action = 'none';
+          this.loginThenExit = false;
+        } else {
+          this.config.startup_action = 'monitor';
+        }
+      },
+    },
+    loginThenExit: {
+      get() { return this.config.startup_action === 'login_once'; },
+      set(val) {
+        this.config.startup_action = val ? 'login_once' : 'monitor';
+      },
+    },
     binaryOptions() {
       return [
         { value: '', label: '选择执行程序...' },
