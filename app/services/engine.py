@@ -597,15 +597,8 @@ class ScheduleEngine:
     # ── 公共 API（监控 — 从 API 线程 / main.py 调用）──
 
     def boot(self) -> None:
-        # --no-auto 启动标志：跳过 login_then_exit 和 auto_start，用于恢复设置
-        if os.environ.pop("CAMPUS_AUTH_NO_AUTO", None):
-            logger.info("--no-auto 模式：跳过自动启动监控")
-            return
-
-        # WS drain loop 由 main.py lifespan 统一启动和管理生命周期
-
-        if self._ui_config.auto_start:
-            self.start_monitoring()
+        """启动引擎。由调用方决定是否调用，不再自行判断配置。"""
+        self.start_monitoring()
 
     @property
     def login_in_progress(self) -> bool:
