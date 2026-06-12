@@ -826,13 +826,13 @@ class ScheduleEngine:
         test_sites = parse_ping_targets(targets)
         mode_desc = []
         if enable_tcp:
-            mode_desc.append("TCP")
+            mode_desc.append(f"TCP({len(test_sites) if test_sites else 2})")
         if enable_http:
-            mode_desc.append("HTTP")
+            mode_desc.append("HTTP(2)")
         if url_checks:
-            mode_desc.append("网址响应")
+            mode_desc.append(f"网址响应({len(url_checks)})")
         self.record_log(
-            f"手动网络测试 -> 目标={len(test_sites)} 检测方式={'+'.join(mode_desc) or '无'}",
+            f"手动网络测试 -> 检测方式={'+'.join(mode_desc) or '无'}",
             "INFO",
             "network",
         )

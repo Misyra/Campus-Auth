@@ -3,6 +3,22 @@
 本文档记录项目的所有变更，包括文档更新、代码修改、配置调整等。
 
 
+## 2026-06-12
+
+### fix: 修复网络探测死锁，修正日志显示，前端超时调整
+
+1. `app/network/probes.py`：
+   - 移除 `_check_url` 和 `_check_one` 中多余的 `_probe_lock`，修复与 `_get_probe_client` 内部锁的死锁问题
+   - `_get_probe_client` 自身已有线程安全的双重检查锁，外层加锁导致首次探测时死锁挂起
+
+2. `app/services/engine.py`：
+   - 手动网络测试日志改为显示各检测方式的实际目标数量，格式如 `TCP(3)+HTTP(2)+网址响应(3)`
+   - 当 TCP 关闭时不再显示 TCP 目标数，避免误导
+
+3. `frontend/js/methods/actions.js`：
+   - 网络测试接口超时从默认 10 秒调整为 5 秒
+
+
 ## 2026-06-12（重构）
 
 ### refactor: 前端设置页面 checkbox 改为 radio group，适配 startup_action/runtime_mode
