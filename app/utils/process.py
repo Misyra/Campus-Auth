@@ -30,7 +30,6 @@ __all__ = [
 
 def get_pid_file() -> Path:
     """获取 PID 文件路径。"""
-    AUTH_DATA_DIR.mkdir(exist_ok=True)
     return AUTH_DATA_DIR / "campus_network_auth.pid"
 
 
@@ -133,16 +132,16 @@ def write_pid(mode: str | None = None) -> None:
     Args:
         mode: 运行模式标记，如 "lightweight" 或 "full"。存入 PID 文件第三行。
     """
+    from app.utils.files import atomic_write
+
+    AUTH_DATA_DIR.mkdir(exist_ok=True)
     pid_file = get_pid_file()
     proc_name = os.path.basename(sys.executable)
     start_time = time.strftime("%Y-%m-%d %H:%M:%S")
     content = f"{os.getpid()}\n{proc_name}|{start_time}"
     if mode:
         content += f"\n{mode}"
-    # 原子写入: 临时文件 + 重命名
-    tmp = pid_file.with_suffix(".pid.tmp")
-    tmp.write_text(content, encoding="utf-8")
-    tmp.replace(pid_file)
+    atomic_write(pid_file, content)
 
 
 def cleanup_pid() -> None:

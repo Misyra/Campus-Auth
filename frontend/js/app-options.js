@@ -64,14 +64,6 @@ export const appOptions = {
         { value: false, label: '保持监控（推荐）' },
         { value: true, label: '自启动时登录后退出' },
       ],
-      logLevelOptions: [
-        { value: '', label: '全部级别' },
-        { value: 'INFO', label: 'INFO' },
-        { value: 'WARNING', label: 'WARNING' },
-        { value: 'ERROR', label: 'ERROR' },
-        { value: 'CRITICAL', label: 'CRITICAL' },
-        { value: 'DEBUG', label: 'DEBUG' },
-      ],
       logSourceOptions: [
         { value: '', label: '全部来源' },
         { value: 'backend', label: 'BAK' },

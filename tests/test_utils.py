@@ -311,16 +311,16 @@ class TestAtomicWrite:
             os.chdir(old_cwd)
 
     def test_atomic_write_prefix_length_limit(self, tmp_path):
-        """prefix 长度超过 20 字符时应抛出 ValueError"""
+        """长 prefix 应正常工作（不再有长度限制）"""
         target = tmp_path / "test.txt"
-        with pytest.raises(ValueError, match="prefix/suffix"):
-            atomic_write(str(target), "content", prefix="x" * 21)
+        atomic_write(str(target), "content", prefix="x" * 21)
+        assert target.read_text(encoding="utf-8") == "content"
 
     def test_atomic_write_suffix_length_limit(self, tmp_path):
-        """suffix 长度超过 20 字符时应抛出 ValueError"""
+        """长 suffix 应正常工作（不再有长度限制）"""
         target = tmp_path / "test.txt"
-        with pytest.raises(ValueError, match="prefix/suffix"):
-            atomic_write(str(target), "content", suffix="x" * 21)
+        atomic_write(str(target), "content", suffix="x" * 21)
+        assert target.read_text(encoding="utf-8") == "content"
 
 
 # =====================================================================

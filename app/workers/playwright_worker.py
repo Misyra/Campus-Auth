@@ -289,6 +289,10 @@ class PlaywrightWorker:
 
         return WorkerResponse(success=False, error="命令执行超时或无响应")
 
+    def submit_nowait(self, cmd_type: str, data: dict | None = None) -> None:
+        """提交命令但不等待响应（fire-and-forget）。"""
+        self._cmd_queue.put_nowait(WorkerCommand(type=cmd_type, data=data or {}))
+
     # ── Worker 线程入口 ──
 
     def _worker_entry(self) -> None:

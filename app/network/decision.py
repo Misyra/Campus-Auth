@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import socket
 from collections.abc import Iterable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 
 from app.utils.logging import get_logger
@@ -15,6 +16,10 @@ from .probes import (
     is_network_available_http,
     is_network_available_socket,
     is_network_available_url,
+)
+
+_decision_executor = ThreadPoolExecutor(
+    max_workers=3, thread_name_prefix="net-decision"
 )
 
 logger = get_logger("network_decision", source="network")
@@ -151,7 +156,7 @@ def is_network_available(
 
     socket_ok = http_ok = url_ok = True
 
-    pool = _executor
+    pool = _decision_executor
     futures = {}
     if enable_tcp:
         futures[

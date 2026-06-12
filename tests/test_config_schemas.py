@@ -23,7 +23,6 @@ from app.schemas import (
 )
 from app.services.config_service import (
     _decrypt_password_field,
-    _normalize_headers_json,
     _normalize_targets,
     _safe_decrypt,
 )
@@ -261,40 +260,45 @@ class TestNormalizeTargets:
 
 
 class TestNormalizeHeadersJson:
+    """测试 schema validator 中的 headers JSON 验证与格式化（原 _normalize_headers_json）"""
+
+    @staticmethod
+    def _validate(value: str) -> str:
+        return MonitorConfigPayload(
+            browser_extra_headers_json=value
+        ).browser_extra_headers_json
+
     def test_valid_json_object(self):
-        result = _normalize_headers_json('{"X-Custom": "value"}')
+        result = self._validate('{"X-Custom": "value"}')
         assert result == '{"X-Custom":"value"}'
 
     def test_empty_string(self):
-        assert _normalize_headers_json("") == ""
-
-    def test_none(self):
-        assert _normalize_headers_json(None) == ""
+        assert self._validate("") == ""
 
     def test_whitespace_strips(self):
-        result = _normalize_headers_json('  {"k": "v"}  ')
+        result = self._validate('  {"k": "v"}  ')
         assert result == '{"k":"v"}'
 
     def test_invalid_json_raises(self):
-        with pytest.raises(ValueError, match="JSON"):
-            _normalize_headers_json("not json")
+        with pytest.raises(ValidationError, match="JSON"):
+            self._validate("not json")
 
     def test_json_array_raises(self):
-        with pytest.raises(ValueError, match="格式不正确"):
-            _normalize_headers_json("[1, 2, 3]")
+        with pytest.raises(ValidationError, match="格式不正确"):
+            self._validate("[1, 2, 3]")
 
     def test_json_string_raises(self):
-        with pytest.raises(ValueError, match="格式不正确"):
-            _normalize_headers_json('"just a string"')
+        with pytest.raises(ValidationError, match="格式不正确"):
+            self._validate('"just a string"')
 
     def test_preserves_unicode(self):
-        result = _normalize_headers_json('{"中文": "值"}')
+        result = self._validate('{"中文": "值"}')
         parsed = json.loads(result)
         assert parsed["中文"] == "值"
 
     def test_compact_format(self):
         """输出应为紧凑格式（无多余空格）"""
-        result = _normalize_headers_json('{  "key" :  "value"  }')
+        result = self._validate('{  "key" :  "value"  }')
         assert result == '{"key":"value"}'
 
 
@@ -347,7 +351,7 @@ class TestAuthUrlValidator:
 class TestHeadersJsonValidator:
     def test_valid_json_object(self):
         m = MonitorConfigPayload(browser_extra_headers_json='{"X-Custom": "value"}')
-        assert m.browser_extra_headers_json == '{"X-Custom": "value"}'
+        assert m.browser_extra_headers_json == '{"X-Custom":"value"}'
 
     def test_empty_string(self):
         m = MonitorConfigPayload(browser_extra_headers_json="")
@@ -355,7 +359,7 @@ class TestHeadersJsonValidator:
 
     def test_strips_whitespace(self):
         m = MonitorConfigPayload(browser_extra_headers_json='  {"k": "v"}  ')
-        assert m.browser_extra_headers_json == '{"k": "v"}'
+        assert m.browser_extra_headers_json == '{"k":"v"}'
 
     def test_invalid_json(self):
         with pytest.raises(ValidationError, match="JSON"):

@@ -300,6 +300,7 @@ class LoginAttemptHandler:
     async def close_browser(self) -> None:
         """关闭浏览器（登录成功或监控停止时调用）"""
         if self._browser_ctx:
+            worker = None
             try:
                 from app.workers.playwright_worker import get_worker
 
@@ -308,9 +309,10 @@ class LoginAttemptHandler:
             except Exception as exc:
                 self.logger.warning("浏览器上下文关闭异常: {}", exc)
             finally:
-                try:
-                    await worker.close_browser()
-                except Exception as exc:
-                    self.logger.warning("浏览器关闭时异常: {}", exc)
+                if worker is not None:
+                    try:
+                        await worker.close_browser()
+                    except Exception as exc:
+                        self.logger.warning("浏览器关闭时异常: {}", exc)
                 self._browser_ctx = None
                 self.logger.info("浏览器已关闭")

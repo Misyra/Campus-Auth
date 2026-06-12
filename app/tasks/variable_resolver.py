@@ -111,7 +111,7 @@ class VariableResolver:
             # If variable not found, resolve returns the original pattern
             if resolved == match.group(0):
                 logger.warning("[var] 未解析的变量: {}", match.group(0))
-                return '""'  # Default to empty string
+                return json.dumps(match.group(0))  # 保留原样，转义后作为 JS 字符串
             return json.dumps(resolved)
 
         return self.TEMPLATE_PATTERN.sub(replacer, value)

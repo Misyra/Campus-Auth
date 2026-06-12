@@ -53,13 +53,14 @@ def _get_or_create_key() -> bytes:
             except Exception as exc:
                 logger.error("读取加密密钥失败: {}", exc)
                 # 备份损坏的密钥文件
-                if _KEY_FILE.exists():
-                    backup_path = _KEY_FILE.with_suffix(f".bak.{int(time.time())}")
-                    try:
-                        _KEY_FILE.rename(backup_path)
-                        logger.info("已备份损坏的密钥文件到: {}", backup_path)
-                    except OSError as backup_err:
-                        logger.warning("备份密钥文件失败: {}", backup_err)
+                backup_path = _KEY_FILE.with_suffix(f".bak.{int(time.time())}")
+                try:
+                    _KEY_FILE.rename(backup_path)
+                    logger.info("已备份损坏的密钥文件到: {}", backup_path)
+                except FileNotFoundError:
+                    pass  # 文件不存在，无需备份
+                except OSError as backup_err:
+                    logger.warning("备份密钥文件失败: {}", backup_err)
                 logger.warning(
                     "将生成新密钥，此前保存的密码将无法自动恢复，请在设置中重新输入密码"
                 )

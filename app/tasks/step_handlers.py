@@ -123,7 +123,8 @@ class StepHandler(ABC):
             try:
                 loc = ctx.locator(candidate).first
                 await loc.wait_for(state="visible", timeout=wait_timeout)
-                await action_fn(loc, timeout)
+                remaining_ms = max(500, int((deadline - time.perf_counter()) * 1000))
+                await action_fn(loc, remaining_ms)
                 logger.debug("{} 普通操作成功 -> {}", label, candidate)
                 return True, ""
             except Exception:

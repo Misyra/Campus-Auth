@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from app.constants import DEFAULT_NETWORK_TARGETS
@@ -95,31 +94,12 @@ def _normalize_targets(raw: str) -> str:
     return ",".join(parts)
 
 
-def _normalize_headers_json(raw: str) -> str:
-    text = str(raw or "").strip()
-    if not text:
-        return ""
-
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"浏览器请求头格式不正确，请确认输入的是合法的 JSON 对象: {exc}"
-        ) from exc
-    if not isinstance(parsed, dict):
-        raise ValueError(
-            '浏览器请求头格式不正确，应为键值对形式，例如: {"Referer": "https://example.com"}'
-        )
-
-    return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
-
-
 def _build_config_payload(
     profile_service: ProfileService,
     data: ProfilesData | None = None,
     *,
     apply_overrides: bool = False,
-) -> MonitorConfigPayload | tuple[MonitorConfigPayload, bool]:
+) -> tuple[MonitorConfigPayload, bool]:
     """构建配置 payload 的通用逻辑。
 
     Args:
@@ -128,8 +108,8 @@ def _build_config_payload(
         apply_overrides: 是否应用活动方案的覆盖值（运行时配置）
 
     Returns:
-        apply_overrides=False: MonitorConfigPayload
-        apply_overrides=True: (MonitorConfigPayload, has_decrypt_error)
+        (MonitorConfigPayload, has_decrypt_error): has_decrypt_error 仅在
+        apply_overrides=True 且解密出错时为 True，否则为 False。
     """
     if data is None:
         data = profile_service.load()
@@ -234,9 +214,7 @@ def _build_config_payload(
     )
 
     result = MonitorConfigPayload(**payload_dict)
-    if apply_overrides:
-        return (result, any_error)
-    return result
+    return (result, any_error if apply_overrides else False)
 
 
 def load_ui_config(
@@ -248,7 +226,8 @@ def load_ui_config(
     设置页面展示和修改的都是全局配置（system + default 方案），
     不随活动方案变化。方案独立的覆盖值在方案页面单独管理。
     """
-    return _build_config_payload(profile_service, data, apply_overrides=False)
+    payload, _ = _build_config_payload(profile_service, data, apply_overrides=False)
+    return payload
 
 
 def load_runtime_config(
@@ -294,9 +273,7 @@ def _build_browser_config(payload: MonitorConfigPayload) -> dict[str, Any]:
         "user_agent": payload.browser_user_agent.strip(),
         "low_resource_mode": payload.browser_low_resource_mode,
         "disable_web_security": payload.browser_disable_web_security,
-        "extra_headers_json": _normalize_headers_json(
-            payload.browser_extra_headers_json
-        ),
+        "extra_headers_json": payload.browser_extra_headers_json,
         "browser_args": payload.browser_args.strip(),
         "stealth_mode": payload.stealth_mode,
         "stealth_custom_script": payload.stealth_custom_script.strip(),
@@ -423,24 +400,30 @@ def _update_system_settings(
     )
 
     # 直接映射的系统字段
-    assign_profile_fields(
-        system_settings.__dict__,
-        payload.model_dump(),
-        [
-            "access_log",
-            "minimize_to_tray",
-            "lightweight_mode",
-            "auto_open_browser",
-            "login_then_exit",
-            "max_retries",
-            "retry_interval",
-            "log_retention_days",
-            "block_proxy",
-            "network_check_timeout",
-            "app_port",
-            "shell_path",
-        ],
-    )
+    field_list = [
+        "access_log",
+        "minimize_to_tray",
+        "lightweight_mode",
+        "auto_open_browser",
+        "login_then_exit",
+        "max_retries",
+        "retry_interval",
+        "log_retention_days",
+        "block_proxy",
+        "network_check_timeout",
+        "app_port",
+        "shell_path",
+    ]
+    update_data = {
+        k: v
+        for k, v in payload.model_dump().items()
+        if k in field_list and v is not None
+    }
+    merged = {**system_settings.model_dump(), **update_data}
+    validated = type(system_settings).model_validate(merged)
+    for field in field_list:
+        if field in update_data:
+            setattr(system_settings, field, getattr(validated, field))
     # 需要归一化处理的系统字段
     system_settings.auth_url = payload.auth_url.strip()
     system_settings.carrier = str(payload.carrier or "无").strip()
@@ -459,39 +442,43 @@ def _update_default_profile(
 ) -> None:
     """更新 default 方案的高级设置。"""
     # 直接映射的 profile 字段
-    assign_profile_fields(
-        default_profile.__dict__,
-        payload.model_dump(),
-        [
-            "check_interval_seconds",
-            "auto_start",
-            "headless",
-            "browser_timeout",
-            "browser_navigation_timeout",
-            "login_timeout",
-            "browser_low_resource_mode",
-            "browser_disable_web_security",
-            "pause_enabled",
-            "pause_start_hour",
-            "pause_end_hour",
-            "enable_tcp_check",
-            "enable_http_check",
-            "enable_local_check",
-            "check_auth_url",
-            "auth_url_targets",
-            "url_check_urls",
-            "stealth_mode",
-            "stealth_custom_script",
-            "custom_variables",
-            "browser_viewport_width",
-            "browser_viewport_height",
-        ],
-    )
+    field_list = [
+        "check_interval_seconds",
+        "auto_start",
+        "headless",
+        "browser_timeout",
+        "browser_navigation_timeout",
+        "login_timeout",
+        "browser_low_resource_mode",
+        "browser_disable_web_security",
+        "pause_enabled",
+        "pause_start_hour",
+        "pause_end_hour",
+        "enable_tcp_check",
+        "enable_http_check",
+        "enable_local_check",
+        "check_auth_url",
+        "auth_url_targets",
+        "url_check_urls",
+        "stealth_mode",
+        "stealth_custom_script",
+        "custom_variables",
+        "browser_viewport_width",
+        "browser_viewport_height",
+    ]
+    update_data = {
+        k: v
+        for k, v in payload.model_dump().items()
+        if k in field_list and v is not None
+    }
+    merged = {**default_profile.model_dump(), **update_data}
+    validated = type(default_profile).model_validate(merged)
+    for field in field_list:
+        if field in update_data:
+            setattr(default_profile, field, getattr(validated, field))
     # 需要归一化处理的 profile 字段
     default_profile.browser_user_agent = payload.browser_user_agent.strip()
-    default_profile.browser_extra_headers_json = _normalize_headers_json(
-        payload.browser_extra_headers_json
-    )
+    default_profile.browser_extra_headers_json = payload.browser_extra_headers_json
     default_profile.browser_args = payload.browser_args.strip()
     default_profile.browser_locale = payload.browser_locale.strip()
     default_profile.browser_timezone = payload.browser_timezone.strip()

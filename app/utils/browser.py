@@ -124,13 +124,12 @@ class BrowserContextManager:
 
         from app.workers.playwright_worker import (
             CMD_BROWSER_RELEASE,
-            WorkerCommand,
             get_worker,
         )
 
         worker = get_worker()
         try:
-            worker._cmd_queue.put_nowait(WorkerCommand(type=CMD_BROWSER_RELEASE))
+            worker.submit_nowait(CMD_BROWSER_RELEASE)
         except _queue_mod.Full:
             self.logger.warning("Worker 队列已满，无法发送 CMD_BROWSER_RELEASE")
 

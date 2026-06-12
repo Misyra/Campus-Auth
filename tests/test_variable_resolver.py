@@ -161,11 +161,11 @@ class TestResolveForJs:
         assert '"' in result
         assert "a'b" in result
 
-    def test_unresolved_var_empty_string(self):
-        """未解析变量在 JS 中返回空字符串。"""
+    def test_unresolved_var_preserved_in_js(self):
+        """未解析变量在 JS 中保留原样（JSON 编码）。"""
         resolver = VariableResolver(_make_config(), {})
         result = resolver.resolve_for_js("{{MISSING}}")
-        assert result == '""'
+        assert result == '"{{MISSING}}"'
 
     def test_non_template_passthrough(self):
         """无模板标记原样返回。"""

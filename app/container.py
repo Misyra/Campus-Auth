@@ -51,13 +51,16 @@ class ServiceContainer:
             project_root / "tasks" / "scheduled" / "history"
         )
 
+        def _get_worker():
+            from app.workers.playwright_worker import get_worker
+
+            return get_worker()
+
         # 任务执行器（双线程池）
         self.task_executor = TaskExecutor(
             registry=self.task_registry,
             history_store=self.task_history_store,
-            worker_getter=lambda: __import__(
-                "app.workers.playwright_worker", fromlist=["get_worker"]
-            ).get_worker(),
+            worker_getter=_get_worker,
             login_history=self.login_history_service,
             profile_service=self.profile_service,
             get_runtime_config=self.config_provider.get_runtime_config,
@@ -76,9 +79,7 @@ class ServiceContainer:
             self.profile_service,
             self.ws_manager,
             login_history_service=self.login_history_service,
-            worker_getter=lambda: __import__(
-                "app.workers.playwright_worker", fromlist=["get_worker"]
-            ).get_worker(),
+            worker_getter=_get_worker,
             task_registry=self.task_registry,
             task_executor=self.task_executor,
             task_facade=self.task_facade,
@@ -111,12 +112,20 @@ class ServiceContainer:
         """启动所有服务。"""
         from app.workers.playwright_worker import cleanup_orphan_browsers
 
-        cleanup_orphan_browsers()
-        self.start_web_services()
-        self.engine.boot()
-        if self.task_registry.has_enabled_tasks():
-            self.engine.start_scheduler()
-        container_logger.info("服务容器启动完成")
+        try:
+            cleanup_orphan_browsers()
+            self.start_web_services()
+            self.engine.boot()
+            if self.task_registry.has_enabled_tasks():
+                self.engine.start_scheduler()
+            container_logger.info("服务容器启动完成")
+        except Exception:
+            container_logger.exception("服务启动失败，正在清理...")
+            try:
+                await self.shutdown()
+            except Exception:
+                container_logger.exception("清理过程中也发生异常")
+            raise
 
     def start_web_services(self):
         """启动 Web 相关服务（DashboardSink + WS drain loop）。幂等。"""
