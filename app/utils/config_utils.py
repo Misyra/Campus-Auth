@@ -10,8 +10,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.utils.logging import get_logger
-
 # ── 常量 ──────────────────────────────────────────────────────────────
 
 # SystemSettings 中需要提取到 MonitorConfigPayload 的字段
@@ -97,31 +95,6 @@ def assign_profile_fields(target: dict, source: dict, field_names: list[str]) ->
         if name in source:
             target[name] = source[name]
 
-
-def validate_profile_fields() -> None:
-    """验证 PROFILE_FIELDS 与 SystemSettings 模型字段是否同步。
-
-    在服务启动时调用，检测两者不一致时记录警告日志。
-    """
-    from app.schemas import SystemSettings
-
-    model_fields = set(SystemSettings.model_fields.keys())
-    hardcoded = set(PROFILE_FIELDS)
-
-    only_in_model = model_fields - hardcoded
-    only_in_hardcoded = hardcoded - model_fields
-
-    logger = get_logger("config_helpers", source="backend")
-    if only_in_model:
-        logger.warning(
-            "PROFILE_FIELDS 缺少以下 SystemSettings 字段: {}",
-            sorted(only_in_model),
-        )
-    if only_in_hardcoded:
-        logger.warning(
-            "PROFILE_FIELDS 中以下字段不在 SystemSettings 中: {}",
-            sorted(only_in_hardcoded),
-        )
 
 
 # ── 验证器 ────────────────────────────────────────────────────────────

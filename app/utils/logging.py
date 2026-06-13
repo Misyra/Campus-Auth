@@ -45,8 +45,6 @@ def _file_format(record):
     return "[{time:YYYY-MM-DD HH:mm:ss}][{level}][{extra[_source]}][{name}] {message}\n"
 
 
-_WEBSOCKET_FORMAT = "{name} | {message}"
-
 # 默认添加控制台 handler
 logger.add(
     sys.stdout,
