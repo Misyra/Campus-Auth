@@ -14,7 +14,7 @@ from typing import Any
 from app.constants import SCREENSHOTS_DIR
 from app.utils.logging import get_logger
 
-from .models import PROJECT_ROOT, StepConfig, StepError, StepType
+from .models import StepConfig, StepError, StepType
 from .variable_resolver import VariableResolver
 
 logger = get_logger("step_handlers", source="task")
