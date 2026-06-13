@@ -177,10 +177,8 @@ export const DEFAULT_PROFILE_SETTINGS = {
   username: '',
   password: '',
   use_global_credentials: true,
-  use_global_advanced: true,
   use_global_auth_url: true,
   use_global_task: true,
   auth_url: '',
   active_task: '',
-  browser_user_agent: '',
 };
