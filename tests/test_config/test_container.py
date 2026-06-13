@@ -290,11 +290,10 @@ class TestShutdown:
         # 不抛异常即通过
 
     @patch("app.workers.playwright_worker.cleanup_orphan_browsers")
-    @patch("app.container.shutil")
     def test_shutdown_cleans_temp_dir(
-        self, mock_shutil, mock_cleanup, container_for_shutdown, project_root
+        self, mock_cleanup, container_for_shutdown, project_root
     ):
-        """shutdown 应清理临时目录。"""
+        """shutdown 应使用 shutil.rmtree 一步清理临时目录。"""
         temp_dir = project_root / "temp"
         temp_dir.mkdir()
 
@@ -304,15 +303,14 @@ class TestShutdown:
         temp_subdir = temp_dir / "subdir"
         temp_subdir.mkdir()
 
-        # mock shutil.rmtree 让它不报错
-        mock_shutil.rmtree = MagicMock()
-
         # mock shutdown_worker
         with patch("app.workers.playwright_worker.shutdown_worker"):
             asyncio.run(container_for_shutdown.shutdown())
 
-        # 验证文件被清理 — unlink 被调用（temp_file），rmtree 被调用（temp_subdir）
+        # 验证临时目录被清理后重建
+        assert temp_dir.exists()
         assert not temp_file.exists()
+        assert list(temp_dir.iterdir()) == []
 
     @patch("app.workers.playwright_worker.cleanup_orphan_browsers")
     def test_shutdown_handles_temp_dir_not_exist(
