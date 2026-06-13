@@ -40,6 +40,8 @@ environment/
 
 # User-specific network profiles
 settings.json
+!config/settings.json
+config/profiles/
 backups/*
 
 # Log files
