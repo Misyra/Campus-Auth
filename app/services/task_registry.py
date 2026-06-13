@@ -203,18 +203,6 @@ class TaskRegistry:
                 if not task_ids:
                     del self._schedule_index[key]
 
-    def _update_index(self, task_id: str, config: dict[str, Any]) -> None:
-        """先移除旧索引再添加新索引（需要在锁内调用）。
-
-        用于任务配置更新时的索引重建。
-        """
-        # 查找旧配置并移除旧索引
-        old = self._cache.get(task_id)
-        if old is not None:
-            self._remove_from_index(task_id, old)
-        # 添加新索引
-        self._add_to_index(task_id, config)
-
 
 class TaskHistoryStore:
     """定时任务执行历史存储。

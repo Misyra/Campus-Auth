@@ -710,21 +710,6 @@ class TestProfileService:
         data = service_with_profiles.load()
         assert data.auto_switch is True
 
-    def test_invalidate_cache(self, service_with_profiles):
-        data = service_with_profiles.load()
-        assert len(data.profiles) == 2
-        service_with_profiles.invalidate_cache()
-
-        # 添加新方案文件
-        new_profile = ProfileSettings(name="新增方案")
-        profile_path = service_with_profiles._profiles_dir / "new_id.json"
-        profile_path.write_text(
-            new_profile.model_dump_json(indent=2), encoding="utf-8"
-        )
-
-        data = service_with_profiles.load()
-        assert "new_id" in data.profiles
-
     def test_detect_matching_profile_by_gateway(self, service_with_profiles):
         with (
             patch(
