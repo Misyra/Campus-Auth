@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -249,3 +250,105 @@ class TestPathSafety:
         filename = "test.jpg"
         safe_name = Path(filename).name
         assert safe_name == filename
+
+
+# ── 远程 URL 下载 Content-Length 检查 ──
+
+
+class TestFetchUrlContentLength:
+    """POST /api/background/fetch-url — Content-Length 预检查。
+
+    通过直接调用 fetch_background_url 函数来避免 ASGI transport 的 mock 问题。
+    """
+
+    @staticmethod
+    def _mock_response(content_length: str | None, body: bytes = b"") -> httpx.Response:
+        """构造模拟的 httpx.Response。"""
+        headers = {}
+        if content_length is not None:
+            headers["content-length"] = content_length
+        headers["content-type"] = "image/png"
+        request = httpx.Request("GET", "https://example.com/img.png")
+        return httpx.Response(
+            status_code=200,
+            headers=headers,
+            content=body,
+            request=request,
+        )
+
+    @pytest.mark.asyncio
+    async def test_rejects_when_content_length_exceeds_limit(self, tmp_path):
+        """Content-Length 超过限制时拒绝，不加载响应体。"""
+        bg_dir = tmp_path / "frontend" / "background"
+        bg_dir.mkdir(parents=True, exist_ok=True)
+
+        huge_size = str(10 * 1024 * 1024)  # 10MB
+        mock_resp = self._mock_response(huge_size)
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with (
+            patch("app.api.tools.validate_url"),
+            patch("app.api.tools.httpx.AsyncClient", return_value=mock_client),
+            patch("app.api.tools.BG_DIR", bg_dir),
+        ):
+            from app.api.tools import fetch_background_url
+
+            with pytest.raises(Exception) as exc_info:
+                await fetch_background_url({"url": "https://example.com/big.png"})
+            assert exc_info.value.status_code == 400
+            assert "5MB" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_accepts_when_content_length_within_limit(self, tmp_path):
+        """Content-Length 在限制内时正常处理。"""
+        bg_dir = tmp_path / "frontend" / "background"
+        bg_dir.mkdir(parents=True, exist_ok=True)
+
+        small_body = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+        mock_resp = self._mock_response(str(len(small_body)), small_body)
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with (
+            patch("app.api.tools.validate_url"),
+            patch("app.api.tools.httpx.AsyncClient", return_value=mock_client),
+            patch("app.api.tools.BG_DIR", bg_dir),
+            patch("app.api.tools._cleanup_old_backgrounds"),
+        ):
+            from app.api.tools import fetch_background_url
+
+            result = await fetch_background_url({"url": "https://example.com/small.png"})
+            assert "filename" in result
+            assert result["url"].startswith("/api/background/")
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_body_size_when_no_content_length(self, tmp_path):
+        """无 Content-Length 头时回退到响应体大小检查。"""
+        bg_dir = tmp_path / "frontend" / "background"
+        bg_dir.mkdir(parents=True, exist_ok=True)
+
+        small_body = b"\x89PNG\r\n\x1a\n" + b"\x00" * 10
+        mock_resp = self._mock_response(None, small_body)
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with (
+            patch("app.api.tools.validate_url"),
+            patch("app.api.tools.httpx.AsyncClient", return_value=mock_client),
+            patch("app.api.tools.BG_DIR", bg_dir),
+            patch("app.api.tools._cleanup_old_backgrounds"),
+        ):
+            from app.api.tools import fetch_background_url
+
+            result = await fetch_background_url({"url": "https://example.com/no-header.png"})
+            assert "filename" in result
