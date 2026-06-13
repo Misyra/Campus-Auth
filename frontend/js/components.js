@@ -12,7 +12,7 @@ export const CustomSelect = {
   },
   emits: ['update:modelValue', 'change'],
   data() {
-    return { open: false, activeIndex: -1, dropdownStyle: {} };
+    return { open: false, activeIndex: -1 };
   },
   computed: {
     selectedLabel() {
@@ -27,9 +27,7 @@ export const CustomSelect = {
       if (this.open) {
         this.activeIndex = this.options.findIndex(o => o.value === this.modelValue);
         this.$nextTick(() => {
-          this._positionDropdown();
           this.scrollToActive();
-          // 全局点击监听关闭下拉
           document.addEventListener('mousedown', this.onDocClick);
         });
       } else {
@@ -83,19 +81,6 @@ export const CustomSelect = {
           break;
       }
     },
-    _positionDropdown() {
-      const trigger = this.$refs.trigger;
-      if (!trigger) return;
-      const rect = trigger.getBoundingClientRect();
-      this.dropdownStyle = {
-        position: 'fixed',
-        top: `${rect.bottom + 4}px`,
-        left: `${rect.left}px`,
-        width: `${rect.width}px`,
-        right: 'auto',
-        zIndex: 9999,
-      };
-    },
     scrollToActive() {
       this.$nextTick(() => {
         const el = this.$el.querySelector('.custom-select-option.active');
@@ -125,7 +110,7 @@ export const CustomSelect = {
           <polyline points="6 9 12 15 18 9"/>
         </svg>
       </button>
-      <div v-if="open" class="custom-select-dropdown" role="listbox" :style="dropdownStyle">
+      <div v-if="open" class="custom-select-dropdown" role="listbox">
         <div
           v-for="(opt, i) in options"
           :key="opt.value"
