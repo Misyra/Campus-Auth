@@ -13,22 +13,6 @@ from .profile_service import ProfileService
 
 config_logger = get_logger("runtime_config", source="backend")
 
-# 运行时配置中不应被方案覆盖的字段
-_PROTECTED_KEYS = frozenset(
-    {
-        "username",
-        "password",
-        "auth_url",
-        "active_task",
-        "carrier",
-        "carrier_custom",
-        "use_global_credentials",
-        "backend_log_level",
-        "frontend_log_level",
-    }
-)
-
-
 def _safe_decrypt(ciphertext: str) -> tuple[str, bool]:
     """解密密码。返回 (解密结果, 是否有错误)"""
     if not ciphertext:

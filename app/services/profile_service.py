@@ -31,11 +31,6 @@ class ProfileService:
         self._config_dir.mkdir(parents=True, exist_ok=True)
         self._profiles_dir.mkdir(parents=True, exist_ok=True)
 
-    def invalidate_cache(self) -> None:
-        """清除缓存，强制下次 load() 从磁盘读取"""
-        with self._lock:
-            self._data = None
-
     def _load_unsafe(self) -> ProfilesData:
         """加载配置（不加锁，由调用者持有锁）"""
         if self._data is not None:
