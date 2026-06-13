@@ -171,9 +171,13 @@ class NetworkMonitorCore:
             modes.append(f"网址响应({len(url_checks)})")
         modes_str = " + ".join(modes) if modes else "无"
 
+        # 脱敏处理：截断认证地址，隐藏用户名明文
+        masked_url = auth_url[:20] + "..." if len(auth_url) > 20 else auth_url
+        masked_username = username[:3] + "***" if len(username) > 3 else "***"
+
         self.log_message(
             f"网络监控已启动 | 检测间隔: {interval}s | 方式: {modes_str}\n"
-            f"认证地址: {auth_url} | 账号: {username} | 运营商: {isp}"
+            f"认证地址: {masked_url} | 账号: {masked_username} | 运营商: {isp}"
         )
 
     def check_once(self) -> dict[str, Any]:
