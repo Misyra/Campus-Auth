@@ -16,13 +16,15 @@
 debug/
   logs/                         # 日志文件（loguru 原生轮转）
     app.log                     # 当前日志
-    app.log.2026-06-12          # 按日期归档（loguru rotation="00:00" 自动生成）
-    app.log.2026-06-11
+    app.2026-06-12_00-00-00_123456.log   # 归档（loguru 轮转自动生成）
+    app.2026-06-11_00-00-00_654321.log
   screenshots/                  # 截图，只保留当天
     2026-06-13/
       taskid_stepid_20260613_120000_123456.png
 temp/                           # 不动，调试模式临时文件
 ```
+
+loguru 归档文件命名格式：`app.{YYYY-MM-DD_HH-MM-SS_microseconds}.log`，当前日志始终为 `app.log`。
 
 ## 常量变更
 
@@ -49,10 +51,7 @@ logger.add(
 )
 ```
 
-loguru 轮转后归档文件命名格式为 `app.log.2026-06-12_00-00-00`（YYYY-MM-DD_HH-MM-SS），非简单的 `.N` 后缀。
-
 - `DateRotatingSink` 中的 `_rotate_file()`、`_cleanup_old_dirs()`、文件大小检查等自定义逻辑全部移除
-- 保留 `_get_log_path()` 的日期目录逻辑（不再需要，但 loguru 直接写单文件）
 - 保留 `DashboardSink` 不动（实时日志 + WebSocket 广播）
 - 保留 `LogConfigCenter` 不动（运行时级别控制）
 
@@ -86,32 +85,38 @@ def cleanup_old_screenshots():
 
 ### GET /api/logfiles/list
 
-去掉日期分组，直接返回日志文件列表：
+保持按日期分组（`list[LogFileGroup]`），分组逻辑从遍历目录改为从文件名提取日期：
 
 ```python
-# 文件名校验正则更新（适配 loguru 归档命名）
-_SAFE_FILE_PATTERN = re.compile(r"^app\.log(?:\.\d{4}-\d{2}-\d{2}(?:_\d{2}-\d{2}-\d{2})?)?$")
+# 文件名校验正则（适配 loguru 归档命名）
+_SAFE_FILE_PATTERN = re.compile(r"^app\.log$")                         # 当前日志
+_ARCHIVE_PATTERN = re.compile(r"^app\.(\d{4}-\d{2}-\d{2})_\d{2}-\d{2}-\d{2}(?:_\d+)?(?:\.\d+)?\.log$")
 ```
 
 ```python
-# 响应格式变更
-# 旧：list[LogFileGroup]（按日期分组）
-# 新：list[LogFileInfo]（平铺列表）
-
-@router.get("/api/logfiles/list", response_model=list[LogFileInfo])
-def list_log_files() -> list[LogFileInfo]:
-    """列出 debug/logs/ 下所有日志文件。"""
-    files = []
+@router.get("/api/logfiles/list", response_model=list[LogFileGroup])
+def list_log_files() -> list[LogFileGroup]:
+    """列出 debug/logs/ 下所有日志文件，按日期分组（从文件名提取日期）。"""
+    groups: dict[str, list[LogFileInfo]] = {}
     for f in sorted(LOGS_DIR.iterdir()):
-        if f.is_file() and _SAFE_FILE_PATTERN.match(f.name):
-            stat = f.stat()
-            files.append(LogFileInfo(name=f.name, size=stat.st_size, modified=...))
-    return files
+        if not f.is_file():
+            continue
+        if f.name == "app.log":
+            date = datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d")
+        elif m := _ARCHIVE_PATTERN.match(f.name):
+            date = m.group(1)
+        else:
+            continue
+        stat = f.stat()
+        groups.setdefault(date, []).append(
+            LogFileInfo(name=f.name, size=stat.st_size, modified=...)
+        )
+    return [LogFileGroup(date=d, files=files) for d in sorted(groups, reverse=True)]
 ```
 
 ### GET /api/logfiles/content
 
-去掉 `date` 参数，`file` 参数直接定位文件：
+去掉 `date` 参数，文件名已包含足够定位信息：
 
 ```python
 @router.get("/api/logfiles/content", response_model=LogFileContent)
@@ -122,7 +127,10 @@ def get_log_file_content(
     search: str = Query(default=""),
     limit: int = Query(default=2000, ge=1, le=10000),
 ) -> LogFileContent:
+    _validate_filename(file)
     filepath = LOGS_DIR / file
+    if not filepath.exists():
+        raise HTTPException(404, f"日志文件不存在: {file}")
     # ...
 ```
 
@@ -130,8 +138,8 @@ def get_log_file_content(
 
 ### 日志查看器（logfiles 页面）
 
-- 去掉日期 Tab 选择器
-- 文件列表从平铺的文件名列表中选择
+- 日期 Tab 选择器保留（数据来源从目录结构改为 API 返回的 `LogFileGroup`，后端从文件名提取日期）
+- `fetchLogFileContent` 调用去掉 `date` 参数，只传 `file` 名
 - 级别、来源、搜索过滤保持不变
 
 ### 截图 URL
@@ -159,17 +167,15 @@ _app.mount("/temp", StaticFiles(directory=TEMP_DIR), name="temp")
 |------|---------|
 | `app/constants.py` | `LOGS_DIR` → `DEBUG_DIR / "logs"`，新增 `SCREENSHOTS_DIR` |
 | `app/utils/logging.py` | `DateRotatingSink` 简化为 loguru 原生 `logger.add()` |
-| `app/api/logfiles.py` | API 去掉 `date` 参数，`list` 返回平铺列表 |
+| `app/api/logfiles.py` | `list` 从文件名提取日期分组，`content` 去掉 `date` 参数 |
 | `app/tasks/browser_runner.py` | 截图路径改到 `SCREENSHOTS_DIR / date` |
 | `app/tasks/step_handlers.py` | 截图路径同上 |
 | `app/utils/files.py` | `save_screenshot` 调用方传入新路径 |
 | `app/application.py` | 静态挂载改为 `/debug`，截图清理逻辑迁移 |
 | `app/container.py` | 日志初始化适配新路径 |
 | `app/schemas.py` | `log_retention_days` 描述更新 |
-| `frontend/js/methods/logfiles.js` | 去掉日期选择逻辑 |
+| `frontend/js/methods/logfiles.js` | `fetchLogFileContent` 去掉 `date` 参数 |
 | `frontend/js/methods/formatters.js` | 截图 URL 正则适配 |
-| `frontend/partials/pages/logfiles.html` | 去掉日期 Tab |
-| `frontend/styles/pages/logfiles.css` | 去掉日期 Tab 样式 |
 | 相关测试文件 | 适配新路径和 API 签名 |
 
 ## 向后迁移
