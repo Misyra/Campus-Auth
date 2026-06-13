@@ -46,6 +46,7 @@ backups/*
 # Log files
 *.log
 logs/
+debug/
 
 # IDE
 .vscode/
