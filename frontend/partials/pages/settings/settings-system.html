@@ -60,11 +60,11 @@
             <input type="checkbox" :checked="autostart.enabled" @change="autostart.enabled ? disableAutostart() : enableAutostart()" :disabled="busy.autostart" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">开机自启动</span>
+            <span v-if="autostart.method !== '-'" class="autostart-method-badge">{{ autostart.method }}</span>
             <span class="field-help" tabindex="0" role="note" data-tip="开机时自动启动 Campus-Auth。配合「启动后开始监控」可持续监控网络，或配合「自动登录，成功后退出」实现开机自动认证。">?</span>
           </label>
         </div>
       </div>
-      <span v-if="autostart.method !== '-'" class="autostart-method-hint">当前方式：{{ autostart.method }}</span>
       <div class="form-group" v-if="autostart.enabled">
         <div class="field-label-row">
           <label>自启动模式</label>
