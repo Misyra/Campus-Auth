@@ -416,11 +416,10 @@ def _update_system_settings(
         for k, v in payload.model_dump().items()
         if k in field_list and v is not None
     }
-    merged = {**system_settings.model_dump(), **update_data}
-    validated = type(system_settings).model_validate(merged)
+    updated = system_settings.model_copy(update=update_data)
     for field in field_list:
         if field in update_data:
-            setattr(system_settings, field, getattr(validated, field))
+            setattr(system_settings, field, getattr(updated, field))
     # 需要归一化处理的系统字段
     system_settings.auth_url = payload.auth_url.strip()
     system_settings.carrier = str(payload.carrier or "无").strip()
@@ -467,11 +466,10 @@ def _update_default_profile(
         for k, v in payload.model_dump().items()
         if k in field_list and v is not None
     }
-    merged = {**default_profile.model_dump(), **update_data}
-    validated = type(default_profile).model_validate(merged)
+    updated = default_profile.model_copy(update=update_data)
     for field in field_list:
         if field in update_data:
-            setattr(default_profile, field, getattr(validated, field))
+            setattr(default_profile, field, getattr(updated, field))
     # 需要归一化处理的 profile 字段
     default_profile.browser_user_agent = payload.browser_user_agent.strip()
     default_profile.browser_extra_headers_json = payload.browser_extra_headers_json
