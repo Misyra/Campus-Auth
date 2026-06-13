@@ -39,10 +39,3 @@ async def debug_stop(
     debug_mgr: DebugSessionManager = Depends(get_debug_manager),
 ) -> dict[str, object]:
     return await debug_mgr.stop()
-
-
-@router.get("/api/debug/status")
-async def debug_status(
-    debug_mgr: DebugSessionManager = Depends(get_debug_manager),
-) -> dict[str, object]:
-    return debug_mgr.get_status()

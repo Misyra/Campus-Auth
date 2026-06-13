@@ -122,7 +122,8 @@ class ScheduleEngine:
         self._empty_broadcast_queue: deque = deque(maxlen=10)
 
         # 锁（必须在 _reload_config_internal 之前初始化）
-        self._login_lock: threading.Lock = threading.Lock()
+        self._manual_login_in_progress = False
+        self._manual_login_lock: threading.Lock = threading.Lock()
         self._reload_lock: threading.Lock = threading.Lock()
         self._pure_mode_lock: threading.Lock = threading.Lock()
         self._start_stop_lock: threading.Lock = threading.Lock()
@@ -301,10 +302,10 @@ class ScheduleEngine:
             return False
         return now >= self._login_retry.last_attempt + intervals[idx]
 
-    def _do_async_login(self) -> None:
-        """提交登录到 executor 的 login_pool。"""
+    def _do_async_login(self) -> bool:
+        """提交登录到 executor 的 login_pool。返回 True 表示已提交。"""
         if self._login_in_progress.is_set():
-            return
+            return False
         self._login_in_progress.set()
         self._login_retry.last_attempt = time.time()
         self._login_retry.count += 1
@@ -322,10 +323,11 @@ class ScheduleEngine:
                     self._update_status_snapshot(),
                 )
             )
+            return True
         else:
             self._login_in_progress.clear()
             self._update_status_snapshot()
-        return
+            return False
 
     def _get_retry_config(self) -> tuple[int, list[int]]:
         """获取登录重试配置。"""
@@ -403,8 +405,14 @@ class ScheduleEngine:
 
     def _handle_login(self, cmd: EngineCommand) -> None:
         """执行一次性登录（手动触发，异步执行）。"""
-        self._do_async_login()
-        cmd.response_data = (True, "登录已提交")
+        config = self._copy_runtime_config()
+        if not config.get("username") or not config.get("password") or not config.get("auth_url"):
+            cmd.response_data = (False, "登录配置不完整（请先设置认证地址、用户名和密码）")
+            return
+        if self._do_async_login():
+            cmd.response_data = (True, "登录已提交")
+        else:
+            cmd.response_data = (False, "登录任务已在执行中，请稍后再试")
 
     def _handle_reload(self, cmd: EngineCommand) -> None:
         """重载配置并重启监控（仅在引擎线程中调用）。"""
@@ -704,11 +712,10 @@ class ScheduleEngine:
         )
 
     def run_manual_login(self) -> tuple[bool, str]:
-        with self._login_lock:
-            if self._login_in_progress.is_set():
+        with self._manual_login_lock:
+            if self._manual_login_in_progress:
                 return False, "登录操作正在进行中"
-            self._login_in_progress.set()
-        cmd_in_queue = False
+            self._manual_login_in_progress = True
         try:
             logger.debug("收到手动登录请求")
 
@@ -718,36 +725,32 @@ class ScheduleEngine:
                 response_event=threading.Event(),
             )
             if not self._enqueue(cmd):
-                self._login_in_progress.clear()
                 return False, "队列已满"
-            cmd_in_queue = True
-        except Exception:
-            if not cmd_in_queue:
-                self._login_in_progress.clear()
-            raise
 
-        # Wait for consumer to execute login (with timeout)
-        login_timeout = getattr(self._ui_config, "login_timeout", 120)
-        cmd.response_event.wait(timeout=login_timeout)
+            # Wait for consumer to execute login (with timeout)
+            login_timeout = getattr(self._ui_config, "login_timeout", 120)
+            cmd.response_event.wait(timeout=login_timeout)
 
-        if cmd.response_data is None:
-            # 超时：检查引擎线程是否存活
-            # 如果引擎线程已死，主动清除标志位（防止永久卡住）
-            if not self._engine_thread.is_alive():
-                logger.error("引擎线程已退出，已重置登录状态标志")
-                self._login_in_progress.clear()
-            return False, "手动登录超时"
+            if cmd.response_data is None:
+                # 超时：检查引擎线程是否存活
+                # 如果引擎线程已死，返回明确错误信息
+                if not self._engine_thread.is_alive():
+                    logger.error("引擎线程已退出")
+                    return False, "手动登录超时（引擎线程已退出）"
+                return False, "手动登录超时"
 
-        success, message = cmd.response_data
-        if success:
-            # network_state 已由消费者 _handle_login 统一赋值，无需 API 线程操作
-            self._update_status_snapshot()
-            logger.info("手动登录成功")
-            return True, f"手动登录成功：{message}"
+            success, message = cmd.response_data
+            if success:
+                # network_state 已由消费者 _handle_login 统一赋值，无需 API 线程操作
+                self._update_status_snapshot()
+                logger.info("手动登录成功")
+                return True, f"手动登录成功：{message}"
 
-        log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
-        logger.warning("手动登录失败: {}", log_msg)
-        return False, f"手动登录失败：{message}"
+            log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
+            logger.warning("手动登录失败: {}", log_msg)
+            return False, f"手动登录失败：{message}"
+        finally:
+            self._manual_login_in_progress = False
 
     def test_network(self) -> tuple[bool, str]:
         logger.debug("开始手动网络测试")

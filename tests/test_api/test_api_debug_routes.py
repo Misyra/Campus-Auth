@@ -109,20 +109,3 @@ class TestDebugStop:
         assert resp.json()["running"] is False
 
 
-class TestDebugStatus:
-    """测试 GET /api/debug/status 端点。"""
-
-    def test_debug_status_returns_200(self, client):
-        test_client, _ = client
-        resp = test_client.get("/api/debug/status")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "running" in data
-        assert "current_step" in data
-        assert "total_steps" in data
-
-    def test_debug_status_default_values(self, client):
-        test_client, _ = client
-        data = test_client.get("/api/debug/status").json()
-        assert data["running"] is False
-        assert data["task_id"] is None

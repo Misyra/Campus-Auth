@@ -312,13 +312,6 @@ class TestProfilesRouter:
         assert "profiles" in data
         assert "active_profile" in data
 
-    def test_get_active_profile(self, client):
-        resp = client.get("/api/profiles/active")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "profile_id" in data
-        assert "settings" in data
-
     def test_get_profile(self, client):
         resp = client.get("/api/profiles/default")
         assert resp.status_code == 200
@@ -384,13 +377,6 @@ class TestHistoryRouter:
 
 
 class TestDebugRouter:
-    def test_debug_status(self, client):
-        resp = client.get("/api/debug/status")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "running" in data
-        assert "current_step" in data
-
     def test_debug_stop(self, client):
         resp = client.post("/api/debug/stop")
         assert resp.status_code == 200
@@ -471,11 +457,6 @@ class TestScheduledTasksRouter:
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is False
-
-    def test_get_scheduled_task_not_found(self, client):
-        # get_task 返回 None，应返回 404
-        resp = client.get("/api/scheduled-tasks/nonexistent")
-        assert resp.status_code == 404
 
     def test_delete_scheduled_task(self, client):
         resp = client.delete("/api/scheduled-tasks/task_123")

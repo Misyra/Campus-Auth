@@ -48,19 +48,6 @@ def list_profiles(
     }
 
 
-@router.get("/api/profiles/active")
-def get_active_profile(
-    profile_svc: ProfileService = Depends(get_profile_service),
-) -> dict:
-    data = profile_svc.load()
-    profile = profile_svc.get_active_profile()
-    return {
-        "profile_id": data.active_profile,
-        "auto_switch": data.auto_switch,
-        "settings": profile.model_dump(),
-    }
-
-
 @router.get("/api/profiles/{profile_id}")
 def get_profile(
     profile_id: str,
