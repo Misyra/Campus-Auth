@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import itertools
+import threading
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
@@ -20,13 +21,15 @@ from typing import Any
 
 _debug_gen = itertools.count(1)
 _current_gen: int = 0
+_gen_lock = threading.Lock()
 
 
 def _next_debug_gen() -> int:
-    """返回下一个代数编号（线程安全）。"""
+    """返回下一个代数编号（线程安全，使用锁保护全局状态）。"""
     global _current_gen
-    _current_gen = next(_debug_gen)
-    return _current_gen
+    with _gen_lock:
+        _current_gen = next(_debug_gen)
+        return _current_gen
 
 
 # ---------------------------------------------------------------------------
