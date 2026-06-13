@@ -88,6 +88,25 @@ class TestVariablePriority:
         resolver = VariableResolver(_make_config(), {})
         assert resolver.resolve("{{UNKNOWN}}") == "{{UNKNOWN}}"
 
+    def test_none_runtime_var_resolves_to_empty(self):
+        """运行时变量值为 None 时解析为空字符串。"""
+        resolver = VariableResolver(_make_config(), {"X": "should_not_appear"})
+        resolver.set_runtime_var("X", None)
+        assert resolver.resolve("{{X}}") == ""
+
+    def test_non_string_runtime_var_serialized(self):
+        """非字符串运行时变量通过 JSON 序列化。"""
+        resolver = VariableResolver(_make_config(), {})
+        resolver.set_runtime_var("LIST", [1, 2, 3])
+        assert resolver.resolve("{{LIST}}") == "[1, 2, 3]"
+
+    def test_non_serializable_runtime_var_fallback_to_str(self):
+        """不可 JSON 序列化的运行时变量回退到 str()。"""
+        resolver = VariableResolver(_make_config(), {})
+        resolver.set_runtime_var("OBJ", object())
+        result = resolver.resolve("{{OBJ}}")
+        assert result.startswith("<object")
+
 
 # ── 递归解析 ──
 

@@ -407,6 +407,23 @@ class TestSelectHandler:
         ok, msg = await handler.execute(page, step, _make_resolver())
         assert ok is True
 
+    @pytest.mark.asyncio
+    async def test_select_fuzzy_match_by_label(self):
+        """精确匹配失败时回退到标签文本模糊匹配。"""
+        handler = SelectHandler()
+        step = StepConfig(id="s1", type="select", selector="#sel", value="option")
+        page = _make_page()
+        locator = _make_locator(page)
+        # 精确匹配失败
+        locator.first.select_option = AsyncMock(return_value=[])
+        # 选项列表返回候选
+        locator.first.evaluate = AsyncMock(
+            return_value=["Option 1", "Option 2", "Option Three"]
+        )
+
+        ok, msg = await handler.execute(page, step, _make_resolver())
+        assert ok is True
+
 
 # ── ClickSelectHandler ──
 
@@ -497,6 +514,50 @@ class TestClickSelectHandler:
 
         ok, msg = await handler.execute(page, step, _make_resolver())
         assert ok is True
+
+    @pytest.mark.asyncio
+    async def test_click_option_global_search(self):
+        """_click_option 全局搜索并点击选项。"""
+        handler = ClickSelectHandler()
+        page = _make_page()
+        mock_option = MagicMock()
+        mock_option.wait_for = AsyncMock()
+        mock_option.click = AsyncMock()
+        page.get_by_text.return_value.first = mock_option
+
+        ok = await handler._click_option(page, "Option Text", "", 5000)
+        assert ok is True
+        page.get_by_text.assert_called_with("Option Text", exact=False)
+        mock_option.click.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_click_option_in_container(self):
+        """_click_option 在指定容器内搜索选项。"""
+        handler = ClickSelectHandler()
+        page = _make_page()
+        mock_container = MagicMock()
+        mock_option = MagicMock()
+        mock_option.wait_for = AsyncMock()
+        mock_option.click = AsyncMock()
+        mock_container.get_by_text.return_value.first = mock_option
+        page.locator.return_value.first = mock_container
+
+        ok = await handler._click_option(page, "Opt", "#options-container", 5000)
+        assert ok is True
+        page.locator.assert_called_with("#options-container")
+        mock_container.get_by_text.assert_called_with("Opt", exact=False)
+
+    @pytest.mark.asyncio
+    async def test_click_option_not_found(self):
+        """选项页面元素未找到时返回 False。"""
+        handler = ClickSelectHandler()
+        page = _make_page()
+        mock_option = MagicMock()
+        mock_option.wait_for = AsyncMock(side_effect=Exception("not found"))
+        page.get_by_text.return_value.first = mock_option
+
+        ok = await handler._click_option(page, "Missing", "", 5000)
+        assert ok is False
 
 
 # ── WaitHandler ──
@@ -917,6 +978,44 @@ class TestOcrHandler:
             ok, msg = await handler.execute(page, step, _make_resolver())
             assert ok is True
             mock_target.fill.assert_called_once_with("XYZ", timeout=10000)
+
+    @pytest.mark.asyncio
+    async def test_ocr_target_fill_falls_back_to_force_input(self):
+        """fill 失败时降级到强制输入 JS。"""
+        handler = OcrHandler()
+        step = StepConfig(
+            id="s1",
+            type="ocr",
+            selector="#captcha",
+            target_selector="#captcha_input",
+        )
+        page = _make_page()
+
+        mock_img = AsyncMock()
+        mock_img.screenshot = AsyncMock(return_value=b"img")
+        mock_target = AsyncMock()
+        mock_target.fill = AsyncMock(side_effect=Exception("fill failed"))
+        mock_target.wait_for = AsyncMock()
+        mock_target.evaluate = AsyncMock()
+
+        async def find_element(ctx, sel, timeout):
+            if sel == "#captcha":
+                return mock_img
+            return mock_target
+
+        handler._find_element = find_element
+
+        with (
+            patch.object(handler, "_get_ocr") as mock_get_ocr,
+            patch.object(handler, "schedule_cleanup"),
+        ):
+            mock_ocr = MagicMock()
+            mock_ocr.classification.return_value = "XYZ"
+            mock_get_ocr.return_value = mock_ocr
+
+            ok, msg = await handler.execute(page, step, _make_resolver())
+            assert ok is True
+            mock_target.evaluate.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_ocr_with_char_range(self):

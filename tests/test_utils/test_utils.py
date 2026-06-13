@@ -111,6 +111,26 @@ class TestEncryptDecrypt:
         encrypted = encrypt_password(original)
         assert decrypt_password(encrypted) == original
 
+    def test_decrypt_wrong_key_raises(self):
+        """密钥变更后解密旧密码应抛出 DecryptionError。"""
+        import base64
+
+        original = "secret123"
+        encrypted = encrypt_password(original)
+        from app.utils.crypto import (
+            _derive_fernet_key,
+            clear_decryption_error,
+            has_decryption_error,
+        )
+
+        clear_decryption_error()
+        # 注入不同密钥模拟密钥变更（44 字节 URL-safe base64）
+        other_key = base64.urlsafe_b64encode(b"\x99" * 32)
+        with patch("app.utils.crypto._derive_fernet_key", return_value=other_key):
+            with pytest.raises(DecryptionError):
+                decrypt_password(encrypted)
+            assert has_decryption_error() is True
+
 
 class TestIsEncrypted:
     def test_encrypted_value(self):
