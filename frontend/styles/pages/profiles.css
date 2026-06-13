@@ -452,67 +452,6 @@
   margin: 20px 0;
 }
 
-/* 高级设置折叠 */
-.editor-collapsible {
-  margin-top: 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  transition: border-color 0.25s ease;
-}
-
-.editor-collapsible[open] {
-  border-color: var(--border-hover);
-}
-
-.editor-collapsible-title {
-  padding: 10px 14px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  cursor: pointer;
-  background: rgba(51, 65, 85, 0.3);
-  user-select: none;
-  list-style: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: background 0.2s ease;
-}
-
-.editor-collapsible-title:hover {
-  background: rgba(51, 65, 85, 0.5);
-}
-
-.editor-collapsible-title::-webkit-details-marker {
-  display: none;
-}
-
-.editor-collapsible-title::before {
-  content: '';
-  display: inline-block;
-  width: 0;
-  height: 0;
-  border-left: 5px solid var(--text-secondary);
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
-  transition: transform 0.2s;
-}
-
-.editor-collapsible[open] .editor-collapsible-title::before {
-  transform: rotate(90deg);
-}
-
-.editor-collapsible[open] .editor-collapsible-title {
-  border-bottom: 1px solid var(--border);
-}
-
-.editor-collapsible-body {
-  padding: 14px;
-}
-
 /* Toggle — 使用更具体的选择器避免覆盖 components.css */
 .profile-editor-card .toggle-group {
   margin-top: 4px;
