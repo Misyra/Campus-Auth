@@ -169,10 +169,8 @@ def _run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
 
     # 加载配置
     try:
-        from app.services.config_service import (
-            build_runtime_config,
-            load_runtime_config,
-        )
+        from app.services.config_service import build_runtime_config
+        from app.services.runtime_config import load_runtime_config
         from app.services.profile_service import ProfileService
 
         ps = ProfileService(Path(__file__).parent.resolve())

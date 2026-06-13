@@ -504,7 +504,7 @@ class TestRunLoginThenExit:
                 return_value={"retry_settings": {"max_retries": 3}},
             ),
             patch(
-                "app.services.config_service.load_runtime_config",
+                "app.services.runtime_config.load_runtime_config",
                 return_value=(MagicMock(), False),
             ),
             patch("main.cleanup_orphan_browsers"),
@@ -535,7 +535,7 @@ class TestRunLoginThenExit:
                 },
             ),
             patch(
-                "app.services.config_service.load_runtime_config",
+                "app.services.runtime_config.load_runtime_config",
                 return_value=(MagicMock(), False),
             ),
             patch("main.cleanup_orphan_browsers"),
@@ -565,7 +565,7 @@ class TestRunLoginThenExit:
                 },
             ),
             patch(
-                "app.services.config_service.load_runtime_config",
+                "app.services.runtime_config.load_runtime_config",
                 return_value=(MagicMock(), False),
             ),
             patch("main.cleanup_orphan_browsers"),
@@ -593,7 +593,7 @@ class TestRunLoginThenExit:
                 return_value={"retry_settings": {"max_retries": 3}},
             ),
             patch(
-                "app.services.config_service.load_runtime_config",
+                "app.services.runtime_config.load_runtime_config",
                 return_value=(MagicMock(), False),
             ),
             patch(
@@ -625,7 +625,7 @@ class TestRunLoginThenExit:
                 return_value={"retry_settings": {"max_retries": 3}},
             ),
             patch(
-                "app.services.config_service.load_runtime_config",
+                "app.services.runtime_config.load_runtime_config",
                 return_value=(MagicMock(), False),
             ),
             patch(
@@ -658,7 +658,7 @@ class TestRunLoginThenExit:
                 return_value={"retry_settings": {"max_retries": 3}},
             ),
             patch(
-                "app.services.config_service.load_runtime_config",
+                "app.services.runtime_config.load_runtime_config",
                 return_value=(MagicMock(), False),
             ),
             patch(
