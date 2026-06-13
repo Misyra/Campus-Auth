@@ -277,8 +277,6 @@ class MonitorConfigPayload(
     @field_validator("custom_variables")
     @classmethod
     def validate_custom_variables(cls, v: dict[str, str]) -> dict[str, str]:
-        import re
-
         _ENV_KEY_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
         if len(v) > 50:
             raise ValueError("自定义变量最多 50 个")
