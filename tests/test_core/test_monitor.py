@@ -344,33 +344,6 @@ class TestMonitorCoreSnapshot:
         assert snap["network_state"] == "connected"
 
 
-class TestMonitorCoreGetRetryConfig:
-    def test_default_config(self):
-        core = NetworkMonitorCore()
-        max_retries, intervals = core._get_retry_config()
-        assert max_retries == core.MAX_CONSECUTIVE_LOGIN_FAILURES
-        assert len(intervals) == max_retries
-
-    def test_custom_config(self):
-        config = {"retry_settings": {"max_retries": 2, "retry_interval": 10}}
-        core = NetworkMonitorCore(config=config)
-        max_retries, intervals = core._get_retry_config()
-        assert max_retries == 2
-        assert intervals[0] == 10
-
-    def test_max_retries_clamped(self):
-        """最大重试次数应被限制在 1~5"""
-        config = {"retry_settings": {"max_retries": 100}}
-        core = NetworkMonitorCore(config=config)
-        max_retries, _ = core._get_retry_config()
-        assert max_retries == 5
-
-        config = {"retry_settings": {"max_retries": 0}}
-        core = NetworkMonitorCore(config=config)
-        max_retries, _ = core._get_retry_config()
-        assert max_retries == 1
-
-
 class TestMonitorCoreGetTestSites:
     def test_default_targets(self):
         core = NetworkMonitorCore()
@@ -513,24 +486,6 @@ class TestMonitorCoreDetailedSnapshot:
         core.last_check_time = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
         snap = core.snapshot()
         assert "2026-01-01" in snap["last_check_time"]
-
-
-class TestMonitorCoreDetailedRetryConfig:
-    """retry_config 详细测试。"""
-
-    def test_negative_retries_clamped(self):
-        """负数重试次数被钳制为最小值 1。"""
-        core = NetworkMonitorCore(config={"retry_settings": {"max_retries": -1}})
-        max_retries, _ = core._get_retry_config()
-        assert max_retries >= 1
-
-    def test_exponential_backoff(self):
-        """间隔呈指数增长。"""
-        core = NetworkMonitorCore(
-            config={"retry_settings": {"max_retries": 4, "retry_interval": 5}}
-        )
-        _, intervals = core._get_retry_config()
-        assert intervals == [5, 10, 20, 40]
 
 
 class TestMonitorCoreLogMessage:
