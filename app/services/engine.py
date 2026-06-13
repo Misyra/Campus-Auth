@@ -176,18 +176,6 @@ class ScheduleEngine:
             logger.warning("命令队列已满 (type={})，操作被跳过", cmd.type)
             return False
 
-    # ── 队列消费者（在专用守护线程中运行）──
-
-    # 命令类型 → handler 方法名
-    _CMD_ROUTES: dict[EngineCmdType, str] = {
-        EngineCmdType.START: "_handle_start",
-        EngineCmdType.STOP: "_handle_stop",
-        EngineCmdType.LOGIN: "_handle_login",
-        EngineCmdType.SHUTDOWN: "_handle_shutdown",
-        EngineCmdType.RELOAD: "_handle_reload",
-        EngineCmdType.APPLY_PROFILE: "_handle_apply_profile",
-    }
-
     # ── 统一引擎循环 ──
 
     def _engine_loop(self) -> None:
@@ -259,9 +247,18 @@ class ScheduleEngine:
     def _process_command(self, cmd: EngineCommand) -> None:
         """处理一个命令。"""
         try:
-            handler_name = self._CMD_ROUTES.get(cmd.type)
-            if handler_name:
-                getattr(self, handler_name)(cmd)
+            if cmd.type == EngineCmdType.START:
+                self._handle_start(cmd)
+            elif cmd.type == EngineCmdType.STOP:
+                self._handle_stop(cmd)
+            elif cmd.type == EngineCmdType.LOGIN:
+                self._handle_login(cmd)
+            elif cmd.type == EngineCmdType.SHUTDOWN:
+                self._handle_shutdown(cmd)
+            elif cmd.type == EngineCmdType.RELOAD:
+                self._handle_reload(cmd)
+            elif cmd.type == EngineCmdType.APPLY_PROFILE:
+                self._handle_apply_profile(cmd)
         except Exception:
             logger.exception("命令执行失败: {}", cmd.type)
         finally:
