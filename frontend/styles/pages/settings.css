@@ -408,12 +408,16 @@
   margin: 20px 0;
 }
 
-.autostart-method-hint {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 4px;
-  /* 与 toggle 内容对齐：slider 44px + gap 12px = 56px */
-  margin-left: 56px;
+.autostart-method-badge {
+  display: inline-block;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-glass);
+  border: 1px solid var(--border);
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-family: var(--font-mono);
+  margin-left: 4px;
 }
 
 /* 自定义变量样式 */
