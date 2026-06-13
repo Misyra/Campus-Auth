@@ -163,7 +163,10 @@ def create_app(existing_container=None):
                 _server.should_exit = True
             else:
                 # 回退：发送 SIGTERM（仅在无法获取 server 引用时）
-                os.kill(os.getpid(), signal.SIGTERM)
+                if hasattr(signal, "SIGTERM"):
+                    os.kill(os.getpid(), signal.SIGTERM)
+                else:
+                    os._exit(0)
 
         shutdown_waiter = asyncio.create_task(_wait_shutdown())
 
@@ -260,8 +263,10 @@ def create_app(existing_container=None):
                                 level=str(d.get("level", "INFO"))[:20],
                                 source="frontend",
                             )
-                except (json.JSONDecodeError, KeyError):
+                except json.JSONDecodeError:
                     ws_logger.debug("WebSocket 消息解析失败", exc_info=True)
+                except Exception:
+                    ws_logger.debug("WebSocket 消息处理异常", exc_info=True)
         except WebSocketDisconnect:
             await ws_mgr.disconnect(websocket)
         except Exception:
@@ -321,6 +326,7 @@ def run(
 
     import uvicorn
 
+    sys_settings = None
     if access_log_enabled is None or log_retention is None:
         # 调用方未传入日志配置，从 settings.json 读取
         try:
@@ -343,13 +349,10 @@ def run(
     log_center.initialize({"level": "INFO"}, source="backend")
 
     # 从 settings.json 恢复 source 级别配置
-    try:
-        if hasattr(sys_settings, "source_levels") and sys_settings.source_levels:
-            for src, lvl in sys_settings.source_levels.items():
-                with contextlib.suppress(ValueError):
-                    log_center.set_source_level(src, lvl)
-    except NameError:
-        pass  # sys_settings 未加载（读取配置失败时）
+    if sys_settings is not None and hasattr(sys_settings, "source_levels") and sys_settings.source_levels:
+        for src, lvl in sys_settings.source_levels.items():
+            with contextlib.suppress(ValueError):
+                log_center.set_source_level(src, lvl)
 
     # 压制第三方库的 DEBUG 日志
     import logging
