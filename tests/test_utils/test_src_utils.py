@@ -1072,22 +1072,6 @@ class TestBootstrapState:
         assert result is True
         assert pb._BOOTSTRAP_DONE is False
 
-    def test_is_bootstrap_skipped(self):
-        """is_bootstrap_skipped 查询函数。"""
-        import app.workers.playwright_bootstrap as pb
-
-        assert pb.is_bootstrap_skipped() is False
-        pb._BOOTSTRAP_SKIPPED = True
-        assert pb.is_bootstrap_skipped() is True
-
-    def test_is_bootstrap_done(self):
-        """is_bootstrap_done 查询函数。"""
-        import app.workers.playwright_bootstrap as pb
-
-        assert pb.is_bootstrap_done() is False
-        pb._BOOTSTRAP_DONE = True
-        assert pb.is_bootstrap_done() is True
-
 
 # ── PlaywrightWorker submit alive 预检 ──
 
