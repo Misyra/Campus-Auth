@@ -167,18 +167,14 @@ class ScheduleEngine:
 
     # ── 队列入队辅助 ──
 
-    def _enqueue(self, cmd: EngineCommand, retries: int = 2) -> bool:
-        """尝试将命令入队，带重试。返回 True 表示成功。"""
-        for attempt in range(retries):
-            try:
-                self._cmd_queue.put_nowait(cmd)
-                return True
-            except queue.Full:
-                if attempt < retries - 1:
-                    time.sleep(0.05)
-                else:
-                    logger.warning("命令队列已满 (type={})，操作被跳过", cmd.type)
-        return False
+    def _enqueue(self, cmd: EngineCommand) -> bool:
+        """尝试将命令入队。返回 True 表示成功。"""
+        try:
+            self._cmd_queue.put_nowait(cmd)
+            return True
+        except queue.Full:
+            logger.warning("命令队列已满 (type={})，操作被跳过", cmd.type)
+            return False
 
     # ── 队列消费者（在专用守护线程中运行）──
 
