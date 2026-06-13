@@ -71,59 +71,6 @@ def _cleanup_old_screenshots() -> None:
         startup_logger.warning("清理旧截图失败: {}", exc)
 
 
-def _migrate_old_logs() -> None:
-    """启动时将旧 logs/ 目录内容迁移到 debug/。"""
-    import shutil
-
-    old_logs_dir = PROJECT_ROOT / "logs"
-    if not old_logs_dir.exists():
-        return
-
-    try:
-        migrated_logs = 0
-        migrated_screenshots = 0
-
-        for date_dir in old_logs_dir.iterdir():
-            if not date_dir.is_dir():
-                continue
-            date_name = date_dir.name  # YYYY-MM-DD
-
-            # 迁移日志文件
-            for f in date_dir.iterdir():
-                if f.is_file() and (
-                    f.name == "app.log" or f.name.startswith("app.log.")
-                ):
-                    dest = LOGS_DIR / f.name
-                    if not dest.exists():
-                        shutil.move(str(f), str(dest))
-                        migrated_logs += 1
-
-            # 迁移截图
-            screenshots_dir = date_dir / "screenshots"
-            if screenshots_dir.is_dir():
-                dest = SCREENSHOTS_DIR / date_name
-                if not dest.exists():
-                    shutil.move(str(screenshots_dir), str(dest))
-                    migrated_screenshots += 1
-
-        # 清理空目录
-        for date_dir in old_logs_dir.iterdir():
-            if date_dir.is_dir():
-                with contextlib.suppress(OSError):
-                    date_dir.rmdir()
-        with contextlib.suppress(OSError):
-            old_logs_dir.rmdir()
-
-        if migrated_logs or migrated_screenshots:
-            startup_logger.info(
-                "旧日志迁移完成: {} 个日志文件, {} 个截图目录",
-                migrated_logs,
-                migrated_screenshots,
-            )
-    except Exception as exc:
-        startup_logger.warning("旧日志迁移失败: {}", exc)
-
-
 _access_log_event = threading.Event()  # 默认未 set（即关闭）
 
 # 模块级占位符，run() 调用后设为实际 FastAPI 实例
@@ -219,6 +166,9 @@ def create_app(existing_container=None):
 
         # 启动时清理 temp 目录中的旧截图
         _cleanup_temp_screenshots()
+
+        # 清理非当天截图
+        _cleanup_old_screenshots()
 
         startup_logger.info(
             "FastAPI 启动: 完成，耗时 {:.3f}s",
@@ -369,11 +319,11 @@ def create_app(existing_container=None):
         return FileResponse(FRONTEND_DIR / "index.html")
 
     # 确保挂载目录存在（发布版本解压后这些目录可能不存在）
-    for _dir in (LOGS_DIR, TEMP_DIR):
+    for _dir in (DEBUG_DIR, TEMP_DIR):
         _dir.mkdir(parents=True, exist_ok=True)
 
     _app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
-    _app.mount("/logs", StaticFiles(directory=LOGS_DIR), name="logs")
+    _app.mount("/debug", StaticFiles(directory=DEBUG_DIR), name="debug")
     _app.mount("/temp", StaticFiles(directory=TEMP_DIR), name="temp")
 
     return _app
@@ -433,17 +383,9 @@ def run(
     log_dir = LOGS_DIR
     try:
         log_center.add_file_handler(str(log_dir), retention_days=log_retention)
-        from datetime import datetime
-
-        today_dir = log_dir / datetime.now().strftime("%Y-%m-%d")
-        today_log = today_dir / "app.log"
-        startup_logger.info("日志文件: {}", today_log)
-        for old_name in ("campus_auth.log",):
-            old_log = log_dir / old_name
-            if old_log.exists():
-                old_log.unlink(missing_ok=True)
+        startup_logger.info("日志文件: {}", log_dir / "app.log")
     except Exception:
-        startup_logger.warning("旧日志清理失败", exc_info=True)
+        startup_logger.warning("日志系统初始化失败", exc_info=True)
 
     if access_log_enabled:
         _access_log_event.set()

@@ -729,10 +729,10 @@ class TestScreenshotHandler:
         with patch(
             "app.utils.files.save_screenshot", new_callable=AsyncMock
         ) as mock_save:
-            mock_save.return_value = "/logs/2024-01-01/screenshots/test.png"
+            mock_save.return_value = "/debug/screenshots/2024-01-01/test.png"
             ok, msg = await handler.execute(page, step, _make_resolver(task_id="test"))
             assert ok is True
-            assert "/logs/" in msg
+            assert "/debug/screenshots/" in msg
 
     @pytest.mark.asyncio
     async def test_screenshot_with_path(self):
@@ -744,7 +744,7 @@ class TestScreenshotHandler:
         with patch(
             "app.utils.files.save_screenshot", new_callable=AsyncMock
         ) as mock_save:
-            mock_save.return_value = "/logs/2024-01-01/screenshots/custom.png"
+            mock_save.return_value = "/debug/screenshots/2024-01-01/custom.png"
             ok, msg = await handler.execute(page, step, _make_resolver())
             assert ok is True
 
