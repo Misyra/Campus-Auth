@@ -13,9 +13,6 @@ from app.utils.logging import get_logger
 
 logger = get_logger("task_models", source="task")
 
-# 项目根目录（模块级，避免各处重复计算）
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
 # 任务ID验证正则
 TASK_ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 
