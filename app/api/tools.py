@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from app.constants import PROJECT_ROOT
+from app.utils.repo_proxy import validate_url
 
 router = APIRouter()
 
@@ -94,6 +95,7 @@ async def fetch_background_url(body: dict) -> dict:
     url = body.get("url", "").strip()
     if not url:
         raise HTTPException(400, "请提供图片 URL")
+    validate_url(url)
 
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
@@ -124,6 +126,11 @@ async def fetch_background_url(body: dict) -> dict:
         ext = Path(url.split("?")[0]).suffix.lower() or ".jpg"
     if ext not in ALLOWED_EXTENSIONS:
         ext = ".jpg"
+
+    # 先检查 Content-Length 头，避免将超大响应体加载到内存
+    content_length = resp.headers.get("content-length")
+    if content_length and int(content_length) > MAX_FILE_SIZE:
+        raise HTTPException(400, "图片大小超过 5MB 限制")
 
     content = resp.content
     if len(content) > MAX_FILE_SIZE:

@@ -5,6 +5,30 @@
 
 ## 2026-06-13
 
+### fix: 修复 tools.py 远程图片下载内存耗尽风险
+
+修复 `app/api/tools.py` 中 `fetch_background_url` 端点的内存耗尽风险：
+
+- **问题：** `resp.content` 在大小检查前将整个响应体加载到内存，如果远程服务器返回超大文件（如几 GB），会先耗尽内存再触发大小检查。
+- **修复：** 在加载响应体前先检查 `Content-Length` 头，超过 5MB 限制时直接拒绝，避免内存分配。原有的 `resp.content` 大小检查作为兜底保留（处理无 Content-Length 头或分块传输的情况）。
+
+**新增测试：** `tests/test_api/test_api_tools_routes.py` 中新增 `TestFetchUrlContentLength` 测试类（3 个测试用例）
+**测试结果：** 3 passed，全量 1700 passed（4 个既有失败与本次修改无关）
+
+### fix: 修复 monitor_service.py 日志中 auth_url 和 username 明文记录问题
+
+修复 `app/services/monitor_service.py` 中 `init_monitoring()` 方法的敏感信息日志泄露问题：
+
+- **问题：** `init_monitoring()` 日志中直接输出完整的认证地址（auth_url）和用户名（username），存在敏感信息泄露风险。
+- **修复：**
+  - 认证地址超过 20 字符时截断并加省略号（`auth_url[:20] + "..."`）
+  - 用户名超过 3 字符时仅显示前 3 字符加 `***`（`username[:3] + "***"`）
+  - 短于阈值的值仍被脱敏（用户名短于 3 字符显示 `***`）
+  - 运营商（isp）信息不需要脱敏，保持明文
+
+**新增测试文件：** `tests/test_services/test_monitor_service_fix.py`（5 个测试用例）
+**测试结果：** 5 passed，全量 1691 passed（4 个既有失败与本次修改无关）
+
 ### fix: 修复 uninstall.py 中的危险删除操作问题
 
 修复 `app/services/uninstall.py` 中 `_remove_user_data()` 的 `shutil.rmtree` 无路径校验问题：
@@ -2716,3 +2740,18 @@
 - 添加 `"startup_action"` 和 `"runtime_mode"`（在 `"auto_open_browser"` 之后）
 
 **验证结果：** `python -c` 断言全部通过
+
+## 2026-06-13（container.py 清理逻辑优化）
+
+### refactor: container.py 清理逻辑优化 — suppress(Exception) 改为显式 try/except + 日志，临时目录清理改用 shutil.rmtree
+
+**修改文件：** `app/container.py`
+
+**修改内容：**
+1. `stop_web_services()` 和 `shutdown()` 中的 `contextlib.suppress(Exception)` 替换为 `try/except` + `container_logger.debug()` 记录异常详情，避免静默吞掉错误
+2. `shutdown()` 中临时目录清理从逐个遍历 `iterdir()` + `unlink`/`rmtree` 改为 `shutil.rmtree` 一步删除后重建目录，提升清理效率
+
+**测试新增：** `tests/test_services/test_container_cleanup_fix.py`（6 个测试用例）
+**测试更新：** `tests/test_config/test_container.py` 中 `test_shutdown_cleans_temp_dir` 适配新的清理逻辑
+
+**验证结果：** 全量 container 相关测试 41 个全部通过
