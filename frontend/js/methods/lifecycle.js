@@ -23,7 +23,6 @@ export const lifecycleMethods = {
       this.fetchActiveTask(),
       this.fetchProfiles(),
       this.fetchPureMode(),
-      this.fetchBackups(),
       this.fetchLoginHistory(),
       this.loadScheduledTasks(),
       this.fetchShells(),
