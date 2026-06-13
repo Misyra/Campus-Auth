@@ -190,7 +190,7 @@ def list_log_files() -> list[LogFileGroup]:
             )
         )
 
-    return [LogFileGroup(date=d, files=files) for d in sorted(groups, reverse=True)]
+    return [LogFileGroup(date=d, files=groups[d]) for d in sorted(groups, reverse=True)]
 
 
 @router.get("/api/logfiles/content", response_model=LogFileContent)

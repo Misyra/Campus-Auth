@@ -10,46 +10,12 @@ from fastapi import HTTPException
 
 from app.api.logfiles import (
     _parse_log_line,
-    _validate_date,
     _validate_filename,
     get_log_file_content,
     list_log_files,
     read_tail,
     scan_file,
 )
-
-# ── _validate_date ──
-
-
-class TestValidateDate:
-    """日期格式校验。"""
-
-    def test_valid_date(self):
-        """有效日期不抛异常。"""
-        _validate_date("2026-06-01")  # 不应抛异常
-
-    def test_invalid_format(self):
-        """无效格式抛 HTTPException。"""
-        with pytest.raises(HTTPException) as exc_info:
-            _validate_date("2026/06/01")
-        assert exc_info.value.status_code == 400
-
-    def test_invalid_date_value(self):
-        """不存在的日期抛 HTTPException。"""
-        with pytest.raises(HTTPException) as exc_info:
-            _validate_date("2026-02-30")
-        assert exc_info.value.status_code == 400
-
-    def test_empty_string(self):
-        """空字符串抛 HTTPException。"""
-        with pytest.raises(HTTPException):
-            _validate_date("")
-
-    def test_partial_date(self):
-        """不完整的日期抛 HTTPException。"""
-        with pytest.raises(HTTPException):
-            _validate_date("2026-06")
-
 
 # ── _validate_filename ──
 
@@ -60,8 +26,8 @@ class TestValidateFilename:
     def test_valid_filenames(self):
         """有效文件名不抛异常。"""
         _validate_filename("app.log")
-        _validate_filename("app.log.1")
-        _validate_filename("app.log.999")
+        _validate_filename("app.2026-06-13_00-00-00_123456.log")
+        _validate_filename("app.2026-06-13_00-00-00.log")
 
     def test_path_traversal_rejected(self):
         """路径穿越被拒绝。"""
@@ -89,10 +55,10 @@ class TestValidateFilename:
         with pytest.raises(HTTPException):
             _validate_filename(".log")
 
-    def test_negative_number_rejected(self):
-        """负数后缀被拒绝（app.log.-1）。"""
+    def test_old_format_rejected(self):
+        """旧的 app.log.1 格式被拒绝。"""
         with pytest.raises(HTTPException):
-            _validate_filename("app.log.-1")
+            _validate_filename("app.log.1")
 
 
 # ── _parse_log_line ──
@@ -164,43 +130,31 @@ class TestListLogFiles:
             result = list_log_files()
             assert result == []
 
-    def test_groups_by_date(self, tmp_path):
-        """按日期分组。"""
-        # 创建日期目录和日志文件
-        date_dir = tmp_path / "2026-06-01"
-        date_dir.mkdir()
-        (date_dir / "app.log").write_text("test log content")
+    def test_current_log_file(self, tmp_path):
+        """当前日志文件 app.log 按修改日期分组。"""
+        (tmp_path / "app.log").write_text("test log content")
 
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
             result = list_log_files()
             assert len(result) == 1
-            assert result[0].date == "2026-06-01"
             assert len(result[0].files) == 1
             assert result[0].files[0].name == "app.log"
 
-    def test_skips_invalid_date_dirs(self, tmp_path):
-        """跳过无效日期目录。"""
-        # 有效目录
-        valid_dir = tmp_path / "2026-06-01"
-        valid_dir.mkdir()
-        (valid_dir / "app.log").write_text("content")
-        # 无效目录
-        invalid_dir = tmp_path / "not-a-date"
-        invalid_dir.mkdir()
-        (invalid_dir / "app.log").write_text("content")
+    def test_archive_files_grouped_by_date(self, tmp_path):
+        """归档文件从文件名提取日期分组。"""
+        (tmp_path / "app.2026-06-01_00-00-00_123456.log").write_text("old")
+        (tmp_path / "app.2026-06-03_00-00-00_654321.log").write_text("newer")
 
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
             result = list_log_files()
-            assert len(result) == 1
-            assert result[0].date == "2026-06-01"
+            dates = [g.date for g in result]
+            assert dates == ["2026-06-03", "2026-06-01"]
 
     def test_skips_non_matching_files(self, tmp_path):
         """跳过不符合命名规则的文件。"""
-        date_dir = tmp_path / "2026-06-01"
-        date_dir.mkdir()
-        (date_dir / "app.log").write_text("valid")
-        (date_dir / "other.log").write_text("invalid")
-        (date_dir / "app.log.abc").write_text("invalid")
+        (tmp_path / "app.log").write_text("valid")
+        (tmp_path / "other.log").write_text("invalid")
+        (tmp_path / "random.txt").write_text("invalid")
 
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
             result = list_log_files()
@@ -210,10 +164,9 @@ class TestListLogFiles:
 
     def test_sorted_by_date_desc(self, tmp_path):
         """按日期降序排列。"""
-        for date in ["2026-06-01", "2026-06-03", "2026-06-02"]:
-            d = tmp_path / date
-            d.mkdir()
-            (d / "app.log").write_text("content")
+        (tmp_path / "app.2026-06-01_00-00-00.log").write_text("a")
+        (tmp_path / "app.2026-06-03_00-00-00.log").write_text("c")
+        (tmp_path / "app.2026-06-02_00-00-00.log").write_text("b")
 
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
             result = list_log_files()
@@ -227,27 +180,23 @@ class TestListLogFiles:
 class TestGetLogFileContent:
     """get_log_file_content 端点。"""
 
-    def _create_log_file(self, tmp_path: Path, date: str, filename: str, content: str):
+    def _create_log_file(self, tmp_path: Path, filename: str, content: str):
         """辅助方法：创建日志文件。"""
-        date_dir = tmp_path / date
-        date_dir.mkdir(parents=True, exist_ok=True)
-        (date_dir / filename).write_text(content, encoding="utf-8")
+        (tmp_path / filename).write_text(content, encoding="utf-8")
 
     def test_basic_content(self, tmp_path):
         """基本内容读取。"""
         content = "[2026-06-01 00:00:00][INFO][backend][mod] hello\n"
-        self._create_log_file(tmp_path, "2026-06-01", "app.log", content)
+        self._create_log_file(tmp_path, "app.log", content)
 
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
             result = get_log_file_content(
-                date="2026-06-01",
                 file="app.log",
                 level="",
                 source="",
                 search="",
                 limit=2000,
             )
-            assert result.date == "2026-06-01"
             assert result.file == "app.log"
             assert result.total_lines == 1
             assert result.returned_lines == 1
@@ -258,7 +207,6 @@ class TestGetLogFileContent:
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
             with pytest.raises(HTTPException) as exc_info:
                 get_log_file_content(
-                    date="2026-06-01",
                     file="app.log",
                     level="",
                     source="",
@@ -274,11 +222,10 @@ class TestGetLogFileContent:
             "[2026-06-01 00:00:01][ERROR][backend][mod] error msg\n"
             "[2026-06-01 00:00:02][INFO][backend][mod] info msg 2\n"
         )
-        self._create_log_file(tmp_path, "2026-06-01", "app.log", content)
+        self._create_log_file(tmp_path, "app.log", content)
 
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
             result = get_log_file_content(
-                date="2026-06-01",
                 file="app.log",
                 level="ERROR",
                 source="",
@@ -295,11 +242,10 @@ class TestGetLogFileContent:
             "[2026-06-01 00:00:01][ERROR][backend][mod] 连接超时\n"
             "[2026-06-01 00:00:02][INFO][backend][mod] 网络正常\n"
         )
-        self._create_log_file(tmp_path, "2026-06-01", "app.log", content)
+        self._create_log_file(tmp_path, "app.log", content)
 
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
             result = get_log_file_content(
-                date="2026-06-01",
                 file="app.log",
                 level="",
                 source="",
@@ -312,11 +258,10 @@ class TestGetLogFileContent:
     def test_search_case_insensitive(self, tmp_path):
         """搜索大小写不敏感。"""
         content = "[2026-06-01 00:00:00][INFO][backend][mod] Hello World\n"
-        self._create_log_file(tmp_path, "2026-06-01", "app.log", content)
+        self._create_log_file(tmp_path, "app.log", content)
 
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
             result = get_log_file_content(
-                date="2026-06-01",
                 file="app.log",
                 level="",
                 source="",
@@ -332,41 +277,24 @@ class TestGetLogFileContent:
             for i in range(100)
         ]
         content = "".join(lines)
-        self._create_log_file(tmp_path, "2026-06-01", "app.log", content)
+        self._create_log_file(tmp_path, "app.log", content)
 
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
             result = get_log_file_content(
-                date="2026-06-01",
                 file="app.log",
                 level="",
                 source="",
                 search="",
                 limit=10,
             )
-            # 浏览模式下 total_lines 等于 returned_lines
             assert result.total_lines == 10
             assert result.returned_lines == 10
-
-    def test_invalid_date_rejected(self, tmp_path):
-        """无效日期被拒绝。"""
-        with patch("app.api.logfiles.LOGS_DIR", tmp_path):
-            with pytest.raises(HTTPException) as exc_info:
-                get_log_file_content(
-                    date="invalid",
-                    file="app.log",
-                    level="",
-                    source="",
-                    search="",
-                    limit=2000,
-                )
-            assert exc_info.value.status_code == 400
 
     def test_invalid_filename_rejected(self, tmp_path):
         """无效文件名被拒绝。"""
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
             with pytest.raises(HTTPException) as exc_info:
                 get_log_file_content(
-                    date="2026-06-01",
                     file="../../etc/passwd",
                     level="",
                     source="",
@@ -374,6 +302,22 @@ class TestGetLogFileContent:
                     limit=2000,
                 )
             assert exc_info.value.status_code == 400
+
+    def test_archive_file_content(self, tmp_path):
+        """归档文件内容读取。"""
+        content = "[2026-06-01 00:00:00][INFO][backend][mod] archived log\n"
+        self._create_log_file(tmp_path, "app.2026-06-01_00-00-00_123456.log", content)
+
+        with patch("app.api.logfiles.LOGS_DIR", tmp_path):
+            result = get_log_file_content(
+                file="app.2026-06-01_00-00-00_123456.log",
+                level="",
+                source="",
+                search="",
+                limit=2000,
+            )
+            assert result.total_lines == 1
+            assert result.lines[0].message == "archived log"
 
 
 # ── scan_file ──
@@ -516,11 +460,9 @@ class TestReadTail:
 class TestBrowseVsSearchMode:
     """测试搜索模式与浏览模式的分离。"""
 
-    def _create_log_file(self, tmp_path: Path, date: str, filename: str, content: str):
+    def _create_log_file(self, tmp_path: Path, filename: str, content: str):
         """辅助方法：创建日志文件。"""
-        date_dir = tmp_path / date
-        date_dir.mkdir(parents=True, exist_ok=True)
-        (date_dir / filename).write_text(content, encoding="utf-8")
+        (tmp_path / filename).write_text(content, encoding="utf-8")
 
     def test_browse_mode_uses_read_tail(self, tmp_path):
         """浏览模式（无过滤条件）应读取末尾行。"""
@@ -529,11 +471,10 @@ class TestBrowseVsSearchMode:
             for i in range(100)
         ]
         content = "".join(lines)
-        self._create_log_file(tmp_path, "2026-06-12", "app.log", content)
+        self._create_log_file(tmp_path, "app.log", content)
 
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
             result = get_log_file_content(
-                date="2026-06-12",
                 file="app.log",
                 level="",
                 source="",
@@ -551,11 +492,10 @@ class TestBrowseVsSearchMode:
             "[2026-06-12 10:00:01][ERROR][network][monitor] 认证失败\n"
             "[2026-06-12 10:00:02][INFO][backend][test] 普通日志\n"
         )
-        self._create_log_file(tmp_path, "2026-06-12", "app.log", content)
+        self._create_log_file(tmp_path, "app.log", content)
 
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
             result = get_log_file_content(
-                date="2026-06-12",
                 file="app.log",
                 level="",
                 source="",
@@ -573,11 +513,10 @@ class TestBrowseVsSearchMode:
             "[2026-06-12 10:00:01][ERROR][backend][test] 错误日志\n"
             "[2026-06-12 10:00:02][INFO][backend][test] 普通日志\n"
         )
-        self._create_log_file(tmp_path, "2026-06-12", "app.log", content)
+        self._create_log_file(tmp_path, "app.log", content)
 
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
             result = get_log_file_content(
-                date="2026-06-12",
                 file="app.log",
                 level="ERROR",
                 source="",
@@ -594,11 +533,10 @@ class TestBrowseVsSearchMode:
             "[2026-06-12 10:00:01][INFO][network][monitor] 网络日志\n"
             "[2026-06-12 10:00:02][INFO][backend][test] 后端日志\n"
         )
-        self._create_log_file(tmp_path, "2026-06-12", "app.log", content)
+        self._create_log_file(tmp_path, "app.log", content)
 
         with patch("app.api.logfiles.LOGS_DIR", tmp_path):
             result = get_log_file_content(
-                date="2026-06-12",
                 file="app.log",
                 level="",
                 source="network",

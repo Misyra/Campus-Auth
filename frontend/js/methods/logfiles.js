@@ -28,11 +28,10 @@ export const logFileMethods = {
     await this.fetchLogFileContent();
   },
   async fetchLogFileContent() {
-    if (!this.logViewer.date) return;
+    if (!this.logViewer.file) return;
     this.logViewer.loading = true;
     try {
       const params = {
-        date: this.logViewer.date,
         file: this.logViewer.file,
         limit: 5000,
       };
