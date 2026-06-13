@@ -336,46 +336,6 @@ class ScheduleEngine:
             self._update_status_snapshot()
         return
 
-        # 回退：旧的独立线程登录（_task_executor 未注入时）
-        def _do_login():
-            try:
-                config = self._copy_runtime_config()
-                pure_mode = self.pure_mode
-                if pure_mode:
-                    config.setdefault("browser_settings", {})["pure_mode"] = True
-                login_timeout = getattr(self._ui_config, "login_timeout", 120)
-
-                from app.workers.playwright_worker import CMD_LOGIN
-
-                result = self._worker_getter().submit(
-                    CMD_LOGIN,
-                    data={
-                        "config": config,
-                        "pure_mode": pure_mode,
-                        "skip_pause_check": False,
-                    },
-                    timeout=login_timeout,
-                )
-
-                if result.success:
-                    if self._monitor_core:
-                        self._monitor_core.update_status_after_login(True)
-                    self._login_retry.count = 0
-                else:
-                    if self._monitor_core:
-                        self._monitor_core.update_status_after_login(
-                            False, result.error or ""
-                        )
-            except Exception as exc:
-                logger.exception("异步登录异常")
-                if self._monitor_core:
-                    self._monitor_core.update_status_after_login(False, str(exc))
-            finally:
-                self._login_in_progress.clear()
-                self._update_status_snapshot()
-
-        threading.Thread(target=_do_login, daemon=True).start()
-
     def _get_retry_config(self) -> tuple[int, list[int]]:
         """获取登录重试配置。"""
         try:

@@ -50,9 +50,7 @@ from app.workers.playwright_worker import cleanup_orphan_browsers  # noqa: E402
 
 def _open_browser(port: int, setting: bool | None = None) -> None:
     """根据配置决定是否打开浏览器。setting=True 打开，False/None 不打开。"""
-    if setting is not None and not setting:
-        return
-    if setting is None:
+    if not setting:
         return
 
     def _worker():
@@ -265,6 +263,9 @@ def _build_app_config(
     cli_no_tray: bool = False,
 ) -> AppConfig:
     """合并 Default → Settings → CLI 为最终 AppConfig"""
+    from app.utils.logging import get_logger
+
+    logger = get_logger("startup", source="backend")
     config = AppConfig()
 
     # 从 settings.json 加载
@@ -278,7 +279,7 @@ def _build_app_config(
         config.minimize_to_tray = bool(getattr(_sys, "minimize_to_tray", True))
         config.auto_open_browser = bool(getattr(_sys, "auto_open_browser", False))
     except Exception:
-        pass  # 使用默认值
+        logger.debug("加载配置失败，使用默认值", exc_info=True)
 
     # CLI 覆盖
     if cli_startup_action is not None:
@@ -421,9 +422,9 @@ def _run_full(
 
             tray_icon = SystemTray(
                 port=port,
-                on_exit=lambda: os.kill(os.getpid(), signal.SIGTERM)
-                if hasattr(signal, "SIGTERM")
-                else cleanup_pid() or os._exit(0),
+                on_exit=lambda: (
+                    os.kill(os.getpid(), signal.SIGTERM) if hasattr(signal, "SIGTERM") else os._exit(0)
+                ),
             )
             tray_icon.start()
             logger.info("系统托盘已启动，双击图标打开控制台")
@@ -483,7 +484,11 @@ def _run_server(ctx: ApplicationContext, force: bool = False) -> None:
     # Playwright 检查
     stage_begin = time.perf_counter()
     startup_logger.info("正在检查 Playwright 环境")
-    ensure_playwright_ready(print)
+
+    def _log_playwright_ready(msg: str):
+        startup_logger.info(msg)
+
+    ensure_playwright_ready(_log_playwright_ready)
     startup_logger.info(
         "Playwright 环境检查完成 ({:.3f}s)",
         time.perf_counter() - stage_begin,
@@ -518,8 +523,6 @@ def _run_server(ctx: ApplicationContext, force: bool = False) -> None:
 
 def _setup_exception_hooks() -> None:
     """设置全局异常钩子，确保线程内未捕获异常被记录到日志。"""
-    import threading
-
     from app.utils.logging import get_logger
 
     _hook_logger = get_logger("uncaught", source="backend")
