@@ -6,6 +6,7 @@
 """
 
 import base64
+import getpass
 import hashlib
 import os
 import threading
@@ -80,7 +81,7 @@ def _get_or_create_key() -> bytes:
             try:
                 import subprocess
 
-                username = os.environ.get("USERNAME", "Users")
+                username = os.environ.get("USERNAME") or getpass.getuser()
                 subprocess.run(
                     [
                         "icacls",
