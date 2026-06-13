@@ -19,6 +19,8 @@ from typing import Any
 
 from loguru import logger
 
+from app.constants import LOG_BUFFER_MAXLEN, STATUS_LOG_MAXLEN
+
 # 移除 loguru 默认的 stderr handler
 logger.remove()
 
@@ -122,7 +124,7 @@ class DashboardSink:
     _MAX_MSG_LEN = 2000  # 消息截断上限，防止单条日志携带大量 traceback
     _MAX_SRC_LEN = 64  # source 字段防异常膨胀
 
-    def __init__(self, maxlen: int = 500, broadcast_maxlen: int = 200):
+    def __init__(self, maxlen: int = LOG_BUFFER_MAXLEN, broadcast_maxlen: int = STATUS_LOG_MAXLEN):
         self.buffer: deque[dict] = deque(maxlen=maxlen)
         self.broadcast_queue: deque[dict] = deque(maxlen=broadcast_maxlen)
         self._lock = threading.Lock()

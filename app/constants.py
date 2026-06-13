@@ -37,7 +37,7 @@ DEFAULT_STEP_TIMEOUT_MS = 10000  # 步骤默认超时（毫秒）
 DEFAULT_TASK_TIMEOUT_MS = 30000  # 任务默认超时（毫秒）
 
 # ── 容量常量 ──
-LOG_BUFFER_MAXLEN = 1200  # 日志环形缓冲
+LOG_BUFFER_MAXLEN = 500  # 日志环形缓冲
 STATUS_LOG_MAXLEN = 200  # 状态日志缓冲
 DEBUG_LOG_MAXLEN = 1000  # 调试日志缓冲
 CMD_QUEUE_MAXSIZE = 50  # 命令队列容量

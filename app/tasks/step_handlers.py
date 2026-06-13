@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from app.constants import SCREENSHOTS_DIR
+from app.constants import DEFAULT_STEP_TIMEOUT_MS, SCREENSHOTS_DIR
 from app.utils.logging import get_logger
 
 from .models import StepConfig, StepError, StepType
@@ -231,7 +231,7 @@ class InputHandler(StepHandler):
         selector = params.get("selector", "")
         value = params.get("value", "")
         clear = params.get("clear", True)
-        timeout = step.timeout or 10000
+        timeout = step.timeout or DEFAULT_STEP_TIMEOUT_MS
 
         if not selector:
             return False, "输入步骤需要 selector"
@@ -286,7 +286,7 @@ class ClickHandler(StepHandler):
     ) -> tuple[bool, str]:
         params = self.resolve_params(step, resolver)
         selector = params.get("selector", "")
-        timeout = step.timeout or 10000
+        timeout = step.timeout or DEFAULT_STEP_TIMEOUT_MS
 
         if not selector:
             return False, "点击步骤需要 selector"
@@ -326,7 +326,7 @@ class SelectHandler(StepHandler):
         params = self.resolve_params(step, resolver)
         selector = params.get("selector", "")
         value = str(params.get("value", "") or "").strip()
-        timeout = step.timeout or 10000
+        timeout = step.timeout or DEFAULT_STEP_TIMEOUT_MS
 
         if not selector:
             return False, "选择步骤需要 selector"
@@ -409,7 +409,7 @@ class ClickSelectHandler(StepHandler):
         selector = params.get("selector", "")
         value = str(params.get("value", "") or "").strip()
         option_selector = params.get("option_selector", "")
-        timeout = step.timeout or 10000
+        timeout = step.timeout or DEFAULT_STEP_TIMEOUT_MS
 
         if not selector:
             return False, "click_select 步骤需要 selector"
@@ -480,7 +480,7 @@ class WaitHandler(StepHandler):
     ) -> tuple[bool, str]:
         params = self.resolve_params(step, resolver)
         selector = params.get("selector", "")
-        timeout = step.timeout or 10000
+        timeout = step.timeout or DEFAULT_STEP_TIMEOUT_MS
 
         if not selector:
             return False, "等待步骤需要 selector"
@@ -509,7 +509,7 @@ class WaitUrlHandler(StepHandler):
     ) -> tuple[bool, str]:
         params = self.resolve_params(step, resolver)
         pattern = params.get("pattern", "")
-        timeout = step.timeout or 10000
+        timeout = step.timeout or DEFAULT_STEP_TIMEOUT_MS
 
         if not pattern:
             return False, "wait_url 步骤需要 pattern"
@@ -708,7 +708,7 @@ class OcrHandler(StepHandler):
         if not selector:
             return False, "ocr 步骤需要 selector（验证码图片选择器）"
 
-        timeout = step.timeout or 10000
+        timeout = step.timeout or DEFAULT_STEP_TIMEOUT_MS
         ctx = await self._resolve_frame(page, step)
         logger.info(
             "[ocr] selector={}, target={}, old={}, char_range={}",

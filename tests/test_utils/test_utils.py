@@ -1168,7 +1168,7 @@ class TestDashboardSink:
         from app.utils.logging import DashboardSink
 
         sink = DashboardSink()
-        assert sink.buffer.maxlen == 1200
+        assert sink.buffer.maxlen == 500
         assert sink.broadcast_queue.maxlen == 200
         assert len(sink.buffer) == 0
         assert len(sink.broadcast_queue) == 0
