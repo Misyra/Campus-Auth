@@ -3,6 +3,7 @@ import { TIMING, LIMITS } from '../constants.js';
 export const uiMethods = {
   // 弹窗焦点陷阱：将焦点限制在指定容器内
   _trapFocus(container) {
+    this._releaseFocusTrap(); // 清理旧监听器，防止连续打开弹窗时泄漏
     if (!container) return;
     const focusable = container.querySelectorAll(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -33,7 +34,6 @@ export const uiMethods = {
     }
   },
   // 统一弹窗管理：打开弹窗时自动设置焦点陷阱
-  // @param {string} overlaySelector - 弹窗遮罩层的 CSS 选择器
   openModal(overlaySelector) {
     this.$nextTick(() => {
       const overlay = document.querySelector(overlaySelector);
@@ -43,36 +43,6 @@ export const uiMethods = {
   // 统一弹窗管理：关闭弹窗时自动释放焦点陷阱
   closeModal() {
     this._releaseFocusTrap();
-  },
-  _showToast(success, message) {
-    if (!container) return;
-    const focusable = container.querySelectorAll(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    if (focusable.length) focusable[0].focus();
-    this._focusTrapHandler = (e) => {
-      if (e.key === 'Escape') {
-        this._releaseFocusTrap();
-        return;
-      }
-      if (e.key !== 'Tab') return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', this._focusTrapHandler);
-  },
-  _releaseFocusTrap() {
-    if (this._focusTrapHandler) {
-      document.removeEventListener('keydown', this._focusTrapHandler);
-      this._focusTrapHandler = null;
-    }
   },
   _showToast(success, message) {
     this.toast = { success, message, leaving: false };
@@ -172,6 +142,19 @@ export const uiMethods = {
   },
   setSettingsTab(tabId) {
     this.currentSettingsTab = tabId;
+  },
+  // 编辑器关闭确认
+  closeEditor() {
+    if (this.editingTask && !confirm('当前有未保存的修改，确定要关闭吗？')) return;
+    this.editingTask = null;
+    this.jsonError = '';
+  },
+  // 清空日志确认
+  clearLogs() {
+    if (!this.logs.length) return;
+    if (!confirm(`确定要清空当前 ${this.logs.length} 条日志显示吗？\n（后端日志文件不受影响）`)) return;
+    this.logs = [];
+    this.newLogCount = 0;
   },
   // 导航到指定页面
   navigateTo(page) {

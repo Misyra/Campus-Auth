@@ -107,7 +107,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-primary);
-  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Monaco', monospace;
+  font-family: var(--font-mono);
   font-size: 0.78rem;
   line-height: 1.6;
 }

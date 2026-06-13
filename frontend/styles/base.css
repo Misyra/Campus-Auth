@@ -605,6 +605,11 @@ body.no-backdrop-filter .card {
   --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.06);
   --shadow-accent: 0 0 10px rgba(34, 211, 238, 0.15);
+  --border-accent: rgba(56, 189, 248, 0.2);
+  --border-accent-hover: rgba(56, 189, 248, 0.3);
+  --border-accent-strong: rgba(56, 189, 248, 0.4);
+  --text-tertiary: #94a3b8;
+  --purple: #8b5cf6;
 }
 
 [data-theme="light"] .logo-text {
