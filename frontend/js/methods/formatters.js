@@ -44,6 +44,9 @@ export const formatterMethods = {
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   },
+  getSourceLabel(source) {
+    return LOG_SOURCES.find(s => s.value === source)?.label || (source ? source.toUpperCase().slice(0, 3) : '未知');
+  },
 };
 
 /**
