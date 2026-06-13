@@ -55,6 +55,10 @@ export const LOG_LEVELS = [
   { value: 'CRITICAL', label: 'CRITICAL' },
 ];
 
+// 日志级别数值映射（数值越大级别越高）
+export const LEVEL_VALUES = Object.fromEntries(LOG_LEVELS.map((l, i) => [l.value, i]));
+// { DEBUG: 0, INFO: 1, WARNING: 2, ERROR: 3, CRITICAL: 4 }
+
 // 日志来源列表
 export const LOG_SOURCES = [
   { value: 'backend', label: 'backend', color: '#4fc3f7' },
