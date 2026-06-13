@@ -171,13 +171,3 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
             if log:
                 log(f"Playwright 初始化失败: {exc}")
             return False
-
-
-def is_bootstrap_skipped() -> bool:
-    """检查 bootstrap 是否被用户禁用（跳过验证）。"""
-    return _BOOTSTRAP_SKIPPED
-
-
-def is_bootstrap_done() -> bool:
-    """检查 bootstrap 是否已完成验证。"""
-    return _BOOTSTRAP_DONE
