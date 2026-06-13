@@ -118,6 +118,12 @@ class _MonitorFieldsMixin(_ClampMixin):
     check_interval_seconds: int = Field(
         default=300, ge=10, le=86400, description="检测间隔（秒）"
     )
+    check_interval_milliseconds: int = Field(
+        default=0,
+        ge=0,
+        le=86400000,
+        description="检测间隔（毫秒），0 表示使用秒级检测间隔；启用时最小 100 毫秒",
+    )
     auto_start: bool = False
     pause_enabled: bool = True
     pause_start_hour: int = Field(default=0, ge=0, le=23)
@@ -152,6 +158,11 @@ class _MonitorFieldsMixin(_ClampMixin):
         default=True, description="屏蔽系统代理：开启后网络检测时忽略系统代理设置"
     )
     custom_variables: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("check_interval_milliseconds")
+    @classmethod
+    def clamp_check_interval_milliseconds(cls, v: int) -> int:
+        return 100 if 0 < v < 100 else v
 
 
 class _SharedValidatorsMixin:

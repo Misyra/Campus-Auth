@@ -453,6 +453,25 @@ class TestMonitorCoreWaitInterruptible:
         result = core._wait_interruptible(0, step=1)
         assert result is True
 
+    def test_config_update_wakes_wait(self):
+        """配置热更新后应尽快结束等待，重新进入检测循环。"""
+        core = NetworkMonitorCore()
+        core.monitoring = True
+        timer = threading.Timer(
+            0.05,
+            lambda: core.update_config({"monitor": {"interval": 1}}),
+        )
+
+        start = time.monotonic()
+        timer.start()
+        try:
+            result = core._wait_interruptible(10, step=10)
+        finally:
+            timer.cancel()
+
+        assert result is True
+        assert time.monotonic() - start < 1
+
 
 class TestMonitorCoreGetMonitorInterval:
     def test_default_interval(self):
@@ -482,6 +501,38 @@ class TestMonitorCoreLoginRetryOrBreak:
         core.login_attempt_count = 5
         result = core._login_retry_or_break(3, [5, 30, 60])
         assert result == RecoveryResult.GIVE_UP
+
+
+class TestMonitorCoreAttemptLogin:
+    @patch("app.utils.crypto.has_decryption_error", return_value=False)
+    @patch("app.workers.playwright_worker.get_worker")
+    def test_uses_login_timeout_instead_of_browser_timeout(
+        self, mock_get_worker, _mock_decrypt
+    ):
+        worker = MagicMock()
+        worker.submit.return_value = MagicMock(
+            success=True,
+            data="ok",
+            error=None,
+        )
+        mock_get_worker.return_value = worker
+        core = NetworkMonitorCore(
+            config={
+                "auth_url": "http://example.test",
+                "username": "user",
+                "browser_settings": {
+                    "timeout": 8,
+                    "login_timeout": 90,
+                },
+            }
+        )
+
+        ok, msg = core.attempt_login()
+
+        assert ok is True
+        assert msg == "ok"
+        worker.submit.assert_called_once()
+        assert worker.submit.call_args.kwargs["timeout"] == 90
 
 
 class TestMonitorCoreStartStop:

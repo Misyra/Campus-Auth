@@ -61,6 +61,7 @@ const _SHARED_DEFAULTS = {
   carrier: "无",
   carrier_custom: "",
   check_interval_seconds: 300,
+  check_interval_milliseconds: 0,
   auto_start: false,
   headless: true,
   browser_timeout: 8,

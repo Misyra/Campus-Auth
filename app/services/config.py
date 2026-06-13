@@ -261,6 +261,7 @@ def _build_browser_config(payload: MonitorConfigPayload) -> dict[str, Any]:
         "headless": payload.headless,
         "timeout": payload.browser_timeout,
         "navigation_timeout": payload.browser_navigation_timeout,
+        "login_timeout": payload.login_timeout,
         "user_agent": payload.browser_user_agent.strip(),
         "low_resource_mode": payload.browser_low_resource_mode,
         "disable_web_security": payload.browser_disable_web_security,
@@ -281,8 +282,12 @@ def _build_monitor_config(payload: MonitorConfigPayload) -> dict[str, Any]:
     """构建监控检测相关配置。"""
     from app.utils.network_helpers import parse_portal_checks
 
+    interval_ms = int(payload.check_interval_milliseconds or 0)
+    interval = interval_ms / 1000 if interval_ms > 0 else payload.check_interval_seconds
+
     return {
-        "interval": payload.check_interval_seconds,
+        "interval": interval,
+        "interval_milliseconds": interval_ms,
         "ping_targets": [
             item.strip() for item in payload.network_targets.split(",") if item.strip()
         ],
@@ -429,6 +434,7 @@ def _update_default_profile(
         payload.model_dump(),
         [
             "check_interval_seconds",
+            "check_interval_milliseconds",
             "auto_start",
             "headless",
             "browser_timeout",

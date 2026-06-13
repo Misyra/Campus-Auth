@@ -121,6 +121,11 @@
           <input id="wiz-interval" v-model.number="config.check_interval_seconds" type="number" min="10" max="86400" />
           <span class="hint">每隔多久检测一次网络状态，建议 180-600 秒（3-10 分钟）</span>
         </div>
+        <div class="form-group">
+          <label for="wiz-interval-ms">检测间隔（毫秒）</label>
+          <input id="wiz-interval-ms" v-model.number="config.check_interval_milliseconds" type="number" min="0" max="86400000" step="100" />
+          <span class="hint">设置为 0 时使用秒级间隔；需要快速检测时可填 500 等毫秒值，启用时最小 100 毫秒</span>
+        </div>
 
         <div class="form-row">
           <div class="form-group">
@@ -174,7 +179,7 @@
           </div>
           <div class="summary-item">
             <span class="label">检测间隔</span>
-            <span class="value">{{ config.check_interval_seconds }} 秒</span>
+            <span class="value">{{ config.check_interval_milliseconds > 0 ? config.check_interval_milliseconds + ' 毫秒' : config.check_interval_seconds + ' 秒' }}</span>
           </div>
           <div class="summary-item">
             <span class="label">自动监控</span>

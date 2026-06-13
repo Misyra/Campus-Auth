@@ -84,6 +84,8 @@ class NetworkMonitorCore:
         self._stop_requested = False
         self._cancel_login = threading.Event()
         self._stop_event = threading.Event()
+        self._wait_condition = threading.Condition()
+        self._config_version = 0
         # 登录恢复进行中标志（供定时任务等待）
         self._login_recovery_in_progress = threading.Event()
         self._test_sites_cache: Optional[list[tuple[str, int]]] = None
@@ -148,14 +150,20 @@ class NetworkMonitorCore:
         self._test_sites_cache = None  # 清除测试站点缓存
         # 同步 block_proxy 到 network_test 模块，决定 HTTP 客户端是否信任系统代理
         set_block_proxy(self.config.get("block_proxy", True))
+        with self._wait_condition:
+            self._config_version += 1
+            self._wait_condition.notify_all()
 
-    def _get_monitor_interval(self) -> int:
+    def _get_monitor_interval(self) -> float:
         """获取当前配置的检测间隔（秒）。"""
-        return int(
-            self.config.get("monitor", {}).get(
-                "interval", self.DEFAULT_INTERVAL_SECONDS
-            )
+        raw_interval = self.config.get("monitor", {}).get(
+            "interval", self.DEFAULT_INTERVAL_SECONDS
         )
+        try:
+            interval = float(raw_interval)
+        except (TypeError, ValueError):
+            interval = float(self.DEFAULT_INTERVAL_SECONDS)
+        return max(0.001, interval)
 
     def start_monitoring(self) -> None:
         try:
@@ -220,6 +228,8 @@ class NetworkMonitorCore:
         self._stop_requested = True
         self._cancel_login.set()
         self._stop_event.set()
+        with self._wait_condition:
+            self._wait_condition.notify_all()
         was_monitoring = self.monitoring
         self.monitoring = False
         self.status_detail = "已停止"
@@ -246,12 +256,22 @@ class NetworkMonitorCore:
         except Exception as e:
             self.log_message(f"关闭浏览器时出错: {e}", "WARNING")
 
-    def _wait_interruptible(self, seconds: int, step: int = 5) -> bool:
+    def _wait_interruptible(self, seconds: float, step: float = 5) -> bool:
         remaining = max(0, seconds)
+        deadline = time.monotonic() + remaining
+        observed_config_version = self._config_version
         while self.monitoring and remaining > 0:
-            if self._stop_event.wait(timeout=min(step, remaining)):
+            if self._stop_event.is_set():
                 return False
-            remaining -= step
+            with self._wait_condition:
+                if self._config_version != observed_config_version:
+                    return True
+                self._wait_condition.wait(timeout=min(step, remaining))
+                if self._stop_event.is_set():
+                    return False
+                if self._config_version != observed_config_version:
+                    return True
+            remaining = deadline - time.monotonic()
         return self.monitoring
 
     def _get_retry_config(self) -> tuple[int, list[int]]:
@@ -505,10 +525,7 @@ class NetworkMonitorCore:
                     f"等待 {interval} 秒至下次检测周期（{next_check.strftime('%H:%M:%S')}）",
                     "INFO",
                 )
-            wait_step = min(
-                self.MAX_WAIT_STEP_SECONDS,
-                max(self.MIN_WAIT_STEP_SECONDS, interval // 10),
-            )
+            wait_step = min(self.MAX_WAIT_STEP_SECONDS, max(0.1, interval / 10))
             if not self._wait_interruptible(interval, step=wait_step):
                 break
 
@@ -613,7 +630,16 @@ class NetworkMonitorCore:
             # ── 通过 PlaywrightWorker 派发登录 ──
             from app.workers.playwright_worker import get_worker, CMD_LOGIN
 
-            login_timeout = self.config.get("browser_settings", {}).get("timeout", 120)
+            browser_settings = self.config.get("browser_settings", {})
+            raw_login_timeout = browser_settings.get(
+                "login_timeout",
+                self.config.get("login_timeout", 120),
+            )
+            try:
+                login_timeout = int(raw_login_timeout)
+            except (TypeError, ValueError):
+                login_timeout = 120
+            login_timeout = max(10, min(login_timeout, 600))
             data = {
                 "config": self.config,
                 "cancel_event": self._cancel_login,

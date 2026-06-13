@@ -375,12 +375,14 @@ class TestBuildRuntimeConfig:
         payload = MonitorConfigPayload(
             headless=False,
             browser_timeout=15,
+            login_timeout=90,
             browser_user_agent="Custom UA",
         )
         config = build_runtime_config(payload)
         browser = config["browser_settings"]
         assert browser["headless"] is False
         assert browser["timeout"] == 15
+        assert browser["login_timeout"] == 90
         assert browser["user_agent"] == "Custom UA"
 
     def test_pause_settings(self):
@@ -408,6 +410,16 @@ class TestBuildRuntimeConfig:
         assert "8.8.8.8:53" in monitor["ping_targets"]
         assert monitor["enable_tcp_check"] is True
         assert monitor["enable_http_check"] is False
+
+    def test_monitor_settings_prefers_milliseconds_interval(self):
+        payload = MonitorConfigPayload(
+            check_interval_seconds=600,
+            check_interval_milliseconds=500,
+        )
+        config = build_runtime_config(payload)
+        monitor = config["monitor"]
+        assert monitor["interval"] == 0.5
+        assert monitor["interval_milliseconds"] == 500
 
     def test_portal_check_urls(self):
         payload = MonitorConfigPayload(

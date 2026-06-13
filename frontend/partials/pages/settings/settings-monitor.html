@@ -13,6 +13,13 @@
       </div>
       <div class="form-group">
         <div class="field-label-row">
+          <label for="settings-interval-ms">检测间隔（毫秒）</label>
+          <span class="field-help" tabindex="0" role="note" data-tip="设置为 0 时使用上方秒级间隔；大于 0 时优先按毫秒间隔检测。启用时最小 100 毫秒。">?</span>
+        </div>
+        <input id="settings-interval-ms" v-model.number="config.check_interval_milliseconds" type="number" min="0" max="86400000" step="100" />
+      </div>
+      <div class="form-group">
+        <div class="field-label-row">
           <label for="settings-network-check-timeout">检测超时（秒）</label>
           <span class="field-help" tabindex="0" role="note" data-tip="网络检测的超时时间。如果网络较慢或经常误判为断网，可以适当增大此值。默认 2 秒，范围 1~30 秒。">?</span>
         </div>

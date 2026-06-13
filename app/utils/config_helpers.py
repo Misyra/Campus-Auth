@@ -19,6 +19,7 @@ PROFILE_FIELDS: list[str] = [
     "carrier",
     "carrier_custom",
     "check_interval_seconds",
+    "check_interval_milliseconds",
     "auto_start",
     "headless",
     "browser_timeout",

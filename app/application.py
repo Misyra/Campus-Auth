@@ -97,13 +97,18 @@ async def lifespan(app_instance):
         settings_path.stat().st_size if settings_path.exists() else 0,
     )
     config = services.monitor_service.get_config()
+    interval_display = (
+        f"{config.check_interval_milliseconds}ms"
+        if config.check_interval_milliseconds > 0
+        else f"{config.check_interval_seconds}s"
+    )
     startup_logger.info(
-        "当前配置: 用户={}, 密码={}, 认证={}, 运营商={}, 间隔={}min, 自动监控={}",
+        "当前配置: 用户={}, 密码={}, 认证={}, 运营商={}, 间隔={}, 自动监控={}",
         f"'{config.username}'" if config.username else "(空)",
         "已设置" if config.password else "(空)",
         f"'{config.auth_url}'" if config.auth_url else "(空)",
         config.carrier,
-        config.check_interval_seconds,
+        interval_display,
         config.auto_start,
     )
 

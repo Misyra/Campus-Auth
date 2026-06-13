@@ -355,6 +355,10 @@
               <input id="prof-interval" v-model.number="editingProfile.check_interval_seconds" type="number" min="10" max="86400" />
             </div>
             <div class="form-group">
+              <label for="prof-interval-ms">检测间隔（毫秒）</label>
+              <input id="prof-interval-ms" v-model.number="editingProfile.check_interval_milliseconds" type="number" min="0" max="86400000" step="100" />
+            </div>
+            <div class="form-group">
               <label for="prof-net-targets">网络检测目标</label>
               <input id="prof-net-targets" v-model="editingProfile.network_targets" type="text" placeholder="8.8.8.8:53,..." />
             </div>
