@@ -7,7 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.constants import AUTH_DATA_DIR, PROJECT_ROOT
+from app.utils.logging import get_logger
 from app.utils.platform import get_platform
+
+logger = get_logger("uninstall", source="backend")
 
 USER_DATA_DIR = AUTH_DATA_DIR
 
@@ -118,7 +121,15 @@ def _remove_autostart() -> tuple[bool, str]:
 def _remove_user_data() -> tuple[bool, str]:
     if not USER_DATA_DIR.exists():
         return True, "用户数据目录不存在，跳过"
+
+    # 路径校验：确保删除的是预期的用户数据目录
+    expected_name = ".campus_network_auth"
+    if USER_DATA_DIR.name != expected_name:
+        return False, f"安全检查失败：目录名不是 {expected_name}"
+
     try:
+        file_count = sum(1 for _ in USER_DATA_DIR.rglob("*") if _.is_file())
+        logger.warning("即将删除用户数据目录: {} ({} 个文件)", USER_DATA_DIR, file_count)
         shutil.rmtree(USER_DATA_DIR)
         return True, f"已删除 {USER_DATA_DIR}"
     except Exception as exc:
