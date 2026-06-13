@@ -8,7 +8,6 @@ export const CustomSelect = {
     // { value, label }[]
     placeholder: { type: String, default: '请选择...' },
     compact: { type: Boolean, default: false },
-    logfiles: { type: Boolean, default: false },
     disabled: { type: Boolean, default: false },
   },
   emits: ['update:modelValue', 'change'],
@@ -94,7 +93,7 @@ export const CustomSelect = {
     document.removeEventListener('mousedown', this.onDocClick);
   },
   template: `
-    <div class="custom-select" :class="{ open, compact, logfiles, disabled }">
+    <div class="custom-select" :class="{ open, compact, disabled }">
       <button
         ref="trigger"
         type="button"

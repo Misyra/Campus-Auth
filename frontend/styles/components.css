@@ -519,21 +519,6 @@
   font-size: 12px;
 }
 
-/* 日志文件场景的样式 */
-.custom-select.logfiles .custom-select-trigger {
-  padding: 6px 30px 6px 10px;
-  font-size: 0.8rem;
-  min-height: auto;
-  border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
-}
-
-.custom-select.logfiles .custom-select-arrow {
-  right: 10px;
-  width: 10px;
-  height: 10px;
-}
-
 .custom-select.disabled .custom-select-trigger {
   opacity: 0.5;
   cursor: not-allowed;

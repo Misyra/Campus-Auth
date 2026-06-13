@@ -105,7 +105,6 @@ def create_app(existing_container=None):
         config,
         debug,
         history,
-        logfiles,
         monitor,
         ocr,
         profiles,
@@ -317,7 +316,6 @@ def create_app(existing_container=None):
     _app.include_router(scripts.router)
     _app.include_router(scheduled_tasks.router)
     _app.include_router(history.router)
-    _app.include_router(logfiles.router)
 
     # ==================== 首页和静态文件 ====================
 

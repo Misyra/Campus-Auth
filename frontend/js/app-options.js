@@ -12,7 +12,7 @@ import { scriptMethods } from './methods/scripts.js';
 
 import { taskMethods } from './tasks/index.js';
 import { uiMethods } from './methods/ui.js';
-import { logFileMethods } from './methods/logfiles.js';
+
 
 // 按功能域拆分的数据模块
 import { dashboardData } from './data/dashboard.js';
@@ -28,7 +28,6 @@ import { websocketData } from './data/websocket.js';
 import { timerData } from './data/timers.js';
 import { statusData } from './data/status.js';
 import { appearanceData } from './data/appearance.js';
-import { logFileData } from './data/logfiles.js';
 import { scheduledTasksData } from './data/scheduled_tasks.js';
 
 export const appOptions = {
@@ -48,7 +47,6 @@ export const appOptions = {
       ...timerData(),
       ...statusData(),
       ...appearanceData(),
-      ...logFileData(),
       ...scheduledTasksData(),
 
       // 全局共享状态
@@ -111,12 +109,6 @@ export const appOptions = {
         ...this.browserTasks.map(t => ({ value: t.id, label: t.name })),
       ];
     },
-    logFileOptions() {
-      return this.currentLogFiles.map(f => ({
-        value: f.name,
-        label: f.name + ' (' + this.formatFileSize(f.size) + ')',
-      }));
-    },
     pageTitle() {
       const titles = {
         dashboard: '仪表盘',
@@ -127,7 +119,6 @@ export const appOptions = {
         profiles: '配置方案',
         'profile-edit': this.editingProfile?.id ? '编辑配置方案' : '新建配置方案',
         appearance: '外观设置',
-        logs: '日志查看器',
         about: '关于',
       };
       return titles[this.currentPage] || '仪表盘';
@@ -215,10 +206,6 @@ export const appOptions = {
     },
     uninstallCheckedCount() {
       return this.uninstall.items.filter(it => it.exists && it.checked).length;
-    },
-    currentLogFiles() {
-      const group = this.logFileGroups.find(g => g.date === this.logViewer.date);
-      return group?.files || [];
     },
     shellPathMode: {
       get() {
@@ -312,9 +299,6 @@ export const appOptions = {
           if (logViewer) logViewer.scrollTop = logViewer.scrollHeight;
         });
       }
-      if (newPage === 'logs' && !this.logFileGroups.length) {
-        this.fetchLogFileGroups();
-      }
     },
   },
   mounted() {
@@ -353,6 +337,5 @@ export const appOptions = {
     ...appearanceMethods,
 
     ...dragMethods,
-    ...logFileMethods,
   },
 };

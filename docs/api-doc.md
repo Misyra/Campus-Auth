@@ -109,13 +109,6 @@
 | GET | `/api/logs?limit=200` | 获取历史日志（内存缓冲区，最多 1200 条） |
 | WS | `/ws/logs` | WebSocket 实时日志流 |
 
-## 日志文件
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/logfiles/list` | 列出所有日志文件，按日期分组（最新在前） |
-| GET | `/api/logfiles/content?date=YYYY-MM-DD&file=app.log&level=&search=&limit=2000` | 获取日志文件内容，支持按级别过滤和关键词搜索 |
-
 ## 登录历史
 
 | 方法 | 路径 | 说明 |
