@@ -5,6 +5,16 @@
 
 ## 2026-06-13
 
+### fix: 修复 env.py 自定义变量可覆盖内置变量的问题
+
+修复 `app/utils/env.py` 中自定义变量可覆盖内置模板变量的问题：
+
+- **问题：** `custom_variables` 中的 `LOGIN_URL`、`ISP`、`PASSWORD` 等内置变量可被覆盖，导致任务步骤中模板替换被篡改。`USERNAME` 因已在 `_ENV_DENYLIST` 中而恰好受保护。
+- **修复：** 在注入自定义变量前记录已存在的内置变量 key 集合，跳过与内置变量同名（不区分大小写）的自定义变量，并记录 warning 日志。
+
+**新增测试文件：** `tests/test_utils/test_env_fix.py`（6 个测试用例）
+**测试结果：** 6 passed，全量 1661 passed（4 个既有失败与本次修改无关）
+
 ### fix: 修复 logging.py 缓冲配置不一致与 level_order 重复创建
 
 修复 `app/utils/logging.py` 中两个问题：
