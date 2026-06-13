@@ -366,18 +366,6 @@ class PlaywrightWorker:
 
     # ── 命令派发 ──
 
-    # 命令类型 → (handler 方法名, 是否需要 data 参数)
-    _CMD_ROUTES: dict[str, tuple[str, bool]] = {
-        CMD_LOGIN: ("_handle_login", True),
-        CMD_DEBUG_START: ("_handle_debug_start", True),
-        CMD_DEBUG_STEP: ("_handle_debug_step", True),
-        CMD_DEBUG_STOP: ("_handle_debug_stop", False),
-        CMD_BROWSER_ACQUIRE: ("_handle_browser_acquire", True),
-        CMD_BROWSER_RELEASE: ("_handle_browser_release", False),
-        CMD_BROWSER_CLOSE: ("_handle_browser_close", False),
-        CMD_BROWSER_HEALTH_CHECK: ("_handle_health_check", False),
-    }
-
     async def _dispatch(self, cmd: WorkerCommand) -> None:
         """派发 WorkerCommand 到对应的异步处理函数。
 
@@ -385,11 +373,22 @@ class PlaywrightWorker:
         将返回值设为 cmd.response_data 并通知等待方。
         """
         try:
-            route = self._CMD_ROUTES.get(cmd.type)
-            if route:
-                handler_name, needs_data = route
-                handler = getattr(self, handler_name)
-                result = await handler(cmd.data) if needs_data else await handler()
+            if cmd.type == CMD_LOGIN:
+                result = await self._handle_login(cmd.data)
+            elif cmd.type == CMD_DEBUG_START:
+                result = await self._handle_debug_start(cmd.data)
+            elif cmd.type == CMD_DEBUG_STEP:
+                result = await self._handle_debug_step(cmd.data)
+            elif cmd.type == CMD_DEBUG_STOP:
+                result = await self._handle_debug_stop()
+            elif cmd.type == CMD_BROWSER_ACQUIRE:
+                result = await self._handle_browser_acquire(cmd.data)
+            elif cmd.type == CMD_BROWSER_RELEASE:
+                result = await self._handle_browser_release()
+            elif cmd.type == CMD_BROWSER_CLOSE:
+                result = await self._handle_browser_close()
+            elif cmd.type == CMD_BROWSER_HEALTH_CHECK:
+                result = await self._handle_health_check()
             elif cmd.type == CMD_SHUTDOWN:
                 result = WorkerResponse(success=True, data="Worker 正在关闭")
             else:
