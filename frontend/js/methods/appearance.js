@@ -47,13 +47,25 @@ export const appearanceMethods = {
     if (this.appearance.accent_color) {
       root.style.setProperty('--accent', this.appearance.accent_color);
       root.style.setProperty('--accent-hover', adjustColor(this.appearance.accent_color, -20));
+      const accentRgb = hexToRgb(this.appearance.accent_color);
+      if (accentRgb) {
+        root.style.setProperty('--accent-rgb', `${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}`);
+      }
     }
 
     // 页面缩放 — 只缩放内容区域，顶栏和侧边栏不受影响
     const wrapper = document.querySelector('.content-wrapper'); // 无 ref 可用，保留 querySelector
     if (wrapper) {
       const scale = (this.appearance.zoom || 100) / 100;
-      wrapper.style.zoom = scale;
+      if (scale !== 1) {
+        wrapper.style.transform = `scale(${scale})`;
+        wrapper.style.transformOrigin = 'top left';
+        wrapper.style.width = `${100 / scale}%`;
+      } else {
+        wrapper.style.transform = '';
+        wrapper.style.transformOrigin = '';
+        wrapper.style.width = '';
+      }
     }
 
     // 主题
