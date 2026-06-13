@@ -97,14 +97,33 @@ class NetworkMonitorCore:
             log_func = getattr(self.logger, level.lower(), self.logger.info)
             log_func(message)
 
-    def _update_state(self, **kwargs: Any) -> None:
-        """线程安全地更新状态字段。
-
-        用法: self._update_state(monitoring=True, status_detail="...")
-        """
+    def _update_state(
+        self,
+        *,
+        monitoring: bool | None = None,
+        network_check_count: int | None = None,
+        login_attempt_count: int | None = None,
+        start_time: float | None = None,
+        last_check_time: datetime.datetime | None = None,
+        network_state: NetworkState | None = None,
+        status_detail: str | None = None,
+    ) -> None:
+        """线程安全地更新状态字段。仅更新非 None 的字段。"""
         with self._state_lock:
-            for k, v in kwargs.items():
-                setattr(self, k, v)
+            if monitoring is not None:
+                self.monitoring = monitoring
+            if network_check_count is not None:
+                self.network_check_count = network_check_count
+            if login_attempt_count is not None:
+                self.login_attempt_count = login_attempt_count
+            if start_time is not None:
+                self.start_time = start_time
+            if last_check_time is not None:
+                self.last_check_time = last_check_time
+            if network_state is not None:
+                self.network_state = network_state
+            if status_detail is not None:
+                self.status_detail = status_detail
 
     def snapshot(self) -> dict[str, Any]:
         """线程安全地获取状态快照。"""
