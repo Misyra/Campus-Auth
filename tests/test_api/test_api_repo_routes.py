@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -64,7 +64,7 @@ def client(tmp_path):
 class TestRepoFetchIndex:
     """测试 GET /api/repo/fetch 端点。"""
 
-    @patch("app.api.repo.repo_fetch_json")
+    @patch("app.api.repo.async_repo_fetch_json", new_callable=AsyncMock)
     def test_repo_fetch_index_success(self, mock_fetch, client):
         test_client, _ = client
         mock_fetch.return_value = [{"id": "task1", "name": "任务1"}]
@@ -74,7 +74,7 @@ class TestRepoFetchIndex:
         assert isinstance(data, list)
         assert data[0]["id"] == "task1"
 
-    @patch("app.api.repo.repo_fetch_json")
+    @patch("app.api.repo.async_repo_fetch_json", new_callable=AsyncMock)
     def test_repo_fetch_index_empty(self, mock_fetch, client):
         test_client, _ = client
         mock_fetch.return_value = []
@@ -86,7 +86,7 @@ class TestRepoFetchIndex:
 class TestRepoFetchTask:
     """测试 GET /api/repo/task 端点。"""
 
-    @patch("app.api.repo.repo_fetch_json")
+    @patch("app.api.repo.async_repo_fetch_json", new_callable=AsyncMock)
     def test_repo_fetch_task_success(self, mock_fetch, client):
         test_client, _ = client
         mock_fetch.return_value = {"name": "任务详情", "steps": []}

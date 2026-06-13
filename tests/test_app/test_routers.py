@@ -490,14 +490,14 @@ class TestScheduledTasksRouter:
 
 
 class TestRepoRouter:
-    @patch("app.api.repo.repo_fetch_json")
+    @patch("app.api.repo.async_repo_fetch_json", new_callable=AsyncMock)
     def test_repo_fetch_index(self, mock_fetch, client):
         mock_fetch.return_value = [{"id": "task1", "name": "任务1"}]
         resp = client.get("/api/repo/fetch?url=https://example.com/index.json")
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
 
-    @patch("app.api.repo.repo_fetch_json")
+    @patch("app.api.repo.async_repo_fetch_json", new_callable=AsyncMock)
     def test_repo_fetch_task(self, mock_fetch, client):
         mock_fetch.return_value = {"name": "任务详情"}
         resp = client.get("/api/repo/task?url=https://example.com/task.json")
