@@ -111,14 +111,14 @@
   <!-- 空状态 -->
   <div v-if="!Object.keys(profiles).length" class="card">
     <div class="profiles-empty">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:0.3;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
         <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
         <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
         <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
         <line x1="12" y1="20" x2="12.01" y2="20"/>
       </svg>
-      <p style="font-size:15px;">暂无配置方案</p>
-      <p style="font-size:13px;color:var(--text-muted);">为不同网络环境创建独立的认证配置</p>
+      <span class="profiles-empty-title">暂无配置方案</span>
+      <span class="profiles-empty-desc">为不同网络环境创建独立的认证配置</span>
       <button class="btn btn-sm btn-primary" @click="showProfileEditor(null)">创建第一个方案</button>
     </div>
   </div>
@@ -268,7 +268,7 @@
             <span class="field-help" tabindex="0" role="note" data-tip="开启则使用系统设置中的账号密码，关闭后可为本方案配置独立的账号、密码和运营商。">?</span>
           </label>
         </div>
-        <div v-if="!editingProfile.use_global_credentials" style="margin-top:8px;">
+        <div v-if="!editingProfile.use_global_credentials" class="profile-credentials-section">
           <div class="form-row">
             <div class="form-group">
               <label for="prof-username">独立账号</label>
@@ -283,7 +283,7 @@
                 :placeholder="editingProfile.password && editingProfile.password.startsWith('•') ? '已保存，清空可更新' : '留空使用全局'"
                 @focus="$event.target.select()"
               />
-              <span class="hint">本地加密保存，配置切换和备份均无法导出</span>
+              <span class="hint">密码不会随配置切换导出，仅在本机生效</span>
             </div>
           </div>
           <div class="form-row">
@@ -302,7 +302,7 @@
       <!-- 认证设置 -->
       <div class="editor-section">
         <div class="editor-section-label">认证设置</div>
-        <div class="toggle-group" style="margin-bottom: 12px;">
+        <div class="toggle-group">
           <label class="toggle compact">
             <input type="checkbox" v-model="editingProfile.use_global_auth_url" />
             <span class="toggle-slider"></span>
@@ -314,7 +314,7 @@
           <label for="prof-auth-url">认证地址</label>
           <input id="prof-auth-url" v-model.trim="editingProfile.auth_url" type="text" placeholder="http://" />
         </div>
-        <div class="toggle-group" style="margin-bottom: 12px;">
+        <div class="toggle-group">
           <label class="toggle compact">
             <input type="checkbox" v-model="editingProfile.use_global_task" />
             <span class="toggle-slider"></span>

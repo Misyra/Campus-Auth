@@ -94,7 +94,7 @@
               :class="{ 'input-error': wizardErrors.password }"
             />
             <span v-if="wizardErrors.password" class="error-text">{{ wizardErrors.password }}</span>
-            <span v-else class="hint">您的校园网登录密码（本地加密保存，配置切换和备份均无法导出）</span>
+            <span v-else class="hint">您的校园网登录密码（本地加密保存，不会随配置切换导出）</span>
           </div>
 
           <div class="form-group">
