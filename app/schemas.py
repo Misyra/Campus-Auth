@@ -232,7 +232,7 @@ class _SystemFieldsMixin(BaseModel):
     max_retries: int = Field(default=3, ge=0, le=10)
     retry_interval: int = Field(default=5, ge=1, le=300, description="重试间隔（秒）")
     log_retention_days: int = Field(
-        default=7, ge=1, le=365, description="日志与截图保留天数"
+        default=7, ge=1, le=365, description="日志保留天数"
     )
     app_port: int = Field(default=50721, ge=1024, le=65535, description="网页界面端口")
     proxy: str = Field(default="", description="网络代理地址")
