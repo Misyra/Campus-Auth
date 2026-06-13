@@ -154,11 +154,11 @@ def _cmd_autostart(action: str) -> None:
         sys.exit(0 if ok else 1)
 
 
-# ==================== 登录成功后退出 ====================
+# ==================== 自动登录，成功后退出 ====================
 
 
 def _run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
-    """登录成功后退出模式。
+    """自动登录，成功后退出模式。
 
     返回:
         LoginResult.SUCCESS — 登录成功，应退出进程
@@ -230,7 +230,7 @@ def _run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
             return LoginResult.SUCCESS
 
         print(f"登录失败 (第 {attempt} 次): {message}")
-        if max_retries > 0 and attempt >= max_retries:
+        if attempt >= max_retries:
             break
 
     cleanup_orphan_browsers()
@@ -313,8 +313,9 @@ def handle_startup_action(
             if result == LoginResult.SUCCESS:
                 return StartupResult.EXIT, False
             if result == LoginResult.CONFIG_ERROR:
+                # 配置错误无法自动恢复，退出让用户修正
                 return StartupResult.EXIT, False
-            # TEMPORARY_FAILURE → 继续进入监控
+            # TEMPORARY_FAILURE → 网络等临时性问题，继续监控等待恢复
             return StartupResult.CONTINUE, False
         case _:
             return StartupResult.CONTINUE, False
@@ -548,7 +549,7 @@ def main() -> None:
   python main.py                              启动 Web 控制台
   python main.py --runtime-mode lightweight   轻量模式（无 Web 界面，覆盖自启动模式）
   python main.py --startup-action monitor     启动后自动开始监控
-  python main.py --startup-action login_once  登录成功后退出
+  python main.py --startup-action login_once  自动登录，成功后退出
   python main.py --no-browser                 不自动打开浏览器
   python main.py --status                     查看运行状态
   python main.py --stop                       停止后台服务

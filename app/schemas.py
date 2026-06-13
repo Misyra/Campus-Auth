@@ -220,9 +220,9 @@ class _SystemFieldsMixin(BaseModel):
     backend_log_level: str = Field(default="INFO")
     frontend_log_level: str = Field(default="INFO")
     access_log: bool = Field(default=False, description="Uvicorn HTTP 请求日志")
-    startup_action: str = Field(
-        default="none",
-        description="启动行为：none=不自动执行, monitor=自动监控, login_once=登录后退出",
+    startup_action: StartupAction = Field(
+        default=StartupAction.NONE,
+        description="启动行为：none=不自动执行, monitor=自动监控, login_once=自动登录成功后退出",
     )
     autostart_lightweight: bool = Field(
         default=True, description="自启动轻量模式：True=仅监控, False=完整模式(含Web)"

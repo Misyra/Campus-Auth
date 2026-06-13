@@ -41,23 +41,17 @@
 
       <div class="settings-section-divider"></div>
       <h4 class="settings-section-heading">启动行为</h4>
-      <div class="toggle-group">
-        <div class="toggle-with-help">
-          <label class="toggle toggle-help-inline">
-            <input type="checkbox" v-model="autoStartMonitor" />
-            <span class="toggle-slider"></span>
-            <span class="toggle-label">启动后自动监控</span>
-            <span class="field-help" tabindex="0" role="note" data-tip="程序启动后自动开始网络监控，断网时自动触发登录。">?</span>
-          </label>
+      <div class="form-group">
+        <div class="field-label-row">
+          <label for="settings-startup-action">启动后执行</label>
+          <span class="field-help" tabindex="0" role="note" data-tip="选择程序启动后自动执行的操作。">?</span>
         </div>
-        <div class="toggle-with-help">
-          <label class="toggle toggle-help-inline">
-            <input type="checkbox" v-model="loginThenExit" :disabled="!autoStartMonitor" />
-            <span class="toggle-slider"></span>
-            <span class="toggle-label">登录成功后退出</span>
-            <span class="field-help" tabindex="0" role="note" data-tip="需要开启「启动后自动监控」。启动后检测网络，已连接则直接退出；未连接则登录，成功后退出。适用于开机自动认证场景。">?</span>
-          </label>
-        </div>
+        <custom-select
+          id="settings-startup-action"
+          v-model="config.startup_action"
+          :options="loginActionOptions"
+        ></custom-select>
+        <span class="hint">{{ startupActionHint }}</span>
       </div>
 
       <div class="toggle-group">
@@ -66,7 +60,7 @@
             <input type="checkbox" :checked="autostart.enabled" @change="autostart.enabled ? disableAutostart() : enableAutostart()" :disabled="busy.autostart" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">开机自启动</span>
-            <span class="field-help" tabindex="0" role="note" data-tip="开机时自动启动 Campus-Auth。配合「启动后自动监控」可实现全自动登录。">?</span>
+            <span class="field-help" tabindex="0" role="note" data-tip="开机时自动启动 Campus-Auth。配合「启动后开始监控」可持续监控网络，或配合「自动登录，成功后退出」实现开机自动认证。">?</span>
           </label>
         </div>
       </div>

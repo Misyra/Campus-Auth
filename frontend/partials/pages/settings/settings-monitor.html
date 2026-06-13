@@ -199,7 +199,7 @@
         <div class="form-group">
           <div class="field-label-row">
             <label for="settings-max-retries">最大登录重试次数</label>
-            <span class="field-help" tabindex="0" role="note" data-tip="登录失败后最多重试几次，超出后等待下次网络检测周期再试。监控模式上限 5 次，登录成功后退出模式上限 3 次。">?</span>
+            <span class="field-help" tabindex="0" role="note" data-tip="登录失败后最多重试几次，超出后等待下次网络检测周期再试。监控模式上限 5 次，自动登录成功后退出模式上限 3 次。">?</span>
           </div>
           <input id="settings-max-retries" v-model.number="config.max_retries" type="number" min="1" max="5" />
         </div>

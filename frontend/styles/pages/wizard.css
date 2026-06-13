@@ -229,3 +229,17 @@
   font-weight: 500;
   color: var(--text-primary);
 }
+
+/* 错误提示样式 */
+.wizard-page .input-error {
+  border-color: var(--error) !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
+}
+
+.wizard-page .error-text {
+  display: block;
+  color: var(--error);
+  font-size: 12px;
+  margin-top: 6px;
+  line-height: 1.4;
+}
