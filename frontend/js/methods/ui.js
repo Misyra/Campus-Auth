@@ -276,18 +276,23 @@ export const uiMethods = {
   _showExitOverlay() {
     const overlay = document.createElement('div');
     overlay.className = 'exit-overlay';
-    overlay.innerHTML = `
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-        <polyline points="22 4 12 14.01 9 11.01"/>
-      </svg>
-      <h2>已安全退出</h2>
-      <p>后端服务已关闭</p>
-      <button class="btn btn-primary" onclick="window.open('','_self').close()">关闭页面</button>`;
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('width', '48');
+    svg.setAttribute('height', '48');
+    svg.innerHTML = '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>';
+    const h2 = document.createElement('h2');
+    h2.textContent = '已安全退出';
+    const p = document.createElement('p');
+    p.textContent = '后端服务已关闭';
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-primary';
+    btn.textContent = '关闭页面';
+    btn.addEventListener('click', () => window.close());
+    overlay.append(svg, h2, p, btn);
     document.body.appendChild(overlay);
-    setTimeout(() => {
-      window.open('', '_self');
-      window.close();
-    }, 100);
   },
 };
