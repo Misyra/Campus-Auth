@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import queue
 import re
 import threading
@@ -33,9 +34,6 @@ from .profile_service import ProfileService
 
 # WS 广播队列排空间隔（秒）
 WS_DRAIN_INTERVAL_SECONDS = 0.05
-
-# 监控停止超时（秒）
-MONITOR_STOP_TIMEOUT_S = MONITOR_STOP_TIMEOUT
 
 # ── Actor 模型：类型化命令派发 ──
 
@@ -536,9 +534,7 @@ class ScheduleEngine:
             except IndexError:
                 break
             try:
-                import json as _json
-
-                await self._ws_manager.broadcast(_json.dumps(data))
+                await self._ws_manager.broadcast(json.dumps(data))
             except Exception:
                 logger.exception("WS 广播发送失败")
 
