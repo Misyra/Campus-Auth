@@ -379,11 +379,6 @@
   z-index: auto;
 }
 
-/* 下拉菜单展开时，降低 custom-select 自身层级，避免遮挡 field-help tooltip */
-.custom-select.open {
-  z-index: 0;
-}
-
 /* 当下拉菜单展开时，提升所在卡片的层级，避免被后续卡片遮挡 */
 .card:has(.custom-select.open) {
   position: relative;
@@ -728,6 +723,7 @@
   line-height: 1;
   cursor: help;
   isolation: isolate;
+  z-index: var(--z-overlay);
   transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
 }
 
