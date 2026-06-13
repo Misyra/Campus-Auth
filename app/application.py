@@ -16,7 +16,7 @@ mimetypes.add_type("application/javascript", ".mjs")
 
 from loguru import logger
 
-from app.constants import FRONTEND_DIR, LOGS_DIR, PROJECT_ROOT, TEMP_DIR
+from app.constants import DEBUG_DIR, FRONTEND_DIR, LOGS_DIR, PROJECT_ROOT, SCREENSHOTS_DIR, TEMP_DIR
 from app.utils.logging import LogConfigCenter, get_logger
 from app.utils.ports import resolve_port
 
@@ -51,6 +51,79 @@ def _cleanup_temp_screenshots() -> None:
         startup_logger.warning("清理 temp 截图失败: {}", exc)
 
 
+def _cleanup_old_screenshots() -> None:
+    """启动时清理非当天的截图子目录。"""
+    try:
+        if not SCREENSHOTS_DIR.exists():
+            return
+        from datetime import datetime
+        import shutil
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        removed = 0
+        for d in SCREENSHOTS_DIR.iterdir():
+            if d.is_dir() and d.name != today:
+                shutil.rmtree(d, ignore_errors=True)
+                removed += 1
+        if removed:
+            startup_logger.info("启动时清理旧截图: 删除 {} 个日期目录", removed)
+    except Exception as exc:
+        startup_logger.warning("清理旧截图失败: {}", exc)
+
+
+def _migrate_old_logs() -> None:
+    """启动时将旧 logs/ 目录内容迁移到 debug/。"""
+    import shutil
+
+    old_logs_dir = PROJECT_ROOT / "logs"
+    if not old_logs_dir.exists():
+        return
+
+    try:
+        migrated_logs = 0
+        migrated_screenshots = 0
+
+        for date_dir in old_logs_dir.iterdir():
+            if not date_dir.is_dir():
+                continue
+            date_name = date_dir.name  # YYYY-MM-DD
+
+            # 迁移日志文件
+            for f in date_dir.iterdir():
+                if f.is_file() and (
+                    f.name == "app.log" or f.name.startswith("app.log.")
+                ):
+                    dest = LOGS_DIR / f.name
+                    if not dest.exists():
+                        shutil.move(str(f), str(dest))
+                        migrated_logs += 1
+
+            # 迁移截图
+            screenshots_dir = date_dir / "screenshots"
+            if screenshots_dir.is_dir():
+                dest = SCREENSHOTS_DIR / date_name
+                if not dest.exists():
+                    shutil.move(str(screenshots_dir), str(dest))
+                    migrated_screenshots += 1
+
+        # 清理空目录
+        for date_dir in old_logs_dir.iterdir():
+            if date_dir.is_dir():
+                with contextlib.suppress(OSError):
+                    date_dir.rmdir()
+        with contextlib.suppress(OSError):
+            old_logs_dir.rmdir()
+
+        if migrated_logs or migrated_screenshots:
+            startup_logger.info(
+                "旧日志迁移完成: {} 个日志文件, {} 个截图目录",
+                migrated_logs,
+                migrated_screenshots,
+            )
+    except Exception as exc:
+        startup_logger.warning("旧日志迁移失败: {}", exc)
+
+
 _access_log_event = threading.Event()  # 默认未 set（即关闭）
 
 # 模块级占位符，run() 调用后设为实际 FastAPI 实例
@@ -75,7 +148,6 @@ def create_app(existing_container=None):
 
     from app.api import (
         autostart,
-        backup,
         config,
         debug,
         history,
@@ -280,7 +352,6 @@ def create_app(existing_container=None):
     _app.include_router(tasks.router)
     _app.include_router(profiles.router)
     _app.include_router(debug.router)
-    _app.include_router(backup.router)
     _app.include_router(repo.router)
     _app.include_router(system.router)
     _app.include_router(autostart.router)

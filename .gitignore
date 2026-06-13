@@ -94,6 +94,7 @@ docs/superpowers/
 logo.png
 cat.svg
 development/
+dev/
 
 # Release staging artifacts
 release/stage-win/

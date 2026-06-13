@@ -27,8 +27,6 @@ class ServiceContainer:
         self.project_root = project_root
         self._temp_dir = project_root / "temp"
         self._logs_dir = project_root / "logs"
-        self._backup_dir = project_root / "backups"
-        self._backup_dir.mkdir(parents=True, exist_ok=True)
         self._is_lightweight = mode == "lightweight"
 
         # 基础服务

@@ -1,4 +1,4 @@
-"""日志文件查看路由 — 按日期/级别查看历史日志文件。"""
+"""日志文件查看路由 — 查看历史日志文件。"""
 
 from __future__ import annotations
 
@@ -16,9 +16,11 @@ from app.utils.logging import VALID_LOG_LEVELS, VALID_SOURCES
 
 router = APIRouter()
 
-# 安全校验：只允许 app.log 和 app.log.N（N=1,2,3,...）
-_SAFE_FILE_PATTERN = re.compile(r"^app\.log(?:\.\d+)?$")
-_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# 文件名校验：当前日志 + loguru 归档格式
+_SAFE_FILE_PATTERN = re.compile(r"^app\.log$")
+_ARCHIVE_PATTERN = re.compile(
+    r"^app\.(\d{4}-\d{2}-\d{2})_\d{2}-\d{2}-\d{2}(?:_\d+)?(?:\.\d+)?\.log$"
+)
 
 # 日志行解析正则
 # 格式: [2026-06-01 00:04:44][INFO][source][name] message
@@ -47,25 +49,20 @@ class LogLine(BaseModel):
 
 
 class LogFileContent(BaseModel):
-    date: str
     file: str
     total_lines: int
     returned_lines: int
     lines: list[LogLine]
 
 
-def _validate_date(date: str) -> None:
-    """校验日期格式 YYYY-MM-DD。"""
-    try:
-        datetime.strptime(date, "%Y-%m-%d")
-    except ValueError as err:
-        raise HTTPException(400, "日期格式无效，须为 YYYY-MM-DD") from err
-
-
 def _validate_filename(filename: str) -> None:
     """校验文件名安全性。"""
-    if not _SAFE_FILE_PATTERN.match(filename):
-        raise HTTPException(400, "文件名无效，仅允许 app.log 和 app.log.N")
+    if not filename:
+        raise HTTPException(400, "文件名不能为空")
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(400, "文件名包含非法字符")
+    if not (_SAFE_FILE_PATTERN.match(filename) or _ARCHIVE_PATTERN.match(filename)):
+        raise HTTPException(400, "文件名无效，仅允许 app.log 和 loguru 归档格式")
 
 
 def _parse_log_line(raw: str) -> LogLine:
@@ -165,37 +162,39 @@ def scan_file(
 
 @router.get("/api/logfiles/list", response_model=list[LogFileGroup])
 def list_log_files() -> list[LogFileGroup]:
-    """列出所有日志文件，按日期分组（最新在前）。"""
+    """列出所有日志文件，按日期分组（从文件名提取日期）。"""
     if not LOGS_DIR.exists():
         return []
 
-    groups: list[LogFileGroup] = []
+    groups: dict[str, list[LogFileInfo]] = {}
 
-    for item in sorted(LOGS_DIR.iterdir(), reverse=True):
-        if not item.is_dir() or not _DATE_PATTERN.match(item.name):
+    for f in sorted(LOGS_DIR.iterdir()):
+        if not f.is_file():
             continue
-        files: list[LogFileInfo] = []
-        for f in sorted(item.iterdir()):
-            if f.is_file() and _SAFE_FILE_PATTERN.match(f.name):
-                stat = f.stat()
-                files.append(
-                    LogFileInfo(
-                        name=f.name,
-                        size=stat.st_size,
-                        modified=datetime.fromtimestamp(stat.st_mtime).strftime(
-                            "%Y-%m-%d %H:%M:%S"
-                        ),
-                    )
-                )
-        if files:
-            groups.append(LogFileGroup(date=item.name, files=files))
+        # 当前日志文件归入其修改日期
+        if f.name == "app.log":
+            date = datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d")
+        # 归档文件从文件名提取日期
+        elif m := _ARCHIVE_PATTERN.match(f.name):
+            date = m.group(1)
+        else:
+            continue
+        stat = f.stat()
+        groups.setdefault(date, []).append(
+            LogFileInfo(
+                name=f.name,
+                size=stat.st_size,
+                modified=datetime.fromtimestamp(stat.st_mtime).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
+            )
+        )
 
-    return groups
+    return [LogFileGroup(date=d, files=files) for d in sorted(groups, reverse=True)]
 
 
 @router.get("/api/logfiles/content", response_model=LogFileContent)
 def get_log_file_content(
-    date: str = Query(..., description="日期 YYYY-MM-DD"),
     file: str = Query(default="app.log", description="文件名"),
     level: str = Query(default="", description="级别过滤"),
     source: str = Query(default="", description="来源过滤"),
@@ -203,14 +202,11 @@ def get_log_file_content(
     limit: int = Query(default=2000, ge=1, le=10000),
 ) -> LogFileContent:
     """获取日志文件内容，支持按级别过滤和关键词搜索。"""
-    _validate_date(date)
     _validate_filename(file)
 
-    date_dir = LOGS_DIR / date
-    filepath = date_dir / file
-
-    if not date_dir.is_dir() or not filepath.exists():
-        raise HTTPException(404, f"日志文件不存在: {date}/{file}")
+    filepath = LOGS_DIR / file
+    if not filepath.exists():
+        raise HTTPException(404, f"日志文件不存在: {file}")
 
     # 判断是否为搜索模式
     is_search_mode = bool(search or level or source)
@@ -225,7 +221,6 @@ def get_log_file_content(
         total = len(parsed)
 
     return LogFileContent(
-        date=date,
         file=file,
         total_lines=total,
         returned_lines=len(parsed),

@@ -32,7 +32,6 @@ def client(tmp_path):
     (tmp_path / "frontend" / "index.html").write_text("<html></html>")
     (tmp_path / "logs").mkdir(exist_ok=True)
     (tmp_path / "temp").mkdir(exist_ok=True)
-    (tmp_path / "backups").mkdir(exist_ok=True)
     (tmp_path / "tasks" / "browser").mkdir(parents=True)
     (tmp_path / "tasks" / "scripts").mkdir(parents=True)
     (tmp_path / "tools").mkdir(exist_ok=True)
@@ -72,7 +71,6 @@ def client(tmp_path):
         patch("app.constants.FRONTEND_DIR", tmp_path / "frontend"),
         patch("app.constants.LOGS_DIR", tmp_path / "logs"),
         patch("app.constants.TEMP_DIR", tmp_path / "temp"),
-        patch("app.constants.BACKUP_DIR", tmp_path / "backups"),
     ):
         from app.application import create_app
 

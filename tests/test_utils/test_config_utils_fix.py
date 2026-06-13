@@ -31,8 +31,8 @@ def test_profile_fields_contains_expected_fields():
         "username",
         "password",
         "auth_url",
-        "active_task",
         "carrier",
+        "carrier_custom",
         "check_interval_seconds",
         "headless",
     ]

@@ -4,7 +4,6 @@
 - get_logger(name, source) — 获取绑定 name 和 source 的 logger
 - LogConfigCenter — 单例配置中心，支持运行时热更新日志级别
 - DashboardSink — 自定义 sink，维护内存环形缓冲区 + WebSocket 广播队列
-- DateRotatingSink — 自定义 sink，按日期目录存储日志
 """
 
 from __future__ import annotations
@@ -12,13 +11,10 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
-import re
 import sys
 import threading
-import time
 from collections import deque
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -173,168 +169,6 @@ class DashboardSink:
             return list(self.buffer)[-limit:]
 
 
-# ==================== 自定义 sink: 按日期目录存储 ====================
-
-
-class DateRotatingSink:
-    """按日期自动切换的日志 sink — 当前日志写入 {log_dir}/YYYY-MM-DD/app.log。
-
-    功能：
-    - 按日期自动创建子目录
-    - 文件超过大小上限时轮转（app.log → app.log.1 → app.log.2 ...）
-    - 定期清理超过保留天数的日期目录
-    """
-
-    def __init__(
-        self,
-        log_dir: str,
-        retention_days: int = 7,
-        file_max_bytes: int = 5 * 1024 * 1024,
-        file_backup_count: int = 3,
-    ):
-        self._log_dir = log_dir
-        self._retention = retention_days
-        self._current_date: str | None = None
-        self._last_cleanup: float = 0
-        self._stream = None
-        self._emit_lock = threading.Lock()
-        self._file_max_bytes = file_max_bytes
-        self._file_backup_count = file_backup_count
-        self._bytes_written: int = 0
-        # 获取配置中心实例
-        self._config_center = LogConfigCenter.get_instance()
-
-    def _get_log_path(self) -> tuple[str, str]:
-        """返回 (日期目录路径, 日志文件路径)"""
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        date_dir = os.path.join(self._log_dir, date_str)
-        return date_dir, os.path.join(date_dir, "app.log")
-
-    def _open_file(self, path: str) -> None:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        # 先打开新流，成功后再关闭旧流，避免 open() 失败时丢失日志流
-        new_stream = open(path, "a", encoding="utf-8", buffering=1)
-        if self._stream:
-            try:
-                self._stream.close()
-            except Exception:
-                import sys
-
-                print("[logging] 关闭旧日志流失败", file=sys.stderr)
-        self._stream = new_stream
-        self._bytes_written = 0
-        if os.path.exists(path):
-            self._bytes_written = os.path.getsize(path)
-
-    def write(self, message):
-        """loguru sink 接口 — 接收格式化后的消息。"""
-        record = message.record
-        source = record["extra"].get("source", "backend")
-        level = record["level"].name
-
-        # 根据 source 级别过滤
-        if not self._config_center.should_emit(source, level):
-            return
-
-        needs_cleanup = False
-        cleanup_cutoff = 0.0
-
-        with self._emit_lock:
-            try:
-                today = datetime.now().strftime("%Y-%m-%d")
-                if today != self._current_date or self._stream is None:
-                    if today != self._current_date:
-                        self._current_date = today
-                    _, path = self._get_log_path()
-                    self._open_file(path)
-
-                # 每小时运行一次过期日期目录清理（标记后在锁外执行）
-                now = time.time()
-                if now - self._last_cleanup > 3600:
-                    self._last_cleanup = now
-                    needs_cleanup = True
-                    cleanup_cutoff = now - self._retention * 86400
-
-                if self._stream is not None:
-                    text = str(message).rstrip("\n") + "\n"
-                    self._stream.write(text)
-                    self._bytes_written += len(text.encode("utf-8"))
-                    if self._bytes_written >= self._file_max_bytes:
-                        self._rotate_file()
-            except Exception as exc:
-                # 不能用 logger — 本方法是 loguru sink，调用 logger 会触发自身导致无限递归
-                print(f"[LOG ERROR] 写入日志文件失败: {exc}", file=sys.stderr)
-
-        # 锁外执行清理（不影响日志写入性能）
-        if needs_cleanup:
-            self._cleanup_old_dirs(cleanup_cutoff)
-
-    def _rotate_file(self) -> None:
-        """当日志文件超过大小上限时，滚动备份并重新打开"""
-        try:
-            if self._stream:
-                self._stream.close()
-                self._stream = None
-
-            _, path = self._get_log_path()
-
-            # 从大到小遍历，将 app.log.N-1 -> app.log.N
-            for i in range(self._file_backup_count - 1, 0, -1):
-                src = f"{path}.{i}"
-                dst = f"{path}.{i + 1}"
-                if os.path.exists(src):
-                    os.replace(src, dst)
-
-            # 将 app.log -> app.log.1
-            if os.path.exists(path):
-                os.replace(path, f"{path}.1")
-
-            self._stream = open(path, "a", encoding="utf-8", buffering=1)
-            self._bytes_written = 0
-        except Exception as exc:
-            # 不能用 logger — 本方法由 write() 调用，同属 sink 内部，调用 logger 会无限递归
-            print(f"[LOG ERROR] 日志轮转失败: {exc}", file=sys.stderr)
-
-    def _cleanup_old_dirs(self, cutoff: float) -> None:
-        """清理超过保留天数的日期目录中的日志文件（保留截图等其他文件）"""
-        base = Path(self._log_dir)
-        if not base.exists():
-            return
-        for d in base.iterdir():
-            if not d.is_dir() or not re.match(r"^\d{4}-\d{2}-\d{2}$", d.name):
-                continue
-            try:
-                if d.stat().st_mtime < cutoff:
-                    # 只删除已知日志文件，保留截图等其他文件
-                    for f in d.iterdir():
-                        if f.is_file() and (
-                            f.name == "app.log" or f.name.startswith("app.log.")
-                        ):
-                            f.unlink(missing_ok=True)
-                    # 目录为空则删除
-                    with contextlib.suppress(OSError):
-                        d.rmdir()
-            except OSError as exc:
-                # 不能用 logger — 本方法由 write() 调用，同属 sink 内部
-                print(
-                    f"[LOG ERROR] 清理过期日志目录失败: {d.name}: {exc}",
-                    file=sys.stderr,
-                )
-
-    def close(self) -> None:
-        """关闭文件流。"""
-        with self._emit_lock:
-            try:
-                if self._stream:
-                    self._stream.close()
-                    self._stream = None
-            except Exception:
-                # 不能用 logger — 本方法由 write() 调用，同属 sink 内部，调用 logger 会无限递归
-                import sys
-
-                print("[logging] 关闭日志流失败", file=sys.stderr)
-
-
 # ==================== 日志配置中心 ====================
 
 
@@ -420,23 +254,21 @@ class LogConfigCenter:
         return self._configured
 
     def add_file_handler(self, log_dir: str, retention_days: int = 7) -> None:
-        """添加按日期存储的日志 sink（始终记录全部级别）"""
-        # 如果已有文件 sink，先移除
+        """添加按日期存储的日志 sink（loguru 原生轮转）"""
         if self._file_sink_id is not None:
             with contextlib.suppress(ValueError):
                 logger.remove(self._file_sink_id)
             self._file_sink_id = None
 
         try:
-            file_sink = DateRotatingSink(
-                log_dir=log_dir,
-                retention_days=retention_days,
-                file_max_bytes=self._config.get("file_max_bytes", 5 * 1024 * 1024),
-                file_backup_count=self._config.get("file_backup_count", 3),
-            )
+            log_path = os.path.join(log_dir, "app.log")
+            os.makedirs(log_dir, exist_ok=True)
 
             self._file_sink_id = logger.add(
-                file_sink.write,
+                log_path,
+                rotation="00:00",
+                retention=f"{retention_days} days",
+                encoding="utf-8",
                 format=_file_format,
                 level="DEBUG",
                 filter=lambda record: record["extra"].get("source") != "frontend",
