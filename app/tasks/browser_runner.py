@@ -290,27 +290,6 @@ class TaskExecutor:
         self._step_results.append(result)
         return result
 
-    async def execute_remaining(self, page, from_index: int) -> dict[str, Any]:
-        """从指定索引开始执行所有步骤（调试模式）"""
-        from_index = max(0, from_index)
-        results = []
-        for i in range(from_index, len(self.config.steps)):
-            result = await self.execute_step_at(page, i)
-            results.append(result)
-            if not result["success"]:
-                return {
-                    "results": results,
-                    "all_success": False,
-                    "stopped_at": i,
-                    "message": f"步骤 {i + 1} 失败: {result['message']}",
-                }
-        return {
-            "results": results,
-            "all_success": True,
-            "stopped_at": len(self.config.steps) - 1,
-            "message": "所有步骤执行完成",
-        }
-
     async def _check_success(self, _page) -> bool:
         if self.monitor_config:
             return await self._network_detection_check()
