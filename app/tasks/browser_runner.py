@@ -408,7 +408,8 @@ class TaskExecutor:
         return False, message
 
     async def _capture_screenshot(self, page) -> str | None:
-        """捕获截图 → 指定目录或 logs/{date}/screenshots/ 目录"""
+        """捕获截图 → 指定目录或 debug/screenshots/{date}/ 目录"""
+        from app.constants import SCREENSHOTS_DIR
         from app.utils.files import save_screenshot
 
         try:
@@ -417,8 +418,8 @@ class TaskExecutor:
                 url_prefix = "/temp"
             else:
                 date_str = datetime.now().strftime("%Y-%m-%d")
-                out_dir = PROJECT_ROOT / "logs" / date_str / "screenshots"
-                url_prefix = f"/logs/{date_str}/screenshots"
+                out_dir = SCREENSHOTS_DIR / date_str
+                url_prefix = f"/debug/screenshots/{date_str}"
 
             task_id = self.config.task_id or self.config.name or "unknown"
             local_path = await asyncio.wait_for(

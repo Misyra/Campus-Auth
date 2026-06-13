@@ -21,7 +21,7 @@ from app.schemas import (
     ProfileSettings,
     SystemSettings,
 )
-from app.services.config_service import (
+from app.services.runtime_config import (
     _decrypt_password_field,
     _normalize_targets,
     _safe_decrypt,
@@ -339,8 +339,6 @@ class TestAuthUrlValidator:
     def test_profile_settings_same_validator(self):
         p = ProfileSettings(auth_url="http://10.0.0.1")
         assert p.auth_url == "http://10.0.0.1"
-        with pytest.raises(ValidationError, match="http"):
-            ProfileSettings(auth_url="invalid")
 
 
 # ---------------------------------------------------------------------
@@ -544,9 +542,8 @@ class TestProfileSettingsDefaults:
         p = ProfileSettings()
         assert p.name == "默认方案"
         assert p.use_global_credentials is True
-        assert p.headless is True
-        assert p.check_interval_seconds == 300
-        assert p.pause_enabled is True
+        assert p.use_global_auth_url is True
+        assert p.use_global_task is True
 
     def test_custom_name(self):
         p = ProfileSettings(name="自定义方案")
@@ -555,12 +552,10 @@ class TestProfileSettingsDefaults:
     def test_use_global_flags(self):
         p = ProfileSettings(
             use_global_credentials=False,
-            use_global_advanced=False,
             use_global_auth_url=False,
             use_global_task=False,
         )
         assert p.use_global_credentials is False
-        assert p.use_global_advanced is False
         assert p.use_global_auth_url is False
         assert p.use_global_task is False
 
@@ -784,7 +779,7 @@ class TestDecryptPasswordField:
         from unittest.mock import patch
 
         with patch(
-            "app.services.config_service.decrypt_password", return_value="secret"
+            "app.services.runtime_config.decrypt_password", return_value="secret"
         ):
             result, has_error = _decrypt_password_field("ENC:encrypted")
             assert result == "secret"
@@ -795,7 +790,7 @@ class TestDecryptPasswordField:
         from unittest.mock import patch
 
         with patch(
-            "app.services.config_service.decrypt_password", return_value="fallback"
+            "app.services.runtime_config.decrypt_password", return_value="fallback"
         ):
             result, has_error = _decrypt_password_field(
                 "••••••••", "ENC:fallback_encrypted"

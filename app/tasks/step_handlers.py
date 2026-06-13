@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from app.constants import LOGS_DIR
+from app.constants import SCREENSHOTS_DIR
 from app.utils.logging import get_logger
 
 from .models import PROJECT_ROOT, StepConfig, StepError, StepType
@@ -567,7 +567,7 @@ class EvalHandler(StepHandler):
 
 
 class ScreenshotHandler(StepHandler):
-    """截图处理器 — 运行时截图存入 logs/{date}/screenshots/ 目录"""
+    """截图处理器 — 运行时截图存入 debug/screenshots/{date}/ 目录"""
 
     @property
     def step_type(self) -> str:
@@ -582,7 +582,7 @@ class ScreenshotHandler(StepHandler):
         path = params.get("path", "")
 
         date_str = datetime.now().strftime("%Y-%m-%d")
-        date_dir = LOGS_DIR / date_str / "screenshots"
+        date_dir = SCREENSHOTS_DIR / date_str
         date_dir.mkdir(parents=True, exist_ok=True)
 
         if not path:
@@ -600,7 +600,7 @@ class ScreenshotHandler(StepHandler):
         if result:
             # 转为可访问的 URL
             filename = Path(result).name
-            url = f"/logs/{date_str}/screenshots/{filename}"
+            url = f"/debug/screenshots/{date_str}/{filename}"
             logger.debug("[screenshot] path={}", url)
             return True, url
         return False, "截图失败"

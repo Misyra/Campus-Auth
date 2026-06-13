@@ -581,11 +581,8 @@ class ScheduleEngine:
         """从 settings.json 重新加载 UI 和运行时配置。"""
         import copy
 
-        from .config_service import (
-            build_runtime_config,
-            load_runtime_config,
-            load_ui_config,
-        )
+        from .config_service import build_runtime_config
+        from .runtime_config import load_runtime_config, load_ui_config
 
         with self._reload_lock:
             data = self._profile_service.load()

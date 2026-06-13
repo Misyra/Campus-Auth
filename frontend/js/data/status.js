@@ -28,10 +28,8 @@ export function statusData() {
       detect: false,
       editorDetect: false,
       debug: false,
-      backup: false,
       uninstall: false,
       ocr: false,
     },
-    backups: [],
   };
 }

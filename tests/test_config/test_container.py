@@ -73,10 +73,6 @@ class TestInit:
         """__init__ 应保存 project_root。"""
         assert container.project_root == project_root
 
-    def test_backup_dir_created(self, container, project_root):
-        """__init__ 应创建 backups 目录。"""
-        assert (project_root / "backups").is_dir()
-
     def test_temp_dir_path(self, container, project_root):
         """temp_dir 路径应为 project_root / temp。"""
         assert container._temp_dir == project_root / "temp"

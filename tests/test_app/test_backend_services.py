@@ -20,12 +20,8 @@ from app.schemas import (
     ProfileSettings,
     SystemSettings,
 )
-from app.services.config_service import (
-    build_runtime_config,
-    load_runtime_config,
-    load_ui_config,
-    save_config_combined,
-)
+from app.services.config_service import build_runtime_config, save_config_combined
+from app.services.runtime_config import load_runtime_config, load_ui_config
 from app.services.debug_session import (
     DebugSession,
     _next_debug_gen,
@@ -247,25 +243,37 @@ class TestTaskService:
 class TestLoadUiConfig:
     @pytest.fixture
     def profile_service(self, tmp_path):
-        data = ProfilesData(
-            system=SystemSettings(
-                username="admin",
-                password="ENC:test",
-                auth_url="http://10.0.0.1",
-                carrier="移动",
-                backend_log_level="INFO",
-                frontend_log_level="DEBUG",
-            ),
-            profiles={
-                "default": ProfileSettings(
-                    name="默认方案",
-                    network_targets="8.8.8.8:53",
-                ),
+        # 创建目录结构
+        config_dir = tmp_path / "config"
+        profiles_dir = config_dir / "profiles"
+        profiles_dir.mkdir(parents=True)
+
+        # 写入 settings.json
+        settings_data = {
+            "auto_switch": False,
+            "active_profile": "default",
+            "system": {
+                "username": "admin",
+                "password": "ENC:test",
+                "auth_url": "http://10.0.0.1",
+                "carrier": "移动",
+                "backend_log_level": "INFO",
+                "frontend_log_level": "DEBUG",
             },
+        }
+        (config_dir / "settings.json").write_text(
+            json.dumps(settings_data, ensure_ascii=False), encoding="utf-8"
         )
-        (tmp_path / "settings.json").write_text(
-            data.model_dump_json(indent=2), encoding="utf-8"
+
+        # 写入方案文件
+        default_profile = ProfileSettings(
+            name="默认方案",
+            network_targets="8.8.8.8:53",
         )
+        (profiles_dir / "default.json").write_text(
+            default_profile.model_dump_json(indent=2), encoding="utf-8"
+        )
+
         return ProfileService(tmp_path)
 
     def test_returns_payload(self, profile_service):
@@ -302,28 +310,42 @@ class TestLoadUiConfig:
 class TestLoadRuntimeConfig:
     @pytest.fixture
     def profile_service(self, tmp_path):
-        data = ProfilesData(
-            system=SystemSettings(
-                username="global_user",
-                password="ENC:global_pass",
-                auth_url="http://global.url",
-            ),
-            profiles={
-                "default": ProfileSettings(name="默认"),
-                "campus": ProfileSettings(
-                    name="校园",
-                    use_global_credentials=False,
-                    username="campus_user",
-                    password="ENC:campus_pass",
-                    use_global_auth_url=False,
-                    auth_url="http://campus.url",
-                ),
+        # 创建目录结构
+        config_dir = tmp_path / "config"
+        profiles_dir = config_dir / "profiles"
+        profiles_dir.mkdir(parents=True)
+
+        # 写入 settings.json
+        settings_data = {
+            "auto_switch": False,
+            "active_profile": "campus",
+            "system": {
+                "username": "global_user",
+                "password": "ENC:global_pass",
+                "auth_url": "http://global.url",
             },
-            active_profile="campus",
+        }
+        (config_dir / "settings.json").write_text(
+            json.dumps(settings_data, ensure_ascii=False), encoding="utf-8"
         )
-        (tmp_path / "settings.json").write_text(
-            data.model_dump_json(indent=2), encoding="utf-8"
+
+        # 写入方案文件
+        default_profile = ProfileSettings(name="默认")
+        (profiles_dir / "default.json").write_text(
+            default_profile.model_dump_json(indent=2), encoding="utf-8"
         )
+        campus_profile = ProfileSettings(
+            name="校园",
+            use_global_credentials=False,
+            username="campus_user",
+            password="ENC:campus_pass",
+            use_global_auth_url=False,
+            auth_url="http://campus.url",
+        )
+        (profiles_dir / "campus.json").write_text(
+            campus_profile.model_dump_json(indent=2), encoding="utf-8"
+        )
+
         return ProfileService(tmp_path)
 
     def test_returns_payload(self, profile_service):
@@ -438,15 +460,30 @@ class TestBuildRuntimeConfig:
 class TestSaveConfigCombined:
     @pytest.fixture
     def profile_service(self, tmp_path):
-        data = ProfilesData(
-            system=SystemSettings(username="old_user", password="ENC:old"),
-            profiles={
-                "default": ProfileSettings(name="默认"),
+        # 创建目录结构
+        config_dir = tmp_path / "config"
+        profiles_dir = config_dir / "profiles"
+        profiles_dir.mkdir(parents=True)
+
+        # 写入 settings.json
+        settings_data = {
+            "auto_switch": False,
+            "active_profile": "default",
+            "system": {
+                "username": "old_user",
+                "password": "ENC:old",
             },
+        }
+        (config_dir / "settings.json").write_text(
+            json.dumps(settings_data, ensure_ascii=False), encoding="utf-8"
         )
-        (tmp_path / "settings.json").write_text(
-            data.model_dump_json(indent=2), encoding="utf-8"
+
+        # 写入方案文件
+        default_profile = ProfileSettings(name="默认")
+        (profiles_dir / "default.json").write_text(
+            default_profile.model_dump_json(indent=2), encoding="utf-8"
         )
+
         return ProfileService(tmp_path)
 
     def test_saves_username(self, profile_service):
@@ -487,8 +524,8 @@ class TestSaveConfigCombined:
         save_config_combined(payload, profile_service)
         data = profile_service.load()
         default = data.profiles["default"]
-        assert default.check_interval_seconds == 600
-        assert default.headless is False
+        # ProfileSettings 不再有这些字段，只验证保存成功
+        assert default.name == "默认"
 
 
 # =====================================================================
@@ -503,22 +540,36 @@ class TestProfileService:
 
     @pytest.fixture
     def service_with_profiles(self, tmp_path):
-        data = ProfilesData(
-            auto_switch=False,
-            active_profile="default",
-            system=SystemSettings(username="admin", password="ENC:test"),
-            profiles={
-                "default": ProfileSettings(name="默认方案"),
-                "campus": ProfileSettings(
-                    name="校园方案",
-                    auth_url="http://10.0.0.1",
-                    match_gateway_ip="10.0.0.1",
-                    match_ssid="CampusWiFi",
-                ),
-            },
+        # 创建目录结构
+        config_dir = tmp_path / "config"
+        profiles_dir = config_dir / "profiles"
+        profiles_dir.mkdir(parents=True)
+
+        # 写入 settings.json
+        settings_data = {
+            "auto_switch": False,
+            "active_profile": "default",
+            "system": {"username": "admin", "password": "ENC:test"},
+        }
+        (config_dir / "settings.json").write_text(
+            json.dumps(settings_data, ensure_ascii=False), encoding="utf-8"
         )
-        settings_path = tmp_path / "settings.json"
-        settings_path.write_text(data.model_dump_json(indent=2), encoding="utf-8")
+
+        # 写入方案文件
+        default_profile = ProfileSettings(name="默认方案")
+        (profiles_dir / "default.json").write_text(
+            default_profile.model_dump_json(indent=2), encoding="utf-8"
+        )
+        campus_profile = ProfileSettings(
+            name="校园方案",
+            auth_url="http://10.0.0.1",
+            match_gateway_ip="10.0.0.1",
+            match_ssid="CampusWiFi",
+        )
+        (profiles_dir / "campus.json").write_text(
+            campus_profile.model_dump_json(indent=2), encoding="utf-8"
+        )
+
         return ProfileService(tmp_path)
 
     def test_load_creates_default(self, service):
@@ -536,7 +587,8 @@ class TestProfileService:
         data = ProfilesData()
         data.profiles["default"] = ProfileSettings(name="测试")
         service.save(data)
-        assert (tmp_path / "settings.json").exists()
+        assert (tmp_path / "config" / "settings.json").exists()
+        assert (tmp_path / "config" / "profiles" / "default.json").exists()
 
     def test_save_and_load_roundtrip(self, service):
         data = ProfilesData()
@@ -550,13 +602,25 @@ class TestProfileService:
         assert profile.name == "默认方案"
 
     def test_get_active_profile_fallback(self, tmp_path):
-        data = ProfilesData(
-            active_profile="nonexistent",
-            profiles={"other": ProfileSettings(name="其他")},
+        # 创建目录结构
+        config_dir = tmp_path / "config"
+        profiles_dir = config_dir / "profiles"
+        profiles_dir.mkdir(parents=True)
+
+        # 写入 settings.json
+        settings_data = {
+            "active_profile": "nonexistent",
+        }
+        (config_dir / "settings.json").write_text(
+            json.dumps(settings_data, ensure_ascii=False), encoding="utf-8"
         )
-        (tmp_path / "settings.json").write_text(
-            data.model_dump_json(), encoding="utf-8"
+
+        # 写入方案文件
+        other_profile = ProfileSettings(name="其他")
+        (profiles_dir / "other.json").write_text(
+            other_profile.model_dump_json(indent=2), encoding="utf-8"
         )
+
         service = ProfileService(tmp_path)
         profile = service.get_active_profile()
         assert profile.name == "其他"
@@ -623,14 +687,17 @@ class TestProfileService:
         ok, msg = service.delete_profile("nonexistent")
         assert ok is False
 
-    def test_delete_last_profile(self, tmp_path):
-        data = ProfilesData(profiles={"only": ProfileSettings(name="唯一")})
-        (tmp_path / "settings.json").write_text(
-            data.model_dump_json(), encoding="utf-8"
-        )
-        service = ProfileService(tmp_path)
-        ok, msg = service.delete_profile("only")
+    def test_delete_last_profile(self, service_with_profiles):
+        # 删除 campus 方案
+        ok, msg = service_with_profiles.delete_profile("campus")
+        assert ok is True
+
+        # 尝试删除最后一个 default 方案（应该失败，因为至少需要保留一个方案）
+        # 注意：由于 ProfileService 会自动创建 default 方案，所以这里测试的是
+        # 删除 default 方案本身应该失败
+        ok, msg = service_with_profiles.delete_profile("default")
         assert ok is False
+        assert "默认" in msg
 
     def test_delete_active_switches(self, service_with_profiles):
         service_with_profiles.set_active_profile("campus")
@@ -647,13 +714,14 @@ class TestProfileService:
         data = service_with_profiles.load()
         assert len(data.profiles) == 2
         service_with_profiles.invalidate_cache()
-        raw = json.loads(
-            (service_with_profiles._settings_path).read_text(encoding="utf-8")
+
+        # 添加新方案文件
+        new_profile = ProfileSettings(name="新增方案")
+        profile_path = service_with_profiles._profiles_dir / "new_id.json"
+        profile_path.write_text(
+            new_profile.model_dump_json(indent=2), encoding="utf-8"
         )
-        raw["profiles"]["new_id"] = {"name": "新增方案"}
-        service_with_profiles._settings_path.write_text(
-            json.dumps(raw, ensure_ascii=False), encoding="utf-8"
-        )
+
         data = service_with_profiles.load()
         assert "new_id" in data.profiles
 
@@ -669,15 +737,27 @@ class TestProfileService:
             assert result == "campus"
 
     def test_detect_matching_profile_by_ssid(self, tmp_path):
-        data = ProfilesData(
-            profiles={
-                "default": ProfileSettings(name="默认"),
-                "wifi_profile": ProfileSettings(name="WiFi方案", match_ssid="MyWiFi"),
-            }
+        # 创建目录结构
+        config_dir = tmp_path / "config"
+        profiles_dir = config_dir / "profiles"
+        profiles_dir.mkdir(parents=True)
+
+        # 写入 settings.json
+        settings_data = {"active_profile": "default"}
+        (config_dir / "settings.json").write_text(
+            json.dumps(settings_data, ensure_ascii=False), encoding="utf-8"
         )
-        (tmp_path / "settings.json").write_text(
-            data.model_dump_json(), encoding="utf-8"
+
+        # 写入方案文件
+        default_profile = ProfileSettings(name="默认")
+        (profiles_dir / "default.json").write_text(
+            default_profile.model_dump_json(indent=2), encoding="utf-8"
         )
+        wifi_profile = ProfileSettings(name="WiFi方案", match_ssid="MyWiFi")
+        (profiles_dir / "wifi_profile.json").write_text(
+            wifi_profile.model_dump_json(indent=2), encoding="utf-8"
+        )
+
         service = ProfileService(tmp_path)
         with (
             patch("app.services.profile_service.detect_gateway_ip", return_value=None),
@@ -702,17 +782,27 @@ class TestProfileService:
             assert result is None
 
     def test_detect_matching_profile_priority(self, tmp_path):
-        data = ProfilesData(
-            profiles={
-                "gw_match": ProfileSettings(
-                    name="网关方案", match_gateway_ip="10.0.0.1"
-                ),
-                "ssid_match": ProfileSettings(name="SSID方案", match_ssid="MyWiFi"),
-            }
+        # 创建目录结构
+        config_dir = tmp_path / "config"
+        profiles_dir = config_dir / "profiles"
+        profiles_dir.mkdir(parents=True)
+
+        # 写入 settings.json
+        settings_data = {"active_profile": "gw_match"}
+        (config_dir / "settings.json").write_text(
+            json.dumps(settings_data, ensure_ascii=False), encoding="utf-8"
         )
-        (tmp_path / "settings.json").write_text(
-            data.model_dump_json(), encoding="utf-8"
+
+        # 写入方案文件
+        gw_profile = ProfileSettings(name="网关方案", match_gateway_ip="10.0.0.1")
+        (profiles_dir / "gw_match.json").write_text(
+            gw_profile.model_dump_json(indent=2), encoding="utf-8"
         )
+        ssid_profile = ProfileSettings(name="SSID方案", match_ssid="MyWiFi")
+        (profiles_dir / "ssid_match.json").write_text(
+            ssid_profile.model_dump_json(indent=2), encoding="utf-8"
+        )
+
         service = ProfileService(tmp_path)
         with (
             patch(
@@ -740,14 +830,15 @@ class TestProfileService:
         assert loaded.profiles["default"].name == "通过update修改"
 
     def test_update_creates_file_if_missing(self, tmp_path):
-        """update() 在 settings.json 不存在时应创建文件"""
+        """update() 在配置不存在时应创建文件"""
         service = ProfileService(tmp_path)
 
         def modifier(d: ProfilesData):
             d.profiles["new"] = ProfileSettings(name="新建方案")
 
         service.update(modifier)
-        assert (tmp_path / "settings.json").exists()
+        assert (tmp_path / "config" / "settings.json").exists()
+        assert (tmp_path / "config" / "profiles" / "new.json").exists()
         loaded = service.load()
         assert "new" in loaded.profiles
 
@@ -755,7 +846,7 @@ class TestProfileService:
         """update() 不应丢失未修改的字段"""
         data = ProfilesData(
             auto_switch=True,
-            profiles={"default": ProfileSettings(name="默认", headless=False)},
+            profiles={"default": ProfileSettings(name="默认")},
         )
         service.save(data)
 
@@ -765,7 +856,7 @@ class TestProfileService:
         service.update(modifier)
         loaded = service.load()
         assert loaded.auto_switch is True
-        assert loaded.profiles["default"].headless is False
+        assert loaded.profiles["default"].name == "默认"
         assert loaded.system.username == "admin"
 
 
@@ -1201,26 +1292,38 @@ class TestCorruptRenameEAFP:
 
     def test_corrupt_rename_eafp(self, tmp_path):
         """测试文件不存在时 rename 抛出 FileNotFoundError 被静默处理。"""
-        settings_path = tmp_path / "settings.json"
+        config_dir = tmp_path / "config"
+        profiles_dir = config_dir / "profiles"
+        profiles_dir.mkdir(parents=True)
+
+        settings_path = config_dir / "settings.json"
         settings_path.write_text("{invalid json!!!", encoding="utf-8")
 
         svc = ProfileService.__new__(ProfileService)
         svc.project_root = tmp_path
+        svc._config_dir = config_dir
         svc._settings_path = settings_path
+        svc._profiles_dir = profiles_dir
         svc._lock = MagicMock()
         svc._data = None
 
         result = svc._load_unsafe()
 
         assert result is not None
-        corrupt_files = list(tmp_path.glob("settings.corrupt.*.json"))
+        corrupt_files = list(config_dir.glob("settings.corrupt.*.json"))
         assert len(corrupt_files) == 1, "损坏文件应被重命名为 settings.corrupt.*.json"
 
     def test_corrupt_rename_file_missing(self, tmp_path):
         """测试文件在读取和重命名之间被删除时，FileNotFoundError 被静默处理。"""
+        config_dir = tmp_path / "config"
+        profiles_dir = config_dir / "profiles"
+        profiles_dir.mkdir(parents=True)
+
         svc = ProfileService.__new__(ProfileService)
         svc.project_root = tmp_path
-        svc._settings_path = tmp_path / "settings.json"
+        svc._config_dir = config_dir
+        svc._settings_path = config_dir / "settings.json"
+        svc._profiles_dir = profiles_dir
         svc._lock = MagicMock()
         svc._data = None
 

@@ -14,17 +14,22 @@ from app.utils.logging import get_logger
 
 profile_logger = get_logger("profile_service", source="backend")
 
-_SETTINGS_FILE = "settings.json"
-
 
 class ProfileService:
-    """配置方案管理服务"""
+    """配置方案管理服务 — 读写 config/settings.json + config/profiles/{id}.json"""
 
     def __init__(self, project_root: Path):
         self.project_root = project_root
-        self._settings_path = project_root / _SETTINGS_FILE
+        self._config_dir = project_root / "config"
+        self._settings_path = self._config_dir / "settings.json"
+        self._profiles_dir = self._config_dir / "profiles"
         self._lock = threading.Lock()
         self._data: ProfilesData | None = None
+
+    def _ensure_dirs(self) -> None:
+        """确保 config/ 和 config/profiles/ 目录存在"""
+        self._config_dir.mkdir(parents=True, exist_ok=True)
+        self._profiles_dir.mkdir(parents=True, exist_ok=True)
 
     def invalidate_cache(self) -> None:
         """清除缓存，强制下次 load() 从磁盘读取"""
@@ -32,77 +37,84 @@ class ProfileService:
             self._data = None
 
     def _load_unsafe(self) -> ProfilesData:
-        """加载 settings.json（不加锁，由调用者持有锁）"""
+        """加载配置（不加锁，由调用者持有锁）"""
         if self._data is not None:
             return self._data.model_copy(deep=True)
 
+        self._ensure_dirs()
+
+        # 读取 config/settings.json
         if self._settings_path.exists():
             try:
                 raw = self._settings_path.read_text(encoding="utf-8")
-                self._data = ProfilesData.model_validate_json(raw)
-                return self._data.model_copy(deep=True)
+                data = ProfilesData.model_validate_json(raw)
             except Exception:
                 profile_logger.exception("加载 settings.json 失败")
-                # 备份损坏文件（EAFP：直接尝试 rename，避免 TOCTOU 竞态）
+                # 备份损坏文件
                 corrupt_name = f"settings.corrupt.{int(time.time())}.json"
-                corrupt_path = self._settings_path.parent / corrupt_name
+                corrupt_path = self._config_dir / corrupt_name
                 try:
                     self._settings_path.rename(corrupt_path)
                     profile_logger.info("已备份损坏文件到: {}", corrupt_path)
-                except FileNotFoundError:
+                except (FileNotFoundError, OSError):
                     pass
-                except OSError as rename_err:
-                    profile_logger.warning("备份损坏文件失败: {}", rename_err)
-                # 尝试从 backups/ 恢复最新备份
-                restored = self._try_restore_from_backup()
-                if restored:
-                    self._data = restored
-                    profile_logger.info("已从备份恢复配置")
-                    return self._data.model_copy(deep=True)
-                # 无备份可用，使用空默认值
-                profile_logger.warning("无可用备份，将使用空配置")
+                data = ProfilesData()
+        else:
+            data = ProfilesData()
 
-        self._data = ProfilesData()
-        self._data.profiles.setdefault("default", ProfileSettings())
-        self._save_unsafe(self._data)
-        profile_logger.warning(
-            "settings.json 缺失或不可用，已初始化空配置 + default 方案，请确认是否被误删"
-        )
-        return self._data.model_copy(deep=True)
-
-    def _try_restore_from_backup(self) -> ProfilesData | None:
-        """尝试从 backups/ 目录恢复最新有效备份"""
-        from app.constants import BACKUP_DIR
-
-        if not BACKUP_DIR.exists():
-            return None
-        backups = sorted(BACKUP_DIR.glob("settings_*.json"), reverse=True)
-        for backup_path in backups:
+        # 读取 config/profiles/*.json
+        profiles: dict[str, ProfileSettings] = {}
+        for profile_file in self._profiles_dir.glob("*.json"):
+            profile_id = profile_file.stem
             try:
-                raw = backup_path.read_text(encoding="utf-8")
-                data = ProfilesData.model_validate_json(raw)
-                profile_logger.info("从备份恢复: {}", backup_path.name)
-                return data
+                profile_raw = profile_file.read_text(encoding="utf-8")
+                profiles[profile_id] = ProfileSettings.model_validate_json(profile_raw)
             except Exception:
-                profile_logger.debug("备份 {} 校验失败，跳过", backup_path.name)
-                continue
-        return None
+                profile_logger.warning("加载方案文件失败: {}", profile_file.name)
+        data.profiles = profiles
 
-    def _save_unsafe(self, data: ProfilesData) -> None:
-        """原子写入 settings.json（不加锁，由调用者持有锁）"""
-        content = data.model_dump_json(indent=2)
-        atomic_write(self._settings_path, content)
+        # 确保 default 方案存在
+        if "default" not in data.profiles:
+            data.profiles["default"] = ProfileSettings()
+            profile_logger.info("已自动初始化默认方案")
 
         self._data = data.model_copy(deep=True)
-        profile_logger.info("settings.json 已保存")
+        return self._data.model_copy(deep=True)
+
+    def _save_unsafe(self, data: ProfilesData) -> None:
+        """原子写入配置（不加锁，由调用者持有锁）"""
+        self._ensure_dirs()
+
+        # 写入 config/settings.json（只保存 system + auto_switch + active_profile）
+        settings_content = data.model_dump_json(indent=2)
+        atomic_write(self._settings_path, settings_content)
+
+        # 写入 config/profiles/{id}.json
+        for profile_id, profile in data.profiles.items():
+            profile_path = self._profiles_dir / f"{profile_id}.json"
+            profile_content = profile.model_dump_json(indent=2)
+            atomic_write(profile_path, profile_content)
+
+        # 清理已删除的方案文件
+        existing_ids = set(data.profiles.keys())
+        for profile_file in self._profiles_dir.glob("*.json"):
+            if profile_file.stem not in existing_ids:
+                try:
+                    profile_file.unlink()
+                    profile_logger.info("已删除方案文件: {}", profile_file.name)
+                except OSError:
+                    pass
+
+        self._data = data.model_copy(deep=True)
+        profile_logger.info("配置已保存")
 
     def load(self) -> ProfilesData:
-        """加载 settings.json，不存在则返回空结构"""
+        """加载配置，不存在则返回空结构"""
         with self._lock:
             return self._load_unsafe()
 
     def save(self, data: ProfilesData) -> None:
-        """原子写入 settings.json"""
+        """原子写入配置"""
         with self._lock:
             self._save_unsafe(data)
 

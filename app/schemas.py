@@ -332,11 +332,8 @@ class AutoStartStatusResponse(BaseModel):
     lightweight: bool = True
 
 
-class ProfileSettings(
-    _BrowserFieldsMixin,
-    _MonitorFieldsMixin,
-):
-    """Profile-specific non-sensitive settings stored in settings.json"""
+class ProfileSettings(BaseModel):
+    """方案配置 — 只存储凭证相关字段，高级设置跟随全局。"""
 
     name: str = Field(default="默认方案")
     match_gateway_ip: str = Field(
@@ -347,13 +344,13 @@ class ProfileSettings(
     password: str = Field(
         default="", description="方案独立密码（加密存储），留空则使用全局密码"
     )
+    carrier: str = Field(default="无", description="方案独立运营商，留空则使用全局")
+    carrier_custom: str = Field(default="", description="自定义运营商关键字")
+    active_task: str = Field(default="", description="方案独立任务，留空则使用全局任务")
+    auth_url: str = Field(default="", description="方案独立认证地址，留空则使用全局")
     use_global_credentials: bool = Field(
         default=True,
-        description="是否使用全局账号密码（true 时忽略 username/password）",
-    )
-    use_global_advanced: bool = Field(
-        default=True,
-        description="是否使用全局高级设置（true 时忽略以下高级字段，使用系统设置中的值）",
+        description="是否使用全局账号密码（true 时忽略 username/password/carrier）",
     )
     use_global_auth_url: bool = Field(
         default=True,

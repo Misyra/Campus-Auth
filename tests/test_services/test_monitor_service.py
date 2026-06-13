@@ -24,10 +24,10 @@ def _make_monitor_service() -> ScheduleEngine:
     with (
         patch("app.services.config_service.build_runtime_config", return_value={}),
         patch(
-            "app.services.config_service.load_runtime_config",
+            "app.services.runtime_config.load_runtime_config",
             return_value=(MagicMock(), False),
         ),
-        patch("app.services.config_service.load_ui_config") as mock_load_ui,
+        patch("app.services.runtime_config.load_ui_config") as mock_load_ui,
         patch("app.services.engine.ProfileService") as mock_ps_cls,
     ):
         mock_ps = MagicMock()
@@ -185,10 +185,10 @@ class TestListLogs:
 
     @patch("app.services.config_service.build_runtime_config", return_value={})
     @patch(
-        "app.services.config_service.load_runtime_config",
+        "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
     )
-    @patch("app.services.config_service.load_ui_config")
+    @patch("app.services.runtime_config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     def test_list_logs_returns_all_when_limit_exceeds(
         self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
@@ -289,10 +289,10 @@ class TestUpdateStatusSnapshot:
 class TestStartStopMonitoring:
     @patch("app.services.config_service.build_runtime_config", return_value={})
     @patch(
-        "app.services.config_service.load_runtime_config",
+        "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
     )
-    @patch("app.services.config_service.load_ui_config")
+    @patch("app.services.runtime_config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     @patch(
         "app.services.engine.ConfigValidator.validate_env_config",
@@ -368,10 +368,10 @@ class TestHandleStartStop:
 class TestHandleLogin:
     @patch("app.services.config_service.build_runtime_config", return_value={})
     @patch(
-        "app.services.config_service.load_runtime_config",
+        "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
     )
-    @patch("app.services.config_service.load_ui_config")
+    @patch("app.services.runtime_config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     def test_handle_login_submits_async(
         self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
@@ -432,10 +432,10 @@ class TestRunManualLogin:
 class TestNetwork:
     @patch("app.services.config_service.build_runtime_config", return_value={})
     @patch(
-        "app.services.config_service.load_runtime_config",
+        "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
     )
-    @patch("app.services.config_service.load_ui_config")
+    @patch("app.services.runtime_config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     @patch("app.services.engine.is_network_available", return_value=True)
     def test_network_ok(
@@ -455,10 +455,10 @@ class TestNetwork:
 
     @patch("app.services.config_service.build_runtime_config", return_value={})
     @patch(
-        "app.services.config_service.load_runtime_config",
+        "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
     )
-    @patch("app.services.config_service.load_ui_config")
+    @patch("app.services.runtime_config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     @patch("app.services.engine.is_network_available", return_value=False)
     def test_network_fail(
@@ -478,10 +478,10 @@ class TestNetwork:
 
     @patch("app.services.config_service.build_runtime_config", return_value={})
     @patch(
-        "app.services.config_service.load_runtime_config",
+        "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
     )
-    @patch("app.services.config_service.load_ui_config")
+    @patch("app.services.runtime_config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     @patch(
         "app.services.engine.is_network_available", side_effect=RuntimeError("timeout")
@@ -510,10 +510,10 @@ class TestNetwork:
 class TestTogglePureMode:
     @patch("app.services.config_service.build_runtime_config", return_value={})
     @patch(
-        "app.services.config_service.load_runtime_config",
+        "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
     )
-    @patch("app.services.config_service.load_ui_config")
+    @patch("app.services.runtime_config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     def test_toggle_pure_mode(
         self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
@@ -536,10 +536,10 @@ class TestTogglePureMode:
 
     @patch("app.services.config_service.build_runtime_config", return_value={})
     @patch(
-        "app.services.config_service.load_runtime_config",
+        "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
     )
-    @patch("app.services.config_service.load_ui_config")
+    @patch("app.services.runtime_config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     def test_pure_mode_read_write_thread_safe(
         self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
@@ -612,10 +612,10 @@ class TestGetConfig:
         return_value={"key": "value"},
     )
     @patch(
-        "app.services.config_service.load_runtime_config",
+        "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
     )
-    @patch("app.services.config_service.load_ui_config")
+    @patch("app.services.runtime_config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     def test_get_runtime_config(
         self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build

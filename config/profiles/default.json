@@ -1,0 +1,14 @@
+{
+  "name": "默认方案",
+  "match_gateway_ip": "",
+  "match_ssid": "",
+  "username": "",
+  "password": "",
+  "carrier": "无",
+  "carrier_custom": "",
+  "active_task": "",
+  "auth_url": "",
+  "use_global_credentials": true,
+  "use_global_auth_url": true,
+  "use_global_task": true
+}
