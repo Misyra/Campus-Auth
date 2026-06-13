@@ -184,8 +184,6 @@ class LogConfigCenter:
 
     DEFAULT_CONFIG = {
         "level": "INFO",
-        "file_max_bytes": 5 * 1024 * 1024,
-        "file_backup_count": 3,
     }
 
     def __new__(cls):
