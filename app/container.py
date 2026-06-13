@@ -147,8 +147,10 @@ class ServiceContainer:
         if self._log_handler_id is not None:
             from loguru import logger as _loguru_logger
 
-            with contextlib.suppress(Exception):
+            try:
                 _loguru_logger.remove(self._log_handler_id)
+            except Exception as exc:
+                container_logger.debug("移除日志处理器失败: {}", exc)
             self._log_handler_id = None
 
         if self._ws_drain_task:
@@ -170,8 +172,10 @@ class ServiceContainer:
         if self._log_handler_id is not None:
             from loguru import logger as _loguru_logger
 
-            with contextlib.suppress(Exception):
+            try:
                 _loguru_logger.remove(self._log_handler_id)
+            except Exception as exc:
+                container_logger.debug("移除日志处理器失败: {}", exc)
             self._log_handler_id = None
 
         if self._ws_drain_task:
@@ -197,11 +201,8 @@ class ServiceContainer:
 
         try:
             if self._temp_dir.exists():
-                for item in self._temp_dir.iterdir():
-                    if item.is_file():
-                        item.unlink(missing_ok=True)
-                    elif item.is_dir():
-                        shutil.rmtree(item, ignore_errors=True)
+                shutil.rmtree(self._temp_dir, ignore_errors=True)
+                self._temp_dir.mkdir(parents=True, exist_ok=True)
         except Exception:
             container_logger.warning("临时目录清理失败", exc_info=True)
 
