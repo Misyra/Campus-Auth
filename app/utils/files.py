@@ -19,11 +19,8 @@ def atomic_write(
 ) -> None:
     """原子写入文件：先写临时文件，再 os.replace 原子替换目标路径。
 
+    临时文件始终在目标文件所在目录创建，确保 os.replace 在同一文件系统内操作。
     创建父目录（如果不存在），失败时清理临时文件。
-
-    注意：当临时文件与目标路径不在同一文件系统时，os.replace 会抛出
-    PermissionError 或 OSError，此时调用方应自行处理回退逻辑。因此本函数
-    不保证在所有场景下都是原子的。
 
     Args:
         path: 目标文件路径
@@ -39,7 +36,7 @@ def atomic_write(
         os.makedirs(parent, exist_ok=True)
 
     tmp_fd, tmp_path = tempfile.mkstemp(
-        dir=parent or None, prefix=prefix, suffix=suffix
+        dir=parent or ".", prefix=prefix, suffix=suffix
     )
     try:
         with os.fdopen(tmp_fd, "w", encoding=encoding, errors=errors) as f:

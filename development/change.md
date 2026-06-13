@@ -3,6 +3,35 @@
 本文档记录项目的所有变更，包括文档更新、代码修改、配置调整等。
 
 
+## 2026-06-13
+
+### fix: 修复 atomic_write 跨文件系统问题
+
+修复 `app/utils/files.py` 中 `atomic_write` 的跨文件系统问题：
+
+- **问题：** 当目标路径为相对路径（如 `"file.txt"`）时，`parent` 为空字符串，`parent or None` 回退到 `None`，导致 `tempfile.mkstemp` 在系统临时目录创建临时文件。`os.replace` 跨文件系统操作会抛出 `OSError`（Windows 上为 `WinError 17`）。
+- **修复：** `parent or None` 改为 `parent or "."`，确保临时文件始终在目标文件所在目录创建，保证 `os.replace` 在同一文件系统内操作。
+- **附带：** 更新 docstring，移除不再适用的跨文件系统警告。
+
+**新增测试文件：** `tests/test_utils/test_files_fix.py`（2 个测试用例）
+**测试结果：** 2 passed，全量 1636 passed（4 个既有失败与本次修改无关）
+
+### fix: 修复 shell_policy.py 进程返回值错误和超时配置不一致
+
+修复 `app/utils/shell_policy.py` 中的两个问题：
+
+1. **Bug 1：进程返回值错误**（第 152 行）
+   - `proc.returncode or 0` 改为 `proc.returncode if proc.returncode is not None else -1`
+   - 当 `proc.returncode` 为 `None` 时（异常状态），原代码错误返回 0（成功），现在返回 -1
+   - 负返回码（如 -9 SIGKILL）不再被 `or 0` 吞掉
+
+2. **Bug 2：超时配置不一致**
+   - `_MAX_TIMEOUT` 常量为 3600，但 docstring 多处写的是 300
+   - 修复 5 处 docstring：类文档、`__init__`、`_clamp_timeout`、`run`、`run_sync`
+
+**新增测试文件：** `tests/test_utils/test_shell_policy_fix.py`（9 个测试用例）
+**测试结果：** 9 passed，全量 1632 passed（4 个既有失败与本次修改无关）
+
 ## 2026-06-12
 
 ### refactor: 启动逻辑收敛 — RuntimeMode→AutostartMode + LOGIN_ONCE 失败分类 + 启动摘要
