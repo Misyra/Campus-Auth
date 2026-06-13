@@ -5,6 +5,26 @@
 
 ## 2026-06-13
 
+### fix: 修复 config_utils.py 中 PROFILE_FIELDS 常量类型问题
+
+修复 `app/utils/config_utils.py` 中 `PROFILE_FIELDS` 常量的类型问题：
+
+- **问题：** `PROFILE_FIELDS` 定义为 `list[str]`，但作为常量不应在运行时被修改，list 是可变类型。
+- **修复：** 将类型注解从 `list[str]` 改为 `tuple[str, ...]`，方括号 `[]` 改为圆括号 `()`，确保常量的不可变性。
+
+**新增测试文件：** `tests/test_utils/test_config_utils_fix.py`（5 个测试用例）
+**测试结果：** 5 passed，全量 1650 passed（4 个既有失败与本次修改无关）
+
+### fix: 修复 notify.py 中 PowerShell 转义不完整问题
+
+修复 `app/utils/notify.py` 中 `_escape_ps` 函数的转义不完整问题：
+
+- **问题：** PowerShell 双引号上下文中需要转义的特殊字符缺少换行符（`\n`）和回车符（`\r`），当通知消息包含这些字符时会导致 PowerShell 脚本语法错误。
+- **修复：** 在 `_escape_ps` 函数中添加 `.replace("\n", "`n").replace("\r", "`r")` 转义处理。
+
+**新增测试文件：** `tests/test_utils/test_notify_fix.py`（9 个测试用例）
+**测试结果：** 9 passed
+
 ### fix: 修复 atomic_write 跨文件系统问题
 
 修复 `app/utils/files.py` 中 `atomic_write` 的跨文件系统问题：
