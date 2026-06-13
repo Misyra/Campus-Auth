@@ -25,7 +25,7 @@ _MAX_TIMEOUT = 3600
 class ShellCommandPolicy:
     """统一 shell 命令执行的安全策略:
     - 执行路径白名单（从外部传入的 allowlist 验证）
-    - timeout 上限 clamp（1, 300）
+    - timeout 上限 clamp（1, 3600）
     - 执行前 audit log
     """
 
@@ -39,7 +39,7 @@ class ShellCommandPolicy:
 
         Args:
             allowlist: 允许的执行路径列表（绝对路径）
-            default_timeout: 默认超时时间（秒），会被 clamp 到 [1, 300]
+            default_timeout: 默认超时时间（秒），会被 clamp 到 [1, 3600]
             audit_hook: 可选的审计钩子，执行前调用 (argv, timeout)
         """
         # 统一转为小写路径比较（Windows 路径不区分大小写）
@@ -51,7 +51,7 @@ class ShellCommandPolicy:
 
     @staticmethod
     def _clamp_timeout(timeout: int) -> int:
-        """将超时限制在 [1, 300] 范围内。"""
+        """将超时限制在 [1, 3600] 范围内。"""
         return max(_MIN_TIMEOUT, min(timeout, _MAX_TIMEOUT))
 
     def _is_allowed(self, path: str) -> bool:
@@ -105,7 +105,7 @@ class ShellCommandPolicy:
 
         Args:
             argv: 完整命令参数列表，第一个元素为执行路径
-            timeout: 超时时间（秒），会被 clamp 到 [1, 300]
+            timeout: 超时时间（秒），会被 clamp 到 [1, 3600]
             **kwargs: 传递给 asyncio.create_subprocess_exec 的额外参数
 
         Returns:
@@ -149,7 +149,7 @@ class ShellCommandPolicy:
         stdout_str = stdout.decode("utf-8", errors="replace").strip() if stdout else ""
         stderr_str = stderr.decode("utf-8", errors="replace").strip() if stderr else ""
 
-        return proc.returncode or 0, stdout_str, stderr_str
+        return proc.returncode if proc.returncode is not None else -1, stdout_str, stderr_str
 
     def run_sync(
         self,
@@ -162,7 +162,7 @@ class ShellCommandPolicy:
 
         Args:
             argv: 完整命令参数列表，第一个元素为执行路径
-            timeout: 超时时间（秒），会被 clamp 到 [1, 300]
+            timeout: 超时时间（秒），会被 clamp 到 [1, 3600]
             **kwargs: 传递给 subprocess.run 的额外参数
 
         Returns:
