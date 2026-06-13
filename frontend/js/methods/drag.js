@@ -78,10 +78,6 @@ export const dragMethods = {
     }
   },
 
-  onDragLeave(e) {
-    // 不需要处理
-  },
-
   onDrop(e, index, listName) {
     e.preventDefault();
     if (!_dragState || _dragState.listName !== listName) return;

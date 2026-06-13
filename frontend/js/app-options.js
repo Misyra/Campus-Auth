@@ -296,7 +296,7 @@ export const appOptions = {
     },
     currentPage(newPage) {
       if (this._dangerResolve) {
-        this._releaseFocusTrap();
+        this.closeModal();
         this._dangerResolve(false);
         this._dangerResolve = null;
         this.dangerConfirm = null;

@@ -204,6 +204,7 @@
   flex-shrink: 0;
 }
 
+/* 紧凑版：设置页面内的任务概览（字号更小） */
 .task-overview-left .task-overview-name {
   font-size: 14px;
   font-weight: 600;
@@ -332,6 +333,8 @@
   align-items: center;
   justify-content: flex-start;
   gap: 10px;
+  position: relative;
+  z-index: 1;
 }
 
 .toggle.toggle-help-inline {

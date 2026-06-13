@@ -25,16 +25,16 @@ export function getBinaryName(path) {
 
 /**
  * 包装 API 调用，统一处理错误 toast。
- * 需要通过 .call(this, ...) 调用以绑定 Vue 实例上下文。
+ * @param {Object} vm - Vue 实例（用于调用 toastOnly）
  * @param {Function} fn - 异步 API 调用函数
  * @param {string} fallbackMsg - 失败时的默认消息
  * @returns {Promise<any>} 成功时返回 fn 的结果（axios response），失败时返回 null
  */
-export async function safeApiCall(fn, fallbackMsg = '操作失败') {
+export async function safeApiCall(vm, fn, fallbackMsg = '操作失败') {
   try {
     return await fn();
   } catch (error) {
-    this.toastOnly(false, extractApiError(error, fallbackMsg));
+    vm.toastOnly(false, extractApiError(error, fallbackMsg));
     return null;
   }
 }

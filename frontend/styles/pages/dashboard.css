@@ -164,6 +164,15 @@
   border-radius: 2px;
 }
 
+.history-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.history-list::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.15);
+  border-radius: 2px;
+}
+
 .log-entries {
   padding: 12px;
 }
@@ -248,15 +257,6 @@
   gap: 6px;
   max-height: 400px;
   overflow-y: auto;
-}
-
-.history-list::-webkit-scrollbar {
-  width: 4px;
-}
-
-.history-list::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.15);
-  border-radius: 2px;
 }
 
 .history-item {

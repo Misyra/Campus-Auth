@@ -228,7 +228,7 @@
 <!-- 弹窗放在页面外部，确保从设置页也能触发 -->
 <!-- 危险步骤确认弹窗 -->
   <div v-if="dangerConfirm" class="danger-overlay" @click.self="confirmDanger(false)">
-    <div class="danger-modal">
+    <div class="danger-modal" role="dialog" aria-modal="true" aria-label="危险步骤确认">
       <div class="danger-modal-header">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:28px;height:28px;color:var(--error);flex-shrink:0;">
           <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
@@ -261,7 +261,7 @@
 
   <!-- 调试模式面板 -->
   <div v-if="debugSession.running" class="debug-overlay">
-    <div class="debug-panel">
+    <div class="debug-panel" role="dialog" aria-modal="true" aria-label="调试模式">
       <div class="debug-header">
         <h3>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-lg" style="color:var(--accent);">
@@ -313,7 +313,7 @@
 
   <!-- 仓库导入弹窗 -->
   <div v-if="repoImport.visible" class="repo-overlay" @click.self="closeRepoImport">
-    <div class="repo-modal">
+    <div class="repo-modal" role="dialog" aria-modal="true" aria-label="远程任务仓库">
       <div class="repo-modal-header">
         <div>
           <h3>
@@ -409,7 +409,7 @@
 
   <!-- 仓库导入免责声明弹窗 -->
   <div v-if="repoImport.disclaimer" class="repo-overlay" style="z-index:210;" @click.self="cancelRepoDisclaimer">
-    <div class="repo-disclaimer-modal">
+    <div class="repo-disclaimer-modal" role="dialog" aria-modal="true" aria-label="远程任务免责声明">
       <div class="repo-disclaimer-header">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:28px;height:28px;color:var(--warning);flex-shrink:0;">
           <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>

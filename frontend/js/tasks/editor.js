@@ -74,7 +74,7 @@ export const editorTaskMethods = {
     }
   },
   _cancelDangerConfirm(reason) {
-    this._releaseFocusTrap();
+    this.closeModal();
     if (this._dangerTimer) {
       clearInterval(this._dangerTimer);
       this._dangerTimer = null;
@@ -94,10 +94,7 @@ export const editorTaskMethods = {
       this._dangerResolve = resolve;
       this.dangerConfirm = { dangers };
       this.dangerCountdown = 3;
-      this.$nextTick(() => {
-        const overlay = document.querySelector('.danger-overlay');
-        if (overlay) this._trapFocus(overlay);
-      });
+      this.openModal('.danger-overlay');
       const timer = setInterval(() => {
         this.dangerCountdown--;
         if (this.dangerCountdown <= 0) {
@@ -108,7 +105,7 @@ export const editorTaskMethods = {
     });
   },
   confirmDanger(allow) {
-    this._releaseFocusTrap();
+    this.closeModal();
     if (this._dangerTimer) {
       clearInterval(this._dangerTimer);
       this._dangerTimer = null;
@@ -125,14 +122,15 @@ export const editorTaskMethods = {
       const { data } = await this.$api.get(`/api/tasks/${taskId}`);
       const baseId = taskId.replace(/_copy(_\d+)?$/, '');
       const existingIds = new Set((this.tasks || []).map(t => t.id));
+      const baseName = data.name.replace(/\s*\(副本\)(\s*\d+)?$/, '');
       let newId = baseId + '_copy';
+      let suffix = ' (副本)';
       let counter = 2;
       while (existingIds.has(newId)) {
         newId = baseId + '_copy_' + counter;
+        suffix = ` (副本${counter})`;
         counter++;
       }
-      const baseName = data.name.replace(/\s*\(副本\)(\s*\d+)?$/, '');
-      const suffix = counter > 2 ? ` (副本${counter - 1})` : ' (副本)';
       this.editingTask = {
         id: newId,
         name: baseName + suffix,
@@ -148,7 +146,7 @@ export const editorTaskMethods = {
     }
   },
   async exportTask(taskId) {
-    const resp = await safeApiCall.call(this, () => this.$api.get(`/api/tasks/${taskId}`), '导出失败');
+    const resp = await safeApiCall(this, () => this.$api.get(`/api/tasks/${taskId}`), '导出失败');
     if (!resp) return;
     downloadBlob(JSON.stringify(resp.data, null, 2), `${taskId}.json`, 'application/json');
     this.frontendLogger.info('tasks', '任务已导出');
@@ -236,14 +234,11 @@ export const editorTaskMethods = {
   showRepoImport() {
     this.repoImport.visible = true;
     this._resetRepoImport();
-    this.$nextTick(() => {
-      const overlay = document.querySelector('.repo-overlay');
-      if (overlay) this._trapFocus(overlay);
-    });
+    this.openModal('.repo-overlay');
   },
 
   closeRepoImport() {
-    this._releaseFocusTrap();
+    this.closeModal();
     this.repoImport.visible = false;
     this._resetRepoImport();
   },
@@ -282,10 +277,7 @@ export const editorTaskMethods = {
     }
     this.repoImport.disclaimer = task;
     this.repoImport.disclaimerCountdown = 3;
-    this.$nextTick(() => {
-      const modal = document.querySelector('.repo-disclaimer-modal');
-      if (modal) this._trapFocus(modal);
-    });
+    this.openModal('.repo-disclaimer-modal');
     const timer = setInterval(() => {
       this.repoImport.disclaimerCountdown--;
       if (this.repoImport.disclaimerCountdown <= 0) {
@@ -297,7 +289,7 @@ export const editorTaskMethods = {
   },
 
   cancelRepoDisclaimer() {
-    this._releaseFocusTrap();
+    this.closeModal();
     if (this._repoDisclaimerTimer) {
       clearInterval(this._repoDisclaimerTimer);
       this._repoDisclaimerTimer = null;
@@ -307,7 +299,7 @@ export const editorTaskMethods = {
   },
 
   async acceptRepoDisclaimer() {
-    this._releaseFocusTrap();
+    this.closeModal();
     if (this._repoDisclaimerTimer) {
       clearInterval(this._repoDisclaimerTimer);
       this._repoDisclaimerTimer = null;

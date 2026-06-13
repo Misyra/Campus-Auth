@@ -32,6 +32,48 @@ export const uiMethods = {
       this._focusTrapHandler = null;
     }
   },
+  // 统一弹窗管理：打开弹窗时自动设置焦点陷阱
+  // @param {string} overlaySelector - 弹窗遮罩层的 CSS 选择器
+  openModal(overlaySelector) {
+    this.$nextTick(() => {
+      const overlay = document.querySelector(overlaySelector);
+      if (overlay) this._trapFocus(overlay);
+    });
+  },
+  // 统一弹窗管理：关闭弹窗时自动释放焦点陷阱
+  closeModal() {
+    this._releaseFocusTrap();
+  },
+  _showToast(success, message) {
+    if (!container) return;
+    const focusable = container.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusable.length) focusable[0].focus();
+    this._focusTrapHandler = (e) => {
+      if (e.key === 'Escape') {
+        this._releaseFocusTrap();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', this._focusTrapHandler);
+  },
+  _releaseFocusTrap() {
+    if (this._focusTrapHandler) {
+      document.removeEventListener('keydown', this._focusTrapHandler);
+      this._focusTrapHandler = null;
+    }
+  },
   _showToast(success, message) {
     this.toast = { success, message, leaving: false };
     if (this._toastTimer) clearTimeout(this._toastTimer);
