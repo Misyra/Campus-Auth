@@ -17,7 +17,7 @@ from app.utils.logging import get_logger
 # 配置文件中跨 load_ui_config / load_runtime_config / build_runtime_config /
 # save_config_combined 四函数重复出现的所有字段名
 # 源自 MonitorConfigPayload / ProfileSettings 交集
-PROFILE_FIELDS: list[str] = [  # 常量，不应在运行时修改
+PROFILE_FIELDS: tuple[str, ...] = (  # 常量，不应在运行时修改
     "username",
     "password",
     "auth_url",
@@ -68,7 +68,7 @@ PROFILE_FIELDS: list[str] = [  # 常量，不应在运行时修改
     "browser_viewport_width",
     "browser_viewport_height",
     "browser_navigation_timeout",
-]
+)
 
 
 # ── 字段提取 / 赋值 ──────────────────────────────────────────────────
