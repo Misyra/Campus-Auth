@@ -474,7 +474,28 @@
 }
 
 .profiles-empty svg {
+  width: 48px;
+  height: 48px;
+  opacity: 0.3;
   margin-bottom: var(--space-md);
+}
+
+.profiles-empty-title {
+  display: block;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.profiles-empty-desc {
+  display: block;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: var(--space-md);
+}
+
+/* 独立账号区域 */
+.profile-credentials-section {
+  margin-top: 8px;
 }
 
 .profiles-empty p {

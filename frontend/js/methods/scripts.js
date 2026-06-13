@@ -268,7 +268,7 @@ print(f"HTTP {resp.status_code}")
   _inferScriptExtension(binaryPath, content) {
     if (binaryPath) {
       const base = binaryPath.split(/[/\\]/).pop().toLowerCase();
-      if (base.startsWith('python') || base === 'py' || base.endsWith('.exe') && base.includes('python')) return '.py';
+      if (base.startsWith('python') || base === 'py' || (base.endsWith('.exe') && base.includes('python'))) return '.py';
       if (base === 'bash' || base === 'sh' || base === 'zsh') return '.sh';
       if (base === 'cmd' || base === 'cmd.exe' || base === 'bat') return '.bat';
       if (base === 'powershell' || base === 'pwsh') return '.ps1';

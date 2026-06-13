@@ -1,4 +1,4 @@
-import { LOG_SOURCES } from '../constants.js';
+import { LOG_SOURCES, LIMITS } from '../constants.js';
 
 // 日志文件查看器方法
 export const logFileMethods = {
@@ -33,7 +33,7 @@ export const logFileMethods = {
     try {
       const params = {
         file: this.logViewer.file,
-        limit: 5000,
+        limit: LIMITS.LOG_FILE_FETCH_LIMIT,
       };
       if (this.logViewer.level) params.level = this.logViewer.level;
       if (this.logViewer.source) params.source = this.logViewer.source;

@@ -125,7 +125,7 @@ export const appOptions = {
         scripts: '自定义脚本',
         scheduled_tasks: '定时任务',
         profiles: '配置方案',
-        'profile-edit': this.editingProfile?.id ? '编辑方案' : '新建方案',
+        'profile-edit': this.editingProfile?.id ? '编辑配置方案' : '新建配置方案',
         appearance: '外观设置',
         logs: '日志查看器',
         about: '关于',

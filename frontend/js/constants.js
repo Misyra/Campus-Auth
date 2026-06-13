@@ -42,6 +42,7 @@ export const TIMING = {
 
 export const LIMITS = {
   LOG_MAX_ENTRIES: 100,           // 前端日志最大条数
+  LOG_FILE_FETCH_LIMIT: 5000,    // 日志文件内容获取条数
   FILE_UPLOAD_MAX: 5 * 1024 * 1024, // 文件上传最大大小（5MB）
   SCROLL_BOTTOM_THRESHOLD: 50,    // 判断滚动到底部的阈值（px）
 };
@@ -124,7 +125,7 @@ export const DEFAULT_CONFIG = {
 export const SETTINGS_TABS = [
   { id: 'account', label: '账号设置', hint: '账号、密码与认证地址' },
   { id: 'monitor', label: '网络与监控', hint: '检测策略、重试与代理' },
-  { id: 'system', label: '系统与日志', hint: '日志、自启动与配置备份' },
+  { id: 'system', label: '系统与日志', hint: '日志、自启动与启动行为' },
   { id: 'browser', label: '浏览器设置', hint: '请求头、图片与浏览器参数' },
   { id: 'tasks', label: '任务设置', hint: '活动任务与模板入口' },
 ];
