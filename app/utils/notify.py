@@ -38,9 +38,9 @@ def send_notification(title: str, message: str, duration_ms: int = 5000) -> bool
 def _notify_windows(title: str, message: str, duration_ms: int) -> bool:
     """Windows: 使用 PowerShell Toast 通知"""
 
-    # PowerShell 双引号上下文中需要转义: `, ", $
+    # PowerShell 双引号上下文中需要转义: `, ", $, \n, \r
     def _escape_ps(s: str) -> str:
-        return s.replace("`", "``").replace('"', '`"').replace("$", "`$")
+        return s.replace("`", "``").replace('"', '`"').replace("$", "`$").replace("\n", "`n").replace("\r", "`r")
 
     safe_title = _escape_ps(title)
     safe_msg = _escape_ps(message)
