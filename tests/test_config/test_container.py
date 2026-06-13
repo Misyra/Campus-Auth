@@ -77,10 +77,6 @@ class TestInit:
         """temp_dir 路径应为 project_root / temp。"""
         assert container._temp_dir == project_root / "temp"
 
-    def test_logs_dir_path(self, container, project_root):
-        """logs_dir 路径应为 project_root / logs。"""
-        assert container._logs_dir == project_root / "logs"
-
     def test_ws_drain_task_initially_none(self, container):
         """ws_drain_task 初始应为 None。"""
         assert container._ws_drain_task is None

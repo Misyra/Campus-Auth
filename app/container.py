@@ -11,7 +11,7 @@ from app.services.autostart import AutoStartService
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
 from app.services.profile_service import ProfileService
-from app.services.task_executor import NullTaskExecutor, TaskExecutor
+from app.services.task_executor import TaskExecutor
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
 from app.services.task_service import TaskService
 from app.services.websocket_manager import NullWebSocketManager, WebSocketManager
@@ -26,7 +26,6 @@ class ServiceContainer:
     def __init__(self, project_root: Path, mode: str = "full"):
         self.project_root = project_root
         self._temp_dir = project_root / "temp"
-        self._logs_dir = project_root / "logs"
         self._is_lightweight = mode == "lightweight"
 
         # 基础服务
