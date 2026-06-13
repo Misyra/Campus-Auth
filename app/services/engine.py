@@ -18,7 +18,6 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from app.constants import MONITOR_STOP_TIMEOUT
 from app.network.decision import is_network_available
 from app.schemas import MonitorConfigPayload, MonitorStatusResponse
 from app.services.monitor_service import NetworkMonitorCore
