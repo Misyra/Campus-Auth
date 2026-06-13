@@ -136,12 +136,15 @@ class TestIsNetworkAvailableSocket:
 
 
 class TestIsNetworkAvailableHttp:
+    def _setup_mock_client(self, MockClient, mock_resp):
+        """_get_probe_client() 直接返回 client 实例，不需要 __enter__ 上下文。"""
+        MockClient.return_value.get.return_value = mock_resp
+
     def test_success_200(self):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         with patch("app.network.probes.httpx.Client") as MockClient:
-            instance = MockClient.return_value.__enter__.return_value
-            instance.get.return_value = mock_resp
+            self._setup_mock_client(MockClient, mock_resp)
             result = is_network_available_http(
                 test_urls=["https://www.baidu.com"], timeout=2.0
             )
@@ -151,8 +154,7 @@ class TestIsNetworkAvailableHttp:
         mock_resp = MagicMock()
         mock_resp.status_code = 500
         with patch("app.network.probes.httpx.Client") as MockClient:
-            instance = MockClient.return_value.__enter__.return_value
-            instance.get.return_value = mock_resp
+            self._setup_mock_client(MockClient, mock_resp)
             result = is_network_available_http(
                 test_urls=["https://www.baidu.com"], timeout=2.0
             )
@@ -160,8 +162,7 @@ class TestIsNetworkAvailableHttp:
 
     def test_connection_error(self):
         with patch("app.network.probes.httpx.Client") as MockClient:
-            instance = MockClient.return_value.__enter__.return_value
-            instance.get.side_effect = Exception("connection error")
+            MockClient.return_value.get.side_effect = Exception("connection error")
             result = is_network_available_http(
                 test_urls=["https://www.baidu.com"], timeout=2.0
             )
@@ -172,8 +173,7 @@ class TestIsNetworkAvailableHttp:
         with patch("app.network.probes.httpx.Client") as MockClient:
             mock_resp = MagicMock()
             mock_resp.status_code = 200
-            instance = MockClient.return_value.__enter__.return_value
-            instance.get.return_value = mock_resp
+            self._setup_mock_client(MockClient, mock_resp)
             result = is_network_available_http(test_urls=[], timeout=2.0)
             assert result is True
 
@@ -184,13 +184,16 @@ class TestIsNetworkAvailableHttp:
 
 
 class TestIsNetworkAvailableUrl:
+    def _setup_mock_client(self, MockClient, mock_resp):
+        """_get_probe_client() 直接返回 client 实例，不需要 __enter__ 上下文。"""
+        MockClient.return_value.get.return_value = mock_resp
+
     def test_success_matching_content(self):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.text = "Success"
         with patch("app.network.probes.httpx.Client") as MockClient:
-            instance = MockClient.return_value.__enter__.return_value
-            instance.get.return_value = mock_resp
+            self._setup_mock_client(MockClient, mock_resp)
             result = is_network_available_url(
                 url_checks=[("http://test.com", "Success")], timeout=3.0
             )
@@ -201,8 +204,7 @@ class TestIsNetworkAvailableUrl:
         mock_resp.status_code = 200
         mock_resp.text = "Login Page"
         with patch("app.network.probes.httpx.Client") as MockClient:
-            instance = MockClient.return_value.__enter__.return_value
-            instance.get.return_value = mock_resp
+            self._setup_mock_client(MockClient, mock_resp)
             result = is_network_available_url(
                 url_checks=[("http://test.com", "Success")], timeout=3.0
             )
@@ -214,8 +216,7 @@ class TestIsNetworkAvailableUrl:
 
     def test_connection_error(self):
         with patch("app.network.probes.httpx.Client") as MockClient:
-            instance = MockClient.return_value.__enter__.return_value
-            instance.get.side_effect = Exception("timeout")
+            MockClient.return_value.get.side_effect = Exception("timeout")
             result = is_network_available_url(
                 url_checks=[("http://test.com", "Success")], timeout=3.0
             )
@@ -227,8 +228,7 @@ class TestIsNetworkAvailableUrl:
         mock_resp.status_code = 200
         mock_resp.text = "Success"
         with patch("app.network.probes.httpx.Client") as MockClient:
-            instance = MockClient.return_value.__enter__.return_value
-            instance.get.return_value = mock_resp
+            self._setup_mock_client(MockClient, mock_resp)
             is_network_available_url(
                 url_checks=[("http://test.com", "Success")], timeout=3.0
             )
@@ -442,6 +442,43 @@ class TestIsAuthUrlReachable:
             _is_auth_url_reachable("http://example.com/auth")
             mock_conn.assert_called_once_with(("example.com", 80), timeout=3)
 
+    def test_extra_targets_reachable(self):
+        """extra_targets 中任一目标可达返回 True。"""
+        from app.network.decision import _is_auth_url_reachable
+
+        with patch("app.network.decision.socket.create_connection") as mock_conn:
+            mock_conn.return_value.__enter__ = lambda s: s
+            mock_conn.return_value.__exit__ = lambda s, *a: None
+            assert (
+                _is_auth_url_reachable(
+                    "",
+                    extra_targets=["10.0.0.1:8080", "10.0.0.2:9090"],
+                )
+                is True
+            )
+
+    def test_extra_targets_all_unreachable(self):
+        """extra_targets 全部不可达返回 False。"""
+        from app.network.decision import _is_auth_url_reachable
+
+        with patch(
+            "app.network.decision.socket.create_connection",
+            side_effect=TimeoutError,
+        ):
+            assert (
+                _is_auth_url_reachable(
+                    "",
+                    extra_targets=["10.0.0.1:8080", "10.0.0.2:9090"],
+                )
+                is False
+            )
+
+    def test_extra_targets_empty_skip(self):
+        """extra_targets 解析为空时跳过检测。"""
+        from app.network.decision import _is_auth_url_reachable
+
+        assert _is_auth_url_reachable("http://10.0.0.1/login", extra_targets=[]) is False
+
 
 # =====================================================================
 # network_decision — is_network_available
@@ -487,6 +524,36 @@ class TestIsNetworkAvailable:
             enable_http=False,
         )
         assert result is True
+
+    @patch("app.network.decision.is_network_available_url", return_value=True)
+    def test_url_checks_only(self, *mocks):
+        """仅启用 URL 响应检测。"""
+        result = is_network_available(
+            enable_tcp=False,
+            enable_http=False,
+            url_checks=[("http://test.com", "Success")],
+        )
+        assert result is True
+
+    @patch("app.network.decision.is_network_available_url", return_value=False)
+    def test_url_checks_fail(self, *mocks):
+        """URL 响应检测失败。"""
+        result = is_network_available(
+            enable_tcp=False,
+            enable_http=False,
+            url_checks=[("http://test.com", "Success")],
+        )
+        assert result is False
+
+    @patch("app.network.decision.is_network_available_socket", side_effect=Exception("boom"))
+    def test_future_exception_returns_false(self, *mocks):
+        """future 抛异常时视为检测失败。"""
+        result = is_network_available(
+            test_sites=[("8.8.8.8", 53)],
+            enable_tcp=True,
+            enable_http=False,
+        )
+        assert result is False
 
 
 # =====================================================================

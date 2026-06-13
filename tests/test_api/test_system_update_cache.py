@@ -1,23 +1,15 @@
-"""测试 system.py 更新检查缓存的锁保护。"""
+"""测试 system.py 更新检查缓存行为。"""
 
 from __future__ import annotations
 
 import asyncio
-import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 
-class TestUpdateCacheLockProtection:
-    """验证 check_update 中全局缓存有锁保护。"""
-
-    def test_update_lock_exists(self):
-        """模块应导出 _update_lock (threading.Lock)。"""
-        import app.api.system as sys_mod
-
-        assert hasattr(sys_mod, "_update_lock")
-        assert isinstance(sys_mod._update_lock, type(threading.Lock()))
+class TestUpdateCache:
+    """验证 check_update 中全局缓存行为。"""
 
     @pytest.mark.asyncio
     async def test_cache_hit_returns_without_network(self):

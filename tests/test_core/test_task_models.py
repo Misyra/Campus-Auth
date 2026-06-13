@@ -221,6 +221,20 @@ class TestTaskConfigFromDict:
         assert config.step_delay == 1.0
         assert isinstance(config.step_delay, float)
 
+    def test_non_dict_steps_filtered(self):
+        """非 dict 的 step 被静默过滤。"""
+        data = {
+            "steps": [
+                {"id": "s1", "type": "click", "selector": "#btn"},
+                "not a dict",
+                None,
+                42,
+            ],
+        }
+        config = TaskConfig.from_dict(data)
+        assert len(config.steps) == 1
+        assert config.steps[0].id == "s1"
+
 
 # ── TaskConfig.to_dict ──
 

@@ -165,3 +165,56 @@ class TestValidateStep:
         step = {"id": "s1", "type": "screenshot"}
         errors = TaskValidator._validate_step(step, 0)
         assert errors == []
+
+    def test_timeout_negative_rejected(self):
+        """负数 timeout 触发错误。"""
+        step = {"id": "s1", "type": "click", "selector": "#btn", "timeout": -1}
+        errors = TaskValidator._validate_step(step, 0)
+        assert any("timeout" in e for e in errors)
+
+    def test_timeout_zero_rejected(self):
+        """零 timeout 触发错误。"""
+        step = {"id": "s1", "type": "click", "selector": "#btn", "timeout": 0}
+        errors = TaskValidator._validate_step(step, 0)
+        assert any("timeout" in e for e in errors)
+
+    def test_timeout_non_numeric_rejected(self):
+        """非数值 timeout 触发错误。"""
+        step = {"id": "s1", "type": "click", "selector": "#btn", "timeout": "abc"}
+        errors = TaskValidator._validate_step(step, 0)
+        assert any("timeout" in e for e in errors)
+
+    def test_timeout_float_accepted(self):
+        """浮点数 timeout 被接受。"""
+        step = {"id": "s1", "type": "click", "selector": "#btn", "timeout": 5.0}
+        errors = TaskValidator._validate_step(step, 0)
+        assert errors == []
+
+
+class TestValidateDuplicateIds:
+    """步骤重复 ID 检测。"""
+
+    def test_duplicate_ids_reported(self):
+        """重复步骤 ID 触发错误。"""
+        config = {
+            "name": "test",
+            "steps": [
+                {"id": "s1", "type": "click", "selector": "#a"},
+                {"id": "s1", "type": "click", "selector": "#b"},
+            ],
+        }
+        ok, errors = TaskValidator.validate(config)
+        assert ok is False
+        assert any("重复" in e for e in errors)
+
+    def test_unique_ids_valid(self):
+        """唯一步骤 ID 通过验证。"""
+        config = {
+            "name": "test",
+            "steps": [
+                {"id": "s1", "type": "click", "selector": "#a"},
+                {"id": "s2", "type": "click", "selector": "#b"},
+            ],
+        }
+        ok, errors = TaskValidator.validate(config)
+        assert ok is True
