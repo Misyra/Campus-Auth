@@ -13,7 +13,7 @@ from typing import Any
 from app.constants import DEFAULT_STEP_TIMEOUT_MS, DEFAULT_TASK_TIMEOUT_MS
 from app.utils.logging import get_logger
 
-from .models import PROJECT_ROOT, StepConfig, StepType, TaskConfig
+from .models import StepConfig, StepType, TaskConfig
 from .step_handlers import StepExecutorRegistry
 from .variable_resolver import VariableResolver
 

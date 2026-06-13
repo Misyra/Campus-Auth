@@ -16,7 +16,14 @@ mimetypes.add_type("application/javascript", ".mjs")
 
 from loguru import logger
 
-from app.constants import DEBUG_DIR, FRONTEND_DIR, LOGS_DIR, PROJECT_ROOT, SCREENSHOTS_DIR, TEMP_DIR
+from app.constants import (
+    DEBUG_DIR,
+    FRONTEND_DIR,
+    LOGS_DIR,
+    PROJECT_ROOT,
+    SCREENSHOTS_DIR,
+    TEMP_DIR,
+)
 from app.utils.logging import LogConfigCenter, get_logger
 from app.utils.ports import resolve_port
 
@@ -56,8 +63,8 @@ def _cleanup_old_screenshots() -> None:
     try:
         if not SCREENSHOTS_DIR.exists():
             return
-        from datetime import datetime
         import shutil
+        from datetime import datetime
 
         today = datetime.now().strftime("%Y-%m-%d")
         removed = 0
