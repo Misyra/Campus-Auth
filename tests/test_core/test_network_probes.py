@@ -9,7 +9,6 @@ import socket
 from unittest.mock import MagicMock, patch
 
 from app.network.decision import (
-    check_campus_network_status,
     check_login_prerequisites,
     check_network_status,
     check_pause,
@@ -554,27 +553,3 @@ class TestIsNetworkAvailable:
             enable_http=False,
         )
         assert result is False
-
-
-# =====================================================================
-# network_decision — check_campus_network_status
-# =====================================================================
-
-
-class TestCheckCampusNetworkStatus:
-    @patch("app.network.decision.is_local_network_connected", return_value=False)
-    def test_no_local_network(self, mock_local):
-        result = check_campus_network_status()
-        assert "未检测到" in result
-
-    @patch("app.network.decision.is_network_available", return_value=True)
-    @patch("app.network.decision.is_local_network_connected", return_value=True)
-    def test_fully_connected(self, *mocks):
-        result = check_campus_network_status()
-        assert "可访问互联网" in result
-
-    @patch("app.network.decision.is_network_available", return_value=False)
-    @patch("app.network.decision.is_local_network_connected", return_value=True)
-    def test_connected_but_no_internet(self, *mocks):
-        result = check_campus_network_status()
-        assert "无法访问互联网" in result

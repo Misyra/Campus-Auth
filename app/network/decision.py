@@ -303,18 +303,3 @@ def _is_auth_url_reachable(
 
     logger.info("认证地址不可达")
     return False
-
-
-def check_campus_network_status() -> str:
-    """校园网状态检测（供 API 调用）。"""
-    logger.info("正在检测校园网状态...")
-
-    if not is_local_network_connected():
-        result = "未检测到本地网络连接（未获取到有效IP）"
-    elif is_network_available():
-        result = "已连接校园网并可访问互联网"
-    else:
-        result = "已连接校园网，但无法访问互联网，需要认证"
-
-    logger.info("校园网状态: {}", result)
-    return result
