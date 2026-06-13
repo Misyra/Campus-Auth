@@ -5,6 +5,18 @@
 
 ## 2026-06-13
 
+### fix: 修复 uninstall.py 中的危险删除操作问题
+
+修复 `app/services/uninstall.py` 中 `_remove_user_data()` 的 `shutil.rmtree` 无路径校验问题：
+
+- **问题：** `_remove_user_data()` 直接调用 `shutil.rmtree(USER_DATA_DIR)` 删除目录，没有校验路径是否为预期的用户数据目录。如果 `USER_DATA_DIR` 被意外修改为其他路径，可能导致误删重要文件。
+- **修复：**
+  1. 添加路径名称校验：检查 `USER_DATA_DIR.name` 是否为 `.campus_network_auth`，不匹配则拒绝删除。
+  2. 添加 logger，删除前记录目录路径和文件数量（warning 级别）。
+
+**新增测试文件：** `tests/test_services/test_uninstall_fix.py`（4 个测试用例）
+**测试结果：** 4 passed，全量 1686 passed（4 个既有失败与本次修改无关）
+
 ### fix: 修复 task_executor.py 中的私有属性访问问题
 
 修复 `app/services/task_executor.py` 中 `_get_script_path()` 直接访问 `self._registry._tasks_dir` 私有属性的问题：
