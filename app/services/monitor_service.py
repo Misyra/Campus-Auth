@@ -37,7 +37,6 @@ class NetworkMonitorCore:
     MAX_CONSECUTIVE_LOGIN_FAILURES = 3
 
     # 类常量：网络检测配置
-    NETWORK_CHECK_TIMEOUT_SECONDS = 2
     DEFAULT_PING_TARGETS = DEFAULT_NETWORK_TARGETS.split(",")
 
     # 类常量：自动切换检测冷却
@@ -287,53 +286,9 @@ class NetworkMonitorCore:
             ),
         }
 
-    def update_status_after_login(self, success: bool, message: str = "") -> None:
-        """登录完成后更新监控状态（由引擎调用）。"""
-        if success:
-            self._update_state(
-                login_attempt_count=0,
-                network_state=NetworkState.CONNECTED,
-                status_detail="网络正常",
-            )
-            self.log_message("登录成功，网络已恢复")
-        else:
-            self._update_state(
-                network_state=NetworkState.DISCONNECTED,
-                status_detail="网络异常：登录失败",
-            )
-            self.log_message(f"登录失败: {message}", "WARNING")
-
     def stop_monitoring(self) -> None:
         """停止监控（状态清理）。"""
         self._update_state(monitoring=False, status_detail="已停止")
-
-    def _close_browser_if_needed(self) -> None:
-        """关闭浏览器实例（通过 Worker 命令队列）"""
-        try:
-            from app.workers.playwright_worker import CMD_BROWSER_CLOSE
-
-            worker = self._worker_getter()
-            if worker:
-                self.log_message("关闭浏览器实例")
-                result = worker.submit(CMD_BROWSER_CLOSE, timeout=5)
-                if not result.success:
-                    self.log_message(f"关闭浏览器失败: {result.error}", "WARNING")
-        except Exception as e:
-            self.log_message(f"关闭浏览器时出错: {e}", "WARNING")
-
-    def _get_retry_config(self) -> tuple[int, list[int]]:
-        """从配置中读取重试参数，回退到默认值"""
-        retry_settings = self.config.get("retry_settings", {})
-        max_retries = int(
-            retry_settings.get("max_retries", self.MAX_CONSECUTIVE_LOGIN_FAILURES)
-        )
-        # 限制 1~5 次，避免网络故障时无限重试或退避时间过长
-        max_retries = max(1, min(max_retries, 5))
-        retry_interval = int(retry_settings.get("retry_interval", 5))
-        from app.utils.retry import get_retry_intervals
-
-        intervals = get_retry_intervals(retry_interval, max_retries, exponential=True)
-        return max_retries, intervals
 
     def _get_test_sites(self) -> list[tuple[str, int]]:
         """获取测试站点列表（带缓存，返回副本避免调用方污染缓存）"""
@@ -393,7 +348,7 @@ class NetworkMonitorCore:
                     self._last_profile_id = self._profile_service.load().active_profile
                     self.log_message(f"方案切换失败: {msg}", "WARNING")
                 else:
-                    # 方案切换成功，设置标志位并停止监控循环
+                    # 方案切换成功（日志已在上方输出）
                     pass
         except Exception as exc:
             self.log_message(f"方案切换检测异常: {exc}", "WARNING")
