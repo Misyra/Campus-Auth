@@ -5,6 +5,16 @@
 
 ## 2026-06-13
 
+### fix: 修复 config.py 回滚语义不完整问题
+
+修复 `app/api/config.py` 中 `save_config` 端点回滚逻辑绕过 Pydantic 验证的问题：
+
+- **问题：** 第 116 行使用 `data.__dict__.update(backup_data.__dict__)` 回滚配置，这会绕过 Pydantic 的验证机制，不更新 `model_fields_set` 等内部状态，导致回滚后模型状态不一致。
+- **修复：** 新增 `_rollback_config()` 辅助函数，使用逐字段 `setattr` 赋值替代 `__dict__.update`，确保 Pydantic 内部状态（如 `model_fields_set`）保持一致。
+
+**新增测试：** `tests/test_api/test_config_fix.py`（4 个测试用例，验证 `__dict__.update` 的已知问题和正确回滚方式）
+**测试结果：** 4 passed，全量 1708 passed（3 个既有失败与本次修改无关）
+
 ### fix: 修复 tools.py 远程图片下载内存耗尽风险
 
 修复 `app/api/tools.py` 中 `fetch_background_url` 端点的内存耗尽风险：

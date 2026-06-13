@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.deps import get_monitor_service, get_profile_service
-from app.schemas import ActionResponse, MonitorConfigPayload
+from app.schemas import ActionResponse, MonitorConfigPayload, ProfilesData
 from app.services.config_service import save_config_combined
 from app.services.engine import ScheduleEngine
 from app.services.profile_service import ProfileService
@@ -113,7 +113,7 @@ def save_config(
             api_logger.error("配置重载失败，正在回滚: {}", reload_exc, exc_info=True)
             try:
                 profile_svc.update(
-                    lambda data: data.__dict__.update(backup_data.__dict__)
+                    lambda data: _rollback_config(data, backup_data)
                 )
                 svc.reload_config()
             except Exception:
@@ -128,3 +128,13 @@ def save_config(
     except Exception as exc:
         api_logger.error("配置保存失败: {}", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=f"配置保存失败: {exc}") from exc
+
+
+def _rollback_config(data: ProfilesData, backup_data: ProfilesData) -> None:
+    """回滚配置到备份状态。
+
+    使用逐字段赋值而非 __dict__.update，确保 Pydantic 内部状态
+    （如 model_fields_set）保持一致。
+    """
+    for field_name in ProfilesData.model_fields:
+        setattr(data, field_name, getattr(backup_data, field_name))
