@@ -92,6 +92,7 @@ export const CustomSelect = {
         top: `${rect.bottom + 4}px`,
         left: `${rect.left}px`,
         width: `${rect.width}px`,
+        right: 'auto',
         zIndex: 9999,
       };
     },
