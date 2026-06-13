@@ -136,6 +136,10 @@ class TaskExecutor:
             allowlist=[shell["path"] for shell in detect_shells()]
         )
 
+    def set_runtime_config_getter(self, getter: Callable[[], dict]) -> None:
+        """设置运行时配置获取器（公共接口）。"""
+        self._get_runtime_config = getter
+
     # ── 定时任务 CRUD（原 TaskFacade 方法）──
 
     def list_tasks(self) -> list[dict]:

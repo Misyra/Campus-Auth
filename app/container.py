@@ -74,7 +74,7 @@ class ServiceContainer:
         )
 
         # 延迟绑定：TaskExecutor 通过引擎获取运行时配置
-        self.task_executor._get_runtime_config = self.engine.get_runtime_config
+        self.task_executor.set_runtime_config_getter(self.engine.get_runtime_config)
 
         self._ws_drain_task: asyncio.Task | None = None
         self._log_handler_id: int | None = None
