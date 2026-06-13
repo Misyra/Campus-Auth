@@ -5,6 +5,16 @@
 
 ## 2026-06-13
 
+### fix: 修复 logging.py 缓冲配置不一致与 level_order 重复创建
+
+修复 `app/utils/logging.py` 中两个问题：
+
+1. **`_rotate_file` 缓冲配置不一致：** 轮转后重新打开文件时缺少 `buffering=1`（行缓冲），而 `_open_file` 中有此参数，导致轮转后日志可能延迟刷新。
+2. **`should_emit` 重复创建字典：** `level_order` 字典在每次 `should_emit` 调用时重建，提取为类常量 `_LEVEL_ORDER`。
+
+**新增测试文件：** `tests/test_utils/test_logging_fix.py`（5 个测试用例）
+**测试结果：** 5 passed，全量 1655 passed（4 个既有失败与本次修改无关）
+
 ### fix: 修复 config_utils.py 中 PROFILE_FIELDS 常量类型问题
 
 修复 `app/utils/config_utils.py` 中 `PROFILE_FIELDS` 常量的类型问题：

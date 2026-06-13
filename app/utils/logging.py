@@ -289,7 +289,7 @@ class DateRotatingSink:
             if os.path.exists(path):
                 os.replace(path, f"{path}.1")
 
-            self._stream = open(path, "a", encoding="utf-8")
+            self._stream = open(path, "a", encoding="utf-8", buffering=1)
             self._bytes_written = 0
         except Exception as exc:
             # 不能用 logger — 本方法由 write() 调用，同属 sink 内部，调用 logger 会无限递归
@@ -346,6 +346,7 @@ class LogConfigCenter:
 
     _instance = None
     _init_lock = threading.Lock()
+    _LEVEL_ORDER = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
 
     DEFAULT_CONFIG = {
         "level": "INFO",
@@ -476,8 +477,7 @@ class LogConfigCenter:
             True 表示应该输出，False 表示应该过滤
         """
         source_level = self.get_source_level(source)
-        level_order = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
-        return level_order.get(level, 0) >= level_order.get(source_level, 0)
+        return self._LEVEL_ORDER.get(level, 0) >= self._LEVEL_ORDER.get(source_level, 0)
 
     def remove_source_level(self, source: str) -> None:
         """移除指定 source 的级别配置（回退到全局级别）"""
