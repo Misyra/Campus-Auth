@@ -122,7 +122,7 @@ class ServiceContainer:
         from loguru import logger
 
         if self._log_handler_id is None:
-            dashboard_sink = DashboardSink(maxlen=500, broadcast_maxlen=200)
+            dashboard_sink = DashboardSink()
             self._log_handler_id = logger.add(
                 dashboard_sink.write,
                 format="{message}",
