@@ -131,6 +131,9 @@
   align-items: center;
   min-height: 36px;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  /* color-mix 回退：旧浏览器显示半透明灰 */
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.2);
 }
 
 .tech-badge:hover {

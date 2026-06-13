@@ -153,9 +153,9 @@
         </div>
 
         <div v-else class="history-list">
-          <div v-for="(record, index) in scheduledTaskHistory" :key="index" class="history-item" :class="record.status">
+          <div v-for="(record, index) in scheduledTaskHistory" :key="index" class="history-item" :class="record.status === 'failure' ? 'failed' : record.status">
             <div class="history-header">
-              <span class="history-status" :class="record.status">
+              <span class="history-status" :class="record.status === 'failure' ? 'failed' : record.status">
                 {{ record.status === 'success' ? '成功' : '失败' }}
               </span>
               <span class="history-time">{{ record.timestamp.replace('T', ' ').substring(0, 19) }}</span>

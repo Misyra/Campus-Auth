@@ -279,7 +279,7 @@ export const appOptions = {
             return;
           }
           this._configDirty = JSON.stringify(this.config) !== this.savedConfigSnapshot;
-        }, 150);
+        }, 300);
       },
       deep: true,
     },

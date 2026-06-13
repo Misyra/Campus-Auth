@@ -43,7 +43,7 @@
 }
 
 .profiles-status-icon.off {
-  background: rgba(51, 65, 85, 0.5);
+  background: var(--bg-hover);
   color: var(--text-muted);
 }
 
@@ -226,7 +226,7 @@
 
 .profile-card:hover {
   border-color: var(--border-hover);
-  background: rgba(51, 65, 85, 0.4);
+  background: var(--bg-hover);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   transform: translateY(-1px);
 }

@@ -85,7 +85,7 @@
   border-left: 3px solid var(--success);
 }
 
-.scheduled-tasks-page .history-item.failure {
+.scheduled-tasks-page .history-item.failed {
   border-left: 3px solid var(--error);
 }
 

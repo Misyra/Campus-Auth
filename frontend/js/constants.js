@@ -42,7 +42,7 @@ export const TIMING = {
 
 export const LIMITS = {
   LOG_MAX_ENTRIES: 100,           // 前端日志最大条数
-  LOG_FILE_FETCH_LIMIT: 5000,    // 日志文件内容获取条数
+  LOG_FILE_FETCH_LIMIT: 2000,    // 日志文件内容获取条数
   FILE_UPLOAD_MAX: 5 * 1024 * 1024, // 文件上传最大大小（5MB）
   SCROLL_BOTTOM_THRESHOLD: 50,    // 判断滚动到底部的阈值（px）
 };
