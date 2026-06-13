@@ -136,8 +136,6 @@ def build_runtime_config(
         base["isp"] = ""
     else:
         base["isp"] = carrier
-    base["startup_action"] = payload.startup_action
-    base["autostart_lightweight"] = payload.autostart_lightweight
 
     # 浏览器配置
     base["browser_settings"] = {

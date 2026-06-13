@@ -1,4 +1,5 @@
 import { LIMITS, TIMING } from '../constants.js';
+import { extractApiError } from './utils.js';
 
 export const lifecycleMethods = {
   // 封装初始化错误计数，达到阈值后静默（避免多模块竞态读写 _initErrorCount）
@@ -179,7 +180,7 @@ export const lifecycleMethods = {
         this.toastOnly(false, data.message);
       }
     } catch (error) {
-      const msg = error?.response?.data?.detail || '保存失败';
+      const msg = extractApiError(error, '保存失败');
       this.frontendLogger.error('lifecycle', '向导保存异常: ' + msg, error);
       this.toastOnly(false, msg);
     } finally {

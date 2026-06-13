@@ -91,8 +91,10 @@
               type="password"
               placeholder="请输入密码"
               autocomplete="current-password"
+              :class="{ 'input-error': wizardErrors.password }"
             />
-            <span class="hint">您的校园网登录密码（本地加密保存，配置切换和备份均无法导出）</span>
+            <span v-if="wizardErrors.password" class="error-text">{{ wizardErrors.password }}</span>
+            <span v-else class="hint">您的校园网登录密码（本地加密保存，配置切换和备份均无法导出）</span>
           </div>
 
           <div class="form-group">
@@ -102,8 +104,10 @@
               v-model.trim="config.auth_url"
               type="text"
               placeholder="http://"
+              :class="{ 'input-error': wizardErrors.auth_url }"
             />
-            <span class="hint">校园网认证页面的网址，例如 http://auth.school.edu.cn</span>
+            <span v-if="wizardErrors.auth_url" class="error-text">{{ wizardErrors.auth_url }}</span>
+            <span v-else class="hint">校园网认证页面的网址，例如 http://auth.school.edu.cn</span>
           </div>
 
           <div class="form-group">
@@ -119,8 +123,10 @@
               v-model.trim="config.carrier_custom"
               type="text"
               placeholder="例如：校园专网、宿舍网、移动(新)"
+              :class="{ 'input-error': wizardErrors.carrier_custom }"
             />
-            <span class="hint">将按关键字匹配登录页的运营商选项</span>
+            <span v-if="wizardErrors.carrier_custom" class="error-text">{{ wizardErrors.carrier_custom }}</span>
+            <span v-else class="hint">将按关键字匹配登录页的运营商选项</span>
           </div>
         </form>
 
@@ -181,7 +187,7 @@
         <div class="form-group">
           <label for="wiz-startup-action">启动行为</label>
           <custom-select v-model="config.startup_action" :options="loginActionOptions"></custom-select>
-          <span class="hint">程序启动后自动执行的操作</span>
+          <span class="hint">{{ startupActionHint }}</span>
         </div>
       </div>
 
@@ -214,7 +220,7 @@
           </div>
           <div class="summary-item">
             <span class="label">启动行为</span>
-            <span class="value">{{ { none: '不自动执行', monitor: '启动后开始监控', login_once: '登录成功后退出' }[config.startup_action] || '不自动执行' }}</span>
+            <span class="value">{{ startupActionLabel }}</span>
           </div>
         </div>
 

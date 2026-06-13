@@ -108,6 +108,10 @@ export const uiMethods = {
         this.toastOnly(false, '请输入认证地址');
         return;
       }
+      if (!/^https?:\/\//i.test(this.config.auth_url)) {
+        this.toastOnly(false, '认证地址必须以 http:// 或 https:// 开头');
+        return;
+      }
       if (this.config.carrier === '自定义' && (!this.config.carrier_custom || !this.config.carrier_custom.trim())) {
         this.toastOnly(false, '请输入自定义运营商关键字');
         return;

@@ -63,7 +63,7 @@ export const appOptions = {
       loginActionOptions: [
         { value: 'none', label: '不自动执行' },
         { value: 'monitor', label: '启动后开始监控（推荐）' },
-        { value: 'login_once', label: '登录成功后退出' },
+        { value: 'login_once', label: '自动登录，成功后退出' },
       ],
       logSourceOptions: [
         { value: '', label: '全部来源' },
@@ -153,6 +153,25 @@ export const appOptions = {
       }
       return true;
     },
+    wizardErrors() {
+      const errors = {};
+      if (this.wizardStep === 2) {
+        if (this.config.username && !this.config.password) {
+          errors.password = '请输入密码';
+        } else if (this.config.password && this.config.password.length < 2) {
+          errors.password = '密码长度不能少于2位';
+        }
+        if (this.config.auth_url && !/^https?:\/\//i.test(this.config.auth_url)) {
+          errors.auth_url = '认证地址必须以 http:// 或 https:// 开头';
+        }
+        if (this.config.carrier === '自定义' && this.config.carrier_custom !== undefined) {
+          if (!this.config.carrier_custom || !this.config.carrier_custom.trim()) {
+            errors.carrier_custom = '请输入自定义运营商关键字';
+          }
+        }
+      }
+      return errors;
+    },
     configDirty() {
       return this._configDirty;
     },
@@ -229,22 +248,17 @@ export const appOptions = {
         { value: false, label: '完整模式' },
       ];
     },
-    autoStartMonitor: {
-      get() { return this.config.startup_action !== 'none'; },
-      set(val) {
-        if (!val) {
-          this.config.startup_action = 'none';
-          this.loginThenExit = false;
-        } else {
-          this.config.startup_action = 'monitor';
-        }
-      },
+    startupActionHint() {
+      const hints = {
+        none: '程序启动后不自动执行任何操作，需手动启动监控',
+        monitor: '程序启动后自动开始网络监控，断网时自动重连',
+        login_once: '启动后尝试登录一次，成功后自动退出。适用于开机自启动场景',
+      };
+      return hints[this.config.startup_action] || hints.none;
     },
-    loginThenExit: {
-      get() { return this.config.startup_action === 'login_once'; },
-      set(val) {
-        this.config.startup_action = val ? 'login_once' : 'monitor';
-      },
+    startupActionLabel() {
+      const opt = this.loginActionOptions.find(o => o.value === this.config.startup_action);
+      return opt ? opt.label.replace('（推荐）', '') : '不自动执行';
     },
     binaryOptions() {
       return [
