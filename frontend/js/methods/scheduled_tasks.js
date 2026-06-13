@@ -98,7 +98,7 @@ export const scheduledTasksMethods = {
   // 删除定时任务
   async deleteScheduledTask(taskId) {
     if (!confirm('确定要删除这个定时任务吗？')) return;
-    const resp = await safeApiCall.call(this, () => this.$api.delete(`/api/scheduled-tasks/${taskId}`), '删除失败');
+    const resp = await safeApiCall(this, () => this.$api.delete(`/api/scheduled-tasks/${taskId}`), '删除失败');
     if (!resp) return;
     const result = resp.data;
     this.toastOnly(result.success, result.message);
@@ -109,7 +109,7 @@ export const scheduledTasksMethods = {
 
   // 切换定时任务启用状态
   async toggleScheduledTask(taskId) {
-    const resp = await safeApiCall.call(this, () => this.$api.post(`/api/scheduled-tasks/${taskId}/toggle`), '操作失败');
+    const resp = await safeApiCall(this, () => this.$api.post(`/api/scheduled-tasks/${taskId}/toggle`), '操作失败');
     if (!resp) return;
     const result = resp.data;
     this.toastOnly(result.success, result.message);
@@ -120,7 +120,7 @@ export const scheduledTasksMethods = {
 
   // 手动执行定时任务
   async runScheduledTask(taskId) {
-    const resp = await safeApiCall.call(this, () => this.$api.post(`/api/scheduled-tasks/${taskId}/run`), '执行失败');
+    const resp = await safeApiCall(this, () => this.$api.post(`/api/scheduled-tasks/${taskId}/run`), '执行失败');
     if (!resp) return;
     const result = resp.data;
     this.toastOnly(result.success, result.message);

@@ -99,6 +99,10 @@ export const CustomSelect = {
         ref="trigger"
         type="button"
         class="custom-select-trigger"
+        role="combobox"
+        :aria-expanded="open"
+        aria-haspopup="listbox"
+        :aria-activedescendant="open && activeIndex >= 0 ? 'cs-opt-' + activeIndex : undefined"
         @click="toggle"
         @keydown="onKeydown"
       >
@@ -108,11 +112,14 @@ export const CustomSelect = {
           <polyline points="6 9 12 15 18 9"/>
         </svg>
       </button>
-      <div v-if="open" class="custom-select-dropdown">
+      <div v-if="open" class="custom-select-dropdown" role="listbox">
         <div
           v-for="(opt, i) in options"
           :key="opt.value"
+          :id="'cs-opt-' + i"
           class="custom-select-option"
+          role="option"
+          :aria-selected="opt.value === modelValue"
           :class="{ selected: opt.value === modelValue, active: i === activeIndex }"
           @mousedown.prevent="select(opt)"
           @mouseenter="activeIndex = i"

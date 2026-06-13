@@ -166,7 +166,7 @@
 
     <!-- 卸载弹窗 -->
     <div v-if="uninstall.visible" class="uninstall-overlay" @click.self="closeUninstall">
-      <div class="uninstall-modal">
+      <div class="uninstall-modal" role="dialog" aria-modal="true" aria-label="卸载清理">
         <div class="uninstall-modal-header">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="28" height="28" style="color:var(--error);flex-shrink:0;">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>

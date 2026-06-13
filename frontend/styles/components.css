@@ -6,13 +6,11 @@
   backdrop-filter: var(--card-blur, var(--blur-md));
   box-shadow: var(--shadow);
   transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
-  /* 提示浏览器提前准备 backdrop-filter 合成层 */
+  /* 提前告知浏览器将有 transform 变化，优化毛玻璃动画 */
   will-change: transform;
-  backface-visibility: hidden;
 }
 
 .card:hover {
-  border-color: var(--border-hover);
   box-shadow: var(--shadow-lg);
 }
 
@@ -378,12 +376,23 @@
 .custom-select {
   position: relative;
   width: 100%;
+  z-index: auto;
+}
+
+/* 下拉菜单展开时，降低 custom-select 自身层级，避免遮挡 field-help tooltip */
+.custom-select.open {
+  z-index: 0;
 }
 
 /* 当下拉菜单展开时，提升所在卡片的层级，避免被后续卡片遮挡 */
 .card:has(.custom-select.open) {
   position: relative;
   z-index: var(--z-dropdown);
+}
+
+/* 下拉菜单自身需要高层级 */
+.custom-select-dropdown {
+  z-index: var(--z-modal);
 }
 
 .custom-select-trigger {
@@ -448,7 +457,6 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
-  z-index: var(--z-overlay, 150);
   padding: 4px;
   max-height: 250px;
   overflow-y: auto;

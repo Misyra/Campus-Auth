@@ -18,5 +18,7 @@ export function configData() {
       global_level: 'INFO',
       source_levels: {},
     },
+    // 并发锁（防止重复请求）
+    _autostartInFlight: false,
   };
 }

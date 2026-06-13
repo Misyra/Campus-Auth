@@ -168,7 +168,7 @@ export const scriptMethods = {
   },
 
   async exportScript(taskId) {
-    const resp = await safeApiCall.call(this, () => this.$api.get(`/api/scripts/${taskId}`), '导出失败');
+    const resp = await safeApiCall(this, () => this.$api.get(`/api/scripts/${taskId}`), '导出失败');
     if (!resp) return;
     const data = resp.data;
     const ext = this._inferScriptExtension(data.binary_path, data.content);

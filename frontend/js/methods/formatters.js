@@ -75,7 +75,9 @@ export function formatTimeValue(seconds) {
  * @returns {{r: number, g: number, b: number} | null}
  */
 export function hexToRgb(hex) {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  let h = (hex || '').replace('#', '');
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  const result = /^([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(h);
   return result ? {
     r: parseInt(result[1], 16),
     g: parseInt(result[2], 16),
@@ -90,7 +92,10 @@ export function hexToRgb(hex) {
  * @returns {string} 调整后的 HEX 颜色值
  */
 export function adjustColor(hex, amount) {
-  const num = parseInt(hex.replace('#', ''), 16);
+  let h = hex.replace('#', '');
+  // 展开 3 位简写（abc → aabbcc）
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  const num = parseInt(h, 16);
   const r = Math.max(0, Math.min(255, (num >> 16) + amount));
   const g = Math.max(0, Math.min(255, ((num >> 8) & 0x00FF) + amount));
   const b = Math.max(0, Math.min(255, (num & 0x0000FF) + amount));

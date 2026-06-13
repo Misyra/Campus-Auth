@@ -4,10 +4,7 @@ export const actionMethods = {
   async openUninstall() {
     this.uninstall.visible = true;
     this.uninstall.scanning = true;
-    this.$nextTick(() => {
-      const overlay = document.querySelector('.uninstall-overlay');
-      if (overlay) this._trapFocus(overlay);
-    });
+    this.openModal('.uninstall-overlay');
     this.uninstall.results = null;
     this.uninstall.items = [];
     try {
@@ -22,7 +19,7 @@ export const actionMethods = {
     }
   },
   closeUninstall() {
-    this._releaseFocusTrap();
+    this.closeModal();
     this.uninstall.visible = false;
     this.uninstall.results = null;
   },

@@ -74,11 +74,11 @@ export const appearanceMethods = {
       }
     }
 
-    // 卡片透明度 — 毛玻璃 blur 跟随透明度联动
+    // 卡片透明度与毛玻璃模糊
     const co = this.appearance.card_opacity;
-    if (this.appearance.backdrop_filter) {
-      // 透明度 0 → 完全关闭 blur，透明度 1 → 最强 blur
-      _p('--card-blur', co > 0 ? `blur(${Math.round(co * 20)}px)` : 'none');
+    const blurPx = this.appearance.card_blur ?? 12;
+    if (this.appearance.backdrop_filter && blurPx > 0) {
+      _p('--card-blur', `blur(${blurPx}px)`);
     } else {
       _p('--card-blur', 'none');
     }
@@ -172,15 +172,12 @@ export const appearanceMethods = {
     this.randomWallpaperDialog.url = this.appearance.wallpaper_api_url || 'https://t.alcy.cc/pc';
     this.randomWallpaperDialog.loading = false;
     this.randomWallpaperDialog.visible = true;
-    this.$nextTick(() => {
-      const overlay = document.querySelector('.random-wallpaper-overlay');
-      if (overlay) this._trapFocus(overlay);
-    });
+    this.openModal('.random-wallpaper-overlay');
   },
 
   // 关闭随机壁纸对话框
   closeRandomWallpaperDialog() {
-    this._releaseFocusTrap();
+    this.closeModal();
     this.randomWallpaperDialog.visible = false;
   },
 

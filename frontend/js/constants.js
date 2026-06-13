@@ -139,6 +139,7 @@ export const DEFAULT_APPEARANCE = {
   background_opacity: 0.3,
   background_color: '#0f172a',
   card_opacity: 0.45,
+  card_blur: 12,
   border_intensity: 1.0,
   sidebar_opacity: 0.95,
   sidebar_color: '',
