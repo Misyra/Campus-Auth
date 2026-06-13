@@ -1,4 +1,4 @@
-import { api, SETTINGS_TABS, LOG_LEVELS } from './constants.js';
+import { api, SETTINGS_TABS, LOG_LEVELS, LEVEL_VALUES } from './constants.js';
 import { createFrontendLogger } from './logger.js';
 import { actionMethods } from './methods/actions.js';
 import { appearanceMethods } from './methods/appearance.js';
@@ -169,8 +169,9 @@ export const appOptions = {
     filteredLogs() {
       const { level, source, search } = this.logFilter;
       const q = search ? search.toLowerCase() : '';
+      const minLevel = LEVEL_VALUES[level] ?? 0;
       return this.logs.filter(l =>
-        (!level || l.level === level) &&
+        (!level || (LEVEL_VALUES[l.level] ?? 0) >= minLevel) &&
         (!source || l.source === source) &&
         (!q || l.message.toLowerCase().includes(q))
       );
