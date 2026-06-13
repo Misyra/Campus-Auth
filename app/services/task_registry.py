@@ -47,6 +47,10 @@ class TaskRegistry:
 
     # ── 公开查询 ──
 
+    def get_tasks_dir(self) -> Path:
+        """获取任务目录路径。"""
+        return self._tasks_dir
+
     def get_task(self, task_id: str) -> dict[str, Any] | None:
         """获取任务配置（副本）。不存在或 ID 无效返回 None。"""
         if not is_valid_task_id(task_id):

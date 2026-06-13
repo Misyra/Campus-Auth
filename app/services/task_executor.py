@@ -474,8 +474,13 @@ class TaskExecutor:
         if hasattr(self._registry, "get_script_path"):
             return self._registry.get_script_path(script_id)
         # 回退：尝试通过 tasks_dir 推断
-        if hasattr(self._registry, "_tasks_dir"):
+        tasks_dir = None
+        if hasattr(self._registry, "get_tasks_dir"):
+            tasks_dir = self._registry.get_tasks_dir()
+        elif hasattr(self._registry, "_tasks_dir"):
+            # 兼容旧版本
             tasks_dir = self._registry._tasks_dir
+        if tasks_dir is not None:
             # 定时任务目录结构: tasks/scheduled/ 下无脚本，脚本在 tasks/scripts/
             # 这里需要通过 project_root 推断
             project_root = tasks_dir.parent.parent

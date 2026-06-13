@@ -5,6 +5,29 @@
 
 ## 2026-06-13
 
+### fix: 修复 task_executor.py 中的私有属性访问问题
+
+修复 `app/services/task_executor.py` 中 `_get_script_path()` 直接访问 `self._registry._tasks_dir` 私有属性的问题：
+
+- **问题：** `_get_script_path()` 回退逻辑直接访问 `TaskRegistry._tasks_dir`（私有属性），违反封装原则。且 `get_tasks_dir` 分支缺少路径推断逻辑，导致两个分支行为不对称。
+- **修复：**
+  1. 在 `TaskRegistry`（`app/services/task_registry.py`）中添加公共方法 `get_tasks_dir()`。
+  2. 修改 `_get_script_path()` 优先使用 `get_tasks_dir()`，回退到 `_tasks_dir`（兼容旧版本）。
+  3. 将路径推断逻辑提取到两个分支共享的位置，修复逻辑不对称问题。
+
+**新增测试文件：** `tests/test_services/test_task_executor_fix.py`（6 个测试用例）
+**测试结果：** 6 passed，全量 1680 passed（4 个既有失败与本次修改无关）
+
+### fix: 修复 debug_session.py 中 _next_debug_gen 的线程安全问题
+
+修复 `app/services/debug_session.py` 中 `_next_debug_gen` 函数的线程安全问题：
+
+- **问题：** `_next_debug_gen` 通过 `global _current_gen` 读写模块级全局变量，无锁保护。虽然 CPython 的 GIL 在当前实现中提供了隐式保护，但依赖 GIL 是实现细节而非语言保证，在其他 Python 实现（如 PyPy、GraalPy）中可能导致竞态条件。
+- **修复：** 添加模块级 `threading.Lock`（`_gen_lock`），在 `_next_debug_gen` 中用 `with _gen_lock` 保护 `_current_gen` 的读写和 `next(_debug_gen)` 调用。
+
+**新增测试文件：** `tests/test_services/test_debug_session_fix.py`（3 个测试用例）
+**测试结果：** 3 passed，全量 1674 passed（4 个既有失败与本次修改无关）
+
 ### fix: 修复 env.py 自定义变量可覆盖内置变量的问题
 
 修复 `app/utils/env.py` 中自定义变量可覆盖内置模板变量的问题：
