@@ -91,19 +91,6 @@ class TestListProfiles:
         assert data["profiles"]["default"]["name"] == "默认方案"
 
 
-class TestGetActiveProfile:
-    """测试 GET /api/profiles/active 端点。"""
-
-    def test_get_active_profile_returns_200(self, client):
-        test_client, _ = client
-        resp = test_client.get("/api/profiles/active")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "profile_id" in data
-        assert "settings" in data
-        assert "auto_switch" in data
-
-
 class TestGetProfile:
     """测试 GET /api/profiles/{profile_id} 端点。"""
 

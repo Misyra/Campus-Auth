@@ -86,23 +86,6 @@ class TestLogLevels:
         data = response.json()
         assert data["success"] is True
 
-    def test_reset_source_level(self, client):
-        """测试重置 source 级别"""
-        test_client, _ = client
-        # 先设置
-        test_client.put(
-            "/api/config/source-level",
-            json={"source": "network", "level": "DEBUG"},
-        )
-
-        # 再重置
-        response = test_client.delete("/api/config/source-level/network")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is True
-
-
 class TestGetConfig:
     """测试 GET /api/config 端点。"""
 

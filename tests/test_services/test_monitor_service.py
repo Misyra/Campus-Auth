@@ -8,6 +8,7 @@ from __future__ import annotations
 import queue
 import threading
 import time
+from concurrent.futures import Future
 from unittest.mock import MagicMock, patch
 
 from app.services.engine import (
@@ -376,7 +377,7 @@ class TestHandleLogin:
     def test_handle_login_submits_async(
         self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
     ):
-        """_handle_login 现在异步执行，立即返回提交状态。"""
+        """_handle_login 有配置时提交异步登录并返回成功。"""
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.system.pure_mode = False
@@ -393,7 +394,9 @@ class TestHandleLogin:
         mock_get_worker = MagicMock(return_value=mock_worker)
 
         mock_task_executor = MagicMock()
-        mock_task_executor.execute_login_async.return_value = None
+        future = Future()
+        future.set_result((True, "登录成功"))
+        mock_task_executor.execute_login_async.return_value = future
 
         svc = ScheduleEngine(
             MagicMock(), worker_getter=mock_get_worker, task_executor=mock_task_executor
@@ -401,13 +404,33 @@ class TestHandleLogin:
         svc._shutdown_event.set()  # 停止引擎线程，避免干扰
         time.sleep(0.1)
 
-        cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
-        svc._handle_login(cmd)
-        # 异步模式：立即返回提交状态，不等待结果
-        assert cmd.response_data == (True, "登录已提交")
+        # 提供有效配置，否则 _handle_login 会拒绝
+        with patch.object(svc, "_copy_runtime_config", return_value={
+            "username": "test", "password": "test", "auth_url": "http://test.com"
+        }):
+            cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
+            svc._handle_login(cmd)
+            # 异步模式：立即返回提交状态，不等待结果
+            assert cmd.response_data == (True, "登录已提交")
         # 等待异步登录线程完成
         time.sleep(0.5)
         assert not svc._login_in_progress.is_set()
+
+    def test_handle_login_no_config_returns_false(self):
+        """_handle_login 无配置时返回 False。"""
+        svc = ScheduleEngine.__new__(ScheduleEngine)
+        svc._login_in_progress = threading.Event()
+        svc._update_status_snapshot = MagicMock()
+        svc._task_executor = MagicMock()
+        # 返回空配置
+        svc._runtime_config = {}
+
+        cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
+        svc._handle_login(cmd)
+
+        success, message = cmd.response_data
+        assert success is False
+        assert "配置不完整" in message
 
 
 # =====================================================================
@@ -418,7 +441,7 @@ class TestHandleLogin:
 class TestRunManualLogin:
     def test_run_manual_login_in_progress(self):
         svc = _make_monitor_service()
-        svc._login_in_progress.set()
+        svc._manual_login_in_progress = True
         ok, msg = svc.run_manual_login()
         assert ok is False
         assert "进行中" in msg
@@ -725,46 +748,31 @@ class TestShutdownSynchronous:
         svc._handle_stop()
 
 
-class TestLoginInProgressNoDoubleClear:
-    """P1-BE-3: _login_in_progress 清除路径收敛为单点测试"""
+class TestManualLoginTimeout:
+    """P1-BE-3: 手动登录超时后 _manual_login_in_progress 应被清除"""
 
-    def test_login_in_progress_no_double_clear(self):
-        """测试超时分支不清除 _login_in_progress，由消费者 finally 统一清除"""
+    def test_manual_login_timeout_clears_flag(self):
+        """测试超时后 _manual_login_in_progress 在 finally 中被清除"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._cmd_queue = queue.Queue(maxsize=50)
-        svc._login_in_progress = threading.Event()
-        svc._login_in_progress.set()  # 模拟登录进行中
-        svc._login_lock = threading.Lock()
+        svc._manual_login_in_progress = False
+        svc._manual_login_lock = threading.Lock()
         svc._runtime_config = {"auth_url": "http://test.com", "username": "test"}
         svc._ui_config = MagicMock()
         svc._ui_config.login_timeout = 0.01  # 极短超时
         svc._monitor_core = None
         svc._pure_mode = False
         svc._pure_mode_lock = threading.Lock()
+        svc._engine_thread = MagicMock()
+        svc._engine_thread.is_alive.return_value = True
 
-        # 模拟消费者不清除 _login_in_progress（模拟超时场景）
-        # 创建一个不会设置 response_data 的命令
-        cmd = EngineCommand(
-            type=EngineCmdType.LOGIN,
-            data={"config": {}, "pure_mode": False, "skip_pause_check": True},
-            response_event=threading.Event(),
-        )
-
-        # 直接将 cmd 放入队列，模拟 put_nowait 成功
-        svc._cmd_queue.put_nowait(cmd)
-
-        # 模拟 run_manual_login 超时路径：不消费队列，response_data 保持 None
         with patch.object(svc, "_copy_runtime_config", return_value={}):
-            # 直接测试超时分支逻辑
-            cmd.response_event.wait(timeout=0.01)
+            ok, msg = svc.run_manual_login()
 
-            # 超时分支：response_data 为 None
-            assert cmd.response_data is None
-            # 关键验证：超时分支不应清除 _login_in_progress
-            # （消费者 finally 才负责清除）
-            assert svc._login_in_progress.is_set(), (
-                "超时分支不应清除 _login_in_progress，应由消费者 finally 统一清除"
-            )
+        assert not ok
+        assert "超时" in msg
+        # finally 块应清除标志
+        assert not svc._manual_login_in_progress
 
 
 class TestStartMonitoringPutNowait:
@@ -875,15 +883,15 @@ class TestApplyProfileQueueDispatch:
         ), f"apply_profile 应派发 APPLY_PROFILE 命令，实际派发: {enqueued}"
 
 
-class TestLoginInProgressConsumerDead:
-    """引擎线程死亡时，_login_in_progress 应被主动清除。"""
+class TestManualLoginConsumerDead:
+    """引擎线程死亡时，_manual_login_in_progress 应被 finally 清除。"""
 
     def test_login_timeout_clears_when_engine_dead(self):
-        """测试超时且引擎线程已死时，主动清除 _login_in_progress。"""
+        """测试超时且引擎线程已死时，_manual_login_in_progress 被 finally 清除。"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._cmd_queue = queue.Queue(maxsize=50)
-        svc._login_in_progress = threading.Event()
-        svc._login_lock = threading.Lock()
+        svc._manual_login_in_progress = False
+        svc._manual_login_lock = threading.Lock()
         svc._runtime_config = {"auth_url": "http://test.com", "username": "test"}
         svc._ui_config = MagicMock()
         svc._ui_config.login_timeout = 0.01
@@ -899,8 +907,8 @@ class TestLoginInProgressConsumerDead:
         with patch.object(svc, "_copy_runtime_config", return_value={}):
             ok, msg = svc.run_manual_login()
 
-        assert not svc._login_in_progress.is_set(), (
-            "引擎线程已死时，_login_in_progress 应被主动清除"
+        assert not svc._manual_login_in_progress, (
+            "引擎线程已死时，_manual_login_in_progress 应被 finally 清除"
         )
         assert not ok
         assert "超时" in msg

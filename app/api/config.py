@@ -54,19 +54,6 @@ def set_source_level(payload: dict, request: Request):
     return {"success": True, "message": f"已设置 {source} 级别为 {level}"}
 
 
-@router.delete("/api/config/source-level/{source}")
-def reset_source_level(source: str, request: Request):
-    """重置 source 级别（使用全局级别）"""
-    from app.utils.logging import LogConfigCenter
-
-    config = LogConfigCenter.get_instance()
-    config.remove_source_level(source)
-
-    _persist_source_levels(request, config)
-
-    return {"success": True, "message": f"已重置 {source} 级别"}
-
-
 def _persist_source_levels(request: Request, config):
     """将 source_levels 持久化到 settings.json"""
     profile_service = request.app.state.services.profile_service

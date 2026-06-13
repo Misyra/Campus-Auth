@@ -112,18 +112,6 @@ def list_scheduled_tasks(
     return engine.tasks.list_tasks()
 
 
-@router.get("/api/scheduled-tasks/{task_id}")
-def get_scheduled_task(
-    task_id: str,
-    engine: ScheduleEngine = Depends(get_monitor_service),
-) -> dict[str, Any]:
-    """获取定时任务详情。"""
-    task = engine.tasks.get_task(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="定时任务不存在")
-    return task
-
-
 @router.post("/api/scheduled-tasks", response_model=ActionResponse)
 async def create_scheduled_task(
     payload: dict,
