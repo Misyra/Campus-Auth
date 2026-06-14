@@ -744,11 +744,35 @@ class TestGlobalSettings:
 
 
 class TestProfilesData:
+    def test_default_profile_auto_created(self):
+        """测试自动创建 default profile"""
+        data = ProfilesData()
+        assert "default" in data.profiles
+        assert data.profiles["default"].name == "默认方案"
+
+    def test_global_settings_default(self):
+        """测试 GlobalSettings 默认值"""
+        data = ProfilesData()
+        assert isinstance(data.global_settings, GlobalSettings)
+        assert data.global_settings.backend_log_level == "INFO"
+
+    def test_custom_profiles(self):
+        """测试自定义 profiles"""
+        data = ProfilesData(
+            profiles={
+                "default": ProfileSettings(name="默认"),
+                "custom": ProfileSettings(name="自定义"),
+            }
+        )
+        assert len(data.profiles) == 2
+        assert data.profiles["default"].name == "默认"
+        assert data.profiles["custom"].name == "自定义"
+
     def test_defaults(self):
         data = ProfilesData()
         assert data.auto_switch is False
         assert data.active_profile == "default"
-        assert isinstance(data.system, SystemSettings)
+        assert isinstance(data.global_settings, GlobalSettings)
         assert isinstance(data.profiles, dict)
 
     def test_with_profiles(self):
@@ -765,9 +789,10 @@ class TestProfilesData:
         assert len(data.profiles) == 2
         assert data.profiles["default"].name == "默认"
 
-    def test_empty_profiles(self):
+    def test_empty_profiles_creates_default(self):
         data = ProfilesData(profiles={})
-        assert len(data.profiles) == 0
+        assert "default" in data.profiles
+        assert data.profiles["default"].name == "默认方案"
 
 
 # ---------------------------------------------------------------------

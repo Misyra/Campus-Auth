@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.constants import DEFAULT_HTTP_TARGETS, DEFAULT_NETWORK_TARGETS
 from app.utils.logging import VALID_LOG_LEVELS
@@ -472,8 +472,15 @@ class ProfilesData(BaseModel):
 
     auto_switch: bool = Field(default=False, description="是否根据网关 IP 自动切换方案")
     active_profile: str = Field(default="default")
-    system: SystemSettings = Field(default_factory=SystemSettings)
+    global_settings: GlobalSettings = Field(default_factory=GlobalSettings)
     profiles: dict[str, ProfileSettings] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def ensure_default_profile(self) -> "ProfilesData":
+        """确保 default profile 存在"""
+        if "default" not in self.profiles:
+            self.profiles["default"] = ProfileSettings()
+        return self
 
 
 def get_runtime_features(
