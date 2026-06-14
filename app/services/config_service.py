@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.schemas import GlobalSettings, MonitorConfigPayload, ProfilesData, ProfileSettings, SystemSettings
+from app.schemas import (
+    GlobalSettings,
+    MonitorConfigPayload,
+    ProfilesData,
+    ProfileSettings,
+    SystemSettings,
+)
 from app.utils.logging import get_logger, normalize_level
 
 from .profile_service import ProfileService
