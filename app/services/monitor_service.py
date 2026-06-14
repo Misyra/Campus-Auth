@@ -39,9 +39,6 @@ class NetworkMonitorCore:
     # 类常量：网络检测配置
     DEFAULT_PING_TARGETS = DEFAULT_NETWORK_TARGETS.split(",")
 
-    # 类常量：自动切换检测冷却
-    GATEWAY_CHECK_COOLDOWN_SECONDS = 60
-
     def __init__(
         self,
         config: dict[str, Any] | None = None,
@@ -74,7 +71,6 @@ class NetworkMonitorCore:
         # 自动切换相关
         self._profile_service: ProfileService | None = None
         self._last_profile_id: str | None = None
-        self._last_gateway_check_time: float = 0
 
     def log_message(
         self, message: str, level: str = "INFO", exc_info: bool = False
@@ -306,7 +302,7 @@ class NetworkMonitorCore:
         return result
 
     def _check_profile_switch(self) -> None:
-        """检测网关 IP 并自动切换方案（带冷却时间）。
+        """检测网关 IP 并自动切换方案。
 
         检测到方案变化时设置标志位并停止监控循环，由外部重启。
         """
@@ -314,15 +310,6 @@ class NetworkMonitorCore:
             return
 
         try:
-            now = time.time()
-            if (
-                now - self._last_gateway_check_time
-                < self.GATEWAY_CHECK_COOLDOWN_SECONDS
-            ):
-                return
-
-            self._last_gateway_check_time = now
-
             data = self._profile_service.load()
             if not data.auto_switch:
                 return
