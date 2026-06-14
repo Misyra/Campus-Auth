@@ -169,9 +169,6 @@ class _MonitorFieldsMixin(BaseModel):
     check_interval_seconds: int = Field(
         default=300, ge=10, le=86400, description="检测间隔（秒）"
     )
-    pause_enabled: bool = True
-    pause_start_hour: int = Field(default=0, ge=0, le=23)
-    pause_end_hour: int = Field(default=6, ge=0, le=23)
     network_targets: str = Field(default=DEFAULT_NETWORK_TARGETS)
     http_targets: str = Field(
         default=DEFAULT_HTTP_TARGETS,
@@ -217,6 +214,9 @@ class _SystemFieldsMixin(BaseModel):
     auth_url: str = Field(default="", description="全局认证地址")
     carrier: str = Field(default="无", description="全局运营商")
     carrier_custom: str = Field(default="", description="自定义运营商关键字")
+    pause_enabled: bool = Field(default=True, description="启用暂停时段")
+    pause_start_hour: int = Field(default=0, ge=0, le=23, description="暂停开始（小时）")
+    pause_end_hour: int = Field(default=6, ge=0, le=23, description="暂停结束（小时）")
     backend_log_level: str = Field(default="INFO")
     frontend_log_level: str = Field(default="INFO")
     access_log: bool = Field(default=False, description="Uvicorn HTTP 请求日志")
