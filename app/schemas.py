@@ -256,6 +256,48 @@ class _SystemFieldsMixin(BaseModel):
         return v
 
 
+class GlobalSettings(BaseModel):
+    """全局系统配置 — 仅系统级设置，不包含业务逻辑"""
+
+    # 日志配置
+    backend_log_level: str = Field(default="INFO")
+    frontend_log_level: str = Field(default="INFO")
+    access_log: bool = Field(default=False, description="Uvicorn HTTP 请求日志")
+    log_retention_days: int = Field(default=7, ge=1, le=365, description="日志保留天数")
+
+    # UI 配置
+    minimize_to_tray: bool = Field(default=True, description="最小化到系统托盘")
+    auto_open_browser: bool = Field(default=False, description="启动后自动打开浏览器")
+    startup_action: StartupAction = Field(default=StartupAction.NONE)
+    autostart_lightweight: bool = Field(default=True)
+
+    # 网络配置
+    proxy: str = Field(default="", description="网络代理地址")
+    block_proxy: bool = Field(default=True, description="屏蔽系统代理")
+
+    # 应用配置
+    app_port: int = Field(default=50721, ge=1024, le=65535)
+    shell_path: str = Field(default="", description="自定义 Shell 路径")
+    pure_mode: bool = Field(default=True, description="纯净模式")
+
+    # 重试配置
+    max_retries: int = Field(default=3, ge=0, le=10)
+    retry_interval: int = Field(default=5, ge=1, le=300, description="重试间隔（秒）")
+
+    # Source 级别配置
+    source_levels: dict[str, str] = {}
+
+    @field_validator("backend_log_level", "frontend_log_level")
+    @classmethod
+    def validate_log_level(cls, v: str) -> str:
+        v = v.upper().strip()
+        if v and v not in VALID_LOG_LEVELS:
+            raise ValueError(
+                f"无效的日志级别: {v}，可选值: {', '.join(VALID_LOG_LEVELS)}"
+            )
+        return v
+
+
 # ── 主要模型 ──
 
 
