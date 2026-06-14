@@ -21,7 +21,7 @@ config_logger = get_logger("config_service", source="backend")
 def _update_global_settings(
     global_settings: GlobalSettings, payload: MonitorConfigPayload
 ) -> None:
-    """更新全局系统设置（不包含凭证）"""
+    """更新全局系统设置（不包含凭证和浏览器配置）"""
     global_settings.backend_log_level = normalize_level(
         payload.backend_log_level, "WARNING"
     )
@@ -87,23 +87,6 @@ def save_config_combined(
         profile.url_check_urls = payload.url_check_urls
         profile.network_check_timeout = payload.network_check_timeout
 
-        # 更新浏览器配置
-        profile.headless = payload.headless
-        profile.browser_timeout = payload.browser_timeout
-        profile.browser_navigation_timeout = payload.browser_navigation_timeout
-        profile.login_timeout = payload.login_timeout
-        profile.browser_user_agent = payload.browser_user_agent
-        profile.browser_low_resource_mode = payload.browser_low_resource_mode
-        profile.browser_disable_web_security = payload.browser_disable_web_security
-        profile.browser_extra_headers_json = payload.browser_extra_headers_json
-        profile.browser_args = payload.browser_args
-        profile.stealth_mode = payload.stealth_mode
-        profile.stealth_custom_script = payload.stealth_custom_script
-        profile.browser_locale = payload.browser_locale
-        profile.browser_timezone = payload.browser_timezone
-        profile.browser_viewport_width = payload.browser_viewport_width
-        profile.browser_viewport_height = payload.browser_viewport_height
-
         # 更新自定义变量
         profile.custom_variables = payload.custom_variables
 
@@ -117,7 +100,9 @@ def save_config_combined(
 
 
 def build_runtime_config(
-    payload: MonitorConfigPayload, system_settings: SystemSettings | None = None
+    payload: MonitorConfigPayload,
+    system_settings: SystemSettings | None = None,
+    global_settings: GlobalSettings | None = None,
 ) -> dict[str, Any]:
     """从 MonitorConfigPayload 构建运行时配置字典。
 
@@ -160,23 +145,42 @@ def build_runtime_config(
     else:
         base["isp"] = carrier
 
-    # 浏览器配置
-    base["browser_settings"] = {
-        "headless": payload.headless,
-        "timeout": payload.browser_timeout,
-        "navigation_timeout": payload.browser_navigation_timeout,
-        "user_agent": payload.browser_user_agent.strip(),
-        "low_resource_mode": payload.browser_low_resource_mode,
-        "disable_web_security": payload.browser_disable_web_security,
-        "extra_headers_json": payload.browser_extra_headers_json,
-        "browser_args": payload.browser_args.strip(),
-        "stealth_mode": payload.stealth_mode,
-        "stealth_custom_script": payload.stealth_custom_script.strip(),
-        "locale": payload.browser_locale.strip(),
-        "timezone_id": payload.browser_timezone.strip(),
-        "viewport_width": payload.browser_viewport_width,
-        "viewport_height": payload.browser_viewport_height,
-    }
+    # 浏览器配置 — 从 GlobalSettings 获取
+    if global_settings:
+        base["browser_settings"] = {
+            "headless": global_settings.headless,
+            "timeout": global_settings.browser_timeout,
+            "navigation_timeout": global_settings.browser_navigation_timeout,
+            "user_agent": global_settings.browser_user_agent.strip(),
+            "low_resource_mode": global_settings.browser_low_resource_mode,
+            "disable_web_security": global_settings.browser_disable_web_security,
+            "extra_headers_json": global_settings.browser_extra_headers_json,
+            "browser_args": global_settings.browser_args.strip(),
+            "stealth_mode": global_settings.stealth_mode,
+            "stealth_custom_script": global_settings.stealth_custom_script.strip(),
+            "locale": global_settings.browser_locale.strip(),
+            "timezone_id": global_settings.browser_timezone.strip(),
+            "viewport_width": global_settings.browser_viewport_width,
+            "viewport_height": global_settings.browser_viewport_height,
+        }
+    else:
+        # 回退：使用默认值
+        base["browser_settings"] = {
+            "headless": True,
+            "timeout": 8,
+            "navigation_timeout": 15,
+            "user_agent": "",
+            "low_resource_mode": False,
+            "disable_web_security": False,
+            "extra_headers_json": "",
+            "browser_args": "",
+            "stealth_mode": False,
+            "stealth_custom_script": "",
+            "locale": "zh-CN",
+            "timezone_id": "Asia/Shanghai",
+            "viewport_width": 1280,
+            "viewport_height": 720,
+        }
 
     # 暂停时段
     base["pause_login"] = {

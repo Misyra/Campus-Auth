@@ -34,7 +34,6 @@ def test_profile_fields_contains_expected_fields():
         "carrier",
         "carrier_custom",
         "check_interval_seconds",
-        "headless",
     ]
     for field in expected_fields:
         assert field in PROFILE_FIELDS, f"PROFILE_FIELDS 缺少字段: {field}"

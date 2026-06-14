@@ -265,7 +265,7 @@ class TestNormalizeHeadersJson:
 
     @staticmethod
     def _validate(value: str) -> str:
-        return MonitorConfigPayload(
+        return GlobalSettings(
             browser_extra_headers_json=value
         ).browser_extra_headers_json
 
@@ -349,24 +349,24 @@ class TestAuthUrlValidator:
 
 class TestHeadersJsonValidator:
     def test_valid_json_object(self):
-        m = MonitorConfigPayload(browser_extra_headers_json='{"X-Custom": "value"}')
+        m = GlobalSettings(browser_extra_headers_json='{"X-Custom": "value"}')
         assert m.browser_extra_headers_json == '{"X-Custom":"value"}'
 
     def test_empty_string(self):
-        m = MonitorConfigPayload(browser_extra_headers_json="")
+        m = GlobalSettings(browser_extra_headers_json="")
         assert m.browser_extra_headers_json == ""
 
     def test_strips_whitespace(self):
-        m = MonitorConfigPayload(browser_extra_headers_json='  {"k": "v"}  ')
+        m = GlobalSettings(browser_extra_headers_json='  {"k": "v"}  ')
         assert m.browser_extra_headers_json == '{"k":"v"}'
 
     def test_invalid_json(self):
         with pytest.raises(ValidationError, match="JSON"):
-            MonitorConfigPayload(browser_extra_headers_json="not json")
+            GlobalSettings(browser_extra_headers_json="not json")
 
     def test_json_array_rejected(self):
         with pytest.raises(ValidationError, match="格式不正确"):
-            MonitorConfigPayload(browser_extra_headers_json="[1, 2, 3]")
+            GlobalSettings(browser_extra_headers_json="[1, 2, 3]")
 
 
 # ---------------------------------------------------------------------
@@ -440,16 +440,16 @@ class TestCustomVariablesValidator:
 
 class TestConstrainedFields:
     def test_browser_timeout_valid(self):
-        m = MonitorConfigPayload(browser_timeout=5)
+        m = GlobalSettings(browser_timeout=5)
         assert m.browser_timeout == 5
 
     def test_browser_timeout_too_low(self):
         with pytest.raises(ValidationError):
-            MonitorConfigPayload(browser_timeout=0)
+            GlobalSettings(browser_timeout=0)
 
     def test_browser_timeout_too_high(self):
         with pytest.raises(ValidationError):
-            MonitorConfigPayload(browser_timeout=61)
+            GlobalSettings(browser_timeout=61)
 
     def test_app_port_valid(self):
         m = MonitorConfigPayload(app_port=8080)
@@ -475,12 +475,12 @@ class TestConstrainedFields:
         assert m.pause_end_hour == 23
 
     def test_login_timeout_valid(self):
-        m = MonitorConfigPayload(login_timeout=120)
+        m = GlobalSettings(login_timeout=120)
         assert m.login_timeout == 120
 
     def test_login_timeout_too_low(self):
         with pytest.raises(ValidationError):
-            MonitorConfigPayload(login_timeout=5)
+            GlobalSettings(login_timeout=5)
 
     def test_network_check_timeout_valid(self):
         m = MonitorConfigPayload(network_check_timeout=5)
@@ -491,7 +491,7 @@ class TestConstrainedFields:
             MonitorConfigPayload(network_check_timeout=31)
 
     def test_browser_viewport_valid(self):
-        m = MonitorConfigPayload(
+        m = GlobalSettings(
             browser_viewport_width=1920, browser_viewport_height=1080
         )
         assert m.browser_viewport_width == 1920
@@ -499,11 +499,11 @@ class TestConstrainedFields:
 
     def test_browser_viewport_too_low(self):
         with pytest.raises(ValidationError):
-            MonitorConfigPayload(browser_viewport_width=100)
+            GlobalSettings(browser_viewport_width=100)
 
     def test_browser_viewport_too_high(self):
         with pytest.raises(ValidationError):
-            MonitorConfigPayload(browser_viewport_width=5000)
+            GlobalSettings(browser_viewport_width=5000)
 
 
 # ---------------------------------------------------------------------
@@ -570,7 +570,7 @@ class TestProfileSettingsDefaults:
 
 
 class TestProfileSettings:
-    """扩展 ProfileSettings 测试 — 浏览器配置和监控配置"""
+    """扩展 ProfileSettings 测试 — 监控配置"""
 
     def test_default_values(self):
         """测试默认值"""
@@ -582,8 +582,6 @@ class TestProfileSettings:
         assert profile.auth_url == ""
         assert profile.check_interval_seconds == 300
         assert profile.pause_enabled is True
-        assert profile.headless is True
-        assert profile.browser_timeout == 8
 
     def test_custom_values(self):
         """测试自定义值"""
@@ -594,7 +592,6 @@ class TestProfileSettings:
             carrier="移动",
             auth_url="http://example.com",
             check_interval_seconds=600,
-            headless=False,
         )
         assert profile.name == "测试方案"
         assert profile.username == "testuser"
@@ -602,27 +599,11 @@ class TestProfileSettings:
         assert profile.carrier == "移动"
         assert profile.auth_url == "http://example.com"
         assert profile.check_interval_seconds == 600
-        assert profile.headless is False
 
     def test_invalid_auth_url(self):
         """测试无效认证地址"""
         with pytest.raises(ValidationError, match="认证地址必须以 http"):
             ProfileSettings(auth_url="not-a-url")
-
-    def test_browser_fields_defaults(self):
-        """测试浏览器字段默认值"""
-        profile = ProfileSettings()
-        assert profile.browser_navigation_timeout == 15
-        assert profile.login_timeout == 60
-        assert profile.browser_low_resource_mode is False
-        assert profile.browser_disable_web_security is False
-        assert profile.browser_extra_headers_json == ""
-        assert profile.stealth_mode is False
-        assert profile.stealth_custom_script == ""
-        assert profile.browser_locale == "zh-CN"
-        assert profile.browser_timezone == "Asia/Shanghai"
-        assert profile.browser_viewport_width == 1280
-        assert profile.browser_viewport_height == 720
 
     def test_monitor_fields_defaults(self):
         """测试监控字段默认值"""
@@ -636,14 +617,6 @@ class TestProfileSettings:
         assert profile.auth_url_targets == ""
         assert profile.network_check_timeout == 2
         assert profile.custom_variables == {}
-
-    def test_extra_headers_json_validation(self):
-        """测试浏览器请求头 JSON 验证"""
-        profile = ProfileSettings(browser_extra_headers_json='{"Referer": "https://example.com"}')
-        assert '"Referer"' in profile.browser_extra_headers_json
-
-        with pytest.raises(ValidationError, match="JSON"):
-            ProfileSettings(browser_extra_headers_json="not json")
 
 
 # ---------------------------------------------------------------------
@@ -887,8 +860,6 @@ class TestMonitorConfigPayloadFull:
             password="testpass",
             auth_url="http://10.0.0.1/login",
             check_interval_seconds=600,
-            headless=False,
-            browser_timeout=10,
             pause_enabled=False,
             enable_tcp_check=True,
             enable_http_check=False,
@@ -896,7 +867,6 @@ class TestMonitorConfigPayloadFull:
         )
         assert m.username == "testuser"
         assert m.check_interval_seconds == 600
-        assert m.headless is False
         assert m.enable_http_check is False
         assert m.custom_variables == {"KEY": "VAL"}
 
@@ -905,7 +875,6 @@ class TestMonitorConfigPayloadFull:
         m = MonitorConfigPayload()
         assert m.username == ""
         assert m.auth_url == ""
-        assert m.headless is True
         assert m.enable_tcp_check is False
         assert m.enable_http_check is False
 

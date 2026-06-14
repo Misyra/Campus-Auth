@@ -261,31 +261,17 @@ class TestSaveConfigCombined:
         assert profile.network_check_timeout == 5
 
     def test_updates_browser_config(self):
-        """测试更新浏览器配置"""
+        """测试浏览器配置现在保存在 global_settings 中"""
         mock_profile_service = MagicMock()
-        payload = MonitorConfigPayload(
-            headless=False,
-            browser_timeout=15,
-            browser_navigation_timeout=30,
-            login_timeout=120,
-            browser_user_agent="Custom UA",
-            browser_low_resource_mode=True,
-            browser_disable_web_security=True,
-            browser_extra_headers_json='{"X-Custom": "value"}',
-            browser_args="--custom-arg",
-            stealth_mode=True,
-            stealth_custom_script="console.log('test')",
-            browser_locale="en-US",
-            browser_timezone="America/New_York",
-            browser_viewport_width=1920,
-            browser_viewport_height=1080,
-        )
+        payload = MonitorConfigPayload()
 
         captured_data = None
 
         def mock_update(func):
             nonlocal captured_data
             data = ProfilesData()
+            # 浏览器配置现在在 global_settings 中，不在 MonitorConfigPayload 中
+            # 所以 save_config_combined 不会更新浏览器配置
             func(data)
             captured_data = data
 
@@ -293,24 +279,17 @@ class TestSaveConfigCombined:
 
         save_config_combined(payload, mock_profile_service)
 
-        # 验证浏览器配置被更新
+        # 验证 global_settings 中的浏览器配置保持默认值
         assert captured_data is not None
-        profile = captured_data.profiles["default"]
-        assert profile.headless is False
-        assert profile.browser_timeout == 15
-        assert profile.browser_navigation_timeout == 30
-        assert profile.login_timeout == 120
-        assert profile.browser_user_agent == "Custom UA"
-        assert profile.browser_low_resource_mode is True
-        assert profile.browser_disable_web_security is True
-        assert profile.browser_extra_headers_json == '{"X-Custom":"value"}'
-        assert profile.browser_args == "--custom-arg"
-        assert profile.stealth_mode is True
-        assert profile.stealth_custom_script == "console.log('test')"
-        assert profile.browser_locale == "en-US"
-        assert profile.browser_timezone == "America/New_York"
-        assert profile.browser_viewport_width == 1920
-        assert profile.browser_viewport_height == 1080
+        global_settings = captured_data.global_settings
+        assert global_settings.headless is True
+        assert global_settings.browser_timeout == 8
+        assert global_settings.browser_navigation_timeout == 15
+        assert global_settings.login_timeout == 60
+        assert global_settings.browser_locale == "zh-CN"
+        assert global_settings.browser_timezone == "Asia/Shanghai"
+        assert global_settings.browser_viewport_width == 1280
+        assert global_settings.browser_viewport_height == 720
 
     def test_updates_custom_variables(self):
         """测试更新自定义变量"""
