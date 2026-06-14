@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from app.constants import DEFAULT_NETWORK_TARGETS
-from app.schemas import MonitorConfigPayload, ProfileSettings, ProfilesData
+from app.schemas import MonitorConfigPayload, ProfilesData, ProfileSettings
 from app.utils.crypto import decrypt_password, mask_password
 from app.utils.exceptions import DecryptionError
 from app.utils.logging import get_logger, normalize_level

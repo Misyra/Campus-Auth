@@ -476,7 +476,7 @@ class ProfilesData(BaseModel):
     profiles: dict[str, ProfileSettings] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def ensure_default_profile(self) -> "ProfilesData":
+    def ensure_default_profile(self) -> ProfilesData:
         """确保 default profile 存在"""
         if "default" not in self.profiles:
             self.profiles["default"] = ProfileSettings()
