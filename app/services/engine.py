@@ -281,6 +281,13 @@ class ScheduleEngine:
             else:
                 self._login_retry.count = 0
 
+            # 检查是否需要重启（自动切换方案）
+            if self._monitor_core.consume_profile_switch_flag():
+                logger.info("检测到方案切换，重启监控")
+                self._handle_stop()
+                self._reload_config_internal()
+                self._handle_start(EngineCommand(type=EngineCmdType.START))
+
             self._next_network_check = time.time() + interval
             self._update_status_snapshot(force=True)
         except Exception:
