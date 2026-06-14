@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from app.schemas import (
     ActionResponse,
     AutoStartStatusResponse,
+    GlobalSettings,
     LogEntry,
     MonitorConfigPayload,
     MonitorStatusResponse,
@@ -614,6 +615,50 @@ class TestSystemSettings:
         """测试 source_levels 默认为空字典"""
         settings = SystemSettings()
         assert settings.source_levels == {}
+
+
+# ---------------------------------------------------------------------
+# GlobalSettings
+# ---------------------------------------------------------------------
+
+
+class TestGlobalSettings:
+    def test_default_values(self):
+        """测试默认值"""
+        settings = GlobalSettings()
+        assert settings.backend_log_level == "INFO"
+        assert settings.frontend_log_level == "INFO"
+        assert settings.access_log is False
+        assert settings.log_retention_days == 7
+        assert settings.minimize_to_tray is True
+        assert settings.auto_open_browser is False
+        assert settings.proxy == ""
+        assert settings.block_proxy is True
+        assert settings.app_port == 50721
+        assert settings.pure_mode is True
+        assert settings.max_retries == 3
+        assert settings.retry_interval == 5
+
+    def test_custom_values(self):
+        """测试自定义值"""
+        settings = GlobalSettings(
+            backend_log_level="DEBUG",
+            app_port=8080,
+            max_retries=5,
+        )
+        assert settings.backend_log_level == "DEBUG"
+        assert settings.app_port == 8080
+        assert settings.max_retries == 5
+
+    def test_invalid_log_level(self):
+        """测试无效日志级别"""
+        with pytest.raises(ValueError, match="无效的日志级别"):
+            GlobalSettings(backend_log_level="INVALID")
+
+    def test_log_level_normalization(self):
+        """测试日志级别归一化"""
+        settings = GlobalSettings(backend_log_level="debug")
+        assert settings.backend_log_level == "DEBUG"
 
 
 # ---------------------------------------------------------------------
