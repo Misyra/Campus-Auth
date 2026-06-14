@@ -1,6 +1,35 @@
 import { extractApiError, pickFile, downloadBlob, safeApiCall } from '../methods/utils.js';
 
 export const editorTaskMethods = {
+  // 同步 name/description 输入框到 JSON 内容
+  syncMetaToJson() {
+    if (!this.editingTask || this._syncingFromJson) return;
+    this._syncingFromMeta = true;
+    try {
+      const parsed = JSON.parse(this.editingTask.json);
+      parsed.name = this.editingTask.name;
+      parsed.description = this.editingTask.description;
+      this.editingTask.json = JSON.stringify(parsed, null, 2);
+      this.jsonError = '';
+    } catch {
+      // JSON 无效时不同步，等用户修正
+    }
+    this._syncingFromMeta = false;
+  },
+  // 同步 JSON 内容到 name/description 输入框
+  syncJsonToMeta() {
+    if (!this.editingTask || this._syncingFromMeta) return;
+    this._syncingFromJson = true;
+    try {
+      const parsed = JSON.parse(this.editingTask.json);
+      if ('name' in parsed) this.editingTask.name = parsed.name || '';
+      if ('description' in parsed) this.editingTask.description = parsed.description || '';
+      this.jsonError = '';
+    } catch {
+      // JSON 无效时不同步
+    }
+    this._syncingFromJson = false;
+  },
   async showTaskEditor(taskId) {
     if (taskId) {
       try {
@@ -44,6 +73,9 @@ export const editorTaskMethods = {
     try {
       const { data } = await this.$api.get(`/api/tasks/${templateId}`);
       this.editingTask.json = JSON.stringify(data, null, 2);
+      // 同步 name/description
+      if (data.name) this.editingTask.name = data.name;
+      if (data.description) this.editingTask.description = data.description;
       this.jsonError = '';
     } catch (error) {
       this.frontendLogger.error('tasks', '加载模板失败: ' + templateId, error);
