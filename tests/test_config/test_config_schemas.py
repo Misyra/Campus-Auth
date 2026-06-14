@@ -569,6 +569,83 @@ class TestProfileSettingsDefaults:
         assert p.match_ssid == "CampusWiFi"
 
 
+class TestProfileSettings:
+    """扩展 ProfileSettings 测试 — 浏览器配置和监控配置"""
+
+    def test_default_values(self):
+        """测试默认值"""
+        profile = ProfileSettings()
+        assert profile.name == "默认方案"
+        assert profile.username == ""
+        assert profile.password == ""
+        assert profile.carrier == "无"
+        assert profile.auth_url == ""
+        assert profile.check_interval_seconds == 300
+        assert profile.pause_enabled is True
+        assert profile.headless is True
+        assert profile.browser_timeout == 8
+
+    def test_custom_values(self):
+        """测试自定义值"""
+        profile = ProfileSettings(
+            name="测试方案",
+            username="testuser",
+            password="testpass",
+            carrier="移动",
+            auth_url="http://example.com",
+            check_interval_seconds=600,
+            headless=False,
+        )
+        assert profile.name == "测试方案"
+        assert profile.username == "testuser"
+        assert profile.password == "testpass"
+        assert profile.carrier == "移动"
+        assert profile.auth_url == "http://example.com"
+        assert profile.check_interval_seconds == 600
+        assert profile.headless is False
+
+    def test_invalid_auth_url(self):
+        """测试无效认证地址"""
+        with pytest.raises(ValidationError, match="认证地址必须以 http"):
+            ProfileSettings(auth_url="not-a-url")
+
+    def test_browser_fields_defaults(self):
+        """测试浏览器字段默认值"""
+        profile = ProfileSettings()
+        assert profile.browser_navigation_timeout == 15
+        assert profile.login_timeout == 60
+        assert profile.browser_low_resource_mode is False
+        assert profile.browser_disable_web_security is False
+        assert profile.browser_extra_headers_json == ""
+        assert profile.stealth_mode is False
+        assert profile.stealth_custom_script == ""
+        assert profile.browser_locale == "zh-CN"
+        assert profile.browser_timezone == "Asia/Shanghai"
+        assert profile.browser_viewport_width == 1280
+        assert profile.browser_viewport_height == 720
+
+    def test_monitor_fields_defaults(self):
+        """测试监控字段默认值"""
+        profile = ProfileSettings()
+        assert profile.pause_start_hour == 0
+        assert profile.pause_end_hour == 6
+        assert profile.enable_tcp_check is False
+        assert profile.enable_http_check is False
+        assert profile.enable_local_check is True
+        assert profile.check_auth_url is False
+        assert profile.auth_url_targets == ""
+        assert profile.network_check_timeout == 2
+        assert profile.custom_variables == {}
+
+    def test_extra_headers_json_validation(self):
+        """测试浏览器请求头 JSON 验证"""
+        profile = ProfileSettings(browser_extra_headers_json='{"Referer": "https://example.com"}')
+        assert '"Referer"' in profile.browser_extra_headers_json
+
+        with pytest.raises(ValidationError, match="JSON"):
+            ProfileSettings(browser_extra_headers_json="not json")
+
+
 # ---------------------------------------------------------------------
 # SystemSettings
 # ---------------------------------------------------------------------
