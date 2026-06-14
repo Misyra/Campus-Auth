@@ -93,7 +93,7 @@ def is_local_network_connected() -> bool:
     """检查本地网络是否有实际连接（有线或无线）。"""
     try:
         for name, stats in psutil.net_if_stats().items():
-            if stats.isup and name.lower() not in ("lo", "loopback"):
+            if stats.isup and not name.lower().startswith("lo"):
                 logger.debug("网络接口已连接: {} (speed={}Mbps)", name, stats.speed)
                 return True
     except Exception as exc:
