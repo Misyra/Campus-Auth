@@ -136,4 +136,4 @@ for arg in "$@"; do
 done
 
 echo "[3/3] 启动 Campus-Auth..."
-exec "$UV_CMD" run main.py "$@"
+exec "$UV_CMD" run main.py --browser "$@"
