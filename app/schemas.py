@@ -372,22 +372,66 @@ class AutoStartStatusResponse(BaseModel):
     lightweight: bool = True
 
 
-class ProfileSettings(BaseModel):
-    """方案配置 — 只存储凭证相关字段，高级设置跟随全局。"""
+class ProfileSettings(_BrowserFieldsMixin):
+    """方案配置 — 所有业务配置的唯一数据源"""
 
+    # 基本信息
     name: str = Field(default="默认方案")
     match_gateway_ip: str = Field(
         default="", description="匹配的网关 IP，留空表示不匹配（手动选择时使用）"
     )
     match_ssid: str = Field(default="", description="匹配的 WiFi SSID，留空表示不匹配")
+
+    # 凭证配置
     username: str = Field(default="", description="方案独立账号，留空则使用全局账号")
     password: str = Field(
         default="", description="方案独立密码（加密存储），留空则使用全局密码"
     )
     carrier: str = Field(default="无", description="方案独立运营商，留空则使用全局")
     carrier_custom: str = Field(default="", description="自定义运营商关键字")
-    active_task: str = Field(default="", description="方案独立任务，留空则使用全局任务")
     auth_url: str = Field(default="", description="方案独立认证地址，留空则使用全局")
+    active_task: str = Field(default="", description="方案独立任务，留空则使用全局任务")
+
+    # 监控配置
+    check_interval_seconds: int = Field(
+        default=300, ge=10, le=86400, description="检测间隔（秒）"
+    )
+    pause_enabled: bool = Field(default=True, description="启用暂停时段")
+    pause_start_hour: int = Field(default=0, ge=0, le=23, description="暂停开始（小时）")
+    pause_end_hour: int = Field(default=6, ge=0, le=23, description="暂停结束（小时）")
+    network_targets: str = Field(default=DEFAULT_NETWORK_TARGETS)
+    http_targets: str = Field(
+        default=DEFAULT_HTTP_TARGETS, description="HTTP 检测目标地址，逗号分隔"
+    )
+    enable_tcp_check: bool = Field(
+        default=False, description="通过 TCP 端口连接检测目标地址是否可达"
+    )
+    enable_http_check: bool = Field(
+        default=False, description="通过 HTTP 请求检测网页是否可正常访问"
+    )
+    enable_local_check: bool = Field(
+        default=True,
+        description="物理网络连接检查：未连接 WiFi/网线时跳过登录",
+    )
+    check_auth_url: bool = Field(
+        default=False, description="登录前检测认证地址是否可达，不可达则跳过登录"
+    )
+    auth_url_targets: str = Field(
+        default="",
+        description="认证地址可达性附加检测目标，逗号分隔的 host:port，留空则仅检测认证地址本身",
+    )
+    url_check_urls: str = Field(
+        default="http://captive.apple.com/hotspot-detect.html|Success\nhttp://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test\nhttp://detectportal.firefox.com/success.txt|success",
+        description="网址响应检测地址，每行一个：URL|预期内容，留空不启用",
+    )
+    network_check_timeout: int = Field(
+        default=2, ge=1, le=30, description="TCP 网络检测超时（秒）"
+    )
+
+    # 自定义变量
+    custom_variables: dict[str, str] = Field(default_factory=dict)
+
+    # 全局配置覆盖标志
     use_global_credentials: bool = Field(
         default=True,
         description="是否使用全局账号密码（true 时忽略 username/password/carrier）",
@@ -400,6 +444,11 @@ class ProfileSettings(BaseModel):
         default=True,
         description="是否使用全局活动任务（true 时忽略 active_task，使用全局任务）",
     )
+
+    @field_validator("auth_url")
+    @classmethod
+    def validate_auth_url(cls, v: str) -> str:
+        return _validate_auth_url(v)
 
 
 class SystemSettings(_SystemFieldsMixin):
