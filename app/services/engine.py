@@ -604,7 +604,6 @@ class ScheduleEngine:
                 logger.warning("配置重载时部分密码解密失败")
             self._runtime_config = build_runtime_config(
                 runtime_payload,
-                data.system,
             )
             self._runtime_snapshot = copy.deepcopy(self._runtime_config)
 
