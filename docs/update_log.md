@@ -1,5 +1,49 @@
 # 更新日志
 
+## v4.0.2
+
+### 新增功能
+
+- **任务编辑器双向同步**：name/description 输入框与 JSON 配置实时双向同步，修改输入框自动更新 JSON，修改 JSON 自动更新输入框
+
+### 修复
+
+- 修复 `is_local_network_connected()` 未正确过滤回环接口的问题（Windows `Loopback Pseudo-Interface 1`、macOS `lo0`）
+- 修复手动登录在无配置时误返回 `success=True`
+- 修复日志级别下拉选择后显示对应级别及更高级别，默认选中 INFO
+- 修复 CustomSelect 下拉框被父容器遮挡问题（改用 `position: fixed`）
+- 修复 field-help tooltip 被同级元素遮挡问题（添加 `z-index`）
+- 修复 Dashboard 使用的 `getSourceLabel` 方法缺失
+- 修复前端 CSS 变量 `--accent-rgb` 缺失、Firefox zoom 兼容、退出页 innerHTML 清理
+
+### 重构
+
+- 删除 `decision.py` 中未使用的 `check_campus_network_status()` 函数及对应测试
+- 清理 `tasks` 层死代码（重复 `PROJECT_ROOT`、`execute_remaining`）
+- 清理 `services` 层 3 处死代码、`monitor_service.py` 中 4 处死代码和误导注释
+- 清理 `utils` 层 3 处死代码（`config_utils`、`logging`、`repo_proxy`）
+- 删除 `constants.py` 中 4 个零引用常量
+- 删除 `api/__init__.py` 中未使用的 `logged_action` 装饰器
+- 删除 `diagnostics.py` shim 文件及对应测试
+- 删除 `playwright_bootstrap` 中两个零引用查询函数及对应测试
+- 删除 `container.py` 中未使用的 `NullTaskExecutor` 导入和 `_logs_dir` 属性
+- 删除 `schemas.py` 方法内重复的 `import re`
+- 删除日志文件查看器功能
+- 清理 Task 5/6 遗留的孤立导入
+- `engine.py` 移除死常量、将循环内 import 移至模块顶部
+
+### 测试
+
+- 补充多模块缺失的测试用例
+
+### 文档
+
+- 全面更新 README.md：修正项目结构、入口文件（`app.py` → `main.py`）、CLI 参数、模块路径
+- 全面更新 API 文档：新增日志级别、OCR 管理、脚本二进制列表等端点，移除已删除端点
+- 全面更新开发文档：修正架构概览、模块路径、环境变量参考
+
+---
+
 ## v4.0.0
 
 ### 新增功能
