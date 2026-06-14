@@ -12,16 +12,18 @@ from typing import Any
 
 # ── 常量 ──────────────────────────────────────────────────────────────
 
-# SystemSettings 中需要提取到 MonitorConfigPayload 的字段
+# ProfileSettings 中的所有字段
 PROFILE_FIELDS: tuple[str, ...] = (
     "username",
     "password",
     "auth_url",
     "carrier",
     "carrier_custom",
+    "active_task",
     "check_interval_seconds",
     "headless",
     "browser_timeout",
+    "browser_navigation_timeout",
     "login_timeout",
     "browser_user_agent",
     "browser_low_resource_mode",
@@ -43,26 +45,30 @@ PROFILE_FIELDS: tuple[str, ...] = (
     "check_auth_url",
     "auth_url_targets",
     "url_check_urls",
+    "custom_variables",
+    "block_proxy",
+    "network_check_timeout",
+    "browser_viewport_width",
+    "browser_viewport_height",
+)
+
+# GlobalSettings 中的字段
+GLOBAL_FIELDS: tuple[str, ...] = (
     "backend_log_level",
     "frontend_log_level",
     "access_log",
+    "log_retention_days",
     "minimize_to_tray",
     "auto_open_browser",
     "startup_action",
     "autostart_lightweight",
+    "proxy",
+    "app_port",
+    "shell_path",
+    "pure_mode",
     "max_retries",
     "retry_interval",
-    "log_retention_days",
-    "custom_variables",
-    "proxy",
-    "block_proxy",
-    "app_port",
-    "network_check_timeout",
-    "use_global_credentials",
-    "shell_path",
-    "browser_viewport_width",
-    "browser_viewport_height",
-    "browser_navigation_timeout",
+    "source_levels",
 )
 
 
