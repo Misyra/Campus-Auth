@@ -1,0 +1,424 @@
+"""测试 config_service.py 中的配置保存逻辑。"""
+
+from __future__ import annotations
+
+from unittest.mock import MagicMock, patch
+
+from app.schemas import (
+    GlobalSettings,
+    MonitorConfigPayload,
+    ProfilesData,
+    ProfileSettings,
+)
+from app.services.config_service import save_config_combined, _update_global_settings
+
+
+class TestUpdateGlobalSettings:
+    """测试 _update_global_settings 函数"""
+
+    def test_updates_global_settings_fields(self):
+        """测试更新全局设置字段"""
+        global_settings = GlobalSettings()
+        payload = MonitorConfigPayload(
+            backend_log_level="DEBUG",
+            frontend_log_level="INFO",
+            access_log=True,
+            log_retention_days=14,
+            minimize_to_tray=False,
+            auto_open_browser=True,
+            startup_action="monitor",
+            autostart_lightweight=False,
+            proxy="http://proxy:8080",
+            block_proxy=False,
+            app_port=8080,
+            shell_path="/bin/bash",
+            max_retries=5,
+            retry_interval=10,
+        )
+
+        _update_global_settings(global_settings, payload)
+
+        assert global_settings.backend_log_level == "DEBUG"
+        assert global_settings.frontend_log_level == "INFO"
+        assert global_settings.access_log is True
+        assert global_settings.log_retention_days == 14
+        assert global_settings.minimize_to_tray is False
+        assert global_settings.auto_open_browser is True
+        assert global_settings.startup_action == "monitor"
+        assert global_settings.autostart_lightweight is False
+        assert global_settings.proxy == "http://proxy:8080"
+        assert global_settings.block_proxy is False
+        assert global_settings.app_port == 8080
+        assert global_settings.shell_path == "/bin/bash"
+        assert global_settings.max_retries == 5
+        assert global_settings.retry_interval == 10
+
+    def test_normalizes_log_levels(self):
+        """测试日志级别归一化"""
+        global_settings = GlobalSettings()
+        payload = MonitorConfigPayload(
+            backend_log_level="  debug  ",
+            frontend_log_level="  warning  ",
+        )
+
+        _update_global_settings(global_settings, payload)
+
+        assert global_settings.backend_log_level == "DEBUG"
+        assert global_settings.frontend_log_level == "WARNING"
+
+    def test_strips_proxy_whitespace(self):
+        """测试代理地址去除空白"""
+        global_settings = GlobalSettings()
+        payload = MonitorConfigPayload(proxy="  http://proxy:8080  ")
+
+        _update_global_settings(global_settings, payload)
+
+        assert global_settings.proxy == "http://proxy:8080"
+
+    def test_does_not_update_credentials(self):
+        """测试不更新凭证字段（凭证应保存到 profile）"""
+        global_settings = GlobalSettings()
+        payload = MonitorConfigPayload(
+            username="testuser",
+            password="testpass",
+            auth_url="http://example.com",
+            carrier="移动",
+        )
+
+        _update_global_settings(global_settings, payload)
+
+        # GlobalSettings 不应包含凭证字段
+        assert not hasattr(global_settings, "username")
+        assert not hasattr(global_settings, "password")
+        assert not hasattr(global_settings, "auth_url")
+        assert not hasattr(global_settings, "carrier")
+
+
+class TestSaveConfigCombined:
+    """测试 save_config_combined 函数"""
+
+    def test_saves_to_active_profile(self):
+        """测试保存到活动 profile"""
+        mock_profile_service = MagicMock()
+        payload = MonitorConfigPayload(
+            username="testuser",
+            password="testpass",
+            auth_url="http://example.com",
+            carrier="移动",
+            active_task="task1",
+            check_interval_seconds=600,
+            headless=False,
+        )
+
+        # 模拟 profile_service.update 的行为
+        def mock_update(func):
+            data = ProfilesData()
+            data.active_profile = "default"
+            func(data)
+            return data
+
+        mock_profile_service.update.side_effect = mock_update
+
+        save_config_combined(payload, mock_profile_service)
+
+        # 验证 update 被调用
+        mock_profile_service.update.assert_called_once()
+
+    def test_creates_active_profile_if_missing(self):
+        """测试活动 profile 不存在时自动创建"""
+        mock_profile_service = MagicMock()
+        payload = MonitorConfigPayload(
+            username="testuser",
+            password="testpass",
+        )
+
+        captured_data = None
+
+        def mock_update(func):
+            nonlocal captured_data
+            data = ProfilesData()
+            data.active_profile = "custom_profile"
+            # 确保 custom_profile 不存在
+            assert "custom_profile" not in data.profiles
+            func(data)
+            captured_data = data
+
+        mock_profile_service.update.side_effect = mock_update
+
+        save_config_combined(payload, mock_profile_service)
+
+        # 验证 profile 被创建
+        assert captured_data is not None
+        assert "custom_profile" in captured_data.profiles
+        assert captured_data.profiles["custom_profile"].username == "testuser"
+
+    def test_updates_global_settings(self):
+        """测试更新全局设置"""
+        mock_profile_service = MagicMock()
+        payload = MonitorConfigPayload(
+            backend_log_level="DEBUG",
+            proxy="http://proxy:8080",
+            app_port=8080,
+        )
+
+        captured_data = None
+
+        def mock_update(func):
+            nonlocal captured_data
+            data = ProfilesData()
+            func(data)
+            captured_data = data
+
+        mock_profile_service.update.side_effect = mock_update
+
+        save_config_combined(payload, mock_profile_service)
+
+        # 验证全局设置被更新
+        assert captured_data is not None
+        assert captured_data.global_settings.backend_log_level == "DEBUG"
+        assert captured_data.global_settings.proxy == "http://proxy:8080"
+        assert captured_data.global_settings.app_port == 8080
+
+    def test_saves_credentials_to_profile(self):
+        """测试凭证保存到 profile"""
+        mock_profile_service = MagicMock()
+        payload = MonitorConfigPayload(
+            username="testuser",
+            password="testpass",
+            auth_url="http://example.com",
+            carrier="移动",
+            carrier_custom="custom_isp",
+            active_task="task1",
+        )
+
+        captured_data = None
+
+        def mock_update(func):
+            nonlocal captured_data
+            data = ProfilesData()
+            func(data)
+            captured_data = data
+
+        mock_profile_service.update.side_effect = mock_update
+
+        save_config_combined(payload, mock_profile_service)
+
+        # 验证凭证保存到 profile
+        assert captured_data is not None
+        profile = captured_data.profiles["default"]
+        assert profile.username == "testuser"
+        assert profile.auth_url == "http://example.com"
+        assert profile.carrier == "移动"
+        assert profile.carrier_custom == "custom_isp"
+        assert profile.active_task == "task1"
+
+    def test_updates_monitor_config(self):
+        """测试更新监控配置"""
+        mock_profile_service = MagicMock()
+        payload = MonitorConfigPayload(
+            check_interval_seconds=600,
+            pause_enabled=False,
+            pause_start_hour=22,
+            pause_end_hour=8,
+            network_targets="8.8.8.8,114.114.114.114",
+            http_targets="http://example.com",
+            enable_tcp_check=True,
+            enable_http_check=True,
+            enable_local_check=False,
+            check_auth_url=True,
+            auth_url_targets="example.com:80",
+            url_check_urls="http://example.com|Success",
+            network_check_timeout=5,
+        )
+
+        captured_data = None
+
+        def mock_update(func):
+            nonlocal captured_data
+            data = ProfilesData()
+            func(data)
+            captured_data = data
+
+        mock_profile_service.update.side_effect = mock_update
+
+        save_config_combined(payload, mock_profile_service)
+
+        # 验证监控配置被更新
+        assert captured_data is not None
+        profile = captured_data.profiles["default"]
+        assert profile.check_interval_seconds == 600
+        assert profile.pause_enabled is False
+        assert profile.pause_start_hour == 22
+        assert profile.pause_end_hour == 8
+        assert profile.network_targets == "8.8.8.8,114.114.114.114"
+        assert profile.http_targets == "http://example.com"
+        assert profile.enable_tcp_check is True
+        assert profile.enable_http_check is True
+        assert profile.enable_local_check is False
+        assert profile.check_auth_url is True
+        assert profile.auth_url_targets == "example.com:80"
+        assert profile.url_check_urls == "http://example.com|Success"
+        assert profile.network_check_timeout == 5
+
+    def test_updates_browser_config(self):
+        """测试更新浏览器配置"""
+        mock_profile_service = MagicMock()
+        payload = MonitorConfigPayload(
+            headless=False,
+            browser_timeout=15,
+            browser_navigation_timeout=30,
+            login_timeout=120,
+            browser_user_agent="Custom UA",
+            browser_low_resource_mode=True,
+            browser_disable_web_security=True,
+            browser_extra_headers_json='{"X-Custom": "value"}',
+            browser_args="--custom-arg",
+            stealth_mode=True,
+            stealth_custom_script="console.log('test')",
+            browser_locale="en-US",
+            browser_timezone="America/New_York",
+            browser_viewport_width=1920,
+            browser_viewport_height=1080,
+        )
+
+        captured_data = None
+
+        def mock_update(func):
+            nonlocal captured_data
+            data = ProfilesData()
+            func(data)
+            captured_data = data
+
+        mock_profile_service.update.side_effect = mock_update
+
+        save_config_combined(payload, mock_profile_service)
+
+        # 验证浏览器配置被更新
+        assert captured_data is not None
+        profile = captured_data.profiles["default"]
+        assert profile.headless is False
+        assert profile.browser_timeout == 15
+        assert profile.browser_navigation_timeout == 30
+        assert profile.login_timeout == 120
+        assert profile.browser_user_agent == "Custom UA"
+        assert profile.browser_low_resource_mode is True
+        assert profile.browser_disable_web_security is True
+        assert profile.browser_extra_headers_json == '{"X-Custom":"value"}'
+        assert profile.browser_args == "--custom-arg"
+        assert profile.stealth_mode is True
+        assert profile.stealth_custom_script == "console.log('test')"
+        assert profile.browser_locale == "en-US"
+        assert profile.browser_timezone == "America/New_York"
+        assert profile.browser_viewport_width == 1920
+        assert profile.browser_viewport_height == 1080
+
+    def test_updates_custom_variables(self):
+        """测试更新自定义变量"""
+        mock_profile_service = MagicMock()
+        custom_vars = {"KEY1": "value1", "KEY2": "value2"}
+        payload = MonitorConfigPayload(custom_variables=custom_vars)
+
+        captured_data = None
+
+        def mock_update(func):
+            nonlocal captured_data
+            data = ProfilesData()
+            func(data)
+            captured_data = data
+
+        mock_profile_service.update.side_effect = mock_update
+
+        save_config_combined(payload, mock_profile_service)
+
+        # 验证自定义变量被更新
+        assert captured_data is not None
+        profile = captured_data.profiles["default"]
+        assert profile.custom_variables == custom_vars
+
+    @patch("app.utils.crypto.save_password_field")
+    def test_encrypts_password(self, mock_save_password):
+        """测试密码加密"""
+        mock_save_password.return_value = "encrypted_password"
+        mock_profile_service = MagicMock()
+        payload = MonitorConfigPayload(
+            username="testuser",
+            password="testpass",
+        )
+
+        captured_data = None
+
+        def mock_update(func):
+            nonlocal captured_data
+            data = ProfilesData()
+            func(data)
+            captured_data = data
+
+        mock_profile_service.update.side_effect = mock_update
+
+        save_config_combined(payload, mock_profile_service)
+
+        # 验证密码被加密
+        mock_save_password.assert_called_once_with("testpass", "")
+        assert captured_data is not None
+        assert captured_data.profiles["default"].password == "encrypted_password"
+
+    @patch("app.utils.crypto.save_password_field")
+    def test_preserves_existing_password_if_not_provided(self, mock_save_password):
+        """测试未提供密码时保留现有密码"""
+        mock_save_password.return_value = "encrypted_password"
+        mock_profile_service = MagicMock()
+        payload = MonitorConfigPayload(
+            username="testuser",
+            password="••••••••",  # 前端掩码
+        )
+
+        captured_data = None
+
+        def mock_update(func):
+            nonlocal captured_data
+            data = ProfilesData()
+            data.profiles["default"].password = "existing_encrypted"
+            func(data)
+            captured_data = data
+
+        mock_profile_service.update.side_effect = mock_update
+
+        save_config_combined(payload, mock_profile_service)
+
+        # 验证密码未被更新（因为以 • 开头）
+        assert captured_data is not None
+        assert captured_data.profiles["default"].password == "existing_encrypted"
+        mock_save_password.assert_not_called()
+
+    def test_strips_whitespace_from_credentials(self):
+        """测试凭证去除空白"""
+        mock_profile_service = MagicMock()
+        payload = MonitorConfigPayload(
+            username="  testuser  ",
+            password="testpass",
+            auth_url="  http://example.com  ",
+            carrier="  移动  ",
+            carrier_custom="  custom  ",
+            active_task="  task1  ",
+        )
+
+        captured_data = None
+
+        def mock_update(func):
+            nonlocal captured_data
+            data = ProfilesData()
+            func(data)
+            captured_data = data
+
+        mock_profile_service.update.side_effect = mock_update
+
+        save_config_combined(payload, mock_profile_service)
+
+        # 验证空白被去除
+        assert captured_data is not None
+        profile = captured_data.profiles["default"]
+        assert profile.username == "testuser"
+        assert profile.auth_url == "http://example.com"
+        assert profile.carrier == "移动"
+        assert profile.carrier_custom == "custom"
+        assert profile.active_task == "task1"
