@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.schemas import ProfilesData, ProfileSettings, SystemSettings
+from app.schemas import GlobalSettings, ProfilesData, ProfileSettings
 
 
 class TestDictUpdateBreaksPydantic:
@@ -18,19 +18,19 @@ class TestDictUpdateBreaksPydantic:
     def test_dict_update_preserves_field_values(self):
         """__dict__.update 能正确替换字段值。"""
         data = ProfilesData(
-            system=SystemSettings(username="current", password="ENC:current"),
-            profiles={"default": ProfileSettings(name="当前方案")},
+            global_settings=GlobalSettings(),
+            profiles={"default": ProfileSettings(name="当前方案", username="current")},
         )
         backup = ProfilesData(
-            system=SystemSettings(username="backup", password="ENC:backup"),
-            profiles={"default": ProfileSettings(name="备份方案")},
+            global_settings=GlobalSettings(),
+            profiles={"default": ProfileSettings(name="备份方案", username="backup")},
         )
 
         # 当前的回滚方式
         data.__dict__.update(backup.__dict__)
 
         # 字段值确实被替换了
-        assert data.system.username == "backup"
+        assert data.profiles["default"].username == "backup"
 
     def test_dict_update_corrupts_pydantic_fields_set(self):
         """__dict__.update 会破坏 __pydantic_fields_set__，导致 model_dump 行为异常。
@@ -40,14 +40,15 @@ class TestDictUpdateBreaksPydantic:
         """
         # data 只设置了部分字段
         data = ProfilesData(
-            system=SystemSettings(username="current", password="ENC:current"),
+            global_settings=GlobalSettings(),
+            profiles={"default": ProfileSettings(username="current")},
         )
         # backup 设置了所有字段
         backup = ProfilesData(
             auto_switch=True,
             active_profile="custom",
-            system=SystemSettings(username="backup", password="ENC:backup"),
-            profiles={"default": ProfileSettings(name="备份方案")},
+            global_settings=GlobalSettings(),
+            profiles={"default": ProfileSettings(name="备份方案", username="backup")},
         )
 
         # 记录 backup 的 fields_set
@@ -68,12 +69,12 @@ class TestDictUpdateBreaksPydantic:
         这个测试记录了当前行为，但不保证未来兼容性。
         """
         data = ProfilesData(
-            system=SystemSettings(username="current", password="ENC:current"),
-            profiles={"default": ProfileSettings(name="当前方案")},
+            global_settings=GlobalSettings(),
+            profiles={"default": ProfileSettings(name="当前方案", username="current")},
         )
         backup = ProfilesData(
-            system=SystemSettings(username="backup", password="ENC:backup"),
-            profiles={"default": ProfileSettings(name="备份方案")},
+            global_settings=GlobalSettings(),
+            profiles={"default": ProfileSettings(name="备份方案", username="backup")},
         )
 
         backup_dump = backup.model_dump()
@@ -87,14 +88,14 @@ class TestDictUpdateBreaksPydantic:
     def test_proper_rollback_via_field_assignment(self):
         """正确的回滚方式：逐字段赋值，保持 Pydantic 内部状态一致。"""
         data = ProfilesData(
-            system=SystemSettings(username="current", password="ENC:current"),
-            profiles={"default": ProfileSettings(name="当前方案")},
+            global_settings=GlobalSettings(),
+            profiles={"default": ProfileSettings(name="当前方案", username="current")},
         )
         backup = ProfilesData(
             auto_switch=True,
             active_profile="custom",
-            system=SystemSettings(username="backup", password="ENC:backup"),
-            profiles={"default": ProfileSettings(name="备份方案")},
+            global_settings=GlobalSettings(),
+            profiles={"default": ProfileSettings(name="备份方案", username="backup")},
         )
 
         # 正确的回滚方式
@@ -102,7 +103,7 @@ class TestDictUpdateBreaksPydantic:
             setattr(data, field_name, getattr(backup, field_name))
 
         # 字段值正确
-        assert data.system.username == "backup"
+        assert data.profiles["default"].username == "backup"
         assert data.auto_switch is True
         assert data.active_profile == "custom"
 

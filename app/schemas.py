@@ -101,64 +101,6 @@ _BROWSER_ARGS_DEFAULT = (
 )
 
 
-# ── 共享字段 mixin（消除 MonitorConfigPayload 与 ProfileSettings 之间的重复） ──
-
-
-class _BrowserFieldsMixin(BaseModel):
-    """浏览器相关共享字段"""
-
-    headless: bool = True
-    browser_timeout: int = Field(
-        default=8, ge=1, le=60, description="页面操作超时（秒）"
-    )
-    login_timeout: int = Field(
-        default=60, ge=10, le=600, description="手动登录等待超时（秒）"
-    )
-    browser_navigation_timeout: int = Field(
-        default=15, ge=3, le=60, description="打开登录页面超时（秒）"
-    )
-    browser_user_agent: str = Field(default_factory=get_default_ua)
-    browser_low_resource_mode: bool = False
-    browser_disable_web_security: bool = False
-    browser_extra_headers_json: str = Field(default="")
-    browser_args: str = Field(
-        default=_BROWSER_ARGS_DEFAULT, description="自定义 Chromium 启动参数，每行一个"
-    )
-    stealth_mode: bool = Field(
-        default=False, description="隐藏浏览器自动操作特征，降低被识别为工具操作的风险"
-    )
-    stealth_custom_script: str = Field(
-        default="",
-        description="在反检测模式开启时额外执行的自定义 JavaScript 脚本",
-    )
-    browser_locale: str = Field(default="zh-CN", description="浏览器语言区域")
-    browser_timezone: str = Field(default="Asia/Shanghai", description="浏览器时区 ID")
-    browser_viewport_width: int = Field(
-        default=1280, ge=320, le=3840, description="浏览器视口宽度"
-    )
-    browser_viewport_height: int = Field(
-        default=720, ge=240, le=2160, description="浏览器视口高度"
-    )
-
-    @field_validator("browser_extra_headers_json")
-    @classmethod
-    def validate_headers_json(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            return ""
-        try:
-            parsed = json.loads(v)
-        except json.JSONDecodeError as e:
-            raise ValueError(
-                f"浏览器请求头格式不正确，请确认输入的是合法的 JSON 对象: {e}"
-            ) from e
-        if not isinstance(parsed, dict):
-            raise ValueError(
-                '浏览器请求头格式不正确，应为键值对形式，例如: {"Referer": "https://example.com"}'
-            )
-        return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
-
-
 class _MonitorFieldsMixin(BaseModel):
     """监控与网络检测相关共享字段"""
 
@@ -287,6 +229,23 @@ class GlobalSettings(BaseModel):
     # Source 级别配置
     source_levels: dict[str, str] = {}
 
+    # 浏览器配置
+    headless: bool = Field(default=True)
+    browser_timeout: int = Field(default=8, ge=1, le=60, description="页面操作超时（秒）")
+    browser_navigation_timeout: int = Field(default=15, ge=3, le=60, description="打开登录页面超时（秒）")
+    login_timeout: int = Field(default=60, ge=10, le=600, description="手动登录等待超时（秒）")
+    browser_user_agent: str = Field(default_factory=get_default_ua)
+    browser_low_resource_mode: bool = Field(default=False)
+    browser_disable_web_security: bool = Field(default=False)
+    browser_extra_headers_json: str = Field(default="")
+    browser_args: str = Field(default=_BROWSER_ARGS_DEFAULT, description="自定义 Chromium 启动参数，每行一个")
+    stealth_mode: bool = Field(default=False, description="隐藏浏览器自动操作特征，降低被识别为工具操作的风险")
+    stealth_custom_script: str = Field(default="", description="在反检测模式开启时额外执行的自定义 JavaScript 脚本")
+    browser_locale: str = Field(default="zh-CN", description="浏览器语言区域")
+    browser_timezone: str = Field(default="Asia/Shanghai", description="浏览器时区 ID")
+    browser_viewport_width: int = Field(default=1280, ge=320, le=3840, description="浏览器视口宽度")
+    browser_viewport_height: int = Field(default=720, ge=240, le=2160, description="浏览器视口高度")
+
     @field_validator("backend_log_level", "frontend_log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:
@@ -297,12 +256,29 @@ class GlobalSettings(BaseModel):
             )
         return v
 
+    @field_validator("browser_extra_headers_json")
+    @classmethod
+    def validate_headers_json(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            return ""
+        try:
+            parsed = json.loads(v)
+        except json.JSONDecodeError as e:
+            raise ValueError(
+                f"浏览器请求头格式不正确，请确认输入的是合法的 JSON 对象: {e}"
+            ) from e
+        if not isinstance(parsed, dict):
+            raise ValueError(
+                '浏览器请求头格式不正确，应为键值对形式，例如: {"Referer": "https://example.com"}'
+            )
+        return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
+
 
 # ── 主要模型 ──
 
 
 class MonitorConfigPayload(
-    _BrowserFieldsMixin,
     _MonitorFieldsMixin,
     _SystemFieldsMixin,
 ):
@@ -372,7 +348,7 @@ class AutoStartStatusResponse(BaseModel):
     lightweight: bool = True
 
 
-class ProfileSettings(_BrowserFieldsMixin):
+class ProfileSettings(BaseModel):
     """方案配置 — 所有业务配置的唯一数据源"""
 
     # 基本信息

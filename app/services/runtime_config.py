@@ -115,6 +115,22 @@ def _build_config_payload(
         "max_retries": data.global_settings.max_retries,
         "retry_interval": data.global_settings.retry_interval,
         "source_levels": data.global_settings.source_levels,
+        # 浏览器配置
+        "headless": data.global_settings.headless,
+        "browser_timeout": data.global_settings.browser_timeout,
+        "browser_navigation_timeout": data.global_settings.browser_navigation_timeout,
+        "login_timeout": data.global_settings.login_timeout,
+        "browser_user_agent": data.global_settings.browser_user_agent,
+        "browser_low_resource_mode": data.global_settings.browser_low_resource_mode,
+        "browser_disable_web_security": data.global_settings.browser_disable_web_security,
+        "browser_extra_headers_json": data.global_settings.browser_extra_headers_json,
+        "browser_args": data.global_settings.browser_args,
+        "stealth_mode": data.global_settings.stealth_mode,
+        "stealth_custom_script": data.global_settings.stealth_custom_script,
+        "browser_locale": data.global_settings.browser_locale,
+        "browser_timezone": data.global_settings.browser_timezone,
+        "browser_viewport_width": data.global_settings.browser_viewport_width,
+        "browser_viewport_height": data.global_settings.browser_viewport_height,
     })
 
     # 归一化

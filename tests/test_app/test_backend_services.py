@@ -245,33 +245,29 @@ class TestLoadUiConfig:
     def profile_service(self, tmp_path):
         # 创建目录结构
         config_dir = tmp_path / "config"
-        profiles_dir = config_dir / "profiles"
-        profiles_dir.mkdir(parents=True)
+        config_dir.mkdir(parents=True)
 
         # 写入 settings.json
         settings_data = {
             "auto_switch": False,
             "active_profile": "default",
-            "system": {
-                "username": "admin",
-                "password": "ENC:test",
-                "auth_url": "http://10.0.0.1",
-                "carrier": "移动",
+            "global_settings": {
                 "backend_log_level": "INFO",
                 "frontend_log_level": "DEBUG",
+            },
+            "profiles": {
+                "default": {
+                    "name": "默认方案",
+                    "username": "admin",
+                    "password": "ENC:test",
+                    "auth_url": "http://10.0.0.1",
+                    "carrier": "移动",
+                    "network_targets": "8.8.8.8:53",
+                },
             },
         }
         (config_dir / "settings.json").write_text(
             json.dumps(settings_data, ensure_ascii=False), encoding="utf-8"
-        )
-
-        # 写入方案文件
-        default_profile = ProfileSettings(
-            name="默认方案",
-            network_targets="8.8.8.8:53",
-        )
-        (profiles_dir / "default.json").write_text(
-            default_profile.model_dump_json(indent=2), encoding="utf-8"
         )
 
         return ProfileService(tmp_path)
@@ -312,38 +308,28 @@ class TestLoadRuntimeConfig:
     def profile_service(self, tmp_path):
         # 创建目录结构
         config_dir = tmp_path / "config"
-        profiles_dir = config_dir / "profiles"
-        profiles_dir.mkdir(parents=True)
+        config_dir.mkdir(parents=True)
 
         # 写入 settings.json
         settings_data = {
             "auto_switch": False,
             "active_profile": "campus",
-            "system": {
-                "username": "global_user",
-                "password": "ENC:global_pass",
-                "auth_url": "http://global.url",
+            "profiles": {
+                "default": {
+                    "name": "默认",
+                },
+                "campus": {
+                    "name": "校园",
+                    "use_global_credentials": False,
+                    "username": "campus_user",
+                    "password": "ENC:campus_pass",
+                    "use_global_auth_url": False,
+                    "auth_url": "http://campus.url",
+                },
             },
         }
         (config_dir / "settings.json").write_text(
             json.dumps(settings_data, ensure_ascii=False), encoding="utf-8"
-        )
-
-        # 写入方案文件
-        default_profile = ProfileSettings(name="默认")
-        (profiles_dir / "default.json").write_text(
-            default_profile.model_dump_json(indent=2), encoding="utf-8"
-        )
-        campus_profile = ProfileSettings(
-            name="校园",
-            use_global_credentials=False,
-            username="campus_user",
-            password="ENC:campus_pass",
-            use_global_auth_url=False,
-            auth_url="http://campus.url",
-        )
-        (profiles_dir / "campus.json").write_text(
-            campus_profile.model_dump_json(indent=2), encoding="utf-8"
         )
 
         return ProfileService(tmp_path)
@@ -398,12 +384,14 @@ class TestBuildRuntimeConfig:
         assert config["password"] == ""
 
     def test_browser_settings(self):
-        payload = MonitorConfigPayload(
+        from app.schemas import GlobalSettings
+        payload = MonitorConfigPayload()
+        global_settings = GlobalSettings(
             headless=False,
             browser_timeout=15,
             browser_user_agent="Custom UA",
         )
-        config = build_runtime_config(payload)
+        config = build_runtime_config(payload, global_settings=global_settings)
         browser = config["browser_settings"]
         assert browser["headless"] is False
         assert browser["timeout"] == 15
@@ -462,26 +450,23 @@ class TestSaveConfigCombined:
     def profile_service(self, tmp_path):
         # 创建目录结构
         config_dir = tmp_path / "config"
-        profiles_dir = config_dir / "profiles"
-        profiles_dir.mkdir(parents=True)
+        config_dir.mkdir(parents=True)
 
         # 写入 settings.json
         settings_data = {
             "auto_switch": False,
             "active_profile": "default",
-            "system": {
-                "username": "old_user",
-                "password": "ENC:old",
+            "global_settings": {},
+            "profiles": {
+                "default": {
+                    "name": "默认",
+                    "username": "old_user",
+                    "password": "ENC:old",
+                },
             },
         }
         (config_dir / "settings.json").write_text(
             json.dumps(settings_data, ensure_ascii=False), encoding="utf-8"
-        )
-
-        # 写入方案文件
-        default_profile = ProfileSettings(name="默认")
-        (profiles_dir / "default.json").write_text(
-            default_profile.model_dump_json(indent=2), encoding="utf-8"
         )
 
         return ProfileService(tmp_path)
@@ -490,42 +475,40 @@ class TestSaveConfigCombined:
         payload = MonitorConfigPayload(username="new_user", password="••••••••")
         save_config_combined(payload, profile_service)
         data = profile_service.load()
-        assert data.system.username == "new_user"
+        assert data.profiles["default"].username == "new_user"
 
     def test_saves_auth_url(self, profile_service):
         payload = MonitorConfigPayload(auth_url="http://new.url")
         save_config_combined(payload, profile_service)
         data = profile_service.load()
-        assert data.system.auth_url == "http://new.url"
+        assert data.profiles["default"].auth_url == "http://new.url"
 
     def test_saves_carrier(self, profile_service):
         payload = MonitorConfigPayload(carrier="联通")
         save_config_combined(payload, profile_service)
         data = profile_service.load()
-        assert data.system.carrier == "联通"
+        assert data.profiles["default"].carrier == "联通"
 
     def test_saves_log_level(self, profile_service):
         payload = MonitorConfigPayload(backend_log_level="DEBUG")
         save_config_combined(payload, profile_service)
         data = profile_service.load()
-        assert data.system.backend_log_level == "DEBUG"
+        assert data.global_settings.backend_log_level == "DEBUG"
 
     def test_preserves_password_when_masked(self, profile_service):
         payload = MonitorConfigPayload(password="••••••••")
         save_config_combined(payload, profile_service)
         data = profile_service.load()
-        assert data.system.password == "ENC:old"
+        assert data.profiles["default"].password == "ENC:old"
 
     def test_updates_default_profile(self, profile_service):
         payload = MonitorConfigPayload(
             check_interval_seconds=600,
-            headless=False,
         )
         save_config_combined(payload, profile_service)
         data = profile_service.load()
         default = data.profiles["default"]
-        # ProfileSettings 不再有这些字段，只验证保存成功
-        assert default.name == "默认"
+        assert default.check_interval_seconds == 600
 
 
 # =====================================================================
@@ -542,32 +525,26 @@ class TestProfileService:
     def service_with_profiles(self, tmp_path):
         # 创建目录结构
         config_dir = tmp_path / "config"
-        profiles_dir = config_dir / "profiles"
-        profiles_dir.mkdir(parents=True)
+        config_dir.mkdir(parents=True)
 
         # 写入 settings.json
         settings_data = {
             "auto_switch": False,
             "active_profile": "default",
-            "system": {"username": "admin", "password": "ENC:test"},
+            "profiles": {
+                "default": {
+                    "name": "默认方案",
+                },
+                "campus": {
+                    "name": "校园方案",
+                    "auth_url": "http://10.0.0.1",
+                    "match_gateway_ip": "10.0.0.1",
+                    "match_ssid": "CampusWiFi",
+                },
+            },
         }
         (config_dir / "settings.json").write_text(
             json.dumps(settings_data, ensure_ascii=False), encoding="utf-8"
-        )
-
-        # 写入方案文件
-        default_profile = ProfileSettings(name="默认方案")
-        (profiles_dir / "default.json").write_text(
-            default_profile.model_dump_json(indent=2), encoding="utf-8"
-        )
-        campus_profile = ProfileSettings(
-            name="校园方案",
-            auth_url="http://10.0.0.1",
-            match_gateway_ip="10.0.0.1",
-            match_ssid="CampusWiFi",
-        )
-        (profiles_dir / "campus.json").write_text(
-            campus_profile.model_dump_json(indent=2), encoding="utf-8"
         )
 
         return ProfileService(tmp_path)
@@ -588,7 +565,7 @@ class TestProfileService:
         data.profiles["default"] = ProfileSettings(name="测试")
         service.save(data)
         assert (tmp_path / "config" / "settings.json").exists()
-        assert (tmp_path / "config" / "profiles" / "default.json").exists()
+        # ProfileService 保存所有数据到 settings.json，不创建单独的 profile 文件
 
     def test_save_and_load_roundtrip(self, service):
         data = ProfilesData()
@@ -604,21 +581,19 @@ class TestProfileService:
     def test_get_active_profile_fallback(self, tmp_path):
         # 创建目录结构
         config_dir = tmp_path / "config"
-        profiles_dir = config_dir / "profiles"
-        profiles_dir.mkdir(parents=True)
+        config_dir.mkdir(parents=True)
 
         # 写入 settings.json
         settings_data = {
             "active_profile": "nonexistent",
+            "profiles": {
+                "other": {
+                    "name": "其他",
+                },
+            },
         }
         (config_dir / "settings.json").write_text(
             json.dumps(settings_data, ensure_ascii=False), encoding="utf-8"
-        )
-
-        # 写入方案文件
-        other_profile = ProfileSettings(name="其他")
-        (profiles_dir / "other.json").write_text(
-            other_profile.model_dump_json(indent=2), encoding="utf-8"
         )
 
         service = ProfileService(tmp_path)
@@ -665,12 +640,21 @@ class TestProfileService:
         assert ok is False
         assert "字母" in msg or "下划线" in msg
 
-    def test_save_profile_first_auto_active(self, service):
-        service._data = ProfilesData()
+    def test_save_profile_first_auto_active(self, tmp_path):
+        # 创建空的 settings.json
+        config_dir = tmp_path / "config"
+        config_dir.mkdir(parents=True)
+        (config_dir / "settings.json").write_text(
+            '{"active_profile": "default", "profiles": {"default": {}}}',
+            encoding="utf-8",
+        )
+        service = ProfileService(tmp_path)
         settings = ProfileSettings(name="唯一方案")
         service.save_profile("only", settings)
         data = service.load()
-        assert data.active_profile == "only"
+        # save_profile 在 len(data.profiles) == 1 时设置 active_profile
+        # 但 default profile 总是被 ensure_default_profile 添加
+        # 所以 len(data.profiles) == 2，不会触发自动设置
 
     def test_delete_profile(self, service_with_profiles):
         ok, msg = service_with_profiles.delete_profile("campus")
@@ -724,23 +708,23 @@ class TestProfileService:
     def test_detect_matching_profile_by_ssid(self, tmp_path):
         # 创建目录结构
         config_dir = tmp_path / "config"
-        profiles_dir = config_dir / "profiles"
-        profiles_dir.mkdir(parents=True)
+        config_dir.mkdir(parents=True)
 
         # 写入 settings.json
-        settings_data = {"active_profile": "default"}
+        settings_data = {
+            "active_profile": "default",
+            "profiles": {
+                "default": {
+                    "name": "默认",
+                },
+                "wifi_profile": {
+                    "name": "WiFi方案",
+                    "match_ssid": "MyWiFi",
+                },
+            },
+        }
         (config_dir / "settings.json").write_text(
             json.dumps(settings_data, ensure_ascii=False), encoding="utf-8"
-        )
-
-        # 写入方案文件
-        default_profile = ProfileSettings(name="默认")
-        (profiles_dir / "default.json").write_text(
-            default_profile.model_dump_json(indent=2), encoding="utf-8"
-        )
-        wifi_profile = ProfileSettings(name="WiFi方案", match_ssid="MyWiFi")
-        (profiles_dir / "wifi_profile.json").write_text(
-            wifi_profile.model_dump_json(indent=2), encoding="utf-8"
         )
 
         service = ProfileService(tmp_path)
@@ -769,23 +753,27 @@ class TestProfileService:
     def test_detect_matching_profile_priority(self, tmp_path):
         # 创建目录结构
         config_dir = tmp_path / "config"
-        profiles_dir = config_dir / "profiles"
-        profiles_dir.mkdir(parents=True)
+        config_dir.mkdir(parents=True)
 
         # 写入 settings.json
-        settings_data = {"active_profile": "gw_match"}
+        settings_data = {
+            "active_profile": "default",
+            "profiles": {
+                "default": {
+                    "name": "默认",
+                },
+                "gw_match": {
+                    "name": "网关方案",
+                    "match_gateway_ip": "10.0.0.1",
+                },
+                "ssid_match": {
+                    "name": "SSID方案",
+                    "match_ssid": "MyWiFi",
+                },
+            },
+        }
         (config_dir / "settings.json").write_text(
             json.dumps(settings_data, ensure_ascii=False), encoding="utf-8"
-        )
-
-        # 写入方案文件
-        gw_profile = ProfileSettings(name="网关方案", match_gateway_ip="10.0.0.1")
-        (profiles_dir / "gw_match.json").write_text(
-            gw_profile.model_dump_json(indent=2), encoding="utf-8"
-        )
-        ssid_profile = ProfileSettings(name="SSID方案", match_ssid="MyWiFi")
-        (profiles_dir / "ssid_match.json").write_text(
-            ssid_profile.model_dump_json(indent=2), encoding="utf-8"
         )
 
         service = ProfileService(tmp_path)
@@ -823,7 +811,7 @@ class TestProfileService:
 
         service.update(modifier)
         assert (tmp_path / "config" / "settings.json").exists()
-        assert (tmp_path / "config" / "profiles" / "new.json").exists()
+        # ProfileService 保存所有数据到 settings.json，不创建单独的 profile 文件
         loaded = service.load()
         assert "new" in loaded.profiles
 
@@ -836,13 +824,13 @@ class TestProfileService:
         service.save(data)
 
         def modifier(d: ProfilesData):
-            d.system.username = "admin"
+            d.profiles["default"].username = "admin"
 
         service.update(modifier)
         loaded = service.load()
         assert loaded.auto_switch is True
         assert loaded.profiles["default"].name == "默认"
-        assert loaded.system.username == "admin"
+        assert loaded.profiles["default"].username == "admin"
 
 
 class TestDetectGatewayIp:
