@@ -339,6 +339,14 @@ uv run ruff check .
 uv run ruff format .
 ```
 
+### 编译启动程序
+
+`start.exe` 由 `start.go` 编译生成，需要 Go 1.20+：
+
+```bash
+go build -ldflags="-s -w" -o start.exe start.go
+```
+
 ### 常用调试入口
 
 #### 日志
