@@ -71,6 +71,7 @@ class NetworkMonitorCore:
         # 自动切换相关
         self._profile_service: ProfileService | None = None
         self._last_profile_id: str | None = None
+        self._profile_switch_needed: bool = False
 
     def log_message(
         self, message: str, level: str = "INFO", exc_info: bool = False
@@ -335,7 +336,14 @@ class NetworkMonitorCore:
                     self._last_profile_id = self._profile_service.load().active_profile
                     self.log_message(f"方案切换失败: {msg}", "WARNING")
                 else:
-                    # 方案切换成功（日志已在上方输出）
-                    pass
+                    # 方案切换成功，设置标志位
+                    self._profile_switch_needed = True
         except Exception as exc:
             self.log_message(f"方案切换检测异常: {exc}", "WARNING")
+
+    def consume_profile_switch_flag(self) -> bool:
+        """消费重启标志位（原子操作）。"""
+        if self._profile_switch_needed:
+            self._profile_switch_needed = False
+            return True
+        return False
