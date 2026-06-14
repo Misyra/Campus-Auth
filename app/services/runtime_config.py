@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from app.constants import DEFAULT_NETWORK_TARGETS
 from app.schemas import MonitorConfigPayload, ProfileSettings, ProfilesData
-from app.utils.config_utils import PROFILE_FIELDS, extract_profile_fields
 from app.utils.crypto import decrypt_password, mask_password
 from app.utils.exceptions import DecryptionError
 from app.utils.logging import get_logger, normalize_level
@@ -75,81 +74,59 @@ def _build_config_payload(
     """
     if data is None:
         data = profile_service.load()
-    system_settings = data.system
 
-    if apply_overrides:
-        profile = data.profiles.get(data.active_profile)
-        config_logger.debug("加载运行时配置: profile={}", data.active_profile)
-    else:
-        profile = None
-        config_logger.debug("加载 UI 配置: profile={}", data.active_profile)
+    # 执行迁移（如果需要）
+    data = migrate_config_if_needed(data)
 
-    # 从系统设置作为基础
-    payload_dict = extract_profile_fields(system_settings.model_dump(), PROFILE_FIELDS)
+    # 获取活动 profile
+    profile = data.profiles.get(data.active_profile)
+    if profile is None:
+        profile = data.profiles.get("default", ProfileSettings())
 
+    config_logger.debug("加载配置: profile={}", data.active_profile)
+
+    # 从 profile 构建 payload
+    payload_dict = profile.model_dump()
+
+    # 处理密码
     any_error = False
-
     if apply_overrides:
-        # 账号密码：方案独立 > 全局；运行时使用解密明文
-        use_global = True
-        if profile and not profile.use_global_credentials and profile.username:
-            payload_dict["username"] = profile.username
-            use_global = False
-            pwd, err = _decrypt_password_field(
-                profile.password or "",
-                fallback_pwd=system_settings.password or "",
-                label=f"方案 '{data.active_profile}'",
-            )
-            payload_dict["password"] = pwd
-            any_error = err
-        else:
-            payload_dict["username"] = system_settings.username
-            pwd, err = _decrypt_password_field(system_settings.password or "")
-            payload_dict["password"] = pwd
-            any_error = err
-        payload_dict["use_global_credentials"] = use_global
-
-        # 认证地址：跟随全局或使用方案独立值
-        if not profile or profile.use_global_auth_url:
-            payload_dict["auth_url"] = system_settings.auth_url
-        else:
-            payload_dict["auth_url"] = profile.auth_url
-
-        # 任务：跟随全局或使用方案独立任务
-        if not profile or profile.use_global_task:
-            payload_dict["active_task"] = ""
-        else:
-            payload_dict["active_task"] = profile.active_task
-
-        # 运营商：跟随 use_global_credentials 标志
-        if not profile or profile.use_global_credentials:
-            payload_dict["carrier"] = system_settings.carrier
-            payload_dict["carrier_custom"] = system_settings.carrier_custom
-        else:
-            payload_dict["carrier"] = profile.carrier
-            payload_dict["carrier_custom"] = profile.carrier_custom
+        pwd, err = _decrypt_password_field(profile.password)
+        payload_dict["password"] = pwd
+        any_error = err
     else:
-        # UI 模式：使用全局系统设置
-        payload_dict["password"] = mask_password(system_settings.password)
-        payload_dict["active_task"] = ""
-        payload_dict["use_global_credentials"] = True
+        payload_dict["password"] = mask_password(profile.password)
 
-    # 公共归一化
-    payload_dict["network_targets"] = _normalize_targets(
-        payload_dict.get("network_targets", "")
-    )
-    payload_dict["http_targets"] = _normalize_targets(
-        payload_dict.get("http_targets", "")
-    )
+    # 合并 global_settings 中的系统配置
+    payload_dict.update({
+        "backend_log_level": data.global_settings.backend_log_level,
+        "frontend_log_level": data.global_settings.frontend_log_level,
+        "access_log": data.global_settings.access_log,
+        "log_retention_days": data.global_settings.log_retention_days,
+        "minimize_to_tray": data.global_settings.minimize_to_tray,
+        "auto_open_browser": data.global_settings.auto_open_browser,
+        "startup_action": data.global_settings.startup_action,
+        "autostart_lightweight": data.global_settings.autostart_lightweight,
+        "proxy": data.global_settings.proxy,
+        "block_proxy": data.global_settings.block_proxy,
+        "app_port": data.global_settings.app_port,
+        "shell_path": data.global_settings.shell_path,
+        "pure_mode": data.global_settings.pure_mode,
+        "max_retries": data.global_settings.max_retries,
+        "retry_interval": data.global_settings.retry_interval,
+        "source_levels": data.global_settings.source_levels,
+    })
+
+    # 归一化
     payload_dict["backend_log_level"] = normalize_level(
-        system_settings.backend_log_level, "WARNING"
+        payload_dict.get("backend_log_level", "INFO"), "WARNING"
     )
     payload_dict["frontend_log_level"] = normalize_level(
-        system_settings.frontend_log_level, "WARNING"
+        payload_dict.get("frontend_log_level", "INFO"), "WARNING"
     )
 
     result = MonitorConfigPayload(**payload_dict)
-    return (result, any_error if apply_overrides else False)
+    return (result, any_error)
 
 
 def load_ui_config(
