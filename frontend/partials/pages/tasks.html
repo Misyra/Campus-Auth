@@ -109,11 +109,11 @@
         </div>
         <div class="form-group">
           <label for="task-name">任务名称</label>
-          <input id="task-name" v-model="editingTask.name" type="text" placeholder="我的登录任务" />
+          <input id="task-name" v-model="editingTask.name" type="text" placeholder="我的登录任务" @input="syncMetaToJson" />
         </div>
         <div class="form-group">
           <label for="task-desc">描述</label>
-          <input id="task-desc" v-model="editingTask.description" type="text" placeholder="任务描述" />
+          <input id="task-desc" v-model="editingTask.description" type="text" placeholder="任务描述" @input="syncMetaToJson" />
         </div>
         <div class="form-group">
           <label for="task-url">认证地址</label>
@@ -127,7 +127,7 @@
             v-model="editingTask.json"
             rows="12"
             placeholder="任务JSON配置"
-            @input="validateJson"
+            @input="validateJson(); syncJsonToMeta()"
             :class="{ 'json-invalid': jsonError, 'json-valid': editingTask.json && editingTask.json.trim() && !jsonError }"
           ></textarea>
           <div v-if="jsonError" class="json-error">{{ jsonError }}</div>
