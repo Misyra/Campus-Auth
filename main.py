@@ -242,16 +242,6 @@ def _run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
 # ==================== 启动辅助函数 ====================
 
 
-def _detect_launch_context() -> LaunchContext:
-    """检测启动来源（仅用于日志和 UI 体验，不参与业务逻辑）"""
-    source = (
-        LaunchSource.AUTOSTART
-        if os.environ.get("CAMPUS_AUTH_AUTOSTART") == "1"
-        else LaunchSource.MANUAL
-    )
-    return LaunchContext(source=source)
-
-
 def _build_app_config(
     cli_startup_action: str | None = None,
     cli_runtime_mode: str | None = None,
@@ -584,6 +574,12 @@ def main() -> None:
         choices=["status", "enable", "disable"],
         help="管理开机自启动 (status/enable/disable)",
     )
+    parser.add_argument(
+        "--source",
+        choices=["manual", "autostart"],
+        default="manual",
+        help=argparse.SUPPRESS,
+    )
     args = parser.parse_args()
 
     # 互斥参数检测
@@ -614,7 +610,7 @@ def main() -> None:
         cli_tray=args.tray,
         cli_no_tray=args.no_tray,
     )
-    launch_ctx = _detect_launch_context()
+    launch_ctx = LaunchContext(source=LaunchSource(args.source))
     ctx = ApplicationContext(config=config, launch=launch_ctx)
 
     _run_server(ctx, force=args.force)

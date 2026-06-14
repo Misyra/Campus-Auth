@@ -21,7 +21,7 @@ def _autostart_cli_args(lightweight: bool = True) -> str:
         lightweight: True 时使用轻量模式（仅监控），False 时使用完整模式（含 Web）
     """
     mode = "--runtime-mode lightweight" if lightweight else ""
-    return f"--startup-action monitor {mode} --no-browser".replace("  ", " ").strip()
+    return f"--startup-action monitor {mode} --no-browser --source autostart".replace("  ", " ").strip()
 
 
 class AutoStartService:
@@ -192,11 +192,6 @@ class AutoStartService:
         <string>-lc</string>
         <string>{escaped_cmd}</string>
     </array>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>CAMPUS_AUTH_AUTOSTART</key>
-        <string>1</string>
-    </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
@@ -266,7 +261,6 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory={self.project_root}
-Environment=CAMPUS_AUTH_AUTOSTART=1
 ExecStart=/bin/sh -lc '{cmd}'
 Restart=always
 RestartSec=5
@@ -304,7 +298,6 @@ WantedBy=default.target
                 （targetExe 赋值 + WshShell.Run 调用）。
         """
         return f"""Set WshShell = CreateObject("WScript.Shell")
-WshShell.Environment("PROCESS")("CAMPUS_AUTH_AUTOSTART") = "1"
 
 ' Check if already running
 Set fso = CreateObject("Scripting.FileSystemObject")
