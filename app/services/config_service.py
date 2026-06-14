@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.schemas import MonitorConfigPayload, ProfilesData, ProfileSettings, SystemSettings
+from app.schemas import GlobalSettings, MonitorConfigPayload, ProfilesData, ProfileSettings, SystemSettings
 from app.utils.logging import get_logger, normalize_level
 
 from .profile_service import ProfileService
@@ -12,82 +12,99 @@ from .profile_service import ProfileService
 config_logger = get_logger("config_service", source="backend")
 
 
-def _update_system_settings(
-    system_settings: SystemSettings, payload: MonitorConfigPayload
+def _update_global_settings(
+    global_settings: GlobalSettings, payload: MonitorConfigPayload
 ) -> None:
-    """更新系统设置字段。"""
-    from app.utils.crypto import save_password_field
-
-    pwd_raw = payload.password.strip()
-    old_user = system_settings.username
-    system_settings.username = payload.username.strip()
-    system_settings.password = save_password_field(pwd_raw, system_settings.password)
-    pwd_status = "已更新" if (pwd_raw and not pwd_raw.startswith("•")) else "保留"
-    config_logger.info("系统设置已保存: 用户={}", system_settings.username)
-    config_logger.debug("密码状态: {}, 旧用户名: {}", pwd_status, old_user)
-
-    # 直接映射的系统字段
-    field_list = [
-        "access_log",
-        "minimize_to_tray",
-        "startup_action",
-        "autostart_lightweight",
-        "auto_open_browser",
-        "max_retries",
-        "retry_interval",
-        "log_retention_days",
-        "block_proxy",
-        "network_check_timeout",
-        "app_port",
-        "shell_path",
-    ]
-    update_data = {
-        k: v
-        for k, v in payload.model_dump().items()
-        if k in field_list and v is not None
-    }
-    merged = {**system_settings.model_dump(), **update_data}
-    validated = type(system_settings).model_validate(merged)
-    for field in field_list:
-        if field in update_data:
-            setattr(system_settings, field, getattr(validated, field))
-    # 需要归一化处理的系统字段
-    system_settings.auth_url = payload.auth_url.strip()
-    system_settings.carrier = str(payload.carrier or "无").strip()
-    system_settings.carrier_custom = str(payload.carrier_custom or "").strip()
-    system_settings.backend_log_level = normalize_level(
+    """更新全局系统设置（不包含凭证）"""
+    global_settings.backend_log_level = normalize_level(
         payload.backend_log_level, "WARNING"
     )
-    system_settings.frontend_log_level = normalize_level(
+    global_settings.frontend_log_level = normalize_level(
         payload.frontend_log_level, "WARNING"
     )
-    system_settings.proxy = payload.proxy.strip()
+    global_settings.access_log = payload.access_log
+    global_settings.log_retention_days = payload.log_retention_days
+    global_settings.minimize_to_tray = payload.minimize_to_tray
+    global_settings.auto_open_browser = payload.auto_open_browser
+    global_settings.startup_action = payload.startup_action
+    global_settings.autostart_lightweight = payload.autostart_lightweight
+    global_settings.proxy = payload.proxy.strip()
+    global_settings.block_proxy = payload.block_proxy
+    global_settings.app_port = payload.app_port
+    global_settings.shell_path = payload.shell_path
+    global_settings.max_retries = payload.max_retries
+    global_settings.retry_interval = payload.retry_interval
 
 
 def save_config_combined(
     payload: MonitorConfigPayload,
     profile_service: ProfileService,
 ) -> None:
-    """原子化保存全局设置（system + default 方案）。
-
-    设置页面始终修改全局配置，不涉及活动方案的独立字段。
-    使用 profile_service.update() 保证 load→modify→save 原子性。
-    """
+    """原子化保存配置到活动 profile 和 global_settings。"""
 
     def _apply(data: ProfilesData) -> None:
-        # 更新系统设置
-        _update_system_settings(data.system, payload)
+        # 更新全局设置（不包含凭证）
+        _update_global_settings(data.global_settings, payload)
 
-        # 确保 default 方案存在
-        if "default" not in data.profiles:
-            data.profiles["default"] = ProfileSettings()
-            config_logger.info("已自动初始化默认方案")
+        # 确保活动 profile 存在
+        active_profile = data.active_profile
+        if active_profile not in data.profiles:
+            data.profiles[active_profile] = ProfileSettings()
+            config_logger.info("已自动初始化活动方案: {}", active_profile)
 
-        # 在锁内写日志，data 就是即将持久化的内容
+        # 更新活动 profile
+        profile = data.profiles[active_profile]
+
+        # 更新凭证
+        from app.utils.crypto import save_password_field
+        profile.username = payload.username.strip()
+        pwd_raw = payload.password.strip()
+        if pwd_raw and not pwd_raw.startswith("•"):
+            profile.password = save_password_field(pwd_raw, profile.password)
+        profile.auth_url = payload.auth_url.strip()
+        profile.carrier = str(payload.carrier or "无").strip()
+        profile.carrier_custom = str(payload.carrier_custom or "").strip()
+        profile.active_task = payload.active_task.strip()
+
+        # 更新监控配置
+        profile.check_interval_seconds = payload.check_interval_seconds
+        profile.pause_enabled = payload.pause_enabled
+        profile.pause_start_hour = payload.pause_start_hour
+        profile.pause_end_hour = payload.pause_end_hour
+        profile.network_targets = payload.network_targets
+        profile.http_targets = payload.http_targets
+        profile.enable_tcp_check = payload.enable_tcp_check
+        profile.enable_http_check = payload.enable_http_check
+        profile.enable_local_check = payload.enable_local_check
+        profile.check_auth_url = payload.check_auth_url
+        profile.auth_url_targets = payload.auth_url_targets
+        profile.url_check_urls = payload.url_check_urls
+        profile.network_check_timeout = payload.network_check_timeout
+
+        # 更新浏览器配置
+        profile.headless = payload.headless
+        profile.browser_timeout = payload.browser_timeout
+        profile.browser_navigation_timeout = payload.browser_navigation_timeout
+        profile.login_timeout = payload.login_timeout
+        profile.browser_user_agent = payload.browser_user_agent
+        profile.browser_low_resource_mode = payload.browser_low_resource_mode
+        profile.browser_disable_web_security = payload.browser_disable_web_security
+        profile.browser_extra_headers_json = payload.browser_extra_headers_json
+        profile.browser_args = payload.browser_args
+        profile.stealth_mode = payload.stealth_mode
+        profile.stealth_custom_script = payload.stealth_custom_script
+        profile.browser_locale = payload.browser_locale
+        profile.browser_timezone = payload.browser_timezone
+        profile.browser_viewport_width = payload.browser_viewport_width
+        profile.browser_viewport_height = payload.browser_viewport_height
+
+        # 更新自定义变量
+        profile.custom_variables = payload.custom_variables
+
         config_logger.info(
-            "配置已保存: 用户={}, 活动方案={}",
-            data.system.username,
-            data.active_profile,
+            "配置已保存: profile={}, 用户={}",
+            active_profile,
+            profile.username,
         )
 
     profile_service.update(_apply)
