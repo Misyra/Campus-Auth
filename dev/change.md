@@ -3,6 +3,17 @@
 ## 2026-06-15
 
 ### fix
+- `app/network/probes.py` set_block_proxy 时关闭旧 httpx 客户端，确保代理设置立即生效
+  - 修改后 `_block_proxy` 标志后，立即关闭并置空 `_probe_client`
+  - 下次探测时 `_get_probe_client` 会以新的代理设置重建客户端
+
+### fix
+- `app/services/task_registry.py` save_task 磁盘写入失败时回滚缓存，防止任务丢失
+  - 先更新缓存（备份旧值），再写入磁盘
+  - 磁盘写入失败时回滚缓存和调度索引到写入前状态
+  - 原逻辑：磁盘写入成功但缓存更新失败时任务会"消失"，缓存更新成功但磁盘写入失败时缓存与磁盘不一致
+
+### fix
 - `app/services/task_executor.py` 修复登录去重时错误设置调用方 cancel_event 的问题
   - 移除去重分支中 `cancel_event.set()` 调用（该操作设置的是调用方的事件，而非运行中任务的事件）
   - 有无 cancel_event 时统一返回已有 Future，不再返回 None

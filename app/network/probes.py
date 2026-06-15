@@ -130,6 +130,10 @@ def is_network_available_socket(
             label, ok, detail = future.result(timeout=1)
             if ok:
                 logger.debug("TCP 连接成功: {} {}", label, detail)
+                # 成功：取消其余任务
+                for f in futures:
+                    if not f.done():
+                        f.cancel()
                 return True
             logger.debug("TCP 连接失败: {} -- {}", label, detail)
     except TimeoutError:
@@ -190,6 +194,10 @@ def is_network_available_url(
             url, ok, detail = future.result(timeout=1)
             if ok:
                 logger.debug("网址响应检测成功: {} -> {}", url, detail)
+                # 成功：取消其余任务
+                for f in futures:
+                    if not f.done():
+                        f.cancel()
                 return True
             logger.debug("网址响应检测失败: {} -- {}", url, detail)
     except TimeoutError:
@@ -245,6 +253,10 @@ def is_network_available_http(
             url, ok, detail = future.result(timeout=1)
             if ok:
                 logger.debug("HTTP 请求成功: {} -> {}", url, detail)
+                # 成功：取消其余任务
+                for f in futures:
+                    if not f.done():
+                        f.cancel()
                 return True
             logger.debug("HTTP 请求失败: {} -- {}", url, detail)
     except TimeoutError:
