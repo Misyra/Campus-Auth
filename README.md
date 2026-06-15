@@ -22,7 +22,7 @@ Campus-Auth 主要解决三个场景：
 - 任务系统：使用 JSON 描述认证步骤，支持导入导出、复制、安全检测。
 - 实时日志：通过 WebSocket 推送运行日志，支持按级别筛选和文本搜索。
 - 开机自启动：支持在 Windows、macOS 和 Linux 上配置自启动。
-- 系统托盘：可在后台最小化到托盘运行。
+- 系统托盘：可在后台最小化到托盘运行。轻量模式下支持按需唤醒 Web 控制台。
 - 防重复启动：同时检测 PID 文件和本地端口，避免重复拉起同一实例。
 - 智能状态判断：识别已登录状态，减少重复提交和无效请求。
 - 暂停时段：支持在夜间或指定时间段暂停自动登录。
@@ -84,6 +84,9 @@ python main.py --no-browser
 
 # 不启动系统托盘
 python main.py --no-tray
+
+# 指定运行模式
+python main.py --runtime-mode lightweight   # 轻量模式（无 Web UI，可通过托盘唤醒）
 
 # 查看服务状态
 python main.py --status
