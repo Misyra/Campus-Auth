@@ -359,7 +359,7 @@ def run(
             from app.services.profile_service import ProfileService
 
             profile_service = ProfileService(PROJECT_ROOT)
-            sys_settings = profile_service.load().system
+            sys_settings = profile_service.load().global_settings
             if access_log_enabled is None:
                 access_log_enabled = bool(sys_settings.access_log)
             if log_retention is None:

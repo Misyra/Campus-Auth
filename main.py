@@ -262,7 +262,7 @@ def _build_app_config(
 
         _ps = ProfileService(Path(__file__).parent.resolve())
         _data = _ps.load()
-        _sys = _data.system
+        _sys = _data.global_settings
         config.startup_action = StartupAction(getattr(_sys, "startup_action", "none"))
         config.minimize_to_tray = bool(getattr(_sys, "minimize_to_tray", True))
         config.auto_open_browser = bool(getattr(_sys, "auto_open_browser", False))
@@ -434,7 +434,7 @@ def _run_full(
             from app.services.profile_service import ProfileService
 
             _ps = ProfileService(Path(__file__).parent.resolve())
-            _sys = _ps.load().system
+            _sys = _ps.load().global_settings
             _al = bool(_sys.access_log)
             _lr = max(1, int(_sys.log_retention_days))
         except (AttributeError, TypeError, ValueError):
