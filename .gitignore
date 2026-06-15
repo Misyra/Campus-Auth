@@ -59,7 +59,8 @@ launcher.py
 package_zip.ps1
 
 # Claude Code
-.claude/
+.claude/settings.json
+.claude/settings.local.json
 .agents/
 .worktrees/
 CLAUDE.md
