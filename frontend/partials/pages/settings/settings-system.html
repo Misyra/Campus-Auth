@@ -40,21 +40,6 @@
       </div>
 
       <div class="settings-section-divider"></div>
-      <h4 class="settings-section-heading">启动行为</h4>
-      <div class="form-group">
-        <div class="field-label-row">
-          <label for="settings-startup-action">启动后执行</label>
-          <span class="field-help" tabindex="0" role="note" data-tip="选择程序启动后自动执行的操作。">?</span>
-        </div>
-        <custom-select
-          id="settings-startup-action"
-          v-model="config.startup_action"
-          :options="loginActionOptions"
-        ></custom-select>
-        <span class="hint">{{ startupActionHint }}</span>
-      </div>
-
-      <div class="settings-section-divider"></div>
       <h4 class="settings-section-heading">界面行为</h4>
       <div class="toggle-group">
         <div class="toggle-with-help">
@@ -90,6 +75,22 @@
       <h2>开机自启动</h2>
     </div>
     <div class="card-body">
+      <h4 class="settings-section-heading">启动行为</h4>
+      <div class="form-group">
+        <div class="field-label-row">
+          <label for="settings-startup-action">启动后执行</label>
+          <span class="field-help" tabindex="0" role="note" data-tip="选择程序启动后自动执行的操作。">?</span>
+        </div>
+        <custom-select
+          id="settings-startup-action"
+          v-model="config.startup_action"
+          :options="loginActionOptions"
+        ></custom-select>
+        <span class="hint">{{ startupActionHint }}</span>
+      </div>
+
+      <div class="settings-section-divider"></div>
+      <h4 class="settings-section-heading">开机自启动</h4>
       <div class="toggle-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
