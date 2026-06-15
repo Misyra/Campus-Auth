@@ -309,10 +309,9 @@ class TestSaveConfigCombined:
 
         save_config_combined(payload, mock_profile_service)
 
-        # 验证自定义变量被更新
+        # 验证自定义变量被更新到 global_settings
         assert captured_data is not None
-        profile = captured_data.profiles["default"]
-        assert profile.custom_variables == custom_vars
+        assert captured_data.global_settings.custom_variables == custom_vars
 
     @patch("app.utils.crypto.save_password_field")
     def test_encrypts_password(self, mock_save_password):
