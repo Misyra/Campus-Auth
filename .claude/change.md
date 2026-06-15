@@ -3,6 +3,19 @@
 ## 2026-06-15
 
 ### test
+- `tests/test_utils/test_login.py` 提升 login.py 测试覆盖率从 56% 到 98%
+  - `TestAttemptLoginSkipPauseCheck`：skip_pause_check=True 跳过检查
+  - `TestAttemptLoginWithPause`：暂停时段、网络正常、物理断开、认证地址不可达、前置条件通过、异常捕获
+  - `TestPerformLoginWithAuthClass`：有/无活动任务分支
+  - `TestPerformLoginWithActiveTask`：profile_task_id 路径、get_active_task 路径、task 为 None、ScriptTaskInfo 分支、LoginCancelledError、通用异常
+  - `TestExecuteBrowserTask`：cancel_event、已有浏览器关闭、__aenter__ 失败、page 为 None、登录成功/失败关闭策略、弹窗监听器注册/移除、截图 URL
+  - `TestExecuteScriptTask`：cancel_event、脚本失败、脚本成功+网络正常/不通、超时配置
+  - `TestCloseBrowser`：有/无上下文、__aexit__ 异常
+  - `TestScreenshotUrlPattern`：中英文冒号、jpg、无截图不变
+  - `TestEnsureTaskManager`：初始化、已初始化跳过、环境变量覆盖
+  - `TestInit`：默认值、自定义值
+
+### test
 - `tests/test_utils/test_crypto.py` 提升 crypto.py 测试覆盖率从 79% 到 97%
   - `TestGetOrCreateKeyCache`：缓存命中和 double-check 缓存
   - `TestCorruptedKeyFile`：密钥文件损坏备份、错误长度、rename FileNotFoundError、rename OSError
