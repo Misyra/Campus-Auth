@@ -3,6 +3,45 @@
 ## 2026-06-15
 
 ### test
+- `tests/test_services/test_engine.py` 添加 engine.py 单元测试，覆盖调度引擎核心逻辑（覆盖率 75% → 93%）
+  - `TestEngineCmdType`：枚举值和成员数
+  - `TestEngineCommand`：默认值和自定义值
+  - `TestStatusSnapshot`：默认值和自定义值
+  - `TestLoginRetryState`：默认值和自定义值
+  - `TestEngineInit`：初始化默认值和 task 组件注入
+  - `TestEnqueue`：成功入队和队列满
+  - `TestCalculateWakeup`：默认/监控/重试/调度/异常回退 5 种场景
+  - `TestProcessCommand`：6 种命令类型派发 + response_event 设置 + 异常仍 set
+  - `TestHandleStart`：重复启动/正常创建/纯净模式
+  - `TestHandleStop`：无 core/有 core
+  - `TestHandleShutdown`：调用 stop
+  - `TestHandleLogin`：无配置/缺字段/异步成功/已在进行
+  - `TestHandleReload`：未监控/正在监控
+  - `TestHandleApplyProfile`：未监控/正在监控
+  - `TestDoNetworkCheck`：无 core/需登录/正常/方案切换/异常
+  - `TestLoginRetryNeeded`：7 个分支全覆盖
+  - `TestDoAsyncLogin`：已在进行/Future None/Future 成功/异常清除标志
+  - `TestGetRetryConfig`：正常/异常回退
+  - `TestRunScheduleTick`：有任务/无任务/无 registry
+  - `TestUpdateStatusSnapshot`：无 core/connected/disconnected/节流/force/异常
+  - `TestQueueStatusBroadcast`：默认队列/dashboard sink/异常
+  - `TestGetStatus`：stopped/running
+  - `TestShutdown`：设置事件/幂等/停止调度器
+  - `TestStartStopMonitoring`：已在运行/配置无效/队列满/成功/未运行/运行中
+  - `TestReloadConfig`：入队/队列满/超时
+  - `TestApplyProfile`：入队/队列满/超时
+  - `TestRunManualLogin`：进行中/队列满/成功/失败/超时(存活)/超时(死亡)
+  - `TestNetwork`：正常/失败/异常/带目标
+  - `TestTogglePureMode`：切换
+  - `TestProperties`：login_in_progress/ws_broadcast_queue/pure_mode/_is_monitoring/tasks/scheduler_running
+  - `TestSchedulerControl`：启动/幂等/停止/has_enabled_tasks
+  - `TestGetConfig`：get_config/get_runtime_config 返回副本
+  - `TestRecordLog`：基本/network source 触发快照
+  - `TestListLogs`：无 sink/有 sink/零 limit
+  - `TestBoot`：调用 start_monitoring
+  - `TestWsDrain`：空队列/有消息/broadcast 异常
+
+### test
 - `tests/test_utils/test_login.py` 提升 login.py 测试覆盖率从 56% 到 98%
   - `TestAttemptLoginSkipPauseCheck`：skip_pause_check=True 跳过检查
   - `TestAttemptLoginWithPause`：暂停时段、网络正常、物理断开、认证地址不可达、前置条件通过、异常捕获
