@@ -3,6 +3,11 @@
 ## 2026-06-15
 
 ### fix
+- `app/version.py` 移除 `get_project_version` 的 `@lru_cache(maxsize=1)` 装饰器
+  - 缓存导致不同 `project_root` 参数被忽略，始终返回首次调用的结果
+  - 移除 `from functools import lru_cache` 导入（文件中无其他使用）
+
+### fix
 - `app/workers/script_runner.py` 脚本执行失败时优先输出 stderr 内容
   - 原逻辑 `stdout[:500] or stderr[:500]` 在 stdout 有内容时丢弃 stderr 错误详情
   - 成功时仅使用 stdout，失败时优先使用 stderr
