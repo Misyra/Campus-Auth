@@ -2,6 +2,10 @@
 
 ## 2026-06-15
 
+### chore
+- 删除空的 `backups/` 文件夹，清理 `.gitignore` 中的 `backups/*` 条目
+  - 代码中无任何逻辑创建或使用此目录，属于残留文件
+
 ### test
 - 更新测试适配 close_browser、线程池和 lru_cache 的修改
   - `tests/test_utils/test_utils.py::TestGetProjectVersion`：移除 `setup_method` 中的 `cache_clear()` 调用和 `test_lru_cache` 测试方法（`get_project_version` 已无 `@lru_cache`）

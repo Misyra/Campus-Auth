@@ -36,7 +36,6 @@ tasks/browser/test2.json
 
 # User-specific network profiles
 config/
-backups/*
 
 # Log files
 *.log
