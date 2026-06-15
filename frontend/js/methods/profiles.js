@@ -87,6 +87,10 @@ export const profileMethods = {
           this.currentPage = 'profiles';
         }
         await this.fetchProfiles();
+        // 如果删除的是活动方案，重置 activeProfileId
+        if (!this.profiles[this.activeProfileId]) {
+          this.activeProfileId = 'default';
+        }
       } else {
         this.frontendLogger.warn('profiles', '方案删除失败: ' + data.message);
         this.toastOnly(false, data.message);
@@ -97,6 +101,7 @@ export const profileMethods = {
     }
   },
   async setActiveProfile(profileId) {
+    if (this.autoSwitch) return;
     try {
       const { data } = await this.$api.post(`/api/profiles/active/${profileId}`);
       if (data.success) {
