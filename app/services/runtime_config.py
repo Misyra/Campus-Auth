@@ -1,4 +1,4 @@
-"""运行时配置合并 — 从 SystemSettings + ProfileSettings 合并出 MonitorConfigPayload。"""
+"""运行时配置合并 — 从 GlobalSettings + ProfileSettings 合并出 MonitorConfigPayload。"""
 
 from __future__ import annotations
 

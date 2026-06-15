@@ -9,7 +9,6 @@ from app.schemas import (
     MonitorConfigPayload,
     ProfilesData,
     ProfileSettings,
-    SystemSettings,
 )
 from app.utils.logging import get_logger, normalize_level
 
@@ -101,7 +100,6 @@ def save_config_combined(
 
 def build_runtime_config(
     payload: MonitorConfigPayload,
-    system_settings: SystemSettings | None = None,
     global_settings: GlobalSettings | None = None,
 ) -> dict[str, Any]:
     """从 MonitorConfigPayload 构建运行时配置字典。
