@@ -8,19 +8,31 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from app.constants import DEFAULT_TASK_TIMEOUT_MS
 from app.utils.logging import get_logger
 
-logger = get_logger("task_models", side="BACKEND")
-
-# 项目根目录（模块级，避免各处重复计算）
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+logger = get_logger("task_models", source="task")
 
 # 任务ID验证正则
 TASK_ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 
-# 默认超时配置（毫秒）
-DEFAULT_STEP_TIMEOUT = 10000
-DEFAULT_TASK_TIMEOUT = 30000
+
+def _is_valid_step(s: Any) -> bool:
+    """检查 step 是否为有效的 dict，非 dict 的 step 记录警告。"""
+    if isinstance(s, dict):
+        return True
+    logger.warning("steps 中包含非对象元素，已跳过: {}", type(s).__name__)
+    return False
+
+
+def _safe_float(value: Any, default: float) -> float:
+    """安全的 float 转换，异常时返回默认值。"""
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
 
 
 class TaskError(Exception):
@@ -66,7 +78,6 @@ class StepConfig:
     script: str | None = None
     store_as: str | None = None
     clear: bool = True
-    wait_until: str = "networkidle"
     path: str | None = None
     duration: int = 1000  # sleep duration in ms
     frame: str | None = None  # frame 选择器（URL、name 或 CSS 选择器）
@@ -80,28 +91,20 @@ class StepConfig:
     # 扩展参数
     extra: dict[str, Any] = field(default_factory=dict)
 
-    # 字段默认值映射，to_dict 时跳过与默认值相同的字段
-    _DEFAULTS = {
-        "description": "",
-        "timeout": None,
-        "url": None,
-        "selector": None,
-        "value": None,
-        "pattern": None,
-        "script": None,
-        "store_as": None,
-        "clear": True,
-        "wait_until": "networkidle",
-        "path": None,
-        "duration": 1000,
-        "frame": None,
-        "required": False,
-        "option_selector": None,
-        "target_selector": None,
-        "old": False,
-        "char_range": None,
-        "extra": {},
-    }
+    @classmethod
+    def _field_defaults(cls) -> dict[str, Any]:
+        """动态获取字段默认值，用于 to_dict 时跳过默认值。"""
+        from dataclasses import MISSING, fields
+
+        defaults = {}
+        for f in fields(cls):
+            if f.name in ("id", "type", "extra"):
+                continue
+            if f.default is not MISSING:
+                defaults[f.name] = f.default
+            elif f.default_factory is not MISSING:
+                defaults[f.name] = f.default_factory()
+        return defaults
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> StepConfig:
@@ -144,14 +147,14 @@ class StepConfig:
     def to_dict(self) -> dict[str, Any]:
         """序列化为紧凑字典，跳过默认值和 None，合并 extra 回顶层"""
         result: dict[str, Any] = {"id": self.id, "type": self.type}
+        defaults = self._field_defaults()
         for field_name in self.__dataclass_fields__:
             if field_name in ("id", "type", "extra"):
                 continue
             value = getattr(self, field_name)
-            default = self._DEFAULTS.get(field_name)
+            default = defaults.get(field_name)
             if value is not None and value != default:
                 result[field_name] = value
-        # 把 extra 里的扩展字段合并回顶层
         if self.extra:
             result.update(self.extra)
         return result
@@ -165,7 +168,7 @@ class TaskConfig:
     name: str = "未命名任务"
     description: str = ""
     url: str = ""
-    timeout: int = DEFAULT_TASK_TIMEOUT
+    timeout: int = DEFAULT_TASK_TIMEOUT_MS
     variables: dict[str, str] = field(default_factory=dict)
     steps: list[StepConfig] = field(default_factory=list)
     on_success: dict[str, Any] = field(default_factory=dict)
@@ -184,14 +187,18 @@ class TaskConfig:
             name=data.get("name", "未命名任务"),
             description=data.get("description", ""),
             url=data.get("url", ""),
-            timeout=data.get("timeout", DEFAULT_TASK_TIMEOUT),
+            timeout=data.get("timeout", DEFAULT_TASK_TIMEOUT_MS),
             variables=data.get("variables", {}),
-            steps=[StepConfig.from_dict(s) for s in data.get("steps", [])],
+            steps=[
+                StepConfig.from_dict(s)
+                for s in data.get("steps", [])
+                if _is_valid_step(s)
+            ],
             on_success=data.get("on_success", {}),
             on_failure=data.get("on_failure", {}),
             metadata=data.get("metadata", {}),
             reveal_hidden=data.get("reveal_hidden", False),
-            step_delay=float(data.get("step_delay", 0.5)),
+            step_delay=_safe_float(data.get("step_delay"), 0.5),
         )
 
     def to_dict(self) -> dict[str, Any]:

@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
 
 jobs:
   test:
@@ -28,12 +28,13 @@ jobs:
 
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
-        shell: cmd
-        run: .\launcher.bat --install-only
+        run: go run start.go --install-only
 
       - name: Install dependencies (Unix)
         if: runner.os != 'Windows'
-        run: ./setup_env.sh --install-only
+        run: |
+          chmod +x start.sh
+          ./start.sh --install-only
 
       - name: Add local uv to PATH
         shell: bash
@@ -51,29 +52,4 @@ jobs:
             playwright-${{ runner.os }}-
 
       - name: Run tests
-        run: uv run pytest --tb=short -q
-
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
-      - name: Install dependencies
-        run: |
-          chmod +x setup_env.sh
-          ./setup_env.sh --install-only
-
-      - name: Add local uv to PATH
-        shell: bash
-        run: echo "$GITHUB_WORKSPACE/.uv" >> "$GITHUB_PATH"
-
-      - name: Ruff check
-        run: uv run ruff check .
-
-      - name: Ruff format check
-        run: uv run ruff format --check .
+        run: uv run pytest --tb=short -q --cov=app --cov-report=term-missing

@@ -10,14 +10,14 @@ import re
 import subprocess
 
 from app.utils.logging import get_logger
-from app.utils.platform_utils import (
-    is_windows,
-    is_macos,
-    is_linux,
+from app.utils.platform import (
     CREATE_NO_WINDOW_FLAG,
+    is_linux,
+    is_macos,
+    is_windows,
 )
 
-logger = get_logger("network_detect", side="BACKEND")
+logger = get_logger("network_detect", source="network")
 
 
 # ── 公共 API ──
@@ -135,8 +135,16 @@ def _detect_gateway_windows() -> str | None:
             rb"\xec\x98\xa4\xeb\xa5\xb8 \xea\xb2\x8c\xec\x9d\xb4\xed\x8a\xb8\xec\x9b\xa8\xec\x9d\xb4",  # "오른 게이트웨이" UTF-8
         ]
         combined = rb"(?:" + rb"|".join(gateway_patterns) + rb")"
-        pattern = re.compile(combined + rb"[\s.:]*(\d+\.\d+\.\d+\.\d+)")
+        # 匹配网关标签后的 IPv4 地址（可能在下一行）
+        pattern = re.compile(combined + rb"[\s.:]*(\d+\.\d+\.\d+\.\d+)", re.DOTALL)
         for match in pattern.finditer(output):
+            ip = match.group(1).decode("ascii")
+            if ip != "0.0.0.0":
+                return ip
+
+        # 回退：查找网关标签后缩进的 IPv4 地址（通常在下一行）
+        gateway_line_pattern = re.compile(combined + rb"[^\n]*\n\s+(\d+\.\d+\.\d+\.\d+)")
+        for match in gateway_line_pattern.finditer(output):
             ip = match.group(1).decode("ascii")
             if ip != "0.0.0.0":
                 return ip
@@ -155,11 +163,7 @@ def _detect_gateway_windows() -> str | None:
 def _detect_ssid_windows() -> str | None:
     """Windows: 解析 netsh wlan show interfaces 获取当前 WiFi SSID。"""
     try:
-        creationflags = (
-            subprocess.CREATE_NO_WINDOW
-            if hasattr(subprocess, "CREATE_NO_WINDOW")
-            else 0
-        )
+        creationflags = CREATE_NO_WINDOW_FLAG
         result = subprocess.run(
             ["netsh", "wlan", "show", "interfaces"],
             capture_output=True,
@@ -174,6 +178,19 @@ def _detect_ssid_windows() -> str | None:
         match = pattern.search(output)
         if match:
             raw = match.group(1).strip()
+
+            # 检查是否为十六进制编码的 SSID（包含非 ASCII 字符时 netsh 可能输出十六进制形式）
+            try:
+                ssid_hex = raw.decode("ascii")
+                if re.fullmatch(r"[0-9A-Fa-f]+", ssid_hex) and len(ssid_hex) % 2 == 0:
+                    ssid_bytes = bytes.fromhex(ssid_hex)
+                    ssid = ssid_bytes.decode("utf-8")
+                    if ssid and any(c.isprintable() for c in ssid):
+                        return ssid
+            except (ValueError, UnicodeDecodeError):
+                pass
+
+            # 正常解码
             try:
                 ssid = raw.decode(encoding)
             except (UnicodeDecodeError, LookupError):
@@ -192,7 +209,7 @@ def _detect_ssid_windows() -> str | None:
 def _detect_gateway_linux() -> str | None:
     """Linux: 解析 /proc/net/route 获取默认网关"""
     try:
-        with open("/proc/net/route", "r") as f:
+        with open("/proc/net/route") as f:
             for line in f:
                 parts = line.strip().split()
                 if len(parts) >= 3 and parts[1] == "00000000":
@@ -302,10 +319,9 @@ def _detect_ssid_darwin() -> str | None:
         wifi_device = None
         lines = result.stdout.splitlines()
         for i, line in enumerate(lines):
-            if "Wi-Fi" in line or "AirPort" in line:
-                if i + 1 < len(lines):
-                    wifi_device = lines[i + 1].split(":")[-1].strip()
-                    break
+            if ("Wi-Fi" in line or "AirPort" in line) and i + 1 < len(lines):
+                wifi_device = lines[i + 1].split(":")[-1].strip()
+                break
 
         if wifi_device:
             result = subprocess.run(

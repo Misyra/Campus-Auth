@@ -9,10 +9,7 @@ export const debugTaskMethods = {
       // P1-FE-6: 构建 Map 加速步骤结果查询
       this._resultByIndex = new Map((data.results || []).map(r => [r.step_index, r]));
       this.frontendLogger.info('debug', `开始调试任务 ${taskId}`);
-      this.$nextTick(() => {
-        const overlay = document.querySelector('.debug-overlay');
-        if (overlay) this._trapFocus(overlay);
-      });
+      this.openModal('.debug-overlay');
     } catch (error) {
       const msg = extractApiError(error, '启动调试失败');
       this.frontendLogger.error('debug', '启动调试失败: ' + msg);
@@ -47,18 +44,21 @@ export const debugTaskMethods = {
   },
 
   async debugStop() {
-    this._releaseFocusTrap();
+    this.closeModal();
     try {
       const { data } = await this.$api.post('/api/debug/stop');
-      this.debugSession = {
-        running: false, task_id: null, current_step: 0,
-        total_steps: 0, steps: [], results: [], screenshot_url: null,
-      };
       this.frontendLogger.info('debug', '调试已停止');
       this.toastOnly(true, data.message || '调试已停止');
     } catch (error) {
       this.frontendLogger.error('debug', '停止调试失败', error);
       this.toastOnly(false, '停止调试失败');
+    } finally {
+      // 无论 API 成功失败都重置本地状态（调试会话已不可用）
+      this.debugSession = {
+        running: false, task_id: null, current_step: 0,
+        total_steps: 0, steps: [], results: [], screenshot_url: null,
+      };
+      this._resultByIndex = new Map();
     }
   },
 

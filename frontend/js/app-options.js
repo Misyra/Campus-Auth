@@ -1,8 +1,7 @@
-import { api, SETTINGS_TABS } from './constants.js';
+import { api, SETTINGS_TABS, LOG_LEVELS, LEVEL_VALUES } from './constants.js';
 import { createFrontendLogger } from './logger.js';
 import { actionMethods } from './methods/actions.js';
 import { appearanceMethods } from './methods/appearance.js';
-import { autostartMethods } from './methods/autostart.js';
 import { configMethods } from './methods/config.js';
 import { dragMethods } from './methods/drag.js';
 import { formatterMethods } from './methods/formatters.js';
@@ -11,10 +10,9 @@ import { profileMethods } from './methods/profiles.js';
 import { scheduledTasksMethods } from './methods/scheduled_tasks.js';
 import { scriptMethods } from './methods/scripts.js';
 
-import { statusMethods } from './methods/status.js';
 import { taskMethods } from './tasks/index.js';
 import { uiMethods } from './methods/ui.js';
-import { logFileMethods } from './methods/logfiles.js';
+
 
 // 按功能域拆分的数据模块
 import { dashboardData } from './data/dashboard.js';
@@ -30,7 +28,6 @@ import { websocketData } from './data/websocket.js';
 import { timerData } from './data/timers.js';
 import { statusData } from './data/status.js';
 import { appearanceData } from './data/appearance.js';
-import { logFileData } from './data/logfiles.js';
 import { scheduledTasksData } from './data/scheduled_tasks.js';
 
 export const appOptions = {
@@ -50,14 +47,38 @@ export const appOptions = {
       ...timerData(),
       ...statusData(),
       ...appearanceData(),
-      ...logFileData(),
       ...scheduledTasksData(),
 
       // 全局共享状态
       settingsTabs: SETTINGS_TABS,
+      carrierOptions: [
+        { value: '无', label: '无' },
+        { value: '移动', label: '移动' },
+        { value: '联通', label: '联通' },
+        { value: '电信', label: '电信' },
+        { value: '自定义', label: '自定义' },
+      ],
+      loginActionOptions: [
+        { value: 'none', label: '不自动执行' },
+        { value: 'monitor', label: '启动后开始监控（推荐）' },
+        { value: 'login_once', label: '自动登录，成功后退出' },
+      ],
+      logSourceOptions: [
+        { value: '', label: '全部来源' },
+        { value: 'backend', label: 'BAK' },
+        { value: 'network', label: 'NET' },
+        { value: 'task', label: 'TSK' },
+        { value: 'frontend', label: 'FRT' },
+        { value: 'debug', label: 'DBG' },
+      ],
+      scheduledTaskTypeOptions: [
+        { value: 'script', label: '自定义脚本' },
+        { value: 'browser', label: '浏览器任务' },
+      ],
       frontendLogger: createFrontendLogger('INFO'),
       appVersion: 'unknown',
       pythonVersion: '',
+      shellCustomMode: false,
     };
   },
   computed: {
@@ -67,6 +88,27 @@ export const appOptions = {
     browserTasks() {
       return this.tasks.filter(t => t.type !== 'script');
     },
+    taskOptions() {
+      return [
+        { value: '', label: '默认任务' },
+        ...this.tasks.map(t => ({ value: t.id, label: t.name || t.id })),
+      ];
+    },
+    scriptTargetOptions() {
+      return [
+        { value: '', label: '请选择...' },
+        ...this.scripts.map(s => ({
+          value: s.id,
+          label: s.name + (s.binary_path ? ' (' + this.getBinaryName(s.binary_path) + ')' : ''),
+        })),
+      ];
+    },
+    browserTargetOptions() {
+      return [
+        { value: '', label: '请选择...' },
+        ...this.browserTasks.map(t => ({ value: t.id, label: t.name })),
+      ];
+    },
     pageTitle() {
       const titles = {
         dashboard: '仪表盘',
@@ -75,36 +117,64 @@ export const appOptions = {
         scripts: '自定义脚本',
         scheduled_tasks: '定时任务',
         profiles: '配置方案',
-        'profile-edit': this.editingProfile?.id ? '编辑方案' : '新建方案',
+        'profile-edit': this.editingProfile?.id ? '编辑配置方案' : '新建配置方案',
         appearance: '外观设置',
-        logs: '日志查看器',
         about: '关于',
       };
       return titles[this.currentPage] || '仪表盘';
     },
     canProceed() {
       if (this.wizardStep === 1) {
-        return this.config.username && this.config.password && this.config.auth_url;
+        return this.agreedToTerms;
       }
-      if (this.wizardStep === 2 && this.config.carrier === '自定义') {
-        return !!(this.config.carrier_custom && this.config.carrier_custom.trim());
+      if (this.wizardStep === 2) {
+        // 验证必填项
+        if (!this.config.username || !this.config.password || !this.config.auth_url) {
+          return false;
+        }
+        // 验证密码长度
+        if (this.config.password.length < 2) {
+          return false;
+        }
+        // 验证自定义运营商关键字
+        if (this.config.carrier === '自定义') {
+          return !!(this.config.carrier_custom && this.config.carrier_custom.trim());
+        }
+        return true;
       }
       return true;
+    },
+    wizardErrors() {
+      const errors = {};
+      if (this.wizardStep === 2) {
+        if (this.config.username && !this.config.password) {
+          errors.password = '请输入密码';
+        } else if (this.config.password && this.config.password.length < 2) {
+          errors.password = '密码长度不能少于2位';
+        }
+        if (this.config.auth_url && !/^https?:\/\//i.test(this.config.auth_url)) {
+          errors.auth_url = '认证地址必须以 http:// 或 https:// 开头';
+        }
+        if (this.config.carrier === '自定义' && this.config.carrier_custom !== undefined) {
+          if (!this.config.carrier_custom || !this.config.carrier_custom.trim()) {
+            errors.carrier_custom = '请输入自定义运营商关键字';
+          }
+        }
+      }
+      return errors;
     },
     configDirty() {
       return this._configDirty;
     },
     filteredLogs() {
-      let result = this.logs;
-      if (this.logFilter.level) {
-        result = result.filter(l => l.level === this.logFilter.level);
-      }
-      if (this.logFilter.search) {
-        const q = this.logFilter.search.toLowerCase();
-        result = result.filter(l => l.message.toLowerCase().includes(q));
-      }
-      // P1-FE-4: 预计算截图 URL，避免模板中重复调用 extractScreenshotUrl
-      return result.map(item => ({ ...item, _screenshot: this.extractScreenshotUrl(item.message) }));
+      const { level, source, search } = this.logFilter;
+      const q = search ? search.toLowerCase() : '';
+      const minLevel = LEVEL_VALUES[level] ?? 0;
+      return this.logs.filter(l =>
+        (!level || (LEVEL_VALUES[l.level] ?? 0) >= minLevel) &&
+        (!source || l.source === source) &&
+        (!q || l.message.toLowerCase().includes(q))
+      );
     },
     networkStatus() {
       if (!this.status.monitoring) return 'idle';
@@ -116,12 +186,12 @@ export const appOptions = {
       if (!this.status.monitoring) return '已停止';
       return this.status.status_detail || '正在启动监控';
     },
-    portalCheckEnabled: {
+    urlCheckEnabled: {
       get() {
-        return !!(this.config.portal_check_urls && this.config.portal_check_urls.trim());
+        return !!(this.config.url_check_urls && this.config.url_check_urls.trim());
       },
       set(val) {
-        this.config.portal_check_urls = val ? (this.config.portal_check_urls || this.defaultPortalUrls) : '';
+        this.config.url_check_urls = val ? (this.config.url_check_urls || this.defaultUrlCheckUrls) : '';
       },
     },
     filteredRepoTasks() {
@@ -138,20 +208,53 @@ export const appOptions = {
     uninstallCheckedCount() {
       return this.uninstall.items.filter(it => it.exists && it.checked).length;
     },
-    currentLogFiles() {
-      const group = this.logFileGroups.find(g => g.date === this.logViewer.date);
-      return group?.files || [];
-    },
     shellPathMode: {
       get() {
-        if (!this.config.shell_path) return this._shellCustomMode ? '__custom__' : '';
+        if (this.shellCustomMode) return '__custom__';
+        if (!this.config.shell_path) return '';
         if (this.availableShells.some(s => s.path === this.config.shell_path)) return this.config.shell_path;
         return '__custom__';
       },
       set(val) {
-        this._shellCustomMode = (val === '__custom__');
+        this.shellCustomMode = (val === '__custom__');
         if (val !== '__custom__') this.config.shell_path = val;
       },
+    },
+    shellPathOptions() {
+      return [
+        { value: '', label: '自动检测（推荐）' },
+        ...this.availableShells.map(s => ({ value: s.path, label: s.name + ' - ' + s.description })),
+        { value: '__custom__', label: '自定义路径...' },
+      ];
+    },
+    logLevelOptions() {
+      return LOG_LEVELS;
+    },
+    autostartModeOptions() {
+      return [
+        { value: true, label: '轻量模式（推荐）' },
+        { value: false, label: '完整模式' },
+      ];
+    },
+    startupActionHint() {
+      const hints = {
+        none: '程序启动后不自动执行任何操作，需手动启动监控',
+        monitor: '程序启动后自动开始网络监控，断网时自动重连',
+        login_once: '启动后尝试登录一次，成功后自动退出。适用于开机自启动场景',
+      };
+      return hints[this.config.startup_action] || hints.none;
+    },
+    startupActionLabel() {
+      const opt = this.loginActionOptions.find(o => o.value === this.config.startup_action);
+      return opt ? opt.label.replace('（推荐）', '') : '不自动执行';
+    },
+    binaryOptions() {
+      return [
+        { value: '', label: '选择执行程序...' },
+        ...this.availableBinaries.map(b => ({ value: b.path, label: b.name })),
+        { value: '__custom_python__', label: 'Python (自定义环境)' },
+        { value: '__custom__', label: '自定义路径...' },
+      ];
     },
   },
   watch: {
@@ -164,7 +267,7 @@ export const appOptions = {
             return;
           }
           this._configDirty = JSON.stringify(this.config) !== this.savedConfigSnapshot;
-        }, 150);
+        }, 300);
       },
       deep: true,
     },
@@ -181,7 +284,7 @@ export const appOptions = {
     },
     currentPage(newPage) {
       if (this._dangerResolve) {
-        this._releaseFocusTrap();
+        this.closeModal();
         this._dangerResolve(false);
         this._dangerResolve = null;
         this.dangerConfirm = null;
@@ -196,9 +299,6 @@ export const appOptions = {
           const logViewer = this.$refs?.logViewer;
           if (logViewer) logViewer.scrollTop = logViewer.scrollHeight;
         });
-      }
-      if (newPage === 'logs' && !this.logFileGroups.length) {
-        this.fetchLogFileGroups();
       }
     },
   },
@@ -220,6 +320,9 @@ export const appOptions = {
     if (this._logScrollRaf) cancelAnimationFrame(this._logScrollRaf);
     if (this._configDirtyTimer) clearTimeout(this._configDirtyTimer);
     this.timers.forEach((t) => clearInterval(t));
+    if (this._visibilityHandler) {
+      document.removeEventListener('visibilitychange', this._visibilityHandler);
+    }
     if (this.ws) this.ws.close();
   },
   methods: {
@@ -227,9 +330,7 @@ export const appOptions = {
     ...formatterMethods,
     ...lifecycleMethods,
     ...configMethods,
-    ...statusMethods,
     ...actionMethods,
-    ...autostartMethods,
     ...taskMethods,
     ...scriptMethods,
     ...scheduledTasksMethods,
@@ -237,6 +338,5 @@ export const appOptions = {
     ...appearanceMethods,
 
     ...dragMethods,
-    ...logFileMethods,
   },
 };

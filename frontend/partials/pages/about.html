@@ -1,4 +1,4 @@
-<div v-if="currentPage === 'about'" class="page-content fade-in">
+<div v-if="currentPage === 'about'" class="page-content">
   <div class="about-container">
     <div class="about-hero card">
       <img src="/static/black-cat.svg" alt="Logo" class="about-logo" />
@@ -61,7 +61,7 @@
             <div class="tech-item">
               <span class="tech-badge uv">uv</span>
             </div>
-            <div class="tech-item" v-if="ocrStatus.installed">
+            <div class="tech-item">
               <span class="tech-badge ddddocr">Ddddocr</span>
             </div>
           </div>
@@ -156,7 +156,7 @@
         </svg>
         <div>
           <h3>卸载程序</h3>
-          <p class="uninstall-desc">清理开机自启、用户数据、浏览器缓存等外部残留</p>
+          <p class="uninstall-desc">清理开机自启项、浏览器缓存、Playwright 浏览器等附加组件</p>
         </div>
       </div>
       <button class="btn btn-danger btn-sm" @click="openUninstall" :disabled="busy.uninstall">
@@ -166,7 +166,7 @@
 
     <!-- 卸载弹窗 -->
     <div v-if="uninstall.visible" class="uninstall-overlay" @click.self="closeUninstall">
-      <div class="uninstall-modal">
+      <div class="uninstall-modal" role="dialog" aria-modal="true" aria-label="卸载清理">
         <div class="uninstall-modal-header">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="28" height="28" style="color:var(--error);flex-shrink:0;">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
@@ -194,7 +194,7 @@
             <span :class="r.success ? 'result-ok' : 'result-fail'">{{ r.success ? 'OK' : 'FAIL' }}</span>
             <span>{{ r.label }}: {{ r.message }}</span>
           </div>
-          <p class="uninstall-final-hint">请关闭本程序，然后手动删除整个项目文件夹即可完成卸载。</p>
+          <p class="uninstall-final-hint">请关闭本程序，然后手动删除整个项目文件夹即可完成卸载。项目路径将显示在上方清理结果中。</p>
         </div>
 
         <div v-else class="uninstall-modal-body">
@@ -211,7 +211,7 @@
             <span v-if="!it.exists" class="uninstall-item-tag">未检测到</span>
           </label>
           <div class="uninstall-hint-box">
-            清理完成后，请先关闭本程序，再手动删除整个项目文件夹即可完成卸载。
+            清理完成后，请先关闭本程序，再手动删除整个项目文件夹即可完成卸载。项目路径将显示在上方列表中。
           </div>
         </div>
 

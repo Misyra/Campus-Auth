@@ -11,13 +11,13 @@ import os
 import subprocess
 import sys
 import threading
+from collections.abc import Callable
+from pathlib import Path
 
 from app.utils.logging import get_logger
-from app.utils.platform_utils import is_windows, is_macos, CREATE_NO_WINDOW_FLAG
-from pathlib import Path
-from typing import Callable
+from app.utils.platform import CREATE_NO_WINDOW_FLAG, is_macos, is_windows
 
-logger = get_logger("playwright_bootstrap", side="BACKEND")
+logger = get_logger("playwright_bootstrap", source="backend")
 
 _BOOTSTRAP_LOCK = threading.Lock()
 _BOOTSTRAP_DONE = False
@@ -171,13 +171,3 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
             if log:
                 log(f"Playwright 初始化失败: {exc}")
             return False
-
-
-def is_bootstrap_skipped() -> bool:
-    """检查 bootstrap 是否被用户禁用（跳过验证）。"""
-    return _BOOTSTRAP_SKIPPED
-
-
-def is_bootstrap_done() -> bool:
-    """检查 bootstrap 是否已完成验证。"""
-    return _BOOTSTRAP_DONE

@@ -1,4 +1,4 @@
-import { extractApiError, getBinaryName } from './utils.js';
+import { extractApiError, getBinaryName, safeApiCall, pickFile, downloadBlob } from './utils.js';
 
 export const scriptMethods = {
   getBinaryName,
@@ -107,6 +107,13 @@ export const scriptMethods = {
       return;
     }
 
+    // 脚本内容大小限制（100KB）
+    const maxSize = 100 * 1024;
+    if (new TextEncoder().encode(this.editingTask.content).length > maxSize) {
+      this.toastOnly(false, `脚本内容超过大小限制（最大 ${maxSize / 1024}KB）`);
+      return;
+    }
+
     // 处理二进制路径
     let binaryPath = this.editingTask.binary_path;
     if (binaryPath === '__custom__') {
@@ -161,55 +168,43 @@ export const scriptMethods = {
   },
 
   async exportScript(taskId) {
-    try {
-      const { data } = await this.$api.get(`/api/scripts/${taskId}`);
-      const blob = new Blob([data.content || ''], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      // 根据 binary_path 推断文件扩展名
-      const ext = this._inferScriptExtension(data.binary_path, data.content);
-      a.download = `${taskId}${ext}`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      this.toastOnly(false, extractApiError(error, '导出失败'));
-    }
+    const resp = await safeApiCall(this, () => this.$api.get(`/api/scripts/${taskId}`), '导出失败');
+    if (!resp) return;
+    const data = resp.data;
+    const ext = this._inferScriptExtension(data.binary_path, data.content);
+    downloadBlob(data.content || '', `${taskId}${ext}`, 'text/plain');
   },
 
-  importScript() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.py,.sh,.bat,.ps1,.txt';
-    input.onchange = (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const content = ev.target.result;
-        let id = file.name.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_]/g, '_');
-        // 确保 ID 以字母开头（HTML ID 规范）
-        if (/^[0-9]/.test(id)) {
-          id = 'sc_' + id;
+  async importScript() {
+    const file = await pickFile('.py,.sh,.bat,.ps1,.txt');
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target.result;
+      let id = file.name.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_]/g, '_');
+      if (/^[0-9]/.test(id)) {
+        id = 'sc_' + id;
+      }
+      if (this.scripts && this.scripts.some(s => s.id === id)) {
+        if (!confirm(`脚本「${id}」已存在，是否覆盖？`)) {
+          return;
         }
-        this.editingTaskType = 'script';
-        this.editingTask = {
-          id: id,
-          name: '',
-          description: '',
-          content: content,
-          binary_path: '',
-          _customBinary: '',
-          _customPythonBinary: '',
-          _isNew: true,
-        };
-        this.currentPage = 'scripts';
-        input.value = '';
-        input.onchange = null;
+      }
+      this.editingTaskType = 'script';
+      this.editingTask = {
+        id: id,
+        name: '',
+        description: '',
+        content: content,
+        binary_path: '',
+        _customBinary: '',
+        _customPythonBinary: '',
+        _isNew: true,
       };
-      reader.readAsText(file);
+      this.currentPage = 'scripts';
+      this.frontendLogger.info('scripts', '已导入脚本文件，请检查后保存');
     };
-    input.click();
+    reader.readAsText(file);
   },
 
   loadScriptTemplate() {
@@ -273,7 +268,7 @@ print(f"HTTP {resp.status_code}")
   _inferScriptExtension(binaryPath, content) {
     if (binaryPath) {
       const base = binaryPath.split(/[/\\]/).pop().toLowerCase();
-      if (base.startsWith('python') || base === 'py' || base.endsWith('.exe') && base.includes('python')) return '.py';
+      if (base.startsWith('python') || base === 'py' || (base.endsWith('.exe') && base.includes('python'))) return '.py';
       if (base === 'bash' || base === 'sh' || base === 'zsh') return '.sh';
       if (base === 'cmd' || base === 'cmd.exe' || base === 'bat') return '.bat';
       if (base === 'powershell' || base === 'pwsh') return '.ps1';

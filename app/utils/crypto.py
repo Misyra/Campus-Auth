@@ -6,18 +6,20 @@
 """
 
 import base64
+import getpass
 import hashlib
 import os
 import threading
 import time
 
 from app.constants import AUTH_DATA_DIR
-from .file_helpers import atomic_write
-from .logging import get_logger
-from .exceptions import DecryptionError
-from .platform_utils import is_windows, CREATE_NO_WINDOW_FLAG
 
-logger = get_logger("crypto", side="BACKEND")
+from .exceptions import DecryptionError
+from .files import atomic_write
+from .logging import get_logger
+from .platform import CREATE_NO_WINDOW_FLAG, is_windows
+
+logger = get_logger("crypto", source="backend")
 
 _KEY_DIR = AUTH_DATA_DIR
 _KEY_FILE = _KEY_DIR / ".enc_key"
@@ -52,14 +54,17 @@ def _get_or_create_key() -> bytes:
             except Exception as exc:
                 logger.error("读取加密密钥失败: {}", exc)
                 # 备份损坏的密钥文件
-                if _KEY_FILE.exists():
-                    backup_path = _KEY_FILE.with_suffix(f".bak.{int(time.time())}")
-                    try:
-                        _KEY_FILE.rename(backup_path)
-                        logger.info("已备份损坏的密钥文件到: {}", backup_path)
-                    except OSError as backup_err:
-                        logger.warning("备份密钥文件失败: {}", backup_err)
-                logger.warning("将生成新密钥，此前加密的密码将无法解密")
+                backup_path = _KEY_FILE.with_suffix(f".bak.{int(time.time())}")
+                try:
+                    _KEY_FILE.rename(backup_path)
+                    logger.info("已备份损坏的密钥文件到: {}", backup_path)
+                except FileNotFoundError:
+                    pass  # 文件不存在，无需备份
+                except OSError as backup_err:
+                    logger.warning("备份密钥文件失败: {}", backup_err)
+                logger.warning(
+                    "将生成新密钥，此前保存的密码将无法自动恢复，请在设置中重新输入密码"
+                )
 
         # 生成新密钥
         key = os.urandom(32)
@@ -76,7 +81,7 @@ def _get_or_create_key() -> bytes:
             try:
                 import subprocess
 
-                username = os.environ.get("USERNAME", "Users")
+                username = os.environ.get("USERNAME") or getpass.getuser()
                 subprocess.run(
                     [
                         "icacls",
@@ -91,6 +96,8 @@ def _get_or_create_key() -> bytes:
                     creationflags=CREATE_NO_WINDOW_FLAG,
                     check=True,
                 )
+            except subprocess.TimeoutExpired:
+                logger.warning("设置密钥文件权限超时 (icacls)")
             except Exception as exc:
                 logger.warning("设置密钥文件权限失败 (icacls): {}", exc)
 
@@ -124,12 +131,11 @@ def encrypt_password(plaintext: str) -> str:
     try:
         from cryptography.fernet import Fernet
     except ImportError:
-        # cryptography 未安装时回退到简单混淆（不推荐，但保证可用）
         logger.warning(
-            "cryptography 库未安装，密码将使用 Base64 编码存储（非真正加密），"
-            "建议安装 cryptography: pip install cryptography"
+            "cryptography 库未安装，密码将以明文存储，"
+            "建议通过 uv add cryptography 安装依赖以启用加密保护"
         )
-        return _simple_obfuscate(plaintext)
+        return plaintext
 
     key = _derive_fernet_key()
     f = Fernet(key)
@@ -150,20 +156,17 @@ def decrypt_password(ciphertext: str) -> str:
 
     encrypted_data = ciphertext[len(_ENC_PREFIX) :]
 
-    # B64: 前缀表示无 cryptography 时的简单混淆，优先路由避免 Fernet 错误
-    if encrypted_data.startswith(_OBFUSCATE_PREFIX):
-        return _simple_deobfuscate(encrypted_data)
-
     try:
-        from cryptography.fernet import Fernet, InvalidToken
         from cryptography.exceptions import InvalidSignature
+        from cryptography.fernet import Fernet, InvalidToken
 
         key = _derive_fernet_key()
         f = Fernet(key)
         return f.decrypt(encrypted_data.encode("ascii")).decode("utf-8")
     except ImportError:
-        logger.warning("cryptography 库未安装，尝试 Base64 反混淆")
-        return _simple_deobfuscate(encrypted_data)
+        _decryption_failed.set()
+        logger.error("cryptography 库未安装，无法解密密码，请安装依赖后重试")
+        raise DecryptionError("cryptography 库未安装，无法解密密码") from None
     except (InvalidToken, InvalidSignature, ValueError, OSError) as e:
         # 解密失败：可能是密钥变更，记录错误并抛出异常
         _decryption_failed.set()
@@ -171,11 +174,6 @@ def decrypt_password(ciphertext: str) -> str:
             "密码解密失败（可能是密钥变更或数据损坏），请在设置页面重新输入密码"
         )
         raise DecryptionError("密码解密失败，请重新输入密码") from e
-
-
-def is_encrypted(value: str) -> bool:
-    """判断值是否已加密"""
-    return bool(value and value.startswith(_ENC_PREFIX))
 
 
 def has_decryption_error() -> bool:
@@ -217,40 +215,14 @@ def save_password_field(raw: str | None, existing_encrypted: str) -> str:
     if raw is None:
         # 未传密码 → 无操作，保留原值。不发警告（合法场景）
         return existing_encrypted or ""
-    if raw == "" or raw.startswith("•"):
-        # 显式置空或掩码 → 尝试保留已有密码
-        if not existing_encrypted:
-            logger.warning(
-                "密码为空或掩码但无已有加密密码，密码将保持为空！raw={}",
-                repr(raw[:20]),
-            )
+    if raw.startswith("•"):
+        # 掩码 → 保留已有密码
         return existing_encrypted or ""
+    if raw == "":
+        # 显式置空 → 清除密码
+        return ""
     if raw.startswith("ENC:"):
         # 已是加密值（来自已保存的方案）→ 原样返回
         return raw
     # 明文密码 → 加密存储
     return encrypt_password(raw)
-
-
-# ==================== 简单回退方案 ====================
-# 当 cryptography 不可用时，使用 base64 混淆（非加密，仅防肉眼）
-
-_OBFUSCATE_PREFIX = "B64:"
-
-
-def _simple_obfuscate(plaintext: str) -> str:
-    """简单 base64 混淆（非加密）"""
-    encoded = base64.b64encode(plaintext.encode("utf-8")).decode("ascii")
-    return f"{_ENC_PREFIX}{_OBFUSCATE_PREFIX}{encoded}"
-
-
-def _simple_deobfuscate(ciphertext: str) -> str:
-    """简单 base64 反混淆"""
-    if ciphertext.startswith(_OBFUSCATE_PREFIX):
-        try:
-            return base64.b64decode(ciphertext[len(_OBFUSCATE_PREFIX) :]).decode(
-                "utf-8"
-            )
-        except Exception:
-            return ciphertext
-    return ciphertext

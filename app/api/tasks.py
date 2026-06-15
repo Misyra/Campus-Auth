@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.utils.logging import get_logger
-
 from app.deps import get_task_service
 from app.schemas import ActionResponse
-from app.services.task import TaskService
+from app.services.task_service import TaskService
+from app.utils.logging import get_logger
 
 router = APIRouter()
-api_logger = get_logger("backend.api", side="BACKEND")
+api_logger = get_logger("api", source="backend")
 
 
 @router.get("/api/tasks")

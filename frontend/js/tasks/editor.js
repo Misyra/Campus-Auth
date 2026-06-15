@@ -1,6 +1,35 @@
-import { extractApiError } from '../methods/utils.js';
+import { extractApiError, pickFile, downloadBlob, safeApiCall } from '../methods/utils.js';
 
 export const editorTaskMethods = {
+  // 同步 name/description 输入框到 JSON 内容
+  syncMetaToJson() {
+    if (!this.editingTask || this._syncingFromJson) return;
+    this._syncingFromMeta = true;
+    try {
+      const parsed = JSON.parse(this.editingTask.json);
+      parsed.name = this.editingTask.name;
+      parsed.description = this.editingTask.description;
+      this.editingTask.json = JSON.stringify(parsed, null, 2);
+      this.jsonError = '';
+    } catch {
+      // JSON 无效时不同步，等用户修正
+    }
+    this._syncingFromMeta = false;
+  },
+  // 同步 JSON 内容到 name/description 输入框
+  syncJsonToMeta() {
+    if (!this.editingTask || this._syncingFromMeta) return;
+    this._syncingFromJson = true;
+    try {
+      const parsed = JSON.parse(this.editingTask.json);
+      if ('name' in parsed) this.editingTask.name = parsed.name || '';
+      if ('description' in parsed) this.editingTask.description = parsed.description || '';
+      this.jsonError = '';
+    } catch {
+      // JSON 无效时不同步
+    }
+    this._syncingFromJson = false;
+  },
   async showTaskEditor(taskId) {
     if (taskId) {
       try {
@@ -44,6 +73,9 @@ export const editorTaskMethods = {
     try {
       const { data } = await this.$api.get(`/api/tasks/${templateId}`);
       this.editingTask.json = JSON.stringify(data, null, 2);
+      // 同步 name/description
+      if (data.name) this.editingTask.name = data.name;
+      if (data.description) this.editingTask.description = data.description;
       this.jsonError = '';
     } catch (error) {
       this.frontendLogger.error('tasks', '加载模板失败: ' + templateId, error);
@@ -74,7 +106,7 @@ export const editorTaskMethods = {
     }
   },
   _cancelDangerConfirm(reason) {
-    this._releaseFocusTrap();
+    this.closeModal();
     if (this._dangerTimer) {
       clearInterval(this._dangerTimer);
       this._dangerTimer = null;
@@ -94,10 +126,7 @@ export const editorTaskMethods = {
       this._dangerResolve = resolve;
       this.dangerConfirm = { dangers };
       this.dangerCountdown = 3;
-      this.$nextTick(() => {
-        const overlay = document.querySelector('.danger-overlay');
-        if (overlay) this._trapFocus(overlay);
-      });
+      this.openModal('.danger-overlay');
       const timer = setInterval(() => {
         this.dangerCountdown--;
         if (this.dangerCountdown <= 0) {
@@ -108,7 +137,7 @@ export const editorTaskMethods = {
     });
   },
   confirmDanger(allow) {
-    this._releaseFocusTrap();
+    this.closeModal();
     if (this._dangerTimer) {
       clearInterval(this._dangerTimer);
       this._dangerTimer = null;
@@ -125,14 +154,15 @@ export const editorTaskMethods = {
       const { data } = await this.$api.get(`/api/tasks/${taskId}`);
       const baseId = taskId.replace(/_copy(_\d+)?$/, '');
       const existingIds = new Set((this.tasks || []).map(t => t.id));
+      const baseName = data.name.replace(/\s*\(副本\)(\s*\d+)?$/, '');
       let newId = baseId + '_copy';
+      let suffix = ' (副本)';
       let counter = 2;
       while (existingIds.has(newId)) {
         newId = baseId + '_copy_' + counter;
+        suffix = ` (副本${counter})`;
         counter++;
       }
-      const baseName = data.name.replace(/\s*\(副本\)(\s*\d+)?$/, '');
-      const suffix = counter > 2 ? ` (副本${counter - 1})` : ' (副本)';
       this.editingTask = {
         id: newId,
         name: baseName + suffix,
@@ -148,59 +178,39 @@ export const editorTaskMethods = {
     }
   },
   async exportTask(taskId) {
-    try {
-      const { data } = await this.$api.get(`/api/tasks/${taskId}`);
-      const json = JSON.stringify(data, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${taskId}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      this.frontendLogger.info('tasks', '任务已导出');
-    } catch (error) {
-      this.frontendLogger.error('tasks', '导出任务失败: ' + taskId, error);
-      this.toastOnly(false, '导出失败');
-    }
+    const resp = await safeApiCall(this, () => this.$api.get(`/api/tasks/${taskId}`), '导出失败');
+    if (!resp) return;
+    downloadBlob(JSON.stringify(resp.data, null, 2), `${taskId}.json`, 'application/json');
+    this.frontendLogger.info('tasks', '任务已导出');
   },
-  importTask() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        try {
-          const data = JSON.parse(ev.target.result);
-          let id = file.name.replace(/\.json$/, '').replace(/[^A-Za-z0-9_]/g, '_');
-          // 确保 ID 以字母开头（HTML ID 规范）
-          if (/^[0-9]/.test(id)) {
-            id = 'task_' + id;
-          }
-          this.editingTask = {
-            id: id,
-            name: data.name || '',
-            description: data.description || '',
-            url: data.url || '',
-            json: JSON.stringify(data, null, 2),
-            _isNew: true,
-          };
-          this.jsonError = '';
-          this.currentPage = 'tasks';
-          this.frontendLogger.info('tasks', '已导入任务配置，请检查后保存');
-        } catch (e) {
-          this.frontendLogger.warn('tasks', '导入失败: 文件不是有效 JSON: ' + e.message);
-          this.toastOnly(false, '文件不是有效的 JSON');
+  async importTask() {
+    const file = await pickFile('.json');
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        let id = file.name.replace(/\.json$/, '').replace(/[^A-Za-z0-9_]/g, '_');
+        if (/^[0-9]/.test(id)) {
+          id = 'task_' + id;
         }
-        input.value = '';
-        input.onchange = null;
-      };
-      reader.readAsText(file);
+        this.editingTask = {
+          id: id,
+          name: data.name || '',
+          description: data.description || '',
+          url: data.url || '',
+          json: JSON.stringify(data, null, 2),
+          _isNew: true,
+        };
+        this.jsonError = '';
+        this.currentPage = 'tasks';
+        this.frontendLogger.info('tasks', '已导入任务配置，请检查后保存');
+      } catch (e) {
+        this.frontendLogger.warn('tasks', '导入失败: 文件不是有效 JSON: ' + e.message);
+        this.toastOnly(false, '文件不是有效的 JSON');
+      }
     };
-    input.click();
+    reader.readAsText(file);
   },
 
   async fetchPureMode() {
@@ -213,6 +223,9 @@ export const editorTaskMethods = {
   },
 
   async togglePureMode() {
+    // 防止快速点击导致竞态
+    if (this._pureModeLoading) return;
+    this._pureModeLoading = true;
     // v-model 已同步更新 pureMode，此处调用 API 持久化到后端
     try {
       const { data } = await this.$api.post('/api/pure-mode');
@@ -225,6 +238,8 @@ export const editorTaskMethods = {
       this.pureMode = !this.pureMode;
       this.frontendLogger.error('tasks', '切换纯净模式失败', error);
       this.toastOnly(false, '切换纯净模式失败');
+    } finally {
+      this._pureModeLoading = false;
     }
   },
 
@@ -251,14 +266,11 @@ export const editorTaskMethods = {
   showRepoImport() {
     this.repoImport.visible = true;
     this._resetRepoImport();
-    this.$nextTick(() => {
-      const overlay = document.querySelector('.repo-overlay');
-      if (overlay) this._trapFocus(overlay);
-    });
+    this.openModal('.repo-overlay');
   },
 
   closeRepoImport() {
-    this._releaseFocusTrap();
+    this.closeModal();
     this.repoImport.visible = false;
     this._resetRepoImport();
   },
@@ -297,10 +309,7 @@ export const editorTaskMethods = {
     }
     this.repoImport.disclaimer = task;
     this.repoImport.disclaimerCountdown = 3;
-    this.$nextTick(() => {
-      const modal = document.querySelector('.repo-disclaimer-modal');
-      if (modal) this._trapFocus(modal);
-    });
+    this.openModal('.repo-disclaimer-modal');
     const timer = setInterval(() => {
       this.repoImport.disclaimerCountdown--;
       if (this.repoImport.disclaimerCountdown <= 0) {
@@ -312,7 +321,7 @@ export const editorTaskMethods = {
   },
 
   cancelRepoDisclaimer() {
-    this._releaseFocusTrap();
+    this.closeModal();
     if (this._repoDisclaimerTimer) {
       clearInterval(this._repoDisclaimerTimer);
       this._repoDisclaimerTimer = null;
@@ -322,7 +331,7 @@ export const editorTaskMethods = {
   },
 
   async acceptRepoDisclaimer() {
-    this._releaseFocusTrap();
+    this.closeModal();
     if (this._repoDisclaimerTimer) {
       clearInterval(this._repoDisclaimerTimer);
       this._repoDisclaimerTimer = null;
@@ -333,7 +342,10 @@ export const editorTaskMethods = {
 
     try {
       const { data } = await this.$api.get(`/api/repo/task?url=${encodeURIComponent(task.url)}`);
-      const id = (task.id || data.name || 'imported').replace(/[^A-Za-z0-9_]/g, '_');
+      let id = (task.id || data.name || 'imported').replace(/[^A-Za-z0-9_]/g, '_');
+      if (/^[0-9]/.test(id)) {
+        id = 'task_' + id;
+      }
       this.editingTask = {
         id: id,
         name: data.name || task.name || '',

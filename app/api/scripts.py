@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from app.workers.script_runner import ScriptRunner, detect_available_binaries
-from app.utils.logging import get_logger
-
 from app.deps import get_task_service
 from app.schemas import ActionResponse
-from app.services.task import TaskService
+from app.services.task_service import TaskService
+from app.utils.logging import get_logger
+from app.workers.script_runner import ScriptRunner, detect_available_binaries
 
 router = APIRouter()
-api_logger = get_logger("backend.api", side="BACKEND")
+api_logger = get_logger("api", source="backend")
+_script_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="script_runner")
 
 
 @router.get("/api/scripts")
@@ -98,7 +99,7 @@ async def run_script(
     runner = ScriptRunner(script_path, timeout=timeout, binary_path=binary_path)
 
     loop = asyncio.get_running_loop()
-    success, message = await loop.run_in_executor(None, runner.run)
+    success, message = await loop.run_in_executor(_script_executor, runner.run)
 
     api_logger.info("运行脚本 {} -> success={}, message={}", task_id, success, message)
     return ActionResponse(success=success, message=message)

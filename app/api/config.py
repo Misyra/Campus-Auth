@@ -2,24 +2,69 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
-from app.utils import ConfigValidator
+from app.deps import get_monitor_service, get_profile_service
+from app.schemas import ActionResponse, MonitorConfigPayload, ProfilesData
+from app.services.config_service import save_config_combined
+from app.services.engine import ScheduleEngine
+from app.services.profile_service import ProfileService
 from app.utils.logging import get_logger
 
-from app.services.config import save_config_combined
-from app.deps import get_monitor_service, get_profile_service
-from app.services.monitor import MonitorService
-from app.services.profile import ProfileService
-from app.schemas import ActionResponse, MonitorConfigPayload
-
 router = APIRouter()
-api_logger = get_logger("backend.api", side="BACKEND")
+api_logger = get_logger("api", source="backend")
+
+
+@router.get("/api/config/log-levels")
+def get_log_levels():
+    """获取日志级别配置"""
+    from app.utils.logging import LogConfigCenter
+
+    config = LogConfigCenter.get_instance()
+    return {
+        "global_level": config.get_config().get("level", "INFO"),
+        "source_levels": config.get_all_source_levels(),
+    }
+
+
+@router.put("/api/config/source-level")
+def set_source_level(payload: dict, request: Request):
+    """设置日志级别。source='global' 时设置全局级别，否则设置来源级别。"""
+    from app.utils.logging import LogConfigCenter
+
+    source = payload.get("source")
+    level = payload.get("level")
+
+    if not source or not level:
+        raise HTTPException(400, "缺少 source 或 level 参数")
+
+    config = LogConfigCenter.get_instance()
+
+    if source == "global":
+        config.set_level(level)
+        return {"success": True, "message": f"已设置全局级别为 {level}"}
+
+    try:
+        config.set_source_level(source, level)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+    _persist_source_levels(request, config)
+
+    return {"success": True, "message": f"已设置 {source} 级别为 {level}"}
+
+
+def _persist_source_levels(request: Request, config):
+    """将 source_levels 持久化到 settings.json"""
+    profile_service = request.app.state.services.profile_service
+    profile_service.update(
+        lambda d: setattr(d.global_settings, "source_levels", config.get_all_source_levels())
+    )
 
 
 @router.get("/api/config", response_model=MonitorConfigPayload)
 def get_config(
-    svc: MonitorService = Depends(get_monitor_service),
+    svc: ScheduleEngine = Depends(get_monitor_service),
 ) -> MonitorConfigPayload:
     return svc.get_config()
 
@@ -35,23 +80,37 @@ def get_default_stealth_script() -> dict:
 @router.put("/api/config", response_model=ActionResponse)
 def save_config(
     payload: MonitorConfigPayload,
-    svc: MonitorService = Depends(get_monitor_service),
+    svc: ScheduleEngine = Depends(get_monitor_service),
     profile_svc: ProfileService = Depends(get_profile_service),
 ) -> ActionResponse:
     try:
-        # 校验关键字段
-        ok, error = ConfigValidator.validate_gui_config(
-            payload.username,
-            payload.password,
-            str(payload.check_interval_seconds),
-        )
-        if not ok:
-            raise ValueError(error)
+        # 备份当前配置，用于 reload 失败时回滚
+        import copy
+
+        backup_data = copy.deepcopy(profile_svc.load())
 
         # 原子化保存：系统设置 + 活动方案
         save_config_combined(payload, profile_svc)
+
         # 同步更新 MonitorService 运行时配置
-        svc.reload_config()
+        try:
+            svc.reload_config()
+        except Exception as reload_exc:
+            # reload 失败：回滚磁盘配置并重新加载
+            api_logger.error("配置重载失败，正在回滚: {}", reload_exc, exc_info=True)
+            try:
+                profile_svc.update(
+                    lambda data: _rollback_config(data, backup_data)
+                )
+                svc.reload_config()
+            except Exception as rollback_exc:
+                api_logger.error(
+                    "回滚失败（磁盘配置已回滚，运行时状态可能不一致）: {}",
+                    rollback_exc,
+                    exc_info=True,
+                )
+            raise reload_exc
+
         api_logger.info("配置已保存 -> success=True")
         return ActionResponse(success=True, message="配置保存成功")
     except ValueError as exc:
@@ -60,3 +119,13 @@ def save_config(
     except Exception as exc:
         api_logger.error("配置保存失败: {}", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=f"配置保存失败: {exc}") from exc
+
+
+def _rollback_config(data: ProfilesData, backup_data: ProfilesData) -> None:
+    """回滚配置到备份状态。
+
+    使用逐字段赋值而非 __dict__.update，确保 Pydantic 内部状态
+    （如 model_fields_set）保持一致。
+    """
+    for field_name in ProfilesData.model_fields:
+        setattr(data, field_name, getattr(backup_data, field_name))

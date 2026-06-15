@@ -1,8 +1,8 @@
-import { getBinaryName, extractApiError } from './utils.js';
+import { extractApiError, safeApiCall } from './utils.js';
+import { formatScheduleTime, formatTimeValue } from './formatters.js';
 
 // 定时任务相关方法
 export const scheduledTasksMethods = {
-  getBinaryName,
   // 加载定时任务列表
   async loadScheduledTasks() {
     try {
@@ -98,47 +98,33 @@ export const scheduledTasksMethods = {
   // 删除定时任务
   async deleteScheduledTask(taskId) {
     if (!confirm('确定要删除这个定时任务吗？')) return;
-
-    try {
-      const { data: result } = await this.$api.delete(`/api/scheduled-tasks/${taskId}`);
-      this.toastOnly(result.success, result.message);
-
-      if (result.success) {
-        await this.loadScheduledTasks();
-      }
-    } catch (e) {
-      const msg = extractApiError(e, '删除失败');
-      this.toastOnly(false, msg);
+    const resp = await safeApiCall(this, () => this.$api.delete(`/api/scheduled-tasks/${taskId}`), '删除失败');
+    if (!resp) return;
+    const result = resp.data;
+    this.toastOnly(result.success, result.message);
+    if (result.success) {
+      await this.loadScheduledTasks();
     }
   },
 
   // 切换定时任务启用状态
   async toggleScheduledTask(taskId) {
-    try {
-      const { data: result } = await this.$api.post(`/api/scheduled-tasks/${taskId}/toggle`);
-      this.toastOnly(result.success, result.message);
-
-      if (result.success) {
-        await this.loadScheduledTasks();
-      }
-    } catch (e) {
-      const msg = extractApiError(e, '操作失败');
-      this.toastOnly(false, msg);
+    const resp = await safeApiCall(this, () => this.$api.post(`/api/scheduled-tasks/${taskId}/toggle`), '操作失败');
+    if (!resp) return;
+    const result = resp.data;
+    this.toastOnly(result.success, result.message);
+    if (result.success) {
+      await this.loadScheduledTasks();
     }
   },
 
   // 手动执行定时任务
   async runScheduledTask(taskId) {
-    try {
-      const { data: result } = await this.$api.post(`/api/scheduled-tasks/${taskId}/run`);
-      this.toastOnly(result.success, result.message);
-
-      // 刷新列表（更新最后执行时间）
-      await this.loadScheduledTasks();
-    } catch (e) {
-      const msg = extractApiError(e, '执行失败');
-      this.toastOnly(false, msg);
-    }
+    const resp = await safeApiCall(this, () => this.$api.post(`/api/scheduled-tasks/${taskId}/run`), '执行失败');
+    if (!resp) return;
+    const result = resp.data;
+    this.toastOnly(result.success, result.message);
+    await this.loadScheduledTasks();
   },
 
   // 加载执行历史
@@ -163,13 +149,11 @@ export const scheduledTasksMethods = {
     this.scheduledTaskHistory = [];
   },
 
-  // 格式化时间
-  formatScheduleTime(schedule) {
-    if (!schedule) return '';
-    const hour = String(schedule.hour ?? 0).padStart(2, '0');
-    const minute = String(schedule.minute ?? 0).padStart(2, '0');
-    return `${hour}:${minute}`;
-  },
+  // 格式化调度时间
+  formatScheduleTime,
+
+  // 格式化超时时间
+  formatTimeValue,
 
   // 格式化任务类型
   formatTaskType(type) {
@@ -178,11 +162,6 @@ export const scheduledTasksMethods = {
       browser: '浏览器任务',
     };
     return types[type] || type;
-  },
-
-  // 格式化时间为 HH:MM 格式
-  formatTimeValue(hour, minute) {
-    return `${String(hour ?? 0).padStart(2, '0')}:${String(minute ?? 0).padStart(2, '0')}`;
   },
 
   // 处理时间变化

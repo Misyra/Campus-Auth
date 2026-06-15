@@ -43,7 +43,7 @@
 }
 
 .profiles-status-icon.off {
-  background: rgba(51, 65, 85, 0.5);
+  background: var(--bg-hover);
   color: var(--text-muted);
 }
 
@@ -226,7 +226,7 @@
 
 .profile-card:hover {
   border-color: var(--border-hover);
-  background: rgba(51, 65, 85, 0.4);
+  background: var(--bg-hover);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   transform: translateY(-1px);
 }
@@ -248,6 +248,12 @@
   min-width: 0;
   cursor: pointer;
   padding: 2px 0;
+}
+
+.profile-card-main.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .profile-card-header {
@@ -305,7 +311,7 @@
 
 .profile-card-meta {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   margin-top: 8px;
   flex-wrap: wrap;
 }
@@ -315,12 +321,16 @@
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  padding: 2px 8px;
+  padding: 2px 6px;
   border-radius: 4px;
   background: var(--bg-glass);
   color: var(--text-secondary);
   font-family: var(--font-mono);
   border: 1px solid var(--border);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .profile-tag svg {
@@ -452,67 +462,6 @@
   margin: 20px 0;
 }
 
-/* 高级设置折叠 */
-.editor-collapsible {
-  margin-top: 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  transition: border-color 0.25s ease;
-}
-
-.editor-collapsible[open] {
-  border-color: var(--border-hover);
-}
-
-.editor-collapsible-title {
-  padding: 10px 14px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  cursor: pointer;
-  background: rgba(51, 65, 85, 0.3);
-  user-select: none;
-  list-style: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: background 0.2s ease;
-}
-
-.editor-collapsible-title:hover {
-  background: rgba(51, 65, 85, 0.5);
-}
-
-.editor-collapsible-title::-webkit-details-marker {
-  display: none;
-}
-
-.editor-collapsible-title::before {
-  content: '';
-  display: inline-block;
-  width: 0;
-  height: 0;
-  border-left: 5px solid var(--text-secondary);
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
-  transition: transform 0.2s;
-}
-
-.editor-collapsible[open] .editor-collapsible-title::before {
-  transform: rotate(90deg);
-}
-
-.editor-collapsible[open] .editor-collapsible-title {
-  border-bottom: 1px solid var(--border);
-}
-
-.editor-collapsible-body {
-  padding: 14px;
-}
-
 /* Toggle — 使用更具体的选择器避免覆盖 components.css */
 .profile-editor-card .toggle-group {
   margin-top: 4px;
@@ -535,7 +484,28 @@
 }
 
 .profiles-empty svg {
+  width: 48px;
+  height: 48px;
+  opacity: 0.3;
   margin-bottom: var(--space-md);
+}
+
+.profiles-empty-title {
+  display: block;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.profiles-empty-desc {
+  display: block;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: var(--space-md);
+}
+
+/* 独立账号区域 */
+.profile-credentials-section {
+  margin-top: 8px;
 }
 
 .profiles-empty p {

@@ -15,9 +15,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import queue
-import subprocess
-import sys
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -27,15 +26,14 @@ if TYPE_CHECKING:
     from playwright.async_api import Route
 
 from app.constants import (
-    WORKER_SUBMIT_TIMEOUT,
-    WORKER_READY_TIMEOUT,
     WORKER_JOIN_TIMEOUT,
     WORKER_QUEUE_PUT_TIMEOUT,
+    WORKER_READY_TIMEOUT,
+    WORKER_SUBMIT_TIMEOUT,
 )
 from app.utils.logging import get_logger
-from app.utils.platform_utils import CREATE_NO_WINDOW_FLAG
 
-logger = get_logger("playwright_worker", side="BACKEND")
+logger = get_logger("playwright_worker", source="backend")
 
 
 # ── 命令类型常量 ──
@@ -71,6 +69,7 @@ class WorkerCommand:
     data: dict = field(default_factory=dict)  # 命令参数
     response_event: threading.Event | None = None  # 调用方等待此事件以获取结果
     response_data: Any = None  # 消费者线程设置返回数据
+    cancelled: bool = False  # 超时后标记为已取消，跳过执行
 
 
 @dataclass
@@ -95,6 +94,9 @@ class PlaywrightWorker:
     def __init__(self) -> None:
         self._cmd_queue: queue.Queue[WorkerCommand] = queue.Queue(maxsize=50)
         self._stop_event = threading.Event()
+        self._shutdown_permanent = (
+            threading.Event()
+        )  # 永久关闭标志，stop() 设置后不可重置
         self._consumer_thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._worker_ready = threading.Event()
@@ -109,9 +111,32 @@ class PlaywrightWorker:
         self._debug_executor: Any = (
             None  # TaskExecutor 实例，调试步骤执行时在 Worker 线程内使用
         )
+        self._last_browser_settings: dict | None = None  # 缓存最近一次浏览器设置
 
         # _wake_event 用于立即唤醒 _async_run 协程处理新命令
         self._wake_event: asyncio.Event | None = None
+
+    # ── 只读属性（供同线程调用者访问，如 BrowserContextManager）──
+
+    @property
+    def page(self) -> Any:
+        """当前页面引用（仅限 Worker 事件循环线程内访问）"""
+        return self._page
+
+    @property
+    def browser(self) -> Any:
+        """浏览器实例（仅限 Worker 事件循环线程内访问）"""
+        return self._browser
+
+    @property
+    def context(self) -> Any:
+        """浏览器上下文（仅限 Worker 事件循环线程内访问）"""
+        return self._context
+
+    @property
+    def playwright_instance(self) -> Any:
+        """Playwright 实例（仅限 Worker 事件循环线程内访问）"""
+        return self._playwright
 
     # ── 公共生命周期方法 ──
 
@@ -132,7 +157,9 @@ class PlaywrightWorker:
         # 等待事件循环就绪（最多 5 秒）
         self._worker_ready.wait(timeout=WORKER_READY_TIMEOUT)
         if not self._worker_ready.is_set():
-            logger.warning("PlaywrightWorker 事件循环启动超时")
+            logger.warning(
+                "PlaywrightWorker 事件循环启动超时 ({}s)", WORKER_READY_TIMEOUT
+            )
 
     def stop(self, timeout: float = 5) -> None:
         """发送关闭信号并等待线程结束。
@@ -144,20 +171,25 @@ class PlaywrightWorker:
             timeout: 等待线程结束的超时秒数
         """
         self._stop_event.set()
+        self._shutdown_permanent.set()
 
         # 放入 SHUTDOWN 命令确保事件循环能正常退出
         try:
             self._cmd_queue.put_nowait(WorkerCommand(type=CMD_SHUTDOWN))
         except queue.Full:
-            logger.warning("命令队列已满，强制停止 Worker")
+            logger.warning(
+                "命令队列已满 (maxsize={})，强制停止 Worker", self._cmd_queue.maxsize
+            )
             if self._loop is not None and self._loop.is_running():
                 self._loop.call_soon_threadsafe(self._loop.stop)
             return
 
         # 通过 run_coroutine_threadsafe 唤醒 Worker 的事件循环
         # 这是唯一允许的跨线程 asyncio 调用
-        if self._loop is not None:
-            asyncio.run_coroutine_threadsafe(self._wake_async(), self._loop)
+        loop = self._loop
+        if loop is not None:
+            with contextlib.suppress(RuntimeError):
+                asyncio.run_coroutine_threadsafe(self._wake_async(), loop)
 
         # 等待消费者线程正常退出
         if self._consumer_thread:
@@ -165,8 +197,9 @@ class PlaywrightWorker:
             # 超时后强制停止事件循环
             if self._consumer_thread.is_alive():
                 logger.warning("Worker 线程未在 {}s 内退出，强制停止", timeout)
-                if self._loop is not None:
-                    self._loop.call_soon_threadsafe(self._loop.stop)
+                loop = self._loop
+                if loop is not None:
+                    loop.call_soon_threadsafe(loop.stop)
                 self._consumer_thread.join(timeout=WORKER_JOIN_TIMEOUT)
 
         # 排干队列中残留的命令，通知等待方 Worker 已关闭
@@ -207,14 +240,18 @@ class PlaywrightWorker:
             WorkerResponse 对象
         """
         # Worker 已关闭时拒绝新命令（SHUTDOWN 命令走 stop() 路径不经过此检查）
-        if self._stop_event.is_set():
+        if self._stop_event.is_set() or self._shutdown_permanent.is_set():
             return WorkerResponse(success=False, error="Worker 已关闭，不接受新命令")
 
         # 检测消费者线程是否存活，若已死亡则尝试重启
         if not self.is_alive():
             with self._restart_lock:
-                # 双重检查：获取锁后再次确认线程状态
-                if not self.is_alive() and not self._stop_event.is_set():
+                # 三重检查：获取锁后再次确认线程状态和关闭标志
+                if (
+                    not self.is_alive()
+                    and not self._stop_event.is_set()
+                    and not self._shutdown_permanent.is_set()
+                ):
                     logger.warning("检测到消费者线程已死亡，尝试重启")
                     try:
                         self.start()
@@ -236,8 +273,10 @@ class PlaywrightWorker:
 
         # 通过 run_coroutine_threadsafe 唤醒 Worker 的事件循环，
         # 使 _async_run 立即处理新放入的命令
-        if self._loop is not None:
-            asyncio.run_coroutine_threadsafe(self._wake_async(), self._loop)
+        loop = self._loop
+        if loop is not None:
+            with contextlib.suppress(RuntimeError):
+                asyncio.run_coroutine_threadsafe(self._wake_async(), loop)
 
         if not wait:
             return WorkerResponse(success=True)
@@ -249,7 +288,13 @@ class PlaywrightWorker:
                 return cmd.response_data
             return WorkerResponse(success=True, data=cmd.response_data)
 
+        # 超时：标记命令为已取消
+        cmd.cancelled = True
         return WorkerResponse(success=False, error="命令执行超时或无响应")
+
+    def submit_nowait(self, cmd_type: str, data: dict | None = None) -> None:
+        """提交命令但不等待响应（fire-and-forget）。"""
+        self._cmd_queue.put_nowait(WorkerCommand(type=cmd_type, data=data or {}))
 
     # ── Worker 线程入口 ──
 
@@ -315,10 +360,8 @@ class PlaywrightWorker:
                         return
 
                 # 等待唤醒信号或超时
-                try:
+                with contextlib.suppress(TimeoutError):
                     await asyncio.wait_for(wake_event.wait(), timeout=0.5)
-                except asyncio.TimeoutError:
-                    pass
         finally:
             # 停止事件循环，使 _worker_entry() 中的 run_forever() 返回
             if self._loop and not self._loop.is_closed():
@@ -326,30 +369,33 @@ class PlaywrightWorker:
 
     # ── 命令派发 ──
 
-    # 命令类型 → (handler 方法名, 是否需要 data 参数)
-    _CMD_ROUTES: dict[str, tuple[str, bool]] = {
-        CMD_LOGIN: ("_handle_login", True),
-        CMD_DEBUG_START: ("_handle_debug_start", True),
-        CMD_DEBUG_STEP: ("_handle_debug_step", True),
-        CMD_DEBUG_STOP: ("_handle_debug_stop", False),
-        CMD_BROWSER_ACQUIRE: ("_handle_browser_acquire", True),
-        CMD_BROWSER_RELEASE: ("_handle_browser_release", False),
-        CMD_BROWSER_CLOSE: ("_handle_browser_close", False),
-        CMD_BROWSER_HEALTH_CHECK: ("_handle_health_check", False),
-    }
-
     async def _dispatch(self, cmd: WorkerCommand) -> None:
         """派发 WorkerCommand 到对应的异步处理函数。
 
         根据 cmd.type 路由到对应的 _handle_* 方法，
         将返回值设为 cmd.response_data 并通知等待方。
         """
+        # 超时命令已取消，跳过执行避免资源浪费
+        if cmd.cancelled:
+            return
+
         try:
-            route = self._CMD_ROUTES.get(cmd.type)
-            if route:
-                handler_name, needs_data = route
-                handler = getattr(self, handler_name)
-                result = await handler(cmd.data) if needs_data else await handler()
+            if cmd.type == CMD_LOGIN:
+                result = await self._handle_login(cmd.data)
+            elif cmd.type == CMD_DEBUG_START:
+                result = await self._handle_debug_start(cmd.data)
+            elif cmd.type == CMD_DEBUG_STEP:
+                result = await self._handle_debug_step(cmd.data)
+            elif cmd.type == CMD_DEBUG_STOP:
+                result = await self._handle_debug_stop()
+            elif cmd.type == CMD_BROWSER_ACQUIRE:
+                result = await self._handle_browser_acquire(cmd.data)
+            elif cmd.type == CMD_BROWSER_RELEASE:
+                result = await self._handle_browser_release()
+            elif cmd.type == CMD_BROWSER_CLOSE:
+                result = await self._handle_browser_close()
+            elif cmd.type == CMD_BROWSER_HEALTH_CHECK:
+                result = await self._handle_health_check()
             elif cmd.type == CMD_SHUTDOWN:
                 result = WorkerResponse(success=True, data="Worker 正在关闭")
             else:
@@ -404,6 +450,7 @@ class PlaywrightWorker:
         3. 创建 TaskExecutor（线程安全 — 所有 Playwright 操作在 Worker 线程内执行）
         4. 初始截图并返回 URL
         """
+        from app.constants import DEFAULT_STEP_TIMEOUT_MS
         from app.tasks import TaskConfig, TaskExecutor
 
         config = data.get("config", {})
@@ -411,7 +458,7 @@ class PlaywrightWorker:
         task_data = data.get("task_data", {})
         template_vars = data.get("template_vars", data.get("env_vars", {}))
         screenshot_dir = data.get("screenshot_dir", "")
-        default_timeout = data.get("default_timeout", TaskExecutor.DEFAULT_STEP_TIMEOUT)
+        default_timeout = data.get("default_timeout", DEFAULT_STEP_TIMEOUT_MS)
         navigation_timeout = data.get(
             "navigation_timeout", TaskExecutor.DEFAULT_NAVIGATION_TIMEOUT
         )
@@ -436,6 +483,7 @@ class PlaywrightWorker:
                 )
             except Exception as e:
                 logger.warning("调试页面加载失败: {}", e)
+                return WorkerResponse(success=False, error=f"调试页面加载失败: {e}")
 
         # 创建 TaskExecutor（在 Worker 线程内，page 对象安全）
         if task_data:
@@ -537,6 +585,11 @@ class PlaywrightWorker:
                 try:
                     if self._context is not None and not self._context.is_closed():
                         self._page = await self._context.new_page()
+                        # 重新应用反检测脚本和路由拦截（新页面未继承旧页面的设置）
+                        if self._page is not None:
+                            await self._apply_stealth_and_routes(
+                                {"browser_settings": self._last_browser_settings or {}}
+                            )
                 except Exception:
                     logger.warning("创建替代页面失败，_page 保持 None")
 
@@ -668,6 +721,7 @@ class PlaywrightWorker:
         from playwright.async_api import async_playwright
 
         browser_settings = config.get("browser_settings", {})
+        self._last_browser_settings = browser_settings  # 缓存用于页面重建
         headless = browser_settings.get("headless", True)
         pure_mode = browser_settings.get("pure_mode", False)
 
@@ -675,30 +729,37 @@ class PlaywrightWorker:
 
         self._playwright = await async_playwright().start()
 
-        if pure_mode:
-            # 纯净模式：原始 Chromium，无扩展无自定义参数
-            self._browser = await self._playwright.chromium.launch(headless=headless)
-            ctx_opts = {
-                "viewport": {
-                    "width": browser_settings.get("viewport_width", 1280),
-                    "height": browser_settings.get("viewport_height", 720),
+        try:
+            if pure_mode:
+                # 纯净模式：原始 Chromium，无扩展无自定义参数
+                self._browser = await self._playwright.chromium.launch(
+                    headless=headless
+                )
+                ctx_opts = {
+                    "viewport": {
+                        "width": browser_settings.get("viewport_width", 1280),
+                        "height": browser_settings.get("viewport_height", 720),
+                    }
                 }
-            }
-            self._context = await self._browser.new_context(**ctx_opts)
-        else:
-            launch_args = self._build_launch_args(browser_settings)
-            self._browser = await self._playwright.chromium.launch(
-                headless=headless, args=launch_args
-            )
-            ctx_opts = self._build_context_options(browser_settings)
-            self._context = await self._browser.new_context(**ctx_opts)
-            await self._apply_stealth_and_routes(browser_settings)
+                self._context = await self._browser.new_context(**ctx_opts)
+            else:
+                launch_args = self._build_launch_args(browser_settings)
+                self._browser = await self._playwright.chromium.launch(
+                    headless=headless, args=launch_args
+                )
+                ctx_opts = self._build_context_options(browser_settings)
+                self._context = await self._browser.new_context(**ctx_opts)
+                await self._apply_stealth_and_routes(browser_settings)
 
-        self._page = await self._context.new_page()
+            self._page = await self._context.new_page()
 
-        # 纯净模式下也需要应用反检测脚本（如果启用）
-        if pure_mode and browser_settings.get("stealth_mode", False):
-            await self._apply_stealth_and_routes(browser_settings)
+            # 纯净模式下也需要应用反检测脚本（如果启用）
+            if pure_mode and browser_settings.get("stealth_mode", False):
+                await self._apply_stealth_and_routes(browser_settings)
+        except Exception:
+            logger.warning("浏览器启动中间步骤失败，回滚已创建的资源", exc_info=True)
+            await self._close_browser()
+            raise
 
         logger.info("浏览器启动完成")
 
@@ -796,11 +857,22 @@ class PlaywrightWorker:
                     logger.error("关闭浏览器异常: {}", e)
         self._browser = None
 
-        # 停止 Playwright 服务
-        await self._close_resource(self._playwright, "Playwright", graceful)
+        # 停止 Playwright 服务（AsyncPlaywright 使用 stop() 而非 close()）
+        if self._playwright is not None:
+            try:
+                await self._playwright.stop()
+            except Exception as e:
+                if graceful:
+                    if self._is_normal_close_error(e):
+                        logger.warning("停止 Playwright 时连接已断开（正常）: {}", e)
+                    else:
+                        logger.error("停止 Playwright 异常: {}", e)
         self._playwright = None
 
-        logger.info("浏览器资源已清理" if graceful else "强制清理完成")
+        if graceful:
+            logger.info("浏览器资源已清理")
+        else:
+            logger.warning("浏览器资源强制清理完成")
 
     async def _close_browser(self) -> None:
         """关闭浏览器并释放所有资源（优雅模式）。
@@ -849,17 +921,21 @@ class PlaywrightWorker:
             logger.warning("解析自定义请求头失败: {}", exc)
         return {}
 
-    async def _handle_low_resource_request(self, route: "Route") -> None:
+    async def _handle_low_resource_request(self, route: Route) -> None:
         """低资源模式请求处理。
 
         拦截图片、字体、媒体资源请求并中止，减少内存和带宽消耗。
         """
-        request = route.request
-        blocked_types = {"image", "font", "media"}
-        if request.resource_type in blocked_types:
-            await route.abort()
-            return
-        await route.continue_()
+        try:
+            request = route.request
+            blocked_types = {"image", "font", "media"}
+            if request.resource_type in blocked_types:
+                await route.abort()
+                return
+            await route.continue_()
+        except Exception as e:
+            # 页面/上下文已关闭时 route 操作会抛异常
+            logger.debug("route 异常已忽略: {}", e)
 
 
 # ── 模块级单例 ──
@@ -875,7 +951,7 @@ def get_worker() -> PlaywrightWorker:
     首次调用时创建实例并自动 start()。
     后续调用返回已有实例；若实例已停止则自动重建。
     """
-    global _worker  # noqa: PLW0603
+    global _worker
     if _worker is None or not _worker.is_alive():
         with _worker_lock:
             if _worker is None or not _worker.is_alive():
@@ -884,163 +960,51 @@ def get_worker() -> PlaywrightWorker:
                         _worker.stop()
                     except Exception:
                         logger.debug("停止旧 Worker 失败", exc_info=True)
+                cleanup_orphan_browsers()
                 _worker = PlaywrightWorker()
                 _worker.start()
     return _worker
+
+
+def shutdown_worker(timeout: float = 5) -> None:
+    """关闭并清理全局 Worker 单例。shutdown 场景专用，不创建新实例。"""
+    global _worker
+    with _worker_lock:
+        if _worker is not None and _worker.is_alive():
+            _worker.stop(timeout=timeout)
+        _worker = None
 
 
 # ── 孤儿浏览器清理 ──
 
 
 def cleanup_orphan_browsers() -> None:
-    """清理孤儿 Chromium 浏览器进程
+    """清理孤儿 Playwright Chromium 进程。
 
     扫描并杀掉由 Campus-Auth 启动但已失去 Python 父进程的 Chromium 实例。
-    仅清理 Playwright 管理的浏览器（可执行路径包含 "ms-playwright"），
+    仅清理 Playwright 管理的浏览器（可执行路径或命令行包含 "ms-playwright"），
     不会误杀用户自行安装的 Chrome/Edge/Brave 等浏览器。
-
-    平台差异:
-    - Windows: 使用 wmic 枚举进程, taskkill 终止
-    - Linux/macOS: 使用 ps 枚举进程, kill 终止
     """
-    if sys.platform == "win32":
-        _cleanup_windows()
+    import psutil
+
+    killed = 0
+    for proc in psutil.process_iter(["pid", "exe", "cmdline"]):
+        try:
+            info = proc.info
+            exe = (info.get("exe") or "").lower()
+            cmdline = " ".join(info.get("cmdline") or []).lower()
+            if ("ms-playwright" in exe or "ms-playwright" in cmdline) and (
+                "chrom" in exe or "chrom" in cmdline
+            ):
+                proc.kill()
+                killed += 1
+                logger.debug("已终止孤儿 Chromium PID={}", info["pid"])
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+        except Exception:
+            logger.debug("终止进程异常", exc_info=True)
+
+    if killed:
+        logger.info("已终止 {} 个孤儿 Chromium 进程", killed)
     else:
-        _cleanup_posix()
-
-
-def _cleanup_windows() -> None:
-    """Windows 平台: 通过 PowerShell 查找并终止 Playwright Chromium 进程"""
-    try:
-        # 使用 PowerShell Get-CimInstance 获取所有 chrome.exe 的 PID 和执行路径
-        result = subprocess.run(
-            [
-                "powershell",
-                "-NoProfile",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | "
-                "Select-Object ProcessId,ExecutablePath | ConvertTo-Csv -NoTypeInformation",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            creationflags=CREATE_NO_WINDOW_FLAG,
-        )
-        if result.returncode != 0 or not result.stdout.strip():
-            return
-
-        pids_to_kill: list[str] = []
-        empty_path_pids: list[str] = []
-        for line in result.stdout.strip().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "ProcessId" in line:
-                continue
-            # CSV 格式: "ProcessId","ExecutablePath"
-            parts = line.split(",", 1)
-            if len(parts) < 2:
-                continue
-            pid_str = parts[0].strip().strip('"')
-            exe_path = parts[1].strip().strip('"')
-            if not pid_str.isdigit():
-                continue
-            if exe_path and "ms-playwright" in exe_path.lower():
-                pids_to_kill.append(pid_str)
-            elif not exe_path:
-                # 标准用户下 ExecutablePath 可能为空，记录备用
-                empty_path_pids.append(pid_str)
-
-        # 如果没有精确匹配的进程，但有空路径的 chrome.exe，尝试通过命令行参数匹配
-        if not pids_to_kill and empty_path_pids:
-            for pid in empty_path_pids:
-                try:
-                    cmd_result = subprocess.run(
-                        [
-                            "powershell",
-                            "-NoProfile",
-                            "-ExecutionPolicy",
-                            "Bypass",
-                            "-Command",
-                            f'(Get-CimInstance Win32_Process -Filter "ProcessId={pid}").CommandLine',
-                        ],
-                        capture_output=True,
-                        text=True,
-                        timeout=5,
-                        creationflags=CREATE_NO_WINDOW_FLAG,
-                    )
-                    cmdline = (cmd_result.stdout or "").strip().lower()
-                    if "ms-playwright" in cmdline:
-                        pids_to_kill.append(pid)
-                except Exception:
-                    logger.debug("获取进程 {} 命令行失败，跳过", pid, exc_info=True)
-
-        if not pids_to_kill:
-            logger.debug("未发现孤儿 Playwright Chromium 进程")
-            return
-
-        logger.info(
-            "发现 {} 个孤儿 Playwright Chromium 进程，正在清理...", len(pids_to_kill)
-        )
-        for pid in pids_to_kill:
-            try:
-                subprocess.run(
-                    ["taskkill", "/F", "/PID", pid],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                    creationflags=CREATE_NO_WINDOW_FLAG,
-                )
-                logger.debug("已终止 Chromium 进程 PID={}", pid)
-            except Exception:
-                logger.warning("终止 Chromium 进程 PID={} 失败", pid)
-    except Exception:
-        logger.warning("扫描孤儿 Chromium 进程时出现异常", exc_info=True)
-
-
-def _cleanup_posix() -> None:
-    """Linux/macOS 平台: 通过 ps 查找并终止 Playwright Chromium 进程"""
-    try:
-        result = subprocess.run(
-            ["ps", "-eo", "pid=,args="],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode != 0 or not result.stdout.strip():
-            return
-
-        pids_to_kill: list[str] = []
-        for line in result.stdout.strip().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            # 格式: "PID ARGS"
-            parts = line.split(None, 1)
-            if len(parts) < 2:
-                continue
-            pid_str, args = parts[0], parts[1]
-            # 仅匹配 Playwright 管理的 Chromium（路径包含 ms-playwright）
-            if "ms-playwright" in args.lower() and "chrom" in args.lower():
-                pids_to_kill.append(pid_str)
-
-        if not pids_to_kill:
-            logger.debug("未发现孤儿 Playwright Chromium 进程")
-            return
-
-        logger.info(
-            "发现 {} 个孤儿 Playwright Chromium 进程，正在清理...", len(pids_to_kill)
-        )
-        for pid in pids_to_kill:
-            try:
-                subprocess.run(
-                    ["kill", "-9", pid],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                logger.debug("已终止 Chromium 进程 PID={}", pid)
-            except Exception:
-                logger.warning("终止 Chromium 进程 PID={} 失败", pid)
-    except Exception:
-        logger.warning("扫描孤儿 Chromium 进程时出现异常", exc_info=True)
+        logger.debug("未发现孤儿 Playwright Chromium 进程")

@@ -1,4 +1,4 @@
-<div v-if="currentPage === 'scripts'" class="page-content fade-in">
+<div v-if="currentPage === 'scripts'" class="page-content">
   <div class="tasks-grid">
     <div class="card">
       <div class="card-header">
@@ -23,8 +23,12 @@
       </div>
       <div class="card-body">
         <div v-if="!scripts.length" class="empty-state">
-          <p>暂无自定义脚本</p>
-          <p class="hint">支持 Python、Shell 或任意可执行程序，无需浏览器，资源占用更低</p>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <polyline points="16 18 22 12 16 6"/>
+            <polyline points="8 6 2 12 8 18"/>
+          </svg>
+          <span>暂无自定义脚本</span>
+          <span class="hint">支持 Python、Shell 或任意可执行程序，无需浏览器，资源占用更低</span>
         </div>
         <div v-else class="task-list">
           <div
@@ -56,7 +60,7 @@
             </div>
             <div class="task-actions">
               <button class="btn btn-sm" @click="setActiveScript(script.id)" :disabled="activeTaskId === script.id">
-                {{ activeTaskId === script.id ? '当前使用' : '使用' }}
+                {{ activeTaskId === script.id ? '使用中' : '使用' }}
               </button>
               <button class="btn btn-sm" @click="showScriptEditor(script.id)">编辑</button>
               <button class="btn btn-sm" @click="runScript(script.id)" title="立即执行此脚本">运行</button>
@@ -80,29 +84,22 @@
       </div>
       <div class="card-body">
         <div class="form-group">
-          <label>脚本ID</label>
-          <input v-model="editingTask.id" type="text" placeholder="my_script" :disabled="!editingTask._isNew" />
+          <label for="script-id">脚本ID</label>
+          <input id="script-id" v-model="editingTask.id" type="text" placeholder="my_script" :disabled="!editingTask._isNew" />
           <span class="hint">必须以字母开头，且只能包含字母、数字和下划线</span>
         </div>
         <div class="form-group">
-          <label>名称</label>
-          <input v-model="editingTask.name" type="text" placeholder="我的登录脚本" />
+          <label for="script-name">名称</label>
+          <input id="script-name" v-model="editingTask.name" type="text" placeholder="我的登录脚本" />
         </div>
         <div class="form-group">
-          <label>描述</label>
-          <input v-model="editingTask.description" type="text" placeholder="脚本描述（可选）" />
+          <label for="script-desc">描述</label>
+          <input id="script-desc" v-model="editingTask.description" type="text" placeholder="脚本描述（可选）" />
         </div>
         <div class="form-group">
-          <label>执行程序</label>
+          <label for="script-binary">执行程序</label>
           <div class="binary-input-group">
-            <select v-model="editingTask.binary_path" @change="onBinarySelectChange">
-              <option value="">选择执行程序...</option>
-              <option v-for="bin in availableBinaries" :key="bin.path" :value="bin.path">
-                {{ bin.name }}
-              </option>
-              <option value="__custom_python__">Python (自定义环境)</option>
-              <option value="__custom__">自定义路径...</option>
-            </select>
+            <custom-select v-model="editingTask.binary_path" :options="binaryOptions" @change="onBinarySelectChange"></custom-select>
             <input
               v-if="editingTask.binary_path === '__custom_python__'"
               v-model="editingTask._customPythonBinary"
@@ -122,15 +119,16 @@
           <span class="hint" v-else>选择执行此脚本的程序，默认使用当前 Python 解释器</span>
         </div>
         <div class="form-group">
-          <label>脚本内容</label>
+          <label for="script-content">脚本内容</label>
           <textarea
+            id="script-content"
             v-model="editingTask.content"
             rows="18"
             placeholder="#!/usr/bin/env python3&#10;import httpx&#10;&#10;resp = httpx.post('http://...', data={...})&#10;..."
             class="script-editor"
           ></textarea>
           <span class="hint">
-            脚本直接硬编码账号密码等参数，通过 stdout 输出信息
+            脚本可直接硬编码账号密码等参数，stdout 输出会记录到日志，方便调试
           </span>
         </div>
         <div class="task-editor-actions">
@@ -153,7 +151,7 @@
           <p>每个脚本可以指定不同的执行程序：</p>
           <ul>
             <li><strong>Python</strong>（默认）— 使用 Python 解释器执行，推荐使用 httpx 或 urllib</li>
-            <li><strong>Shell</strong> — 使用 bash/cmd/powershell 执行 shell 脚本</li>
+            <li><strong>Shell</strong> — Windows 上默认使用 cmd，Linux/macOS 上默认使用 bash，也可自定义 shell 路径</li>
             <li><strong>自定义</strong> — 任意可执行文件（.exe、.bat 等）</li>
           </ul>
 

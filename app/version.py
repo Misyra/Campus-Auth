@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import re
-from functools import lru_cache
 from pathlib import Path
 
 _VERSION_PATTERN = re.compile(r'^version\s*=\s*"([^\"]+)"\s*$')
 
 
-@lru_cache(maxsize=1)
 def get_project_version(project_root: Path | None = None) -> str:
     """从 pyproject.toml 读取项目版本，读取失败时返回 unknown。"""
     root = project_root or Path(__file__).resolve().parents[1]
@@ -46,7 +44,7 @@ def compare_versions(a: str, b: str) -> int:
         max_len = max(len(va), len(vb))
         va.extend([0] * (max_len - len(va)))
         vb.extend([0] * (max_len - len(vb)))
-        for x, y in zip(va, vb):
+        for x, y in zip(va, vb, strict=False):
             if x > y:
                 return 1
             if x < y:

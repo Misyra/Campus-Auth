@@ -4,7 +4,7 @@ from typing import Any
 
 from .logging import get_logger
 
-logger = get_logger("env", side="BACKEND")
+logger = get_logger("env", source="backend")
 
 
 # Windows 保留环境变量 + Unix/Python 内置变量，防止 runtime vars 与系统变量冲突
@@ -64,10 +64,15 @@ def build_login_template_vars(
     if password:
         template_vars["PASSWORD"] = password
 
+    # 内置变量集合，防止自定义变量覆盖 LOGIN_URL、ISP、USERNAME、PASSWORD
+    _builtin_keys = {k for k in template_vars if k}
+
     if custom_variables and isinstance(custom_variables, dict):
         for k, v in custom_variables.items():
             if k.upper() in _ENV_DENYLIST_UPPER:
                 logger.warning("自定义变量 '{}' 与系统保留名冲突，已跳过", k)
+            elif k.upper() in _builtin_keys:
+                logger.warning("自定义变量 '{}' 与内置变量冲突，已跳过", k)
             else:
                 template_vars[k] = v
 

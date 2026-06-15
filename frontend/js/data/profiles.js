@@ -7,5 +7,6 @@ export function profileData() {
     editingProfile: null,
     detectResult: null,
     editorDetectResult: null,
+    _autoSwitchInFlight: false,
   };
 }

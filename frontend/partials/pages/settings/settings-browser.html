@@ -4,19 +4,21 @@
       <h2>基本设置</h2>
     </div>
     <div class="card-body">
-      <div class="form-group">
-        <div class="field-label-row">
-          <label for="settings-browser-timeout">页面操作超时（秒）</label>
-          <span class="field-help" tabindex="0" role="note" data-tip="任务执行时每个浏览器步骤（点击、输入、等待元素加载等）的最长等待时间。超时则该步骤失败，不影响整体登录流程的其他步骤。">?</span>
+      <div class="form-row">
+        <div class="form-group">
+          <div class="field-label-row">
+            <label for="settings-browser-timeout">页面操作超时（秒）</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="任务执行时每个浏览器步骤（点击、输入、等待元素加载等）的最长等待时间。超时则该步骤失败，不影响整体登录流程的其他步骤。">?</span>
+          </div>
+          <input id="settings-browser-timeout" v-model.number="config.browser_timeout" type="number" min="1" max="60" />
         </div>
-        <input id="settings-browser-timeout" v-model.number="config.browser_timeout" type="number" min="1" max="60" />
-      </div>
-      <div class="form-group">
-        <div class="field-label-row">
-          <label for="settings-browser-navigation-timeout">打开登录页面超时（秒）</label>
-          <span class="field-help" tabindex="0" role="note" data-tip="自动导航到登录页面的超时时间。校园网 DNS 劫持/重定向链较长时可适当调大。">?</span>
+        <div class="form-group">
+          <div class="field-label-row">
+            <label for="settings-browser-navigation-timeout">打开登录页面超时（秒）</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="自动导航到登录页面的超时时间。校园网 DNS 劫持/重定向链较长时可适当调大。">?</span>
+          </div>
+          <input id="settings-browser-navigation-timeout" v-model.number="config.browser_navigation_timeout" type="number" min="3" max="60" />
         </div>
-        <input id="settings-browser-navigation-timeout" v-model.number="config.browser_navigation_timeout" type="number" min="3" max="60" />
       </div>
       <div class="toggle-group">
         <div class="toggle-with-help">
@@ -38,19 +40,21 @@
           </label>
         </div>
       </div>
-      <div class="form-group">
-        <div class="field-label-row">
-          <label for="settings-browser-locale">浏览器语言（Locale）</label>
-          <span class="field-help" tabindex="0" role="note" data-tip="设置浏览器语言，用于 Playwright 浏览器上下文的 locale 参数。部分认证页面会根据语言显示不同内容。默认为 zh-CN。">?</span>
+      <div class="form-row">
+        <div class="form-group">
+          <div class="field-label-row">
+            <label for="settings-browser-locale">浏览器语言（Locale）</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="设置浏览器语言，用于 Playwright 浏览器上下文的 locale 参数。部分认证页面会根据语言显示不同内容。默认为 zh-CN。">?</span>
+          </div>
+          <input id="settings-browser-locale" v-model.trim="config.browser_locale" type="text" placeholder="zh-CN" />
         </div>
-        <input id="settings-browser-locale" v-model.trim="config.browser_locale" type="text" placeholder="zh-CN" />
-      </div>
-      <div class="form-group">
-        <div class="field-label-row">
-          <label for="settings-browser-timezone">浏览器时区（Timezone）</label>
-          <span class="field-help" tabindex="0" role="note" data-tip="设置浏览器时区，用于 Playwright 浏览器上下文的 timezone_id 参数。部分认证系统会检测时区设置。默认为 Asia/Shanghai。">?</span>
+        <div class="form-group">
+          <div class="field-label-row">
+            <label for="settings-browser-timezone">浏览器时区（Timezone）</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="设置浏览器时区，用于 Playwright 浏览器上下文的 timezone_id 参数。部分认证系统会检测时区设置。默认为 Asia/Shanghai。">?</span>
+          </div>
+          <input id="settings-browser-timezone" v-model.trim="config.browser_timezone" type="text" placeholder="Asia/Shanghai" />
         </div>
-        <input id="settings-browser-timezone" v-model.trim="config.browser_timezone" type="text" placeholder="Asia/Shanghai" />
       </div>
     </div>
   </section>
@@ -120,10 +124,10 @@
         </div>
       </div>
       <div v-if="pureMode" class="browser-safe-info">
-        <p>纯净模式已开启，浏览器使用 Chromium 原始设置。关闭后可自定义以下高级选项。</p>
+        <p>纯净模式已开启，浏览器使用默认设置。关闭后可自定义以下高级选项。</p>
       </div>
       <div v-if="!pureMode" class="browser-safe-info browser-safe-info--warning">
-        <p>纯净模式适配大部分环境。如果登录异常或无法打开网页，请尝试修改下方参数。</p>
+        <p>当前为自定义模式。如果登录异常，可尝试开启纯净模式。</p>
       </div>
       <template v-if="!pureMode">
         <div class="form-group">

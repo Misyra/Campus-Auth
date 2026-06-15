@@ -81,6 +81,11 @@
     padding: 16px;
   }
 
+  .notification-dropdown {
+    width: 280px;
+    right: 0;
+  }
+
   .content-wrapper {
     padding: 16px;
   }

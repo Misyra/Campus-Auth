@@ -72,53 +72,54 @@
   flex: 1;
 }
 
-.history-list {
+.scheduled-tasks-page .history-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  max-height: unset;
 }
 
 /* .history-item 基础样式来自 dashboard.css */
 /* 以下为定时任务历史的修饰符 */
-.history-item.success {
+.scheduled-tasks-page .history-item.success {
   border-left: 3px solid var(--success);
 }
 
-.history-item.failure {
+.scheduled-tasks-page .history-item.failed {
   border-left: 3px solid var(--error);
 }
 
-.history-header {
+.scheduled-tasks-page .history-header {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-bottom: 8px;
 }
 
-.history-status {
+.scheduled-tasks-page .history-status {
   font-weight: 600;
   font-size: 13px;
 }
 
-.history-status.success {
+.scheduled-tasks-page .history-status.success {
   color: var(--success);
 }
 
-.history-status.failure {
+.scheduled-tasks-page .history-status.failure {
   color: var(--error);
 }
 
-.history-time {
+.scheduled-tasks-page .history-time {
   font-size: 12px;
   color: var(--text-secondary);
 }
 
-.history-duration {
+.scheduled-tasks-page .history-duration {
   font-size: 12px;
   color: var(--text-secondary);
 }
 
-.history-message {
+.scheduled-tasks-page .history-message {
   font-size: 13px;
   color: var(--text-secondary);
   word-break: break-all;

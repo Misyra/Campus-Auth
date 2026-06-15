@@ -3,6 +3,7 @@ import { TIMING, LIMITS } from '../constants.js';
 export const uiMethods = {
   // 弹窗焦点陷阱：将焦点限制在指定容器内
   _trapFocus(container) {
+    this._releaseFocusTrap(); // 清理旧监听器，防止连续打开弹窗时泄漏
     if (!container) return;
     const focusable = container.querySelectorAll(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -31,6 +32,17 @@ export const uiMethods = {
       document.removeEventListener('keydown', this._focusTrapHandler);
       this._focusTrapHandler = null;
     }
+  },
+  // 统一弹窗管理：打开弹窗时自动设置焦点陷阱
+  openModal(overlaySelector) {
+    this.$nextTick(() => {
+      const overlay = document.querySelector(overlaySelector);
+      if (overlay) this._trapFocus(overlay);
+    });
+  },
+  // 统一弹窗管理：关闭弹窗时自动释放焦点陷阱
+  closeModal() {
+    this._releaseFocusTrap();
   },
   _showToast(success, message) {
     this.toast = { success, message, leaving: false };
@@ -85,6 +97,38 @@ export const uiMethods = {
     this._showToast(success, message);
   },
   nextWizardStep() {
+    // 第 1 步需要同意协议
+    if (this.wizardStep === 1 && !this.agreedToTerms) {
+      this.toastOnly(false, '请先阅读并同意使用协议');
+      return;
+    }
+    // 第 2 步验证账号信息
+    if (this.wizardStep === 2) {
+      if (!this.config.username) {
+        this.toastOnly(false, '请输入账号');
+        return;
+      }
+      if (!this.config.password) {
+        this.toastOnly(false, '请输入密码');
+        return;
+      }
+      if (this.config.password.length < 2) {
+        this.toastOnly(false, '密码长度不能少于2位');
+        return;
+      }
+      if (!this.config.auth_url) {
+        this.toastOnly(false, '请输入认证地址');
+        return;
+      }
+      if (!/^https?:\/\//i.test(this.config.auth_url)) {
+        this.toastOnly(false, '认证地址必须以 http:// 或 https:// 开头');
+        return;
+      }
+      if (this.config.carrier === '自定义' && (!this.config.carrier_custom || !this.config.carrier_custom.trim())) {
+        this.toastOnly(false, '请输入自定义运营商关键字');
+        return;
+      }
+    }
     if (this.wizardStep < 4) {
       this.wizardStep++;
     }
@@ -98,6 +142,19 @@ export const uiMethods = {
   },
   setSettingsTab(tabId) {
     this.currentSettingsTab = tabId;
+  },
+  // 编辑器关闭确认
+  closeEditor() {
+    if (this.editingTask && !confirm('当前有未保存的修改，确定要关闭吗？')) return;
+    this.editingTask = null;
+    this.jsonError = '';
+  },
+  // 清空日志确认
+  clearLogs() {
+    if (!this.logs.length) return;
+    if (!confirm(`确定要清空当前 ${this.logs.length} 条日志显示吗？\n（后端日志文件不受影响）`)) return;
+    this.logs = [];
+    this.newLogCount = 0;
   },
   // 导航到指定页面
   navigateTo(page) {
@@ -120,7 +177,9 @@ export const uiMethods = {
   },
   removeCustomVar(key) {
     if (this.config.custom_variables && key in this.config.custom_variables) {
-      delete this.config.custom_variables[key];
+      const newVars = { ...this.config.custom_variables };
+      delete newVars[key];
+      this.config.custom_variables = newVars;
     }
   },
   updateCustomVarKey(oldKey, newKey) {
@@ -205,28 +264,35 @@ export const uiMethods = {
         this.ws.close();
       }
       await this.$api.post('/api/shutdown');
-      // 尝试关闭窗口，浏览器可能拦截
-      setTimeout(() => {
-        window.close();
-        // 如果窗口没关成（浏览器拦截），显示提示
-        setTimeout(() => {
-          const overlay = document.createElement('div');
-          overlay.className = 'exit-overlay';
-          overlay.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-              <polyline points="22 4 12 14.01 9 11.01"/>
-            </svg>
-            <h2>应用已退出</h2>
-            <p>后端已关闭，你可以关闭此标签页</p>`;
-          document.body.appendChild(overlay);
-        }, 500);
-      }, 1000);
+      // 显示退出提示页面
+      this._showExitOverlay();
     } catch (error) {
       this.frontendLogger.error('app', '退出应用失败', error);
-      this.notify(false, '退出失败，请手动关闭窗口');
+      this._showExitOverlay();
     } finally {
       this.busy.monitor = false;
     }
+  },
+  _showExitOverlay() {
+    const overlay = document.createElement('div');
+    overlay.className = 'exit-overlay';
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('width', '48');
+    svg.setAttribute('height', '48');
+    svg.innerHTML = '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>';
+    const h2 = document.createElement('h2');
+    h2.textContent = '已安全退出';
+    const p = document.createElement('p');
+    p.textContent = '后端服务已关闭';
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-primary';
+    btn.textContent = '关闭页面';
+    btn.addEventListener('click', () => window.close());
+    overlay.append(svg, h2, p, btn);
+    document.body.appendChild(overlay);
   },
 };
