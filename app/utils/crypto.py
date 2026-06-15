@@ -131,12 +131,11 @@ def encrypt_password(plaintext: str) -> str:
     try:
         from cryptography.fernet import Fernet
     except ImportError:
-        # cryptography 未安装时回退到简单混淆（不推荐，但保证可用）
         logger.warning(
-            "密码保护功能受限（缺少加密库），"
-            "建议通过 uv add cryptography 安装依赖以启用完整加密保护"
+            "cryptography 库未安装，密码将以明文存储，"
+            "建议通过 uv add cryptography 安装依赖以启用加密保护"
         )
-        return _simple_obfuscate(plaintext)
+        return plaintext
 
     key = _derive_fernet_key()
     f = Fernet(key)
@@ -157,10 +156,6 @@ def decrypt_password(ciphertext: str) -> str:
 
     encrypted_data = ciphertext[len(_ENC_PREFIX) :]
 
-    # B64: 前缀表示无 cryptography 时的简单混淆，优先路由避免 Fernet 错误
-    if encrypted_data.startswith(_OBFUSCATE_PREFIX):
-        return _simple_deobfuscate(encrypted_data)
-
     try:
         from cryptography.exceptions import InvalidSignature
         from cryptography.fernet import Fernet, InvalidToken
@@ -169,8 +164,9 @@ def decrypt_password(ciphertext: str) -> str:
         f = Fernet(key)
         return f.decrypt(encrypted_data.encode("ascii")).decode("utf-8")
     except ImportError:
-        logger.warning("cryptography 库未安装，尝试 Base64 反混淆")
-        return _simple_deobfuscate(encrypted_data)
+        _decryption_failed.set()
+        logger.error("cryptography 库未安装，无法解密密码，请安装依赖后重试")
+        raise DecryptionError("cryptography 库未安装，无法解密密码") from None
     except (InvalidToken, InvalidSignature, ValueError, OSError) as e:
         # 解密失败：可能是密钥变更，记录错误并抛出异常
         _decryption_failed.set()
@@ -230,29 +226,3 @@ def save_password_field(raw: str | None, existing_encrypted: str) -> str:
         return raw
     # 明文密码 → 加密存储
     return encrypt_password(raw)
-
-
-# ==================== 简单回退方案 ====================
-# 当 cryptography 不可用时，使用 base64 混淆（非加密，仅防肉眼）
-
-_OBFUSCATE_PREFIX = "B64:"
-
-
-def _simple_obfuscate(plaintext: str) -> str:
-    """简单 base64 混淆（非加密）"""
-    encoded = base64.b64encode(plaintext.encode("utf-8")).decode("ascii")
-    return f"{_ENC_PREFIX}{_OBFUSCATE_PREFIX}{encoded}"
-
-
-def _simple_deobfuscate(ciphertext: str) -> str:
-    """简单 base64 反混淆"""
-    if ciphertext.startswith(_OBFUSCATE_PREFIX):
-        try:
-            return base64.b64decode(ciphertext[len(_OBFUSCATE_PREFIX) :]).decode(
-                "utf-8"
-            )
-        except Exception as e:
-            _decryption_failed.set()
-            logger.error("Base64 反混淆失败（数据损坏），请在设置页面重新输入密码")
-            raise DecryptionError("密码解混淆失败，请重新输入密码") from e
-    return ciphertext
