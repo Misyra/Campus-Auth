@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -66,8 +67,6 @@ class TestReadPidFile:
 
     def test_valid_json(self, tmp_path):
         """有效 JSON 格式。"""
-        import json
-
         pid_file = tmp_path / "test.pid"
         data = {"pid": 12345, "create_time": 1718191234.123, "mode": "lightweight", "proc_name": "python.exe"}
         pid_file.write_text(json.dumps(data), encoding="utf-8")
@@ -118,8 +117,6 @@ class TestReadPidFile:
 
     def test_negative_pid(self, tmp_path):
         """负数 PID。"""
-        import json
-
         pid_file = tmp_path / "test.pid"
         data = {"pid": -1, "create_time": 1718191234.123}
         pid_file.write_text(json.dumps(data), encoding="utf-8")
@@ -130,8 +127,6 @@ class TestReadPidFile:
 
     def test_zero_pid(self, tmp_path):
         """零 PID。"""
-        import json
-
         pid_file = tmp_path / "test.pid"
         data = {"pid": 0, "create_time": 1718191234.123}
         pid_file.write_text(json.dumps(data), encoding="utf-8")
@@ -180,8 +175,6 @@ class TestGetProcessName:
 
     def test_current_process(self):
         """当前进程应有名称。"""
-        import os
-
         name = get_process_name(os.getpid())
         assert name is not None
         assert isinstance(name, str)
@@ -199,8 +192,6 @@ class TestGetProcessCreateTime:
 
     def test_current_process(self):
         """当前进程应有创建时间。"""
-        import os
-
         result = get_process_create_time(os.getpid())
         assert result is not None
         assert isinstance(result, float)
@@ -234,14 +225,10 @@ class TestVerifyProcessIdentity:
 
     def test_process_alive_no_create_time(self):
         """进程存活且不检查 create_time → True。"""
-        import os
-
         assert verify_process_identity(os.getpid()) is True
 
     def test_process_alive_matching_create_time(self):
         """进程存活且 create_time 匹配 → True。"""
-        import os
-
         pid = os.getpid()
         ct = psutil.Process(pid).create_time()
         assert verify_process_identity(pid, ct) is True
@@ -252,23 +239,17 @@ class TestVerifyProcessIdentity:
 
     def test_create_time_not_available(self):
         """进程存在但无法获取 create_time → False（覆盖 103-104 行）。"""
-        import os
-
         pid = os.getpid()
         with patch("app.utils.process.get_process_create_time", return_value=None):
             assert verify_process_identity(pid, 12345.0) is False
 
     def test_create_time_mismatch(self):
         """进程存在但 create_time 不匹配 → False（覆盖 106-107 行）。"""
-        import os
-
         pid = os.getpid()
         assert verify_process_identity(pid, 0.0) is False
 
     def test_create_time_within_tolerance(self):
         """create_time 在 1 秒误差内 → True。"""
-        import os
-
         pid = os.getpid()
         ct = psutil.Process(pid).create_time()
         assert verify_process_identity(pid, ct + 0.5) is True
@@ -311,8 +292,6 @@ class TestIsServiceRunning:
 
     def test_grace_period_skips_port_check(self, tmp_path):
         """刚启动 30 秒内跳过端口检查（覆盖 140 行）。"""
-        import os
-
         pid = os.getpid()
         ct = psutil.Process(pid).create_time()
         pid_file = tmp_path / "test.pid"
@@ -330,8 +309,6 @@ class TestIsServiceRunning:
 
     def test_full_mode_port_not_used_cleans_up(self, tmp_path):
         """完整模式下端口未监听且超过宽限期 → 清理。"""
-        import os
-
         pid = os.getpid()
         ct = psutil.Process(pid).create_time()
         pid_file = tmp_path / "test.pid"
@@ -350,8 +327,6 @@ class TestIsServiceRunning:
 
     def test_full_mode_port_in_use(self, tmp_path):
         """完整模式下端口已监听 → 运行中。"""
-        import os
-
         pid = os.getpid()
         ct = psutil.Process(pid).create_time()
         pid_file = tmp_path / "test.pid"
@@ -367,8 +342,6 @@ class TestIsServiceRunning:
 
     def test_lightweight_mode_skips_port_check(self, tmp_path):
         """轻量模式跳过端口检查。"""
-        import os
-
         pid = os.getpid()
         ct = psutil.Process(pid).create_time()
         pid_file = tmp_path / "test.pid"
