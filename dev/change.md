@@ -3,6 +3,16 @@
 ## 2026-06-15
 
 ### fix
+- `app/services/config_service.py` 支持用户显式清空密码字段
+  - 用户清空密码字段时 `pwd_raw` 为空字符串，原 `if pwd_raw and ...` 条件跳过，旧密码残留
+  - 改为 `if/elif/else` 三分支：掩码值跳过、非空加密保存、空字符串清空
+
+### fix
+- `main.py` CLI 登录模式传递 `global_settings` 给 `build_runtime_config`
+  - 原逻辑未传 `global_settings`，浏览器配置和重试设置使用硬编码默认值
+  - 现在通过 `data.global_settings` 正确传递，与 API 路由行为一致
+
+### fix
 - `app/utils/network.py` 修复 `parse_ping_targets` 对 IPv6 地址的处理
   - IPv6 地址含多个冒号（如 `::1`、`2001:db8::1`），原逻辑误判为已有端口
   - 新增 IPv6 检测：以 `[` 开头直接传递，多个冒号视为 IPv6 并补全 `[addr]:53`
