@@ -135,8 +135,16 @@ def _detect_gateway_windows() -> str | None:
             rb"\xec\x98\xa4\xeb\xa5\xb8 \xea\xb2\x8c\xec\x9d\xb4\xed\x8a\xb8\xec\x9b\xa8\xec\x9d\xb4",  # "오른 게이트웨이" UTF-8
         ]
         combined = rb"(?:" + rb"|".join(gateway_patterns) + rb")"
-        pattern = re.compile(combined + rb"[\s.:]*(\d+\.\d+\.\d+\.\d+)")
+        # 匹配网关标签后的 IPv4 地址（可能在下一行）
+        pattern = re.compile(combined + rb"[\s.:]*(\d+\.\d+\.\d+\.\d+)", re.DOTALL)
         for match in pattern.finditer(output):
+            ip = match.group(1).decode("ascii")
+            if ip != "0.0.0.0":
+                return ip
+
+        # 回退：查找网关标签后缩进的 IPv4 地址（通常在下一行）
+        gateway_line_pattern = re.compile(combined + rb"[^\n]*\n\s+(\d+\.\d+\.\d+\.\d+)")
+        for match in gateway_line_pattern.finditer(output):
             ip = match.group(1).decode("ascii")
             if ip != "0.0.0.0":
                 return ip
