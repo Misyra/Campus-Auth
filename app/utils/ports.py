@@ -20,7 +20,7 @@ _DEFAULT_PORT = 50721
 def resolve_port() -> int:
     """解析应用监听端口。
 
-    优先级：环境变量 APP_PORT > settings.json system.app_port > 默认 50721。
+    优先级：环境变量 APP_PORT > config/settings.json global_settings.app_port > 默认 50721。
     """
     raw = os.getenv("APP_PORT", "").strip()
     if raw:
@@ -31,18 +31,20 @@ def resolve_port() -> int:
         except ValueError:
             _startup_logger.warning("端口解析失败，使用默认 {}", _DEFAULT_PORT)
 
-    settings_path = PROJECT_ROOT / "settings.json"
+    # 修正：读取 config/settings.json 而非 settings.json
+    settings_path = PROJECT_ROOT / "config" / "settings.json"
     if settings_path.exists():
         try:
             data = json.loads(settings_path.read_text(encoding="utf-8"))
-            app_port = data.get("system", {}).get("app_port")
+            # 修正：读取 global_settings.app_port 而非 system.app_port
+            app_port = data.get("global_settings", {}).get("app_port")
             if app_port is not None:
                 port = int(app_port)
                 if 1 <= port <= 65535:
                     return port
         except (json.JSONDecodeError, ValueError, OSError) as exc:
             _startup_logger.warning(
-                "读取 settings.json 端口配置失败，使用默认端口 {}: {}",
+                "读取 config/settings.json 端口配置失败，使用默认端口 {}: {}",
                 _DEFAULT_PORT,
                 exc,
             )
