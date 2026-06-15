@@ -24,8 +24,9 @@ class TestNullWebSocketManager:
     @pytest.mark.asyncio
     async def test_connect(self):
         mgr = NullWebSocketManager()
-        ws = MagicMock()
+        ws = AsyncMock()
         await mgr.connect(ws)  # 不抛异常即通过
+        ws.accept.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_disconnect(self):
