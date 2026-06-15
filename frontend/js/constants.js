@@ -104,7 +104,6 @@ export const DEFAULT_CONFIG = {
   ..._SHARED_DEFAULTS,
   username: "",
   password: "",
-  use_global_credentials: true,
   auth_url: "",
   active_task: "",
   browser_user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -181,9 +180,6 @@ export const DEFAULT_PROFILE_SETTINGS = {
   match_ssid: '',
   username: '',
   password: '',
-  use_global_credentials: true,
-  use_global_auth_url: true,
-  use_global_task: true,
   auth_url: '',
   active_task: '',
 };
