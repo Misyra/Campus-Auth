@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import uuid
 from datetime import datetime, timedelta
@@ -104,6 +105,7 @@ class LoginHistoryService:
                 with open(self._history_path, "a", encoding="utf-8") as f:
                     f.write(entry.model_dump_json() + "\n")
                     f.flush()
+                    os.fsync(f.fileno())
                 self._write_count += 1
                 # 每 50 次写入概率性清理旧记录
                 if self._write_count % 50 == 0:
