@@ -3,6 +3,19 @@
 ## 2026-06-15
 
 ### test
+- `tests/test_utils/test_crypto.py` 提升 crypto.py 测试覆盖率从 79% 到 97%
+  - `TestGetOrCreateKeyCache`：缓存命中和 double-check 缓存
+  - `TestCorruptedKeyFile`：密钥文件损坏备份、错误长度、rename FileNotFoundError、rename OSError
+  - `TestChmodFailure`：chmod 失败时警告但不影响密钥生成
+  - `TestIcaclsErrors`：icacls 超时和其他异常
+  - `TestDeriveFernetKeyCache`：Fernet 密钥缓存命中
+  - `TestEncryptPassword`：空字符串、正常加密、cryptography 未安装
+  - `TestDecryptPassword`：空字符串、明文回退、正常解密、cryptography 未安装、解密失败
+  - `TestDecryptionErrorFlag`：初始状态、设置和清除
+  - `TestMaskPassword`：空值、None、正常值、长度一致性
+  - `TestSavePasswordField`：全部 7 个分支（None、掩码、空、ENC、明文）
+
+### test
 - `tests/test_utils/test_ports.py` 添加 `resolve_port` 单元测试（19 个用例，覆盖率 100%）
   - `TestResolvePortFromEnv`：有效端口、最小/最大端口、带空格端口
   - `TestResolvePortEnvInvalid`：非数字、零、超范围、负数、空字符串、纯空格
