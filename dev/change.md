@@ -400,3 +400,10 @@
   - 任务文件存储：更新目录结构为 `tasks/browser/`、`tasks/scripts/`、`tasks/scheduled/`
   - TaskManager：`active.txt` 改为通过 API 管理活动任务
   - 网络探测：更新为 URL 响应检测、TCP/HTTP 可配置目标、psutil 本地网络检测
+
+### fix
+- `app/services/autostart.py` VBS 自启动脚本适配 JSON 格式 PID 文件
+  - `write_pid` 函数写入 JSON 格式 (`{"pid": 12345, "create_time": ...}`)，但 VBS 脚本期望纯数字 PID
+  - 更新 VBS 模板解析逻辑：初始化 `pid = 0`，使用 `InStr` 查找 `":"` 提取 JSON 中的 PID 值
+  - 添加 `If pid > 0 Then` 条件检查，仅在成功解析 PID 后才执行 WMI 进程检测
+  - 避免因格式不匹配导致 WMI 查询失败，防止启动重复实例
