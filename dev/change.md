@@ -167,6 +167,11 @@
   - 浏览器实例保持在 Worker 中复用，避免每次登录多花 3-5 秒重启浏览器
 
 ### fix
+- `app/tasks/step_handlers.py` OCR 初始化和识别移至线程执行，避免阻塞事件循环
+  - `DdddOcr()` 构造函数和 `classification()` 推理调用均为同步阻塞操作
+  - 用 `asyncio.to_thread` 包裹三个调用点，释放事件循环
+
+### fix
 - `app/services/engine.py` 守卫 profile switch 防止并发 shutdown 导致 `_monitor_core` 为 None
   - `_do_network_check` 第 285 行 `consume_profile_switch_flag()` 调用前增加 `_monitor_core` 空值检查
   - 防止 `_handle_stop()` 设置 `_monitor_core = None` 后 `shutdown()` 并发访问引发 `AttributeError`
