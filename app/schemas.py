@@ -181,6 +181,9 @@ class _SystemFieldsMixin(BaseModel):
     shell_path: str = Field(
         default="", description="自定义 Shell 路径（留空使用系统默认）"
     )
+    login_timeout: int = Field(
+        default=60, ge=10, le=600, description="手动登录等待超时（秒）"
+    )
 
     @field_validator("auth_url")
     @classmethod
