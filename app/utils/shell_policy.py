@@ -191,7 +191,11 @@ class ShellCommandPolicy:
         }
         if platform.system() == "Windows":
             run_kwargs["creationflags"] = CREATE_NO_WINDOW_FLAG
-        run_kwargs.update(kwargs)
+        # 只允许白名单中的额外参数，防止安全策略被绕过
+        _ALLOWED_KWARGS = {"env", "cwd"}
+        for key in _ALLOWED_KWARGS:
+            if key in kwargs:
+                run_kwargs[key] = kwargs[key]
 
         try:
             result = subprocess.run(argv, **run_kwargs)
