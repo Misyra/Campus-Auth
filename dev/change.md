@@ -76,6 +76,11 @@
   - 移除死代码分支及不再使用的 `decrypt_password`、`DecryptionError` 导入
 
 ### fix
+- `app/services/engine.py` 守卫 profile switch 防止并发 shutdown 导致 `_monitor_core` 为 None
+  - `_do_network_check` 第 285 行 `consume_profile_switch_flag()` 调用前增加 `_monitor_core` 空值检查
+  - 防止 `_handle_stop()` 设置 `_monitor_core = None` 后 `shutdown()` 并发访问引发 `AttributeError`
+
+### fix
 - `app/utils/ports.py` 修复端口配置读取路径和 JSON key
   - 路径从 `PROJECT_ROOT / "settings.json"` 修正为 `PROJECT_ROOT / "config" / "settings.json"`
   - JSON key 从 `system.app_port` 修正为 `global_settings.app_port`
