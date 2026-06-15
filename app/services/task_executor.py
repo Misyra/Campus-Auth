@@ -188,7 +188,7 @@ class TaskExecutor:
 
     def execute_login_async(
         self, cancel_event: threading.Event | None = None
-    ) -> Future | None:
+    ) -> Future:
         """异步执行登录（提交到 login_pool），带去重。
 
         如果已有登录任务在执行中，返回已有的 Future 而非重复提交。
@@ -197,19 +197,14 @@ class TaskExecutor:
             cancel_event: 取消事件，设置后登录流程应尽快退出
 
         Returns:
-            Future 对象（新的或已有的），如果已有登录在进行中且 cancel_event
-            为 None 则返回 None
+            Future 对象（新的或已有的）
         """
         with self._login_lock:
             # 检查是否已有登录在进行
             if self._login_future is not None and not self._login_future.done():
-                if cancel_event is not None:
-                    # 有取消事件时，设置取消标志并返回已有 Future
-                    cancel_event.set()
-                    return self._login_future
-                # 无取消事件时，跳过重复提交
+                # 去重：返回已有 Future，不设置调用方的 cancel_event
                 logger.debug("登录任务已在执行中，跳过重复提交")
-                return None
+                return self._login_future
 
             # 提交新的登录任务
             future = self._login_pool.submit(self.execute_login, cancel_event)
