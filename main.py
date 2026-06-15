@@ -207,7 +207,7 @@ def _run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
         attempt += 1
         # 指数退避：首次间隔 0，后续 interval × 2^(attempt-2)
         if attempt > 1:
-            delay = retry_interval * (2 ** (attempt - 2))
+            delay = min(retry_interval * (2 ** (attempt - 2)), 300)
             print(f"等待 {delay} 秒后重试第 {attempt} 次...")
             time.sleep(delay)
 
