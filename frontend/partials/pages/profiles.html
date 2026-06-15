@@ -158,13 +158,7 @@
             {{ info.match_ssid }}
           </span>
           <span v-if="info.carrier && info.carrier !== '无'" class="profile-tag">{{ info.carrier === '自定义' ? info.carrier_custom : info.carrier }}</span>
-          <span v-if="info.auth_url" class="profile-tag">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-xs">
-              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-            </svg>
-            {{ info.auth_url }}
-          </span>
+          <span v-if="info.auth_url" class="profile-tag muted">{{ info.auth_url }}</span>
           <span v-if="info.active_task" class="profile-tag">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-xs">
               <polyline points="4 17 10 11 4 5"/>
