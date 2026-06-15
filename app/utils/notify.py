@@ -13,28 +13,6 @@ from .platform import CREATE_NO_WINDOW_FLAG, is_linux, is_macos, is_windows
 logger = get_logger("notify", source="backend")
 
 
-def send_notification(title: str, message: str, duration_ms: int = 5000) -> bool:
-    """发送桌面通知（跨平台）
-
-    Returns:
-        True 如果通知发送成功
-    """
-    try:
-        # 运行时动态检测平台，避免模块级平台锁定
-        if is_windows():
-            return _notify_windows(title, message, duration_ms)
-        elif is_macos():
-            return _notify_macos(title, message)
-        elif is_linux():
-            return _notify_linux(title, message, duration_ms)
-        else:
-            logger.debug("不支持的操作系统")
-            return False
-    except Exception as exc:
-        logger.warning("发送桌面通知失败: {}", str(exc)[:200])
-        return False
-
-
 def _notify_windows(title: str, message: str, duration_ms: int) -> bool:
     """Windows: 使用 PowerShell Toast 通知"""
 

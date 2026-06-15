@@ -22,7 +22,6 @@ from app.utils.notify import (
     _notify_linux,
     _notify_macos,
     _notify_windows,
-    send_notification,
 )
 from app.workers.playwright_bootstrap import (
     _candidate_hosts,
@@ -48,51 +47,6 @@ from app.workers.playwright_worker import (
 # ─────────────────────────────────────────────────────────────────────
 #  桌面通知 (src/utils/notify.py)
 # ─────────────────────────────────────────────────────────────────────
-
-
-class TestSendNotification:
-    @patch("app.utils.notify.is_windows", return_value=True)
-    @patch("app.utils.notify._notify_windows", return_value=True)
-    def test_windows(self, mock_win, mock_is_win):
-        assert send_notification("标题", "消息") is True
-        mock_win.assert_called_once_with("标题", "消息", 5000)
-
-    @patch("app.utils.notify.is_windows", return_value=False)
-    @patch("app.utils.notify.is_macos", return_value=True)
-    @patch("app.utils.notify._notify_macos", return_value=True)
-    def test_macos(self, mock_mac, mock_is_mac, mock_is_win):
-        assert send_notification("标题", "消息") is True
-        mock_mac.assert_called_once_with("标题", "消息")
-
-    @patch("app.utils.notify.is_windows", return_value=False)
-    @patch("app.utils.notify.is_macos", return_value=False)
-    @patch("app.utils.notify.is_linux", return_value=True)
-    @patch("app.utils.notify._notify_linux", return_value=True)
-    def test_linux(self, mock_linux, mock_is_linux, mock_is_mac, mock_is_win):
-        assert send_notification("标题", "消息") is True
-        mock_linux.assert_called_once_with("标题", "消息", 5000)
-
-    @patch("app.utils.notify.is_windows", return_value=False)
-    @patch("app.utils.notify.is_macos", return_value=False)
-    @patch("app.utils.notify.is_linux", return_value=False)
-    def test_unsupported_platform(self, mock_is_linux, mock_is_mac, mock_is_win):
-        assert send_notification("标题", "消息") is False
-
-    @patch("app.utils.notify.is_windows", return_value=True)
-    @patch("app.utils.notify._notify_windows", side_effect=Exception("fail"))
-    def test_exception_returns_false(self, mock_win, mock_is_win):
-        assert send_notification("标题", "消息") is False
-
-    @patch("app.utils.notify.is_windows", return_value=True)
-    @patch("app.utils.notify._notify_windows", return_value=True)
-    def test_custom_duration(self, mock_win, mock_is_win):
-        send_notification("标题", "消息", duration_ms=10000)
-        mock_win.assert_called_once_with("标题", "消息", 10000)
-
-    @patch("app.utils.notify.is_windows", return_value=True)
-    @patch("app.utils.notify._notify_windows", return_value=False)
-    def test_failure_returns_false(self, mock_win, mock_is_win):
-        assert send_notification("标题", "消息") is False
 
 
 class TestNotifyWindows:

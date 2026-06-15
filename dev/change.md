@@ -2,6 +2,12 @@
 
 ## 2026-06-15
 
+### refactor
+- `app/utils/notify.py` 删除 `send_notification` 死代码
+  - 函数在生产代码中无任何调用者，仅在测试中使用
+  - 删除 `send_notification` 函数及其测试类 `TestSendNotification`
+  - 保留 `_notify_windows`、`_notify_macos`、`_notify_linux` 平台通知函数
+
 ### fix
 - `app/services/config_service.py` 删除 `build_runtime_config` 中不可达的密码回退代码
   - `GlobalSettings` 没有 `password` 字段，`hasattr(global_settings, 'password')` 永远返回 `False`
