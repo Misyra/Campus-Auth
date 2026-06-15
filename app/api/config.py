@@ -58,7 +58,7 @@ def _persist_source_levels(request: Request, config):
     """将 source_levels 持久化到 settings.json"""
     profile_service = request.app.state.services.profile_service
     profile_service.update(
-        lambda d: setattr(d.system, "source_levels", config.get_all_source_levels())
+        lambda d: setattr(d.global_settings, "source_levels", config.get_all_source_levels())
     )
 
 
