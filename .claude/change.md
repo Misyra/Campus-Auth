@@ -27,7 +27,6 @@
 - `application.py` 配置诊断路径修正：`settings.json` → `config/settings.json`
 
 ### perf
-- 轻量模式使用 `NullTaskExecutor`，避免创建不必要的线程池
 - 定时任务线程池 worker 数从 4 减至 2（定时任务很少并发）
 
 ### chore
