@@ -156,6 +156,7 @@ def build_runtime_config(
             "timezone_id": global_settings.browser_timezone.strip(),
             "viewport_width": global_settings.browser_viewport_width,
             "viewport_height": global_settings.browser_viewport_height,
+            "pure_mode": global_settings.pure_mode,
         }
     else:
         # 回退：使用默认值
@@ -174,6 +175,7 @@ def build_runtime_config(
             "timezone_id": "Asia/Shanghai",
             "viewport_width": 1280,
             "viewport_height": 720,
+            "pure_mode": True,
         }
 
     # 暂停时段

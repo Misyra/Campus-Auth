@@ -438,6 +438,24 @@ class TestBuildRuntimeConfig:
         assert config["retry_settings"]["max_retries"] == 5
         assert config["retry_settings"]["retry_interval"] == 10
 
+    def test_browser_settings_pure_mode(self):
+        """测试 pure_mode 正确传递到 browser_settings"""
+        payload = MonitorConfigPayload()
+
+        # 默认值应为 True
+        gs_default = GlobalSettings()
+        config = build_runtime_config(payload, global_settings=gs_default)
+        assert config["browser_settings"]["pure_mode"] is True
+
+        # 显式设置为 False
+        gs_false = GlobalSettings(pure_mode=False)
+        config = build_runtime_config(payload, global_settings=gs_false)
+        assert config["browser_settings"]["pure_mode"] is False
+
+        # 无 global_settings 时回退默认值
+        config = build_runtime_config(payload)
+        assert config["browser_settings"]["pure_mode"] is True
+
 
 # =====================================================================
 # save_config_combined

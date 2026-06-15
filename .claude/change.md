@@ -5,6 +5,10 @@
 ### chore
 - 删除空的 `backups/` 文件夹，清理 `.gitignore` 中的 `backups/*` 条目
   - 代码中无任何逻辑创建或使用此目录，属于残留文件
+- 更新 `not-to-do.md`，新增"架构类"分类，补充 3 条设计决策
+  - 不缩窄 `except Exception`：桌面应用永不崩溃的核心目标
+  - 不迁移 threading 为 asyncio：牵动 engine/worker/tray 整条链路
+  - 不给前端加 TS/bundler：保留用户可直接修改的优势
 
 ### test
 - 更新测试适配 close_browser、线程池和 lru_cache 的修改
@@ -116,6 +120,12 @@
   - 先更新缓存（备份旧值），再写入磁盘
   - 磁盘写入失败时回滚缓存和调度索引到写入前状态
   - 原逻辑：磁盘写入成功但缓存更新失败时任务会"消失"，缓存更新成功但磁盘写入失败时缓存与磁盘不一致
+
+### fix
+- `app/services/config_service.py` 补充 `build_runtime_config` 中遗漏的 `pure_mode` 字段
+  - `global_settings` 分支：添加 `"pure_mode": global_settings.pure_mode`
+  - 回退默认值分支：添加 `"pure_mode": True`（与 `GlobalSettings.pure_mode` 默认值一致）
+  - TaskExecutor 路径因遗漏此字段导致 `pure_mode` 永远为 `False`
 
 ### fix
 - `app/services/task_executor.py` 修复登录去重时错误设置调用方 cancel_event 的问题
