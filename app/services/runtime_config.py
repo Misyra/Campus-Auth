@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.constants import DEFAULT_NETWORK_TARGETS
 from app.schemas import MonitorConfigPayload, ProfilesData, ProfileSettings
 from app.utils.crypto import decrypt_password, mask_password
 from app.utils.exceptions import DecryptionError
@@ -47,13 +46,6 @@ def _decrypt_password_field(
             return _safe_decrypt(fallback_pwd)
         else:
             return ("", False)
-
-
-def _normalize_targets(raw: str) -> str:
-    parts = [item.strip() for item in str(raw or "").split(",") if item.strip()]
-    if not parts:
-        return DEFAULT_NETWORK_TARGETS
-    return ",".join(parts)
 
 
 def _build_config_payload(
