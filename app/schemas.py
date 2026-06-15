@@ -261,6 +261,9 @@ class GlobalSettings(BaseModel):
     browser_viewport_width: int = Field(default=1280, ge=320, le=3840, description="浏览器视口宽度")
     browser_viewport_height: int = Field(default=720, ge=240, le=2160, description="浏览器视口高度")
 
+    # 自定义变量
+    custom_variables: dict[str, str] = Field(default_factory=dict)
+
     @field_validator("backend_log_level", "frontend_log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:
@@ -382,9 +385,6 @@ class ProfileSettings(BaseModel):
     carrier_custom: str = Field(default="", description="自定义运营商关键字")
     auth_url: str = Field(default="", description="方案独立认证地址，留空则使用全局")
     active_task: str = Field(default="", description="方案独立任务，留空则使用全局任务")
-
-    # 自定义变量
-    custom_variables: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("auth_url")
     @classmethod

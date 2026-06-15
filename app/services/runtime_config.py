@@ -142,6 +142,8 @@ def _build_config_payload(
         "browser_timezone": data.global_settings.browser_timezone,
         "browser_viewport_width": data.global_settings.browser_viewport_width,
         "browser_viewport_height": data.global_settings.browser_viewport_height,
+        # 自定义变量
+        "custom_variables": data.global_settings.custom_variables,
     })
 
     # 归一化
