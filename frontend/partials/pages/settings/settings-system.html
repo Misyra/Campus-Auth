@@ -46,7 +46,7 @@
 
   <section class="card settings-panel">
     <div class="card-header">
-      <h2>开机自启动</h2>
+      <h2>启动与界面</h2>
     </div>
     <div class="card-body">
       <h4 class="settings-section-heading">启动行为</h4>
@@ -88,19 +88,21 @@
         ></custom-select>
       </div>
 
-      <div class="settings-section-divider"></div>
-      <h4 class="settings-section-heading">轻量模式托盘</h4>
-      <div class="toggle-group">
-        <div class="toggle-with-help">
-          <label class="toggle toggle-help-inline">
-            <input type="checkbox" v-model="config.lightweight_tray" />
-            <span class="toggle-slider"></span>
-            <span class="toggle-label">显示系统托盘</span>
-            <span class="field-help" tabindex="0" role="note" data-tip="轻量模式下显示系统托盘图标。点击托盘中的「打开控制台」可唤醒 Web 管理界面。">?</span>
-          </label>
+      <template v-if="autostart.lightweight">
+        <div class="settings-section-divider"></div>
+        <h4 class="settings-section-heading">轻量模式托盘</h4>
+        <div class="toggle-group">
+          <div class="toggle-with-help">
+            <label class="toggle toggle-help-inline">
+              <input type="checkbox" v-model="config.lightweight_tray" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">显示系统托盘</span>
+              <span class="field-help" tabindex="0" role="note" data-tip="开启后可以通过托盘打开管理界面，但是会增加 10MB 左右内存。关闭后无法进入 Web 界面，只能通过命令行管理。建议在完成所有配置后打开。">?</span>
+            </label>
+          </div>
         </div>
-      </div>
-      <span class="hint">开启后可通过托盘图标唤醒 Web 控制台</span>
+        <span class="hint">开启后可通过托盘图标唤醒 Web 控制台（约增加 10MB 内存）</span>
+      </template>
 
       <div class="settings-section-divider"></div>
       <h4 class="settings-section-heading">界面行为</h4>
