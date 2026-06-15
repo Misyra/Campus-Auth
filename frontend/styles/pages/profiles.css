@@ -305,7 +305,7 @@
 
 .profile-card-meta {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   margin-top: 8px;
   flex-wrap: wrap;
 }
@@ -315,13 +315,13 @@
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  padding: 2px 8px;
+  padding: 2px 6px;
   border-radius: 4px;
   background: var(--bg-glass);
   color: var(--text-secondary);
   font-family: var(--font-mono);
   border: 1px solid var(--border);
-  max-width: 200px;
+  max-width: 150px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
