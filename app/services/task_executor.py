@@ -2,7 +2,7 @@
 
 双线程池架构：
 - login_pool(1) — 登录专用，永不阻塞
-- task_pool(4, queue=50) — 定时任务，BoundedExecutor 限制队列
+- task_pool(2, queue=50, 懒初始化) — 定时任务，BoundedExecutor 限制队列
 
 登录去重机制：_login_future 防止重复提交。
 """
