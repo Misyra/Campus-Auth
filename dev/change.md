@@ -3,6 +3,11 @@
 ## 2026-06-15
 
 ### fix
+- `app/services/login_history_service.py` 登录历史清理与写入在同一锁块内执行，消除竞态窗口
+  - `add` 方法中 `need_cleanup` 标志和二次加锁改为在同一个 `with self._lock:` 块内直接调用 `_cleanup_old`
+  - 原逻辑释放锁后重新获取锁执行清理，并发 `add()` 可能写入被 `atomic_write` 覆盖的新记录
+
+### fix
 - `app/api/scripts.py` 脚本执行线程池移至模块级，确保随进程生命周期管理
   - `ThreadPoolExecutor` 从 `run_script._executor` 函数属性移至模块级 `_script_executor`
   - 消除 `hasattr` + 赋值的线程安全隐患（并发首次调用可能创建多个 executor）
