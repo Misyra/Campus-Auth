@@ -75,18 +75,21 @@ $toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds({duration_sec})
 
 def _notify_macos(title: str, message: str) -> bool:
     """macOS: 使用 osascript 发送通知"""
-    # 先转义反斜杠再转义双引号，防止反斜杠导致双引号逃逸
-    # macOS osascript 不支持通知中的换行符，替换为空格
-    safe_title = title.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
-    safe_msg = message.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
-    script = f'display notification "{safe_msg}" with title "{safe_title}"'
-    result = subprocess.run(
-        ["osascript", "-e", script],
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
-    return result.returncode == 0
+    try:
+        # 先转义反斜杠再转义双引号，防止反斜杠导致双引号逃逸
+        # macOS osascript 不支持通知中的换行符，替换为空格
+        safe_title = title.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
+        safe_msg = message.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
+        script = f'display notification "{safe_msg}" with title "{safe_title}"'
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
 
 
 def _notify_linux(title: str, message: str, duration_ms: int) -> bool:
