@@ -2,7 +2,7 @@
 
 双线程池架构：
 - login_pool(1) — 登录专用，永不阻塞
-- task_pool(2, queue=50, 懒初始化) — 定时任务，BoundedExecutor 限制队列
+- task_pool(2, queue=10, 懒初始化) — 定时任务，BoundedExecutor 限制队列
 
 登录去重机制：_login_future 防止重复提交。
 """
@@ -147,7 +147,7 @@ class TaskExecutor:
     def _ensure_task_pool(self) -> BoundedExecutor:
         """确保定时任务线程池存在（懒初始化）。"""
         if self._task_pool is None:
-            self._task_pool = BoundedExecutor(max_workers=2, queue_size=50)
+            self._task_pool = BoundedExecutor(max_workers=2, queue_size=10)
         return self._task_pool
 
     # ── 定时任务 CRUD（原 TaskFacade 方法）──
