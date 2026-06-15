@@ -79,6 +79,10 @@
   min-height: 100%;
 }
 
+.settings-panel--accent {
+  border-left: 3px solid var(--accent-color, #22d3ee);
+}
+
 .settings-detect-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
