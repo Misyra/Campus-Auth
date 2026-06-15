@@ -39,34 +39,6 @@
         ></custom-select>
       </div>
 
-      <div class="settings-section-divider"></div>
-      <h4 class="settings-section-heading">界面行为</h4>
-      <div class="toggle-group">
-        <div class="toggle-with-help">
-          <label class="toggle toggle-help-inline">
-            <input type="checkbox" v-model="config.minimize_to_tray" :disabled="config.startup_action === 'login_once'" />
-            <span class="toggle-slider"></span>
-            <span class="toggle-label">最小化到系统托盘</span>
-            <span class="field-help" tabindex="0" role="note" data-tip="关闭窗口时最小化到系统托盘，可通过托盘图标重新打开界面。关闭此选项后关闭窗口程序仍在后台运行，但只能手动输入地址访问。">?</span>
-          </label>
-        </div>
-      </div>
-      <div class="toggle-group">
-        <div class="toggle-with-help">
-          <label class="toggle toggle-help-inline">
-            <input type="checkbox" :checked="!config.auto_open_browser" @change="config.auto_open_browser = !$event.target.checked" />
-            <span class="toggle-slider"></span>
-            <span class="toggle-label">静默启动</span>
-            <span
-              class="field-help"
-              tabindex="0"
-              role="note"
-              data-tip="开启后启动软件时不自动打开网页界面。如果你希望开机后后台静默运行，建议开启。"
-            >?</span>
-          </label>
-        </div>
-      </div>
-
     </div>
   </section>
 
@@ -127,6 +99,34 @@
         </div>
       </div>
       <span class="hint">开启后可通过托盘图标唤醒 Web 控制台</span>
+
+      <div class="settings-section-divider"></div>
+      <h4 class="settings-section-heading">界面行为</h4>
+      <div class="toggle-group">
+        <div class="toggle-with-help">
+          <label class="toggle toggle-help-inline">
+            <input type="checkbox" v-model="config.minimize_to_tray" :disabled="config.startup_action === 'login_once'" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">最小化到系统托盘</span>
+            <span class="field-help" tabindex="0" role="note" data-tip="关闭窗口时最小化到系统托盘，可通过托盘图标重新打开界面。关闭此选项后关闭窗口程序仍在后台运行，但只能手动输入地址访问。">?</span>
+          </label>
+        </div>
+      </div>
+      <div class="toggle-group">
+        <div class="toggle-with-help">
+          <label class="toggle toggle-help-inline">
+            <input type="checkbox" :checked="!config.auto_open_browser" @change="config.auto_open_browser = !$event.target.checked" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">静默启动</span>
+            <span
+              class="field-help"
+              tabindex="0"
+              role="note"
+              data-tip="开启后启动软件时不自动打开网页界面。如果你希望开机后后台静默运行，建议开启。"
+            >?</span>
+          </label>
+        </div>
+      </div>
     </div>
   </section>
 
