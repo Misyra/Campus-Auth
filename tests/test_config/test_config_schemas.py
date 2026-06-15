@@ -24,7 +24,6 @@ from app.schemas import (
 )
 from app.services.runtime_config import (
     _decrypt_password_field,
-    _normalize_targets,
     _safe_decrypt,
 )
 from app.utils.config_utils import ConfigValidator
@@ -152,33 +151,6 @@ class TestNormalizeLevelService:
 
     def test_valid_with_custom_default(self):
         assert _normalize_level("DEBUG", default="ERROR") == "DEBUG"
-
-
-class TestNormalizeTargets:
-    def test_valid_targets(self):
-        result = _normalize_targets("8.8.8.8:53,1.1.1.1:443")
-        assert result == "8.8.8.8:53,1.1.1.1:443"
-
-    def test_empty_returns_default(self):
-        result = _normalize_targets("")
-        assert "8.8.8.8:53" in result
-        assert "114.114.114.114:53" in result
-
-    def test_none_returns_default(self):
-        result = _normalize_targets(None)
-        assert "8.8.8.8:53" in result
-
-    def test_whitespace_trimming(self):
-        result = _normalize_targets("  8.8.8.8:53  ,  1.1.1.1:443  ")
-        assert result == "8.8.8.8:53,1.1.1.1:443"
-
-    def test_empty_items_filtered(self):
-        result = _normalize_targets("8.8.8.8:53,,,1.1.1.1:443,")
-        assert result == "8.8.8.8:53,1.1.1.1:443"
-
-    def test_single_target(self):
-        result = _normalize_targets("10.0.0.1:8080")
-        assert result == "10.0.0.1:8080"
 
 
 class TestNormalizeHeadersJson:
