@@ -171,5 +171,5 @@ def load_runtime_config(
     profile_service: ProfileService,
     data: ProfilesData | None = None,
 ) -> tuple[MonitorConfigPayload, bool]:
-    """加载运行时配置 —— 根据活动方案的 use_global_* 标志合并全局与方案独立值。"""
+    """加载运行时配置 —— 从 profile 和 global_settings 合并。"""
     return _build_config_payload(profile_service, data, apply_overrides=True)
