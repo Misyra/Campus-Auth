@@ -58,6 +58,7 @@ class AppConfig:
     startup_action: StartupAction = StartupAction.NONE
     runtime_mode: RuntimeMode = RuntimeMode.FULL  # CLI --runtime-mode 覆盖
     minimize_to_tray: bool = True
+    lightweight_tray: bool = True
     auto_open_browser: bool = False
 
 
@@ -215,6 +216,7 @@ class GlobalSettings(BaseModel):
     auto_open_browser: bool = Field(default=False, description="启动后自动打开浏览器")
     startup_action: StartupAction = Field(default=StartupAction.NONE)
     autostart_lightweight: bool = Field(default=True)
+    lightweight_tray: bool = Field(default=True, description="轻量模式显示系统托盘")
 
     # 监控配置
     check_interval_seconds: int = Field(default=300, ge=10, le=86400, description="检测间隔（秒）")
@@ -409,14 +411,15 @@ class ProfilesData(BaseModel):
 
 
 def get_runtime_features(
-    mode: RuntimeMode | str, minimize_to_tray: bool, auto_open_browser: bool
+    mode: RuntimeMode | str, minimize_to_tray: bool, auto_open_browser: bool,
+    lightweight_tray: bool = True
 ) -> RuntimeFeatures:
     """根据运行模式派生特性标志"""
     if mode == RuntimeMode.LIGHTWEIGHT:
         return RuntimeFeatures(
             web_enabled=False,
             browser_enabled=False,
-            tray_enabled=minimize_to_tray,
+            tray_enabled=lightweight_tray,
         )
     return RuntimeFeatures(
         web_enabled=True,
