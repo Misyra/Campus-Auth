@@ -25,29 +25,26 @@
 - **不要给 _block_proxy 加同步** — 同上
 - **不要给 stop() 加竞态保护** — 仅在关闭时触发，窗口极短
 - **不要给 PID 文件检查加锁** — 两个实例同毫秒启动的概率几乎为零
-- **不要给备份操作加原子性** — 用户手动触发，与配置写入同时发生的概率极低
 
 ## 代码质量类 — 功能正确，不需要改
 
 - **不要给 debug 路由加 response_model** — 会截断调试状态
 - **不要给 save_task 加 Pydantic 校验** — 任务 JSON 结构灵活，严格校验可能拒绝合法任务
-- **不要改 toggle_auto_switch 的 Query 参数** — FastAPI 能正确处理
 - **不要改拖拽状态为 Vue 响应式** — 单一实例，模块级变量正常工作
 - **不要优化 configDirty 的 JSON.stringify** — 配置对象体量下不会卡顿
 - **不要给 API 调用加 loading 状态** — 单用户场景下并发请求概率低
-- **不要改日志文件为 POSIX 权限** — 仅 Windows 运行
+- **不要改日志文件为 POSIX 权限** — 日志轮转由 loguru 处理，无需手动设置
 - **不要更新硬编码的 Chrome UA** — 需要时手动更新即可
 - **不要给用户名密码加最小长度** — 应匹配实际校园网账号格式
 - **不要擦除密钥内存** — Python 字符串不可变，bytearray 方案需重构整个接口
 - **不要改 quitApp 的 innerHTML** — 退出场景下由 OS 进程终止处理
-- **不要给 exportBackup 加路径遍历检查** — 备份列表来自后端 listdir
 - **不要提取 applyAppearance 的公共颜色解析函数** — 功能正确，属重构范畴
 
 ## 误判/假阳性 — 问题不成立
 
 - **asyncio.Lock 从后台线程调用** — 所有调用都在事件循环线程中
-- **os._exit(0) 跳过清理** — 守护线程中是唯一正确方式，调用前已做清理
-- **Base64 伪加密回退** — cryptography 是必需依赖，回退代码已有 warning
+- **os._exit(0) 跳过清理** — 信号处理器/回退路径中无法优雅关闭，调用前已做清理
+- **明文存储回退 (cryptography 缺失)** — cryptography 是必需依赖，缺少时回退为明文存储，已有 warning
 - **close_browser 命令顺序** — CLOSE-then-RELEASE 是正确的资源管理顺序
 - **login_attempt_count 重置重复** — 两处在互斥的代码路径中
 - **DOM 元素内存泄漏** — detached 节点，GC 可正常回收
