@@ -107,8 +107,6 @@ def build_runtime_config(
     ⚠ 返回字典包含明文 password 字段，切勿整体记录到日志中。
     """
     from app.utils.config_utils import assign_profile_fields
-    from app.utils.crypto import decrypt_password
-    from app.utils.exceptions import DecryptionError
     from app.utils.network import parse_url_checks
 
     config_logger.debug(
@@ -121,14 +119,7 @@ def build_runtime_config(
     raw_password = payload.password.strip()
     if raw_password and not raw_password.startswith("•"):
         base["password"] = raw_password
-    elif global_settings:
-        pwd = ""
-        if hasattr(global_settings, 'password') and global_settings.password:
-            try:
-                pwd = decrypt_password(global_settings.password)
-            except DecryptionError:
-                config_logger.error("系统密码解密失败")
-        base["password"] = pwd
+    # GlobalSettings 没有 password 字段，删除不可达的回退代码
 
     base["auth_url"] = payload.auth_url.strip()
     base["active_task"] = payload.active_task.strip()
