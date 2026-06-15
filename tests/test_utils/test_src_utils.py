@@ -11,7 +11,7 @@ import os
 import subprocess
 import threading
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -1114,3 +1114,699 @@ class TestSubmitAliveCheck:
             concurrent.futures.wait(futures)
 
         assert restart_count == 1, f"重启次数应为 1，实际: {restart_count}"
+
+
+# ── PlaywrightWorker._build_launch_args ──
+
+
+class TestBuildLaunchArgs:
+    """浏览器启动参数构建。"""
+
+    def test_default_args(self):
+        """默认参数包含基础安全选项。"""
+        worker = PlaywrightWorker()
+        args = worker._build_launch_args({})
+        assert "--no-sandbox" in args
+        assert "--disable-dev-shm-usage" in args
+        assert "--disable-gpu" in args
+        assert "--memory-pressure-off" in args
+
+    def test_disable_web_security(self):
+        """启用 disable_web_security 时添加对应参数。"""
+        worker = PlaywrightWorker()
+        args = worker._build_launch_args({"disable_web_security": True})
+        assert "--disable-web-security" in args
+
+    def test_low_resource_mode(self):
+        """启用低资源模式时禁用图片。"""
+        worker = PlaywrightWorker()
+        args = worker._build_launch_args({"low_resource_mode": True})
+        assert "--blink-settings=imagesEnabled=false" in args
+
+    def test_custom_browser_args(self):
+        """自定义浏览器参数被添加。"""
+        worker = PlaywrightWorker()
+        settings = {"browser_args": "--disable-extensions\n--no-first-run"}
+        args = worker._build_launch_args(settings)
+        assert "--disable-extensions" in args
+        assert "--no-first-run" in args
+
+    def test_custom_args_no_duplicates(self):
+        """自定义参数不与默认参数重复。"""
+        worker = PlaywrightWorker()
+        settings = {"browser_args": "--no-sandbox"}
+        args = worker._build_launch_args(settings)
+        assert args.count("--no-sandbox") == 1
+
+    def test_custom_args_strips_whitespace(self):
+        """自定义参数中的空白行被跳过。"""
+        worker = PlaywrightWorker()
+        settings = {"browser_args": "--flag1\n\n  \n--flag2"}
+        args = worker._build_launch_args(settings)
+        assert "--flag1" in args
+        assert "--flag2" in args
+
+    def test_empty_browser_args(self):
+        """空的 browser_args 不影响结果。"""
+        worker = PlaywrightWorker()
+        args = worker._build_launch_args({"browser_args": ""})
+        assert len(args) == 4  # 只有默认的 4 个参数
+
+    def test_none_browser_args(self):
+        """None 的 browser_args 不影响结果。"""
+        worker = PlaywrightWorker()
+        args = worker._build_launch_args({"browser_args": None})
+        assert len(args) == 4
+
+
+# ── PlaywrightWorker._build_context_options ──
+
+
+class TestBuildContextOptions:
+    """浏览器上下文选项构建。"""
+
+    def test_default_options(self):
+        """默认选项包含标准视口和区域设置。"""
+        worker = PlaywrightWorker()
+        opts = worker._build_context_options({})
+        assert opts["viewport"]["width"] == 1280
+        assert opts["viewport"]["height"] == 720
+        assert opts["locale"] == "zh-CN"
+        assert opts["timezone_id"] == "Asia/Shanghai"
+        assert opts["has_touch"] is False
+        assert opts["color_scheme"] == "light"
+        assert opts["ignore_https_errors"] is True
+
+    def test_custom_viewport(self):
+        """自定义视口大小。"""
+        worker = PlaywrightWorker()
+        opts = worker._build_context_options(
+            {"viewport_width": 1920, "viewport_height": 1080}
+        )
+        assert opts["viewport"]["width"] == 1920
+        assert opts["viewport"]["height"] == 1080
+
+    def test_custom_user_agent(self):
+        """自定义 User-Agent 被添加。"""
+        worker = PlaywrightWorker()
+        opts = worker._build_context_options({"user_agent": "CustomBot/1.0"})
+        assert opts["user_agent"] == "CustomBot/1.0"
+
+    def test_empty_user_agent_ignored(self):
+        """空 User-Agent 不被添加。"""
+        worker = PlaywrightWorker()
+        opts = worker._build_context_options({"user_agent": ""})
+        assert "user_agent" not in opts
+
+    def test_extra_http_headers(self):
+        """自定义 HTTP 请求头被添加。"""
+        worker = PlaywrightWorker()
+        opts = worker._build_context_options(
+            {"extra_headers_json": '{"X-Test": "value"}'}
+        )
+        assert opts["extra_http_headers"] == {"X-Test": "value"}
+
+    def test_ignore_https_errors_false(self):
+        """禁用忽略 HTTPS 错误。"""
+        worker = PlaywrightWorker()
+        opts = worker._build_context_options({"ignore_https_errors": False})
+        assert opts["ignore_https_errors"] is False
+
+
+# ── PlaywrightWorker._health_check ──
+
+
+class TestHealthCheck:
+    """浏览器健康检查。"""
+
+    @pytest.mark.asyncio
+    async def test_no_browser(self):
+        """无浏览器实例时返回 False。"""
+        worker = PlaywrightWorker()
+        assert await worker._health_check() is False
+
+    @pytest.mark.asyncio
+    async def test_browser_connected(self):
+        """浏览器连接正常时返回 True。"""
+        worker = PlaywrightWorker()
+        mock_browser = MagicMock()
+        mock_browser.is_connected.return_value = True
+        worker._browser = mock_browser
+        assert await worker._health_check() is True
+
+    @pytest.mark.asyncio
+    async def test_browser_disconnected(self):
+        """浏览器断开连接时返回 False。"""
+        worker = PlaywrightWorker()
+        mock_browser = MagicMock()
+        mock_browser.is_connected.return_value = False
+        worker._browser = mock_browser
+        assert await worker._health_check() is False
+
+    @pytest.mark.asyncio
+    async def test_browser_check_raises(self):
+        """健康检查抛异常时返回 False。"""
+        worker = PlaywrightWorker()
+        mock_browser = MagicMock()
+        mock_browser.is_connected.side_effect = RuntimeError("browser crashed")
+        worker._browser = mock_browser
+        assert await worker._health_check() is False
+
+
+# ── PlaywrightWorker._is_normal_close_error ──
+
+
+class TestIsNormalCloseError:
+    """正常关闭错误判断。"""
+
+    def test_target_closed(self):
+        """'target closed' 被识别为正常关闭。"""
+        assert PlaywrightWorker._is_normal_close_error(
+            RuntimeError("Target closed")
+        ) is True
+
+    def test_connection_closed(self):
+        """'connection closed' 被识别为正常关闭。"""
+        assert PlaywrightWorker._is_normal_close_error(
+            RuntimeError("Connection closed")
+        ) is True
+
+    def test_other_error(self):
+        """其他错误不被视为正常关闭。"""
+        assert PlaywrightWorker._is_normal_close_error(
+            RuntimeError("Some other error")
+        ) is False
+
+    def test_case_insensitive(self):
+        """匹配不区分大小写。"""
+        assert PlaywrightWorker._is_normal_close_error(
+            RuntimeError("TARGET CLOSED")
+        ) is True
+
+
+# ── PlaywrightWorker._handle_low_resource_request ──
+
+
+class TestHandleLowResourceRequest:
+    """低资源模式请求拦截。"""
+
+    @pytest.mark.asyncio
+    async def test_blocks_image(self):
+        """图片请求被中止。"""
+        worker = PlaywrightWorker()
+        mock_route = MagicMock()
+        mock_route.request.resource_type = "image"
+        mock_route.abort = AsyncMock()
+        mock_route.continue_ = AsyncMock()
+        await worker._handle_low_resource_request(mock_route)
+        mock_route.abort.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_blocks_font(self):
+        """字体请求被中止。"""
+        worker = PlaywrightWorker()
+        mock_route = MagicMock()
+        mock_route.request.resource_type = "font"
+        mock_route.abort = AsyncMock()
+        mock_route.continue_ = AsyncMock()
+        await worker._handle_low_resource_request(mock_route)
+        mock_route.abort.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_blocks_media(self):
+        """媒体请求被中止。"""
+        worker = PlaywrightWorker()
+        mock_route = MagicMock()
+        mock_route.request.resource_type = "media"
+        mock_route.abort = AsyncMock()
+        mock_route.continue_ = AsyncMock()
+        await worker._handle_low_resource_request(mock_route)
+        mock_route.abort.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_allows_document(self):
+        """文档请求被放行。"""
+        worker = PlaywrightWorker()
+        mock_route = MagicMock()
+        mock_route.request.resource_type = "document"
+        mock_route.abort = AsyncMock()
+        mock_route.continue_ = AsyncMock()
+        await worker._handle_low_resource_request(mock_route)
+        mock_route.continue_.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_allows_script(self):
+        """脚本请求被放行。"""
+        worker = PlaywrightWorker()
+        mock_route = MagicMock()
+        mock_route.request.resource_type = "script"
+        mock_route.abort = AsyncMock()
+        mock_route.continue_ = AsyncMock()
+        await worker._handle_low_resource_request(mock_route)
+        mock_route.continue_.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_exception_ignored(self):
+        """异常被静默处理（页面/上下文已关闭）。"""
+        worker = PlaywrightWorker()
+        mock_route = MagicMock()
+        mock_route.request.resource_type = "document"
+        mock_route.abort = AsyncMock()
+        mock_route.continue_ = AsyncMock(side_effect=RuntimeError("page closed"))
+        await worker._handle_low_resource_request(mock_route)
+
+
+# ── PlaywrightWorker._wake_async ──
+
+
+class TestWakeAsync:
+    """唤醒事件循环。"""
+
+    @pytest.mark.asyncio
+    async def test_sets_wake_event(self):
+        """设置 _wake_event。"""
+        worker = PlaywrightWorker()
+        event = MagicMock()
+        worker._wake_event = event
+        await worker._wake_async()
+        event.set.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_no_wake_event(self):
+        """无 _wake_event 时不报错。"""
+        worker = PlaywrightWorker()
+        worker._wake_event = None
+        await worker._wake_async()  # 不应抛异常
+
+
+# ── PlaywrightWorker 属性访问 ──
+
+
+class TestWorkerProperties:
+    """Worker 属性访问。"""
+
+    def test_page_property(self):
+        worker = PlaywrightWorker()
+        assert worker.page is None
+
+    def test_browser_property(self):
+        worker = PlaywrightWorker()
+        assert worker.browser is None
+
+    def test_context_property(self):
+        worker = PlaywrightWorker()
+        assert worker.context is None
+
+    def test_playwright_instance_property(self):
+        worker = PlaywrightWorker()
+        assert worker.playwright_instance is None
+
+
+# ── PlaywrightWorker._close_resource ──
+
+
+class TestCloseResource:
+    """资源关闭辅助方法。"""
+
+    @pytest.mark.asyncio
+    async def test_close_none_resource(self):
+        """关闭 None 资源不报错。"""
+        worker = PlaywrightWorker()
+        await worker._close_resource(None, "test", graceful=True)
+
+    @pytest.mark.asyncio
+    async def test_close_graceful_success(self):
+        """优雅关闭成功。"""
+        worker = PlaywrightWorker()
+        mock_resource = MagicMock()
+        mock_resource.is_closed.return_value = False
+        mock_resource.close = AsyncMock()
+        await worker._close_resource(mock_resource, "page", graceful=True, has_check="is_closed")
+        mock_resource.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_close_graceful_already_closed(self):
+        """资源已关闭时跳过 close。"""
+        worker = PlaywrightWorker()
+        mock_resource = MagicMock()
+        mock_resource.is_closed.return_value = True
+        mock_resource.close = AsyncMock()
+        await worker._close_resource(mock_resource, "page", graceful=True, has_check="is_closed")
+        mock_resource.close.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_close_graceful_normal_error(self):
+        """优雅关闭时正常关闭错误仅 warning。"""
+        worker = PlaywrightWorker()
+        mock_resource = MagicMock()
+        mock_resource.close = AsyncMock(side_effect=RuntimeError("target closed"))
+        await worker._close_resource(mock_resource, "page", graceful=True)
+
+    @pytest.mark.asyncio
+    async def test_close_non_graceful_exception(self):
+        """非优雅模式下异常被忽略。"""
+        worker = PlaywrightWorker()
+        mock_resource = MagicMock()
+        mock_resource.close = AsyncMock(side_effect=RuntimeError("any error"))
+        await worker._close_resource(mock_resource, "page", graceful=False)
+
+
+# ── PlaywrightWorker._dispatch ──
+
+
+class TestDispatch:
+    """命令派发。"""
+
+    @pytest.mark.asyncio
+    async def test_cancelled_command_skipped(self):
+        """已取消的命令被跳过。"""
+        worker = PlaywrightWorker()
+        cmd = WorkerCommand(type=CMD_LOGIN, cancelled=True)
+        await worker._dispatch(cmd)
+        assert cmd.response_data is None
+
+    @pytest.mark.asyncio
+    async def test_shutdown_command(self):
+        """SHUTDOWN 命令返回成功。"""
+        worker = PlaywrightWorker()
+        event = threading.Event()
+        cmd = WorkerCommand(type=CMD_SHUTDOWN, response_event=event)
+        await worker._dispatch(cmd)
+        assert cmd.response_data.success is True
+
+    @pytest.mark.asyncio
+    async def test_unknown_command(self):
+        """未知命令返回错误。"""
+        worker = PlaywrightWorker()
+        event = threading.Event()
+        cmd = WorkerCommand(type="unknown_type", response_event=event)
+        await worker._dispatch(cmd)
+        assert cmd.response_data.success is False
+        assert "未知命令" in cmd.response_data.error
+
+    @pytest.mark.asyncio
+    async def test_browser_release_command(self):
+        """BROWSER_RELEASE 命令返回成功。"""
+        worker = PlaywrightWorker()
+        event = threading.Event()
+        cmd = WorkerCommand(type=CMD_BROWSER_RELEASE, response_event=event)
+        await worker._dispatch(cmd)
+        assert cmd.response_data.success is True
+
+    @pytest.mark.asyncio
+    async def test_dispatch_sets_response_event(self):
+        """派发完成后设置 response_event。"""
+        worker = PlaywrightWorker()
+        event = threading.Event()
+        cmd = WorkerCommand(type=CMD_SHUTDOWN, response_event=event)
+        await worker._dispatch(cmd)
+        assert event.is_set()
+
+    @pytest.mark.asyncio
+    async def test_dispatch_exception_sets_error(self):
+        """派发异常时设置错误响应。"""
+        worker = PlaywrightWorker()
+        event = threading.Event()
+        cmd = WorkerCommand(type=CMD_LOGIN, response_event=event)
+        with patch.object(worker, "_handle_login", new=AsyncMock(side_effect=RuntimeError("boom"))):
+            await worker._dispatch(cmd)
+        assert cmd.response_data.success is False
+        assert "boom" in cmd.response_data.error
+
+
+# ── PlaywrightWorker.submit with queue full ──
+
+
+class TestSubmitQueueFull:
+    """submit 队列满时的行为。"""
+
+    def test_queue_full_returns_error(self):
+        """队列满时返回错误。"""
+        worker = PlaywrightWorker()
+        worker._consumer_thread = MagicMock()
+        worker._consumer_thread.is_alive.return_value = True
+        worker._stop_event.clear()
+
+        with patch.object(worker._cmd_queue, "put", side_effect=__import__("queue").Full):
+            result = worker.submit("test_cmd", wait=False)
+        assert result.success is False
+        assert "队列已满" in result.error
+
+
+# ── PlaywrightWorker.submit with timeout ──
+
+
+class TestSubmitTimeout:
+    """submit 超时行为。"""
+
+    def test_timeout_returns_error(self):
+        """等待超时返回错误。"""
+        worker = PlaywrightWorker()
+        worker._consumer_thread = MagicMock()
+        worker._consumer_thread.is_alive.return_value = True
+        worker._stop_event.clear()
+
+        cmd = None
+
+        def capture_cmd(cmd_obj, timeout=None):
+            nonlocal cmd
+            cmd = cmd_obj
+
+        with patch.object(worker._cmd_queue, "put"):
+            with patch.object(worker, "_loop", None):
+                result = worker.submit("test_cmd", wait=True, timeout=0.01)
+
+        assert result.success is False
+        assert "超时" in result.error or "无响应" in result.error
+
+
+# ── PlaywrightWorker.submit with response_data ──
+
+
+class TestSubmitResponseData:
+    """submit 响应数据处理。"""
+
+    def test_response_data_is_worker_response(self):
+        """response_data 为 WorkerResponse 时直接返回。"""
+        worker = PlaywrightWorker()
+        worker._consumer_thread = MagicMock()
+        worker._consumer_thread.is_alive.return_value = True
+        worker._stop_event.clear()
+
+        # 模拟 put 后直接设置 response_data
+        def fake_put(cmd, timeout=None):
+            cmd.response_data = WorkerResponse(success=True, data="result")
+            if cmd.response_event:
+                cmd.response_event.set()
+
+        with patch.object(worker._cmd_queue, "put", side_effect=fake_put):
+            with patch.object(worker, "_loop", None):
+                result = worker.submit("test_cmd", wait=True)
+
+        assert result.success is True
+        assert result.data == "result"
+
+    def test_response_data_is_plain_value(self):
+        """response_data 为普通值时包装为 WorkerResponse。"""
+        worker = PlaywrightWorker()
+        worker._consumer_thread = MagicMock()
+        worker._consumer_thread.is_alive.return_value = True
+        worker._stop_event.clear()
+
+        def fake_put(cmd, timeout=None):
+            cmd.response_data = "plain_value"
+            if cmd.response_event:
+                cmd.response_event.set()
+
+        with patch.object(worker._cmd_queue, "put", side_effect=fake_put):
+            with patch.object(worker, "_loop", None):
+                result = worker.submit("test_cmd", wait=True)
+
+        assert result.success is True
+        assert result.data == "plain_value"
+
+
+# ── PlaywrightWorker.submit_nowait ──
+
+
+class TestSubmitNowait:
+    """submit_nowait 方法。"""
+
+    def test_puts_command_in_queue(self):
+        """命令被放入队列。"""
+        worker = PlaywrightWorker()
+        worker.submit_nowait(CMD_SHUTDOWN)
+        cmd = worker._cmd_queue.get_nowait()
+        assert cmd.type == CMD_SHUTDOWN
+
+
+# ── PlaywrightWorker._cleanup_browser ──
+
+
+class TestCleanupBrowser:
+    """浏览器资源清理。"""
+
+    @pytest.mark.asyncio
+    async def test_cleanup_graceful_all_none(self):
+        """所有资源为 None 时不报错。"""
+        worker = PlaywrightWorker()
+        await worker._cleanup_browser(graceful=True)
+        assert worker._playwright is None
+        assert worker._browser is None
+        assert worker._context is None
+        assert worker._page is None
+        assert worker._debug_page is None
+        assert worker._debug_executor is None
+
+    @pytest.mark.asyncio
+    async def test_cleanup_force_all_none(self):
+        """强制清理所有资源为 None。"""
+        worker = PlaywrightWorker()
+        await worker._cleanup_browser(graceful=False)
+        assert worker._playwright is None
+
+    @pytest.mark.asyncio
+    async def test_cleanup_with_debug_page(self):
+        """清理调试页面。"""
+        worker = PlaywrightWorker()
+        mock_debug_page = MagicMock()
+        mock_debug_page.is_closed.return_value = False
+        mock_debug_page.close = AsyncMock()
+        worker._debug_page = mock_debug_page
+        worker._debug_executor = MagicMock()
+
+        await worker._cleanup_browser(graceful=True)
+
+        mock_debug_page.close.assert_awaited_once()
+        assert worker._debug_page is None
+        assert worker._debug_executor is None
+
+    @pytest.mark.asyncio
+    async def test_cleanup_with_browser_connected(self):
+        """浏览器连接正常时调用 close。"""
+        worker = PlaywrightWorker()
+        mock_browser = MagicMock()
+        mock_browser.is_connected.return_value = True
+        mock_browser.close = AsyncMock()
+        worker._browser = mock_browser
+
+        await worker._cleanup_browser(graceful=True)
+
+        mock_browser.close.assert_awaited_once()
+        assert worker._browser is None
+
+    @pytest.mark.asyncio
+    async def test_cleanup_with_browser_disconnected(self):
+        """浏览器已断开时跳过 close。"""
+        worker = PlaywrightWorker()
+        mock_browser = MagicMock()
+        mock_browser.is_connected.return_value = False
+        mock_browser.close = AsyncMock()
+        worker._browser = mock_browser
+
+        await worker._cleanup_browser(graceful=True)
+
+        mock_browser.close.assert_not_awaited()
+        assert worker._browser is None
+
+    @pytest.mark.asyncio
+    async def test_cleanup_with_playwright(self):
+        """清理 Playwright 实例。"""
+        worker = PlaywrightWorker()
+        mock_pw = MagicMock()
+        mock_pw.stop = AsyncMock()
+        worker._playwright = mock_pw
+
+        await worker._cleanup_browser(graceful=True)
+
+        mock_pw.stop.assert_awaited_once()
+        assert worker._playwright is None
+
+    @pytest.mark.asyncio
+    async def test_cleanup_playwright_normal_close_error(self):
+        """Playwright 停止时正常关闭错误仅 warning。"""
+        worker = PlaywrightWorker()
+        mock_pw = MagicMock()
+        mock_pw.stop = AsyncMock(side_effect=RuntimeError("target closed"))
+        worker._playwright = mock_pw
+
+        await worker._cleanup_browser(graceful=True)
+
+    @pytest.mark.asyncio
+    async def test_cleanup_playwright_other_error(self):
+        """Playwright 停止时其他错误记录为 error。"""
+        worker = PlaywrightWorker()
+        mock_pw = MagicMock()
+        mock_pw.stop = AsyncMock(side_effect=RuntimeError("some error"))
+        worker._playwright = mock_pw
+
+        await worker._cleanup_browser(graceful=True)
+
+    @pytest.mark.asyncio
+    async def test_cleanup_force_silences_exceptions(self):
+        """强制模式下所有异常被静默。"""
+        worker = PlaywrightWorker()
+        mock_pw = MagicMock()
+        mock_pw.stop = AsyncMock(side_effect=RuntimeError("boom"))
+        worker._playwright = mock_pw
+
+        await worker._cleanup_browser(graceful=False)
+
+
+# ── PlaywrightWorker.stop 详细测试 ──
+
+
+class TestStopDetails:
+    """stop 方法详细测试。"""
+
+    def test_stop_sets_permanent_shutdown(self):
+        """stop 设置永久关闭标志。"""
+        worker = PlaywrightWorker()
+        worker.stop(timeout=0.1)
+        assert worker._shutdown_permanent.is_set()
+        assert worker._stop_event.is_set()
+
+    def test_stop_drains_queue(self):
+        """stop 排干队列并通知等待方。"""
+        worker = PlaywrightWorker()
+        event = threading.Event()
+        cmd = WorkerCommand(type=CMD_LOGIN, response_event=event)
+        worker._cmd_queue.put_nowait(cmd)
+
+        worker.stop(timeout=0.1)
+
+        assert event.is_set()
+        assert cmd.response_data is not None
+        assert cmd.response_data.success is False
+
+
+# ── get_worker / shutdown_worker ──
+
+
+class TestGetWorkerShutdownWorker:
+    """全局 Worker 单例管理。"""
+
+    def test_shutdown_worker_when_none(self):
+        """Worker 为 None 时不报错。"""
+        import app.workers.playwright_worker as pw_mod
+
+        old = pw_mod._worker
+        try:
+            pw_mod._worker = None
+            pw_mod.shutdown_worker(timeout=0.1)
+        finally:
+            pw_mod._worker = old
+
+    def test_shutdown_worker_when_alive(self):
+        """Worker 存活时正常关闭。"""
+        import app.workers.playwright_worker as pw_mod
+
+        mock_worker = MagicMock()
+        mock_worker.is_alive.return_value = True
+        old = pw_mod._worker
+        try:
+            pw_mod._worker = mock_worker
+            pw_mod.shutdown_worker(timeout=0.1)
+            mock_worker.stop.assert_called_once_with(timeout=0.1)
+        finally:
+            pw_mod._worker = old

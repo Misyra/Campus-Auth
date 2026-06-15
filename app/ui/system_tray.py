@@ -8,13 +8,13 @@ logger = get_logger("system_tray", source="backend")
 
 
 class SystemTray:
-    def __init__(self, port: int = 50721, on_exit=None):
+    def __init__(self, port: int = 50721, on_exit=None, on_open_console=None):
         self.port = port
         self.on_exit = on_exit
+        self.on_open_console = on_open_console
         self.icon = None
         self._thread = None
         self._monitoring = False
-        # 延迟导入的模块（在 start() 中初始化）
         self._pystray = None
         self._Image = None
 
@@ -47,10 +47,16 @@ class SystemTray:
 
     def _create_menu(self):
         """创建托盘菜单（需要先调用 start() 初始化模块）。"""
+        def _open_console(icon, item):
+            if self.on_open_console:
+                self.on_open_console()
+            else:
+                webbrowser.open(f"http://127.0.0.1:{self.port}")
+
         return self._pystray.Menu(
             self._pystray.MenuItem(
                 "打开控制台",
-                lambda: webbrowser.open(f"http://127.0.0.1:{self.port}"),
+                _open_console,
                 default=True,
             ),
             self._pystray.MenuItem(

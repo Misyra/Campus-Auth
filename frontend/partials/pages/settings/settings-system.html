@@ -1,45 +1,54 @@
 <div v-if="currentSettingsTab === 'system'" class="settings-panel-grid">
   <section class="card settings-panel">
     <div class="card-header">
-      <h2>系统策略</h2>
+      <h2>日志设置</h2>
     </div>
-    <div class="card-body">
-      <h4 class="settings-section-heading">日志管理</h4>
-      <div class="form-row">
+    <div class="card-body settings-log-columns">
+      <div>
+        <h4 class="settings-section-heading">日志管理</h4>
+        <div class="form-row">
+          <div class="form-group">
+            <div class="field-label-row">
+              <label for="settings-log-retention">日志保留天数</label>
+              <span class="field-help" tabindex="0" role="note" data-tip="日志和失败截图按天归档，超过设定天数的整日归档（含日志和截图）会自动清理。设为 7 可平衡排查需求与磁盘占用。">?</span>
+            </div>
+            <input id="settings-log-retention" v-model.number="config.log_retention_days" type="number" min="1" max="365" />
+          </div>
+        </div>
+        <div class="toggle-group">
+          <div class="toggle-with-help">
+            <label class="toggle toggle-help-inline">
+              <input type="checkbox" v-model="config.access_log" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">显示 HTTP 请求日志</span>
+              <span class="field-help" tabindex="0" role="note" data-tip="开启后会记录每次 API 请求的方法、路径和耗时。调试时有用，日常使用建议关闭以减少日志量。">?</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h4 class="settings-section-heading">日志级别</h4>
         <div class="form-group">
           <div class="field-label-row">
-            <label for="settings-log-retention">日志保留天数</label>
-            <span class="field-help" tabindex="0" role="note" data-tip="日志和失败截图按天归档，超过设定天数的整日归档（含日志和截图）会自动清理。设为 7 可平衡排查需求与磁盘占用。">?</span>
+            <label>全局日志级别</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="设置所有日志来源的默认级别。低于该级别的日志将被过滤。">?</span>
           </div>
-          <input id="settings-log-retention" v-model.number="config.log_retention_days" type="number" min="1" max="365" />
+          <custom-select
+            v-model="logLevels.global_level"
+            :options="logLevelOptions"
+            @change="(val) => setSourceLevel('global', val)"
+          ></custom-select>
         </div>
       </div>
-      <div class="toggle-group">
-        <div class="toggle-with-help">
-          <label class="toggle toggle-help-inline">
-            <input type="checkbox" v-model="config.access_log" />
-            <span class="toggle-slider"></span>
-            <span class="toggle-label">显示 HTTP 请求日志</span>
-            <span class="field-help" tabindex="0" role="note" data-tip="开启后会记录每次 API 请求的方法、路径和耗时。调试时有用，日常使用建议关闭以减少日志量。">?</span>
-          </label>
-        </div>
-      </div>
+    </div>
+  </section>
 
-      <div class="settings-section-divider"></div>
-      <h4 class="settings-section-heading">日志级别</h4>
-      <div class="form-group">
-        <div class="field-label-row">
-          <label>全局日志级别</label>
-          <span class="field-help" tabindex="0" role="note" data-tip="设置所有日志来源的默认级别。低于该级别的日志将被过滤。">?</span>
-        </div>
-        <custom-select
-          v-model="logLevels.global_level"
-          :options="logLevelOptions"
-          @change="(val) => setSourceLevel('global', val)"
-        ></custom-select>
-      </div>
-
-      <div class="settings-section-divider"></div>
+  <section class="card settings-panel">
+    <div class="card-header">
+      <h2>启动与界面</h2>
+    </div>
+    <div class="card-body">
       <h4 class="settings-section-heading">启动行为</h4>
       <div class="form-group">
         <div class="field-label-row">
@@ -54,6 +63,8 @@
         <span class="hint">{{ startupActionHint }}</span>
       </div>
 
+      <div class="settings-section-divider"></div>
+      <h4 class="settings-section-heading">开机自启动</h4>
       <div class="toggle-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
@@ -68,7 +79,7 @@
       <div class="form-group" v-if="autostart.enabled">
         <div class="field-label-row">
           <label>自启动模式</label>
-          <span class="field-help" tabindex="0" role="note" data-tip="轻量模式仅后台监控，不启动 Web 界面；完整模式启动 Web 管理界面。">?</span>
+          <span class="field-help" tabindex="0" role="note" data-tip="轻量模式仅后台监控，不启动 Web 界面，可降低常态内存占用；完整模式启动 Web 管理界面。">?</span>
         </div>
         <custom-select
           v-model="autostart.lightweight"
@@ -76,6 +87,19 @@
           @change="setAutostartMode"
         ></custom-select>
       </div>
+
+      <template v-if="autostart.lightweight">
+        <div class="toggle-group" style="margin-top: 12px;">
+          <div class="toggle-with-help">
+            <label class="toggle toggle-help-inline">
+              <input type="checkbox" v-model="config.lightweight_tray" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">轻量模式托盘开关</span>
+              <span class="field-help" tabindex="0" role="note" data-tip="开启后可以通过托盘打开管理界面，但是会增加 10MB 左右内存。关闭后无法进入 Web 界面，只能通过命令行管理。建议在完成所有配置后打开。">?</span>
+            </label>
+          </div>
+        </div>
+      </template>
 
       <div class="settings-section-divider"></div>
       <h4 class="settings-section-heading">界面行为</h4>
@@ -85,7 +109,7 @@
             <input type="checkbox" v-model="config.minimize_to_tray" :disabled="config.startup_action === 'login_once'" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">最小化到系统托盘</span>
-            <span class="field-help" tabindex="0" role="note" data-tip="关闭窗口时最小化到系统托盘，可通过托盘图标重新打开界面。关闭此选项后关闭窗口程序仍在后台运行，但只能手动输入地址访问。">?</span>
+            <span class="field-help" tabindex="0" role="note" data-tip="关闭窗口时最小化到系统托盘，可通过托盘图标重新打开界面。关闭后可降低内存占用，但只能手动打开 Web 界面。">?</span>
           </label>
         </div>
       </div>
@@ -104,7 +128,6 @@
           </label>
         </div>
       </div>
-
     </div>
   </section>
 
@@ -113,30 +136,32 @@
       <h2>网络与端口</h2>
     </div>
     <div class="card-body">
-      <div class="form-group">
-        <div class="field-label-row">
-          <label for="settings-app-port">控制台端口</label>
-          <span class="field-help" tabindex="0" role="note" data-tip="Web 控制台的监听端口。修改后需要重启服务器才能生效。默认 50721，范围 1024~65535。">?</span>
+      <div class="form-row">
+        <div class="form-group">
+          <div class="field-label-row">
+            <label for="settings-app-port">控制台端口</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="Web 控制台的监听端口。修改后需要重启服务器才能生效。默认 50721，范围 1024~65535。">?</span>
+          </div>
+          <input
+            id="settings-app-port"
+            v-model.number="config.app_port"
+            type="number"
+            min="1024"
+            max="65535"
+          />
         </div>
-        <input
-          id="settings-app-port"
-          v-model.number="config.app_port"
-          type="number"
-          min="1024"
-          max="65535"
-        />
-      </div>
-      <div class="form-group">
-        <div class="field-label-row">
-          <label for="settings-proxy">网络代理</label>
-          <span class="field-help" tabindex="0" role="note" data-tip="用于远程仓库导入等网络请求的代理地址。留空则不使用代理。支持 HTTP 和 SOCKS5 协议，例如 http://127.0.0.1:7897 或 socks5://127.0.0.1:7890。">?</span>
+        <div class="form-group">
+          <div class="field-label-row">
+            <label for="settings-proxy">网络代理</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="用于远程仓库导入等网络请求的代理地址。留空则不使用代理。支持 HTTP 和 SOCKS5 协议，例如 http://127.0.0.1:7897 或 socks5://127.0.0.1:7890。">?</span>
+          </div>
+          <input
+            id="settings-proxy"
+            v-model.trim="config.proxy"
+            type="text"
+            placeholder="留空不使用代理，例如 http://127.0.0.1:7897"
+          />
         </div>
-        <input
-          id="settings-proxy"
-          v-model.trim="config.proxy"
-          type="text"
-          placeholder="留空不使用代理，例如 http://127.0.0.1:7897"
-        />
       </div>
       <div class="form-group">
         <div class="field-label-row">

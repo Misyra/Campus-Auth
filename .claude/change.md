@@ -3,6 +3,210 @@
 ## 2026-06-15
 
 ### fix
+- `app/services/task_executor.py` 修复 `execute_login_async` 死锁风险
+  - 将 `future.add_done_callback(self._on_login_done)` 从 `with self._login_lock:` 块内移到锁外
+  - 原代码在锁内注册回调，而 `_on_login_done` 回调也会获取同一锁，若 `execute_login` 极快完成会导致主线程阻塞
+  - 确保回调注册在锁释放后执行，消除时序问题
+
+### test
+- 完成测试覆盖率改进，整体覆盖率达到 86%（目标 85%）
+  - `tests/test_utils/test_src_utils.py` 新增 PlaywrightWorker 纯逻辑测试
+    - `TestBuildLaunchArgs`（8 个）：默认参数、disable_web_security、low_resource_mode、自定义参数、去重、空白行、空值/None
+    - `TestBuildContextOptions`（6 个）：默认选项、自定义视口、User-Agent、空 UA、额外请求头、HTTPS 错误
+    - `TestHealthCheck`（4 个）：无浏览器、连接正常、断开、异常
+    - `TestIsNormalCloseError`（4 个）：target closed、connection closed、其他错误、大小写
+    - `TestHandleLowResourceRequest`（6 个）：图片/字体/媒体拦截、文档/脚本放行、异常静默
+    - `TestWakeAsync`（2 个）：设置事件、无事件
+    - `TestWorkerProperties`（4 个）：page/browser/context/playwright_instance
+    - `TestCloseResource`（5 个）：None、成功、已关闭、正常错误、非优雅模式
+    - `TestDispatch`（6 个）：已取消跳过、SHUTDOWN、未知命令、BROWSER_RELEASE、response_event、异常
+    - `TestSubmitQueueFull`（1 个）：队列满返回错误
+    - `TestSubmitTimeout`（1 个）：超时返回错误
+    - `TestSubmitResponseData`（2 个）：WorkerResponse/普通值
+    - `TestSubmitNowait`（1 个）：命令入队
+    - `TestCleanupBrowser`（9 个）：全 None、强制清理、调试页面、浏览器连接/断开、Playwright、正常错误、其他错误、强制静默
+    - `TestStopDetails`（2 个）：永久关闭标志、排干队列
+    - `TestGetWorkerShutdownWorker`（2 个）：None 时不报错、存活时关闭
+  - `tests/test_api/test_api_autostart_routes.py` 新增 AutoStartService 纯逻辑测试
+    - `TestAutostartCliArgs`（3 个）：轻量/完整模式、无连续空格
+    - `TestAutoStartServiceInit`（1 个）：初始化
+    - `TestAutoStartServicePaths`（3 个）：macOS/Linux/Windows 路径
+    - `TestAutoStartServiceRun`（4 个）：成功/失败/超时/异常
+    - `TestAutoStartServiceStatus`（4 个）：macOS/Linux/Windows/不支持平台
+    - `TestAutoStartServiceEnableDisable`（5 个）：不支持平台、Windows 成功/CJK 路径、禁用
+    - `TestBuildVbsContent`（3 个）：WshShell、PID 检查、运行命令
+    - `TestHasCjkChars`（4 个）：中文、混合、纯 ASCII、空字符串
+    - `TestStartCommand`（3 个）：打包可执行文件、回退、venv
+    - `TestDisableMacos`（2 个）：存在/不存在
+    - `TestDisableLinux`（1 个）：禁用
+  - `tests/test_app/test_application_logic.py` 增强截图清理测试
+    - `TestCleanupTempScreenshots`：重写为实际文件时间测试，覆盖 png/jpg/jpeg/新文件/非图片/不存在/空目录/异常
+    - `TestCleanupOldScreenshots`（5 个）：旧目录删除/不存在/空目录/异常/跳过当天
+  - 优化 6 个 10 秒超时测试（engine/monitor_service），测试执行时间从 126 秒降至 50 秒
+    - `test_engine.py`：`test_reload_config_enqueues`/`test_reload_config_timeout`/`test_apply_profile_enqueues`/`test_apply_profile_timeout` 改为 mock response_event.wait
+    - `test_monitor_service.py`：`test_reload_config_enqueues_reload_command`/`test_apply_profile_enqueues_command` 改为立即设置 response_event
+
+### feat
+- `frontend/js/constants.js` `DEFAULT_CONFIG` 新增 `lightweight_tray: true` 字段
+
+### feat
+- `main.py` `_build_app_config()` 新增读取 `lightweight_tray` 配置
+  - 在 `minimize_to_tray` 读取后新增 `config.lightweight_tray` 读取
+  - 默认值 `True`，与 `minimize_to_tray` 保持一致
+
+### test
+- `tests/test_integration/test_scheduled_task.py` 添加定时任务集成测试（38 个用例）
+  - `TestTaskRegistrationAndExecution`（11 个）：保存/读取/列出/删除任务、删除清理历史、执行不存在/不支持类型的任务、执行记录历史/更新 last_run、has_enabled_tasks、调度索引查询/更新
+  - `TestTaskExecutionWithVariableResolution`（12 个）：变量基础替换/嵌套解析/运行时优先级/JS 安全转义/未解析保留/循环引用/最大深度、StepHandler 参数解析、浏览器任务变量传递、Shell 任务执行/空命令
+  - `TestTaskFailureHandling`（8 个）：异常记录失败历史、失败更新 last_status、脚本/浏览器不存在、历史持久化/裁剪/无效 ID、多次失败累积
+  - `TestTaskCancellation`（7 个）：登录取消事件、异步去重、BoundedExecutor 队列满拒绝、NullTaskExecutor 全方法、shutdown、信号量释放、线程池懒初始化
+
+### test
+- `tests/test_integration/test_login_flow.py` 添加登录流程集成测试（39 个用例）
+  - `TestFullLoginSequence`（10 个）：手动登录命令成功/失败、配置缺失、async_login 提交、TaskExecutor 登录成功/失败/取消/异常、完整手动登录序列
+  - `TestLoginWithNetworkDetection`（7 个）：网络检测触发登录、无需登录、更新间隔、方案切换、异常继续、登录后网络恢复、引擎循环集成
+  - `TestLoginRetryMechanism`（11 个）：基本重试判断、间隔时间、最大次数、进行中跳过、无配置/零计数、间隔递增、配置获取/异常回退、重置计数、唤醒时间
+  - `TestLoginConcurrencyProtection`（11 个）：进行中拒绝、Future 清除状态、并发拒绝、手动登录锁、锁释放（完成/超时）、重试不触发、异常清除、Future None、多线程竞争
+
+### test
+- `tests/test_integration/test_app_startup.py` 添加应用启动集成测试（22 个用例）
+  - `TestCreateAppInitialization`（9 个）：FastAPI 实例创建、标题/版本、lifespan 配置、首页路由、静态文件挂载、WebSocket 端点、existing_container 参数、CORS 中间件、必要目录创建
+  - `TestAppLifespan`（7 个）：shutdown_event 创建、existing_container 模式启动、调度器启用/跳过、shutdown 调用、完整生命周期、新容器模式 startup
+  - `TestDependencyInjection`（6 个）：services 挂载到 app.state、shutdown_event 类型、monitor_service 配置访问、uvicorn Server 存储、server_ref 填充、access_log_event 控制
+  - 使用 `APIRouter` 作为 `new_callable` patch 路由模块，避免 MagicMock 导致的 lifespan 递归合并问题
+- `tests/test_integration/__init__.py` 创建集成测试包
+
+### test
+- `tests/test_services/test_websocket_manager.py` 添加 websocket_manager.py 单元测试，覆盖率 100%
+  - `TestNullWebSocketManager`：覆盖 connect、disconnect、broadcast、close_all 四个空操作方法
+  - `TestWebSocketManagerConnect`：覆盖 accept 调用和连接追加、多连接
+  - `TestWebSocketManagerDisconnect`：覆盖移除连接、不存在连接不报错、仅移除目标连接
+  - `TestWebSocketManagerBroadcast`：覆盖空连接广播、多连接发送、失败连接自动清理、已移除连接不报错、超时断开、超时已移除、send_safe 调用验证
+  - `TestWebSocketManagerCloseAll`：覆盖清空连接、调用 close、关闭异常不影响其他连接、空连接关闭
+  - `TestWebSocketManagerInit`：覆盖初始化状态验证
+
+### test
+- `tests/test_services/test_login_history.py` 补充 login_history_service.py 单元测试，覆盖率从 73% 提升至 99%
+  - `TestRecord`：覆盖 `record` 方法全部分支 — 无服务对象、profile_service 正常/返回 None/抛异常、task_manager 正常/无 name 属性/load_task 返回 None/抛异常、error 传递
+  - `TestAddException`：覆盖 `add` 方法写入异常不抛出、失败时不递增 `_write_count`
+  - `TestListRecentLargeFile`：覆盖 >5MB 大文件只读取末尾分支
+  - `TestListRecentException`：覆盖 stat 查询异常和文件读取异常返回空列表
+  - `TestClearException`：覆盖 clear 读取失败返回 0
+  - `TestCleanupOldException`：覆盖 `_cleanup_old` 读取异常静默处理、JSON 解析失败行保留
+
+### test
+- `tests/test_services/test_debug_service.py` 添加 debug_service.py 补充单元测试，覆盖率从 90% 提升至 98%
+  - `TestDebugTimeoutWatcherActualTimeout`：覆盖超时触发关闭浏览器、浏览器未活跃跳过关闭、锁内代数不匹配跳过
+  - `TestStartTemplateVarReplacement`：覆盖 URL 模板变量替换分支
+  - `TestNextStepSessionReplaced`：覆盖 Worker 失败/成功后会话被替换时直接返回
+  - `TestRunAllSessionReplaced`：覆盖循环内会话被替换/停止运行/步骤完成后替换三种场景
+  - `TestStopTempDirCleanupError`：覆盖临时目录 iterdir 异常和文件 unlink 异常
+
+### test
+- `tests/test_services/test_task_executor_fix.py` 提升 task_executor.py 测试覆盖率从 35% 到 99%
+  - `TestTaskExecutorGetScriptPath`：新增 `test_uses_get_script_path_method`、`test_falls_back_to_py_extension`、`test_returns_none_when_script_not_found`
+  - `TestTaskPoolLazyInit`：新增 `test_shutdown_with_task_pool`、`test_ensure_task_pool_creates_once`
+  - `TestNullTaskExecutor`：覆盖全部 11 个方法（has_enabled_tasks、shutdown、execute_task_async、execute_login_async、execute_task、execute_login、list_tasks、get_task、save_task、delete_task、get_history）
+  - `TestBoundedExecutor`：覆盖 submit 成功、参数传递、队列满抛异常、信号量异常释放、任务完成后释放、shutdown
+  - `TestTaskExecutorCRUD`：覆盖 list_tasks、get_task、save_task、delete_task（成功/失败）、get_history、has_enabled_tasks、set_runtime_config_getter
+  - `TestTaskExecutorExecuteTask`：覆盖任务不存在、不支持类型、script/browser/shell 分发、执行异常、默认超时、历史记录
+  - `TestTaskExecutorExecuteScript`：覆盖无 registry、任务不存在、类型错误、脚本文件不存在
+  - `TestTaskExecutorExecuteBrowser`：覆盖任务不存在、类型错误、成功/失败/ImportError/通用异常、data 非字符串、无 error 消息
+  - `TestTaskExecutorExecuteShell`：覆盖空命令、配置来源（runtime/default/异常回退）、shell 类型格式（powershell/cmd/bash）、返回码处理、输出截断、异常处理
+  - `TestTaskExecutorExecuteLogin`：覆盖取消事件、成功/失败/无 error/data 非字符串/无配置/ImportError/通用异常
+  - `TestTaskExecutorRecordLoginHistory`：覆盖无服务、成功记录、失败记录、异常捕获
+  - `TestTaskExecutorLoginAsync`：覆盖首次提交、去重返回已有 Future、完成后清理、cancel_event 传递、完成后可重新提交
+  - `TestTaskExecutorOnLoginDone`：覆盖匹配清理、不匹配不清理
+  - `TestTaskExecutorTaskAsync`：覆盖提交到 task_pool、懒初始化
+
+### test
+- `tests/test_services/test_engine.py` 添加 engine.py 单元测试，覆盖调度引擎核心逻辑（覆盖率 75% → 93%）
+  - `TestEngineCmdType`：枚举值和成员数
+  - `TestEngineCommand`：默认值和自定义值
+  - `TestStatusSnapshot`：默认值和自定义值
+  - `TestLoginRetryState`：默认值和自定义值
+  - `TestEngineInit`：初始化默认值和 task 组件注入
+  - `TestEnqueue`：成功入队和队列满
+  - `TestCalculateWakeup`：默认/监控/重试/调度/异常回退 5 种场景
+  - `TestProcessCommand`：6 种命令类型派发 + response_event 设置 + 异常仍 set
+  - `TestHandleStart`：重复启动/正常创建/纯净模式
+  - `TestHandleStop`：无 core/有 core
+  - `TestHandleShutdown`：调用 stop
+  - `TestHandleLogin`：无配置/缺字段/异步成功/已在进行
+  - `TestHandleReload`：未监控/正在监控
+  - `TestHandleApplyProfile`：未监控/正在监控
+  - `TestDoNetworkCheck`：无 core/需登录/正常/方案切换/异常
+  - `TestLoginRetryNeeded`：7 个分支全覆盖
+  - `TestDoAsyncLogin`：已在进行/Future None/Future 成功/异常清除标志
+  - `TestGetRetryConfig`：正常/异常回退
+  - `TestRunScheduleTick`：有任务/无任务/无 registry
+  - `TestUpdateStatusSnapshot`：无 core/connected/disconnected/节流/force/异常
+  - `TestQueueStatusBroadcast`：默认队列/dashboard sink/异常
+  - `TestGetStatus`：stopped/running
+  - `TestShutdown`：设置事件/幂等/停止调度器
+  - `TestStartStopMonitoring`：已在运行/配置无效/队列满/成功/未运行/运行中
+  - `TestReloadConfig`：入队/队列满/超时
+  - `TestApplyProfile`：入队/队列满/超时
+  - `TestRunManualLogin`：进行中/队列满/成功/失败/超时(存活)/超时(死亡)
+  - `TestNetwork`：正常/失败/异常/带目标
+  - `TestTogglePureMode`：切换
+  - `TestProperties`：login_in_progress/ws_broadcast_queue/pure_mode/_is_monitoring/tasks/scheduler_running
+  - `TestSchedulerControl`：启动/幂等/停止/has_enabled_tasks
+  - `TestGetConfig`：get_config/get_runtime_config 返回副本
+  - `TestRecordLog`：基本/network source 触发快照
+  - `TestListLogs`：无 sink/有 sink/零 limit
+  - `TestBoot`：调用 start_monitoring
+  - `TestWsDrain`：空队列/有消息/broadcast 异常
+
+### test
+- `tests/test_utils/test_login.py` 提升 login.py 测试覆盖率从 56% 到 98%
+  - `TestAttemptLoginSkipPauseCheck`：skip_pause_check=True 跳过检查
+  - `TestAttemptLoginWithPause`：暂停时段、网络正常、物理断开、认证地址不可达、前置条件通过、异常捕获
+  - `TestPerformLoginWithAuthClass`：有/无活动任务分支
+  - `TestPerformLoginWithActiveTask`：profile_task_id 路径、get_active_task 路径、task 为 None、ScriptTaskInfo 分支、LoginCancelledError、通用异常
+  - `TestExecuteBrowserTask`：cancel_event、已有浏览器关闭、__aenter__ 失败、page 为 None、登录成功/失败关闭策略、弹窗监听器注册/移除、截图 URL
+  - `TestExecuteScriptTask`：cancel_event、脚本失败、脚本成功+网络正常/不通、超时配置
+  - `TestCloseBrowser`：有/无上下文、__aexit__ 异常
+  - `TestScreenshotUrlPattern`：中英文冒号、jpg、无截图不变
+  - `TestEnsureTaskManager`：初始化、已初始化跳过、环境变量覆盖
+  - `TestInit`：默认值、自定义值
+
+### test
+- `tests/test_utils/test_crypto.py` 提升 crypto.py 测试覆盖率从 79% 到 97%
+  - `TestGetOrCreateKeyCache`：缓存命中和 double-check 缓存
+  - `TestCorruptedKeyFile`：密钥文件损坏备份、错误长度、rename FileNotFoundError、rename OSError
+  - `TestChmodFailure`：chmod 失败时警告但不影响密钥生成
+  - `TestIcaclsErrors`：icacls 超时和其他异常
+  - `TestDeriveFernetKeyCache`：Fernet 密钥缓存命中
+  - `TestEncryptPassword`：空字符串、正常加密、cryptography 未安装
+  - `TestDecryptPassword`：空字符串、明文回退、正常解密、cryptography 未安装、解密失败
+  - `TestDecryptionErrorFlag`：初始状态、设置和清除
+  - `TestMaskPassword`：空值、None、正常值、长度一致性
+  - `TestSavePasswordField`：全部 7 个分支（None、掩码、空、ENC、明文）
+
+### test
+- `tests/test_utils/test_ports.py` 添加 `resolve_port` 单元测试（19 个用例，覆盖率 100%）
+  - `TestResolvePortFromEnv`：有效端口、最小/最大端口、带空格端口
+  - `TestResolvePortEnvInvalid`：非数字、零、超范围、负数、空字符串、纯空格
+  - `TestResolvePortFromSettings`：有效配置、缺字段、无效端口、非数字端口
+  - `TestResolvePortSettingsErrors`：文件不存在、JSON 格式错误
+  - `TestResolvePortPriority`：环境变量优先于 settings.json
+  - `TestResolvePortDefault`：无配置时返回默认端口 50721
+
+### perf
+- 定时任务线程池懒初始化，无任务时不创建线程
+  - `app/services/task_executor.py`：`_task_pool` 初始为 `None`，首次调用 `execute_task_async` 时才创建
+  - 新增 `_ensure_task_pool()` 方法封装懒初始化逻辑
+  - `shutdown()` 添加 `_task_pool is not None` 检查，避免未创建时调用
+  - 更新类文档字符串，标注 `_task_pool` 为懒初始化
+
+### test
+- `tests/test_services/test_task_executor_fix.py` 新增 `TestTaskPoolLazyInit` 测试类
+  - `test_task_pool_initially_none`：初始化时 `_task_pool` 应为 `None`
+  - `test_task_pool_created_on_first_use`：首次调用 `execute_task_async` 时创建
+  - `test_shutdown_without_task_pool`：无 `_task_pool` 时 `shutdown` 不报错
+
+### fix
 - `app/schemas.py` 在 `_SystemFieldsMixin` 中补充 `login_timeout` 字段
   - `MonitorConfigPayload` 继承的两个 mixin 均无此字段，Pydantic v2 静默丢弃用户设置的值
   - `engine.py` 中 `getattr(self._ui_config, "login_timeout", 120)` 永远返回 120s
@@ -25,6 +229,9 @@
 
 ### fix
 - `application.py` 配置诊断路径修正：`settings.json` → `config/settings.json`
+
+### perf
+- 定时任务线程池 worker 数从 4 减至 2（定时任务很少并发）
 
 ### chore
 - 删除空的 `backups/` 文件夹，清理 `.gitignore` 中的 `backups/*` 条目
