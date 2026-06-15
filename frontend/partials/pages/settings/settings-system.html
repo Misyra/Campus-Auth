@@ -54,29 +54,6 @@
         <span class="hint">{{ startupActionHint }}</span>
       </div>
 
-      <div class="toggle-group">
-        <div class="toggle-with-help">
-          <label class="toggle toggle-help-inline">
-            <input type="checkbox" :checked="autostart.enabled" @change="autostart.enabled ? disableAutostart() : enableAutostart()" :disabled="busy.autostart" />
-            <span class="toggle-slider"></span>
-            <span class="toggle-label">开机自启动</span>
-            <span v-if="autostart.method !== '-'" class="autostart-method-badge">{{ autostart.method }}</span>
-            <span class="field-help" tabindex="0" role="note" data-tip="开机时自动启动 Campus-Auth。配合「启动后开始监控」可持续监控网络，或配合「自动登录，成功后退出」实现开机自动认证。">?</span>
-          </label>
-        </div>
-      </div>
-      <div class="form-group" v-if="autostart.enabled">
-        <div class="field-label-row">
-          <label>自启动模式</label>
-          <span class="field-help" tabindex="0" role="note" data-tip="轻量模式仅后台监控，不启动 Web 界面；完整模式启动 Web 管理界面。">?</span>
-        </div>
-        <custom-select
-          v-model="autostart.lightweight"
-          :options="autostartModeOptions"
-          @change="setAutostartMode"
-        ></custom-select>
-      </div>
-
       <div class="settings-section-divider"></div>
       <h4 class="settings-section-heading">界面行为</h4>
       <div class="toggle-group">
@@ -105,6 +82,50 @@
         </div>
       </div>
 
+    </div>
+  </section>
+
+  <section class="card settings-panel settings-panel--accent">
+    <div class="card-header">
+      <h2>开机自启动</h2>
+    </div>
+    <div class="card-body">
+      <div class="toggle-group">
+        <div class="toggle-with-help">
+          <label class="toggle toggle-help-inline">
+            <input type="checkbox" :checked="autostart.enabled" @change="autostart.enabled ? disableAutostart() : enableAutostart()" :disabled="busy.autostart" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">开机自启动</span>
+            <span v-if="autostart.method !== '-'" class="autostart-method-badge">{{ autostart.method }}</span>
+            <span class="field-help" tabindex="0" role="note" data-tip="开机时自动启动 Campus-Auth。配合「启动后开始监控」可持续监控网络，或配合「自动登录，成功后退出」实现开机自动认证。">?</span>
+          </label>
+        </div>
+      </div>
+      <div class="form-group" v-if="autostart.enabled">
+        <div class="field-label-row">
+          <label>自启动模式</label>
+          <span class="field-help" tabindex="0" role="note" data-tip="轻量模式仅后台监控，不启动 Web 界面；完整模式启动 Web 管理界面。">?</span>
+        </div>
+        <custom-select
+          v-model="autostart.lightweight"
+          :options="autostartModeOptions"
+          @change="setAutostartMode"
+        ></custom-select>
+      </div>
+
+      <div class="settings-section-divider"></div>
+      <h4 class="settings-section-heading">轻量模式托盘</h4>
+      <div class="toggle-group">
+        <div class="toggle-with-help">
+          <label class="toggle toggle-help-inline">
+            <input type="checkbox" v-model="config.lightweight_tray" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">显示系统托盘</span>
+            <span class="field-help" tabindex="0" role="note" data-tip="轻量模式下显示系统托盘图标。点击托盘中的「打开控制台」可唤醒 Web 管理界面。">?</span>
+          </label>
+        </div>
+      </div>
+      <span class="hint">开启后可通过托盘图标唤醒 Web 控制台</span>
     </div>
   </section>
 
