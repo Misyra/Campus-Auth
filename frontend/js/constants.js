@@ -110,6 +110,7 @@ export const DEFAULT_CONFIG = {
   url_check_urls: "http://captive.apple.com/hotspot-detect.html|Success\nhttp://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test\nhttp://detectportal.firefox.com/success.txt|success",
   access_log: false,
   minimize_to_tray: true,
+  lightweight_tray: true,
   startup_action: "none",
   auto_open_browser: false,
   log_retention_days: 7,

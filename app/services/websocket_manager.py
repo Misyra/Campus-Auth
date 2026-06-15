@@ -20,7 +20,7 @@ class NullWebSocketManager:
     """空 WebSocket 管理器 — 轻量模式下使用，避免 None 检查。"""
 
     async def connect(self, websocket: "WebSocket"):
-        pass
+        await websocket.accept()
 
     async def disconnect(self, websocket: "WebSocket"):
         pass

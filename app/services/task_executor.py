@@ -2,7 +2,7 @@
 
 双线程池架构：
 - login_pool(1) — 登录专用，永不阻塞
-- task_pool(4, queue=50) — 定时任务，BoundedExecutor 限制队列
+- task_pool(2, queue=10, 懒初始化) — 定时任务，BoundedExecutor 限制队列
 
 登录去重机制：_login_future 防止重复提交。
 """
@@ -102,8 +102,8 @@ class TaskExecutor:
     """任务执行中心 — 双线程池 + 登录去重。
 
     Attributes:
-        _login_pool: 登录专用线程池（1 个工作线程）
-        _task_pool: 定时任务线程池（4 个工作线程，队列上限 50）
+        _login_pool: 登录专用线程池（1 个工作线程，立即创建）
+        _task_pool: 定时任务线程池（懒初始化，无定时任务时不创建）
         _login_future: 当前登录 Future，用于去重
         _login_lock: 保护 _login_future 的锁
     """
@@ -124,12 +124,12 @@ class TaskExecutor:
         self._profile_service = profile_service
         self._get_runtime_config = get_runtime_config
 
-        # 双线程池
+        # 线程池：登录池立即创建，任务池懒初始化（无定时任务时不创建线程）
         self._login_pool = ThreadPoolExecutor(
             max_workers=1,
             thread_name_prefix="login-exec",
         )
-        self._task_pool = BoundedExecutor(max_workers=4, queue_size=50)
+        self._task_pool: BoundedExecutor | None = None
 
         # 登录去重
         self._login_future: Future | None = None
@@ -143,6 +143,12 @@ class TaskExecutor:
     def set_runtime_config_getter(self, getter: Callable[[], dict]) -> None:
         """设置运行时配置获取器（公共接口）。"""
         self._get_runtime_config = getter
+
+    def _ensure_task_pool(self) -> BoundedExecutor:
+        """确保定时任务线程池存在（懒初始化）。"""
+        if self._task_pool is None:
+            self._task_pool = BoundedExecutor(max_workers=2, queue_size=10)
+        return self._task_pool
 
     # ── 定时任务 CRUD（原 TaskFacade 方法）──
 
@@ -184,7 +190,7 @@ class TaskExecutor:
         Raises:
             RuntimeError: 任务队列已满
         """
-        return self._task_pool.submit(self.execute_task, task_id)
+        return self._ensure_task_pool().submit(self.execute_task, task_id)
 
     def execute_login_async(
         self, cancel_event: threading.Event | None = None
@@ -199,6 +205,7 @@ class TaskExecutor:
         Returns:
             Future 对象（新的或已有的）
         """
+        future = None
         with self._login_lock:
             # 检查是否已有登录在进行
             if self._login_future is not None and not self._login_future.done():
@@ -209,8 +216,10 @@ class TaskExecutor:
             # 提交新的登录任务
             future = self._login_pool.submit(self.execute_login, cancel_event)
             self._login_future = future
-            future.add_done_callback(self._on_login_done)
-            return future
+
+        # 锁外注册回调，避免时序问题
+        future.add_done_callback(self._on_login_done)
+        return future
 
     def _on_login_done(self, future: Future) -> None:
         """登录任务完成后清理引用。"""
@@ -504,8 +513,9 @@ class TaskExecutor:
     # ── 生命周期 ──
 
     def shutdown(self, wait: bool = True) -> None:
-        """关闭两个线程池。"""
+        """关闭线程池。"""
         logger.info("TaskExecutor 开始关闭...")
-        self._task_pool.shutdown(wait=wait)
+        if self._task_pool is not None:
+            self._task_pool.shutdown(wait=wait)
         self._login_pool.shutdown(wait=wait)
         logger.info("TaskExecutor 已关闭")
