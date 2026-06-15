@@ -26,6 +26,10 @@
 ### fix
 - `application.py` 配置诊断路径修正：`settings.json` → `config/settings.json`
 
+### perf
+- 轻量模式使用 `NullTaskExecutor`，避免创建不必要的线程池
+- 定时任务线程池 worker 数从 4 减至 2（定时任务很少并发）
+
 ### chore
 - 删除空的 `backups/` 文件夹，清理 `.gitignore` 中的 `backups/*` 条目
   - 代码中无任何逻辑创建或使用此目录，属于残留文件

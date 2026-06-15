@@ -103,7 +103,7 @@ class TaskExecutor:
 
     Attributes:
         _login_pool: 登录专用线程池（1 个工作线程）
-        _task_pool: 定时任务线程池（4 个工作线程，队列上限 50）
+        _task_pool: 定时任务线程池（2 个工作线程，队列上限 50）
         _login_future: 当前登录 Future，用于去重
         _login_lock: 保护 _login_future 的锁
     """
@@ -129,7 +129,7 @@ class TaskExecutor:
             max_workers=1,
             thread_name_prefix="login-exec",
         )
-        self._task_pool = BoundedExecutor(max_workers=4, queue_size=50)
+        self._task_pool = BoundedExecutor(max_workers=2, queue_size=50)
 
         # 登录去重
         self._login_future: Future | None = None
