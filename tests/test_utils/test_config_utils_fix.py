@@ -33,7 +33,7 @@ def test_profile_fields_contains_expected_fields():
         "auth_url",
         "carrier",
         "carrier_custom",
-        "check_interval_seconds",
+        "custom_variables",
     ]
     for field in expected_fields:
         assert field in PROFILE_FIELDS, f"PROFILE_FIELDS 缺少字段: {field}"

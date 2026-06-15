@@ -33,7 +33,7 @@ def _make_monitor_service() -> ScheduleEngine:
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
+        mock_ps.load.return_value.global_settings.pure_mode = False
         mock_ui_config = MagicMock()
         mock_load_ui.return_value = mock_ui_config
         return ScheduleEngine(MagicMock())
@@ -196,7 +196,7 @@ class TestListLogs:
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
+        mock_ps.load.return_value.global_settings.pure_mode = False
         mock_ui_config = MagicMock()
 
         mock_load_ui.return_value = mock_ui_config
@@ -304,7 +304,7 @@ class TestStartStopMonitoring:
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
+        mock_ps.load.return_value.global_settings.pure_mode = False
         mock_ui_config = MagicMock()
 
         mock_load_ui.return_value = mock_ui_config
@@ -380,7 +380,7 @@ class TestHandleLogin:
         """_handle_login 有配置时提交异步登录并返回成功。"""
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
+        mock_ps.load.return_value.global_settings.pure_mode = False
         mock_ui_config = MagicMock()
 
         mock_ui_config.login_timeout = 120
@@ -466,7 +466,7 @@ class TestNetwork:
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
+        mock_ps.load.return_value.global_settings.pure_mode = False
         mock_ui_config = MagicMock()
 
         mock_load_ui.return_value = mock_ui_config
@@ -489,7 +489,7 @@ class TestNetwork:
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
+        mock_ps.load.return_value.global_settings.pure_mode = False
         mock_ui_config = MagicMock()
 
         mock_load_ui.return_value = mock_ui_config
@@ -514,7 +514,7 @@ class TestNetwork:
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
+        mock_ps.load.return_value.global_settings.pure_mode = False
         mock_ui_config = MagicMock()
 
         mock_load_ui.return_value = mock_ui_config
@@ -544,7 +544,7 @@ class TestTogglePureMode:
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_data = MagicMock()
-        mock_data.system.pure_mode = False
+        mock_data.global_settings.pure_mode = False
         mock_ps.load.return_value = mock_data
         mock_ui_config = MagicMock()
 
@@ -571,7 +571,7 @@ class TestTogglePureMode:
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_data = MagicMock()
-        mock_data.system.pure_mode = False
+        mock_data.global_settings.pure_mode = False
         mock_ps.load.return_value = mock_data
         mock_ui_config = MagicMock()
 
@@ -645,7 +645,7 @@ class TestGetConfig:
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.system.pure_mode = False
+        mock_ps.load.return_value.global_settings.pure_mode = False
         mock_ui_config = MagicMock()
 
         mock_load_ui.return_value = mock_ui_config

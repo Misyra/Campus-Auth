@@ -213,7 +213,7 @@ class TestSaveConfigCombined:
         assert profile.active_task == "task1"
 
     def test_updates_monitor_config(self):
-        """测试更新监控配置"""
+        """测试更新监控配置 — 监控配置保存到 global_settings"""
         mock_profile_service = MagicMock()
         payload = MonitorConfigPayload(
             check_interval_seconds=600,
@@ -243,22 +243,22 @@ class TestSaveConfigCombined:
 
         save_config_combined(payload, mock_profile_service)
 
-        # 验证监控配置被更新
+        # 验证监控配置被更新到 global_settings
         assert captured_data is not None
-        profile = captured_data.profiles["default"]
-        assert profile.check_interval_seconds == 600
-        assert profile.pause_enabled is False
-        assert profile.pause_start_hour == 22
-        assert profile.pause_end_hour == 8
-        assert profile.network_targets == "8.8.8.8,114.114.114.114"
-        assert profile.http_targets == "http://example.com"
-        assert profile.enable_tcp_check is True
-        assert profile.enable_http_check is True
-        assert profile.enable_local_check is False
-        assert profile.check_auth_url is True
-        assert profile.auth_url_targets == "example.com:80"
-        assert profile.url_check_urls == "http://example.com|Success"
-        assert profile.network_check_timeout == 5
+        gs = captured_data.global_settings
+        assert gs.check_interval_seconds == 600
+        assert gs.pause_enabled is False
+        assert gs.pause_start_hour == 22
+        assert gs.pause_end_hour == 8
+        assert gs.network_targets == "8.8.8.8,114.114.114.114"
+        assert gs.http_targets == "http://example.com"
+        assert gs.enable_tcp_check is True
+        assert gs.enable_http_check is True
+        assert gs.enable_local_check is False
+        assert gs.check_auth_url is True
+        assert gs.auth_url_targets == "example.com:80"
+        assert gs.url_check_urls == "http://example.com|Success"
+        assert gs.network_check_timeout == 5
 
     def test_updates_browser_config(self):
         """测试浏览器配置现在保存在 global_settings 中"""
