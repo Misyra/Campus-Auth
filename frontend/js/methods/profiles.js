@@ -145,7 +145,7 @@ export const profileMethods = {
     this._autoSwitchInFlight = true;
     const newState = !this.autoSwitch;
     try {
-      const { data } = await this.$api.post(`/api/profiles/auto-switch?enabled=${newState}`);
+      const { data } = await this.$api.post('/api/profiles/auto-switch', { enabled: newState });
       if (data.success) {
         this.autoSwitch = newState;
         // 更新活动方案

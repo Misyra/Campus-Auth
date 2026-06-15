@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 from app.deps import get_monitor_service, get_profile_service
 from app.schemas import ActionResponse, ProfileSettings
@@ -148,11 +148,15 @@ def detect_network_profile(
 
 @router.post("/api/profiles/auto-switch")
 def toggle_auto_switch(
-    enabled: str = Query(default="true"),
+    body: dict = Body(default={}),
     profile_svc: ProfileService = Depends(get_profile_service),
     monitor_svc: ScheduleEngine = Depends(get_monitor_service),
 ) -> dict:
-    enabled_bool = enabled.strip().lower() in ("true", "1", "yes", "on")
+    enabled = body.get("enabled", True)
+    if isinstance(enabled, str):
+        enabled_bool = enabled.strip().lower() in ("true", "1", "yes", "on")
+    else:
+        enabled_bool = bool(enabled)
     profile_svc.set_auto_switch(enabled_bool)
     state = "开启" if enabled_bool else "关闭"
     api_logger.info("自动切换 {}", state)
