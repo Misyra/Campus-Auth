@@ -1,4 +1,14 @@
 <div v-if="currentSettingsTab === 'account'" class="settings-panel-grid">
+  <!-- 当前方案提示 -->
+  <div class="current-profile-hint">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+      <circle cx="12" cy="7" r="4"/>
+    </svg>
+    <span>当前方案：<strong>{{ activeProfileId || 'default' }}</strong></span>
+    <a href="#" @click.prevent="currentPage = 'profiles'" class="hint-link">管理方案</a>
+  </div>
+
   <section class="card settings-panel">
     <div class="card-header">
       <h2>账号配置</h2>
