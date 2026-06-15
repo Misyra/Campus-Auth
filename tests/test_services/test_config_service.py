@@ -285,7 +285,7 @@ class TestSaveConfigCombined:
         assert global_settings.headless is True
         assert global_settings.browser_timeout == 8
         assert global_settings.browser_navigation_timeout == 15
-        assert global_settings.login_timeout == 60
+        assert global_settings.login_timeout == 90
         assert global_settings.browser_locale == "zh-CN"
         assert global_settings.browser_timezone == "Asia/Shanghai"
         assert global_settings.browser_viewport_width == 1280

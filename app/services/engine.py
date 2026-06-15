@@ -734,7 +734,7 @@ class ScheduleEngine:
                 return False, "队列已满"
 
             # Wait for consumer to execute login (with timeout)
-            login_timeout = getattr(self._ui_config, "login_timeout", 120)
+            login_timeout = self._ui_config.login_timeout
             cmd.response_event.wait(timeout=login_timeout)
 
             if cmd.response_data is None:

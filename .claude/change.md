@@ -2,6 +2,18 @@
 
 ## 2026-06-15
 
+### fix
+- `app/schemas.py` 在 `_SystemFieldsMixin` 中补充 `login_timeout` 字段
+  - `MonitorConfigPayload` 继承的两个 mixin 均无此字段，Pydantic v2 静默丢弃用户设置的值
+  - `engine.py` 中 `getattr(self._ui_config, "login_timeout", 120)` 永远返回 120s
+  - 字段定义与 `GlobalSettings.login_timeout` 一致：`default=90, ge=10, le=600`
+  - `tests/test_app/test_backend_services.py` 新增 `test_login_timeout_in_payload` 测试
+- `login_timeout` 默认值从 60s 调整为 90s
+  - `app/schemas.py`：`_SystemFieldsMixin` 和 `GlobalSettings` 两处同步修改
+  - `frontend/js/constants.js`：前端默认值同步
+  - `app/services/engine.py`：`getattr(..., 120)` 简化为直接属性访问（字段已补充，不再需要防御性 fallback）
+  - `frontend/js/methods/actions.js`：回退值从 120 改为 90
+
 ### chore
 - 删除空的 `backups/` 文件夹，清理 `.gitignore` 中的 `backups/*` 条目
   - 代码中无任何逻辑创建或使用此目录，属于残留文件
