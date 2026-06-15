@@ -3,6 +3,18 @@
 ## 2026-06-15
 
 ### fix
+- `app/api/system.py` check_update 添加 asyncio.Lock 防止并发重复请求 GitHub API
+  - 添加模块级 `_update_lock = asyncio.Lock()`
+  - 将 `check_update` 函数体包裹在 `async with _update_lock:` 中
+  - 防止并发请求同时 miss 缓存后各自发起 HTTP 请求
+
+### fix
+- `app/api/config.py` 配置回滚失败时记录详细错误信息
+  - 回滚失败的 except 块现在捕获异常并记录详细信息
+  - 包含"磁盘配置已回滚，运行时状态可能不一致"的提示，便于排查问题
+  - 原逻辑只记录"回滚失败"，异常细节被静默吞掉
+
+### fix
 - `app/utils/config_utils.py` 密码解密失败时给出明确错误信息
   - `validate_env_config` 新增 `has_decryption_error()` 检查
   - 原逻辑：密钥变更后加密密码解密失败，password 字段非空，误报"缺少用户名或密码"
