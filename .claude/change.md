@@ -30,6 +30,7 @@
   - 不缩窄 `except Exception`：桌面应用永不崩溃的核心目标
   - 不迁移 threading 为 asyncio：牵动 engine/worker/tray 整条链路
   - 不给前端加 TS/bundler：保留用户可直接修改的优势
+- CI Windows 依赖安装改用 `start.exe`（原 `go run start.go`）
 
 ### test
 - 更新测试适配 close_browser、线程池和 lru_cache 的修改
