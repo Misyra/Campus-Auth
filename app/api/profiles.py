@@ -146,29 +146,33 @@ def detect_network_profile(
     }
 
 
-@router.post("/api/profiles/auto-switch", response_model=ActionResponse)
+@router.post("/api/profiles/auto-switch")
 def toggle_auto_switch(
     enabled: str = Query(default="true"),
     profile_svc: ProfileService = Depends(get_profile_service),
     monitor_svc: ScheduleEngine = Depends(get_monitor_service),
-) -> ActionResponse:
+) -> dict:
     enabled_bool = enabled.strip().lower() in ("true", "1", "yes", "on")
     profile_svc.set_auto_switch(enabled_bool)
     state = "开启" if enabled_bool else "关闭"
     api_logger.info("自动切换 {}", state)
+
+    # 获取当前活动方案
+    data = profile_svc.load()
+    active_profile = data.active_profile
 
     # 开启自动切换时，立即进行一次检测
     if enabled_bool:
         try:
             matched_id = profile_svc.detect_matching_profile()
             if matched_id:
-                data = profile_svc.load()
                 if matched_id != data.active_profile:
                     profile = data.profiles.get(matched_id)
                     profile_name = profile.name if profile else matched_id
                     api_logger.info("自动切换检测到匹配方案: {}", profile_name)
                     profile_svc.set_active_profile(matched_id)
                     monitor_svc.apply_profile(matched_id)
+                    active_profile = matched_id
                 else:
                     api_logger.info("当前方案已匹配，无需切换")
             else:
@@ -176,4 +180,8 @@ def toggle_auto_switch(
         except Exception as exc:
             api_logger.warning("自动切换检测失败: {}", exc)
 
-    return ActionResponse(success=True, message=f"自动切换已{state}")
+    return {
+        "success": True,
+        "message": f"自动切换已{state}",
+        "active_profile": active_profile,
+    }
