@@ -20,7 +20,6 @@ from app.schemas import (
     MonitorStatusResponse,
     ProfilesData,
     ProfileSettings,
-    SystemSettings,
 )
 from app.services.runtime_config import (
     _decrypt_password_field,
@@ -510,54 +509,6 @@ class TestProfileSettings:
         assert profile.auth_url_targets == ""
         assert profile.network_check_timeout == 2
         assert profile.custom_variables == {}
-
-
-# ---------------------------------------------------------------------
-# SystemSettings
-# ---------------------------------------------------------------------
-
-
-class TestSystemSettings:
-    def test_defaults(self):
-        s = SystemSettings()
-        assert s.username == ""
-        assert s.password == ""
-        assert s.auth_url == ""
-        assert s.backend_log_level == "INFO"
-        assert s.frontend_log_level == "INFO"
-        assert s.max_retries == 3
-        assert s.retry_interval == 5
-        assert s.app_port == 50721
-
-    def test_pure_mode(self):
-        s = SystemSettings(pure_mode=True)
-        assert s.pure_mode is True
-
-    def test_block_proxy(self):
-        s = SystemSettings(block_proxy=False)
-        assert s.block_proxy is False
-
-    def test_log_level_validation(self):
-        s = SystemSettings(backend_log_level="debug")
-        assert s.backend_log_level == "DEBUG"
-
-    def test_invalid_log_level(self):
-        with pytest.raises(ValidationError):
-            SystemSettings(backend_log_level="INVALID")
-
-    def test_source_levels(self):
-        """测试 SystemSettings 支持 source_levels"""
-        settings = SystemSettings(
-            backend_log_level="INFO",
-            source_levels={"network": "DEBUG", "task": "WARNING"},
-        )
-        assert settings.source_levels == {"network": "DEBUG", "task": "WARNING"}
-        assert settings.backend_log_level == "INFO"
-
-    def test_source_levels_default(self):
-        """测试 source_levels 默认为空字典"""
-        settings = SystemSettings()
-        assert settings.source_levels == {}
 
 
 # ---------------------------------------------------------------------

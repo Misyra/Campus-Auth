@@ -2,6 +2,47 @@
 
 ## 2026-06-15
 
+### fix
+- `app/utils/crypto.py` 完全移除 base64 混淆逻辑，缺少 cryptography 时改用明文
+  - `encrypt_password`：缺少 cryptography 时直接返回明文并输出 warning
+  - `decrypt_password`：遇到 `ENC:` 前缀但 cryptography 不可用时抛出 `DecryptionError`
+  - 删除 `_simple_obfuscate`、`_simple_deobfuscate` 函数和 `_OBFUSCATE_PREFIX` 常量
+  - 删除 `decrypt_password` 中 `ENC:B64:` 分支和 `except ImportError` 的 base64 回退
+  - 删除 `TestSimpleObfuscate` 和 `TestSimpleDeobfuscate` 测试类
+
+### docs
+- `app/network/decision.py` `_is_auth_url_reachable` 添加设计意图注释
+  - 说明有 `extra_targets` 时只检测自定义目标、不回退 `auth_url` 是故意设计
+
+### docs
+- `docs/superpowers/plans/2026-06-15-code-review-fixes.md` 代码审查修复实施计划
+  - 36 个任务，覆盖 36 个审查发现
+  - 按子系统分组：测试套件、引擎核心、任务执行器、网络检测、配置/API、进程管理、工具模块、前端
+
+### docs
+- 生成全项目代码审查报告 `code-review-report.md`
+  - 12 个 Review Unit 并行审查（P0×5 + P1×6 + P2×1）
+  - 发现 12 个 Critical、32 个 Major、20 个 Minor 问题
+  - 关键发现：测试套件引用已删除的 SystemSettings 无法运行、浏览器常驻机制被破坏、Go 启动器跨平台兼容性缺失、信号量泄漏、密钥损坏时无备份覆盖
+
+### docs
+- `.claude/skills/code-review-report.md` 完善 code review skill 定义
+  - 补充 `disable-model-invocation: true` 注释说明
+  - Phase 1 新增 Explore Agent Prompt 模板，明确探索阶段输出格式
+  - Phase 1 新增默认 Unit 骨架表（14 个 Unit），提供确定性拆分基础
+  - Phase 2 补充空优先级批次跳过条件
+  - Phase 2 subagent prompt 模板输出字段与 JSON Schema 对齐（severity/file/line_range 等）
+  - 新增输出 Schema 定义，通过 `schema` 参数强校验 subagent 返回格式
+  - 报告模板模块表改为动态生成，与项目背景表解耦
+  - 统一代码片段引用格式为 `` ```startLine:endLine:filepath`` ``
+  - 执行要点新增 Schema 强校验说明
+
+### refactor
+- `app/services/runtime_config.py` 清理 D7 `_normalize_targets` 死代码
+  - 删除 `_normalize_targets` 函数（生产代码中无任何调用者）
+  - 移除不再使用的 `DEFAULT_NETWORK_TARGETS` 导入
+  - 删除 `tests/test_config/test_config_schemas.py` 中 `TestNormalizeTargets` 测试类和 `_normalize_targets` 导入
+
 ### refactor
 - `app/utils/crypto.py` 清理 D6 `is_encrypted` 死代码
   - 删除 `is_encrypted` 函数（生产代码中无任何调用者）
@@ -23,6 +64,11 @@
   - 函数在生产代码中无任何调用者，仅在测试中使用
   - 删除 `send_notification` 函数及其测试类 `TestSendNotification`
   - 保留 `_notify_windows`、`_notify_macos`、`_notify_linux` 平台通知函数
+
+### test
+- 移除已删除类 `SystemSettings` 和 `migrate_config_if_needed` 的死测试引用
+  - `tests/test_config/test_config_schemas.py`：移除 `SystemSettings` 导入和 `TestSystemSettings` 测试类
+  - 删除 `tests/test_services/test_runtime_config.py`（全部测试均引用已删除的 `SystemSettings` 和 `migrate_config_if_needed`）
 
 ### fix
 - `app/services/config_service.py` 删除 `build_runtime_config` 中不可达的密码回退代码
