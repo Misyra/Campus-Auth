@@ -887,6 +887,12 @@ class TestDefaultConstants:
 class TestDecryptionError:
     """解密错误状态管理。"""
 
+    def teardown_method(self):
+        """每个测试后清除解密错误状态，防止污染其他测试。"""
+        from app.utils.crypto import clear_decryption_error
+
+        clear_decryption_error()
+
     def test_initial_state(self):
         """初始状态无解密错误。"""
         from app.utils.crypto import clear_decryption_error, has_decryption_error
