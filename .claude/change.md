@@ -3,6 +3,13 @@
 ## 2026-06-15
 
 ### test
+- `tests/test_integration/test_scheduled_task.py` 添加定时任务集成测试（38 个用例）
+  - `TestTaskRegistrationAndExecution`（11 个）：保存/读取/列出/删除任务、删除清理历史、执行不存在/不支持类型的任务、执行记录历史/更新 last_run、has_enabled_tasks、调度索引查询/更新
+  - `TestTaskExecutionWithVariableResolution`（12 个）：变量基础替换/嵌套解析/运行时优先级/JS 安全转义/未解析保留/循环引用/最大深度、StepHandler 参数解析、浏览器任务变量传递、Shell 任务执行/空命令
+  - `TestTaskFailureHandling`（8 个）：异常记录失败历史、失败更新 last_status、脚本/浏览器不存在、历史持久化/裁剪/无效 ID、多次失败累积
+  - `TestTaskCancellation`（7 个）：登录取消事件、异步去重、BoundedExecutor 队列满拒绝、NullTaskExecutor 全方法、shutdown、信号量释放、线程池懒初始化
+
+### test
 - `tests/test_integration/test_login_flow.py` 添加登录流程集成测试（39 个用例）
   - `TestFullLoginSequence`（10 个）：手动登录命令成功/失败、配置缺失、async_login 提交、TaskExecutor 登录成功/失败/取消/异常、完整手动登录序列
   - `TestLoginWithNetworkDetection`（7 个）：网络检测触发登录、无需登录、更新间隔、方案切换、异常继续、登录后网络恢复、引擎循环集成
