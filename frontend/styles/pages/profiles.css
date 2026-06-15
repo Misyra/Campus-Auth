@@ -321,6 +321,10 @@
   color: var(--text-secondary);
   font-family: var(--font-mono);
   border: 1px solid var(--border);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .profile-tag svg {
