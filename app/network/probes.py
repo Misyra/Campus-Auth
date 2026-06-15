@@ -78,9 +78,14 @@ def set_block_proxy(enabled: bool) -> None:
     当 enabled=True 时，HTTP 客户端不读取系统代理设置（默认行为）；
     当 enabled=False 时，允许 HTTP 客户端使用系统代理。
     """
-    global _block_proxy
+    global _block_proxy, _probe_client, _probe_block_proxy
     with _proxy_lock:
         _block_proxy = enabled
+    # 关闭旧客户端，下次探测时自动重建
+    with _probe_lock:
+        if _probe_client is not None and not _probe_client.is_closed:
+            _probe_client.close()
+        _probe_client = None
 
 
 def is_block_proxy() -> bool:
