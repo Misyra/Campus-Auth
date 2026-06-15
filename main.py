@@ -421,9 +421,11 @@ def _run_lightweight(ctx: ApplicationContext, logger):
     finally:
         if tray_icon:
             tray_icon.stop()
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(container.shutdown())
-        loop.close()
+        # 如果 Web 服务已启动，shutdown 由 Uvicorn 的事件循环处理
+        if not _web_server_state["started"]:
+            loop = asyncio.new_event_loop()
+            loop.run_until_complete(container.shutdown())
+            loop.close()
 
 
 def _run_full(
