@@ -347,6 +347,40 @@
 
 /* .field-help 已统一定义在 components.css 中 */
 
+/* 当前方案提示 */
+.current-profile-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(34, 211, 238, 0.05);
+  border: 1px solid rgba(34, 211, 238, 0.12);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.current-profile-hint svg {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.current-profile-hint strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.current-profile-hint .hint-link {
+  margin-left: auto;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 12px;
+}
+
+.current-profile-hint .hint-link:hover {
+  text-decoration: underline;
+}
+
 /* ---- 悬浮保存按钮 ---- */
 .settings-float-save {
   position: sticky;
