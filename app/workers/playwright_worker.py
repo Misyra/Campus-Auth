@@ -69,6 +69,7 @@ class WorkerCommand:
     data: dict = field(default_factory=dict)  # 命令参数
     response_event: threading.Event | None = None  # 调用方等待此事件以获取结果
     response_data: Any = None  # 消费者线程设置返回数据
+    cancelled: bool = False  # 超时后标记为已取消，跳过执行
 
 
 @dataclass
@@ -287,6 +288,8 @@ class PlaywrightWorker:
                 return cmd.response_data
             return WorkerResponse(success=True, data=cmd.response_data)
 
+        # 超时：标记命令为已取消
+        cmd.cancelled = True
         return WorkerResponse(success=False, error="命令执行超时或无响应")
 
     def submit_nowait(self, cmd_type: str, data: dict | None = None) -> None:
@@ -372,6 +375,10 @@ class PlaywrightWorker:
         根据 cmd.type 路由到对应的 _handle_* 方法，
         将返回值设为 cmd.response_data 并通知等待方。
         """
+        # 超时命令已取消，跳过执行避免资源浪费
+        if cmd.cancelled:
+            return
+
         try:
             if cmd.type == CMD_LOGIN:
                 result = await self._handle_login(cmd.data)
