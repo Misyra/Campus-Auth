@@ -15,10 +15,10 @@ import pytest
 
 from app.network.detect import detect_gateway_ip, detect_wifi_ssid
 from app.schemas import (
+    GlobalSettings,
     MonitorConfigPayload,
     ProfilesData,
     ProfileSettings,
-    SystemSettings,
 )
 from app.services.config_service import build_runtime_config, save_config_combined
 from app.services.runtime_config import load_runtime_config, load_ui_config
@@ -377,10 +377,9 @@ class TestBuildRuntimeConfig:
         config = build_runtime_config(payload)
         assert config["isp"] == ""
 
-    def test_masked_password_uses_sys(self):
+    def test_masked_password_returns_empty(self):
         payload = MonitorConfigPayload(password="••••••••")
-        sys = SystemSettings(password="ENC:encrypted")
-        config = build_runtime_config(payload, sys)
+        config = build_runtime_config(payload)
         assert config["password"] == ""
 
     def test_browser_settings(self):
@@ -434,8 +433,8 @@ class TestBuildRuntimeConfig:
 
     def test_retry_settings(self):
         payload = MonitorConfigPayload()
-        sys = SystemSettings(max_retries=5, retry_interval=10)
-        config = build_runtime_config(payload, sys)
+        gs = GlobalSettings(max_retries=5, retry_interval=10)
+        config = build_runtime_config(payload, gs)
         assert config["retry_settings"]["max_retries"] == 5
         assert config["retry_settings"]["retry_interval"] == 10
 
