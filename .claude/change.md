@@ -3,6 +3,15 @@
 ## 2026-06-15
 
 ### test
+- `tests/test_services/test_websocket_manager.py` 添加 websocket_manager.py 单元测试，覆盖率 100%
+  - `TestNullWebSocketManager`：覆盖 connect、disconnect、broadcast、close_all 四个空操作方法
+  - `TestWebSocketManagerConnect`：覆盖 accept 调用和连接追加、多连接
+  - `TestWebSocketManagerDisconnect`：覆盖移除连接、不存在连接不报错、仅移除目标连接
+  - `TestWebSocketManagerBroadcast`：覆盖空连接广播、多连接发送、失败连接自动清理、已移除连接不报错、超时断开、超时已移除、send_safe 调用验证
+  - `TestWebSocketManagerCloseAll`：覆盖清空连接、调用 close、关闭异常不影响其他连接、空连接关闭
+  - `TestWebSocketManagerInit`：覆盖初始化状态验证
+
+### test
 - `tests/test_services/test_login_history.py` 补充 login_history_service.py 单元测试，覆盖率从 73% 提升至 99%
   - `TestRecord`：覆盖 `record` 方法全部分支 — 无服务对象、profile_service 正常/返回 None/抛异常、task_manager 正常/无 name 属性/load_task 返回 None/抛异常、error 传递
   - `TestAddException`：覆盖 `add` 方法写入异常不抛出、失败时不递增 `_write_count`

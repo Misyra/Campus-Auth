@@ -1,0 +1,237 @@
+"""websocket_manager.py — WebSocket 管理器单元测试
+
+覆盖 WebSocketManager 和 NullWebSocketManager 的连接管理、消息广播、异常处理。
+"""
+
+from __future__ import annotations
+
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from app.services.websocket_manager import NullWebSocketManager, WebSocketManager
+
+
+# =====================================================================
+# NullWebSocketManager
+# =====================================================================
+
+
+class TestNullWebSocketManager:
+    """NullWebSocketManager 所有方法应为空操作，不抛异常。"""
+
+    @pytest.mark.asyncio
+    async def test_connect(self):
+        mgr = NullWebSocketManager()
+        ws = MagicMock()
+        await mgr.connect(ws)  # 不抛异常即通过
+
+    @pytest.mark.asyncio
+    async def test_disconnect(self):
+        mgr = NullWebSocketManager()
+        ws = MagicMock()
+        await mgr.disconnect(ws)
+
+    @pytest.mark.asyncio
+    async def test_broadcast(self):
+        mgr = NullWebSocketManager()
+        await mgr.broadcast("hello")
+
+    @pytest.mark.asyncio
+    async def test_close_all(self):
+        mgr = NullWebSocketManager()
+        await mgr.close_all()
+
+
+# =====================================================================
+# WebSocketManager — 连接管理
+# =====================================================================
+
+
+class TestWebSocketManagerConnect:
+    """连接管理测试。"""
+
+    @pytest.mark.asyncio
+    async def test_connect_accepts_and_appends(self):
+        mgr = WebSocketManager()
+        ws = AsyncMock()
+        await mgr.connect(ws)
+        ws.accept.assert_awaited_once()
+        assert ws in mgr._connections
+
+    @pytest.mark.asyncio
+    async def test_connect_multiple(self):
+        mgr = WebSocketManager()
+        ws1, ws2, ws3 = AsyncMock(), AsyncMock(), AsyncMock()
+        await mgr.connect(ws1)
+        await mgr.connect(ws2)
+        await mgr.connect(ws3)
+        assert len(mgr._connections) == 3
+
+
+class TestWebSocketManagerDisconnect:
+    """断开连接测试。"""
+
+    @pytest.mark.asyncio
+    async def test_disconnect_removes(self):
+        mgr = WebSocketManager()
+        ws = AsyncMock()
+        await mgr.connect(ws)
+        await mgr.disconnect(ws)
+        assert ws not in mgr._connections
+
+    @pytest.mark.asyncio
+    async def test_disconnect_nonexistent_is_noop(self):
+        mgr = WebSocketManager()
+        ws = AsyncMock()
+        await mgr.disconnect(ws)  # 不在列表中，不抛异常
+        assert len(mgr._connections) == 0
+
+    @pytest.mark.asyncio
+    async def test_disconnect_only_removes_target(self):
+        mgr = WebSocketManager()
+        ws1, ws2 = AsyncMock(), AsyncMock()
+        await mgr.connect(ws1)
+        await mgr.connect(ws2)
+        await mgr.disconnect(ws1)
+        assert ws1 not in mgr._connections
+        assert ws2 in mgr._connections
+
+
+# =====================================================================
+# WebSocketManager — 消息广播
+# =====================================================================
+
+
+class TestWebSocketManagerBroadcast:
+    """消息广播测试。"""
+
+    @pytest.mark.asyncio
+    async def test_broadcast_empty_connections(self):
+        mgr = WebSocketManager()
+        await mgr.broadcast("msg")  # 无连接时不抛异常
+
+    @pytest.mark.asyncio
+    async def test_broadcast_sends_to_all(self):
+        mgr = WebSocketManager()
+        ws1, ws2 = AsyncMock(), AsyncMock()
+        await mgr.connect(ws1)
+        await mgr.connect(ws2)
+        await mgr.broadcast("hello")
+        ws1.send_text.assert_awaited_once_with("hello")
+        ws2.send_text.assert_awaited_once_with("hello")
+
+    @pytest.mark.asyncio
+    async def test_broadcast_removes_failed_connection(self):
+        mgr = WebSocketManager()
+        ws_good = AsyncMock()
+        ws_bad = AsyncMock()
+        ws_bad.send_text.side_effect = ConnectionError("broken")
+        await mgr.connect(ws_good)
+        await mgr.connect(ws_bad)
+        await mgr.broadcast("msg")
+        assert ws_good in mgr._connections
+        assert ws_bad not in mgr._connections
+
+    @pytest.mark.asyncio
+    async def test_broadcast_removes_already_removed_connection(self):
+        """发送失败后，若连接已被其他路径移除，不应报错。"""
+        mgr = WebSocketManager()
+        ws = AsyncMock()
+        ws.send_text.side_effect = RuntimeError("fail")
+        await mgr.connect(ws)
+        # 先手动移除，模拟并发场景
+        mgr._connections.remove(ws)
+        # broadcast 仍应正常完成
+        await mgr.broadcast("msg")
+
+    @pytest.mark.asyncio
+    async def test_send_safe_timeout_removes_connection(self):
+        """_send_safe 超时时应移除连接。"""
+        mgr = WebSocketManager()
+        ws = AsyncMock()
+        ws.send_text = AsyncMock(side_effect=TimeoutError)
+        await mgr.connect(ws)
+        await mgr._send_safe(ws, "msg")
+        assert ws not in mgr._connections
+
+    @pytest.mark.asyncio
+    async def test_send_safe_timeout_already_removed(self):
+        """超时后若连接已不在列表中，不应报错。"""
+        mgr = WebSocketManager()
+        ws = AsyncMock()
+        ws.send_text = AsyncMock(side_effect=TimeoutError)
+        # 不 connect，直接调用 _send_safe
+        await mgr._send_safe(ws, "msg")
+
+    @pytest.mark.asyncio
+    async def test_broadcast_calls_send_safe_for_each(self):
+        """broadcast 应为每个连接调用 _send_safe。"""
+        mgr = WebSocketManager()
+        ws1, ws2 = AsyncMock(), AsyncMock()
+        await mgr.connect(ws1)
+        await mgr.connect(ws2)
+        with patch.object(mgr, "_send_safe", new_callable=AsyncMock) as mock_send:
+            await mgr.broadcast("test")
+            assert mock_send.call_count == 2
+
+
+# =====================================================================
+# WebSocketManager — close_all
+# =====================================================================
+
+
+class TestWebSocketManagerCloseAll:
+    """关闭所有连接测试。"""
+
+    @pytest.mark.asyncio
+    async def test_close_all_clears_connections(self):
+        mgr = WebSocketManager()
+        ws1, ws2 = AsyncMock(), AsyncMock()
+        await mgr.connect(ws1)
+        await mgr.connect(ws2)
+        await mgr.close_all()
+        assert len(mgr._connections) == 0
+
+    @pytest.mark.asyncio
+    async def test_close_all_calls_close(self):
+        mgr = WebSocketManager()
+        ws1, ws2 = AsyncMock(), AsyncMock()
+        await mgr.connect(ws1)
+        await mgr.connect(ws2)
+        await mgr.close_all()
+        ws1.close.assert_awaited_once_with(code=1001, reason="Server shutting down")
+        ws2.close.assert_awaited_once_with(code=1001, reason="Server shutting down")
+
+    @pytest.mark.asyncio
+    async def test_close_all_handles_close_error(self):
+        """单个连接关闭失败不应影响其他连接。"""
+        mgr = WebSocketManager()
+        ws_bad = AsyncMock()
+        ws_bad.close.side_effect = RuntimeError("close failed")
+        ws_good = AsyncMock()
+        await mgr.connect(ws_bad)
+        await mgr.connect(ws_good)
+        await mgr.close_all()  # 不应抛异常
+        ws_good.close.assert_awaited_once()
+        assert len(mgr._connections) == 0
+
+    @pytest.mark.asyncio
+    async def test_close_all_empty(self):
+        mgr = WebSocketManager()
+        await mgr.close_all()  # 无连接时不抛异常
+
+
+# =====================================================================
+# WebSocketManager — 初始化
+# =====================================================================
+
+
+class TestWebSocketManagerInit:
+    """初始化测试。"""
+
+    def test_init_creates_empty_connections(self):
+        mgr = WebSocketManager()
+        assert mgr._connections == []
+        assert isinstance(mgr._lock, asyncio.Lock)
