@@ -26,7 +26,6 @@ from app.utils.config_utils import assign_profile_fields
 from app.utils.crypto import (
     decrypt_password,
     encrypt_password,
-    is_encrypted,
     mask_password,
     save_password_field,
 )
@@ -75,7 +74,6 @@ class TestEncryptDecrypt:
         """加密后解密应返回原文"""
         original = "my_secret_password_123"
         encrypted = encrypt_password(original)
-        assert is_encrypted(encrypted)
         assert decrypt_password(encrypted) == original
 
     def test_empty_string(self):
@@ -130,20 +128,6 @@ class TestEncryptDecrypt:
             with pytest.raises(DecryptionError):
                 decrypt_password(encrypted)
             assert has_decryption_error() is True
-
-
-class TestIsEncrypted:
-    def test_encrypted_value(self):
-        assert is_encrypted("ENC:something") is True
-
-    def test_plaintext_value(self):
-        assert is_encrypted("plaintext") is False
-
-    def test_empty_string(self):
-        assert is_encrypted("") is False
-
-    def test_enc_prefix_only(self):
-        assert is_encrypted("ENC:") is True
 
 
 class TestMaskPassword:
