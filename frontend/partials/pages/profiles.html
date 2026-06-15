@@ -168,8 +168,13 @@
         </div>
       </div>
       <div class="profile-card-actions" @click.stop>
-        <button class="btn btn-xs" @click="setActiveProfile(pid)" :disabled="activeProfileId === pid">
-          {{ activeProfileId === pid ? '使用中' : '切换' }}
+        <button
+          class="btn btn-xs"
+          @click="setActiveProfile(pid)"
+          :disabled="activeProfileId === pid || autoSwitch"
+          :title="autoSwitch ? '自动切换已开启，无法手动切换' : ''"
+        >
+          {{ activeProfileId === pid ? '使用中' : (autoSwitch ? '自动' : '切换') }}
         </button>
         <button class="btn btn-xs" @click="showProfileEditor(pid)">编辑</button>
         <button class="btn btn-xs btn-danger" @click="deleteProfile(pid)" :disabled="pid === 'default'">删除</button>
