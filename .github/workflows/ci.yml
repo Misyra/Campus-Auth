@@ -28,7 +28,7 @@ jobs:
 
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
-        run: .\start.exe --install-only
+        run: go run start.go --install-only
 
       - name: Install dependencies (Unix)
         if: runner.os != 'Windows'
