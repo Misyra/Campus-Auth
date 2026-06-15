@@ -407,20 +407,6 @@ class ProfileSettings(BaseModel):
     # 自定义变量
     custom_variables: dict[str, str] = Field(default_factory=dict)
 
-    # 全局配置覆盖标志
-    use_global_credentials: bool = Field(
-        default=True,
-        description="是否使用全局账号密码（true 时忽略 username/password/carrier）",
-    )
-    use_global_auth_url: bool = Field(
-        default=True,
-        description="是否使用全局认证地址（true 时忽略 auth_url，使用系统设置中的认证地址）",
-    )
-    use_global_task: bool = Field(
-        default=True,
-        description="是否使用全局活动任务（true 时忽略 active_task，使用全局任务）",
-    )
-
     @field_validator("auth_url")
     @classmethod
     def validate_auth_url(cls, v: str) -> str:
