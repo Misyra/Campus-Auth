@@ -141,7 +141,7 @@ class ScheduleEngine:
         self._reload_config_internal()
 
         self._monitor_core: NetworkMonitorCore | None = None
-        self._pure_mode: bool = self._profile_service.load().system.pure_mode
+        self._pure_mode: bool = self._profile_service.load().global_settings.pure_mode
 
         # Actor model: command dispatch queue
         self._cmd_queue: queue.Queue[EngineCommand] = queue.Queue(maxsize=50)
