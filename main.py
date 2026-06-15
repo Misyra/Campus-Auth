@@ -265,6 +265,7 @@ def _build_app_config(
         _sys = _data.global_settings
         config.startup_action = StartupAction(getattr(_sys, "startup_action", "none"))
         config.minimize_to_tray = bool(getattr(_sys, "minimize_to_tray", True))
+        config.lightweight_tray = bool(getattr(_sys, "lightweight_tray", True))
         config.auto_open_browser = bool(getattr(_sys, "auto_open_browser", False))
     except Exception:
         logger.debug("加载配置失败，使用默认值", exc_info=True)
@@ -340,8 +341,9 @@ def _handle_existing_instance(ctx: ApplicationContext, force: bool = False):
 
 
 def _run_lightweight(ctx: ApplicationContext, logger):
-    """轻量模式：始终启动监控 + 定时任务，无 Web 服务、无托盘。"""
+    """轻量模式：始终启动监控 + 定时任务，无 Web 服务，可选托盘。"""
     from app.container import ServiceContainer
+    from app.utils.ports import resolve_port
 
     container = ServiceContainer(
         Path(__file__).parent.resolve(), mode="lightweight"
@@ -351,12 +353,37 @@ def _run_lightweight(ctx: ApplicationContext, logger):
         container.engine.start_scheduler()
     logger.info("轻量模式启动: 仅监控 + 定时任务，按 Ctrl+C 停止")
 
+    # 系统托盘（可选）
+    features = get_runtime_features(
+        RuntimeMode.LIGHTWEIGHT,
+        ctx.config.minimize_to_tray,
+        ctx.config.auto_open_browser,
+    )
+    tray_icon = None
+    if features.tray_enabled:
+        try:
+            from app.ui.system_tray import SystemTray
+
+            port = resolve_port()
+            tray_icon = SystemTray(
+                port=port,
+                on_exit=lambda: (
+                    os.kill(os.getpid(), signal.SIGTERM) if hasattr(signal, "SIGTERM") else os._exit(0)
+                ),
+            )
+            tray_icon.start()
+            logger.info("系统托盘已启动")
+        except Exception as e:
+            logger.warning("启动系统托盘失败: {}", e)
+
     try:
         while True:
             time.sleep(60)  # 长间隔等待，可被 Ctrl+C 中断
     except KeyboardInterrupt:
         logger.info("收到退出信号，正在关闭服务...")
     finally:
+        if tray_icon:
+            tray_icon.stop()
         loop = asyncio.new_event_loop()
         loop.run_until_complete(container.shutdown())
         loop.close()
