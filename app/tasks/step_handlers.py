@@ -516,8 +516,8 @@ class WaitUrlHandler(StepHandler):
 
         try:
             compiled = re.compile(pattern)
-        except re.error:
-            return False, f"wait_url 步骤的 pattern 不是有效的正则表达式: {pattern}"
+        except re.error as e:
+            return False, f"wait_url 步骤的 pattern 不是有效的正则表达式: {pattern} ({e})"
 
         logger.debug("[wait_url] pattern={}", pattern)
         deadline = asyncio.get_running_loop().time() + timeout / 1000
