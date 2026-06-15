@@ -131,7 +131,7 @@
       class="profile-card"
       :class="{ active: activeProfileId === pid }"
     >
-      <div class="profile-card-main" @click="setActiveProfile(pid)">
+      <div class="profile-card-main" @click="!autoSwitch && setActiveProfile(pid)" :class="{ disabled: autoSwitch }">
         <div class="profile-card-header">
           <div class="profile-card-title">
             <span class="profile-card-name">{{ info.name || pid }}</span>
