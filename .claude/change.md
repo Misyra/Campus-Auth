@@ -3,6 +3,15 @@
 ## 2026-06-15
 
 ### test
+- `tests/test_services/test_login_history.py` 补充 login_history_service.py 单元测试，覆盖率从 73% 提升至 99%
+  - `TestRecord`：覆盖 `record` 方法全部分支 — 无服务对象、profile_service 正常/返回 None/抛异常、task_manager 正常/无 name 属性/load_task 返回 None/抛异常、error 传递
+  - `TestAddException`：覆盖 `add` 方法写入异常不抛出、失败时不递增 `_write_count`
+  - `TestListRecentLargeFile`：覆盖 >5MB 大文件只读取末尾分支
+  - `TestListRecentException`：覆盖 stat 查询异常和文件读取异常返回空列表
+  - `TestClearException`：覆盖 clear 读取失败返回 0
+  - `TestCleanupOldException`：覆盖 `_cleanup_old` 读取异常静默处理、JSON 解析失败行保留
+
+### test
 - `tests/test_services/test_debug_service.py` 添加 debug_service.py 补充单元测试，覆盖率从 90% 提升至 98%
   - `TestDebugTimeoutWatcherActualTimeout`：覆盖超时触发关闭浏览器、浏览器未活跃跳过关闭、锁内代数不匹配跳过
   - `TestStartTemplateVarReplacement`：覆盖 URL 模板变量替换分支
