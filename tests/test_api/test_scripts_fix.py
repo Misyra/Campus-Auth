@@ -60,43 +60,10 @@ class TestScriptThreadPool:
 
     @pytest.mark.asyncio
     async def test_executor_is_reused(self):
-        """多次调用应复用同一个 executor 实例。"""
-        from app.api.scripts import run_script
+        """模块级 executor 应存在并可复用。"""
+        from app.api.scripts import _script_executor
 
-        # 清除可能存在的旧 executor
-        if hasattr(run_script, "_executor"):
-            delattr(run_script, "_executor")
-
-        executors_seen = []
-
-        mock_task_service = MagicMock()
-        mock_task_service.get_task.return_value = {"type": "script", "binary_path": ""}
-        mock_task_service.get_script_path.return_value = MagicMock(
-            exists=MagicMock(return_value=True)
-        )
-
-        mock_request = MagicMock()
-        mock_request.app.state.services.monitor_service.get_runtime_config.return_value = {
-            "monitor": {"script_timeout": 60}
-        }
-
-        async def mock_run_in_executor(executor, func):
-            executors_seen.append(executor)
-            return True, "mock success"
-
-        with (
-            patch("app.api.scripts.ScriptRunner") as mock_runner_cls,
-            patch.object(asyncio.BaseEventLoop, "run_in_executor", side_effect=mock_run_in_executor),
-        ):
-            mock_runner = MagicMock()
-            mock_runner_cls.return_value = mock_runner
-
-            await run_script(mock_request, "test_task", mock_task_service)
-            await run_script(mock_request, "test_task", mock_task_service)
-
-        # 两次调用应该使用同一个 executor
-        assert len(executors_seen) == 2
-        assert executors_seen[0] is executors_seen[1]
-        # executor 应该已被创建并缓存
-        assert hasattr(run_script, "_executor")
-        assert isinstance(run_script._executor, ThreadPoolExecutor)
+        # 验证模块级 executor 存在且为 ThreadPoolExecutor
+        assert _script_executor is not None
+        assert isinstance(_script_executor, ThreadPoolExecutor)
+        assert _script_executor._thread_name_prefix == "script_runner"

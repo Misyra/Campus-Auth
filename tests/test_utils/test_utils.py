@@ -468,9 +468,6 @@ class TestParseHostPort:
 
 
 class TestGetProjectVersion:
-    def setup_method(self):
-        get_project_version.cache_clear()
-
     def test_valid_pyproject(self, tmp_path):
         (tmp_path / "pyproject.toml").write_text(
             '[project]\nname = "test"\nversion = "1.2.3"\n'
@@ -493,14 +490,6 @@ class TestGetProjectVersion:
             'version = "0.0.1"\n\n[project]\nname = "test"\n'
         )
         assert get_project_version(tmp_path) == "unknown"
-
-    def test_lru_cache(self, tmp_path):
-        (tmp_path / "pyproject.toml").write_text('[project]\nversion = "1.0.0"\n')
-        v1 = get_project_version(tmp_path)
-        (tmp_path / "pyproject.toml").write_text('[project]\nversion = "2.0.0"\n')
-        v2 = get_project_version(tmp_path)
-        assert v1 == "1.0.0"
-        assert v2 == "1.0.0"  # 缓存命中
 
     def test_default_root(self):
         v = get_project_version()
@@ -890,48 +879,6 @@ class TestDefaultConstants:
         m = MonitorConfigPayload()
         assert m.network_targets == DEFAULT_NETWORK_TARGETS
         assert m.http_targets == DEFAULT_HTTP_TARGETS
-
-
-# =====================================================================
-# crypto — _simple_obfuscate / _simple_deobfuscate（从 test_crypto.py 合并）
-# =====================================================================
-
-
-class TestSimpleObfuscate:
-    """简单 Base64 混淆。"""
-
-    def test_roundtrip(self):
-        """混淆 -> 反混淆往返。"""
-        from app.utils.crypto import _simple_deobfuscate, _simple_obfuscate
-
-        original = "test_password_123"
-        obfuscated = _simple_obfuscate(original)
-        assert obfuscated.startswith("ENC:B64:")
-        deobfuscated = _simple_deobfuscate(obfuscated[len("ENC:") :])
-        assert deobfuscated == original
-
-    def test_unicode(self):
-        """Unicode 字符支持。"""
-        from app.utils.crypto import _simple_deobfuscate, _simple_obfuscate
-
-        original = "密码测试"
-        obfuscated = _simple_obfuscate(original)
-        deobfuscated = _simple_deobfuscate(obfuscated[len("ENC:") :])
-        assert deobfuscated == original
-
-    def test_empty_string(self):
-        """空字符串。"""
-        from app.utils.crypto import _simple_obfuscate
-
-        obfuscated = _simple_obfuscate("")
-        assert obfuscated == "ENC:B64:"
-
-    def test_deobfuscate_without_prefix(self):
-        """无 B64: 前缀原样返回。"""
-        from app.utils.crypto import _simple_deobfuscate
-
-        result = _simple_deobfuscate("plaintext")
-        assert result == "plaintext"
 
 
 # ── has_decryption_error / clear_decryption_error ──
