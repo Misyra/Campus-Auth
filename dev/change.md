@@ -3,6 +3,12 @@
 ## 2026-06-15
 
 ### refactor
+- `app/utils/crypto.py` 清理 D6 `is_encrypted` 死代码
+  - 删除 `is_encrypted` 函数（生产代码中无任何调用者）
+  - 删除 `tests/test_utils/test_utils.py` 中 `TestIsEncrypted` 测试类和 `is_encrypted` 导入
+  - 移除 `test_round_trip` 中对 `is_encrypted` 的断言
+
+### refactor
 - `app/utils/config_utils.py` 清理 D2-D5 死代码
   - 删除 `PROFILE_FIELDS` 常量（在重构后不再被生产代码使用）
   - 删除 `GLOBAL_FIELDS` 常量（在重构后不再被生产代码使用）

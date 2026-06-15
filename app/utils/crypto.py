@@ -180,11 +180,6 @@ def decrypt_password(ciphertext: str) -> str:
         raise DecryptionError("密码解密失败，请重新输入密码") from e
 
 
-def is_encrypted(value: str) -> bool:
-    """判断值是否已加密"""
-    return bool(value and value.startswith(_ENC_PREFIX))
-
-
 def has_decryption_error() -> bool:
     """检查是否有解密失败记录"""
     return _decryption_failed.is_set()
