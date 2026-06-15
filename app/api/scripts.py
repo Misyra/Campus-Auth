@@ -15,6 +15,7 @@ from app.workers.script_runner import ScriptRunner, detect_available_binaries
 
 router = APIRouter()
 api_logger = get_logger("api", source="backend")
+_script_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="script_runner")
 
 
 @router.get("/api/scripts")
@@ -97,12 +98,8 @@ async def run_script(
     binary_path = task.get("binary_path", "")
     runner = ScriptRunner(script_path, timeout=timeout, binary_path=binary_path)
 
-    # 使用专用线程池，避免阻塞其他 run_in_executor 调用
-    if not hasattr(run_script, "_executor"):
-        run_script._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="script_runner")
-
     loop = asyncio.get_running_loop()
-    success, message = await loop.run_in_executor(run_script._executor, runner.run)
+    success, message = await loop.run_in_executor(_script_executor, runner.run)
 
     api_logger.info("运行脚本 {} -> success={}, message={}", task_id, success, message)
     return ActionResponse(success=success, message=message)
