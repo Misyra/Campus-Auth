@@ -59,4 +59,9 @@ class ConfigValidator:
         if not _URL_PATTERN.match(auth_url):
             return False, "认证地址必须以 http:// 或 https:// 开头"
 
+        # 检查密码解密是否失败
+        from app.utils.crypto import has_decryption_error
+        if has_decryption_error():
+            return False, "密码解密失败（可能是密钥变更），请在设置页面重新输入密码"
+
         return True, ""
