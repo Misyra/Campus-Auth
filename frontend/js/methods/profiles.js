@@ -148,6 +148,10 @@ export const profileMethods = {
       const { data } = await this.$api.post(`/api/profiles/auto-switch?enabled=${newState}`);
       if (data.success) {
         this.autoSwitch = newState;
+        // 更新活动方案
+        if (data.active_profile) {
+          this.activeProfileId = data.active_profile;
+        }
         this.frontendLogger.info('profiles', data.message);
         this.toastOnly(true, data.message);
       } else {
