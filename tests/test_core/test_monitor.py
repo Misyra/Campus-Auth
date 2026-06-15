@@ -235,20 +235,15 @@ class TestAttemptLogin:
 class TestCloseBrowser:
     @pytest.mark.asyncio
     async def test_close_browser_with_context(self):
-        """有浏览器上下文时应正确关闭"""
+        """有浏览器上下文时应释放上下文引用（不销毁浏览器实例）"""
         handler = LoginAttemptHandler(config={})
         mock_ctx = AsyncMock()
         handler._browser_ctx = mock_ctx
 
-        with patch("app.workers.playwright_worker.get_worker") as mock_get_worker:
-            mock_worker = MagicMock()
-            mock_worker.close_browser = AsyncMock()
-            mock_get_worker.return_value = mock_worker
-
-            await handler.close_browser()
-            mock_worker.close_browser.assert_called_once()
-            mock_ctx.__aexit__.assert_called_once()
-            assert handler._browser_ctx is None
+        await handler.close_browser()
+        # close_browser 只释放上下文引用，不调用 worker.close_browser
+        mock_ctx.__aexit__.assert_called_once()
+        assert handler._browser_ctx is None
 
     @pytest.mark.asyncio
     async def test_close_browser_without_context(self):

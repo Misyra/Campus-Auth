@@ -2,6 +2,22 @@
 
 ## 2026-06-15
 
+### test
+- 更新测试适配 close_browser、线程池和 lru_cache 的修改
+  - `tests/test_utils/test_utils.py::TestGetProjectVersion`：移除 `setup_method` 中的 `cache_clear()` 调用和 `test_lru_cache` 测试方法（`get_project_version` 已无 `@lru_cache`）
+  - `tests/test_api/test_scripts_fix.py::TestScriptThreadPool::test_executor_is_reused`：改为检查模块级 `_script_executor`（executor 已从函数属性移至模块级）
+  - `tests/test_core/test_monitor.py::TestCloseBrowser::test_close_browser_with_context`：移除 `worker.close_browser` 断言（`close_browser` 仅释放上下文引用，不再销毁浏览器实例）
+
+### test
+- 修复 5 个测试文件中已删除的 `SystemSettings` 引用，改用 `GlobalSettings`
+  - `test_api_config_routes.py`、`test_api_profiles_routes.py`、`test_api_repo_routes.py`、`test_routers.py`：导入替换 + `ProfilesData` 字段从 `system=SystemSettings(...)` 改为 `global_settings=GlobalSettings()`，凭证字段移至 `ProfileSettings`
+  - `test_backend_services.py`：`test_masked_password_uses_sys` 简化为不传 `global_settings`（密码遮蔽逻辑不再依赖全局设置回退），`test_retry_settings` 改用 `GlobalSettings`
+
+### docs
+- `frontend/partials/pages/settings/settings-account.html` 密码字段添加不可恢复提示
+  - 密码输入框下方新增提示："密码本地存储，不保证意外删除后可恢复"
+  - 复用现有 `.hint` 样式类，与上方"密码不会随配置切换导出"提示风格一致
+
 ### fix
 - `frontend/js/methods/profiles.js` 和 `frontend/styles/pages/profiles.css` 自动切换模式下添加防御检查、删除恢复和禁用卡片样式
   - `setActiveProfile` 方法开头添加 `if (this.autoSwitch) return` 防御检查，CSS pointer-events 失效时仍阻止手动切换
