@@ -3,6 +3,12 @@
 ## 2026-06-15
 
 ### fix
+- `app/services/task_executor.py` 修复登录去重时错误设置调用方 cancel_event 的问题
+  - 移除去重分支中 `cancel_event.set()` 调用（该操作设置的是调用方的事件，而非运行中任务的事件）
+  - 有无 cancel_event 时统一返回已有 Future，不再返回 None
+  - 更新返回类型注解和文档字符串
+
+### fix
 - `app/utils/crypto.py` 完全移除 base64 混淆逻辑，缺少 cryptography 时改用明文
   - `encrypt_password`：缺少 cryptography 时直接返回明文并输出 warning
   - `decrypt_password`：遇到 `ENC:` 前缀但 cryptography 不可用时抛出 `DecryptionError`
@@ -36,6 +42,12 @@
   - 报告模板模块表改为动态生成，与项目背景表解耦
   - 统一代码片段引用格式为 `` ```startLine:endLine:filepath`` ``
   - 执行要点新增 Schema 强校验说明
+
+### fix
+- `app/workers/playwright_worker.py` 跳过已超时的 Worker 命令执行，防止资源浪费
+  - `WorkerCommand` 新增 `cancelled` 字段
+  - `submit()` 超时后设置 `cmd.cancelled = True`
+  - `_dispatch()` 执行前检查 `cancelled` 标志，已取消的命令直接跳过
 
 ### refactor
 - `app/services/runtime_config.py` 清理 D7 `_normalize_targets` 死代码
@@ -74,6 +86,11 @@
 - `app/services/config_service.py` 删除 `build_runtime_config` 中不可达的密码回退代码
   - `GlobalSettings` 没有 `password` 字段，`hasattr(global_settings, 'password')` 永远返回 `False`
   - 移除死代码分支及不再使用的 `decrypt_password`、`DecryptionError` 导入
+
+### fix
+- `app/services/task_executor.py` 修复 BoundedExecutor 信号量泄漏
+  - `submit()` 中 `self._executor.submit()` 若抛异常，信号量已获取但无人释放
+  - 用 try/except 包裹 submit 调用，异常时立即释放信号量再 re-raise
 
 ### fix
 - `app/utils/login.py` 移除双重 close_browser，仅释放浏览器上下文引用
