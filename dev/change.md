@@ -3,6 +3,17 @@
 ## 2026-06-15
 
 ### fix
+- `app/api/scripts.py` 脚本执行线程池移至模块级，确保随进程生命周期管理
+  - `ThreadPoolExecutor` 从 `run_script._executor` 函数属性移至模块级 `_script_executor`
+  - 消除 `hasattr` + 赋值的线程安全隐患（并发首次调用可能创建多个 executor）
+  - executor 现在随模块生命周期存在，可被进程退出时正确关闭
+
+### fix
+- `app/api/profiles.py` 自动切换检测失败时在响应中返回警告信息
+  - `toggle_auto_switch` 中检测异常不再静默吞掉，改为在响应中返回 `warning` 字段
+  - 用户可明确知道首次检测失败，而非只看到"自动切换已开启"
+
+### fix
 - `app/api/system.py` check_update 添加 asyncio.Lock 防止并发重复请求 GitHub API
   - 添加模块级 `_update_lock = asyncio.Lock()`
   - 将 `check_update` 函数体包裹在 `async with _update_lock:` 中
