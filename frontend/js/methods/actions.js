@@ -60,7 +60,7 @@ export const actionMethods = {
     this.busy.action = true;
     try {
       this.frontendLogger.info('action', '手动登录请求');
-      const loginTimeoutMs = (this.config.login_timeout || 120) * 1000;
+      const loginTimeoutMs = (this.config.login_timeout || 90) * 1000;
       const { data } = await this.$api.post('/api/actions/login', null, { timeout: loginTimeoutMs });
       this.notify(data.success, this.stripScreenshotHint(data.message), 'login');
       // 登录完成后刷新登录历史

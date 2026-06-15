@@ -78,7 +78,7 @@ const _SHARED_DEFAULTS = {
   headless: true,
   browser_timeout: 8,
   browser_navigation_timeout: 15,
-  login_timeout: 60,
+  login_timeout: 90,
   max_retries: 3,
   retry_interval: 5,
   browser_low_resource_mode: false,

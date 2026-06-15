@@ -458,9 +458,9 @@ class TestBuildRuntimeConfig:
 
     def test_login_timeout_in_payload(self):
         """测试 login_timeout 正确通过 MonitorConfigPayload 传递"""
-        # 默认值应为 60
+        # 默认值应为 90
         payload_default = MonitorConfigPayload()
-        assert payload_default.login_timeout == 60
+        assert payload_default.login_timeout == 90
 
         # 显式设置值
         payload_custom = MonitorConfigPayload(login_timeout=120)
