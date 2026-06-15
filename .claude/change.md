@@ -3,6 +3,23 @@
 ## 2026-06-15
 
 ### test
+- `tests/test_services/test_task_executor_fix.py` 提升 task_executor.py 测试覆盖率从 35% 到 99%
+  - `TestTaskExecutorGetScriptPath`：新增 `test_uses_get_script_path_method`、`test_falls_back_to_py_extension`、`test_returns_none_when_script_not_found`
+  - `TestTaskPoolLazyInit`：新增 `test_shutdown_with_task_pool`、`test_ensure_task_pool_creates_once`
+  - `TestNullTaskExecutor`：覆盖全部 11 个方法（has_enabled_tasks、shutdown、execute_task_async、execute_login_async、execute_task、execute_login、list_tasks、get_task、save_task、delete_task、get_history）
+  - `TestBoundedExecutor`：覆盖 submit 成功、参数传递、队列满抛异常、信号量异常释放、任务完成后释放、shutdown
+  - `TestTaskExecutorCRUD`：覆盖 list_tasks、get_task、save_task、delete_task（成功/失败）、get_history、has_enabled_tasks、set_runtime_config_getter
+  - `TestTaskExecutorExecuteTask`：覆盖任务不存在、不支持类型、script/browser/shell 分发、执行异常、默认超时、历史记录
+  - `TestTaskExecutorExecuteScript`：覆盖无 registry、任务不存在、类型错误、脚本文件不存在
+  - `TestTaskExecutorExecuteBrowser`：覆盖任务不存在、类型错误、成功/失败/ImportError/通用异常、data 非字符串、无 error 消息
+  - `TestTaskExecutorExecuteShell`：覆盖空命令、配置来源（runtime/default/异常回退）、shell 类型格式（powershell/cmd/bash）、返回码处理、输出截断、异常处理
+  - `TestTaskExecutorExecuteLogin`：覆盖取消事件、成功/失败/无 error/data 非字符串/无配置/ImportError/通用异常
+  - `TestTaskExecutorRecordLoginHistory`：覆盖无服务、成功记录、失败记录、异常捕获
+  - `TestTaskExecutorLoginAsync`：覆盖首次提交、去重返回已有 Future、完成后清理、cancel_event 传递、完成后可重新提交
+  - `TestTaskExecutorOnLoginDone`：覆盖匹配清理、不匹配不清理
+  - `TestTaskExecutorTaskAsync`：覆盖提交到 task_pool、懒初始化
+
+### test
 - `tests/test_services/test_engine.py` 添加 engine.py 单元测试，覆盖调度引擎核心逻辑（覆盖率 75% → 93%）
   - `TestEngineCmdType`：枚举值和成员数
   - `TestEngineCommand`：默认值和自定义值
