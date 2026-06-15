@@ -20,7 +20,6 @@ PROFILE_FIELDS: tuple[str, ...] = (
     "carrier",
     "carrier_custom",
     "active_task",
-    "custom_variables",
 )
 
 # GlobalSettings 中的字段
@@ -71,6 +70,8 @@ GLOBAL_FIELDS: tuple[str, ...] = (
     "browser_timezone",
     "browser_viewport_width",
     "browser_viewport_height",
+    # 自定义变量
+    "custom_variables",
 )
 
 

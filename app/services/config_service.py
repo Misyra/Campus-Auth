@@ -55,6 +55,9 @@ def _update_global_settings(
     global_settings.url_check_urls = payload.url_check_urls
     global_settings.network_check_timeout = payload.network_check_timeout
 
+    # 自定义变量
+    global_settings.custom_variables = payload.custom_variables
+
 
 def save_config_combined(
     payload: MonitorConfigPayload,
@@ -85,9 +88,6 @@ def save_config_combined(
         profile.carrier = str(payload.carrier or "无").strip()
         profile.carrier_custom = str(payload.carrier_custom or "").strip()
         profile.active_task = payload.active_task.strip()
-
-        # 更新自定义变量
-        profile.custom_variables = payload.custom_variables
 
         config_logger.info(
             "配置已保存: profile={}, 用户={}",
