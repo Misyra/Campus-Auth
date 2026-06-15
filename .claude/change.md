@@ -3,6 +3,14 @@
 ## 2026-06-15
 
 ### test
+- `tests/test_services/test_debug_service.py` 添加 debug_service.py 补充单元测试，覆盖率从 90% 提升至 98%
+  - `TestDebugTimeoutWatcherActualTimeout`：覆盖超时触发关闭浏览器、浏览器未活跃跳过关闭、锁内代数不匹配跳过
+  - `TestStartTemplateVarReplacement`：覆盖 URL 模板变量替换分支
+  - `TestNextStepSessionReplaced`：覆盖 Worker 失败/成功后会话被替换时直接返回
+  - `TestRunAllSessionReplaced`：覆盖循环内会话被替换/停止运行/步骤完成后替换三种场景
+  - `TestStopTempDirCleanupError`：覆盖临时目录 iterdir 异常和文件 unlink 异常
+
+### test
 - `tests/test_services/test_task_executor_fix.py` 提升 task_executor.py 测试覆盖率从 35% 到 99%
   - `TestTaskExecutorGetScriptPath`：新增 `test_uses_get_script_path_method`、`test_falls_back_to_py_extension`、`test_returns_none_when_script_not_found`
   - `TestTaskPoolLazyInit`：新增 `test_shutdown_with_task_pool`、`test_ensure_task_pool_creates_once`
