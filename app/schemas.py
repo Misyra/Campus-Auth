@@ -413,22 +413,6 @@ class ProfileSettings(BaseModel):
         return _validate_auth_url(v)
 
 
-class SystemSettings(_SystemFieldsMixin):
-    """全局系统配置（原 .env 中的业务配置）"""
-
-    pure_mode: bool = Field(
-        default=True, description="纯净模式：使用浏览器原始默认设置，不添加额外启动参数"
-    )
-    network_check_timeout: int = Field(
-        default=2, ge=1, le=30, description="TCP 网络检测超时（秒）"
-    )
-    block_proxy: bool = Field(
-        default=True, description="屏蔽系统代理：开启后网络检测时忽略系统代理设置"
-    )
-    # 新增：source 级别配置
-    source_levels: dict[str, str] = {}
-
-
 class ProfilesData(BaseModel):
     """Top-level structure of settings.json"""
 
