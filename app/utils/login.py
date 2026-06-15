@@ -298,21 +298,12 @@ class LoginAttemptHandler:
             return False, f"网络未连通: {net_msg}"
 
     async def close_browser(self) -> None:
-        """关闭浏览器（登录成功或监控停止时调用）"""
+        """释放浏览器上下文引用（不销毁浏览器实例）"""
         if self._browser_ctx:
-            worker = None
             try:
-                from app.workers.playwright_worker import get_worker
-
-                worker = get_worker()
                 await self._browser_ctx.__aexit__(None, None, None)
             except Exception as exc:
                 self.logger.warning("浏览器上下文关闭异常: {}", exc)
             finally:
-                if worker is not None:
-                    try:
-                        await worker.close_browser()
-                    except Exception as exc:
-                        self.logger.warning("浏览器关闭时异常: {}", exc)
                 self._browser_ctx = None
-                self.logger.info("浏览器已关闭")
+                self.logger.info("浏览器上下文已释放")
