@@ -36,9 +36,7 @@ def list_profiles(
             "match_ssid": settings.match_ssid,
             "carrier": settings.carrier,
             "carrier_custom": settings.carrier_custom,
-            "use_global_auth_url": settings.use_global_auth_url,
             "auth_url": settings.auth_url,
-            "use_global_task": settings.use_global_task,
             "active_task": settings.active_task,
         }
     return {
