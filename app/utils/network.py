@@ -107,11 +107,22 @@ def parse_ping_targets(raw: str | list | None) -> list[tuple[str, int]]:
     # 补全缺少端口的项
     targets: list[str] = []
     for item in items:
-        if ":" not in item:
+        if item.startswith("["):
+            # 已是 [IPv6]:port 格式，直接传递
+            targets.append(item)
+        elif ":" in item:
+            # 可能是 IPv6 地址（含多个冒号）或 host:port
+            colon_count = item.count(":")
+            if colon_count >= 2:
+                # IPv6 地址，补全端口
+                targets.append(f"[{item}]:53")
+            else:
+                # host:port 格式，直接传递
+                targets.append(item)
+        else:
+            # 无冒号：IPv4 或域名
             parts = item.split(".")
             is_ipv4 = len(parts) == 4 and all(p.isdigit() for p in parts)
             targets.append(f"{item}:{53 if is_ipv4 else 443}")
-        else:
-            targets.append(item)
 
     return parse_host_port(targets)

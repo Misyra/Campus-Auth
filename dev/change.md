@@ -2,6 +2,12 @@
 
 ## 2026-06-15
 
+### fix
+- `app/utils/network.py` 修复 `parse_ping_targets` 对 IPv6 地址的处理
+  - IPv6 地址含多个冒号（如 `::1`、`2001:db8::1`），原逻辑误判为已有端口
+  - 新增 IPv6 检测：以 `[` 开头直接传递，多个冒号视为 IPv6 并补全 `[addr]:53`
+  - 单冒号视为 host:port 格式，无冒号走原有 IPv4/域名逻辑
+
 ### refactor
 - `app/network/decision.py` 移除 `is_network_available` 中的死代码
   - `socket_ok`/`http_ok`/`url_ok` 变量在循环中只会被赋值为 `True`（失败时已提前 `return False`）
