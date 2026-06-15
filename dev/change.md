@@ -2,6 +2,11 @@
 
 ## 2026-06-15
 
+### fix
+- `app/utils/ports.py` 修复端口配置读取路径和 JSON key
+  - 路径从 `PROJECT_ROOT / "settings.json"` 修正为 `PROJECT_ROOT / "config" / "settings.json"`
+  - JSON key 从 `system.app_port` 修正为 `global_settings.app_port`
+
 ### feat
 - `app/api/profiles.py` 开启自动切换时立即检测匹配方案
   - `toggle_auto_switch` 新增 `monitor_svc` 依赖
