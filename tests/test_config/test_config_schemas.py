@@ -434,23 +434,14 @@ class TestProfileSettingsDefaults:
     def test_defaults(self):
         p = ProfileSettings()
         assert p.name == "默认方案"
-        assert p.use_global_credentials is True
-        assert p.use_global_auth_url is True
-        assert p.use_global_task is True
+        assert p.username == ""
+        assert p.password == ""
+        assert p.carrier == "无"
+        assert p.auth_url == ""
 
     def test_custom_name(self):
         p = ProfileSettings(name="自定义方案")
         assert p.name == "自定义方案"
-
-    def test_use_global_flags(self):
-        p = ProfileSettings(
-            use_global_credentials=False,
-            use_global_auth_url=False,
-            use_global_task=False,
-        )
-        assert p.use_global_credentials is False
-        assert p.use_global_auth_url is False
-        assert p.use_global_task is False
 
     def test_match_fields(self):
         p = ProfileSettings(
@@ -462,7 +453,7 @@ class TestProfileSettingsDefaults:
 
 
 class TestProfileSettings:
-    """扩展 ProfileSettings 测试 — 监控配置"""
+    """ProfileSettings 测试"""
 
     def test_default_values(self):
         """测试默认值"""
@@ -472,8 +463,6 @@ class TestProfileSettings:
         assert profile.password == ""
         assert profile.carrier == "无"
         assert profile.auth_url == ""
-        assert profile.check_interval_seconds == 300
-        assert profile.pause_enabled is True
 
     def test_custom_values(self):
         """测试自定义值"""
@@ -483,32 +472,17 @@ class TestProfileSettings:
             password="testpass",
             carrier="移动",
             auth_url="http://example.com",
-            check_interval_seconds=600,
         )
         assert profile.name == "测试方案"
         assert profile.username == "testuser"
         assert profile.password == "testpass"
         assert profile.carrier == "移动"
         assert profile.auth_url == "http://example.com"
-        assert profile.check_interval_seconds == 600
 
     def test_invalid_auth_url(self):
         """测试无效认证地址"""
         with pytest.raises(ValidationError, match="认证地址必须以 http"):
             ProfileSettings(auth_url="not-a-url")
-
-    def test_monitor_fields_defaults(self):
-        """测试监控字段默认值"""
-        profile = ProfileSettings()
-        assert profile.pause_start_hour == 0
-        assert profile.pause_end_hour == 6
-        assert profile.enable_tcp_check is False
-        assert profile.enable_http_check is False
-        assert profile.enable_local_check is True
-        assert profile.check_auth_url is False
-        assert profile.auth_url_targets == ""
-        assert profile.network_check_timeout == 2
-        assert profile.custom_variables == {}
 
 
 # ---------------------------------------------------------------------
