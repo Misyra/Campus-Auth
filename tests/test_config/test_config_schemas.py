@@ -35,6 +35,12 @@ from app.utils.logging import normalize_level as _normalize_level
 
 
 class TestValidateEnvConfig:
+    def setup_method(self):
+        """清除解密错误状态，防止其他测试污染。"""
+        from app.utils.crypto import clear_decryption_error
+
+        clear_decryption_error()
+
     def test_valid_config(self):
         ok, msg = ConfigValidator.validate_env_config(
             {

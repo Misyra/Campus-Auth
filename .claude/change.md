@@ -15,11 +15,13 @@
   - `frontend/js/methods/actions.js`：回退值从 120 改为 90
 
 ### test
-- 修复 6 个因字段迁移导致的测试失败
-  - 监控字段（`check_interval_seconds`、`pause_enabled` 等）和 `use_global_*` 标志已从 `ProfileSettings` 移至 `GlobalSettings`，但测试未同步更新
-  - `test_config_schemas.py`：删除 `TestProfileSettingsDefaults.test_use_global_flags` 和 `TestProfileSettings.test_monitor_fields_defaults`，移除其他测试中对已迁移字段的断言
-  - `test_backend_services.py`：`test_updates_default_profile` 改为检查 `global_settings.check_interval_seconds`
-  - 剩余 1 个失败 `test_valid_config` 为预先存在的测试隔离问题（全局 `_decryption_failed` 状态污染）
+- 修复 7 个预先存在的测试失败
+  - 6 个因字段迁移导致：监控字段和 `use_global_*` 标志已从 `ProfileSettings` 移至 `GlobalSettings`，但测试未同步更新
+    - `test_config_schemas.py`：删除 `TestProfileSettingsDefaults.test_use_global_flags` 和 `TestProfileSettings.test_monitor_fields_defaults`，移除其他测试中对已迁移字段的断言
+    - `test_backend_services.py`：`test_updates_default_profile` 改为检查 `global_settings.check_interval_seconds`
+  - 1 个测试隔离问题：`test_valid_config` 因全局 `_decryption_failed` 状态被其他测试污染而失败
+    - `test_utils.py`：`TestDecryptionError` 添加 `teardown_method` 清除状态
+    - `test_config_schemas.py`：`TestValidateEnvConfig` 添加 `setup_method` 清除状态
 
 ### chore
 - 删除空的 `backups/` 文件夹，清理 `.gitignore` 中的 `backups/*` 条目
