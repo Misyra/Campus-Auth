@@ -121,11 +121,11 @@ def build_runtime_config(
     raw_password = payload.password.strip()
     if raw_password and not raw_password.startswith("•"):
         base["password"] = raw_password
-    elif system_settings:
+    elif global_settings:
         pwd = ""
-        if system_settings.password:
+        if hasattr(global_settings, 'password') and global_settings.password:
             try:
-                pwd = decrypt_password(system_settings.password)
+                pwd = decrypt_password(global_settings.password)
             except DecryptionError:
                 config_logger.error("系统密码解密失败")
         base["password"] = pwd
@@ -229,11 +229,11 @@ def build_runtime_config(
         ],
     )
 
-    # 重试策略从系统设置读取
-    if system_settings:
+    # 重试策略从全局设置读取
+    if global_settings:
         base["retry_settings"] = {
-            "max_retries": system_settings.max_retries,
-            "retry_interval": system_settings.retry_interval,
+            "max_retries": global_settings.max_retries,
+            "retry_interval": global_settings.retry_interval,
         }
 
     return base
