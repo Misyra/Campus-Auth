@@ -209,7 +209,14 @@ class TaskExecutor:
             # 提交新的登录任务
             future = self._login_pool.submit(self.execute_login, cancel_event)
             self._login_future = future
+            future.add_done_callback(self._on_login_done)
             return future
+
+    def _on_login_done(self, future: Future) -> None:
+        """登录任务完成后清理引用。"""
+        with self._login_lock:
+            if self._login_future is future:
+                self._login_future = None
 
     # ── 同步执行接口 ──
 
