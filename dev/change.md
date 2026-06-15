@@ -3,6 +3,12 @@
 ## 2026-06-15
 
 ### fix
+- `frontend/js/methods/profiles.js` 和 `frontend/styles/pages/profiles.css` 自动切换模式下添加防御检查、删除恢复和禁用卡片样式
+  - `setActiveProfile` 方法开头添加 `if (this.autoSwitch) return` 防御检查，CSS pointer-events 失效时仍阻止手动切换
+  - `deleteProfile` 中 `fetchProfiles` 后检查 `activeProfileId` 是否指向已删除方案，若是则重置为 `default`
+  - `.profile-card-main.disabled` CSS 添加 `opacity: 0.5` 和 `cursor: not-allowed`，禁用卡片视觉提示更明确
+
+### fix
 - `app/version.py` 移除 `get_project_version` 的 `@lru_cache(maxsize=1)` 装饰器
   - 缓存导致不同 `project_root` 参数被忽略，始终返回首次调用的结果
   - 移除 `from functools import lru_cache` 导入（文件中无其他使用）
