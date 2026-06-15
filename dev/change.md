@@ -167,6 +167,11 @@
   - 删除 `tests/test_services/test_runtime_config.py`（全部测试均引用已删除的 `SystemSettings` 和 `migrate_config_if_needed`）
 
 ### fix
+- `app/utils/shell_policy.py` `run_sync` 过滤 kwargs，防止安全策略被绕过
+  - 原 `run_kwargs.update(kwargs)` 允许调用方传入 `shell=True` 等危险参数
+  - 改为白名单过滤，仅允许 `env` 和 `cwd` 两个额外参数
+
+### fix
 - `app/services/config_service.py` 删除 `build_runtime_config` 中不可达的密码回退代码
   - `GlobalSettings` 没有 `password` 字段，`hasattr(global_settings, 'password')` 永远返回 `False`
   - 移除死代码分支及不再使用的 `decrypt_password`、`DecryptionError` 导入
