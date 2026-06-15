@@ -2,6 +2,15 @@
 
 ## 2026-06-15
 
+### test
+- `tests/test_utils/test_ports.py` 添加 `resolve_port` 单元测试（19 个用例，覆盖率 100%）
+  - `TestResolvePortFromEnv`：有效端口、最小/最大端口、带空格端口
+  - `TestResolvePortEnvInvalid`：非数字、零、超范围、负数、空字符串、纯空格
+  - `TestResolvePortFromSettings`：有效配置、缺字段、无效端口、非数字端口
+  - `TestResolvePortSettingsErrors`：文件不存在、JSON 格式错误
+  - `TestResolvePortPriority`：环境变量优先于 settings.json
+  - `TestResolvePortDefault`：无配置时返回默认端口 50721
+
 ### perf
 - 定时任务线程池懒初始化，无任务时不创建线程
   - `app/services/task_executor.py`：`_task_pool` 初始为 `None`，首次调用 `execute_task_async` 时才创建
