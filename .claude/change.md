@@ -23,6 +23,9 @@
     - `test_utils.py`：`TestDecryptionError` 添加 `teardown_method` 清除状态
     - `test_config_schemas.py`：`TestValidateEnvConfig` 添加 `setup_method` 清除状态
 
+### fix
+- `application.py` 配置诊断路径修正：`settings.json` → `config/settings.json`
+
 ### chore
 - 删除空的 `backups/` 文件夹，清理 `.gitignore` 中的 `backups/*` 条目
   - 代码中无任何逻辑创建或使用此目录，属于残留文件
