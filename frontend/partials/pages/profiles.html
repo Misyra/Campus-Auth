@@ -157,7 +157,14 @@
             </svg>
             {{ info.match_ssid }}
           </span>
-          <span v-if="!info.match_gateway_ip && !info.match_ssid" class="profile-tag muted">无匹配规则</span>
+          <span v-if="!info.match_gateway_ip && !info.match_ssid" class="profile-tag">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-xs">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="15" y1="9" x2="9" y2="15"/>
+              <line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+            无匹配规则
+          </span>
         </div>
       </div>
       <div class="profile-card-actions" @click.stop>
