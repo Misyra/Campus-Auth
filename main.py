@@ -389,6 +389,7 @@ def _run_full(
     def _signal_handler(signum, _frame):
         nonlocal _shutdown_initiated
         if _shutdown_initiated:
+            # 双击 Ctrl+C：强制退出（cleanup_pid 在首次信号时已完成）
             cleanup_pid()
             os._exit(1)
         _shutdown_initiated = True
@@ -397,6 +398,7 @@ def _run_full(
         if _uvicorn_server[0] is not None:
             _uvicorn_server[0].should_exit = True
         else:
+            # uvicorn 未就绪，PID 已清理，直接退出
             os._exit(0)
 
     signal.signal(signal.SIGINT, _signal_handler)
