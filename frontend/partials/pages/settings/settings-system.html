@@ -3,42 +3,44 @@
     <div class="card-header">
       <h2>日志设置</h2>
     </div>
-    <div class="card-body">
-      <h4 class="settings-section-heading">日志管理</h4>
-      <div class="form-row">
+    <div class="card-body settings-log-columns">
+      <div>
+        <h4 class="settings-section-heading">日志管理</h4>
+        <div class="form-row">
+          <div class="form-group">
+            <div class="field-label-row">
+              <label for="settings-log-retention">日志保留天数</label>
+              <span class="field-help" tabindex="0" role="note" data-tip="日志和失败截图按天归档，超过设定天数的整日归档（含日志和截图）会自动清理。设为 7 可平衡排查需求与磁盘占用。">?</span>
+            </div>
+            <input id="settings-log-retention" v-model.number="config.log_retention_days" type="number" min="1" max="365" />
+          </div>
+        </div>
+        <div class="toggle-group">
+          <div class="toggle-with-help">
+            <label class="toggle toggle-help-inline">
+              <input type="checkbox" v-model="config.access_log" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">显示 HTTP 请求日志</span>
+              <span class="field-help" tabindex="0" role="note" data-tip="开启后会记录每次 API 请求的方法、路径和耗时。调试时有用，日常使用建议关闭以减少日志量。">?</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h4 class="settings-section-heading">日志级别</h4>
         <div class="form-group">
           <div class="field-label-row">
-            <label for="settings-log-retention">日志保留天数</label>
-            <span class="field-help" tabindex="0" role="note" data-tip="日志和失败截图按天归档，超过设定天数的整日归档（含日志和截图）会自动清理。设为 7 可平衡排查需求与磁盘占用。">?</span>
+            <label>全局日志级别</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="设置所有日志来源的默认级别。低于该级别的日志将被过滤。">?</span>
           </div>
-          <input id="settings-log-retention" v-model.number="config.log_retention_days" type="number" min="1" max="365" />
+          <custom-select
+            v-model="logLevels.global_level"
+            :options="logLevelOptions"
+            @change="(val) => setSourceLevel('global', val)"
+          ></custom-select>
         </div>
       </div>
-      <div class="toggle-group">
-        <div class="toggle-with-help">
-          <label class="toggle toggle-help-inline">
-            <input type="checkbox" v-model="config.access_log" />
-            <span class="toggle-slider"></span>
-            <span class="toggle-label">显示 HTTP 请求日志</span>
-            <span class="field-help" tabindex="0" role="note" data-tip="开启后会记录每次 API 请求的方法、路径和耗时。调试时有用，日常使用建议关闭以减少日志量。">?</span>
-          </label>
-        </div>
-      </div>
-
-      <div class="settings-section-divider"></div>
-      <h4 class="settings-section-heading">日志级别</h4>
-      <div class="form-group">
-        <div class="field-label-row">
-          <label>全局日志级别</label>
-          <span class="field-help" tabindex="0" role="note" data-tip="设置所有日志来源的默认级别。低于该级别的日志将被过滤。">?</span>
-        </div>
-        <custom-select
-          v-model="logLevels.global_level"
-          :options="logLevelOptions"
-          @change="(val) => setSourceLevel('global', val)"
-        ></custom-select>
-      </div>
-
     </div>
   </section>
 
