@@ -5,7 +5,7 @@
       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
       <circle cx="12" cy="7" r="4"/>
     </svg>
-    <span>当前方案：<strong>{{ activeProfileId || 'default' }}</strong></span>
+    <span>当前方案：<strong>{{ profiles[activeProfileId]?.name || activeProfileId || '默认方案' }}</strong></span>
     <a href="#" @click.prevent="currentPage = 'profiles'" class="hint-link">管理方案</a>
   </div>
 
