@@ -456,6 +456,23 @@ class TestBuildRuntimeConfig:
         config = build_runtime_config(payload)
         assert config["browser_settings"]["pure_mode"] is True
 
+    def test_login_timeout_in_payload(self):
+        """测试 login_timeout 正确通过 MonitorConfigPayload 传递"""
+        # 默认值应为 60
+        payload_default = MonitorConfigPayload()
+        assert payload_default.login_timeout == 60
+
+        # 显式设置值
+        payload_custom = MonitorConfigPayload(login_timeout=120)
+        assert payload_custom.login_timeout == 120
+
+        # 边界值
+        payload_min = MonitorConfigPayload(login_timeout=10)
+        assert payload_min.login_timeout == 10
+
+        payload_max = MonitorConfigPayload(login_timeout=600)
+        assert payload_max.login_timeout == 600
+
 
 # =====================================================================
 # save_config_combined
