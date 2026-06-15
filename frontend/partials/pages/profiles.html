@@ -157,15 +157,6 @@
             </svg>
             {{ info.match_ssid }}
           </span>
-          <span v-if="info.carrier && info.carrier !== '无'" class="profile-tag">{{ info.carrier === '自定义' ? info.carrier_custom : info.carrier }}</span>
-          <span v-if="info.auth_url" class="profile-tag muted">{{ info.auth_url }}</span>
-          <span v-if="info.active_task" class="profile-tag">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-xs">
-              <polyline points="4 17 10 11 4 5"/>
-              <line x1="12" y1="19" x2="20" y2="19"/>
-            </svg>
-            {{ info.active_task }}
-          </span>
           <span v-if="!info.match_gateway_ip && !info.match_ssid" class="profile-tag muted">无匹配规则</span>
         </div>
       </div>
