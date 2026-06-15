@@ -40,6 +40,21 @@ def _update_global_settings(
     global_settings.max_retries = payload.max_retries
     global_settings.retry_interval = payload.retry_interval
 
+    # 监控配置
+    global_settings.check_interval_seconds = payload.check_interval_seconds
+    global_settings.pause_enabled = payload.pause_enabled
+    global_settings.pause_start_hour = payload.pause_start_hour
+    global_settings.pause_end_hour = payload.pause_end_hour
+    global_settings.network_targets = payload.network_targets
+    global_settings.http_targets = payload.http_targets
+    global_settings.enable_tcp_check = payload.enable_tcp_check
+    global_settings.enable_http_check = payload.enable_http_check
+    global_settings.enable_local_check = payload.enable_local_check
+    global_settings.check_auth_url = payload.check_auth_url
+    global_settings.auth_url_targets = payload.auth_url_targets
+    global_settings.url_check_urls = payload.url_check_urls
+    global_settings.network_check_timeout = payload.network_check_timeout
+
 
 def save_config_combined(
     payload: MonitorConfigPayload,
@@ -70,21 +85,6 @@ def save_config_combined(
         profile.carrier = str(payload.carrier or "无").strip()
         profile.carrier_custom = str(payload.carrier_custom or "").strip()
         profile.active_task = payload.active_task.strip()
-
-        # 更新监控配置
-        profile.check_interval_seconds = payload.check_interval_seconds
-        profile.pause_enabled = payload.pause_enabled
-        profile.pause_start_hour = payload.pause_start_hour
-        profile.pause_end_hour = payload.pause_end_hour
-        profile.network_targets = payload.network_targets
-        profile.http_targets = payload.http_targets
-        profile.enable_tcp_check = payload.enable_tcp_check
-        profile.enable_http_check = payload.enable_http_check
-        profile.enable_local_check = payload.enable_local_check
-        profile.check_auth_url = payload.check_auth_url
-        profile.auth_url_targets = payload.auth_url_targets
-        profile.url_check_urls = payload.url_check_urls
-        profile.network_check_timeout = payload.network_check_timeout
 
         # 更新自定义变量
         profile.custom_variables = payload.custom_variables

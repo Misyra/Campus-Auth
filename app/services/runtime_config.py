@@ -94,7 +94,7 @@ def _build_config_payload(
     else:
         payload_dict["password"] = mask_password(profile.password)
 
-    # 合并 global_settings 中的系统配置
+    # 合并 global_settings 中的系统配置和监控配置
     payload_dict.update({
         "backend_log_level": data.global_settings.backend_log_level,
         "frontend_log_level": data.global_settings.frontend_log_level,
@@ -112,6 +112,20 @@ def _build_config_payload(
         "max_retries": data.global_settings.max_retries,
         "retry_interval": data.global_settings.retry_interval,
         "source_levels": data.global_settings.source_levels,
+        # 监控配置
+        "check_interval_seconds": data.global_settings.check_interval_seconds,
+        "pause_enabled": data.global_settings.pause_enabled,
+        "pause_start_hour": data.global_settings.pause_start_hour,
+        "pause_end_hour": data.global_settings.pause_end_hour,
+        "network_targets": data.global_settings.network_targets,
+        "http_targets": data.global_settings.http_targets,
+        "enable_tcp_check": data.global_settings.enable_tcp_check,
+        "enable_http_check": data.global_settings.enable_http_check,
+        "enable_local_check": data.global_settings.enable_local_check,
+        "check_auth_url": data.global_settings.check_auth_url,
+        "auth_url_targets": data.global_settings.auth_url_targets,
+        "url_check_urls": data.global_settings.url_check_urls,
+        "network_check_timeout": data.global_settings.network_check_timeout,
         # 浏览器配置
         "headless": data.global_settings.headless,
         "browser_timeout": data.global_settings.browser_timeout,
