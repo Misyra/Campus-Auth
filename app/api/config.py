@@ -103,8 +103,12 @@ def save_config(
                     lambda data: _rollback_config(data, backup_data)
                 )
                 svc.reload_config()
-            except Exception:
-                api_logger.error("回滚失败", exc_info=True)
+            except Exception as rollback_exc:
+                api_logger.error(
+                    "回滚失败（磁盘配置已回滚，运行时状态可能不一致）: {}",
+                    rollback_exc,
+                    exc_info=True,
+                )
             raise reload_exc
 
         api_logger.info("配置已保存 -> success=True")

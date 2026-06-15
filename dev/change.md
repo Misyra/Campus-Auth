@@ -3,6 +3,12 @@
 ## 2026-06-15
 
 ### fix
+- `app/utils/config_utils.py` 密码解密失败时给出明确错误信息
+  - `validate_env_config` 新增 `has_decryption_error()` 检查
+  - 原逻辑：密钥变更后加密密码解密失败，password 字段非空，误报"缺少用户名或密码"
+  - 新增检查位于 URL 校验之后、`return True` 之前，解密失败时返回"密码解密失败（可能是密钥变更），请在设置页面重新输入密码"
+
+### fix
 - `app/services/config_service.py` 支持用户显式清空密码字段
   - 用户清空密码字段时 `pwd_raw` 为空字符串，原 `if pwd_raw and ...` 条件跳过，旧密码残留
   - 改为 `if/elif/else` 三分支：掩码值跳过、非空加密保存、空字符串清空
