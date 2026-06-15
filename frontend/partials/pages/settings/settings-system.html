@@ -136,30 +136,32 @@
       <h2>网络与端口</h2>
     </div>
     <div class="card-body">
-      <div class="form-group">
-        <div class="field-label-row">
-          <label for="settings-app-port">控制台端口</label>
-          <span class="field-help" tabindex="0" role="note" data-tip="Web 控制台的监听端口。修改后需要重启服务器才能生效。默认 50721，范围 1024~65535。">?</span>
+      <div class="form-row">
+        <div class="form-group">
+          <div class="field-label-row">
+            <label for="settings-app-port">控制台端口</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="Web 控制台的监听端口。修改后需要重启服务器才能生效。默认 50721，范围 1024~65535。">?</span>
+          </div>
+          <input
+            id="settings-app-port"
+            v-model.number="config.app_port"
+            type="number"
+            min="1024"
+            max="65535"
+          />
         </div>
-        <input
-          id="settings-app-port"
-          v-model.number="config.app_port"
-          type="number"
-          min="1024"
-          max="65535"
-        />
-      </div>
-      <div class="form-group">
-        <div class="field-label-row">
-          <label for="settings-proxy">网络代理</label>
-          <span class="field-help" tabindex="0" role="note" data-tip="用于远程仓库导入等网络请求的代理地址。留空则不使用代理。支持 HTTP 和 SOCKS5 协议，例如 http://127.0.0.1:7897 或 socks5://127.0.0.1:7890。">?</span>
+        <div class="form-group">
+          <div class="field-label-row">
+            <label for="settings-proxy">网络代理</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="用于远程仓库导入等网络请求的代理地址。留空则不使用代理。支持 HTTP 和 SOCKS5 协议，例如 http://127.0.0.1:7897 或 socks5://127.0.0.1:7890。">?</span>
+          </div>
+          <input
+            id="settings-proxy"
+            v-model.trim="config.proxy"
+            type="text"
+            placeholder="留空不使用代理，例如 http://127.0.0.1:7897"
+          />
         </div>
-        <input
-          id="settings-proxy"
-          v-model.trim="config.proxy"
-          type="text"
-          placeholder="留空不使用代理，例如 http://127.0.0.1:7897"
-        />
       </div>
       <div class="form-group">
         <div class="field-label-row">
