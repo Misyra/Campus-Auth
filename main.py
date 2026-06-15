@@ -341,7 +341,7 @@ def _handle_existing_instance(ctx: ApplicationContext, force: bool = False):
 
 
 def _run_lightweight(ctx: ApplicationContext, logger):
-    """轻量模式：始终启动监控 + 定时任务，无 Web 服务，可选托盘。"""
+    """轻量模式：始终启动监控 + 定时任务，可选托盘，支持按需唤醒 WebUI。"""
     from app.container import ServiceContainer
     from app.utils.ports import resolve_port
 
@@ -353,11 +353,45 @@ def _run_lightweight(ctx: ApplicationContext, logger):
         container.engine.start_scheduler()
     logger.info("轻量模式启动: 仅监控 + 定时任务，按 Ctrl+C 停止")
 
+    # Web 服务状态
+    _web_server_state = {"started": False, "server_ref": [None]}
+
+    def _start_web_server():
+        """按需启动 Web 服务（在子线程中运行）。"""
+        if _web_server_state["started"]:
+            return
+        _web_server_state["started"] = True
+
+        def _worker():
+            try:
+                from app.application import run
+                run(
+                    existing_container=container,
+                    server_ref=_web_server_state["server_ref"],
+                )
+            except Exception as e:
+                logger.error("Web 服务启动失败: {}", e)
+                _web_server_state["started"] = False
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _open_console():
+        """托盘回调：启动 Web 服务并打开浏览器。"""
+        port = resolve_port()
+        _start_web_server()
+        # 等待服务就绪
+        for _ in range(30):
+            if is_local_port_in_use(port):
+                break
+            time.sleep(0.5)
+        webbrowser.open(f"http://127.0.0.1:{port}")
+
     # 系统托盘（可选）
     features = get_runtime_features(
         RuntimeMode.LIGHTWEIGHT,
         ctx.config.minimize_to_tray,
         ctx.config.auto_open_browser,
+        ctx.config.lightweight_tray,
     )
     tray_icon = None
     if features.tray_enabled:
@@ -370,6 +404,7 @@ def _run_lightweight(ctx: ApplicationContext, logger):
                 on_exit=lambda: (
                     os.kill(os.getpid(), signal.SIGTERM) if hasattr(signal, "SIGTERM") else os._exit(0)
                 ),
+                on_open_console=_open_console,
             )
             tray_icon.start()
             logger.info("系统托盘已启动")
@@ -378,7 +413,7 @@ def _run_lightweight(ctx: ApplicationContext, logger):
 
     try:
         while True:
-            time.sleep(60)  # 长间隔等待，可被 Ctrl+C 中断
+            time.sleep(60)
     except KeyboardInterrupt:
         logger.info("收到退出信号，正在关闭服务...")
     finally:
