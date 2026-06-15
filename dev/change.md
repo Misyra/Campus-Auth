@@ -198,6 +198,11 @@
   - 用 `asyncio.to_thread` 包裹三个调用点，释放事件循环
 
 ### fix
+- `app/api/profiles.py` 和 `frontend/js/methods/profiles.js` toggleAutoSwitch 改用 POST body 传递参数
+  - 前端：将 query string `?enabled=${newState}` 改为 POST body `{ enabled: newState }`
+  - 后端：`Query(default="true")` 改为 `Body(default={})`，解析逻辑兼容字符串和布尔值
+
+### fix
 - `app/services/engine.py` 守卫 profile switch 防止并发 shutdown 导致 `_monitor_core` 为 None
   - `_do_network_check` 第 285 行 `consume_profile_switch_flag()` 调用前增加 `_monitor_core` 空值检查
   - 防止 `_handle_stop()` 设置 `_monitor_core = None` 后 `shutdown()` 并发访问引发 `AttributeError`
