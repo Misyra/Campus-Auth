@@ -82,8 +82,13 @@ def save_config_combined(
         from app.utils.crypto import save_password_field
         profile.username = payload.username.strip()
         pwd_raw = payload.password.strip()
-        if pwd_raw and not pwd_raw.startswith("•"):
+        if pwd_raw.startswith("•"):
+            pass  # 掩码值，不更新密码
+        elif pwd_raw:
             profile.password = save_password_field(pwd_raw, profile.password)
+        else:
+            # 用户显式清空密码
+            profile.password = ""
         profile.auth_url = payload.auth_url.strip()
         profile.carrier = str(payload.carrier or "无").strip()
         profile.carrier_custom = str(payload.carrier_custom or "").strip()
