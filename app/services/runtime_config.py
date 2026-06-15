@@ -75,9 +75,6 @@ def _build_config_payload(
     if data is None:
         data = profile_service.load()
 
-    # 执行迁移（如果需要）
-    data = migrate_config_if_needed(data)
-
     # 获取活动 profile
     profile = data.profiles.get(data.active_profile)
     if profile is None:
@@ -160,55 +157,3 @@ def load_runtime_config(
 ) -> tuple[MonitorConfigPayload, bool]:
     """加载运行时配置 —— 根据活动方案的 use_global_* 标志合并全局与方案独立值。"""
     return _build_config_payload(profile_service, data, apply_overrides=True)
-
-
-def migrate_config_if_needed(data: ProfilesData) -> ProfilesData:
-    """迁移旧配置到新格式
-
-    将 SystemSettings 中的凭证迁移到 default profile。
-    """
-    migration_logger = get_logger("config_migration", source="backend")
-
-    # 检查是否有旧的 system 字段需要迁移
-    # 注意：旧格式使用 data.system，新格式使用 data.global_settings
-    if not hasattr(data, 'system'):
-        return data
-
-    system = data.system
-
-    # 检查是否有凭证需要迁移
-    has_credentials = any([
-        getattr(system, 'username', None),
-        getattr(system, 'password', None),
-        getattr(system, 'auth_url', None),
-        getattr(system, 'carrier', None) and getattr(system, 'carrier', None) != "无",
-    ])
-
-    if has_credentials:
-        # 确保 default profile 存在
-        if "default" not in data.profiles:
-            data.profiles["default"] = ProfileSettings()
-
-        default_profile = data.profiles["default"]
-
-        # 迁移凭证到 default profile
-        if getattr(system, 'username', None) and not default_profile.username:
-            default_profile.username = system.username
-        if getattr(system, 'password', None) and not default_profile.password:
-            default_profile.password = system.password
-        if getattr(system, 'auth_url', None) and not default_profile.auth_url:
-            default_profile.auth_url = system.auth_url
-        if getattr(system, 'carrier', None) and system.carrier != "无":
-            default_profile.carrier = system.carrier
-            default_profile.carrier_custom = getattr(system, 'carrier_custom', '')
-
-        # 清空 system 中的凭证
-        system.username = ""
-        system.password = ""
-        system.auth_url = ""
-        system.carrier = "无"
-        system.carrier_custom = ""
-
-        migration_logger.info("已迁移凭证到 default profile")
-
-    return data
