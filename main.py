@@ -179,7 +179,7 @@ def _run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
         if has_decrypt_error:
             logger.warning("密码解密失败，请检查配置")
             return LoginResult.CONFIG_ERROR
-        runtime_config = build_runtime_config(payload)
+        runtime_config = build_runtime_config(payload, global_settings=data.global_settings)
     except Exception as exc:
         logger.error("加载配置失败: {}", exc)
         return LoginResult.CONFIG_ERROR
