@@ -541,8 +541,8 @@ class TestSaveConfigCombined:
         )
         save_config_combined(payload, profile_service)
         data = profile_service.load()
-        default = data.profiles["default"]
-        assert default.check_interval_seconds == 600
+        # 监控配置已移至 global_settings
+        assert data.global_settings.check_interval_seconds == 600
 
 
 # =====================================================================
