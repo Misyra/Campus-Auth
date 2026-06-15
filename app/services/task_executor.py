@@ -205,6 +205,7 @@ class TaskExecutor:
         Returns:
             Future 对象（新的或已有的）
         """
+        future = None
         with self._login_lock:
             # 检查是否已有登录在进行
             if self._login_future is not None and not self._login_future.done():
@@ -215,8 +216,10 @@ class TaskExecutor:
             # 提交新的登录任务
             future = self._login_pool.submit(self.execute_login, cancel_event)
             self._login_future = future
-            future.add_done_callback(self._on_login_done)
-            return future
+
+        # 锁外注册回调，避免时序问题
+        future.add_done_callback(self._on_login_done)
+        return future
 
     def _on_login_done(self, future: Future) -> None:
         """登录任务完成后清理引用。"""

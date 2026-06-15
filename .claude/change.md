@@ -2,6 +2,12 @@
 
 ## 2026-06-15
 
+### fix
+- `app/services/task_executor.py` 修复 `execute_login_async` 死锁风险
+  - 将 `future.add_done_callback(self._on_login_done)` 从 `with self._login_lock:` 块内移到锁外
+  - 原代码在锁内注册回调，而 `_on_login_done` 回调也会获取同一锁，若 `execute_login` 极快完成会导致主线程阻塞
+  - 确保回调注册在锁释放后执行，消除时序问题
+
 ### test
 - 完成测试覆盖率改进，整体覆盖率达到 86%（目标 85%）
   - `tests/test_utils/test_src_utils.py` 新增 PlaywrightWorker 纯逻辑测试
