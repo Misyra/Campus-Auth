@@ -158,14 +158,14 @@
             {{ info.match_ssid }}
           </span>
           <span v-if="info.carrier && info.carrier !== '无'" class="profile-tag">{{ info.carrier === '自定义' ? info.carrier_custom : info.carrier }}</span>
-          <span v-if="!info.use_global_auth_url && info.auth_url" class="profile-tag">
+          <span v-if="info.auth_url" class="profile-tag">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-xs">
               <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
               <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
             </svg>
             自定义地址
           </span>
-          <span v-if="!info.use_global_task && info.active_task" class="profile-tag">
+          <span v-if="info.active_task" class="profile-tag">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-xs">
               <polyline points="4 17 10 11 4 5"/>
               <line x1="12" y1="19" x2="20" y2="19"/>
@@ -260,15 +260,7 @@
       <!-- 账号凭证 -->
       <div class="editor-section">
         <div class="editor-section-label">账号凭证</div>
-        <div class="toggle-group">
-          <label class="toggle compact">
-            <input type="checkbox" v-model="editingProfile.use_global_credentials" />
-            <span class="toggle-slider"></span>
-            <span class="toggle-label">使用全局账号密码</span>
-            <span class="field-help" tabindex="0" role="note" data-tip="开启则使用系统设置中的账号密码，关闭后可为本方案配置独立的账号、密码和运营商。">?</span>
-          </label>
-        </div>
-        <div v-if="!editingProfile.use_global_credentials" class="profile-credentials-section">
+        <div class="profile-credentials-section">
           <div class="form-row">
             <div class="form-group">
               <label for="prof-username">独立账号</label>
@@ -302,27 +294,11 @@
       <!-- 认证设置 -->
       <div class="editor-section">
         <div class="editor-section-label">认证设置</div>
-        <div class="toggle-group">
-          <label class="toggle compact">
-            <input type="checkbox" v-model="editingProfile.use_global_auth_url" />
-            <span class="toggle-slider"></span>
-            <span class="toggle-label">跟随全局认证地址</span>
-            <span class="field-help" tabindex="0" role="note" data-tip="开启后使用系统设置中的认证地址，关闭后可为本方案单独配置认证 URL（如不同运营商有不同的认证入口）。">?</span>
-          </label>
-        </div>
-        <div v-if="!editingProfile.use_global_auth_url" class="form-group">
+        <div class="form-group">
           <label for="prof-auth-url">认证地址</label>
           <input id="prof-auth-url" v-model.trim="editingProfile.auth_url" type="text" placeholder="http://" />
         </div>
-        <div class="toggle-group">
-          <label class="toggle compact">
-            <input type="checkbox" v-model="editingProfile.use_global_task" />
-            <span class="toggle-slider"></span>
-            <span class="toggle-label">跟随全局任务</span>
-            <span class="field-help" tabindex="0" role="note" data-tip="开启后使用任务管理页面设置的活动任务，关闭后可为本方案指定独立的登录任务（如不同网络使用不同的认证流程）。">?</span>
-          </label>
-        </div>
-        <div v-if="!editingProfile.use_global_task" class="form-group">
+        <div class="form-group">
           <label for="prof-task">执行任务</label>
           <custom-select v-model="editingProfile.active_task" :options="taskOptions"></custom-select>
         </div>
