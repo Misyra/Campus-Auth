@@ -51,7 +51,7 @@ export const profileMethods = {
       return;
     }
 
-    const { id, ...settings } = this.editingProfile;
+    const { id, _isNew, ...settings } = this.editingProfile;
 
     try {
       const { data } = await this.$api.put(`/api/profiles/${profileId}`, settings);
