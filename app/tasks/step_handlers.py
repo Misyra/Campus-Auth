@@ -753,12 +753,12 @@ class OcrHandler(StepHandler):
                 # 有字符范围限制时创建独立实例，避免 set_ranges 污染缓存实例
                 import ddddocr
 
-                ocr = ddddocr.DdddOcr(old=old, show_ad=False)
+                ocr = await asyncio.to_thread(ddddocr.DdddOcr, old=old, show_ad=False)
                 ocr.set_ranges(char_range)
                 logger.debug("[ocr] set_ranges({})", char_range)
             else:
-                ocr = self._get_ocr(old=old)
-            result = ocr.classification(img_bytes)
+                ocr = await asyncio.to_thread(self._get_ocr, old=old)
+            result = await asyncio.to_thread(ocr.classification, img_bytes)
         except Exception as e:
             self.schedule_cleanup(old)
             return False, f"验证码识别失败: {e}"
