@@ -3,6 +3,14 @@
 ## 2026-06-15
 
 ### test
+- `tests/test_integration/test_app_startup.py` 添加应用启动集成测试（22 个用例）
+  - `TestCreateAppInitialization`（9 个）：FastAPI 实例创建、标题/版本、lifespan 配置、首页路由、静态文件挂载、WebSocket 端点、existing_container 参数、CORS 中间件、必要目录创建
+  - `TestAppLifespan`（7 个）：shutdown_event 创建、existing_container 模式启动、调度器启用/跳过、shutdown 调用、完整生命周期、新容器模式 startup
+  - `TestDependencyInjection`（6 个）：services 挂载到 app.state、shutdown_event 类型、monitor_service 配置访问、uvicorn Server 存储、server_ref 填充、access_log_event 控制
+  - 使用 `APIRouter` 作为 `new_callable` patch 路由模块，避免 MagicMock 导致的 lifespan 递归合并问题
+- `tests/test_integration/__init__.py` 创建集成测试包
+
+### test
 - `tests/test_services/test_websocket_manager.py` 添加 websocket_manager.py 单元测试，覆盖率 100%
   - `TestNullWebSocketManager`：覆盖 connect、disconnect、broadcast、close_all 四个空操作方法
   - `TestWebSocketManagerConnect`：覆盖 accept 调用和连接追加、多连接
