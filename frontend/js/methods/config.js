@@ -32,8 +32,8 @@ export const configMethods = {
     if (!passwordIsMasked && !this.config.password && !confirm('密码为空，自动认证将无法工作。\n\n确定要继续保存吗？')) {
       return;
     }
-    if (!this.config.enable_tcp_check && !this.config.enable_http_check && !(this.config.portal_check_urls && this.config.portal_check_urls.trim())) {
-      this.toastOnly(false, '至少需要启用一种网络检测方式（TCP / HTTP / Captive Portal）');
+    if (!this.config.enable_tcp_check && !this.config.enable_http_check && !(this.config.url_check_urls && this.config.url_check_urls.trim())) {
+      this.toastOnly(false, '至少需要启用一种网络检测方式（TCP / HTTP / 网址响应）');
       return;
     }
 
@@ -67,6 +67,12 @@ export const configMethods = {
     this._configDirty = true;
     this.frontendLogger.info('config', '已恢复默认设置，请点击保存以生效');
   },
+  onShellFileSelected(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    this.config.shell_path = file.path || file.name;
+    e.target.value = '';
+  },
   async fetchShells() {
     try {
       const { data } = await this.$api.get('/api/shells');
@@ -85,83 +91,6 @@ export const configMethods = {
       this.frontendLogger.info('config', '已加载默认反检测脚本');
     } catch (error) {
       this.frontendLogger.warn('config', '获取默认反检测脚本失败', error);
-    }
-  },
-  async fetchBackups() {
-    try {
-      const { data } = await this.$api.get('/api/backup/list');
-      this.backups = data;
-    } catch {
-      // 备份列表获取失败，初始化为空数组
-      this.backups = [];
-    }
-  },
-  async createBackup() {
-    this.busy.backup = true;
-    try {
-      const { data } = await this.$api.post('/api/backup/create');
-      if (data.success) {
-        this.frontendLogger.info('backup', '备份创建成功: ' + data.message);
-        this.toastOnly(true, data.message);
-        await this.fetchBackups();
-      } else {
-        this.frontendLogger.warn('backup', '备份创建失败: ' + data.message);
-        this.toastOnly(false, data.message);
-      }
-    } catch (error) {
-      const msg = extractApiError(error, '创建备份失败');
-      this.frontendLogger.error('backup', '备份创建异常: ' + msg, error);
-      this.toastOnly(false, msg);
-    } finally {
-      this.busy.backup = false;
-    }
-  },
-  async restoreBackup(filename) {
-    if (!confirm(`确定要从 ${filename} 恢复配置吗？当前配置将被覆盖。`)) return;
-    await this.createBackup();
-    try {
-      const { data } = await this.$api.post(`/api/backup/restore/${filename}`);
-      if (data.success) {
-        this.frontendLogger.info('backup', '备份恢复成功: ' + filename);
-        this.toastOnly(true, data.message);
-        await this.fetchConfig(true);
-        await this.fetchProfiles();
-        await this.fetchBackups();
-      } else {
-        this.frontendLogger.warn('backup', '备份恢复失败: ' + data.message);
-        this.toastOnly(false, data.message);
-      }
-    } catch (error) {
-      const msg = extractApiError(error, '恢复备份失败');
-      this.frontendLogger.error('backup', '备份恢复异常: ' + msg, error);
-      this.toastOnly(false, msg);
-    }
-  },
-  exportBackup(filename) {
-    // 直接触发浏览器下载
-    const url = `${window.location.origin}/api/backup/download/${filename}`;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    this.frontendLogger.info('config', `导出备份: ${filename}`);
-  },
-  async deleteBackup(filename) {
-    if (!confirm(`确定要删除备份 ${filename} 吗？`)) return;
-    try {
-      const { data } = await this.$api.delete(`/api/backup/${filename}`);
-      if (data.success) {
-        this.frontendLogger.info('backup', '备份删除成功: ' + filename);
-        this.toastOnly(true, data.message);
-        await this.fetchBackups();
-      } else {
-        this.frontendLogger.warn('backup', '备份删除失败: ' + data.message);
-        this.toastOnly(false, data.message);
-      }
-    } catch (error) {
-      const msg = extractApiError(error, '删除备份失败');
-      this.frontendLogger.error('backup', '备份删除异常: ' + msg, error);
-      this.toastOnly(false, msg);
     }
   },
   // ── OCR 依赖管理 ──
@@ -213,6 +142,91 @@ export const configMethods = {
       this.toastOnly(false, msg);
     } finally {
       this.busy.ocr = false;
+    }
+  },
+  // ── 开机自启动管理 ──
+  async fetchAutostart() {
+    if (this._autostartInFlight) return;
+    this._autostartInFlight = true;
+    try {
+      const { data } = await this.$api.get('/api/autostart/status');
+      this.autostart = data;
+    } catch (error) {
+      this.frontendLogger.warn('autostart', '获取自启动状态失败', error);
+      if (error?.response?.status === 404) {
+        this.autostart = {
+          platform: '-',
+          enabled: false,
+          method: '当前后端不支持',
+          location: '',
+        };
+      }
+    } finally {
+      this._autostartInFlight = false;
+    }
+  },
+  async _toggleAutostart(enable) {
+    const action = enable ? 'enable' : 'disable';
+    const label = enable ? '启用' : '关闭';
+    this.busy.autostart = true;
+    try {
+      const { data } = await this.$api.post(`/api/autostart/${action}`);
+      if (data.success) {
+        this.frontendLogger.info('autostart', data.message);
+        this.toastOnly(true, data.message);
+      } else {
+        this.frontendLogger.warn('autostart', `${label}自启动失败: ${data.message}`);
+        this.toastOnly(false, data.message);
+      }
+    } catch (error) {
+      if (error?.response?.status === 404) {
+        this.frontendLogger.warn('autostart', '后端不支持开机自启动');
+        this.toastOnly(false, '当前后端版本不支持开机自启动，请重启后端');
+      } else {
+        this.frontendLogger.error('autostart', `${label}自启动异常`, error);
+        this.toastOnly(false, `${label}自启动失败`);
+      }
+    } finally {
+      await this.fetchAutostart();
+      this.busy.autostart = false;
+    }
+  },
+  async enableAutostart() { return this._toggleAutostart(true); },
+  async disableAutostart() { return this._toggleAutostart(false); },
+  async setAutostartMode(lightweight) {
+    try {
+      const { data } = await this.$api.post('/api/autostart/mode', { lightweight });
+      if (data.success) {
+        this.frontendLogger.info('autostart', data.message);
+        this.toastOnly(true, data.message);
+      } else {
+        this.frontendLogger.warn('autostart', `切换自启动模式失败: ${data.message}`);
+        this.toastOnly(false, data.message);
+      }
+    } catch (error) {
+      this.frontendLogger.error('autostart', '切换自启动模式异常', error);
+      this.toastOnly(false, '切换自启动模式失败');
+    }
+  },
+  // ── 日志级别管理 ──
+  async fetchLogLevels() {
+    try {
+      const { data } = await this.$api.get('/api/config/log-levels');
+      this.logLevels = data;
+    } catch (error) {
+      this.frontendLogger.warn('config', '获取日志级别配置失败', error);
+    }
+  },
+  async setSourceLevel(source, level) {
+    try {
+      await this.$api.put('/api/config/source-level', { source, level });
+      this.logLevels.source_levels[source] = level;
+      this.frontendLogger.info('config', `已设置 ${source} 级别为 ${level}`);
+      this.toastOnly(true, `已设置 ${source} 级别为 ${level}`);
+    } catch (error) {
+      const msg = extractApiError(error, '设置失败');
+      this.frontendLogger.error('config', `设置日志级别失败: ${msg}`, error);
+      this.toastOnly(false, msg);
     }
   },
 };

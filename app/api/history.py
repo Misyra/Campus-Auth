@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 
 from app.deps import get_login_history_service
-from app.services.login_history import LoginHistoryEntry, LoginHistoryService
+from app.services.login_history_service import LoginHistoryEntry, LoginHistoryService
 
 router = APIRouter()
 

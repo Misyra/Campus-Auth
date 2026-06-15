@@ -11,6 +11,7 @@ export function debugData() {
       screenshot_url: null,
     },
     debugLoading: false,
-    pureMode: false,
+    pureMode: true,
+    _pureModeLoading: false,
   };
 }

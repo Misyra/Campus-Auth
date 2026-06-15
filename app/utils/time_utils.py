@@ -1,10 +1,10 @@
 """时间相关工具函数"""
 
 import datetime
-from typing import Dict, Any, Tuple
+from typing import Any
 
 
-def is_in_pause_period(pause_config: Dict[str, Any]) -> bool:
+def is_in_pause_period(pause_config: dict[str, Any]) -> bool:
     """检查当前时间是否在暂停时段内。
 
     当 pause_config 为空字典或缺少 enabled 字段时，默认认为暂停功能已启用。
@@ -35,7 +35,7 @@ def is_in_pause_period(pause_config: Dict[str, Any]) -> bool:
         return current_hour >= start_hour or current_hour < end_hour
 
 
-def get_runtime_stats(start_time: float, check_count: int) -> Tuple[str, str]:
+def get_runtime_stats(start_time: float, check_count: int) -> tuple[str, str]:
     """获取运行时统计信息。
 
     参数:

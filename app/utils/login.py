@@ -1,13 +1,15 @@
 """登录尝试处理器。"""
 
 import asyncio
+import contextlib
 import datetime
 import os
 import re
+import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from .browser import BrowserContextManager
 from .env import build_login_template_vars
@@ -26,7 +28,7 @@ class LoginAttemptHandler:
 
     def __init__(
         self,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         cancel_event: threading.Event | None = None,
         close_on_failure: bool = True,
     ):
@@ -42,7 +44,7 @@ class LoginAttemptHandler:
         self.config = config
         self.cancel_event = cancel_event
         self.close_on_failure = close_on_failure
-        self.logger = get_logger("login")
+        self.logger = get_logger("login", source="backend")
         self._browser_ctx: BrowserContextManager | None = None
         self._task_manager: Any | None = None
         self._project_root: Path | None = None
@@ -72,7 +74,7 @@ class LoginAttemptHandler:
                     self.logger.info(msg)
                     return False, msg
 
-                net_ok, _ = check_network_status(self.config)
+                net_ok, _ = await asyncio.to_thread(check_network_status, self.config)
                 if net_ok:
                     msg = "网络正常，无需登录"
                     self.logger.info(msg)
@@ -96,7 +98,7 @@ class LoginAttemptHandler:
             return await self._perform_login_with_auth_class()
 
         except Exception as e:
-            error_msg = f"登录过程中发生错误: {str(e)}"
+            error_msg = f"登录过程中发生错误: {e!s}"
             self.logger.error(error_msg)
             return False, error_msg
 
@@ -106,13 +108,13 @@ class LoginAttemptHandler:
         if task_result is not None:
             return task_result
 
-        error_msg = "未找到可执行的活动任务，请在任务管理页面配置并激活一个任务"
+        error_msg = "未找到可执行的任务，请先在任务管理页面创建并启用一个登录任务"
         self.logger.error("{}", error_msg)
         return False, error_msg
 
     async def _perform_login_with_active_task(self) -> tuple[bool, str] | None:
         """执行当前活动任务；返回 None 表示未找到可执行任务。"""
-        from ..task_executor import ScriptTaskInfo
+        from ..tasks.models import ScriptTaskInfo
 
         phase_start = time.perf_counter()
         try:
@@ -149,7 +151,7 @@ class LoginAttemptHandler:
     def _ensure_task_manager(self) -> None:
         """懒初始化 TaskManager。"""
         if self._task_manager is None:
-            from ..task_executor import TaskManager
+            from ..tasks.manager import TaskManager
 
             root_override = os.getenv("CAMPUS_AUTH_PROJECT_ROOT", "").strip()
             self._project_root = (
@@ -163,7 +165,7 @@ class LoginAttemptHandler:
         self, task: Any, active_task_id: str, phase_start: float
     ) -> tuple[bool, str]:
         """执行浏览器任务。"""
-        from ..task_executor import TaskExecutor
+        from ..tasks.browser_runner import TaskExecutor
 
         login_url = self.config.get("auth_url", "")
         username = self.config.get("username", "")
@@ -193,8 +195,15 @@ class LoginAttemptHandler:
         browser_manager = BrowserContextManager(
             self.config, cancel_event=self.cancel_event
         )
-        await browser_manager.__aenter__()
-        self._browser_ctx = browser_manager
+        self._browser_ctx = browser_manager  # 先赋值，确保异常时 close_browser 能清理
+        try:
+            await browser_manager.__aenter__()
+        except Exception:
+            # __aenter__ 失败时手动调用 __aexit__ 释放已获取的资源
+            self._browser_ctx = None
+            with contextlib.suppress(Exception):
+                await browser_manager.__aexit__(*sys.exc_info())
+            raise
         self.logger.info("浏览器就绪 ({:.1f}s)", time.perf_counter() - browser_start)
 
         # 成功标志：默认 False，executor 返回成功时设为 True
@@ -252,8 +261,8 @@ class LoginAttemptHandler:
 
         脚本只负责发请求，登录是否成功通过网络检测判断。
         """
-        from ..network_decision import check_network_status
-        from ..script_runner import ScriptRunner
+        from ..network.decision import check_network_status
+        from ..workers.script_runner import ScriptRunner
 
         self.logger.info(
             "脚本任务开始 -> 任务={} 脚本={}",
@@ -278,7 +287,7 @@ class LoginAttemptHandler:
         self.logger.info("脚本已执行，等待网络验证...")
         await asyncio.sleep(LOGIN_SUCCESS_SETTLE_SECONDS)
 
-        net_ok, net_msg = check_network_status(self.config)
+        net_ok, net_msg = await asyncio.to_thread(check_network_status, self.config)
 
         total = time.perf_counter() - phase_start
         if net_ok:
@@ -289,20 +298,12 @@ class LoginAttemptHandler:
             return False, f"网络未连通: {net_msg}"
 
     async def close_browser(self) -> None:
-        """关闭浏览器（登录成功或监控停止时调用）"""
+        """释放浏览器上下文引用（不销毁浏览器实例）"""
         if self._browser_ctx:
             try:
-                from app.workers.playwright_worker import get_worker
-
-                worker = get_worker()
-                await worker.close_browser()
+                await self._browser_ctx.__aexit__(None, None, None)
             except Exception as exc:
-                self.logger.warning("浏览器关闭时异常: {}", exc)
+                self.logger.warning("浏览器上下文关闭异常: {}", exc)
             finally:
-                # 确保 __aexit__ 始终执行，释放本地引用
-                try:
-                    await self._browser_ctx.__aexit__(None, None, None)
-                except Exception:
-                    self.logger.warning("浏览器上下文关闭异常", exc_info=True)
                 self._browser_ctx = None
-                self.logger.info("浏览器已关闭")
+                self.logger.info("浏览器上下文已释放")

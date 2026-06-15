@@ -14,48 +14,6 @@
           <input id="settings-log-retention" v-model.number="config.log_retention_days" type="number" min="1" max="365" />
         </div>
       </div>
-
-      <div class="settings-section-divider"></div>
-      <h4 class="settings-section-heading">启动行为</h4>
-      <div class="toggle-group">
-        <div class="toggle-with-help">
-          <label class="toggle toggle-help-inline">
-            <input type="checkbox" v-model="config.auto_start" />
-            <span class="toggle-slider"></span>
-            <span class="toggle-label">启动后自动监控</span>
-            <span class="field-help" tabindex="0" role="note" data-tip="开启后软件启动即自动开始检测网络，断网时自动触发登录。关闭则需手动点击「启动监控」才会开始工作。配合开机自启可实现全自动登录。">?</span>
-          </label>
-        </div>
-      </div>
-      <div class="toggle-group">
-        <div class="toggle-with-help">
-          <label class="toggle toggle-help-inline">
-            <input type="checkbox" v-model="config.login_then_exit" />
-            <span class="toggle-slider"></span>
-            <span class="toggle-label">登录成功后退出</span>
-            <span
-              class="field-help"
-              tabindex="0"
-              role="note"
-              data-tip="启动后自动登录，登录成功后退出软件。登录失败会自动重试（最多 3 次），超限后回退到正常启动进入 Web 控制台。适用于搭配开机自启使用，只需认证一次、不需要持续监控的场景。"
-            >?</span>
-          </label>
-        </div>
-      </div>
-      <div class="toggle-group">
-        <div class="toggle-with-help">
-          <label class="toggle toggle-help-inline">
-            <input type="checkbox" :checked="autostart.enabled" @change="autostart.enabled ? disableAutostart() : enableAutostart()" :disabled="busy.autostart" />
-            <span class="toggle-slider"></span>
-            <span class="toggle-label">开机自启动</span>
-            <span class="field-help" tabindex="0" role="note" data-tip="开机时自动启动 Campus-Auth。配合「启动后自动监控」可实现全自动登录。">?</span>
-          </label>
-        </div>
-        <span v-if="autostart.method !== '-'" class="autostart-method-hint">当前方式：{{ autostart.method }}</span>
-      </div>
-
-      <div class="settings-section-divider"></div>
-      <h4 class="settings-section-heading">界面行为</h4>
       <div class="toggle-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
@@ -66,10 +24,65 @@
           </label>
         </div>
       </div>
+
+      <div class="settings-section-divider"></div>
+      <h4 class="settings-section-heading">日志级别</h4>
+      <div class="form-group">
+        <div class="field-label-row">
+          <label>全局日志级别</label>
+          <span class="field-help" tabindex="0" role="note" data-tip="设置所有日志来源的默认级别。低于该级别的日志将被过滤。">?</span>
+        </div>
+        <custom-select
+          v-model="logLevels.global_level"
+          :options="logLevelOptions"
+          @change="(val) => setSourceLevel('global', val)"
+        ></custom-select>
+      </div>
+
+      <div class="settings-section-divider"></div>
+      <h4 class="settings-section-heading">启动行为</h4>
+      <div class="form-group">
+        <div class="field-label-row">
+          <label for="settings-startup-action">启动后执行</label>
+          <span class="field-help" tabindex="0" role="note" data-tip="选择程序启动后自动执行的操作。">?</span>
+        </div>
+        <custom-select
+          id="settings-startup-action"
+          v-model="config.startup_action"
+          :options="loginActionOptions"
+        ></custom-select>
+        <span class="hint">{{ startupActionHint }}</span>
+      </div>
+
       <div class="toggle-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
-            <input type="checkbox" v-model="config.minimize_to_tray" />
+            <input type="checkbox" :checked="autostart.enabled" @change="autostart.enabled ? disableAutostart() : enableAutostart()" :disabled="busy.autostart" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">开机自启动</span>
+            <span v-if="autostart.method !== '-'" class="autostart-method-badge">{{ autostart.method }}</span>
+            <span class="field-help" tabindex="0" role="note" data-tip="开机时自动启动 Campus-Auth。配合「启动后开始监控」可持续监控网络，或配合「自动登录，成功后退出」实现开机自动认证。">?</span>
+          </label>
+        </div>
+      </div>
+      <div class="form-group" v-if="autostart.enabled">
+        <div class="field-label-row">
+          <label>自启动模式</label>
+          <span class="field-help" tabindex="0" role="note" data-tip="轻量模式仅后台监控，不启动 Web 界面；完整模式启动 Web 管理界面。">?</span>
+        </div>
+        <custom-select
+          v-model="autostart.lightweight"
+          :options="autostartModeOptions"
+          @change="setAutostartMode"
+        ></custom-select>
+      </div>
+
+      <div class="settings-section-divider"></div>
+      <h4 class="settings-section-heading">界面行为</h4>
+      <div class="toggle-group">
+        <div class="toggle-with-help">
+          <label class="toggle toggle-help-inline">
+            <input type="checkbox" v-model="config.minimize_to_tray" :disabled="config.startup_action === 'login_once'" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">最小化到系统托盘</span>
             <span class="field-help" tabindex="0" role="note" data-tip="关闭窗口时最小化到系统托盘，可通过托盘图标重新打开界面。关闭此选项后关闭窗口程序仍在后台运行，但只能手动输入地址访问。">?</span>
@@ -86,41 +99,9 @@
               class="field-help"
               tabindex="0"
               role="note"
-              data-tip="开启后启动软件时不自动打开浏览器窗口。如果你希望开机后后台静默登录，建议开启。"
+              data-tip="开启后启动软件时不自动打开网页界面。如果你希望开机后后台静默运行，建议开启。"
             >?</span>
           </label>
-        </div>
-      </div>
-
-      <div class="settings-section-divider"></div>
-      <h4 class="settings-section-heading">OCR 验证码识别</h4>
-      <div class="ocr-section">
-        <div class="ocr-status-row">
-          <span class="ocr-status-label">ddddocr 依赖</span>
-          <span v-if="ocrStatus.installed" class="ocr-status-badge installed">已安装</span>
-          <span v-else class="ocr-status-badge not-installed">未安装</span>
-          <span v-if="ocrStatus.installed && ocrStatus.size_mb > 0" class="ocr-size-hint">约 {{ ocrStatus.size_mb }} MB</span>
-        </div>
-        <p class="ocr-description">
-          OCR 用于自动识别验证码图片。仅在任务中使用 <code>ocr</code> 步骤时才需要安装。
-          安装后会占用约 120MB 磁盘空间（含 onnxruntime 运行时）。
-        </p>
-        <div class="ocr-actions">
-          <button v-if="!ocrStatus.installed" class="btn btn-primary btn-sm" @click="installOcr" :disabled="busy.ocr">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            {{ busy.ocr ? '安装中...' : '安装 OCR 依赖' }}
-          </button>
-          <button v-else class="btn btn-danger-ghost btn-sm" @click="uninstallOcr" :disabled="busy.ocr">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-              <polyline points="3 6 5 6 21 6"/>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-            </svg>
-            {{ busy.ocr ? '卸载中...' : '卸载 OCR 依赖' }}
-          </button>
         </div>
       </div>
 
@@ -162,79 +143,24 @@
           <label for="settings-shell">Shell 路径</label>
           <span class="field-help" tabindex="0" role="note" data-tip="定时任务执行 Shell 命令时使用的 Shell。留空使用系统默认（Windows 优先 PowerShell，Linux/macOS 使用 bash）。">?</span>
         </div>
-        <select
-          id="settings-shell"
-          v-model="shellPathMode"
-        >
-          <option value="">自动检测（推荐）</option>
-          <option v-for="shell in availableShells" :key="shell.path" :value="shell.path">
-            {{ shell.name }} - {{ shell.description }}
-          </option>
-          <option value="__custom__">自定义路径...</option>
-        </select>
-        <input
-          v-if="shellPathMode === '__custom__'"
-          v-model.trim="config.shell_path"
-          type="text"
-          placeholder="输入 Shell 可执行文件的完整路径"
-          class="mt-2"
-        />
+        <custom-select v-model="shellPathMode" :options="shellPathOptions"></custom-select>
+        <div v-if="shellPathMode === '__custom__' || shellCustomMode" class="shell-custom-input">
+          <input
+            v-model.trim="config.shell_path"
+            type="text"
+            placeholder="输入 Shell 可执行文件的完整路径"
+          />
+          <button type="button" class="btn btn-sm btn-secondary" @click="$refs.shellFileInput.click()">浏览...</button>
+          <input
+            ref="shellFileInput"
+            type="file"
+            accept=".exe,.bat,.cmd,.ps1,.sh"
+            style="display:none"
+            @change="onShellFileSelected"
+          />
+        </div>
         <span class="hint" v-if="config.shell_path && shellPathMode !== '__custom__'">当前: {{ config.shell_path }}</span>
         <span class="hint" v-else-if="!config.shell_path">默认: {{ defaultShell }}</span>
-      </div>
-    </div>
-  </section>
-
-  <!-- 配置备份与恢复 -->
-  <section class="card settings-panel">
-    <div class="card-header">
-      <h2>配置备份</h2>
-      <span class="card-header-sub">防止误操作导致配置丢失</span>
-    </div>
-    <div class="card-body">
-      <div class="backup-toolbar">
-        <div class="backup-summary" v-if="backups.length > 0">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="7 10 12 15 17 10"/>
-            <line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          <span>{{ backups.length }} 个备份</span>
-        </div>
-        <button class="btn btn-primary" type="button" @click="createBackup" :disabled="busy.backup">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-            <polyline points="17 21 17 13 7 13 7 21"/>
-            <polyline points="7 3 7 8 15 8"/>
-          </svg>
-          {{ busy.backup ? '备份中...' : '创建备份' }}
-        </button>
-      </div>
-      <div v-if="backups.length > 0" class="backup-table">
-        <div class="backup-table-header">
-          <span class="backup-col-name">文件名</span>
-          <span class="backup-col-time">创建时间</span>
-          <span class="backup-col-size">大小</span>
-          <span class="backup-col-actions">操作</span>
-        </div>
-        <div class="backup-row" v-for="b in backups" :key="b.filename">
-          <span class="backup-col-name" :title="b.filename">{{ b.filename }}</span>
-          <span class="backup-col-time">{{ b.created }}</span>
-          <span class="backup-col-size">{{ (b.size / 1024).toFixed(1) }} KB</span>
-          <span class="backup-col-actions">
-            <button class="btn btn-sm btn-secondary" type="button" @click="restoreBackup(b.filename)" title="用此备份覆盖当前配置（操作前会自动备份当前配置）">恢复</button>
-            <button class="btn btn-sm btn-secondary" type="button" @click="exportBackup(b.filename)" title="下载备份文件到本地">导出</button>
-            <button class="btn btn-sm btn-danger-ghost" type="button" @click="deleteBackup(b.filename)" title="删除此备份文件">删除</button>
-          </span>
-        </div>
-      </div>
-      <div v-else class="backup-empty">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-          <line x1="3" y1="9" x2="21" y2="9"/>
-          <line x1="9" y1="21" x2="9" y2="9"/>
-        </svg>
-        <p>暂无备份，点击"创建备份"保存当前配置</p>
       </div>
     </div>
   </section>

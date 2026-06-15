@@ -7,40 +7,18 @@ import os
 import shutil
 import subprocess
 
-from .platform_utils import is_windows, is_macos, is_linux
 from .logging import get_logger
+from .platform import CREATE_NO_WINDOW_FLAG, is_linux, is_macos, is_windows
 
-logger = get_logger("notify", side="BACKEND")
-
-
-def send_notification(title: str, message: str, duration_ms: int = 5000) -> bool:
-    """发送桌面通知（跨平台）
-
-    Returns:
-        True 如果通知发送成功
-    """
-    try:
-        # 运行时动态检测平台，避免模块级平台锁定
-        if is_windows():
-            return _notify_windows(title, message, duration_ms)
-        elif is_macos():
-            return _notify_macos(title, message)
-        elif is_linux():
-            return _notify_linux(title, message, duration_ms)
-        else:
-            logger.debug("不支持的操作系统")
-            return False
-    except Exception as exc:
-        logger.warning("发送桌面通知失败: {}", str(exc)[:200])
-        return False
+logger = get_logger("notify", source="backend")
 
 
 def _notify_windows(title: str, message: str, duration_ms: int) -> bool:
     """Windows: 使用 PowerShell Toast 通知"""
 
-    # PowerShell 双引号上下文中需要转义: `, ", $
+    # PowerShell 双引号上下文中需要转义: `, ", $, \n, \r
     def _escape_ps(s: str) -> str:
-        return s.replace("`", "``").replace('"', '`"').replace("$", "`$")
+        return s.replace("`", "``").replace('"', '`"').replace("$", "`$").replace("\n", "`n").replace("\r", "`r")
 
     safe_title = _escape_ps(title)
     safe_msg = _escape_ps(message)
@@ -70,9 +48,7 @@ $toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds({duration_sec})
             capture_output=True,
             text=True,
             timeout=10,
-            creationflags=subprocess.CREATE_NO_WINDOW
-            if hasattr(subprocess, "CREATE_NO_WINDOW")
-            else 0,
+            creationflags=CREATE_NO_WINDOW_FLAG,
         )
         if result.returncode == 0:
             logger.debug("Windows 通知已发送: {}", title)
@@ -86,9 +62,7 @@ $toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds({duration_sec})
             ["msg", os.environ.get("USERNAME", "*"), f"{title}: {message}"],
             capture_output=True,
             timeout=5,
-            creationflags=subprocess.CREATE_NO_WINDOW
-            if hasattr(subprocess, "CREATE_NO_WINDOW")
-            else 0,
+            creationflags=CREATE_NO_WINDOW_FLAG,
         )
         return result.returncode == 0
     except FileNotFoundError:
@@ -101,18 +75,21 @@ $toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds({duration_sec})
 
 def _notify_macos(title: str, message: str) -> bool:
     """macOS: 使用 osascript 发送通知"""
-    # 先转义反斜杠再转义双引号，防止反斜杠导致双引号逃逸
-    # macOS osascript 不支持通知中的换行符，替换为空格
-    safe_title = title.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
-    safe_msg = message.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
-    script = f'display notification "{safe_msg}" with title "{safe_title}"'
-    result = subprocess.run(
-        ["osascript", "-e", script],
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
-    return result.returncode == 0
+    try:
+        # 先转义反斜杠再转义双引号，防止反斜杠导致双引号逃逸
+        # macOS osascript 不支持通知中的换行符，替换为空格
+        safe_title = title.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
+        safe_msg = message.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
+        script = f'display notification "{safe_msg}" with title "{safe_title}"'
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
 
 
 def _notify_linux(title: str, message: str, duration_ms: int) -> bool:

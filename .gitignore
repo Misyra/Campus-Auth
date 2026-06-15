@@ -1,9 +1,6 @@
 # 测试覆盖率
 .coverage
 
-# 优化计划（临时文档）
-*OPTIMIZATION_PLAN*.md
-
 # Python-generated files
 __pycache__/
 *.py[oc]
@@ -18,15 +15,15 @@ wheels/
 # 本地 uv 存放目录（launcher.py 自动下载）
 .uv/
 
+# Embedded Python environment (auto-downloaded)
+environment/
+
 # Task active state (local user preference)
 tasks/active.txt
 tasks/.order.json
 tasks/scheduled/
 tasks/scripts/
 tasks/browser/test2.json
-
-# Embedded Python environment (auto-downloaded)
-environment/
 
 # Executable files
 *.exe
@@ -36,14 +33,14 @@ environment/
 .env
 .env.bak
 .env.migrated
-.agreed
 
 # User-specific network profiles
-settings.json
+config/
 
 # Log files
 *.log
 logs/
+debug/
 
 # IDE
 .vscode/
@@ -56,21 +53,9 @@ launcher.py
 package_zip.ps1
 
 # Claude Code
-.claude/
-.agents/
-.worktrees/
-CLAUDE.md
-CODE_REVIEW_FIX.md
-AGENTS.md
-skills-lock.json
-.sisyphus/
+.claude/settings.json
+.claude/settings.local.json
 
-# Pyright
-pyrightconfig.json
-
-
-# OpenCode working directory
-.omo/
 # OS
 .DS_Store
 Thumbs.db
@@ -81,17 +66,15 @@ temp/
 # User background images
 frontend/background/
 
-# 流程图（本地参考，不随仓库分发）
-doc/diagrams/
+# 审计报告和实施计划（本地参考）
+docs/superpowers/
 
-# Source assets
-1.png
-logo.png
-cat.svg
-development/
+# Source assets (in dev/)
+dev/
 
 # Release staging artifacts
 release/stage-win/
 release/stage-win-full/
-release/*
-development/*
+
+# Pyright
+pyrightconfig.json

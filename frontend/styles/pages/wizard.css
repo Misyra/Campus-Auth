@@ -171,3 +171,75 @@
 .wizard-footer .btn {
   min-width: 100px;
 }
+
+/* 协议内容样式 */
+.terms-content {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 20px;
+  backdrop-filter: blur(4px);
+}
+
+.terms-content h4 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--text-primary);
+}
+
+.terms-content p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.terms-content ul {
+  list-style: disc;
+  padding-left: 20px;
+  margin-bottom: 16px;
+}
+
+.terms-content li {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.terms-checkbox {
+  padding: 16px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.terms-checkbox .toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.terms-checkbox .toggle-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* 错误提示样式 */
+.wizard-page .input-error {
+  border-color: var(--error) !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
+}
+
+.wizard-page .error-text {
+  display: block;
+  color: var(--error);
+  font-size: 12px;
+  margin-top: 6px;
+  line-height: 1.4;
+}

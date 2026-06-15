@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import ntpath
 import os
 import platform
@@ -9,12 +10,13 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import Any
 
 from app.utils.logging import get_logger
 from app.utils.shell_policy import ShellCommandPolicy
 from app.utils.shell_utils import detect_binaries
 
-logger = get_logger("script_runner", side="BACKEND")
+logger = get_logger("script_runner", source="backend")
 
 # 默认脚本超时（秒）
 DEFAULT_TIMEOUT = 60
@@ -68,6 +70,7 @@ class ScriptRunner:
         self.timeout = timeout
         self.binary_path = binary_path or get_default_binary()
         self._script_content: str | None = None
+        self._cache_available_binaries: list[dict[str, Any]] | None = None
 
     def _load_script_content(self) -> str | None:
         """从 JSON 文件加载脚本内容。
@@ -187,8 +190,13 @@ class ScriptRunner:
             cmd = self._build_cmd()
 
         # 使用 ShellCommandPolicy 进行安全校验和执行
-        available = [b["path"] for b in detect_available_binaries()]
+        if self._cache_available_binaries is None:
+            self._cache_available_binaries = detect_available_binaries()
+        available = [b["path"] for b in self._cache_available_binaries]
         if self.binary_path not in available:
+            logger.warning(
+                "binary_path 不在系统已知列表中，已自动添加: {}", self.binary_path
+            )
             available.append(self.binary_path)
         policy = ShellCommandPolicy(allowlist=available)
 
@@ -206,26 +214,29 @@ class ScriptRunner:
         except PermissionError as e:
             logger.error("脚本执行被拒绝: {}", e)
             return False, str(e)
+        except FileNotFoundError as e:
+            logger.error("脚本或解释器不存在: {}", e)
+            return False, f"脚本或解释器不存在: {e}"
+        except Exception as e:
+            logger.error("脚本执行异常: {}", e)
+            return False, f"执行异常: {e}"
         finally:
             if temp_path is not None:
-                try:
+                with contextlib.suppress(OSError):
                     os.unlink(temp_path)
-                except OSError:
-                    pass
 
         elapsed = time.perf_counter() - start
 
         if stderr_str:
-            logger.info("脚本 stderr: {}", stderr_str[:500])
-
-        output = (
-            stdout_str[:500] or stderr_str[:500] or f"(无输出, exit code {returncode})"
-        )
+            logger.warning("脚本 stderr: {}", stderr_str[:500])
 
         if returncode == 0:
+            output = stdout_str[:500] or f"(无输出, exit code 0)"
             logger.info("脚本执行完成 ({:.1f}s): {}", elapsed, output)
             return True, output
         else:
+            # 失败时优先使用 stderr
+            output = stderr_str[:500] or stdout_str[:500] or f"(无输出, exit code {returncode})"
             logger.warning(
                 "脚本执行失败 ({:.1f}s, exit {}): {}", elapsed, returncode, output
             )

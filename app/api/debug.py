@@ -5,8 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 
 from app.deps import get_debug_manager, get_monitor_service
-from app.services.debug import DebugSessionManager
-from app.services.monitor import MonitorService
+from app.services.debug_service import DebugSessionManager
+from app.services.engine import ScheduleEngine
 
 router = APIRouter()
 
@@ -15,7 +15,7 @@ router = APIRouter()
 async def debug_start(
     request: Request,
     debug_mgr: DebugSessionManager = Depends(get_debug_manager),
-    monitor_svc: MonitorService = Depends(get_monitor_service),
+    monitor_svc: ScheduleEngine = Depends(get_monitor_service),
 ) -> dict[str, object]:
     return await debug_mgr.start(request, monitor_svc)
 
@@ -39,10 +39,3 @@ async def debug_stop(
     debug_mgr: DebugSessionManager = Depends(get_debug_manager),
 ) -> dict[str, object]:
     return await debug_mgr.stop()
-
-
-@router.get("/api/debug/status")
-async def debug_status(
-    debug_mgr: DebugSessionManager = Depends(get_debug_manager),
-) -> dict[str, object]:
-    return debug_mgr.get_status()

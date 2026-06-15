@@ -6,11 +6,11 @@ import json
 import re
 from typing import Any
 
-from .models import StepError, TaskConfig
-
 from app.utils.logging import get_logger
 
-logger = get_logger("variable_resolver", side="BACKEND")
+from .models import StepError, TaskConfig
+
+logger = get_logger("variable_resolver", source="task")
 
 
 class VariableResolver:
@@ -59,11 +59,15 @@ class VariableResolver:
             # 按优先级查找变量
             if var_name in self.runtime_vars:
                 raw = self.runtime_vars[var_name]
-                resolved = (
-                    json.dumps(raw, ensure_ascii=False)
-                    if not isinstance(raw, str)
-                    else raw
-                )
+                if raw is None:
+                    resolved = ""
+                elif not isinstance(raw, str):
+                    try:
+                        resolved = json.dumps(raw, ensure_ascii=False)
+                    except TypeError:
+                        resolved = str(raw)
+                else:
+                    resolved = raw
             elif var_name in self.template_vars:
                 resolved = str(self.template_vars[var_name])
             elif var_name in self.config.variables:
@@ -71,7 +75,7 @@ class VariableResolver:
                     self.config.variables[var_name], depth + 1, visited | {var_name}
                 )
             else:
-                logger.warning("[VariableResolver] 未解析的变量: {}", match.group(0))
+                logger.warning("[var] 未解析的变量: {}", match.group(0))
                 return match.group(0)  # 保留原样
 
             # 递归解析
@@ -106,8 +110,8 @@ class VariableResolver:
             resolved = self.resolve(match.group(0))
             # If variable not found, resolve returns the original pattern
             if resolved == match.group(0):
-                logger.warning("[VariableResolver] 未解析的变量: {}", match.group(0))
-                return '""'  # Default to empty string
+                logger.warning("[var] 未解析的变量: {}", match.group(0))
+                return json.dumps(match.group(0))  # 保留原样，转义后作为 JS 字符串
             return json.dumps(resolved)
 
         return self.TEMPLATE_PATTERN.sub(replacer, value)

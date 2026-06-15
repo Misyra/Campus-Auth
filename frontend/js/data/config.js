@@ -4,7 +4,7 @@ import { DEFAULT_CONFIG } from '../constants.js';
 export function configData() {
   return {
     config: { ...DEFAULT_CONFIG },
-    defaultPortalUrls: DEFAULT_CONFIG.portal_check_urls,
+    defaultUrlCheckUrls: DEFAULT_CONFIG.url_check_urls,
     savedConfigSnapshot: '',
     _configDirty: false,
     dangerConfirm: null,
@@ -13,5 +13,12 @@ export function configData() {
     defaultShell: '',
     // OCR 依赖管理
     ocrStatus: { installed: false, size_mb: 0 },
+    // 日志级别配置
+    logLevels: {
+      global_level: 'INFO',
+      source_levels: {},
+    },
+    // 并发锁（防止重复请求）
+    _autostartInFlight: false,
   };
 }

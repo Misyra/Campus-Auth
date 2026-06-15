@@ -13,15 +13,12 @@ PROJECT_ROOT = (
 )
 
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
-LOGS_DIR = PROJECT_ROOT / "logs"
+DEBUG_DIR = PROJECT_ROOT / "debug"
+LOGS_DIR = DEBUG_DIR / "logs"
+SCREENSHOTS_DIR = DEBUG_DIR / "screenshots"
 TEMP_DIR = PROJECT_ROOT / "temp"
-BACKUP_DIR = PROJECT_ROOT / "backups"
-MAX_BACKUPS = 20
 
-# 备份文件名正则（供 backup 路由校验）
-BACKUP_FILENAME_PATTERN = r"^settings_\d{8}_\d{6}(?:_\d{6})?(?:_autosave)?\.json$"
-
-# 默认网络检测目标（单一来源，避免 schemas/config_service/monitor_core 重复）
+# 默认网络检测目标（单一来源，避免 schemas/config_service/monitor_service 重复）
 DEFAULT_NETWORK_TARGETS: str = "8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
 DEFAULT_HTTP_TARGETS: str = "https://www.baidu.com,https://www.qq.com"
 
@@ -33,19 +30,11 @@ WORKER_SUBMIT_TIMEOUT = 300  # Worker 命令提交超时
 WORKER_READY_TIMEOUT = 5  # Worker 就绪等待
 WORKER_JOIN_TIMEOUT = 3  # Worker 线程 join
 WORKER_QUEUE_PUT_TIMEOUT = 10  # 命令入队超时
-MONITOR_THREAD_JOIN_TIMEOUT = 8  # 监控线程 join
 MONITOR_STOP_TIMEOUT = 10  # 监控停止等待
-MONITOR_RELOAD_TIMEOUT = 15  # 配置重载等待
-SCHEDULER_POLL_INTERVAL = 30  # 调度器轮询间隔
 PORTAL_WAIT_AFTER_LOGIN = 5  # 登录后等待 Portal 更新
 DEFAULT_STEP_TIMEOUT_MS = 10000  # 步骤默认超时（毫秒）
 DEFAULT_TASK_TIMEOUT_MS = 30000  # 任务默认超时（毫秒）
 
 # ── 容量常量 ──
-LOG_BUFFER_MAXLEN = 1200  # 日志环形缓冲
+LOG_BUFFER_MAXLEN = 500  # 日志环形缓冲
 STATUS_LOG_MAXLEN = 200  # 状态日志缓冲
-DEBUG_LOG_MAXLEN = 1000  # 调试日志缓冲
-CMD_QUEUE_MAXSIZE = 50  # 命令队列容量
-
-# ── 默认端口 ──
-DEFAULT_APP_PORT = 50721  # 应用默认端口

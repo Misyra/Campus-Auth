@@ -1,31 +1,75 @@
 from __future__ import annotations
 
 import atexit
-import re
 import socket
 import ssl
-import subprocess
 import threading
 import time
+from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Iterable, Sequence
 
 import httpx
+import psutil
 
 from app.utils.logging import get_logger
-from app.utils.platform_utils import (
-    is_windows,
-    is_macos,
-    is_linux,
-    CREATE_NO_WINDOW_FLAG,
-)
 
-logger = get_logger("network_probes", side="BACKEND")
+logger = get_logger("network_probes", source="network")
 
-executor = ThreadPoolExecutor(max_workers=5)
+executor = ThreadPoolExecutor(max_workers=3)
 atexit.register(executor.shutdown, wait=False, cancel_futures=True)
 _proxy_lock = threading.Lock()
 _block_proxy = True  # 默认屏蔽系统代理，避免代理影响网络检测
+
+# ── httpx 全局单例 ──
+
+_probe_client: httpx.Client | None = None
+_probe_lock = threading.Lock()
+_probe_block_proxy: bool = True  # 记录创建时的代理状态
+
+
+def _get_probe_client(block_proxy: bool) -> httpx.Client:
+    """获取全局复用的探测 Client，线程安全。代理设置变化时自动重建。"""
+    global _probe_client, _probe_block_proxy
+    # 快速路径：无需加锁
+    if (
+        _probe_client is not None
+        and not _probe_client.is_closed
+        and _probe_block_proxy == block_proxy
+    ):
+        return _probe_client
+    # 慢速路径：加锁重建
+    with _probe_lock:
+        if (
+            _probe_client is not None
+            and not _probe_client.is_closed
+            and _probe_block_proxy == block_proxy
+        ):
+            return _probe_client
+        if _probe_client is not None and not _probe_client.is_closed:
+            _probe_client.close()
+        _probe_client = httpx.Client(
+            verify=False,
+            follow_redirects=True,
+            trust_env=not block_proxy,
+            limits=httpx.Limits(
+                max_connections=4,
+                max_keepalive_connections=2,
+                keepalive_expiry=30.0,
+            ),
+        )
+        _probe_block_proxy = block_proxy
+    return _probe_client
+
+
+def _close_probe_client() -> None:
+    global _probe_client
+    with _probe_lock:
+        if _probe_client and not _probe_client.is_closed:
+            _probe_client.close()
+            _probe_client = None
+
+
+atexit.register(_close_probe_client)
 
 
 def set_block_proxy(enabled: bool) -> None:
@@ -34,9 +78,14 @@ def set_block_proxy(enabled: bool) -> None:
     当 enabled=True 时，HTTP 客户端不读取系统代理设置（默认行为）；
     当 enabled=False 时，允许 HTTP 客户端使用系统代理。
     """
-    global _block_proxy
+    global _block_proxy, _probe_client, _probe_block_proxy
     with _proxy_lock:
         _block_proxy = enabled
+    # 关闭旧客户端，下次探测时自动重建
+    with _probe_lock:
+        if _probe_client is not None and not _probe_client.is_closed:
+            _probe_client.close()
+        _probe_client = None
 
 
 def is_block_proxy() -> bool:
@@ -46,181 +95,16 @@ def is_block_proxy() -> bool:
 
 
 def is_local_network_connected() -> bool:
-    """检查本地网络是否有实际连接（有线或无线）。
-
-    优先使用快速 IP 检测，失败时回退到平台特判。
-    """
-    # 优先：快速 IP 检测（~10ms），避免 Windows 上 PowerShell 启动慢
+    """检查本地网络是否有实际连接（有线或无线）。"""
     try:
-        hostname = socket.gethostname()
-        ip_list = socket.gethostbyname_ex(hostname)[2]
-        non_loopback = [
-            ip
-            for ip in ip_list
-            if not ip.startswith("127.") and not ip.startswith("169.254.")
-        ]
-        if non_loopback:
-            logger.debug("本地网络已连接，IP: {}", ", ".join(non_loopback))
-            return True
+        for name, stats in psutil.net_if_stats().items():
+            if stats.isup and not name.lower().startswith("lo"):
+                logger.debug("网络接口已连接: {} (speed={}Mbps)", name, stats.speed)
+                return True
     except Exception as exc:
-        logger.debug("快速 IP 检测失败: {}", exc)
-
-    # 回退：平台特判
-    try:
-        if is_windows():
-            return _check_windows_adapter()
-        elif is_linux():
-            return _check_linux_route()
-        elif is_macos():
-            return _check_macos_service()
-    except Exception as exc:
-        logger.debug("平台网络检测失败: {}", exc)
+        logger.debug("psutil 网络检测失败: {}", exc)
 
     logger.warning("未检测到本地网络连接")
-    return False
-
-
-def _check_windows_adapter() -> bool:
-    """Windows: 检查网络适配器是否实际连接。
-
-    netsh 输出是本地化的（中文"已连接"、英文"Connected"、日文"接続済み"等），
-    无法穷举所有语言。改用 PowerShell Get-NetAdapter（输出结构化，不依赖语言），
-    失败时回退到 netsh + 多语言匹配。
-    """
-    # 优先使用 PowerShell（结构化输出，不受系统语言影响）
-    try:
-        result = subprocess.run(
-            [
-                "powershell",
-                "-NoProfile",
-                "-Command",
-                "Get-NetAdapter | Select-Object -ExpandProperty Status",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            creationflags=CREATE_NO_WINDOW_FLAG,
-        )
-        if result.returncode == 0:
-            statuses = [
-                line.strip().lower()
-                for line in result.stdout.splitlines()
-                if line.strip()
-            ]
-            if "up" in statuses:
-                logger.info("检测到已连接的网络适配器 (PowerShell)")
-                return True
-            logger.warning("所有网络适配器均未连接 (PowerShell)")
-            return False
-    except FileNotFoundError:
-        logger.debug("PowerShell 不可用，回退到 netsh")
-
-    # 回退：netsh（输出受系统语言影响，尝试常见语言）
-    try:
-        result = subprocess.run(
-            ["netsh", "interface", "show", "interface"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            creationflags=CREATE_NO_WINDOW_FLAG,
-        )
-        if result.returncode != 0:
-            logger.debug("netsh 执行失败: {}", result.stderr)
-            return False
-
-        # 已知的"已连接"多语言映射
-        connected_keywords = {
-            "connected",
-            "已连接",
-            "接続済み",
-            "connecté",
-            "verbunden",
-            "подключено",
-            "conectado",
-        }
-        for line in result.stdout.splitlines():
-            parts = line.split()
-            if len(parts) >= 4 and parts[1].lower() in connected_keywords:
-                name = " ".join(parts[3:])
-                lower_name = name.lower()
-                if "loopback" not in lower_name and "tunnel" not in lower_name:
-                    logger.info("检测到已连接的网络接口: {}", name)
-                    return True
-
-        logger.warning("未检测到已连接的网络接口")
-        return False
-    except FileNotFoundError:
-        logger.debug("netsh 不可用")
-        return False
-
-
-def _check_linux_route() -> bool:
-    """Linux: 检查是否有默认路由（表示有实际网络连接）。"""
-    try:
-        with open("/proc/net/route", "r") as f:
-            for line in f:
-                fields = line.strip().split()
-                if len(fields) >= 3 and fields[1] == "00000000":
-                    iface = fields[0]
-                    if iface != "lo":
-                        logger.info("检测到默认路由接口: {}", iface)
-                        return True
-    except Exception as exc:
-        logger.debug("读取路由表失败: {}", exc)
-    logger.warning("未检测到默认路由")
-    return False
-
-
-def _check_macos_service() -> bool:
-    """macOS: 检查网络接口是否有实际连接（IP 地址分配）。
-
-    动态获取所有硬件接口列表（而非硬编码 en0/en1），
-    用 networksetup 列出所有端口对应的设备名，
-    再用 ifconfig 逐一检查是否有活跃连接。
-    """
-    try:
-        # 列出所有硬件端口及其设备名（输出受系统语言影响，设置 LC_ALL=C 强制英文）
-        list_result = subprocess.run(
-            ["networksetup", "-listallhardwareports"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            env={"LC_ALL": "C"},  # 强制英文输出，便于解析 Device/Port 等关键字
-        )
-        if list_result.returncode != 0:
-            logger.debug("networksetup 执行失败: {}", list_result.stderr)
-            raise RuntimeError("networksetup failed")
-
-        # 解析 "Device: XXX" 行，提取所有硬件设备名
-        devices = re.findall(r"^Device: (.+)$", list_result.stdout, re.MULTILINE)
-        if not devices:
-            logger.debug("未从 networksetup 输出中找到任何设备")
-            return False
-    except Exception as exc:
-        logger.debug("networksetup 检测失败，回退到硬编码接口: {}", exc)
-        devices = ("en0", "en1")  # 回退：常见接口名
-
-    for iface in devices:
-        try:
-            result = subprocess.run(
-                ["ifconfig", iface],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if result.returncode != 0:
-                continue
-            # 检查是否有 "status: active" 或分配了非 0.0.0.0 的 IP
-            output = result.stdout
-            if "status: active" in output:
-                # 进一步确认有 IP 地址
-                if re.search(r"inet\s+(?!0\.0\.0\.0)\d+\.\d+\.\d+\.\d+", output):
-                    logger.info("检测到活跃的网络接口: {}", iface)
-                    return True
-        except Exception:
-            continue
-
-    logger.warning("未检测到活跃的网络接口")
     return False
 
 
@@ -241,33 +125,41 @@ def is_network_available_socket(
             return (f"{host}:{port}", False, f"{type(exc).__name__}")
 
     futures = {executor.submit(_connect_one, h, p): (h, p) for h, p in targets}
-    for future in as_completed(futures):
-        label, ok, detail = future.result()
-        if ok:
-            logger.info("TCP 连接成功: {} {}", label, detail)
-            return True
-        logger.info("TCP 连接失败: {} -- {}", label, detail)
+    try:
+        for future in as_completed(futures, timeout=timeout + 2):
+            label, ok, detail = future.result(timeout=1)
+            if ok:
+                logger.debug("TCP 连接成功: {} {}", label, detail)
+                # 成功：取消其余任务
+                for f in futures:
+                    if not f.done():
+                        f.cancel()
+                return True
+            logger.debug("TCP 连接失败: {} -- {}", label, detail)
+    except TimeoutError:
+        logger.warning("TCP 检测超时 ({:.1f}s)", timeout + 2)
+        return False
     logger.warning("所有 TCP 目标均不可达 ({} 个)", len(targets))
     return False
 
 
-def is_network_available_portal(
-    portal_checks: Sequence[tuple[str, str]] | None = None,
+def is_network_available_url(
+    url_checks: Sequence[tuple[str, str]] | None = None,
     timeout: float = 3.0,
 ) -> bool:
-    """通过 captive portal 检测 URL 检测网络连通性。
+    """通过网址响应检测 URL 检测网络连通性。
 
-    访问配置的 captive portal 检测地址，验证响应内容是否包含预期的"正常"标识。
+    访问配置的网址响应检测地址，验证响应内容是否包含预期的"正常"标识。
     如果被重定向到登录页面或返回非预期内容，说明需要认证。
 
     参数:
-        portal_checks: (URL, 预期内容) 元组列表，为 None 时使用内置默认值
+        url_checks: (URL, 预期内容) 元组列表，为 None 时使用内置默认值
         timeout: 单个请求超时秒数
 
     返回 True 表示至少有一个检测 URL 返回了预期内容（网络正常）。
     """
-    if portal_checks is None:
-        portal_checks = [
+    if url_checks is None:
+        url_checks = [
             ("http://captive.apple.com/hotspot-detect.html", "Success"),
             (
                 "http://www.msftconnecttest.com/connecttest.txt",
@@ -275,16 +167,14 @@ def is_network_available_portal(
             ),
             ("http://detectportal.firefox.com/success.txt", "success"),
         ]
-    if not portal_checks:
+    if not url_checks:
         return True
 
-    def _check_portal(url: str, expected: str) -> tuple[str, bool, str]:
+    def _check_url(url: str, expected: str) -> tuple[str, bool, str]:
         start = time.perf_counter()
         try:
-            with httpx.Client(
-                verify=False, trust_env=not is_block_proxy(), follow_redirects=True
-            ) as client:
-                resp = client.get(url, timeout=timeout)
+            block = is_block_proxy()
+            resp = _get_probe_client(block).get(url, timeout=timeout)
             elapsed = (time.perf_counter() - start) * 1000
             body = resp.text.strip()
             if expected in body:
@@ -298,16 +188,22 @@ def is_network_available_portal(
             elapsed = (time.perf_counter() - start) * 1000
             return (url, False, f"{type(exc).__name__} ({elapsed:.0f}ms)")
 
-    futures = {
-        executor.submit(_check_portal, url, exp): url for url, exp in portal_checks
-    }
-    for future in as_completed(futures):
-        url, ok, detail = future.result()
-        if ok:
-            logger.info("Captive portal 检测成功: {} -> {}", url, detail)
-            return True
-        logger.info("Captive portal 检测失败: {} -- {}", url, detail)
-    logger.warning("所有 captive portal 检测均未通过 ({} 个)", len(portal_checks))
+    futures = {executor.submit(_check_url, url, exp): url for url, exp in url_checks}
+    try:
+        for future in as_completed(futures, timeout=timeout + 2):
+            url, ok, detail = future.result(timeout=1)
+            if ok:
+                logger.debug("网址响应检测成功: {} -> {}", url, detail)
+                # 成功：取消其余任务
+                for f in futures:
+                    if not f.done():
+                        f.cancel()
+                return True
+            logger.debug("网址响应检测失败: {} -- {}", url, detail)
+    except TimeoutError:
+        logger.warning("网址响应检测超时 ({:.1f}s)", timeout + 2)
+        return False
+    logger.warning("所有网址响应检测均未通过 ({} 个)", len(url_checks))
     return False
 
 
@@ -334,10 +230,10 @@ def is_network_available_http(
         """在独立线程中检测单个 URL。返回 (url, success, detail)。"""
         start = time.perf_counter()
         try:
-            with httpx.Client(verify=False, trust_env=not is_block_proxy()) as client:
-                resp = client.get(
-                    url, timeout=timeout, follow_redirects=follow_redirects
-                )
+            block = is_block_proxy()
+            resp = _get_probe_client(block).get(
+                url, timeout=timeout, follow_redirects=follow_redirects
+            )
             elapsed = (time.perf_counter() - start) * 1000
             if 200 <= resp.status_code < 300:
                 return (url, True, f"HTTP {resp.status_code} ({elapsed:.0f}ms)")
@@ -348,15 +244,23 @@ def is_network_available_http(
             if isinstance(exc, ssl.SSLError) or "CERTIFICATE_VERIFY_FAILED" in str(exc):
                 logger.debug("SSL 证书验证失败 (预期行为): {} -- {}", url, exc)
             else:
-                logger.info("HTTP 请求异常: {} -- {}", url, exc)
+                logger.debug("HTTP 请求异常: {} -- {}", url, exc)
             return (url, False, f"{type(exc).__name__}: {exc}")
 
     futures = {executor.submit(_check_one, url): url for url in urls}
-    for future in as_completed(futures):
-        url, ok, detail = future.result()
-        if ok:
-            logger.info("HTTP 请求成功: {} -> {}", url, detail)
-            return True
-        logger.info("HTTP 请求失败: {} -- {}", url, detail)
+    try:
+        for future in as_completed(futures, timeout=timeout + 2):
+            url, ok, detail = future.result(timeout=1)
+            if ok:
+                logger.debug("HTTP 请求成功: {} -> {}", url, detail)
+                # 成功：取消其余任务
+                for f in futures:
+                    if not f.done():
+                        f.cancel()
+                return True
+            logger.debug("HTTP 请求失败: {} -- {}", url, detail)
+    except TimeoutError:
+        logger.warning("HTTP 检测超时 ({:.1f}s)", timeout + 2)
+        return False
     logger.warning("所有 HTTP 目标均不可达 ({} 个)", len(urls))
     return False

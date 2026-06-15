@@ -5,18 +5,19 @@ from __future__ import annotations
 import asyncio
 import re
 import threading
+import time
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .models import StepConfig, StepError, StepType, PROJECT_ROOT
-from .variable_resolver import VariableResolver
-from app.constants import LOGS_DIR
-
+from app.constants import DEFAULT_STEP_TIMEOUT_MS, SCREENSHOTS_DIR
 from app.utils.logging import get_logger
 
-logger = get_logger("step_handlers", side="BACKEND")
+from .models import StepConfig, StepError, StepType
+from .variable_resolver import VariableResolver
+
+logger = get_logger("step_handlers", source="task")
 
 # 强制输入 JS 脚本：绕过可见性检查，通过原生 setter 设置值并模拟完整用户交互事件
 _FORCE_INPUT_JS = """(el, params) => {
@@ -114,6 +115,7 @@ class StepHandler(ABC):
             (success, message)
         """
         candidates = self._parse_selectors(selector)
+        deadline = time.perf_counter() + timeout / 1000
 
         # 策略1: 快速尝试可见元素
         wait_timeout = max(1500, int(timeout * 0.15))
@@ -121,20 +123,24 @@ class StepHandler(ABC):
             try:
                 loc = ctx.locator(candidate).first
                 await loc.wait_for(state="visible", timeout=wait_timeout)
-                await action_fn(loc, timeout)
+                remaining_ms = max(500, int((deadline - time.perf_counter()) * 1000))
+                await action_fn(loc, remaining_ms)
                 logger.debug("{} 普通操作成功 -> {}", label, candidate)
                 return True, ""
             except Exception:
                 logger.debug("{} 普通操作候选失败: {}", label, candidate)
                 continue
 
-        # 策略2: 降级到 attached 元素
+        # 策略2: 降级到 attached 元素（使用共享截止时间）
         logger.debug("{} 所有候选均未匹配可见元素，降级操作", label)
         for candidate in candidates:
+            remaining = max(500, int((deadline - time.perf_counter()) * 1000))
+            if remaining <= 0:
+                break
             try:
                 loc = ctx.locator(candidate).first
-                await loc.wait_for(state="attached", timeout=timeout)
-                await fallback_fn(loc, timeout)
+                await loc.wait_for(state="attached", timeout=remaining)
+                await fallback_fn(loc, remaining)
                 logger.debug("{} 降级操作成功 -> {}", label, candidate)
                 return True, ""
             except Exception:
@@ -149,7 +155,7 @@ class StepHandler(ABC):
         if not isinstance(frame_selector, str):
             if frame_selector is not None:
                 logger.warning(
-                    "[frame] 步骤 %s 的 frame 字段应为字符串，实际为 %s (%s)，将回退到主页面执行",
+                    "[frame] 步骤 {} 的 frame 字段应为字符串，实际为 {} ({})，将回退到主页面执行",
                     step.id,
                     frame_selector,
                     type(frame_selector).__name__,
@@ -225,19 +231,22 @@ class InputHandler(StepHandler):
         selector = params.get("selector", "")
         value = params.get("value", "")
         clear = params.get("clear", True)
-        timeout = step.timeout or 10000
+        timeout = step.timeout or DEFAULT_STEP_TIMEOUT_MS
 
         if not selector:
             return False, "输入步骤需要 selector"
 
         ctx = await self._resolve_frame(page, step)
+        _PASSWORD_KEYWORDS = ("密码", "口令", "password", "passwd", "pwd")
+        desc_lower = (step.description or "").lower()
+        id_lower = (step.id or "").lower()
         masked = (
             "***"
-            if any(k in step.description.lower() for k in ("密码", "password", "pwd"))
+            if any(k in desc_lower or k in id_lower for k in _PASSWORD_KEYWORDS)
             else value
         )
         logger.debug(
-            "[input] value=%s, clear=%s, timeout=%dms",
+            "[input] value={}, clear={}, timeout={}ms",
             masked,
             clear,
             timeout,
@@ -277,7 +286,7 @@ class ClickHandler(StepHandler):
     ) -> tuple[bool, str]:
         params = self.resolve_params(step, resolver)
         selector = params.get("selector", "")
-        timeout = step.timeout or 10000
+        timeout = step.timeout or DEFAULT_STEP_TIMEOUT_MS
 
         if not selector:
             return False, "点击步骤需要 selector"
@@ -317,7 +326,7 @@ class SelectHandler(StepHandler):
         params = self.resolve_params(step, resolver)
         selector = params.get("selector", "")
         value = str(params.get("value", "") or "").strip()
-        timeout = step.timeout or 10000
+        timeout = step.timeout or DEFAULT_STEP_TIMEOUT_MS
 
         if not selector:
             return False, "选择步骤需要 selector"
@@ -365,7 +374,7 @@ class SelectHandler(StepHandler):
             logger.debug("[select] 获取选项列表失败: {}", e)
             option_texts = []
 
-        logger.info("[select] 可用选项: {}", option_texts)
+        logger.debug("[select] 可用选项: {}", option_texts)
         normalized_target = value.strip().lower()
         for text in option_texts:
             current = str(text or "").strip()
@@ -400,18 +409,18 @@ class ClickSelectHandler(StepHandler):
         selector = params.get("selector", "")
         value = str(params.get("value", "") or "").strip()
         option_selector = params.get("option_selector", "")
-        timeout = step.timeout or 10000
+        timeout = step.timeout or DEFAULT_STEP_TIMEOUT_MS
 
         if not selector:
             return False, "click_select 步骤需要 selector"
         # value 为空或包含未解析变量时跳过
         if not value or "{{" in value:
-            logger.info("[click_select] value 为空或包含未解析变量，跳过: {}", value)
+            logger.debug("[click_select] value 为空或包含未解析变量，跳过: {}", value)
             return True, ""
 
         ctx = await self._resolve_frame(page, step)
-        logger.info(
-            "[click_select] trigger=%s, value=%s, option_sel=%s, timeout=%dms",
+        logger.debug(
+            "[click_select] trigger={}, value={}, option_sel={}, timeout={}ms",
             selector,
             value,
             option_selector or "(auto)",
@@ -420,18 +429,19 @@ class ClickSelectHandler(StepHandler):
 
         trigger = await self._find_element(ctx, selector, timeout)
         if not trigger:
-            logger.info("[click_select] 未找到触发器，跳过: {}", selector)
+            logger.debug("[click_select] 未找到触发器，跳过: {}", selector)
             if step.required:
                 return False, f"click_select 触发器未找到: {selector}"
             return True, ""
 
         await trigger.click(timeout=timeout)
-        logger.info("[click_select] 触发器已点击，等待 500ms 后查找选项")
-        await page.wait_for_timeout(500)
+        select_delay = step.extra.get("select_delay", 500) if step.extra else 500
+        logger.info("[click_select] 触发器已点击，等待 {}ms 后查找选项", select_delay)
+        await page.wait_for_timeout(select_delay)
 
         clicked = await self._click_option(ctx, value, option_selector, timeout)
         if not clicked:
-            logger.info("[click_select] 未匹配到选项，跳过: {}", value)
+            logger.debug("[click_select] 未匹配到选项，跳过: {}", value)
             if step.required:
                 return False, f"click_select 选项未匹配: {value}"
         return True, ""
@@ -470,13 +480,13 @@ class WaitHandler(StepHandler):
     ) -> tuple[bool, str]:
         params = self.resolve_params(step, resolver)
         selector = params.get("selector", "")
-        timeout = step.timeout or 10000
+        timeout = step.timeout or DEFAULT_STEP_TIMEOUT_MS
 
         if not selector:
             return False, "等待步骤需要 selector"
 
         ctx = await self._resolve_frame(page, step)
-        logger.info("[wait] selector={}, timeout={}", selector, timeout)
+        logger.debug("[wait] selector={}, timeout={}", selector, timeout)
         try:
             await ctx.locator(selector).first.wait_for(timeout=timeout)
         except TimeoutError:
@@ -499,17 +509,17 @@ class WaitUrlHandler(StepHandler):
     ) -> tuple[bool, str]:
         params = self.resolve_params(step, resolver)
         pattern = params.get("pattern", "")
-        timeout = step.timeout or 10000
+        timeout = step.timeout or DEFAULT_STEP_TIMEOUT_MS
 
         if not pattern:
             return False, "wait_url 步骤需要 pattern"
 
         try:
             compiled = re.compile(pattern)
-        except re.error:
-            return False, f"wait_url 步骤的 pattern 不是有效的正则表达式: {pattern}"
+        except re.error as e:
+            return False, f"wait_url 步骤的 pattern 不是有效的正则表达式: {pattern} ({e})"
 
-        logger.info("[wait_url] pattern={}", pattern)
+        logger.debug("[wait_url] pattern={}", pattern)
         deadline = asyncio.get_running_loop().time() + timeout / 1000
         while True:
             current_url = page.url
@@ -557,7 +567,7 @@ class EvalHandler(StepHandler):
 
 
 class ScreenshotHandler(StepHandler):
-    """截图处理器 — 运行时截图存入 logs/{date}/screenshots/ 目录"""
+    """截图处理器 — 运行时截图存入 debug/screenshots/{date}/ 目录"""
 
     @property
     def step_type(self) -> str:
@@ -566,17 +576,17 @@ class ScreenshotHandler(StepHandler):
     async def execute(
         self, page, step: StepConfig, resolver: VariableResolver
     ) -> tuple[bool, str]:
-        from app.utils.file_helpers import save_screenshot
+        from app.utils.files import save_screenshot
 
         params = self.resolve_params(step, resolver)
         path = params.get("path", "")
 
         date_str = datetime.now().strftime("%Y-%m-%d")
-        date_dir = LOGS_DIR / date_str / "screenshots"
+        date_dir = SCREENSHOTS_DIR / date_str
         date_dir.mkdir(parents=True, exist_ok=True)
 
         if not path:
-            task_id = resolver.config.task_id or "unknown"
+            task_id = resolver.config.task_id or resolver.config.name or "unknown"
             step_id = step.id or "s0"
             result = await save_screenshot(
                 page, date_dir, task_id=task_id, step_id=step_id
@@ -590,7 +600,7 @@ class ScreenshotHandler(StepHandler):
         if result:
             # 转为可访问的 URL
             filename = Path(result).name
-            url = f"/logs/{date_str}/screenshots/{filename}"
+            url = f"/debug/screenshots/{date_str}/{filename}"
             logger.debug("[screenshot] path={}", url)
             return True, url
         return False, "截图失败"
@@ -619,7 +629,7 @@ class SleepHandler(StepHandler):
             )
             duration = self.MAX_SLEEP_MS
 
-        logger.info("[sleep] duration={}ms", duration)
+        logger.debug("[sleep] duration={}ms", duration)
         await page.wait_for_timeout(duration)
         return True, ""
 
@@ -645,10 +655,10 @@ class OcrHandler(StepHandler):
                 import ddddocr
 
                 instance = ddddocr.DdddOcr(old=old, show_ad=False)
-            except ImportError:
+            except ImportError as err:
                 raise StepError(
                     "ddddocr 未安装，请在「设置 → 系统与日志」中安装 OCR 依赖"
-                )
+                ) from err
             cls._ocr_instances[old] = instance
             return instance
 
@@ -698,7 +708,7 @@ class OcrHandler(StepHandler):
         if not selector:
             return False, "ocr 步骤需要 selector（验证码图片选择器）"
 
-        timeout = step.timeout or 10000
+        timeout = step.timeout or DEFAULT_STEP_TIMEOUT_MS
         ctx = await self._resolve_frame(page, step)
         logger.info(
             "[ocr] selector={}, target={}, old={}, char_range={}",
@@ -720,19 +730,19 @@ class OcrHandler(StepHandler):
         except Exception as e:
             return False, f"验证码截图失败: {e}"
 
-        # 保存验证码截图到 logs 目录
+        # 保存验证码截图到 debug/screenshots 目录
         screenshot_url = ""
         try:
             date_str = datetime.now().strftime("%Y-%m-%d")
-            date_dir = PROJECT_ROOT / "logs" / date_str / "screenshots"
+            date_dir = SCREENSHOTS_DIR / date_str
             date_dir.mkdir(parents=True, exist_ok=True)
-            task_id = resolver.config.task_id or "unknown"
+            task_id = resolver.config.task_id or resolver.config.name or "unknown"
             step_id = step.id or "ocr"
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
             filename = f"{task_id}_{step_id}_{stamp}.png"
             local_path = date_dir / filename
             local_path.write_bytes(img_bytes)
-            screenshot_url = f"/logs/{date_str}/screenshots/{filename}"
+            screenshot_url = f"/debug/screenshots/{date_str}/{filename}"
             logger.info("[ocr] 验证码截图已保存: {}", screenshot_url)
         except Exception as e:
             logger.warning("[ocr] 保存验证码截图失败: {}", e)
@@ -743,12 +753,12 @@ class OcrHandler(StepHandler):
                 # 有字符范围限制时创建独立实例，避免 set_ranges 污染缓存实例
                 import ddddocr
 
-                ocr = ddddocr.DdddOcr(old=old, show_ad=False)
+                ocr = await asyncio.to_thread(ddddocr.DdddOcr, old=old, show_ad=False)
                 ocr.set_ranges(char_range)
                 logger.debug("[ocr] set_ranges({})", char_range)
             else:
-                ocr = self._get_ocr(old=old)
-            result = ocr.classification(img_bytes)
+                ocr = await asyncio.to_thread(self._get_ocr, old=old)
+            result = await asyncio.to_thread(ocr.classification, img_bytes)
         except Exception as e:
             self.schedule_cleanup(old)
             return False, f"验证码识别失败: {e}"

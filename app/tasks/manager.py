@@ -6,13 +6,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .models import TaskConfig, ScriptTaskInfo, TASK_ID_PATTERN
-from .validator import TaskValidator
-
-from app.utils.file_helpers import atomic_write
+from app.utils.files import atomic_write
 from app.utils.logging import get_logger
 
-logger = get_logger("task_manager", side="BACKEND")
+from .models import TASK_ID_PATTERN, ScriptTaskInfo, TaskConfig
+from .validator import TaskValidator
+
+logger = get_logger("task_manager", source="task")
 
 
 def normalize_task_id(task_id: str | None) -> str:
@@ -227,7 +227,7 @@ class TaskManager:
 
         # 1. 扫描 scripts/ 下的 JSON 文件（排除 .meta.json）
         for file in self.scripts_dir.glob("*.json"):
-            if file.suffix.lower() == ".meta.json":
+            if file.name.lower().endswith(".meta.json"):
                 continue
             if not is_valid_task_id(file.stem):
                 continue
@@ -386,15 +386,18 @@ class TaskManager:
         normalized = normalize_task_id(task_id)
         if not is_valid_task_id(normalized):
             return False
+        deleted = False
         # 从两个子目录中删除
         for subdir in (self.browser_dir, self.scripts_dir):
             for ext in (".json", ".py", ".meta.json"):
                 file = subdir / f"{normalized}{ext}"
-                try:
-                    file.unlink(missing_ok=True)
-                except Exception as e:
-                    logger.error("无法删除任务文件 {}: {}", file, e)
-        return True
+                if file.exists():
+                    try:
+                        file.unlink()
+                        deleted = True
+                    except Exception as e:
+                        logger.error("无法删除任务文件 {}: {}", file, e)
+        return deleted
 
     def _find_task_type(self, task_id: str) -> str | None:
         """查找任务所在的子目录类型，返回 'browser' 或 'scripts'，未找到返回 None。"""

@@ -8,14 +8,17 @@
     try {
       const res = await fetch(src, { cache: 'no-cache' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      el.innerHTML = await res.text();
-      el.removeAttribute('data-include');
+      const html = await res.text();
+      const temp = document.createElement('div');
+      temp.innerHTML = html;
+      // 用获取的内容替换整个 data-include div，避免多余的包装壳
+      el.replaceWith(...temp.childNodes);
+
     } catch (err) {
       const errDiv = document.createElement('div');
       errDiv.className = 'include-error';
       errDiv.textContent = '模板加载失败: ' + src;
-      el.replaceChildren(errDiv);
-      el.removeAttribute('data-include');
+      el.replaceWith(errDiv);
       console.error('[template-loader] failed:', src, err);
     }
   }

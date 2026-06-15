@@ -18,6 +18,7 @@ export function statusData() {
       enabled: false,
       method: '-',
       location: '',
+      lightweight: true,
     },
     busy: {
       save: false,
@@ -27,10 +28,8 @@ export function statusData() {
       detect: false,
       editorDetect: false,
       debug: false,
-      backup: false,
       uninstall: false,
       ocr: false,
     },
-    backups: [],
   };
 }

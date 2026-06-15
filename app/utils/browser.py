@@ -73,7 +73,7 @@ class BrowserContextManager:
         self.config = config
         self.cancel_event = cancel_event
         self.browser_settings = config.get("browser_settings", {})
-        self.logger = get_logger("browser")
+        self.logger = get_logger("browser", source="backend")
 
         # 浏览器相关属性
         self.playwright = None
@@ -103,12 +103,12 @@ class BrowserContextManager:
         # 确保 Worker 中的浏览器已就绪（直接调用，同一事件循环线程）
         await worker.ensure_browser(self.config)
 
-        # 从 Worker 获取浏览器对象引用（同线程，安全）
+        # 从 Worker 获取浏览器对象引用（同线程，通过只读属性访问）
         self._worker_managed = True
-        self.playwright = worker._playwright
-        self.browser = worker._browser
-        self.context = worker._context
-        self.page = worker._page
+        self.playwright = worker.playwright_instance
+        self.browser = worker.browser
+        self.context = worker.context
+        self.page = worker.page
 
         self.logger.info("浏览器已通过 Worker 就绪")
         return self
@@ -120,10 +120,18 @@ class BrowserContextManager:
         向 Worker 提交 CMD_BROWSER_RELEASE（fire-and-forget）即可。
         """
         # 通知 Worker 释放引用（无需等待结果）
-        from app.workers.playwright_worker import get_worker, CMD_BROWSER_RELEASE
+        import queue as _queue_mod
+
+        from app.workers.playwright_worker import (
+            CMD_BROWSER_RELEASE,
+            get_worker,
+        )
 
         worker = get_worker()
-        worker.submit(CMD_BROWSER_RELEASE, wait=False)
+        try:
+            worker.submit_nowait(CMD_BROWSER_RELEASE)
+        except _queue_mod.Full:
+            self.logger.warning("Worker 队列已满，无法发送 CMD_BROWSER_RELEASE")
 
         # 清空本地引用
         self.playwright = None

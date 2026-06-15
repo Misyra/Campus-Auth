@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-
-from app.utils.logging import get_logger
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 from app.deps import get_monitor_service, get_profile_service
-from app.services.monitor import MonitorService
-from app.services.profile import ProfileService
 from app.schemas import ActionResponse, ProfileSettings
+from app.services.engine import ScheduleEngine
+from app.services.profile_service import ProfileService
+from app.utils.logging import get_logger
 
 router = APIRouter()
-api_logger = get_logger("backend.api", side="BACKEND")
+api_logger = get_logger("api", source="backend")
 
 
 def _safe_detect(func, label: str, default=None):
@@ -37,28 +36,13 @@ def list_profiles(
             "match_ssid": settings.match_ssid,
             "carrier": settings.carrier,
             "carrier_custom": settings.carrier_custom,
-            "use_global_auth_url": settings.use_global_auth_url,
             "auth_url": settings.auth_url,
-            "use_global_task": settings.use_global_task,
             "active_task": settings.active_task,
         }
     return {
         "profiles": result,
         "active_profile": data.active_profile,
         "auto_switch": data.auto_switch,
-    }
-
-
-@router.get("/api/profiles/active")
-def get_active_profile(
-    profile_svc: ProfileService = Depends(get_profile_service),
-) -> dict:
-    data = profile_svc.load()
-    profile = profile_svc.get_active_profile()
-    return {
-        "profile_id": data.active_profile,
-        "auto_switch": data.auto_switch,
-        "settings": profile.model_dump(),
     }
 
 
@@ -82,7 +66,7 @@ def save_profile(
     profile_id: str,
     payload: ProfileSettings,
     profile_svc: ProfileService = Depends(get_profile_service),
-    monitor_svc: MonitorService = Depends(get_monitor_service),
+    monitor_svc: ScheduleEngine = Depends(get_monitor_service),
 ) -> ActionResponse:
     ok, message = profile_svc.save_profile(profile_id, payload)
     api_logger.info("保存方案 {} -> success={}, message={}", profile_id, ok, message)
@@ -100,20 +84,15 @@ def save_profile(
 def delete_profile(
     profile_id: str,
     profile_svc: ProfileService = Depends(get_profile_service),
-    monitor_svc: MonitorService = Depends(get_monitor_service),
+    monitor_svc: ScheduleEngine = Depends(get_monitor_service),
 ) -> ActionResponse:
-    data = profile_svc.load()
-    was_active = data.active_profile == profile_id
-
     ok, message = profile_svc.delete_profile(profile_id)
     api_logger.info("删除方案 {} -> success={}, message={}", profile_id, ok, message)
-    # 删除活动方案后通知监控重载配置
-    if ok and was_active:
+    # 删除成功后始终通知监控重载配置（安全做法，避免 TOCTOU 竞态）
+    if ok:
         try:
             new_data = profile_svc.load()
-            new_profile = new_data.profiles.get(new_data.active_profile)
-            new_name = new_profile.name if new_profile else new_data.active_profile
-            monitor_svc.apply_profile(new_name)
+            monitor_svc.apply_profile(new_data.active_profile)
         except Exception:
             api_logger.warning("删除方案后应用方案失败", exc_info=True)
     return ActionResponse(success=ok, message=message)
@@ -123,18 +102,16 @@ def delete_profile(
 def set_active_profile(
     profile_id: str,
     profile_svc: ProfileService = Depends(get_profile_service),
-    monitor_svc: MonitorService = Depends(get_monitor_service),
+    monitor_svc: ScheduleEngine = Depends(get_monitor_service),
 ) -> ActionResponse:
     ok, message = profile_svc.set_active_profile(profile_id)
     api_logger.info(
         "设置活动方案 {} -> success={}, message={}", profile_id, ok, message
     )
     if ok:
-        data = profile_svc.load()
-        profile = data.profiles.get(profile_id)
-        profile_name = profile.name if profile else profile_id
         try:
-            monitor_svc.apply_profile(profile_name)
+            # 统一传 profile_id，apply_profile 内部解析名称用于日志
+            monitor_svc.apply_profile(profile_id)
         except Exception:
             api_logger.warning("应用方案失败", exc_info=True)
     return ActionResponse(success=ok, message=message)
@@ -169,13 +146,51 @@ def detect_network_profile(
     }
 
 
-@router.post("/api/profiles/auto-switch", response_model=ActionResponse)
+@router.post("/api/profiles/auto-switch")
 def toggle_auto_switch(
-    enabled: str = Query(default="true"),
+    body: dict = Body(default={}),
     profile_svc: ProfileService = Depends(get_profile_service),
-) -> ActionResponse:
-    enabled_bool = enabled.strip().lower() in ("true", "1", "yes", "on")
+    monitor_svc: ScheduleEngine = Depends(get_monitor_service),
+) -> dict:
+    enabled = body.get("enabled", True)
+    if isinstance(enabled, str):
+        enabled_bool = enabled.strip().lower() in ("true", "1", "yes", "on")
+    else:
+        enabled_bool = bool(enabled)
     profile_svc.set_auto_switch(enabled_bool)
     state = "开启" if enabled_bool else "关闭"
     api_logger.info("自动切换 {}", state)
-    return ActionResponse(success=True, message=f"自动切换已{state}")
+
+    # 获取当前活动方案
+    data = profile_svc.load()
+    active_profile = data.active_profile
+
+    # 开启自动切换时，立即进行一次检测
+    warning = None
+    if enabled_bool:
+        try:
+            matched_id = profile_svc.detect_matching_profile()
+            if matched_id:
+                if matched_id != data.active_profile:
+                    profile = data.profiles.get(matched_id)
+                    profile_name = profile.name if profile else matched_id
+                    api_logger.info("自动切换检测到匹配方案: {}", profile_name)
+                    profile_svc.set_active_profile(matched_id)
+                    monitor_svc.apply_profile(matched_id)
+                    active_profile = matched_id
+                else:
+                    api_logger.info("当前方案已匹配，无需切换")
+            else:
+                api_logger.info("未检测到匹配方案，保持当前方案")
+        except Exception as exc:
+            api_logger.warning("自动切换检测失败: {}", exc)
+            warning = f"首次检测失败: {exc}"
+
+    result = {
+        "success": True,
+        "message": f"自动切换已{state}",
+        "active_profile": active_profile,
+    }
+    if warning:
+        result["warning"] = warning
+    return result

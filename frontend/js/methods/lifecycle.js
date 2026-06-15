@@ -1,4 +1,5 @@
-import { LOG_LEVELS, TIMING } from '../constants.js';
+import { LIMITS, TIMING } from '../constants.js';
+import { extractApiError } from './utils.js';
 
 export const lifecycleMethods = {
   // 封装初始化错误计数，达到阈值后静默（避免多模块竞态读写 _initErrorCount）
@@ -23,11 +24,11 @@ export const lifecycleMethods = {
       this.fetchActiveTask(),
       this.fetchProfiles(),
       this.fetchPureMode(),
-      this.fetchBackups(),
       this.fetchLoginHistory(),
       this.loadScheduledTasks(),
       this.fetchShells(),
       this.fetchOcrStatus(),
+      this.fetchLogLevels(),
     ]);
     const rejectedCount = initResults.filter(r => r.status === 'rejected').length;
     if (rejectedCount > 0) {
@@ -170,6 +171,7 @@ export const lifecycleMethods = {
       const { data } = await this.$api.put('/api/config', this.config);
       if (data.success) {
         this.showWizard = false;
+        this.agreedToTerms = false;
         // 从 API 重新加载配置以获取服务端规范化后的值，确保快照一致
         await this.fetchConfig(true);
         this.frontendLogger.info('lifecycle', '配置完成');
@@ -178,16 +180,12 @@ export const lifecycleMethods = {
         this.toastOnly(false, data.message);
       }
     } catch (error) {
-      const msg = error?.response?.data?.detail || '保存失败';
+      const msg = extractApiError(error, '保存失败');
       this.frontendLogger.error('lifecycle', '向导保存异常: ' + msg, error);
       this.toastOnly(false, msg);
     } finally {
       this.busy.save = false;
     }
-  },
-  _shouldShowLog() {
-    // 日志级别过滤已移除，前端显示所有日志
-    return true;
   },
   connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -229,9 +227,7 @@ export const lifecycleMethods = {
         if (data.type === 'status') {
           this.status = { ...this.status, ...data.data };
         } else if (data.type === 'log') {
-          if (this._shouldShowLog(data.data.level)) {
-            this._appendLogs([data.data]);
-          }
+          this._appendLogs([data.data]);
         }
       } catch (e) {
         this.frontendLogger.error('websocket', '消息解析错误', e);
@@ -262,6 +258,11 @@ export const lifecycleMethods = {
     };
 
     // 应用层 ping/pong，防止校园网代理 60s 无流量切断连接
+    // 清理旧的 ping timer，防止重连时累积
+    if (this._wsPingTimer) {
+      clearInterval(this._wsPingTimer);
+      this.timers = this.timers.filter(t => t !== this._wsPingTimer);
+    }
     this._wsPingTimer = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({ type: 'ping' }));
@@ -272,11 +273,38 @@ export const lifecycleMethods = {
   _setupVisibilityChange() {
     // 监听页面可见性变化，切回页面时主动重连
     this._visibilityHandler = () => {
-      if (document.visibilityState === 'visible' && !this.wsConnected) {
+      if (document.visibilityState === 'visible' && this.ws?.readyState !== WebSocket.OPEN) {
+        this.wsRetryCount = 0; // 重置重试计数，给页面恢复后新的重连机会
         this.frontendLogger.info('websocket', '页面恢复可见，尝试重连');
         this.connectWebSocket();
       }
     };
     document.addEventListener('visibilitychange', this._visibilityHandler);
+  },
+  async fetchStatus() {
+    try {
+      const { data } = await this.$api.get('/api/status');
+      this.status = data;
+      if (this.fetchStatusFailCount > 0) {
+        this.fetchStatusFailCount = 0;
+        this.notify(true, '已重新连接到服务器', 'network');
+      }
+    } catch (error) {
+      this.fetchStatusFailCount = (this.fetchStatusFailCount || 0) + 1;
+      this.frontendLogger.warn('status', '获取状态失败', error);
+      if (this.fetchStatusFailCount === 1) {
+        this.notify(false, '无法连接到服务器，请检查后端是否已关闭', 'network');
+      }
+    }
+  },
+  async fetchLogs() {
+    try {
+      const { data } = await this.$api.get('/api/logs', { params: { limit: LIMITS.LOG_MAX_ENTRIES } });
+      this.logs = data;
+      this.$nextTick(() => this.scrollToBottom());
+    } catch (error) {
+      this.frontendLogger.error('logs', '获取日志失败', error);
+      this._recordInitError('加载日志失败');
+    }
   },
 };

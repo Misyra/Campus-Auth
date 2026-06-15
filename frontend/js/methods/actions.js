@@ -4,10 +4,7 @@ export const actionMethods = {
   async openUninstall() {
     this.uninstall.visible = true;
     this.uninstall.scanning = true;
-    this.$nextTick(() => {
-      const overlay = document.querySelector('.uninstall-overlay');
-      if (overlay) this._trapFocus(overlay);
-    });
+    this.openModal('.uninstall-overlay');
     this.uninstall.results = null;
     this.uninstall.items = [];
     try {
@@ -22,7 +19,7 @@ export const actionMethods = {
     }
   },
   closeUninstall() {
-    this._releaseFocusTrap();
+    this.closeModal();
     this.uninstall.visible = false;
     this.uninstall.results = null;
   },
@@ -63,7 +60,7 @@ export const actionMethods = {
     this.busy.action = true;
     try {
       this.frontendLogger.info('action', '手动登录请求');
-      const loginTimeoutMs = (this.config.login_timeout || 120) * 1000;
+      const loginTimeoutMs = (this.config.login_timeout || 90) * 1000;
       const { data } = await this.$api.post('/api/actions/login', null, { timeout: loginTimeoutMs });
       this.notify(data.success, this.stripScreenshotHint(data.message), 'login');
       // 登录完成后刷新登录历史
@@ -80,7 +77,7 @@ export const actionMethods = {
     this.busy.action = true;
     try {
       this.frontendLogger.info('action', '手动网络测试');
-      const { data } = await this.$api.post('/api/actions/test-network');
+      const { data } = await this.$api.post('/api/actions/test-network', null, { timeout: 5000 });
       // 网络测试结果只显示 toast，不记录通知历史
       this.toastOnly(data.success, data.message);
     } catch (error) {

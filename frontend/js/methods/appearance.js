@@ -1,4 +1,6 @@
 import { DEFAULT_APPEARANCE, ACCENT_COLORS, BG_COLORS, LIMITS } from '../constants.js';
+import { hexToRgb, adjustColor } from './formatters.js';
+import { pickFile } from './utils.js';
 
 export const appearanceMethods = {
   // 保存外观设置
@@ -44,14 +46,26 @@ export const appearanceMethods = {
     // 主题色
     if (this.appearance.accent_color) {
       root.style.setProperty('--accent', this.appearance.accent_color);
-      root.style.setProperty('--accent-hover', this.adjustColor(this.appearance.accent_color, -20));
+      root.style.setProperty('--accent-hover', adjustColor(this.appearance.accent_color, -20));
+      const accentRgb = hexToRgb(this.appearance.accent_color);
+      if (accentRgb) {
+        root.style.setProperty('--accent-rgb', `${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}`);
+      }
     }
 
     // 页面缩放 — 只缩放内容区域，顶栏和侧边栏不受影响
     const wrapper = document.querySelector('.content-wrapper'); // 无 ref 可用，保留 querySelector
     if (wrapper) {
       const scale = (this.appearance.zoom || 100) / 100;
-      wrapper.style.zoom = scale;
+      if (scale !== 1) {
+        wrapper.style.transform = `scale(${scale})`;
+        wrapper.style.transformOrigin = 'top left';
+        wrapper.style.width = `${100 / scale}%`;
+      } else {
+        wrapper.style.transform = '';
+        wrapper.style.transformOrigin = '';
+        wrapper.style.width = '';
+      }
     }
 
     // 主题
@@ -65,18 +79,18 @@ export const appearanceMethods = {
       _p('--bg-primary', '#eef2f7');
       _p('--bg-secondary', '#e4e9f0');
     } else if (this.appearance.background_color) {
-      const bgRgb = this.hexToRgb(this.appearance.background_color);
+      const bgRgb = hexToRgb(this.appearance.background_color);
       if (bgRgb) {
         _p('--bg-primary', this.appearance.background_color);
         _p('--bg-secondary', `rgb(${Math.min(bgRgb.r + 15, 255)}, ${Math.min(bgRgb.g + 15, 255)}, ${Math.min(bgRgb.b + 15, 255)})`);
       }
     }
 
-    // 卡片透明度 — 毛玻璃 blur 跟随透明度联动
+    // 卡片透明度与毛玻璃模糊
     const co = this.appearance.card_opacity;
-    if (this.appearance.backdrop_filter) {
-      // 透明度 0 → 完全关闭 blur，透明度 1 → 最强 blur
-      _p('--card-blur', co > 0 ? `blur(${Math.round(co * 20)}px)` : 'none');
+    const blurPx = this.appearance.card_blur ?? 12;
+    if (this.appearance.backdrop_filter && blurPx > 0) {
+      _p('--card-blur', `blur(${blurPx}px)`);
     } else {
       _p('--card-blur', 'none');
     }
@@ -84,7 +98,7 @@ export const appearanceMethods = {
     if (isLight) {
       _p('--bg-card', `rgba(255, 255, 255, ${co})`);
     } else {
-      const cardRgb = this.hexToRgb(this.appearance.background_color || '#0f172a');
+      const cardRgb = hexToRgb(this.appearance.background_color || '#0f172a');
       if (cardRgb) {
         _p('--bg-card', `rgba(${cardRgb.r}, ${cardRgb.g}, ${cardRgb.b}, ${co})`);
       }
@@ -108,7 +122,7 @@ export const appearanceMethods = {
     // 侧边栏背景色
     if (this.appearance.sidebar_color) {
       // 用户自定义颜色
-      const sidebarRgb = this.hexToRgb(this.appearance.sidebar_color);
+      const sidebarRgb = hexToRgb(this.appearance.sidebar_color);
       if (sidebarRgb) {
         _p('--sidebar-bg-1', `rgba(${sidebarRgb.r}, ${sidebarRgb.g}, ${sidebarRgb.b}, var(--sidebar-opacity))`);
         _p('--sidebar-bg-2', `rgba(${sidebarRgb.r}, ${sidebarRgb.g}, ${sidebarRgb.b}, calc(var(--sidebar-opacity) + 0.03))`);
@@ -118,7 +132,7 @@ export const appearanceMethods = {
       _p('--sidebar-bg-2', 'rgba(226, 232, 240, calc(var(--sidebar-opacity) + 0.03))');
     } else {
       // 深色主题从背景色推导
-      const bgRgb = this.hexToRgb(this.appearance.background_color || '#0f172a');
+      const bgRgb = hexToRgb(this.appearance.background_color || '#0f172a');
       if (bgRgb) {
         _p('--sidebar-bg-1', `rgba(${Math.min(bgRgb.r + 15, 255)}, ${Math.min(bgRgb.g + 15, 255)}, ${Math.min(bgRgb.b + 15, 255)}, var(--sidebar-opacity))`);
         _p('--sidebar-bg-2', `rgba(${Math.max(bgRgb.r - 10, 0)}, ${Math.max(bgRgb.g - 10, 0)}, ${Math.max(bgRgb.b - 10, 0)}, calc(var(--sidebar-opacity) + 0.03))`);
@@ -133,63 +147,36 @@ export const appearanceMethods = {
     }
   },
 
-  // 颜色调整辅助函数
-  adjustColor(hex, amount) {
-    const num = parseInt(hex.replace('#', ''), 16);
-    const r = Math.max(0, Math.min(255, (num >> 16) + amount));
-    const g = Math.max(0, Math.min(255, ((num >> 8) & 0x00FF) + amount));
-    const b = Math.max(0, Math.min(255, (num & 0x0000FF) + amount));
-    return `#${(1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1)}`;
-  },
-
-  hexToRgb(hex) {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-      r: parseInt(result[1], 16),
-      g: parseInt(result[2], 16),
-      b: parseInt(result[3], 16),
-    } : null;
-  },
-
   getBgColors() {
     return BG_COLORS;
   },
 
   // 选择背景图片（上传到服务器）
   async selectBackgroundImage() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
+    const file = await pickFile('image/*');
+    if (!file) return;
 
-    input.onchange = async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
+    if (file.size > LIMITS.FILE_UPLOAD_MAX) {
+      this.toastOnly(false, '图片大小不能超过 5MB');
+      return;
+    }
 
-      if (file.size > LIMITS.FILE_UPLOAD_MAX) {
-        this.toastOnly(false, '图片大小不能超过 5MB');
-        return;
-      }
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
 
-      try {
-        // 上传到服务器
-        const formData = new FormData();
-        formData.append('file', file);
+      const { data } = await this.$api.post('/api/background/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
 
-        const { data } = await this.$api.post('/api/background/upload', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-
-        this.appearance.background_url = data.url;
-        this.appearance.background_filename = data.filename;
-        this.applyAppearance();
-        this.toastOnly(true, '背景图片已设置');
-      } catch (err) {
-        console.error('上传背景图片失败:', err);
-        this.toastOnly(false, '上传失败: ' + (err.response?.data?.detail || err.message));
-      }
-    };
-
-    input.click();
+      this.appearance.background_url = data.url;
+      this.appearance.background_filename = data.filename;
+      this.applyAppearance();
+      this.toastOnly(true, '背景图片已设置');
+    } catch (err) {
+      console.error('上传背景图片失败:', err);
+      this.toastOnly(false, '上传失败: ' + (err.response?.data?.detail || err.message));
+    }
   },
 
   // 打开随机壁纸对话框
@@ -197,15 +184,12 @@ export const appearanceMethods = {
     this.randomWallpaperDialog.url = this.appearance.wallpaper_api_url || 'https://t.alcy.cc/pc';
     this.randomWallpaperDialog.loading = false;
     this.randomWallpaperDialog.visible = true;
-    this.$nextTick(() => {
-      const overlay = document.querySelector('.random-wallpaper-overlay');
-      if (overlay) this._trapFocus(overlay);
-    });
+    this.openModal('.random-wallpaper-overlay');
   },
 
   // 关闭随机壁纸对话框
   closeRandomWallpaperDialog() {
-    this._releaseFocusTrap();
+    this.closeModal();
     this.randomWallpaperDialog.visible = false;
   },
 

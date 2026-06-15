@@ -46,13 +46,27 @@ export const LIMITS = {
   SCROLL_BOTTOM_THRESHOLD: 50,    // 判断滚动到底部的阈值（px）
 };
 
-export const LOG_LEVELS = {
-  DEBUG: 10,
-  INFO: 20,
-  WARNING: 30,
-  ERROR: 40,
-  CRITICAL: 50,
-};
+// 日志级别选项
+export const LOG_LEVELS = [
+  { value: 'DEBUG', label: 'DEBUG' },
+  { value: 'INFO', label: 'INFO' },
+  { value: 'WARNING', label: 'WARNING' },
+  { value: 'ERROR', label: 'ERROR' },
+  { value: 'CRITICAL', label: 'CRITICAL' },
+];
+
+// 日志级别数值映射（数值越大级别越高）
+export const LEVEL_VALUES = Object.fromEntries(LOG_LEVELS.map((l, i) => [l.value, i]));
+// { DEBUG: 0, INFO: 1, WARNING: 2, ERROR: 3, CRITICAL: 4 }
+
+// 日志来源列表
+export const LOG_SOURCES = [
+  { value: 'backend', label: 'backend', color: '#4fc3f7' },
+  { value: 'network', label: 'network', color: '#81c784' },
+  { value: 'task', label: 'task', color: '#fff176' },
+  { value: 'frontend', label: 'frontend', color: '#ce93d8' },
+  { value: 'debug', label: 'debug', color: '#ffab91' },
+];
 
 export const BROWSER_ARGS_DEFAULT = "--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees\n--disable-ipc-flooding-protection\n--disable-hang-monitor\n--disable-popup-blocking";
 
@@ -61,11 +75,10 @@ const _SHARED_DEFAULTS = {
   carrier: "无",
   carrier_custom: "",
   check_interval_seconds: 300,
-  auto_start: false,
   headless: true,
   browser_timeout: 8,
   browser_navigation_timeout: 15,
-  login_timeout: 60,
+  login_timeout: 90,
   max_retries: 3,
   retry_interval: 5,
   browser_low_resource_mode: false,
@@ -91,15 +104,14 @@ export const DEFAULT_CONFIG = {
   ..._SHARED_DEFAULTS,
   username: "",
   password: "",
-  use_global_credentials: true,
   auth_url: "",
   active_task: "",
   browser_user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-  portal_check_urls: "http://captive.apple.com/hotspot-detect.html|Success\nhttp://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test\nhttp://detectportal.firefox.com/success.txt|success",
+  url_check_urls: "http://captive.apple.com/hotspot-detect.html|Success\nhttp://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test\nhttp://detectportal.firefox.com/success.txt|success",
   access_log: false,
   minimize_to_tray: true,
+  startup_action: "none",
   auto_open_browser: false,
-  login_then_exit: false,
   log_retention_days: 7,
   proxy: "",
   block_proxy: true,
@@ -115,7 +127,7 @@ export const DEFAULT_CONFIG = {
 export const SETTINGS_TABS = [
   { id: 'account', label: '账号设置', hint: '账号、密码与认证地址' },
   { id: 'monitor', label: '网络与监控', hint: '检测策略、重试与代理' },
-  { id: 'system', label: '系统与日志', hint: '日志、自启动与配置备份' },
+  { id: 'system', label: '系统与日志', hint: '日志、自启动与启动行为' },
   { id: 'browser', label: '浏览器设置', hint: '请求头、图片与浏览器参数' },
   { id: 'tasks', label: '任务设置', hint: '活动任务与模板入口' },
 ];
@@ -129,6 +141,7 @@ export const DEFAULT_APPEARANCE = {
   background_opacity: 0.3,
   background_color: '#0f172a',
   card_opacity: 0.45,
+  card_blur: 12,
   border_intensity: 1.0,
   sidebar_opacity: 0.95,
   sidebar_color: '',
@@ -167,11 +180,6 @@ export const DEFAULT_PROFILE_SETTINGS = {
   match_ssid: '',
   username: '',
   password: '',
-  use_global_credentials: true,
-  use_global_advanced: true,
-  use_global_auth_url: true,
-  use_global_task: true,
   auth_url: '',
   active_task: '',
-  browser_user_agent: '',
 };

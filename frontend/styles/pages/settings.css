@@ -1,9 +1,3 @@
-.settings-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 16px;
-}
-
 .settings-page {
   display: flex;
   flex-direction: column;
@@ -170,6 +164,77 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.task-overview-card .card-body {
+  padding: 12px 16px;
+}
+
+.task-overview-compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.task-overview-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.task-overview-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.task-overview-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+/* 紧凑版：设置页面内的任务概览（字号更小） */
+.task-overview-left .task-overview-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-overview-left .task-overview-desc {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 0;
+}
+
+.task-overview-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.settings-page .btn-icon-only {
+  padding: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .task-overview-info {
@@ -268,17 +333,53 @@
   align-items: center;
   justify-content: flex-start;
   gap: 10px;
+  position: relative;
+  z-index: 1;
 }
 
 .toggle.toggle-help-inline {
-  gap: 8px;
+  gap: 12px;
 }
 
 .toggle.toggle-help-inline .field-help {
-  margin-left: 2px;
+  margin-left: 6px;
 }
 
 /* .field-help 已统一定义在 components.css 中 */
+
+/* 当前方案提示 */
+.current-profile-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(34, 211, 238, 0.05);
+  border: 1px solid rgba(34, 211, 238, 0.12);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.current-profile-hint svg {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.current-profile-hint strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.current-profile-hint .hint-link {
+  margin-left: auto;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 12px;
+}
+
+.current-profile-hint .hint-link:hover {
+  text-decoration: underline;
+}
 
 /* ---- 悬浮保存按钮 ---- */
 .settings-float-save {
@@ -344,12 +445,16 @@
   margin: 20px 0;
 }
 
-.autostart-method-hint {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: -8px;
-  margin-bottom: 8px;
-  padding-left: 60px;
+.autostart-method-badge {
+  display: inline-block;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-glass);
+  border: 1px solid var(--border);
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-family: var(--font-mono);
+  margin-left: 4px;
 }
 
 /* 自定义变量样式 */
@@ -521,122 +626,6 @@
   color: var(--text-secondary);
 }
 
-/* ---- 配置备份 ---- */
-.backup-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.backup-summary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.backup-summary svg {
-  color: var(--accent);
-  flex-shrink: 0;
-}
-
-.backup-table {
-  display: flex;
-  flex-direction: column;
-}
-
-.backup-table-header {
-  display: grid;
-  grid-template-columns: 1fr 160px 70px 170px;
-  gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border-accent);
-  font-size: 12px;
-  color: var(--text-muted);
-  font-weight: 600;
-}
-
-.backup-row {
-  display: grid;
-  grid-template-columns: 1fr 160px 70px 170px;
-  gap: 8px;
-  align-items: center;
-  padding: 10px 12px;
-  border-bottom: 1px solid rgba(56, 189, 248, 0.06);
-  font-size: 13px;
-  color: var(--text-secondary);
-  transition: background 0.15s ease;
-}
-
-.backup-row:last-child {
-  border-bottom: none;
-}
-
-.backup-row:hover {
-  background: rgba(34, 211, 238, 0.04);
-}
-
-.backup-col-name {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.backup-col-time {
-  font-size: 12px;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-.backup-col-size {
-  font-size: 12px;
-  color: var(--text-muted);
-  text-align: right;
-}
-
-.backup-col-actions {
-  display: flex;
-  gap: 6px;
-  justify-content: flex-end;
-}
-
-.backup-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 32px 16px;
-  gap: 12px;
-  color: var(--text-muted);
-}
-
-.backup-empty svg {
-  opacity: 0.35;
-}
-
-.backup-empty p {
-  margin: 0;
-  font-size: 13px;
-  text-align: center;
-}
-
-@media (max-width: 768px) {
-  .backup-table-header,
-  .backup-row {
-    grid-template-columns: 1fr 90px 50px 130px;
-  }
-
-  .backup-col-time {
-    font-size: 11px;
-  }
-}
-
 /* ---- OCR 依赖管理 ---- */
 .ocr-section {
   display: flex;
@@ -709,30 +698,42 @@
   margin-bottom: 8px;
 }
 
-.btn-sm {
+.settings-page .btn-sm {
   padding: 4px 10px;
   font-size: 12px;
   border-radius: var(--radius-sm);
 }
 
-.btn-secondary {
+.settings-page .btn-secondary {
   background: var(--bg-card-elevated);
   color: var(--text-primary);
   border: 1px solid var(--border);
 }
 
-.btn-secondary:hover {
+.settings-page .btn-secondary:hover {
   background: var(--bg-hover);
   border-color: var(--border-hover);
 }
 
-.btn-ghost {
+.settings-page .btn-ghost {
   background: transparent;
   color: var(--text-secondary);
   border: 1px solid transparent;
 }
 
-.btn-ghost:hover {
+.settings-page .btn-ghost:hover {
   color: var(--text-primary);
   background: var(--bg-hover);
 }
+
+/* Shell 自定义路径输入 */
+.shell-custom-input {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.shell-custom-input input[type="text"] {
+  flex: 1;
+}
+

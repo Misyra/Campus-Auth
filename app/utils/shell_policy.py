@@ -1,7 +1,7 @@
 """统一 shell 命令执行的安全策略。
 
 提供 ShellCommandPolicy 类，用于验证执行路径白名单、超时上限钳制、
-执行前审计日志。scheduler_service 和 script_runner 共享此策略。
+执行前审计日志。TaskExecutor 和 ScriptRunner 共享此策略。
 """
 
 from __future__ import annotations
@@ -10,22 +10,22 @@ import asyncio
 import platform
 import subprocess
 import sys
-from typing import Callable
+from collections.abc import Callable
 
 from .logging import get_logger
-from .platform_utils import CREATE_NO_WINDOW_FLAG
+from .platform import CREATE_NO_WINDOW_FLAG
 
-logger = get_logger("shell_policy", side="BACKEND")
+logger = get_logger("shell_policy", source="backend")
 
 # 超时上下限
 _MIN_TIMEOUT = 1
-_MAX_TIMEOUT = 300
+_MAX_TIMEOUT = 3600
 
 
 class ShellCommandPolicy:
     """统一 shell 命令执行的安全策略:
     - 执行路径白名单（从外部传入的 allowlist 验证）
-    - timeout 上限 clamp（1, 300）
+    - timeout 上限 clamp（1, 3600）
     - 执行前 audit log
     """
 
@@ -39,7 +39,7 @@ class ShellCommandPolicy:
 
         Args:
             allowlist: 允许的执行路径列表（绝对路径）
-            default_timeout: 默认超时时间（秒），会被 clamp 到 [1, 300]
+            default_timeout: 默认超时时间（秒），会被 clamp 到 [1, 3600]
             audit_hook: 可选的审计钩子，执行前调用 (argv, timeout)
         """
         # 统一转为小写路径比较（Windows 路径不区分大小写）
@@ -51,7 +51,7 @@ class ShellCommandPolicy:
 
     @staticmethod
     def _clamp_timeout(timeout: int) -> int:
-        """将超时限制在 [1, 300] 范围内。"""
+        """将超时限制在 [1, 3600] 范围内。"""
         return max(_MIN_TIMEOUT, min(timeout, _MAX_TIMEOUT))
 
     def _is_allowed(self, path: str) -> bool:
@@ -101,11 +101,11 @@ class ShellCommandPolicy:
         timeout: int | None = None,
         **kwargs,
     ) -> tuple[int, str, str]:
-        """异步执行命令（用于 scheduler_service 的 asyncio 场景）。
+        """异步执行命令（用于 asyncio 场景）。
 
         Args:
             argv: 完整命令参数列表，第一个元素为执行路径
-            timeout: 超时时间（秒），会被 clamp 到 [1, 300]
+            timeout: 超时时间（秒），会被 clamp 到 [1, 3600]
             **kwargs: 传递给 asyncio.create_subprocess_exec 的额外参数
 
         Returns:
@@ -127,18 +127,21 @@ class ShellCommandPolicy:
         if platform.system() == "Windows":
             kwargs.setdefault("creationflags", CREATE_NO_WINDOW_FLAG)
 
-        proc = await asyncio.create_subprocess_exec(
-            *argv,
-            stdout=kwargs.pop("stdout", asyncio.subprocess.PIPE),
-            stderr=kwargs.pop("stderr", asyncio.subprocess.PIPE),
-            **kwargs,
-        )
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *argv,
+                stdout=kwargs.pop("stdout", asyncio.subprocess.PIPE),
+                stderr=kwargs.pop("stderr", asyncio.subprocess.PIPE),
+                **kwargs,
+            )
+        except FileNotFoundError:
+            return -1, "", f"执行文件不存在: {executable}"
 
         try:
             stdout, stderr = await asyncio.wait_for(
                 proc.communicate(), timeout=effective_timeout
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.wait()
             return -1, "", f"命令执行超时 ({effective_timeout}s)"
@@ -146,7 +149,7 @@ class ShellCommandPolicy:
         stdout_str = stdout.decode("utf-8", errors="replace").strip() if stdout else ""
         stderr_str = stderr.decode("utf-8", errors="replace").strip() if stderr else ""
 
-        return proc.returncode or 0, stdout_str, stderr_str
+        return proc.returncode if proc.returncode is not None else -1, stdout_str, stderr_str
 
     def run_sync(
         self,
@@ -159,7 +162,7 @@ class ShellCommandPolicy:
 
         Args:
             argv: 完整命令参数列表，第一个元素为执行路径
-            timeout: 超时时间（秒），会被 clamp 到 [1, 300]
+            timeout: 超时时间（秒），会被 clamp 到 [1, 3600]
             **kwargs: 传递给 subprocess.run 的额外参数
 
         Returns:
@@ -188,7 +191,11 @@ class ShellCommandPolicy:
         }
         if platform.system() == "Windows":
             run_kwargs["creationflags"] = CREATE_NO_WINDOW_FLAG
-        run_kwargs.update(kwargs)
+        # 只允许白名单中的额外参数，防止安全策略被绕过
+        _ALLOWED_KWARGS = {"env", "cwd"}
+        for key in _ALLOWED_KWARGS:
+            if key in kwargs:
+                run_kwargs[key] = kwargs[key]
 
         try:
             result = subprocess.run(argv, **run_kwargs)

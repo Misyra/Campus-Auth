@@ -6,13 +6,11 @@
   backdrop-filter: var(--card-blur, var(--blur-md));
   box-shadow: var(--shadow);
   transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
-  /* 提示浏览器提前准备 backdrop-filter 合成层 */
+  /* 提前告知浏览器将有 transform 变化，优化毛玻璃动画 */
   will-change: transform;
-  backface-visibility: hidden;
 }
 
 .card:hover {
-  border-color: var(--border-hover);
   box-shadow: var(--shadow-lg);
 }
 
@@ -183,9 +181,13 @@
 }
 
 .nav-item.active {
+  /* 渐进增强: 第一行为旧浏览器回退值，第二行为 color-mix() 增强值 */
+  background: rgba(167, 139, 250, 0.08);
   background: linear-gradient(135deg, color-mix(in srgb, var(--sidebar-accent, var(--accent)) 12%, transparent), rgba(167, 139, 250, 0.08));
   color: var(--sidebar-accent, var(--accent));
+  border: 1px solid rgba(167, 139, 250, 0.2);
   border: 1px solid color-mix(in srgb, var(--sidebar-accent, var(--accent)) 20%, transparent);
+  box-shadow: 0 0 20px rgba(167, 139, 250, 0.08);
   box-shadow: 0 0 20px color-mix(in srgb, var(--sidebar-accent, var(--accent)) 8%, transparent);
 }
 
@@ -370,6 +372,158 @@
   border-color: var(--border-hover);
 }
 
+/* ========== Custom Select 自定义下拉选择组件 ========== */
+.custom-select {
+  position: relative;
+  width: 100%;
+  z-index: auto;
+}
+
+/* 当下拉菜单展开时，提升所在卡片的层级，避免被后续卡片遮挡 */
+.card:has(.custom-select.open) {
+  position: relative;
+  z-index: var(--z-dropdown);
+}
+
+/* 下拉菜单自身需要高层级 */
+.custom-select-dropdown {
+  z-index: var(--z-modal);
+}
+
+.custom-select-trigger {
+  width: 100%;
+  padding: 12px 38px 12px 14px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  position: relative;
+  line-height: 1.4;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+}
+
+.custom-select-trigger:hover {
+  background: var(--bg-glass-heavy);
+  border-color: var(--border-hover);
+}
+
+.custom-select.open .custom-select-trigger {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12), 0 0 16px rgba(34, 211, 238, 0.06);
+}
+
+.custom-select-placeholder {
+  color: var(--text-muted);
+}
+
+.custom-select-arrow {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  opacity: 0.5;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.custom-select.open .custom-select-arrow {
+  transform: translateY(-50%) rotate(180deg);
+  opacity: 1;
+}
+
+.custom-select.open .custom-select-arrow polyline {
+  stroke: var(--accent);
+}
+
+.custom-select-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+  max-height: 250px;
+  overflow-y: auto;
+  animation: cs-dropdown-enter 0.15s ease;
+}
+
+@keyframes cs-dropdown-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.custom-select-option {
+  padding: 8px 12px;
+  border-radius: calc(var(--radius-md) - 4px);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+  user-select: none;
+}
+
+.custom-select-option:hover,
+.custom-select-option.active {
+  background: var(--bg-glass-heavy);
+}
+
+.custom-select-option.selected {
+  background: rgba(34, 211, 238, 0.12);
+  color: var(--accent);
+}
+
+/* 筛选场景的紧凑样式 */
+.custom-select.compact .custom-select-trigger {
+  padding: 5px 28px 5px 8px;
+  font-size: 12px;
+  min-height: auto;
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+}
+
+.custom-select.compact .custom-select-arrow {
+  right: 8px;
+  width: 10px;
+  height: 10px;
+}
+
+.custom-select.compact .custom-select-dropdown {
+  border-radius: var(--radius-sm);
+  padding: 3px;
+}
+
+.custom-select.compact .custom-select-option {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.custom-select.disabled .custom-select-trigger {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.custom-select.disabled .custom-select-arrow {
+  opacity: 0.5;
+}
+
 .form-group textarea {
   min-height: 140px;
   resize: vertical;
@@ -440,11 +594,6 @@
 .toggle input:checked + .toggle-slider::after {
   transform: translateX(20px);
   background: var(--bg-primary);
-}
-
-.toggle-label {
-  font-size: 14px;
-  color: var(--text-primary);
 }
 
 .empty-state {
@@ -563,40 +712,52 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   border-radius: 999px;
-  border: 1px solid rgba(34, 211, 238, 0.45);
-  background: rgba(34, 211, 238, 0.14);
-  color: var(--accent);
-  font-size: 9px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(148, 163, 184, 0.1);
+  color: rgba(203, 213, 225, 0.8);
+  font-size: 8px;
   font-weight: 700;
   line-height: 1;
   cursor: help;
   isolation: isolate;
+  z-index: var(--z-overlay);
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.field-help:hover,
+.field-help:focus-visible {
+  border-color: rgba(34, 211, 238, 0.5);
+  background: rgba(34, 211, 238, 0.12);
+  color: var(--accent);
 }
 
 .field-help::after {
   content: attr(data-tip);
   position: absolute;
-  left: calc(100% + 12px);
+  left: calc(100% + 10px);
   top: 50%;
   transform: translateY(-50%) translateX(4px);
   width: max-content;
-  max-width: min(380px, calc(100vw - 80px));
-  padding: 14px 16px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-accent-strong);
-  background: rgba(8, 15, 30, 0.95);
-  color: #e6f1ff;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.7;
+  max-width: min(320px, calc(100vw - 80px));
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  background: rgba(15, 23, 42, 0.96);
+  color: rgba(226, 232, 240, 0.95);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.25),
+    0 0 0 1px rgba(148, 163, 184, 0.06);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.65;
+  letter-spacing: 0.01em;
   white-space: normal;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition: opacity 0.18s ease, transform 0.18s ease;
   z-index: var(--z-modal);
   backdrop-filter: var(--blur-md);
 }
@@ -610,7 +771,7 @@
 /* 向左翻转提示框，用于右侧空间不足时 */
 .field-help--flip::after {
   left: auto;
-  right: calc(100% + 12px);
+  right: calc(100% + 10px);
   max-width: min(280px, calc(100vw - 80px));
   transform: translateY(-50%) translateX(-4px);
 }
@@ -828,7 +989,7 @@
 
 .notification-dropdown {
   position: absolute;
-  top: 100%;
+  top: calc(100% + 8px);
   right: 0;
   width: 320px;
   max-height: 400px;
@@ -837,7 +998,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
-  z-index: 100;
+  z-index: var(--z-overlay);
   margin-top: 8px;
   animation: dropdownEnter 0.2s ease;
 }
@@ -954,12 +1115,12 @@
 /* 危险按钮幽灵样式 */
 .btn-danger-ghost {
     background: transparent;
-    color: var(--color-danger, #ef4444);
-    border: 1px solid var(--color-danger, #ef4444);
+    color: var(--error);
+    border: 1px solid var(--error);
     transition: background-color 0.2s ease, color 0.2s ease;
 }
 .btn-danger-ghost:hover {
-    background: var(--color-danger, #ef4444);
+    background: var(--error);
     color: white;
 }
 
@@ -993,7 +1154,7 @@
   font-family: system-ui;
   color: var(--text-primary);
   background: var(--bg-primary);
-  z-index: 9999;
+  z-index: var(--z-max);
 }
 
 .exit-overlay svg {
@@ -1010,3 +1171,96 @@
   color: var(--text-secondary);
   font-size: 14px;
 }
+
+.exit-overlay .btn {
+  margin-top: 12px;
+  min-width: 140px;
+}
+
+/* ── 提示条 ── */
+
+.alert-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-md);
+  background: rgba(34, 211, 238, 0.06);
+  border: 1px solid rgba(34, 211, 238, 0.15);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.alert-hint code {
+  font-size: 11px;
+  padding: 1px 4px;
+  background: rgba(34, 211, 238, 0.1);
+  border-radius: 3px;
+  color: var(--accent);
+}
+
+.alert-hint a {
+  color: var(--accent);
+  text-decoration: none;
+  margin-left: 2px;
+}
+
+.alert-hint a:hover {
+  text-decoration: underline;
+}
+
+/* ========== Radio Group ========== */
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.radio-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.radio-option:hover {
+  background: var(--bg-glass);
+  border-color: var(--border-hover, var(--border));
+}
+
+.radio-option:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-bg, rgba(var(--accent-rgb, 99, 102, 241), 0.06));
+}
+
+.radio-option input[type="radio"] {
+  margin: 3px 0 0;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+
+.radio-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.radio-label {
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.radio-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+

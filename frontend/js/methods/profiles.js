@@ -51,7 +51,7 @@ export const profileMethods = {
       return;
     }
 
-    const { id, ...settings } = this.editingProfile;
+    const { id, _isNew, ...settings } = this.editingProfile;
 
     try {
       const { data } = await this.$api.put(`/api/profiles/${profileId}`, settings);
@@ -87,6 +87,10 @@ export const profileMethods = {
           this.currentPage = 'profiles';
         }
         await this.fetchProfiles();
+        // 如果删除的是活动方案，重置 activeProfileId
+        if (!this.profiles[this.activeProfileId]) {
+          this.activeProfileId = 'default';
+        }
       } else {
         this.frontendLogger.warn('profiles', '方案删除失败: ' + data.message);
         this.toastOnly(false, data.message);
@@ -97,6 +101,7 @@ export const profileMethods = {
     }
   },
   async setActiveProfile(profileId) {
+    if (this.autoSwitch) return;
     try {
       const { data } = await this.$api.post(`/api/profiles/active/${profileId}`);
       if (data.success) {
@@ -145,9 +150,13 @@ export const profileMethods = {
     this._autoSwitchInFlight = true;
     const newState = !this.autoSwitch;
     try {
-      const { data } = await this.$api.post(`/api/profiles/auto-switch?enabled=${newState}`);
+      const { data } = await this.$api.post('/api/profiles/auto-switch', { enabled: newState });
       if (data.success) {
         this.autoSwitch = newState;
+        // 更新活动方案
+        if (data.active_profile) {
+          this.activeProfileId = data.active_profile;
+        }
         this.frontendLogger.info('profiles', data.message);
         this.toastOnly(true, data.message);
       } else {
@@ -156,7 +165,7 @@ export const profileMethods = {
       }
     } catch (error) {
       this.frontendLogger.error('profiles', '切换自动切换异常', error);
-      this.toastOnly(false, '切换自动切换失败');
+      this.toastOnly(false, '自动切换设置失败');
     } finally {
       this._autoSwitchInFlight = false;
     }
