@@ -252,7 +252,7 @@
 
 .profile-card-main.disabled {
   cursor: default;
-  filter: grayscale(1);
+  pointer-events: none;
 }
 
 .profile-card-header {
