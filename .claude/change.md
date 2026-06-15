@@ -3,6 +3,13 @@
 ## 2026-06-15
 
 ### test
+- `tests/test_integration/test_login_flow.py` 添加登录流程集成测试（39 个用例）
+  - `TestFullLoginSequence`（10 个）：手动登录命令成功/失败、配置缺失、async_login 提交、TaskExecutor 登录成功/失败/取消/异常、完整手动登录序列
+  - `TestLoginWithNetworkDetection`（7 个）：网络检测触发登录、无需登录、更新间隔、方案切换、异常继续、登录后网络恢复、引擎循环集成
+  - `TestLoginRetryMechanism`（11 个）：基本重试判断、间隔时间、最大次数、进行中跳过、无配置/零计数、间隔递增、配置获取/异常回退、重置计数、唤醒时间
+  - `TestLoginConcurrencyProtection`（11 个）：进行中拒绝、Future 清除状态、并发拒绝、手动登录锁、锁释放（完成/超时）、重试不触发、异常清除、Future None、多线程竞争
+
+### test
 - `tests/test_integration/test_app_startup.py` 添加应用启动集成测试（22 个用例）
   - `TestCreateAppInitialization`（9 个）：FastAPI 实例创建、标题/版本、lifespan 配置、首页路由、静态文件挂载、WebSocket 端点、existing_container 参数、CORS 中间件、必要目录创建
   - `TestAppLifespan`（7 个）：shutdown_event 创建、existing_container 模式启动、调度器启用/跳过、shutdown 调用、完整生命周期、新容器模式 startup
