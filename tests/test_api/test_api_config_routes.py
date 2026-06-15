@@ -8,11 +8,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.schemas import (
+    GlobalSettings,
     MonitorConfigPayload,
     MonitorStatusResponse,
     ProfilesData,
     ProfileSettings,
-    SystemSettings,
 )
 
 
@@ -49,8 +49,8 @@ def client(tmp_path):
 
         # profile_service mock
         profile_data = ProfilesData(
-            system=SystemSettings(username="testuser", password="ENC:test"),
-            profiles={"default": ProfileSettings(name="默认方案")},
+            global_settings=GlobalSettings(),
+            profiles={"default": ProfileSettings(name="默认方案", username="testuser", password="ENC:test")},
         )
         mock_services.profile_service.load.return_value = profile_data
 
