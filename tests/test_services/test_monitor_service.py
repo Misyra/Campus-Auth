@@ -850,6 +850,9 @@ class TestReloadConfigQueueDispatch:
 
         def mock_enqueue(cmd, retries=2):
             enqueued.append(cmd.type)
+            # 立即设置 response_event 避免等待超时
+            if cmd.response_event:
+                cmd.response_event.set()
             return True
 
         svc._enqueue = mock_enqueue
@@ -872,6 +875,9 @@ class TestApplyProfileQueueDispatch:
 
         def mock_enqueue(cmd, retries=2):
             enqueued.append((cmd.type, cmd.data))
+            # 立即设置 response_event 避免等待超时
+            if cmd.response_event:
+                cmd.response_event.set()
             return True
 
         svc._enqueue = mock_enqueue

@@ -1044,7 +1044,12 @@ class TestReloadConfig:
     def test_reload_config_enqueues(self):
         svc = _make_raw_engine()
         enqueued = []
-        svc._enqueue = lambda cmd: (enqueued.append(cmd.type), True)[1]
+        def fake_enqueue(cmd):
+            enqueued.append(cmd.type)
+            if cmd.response_event:
+                cmd.response_event.set()
+            return True
+        svc._enqueue = fake_enqueue
         svc.reload_config()
         assert EngineCmdType.RELOAD in enqueued
 
@@ -1060,14 +1065,20 @@ class TestReloadConfig:
             cmd.response_event = real_event
             return True
         svc._enqueue = fake_enqueue
-        svc.reload_config()
+        with patch.object(real_event, "wait", return_value=False):
+            svc.reload_config()
 
 
 class TestApplyProfile:
     def test_apply_profile_enqueues(self):
         svc = _make_raw_engine()
         enqueued = []
-        svc._enqueue = lambda cmd: (enqueued.append((cmd.type, cmd.data)), True)[1]
+        def fake_enqueue(cmd):
+            enqueued.append((cmd.type, cmd.data))
+            if cmd.response_event:
+                cmd.response_event.set()
+            return True
+        svc._enqueue = fake_enqueue
         svc.apply_profile("p1")
         assert any(
             t == EngineCmdType.APPLY_PROFILE and d.get("profile_id") == "p1"
@@ -1086,7 +1097,8 @@ class TestApplyProfile:
             cmd.response_event = real_event
             return True
         svc._enqueue = fake_enqueue
-        svc.apply_profile("p1")
+        with patch.object(real_event, "wait", return_value=False):
+            svc.apply_profile("p1")
 
 
 # =====================================================================

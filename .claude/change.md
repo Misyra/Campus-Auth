@@ -3,6 +3,52 @@
 ## 2026-06-15
 
 ### test
+- 完成测试覆盖率改进，整体覆盖率达到 86%（目标 85%）
+  - `tests/test_utils/test_src_utils.py` 新增 PlaywrightWorker 纯逻辑测试
+    - `TestBuildLaunchArgs`（8 个）：默认参数、disable_web_security、low_resource_mode、自定义参数、去重、空白行、空值/None
+    - `TestBuildContextOptions`（6 个）：默认选项、自定义视口、User-Agent、空 UA、额外请求头、HTTPS 错误
+    - `TestHealthCheck`（4 个）：无浏览器、连接正常、断开、异常
+    - `TestIsNormalCloseError`（4 个）：target closed、connection closed、其他错误、大小写
+    - `TestHandleLowResourceRequest`（6 个）：图片/字体/媒体拦截、文档/脚本放行、异常静默
+    - `TestWakeAsync`（2 个）：设置事件、无事件
+    - `TestWorkerProperties`（4 个）：page/browser/context/playwright_instance
+    - `TestCloseResource`（5 个）：None、成功、已关闭、正常错误、非优雅模式
+    - `TestDispatch`（6 个）：已取消跳过、SHUTDOWN、未知命令、BROWSER_RELEASE、response_event、异常
+    - `TestSubmitQueueFull`（1 个）：队列满返回错误
+    - `TestSubmitTimeout`（1 个）：超时返回错误
+    - `TestSubmitResponseData`（2 个）：WorkerResponse/普通值
+    - `TestSubmitNowait`（1 个）：命令入队
+    - `TestCleanupBrowser`（9 个）：全 None、强制清理、调试页面、浏览器连接/断开、Playwright、正常错误、其他错误、强制静默
+    - `TestStopDetails`（2 个）：永久关闭标志、排干队列
+    - `TestGetWorkerShutdownWorker`（2 个）：None 时不报错、存活时关闭
+  - `tests/test_api/test_api_autostart_routes.py` 新增 AutoStartService 纯逻辑测试
+    - `TestAutostartCliArgs`（3 个）：轻量/完整模式、无连续空格
+    - `TestAutoStartServiceInit`（1 个）：初始化
+    - `TestAutoStartServicePaths`（3 个）：macOS/Linux/Windows 路径
+    - `TestAutoStartServiceRun`（4 个）：成功/失败/超时/异常
+    - `TestAutoStartServiceStatus`（4 个）：macOS/Linux/Windows/不支持平台
+    - `TestAutoStartServiceEnableDisable`（5 个）：不支持平台、Windows 成功/CJK 路径、禁用
+    - `TestBuildVbsContent`（3 个）：WshShell、PID 检查、运行命令
+    - `TestHasCjkChars`（4 个）：中文、混合、纯 ASCII、空字符串
+    - `TestStartCommand`（3 个）：打包可执行文件、回退、venv
+    - `TestDisableMacos`（2 个）：存在/不存在
+    - `TestDisableLinux`（1 个）：禁用
+  - `tests/test_app/test_application_logic.py` 增强截图清理测试
+    - `TestCleanupTempScreenshots`：重写为实际文件时间测试，覆盖 png/jpg/jpeg/新文件/非图片/不存在/空目录/异常
+    - `TestCleanupOldScreenshots`（5 个）：旧目录删除/不存在/空目录/异常/跳过当天
+  - 优化 6 个 10 秒超时测试（engine/monitor_service），测试执行时间从 126 秒降至 50 秒
+    - `test_engine.py`：`test_reload_config_enqueues`/`test_reload_config_timeout`/`test_apply_profile_enqueues`/`test_apply_profile_timeout` 改为 mock response_event.wait
+    - `test_monitor_service.py`：`test_reload_config_enqueues_reload_command`/`test_apply_profile_enqueues_command` 改为立即设置 response_event
+
+### feat
+- `frontend/js/constants.js` `DEFAULT_CONFIG` 新增 `lightweight_tray: true` 字段
+
+### feat
+- `main.py` `_build_app_config()` 新增读取 `lightweight_tray` 配置
+  - 在 `minimize_to_tray` 读取后新增 `config.lightweight_tray` 读取
+  - 默认值 `True`，与 `minimize_to_tray` 保持一致
+
+### test
 - `tests/test_integration/test_scheduled_task.py` 添加定时任务集成测试（38 个用例）
   - `TestTaskRegistrationAndExecution`（11 个）：保存/读取/列出/删除任务、删除清理历史、执行不存在/不支持类型的任务、执行记录历史/更新 last_run、has_enabled_tasks、调度索引查询/更新
   - `TestTaskExecutionWithVariableResolution`（12 个）：变量基础替换/嵌套解析/运行时优先级/JS 安全转义/未解析保留/循环引用/最大深度、StepHandler 参数解析、浏览器任务变量传递、Shell 任务执行/空命令
