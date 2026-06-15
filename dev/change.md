@@ -2,6 +2,13 @@
 
 ## 2026-06-15
 
+### feat
+- `app/api/profiles.py` 开启自动切换时立即检测匹配方案
+  - `toggle_auto_switch` 新增 `monitor_svc` 依赖
+  - 开启自动切换后立即调用 `detect_matching_profile` 检测当前网络
+  - 检测到匹配方案且与当前方案不同时，自动切换并应用
+  - 检测过程异常不影响开关状态设置，仅记录警告日志
+
 ### refactor
 - `frontend/partials/pages/profiles.html` 移除所有 `use_global_*` 引用
   - 方案列表：`auth_url` 和 `active_task` 标签仅检查值是否存在
