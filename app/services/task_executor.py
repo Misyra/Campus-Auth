@@ -84,7 +84,11 @@ class BoundedExecutor:
         if not self._semaphore.acquire(blocking=False):
             raise RuntimeError("任务队列已满，无法提交更多任务")
 
-        future = self._executor.submit(func, *args, **kwargs)
+        try:
+            future = self._executor.submit(func, *args, **kwargs)
+        except Exception:
+            self._semaphore.release()
+            raise
         # 任务完成或取消时释放信号量
         future.add_done_callback(lambda _: self._semaphore.release())
         return future

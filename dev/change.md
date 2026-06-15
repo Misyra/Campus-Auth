@@ -76,6 +76,12 @@
   - 移除死代码分支及不再使用的 `decrypt_password`、`DecryptionError` 导入
 
 ### fix
+- `app/utils/login.py` 移除双重 close_browser，仅释放浏览器上下文引用
+  - 移除 `close_browser` 中对 `worker.close_browser()` 的调用（该调用会销毁整个浏览器实例）
+  - 移除不再需要的 `get_worker` 导入
+  - 浏览器实例保持在 Worker 中复用，避免每次登录多花 3-5 秒重启浏览器
+
+### fix
 - `app/services/engine.py` 守卫 profile switch 防止并发 shutdown 导致 `_monitor_core` 为 None
   - `_do_network_check` 第 285 行 `consume_profile_switch_flag()` 调用前增加 `_monitor_core` 空值检查
   - 防止 `_handle_stop()` 设置 `_monitor_core = None` 后 `shutdown()` 并发访问引发 `AttributeError`
