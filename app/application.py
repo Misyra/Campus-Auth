@@ -144,7 +144,7 @@ def create_app(existing_container=None):
         app_instance.state.services = services
 
         # 配置诊断
-        settings_path = PROJECT_ROOT / "settings.json"
+        settings_path = PROJECT_ROOT / "config" / "settings.json"
         startup_logger.debug(
             "settings.json 路径: {} (存在={}, 大小={})",
             settings_path,
