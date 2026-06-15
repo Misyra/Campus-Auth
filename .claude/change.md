@@ -2,6 +2,19 @@
 
 ## 2026-06-15
 
+### perf
+- 定时任务线程池懒初始化，无任务时不创建线程
+  - `app/services/task_executor.py`：`_task_pool` 初始为 `None`，首次调用 `execute_task_async` 时才创建
+  - 新增 `_ensure_task_pool()` 方法封装懒初始化逻辑
+  - `shutdown()` 添加 `_task_pool is not None` 检查，避免未创建时调用
+  - 更新类文档字符串，标注 `_task_pool` 为懒初始化
+
+### test
+- `tests/test_services/test_task_executor_fix.py` 新增 `TestTaskPoolLazyInit` 测试类
+  - `test_task_pool_initially_none`：初始化时 `_task_pool` 应为 `None`
+  - `test_task_pool_created_on_first_use`：首次调用 `execute_task_async` 时创建
+  - `test_shutdown_without_task_pool`：无 `_task_pool` 时 `shutdown` 不报错
+
 ### fix
 - `app/schemas.py` 在 `_SystemFieldsMixin` 中补充 `login_timeout` 字段
   - `MonitorConfigPayload` 继承的两个 mixin 均无此字段，Pydantic v2 静默丢弃用户设置的值

@@ -94,3 +94,63 @@ class TestTaskExecutorGetScriptPath:
 
         result = executor._get_script_path("nonexistent")
         assert result is None
+
+
+class TestTaskPoolLazyInit:
+    """定时任务线程池懒初始化测试。"""
+
+    def test_task_pool_initially_none(self, tmp_path):
+        """初始化时 _task_pool 应为 None。"""
+        from app.services.task_executor import TaskExecutor
+
+        registry = MagicMock()
+        registry.has_enabled_tasks.return_value = False
+        history_store = MagicMock()
+
+        executor = TaskExecutor(
+            registry=registry,
+            history_store=history_store,
+            worker_getter=MagicMock(),
+        )
+        assert executor._task_pool is None
+
+    def test_task_pool_created_on_first_use(self, tmp_path):
+        """首次调用 execute_task_async 时创建 _task_pool。"""
+        from app.services.task_executor import TaskExecutor
+
+        registry = MagicMock()
+        registry.get_task.return_value = {
+            "type": "script",
+            "target_id": "test",
+            "timeout": 60,
+        }
+        history_store = MagicMock()
+
+        executor = TaskExecutor(
+            registry=registry,
+            history_store=history_store,
+            worker_getter=MagicMock(),
+        )
+        assert executor._task_pool is None
+
+        # Mock execute_task 避免实际执行
+        executor.execute_task = MagicMock(return_value=(True, "ok"))
+        executor.execute_task_async("test")
+
+        assert executor._task_pool is not None
+
+    def test_shutdown_without_task_pool(self, tmp_path):
+        """无 _task_pool 时 shutdown 不报错。"""
+        from app.services.task_executor import TaskExecutor
+
+        registry = MagicMock()
+        history_store = MagicMock()
+
+        executor = TaskExecutor(
+            registry=registry,
+            history_store=history_store,
+            worker_getter=MagicMock(),
+        )
+        assert executor._task_pool is None
+        # 不应抛出异常
+        executor.shutdown()
