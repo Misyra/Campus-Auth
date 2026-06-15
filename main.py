@@ -281,8 +281,10 @@ def _build_app_config(
         config.auto_open_browser = False
     if cli_tray:
         config.minimize_to_tray = True
+        config.lightweight_tray = True
     if cli_no_tray:
         config.minimize_to_tray = False
+        config.lightweight_tray = False
 
     return config
 
