@@ -2,6 +2,18 @@
 
 ## 2026-06-15
 
+### refactor
+- `app/network/decision.py` 移除 `is_network_available` 中的死代码
+  - `socket_ok`/`http_ok`/`url_ok` 变量在循环中只会被赋值为 `True`（失败时已提前 `return False`）
+  - 删除变量声明和循环中的赋值语句
+  - 删除冗余的 `result` 计算和日志输出，循环正常结束直接 `return True`
+
+### fix
+- `app/network/probes.py` 探测成功时取消其余 pending 的 future，释放线程池资源
+  - `is_network_available_socket`、`is_network_available_url`、`is_network_available_http` 三个函数
+  - 首个目标返回成功后，遍历所有 future 取消未完成的任务
+  - 避免剩余 future 继续占用线程池直到超时
+
 ### fix
 - `app/network/probes.py` set_block_proxy 时关闭旧 httpx 客户端，确保代理设置立即生效
   - 修改后 `_block_proxy` 标志后，立即关闭并置空 `_probe_client`

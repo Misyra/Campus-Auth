@@ -162,8 +162,6 @@ def is_network_available(
 
     from concurrent.futures import as_completed
 
-    socket_ok = http_ok = url_ok = True
-
     pool = _decision_executor
     futures = {}
     if enable_tcp:
@@ -204,12 +202,6 @@ def is_network_available(
                     if not f.done():
                         f.cancel()
                 return False
-            if kind == "tcp":
-                socket_ok = ok
-            elif kind == "http":
-                http_ok = ok
-            elif kind == "url":
-                url_ok = ok
     except TimeoutError:
         logger.warning("网络检测超时 ({:.1f}s)，视为网络异常", overall_timeout)
         for f in futures:
@@ -217,25 +209,7 @@ def is_network_available(
                 f.cancel()
         return False
 
-    result = (
-        (socket_ok or not enable_tcp)
-        and (http_ok or not enable_http)
-        and (url_ok or not enable_url)
-    )
-
-    status_parts = []
-    if enable_tcp:
-        status_parts.append(f"TCP={'通' if socket_ok else '断'}")
-    if enable_http:
-        status_parts.append(f"HTTP={'通' if http_ok else '断'}")
-    if enable_url:
-        status_parts.append(f"URL={'通' if url_ok else '断'}")
-    logger.debug(
-        "网络检测完成: {} -> {}",
-        " ".join(status_parts) if status_parts else "无",
-        "网络正常" if result else "网络异常",
-    )
-    return result
+    return True
 
 
 def _is_auth_url_reachable(
@@ -259,6 +233,8 @@ def _is_auth_url_reachable(
             logger.debug("认证可达性检测失败: {} -- {}", label, exc)
             return False
 
+    # 有 extra_targets 时只检测自定义目标，不回退到 auth_url。
+    # 这是故意设计：用户配置 extra_targets 意味着用自定义目标替代认证地址做可达性判断。
     if extra_targets:
         from concurrent.futures import as_completed
 
