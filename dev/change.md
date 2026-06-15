@@ -3,6 +3,11 @@
 ## 2026-06-15
 
 ### fix
+- `app/services/config_service.py` 删除 `build_runtime_config` 中不可达的密码回退代码
+  - `GlobalSettings` 没有 `password` 字段，`hasattr(global_settings, 'password')` 永远返回 `False`
+  - 移除死代码分支及不再使用的 `decrypt_password`、`DecryptionError` 导入
+
+### fix
 - `app/utils/ports.py` 修复端口配置读取路径和 JSON key
   - 路径从 `PROJECT_ROOT / "settings.json"` 修正为 `PROJECT_ROOT / "config" / "settings.json"`
   - JSON key 从 `system.app_port` 修正为 `global_settings.app_port`
