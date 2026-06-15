@@ -1,94 +1,14 @@
 #!/usr/bin/env python3
 """
-配置工具模块 — 验证、字段提取与赋值、常量定义
+配置工具模块 — 验证、字段赋值
 
-合并自原 config.py（ConfigValidator）和 config_helpers.py
-（PROFILE_FIELDS / extract / assign / validate）。
+合并自原 config.py（ConfigValidator）和 config_helpers.py。
 """
 
 from __future__ import annotations
 
-from typing import Any
 
-# ── 常量 ──────────────────────────────────────────────────────────────
-
-# ProfileSettings 中的所有字段
-PROFILE_FIELDS: tuple[str, ...] = (
-    "username",
-    "password",
-    "auth_url",
-    "carrier",
-    "carrier_custom",
-    "active_task",
-)
-
-# GlobalSettings 中的字段
-GLOBAL_FIELDS: tuple[str, ...] = (
-    "backend_log_level",
-    "frontend_log_level",
-    "access_log",
-    "log_retention_days",
-    "minimize_to_tray",
-    "auto_open_browser",
-    "startup_action",
-    "autostart_lightweight",
-    "proxy",
-    "block_proxy",
-    "app_port",
-    "shell_path",
-    "pure_mode",
-    "max_retries",
-    "retry_interval",
-    "source_levels",
-    # 监控配置
-    "check_interval_seconds",
-    "pause_enabled",
-    "pause_start_hour",
-    "pause_end_hour",
-    "network_targets",
-    "http_targets",
-    "enable_tcp_check",
-    "enable_http_check",
-    "enable_local_check",
-    "check_auth_url",
-    "auth_url_targets",
-    "url_check_urls",
-    "network_check_timeout",
-    # 浏览器配置
-    "headless",
-    "browser_timeout",
-    "browser_navigation_timeout",
-    "login_timeout",
-    "browser_user_agent",
-    "browser_low_resource_mode",
-    "browser_disable_web_security",
-    "browser_extra_headers_json",
-    "browser_args",
-    "stealth_mode",
-    "stealth_custom_script",
-    "browser_locale",
-    "browser_timezone",
-    "browser_viewport_width",
-    "browser_viewport_height",
-    # 自定义变量
-    "custom_variables",
-)
-
-
-# ── 字段提取 / 赋值 ──────────────────────────────────────────────────
-
-
-def extract_profile_fields(source: dict, field_names: list[str]) -> dict[str, Any]:
-    """从 source 字典中提取指定字段，返回新字典。
-
-    Args:
-        source: 源字典（通常为 MonitorConfigPayload.model_dump() 结果）
-        field_names: 需要提取的字段名列表
-
-    Returns:
-        仅包含 source 中存在的指定字段的新字典
-    """
-    return {name: source[name] for name in field_names if name in source}
+# ── 字段赋值 ──────────────────────────────────────────────────────────
 
 
 def assign_profile_fields(target: dict, source: dict, field_names: list[str]) -> None:
@@ -111,53 +31,6 @@ def assign_profile_fields(target: dict, source: dict, field_names: list[str]) ->
 
 class ConfigValidator:
     """配置验证工具类 - 统一管理配置验证逻辑"""
-
-    @staticmethod
-    def validate_gui_config(
-        username: str, password: str, check_interval: str | int
-    ) -> tuple[bool, str]:
-        """
-        验证GUI配置是否有效
-
-        参数:
-            username: 用户名
-            password: 密码
-            check_interval: 检测间隔（字符串或整数）
-
-        返回:
-            tuple[bool, str]: (是否有效, 错误信息)
-        """
-        # 验证必填字段
-        username = username.strip()
-        password = password.strip()
-
-        # 掩码密码（"••••••••"）表示服务端已有加密密码，无需校验
-        is_masked = password.startswith("•")
-
-        if not username:
-            return False, "账号不能为空"
-        if not password and not is_masked:
-            return False, "密码不能为空"
-
-        # 验证账号格式（基本验证）
-        if len(username) < 2:
-            return False, "账号长度不能少于2位"
-
-        # 验证密码格式（基本验证）— 跳过掩码
-        if not is_masked and len(password) < 2:
-            return False, "密码长度不能少于2位"
-
-        # 验证检测间隔
-        try:
-            interval_int = int(check_interval)
-            if interval_int < 1:
-                return False, "检测间隔必须大于0"
-            if interval_int > 86400:  # 24小时
-                return False, "检测间隔不能超过 24 小时（86400 秒）"
-        except (ValueError, TypeError):
-            return False, "检测间隔必须是正整数"
-
-        return True, ""
 
     @staticmethod
     def validate_env_config(config: dict) -> tuple[bool, str]:

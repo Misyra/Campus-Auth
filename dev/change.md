@@ -3,6 +3,16 @@
 ## 2026-06-15
 
 ### refactor
+- `app/utils/config_utils.py` 清理 D2-D5 死代码
+  - 删除 `PROFILE_FIELDS` 常量（在重构后不再被生产代码使用）
+  - 删除 `GLOBAL_FIELDS` 常量（在重构后不再被生产代码使用）
+  - 删除 `extract_profile_fields` 函数（在重构后不再被生产代码使用）
+  - 删除 `ConfigValidator.validate_gui_config` 方法（在重构后不再被生产代码使用）
+  - 删除 `tests/test_utils/test_config_utils_fix.py` 文件（全部内容为 PROFILE_FIELDS 测试）
+  - 删除 `tests/test_utils/test_utils.py` 中 `TestExtractProfileFields` 测试类
+  - 删除 `tests/test_config/test_config_schemas.py` 中 `TestValidateGuiConfig` 测试类
+
+### refactor
 - `app/utils/notify.py` 删除 `send_notification` 死代码
   - 函数在生产代码中无任何调用者，仅在测试中使用
   - 删除 `send_notification` 函数及其测试类 `TestSendNotification`
