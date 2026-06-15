@@ -20,7 +20,7 @@ import pytest
 from app.utils import str_to_bool
 
 # ── config_helpers ──
-from app.utils.config_utils import assign_profile_fields, extract_profile_fields
+from app.utils.config_utils import assign_profile_fields
 
 # ── crypto ──
 from app.utils.crypto import (
@@ -196,37 +196,6 @@ class TestSavePasswordField:
 # =====================================================================
 # config_helpers
 # =====================================================================
-
-
-class TestExtractProfileFields:
-    def test_basic(self):
-        source = {"a": 1, "b": 2, "c": 3}
-        result = extract_profile_fields(source, ["a", "c"])
-        assert result == {"a": 1, "c": 3}
-
-    def test_missing_keys_skipped(self):
-        source = {"a": 1}
-        result = extract_profile_fields(source, ["a", "b", "c"])
-        assert result == {"a": 1}
-
-    def test_empty_field_names(self):
-        assert extract_profile_fields({"a": 1}, []) == {}
-
-    def test_empty_source(self):
-        assert extract_profile_fields({}, ["a", "b"]) == {}
-
-    def test_source_extra_keys_not_copied(self):
-        source = {"a": 1, "secret": "leaked"}
-        result = extract_profile_fields(source, ["a"])
-        assert "secret" not in result
-
-    def test_preserves_value_types(self):
-        source = {"num": 42, "flag": True, "nested": {"k": "v"}, "none_val": None}
-        result = extract_profile_fields(source, ["num", "flag", "nested", "none_val"])
-        assert result["num"] == 42
-        assert result["flag"] is True
-        assert result["nested"] == {"k": "v"}
-        assert result["none_val"] is None
 
 
 class TestAssignProfileFields:
