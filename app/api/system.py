@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 
@@ -23,6 +24,7 @@ api_logger = get_logger("api", source="backend")
 _update_cache: dict | None = None
 _update_cache_time: float = 0
 _UPDATE_CACHE_TTL = 12 * 60 * 60  # 12 小时
+_update_lock = asyncio.Lock()
 
 
 # ── 健康检查 / 更新检测 ──
@@ -54,49 +56,50 @@ async def check_update() -> dict:
 
     current = get_project_version(PROJECT_ROOT)
 
-    # 缓存命中直接返回
-    if _update_cache and (time.monotonic() - _update_cache_time) < _UPDATE_CACHE_TTL:
-        return {**_update_cache, "current": current}
+    async with _update_lock:
+        # 缓存命中直接返回
+        if _update_cache and (time.monotonic() - _update_cache_time) < _UPDATE_CACHE_TTL:
+            return {**_update_cache, "current": current}
 
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
-                "https://api.github.com/repos/Misyra/Campus-Auth/releases/latest",
-                headers={
-                    "Accept": "application/vnd.github.v3+json",
-                    "User-Agent": "Campus-Auth",
-                },
-            )
-        resp.raise_for_status()
-        data = resp.json()
-        tag = data.get("tag_name", "").lstrip("v")
-        result = {
-            "current": current,
-            "latest": tag,
-            "has_update": compare_versions(tag, current) > 0,
-            "url": data.get("html_url", ""),
-            "body": data.get("body", ""),
-            "published_at": data.get("published_at", ""),
-        }
-        # 更新缓存
-        _update_cache = result
-        _update_cache_time = time.monotonic()
-        return result
-    except Exception as e:
-        # 请求失败但有旧缓存，返回旧缓存 + 错误信息
-        if _update_cache:
-            return {
-                **_update_cache,
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    "https://api.github.com/repos/Misyra/Campus-Auth/releases/latest",
+                    headers={
+                        "Accept": "application/vnd.github.v3+json",
+                        "User-Agent": "Campus-Auth",
+                    },
+                )
+            resp.raise_for_status()
+            data = resp.json()
+            tag = data.get("tag_name", "").lstrip("v")
+            result = {
                 "current": current,
-                "cached": True,
+                "latest": tag,
+                "has_update": compare_versions(tag, current) > 0,
+                "url": data.get("html_url", ""),
+                "body": data.get("body", ""),
+                "published_at": data.get("published_at", ""),
+            }
+            # 更新缓存
+            _update_cache = result
+            _update_cache_time = time.monotonic()
+            return result
+        except Exception as e:
+            # 请求失败但有旧缓存，返回旧缓存 + 错误信息
+            if _update_cache:
+                return {
+                    **_update_cache,
+                    "current": current,
+                    "cached": True,
+                    "error": str(e),
+                }
+            return {
+                "current": current,
+                "latest": None,
+                "has_update": False,
                 "error": str(e),
             }
-        return {
-            "current": current,
-            "latest": None,
-            "has_update": False,
-            "error": str(e),
-        }
 
 
 # ── 初始化状态 ──
