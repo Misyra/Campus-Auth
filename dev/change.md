@@ -3,6 +3,12 @@
 ## 2026-06-15
 
 ### fix
+- `app/workers/script_runner.py` 脚本执行失败时优先输出 stderr 内容
+  - 原逻辑 `stdout[:500] or stderr[:500]` 在 stdout 有内容时丢弃 stderr 错误详情
+  - 成功时仅使用 stdout，失败时优先使用 stderr
+  - 消除 `output` 变量在 `returncode` 判断前的无条件赋值
+
+### fix
 - `app/services/login_history_service.py` 登录历史写入后添加 fsync，防止进程崩溃丢数据
   - `add` 方法中 `f.flush()` 后新增 `os.fsync(f.fileno())`
   - `flush()` 仅写入 OS 缓冲区，`fsync` 确保数据落盘

@@ -230,14 +230,13 @@ class ScriptRunner:
         if stderr_str:
             logger.warning("脚本 stderr: {}", stderr_str[:500])
 
-        output = (
-            stdout_str[:500] or stderr_str[:500] or f"(无输出, exit code {returncode})"
-        )
-
         if returncode == 0:
+            output = stdout_str[:500] or f"(无输出, exit code 0)"
             logger.info("脚本执行完成 ({:.1f}s): {}", elapsed, output)
             return True, output
         else:
+            # 失败时优先使用 stderr
+            output = stderr_str[:500] or stdout_str[:500] or f"(无输出, exit code {returncode})"
             logger.warning(
                 "脚本执行失败 ({:.1f}s, exit {}): {}", elapsed, returncode, output
             )
