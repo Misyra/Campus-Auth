@@ -162,6 +162,7 @@ def toggle_auto_switch(
     active_profile = data.active_profile
 
     # 开启自动切换时，立即进行一次检测
+    warning = None
     if enabled_bool:
         try:
             matched_id = profile_svc.detect_matching_profile()
@@ -179,9 +180,13 @@ def toggle_auto_switch(
                 api_logger.info("未检测到匹配方案，保持当前方案")
         except Exception as exc:
             api_logger.warning("自动切换检测失败: {}", exc)
+            warning = f"首次检测失败: {exc}"
 
-    return {
+    result = {
         "success": True,
         "message": f"自动切换已{state}",
         "active_profile": active_profile,
     }
+    if warning:
+        result["warning"] = warning
+    return result
