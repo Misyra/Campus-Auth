@@ -134,6 +134,10 @@ def is_service_running() -> tuple[bool, int | None]:
 
         port = resolve_port()
         if not is_local_port_in_use(port):
+            # 宽限期：进程刚启动时端口可能还未就绪
+            create_time = data.get("create_time")
+            if create_time and (time.time() - create_time) < 30:
+                return True, pid  # 刚启动，跳过端口检查
             # 进程存在但未监听端口 → 不是本应用实例，清理残留 PID 文件
             pid_file.unlink(missing_ok=True)
             return False, None
