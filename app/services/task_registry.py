@@ -78,30 +78,41 @@ class TaskRegistry:
             return False, "无效的任务 ID"
 
         task_file = self._tasks_dir / f"{task_id}.json"
+        with self._lock:
+            # 备份旧缓存
+            old = self._cache.get(task_id)
+            old_index_entry = deepcopy(old) if old is not None else None
+
+            # 先更新缓存（可回滚）
+            stored = deepcopy(config)
+            stored["id"] = task_id
+            self._cache[task_id] = stored
+            if old is not None:
+                self._remove_from_index(task_id, old)
+            self._add_to_index(task_id, stored)
+
         try:
-            # 写入磁盘（不含 id 字段）
+            # 写入磁盘
             data = {k: v for k, v in config.items() if k != "id"}
             atomic_write(
                 str(task_file),
                 json.dumps(data, ensure_ascii=False, indent=2),
             )
-
-            # 更新缓存
-            with self._lock:
-                old = self._cache.get(task_id)
-                if old is not None:
-                    self._remove_from_index(task_id, old)
-
-                stored = deepcopy(config)
-                stored["id"] = task_id
-                self._cache[task_id] = stored
-                self._add_to_index(task_id, stored)
-
-            logger.info("定时任务已保存: {}", task_id)
-            return True, "定时任务保存成功"
         except Exception as exc:
+            # 写入失败，回滚缓存
+            with self._lock:
+                if old_index_entry is not None:
+                    self._cache[task_id] = old_index_entry
+                    self._remove_from_index(task_id, stored)
+                    self._add_to_index(task_id, old_index_entry)
+                else:
+                    self._cache.pop(task_id, None)
+                    self._remove_from_index(task_id, stored)
             logger.error("保存定时任务失败 {}: {}", task_id, exc)
             return False, f"定时任务保存失败: {exc}"
+
+        logger.info("定时任务已保存: {}", task_id)
+        return True, "定时任务保存成功"
 
     def delete_task(self, task_id: str) -> tuple[bool, str]:
         """删除任务。同时清理调度索引。"""
