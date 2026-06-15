@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.application import _cleanup_temp_screenshots
+from app.application import _cleanup_old_screenshots, _cleanup_temp_screenshots
 from app.utils.ports import resolve_port
 
 # ── resolve_port ──
@@ -61,38 +63,67 @@ class TestResolvePort:
 class TestCleanupTempScreenshots:
     """临时截图清理。"""
 
-    def test_removes_old_files(self, tmp_path):
-        """删除过期文件。"""
-        import time
-
-        # 创建一个过期文件（8 天前）
+    def test_removes_old_png_files(self, tmp_path):
+        """删除超过 7 天的 png 文件。"""
         old_file = tmp_path / "old_screenshot.png"
         old_file.write_text("old")
+        # 设置修改时间为 8 天前
         old_time = time.time() - 8 * 86400
-        old_file.touch()
-        old_file.stat()
+        os.utime(str(old_file), (old_time, old_time))
 
-        # 创建一个新文件
         new_file = tmp_path / "new_screenshot.png"
         new_file.write_text("new")
 
-        with (
-            patch("app.application.TEMP_DIR", tmp_path),
-            patch("pathlib.Path.stat") as mock_stat,
-        ):
-            # mock 文件的修改时间
-            old_stat = MagicMock()
-            old_stat.st_mtime = old_time
-            new_stat = MagicMock()
-            new_stat.st_mtime = time.time()
-            mock_stat.side_effect = lambda: old_stat if "old" in str(self) else new_stat
-            # 直接测试逻辑，不依赖实际文件时间
-            pass
+        with patch("app.application.TEMP_DIR", tmp_path):
+            _cleanup_temp_screenshots()
+
+        assert not old_file.exists()
+        assert new_file.exists()
+
+    def test_removes_old_jpg_files(self, tmp_path):
+        """删除超过 7 天的 jpg 文件。"""
+        old_file = tmp_path / "old.jpg"
+        old_file.write_text("old")
+        old_time = time.time() - 8 * 86400
+        os.utime(str(old_file), (old_time, old_time))
+
+        with patch("app.application.TEMP_DIR", tmp_path):
+            _cleanup_temp_screenshots()
+
+        assert not old_file.exists()
+
+    def test_removes_old_jpeg_files(self, tmp_path):
+        """删除超过 7 天的 jpeg 文件。"""
+        old_file = tmp_path / "old.jpeg"
+        old_file.write_text("old")
+        old_time = time.time() - 8 * 86400
+        os.utime(str(old_file), (old_time, old_time))
+
+        with patch("app.application.TEMP_DIR", tmp_path):
+            _cleanup_temp_screenshots()
+
+        assert not old_file.exists()
+
+    def test_keeps_recent_files(self, tmp_path):
+        """保留 7 天内的文件。"""
+        recent_file = tmp_path / "recent.png"
+        recent_file.write_text("recent")
+        # 修改时间为 1 天前
+        recent_time = time.time() - 1 * 86400
+        os.utime(str(recent_file), (recent_time, recent_time))
+
+        with patch("app.application.TEMP_DIR", tmp_path):
+            _cleanup_temp_screenshots()
+
+        assert recent_file.exists()
 
     def test_skips_non_image_files(self, tmp_path):
         """跳过非图片文件。"""
         txt_file = tmp_path / "readme.txt"
         txt_file.write_text("not an image")
+        # 设置为过期时间
+        old_time = time.time() - 10 * 86400
+        os.utime(str(txt_file), (old_time, old_time))
 
         with patch("app.application.TEMP_DIR", tmp_path):
             _cleanup_temp_screenshots()
@@ -101,12 +132,76 @@ class TestCleanupTempScreenshots:
     def test_handles_nonexistent_dir(self, tmp_path):
         """目录不存在时不抛异常。"""
         with patch("app.application.TEMP_DIR", tmp_path / "nonexistent"):
-            _cleanup_temp_screenshots()  # 不应抛异常
+            _cleanup_temp_screenshots()
 
     def test_handles_empty_dir(self, tmp_path):
         """空目录不抛异常。"""
         with patch("app.application.TEMP_DIR", tmp_path):
+            _cleanup_temp_screenshots()
+
+    def test_handles_cleanup_exception(self, tmp_path):
+        """清理过程中的异常被捕获。"""
+        with (
+            patch("app.application.TEMP_DIR", tmp_path),
+            patch.object(Path, "iterdir", side_effect=OSError("permission denied")),
+        ):
             _cleanup_temp_screenshots()  # 不应抛异常
+
+
+class TestCleanupOldScreenshots:
+    """旧截图目录清理。"""
+
+    def test_removes_old_date_dirs(self, tmp_path):
+        """删除非当天的日期目录。"""
+        # 创建一个旧日期目录
+        old_dir = tmp_path / "2020-01-01"
+        old_dir.mkdir()
+        (old_dir / "screenshot.png").write_text("old")
+
+        # 创建当天目录
+        from datetime import datetime
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        today_dir = tmp_path / today
+        today_dir.mkdir()
+        (today_dir / "screenshot.png").write_text("today")
+
+        with patch("app.application.SCREENSHOTS_DIR", tmp_path):
+            _cleanup_old_screenshots()
+
+        assert not old_dir.exists()
+        assert today_dir.exists()
+
+    def test_handles_nonexistent_dir(self, tmp_path):
+        """目录不存在时不抛异常。"""
+        with patch("app.application.SCREENSHOTS_DIR", tmp_path / "nonexistent"):
+            _cleanup_old_screenshots()
+
+    def test_handles_empty_dir(self, tmp_path):
+        """空目录不抛异常。"""
+        with patch("app.application.SCREENSHOTS_DIR", tmp_path):
+            _cleanup_old_screenshots()
+
+    def test_handles_cleanup_exception(self, tmp_path):
+        """清理过程中的异常被捕获。"""
+        with (
+            patch("app.application.SCREENSHOTS_DIR", tmp_path),
+            patch.object(Path, "iterdir", side_effect=OSError("permission denied")),
+        ):
+            _cleanup_old_screenshots()
+
+    def test_skips_today_dir(self, tmp_path):
+        """跳过当天目录。"""
+        from datetime import datetime
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        today_dir = tmp_path / today
+        today_dir.mkdir()
+
+        with patch("app.application.SCREENSHOTS_DIR", tmp_path):
+            _cleanup_old_screenshots()
+
+        assert today_dir.exists()
 
 
 # ── WebSocket 消息处理逻辑 ──
