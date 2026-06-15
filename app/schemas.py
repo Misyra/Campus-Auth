@@ -306,9 +306,6 @@ class MonitorConfigPayload(
         le=30,
         description="TCP 网络检测超时（秒），检测网络连通性时使用",
     )
-    use_global_credentials: bool = Field(
-        default=True, description="当前是否使用全局凭证（前端只读，后端填充）"
-    )
 
     @field_validator("custom_variables")
     @classmethod
