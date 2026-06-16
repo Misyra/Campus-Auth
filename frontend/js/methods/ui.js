@@ -120,10 +120,14 @@ export const uiMethods = {
     if (browser.installed) {
       // 已安装，直接选择
       this.selectBrowser(browser.channel);
+    } else if (browser.channel === 'playwright') {
+      // Playwright Chromium 未安装，提示自动下载
+      if (confirm('Playwright Chromium 未安装。\n\n是否自动下载？（约 150MB）')) {
+        this.installPlaywrightChromium();
+      }
     } else {
-      // 未安装，弹窗提示
+      // 其他浏览器未安装，弹窗提示跳转官网
       const downloadUrls = {
-        playwright: 'https://playwright.dev/docs/browsers',
         msedge: 'https://www.microsoft.com/edge',
         chrome: 'https://www.google.com/chrome/',
         firefox: 'https://www.firefox.com/',
@@ -133,6 +137,27 @@ export const uiMethods = {
       if (confirm(`${browser.name} 未安装。\n\n是否跳转到官网下载？`)) {
         window.open(url, '_blank');
       }
+    }
+  },
+  // 安装 Playwright Chromium
+  async installPlaywrightChromium() {
+    this.browserLoading = true;
+    try {
+      const response = await fetch('/api/browsers/install-playwright', { method: 'POST' });
+      const data = await response.json();
+      if (data.success) {
+        this.frontendLogger.info('browser', 'Playwright Chromium 安装成功');
+        // 重新加载浏览器列表
+        await this.fetchBrowsers();
+      } else {
+        this.frontendLogger.error('browser', '安装失败: ' + data.message);
+        alert('安装失败: ' + data.message);
+      }
+    } catch (error) {
+      this.frontendLogger.error('browser', '安装请求失败', error);
+      alert('安装请求失败，请查看日志');
+    } finally {
+      this.browserLoading = false;
     }
   },
   nextWizardStep() {
