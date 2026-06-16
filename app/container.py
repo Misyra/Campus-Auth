@@ -11,7 +11,7 @@ from app.services.autostart import AutoStartService
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
 from app.services.profile_service import ProfileService
-from app.services.task_executor import TaskExecutor
+from app.services.task_executor import NullTaskExecutor, TaskExecutor
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
 from app.services.task_service import TaskService
 from app.services.websocket_manager import NullWebSocketManager, WebSocketManager
@@ -50,14 +50,17 @@ class ServiceContainer:
 
             return get_worker()
 
-        # 任务执行器（双线程池）
-        self.task_executor = TaskExecutor(
-            registry=self.task_registry,
-            history_store=self.task_history_store,
-            worker_getter=_get_worker,
-            login_history=self.login_history_service,
-            profile_service=self.profile_service,
-        )
+        # 任务执行器（轻量模式使用空实现，避免创建线程池）
+        if self._is_lightweight:
+            self.task_executor = NullTaskExecutor()
+        else:
+            self.task_executor = TaskExecutor(
+                registry=self.task_registry,
+                history_store=self.task_history_store,
+                worker_getter=_get_worker,
+                login_history=self.login_history_service,
+                profile_service=self.profile_service,
+            )
 
         # 统一引擎（替代 MonitorService + SchedulerService）
         self.engine = ScheduleEngine(
@@ -71,7 +74,8 @@ class ServiceContainer:
         )
 
         # 延迟绑定：TaskExecutor 通过引擎获取运行时配置
-        self.task_executor.set_runtime_config_getter(self.engine.get_runtime_config)
+        if not self._is_lightweight:
+            self.task_executor.set_runtime_config_getter(self.engine.get_runtime_config)
 
         self._ws_drain_task: asyncio.Task | None = None
         self._log_handler_id: int | None = None

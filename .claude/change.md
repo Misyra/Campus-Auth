@@ -3,6 +3,13 @@
 ## 2026-06-16
 
 ### fix
+- 修复应用入口 4 个问题（`app/container.py`、`main.py`、`tests/test_config/test_container.py`）
+  - [3] 轻量模式创建 `NullTaskExecutor` 而非真正的 `TaskExecutor`，避免创建不必要的线程池
+  - [29] 轻量模式关闭时复用已有 event loop 而非创建新的，无可用 loop 时回退到同步关闭
+  - [30] `_start_web_server` 使用 `threading.Lock` 保护标志检查和设置，防止竞态条件
+  - [64] `_terminate_process` 后验证进程已实际退出再清理 PID 文件
+
+### fix
 - 修复任务系统 4 个问题（`app/tasks/variable_resolver.py`、`app/tasks/step_handlers.py`）
   - [6] `resolve_for_js` 双重编码：replacer 函数改为 `json.dumps(str(resolved))`，确保非字符串类型解析结果先转为字符串再 JSON 编码，输出始终是合法的 JS 字符串字面量
   - [7] 变量解析缓存未绑定上下文：`__init__` 新增 `_cache_version` 版本号，`set_runtime_var` 递增版本号，缓存 key 从原始字符串改为 `(version, value)` 元组，外部修改变量后缓存自动失效
