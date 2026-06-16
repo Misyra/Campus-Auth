@@ -186,6 +186,31 @@ class _SystemFieldsMixin(BaseModel):
         default=90, ge=10, le=600, description="手动登录等待超时（秒）"
     )
 
+    # 浏览器配置
+    browser_channel: str = Field(
+        default="playwright",
+        description="浏览器类型: playwright(自带Chromium) | msedge(系统Edge) | chrome(系统Chrome) | firefox | custom(自定义路径)"
+    )
+    browser_custom_path: str = Field(
+        default="",
+        description="自定义浏览器可执行文件路径（仅 browser_channel='custom' 时生效）"
+    )
+    headless: bool = Field(default=True)
+    browser_timeout: int = Field(default=8, ge=1, le=60, description="页面操作超时（秒）")
+    browser_navigation_timeout: int = Field(default=15, ge=3, le=60, description="打开登录页面超时（秒）")
+    browser_user_agent: str = Field(default_factory=get_default_ua)
+    browser_low_resource_mode: bool = Field(default=False)
+    browser_disable_web_security: bool = Field(default=False)
+    browser_extra_headers_json: str = Field(default="")
+    browser_args: str = Field(default=_BROWSER_ARGS_DEFAULT, description="自定义 Chromium 启动参数，每行一个")
+    stealth_mode: bool = Field(default=False, description="隐藏浏览器自动操作特征，降低被识别为工具操作的风险")
+    stealth_custom_script: str = Field(default="", description="在反检测模式开启时额外执行的自定义 JavaScript 脚本")
+    browser_locale: str = Field(default="zh-CN", description="浏览器语言区域")
+    browser_timezone: str = Field(default="Asia/Shanghai", description="浏览器时区 ID")
+    browser_viewport_width: int = Field(default=1280, ge=320, le=3840, description="浏览器视口宽度")
+    browser_viewport_height: int = Field(default=720, ge=240, le=2160, description="浏览器视口高度")
+    pure_mode: bool = Field(default=True, description="纯净模式")
+
     @field_validator("auth_url")
     @classmethod
     def validate_auth_url(cls, v: str) -> str:
