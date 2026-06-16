@@ -2,6 +2,38 @@
 
 ## 2026-06-16
 
+### fix
+- `app/workers/playwright_worker.py` 修复 4 个浏览器自动化核心问题
+  - `submit_nowait` 添加 `queue.Full` 异常处理和 `_wake_async()` 唤醒事件循环，与 `submit()` 行为一致
+  - `cleanup_orphan_browsers` 扩展过滤条件支持 Firefox 进程清理（原仅清理 Chromium）
+  - `get_worker()` 使用临时变量 `new_worker`，`start()` 成功后再赋值给 `_worker`，避免其他线程拿到未初始化实例
+  - `_handle_debug_stop` 反检测脚本应用逻辑与 `_start_browser` 一致：纯净模式下仅 `stealth_mode` 启用时才应用
+
+### docs
+- 生成全项目代码审查报告 `code-review-report.md`
+  - 13 个 Review Unit 并行审查（P0×3 + P1×5 + P2×5）
+  - 发现 12 个 Critical、40 个 Major、22 个 Minor 问题（共 74 个）
+  - 关键发现：浏览器生命周期竞态（__aexit__ + ensure_browser 冲突）、脚本执行白名单绕过、轻量模式 TaskExecutor 未使用 NullTaskExecutor、变量解析双重编码
+  - 跳过日志系统（正在优化中）
+
+### refactor
+- 移除旧的保存按钮和表单提交
+  - `frontend/partials/pages/settings.html` 移除表单的 `@submit.prevent="saveConfig"` 事件绑定
+  - `frontend/partials/pages/settings/settings-browser.html` 删除底部悬浮保存按钮区域（`settings-float-save`）
+
+### feat
+- 为所有配置项添加自动保存事件监听
+  - `frontend/partials/pages/settings/settings-browser.html` 为 17 个配置项添加 @change/@input 事件
+  - `frontend/partials/pages/settings/settings-monitor.html` 为 18 个配置项添加 @change/@input 事件
+  - `frontend/partials/pages/settings/settings-system.html` 为 11 个配置项添加 @change/@input 事件
+  - `frontend/partials/pages/settings/settings-account.html` 为 6 个配置项添加 @change/@input 事件
+  - checkbox 类型使用 @change 事件，type 为 'toggle'
+  - input/textarea 类型使用 @input 事件，type 为 'input'
+  - select 类型使用 @change 事件，type 为 'toggle'
+  - computed 属性（pureMode、urlCheckEnabled）使用特殊格式：先调用切换方法再调用 onConfigChange
+
+
+
 ### feat
 - 添加配置自动保存逻辑
   - `frontend/js/methods/config.js` 新增 `_isConfigLoaded`、`_lastSavedConfig`、`_saveConfigTimer`、`_saveAbortController` 属性
