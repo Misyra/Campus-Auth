@@ -94,7 +94,13 @@ class BoundedExecutor:
         return future
 
     def shutdown(self, wait: bool = True) -> None:
-        """关闭线程池。"""
+        """关闭线程池。
+
+        Note:
+            当 wait=False 时，已提交但尚未执行的任务的信号量计数不会被释放，
+            因为 done_callback 可能未被触发。这仅影响优雅退出场景，
+            进程退出后信号量随资源回收，不会造成实际问题。
+        """
         self._executor.shutdown(wait=wait)
 
 
