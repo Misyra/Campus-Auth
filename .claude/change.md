@@ -3,6 +3,17 @@
 ## 2026-06-16
 
 ### fix
+- 添加自定义浏览器路径安全校验
+  - `app/schemas.py` 在 `_SystemFieldsMixin` 和 `GlobalSettings` 中添加 `browser_custom_path` 字段校验器，检测路径中的危险字符（`;`、`&`、`|`、`` ` ``、`$`、`(`、`)`、`{`、`}`）
+  - `app/workers/playwright_worker.py` `_launch_browser` 方法中添加路径存在性检查，路径不存在时抛出 `FileNotFoundError`
+
+### fix
+- 修复 Firefox 启动时不传递 Chromium 专属参数
+  - `app/workers/playwright_worker.py` `_build_launch_args` 方法新增 `channel` 参数
+  - 当 `channel == "firefox"` 时返回空列表，不传递 Chromium 专属参数
+  - `_start_browser` 方法调用时传递 `channel` 参数
+
+### fix
 - 修复浏览器配置无法保存的问题
   - `app/schemas.py` MonitorConfigPayload 添加浏览器配置字段（headless、browser_channel 等）
   - `app/services/config_service.py` _update_global_settings 添加浏览器配置更新逻辑

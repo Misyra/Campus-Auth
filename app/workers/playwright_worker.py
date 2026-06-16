@@ -768,7 +768,9 @@ class PlaywrightWorker:
     async def _launch_browser(self, playwright, channel: str, custom_path: str, headless: bool, launch_args: list):
         """根据 channel 启动对应的浏览器。"""
         if channel == "custom" and custom_path:
-            # 使用自定义路径
+            # 检查路径是否存在
+            if not Path(custom_path).exists():
+                raise FileNotFoundError(f"自定义浏览器路径不存在: {custom_path}")
             logger.info("使用自定义浏览器路径: {}", custom_path)
             return await playwright.chromium.launch(
                 executable_path=custom_path, headless=headless, args=launch_args
