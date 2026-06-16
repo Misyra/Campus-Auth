@@ -12,7 +12,7 @@
     </button>
   </div>
 
-  <form v-if="currentSettingsTab !== 'tasks'" @submit.prevent="saveConfig" autocomplete="on" class="settings-form">
+  <form v-if="currentSettingsTab !== 'tasks'" autocomplete="on" class="settings-form">
     <div data-include="/static/partials/pages/settings/settings-account.html"></div>
     <div data-include="/static/partials/pages/settings/settings-monitor.html"></div>
     <div data-include="/static/partials/pages/settings/settings-system.html"></div>
