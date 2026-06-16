@@ -128,7 +128,7 @@ def _detect_custom() -> BrowserInfo:
     return BrowserInfo(
         channel="custom",
         name="自定义浏览器",
-        icon=_get_icon_url("browser-custom.svg"),
+        icon=_get_icon_url("custom.svg"),
         installed=True,  # 始终可用，由用户自行确保路径有效
         needs_download=False,
         description="手动指定浏览器可执行文件路径"
