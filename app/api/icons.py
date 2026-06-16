@@ -20,9 +20,17 @@ async def get_icon(filename: str):
     if not filename.endswith(".svg"):
         raise HTTPException(400, "只支持 SVG 文件")
 
-    icon_path = ICONS_DIR / filename
+    # 安全检查：防止路径遍历攻击
+    icon_path = (ICONS_DIR / filename).resolve()
+    if not str(icon_path).startswith(str(ICONS_DIR.resolve())):
+        raise HTTPException(400, "非法路径")
+
     if not icon_path.exists():
         raise HTTPException(404, "图标不存在")
 
     content = icon_path.read_text(encoding="utf-8")
-    return Response(content, media_type="image/svg+xml")
+    return Response(
+        content,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
