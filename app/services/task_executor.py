@@ -130,10 +130,12 @@ class TaskExecutor:
             thread_name_prefix="login-exec",
         )
         self._task_pool: BoundedExecutor | None = None
+        self._task_pool_lock = threading.Lock()
 
         # 登录去重
         self._login_future: Future | None = None
         self._login_lock = threading.Lock()
+        self._login_cancel_event: threading.Event | None = None
 
         # Shell 安全策略
         self._shell_policy = ShellCommandPolicy(
@@ -145,9 +147,11 @@ class TaskExecutor:
         self._get_runtime_config = getter
 
     def _ensure_task_pool(self) -> BoundedExecutor:
-        """确保定时任务线程池存在（懒初始化）。"""
+        """确保定时任务线程池存在（懒初始化，双检锁）。"""
         if self._task_pool is None:
-            self._task_pool = BoundedExecutor(max_workers=2, queue_size=10)
+            with self._task_pool_lock:
+                if self._task_pool is None:
+                    self._task_pool = BoundedExecutor(max_workers=2, queue_size=10)
         return self._task_pool
 
     # ── 定时任务 CRUD（原 TaskFacade 方法）──
@@ -200,6 +204,8 @@ class TaskExecutor:
         """异步执行登录（提交到 login_pool），带去重。
 
         如果已有登录任务在执行中，返回已有的 Future 而非重复提交。
+        去重时，新调用方的 cancel_event 会联动到已有任务：
+        当新 cancel_event 被设置时，已有任务的 cancel_event 也会被设置。
 
         Args:
             cancel_event: 取消事件，设置后登录流程应尽快退出
@@ -212,8 +218,10 @@ class TaskExecutor:
         with self._login_lock:
             # 检查是否已有登录在进行
             if self._login_future is not None and not self._login_future.done():
-                # 去重：返回已有 Future，不设置调用方的 cancel_event
                 logger.debug("登录任务已在执行中，跳过重复提交")
+                # 联动新 cancel_event 到已有任务
+                if cancel_event is not None and self._login_cancel_event is not None:
+                    self._link_cancel_event(cancel_event, self._login_cancel_event)
                 return self._login_future
 
             # 提交新的登录任务
@@ -221,16 +229,32 @@ class TaskExecutor:
                 self.execute_login, cancel_event, skip_pause_check
             )
             self._login_future = future
+            self._login_cancel_event = cancel_event
 
         # 锁外注册回调，避免时序问题
         future.add_done_callback(self._on_login_done)
         return future
+
+    @staticmethod
+    def _link_cancel_event(
+        new_event: threading.Event, target_event: threading.Event
+    ) -> None:
+        """在后台线程监控 new_event，设置时联动到 target_event。"""
+
+        def _watcher() -> None:
+            new_event.wait()
+            if new_event.is_set():
+                target_event.set()
+
+        t = threading.Thread(target=_watcher, daemon=True, name="cancel-link")
+        t.start()
 
     def _on_login_done(self, future: Future) -> None:
         """登录任务完成后清理引用。"""
         with self._login_lock:
             if self._login_future is future:
                 self._login_future = None
+                self._login_cancel_event = None
 
     # ── 同步执行接口 ──
 
@@ -495,28 +519,10 @@ class TaskExecutor:
     def _get_script_path(self, script_id: str):
         """获取脚本任务的文件路径。
 
-        通过 registry 关联的 TaskManager 查找脚本路径。
+        委托 TaskRegistry.get_script_path() 查找。
         """
-        # registry 是 TaskRegistry，需要通过 TaskManager 获取脚本路径
-        # TaskRegistry 可能没有直接的脚本路径访问，这里尝试兼容
         if hasattr(self._registry, "get_script_path"):
             return self._registry.get_script_path(script_id)
-        # 回退：尝试通过 tasks_dir 推断
-        tasks_dir = None
-        if hasattr(self._registry, "get_tasks_dir"):
-            tasks_dir = self._registry.get_tasks_dir()
-        elif hasattr(self._registry, "_tasks_dir"):
-            # 兼容旧版本
-            tasks_dir = self._registry._tasks_dir
-        if tasks_dir is not None:
-            # 定时任务目录结构: tasks/scheduled/ 下无脚本，脚本在 tasks/scripts/
-            # 这里需要通过 project_root 推断
-            project_root = tasks_dir.parent.parent
-            scripts_dir = project_root / "tasks" / "scripts"
-            for ext in (".json", ".py"):
-                candidate = scripts_dir / f"{script_id}{ext}"
-                if candidate.exists():
-                    return candidate
         return None
 
     # ── 生命周期 ──
