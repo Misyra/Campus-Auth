@@ -47,10 +47,10 @@ def _detect_playwright_chromium() -> BrowserInfo:
     return BrowserInfo(
         channel="playwright",
         name="Playwright Chromium",
-        icon="chromium-icon",
+        icon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/><path d="M12 2a10 10 0 0 0 0 20"/><line x1="2" y1="12" x2="22" y2="12"/></svg>',
         installed=installed,
         needs_download=not installed,
-        description="推荐选项" if installed else "需下载约 150MB"
+        description="推荐选项，内置浏览器" if installed else "需下载约 150MB"
     )
 
 
@@ -65,10 +65,10 @@ def _detect_edge() -> BrowserInfo:
     return BrowserInfo(
         channel="msedge",
         name="Microsoft Edge",
-        icon="edge-icon",
+        icon='<svg viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h-2v-2h2v2zm0-4h-2V7h2v6zm4 4h-2v-2h2v2zm0-4h-2V7h2v6z" fill="#0078D4"/></svg>',
         installed=installed,
         needs_download=False,
-        description="使用系统已安装的 Edge" if installed else "未检测到 Edge 浏览器"
+        description="系统浏览器，无需下载" if installed else "未检测到 Edge 浏览器"
     )
 
 
@@ -80,10 +80,10 @@ def _detect_chrome() -> BrowserInfo:
     return BrowserInfo(
         channel="chrome",
         name="Google Chrome",
-        icon="chrome-icon",
+        icon='<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#4285F4"/><circle cx="12" cy="12" r="4" fill="white"/><path d="M12 2a10 10 0 0 1 10 10h-6a4 4 0 0 0-4-4V2z" fill="#EA4335"/><path d="M22 12a10 10 0 0 1-10 10v-6a4 4 0 0 0 4-4h6z" fill="#FBBC05"/><path d="M12 22a10 10 0 0 1-10-10h6a4 4 0 0 0 4 4v6z" fill="#34A853"/><path d="M2 12a10 10 0 0 1 10-10v6a4 4 0 0 0-4 4H2z" fill="#4285F4"/></svg>',
         installed=installed,
         needs_download=False,
-        description="使用系统已安装的 Chrome" if installed else "未检测到 Chrome 浏览器"
+        description="系统浏览器，无需下载" if installed else "未检测到 Chrome 浏览器"
     )
 
 
@@ -95,10 +95,10 @@ def _detect_firefox() -> BrowserInfo:
     return BrowserInfo(
         channel="firefox",
         name="Firefox",
-        icon="firefox-icon",
+        icon='<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#FF7139"/><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" fill="white"/><path d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z" fill="white"/></svg>',
         installed=installed,
         needs_download=not installed,
-        description="使用系统已安装的 Firefox" if installed else "需下载 Firefox 驱动"
+        description="系统浏览器，无需下载" if installed else "需下载 Firefox 驱动"
     )
 
 
@@ -107,7 +107,7 @@ def _detect_custom() -> BrowserInfo:
     return BrowserInfo(
         channel="custom",
         name="自定义路径",
-        icon="custom-icon",
+        icon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>',
         installed=True,  # 始终可用，由用户自行确保路径有效
         needs_download=False,
         description="手动指定浏览器可执行文件路径"
