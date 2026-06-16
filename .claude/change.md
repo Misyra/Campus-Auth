@@ -3,6 +3,13 @@
 ## 2026-06-16
 
 ### feat
+- `app/workers/playwright_worker.py` `_start_browser` 支持根据 `browser_channel` 启动不同浏览器
+  - 新增 `_launch_browser` 辅助方法，根据 channel 分发到不同启动逻辑
+  - 支持 5 种浏览器 channel：playwright（默认）、msedge、chrome、firefox、custom（自定义路径）
+  - Firefox 使用 `playwright.firefox.launch()`，自定义路径使用 `executable_path` 参数
+  - `browser_channel` 和 `browser_custom_path` 从 `browser_settings` 配置中读取
+
+### feat
 - `app/api/browsers.py` 新增 GET /api/browsers 端点
   - 返回系统已安装的浏览器列表（5 种选项）和当前配置的 browser_channel
   - 通过 `detect_browsers()` 检测浏览器，通过 `profile_service.load()` 获取当前配置
