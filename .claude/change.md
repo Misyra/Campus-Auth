@@ -942,3 +942,12 @@
   - `frontend/js/data/config.js`：移除 savedConfigSnapshot 和 _configDirty 数据属性
   - `frontend/js/methods/config.js`：fetchConfig 移除 _configDirty 和 savedConfigSnapshot 设置
   - `frontend/js/methods/config.js`：resetConfig 移除 _configDirty = true，由 computed 自动检测
+
+### fix
+- 修复 6 个 Minor 问题（分散在多个文件）
+  - [50] `app/utils/browser.py` `STEALTH_INIT_SCRIPT` 改用 `Object.defineProperty` 设置 `__playwright`/`__pw_manual` 为 undefined，防止 non-configurable 属性 delete 静默失败
+  - [53] `app/services/monitor_service.py` `consume_profile_switch_flag` 注释修正为"由引擎线程串行调用，无需额外同步"
+  - [57] `app/utils/shell_utils.py` `get_default_shell` 非 Windows 回退路径使用 `shutil.which` 验证存在性，`$SHELL` 环境变量指向已删除 shell 时回退到 bash/sh
+  - [60] `app/utils/crypto.py` `save_password_field` 掩码判断从 `startswith("•")` 改为精确匹配 `"••••••••"`，避免以 bullet 开头的密码被误判
+  - [61] `app/schemas.py` 提取 `_CommonSettingsMixin` 共享 mixin，消除 `_SystemFieldsMixin` 与 `GlobalSettings` 之间约 40 个重复字段定义和 2 个重复验证器
+  - [66] `app/tasks/manager.py` `_extract_script_metadata` 使用 `ast.get_docstring()` 正确提取标准多行 docstring
