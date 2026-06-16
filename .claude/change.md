@@ -1,5 +1,21 @@
 # 修改日志
 
+## 2026-06-16
+
+### feat
+- `app/utils/browser_registry.py` 新增浏览器注册表，检测系统已安装的浏览器
+  - `BrowserInfo` 数据类：channel、name、icon、installed、needs_download、description
+  - `detect_browsers()` 返回 5 种浏览器选项：Playwright Chromium、Microsoft Edge、Google Chrome、Firefox、自定义路径
+  - Playwright Chromium 检测缓存目录中的已下载实例
+  - Edge/Chrome/Firefox 通过 `shutil.which` 和 macOS 应用路径检测
+  - 自定义路径始终可用，由用户自行确保路径有效
+
+### test
+- `tests/test_utils/test_browser_registry.py` 添加浏览器注册表测试（3 个用例）
+  - `test_detect_browsers_returns_list`：返回类型验证
+  - `test_browser_info_fields`：字段完整性验证
+  - `test_detect_browsers_contains_all_options`：5 种浏览器选项全覆盖
+
 ## 2026-06-15
 
 ### fix
