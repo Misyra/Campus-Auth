@@ -75,6 +75,8 @@ const _SHARED_DEFAULTS = {
   carrier: "无",
   carrier_custom: "",
   check_interval_seconds: 300,
+  browser_channel: "playwright",
+  browser_custom_path: "",
   headless: true,
   browser_timeout: 8,
   browser_navigation_timeout: 15,
