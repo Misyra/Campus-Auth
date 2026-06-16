@@ -950,7 +950,7 @@
   gap: 8px;
   padding: 8px 16px;
   background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--border);
   font-size: 13px;
 }
 
@@ -965,11 +965,11 @@
 }
 
 .save-status.saved {
-  color: var(--success-color);
+  color: var(--success);
 }
 
 .save-status.failed {
-  color: var(--error-color);
+  color: var(--error);
 }
 
 @keyframes spin {
