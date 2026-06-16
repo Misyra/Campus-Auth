@@ -747,3 +747,73 @@
   flex: 1;
 }
 
+/* 浏览器选择 */
+.browser-selection {
+  margin-top: 0.5rem;
+}
+
+.browser-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.browser-card {
+  border: 2px solid var(--border, #333);
+  border-radius: var(--radius-lg, 8px);
+  padding: 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.browser-card:hover {
+  border-color: var(--accent, #22d3ee);
+}
+
+.browser-card.active {
+  border-color: var(--accent, #22d3ee);
+  background: rgba(34, 211, 238, 0.08);
+}
+
+.browser-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.browser-name {
+  font-weight: bold;
+  margin-bottom: 0.25rem;
+  color: var(--text-primary);
+}
+
+.browser-status {
+  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
+}
+
+.browser-desc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.custom-path-section {
+  margin-top: 1rem;
+}
+
+.custom-path-section label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.custom-path-section input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 4px);
+  background: var(--bg-glass);
+  color: var(--text-primary);
+  box-sizing: border-box;
+}
+
