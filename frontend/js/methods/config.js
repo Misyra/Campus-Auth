@@ -155,16 +155,16 @@ export const configMethods = {
       const { data } = await this.$api.post('/api/ocr/install');
       if (data.success) {
         this.frontendLogger.info('ocr', data.message);
-        this.toastOnly(true, data.message + '，需重启程序后生效');
+        this.notify(true, data.message + '，需重启程序后生效', 'install');
         await this.fetchOcrStatus();
       } else {
         this.frontendLogger.warn('ocr', '安装失败: ' + data.message);
-        this.toastOnly(false, data.message);
+        this.notify(false, data.message, 'install');
       }
     } catch (error) {
       const msg = extractApiError(error, '安装失败');
       this.frontendLogger.error('ocr', '安装异常: ' + msg, error);
-      this.toastOnly(false, msg);
+      this.notify(false, msg, 'install');
     } finally {
       this.busy.ocr = false;
     }
@@ -176,16 +176,16 @@ export const configMethods = {
       const { data } = await this.$api.post('/api/ocr/uninstall');
       if (data.success) {
         this.frontendLogger.info('ocr', data.message);
-        this.toastOnly(true, data.message + '，需重启程序后生效');
+        this.notify(true, data.message + '，需重启程序后生效', 'install');
         await this.fetchOcrStatus();
       } else {
         this.frontendLogger.warn('ocr', '卸载失败: ' + data.message);
-        this.toastOnly(false, data.message);
+        this.notify(false, data.message, 'install');
       }
     } catch (error) {
       const msg = extractApiError(error, '卸载失败');
       this.frontendLogger.error('ocr', '卸载异常: ' + msg, error);
-      this.toastOnly(false, msg);
+      this.notify(false, msg, 'install');
     } finally {
       this.busy.ocr = false;
     }

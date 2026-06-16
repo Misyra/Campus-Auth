@@ -164,7 +164,8 @@
       </button>
     </div>
 
-    <!-- 卸载弹窗 -->
+    <!-- 卸载弹窗（Teleport 到 body 避免 transform 破坏 fixed 定位） -->
+    <Teleport to="body">
     <div v-if="uninstall.visible" class="uninstall-overlay" @click.self="closeUninstall">
       <div class="uninstall-modal" role="dialog" aria-modal="true" aria-label="卸载清理">
         <div class="uninstall-modal-header">
@@ -226,5 +227,6 @@
         </div>
       </div>
     </div>
+    </Teleport>
   </div>
 </div>

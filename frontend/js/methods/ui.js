@@ -64,6 +64,7 @@ export const uiMethods = {
     const icons = {
       login: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
       monitor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
+      install: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
       network: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
       update: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
       security: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
@@ -78,7 +79,7 @@ export const uiMethods = {
     return `${now.getMonth() + 1}/${now.getDate()} ${h}:${m}:${s}`;
   },
   _notifyCategoryLabel(category) {
-    const labels = { login: '登录', monitor: '监控', network: '网络', update: '更新', security: '安全' };
+    const labels = { login: '登录', monitor: '监控', network: '网络', update: '更新', security: '安全', install: '安装' };
     return labels[category] || '';
   },
   notify(success, message, category, action) {
@@ -121,6 +122,7 @@ export const uiMethods = {
   selectBrowser(channel) {
     this.selectedBrowser = channel;
     this.config.browser_channel = channel;
+    this.onConfigChange('browser_channel', channel, 'toggle');
   },
   // 辅助方法：获取浏览器信息
   getBrowser(channel) {
@@ -176,39 +178,41 @@ export const uiMethods = {
       }
     }
   },
-  // 安装 Playwright Chromium
-  async installPlaywrightChromium() {
-    this.browserLoading = true;
-    this.notify(true, '正在下载 Playwright Chromium，请稍候...');
+  // 安装 Playwright Chromium（后台下载，不阻塞 UI）
+  installPlaywrightChromium() {
+    this.playwrightDownloading = true;
+    this.notify(true, 'Playwright Chromium 下载已开始，你可以继续配置其他选项', 'install');
+    this.frontendLogger.info('browser', '开始下载 Playwright Chromium');
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 分钟超时
-    try {
-      const response = await fetch('/api/browsers/install-playwright', {
-        method: 'POST',
-        signal: controller.signal,
+    fetch('/api/browsers/install-playwright', {
+      method: 'POST',
+      signal: controller.signal,
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          this.frontendLogger.info('browser', 'Playwright Chromium 安装成功');
+          this.notify(true, 'Playwright Chromium 安装完成！', 'install');
+          this.fetchBrowsers();
+        } else {
+          this.frontendLogger.error('browser', '安装失败: ' + data.message);
+          this.notify(false, '安装失败: ' + data.message, 'install');
+        }
+      })
+      .catch(error => {
+        if (error.name === 'AbortError') {
+          this.frontendLogger.error('browser', '安装超时（超过 10 分钟）');
+          this.notify(false, '安装超时，请检查网络后重试', 'install');
+        } else {
+          this.frontendLogger.error('browser', '安装请求失败', error);
+          this.notify(false, '安装请求失败，请查看日志', 'install');
+        }
+      })
+      .finally(() => {
+        clearTimeout(timeoutId);
+        this.playwrightDownloading = false;
       });
-      const data = await response.json();
-      if (data.success) {
-        this.frontendLogger.info('browser', 'Playwright Chromium 安装成功');
-        this.notify(true, 'Playwright Chromium 安装成功！');
-        // 重新加载浏览器列表
-        await this.fetchBrowsers();
-      } else {
-        this.frontendLogger.error('browser', '安装失败: ' + data.message);
-        this.notify(false, '安装失败: ' + data.message);
-      }
-    } catch (error) {
-      if (error.name === 'AbortError') {
-        this.frontendLogger.error('browser', '安装超时（超过 10 分钟）');
-        this.notify(false, '安装超时，请检查网络后重试');
-      } else {
-        this.frontendLogger.error('browser', '安装请求失败', error);
-        this.notify(false, '安装请求失败，请查看日志');
-      }
-    } finally {
-      clearTimeout(timeoutId);
-      this.browserLoading = false;
-    }
   },
   nextWizardStep() {
     // 第 1 步需要同意协议
