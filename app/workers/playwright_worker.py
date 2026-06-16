@@ -294,7 +294,17 @@ class PlaywrightWorker:
 
     def submit_nowait(self, cmd_type: str, data: dict | None = None) -> None:
         """提交命令但不等待响应（fire-and-forget）。"""
-        self._cmd_queue.put_nowait(WorkerCommand(type=cmd_type, data=data or {}))
+        try:
+            self._cmd_queue.put_nowait(WorkerCommand(type=cmd_type, data=data or {}))
+        except queue.Full:
+            logger.warning("submit_nowait 队列已满 (maxsize={})，丢弃命令 {}", self._cmd_queue.maxsize, cmd_type)
+            return
+
+        # 唤醒 Worker 事件循环处理新命令
+        loop = self._loop
+        if loop is not None:
+            with contextlib.suppress(RuntimeError):
+                asyncio.run_coroutine_threadsafe(self._wake_async(), loop)
 
     # ── Worker 线程入口 ──
 
@@ -586,10 +596,14 @@ class PlaywrightWorker:
                     if self._context is not None and not self._context.is_closed():
                         self._page = await self._context.new_page()
                         # 重新应用反检测脚本和路由拦截（新页面未继承旧页面的设置）
+                        # 使用与 _start_browser 一致的判断逻辑
                         if self._page is not None:
-                            await self._apply_stealth_and_routes(
-                                {"browser_settings": self._last_browser_settings or {}}
-                            )
+                            settings = self._last_browser_settings or {}
+                            pure_mode = settings.get("pure_mode", False)
+                            if not pure_mode or settings.get("stealth_mode", False):
+                                await self._apply_stealth_and_routes(
+                                    {"browser_settings": settings}
+                                )
                 except Exception:
                     logger.warning("创建替代页面失败，_page 保持 None")
 
@@ -988,8 +1002,9 @@ def get_worker() -> PlaywrightWorker:
                     except Exception:
                         logger.debug("停止旧 Worker 失败", exc_info=True)
                 cleanup_orphan_browsers()
-                _worker = PlaywrightWorker()
-                _worker.start()
+                new_worker = PlaywrightWorker()
+                new_worker.start()
+                _worker = new_worker
     return _worker
 
 
@@ -1006,9 +1021,9 @@ def shutdown_worker(timeout: float = 5) -> None:
 
 
 def cleanup_orphan_browsers() -> None:
-    """清理孤儿 Playwright Chromium 进程。
+    """清理孤儿 Playwright 浏览器进程。
 
-    扫描并杀掉由 Campus-Auth 启动但已失去 Python 父进程的 Chromium 实例。
+    扫描并杀掉由 Campus-Auth 启动但已失去 Python 父进程的浏览器实例。
     仅清理 Playwright 管理的浏览器（可执行路径或命令行包含 "ms-playwright"），
     不会误杀用户自行安装的 Chrome/Edge/Brave 等浏览器。
     """
@@ -1020,18 +1035,21 @@ def cleanup_orphan_browsers() -> None:
             info = proc.info
             exe = (info.get("exe") or "").lower()
             cmdline = " ".join(info.get("cmdline") or []).lower()
-            if ("ms-playwright" in exe or "ms-playwright" in cmdline) and (
-                "chrom" in exe or "chrom" in cmdline
-            ):
+            is_playwright_managed = "ms-playwright" in exe or "ms-playwright" in cmdline
+            is_browser = any(
+                kw in exe or kw in cmdline
+                for kw in ("chrom", "firefox")
+            )
+            if is_playwright_managed and is_browser:
                 proc.kill()
                 killed += 1
-                logger.debug("已终止孤儿 Chromium PID={}", info["pid"])
+                logger.debug("已终止孤儿浏览器进程 PID={}", info["pid"])
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
         except Exception:
             logger.debug("终止进程异常", exc_info=True)
 
     if killed:
-        logger.info("已终止 {} 个孤儿 Chromium 进程", killed)
+        logger.info("已终止 {} 个孤儿浏览器进程", killed)
     else:
-        logger.debug("未发现孤儿 Playwright Chromium 进程")
+        logger.debug("未发现孤儿 Playwright 浏览器进程")
