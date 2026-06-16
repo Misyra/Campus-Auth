@@ -134,7 +134,7 @@ class TaskManager:
 
     @staticmethod
     def _extract_script_metadata(file: Path) -> dict[str, str]:
-        """从 Python 脚本的前 10 行注释中提取 name 和 description。
+        """从 Python 脚本的注释和 docstring 中提取 name 和 description。
 
         支持格式：
             # name: 任务名称
@@ -144,7 +144,8 @@ class TaskManager:
         name = file.stem
         description = ""
         try:
-            lines = file.read_text(encoding="utf-8").splitlines()[:10]
+            content = file.read_text(encoding="utf-8")
+            lines = content.splitlines()[:10]
             for line in lines:
                 stripped = line.strip()
                 if stripped.lower().startswith("# name:"):
@@ -153,13 +154,11 @@ class TaskManager:
                     description = stripped.split(":", 1)[1].strip()
             # 如果没找到 name 注释，尝试 docstring
             if name == file.stem:
-                for line in lines:
-                    stripped = line.strip()
-                    if stripped.startswith('"""') or stripped.startswith("'''"):
-                        doc = stripped.strip("\"'").strip()
-                        if doc:
-                            name = doc.split("\n")[0][:80]
-                        break
+                import ast
+                tree = ast.parse(content)
+                docstring = ast.get_docstring(tree)
+                if docstring:
+                    name = docstring.split("\n")[0][:80]
         except Exception:
             logger.debug("解析脚本 docstring 失败: {}", file, exc_info=True)
         return {"name": name, "description": description}

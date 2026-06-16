@@ -53,9 +53,9 @@ Object.defineProperty(navigator, 'languages', {
     get: () => ['zh-CN', 'zh', 'en-US', 'en'],
 });
 
-// 隐藏 Playwright 注入的属性
-delete window.__playwright;
-delete window.__pw_manual;
+// 隐藏 Playwright 注入的属性（Object.defineProperty 防止 non-configurable 属性 delete 静默失败）
+Object.defineProperty(window, '__playwright', {value: undefined, writable: false, configurable: false});
+Object.defineProperty(window, '__pw_manual', {value: undefined, writable: false, configurable: false});
 """.lstrip()
 
 
