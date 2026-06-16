@@ -54,6 +54,30 @@ def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(cmd, **kwargs)
 
 
+def _get_browser_channel() -> str:
+    """从配置文件读取 browser_channel。"""
+    try:
+        from app.services.profile_service import profile_service
+
+        profile_data = profile_service.load()
+        if profile_data and profile_data.global_settings:
+            return profile_data.global_settings.browser_channel
+    except Exception:
+        logger.debug("读取 browser_channel 配置失败", exc_info=True)
+    return "playwright"  # 默认值
+
+
+def _has_browser(channel: str) -> bool:
+    """检查指定浏览器是否已安装。"""
+    if channel == "playwright":
+        return _has_chromium()
+    elif channel == "firefox":
+        import shutil
+
+        return shutil.which("firefox") is not None
+    return False
+
+
 def _has_chromium() -> bool:
     # 快速路径：直接扫描 ms-playwright 浏览器目录，避免导入 playwright.sync_api
     # （后者会加载 ~15-20MB 的 Python 绑定并启动一个 Playwright 实例）
@@ -107,7 +131,13 @@ def _has_chromium() -> bool:
 
 
 def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
-    """确保 playwright 包可导入且 Chromium 已安装。"""
+    """确保 playwright 包可导入且所需浏览器已安装。
+
+    根据配置的 browser_channel 决定下载内容：
+    - playwright: 下载 Chromium
+    - firefox: 下载 Firefox 驱动
+    - msedge/chrome/custom: 跳过下载（使用系统浏览器）
+    """
     global _BOOTSTRAP_DONE, _BOOTSTRAP_SKIPPED
 
     with _BOOTSTRAP_LOCK:
@@ -120,18 +150,33 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
         if not _is_enabled():
             _BOOTSTRAP_SKIPPED = True
             if log:
-                log("AUTO_INSTALL_PLAYWRIGHT 已禁用，跳过 Chromium 验证")
+                log("AUTO_INSTALL_PLAYWRIGHT 已禁用，跳过浏览器验证")
             return True
 
-        # 快速路径：直接检查 chromium 是否已安装，避免导入 playwright（~15-20MB）
+        # 读取配置的 browser_channel
+        channel = _get_browser_channel()
+        if log:
+            log(f"配置的浏览器类型: {channel}")
+
+        # 系统浏览器不需要下载
+        if channel in ("msedge", "chrome", "custom"):
+            _BOOTSTRAP_DONE = True
+            if log:
+                log(f"使用系统浏览器 ({channel})，跳过下载")
+            return True
+
+        # 需要下载的浏览器：playwright 或 firefox
+        install_target = "chromium" if channel == "playwright" else "firefox"
+
+        # 快速路径：检查是否已安装
         try:
-            if _has_chromium():
+            if _has_browser(channel):
                 _BOOTSTRAP_DONE = True
                 return True
         except Exception:
-            logger.debug("快速路径 Chromium 检查失败，回退到慢速路径", exc_info=True)
+            logger.debug("快速路径浏览器检查失败，回退到慢速路径", exc_info=True)
 
-        # 慢速路径：chromium 未找到，需要导入 playwright 来安装
+        # 慢速路径：需要导入 playwright 来安装
         try:
             import playwright  # noqa: F401
         except Exception as exc:
@@ -142,7 +187,7 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
 
         try:
             if log:
-                log("正在安装 Playwright Chromium 浏览器内核...")
+                log(f"正在安装 Playwright {install_target} 浏览器...")
 
             for host in _candidate_hosts():
                 # NOTE: os.environ 在此处修改是安全的，因为：
@@ -154,12 +199,12 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
                     log(f"尝试下载源: {host}")
 
                 result = _run(
-                    [sys.executable, "-m", "playwright", "install", "chromium"]
+                    [sys.executable, "-m", "playwright", "install", install_target]
                 )
                 if result.returncode == 0:
                     _BOOTSTRAP_DONE = True
                     if log:
-                        log("Playwright Chromium 下载完成")
+                        log(f"Playwright {install_target} 下载完成")
                     return True
 
                 if log:
