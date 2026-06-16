@@ -10,6 +10,10 @@ export const configMethods = {
         ...data,
         browser_extra_headers_json: data.browser_extra_headers_json || '',
       };
+      // 同步浏览器选择状态
+      if (data.browser_channel) {
+        this.selectedBrowser = data.browser_channel;
+      }
       if (updateSnapshot) {
         this._configDirty = false;
         this.savedConfigSnapshot = JSON.stringify(this.config);
