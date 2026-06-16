@@ -22,8 +22,13 @@
         <span class="step-label">监控设置</span>
       </div>
       <div class="step-line" :class="{ completed: wizardStep > 3 }"></div>
-      <div class="step" :class="{ active: wizardStep === 4 }">
+      <div class="step" :class="{ active: wizardStep === 4, completed: wizardStep > 4 }">
         <span class="step-number">4</span>
+        <span class="step-label">浏览器选择</span>
+      </div>
+      <div class="step-line" :class="{ completed: wizardStep > 4 }"></div>
+      <div class="step" :class="{ active: wizardStep === 5 }">
+        <span class="step-number">5</span>
         <span class="step-label">完成</span>
       </div>
     </div>
@@ -191,8 +196,49 @@
         </div>
       </div>
 
-      <!-- 第 4 步：完成 -->
-      <div v-if="wizardStep === 4" class="wizard-page">
+      <!-- 第 4 步：浏览器选择 -->
+      <div v-if="wizardStep === 4" class="wizard-step">
+        <h3>选择浏览器</h3>
+        <p class="step-description">选择用于自动登录的浏览器</p>
+
+        <div class="browser-selection">
+          <div v-if="browserLoading" class="loading">正在检测浏览器...</div>
+
+          <div v-else class="browser-cards">
+            <div
+              v-for="browser in availableBrowsers"
+              :key="browser.channel"
+              class="browser-card"
+              :class="{ active: selectedBrowser === browser.channel }"
+              @click="selectBrowser(browser.channel)"
+            >
+              <div class="browser-icon">{{ browser.icon }}</div>
+              <div class="browser-info">
+                <div class="browser-name">{{ browser.name }}</div>
+                <div class="browser-status">
+                  <span v-if="browser.installed" class="status-installed">✅ 已安装</span>
+                  <span v-else-if="browser.needs_download" class="status-download">⬇️ 需下载</span>
+                  <span v-else class="status-unavailable">❌ 不可用</span>
+                </div>
+                <div class="browser-desc">{{ browser.description }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 自定义路径输入 -->
+          <div v-if="selectedBrowser === 'custom'" class="custom-path-section">
+            <label>浏览器可执行文件路径</label>
+            <input
+              type="text"
+              v-model="config.browser_custom_path"
+              placeholder="例如: C:\Program Files\Browser\browser.exe"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- 第 5 步：完成 -->
+      <div v-if="wizardStep === 5" class="wizard-page">
         <h2>配置完成</h2>
         <p class="description">您已完成基本配置，可以开始使用了！</p>
 
@@ -237,7 +283,7 @@
       </button>
       <div class="spacer"></div>
       <button class="btn btn-text" @click="skipWizard">跳过向导</button>
-      <button v-if="wizardStep < 4" class="btn btn-primary" @click="nextWizardStep" :disabled="!canProceed">
+      <button v-if="wizardStep < 5" class="btn btn-primary" @click="nextWizardStep" :disabled="!canProceed">
         下一步
       </button>
       <button v-else class="btn btn-primary" @click="finishWizard" :disabled="busy.save">
