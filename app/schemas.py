@@ -250,6 +250,14 @@ class GlobalSettings(BaseModel):
     source_levels: dict[str, str] = {}
 
     # 浏览器配置
+    browser_channel: str = Field(
+        default="playwright",
+        description="浏览器类型: playwright(自带Chromium) | msedge(系统Edge) | chrome(系统Chrome) | firefox | custom(自定义路径)"
+    )
+    browser_custom_path: str = Field(
+        default="",
+        description="自定义浏览器可执行文件路径（仅 browser_channel='custom' 时生效）"
+    )
     headless: bool = Field(default=True)
     browser_timeout: int = Field(default=8, ge=1, le=60, description="页面操作超时（秒）")
     browser_navigation_timeout: int = Field(default=15, ge=3, le=60, description="打开登录页面超时（秒）")
