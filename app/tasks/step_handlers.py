@@ -619,7 +619,15 @@ class SleepHandler(StepHandler):
         self, page, step: StepConfig, resolver: VariableResolver
     ) -> tuple[bool, str]:
         params = self.resolve_params(step, resolver)
-        duration = int(params.get("duration", 1000))
+        try:
+            duration = int(params.get("duration", 1000))
+        except (ValueError, TypeError):
+            logger.warning("[sleep] duration 无法转换为整数: {}", params.get("duration"))
+            duration = 1000
+
+        if duration < 0:
+            logger.warning("[sleep] duration={}ms 为负数，使用默认值 1000ms", duration)
+            duration = 1000
 
         if duration > self.MAX_SLEEP_MS:
             logger.warning(
@@ -665,14 +673,21 @@ class OcrHandler(StepHandler):
     @classmethod
     def schedule_cleanup(cls, old: bool = False):
         """OCR 使用完毕后调用，启动定时清理"""
-        cls._cancel_cleanup(old)
-        timer = threading.Timer(cls._IDLE_TIMEOUT, cls._do_cleanup, args=[old])
-        timer.daemon = True
-        timer.start()
-        cls._cleanup_timers[old] = timer
+        with cls._ocr_lock:
+            cls._cancel_cleanup_locked(old)
+            timer = threading.Timer(cls._IDLE_TIMEOUT, cls._do_cleanup, args=[old])
+            timer.daemon = True
+            timer.start()
+            cls._cleanup_timers[old] = timer
 
     @classmethod
     def _cancel_cleanup(cls, old: bool):
+        with cls._ocr_lock:
+            cls._cancel_cleanup_locked(old)
+
+    @classmethod
+    def _cancel_cleanup_locked(cls, old: bool):
+        """内部方法：在已持有 _ocr_lock 的情况下取消清理定时器。"""
         timer = cls._cleanup_timers.pop(old, None)
         if timer is not None:
             timer.cancel()
@@ -686,7 +701,7 @@ class OcrHandler(StepHandler):
                 logger.info(
                     "[ocr] 模型已卸载 (old={})，空闲超过 {}s", old, cls._IDLE_TIMEOUT
                 )
-        cls._cleanup_timers.pop(old, None)
+            cls._cleanup_timers.pop(old, None)
         import gc
 
         gc.collect()

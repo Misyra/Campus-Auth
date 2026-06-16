@@ -3,6 +3,13 @@
 ## 2026-06-16
 
 ### fix
+- 修复任务系统 4 个问题（`app/tasks/variable_resolver.py`、`app/tasks/step_handlers.py`）
+  - [6] `resolve_for_js` 双重编码：replacer 函数改为 `json.dumps(str(resolved))`，确保非字符串类型解析结果先转为字符串再 JSON 编码，输出始终是合法的 JS 字符串字面量
+  - [7] 变量解析缓存未绑定上下文：`__init__` 新增 `_cache_version` 版本号，`set_runtime_var` 递增版本号，缓存 key 从原始字符串改为 `(version, value)` 元组，外部修改变量后缓存自动失效
+  - [33] OCR Timer 生命周期竞态：`_cleanup_timers` 的读写操作（`schedule_cleanup`、`_cancel_cleanup`、`_do_cleanup`）全部纳入 `_ocr_lock` 保护范围，新增 `_cancel_cleanup_locked` 内部方法避免死锁
+  - [34] SleepHandler 缺少校验：`int()` 转换添加 try/except 捕获 ValueError/TypeError，添加负值检查回退到默认值 1000ms
+
+### fix
 - 修复配置服务 3 个问题（`app/services/config_service.py`、`app/services/runtime_config.py`、`app/schemas.py`）
   - [26] `_update_global_settings` 补充 `lightweight_tray` 字段同步，将前端传来的值复制到 `global_settings`
   - [27] `_build_config_payload` 补充 `lightweight_tray` 字段，从 `global_settings` 读取并合并到 payload
