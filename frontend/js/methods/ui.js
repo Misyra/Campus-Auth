@@ -101,9 +101,14 @@ export const uiMethods = {
     this.browserLoading = true;
     try {
       const response = await fetch('/api/browsers');
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
       const data = await response.json();
       this.availableBrowsers = data.browsers;
       this.selectedBrowser = data.current;
+      // 同步 config.browser_channel
+      this.config.browser_channel = data.current;
     } catch (error) {
       console.error('获取浏览器列表失败:', error);
     } finally {
