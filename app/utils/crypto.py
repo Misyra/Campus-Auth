@@ -215,7 +215,7 @@ def save_password_field(raw: str | None, existing_encrypted: str) -> str:
     if raw is None:
         # 未传密码 → 无操作，保留原值。不发警告（合法场景）
         return existing_encrypted or ""
-    if raw == "••••••••":
+    if raw.startswith("•"):
         # 掩码 → 保留已有密码
         return existing_encrypted or ""
     if raw == "":

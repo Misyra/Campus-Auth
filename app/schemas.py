@@ -245,8 +245,8 @@ class _CommonSettingsMixin(BaseModel):
         v = v.strip()
         if not v:
             return v
-        if re.search(r'[;&|`$(){}]', v):
-            raise ValueError("路径包含非法字符")
+        if "\0" in v:
+            raise ValueError("路径包含非法字符（null 字节）")
         return v
 
 
