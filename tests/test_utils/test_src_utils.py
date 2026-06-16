@@ -446,9 +446,10 @@ class TestEnsurePlaywrightReady:
         pb._BOOTSTRAP_DONE = True
         assert ensure_playwright_ready() is True
 
+    @patch("app.workers.playwright_bootstrap._get_browser_channel", return_value="playwright")
     @patch("app.workers.playwright_bootstrap._has_chromium", return_value=False)
     @patch("app.workers.playwright_bootstrap._is_enabled", return_value=True)
-    def test_no_playwright_package(self, mock_enabled, mock_chromium):
+    def test_no_playwright_package(self, mock_enabled, mock_chromium, mock_channel):
         import sys
 
         with patch.dict(sys.modules, {"playwright": None}):
