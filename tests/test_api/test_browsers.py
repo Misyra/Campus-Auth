@@ -71,7 +71,7 @@ def test_get_browsers_structure(client):
 
 
 def test_get_browsers_contains_all_channels(client):
-    """browsers 列表应包含所有 5 种选项。"""
+    """browsers 列表应包含所有 4 种选项。"""
     test_client, _ = client
     response = test_client.get("/api/browsers")
     data = response.json()
@@ -80,7 +80,7 @@ def test_get_browsers_contains_all_channels(client):
     assert "msedge" in channels
     assert "chrome" in channels
     assert "firefox" in channels
-    assert "custom" in channels
+    assert len(channels) == 4
 
 
 def test_get_browsers_current_field(client):
@@ -88,7 +88,7 @@ def test_get_browsers_current_field(client):
     test_client, _ = client
     response = test_client.get("/api/browsers")
     data = response.json()
-    assert data["current"] in ["playwright", "msedge", "chrome", "firefox", "custom"]
+    assert data["current"] in ["playwright", "msedge", "chrome", "firefox"]
 
 
 def test_get_browsers_item_structure(client):

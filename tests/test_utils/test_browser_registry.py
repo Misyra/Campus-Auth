@@ -27,11 +27,11 @@ def test_browser_info_fields():
 
 
 def test_detect_browsers_contains_all_options():
-    """detect_browsers 应返回 5 种浏览器选项。"""
+    """detect_browsers 应返回 4 种浏览器选项。"""
     result = detect_browsers()
     channels = [b.channel for b in result]
     assert "playwright" in channels
     assert "msedge" in channels
     assert "chrome" in channels
     assert "firefox" in channels
-    assert "custom" in channels
+    assert len(channels) == 4
