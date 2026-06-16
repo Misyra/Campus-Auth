@@ -119,7 +119,7 @@ def _detect_firefox() -> BrowserInfo:
         icon=_get_icon_url("firefox.svg"),
         installed=installed,
         needs_download=not installed,
-        description="系统浏览器，无需下载" if installed else "需下载 Firefox 驱动"
+        description="系统浏览器，无需下载" if installed else "未安装 Firefox 浏览器"
     )
 
 

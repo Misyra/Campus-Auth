@@ -783,12 +783,12 @@
 
 .browser-card.disabled {
   opacity: 0.5;
-  cursor: not-allowed;
+  cursor: pointer;
 }
 
 .browser-card.disabled:hover {
-  border-color: var(--border, #333);
-  background: var(--bg-card, transparent);
+  border-color: var(--accent, #22d3ee);
+  background: var(--bg-hover, rgba(34, 211, 238, 0.04));
 }
 
 .browser-icon {
@@ -834,12 +834,8 @@
   color: var(--success, #22c55e);
 }
 
-.status-download {
+.status-not-installed {
   color: var(--warning, #f59e0b);
-}
-
-.status-unavailable {
-  color: var(--danger, #ef4444);
 }
 
 .browser-desc {
