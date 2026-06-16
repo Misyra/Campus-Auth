@@ -96,6 +96,25 @@ export const uiMethods = {
     this.unreadNotifications++;
     this._showToast(success, message);
   },
+  // 获取可用浏览器列表
+  async fetchBrowsers() {
+    this.browserLoading = true;
+    try {
+      const response = await fetch('/api/browsers');
+      const data = await response.json();
+      this.availableBrowsers = data.browsers;
+      this.selectedBrowser = data.current;
+    } catch (error) {
+      console.error('获取浏览器列表失败:', error);
+    } finally {
+      this.browserLoading = false;
+    }
+  },
+  // 选择浏览器
+  selectBrowser(channel) {
+    this.selectedBrowser = channel;
+    this.config.browser_channel = channel;
+  },
   nextWizardStep() {
     // 第 1 步需要同意协议
     if (this.wizardStep === 1 && !this.agreedToTerms) {
@@ -129,7 +148,11 @@ export const uiMethods = {
         return;
       }
     }
-    if (this.wizardStep < 4) {
+    // 步骤 4：浏览器选择（无需验证，直接进入下一步）
+    if (this.wizardStep === 4) {
+      this.config.browser_channel = this.selectedBrowser;
+    }
+    if (this.wizardStep < 5) {
       this.wizardStep++;
     }
   },
