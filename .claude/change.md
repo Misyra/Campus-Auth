@@ -3,6 +3,19 @@
 ## 2026-06-16
 
 ### fix
+- 修复 engine.py 两个代码质量问题（`app/services/engine.py`）
+  - `_handle_reload` 和 `_handle_apply_profile` 检查 `_reload_config_internal` 返回值，失败时跳过 `_handle_start` 并记录错误
+  - `_reload_config_internal` 的 except 分支设置 `self._pure_mode = False` 安全默认值，防止 reload 失败后 `_pure_mode` 未初始化
+
+### fix
+- 修复调度引擎 5 个问题（`app/services/engine.py`）
+  - [19] 手动登录路径不再污染自动重试计数：`_do_async_login` 添加 `is_manual` 参数，手动登录不递增 `count`
+  - [21] `_do_network_check` 使用 `_monitor_core` 局部引用，避免与 `shutdown` 竞争导致 `AttributeError`
+  - [54] profile switch 后 `_reload_config_internal` 失败时跳过 `_handle_start`，防止用过期配置启动监控
+  - [55] `drain_ws_queue` 入口检查 `_ws_manager is not None`，避免 `AttributeError`
+  - [56] `_reload_config_internal` 中同时更新 `_pure_mode`（在 `_pure_mode_lock` 内），消除 `__init__` 中重复的 `load()` 调用
+
+### fix
 - 浏览器注册与安装修复（5 个问题）
   - `app/utils/browser_registry.py` 提取公共 `has_playwright_chromium()` 函数，消除与 `playwright_bootstrap.py` 的 Chromium 检测逻辑重复
   - `app/workers/playwright_bootstrap.py` `_has_chromium()` 改为复用 `has_playwright_chromium()`，移除 `sync_playwright` 回退路径

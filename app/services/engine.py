@@ -431,7 +431,9 @@ class ScheduleEngine:
         was_monitoring = self._is_monitoring
         if was_monitoring:
             self._handle_stop()
-        self._reload_config_internal()
+        if not self._reload_config_internal():
+            logger.error("配置重载失败，跳过监控重启")
+            return
         if was_monitoring:
             self._handle_start(EngineCommand(type=EngineCmdType.START))
         logger.info("配置已重载")
@@ -444,7 +446,9 @@ class ScheduleEngine:
             self._handle_stop()
 
         # 重载配置（方案已由 API 路由持久化，此处重新读取）
-        self._reload_config_internal()
+        if not self._reload_config_internal():
+            logger.error("配置重载失败，跳过方案切换")
+            return
 
         # 直接用 profile_id 记录日志，避免重复 load
         new_url = self._runtime_config.get("auth_url", "")
@@ -621,6 +625,8 @@ class ScheduleEngine:
             return True
         except Exception:
             logger.exception("配置重载失败")
+            with self._pure_mode_lock:
+                self._pure_mode = False
             return False
 
     def _copy_runtime_config(self) -> dict:
