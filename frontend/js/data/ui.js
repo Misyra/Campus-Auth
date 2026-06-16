@@ -22,5 +22,6 @@ export function uiData() {
     availableBrowsers: [],
     selectedBrowser: 'playwright',
     browserLoading: false,
+    saveFailed: false,
   };
 }
