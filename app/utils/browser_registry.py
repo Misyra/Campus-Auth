@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -35,11 +36,22 @@ class BrowserInfo:
     description: str      # 状态描述
 
 
+# detect_browsers TTL 缓存（30 秒）
+_DETECT_CACHE: list[BrowserInfo] | None = None
+_DETECT_CACHE_TIME: float = 0.0
+_DETECT_CACHE_TTL: float = 30.0
+
+
 def detect_browsers() -> list[BrowserInfo]:
     """检测系统已安装的浏览器。
 
     仅在向导和设置页面调用，启动时直接使用配置的 channel。
+    带 30 秒 TTL 缓存，避免频繁文件系统操作。
     """
+    global _DETECT_CACHE, _DETECT_CACHE_TIME
+    now = time.monotonic()
+    if _DETECT_CACHE is not None and (now - _DETECT_CACHE_TIME) < _DETECT_CACHE_TTL:
+        return _DETECT_CACHE
     browsers = [
         _detect_playwright_chromium(),
         _detect_edge(),
@@ -47,6 +59,8 @@ def detect_browsers() -> list[BrowserInfo]:
         _detect_firefox(),
         _detect_custom(),
     ]
+    _DETECT_CACHE = browsers
+    _DETECT_CACHE_TIME = now
     return browsers
 
 
@@ -118,6 +132,7 @@ def _detect_firefox() -> BrowserInfo:
         program_files = [
             Path(os.environ.get("PROGRAMFILES", "C:\\Program Files")),
             Path(os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)")),
+            Path(os.environ.get("LOCALAPPDATA", "")),
         ]
         for base in program_files:
             firefox_path = base / "Mozilla Firefox" / "firefox.exe"
@@ -146,8 +161,11 @@ def _detect_custom() -> BrowserInfo:
     )
 
 
-def _has_playwright_chromium() -> bool:
-    """检查 Playwright Chromium 是否已下载。"""
+def has_playwright_chromium() -> bool:
+    """检查 Playwright Chromium 是否已下载（公共函数）。
+
+    扫描标准缓存目录和包内 .local-browsers 备用路径。
+    """
     # 标准缓存目录
     if PLATFORM == "windows":
         cache_dir = Path.home() / "AppData" / "Local" / "ms-playwright"
@@ -184,6 +202,11 @@ def _has_playwright_chromium() -> bool:
                 if candidate.exists():
                     return True
     return False
+
+
+def _has_playwright_chromium() -> bool:
+    """检查 Playwright Chromium 是否已下载（内部便捷函数）。"""
+    return has_playwright_chromium()
 
 
 def _check_command_exists(command: str) -> bool:

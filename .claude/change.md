@@ -3,6 +3,16 @@
 ## 2026-06-16
 
 ### fix
+- 浏览器注册与安装修复（5 个问题）
+  - `app/utils/browser_registry.py` 提取公共 `has_playwright_chromium()` 函数，消除与 `playwright_bootstrap.py` 的 Chromium 检测逻辑重复
+  - `app/workers/playwright_bootstrap.py` `_has_chromium()` 改为复用 `has_playwright_chromium()`，移除 `sync_playwright` 回退路径
+  - `app/api/install_playwright.py` 并发保护从布尔变量 `_installing` 改为 `asyncio.Lock()`
+  - `app/workers/playwright_bootstrap.py` `ensure_playwright_ready` 保存/恢复 `PLAYWRIGHT_DOWNLOAD_HOST` 环境变量
+  - `app/utils/browser_registry.py` `_detect_firefox()` Windows 路径补充 `%LOCALAPPDATA%\Mozilla Firefox\firefox.exe`
+  - `app/utils/browser_registry.py` `detect_browsers()` 添加 30 秒 TTL 缓存
+  - 清理 `playwright_bootstrap.py` 中未使用的 `Path`、`is_macos` 导入
+
+### fix
 - `app/workers/playwright_worker.py` 修复 4 个浏览器自动化核心问题
   - `submit_nowait` 添加 `queue.Full` 异常处理和 `_wake_async()` 唤醒事件循环，与 `submit()` 行为一致
   - `cleanup_orphan_browsers` 扩展过滤条件支持 Firefox 进程清理（原仅清理 Chromium）
