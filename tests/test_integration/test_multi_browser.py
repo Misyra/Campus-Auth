@@ -24,11 +24,12 @@ def test_build_runtime_config_includes_channel():
 
 
 def test_detect_browsers_returns_all_channels():
-    """detect_browsers 应返回所有 4 种浏览器选项。"""
+    """detect_browsers 应返回所有 5 种浏览器选项。"""
     browsers = detect_browsers()
     channels = [b.channel for b in browsers]
-    assert len(channels) == 4
+    assert len(channels) == 5
     assert "playwright" in channels
     assert "msedge" in channels
     assert "chrome" in channels
     assert "firefox" in channels
+    assert "custom" in channels

@@ -37,6 +37,7 @@ def detect_browsers() -> list[BrowserInfo]:
         _detect_edge(),
         _detect_chrome(),
         _detect_firefox(),
+        _detect_custom(),
     ]
     return browsers
 
@@ -111,6 +112,18 @@ def _detect_firefox() -> BrowserInfo:
         installed=installed,
         needs_download=not installed,
         description="系统浏览器，无需下载" if installed else "需下载 Firefox 驱动"
+    )
+
+
+def _detect_custom() -> BrowserInfo:
+    """自定义路径选项（不检测，由用户自行确保）。"""
+    return BrowserInfo(
+        channel="custom",
+        name="自定义浏览器",
+        icon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>',
+        installed=True,  # 始终可用，由用户自行确保路径有效
+        needs_download=False,
+        description="手动指定浏览器可执行文件路径"
     )
 
 
