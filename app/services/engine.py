@@ -141,7 +141,6 @@ class ScheduleEngine:
         self._reload_config_internal()
 
         self._monitor_core: NetworkMonitorCore | None = None
-        self._pure_mode: bool = self._profile_service.load().global_settings.pure_mode
 
         # Actor model: command dispatch queue
         self._cmd_queue: queue.Queue[EngineCommand] = queue.Queue(maxsize=50)
@@ -266,11 +265,12 @@ class ScheduleEngine:
 
     def _do_network_check(self) -> None:
         """执行一次网络检测。"""
-        if self._monitor_core is None:
+        core = self._monitor_core
+        if core is None:
             return
 
         try:
-            result = self._monitor_core.check_once()
+            result = core.check_once()
             interval = int(result.get("interval", self._monitor_check_interval))
             self._monitor_check_interval = interval
 
@@ -282,11 +282,13 @@ class ScheduleEngine:
                 self._login_retry.count = 0
 
             # 检查是否需要重启（自动切换方案）
-            if self._monitor_core and self._monitor_core.consume_profile_switch_flag():
+            if core.consume_profile_switch_flag():
                 logger.info("检测到方案切换，重启监控")
                 self._handle_stop()
-                self._reload_config_internal()
-                self._handle_start(EngineCommand(type=EngineCmdType.START))
+                if self._reload_config_internal():
+                    self._handle_start(EngineCommand(type=EngineCmdType.START))
+                else:
+                    logger.error("配置重载失败，跳过监控重启")
 
             self._next_network_check = time.time() + interval
             self._update_status_snapshot(force=True)
@@ -308,13 +310,14 @@ class ScheduleEngine:
             return False
         return now >= self._login_retry.last_attempt + intervals[idx]
 
-    def _do_async_login(self, skip_pause_check: bool = False) -> bool:
+    def _do_async_login(self, skip_pause_check: bool = False, is_manual: bool = False) -> bool:
         """提交登录到 executor 的 login_pool。返回 True 表示已提交。"""
         if self._login_in_progress.is_set():
             return False
         self._login_in_progress.set()
         self._login_retry.last_attempt = time.time()
-        self._login_retry.count += 1
+        if not is_manual:
+            self._login_retry.count += 1
 
         try:
             future = self._task_executor.execute_login_async(
@@ -418,7 +421,7 @@ class ScheduleEngine:
             cmd.response_data = (False, "登录配置不完整（请先设置认证地址、用户名和密码）")
             return
         skip_pause_check = cmd.data.get("skip_pause_check", False)
-        if self._do_async_login(skip_pause_check=skip_pause_check):
+        if self._do_async_login(skip_pause_check=skip_pause_check, is_manual=True):
             cmd.response_data = (True, "登录已提交")
         else:
             cmd.response_data = (False, "登录任务已在执行中，请稍后再试")
@@ -544,6 +547,8 @@ class ScheduleEngine:
 
     async def drain_ws_queue(self) -> None:
         """Flush pending WS broadcast messages to WebSocket clients."""
+        if self._ws_manager is None:
+            return
         broadcast_queue = self.ws_broadcast_queue
         while True:
             try:
@@ -590,26 +595,33 @@ class ScheduleEngine:
     def get_config(self) -> MonitorConfigPayload:
         return self._ui_config.model_copy(deep=True)
 
-    def _reload_config_internal(self) -> None:
-        """从 settings.json 重新加载 UI 和运行时配置。"""
+    def _reload_config_internal(self) -> bool:
+        """从 settings.json 重新加载 UI 和运行时配置。返回 True 表示成功。"""
         import copy
 
         from .config_service import build_runtime_config
         from .runtime_config import load_runtime_config, load_ui_config
 
-        with self._reload_lock:
-            data = self._profile_service.load()
-            self._ui_config = load_ui_config(self._profile_service, data=data)
-            runtime_payload, has_decrypt_error = load_runtime_config(
-                self._profile_service, data=data
-            )
-            if has_decrypt_error:
-                logger.warning("配置重载时部分密码解密失败")
-            self._runtime_config = build_runtime_config(
-                runtime_payload,
-                global_settings=data.global_settings,
-            )
-            self._runtime_snapshot = copy.deepcopy(self._runtime_config)
+        try:
+            with self._reload_lock:
+                data = self._profile_service.load()
+                self._ui_config = load_ui_config(self._profile_service, data=data)
+                runtime_payload, has_decrypt_error = load_runtime_config(
+                    self._profile_service, data=data
+                )
+                if has_decrypt_error:
+                    logger.warning("配置重载时部分密码解密失败")
+                self._runtime_config = build_runtime_config(
+                    runtime_payload,
+                    global_settings=data.global_settings,
+                )
+                self._runtime_snapshot = copy.deepcopy(self._runtime_config)
+                with self._pure_mode_lock:
+                    self._pure_mode = data.global_settings.pure_mode
+            return True
+        except Exception:
+            logger.exception("配置重载失败")
+            return False
 
     def _copy_runtime_config(self) -> dict:
         """返回运行时配置快照（仅在 reload 时更新，读取零拷贝）。"""
