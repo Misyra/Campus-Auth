@@ -2,6 +2,27 @@ import { DEFAULT_CONFIG } from '../constants.js';
 import { extractApiError } from './utils.js';
 
 export const configMethods = {
+  // 自动保存相关属性
+  _isConfigLoaded: false,
+  _lastSavedConfig: null,
+  _saveConfigTimer: null,
+  _saveAbortController: null,
+
+  // 防抖保存
+  _debounceSave(delay = 500) {
+    if (this._saveConfigTimer) clearTimeout(this._saveConfigTimer);
+    this._saveConfigTimer = setTimeout(() => {
+      this.saveConfig();
+    }, delay);
+  },
+
+  // 配置变更时调用
+  onConfigChange(field, value, type = 'toggle') {
+    if (!this._isConfigLoaded) return;
+    const delay = type === 'input' ? 1000 : 500;
+    this._debounceSave(delay);
+  },
+
   async fetchConfig(updateSnapshot = false) {
     try {
       const { data } = await this.$api.get('/api/config');
@@ -17,50 +38,73 @@ export const configMethods = {
       if (updateSnapshot) {
         this._configDirty = false;
         this.savedConfigSnapshot = JSON.stringify(this.config);
+        this._lastSavedConfig = JSON.stringify(this.config);
       }
       this.frontendLogger.info('config', '配置已加载');
+
+      // 首次加载完成后启用自动保存
+      if (!this._isConfigLoaded) {
+        this.$nextTick(() => {
+          this._isConfigLoaded = true;
+        });
+      }
     } catch (error) {
       this.frontendLogger.error('config', '获取配置失败', error);
       this._recordInitError('加载配置失败');
     }
   },
   async saveConfig() {
-    // 关键字段检查
-    if (!this.config.auth_url && !confirm('认证地址为空，自动认证将无法工作。\n\n确定要继续保存吗？')) {
+    // 脏值检测
+    const current = JSON.stringify(this.config);
+    if (this._lastSavedConfig && current === this._lastSavedConfig) {
       return;
     }
-    if (!this.config.username && !confirm('账号为空，自动认证将无法工作。\n\n确定要继续保存吗？')) {
-      return;
+
+    // 关键字段检查（自动保存时跳过确认弹窗）
+    if (!this.config.auth_url) {
+      this.frontendLogger.warn('config', '认证地址为空，自动认证将无法工作');
     }
-    const passwordIsMasked = this.config.password && this.config.password.startsWith('•');
-    if (!passwordIsMasked && !this.config.password && !confirm('密码为空，自动认证将无法工作。\n\n确定要继续保存吗？')) {
-      return;
+    if (!this.config.username) {
+      this.frontendLogger.warn('config', '账号为空，自动认证将无法工作');
     }
     if (!this.config.enable_tcp_check && !this.config.enable_http_check && !(this.config.url_check_urls && this.config.url_check_urls.trim())) {
       this.toastOnly(false, '至少需要启用一种网络检测方式（TCP / HTTP / 网址响应）');
       return;
     }
 
+    // 取消上一次请求
+    if (this._saveAbortController) {
+      this._saveAbortController.abort();
+    }
+    this._saveAbortController = new AbortController();
+
     this.busy.save = true;
+    this.saveFailed = false;
     try {
       const payload = { ...this.config };
       if (payload.carrier !== '自定义') {
         payload.carrier_custom = '';
       }
-      const { data } = await this.$api.put('/api/config', payload);
+      const { data } = await this.$api.put('/api/config', payload, {
+        signal: this._saveAbortController.signal,
+      });
       if (data.success) {
-        this.frontendLogger.info('config', data.message || '配置保存成功');
-        // 用后端规范化值刷新 config 并重置 savedConfigSnapshot，确保 dirty tracking 一致
+        this._lastSavedConfig = current;
+        this.frontendLogger.info('config', '配置保存成功');
+        // 用后端规范化值刷新 config 并重置 savedConfigSnapshot
         await this.fetchConfig(true);
         await this.fetchProfiles();
       } else {
         this.frontendLogger.warn('config', '保存配置被拒绝: ' + data.message);
         this.toastOnly(false, data.message);
+        this.saveFailed = true;
       }
     } catch (error) {
+      if (error.name === 'AbortError') return;  // 被取消，忽略
       const msg = extractApiError(error, '保存失败');
       this.frontendLogger.error('config', '保存配置失败', error);
       this.toastOnly(false, msg);
+      this.saveFailed = true;
     } finally {
       this.busy.save = false;
     }
@@ -69,7 +113,8 @@ export const configMethods = {
     if (!confirm('确定要恢复默认设置吗？当前修改将丢失。')) return;
     this.config = structuredClone(DEFAULT_CONFIG);
     this._configDirty = true;
-    this.frontendLogger.info('config', '已恢复默认设置，请点击保存以生效');
+    this._lastSavedConfig = null;  // 重置快照
+    this.frontendLogger.info('config', '已恢复默认设置');
   },
   onShellFileSelected(e) {
     const file = e.target.files?.[0];
