@@ -838,6 +838,10 @@
   color: var(--warning, #f59e0b);
 }
 
+.status-custom {
+  color: var(--accent, #22d3ee);
+}
+
 .browser-desc {
   font-size: 0.75rem;
   color: var(--text-secondary);
