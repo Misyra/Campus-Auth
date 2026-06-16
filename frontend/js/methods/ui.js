@@ -115,6 +115,26 @@ export const uiMethods = {
     this.selectedBrowser = channel;
     this.config.browser_channel = channel;
   },
+  // 处理浏览器点击
+  handleBrowserClick(browser) {
+    if (browser.installed) {
+      // 已安装，直接选择
+      this.selectBrowser(browser.channel);
+    } else {
+      // 未安装，弹窗提示
+      const downloadUrls = {
+        playwright: 'https://playwright.dev/docs/browsers',
+        msedge: 'https://www.microsoft.com/edge',
+        chrome: 'https://www.google.com/chrome/',
+        firefox: 'https://www.firefox.com/',
+        custom: 'https://playwright.dev/docs/browsers',
+      };
+      const url = downloadUrls[browser.channel] || 'https://playwright.dev/docs/browsers';
+      if (confirm(`${browser.name} 未安装。\n\n是否跳转到官网下载？`)) {
+        window.open(url, '_blank');
+      }
+    }
+  },
   nextWizardStep() {
     // 第 1 步需要同意协议
     if (this.wizardStep === 1 && !this.agreedToTerms) {
