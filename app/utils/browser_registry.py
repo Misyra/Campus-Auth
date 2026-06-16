@@ -113,6 +113,17 @@ def _detect_firefox() -> BrowserInfo:
     installed = _check_command_exists("firefox")
     if PLATFORM == "darwin":
         installed = Path("/Applications/Firefox.app").exists()
+    elif PLATFORM == "windows":
+        # 检查 Windows 标准安装路径
+        program_files = [
+            Path(os.environ.get("PROGRAMFILES", "C:\\Program Files")),
+            Path(os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)")),
+        ]
+        for base in program_files:
+            firefox_path = base / "Mozilla Firefox" / "firefox.exe"
+            if firefox_path.exists():
+                installed = True
+                break
     return BrowserInfo(
         channel="firefox",
         name="Firefox",
