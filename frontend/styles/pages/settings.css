@@ -858,24 +858,6 @@
 .custom-path-section label {
   display: block;
   margin-bottom: 0.5rem;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.custom-path-section input[type="text"] {
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--border, #333);
-  border-radius: var(--radius-md, 6px);
-  background: var(--bg-input, #1a1a1a);
-  color: var(--text-primary);
-  font-size: 0.875rem;
-}
-
-.custom-path-section input[type="text"]:focus {
-  outline: none;
-  border-color: var(--accent, #22d3ee);
-  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.1);
 }
 
 .custom-path-hint {
