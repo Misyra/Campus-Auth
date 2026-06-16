@@ -893,19 +893,4 @@
 .custom-path-hint a:hover {
   text-decoration: underline;
 }
-  display: block;
-  margin-bottom: 0.5rem;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.custom-path-section input {
-  width: 100%;
-  padding: 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md, 4px);
-  background: var(--bg-glass);
-  color: var(--text-primary);
-  box-sizing: border-box;
-}
 
