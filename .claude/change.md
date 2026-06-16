@@ -3,6 +3,13 @@
 ## 2026-06-16
 
 ### fix
+- 修复前端浏览器交互逻辑两个问题（`frontend/js/methods/ui.js`）
+  - [47] `handleBrowserClick` 为 `custom` 通道增加独立分支：选中浏览器并聚焦到路径输入框，同时从 `downloadUrls` 中移除 `custom` 条目
+  - [48] `installPlaywrightChromium` 的 `fetch` 调用添加 AbortController 600 秒（10 分钟）超时保护，超时后显示友好提示
+
+## 2026-06-16
+
+### fix
 - 修复网络探测客户端获取的 TOCTOU 竞态（`app/network/probes.py`）
   - [35] `_get_probe_client` 移除无锁快速路径，统一走锁内检查
   - 原双检锁模式中快速路径在无锁环境下多步条件判断可能读到不一致状态

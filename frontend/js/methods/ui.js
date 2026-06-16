@@ -150,6 +150,14 @@ export const uiMethods = {
         }
       }
       this.selectBrowser(browser.channel);
+    } else if (browser.channel === 'custom') {
+      // 自定义浏览器始终 installed=true，但代码上仍保持独立分支
+      // 选中并聚焦到路径输入框
+      this.selectBrowser(browser.channel);
+      this.$nextTick(() => {
+        const input = document.querySelector('[data-custom-browser-path]');
+        if (input) input.focus();
+      });
     } else if (browser.channel === 'playwright') {
       // Playwright Chromium 未安装，提示自动下载
       if (confirm('Playwright Chromium 未安装。\n\n是否自动下载？（约 150MB）')) {
@@ -161,7 +169,6 @@ export const uiMethods = {
         msedge: 'https://www.microsoft.com/edge',
         chrome: 'https://www.google.com/chrome/',
         firefox: 'https://www.firefox.com/',
-        custom: 'https://playwright.dev/docs/browsers',
       };
       const url = downloadUrls[browser.channel] || 'https://playwright.dev/docs/browsers';
       if (confirm(`${browser.name} 未安装。\n\n是否跳转到官网下载？`)) {
@@ -173,8 +180,13 @@ export const uiMethods = {
   async installPlaywrightChromium() {
     this.browserLoading = true;
     this.notify(true, '正在下载 Playwright Chromium，请稍候...');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 分钟超时
     try {
-      const response = await fetch('/api/browsers/install-playwright', { method: 'POST' });
+      const response = await fetch('/api/browsers/install-playwright', {
+        method: 'POST',
+        signal: controller.signal,
+      });
       const data = await response.json();
       if (data.success) {
         this.frontendLogger.info('browser', 'Playwright Chromium 安装成功');
@@ -186,9 +198,15 @@ export const uiMethods = {
         this.notify(false, '安装失败: ' + data.message);
       }
     } catch (error) {
-      this.frontendLogger.error('browser', '安装请求失败', error);
-      this.notify(false, '安装请求失败，请查看日志');
+      if (error.name === 'AbortError') {
+        this.frontendLogger.error('browser', '安装超时（超过 10 分钟）');
+        this.notify(false, '安装超时，请检查网络后重试');
+      } else {
+        this.frontendLogger.error('browser', '安装请求失败', error);
+        this.notify(false, '安装请求失败，请查看日志');
+      }
     } finally {
+      clearTimeout(timeoutId);
       this.browserLoading = false;
     }
   },
