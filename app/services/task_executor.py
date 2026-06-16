@@ -193,7 +193,9 @@ class TaskExecutor:
         return self._ensure_task_pool().submit(self.execute_task, task_id)
 
     def execute_login_async(
-        self, cancel_event: threading.Event | None = None
+        self,
+        cancel_event: threading.Event | None = None,
+        skip_pause_check: bool = False,
     ) -> Future:
         """异步执行登录（提交到 login_pool），带去重。
 
@@ -201,6 +203,7 @@ class TaskExecutor:
 
         Args:
             cancel_event: 取消事件，设置后登录流程应尽快退出
+            skip_pause_check: 是否跳过暂停时段和网络检测
 
         Returns:
             Future 对象（新的或已有的）
@@ -214,7 +217,9 @@ class TaskExecutor:
                 return self._login_future
 
             # 提交新的登录任务
-            future = self._login_pool.submit(self.execute_login, cancel_event)
+            future = self._login_pool.submit(
+                self.execute_login, cancel_event, skip_pause_check
+            )
             self._login_future = future
 
         # 锁外注册回调，避免时序问题
@@ -282,7 +287,9 @@ class TaskExecutor:
         return success, message
 
     def execute_login(
-        self, cancel_event: threading.Event | None = None
+        self,
+        cancel_event: threading.Event | None = None,
+        skip_pause_check: bool = False,
     ) -> tuple[bool, str]:
         """同步执行登录（在 login_pool 工作线程中运行）。
 
@@ -308,6 +315,8 @@ class TaskExecutor:
                 data={
                     "config": config,
                     "pure_mode": pure_mode,
+                    "skip_pause_check": skip_pause_check,
+                    "cancel_event": cancel_event,
                 },
                 wait=True,
                 timeout=300,
