@@ -3,6 +3,11 @@
 ## 2026-06-16
 
 ### fix
+- 修复网络探测客户端获取的 TOCTOU 竞态（`app/network/probes.py`）
+  - [35] `_get_probe_client` 移除无锁快速路径，统一走锁内检查
+  - 原双检锁模式中快速路径在无锁环境下多步条件判断可能读到不一致状态
+
+### fix
 - 修复调试会话管理 5 个问题（`app/services/debug_service.py`）
   - [9] `run_all` 会话有效性检查移入 `async with self._lock` 块内，消除锁外访问共享 `_session` 的竞态
   - [10] `_debug_timeout_watcher` 将 `_last_activity` 读取和超时判断全部纳入锁保护范围

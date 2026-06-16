@@ -30,14 +30,6 @@ _probe_block_proxy: bool = True  # 记录创建时的代理状态
 def _get_probe_client(block_proxy: bool) -> httpx.Client:
     """获取全局复用的探测 Client，线程安全。代理设置变化时自动重建。"""
     global _probe_client, _probe_block_proxy
-    # 快速路径：无需加锁
-    if (
-        _probe_client is not None
-        and not _probe_client.is_closed
-        and _probe_block_proxy == block_proxy
-    ):
-        return _probe_client
-    # 慢速路径：加锁重建
     with _probe_lock:
         if (
             _probe_client is not None
