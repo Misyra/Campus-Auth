@@ -96,6 +96,7 @@ def _build_config_payload(
         "auto_open_browser": data.global_settings.auto_open_browser,
         "startup_action": data.global_settings.startup_action,
         "autostart_lightweight": data.global_settings.autostart_lightweight,
+        "lightweight_tray": data.global_settings.lightweight_tray,
         "proxy": data.global_settings.proxy,
         "block_proxy": data.global_settings.block_proxy,
         "app_port": data.global_settings.app_port,

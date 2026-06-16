@@ -242,7 +242,7 @@ class TaskExecutor:
         """在后台线程监控 new_event，设置时联动到 target_event。"""
 
         def _watcher() -> None:
-            new_event.wait()
+            new_event.wait(timeout=300)
             if new_event.is_set():
                 target_event.set()
 

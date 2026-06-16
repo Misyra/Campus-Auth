@@ -343,7 +343,7 @@ class TestSaveConfigCombined:
     @patch("app.utils.crypto.save_password_field")
     def test_preserves_existing_password_if_not_provided(self, mock_save_password):
         """测试未提供密码时保留现有密码"""
-        mock_save_password.return_value = "encrypted_password"
+        mock_save_password.return_value = "existing_encrypted"
         mock_profile_service = MagicMock()
         payload = MonitorConfigPayload(
             username="testuser",
@@ -363,10 +363,10 @@ class TestSaveConfigCombined:
 
         save_config_combined(payload, mock_profile_service)
 
-        # 验证密码未被更新（因为以 • 开头）
+        # 验证密码被保留（save_password_field 处理掩码值后返回原密码）
         assert captured_data is not None
         assert captured_data.profiles["default"].password == "existing_encrypted"
-        mock_save_password.assert_not_called()
+        mock_save_password.assert_called_once_with("••••••••", "existing_encrypted")
 
     def test_strips_whitespace_from_credentials(self):
         """测试凭证去除空白"""
