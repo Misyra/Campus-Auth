@@ -171,6 +171,10 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
             return True
 
         # 需要下载的浏览器：playwright 或 firefox
+        VALID_CHANNELS = ("playwright", "msedge", "chrome", "firefox", "custom")
+        if channel not in VALID_CHANNELS:
+            logger.warning("无效的 browser_channel: {}，使用默认值 playwright", channel)
+            channel = "playwright"
         install_target = "chromium" if channel == "playwright" else "firefox"
 
         # 快速路径：检查是否已安装
