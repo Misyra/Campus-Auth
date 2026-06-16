@@ -20,7 +20,7 @@ config_logger = get_logger("config_service", source="backend")
 def _update_global_settings(
     global_settings: GlobalSettings, payload: MonitorConfigPayload
 ) -> None:
-    """更新全局系统设置（不包含凭证和浏览器配置）"""
+    """更新全局系统设置（不包含凭证）"""
     global_settings.backend_log_level = normalize_level(
         payload.backend_log_level, "WARNING"
     )
@@ -54,6 +54,26 @@ def _update_global_settings(
     global_settings.auth_url_targets = payload.auth_url_targets
     global_settings.url_check_urls = payload.url_check_urls
     global_settings.network_check_timeout = payload.network_check_timeout
+
+    # 浏览器配置
+    global_settings.browser_channel = payload.browser_channel
+    global_settings.browser_custom_path = payload.browser_custom_path.strip()
+    global_settings.headless = payload.headless
+    global_settings.browser_timeout = payload.browser_timeout
+    global_settings.browser_navigation_timeout = payload.browser_navigation_timeout
+    global_settings.login_timeout = payload.login_timeout
+    global_settings.browser_user_agent = payload.browser_user_agent
+    global_settings.browser_low_resource_mode = payload.browser_low_resource_mode
+    global_settings.browser_disable_web_security = payload.browser_disable_web_security
+    global_settings.browser_extra_headers_json = payload.browser_extra_headers_json
+    global_settings.browser_args = payload.browser_args
+    global_settings.stealth_mode = payload.stealth_mode
+    global_settings.stealth_custom_script = payload.stealth_custom_script
+    global_settings.browser_locale = payload.browser_locale
+    global_settings.browser_timezone = payload.browser_timezone
+    global_settings.browser_viewport_width = payload.browser_viewport_width
+    global_settings.browser_viewport_height = payload.browser_viewport_height
+    global_settings.pure_mode = payload.pure_mode
 
     # 自定义变量
     global_settings.custom_variables = payload.custom_variables
