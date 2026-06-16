@@ -2,39 +2,51 @@
 
 ## v4.0.4
 
+### 新增功能
+
+- **多浏览器支持**：新增 Edge、Chrome、Firefox、自定义路径等浏览器选项，不再局限于 Playwright Chromium
+  - 浏览器注册表：自动检测系统已安装的浏览器（Edge、Chrome、Firefox）
+  - 浏览器选择 UI：向导页面和设置页面支持浏览器卡片选择
+  - Firefox 兼容性警告：选择 Firefox 时提示可能不支持部分功能
+  - 自定义路径：支持手动指定浏览器可执行文件路径
+  - 自动保存：切换浏览器时自动触发配置保存
+- **配置自动保存**：所有配置项变更后自动保存，无需手动点击
+  - 防抖机制：输入框 500ms 防抖，避免频繁保存
+  - 脏值检测：仅在配置实际变更时保存
+  - 保存状态栏：显示保存中/已保存/保存失败状态
+- **Playwright 后台下载**：下载过程不阻塞 UI，卡片显示"下载中..."状态
+- **通知分类系统**：新增 install 分类，下载和安装相关通知显示下载图标
+
 ### 优化
 
 - 代码审查问题修复：修复 43 个确认问题（8 Critical + 23 Major + 12 Minor）
-- 浏览器选择自动保存：切换浏览器时自动触发保存
-- Playwright 后台下载：下载过程不阻塞 UI，卡片显示下载状态
-- 通知分类优化：添加 install 分类（下载图标+安装标签）
-- 保存按钮主题化：支持 light/dark 主题，状态联动文字
-- 卸载弹窗修复：Teleport 到 body 避免 transform 破坏 fixed 定位
+- 保存按钮主题化：支持 light/dark 主题，状态联动文字（立即保存/已保存/保存失败）
+- 卸载弹窗修复：使用 Teleport 渲染到 body 层，避免 transform 破坏 fixed 定位
 - 向导页面宽度增加：从 600px 增加到 760px
-- 目录结构调整：tools 移至 res/tools
-- 启动脚本优化：移除自动下载 Playwright 步骤
+- 目录结构调整：tools 移至 res/tools，便于后续扩展
+- 启动脚本优化：移除自动下载 Playwright 步骤，改为应用内按需下载
+- Chromium 检测逻辑统一：提取公共函数，消除重复代码
+- 浏览器检测缓存：`detect_browsers()` 添加 30 秒 TTL 缓存
+- Firefox 检测增强：补充 Windows `LOCALAPPDATA` 路径检测
 
 ### 修复
 
-- 修复 Chromium 检测逻辑重复
-- 修复 `ensure_task_pool` 懒初始化无锁保护
+- 修复 `ensure_task_pool` 懒初始化无锁保护（双检锁）
 - 修复轻量模式创建真正的 TaskExecutor 而非 NullTaskExecutor
-- 修复 `install_playwright` 布尔变量并发保护
-- 修复 `resolve_for_js` 双重编码
-- 修复变量解析缓存未绑定上下文
+- 修复 `install_playwright` 布尔变量并发保护（改用 asyncio.Lock）
+- 修复 `resolve_for_js` 双重编码（统一 str() 转换）
+- 修复变量解析缓存未绑定上下文（版本号机制）
 - 修复 `run_all` 锁外访问共享 `_session` 竞态
 - 修复超时监控器无锁读取 `_last_activity`
 - 修复 `submit_nowait` 缺少队列满处理和事件循环唤醒
-- 修复 `cleanup_orphan_browsers` 只清理 Chromium
-- 修复 `get_worker()` 锁内耗时操作
+- 修复 `cleanup_orphan_browsers` 只清理 Chromium（扩展支持 Firefox）
+- 修复 `get_worker()` 锁内耗时操作（赋值移到 start 成功后）
 - 修复 `_handle_debug_stop` 反检测脚本行为不一致
 - 修复 `ensure_playwright_ready` 修改全局 `os.environ` 无回滚
-- 修复 Firefox 检测缺少 `LOCALAPPDATA` 路径
-- 修复 `detect_browsers()` 无缓存
 - 修复手动登录路径污染自动重试计数
-- 修复 `shutdown` 绕过 Actor 模型
-- 修复 `execute_login_async` 去重返回旧 Future
-- 修复 `_get_script_path` 路径推断脆弱
+- 修复 `shutdown` 绕过 Actor 模型（使用局部引用）
+- 修复 `execute_login_async` 去重返回旧 Future（cancel_event 联动）
+- 修复 `_get_script_path` 路径推断脆弱（委托 TaskRegistry）
 - 修复 `_update_global_settings` 遗漏 `lightweight_tray`
 - 修复 `_build_config_payload` 遗漏 `lightweight_tray`
 - 修复密码处理绕过 `save_password_field`
@@ -46,13 +58,13 @@
 - 修复 `run_all` 与 `next_step` 并发保护不一致
 - 修复 `start` 方法锁内执行耗时操作
 - 修复自定义浏览器交互逻辑错误
-- 修复 `installPlaywrightChromium` 无超时保护
-- 修复 STEALTH_INIT_SCRIPT 的 delete 可能无效
+- 修复 `installPlaywrightChromium` 无超时保护（10 分钟超时）
+- 修复 STEALTH_INIT_SCRIPT 的 delete 可能无效（改用 Object.defineProperty）
 - 修复 `consume_profile_switch_flag` 注释错误
 - 修复 `get_default_shell` 非 Windows 回退路径未验证
 - 修复 `save_password_field` 掩码判断仅检查前缀
-- 修复 `_extract_script_metadata` 不支持多行 docstring
-- 修复 `_SystemFieldsMixin` 和 `GlobalSettings` 字段重复定义
+- 修复 `_extract_script_metadata` 不支持多行 docstring（使用 ast.get_docstring）
+- 修复 `_SystemFieldsMixin` 和 `GlobalSettings` 字段重复定义（提取共享 mixin）
 
 ## v4.0.3
 
