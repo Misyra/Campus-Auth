@@ -2,21 +2,42 @@
 
 ## 2026-06-16
 
-### feat
-- 多浏览器支持功能完成
-  - `app/schemas.py` GlobalSettings 新增 `browser_channel` 和 `browser_custom_path` 字段
-  - `app/utils/browser_registry.py` 新增浏览器注册表，检测系统已安装的 5 种浏览器选项
-  - `app/api/browsers.py` 新增 GET /api/browsers 端点
-  - `app/services/config_service.py` build_runtime_config 传递新字段
-  - `app/workers/playwright_worker.py` _start_browser 支持根据 channel 启动不同浏览器
-  - `app/workers/playwright_bootstrap.py` ensure_playwright_ready 根据 channel 按需下载
-  - `frontend/partials/wizard.html` 向导新增浏览器选择步骤（第 4 步）
-  - `frontend/partials/pages/settings/settings-browser.html` 设置页添加浏览器选择
+### fix
+- 修复浏览器配置无法保存的问题
+  - `app/schemas.py` MonitorConfigPayload 添加浏览器配置字段（headless、browser_channel 等）
+  - `app/services/config_service.py` _update_global_settings 添加浏览器配置更新逻辑
+  - `app/services/runtime_config.py` _build_config_payload 添加 browser_channel 和 browser_custom_path 字段
 
-### test
-- `tests/test_utils/test_browser_registry.py` 浏览器注册表测试（3 个用例）
-- `tests/test_api/test_browsers.py` 浏览器 API 端点测试（5 个用例）
-- `tests/test_integration/test_multi_browser.py` 多浏览器集成测试（4 个用例）
+### fix
+- 修复手动登录 skip_pause_check 参数未传递的问题
+  - `app/services/engine.py` _handle_login 和 _do_async_login 传递 skip_pause_check
+  - `app/services/task_executor.py` execute_login_async 和 execute_login 传递 skip_pause_check
+
+### fix
+- 修复浏览器未正确关闭的问题
+  - `app/utils/browser.py` __aexit__ 改用 CMD_BROWSER_CLOSE 关闭浏览器
+
+### refactor
+- 删除浏览器复用逻辑，ensure_browser 每次都重新启动浏览器
+  - `app/workers/playwright_worker.py` ensure_browser 简化为直接关闭并重启
+
+### feat
+- 优化浏览器选择 UI，使用 SVG 图标和更好的样式
+  - `app/utils/browser_registry.py` 更新浏览器图标为 SVG
+  - `frontend/partials/pages/settings/settings-browser.html` 优化卡片布局和状态显示
+  - `frontend/partials/wizard.html` 同步更新向导页面样式
+  - `frontend/styles/pages/settings.css` 添加浏览器选择相关样式
+
+### fix
+- 修复 Chrome 检测逻辑，添加 Windows 标准安装路径检测
+  - `app/utils/browser_registry.py` 检查 Program Files 下的 Chrome 路径
+
+### feat
+- 恢复自定义路径选项，添加 Playwright 兼容性说明
+  - `app/utils/browser_registry.py` 恢复 _detect_custom 函数
+  - `frontend/partials/pages/settings/settings-browser.html` 添加自定义路径输入和说明链接
+  - `frontend/partials/wizard.html` 同步更新向导页面
+  - `frontend/styles/pages/settings.css` 添加自定义路径提示样式
 
 ## 2026-06-16
 
