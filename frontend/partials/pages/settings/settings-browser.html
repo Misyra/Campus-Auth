@@ -1,4 +1,49 @@
 <div v-if="currentSettingsTab === 'browser'" class="settings-panel-grid">
+  <!-- 浏览器选择 -->
+  <section class="card settings-panel">
+    <div class="card-header">
+      <h2>浏览器类型</h2>
+    </div>
+    <div class="card-body">
+      <p class="form-help-text">选择用于自动登录的浏览器</p>
+
+      <div class="browser-selection">
+        <div v-if="browserLoading" class="loading">正在检测浏览器...</div>
+
+        <div v-else class="browser-cards">
+          <div
+            v-for="browser in availableBrowsers"
+            :key="browser.channel"
+            class="browser-card"
+            :class="{ active: config.browser_channel === browser.channel }"
+            @click="selectBrowser(browser.channel)"
+          >
+            <div class="browser-icon">{{ browser.icon }}</div>
+            <div class="browser-info">
+              <div class="browser-name">{{ browser.name }}</div>
+              <div class="browser-status">
+                <span v-if="browser.installed" class="status-installed">✅ 已安装</span>
+                <span v-else-if="browser.needs_download" class="status-download">⬇️ 需下载</span>
+                <span v-else class="status-unavailable">❌ 不可用</span>
+              </div>
+              <div class="browser-desc">{{ browser.description }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 自定义路径输入 -->
+        <div v-if="config.browser_channel === 'custom'" class="custom-path-section">
+          <label>浏览器可执行文件路径</label>
+          <input
+            type="text"
+            v-model="config.browser_custom_path"
+            placeholder="例如: C:\Program Files\Browser\browser.exe"
+          />
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="card settings-panel">
     <div class="card-header">
       <h2>基本设置</h2>
