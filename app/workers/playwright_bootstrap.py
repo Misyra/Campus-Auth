@@ -57,11 +57,16 @@ def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
 def _get_browser_channel() -> str:
     """从配置文件读取 browser_channel。"""
     try:
-        from app.services.profile_service import profile_service
+        import json
 
-        profile_data = profile_service.load()
-        if profile_data and profile_data.global_settings:
-            return profile_data.global_settings.browser_channel
+        from app.constants import PROJECT_ROOT
+
+        settings_path = PROJECT_ROOT / "config" / "settings.json"
+        if settings_path.exists():
+            with open(settings_path, encoding="utf-8") as f:
+                data = json.load(f)
+            channel = data.get("global_settings", {}).get("browser_channel", "playwright")
+            return channel
     except Exception:
         logger.debug("读取 browser_channel 配置失败", exc_info=True)
     return "playwright"  # 默认值
