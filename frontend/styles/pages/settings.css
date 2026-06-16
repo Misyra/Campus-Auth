@@ -800,9 +800,10 @@
   justify-content: center;
 }
 
-.browser-icon svg {
+.browser-icon img {
   width: 100%;
   height: 100%;
+  object-fit: contain;
 }
 
 .browser-info {
