@@ -23,6 +23,7 @@
           type="text"
           placeholder="学号/账号"
           autocomplete="username"
+          @input="onConfigChange('username', config.username, 'input')"
         />
       </div>
       <div class="form-group">
@@ -35,6 +36,7 @@
           :placeholder="config.password && config.password.startsWith('•') ? '密码已加密保存，清空后输入新密码' : '输入密码'"
           autocomplete="current-password"
           @focus="$event.target.select()"
+          @input="onConfigChange('password', config.password, 'input')"
         />
         <span class="hint">密码不会随配置切换导出，仅在本机生效</span>
         <span class="hint">密码本地存储，不保证意外删除后可恢复</span>
@@ -54,6 +56,7 @@
           v-model.trim="config.auth_url"
           type="text"
           placeholder="http://"
+          @input="onConfigChange('auth_url', config.auth_url, 'input')"
         />
       </div>
       <div class="form-group">
@@ -66,7 +69,7 @@
             data-tip="校园网登录页面的运营商选择。选择&quot;无&quot;则跳过运营商步骤；选择&quot;自定义&quot;可输入关键字匹配登录页面的运营商列表，适用于非标准运营商名称。"
           >?</span>
         </div>
-        <custom-select v-model="config.carrier" :options="carrierOptions"></custom-select>
+        <custom-select v-model="config.carrier" :options="carrierOptions" @change="(val) => onConfigChange('carrier', val, 'toggle')"></custom-select>
       </div>
       <div v-if="config.carrier === '自定义'" class="form-group">
         <label for="settings-carrier-custom">自定义运营商关键字</label>
@@ -76,6 +79,7 @@
           name="carrier_custom"
           type="text"
           placeholder="例如：校园专网、宿舍网、移动(新)"
+          @input="onConfigChange('carrier_custom', config.carrier_custom, 'input')"
         />
       </div>
     </div>
@@ -114,6 +118,7 @@
               type="text"
               v-model="config.custom_variables[key]"
               placeholder="变量值"
+              @input="onConfigChange('custom_variables', config.custom_variables, 'input')"
             />
           </div>
           <button type="button" class="btn btn-icon-only btn-danger btn-delete-var" @click="removeCustomVar(key)" title="删除">

@@ -97,6 +97,7 @@
             type="text"
             v-model="config.browser_custom_path"
             placeholder="例如: C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
+            @input="onConfigChange('browser_custom_path', config.browser_custom_path, 'input')"
           />
           <span class="hint">
             需要使用支持 Playwright 的浏览器二进制文件。
@@ -118,20 +119,20 @@
             <label for="settings-browser-timeout">页面操作超时（秒）</label>
             <span class="field-help" tabindex="0" role="note" data-tip="任务执行时每个浏览器步骤（点击、输入、等待元素加载等）的最长等待时间。超时则该步骤失败，不影响整体登录流程的其他步骤。">?</span>
           </div>
-          <input id="settings-browser-timeout" v-model.number="config.browser_timeout" type="number" min="1" max="60" />
+          <input id="settings-browser-timeout" v-model.number="config.browser_timeout" type="number" min="1" max="60" @input="onConfigChange('browser_timeout', config.browser_timeout, 'input')" />
         </div>
         <div class="form-group">
           <div class="field-label-row">
             <label for="settings-browser-navigation-timeout">打开登录页面超时（秒）</label>
             <span class="field-help" tabindex="0" role="note" data-tip="自动导航到登录页面的超时时间。校园网 DNS 劫持/重定向链较长时可适当调大。">?</span>
           </div>
-          <input id="settings-browser-navigation-timeout" v-model.number="config.browser_navigation_timeout" type="number" min="3" max="60" />
+          <input id="settings-browser-navigation-timeout" v-model.number="config.browser_navigation_timeout" type="number" min="3" max="60" @input="onConfigChange('browser_navigation_timeout', config.browser_navigation_timeout, 'input')" />
         </div>
       </div>
       <div class="toggle-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
-            <input type="checkbox" v-model="config.headless" />
+            <input type="checkbox" v-model="config.headless" @change="onConfigChange('headless', config.headless, 'toggle')" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">无头浏览器模式</span>
             <span class="field-help" tabindex="0" role="note" data-tip="开启后浏览器在后台运行，不显示窗口。关闭可观察浏览器操作过程，便于调试登录问题。">?</span>
@@ -141,7 +142,7 @@
       <div class="toggle-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
-            <input type="checkbox" v-model="config.browser_low_resource_mode" />
+            <input type="checkbox" v-model="config.browser_low_resource_mode" @change="onConfigChange('browser_low_resource_mode', config.browser_low_resource_mode, 'toggle')" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">低资源模式（禁用图片）</span>
             <span class="field-help" tabindex="0" role="note" data-tip="拦截页面中的图片资源请求，减少带宽消耗和内存占用。对登录流程无影响，建议保持开启。">?</span>
@@ -154,14 +155,14 @@
             <label for="settings-browser-locale">浏览器语言（Locale）</label>
             <span class="field-help" tabindex="0" role="note" data-tip="设置浏览器语言，用于 Playwright 浏览器上下文的 locale 参数。部分认证页面会根据语言显示不同内容。默认为 zh-CN。">?</span>
           </div>
-          <input id="settings-browser-locale" v-model.trim="config.browser_locale" type="text" placeholder="zh-CN" />
+          <input id="settings-browser-locale" v-model.trim="config.browser_locale" type="text" placeholder="zh-CN" @input="onConfigChange('browser_locale', config.browser_locale, 'input')" />
         </div>
         <div class="form-group">
           <div class="field-label-row">
             <label for="settings-browser-timezone">浏览器时区（Timezone）</label>
             <span class="field-help" tabindex="0" role="note" data-tip="设置浏览器时区，用于 Playwright 浏览器上下文的 timezone_id 参数。部分认证系统会检测时区设置。默认为 Asia/Shanghai。">?</span>
           </div>
-          <input id="settings-browser-timezone" v-model.trim="config.browser_timezone" type="text" placeholder="Asia/Shanghai" />
+          <input id="settings-browser-timezone" v-model.trim="config.browser_timezone" type="text" placeholder="Asia/Shanghai" @input="onConfigChange('browser_timezone', config.browser_timezone, 'input')" />
         </div>
       </div>
     </div>
@@ -175,7 +176,7 @@
       <div class="toggle-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
-            <input type="checkbox" v-model="config.browser_disable_web_security" />
+            <input type="checkbox" v-model="config.browser_disable_web_security" @change="onConfigChange('browser_disable_web_security', config.browser_disable_web_security, 'toggle')" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">禁用同源策略</span>
             <span class="field-help" tabindex="0" role="note" data-tip="关闭浏览器的同源安全策略（CORS）。仅在认证页面因跨域请求被拦截而登录失败时才需要启用，一般情况请保持关闭。">?</span>
@@ -185,7 +186,7 @@
       <div class="toggle-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
-            <input type="checkbox" v-model="config.stealth_mode" />
+            <input type="checkbox" v-model="config.stealth_mode" @change="onConfigChange('stealth_mode', config.stealth_mode, 'toggle')" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">反检测模式</span>
             <span class="field-help" tabindex="0" role="note" data-tip="注入脚本隐藏浏览器自动化痕迹（navigator.webdriver、plugins 等）。部分认证页面可能因此脚本而显示异常，一般请保持关闭。">?</span>
@@ -211,6 +212,7 @@
           rows="10"
           placeholder="留空使用内置默认脚本..."
           style="font-family: monospace; font-size: 12px; resize: vertical;"
+          @input="onConfigChange('stealth_custom_script', config.stealth_custom_script, 'input')"
         ></textarea>
       </div>
     </div>
@@ -224,7 +226,7 @@
       <div class="toggle-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
-            <input type="checkbox" v-model="pureMode" @change="togglePureMode()" />
+            <input type="checkbox" v-model="pureMode" @change="togglePureMode(); onConfigChange('pure_mode', pureMode, 'toggle')" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">纯净模式</span>
             <span class="field-help" tabindex="0" role="note" data-tip="使用 Chromium 原始设置启动浏览器，不注入任何自定义参数（UA、请求头、启动参数等）。适用于认证系统检测浏览器指纹的场景，可降低被识别为自动化工具的风险。">?</span>
@@ -246,12 +248,12 @@
           <div class="viewport-input-row">
             <div class="viewport-input-group">
               <label for="settings-vp-w" class="viewport-label">宽</label>
-              <input id="settings-vp-w" v-model.number="config.browser_viewport_width" type="number" min="320" max="3840" class="viewport-input" />
+              <input id="settings-vp-w" v-model.number="config.browser_viewport_width" type="number" min="320" max="3840" class="viewport-input" @input="onConfigChange('browser_viewport_width', config.browser_viewport_width, 'input')" />
             </div>
             <span class="viewport-separator">×</span>
             <div class="viewport-input-group">
               <label for="settings-vp-h" class="viewport-label">高</label>
-              <input id="settings-vp-h" v-model.number="config.browser_viewport_height" type="number" min="240" max="2160" class="viewport-input" />
+              <input id="settings-vp-h" v-model.number="config.browser_viewport_height" type="number" min="240" max="2160" class="viewport-input" @input="onConfigChange('browser_viewport_height', config.browser_viewport_height, 'input')" />
             </div>
           </div>
         </div>
@@ -272,6 +274,7 @@
             rows="4"
             spellcheck="false"
             placeholder="--disable-blink-features=AutomationControlled&#10;--disable-software-rasterizer&#10;--disable-extensions"
+            @input="onConfigChange('browser_args', config.browser_args, 'input')"
           ></textarea>
           <span class="hint">每行一个参数。如果登录时被识别为自动化工具或页面无法正常加载，可点击「加载推荐参数」尝试。</span>
         </div>
@@ -280,7 +283,7 @@
             <label for="settings-browser-ua">用户代理</label>
             <span class="field-help" tabindex="0" role="note" data-tip="浏览器的 User-Agent 字符串。留空使用 Chromium 默认值，仅在认证系统对 UA 有特殊要求时再修改。">?</span>
           </div>
-          <input id="settings-browser-ua" v-model.trim="config.browser_user_agent" type="text" placeholder="留空使用 Chromium 默认值" />
+          <input id="settings-browser-ua" v-model.trim="config.browser_user_agent" type="text" placeholder="留空使用 Chromium 默认值" @input="onConfigChange('browser_user_agent', config.browser_user_agent, 'input')" />
         </div>
         <div class="form-group">
           <div class="field-label-row">
@@ -293,6 +296,7 @@
             rows="4"
             spellcheck="false"
             placeholder='{"Referer":"http://..."}'
+            @input="onConfigChange('browser_extra_headers_json', config.browser_extra_headers_json, 'input')"
           ></textarea>
         </div>
       </template>
