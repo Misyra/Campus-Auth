@@ -310,6 +310,8 @@ export const appOptions = {
     if (this._toastTimer) clearTimeout(this._toastTimer);
     if (this._toastLeavingTimer) clearTimeout(this._toastLeavingTimer);
     if (this._appearanceTimer) clearTimeout(this._appearanceTimer);
+    if (this._saveConfigTimer) clearTimeout(this._saveConfigTimer);
+    if (this._saveAbortController) this._saveAbortController.abort();
     if (this._logScrollRaf) cancelAnimationFrame(this._logScrollRaf);
     this.timers.forEach((t) => clearInterval(t));
     if (this._visibilityHandler) {
