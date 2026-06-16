@@ -851,4 +851,23 @@
   color: var(--accent, #22d3ee);
 }
 
+.browser-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius-md, 6px);
+  color: var(--warning, #f59e0b);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.browser-warning svg {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
 

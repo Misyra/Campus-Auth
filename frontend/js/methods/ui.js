@@ -123,7 +123,12 @@ export const uiMethods = {
   // 处理浏览器点击
   handleBrowserClick(browser) {
     if (browser.installed) {
-      // 已安装，直接选择
+      // Firefox 兼容性警告
+      if (browser.channel === 'firefox') {
+        if (!confirm('Firefox 可能不支持部分功能（如反检测模式、自定义浏览器参数等）。\n\n建议使用 Chromium 内核浏览器（Playwright Chromium、Edge、Chrome）。\n\n确定要使用 Firefox 吗？')) {
+          return;
+        }
+      }
       this.selectBrowser(browser.channel);
     } else if (browser.channel === 'playwright') {
       // Playwright Chromium 未安装，提示自动下载

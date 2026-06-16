@@ -2,6 +2,17 @@
 
 ## 2026-06-16
 
+### feat
+- 添加 Firefox 兼容性警告提示
+  - `frontend/partials/pages/settings/settings-browser.html` 浏览器卡片区域添加 Firefox 兼容性警告
+  - `frontend/partials/wizard.html` 向导页面浏览器选择区域添加相同警告
+  - `frontend/styles/pages/settings.css` 添加 `.browser-warning` 警告样式
+  - `frontend/js/methods/ui.js` `handleBrowserClick` 方法添加 Firefox 选择前的确认弹窗
+
+### fix
+- DEFAULT_CONFIG 添加 browser_channel 和 browser_custom_path 字段
+  - `frontend/js/constants.js` `_SHARED_DEFAULTS` 中在 `headless: true` 之前添加 `browser_channel: "playwright"` 和 `browser_custom_path: ""`
+
 ### fix
 - Playwright Chromium 检测添加 .local-browsers 备用路径
   - `app/utils/browser_registry.py` `_has_playwright_chromium` 通过 `importlib.util.find_spec` 定位 playwright 包内的 `.local-browsers` 目录

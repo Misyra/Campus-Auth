@@ -49,6 +49,16 @@
           </div>
         </div>
 
+        <!-- Firefox 兼容性警告 -->
+        <div v-if="config.browser_channel === 'firefox'" class="browser-warning">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <span>Firefox 可能不支持部分功能（如反检测模式、自定义浏览器参数等），建议使用 Chromium 内核浏览器</span>
+        </div>
+
         <!-- 自定义路径输入 -->
         <div v-if="config.browser_channel === 'custom'" class="form-group">
           <label for="settings-browser-custom-path">浏览器可执行文件路径</label>
