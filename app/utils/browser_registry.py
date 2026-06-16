@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,7 +37,6 @@ def detect_browsers() -> list[BrowserInfo]:
         _detect_edge(),
         _detect_chrome(),
         _detect_firefox(),
-        _detect_custom(),
     ]
     return browsers
 
@@ -77,6 +77,18 @@ def _detect_chrome() -> BrowserInfo:
     installed = _check_command_exists("google-chrome") or _check_command_exists("chrome")
     if PLATFORM == "darwin":
         installed = Path("/Applications/Google Chrome.app").exists()
+    elif PLATFORM == "windows":
+        # 检查 Windows 标准安装路径
+        program_files = [
+            Path(os.environ.get("PROGRAMFILES", "C:\\Program Files")),
+            Path(os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)")),
+            Path(os.environ.get("LOCALAPPDATA", "")),
+        ]
+        for base in program_files:
+            chrome_path = base / "Google" / "Chrome" / "Application" / "chrome.exe"
+            if chrome_path.exists():
+                installed = True
+                break
     return BrowserInfo(
         channel="chrome",
         name="Google Chrome",
@@ -99,18 +111,6 @@ def _detect_firefox() -> BrowserInfo:
         installed=installed,
         needs_download=not installed,
         description="系统浏览器，无需下载" if installed else "需下载 Firefox 驱动"
-    )
-
-
-def _detect_custom() -> BrowserInfo:
-    """自定义路径选项（不检测，由用户自行确保）。"""
-    return BrowserInfo(
-        channel="custom",
-        name="自定义路径",
-        icon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>',
-        installed=True,  # 始终可用，由用户自行确保路径有效
-        needs_download=False,
-        description="手动指定浏览器可执行文件路径"
     )
 
 
