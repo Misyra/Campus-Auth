@@ -204,49 +204,97 @@
         <div class="browser-selection">
           <div v-if="browserLoading" class="loading">正在检测浏览器...</div>
 
-          <div v-else class="browser-cards">
-            <div
-              v-for="browser in availableBrowsers"
-              :key="browser.channel"
-              class="browser-card"
-              :class="{ active: selectedBrowser === browser.channel, disabled: !browser.installed }"
-              @click="handleBrowserClick(browser)"
-            >
-              <div class="browser-icon">
-                <img :src="browser.icon" :alt="browser.name" width="32" height="32" />
+          <div v-else>
+            <!-- 推荐浏览器：Playwright Chromium -->
+            <div class="browser-section">
+              <div class="browser-section-title">
+                <span class="recommend-badge">推荐</span>
+                兼容性最好
               </div>
-              <div class="browser-info">
-                <div class="browser-name">{{ browser.name }}</div>
-                <div class="browser-status">
-                  <span v-if="browser.channel === 'custom'" class="status-custom">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                      <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                      <path d="M2 17l10 5 10-5"/>
-                      <path d="M2 12l10 5 10-5"/>
-                    </svg>
-                    自定义路径
-                  </span>
-                  <span v-else-if="browser.installed" class="status-installed">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <div
+                class="browser-card recommended"
+                :class="{ active: selectedBrowser === 'playwright', disabled: !isBrowserInstalled('playwright') }"
+                @click="handleBrowserClick(getBrowser('playwright'))"
+              >
+                <div class="browser-icon">
+                  <img :src="getBrowserIcon('playwright')" alt="Playwright Chromium" width="40" height="40" />
+                </div>
+                <div class="browser-info">
+                  <div class="browser-name">Playwright Chromium</div>
+                  <div class="browser-status">
+                    <span v-if="isBrowserInstalled('playwright')" class="status-installed">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      已安装
+                    </span>
+                    <span v-else class="status-not-installed">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                      </svg>
+                      点击下载
+                    </span>
+                  </div>
+                  <div class="browser-desc">内置浏览器，支持所有功能</div>
+                </div>
+                <div v-if="selectedBrowser === 'playwright'" class="browser-check">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <!-- 其他浏览器 -->
+            <div class="browser-section">
+              <div class="browser-section-title">系统浏览器</div>
+              <div class="browser-cards-grid">
+                <div
+                  v-for="browser in getOtherBrowsers()"
+                  :key="browser.channel"
+                  class="browser-card"
+                  :class="{ active: selectedBrowser === browser.channel, disabled: !browser.installed }"
+                  @click="handleBrowserClick(browser)"
+                >
+                  <div class="browser-icon">
+                    <img :src="browser.icon" :alt="browser.name" width="32" height="32" />
+                  </div>
+                  <div class="browser-info">
+                    <div class="browser-name">{{ browser.name }}</div>
+                    <div class="browser-status">
+                      <span v-if="browser.channel === 'custom'" class="status-custom">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                          <path d="M2 17l10 5 10-5"/>
+                          <path d="M2 12l10 5 10-5"/>
+                        </svg>
+                        自定义路径
+                      </span>
+                      <span v-else-if="browser.installed" class="status-installed">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        已安装
+                      </span>
+                      <span v-else class="status-not-installed">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                          <polyline points="7 10 12 15 17 10"/>
+                          <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        未安装
+                      </span>
+                    </div>
+                    <div class="browser-desc">{{ browser.description }}</div>
+                  </div>
+                  <div v-if="selectedBrowser === browser.channel" class="browser-check">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                       <polyline points="20 6 9 17 4 12"/>
                     </svg>
-                    已安装
-                  </span>
-                  <span v-else class="status-not-installed">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                      <polyline points="7 10 12 15 17 10"/>
-                      <line x1="12" y1="15" x2="12" y2="3"/>
-                    </svg>
-                    未安装
-                  </span>
+                  </div>
                 </div>
-                <div class="browser-desc">{{ browser.description }}</div>
-              </div>
-              <div v-if="selectedBrowser === browser.channel" class="browser-check">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
               </div>
             </div>
           </div>
@@ -285,7 +333,7 @@
           </div>
 
           <!-- 自定义路径输入 -->
-          <div v-if="selectedBrowser === 'custom'" class="form-group">
+          <div v-if="selectedBrowser === 'custom'" class="form-group" style="margin-top: 1rem;">
             <label for="wizard-browser-custom-path">浏览器可执行文件路径</label>
             <input
               id="wizard-browser-custom-path"
@@ -297,6 +345,16 @@
               需要使用支持 Playwright 的浏览器二进制文件。
               <a href="https://playwright.dev/docs/browsers#chromium" target="_blank" rel="noopener">查看支持的浏览器要求 →</a>
             </span>
+          </div>
+
+          <!-- 未选择提示 -->
+          <div v-if="!selectedBrowser" class="browser-select-hint">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <span>请选择一个浏览器才能继续</span>
           </div>
         </div>
       </div>
