@@ -118,14 +118,8 @@ echo "使用 uv: $UV_CMD"
 
 cd "$PROJECT_ROOT"
 
-echo "[1/3] 安装依赖..."
+echo "[1/2] 安装依赖..."
 $UV_CMD sync
-
-echo "[2/3] 安装 Playwright Chromium..."
-$UV_CMD run playwright install chromium || {
-    echo "[!] Playwright 安装失败，如已安装可忽略"
-    echo "    手动运行: uv run playwright install chromium"
-}
 
 # 检查 --install-only 参数
 for arg in "$@"; do
@@ -135,5 +129,5 @@ for arg in "$@"; do
     fi
 done
 
-echo "[3/3] 启动 Campus-Auth..."
+echo "[2/2] 启动 Campus-Auth..."
 exec "$UV_CMD" run main.py --browser "$@"
