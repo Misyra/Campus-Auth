@@ -14,7 +14,29 @@
 - **不要删除 console.log** — 仅本地运行，开发者工具需用户主动打开
 - **不要替换 CSS color-mix()** — 2023 年起主流浏览器已全面 GA
 - **不要给 repo_proxy 加 SSRF 防护** — 用户需手动输入恶意 URL，已限制 https?:// 协议
+- **不要脱敏 repo_proxy 的错误信息** — 本地单用户，详细错误信息帮助排查；用户自己配置的 URL
+- **不要给 `_is_auth_url_reachable` 拆分独立线程池** — 网络探测每 300 秒一次，登录前检查仅一次，同时跑满 3 worker 概率极低，都有超时保护
+- **不要给 `run_script` 端点加并发限制** — 单用户桌面应用，前端无批量执行功能，不可能并发大量请求
+- **不要给 PID 宽限期加进程名校验** — PID 复用 × 创建时间 1 秒巧合 × 30 秒宽限期同时满足的概率几乎为零，桌面应用启动一次就跑着
+- **不要从 `_build_minimal_env` 移除 APPDATA/LOCALAPPDATA/USERPROFILE** — 用户自己写的脚本已有完整系统权限，这些变量是解释器和包管理器正常工作必需的
+- **不要脱敏 browsers.py 的异常信息** — 与 repo_proxy 同理，本地单用户，详细错误帮助排查
+- **不要给 SVG 图标加路径遍历防护** — localhost 访问，`.svg` 扩展名已限制，`startswith` 足够
+- **不要给异步 ShellCommandPolicy.run 加 kwargs 白名单** — 用户自己写的脚本，与 `run_sync` 的白名单一致即可
+- **不要给 ShellCommandPolicy 加路径规范化** — `shutil.which` 返回的已是规范路径，单用户场景
+- **不要给临时文件删除加告警** — 用户自己的脚本，desktop app
+- **不要给 browser_args 加黑名单过滤** — 用户自己配置的启动参数
+- **不要给 `_execute_shell` 的 command 做消毒** — 用户自己写的 shell 命令，桌面应用场景
+- **不要给 /debug /temp 静态目录加认证** — localhost 访问，单用户桌面应用
+- **不要给 `is_local_port_in_use` 加 IPv6 检测** — 纯 IPv6 环境几乎不存在，校园网场景必有 IPv4
+- **不要处理 `cancel_futures` 的 Python 3.8 兼容性** — 项目最低要求 Python 3.10，默认 3.12
+- **不要优化 `delete_profile` 后的方案切换逻辑** — `next(iter())` 取第一个方案即可，方案数量少，用户可手动切换
+- **不要给 `ProfileService._load_unsafe` 加文件修改时间检查** — 正常使用通过 UI/API 修改配置，不会在运行时手动改 settings.json
+- **不要脱敏启动日志中的 username/auth_url** — 本地单用户桌面应用，日志文件在本地，用户自己配置的值
 - **不要给脚本执行加沙箱** — 用户自己写的脚本，增加复杂度无收益
+- **不要删除 script_runner 的白名单自动追加** — 白名单是已知解释器发现机制而非安全防线；自动追加是合理的降级策略，warning 已提示用户；若优化应改到前端保存时提示"该路径不在已知列表中，是否继续？"，后端只做路径存在性检查
+- **不要给 delete_task 加 _safe_subdir_path** — TASK_ID_PATTERN `^[A-Za-z][A-Za-z0-9_]*$` 已排除路径穿越字符，当前安全；单用户桌面应用场景
+- **不要改网络探测为"任一成功即返回 True"** — 当前"任一失败即返回 False"是故意设计的严格模式：宁可误报断网触发多余登录，不可漏报导致断网不处理；HTTP 200 可能是 portal 拦截页面
+- **不要改 `is_in_pause_period` 的默认 `enabled=True`** — 空配置默认启用暂停是故意设计，校园网凌晨 0-6 点一般不需要认证；文档字符串已说明
 - **不要校验 TaskConfig 的 URL scheme** — 任务文件由用户创建
 - **不要给 background_url 做 CSS 注入防护** — 用户自己设置的 URL
 

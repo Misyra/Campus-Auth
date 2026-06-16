@@ -3,6 +3,16 @@
 ## 2026-06-16
 
 ### fix
+- 修复配置服务 3 个问题（`app/services/config_service.py`、`app/services/runtime_config.py`、`app/schemas.py`）
+  - [26] `_update_global_settings` 补充 `lightweight_tray` 字段同步，将前端传来的值复制到 `global_settings`
+  - [27] `_build_config_payload` 补充 `lightweight_tray` 字段，从 `global_settings` 读取并合并到 payload
+  - [28] 密码处理简化为一行调用 `save_password_field`，委托给已有的密码处理函数处理所有场景（掩码、空值、ENC: 前缀、明文）
+  - `app/schemas.py` `_SystemFieldsMixin` 添加 `lightweight_tray` 字段定义，使 `MonitorConfigPayload` 能传递该字段
+
+### fix
+- `app/services/task_executor.py` `_link_cancel_event` 观看线程添加 300 秒超时，防止无限阻塞
+
+### fix
 - 修复 TaskExecutor 3 个问题（`app/services/task_executor.py`、`app/services/task_registry.py`）
   - [2] `_ensure_task_pool` 懒初始化添加双检锁（`_task_pool_lock`），防止多线程并发创建多个 BoundedExecutor
   - [22] `execute_login_async` 去重时联动新 `cancel_event` 到已有任务：新增 `_login_cancel_event` 存储已有任务的 cancel_event，去重时通过 `_link_cancel_event` 后台线程监控新事件并联动；`_on_login_done` 同步清理 `_login_cancel_event`

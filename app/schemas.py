@@ -180,6 +180,7 @@ class _SystemFieldsMixin(BaseModel):
     autostart_lightweight: bool = Field(
         default=True, description="自启动轻量模式：True=仅监控, False=完整模式(含Web)"
     )
+    lightweight_tray: bool = Field(default=True, description="轻量模式显示系统托盘")
     minimize_to_tray: bool = Field(default=True, description="最小化到系统托盘")
     auto_open_browser: bool = Field(default=False, description="启动后自动打开浏览器")
     max_retries: int = Field(default=3, ge=0, le=10)
