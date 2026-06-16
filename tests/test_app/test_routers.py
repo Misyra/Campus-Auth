@@ -34,7 +34,7 @@ def client(tmp_path):
     (tmp_path / "temp").mkdir(exist_ok=True)
     (tmp_path / "tasks" / "browser").mkdir(parents=True)
     (tmp_path / "tasks" / "scripts").mkdir(parents=True)
-    (tmp_path / "tools").mkdir(exist_ok=True)
+    (tmp_path / "res" / "tools").mkdir(parents=True)
     (tmp_path / "doc").mkdir(exist_ok=True)
     (tmp_path / "frontend" / "background").mkdir(parents=True)
 

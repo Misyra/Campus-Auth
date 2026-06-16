@@ -22,8 +22,8 @@ def client(tmp_path):
     """创建测试客户端，使用临时背景目录。"""
     bg_dir = tmp_path / "frontend" / "background"
     bg_dir.mkdir(parents=True, exist_ok=True)
-    tools_dir = tmp_path / "tools"
-    tools_dir.mkdir(exist_ok=True)
+    tools_dir = tmp_path / "res" / "tools"
+    tools_dir.mkdir(parents=True, exist_ok=True)
     docs_dir = tmp_path / "docs"
     docs_dir.mkdir(exist_ok=True)
 
@@ -161,7 +161,7 @@ class TestDownloadTaskRecorder:
     def test_download_when_exists(self, client):
         """脚本存在时成功下载。"""
         test_client, _, tmp_path = client
-        script_path = tmp_path / "tools" / "task-recorder.user.js"
+        script_path = tmp_path / "res" / "tools" / "task-recorder.user.js"
         script_path.write_text(
             "// ==UserScript==\nconsole.log('test');", encoding="utf-8"
         )
@@ -173,7 +173,7 @@ class TestDownloadTaskRecorder:
         """脚本不存在时返回 404。"""
         test_client, _, tmp_path = client
         # 确保 tools 目录为空
-        tools_dir = tmp_path / "tools"
+        tools_dir = tmp_path / "res" / "tools"
         for f in tools_dir.iterdir():
             f.unlink()
         resp = test_client.get("/api/tools/task-recorder.user.js")
