@@ -3,6 +3,24 @@
 ## 2026-06-16
 
 ### feat
+- 多浏览器支持功能完成
+  - `app/schemas.py` GlobalSettings 新增 `browser_channel` 和 `browser_custom_path` 字段
+  - `app/utils/browser_registry.py` 新增浏览器注册表，检测系统已安装的 5 种浏览器选项
+  - `app/api/browsers.py` 新增 GET /api/browsers 端点
+  - `app/services/config_service.py` build_runtime_config 传递新字段
+  - `app/workers/playwright_worker.py` _start_browser 支持根据 channel 启动不同浏览器
+  - `app/workers/playwright_bootstrap.py` ensure_playwright_ready 根据 channel 按需下载
+  - `frontend/partials/wizard.html` 向导新增浏览器选择步骤（第 4 步）
+  - `frontend/partials/pages/settings/settings-browser.html` 设置页添加浏览器选择
+
+### test
+- `tests/test_utils/test_browser_registry.py` 浏览器注册表测试（3 个用例）
+- `tests/test_api/test_browsers.py` 浏览器 API 端点测试（5 个用例）
+- `tests/test_integration/test_multi_browser.py` 多浏览器集成测试（4 个用例）
+
+## 2026-06-16
+
+### feat
 - `app/workers/playwright_worker.py` `_start_browser` 支持根据 `browser_channel` 启动不同浏览器
   - 新增 `_launch_browser` 辅助方法，根据 channel 分发到不同启动逻辑
   - 支持 5 种浏览器 channel：playwright（默认）、msedge、chrome、firefox、custom（自定义路径）
