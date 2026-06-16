@@ -249,6 +249,21 @@
             </div>
           </div>
 
+          <!-- 自定义路径输入 -->
+          <div v-if="selectedBrowser === 'custom'" class="custom-path-section">
+            <label>浏览器可执行文件路径</label>
+            <input
+              type="text"
+              v-model="config.browser_custom_path"
+              placeholder="例如: C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
+            />
+            <p class="custom-path-hint">
+              需要使用支持 Playwright 的浏览器二进制文件。
+              <a href="https://playwright.dev/docs/browsers#chromium" target="_blank" rel="noopener">
+                查看支持的浏览器要求 →
+              </a>
+            </p>
+          </div>
         </div>
       </div>
 
