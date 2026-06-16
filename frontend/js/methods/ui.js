@@ -152,20 +152,22 @@ export const uiMethods = {
   // 安装 Playwright Chromium
   async installPlaywrightChromium() {
     this.browserLoading = true;
+    this.notify(true, '正在下载 Playwright Chromium，请稍候...');
     try {
       const response = await fetch('/api/browsers/install-playwright', { method: 'POST' });
       const data = await response.json();
       if (data.success) {
         this.frontendLogger.info('browser', 'Playwright Chromium 安装成功');
+        this.notify(true, 'Playwright Chromium 安装成功！');
         // 重新加载浏览器列表
         await this.fetchBrowsers();
       } else {
         this.frontendLogger.error('browser', '安装失败: ' + data.message);
-        alert('安装失败: ' + data.message);
+        this.notify(false, '安装失败: ' + data.message);
       }
     } catch (error) {
       this.frontendLogger.error('browser', '安装请求失败', error);
-      alert('安装请求失败，请查看日志');
+      this.notify(false, '安装请求失败，请查看日志');
     } finally {
       this.browserLoading = false;
     }
