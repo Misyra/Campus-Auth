@@ -29,6 +29,16 @@ class RuntimeMode(StrEnum):
     LIGHTWEIGHT = "lightweight"
 
 
+class BrowserChannel(StrEnum):
+    """浏览器类型"""
+
+    PLAYWRIGHT = "playwright"
+    MSEdge = "msedge"
+    CHROME = "chrome"
+    FIREFOX = "firefox"
+    CUSTOM = "custom"
+
+
 class LaunchSource(StrEnum):
     """程序是怎么被启动的（仅用于日志和 UI 体验，不参与业务逻辑）"""
 
@@ -187,8 +197,8 @@ class _SystemFieldsMixin(BaseModel):
     )
 
     # 浏览器配置
-    browser_channel: str = Field(
-        default="playwright",
+    browser_channel: BrowserChannel = Field(
+        default=BrowserChannel.PLAYWRIGHT,
         description="浏览器类型: playwright(自带Chromium) | msedge(系统Edge) | chrome(系统Chrome) | firefox | custom(自定义路径)"
     )
     browser_custom_path: str = Field(
@@ -275,8 +285,8 @@ class GlobalSettings(BaseModel):
     source_levels: dict[str, str] = {}
 
     # 浏览器配置
-    browser_channel: str = Field(
-        default="playwright",
+    browser_channel: BrowserChannel = Field(
+        default=BrowserChannel.PLAYWRIGHT,
         description="浏览器类型: playwright(自带Chromium) | msedge(系统Edge) | chrome(系统Chrome) | firefox | custom(自定义路径)"
     )
     browser_custom_path: str = Field(

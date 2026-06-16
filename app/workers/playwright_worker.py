@@ -772,7 +772,7 @@ class PlaywrightWorker:
         elif channel == "firefox":
             # Firefox 使用 firefox.launch()
             logger.info("使用 Firefox 浏览器")
-            return await playwright.firefox.launch(headless=headless)
+            return await playwright.firefox.launch(headless=headless, args=launch_args)
         elif channel == "playwright":
             # Playwright 自带 Chromium
             logger.info("使用 Playwright Chromium")
