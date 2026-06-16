@@ -5,10 +5,12 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
+from app.constants import PROJECT_ROOT
+
 router = APIRouter()
 
 # 图标目录
-ICONS_DIR = Path(__file__).parent.parent.parent / "res" / "icons"
+ICONS_DIR = PROJECT_ROOT / "res" / "icons"
 
 
 @router.get("/api/icons/{filename}")
