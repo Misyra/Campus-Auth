@@ -5,8 +5,6 @@ export function configData() {
   return {
     config: { ...DEFAULT_CONFIG },
     defaultUrlCheckUrls: DEFAULT_CONFIG.url_check_urls,
-    savedConfigSnapshot: '',
-    _configDirty: false,
     dangerConfirm: null,
     dangerCountdown: 0,
     availableShells: [],

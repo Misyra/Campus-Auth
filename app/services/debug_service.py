@@ -75,12 +75,13 @@ class DebugSessionManager:
         try:
             while True:
                 await asyncio.sleep(check_interval)
-                if gen != _current_gen:
-                    return
-                if time.monotonic() - self._session._last_activity > timeout_seconds:
-                    async with self._lock:
-                        if gen != _current_gen:
-                            return
+                async with self._lock:
+                    if gen != _current_gen:
+                        return
+                    if (
+                        time.monotonic() - self._session._last_activity
+                        > timeout_seconds
+                    ):
                         debug_logger.info(
                             "调试会话超时（{}s 无操作），正在关闭浏览器",
                             timeout_seconds,
@@ -90,6 +91,7 @@ class DebugSessionManager:
                                 await self._close_debug_browser()
                         finally:
                             self._session = empty_debug_session()
+                    # 未超时时释放锁，下一轮 sleep 后重新检查
         except asyncio.CancelledError:
             pass
 
@@ -140,39 +142,46 @@ class DebugSessionManager:
                 await self._close_debug_browser()
             await self._cancel_debug_timer()
 
-            try:
-                steps_info = [
-                    {
-                        "index": i,
-                        "id": step.id,
-                        "type": step.type,
-                        "description": step.description or step.type,
-                    }
-                    for i, step in enumerate(task.steps)
-                ]
+            steps_info = [
+                {
+                    "index": i,
+                    "id": step.id,
+                    "type": step.type,
+                    "description": step.description or step.type,
+                }
+                for i, step in enumerate(task.steps)
+            ]
 
-                gen = _next_debug_gen()
-                self._session = empty_debug_session()
-                self._session._browser_active = True
-                self._session.task_id = task_id
-                self._session.steps = steps_info
-                self._session.running = True
-                self._session._last_activity = time.monotonic()
-                self._session._timer_task = asyncio.create_task(
-                    self._debug_timeout_watcher(gen)
-                )
-                self._session.executor = None
+            gen = _next_debug_gen()
+            self._session = empty_debug_session()
+            self._session._browser_active = True
+            self._session.task_id = task_id
+            self._session.steps = steps_info
+            self._session.running = True
+            self._session._last_activity = time.monotonic()
+            self._session._timer_task = asyncio.create_task(
+                self._debug_timeout_watcher(gen)
+            )
+            self._session.executor = None
 
-                response = await asyncio.to_thread(
-                    lambda: get_worker().submit(CMD_DEBUG_START, data=worker_data)
-                )
-                if not response.success:
-                    raise RuntimeError(f"调试会话启动失败: {response.error}")
-                if isinstance(response.data, dict):
-                    self._session.screenshot_url = response.data.get("screenshot_url")
-            except Exception:
+        # Worker 启动在锁外执行，避免持锁等待线程
+        try:
+            response = await asyncio.to_thread(
+                lambda: get_worker().submit(CMD_DEBUG_START, data=worker_data)
+            )
+        except Exception:
+            async with self._lock:
                 await self._close_debug_browser()
-                raise
+            raise
+
+        if not response.success:
+            async with self._lock:
+                await self._close_debug_browser()
+            raise RuntimeError(f"调试会话启动失败: {response.error}")
+
+        if isinstance(response.data, dict):
+            async with self._lock:
+                self._session.screenshot_url = response.data.get("screenshot_url")
 
         debug_logger.info("调试会话已启动，任务: {}", task_id)
         return self._debug_response()
@@ -232,12 +241,14 @@ class DebugSessionManager:
             if from_idx >= len(session.steps):
                 return {**self._debug_response(), "message": "所有步骤已执行完毕"}
 
-        worker = get_worker()
-        results: list[dict] = []
-        all_success = True
+        # 一次性获取信号量，持有到整个批量执行完成，防止 next_step 插入
+        async with self._exec_sem:
+            worker = get_worker()
+            results: list[dict] = []
+            all_success = True
 
-        for i in range(from_idx, len(session.steps)):
-            async with self._exec_sem:
+            for i in range(from_idx, len(session.steps)):
+                # 会话有效性检查在锁内执行
                 async with self._lock:
                     if self._session is not session or not session.running:
                         all_success = False
@@ -249,27 +260,29 @@ class DebugSessionManager:
                     )
                 )
 
-            if self._session is not session or not session.running:
-                all_success = False
-                break
+                # 响应后在锁内检查会话状态
+                async with self._lock:
+                    if self._session is not session or not session.running:
+                        all_success = False
+                        break
 
-            if not response.success:
-                results.append(
-                    {
-                        "step_index": i,
-                        "success": False,
-                        "message": response.error or "步骤执行异常",
-                        "screenshot_url": None,
-                    }
-                )
-                all_success = False
-                break
+                if not response.success:
+                    results.append(
+                        {
+                            "step_index": i,
+                            "success": False,
+                            "message": response.error or "步骤执行异常",
+                            "screenshot_url": None,
+                        }
+                    )
+                    all_success = False
+                    break
 
-            step_result = response.data
-            results.append(step_result)
-            if not step_result.get("success", False):
-                all_success = False
-                break
+                step_result = response.data
+                results.append(step_result)
+                if not step_result.get("success", False):
+                    all_success = False
+                    break
 
         async with self._lock:
             if self._session is not session:
@@ -308,6 +321,7 @@ class DebugSessionManager:
     async def close(self):
         """关闭调试会话（用于 lifespan 清理）。"""
         try:
+            await self._cancel_debug_timer()
             if self._session._browser_active:
                 await self._close_debug_browser()
         finally:

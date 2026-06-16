@@ -64,6 +64,7 @@ export const uiMethods = {
     const icons = {
       login: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
       monitor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
+      install: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
       network: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
       update: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
       security: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
@@ -78,7 +79,7 @@ export const uiMethods = {
     return `${now.getMonth() + 1}/${now.getDate()} ${h}:${m}:${s}`;
   },
   _notifyCategoryLabel(category) {
-    const labels = { login: '登录', monitor: '监控', network: '网络', update: '更新', security: '安全' };
+    const labels = { login: '登录', monitor: '监控', network: '网络', update: '更新', security: '安全', install: '安装' };
     return labels[category] || '';
   },
   notify(success, message, category, action) {
@@ -95,6 +96,123 @@ export const uiMethods = {
     if (this.notifications.length > TIMING.NOTIFICATION_MAX) this.notifications.length = TIMING.NOTIFICATION_MAX;
     this.unreadNotifications++;
     this._showToast(success, message);
+  },
+  // 获取可用浏览器列表
+  async fetchBrowsers() {
+    this.browserLoading = true;
+    try {
+      const response = await fetch('/api/browsers');
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      this.availableBrowsers = data.browsers;
+      // 只在已有选择时同步，向导模式下默认不选择
+      if (this.selectedBrowser) {
+        this.selectedBrowser = data.current;
+        this.config.browser_channel = data.current;
+      }
+    } catch (error) {
+      console.error('获取浏览器列表失败:', error);
+    } finally {
+      this.browserLoading = false;
+    }
+  },
+  // 选择浏览器
+  selectBrowser(channel) {
+    this.selectedBrowser = channel;
+    this.config.browser_channel = channel;
+    this.onConfigChange('browser_channel', channel, 'toggle');
+  },
+  // 辅助方法：获取浏览器信息
+  getBrowser(channel) {
+    return this.availableBrowsers.find(b => b.channel === channel) || { channel, installed: false };
+  },
+  // 辅助方法：获取浏览器图标
+  getBrowserIcon(channel) {
+    const browser = this.availableBrowsers.find(b => b.channel === channel);
+    return browser ? browser.icon : '';
+  },
+  // 辅助方法：检查浏览器是否已安装
+  isBrowserInstalled(channel) {
+    const browser = this.availableBrowsers.find(b => b.channel === channel);
+    return browser ? browser.installed : false;
+  },
+  // 辅助方法：获取其他浏览器（排除 Playwright）
+  getOtherBrowsers() {
+    return this.availableBrowsers.filter(b => b.channel !== 'playwright');
+  },
+  // 处理浏览器点击
+  handleBrowserClick(browser) {
+    if (browser.installed) {
+      // Firefox 兼容性警告
+      if (browser.channel === 'firefox') {
+        if (!confirm('Firefox 可能不支持部分功能（如反检测模式、自定义浏览器参数等）。\n\n建议使用 Chromium 内核浏览器（Playwright Chromium、Edge、Chrome）。\n\n确定要使用 Firefox 吗？')) {
+          return;
+        }
+      }
+      this.selectBrowser(browser.channel);
+    } else if (browser.channel === 'custom') {
+      // 自定义浏览器始终 installed=true，但代码上仍保持独立分支
+      // 选中并聚焦到路径输入框
+      this.selectBrowser(browser.channel);
+      this.$nextTick(() => {
+        const input = document.querySelector('[data-custom-browser-path]');
+        if (input) input.focus();
+      });
+    } else if (browser.channel === 'playwright') {
+      // Playwright Chromium 未安装，提示自动下载
+      if (confirm('Playwright Chromium 未安装。\n\n是否自动下载？（约 150MB）')) {
+        this.installPlaywrightChromium();
+      }
+    } else {
+      // 其他浏览器未安装，弹窗提示跳转官网
+      const downloadUrls = {
+        msedge: 'https://www.microsoft.com/edge',
+        chrome: 'https://www.google.com/chrome/',
+        firefox: 'https://www.firefox.com/',
+      };
+      const url = downloadUrls[browser.channel] || 'https://playwright.dev/docs/browsers';
+      if (confirm(`${browser.name} 未安装。\n\n是否跳转到官网下载？`)) {
+        window.open(url, '_blank');
+      }
+    }
+  },
+  // 安装 Playwright Chromium（后台下载，不阻塞 UI）
+  installPlaywrightChromium() {
+    this.playwrightDownloading = true;
+    this.notify(true, 'Playwright Chromium 下载已开始，你可以继续配置其他选项', 'install');
+    this.frontendLogger.info('browser', '开始下载 Playwright Chromium');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 分钟超时
+    fetch('/api/browsers/install-playwright', {
+      method: 'POST',
+      signal: controller.signal,
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          this.frontendLogger.info('browser', 'Playwright Chromium 安装成功');
+          this.notify(true, 'Playwright Chromium 安装完成！', 'install');
+          this.fetchBrowsers();
+        } else {
+          this.frontendLogger.error('browser', '安装失败: ' + data.message);
+          this.notify(false, '安装失败: ' + data.message, 'install');
+        }
+      })
+      .catch(error => {
+        if (error.name === 'AbortError') {
+          this.frontendLogger.error('browser', '安装超时（超过 10 分钟）');
+          this.notify(false, '安装超时，请检查网络后重试', 'install');
+        } else {
+          this.frontendLogger.error('browser', '安装请求失败', error);
+          this.notify(false, '安装请求失败，请查看日志', 'install');
+        }
+      })
+      .finally(() => {
+        clearTimeout(timeoutId);
+        this.playwrightDownloading = false;
+      });
   },
   nextWizardStep() {
     // 第 1 步需要同意协议
@@ -129,7 +247,15 @@ export const uiMethods = {
         return;
       }
     }
-    if (this.wizardStep < 4) {
+    // 步骤 4：浏览器选择
+    if (this.wizardStep === 4) {
+      if (!this.selectedBrowser) {
+        this.toastOnly(false, '请选择一个浏览器');
+        return;
+      }
+      this.config.browser_channel = this.selectedBrowser;
+    }
+    if (this.wizardStep < 5) {
       this.wizardStep++;
     }
   },

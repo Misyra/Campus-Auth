@@ -28,6 +28,7 @@ class VariableResolver:
             "description": config.description,
         }
         self._cache: dict[str, str] = {}
+        self._cache_version: int = 0
 
     def resolve(
         self, value: Any, depth: int = 0, visited: set[str] | None = None
@@ -39,9 +40,10 @@ class VariableResolver:
         if "{{" not in value:
             return value
 
-        # 检查缓存
-        if depth == 0 and value in self._cache:
-            return self._cache[value]
+        # 检查缓存（key 包含版本号，避免外部修改后返回过期结果）
+        cache_key = (self._cache_version, value) if depth == 0 else None
+        if cache_key is not None and cache_key in self._cache:
+            return self._cache[cache_key]
 
         visited = visited or set()
         if depth > self.MAX_DEPTH:
@@ -86,8 +88,8 @@ class VariableResolver:
         result = self.TEMPLATE_PATTERN.sub(replacer, value)
 
         # 缓存结果
-        if depth == 0:
-            self._cache[value] = result
+        if cache_key is not None:
+            self._cache[cache_key] = result
 
         return result
 
@@ -95,6 +97,7 @@ class VariableResolver:
         """设置运行时变量"""
         self.runtime_vars[name] = value
         self._cache.clear()
+        self._cache_version += 1
 
     def resolve_for_js(self, value: str) -> str:
         """解析变量并进行 JSON 安全编码，用于 JavaScript 嵌入。
@@ -112,6 +115,6 @@ class VariableResolver:
             if resolved == match.group(0):
                 logger.warning("[var] 未解析的变量: {}", match.group(0))
                 return json.dumps(match.group(0))  # 保留原样，转义后作为 JS 字符串
-            return json.dumps(resolved)
+            return json.dumps(str(resolved))
 
         return self.TEMPLATE_PATTERN.sub(replacer, value)

@@ -93,6 +93,11 @@ def _cmd_stop() -> None:
     print(f"正在停止服务 (PID: {pid})...")
     try:
         _terminate_process(pid)
+        # 验证进程已实际退出
+        for _ in range(10):
+            time.sleep(0.5)
+            if not is_service_running()[0]:
+                break
         print("服务已停止")
     except OSError:
         print("服务未运行")
@@ -323,6 +328,11 @@ def _handle_existing_instance(ctx: ApplicationContext, force: bool = False):
     if force:
         print(f"强制模式：正在终止已运行的实例 (PID: {pid})...")
         _terminate_process(pid)
+        # 验证进程已实际退出
+        for _ in range(10):
+            time.sleep(0.5)
+            if not is_service_running()[0]:
+                break
         cleanup_pid()
         print("已终止，继续启动...")
         return
@@ -356,13 +366,15 @@ def _run_lightweight(ctx: ApplicationContext, logger):
     logger.info("轻量模式启动: 仅监控 + 定时任务，按 Ctrl+C 停止")
 
     # Web 服务状态
+    _web_server_lock = threading.Lock()
     _web_server_state = {"started": False, "server_ref": [None]}
 
     def _start_web_server():
         """按需启动 Web 服务（在子线程中运行）。"""
-        if _web_server_state["started"]:
-            return
-        _web_server_state["started"] = True
+        with _web_server_lock:
+            if _web_server_state["started"]:
+                return
+            _web_server_state["started"] = True
 
         def _worker():
             try:
@@ -423,9 +435,17 @@ def _run_lightweight(ctx: ApplicationContext, logger):
             tray_icon.stop()
         # 如果 Web 服务已启动，shutdown 由 Uvicorn 的事件循环处理
         if not _web_server_state["started"]:
-            loop = asyncio.new_event_loop()
-            loop.run_until_complete(container.shutdown())
-            loop.close()
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # 已有运行中的 loop，安排协程执行
+                    loop.create_task(container.shutdown())
+                else:
+                    loop.run_until_complete(container.shutdown())
+            except RuntimeError:
+                # 无可用 event loop，跳过异步 shutdown
+                container.task_executor.shutdown(wait=False)
+                container.engine.shutdown()
 
 
 def _run_full(

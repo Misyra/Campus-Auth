@@ -31,8 +31,12 @@
 
   /* 状态色 */
   --success: #10b981;
+  --success-bg: rgba(16, 185, 129, 0.15);
+  --success-border: rgba(16, 185, 129, 0.3);
   --warning: #f59e0b;
   --error: #ef4444;
+  --error-bg: rgba(239, 68, 68, 0.15);
+  --error-border: rgba(239, 68, 68, 0.3);
   --purple: #a78bfa;
 
   /* 阴影 */
@@ -610,6 +614,10 @@ body.no-backdrop-filter .card {
   --border-accent-strong: rgba(56, 189, 248, 0.4);
   --text-tertiary: #94a3b8;
   --purple: #8b5cf6;
+  --success-bg: rgba(16, 185, 129, 0.1);
+  --success-border: rgba(16, 185, 129, 0.25);
+  --error-bg: rgba(239, 68, 68, 0.1);
+  --error-border: rgba(239, 68, 68, 0.25);
 }
 
 [data-theme="light"] .logo-text {

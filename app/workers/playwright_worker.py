@@ -294,7 +294,17 @@ class PlaywrightWorker:
 
     def submit_nowait(self, cmd_type: str, data: dict | None = None) -> None:
         """提交命令但不等待响应（fire-and-forget）。"""
-        self._cmd_queue.put_nowait(WorkerCommand(type=cmd_type, data=data or {}))
+        try:
+            self._cmd_queue.put_nowait(WorkerCommand(type=cmd_type, data=data or {}))
+        except queue.Full:
+            logger.warning("submit_nowait 队列已满 (maxsize={})，丢弃命令 {}", self._cmd_queue.maxsize, cmd_type)
+            return
+
+        # 唤醒 Worker 事件循环处理新命令
+        loop = self._loop
+        if loop is not None:
+            with contextlib.suppress(RuntimeError):
+                asyncio.run_coroutine_threadsafe(self._wake_async(), loop)
 
     # ── Worker 线程入口 ──
 
@@ -586,10 +596,14 @@ class PlaywrightWorker:
                     if self._context is not None and not self._context.is_closed():
                         self._page = await self._context.new_page()
                         # 重新应用反检测脚本和路由拦截（新页面未继承旧页面的设置）
+                        # 使用与 _start_browser 一致的判断逻辑
                         if self._page is not None:
-                            await self._apply_stealth_and_routes(
-                                {"browser_settings": self._last_browser_settings or {}}
-                            )
+                            settings = self._last_browser_settings or {}
+                            pure_mode = settings.get("pure_mode", False)
+                            if not pure_mode or settings.get("stealth_mode", False):
+                                await self._apply_stealth_and_routes(
+                                    {"browser_settings": settings}
+                                )
                 except Exception:
                     logger.warning("创建替代页面失败，_page 保持 None")
 
@@ -637,20 +651,19 @@ class PlaywrightWorker:
 
         此方法供同线程调用者使用（如 BrowserContextManager），
         外部调用应使用 CMD_BROWSER_ACQUIRE 命令通过 submit 队列派发。
+        每次调用都会关闭旧浏览器并启动新浏览器，不复用。
         """
-        need_restart = not await self._health_check()
-        # 浏览器存活但页面不可用（关闭或为空），重建上下文和页面
-        if not need_restart and (self._page is None or self._page.is_closed()):
-            logger.info("页面已关闭，重建浏览器上下文")
-            need_restart = True
-        if need_restart:
-            await self._close_browser()
-            await self._start_browser(config)
+        await self._close_browser()
+        await self._start_browser(config)
 
     # ── 浏览器生命周期管理 ──
 
-    def _build_launch_args(self, browser_settings: dict) -> list[str]:
+    def _build_launch_args(self, browser_settings: dict, channel: str = "playwright") -> list[str]:
         """构建浏览器启动参数。"""
+        # Firefox 不支持 Chromium 专属参数
+        if channel == "firefox":
+            return []
+
         args = [
             "--no-sandbox",
             "--disable-dev-shm-usage",
@@ -713,10 +726,11 @@ class PlaywrightWorker:
             await self._page.add_init_script(script)
 
     async def _start_browser(self, config: dict) -> None:
-        """启动 Chromium 浏览器。
+        """启动浏览器。
 
         根据配置创建浏览器实例、上下文和页面。
         支持 headless/pure_mode/自定义启动参数/低资源模式/反检测脚本。
+        根据 browser_channel 选择不同浏览器：playwright/msedge/chrome/firefox/custom。
         """
         from playwright.async_api import async_playwright
 
@@ -724,16 +738,18 @@ class PlaywrightWorker:
         self._last_browser_settings = browser_settings  # 缓存用于页面重建
         headless = browser_settings.get("headless", True)
         pure_mode = browser_settings.get("pure_mode", False)
+        channel = browser_settings.get("browser_channel", "playwright")
+        custom_path = browser_settings.get("browser_custom_path", "")
 
-        logger.info("启动浏览器 (headless={}, pure_mode={})", headless, pure_mode)
+        logger.info("启动浏览器 (headless={}, pure_mode={}, channel={})", headless, pure_mode, channel)
 
         self._playwright = await async_playwright().start()
 
         try:
             if pure_mode:
-                # 纯净模式：原始 Chromium，无扩展无自定义参数
-                self._browser = await self._playwright.chromium.launch(
-                    headless=headless
+                # 纯净模式：无扩展无自定义参数
+                self._browser = await self._launch_browser(
+                    self._playwright, channel, custom_path, headless, []
                 )
                 ctx_opts = {
                     "viewport": {
@@ -743,9 +759,9 @@ class PlaywrightWorker:
                 }
                 self._context = await self._browser.new_context(**ctx_opts)
             else:
-                launch_args = self._build_launch_args(browser_settings)
-                self._browser = await self._playwright.chromium.launch(
-                    headless=headless, args=launch_args
+                launch_args = self._build_launch_args(browser_settings, channel)
+                self._browser = await self._launch_browser(
+                    self._playwright, channel, custom_path, headless, launch_args
                 )
                 ctx_opts = self._build_context_options(browser_settings)
                 self._context = await self._browser.new_context(**ctx_opts)
@@ -762,6 +778,31 @@ class PlaywrightWorker:
             raise
 
         logger.info("浏览器启动完成")
+
+    async def _launch_browser(self, playwright, channel: str, custom_path: str, headless: bool, launch_args: list):
+        """根据 channel 启动对应的浏览器。"""
+        if channel == "custom" and custom_path:
+            # 检查路径是否存在
+            if not Path(custom_path).exists():
+                raise FileNotFoundError(f"自定义浏览器路径不存在: {custom_path}")
+            logger.info("使用自定义浏览器路径: {}", custom_path)
+            return await playwright.chromium.launch(
+                executable_path=custom_path, headless=headless, args=launch_args
+            )
+        elif channel == "firefox":
+            # Firefox 使用 firefox.launch()
+            logger.info("使用 Firefox 浏览器")
+            return await playwright.firefox.launch(headless=headless, args=launch_args)
+        elif channel == "playwright":
+            # Playwright 自带 Chromium
+            logger.info("使用 Playwright Chromium")
+            return await playwright.chromium.launch(headless=headless, args=launch_args)
+        else:
+            # msedge 或 chrome，使用 channel 参数
+            logger.info("使用系统浏览器: {}", channel)
+            return await playwright.chromium.launch(
+                channel=channel, headless=headless, args=launch_args
+            )
 
     async def _health_check(self) -> bool:
         """检查浏览器健康状态。
@@ -961,8 +1002,9 @@ def get_worker() -> PlaywrightWorker:
                     except Exception:
                         logger.debug("停止旧 Worker 失败", exc_info=True)
                 cleanup_orphan_browsers()
-                _worker = PlaywrightWorker()
-                _worker.start()
+                new_worker = PlaywrightWorker()
+                new_worker.start()
+                _worker = new_worker
     return _worker
 
 
@@ -979,9 +1021,9 @@ def shutdown_worker(timeout: float = 5) -> None:
 
 
 def cleanup_orphan_browsers() -> None:
-    """清理孤儿 Playwright Chromium 进程。
+    """清理孤儿 Playwright 浏览器进程。
 
-    扫描并杀掉由 Campus-Auth 启动但已失去 Python 父进程的 Chromium 实例。
+    扫描并杀掉由 Campus-Auth 启动但已失去 Python 父进程的浏览器实例。
     仅清理 Playwright 管理的浏览器（可执行路径或命令行包含 "ms-playwright"），
     不会误杀用户自行安装的 Chrome/Edge/Brave 等浏览器。
     """
@@ -993,18 +1035,21 @@ def cleanup_orphan_browsers() -> None:
             info = proc.info
             exe = (info.get("exe") or "").lower()
             cmdline = " ".join(info.get("cmdline") or []).lower()
-            if ("ms-playwright" in exe or "ms-playwright" in cmdline) and (
-                "chrom" in exe or "chrom" in cmdline
-            ):
+            is_playwright_managed = "ms-playwright" in exe or "ms-playwright" in cmdline
+            is_browser = any(
+                kw in exe or kw in cmdline
+                for kw in ("chrom", "firefox")
+            )
+            if is_playwright_managed and is_browser:
                 proc.kill()
                 killed += 1
-                logger.debug("已终止孤儿 Chromium PID={}", info["pid"])
+                logger.debug("已终止孤儿浏览器进程 PID={}", info["pid"])
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
         except Exception:
             logger.debug("终止进程异常", exc_info=True)
 
     if killed:
-        logger.info("已终止 {} 个孤儿 Chromium 进程", killed)
+        logger.info("已终止 {} 个孤儿浏览器进程", killed)
     else:
-        logger.debug("未发现孤儿 Playwright Chromium 进程")
+        logger.debug("未发现孤儿 Playwright 浏览器进程")

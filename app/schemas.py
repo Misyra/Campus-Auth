@@ -29,6 +29,16 @@ class RuntimeMode(StrEnum):
     LIGHTWEIGHT = "lightweight"
 
 
+class BrowserChannel(StrEnum):
+    """浏览器类型"""
+
+    PLAYWRIGHT = "playwright"
+    MSEdge = "msedge"
+    CHROME = "chrome"
+    FIREFOX = "firefox"
+    CUSTOM = "custom"
+
+
 class LaunchSource(StrEnum):
     """程序是怎么被启动的（仅用于日志和 UI 体验，不参与业务逻辑）"""
 
@@ -149,20 +159,18 @@ class _MonitorFieldsMixin(BaseModel):
         return _validate_auth_url(v)
 
 
-class _SystemFieldsMixin(BaseModel):
-    """SystemSettings 与 MonitorConfigPayload 共享的系统配置字段"""
+class _CommonSettingsMixin(BaseModel):
+    """_SystemFieldsMixin 与 GlobalSettings 共享的系统配置字段"""
 
-    username: str = Field(default="", description="全局校园网用户名")
-    password: str = Field(default="", description="全局校园网密码（ENC: 加密）")
-    auth_url: str = Field(default="", description="全局认证地址")
-    carrier: str = Field(default="无", description="全局运营商")
-    carrier_custom: str = Field(default="", description="自定义运营商关键字")
-    pause_enabled: bool = Field(default=True, description="启用暂停时段")
-    pause_start_hour: int = Field(default=0, ge=0, le=23, description="暂停开始（小时）")
-    pause_end_hour: int = Field(default=6, ge=0, le=23, description="暂停结束（小时）")
+    # 日志配置
     backend_log_level: str = Field(default="INFO")
     frontend_log_level: str = Field(default="INFO")
     access_log: bool = Field(default=False, description="Uvicorn HTTP 请求日志")
+    log_retention_days: int = Field(
+        default=7, ge=1, le=365, description="日志保留天数"
+    )
+
+    # UI 配置
     startup_action: StartupAction = Field(
         default=StartupAction.NONE,
         description="启动行为：none=不自动执行, monitor=自动监控, login_once=自动登录成功后退出",
@@ -170,90 +178,45 @@ class _SystemFieldsMixin(BaseModel):
     autostart_lightweight: bool = Field(
         default=True, description="自启动轻量模式：True=仅监控, False=完整模式(含Web)"
     )
-    minimize_to_tray: bool = Field(default=True, description="最小化到系统托盘")
-    auto_open_browser: bool = Field(default=False, description="启动后自动打开浏览器")
-    max_retries: int = Field(default=3, ge=0, le=10)
-    retry_interval: int = Field(default=5, ge=1, le=300, description="重试间隔（秒）")
-    log_retention_days: int = Field(
-        default=7, ge=1, le=365, description="日志保留天数"
-    )
-    app_port: int = Field(default=50721, ge=1024, le=65535, description="网页界面端口")
-    proxy: str = Field(default="", description="网络代理地址")
-    shell_path: str = Field(
-        default="", description="自定义 Shell 路径（留空使用系统默认）"
-    )
-    login_timeout: int = Field(
-        default=90, ge=10, le=600, description="手动登录等待超时（秒）"
-    )
-
-    @field_validator("auth_url")
-    @classmethod
-    def validate_auth_url(cls, v: str) -> str:
-        return _validate_auth_url(v)
-
-    @field_validator("backend_log_level", "frontend_log_level")
-    @classmethod
-    def validate_log_level(cls, v: str) -> str:
-        v = v.upper().strip()
-        if v and v not in VALID_LOG_LEVELS:
-            raise ValueError(
-                f"无效的日志级别: {v}，可选值: {', '.join(VALID_LOG_LEVELS)}"
-            )
-        return v
-
-
-class GlobalSettings(BaseModel):
-    """全局系统配置 — 仅系统级设置，不包含业务逻辑"""
-
-    # 日志配置
-    backend_log_level: str = Field(default="INFO")
-    frontend_log_level: str = Field(default="INFO")
-    access_log: bool = Field(default=False, description="Uvicorn HTTP 请求日志")
-    log_retention_days: int = Field(default=7, ge=1, le=365, description="日志保留天数")
-
-    # UI 配置
-    minimize_to_tray: bool = Field(default=True, description="最小化到系统托盘")
-    auto_open_browser: bool = Field(default=False, description="启动后自动打开浏览器")
-    startup_action: StartupAction = Field(default=StartupAction.NONE)
-    autostart_lightweight: bool = Field(default=True)
     lightweight_tray: bool = Field(default=True, description="轻量模式显示系统托盘")
+    minimize_to_tray: bool = Field(default=True, description="最小化到系统托盘")
+    auto_open_browser: bool = Field(default=False, description="启动后自动打开浏览器")
 
-    # 监控配置
-    check_interval_seconds: int = Field(default=300, ge=10, le=86400, description="检测间隔（秒）")
+    # 暂停时段
     pause_enabled: bool = Field(default=True, description="启用暂停时段")
     pause_start_hour: int = Field(default=0, ge=0, le=23, description="暂停开始（小时）")
     pause_end_hour: int = Field(default=6, ge=0, le=23, description="暂停结束（小时）")
-    network_targets: str = Field(default=DEFAULT_NETWORK_TARGETS)
-    http_targets: str = Field(default=DEFAULT_HTTP_TARGETS, description="HTTP 检测目标地址，逗号分隔")
-    enable_tcp_check: bool = Field(default=False, description="通过 TCP 端口连接检测目标地址是否可达")
-    enable_http_check: bool = Field(default=False, description="通过 HTTP 请求检测网页是否可正常访问")
-    enable_local_check: bool = Field(default=True, description="物理网络连接检查：未连接 WiFi/网线时跳过登录")
-    check_auth_url: bool = Field(default=False, description="登录前检测认证地址是否可达，不可达则跳过登录")
-    auth_url_targets: str = Field(default="", description="认证地址可达性附加检测目标，逗号分隔的 host:port，留空则仅检测认证地址本身")
-    url_check_urls: str = Field(default="http://captive.apple.com/hotspot-detect.html|Success\nhttp://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test\nhttp://detectportal.firefox.com/success.txt|success", description="网址响应检测地址，每行一个：URL|预期内容，留空不启用")
-    network_check_timeout: int = Field(default=2, ge=1, le=30, description="TCP 网络检测超时（秒）")
 
     # 网络配置
     proxy: str = Field(default="", description="网络代理地址")
     block_proxy: bool = Field(default=True, description="屏蔽系统代理")
 
     # 应用配置
-    app_port: int = Field(default=50721, ge=1024, le=65535)
-    shell_path: str = Field(default="", description="自定义 Shell 路径")
+    app_port: int = Field(default=50721, ge=1024, le=65535, description="网页界面端口")
+    shell_path: str = Field(
+        default="", description="自定义 Shell 路径（留空使用系统默认）"
+    )
     pure_mode: bool = Field(default=True, description="纯净模式")
 
     # 重试配置
     max_retries: int = Field(default=3, ge=0, le=10)
     retry_interval: int = Field(default=5, ge=1, le=300, description="重试间隔（秒）")
 
-    # Source 级别配置
-    source_levels: dict[str, str] = {}
-
     # 浏览器配置
+    browser_channel: BrowserChannel = Field(
+        default=BrowserChannel.PLAYWRIGHT,
+        description="浏览器类型: playwright(自带Chromium) | msedge(系统Edge) | chrome(系统Chrome) | firefox | custom(自定义路径)"
+    )
+    browser_custom_path: str = Field(
+        default="",
+        description="自定义浏览器可执行文件路径（仅 browser_channel='custom' 时生效）"
+    )
     headless: bool = Field(default=True)
     browser_timeout: int = Field(default=8, ge=1, le=60, description="页面操作超时（秒）")
     browser_navigation_timeout: int = Field(default=15, ge=3, le=60, description="打开登录页面超时（秒）")
-    login_timeout: int = Field(default=90, ge=10, le=600, description="手动登录等待超时（秒）")
+    login_timeout: int = Field(
+        default=90, ge=10, le=600, description="手动登录等待超时（秒）"
+    )
     browser_user_agent: str = Field(default_factory=get_default_ua)
     browser_low_resource_mode: bool = Field(default=False)
     browser_disable_web_security: bool = Field(default=False)
@@ -266,9 +229,6 @@ class GlobalSettings(BaseModel):
     browser_viewport_width: int = Field(default=1280, ge=320, le=3840, description="浏览器视口宽度")
     browser_viewport_height: int = Field(default=720, ge=240, le=2160, description="浏览器视口高度")
 
-    # 自定义变量
-    custom_variables: dict[str, str] = Field(default_factory=dict)
-
     @field_validator("backend_log_level", "frontend_log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:
@@ -278,6 +238,53 @@ class GlobalSettings(BaseModel):
                 f"无效的日志级别: {v}，可选值: {', '.join(VALID_LOG_LEVELS)}"
             )
         return v
+
+    @field_validator("browser_custom_path")
+    @classmethod
+    def validate_custom_path(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            return v
+        if re.search(r'[;&|`$(){}]', v):
+            raise ValueError("路径包含非法字符")
+        return v
+
+
+class _SystemFieldsMixin(_CommonSettingsMixin):
+    """MonitorConfigPayload 额外需要的凭证及业务配置字段"""
+
+    username: str = Field(default="", description="全局校园网用户名")
+    password: str = Field(default="", description="全局校园网密码（ENC: 加密）")
+    auth_url: str = Field(default="", description="全局认证地址")
+    carrier: str = Field(default="无", description="全局运营商")
+    carrier_custom: str = Field(default="", description="自定义运营商关键字")
+
+    @field_validator("auth_url")
+    @classmethod
+    def validate_auth_url(cls, v: str) -> str:
+        return _validate_auth_url(v)
+
+
+class GlobalSettings(_CommonSettingsMixin):
+    """全局系统配置 — 仅系统级设置，不包含业务逻辑"""
+
+    # 监控配置
+    check_interval_seconds: int = Field(default=300, ge=10, le=86400, description="检测间隔（秒）")
+    network_targets: str = Field(default=DEFAULT_NETWORK_TARGETS)
+    http_targets: str = Field(default=DEFAULT_HTTP_TARGETS, description="HTTP 检测目标地址，逗号分隔")
+    enable_tcp_check: bool = Field(default=False, description="通过 TCP 端口连接检测目标地址是否可达")
+    enable_http_check: bool = Field(default=False, description="通过 HTTP 请求检测网页是否可正常访问")
+    enable_local_check: bool = Field(default=True, description="物理网络连接检查：未连接 WiFi/网线时跳过登录")
+    check_auth_url: bool = Field(default=False, description="登录前检测认证地址是否可达，不可达则跳过登录")
+    auth_url_targets: str = Field(default="", description="认证地址可达性附加检测目标，逗号分隔的 host:port，留空则仅检测认证地址本身")
+    url_check_urls: str = Field(default="http://captive.apple.com/hotspot-detect.html|Success\nhttp://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test\nhttp://detectportal.firefox.com/success.txt|success", description="网址响应检测地址，每行一个：URL|预期内容，留空不启用")
+    network_check_timeout: int = Field(default=2, ge=1, le=30, description="TCP 网络检测超时（秒）")
+
+    # Source 级别配置
+    source_levels: dict[str, str] = {}
+
+    # 自定义变量
+    custom_variables: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("browser_extra_headers_json")
     @classmethod

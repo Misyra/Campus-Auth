@@ -19,5 +19,10 @@ export function uiData() {
     notifications: [],
     unreadNotifications: 0,
     showNotifications: false,
+    availableBrowsers: [],
+    selectedBrowser: 'playwright',
+    browserLoading: false,
+    playwrightDownloading: false,
+    saveFailed: false,
   };
 }

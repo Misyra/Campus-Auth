@@ -68,8 +68,8 @@ func main() {
 	uvCmd := findUv(uvDir, uvExe)
 	fmt.Printf("使用 uv: %s\n", uvCmd)
 
-	// [1/3] 安装依赖
-	fmt.Println("\n[1/3] 安装依赖...")
+	// [1/2] 安装依赖
+	fmt.Println("\n[1/2] 安装依赖...")
 	if err := runCommand(uvCmd, "sync"); err != nil {
 		fmt.Printf("[X] 依赖安装失败: %v\n", err)
 		fmt.Println("    手动运行: uv sync")
@@ -78,21 +78,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	// [2/3] 安装 Playwright Chromium
-	fmt.Println("\n[2/3] 安装 Playwright Chromium...")
-	if err := runCommand(uvCmd, "run", "playwright", "install", "chromium"); err != nil {
-		fmt.Println("[!] Playwright 安装失败，如已安装可忽略")
-		fmt.Println("    手动运行: uv run playwright install chromium")
-	}
-
 	// 检查 --install-only
 	if installOnly {
 		fmt.Println("\n[OK] 环境准备完成")
 		return
 	}
 
-	// [3/3] 启动应用
-	fmt.Println("\n[3/3] 启动 Campus-Auth...")
+	// [2/2] 启动应用
+	fmt.Println("\n[2/2] 启动 Campus-Auth...")
 	args := append([]string{"run", "main.py", "--browser"}, extraArgs...)
 	if err := runCommand(uvCmd, args...); err != nil {
 		fmt.Printf("[X] 启动失败: %v\n", err)

@@ -12,7 +12,7 @@
     </button>
   </div>
 
-  <form v-if="currentSettingsTab !== 'tasks'" @submit.prevent="saveConfig" autocomplete="on" class="settings-form">
+  <form v-if="currentSettingsTab !== 'tasks'" autocomplete="on" class="settings-form">
     <div data-include="/static/partials/pages/settings/settings-account.html"></div>
     <div data-include="/static/partials/pages/settings/settings-monitor.html"></div>
     <div data-include="/static/partials/pages/settings/settings-system.html"></div>
@@ -20,4 +20,29 @@
   </form>
 
   <div data-include="/static/partials/pages/settings/settings-tasks.html"></div>
+
+  <!-- 保存状态栏 -->
+  <div class="save-status-bar">
+    <button
+      class="save-btn"
+      :class="{
+        'save-btn-idle': !busy.save && !saveFailed,
+        'save-btn-saving': busy.save,
+        'save-btn-saved': !busy.save && !saveFailed && !configDirty,
+        'save-btn-failed': saveFailed
+      }"
+      @click="saveConfig"
+      :disabled="busy.save"
+    >
+      <template v-if="busy.save">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" class="spin" style="vertical-align: -2px; margin-right: 4px;">
+          <path d="M21 12a9 9 0 11-6.219-8.56"/>
+        </svg>
+        保存中...
+      </template>
+      <template v-else-if="saveFailed">保存失败</template>
+      <template v-else-if="!configDirty">已保存</template>
+      <template v-else>立即保存</template>
+    </button>
+  </div>
 </div>

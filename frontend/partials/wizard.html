@@ -22,8 +22,13 @@
         <span class="step-label">监控设置</span>
       </div>
       <div class="step-line" :class="{ completed: wizardStep > 3 }"></div>
-      <div class="step" :class="{ active: wizardStep === 4 }">
+      <div class="step" :class="{ active: wizardStep === 4, completed: wizardStep > 4 }">
         <span class="step-number">4</span>
+        <span class="step-label">浏览器选择</span>
+      </div>
+      <div class="step-line" :class="{ completed: wizardStep > 4 }"></div>
+      <div class="step" :class="{ active: wizardStep === 5 }">
+        <span class="step-number">5</span>
         <span class="step-label">完成</span>
       </div>
     </div>
@@ -191,8 +196,176 @@
         </div>
       </div>
 
-      <!-- 第 4 步：完成 -->
-      <div v-if="wizardStep === 4" class="wizard-page">
+      <!-- 第 4 步：浏览器选择 -->
+      <div v-if="wizardStep === 4" class="wizard-step">
+        <h3>选择浏览器</h3>
+        <p class="step-description">选择用于自动登录的浏览器</p>
+
+        <div class="browser-selection">
+          <div v-if="browserLoading" class="loading">正在检测浏览器...</div>
+
+          <div v-else>
+            <!-- 推荐浏览器：Playwright Chromium -->
+            <div class="browser-section">
+              <div class="browser-section-title">
+                <span class="recommend-badge">推荐</span>
+                兼容性最好
+              </div>
+              <div
+                class="browser-card recommended"
+                :class="{ active: selectedBrowser === 'playwright', disabled: !isBrowserInstalled('playwright') }"
+                @click="handleBrowserClick(getBrowser('playwright'))"
+              >
+                <div class="browser-icon">
+                  <img :src="getBrowserIcon('playwright')" alt="Playwright Chromium" width="40" height="40" />
+                </div>
+                <div class="browser-info">
+                  <div class="browser-name">Playwright Chromium</div>
+                  <div class="browser-status">
+                    <span v-if="isBrowserInstalled('playwright')" class="status-installed">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      已安装
+                    </span>
+                    <span v-else-if="playwrightDownloading" class="status-downloading">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" class="spin">
+                        <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                      </svg>
+                      下载中...
+                    </span>
+                    <span v-else class="status-not-installed">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                      </svg>
+                      点击下载
+                    </span>
+                  </div>
+                  <div class="browser-desc">内置浏览器，支持所有功能</div>
+                </div>
+                <div v-if="selectedBrowser === 'playwright'" class="browser-check">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <!-- 其他浏览器 -->
+            <div class="browser-section">
+              <div class="browser-section-title">系统浏览器</div>
+              <div class="browser-cards-grid">
+                <div
+                  v-for="browser in getOtherBrowsers()"
+                  :key="browser.channel"
+                  class="browser-card"
+                  :class="{ active: selectedBrowser === browser.channel, disabled: !browser.installed }"
+                  @click="handleBrowserClick(browser)"
+                >
+                  <div class="browser-icon">
+                    <img :src="browser.icon" :alt="browser.name" width="32" height="32" />
+                  </div>
+                  <div class="browser-info">
+                    <div class="browser-name">{{ browser.name }}</div>
+                    <div class="browser-status">
+                      <span v-if="browser.channel === 'custom'" class="status-custom">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                          <path d="M2 17l10 5 10-5"/>
+                          <path d="M2 12l10 5 10-5"/>
+                        </svg>
+                        自定义路径
+                      </span>
+                      <span v-else-if="browser.installed" class="status-installed">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        已安装
+                      </span>
+                      <span v-else class="status-not-installed">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                          <polyline points="7 10 12 15 17 10"/>
+                          <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        未安装
+                      </span>
+                    </div>
+                    <div class="browser-desc">{{ browser.description }}</div>
+                  </div>
+                  <div v-if="selectedBrowser === browser.channel" class="browser-check">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Firefox 兼容性警告 -->
+          <div v-if="selectedBrowser === 'firefox'" class="browser-warning">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <div>
+              <strong>Firefox 兼容性限制：</strong>
+              <ul style="margin: 0.25rem 0 0 1.25rem; padding: 0;">
+                <li>自定义浏览器参数不生效（已自动跳过）</li>
+                <li>反检测模式可能不完全有效</li>
+              </ul>
+              <span style="opacity: 0.8;">建议使用 Chromium 内核浏览器以获得完整功能支持</span>
+            </div>
+          </div>
+
+          <!-- 自定义浏览器兼容性提示 -->
+          <div v-if="selectedBrowser === 'custom'" class="browser-info-tip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+            <div>
+              <strong>自定义浏览器说明：</strong>
+              <ul style="margin: 0.25rem 0 0 1.25rem; padding: 0;">
+                <li>仅支持 Chromium 内核浏览器（如 Brave、Vivaldi 等）</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- 自定义路径输入 -->
+          <div v-if="selectedBrowser === 'custom'" class="form-group" style="margin-top: 1rem;">
+            <label for="wizard-browser-custom-path">浏览器可执行文件路径</label>
+            <input
+              id="wizard-browser-custom-path"
+              type="text"
+              v-model="config.browser_custom_path"
+              placeholder="例如: C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
+            />
+            <span class="hint">
+              需要使用支持 Playwright 的浏览器二进制文件。
+              <a href="https://playwright.dev/docs/browsers#chromium" target="_blank" rel="noopener">查看支持的浏览器要求 →</a>
+            </span>
+          </div>
+
+          <!-- 未选择提示 -->
+          <div v-if="!selectedBrowser" class="browser-select-hint">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <span>请选择一个浏览器才能继续</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 第 5 步：完成 -->
+      <div v-if="wizardStep === 5" class="wizard-page">
         <h2>配置完成</h2>
         <p class="description">您已完成基本配置，可以开始使用了！</p>
 
@@ -237,7 +410,7 @@
       </button>
       <div class="spacer"></div>
       <button class="btn btn-text" @click="skipWizard">跳过向导</button>
-      <button v-if="wizardStep < 4" class="btn btn-primary" @click="nextWizardStep" :disabled="!canProceed">
+      <button v-if="wizardStep < 5" class="btn btn-primary" @click="nextWizardStep" :disabled="!canProceed">
         下一步
       </button>
       <button v-else class="btn btn-primary" @click="finishWizard" :disabled="busy.save">

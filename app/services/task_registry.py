@@ -51,6 +51,18 @@ class TaskRegistry:
         """获取任务目录路径。"""
         return self._tasks_dir
 
+    def get_script_path(self, script_id: str) -> Path | None:
+        """获取脚本任务的文件路径。
+
+        在 tasks/scripts/ 目录下查找 .json 或 .py 文件。
+        """
+        scripts_dir = self._tasks_dir.parent / "scripts"
+        for ext in (".json", ".py"):
+            candidate = scripts_dir / f"{script_id}{ext}"
+            if candidate.exists():
+                return candidate
+        return None
+
     def get_task(self, task_id: str) -> dict[str, Any] | None:
         """获取任务配置（副本）。不存在或 ID 无效返回 None。"""
         if not is_valid_task_id(task_id):
