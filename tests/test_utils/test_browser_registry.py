@@ -15,13 +15,14 @@ def test_browser_info_fields():
     info = BrowserInfo(
         channel="test",
         name="Test Browser",
-        icon="test-icon",
+        icon="/api/icons/test.svg",
         installed=True,
         needs_download=False,
         description="测试浏览器"
     )
     assert info.channel == "test"
     assert info.name == "Test Browser"
+    assert info.icon == "/api/icons/test.svg"
     assert info.installed is True
     assert info.needs_download is False
 

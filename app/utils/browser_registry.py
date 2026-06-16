@@ -18,15 +18,9 @@ PLATFORM = get_platform()
 ICONS_DIR = Path(__file__).parent.parent.parent / "res" / "icons"
 
 
-def _load_icon(filename: str) -> str:
-    """从 res/icons 目录加载 SVG 图标。"""
-    try:
-        icon_path = ICONS_DIR / filename
-        if icon_path.exists():
-            return icon_path.read_text(encoding="utf-8").strip()
-    except Exception:
-        logger.debug("加载图标失败: {}", filename, exc_info=True)
-    return ""
+def _get_icon_url(filename: str) -> str:
+    """获取图标 URL。"""
+    return f"/api/icons/{filename}"
 
 
 @dataclass
@@ -62,7 +56,7 @@ def _detect_playwright_chromium() -> BrowserInfo:
     return BrowserInfo(
         channel="playwright",
         name="Playwright Chromium",
-        icon=_load_icon("chromium.svg"),
+        icon=_get_icon_url("chromium.svg"),
         installed=installed,
         needs_download=not installed,
         description="推荐选项，内置浏览器" if installed else "需下载约 150MB"
@@ -80,7 +74,7 @@ def _detect_edge() -> BrowserInfo:
     return BrowserInfo(
         channel="msedge",
         name="Microsoft Edge",
-        icon=_load_icon("edge.svg"),
+        icon=_get_icon_url("edge.svg"),
         installed=installed,
         needs_download=False,
         description="系统浏览器，无需下载" if installed else "未检测到 Edge 浏览器"
@@ -107,7 +101,7 @@ def _detect_chrome() -> BrowserInfo:
     return BrowserInfo(
         channel="chrome",
         name="Google Chrome",
-        icon=_load_icon("google-chrome.svg"),
+        icon=_get_icon_url("google-chrome.svg"),
         installed=installed,
         needs_download=False,
         description="系统浏览器，无需下载" if installed else "未检测到 Chrome 浏览器"
@@ -122,7 +116,7 @@ def _detect_firefox() -> BrowserInfo:
     return BrowserInfo(
         channel="firefox",
         name="Firefox",
-        icon=_load_icon("firefox.svg"),
+        icon=_get_icon_url("firefox.svg"),
         installed=installed,
         needs_download=not installed,
         description="系统浏览器，无需下载" if installed else "需下载 Firefox 驱动"
@@ -134,7 +128,7 @@ def _detect_custom() -> BrowserInfo:
     return BrowserInfo(
         channel="custom",
         name="自定义浏览器",
-        icon=_load_icon("browser-custom.svg"),
+        icon=_get_icon_url("browser-custom.svg"),
         installed=True,  # 始终可用，由用户自行确保路径有效
         needs_download=False,
         description="手动指定浏览器可执行文件路径"

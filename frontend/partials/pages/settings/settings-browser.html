@@ -18,7 +18,9 @@
             :class="{ active: config.browser_channel === browser.channel, disabled: !browser.installed && browser.needs_download }"
             @click="browser.installed || !browser.needs_download ? selectBrowser(browser.channel) : null"
           >
-            <div class="browser-icon" v-html="browser.icon"></div>
+            <div class="browser-icon">
+              <img :src="browser.icon" :alt="browser.name" width="32" height="32" />
+            </div>
             <div class="browser-info">
               <div class="browser-name">{{ browser.name }}</div>
               <div class="browser-status">
