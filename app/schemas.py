@@ -236,6 +236,16 @@ class _SystemFieldsMixin(BaseModel):
             )
         return v
 
+    @field_validator("browser_custom_path")
+    @classmethod
+    def validate_custom_path(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            return v
+        if re.search(r'[;&|`$(){}]', v):
+            raise ValueError("路径包含非法字符")
+        return v
+
 
 class GlobalSettings(BaseModel):
     """全局系统配置 — 仅系统级设置，不包含业务逻辑"""
@@ -320,6 +330,16 @@ class GlobalSettings(BaseModel):
             raise ValueError(
                 f"无效的日志级别: {v}，可选值: {', '.join(VALID_LOG_LEVELS)}"
             )
+        return v
+
+    @field_validator("browser_custom_path")
+    @classmethod
+    def validate_custom_path(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            return v
+        if re.search(r'[;&|`$(){}]', v):
+            raise ValueError("路径包含非法字符")
         return v
 
     @field_validator("browser_extra_headers_json")
