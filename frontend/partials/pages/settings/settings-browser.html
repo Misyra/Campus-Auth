@@ -51,10 +51,7 @@
 
         <!-- 自定义路径输入 -->
         <div v-if="config.browser_channel === 'custom'" class="form-group">
-          <div class="field-label-row">
-            <label for="settings-browser-custom-path">浏览器可执行文件路径</label>
-            <span class="field-help" tabindex="0" role="note" data-tip="需要使用支持 Playwright 的浏览器二进制文件。">?</span>
-          </div>
+          <label for="settings-browser-custom-path">浏览器可执行文件路径</label>
           <input
             id="settings-browser-custom-path"
             type="text"
