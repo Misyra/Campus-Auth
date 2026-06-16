@@ -36,8 +36,6 @@ export const configMethods = {
         this.selectedBrowser = data.browser_channel;
       }
       if (updateSnapshot) {
-        this._configDirty = false;
-        this.savedConfigSnapshot = JSON.stringify(this.config);
         this._lastSavedConfig = JSON.stringify(this.config);
       }
       this.frontendLogger.info('config', '配置已加载');
@@ -112,8 +110,7 @@ export const configMethods = {
   resetConfig() {
     if (!confirm('确定要恢复默认设置吗？当前修改将丢失。')) return;
     this.config = structuredClone(DEFAULT_CONFIG);
-    this._configDirty = true;
-    this._lastSavedConfig = null;  // 重置快照
+    this._lastSavedConfig = null;  // 重置快照，configDirty 会自动检测到变更
     this.frontendLogger.info('config', '已恢复默认设置');
   },
   onShellFileSelected(e) {

@@ -164,7 +164,7 @@ export const appOptions = {
       return errors;
     },
     configDirty() {
-      return this._configDirty;
+      return this._lastSavedConfig !== null && JSON.stringify(this.config) !== this._lastSavedConfig;
     },
     filteredLogs() {
       const { level, source, search } = this.logFilter;
@@ -260,14 +260,7 @@ export const appOptions = {
   watch: {
     config: {
       handler() {
-        if (this._configDirtyTimer) clearTimeout(this._configDirtyTimer);
-        this._configDirtyTimer = setTimeout(() => {
-          if (!this.savedConfigSnapshot) {
-            this._configDirty = false;
-            return;
-          }
-          this._configDirty = JSON.stringify(this.config) !== this.savedConfigSnapshot;
-        }, 300);
+        // 配置变更时由 configDirty computed 自动检测
       },
       deep: true,
     },
@@ -318,7 +311,6 @@ export const appOptions = {
     if (this._toastLeavingTimer) clearTimeout(this._toastLeavingTimer);
     if (this._appearanceTimer) clearTimeout(this._appearanceTimer);
     if (this._logScrollRaf) cancelAnimationFrame(this._logScrollRaf);
-    if (this._configDirtyTimer) clearTimeout(this._configDirtyTimer);
     this.timers.forEach((t) => clearInterval(t));
     if (this._visibilityHandler) {
       document.removeEventListener('visibilitychange', this._visibilityHandler);

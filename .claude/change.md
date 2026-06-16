@@ -3,6 +3,14 @@
 ## 2026-06-16
 
 ### feat
+- 添加配置自动保存逻辑
+  - `frontend/js/methods/config.js` 新增 `_isConfigLoaded`、`_lastSavedConfig`、`_saveConfigTimer`、`_saveAbortController` 属性
+  - 新增 `_debounceSave` 防抖方法和 `onConfigChange` 配置变更回调
+  - `fetchConfig` 添加首次加载保护和快照
+  - `saveConfig` 添加脏值检测、AbortController 取消机制、saveFailed 状态管理
+  - `resetConfig` 添加快照重置
+
+### feat
 - 添加 Firefox 兼容性警告提示
   - `frontend/partials/pages/settings/settings-browser.html` 浏览器卡片区域添加 Firefox 兼容性警告
   - `frontend/partials/wizard.html` 向导页面浏览器选择区域添加相同警告
@@ -815,3 +823,12 @@
   - 更新 VBS 模板解析逻辑：初始化 `pid = 0`，使用 `InStr` 查找 `":"` 提取 JSON 中的 PID 值
   - 添加 `If pid > 0 Then` 条件检查，仅在成功解析 PID 后才执行 WMI 进程检测
   - 避免因格式不匹配导致 WMI 查询失败，防止启动重复实例
+
+### refactor
+- 移除旧的 configDirty 检测逻辑，改用 _lastSavedConfig 进行脏值检测
+  - `frontend/js/app-options.js`：configDirty computed 改为直接比较 JSON.stringify(config) 与 _lastSavedConfig
+  - `frontend/js/app-options.js`：config watcher 移除防抖定时器和 dirty 状态更新逻辑
+  - `frontend/js/app-options.js`：beforeUnmount 移除 _configDirtyTimer 清理
+  - `frontend/js/data/config.js`：移除 savedConfigSnapshot 和 _configDirty 数据属性
+  - `frontend/js/methods/config.js`：fetchConfig 移除 _configDirty 和 savedConfigSnapshot 设置
+  - `frontend/js/methods/config.js`：resetConfig 移除 _configDirty = true，由 computed 自动检测
