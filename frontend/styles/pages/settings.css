@@ -943,4 +943,41 @@
   font-size: 0.875rem;
 }
 
+/* ---- 保存状态栏 ---- */
+.save-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  font-size: 13px;
+}
+
+.save-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.save-status.saving {
+  color: var(--text-secondary);
+}
+
+.save-status.saved {
+  color: var(--success-color);
+}
+
+.save-status.failed {
+  color: var(--error-color);
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
 
