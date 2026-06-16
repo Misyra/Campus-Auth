@@ -3,6 +3,11 @@
 ## 2026-06-16
 
 ### fix
+- Playwright Chromium 检测添加 .local-browsers 备用路径
+  - `app/utils/browser_registry.py` `_has_playwright_chromium` 通过 `importlib.util.find_spec` 定位 playwright 包内的 `.local-browsers` 目录
+  - 先搜索标准缓存目录，再搜索包内备用路径，任一路径找到 chromium 即返回 True
+
+### fix
 - 添加自定义浏览器路径安全校验
   - `app/schemas.py` 在 `_SystemFieldsMixin` 和 `GlobalSettings` 中添加 `browser_custom_path` 字段校验器，检测路径中的危险字符（`;`、`&`、`|`、`` ` ``、`$`、`(`、`)`、`{`、`}`）
   - `app/workers/playwright_worker.py` `_launch_browser` 方法中添加路径存在性检查，路径不存在时抛出 `FileNotFoundError`

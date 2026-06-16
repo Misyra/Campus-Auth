@@ -148,6 +148,7 @@ def _detect_custom() -> BrowserInfo:
 
 def _has_playwright_chromium() -> bool:
     """检查 Playwright Chromium 是否已下载。"""
+    # 标准缓存目录
     if PLATFORM == "windows":
         cache_dir = Path.home() / "AppData" / "Local" / "ms-playwright"
     elif PLATFORM == "darwin":
@@ -155,20 +156,33 @@ def _has_playwright_chromium() -> bool:
     else:
         cache_dir = Path.home() / ".cache" / "ms-playwright"
 
-    if not cache_dir.exists():
-        return False
+    search_dirs = [cache_dir]
 
-    for d in cache_dir.glob("chromium-*"):
-        if not d.is_dir():
+    # 添加包内 .local-browsers 备用路径
+    try:
+        import importlib.util as _ilu
+        _spec = _ilu.find_spec("playwright")
+        if _spec and _spec.submodule_search_locations:
+            search_dirs.append(
+                Path(_spec.submodule_search_locations[0]) / "driver" / "package" / ".local-browsers"
+            )
+    except Exception:
+        pass
+
+    for base_dir in search_dirs:
+        if not base_dir.is_dir():
             continue
-        for candidate in [
-            d / "chrome-win64" / "chrome.exe",
-            d / "chrome-win" / "chrome.exe",
-            d / "chrome-linux" / "chrome",
-            d / "chrome-mac" / "Chromium.app" / "Contents" / "MacOS" / "Chromium",
-        ]:
-            if candidate.exists():
-                return True
+        for d in base_dir.glob("chromium-*"):
+            if not d.is_dir():
+                continue
+            for candidate in [
+                d / "chrome-win64" / "chrome.exe",
+                d / "chrome-win" / "chrome.exe",
+                d / "chrome-linux" / "chrome",
+                d / "chrome-mac" / "Chromium.app" / "Contents" / "MacOS" / "Chromium",
+            ]:
+                if candidate.exists():
+                    return True
     return False
 
 
