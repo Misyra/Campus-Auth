@@ -258,7 +258,9 @@ Campus-Auth/
 ├── tests/                    # pytest 测试
 ├── docs/                     # 文档
 ├── dev/                      # 开发笔记
-├── tools/                    # 辅助工具（油猴脚本）
+├── res/                      # 资源文件
+│   ├── icons/                # 图标
+│   └── tools/                # 辅助工具（油猴脚本）
 ├── debug/                    # 日志与截图（按日期归档）
 └── release/                  # 发布产物
 ```
