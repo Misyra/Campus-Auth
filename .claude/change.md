@@ -2,6 +2,9 @@
 
 ## 2026-06-16
 
+### docs
+- [59] `app/services/task_executor.py` `BoundedExecutor.shutdown` 添加注释说明 `wait=False` 时信号量残留行为
+
 ### fix
 - 修复前端浏览器交互逻辑两个问题（`frontend/js/methods/ui.js`）
   - [47] `handleBrowserClick` 为 `custom` 通道增加独立分支：选中浏览器并聚焦到路径输入框，同时从 `downloadUrls` 中移除 `custom` 条目
