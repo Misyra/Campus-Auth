@@ -3,6 +3,21 @@
 ## 2026-06-16
 
 ### feat
+- `app/api/browsers.py` 新增 GET /api/browsers 端点
+  - 返回系统已安装的浏览器列表（5 种选项）和当前配置的 browser_channel
+  - 通过 `detect_browsers()` 检测浏览器，通过 `profile_service.load()` 获取当前配置
+  - 使用 FastAPI Depends 注入 profile_service，与项目风格一致
+- `app/application.py` 注册 browsers 路由
+
+### test
+- `tests/test_api/test_browsers.py` 添加浏览器 API 端点测试（5 个用例）
+  - `test_get_browsers_returns_200`：返回 200 状态码
+  - `test_get_browsers_structure`：响应包含 browsers 列表和 current 字段
+  - `test_get_browsers_contains_all_channels`：5 种浏览器选项全覆盖
+  - `test_get_browsers_current_field`：current 字段值合法
+  - `test_get_browsers_item_structure`：每个浏览器项包含必要字段
+
+### feat
 - `app/utils/browser_registry.py` 新增浏览器注册表，检测系统已安装的浏览器
   - `BrowserInfo` 数据类：channel、name、icon、installed、needs_download、description
   - `detect_browsers()` 返回 5 种浏览器选项：Playwright Chromium、Microsoft Edge、Google Chrome、Firefox、自定义路径
