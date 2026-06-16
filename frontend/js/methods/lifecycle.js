@@ -29,6 +29,7 @@ export const lifecycleMethods = {
       this.fetchShells(),
       this.fetchOcrStatus(),
       this.fetchLogLevels(),
+      this.fetchBrowsers(),
     ]);
     const rejectedCount = initResults.filter(r => r.status === 'rejected').length;
     if (rejectedCount > 0) {

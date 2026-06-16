@@ -47,7 +47,8 @@ def _make_engine(**overrides) -> ScheduleEngine:
         ScheduleEngine.__init__(svc, MagicMock(), **overrides)
         # 立即停止引擎线程
         svc._shutdown_event.set()
-        time.sleep(0.05)
+        if svc._engine_thread and svc._engine_thread.is_alive():
+            svc._engine_thread.join(timeout=1)
         return svc
 
 

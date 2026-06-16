@@ -342,7 +342,7 @@ class NetworkMonitorCore:
             self.log_message(f"方案切换检测异常: {exc}", "WARNING")
 
     def consume_profile_switch_flag(self) -> bool:
-        """消费重启标志位（原子操作）。"""
+        """消费重启标志位（由引擎线程串行调用，无需额外同步）。"""
         if self._profile_switch_needed:
             self._profile_switch_needed = False
             return True

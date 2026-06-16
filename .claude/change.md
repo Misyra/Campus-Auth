@@ -1,5 +1,230 @@
 # 修改日志
 
+## 2026-06-16
+
+### docs
+- [59] `app/services/task_executor.py` `BoundedExecutor.shutdown` 添加注释说明 `wait=False` 时信号量残留行为
+
+### fix
+- 修复前端浏览器交互逻辑两个问题（`frontend/js/methods/ui.js`）
+  - [47] `handleBrowserClick` 为 `custom` 通道增加独立分支：选中浏览器并聚焦到路径输入框，同时从 `downloadUrls` 中移除 `custom` 条目
+  - [48] `installPlaywrightChromium` 的 `fetch` 调用添加 AbortController 600 秒（10 分钟）超时保护，超时后显示友好提示
+
+## 2026-06-16
+
+### fix
+- 修复网络探测客户端获取的 TOCTOU 竞态（`app/network/probes.py`）
+  - [35] `_get_probe_client` 移除无锁快速路径，统一走锁内检查
+  - 原双检锁模式中快速路径在无锁环境下多步条件判断可能读到不一致状态
+
+### fix
+- 修复调试会话管理 5 个问题（`app/services/debug_service.py`）
+  - [9] `run_all` 会话有效性检查移入 `async with self._lock` 块内，消除锁外访问共享 `_session` 的竞态
+  - [10] `_debug_timeout_watcher` 将 `_last_activity` 读取和超时判断全部纳入锁保护范围
+  - [44] `run_all` 在循环开始前一次性获取 `_exec_sem` 并持有到整个批量执行完成，防止 `next_step` 插入
+  - [45] `start` 将 Worker 启动调用移到锁外执行，失败时再加锁回滚状态，避免持锁等待线程
+  - [75] `close` 方法开头添加 `await self._cancel_debug_timer()`，取消超时定时器
+
+### fix
+- 修复应用入口 4 个问题（`app/container.py`、`main.py`、`tests/test_config/test_container.py`）
+  - [3] 轻量模式创建 `NullTaskExecutor` 而非真正的 `TaskExecutor`，避免创建不必要的线程池
+  - [29] 轻量模式关闭时复用已有 event loop 而非创建新的，无可用 loop 时回退到同步关闭
+  - [30] `_start_web_server` 使用 `threading.Lock` 保护标志检查和设置，防止竞态条件
+  - [64] `_terminate_process` 后验证进程已实际退出再清理 PID 文件
+
+### fix
+- 修复任务系统 4 个问题（`app/tasks/variable_resolver.py`、`app/tasks/step_handlers.py`）
+  - [6] `resolve_for_js` 双重编码：replacer 函数改为 `json.dumps(str(resolved))`，确保非字符串类型解析结果先转为字符串再 JSON 编码，输出始终是合法的 JS 字符串字面量
+  - [7] 变量解析缓存未绑定上下文：`__init__` 新增 `_cache_version` 版本号，`set_runtime_var` 递增版本号，缓存 key 从原始字符串改为 `(version, value)` 元组，外部修改变量后缓存自动失效
+  - [33] OCR Timer 生命周期竞态：`_cleanup_timers` 的读写操作（`schedule_cleanup`、`_cancel_cleanup`、`_do_cleanup`）全部纳入 `_ocr_lock` 保护范围，新增 `_cancel_cleanup_locked` 内部方法避免死锁
+  - [34] SleepHandler 缺少校验：`int()` 转换添加 try/except 捕获 ValueError/TypeError，添加负值检查回退到默认值 1000ms
+
+### fix
+- 修复配置服务 3 个问题（`app/services/config_service.py`、`app/services/runtime_config.py`、`app/schemas.py`）
+  - [26] `_update_global_settings` 补充 `lightweight_tray` 字段同步，将前端传来的值复制到 `global_settings`
+  - [27] `_build_config_payload` 补充 `lightweight_tray` 字段，从 `global_settings` 读取并合并到 payload
+  - [28] 密码处理简化为一行调用 `save_password_field`，委托给已有的密码处理函数处理所有场景（掩码、空值、ENC: 前缀、明文）
+  - `app/schemas.py` `_SystemFieldsMixin` 添加 `lightweight_tray` 字段定义，使 `MonitorConfigPayload` 能传递该字段
+
+### fix
+- `app/services/task_executor.py` `_link_cancel_event` 观看线程添加 300 秒超时，防止无限阻塞
+
+### fix
+- 修复 TaskExecutor 3 个问题（`app/services/task_executor.py`、`app/services/task_registry.py`）
+  - [2] `_ensure_task_pool` 懒初始化添加双检锁（`_task_pool_lock`），防止多线程并发创建多个 BoundedExecutor
+  - [22] `execute_login_async` 去重时联动新 `cancel_event` 到已有任务：新增 `_login_cancel_event` 存储已有任务的 cancel_event，去重时通过 `_link_cancel_event` 后台线程监控新事件并联动；`_on_login_done` 同步清理 `_login_cancel_event`
+  - [24] `_get_script_path` 路径推断改为委托 `TaskRegistry.get_script_path()`：在 `TaskRegistry` 上新增 `get_script_path(task_id)` 方法，在 `tasks/scripts/` 目录查找 `.json`/`.py` 文件；移除 `task_executor.py` 中硬编码的 `tasks_dir.parent.parent` 推断逻辑
+
+### test
+- 更新测试适配 TaskExecutor 修复
+  - `tests/test_services/test_task_executor_fix.py`：重写 `TestTaskExecutorGetScriptPath`（3 个测试改为验证委托行为）、新增 `test_ensure_task_pool_thread_safe`（双检锁并发安全）、新增 `test_duplicate_login_links_cancel_event`（cancel_event 联动）、新增 `test_on_login_done_clears_cancel_event`、修复 `test_duplicate_login_returns_existing` 签名
+  - `tests/test_core/test_task_registry.py`：新增 `TestRegistryGetScriptPath`（4 个测试：json/py 查找、优先级、不存在）
+
+### fix
+- 修复 engine.py 两个代码质量问题（`app/services/engine.py`）
+  - `_handle_reload` 和 `_handle_apply_profile` 检查 `_reload_config_internal` 返回值，失败时跳过 `_handle_start` 并记录错误
+  - `_reload_config_internal` 的 except 分支设置 `self._pure_mode = False` 安全默认值，防止 reload 失败后 `_pure_mode` 未初始化
+
+### fix
+- 修复调度引擎 5 个问题（`app/services/engine.py`）
+  - [19] 手动登录路径不再污染自动重试计数：`_do_async_login` 添加 `is_manual` 参数，手动登录不递增 `count`
+  - [21] `_do_network_check` 使用 `_monitor_core` 局部引用，避免与 `shutdown` 竞争导致 `AttributeError`
+  - [54] profile switch 后 `_reload_config_internal` 失败时跳过 `_handle_start`，防止用过期配置启动监控
+  - [55] `drain_ws_queue` 入口检查 `_ws_manager is not None`，避免 `AttributeError`
+  - [56] `_reload_config_internal` 中同时更新 `_pure_mode`（在 `_pure_mode_lock` 内），消除 `__init__` 中重复的 `load()` 调用
+
+### fix
+- 浏览器注册与安装修复（5 个问题）
+  - `app/utils/browser_registry.py` 提取公共 `has_playwright_chromium()` 函数，消除与 `playwright_bootstrap.py` 的 Chromium 检测逻辑重复
+  - `app/workers/playwright_bootstrap.py` `_has_chromium()` 改为复用 `has_playwright_chromium()`，移除 `sync_playwright` 回退路径
+  - `app/api/install_playwright.py` 并发保护从布尔变量 `_installing` 改为 `asyncio.Lock()`
+  - `app/workers/playwright_bootstrap.py` `ensure_playwright_ready` 保存/恢复 `PLAYWRIGHT_DOWNLOAD_HOST` 环境变量
+  - `app/utils/browser_registry.py` `_detect_firefox()` Windows 路径补充 `%LOCALAPPDATA%\Mozilla Firefox\firefox.exe`
+  - `app/utils/browser_registry.py` `detect_browsers()` 添加 30 秒 TTL 缓存
+  - 清理 `playwright_bootstrap.py` 中未使用的 `Path`、`is_macos` 导入
+
+### fix
+- `app/workers/playwright_worker.py` 修复 4 个浏览器自动化核心问题
+  - `submit_nowait` 添加 `queue.Full` 异常处理和 `_wake_async()` 唤醒事件循环，与 `submit()` 行为一致
+  - `cleanup_orphan_browsers` 扩展过滤条件支持 Firefox 进程清理（原仅清理 Chromium）
+  - `get_worker()` 使用临时变量 `new_worker`，`start()` 成功后再赋值给 `_worker`，避免其他线程拿到未初始化实例
+  - `_handle_debug_stop` 反检测脚本应用逻辑与 `_start_browser` 一致：纯净模式下仅 `stealth_mode` 启用时才应用
+
+### docs
+- 生成全项目代码审查报告 `code-review-report.md`
+  - 13 个 Review Unit 并行审查（P0×3 + P1×5 + P2×5）
+  - 发现 12 个 Critical、40 个 Major、22 个 Minor 问题（共 74 个）
+  - 关键发现：浏览器生命周期竞态（__aexit__ + ensure_browser 冲突）、脚本执行白名单绕过、轻量模式 TaskExecutor 未使用 NullTaskExecutor、变量解析双重编码
+  - 跳过日志系统（正在优化中）
+
+### refactor
+- 移除旧的保存按钮和表单提交
+  - `frontend/partials/pages/settings.html` 移除表单的 `@submit.prevent="saveConfig"` 事件绑定
+  - `frontend/partials/pages/settings/settings-browser.html` 删除底部悬浮保存按钮区域（`settings-float-save`）
+
+### feat
+- 为所有配置项添加自动保存事件监听
+  - `frontend/partials/pages/settings/settings-browser.html` 为 17 个配置项添加 @change/@input 事件
+  - `frontend/partials/pages/settings/settings-monitor.html` 为 18 个配置项添加 @change/@input 事件
+  - `frontend/partials/pages/settings/settings-system.html` 为 11 个配置项添加 @change/@input 事件
+  - `frontend/partials/pages/settings/settings-account.html` 为 6 个配置项添加 @change/@input 事件
+  - checkbox 类型使用 @change 事件，type 为 'toggle'
+  - input/textarea 类型使用 @input 事件，type 为 'input'
+  - select 类型使用 @change 事件，type 为 'toggle'
+  - computed 属性（pureMode、urlCheckEnabled）使用特殊格式：先调用切换方法再调用 onConfigChange
+
+
+
+### feat
+- 添加配置自动保存逻辑
+  - `frontend/js/methods/config.js` 新增 `_isConfigLoaded`、`_lastSavedConfig`、`_saveConfigTimer`、`_saveAbortController` 属性
+  - 新增 `_debounceSave` 防抖方法和 `onConfigChange` 配置变更回调
+  - `fetchConfig` 添加首次加载保护和快照
+  - `saveConfig` 添加脏值检测、AbortController 取消机制、saveFailed 状态管理
+  - `resetConfig` 添加快照重置
+
+### feat
+- 添加 Firefox 兼容性警告提示
+  - `frontend/partials/pages/settings/settings-browser.html` 浏览器卡片区域添加 Firefox 兼容性警告
+  - `frontend/partials/wizard.html` 向导页面浏览器选择区域添加相同警告
+  - `frontend/styles/pages/settings.css` 添加 `.browser-warning` 警告样式
+  - `frontend/js/methods/ui.js` `handleBrowserClick` 方法添加 Firefox 选择前的确认弹窗
+
+### fix
+- DEFAULT_CONFIG 添加 browser_channel 和 browser_custom_path 字段
+  - `frontend/js/constants.js` `_SHARED_DEFAULTS` 中在 `headless: true` 之前添加 `browser_channel: "playwright"` 和 `browser_custom_path: ""`
+
+### fix
+- Playwright Chromium 检测添加 .local-browsers 备用路径
+  - `app/utils/browser_registry.py` `_has_playwright_chromium` 通过 `importlib.util.find_spec` 定位 playwright 包内的 `.local-browsers` 目录
+  - 先搜索标准缓存目录，再搜索包内备用路径，任一路径找到 chromium 即返回 True
+
+### fix
+- 添加自定义浏览器路径安全校验
+  - `app/schemas.py` 在 `_SystemFieldsMixin` 和 `GlobalSettings` 中添加 `browser_custom_path` 字段校验器，检测路径中的危险字符（`;`、`&`、`|`、`` ` ``、`$`、`(`、`)`、`{`、`}`）
+  - `app/workers/playwright_worker.py` `_launch_browser` 方法中添加路径存在性检查，路径不存在时抛出 `FileNotFoundError`
+
+### fix
+- 修复 Firefox 启动时不传递 Chromium 专属参数
+  - `app/workers/playwright_worker.py` `_build_launch_args` 方法新增 `channel` 参数
+  - 当 `channel == "firefox"` 时返回空列表，不传递 Chromium 专属参数
+  - `_start_browser` 方法调用时传递 `channel` 参数
+
+### fix
+- 修复浏览器配置无法保存的问题
+  - `app/schemas.py` MonitorConfigPayload 添加浏览器配置字段（headless、browser_channel 等）
+  - `app/services/config_service.py` _update_global_settings 添加浏览器配置更新逻辑
+  - `app/services/runtime_config.py` _build_config_payload 添加 browser_channel 和 browser_custom_path 字段
+
+### fix
+- 修复手动登录 skip_pause_check 参数未传递的问题
+  - `app/services/engine.py` _handle_login 和 _do_async_login 传递 skip_pause_check
+  - `app/services/task_executor.py` execute_login_async 和 execute_login 传递 skip_pause_check
+
+### fix
+- 修复浏览器未正确关闭的问题
+  - `app/utils/browser.py` __aexit__ 改用 CMD_BROWSER_CLOSE 关闭浏览器
+
+### refactor
+- 删除浏览器复用逻辑，ensure_browser 每次都重新启动浏览器
+  - `app/workers/playwright_worker.py` ensure_browser 简化为直接关闭并重启
+
+### feat
+- 优化浏览器选择 UI，使用 SVG 图标和更好的样式
+  - `app/utils/browser_registry.py` 更新浏览器图标为 SVG
+  - `frontend/partials/pages/settings/settings-browser.html` 优化卡片布局和状态显示
+  - `frontend/partials/wizard.html` 同步更新向导页面样式
+  - `frontend/styles/pages/settings.css` 添加浏览器选择相关样式
+
+### fix
+- 修复 Chrome 检测逻辑，添加 Windows 标准安装路径检测
+  - `app/utils/browser_registry.py` 检查 Program Files 下的 Chrome 路径
+
+### feat
+- 恢复自定义路径选项，添加 Playwright 兼容性说明
+  - `app/utils/browser_registry.py` 恢复 _detect_custom 函数
+  - `frontend/partials/pages/settings/settings-browser.html` 添加自定义路径输入和说明链接
+  - `frontend/partials/wizard.html` 同步更新向导页面
+  - `frontend/styles/pages/settings.css` 添加自定义路径提示样式
+
+## 2026-06-16
+
+### feat
+- `app/workers/playwright_worker.py` `_start_browser` 支持根据 `browser_channel` 启动不同浏览器
+  - 新增 `_launch_browser` 辅助方法，根据 channel 分发到不同启动逻辑
+  - 支持 5 种浏览器 channel：playwright（默认）、msedge、chrome、firefox、custom（自定义路径）
+  - Firefox 使用 `playwright.firefox.launch()`，自定义路径使用 `executable_path` 参数
+  - `browser_channel` 和 `browser_custom_path` 从 `browser_settings` 配置中读取
+
+### feat
+- `app/api/browsers.py` 新增 GET /api/browsers 端点
+  - 返回系统已安装的浏览器列表（5 种选项）和当前配置的 browser_channel
+  - 通过 `detect_browsers()` 检测浏览器，通过 `profile_service.load()` 获取当前配置
+  - 使用 FastAPI Depends 注入 profile_service，与项目风格一致
+- `app/application.py` 注册 browsers 路由
+
+### test
+- `tests/test_api/test_browsers.py` 添加浏览器 API 端点测试（5 个用例）
+  - `test_get_browsers_returns_200`：返回 200 状态码
+  - `test_get_browsers_structure`：响应包含 browsers 列表和 current 字段
+  - `test_get_browsers_contains_all_channels`：5 种浏览器选项全覆盖
+  - `test_get_browsers_current_field`：current 字段值合法
+  - `test_get_browsers_item_structure`：每个浏览器项包含必要字段
+
+### feat
+- `app/utils/browser_registry.py` 新增浏览器注册表，检测系统已安装的浏览器
+  - `BrowserInfo` 数据类：channel、name、icon、installed、needs_download、description
+  - `detect_browsers()` 返回 5 种浏览器选项：Playwright Chromium、Microsoft Edge、Google Chrome、Firefox、自定义路径
+  - Playwright Chromium 检测缓存目录中的已下载实例
+  - Edge/Chrome/Firefox 通过 `shutil.which` 和 macOS 应用路径检测
+  - 自定义路径始终可用，由用户自行确保路径有效
+
+### test
+- `tests/test_utils/test_browser_registry.py` 添加浏览器注册表测试（3 个用例）
+  - `test_detect_browsers_returns_list`：返回类型验证
+  - `test_browser_info_fields`：字段完整性验证
+  - `test_detect_browsers_contains_all_options`：5 种浏览器选项全覆盖
+
 ## 2026-06-15
 
 ### fix
@@ -711,3 +936,21 @@
   - 更新 VBS 模板解析逻辑：初始化 `pid = 0`，使用 `InStr` 查找 `":"` 提取 JSON 中的 PID 值
   - 添加 `If pid > 0 Then` 条件检查，仅在成功解析 PID 后才执行 WMI 进程检测
   - 避免因格式不匹配导致 WMI 查询失败，防止启动重复实例
+
+### refactor
+- 移除旧的 configDirty 检测逻辑，改用 _lastSavedConfig 进行脏值检测
+  - `frontend/js/app-options.js`：configDirty computed 改为直接比较 JSON.stringify(config) 与 _lastSavedConfig
+  - `frontend/js/app-options.js`：config watcher 移除防抖定时器和 dirty 状态更新逻辑
+  - `frontend/js/app-options.js`：beforeUnmount 移除 _configDirtyTimer 清理
+  - `frontend/js/data/config.js`：移除 savedConfigSnapshot 和 _configDirty 数据属性
+  - `frontend/js/methods/config.js`：fetchConfig 移除 _configDirty 和 savedConfigSnapshot 设置
+  - `frontend/js/methods/config.js`：resetConfig 移除 _configDirty = true，由 computed 自动检测
+
+### fix
+- 修复 6 个 Minor 问题（分散在多个文件）
+  - [50] `app/utils/browser.py` `STEALTH_INIT_SCRIPT` 改用 `Object.defineProperty` 设置 `__playwright`/`__pw_manual` 为 undefined，防止 non-configurable 属性 delete 静默失败
+  - [53] `app/services/monitor_service.py` `consume_profile_switch_flag` 注释修正为"由引擎线程串行调用，无需额外同步"
+  - [57] `app/utils/shell_utils.py` `get_default_shell` 非 Windows 回退路径使用 `shutil.which` 验证存在性，`$SHELL` 环境变量指向已删除 shell 时回退到 bash/sh
+  - [60] `app/utils/crypto.py` `save_password_field` 掩码判断从 `startswith("•")` 改为精确匹配 `"••••••••"`，避免以 bullet 开头的密码被误判
+  - [61] `app/schemas.py` 提取 `_CommonSettingsMixin` 共享 mixin，消除 `_SystemFieldsMixin` 与 `GlobalSettings` 之间约 40 个重复字段定义和 2 个重复验证器
+  - [66] `app/tasks/manager.py` `_extract_script_metadata` 使用 `ast.get_docstring()` 正确提取标准多行 docstring

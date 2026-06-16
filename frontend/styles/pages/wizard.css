@@ -20,7 +20,7 @@
   border: 1px solid var(--border);
   border-radius: 20px;
   width: 100%;
-  max-width: 600px;
+  max-width: 760px;
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);

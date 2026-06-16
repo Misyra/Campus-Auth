@@ -202,6 +202,7 @@ class LogConfigCenter:
         self._configured = False
         self._initialized = True
         self._file_sink_id: int | None = None
+        self._frontend_file_sink_id: int | None = None
         # source 级别配置
         self._source_levels: dict[str, str] = {}
 
@@ -253,23 +254,41 @@ class LogConfigCenter:
 
     def add_file_handler(self, log_dir: str, retention_days: int = 7) -> None:
         """添加按日期存储的日志 sink（loguru 原生轮转）"""
+        # 移除旧的 sink
         if self._file_sink_id is not None:
             with contextlib.suppress(ValueError):
                 logger.remove(self._file_sink_id)
             self._file_sink_id = None
+        if self._frontend_file_sink_id is not None:
+            with contextlib.suppress(ValueError):
+                logger.remove(self._frontend_file_sink_id)
+            self._frontend_file_sink_id = None
 
         try:
-            log_path = os.path.join(log_dir, "app.log")
             os.makedirs(log_dir, exist_ok=True)
 
+            # 后端日志 -> app.log
+            backend_path = os.path.join(log_dir, "app.log")
             self._file_sink_id = logger.add(
-                log_path,
+                backend_path,
                 rotation="00:00",
                 retention=f"{retention_days} days",
                 encoding="utf-8",
                 format=_file_format,
                 level="DEBUG",
                 filter=lambda record: record["extra"].get("source") != "frontend",
+            )
+
+            # 前端日志 -> frontend.log
+            frontend_path = os.path.join(log_dir, "frontend.log")
+            self._frontend_file_sink_id = logger.add(
+                frontend_path,
+                rotation="00:00",
+                retention=f"{retention_days} days",
+                encoding="utf-8",
+                format=_file_format,
+                level="DEBUG",
+                filter=lambda record: record["extra"].get("source") == "frontend",
             )
 
             logger.info("日志系统启动 | 目录: {} | 保留 {} 天", log_dir, retention_days)

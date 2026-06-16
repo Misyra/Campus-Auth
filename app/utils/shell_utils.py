@@ -68,4 +68,7 @@ def get_default_shell() -> str:
             return powershell
         return "cmd.exe"
     else:
-        return os.environ.get("SHELL", "/bin/bash")
+        shell_env = os.environ.get("SHELL")
+        if shell_env and shutil.which(shell_env):
+            return shell_env
+        return shutil.which("bash") or shutil.which("sh") or "/bin/bash"

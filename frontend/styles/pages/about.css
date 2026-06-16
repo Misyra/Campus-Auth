@@ -337,7 +337,6 @@
   align-items: center;
   justify-content: center;
   z-index: var(--z-modal);
-  backdrop-filter: var(--blur-sm);
 }
 
 .uninstall-modal {

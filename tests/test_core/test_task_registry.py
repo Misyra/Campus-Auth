@@ -128,6 +128,58 @@ class TestRegistryInit:
         assert "t3" not in due  # 禁用的任务不在索引中
 
 
+class TestRegistryGetScriptPath:
+    """get_script_path 测试。"""
+
+    def test_finds_json_script(self, tmp_path: Path) -> None:
+        """查找 .json 脚本文件。"""
+        tasks_dir = tmp_path / "tasks" / "scheduled"
+        tasks_dir.mkdir(parents=True)
+        scripts_dir = tmp_path / "tasks" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        script_file = scripts_dir / "my_script.json"
+        script_file.write_text("{}")
+
+        reg = TaskRegistry(tasks_dir)
+        assert reg.get_script_path("my_script") == script_file
+
+    def test_finds_py_script(self, tmp_path: Path) -> None:
+        """查找 .py 脚本文件。"""
+        tasks_dir = tmp_path / "tasks" / "scheduled"
+        tasks_dir.mkdir(parents=True)
+        scripts_dir = tmp_path / "tasks" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        script_file = scripts_dir / "my_script.py"
+        script_file.write_text("print('hello')")
+
+        reg = TaskRegistry(tasks_dir)
+        assert reg.get_script_path("my_script") == script_file
+
+    def test_json_preferred_over_py(self, tmp_path: Path) -> None:
+        """同时存在 .json 和 .py 时优先返回 .json。"""
+        tasks_dir = tmp_path / "tasks" / "scheduled"
+        tasks_dir.mkdir(parents=True)
+        scripts_dir = tmp_path / "tasks" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        json_file = scripts_dir / "dual.json"
+        json_file.write_text("{}")
+        py_file = scripts_dir / "dual.py"
+        py_file.write_text("print()")
+
+        reg = TaskRegistry(tasks_dir)
+        assert reg.get_script_path("dual") == json_file
+
+    def test_returns_none_when_not_found(self, tmp_path: Path) -> None:
+        """脚本不存在时返回 None。"""
+        tasks_dir = tmp_path / "tasks" / "scheduled"
+        tasks_dir.mkdir(parents=True)
+        scripts_dir = tmp_path / "tasks" / "scripts"
+        scripts_dir.mkdir(parents=True)
+
+        reg = TaskRegistry(tasks_dir)
+        assert reg.get_script_path("nonexistent") is None
+
+
 class TestRegistryGetTask:
     """get_task 测试。"""
 

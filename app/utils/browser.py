@@ -53,9 +53,9 @@ Object.defineProperty(navigator, 'languages', {
     get: () => ['zh-CN', 'zh', 'en-US', 'en'],
 });
 
-// 隐藏 Playwright 注入的属性
-delete window.__playwright;
-delete window.__pw_manual;
+// 隐藏 Playwright 注入的属性（Object.defineProperty 防止 non-configurable 属性 delete 静默失败）
+Object.defineProperty(window, '__playwright', {value: undefined, writable: false, configurable: false});
+Object.defineProperty(window, '__pw_manual', {value: undefined, writable: false, configurable: false});
 """.lstrip()
 
 
@@ -114,24 +114,20 @@ class BrowserContextManager:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """异步上下文管理器出口 - 通知 Worker 释放浏览器引用
-
-        浏览器常驻 Worker 生命周期内，不会实际关闭。
-        向 Worker 提交 CMD_BROWSER_RELEASE（fire-and-forget）即可。
-        """
-        # 通知 Worker 释放引用（无需等待结果）
+        """异步上下文管理器出口 - 关闭浏览器并释放资源。"""
+        # 关闭浏览器
         import queue as _queue_mod
 
         from app.workers.playwright_worker import (
-            CMD_BROWSER_RELEASE,
+            CMD_BROWSER_CLOSE,
             get_worker,
         )
 
         worker = get_worker()
         try:
-            worker.submit_nowait(CMD_BROWSER_RELEASE)
+            worker.submit_nowait(CMD_BROWSER_CLOSE)
         except _queue_mod.Full:
-            self.logger.warning("Worker 队列已满，无法发送 CMD_BROWSER_RELEASE")
+            self.logger.warning("Worker 队列已满，无法发送 CMD_BROWSER_CLOSE")
 
         # 清空本地引用
         self.playwright = None

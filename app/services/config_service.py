@@ -20,7 +20,7 @@ config_logger = get_logger("config_service", source="backend")
 def _update_global_settings(
     global_settings: GlobalSettings, payload: MonitorConfigPayload
 ) -> None:
-    """更新全局系统设置（不包含凭证和浏览器配置）"""
+    """更新全局系统设置（不包含凭证）"""
     global_settings.backend_log_level = normalize_level(
         payload.backend_log_level, "WARNING"
     )
@@ -55,6 +55,29 @@ def _update_global_settings(
     global_settings.url_check_urls = payload.url_check_urls
     global_settings.network_check_timeout = payload.network_check_timeout
 
+    # 浏览器配置
+    global_settings.browser_channel = payload.browser_channel
+    global_settings.browser_custom_path = payload.browser_custom_path.strip()
+    global_settings.headless = payload.headless
+    global_settings.browser_timeout = payload.browser_timeout
+    global_settings.browser_navigation_timeout = payload.browser_navigation_timeout
+    global_settings.login_timeout = payload.login_timeout
+    global_settings.browser_user_agent = payload.browser_user_agent
+    global_settings.browser_low_resource_mode = payload.browser_low_resource_mode
+    global_settings.browser_disable_web_security = payload.browser_disable_web_security
+    global_settings.browser_extra_headers_json = payload.browser_extra_headers_json
+    global_settings.browser_args = payload.browser_args
+    global_settings.stealth_mode = payload.stealth_mode
+    global_settings.stealth_custom_script = payload.stealth_custom_script
+    global_settings.browser_locale = payload.browser_locale
+    global_settings.browser_timezone = payload.browser_timezone
+    global_settings.browser_viewport_width = payload.browser_viewport_width
+    global_settings.browser_viewport_height = payload.browser_viewport_height
+    global_settings.pure_mode = payload.pure_mode
+
+    # 轻量模式托盘
+    global_settings.lightweight_tray = payload.lightweight_tray
+
     # 自定义变量
     global_settings.custom_variables = payload.custom_variables
 
@@ -81,14 +104,7 @@ def save_config_combined(
         # 更新凭证
         from app.utils.crypto import save_password_field
         profile.username = payload.username.strip()
-        pwd_raw = payload.password.strip()
-        if pwd_raw.startswith("•"):
-            pass  # 掩码值，不更新密码
-        elif pwd_raw:
-            profile.password = save_password_field(pwd_raw, profile.password)
-        else:
-            # 用户显式清空密码
-            profile.password = ""
+        profile.password = save_password_field(payload.password, profile.password)
         profile.auth_url = payload.auth_url.strip()
         profile.carrier = str(payload.carrier or "无").strip()
         profile.carrier_custom = str(payload.carrier_custom or "").strip()
@@ -157,6 +173,8 @@ def build_runtime_config(
             "viewport_width": global_settings.browser_viewport_width,
             "viewport_height": global_settings.browser_viewport_height,
             "pure_mode": global_settings.pure_mode,
+            "browser_channel": global_settings.browser_channel,
+            "browser_custom_path": global_settings.browser_custom_path.strip(),
         }
     else:
         # 回退：使用默认值
@@ -176,6 +194,8 @@ def build_runtime_config(
             "viewport_width": 1280,
             "viewport_height": 720,
             "pure_mode": True,
+            "browser_channel": "playwright",
+            "browser_custom_path": "",
         }
 
     # 暂停时段

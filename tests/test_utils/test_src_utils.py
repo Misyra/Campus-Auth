@@ -409,34 +409,15 @@ class TestIsEnabled:
 
 
 class TestHasChromium:
-    @patch("app.workers.playwright_bootstrap.is_windows", return_value=True)
-    def test_windows_no_cache_dir(self, mock_is_win):
-        with (
-            patch(
-                "app.workers.playwright_bootstrap.Path.home",
-                return_value=Path("/nonexistent"),
-            ),
-            patch("importlib.util.find_spec", return_value=None),
-            patch.dict(
-                "sys.modules", {"playwright.sync_api": None, "playwright": None}
-            ),
-        ):
-            assert _has_chromium() is False
+    @patch("app.utils.browser_registry.has_playwright_chromium", return_value=False)
+    def test_no_chromium(self, mock_has_pw):
+        assert _has_chromium() is False
+        mock_has_pw.assert_called_once()
 
-    @patch("app.workers.playwright_bootstrap.is_windows", return_value=False)
-    @patch("app.workers.playwright_bootstrap.is_macos", return_value=False)
-    def test_linux_no_cache_dir(self, mock_is_mac, mock_is_win):
-        with (
-            patch(
-                "app.workers.playwright_bootstrap.Path.home",
-                return_value=Path("/nonexistent"),
-            ),
-            patch("importlib.util.find_spec", return_value=None),
-            patch.dict(
-                "sys.modules", {"playwright.sync_api": None, "playwright": None}
-            ),
-        ):
-            assert _has_chromium() is False
+    @patch("app.utils.browser_registry.has_playwright_chromium", return_value=True)
+    def test_has_chromium(self, mock_has_pw):
+        assert _has_chromium() is True
+        mock_has_pw.assert_called_once()
 
 
 class TestEnsurePlaywrightReady:
@@ -465,9 +446,10 @@ class TestEnsurePlaywrightReady:
         pb._BOOTSTRAP_DONE = True
         assert ensure_playwright_ready() is True
 
+    @patch("app.workers.playwright_bootstrap._get_browser_channel", return_value="playwright")
     @patch("app.workers.playwright_bootstrap._has_chromium", return_value=False)
     @patch("app.workers.playwright_bootstrap._is_enabled", return_value=True)
-    def test_no_playwright_package(self, mock_enabled, mock_chromium):
+    def test_no_playwright_package(self, mock_enabled, mock_chromium, mock_channel):
         import sys
 
         with patch.dict(sys.modules, {"playwright": None}):

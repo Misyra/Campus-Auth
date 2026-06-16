@@ -156,7 +156,7 @@ class TestSavePasswordField:
 
     def test_mask_preserves_existing(self):
         """raw 为掩码时应保留原加密值"""
-        assert save_password_field("••••", "ENC:existing") == "ENC:existing"
+        assert save_password_field("••••••••", "ENC:existing") == "ENC:existing"
 
     def test_enc_passthrough(self):
         """raw 已有 ENC: 前缀应原样返回"""

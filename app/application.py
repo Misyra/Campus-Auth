@@ -102,9 +102,12 @@ def create_app(existing_container=None):
 
     from app.api import (
         autostart,
+        browsers,
         config,
         debug,
         history,
+        icons,
+        install_playwright,
         monitor,
         ocr,
         profiles,
@@ -316,6 +319,9 @@ def create_app(existing_container=None):
     _app.include_router(scripts.router)
     _app.include_router(scheduled_tasks.router)
     _app.include_router(history.router)
+    _app.include_router(browsers.router)
+    _app.include_router(icons.router)
+    _app.include_router(install_playwright.router)
 
     # ==================== 首页和静态文件 ====================
 
