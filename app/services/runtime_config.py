@@ -119,6 +119,8 @@ def _build_config_payload(
         "url_check_urls": data.global_settings.url_check_urls,
         "network_check_timeout": data.global_settings.network_check_timeout,
         # 浏览器配置
+        "browser_channel": data.global_settings.browser_channel,
+        "browser_custom_path": data.global_settings.browser_custom_path,
         "headless": data.global_settings.headless,
         "browser_timeout": data.global_settings.browser_timeout,
         "browser_navigation_timeout": data.global_settings.browser_navigation_timeout,
