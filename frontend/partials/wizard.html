@@ -258,7 +258,30 @@
               <line x1="12" y1="9" x2="12" y2="13"/>
               <line x1="12" y1="17" x2="12.01" y2="17"/>
             </svg>
-            <span>Firefox 可能不支持部分功能（如反检测模式、自定义浏览器参数等），建议使用 Chromium 内核浏览器</span>
+            <div>
+              <strong>Firefox 兼容性限制：</strong>
+              <ul style="margin: 0.25rem 0 0 1.25rem; padding: 0;">
+                <li>自定义浏览器参数不生效（已自动跳过）</li>
+                <li>反检测模式可能不完全有效</li>
+              </ul>
+              <span style="opacity: 0.8;">建议使用 Chromium 内核浏览器以获得完整功能支持</span>
+            </div>
+          </div>
+
+          <!-- 自定义浏览器兼容性提示 -->
+          <div v-if="selectedBrowser === 'custom'" class="browser-info-tip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+            <div>
+              <strong>自定义浏览器说明：</strong>
+              <ul style="margin: 0.25rem 0 0 1.25rem; padding: 0;">
+                <li>仅支持 Chromium 内核浏览器（如 Brave、Vivaldi 等）</li>
+                <li>不支持 Firefox 或 WebKit 内核浏览器</li>
+              </ul>
+            </div>
           </div>
 
           <!-- 自定义路径输入 -->

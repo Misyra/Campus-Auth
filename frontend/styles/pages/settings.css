@@ -874,4 +874,23 @@
   margin-top: 0.125rem;
 }
 
+.browser-info-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(34, 211, 238, 0.1);
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  border-radius: var(--radius-md, 6px);
+  color: var(--accent, #22d3ee);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.browser-info-tip svg {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
 
