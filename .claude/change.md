@@ -3,6 +3,17 @@
 ## 2026-06-16
 
 ### fix
+- 修复 TaskExecutor 3 个问题（`app/services/task_executor.py`、`app/services/task_registry.py`）
+  - [2] `_ensure_task_pool` 懒初始化添加双检锁（`_task_pool_lock`），防止多线程并发创建多个 BoundedExecutor
+  - [22] `execute_login_async` 去重时联动新 `cancel_event` 到已有任务：新增 `_login_cancel_event` 存储已有任务的 cancel_event，去重时通过 `_link_cancel_event` 后台线程监控新事件并联动；`_on_login_done` 同步清理 `_login_cancel_event`
+  - [24] `_get_script_path` 路径推断改为委托 `TaskRegistry.get_script_path()`：在 `TaskRegistry` 上新增 `get_script_path(task_id)` 方法，在 `tasks/scripts/` 目录查找 `.json`/`.py` 文件；移除 `task_executor.py` 中硬编码的 `tasks_dir.parent.parent` 推断逻辑
+
+### test
+- 更新测试适配 TaskExecutor 修复
+  - `tests/test_services/test_task_executor_fix.py`：重写 `TestTaskExecutorGetScriptPath`（3 个测试改为验证委托行为）、新增 `test_ensure_task_pool_thread_safe`（双检锁并发安全）、新增 `test_duplicate_login_links_cancel_event`（cancel_event 联动）、新增 `test_on_login_done_clears_cancel_event`、修复 `test_duplicate_login_returns_existing` 签名
+  - `tests/test_core/test_task_registry.py`：新增 `TestRegistryGetScriptPath`（4 个测试：json/py 查找、优先级、不存在）
+
+### fix
 - 修复 engine.py 两个代码质量问题（`app/services/engine.py`）
   - `_handle_reload` 和 `_handle_apply_profile` 检查 `_reload_config_internal` 返回值，失败时跳过 `_handle_start` 并记录错误
   - `_reload_config_internal` 的 except 分支设置 `self._pure_mode = False` 安全默认值，防止 reload 失败后 `_pure_mode` 未初始化

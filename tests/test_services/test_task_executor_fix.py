@@ -67,61 +67,10 @@ class TestTaskRegistryGetTasksDir:
 
 
 class TestTaskExecutorGetScriptPath:
-    """TaskExecutor._get_script_path() 使用公共方法的测试。"""
+    """TaskExecutor._get_script_path() 委托 registry.get_script_path() 的测试。"""
 
-    def test_uses_public_method_first(self, tmp_path: Path) -> None:
-        tasks_dir = tmp_path / "tasks" / "scheduled"
-        tasks_dir.mkdir(parents=True)
-        scripts_dir = tmp_path / "tasks" / "scripts"
-        scripts_dir.mkdir(parents=True)
-
-        script_file = scripts_dir / "test_script.json"
-        script_file.write_text("{}")
-
-        mock_registry = MagicMock(spec=["get_tasks_dir"])
-        mock_registry.get_tasks_dir.return_value = tasks_dir
-
-        from app.services.task_executor import TaskExecutor
-
-        executor = TaskExecutor.__new__(TaskExecutor)
-        executor._registry = mock_registry
-
-        result = executor._get_script_path("test_script")
-        assert result == script_file
-
-    def test_falls_back_to_private_attr(self, tmp_path: Path) -> None:
-        tasks_dir = tmp_path / "tasks" / "scheduled"
-        tasks_dir.mkdir(parents=True)
-        scripts_dir = tmp_path / "tasks" / "scripts"
-        scripts_dir.mkdir(parents=True)
-
-        script_file = scripts_dir / "test_script.json"
-        script_file.write_text("{}")
-
-        mock_registry = MagicMock(spec=[])
-        mock_registry._tasks_dir = tasks_dir
-
-        from app.services.task_executor import TaskExecutor
-
-        executor = TaskExecutor.__new__(TaskExecutor)
-        executor._registry = mock_registry
-
-        result = executor._get_script_path("test_script")
-        assert result == script_file
-
-    def test_returns_none_when_no_dir_info(self) -> None:
-        mock_registry = MagicMock(spec=[])
-
-        from app.services.task_executor import TaskExecutor
-
-        executor = TaskExecutor.__new__(TaskExecutor)
-        executor._registry = mock_registry
-
-        result = executor._get_script_path("nonexistent")
-        assert result is None
-
-    def test_uses_get_script_path_method(self) -> None:
-        """优先使用 registry.get_script_path() 方法。"""
+    def test_delegates_to_registry(self) -> None:
+        """委托 registry.get_script_path() 方法。"""
         mock_path = MagicMock()
         mock_registry = MagicMock(spec=["get_script_path"])
         mock_registry.get_script_path.return_value = mock_path
@@ -135,37 +84,22 @@ class TestTaskExecutorGetScriptPath:
         assert result is mock_path
         mock_registry.get_script_path.assert_called_once_with("test")
 
-    def test_falls_back_to_py_extension(self, tmp_path: Path) -> None:
-        """当 .json 不存在时，尝试 .py 扩展名。"""
-        tasks_dir = tmp_path / "tasks" / "scheduled"
-        tasks_dir.mkdir(parents=True)
-        scripts_dir = tmp_path / "tasks" / "scripts"
-        scripts_dir.mkdir(parents=True)
-
-        script_file = scripts_dir / "test_script.py"
-        script_file.write_text("print('hello')")
-
-        mock_registry = MagicMock(spec=["get_tasks_dir"])
-        mock_registry.get_tasks_dir.return_value = tasks_dir
+    def test_returns_none_when_no_method(self) -> None:
+        """registry 无 get_script_path 时返回 None。"""
+        mock_registry = MagicMock(spec=[])
 
         from app.services.task_executor import TaskExecutor
 
         executor = TaskExecutor.__new__(TaskExecutor)
         executor._registry = mock_registry
 
-        result = executor._get_script_path("test_script")
-        assert result == script_file
+        result = executor._get_script_path("nonexistent")
+        assert result is None
 
-    def test_returns_none_when_script_not_found(self, tmp_path: Path) -> None:
-        """脚本文件不存在时返回 None。"""
-        tasks_dir = tmp_path / "tasks" / "scheduled"
-        tasks_dir.mkdir(parents=True)
-        scripts_dir = tmp_path / "tasks" / "scripts"
-        scripts_dir.mkdir(parents=True)
-        # 不创建脚本文件
-
-        mock_registry = MagicMock(spec=["get_tasks_dir"])
-        mock_registry.get_tasks_dir.return_value = tasks_dir
+    def test_returns_none_when_registry_returns_none(self) -> None:
+        """registry.get_script_path 返回 None 时返回 None。"""
+        mock_registry = MagicMock(spec=["get_script_path"])
+        mock_registry.get_script_path.return_value = None
 
         from app.services.task_executor import TaskExecutor
 
@@ -274,6 +208,33 @@ class TestTaskPoolLazyInit:
         pool1 = executor._ensure_task_pool()
         pool2 = executor._ensure_task_pool()
         assert pool1 is pool2
+
+    def test_ensure_task_pool_thread_safe(self):
+        """并发调用 _ensure_task_pool 应返回同一实例（双检锁）。"""
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+
+        results = []
+        barrier = threading.Barrier(10)
+
+        def call_ensure():
+            barrier.wait(timeout=5)
+            results.append(executor._ensure_task_pool())
+
+        threads = [threading.Thread(target=call_ensure) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+
+        assert len(results) == 10
+        assert all(r is results[0] for r in results)
+        executor._task_pool.shutdown(wait=False)
 
 
 # =====================================================================
@@ -1185,7 +1146,7 @@ class TestTaskExecutorLoginAsync:
         executor = self._make_executor()
 
         blocker = threading.Event()
-        def slow_login(cancel_event=None):
+        def slow_login(cancel_event=None, skip_pause_check=False):
             blocker.wait(timeout=5)
             return (True, "ok")
 
@@ -1238,6 +1199,51 @@ class TestTaskExecutorLoginAsync:
         future2 = executor.execute_login_async()
         assert future2 is not future1
         future2.result(timeout=5)
+
+    def test_duplicate_login_links_cancel_event(self):
+        """去重时新 cancel_event 应联动到已有任务。"""
+        executor = self._make_executor()
+
+        blocker = threading.Event()
+        received_cancel = threading.Event()
+
+        def slow_login(cancel_event=None, skip_pause_check=False):
+            # 模拟长时间登录，定期检查 cancel_event
+            for _ in range(50):
+                if cancel_event and cancel_event.is_set():
+                    received_cancel.set()
+                    return (False, "cancelled")
+                blocker.wait(timeout=0.1)
+            return (True, "ok")
+
+        executor.execute_login = slow_login
+
+        original_cancel = threading.Event()
+        future1 = executor.execute_login_async(cancel_event=original_cancel)
+
+        # 第二次调用，带新的 cancel_event
+        new_cancel = threading.Event()
+        future2 = executor.execute_login_async(cancel_event=new_cancel)
+        assert future1 is future2
+
+        # 设置新 cancel_event，应联动到已有任务
+        new_cancel.set()
+        future1.result(timeout=5)
+
+        # 验证已有任务确实收到了取消信号
+        assert received_cancel.is_set()
+
+    def test_on_login_done_clears_cancel_event(self):
+        """登录完成后 _login_cancel_event 应被清理。"""
+        executor = self._make_executor()
+        executor.execute_login = _slow_return((True, "ok"))
+
+        cancel = threading.Event()
+        future = executor.execute_login_async(cancel_event=cancel)
+        future.result(timeout=5)
+        time.sleep(0.1)
+
+        assert executor._login_cancel_event is None
 
 
 # =====================================================================
