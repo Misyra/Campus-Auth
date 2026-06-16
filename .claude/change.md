@@ -3,6 +3,14 @@
 ## 2026-06-16
 
 ### fix
+- 修复调试会话管理 5 个问题（`app/services/debug_service.py`）
+  - [9] `run_all` 会话有效性检查移入 `async with self._lock` 块内，消除锁外访问共享 `_session` 的竞态
+  - [10] `_debug_timeout_watcher` 将 `_last_activity` 读取和超时判断全部纳入锁保护范围
+  - [44] `run_all` 在循环开始前一次性获取 `_exec_sem` 并持有到整个批量执行完成，防止 `next_step` 插入
+  - [45] `start` 将 Worker 启动调用移到锁外执行，失败时再加锁回滚状态，避免持锁等待线程
+  - [75] `close` 方法开头添加 `await self._cancel_debug_timer()`，取消超时定时器
+
+### fix
 - 修复应用入口 4 个问题（`app/container.py`、`main.py`、`tests/test_config/test_container.py`）
   - [3] 轻量模式创建 `NullTaskExecutor` 而非真正的 `TaskExecutor`，避免创建不必要的线程池
   - [29] 轻量模式关闭时复用已有 event loop 而非创建新的，无可用 loop 时回退到同步关闭
