@@ -838,6 +838,10 @@
   color: var(--warning, #f59e0b);
 }
 
+.status-downloading {
+  color: var(--accent, #22d3ee);
+}
+
 .status-custom {
   color: var(--accent, #22d3ee);
 }
@@ -945,12 +949,14 @@
 
 /* ---- 保存状态栏 ---- */
 .save-status-bar {
+  position: sticky;
+  bottom: 20px;
+  z-index: var(--z-sticky);
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border);
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
   font-size: 13px;
 }
 
@@ -970,6 +976,57 @@
 
 .save-status.failed {
   color: var(--error);
+}
+
+/* 保存按钮状态 */
+.save-btn {
+  min-width: 100px;
+  padding: 8px 20px;
+  border: none;
+  border-radius: var(--radius-md, 8px);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.save-btn-idle {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.3);
+}
+
+.save-btn-idle:hover {
+  background: var(--accent-hover, #06b6d4);
+  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.4);
+  transform: translateY(-1px);
+}
+
+.save-btn-saving {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+}
+
+.save-btn-saved {
+  background: var(--success-bg, rgba(34, 197, 94, 0.15));
+  color: var(--success);
+  border: 1px solid var(--success-border, rgba(34, 197, 94, 0.3));
+}
+
+.save-btn-failed {
+  background: var(--error-bg, rgba(239, 68, 68, 0.15));
+  color: var(--error);
+  border: 1px solid var(--error-border, rgba(239, 68, 68, 0.3));
+}
+
+/* 浅色主题 */
+[data-theme="light"] .save-btn-idle {
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.2);
+}
+
+[data-theme="light"] .save-btn-idle:hover {
+  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);
 }
 
 @keyframes spin {

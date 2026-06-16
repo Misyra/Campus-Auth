@@ -23,28 +23,26 @@
 
   <!-- 保存状态栏 -->
   <div class="save-status-bar">
-    <span v-if="busy.save" class="save-status saving">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" class="spin">
-        <path d="M21 12a9 9 0 11-6.219-8.56"/>
-      </svg>
-      保存中...
-    </span>
-    <span v-else-if="saveFailed" class="save-status failed">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="15" y1="9" x2="9" y2="15"/>
-        <line x1="9" y1="9" x2="15" y2="15"/>
-      </svg>
-      保存失败
-    </span>
-    <span v-else class="save-status saved">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-        <polyline points="20 6 9 17 4 12"/>
-      </svg>
-      已保存
-    </span>
-    <button class="btn btn-sm btn-ghost" @click="saveConfig" :disabled="busy.save">
-      立即保存
+    <button
+      class="save-btn"
+      :class="{
+        'save-btn-idle': !busy.save && !saveFailed,
+        'save-btn-saving': busy.save,
+        'save-btn-saved': !busy.save && !saveFailed && !configDirty,
+        'save-btn-failed': saveFailed
+      }"
+      @click="saveConfig"
+      :disabled="busy.save"
+    >
+      <template v-if="busy.save">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" class="spin" style="vertical-align: -2px; margin-right: 4px;">
+          <path d="M21 12a9 9 0 11-6.219-8.56"/>
+        </svg>
+        保存中...
+      </template>
+      <template v-else-if="saveFailed">保存失败</template>
+      <template v-else-if="!configDirty">已保存</template>
+      <template v-else>立即保存</template>
     </button>
   </div>
 </div>
