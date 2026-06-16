@@ -360,10 +360,11 @@ class ScheduleEngine:
 
         now = datetime.now()
         registry = getattr(self, "_task_registry", None)
-        if registry:
+        executor = getattr(self, "_task_executor", None)
+        if registry and executor:
             due_tasks = registry.get_due_tasks(now.hour, now.minute)
             for task_id in due_tasks:
-                self._task_executor.execute_task_async(task_id)
+                executor.execute_task_async(task_id)
         # 计算下一个整分钟
         self._next_schedule_tick = (int(time.time() // 60) * 60) + 60
 
@@ -589,7 +590,8 @@ class ScheduleEngine:
 
     @property
     def _is_monitoring(self) -> bool:
-        return self._monitor_core is not None and self._monitor_core.monitoring
+        core = self._monitor_core
+        return core is not None and core.monitoring
 
     @property
     def tasks(self):

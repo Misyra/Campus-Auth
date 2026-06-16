@@ -106,3 +106,14 @@ def _notify_linux(title: str, message: str, duration_ms: int) -> bool:
         timeout=5,
     )
     return result.returncode == 0
+
+
+def notify(title: str, message: str, duration_ms: int = 5000) -> bool:
+    """跨平台通知。自动检测当前平台。"""
+    if is_windows():
+        return _notify_windows(title, message, duration_ms)
+    elif is_macos():
+        return _notify_macos(title, message)
+    elif is_linux():
+        return _notify_linux(title, message, duration_ms)
+    return False

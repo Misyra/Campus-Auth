@@ -261,7 +261,10 @@ class NetworkMonitorCore:
         elif net_reason == "all_disabled":
             self.log_message("所有网络检测均未启用，跳过", "WARNING")
         else:
-            self._update_state(status_detail="网络异常：待登录")
+            self._update_state(
+                network_state=NetworkState.DISCONNECTED,
+                status_detail="网络异常：待登录",
+            )
 
         # 自动切换检测
         self._check_profile_switch()

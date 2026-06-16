@@ -451,6 +451,17 @@ class PlaywrightWorker:
             logger.exception("登录执行异常")
             return WorkerResponse(success=False, error=str(e))
 
+    async def _cleanup_debug_session(self):
+        """统一清理调试会话资源。"""
+        self._debug_executor = None
+        if self._debug_page is not None:
+            try:
+                if not self._debug_page.is_closed():
+                    await self._debug_page.close()
+            except Exception as e:
+                logger.warning("关闭旧调试页面异常: {}", e)
+            self._debug_page = None
+
     async def _handle_debug_start(self, data: dict) -> WorkerResponse:
         """启动调试会话。
 
@@ -472,6 +483,11 @@ class PlaywrightWorker:
         navigation_timeout = data.get(
             "navigation_timeout", TaskExecutor.DEFAULT_NAVIGATION_TIMEOUT
         )
+
+        # 守卫：若已有调试会话，先清理
+        if self._debug_page is not None:
+            logger.info("检测到残留调试会话，自动清理")
+            await self._cleanup_debug_session()
 
         # 检查浏览器健康状态，不健康则重建
         if not await self._health_check():
@@ -575,37 +591,30 @@ class PlaywrightWorker:
 
     async def _handle_debug_stop(self) -> WorkerResponse:
         """停止调试会话并清理 Worker 内部状态。"""
-        # 清除调试执行器引用
-        self._debug_executor = None
+        await self._cleanup_debug_session()
 
-        # 关闭调试页面
-        if self._debug_page is not None:
-            same_as_main = self._debug_page is self._page
+        # 重建主页面
+        if self._context is not None and not self._context.is_closed():
+            # 先关闭旧主页面，保证一个 context 一个主 page
+            old_page = self._page
+            if old_page is not None and not old_page.is_closed():
+                with contextlib.suppress(Exception):
+                    await old_page.close()
+            self._page = await self._context.new_page()
+            if self._page is not None:
+                settings = self._last_browser_settings or {}
+                pure_mode = settings.get("pure_mode", False)
+                if not pure_mode or settings.get("stealth_mode", False):
+                    await self._apply_stealth_and_routes({"browser_settings": settings})
+        else:
+            # context 已关闭，尝试重建完整链路
+            logger.warning("Context 已关闭，尝试重建浏览器")
             try:
-                if not self._debug_page.is_closed():
-                    await self._debug_page.close()
-            except Exception as e:
-                logger.warning("关闭调试页面异常: {}", e)
-            self._debug_page = None
-
-            # 如果调试页面就是主页面，关闭后需要创建一个新页面，
-            # 避免后续 browser 操作（_handle_debug_start / BrowserContextManager）因 _page 为空而失败
-            if same_as_main:
-                self._page = None
-                try:
-                    if self._context is not None and not self._context.is_closed():
-                        self._page = await self._context.new_page()
-                        # 重新应用反检测脚本和路由拦截（新页面未继承旧页面的设置）
-                        # 使用与 _start_browser 一致的判断逻辑
-                        if self._page is not None:
-                            settings = self._last_browser_settings or {}
-                            pure_mode = settings.get("pure_mode", False)
-                            if not pure_mode or settings.get("stealth_mode", False):
-                                await self._apply_stealth_and_routes(
-                                    {"browser_settings": settings}
-                                )
-                except Exception:
-                    logger.warning("创建替代页面失败，_page 保持 None")
+                config = {"browser_settings": self._last_browser_settings or {}}
+                await self._close_browser()
+                await self._start_browser(config)
+            except Exception:
+                logger.exception("重建浏览器失败")
 
         logger.info("调试会话已停止，Worker 内部状态已清理")
         return WorkerResponse(success=True, data="调试会话已停止")
@@ -956,7 +965,19 @@ class PlaywrightWorker:
         try:
             headers = json.loads(raw_headers)
             if isinstance(headers, dict):
-                return {str(k): str(v) for k, v in headers.items() if k is not None}
+                result = {}
+                for k, v in headers.items():
+                    if k is None:
+                        continue
+                    k_str, v_str = str(k), str(v)
+                    if len(k_str) > 256 or len(v_str) > 4096:
+                        logger.warning("Header 过长已跳过: {} ({}B)", k_str[:32], len(k_str))
+                        continue
+                    if "\r" in k_str or "\n" in k_str:
+                        logger.warning("Header key 含换行符已跳过: {}", k_str[:32])
+                        continue
+                    result[k_str] = v_str
+                return result
             logger.warning("自定义请求头必须是 JSON 对象，已忽略")
         except Exception as exc:
             logger.warning("解析自定义请求头失败: {}", exc)

@@ -84,7 +84,7 @@ def _detect_edge() -> BrowserInfo:
         # Windows 必有 Edge
         installed = True
     elif PLATFORM == "darwin":
-        installed = Path("/Applications/Microsoft Edge.app").exists()
+        installed = installed or Path("/Applications/Microsoft Edge.app").exists()
     return BrowserInfo(
         channel="msedge",
         name="Microsoft Edge",
@@ -99,7 +99,7 @@ def _detect_chrome() -> BrowserInfo:
     """检测系统是否安装 Google Chrome。"""
     installed = _check_command_exists("google-chrome") or _check_command_exists("chrome")
     if PLATFORM == "darwin":
-        installed = Path("/Applications/Google Chrome.app").exists()
+        installed = installed or Path("/Applications/Google Chrome.app").exists()
     elif PLATFORM == "windows":
         # 检查 Windows 标准安装路径
         program_files = [
@@ -126,7 +126,7 @@ def _detect_firefox() -> BrowserInfo:
     """检测系统是否安装 Firefox。"""
     installed = _check_command_exists("firefox")
     if PLATFORM == "darwin":
-        installed = Path("/Applications/Firefox.app").exists()
+        installed = installed or Path("/Applications/Firefox.app").exists()
     elif PLATFORM == "windows":
         # 检查 Windows 标准安装路径
         program_files = [
