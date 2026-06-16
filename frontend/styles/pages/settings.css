@@ -754,20 +754,26 @@
 
 .browser-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
 }
 
 .browser-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
   border: 2px solid var(--border, #333);
   border-radius: var(--radius-lg, 8px);
   padding: 1rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
+  position: relative;
+  background: var(--bg-card, transparent);
 }
 
 .browser-card:hover {
   border-color: var(--accent, #22d3ee);
+  background: var(--bg-hover, rgba(34, 211, 238, 0.04));
 }
 
 .browser-card.active {
@@ -775,25 +781,77 @@
   background: rgba(34, 211, 238, 0.08);
 }
 
+.browser-card.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.browser-card.disabled:hover {
+  border-color: var(--border, #333);
+  background: var(--bg-card, transparent);
+}
+
 .browser-icon {
-  font-size: 2rem;
-  margin-bottom: 0.5rem;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.browser-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.browser-info {
+  flex: 1;
+  min-width: 0;
 }
 
 .browser-name {
-  font-weight: bold;
+  font-weight: 600;
+  font-size: 0.9375rem;
   margin-bottom: 0.25rem;
   color: var(--text-primary);
 }
 
 .browser-status {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.browser-status svg {
+  flex-shrink: 0;
+}
+
+.status-installed {
+  color: var(--success, #22c55e);
+}
+
+.status-download {
+  color: var(--warning, #f59e0b);
+}
+
+.status-unavailable {
+  color: var(--danger, #ef4444);
 }
 
 .browser-desc {
   font-size: 0.75rem;
   color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.browser-check {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  color: var(--accent, #22d3ee);
 }
 
 .custom-path-section {
