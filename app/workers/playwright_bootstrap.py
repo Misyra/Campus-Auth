@@ -54,8 +54,13 @@ def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(cmd, **kwargs)
 
 
-def _get_browser_channel() -> str:
-    """从配置文件读取 browser_channel。"""
+def _get_browser_channel() -> str | None:
+    """从配置文件读取 browser_channel。
+
+    Returns:
+        str: 配置的浏览器类型
+        None: 配置文件不存在或读取失败
+    """
     try:
         import json
 
@@ -65,11 +70,12 @@ def _get_browser_channel() -> str:
         if settings_path.exists():
             with open(settings_path, encoding="utf-8") as f:
                 data = json.load(f)
-            channel = data.get("global_settings", {}).get("browser_channel", "playwright")
-            return channel
+            channel = data.get("global_settings", {}).get("browser_channel")
+            if channel:
+                return channel
     except Exception:
         logger.debug("读取 browser_channel 配置失败", exc_info=True)
-    return "playwright"  # 默认值
+    return None  # 配置文件不存在或未配置
 
 
 def _has_browser(channel: str) -> bool:
@@ -160,6 +166,14 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
 
         # 读取配置的 browser_channel
         channel = _get_browser_channel()
+
+        # 配置文件不存在或未配置，跳过下载（首次启动向导会配置）
+        if channel is None:
+            _BOOTSTRAP_DONE = True
+            if log:
+                log("未配置浏览器类型，跳过下载（首次启动请完成向导配置）")
+            return True
+
         if log:
             log(f"配置的浏览器类型: {channel}")
 
@@ -173,8 +187,9 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
         # 需要下载的浏览器：playwright 或 firefox
         VALID_CHANNELS = ("playwright", "msedge", "chrome", "firefox", "custom")
         if channel not in VALID_CHANNELS:
-            logger.warning("无效的 browser_channel: {}，使用默认值 playwright", channel)
-            channel = "playwright"
+            logger.warning("无效的 browser_channel: {}，跳过下载", channel)
+            _BOOTSTRAP_DONE = True
+            return True
         install_target = "chromium" if channel == "playwright" else "firefox"
 
         # 快速路径：检查是否已安装
