@@ -1,5 +1,59 @@
 # 更新日志
 
+## v4.0.4
+
+### 优化
+
+- 代码审查问题修复：修复 43 个确认问题（8 Critical + 23 Major + 12 Minor）
+- 浏览器选择自动保存：切换浏览器时自动触发保存
+- Playwright 后台下载：下载过程不阻塞 UI，卡片显示下载状态
+- 通知分类优化：添加 install 分类（下载图标+安装标签）
+- 保存按钮主题化：支持 light/dark 主题，状态联动文字
+- 卸载弹窗修复：Teleport 到 body 避免 transform 破坏 fixed 定位
+- 向导页面宽度增加：从 600px 增加到 760px
+- 目录结构调整：tools 移至 res/tools
+- 启动脚本优化：移除自动下载 Playwright 步骤
+
+### 修复
+
+- 修复 Chromium 检测逻辑重复
+- 修复 `ensure_task_pool` 懒初始化无锁保护
+- 修复轻量模式创建真正的 TaskExecutor 而非 NullTaskExecutor
+- 修复 `install_playwright` 布尔变量并发保护
+- 修复 `resolve_for_js` 双重编码
+- 修复变量解析缓存未绑定上下文
+- 修复 `run_all` 锁外访问共享 `_session` 竞态
+- 修复超时监控器无锁读取 `_last_activity`
+- 修复 `submit_nowait` 缺少队列满处理和事件循环唤醒
+- 修复 `cleanup_orphan_browsers` 只清理 Chromium
+- 修复 `get_worker()` 锁内耗时操作
+- 修复 `_handle_debug_stop` 反检测脚本行为不一致
+- 修复 `ensure_playwright_ready` 修改全局 `os.environ` 无回滚
+- 修复 Firefox 检测缺少 `LOCALAPPDATA` 路径
+- 修复 `detect_browsers()` 无缓存
+- 修复手动登录路径污染自动重试计数
+- 修复 `shutdown` 绕过 Actor 模型
+- 修复 `execute_login_async` 去重返回旧 Future
+- 修复 `_get_script_path` 路径推断脆弱
+- 修复 `_update_global_settings` 遗漏 `lightweight_tray`
+- 修复 `_build_config_payload` 遗漏 `lightweight_tray`
+- 修复密码处理绕过 `save_password_field`
+- 修复轻量模式关闭时 event loop 管理竞态
+- 修复轻量模式 Web 服务按需启动竞态
+- 修复 OCR Timer 生命周期竞态
+- 修复 `SleepHandler` 缺少校验
+- 修复 `_get_probe_client` 快速路径 TOCTOU
+- 修复 `run_all` 与 `next_step` 并发保护不一致
+- 修复 `start` 方法锁内执行耗时操作
+- 修复自定义浏览器交互逻辑错误
+- 修复 `installPlaywrightChromium` 无超时保护
+- 修复 STEALTH_INIT_SCRIPT 的 delete 可能无效
+- 修复 `consume_profile_switch_flag` 注释错误
+- 修复 `get_default_shell` 非 Windows 回退路径未验证
+- 修复 `save_password_field` 掩码判断仅检查前缀
+- 修复 `_extract_script_metadata` 不支持多行 docstring
+- 修复 `_SystemFieldsMixin` 和 `GlobalSettings` 字段重复定义
+
 ## v4.0.3
 
 ### 新增功能
