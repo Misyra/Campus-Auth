@@ -106,9 +106,11 @@ export const uiMethods = {
       }
       const data = await response.json();
       this.availableBrowsers = data.browsers;
-      this.selectedBrowser = data.current;
-      // 同步 config.browser_channel
-      this.config.browser_channel = data.current;
+      // 只在已有选择时同步，向导模式下默认不选择
+      if (this.selectedBrowser) {
+        this.selectedBrowser = data.current;
+        this.config.browser_channel = data.current;
+      }
     } catch (error) {
       console.error('获取浏览器列表失败:', error);
     } finally {
@@ -119,6 +121,24 @@ export const uiMethods = {
   selectBrowser(channel) {
     this.selectedBrowser = channel;
     this.config.browser_channel = channel;
+  },
+  // 辅助方法：获取浏览器信息
+  getBrowser(channel) {
+    return this.availableBrowsers.find(b => b.channel === channel) || { channel, installed: false };
+  },
+  // 辅助方法：获取浏览器图标
+  getBrowserIcon(channel) {
+    const browser = this.availableBrowsers.find(b => b.channel === channel);
+    return browser ? browser.icon : '';
+  },
+  // 辅助方法：检查浏览器是否已安装
+  isBrowserInstalled(channel) {
+    const browser = this.availableBrowsers.find(b => b.channel === channel);
+    return browser ? browser.installed : false;
+  },
+  // 辅助方法：获取其他浏览器（排除 Playwright）
+  getOtherBrowsers() {
+    return this.availableBrowsers.filter(b => b.channel !== 'playwright');
   },
   // 处理浏览器点击
   handleBrowserClick(browser) {
@@ -205,8 +225,12 @@ export const uiMethods = {
         return;
       }
     }
-    // 步骤 4：浏览器选择（无需验证，直接进入下一步）
+    // 步骤 4：浏览器选择
     if (this.wizardStep === 4) {
+      if (!this.selectedBrowser) {
+        this.toastOnly(false, '请选择一个浏览器');
+        return;
+      }
       this.config.browser_channel = this.selectedBrowser;
     }
     if (this.wizardStep < 5) {
