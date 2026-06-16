@@ -644,8 +644,12 @@ class PlaywrightWorker:
 
     # ── 浏览器生命周期管理 ──
 
-    def _build_launch_args(self, browser_settings: dict) -> list[str]:
+    def _build_launch_args(self, browser_settings: dict, channel: str = "playwright") -> list[str]:
         """构建浏览器启动参数。"""
+        # Firefox 不支持 Chromium 专属参数
+        if channel == "firefox":
+            return []
+
         args = [
             "--no-sandbox",
             "--disable-dev-shm-usage",
@@ -741,7 +745,7 @@ class PlaywrightWorker:
                 }
                 self._context = await self._browser.new_context(**ctx_opts)
             else:
-                launch_args = self._build_launch_args(browser_settings)
+                launch_args = self._build_launch_args(browser_settings, channel)
                 self._browser = await self._launch_browser(
                     self._playwright, channel, custom_path, headless, launch_args
                 )
