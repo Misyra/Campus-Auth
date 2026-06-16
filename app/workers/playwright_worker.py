@@ -713,10 +713,11 @@ class PlaywrightWorker:
             await self._page.add_init_script(script)
 
     async def _start_browser(self, config: dict) -> None:
-        """启动 Chromium 浏览器。
+        """启动浏览器。
 
         根据配置创建浏览器实例、上下文和页面。
         支持 headless/pure_mode/自定义启动参数/低资源模式/反检测脚本。
+        根据 browser_channel 选择不同浏览器：playwright/msedge/chrome/firefox/custom。
         """
         from playwright.async_api import async_playwright
 
@@ -724,16 +725,18 @@ class PlaywrightWorker:
         self._last_browser_settings = browser_settings  # 缓存用于页面重建
         headless = browser_settings.get("headless", True)
         pure_mode = browser_settings.get("pure_mode", False)
+        channel = browser_settings.get("browser_channel", "playwright")
+        custom_path = browser_settings.get("browser_custom_path", "")
 
-        logger.info("启动浏览器 (headless={}, pure_mode={})", headless, pure_mode)
+        logger.info("启动浏览器 (headless={}, pure_mode={}, channel={})", headless, pure_mode, channel)
 
         self._playwright = await async_playwright().start()
 
         try:
             if pure_mode:
-                # 纯净模式：原始 Chromium，无扩展无自定义参数
-                self._browser = await self._playwright.chromium.launch(
-                    headless=headless
+                # 纯净模式：无扩展无自定义参数
+                self._browser = await self._launch_browser(
+                    self._playwright, channel, custom_path, headless, []
                 )
                 ctx_opts = {
                     "viewport": {
@@ -744,8 +747,8 @@ class PlaywrightWorker:
                 self._context = await self._browser.new_context(**ctx_opts)
             else:
                 launch_args = self._build_launch_args(browser_settings)
-                self._browser = await self._playwright.chromium.launch(
-                    headless=headless, args=launch_args
+                self._browser = await self._launch_browser(
+                    self._playwright, channel, custom_path, headless, launch_args
                 )
                 ctx_opts = self._build_context_options(browser_settings)
                 self._context = await self._browser.new_context(**ctx_opts)
@@ -762,6 +765,29 @@ class PlaywrightWorker:
             raise
 
         logger.info("浏览器启动完成")
+
+    async def _launch_browser(self, playwright, channel: str, custom_path: str, headless: bool, launch_args: list):
+        """根据 channel 启动对应的浏览器。"""
+        if channel == "custom" and custom_path:
+            # 使用自定义路径
+            logger.info("使用自定义浏览器路径: {}", custom_path)
+            return await playwright.chromium.launch(
+                executable_path=custom_path, headless=headless, args=launch_args
+            )
+        elif channel == "firefox":
+            # Firefox 使用 firefox.launch()
+            logger.info("使用 Firefox 浏览器")
+            return await playwright.firefox.launch(headless=headless)
+        elif channel == "playwright":
+            # Playwright 自带 Chromium
+            logger.info("使用 Playwright Chromium")
+            return await playwright.chromium.launch(headless=headless, args=launch_args)
+        else:
+            # msedge 或 chrome，使用 channel 参数
+            logger.info("使用系统浏览器: {}", channel)
+            return await playwright.chromium.launch(
+                channel=channel, headless=headless, args=launch_args
+            )
 
     async def _health_check(self) -> bool:
         """检查浏览器健康状态。
