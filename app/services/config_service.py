@@ -157,6 +157,8 @@ def build_runtime_config(
             "viewport_width": global_settings.browser_viewport_width,
             "viewport_height": global_settings.browser_viewport_height,
             "pure_mode": global_settings.pure_mode,
+            "browser_channel": global_settings.browser_channel,
+            "browser_custom_path": global_settings.browser_custom_path.strip(),
         }
     else:
         # 回退：使用默认值
@@ -176,6 +178,8 @@ def build_runtime_config(
             "viewport_width": 1280,
             "viewport_height": 720,
             "pure_mode": True,
+            "browser_channel": "playwright",
+            "browser_custom_path": "",
         }
 
     # 暂停时段
