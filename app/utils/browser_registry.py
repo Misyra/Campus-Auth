@@ -14,6 +14,20 @@ logger = get_logger("browser_registry", source="backend")
 
 PLATFORM = get_platform()
 
+# 图标目录
+ICONS_DIR = Path(__file__).parent.parent.parent / "res" / "icons"
+
+
+def _load_icon(filename: str) -> str:
+    """从 res/icons 目录加载 SVG 图标。"""
+    try:
+        icon_path = ICONS_DIR / filename
+        if icon_path.exists():
+            return icon_path.read_text(encoding="utf-8").strip()
+    except Exception:
+        logger.debug("加载图标失败: {}", filename, exc_info=True)
+    return ""
+
 
 @dataclass
 class BrowserInfo:
@@ -21,7 +35,7 @@ class BrowserInfo:
 
     channel: str          # "playwright" | "msedge" | "chrome" | "firefox" | "custom"
     name: str             # 显示名称
-    icon: str             # 图标类名
+    icon: str             # SVG 图标内容
     installed: bool       # 系统是否已安装
     needs_download: bool  # 是否需要下载驱动
     description: str      # 状态描述
@@ -48,7 +62,7 @@ def _detect_playwright_chromium() -> BrowserInfo:
     return BrowserInfo(
         channel="playwright",
         name="Playwright Chromium",
-        icon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/><path d="M12 2a10 10 0 0 0 0 20"/><line x1="2" y1="12" x2="22" y2="12"/></svg>',
+        icon=_load_icon("chromium.svg"),
         installed=installed,
         needs_download=not installed,
         description="推荐选项，内置浏览器" if installed else "需下载约 150MB"
@@ -66,7 +80,7 @@ def _detect_edge() -> BrowserInfo:
     return BrowserInfo(
         channel="msedge",
         name="Microsoft Edge",
-        icon='<svg viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h-2v-2h2v2zm0-4h-2V7h2v6zm4 4h-2v-2h2v2zm0-4h-2V7h2v6z" fill="#0078D4"/></svg>',
+        icon=_load_icon("edge.svg"),
         installed=installed,
         needs_download=False,
         description="系统浏览器，无需下载" if installed else "未检测到 Edge 浏览器"
@@ -93,7 +107,7 @@ def _detect_chrome() -> BrowserInfo:
     return BrowserInfo(
         channel="chrome",
         name="Google Chrome",
-        icon='<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#4285F4"/><circle cx="12" cy="12" r="4" fill="white"/><path d="M12 2a10 10 0 0 1 10 10h-6a4 4 0 0 0-4-4V2z" fill="#EA4335"/><path d="M22 12a10 10 0 0 1-10 10v-6a4 4 0 0 0 4-4h6z" fill="#FBBC05"/><path d="M12 22a10 10 0 0 1-10-10h6a4 4 0 0 0 4 4v6z" fill="#34A853"/><path d="M2 12a10 10 0 0 1 10-10v6a4 4 0 0 0-4 4H2z" fill="#4285F4"/></svg>',
+        icon=_load_icon("google-chrome.svg"),
         installed=installed,
         needs_download=False,
         description="系统浏览器，无需下载" if installed else "未检测到 Chrome 浏览器"
@@ -108,7 +122,7 @@ def _detect_firefox() -> BrowserInfo:
     return BrowserInfo(
         channel="firefox",
         name="Firefox",
-        icon='<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#FF7139"/><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" fill="white"/><path d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z" fill="white"/></svg>',
+        icon=_load_icon("firefox.svg"),
         installed=installed,
         needs_download=not installed,
         description="系统浏览器，无需下载" if installed else "需下载 Firefox 驱动"
@@ -120,7 +134,7 @@ def _detect_custom() -> BrowserInfo:
     return BrowserInfo(
         channel="custom",
         name="自定义浏览器",
-        icon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>',
+        icon=_load_icon("chromium.svg"),  # 使用 Chromium 图标
         installed=True,  # 始终可用，由用户自行确保路径有效
         needs_download=False,
         description="手动指定浏览器可执行文件路径"
