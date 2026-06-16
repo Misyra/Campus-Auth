@@ -637,15 +637,10 @@ class PlaywrightWorker:
 
         此方法供同线程调用者使用（如 BrowserContextManager），
         外部调用应使用 CMD_BROWSER_ACQUIRE 命令通过 submit 队列派发。
+        每次调用都会关闭旧浏览器并启动新浏览器，不复用。
         """
-        need_restart = not await self._health_check()
-        # 浏览器存活但页面不可用（关闭或为空），重建上下文和页面
-        if not need_restart and (self._page is None or self._page.is_closed()):
-            logger.info("页面已关闭，重建浏览器上下文")
-            need_restart = True
-        if need_restart:
-            await self._close_browser()
-            await self._start_browser(config)
+        await self._close_browser()
+        await self._start_browser(config)
 
     # ── 浏览器生命周期管理 ──
 
