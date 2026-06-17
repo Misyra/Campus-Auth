@@ -99,13 +99,17 @@ def _notify_linux(title: str, message: str, duration_ms: int) -> bool:
         logger.warning("未找到 notify-send，无法发送 Linux 桌面通知")
         return False
     duration_sec = max(1, duration_ms // 1000) * 1000
-    result = subprocess.run(
-        ["notify-send", title, message, "-t", str(duration_sec), "-a", "Campus-Auth"],
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
-    return result.returncode == 0
+    try:
+        result = subprocess.run(
+            ["notify-send", title, message, "-t", str(duration_sec), "-a", "Campus-Auth"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.returncode == 0
+    except FileNotFoundError:
+        logger.warning("notify-send 执行时不存在")
+        return False
 
 
 def notify(title: str, message: str, duration_ms: int = 5000) -> bool:

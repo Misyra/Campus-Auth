@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,6 +41,7 @@ class BrowserInfo:
 _DETECT_CACHE: list[BrowserInfo] | None = None
 _DETECT_CACHE_TIME: float = 0.0
 _DETECT_CACHE_TTL: float = 30.0
+_DETECT_CACHE_LOCK = threading.Lock()
 
 
 def detect_browsers() -> list[BrowserInfo]:
@@ -50,8 +52,9 @@ def detect_browsers() -> list[BrowserInfo]:
     """
     global _DETECT_CACHE, _DETECT_CACHE_TIME
     now = time.monotonic()
-    if _DETECT_CACHE is not None and (now - _DETECT_CACHE_TIME) < _DETECT_CACHE_TTL:
-        return _DETECT_CACHE
+    with _DETECT_CACHE_LOCK:
+        if _DETECT_CACHE is not None and (now - _DETECT_CACHE_TIME) < _DETECT_CACHE_TTL:
+            return _DETECT_CACHE
     browsers = [
         _detect_playwright_chromium(),
         _detect_edge(),
@@ -59,8 +62,9 @@ def detect_browsers() -> list[BrowserInfo]:
         _detect_firefox(),
         _detect_custom(),
     ]
-    _DETECT_CACHE = browsers
-    _DETECT_CACHE_TIME = now
+    with _DETECT_CACHE_LOCK:
+        _DETECT_CACHE = browsers
+        _DETECT_CACHE_TIME = now
     return browsers
 
 
@@ -105,7 +109,7 @@ def _detect_chrome() -> BrowserInfo:
         program_files = [
             Path(os.environ.get("PROGRAMFILES", "C:\\Program Files")),
             Path(os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)")),
-            Path(os.environ.get("LOCALAPPDATA", "")),
+            *( [Path(p)] if (p := os.environ.get("LOCALAPPDATA")) else [] ),
         ]
         for base in program_files:
             chrome_path = base / "Google" / "Chrome" / "Application" / "chrome.exe"
@@ -132,7 +136,7 @@ def _detect_firefox() -> BrowserInfo:
         program_files = [
             Path(os.environ.get("PROGRAMFILES", "C:\\Program Files")),
             Path(os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)")),
-            Path(os.environ.get("LOCALAPPDATA", "")),
+            *( [Path(p)] if (p := os.environ.get("LOCALAPPDATA")) else [] ),
         ]
         for base in program_files:
             firefox_path = base / "Mozilla Firefox" / "firefox.exe"
