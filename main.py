@@ -539,7 +539,12 @@ def _run_full(
     finally:
         if tray_icon:
             tray_icon.stop()
-    # container.shutdown() 由 lifespan 管理，此处不再重复调用
+        # lifespan 通常已执行 shutdown，此处为防御性补调（幂等安全）
+        if not container._shutdown_done:
+            try:
+                loop.run_until_complete(container.shutdown())
+            except Exception:
+                pass
 
 
 # ==================== 主启动 ====================

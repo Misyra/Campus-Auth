@@ -189,7 +189,7 @@ export const uiMethods = {
       method: 'POST',
       signal: controller.signal,
     })
-      .then(res => res.json())
+      .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
       .then(data => {
         if (data.success) {
           this.frontendLogger.info('browser', 'Playwright Chromium 安装成功');
@@ -318,7 +318,7 @@ export const uiMethods = {
       this.toastOnly(false, '变量名必须以字母或下划线开头，只能包含字母、数字和下划线');
       // 恢复原值
       this.$nextTick(() => {
-        const input = document.querySelector('.custom-var-item input[data-var-key="' + oldKey + '"]');
+        const input = document.querySelector('.custom-var-item input[data-var-key="' + CSS.escape(oldKey) + '"]');
         if (input) input.value = oldKey;
       });
       return;

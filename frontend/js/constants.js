@@ -18,7 +18,8 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
     const status = error?.response?.status;
-    const isNetworkError = !error.response;
+    const isCanceled = error.code === 'ERR_CANCELED' || error.name === 'CanceledError';
+    const isNetworkError = !error.response && !isCanceled;
     const isRetryable = isNetworkError || RETRY_CONFIG.retryableStatuses.includes(status);
     if (!isRetryable) return Promise.reject(error);
 

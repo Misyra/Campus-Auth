@@ -64,6 +64,9 @@ def parse_host_port(targets: list[str]) -> list[tuple[str, int]]:
 
         host_part, port_part = item.rsplit(":", 1)
         host = host_part.strip()
+        # 剥离 IPv6 方括号：[::1] → ::1
+        if host.startswith("[") and host.endswith("]"):
+            host = host[1:-1]
         port_str = port_part.strip()
 
         if not host:

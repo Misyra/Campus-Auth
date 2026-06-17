@@ -46,10 +46,12 @@ def _is_enabled() -> bool:
     return str_to_bool(os.getenv("AUTO_INSTALL_PLAYWRIGHT", "true"))
 
 
-def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+def _run(cmd: list[str], env: dict | None = None) -> subprocess.CompletedProcess[str]:
     kwargs: dict = {"capture_output": True, "text": True, "check": False}
     if is_windows():
         kwargs["creationflags"] = CREATE_NO_WINDOW_FLAG
+    if env is not None:
+        kwargs["env"] = env
     return subprocess.run(cmd, **kwargs)
 
 
@@ -163,19 +165,20 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
                 log("请先运行启动脚本执行 uv sync")
             return False
 
-        # 保存原始环境变量，函数结束时恢复
-        _orig_host = os.environ.get("PLAYWRIGHT_DOWNLOAD_HOST")
         try:
             if log:
                 log(f"正在安装 Playwright {install_target} 浏览器...")
 
+            base_env = os.environ.copy()
             for host in _candidate_hosts():
-                os.environ["PLAYWRIGHT_DOWNLOAD_HOST"] = host
+                env = base_env.copy()
+                env["PLAYWRIGHT_DOWNLOAD_HOST"] = host
                 if log:
                     log(f"尝试下载源: {host}")
 
                 result = _run(
-                    [sys.executable, "-m", "playwright", "install", install_target]
+                    [sys.executable, "-m", "playwright", "install", install_target],
+                    env=env,
                 )
                 if result.returncode == 0:
                     _BOOTSTRAP_DONE = True
@@ -192,9 +195,3 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
             if log:
                 log(f"Playwright 初始化失败: {exc}")
             return False
-        finally:
-            # 恢复原始环境变量
-            if _orig_host is None:
-                os.environ.pop("PLAYWRIGHT_DOWNLOAD_HOST", None)
-            else:
-                os.environ["PLAYWRIGHT_DOWNLOAD_HOST"] = _orig_host

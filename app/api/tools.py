@@ -19,7 +19,7 @@ router = APIRouter()
 BG_DIR = PROJECT_ROOT / "frontend" / "background"
 BG_DIR.mkdir(parents=True, exist_ok=True)
 
-ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
 
@@ -116,6 +116,7 @@ async def fetch_background_url(body: dict) -> dict:
                     "image/png": ".png",
                     "image/gif": ".gif",
                     "image/webp": ".webp",
+                    "image/svg+xml": ".svg",
                 }
                 ext = ext_map.get(content_type.split(";")[0].strip(), "")
                 if not ext:

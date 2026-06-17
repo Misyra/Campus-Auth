@@ -439,7 +439,7 @@ class TestParseHostPort:
 
     def test_ipv6(self):
         result = parse_host_port(["[::1]:8080"])
-        assert result == [("[::1]", 8080)]
+        assert result == [("::1", 8080)]
 
     def test_missing_port(self):
         with pytest.raises(ValueError):
