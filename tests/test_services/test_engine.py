@@ -545,6 +545,36 @@ class TestHandleReload:
         svc._reload_config_internal.assert_called_once()
         svc._handle_start.assert_called_once()
 
+    def test_reload_failure_keeps_monitoring(self):
+        """重载失败时不应调用 _handle_stop，监控应继续运行。"""
+        svc = _make_raw_engine()
+        mock_core = MagicMock()
+        mock_core.monitoring = True
+        svc._monitor_core = mock_core
+        svc._reload_config_internal = MagicMock(return_value=False)
+        svc._handle_stop = MagicMock()
+        svc._handle_start = MagicMock()
+        cmd = EngineCommand(type=EngineCmdType.RELOAD)
+        svc._handle_reload(cmd)
+        svc._reload_config_internal.assert_called_once()
+        svc._handle_stop.assert_not_called()
+        svc._handle_start.assert_not_called()
+
+    def test_reload_success_restarts_monitoring(self):
+        """重载成功且之前在监控时，应调用 stop + start。"""
+        svc = _make_raw_engine()
+        mock_core = MagicMock()
+        mock_core.monitoring = True
+        svc._monitor_core = mock_core
+        svc._reload_config_internal = MagicMock(return_value=True)
+        svc._handle_stop = MagicMock()
+        svc._handle_start = MagicMock()
+        cmd = EngineCommand(type=EngineCmdType.RELOAD)
+        svc._handle_reload(cmd)
+        svc._reload_config_internal.assert_called_once()
+        svc._handle_stop.assert_called_once()
+        svc._handle_start.assert_called_once()
+
 
 # =====================================================================
 # _handle_apply_profile
