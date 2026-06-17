@@ -39,7 +39,6 @@
             :class="{ active: activeTaskId === script.id }"
             @dragstart="handleDragStart($event, index, 'scripts')"
             @dragover="onDragOver($event, index, 'scripts')"
-            @dragleave="onDragLeave($event)"
             @drop="onDrop($event, index, 'scripts')"
             @dragend="onDragEnd($event)"
           >
