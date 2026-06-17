@@ -217,3 +217,20 @@ class ProfileService:
             data.auto_switch = enabled
             self._save_unsafe(data)
         profile_logger.info("自动切换: {}", "开启" if enabled else "关闭")
+
+
+def create_profile_service(project_root: Path | None = None) -> ProfileService:
+    """ProfileService 工厂函数 — 统一各入口点的创建方式。
+
+    每次调用返回新实例（非单例）。project_root 默认使用项目根目录
+    （即 profile_service.py 向上三级: app/services/profile_service.py → 项目根）。
+
+    Args:
+        project_root: 项目根目录。None 时自动推导。
+
+    Returns:
+        新创建的 ProfileService 实例。
+    """
+    if project_root is None:
+        project_root = Path(__file__).parent.parent.parent.resolve()
+    return ProfileService(project_root)
