@@ -9,7 +9,8 @@ const RETRY_CONFIG = {
   retryableStatuses: [408, 429, 500, 502, 503, 504],
 };
 
-// 响应拦截器：对网络错误和 5xx 状态码自动重试
+// 响应拦截器：对网络错误和 5xx 状态码自动重试（仅幂等方法）
+const RETRYABLE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -17,6 +18,12 @@ api.interceptors.response.use(
     if (!config || config.__retryCount >= RETRY_CONFIG.maxRetries) {
       return Promise.reject(error);
     }
+
+    // 仅允许幂等方法自动重试
+    if (!RETRYABLE_METHODS.includes(config.method?.toUpperCase())) {
+      return Promise.reject(error);
+    }
+
     const status = error?.response?.status;
     const isCanceled = error.code === 'ERR_CANCELED' || error.name === 'CanceledError';
     const isNetworkError = !error.response && !isCanceled;
