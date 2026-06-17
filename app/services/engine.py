@@ -431,12 +431,15 @@ class ScheduleEngine:
     def _handle_reload(self, cmd: EngineCommand) -> None:
         """重载配置并重启监控（仅在引擎线程中调用）。"""
         was_monitoring = self._is_monitoring
+
+        # 先加载新配置（不修改当前运行状态）
+        if not self._reload_config_internal():
+            logger.error("配置重载失败，监控继续使用旧配置运行")
+            return
+
+        # 仅当重载成功且之前处于监控状态时，才执行 stop/start
         if was_monitoring:
             self._handle_stop()
-        if not self._reload_config_internal():
-            logger.error("配置重载失败，跳过监控重启")
-            return
-        if was_monitoring:
             self._handle_start(EngineCommand(type=EngineCmdType.START))
         logger.info("配置已重载")
 
