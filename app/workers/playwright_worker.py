@@ -146,6 +146,8 @@ class PlaywrightWorker:
         创建 daemon Thread，线程内部运行持久 asyncio 事件循环，
         通过 _worker_ready 事件等待循环就绪后再返回。
         """
+        if self.is_alive():
+            return
         self._stop_event.clear()
         self._worker_ready.clear()
         self._consumer_thread = threading.Thread(
@@ -282,15 +284,14 @@ class PlaywrightWorker:
             return WorkerResponse(success=True)
 
         # 阻塞等待命令执行完成
-        cmd.response_event.wait(timeout=timeout)
-        if cmd.response_data is not None:
-            if isinstance(cmd.response_data, WorkerResponse):
-                return cmd.response_data
-            return WorkerResponse(success=True, data=cmd.response_data)
+        if not cmd.response_event.wait(timeout=timeout):
+            # 超时：标记命令为已取消
+            cmd.cancelled = True
+            return WorkerResponse(success=False, error="命令执行超时或无响应")
 
-        # 超时：标记命令为已取消
-        cmd.cancelled = True
-        return WorkerResponse(success=False, error="命令执行超时或无响应")
+        if isinstance(cmd.response_data, WorkerResponse):
+            return cmd.response_data
+        return WorkerResponse(success=True, data=cmd.response_data)
 
     def submit_nowait(self, cmd_type: str, data: dict | None = None) -> None:
         """提交命令但不等待响应（fire-and-forget）。"""
@@ -600,12 +601,8 @@ class PlaywrightWorker:
             if old_page is not None and not old_page.is_closed():
                 with contextlib.suppress(Exception):
                     await old_page.close()
+            # context 级 init_script 自动继承到新页面，无需重新应用 stealth
             self._page = await self._context.new_page()
-            if self._page is not None:
-                settings = self._last_browser_settings or {}
-                pure_mode = settings.get("pure_mode", False)
-                if not pure_mode or settings.get("stealth_mode", False):
-                    await self._apply_stealth_and_routes({"browser_settings": settings})
         else:
             # context 已关闭，尝试重建完整链路
             logger.warning("Context 已关闭，尝试重建浏览器")
@@ -729,6 +726,9 @@ class PlaywrightWorker:
 
     async def _apply_stealth_and_routes(self, browser_settings: dict) -> None:
         """应用反检测脚本和路由拦截。"""
+        if self._context is None:
+            return
+
         # 低资源模式：路由拦截屏蔽图片/字体/媒体
         if browser_settings.get("low_resource_mode", False):
             await self._context.route("**/*", self._handle_low_resource_request)
@@ -740,7 +740,8 @@ class PlaywrightWorker:
             custom = browser_settings.get("stealth_custom_script", "").strip()
             # 有自定义脚本则使用自定义，否则使用默认脚本
             script = custom or STEALTH_INIT_SCRIPT
-            await self._page.add_init_script(script)
+            # 挂载到 context 级别，自动继承到所有新页面（含 popup、debug_page）
+            await self._context.add_init_script(script)
 
     async def _start_browser(self, config: dict) -> None:
         """启动浏览器。
