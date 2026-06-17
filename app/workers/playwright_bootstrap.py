@@ -18,6 +18,8 @@ from app.utils.platform import CREATE_NO_WINDOW_FLAG, is_windows
 
 logger = get_logger("playwright_bootstrap", source="backend")
 
+BOOTSTRAP_TIMEOUT = 300
+
 _BOOTSTRAP_LOCK = threading.Lock()
 _BOOTSTRAP_DONE = False
 _BOOTSTRAP_SKIPPED = False  # 用户禁用 auto-install，跳过验证
@@ -47,7 +49,7 @@ def _is_enabled() -> bool:
 
 
 def _run(cmd: list[str], env: dict | None = None) -> subprocess.CompletedProcess[str]:
-    kwargs: dict = {"capture_output": True, "text": True, "check": False}
+    kwargs: dict = {"capture_output": True, "text": True, "check": False, "timeout": BOOTSTRAP_TIMEOUT}
     if is_windows():
         kwargs["creationflags"] = CREATE_NO_WINDOW_FLAG
     if env is not None:
