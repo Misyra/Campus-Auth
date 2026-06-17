@@ -92,7 +92,11 @@ _download_uv() {
         exit 1
     fi
     local actual
-    actual="$(sha256sum "$archive" | cut -d' ' -f1)"
+    if command -v sha256sum &>/dev/null; then
+        actual="$(sha256sum "$archive" | cut -d' ' -f1)"
+    else
+        actual="$(shasum -a 256 "$archive" | cut -d' ' -f1)"
+    fi
     if [[ "$actual" != "$expected" ]]; then
         echo " 失败: 期望 $expected, 实际 $actual" >&2
         rm -f "$archive"

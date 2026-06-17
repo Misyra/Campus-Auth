@@ -131,6 +131,9 @@ def encrypt_password(plaintext: str) -> str:
     try:
         from cryptography.fernet import Fernet
     except ImportError:
+        # cryptography 是 pyproject.toml 中的必需依赖（uv sync 会自动安装），
+        # 正常部署下不可能缺失。此分支仅作为极端防御（如手动删除 .venv 中的包）。
+        # 密码以明文写入 settings.json，已有 warning 日志提示用户。
         logger.warning(
             "cryptography 库未安装，密码将以明文存储，"
             "建议通过 uv add cryptography 安装依赖以启用加密保护"
@@ -217,6 +220,10 @@ def save_password_field(raw: str | None, existing_encrypted: str) -> str:
         return existing_encrypted or ""
     if raw.startswith("•"):
         # 掩码 → 保留已有密码
+        # 已知限制：若用户真实密码以 • (U+2022) 开头会被误判为掩码。
+        # 实际不会发生：校园网密码格式为字母数字，不含 Unicode bullet 字符。
+        # 前端掩码固定为 "••••••••"（8 个 •），此处用 startswith 而非精确匹配
+        # 是为了兼容掩码长度可能变化的情况。
         return existing_encrypted or ""
     if raw == "":
         # 显式置空 → 清除密码
