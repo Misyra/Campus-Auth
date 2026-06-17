@@ -2,6 +2,28 @@
 
 ## 2026-06-18
 
+### refactor
+- `tests/test_utils/test_logging_fix.py` 1 个 `inspect.getsource()` 源码检查测试替换为行为测试
+  - `test_should_emit_uses_class_constant`（源码检查）→ `test_should_emit_uses_class_constant_via_behavior`（行为测试：修改类属性验证 should_emit 引用类常量）
+
+### refactor
+- `tests/test_app/test_application_fix.py` 7 个 `inspect.getsource()` 源码检查测试替换为行为测试
+  - `TestSourceLevelsConfig`（2 个源码检查）→ `TestRunFunctionSafety`（2 个行为测试：callable 验证、import 无 NameError）
+  - `TestWebSocketKeyErrorHandling`（3 个源码检查）→ `TestWebSocketMessageHandling`（2 个行为测试：无效 JSON 处理、未知消息类型处理）
+  - `TestWindowsSigterm`（2 个源码检查 + 1 个信息性测试）→ `TestWindowsSigterm`（1 个行为测试 + 1 个信息性测试：lifespan 信号注册、平台 SIGTERM 可用性）
+
+### refactor
+- 测试文件迁移使用共享 `api_client` fixture（8 个文件）
+  - `tests/test_api/test_api_tasks_routes.py`：删除本地 `client` fixture，使用 `api_client` + `_setup_task_mocks` 辅助函数
+  - `tests/test_api/test_browsers.py`：删除本地 `client` fixture，使用 `api_client` + `_setup_browser_mocks` 辅助函数
+  - `tests/test_api/test_scheduled_tasks_fix.py`：删除本地 `client` fixture，使用 `api_client`，mock 配置移至各测试方法内
+  - `tests/test_api/test_api_autostart_routes.py`：删除本地 `client` fixture，使用 `api_client`，mock 配置移至各测试方法内；移除不再需要的 `TestClient`、`MonitorConfigPayload`、`MonitorStatusResponse`、`pytest`、`Path` 导入
+  - `tests/test_api/test_api_config_routes.py`：删除本地 `client` fixture，使用 `api_client`，mock 配置移至各测试方法内；移除不再需要的 `TestClient`、`MagicMock`、`pytest`、`MonitorStatusResponse` 导入
+  - `tests/test_api/test_api_repo_routes.py`：删除本地 `client` fixture，使用 `api_client`，mock 配置移至各测试方法内；移除不再需要的 `MagicMock`、`pytest`、`TestClient` 导入
+  - `tests/test_api/test_api_scripts_routes.py`：删除本地 `client` fixture，使用 `api_client`，mock 配置移至各测试方法内；移除不再需要的 `MagicMock`、`pytest`、`TestClient` 导入
+  - `tests/test_api/test_api_system_routes.py`：删除本地 `client` fixture，使用 `api_client`，mock 配置移至各测试方法内；移除不再需要的 `MagicMock`、`pytest`、`TestClient` 导入
+  - 共享 fixture 定义于 `tests/test_api/conftest.py`，消除 8 处重复的 `tmp_path` 目录创建和 `app.constants` patch 代码
+
 ### fix
 - `app/workers/playwright_worker.py` 修复 stealth_mode Bug + 防御性改进（4 项）
 
