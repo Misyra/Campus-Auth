@@ -3,6 +3,20 @@
 ## 2026-06-18
 
 ### refactor
+- `app/application.py` create_app 拆分为 `_create_lifespan`/`_register_routes`/`_register_static`（Task 4）
+  - 提取 `_create_lifespan(existing_container)` 封装生命周期管理逻辑，返回 lifespan context manager
+  - 提取 `_register_routes(app)` 封装 16 个 API router 注册
+  - 提取 `_register_static(app)` 封装首页路由和 3 个静态文件挂载
+  - `create_app` 简化为协调函数：创建 lifespan → 创建 FastAPI → 配置 CORS → 注册中间件 → 注册 WebSocket → 注册路由和静态文件
+  - 修复原 `_wait_shutdown` 中引用外部 `_app` 闭包变量的问题，改为使用 `app_instance` 参数
+
+### refactor
+- `main.py` 提取 `_load_login_config` 和 `_execute_login_with_retries`（Task 3）
+  - `_load_login_config(logger)` 封装配置加载逻辑，返回 `(runtime_config, None)` 或 `(None, LoginResult.CONFIG_ERROR)`
+  - `_execute_login_with_retries(runtime_config, logger)` 封装指数退避重试逻辑
+  - `_run_login_then_exit` 简化为协调函数：加载配置 → 网络检测 → 重试登录
+
+### refactor
 - `main.py` 工厂替换 ProfileService + 提取 `_create_tray`/`_wait_for_exit`（Task 2）
   - 3 处 `ProfileService(Path(__file__).parent.resolve())` 替换为 `create_profile_service()` 工厂调用
   - 顶部新增 `from app.services.profile_service import create_profile_service` import
