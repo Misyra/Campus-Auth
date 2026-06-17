@@ -2,6 +2,12 @@
 
 ## 2026-06-17
 
+### refactor
+- `app/services/task_registry.py` `save_task` 改为磁盘优先模式（Task 8）
+  - 先写磁盘（锁外），成功后再更新缓存（锁内），I/O 不在全局锁内
+  - 崩溃恢复更安全：磁盘是新数据，缓存是旧数据，重启后从磁盘恢复
+  - `delete_task` 已是磁盘优先模式，无需修改
+
 ### fix
 - `app/services/task_executor.py` 登录并发保护：`execute_login_async` 内部创建默认 `cancel_event`
   - `cancel_event is None` 时内部创建 `threading.Event()`，确保执行器始终拥有取消令牌
