@@ -215,44 +215,13 @@ export const uiMethods = {
       });
   },
   nextWizardStep() {
-    // 第 1 步需要同意协议
-    if (this.wizardStep === 1 && !this.agreedToTerms) {
-      this.toastOnly(false, '请先阅读并同意使用协议');
+    const errors = this.validateWizardStep(this.wizardStep, this);
+    if (Object.keys(errors).length) {
+      this.toastOnly(false, Object.values(errors)[0]);
       return;
     }
-    // 第 2 步验证账号信息
-    if (this.wizardStep === 2) {
-      if (!this.config.username) {
-        this.toastOnly(false, '请输入账号');
-        return;
-      }
-      if (!this.config.password) {
-        this.toastOnly(false, '请输入密码');
-        return;
-      }
-      if (this.config.password.length < 2) {
-        this.toastOnly(false, '密码长度不能少于2位');
-        return;
-      }
-      if (!this.config.auth_url) {
-        this.toastOnly(false, '请输入认证地址');
-        return;
-      }
-      if (!/^https?:\/\//i.test(this.config.auth_url)) {
-        this.toastOnly(false, '认证地址必须以 http:// 或 https:// 开头');
-        return;
-      }
-      if (this.config.carrier === '自定义' && (!this.config.carrier_custom || !this.config.carrier_custom.trim())) {
-        this.toastOnly(false, '请输入自定义运营商关键字');
-        return;
-      }
-    }
-    // 步骤 4：浏览器选择
+    // 步骤 4 通过后同步浏览器选择到 config
     if (this.wizardStep === 4) {
-      if (!this.selectedBrowser) {
-        this.toastOnly(false, '请选择一个浏览器');
-        return;
-      }
       this.config.browser_channel = this.selectedBrowser;
     }
     if (this.wizardStep < 5) {
