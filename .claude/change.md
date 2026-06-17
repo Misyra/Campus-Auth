@@ -3,6 +3,14 @@
 ## 2026-06-18
 
 ### refactor
+- `app/schemas.py` GlobalSettings 继承 Mixin 消除 12 个重复字段
+  - GlobalSettings 改为继承 `_MonitorFieldsMixin` + `_CommonSettingsMixin`
+  - 移除 12 个已在 Mixin 中定义的重复字段声明（仅保留 `source_levels` 和 `network_check_timeout`）
+  - 移除 `_MonitorFieldsMixin` 中的 `block_proxy`（保留在 `_CommonSettingsMixin`，避免 MRO 冲突）
+  - `url_check_urls` 默认值改用 `DEFAULT_URL_CHECK_URLS` 常量
+  - 添加 `GLOBAL_SETTINGS_FIELDS` 共享常量供 config pipeline 使用
+
+### refactor
 - `tests/test_utils/test_logging_fix.py` 1 个 `inspect.getsource()` 源码检查测试替换为行为测试
   - `test_should_emit_uses_class_constant`（源码检查）→ `test_should_emit_uses_class_constant_via_behavior`（行为测试：修改类属性验证 should_emit 引用类常量）
 
