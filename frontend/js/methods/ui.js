@@ -142,6 +142,18 @@ export const uiMethods = {
   getOtherBrowsers() {
     return this.availableBrowsers.filter(b => b.channel !== 'playwright');
   },
+  // 浏览器选择共享 partial 辅助：返回当前活跃的浏览器 channel
+  getActiveBrowserChannel() {
+    // wizard 模式用 selectedBrowser，settings 模式用 config.browser_channel
+    return this.selectedBrowser || this.config.browser_channel;
+  },
+  // 浏览器选择共享 partial 辅助：自定义路径输入处理
+  onBrowserCustomPathInput() {
+    // settings 模式下需要触发配置保存
+    if (this.onConfigChange) {
+      this.onConfigChange('browser_custom_path', this.config.browser_custom_path, 'input');
+    }
+  },
   // 处理浏览器点击
   handleBrowserClick(browser) {
     if (browser.installed) {
