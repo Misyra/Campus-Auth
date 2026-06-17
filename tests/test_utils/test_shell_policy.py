@@ -119,9 +119,11 @@ class TestAuditLog:
             default_timeout=30,
             audit_hook=hook,
         )
-        # 模拟 subprocess.run 避免真实执行
-        with patch("app.utils.shell_policy.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+        # 模拟 subprocess.Popen 避免真实执行
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = ("ok", "")
+        mock_proc.returncode = 0
+        with patch("app.utils.shell_policy.subprocess.Popen", return_value=mock_proc):
             policy.run_sync(["/bin/sh", "-c", "echo ok"])
 
         hook.assert_called_once()
@@ -165,8 +167,10 @@ class TestAuditLog:
             allowlist=["/bin/sh"],
             audit_hook=bad_hook,
         )
-        with patch("app.utils.shell_policy.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = ("ok", "")
+        mock_proc.returncode = 0
+        with patch("app.utils.shell_policy.subprocess.Popen", return_value=mock_proc):
             # 不应抛出异常
             code, out, err = policy.run_sync(["/bin/sh", "-c", "echo ok"])
             assert code == 0
@@ -174,8 +178,10 @@ class TestAuditLog:
     def test_no_hook_still_works(self):
         """不设置审计钩子时命令执行应正常。"""
         policy = ShellCommandPolicy(allowlist=["/bin/sh"], audit_hook=None)
-        with patch("app.utils.shell_policy.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = ("ok", "")
+        mock_proc.returncode = 0
+        with patch("app.utils.shell_policy.subprocess.Popen", return_value=mock_proc):
             code, out, err = policy.run_sync(["/bin/sh", "-c", "echo ok"])
             assert code == 0
 
@@ -197,28 +203,36 @@ class TestRunSync:
     def test_success_returns_zero(self):
         """成功执行应返回 returncode=0。"""
         policy = ShellCommandPolicy(allowlist=["/bin/sh"])
-        with patch("app.utils.shell_policy.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="hello", stderr="")
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = ("hello", "")
+        mock_proc.returncode = 0
+        with patch("app.utils.shell_policy.subprocess.Popen", return_value=mock_proc):
             code, out, err = policy.run_sync(["/bin/sh", "-c", "echo hello"])
             assert code == 0
             assert out == "hello"
 
     def test_timeout_expired_returns_minus_one(self):
-        """超时应返回 returncode=-1。"""
+        """超时应返回 returncode=-1 并清理进程树。"""
         import subprocess as sp
 
         policy = ShellCommandPolicy(allowlist=["/bin/sh"])
-        with patch("app.utils.shell_policy.subprocess.run") as mock_run:
-            mock_run.side_effect = sp.TimeoutExpired(cmd="/bin/sh", timeout=1)
+        mock_proc = MagicMock()
+        mock_proc.pid = 12345
+        mock_proc.communicate.side_effect = sp.TimeoutExpired(cmd="/bin/sh", timeout=1)
+        with (
+            patch("app.utils.shell_policy.subprocess.Popen", return_value=mock_proc),
+            patch.object(policy, "_kill_process_tree_sync") as mock_kill,
+        ):
             code, out, err = policy.run_sync(["/bin/sh", "-c", "sleep 999"])
             assert code == -1
             assert "超时" in err
+            mock_kill.assert_called_once_with(12345)
 
     def test_file_not_found_returns_minus_one(self):
         """文件不存在应返回 returncode=-1。"""
         policy = ShellCommandPolicy(allowlist=["/nonexistent/bin"])
-        with patch("app.utils.shell_policy.subprocess.run") as mock_run:
-            mock_run.side_effect = FileNotFoundError()
+        with patch("app.utils.shell_policy.subprocess.Popen") as mock_popen:
+            mock_popen.side_effect = FileNotFoundError()
             code, out, err = policy.run_sync(["/nonexistent/bin", "-c", "test"])
             assert code == -1
             assert "不存在" in err

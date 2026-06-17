@@ -3,6 +3,26 @@
 ## 2026-06-17
 
 ### fix
+- `app/utils/shell_policy.py` `run_sync` 超时后杀死子进程树（Task 6）
+  - `subprocess.run(timeout=...)` 改为 `Popen + communicate(timeout)` 模式，超时时调用 `_kill_process_tree_sync`
+  - 新增 `_kill_process_tree_sync(pid)` 同步版进程树清理方法，复用 `_kill_process_tree` 的 psutil 逻辑
+  - 原超时仅返回错误码，子进程（如 chrome）继续运行，现在与异步 `run()` 行为一致
+- `tests/test_utils/test_shell_policy.py` 更新测试适配 `run_sync` 改用 `Popen`
+  - 5 个测试从 mock `subprocess.run` 改为 mock `subprocess.Popen`
+  - `test_timeout_expired_returns_minus_one` 新增 `_kill_process_tree_sync` 调用断言
+
+### fix
+- `app/workers/playwright_bootstrap.py` `_run()` 添加 `BOOTSTRAP_TIMEOUT=300` 超时保护
+  - `subprocess.run` 未设置 timeout 时下载卡住会永久占用 `_BOOTSTRAP_LOCK`
+  - 新增模块级常量 `BOOTSTRAP_TIMEOUT = 300`，传入 `subprocess.run` 的 `timeout` 参数
+
+### fix
+- 配置重载顺序修复，避免重载失败时监控被意外停止
+  - `_handle_reload` 先执行 `_reload_config_internal()`，仅当重载成功且之前处于监控状态时才执行 stop/start
+  - 原逻辑先 stop 再 reload，reload 失败时监控永久停止
+  - 新增测试 `test_reload_failure_keeps_monitoring` 和 `test_reload_success_restarts_monitoring`
+
+### fix
 - `_run_full()` finally 块修复：`loop.run_until_complete` 改为 `asyncio.run`，修复未定义变量 `loop` 导致 shutdown 永不执行的 bug
   - 删除 `if not container._shutdown_done` 检查（`asyncio.run` 内部的 `shutdown()` 已是幂等的）
   - `except Exception: pass` 改为 `logger.exception("容器关闭失败")`，避免静默吞掉错误
