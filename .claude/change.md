@@ -2,6 +2,20 @@
 
 ## 2026-06-17
 
+### fix
+- uv 版本升级至 0.11.21 并添加 SHA256 校验（`start.go` + `start.sh`）
+  - 版本从 0.7.3 升级到 0.11.21
+  - 下载后对文件执行 SHA256 校验，防止文件被篡改或损坏
+  - 校验失败时跳过当前镜像源，尝试下一个
+  - 覆盖全部平台：Windows/macOS/Linux，x86_64/arm64
+
+### docs
+- 生成全项目高精度代码审查报告 `code-review-report.md`（第二轮）
+  - 15 个 Review Unit 并行审查（P0×5 + P1×7 + P2×3）
+  - 发现 11 个 Critical、31 个 Major、28 个 Minor 问题（共 70 个）
+  - 关键发现：shell 命令注入（command 未过滤直接传入 shell）、uv 下载无 SHA256 校验、PowerShell 通知注入、密码掩码逻辑绕过、custom_browser_engine 配置未传递
+  - 覆盖全部模块：app/services、app/tasks、app/workers、app/network、app/api、app/utils、frontend、tests、root (start.go/sh)
+
 ### docs
 - 生成代码审查问题分析报告 `docs/superpowers/specs/2026-06-17-code-review-analysis.md`
   - 逐项验证 `code-review-report.md` 中 71 个问题的属实性
