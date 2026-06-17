@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import socket
 from collections.abc import Iterable, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
+from app.utils.concurrent import cancel_pending, race_first_success
 from app.utils.logging import get_logger
 from app.utils.time_utils import is_in_pause_period
 
@@ -175,8 +176,6 @@ def is_network_available(
         "开" if enable_url else "关",
     )
 
-    from concurrent.futures import as_completed
-
     pool = _decision_executor
     futures = {}
     if enable_tcp:
@@ -216,15 +215,11 @@ def is_network_available(
                 # AND 逻辑：任一检测方法失败即判定网络不可用。
                 # 这是故意设计 — 宁可误报断网触发多余登录，不可漏报导致断网不处理。
                 # HTTP 200 可能是 captive portal 拦截页面，需 TCP/URL 同时验证。
-                for f in futures:
-                    if not f.done():
-                        f.cancel()
+                cancel_pending(futures)
                 return False
     except TimeoutError:
         logger.warning("网络检测超时 ({:.1f}s)，视为网络异常", overall_timeout)
-        for f in futures:
-            if not f.done():
-                f.cancel()
+        cancel_pending(futures)
         return False
 
     return True
@@ -254,8 +249,6 @@ def _is_auth_url_reachable(
     # 有 extra_targets 时只检测自定义目标，不回退到 auth_url。
     # 这是故意设计：用户配置 extra_targets 意味着用自定义目标替代认证地址做可达性判断。
     if extra_targets:
-        from concurrent.futures import as_completed
-
         from app.utils.network import parse_host_port
 
         try:
@@ -265,21 +258,19 @@ def _is_auth_url_reachable(
             targets = []
         if targets:
             futures = {
-                _executor.submit(_check_host_port, host, port, f"{host}:{port}"): (
-                    host,
-                    port,
-                )
+                _executor.submit(
+                    _check_host_port, host, port, f"{host}:{port}"
+                ): (host, port)
                 for host, port in targets
             }
-            try:
-                for future in as_completed(futures, timeout=4):
-                    if future.result(timeout=1):
-                        # 任一目标可达即取消其余任务
-                        for f in futures:
-                            f.cancel()
-                        return True
-            except Exception:
-                logger.debug("附加目标并发检测异常", exc_info=True)
+            if race_first_success(
+                futures,
+                timeout=4,
+                label="认证可达性",
+                success_prefix="",
+                fail_prefix="",
+            ):
+                return True
         logger.info("自定义检测目标均不可达")
         return False
 
