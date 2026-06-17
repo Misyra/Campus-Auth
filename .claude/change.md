@@ -3,6 +3,11 @@
 ## 2026-06-17
 
 ### fix
+- `_run_full()` finally 块修复：`loop.run_until_complete` 改为 `asyncio.run`，修复未定义变量 `loop` 导致 shutdown 永不执行的 bug
+  - 删除 `if not container._shutdown_done` 检查（`asyncio.run` 内部的 `shutdown()` 已是幂等的）
+  - `except Exception: pass` 改为 `logger.exception("容器关闭失败")`，避免静默吞掉错误
+
+### fix
 - NullTaskExecutor 签名与 TaskExecutor 兼容（添加 skip_pause_check 参数）
   - `execute_login_async` 和 `execute_login` 方法添加 `skip_pause_check=False` 参数
   - 防止轻量模式下引擎调用 `execute_login_async(skip_pause_check=...)` 时抛出 TypeError

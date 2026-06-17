@@ -540,11 +540,10 @@ def _run_full(
         if tray_icon:
             tray_icon.stop()
         # lifespan 通常已执行 shutdown，此处为防御性补调（幂等安全）
-        if not container._shutdown_done:
-            try:
-                loop.run_until_complete(container.shutdown())
-            except Exception:
-                pass
+        try:
+            asyncio.run(container.shutdown())
+        except Exception:
+            logger.exception("容器关闭失败")
 
 
 # ==================== 主启动 ====================
