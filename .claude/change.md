@@ -3,11 +3,31 @@
 ## 2026-06-17
 
 ### fix
+- NullTaskExecutor 签名与 TaskExecutor 兼容（添加 skip_pause_check 参数）
+  - `execute_login_async` 和 `execute_login` 方法添加 `skip_pause_check=False` 参数
+  - 防止轻量模式下引擎调用 `execute_login_async(skip_pause_check=...)` 时抛出 TypeError
+
+### fix
 - uv 版本升级至 0.11.21 并添加 SHA256 校验（`start.go` + `start.sh`）
   - 版本从 0.7.3 升级到 0.11.21
   - 下载后对文件执行 SHA256 校验，防止文件被篡改或损坏
   - 校验失败时跳过当前镜像源，尝试下一个
   - 覆盖全部平台：Windows/macOS/Linux，x86_64/arm64
+- `start.sh` 修复 macOS 兼容性：sha256sum 改为 sha256sum/shasum -a 256 兼容写法
+
+### docs
+- 两轮代码审查报告合并验证完成（`dev/code-review-report.md`）
+  - 134 个原始问题逐项验证：27 个误报、42 个排除（not-to-do + 安全类）、1 个已修复
+  - 2 个严重程度被高估，9 个确认需关注（5 高 + 4 中）、29 个低影响
+  - 高严重性：NullTaskExecutor 签名、main.py shutdown 失败、配置重载无恢复、run_sync 进程泄漏、Playwright 安装无超时
+- `app/utils/crypto.py` save_password_field 添加注释说明 `startswith("•")` 掩码判断的设计意图
+- `app/utils/crypto.py` encrypt_password 添加注释说明 cryptography 缺失降级的防御性质
+- `app/network/decision.py` is_network_available 添加注释说明 AND 逻辑的设计意图
+- `app/services/websocket_manager.py` broadcast 添加注释说明 O(n²) 清理在实际场景中无影响
+- `app/network/detect.py` SSID 十六进制检测添加注释说明误判概率极低
+- `frontend/js/methods/lifecycle.js` visibility change handler 添加注释说明无防抖的实际影响可忽略
+- `dev/confirmed-issues.md` 生成确认存在的问题清单（38 个未修复 + 2 个已修复，高/中严重性含完整代码上下文、修复方案和优先级排序）
+- `docs/superpowers/plans/2026-06-17-code-review-fixes.md` 代码审查修复实施计划（10 个 Task，TDD 模式）
 
 ### docs
 - 生成全项目高精度代码审查报告 `code-review-report.md`（第二轮）

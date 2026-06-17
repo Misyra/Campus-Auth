@@ -35,13 +35,13 @@ class NullTaskExecutor:
     def execute_task_async(self, task_id: str) -> Future | None:
         return None
 
-    def execute_login_async(self, cancel_event=None) -> Future | None:
+    def execute_login_async(self, cancel_event=None, skip_pause_check=False) -> Future | None:
         return None
 
     def execute_task(self, task_id: str) -> tuple[bool, str]:
         return False, "轻量模式下不支持定时任务"
 
-    def execute_login(self, cancel_event=None) -> Any:
+    def execute_login(self, cancel_event=None, skip_pause_check=False) -> Any:
         return None
 
     def list_tasks(self) -> list[dict]:
