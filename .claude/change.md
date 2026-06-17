@@ -3,6 +3,13 @@
 ## 2026-06-17
 
 ### fix
+- `app/services/task_executor.py` 登录并发保护：`execute_login_async` 内部创建默认 `cancel_event`
+  - `cancel_event is None` 时内部创建 `threading.Event()`，确保执行器始终拥有取消令牌
+  - 新增 `cancel_login()` 方法，设置 `_login_cancel_event` 取消正在进行的登录
+  - `NullTaskExecutor` 添加 `cancel_login()` 方法（返回 None）
+  - 引擎调用 `execute_login_async(skip_pause_check=...)` 不传 `cancel_event` 时不再无法取消登录
+
+### fix
 - `app/utils/shell_policy.py` `run_sync` 超时后杀死子进程树（Task 6）
   - `subprocess.run(timeout=...)` 改为 `Popen + communicate(timeout)` 模式，超时时调用 `_kill_process_tree_sync`
   - 新增 `_kill_process_tree_sync(pid)` 同步版进程树清理方法，复用 `_kill_process_tree` 的 psutil 逻辑
