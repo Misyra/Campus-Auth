@@ -91,7 +91,9 @@ def _build_config_payload(
     # 一次 model_dump 替代 53 行逐字段取值。
     # 注：source_levels 仅在 GlobalSettings 中，不在 MonitorConfigPayload 中，
     # 因此不在交集中——这与重构前行为一致（MonitorConfigPayload(**payload_dict) 同样会丢弃该键）。
-    gs_dict = data.global_settings.model_dump(include=GLOBAL_SETTINGS_FIELDS)
+    # 排除 profile 覆盖字段：这些字段由 profile 独立控制，不应被 global_settings 覆盖。
+    _PROFILE_OVERRIDE = frozenset({"auth_url", "carrier", "carrier_custom"})
+    gs_dict = data.global_settings.model_dump(include=GLOBAL_SETTINGS_FIELDS - _PROFILE_OVERRIDE)
     payload_dict.update(gs_dict)
 
     # 归一化
