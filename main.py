@@ -170,44 +170,40 @@ def _cmd_autostart(action: str) -> None:
 # ==================== 自动登录，成功后退出 ====================
 
 
-def _run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
-    """自动登录，成功后退出模式。
+def _load_login_config(logger):
+    """加载登录所需的运行时配置。
 
-    返回:
-        LoginResult.SUCCESS — 登录成功，应退出进程
-        LoginResult.CONFIG_ERROR — 配置错误，应退出进程
-        LoginResult.TEMPORARY_FAILURE — 临时失败，继续监控
+    Returns:
+        (runtime_config, None) — 成功时返回配置字典和 None。
+        (None, LoginResult.CONFIG_ERROR) — 失败时返回 None 和错误结果。
+    """
+    from app.services.config_service import build_runtime_config
+    from app.services.runtime_config import load_runtime_config
+
+    ps = create_profile_service()
+    data = ps.load()
+    payload, has_decrypt_error = load_runtime_config(ps)
+    if has_decrypt_error:
+        logger.warning("密码解密失败，请检查配置")
+        return None, LoginResult.CONFIG_ERROR
+    runtime_config = build_runtime_config(
+        payload, global_settings=data.global_settings
+    )
+    return runtime_config, None
+
+
+def _execute_login_with_retries(runtime_config: dict, logger) -> LoginResult:
+    """执行登录，含指数退避重试。
+
+    Args:
+        runtime_config: 运行时配置字典。
+        logger: 日志记录器。
+
+    Returns:
+        LoginResult.SUCCESS — 登录成功
+        LoginResult.TEMPORARY_FAILURE — 重试耗尽仍失败
     """
     from app.workers.playwright_worker import CMD_LOGIN, get_worker
-
-    # 加载配置
-    try:
-        from app.services.config_service import build_runtime_config
-        from app.services.runtime_config import load_runtime_config
-
-        ps = create_profile_service()
-        data = ps.load()
-        payload, has_decrypt_error = load_runtime_config(ps)
-        if has_decrypt_error:
-            logger.warning("密码解密失败，请检查配置")
-            return LoginResult.CONFIG_ERROR
-        runtime_config = build_runtime_config(payload, global_settings=data.global_settings)
-    except Exception as exc:
-        logger.error("加载配置失败: {}", exc)
-        return LoginResult.CONFIG_ERROR
-
-    # 先检测网络状态，已连接则无需登录
-    try:
-        from app.network.decision import check_network_status
-
-        network_ok, reason, _ = check_network_status(runtime_config)
-        if network_ok:
-            print("网络已连接，无需登录，正在退出...")
-            return LoginResult.SUCCESS
-        print(f"网络未连接 ({reason})，开始登录...")
-    except Exception as exc:
-        logger.debug("网络检测异常，继续尝试登录: {}", exc)
-        print("网络检测异常，开始登录...")
 
     retry_settings = runtime_config.get("retry_settings", {})
     raw = retry_settings.get("max_retries", 3)
@@ -249,6 +245,39 @@ def _run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
     print(f"已重试 {max_retries} 次均失败，回退到正常模式")
     logger.warning("登录失败（已重试 {} 次），回退到正常模式", max_retries)
     return LoginResult.TEMPORARY_FAILURE
+
+
+def _run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
+    """自动登录，成功后退出模式。
+
+    返回:
+        LoginResult.SUCCESS — 登录成功，应退出进程
+        LoginResult.CONFIG_ERROR — 配置错误，应退出进程
+        LoginResult.TEMPORARY_FAILURE — 临时失败，继续监控
+    """
+    # 加载配置
+    try:
+        runtime_config, error = _load_login_config(logger)
+        if error is not None:
+            return error
+    except Exception as exc:
+        logger.error("加载配置失败: {}", exc)
+        return LoginResult.CONFIG_ERROR
+
+    # 先检测网络状态，已连接则无需登录
+    try:
+        from app.network.decision import check_network_status
+
+        network_ok, reason, _ = check_network_status(runtime_config)
+        if network_ok:
+            print("网络已连接，无需登录，正在退出...")
+            return LoginResult.SUCCESS
+        print(f"网络未连接 ({reason})，开始登录...")
+    except Exception as exc:
+        logger.debug("网络检测异常，继续尝试登录: {}", exc)
+        print("网络检测异常，开始登录...")
+
+    return _execute_login_with_retries(runtime_config, logger)
 
 
 # ==================== 启动辅助函数 ====================
