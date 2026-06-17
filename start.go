@@ -10,8 +10,10 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
+	"syscall"
 )
 
 const (
@@ -216,13 +218,28 @@ func verifySHA256(filePath, filename string) error {
 	return nil
 }
 
-// runCommand 运行外部命令，实时输出
+// runCommand 运行外部命令，实时输出，转发信号给子进程
 func runCommand(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	// 转发信号给子进程
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		if cmd.Process != nil {
+			cmd.Process.Signal(os.Interrupt)
+		}
+	}()
+
+	return cmd.Wait()
 }
 
 // fatal 输出错误信息并退出
