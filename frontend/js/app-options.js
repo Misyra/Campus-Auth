@@ -224,12 +224,6 @@ export const appOptions = {
     },
   },
   watch: {
-    config: {
-      handler() {
-        // 配置变更时由 configDirty computed 自动检测
-      },
-      deep: true,
-    },
     appearance: {
       handler() {
         // 防抖：避免频繁操作 DOM 导致卡顿
