@@ -46,6 +46,14 @@
   - 防止轻量模式下引擎调用 `execute_login_async(skip_pause_check=...)` 时抛出 TypeError
 
 ### fix
+- `frontend/js/constants.js` Axios 拦截器仅对幂等请求执行自动重试
+  - 新增 `RETRYABLE_METHODS = ['GET', 'HEAD', 'OPTIONS']` 检查
+  - POST/PUT/DELETE 等非幂等请求不再被静默重试（如登录、启动监控）
+- `start.go` 添加信号转发，Ctrl+C 时子进程同步退出
+  - `cmd.Run()` 改为 `cmd.Start()` + `signal.Notify` + `cmd.Wait()`
+  - 收到 SIGINT/SIGTERM 时转发给子进程，避免孤儿进程
+
+### fix
 - uv 版本升级至 0.11.21 并添加 SHA256 校验（`start.go` + `start.sh`）
   - 版本从 0.7.3 升级到 0.11.21
   - 下载后对文件执行 SHA256 校验，防止文件被篡改或损坏
