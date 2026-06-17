@@ -832,32 +832,32 @@ class OcrHandler(StepHandler):
             self.schedule_cleanup(old)
 
 
+# ── 模块级常量：默认处理器映射（所有 handler 无状态，安全共享）──
+
+DEFAULT_HANDLERS: dict[str, StepHandler] = {
+    handler.step_type: handler
+    for handler in [
+        InputHandler(),
+        ClickHandler(),
+        SelectHandler(),
+        ClickSelectHandler(),
+        WaitHandler(),
+        WaitUrlHandler(),
+        EvalHandler(),
+        ScreenshotHandler(),
+        SleepHandler(),
+        OcrHandler(),
+    ]
+}
+# custom_js 已合并到 eval，保留映射以兼容旧任务
+DEFAULT_HANDLERS["custom_js"] = DEFAULT_HANDLERS[StepType.EVAL]
+
+
 class StepExecutorRegistry:
-    """步骤执行器注册表"""
+    """步骤执行器注册表 — 薄包装层，底层共享 DEFAULT_HANDLERS 常量。"""
 
     def __init__(self):
-        self._handlers: dict[str, StepHandler] = {}
-        self._register_defaults()
-
-    def _register_defaults(self) -> None:
-        """注册默认处理器"""
-        handlers = [
-            InputHandler(),
-            ClickHandler(),
-            SelectHandler(),
-            ClickSelectHandler(),
-            WaitHandler(),
-            WaitUrlHandler(),
-            EvalHandler(),
-            ScreenshotHandler(),
-            SleepHandler(),
-            OcrHandler(),
-        ]
-        for handler in handlers:
-            self.register(handler)
-
-        # custom_js 已合并到 eval，保留映射以兼容旧任务
-        self._handlers["custom_js"] = self._handlers.get(StepType.EVAL)
+        self._handlers: dict[str, StepHandler] = dict(DEFAULT_HANDLERS)
 
     def register(self, handler: StepHandler) -> None:
         """注册处理器"""
