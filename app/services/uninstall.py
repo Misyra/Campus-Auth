@@ -8,7 +8,7 @@ from pathlib import Path
 
 from app.constants import AUTH_DATA_DIR, PROJECT_ROOT
 from app.utils.logging import get_logger
-from app.utils.platform import get_platform
+from app.utils.platform import get_platform, get_playwright_cache_dir
 
 logger = get_logger("uninstall", source="backend")
 
@@ -53,7 +53,7 @@ def detect() -> list[CleanupItem]:
         items.append(CleanupItem("userdata", "用户数据", False))
 
     # Playwright 缓存
-    pw_cache = _playwright_cache_dir()
+    pw_cache = get_playwright_cache_dir()
     if pw_cache and pw_cache.exists():
         size = _dir_size_mb(pw_cache)
         items.append(
@@ -80,7 +80,7 @@ def perform(keys: list[str]) -> list[CleanupResult]:
         results.append(CleanupResult("userdata", "删除用户数据", success, message))
 
     if "playwright" in keys:
-        pw_cache = _playwright_cache_dir()
+        pw_cache = get_playwright_cache_dir()
         if pw_cache:
             success, message = _remove_playwright_cache(pw_cache)
             results.append(
@@ -134,16 +134,6 @@ def _remove_user_data() -> tuple[bool, str]:
         return True, f"已删除 {USER_DATA_DIR}"
     except Exception as exc:
         return False, f"删除用户数据失败: {exc}"
-
-
-def _playwright_cache_dir() -> Path | None:
-    if PLATFORM == "windows":  # get_platform() 返回 "windows"
-        return Path.home() / "AppData" / "Local" / "ms-playwright"
-    if PLATFORM == "darwin":
-        return Path.home() / "Library" / "Caches" / "ms-playwright"
-    if PLATFORM == "linux":
-        return Path.home() / ".cache" / "ms-playwright"
-    return None
 
 
 def _remove_playwright_cache(cache_dir: Path) -> tuple[bool, str]:

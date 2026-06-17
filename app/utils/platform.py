@@ -17,6 +17,7 @@ CREATE_NO_WINDOW_FLAG: int = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 __all__ = [
     "CREATE_NO_WINDOW_FLAG",
     "get_default_ua",
+    "get_playwright_cache_dir",
     "get_platform",
     "is_linux",
     "is_macos",
@@ -79,3 +80,26 @@ def get_default_ua() -> str:
         return _MACOS_UA
     # Linux 及 fallback 平台均使用 Linux UA
     return _LINUX_UA
+
+
+def get_playwright_cache_dir() -> "Path | None":
+    """返回 Playwright 浏览器缓存的标准目录路径。
+
+    各平台路径：
+    - Windows: ~/AppData/Local/ms-playwright
+    - macOS:   ~/Library/Caches/ms-playwright
+    - Linux:   ~/.cache/ms-playwright
+
+    Returns:
+        平台对应的缓存目录 Path，不支持的平台返回 None。
+    """
+    from pathlib import Path
+
+    platform = get_platform()
+    if platform == "windows":
+        return Path.home() / "AppData" / "Local" / "ms-playwright"
+    if platform == "darwin":
+        return Path.home() / "Library" / "Caches" / "ms-playwright"
+    if platform == "linux":
+        return Path.home() / ".cache" / "ms-playwright"
+    return None
