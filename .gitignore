@@ -17,6 +17,7 @@ wheels/
 
 # Embedded Python environment (auto-downloaded)
 environment/
+release/
 
 # Task active state (local user preference)
 tasks/active.txt
