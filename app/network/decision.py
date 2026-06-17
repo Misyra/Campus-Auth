@@ -213,6 +213,9 @@ def is_network_available(
                 logger.debug("检测 {} 异常: {}", kind, exc)
                 ok = False
             if not ok:
+                # AND 逻辑：任一检测方法失败即判定网络不可用。
+                # 这是故意设计 — 宁可误报断网触发多余登录，不可漏报导致断网不处理。
+                # HTTP 200 可能是 captive portal 拦截页面，需 TCP/URL 同时验证。
                 for f in futures:
                     if not f.done():
                         f.cancel()

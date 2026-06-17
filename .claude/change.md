@@ -32,6 +32,7 @@
 ### fix
 - 配置重载顺序修复，避免重载失败时监控被意外停止
   - `_handle_reload` 先执行 `_reload_config_internal()`，仅当重载成功且之前处于监控状态时才执行 stop/start
+  - `_handle_apply_profile` 同样修复，先加载成功再 stop+start
   - 原逻辑先 stop 再 reload，reload 失败时监控永久停止
   - 新增测试 `test_reload_failure_keeps_monitoring` 和 `test_reload_success_restarts_monitoring`
 
