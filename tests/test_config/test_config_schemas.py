@@ -461,15 +461,6 @@ class TestProfileSettingsDefaults:
 class TestProfileSettings:
     """ProfileSettings 测试"""
 
-    def test_default_values(self):
-        """测试默认值"""
-        profile = ProfileSettings()
-        assert profile.name == "默认方案"
-        assert profile.username == ""
-        assert profile.password == ""
-        assert profile.carrier == "无"
-        assert profile.auth_url == ""
-
     def test_custom_values(self):
         """测试自定义值"""
         profile = ProfileSettings(
