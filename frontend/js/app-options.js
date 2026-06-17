@@ -124,44 +124,10 @@ export const appOptions = {
       return titles[this.currentPage] || '仪表盘';
     },
     canProceed() {
-      if (this.wizardStep === 1) {
-        return this.agreedToTerms;
-      }
-      if (this.wizardStep === 2) {
-        // 验证必填项
-        if (!this.config.username || !this.config.password || !this.config.auth_url) {
-          return false;
-        }
-        // 验证密码长度
-        if (this.config.password.length < 2) {
-          return false;
-        }
-        // 验证自定义运营商关键字
-        if (this.config.carrier === '自定义') {
-          return !!(this.config.carrier_custom && this.config.carrier_custom.trim());
-        }
-        return true;
-      }
-      return true;
+      return Object.keys(this.validateWizardStep(this.wizardStep, this)).length === 0;
     },
     wizardErrors() {
-      const errors = {};
-      if (this.wizardStep === 2) {
-        if (this.config.username && !this.config.password) {
-          errors.password = '请输入密码';
-        } else if (this.config.password && this.config.password.length < 2) {
-          errors.password = '密码长度不能少于2位';
-        }
-        if (this.config.auth_url && !/^https?:\/\//i.test(this.config.auth_url)) {
-          errors.auth_url = '认证地址必须以 http:// 或 https:// 开头';
-        }
-        if (this.config.carrier === '自定义' && this.config.carrier_custom !== undefined) {
-          if (!this.config.carrier_custom || !this.config.carrier_custom.trim()) {
-            errors.carrier_custom = '请输入自定义运营商关键字';
-          }
-        }
-      }
-      return errors;
+      return this.validateWizardStep(this.wizardStep, this);
     },
     configDirty() {
       return this._lastSavedConfig !== null && JSON.stringify(this.config) !== this._lastSavedConfig;
@@ -320,6 +286,40 @@ export const appOptions = {
     if (this.ws) this.ws.close();
   },
   methods: {
+    // ── 向导验证（F2: 单点定义）──
+    validateWizardStep(step, data) {
+      const errors = {};
+      if (step === 1) {
+        if (!data.agreedToTerms) {
+          errors.agreedToTerms = '请先阅读并同意使用协议';
+        }
+      }
+      if (step === 2) {
+        if (!data.config.username) {
+          errors.username = '请输入账号';
+        }
+        if (!data.config.password) {
+          errors.password = '请输入密码';
+        } else if (data.config.password.length < 2) {
+          errors.password = '密码长度不能少于2位';
+        }
+        if (!data.config.auth_url) {
+          errors.auth_url = '请输入认证地址';
+        } else if (!/^https?:\/\//i.test(data.config.auth_url)) {
+          errors.auth_url = '认证地址必须以 http:// 或 https:// 开头';
+        }
+        if (data.config.carrier === '自定义' && (!data.config.carrier_custom || !data.config.carrier_custom.trim())) {
+          errors.carrier_custom = '请输入自定义运营商关键字';
+        }
+      }
+      if (step === 4) {
+        if (!data.selectedBrowser) {
+          errors.selectedBrowser = '请选择一个浏览器';
+        }
+      }
+      return errors;
+    },
+
     ...uiMethods,
     ...formatterMethods,
     ...lifecycleMethods,
