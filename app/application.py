@@ -35,47 +35,49 @@ ws_logger = get_logger("ws", source="backend")
 _TEMP_SCREENSHOT_MAX_AGE_DAYS = 7
 
 
-def _cleanup_temp_screenshots() -> None:
-    """启动时清理 temp/ 目录中超过保留天数的截图文件。"""
+def _cleanup_screenshots() -> None:
+    """启动时清理截图文件：
+    1. temp/ 目录中超过保留天数的截图文件。
+    2. screenshots/ 目录中非当天的日期子目录。
+    """
+    # --- 清理 temp/ 中的过期截图 ---
     try:
-        if not TEMP_DIR.exists():
-            return
-        import time as _time
-
-        cutoff = _time.time() - _TEMP_SCREENSHOT_MAX_AGE_DAYS * 86400
-        removed = 0
-        for f in TEMP_DIR.iterdir():
-            if (
-                f.is_file()
-                and f.suffix in (".png", ".jpg", ".jpeg")
-                and f.stat().st_mtime < cutoff
-            ):
-                f.unlink()
-                removed += 1
-        if removed:
-            startup_logger.info("启动时清理 temp 截图: 删除 {} 个过期文件", removed)
+        if TEMP_DIR.exists():
+            cutoff = time.time() - _TEMP_SCREENSHOT_MAX_AGE_DAYS * 86400
+            removed_temp = 0
+            for f in TEMP_DIR.iterdir():
+                if (
+                    f.is_file()
+                    and f.suffix in (".png", ".jpg", ".jpeg")
+                    and f.stat().st_mtime < cutoff
+                ):
+                    f.unlink()
+                    removed_temp += 1
+            if removed_temp:
+                startup_logger.info(
+                    "启动时清理 temp 截图: 删除 {} 个过期文件", removed_temp
+                )
     except Exception as exc:
         startup_logger.warning("清理 temp 截图失败: {}", exc)
 
-
-def _cleanup_old_screenshots() -> None:
-    """启动时清理非当天的截图子目录。"""
+    # --- 清理 screenshots/ 中的非当天目录 ---
     try:
-        if not SCREENSHOTS_DIR.exists():
-            return
-        import shutil
-        from datetime import datetime
+        if SCREENSHOTS_DIR.exists():
+            import shutil
+            from datetime import datetime
 
-        today = datetime.now().strftime("%Y-%m-%d")
-        removed = 0
-        for d in SCREENSHOTS_DIR.iterdir():
-            if d.is_dir() and d.name != today:
-                shutil.rmtree(d, ignore_errors=True)
-                removed += 1
-        if removed:
-            startup_logger.info("启动时清理旧截图: 删除 {} 个日期目录", removed)
+            today = datetime.now().strftime("%Y-%m-%d")
+            removed_dirs = 0
+            for d in SCREENSHOTS_DIR.iterdir():
+                if d.is_dir() and d.name != today:
+                    shutil.rmtree(d, ignore_errors=True)
+                    removed_dirs += 1
+            if removed_dirs:
+                startup_logger.info(
+                    "启动时清理旧截图: 删除 {} 个日期目录", removed_dirs
+                )
     except Exception as exc:
-        startup_logger.warning("清理旧截图失败: {}", exc)
+        startup_logger.warning("清理旧截图失败: {}".format(exc))
 
 
 _access_log_event = threading.Event()  # 默认未 set（即关闭）
@@ -149,11 +151,8 @@ def _create_lifespan(existing_container):
                 "建议安装: pip install cryptography"
             )
 
-        # 启动时清理 temp 目录中的旧截图
-        _cleanup_temp_screenshots()
-
-        # 清理非当天截图
-        _cleanup_old_screenshots()
+        # 启动时清理截图文件
+        _cleanup_screenshots()
 
         startup_logger.info(
             "FastAPI 启动: 完成，耗时 {:.3f}s",
