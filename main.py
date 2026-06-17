@@ -44,6 +44,7 @@ from app.utils.process import (  # noqa: E402
 )
 from app.workers.playwright_bootstrap import ensure_playwright_ready  # noqa: E402
 from app.workers.playwright_worker import cleanup_orphan_browsers  # noqa: E402
+from app.services.profile_service import create_profile_service  # noqa: E402
 
 # ==================== 浏览器控制 ====================
 
@@ -105,6 +106,23 @@ def _cmd_stop() -> None:
         cleanup_pid()
 
 
+def _wait_for_exit(pid: int, max_wait: int = 5) -> bool:
+    """等待进程退出，最多 max_wait 秒。
+
+    Args:
+        pid: 目标进程 PID。
+        max_wait: 最大等待秒数。
+
+    Returns:
+        True 表示进程已退出，False 表示超时仍在运行。
+    """
+    for _ in range(max_wait):
+        time.sleep(1)
+        if get_process_name(pid) is None:
+            return True
+    return False
+
+
 def _terminate_process(pid: int) -> None:
     """终止进程（先 SIGTERM，等待后 SIGKILL）。"""
     if is_windows():
@@ -114,28 +132,18 @@ def _terminate_process(pid: int) -> None:
             capture_output=True,
             creationflags=CREATE_NO_WINDOW_FLAG,
         )
-        # 等待进程退出
-        for _ in range(5):
-            time.sleep(1)
-            if get_process_name(pid) is None:
-                return
-        # 仍未退出，强制终止
-        subprocess.run(
-            ["taskkill", "/F", "/PID", str(pid)],
-            capture_output=True,
-            creationflags=CREATE_NO_WINDOW_FLAG,
-        )
+        if not _wait_for_exit(pid, max_wait=5):
+            # 仍未退出，强制终止
+            subprocess.run(
+                ["taskkill", "/F", "/PID", str(pid)],
+                capture_output=True,
+                creationflags=CREATE_NO_WINDOW_FLAG,
+            )
     else:
         os.kill(pid, signal.SIGTERM)
-        # 等待进程退出
-        for _ in range(5):
-            time.sleep(1)
-            try:
-                os.kill(pid, 0)
-            except OSError:
-                return
-        # SIGTERM 无效，使用 SIGKILL
-        os.kill(pid, signal.SIGKILL)
+        if not _wait_for_exit(pid, max_wait=5):
+            # SIGTERM 无效，使用 SIGKILL
+            os.kill(pid, signal.SIGKILL)
 
 
 def _cmd_autostart(action: str) -> None:
@@ -176,9 +184,8 @@ def _run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
     try:
         from app.services.config_service import build_runtime_config
         from app.services.runtime_config import load_runtime_config
-        from app.services.profile_service import ProfileService
 
-        ps = ProfileService(Path(__file__).parent.resolve())
+        ps = create_profile_service()
         data = ps.load()
         payload, has_decrypt_error = load_runtime_config(ps)
         if has_decrypt_error:
@@ -263,9 +270,7 @@ def _build_app_config(
 
     # 从 settings.json 加载
     try:
-        from app.services.profile_service import ProfileService
-
-        _ps = ProfileService(Path(__file__).parent.resolve())
+        _ps = create_profile_service()
         _data = _ps.load()
         _sys = _data.global_settings
         config.startup_action = StartupAction(getattr(_sys, "startup_action", "none"))
@@ -351,6 +356,41 @@ def _handle_existing_instance(ctx: ApplicationContext, force: bool = False):
 # ==================== 运行模式 ====================
 
 
+def _create_tray(
+    port: int,
+    on_exit,
+    on_open_console=None,
+):
+    """创建并启动系统托盘图标。
+
+    Args:
+        port: Web 服务端口，用于"打开控制台"的默认 URL。
+        on_exit: 退出回调（无参数），通常为发送 SIGTERM 或 os._exit。
+        on_open_console: 打开控制台回调（无参数）。
+            轻量模式传入按需启动 Web 服务的回调；
+            完整模式为 None（使用默认 webbrowser.open 行为）。
+
+    Returns:
+        SystemTray 实例（已 start），失败时返回 None。
+    """
+    try:
+        from app.ui.system_tray import SystemTray
+
+        tray_icon = SystemTray(
+            port=port,
+            on_exit=on_exit,
+            on_open_console=on_open_console,
+        )
+        tray_icon.start()
+        return tray_icon
+    except Exception as e:
+        from app.utils.logging import get_logger
+        get_logger("startup", source="backend").warning(
+            "启动系统托盘失败: {}", e
+        )
+        return None
+
+
 
 def _run_lightweight(ctx: ApplicationContext, logger):
     """轻量模式：始终启动监控 + 定时任务，可选托盘，支持按需唤醒 WebUI。"""
@@ -409,21 +449,16 @@ def _run_lightweight(ctx: ApplicationContext, logger):
     )
     tray_icon = None
     if features.tray_enabled:
-        try:
-            from app.ui.system_tray import SystemTray
-
-            port = resolve_port()
-            tray_icon = SystemTray(
-                port=port,
-                on_exit=lambda: (
-                    os.kill(os.getpid(), signal.SIGTERM) if hasattr(signal, "SIGTERM") else os._exit(0)
-                ),
-                on_open_console=_open_console,
-            )
-            tray_icon.start()
+        port = resolve_port()
+        tray_icon = _create_tray(
+            port=port,
+            on_exit=lambda: (
+                os.kill(os.getpid(), signal.SIGTERM) if hasattr(signal, "SIGTERM") else os._exit(0)
+            ),
+            on_open_console=_open_console,
+        )
+        if tray_icon:
             logger.info("系统托盘已启动")
-        except Exception as e:
-            logger.warning("启动系统托盘失败: {}", e)
 
     try:
         while True:
@@ -494,19 +529,14 @@ def _run_full(
     # 系统托盘
     tray_icon = None
     if features.tray_enabled:
-        try:
-            from app.ui.system_tray import SystemTray
-
-            tray_icon = SystemTray(
-                port=port,
-                on_exit=lambda: (
-                    os.kill(os.getpid(), signal.SIGTERM) if hasattr(signal, "SIGTERM") else os._exit(0)
-                ),
-            )
-            tray_icon.start()
+        tray_icon = _create_tray(
+            port=port,
+            on_exit=lambda: (
+                os.kill(os.getpid(), signal.SIGTERM) if hasattr(signal, "SIGTERM") else os._exit(0)
+            ),
+        )
+        if tray_icon:
             logger.info("系统托盘已启动，双击图标打开控制台")
-        except Exception as e:
-            logger.warning("启动系统托盘失败: {}", e)
 
     if features.browser_enabled:
         _open_browser(port, setting=True)
@@ -519,9 +549,7 @@ def _run_full(
 
     try:
         try:
-            from app.services.profile_service import ProfileService
-
-            _ps = ProfileService(Path(__file__).parent.resolve())
+            _ps = create_profile_service()
             _sys = _ps.load().global_settings
             _al = bool(_sys.access_log)
             _lr = max(1, int(_sys.log_retention_days))
