@@ -2,6 +2,24 @@
 
 ## 2026-06-18
 
+### style
+- `frontend/styles/pages/tasks.css` 三个 overlay 提取 `.overlay-base` 共享属性（PR5 Task 5）
+  - 新增 `.overlay-base` 包含 `position: fixed`、`inset: 0`、`display: flex`、居中对齐、`backdrop-filter` 等 5 个共享属性
+  - `.danger-overlay`、`.debug-overlay`、`.repo-overlay` 各自仅保留 `background`、`z-index`、`animation` 差异属性
+  - `frontend/partials/pages/tasks.html` 四个 overlay div 添加 `overlay-base` class
+
+### refactor
+- `frontend/js/methods/ui.js` `nextWizardStep` 使用 `validateWizardStep` 替代 inline 验证（PR5 Task 2）
+  - 35 行 if-else 验证逻辑简化为 4 行委托调用
+  - 步骤 4 的 `browser_channel` 同步保留在验证通过后执行
+
+### refactor
+- `frontend/js/app-options.js` 向导验证逻辑统一为 `validateWizardStep` 单点定义（PR5 Task 1）
+  - 新增 `validateWizardStep(step, data)` 纯函数方法，集中定义 step 1/2/4 的验证规则和错误消息
+  - `canProceed` computed 从 20 行 if-else 简化为一行委托调用
+  - `wizardErrors` computed 从 18 行条件逻辑简化为一行委托调用
+  - 消除 `canProceed` 与 `wizardErrors` 之间的验证逻辑重复
+
 ### fix
 - 测试文件同步修复：旧函数名 `_cleanup_temp_screenshots`/`_cleanup_old_screenshots` 更新为合并后的 `_cleanup_screenshots`（Task 6）
   - `tests/test_app/test_application_logic.py`：import 从 `_cleanup_old_screenshots, _cleanup_temp_screenshots` 改为 `_cleanup_screenshots`，两个测试类合并为 `TestCleanupScreenshots`，每个测试同时 mock `TEMP_DIR` 和 `SCREENSHOTS_DIR`
