@@ -116,22 +116,13 @@ class BrowserContextManager:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """异步上下文管理器出口 — 关闭浏览器并释放资源。
 
-        防御性设计：同线程直接 await，跨线程走 run_coroutine_threadsafe。
-        不使用 submit_nowait（不等完成）和 submit(wait=True)（阻塞事件循环）。
+        必须在 PlaywrightWorker 事件循环内调用（架构约束）。
         """
-        import asyncio
-
         from app.workers.playwright_worker import get_worker
 
         worker = get_worker()
         try:
-            if asyncio.get_running_loop() is worker._loop:
-                await worker._close_browser()
-            else:
-                future = asyncio.run_coroutine_threadsafe(
-                    worker._close_browser(), worker._loop
-                )
-                await asyncio.wrap_future(future)
+            await worker._close_browser()
         except Exception:
             self.logger.warning("关闭浏览器异常", exc_info=True)
 
@@ -141,12 +132,7 @@ class BrowserContextManager:
         self.page = None
 
         if exc_type:
-            try:
-                self.logger.error(
-                    "浏览器操作异常: {}: {}", exc_type.__name__, str(exc_val)[:200]
-                )
-            except Exception:
-                self.logger.error(
-                    "浏览器操作异常: {} (详情无法格式化)", exc_type.__name__
-                )
+            self.logger.error(
+                "浏览器操作异常: {}: {}", exc_type.__name__, str(exc_val)[:200]
+            )
         return False
