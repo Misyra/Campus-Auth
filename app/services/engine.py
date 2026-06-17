@@ -582,6 +582,10 @@ class ScheduleEngine:
     def login_in_progress(self) -> bool:
         return self._login_in_progress.is_set()
 
+    def set_dashboard_sink(self, sink) -> None:
+        """注入 DashboardSink 实例（由 container.start_web_services 调用）。"""
+        self._dashboard_sink = sink
+
     @property
     def ws_broadcast_queue(self) -> deque:
         """WS 广播队列（从 DashboardSink 获取）。"""

@@ -132,7 +132,7 @@ class ServiceContainer:
                 level="DEBUG",
                 filter=lambda record: record["extra"].get("source") != "frontend",
             )
-            self.engine._dashboard_sink = dashboard_sink
+            self.engine.set_dashboard_sink(dashboard_sink)
         self._ws_drain_task = asyncio.create_task(self.engine.ws_drain_loop())
         self._web_services_started = True
         container_logger.info("Web 服务已启动")
