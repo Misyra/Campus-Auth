@@ -170,19 +170,8 @@ class ServiceContainer:
         self._shutdown_done = True
         container_logger.info("服务容器开始关闭...")
 
-        if self._log_handler_id is not None:
-            from loguru import logger as _loguru_logger
-
-            try:
-                _loguru_logger.remove(self._log_handler_id)
-            except Exception as exc:
-                container_logger.debug("移除日志处理器失败: {}", exc)
-            self._log_handler_id = None
-
-        if self._ws_drain_task:
-            self._ws_drain_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._ws_drain_task
+        # 复用 stop_web_services — 消除重复代码并修复 _ws_drain_task = None 遗漏 bug
+        await self.stop_web_services()
 
         self.task_executor.shutdown(wait=False)
 
