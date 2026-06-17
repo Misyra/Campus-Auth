@@ -2,6 +2,14 @@
 
 ## 2026-06-18
 
+### refactor
+- `main.py` 工厂替换 ProfileService + 提取 `_create_tray`/`_wait_for_exit`（Task 2）
+  - 3 处 `ProfileService(Path(__file__).parent.resolve())` 替换为 `create_profile_service()` 工厂调用
+  - 顶部新增 `from app.services.profile_service import create_profile_service` import
+  - 提取 `_wait_for_exit(pid, max_wait)` 辅助函数，`_terminate_process` 改用该函数
+  - 提取 `_create_tray(port, on_exit, on_open_console)` 工厂函数，`_run_lightweight` 和 `_run_full` 改用该函数
+  - 托盘创建的 try/except 移入 `_create_tray` 内部，调用方通过返回值判断成功/失败
+
 ### fix
 - `tests/test_services/test_scheduler_service.py` 修复 `test_timeout_clamped_to_max` 和 `test_audit_log_called` 两个测试 mock 路径过时
   - `5cf7473` 将 `run_sync` 从 `subprocess.run` 改为 `subprocess.Popen`，但测试中 mock 路径未同步更新
