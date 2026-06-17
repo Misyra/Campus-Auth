@@ -276,6 +276,30 @@ class TestFetchUrlContentLength:
             request=request,
         )
 
+    @staticmethod
+    def _mock_stream_context(mock_resp):
+        """构造模拟的 stream 异步上下文管理器。"""
+        cm = AsyncMock()
+        cm.__aenter__ = AsyncMock(return_value=mock_resp)
+        cm.__aexit__ = AsyncMock(return_value=False)
+        return cm
+
+    def _mock_stream_response(self, content_length: str | None, body: bytes = b""):
+        """构造支持 iter_bytes 的 mock 响应和 stream 上下文管理器。"""
+        mock_resp = AsyncMock()
+        headers = {"content-type": "image/png"}
+        if content_length is not None:
+            headers["content-length"] = content_length
+        mock_resp.headers = headers
+        mock_resp.raise_for_status = MagicMock()
+
+        async def _iter_bytes(chunk_size=8192):
+            for i in range(0, len(body), chunk_size):
+                yield body[i : i + chunk_size]
+
+        mock_resp.iter_bytes = _iter_bytes
+        return self._mock_stream_context(mock_resp)
+
     @pytest.mark.asyncio
     async def test_rejects_when_content_length_exceeds_limit(self, tmp_path):
         """Content-Length 超过限制时拒绝，不加载响应体。"""
@@ -283,10 +307,10 @@ class TestFetchUrlContentLength:
         bg_dir.mkdir(parents=True, exist_ok=True)
 
         huge_size = str(10 * 1024 * 1024)  # 10MB
-        mock_resp = self._mock_response(huge_size)
+        stream_cm = self._mock_stream_response(huge_size)
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_resp)
+        mock_client.stream = MagicMock(return_value=stream_cm)
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
@@ -309,10 +333,10 @@ class TestFetchUrlContentLength:
         bg_dir.mkdir(parents=True, exist_ok=True)
 
         small_body = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
-        mock_resp = self._mock_response(str(len(small_body)), small_body)
+        stream_cm = self._mock_stream_response(str(len(small_body)), small_body)
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_resp)
+        mock_client.stream = MagicMock(return_value=stream_cm)
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
@@ -335,10 +359,10 @@ class TestFetchUrlContentLength:
         bg_dir.mkdir(parents=True, exist_ok=True)
 
         small_body = b"\x89PNG\r\n\x1a\n" + b"\x00" * 10
-        mock_resp = self._mock_response(None, small_body)
+        stream_cm = self._mock_stream_response(None, small_body)
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_resp)
+        mock_client.stream = MagicMock(return_value=stream_cm)
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 

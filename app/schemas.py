@@ -211,6 +211,10 @@ class _CommonSettingsMixin(BaseModel):
         default="",
         description="自定义浏览器可执行文件路径（仅 browser_channel='custom' 时生效）"
     )
+    custom_browser_engine: str = Field(
+        default="auto",
+        description="自定义浏览器引擎: auto(默认Chromium) | firefox | webkit"
+    )
     headless: bool = Field(default=True)
     browser_timeout: int = Field(default=8, ge=1, le=60, description="页面操作超时（秒）")
     browser_navigation_timeout: int = Field(default=15, ge=3, le=60, description="打开登录页面超时（秒）")
@@ -249,6 +253,24 @@ class _CommonSettingsMixin(BaseModel):
             raise ValueError("路径包含非法字符（null 字节）")
         return v
 
+    @field_validator("browser_extra_headers_json")
+    @classmethod
+    def validate_headers_json(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            return ""
+        try:
+            parsed = json.loads(v)
+        except json.JSONDecodeError as e:
+            raise ValueError(
+                f"浏览器请求头格式不正确，请确认输入的是合法的 JSON 对象: {e}"
+            ) from e
+        if not isinstance(parsed, dict):
+            raise ValueError(
+                '浏览器请求头格式不正确，应为键值对形式，例如: {"Referer": "https://example.com"}'
+            )
+        return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
+
 
 class _SystemFieldsMixin(_CommonSettingsMixin):
     """MonitorConfigPayload 额外需要的凭证及业务配置字段"""
@@ -285,24 +307,6 @@ class GlobalSettings(_CommonSettingsMixin):
 
     # 自定义变量
     custom_variables: dict[str, str] = Field(default_factory=dict)
-
-    @field_validator("browser_extra_headers_json")
-    @classmethod
-    def validate_headers_json(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            return ""
-        try:
-            parsed = json.loads(v)
-        except json.JSONDecodeError as e:
-            raise ValueError(
-                f"浏览器请求头格式不正确，请确认输入的是合法的 JSON 对象: {e}"
-            ) from e
-        if not isinstance(parsed, dict):
-            raise ValueError(
-                '浏览器请求头格式不正确，应为键值对形式，例如: {"Referer": "https://example.com"}'
-            )
-        return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
 
 
 # ── 主要模型 ──

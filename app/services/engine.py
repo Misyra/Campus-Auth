@@ -283,12 +283,13 @@ class ScheduleEngine:
 
             # 检查是否需要重启（自动切换方案）
             if core.consume_profile_switch_flag():
-                logger.info("检测到方案切换，重启监控")
-                self._handle_stop()
+                logger.info("检测到方案切换，准备重启监控")
+                # 先 reload，成功后再 stop → start（失败则旧 core 继续运行）
                 if self._reload_config_internal():
+                    self._handle_stop()
                     self._handle_start(EngineCommand(type=EngineCmdType.START))
                 else:
-                    logger.error("配置重载失败，跳过监控重启")
+                    logger.error("配置重载失败，继续使用当前配置")
 
             self._next_network_check = time.time() + interval
             self._update_status_snapshot(force=True)
@@ -696,28 +697,26 @@ class ScheduleEngine:
             return True, "监控已停止"
 
     def shutdown(self) -> None:
-        """完全关闭 ScheduleEngine：停止监控 + 停止调度器 + 终止引擎线程。"""
+        """两阶段 shutdown：先通知引擎线程退出，等待确认后再清理资源。"""
         if self._shutdown_event.is_set():
             return
-        # 停止调度器
         self._scheduler_running = False
 
-        # 直接停止监控核心（不等待 response，避免阻塞）
-        if self._monitor_core is not None:
-            with contextlib.suppress(Exception):
-                self._monitor_core.stop_monitoring()
-        self._monitor_core = None
-
-        # 设置关闭事件，通知引擎线程退出循环
+        # 阶段 1：通知引擎线程退出
         self._shutdown_event.set()
-
-        # 发送 shutdown 命令确保引擎能立即处理退出
         with contextlib.suppress(queue.Full):
             self._cmd_queue.put_nowait(EngineCommand(type=EngineCmdType.SHUTDOWN))
 
-        # 短超时等待，不阻塞（守护线程会随进程退出）
+        # 等待引擎线程退出（最多 5 秒）
         if self._engine_thread and self._engine_thread.is_alive():
-            self._engine_thread.join(timeout=1)
+            self._engine_thread.join(timeout=5.0)
+
+        # 阶段 2：引擎线程已退出，安全清理（不会再有并发修改）
+        core = self._monitor_core
+        if core is not None:
+            with contextlib.suppress(Exception):
+                core.stop_monitoring()
+        self._monitor_core = None
 
         logger.info("引擎服务已关闭")
 

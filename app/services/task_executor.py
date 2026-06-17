@@ -434,26 +434,19 @@ class TaskExecutor:
             duration_ms = int((time.perf_counter() - start_time) * 1000)
 
             if result.success:
-                self._record_login_history(True, duration_ms)
                 return True, (
                     result.data
                     if isinstance(result.data, str)
                     else "浏览器任务执行成功"
                 )
             else:
-                error_msg = result.error or "浏览器任务执行失败"
-                self._record_login_history(False, duration_ms, error=error_msg)
-                return False, error_msg
+                return False, result.error or "浏览器任务执行失败"
 
         except ImportError as exc:
-            duration_ms = int((time.perf_counter() - start_time) * 1000)
             logger.warning("浏览器任务执行缺少依赖: {}", exc)
-            self._record_login_history(False, duration_ms, error=str(exc))
             return False, "浏览器任务需要额外依赖，请检查 Playwright 安装状态"
         except Exception as exc:
-            duration_ms = int((time.perf_counter() - start_time) * 1000)
             logger.error("浏览器任务执行异常: {}", exc)
-            self._record_login_history(False, duration_ms, error=str(exc))
             return False, f"浏览器任务执行异常: {exc}"
 
     def _execute_shell(

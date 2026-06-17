@@ -1,5 +1,22 @@
 # 修改日志
 
+## 2026-06-17
+
+### docs
+- 生成代码审查问题分析报告 `docs/superpowers/specs/2026-06-17-code-review-analysis.md`
+  - 逐项验证 `code-review-report.md` 中 71 个问题的属实性
+  - 38 项属实且严重、18 项严重程度偏高、8 项部分属实、7 项需进一步确认
+  - 按可操作性分类：19 项可通过重构解决、28 项可快速修复、12 项需接受/缓解
+  - 为每类问题提供具体解决方案、工时估算和风险评估
+- 重构方案冻结版 `docs/superpowers/specs/2026-06-17-refactor-optimization-design.md`
+  - 经四轮讨论修正，35 项改动，~37h 工时（含测试验证）
+  - C01 采用 `run_coroutine_threadsafe` 防御性设计；C12 简化为 null 字节检查；C11 改名 `custom_browser_engine`
+  - 否决 4 项（M12/M13/C07/M09），可进入实施阶段
+- 生成实施计划 `docs/superpowers/plans/2026-06-17-refactor-optimization.md`
+  - 12 个 Task，按风险分三批执行
+  - 每个 Task 包含：具体代码改动、测试命令、提交信息
+  - 最后附全量测试验证清单和手动验证路径
+
 ## 2026-06-16
 
 ### docs

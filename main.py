@@ -193,7 +193,7 @@ def _run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
     try:
         from app.network.decision import check_network_status
 
-        network_ok, reason = check_network_status(runtime_config)
+        network_ok, reason, _ = check_network_status(runtime_config)
         if network_ok:
             print("网络已连接，无需登录，正在退出...")
             return LoginResult.SUCCESS

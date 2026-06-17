@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import platform
 import subprocess
 import sys
@@ -94,6 +95,8 @@ class ShellCommandPolicy:
         )
         return True, effective_timeout, ""
 
+    _ALLOWED_SUBPROCESS_KWARGS = {"env", "cwd", "creationflags"}
+
     async def run(
         self,
         argv: list[str],
@@ -106,7 +109,7 @@ class ShellCommandPolicy:
         Args:
             argv: 完整命令参数列表，第一个元素为执行路径
             timeout: 超时时间（秒），会被 clamp 到 [1, 3600]
-            **kwargs: 传递给 asyncio.create_subprocess_exec 的额外参数
+            **kwargs: 传递给 asyncio.create_subprocess_exec 的额外参数（仅 env/cwd/creationflags）
 
         Returns:
             (returncode, stdout_str, stderr_str)
@@ -124,15 +127,17 @@ class ShellCommandPolicy:
 
         self._audit(argv, effective_timeout)
 
+        # 白名单过滤，防止 shell=True 等危险参数被透传
+        safe_kwargs = {k: v for k, v in kwargs.items() if k in self._ALLOWED_SUBPROCESS_KWARGS}
         if platform.system() == "Windows":
-            kwargs.setdefault("creationflags", CREATE_NO_WINDOW_FLAG)
+            safe_kwargs.setdefault("creationflags", CREATE_NO_WINDOW_FLAG)
 
         try:
             proc = await asyncio.create_subprocess_exec(
                 *argv,
-                stdout=kwargs.pop("stdout", asyncio.subprocess.PIPE),
-                stderr=kwargs.pop("stderr", asyncio.subprocess.PIPE),
-                **kwargs,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                **safe_kwargs,
             )
         except FileNotFoundError:
             return -1, "", f"执行文件不存在: {executable}"
@@ -142,14 +147,31 @@ class ShellCommandPolicy:
                 proc.communicate(), timeout=effective_timeout
             )
         except TimeoutError:
-            proc.kill()
-            await proc.wait()
+            await self._kill_process_tree(proc)
             return -1, "", f"命令执行超时 ({effective_timeout}s)"
 
         stdout_str = stdout.decode("utf-8", errors="replace").strip() if stdout else ""
         stderr_str = stderr.decode("utf-8", errors="replace").strip() if stderr else ""
 
         return proc.returncode if proc.returncode is not None else -1, stdout_str, stderr_str
+
+    async def _kill_process_tree(self, proc):
+        """杀死进程及其所有子进程。"""
+        try:
+            import psutil
+            parent = psutil.Process(proc.pid)
+            for child in parent.children(recursive=True):
+                with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
+                    child.kill()
+            parent.kill()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, ProcessLookupError):
+            pass
+        except Exception:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+        await proc.wait()
 
     def run_sync(
         self,

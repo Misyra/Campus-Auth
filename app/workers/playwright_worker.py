@@ -667,29 +667,37 @@ class PlaywrightWorker:
 
     # ── 浏览器生命周期管理 ──
 
+    _CHROMIUM_ONLY_FLAGS = {
+        "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
+        "--memory-pressure-off", "--disable-web-security",
+    }
+
     def _build_launch_args(self, browser_settings: dict, channel: str = "playwright") -> list[str]:
         """构建浏览器启动参数。"""
-        # Firefox 不支持 Chromium 专属参数
-        if channel == "firefox":
-            return []
+        args = []
 
-        args = [
-            "--no-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-gpu",
-            "--memory-pressure-off",
-        ]
-        if browser_settings.get("disable_web_security", False):
-            args.append("--disable-web-security")
-        if browser_settings.get("low_resource_mode", False):
-            args.append("--blink-settings=imagesEnabled=false")
+        if channel != "firefox":
+            args.extend([
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--memory-pressure-off",
+            ])
+            if browser_settings.get("disable_web_security", False):
+                args.append("--disable-web-security")
+            if browser_settings.get("low_resource_mode", False):
+                args.append("--blink-settings=imagesEnabled=false")
 
-        # 用户自定义浏览器参数
+        # 用户自定义参数（所有 engine 都解析）
         custom_args = str(browser_settings.get("browser_args", "") or "").strip()
         if custom_args:
             for flag in custom_args.splitlines():
                 flag = flag.strip()
-                if flag and flag not in args:
+                if not flag or flag.startswith("#"):
+                    continue
+                if channel == "firefox" and flag in self._CHROMIUM_ONLY_FLAGS:
+                    continue
+                if flag not in args:
                     args.append(flag)
         return args
 
@@ -791,11 +799,18 @@ class PlaywrightWorker:
     async def _launch_browser(self, playwright, channel: str, custom_path: str, headless: bool, launch_args: list):
         """根据 channel 启动对应的浏览器。"""
         if channel == "custom" and custom_path:
-            # 检查路径是否存在
             if not Path(custom_path).exists():
                 raise FileNotFoundError(f"自定义浏览器路径不存在: {custom_path}")
-            logger.info("使用自定义浏览器路径: {}", custom_path)
-            return await playwright.chromium.launch(
+            custom_engine = (self._last_browser_settings or {}).get("custom_browser_engine", "auto")
+            if custom_engine == "firefox":
+                engine = "firefox"
+            elif custom_engine == "webkit":
+                engine = "webkit"
+            else:
+                engine = "chromium"
+            logger.info("使用自定义浏览器: {} (engine={})", custom_path, engine)
+            launcher = getattr(playwright, engine)
+            return await launcher.launch(
                 executable_path=custom_path, headless=headless, args=launch_args
             )
         elif channel == "firefox":
