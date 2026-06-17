@@ -6,11 +6,12 @@ import ssl
 import threading
 import time
 from collections.abc import Iterable, Sequence
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 import psutil
 
+from app.utils.concurrent import race_first_success
 from app.utils.logging import get_logger
 
 logger = get_logger("network_probes", source="network")
@@ -117,22 +118,13 @@ def is_network_available_socket(
             return (f"{host}:{port}", False, f"{type(exc).__name__}")
 
     futures = {executor.submit(_connect_one, h, p): (h, p) for h, p in targets}
-    try:
-        for future in as_completed(futures, timeout=timeout + 2):
-            label, ok, detail = future.result(timeout=1)
-            if ok:
-                logger.debug("TCP 连接成功: {} {}", label, detail)
-                # 成功：取消其余任务
-                for f in futures:
-                    if not f.done():
-                        f.cancel()
-                return True
-            logger.debug("TCP 连接失败: {} -- {}", label, detail)
-    except TimeoutError:
-        logger.warning("TCP 检测超时 ({:.1f}s)", timeout + 2)
-        return False
-    logger.warning("所有 TCP 目标均不可达 ({} 个)", len(targets))
-    return False
+    return race_first_success(
+        futures,
+        timeout=timeout + 2,
+        label="TCP",
+        success_prefix="TCP 连接",
+        fail_prefix="TCP 连接",
+    )
 
 
 def is_network_available_url(
@@ -181,22 +173,13 @@ def is_network_available_url(
             return (url, False, f"{type(exc).__name__} ({elapsed:.0f}ms)")
 
     futures = {executor.submit(_check_url, url, exp): url for url, exp in url_checks}
-    try:
-        for future in as_completed(futures, timeout=timeout + 2):
-            url, ok, detail = future.result(timeout=1)
-            if ok:
-                logger.debug("网址响应检测成功: {} -> {}", url, detail)
-                # 成功：取消其余任务
-                for f in futures:
-                    if not f.done():
-                        f.cancel()
-                return True
-            logger.debug("网址响应检测失败: {} -- {}", url, detail)
-    except TimeoutError:
-        logger.warning("网址响应检测超时 ({:.1f}s)", timeout + 2)
-        return False
-    logger.warning("所有网址响应检测均未通过 ({} 个)", len(url_checks))
-    return False
+    return race_first_success(
+        futures,
+        timeout=timeout + 2,
+        label="网址响应检测",
+        success_prefix="网址响应检测",
+        fail_prefix="网址响应检测",
+    )
 
 
 def is_network_available_http(
@@ -240,19 +223,10 @@ def is_network_available_http(
             return (url, False, f"{type(exc).__name__}: {exc}")
 
     futures = {executor.submit(_check_one, url): url for url in urls}
-    try:
-        for future in as_completed(futures, timeout=timeout + 2):
-            url, ok, detail = future.result(timeout=1)
-            if ok:
-                logger.debug("HTTP 请求成功: {} -> {}", url, detail)
-                # 成功：取消其余任务
-                for f in futures:
-                    if not f.done():
-                        f.cancel()
-                return True
-            logger.debug("HTTP 请求失败: {} -- {}", url, detail)
-    except TimeoutError:
-        logger.warning("HTTP 检测超时 ({:.1f}s)", timeout + 2)
-        return False
-    logger.warning("所有 HTTP 目标均不可达 ({} 个)", len(urls))
-    return False
+    return race_first_success(
+        futures,
+        timeout=timeout + 2,
+        label="HTTP",
+        success_prefix="HTTP 请求",
+        fail_prefix="HTTP 请求",
+    )
