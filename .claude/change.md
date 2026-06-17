@@ -1,5 +1,14 @@
 # 修改日志
 
+## 2026-06-18
+
+### fix
+- `app/workers/playwright_worker.py` 修复 stealth_mode Bug + 防御性改进（4 项）
+  - `_apply_stealth_and_routes` 改用 `context.add_init_script` 替代 `page.add_init_script`，stealth 脚本自动继承到所有新页面（含 popup、debug_page）
+  - `_handle_debug_stop` 删除新页面后重新应用 stealth 的冗余代码（context 级 init_script 已自动继承）
+  - `start()` 新增 `if self.is_alive(): return` 重复启动保护
+  - `submit()` 超时判定改用 `event.wait()` 返回值，替代检查 `response_data is not None`（后者在返回值为 None 时误判为超时）
+
 ## 2026-06-17
 
 ### refactor
