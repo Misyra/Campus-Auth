@@ -2,6 +2,40 @@
 
 ## 2026-06-18
 
+### fix
+- `tests/test_services/test_system_services.py` 修复 PR6 提取共享函数后的测试导入和断言（Task 10）
+  - `_dir_size_mb` 改为从 `app.utils.files.dir_size_mb` 导入
+  - `_playwright_cache_dir` 改为从 `app.utils.platform.get_playwright_cache_dir` 导入
+  - `TestPlaywrightCacheDir` 补丁路径从 `app.services.uninstall.PLATFORM` 改为 `app.utils.platform.get_platform`
+  - `TestDirSizeMb.test_with_files` 写入数据从 11 字节增至 1MB+，避免 `round(..., 1)` 精度截断为 0.0
+
+### refactor
+- 创建共享 `engine_factory` fixture，消除 test_monitor_service/test_engine 重复工厂（PR6 Task 8）
+
+### refactor
+- 创建共享 `engine_factory` fixture，消除 test_monitor_service/test_engine 重复工厂（PR6 Task 8）
+  - 新建 `tests/test_services/conftest.py`，提供 `engine_factory` fixture，支持标准模式（`engine_factory()`）和原始模式（`engine_factory(raw=True)`）
+  - `test_monitor_service.py`：删除 `_make_monitor_service` 函数，16 处调用点替换为 `engine_factory()`，每个方法签名添加 `engine_factory` 参数
+  - `test_engine.py`：删除 `_make_engine` 和 `_make_raw_engine` 两个函数，约 90 处调用点替换为 `engine_factory()`/`engine_factory(raw=True)`
+  - 167 个测试全部通过
+
+### refactor
+- `frontend/js/tasks/editor.js` 提取 `_showCountdownModal` 辅助函数，消除重复倒计时模式（PR6 Task 7）
+  - 新增 `_clearCountdownTimer(timerRefKey)` 和 `_showCountdownModal(modalSelector, countdownObj, countdownKey, timerRefKey, initialSeconds)` 两个辅助方法
+  - `showDangerConfirm` 从 17 行简化为 7 行，委托 `_showCountdownModal` 处理倒计时逻辑
+  - `confirmRepoImport` 从 16 行简化为 3 行
+  - `_cancelDangerConfirm` 和 `cancelRepoDisclaimer` 的清理逻辑保持不变，与辅助函数不冲突
+  - 净减 2 行代码（-25 +23）
+
+- 提取浏览器选择共享 partial，消除 wizard/settings 重复 HTML（PR6 Task 6）
+  - 创建 `frontend/partials/shared/browser-selection.html`：Firefox 兼容性警告 + 自定义浏览器说明 + 自定义路径输入
+  - `frontend/partials/wizard.html` 第 308-353 行替换为 `data-include` 引用
+  - `frontend/partials/pages/settings/settings-browser.html` 第 66-112 行替换为 `data-include` 引用
+  - `frontend/js/methods/ui.js` 新增 `getActiveBrowserChannel()` 和 `onBrowserCustomPathInput()` 方法
+  - `getActiveBrowserChannel()` 兼容 wizard（`selectedBrowser`）和 settings（`config.browser_channel`）两种模式
+  - `onBrowserCustomPathInput()` 在 settings 模式下触发 `onConfigChange` 自动保存
+  - 净减 27 行代码（-93 +66）
+
 ### chore
 - `frontend/partials/pages/tasks.html` 和 `frontend/partials/pages/scripts.html` 删除不存在的 `onDragLeave` 拖拽事件绑定（PR5 Task 8）
   - `drag.js` 中未定义 `onDragLeave` 方法，拖拽排序使用实时交换模式（在 `onDragOver` 中完成），不需要 `dragleave` 事件

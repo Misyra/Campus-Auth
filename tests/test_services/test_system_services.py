@@ -18,11 +18,11 @@ from app.services.uninstall import (
     CleanupItem,
     CleanupResult,
     _check_autostart,
-    _dir_size_mb,
-    _playwright_cache_dir,
     detect,
     perform,
 )
+from app.utils.files import dir_size_mb as _dir_size_mb
+from app.utils.platform import get_playwright_cache_dir as _playwright_cache_dir
 
 # ─────────────────────────────────────────────────────────────────────
 #  AutoStartService (backend/autostart_service.py)
@@ -206,26 +206,26 @@ class TestCleanupResult:
 
 
 class TestPlaywrightCacheDir:
-    @patch("app.services.uninstall.PLATFORM", "windows")
-    def test_windows(self):
+    @patch("app.utils.platform.get_platform", return_value="windows")
+    def test_windows(self, _mock):
         path = _playwright_cache_dir()
         assert path is not None
         assert "ms-playwright" in str(path)
 
-    @patch("app.services.uninstall.PLATFORM", "darwin")
-    def test_macos(self):
+    @patch("app.utils.platform.get_platform", return_value="darwin")
+    def test_macos(self, _mock):
         path = _playwright_cache_dir()
         assert path is not None
         assert "ms-playwright" in str(path)
 
-    @patch("app.services.uninstall.PLATFORM", "linux")
-    def test_linux(self):
+    @patch("app.utils.platform.get_platform", return_value="linux")
+    def test_linux(self, _mock):
         path = _playwright_cache_dir()
         assert path is not None
         assert "ms-playwright" in str(path)
 
-    @patch("app.services.uninstall.PLATFORM", "unknown")
-    def test_unknown(self):
+    @patch("app.utils.platform.get_platform", return_value="unknown")
+    def test_unknown(self, _mock):
         path = _playwright_cache_dir()
         assert path is None
 
@@ -235,7 +235,8 @@ class TestDirSizeMb:
         assert _dir_size_mb(tmp_path) == 0.0
 
     def test_with_files(self, tmp_path):
-        (tmp_path / "test.txt").write_text("hello world")
+        # 写入超过 1MB 以确保 round(..., 1) 不为 0
+        (tmp_path / "test.txt").write_bytes(b"x" * (1024 * 1024 + 1))
         size = _dir_size_mb(tmp_path)
         assert size > 0
 
