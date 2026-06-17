@@ -3,6 +3,30 @@
 ## 2026-06-18
 
 ### fix
+- `tests/test_services/test_scheduler_service.py` 修复 `test_timeout_clamped_to_max` 和 `test_audit_log_called` 两个测试 mock 路径过时
+  - `5cf7473` 将 `run_sync` 从 `subprocess.run` 改为 `subprocess.Popen`，但测试中 mock 路径未同步更新
+  - mock 路径从 `app.utils.shell_policy.subprocess.run` 改为 `app.utils.shell_policy.subprocess.Popen`
+  - mock 返回值适配 Popen 接口：`communicate()` 返回 `(stdout, stderr)` 元组，`returncode` 为实例属性
+
+### refactor
+- `app/services/engine.py` 添加 `set_dashboard_sink` 公共方法，`app/container.py` 改用该方法替代直接访问 `_dashboard_sink` 私有属性
+
+### refactor
+- `app/network/decision.py` 使用 `race_first_success`/`cancel_pending` 替代内联竞态代码 + import 移至顶部
+  - `_is_auth_url_reachable` extra_targets 分支的 OR 竞态替换为 `race_first_success` 调用
+  - `is_network_available` AND 竞态中的内联取消循环替换为 `cancel_pending` 调用
+  - 2 处内联 `from concurrent.futures import as_completed` 移至顶部 import
+  - 新增 `from app.utils.concurrent import cancel_pending, race_first_success` 顶部 import
+  - 净减 9 行代码（-24 +15）
+
+### refactor
+- `app/network/probes.py` 3 个检测函数使用 `race_first_success` 消除竞态重复代码
+  - `is_network_available_socket`、`is_network_available_url`、`is_network_available_http` 的 futures 竞态循环替换为 `race_first_success()` 调用
+  - 移除不再需要的 `as_completed` 导入
+  - worker 函数（`_connect_one`、`_check_url`、`_check_one`）保持不变
+  - 净减 26 行代码（-49 +23）
+
+### fix
 - `app/services/runtime_config.py` `_build_config_payload` 修复 profile 覆盖字段被 global_settings 覆盖的 bug
   - `auth_url`、`carrier`、`carrier_custom` 从 `_MonitorFieldsMixin` 继承后进入 `GLOBAL_SETTINGS_FIELDS`，导致 `payload_dict.update(gs_dict)` 覆盖 profile 中的独立值
   - 新增 `_PROFILE_OVERRIDE` 排除集合，从 `gs_dict` 中排除这 3 个 profile 覆盖字段
