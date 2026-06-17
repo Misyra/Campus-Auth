@@ -4,6 +4,12 @@
 
 ### fix
 - `app/workers/playwright_worker.py` 修复 stealth_mode Bug + 防御性改进（4 项）
+
+### fix
+- `app/services/engine.py` 修复 ScheduleEngine 两个接口契约问题
+  - `_handle_reload` / `_handle_apply_profile` 设置 `cmd.response_data`，调用方可区分成功/失败（与 `_handle_login` 协议一致）
+  - `reload_config()` / `apply_profile()` 返回 `tuple[bool, str]`，超时/队列满/执行失败均有明确返回
+  - `run_manual_login()` finally 块加 `self._manual_login_lock`，消除读加锁写不加锁的数据竞争
   - `_apply_stealth_and_routes` 改用 `context.add_init_script` 替代 `page.add_init_script`，stealth 脚本自动继承到所有新页面（含 popup、debug_page）
   - `_handle_debug_stop` 删除新页面后重新应用 stealth 的冗余代码（context 级 init_script 已自动继承）
   - `start()` 新增 `if self.is_alive(): return` 重复启动保护

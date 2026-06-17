@@ -435,6 +435,7 @@ class ScheduleEngine:
         # 先加载新配置（不修改当前运行状态）
         if not self._reload_config_internal():
             logger.error("配置重载失败，监控继续使用旧配置运行")
+            cmd.response_data = (False, "配置重载失败")
             return
 
         # 仅当重载成功且之前处于监控状态时，才执行 stop/start
@@ -442,6 +443,7 @@ class ScheduleEngine:
             self._handle_stop()
             self._handle_start(EngineCommand(type=EngineCmdType.START))
         logger.info("配置已重载")
+        cmd.response_data = (True, "配置重载成功")
 
     def _handle_apply_profile(self, cmd: EngineCommand) -> None:
         """切换方案并重启监控（仅在引擎线程中调用）。"""
@@ -451,6 +453,7 @@ class ScheduleEngine:
         # 先加载新配置（不修改当前运行状态）
         if not self._reload_config_internal():
             logger.error("配置重载失败，监控继续使用旧方案运行")
+            cmd.response_data = (False, "方案切换失败")
             return
 
         # 直接用 profile_id 记录日志，避免重复 load
@@ -467,6 +470,7 @@ class ScheduleEngine:
                 level="INFO",
                 source="backend",
             )
+        cmd.response_data = (True, "方案切换成功")
 
     # ── 日志 / 状态快照桥接 ──
 
@@ -640,7 +644,7 @@ class ScheduleEngine:
 
         return copy.deepcopy(self._runtime_config)
 
-    def reload_config(self) -> None:
+    def reload_config(self) -> tuple[bool, str]:
         """重新加载配置并重启监控（如果正在运行）。
 
         通过队列派发到引擎线程执行，确保线程安全。
@@ -650,13 +654,15 @@ class ScheduleEngine:
             response_event=threading.Event(),
         )
         if not self._enqueue(cmd):
-            logger.warning("配置重载失败：队列已满")
-            return
+            return False, "配置重载失败：队列已满"
         # 等待消费者完成（最多 10 秒，避免无限阻塞 API 线程）
         if not cmd.response_event.wait(timeout=10):
-            logger.warning("配置重载超时，将在引擎空闲后生效")
+            return False, "配置重载超时，将在引擎空闲后生效"
+        if cmd.response_data:
+            return cmd.response_data
+        return False, "配置重载未返回结果"
 
-    def apply_profile(self, profile_id: str) -> None:
+    def apply_profile(self, profile_id: str) -> tuple[bool, str]:
         """切换到新方案：停止监控 → 重载配置 → 重启监控。
 
         通过队列派发到引擎线程执行，确保线程安全。
@@ -667,11 +673,13 @@ class ScheduleEngine:
             response_event=threading.Event(),
         )
         if not self._enqueue(cmd):
-            logger.warning("方案切换失败：队列已满")
-            return
+            return False, "方案切换失败：队列已满"
         # 等待消费者完成（最多 10 秒）
         if not cmd.response_event.wait(timeout=10):
-            logger.warning("方案切换超时，将在引擎空闲后生效")
+            return False, "方案切换超时，将在引擎空闲后生效"
+        if cmd.response_data:
+            return cmd.response_data
+        return False, "方案切换未返回结果"
 
     def start_monitoring(self) -> tuple[bool, str]:
         logger.debug("收到启动监控请求")
@@ -780,7 +788,8 @@ class ScheduleEngine:
             logger.warning("手动登录失败: {}", log_msg)
             return False, f"手动登录失败：{message}"
         finally:
-            self._manual_login_in_progress = False
+            with self._manual_login_lock:
+                self._manual_login_in_progress = False
 
     def test_network(self) -> tuple[bool, str]:
         logger.debug("开始手动网络测试")
