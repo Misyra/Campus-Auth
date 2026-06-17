@@ -2,6 +2,7 @@
 
 import asyncio
 import sys
+import time
 
 from fastapi import APIRouter
 
@@ -40,10 +41,23 @@ async def install_playwright_chromium():
                 **kwargs,
             )
 
-            # 实时读取输出
+            # 实时读取输出（带空闲超时保护）
             output_lines = []
+            last_output = time.monotonic()
             while True:
-                line = await process.stdout.readline()
+                try:
+                    async with asyncio.timeout(30):
+                        line = await process.stdout.readline()
+                        if line:
+                            last_output = time.monotonic()
+                except asyncio.TimeoutError:
+                    idle = time.monotonic() - last_output
+                    if idle > 300:
+                        logger.error("Playwright 安装 5 分钟无输出，判定挂死")
+                        process.kill()
+                        raise
+                    logger.debug("Playwright 安装 30 秒无输出，继续等待...")
+                    continue
                 if not line:
                     break
                 line_str = line.decode().strip()
