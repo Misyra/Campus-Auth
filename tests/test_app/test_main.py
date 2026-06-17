@@ -598,7 +598,7 @@ class TestRunLoginThenExit:
             ),
             patch(
                 "app.network.decision.check_network_status",
-                return_value=(True, "network_ok"),
+                return_value=(True, "network_ok", "tcp"),
             ),
         ):
             mock_ps.load.return_value = mock_data
@@ -630,7 +630,7 @@ class TestRunLoginThenExit:
             ),
             patch(
                 "app.network.decision.check_network_status",
-                return_value=(False, "network_down"),
+                return_value=(False, "network_down", "none"),
             ),
             patch("main.cleanup_orphan_browsers"),
             patch("time.sleep"),

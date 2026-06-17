@@ -55,27 +55,35 @@ def check_pause(config: dict) -> tuple[bool, str]:
     return (False, "")
 
 
-def check_network_status(config: dict) -> tuple[bool, str]:
+def check_network_status(config: dict) -> tuple[bool, str, str]:
     """网络状态检测 (TCP / HTTP / 网址响应)。
 
     仅做网络连通性检测，不做物理网络检查和认证地址检查。
     由监控循环调用，决定是否需要触发登录。
 
     Returns:
-        (True, "network_ok")      — 网络正常，无需登录
-        (False, "all_disabled")   — 所有检测方式均未启用
-        (False, "network_down")   — 网络异常，应触发登录
+        (True, "network_ok", method)   — 网络正常，method 为 tcp/http/url/local_only
+        (False, "all_disabled", "none") — 所有检测方式均未启用
+        (False, "network_down", "none") — 网络异常，应触发登录
     """
     monitor_config = config.get("monitor", {})
     enable_tcp = monitor_config.get("enable_tcp_check", False)
     enable_http = monitor_config.get("enable_http_check", False)
-    url_checks = monitor_config.get("url_check_urls", None)
+
+    # C09: 在此处解析 url_check_urls，避免 decision.py 使用原始字符串
+    from app.utils.network import parse_url_checks
+
+    url_checks_raw = monitor_config.get("url_check_urls", None)
+    if isinstance(url_checks_raw, str) and url_checks_raw.strip():
+        url_checks = parse_url_checks(url_checks_raw)
+    else:
+        url_checks = url_checks_raw
     enable_url = bool(url_checks)
 
     # 所有检测都未启用
     if not enable_tcp and not enable_http and not enable_url:
         logger.warning("所有网络检测方式均已关闭，无法判断网络状态")
-        return (False, "all_disabled")
+        return (False, "all_disabled", "none")
 
     from app.utils.network import parse_ping_targets
 
@@ -97,8 +105,15 @@ def check_network_status(config: dict) -> tuple[bool, str]:
     )
 
     if ok:
-        return (True, "network_ok")
-    return (False, "network_down")
+        # M21: 返回实际使用的检测方法
+        if enable_tcp:
+            return (True, "network_ok", "tcp")
+        if enable_http:
+            return (True, "network_ok", "http")
+        if enable_url:
+            return (True, "network_ok", "url")
+        return (True, "network_ok", "local_only")
+    return (False, "network_down", "none")
 
 
 def check_login_prerequisites(config: dict) -> tuple[bool, str]:

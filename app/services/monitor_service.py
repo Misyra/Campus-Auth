@@ -250,7 +250,7 @@ class NetworkMonitorCore:
             }
 
         # 2. 网络状态检测
-        net_ok, net_reason = check_network_status(self.config)
+        net_ok, net_reason, net_method = check_network_status(self.config)
         if net_ok:
             self._update_state(
                 login_attempt_count=0,
@@ -278,9 +278,7 @@ class NetworkMonitorCore:
             "interval": interval,
             "result": NetworkCheckResult(
                 available=net_ok,
-                method=net_reason
-                if net_reason in ("tcp", "http", "url")
-                else "local_only",
+                method=net_method,
                 latency_ms=0,
                 detail="" if net_ok else net_reason,
             ),

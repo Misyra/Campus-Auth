@@ -381,7 +381,7 @@ WantedBy=default.target
         content = self._build_vbs_content(run_command)
 
         try:
-            startup_vbs.write_text(content, encoding="utf-8")
+            startup_vbs.write_text(content, encoding="utf-16")
         except PermissionError:
             logger.error("写入启动文件失败: PermissionError，可能被杀毒软件拦截")
             return (

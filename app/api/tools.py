@@ -99,42 +99,48 @@ async def fetch_background_url(body: dict) -> dict:
 
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
+            async with client.stream("GET", url) as resp:
+                resp.raise_for_status()
+
+                content_type = resp.headers.get("content-type", "")
+                if "image" not in content_type and not url.lower().endswith(
+                    (".jpg", ".jpeg", ".png", ".gif", ".webp")
+                ):
+                    raise HTTPException(
+                        400, "该地址返回的内容不是图片格式，请确认地址指向的是图片文件"
+                    )
+
+                # 从 Content-Type 或 URL 推断扩展名
+                ext_map = {
+                    "image/jpeg": ".jpg",
+                    "image/png": ".png",
+                    "image/gif": ".gif",
+                    "image/webp": ".webp",
+                }
+                ext = ext_map.get(content_type.split(";")[0].strip(), "")
+                if not ext:
+                    ext = Path(url.split("?")[0]).suffix.lower() or ".jpg"
+                if ext not in ALLOWED_EXTENSIONS:
+                    ext = ".jpg"
+
+                # 检查 Content-Length
+                cl = int(resp.headers.get("content-length", 0))
+                if cl > MAX_FILE_SIZE:
+                    raise HTTPException(400, "图片大小超过 5MB 限制")
+
+                # 流式读取，超限立即中断
+                chunks = []
+                total = 0
+                async for chunk in resp.iter_bytes(8192):
+                    total += len(chunk)
+                    if total > MAX_FILE_SIZE:
+                        raise HTTPException(400, "图片大小超过 5MB 限制")
+                    chunks.append(chunk)
+                content = b"".join(chunks)
     except httpx.HTTPError as exc:
         raise HTTPException(
             400, "下载图片失败，请检查网络连接或确认地址是否正确"
         ) from exc
-
-    content_type = resp.headers.get("content-type", "")
-    if "image" not in content_type and not url.lower().endswith(
-        (".jpg", ".jpeg", ".png", ".gif", ".webp")
-    ):
-        raise HTTPException(
-            400, "该地址返回的内容不是图片格式，请确认地址指向的是图片文件"
-        )
-
-    # 从 Content-Type 或 URL 推断扩展名
-    ext_map = {
-        "image/jpeg": ".jpg",
-        "image/png": ".png",
-        "image/gif": ".gif",
-        "image/webp": ".webp",
-    }
-    ext = ext_map.get(content_type.split(";")[0].strip(), "")
-    if not ext:
-        ext = Path(url.split("?")[0]).suffix.lower() or ".jpg"
-    if ext not in ALLOWED_EXTENSIONS:
-        ext = ".jpg"
-
-    # 先检查 Content-Length 头，避免将超大响应体加载到内存
-    content_length = resp.headers.get("content-length")
-    if content_length and int(content_length) > MAX_FILE_SIZE:
-        raise HTTPException(400, "图片大小超过 5MB 限制")
-
-    content = resp.content
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(400, "图片大小超过 5MB 限制")
 
     filename = f"{uuid.uuid4().hex}{ext}"
     filepath = BG_DIR / filename

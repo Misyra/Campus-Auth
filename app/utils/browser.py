@@ -114,28 +114,32 @@ class BrowserContextManager:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """异步上下文管理器出口 - 关闭浏览器并释放资源。"""
-        # 关闭浏览器
-        import queue as _queue_mod
+        """异步上下文管理器出口 — 关闭浏览器并释放资源。
 
-        from app.workers.playwright_worker import (
-            CMD_BROWSER_CLOSE,
-            get_worker,
-        )
+        防御性设计：同线程直接 await，跨线程走 run_coroutine_threadsafe。
+        不使用 submit_nowait（不等完成）和 submit(wait=True)（阻塞事件循环）。
+        """
+        import asyncio
+
+        from app.workers.playwright_worker import get_worker
 
         worker = get_worker()
         try:
-            worker.submit_nowait(CMD_BROWSER_CLOSE)
-        except _queue_mod.Full:
-            self.logger.warning("Worker 队列已满，无法发送 CMD_BROWSER_CLOSE")
+            if asyncio.get_running_loop() is worker._loop:
+                await worker._close_browser()
+            else:
+                future = asyncio.run_coroutine_threadsafe(
+                    worker._close_browser(), worker._loop
+                )
+                await asyncio.wrap_future(future)
+        except Exception:
+            self.logger.warning("关闭浏览器异常", exc_info=True)
 
-        # 清空本地引用
         self.playwright = None
         self.browser = None
         self.context = None
         self.page = None
 
-        # 如果有异常，记录但不抑制
         if exc_type:
             try:
                 self.logger.error(
@@ -145,4 +149,4 @@ class BrowserContextManager:
                 self.logger.error(
                     "浏览器操作异常: {} (详情无法格式化)", exc_type.__name__
                 )
-        return False  # 将异常传播给调用者（不抑制）
+        return False

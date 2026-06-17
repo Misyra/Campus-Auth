@@ -164,25 +164,24 @@ class TaskRegistry:
     ) -> None:
         """更新任务的最后执行时间和状态。
 
-        仅更新缓存和磁盘，不触发索引变更。
+        前提：调度器保证同一 task_id 不会并发执行。
+        若未来引入手动执行与定时执行并发，需要为 task_id 增加独立锁。
         """
         with self._lock:
             task = self._cache.get(task_id)
             if task is None:
                 return
-
             task["last_run"] = timestamp or datetime.now().isoformat()
             task["last_status"] = status
-
-            # 写回磁盘
-            try:
-                data = {k: v for k, v in task.items() if k != "id"}
-                atomic_write(
-                    str(self._tasks_dir / f"{task_id}.json"),
-                    json.dumps(data, ensure_ascii=False, indent=2),
-                )
-            except Exception as exc:
-                logger.error("更新定时任务状态失败 {}: {}", task_id, exc)
+            snapshot = {k: v for k, v in task.items() if k != "id"}
+        # 锁外写磁盘（只读操作不被阻塞）
+        try:
+            atomic_write(
+                str(self._tasks_dir / f"{task_id}.json"),
+                json.dumps(snapshot, ensure_ascii=False, indent=2),
+            )
+        except Exception as exc:
+            logger.error("更新定时任务状态失败 {}: {}", task_id, exc)
 
     # ── 内部方法 ──
 

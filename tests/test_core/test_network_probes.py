@@ -277,18 +277,20 @@ class TestCheckNetworkStatus:
 
     @patch("app.network.decision.is_network_available", return_value=True)
     def test_network_ok(self, *mocks):
-        ok, reason = check_network_status(self._make_config())
+        ok, reason, method = check_network_status(self._make_config())
         assert ok is True
         assert reason == "network_ok"
+        assert method in ("tcp", "http", "url", "local_only")
 
     @patch("app.network.decision.is_network_available", return_value=False)
     def test_network_down(self, *mocks):
-        ok, reason = check_network_status(self._make_config())
+        ok, reason, method = check_network_status(self._make_config())
         assert ok is False
         assert reason == "network_down"
+        assert method == "none"
 
     def test_all_disabled(self):
-        ok, reason = check_network_status(
+        ok, reason, method = check_network_status(
             self._make_config(
                 enable_tcp_check=False,
                 enable_http_check=False,
@@ -297,6 +299,7 @@ class TestCheckNetworkStatus:
         )
         assert ok is False
         assert reason == "all_disabled"
+        assert method == "none"
 
 
 # =====================================================================
