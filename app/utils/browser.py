@@ -60,7 +60,11 @@ Object.defineProperty(window, '__pw_manual', {value: undefined, writable: false,
 
 
 class BrowserContextManager:
-    """浏览器上下文管理器 - 使用异步上下文管理器确保资源正确释放"""
+    """浏览器上下文管理器 - 使用异步上下文管理器确保资源正确释放。
+
+    设计约束：只能在 PlaywrightWorker 事件循环内使用（通过 _handle_login → attempt_login 调用链）。
+    不支持跨线程调用，不支持在 FastAPI 路由中直接使用。
+    """
 
     def __init__(self, config: dict, cancel_event: threading.Event | None = None):
         """
