@@ -84,3 +84,31 @@ async def save_screenshot(
     except Exception as e:
         logger.warning("截图保存失败: {}", e)
         return None
+
+
+def dir_size_mb(path: Path | str) -> float:
+    """递归计算目录或文件的磁盘占用（MB）。
+
+    使用 rglob + stat 遍历所有文件，累加大小后转换为 MB。
+    OSError（权限不足等）的文件会被跳过。
+
+    Args:
+        path: 目录或文件路径。
+
+    Returns:
+        占用大小（MB），保留 1 位小数。路径不存在时返回 0.0。
+    """
+    p = Path(path)
+    if not p.exists():
+        return 0.0
+    if p.is_file():
+        return round(p.stat().st_size / (1024 * 1024), 1)
+
+    total = 0
+    try:
+        for f in p.rglob("*"):
+            if f.is_file():
+                total += f.stat().st_size
+    except OSError:
+        pass
+    return round(total / (1024 * 1024), 1)
