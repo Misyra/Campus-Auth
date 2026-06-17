@@ -447,12 +447,10 @@ class ScheduleEngine:
         """切换方案并重启监控（仅在引擎线程中调用）。"""
         profile_id = cmd.data.get("profile_id", "")
         was_monitoring = self._is_monitoring
-        if was_monitoring:
-            self._handle_stop()
 
-        # 重载配置（方案已由 API 路由持久化，此处重新读取）
+        # 先加载新配置（不修改当前运行状态）
         if not self._reload_config_internal():
-            logger.error("配置重载失败，跳过方案切换")
+            logger.error("配置重载失败，监控继续使用旧方案运行")
             return
 
         # 直接用 profile_id 记录日志，避免重复 load
@@ -462,6 +460,7 @@ class ScheduleEngine:
         logger.debug("方案详情: 认证={}, 用户={}", new_url, new_user)
 
         if was_monitoring:
+            self._handle_stop()
             self._handle_start(EngineCommand(type=EngineCmdType.START))
             self.record_log(
                 "监控正在按新方案重启",
