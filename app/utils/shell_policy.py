@@ -173,6 +173,18 @@ class ShellCommandPolicy:
                 pass
         await proc.wait()
 
+    def _kill_process_tree_sync(self, pid: int) -> None:
+        """同步版进程树清理。"""
+        try:
+            import psutil
+            parent = psutil.Process(pid)
+            for child in parent.children(recursive=True):
+                with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
+                    child.kill()
+            parent.kill()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, ProcessLookupError):
+            pass
+
     def run_sync(
         self,
         argv: list[str],
@@ -203,30 +215,28 @@ class ShellCommandPolicy:
 
         self._audit(argv, effective_timeout)
 
-        # 提取不适用于 subprocess.run 的参数
-        run_kwargs = {
-            "capture_output": True,
+        popen_kwargs = {
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
             "text": True,
-            "timeout": effective_timeout,
             "encoding": "utf-8",
             "errors": "replace",
         }
         if platform.system() == "Windows":
-            run_kwargs["creationflags"] = CREATE_NO_WINDOW_FLAG
+            popen_kwargs["creationflags"] = CREATE_NO_WINDOW_FLAG
         # 只允许白名单中的额外参数，防止安全策略被绕过
         _ALLOWED_KWARGS = {"env", "cwd"}
         for key in _ALLOWED_KWARGS:
             if key in kwargs:
-                run_kwargs[key] = kwargs[key]
+                popen_kwargs[key] = kwargs[key]
 
         try:
-            result = subprocess.run(argv, **run_kwargs)
+            proc = subprocess.Popen(argv, **popen_kwargs)
+            stdout_str, stderr_str = proc.communicate(timeout=effective_timeout)
         except subprocess.TimeoutExpired:
+            self._kill_process_tree_sync(proc.pid)
             return -1, "", f"命令执行超时 ({effective_timeout}s)"
         except FileNotFoundError:
             return -1, "", f"执行文件不存在: {executable}"
 
-        stdout_str = result.stdout.strip() if result.stdout else ""
-        stderr_str = result.stderr.strip() if result.stderr else ""
-
-        return result.returncode, stdout_str, stderr_str
+        return proc.returncode, stdout_str.strip(), stderr_str.strip()
