@@ -2,6 +2,17 @@
 
 ## 2026-06-18
 
+### fix
+- 测试文件同步修复：旧函数名 `_cleanup_temp_screenshots`/`_cleanup_old_screenshots` 更新为合并后的 `_cleanup_screenshots`（Task 6）
+  - `tests/test_app/test_application_logic.py`：import 从 `_cleanup_old_screenshots, _cleanup_temp_screenshots` 改为 `_cleanup_screenshots`，两个测试类合并为 `TestCleanupScreenshots`，每个测试同时 mock `TEMP_DIR` 和 `SCREENSHOTS_DIR`
+  - `tests/test_integration/test_app_startup.py`：`mock_deps` fixture 中两处 patch 合并为单个 `patch("app.application._cleanup_screenshots")`
+
+### refactor
+- `app/application.py` 合并 `_cleanup_temp_screenshots` + `_cleanup_old_screenshots` 为 `_cleanup_screenshots`（Task 5）
+  - 两个独立函数合并为一个统一的启动时截图清理函数
+  - 使用模块级 `time` 导入替代函数内 `import time as _time` 临时导入
+  - `_create_lifespan` 中两处独立调用替换为单次 `_cleanup_screenshots()` 调用
+
 ### refactor
 - `app/application.py` create_app 拆分为 `_create_lifespan`/`_register_routes`/`_register_static`（Task 4）
   - 提取 `_create_lifespan(existing_container)` 封装生命周期管理逻辑，返回 lifespan context manager
