@@ -7,12 +7,19 @@ set -euo pipefail
 # ── 常量 ──────────────────────────────────────────────────
 PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 UV_DIR="$PROJECT_ROOT/.uv"
-UV_VERSION="0.7.3"
+UV_VERSION="0.11.21"
 MIRRORS=(
     "https://ghfast.top/"
     "https://gh-proxy.com/"
     "https://ghproxy.net/"
     ""  # GitHub 官方源
+)
+# SHA256 校验和（与 UV_VERSION 严格对应）
+declare -A SHA256_MAP=(
+    ["uv-aarch64-apple-darwin.tar.gz"]="1f921d491ba5ffeea774eb04d6681ecee379101341cbb1500394993b541bf3f4"
+    ["uv-x86_64-apple-darwin.tar.gz"]="f3c8e5708a84b920c18b691214d54d2b0da6b984789caae95d47c95120cb7765"
+    ["uv-aarch64-unknown-linux-gnu.tar.gz"]="88e800834007cc5efd4675f166eb2a51e7e3ad19876d85fa8805a6fb5c922397"
+    ["uv-x86_64-unknown-linux-gnu.tar.gz"]="8c88519b0ef0af9801fcdee419bbb12116bd9e6b18e162ae093c932d8b264050"
 )
 
 # ── 检测平台和文件名 ──────────────────────────────────────
@@ -75,6 +82,23 @@ _download_uv() {
         echo "    请手动安装 uv: https://docs.astral.sh/uv/" >&2
         exit 1
     fi
+
+    # SHA256 校验
+    echo -n "  校验 SHA256..." >&2
+    local expected="${SHA256_MAP[$filename]:-}"
+    if [[ -z "$expected" ]]; then
+        echo " 失败: 未知文件 $filename" >&2
+        rm -f "$archive"
+        exit 1
+    fi
+    local actual
+    actual="$(sha256sum "$archive" | cut -d' ' -f1)"
+    if [[ "$actual" != "$expected" ]]; then
+        echo " 失败: 期望 $expected, 实际 $actual" >&2
+        rm -f "$archive"
+        exit 1
+    fi
+    echo " 通过" >&2
 
     echo "正在解压..." >&2
     tar -xzf "$archive" -C "$UV_DIR"
