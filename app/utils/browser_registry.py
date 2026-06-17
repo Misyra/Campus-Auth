@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.utils.logging import get_logger
-from app.utils.platform import get_platform
+from app.utils.platform import get_platform, get_playwright_cache_dir
 
 logger = get_logger("browser_registry", source="backend")
 
@@ -170,13 +170,9 @@ def has_playwright_chromium() -> bool:
 
     扫描标准缓存目录和包内 .local-browsers 备用路径。
     """
-    # 标准缓存目录
-    if PLATFORM == "windows":
-        cache_dir = Path.home() / "AppData" / "Local" / "ms-playwright"
-    elif PLATFORM == "darwin":
-        cache_dir = Path.home() / "Library" / "Caches" / "ms-playwright"
-    else:
-        cache_dir = Path.home() / ".cache" / "ms-playwright"
+    cache_dir = get_playwright_cache_dir()
+    if cache_dir is None:
+        return False
 
     search_dirs = [cache_dir]
 
