@@ -44,6 +44,9 @@ class NullTaskExecutor:
     def execute_login(self, cancel_event=None, skip_pause_check=False) -> Any:
         return None
 
+    def cancel_login(self) -> None:
+        return None
+
     def list_tasks(self) -> list[dict]:
         return []
 
@@ -220,6 +223,9 @@ class TaskExecutor:
         Returns:
             Future 对象（新的或已有的）
         """
+        if cancel_event is None:
+            cancel_event = threading.Event()
+
         future = None
         with self._login_lock:
             # 检查是否已有登录在进行
@@ -254,6 +260,11 @@ class TaskExecutor:
 
         t = threading.Thread(target=_watcher, daemon=True, name="cancel-link")
         t.start()
+
+    def cancel_login(self) -> None:
+        """取消正在进行的登录。"""
+        if self._login_cancel_event:
+            self._login_cancel_event.set()
 
     def _on_login_done(self, future: Future) -> None:
         """登录任务完成后清理引用。"""
