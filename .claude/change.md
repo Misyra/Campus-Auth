@@ -2,6 +2,14 @@
 
 ## 2026-06-18
 
+### chore
+- `frontend/partials/pages/tasks.html` 和 `frontend/partials/pages/scripts.html` 删除不存在的 `onDragLeave` 拖拽事件绑定（PR5 Task 8）
+  - `drag.js` 中未定义 `onDragLeave` 方法，拖拽排序使用实时交换模式（在 `onDragOver` 中完成），不需要 `dragleave` 事件
+
+- `frontend/partials/pages/settings/settings-monitor.html` 删除不存在的 `toggleUrlCheck` 调用（PR5 Task 7）
+  - `@change` 事件绑定中移除 `toggleUrlCheck(); `，仅保留 `onConfigChange` 调用
+  - `urlCheckEnabled` 是 computed getter/setter，setter 已处理 `url_check_urls` 逻辑，无需额外方法
+
 ### style
 - `frontend/styles/pages/tasks.css` 三个 overlay 提取 `.overlay-base` 共享属性（PR5 Task 5）
   - 新增 `.overlay-base` 包含 `position: fixed`、`inset: 0`、`display: flex`、居中对齐、`backdrop-filter` 等 5 个共享属性
