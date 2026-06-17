@@ -16,12 +16,12 @@
   - 12 个 Task，按风险分三批执行
   - 每个 Task 包含：具体代码改动、测试命令、提交信息
   - 最后附全量测试验证清单和手动验证路径
-- 剩余问题设计方案（修订版）`docs/superpowers/specs/2026-06-17-remaining-issues-design.md`
-  - 34 项压缩为 25 项（P3 不单独排期），~12-15h
-  - P0（6 项）：M19/M20/M24/M30/m15/m03 — 用户可见 bug + 安全 + 生命周期
-  - P1（7 项）：M18/m16/m23-m25/m19/m21 — 快速修复
-  - P2（4 项）：需确认后再改
-  - P3（8 项）：顺手带走，不单独排期
+- 剩余问题设计方案（最终版）`docs/superpowers/specs/2026-06-17-remaining-issues-design.md`
+  - P0+P1 共 14 项已全部修复（c0332a3）
+  - P2：M29 已修复（9c79ae6），M15/M23/M28 关闭（Won't Fix，经验证不成立）
+- P3 Backlog `docs/superpowers/specs/2026-06-17-p3-backlog.md`
+  - 18 项低优先级问题（P3 显式 8 项 + Minor 未归类 10 项）
+  - 不单独排期，修改相关文件时顺手处理
 
 ## 2026-06-16
 
