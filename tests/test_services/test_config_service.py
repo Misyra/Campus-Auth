@@ -87,11 +87,13 @@ class TestUpdateGlobalSettings:
 
         _update_global_settings(global_settings, payload)
 
-        # GlobalSettings 不应包含凭证字段
+        # GlobalSettings 不应包含纯凭证字段（仅在 _SystemFieldsMixin 中）
         assert not hasattr(global_settings, "username")
         assert not hasattr(global_settings, "password")
-        assert not hasattr(global_settings, "auth_url")
-        assert not hasattr(global_settings, "carrier")
+        # auth_url/carrier/carrier_custom 现在在 _MonitorFieldsMixin 中，
+        # 属于 GlobalSettings 与 MonitorConfigPayload 的共享字段，会被同步更新
+        assert global_settings.auth_url == "http://example.com"
+        assert global_settings.carrier == "移动"
 
 
 class TestSaveConfigCombined:

@@ -2,6 +2,23 @@
 
 ## 2026-06-18
 
+### fix
+- `app/services/runtime_config.py` `_build_config_payload` 修复 profile 覆盖字段被 global_settings 覆盖的 bug
+  - `auth_url`、`carrier`、`carrier_custom` 从 `_MonitorFieldsMixin` 继承后进入 `GLOBAL_SETTINGS_FIELDS`，导致 `payload_dict.update(gs_dict)` 覆盖 profile 中的独立值
+  - 新增 `_PROFILE_OVERRIDE` 排除集合，从 `gs_dict` 中排除这 3 个 profile 覆盖字段
+  - 修复 `test_auth_url_from_system` 和 `test_uses_profile_auth_url` 两个测试失败
+
+### fix
+- `tests/test_services/test_config_service.py` `test_does_not_update_credentials` 断言更新
+  - `auth_url` 和 `carrier` 现在在 `_MonitorFieldsMixin` 中（`GlobalSettings` 与 `MonitorConfigPayload` 共享），会被 `_update_global_settings` 同步更新
+  - 断言从 `not hasattr(global_settings, "auth_url/carrier")` 改为验证值同步正确
+  - 纯凭证字段（`username`、`password`）仍在 `_SystemFieldsMixin` 中，不会被同步——保持原有语义
+
+### refactor
+- `app/services/runtime_config.py` `_build_config_payload` 53 行逐字段取值改为 `model_dump(include=GLOBAL_SETTINGS_FIELDS)` 一行
+  - 使用 `GLOBAL_SETTINGS_FIELDS` 交集 + `model_dump(include=...)` 替代逐字段 `data.global_settings.xxx` 取值
+  - `source_levels` 不在 `MonitorConfigPayload` 中，自然被排除——与重构前行为一致
+
 ### refactor
 - `app/schemas.py` GlobalSettings 继承 Mixin 消除 12 个重复字段
   - GlobalSettings 改为继承 `_MonitorFieldsMixin` + `_CommonSettingsMixin`
