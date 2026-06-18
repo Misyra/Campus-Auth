@@ -51,7 +51,7 @@ class TestStartCommand:
         with patch.dict(os.environ, {}, clear=True):
             svc = AutoStartService(tmp_path)
             cmd = svc._start_command()
-            assert "app.py" in cmd
+            assert "main.py" in cmd
 
 
 class TestHasCjkChars:

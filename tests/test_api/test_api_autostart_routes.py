@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from app.services.autostart import AutoStartService, _autostart_cli_args
@@ -309,6 +310,14 @@ class TestBuildVbsContent:
         content = AutoStartService._build_vbs_content(run_cmd)
         assert run_cmd in content
 
+    def test_start_command_uses_main_py(self):
+        """启动入口应为 main.py，不是 app.py"""
+        tmp_path = Path(__file__).parent.parent.parent
+        svc = AutoStartService(tmp_path)
+        cmd = svc._start_command()
+        assert "main.py" in cmd
+        assert "app.py" not in cmd
+
 
 class TestHasCjkChars:
     """_has_cjk_chars 静态方法。"""
@@ -346,7 +355,7 @@ class TestStartCommand:
         ):
             # .venv 不存在时回退
             cmd = svc._start_command()
-        assert "app.py" in cmd
+        assert "main.py" in cmd
 
     def test_venv_python_windows(self, tmp_path):
         svc = AutoStartService(tmp_path)
