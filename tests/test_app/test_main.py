@@ -568,6 +568,10 @@ class TestRunLoginThenExit:
                 "app.services.runtime_config.load_runtime_config",
                 return_value=(MagicMock(), False),
             ),
+            patch(
+                "app.network.decision.check_network_status",
+                return_value=(False, "network_down", "none"),
+            ),
             patch("main.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
