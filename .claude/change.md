@@ -1,5 +1,23 @@
 # 修改日志
 
+## 2026-06-19
+
+### fix
+- `main.py` LOGIN_ONCE 网络检测全部禁用时跳过登录
+  - `check_network_status` 返回 `(False, "all_disabled", "none")` 时，原代码进入登录流程
+  - 新增 `reason == "all_disabled"` 分支，假定网络正常并返回 `LoginResult.SUCCESS`
+  - 更新 `test_retries_exhausted` 测试：显式 mock `check_network_status` 返回 `network_down`，避免被 `all_disabled` 分支拦截
+  - 新增 `TestLoginOnceAllDisabled.test_login_once_all_disabled_skips_login` 测试
+
+### fix
+- `app/container.py` 轻量模式使用真实 TaskExecutor 替代 NullTaskExecutor
+  - P0 bug 修复：轻量模式（开机自启动默认模式）的 NullTaskExecutor 导致自动登录完全失效
+  - 移除 `if self._is_lightweight: NullTaskExecutor()` 分支，统一使用 TaskExecutor
+  - 移除未使用的 `NullTaskExecutor` 导入
+  - `set_runtime_config_getter` 调用不再区分轻量/完整模式
+- `tests/test_config/test_container.py` 更新轻量模式测试：验证创建 TaskExecutor 而非 NullTaskExecutor
+- `tests/test_services/test_container_fix.py` 新增测试：验证轻量模式登录能力（返回 Future）
+
 ## 2026-06-18
 
 ### refactor
