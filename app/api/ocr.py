@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.constants import PROJECT_ROOT
 from app.schemas import ActionResponse
@@ -100,7 +100,7 @@ def ocr_install() -> ActionResponse:
         )
     except Exception as e:
         api_logger.error("ddddocr 安装异常: {}", e)
-        return ActionResponse(success=False, message=f"安装异常: {e}")
+        raise HTTPException(status_code=500, detail=f"安装异常: {e}") from e
 
 
 @router.post("/api/ocr/uninstall", response_model=ActionResponse)
@@ -131,4 +131,4 @@ def ocr_uninstall() -> ActionResponse:
         return ActionResponse(success=False, message="未找到 uv 包管理器")
     except Exception as e:
         api_logger.error("ddddocr 卸载异常: {}", e)
-        return ActionResponse(success=False, message=f"卸载异常: {e}")
+        raise HTTPException(status_code=500, detail=f"卸载异常: {e}") from e
