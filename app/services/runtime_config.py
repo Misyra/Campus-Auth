@@ -11,6 +11,16 @@ from .profile_service import ProfileService
 
 config_logger = get_logger("runtime_config", source="backend")
 
+# Profile override fields: profile values take precedence over global defaults.
+# See GLOBAL_SETTINGS_FIELDS for the complete set.
+# Global values act as defaults when profile values are empty.
+PROFILE_OVERRIDE_FIELDS = frozenset({
+    "auth_url",
+    "carrier",
+    "carrier_custom",
+    "active_task",
+})
+
 def _safe_decrypt(ciphertext: str) -> tuple[str, bool]:
     """解密密码。返回 (解密结果, 是否有错误)"""
     if not ciphertext:
@@ -91,12 +101,16 @@ def _build_config_payload(
     # 一次 model_dump 替代 53 行逐字段取值。
     # 注：source_levels 仅在 SystemSettings 中，不在 MonitorConfigPayload 中，
     # 因此不在交集中——这与重构前行为一致（MonitorConfigPayload(**payload_dict) 同样会丢弃该键）。
-    # AuthProfile 可覆盖的字段，从 SystemSettings 中排除
-    # 这些字段同时存在于 AuthProfile 和 SystemSettings 中
-    # AuthProfile 的值优先级更高（留空则使用 SystemSettings 的默认值）
-    _PROFILE_OVERRIDE = frozenset({"auth_url", "carrier", "carrier_custom"})
-    gs_dict = data.global_settings.model_dump(include=GLOBAL_SETTINGS_FIELDS - _PROFILE_OVERRIDE)
+    # 先用全局值填充，再用 profile 的非空值覆盖 PROFILE_OVERRIDE_FIELDS 中的字段。
+    # 这实现了"留空则使用全局"的语义。
+    gs_dict = data.global_settings.model_dump(include=GLOBAL_SETTINGS_FIELDS)
     payload_dict.update(gs_dict)
+
+    # Profile override: profile 非空值优先于全局值
+    for field in PROFILE_OVERRIDE_FIELDS:
+        profile_val = getattr(profile, field, "")
+        if profile_val:
+            payload_dict[field] = profile_val
 
     # 归一化
     payload_dict["backend_log_level"] = normalize_level(
