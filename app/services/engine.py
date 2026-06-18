@@ -361,6 +361,7 @@ class ScheduleEngine:
             retry = config.get("retry_settings", {})
             max_retries = retry.get("max_retries", 3)
             interval = retry.get("retry_interval", 30)
+            # 延迟导入：测试中需要 mock 此函数，顶层导入会导致 mock 路径变化
             from app.utils.retry import get_retry_intervals
 
             intervals = get_retry_intervals(interval, max_retries, exponential=False)
@@ -629,6 +630,7 @@ class ScheduleEngine:
         """从 settings.json 重新加载 UI 和运行时配置。返回 True 表示成功。"""
         import copy
 
+        # 延迟导入：测试中需要 mock 这些函数的返回值，顶层导入会导致 mock 路径变化
         from .config_service import build_runtime_dict_from_payload
         from .runtime_config import load_runtime_config, load_ui_config
 

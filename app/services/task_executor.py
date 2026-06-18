@@ -339,6 +339,7 @@ class TaskExecutor:
         start = time.perf_counter()
 
         try:
+            # 延迟导入：测试需要模拟 playwright_worker 未安装的 ImportError 场景
             from app.workers.playwright_worker import CMD_LOGIN
 
             # 获取运行时配置
@@ -401,6 +402,7 @@ class TaskExecutor:
         if not script_path or not script_path.exists():
             return False, f"脚本文件不存在: {script_id}"
 
+        # 延迟导入：避免顶层导入 playwright/script_runner 的启动开销
         from app.workers.script_runner import ScriptRunner
 
         runner = ScriptRunner(
@@ -423,6 +425,7 @@ class TaskExecutor:
         start_time = time.perf_counter()
 
         try:
+            # 延迟导入：测试需要模拟 playwright_worker 未安装的 ImportError 场景
             from app.workers.playwright_worker import CMD_LOGIN
 
             # 获取运行时配置
