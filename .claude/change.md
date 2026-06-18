@@ -2,6 +2,21 @@
 
 ## 2026-06-18
 
+### docs
+- 新增 `docs/api-conventions.md` API 错误响应规范文档（Task 5: R4）
+  - 定义 5 种场景的响应方式：资源不存在→404，参数非法→422，权限→403，业务失败→ActionResponse(success=False)，程序异常→500
+  - 区分业务可预期失败与程序异常，明确前端处理策略
+
+### fix
+- `app/api/scheduled_tasks.py` 资源不存在改用 HTTPException(404) 替代 ActionResponse(success=False)（Task 5: R4）
+  - `update_scheduled_task`、`run_scheduled_task`、`toggle_scheduled_task` 三处"定时任务不存在"从 ActionResponse 改为 HTTPException(404)
+  - 与 profiles/scripts/tasks/icons/tools 等其他 API 文件保持一致
+
+### fix
+- `app/api/ocr.py` 程序异常改用 HTTPException(500) 替代 ActionResponse(success=False)（Task 5: R4）
+  - `ocr_install` 和 `ocr_uninstall` 两个 except Exception 分支从 ActionResponse 改为 HTTPException(500)
+  - 安装超时、uv 未找到等业务可预期失败保持 ActionResponse 不变
+
 ### refactor
 - `app/schemas.py` ProfileSettings → AuthProfile，GlobalSettings → SystemSettings（Task 4: R3）
   - `ProfileSettings` 重命名为 `AuthProfile`，docstring 改为"认证方案 — 仅含凭证和匹配规则"

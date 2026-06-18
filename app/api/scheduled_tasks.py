@@ -145,7 +145,7 @@ def update_scheduled_task(
 
     existing = engine.tasks.get_task(task_id)
     if not existing:
-        return ActionResponse(success=False, message="定时任务不存在")
+        raise HTTPException(status_code=404, detail="定时任务不存在")
 
     # 验证并规范化配置（更新模式：payload 缺失字段从 existing 填充）
     valid, message, config = _validate_update_payload(payload, existing)
@@ -179,7 +179,7 @@ def run_scheduled_task(
 ) -> ActionResponse:
     """手动执行定时任务（异步后台执行，避免 HTTP 连接长时间阻塞）。"""
     if not engine.tasks.get_task(task_id):
-        return ActionResponse(success=False, message="定时任务不存在")
+        raise HTTPException(status_code=404, detail="定时任务不存在")
 
     # 后台执行，不阻塞 HTTP 响应
     async def _execute():
@@ -208,7 +208,7 @@ def toggle_scheduled_task(
     """启用/禁用定时任务。"""
     task = engine.tasks.get_task(task_id)
     if not task:
-        return ActionResponse(success=False, message="定时任务不存在")
+        raise HTTPException(status_code=404, detail="定时任务不存在")
 
     task = {**task, "enabled": not task.get("enabled", True)}
     ok, message = engine.tasks.save_task(task_id, task)
