@@ -113,7 +113,7 @@ def list_scheduled_tasks(
 
 
 @router.post("/api/scheduled-tasks", response_model=ActionResponse)
-async def create_scheduled_task(
+def create_scheduled_task(
     payload: dict,
     engine: ScheduleEngine = Depends(get_monitor_service),
 ) -> ActionResponse:
@@ -136,7 +136,7 @@ async def create_scheduled_task(
 
 
 @router.put("/api/scheduled-tasks/{task_id}", response_model=ActionResponse)
-async def update_scheduled_task(
+def update_scheduled_task(
     task_id: str,
     payload: dict,
     engine: ScheduleEngine = Depends(get_monitor_service),
@@ -172,7 +172,7 @@ def delete_scheduled_task(
 
 
 @router.post("/api/scheduled-tasks/{task_id}/run", response_model=ActionResponse)
-async def run_scheduled_task(
+def run_scheduled_task(
     task_id: str,
     bg_tasks: BackgroundTasks,
     engine: ScheduleEngine = Depends(get_monitor_service),
@@ -201,7 +201,7 @@ async def run_scheduled_task(
 
 
 @router.post("/api/scheduled-tasks/{task_id}/toggle", response_model=ActionResponse)
-async def toggle_scheduled_task(
+def toggle_scheduled_task(
     task_id: str,
     engine: ScheduleEngine = Depends(get_monitor_service),
 ) -> ActionResponse:
