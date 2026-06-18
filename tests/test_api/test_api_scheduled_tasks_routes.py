@@ -221,9 +221,7 @@ class TestUpdateScheduledTask:
             "/api/scheduled-tasks/nonexistent",
             json={"name": "test"},
         )
-        assert resp.status_code == 200
-        assert resp.json()["success"] is False
-        assert "不存在" in resp.json()["message"]
+        assert resp.status_code == 404
 
     def test_update_empty_name(self, api_client):
         """更新为空名称返回失败。"""
@@ -345,8 +343,7 @@ class TestToggleScheduledTask:
         mock_services.engine = mock_engine
         mock_tasks.get_task.return_value = None
         resp = test_client.post("/api/scheduled-tasks/nonexistent/toggle")
-        assert resp.status_code == 200
-        assert resp.json()["success"] is False
+        assert resp.status_code == 404
 
 
 # ── 手动执行 ──
@@ -377,8 +374,7 @@ class TestRunScheduledTask:
         mock_services.engine = mock_engine
         mock_tasks.get_task.return_value = None
         resp = test_client.post("/api/scheduled-tasks/nonexistent/run")
-        assert resp.status_code == 200
-        assert resp.json()["success"] is False
+        assert resp.status_code == 404
 
     def test_run_failure(self, api_client):
         """后台执行时立即返回成功，实际结果通过执行历史查看。"""
