@@ -132,7 +132,7 @@ async def fetch_background_url(body: dict) -> dict:
                 # 流式读取，超限立即中断
                 chunks = []
                 total = 0
-                async for chunk in resp.iter_bytes(8192):
+                async for chunk in resp.aiter_bytes(8192):
                     total += len(chunk)
                     if total > MAX_FILE_SIZE:
                         raise HTTPException(400, "图片大小超过 5MB 限制")
