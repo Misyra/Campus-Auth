@@ -42,7 +42,7 @@ class AutoStartService:
         if packaged_executable:
             return f'"{packaged_executable}"'
 
-        app_entry = self.project_root / "app.py"
+        app_entry = self.project_root / "main.py"
 
         # 优先使用项目 .venv 中的 Python（uv/venv 均适用）
         if is_windows():
