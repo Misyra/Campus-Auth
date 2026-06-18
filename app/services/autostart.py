@@ -20,8 +20,11 @@ def _autostart_cli_args(lightweight: bool = True) -> str:
     Args:
         lightweight: True 时使用轻量模式（仅监控），False 时使用完整模式（含 Web）
     """
-    mode = "--runtime-mode lightweight" if lightweight else ""
-    return f"--startup-action monitor {mode} --no-browser --source autostart".replace("  ", " ").strip()
+    args = ["--startup-action", "monitor"]
+    if lightweight:
+        args.extend(["--runtime-mode", "lightweight"])
+    args.extend(["--no-browser", "--source", "autostart"])
+    return " ".join(args)
 
 
 class AutoStartService:
@@ -195,7 +198,10 @@ class AutoStartService:
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
-    <true/>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
     <key>StandardOutPath</key>
     <string>{escaped_log_out}</string>
     <key>StandardErrorPath</key>
@@ -262,7 +268,7 @@ After=network.target
 Type=simple
 WorkingDirectory={self.project_root}
 ExecStart=/bin/sh -lc '{cmd}'
-Restart=always
+Restart=on-failure
 RestartSec=5
 
 [Install]
