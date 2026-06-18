@@ -1,5 +1,38 @@
 # 更新日志
 
+## v4.0.5
+
+### 优化
+
+- **VBS 自启动脚本简化**：删除 PID 检测和 WMI 进程查询逻辑，重复实例检测统一由 Python 处理
+  - 修复 PID 复用误判：VBS 的 WMI 只查 PID 存活，Python 的 create_time 验证可区分
+  - macOS/Linux 守护策略对齐退出码语义：`KeepAlive.SuccessfulExit=false` / `Restart=on-failure`
+  - `_autostart_cli_args` 改用 join 拼接，消除空格处理脆弱性
+- **手动登录日志优化**：消除"提交成功"与"登录成功"的歧义，登录完成时新增日志
+- **配置管道命名清晰化**：函数改名消除跨文件命名歧义
+- **密码处理函数集中化**：`safe_decrypt`/`decrypt_password_field` 移至 `crypto.py`
+- **ProfileService 缓存移除**：settings.json 很小，多实例场景下缓存一致性成本高于收益
+- **延迟导入注释**：engine.py/task_executor.py 延迟导入补充原因说明
+- **测试清理**：删除冗余测试文件 `test_routers.py`（569 行）
+
+### 修复
+
+- 修复 `start.sh` macOS 兼容性：`declare -A` 改为 `case` 函数，兼容 bash 3.2
+- 修复 CI macOS KeyboardInterrupt：asyncio Runner 覆盖信号处理器导致测试 teardown 异常
+- 修复 profile override 覆盖语义：留空时应使用全局值
+- 修复 `_handle_existing_instance` force 模式重复等待
+- 修复 `test_api_tools_routes` mock 方法名 `iter_bytes` → `aiter_bytes`
+
+### 重构
+
+- GlobalSettings 继承 Mixin 消除 12 个重复字段
+- ProfileSettings → AuthProfile，GlobalSettings → SystemSettings
+- `record_log` 拆分双重职责，新增 `notify_network_state_changed()`
+- `_build_config_payload` 53 行逐字段取值改为 `model_dump(include=...)`
+- NetworkMonitorCore 探测函数使用 `race_first_success` 消除竞态重复代码
+- application.py `create_app` 拆分为 `_create_lifespan`/`_register_routes`/`_register_static`
+- main.py 提取 `_load_login_config`/`_execute_login_with_retries`/`_create_tray`/`_wait_for_exit`
+
 ## v4.0.4
 
 ### 新增功能
