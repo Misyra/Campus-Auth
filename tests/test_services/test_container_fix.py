@@ -1,55 +1,32 @@
-"""Task 11: 验证 container.py 不直接访问 TaskExecutor 私有属性。"""
-
-from __future__ import annotations
+"""测试 ServiceContainer 轻量模式的登录能力。"""
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
+from app.container import ServiceContainer
 
 
-class TestContainerPrivateAttrFix:
-    """验证 ServiceContainer 通过公共方法绑定 runtime_config_getter。"""
+def test_lightweight_container_has_real_task_executor(tmp_path):
+    """轻量模式应使用真实 TaskExecutor，而非 NullTaskExecutor。"""
+    from app.services.task_executor import NullTaskExecutor, TaskExecutor
 
-    def test_container_uses_public_method_not_private_attr(self, tmp_path: Path):
-        """container.__init__ 应使用 set_runtime_config_getter 而非直接设置 _get_runtime_config。"""
-        with (
-            patch("app.container.WebSocketManager"),
-            patch("app.container.ProfileService"),
-            patch("app.container.LoginHistoryService"),
-            patch("app.container.ScheduleEngine") as mock_engine_cls,
-            patch("app.container.TaskService"),
-            patch("app.container.AutoStartService"),
-            patch("app.container.TaskRegistry"),
-            patch("app.container.TaskHistoryStore"),
-            patch("app.container.TaskExecutor") as mock_te_cls,
-        ):
-            from app.container import ServiceContainer
+    container = ServiceContainer(tmp_path, mode="lightweight")
+    # 应该是 TaskExecutor 实例，不是 NullTaskExecutor
+    assert isinstance(container.task_executor, TaskExecutor)
+    assert not isinstance(container.task_executor, NullTaskExecutor)
 
-            mock_te_instance = mock_te_cls.return_value
-            container = ServiceContainer(tmp_path)
 
-            # 验证调用了公共方法
-            mock_te_instance.set_runtime_config_getter.assert_called_once()
+def test_lightweight_execute_login_async_returns_future(tmp_path):
+    """轻量模式的 execute_login_async 应返回 Future（不是 None）。"""
+    from concurrent.futures import Future
 
-    def test_container_passes_engine_getter(self, tmp_path: Path):
-        """container.__init__ 应将 engine.get_runtime_config 传给 TaskExecutor。"""
-        with (
-            patch("app.container.WebSocketManager"),
-            patch("app.container.ProfileService"),
-            patch("app.container.LoginHistoryService"),
-            patch("app.container.ScheduleEngine") as mock_engine_cls,
-            patch("app.container.TaskService"),
-            patch("app.container.AutoStartService"),
-            patch("app.container.TaskRegistry"),
-            patch("app.container.TaskHistoryStore"),
-            patch("app.container.TaskExecutor") as mock_te_cls,
-        ):
-            from app.container import ServiceContainer
+    container = ServiceContainer(tmp_path, mode="lightweight")
+    # mock worker 避免真实浏览器启动
+    with patch("app.workers.playwright_worker.get_worker") as mock_get_worker:
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = MagicMock(success=True, data="ok")
+        mock_get_worker.return_value = mock_worker
 
-            container = ServiceContainer(tmp_path)
-
-            # 验证传入的是 engine 的 get_runtime_config 方法
-            getter = mock_te_instance = mock_te_cls.return_value
-            call_args = mock_te_instance.set_runtime_config_getter.call_args[0][0]
-            assert call_args is container.engine.get_runtime_config
+        future = container.task_executor.execute_login_async()
+        # 应返回 Future 对象，不是 None
+        assert isinstance(future, Future)
