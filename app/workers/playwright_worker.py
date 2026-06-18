@@ -10,6 +10,9 @@
 命令派发流程:
   submit() → queue.put(cmd) → run_coroutine_threadsafe(_wake_async())
   → _async_run() 被唤醒 → get_nowait() 取出命令 → _dispatch() → handler
+
+NOT-TO-DO: 不要拆分此文件。Worker 是浏览器自动化核心，生命周期紧密
+（启动、命令分发、清理），拆分收益不大反而增加复杂度。
 """
 
 from __future__ import annotations
