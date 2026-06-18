@@ -285,7 +285,7 @@ class TestFetchUrlContentLength:
         return cm
 
     def _mock_stream_response(self, content_length: str | None, body: bytes = b""):
-        """构造支持 iter_bytes 的 mock 响应和 stream 上下文管理器。"""
+        """构造支持 aiter_bytes 的 mock 响应和 stream 上下文管理器。"""
         mock_resp = AsyncMock()
         headers = {"content-type": "image/png"}
         if content_length is not None:
@@ -293,11 +293,11 @@ class TestFetchUrlContentLength:
         mock_resp.headers = headers
         mock_resp.raise_for_status = MagicMock()
 
-        async def _iter_bytes(chunk_size=8192):
+        async def _aiter_bytes(chunk_size=8192):
             for i in range(0, len(body), chunk_size):
                 yield body[i : i + chunk_size]
 
-        mock_resp.iter_bytes = _iter_bytes
+        mock_resp.aiter_bytes = _aiter_bytes
         return self._mock_stream_context(mock_resp)
 
     @pytest.mark.asyncio
