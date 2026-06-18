@@ -10,6 +10,7 @@ NOT-TO-DO: 不要拆分此文件。ScheduleEngine 是调度核心，职责清晰
 from __future__ import annotations
 
 import contextlib
+from concurrent.futures import Future
 import json
 import queue
 import re
@@ -332,12 +333,21 @@ class ScheduleEngine:
             self._update_status_snapshot()
             raise
         if future is not None:
-            future.add_done_callback(
-                lambda _: (
-                    self._login_in_progress.clear(),
-                    self._update_status_snapshot(),
-                )
-            )
+
+            def _on_done(f: Future) -> None:
+                self._login_in_progress.clear()
+                self._update_status_snapshot()
+                try:
+                    ok, msg = f.result()
+                    tag = "手动登录" if is_manual else "自动登录"
+                    if ok:
+                        logger.info("{}完成: {}", tag, msg)
+                    else:
+                        logger.warning("{}失败: {}", tag, msg)
+                except Exception:
+                    logger.exception("登录任务异常")
+
+            future.add_done_callback(_on_done)
             return True
         else:
             self._login_in_progress.clear()
@@ -788,12 +798,12 @@ class ScheduleEngine:
             if success:
                 # network_state 已由消费者 _handle_login 统一赋值，无需 API 线程操作
                 self._update_status_snapshot()
-                logger.info("手动登录成功")
-                return True, f"手动登录成功：{message}"
+                logger.info("手动登录任务已提交")
+                return True, "登录已提交"
 
             log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
-            logger.warning("手动登录失败: {}", log_msg)
-            return False, f"手动登录失败：{message}"
+            logger.warning("手动登录提交失败: {}", log_msg)
+            return False, f"登录提交失败：{message}"
         finally:
             with self._manual_login_lock:
                 self._manual_login_in_progress = False

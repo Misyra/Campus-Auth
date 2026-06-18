@@ -362,11 +362,6 @@ def _handle_existing_instance(ctx: ApplicationContext, force: bool = False):
     if force:
         print(f"强制模式：正在终止已运行的实例 (PID: {pid})...")
         _terminate_process(pid)
-        # 验证进程已实际退出
-        for _ in range(10):
-            time.sleep(0.5)
-            if not is_service_running()[0]:
-                break
         cleanup_pid()
         print("已终止，继续启动...")
         return
