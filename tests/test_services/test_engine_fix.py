@@ -20,3 +20,10 @@ def test_engine_test_network_default_false():
     # 不应出现默认值 True
     assert 'enable_tcp_check", True' not in source
     assert 'enable_http_check", True' not in source
+
+    # init_monitoring 中的 fallback 也应与 schema 一致
+    from app.services.monitor_service import NetworkMonitorCore
+
+    source_monitor = inspect.getsource(NetworkMonitorCore.init_monitoring)
+    assert 'enable_tcp_check", True' not in source_monitor
+    assert 'enable_http_check", True' not in source_monitor
