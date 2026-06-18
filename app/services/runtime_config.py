@@ -21,7 +21,7 @@ PROFILE_OVERRIDE_FIELDS = frozenset({
 })
 
 
-def _build_config_payload(
+def load_payload_from_profiles(
     profile_service: ProfileService,
     data: ProfilesData | None = None,
     *,
@@ -92,7 +92,7 @@ def load_ui_config(
     data: ProfilesData | None = None,
 ) -> MonitorConfigPayload:
     """加载 UI 配置 —— 始终返回全局设置。"""
-    payload, _ = _build_config_payload(profile_service, data, apply_overrides=False)
+    payload, _ = load_payload_from_profiles(profile_service, data, apply_overrides=False)
     return payload
 
 
@@ -101,4 +101,4 @@ def load_runtime_config(
     data: ProfilesData | None = None,
 ) -> tuple[MonitorConfigPayload, bool]:
     """加载运行时配置 —— 从 profile 和 global_settings 合并。"""
-    return _build_config_payload(profile_service, data, apply_overrides=True)
+    return load_payload_from_profiles(profile_service, data, apply_overrides=True)

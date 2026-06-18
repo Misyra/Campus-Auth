@@ -433,7 +433,7 @@ def get_runtime_features(
 
 # SystemSettings 与 MonitorConfigPayload 的共享字段集合。
 # 用于 config_service._update_global_settings（循环赋值）和
-# runtime_config._build_config_payload（model_dump include）。
+# runtime_config.load_payload_from_profiles（model_dump include）。
 GLOBAL_SETTINGS_FIELDS = frozenset(
     f for f in SystemSettings.model_fields
     if f in MonitorConfigPayload.model_fields

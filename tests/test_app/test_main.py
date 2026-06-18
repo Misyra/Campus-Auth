@@ -500,7 +500,7 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_config",
+                "app.services.config_service.build_runtime_dict_from_payload",
                 return_value={"retry_settings": {"max_retries": 3}},
             ),
             patch(
@@ -529,7 +529,7 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_config",
+                "app.services.config_service.build_runtime_dict_from_payload",
                 return_value={
                     "retry_settings": {"max_retries": 3, "retry_interval": 1}
                 },
@@ -559,7 +559,7 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_config",
+                "app.services.config_service.build_runtime_dict_from_payload",
                 return_value={
                     "retry_settings": {"max_retries": 2, "retry_interval": 0}
                 },
@@ -589,7 +589,7 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_config",
+                "app.services.config_service.build_runtime_dict_from_payload",
                 return_value={"retry_settings": {"max_retries": 3}},
             ),
             patch(
@@ -621,7 +621,7 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_config",
+                "app.services.config_service.build_runtime_dict_from_payload",
                 return_value={"retry_settings": {"max_retries": 3}},
             ),
             patch(
@@ -654,7 +654,7 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_config",
+                "app.services.config_service.build_runtime_dict_from_payload",
                 return_value={"retry_settings": {"max_retries": 3}},
             ),
             patch(

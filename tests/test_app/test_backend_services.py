@@ -20,7 +20,7 @@ from app.schemas import (
     ProfilesData,
     SystemSettings,
 )
-from app.services.config_service import build_runtime_config, save_config_combined
+from app.services.config_service import build_runtime_dict_from_payload, save_config_combined
 from app.services.runtime_config import load_runtime_config, load_ui_config
 from app.services.debug_session import (
     DebugSession,
@@ -349,7 +349,7 @@ class TestLoadRuntimeConfig:
 
 
 # =====================================================================
-# build_runtime_config
+# build_runtime_dict_from_payload
 # =====================================================================
 
 
@@ -361,7 +361,7 @@ class TestBuildRuntimeConfig:
             auth_url="http://10.0.0.1",
             carrier="移动",
         )
-        config = build_runtime_config(payload)
+        config = build_runtime_dict_from_payload(payload)
         assert config["username"] == "admin"
         assert config["password"] == "testpass"
         assert config["auth_url"] == "http://10.0.0.1"
@@ -369,17 +369,17 @@ class TestBuildRuntimeConfig:
 
     def test_carrier_custom(self):
         payload = MonitorConfigPayload(carrier="自定义", carrier_custom="校园网")
-        config = build_runtime_config(payload)
+        config = build_runtime_dict_from_payload(payload)
         assert config["isp"] == "校园网"
 
     def test_carrier_none(self):
         payload = MonitorConfigPayload(carrier="无")
-        config = build_runtime_config(payload)
+        config = build_runtime_dict_from_payload(payload)
         assert config["isp"] == ""
 
     def test_masked_password_returns_empty(self):
         payload = MonitorConfigPayload(password="••••••••")
-        config = build_runtime_config(payload)
+        config = build_runtime_dict_from_payload(payload)
         assert config["password"] == ""
 
     def test_browser_settings(self):
@@ -390,7 +390,7 @@ class TestBuildRuntimeConfig:
             browser_timeout=15,
             browser_user_agent="Custom UA",
         )
-        config = build_runtime_config(payload, global_settings=global_settings)
+        config = build_runtime_dict_from_payload(payload, global_settings=global_settings)
         browser = config["browser_settings"]
         assert browser["headless"] is False
         assert browser["timeout"] == 15
@@ -402,7 +402,7 @@ class TestBuildRuntimeConfig:
             pause_start_hour=23,
             pause_end_hour=6,
         )
-        config = build_runtime_config(payload)
+        config = build_runtime_dict_from_payload(payload)
         pause = config["pause_login"]
         assert pause["enabled"] is True
         assert pause["start_hour"] == 23
@@ -415,7 +415,7 @@ class TestBuildRuntimeConfig:
             enable_tcp_check=True,
             enable_http_check=False,
         )
-        config = build_runtime_config(payload)
+        config = build_runtime_dict_from_payload(payload)
         monitor = config["monitor"]
         assert monitor["interval"] == 600
         assert "8.8.8.8:53" in monitor["ping_targets"]
@@ -426,7 +426,7 @@ class TestBuildRuntimeConfig:
         payload = MonitorConfigPayload(
             url_check_urls="http://test.com|Success\nhttp://other.com|OK"
         )
-        config = build_runtime_config(payload)
+        config = build_runtime_dict_from_payload(payload)
         url_check = config["monitor"]["url_check_urls"]
         assert len(url_check) == 2
         assert url_check[0] == ("http://test.com", "Success")
@@ -434,7 +434,7 @@ class TestBuildRuntimeConfig:
     def test_retry_settings(self):
         payload = MonitorConfigPayload()
         gs = SystemSettings(max_retries=5, retry_interval=10)
-        config = build_runtime_config(payload, gs)
+        config = build_runtime_dict_from_payload(payload, gs)
         assert config["retry_settings"]["max_retries"] == 5
         assert config["retry_settings"]["retry_interval"] == 10
 
@@ -444,16 +444,16 @@ class TestBuildRuntimeConfig:
 
         # 默认值应为 True
         gs_default = SystemSettings()
-        config = build_runtime_config(payload, global_settings=gs_default)
+        config = build_runtime_dict_from_payload(payload, global_settings=gs_default)
         assert config["browser_settings"]["pure_mode"] is True
 
         # 显式设置为 False
         gs_false = SystemSettings(pure_mode=False)
-        config = build_runtime_config(payload, global_settings=gs_false)
+        config = build_runtime_dict_from_payload(payload, global_settings=gs_false)
         assert config["browser_settings"]["pure_mode"] is False
 
         # 无 global_settings 时回退默认值
-        config = build_runtime_config(payload)
+        config = build_runtime_dict_from_payload(payload)
         assert config["browser_settings"]["pure_mode"] is True
 
     def test_login_timeout_in_payload(self):
