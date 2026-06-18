@@ -79,6 +79,7 @@ class TestSuppressExceptionFix:
         container = _make_container(tmp_path, mock_container_deps)
         container._log_handler_id = 42
         container._ws_drain_task = None
+        container._web_services_started = True  # 复用 stop_web_services 需要此标志
 
         with patch("app.container.container_logger") as mock_logger:
             with patch("loguru.logger") as mock_loguru:

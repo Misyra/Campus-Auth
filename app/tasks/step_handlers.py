@@ -199,22 +199,35 @@ class StepHandler(ABC):
             logger.warning("[frame] 无法定位 frame '{}': {}", frame_selector, e)
             return page
 
-    async def _find_element(self, ctx, selector: str, timeout: int):
-        """查找元素（支持多个候选选择器，兼容 Page 和 FrameLocator）"""
-        candidates = self._parse_selectors(selector)
+    async def _find_with_deadline(self, ctx, selectors: list[str], timeout_ms: int):
+        """统一的候选选择器查找，deadline 模式分摊超时。
 
-        for candidate in candidates:
+        所有候选共享同一个截止时间，避免 N 个候选 × timeout 的累积问题。
+        """
+        deadline = time.perf_counter() + timeout_ms / 1000
+        for selector in selectors:
+            remaining = deadline - time.perf_counter()
+            if remaining <= 0:
+                return None
             try:
-                locator = ctx.locator(candidate)
-                await locator.first.wait_for(state="visible", timeout=timeout)
-                logger.info("[find] 选择器命中: {}", candidate)
+                locator = ctx.locator(selector)
+                await locator.first.wait_for(
+                    state="visible", timeout=int(remaining * 1000)
+                )
+                logger.info("[find] 选择器命中: {}", selector)
                 return locator.first
             except Exception:
-                logger.debug("[find] 选择器未匹配: {}", candidate)
+                logger.debug("[find] 选择器未匹配: {}", selector)
                 continue
-
-        logger.warning("[find] 所有选择器均未匹配: {}", selector)
         return None
+
+    async def _find_element(self, ctx, selector: str, timeout: int):
+        """查找元素（支持多个候选选择器，deadline 模式分摊超时）。"""
+        candidates = self._parse_selectors(selector)
+        result = await self._find_with_deadline(ctx, candidates, timeout)
+        if result is None:
+            logger.warning("[find] 所有选择器均未匹配: {}", selector)
+        return result
 
 
 class InputHandler(StepHandler):
@@ -819,32 +832,32 @@ class OcrHandler(StepHandler):
             self.schedule_cleanup(old)
 
 
+# ── 模块级常量：默认处理器映射（所有 handler 无状态，安全共享）──
+
+DEFAULT_HANDLERS: dict[str, StepHandler] = {
+    handler.step_type: handler
+    for handler in [
+        InputHandler(),
+        ClickHandler(),
+        SelectHandler(),
+        ClickSelectHandler(),
+        WaitHandler(),
+        WaitUrlHandler(),
+        EvalHandler(),
+        ScreenshotHandler(),
+        SleepHandler(),
+        OcrHandler(),
+    ]
+}
+# custom_js 已合并到 eval，保留映射以兼容旧任务
+DEFAULT_HANDLERS["custom_js"] = DEFAULT_HANDLERS[StepType.EVAL]
+
+
 class StepExecutorRegistry:
-    """步骤执行器注册表"""
+    """步骤执行器注册表 — 薄包装层，底层共享 DEFAULT_HANDLERS 常量。"""
 
     def __init__(self):
-        self._handlers: dict[str, StepHandler] = {}
-        self._register_defaults()
-
-    def _register_defaults(self) -> None:
-        """注册默认处理器"""
-        handlers = [
-            InputHandler(),
-            ClickHandler(),
-            SelectHandler(),
-            ClickSelectHandler(),
-            WaitHandler(),
-            WaitUrlHandler(),
-            EvalHandler(),
-            ScreenshotHandler(),
-            SleepHandler(),
-            OcrHandler(),
-        ]
-        for handler in handlers:
-            self.register(handler)
-
-        # custom_js 已合并到 eval，保留映射以兼容旧任务
-        self._handlers["custom_js"] = self._handlers.get(StepType.EVAL)
+        self._handlers: dict[str, StepHandler] = dict(DEFAULT_HANDLERS)
 
     def register(self, handler: StepHandler) -> None:
         """注册处理器"""

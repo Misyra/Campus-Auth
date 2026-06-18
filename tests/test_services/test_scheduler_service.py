@@ -84,11 +84,14 @@ class TestExecuteShellUsesPolicy:
 
         shell_path = shells[0]["path"]
 
-        with patch("app.utils.shell_policy.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout=b"ok", stderr=b"")
+        with patch("app.utils.shell_policy.subprocess.Popen") as mock_popen:
+            mock_proc = MagicMock()
+            mock_proc.communicate.return_value = ("ok", "")
+            mock_proc.returncode = 0
+            mock_popen.return_value = mock_proc
 
             executor._execute_shell("echo ok", timeout=9999, shell_path=shell_path)
-            assert mock_run.called
+            assert mock_popen.called
 
     def test_audit_log_called(self, executor):
         """执行前应记录审计日志。"""
@@ -98,8 +101,11 @@ class TestExecuteShellUsesPolicy:
 
         shell_path = shells[0]["path"]
 
-        with patch("app.utils.shell_policy.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout=b"ok", stderr=b"")
+        with patch("app.utils.shell_policy.subprocess.Popen") as mock_popen:
+            mock_proc = MagicMock()
+            mock_proc.communicate.return_value = ("ok", "")
+            mock_proc.returncode = 0
+            mock_popen.return_value = mock_proc
 
             result = executor._execute_shell(
                 "echo audit_test", timeout=30, shell_path=shell_path

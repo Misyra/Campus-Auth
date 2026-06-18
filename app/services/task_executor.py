@@ -35,13 +35,16 @@ class NullTaskExecutor:
     def execute_task_async(self, task_id: str) -> Future | None:
         return None
 
-    def execute_login_async(self, cancel_event=None) -> Future | None:
+    def execute_login_async(self, cancel_event=None, skip_pause_check=False) -> Future | None:
         return None
 
     def execute_task(self, task_id: str) -> tuple[bool, str]:
         return False, "轻量模式下不支持定时任务"
 
-    def execute_login(self, cancel_event=None) -> Any:
+    def execute_login(self, cancel_event=None, skip_pause_check=False) -> Any:
+        return None
+
+    def cancel_login(self) -> None:
         return None
 
     def list_tasks(self) -> list[dict]:
@@ -220,6 +223,9 @@ class TaskExecutor:
         Returns:
             Future 对象（新的或已有的）
         """
+        if cancel_event is None:
+            cancel_event = threading.Event()
+
         future = None
         with self._login_lock:
             # 检查是否已有登录在进行
@@ -254,6 +260,11 @@ class TaskExecutor:
 
         t = threading.Thread(target=_watcher, daemon=True, name="cancel-link")
         t.start()
+
+    def cancel_login(self) -> None:
+        """取消正在进行的登录。"""
+        if self._login_cancel_event:
+            self._login_cancel_event.set()
 
     def _on_login_done(self, future: Future) -> None:
         """登录任务完成后清理引用。"""
@@ -328,6 +339,7 @@ class TaskExecutor:
         start = time.perf_counter()
 
         try:
+            # 延迟导入：测试需要模拟 playwright_worker 未安装的 ImportError 场景
             from app.workers.playwright_worker import CMD_LOGIN
 
             # 获取运行时配置
@@ -390,6 +402,7 @@ class TaskExecutor:
         if not script_path or not script_path.exists():
             return False, f"脚本文件不存在: {script_id}"
 
+        # 延迟导入：避免顶层导入 playwright/script_runner 的启动开销
         from app.workers.script_runner import ScriptRunner
 
         runner = ScriptRunner(
@@ -412,6 +425,7 @@ class TaskExecutor:
         start_time = time.perf_counter()
 
         try:
+            # 延迟导入：测试需要模拟 playwright_worker 未安装的 ImportError 场景
             from app.workers.playwright_worker import CMD_LOGIN
 
             # 获取运行时配置
@@ -434,26 +448,19 @@ class TaskExecutor:
             duration_ms = int((time.perf_counter() - start_time) * 1000)
 
             if result.success:
-                self._record_login_history(True, duration_ms)
                 return True, (
                     result.data
                     if isinstance(result.data, str)
                     else "浏览器任务执行成功"
                 )
             else:
-                error_msg = result.error or "浏览器任务执行失败"
-                self._record_login_history(False, duration_ms, error=error_msg)
-                return False, error_msg
+                return False, result.error or "浏览器任务执行失败"
 
         except ImportError as exc:
-            duration_ms = int((time.perf_counter() - start_time) * 1000)
             logger.warning("浏览器任务执行缺少依赖: {}", exc)
-            self._record_login_history(False, duration_ms, error=str(exc))
             return False, "浏览器任务需要额外依赖，请检查 Playwright 安装状态"
         except Exception as exc:
-            duration_ms = int((time.perf_counter() - start_time) * 1000)
             logger.error("浏览器任务执行异常: {}", exc)
-            self._record_login_history(False, duration_ms, error=str(exc))
             return False, f"浏览器任务执行异常: {exc}"
 
     def _execute_shell(

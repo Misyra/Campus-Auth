@@ -20,8 +20,11 @@ def _autostart_cli_args(lightweight: bool = True) -> str:
     Args:
         lightweight: True 时使用轻量模式（仅监控），False 时使用完整模式（含 Web）
     """
-    mode = "--runtime-mode lightweight" if lightweight else ""
-    return f"--startup-action monitor {mode} --no-browser --source autostart".replace("  ", " ").strip()
+    args = ["--startup-action", "monitor"]
+    if lightweight:
+        args.extend(["--runtime-mode", "lightweight"])
+    args.extend(["--no-browser", "--source", "autostart"])
+    return " ".join(args)
 
 
 class AutoStartService:
@@ -39,7 +42,7 @@ class AutoStartService:
         if packaged_executable:
             return f'"{packaged_executable}"'
 
-        app_entry = self.project_root / "app.py"
+        app_entry = self.project_root / "main.py"
 
         # 优先使用项目 .venv 中的 Python（uv/venv 均适用）
         if is_windows():
@@ -195,7 +198,10 @@ class AutoStartService:
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
-    <true/>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
     <key>StandardOutPath</key>
     <string>{escaped_log_out}</string>
     <key>StandardErrorPath</key>
@@ -262,7 +268,7 @@ After=network.target
 Type=simple
 WorkingDirectory={self.project_root}
 ExecStart=/bin/sh -lc '{cmd}'
-Restart=always
+Restart=on-failure
 RestartSec=5
 
 [Install]
@@ -293,51 +299,16 @@ WantedBy=default.target
     def _build_vbs_content(run_command: str) -> str:
         """生成 Windows 自启动 VBScript 内容。
 
+        VBS 仅负责启动应用，重复实例检测由应用自身处理
+        （main.py → _handle_existing_instance → is_service_running）。
+
         Args:
             run_command: VBScript 中用于启动程序的两行代码
-                （targetExe 赋值 + WshShell.Run 调用）。
+                （targetCmd 赋值 + WshShell.Run 调用）。
         """
         vbs_lines = [
             'Set WshShell = CreateObject("WScript.Shell")',
-            '',
-            "' Check if already running",
-            'Set fso = CreateObject("Scripting.FileSystemObject")',
-            'pidFile = WshShell.ExpandEnvironmentStrings("%USERPROFILE%") & "\\\\.campus_network_auth\\\\campus_network_auth.pid"',
-            '',
-            'If fso.FileExists(pidFile) Then',
-            '    Set file = fso.OpenTextFile(pidFile, 1)',
-            '    pid = 0',
-            '    On Error Resume Next',
-            '    Dim rawContent',
-            '    rawContent = Trim(file.ReadLine)',
-            '    file.Close',
-            '',
-            "    ' 尝试解析 JSON 格式的 PID",
-            '    Dim pidStr',
-            '    Dim pos1, pos2',
-            '    pos1 = InStr(rawContent, """":""") + 5',
-            '    If pos1 > 5 Then',
-            '        pos2 = InStr(pos1, rawContent, ",")',
-            '        If pos2 = 0 Then pos2 = InStr(pos1, rawContent, "}}")',
-            '        If pos2 > pos1 Then',
-            '            pidStr = Trim(Mid(rawContent, pos1, pos2 - pos1))',
-            '            If IsNumeric(pidStr) Then pid = CLng(pidStr)',
-            '        End If',
-            '    End If',
-            '    On Error GoTo 0',
-            '',
-            "    ' Check if the process is still alive",
-            '    If pid > 0 Then',
-            '        On Error Resume Next',
-            '        Set objWMIService = GetObject("winmgmts:\\\\\\\\.\\\\root\\\\cimv2")',
-            '        Set colProcessList = objWMIService.ExecQuery("Select * from Win32_Process where ProcessId = " & pid)',
-            '        If colProcessList.Count > 0 Then',
-            '            WScript.Quit',
-            '        End If',
-            '        On Error GoTo 0',
-            '    End If',
-            'End If',
-            '',
+            "",
             run_command,
         ]
         return '\n'.join(vbs_lines)
@@ -381,7 +352,7 @@ WantedBy=default.target
         content = self._build_vbs_content(run_command)
 
         try:
-            startup_vbs.write_text(content, encoding="utf-8")
+            startup_vbs.write_text(content, encoding="utf-16")
         except PermissionError:
             logger.error("写入启动文件失败: PermissionError，可能被杀毒软件拦截")
             return (

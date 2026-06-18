@@ -5,10 +5,11 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.constants import PROJECT_ROOT
 from app.schemas import ActionResponse
+from app.utils.files import dir_size_mb
 from app.utils.logging import get_logger
 from app.utils.platform import CREATE_NO_WINDOW_FLAG
 
@@ -41,24 +42,10 @@ def _estimate_pkg_size_mb(pkg_name: str) -> float:
         return 0.0
 
     pkg_path = Path(spec.origin)
-    # 包目录的 __init__.py → 取父目录；单文件模块直接用
     if pkg_path.name == "__init__.py":
         pkg_path = pkg_path.parent
 
-    if not pkg_path.exists():
-        return 0.0
-
-    if pkg_path.is_file():
-        return round(pkg_path.stat().st_size / (1024 * 1024), 1)
-
-    total = 0
-    try:
-        for f in pkg_path.rglob("*"):
-            if f.is_file():
-                total += f.stat().st_size
-    except OSError:
-        pass
-    return round(total / (1024 * 1024), 1)
+    return dir_size_mb(pkg_path)
 
 
 @router.get("/api/ocr/status")
@@ -113,7 +100,7 @@ def ocr_install() -> ActionResponse:
         )
     except Exception as e:
         api_logger.error("ddddocr 安装异常: {}", e)
-        return ActionResponse(success=False, message=f"安装异常: {e}")
+        raise HTTPException(status_code=500, detail=f"安装异常: {e}") from e
 
 
 @router.post("/api/ocr/uninstall", response_model=ActionResponse)
@@ -144,4 +131,4 @@ def ocr_uninstall() -> ActionResponse:
         return ActionResponse(success=False, message="未找到 uv 包管理器")
     except Exception as e:
         api_logger.error("ddddocr 卸载异常: {}", e)
-        return ActionResponse(success=False, message=f"卸载异常: {e}")
+        raise HTTPException(status_code=500, detail=f"卸载异常: {e}") from e

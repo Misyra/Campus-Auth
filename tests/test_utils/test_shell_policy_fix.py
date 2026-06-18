@@ -1,4 +1,4 @@
-"""验证 shell_policy.py 两个 bug 修复。"""
+"""验证 shell_policy.py 两个 bug 修复 — 行为验证版本。"""
 
 from __future__ import annotations
 
@@ -26,8 +26,6 @@ class TestReturncodeNoneBug:
             return_value=mock_proc,
         ):
             code, _, _ = await policy.run(["/bin/sh", "-c", "test"])
-            # 修复前：`None or 0` == 0，错误地返回 0
-            # 修复后：应返回 -1
             assert code == -1, (
                 f"proc.returncode=None 时应返回 -1，实际返回 {code}"
             )
@@ -66,35 +64,32 @@ class TestReturncodeNoneBug:
             assert code == -9
 
 
-class TestDocstringConsistency:
-    """Bug 2: docstring 中的超时上限应与 _MAX_TIMEOUT 常量一致。"""
+class TestTimeoutBehavior:
+    """Bug 2: 超时上限应为 _MAX_TIMEOUT (3600)，验证实际 clamp 行为。"""
 
     def test_max_timeout_is_3600(self):
         """确认 _MAX_TIMEOUT 常量为 3600。"""
         assert _MAX_TIMEOUT == 3600
 
-    def test_class_docstring_mentions_correct_timeout(self):
-        """类 docstring 应引用 3600 而非 300。"""
-        doc = ShellCommandPolicy.__doc__
-        # 修复后 docstring 应包含 3600
-        assert "3600" in doc, f"docstring 中未找到 '3600': {doc}"
+    def test_clamp_timeout_at_max_boundary(self):
+        """_clamp_timeout 在 _MAX_TIMEOUT 边界的行为。"""
+        policy = ShellCommandPolicy(allowlist=["/bin/sh"])
+        assert policy._clamp_timeout(_MAX_TIMEOUT) == _MAX_TIMEOUT
+        assert policy._clamp_timeout(_MAX_TIMEOUT + 1) == _MAX_TIMEOUT
 
-    def test_init_docstring_mentions_correct_timeout(self):
-        """__init__ docstring 应引用 3600 而非 300。"""
-        doc = ShellCommandPolicy.__init__.__doc__
-        assert "3600" in doc, f"__init__ docstring 中未找到 '3600': {doc}"
+    def test_clamp_timeout_at_min_boundary(self):
+        """_clamp_timeout 在下界的行为。"""
+        policy = ShellCommandPolicy(allowlist=["/bin/sh"])
+        assert policy._clamp_timeout(1) == 1
+        assert policy._clamp_timeout(0) == 1
+        assert policy._clamp_timeout(-10) == 1
 
-    def test_run_docstring_mentions_correct_timeout(self):
-        """run docstring 应引用 3600 而非 300。"""
-        doc = ShellCommandPolicy.run.__doc__
-        assert "3600" in doc, f"run docstring 中未找到 '3600': {doc}"
+    def test_default_timeout_clamped_to_max(self):
+        """构造函数中 default_timeout 超过 _MAX_TIMEOUT 时被 clamp。"""
+        policy = ShellCommandPolicy(allowlist=["/bin/sh"], default_timeout=99999)
+        assert policy._default_timeout == _MAX_TIMEOUT
 
-    def test_run_sync_docstring_mentions_correct_timeout(self):
-        """run_sync docstring 应引用 3600 而非 300。"""
-        doc = ShellCommandPolicy.run_sync.__doc__
-        assert "3600" in doc, f"run_sync docstring 中未找到 '3600': {doc}"
-
-    def test_clamp_timeout_docstring_mentions_correct_timeout(self):
-        """_clamp_timeout docstring 应引用 3600 而非 300。"""
-        doc = ShellCommandPolicy._clamp_timeout.__doc__
-        assert "3600" in doc, f"_clamp_timeout docstring 中未找到 '3600': {doc}"
+    def test_default_timeout_within_range_preserved(self):
+        """构造函数中 default_timeout 在有效范围内时保留原值。"""
+        policy = ShellCommandPolicy(allowlist=["/bin/sh"], default_timeout=120)
+        assert policy._default_timeout == 120

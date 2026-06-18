@@ -53,6 +53,8 @@
 - **不要将 `except Exception` 缩窄为具体异常类型** — 130 处防御性捕获全部配有日志，桌面应用"永不崩溃"是核心目标；Playwright/httpx/网络操作的异常类型不可穷举，缩窄只会引入漏网崩溃
 - **不要将 threading 架构迁移为 asyncio** — engine/worker/tray 等核心组件基于 daemon thread + 队列通信，FastAPI 仅用于 API 层；统一为 asyncio 牵动整条链路，收益不抵风险
 - **不要给前端加 TypeScript/构建工具链** — 原生 HTML/JS/CSS 无构建步骤，用户可直接修改前端文件；加入 bundler 会破坏这个优势
+- **不要拆分 engine.py** — ScheduleEngine 是调度核心，职责清晰（命令队列、监控循环、重试逻辑、调度器），拆分只会增加模块间耦合
+- **不要拆分 playwright_worker.py** — Worker 是浏览器自动化核心，生命周期紧密（启动、命令分发、清理），拆分收益不大反而增加复杂度
 
 ## 代码质量类 — 功能正确，不需要改
 

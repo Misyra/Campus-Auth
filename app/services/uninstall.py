@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.constants import AUTH_DATA_DIR, PROJECT_ROOT
+from app.utils.files import dir_size_mb
 from app.utils.logging import get_logger
-from app.utils.platform import get_platform
+from app.utils.platform import get_platform, get_playwright_cache_dir
 
 logger = get_logger("uninstall", source="backend")
 
@@ -53,9 +54,9 @@ def detect() -> list[CleanupItem]:
         items.append(CleanupItem("userdata", "用户数据", False))
 
     # Playwright 缓存
-    pw_cache = _playwright_cache_dir()
+    pw_cache = get_playwright_cache_dir()
     if pw_cache and pw_cache.exists():
-        size = _dir_size_mb(pw_cache)
+        size = dir_size_mb(pw_cache)
         items.append(
             CleanupItem(
                 "playwright", "Playwright 浏览器缓存", True, str(pw_cache), size
@@ -80,7 +81,7 @@ def perform(keys: list[str]) -> list[CleanupResult]:
         results.append(CleanupResult("userdata", "删除用户数据", success, message))
 
     if "playwright" in keys:
-        pw_cache = _playwright_cache_dir()
+        pw_cache = get_playwright_cache_dir()
         if pw_cache:
             success, message = _remove_playwright_cache(pw_cache)
             results.append(
@@ -136,16 +137,6 @@ def _remove_user_data() -> tuple[bool, str]:
         return False, f"删除用户数据失败: {exc}"
 
 
-def _playwright_cache_dir() -> Path | None:
-    if PLATFORM == "windows":  # get_platform() 返回 "windows"
-        return Path.home() / "AppData" / "Local" / "ms-playwright"
-    if PLATFORM == "darwin":
-        return Path.home() / "Library" / "Caches" / "ms-playwright"
-    if PLATFORM == "linux":
-        return Path.home() / ".cache" / "ms-playwright"
-    return None
-
-
 def _remove_playwright_cache(cache_dir: Path) -> tuple[bool, str]:
     if not cache_dir.exists():
         return True, "Playwright 缓存不存在，跳过"
@@ -155,13 +146,3 @@ def _remove_playwright_cache(cache_dir: Path) -> tuple[bool, str]:
     except Exception as exc:
         return False, f"删除 Playwright 缓存失败: {exc}"
 
-
-def _dir_size_mb(path: Path) -> float:
-    total = 0
-    try:
-        for file_path in path.rglob("*"):
-            if file_path.is_file():
-                total += file_path.stat().st_size
-    except OSError:
-        pass
-    return total / (1024 * 1024)

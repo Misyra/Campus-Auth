@@ -500,7 +500,7 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_config",
+                "app.services.config_service.build_runtime_dict_from_payload",
                 return_value={"retry_settings": {"max_retries": 3}},
             ),
             patch(
@@ -529,7 +529,7 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_config",
+                "app.services.config_service.build_runtime_dict_from_payload",
                 return_value={
                     "retry_settings": {"max_retries": 3, "retry_interval": 1}
                 },
@@ -559,7 +559,7 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_config",
+                "app.services.config_service.build_runtime_dict_from_payload",
                 return_value={
                     "retry_settings": {"max_retries": 2, "retry_interval": 0}
                 },
@@ -589,7 +589,7 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_config",
+                "app.services.config_service.build_runtime_dict_from_payload",
                 return_value={"retry_settings": {"max_retries": 3}},
             ),
             patch(
@@ -598,7 +598,7 @@ class TestRunLoginThenExit:
             ),
             patch(
                 "app.network.decision.check_network_status",
-                return_value=(True, "network_ok"),
+                return_value=(True, "network_ok", "tcp"),
             ),
         ):
             mock_ps.load.return_value = mock_data
@@ -621,7 +621,7 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_config",
+                "app.services.config_service.build_runtime_dict_from_payload",
                 return_value={"retry_settings": {"max_retries": 3}},
             ),
             patch(
@@ -630,7 +630,7 @@ class TestRunLoginThenExit:
             ),
             patch(
                 "app.network.decision.check_network_status",
-                return_value=(False, "network_down"),
+                return_value=(False, "network_down", "none"),
             ),
             patch("main.cleanup_orphan_browsers"),
             patch("time.sleep"),
@@ -654,7 +654,7 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_config",
+                "app.services.config_service.build_runtime_dict_from_payload",
                 return_value={"retry_settings": {"max_retries": 3}},
             ),
             patch(
@@ -915,6 +915,7 @@ class TestSignalHandler:
             patch("os._exit") as mock_exit,
             patch.object(time, "sleep", side_effect=[None, KeyboardInterrupt]),
             patch("signal.signal", side_effect=fake_signal),
+            patch("asyncio.run"),  # 防止 Runner 注册自己的 SIGINT handler
         ):
             mock_ps = MagicMock()
             mock_ps.load.return_value.system = MagicMock(
@@ -964,6 +965,7 @@ class TestSignalHandler:
             patch("signal.signal", side_effect=fake_signal),
             patch("main.os._exit"),
             patch.object(time, "sleep", side_effect=[None, KeyboardInterrupt]),
+            patch("asyncio.run"),  # 防止 Runner 注册自己的 SIGINT handler
         ):
             mock_ps = MagicMock()
             mock_ps.load.return_value.system = MagicMock(

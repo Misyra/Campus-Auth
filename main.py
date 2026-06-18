@@ -44,6 +44,7 @@ from app.utils.process import (  # noqa: E402
 )
 from app.workers.playwright_bootstrap import ensure_playwright_ready  # noqa: E402
 from app.workers.playwright_worker import cleanup_orphan_browsers  # noqa: E402
+from app.services.profile_service import create_profile_service  # noqa: E402
 
 # ==================== 浏览器控制 ====================
 
@@ -105,6 +106,23 @@ def _cmd_stop() -> None:
         cleanup_pid()
 
 
+def _wait_for_exit(pid: int, max_wait: int = 5) -> bool:
+    """等待进程退出，最多 max_wait 秒。
+
+    Args:
+        pid: 目标进程 PID。
+        max_wait: 最大等待秒数。
+
+    Returns:
+        True 表示进程已退出，False 表示超时仍在运行。
+    """
+    for _ in range(max_wait):
+        time.sleep(1)
+        if get_process_name(pid) is None:
+            return True
+    return False
+
+
 def _terminate_process(pid: int) -> None:
     """终止进程（先 SIGTERM，等待后 SIGKILL）。"""
     if is_windows():
@@ -114,28 +132,18 @@ def _terminate_process(pid: int) -> None:
             capture_output=True,
             creationflags=CREATE_NO_WINDOW_FLAG,
         )
-        # 等待进程退出
-        for _ in range(5):
-            time.sleep(1)
-            if get_process_name(pid) is None:
-                return
-        # 仍未退出，强制终止
-        subprocess.run(
-            ["taskkill", "/F", "/PID", str(pid)],
-            capture_output=True,
-            creationflags=CREATE_NO_WINDOW_FLAG,
-        )
+        if not _wait_for_exit(pid, max_wait=5):
+            # 仍未退出，强制终止
+            subprocess.run(
+                ["taskkill", "/F", "/PID", str(pid)],
+                capture_output=True,
+                creationflags=CREATE_NO_WINDOW_FLAG,
+            )
     else:
         os.kill(pid, signal.SIGTERM)
-        # 等待进程退出
-        for _ in range(5):
-            time.sleep(1)
-            try:
-                os.kill(pid, 0)
-            except OSError:
-                return
-        # SIGTERM 无效，使用 SIGKILL
-        os.kill(pid, signal.SIGKILL)
+        if not _wait_for_exit(pid, max_wait=5):
+            # SIGTERM 无效，使用 SIGKILL
+            os.kill(pid, signal.SIGKILL)
 
 
 def _cmd_autostart(action: str) -> None:
@@ -162,45 +170,40 @@ def _cmd_autostart(action: str) -> None:
 # ==================== 自动登录，成功后退出 ====================
 
 
-def _run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
-    """自动登录，成功后退出模式。
+def _load_login_config(logger):
+    """加载登录所需的运行时配置。
 
-    返回:
-        LoginResult.SUCCESS — 登录成功，应退出进程
-        LoginResult.CONFIG_ERROR — 配置错误，应退出进程
-        LoginResult.TEMPORARY_FAILURE — 临时失败，继续监控
+    Returns:
+        (runtime_config, None) — 成功时返回配置字典和 None。
+        (None, LoginResult.CONFIG_ERROR) — 失败时返回 None 和错误结果。
+    """
+    from app.services.config_service import build_runtime_dict_from_payload
+    from app.services.runtime_config import load_runtime_config
+
+    ps = create_profile_service()
+    data = ps.load()
+    payload, has_decrypt_error = load_runtime_config(ps)
+    if has_decrypt_error:
+        logger.warning("密码解密失败，请检查配置")
+        return None, LoginResult.CONFIG_ERROR
+    runtime_config = build_runtime_dict_from_payload(
+        payload, global_settings=data.global_settings
+    )
+    return runtime_config, None
+
+
+def _execute_login_with_retries(runtime_config: dict, logger) -> LoginResult:
+    """执行登录，含指数退避重试。
+
+    Args:
+        runtime_config: 运行时配置字典。
+        logger: 日志记录器。
+
+    Returns:
+        LoginResult.SUCCESS — 登录成功
+        LoginResult.TEMPORARY_FAILURE — 重试耗尽仍失败
     """
     from app.workers.playwright_worker import CMD_LOGIN, get_worker
-
-    # 加载配置
-    try:
-        from app.services.config_service import build_runtime_config
-        from app.services.runtime_config import load_runtime_config
-        from app.services.profile_service import ProfileService
-
-        ps = ProfileService(Path(__file__).parent.resolve())
-        data = ps.load()
-        payload, has_decrypt_error = load_runtime_config(ps)
-        if has_decrypt_error:
-            logger.warning("密码解密失败，请检查配置")
-            return LoginResult.CONFIG_ERROR
-        runtime_config = build_runtime_config(payload, global_settings=data.global_settings)
-    except Exception as exc:
-        logger.error("加载配置失败: {}", exc)
-        return LoginResult.CONFIG_ERROR
-
-    # 先检测网络状态，已连接则无需登录
-    try:
-        from app.network.decision import check_network_status
-
-        network_ok, reason = check_network_status(runtime_config)
-        if network_ok:
-            print("网络已连接，无需登录，正在退出...")
-            return LoginResult.SUCCESS
-        print(f"网络未连接 ({reason})，开始登录...")
-    except Exception as exc:
-        logger.debug("网络检测异常，继续尝试登录: {}", exc)
-        print("网络检测异常，开始登录...")
 
     retry_settings = runtime_config.get("retry_settings", {})
     raw = retry_settings.get("max_retries", 3)
@@ -244,6 +247,39 @@ def _run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
     return LoginResult.TEMPORARY_FAILURE
 
 
+def _run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
+    """自动登录，成功后退出模式。
+
+    返回:
+        LoginResult.SUCCESS — 登录成功，应退出进程
+        LoginResult.CONFIG_ERROR — 配置错误，应退出进程
+        LoginResult.TEMPORARY_FAILURE — 临时失败，继续监控
+    """
+    # 加载配置
+    try:
+        runtime_config, error = _load_login_config(logger)
+        if error is not None:
+            return error
+    except Exception as exc:
+        logger.error("加载配置失败: {}", exc)
+        return LoginResult.CONFIG_ERROR
+
+    # 先检测网络状态，已连接则无需登录
+    try:
+        from app.network.decision import check_network_status
+
+        network_ok, reason, _ = check_network_status(runtime_config)
+        if network_ok:
+            print("网络已连接，无需登录，正在退出...")
+            return LoginResult.SUCCESS
+        print(f"网络未连接 ({reason})，开始登录...")
+    except Exception as exc:
+        logger.debug("网络检测异常，继续尝试登录: {}", exc)
+        print("网络检测异常，开始登录...")
+
+    return _execute_login_with_retries(runtime_config, logger)
+
+
 # ==================== 启动辅助函数 ====================
 
 
@@ -263,9 +299,7 @@ def _build_app_config(
 
     # 从 settings.json 加载
     try:
-        from app.services.profile_service import ProfileService
-
-        _ps = ProfileService(Path(__file__).parent.resolve())
+        _ps = create_profile_service()
         _data = _ps.load()
         _sys = _data.global_settings
         config.startup_action = StartupAction(getattr(_sys, "startup_action", "none"))
@@ -328,11 +362,6 @@ def _handle_existing_instance(ctx: ApplicationContext, force: bool = False):
     if force:
         print(f"强制模式：正在终止已运行的实例 (PID: {pid})...")
         _terminate_process(pid)
-        # 验证进程已实际退出
-        for _ in range(10):
-            time.sleep(0.5)
-            if not is_service_running()[0]:
-                break
         cleanup_pid()
         print("已终止，继续启动...")
         return
@@ -349,6 +378,41 @@ def _handle_existing_instance(ctx: ApplicationContext, force: bool = False):
 
 
 # ==================== 运行模式 ====================
+
+
+def _create_tray(
+    port: int,
+    on_exit,
+    on_open_console=None,
+):
+    """创建并启动系统托盘图标。
+
+    Args:
+        port: Web 服务端口，用于"打开控制台"的默认 URL。
+        on_exit: 退出回调（无参数），通常为发送 SIGTERM 或 os._exit。
+        on_open_console: 打开控制台回调（无参数）。
+            轻量模式传入按需启动 Web 服务的回调；
+            完整模式为 None（使用默认 webbrowser.open 行为）。
+
+    Returns:
+        SystemTray 实例（已 start），失败时返回 None。
+    """
+    try:
+        from app.ui.system_tray import SystemTray
+
+        tray_icon = SystemTray(
+            port=port,
+            on_exit=on_exit,
+            on_open_console=on_open_console,
+        )
+        tray_icon.start()
+        return tray_icon
+    except Exception as e:
+        from app.utils.logging import get_logger
+        get_logger("startup", source="backend").warning(
+            "启动系统托盘失败: {}", e
+        )
+        return None
 
 
 
@@ -409,21 +473,16 @@ def _run_lightweight(ctx: ApplicationContext, logger):
     )
     tray_icon = None
     if features.tray_enabled:
-        try:
-            from app.ui.system_tray import SystemTray
-
-            port = resolve_port()
-            tray_icon = SystemTray(
-                port=port,
-                on_exit=lambda: (
-                    os.kill(os.getpid(), signal.SIGTERM) if hasattr(signal, "SIGTERM") else os._exit(0)
-                ),
-                on_open_console=_open_console,
-            )
-            tray_icon.start()
+        port = resolve_port()
+        tray_icon = _create_tray(
+            port=port,
+            on_exit=lambda: (
+                os.kill(os.getpid(), signal.SIGTERM) if hasattr(signal, "SIGTERM") else os._exit(0)
+            ),
+            on_open_console=_open_console,
+        )
+        if tray_icon:
             logger.info("系统托盘已启动")
-        except Exception as e:
-            logger.warning("启动系统托盘失败: {}", e)
 
     try:
         while True:
@@ -494,19 +553,14 @@ def _run_full(
     # 系统托盘
     tray_icon = None
     if features.tray_enabled:
-        try:
-            from app.ui.system_tray import SystemTray
-
-            tray_icon = SystemTray(
-                port=port,
-                on_exit=lambda: (
-                    os.kill(os.getpid(), signal.SIGTERM) if hasattr(signal, "SIGTERM") else os._exit(0)
-                ),
-            )
-            tray_icon.start()
+        tray_icon = _create_tray(
+            port=port,
+            on_exit=lambda: (
+                os.kill(os.getpid(), signal.SIGTERM) if hasattr(signal, "SIGTERM") else os._exit(0)
+            ),
+        )
+        if tray_icon:
             logger.info("系统托盘已启动，双击图标打开控制台")
-        except Exception as e:
-            logger.warning("启动系统托盘失败: {}", e)
 
     if features.browser_enabled:
         _open_browser(port, setting=True)
@@ -519,9 +573,7 @@ def _run_full(
 
     try:
         try:
-            from app.services.profile_service import ProfileService
-
-            _ps = ProfileService(Path(__file__).parent.resolve())
+            _ps = create_profile_service()
             _sys = _ps.load().global_settings
             _al = bool(_sys.access_log)
             _lr = max(1, int(_sys.log_retention_days))
@@ -539,7 +591,11 @@ def _run_full(
     finally:
         if tray_icon:
             tray_icon.stop()
-    # container.shutdown() 由 lifespan 管理，此处不再重复调用
+        # lifespan 通常已执行 shutdown，此处为防御性补调（幂等安全）
+        try:
+            asyncio.run(container.shutdown())
+        except Exception:
+            logger.exception("容器关闭失败")
 
 
 # ==================== 主启动 ====================

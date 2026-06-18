@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import socket
 from collections.abc import Iterable, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
+from app.utils.concurrent import cancel_pending, race_first_success
 from app.utils.logging import get_logger
 from app.utils.time_utils import is_in_pause_period
 
@@ -55,27 +56,35 @@ def check_pause(config: dict) -> tuple[bool, str]:
     return (False, "")
 
 
-def check_network_status(config: dict) -> tuple[bool, str]:
+def check_network_status(config: dict) -> tuple[bool, str, str]:
     """网络状态检测 (TCP / HTTP / 网址响应)。
 
     仅做网络连通性检测，不做物理网络检查和认证地址检查。
     由监控循环调用，决定是否需要触发登录。
 
     Returns:
-        (True, "network_ok")      — 网络正常，无需登录
-        (False, "all_disabled")   — 所有检测方式均未启用
-        (False, "network_down")   — 网络异常，应触发登录
+        (True, "network_ok", method)   — 网络正常，method 为 tcp/http/url/local_only
+        (False, "all_disabled", "none") — 所有检测方式均未启用
+        (False, "network_down", "none") — 网络异常，应触发登录
     """
     monitor_config = config.get("monitor", {})
     enable_tcp = monitor_config.get("enable_tcp_check", False)
     enable_http = monitor_config.get("enable_http_check", False)
-    url_checks = monitor_config.get("url_check_urls", None)
+
+    # C09: 在此处解析 url_check_urls，避免 decision.py 使用原始字符串
+    from app.utils.network import parse_url_checks
+
+    url_checks_raw = monitor_config.get("url_check_urls", None)
+    if isinstance(url_checks_raw, str) and url_checks_raw.strip():
+        url_checks = parse_url_checks(url_checks_raw)
+    else:
+        url_checks = url_checks_raw
     enable_url = bool(url_checks)
 
     # 所有检测都未启用
     if not enable_tcp and not enable_http and not enable_url:
         logger.warning("所有网络检测方式均已关闭，无法判断网络状态")
-        return (False, "all_disabled")
+        return (False, "all_disabled", "none")
 
     from app.utils.network import parse_ping_targets
 
@@ -97,8 +106,15 @@ def check_network_status(config: dict) -> tuple[bool, str]:
     )
 
     if ok:
-        return (True, "network_ok")
-    return (False, "network_down")
+        # M21: 返回实际使用的检测方法
+        if enable_tcp:
+            return (True, "network_ok", "tcp")
+        if enable_http:
+            return (True, "network_ok", "http")
+        if enable_url:
+            return (True, "network_ok", "url")
+        return (True, "network_ok", "local_only")
+    return (False, "network_down", "none")
 
 
 def check_login_prerequisites(config: dict) -> tuple[bool, str]:
@@ -160,8 +176,6 @@ def is_network_available(
         "开" if enable_url else "关",
     )
 
-    from concurrent.futures import as_completed
-
     pool = _decision_executor
     futures = {}
     if enable_tcp:
@@ -198,15 +212,14 @@ def is_network_available(
                 logger.debug("检测 {} 异常: {}", kind, exc)
                 ok = False
             if not ok:
-                for f in futures:
-                    if not f.done():
-                        f.cancel()
+                # AND 逻辑：任一检测方法失败即判定网络不可用。
+                # 这是故意设计 — 宁可误报断网触发多余登录，不可漏报导致断网不处理。
+                # HTTP 200 可能是 captive portal 拦截页面，需 TCP/URL 同时验证。
+                cancel_pending(futures)
                 return False
     except TimeoutError:
         logger.warning("网络检测超时 ({:.1f}s)，视为网络异常", overall_timeout)
-        for f in futures:
-            if not f.done():
-                f.cancel()
+        cancel_pending(futures)
         return False
 
     return True
@@ -236,8 +249,6 @@ def _is_auth_url_reachable(
     # 有 extra_targets 时只检测自定义目标，不回退到 auth_url。
     # 这是故意设计：用户配置 extra_targets 意味着用自定义目标替代认证地址做可达性判断。
     if extra_targets:
-        from concurrent.futures import as_completed
-
         from app.utils.network import parse_host_port
 
         try:
@@ -247,21 +258,19 @@ def _is_auth_url_reachable(
             targets = []
         if targets:
             futures = {
-                _executor.submit(_check_host_port, host, port, f"{host}:{port}"): (
-                    host,
-                    port,
-                )
+                _executor.submit(
+                    _check_host_port, host, port, f"{host}:{port}"
+                ): (host, port)
                 for host, port in targets
             }
-            try:
-                for future in as_completed(futures, timeout=4):
-                    if future.result(timeout=1):
-                        # 任一目标可达即取消其余任务
-                        for f in futures:
-                            f.cancel()
-                        return True
-            except Exception:
-                logger.debug("附加目标并发检测异常", exc_info=True)
+            if race_first_success(
+                futures,
+                timeout=4,
+                label="认证可达性",
+                success_prefix="",
+                fail_prefix="",
+            ):
+                return True
         logger.info("自定义检测目标均不可达")
         return False
 

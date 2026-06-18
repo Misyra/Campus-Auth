@@ -4,16 +4,27 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
+	"syscall"
 )
 
 const (
-	uvVersion = "0.7.3"
+	uvVersion = "0.11.21"
 )
+
+// uvSHA256 各架构对应的 SHA256 校验和
+var uvSHA256 = map[string]string{
+	"uv-x86_64-pc-windows-msvc.zip":  "ace861f360c6de2babedc1607d0f454b6b09a820dbc8182dc15af927e4df9589",
+	"uv-aarch64-pc-windows-msvc.zip": "74e443f8004022dde57a1bd0d10c097830f9ea8feb4ec927db52cd5d805c2f48",
+}
 
 // getUvFilename 根据系统架构返回对应的 uv 文件名
 func getUvFilename() string {
@@ -151,15 +162,14 @@ func downloadUv(uvDir, uvExe string) error {
 			continue
 		}
 
-		// 校验 zip 文件有效性（用 tar 测试）
-		cmd = exec.Command("tar", "-tf", archive)
-		cmd.Stdout = nil
-		cmd.Stderr = nil
-		if err := cmd.Run(); err != nil {
-			fmt.Println("  [!] 文件无效，尝试下一个源...")
+		// SHA256 校验
+		fmt.Print("  校验 SHA256...")
+		if err := verifySHA256(archive, uvFilename); err != nil {
+			fmt.Printf(" 失败: %v\n", err)
 			os.Remove(archive)
 			continue
 		}
+		fmt.Println(" 通过")
 
 		// 解压
 		fmt.Println("正在解压...")
@@ -183,13 +193,53 @@ func downloadUv(uvDir, uvExe string) error {
 	return fmt.Errorf("所有下载源均失败\n    请手动安装 uv: https://docs.astral.sh/uv/")
 }
 
-// runCommand 运行外部命令，实时输出
+// verifySHA256 校验文件的 SHA256
+func verifySHA256(filePath, filename string) error {
+	expected, ok := uvSHA256[filename]
+	if !ok {
+		return fmt.Errorf("未知文件: %s", filename)
+	}
+
+	f, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return err
+	}
+
+	actual := hex.EncodeToString(h.Sum(nil))
+	if actual != expected {
+		return fmt.Errorf("期望 %s, 实际 %s", expected, actual)
+	}
+	return nil
+}
+
+// runCommand 运行外部命令，实时输出，转发信号给子进程
 func runCommand(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	// 转发信号给子进程
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		if cmd.Process != nil {
+			cmd.Process.Signal(os.Interrupt)
+		}
+	}()
+
+	return cmd.Wait()
 }
 
 // fatal 输出错误信息并退出

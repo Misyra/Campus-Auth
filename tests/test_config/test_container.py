@@ -269,12 +269,13 @@ class TestShutdown:
                     await asyncio.sleep(1)
 
             container_for_shutdown._ws_drain_task = asyncio.create_task(_dummy_loop())
+            container_for_shutdown._web_services_started = True  # 复用 stop_web_services 需要此标志
             # 让 task 开始运行
             await asyncio.sleep(0.01)
 
             await container_for_shutdown.shutdown()
 
-            assert container_for_shutdown._ws_drain_task.cancelled()
+            assert container_for_shutdown._ws_drain_task is None
 
         asyncio.run(_run())
 

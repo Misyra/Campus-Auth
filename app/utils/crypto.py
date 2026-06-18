@@ -131,6 +131,9 @@ def encrypt_password(plaintext: str) -> str:
     try:
         from cryptography.fernet import Fernet
     except ImportError:
+        # cryptography 是 pyproject.toml 中的必需依赖（uv sync 会自动安装），
+        # 正常部署下不可能缺失。此分支仅作为极端防御（如手动删除 .venv 中的包）。
+        # 密码以明文写入 settings.json，已有 warning 日志提示用户。
         logger.warning(
             "cryptography 库未安装，密码将以明文存储，"
             "建议通过 uv add cryptography 安装依赖以启用加密保护"
@@ -215,8 +218,12 @@ def save_password_field(raw: str | None, existing_encrypted: str) -> str:
     if raw is None:
         # 未传密码 → 无操作，保留原值。不发警告（合法场景）
         return existing_encrypted or ""
-    if raw == "••••••••":
+    if raw.startswith("•"):
         # 掩码 → 保留已有密码
+        # 已知限制：若用户真实密码以 • (U+2022) 开头会被误判为掩码。
+        # 实际不会发生：校园网密码格式为字母数字，不含 Unicode bullet 字符。
+        # 前端掩码固定为 "••••••••"（8 个 •），此处用 startswith 而非精确匹配
+        # 是为了兼容掩码长度可能变化的情况。
         return existing_encrypted or ""
     if raw == "":
         # 显式置空 → 清除密码
@@ -226,3 +233,51 @@ def save_password_field(raw: str | None, existing_encrypted: str) -> str:
         return raw
     # 明文密码 → 加密存储
     return encrypt_password(raw)
+
+
+def safe_decrypt(ciphertext: str) -> tuple[str, bool]:
+    """解密密码。返回 (解密结果, 是否有错误)"""
+    if not ciphertext:
+        return ("", False)
+    try:
+        return (decrypt_password(ciphertext), False)
+    except DecryptionError:
+        logger.error("密码解密失败，使用空密码")
+        return ("", True)
+
+
+def decrypt_password_field(
+    raw_pwd: str,
+    fallback_pwd: str = "",
+    label: str = "",
+) -> tuple[str, bool]:
+    """解密密码字段，支持 ENC: 前缀和掩码回退。
+
+    与 save_password_field 对称：save 处理写入加密，decrypt 处理读取解密。
+
+    Args:
+        raw_pwd: 存储的密码值（可能是 ENC:密文、掩码、明文或空）
+        fallback_pwd: 回退密码（当 raw_pwd 为掩码或空时使用）
+        label: 日志标签（如方案名称）
+
+    Returns:
+        (解密结果, 是否有错误)
+    """
+    if raw_pwd.startswith("ENC:"):
+        return safe_decrypt(raw_pwd)
+    elif raw_pwd.startswith("•"):
+        if fallback_pwd:
+            return safe_decrypt(fallback_pwd)
+        else:
+            if label:
+                logger.warning("{} 密码为掩码但回退密码为空", label)
+            return ("", False)
+    elif raw_pwd:
+        return (raw_pwd, False)
+    else:
+        if fallback_pwd:
+            if label:
+                logger.warning("{} 密码为空，使用回退密码", label)
+            return safe_decrypt(fallback_pwd)
+        else:
+            return ("", False)

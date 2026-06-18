@@ -1,5 +1,394 @@
 # 修改日志
 
+## 2026-06-18
+
+### refactor
+- `app/services/autostart.py` VBS 自启动脚本删除 PID 检测逻辑，职责收敛到 Python
+  - `_build_vbs_content` 从 43 行简化为 7 行，删除全部 PID 文件解析和 WMI 进程检测
+  - VBS 仅负责启动应用，重复实例检测由 `main.py → _handle_existing_instance → is_service_running` 统一处理
+  - 修复 PID 复用误判：VBS 的 `Win32_Process where ProcessId = pid` 无法区分 PID 被其他进程占用，Python 的 `create_time` 验证可以
+  - 保留 `On Error Resume Next` 防止 exe 被删/路径变化时弹出错误框
+  - 新增 `test_minimal_output_structure` 测试验证 VBS 最小输出结构，防止未来再悄悄加入 PID 解析
+  - 更新 2 个测试文件的断言：`test_contains_pid_check` → `test_no_pid_parsing`/`test_no_pid_check`
+
+### fix
+- `app/services/engine.py` 优化手动登录日志消息，消除"提交成功"与"登录成功"的歧义
+  - `run_manual_login` 日志从"手动登录成功"改为"手动登录任务已提交"，返回消息从"手动登录成功：登录已提交"改为"登录已提交"
+  - `_do_async_login` 完成回调新增日志：成功时打印"手动/自动登录完成: {message}"，失败时打印"手动/自动登录失败: {message}"
+  - 新增 `from concurrent.futures import Future` 导入
+  - 同步更新 3 个测试文件的断言（`test_api_monitor_routes.py`、`test_routers.py`、`test_engine.py`、`test_login_flow.py`）
+
+### refactor
+
+### fix
+- `main.py` `_handle_existing_instance` 删除 force 模式下重复的等待循环
+  - `_terminate_process` 内部已调用 `_wait_for_exit(pid, max_wait=5)` 等待进程退出
+  - 外层 `for _ in range(10): time.sleep(0.5)` 又等 5 秒是冗余的
+  - `cleanup_pid()` 无条件调用，行为不变
+
+### refactor
+- `app/services/runtime_config.py` 和 `app/services/config_service.py` 函数改名消除配置管道命名混淆（Task 3: P3）
+  - `_build_config_payload` → `load_payload_from_profiles`（读方向：ProfileService → MonitorConfigPayload）
+  - `build_runtime_config` → `build_runtime_dict_from_payload`（构建方向：MonitorConfigPayload → dict）
+  - 函数名直接表达输入→输出方向，消除跨文件命名歧义
+  - 同步更新 11 个文件的导入、调用和 mock 路径
+  - 367 个测试全部通过（2 个已有失败与本次改动无关）
+
+### refactor
+- `app/utils/crypto.py` 密码处理函数集中到 crypto.py（Task 2: P2）
+  - `safe_decrypt` 和 `decrypt_password_field` 从 `runtime_config.py` 移到 `crypto.py`
+  - 与 `save_password_field` / `decrypt_password` / `mask_password` 放在一起，读写对称，集中管理
+  - `runtime_config.py` 改为从 `crypto.py` 导入，删除本地 `_safe_decrypt` / `_decrypt_password_field`
+  - 测试文件更新导入路径和 mock 路径
+
+### fix
+- `app/services/runtime_config.py` 修复 profile override 覆盖语义（Task 1: P1）
+  - PROFILE_OVERRIDE_FIELDS 中的字段应实现"留空则使用全局"语义，而非"总是排除全局值"
+  - 改为先用 `GLOBAL_SETTINGS_FIELDS` 全量合并全局值，再用 profile 非空值覆盖 `PROFILE_OVERRIDE_FIELDS` 字段
+  - 修复 `test_global_active_task_used_when_profile_empty` 测试失败：profile.active_task="" 时应使用全局值
+
+### docs
+- 新增 `docs/api-conventions.md` API 错误响应规范文档（Task 5: R4）
+  - 定义 5 种场景的响应方式：资源不存在→404，参数非法→422，权限→403，业务失败→ActionResponse(success=False)，程序异常→500
+  - 区分业务可预期失败与程序异常，明确前端处理策略
+
+### fix
+- `app/api/scheduled_tasks.py` 资源不存在改用 HTTPException(404) 替代 ActionResponse(success=False)（Task 5: R4）
+  - `update_scheduled_task`、`run_scheduled_task`、`toggle_scheduled_task` 三处"定时任务不存在"从 ActionResponse 改为 HTTPException(404)
+  - 与 profiles/scripts/tasks/icons/tools 等其他 API 文件保持一致
+
+### fix
+- `app/api/ocr.py` 程序异常改用 HTTPException(500) 替代 ActionResponse(success=False)（Task 5: R4）
+  - `ocr_install` 和 `ocr_uninstall` 两个 except Exception 分支从 ActionResponse 改为 HTTPException(500)
+  - 安装超时、uv 未找到等业务可预期失败保持 ActionResponse 不变
+
+### refactor
+- `app/schemas.py` ProfileSettings → AuthProfile，GlobalSettings → SystemSettings（Task 4: R3）
+  - `ProfileSettings` 重命名为 `AuthProfile`，docstring 改为"认证方案 — 仅含凭证和匹配规则"
+  - `GlobalSettings` 重命名为 `SystemSettings`，docstring 改为"系统运行配置 — 监控、浏览器、日志、暂停、重试等"
+  - `_MonitorFieldsMixin` docstring 改为"Profile 可覆盖的全局默认值（监控、认证、运营商等）"
+  - `_CommonSettingsMixin` docstring 中 GlobalSettings 引用更新为 SystemSettings
+  - `ProfilesData` 字段类型和工厂同步更新
+  - `GLOBAL_SETTINGS_FIELDS` 注释和 model_fields 引用同步更新
+  - 同步更新 6 个服务/API 文件和 10 个测试文件的 import 和类型注解
+  - 367 个测试全部通过（2 个已有失败与本次改动无关）
+
+### refactor
+- `app/services/profile_service.py` 删除 ProfileService 内存缓存（Task 3: R2）
+  - 删除 `__init__` 中 `_data` 实例变量
+  - `_load_unsafe` 每次从磁盘读取，不再缓存
+  - `_save_unsafe` 删除缓存更新
+  - 添加注释说明不缓存原因：settings.json 很小（<10KB），多实例场景下缓存一致性成本高于收益
+  - 更新测试 `test_load_caches_data` 为 `test_load_returns_new_instance_each_time`
+
+### refactor
+- `app/services/engine.py` 拆分 `record_log` 双重职责（Task 2: R5）
+  - `record_log` 不再隐式触发 `_update_status_snapshot`
+  - 新增 `notify_network_state_changed()` 显式方法
+  - `test_network` 方法中的调用点更新为显式调用 `notify_network_state_changed()`
+  - 设计原则：任何状态变化都应该由显式方法触发，而不是通过副作用间接传播
+
+### fix
+- `app/api/scheduled_tasks.py` 4 个路由从 `async def` 改为 `def`（Task 1: R1 async 路由修正）
+  - `create_scheduled_task`、`update_scheduled_task`、`run_scheduled_task`、`toggle_scheduled_task`
+  - 这 4 个函数体内无任何 `await`，声明为 `async def` 会导致 FastAPI 在主事件循环线程内同步执行
+  - `save_task()`/`start_scheduler()` 等同步阻塞调用会阻塞所有其他并发请求
+  - 改为 `def` 后 FastAPI 自动将路由丢到线程池执行，释放事件循环
+  - `run_scheduled_task` 内部嵌套的 `async def _execute()` 保持不变（含 `await asyncio.to_thread`）
+
+### docs
+- 新增 `docs/superpowers/specs/2026-06-18-backend-architecture-review.md` 后端架构审查报告
+  - 13 项架构层面问题（3 高 / 5 中 / 5 低），独立验证 12 项完全确认、1 项部分确认
+  - 涵盖：async/sync 路由反模式、ProfileService 多实例缓存不一致、代码重复、配置管道职责模糊、API 错误响应不统一等
+  - 附建议落地顺序（12 阶段，~23-31h 总工时）
+
+### fix
+- `app/container.py` 移除误导性"空闲卸载"日志消息
+  - `stop_web_services()` 的日志从"Web 服务已停止（空闲卸载）"改为"Web 服务已停止"
+  - 该方法仅被 `shutdown()` 复用，不存在独立的空闲卸载机制
+  - 同步清理方法 docstring 中的"空闲卸载"描述
+
+### fix
+- `tests/test_services/test_system_services.py` 修复 PR6 提取共享函数后的测试导入和断言（Task 10）
+  - `_dir_size_mb` 改为从 `app.utils.files.dir_size_mb` 导入
+  - `_playwright_cache_dir` 改为从 `app.utils.platform.get_playwright_cache_dir` 导入
+  - `TestPlaywrightCacheDir` 补丁路径从 `app.services.uninstall.PLATFORM` 改为 `app.utils.platform.get_platform`
+  - `TestDirSizeMb.test_with_files` 写入数据从 11 字节增至 1MB+，避免 `round(..., 1)` 精度截断为 0.0
+
+### refactor
+- 创建共享 `engine_factory` fixture，消除 test_monitor_service/test_engine 重复工厂（PR6 Task 8）
+
+### refactor
+- 创建共享 `engine_factory` fixture，消除 test_monitor_service/test_engine 重复工厂（PR6 Task 8）
+  - 新建 `tests/test_services/conftest.py`，提供 `engine_factory` fixture，支持标准模式（`engine_factory()`）和原始模式（`engine_factory(raw=True)`）
+  - `test_monitor_service.py`：删除 `_make_monitor_service` 函数，16 处调用点替换为 `engine_factory()`，每个方法签名添加 `engine_factory` 参数
+  - `test_engine.py`：删除 `_make_engine` 和 `_make_raw_engine` 两个函数，约 90 处调用点替换为 `engine_factory()`/`engine_factory(raw=True)`
+  - 167 个测试全部通过
+
+### refactor
+- `frontend/js/tasks/editor.js` 提取 `_showCountdownModal` 辅助函数，消除重复倒计时模式（PR6 Task 7）
+  - 新增 `_clearCountdownTimer(timerRefKey)` 和 `_showCountdownModal(modalSelector, countdownObj, countdownKey, timerRefKey, initialSeconds)` 两个辅助方法
+  - `showDangerConfirm` 从 17 行简化为 7 行，委托 `_showCountdownModal` 处理倒计时逻辑
+  - `confirmRepoImport` 从 16 行简化为 3 行
+  - `_cancelDangerConfirm` 和 `cancelRepoDisclaimer` 的清理逻辑保持不变，与辅助函数不冲突
+  - 净减 2 行代码（-25 +23）
+
+- 提取浏览器选择共享 partial，消除 wizard/settings 重复 HTML（PR6 Task 6）
+  - 创建 `frontend/partials/shared/browser-selection.html`：Firefox 兼容性警告 + 自定义浏览器说明 + 自定义路径输入
+  - `frontend/partials/wizard.html` 第 308-353 行替换为 `data-include` 引用
+  - `frontend/partials/pages/settings/settings-browser.html` 第 66-112 行替换为 `data-include` 引用
+  - `frontend/js/methods/ui.js` 新增 `getActiveBrowserChannel()` 和 `onBrowserCustomPathInput()` 方法
+  - `getActiveBrowserChannel()` 兼容 wizard（`selectedBrowser`）和 settings（`config.browser_channel`）两种模式
+  - `onBrowserCustomPathInput()` 在 settings 模式下触发 `onConfigChange` 自动保存
+  - 净减 27 行代码（-93 +66）
+
+### chore
+- `frontend/partials/pages/tasks.html` 和 `frontend/partials/pages/scripts.html` 删除不存在的 `onDragLeave` 拖拽事件绑定（PR5 Task 8）
+  - `drag.js` 中未定义 `onDragLeave` 方法，拖拽排序使用实时交换模式（在 `onDragOver` 中完成），不需要 `dragleave` 事件
+
+- `frontend/partials/pages/settings/settings-monitor.html` 删除不存在的 `toggleUrlCheck` 调用（PR5 Task 7）
+  - `@change` 事件绑定中移除 `toggleUrlCheck(); `，仅保留 `onConfigChange` 调用
+  - `urlCheckEnabled` 是 computed getter/setter，setter 已处理 `url_check_urls` 逻辑，无需额外方法
+
+### style
+- `frontend/styles/pages/tasks.css` 三个 overlay 提取 `.overlay-base` 共享属性（PR5 Task 5）
+  - 新增 `.overlay-base` 包含 `position: fixed`、`inset: 0`、`display: flex`、居中对齐、`backdrop-filter` 等 5 个共享属性
+  - `.danger-overlay`、`.debug-overlay`、`.repo-overlay` 各自仅保留 `background`、`z-index`、`animation` 差异属性
+  - `frontend/partials/pages/tasks.html` 四个 overlay div 添加 `overlay-base` class
+
+### refactor
+- `frontend/js/methods/ui.js` `nextWizardStep` 使用 `validateWizardStep` 替代 inline 验证（PR5 Task 2）
+  - 35 行 if-else 验证逻辑简化为 4 行委托调用
+  - 步骤 4 的 `browser_channel` 同步保留在验证通过后执行
+
+### refactor
+- `frontend/js/app-options.js` 向导验证逻辑统一为 `validateWizardStep` 单点定义（PR5 Task 1）
+  - 新增 `validateWizardStep(step, data)` 纯函数方法，集中定义 step 1/2/4 的验证规则和错误消息
+  - `canProceed` computed 从 20 行 if-else 简化为一行委托调用
+  - `wizardErrors` computed 从 18 行条件逻辑简化为一行委托调用
+  - 消除 `canProceed` 与 `wizardErrors` 之间的验证逻辑重复
+
+### fix
+- 测试文件同步修复：旧函数名 `_cleanup_temp_screenshots`/`_cleanup_old_screenshots` 更新为合并后的 `_cleanup_screenshots`（Task 6）
+  - `tests/test_app/test_application_logic.py`：import 从 `_cleanup_old_screenshots, _cleanup_temp_screenshots` 改为 `_cleanup_screenshots`，两个测试类合并为 `TestCleanupScreenshots`，每个测试同时 mock `TEMP_DIR` 和 `SCREENSHOTS_DIR`
+  - `tests/test_integration/test_app_startup.py`：`mock_deps` fixture 中两处 patch 合并为单个 `patch("app.application._cleanup_screenshots")`
+
+### refactor
+- `app/application.py` 合并 `_cleanup_temp_screenshots` + `_cleanup_old_screenshots` 为 `_cleanup_screenshots`（Task 5）
+  - 两个独立函数合并为一个统一的启动时截图清理函数
+  - 使用模块级 `time` 导入替代函数内 `import time as _time` 临时导入
+  - `_create_lifespan` 中两处独立调用替换为单次 `_cleanup_screenshots()` 调用
+
+### refactor
+- `app/application.py` create_app 拆分为 `_create_lifespan`/`_register_routes`/`_register_static`（Task 4）
+  - 提取 `_create_lifespan(existing_container)` 封装生命周期管理逻辑，返回 lifespan context manager
+  - 提取 `_register_routes(app)` 封装 16 个 API router 注册
+  - 提取 `_register_static(app)` 封装首页路由和 3 个静态文件挂载
+  - `create_app` 简化为协调函数：创建 lifespan → 创建 FastAPI → 配置 CORS → 注册中间件 → 注册 WebSocket → 注册路由和静态文件
+  - 修复原 `_wait_shutdown` 中引用外部 `_app` 闭包变量的问题，改为使用 `app_instance` 参数
+
+### refactor
+- `main.py` 提取 `_load_login_config` 和 `_execute_login_with_retries`（Task 3）
+  - `_load_login_config(logger)` 封装配置加载逻辑，返回 `(runtime_config, None)` 或 `(None, LoginResult.CONFIG_ERROR)`
+  - `_execute_login_with_retries(runtime_config, logger)` 封装指数退避重试逻辑
+  - `_run_login_then_exit` 简化为协调函数：加载配置 → 网络检测 → 重试登录
+
+### refactor
+- `main.py` 工厂替换 ProfileService + 提取 `_create_tray`/`_wait_for_exit`（Task 2）
+  - 3 处 `ProfileService(Path(__file__).parent.resolve())` 替换为 `create_profile_service()` 工厂调用
+  - 顶部新增 `from app.services.profile_service import create_profile_service` import
+  - 提取 `_wait_for_exit(pid, max_wait)` 辅助函数，`_terminate_process` 改用该函数
+  - 提取 `_create_tray(port, on_exit, on_open_console)` 工厂函数，`_run_lightweight` 和 `_run_full` 改用该函数
+  - 托盘创建的 try/except 移入 `_create_tray` 内部，调用方通过返回值判断成功/失败
+
+### fix
+- `tests/test_services/test_scheduler_service.py` 修复 `test_timeout_clamped_to_max` 和 `test_audit_log_called` 两个测试 mock 路径过时
+  - `5cf7473` 将 `run_sync` 从 `subprocess.run` 改为 `subprocess.Popen`，但测试中 mock 路径未同步更新
+  - mock 路径从 `app.utils.shell_policy.subprocess.run` 改为 `app.utils.shell_policy.subprocess.Popen`
+  - mock 返回值适配 Popen 接口：`communicate()` 返回 `(stdout, stderr)` 元组，`returncode` 为实例属性
+
+### refactor
+- `app/services/engine.py` 添加 `set_dashboard_sink` 公共方法，`app/container.py` 改用该方法替代直接访问 `_dashboard_sink` 私有属性
+
+### refactor
+- `app/network/decision.py` 使用 `race_first_success`/`cancel_pending` 替代内联竞态代码 + import 移至顶部
+  - `_is_auth_url_reachable` extra_targets 分支的 OR 竞态替换为 `race_first_success` 调用
+  - `is_network_available` AND 竞态中的内联取消循环替换为 `cancel_pending` 调用
+  - 2 处内联 `from concurrent.futures import as_completed` 移至顶部 import
+  - 新增 `from app.utils.concurrent import cancel_pending, race_first_success` 顶部 import
+  - 净减 9 行代码（-24 +15）
+
+### refactor
+- `app/network/probes.py` 3 个检测函数使用 `race_first_success` 消除竞态重复代码
+  - `is_network_available_socket`、`is_network_available_url`、`is_network_available_http` 的 futures 竞态循环替换为 `race_first_success()` 调用
+  - 移除不再需要的 `as_completed` 导入
+  - worker 函数（`_connect_one`、`_check_url`、`_check_one`）保持不变
+  - 净减 26 行代码（-49 +23）
+
+### fix
+- `app/services/runtime_config.py` `_build_config_payload` 修复 profile 覆盖字段被 global_settings 覆盖的 bug
+  - `auth_url`、`carrier`、`carrier_custom` 从 `_MonitorFieldsMixin` 继承后进入 `GLOBAL_SETTINGS_FIELDS`，导致 `payload_dict.update(gs_dict)` 覆盖 profile 中的独立值
+  - 新增 `_PROFILE_OVERRIDE` 排除集合，从 `gs_dict` 中排除这 3 个 profile 覆盖字段
+  - 修复 `test_auth_url_from_system` 和 `test_uses_profile_auth_url` 两个测试失败
+
+### fix
+- `tests/test_services/test_config_service.py` `test_does_not_update_credentials` 断言更新
+  - `auth_url` 和 `carrier` 现在在 `_MonitorFieldsMixin` 中（`GlobalSettings` 与 `MonitorConfigPayload` 共享），会被 `_update_global_settings` 同步更新
+  - 断言从 `not hasattr(global_settings, "auth_url/carrier")` 改为验证值同步正确
+  - 纯凭证字段（`username`、`password`）仍在 `_SystemFieldsMixin` 中，不会被同步——保持原有语义
+
+### refactor
+- `app/services/runtime_config.py` `_build_config_payload` 53 行逐字段取值改为 `model_dump(include=GLOBAL_SETTINGS_FIELDS)` 一行
+  - 使用 `GLOBAL_SETTINGS_FIELDS` 交集 + `model_dump(include=...)` 替代逐字段 `data.global_settings.xxx` 取值
+  - `source_levels` 不在 `MonitorConfigPayload` 中，自然被排除——与重构前行为一致
+
+### refactor
+- `app/schemas.py` GlobalSettings 继承 Mixin 消除 12 个重复字段
+  - GlobalSettings 改为继承 `_MonitorFieldsMixin` + `_CommonSettingsMixin`
+  - 移除 12 个已在 Mixin 中定义的重复字段声明（仅保留 `source_levels` 和 `network_check_timeout`）
+  - 移除 `_MonitorFieldsMixin` 中的 `block_proxy`（保留在 `_CommonSettingsMixin`，避免 MRO 冲突）
+  - `url_check_urls` 默认值改用 `DEFAULT_URL_CHECK_URLS` 常量
+  - 添加 `GLOBAL_SETTINGS_FIELDS` 共享常量供 config pipeline 使用
+
+### refactor
+- `tests/test_utils/test_logging_fix.py` 1 个 `inspect.getsource()` 源码检查测试替换为行为测试
+  - `test_should_emit_uses_class_constant`（源码检查）→ `test_should_emit_uses_class_constant_via_behavior`（行为测试：修改类属性验证 should_emit 引用类常量）
+
+### refactor
+- `tests/test_app/test_application_fix.py` 7 个 `inspect.getsource()` 源码检查测试替换为行为测试
+  - `TestSourceLevelsConfig`（2 个源码检查）→ `TestRunFunctionSafety`（2 个行为测试：callable 验证、import 无 NameError）
+  - `TestWebSocketKeyErrorHandling`（3 个源码检查）→ `TestWebSocketMessageHandling`（2 个行为测试：无效 JSON 处理、未知消息类型处理）
+  - `TestWindowsSigterm`（2 个源码检查 + 1 个信息性测试）→ `TestWindowsSigterm`（1 个行为测试 + 1 个信息性测试：lifespan 信号注册、平台 SIGTERM 可用性）
+
+### refactor
+- 测试文件迁移使用共享 `api_client` fixture（8 个文件）
+  - `tests/test_api/test_api_tasks_routes.py`：删除本地 `client` fixture，使用 `api_client` + `_setup_task_mocks` 辅助函数
+  - `tests/test_api/test_browsers.py`：删除本地 `client` fixture，使用 `api_client` + `_setup_browser_mocks` 辅助函数
+  - `tests/test_api/test_scheduled_tasks_fix.py`：删除本地 `client` fixture，使用 `api_client`，mock 配置移至各测试方法内
+  - `tests/test_api/test_api_autostart_routes.py`：删除本地 `client` fixture，使用 `api_client`，mock 配置移至各测试方法内；移除不再需要的 `TestClient`、`MonitorConfigPayload`、`MonitorStatusResponse`、`pytest`、`Path` 导入
+  - `tests/test_api/test_api_config_routes.py`：删除本地 `client` fixture，使用 `api_client`，mock 配置移至各测试方法内；移除不再需要的 `TestClient`、`MagicMock`、`pytest`、`MonitorStatusResponse` 导入
+  - `tests/test_api/test_api_repo_routes.py`：删除本地 `client` fixture，使用 `api_client`，mock 配置移至各测试方法内；移除不再需要的 `MagicMock`、`pytest`、`TestClient` 导入
+  - `tests/test_api/test_api_scripts_routes.py`：删除本地 `client` fixture，使用 `api_client`，mock 配置移至各测试方法内；移除不再需要的 `MagicMock`、`pytest`、`TestClient` 导入
+  - `tests/test_api/test_api_system_routes.py`：删除本地 `client` fixture，使用 `api_client`，mock 配置移至各测试方法内；移除不再需要的 `MagicMock`、`pytest`、`TestClient` 导入
+  - 共享 fixture 定义于 `tests/test_api/conftest.py`，消除 8 处重复的 `tmp_path` 目录创建和 `app.constants` patch 代码
+
+### fix
+- `app/workers/playwright_worker.py` 修复 stealth_mode Bug + 防御性改进（4 项）
+
+### fix
+- `app/services/engine.py` 修复 ScheduleEngine 两个接口契约问题
+  - `_handle_reload` / `_handle_apply_profile` 设置 `cmd.response_data`，调用方可区分成功/失败（与 `_handle_login` 协议一致）
+  - `reload_config()` / `apply_profile()` 返回 `tuple[bool, str]`，超时/队列满/执行失败均有明确返回
+  - `run_manual_login()` finally 块加 `self._manual_login_lock`，消除读加锁写不加锁的数据竞争
+  - `_apply_stealth_and_routes` 改用 `context.add_init_script` 替代 `page.add_init_script`，stealth 脚本自动继承到所有新页面（含 popup、debug_page）
+  - `_handle_debug_stop` 删除新页面后重新应用 stealth 的冗余代码（context 级 init_script 已自动继承）
+  - `start()` 新增 `if self.is_alive(): return` 重复启动保护
+  - `submit()` 超时判定改用 `event.wait()` 返回值，替代检查 `response_data is not None`（后者在返回值为 None 时误判为超时）
+
+## 2026-06-17
+
+### refactor
+- `app/services/task_registry.py` `save_task` 改为磁盘优先模式（Task 8）
+  - 先写磁盘（锁外），成功后再更新缓存（锁内），I/O 不在全局锁内
+  - 崩溃恢复更安全：磁盘是新数据，缓存是旧数据，重启后从磁盘恢复
+  - `delete_task` 已是磁盘优先模式，无需修改
+
+### fix
+- `app/services/task_executor.py` 登录并发保护：`execute_login_async` 内部创建默认 `cancel_event`
+  - `cancel_event is None` 时内部创建 `threading.Event()`，确保执行器始终拥有取消令牌
+  - 新增 `cancel_login()` 方法，设置 `_login_cancel_event` 取消正在进行的登录
+  - `NullTaskExecutor` 添加 `cancel_login()` 方法（返回 None）
+  - 引擎调用 `execute_login_async(skip_pause_check=...)` 不传 `cancel_event` 时不再无法取消登录
+
+### fix
+- `app/utils/shell_policy.py` `run_sync` 超时后杀死子进程树（Task 6）
+  - `subprocess.run(timeout=...)` 改为 `Popen + communicate(timeout)` 模式，超时时调用 `_kill_process_tree_sync`
+  - 新增 `_kill_process_tree_sync(pid)` 同步版进程树清理方法，复用 `_kill_process_tree` 的 psutil 逻辑
+  - 原超时仅返回错误码，子进程（如 chrome）继续运行，现在与异步 `run()` 行为一致
+- `tests/test_utils/test_shell_policy.py` 更新测试适配 `run_sync` 改用 `Popen`
+  - 5 个测试从 mock `subprocess.run` 改为 mock `subprocess.Popen`
+  - `test_timeout_expired_returns_minus_one` 新增 `_kill_process_tree_sync` 调用断言
+
+### fix
+- `app/workers/playwright_bootstrap.py` `_run()` 添加 `BOOTSTRAP_TIMEOUT=300` 超时保护
+  - `subprocess.run` 未设置 timeout 时下载卡住会永久占用 `_BOOTSTRAP_LOCK`
+  - 新增模块级常量 `BOOTSTRAP_TIMEOUT = 300`，传入 `subprocess.run` 的 `timeout` 参数
+
+### fix
+- 配置重载顺序修复，避免重载失败时监控被意外停止
+  - `_handle_reload` 先执行 `_reload_config_internal()`，仅当重载成功且之前处于监控状态时才执行 stop/start
+  - `_handle_apply_profile` 同样修复，先加载成功再 stop+start
+  - 原逻辑先 stop 再 reload，reload 失败时监控永久停止
+  - 新增测试 `test_reload_failure_keeps_monitoring` 和 `test_reload_success_restarts_monitoring`
+
+### fix
+- `_run_full()` finally 块修复：`loop.run_until_complete` 改为 `asyncio.run`，修复未定义变量 `loop` 导致 shutdown 永不执行的 bug
+  - 删除 `if not container._shutdown_done` 检查（`asyncio.run` 内部的 `shutdown()` 已是幂等的）
+  - `except Exception: pass` 改为 `logger.exception("容器关闭失败")`，避免静默吞掉错误
+
+### fix
+- NullTaskExecutor 签名与 TaskExecutor 兼容（添加 skip_pause_check 参数）
+  - `execute_login_async` 和 `execute_login` 方法添加 `skip_pause_check=False` 参数
+  - 防止轻量模式下引擎调用 `execute_login_async(skip_pause_check=...)` 时抛出 TypeError
+
+### fix
+- `frontend/js/constants.js` Axios 拦截器仅对幂等请求执行自动重试
+  - 新增 `RETRYABLE_METHODS = ['GET', 'HEAD', 'OPTIONS']` 检查
+  - POST/PUT/DELETE 等非幂等请求不再被静默重试（如登录、启动监控）
+- `start.go` 添加信号转发，Ctrl+C 时子进程同步退出
+  - `cmd.Run()` 改为 `cmd.Start()` + `signal.Notify` + `cmd.Wait()`
+  - 收到 SIGINT/SIGTERM 时转发给子进程，避免孤儿进程
+
+### fix
+- uv 版本升级至 0.11.21 并添加 SHA256 校验（`start.go` + `start.sh`）
+  - 版本从 0.7.3 升级到 0.11.21
+  - 下载后对文件执行 SHA256 校验，防止文件被篡改或损坏
+  - 校验失败时跳过当前镜像源，尝试下一个
+  - 覆盖全部平台：Windows/macOS/Linux，x86_64/arm64
+- `start.sh` 修复 macOS 兼容性：sha256sum 改为 sha256sum/shasum -a 256 兼容写法
+
+### docs
+- 两轮代码审查报告合并验证完成（`dev/code-review-report.md`）
+  - 134 个原始问题逐项验证：27 个误报、42 个排除（not-to-do + 安全类）、1 个已修复
+  - 2 个严重程度被高估，9 个确认需关注（5 高 + 4 中）、29 个低影响
+  - 高严重性：NullTaskExecutor 签名、main.py shutdown 失败、配置重载无恢复、run_sync 进程泄漏、Playwright 安装无超时
+- `app/utils/crypto.py` save_password_field 添加注释说明 `startswith("•")` 掩码判断的设计意图
+- `app/utils/crypto.py` encrypt_password 添加注释说明 cryptography 缺失降级的防御性质
+- `app/network/decision.py` is_network_available 添加注释说明 AND 逻辑的设计意图
+- `app/services/websocket_manager.py` broadcast 添加注释说明 O(n²) 清理在实际场景中无影响
+- `app/network/detect.py` SSID 十六进制检测添加注释说明误判概率极低
+- `frontend/js/methods/lifecycle.js` visibility change handler 添加注释说明无防抖的实际影响可忽略
+- `dev/confirmed-issues.md` 生成确认存在的问题清单（38 个未修复 + 2 个已修复，高/中严重性含完整代码上下文、修复方案和优先级排序）
+- `docs/superpowers/plans/2026-06-17-code-review-fixes.md` 代码审查修复实施计划（10 个 Task，TDD 模式）
+
+### docs
+- 生成全项目高精度代码审查报告 `code-review-report.md`（第二轮）
+  - 15 个 Review Unit 并行审查（P0×5 + P1×7 + P2×3）
+  - 发现 11 个 Critical、31 个 Major、28 个 Minor 问题（共 70 个）
+  - 关键发现：shell 命令注入（command 未过滤直接传入 shell）、uv 下载无 SHA256 校验、PowerShell 通知注入、密码掩码逻辑绕过、custom_browser_engine 配置未传递
+  - 覆盖全部模块：app/services、app/tasks、app/workers、app/network、app/api、app/utils、frontend、tests、root (start.go/sh)
+
+### docs
+- 生成代码审查问题分析报告 `docs/superpowers/specs/2026-06-17-code-review-analysis.md`
+  - 逐项验证 `code-review-report.md` 中 71 个问题的属实性
+  - 38 项属实且严重、18 项严重程度偏高、8 项部分属实、7 项需进一步确认
+  - 按可操作性分类：19 项可通过重构解决、28 项可快速修复、12 项需接受/缓解
+  - 为每类问题提供具体解决方案、工时估算和风险评估
+- 重构方案冻结版 `docs/superpowers/specs/2026-06-17-refactor-optimization-design.md`
+  - 经四轮讨论修正，35 项改动，~37h 工时（含测试验证）
+  - C01 采用 `run_coroutine_threadsafe` 防御性设计；C12 简化为 null 字节检查；C11 改名 `custom_browser_engine`
+  - 否决 4 项（M12/M13/C07/M09），可进入实施阶段
+- 生成实施计划 `docs/superpowers/plans/2026-06-17-refactor-optimization.md`
+  - 12 个 Task，按风险分三批执行
+  - 每个 Task 包含：具体代码改动、测试命令、提交信息
+  - 最后附全量测试验证清单和手动验证路径
+- 剩余问题设计方案（最终版）`docs/superpowers/specs/2026-06-17-remaining-issues-design.md`
+  - P0+P1 共 14 项已全部修复（c0332a3）
+  - P2：M29 已修复（9c79ae6），M15/M23/M28 关闭（Won't Fix，经验证不成立）
+- P3 Backlog `docs/superpowers/specs/2026-06-17-p3-backlog.md`
+  - 18 项低优先级问题（P3 显式 8 项 + Minor 未归类 10 项）
+  - 不单独排期，修改相关文件时顺手处理
+
 ## 2026-06-16
 
 ### docs

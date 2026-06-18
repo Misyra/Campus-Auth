@@ -2,11 +2,15 @@
 
 合并 MonitorService（网络监控）和 SchedulerService（定时任务调度）的全部功能，
 使用 Actor 模型（线程 + 队列）进行命令派发，零 asyncio 依赖的核心逻辑。
+
+NOT-TO-DO: 不要拆分此文件。ScheduleEngine 是调度核心，职责清晰（命令队列、
+监控循环、重试逻辑、调度器），拆分只会增加模块间耦合。
 """
 
 from __future__ import annotations
 
 import contextlib
+from concurrent.futures import Future
 import json
 import queue
 import re
@@ -283,12 +287,13 @@ class ScheduleEngine:
 
             # 检查是否需要重启（自动切换方案）
             if core.consume_profile_switch_flag():
-                logger.info("检测到方案切换，重启监控")
-                self._handle_stop()
+                logger.info("检测到方案切换，准备重启监控")
+                # 先 reload，成功后再 stop → start（失败则旧 core 继续运行）
                 if self._reload_config_internal():
+                    self._handle_stop()
                     self._handle_start(EngineCommand(type=EngineCmdType.START))
                 else:
-                    logger.error("配置重载失败，跳过监控重启")
+                    logger.error("配置重载失败，继续使用当前配置")
 
             self._next_network_check = time.time() + interval
             self._update_status_snapshot(force=True)
@@ -328,12 +333,21 @@ class ScheduleEngine:
             self._update_status_snapshot()
             raise
         if future is not None:
-            future.add_done_callback(
-                lambda _: (
-                    self._login_in_progress.clear(),
-                    self._update_status_snapshot(),
-                )
-            )
+
+            def _on_done(f: Future) -> None:
+                self._login_in_progress.clear()
+                self._update_status_snapshot()
+                try:
+                    ok, msg = f.result()
+                    tag = "手动登录" if is_manual else "自动登录"
+                    if ok:
+                        logger.info("{}完成: {}", tag, msg)
+                    else:
+                        logger.warning("{}失败: {}", tag, msg)
+                except Exception:
+                    logger.exception("登录任务异常")
+
+            future.add_done_callback(_on_done)
             return True
         else:
             self._login_in_progress.clear()
@@ -347,6 +361,7 @@ class ScheduleEngine:
             retry = config.get("retry_settings", {})
             max_retries = retry.get("max_retries", 3)
             interval = retry.get("retry_interval", 30)
+            # 延迟导入：测试中需要 mock 此函数，顶层导入会导致 mock 路径变化
             from app.utils.retry import get_retry_intervals
 
             intervals = get_retry_intervals(interval, max_retries, exponential=False)
@@ -360,10 +375,11 @@ class ScheduleEngine:
 
         now = datetime.now()
         registry = getattr(self, "_task_registry", None)
-        if registry:
+        executor = getattr(self, "_task_executor", None)
+        if registry and executor:
             due_tasks = registry.get_due_tasks(now.hour, now.minute)
             for task_id in due_tasks:
-                self._task_executor.execute_task_async(task_id)
+                executor.execute_task_async(task_id)
         # 计算下一个整分钟
         self._next_schedule_tick = (int(time.time() // 60) * 60) + 60
 
@@ -429,25 +445,29 @@ class ScheduleEngine:
     def _handle_reload(self, cmd: EngineCommand) -> None:
         """重载配置并重启监控（仅在引擎线程中调用）。"""
         was_monitoring = self._is_monitoring
+
+        # 先加载新配置（不修改当前运行状态）
+        if not self._reload_config_internal():
+            logger.error("配置重载失败，监控继续使用旧配置运行")
+            cmd.response_data = (False, "配置重载失败")
+            return
+
+        # 仅当重载成功且之前处于监控状态时，才执行 stop/start
         if was_monitoring:
             self._handle_stop()
-        if not self._reload_config_internal():
-            logger.error("配置重载失败，跳过监控重启")
-            return
-        if was_monitoring:
             self._handle_start(EngineCommand(type=EngineCmdType.START))
         logger.info("配置已重载")
+        cmd.response_data = (True, "配置重载成功")
 
     def _handle_apply_profile(self, cmd: EngineCommand) -> None:
         """切换方案并重启监控（仅在引擎线程中调用）。"""
         profile_id = cmd.data.get("profile_id", "")
         was_monitoring = self._is_monitoring
-        if was_monitoring:
-            self._handle_stop()
 
-        # 重载配置（方案已由 API 路由持久化，此处重新读取）
+        # 先加载新配置（不修改当前运行状态）
         if not self._reload_config_internal():
-            logger.error("配置重载失败，跳过方案切换")
+            logger.error("配置重载失败，监控继续使用旧方案运行")
+            cmd.response_data = (False, "方案切换失败")
             return
 
         # 直接用 profile_id 记录日志，避免重复 load
@@ -457,12 +477,14 @@ class ScheduleEngine:
         logger.debug("方案详情: 认证={}, 用户={}", new_url, new_user)
 
         if was_monitoring:
+            self._handle_stop()
             self._handle_start(EngineCommand(type=EngineCmdType.START))
             self.record_log(
                 "监控正在按新方案重启",
                 level="INFO",
                 source="backend",
             )
+        cmd.response_data = (True, "方案切换成功")
 
     # ── 日志 / 状态快照桥接 ──
 
@@ -479,9 +501,9 @@ class ScheduleEngine:
         log_func = getattr(bound_logger, level_name.lower(), bound_logger.info)
         log_func("{}", message)
 
-        # 监控相关日志 → 更新状态快照（业务逻辑，不属于日志管道）
-        if source in ("network",):
-            self._update_status_snapshot()
+    def notify_network_state_changed(self) -> None:
+        """网络状态变化时显式调用，更新状态快照。"""
+        self._update_status_snapshot()
 
     def _update_status_snapshot(self, force: bool = False) -> None:
         """Read monitor_core state into lock-free StatusSnapshot.
@@ -574,6 +596,10 @@ class ScheduleEngine:
     def login_in_progress(self) -> bool:
         return self._login_in_progress.is_set()
 
+    def set_dashboard_sink(self, sink) -> None:
+        """注入 DashboardSink 实例（由 container.start_web_services 调用）。"""
+        self._dashboard_sink = sink
+
     @property
     def ws_broadcast_queue(self) -> deque:
         """WS 广播队列（从 DashboardSink 获取）。"""
@@ -589,7 +615,8 @@ class ScheduleEngine:
 
     @property
     def _is_monitoring(self) -> bool:
-        return self._monitor_core is not None and self._monitor_core.monitoring
+        core = self._monitor_core
+        return core is not None and core.monitoring
 
     @property
     def tasks(self):
@@ -603,7 +630,8 @@ class ScheduleEngine:
         """从 settings.json 重新加载 UI 和运行时配置。返回 True 表示成功。"""
         import copy
 
-        from .config_service import build_runtime_config
+        # 延迟导入：测试中需要 mock 这些函数的返回值，顶层导入会导致 mock 路径变化
+        from .config_service import build_runtime_dict_from_payload
         from .runtime_config import load_runtime_config, load_ui_config
 
         try:
@@ -615,7 +643,7 @@ class ScheduleEngine:
                 )
                 if has_decrypt_error:
                     logger.warning("配置重载时部分密码解密失败")
-                self._runtime_config = build_runtime_config(
+                self._runtime_config = build_runtime_dict_from_payload(
                     runtime_payload,
                     global_settings=data.global_settings,
                 )
@@ -635,7 +663,7 @@ class ScheduleEngine:
 
         return copy.deepcopy(self._runtime_config)
 
-    def reload_config(self) -> None:
+    def reload_config(self) -> tuple[bool, str]:
         """重新加载配置并重启监控（如果正在运行）。
 
         通过队列派发到引擎线程执行，确保线程安全。
@@ -645,13 +673,15 @@ class ScheduleEngine:
             response_event=threading.Event(),
         )
         if not self._enqueue(cmd):
-            logger.warning("配置重载失败：队列已满")
-            return
+            return False, "配置重载失败：队列已满"
         # 等待消费者完成（最多 10 秒，避免无限阻塞 API 线程）
         if not cmd.response_event.wait(timeout=10):
-            logger.warning("配置重载超时，将在引擎空闲后生效")
+            return False, "配置重载超时，将在引擎空闲后生效"
+        if cmd.response_data:
+            return cmd.response_data
+        return False, "配置重载未返回结果"
 
-    def apply_profile(self, profile_id: str) -> None:
+    def apply_profile(self, profile_id: str) -> tuple[bool, str]:
         """切换到新方案：停止监控 → 重载配置 → 重启监控。
 
         通过队列派发到引擎线程执行，确保线程安全。
@@ -662,11 +692,13 @@ class ScheduleEngine:
             response_event=threading.Event(),
         )
         if not self._enqueue(cmd):
-            logger.warning("方案切换失败：队列已满")
-            return
+            return False, "方案切换失败：队列已满"
         # 等待消费者完成（最多 10 秒）
         if not cmd.response_event.wait(timeout=10):
-            logger.warning("方案切换超时，将在引擎空闲后生效")
+            return False, "方案切换超时，将在引擎空闲后生效"
+        if cmd.response_data:
+            return cmd.response_data
+        return False, "方案切换未返回结果"
 
     def start_monitoring(self) -> tuple[bool, str]:
         logger.debug("收到启动监控请求")
@@ -694,28 +726,26 @@ class ScheduleEngine:
             return True, "监控已停止"
 
     def shutdown(self) -> None:
-        """完全关闭 ScheduleEngine：停止监控 + 停止调度器 + 终止引擎线程。"""
+        """两阶段 shutdown：先通知引擎线程退出，等待确认后再清理资源。"""
         if self._shutdown_event.is_set():
             return
-        # 停止调度器
         self._scheduler_running = False
 
-        # 直接停止监控核心（不等待 response，避免阻塞）
-        if self._monitor_core is not None:
-            with contextlib.suppress(Exception):
-                self._monitor_core.stop_monitoring()
-        self._monitor_core = None
-
-        # 设置关闭事件，通知引擎线程退出循环
+        # 阶段 1：通知引擎线程退出
         self._shutdown_event.set()
-
-        # 发送 shutdown 命令确保引擎能立即处理退出
         with contextlib.suppress(queue.Full):
             self._cmd_queue.put_nowait(EngineCommand(type=EngineCmdType.SHUTDOWN))
 
-        # 短超时等待，不阻塞（守护线程会随进程退出）
+        # 等待引擎线程退出（最多 5 秒）
         if self._engine_thread and self._engine_thread.is_alive():
-            self._engine_thread.join(timeout=1)
+            self._engine_thread.join(timeout=5.0)
+
+        # 阶段 2：引擎线程已退出，安全清理（不会再有并发修改）
+        core = self._monitor_core
+        if core is not None:
+            with contextlib.suppress(Exception):
+                core.stop_monitoring()
+        self._monitor_core = None
 
         logger.info("引擎服务已关闭")
 
@@ -770,14 +800,15 @@ class ScheduleEngine:
             if success:
                 # network_state 已由消费者 _handle_login 统一赋值，无需 API 线程操作
                 self._update_status_snapshot()
-                logger.info("手动登录成功")
-                return True, f"手动登录成功：{message}"
+                logger.info("手动登录任务已提交")
+                return True, "登录已提交"
 
             log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
-            logger.warning("手动登录失败: {}", log_msg)
-            return False, f"手动登录失败：{message}"
+            logger.warning("手动登录提交失败: {}", log_msg)
+            return False, f"登录提交失败：{message}"
         finally:
-            self._manual_login_in_progress = False
+            with self._manual_login_lock:
+                self._manual_login_in_progress = False
 
     def test_network(self) -> tuple[bool, str]:
         logger.debug("开始手动网络测试")
@@ -807,13 +838,16 @@ class ScheduleEngine:
             )
             if is_available:
                 self.record_log("手动测试结果: 网络正常", "INFO", "network")
+                self.notify_network_state_changed()  # 新增
                 return True, "网络连接正常"
             else:
                 self.record_log("手动测试结果: 网络异常", "WARNING", "network")
+                self.notify_network_state_changed()  # 新增
                 return False, "网络连接异常"
         except Exception as exc:
             logger.exception("网络测试失败")
             self.record_log(f"手动测试异常: {exc}", "ERROR", "network")
+            self.notify_network_state_changed()  # 新增
             return False, f"网络测试失败: {exc}"
 
     def list_logs(self, limit: int = 200) -> list:

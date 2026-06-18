@@ -180,6 +180,9 @@ def _detect_ssid_windows() -> str | None:
             raw = match.group(1).strip()
 
             # 检查是否为十六进制编码的 SSID（包含非 ASCII 字符时 netsh 可能输出十六进制形式）
+            # 已知限制：纯 hex 字符的 SSID（如 "414243"）会被误判为编码格式并解码为 "ABC"。
+            # 实际概率极低：需同时满足 (1) SSID 恰好是纯 hex 字符 (2) 解码后是可打印 UTF-8。
+            # 大多数 hex 字符串（如 "CAFE"→\xca\xfe）解码 UTF-8 会失败，自动跳过此分支。
             try:
                 ssid_hex = raw.decode("ascii")
                 if re.fullmatch(r"[0-9A-Fa-f]+", ssid_hex) and len(ssid_hex) % 2 == 0:

@@ -60,7 +60,6 @@
             :class="{ active: activeTaskId === task.id }"
             @dragstart="handleDragStart($event, index, 'browserTasks')"
             @dragover="onDragOver($event, index, 'browserTasks')"
-            @dragleave="onDragLeave($event)"
             @drop="onDrop($event, index, 'browserTasks')"
             @dragend="onDragEnd($event)"
           >
@@ -227,7 +226,7 @@
 
 <!-- 弹窗放在页面外部，确保从设置页也能触发 -->
 <!-- 危险步骤确认弹窗 -->
-  <div v-if="dangerConfirm" class="danger-overlay" @click.self="confirmDanger(false)">
+  <div v-if="dangerConfirm" class="overlay-base danger-overlay" @click.self="confirmDanger(false)">
     <div class="danger-modal" role="dialog" aria-modal="true" aria-label="危险步骤确认">
       <div class="danger-modal-header">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:28px;height:28px;color:var(--error);flex-shrink:0;">
@@ -260,7 +259,7 @@
   </div>
 
   <!-- 调试模式面板 -->
-  <div v-if="debugSession.running" class="debug-overlay">
+  <div v-if="debugSession.running" class="overlay-base debug-overlay">
     <div class="debug-panel" role="dialog" aria-modal="true" aria-label="调试模式">
       <div class="debug-header">
         <h3>
@@ -312,7 +311,7 @@
   </div>
 
   <!-- 仓库导入弹窗 -->
-  <div v-if="repoImport.visible" class="repo-overlay" @click.self="closeRepoImport">
+  <div v-if="repoImport.visible" class="overlay-base repo-overlay" @click.self="closeRepoImport">
     <div class="repo-modal" role="dialog" aria-modal="true" aria-label="远程任务仓库">
       <div class="repo-modal-header">
         <div>
@@ -408,7 +407,7 @@
   </div>
 
   <!-- 仓库导入免责声明弹窗 -->
-  <div v-if="repoImport.disclaimer" class="repo-overlay" style="z-index:210;" @click.self="cancelRepoDisclaimer">
+  <div v-if="repoImport.disclaimer" class="overlay-base repo-overlay" style="z-index:210;" @click.self="cancelRepoDisclaimer">
     <div class="repo-disclaimer-modal" role="dialog" aria-modal="true" aria-label="远程任务免责声明">
       <div class="repo-disclaimer-header">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:28px;height:28px;color:var(--warning);flex-shrink:0;">

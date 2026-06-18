@@ -2,37 +2,24 @@
 
 from __future__ import annotations
 
-import re
+import tomllib
 from pathlib import Path
-
-_VERSION_PATTERN = re.compile(r'^version\s*=\s*"([^\"]+)"\s*$')
 
 
 def get_project_version(project_root: Path | None = None) -> str:
-    """从 pyproject.toml 读取项目版本，读取失败时返回 unknown。"""
+    """从 pyproject.toml 读取项目版本，读取失败时返回 unknown。
+
+    使用 Python 3.11+ 标准库 tomllib 解析 TOML，
+    替代旧的正则逐行扫描方式，确保对所有合法 TOML 语法正确。
+    """
     root = project_root or Path(__file__).resolve().parents[1]
     pyproject = root / "pyproject.toml"
     try:
-        lines = pyproject.read_text(encoding="utf-8").splitlines()
-    except OSError:
+        text = pyproject.read_text(encoding="utf-8")
+        data = tomllib.loads(text)
+        return data.get("project", {}).get("version", "unknown")
+    except (OSError, tomllib.TOMLDecodeError):
         return "unknown"
-
-    in_project_block = False
-    for raw in lines:
-        line = raw.strip()
-        if not line:
-            continue
-        if line.startswith("["):
-            in_project_block = line == "[project]"
-            continue
-        if not in_project_block:
-            continue
-
-        match = _VERSION_PATTERN.match(line)
-        if match:
-            return match.group(1)
-
-    return "unknown"
 
 
 def compare_versions(a: str, b: str) -> int:

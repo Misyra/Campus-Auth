@@ -35,47 +35,49 @@ ws_logger = get_logger("ws", source="backend")
 _TEMP_SCREENSHOT_MAX_AGE_DAYS = 7
 
 
-def _cleanup_temp_screenshots() -> None:
-    """启动时清理 temp/ 目录中超过保留天数的截图文件。"""
+def _cleanup_screenshots() -> None:
+    """启动时清理截图文件：
+    1. temp/ 目录中超过保留天数的截图文件。
+    2. screenshots/ 目录中非当天的日期子目录。
+    """
+    # --- 清理 temp/ 中的过期截图 ---
     try:
-        if not TEMP_DIR.exists():
-            return
-        import time as _time
-
-        cutoff = _time.time() - _TEMP_SCREENSHOT_MAX_AGE_DAYS * 86400
-        removed = 0
-        for f in TEMP_DIR.iterdir():
-            if (
-                f.is_file()
-                and f.suffix in (".png", ".jpg", ".jpeg")
-                and f.stat().st_mtime < cutoff
-            ):
-                f.unlink()
-                removed += 1
-        if removed:
-            startup_logger.info("启动时清理 temp 截图: 删除 {} 个过期文件", removed)
+        if TEMP_DIR.exists():
+            cutoff = time.time() - _TEMP_SCREENSHOT_MAX_AGE_DAYS * 86400
+            removed_temp = 0
+            for f in TEMP_DIR.iterdir():
+                if (
+                    f.is_file()
+                    and f.suffix in (".png", ".jpg", ".jpeg")
+                    and f.stat().st_mtime < cutoff
+                ):
+                    f.unlink()
+                    removed_temp += 1
+            if removed_temp:
+                startup_logger.info(
+                    "启动时清理 temp 截图: 删除 {} 个过期文件", removed_temp
+                )
     except Exception as exc:
         startup_logger.warning("清理 temp 截图失败: {}", exc)
 
-
-def _cleanup_old_screenshots() -> None:
-    """启动时清理非当天的截图子目录。"""
+    # --- 清理 screenshots/ 中的非当天目录 ---
     try:
-        if not SCREENSHOTS_DIR.exists():
-            return
-        import shutil
-        from datetime import datetime
+        if SCREENSHOTS_DIR.exists():
+            import shutil
+            from datetime import datetime
 
-        today = datetime.now().strftime("%Y-%m-%d")
-        removed = 0
-        for d in SCREENSHOTS_DIR.iterdir():
-            if d.is_dir() and d.name != today:
-                shutil.rmtree(d, ignore_errors=True)
-                removed += 1
-        if removed:
-            startup_logger.info("启动时清理旧截图: 删除 {} 个日期目录", removed)
+            today = datetime.now().strftime("%Y-%m-%d")
+            removed_dirs = 0
+            for d in SCREENSHOTS_DIR.iterdir():
+                if d.is_dir() and d.name != today:
+                    shutil.rmtree(d, ignore_errors=True)
+                    removed_dirs += 1
+            if removed_dirs:
+                startup_logger.info(
+                    "启动时清理旧截图: 删除 {} 个日期目录", removed_dirs
+                )
     except Exception as exc:
-        startup_logger.warning("清理旧截图失败: {}", exc)
+        startup_logger.warning("清理旧截图失败: {}".format(exc))
 
 
 _access_log_event = threading.Event()  # 默认未 set（即关闭）
@@ -84,44 +86,18 @@ _access_log_event = threading.Event()  # 默认未 set（即关闭）
 app = None
 
 
-# ==================== 工厂函数 ====================
+# ==================== 工厂辅助函数 ====================
 
 
-def create_app(existing_container=None):
-    """创建 FastAPI 应用实例。
+def _create_lifespan(existing_container):
+    """创建 FastAPI 生命周期管理器。
 
     Args:
-        existing_container: 已有的 ServiceContainer（轻量模式→完整模式转换时使用）。
-            若不为 None，复用该容器并启动 Web 服务和调度器；
-            若为 None，创建新的 ServiceContainer 并执行完整启动。
+        existing_container: 已有的 ServiceContainer（轻量模式升级时使用），或 None。
+
+    Returns:
+        async context manager 函数，供 FastAPI(lifespan=...) 使用。
     """
-    from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-    from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import FileResponse
-    from fastapi.staticfiles import StaticFiles
-
-    from app.api import (
-        autostart,
-        browsers,
-        config,
-        debug,
-        history,
-        icons,
-        install_playwright,
-        monitor,
-        ocr,
-        profiles,
-        repo,
-        scheduled_tasks,
-        scripts,
-        system,
-        tasks,
-        tools,
-    )
-    from app.container import ServiceContainer
-    from app.version import get_project_version
-
-    # ==================== 生命周期管理 ====================
 
     @asynccontextmanager
     async def lifespan(app_instance):
@@ -141,6 +117,8 @@ def create_app(existing_container=None):
             if services.engine.has_enabled_tasks():
                 services.engine.start_scheduler()
         else:
+            from app.container import ServiceContainer
+
             services = ServiceContainer(PROJECT_ROOT)
             await services.startup()
 
@@ -173,11 +151,8 @@ def create_app(existing_container=None):
                 "建议安装: pip install cryptography"
             )
 
-        # 启动时清理 temp 目录中的旧截图
-        _cleanup_temp_screenshots()
-
-        # 清理非当天截图
-        _cleanup_old_screenshots()
+        # 启动时清理截图文件
+        _cleanup_screenshots()
 
         startup_logger.info(
             "FastAPI 启动: 完成，耗时 {:.3f}s",
@@ -189,7 +164,7 @@ def create_app(existing_container=None):
             await shutdown_event.wait()
             # 通过设置 uvicorn Server.should_exit 触发优雅关闭，
             # 而非发送 SIGTERM（后者会被 main.py 的信号处理器拦截并 os._exit）
-            _server = getattr(_app.state, "_uvicorn_server", None)
+            _server = getattr(app_instance.state, "_uvicorn_server", None)
             if _server is not None:
                 _server.should_exit = True
             else:
@@ -211,6 +186,91 @@ def create_app(existing_container=None):
         startup_logger.info("FastAPI 关闭: 正在停止服务...")
         await services.shutdown()
         startup_logger.info("FastAPI 关闭: 完成")
+
+    return lifespan
+
+
+def _register_routes(app) -> None:
+    """注册所有 API 路由到 FastAPI 应用。
+
+    Args:
+        app: FastAPI 应用实例。
+    """
+    from app.api import (
+        autostart,
+        browsers,
+        config,
+        debug,
+        history,
+        icons,
+        install_playwright,
+        monitor,
+        ocr,
+        profiles,
+        repo,
+        scheduled_tasks,
+        scripts,
+        system,
+        tasks,
+        tools,
+    )
+
+    app.include_router(monitor.router)
+    app.include_router(config.router)
+    app.include_router(tasks.router)
+    app.include_router(profiles.router)
+    app.include_router(debug.router)
+    app.include_router(repo.router)
+    app.include_router(system.router)
+    app.include_router(autostart.router)
+    app.include_router(ocr.router)
+    app.include_router(tools.router)
+    app.include_router(scripts.router)
+    app.include_router(scheduled_tasks.router)
+    app.include_router(history.router)
+    app.include_router(browsers.router)
+    app.include_router(icons.router)
+    app.include_router(install_playwright.router)
+
+
+def _register_static(app) -> None:
+    """注册首页路由和静态文件挂载。
+
+    Args:
+        app: FastAPI 应用实例。
+    """
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+
+    @app.get("/", include_in_schema=False)
+    def index() -> FileResponse:
+        return FileResponse(FRONTEND_DIR / "index.html")
+
+    # 确保挂载目录存在（发布版本解压后这些目录可能不存在）
+    for _dir in (DEBUG_DIR, TEMP_DIR):
+        _dir.mkdir(parents=True, exist_ok=True)
+
+    app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+    app.mount("/debug", StaticFiles(directory=DEBUG_DIR), name="debug")
+    app.mount("/temp", StaticFiles(directory=TEMP_DIR), name="temp")
+
+
+def create_app(existing_container=None):
+    """创建 FastAPI 应用实例。
+
+    Args:
+        existing_container: 已有的 ServiceContainer（轻量模式→完整模式转换时使用）。
+            若不为 None，复用该容器并启动 Web 服务和调度器；
+            若为 None，创建新的 ServiceContainer 并执行完整启动。
+    """
+    from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+    from fastapi.middleware.cors import CORSMiddleware
+
+    from app.version import get_project_version
+
+    # ==================== 生命周期 ====================
+
+    lifespan = _create_lifespan(existing_container)
 
     _app = FastAPI(
         title="校园网认证助手 API",
@@ -304,38 +364,10 @@ def create_app(existing_container=None):
             ws_logger.exception("WebSocket 通信异常")
             await ws_mgr.disconnect(websocket)
 
-    # ==================== 路由注册 ====================
+    # ==================== 路由 + 静态文件 ====================
 
-    _app.include_router(monitor.router)
-    _app.include_router(config.router)
-    _app.include_router(tasks.router)
-    _app.include_router(profiles.router)
-    _app.include_router(debug.router)
-    _app.include_router(repo.router)
-    _app.include_router(system.router)
-    _app.include_router(autostart.router)
-    _app.include_router(ocr.router)
-    _app.include_router(tools.router)
-    _app.include_router(scripts.router)
-    _app.include_router(scheduled_tasks.router)
-    _app.include_router(history.router)
-    _app.include_router(browsers.router)
-    _app.include_router(icons.router)
-    _app.include_router(install_playwright.router)
-
-    # ==================== 首页和静态文件 ====================
-
-    @_app.get("/", include_in_schema=False)
-    def index() -> FileResponse:
-        return FileResponse(FRONTEND_DIR / "index.html")
-
-    # 确保挂载目录存在（发布版本解压后这些目录可能不存在）
-    for _dir in (DEBUG_DIR, TEMP_DIR):
-        _dir.mkdir(parents=True, exist_ok=True)
-
-    _app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
-    _app.mount("/debug", StaticFiles(directory=DEBUG_DIR), name="debug")
-    _app.mount("/temp", StaticFiles(directory=TEMP_DIR), name="temp")
+    _register_routes(_app)
+    _register_static(_app)
 
     return _app
 

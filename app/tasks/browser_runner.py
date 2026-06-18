@@ -304,7 +304,9 @@ class TaskExecutor:
 
             # 等待网址响应处理认证请求（可通过 post_login_delay 配置）
             # cfg.get(key, default) 在 JSON 值为 null 时返回 None 而非默认值，需显式处理
-            post_delay = cfg.get("post_login_delay") or 5
+            post_delay = cfg.get("post_login_delay")
+            if post_delay is None:
+                post_delay = 5
             await asyncio.sleep(post_delay)
             enable_tcp = (
                 cfg.get("enable_tcp_check")
@@ -316,7 +318,9 @@ class TaskExecutor:
                 if cfg.get("enable_http_check") is not None
                 else True
             )
-            timeout = cfg.get("network_check_timeout") or 2
+            timeout = cfg.get("network_check_timeout")
+            if timeout is None:
+                timeout = 2
 
             # 解析网址响应检测 URL
             from app.utils.network import parse_url_checks
