@@ -1,6 +1,8 @@
-"""测试引擎网络检测的默认配置一致性。"""
+"""测试引擎网络检测的默认配置一致性 & TOCTOU 竞态修复。"""
 
 import inspect
+import queue
+from unittest.mock import MagicMock
 
 
 def test_engine_test_network_default_false():
@@ -27,3 +29,25 @@ def test_engine_test_network_default_false():
     source_monitor = inspect.getsource(NetworkMonitorCore.init_monitoring)
     assert 'enable_tcp_check", True' not in source_monitor
     assert 'enable_http_check", True' not in source_monitor
+
+
+def test_handle_login_uses_validated_config():
+    """_handle_login 应将校验通过的配置传递给 executor，避免二次读取。"""
+    from app.services.engine import EngineCmdType, EngineCommand, ScheduleEngine
+
+    engine = ScheduleEngine.__new__(ScheduleEngine)
+    engine._command_queue = queue.Queue()
+
+    # 模拟配置快照
+    snapshot = {"username": "u", "password": "p", "auth_url": "http://x"}
+
+    engine._copy_runtime_config = MagicMock(return_value=snapshot)
+    engine._do_async_login = MagicMock(return_value=True)
+
+    cmd = EngineCommand(type=EngineCmdType.LOGIN, data={})
+    engine._handle_login(cmd)
+
+    # _do_async_login 应收到 config_snapshot 参数
+    engine._do_async_login.assert_called_once_with(
+        skip_pause_check=False, is_manual=True, config_snapshot=snapshot,
+    )
