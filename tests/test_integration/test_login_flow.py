@@ -306,7 +306,7 @@ class TestLoginWithNetworkDetection:
     """带网络检测的登录流程：网络异常触发登录 → 登录后验证网络恢复。"""
 
     def test_network_check_triggers_login(self):
-        """网络检测发现 need_login 时，触发异步登录。"""
+        """网络检测发现 need_login 时，触发异步登录并跳过冗余检测。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
         mock_core.check_once.return_value = {
@@ -320,7 +320,7 @@ class TestLoginWithNetworkDetection:
 
         svc._do_network_check()
 
-        svc._do_async_login.assert_called_once()
+        svc._do_async_login.assert_called_once_with(skip_pause_check=True)
         assert svc._login_retry.config == (3, [30, 30, 30])
         assert svc._login_retry.count == 0  # 网络检测触发时重置计数
 
@@ -618,13 +618,37 @@ class TestLoginConcurrencyProtection:
     """登录并发保护：防止同时提交多个登录任务。"""
 
     def test_do_async_login_rejects_when_in_progress(self):
-        """登录进行中时，_do_async_login 返回 False。"""
+        """自动登录进行中时，_do_async_login 返回 False。"""
         svc = _make_raw_engine()
         svc._login_in_progress.set()
 
         result = svc._do_async_login()
 
         assert result is False
+
+    def test_manual_login_cancels_in_progress_auto_login(self):
+        """手动登录应取消卡住的自动登录并重新提交。"""
+        svc = _make_raw_engine()
+        # 模拟自动登录正在进行中
+        svc._login_in_progress.set()
+
+        # 模拟 cancel_login 后 _login_in_progress 被清除（由 _on_done 回调触发）
+        def fake_cancel():
+            svc._login_in_progress.clear()
+
+        svc._task_executor.cancel_login.side_effect = fake_cancel
+
+        future = Future()
+        svc._task_executor.execute_login_async.return_value = future
+
+        result = svc._do_async_login(is_manual=True)
+
+        assert result is True
+        svc._task_executor.cancel_login.assert_called_once()
+
+        # 清理
+        future.set_result((True, "登录成功"))
+        time.sleep(0.1)
 
     def test_login_in_progress_property(self):
         """login_in_progress 属性反映 Event 状态。"""
