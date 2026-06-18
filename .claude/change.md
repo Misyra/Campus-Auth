@@ -2,6 +2,13 @@
 
 ## 2026-06-18
 
+### refactor
+- `app/services/engine.py` 拆分 `record_log` 双重职责（Task 2: R5）
+  - `record_log` 不再隐式触发 `_update_status_snapshot`
+  - 新增 `notify_network_state_changed()` 显式方法
+  - `test_network` 方法中的调用点更新为显式调用 `notify_network_state_changed()`
+  - 设计原则：任何状态变化都应该由显式方法触发，而不是通过副作用间接传播
+
 ### fix
 - `app/api/scheduled_tasks.py` 4 个路由从 `async def` 改为 `def`（Task 1: R1 async 路由修正）
   - `create_scheduled_task`、`update_scheduled_task`、`run_scheduled_task`、`toggle_scheduled_task`

@@ -490,9 +490,9 @@ class ScheduleEngine:
         log_func = getattr(bound_logger, level_name.lower(), bound_logger.info)
         log_func("{}", message)
 
-        # 监控相关日志 → 更新状态快照（业务逻辑，不属于日志管道）
-        if source in ("network",):
-            self._update_status_snapshot()
+    def notify_network_state_changed(self) -> None:
+        """网络状态变化时显式调用，更新状态快照。"""
+        self._update_status_snapshot()
 
     def _update_status_snapshot(self, force: bool = False) -> None:
         """Read monitor_core state into lock-free StatusSnapshot.
@@ -826,13 +826,16 @@ class ScheduleEngine:
             )
             if is_available:
                 self.record_log("手动测试结果: 网络正常", "INFO", "network")
+                self.notify_network_state_changed()  # 新增
                 return True, "网络连接正常"
             else:
                 self.record_log("手动测试结果: 网络异常", "WARNING", "network")
+                self.notify_network_state_changed()  # 新增
                 return False, "网络连接异常"
         except Exception as exc:
             logger.exception("网络测试失败")
             self.record_log(f"手动测试异常: {exc}", "ERROR", "network")
+            self.notify_network_state_changed()  # 新增
             return False, f"网络测试失败: {exc}"
 
     def list_logs(self, limit: int = 200) -> list:
