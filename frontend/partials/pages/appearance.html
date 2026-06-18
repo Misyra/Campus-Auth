@@ -254,7 +254,7 @@
                   <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
                 </svg>
               </label>
-              <input id="custom-sidebar-color" type="color" v-model="appearance.sidebar_color" class="sr-only" />
+              <input id="custom-sidebar-color" type="color" :value="appearance.sidebar_color || '#1e293b'" @change="appearance.sidebar_color = $event.target.value" class="sr-only" />
               <span class="appearance-custom-hex">{{ appearance.sidebar_color || '跟随背景色' }}</span>
               <button v-if="appearance.sidebar_color" type="button" class="btn btn-sm ms-auto" @click="appearance.sidebar_color = ''">重置</button>
             </div>
@@ -265,7 +265,7 @@
                   <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
                 </svg>
               </label>
-              <input id="custom-sidebar-accent" type="color" v-model="appearance.sidebar_accent" class="sr-only" />
+              <input id="custom-sidebar-accent" type="color" :value="appearance.sidebar_accent || '#22d3ee'" @change="appearance.sidebar_accent = $event.target.value" class="sr-only" />
               <span class="appearance-custom-hex">{{ appearance.sidebar_accent || '跟随主题色' }}</span>
               <button v-if="appearance.sidebar_accent" type="button" class="btn btn-sm ms-auto" @click="appearance.sidebar_accent = ''">重置</button>
             </div>
