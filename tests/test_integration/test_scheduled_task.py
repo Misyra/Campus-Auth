@@ -561,7 +561,7 @@ class TestTaskCancellation:
         # 使用延迟返回的 mock 避免回调死锁
         import time as _time
 
-        def slow_login(cancel_event=None, skip_pause_check=False):
+        def slow_login(cancel_event=None, skip_pause_check=False, config_snapshot=None):
             _time.sleep(0.1)
             return (True, "登录成功")
 
@@ -661,7 +661,7 @@ class TestTaskCancellation:
         # 使用延迟返回的 mock 避免回调死锁
         import time as _time
 
-        def slow_login(cancel_event=None, skip_pause_check=False):
+        def slow_login(cancel_event=None, skip_pause_check=False, config_snapshot=None):
             _time.sleep(0.05)
             return (True, "ok")
 
