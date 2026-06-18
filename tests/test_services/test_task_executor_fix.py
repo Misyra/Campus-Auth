@@ -1146,7 +1146,7 @@ class TestTaskExecutorLoginAsync:
         executor = self._make_executor()
 
         blocker = threading.Event()
-        def slow_login(cancel_event=None, skip_pause_check=False):
+        def slow_login(cancel_event=None, skip_pause_check=False, config_snapshot=None):
             blocker.wait(timeout=5)
             return (True, "ok")
 
@@ -1207,7 +1207,7 @@ class TestTaskExecutorLoginAsync:
         blocker = threading.Event()
         received_cancel = threading.Event()
 
-        def slow_login(cancel_event=None, skip_pause_check=False):
+        def slow_login(cancel_event=None, skip_pause_check=False, config_snapshot=None):
             # 模拟长时间登录，定期检查 cancel_event
             for _ in range(50):
                 if cancel_event and cancel_event.is_set():
