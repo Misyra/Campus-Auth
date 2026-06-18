@@ -1319,12 +1319,22 @@ class TestRecordLog:
         svc.record_log = ScheduleEngine.record_log.__get__(svc)
         svc.record_log("测试消息", level="INFO", source="backend")
 
-    def test_record_log_network_source_updates_snapshot(self, engine_factory):
+    def test_record_log_no_side_effect(self, engine_factory):
+        """record_log 不应再触发 _update_status_snapshot。"""
         svc = engine_factory(raw=True)
         svc.record_log = ScheduleEngine.record_log.__get__(svc)
-        svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
-        svc._queue_status_broadcast = MagicMock()
+        svc._update_status_snapshot = MagicMock()
         svc.record_log("网络检测", level="INFO", source="network")
+        svc._update_status_snapshot.assert_not_called()
+
+
+class TestNotifyNetworkStateChanged:
+    def test_notify_network_state_changed(self, engine_factory):
+        svc = engine_factory(raw=True)
+        svc.notify_network_state_changed = ScheduleEngine.notify_network_state_changed.__get__(svc)
+        svc._update_status_snapshot = MagicMock()
+        svc.notify_network_state_changed()
+        svc._update_status_snapshot.assert_called_once()
 
 
 # =====================================================================
