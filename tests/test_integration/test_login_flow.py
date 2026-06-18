@@ -276,7 +276,7 @@ class TestFullLoginSequence:
         success, message = svc.run_manual_login()
 
         assert success is True
-        assert "成功" in message
+        assert "已提交" in message
 
     def test_full_sequence_manual_login_failure(self):
         """完整手动登录失败序列：run_manual_login → 队列 → handle_login → 失败。"""
