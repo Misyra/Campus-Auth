@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from app.schemas import AuthProfile, GLOBAL_SETTINGS_FIELDS, MonitorConfigPayload, ProfilesData
-from app.utils.crypto import decrypt_password, mask_password
-from app.utils.exceptions import DecryptionError
+from app.utils.crypto import decrypt_password_field, mask_password
 from app.utils.logging import get_logger, normalize_level
 
 from .profile_service import ProfileService
@@ -20,42 +19,6 @@ PROFILE_OVERRIDE_FIELDS = frozenset({
     "carrier_custom",
     "active_task",
 })
-
-def _safe_decrypt(ciphertext: str) -> tuple[str, bool]:
-    """解密密码。返回 (解密结果, 是否有错误)"""
-    if not ciphertext:
-        return ("", False)
-    try:
-        return (decrypt_password(ciphertext), False)
-    except DecryptionError:
-        config_logger.error("密码解密失败，使用空密码")
-        return ("", True)
-
-
-def _decrypt_password_field(
-    raw_pwd: str,
-    fallback_pwd: str = "",
-    label: str = "",
-) -> tuple[str, bool]:
-    """解密密码字段，支持 ENC: 前缀和掩码回退。"""
-    if raw_pwd.startswith("ENC:"):
-        return _safe_decrypt(raw_pwd)
-    elif raw_pwd.startswith("•"):
-        if fallback_pwd:
-            return _safe_decrypt(fallback_pwd)
-        else:
-            if label:
-                config_logger.warning("{} 密码为掩码但回退密码为空", label)
-            return ("", False)
-    elif raw_pwd:
-        return (raw_pwd, False)
-    else:
-        if fallback_pwd:
-            if label:
-                config_logger.warning("{} 密码为空，使用回退密码", label)
-            return _safe_decrypt(fallback_pwd)
-        else:
-            return ("", False)
 
 
 def _build_config_payload(
@@ -90,7 +53,7 @@ def _build_config_payload(
     # 处理密码
     any_error = False
     if apply_overrides:
-        pwd, err = _decrypt_password_field(profile.password)
+        pwd, err = decrypt_password_field(profile.password)
         payload_dict["password"] = pwd
         any_error = err
     else:

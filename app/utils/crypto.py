@@ -233,3 +233,51 @@ def save_password_field(raw: str | None, existing_encrypted: str) -> str:
         return raw
     # 明文密码 → 加密存储
     return encrypt_password(raw)
+
+
+def safe_decrypt(ciphertext: str) -> tuple[str, bool]:
+    """解密密码。返回 (解密结果, 是否有错误)"""
+    if not ciphertext:
+        return ("", False)
+    try:
+        return (decrypt_password(ciphertext), False)
+    except DecryptionError:
+        logger.error("密码解密失败，使用空密码")
+        return ("", True)
+
+
+def decrypt_password_field(
+    raw_pwd: str,
+    fallback_pwd: str = "",
+    label: str = "",
+) -> tuple[str, bool]:
+    """解密密码字段，支持 ENC: 前缀和掩码回退。
+
+    与 save_password_field 对称：save 处理写入加密，decrypt 处理读取解密。
+
+    Args:
+        raw_pwd: 存储的密码值（可能是 ENC:密文、掩码、明文或空）
+        fallback_pwd: 回退密码（当 raw_pwd 为掩码或空时使用）
+        label: 日志标签（如方案名称）
+
+    Returns:
+        (解密结果, 是否有错误)
+    """
+    if raw_pwd.startswith("ENC:"):
+        return safe_decrypt(raw_pwd)
+    elif raw_pwd.startswith("•"):
+        if fallback_pwd:
+            return safe_decrypt(fallback_pwd)
+        else:
+            if label:
+                logger.warning("{} 密码为掩码但回退密码为空", label)
+            return ("", False)
+    elif raw_pwd:
+        return (raw_pwd, False)
+    else:
+        if fallback_pwd:
+            if label:
+                logger.warning("{} 密码为空，使用回退密码", label)
+            return safe_decrypt(fallback_pwd)
+        else:
+            return ("", False)

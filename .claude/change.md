@@ -2,6 +2,13 @@
 
 ## 2026-06-18
 
+### refactor
+- `app/utils/crypto.py` 密码处理函数集中到 crypto.py（Task 2: P2）
+  - `safe_decrypt` 和 `decrypt_password_field` 从 `runtime_config.py` 移到 `crypto.py`
+  - 与 `save_password_field` / `decrypt_password` / `mask_password` 放在一起，读写对称，集中管理
+  - `runtime_config.py` 改为从 `crypto.py` 导入，删除本地 `_safe_decrypt` / `_decrypt_password_field`
+  - 测试文件更新导入路径和 mock 路径
+
 ### fix
 - `app/services/runtime_config.py` 修复 profile override 覆盖语义（Task 1: P1）
   - PROFILE_OVERRIDE_FIELDS 中的字段应实现"留空则使用全局"语义，而非"总是排除全局值"

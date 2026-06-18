@@ -21,10 +21,7 @@ from app.schemas import (
     ProfilesData,
     SystemSettings,
 )
-from app.services.runtime_config import (
-    _decrypt_password_field,
-    _safe_decrypt,
-)
+from app.utils.crypto import decrypt_password_field, safe_decrypt
 from app.utils.config_utils import ConfigValidator
 from app.utils.crypto import encrypt_password
 from app.utils.logging import normalize_level as _normalize_level
@@ -111,19 +108,19 @@ class TestSafeDecrypt:
     def test_decrypt_encrypted_value(self):
         """应能解密 ENC: 前缀的值"""
         encrypted = encrypt_password("test123")
-        result, has_error = _safe_decrypt(encrypted)
+        result, has_error = safe_decrypt(encrypted)
         assert result == "test123"
         assert has_error is False
 
     def test_decrypt_empty_string(self):
         """空字符串应返回空字符串"""
-        result, has_error = _safe_decrypt("")
+        result, has_error = safe_decrypt("")
         assert result == ""
         assert has_error is False
 
     def test_decrypt_plaintext_passthrough(self):
         """无 ENC: 前缀的明文应原样返回"""
-        result, has_error = _safe_decrypt("plaintext")
+        result, has_error = safe_decrypt("plaintext")
         assert result == "plaintext"
         assert has_error is False
 
@@ -710,9 +707,9 @@ class TestDecryptPasswordField:
         from unittest.mock import patch
 
         with patch(
-            "app.services.runtime_config.decrypt_password", return_value="secret"
+            "app.utils.crypto.decrypt_password", return_value="secret"
         ):
-            result, has_error = _decrypt_password_field("ENC:encrypted")
+            result, has_error = decrypt_password_field("ENC:encrypted")
             assert result == "secret"
             assert has_error is False
 
@@ -721,9 +718,9 @@ class TestDecryptPasswordField:
         from unittest.mock import patch
 
         with patch(
-            "app.services.runtime_config.decrypt_password", return_value="fallback"
+            "app.utils.crypto.decrypt_password", return_value="fallback"
         ):
-            result, has_error = _decrypt_password_field(
+            result, has_error = decrypt_password_field(
                 "••••••••", "ENC:fallback_encrypted"
             )
             assert result == "fallback"
@@ -731,12 +728,12 @@ class TestDecryptPasswordField:
 
     def test_masked_password_no_fallback(self):
         """掩码密码无回退返回空。"""
-        result, has_error = _decrypt_password_field("••••••••", "")
+        result, has_error = decrypt_password_field("••••••••", "")
         assert result == ""
         assert has_error is False
 
     def test_plain_password(self):
         """明文密码直接返回。"""
-        result, has_error = _decrypt_password_field("mypassword")
+        result, has_error = decrypt_password_field("mypassword")
         assert result == "mypassword"
         assert has_error is False
