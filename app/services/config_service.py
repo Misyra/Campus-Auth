@@ -5,11 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from app.schemas import (
+    AuthProfile,
     GLOBAL_SETTINGS_FIELDS,
-    GlobalSettings,
     MonitorConfigPayload,
     ProfilesData,
-    ProfileSettings,
+    SystemSettings,
 )
 from app.utils.logging import get_logger, normalize_level
 
@@ -24,11 +24,11 @@ _LOG_LEVEL_FIELDS = frozenset({"backend_log_level", "frontend_log_level"})
 
 
 def _update_global_settings(
-    global_settings: GlobalSettings, payload: MonitorConfigPayload
+    global_settings: SystemSettings, payload: MonitorConfigPayload
 ) -> None:
     """更新全局系统设置（不包含凭证）。
 
-    使用 GLOBAL_SETTINGS_FIELDS（GlobalSettings 与 MonitorConfigPayload 的字段交集）
+    使用 GLOBAL_SETTINGS_FIELDS（SystemSettings 与 MonitorConfigPayload 的字段交集）
     驱动循环赋值，替代逐字段手写。特殊字段（strip、log level）在循环内单独处理。
     """
     for field in GLOBAL_SETTINGS_FIELDS:
@@ -53,7 +53,7 @@ def save_config_combined(
         # 确保活动 profile 存在
         active_profile = data.active_profile
         if active_profile not in data.profiles:
-            data.profiles[active_profile] = ProfileSettings()
+            data.profiles[active_profile] = AuthProfile()
             config_logger.info("已自动初始化活动方案: {}", active_profile)
 
         # 更新活动 profile
@@ -79,7 +79,7 @@ def save_config_combined(
 
 def build_runtime_config(
     payload: MonitorConfigPayload,
-    global_settings: GlobalSettings | None = None,
+    global_settings: SystemSettings | None = None,
 ) -> dict[str, Any]:
     """从 MonitorConfigPayload 构建运行时配置字典。
 
@@ -112,8 +112,8 @@ def build_runtime_config(
     else:
         base["isp"] = carrier
 
-    # 浏览器配置 — 从 GlobalSettings 获取（无则使用默认实例）
-    gs = global_settings or GlobalSettings()
+    # 浏览器配置 — 从 SystemSettings 获取（无则使用默认实例）
+    gs = global_settings or SystemSettings()
     base["browser_settings"] = {
         "headless": gs.headless,
         "timeout": gs.browser_timeout,

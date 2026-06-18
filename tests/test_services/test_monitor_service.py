@@ -650,7 +650,7 @@ class TestSaveProfileApplyId:
 
     def test_apply_profile_uses_id_not_name(self):
         from app.api.profiles import save_profile
-        from app.schemas import ProfileSettings
+        from app.schemas import AuthProfile
 
         mock_profile_svc = MagicMock()
         mock_monitor_svc = MagicMock()
@@ -663,7 +663,7 @@ class TestSaveProfileApplyId:
         mock_profile_svc.load.return_value = mock_data
 
         # payload.name 与 profile_id 不同 —— 这是 bug 的核心
-        payload = ProfileSettings(name="完全不同的展示名")
+        payload = AuthProfile(name="完全不同的展示名")
         save_profile(
             profile_id="my_profile_id",
             payload=payload,

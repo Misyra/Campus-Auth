@@ -5,10 +5,10 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from app.schemas import (
-    GlobalSettings,
+    AuthProfile,
     MonitorConfigPayload,
     ProfilesData,
-    ProfileSettings,
+    SystemSettings,
 )
 
 
@@ -84,8 +84,8 @@ class TestSaveConfig:
             username="testuser", password="••••••••", auth_url="http://10.0.0.1"
         )
         mock_services.profile_service.load.return_value = ProfilesData(
-            global_settings=GlobalSettings(),
-            profiles={"default": ProfileSettings(name="默认方案", username="testuser", password="ENC:test")},
+            global_settings=SystemSettings(),
+            profiles={"default": AuthProfile(name="默认方案", username="testuser", password="ENC:test")},
         )
 
         payload = {

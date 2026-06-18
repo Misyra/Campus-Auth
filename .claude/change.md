@@ -3,6 +3,25 @@
 ## 2026-06-18
 
 ### refactor
+- `app/schemas.py` ProfileSettings → AuthProfile，GlobalSettings → SystemSettings（Task 4: R3）
+  - `ProfileSettings` 重命名为 `AuthProfile`，docstring 改为"认证方案 — 仅含凭证和匹配规则"
+  - `GlobalSettings` 重命名为 `SystemSettings`，docstring 改为"系统运行配置 — 监控、浏览器、日志、暂停、重试等"
+  - `_MonitorFieldsMixin` docstring 改为"Profile 可覆盖的全局默认值（监控、认证、运营商等）"
+  - `_CommonSettingsMixin` docstring 中 GlobalSettings 引用更新为 SystemSettings
+  - `ProfilesData` 字段类型和工厂同步更新
+  - `GLOBAL_SETTINGS_FIELDS` 注释和 model_fields 引用同步更新
+  - 同步更新 6 个服务/API 文件和 10 个测试文件的 import 和类型注解
+  - 367 个测试全部通过（2 个已有失败与本次改动无关）
+
+### refactor
+- `app/services/profile_service.py` 删除 ProfileService 内存缓存（Task 3: R2）
+  - 删除 `__init__` 中 `_data` 实例变量
+  - `_load_unsafe` 每次从磁盘读取，不再缓存
+  - `_save_unsafe` 删除缓存更新
+  - 添加注释说明不缓存原因：settings.json 很小（<10KB），多实例场景下缓存一致性成本高于收益
+  - 更新测试 `test_load_caches_data` 为 `test_load_returns_new_instance_each_time`
+
+### refactor
 - `app/services/engine.py` 拆分 `record_log` 双重职责（Task 2: R5）
   - `record_log` 不再隐式触发 `_update_status_snapshot`
   - 新增 `notify_network_state_changed()` 显式方法

@@ -5,9 +5,9 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from app.schemas import (
-    GlobalSettings,
+    AuthProfile,
     ProfilesData,
-    ProfileSettings,
+    SystemSettings,
 )
 
 
@@ -17,11 +17,11 @@ class TestListProfiles:
     def test_list_profiles_returns_200(self, api_client):
         test_client, mock_services = api_client
         profile_data = ProfilesData(
-            global_settings=GlobalSettings(),
-            profiles={"default": ProfileSettings(name="默认方案", username="testuser", password="ENC:test")},
+            global_settings=SystemSettings(),
+            profiles={"default": AuthProfile(name="默认方案", username="testuser", password="ENC:test")},
         )
         mock_services.profile_service.load.return_value = profile_data
-        mock_services.profile_service.get_active_profile.return_value = ProfileSettings(name="默认方案")
+        mock_services.profile_service.get_active_profile.return_value = AuthProfile(name="默认方案")
         resp = test_client.get("/api/profiles")
         assert resp.status_code == 200
         data = resp.json()
@@ -32,11 +32,11 @@ class TestListProfiles:
     def test_list_profiles_content(self, api_client):
         test_client, mock_services = api_client
         profile_data = ProfilesData(
-            global_settings=GlobalSettings(),
-            profiles={"default": ProfileSettings(name="默认方案", username="testuser", password="ENC:test")},
+            global_settings=SystemSettings(),
+            profiles={"default": AuthProfile(name="默认方案", username="testuser", password="ENC:test")},
         )
         mock_services.profile_service.load.return_value = profile_data
-        mock_services.profile_service.get_active_profile.return_value = ProfileSettings(name="默认方案")
+        mock_services.profile_service.get_active_profile.return_value = AuthProfile(name="默认方案")
         data = test_client.get("/api/profiles").json()
         assert "default" in data["profiles"]
         assert data["profiles"]["default"]["name"] == "默认方案"
@@ -48,8 +48,8 @@ class TestGetProfile:
     def test_get_profile_found(self, api_client):
         test_client, mock_services = api_client
         profile_data = ProfilesData(
-            global_settings=GlobalSettings(),
-            profiles={"default": ProfileSettings(name="默认方案", username="testuser", password="ENC:test")},
+            global_settings=SystemSettings(),
+            profiles={"default": AuthProfile(name="默认方案", username="testuser", password="ENC:test")},
         )
         mock_services.profile_service.load.return_value = profile_data
         resp = test_client.get("/api/profiles/default")
@@ -61,8 +61,8 @@ class TestGetProfile:
     def test_get_profile_not_found(self, api_client):
         test_client, mock_services = api_client
         profile_data = ProfilesData(
-            global_settings=GlobalSettings(),
-            profiles={"default": ProfileSettings(name="默认方案", username="testuser", password="ENC:test")},
+            global_settings=SystemSettings(),
+            profiles={"default": AuthProfile(name="默认方案", username="testuser", password="ENC:test")},
         )
         mock_services.profile_service.load.return_value = profile_data
         resp = test_client.get("/api/profiles/nonexistent")

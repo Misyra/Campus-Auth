@@ -15,10 +15,10 @@ import pytest
 
 from app.network.detect import detect_gateway_ip, detect_wifi_ssid
 from app.schemas import (
-    GlobalSettings,
+    AuthProfile,
     MonitorConfigPayload,
     ProfilesData,
-    ProfileSettings,
+    SystemSettings,
 )
 from app.services.config_service import build_runtime_config, save_config_combined
 from app.services.runtime_config import load_runtime_config, load_ui_config
@@ -383,9 +383,9 @@ class TestBuildRuntimeConfig:
         assert config["password"] == ""
 
     def test_browser_settings(self):
-        from app.schemas import GlobalSettings
+        from app.schemas import SystemSettings
         payload = MonitorConfigPayload()
-        global_settings = GlobalSettings(
+        global_settings = SystemSettings(
             headless=False,
             browser_timeout=15,
             browser_user_agent="Custom UA",
@@ -433,7 +433,7 @@ class TestBuildRuntimeConfig:
 
     def test_retry_settings(self):
         payload = MonitorConfigPayload()
-        gs = GlobalSettings(max_retries=5, retry_interval=10)
+        gs = SystemSettings(max_retries=5, retry_interval=10)
         config = build_runtime_config(payload, gs)
         assert config["retry_settings"]["max_retries"] == 5
         assert config["retry_settings"]["retry_interval"] == 10
@@ -443,12 +443,12 @@ class TestBuildRuntimeConfig:
         payload = MonitorConfigPayload()
 
         # 默认值应为 True
-        gs_default = GlobalSettings()
+        gs_default = SystemSettings()
         config = build_runtime_config(payload, global_settings=gs_default)
         assert config["browser_settings"]["pure_mode"] is True
 
         # 显式设置为 False
-        gs_false = GlobalSettings(pure_mode=False)
+        gs_false = SystemSettings(pure_mode=False)
         config = build_runtime_config(payload, global_settings=gs_false)
         assert config["browser_settings"]["pure_mode"] is False
 
@@ -596,14 +596,14 @@ class TestProfileService:
 
     def test_save_creates_file(self, service, tmp_path):
         data = ProfilesData()
-        data.profiles["default"] = ProfileSettings(name="测试")
+        data.profiles["default"] = AuthProfile(name="测试")
         service.save(data)
         assert (tmp_path / "config" / "settings.json").exists()
         # ProfileService 保存所有数据到 settings.json，不创建单独的 profile 文件
 
     def test_save_and_load_roundtrip(self, service):
         data = ProfilesData()
-        data.profiles["test"] = ProfileSettings(name="往返测试")
+        data.profiles["test"] = AuthProfile(name="往返测试")
         service.save(data)
         loaded = service.load()
         assert loaded.profiles["test"].name == "往返测试"
@@ -652,25 +652,25 @@ class TestProfileService:
         assert "不存在" in msg
 
     def test_save_profile_new(self, service):
-        settings = ProfileSettings(name="新方案")
+        settings = AuthProfile(name="新方案")
         ok, msg = service.save_profile("new_profile", settings)
         assert ok is True
         data = service.load()
         assert "new_profile" in data.profiles
 
     def test_save_profile_update(self, service_with_profiles):
-        settings = ProfileSettings(name="更新后方案")
+        settings = AuthProfile(name="更新后方案")
         ok, msg = service_with_profiles.save_profile("default", settings)
         assert ok is True
         data = service_with_profiles.load()
         assert data.profiles["default"].name == "更新后方案"
 
     def test_save_profile_empty_id(self, service):
-        ok, msg = service.save_profile("", ProfileSettings())
+        ok, msg = service.save_profile("", AuthProfile())
         assert ok is False
 
     def test_save_profile_invalid_id(self, service):
-        ok, msg = service.save_profile("my-profile", ProfileSettings())
+        ok, msg = service.save_profile("my-profile", AuthProfile())
         assert ok is False
         assert "字母" in msg or "下划线" in msg
 
@@ -683,7 +683,7 @@ class TestProfileService:
             encoding="utf-8",
         )
         service = ProfileService(tmp_path)
-        settings = ProfileSettings(name="唯一方案")
+        settings = AuthProfile(name="唯一方案")
         service.save_profile("only", settings)
         data = service.load()
         # save_profile 在 len(data.profiles) == 1 时设置 active_profile
@@ -826,11 +826,11 @@ class TestProfileService:
     def test_update_modifies_data(self, service):
         """update() 应在锁内执行读-改-写"""
         data = service.load()
-        data.profiles["default"] = ProfileSettings(name="原始")
+        data.profiles["default"] = AuthProfile(name="原始")
         service.save(data)
 
         def modifier(d: ProfilesData):
-            d.profiles["default"] = ProfileSettings(name="通过update修改")
+            d.profiles["default"] = AuthProfile(name="通过update修改")
 
         service.update(modifier)
         loaded = service.load()
@@ -841,7 +841,7 @@ class TestProfileService:
         service = ProfileService(tmp_path)
 
         def modifier(d: ProfilesData):
-            d.profiles["new"] = ProfileSettings(name="新建方案")
+            d.profiles["new"] = AuthProfile(name="新建方案")
 
         service.update(modifier)
         assert (tmp_path / "config" / "settings.json").exists()
@@ -853,7 +853,7 @@ class TestProfileService:
         """update() 不应丢失未修改的字段"""
         data = ProfilesData(
             auto_switch=True,
-            profiles={"default": ProfileSettings(name="默认")},
+            profiles={"default": AuthProfile(name="默认")},
         )
         service.save(data)
 

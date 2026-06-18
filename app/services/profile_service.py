@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from app.network.detect import detect_gateway_ip, detect_wifi_ssid
-from app.schemas import ProfilesData, ProfileSettings
+from app.schemas import AuthProfile, ProfilesData
 from app.utils.crypto import save_password_field
 from app.utils.files import atomic_write
 from app.utils.logging import get_logger
@@ -82,7 +82,7 @@ class ProfileService:
             func(data)
             self._save_unsafe(data)
 
-    def get_active_profile(self) -> ProfileSettings:
+    def get_active_profile(self) -> AuthProfile:
         """获取当前活动方案的设置（返回值由 load() 深拷贝保护，无需再次拷贝）"""
         data = self.load()
         profile_id = data.active_profile
@@ -93,7 +93,7 @@ class ProfileService:
         if data.profiles:
             first_id = next(iter(data.profiles))
             return data.profiles[first_id]
-        return ProfileSettings()
+        return AuthProfile()
 
     def get_active_profile_id(self) -> str:
         """获取当前活动方案 ID"""
@@ -113,7 +113,7 @@ class ProfileService:
         return True, f"已切换到方案: {data.profiles[profile_id].name}"
 
     def save_profile(
-        self, profile_id: str, settings: ProfileSettings
+        self, profile_id: str, settings: AuthProfile
     ) -> tuple[bool, str]:
         """创建或更新一个方案"""
         if not profile_id or not profile_id.strip():
