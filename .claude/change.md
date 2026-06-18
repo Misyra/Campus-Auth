@@ -3,6 +3,26 @@
 ## 2026-06-18
 
 ### fix
+- `app/api/scheduled_tasks.py` 4 个路由从 `async def` 改为 `def`（Task 1: R1 async 路由修正）
+  - `create_scheduled_task`、`update_scheduled_task`、`run_scheduled_task`、`toggle_scheduled_task`
+  - 这 4 个函数体内无任何 `await`，声明为 `async def` 会导致 FastAPI 在主事件循环线程内同步执行
+  - `save_task()`/`start_scheduler()` 等同步阻塞调用会阻塞所有其他并发请求
+  - 改为 `def` 后 FastAPI 自动将路由丢到线程池执行，释放事件循环
+  - `run_scheduled_task` 内部嵌套的 `async def _execute()` 保持不变（含 `await asyncio.to_thread`）
+
+### docs
+- 新增 `docs/superpowers/specs/2026-06-18-backend-architecture-review.md` 后端架构审查报告
+  - 13 项架构层面问题（3 高 / 5 中 / 5 低），独立验证 12 项完全确认、1 项部分确认
+  - 涵盖：async/sync 路由反模式、ProfileService 多实例缓存不一致、代码重复、配置管道职责模糊、API 错误响应不统一等
+  - 附建议落地顺序（12 阶段，~23-31h 总工时）
+
+### fix
+- `app/container.py` 移除误导性"空闲卸载"日志消息
+  - `stop_web_services()` 的日志从"Web 服务已停止（空闲卸载）"改为"Web 服务已停止"
+  - 该方法仅被 `shutdown()` 复用，不存在独立的空闲卸载机制
+  - 同步清理方法 docstring 中的"空闲卸载"描述
+
+### fix
 - `tests/test_services/test_system_services.py` 修复 PR6 提取共享函数后的测试导入和断言（Task 10）
   - `_dir_size_mb` 改为从 `app.utils.files.dir_size_mb` 导入
   - `_playwright_cache_dir` 改为从 `app.utils.platform.get_playwright_cache_dir` 导入
