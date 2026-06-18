@@ -316,7 +316,7 @@ class ScheduleEngine:
             return False
         return now >= self._login_retry.last_attempt + intervals[idx]
 
-    def _do_async_login(self, skip_pause_check: bool = False, is_manual: bool = False) -> bool:
+    def _do_async_login(self, skip_pause_check: bool = False, is_manual: bool = False, config_snapshot: dict | None = None) -> bool:
         """提交登录到 executor 的 login_pool。返回 True 表示已提交。"""
         if self._login_in_progress.is_set():
             if not is_manual:
@@ -337,7 +337,8 @@ class ScheduleEngine:
 
         try:
             future = self._task_executor.execute_login_async(
-                skip_pause_check=skip_pause_check
+                skip_pause_check=skip_pause_check,
+                config_snapshot=config_snapshot,
             )
         except Exception:
             self._login_in_progress.clear()
@@ -448,7 +449,7 @@ class ScheduleEngine:
             cmd.response_data = (False, "登录配置不完整（请先设置认证地址、用户名和密码）")
             return
         skip_pause_check = cmd.data.get("skip_pause_check", False)
-        if self._do_async_login(skip_pause_check=skip_pause_check, is_manual=True):
+        if self._do_async_login(skip_pause_check=skip_pause_check, is_manual=True, config_snapshot=config):
             cmd.response_data = (True, "登录已提交")
         else:
             cmd.response_data = (False, "登录任务已在执行中，请稍后再试")

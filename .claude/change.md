@@ -3,6 +3,14 @@
 ## 2026-06-19
 
 ### fix
+- `app/services/engine.py` 和 `app/services/task_executor.py` 消除登录配置 TOCTOU 竞态（Task 4: P4）
+  - `_handle_login` 用 `_copy_runtime_config()` 校验配置，但 `_do_async_login` → `execute_login` 二次读取存在竞态窗口
+  - `_do_async_login` 新增 `config_snapshot` 参数，传递校验通过的配置快照
+  - `execute_login_async` 和 `execute_login` 新增 `config_snapshot` 参数，优先使用快照而非二次读取
+  - `config_snapshot` 默认 `None`，自动登录路径（非手动触发）不受影响
+  - 新增 `test_handle_login_uses_validated_config` 测试验证快照传递
+
+### fix
 - `main.py` LOGIN_ONCE 网络检测全部禁用时跳过登录
   - `check_network_status` 返回 `(False, "all_disabled", "none")` 时，原代码进入登录流程
   - 新增 `reason == "all_disabled"` 分支，假定网络正常并返回 `LoginResult.SUCCESS`
