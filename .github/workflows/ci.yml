@@ -52,4 +52,4 @@ jobs:
             playwright-${{ runner.os }}-
 
       - name: Run tests
-        run: uv run pytest --tb=short -q --cov=app --cov-report=term-missing
+        run: uv run pytest --tb=short --full-trace -q --cov=app --cov-report=term-missing
