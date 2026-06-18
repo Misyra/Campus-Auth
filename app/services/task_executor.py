@@ -220,6 +220,7 @@ class TaskExecutor:
         Args:
             cancel_event: 取消事件，设置后登录流程应尽快退出
             skip_pause_check: 是否跳过暂停时段和网络检测
+            config_snapshot: 校验通过的配置快照，避免二次读取产生竞态
 
         Returns:
             Future 对象（新的或已有的）
@@ -337,6 +338,7 @@ class TaskExecutor:
         """同步执行登录（在 login_pool 工作线程中运行）。
 
         通过 PlaywrightWorker 执行浏览器自动化登录。
+        config_snapshot 优先使用，避免二次读取产生 TOCTOU 竞态。
         """
         start = time.perf_counter()
 
