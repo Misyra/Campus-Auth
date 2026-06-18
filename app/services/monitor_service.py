@@ -176,9 +176,9 @@ class NetworkMonitorCore:
 
         monitor_cfg = self.config.get("monitor", {})
         modes = []
-        if monitor_cfg.get("enable_tcp_check", True):
+        if monitor_cfg.get("enable_tcp_check", False):
             modes.append(f"TCP({len(test_sites_info)})")
-        if monitor_cfg.get("enable_http_check", True):
+        if monitor_cfg.get("enable_http_check", False):
             http_urls = monitor_cfg.get("test_urls", [])
             modes.append(f"HTTP({len(http_urls)})")
         url_checks = monitor_cfg.get("url_check_urls")
