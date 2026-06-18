@@ -138,10 +138,7 @@ class ServiceContainer:
         container_logger.info("Web 服务已启动")
 
     async def stop_web_services(self):
-        """停止 Web 相关服务（DashboardSink + WS drain loop）。
-
-        用于空闲卸载：停止 uvicorn 后调用，允许下次重新启动。
-        """
+        """停止 Web 相关服务（DashboardSink + WS drain loop）。"""
         if not self._web_services_started:
             return
 
@@ -161,7 +158,7 @@ class ServiceContainer:
             self._ws_drain_task = None
 
         self._web_services_started = False
-        container_logger.info("Web 服务已停止（空闲卸载）")
+        container_logger.info("Web 服务已停止")
 
     async def shutdown(self):
         """关闭服务。"""
