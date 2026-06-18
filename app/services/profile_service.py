@@ -23,29 +23,28 @@ class ProfileService:
         self._config_dir = project_root / "config"
         self._settings_path = self._config_dir / "settings.json"
         self._lock = threading.Lock()
-        self._data: ProfilesData | None = None
 
     def _ensure_dirs(self) -> None:
         """确保 config/ 目录存在"""
         self._config_dir.mkdir(parents=True, exist_ok=True)
 
     def _load_unsafe(self) -> ProfilesData:
-        """加载配置（不加锁，由调用者持有锁）"""
-        if self._data is not None:
-            return self._data.model_copy(deep=True)
+        """加载配置（不加锁，由调用者持有锁）。
 
+        不缓存配置：
+        1. settings.json 很小（<10KB），每次读盘开销可忽略
+        2. 多实例场景下缓存一致性成本高于收益
+        """
         self._ensure_dirs()
 
         if not self._settings_path.exists():
-            self._data = ProfilesData()
-            return self._data.model_copy(deep=True)
+            return ProfilesData()
 
         try:
             raw = self._settings_path.read_text(encoding="utf-8")
-            data = ProfilesData.model_validate_json(raw)
+            return ProfilesData.model_validate_json(raw)
         except Exception:
             profile_logger.exception("加载 settings.json 失败")
-            # 备份损坏文件
             corrupt_name = f"settings.corrupt.{int(time.time())}.json"
             corrupt_path = self._config_dir / corrupt_name
             try:
@@ -53,19 +52,13 @@ class ProfileService:
                 profile_logger.info("已备份损坏文件到: {}", corrupt_path)
             except (FileNotFoundError, OSError):
                 pass
-            data = ProfilesData()
-
-        self._data = data.model_copy(deep=True)
-        return self._data.model_copy(deep=True)
+            return ProfilesData()
 
     def _save_unsafe(self, data: ProfilesData) -> None:
         """原子写入配置（不加锁，由调用者持有锁）"""
         self._ensure_dirs()
-
         settings_content = data.model_dump_json(indent=2)
         atomic_write(self._settings_path, settings_content)
-
-        self._data = data.model_copy(deep=True)
         profile_logger.info("配置已保存")
 
     def load(self) -> ProfilesData:
