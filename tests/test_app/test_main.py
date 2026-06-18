@@ -915,6 +915,7 @@ class TestSignalHandler:
             patch("os._exit") as mock_exit,
             patch.object(time, "sleep", side_effect=[None, KeyboardInterrupt]),
             patch("signal.signal", side_effect=fake_signal),
+            patch("asyncio.run"),  # 防止 Runner 注册自己的 SIGINT handler
         ):
             mock_ps = MagicMock()
             mock_ps.load.return_value.system = MagicMock(
@@ -964,6 +965,7 @@ class TestSignalHandler:
             patch("signal.signal", side_effect=fake_signal),
             patch("main.os._exit"),
             patch.object(time, "sleep", side_effect=[None, KeyboardInterrupt]),
+            patch("asyncio.run"),  # 防止 Runner 注册自己的 SIGINT handler
         ):
             mock_ps = MagicMock()
             mock_ps.load.return_value.system = MagicMock(
