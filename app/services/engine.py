@@ -619,7 +619,7 @@ class ScheduleEngine:
         """从 settings.json 重新加载 UI 和运行时配置。返回 True 表示成功。"""
         import copy
 
-        from .config_service import build_runtime_config
+        from .config_service import build_runtime_dict_from_payload
         from .runtime_config import load_runtime_config, load_ui_config
 
         try:
@@ -631,7 +631,7 @@ class ScheduleEngine:
                 )
                 if has_decrypt_error:
                     logger.warning("配置重载时部分密码解密失败")
-                self._runtime_config = build_runtime_config(
+                self._runtime_config = build_runtime_dict_from_payload(
                     runtime_payload,
                     global_settings=data.global_settings,
                 )

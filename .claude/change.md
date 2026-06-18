@@ -3,6 +3,14 @@
 ## 2026-06-18
 
 ### refactor
+- `app/services/runtime_config.py` 和 `app/services/config_service.py` 函数改名消除配置管道命名混淆（Task 3: P3）
+  - `_build_config_payload` → `load_payload_from_profiles`（读方向：ProfileService → MonitorConfigPayload）
+  - `build_runtime_config` → `build_runtime_dict_from_payload`（构建方向：MonitorConfigPayload → dict）
+  - 函数名直接表达输入→输出方向，消除跨文件命名歧义
+  - 同步更新 11 个文件的导入、调用和 mock 路径
+  - 367 个测试全部通过（2 个已有失败与本次改动无关）
+
+### refactor
 - `app/utils/crypto.py` 密码处理函数集中到 crypto.py（Task 2: P2）
   - `safe_decrypt` 和 `decrypt_password_field` 从 `runtime_config.py` 移到 `crypto.py`
   - 与 `save_password_field` / `decrypt_password` / `mask_password` 放在一起，读写对称，集中管理

@@ -77,7 +77,7 @@ def save_config_combined(
     profile_service.update(_apply)
 
 
-def build_runtime_config(
+def build_runtime_dict_from_payload(
     payload: MonitorConfigPayload,
     global_settings: SystemSettings | None = None,
 ) -> dict[str, Any]:

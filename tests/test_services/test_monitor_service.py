@@ -166,7 +166,7 @@ class TestListLogs:
         finally:
             logger.remove(handler_id)
 
-    @patch("app.services.config_service.build_runtime_config", return_value={})
+    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
     @patch(
         "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
@@ -270,7 +270,7 @@ class TestUpdateStatusSnapshot:
 
 
 class TestStartStopMonitoring:
-    @patch("app.services.config_service.build_runtime_config", return_value={})
+    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
     @patch(
         "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
@@ -349,7 +349,7 @@ class TestHandleStartStop:
 
 
 class TestHandleLogin:
-    @patch("app.services.config_service.build_runtime_config", return_value={})
+    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
     @patch(
         "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
@@ -435,7 +435,7 @@ class TestRunManualLogin:
 
 
 class TestNetwork:
-    @patch("app.services.config_service.build_runtime_config", return_value={})
+    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
     @patch(
         "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
@@ -458,7 +458,7 @@ class TestNetwork:
         assert ok is True
         assert "正常" in msg
 
-    @patch("app.services.config_service.build_runtime_config", return_value={})
+    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
     @patch(
         "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
@@ -481,7 +481,7 @@ class TestNetwork:
         assert ok is False
         assert "异常" in msg
 
-    @patch("app.services.config_service.build_runtime_config", return_value={})
+    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
     @patch(
         "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
@@ -513,7 +513,7 @@ class TestNetwork:
 
 
 class TestTogglePureMode:
-    @patch("app.services.config_service.build_runtime_config", return_value={})
+    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
     @patch(
         "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
@@ -539,7 +539,7 @@ class TestTogglePureMode:
         assert svc.pure_mode is True
         mock_ps.update.assert_called_once()
 
-    @patch("app.services.config_service.build_runtime_config", return_value={})
+    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
     @patch(
         "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
@@ -613,7 +613,7 @@ class TestLoginInProgress:
 
 class TestGetConfig:
     @patch(
-        "app.services.config_service.build_runtime_config",
+        "app.services.config_service.build_runtime_dict_from_payload",
         return_value={"key": "value"},
     )
     @patch(

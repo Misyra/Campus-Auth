@@ -20,7 +20,7 @@ def engine_factory():
     - engine_factory(raw=True): 使用 __new__ 跳过 __init__，用于单元隔离测试
 
     所有模式都 patch 相同的 4 个依赖：
-    - config_service.build_runtime_config
+    - config_service.build_runtime_dict_from_payload
     - runtime_config.load_runtime_config
     - runtime_config.load_ui_config
     - engine.ProfileService
@@ -29,7 +29,7 @@ def engine_factory():
     def _make(**overrides):
         """标准模式：完整初始化后停止引擎线程。"""
         with (
-            patch("app.services.config_service.build_runtime_config", return_value={}),
+            patch("app.services.config_service.build_runtime_dict_from_payload", return_value={}),
             patch(
                 "app.services.runtime_config.load_runtime_config",
                 return_value=(MagicMock(), False),
