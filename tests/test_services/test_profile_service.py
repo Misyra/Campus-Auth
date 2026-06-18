@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from app.schemas import ProfilesData, ProfileSettings
+from app.schemas import AuthProfile, ProfilesData
 from app.services.profile_service import ProfileService
 
 
@@ -91,8 +91,8 @@ class TestProfileServiceSave:
             auto_switch=True,
             active_profile="campus",
             profiles={
-                "default": ProfileSettings(username="user1"),
-                "campus": ProfileSettings(username="user2"),
+                "default": AuthProfile(username="user1"),
+                "campus": AuthProfile(username="user2"),
             },
         )
         service.save(data)
@@ -115,8 +115,8 @@ class TestProfileServiceSave:
             auto_switch=True,
             active_profile="test",
             profiles={
-                "default": ProfileSettings(username="user1", password="encrypted"),
-                "test": ProfileSettings(
+                "default": AuthProfile(username="user1", password="encrypted"),
+                "test": AuthProfile(
                     username="user2",
                     match_ssid="TestSSID",
                     match_gateway_ip="192.168.1.1",

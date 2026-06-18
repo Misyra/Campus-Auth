@@ -12,11 +12,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.schemas import (
-    GlobalSettings,
+    AuthProfile,
     MonitorConfigPayload,
     MonitorStatusResponse,
     ProfilesData,
-    ProfileSettings,
+    SystemSettings,
 )
 
 # =====================================================================
@@ -109,11 +109,11 @@ def client(tmp_path):
 
         # ── profile_service ──
         profile_data = ProfilesData(
-            global_settings=GlobalSettings(),
-            profiles={"default": ProfileSettings(name="默认方案", username="testuser", password="ENC:test")},
+            global_settings=SystemSettings(),
+            profiles={"default": AuthProfile(name="默认方案", username="testuser", password="ENC:test")},
         )
         mock_services.profile_service.load.return_value = profile_data
-        mock_services.profile_service.get_active_profile.return_value = ProfileSettings(
+        mock_services.profile_service.get_active_profile.return_value = AuthProfile(
             name="默认方案"
         )
         mock_services.profile_service.save_profile.return_value = (True, "保存成功")

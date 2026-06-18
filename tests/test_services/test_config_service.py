@@ -5,20 +5,20 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from app.schemas import (
-    GlobalSettings,
+    AuthProfile,
     MonitorConfigPayload,
     ProfilesData,
-    ProfileSettings,
+    SystemSettings,
 )
 from app.services.config_service import save_config_combined, _update_global_settings
 
 
-class TestUpdateGlobalSettings:
+class TestUpdateSystemSettings:
     """测试 _update_global_settings 函数"""
 
     def test_updates_global_settings_fields(self):
         """测试更新全局设置字段"""
-        global_settings = GlobalSettings()
+        global_settings = SystemSettings()
         payload = MonitorConfigPayload(
             backend_log_level="DEBUG",
             frontend_log_level="INFO",
@@ -55,7 +55,7 @@ class TestUpdateGlobalSettings:
 
     def test_normalizes_log_levels(self):
         """测试日志级别归一化"""
-        global_settings = GlobalSettings()
+        global_settings = SystemSettings()
         payload = MonitorConfigPayload(
             backend_log_level="  debug  ",
             frontend_log_level="  warning  ",
@@ -68,7 +68,7 @@ class TestUpdateGlobalSettings:
 
     def test_strips_proxy_whitespace(self):
         """测试代理地址去除空白"""
-        global_settings = GlobalSettings()
+        global_settings = SystemSettings()
         payload = MonitorConfigPayload(proxy="  http://proxy:8080  ")
 
         _update_global_settings(global_settings, payload)
@@ -77,7 +77,7 @@ class TestUpdateGlobalSettings:
 
     def test_does_not_update_credentials(self):
         """测试不更新凭证字段（凭证应保存到 profile）"""
-        global_settings = GlobalSettings()
+        global_settings = SystemSettings()
         payload = MonitorConfigPayload(
             username="testuser",
             password="testpass",
@@ -87,11 +87,11 @@ class TestUpdateGlobalSettings:
 
         _update_global_settings(global_settings, payload)
 
-        # GlobalSettings 不应包含纯凭证字段（仅在 _SystemFieldsMixin 中）
+        # SystemSettings 不应包含纯凭证字段（仅在 _SystemFieldsMixin 中）
         assert not hasattr(global_settings, "username")
         assert not hasattr(global_settings, "password")
         # auth_url/carrier/carrier_custom 现在在 _MonitorFieldsMixin 中，
-        # 属于 GlobalSettings 与 MonitorConfigPayload 的共享字段，会被同步更新
+        # 属于 SystemSettings 与 MonitorConfigPayload 的共享字段，会被同步更新
         assert global_settings.auth_url == "http://example.com"
         assert global_settings.carrier == "移动"
 

@@ -113,7 +113,7 @@ _BROWSER_ARGS_DEFAULT = (
 
 
 class _MonitorFieldsMixin(BaseModel):
-    """监控与网络检测相关共享字段"""
+    """Profile 可覆盖的全局默认值（监控、认证、运营商等）"""
 
     auth_url: str = Field(default="")
     active_task: str = Field(default="")
@@ -157,7 +157,7 @@ class _MonitorFieldsMixin(BaseModel):
 
 
 class _CommonSettingsMixin(BaseModel):
-    """_SystemFieldsMixin 与 GlobalSettings 共享的系统配置字段"""
+    """_SystemFieldsMixin 与 SystemSettings 共享的系统配置字段"""
 
     # 日志配置
     backend_log_level: str = Field(default="INFO")
@@ -284,8 +284,8 @@ class _SystemFieldsMixin(_CommonSettingsMixin):
         return _validate_auth_url(v)
 
 
-class GlobalSettings(_MonitorFieldsMixin, _CommonSettingsMixin):
-    """全局系统配置 — 仅系统级设置，不包含业务逻辑。
+class SystemSettings(_MonitorFieldsMixin, _CommonSettingsMixin):
+    """系统运行配置 — 监控、浏览器、日志、暂停、重试等。
 
     监控配置字段继承自 _MonitorFieldsMixin，系统配置字段继承自 _CommonSettingsMixin。
     仅声明不属于这两个 Mixin 的额外字段。
@@ -369,8 +369,8 @@ class AutoStartStatusResponse(BaseModel):
     lightweight: bool = True
 
 
-class ProfileSettings(BaseModel):
-    """方案配置 — 所有业务配置的唯一数据源"""
+class AuthProfile(BaseModel):
+    """认证方案 — 仅含凭证和匹配规则"""
 
     # 基本信息
     name: str = Field(default="默认方案")
@@ -400,14 +400,14 @@ class ProfilesData(BaseModel):
 
     auto_switch: bool = Field(default=False, description="是否根据网关 IP 自动切换方案")
     active_profile: str = Field(default="default")
-    global_settings: GlobalSettings = Field(default_factory=GlobalSettings)
-    profiles: dict[str, ProfileSettings] = Field(default_factory=dict)
+    global_settings: SystemSettings = Field(default_factory=SystemSettings)
+    profiles: dict[str, AuthProfile] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def ensure_default_profile(self) -> ProfilesData:
         """确保 default profile 存在"""
         if "default" not in self.profiles:
-            self.profiles["default"] = ProfileSettings()
+            self.profiles["default"] = AuthProfile()
         return self
 
 
@@ -431,10 +431,10 @@ def get_runtime_features(
 
 # ── 字段映射常量 ──
 
-# GlobalSettings 与 MonitorConfigPayload 的共享字段集合。
+# SystemSettings 与 MonitorConfigPayload 的共享字段集合。
 # 用于 config_service._update_global_settings（循环赋值）和
 # runtime_config._build_config_payload（model_dump include）。
 GLOBAL_SETTINGS_FIELDS = frozenset(
-    f for f in GlobalSettings.model_fields
+    f for f in SystemSettings.model_fields
     if f in MonitorConfigPayload.model_fields
 )

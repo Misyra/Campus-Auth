@@ -1,8 +1,8 @@
-"""运行时配置合并 — 从 GlobalSettings + ProfileSettings 合并出 MonitorConfigPayload。"""
+"""运行时配置合并 — 从 SystemSettings + AuthProfile 合并出 MonitorConfigPayload。"""
 
 from __future__ import annotations
 
-from app.schemas import GLOBAL_SETTINGS_FIELDS, MonitorConfigPayload, ProfilesData, ProfileSettings
+from app.schemas import AuthProfile, GLOBAL_SETTINGS_FIELDS, MonitorConfigPayload, ProfilesData
 from app.utils.crypto import decrypt_password, mask_password
 from app.utils.exceptions import DecryptionError
 from app.utils.logging import get_logger, normalize_level
@@ -70,7 +70,7 @@ def _build_config_payload(
     # 获取活动 profile
     profile = data.profiles.get(data.active_profile)
     if profile is None:
-        profile = data.profiles.get("default", ProfileSettings())
+        profile = data.profiles.get("default", AuthProfile())
 
     config_logger.debug("加载配置: profile={}", data.active_profile)
 
@@ -87,11 +87,13 @@ def _build_config_payload(
         payload_dict["password"] = mask_password(profile.password)
 
     # 合并 global_settings 中的系统配置和监控配置
-    # 使用 GLOBAL_SETTINGS_FIELDS 选取 GlobalSettings 与 MonitorConfigPayload 的共享字段，
+    # 使用 GLOBAL_SETTINGS_FIELDS 选取 SystemSettings 与 MonitorConfigPayload 的共享字段，
     # 一次 model_dump 替代 53 行逐字段取值。
-    # 注：source_levels 仅在 GlobalSettings 中，不在 MonitorConfigPayload 中，
+    # 注：source_levels 仅在 SystemSettings 中，不在 MonitorConfigPayload 中，
     # 因此不在交集中——这与重构前行为一致（MonitorConfigPayload(**payload_dict) 同样会丢弃该键）。
-    # 排除 profile 覆盖字段：这些字段由 profile 独立控制，不应被 global_settings 覆盖。
+    # AuthProfile 可覆盖的字段，从 SystemSettings 中排除
+    # 这些字段同时存在于 AuthProfile 和 SystemSettings 中
+    # AuthProfile 的值优先级更高（留空则使用 SystemSettings 的默认值）
     _PROFILE_OVERRIDE = frozenset({"auth_url", "carrier", "carrier_custom"})
     gs_dict = data.global_settings.model_dump(include=GLOBAL_SETTINGS_FIELDS - _PROFILE_OVERRIDE)
     payload_dict.update(gs_dict)
