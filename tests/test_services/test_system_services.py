@@ -18,11 +18,11 @@ from app.services.uninstall import (
     CleanupItem,
     CleanupResult,
     _check_autostart,
-    _dir_size_mb,
-    _playwright_cache_dir,
     detect,
     perform,
 )
+from app.utils.files import dir_size_mb as _dir_size_mb
+from app.utils.platform import get_playwright_cache_dir as _playwright_cache_dir
 
 # ─────────────────────────────────────────────────────────────────────
 #  AutoStartService (backend/autostart_service.py)
@@ -51,7 +51,7 @@ class TestStartCommand:
         with patch.dict(os.environ, {}, clear=True):
             svc = AutoStartService(tmp_path)
             cmd = svc._start_command()
-            assert "app.py" in cmd
+            assert "main.py" in cmd
 
 
 class TestHasCjkChars:
@@ -206,26 +206,26 @@ class TestCleanupResult:
 
 
 class TestPlaywrightCacheDir:
-    @patch("app.services.uninstall.PLATFORM", "windows")
-    def test_windows(self):
+    @patch("app.utils.platform.get_platform", return_value="windows")
+    def test_windows(self, _mock):
         path = _playwright_cache_dir()
         assert path is not None
         assert "ms-playwright" in str(path)
 
-    @patch("app.services.uninstall.PLATFORM", "darwin")
-    def test_macos(self):
+    @patch("app.utils.platform.get_platform", return_value="darwin")
+    def test_macos(self, _mock):
         path = _playwright_cache_dir()
         assert path is not None
         assert "ms-playwright" in str(path)
 
-    @patch("app.services.uninstall.PLATFORM", "linux")
-    def test_linux(self):
+    @patch("app.utils.platform.get_platform", return_value="linux")
+    def test_linux(self, _mock):
         path = _playwright_cache_dir()
         assert path is not None
         assert "ms-playwright" in str(path)
 
-    @patch("app.services.uninstall.PLATFORM", "unknown")
-    def test_unknown(self):
+    @patch("app.utils.platform.get_platform", return_value="unknown")
+    def test_unknown(self, _mock):
         path = _playwright_cache_dir()
         assert path is None
 
@@ -235,7 +235,8 @@ class TestDirSizeMb:
         assert _dir_size_mb(tmp_path) == 0.0
 
     def test_with_files(self, tmp_path):
-        (tmp_path / "test.txt").write_text("hello world")
+        # 写入超过 1MB 以确保 round(..., 1) 不为 0
+        (tmp_path / "test.txt").write_bytes(b"x" * (1024 * 1024 + 1))
         size = _dir_size_mb(tmp_path)
         assert size > 0
 
@@ -308,18 +309,25 @@ class TestPerform:
 
 
 class TestBuildVbsContent:
-    def test_contains_pid_check(self):
-        """生成的 VBScript 应包含 PID 检查逻辑"""
+    def test_minimal_output_structure(self):
+        """VBS 输出应为最小结构：On Error + WshShell + 命令"""
         svc = AutoStartService(project_root=Path("/test"))
-        content = svc._build_vbs_content('WshShell.Run "test.exe"')
-        assert "campus_network_auth.pid" in content
-        assert "Win32_Process" in content
+        run_cmd = 'WshShell.Run "test.exe", 0, False'
+        content = svc._build_vbs_content(run_cmd)
+        expected = (
+            'Set WshShell = CreateObject("WScript.Shell")\n'
+            "\n"
+            'WshShell.Run "test.exe", 0, False'
+        )
+        assert content == expected
 
-    def test_no_env_var_injection(self):
-        """生成的 VBScript 不应包含环境变量注入（已改为 CLI 参数）"""
+    def test_no_pid_parsing(self):
+        """VBS 不应包含 PID 检测逻辑（去重由 Python 处理）"""
         svc = AutoStartService(project_root=Path("/test"))
         content = svc._build_vbs_content('WshShell.Run "test.exe"')
-        assert "CAMPUS_AUTH_AUTOSTART" not in content
+        assert "campus_network_auth.pid" not in content
+        assert "Win32_Process" not in content
+        assert "WMI" not in content.upper()
 
     def test_contains_run_command(self):
         """生成的 VBScript 应包含传入的运行命令"""

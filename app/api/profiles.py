@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Body, Depends, HTTPException
 
 from app.deps import get_monitor_service, get_profile_service
-from app.schemas import ActionResponse, ProfileSettings
+from app.schemas import ActionResponse, AuthProfile
 from app.services.engine import ScheduleEngine
 from app.services.profile_service import ProfileService
 from app.utils.logging import get_logger
@@ -64,7 +64,7 @@ def get_profile(
 @router.put("/api/profiles/{profile_id}", response_model=ActionResponse)
 def save_profile(
     profile_id: str,
-    payload: ProfileSettings,
+    payload: AuthProfile,
     profile_svc: ProfileService = Depends(get_profile_service),
     monitor_svc: ScheduleEngine = Depends(get_monitor_service),
 ) -> ActionResponse:

@@ -43,12 +43,11 @@ def set_source_level(payload: dict, request: Request):
 
     if source == "global":
         config.set_level(level)
-        return {"success": True, "message": f"已设置全局级别为 {level}"}
-
-    try:
-        config.set_source_level(source, level)
-    except ValueError as e:
-        raise HTTPException(400, str(e)) from e
+    else:
+        try:
+            config.set_source_level(source, level)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
 
     _persist_source_levels(request, config)
 
@@ -67,7 +66,11 @@ def _persist_source_levels(request: Request, config):
 def get_config(
     svc: ScheduleEngine = Depends(get_monitor_service),
 ) -> MonitorConfigPayload:
-    return svc.get_config()
+    config = svc.get_config()
+    # 掩码密码，不暴露加密密文（save_password_field 已识别 "•" 前缀为掩码）
+    if config.password:
+        config.password = "••••••••"
+    return config
 
 
 @router.get("/api/config/default-stealth-script")

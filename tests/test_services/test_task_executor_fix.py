@@ -1319,3 +1319,31 @@ class TestTaskExecutorTaskAsync:
         executor.execute_task_async("t1")
         assert executor._task_pool is not None
         executor._task_pool.shutdown(wait=False)
+
+
+# =====================================================================
+# NullTaskExecutor — 签名兼容性
+# =====================================================================
+
+
+class TestNullTaskExecutorSignature:
+    """NullTaskExecutor 签名与 TaskExecutor 兼容。"""
+
+    def test_execute_login_async_accepts_skip_pause_check(self):
+        """NullTaskExecutor.execute_login_async 应接受 skip_pause_check 参数。"""
+        from app.services.task_executor import NullTaskExecutor
+
+        executor = NullTaskExecutor()
+        # 不应抛出 TypeError
+        result = executor.execute_login_async(
+            cancel_event=None, skip_pause_check=True
+        )
+        assert result is None
+
+    def test_execute_login_accepts_skip_pause_check(self):
+        """NullTaskExecutor.execute_login 应接受 skip_pause_check 参数。"""
+        from app.services.task_executor import NullTaskExecutor
+
+        executor = NullTaskExecutor()
+        result = executor.execute_login(cancel_event=None, skip_pause_check=True)
+        assert result is None

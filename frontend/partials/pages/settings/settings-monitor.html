@@ -115,7 +115,7 @@
         <div class="toggle-group" style="margin-top: 12px;">
           <div class="toggle-with-help">
             <label class="toggle toggle-help-inline">
-              <input type="checkbox" v-model="urlCheckEnabled" @change="toggleUrlCheck(); onConfigChange('url_check_enabled', urlCheckEnabled, 'toggle')" />
+              <input type="checkbox" v-model="urlCheckEnabled" @change="onConfigChange('url_check_enabled', urlCheckEnabled, 'toggle')" />
               <span class="toggle-slider"></span>
               <span class="toggle-label">网址响应检测</span>
               <span class="field-help" tabindex="0" role="note" data-tip="通过访问指定网址判断网络是否正常。能准确识别被门户劫持的网络。与 HTTP 检测不同，此方式会检查返回内容是否被劫持。">?</span>

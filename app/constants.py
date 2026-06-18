@@ -21,6 +21,11 @@ TEMP_DIR = PROJECT_ROOT / "temp"
 # 默认网络检测目标（单一来源，避免 schemas/config_service/monitor_service 重复）
 DEFAULT_NETWORK_TARGETS: str = "8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
 DEFAULT_HTTP_TARGETS: str = "https://www.baidu.com,https://www.qq.com"
+DEFAULT_URL_CHECK_URLS: str = (
+    "http://captive.apple.com/hotspot-detect.html|Success\n"
+    "http://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test\n"
+    "http://detectportal.firefox.com/success.txt|success"
+)
 
 # 用户数据目录（避免 .campus_network_auth 路径多处硬编码）
 AUTH_DATA_DIR: Path = Path.home() / ".campus_network_auth"

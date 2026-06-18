@@ -60,7 +60,11 @@ Object.defineProperty(window, '__pw_manual', {value: undefined, writable: false,
 
 
 class BrowserContextManager:
-    """浏览器上下文管理器 - 使用异步上下文管理器确保资源正确释放"""
+    """浏览器上下文管理器 - 使用异步上下文管理器确保资源正确释放。
+
+    设计约束：只能在 PlaywrightWorker 事件循环内使用（通过 _handle_login → attempt_login 调用链）。
+    不支持跨线程调用，不支持在 FastAPI 路由中直接使用。
+    """
 
     def __init__(self, config: dict, cancel_event: threading.Event | None = None):
         """
@@ -114,35 +118,25 @@ class BrowserContextManager:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """异步上下文管理器出口 - 关闭浏览器并释放资源。"""
-        # 关闭浏览器
-        import queue as _queue_mod
+        """异步上下文管理器出口 — 关闭浏览器并释放资源。
 
-        from app.workers.playwright_worker import (
-            CMD_BROWSER_CLOSE,
-            get_worker,
-        )
+        必须在 PlaywrightWorker 事件循环内调用（架构约束）。
+        """
+        from app.workers.playwright_worker import get_worker
 
         worker = get_worker()
         try:
-            worker.submit_nowait(CMD_BROWSER_CLOSE)
-        except _queue_mod.Full:
-            self.logger.warning("Worker 队列已满，无法发送 CMD_BROWSER_CLOSE")
+            await worker._close_browser()
+        except Exception:
+            self.logger.warning("关闭浏览器异常", exc_info=True)
 
-        # 清空本地引用
         self.playwright = None
         self.browser = None
         self.context = None
         self.page = None
 
-        # 如果有异常，记录但不抑制
         if exc_type:
-            try:
-                self.logger.error(
-                    "浏览器操作异常: {}: {}", exc_type.__name__, str(exc_val)[:200]
-                )
-            except Exception:
-                self.logger.error(
-                    "浏览器操作异常: {} (详情无法格式化)", exc_type.__name__
-                )
-        return False  # 将异常传播给调用者（不抑制）
+            self.logger.error(
+                "浏览器操作异常: {}: {}", exc_type.__name__, str(exc_val)[:200]
+            )
+        return False

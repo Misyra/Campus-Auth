@@ -113,7 +113,7 @@ def list_scheduled_tasks(
 
 
 @router.post("/api/scheduled-tasks", response_model=ActionResponse)
-async def create_scheduled_task(
+def create_scheduled_task(
     payload: dict,
     engine: ScheduleEngine = Depends(get_monitor_service),
 ) -> ActionResponse:
@@ -136,7 +136,7 @@ async def create_scheduled_task(
 
 
 @router.put("/api/scheduled-tasks/{task_id}", response_model=ActionResponse)
-async def update_scheduled_task(
+def update_scheduled_task(
     task_id: str,
     payload: dict,
     engine: ScheduleEngine = Depends(get_monitor_service),
@@ -145,7 +145,7 @@ async def update_scheduled_task(
 
     existing = engine.tasks.get_task(task_id)
     if not existing:
-        return ActionResponse(success=False, message="定时任务不存在")
+        raise HTTPException(status_code=404, detail="定时任务不存在")
 
     # 验证并规范化配置（更新模式：payload 缺失字段从 existing 填充）
     valid, message, config = _validate_update_payload(payload, existing)
@@ -172,14 +172,14 @@ def delete_scheduled_task(
 
 
 @router.post("/api/scheduled-tasks/{task_id}/run", response_model=ActionResponse)
-async def run_scheduled_task(
+def run_scheduled_task(
     task_id: str,
     bg_tasks: BackgroundTasks,
     engine: ScheduleEngine = Depends(get_monitor_service),
 ) -> ActionResponse:
     """手动执行定时任务（异步后台执行，避免 HTTP 连接长时间阻塞）。"""
     if not engine.tasks.get_task(task_id):
-        return ActionResponse(success=False, message="定时任务不存在")
+        raise HTTPException(status_code=404, detail="定时任务不存在")
 
     # 后台执行，不阻塞 HTTP 响应
     async def _execute():
@@ -201,14 +201,14 @@ async def run_scheduled_task(
 
 
 @router.post("/api/scheduled-tasks/{task_id}/toggle", response_model=ActionResponse)
-async def toggle_scheduled_task(
+def toggle_scheduled_task(
     task_id: str,
     engine: ScheduleEngine = Depends(get_monitor_service),
 ) -> ActionResponse:
     """启用/禁用定时任务。"""
     task = engine.tasks.get_task(task_id)
     if not task:
-        return ActionResponse(success=False, message="定时任务不存在")
+        raise HTTPException(status_code=404, detail="定时任务不存在")
 
     task = {**task, "enabled": not task.get("enabled", True)}
     ok, message = engine.tasks.save_task(task_id, task)

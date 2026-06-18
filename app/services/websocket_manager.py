@@ -62,6 +62,9 @@ class WebSocketManager:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # 清理断开连接
+        # 已知：list.remove() 是 O(n)，k 个死亡连接总代价 O(k·n)。
+        # 实际无影响：本地桌面应用仅监听 127.0.0.1，连接数通常为 1-2 个（浏览器标签页），
+        # O(n²) 在 n≤2 时等价于 O(1)。无需改为 set/dict。
         async with self._lock:
             for ws, result in zip(connections, results, strict=False):
                 if isinstance(result, Exception) and ws in self._connections:

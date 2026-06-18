@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from app.schemas import ProfilesData, ProfileSettings
+from app.schemas import AuthProfile, ProfilesData
 from app.services.profile_service import ProfileService
 
 
@@ -62,8 +62,8 @@ class TestProfileServiceLoad:
         corrupt_files = list(config_dir.glob("settings.corrupt.*.json"))
         assert len(corrupt_files) == 1
 
-    def test_load_caches_data(self, tmp_path: Path):
-        """第二次 load 返回缓存数据（深拷贝）"""
+    def test_load_returns_new_instance_each_time(self, tmp_path: Path):
+        """每次 load 返回新实例（无缓存），数据一致"""
         config_dir = tmp_path / "config"
         config_dir.mkdir()
         settings = {"active_profile": "default", "profiles": {"default": {}}}
@@ -75,7 +75,7 @@ class TestProfileServiceLoad:
         data1 = service.load()
         data2 = service.load()
 
-        # 深拷贝，不是同一个对象
+        # 每次返回新实例，不是同一个对象
         assert data1 is not data2
         assert data1.profiles is not data2.profiles
         assert data1.active_profile == data2.active_profile
@@ -91,8 +91,8 @@ class TestProfileServiceSave:
             auto_switch=True,
             active_profile="campus",
             profiles={
-                "default": ProfileSettings(username="user1"),
-                "campus": ProfileSettings(username="user2"),
+                "default": AuthProfile(username="user1"),
+                "campus": AuthProfile(username="user2"),
             },
         )
         service.save(data)
@@ -115,8 +115,8 @@ class TestProfileServiceSave:
             auto_switch=True,
             active_profile="test",
             profiles={
-                "default": ProfileSettings(username="user1", password="encrypted"),
-                "test": ProfileSettings(
+                "default": AuthProfile(username="user1", password="encrypted"),
+                "test": AuthProfile(
                     username="user2",
                     match_ssid="TestSSID",
                     match_gateway_ip="192.168.1.1",

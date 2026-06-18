@@ -120,7 +120,7 @@ class TestAttemptLogin:
             ),
             patch(
                 "app.network.decision.check_network_status",
-                return_value=(False, "network_down"),
+                return_value=(False, "network_down", "none"),
             ),
             patch(
                 "app.network.decision.check_login_prerequisites",
@@ -144,7 +144,7 @@ class TestAttemptLogin:
             ),
             patch(
                 "app.network.decision.check_network_status",
-                return_value=(False, "network_down"),
+                return_value=(False, "network_down", "none"),
             ),
             patch(
                 "app.network.decision.check_login_prerequisites",
@@ -167,7 +167,7 @@ class TestAttemptLogin:
             ),
             patch(
                 "app.network.decision.check_network_status",
-                return_value=(True, "network_ok"),
+                return_value=(True, "network_ok", "tcp"),
             ),
         ):
             ok, msg = await handler.attempt_login(skip_pause_check=False)
@@ -188,7 +188,7 @@ class TestAttemptLogin:
             ),
             patch(
                 "app.network.decision.check_network_status",
-                return_value=(False, "network_down"),
+                return_value=(False, "network_down", "none"),
             ),
             patch(
                 "app.network.decision.check_login_prerequisites",

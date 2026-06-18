@@ -132,16 +132,13 @@ class ServiceContainer:
                 level="DEBUG",
                 filter=lambda record: record["extra"].get("source") != "frontend",
             )
-            self.engine._dashboard_sink = dashboard_sink
+            self.engine.set_dashboard_sink(dashboard_sink)
         self._ws_drain_task = asyncio.create_task(self.engine.ws_drain_loop())
         self._web_services_started = True
         container_logger.info("Web 服务已启动")
 
     async def stop_web_services(self):
-        """停止 Web 相关服务（DashboardSink + WS drain loop）。
-
-        用于空闲卸载：停止 uvicorn 后调用，允许下次重新启动。
-        """
+        """停止 Web 相关服务（DashboardSink + WS drain loop）。"""
         if not self._web_services_started:
             return
 
@@ -161,7 +158,7 @@ class ServiceContainer:
             self._ws_drain_task = None
 
         self._web_services_started = False
-        container_logger.info("Web 服务已停止（空闲卸载）")
+        container_logger.info("Web 服务已停止")
 
     async def shutdown(self):
         """关闭服务。"""
@@ -170,19 +167,8 @@ class ServiceContainer:
         self._shutdown_done = True
         container_logger.info("服务容器开始关闭...")
 
-        if self._log_handler_id is not None:
-            from loguru import logger as _loguru_logger
-
-            try:
-                _loguru_logger.remove(self._log_handler_id)
-            except Exception as exc:
-                container_logger.debug("移除日志处理器失败: {}", exc)
-            self._log_handler_id = None
-
-        if self._ws_drain_task:
-            self._ws_drain_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._ws_drain_task
+        # 复用 stop_web_services — 消除重复代码并修复 _ws_drain_task = None 遗漏 bug
+        await self.stop_web_services()
 
         self.task_executor.shutdown(wait=False)
 

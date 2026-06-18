@@ -250,7 +250,7 @@ class NetworkMonitorCore:
             }
 
         # 2. 网络状态检测
-        net_ok, net_reason = check_network_status(self.config)
+        net_ok, net_reason, net_method = check_network_status(self.config)
         if net_ok:
             self._update_state(
                 login_attempt_count=0,
@@ -261,7 +261,10 @@ class NetworkMonitorCore:
         elif net_reason == "all_disabled":
             self.log_message("所有网络检测均未启用，跳过", "WARNING")
         else:
-            self._update_state(status_detail="网络异常：待登录")
+            self._update_state(
+                network_state=NetworkState.DISCONNECTED,
+                status_detail="网络异常：待登录",
+            )
 
         # 自动切换检测
         self._check_profile_switch()
@@ -275,9 +278,7 @@ class NetworkMonitorCore:
             "interval": interval,
             "result": NetworkCheckResult(
                 available=net_ok,
-                method=net_reason
-                if net_reason in ("tcp", "http", "url")
-                else "local_only",
+                method=net_method,
                 latency_ms=0,
                 detail="" if net_ok else net_reason,
             ),

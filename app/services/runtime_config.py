@@ -1,54 +1,27 @@
-"""运行时配置合并 — 从 GlobalSettings + ProfileSettings 合并出 MonitorConfigPayload。"""
+"""运行时配置合并 — 从 SystemSettings + AuthProfile 合并出 MonitorConfigPayload。"""
 
 from __future__ import annotations
 
-from app.schemas import MonitorConfigPayload, ProfilesData, ProfileSettings
-from app.utils.crypto import decrypt_password, mask_password
-from app.utils.exceptions import DecryptionError
+from app.schemas import AuthProfile, GLOBAL_SETTINGS_FIELDS, MonitorConfigPayload, ProfilesData
+from app.utils.crypto import decrypt_password_field, mask_password
 from app.utils.logging import get_logger, normalize_level
 
 from .profile_service import ProfileService
 
 config_logger = get_logger("runtime_config", source="backend")
 
-def _safe_decrypt(ciphertext: str) -> tuple[str, bool]:
-    """解密密码。返回 (解密结果, 是否有错误)"""
-    if not ciphertext:
-        return ("", False)
-    try:
-        return (decrypt_password(ciphertext), False)
-    except DecryptionError:
-        config_logger.error("密码解密失败，使用空密码")
-        return ("", True)
+# Profile override fields: profile values take precedence over global defaults.
+# See GLOBAL_SETTINGS_FIELDS for the complete set.
+# Global values act as defaults when profile values are empty.
+PROFILE_OVERRIDE_FIELDS = frozenset({
+    "auth_url",
+    "carrier",
+    "carrier_custom",
+    "active_task",
+})
 
 
-def _decrypt_password_field(
-    raw_pwd: str,
-    fallback_pwd: str = "",
-    label: str = "",
-) -> tuple[str, bool]:
-    """解密密码字段，支持 ENC: 前缀和掩码回退。"""
-    if raw_pwd.startswith("ENC:"):
-        return _safe_decrypt(raw_pwd)
-    elif raw_pwd.startswith("•"):
-        if fallback_pwd:
-            return _safe_decrypt(fallback_pwd)
-        else:
-            if label:
-                config_logger.warning("{} 密码为掩码但回退密码为空", label)
-            return ("", False)
-    elif raw_pwd:
-        return (raw_pwd, False)
-    else:
-        if fallback_pwd:
-            if label:
-                config_logger.warning("{} 密码为空，使用回退密码", label)
-            return _safe_decrypt(fallback_pwd)
-        else:
-            return ("", False)
-
-
-def _build_config_payload(
+def load_payload_from_profiles(
     profile_service: ProfileService,
     data: ProfilesData | None = None,
     *,
@@ -70,7 +43,7 @@ def _build_config_payload(
     # 获取活动 profile
     profile = data.profiles.get(data.active_profile)
     if profile is None:
-        profile = data.profiles.get("default", ProfileSettings())
+        profile = data.profiles.get("default", AuthProfile())
 
     config_logger.debug("加载配置: profile={}", data.active_profile)
 
@@ -80,66 +53,27 @@ def _build_config_payload(
     # 处理密码
     any_error = False
     if apply_overrides:
-        pwd, err = _decrypt_password_field(profile.password)
+        pwd, err = decrypt_password_field(profile.password)
         payload_dict["password"] = pwd
         any_error = err
     else:
         payload_dict["password"] = mask_password(profile.password)
 
     # 合并 global_settings 中的系统配置和监控配置
-    payload_dict.update({
-        "backend_log_level": data.global_settings.backend_log_level,
-        "frontend_log_level": data.global_settings.frontend_log_level,
-        "access_log": data.global_settings.access_log,
-        "log_retention_days": data.global_settings.log_retention_days,
-        "minimize_to_tray": data.global_settings.minimize_to_tray,
-        "auto_open_browser": data.global_settings.auto_open_browser,
-        "startup_action": data.global_settings.startup_action,
-        "autostart_lightweight": data.global_settings.autostart_lightweight,
-        "lightweight_tray": data.global_settings.lightweight_tray,
-        "proxy": data.global_settings.proxy,
-        "block_proxy": data.global_settings.block_proxy,
-        "app_port": data.global_settings.app_port,
-        "shell_path": data.global_settings.shell_path,
-        "pure_mode": data.global_settings.pure_mode,
-        "max_retries": data.global_settings.max_retries,
-        "retry_interval": data.global_settings.retry_interval,
-        "source_levels": data.global_settings.source_levels,
-        # 监控配置
-        "check_interval_seconds": data.global_settings.check_interval_seconds,
-        "pause_enabled": data.global_settings.pause_enabled,
-        "pause_start_hour": data.global_settings.pause_start_hour,
-        "pause_end_hour": data.global_settings.pause_end_hour,
-        "network_targets": data.global_settings.network_targets,
-        "http_targets": data.global_settings.http_targets,
-        "enable_tcp_check": data.global_settings.enable_tcp_check,
-        "enable_http_check": data.global_settings.enable_http_check,
-        "enable_local_check": data.global_settings.enable_local_check,
-        "check_auth_url": data.global_settings.check_auth_url,
-        "auth_url_targets": data.global_settings.auth_url_targets,
-        "url_check_urls": data.global_settings.url_check_urls,
-        "network_check_timeout": data.global_settings.network_check_timeout,
-        # 浏览器配置
-        "browser_channel": data.global_settings.browser_channel,
-        "browser_custom_path": data.global_settings.browser_custom_path,
-        "headless": data.global_settings.headless,
-        "browser_timeout": data.global_settings.browser_timeout,
-        "browser_navigation_timeout": data.global_settings.browser_navigation_timeout,
-        "login_timeout": data.global_settings.login_timeout,
-        "browser_user_agent": data.global_settings.browser_user_agent,
-        "browser_low_resource_mode": data.global_settings.browser_low_resource_mode,
-        "browser_disable_web_security": data.global_settings.browser_disable_web_security,
-        "browser_extra_headers_json": data.global_settings.browser_extra_headers_json,
-        "browser_args": data.global_settings.browser_args,
-        "stealth_mode": data.global_settings.stealth_mode,
-        "stealth_custom_script": data.global_settings.stealth_custom_script,
-        "browser_locale": data.global_settings.browser_locale,
-        "browser_timezone": data.global_settings.browser_timezone,
-        "browser_viewport_width": data.global_settings.browser_viewport_width,
-        "browser_viewport_height": data.global_settings.browser_viewport_height,
-        # 自定义变量
-        "custom_variables": data.global_settings.custom_variables,
-    })
+    # 使用 GLOBAL_SETTINGS_FIELDS 选取 SystemSettings 与 MonitorConfigPayload 的共享字段，
+    # 一次 model_dump 替代 53 行逐字段取值。
+    # 注：source_levels 仅在 SystemSettings 中，不在 MonitorConfigPayload 中，
+    # 因此不在交集中——这与重构前行为一致（MonitorConfigPayload(**payload_dict) 同样会丢弃该键）。
+    # 先用全局值填充，再用 profile 的非空值覆盖 PROFILE_OVERRIDE_FIELDS 中的字段。
+    # 这实现了"留空则使用全局"的语义。
+    gs_dict = data.global_settings.model_dump(include=GLOBAL_SETTINGS_FIELDS)
+    payload_dict.update(gs_dict)
+
+    # Profile override: profile 非空值优先于全局值
+    for field in PROFILE_OVERRIDE_FIELDS:
+        profile_val = getattr(profile, field, "")
+        if profile_val:
+            payload_dict[field] = profile_val
 
     # 归一化
     payload_dict["backend_log_level"] = normalize_level(
@@ -158,7 +92,7 @@ def load_ui_config(
     data: ProfilesData | None = None,
 ) -> MonitorConfigPayload:
     """加载 UI 配置 —— 始终返回全局设置。"""
-    payload, _ = _build_config_payload(profile_service, data, apply_overrides=False)
+    payload, _ = load_payload_from_profiles(profile_service, data, apply_overrides=False)
     return payload
 
 
@@ -167,4 +101,4 @@ def load_runtime_config(
     data: ProfilesData | None = None,
 ) -> tuple[MonitorConfigPayload, bool]:
     """加载运行时配置 —— 从 profile 和 global_settings 合并。"""
-    return _build_config_payload(profile_service, data, apply_overrides=True)
+    return load_payload_from_profiles(profile_service, data, apply_overrides=True)

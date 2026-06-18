@@ -74,7 +74,7 @@ class LoginAttemptHandler:
                     self.logger.info(msg)
                     return False, msg
 
-                net_ok, _ = await asyncio.to_thread(check_network_status, self.config)
+                net_ok, _, _ = await asyncio.to_thread(check_network_status, self.config)
                 if net_ok:
                     msg = "网络正常，无需登录"
                     self.logger.info(msg)
@@ -287,7 +287,7 @@ class LoginAttemptHandler:
         self.logger.info("脚本已执行，等待网络验证...")
         await asyncio.sleep(LOGIN_SUCCESS_SETTLE_SECONDS)
 
-        net_ok, net_msg = await asyncio.to_thread(check_network_status, self.config)
+        net_ok, net_msg, _ = await asyncio.to_thread(check_network_status, self.config)
 
         total = time.perf_counter() - phase_start
         if net_ok:

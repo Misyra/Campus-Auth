@@ -63,53 +63,8 @@
           </div>
         </div>
 
-        <!-- Firefox 兼容性警告 -->
-        <div v-if="config.browser_channel === 'firefox'" class="browser-warning">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/>
-            <line x1="12" y1="17" x2="12.01" y2="17"/>
-          </svg>
-          <div>
-            <strong>Firefox 兼容性限制：</strong>
-            <ul style="margin: 0.25rem 0 0 1.25rem; padding: 0;">
-              <li>自定义浏览器参数不生效（已自动跳过）</li>
-              <li>反检测模式可能不完全有效</li>
-            </ul>
-            <span style="opacity: 0.8;">建议使用 Chromium 内核浏览器以获得完整功能支持</span>
-          </div>
-        </div>
-
-        <!-- 自定义浏览器兼容性提示 -->
-        <div v-if="config.browser_channel === 'custom'" class="browser-info-tip">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="16" x2="12" y2="12"/>
-            <line x1="12" y1="8" x2="12.01" y2="8"/>
-          </svg>
-          <div>
-            <strong>自定义浏览器说明：</strong>
-            <ul style="margin: 0.25rem 0 0 1.25rem; padding: 0;">
-              <li>仅支持 Chromium 内核浏览器（如 Brave、Vivaldi 等）</li>
-            </ul>
-          </div>
-        </div>
-
-        <!-- 自定义路径输入 -->
-        <div v-if="config.browser_channel === 'custom'" class="form-group">
-          <label for="settings-browser-custom-path">浏览器可执行文件路径</label>
-          <input
-            id="settings-browser-custom-path"
-            type="text"
-            v-model="config.browser_custom_path"
-            placeholder="例如: C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
-            @input="onConfigChange('browser_custom_path', config.browser_custom_path, 'input')"
-          />
-          <span class="hint">
-            需要使用支持 Playwright 的浏览器二进制文件。
-            <a href="https://playwright.dev/docs/browsers#chromium" target="_blank" rel="noopener">查看支持的浏览器要求 →</a>
-          </span>
-        </div>
+        <!-- 浏览器选择共享提示（Firefox 警告 + 自定义提示 + 路径输入） -->
+        <div data-include="/static/partials/shared/browser-selection.html"></div>
       </div>
     </div>
   </section>

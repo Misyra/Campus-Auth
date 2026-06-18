@@ -7,59 +7,7 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-from fastapi.testclient import TestClient
-
-from app.schemas import MonitorConfigPayload, MonitorStatusResponse
 from app.services.autostart import AutoStartService, _autostart_cli_args
-
-
-@pytest.fixture
-def client(tmp_path):
-    """创建隔离的测试客户端。"""
-    (tmp_path / "frontend").mkdir(exist_ok=True)
-    (tmp_path / "frontend" / "index.html").write_text("<html></html>")
-    (tmp_path / "logs").mkdir(exist_ok=True)
-    (tmp_path / "temp").mkdir(exist_ok=True)
-
-    with (
-        patch("app.constants.PROJECT_ROOT", tmp_path),
-        patch("app.constants.FRONTEND_DIR", tmp_path / "frontend"),
-        patch("app.constants.LOGS_DIR", tmp_path / "logs"),
-        patch("app.constants.TEMP_DIR", tmp_path / "temp"),
-    ):
-        from app.application import create_app
-
-        mock_services = MagicMock()
-
-        # monitor_service
-        mock_services.engine.get_config.return_value = MonitorConfigPayload(
-            username="testuser", password="••••••••", auth_url="http://10.0.0.1"
-        )
-        mock_services.engine.get_status.return_value = MonitorStatusResponse(
-            monitoring=False,
-            network_check_count=0,
-            login_attempt_count=0,
-            last_check_time=None,
-            runtime_seconds=0,
-        )
-        mock_services.engine.list_logs.return_value = []
-
-        # autostart_service
-        mock_services.autostart_service.status.return_value = {
-            "platform": "windows",
-            "enabled": False,
-            "method": "",
-            "location": "",
-        }
-        mock_services.autostart_service.enable.return_value = (True, "自启动已启用")
-        mock_services.autostart_service.disable.return_value = (True, "自启动已禁用")
-
-        app = create_app()
-        app.state.services = mock_services
-
-        test_client = TestClient(app)
-        yield test_client, mock_services
 
 
 class TestListShells:
@@ -67,8 +15,8 @@ class TestListShells:
 
     @patch("app.api.autostart.get_default_shell", return_value="/bin/bash")
     @patch("app.api.autostart.detect_available_shells")
-    def test_list_shells_returns_200(self, mock_detect, mock_default, client):
-        test_client, _ = client
+    def test_list_shells_returns_200(self, mock_detect, mock_default, api_client):
+        test_client, _ = api_client
         mock_detect.return_value = [
             {"name": "bash", "path": "/bin/bash", "description": "Bourne Again Shell"}
         ]
@@ -83,8 +31,11 @@ class TestListShells:
 class TestAutostartStatus:
     """测试 GET /api/autostart/status 端点。"""
 
-    def test_autostart_status_returns_200(self, client):
-        test_client, _ = client
+    def test_autostart_status_returns_200(self, api_client):
+        test_client, mock_services = api_client
+        mock_services.autostart_service.status.return_value = {
+            "platform": "windows", "enabled": False, "method": "", "location": "",
+        }
         resp = test_client.get("/api/autostart/status")
         assert resp.status_code == 200
         data = resp.json()
@@ -93,8 +44,11 @@ class TestAutostartStatus:
         assert "method" in data
         assert "location" in data
 
-    def test_autostart_status_default_disabled(self, client):
-        test_client, _ = client
+    def test_autostart_status_default_disabled(self, api_client):
+        test_client, mock_services = api_client
+        mock_services.autostart_service.status.return_value = {
+            "platform": "windows", "enabled": False, "method": "", "location": "",
+        }
         data = test_client.get("/api/autostart/status").json()
         assert data["enabled"] is False
 
@@ -102,8 +56,9 @@ class TestAutostartStatus:
 class TestEnableAutostart:
     """测试 POST /api/autostart/enable 端点。"""
 
-    def test_enable_autostart_success(self, client):
-        test_client, _ = client
+    def test_enable_autostart_success(self, api_client):
+        test_client, mock_services = api_client
+        mock_services.autostart_service.enable.return_value = (True, "自启动已启用")
         resp = test_client.post("/api/autostart/enable")
         assert resp.status_code == 200
         assert resp.json()["success"] is True
@@ -113,8 +68,9 @@ class TestEnableAutostart:
 class TestDisableAutostart:
     """测试 POST /api/autostart/disable 端点。"""
 
-    def test_disable_autostart_success(self, client):
-        test_client, _ = client
+    def test_disable_autostart_success(self, api_client):
+        test_client, mock_services = api_client
+        mock_services.autostart_service.disable.return_value = (True, "自启动已禁用")
         resp = test_client.post("/api/autostart/disable")
         assert resp.status_code == 200
         assert resp.json()["success"] is True
@@ -343,15 +299,24 @@ class TestBuildVbsContent:
         assert "WScript.Shell" in content
         assert "WshShell.Run" in content
 
-    def test_contains_pid_check(self):
+    def test_no_pid_check(self):
+        """VBS 不再包含 PID 检测逻辑（去重由 Python 处理）"""
         content = AutoStartService._build_vbs_content("run_cmd")
-        assert "campus_network_auth.pid" in content
-        assert "Win32_Process" in content
+        assert "campus_network_auth.pid" not in content
+        assert "Win32_Process" not in content
 
     def test_contains_run_command(self):
         run_cmd = 'WshShell.Run "my_app.exe", 0, False'
         content = AutoStartService._build_vbs_content(run_cmd)
         assert run_cmd in content
+
+    def test_start_command_uses_main_py(self):
+        """启动入口应为 main.py，不是 app.py"""
+        tmp_path = Path(__file__).parent.parent.parent
+        svc = AutoStartService(tmp_path)
+        cmd = svc._start_command()
+        assert "main.py" in cmd
+        assert "app.py" not in cmd
 
 
 class TestHasCjkChars:
@@ -390,7 +355,7 @@ class TestStartCommand:
         ):
             # .venv 不存在时回退
             cmd = svc._start_command()
-        assert "app.py" in cmd
+        assert "main.py" in cmd
 
     def test_venv_python_windows(self, tmp_path):
         svc = AutoStartService(tmp_path)

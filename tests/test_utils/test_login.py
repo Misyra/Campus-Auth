@@ -111,7 +111,7 @@ class TestAttemptLoginWithPause:
         ), patch(
             "app.utils.login.asyncio.to_thread", new_callable=AsyncMock
         ) as mock_to_thread:
-            mock_to_thread.return_value = (True, "正常")
+            mock_to_thread.return_value = (True, "正常", "tcp")
             ok, msg = await handler.attempt_login(skip_pause_check=False)
 
         assert ok is False
@@ -130,7 +130,7 @@ class TestAttemptLoginWithPause:
             "app.network.decision.check_login_prerequisites",
             return_value=(False, "local_disconnected"),
         ):
-            mock_to_thread.return_value = (False, "不通")
+            mock_to_thread.return_value = (False, "不通", "none")
             ok, msg = await handler.attempt_login(skip_pause_check=False)
 
         assert ok is False
@@ -149,7 +149,7 @@ class TestAttemptLoginWithPause:
             "app.network.decision.check_login_prerequisites",
             return_value=(False, "auth_url_unreachable"),
         ):
-            mock_to_thread.return_value = (False, "不通")
+            mock_to_thread.return_value = (False, "不通", "none")
             ok, msg = await handler.attempt_login(skip_pause_check=False)
 
         assert ok is False
@@ -170,7 +170,7 @@ class TestAttemptLoginWithPause:
         ), patch.object(
             handler, "_perform_login_with_auth_class", new_callable=AsyncMock
         ) as mock_perform:
-            mock_to_thread.return_value = (False, "不通")
+            mock_to_thread.return_value = (False, "不通", "none")
             mock_perform.return_value = (True, "ok")
             ok, msg = await handler.attempt_login(skip_pause_check=False)
 
@@ -682,7 +682,7 @@ class TestExecuteScriptTask:
             mock_loop.run_in_executor = AsyncMock(return_value=(True, "ok"))
             mock_get_loop.return_value = mock_loop
 
-            mock_to_thread.return_value = (True, "网络正常")
+            mock_to_thread.return_value = (True, "网络正常", "tcp")
 
             ok, msg = await handler._execute_script_task(task, time.perf_counter())
 
@@ -713,7 +713,7 @@ class TestExecuteScriptTask:
             mock_loop.run_in_executor = AsyncMock(return_value=(True, "ok"))
             mock_get_loop.return_value = mock_loop
 
-            mock_to_thread.return_value = (False, "连接超时")
+            mock_to_thread.return_value = (False, "连接超时", "none")
 
             ok, msg = await handler._execute_script_task(task, time.perf_counter())
 
@@ -745,7 +745,7 @@ class TestExecuteScriptTask:
             mock_loop.run_in_executor = AsyncMock(return_value=(True, "ok"))
             mock_get_loop.return_value = mock_loop
 
-            mock_to_thread.return_value = (True, "网络正常")
+            mock_to_thread.return_value = (True, "网络正常", "tcp")
 
             await handler._execute_script_task(task, time.perf_counter())
 

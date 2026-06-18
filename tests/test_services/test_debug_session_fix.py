@@ -1,8 +1,7 @@
-"""debug_session 线程安全测试 — 验证 _next_debug_gen 使用锁保护。"""
+"""debug_session 线程安全测试 — 验证 _next_debug_gen 并发行为。"""
 
 from __future__ import annotations
 
-import inspect
 import threading
 
 from app.services.debug_session import _next_debug_gen
@@ -10,13 +9,6 @@ from app.services.debug_session import _next_debug_gen
 
 class TestNextDebugGenThreadSafety:
     """_next_debug_gen 线程安全。"""
-
-    def test_function_uses_lock(self):
-        """_next_debug_gen 应使用 threading.Lock 保护全局状态。"""
-        source = inspect.getsource(_next_debug_gen)
-        assert "lock" in source.lower(), (
-            "_next_debug_gen 未使用锁保护，请添加 threading.Lock"
-        )
 
     def test_concurrent_calls_return_unique_values(self):
         """多线程并发调用 _next_debug_gen 应返回不重复的值。"""

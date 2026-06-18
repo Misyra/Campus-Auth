@@ -4,33 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-from fastapi.testclient import TestClient
-
-
-@pytest.fixture
-def client(tmp_path):
-    """创建测试客户端，mock 所有服务依赖。"""
-    (tmp_path / "frontend").mkdir(exist_ok=True)
-    (tmp_path / "frontend" / "index.html").write_text("<html></html>")
-    (tmp_path / "logs").mkdir(exist_ok=True)
-    (tmp_path / "temp").mkdir(exist_ok=True)
-
-    with (
-        patch("app.constants.PROJECT_ROOT", tmp_path),
-        patch("app.constants.FRONTEND_DIR", tmp_path / "frontend"),
-        patch("app.constants.LOGS_DIR", tmp_path / "logs"),
-        patch("app.constants.TEMP_DIR", tmp_path / "temp"),
-    ):
-        from app.application import create_app
-
-        mock_services = MagicMock()
-        app = create_app()
-        app.state.services = mock_services
-
-        test_client = TestClient(app)
-        yield test_client, mock_services, tmp_path
-
 
 # ── 列出脚本 ──
 
@@ -38,17 +11,17 @@ def client(tmp_path):
 class TestListScripts:
     """GET /api/scripts"""
 
-    def test_list_empty(self, client):
+    def test_list_empty(self, api_client):
         """无脚本时返回空列表。"""
-        test_client, mock_services, _ = client
+        test_client, mock_services = api_client
         mock_services.task_service.list_scripts.return_value = []
         resp = test_client.get("/api/scripts")
         assert resp.status_code == 200
         assert resp.json() == []
 
-    def test_list_with_scripts(self, client):
+    def test_list_with_scripts(self, api_client):
         """有脚本时返回列表。"""
-        test_client, mock_services, _ = client
+        test_client, mock_services = api_client
         mock_services.task_service.list_scripts.return_value = [
             {"id": "script1", "name": "脚本1", "type": "script"},
             {"id": "script2", "name": "脚本2", "type": "script"},
@@ -64,9 +37,9 @@ class TestListScripts:
 class TestGetScript:
     """GET /api/scripts/{task_id}"""
 
-    def test_get_existing_script(self, client):
+    def test_get_existing_script(self, api_client):
         """获取存在的脚本任务。"""
-        test_client, mock_services, _ = client
+        test_client, mock_services = api_client
         mock_services.task_service.get_task.return_value = {
             "id": "script1",
             "name": "测试脚本",
@@ -77,16 +50,16 @@ class TestGetScript:
         assert resp.status_code == 200
         assert resp.json()["name"] == "测试脚本"
 
-    def test_get_nonexistent_script(self, client):
+    def test_get_nonexistent_script(self, api_client):
         """获取不存在的脚本返回 404。"""
-        test_client, mock_services, _ = client
+        test_client, mock_services = api_client
         mock_services.task_service.get_task.return_value = None
         resp = test_client.get("/api/scripts/nonexistent")
         assert resp.status_code == 404
 
-    def test_get_browser_task_as_script(self, client):
+    def test_get_browser_task_as_script(self, api_client):
         """浏览器任务类型不是 script 返回 404。"""
-        test_client, mock_services, _ = client
+        test_client, mock_services = api_client
         mock_services.task_service.get_task.return_value = {
             "id": "task1",
             "name": "浏览器任务",
@@ -102,9 +75,9 @@ class TestGetScript:
 class TestSaveScript:
     """PUT /api/scripts/{task_id}"""
 
-    def test_save_script_success(self, client):
+    def test_save_script_success(self, api_client):
         """保存脚本成功。"""
-        test_client, mock_services, _ = client
+        test_client, mock_services = api_client
         mock_services.task_service.save_task.return_value = (True, "保存成功")
         resp = test_client.put(
             "/api/scripts/new_script",
@@ -113,9 +86,9 @@ class TestSaveScript:
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-    def test_save_script_failure(self, client):
+    def test_save_script_failure(self, api_client):
         """保存脚本失败。"""
-        test_client, mock_services, _ = client
+        test_client, mock_services = api_client
         mock_services.task_service.save_task.return_value = (False, "保存失败")
         resp = test_client.put(
             "/api/scripts/bad_script",
@@ -131,17 +104,17 @@ class TestSaveScript:
 class TestDeleteScript:
     """DELETE /api/scripts/{task_id}"""
 
-    def test_delete_existing_script(self, client):
+    def test_delete_existing_script(self, api_client):
         """删除存在的脚本。"""
-        test_client, mock_services, _ = client
+        test_client, mock_services = api_client
         mock_services.task_service.delete_task.return_value = (True, "删除成功")
         resp = test_client.delete("/api/scripts/script1")
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-    def test_delete_nonexistent_script(self, client):
+    def test_delete_nonexistent_script(self, api_client):
         """删除不存在的脚本。"""
-        test_client, mock_services, _ = client
+        test_client, mock_services = api_client
         mock_services.task_service.delete_task.return_value = (False, "脚本不存在")
         resp = test_client.delete("/api/scripts/nonexistent")
         assert resp.status_code == 200
@@ -154,9 +127,9 @@ class TestDeleteScript:
 class TestRunScript:
     """POST /api/scripts/{task_id}/run"""
 
-    def test_run_script_success(self, client):
+    def test_run_script_success(self, api_client, tmp_path):
         """运行存在的脚本成功。"""
-        test_client, mock_services, tmp_path = client
+        test_client, mock_services = api_client
         script_file = tmp_path / "test_script.sh"
         script_file.write_text("echo hello", encoding="utf-8")
 
@@ -178,16 +151,16 @@ class TestRunScript:
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-    def test_run_script_not_found(self, client):
+    def test_run_script_not_found(self, api_client):
         """运行不存在的脚本返回 404。"""
-        test_client, mock_services, _ = client
+        test_client, mock_services = api_client
         mock_services.task_service.get_task.return_value = None
         resp = test_client.post("/api/scripts/nonexistent/run")
         assert resp.status_code == 404
 
-    def test_run_script_file_missing(self, client):
+    def test_run_script_file_missing(self, api_client):
         """脚本文件不存在时返回失败。"""
-        test_client, mock_services, _ = client
+        test_client, mock_services = api_client
         mock_services.task_service.get_task.return_value = {
             "id": "script1",
             "name": "测试",
@@ -206,13 +179,13 @@ class TestListBinaries:
     """GET /api/scripts/binaries"""
 
     @patch("app.api.scripts.detect_available_binaries")
-    def test_list_binaries(self, mock_detect, client):
+    def test_list_binaries(self, mock_detect, api_client):
         """返回可用二进制列表。"""
         mock_detect.return_value = [
             {"name": "Python", "path": "/usr/bin/python3", "description": "Python"},
             {"name": "bash", "path": "/bin/bash", "description": "Bash"},
         ]
-        test_client, _, _ = client
+        test_client, _ = api_client
         resp = test_client.get("/api/scripts/binaries")
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)

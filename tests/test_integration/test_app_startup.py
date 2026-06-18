@@ -37,8 +37,7 @@ def mock_deps():
     """Mock 外部依赖（端口、清理、版本号）。"""
     with (
         patch("app.application.resolve_port", return_value=50721),
-        patch("app.application._cleanup_temp_screenshots"),
-        patch("app.application._cleanup_old_screenshots"),
+        patch("app.application._cleanup_screenshots"),
         patch("app.version.get_project_version", return_value="0.0.0-test"),
     ):
         yield

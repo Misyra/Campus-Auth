@@ -20,24 +20,6 @@ from app.services.engine import (
 )
 
 
-def _make_monitor_service() -> ScheduleEngine:
-    """创建带有 mock 依赖的 ScheduleEngine 实例。"""
-    with (
-        patch("app.services.config_service.build_runtime_config", return_value={}),
-        patch(
-            "app.services.runtime_config.load_runtime_config",
-            return_value=(MagicMock(), False),
-        ),
-        patch("app.services.runtime_config.load_ui_config") as mock_load_ui,
-        patch("app.services.engine.ProfileService") as mock_ps_cls,
-    ):
-        mock_ps = MagicMock()
-        mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.global_settings.pure_mode = False
-        mock_ui_config = MagicMock()
-        mock_load_ui.return_value = mock_ui_config
-        return ScheduleEngine(MagicMock())
-
 
 # =====================================================================
 # EngineCommand
@@ -112,8 +94,8 @@ class TestStatusSnapshot:
 
 
 class TestScheduleEngineInit:
-    def test_init(self):
-        svc = _make_monitor_service()
+    def test_init(self, engine_factory):
+        svc = engine_factory()
         assert svc._dashboard_sink is None
         assert svc._login_in_progress.is_set() is False
         assert svc.pure_mode is False
@@ -125,13 +107,13 @@ class TestScheduleEngineInit:
 
 
 class TestRecordLog:
-    def test_record_log(self):
-        svc = _make_monitor_service()
+    def test_record_log(self, engine_factory):
+        svc = engine_factory()
         svc.record_log("测试消息", level="INFO", source="backend")
         # record_log 委托 loguru，无 _dashboard_sink 时不会崩溃
 
-    def test_record_log_ws_broadcast(self):
-        svc = _make_monitor_service()
+    def test_record_log_ws_broadcast(self, engine_factory):
+        svc = engine_factory()
         from loguru import logger
 
         from app.utils.logging import DashboardSink
@@ -158,12 +140,12 @@ class TestRecordLog:
 
 
 class TestListLogs:
-    def test_list_logs_empty(self):
-        svc = _make_monitor_service()
+    def test_list_logs_empty(self, engine_factory):
+        svc = engine_factory()
         assert svc.list_logs() == []
 
-    def test_list_logs_limit(self):
-        svc = _make_monitor_service()
+    def test_list_logs_limit(self, engine_factory):
+        svc = engine_factory()
         from loguru import logger
 
         from app.utils.logging import DashboardSink
@@ -184,7 +166,7 @@ class TestListLogs:
         finally:
             logger.remove(handler_id)
 
-    @patch("app.services.config_service.build_runtime_config", return_value={})
+    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
     @patch(
         "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
@@ -228,14 +210,14 @@ class TestListLogs:
 
 
 class TestGetStatus:
-    def test_get_status_stopped(self):
-        svc = _make_monitor_service()
+    def test_get_status_stopped(self, engine_factory):
+        svc = engine_factory()
         status = svc.get_status()
         assert status.monitoring is False
         assert status.runtime_seconds == 0
 
-    def test_get_status_running(self):
-        svc = _make_monitor_service()
+    def test_get_status_running(self, engine_factory):
+        svc = engine_factory()
         svc._status_snapshot = StatusSnapshot(
             monitoring=True,
             last_network_ok=True,
@@ -256,15 +238,15 @@ class TestGetStatus:
 
 
 class TestUpdateStatusSnapshot:
-    def test_update_no_core(self):
-        svc = _make_monitor_service()
+    def test_update_no_core(self, engine_factory):
+        svc = engine_factory()
         svc._monitor_core = None
         svc._update_status_snapshot()
         assert svc._status_snapshot.monitoring is False
         assert svc._status_snapshot.status_detail == "已停止"
 
-    def test_update_with_core(self):
-        svc = _make_monitor_service()
+    def test_update_with_core(self, engine_factory):
+        svc = engine_factory()
         mock_core = MagicMock()
         mock_core.monitoring = True
         mock_core.snapshot.return_value = {
@@ -288,7 +270,7 @@ class TestUpdateStatusSnapshot:
 
 
 class TestStartStopMonitoring:
-    @patch("app.services.config_service.build_runtime_config", return_value={})
+    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
     @patch(
         "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
@@ -314,8 +296,8 @@ class TestStartStopMonitoring:
         assert ok is True
         assert "已启动" in msg
 
-    def test_start_monitoring_already_running(self):
-        svc = _make_monitor_service()
+    def test_start_monitoring_already_running(self, engine_factory):
+        svc = engine_factory()
         mock_core = MagicMock()
         mock_core.monitoring = True
         mock_core.snapshot.return_value = {
@@ -331,8 +313,8 @@ class TestStartStopMonitoring:
         assert ok is False
         assert "已在运行" in msg
 
-    def test_stop_monitoring_not_running(self):
-        svc = _make_monitor_service()
+    def test_stop_monitoring_not_running(self, engine_factory):
+        svc = engine_factory()
         ok, msg = svc.stop_monitoring()
         assert ok is False
         assert "未运行" in msg
@@ -344,8 +326,8 @@ class TestStartStopMonitoring:
 
 
 class TestHandleStartStop:
-    def test_handle_start_duplicate(self):
-        svc = _make_monitor_service()
+    def test_handle_start_duplicate(self, engine_factory):
+        svc = engine_factory()
         mock_core = MagicMock()
         mock_core.monitoring = True
         svc._monitor_core = mock_core
@@ -354,8 +336,8 @@ class TestHandleStartStop:
         # 不应创建新监控核心
         assert svc._monitor_core is mock_core
 
-    def test_handle_stop_no_core(self):
-        svc = _make_monitor_service()
+    def test_handle_stop_no_core(self, engine_factory):
+        svc = engine_factory()
         svc._monitor_core = None
         svc._handle_stop()
         assert svc._monitor_core is None
@@ -367,7 +349,7 @@ class TestHandleStartStop:
 
 
 class TestHandleLogin:
-    @patch("app.services.config_service.build_runtime_config", return_value={})
+    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
     @patch(
         "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
@@ -439,8 +421,8 @@ class TestHandleLogin:
 
 
 class TestRunManualLogin:
-    def test_run_manual_login_in_progress(self):
-        svc = _make_monitor_service()
+    def test_run_manual_login_in_progress(self, engine_factory):
+        svc = engine_factory()
         svc._manual_login_in_progress = True
         ok, msg = svc.run_manual_login()
         assert ok is False
@@ -453,7 +435,7 @@ class TestRunManualLogin:
 
 
 class TestNetwork:
-    @patch("app.services.config_service.build_runtime_config", return_value={})
+    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
     @patch(
         "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
@@ -476,7 +458,7 @@ class TestNetwork:
         assert ok is True
         assert "正常" in msg
 
-    @patch("app.services.config_service.build_runtime_config", return_value={})
+    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
     @patch(
         "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
@@ -499,7 +481,7 @@ class TestNetwork:
         assert ok is False
         assert "异常" in msg
 
-    @patch("app.services.config_service.build_runtime_config", return_value={})
+    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
     @patch(
         "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
@@ -531,7 +513,7 @@ class TestNetwork:
 
 
 class TestTogglePureMode:
-    @patch("app.services.config_service.build_runtime_config", return_value={})
+    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
     @patch(
         "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
@@ -557,7 +539,7 @@ class TestTogglePureMode:
         assert svc.pure_mode is True
         mock_ps.update.assert_called_once()
 
-    @patch("app.services.config_service.build_runtime_config", return_value={})
+    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
     @patch(
         "app.services.runtime_config.load_runtime_config",
         return_value=(MagicMock(), False),
@@ -617,8 +599,8 @@ class TestTogglePureMode:
 
 
 class TestLoginInProgress:
-    def test_login_in_progress_property(self):
-        svc = _make_monitor_service()
+    def test_login_in_progress_property(self, engine_factory):
+        svc = engine_factory()
         assert svc.login_in_progress is False
         svc._login_in_progress.set()
         assert svc.login_in_progress is True
@@ -631,7 +613,7 @@ class TestLoginInProgress:
 
 class TestGetConfig:
     @patch(
-        "app.services.config_service.build_runtime_config",
+        "app.services.config_service.build_runtime_dict_from_payload",
         return_value={"key": "value"},
     )
     @patch(
@@ -668,7 +650,7 @@ class TestSaveProfileApplyId:
 
     def test_apply_profile_uses_id_not_name(self):
         from app.api.profiles import save_profile
-        from app.schemas import ProfileSettings
+        from app.schemas import AuthProfile
 
         mock_profile_svc = MagicMock()
         mock_monitor_svc = MagicMock()
@@ -681,7 +663,7 @@ class TestSaveProfileApplyId:
         mock_profile_svc.load.return_value = mock_data
 
         # payload.name 与 profile_id 不同 —— 这是 bug 的核心
-        payload = ProfileSettings(name="完全不同的展示名")
+        payload = AuthProfile(name="完全不同的展示名")
         save_profile(
             profile_id="my_profile_id",
             payload=payload,
@@ -841,9 +823,9 @@ class TestNetworkStateSetInConsumer:
 class TestReloadConfigQueueDispatch:
     """reload_config 应通过队列派发 RELOAD 命令。"""
 
-    def test_reload_config_enqueues_reload_command(self):
+    def test_reload_config_enqueues_reload_command(self, engine_factory):
         """测试 reload_config 将 RELOAD 命令放入队列。"""
-        svc = _make_monitor_service()
+        svc = engine_factory()
         svc._status_snapshot = StatusSnapshot(monitoring=False)
 
         enqueued = []
@@ -866,9 +848,9 @@ class TestReloadConfigQueueDispatch:
 class TestApplyProfileQueueDispatch:
     """apply_profile 应通过队列派发 APPLY_PROFILE 命令。"""
 
-    def test_apply_profile_enqueues_command(self):
+    def test_apply_profile_enqueues_command(self, engine_factory):
         """测试 apply_profile 将 APPLY_PROFILE 命令放入队列。"""
-        svc = _make_monitor_service()
+        svc = engine_factory()
         svc._status_snapshot = StatusSnapshot(monitoring=False)
 
         enqueued = []

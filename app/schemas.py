@@ -7,7 +7,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.constants import DEFAULT_HTTP_TARGETS, DEFAULT_NETWORK_TARGETS
+from app.constants import DEFAULT_HTTP_TARGETS, DEFAULT_NETWORK_TARGETS, DEFAULT_URL_CHECK_URLS
 from app.utils.logging import VALID_LOG_LEVELS
 from app.utils.platform import get_default_ua
 
@@ -113,7 +113,7 @@ _BROWSER_ARGS_DEFAULT = (
 
 
 class _MonitorFieldsMixin(BaseModel):
-    """监控与网络检测相关共享字段"""
+    """Profile 可覆盖的全局默认值（监控、认证、运营商等）"""
 
     auth_url: str = Field(default="")
     active_task: str = Field(default="")
@@ -145,11 +145,8 @@ class _MonitorFieldsMixin(BaseModel):
         description="认证地址可达性附加检测目标，逗号分隔的 host:port，留空则仅检测认证地址本身",
     )
     url_check_urls: str = Field(
-        default="http://captive.apple.com/hotspot-detect.html|Success\nhttp://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test\nhttp://detectportal.firefox.com/success.txt|success",
+        default=DEFAULT_URL_CHECK_URLS,
         description="网址响应检测地址，每行一个：URL|预期内容，留空不启用",
-    )
-    block_proxy: bool = Field(
-        default=True, description="屏蔽系统代理：开启后网络检测时忽略系统代理设置"
     )
     custom_variables: dict[str, str] = Field(default_factory=dict)
 
@@ -160,7 +157,7 @@ class _MonitorFieldsMixin(BaseModel):
 
 
 class _CommonSettingsMixin(BaseModel):
-    """_SystemFieldsMixin 与 GlobalSettings 共享的系统配置字段"""
+    """_SystemFieldsMixin 与 SystemSettings 共享的系统配置字段"""
 
     # 日志配置
     backend_log_level: str = Field(default="INFO")
@@ -211,6 +208,10 @@ class _CommonSettingsMixin(BaseModel):
         default="",
         description="自定义浏览器可执行文件路径（仅 browser_channel='custom' 时生效）"
     )
+    custom_browser_engine: str = Field(
+        default="auto",
+        description="自定义浏览器引擎: auto(默认Chromium) | firefox | webkit"
+    )
     headless: bool = Field(default=True)
     browser_timeout: int = Field(default=8, ge=1, le=60, description="页面操作超时（秒）")
     browser_navigation_timeout: int = Field(default=15, ge=3, le=60, description="打开登录页面超时（秒）")
@@ -245,46 +246,9 @@ class _CommonSettingsMixin(BaseModel):
         v = v.strip()
         if not v:
             return v
-        if re.search(r'[;&|`$(){}]', v):
-            raise ValueError("路径包含非法字符")
+        if "\0" in v:
+            raise ValueError("路径包含非法字符（null 字节）")
         return v
-
-
-class _SystemFieldsMixin(_CommonSettingsMixin):
-    """MonitorConfigPayload 额外需要的凭证及业务配置字段"""
-
-    username: str = Field(default="", description="全局校园网用户名")
-    password: str = Field(default="", description="全局校园网密码（ENC: 加密）")
-    auth_url: str = Field(default="", description="全局认证地址")
-    carrier: str = Field(default="无", description="全局运营商")
-    carrier_custom: str = Field(default="", description="自定义运营商关键字")
-
-    @field_validator("auth_url")
-    @classmethod
-    def validate_auth_url(cls, v: str) -> str:
-        return _validate_auth_url(v)
-
-
-class GlobalSettings(_CommonSettingsMixin):
-    """全局系统配置 — 仅系统级设置，不包含业务逻辑"""
-
-    # 监控配置
-    check_interval_seconds: int = Field(default=300, ge=10, le=86400, description="检测间隔（秒）")
-    network_targets: str = Field(default=DEFAULT_NETWORK_TARGETS)
-    http_targets: str = Field(default=DEFAULT_HTTP_TARGETS, description="HTTP 检测目标地址，逗号分隔")
-    enable_tcp_check: bool = Field(default=False, description="通过 TCP 端口连接检测目标地址是否可达")
-    enable_http_check: bool = Field(default=False, description="通过 HTTP 请求检测网页是否可正常访问")
-    enable_local_check: bool = Field(default=True, description="物理网络连接检查：未连接 WiFi/网线时跳过登录")
-    check_auth_url: bool = Field(default=False, description="登录前检测认证地址是否可达，不可达则跳过登录")
-    auth_url_targets: str = Field(default="", description="认证地址可达性附加检测目标，逗号分隔的 host:port，留空则仅检测认证地址本身")
-    url_check_urls: str = Field(default="http://captive.apple.com/hotspot-detect.html|Success\nhttp://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test\nhttp://detectportal.firefox.com/success.txt|success", description="网址响应检测地址，每行一个：URL|预期内容，留空不启用")
-    network_check_timeout: int = Field(default=2, ge=1, le=30, description="TCP 网络检测超时（秒）")
-
-    # Source 级别配置
-    source_levels: dict[str, str] = {}
-
-    # 自定义变量
-    custom_variables: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("browser_extra_headers_json")
     @classmethod
@@ -303,6 +267,36 @@ class GlobalSettings(_CommonSettingsMixin):
                 '浏览器请求头格式不正确，应为键值对形式，例如: {"Referer": "https://example.com"}'
             )
         return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
+
+
+class _SystemFieldsMixin(_CommonSettingsMixin):
+    """MonitorConfigPayload 额外需要的凭证及业务配置字段"""
+
+    username: str = Field(default="", description="全局校园网用户名")
+    password: str = Field(default="", description="全局校园网密码（ENC: 加密）")
+    auth_url: str = Field(default="", description="全局认证地址")
+    carrier: str = Field(default="无", description="全局运营商")
+    carrier_custom: str = Field(default="", description="自定义运营商关键字")
+
+    @field_validator("auth_url")
+    @classmethod
+    def validate_auth_url(cls, v: str) -> str:
+        return _validate_auth_url(v)
+
+
+class SystemSettings(_MonitorFieldsMixin, _CommonSettingsMixin):
+    """系统运行配置 — 监控、浏览器、日志、暂停、重试等。
+
+    监控配置字段继承自 _MonitorFieldsMixin，系统配置字段继承自 _CommonSettingsMixin。
+    仅声明不属于这两个 Mixin 的额外字段。
+    """
+
+    network_check_timeout: int = Field(
+        default=2, ge=1, le=30, description="TCP 网络检测超时（秒）"
+    )
+
+    # Source 级别配置
+    source_levels: dict[str, str] = {}
 
 
 # ── 主要模型 ──
@@ -375,8 +369,8 @@ class AutoStartStatusResponse(BaseModel):
     lightweight: bool = True
 
 
-class ProfileSettings(BaseModel):
-    """方案配置 — 所有业务配置的唯一数据源"""
+class AuthProfile(BaseModel):
+    """认证方案 — 仅含凭证和匹配规则"""
 
     # 基本信息
     name: str = Field(default="默认方案")
@@ -406,14 +400,14 @@ class ProfilesData(BaseModel):
 
     auto_switch: bool = Field(default=False, description="是否根据网关 IP 自动切换方案")
     active_profile: str = Field(default="default")
-    global_settings: GlobalSettings = Field(default_factory=GlobalSettings)
-    profiles: dict[str, ProfileSettings] = Field(default_factory=dict)
+    global_settings: SystemSettings = Field(default_factory=SystemSettings)
+    profiles: dict[str, AuthProfile] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def ensure_default_profile(self) -> ProfilesData:
         """确保 default profile 存在"""
         if "default" not in self.profiles:
-            self.profiles["default"] = ProfileSettings()
+            self.profiles["default"] = AuthProfile()
         return self
 
 
@@ -433,3 +427,14 @@ def get_runtime_features(
         browser_enabled=auto_open_browser,
         tray_enabled=minimize_to_tray,
     )
+
+
+# ── 字段映射常量 ──
+
+# SystemSettings 与 MonitorConfigPayload 的共享字段集合。
+# 用于 config_service._update_global_settings（循环赋值）和
+# runtime_config.load_payload_from_profiles（model_dump include）。
+GLOBAL_SETTINGS_FIELDS = frozenset(
+    f for f in SystemSettings.model_fields
+    if f in MonitorConfigPayload.model_fields
+)

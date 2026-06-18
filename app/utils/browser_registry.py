@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import os
 import shutil
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from app.utils.logging import get_logger
-from app.utils.platform import get_platform
+from app.utils.platform import get_platform, get_playwright_cache_dir
 
 logger = get_logger("browser_registry", source="backend")
 
@@ -40,6 +41,7 @@ class BrowserInfo:
 _DETECT_CACHE: list[BrowserInfo] | None = None
 _DETECT_CACHE_TIME: float = 0.0
 _DETECT_CACHE_TTL: float = 30.0
+_DETECT_CACHE_LOCK = threading.Lock()
 
 
 def detect_browsers() -> list[BrowserInfo]:
@@ -50,8 +52,9 @@ def detect_browsers() -> list[BrowserInfo]:
     """
     global _DETECT_CACHE, _DETECT_CACHE_TIME
     now = time.monotonic()
-    if _DETECT_CACHE is not None and (now - _DETECT_CACHE_TIME) < _DETECT_CACHE_TTL:
-        return _DETECT_CACHE
+    with _DETECT_CACHE_LOCK:
+        if _DETECT_CACHE is not None and (now - _DETECT_CACHE_TIME) < _DETECT_CACHE_TTL:
+            return _DETECT_CACHE
     browsers = [
         _detect_playwright_chromium(),
         _detect_edge(),
@@ -59,8 +62,9 @@ def detect_browsers() -> list[BrowserInfo]:
         _detect_firefox(),
         _detect_custom(),
     ]
-    _DETECT_CACHE = browsers
-    _DETECT_CACHE_TIME = now
+    with _DETECT_CACHE_LOCK:
+        _DETECT_CACHE = browsers
+        _DETECT_CACHE_TIME = now
     return browsers
 
 
@@ -84,7 +88,7 @@ def _detect_edge() -> BrowserInfo:
         # Windows 必有 Edge
         installed = True
     elif PLATFORM == "darwin":
-        installed = Path("/Applications/Microsoft Edge.app").exists()
+        installed = installed or Path("/Applications/Microsoft Edge.app").exists()
     return BrowserInfo(
         channel="msedge",
         name="Microsoft Edge",
@@ -99,13 +103,13 @@ def _detect_chrome() -> BrowserInfo:
     """检测系统是否安装 Google Chrome。"""
     installed = _check_command_exists("google-chrome") or _check_command_exists("chrome")
     if PLATFORM == "darwin":
-        installed = Path("/Applications/Google Chrome.app").exists()
+        installed = installed or Path("/Applications/Google Chrome.app").exists()
     elif PLATFORM == "windows":
         # 检查 Windows 标准安装路径
         program_files = [
             Path(os.environ.get("PROGRAMFILES", "C:\\Program Files")),
             Path(os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)")),
-            Path(os.environ.get("LOCALAPPDATA", "")),
+            *( [Path(p)] if (p := os.environ.get("LOCALAPPDATA")) else [] ),
         ]
         for base in program_files:
             chrome_path = base / "Google" / "Chrome" / "Application" / "chrome.exe"
@@ -126,13 +130,13 @@ def _detect_firefox() -> BrowserInfo:
     """检测系统是否安装 Firefox。"""
     installed = _check_command_exists("firefox")
     if PLATFORM == "darwin":
-        installed = Path("/Applications/Firefox.app").exists()
+        installed = installed or Path("/Applications/Firefox.app").exists()
     elif PLATFORM == "windows":
         # 检查 Windows 标准安装路径
         program_files = [
             Path(os.environ.get("PROGRAMFILES", "C:\\Program Files")),
             Path(os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)")),
-            Path(os.environ.get("LOCALAPPDATA", "")),
+            *( [Path(p)] if (p := os.environ.get("LOCALAPPDATA")) else [] ),
         ]
         for base in program_files:
             firefox_path = base / "Mozilla Firefox" / "firefox.exe"
@@ -166,13 +170,9 @@ def has_playwright_chromium() -> bool:
 
     扫描标准缓存目录和包内 .local-browsers 备用路径。
     """
-    # 标准缓存目录
-    if PLATFORM == "windows":
-        cache_dir = Path.home() / "AppData" / "Local" / "ms-playwright"
-    elif PLATFORM == "darwin":
-        cache_dir = Path.home() / "Library" / "Caches" / "ms-playwright"
-    else:
-        cache_dir = Path.home() / ".cache" / "ms-playwright"
+    cache_dir = get_playwright_cache_dir()
+    if cache_dir is None:
+        return False
 
     search_dirs = [cache_dir]
 

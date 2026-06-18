@@ -13,18 +13,15 @@ from pydantic import ValidationError
 
 from app.schemas import (
     ActionResponse,
+    AuthProfile,
     AutoStartStatusResponse,
-    GlobalSettings,
     LogEntry,
     MonitorConfigPayload,
     MonitorStatusResponse,
     ProfilesData,
-    ProfileSettings,
+    SystemSettings,
 )
-from app.services.runtime_config import (
-    _decrypt_password_field,
-    _safe_decrypt,
-)
+from app.utils.crypto import decrypt_password_field, safe_decrypt
 from app.utils.config_utils import ConfigValidator
 from app.utils.crypto import encrypt_password
 from app.utils.logging import normalize_level as _normalize_level
@@ -111,19 +108,19 @@ class TestSafeDecrypt:
     def test_decrypt_encrypted_value(self):
         """应能解密 ENC: 前缀的值"""
         encrypted = encrypt_password("test123")
-        result, has_error = _safe_decrypt(encrypted)
+        result, has_error = safe_decrypt(encrypted)
         assert result == "test123"
         assert has_error is False
 
     def test_decrypt_empty_string(self):
         """空字符串应返回空字符串"""
-        result, has_error = _safe_decrypt("")
+        result, has_error = safe_decrypt("")
         assert result == ""
         assert has_error is False
 
     def test_decrypt_plaintext_passthrough(self):
         """无 ENC: 前缀的明文应原样返回"""
-        result, has_error = _safe_decrypt("plaintext")
+        result, has_error = safe_decrypt("plaintext")
         assert result == "plaintext"
         assert has_error is False
 
@@ -163,7 +160,7 @@ class TestNormalizeHeadersJson:
 
     @staticmethod
     def _validate(value: str) -> str:
-        return GlobalSettings(
+        return SystemSettings(
             browser_extra_headers_json=value
         ).browser_extra_headers_json
 
@@ -236,7 +233,7 @@ class TestAuthUrlValidator:
             MonitorConfigPayload(auth_url="example.com")
 
     def test_profile_settings_same_validator(self):
-        p = ProfileSettings(auth_url="http://10.0.0.1")
+        p = AuthProfile(auth_url="http://10.0.0.1")
         assert p.auth_url == "http://10.0.0.1"
 
 
@@ -247,24 +244,24 @@ class TestAuthUrlValidator:
 
 class TestHeadersJsonValidator:
     def test_valid_json_object(self):
-        m = GlobalSettings(browser_extra_headers_json='{"X-Custom": "value"}')
+        m = SystemSettings(browser_extra_headers_json='{"X-Custom": "value"}')
         assert m.browser_extra_headers_json == '{"X-Custom":"value"}'
 
     def test_empty_string(self):
-        m = GlobalSettings(browser_extra_headers_json="")
+        m = SystemSettings(browser_extra_headers_json="")
         assert m.browser_extra_headers_json == ""
 
     def test_strips_whitespace(self):
-        m = GlobalSettings(browser_extra_headers_json='  {"k": "v"}  ')
+        m = SystemSettings(browser_extra_headers_json='  {"k": "v"}  ')
         assert m.browser_extra_headers_json == '{"k":"v"}'
 
     def test_invalid_json(self):
         with pytest.raises(ValidationError, match="JSON"):
-            GlobalSettings(browser_extra_headers_json="not json")
+            SystemSettings(browser_extra_headers_json="not json")
 
     def test_json_array_rejected(self):
         with pytest.raises(ValidationError, match="格式不正确"):
-            GlobalSettings(browser_extra_headers_json="[1, 2, 3]")
+            SystemSettings(browser_extra_headers_json="[1, 2, 3]")
 
 
 # ---------------------------------------------------------------------
@@ -338,16 +335,16 @@ class TestCustomVariablesValidator:
 
 class TestConstrainedFields:
     def test_browser_timeout_valid(self):
-        m = GlobalSettings(browser_timeout=5)
+        m = SystemSettings(browser_timeout=5)
         assert m.browser_timeout == 5
 
     def test_browser_timeout_too_low(self):
         with pytest.raises(ValidationError):
-            GlobalSettings(browser_timeout=0)
+            SystemSettings(browser_timeout=0)
 
     def test_browser_timeout_too_high(self):
         with pytest.raises(ValidationError):
-            GlobalSettings(browser_timeout=61)
+            SystemSettings(browser_timeout=61)
 
     def test_app_port_valid(self):
         m = MonitorConfigPayload(app_port=8080)
@@ -373,12 +370,12 @@ class TestConstrainedFields:
         assert m.pause_end_hour == 23
 
     def test_login_timeout_valid(self):
-        m = GlobalSettings(login_timeout=120)
+        m = SystemSettings(login_timeout=120)
         assert m.login_timeout == 120
 
     def test_login_timeout_too_low(self):
         with pytest.raises(ValidationError):
-            GlobalSettings(login_timeout=5)
+            SystemSettings(login_timeout=5)
 
     def test_network_check_timeout_valid(self):
         m = MonitorConfigPayload(network_check_timeout=5)
@@ -389,7 +386,7 @@ class TestConstrainedFields:
             MonitorConfigPayload(network_check_timeout=31)
 
     def test_browser_viewport_valid(self):
-        m = GlobalSettings(
+        m = SystemSettings(
             browser_viewport_width=1920, browser_viewport_height=1080
         )
         assert m.browser_viewport_width == 1920
@@ -397,11 +394,11 @@ class TestConstrainedFields:
 
     def test_browser_viewport_too_low(self):
         with pytest.raises(ValidationError):
-            GlobalSettings(browser_viewport_width=100)
+            SystemSettings(browser_viewport_width=100)
 
     def test_browser_viewport_too_high(self):
         with pytest.raises(ValidationError):
-            GlobalSettings(browser_viewport_width=5000)
+            SystemSettings(browser_viewport_width=5000)
 
 
 # ---------------------------------------------------------------------
@@ -432,13 +429,13 @@ class TestLogEntry:
 
 
 # ---------------------------------------------------------------------
-# ProfileSettings
+# AuthProfile
 # ---------------------------------------------------------------------
 
 
-class TestProfileSettingsDefaults:
+class TestAuthProfileDefaults:
     def test_defaults(self):
-        p = ProfileSettings()
+        p = AuthProfile()
         assert p.name == "默认方案"
         assert p.username == ""
         assert p.password == ""
@@ -446,11 +443,11 @@ class TestProfileSettingsDefaults:
         assert p.auth_url == ""
 
     def test_custom_name(self):
-        p = ProfileSettings(name="自定义方案")
+        p = AuthProfile(name="自定义方案")
         assert p.name == "自定义方案"
 
     def test_match_fields(self):
-        p = ProfileSettings(
+        p = AuthProfile(
             match_gateway_ip="10.0.0.1",
             match_ssid="CampusWiFi",
         )
@@ -458,21 +455,12 @@ class TestProfileSettingsDefaults:
         assert p.match_ssid == "CampusWiFi"
 
 
-class TestProfileSettings:
-    """ProfileSettings 测试"""
-
-    def test_default_values(self):
-        """测试默认值"""
-        profile = ProfileSettings()
-        assert profile.name == "默认方案"
-        assert profile.username == ""
-        assert profile.password == ""
-        assert profile.carrier == "无"
-        assert profile.auth_url == ""
+class TestAuthProfile:
+    """AuthProfile 测试"""
 
     def test_custom_values(self):
         """测试自定义值"""
-        profile = ProfileSettings(
+        profile = AuthProfile(
             name="测试方案",
             username="testuser",
             password="testpass",
@@ -488,18 +476,18 @@ class TestProfileSettings:
     def test_invalid_auth_url(self):
         """测试无效认证地址"""
         with pytest.raises(ValidationError, match="认证地址必须以 http"):
-            ProfileSettings(auth_url="not-a-url")
+            AuthProfile(auth_url="not-a-url")
 
 
 # ---------------------------------------------------------------------
-# GlobalSettings
+# SystemSettings
 # ---------------------------------------------------------------------
 
 
-class TestGlobalSettings:
+class TestSystemSettings:
     def test_default_values(self):
         """测试默认值"""
-        settings = GlobalSettings()
+        settings = SystemSettings()
         assert settings.backend_log_level == "INFO"
         assert settings.frontend_log_level == "INFO"
         assert settings.access_log is False
@@ -515,7 +503,7 @@ class TestGlobalSettings:
 
     def test_custom_values(self):
         """测试自定义值"""
-        settings = GlobalSettings(
+        settings = SystemSettings(
             backend_log_level="DEBUG",
             app_port=8080,
             max_retries=5,
@@ -527,11 +515,11 @@ class TestGlobalSettings:
     def test_invalid_log_level(self):
         """测试无效日志级别"""
         with pytest.raises(ValueError, match="无效的日志级别"):
-            GlobalSettings(backend_log_level="INVALID")
+            SystemSettings(backend_log_level="INVALID")
 
     def test_log_level_normalization(self):
         """测试日志级别归一化"""
-        settings = GlobalSettings(backend_log_level="debug")
+        settings = SystemSettings(backend_log_level="debug")
         assert settings.backend_log_level == "DEBUG"
 
 
@@ -548,17 +536,17 @@ class TestProfilesData:
         assert data.profiles["default"].name == "默认方案"
 
     def test_global_settings_default(self):
-        """测试 GlobalSettings 默认值"""
+        """测试 SystemSettings 默认值"""
         data = ProfilesData()
-        assert isinstance(data.global_settings, GlobalSettings)
+        assert isinstance(data.global_settings, SystemSettings)
         assert data.global_settings.backend_log_level == "INFO"
 
     def test_custom_profiles(self):
         """测试自定义 profiles"""
         data = ProfilesData(
             profiles={
-                "default": ProfileSettings(name="默认"),
-                "custom": ProfileSettings(name="自定义"),
+                "default": AuthProfile(name="默认"),
+                "custom": AuthProfile(name="自定义"),
             }
         )
         assert len(data.profiles) == 2
@@ -569,7 +557,7 @@ class TestProfilesData:
         data = ProfilesData()
         assert data.auto_switch is False
         assert data.active_profile == "default"
-        assert isinstance(data.global_settings, GlobalSettings)
+        assert isinstance(data.global_settings, SystemSettings)
         assert isinstance(data.profiles, dict)
 
     def test_with_profiles(self):
@@ -577,8 +565,8 @@ class TestProfilesData:
             auto_switch=True,
             active_profile="campus",
             profiles={
-                "default": ProfileSettings(name="默认"),
-                "campus": ProfileSettings(name="校园"),
+                "default": AuthProfile(name="默认"),
+                "campus": AuthProfile(name="校园"),
             },
         )
         assert data.auto_switch is True
@@ -719,9 +707,9 @@ class TestDecryptPasswordField:
         from unittest.mock import patch
 
         with patch(
-            "app.services.runtime_config.decrypt_password", return_value="secret"
+            "app.utils.crypto.decrypt_password", return_value="secret"
         ):
-            result, has_error = _decrypt_password_field("ENC:encrypted")
+            result, has_error = decrypt_password_field("ENC:encrypted")
             assert result == "secret"
             assert has_error is False
 
@@ -730,9 +718,9 @@ class TestDecryptPasswordField:
         from unittest.mock import patch
 
         with patch(
-            "app.services.runtime_config.decrypt_password", return_value="fallback"
+            "app.utils.crypto.decrypt_password", return_value="fallback"
         ):
-            result, has_error = _decrypt_password_field(
+            result, has_error = decrypt_password_field(
                 "••••••••", "ENC:fallback_encrypted"
             )
             assert result == "fallback"
@@ -740,12 +728,12 @@ class TestDecryptPasswordField:
 
     def test_masked_password_no_fallback(self):
         """掩码密码无回退返回空。"""
-        result, has_error = _decrypt_password_field("••••••••", "")
+        result, has_error = decrypt_password_field("••••••••", "")
         assert result == ""
         assert has_error is False
 
     def test_plain_password(self):
         """明文密码直接返回。"""
-        result, has_error = _decrypt_password_field("mypassword")
+        result, has_error = decrypt_password_field("mypassword")
         assert result == "mypassword"
         assert has_error is False

@@ -24,75 +24,6 @@ from app.services.engine import (
 )
 
 
-# -- 辅助工厂 --
-
-
-def _make_engine(**overrides) -> ScheduleEngine:
-    """创建带有 mock 依赖的 ScheduleEngine 实例（不启动引擎线程）。"""
-    with (
-        patch("app.services.config_service.build_runtime_config", return_value={}),
-        patch(
-            "app.services.runtime_config.load_runtime_config",
-            return_value=(MagicMock(), False),
-        ),
-        patch("app.services.runtime_config.load_ui_config") as mock_load_ui,
-        patch("app.services.engine.ProfileService") as mock_ps_cls,
-    ):
-        mock_ps = MagicMock()
-        mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.global_settings.pure_mode = False
-        mock_load_ui.return_value = MagicMock()
-
-        svc = ScheduleEngine.__new__(ScheduleEngine)
-        ScheduleEngine.__init__(svc, MagicMock(), **overrides)
-        # 立即停止引擎线程
-        svc._shutdown_event.set()
-        if svc._engine_thread and svc._engine_thread.is_alive():
-            svc._engine_thread.join(timeout=1)
-        return svc
-
-
-def _make_raw_engine() -> ScheduleEngine:
-    """创建一个用 __new__ 跳过 __init__ 的空引擎，用于单元隔离测试。"""
-    svc = ScheduleEngine.__new__(ScheduleEngine)
-    svc._cmd_queue = queue.Queue(maxsize=50)
-    svc._shutdown_event = threading.Event()
-    svc._monitor_core = None
-    svc._engine_running = False
-    svc._login_in_progress = threading.Event()
-    svc._login_retry = _LoginRetryState()
-    svc._runtime_config = {}
-    svc._runtime_snapshot = {}
-    svc._monitor_check_interval = 300
-    svc._next_network_check = 0
-    svc._scheduler_running = False
-    svc._next_schedule_tick = 0.0
-    svc._task_registry = MagicMock()
-    svc._task_executor = MagicMock()
-    svc._status_snapshot = StatusSnapshot()
-    svc._snapshot_min_interval = 1.0
-    svc._last_snapshot_time = 0
-    svc._engine_thread = MagicMock()
-    svc._engine_thread.is_alive.return_value = False
-    svc._manual_login_in_progress = False
-    svc._manual_login_lock = threading.Lock()
-    svc._reload_lock = threading.Lock()
-    svc._pure_mode_lock = threading.Lock()
-    svc._start_stop_lock = threading.Lock()
-    svc._pure_mode = False
-    svc._dashboard_sink = None
-    svc._empty_broadcast_queue = deque(maxlen=10)
-    svc._ws_manager = None
-    svc._ui_config = MagicMock()
-    svc._ui_config.login_timeout = 120
-    svc._login_history = None
-    svc._worker_getter = None
-    svc._profile_service = MagicMock()
-    svc.project_root = MagicMock()
-    svc.record_log = MagicMock()
-    svc._update_status_snapshot = MagicMock()
-    return svc
-
 
 # =====================================================================
 # EngineCmdType 枚举
@@ -195,17 +126,17 @@ class TestLoginRetryState:
 
 
 class TestEngineInit:
-    def test_init_defaults(self):
-        svc = _make_engine()
+    def test_init_defaults(self, engine_factory):
+        svc = engine_factory()
         assert svc._dashboard_sink is None
         assert svc._login_in_progress.is_set() is False
         assert svc._scheduler_running is False
         assert svc._monitor_core is None
 
-    def test_init_with_task_components(self):
+    def test_init_with_task_components(self, engine_factory):
         mock_registry = MagicMock()
         mock_executor = MagicMock()
-        svc = _make_engine(task_registry=mock_registry, task_executor=mock_executor)
+        svc = engine_factory(task_registry=mock_registry, task_executor=mock_executor)
         assert svc._task_registry is mock_registry
         assert svc._task_executor is mock_executor
 
@@ -216,13 +147,13 @@ class TestEngineInit:
 
 
 class TestEnqueue:
-    def test_enqueue_success(self):
-        svc = _make_raw_engine()
+    def test_enqueue_success(self, engine_factory):
+        svc = engine_factory(raw=True)
         cmd = EngineCommand(type=EngineCmdType.START)
         assert svc._enqueue(cmd) is True
 
-    def test_enqueue_full(self):
-        svc = _make_raw_engine()
+    def test_enqueue_full(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._cmd_queue = queue.Queue(maxsize=1)
         svc._cmd_queue.put_nowait(EngineCommand(type=EngineCmdType.START))
         cmd = EngineCommand(type=EngineCmdType.STOP)
@@ -235,17 +166,17 @@ class TestEnqueue:
 
 
 class TestCalculateWakeup:
-    def test_default_wakeup(self):
+    def test_default_wakeup(self, engine_factory):
         """无监控、无重试、无调度时，默认 60 秒后唤醒。"""
-        svc = _make_raw_engine()
+        svc = engine_factory(raw=True)
         # _monitor_core 为 None => _is_monitoring 为 False
         now = time.time()
         wakeup = svc._calculate_wakeup()
         assert wakeup >= now + 59
         assert wakeup <= now + 61
 
-    def test_wakeup_with_monitoring(self):
-        svc = _make_raw_engine()
+    def test_wakeup_with_monitoring(self, engine_factory):
+        svc = engine_factory(raw=True)
         mock_core = MagicMock()
         mock_core.monitoring = True
         svc._monitor_core = mock_core
@@ -253,8 +184,8 @@ class TestCalculateWakeup:
         wakeup = svc._calculate_wakeup()
         assert wakeup <= time.time() + 11
 
-    def test_wakeup_with_login_retry(self):
-        svc = _make_raw_engine()
+    def test_wakeup_with_login_retry(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._monitor_core = None
         svc._login_retry = _LoginRetryState(
             count=1,
@@ -264,17 +195,17 @@ class TestCalculateWakeup:
         wakeup = svc._calculate_wakeup()
         assert wakeup <= time.time() + 60
 
-    def test_wakeup_with_scheduler(self):
-        svc = _make_raw_engine()
+    def test_wakeup_with_scheduler(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._monitor_core = None
         svc._scheduler_running = True
         svc._next_schedule_tick = time.time() + 5
         wakeup = svc._calculate_wakeup()
         assert wakeup <= time.time() + 6
 
-    def test_wakeup_exception_fallback(self):
+    def test_wakeup_exception_fallback(self, engine_factory):
         """异常时回退到 now+5。"""
-        svc = _make_raw_engine()
+        svc = engine_factory(raw=True)
         svc._monitor_core = None
         # 通过让 _is_monitoring 属性检查出错来触发异常
         svc._login_retry = _LoginRetryState(
@@ -301,44 +232,44 @@ class TestProcessCommand:
         got = svc._cmd_queue.get_nowait()
         svc._process_command(got)
 
-    def test_dispatch_start(self):
-        svc = _make_raw_engine()
+    def test_dispatch_start(self, engine_factory):
+        svc = engine_factory(raw=True)
         cmd = EngineCommand(type=EngineCmdType.START, response_event=threading.Event())
         svc._handle_start = MagicMock()
         self._put_and_process(svc, cmd)
         svc._handle_start.assert_called_once()
         assert cmd.response_event.is_set()
 
-    def test_dispatch_stop(self):
-        svc = _make_raw_engine()
+    def test_dispatch_stop(self, engine_factory):
+        svc = engine_factory(raw=True)
         cmd = EngineCommand(type=EngineCmdType.STOP, response_event=threading.Event())
         svc._handle_stop = MagicMock()
         self._put_and_process(svc, cmd)
         svc._handle_stop.assert_called_once()
 
-    def test_dispatch_login(self):
-        svc = _make_raw_engine()
+    def test_dispatch_login(self, engine_factory):
+        svc = engine_factory(raw=True)
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login = MagicMock()
         self._put_and_process(svc, cmd)
         svc._handle_login.assert_called_once()
 
-    def test_dispatch_shutdown(self):
-        svc = _make_raw_engine()
+    def test_dispatch_shutdown(self, engine_factory):
+        svc = engine_factory(raw=True)
         cmd = EngineCommand(type=EngineCmdType.SHUTDOWN, response_event=threading.Event())
         svc._handle_shutdown = MagicMock()
         self._put_and_process(svc, cmd)
         svc._handle_shutdown.assert_called_once()
 
-    def test_dispatch_reload(self):
-        svc = _make_raw_engine()
+    def test_dispatch_reload(self, engine_factory):
+        svc = engine_factory(raw=True)
         cmd = EngineCommand(type=EngineCmdType.RELOAD, response_event=threading.Event())
         svc._handle_reload = MagicMock()
         self._put_and_process(svc, cmd)
         svc._handle_reload.assert_called_once()
 
-    def test_dispatch_apply_profile(self):
-        svc = _make_raw_engine()
+    def test_dispatch_apply_profile(self, engine_factory):
+        svc = engine_factory(raw=True)
         cmd = EngineCommand(
             type=EngineCmdType.APPLY_PROFILE,
             response_event=threading.Event(),
@@ -347,17 +278,17 @@ class TestProcessCommand:
         self._put_and_process(svc, cmd)
         svc._handle_apply_profile.assert_called_once()
 
-    def test_process_sets_response_event(self):
-        svc = _make_raw_engine()
+    def test_process_sets_response_event(self, engine_factory):
+        svc = engine_factory(raw=True)
         event = threading.Event()
         cmd = EngineCommand(type=EngineCmdType.START, response_event=event)
         svc._handle_start = MagicMock()
         self._put_and_process(svc, cmd)
         assert event.is_set()
 
-    def test_process_exception_still_sets_event(self):
+    def test_process_exception_still_sets_event(self, engine_factory):
         """handler 抛出异常时，response_event 仍被 set。"""
-        svc = _make_raw_engine()
+        svc = engine_factory(raw=True)
         event = threading.Event()
         cmd = EngineCommand(type=EngineCmdType.START, response_event=event)
         svc._handle_start = MagicMock(side_effect=RuntimeError("boom"))
@@ -371,9 +302,9 @@ class TestProcessCommand:
 
 
 class TestHandleStart:
-    def test_handle_start_duplicate(self):
+    def test_handle_start_duplicate(self, engine_factory):
         """监控已在运行时，_handle_start 不创建新核心。"""
-        svc = _make_raw_engine()
+        svc = engine_factory(raw=True)
         mock_core = MagicMock()
         mock_core.monitoring = True
         svc._monitor_core = mock_core
@@ -382,9 +313,9 @@ class TestHandleStart:
         assert svc._monitor_core is mock_core
 
     @patch("app.services.engine.NetworkMonitorCore")
-    def test_handle_start_creates_core(self, mock_core_cls):
+    def test_handle_start_creates_core(self, mock_core_cls, engine_factory):
         """正常启动时创建 NetworkMonitorCore。"""
-        svc = _make_raw_engine()
+        svc = engine_factory(raw=True)
         svc._profile_service = MagicMock()
         svc._copy_runtime_config = MagicMock(return_value={})
         mock_core = MagicMock()
@@ -395,9 +326,9 @@ class TestHandleStart:
         mock_core.init_monitoring.assert_called_once()
 
     @patch("app.services.engine.NetworkMonitorCore")
-    def test_handle_start_pure_mode(self, mock_core_cls):
+    def test_handle_start_pure_mode(self, mock_core_cls, engine_factory):
         """纯净模式标志传递给 config。"""
-        svc = _make_raw_engine()
+        svc = engine_factory(raw=True)
         svc._profile_service = MagicMock()
         svc._copy_runtime_config = MagicMock(return_value={})
         svc._pure_mode = True
@@ -415,13 +346,13 @@ class TestHandleStart:
 
 
 class TestHandleStop:
-    def test_handle_stop_no_core(self):
-        svc = _make_raw_engine()
+    def test_handle_stop_no_core(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._handle_stop()
         assert svc._monitor_core is None
 
-    def test_handle_stop_with_core(self):
-        svc = _make_raw_engine()
+    def test_handle_stop_with_core(self, engine_factory):
+        svc = engine_factory(raw=True)
         mock_core = MagicMock()
         svc._monitor_core = mock_core
         svc._handle_stop()
@@ -436,8 +367,8 @@ class TestHandleStop:
 
 
 class TestHandleShutdown:
-    def test_handle_shutdown_calls_stop(self):
-        svc = _make_raw_engine()
+    def test_handle_shutdown_calls_stop(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._handle_stop = MagicMock()
         cmd = EngineCommand(type=EngineCmdType.SHUTDOWN)
         svc._handle_shutdown(cmd)
@@ -450,9 +381,9 @@ class TestHandleShutdown:
 
 
 class TestHandleLogin:
-    def test_handle_login_no_config(self):
+    def test_handle_login_no_config(self, engine_factory):
         """无配置时返回 False。"""
-        svc = _make_raw_engine()
+        svc = engine_factory(raw=True)
         svc._runtime_config = {}
         svc._copy_runtime_config = MagicMock(return_value={})
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
@@ -461,8 +392,8 @@ class TestHandleLogin:
         assert success is False
         assert "配置不完整" in message
 
-    def test_handle_login_missing_username(self):
-        svc = _make_raw_engine()
+    def test_handle_login_missing_username(self, engine_factory):
+        svc = engine_factory(raw=True)
         config = {"password": "p", "auth_url": "http://test.com"}
         svc._copy_runtime_config = MagicMock(return_value=config)
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
@@ -471,8 +402,8 @@ class TestHandleLogin:
         assert success is False
         assert "配置不完整" in message
 
-    def test_handle_login_missing_password(self):
-        svc = _make_raw_engine()
+    def test_handle_login_missing_password(self, engine_factory):
+        svc = engine_factory(raw=True)
         config = {"username": "u", "auth_url": "http://test.com"}
         svc._copy_runtime_config = MagicMock(return_value=config)
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
@@ -480,8 +411,8 @@ class TestHandleLogin:
         success, message = cmd.response_data
         assert success is False
 
-    def test_handle_login_missing_auth_url(self):
-        svc = _make_raw_engine()
+    def test_handle_login_missing_auth_url(self, engine_factory):
+        svc = engine_factory(raw=True)
         config = {"username": "u", "password": "p"}
         svc._copy_runtime_config = MagicMock(return_value=config)
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
@@ -489,8 +420,8 @@ class TestHandleLogin:
         success, message = cmd.response_data
         assert success is False
 
-    def test_handle_login_async_success(self):
-        svc = _make_raw_engine()
+    def test_handle_login_async_success(self, engine_factory):
+        svc = engine_factory(raw=True)
         config = {
             "username": "u",
             "password": "p",
@@ -502,8 +433,8 @@ class TestHandleLogin:
         svc._handle_login(cmd)
         assert cmd.response_data == (True, "登录已提交")
 
-    def test_handle_login_already_in_progress(self):
-        svc = _make_raw_engine()
+    def test_handle_login_already_in_progress(self, engine_factory):
+        svc = engine_factory(raw=True)
         config = {
             "username": "u",
             "password": "p",
@@ -522,8 +453,8 @@ class TestHandleLogin:
 
 
 class TestHandleReload:
-    def test_handle_reload_not_monitoring(self):
-        svc = _make_raw_engine()
+    def test_handle_reload_not_monitoring(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._reload_config_internal = MagicMock()
         svc._handle_start = MagicMock()
         cmd = EngineCommand(type=EngineCmdType.RELOAD)
@@ -531,8 +462,8 @@ class TestHandleReload:
         svc._reload_config_internal.assert_called_once()
         svc._handle_start.assert_not_called()
 
-    def test_handle_reload_monitoring(self):
-        svc = _make_raw_engine()
+    def test_handle_reload_monitoring(self, engine_factory):
+        svc = engine_factory(raw=True)
         mock_core = MagicMock()
         mock_core.monitoring = True
         svc._monitor_core = mock_core
@@ -545,6 +476,36 @@ class TestHandleReload:
         svc._reload_config_internal.assert_called_once()
         svc._handle_start.assert_called_once()
 
+    def test_reload_failure_keeps_monitoring(self, engine_factory):
+        """重载失败时不应调用 _handle_stop，监控应继续运行。"""
+        svc = engine_factory(raw=True)
+        mock_core = MagicMock()
+        mock_core.monitoring = True
+        svc._monitor_core = mock_core
+        svc._reload_config_internal = MagicMock(return_value=False)
+        svc._handle_stop = MagicMock()
+        svc._handle_start = MagicMock()
+        cmd = EngineCommand(type=EngineCmdType.RELOAD)
+        svc._handle_reload(cmd)
+        svc._reload_config_internal.assert_called_once()
+        svc._handle_stop.assert_not_called()
+        svc._handle_start.assert_not_called()
+
+    def test_reload_success_restarts_monitoring(self, engine_factory):
+        """重载成功且之前在监控时，应调用 stop + start。"""
+        svc = engine_factory(raw=True)
+        mock_core = MagicMock()
+        mock_core.monitoring = True
+        svc._monitor_core = mock_core
+        svc._reload_config_internal = MagicMock(return_value=True)
+        svc._handle_stop = MagicMock()
+        svc._handle_start = MagicMock()
+        cmd = EngineCommand(type=EngineCmdType.RELOAD)
+        svc._handle_reload(cmd)
+        svc._reload_config_internal.assert_called_once()
+        svc._handle_stop.assert_called_once()
+        svc._handle_start.assert_called_once()
+
 
 # =====================================================================
 # _handle_apply_profile
@@ -552,8 +513,8 @@ class TestHandleReload:
 
 
 class TestHandleApplyProfile:
-    def test_handle_apply_profile_not_monitoring(self):
-        svc = _make_raw_engine()
+    def test_handle_apply_profile_not_monitoring(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._runtime_config = {"auth_url": "http://test.com", "username": "u"}
         svc._reload_config_internal = MagicMock()
         cmd = EngineCommand(
@@ -562,8 +523,8 @@ class TestHandleApplyProfile:
         svc._handle_apply_profile(cmd)
         svc._reload_config_internal.assert_called_once()
 
-    def test_handle_apply_profile_monitoring(self):
-        svc = _make_raw_engine()
+    def test_handle_apply_profile_monitoring(self, engine_factory):
+        svc = engine_factory(raw=True)
         mock_core = MagicMock()
         mock_core.monitoring = True
         svc._monitor_core = mock_core
@@ -586,12 +547,12 @@ class TestHandleApplyProfile:
 
 
 class TestDoNetworkCheck:
-    def test_do_network_check_no_core(self):
-        svc = _make_raw_engine()
+    def test_do_network_check_no_core(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._do_network_check()
 
-    def test_do_network_check_need_login(self):
-        svc = _make_raw_engine()
+    def test_do_network_check_need_login(self, engine_factory):
+        svc = engine_factory(raw=True)
         mock_core = MagicMock()
         mock_core.check_once.return_value = {"need_login": True, "interval": 300}
         mock_core.consume_profile_switch_flag.return_value = False
@@ -602,8 +563,8 @@ class TestDoNetworkCheck:
         svc._do_async_login.assert_called_once()
         assert svc._login_retry.config == (3, [30, 30, 30])
 
-    def test_do_network_check_no_login_needed(self):
-        svc = _make_raw_engine()
+    def test_do_network_check_no_login_needed(self, engine_factory):
+        svc = engine_factory(raw=True)
         mock_core = MagicMock()
         mock_core.check_once.return_value = {"need_login": False, "interval": 600}
         mock_core.consume_profile_switch_flag.return_value = False
@@ -612,8 +573,8 @@ class TestDoNetworkCheck:
         svc._do_network_check()
         assert svc._login_retry.count == 0
 
-    def test_do_network_check_profile_switch(self):
-        svc = _make_raw_engine()
+    def test_do_network_check_profile_switch(self, engine_factory):
+        svc = engine_factory(raw=True)
         mock_core = MagicMock()
         mock_core.check_once.return_value = {"need_login": False, "interval": 300}
         mock_core.consume_profile_switch_flag.return_value = True
@@ -625,8 +586,8 @@ class TestDoNetworkCheck:
         svc._handle_stop.assert_called_once()
         svc._reload_config_internal.assert_called_once()
 
-    def test_do_network_check_exception(self):
-        svc = _make_raw_engine()
+    def test_do_network_check_exception(self, engine_factory):
+        svc = engine_factory(raw=True)
         mock_core = MagicMock()
         mock_core.check_once.side_effect = RuntimeError("boom")
         svc._monitor_core = mock_core
@@ -640,44 +601,44 @@ class TestDoNetworkCheck:
 
 
 class TestLoginRetryNeeded:
-    def test_no_retry_needed_when_count_zero(self):
-        svc = _make_raw_engine()
+    def test_no_retry_needed_when_count_zero(self, engine_factory):
+        svc = engine_factory(raw=True)
         assert svc._login_retry_needed(time.time()) is False
 
-    def test_no_retry_needed_when_no_config(self):
-        svc = _make_raw_engine()
+    def test_no_retry_needed_when_no_config(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._login_retry.count = 1
         svc._login_retry.config = None
         assert svc._login_retry_needed(time.time()) is False
 
-    def test_no_retry_needed_when_login_in_progress(self):
-        svc = _make_raw_engine()
+    def test_no_retry_needed_when_login_in_progress(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._login_retry.count = 1
         svc._login_retry.config = (3, [10, 20, 30])
         svc._login_in_progress.set()
         assert svc._login_retry_needed(time.time()) is False
 
-    def test_no_retry_needed_when_max_retries_reached(self):
-        svc = _make_raw_engine()
+    def test_no_retry_needed_when_max_retries_reached(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._login_retry.count = 3
         svc._login_retry.config = (3, [10, 20, 30])
         assert svc._login_retry_needed(time.time()) is False
 
-    def test_no_retry_needed_when_index_out_of_range(self):
-        svc = _make_raw_engine()
+    def test_no_retry_needed_when_index_out_of_range(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._login_retry.count = 4
         svc._login_retry.config = (5, [10])
         assert svc._login_retry_needed(time.time()) is False
 
-    def test_no_retry_needed_when_too_early(self):
-        svc = _make_raw_engine()
+    def test_no_retry_needed_when_too_early(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._login_retry.count = 1
         svc._login_retry.last_attempt = time.time()
         svc._login_retry.config = (3, [60, 60, 60])
         assert svc._login_retry_needed(time.time()) is False
 
-    def test_retry_needed(self):
-        svc = _make_raw_engine()
+    def test_retry_needed(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._login_retry.count = 1
         svc._login_retry.last_attempt = time.time() - 100
         svc._login_retry.config = (3, [10, 20, 30])
@@ -690,19 +651,19 @@ class TestLoginRetryNeeded:
 
 
 class TestDoAsyncLogin:
-    def test_already_in_progress(self):
-        svc = _make_raw_engine()
+    def test_already_in_progress(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._login_in_progress.set()
         assert svc._do_async_login() is False
 
-    def test_future_none(self):
-        svc = _make_raw_engine()
+    def test_future_none(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._task_executor.execute_login_async.return_value = None
         assert svc._do_async_login() is False
         assert not svc._login_in_progress.is_set()
 
-    def test_future_success(self):
-        svc = _make_raw_engine()
+    def test_future_success(self, engine_factory):
+        svc = engine_factory(raw=True)
         # 使用一个未完成的 Future，避免 done_callback 立即执行
         future = Future()
         svc._task_executor.execute_login_async.return_value = future
@@ -715,8 +676,8 @@ class TestDoAsyncLogin:
         time.sleep(0.1)
         assert not svc._login_in_progress.is_set()
 
-    def test_exception_clears_flag(self):
-        svc = _make_raw_engine()
+    def test_exception_clears_flag(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._task_executor.execute_login_async.side_effect = RuntimeError("boom")
         with pytest.raises(RuntimeError):
             svc._do_async_login()
@@ -729,8 +690,8 @@ class TestDoAsyncLogin:
 
 
 class TestGetRetryConfig:
-    def test_get_retry_config_normal(self):
-        svc = _make_raw_engine()
+    def test_get_retry_config_normal(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._runtime_config = {
             "retry_settings": {"max_retries": 5, "retry_interval": 60}
         }
@@ -739,9 +700,9 @@ class TestGetRetryConfig:
         assert max_retries == 5
         assert intervals == [60, 60, 60, 60, 60]
 
-    def test_get_retry_config_exception_fallback(self):
+    def test_get_retry_config_exception_fallback(self, engine_factory):
         """异常时返回默认值 (3, [30, 30, 30])。"""
-        svc = _make_raw_engine()
+        svc = engine_factory(raw=True)
         svc._runtime_config = {}
         with patch(
             "app.utils.retry.get_retry_intervals",
@@ -758,22 +719,22 @@ class TestGetRetryConfig:
 
 
 class TestRunScheduleTick:
-    def test_run_schedule_tick(self):
-        svc = _make_raw_engine()
+    def test_run_schedule_tick(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._task_registry.get_due_tasks.return_value = ["task1", "task2"]
         svc._run_schedule_tick()
         svc._task_executor.execute_task_async.assert_any_call("task1")
         svc._task_executor.execute_task_async.assert_any_call("task2")
         assert svc._next_schedule_tick > time.time()
 
-    def test_run_schedule_tick_no_due_tasks(self):
-        svc = _make_raw_engine()
+    def test_run_schedule_tick_no_due_tasks(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._task_registry.get_due_tasks.return_value = []
         svc._run_schedule_tick()
         svc._task_executor.execute_task_async.assert_not_called()
 
-    def test_run_schedule_tick_no_registry(self):
-        svc = _make_raw_engine()
+    def test_run_schedule_tick_no_registry(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._task_registry = None
         svc._run_schedule_tick()
         assert svc._next_schedule_tick > time.time()
@@ -785,8 +746,8 @@ class TestRunScheduleTick:
 
 
 class TestUpdateStatusSnapshot:
-    def test_update_no_core(self):
-        svc = _make_raw_engine()
+    def test_update_no_core(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
         svc._queue_status_broadcast = MagicMock()
         svc._monitor_core = None
@@ -794,8 +755,8 @@ class TestUpdateStatusSnapshot:
         assert svc._status_snapshot.monitoring is False
         assert svc._status_snapshot.status_detail == "已停止"
 
-    def test_update_with_core_connected(self):
-        svc = _make_raw_engine()
+    def test_update_with_core_connected(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
         svc._queue_status_broadcast = MagicMock()
         mock_core = MagicMock()
@@ -815,8 +776,8 @@ class TestUpdateStatusSnapshot:
         assert svc._status_snapshot.network_state == "connected"
         assert svc._status_snapshot.network_check_count == 10
 
-    def test_update_with_core_disconnected(self):
-        svc = _make_raw_engine()
+    def test_update_with_core_disconnected(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
         svc._queue_status_broadcast = MagicMock()
         mock_core = MagicMock()
@@ -833,8 +794,8 @@ class TestUpdateStatusSnapshot:
         svc._update_status_snapshot(force=True)
         assert svc._status_snapshot.last_network_ok is False
 
-    def test_update_throttled(self):
-        svc = _make_raw_engine()
+    def test_update_throttled(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
         svc._queue_status_broadcast = MagicMock()
         svc._last_snapshot_time = time.time()
@@ -844,8 +805,8 @@ class TestUpdateStatusSnapshot:
         svc._update_status_snapshot(force=False)
         assert svc._status_snapshot.monitoring is False
 
-    def test_update_force_skips_throttle(self):
-        svc = _make_raw_engine()
+    def test_update_force_skips_throttle(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
         svc._queue_status_broadcast = MagicMock()
         svc._last_snapshot_time = time.time()
@@ -863,8 +824,8 @@ class TestUpdateStatusSnapshot:
         svc._update_status_snapshot(force=True)
         assert svc._status_snapshot.monitoring is True
 
-    def test_update_core_exception(self):
-        svc = _make_raw_engine()
+    def test_update_core_exception(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
         svc._queue_status_broadcast = MagicMock()
         mock_core = MagicMock()
@@ -880,16 +841,16 @@ class TestUpdateStatusSnapshot:
 
 
 class TestQueueStatusBroadcast:
-    def test_queue_status_broadcast_default_queue(self):
-        svc = _make_raw_engine()
+    def test_queue_status_broadcast_default_queue(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._queue_status_broadcast = ScheduleEngine._queue_status_broadcast.__get__(svc)
         svc.get_status = MagicMock(return_value=MagicMock(model_dump=lambda: {"monitoring": False}))
         svc._queue_status_broadcast()
         assert len(svc._empty_broadcast_queue) == 1
         assert svc._empty_broadcast_queue[0]["type"] == "status"
 
-    def test_queue_status_broadcast_with_dashboard_sink(self):
-        svc = _make_raw_engine()
+    def test_queue_status_broadcast_with_dashboard_sink(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._queue_status_broadcast = ScheduleEngine._queue_status_broadcast.__get__(svc)
         mock_sink = MagicMock()
         mock_sink.broadcast_queue = deque()
@@ -898,8 +859,8 @@ class TestQueueStatusBroadcast:
         svc._queue_status_broadcast()
         assert len(mock_sink.broadcast_queue) == 1
 
-    def test_queue_status_broadcast_exception(self):
-        svc = _make_raw_engine()
+    def test_queue_status_broadcast_exception(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._queue_status_broadcast = ScheduleEngine._queue_status_broadcast.__get__(svc)
         svc.get_status = MagicMock(side_effect=RuntimeError("boom"))
         svc._queue_status_broadcast()
@@ -911,15 +872,15 @@ class TestQueueStatusBroadcast:
 
 
 class TestGetStatus:
-    def test_get_status_stopped(self):
-        svc = _make_raw_engine()
+    def test_get_status_stopped(self, engine_factory):
+        svc = engine_factory(raw=True)
         status = svc.get_status()
         assert status.monitoring is False
         assert status.runtime_seconds == 0
         assert status.network_connected is False
 
-    def test_get_status_running(self):
-        svc = _make_raw_engine()
+    def test_get_status_running(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._status_snapshot = StatusSnapshot(
             monitoring=True,
             last_network_ok=True,
@@ -941,22 +902,22 @@ class TestGetStatus:
 
 
 class TestShutdown:
-    def test_shutdown_sets_event_and_clears_core(self):
-        svc = _make_raw_engine()
+    def test_shutdown_sets_event_and_clears_core(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._monitor_core = MagicMock()
         svc.shutdown()
         assert svc._shutdown_event.is_set()
         assert svc._monitor_core is None
 
-    def test_shutdown_idempotent(self):
-        svc = _make_raw_engine()
+    def test_shutdown_idempotent(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc.shutdown()
         svc.shutdown()
         svc.shutdown()
         assert svc._shutdown_event.is_set()
 
-    def test_shutdown_stops_scheduler(self):
-        svc = _make_raw_engine()
+    def test_shutdown_stops_scheduler(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._scheduler_running = True
         svc.shutdown()
         assert svc._scheduler_running is False
@@ -968,8 +929,8 @@ class TestShutdown:
 
 
 class TestStartStopMonitoring:
-    def test_start_monitoring_already_running(self):
-        svc = _make_raw_engine()
+    def test_start_monitoring_already_running(self, engine_factory):
+        svc = engine_factory(raw=True)
         mock_core = MagicMock()
         mock_core.monitoring = True
         svc._monitor_core = mock_core
@@ -977,8 +938,8 @@ class TestStartStopMonitoring:
         assert ok is False
         assert "已在运行" in msg
 
-    def test_start_monitoring_invalid_config(self):
-        svc = _make_raw_engine()
+    def test_start_monitoring_invalid_config(self, engine_factory):
+        svc = engine_factory(raw=True)
         with patch(
             "app.services.engine.ConfigValidator.validate_env_config",
             return_value=(False, "缺少认证地址"),
@@ -987,8 +948,8 @@ class TestStartStopMonitoring:
         assert ok is False
         assert "配置无效" in msg
 
-    def test_start_monitoring_queue_full(self):
-        svc = _make_raw_engine()
+    def test_start_monitoring_queue_full(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._cmd_queue = queue.Queue(maxsize=1)
         svc._cmd_queue.put_nowait(EngineCommand(type=EngineCmdType.START))
         with patch(
@@ -999,8 +960,8 @@ class TestStartStopMonitoring:
         assert ok is False
         assert "队列已满" in msg
 
-    def test_start_monitoring_success(self):
-        svc = _make_raw_engine()
+    def test_start_monitoring_success(self, engine_factory):
+        svc = engine_factory(raw=True)
         with patch(
             "app.services.engine.ConfigValidator.validate_env_config",
             return_value=(True, ""),
@@ -1009,14 +970,14 @@ class TestStartStopMonitoring:
         assert ok is True
         assert "已启动" in msg
 
-    def test_stop_monitoring_not_running(self):
-        svc = _make_raw_engine()
+    def test_stop_monitoring_not_running(self, engine_factory):
+        svc = engine_factory(raw=True)
         ok, msg = svc.stop_monitoring()
         assert ok is False
         assert "未运行" in msg
 
-    def test_stop_monitoring_running(self):
-        svc = _make_raw_engine()
+    def test_stop_monitoring_running(self, engine_factory):
+        svc = engine_factory(raw=True)
         mock_core = MagicMock()
         mock_core.monitoring = True
         svc._monitor_core = mock_core
@@ -1024,8 +985,8 @@ class TestStartStopMonitoring:
         assert ok is True
         assert "已停止" in msg
 
-    def test_stop_monitoring_queue_full(self):
-        svc = _make_raw_engine()
+    def test_stop_monitoring_queue_full(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._cmd_queue = queue.Queue(maxsize=1)
         mock_core = MagicMock()
         mock_core.monitoring = True
@@ -1042,8 +1003,8 @@ class TestStartStopMonitoring:
 
 
 class TestReloadConfig:
-    def test_reload_config_enqueues(self):
-        svc = _make_raw_engine()
+    def test_reload_config_enqueues(self, engine_factory):
+        svc = engine_factory(raw=True)
         enqueued = []
         def fake_enqueue(cmd):
             enqueued.append(cmd.type)
@@ -1054,13 +1015,13 @@ class TestReloadConfig:
         svc.reload_config()
         assert EngineCmdType.RELOAD in enqueued
 
-    def test_reload_config_queue_full(self):
-        svc = _make_raw_engine()
+    def test_reload_config_queue_full(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._enqueue = MagicMock(return_value=False)
         svc.reload_config()
 
-    def test_reload_config_timeout(self):
-        svc = _make_raw_engine()
+    def test_reload_config_timeout(self, engine_factory):
+        svc = engine_factory(raw=True)
         real_event = threading.Event()
         def fake_enqueue(cmd):
             cmd.response_event = real_event
@@ -1071,8 +1032,8 @@ class TestReloadConfig:
 
 
 class TestApplyProfile:
-    def test_apply_profile_enqueues(self):
-        svc = _make_raw_engine()
+    def test_apply_profile_enqueues(self, engine_factory):
+        svc = engine_factory(raw=True)
         enqueued = []
         def fake_enqueue(cmd):
             enqueued.append((cmd.type, cmd.data))
@@ -1086,13 +1047,13 @@ class TestApplyProfile:
             for t, d in enqueued
         )
 
-    def test_apply_profile_queue_full(self):
-        svc = _make_raw_engine()
+    def test_apply_profile_queue_full(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._enqueue = MagicMock(return_value=False)
         svc.apply_profile("p1")
 
-    def test_apply_profile_timeout(self):
-        svc = _make_raw_engine()
+    def test_apply_profile_timeout(self, engine_factory):
+        svc = engine_factory(raw=True)
         real_event = threading.Event()
         def fake_enqueue(cmd):
             cmd.response_event = real_event
@@ -1108,23 +1069,23 @@ class TestApplyProfile:
 
 
 class TestRunManualLogin:
-    def test_run_manual_login_in_progress(self):
-        svc = _make_raw_engine()
+    def test_run_manual_login_in_progress(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._manual_login_in_progress = True
         ok, msg = svc.run_manual_login()
         assert ok is False
         assert "进行中" in msg
 
-    def test_run_manual_login_queue_full(self):
-        svc = _make_raw_engine()
+    def test_run_manual_login_queue_full(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._cmd_queue = queue.Queue(maxsize=1)
         svc._cmd_queue.put_nowait(EngineCommand(type=EngineCmdType.START))
         ok, msg = svc.run_manual_login()
         assert ok is False
         assert "队列已满" in msg
 
-    def test_run_manual_login_success(self):
-        svc = _make_raw_engine()
+    def test_run_manual_login_success(self, engine_factory):
+        svc = engine_factory(raw=True)
         def fake_enqueue(cmd):
             cmd.response_data = (True, "登录成功")
             if cmd.response_event:
@@ -1134,10 +1095,10 @@ class TestRunManualLogin:
         svc._update_status_snapshot = MagicMock()
         ok, msg = svc.run_manual_login()
         assert ok is True
-        assert "成功" in msg
+        assert "已提交" in msg
 
-    def test_run_manual_login_failure(self):
-        svc = _make_raw_engine()
+    def test_run_manual_login_failure(self, engine_factory):
+        svc = engine_factory(raw=True)
         def fake_enqueue(cmd):
             cmd.response_data = (False, "密码错误")
             if cmd.response_event:
@@ -1149,8 +1110,8 @@ class TestRunManualLogin:
         assert "失败" in msg
         assert "密码错误" in msg
 
-    def test_run_manual_login_timeout_engine_alive(self):
-        svc = _make_raw_engine()
+    def test_run_manual_login_timeout_engine_alive(self, engine_factory):
+        svc = engine_factory(raw=True)
         def fake_enqueue(cmd):
             return True
         svc._enqueue = fake_enqueue
@@ -1162,8 +1123,8 @@ class TestRunManualLogin:
         assert "超时" in msg
         assert not svc._manual_login_in_progress
 
-    def test_run_manual_login_timeout_engine_dead(self):
-        svc = _make_raw_engine()
+    def test_run_manual_login_timeout_engine_dead(self, engine_factory):
+        svc = engine_factory(raw=True)
         def fake_enqueue(cmd):
             return True
         svc._enqueue = fake_enqueue
@@ -1181,32 +1142,32 @@ class TestRunManualLogin:
 
 
 class TestNetwork:
-    def test_network_ok(self):
-        svc = _make_raw_engine()
+    def test_network_ok(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._copy_runtime_config = MagicMock(return_value={"monitor": {}})
         with patch("app.services.engine.is_network_available", return_value=True):
             ok, msg = svc.test_network()
         assert ok is True
         assert "正常" in msg
 
-    def test_network_fail(self):
-        svc = _make_raw_engine()
+    def test_network_fail(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._copy_runtime_config = MagicMock(return_value={"monitor": {}})
         with patch("app.services.engine.is_network_available", return_value=False):
             ok, msg = svc.test_network()
         assert ok is False
         assert "异常" in msg
 
-    def test_network_exception(self):
-        svc = _make_raw_engine()
+    def test_network_exception(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._copy_runtime_config = MagicMock(return_value={"monitor": {}})
         with patch("app.services.engine.is_network_available", side_effect=RuntimeError("timeout")):
             ok, msg = svc.test_network()
         assert ok is False
         assert "失败" in msg
 
-    def test_network_with_targets(self):
-        svc = _make_raw_engine()
+    def test_network_with_targets(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._copy_runtime_config = MagicMock(return_value={
             "monitor": {
                 "ping_targets": "8.8.8.8,1.1.1.1",
@@ -1226,8 +1187,8 @@ class TestNetwork:
 
 
 class TestTogglePureMode:
-    def test_toggle_pure_mode(self):
-        svc = _make_raw_engine()
+    def test_toggle_pure_mode(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._profile_service = MagicMock()
         assert svc.pure_mode is False
         new_value = svc.toggle_pure_mode()
@@ -1242,54 +1203,54 @@ class TestTogglePureMode:
 
 
 class TestProperties:
-    def test_login_in_progress_property(self):
-        svc = _make_raw_engine()
+    def test_login_in_progress_property(self, engine_factory):
+        svc = engine_factory(raw=True)
         assert svc.login_in_progress is False
         svc._login_in_progress.set()
         assert svc.login_in_progress is True
 
-    def test_ws_broadcast_queue_default(self):
-        svc = _make_raw_engine()
+    def test_ws_broadcast_queue_default(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._dashboard_sink = None
         q = svc.ws_broadcast_queue
         assert q is svc._empty_broadcast_queue
 
-    def test_ws_broadcast_queue_with_sink(self):
-        svc = _make_raw_engine()
+    def test_ws_broadcast_queue_with_sink(self, engine_factory):
+        svc = engine_factory(raw=True)
         mock_sink = MagicMock()
         mock_sink.broadcast_queue = deque()
         svc._dashboard_sink = mock_sink
         q = svc.ws_broadcast_queue
         assert q is mock_sink.broadcast_queue
 
-    def test_pure_mode_property(self):
-        svc = _make_raw_engine()
+    def test_pure_mode_property(self, engine_factory):
+        svc = engine_factory(raw=True)
         assert svc.pure_mode is False
 
-    def test_is_monitoring_false(self):
-        svc = _make_raw_engine()
+    def test_is_monitoring_false(self, engine_factory):
+        svc = engine_factory(raw=True)
         assert svc._is_monitoring is False
 
-    def test_is_monitoring_true(self):
-        svc = _make_raw_engine()
+    def test_is_monitoring_true(self, engine_factory):
+        svc = engine_factory(raw=True)
         mock_core = MagicMock()
         mock_core.monitoring = True
         svc._monitor_core = mock_core
         assert svc._is_monitoring is True
 
-    def test_is_monitoring_core_not_monitoring(self):
-        svc = _make_raw_engine()
+    def test_is_monitoring_core_not_monitoring(self, engine_factory):
+        svc = engine_factory(raw=True)
         mock_core = MagicMock()
         mock_core.monitoring = False
         svc._monitor_core = mock_core
         assert svc._is_monitoring is False
 
-    def test_tasks_property(self):
-        svc = _make_raw_engine()
+    def test_tasks_property(self, engine_factory):
+        svc = engine_factory(raw=True)
         assert svc.tasks is svc._task_executor
 
-    def test_scheduler_running_property(self):
-        svc = _make_raw_engine()
+    def test_scheduler_running_property(self, engine_factory):
+        svc = engine_factory(raw=True)
         assert svc.scheduler_running is False
         svc._scheduler_running = True
         assert svc.scheduler_running is True
@@ -1301,27 +1262,27 @@ class TestProperties:
 
 
 class TestSchedulerControl:
-    def test_start_scheduler(self):
-        svc = _make_raw_engine()
+    def test_start_scheduler(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc.start_scheduler()
         assert svc._scheduler_running is True
         assert svc._next_schedule_tick > time.time()
 
-    def test_start_scheduler_idempotent(self):
-        svc = _make_raw_engine()
+    def test_start_scheduler_idempotent(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc.start_scheduler()
         first_tick = svc._next_schedule_tick
         svc.start_scheduler()
         assert svc._next_schedule_tick == first_tick
 
-    def test_stop_scheduler(self):
-        svc = _make_raw_engine()
+    def test_stop_scheduler(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._scheduler_running = True
         svc.stop_scheduler()
         assert svc._scheduler_running is False
 
-    def test_has_enabled_tasks(self):
-        svc = _make_raw_engine()
+    def test_has_enabled_tasks(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._task_executor.has_enabled_tasks.return_value = True
         assert svc.has_enabled_tasks() is True
 
@@ -1332,14 +1293,14 @@ class TestSchedulerControl:
 
 
 class TestGetConfig:
-    def test_get_config_returns_copy(self):
-        svc = _make_raw_engine()
+    def test_get_config_returns_copy(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._ui_config = MagicMock()
         config = svc.get_config()
         svc._ui_config.model_copy.assert_called_once_with(deep=True)
 
-    def test_get_runtime_config_returns_copy(self):
-        svc = _make_raw_engine()
+    def test_get_runtime_config_returns_copy(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._runtime_config = {"key": "value"}
         config = svc.get_runtime_config()
         assert config == {"key": "value"}
@@ -1353,17 +1314,27 @@ class TestGetConfig:
 
 
 class TestRecordLog:
-    def test_record_log_basic(self):
-        svc = _make_raw_engine()
+    def test_record_log_basic(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc.record_log = ScheduleEngine.record_log.__get__(svc)
         svc.record_log("测试消息", level="INFO", source="backend")
 
-    def test_record_log_network_source_updates_snapshot(self):
-        svc = _make_raw_engine()
+    def test_record_log_no_side_effect(self, engine_factory):
+        """record_log 不应再触发 _update_status_snapshot。"""
+        svc = engine_factory(raw=True)
         svc.record_log = ScheduleEngine.record_log.__get__(svc)
-        svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
-        svc._queue_status_broadcast = MagicMock()
+        svc._update_status_snapshot = MagicMock()
         svc.record_log("网络检测", level="INFO", source="network")
+        svc._update_status_snapshot.assert_not_called()
+
+
+class TestNotifyNetworkStateChanged:
+    def test_notify_network_state_changed(self, engine_factory):
+        svc = engine_factory(raw=True)
+        svc.notify_network_state_changed = ScheduleEngine.notify_network_state_changed.__get__(svc)
+        svc._update_status_snapshot = MagicMock()
+        svc.notify_network_state_changed()
+        svc._update_status_snapshot.assert_called_once()
 
 
 # =====================================================================
@@ -1372,12 +1343,12 @@ class TestRecordLog:
 
 
 class TestListLogs:
-    def test_list_logs_no_sink(self):
-        svc = _make_raw_engine()
+    def test_list_logs_no_sink(self, engine_factory):
+        svc = engine_factory(raw=True)
         assert svc.list_logs() == []
 
-    def test_list_logs_with_sink(self):
-        svc = _make_raw_engine()
+    def test_list_logs_with_sink(self, engine_factory):
+        svc = engine_factory(raw=True)
         mock_sink = MagicMock()
         mock_sink.list_logs.return_value = [{"msg": "test"}]
         svc._dashboard_sink = mock_sink
@@ -1385,8 +1356,8 @@ class TestListLogs:
         assert result == [{"msg": "test"}]
         mock_sink.list_logs.assert_called_once_with(limit=10)
 
-    def test_list_logs_zero_limit(self):
-        svc = _make_raw_engine()
+    def test_list_logs_zero_limit(self, engine_factory):
+        svc = engine_factory(raw=True)
         assert svc.list_logs(limit=0) == []
 
 
@@ -1396,8 +1367,8 @@ class TestListLogs:
 
 
 class TestBoot:
-    def test_boot_calls_start_monitoring(self):
-        svc = _make_raw_engine()
+    def test_boot_calls_start_monitoring(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc.start_monitoring = MagicMock(return_value=(True, "已启动"))
         svc.boot()
         svc.start_monitoring.assert_called_once()
@@ -1410,15 +1381,15 @@ class TestBoot:
 
 class TestWsDrain:
     @pytest.mark.asyncio
-    async def test_drain_ws_queue_empty(self):
-        svc = _make_raw_engine()
+    async def test_drain_ws_queue_empty(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._ws_manager = AsyncMock()
         await svc.drain_ws_queue()
         svc._ws_manager.broadcast.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_drain_ws_queue_with_messages(self):
-        svc = _make_raw_engine()
+    async def test_drain_ws_queue_with_messages(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._ws_manager = AsyncMock()
         svc._empty_broadcast_queue.append({"type": "status", "data": {}})
         svc._empty_broadcast_queue.append({"type": "log", "data": {}})
@@ -1426,8 +1397,8 @@ class TestWsDrain:
         assert svc._ws_manager.broadcast.call_count == 2
 
     @pytest.mark.asyncio
-    async def test_drain_ws_queue_broadcast_error(self):
-        svc = _make_raw_engine()
+    async def test_drain_ws_queue_broadcast_error(self, engine_factory):
+        svc = engine_factory(raw=True)
         svc._ws_manager = AsyncMock()
         svc._ws_manager.broadcast.side_effect = RuntimeError("ws error")
         svc._empty_broadcast_queue.append({"type": "status", "data": {}})

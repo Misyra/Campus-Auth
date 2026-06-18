@@ -148,48 +148,35 @@ export const configMethods = {
       this.ocrStatus = { installed: false, size_mb: 0 };
     }
   },
-  async installOcr() {
-    if (!confirm('确定要安装 OCR 依赖吗？\nddddocr + onnxruntime 约占用 ~120MB 磁盘空间。')) return;
+  async _toggleOcr(action) {
+    const isInstall = action === 'install';
+    const confirmText = isInstall
+      ? '确定要安装 OCR 依赖吗？\nddddocr + onnxruntime 约占用 ~120MB 磁盘空间。'
+      : '确定要卸载 OCR 依赖吗？\n卸载后 OCR 验证码识别步骤将无法使用。';
+    if (!confirm(confirmText)) return;
     this.busy.ocr = true;
     try {
-      const { data } = await this.$api.post('/api/ocr/install');
+      const { data } = await this.$api.post(`/api/ocr/${action}`);
       if (data.success) {
         this.frontendLogger.info('ocr', data.message);
         this.notify(true, data.message + '，需重启程序后生效', 'install');
         await this.fetchOcrStatus();
       } else {
-        this.frontendLogger.warn('ocr', '安装失败: ' + data.message);
+        this.frontendLogger.warn('ocr', `${isInstall ? '安装' : '卸载'}失败: ${data.message}`);
         this.notify(false, data.message, 'install');
       }
     } catch (error) {
-      const msg = extractApiError(error, '安装失败');
-      this.frontendLogger.error('ocr', '安装异常: ' + msg, error);
+      const fallback = isInstall ? '安装失败' : '卸载失败';
+      const label = isInstall ? '安装' : '卸载';
+      const msg = extractApiError(error, fallback);
+      this.frontendLogger.error('ocr', `${label}异常: ${msg}`, error);
       this.notify(false, msg, 'install');
     } finally {
       this.busy.ocr = false;
     }
   },
-  async uninstallOcr() {
-    if (!confirm('确定要卸载 OCR 依赖吗？\n卸载后 OCR 验证码识别步骤将无法使用。')) return;
-    this.busy.ocr = true;
-    try {
-      const { data } = await this.$api.post('/api/ocr/uninstall');
-      if (data.success) {
-        this.frontendLogger.info('ocr', data.message);
-        this.notify(true, data.message + '，需重启程序后生效', 'install');
-        await this.fetchOcrStatus();
-      } else {
-        this.frontendLogger.warn('ocr', '卸载失败: ' + data.message);
-        this.notify(false, data.message, 'install');
-      }
-    } catch (error) {
-      const msg = extractApiError(error, '卸载失败');
-      this.frontendLogger.error('ocr', '卸载异常: ' + msg, error);
-      this.notify(false, msg, 'install');
-    } finally {
-      this.busy.ocr = false;
-    }
-  },
+  async installOcr() { return this._toggleOcr('install'); },
+  async uninstallOcr() { return this._toggleOcr('uninstall'); },
   // ── 开机自启动管理 ──
   async fetchAutostart() {
     if (this._autostartInFlight) return;

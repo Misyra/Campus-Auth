@@ -1,6 +1,27 @@
 import { extractApiError, pickFile, downloadBlob, safeApiCall } from '../methods/utils.js';
 
 export const editorTaskMethods = {
+  // ── 倒计时弹窗通用辅助 ──
+  _clearCountdownTimer(timerRefKey) {
+    if (this[timerRefKey]) {
+      clearInterval(this[timerRefKey]);
+      this[timerRefKey] = null;
+    }
+  },
+  _showCountdownModal(modalSelector, countdownObj, countdownKey, timerRefKey, initialSeconds = 3) {
+    this._clearCountdownTimer(timerRefKey);
+    countdownObj[countdownKey] = initialSeconds;
+    this.openModal(modalSelector);
+    const timer = setInterval(() => {
+      countdownObj[countdownKey]--;
+      if (countdownObj[countdownKey] <= 0) {
+        clearInterval(timer);
+        countdownObj[countdownKey] = 0;
+      }
+    }, 1000);
+    this[timerRefKey] = timer;
+  },
+
   // 同步 name/description 输入框到 JSON 内容
   syncMetaToJson() {
     if (!this.editingTask || this._syncingFromJson) return;
@@ -120,20 +141,10 @@ export const editorTaskMethods = {
   },
   showDangerConfirm(dangers) {
     return new Promise((resolve) => {
-      // 清理旧状态，避免泄漏
       this._cancelDangerConfirm('reenter');
-      // resolve 存储到非响应式属性，避免 Vue 代理函数对象
       this._dangerResolve = resolve;
       this.dangerConfirm = { dangers };
-      this.dangerCountdown = 3;
-      this.openModal('.danger-overlay');
-      const timer = setInterval(() => {
-        this.dangerCountdown--;
-        if (this.dangerCountdown <= 0) {
-          clearInterval(timer);
-        }
-      }, 1000);
-      this._dangerTimer = timer;
+      this._showCountdownModal('.danger-overlay', this, 'dangerCountdown', '_dangerTimer');
     });
   },
   confirmDanger(allow) {
@@ -303,21 +314,8 @@ export const editorTaskMethods = {
   },
 
   async confirmRepoImport(task) {
-    if (this._repoDisclaimerTimer) {
-      clearInterval(this._repoDisclaimerTimer);
-      this._repoDisclaimerTimer = null;
-    }
     this.repoImport.disclaimer = task;
-    this.repoImport.disclaimerCountdown = 3;
-    this.openModal('.repo-disclaimer-modal');
-    const timer = setInterval(() => {
-      this.repoImport.disclaimerCountdown--;
-      if (this.repoImport.disclaimerCountdown <= 0) {
-        clearInterval(timer);
-        this.repoImport.disclaimerCountdown = 0;
-      }
-    }, 1000);
-    this._repoDisclaimerTimer = timer;
+    this._showCountdownModal('.repo-disclaimer-modal', this.repoImport, 'disclaimerCountdown', '_repoDisclaimerTimer');
   },
 
   cancelRepoDisclaimer() {

@@ -158,15 +158,19 @@
   border: 1px solid var(--border);
 }
 
-/* 危险步骤确认弹窗 */
-.danger-overlay {
+/* 三个 overlay 共享的布局属性 */
+.overlay-base {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: var(--blur-sm);
   display: flex;
   align-items: center;
   justify-content: center;
+  backdrop-filter: var(--blur-sm);
+}
+
+/* 危险步骤确认弹窗 */
+.danger-overlay {
+  background: rgba(0, 0, 0, 0.65);
   z-index: var(--z-modal);
   animation: fadeIn 0.2s ease;
 }
@@ -296,13 +300,7 @@
 
 
 .debug-overlay {
-  position: fixed;
-  inset: 0;
   background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   z-index: var(--z-overlay);
   animation: debugFadeIn 0.2s ease;
 }
@@ -479,13 +477,7 @@
 /* ==================== 仓库导入 ==================== */
 
 .repo-overlay {
-  position: fixed;
-  inset: 0;
   background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: var(--blur-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   z-index: var(--z-modal);
   animation: fadeIn 0.2s ease;
 }

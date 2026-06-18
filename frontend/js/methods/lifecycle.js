@@ -273,9 +273,12 @@ export const lifecycleMethods = {
   },
   _setupVisibilityChange() {
     // 监听页面可见性变化，切回页面时主动重连
+    // 已知限制：无防抖，快速 Alt+Tab 会绕过 wsMaxRetries 限制。
+    // 实际无影响：localhost 通信开销极小，connectWebSocket 会先清理旧连接再创建新连接，
+    // 不会堆积。重置 wsRetryCount 是故意设计 — 页面恢复可见时给新的重连机会。
     this._visibilityHandler = () => {
       if (document.visibilityState === 'visible' && this.ws?.readyState !== WebSocket.OPEN) {
-        this.wsRetryCount = 0; // 重置重试计数，给页面恢复后新的重连机会
+        this.wsRetryCount = 0;
         this.frontendLogger.info('websocket', '页面恢复可见，尝试重连');
         this.connectWebSocket();
       }

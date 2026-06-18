@@ -10,6 +10,9 @@
 命令派发流程:
   submit() → queue.put(cmd) → run_coroutine_threadsafe(_wake_async())
   → _async_run() 被唤醒 → get_nowait() 取出命令 → _dispatch() → handler
+
+NOT-TO-DO: 不要拆分此文件。Worker 是浏览器自动化核心，生命周期紧密
+（启动、命令分发、清理），拆分收益不大反而增加复杂度。
 """
 
 from __future__ import annotations
@@ -146,6 +149,8 @@ class PlaywrightWorker:
         创建 daemon Thread，线程内部运行持久 asyncio 事件循环，
         通过 _worker_ready 事件等待循环就绪后再返回。
         """
+        if self.is_alive():
+            return
         self._stop_event.clear()
         self._worker_ready.clear()
         self._consumer_thread = threading.Thread(
@@ -282,15 +287,14 @@ class PlaywrightWorker:
             return WorkerResponse(success=True)
 
         # 阻塞等待命令执行完成
-        cmd.response_event.wait(timeout=timeout)
-        if cmd.response_data is not None:
-            if isinstance(cmd.response_data, WorkerResponse):
-                return cmd.response_data
-            return WorkerResponse(success=True, data=cmd.response_data)
+        if not cmd.response_event.wait(timeout=timeout):
+            # 超时：标记命令为已取消
+            cmd.cancelled = True
+            return WorkerResponse(success=False, error="命令执行超时或无响应")
 
-        # 超时：标记命令为已取消
-        cmd.cancelled = True
-        return WorkerResponse(success=False, error="命令执行超时或无响应")
+        if isinstance(cmd.response_data, WorkerResponse):
+            return cmd.response_data
+        return WorkerResponse(success=True, data=cmd.response_data)
 
     def submit_nowait(self, cmd_type: str, data: dict | None = None) -> None:
         """提交命令但不等待响应（fire-and-forget）。"""
@@ -451,6 +455,17 @@ class PlaywrightWorker:
             logger.exception("登录执行异常")
             return WorkerResponse(success=False, error=str(e))
 
+    async def _cleanup_debug_session(self):
+        """统一清理调试会话资源。"""
+        self._debug_executor = None
+        if self._debug_page is not None:
+            try:
+                if not self._debug_page.is_closed():
+                    await self._debug_page.close()
+            except Exception as e:
+                logger.warning("关闭旧调试页面异常: {}", e)
+            self._debug_page = None
+
     async def _handle_debug_start(self, data: dict) -> WorkerResponse:
         """启动调试会话。
 
@@ -472,6 +487,11 @@ class PlaywrightWorker:
         navigation_timeout = data.get(
             "navigation_timeout", TaskExecutor.DEFAULT_NAVIGATION_TIMEOUT
         )
+
+        # 守卫：若已有调试会话，先清理
+        if self._debug_page is not None:
+            logger.info("检测到残留调试会话，自动清理")
+            await self._cleanup_debug_session()
 
         # 检查浏览器健康状态，不健康则重建
         if not await self._health_check():
@@ -575,37 +595,26 @@ class PlaywrightWorker:
 
     async def _handle_debug_stop(self) -> WorkerResponse:
         """停止调试会话并清理 Worker 内部状态。"""
-        # 清除调试执行器引用
-        self._debug_executor = None
+        await self._cleanup_debug_session()
 
-        # 关闭调试页面
-        if self._debug_page is not None:
-            same_as_main = self._debug_page is self._page
+        # 重建主页面
+        if self._context is not None and not self._context.is_closed():
+            # 先关闭旧主页面，保证一个 context 一个主 page
+            old_page = self._page
+            if old_page is not None and not old_page.is_closed():
+                with contextlib.suppress(Exception):
+                    await old_page.close()
+            # context 级 init_script 自动继承到新页面，无需重新应用 stealth
+            self._page = await self._context.new_page()
+        else:
+            # context 已关闭，尝试重建完整链路
+            logger.warning("Context 已关闭，尝试重建浏览器")
             try:
-                if not self._debug_page.is_closed():
-                    await self._debug_page.close()
-            except Exception as e:
-                logger.warning("关闭调试页面异常: {}", e)
-            self._debug_page = None
-
-            # 如果调试页面就是主页面，关闭后需要创建一个新页面，
-            # 避免后续 browser 操作（_handle_debug_start / BrowserContextManager）因 _page 为空而失败
-            if same_as_main:
-                self._page = None
-                try:
-                    if self._context is not None and not self._context.is_closed():
-                        self._page = await self._context.new_page()
-                        # 重新应用反检测脚本和路由拦截（新页面未继承旧页面的设置）
-                        # 使用与 _start_browser 一致的判断逻辑
-                        if self._page is not None:
-                            settings = self._last_browser_settings or {}
-                            pure_mode = settings.get("pure_mode", False)
-                            if not pure_mode or settings.get("stealth_mode", False):
-                                await self._apply_stealth_and_routes(
-                                    {"browser_settings": settings}
-                                )
-                except Exception:
-                    logger.warning("创建替代页面失败，_page 保持 None")
+                config = {"browser_settings": self._last_browser_settings or {}}
+                await self._close_browser()
+                await self._start_browser(config)
+            except Exception:
+                logger.exception("重建浏览器失败")
 
         logger.info("调试会话已停止，Worker 内部状态已清理")
         return WorkerResponse(success=True, data="调试会话已停止")
@@ -658,29 +667,37 @@ class PlaywrightWorker:
 
     # ── 浏览器生命周期管理 ──
 
+    _CHROMIUM_ONLY_FLAGS = {
+        "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
+        "--memory-pressure-off", "--disable-web-security",
+    }
+
     def _build_launch_args(self, browser_settings: dict, channel: str = "playwright") -> list[str]:
         """构建浏览器启动参数。"""
-        # Firefox 不支持 Chromium 专属参数
-        if channel == "firefox":
-            return []
+        args = []
 
-        args = [
-            "--no-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-gpu",
-            "--memory-pressure-off",
-        ]
-        if browser_settings.get("disable_web_security", False):
-            args.append("--disable-web-security")
-        if browser_settings.get("low_resource_mode", False):
-            args.append("--blink-settings=imagesEnabled=false")
+        if channel != "firefox":
+            args.extend([
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--memory-pressure-off",
+            ])
+            if browser_settings.get("disable_web_security", False):
+                args.append("--disable-web-security")
+            if browser_settings.get("low_resource_mode", False):
+                args.append("--blink-settings=imagesEnabled=false")
 
-        # 用户自定义浏览器参数
+        # 用户自定义参数（所有 engine 都解析）
         custom_args = str(browser_settings.get("browser_args", "") or "").strip()
         if custom_args:
             for flag in custom_args.splitlines():
                 flag = flag.strip()
-                if flag and flag not in args:
+                if not flag or flag.startswith("#"):
+                    continue
+                if channel == "firefox" and flag in self._CHROMIUM_ONLY_FLAGS:
+                    continue
+                if flag not in args:
                     args.append(flag)
         return args
 
@@ -712,6 +729,9 @@ class PlaywrightWorker:
 
     async def _apply_stealth_and_routes(self, browser_settings: dict) -> None:
         """应用反检测脚本和路由拦截。"""
+        if self._context is None:
+            return
+
         # 低资源模式：路由拦截屏蔽图片/字体/媒体
         if browser_settings.get("low_resource_mode", False):
             await self._context.route("**/*", self._handle_low_resource_request)
@@ -723,7 +743,8 @@ class PlaywrightWorker:
             custom = browser_settings.get("stealth_custom_script", "").strip()
             # 有自定义脚本则使用自定义，否则使用默认脚本
             script = custom or STEALTH_INIT_SCRIPT
-            await self._page.add_init_script(script)
+            # 挂载到 context 级别，自动继承到所有新页面（含 popup、debug_page）
+            await self._context.add_init_script(script)
 
     async def _start_browser(self, config: dict) -> None:
         """启动浏览器。
@@ -782,11 +803,18 @@ class PlaywrightWorker:
     async def _launch_browser(self, playwright, channel: str, custom_path: str, headless: bool, launch_args: list):
         """根据 channel 启动对应的浏览器。"""
         if channel == "custom" and custom_path:
-            # 检查路径是否存在
             if not Path(custom_path).exists():
                 raise FileNotFoundError(f"自定义浏览器路径不存在: {custom_path}")
-            logger.info("使用自定义浏览器路径: {}", custom_path)
-            return await playwright.chromium.launch(
+            custom_engine = (self._last_browser_settings or {}).get("custom_browser_engine", "auto")
+            if custom_engine == "firefox":
+                engine = "firefox"
+            elif custom_engine == "webkit":
+                engine = "webkit"
+            else:
+                engine = "chromium"
+            logger.info("使用自定义浏览器: {} (engine={})", custom_path, engine)
+            launcher = getattr(playwright, engine)
+            return await launcher.launch(
                 executable_path=custom_path, headless=headless, args=launch_args
             )
         elif channel == "firefox":
@@ -956,7 +984,19 @@ class PlaywrightWorker:
         try:
             headers = json.loads(raw_headers)
             if isinstance(headers, dict):
-                return {str(k): str(v) for k, v in headers.items() if k is not None}
+                result = {}
+                for k, v in headers.items():
+                    if k is None:
+                        continue
+                    k_str, v_str = str(k), str(v)
+                    if len(k_str) > 256 or len(v_str) > 4096:
+                        logger.warning("Header 过长已跳过: {} ({}B)", k_str[:32], len(k_str))
+                        continue
+                    if "\r" in k_str or "\n" in k_str:
+                        logger.warning("Header key 含换行符已跳过: {}", k_str[:32])
+                        continue
+                    result[k_str] = v_str
+                return result
             logger.warning("自定义请求头必须是 JSON 对象，已忽略")
         except Exception as exc:
             logger.warning("解析自定义请求头失败: {}", exc)
