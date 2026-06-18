@@ -6,6 +6,7 @@ import json
 import mimetypes
 import os
 import signal
+import sys
 import threading
 import time
 from contextlib import asynccontextmanager
@@ -467,6 +468,21 @@ def run(
     _app.state._uvicorn_server = uv_server
     if server_ref is not None:
         server_ref[0] = uv_server
+
+    # Windows: 过滤 asyncio ProactorBasePipeTransport 的 ConnectionResetError 噪音
+    # WebSocket 客户端断开时，服务端 shutdown 已关闭的连接会触发此异常，无害
+    if sys.platform == "win32":
+        loop = asyncio.new_event_loop()
+
+        def _suppress_connection_reset(loop, context):
+            exc = context.get("exception")
+            if isinstance(exc, ConnectionResetError):
+                return
+            loop.default_exception_handler(context)
+
+        loop.set_exception_handler(_suppress_connection_reset)
+        asyncio.set_event_loop(loop)
+
     uv_server.run()
 
 
