@@ -33,7 +33,6 @@ def mock_classes():
         patch("app.container.TaskRegistry") as mock_tr_cls,
         patch("app.container.TaskHistoryStore") as mock_ths_cls,
         patch("app.container.TaskExecutor") as mock_te_cls,
-        patch("app.container.NullTaskExecutor") as mock_nte_cls,
         patch("app.services.debug_service.DebugSessionManager") as mock_debug_cls,
     ):
         yield {
@@ -46,7 +45,6 @@ def mock_classes():
             "TaskRegistry": mock_tr_cls,
             "TaskHistoryStore": mock_ths_cls,
             "TaskExecutor": mock_te_cls,
-            "NullTaskExecutor": mock_nte_cls,
             "DebugSessionManager": mock_debug_cls,
         }
 
@@ -144,13 +142,12 @@ class TestInit:
         assert isinstance(container.ws_manager, NullWebSocketManager)
         mock_classes["WebSocketManager"].assert_not_called()
 
-    def test_lightweight_mode_creates_null_task_executor(self, project_root, mock_classes):
-        """轻量模式下应创建 NullTaskExecutor 而非 TaskExecutor。"""
+    def test_lightweight_mode_creates_real_task_executor(self, project_root, mock_classes):
+        """轻量模式下也应创建 TaskExecutor（用于自动登录）。"""
         from app.container import ServiceContainer
 
         container = ServiceContainer(project_root, mode="lightweight")
-        mock_classes["NullTaskExecutor"].assert_called_once()
-        mock_classes["TaskExecutor"].assert_not_called()
+        mock_classes["TaskExecutor"].assert_called_once()
         assert container.task_executor is not None
 
     def test_full_mode_creates_ws_manager(self, container, mock_classes):
