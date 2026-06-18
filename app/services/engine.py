@@ -206,9 +206,9 @@ class ScheduleEngine:
                 if self._is_monitoring and now >= self._next_network_check:
                     self._do_network_check()
 
-                # 登录重试
+                # 登录重试：前次 check_once 已判定 need_login，跳过 attempt_login 内冗余检测
                 if self._login_retry_needed(now):
-                    self._do_async_login()
+                    self._do_async_login(skip_pause_check=True)
 
                 # 定时任务
                 if self._scheduler_running and now >= self._next_schedule_tick:
@@ -281,7 +281,8 @@ class ScheduleEngine:
             if result.get("need_login", False):
                 self._login_retry.config = self._get_retry_config()
                 self._login_retry.count = 0
-                self._do_async_login()
+                # check_once 已完成暂停/网络检测，跳过 attempt_login 内冗余二次检测
+                self._do_async_login(skip_pause_check=True)
             else:
                 self._login_retry.count = 0
 
@@ -318,7 +319,17 @@ class ScheduleEngine:
     def _do_async_login(self, skip_pause_check: bool = False, is_manual: bool = False) -> bool:
         """提交登录到 executor 的 login_pool。返回 True 表示已提交。"""
         if self._login_in_progress.is_set():
-            return False
+            if not is_manual:
+                return False
+            # 手动登录：取消卡住的自动登录，等待完成后重新提交
+            logger.info("手动登录：取消当前登录任务")
+            self._task_executor.cancel_login()
+            deadline = time.time() + 5
+            while self._login_in_progress.is_set() and time.time() < deadline:
+                time.sleep(0.1)
+            if self._login_in_progress.is_set():
+                logger.warning("取消当前登录超时，强制重置登录状态")
+                self._login_in_progress.clear()
         self._login_in_progress.set()
         self._login_retry.last_attempt = time.time()
         if not is_manual:
@@ -815,8 +826,8 @@ class ScheduleEngine:
         config = self._copy_runtime_config()
         monitor_cfg = config.get("monitor", {})
         targets = monitor_cfg.get("ping_targets", [])
-        enable_tcp = monitor_cfg.get("enable_tcp_check", True)
-        enable_http = monitor_cfg.get("enable_http_check", True)
+        enable_tcp = monitor_cfg.get("enable_tcp_check", False)
+        enable_http = monitor_cfg.get("enable_http_check", False)
         url_checks = monitor_cfg.get("url_check_urls", None)
         test_sites = parse_ping_targets(targets)
         mode_desc = []
