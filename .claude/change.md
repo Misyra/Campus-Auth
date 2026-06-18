@@ -16,7 +16,9 @@
   - `run_manual_login` 日志从"手动登录成功"改为"手动登录任务已提交"，返回消息从"手动登录成功：登录已提交"改为"登录已提交"
   - `_do_async_login` 完成回调新增日志：成功时打印"手动/自动登录完成: {message}"，失败时打印"手动/自动登录失败: {message}"
   - 新增 `from concurrent.futures import Future` 导入
-  - 同步更新 3 个测试文件的断言（`test_api_monitor_routes.py`、`test_routers.py`、`test_engine.py`）
+  - 同步更新 3 个测试文件的断言（`test_api_monitor_routes.py`、`test_routers.py`、`test_engine.py`、`test_login_flow.py`）
+
+### refactor
 
 ### fix
 - `main.py` `_handle_existing_instance` 删除 force 模式下重复的等待循环
