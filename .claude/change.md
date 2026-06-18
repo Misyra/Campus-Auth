@@ -2,6 +2,12 @@
 
 ## 2026-06-18
 
+### fix
+- `app/services/runtime_config.py` 修复 profile override 覆盖语义（Task 1: P1）
+  - PROFILE_OVERRIDE_FIELDS 中的字段应实现"留空则使用全局"语义，而非"总是排除全局值"
+  - 改为先用 `GLOBAL_SETTINGS_FIELDS` 全量合并全局值，再用 profile 非空值覆盖 `PROFILE_OVERRIDE_FIELDS` 字段
+  - 修复 `test_global_active_task_used_when_profile_empty` 测试失败：profile.active_task="" 时应使用全局值
+
 ### docs
 - 新增 `docs/api-conventions.md` API 错误响应规范文档（Task 5: R4）
   - 定义 5 种场景的响应方式：资源不存在→404，参数非法→422，权限→403，业务失败→ActionResponse(success=False)，程序异常→500
