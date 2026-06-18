@@ -307,7 +307,6 @@ WantedBy=default.target
                 （targetCmd 赋值 + WshShell.Run 调用）。
         """
         vbs_lines = [
-            "On Error Resume Next",
             'Set WshShell = CreateObject("WScript.Shell")',
             "",
             run_command,

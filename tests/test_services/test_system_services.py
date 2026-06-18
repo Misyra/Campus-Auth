@@ -315,7 +315,6 @@ class TestBuildVbsContent:
         run_cmd = 'WshShell.Run "test.exe", 0, False'
         content = svc._build_vbs_content(run_cmd)
         expected = (
-            "On Error Resume Next\n"
             'Set WshShell = CreateObject("WScript.Shell")\n'
             "\n"
             'WshShell.Run "test.exe", 0, False'
@@ -343,12 +342,6 @@ class TestBuildVbsContent:
         content1 = svc._build_vbs_content('WshShell.Run "a.exe"')
         content2 = svc._build_vbs_content('WshShell.Run "b.exe"')
         assert content1 != content2
-
-    def test_on_error_resume_next(self):
-        """VBS 应包含 On Error Resume Next 防止弹出错误框"""
-        svc = AutoStartService(project_root=Path("/test"))
-        content = svc._build_vbs_content('WshShell.Run "test.exe"')
-        assert "On Error Resume Next" in content
 
 
 # ─────────────────────────────────────────────────────────────────────
