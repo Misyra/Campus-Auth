@@ -309,18 +309,26 @@ class TestPerform:
 
 
 class TestBuildVbsContent:
-    def test_contains_pid_check(self):
-        """生成的 VBScript 应包含 PID 检查逻辑"""
+    def test_minimal_output_structure(self):
+        """VBS 输出应为最小结构：On Error + WshShell + 命令"""
         svc = AutoStartService(project_root=Path("/test"))
-        content = svc._build_vbs_content('WshShell.Run "test.exe"')
-        assert "campus_network_auth.pid" in content
-        assert "Win32_Process" in content
+        run_cmd = 'WshShell.Run "test.exe", 0, False'
+        content = svc._build_vbs_content(run_cmd)
+        expected = (
+            "On Error Resume Next\n"
+            'Set WshShell = CreateObject("WScript.Shell")\n'
+            "\n"
+            'WshShell.Run "test.exe", 0, False'
+        )
+        assert content == expected
 
-    def test_no_env_var_injection(self):
-        """生成的 VBScript 不应包含环境变量注入（已改为 CLI 参数）"""
+    def test_no_pid_parsing(self):
+        """VBS 不应包含 PID 检测逻辑（去重由 Python 处理）"""
         svc = AutoStartService(project_root=Path("/test"))
         content = svc._build_vbs_content('WshShell.Run "test.exe"')
-        assert "CAMPUS_AUTH_AUTOSTART" not in content
+        assert "campus_network_auth.pid" not in content
+        assert "Win32_Process" not in content
+        assert "WMI" not in content.upper()
 
     def test_contains_run_command(self):
         """生成的 VBScript 应包含传入的运行命令"""
@@ -335,6 +343,12 @@ class TestBuildVbsContent:
         content1 = svc._build_vbs_content('WshShell.Run "a.exe"')
         content2 = svc._build_vbs_content('WshShell.Run "b.exe"')
         assert content1 != content2
+
+    def test_on_error_resume_next(self):
+        """VBS 应包含 On Error Resume Next 防止弹出错误框"""
+        svc = AutoStartService(project_root=Path("/test"))
+        content = svc._build_vbs_content('WshShell.Run "test.exe"')
+        assert "On Error Resume Next" in content
 
 
 # ─────────────────────────────────────────────────────────────────────

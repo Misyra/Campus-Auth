@@ -298,10 +298,11 @@ class TestBuildVbsContent:
         assert "WScript.Shell" in content
         assert "WshShell.Run" in content
 
-    def test_contains_pid_check(self):
+    def test_no_pid_check(self):
+        """VBS 不再包含 PID 检测逻辑（去重由 Python 处理）"""
         content = AutoStartService._build_vbs_content("run_cmd")
-        assert "campus_network_auth.pid" in content
-        assert "Win32_Process" in content
+        assert "campus_network_auth.pid" not in content
+        assert "Win32_Process" not in content
 
     def test_contains_run_command(self):
         run_cmd = 'WshShell.Run "my_app.exe", 0, False'

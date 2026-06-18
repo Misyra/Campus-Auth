@@ -3,6 +3,28 @@
 ## 2026-06-18
 
 ### refactor
+- `app/services/autostart.py` VBS 自启动脚本删除 PID 检测逻辑，职责收敛到 Python
+  - `_build_vbs_content` 从 43 行简化为 7 行，删除全部 PID 文件解析和 WMI 进程检测
+  - VBS 仅负责启动应用，重复实例检测由 `main.py → _handle_existing_instance → is_service_running` 统一处理
+  - 修复 PID 复用误判：VBS 的 `Win32_Process where ProcessId = pid` 无法区分 PID 被其他进程占用，Python 的 `create_time` 验证可以
+  - 保留 `On Error Resume Next` 防止 exe 被删/路径变化时弹出错误框
+  - 新增 `test_minimal_output_structure` 测试验证 VBS 最小输出结构，防止未来再悄悄加入 PID 解析
+  - 更新 2 个测试文件的断言：`test_contains_pid_check` → `test_no_pid_parsing`/`test_no_pid_check`
+
+### fix
+- `app/services/engine.py` 优化手动登录日志消息，消除"提交成功"与"登录成功"的歧义
+  - `run_manual_login` 日志从"手动登录成功"改为"手动登录任务已提交"，返回消息从"手动登录成功：登录已提交"改为"登录已提交"
+  - `_do_async_login` 完成回调新增日志：成功时打印"手动/自动登录完成: {message}"，失败时打印"手动/自动登录失败: {message}"
+  - 新增 `from concurrent.futures import Future` 导入
+  - 同步更新 3 个测试文件的断言（`test_api_monitor_routes.py`、`test_routers.py`、`test_engine.py`）
+
+### fix
+- `main.py` `_handle_existing_instance` 删除 force 模式下重复的等待循环
+  - `_terminate_process` 内部已调用 `_wait_for_exit(pid, max_wait=5)` 等待进程退出
+  - 外层 `for _ in range(10): time.sleep(0.5)` 又等 5 秒是冗余的
+  - `cleanup_pid()` 无条件调用，行为不变
+
+### refactor
 - `app/services/runtime_config.py` 和 `app/services/config_service.py` 函数改名消除配置管道命名混淆（Task 3: P3）
   - `_build_config_payload` → `load_payload_from_profiles`（读方向：ProfileService → MonitorConfigPayload）
   - `build_runtime_config` → `build_runtime_dict_from_payload`（构建方向：MonitorConfigPayload → dict）

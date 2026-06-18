@@ -1095,7 +1095,7 @@ class TestRunManualLogin:
         svc._update_status_snapshot = MagicMock()
         ok, msg = svc.run_manual_login()
         assert ok is True
-        assert "成功" in msg
+        assert "已提交" in msg
 
     def test_run_manual_login_failure(self, engine_factory):
         svc = engine_factory(raw=True)

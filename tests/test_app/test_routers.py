@@ -98,7 +98,7 @@ def client(tmp_path):
         )
         mock_services.engine.run_manual_login.return_value = (
             True,
-            "手动登录成功",
+            "登录已提交",
         )
         mock_services.engine.test_network.return_value = (True, "网络正常")
         mock_services.engine.pure_mode = False
