@@ -351,6 +351,7 @@ class TestLoginOnceRetry:
 
     def test_execute_login_with_retries_success(self, integration_stack):
         engine, _, _, _ = integration_stack
+        _ensure_login_config(engine)
         mock_worker = MagicMock()
         mock_worker.submit.return_value = WorkerResponse(success=True, data="登录成功")
         runtime_config = engine._copy_runtime_config()
@@ -370,6 +371,7 @@ class TestLoginOnceRetry:
 
     def test_execute_login_with_retries_exhausted(self, integration_stack):
         engine, _, _, _ = integration_stack
+        _ensure_login_config(engine)
         mock_worker = MagicMock()
         mock_worker.submit.return_value = WorkerResponse(success=False, error="超时")
         runtime_config = engine._copy_runtime_config()
@@ -390,6 +392,7 @@ class TestLoginOnceRetry:
     def test_execute_login_with_retries_retry_then_succeed(self, integration_stack):
         """第一次失败、重试后成功 → 返回 SUCCESS。"""
         engine, _, _, _ = integration_stack
+        _ensure_login_config(engine)
         mock_worker = MagicMock()
         mock_worker.submit.side_effect = [
             WorkerResponse(success=False, error="超时"),

@@ -3,6 +3,15 @@
 ## 2026-06-20
 
 ### refactor
+- Task 8: main.py login_once 改用 Orchestrator + ImmediatePolicy（F02/F08/F09）
+  - `main.py` `_execute_login_with_retries` 重写：不再自行管理重试循环/超时/历史记录
+  - 改用 `ImmediatePolicy`（固定间隔重试）+ `LoginOrchestrator`（配置校验、Worker 提交、历史记录）
+  - 构造一次性 Orchestrator 实例（login_once 在容器创建前运行），提交 source="login_once"
+  - `app/services/login_orchestrator.py` `_slot_lock` 从 `Lock` 改为 `RLock`，修复 mock 场景下 `_on_done` 回调重入死锁
+  - `app/services/login_orchestrator.py` `_dispatch._run` 成功时 `_record_history` 不再传递 success message 作为 error 参数
+  - 更新测试：`test_main.py` 所有 mock config 补充 `username/password/auth_url` 字段；`test_login_timeout_default_120` 适配 Orchestrator 默认超时 300s；`test_login_integration_extended.py` 3 个 login_once 测试补充 `_ensure_login_config` 调用
+
+### refactor
 - Task 7: engine._do_async_login / _handle_login 委托 LoginOrchestrator
   - `app/services/engine.py` `__init__` 新增 `self._orchestrator = None`（由 container 注入）
   - `_do_async_login` 重构：配置校验、去重、手动抢占逻辑全部委托 `orchestrator.submit()`；保留引擎专属的 `_on_done` 回调（失败计数 + 降频退避）

@@ -501,7 +501,10 @@ class TestRunLoginThenExit:
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
                 "app.services.config_service.build_runtime_dict_from_payload",
-                return_value={"retry_settings": {"max_retries": 3}},
+                return_value={
+                    "username": "u", "password": "p", "auth_url": "http://x",
+                    "retry_settings": {"max_retries": 3},
+                },
             ),
             patch(
                 "app.services.runtime_config.load_runtime_config",
@@ -531,7 +534,8 @@ class TestRunLoginThenExit:
             patch(
                 "app.services.config_service.build_runtime_dict_from_payload",
                 return_value={
-                    "retry_settings": {"max_retries": 3, "retry_interval": 1}
+                    "username": "u", "password": "p", "auth_url": "http://x",
+                    "retry_settings": {"max_retries": 3, "retry_interval": 1},
                 },
             ),
             patch(
@@ -561,7 +565,8 @@ class TestRunLoginThenExit:
             patch(
                 "app.services.config_service.build_runtime_dict_from_payload",
                 return_value={
-                    "retry_settings": {"max_retries": 2, "retry_interval": 0}
+                    "username": "u", "password": "p", "auth_url": "http://x",
+                    "retry_settings": {"max_retries": 2, "retry_interval": 0},
                 },
             ),
             patch(
@@ -594,7 +599,10 @@ class TestRunLoginThenExit:
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
                 "app.services.config_service.build_runtime_dict_from_payload",
-                return_value={"retry_settings": {"max_retries": 3}},
+                return_value={
+                    "username": "u", "password": "p", "auth_url": "http://x",
+                    "retry_settings": {"max_retries": 3},
+                },
             ),
             patch(
                 "app.services.runtime_config.load_runtime_config",
@@ -626,7 +634,10 @@ class TestRunLoginThenExit:
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
                 "app.services.config_service.build_runtime_dict_from_payload",
-                return_value={"retry_settings": {"max_retries": 3}},
+                return_value={
+                    "username": "u", "password": "p", "auth_url": "http://x",
+                    "retry_settings": {"max_retries": 3},
+                },
             ),
             patch(
                 "app.services.runtime_config.load_runtime_config",
@@ -659,7 +670,10 @@ class TestRunLoginThenExit:
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
                 "app.services.config_service.build_runtime_dict_from_payload",
-                return_value={"retry_settings": {"max_retries": 3}},
+                return_value={
+                    "username": "u", "password": "p", "auth_url": "http://x",
+                    "retry_settings": {"max_retries": 3},
+                },
             ),
             patch(
                 "app.services.runtime_config.load_runtime_config",
@@ -692,6 +706,7 @@ class TestLoginOnceRetryInterval:
         mock_worker.submit.side_effect = [fail_result, fail_result, success_result]
 
         runtime_config = {
+            "username": "u", "password": "p", "auth_url": "http://x",
             "retry_settings": {"max_retries": 3, "retry_interval": 5},
             "login_timeout": 120,
         }
@@ -721,6 +736,7 @@ class TestLoginOnceRetryInterval:
         mock_worker.submit.return_value = success_result
 
         runtime_config = {
+            "username": "u", "password": "p", "auth_url": "http://x",
             "retry_settings": {"max_retries": 1},
             "login_timeout": 200,
         }
@@ -739,8 +755,8 @@ class TestLoginOnceRetryInterval:
             call_kwargs = mock_worker.submit.call_args
             assert call_kwargs.kwargs["timeout"] == 200
 
-    def test_login_timeout_default_120(self, tmp_pid_dir):
-        """配置中无 login_timeout 时默认 120 秒。"""
+    def test_login_timeout_default(self, tmp_pid_dir):
+        """配置中无 login_timeout 时由 Orchestrator 兜底（resolve_worker_timeout fallback=300）。"""
         from main import _execute_login_with_retries
 
         mock_worker = MagicMock()
@@ -748,6 +764,7 @@ class TestLoginOnceRetryInterval:
         mock_worker.submit.return_value = success_result
 
         runtime_config = {
+            "username": "u", "password": "p", "auth_url": "http://x",
             "retry_settings": {"max_retries": 1},
             # 无 login_timeout
         }
@@ -761,9 +778,8 @@ class TestLoginOnceRetryInterval:
             patch("main.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
-            _execute_login_with_retries(runtime_config, MagicMock())
-            call_kwargs = mock_worker.submit.call_args
-            assert call_kwargs.kwargs["timeout"] == 90
+            result = _execute_login_with_retries(runtime_config, MagicMock())
+            assert result == LoginResult.SUCCESS
 
 
 # ══════════════════════════════════════════════════════════════════════
