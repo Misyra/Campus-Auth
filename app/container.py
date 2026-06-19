@@ -73,6 +73,21 @@ class ServiceContainer:
         # 延迟绑定：TaskExecutor 通过引擎获取运行时配置
         self.task_executor.set_runtime_config_getter(self.engine.get_runtime_config)
 
+        # 注入 LoginOrchestrator — 登录执行的唯一入口
+        from app.services.login_orchestrator import LoginOrchestrator
+
+        self.login_orchestrator = LoginOrchestrator(
+            worker_getter=_get_worker,
+            login_history=self.login_history_service,
+            profile_service=self.profile_service,
+            get_runtime_config=self.engine.get_runtime_config,
+        )
+        # TaskExecutor 复用 Orchestrator（注入 _login_pool）
+        self.task_executor._login_orchestrator = self.login_orchestrator
+        self.login_orchestrator._pool = self.task_executor._login_pool
+        # engine 持有引用（后续 Task 7 使用）
+        self.engine._orchestrator = self.login_orchestrator
+
         self._ws_drain_task: asyncio.Task | None = None
         self._log_handler_id: int | None = None
         self._web_services_started = False
