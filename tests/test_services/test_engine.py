@@ -1352,12 +1352,17 @@ class TestRunManualLogin:
     def test_run_manual_login_timeout_engine_alive(self, engine_factory):
         svc = engine_factory(raw=True)
         def fake_enqueue(cmd):
+            # 不设置 response_data，模拟超时
             return True
         svc._enqueue = fake_enqueue
         svc._engine_thread = MagicMock()
         svc._engine_thread.is_alive.return_value = True
         svc._ui_config.login_timeout = 0.01
-        ok, msg = svc.run_manual_login()
+        # 用 mock Event 使 wait 立即返回 False，避免真实等待 70s
+        fast_event = MagicMock()
+        fast_event.wait.return_value = False
+        with patch("threading.Event", return_value=fast_event):
+            ok, msg = svc.run_manual_login()
         assert ok is False
         assert "超时" in msg
         assert not svc._manual_login_in_progress
@@ -1370,9 +1375,38 @@ class TestRunManualLogin:
         svc._engine_thread = MagicMock()
         svc._engine_thread.is_alive.return_value = False
         svc._ui_config.login_timeout = 0.01
-        ok, msg = svc.run_manual_login()
+        fast_event = MagicMock()
+        fast_event.wait.return_value = False
+        with patch("threading.Event", return_value=fast_event):
+            ok, msg = svc.run_manual_login()
         assert ok is False
         assert "引擎线程已退出" in msg
+
+    def test_run_manual_login_api_timeout_buffered(self, engine_factory):
+        """API 等待超时应为 max(login_timeout, 60) + 10，大于 Worker 超时。"""
+        svc = engine_factory(raw=True)
+        wait_calls = []
+
+        def fake_enqueue(cmd):
+            # 模拟引擎线程设置响应
+            cmd.response_data = (True, "登录已提交")
+            return True
+        svc._enqueue = fake_enqueue
+        svc._engine_thread = MagicMock()
+        svc._engine_thread.is_alive.return_value = True
+        svc._ui_config.login_timeout = 150
+
+        spy_event = MagicMock()
+        spy_event.wait.side_effect = lambda timeout=None: (
+            wait_calls.append(timeout) or True
+        )
+        with patch("threading.Event", return_value=spy_event):
+            ok, msg = svc.run_manual_login()
+
+        assert ok is True
+        # 等待超时应为 max(150, 60) + 10 = 160
+        assert len(wait_calls) >= 1
+        assert wait_calls[-1] == 160
 
 
 # =====================================================================

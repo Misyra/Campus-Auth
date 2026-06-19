@@ -193,7 +193,7 @@ def _load_login_config(logger):
 
 
 def _execute_login_with_retries(runtime_config: dict, logger) -> LoginResult:
-    """执行登录，含指数退避重试。
+    """执行登录，含固定间隔重试。
 
     Args:
         runtime_config: 运行时配置字典。
@@ -216,15 +216,15 @@ def _execute_login_with_retries(runtime_config: dict, logger) -> LoginResult:
     raw = retry_settings.get("max_retries", 3)
     max_retries = max(1, min(raw, 10))
     retry_interval = int(retry_settings.get("retry_interval", 5))
+    login_timeout = int(runtime_config.get("login_timeout", 120))
 
     attempt = 0
     while True:
         attempt += 1
-        # 指数退避：首次间隔 0，后续 interval × 2^(attempt-2)
+        # CHANGED: 固定间隔，与 LoginRetryManager(exponential=False) 一致
         if attempt > 1:
-            delay = min(retry_interval * (2 ** (attempt - 2)), 300)
-            print(f"等待 {delay} 秒后重试第 {attempt} 次...")
-            time.sleep(delay)
+            time.sleep(retry_interval)
+            print(f"等待 {retry_interval} 秒后重试第 {attempt} 次...")
 
         start = time.perf_counter()
         success = False
@@ -233,7 +233,7 @@ def _execute_login_with_retries(runtime_config: dict, logger) -> LoginResult:
             result = get_worker().submit(
                 CMD_LOGIN,
                 data={"config": runtime_config},
-                timeout=120,
+                timeout=login_timeout,
             )
             success = result.success
             message = result.data if result.success else result.error or "登录失败"

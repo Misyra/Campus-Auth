@@ -999,6 +999,65 @@ class TestTaskExecutorExecuteLogin:
         assert success is False
         assert "异常" in msg
 
+    def test_login_timeout_from_config(self):
+        """execute_login 应从 config 读取 login_timeout 并传递给 worker。"""
+        executor = self._make_executor()
+        executor._get_runtime_config = lambda: {
+            "browser_settings": {"pure_mode": False},
+            "login_timeout": 200,
+        }
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = "ok"
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = mock_result
+        executor._worker_getter = lambda: mock_worker
+
+        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
+            executor.execute_login()
+        call_kwargs = mock_worker.submit.call_args.kwargs
+        assert call_kwargs["timeout"] == 200
+
+    def test_login_timeout_default_300(self):
+        """config 中无 login_timeout 时默认 300 秒。"""
+        executor = self._make_executor()
+        executor._get_runtime_config = lambda: {
+            "browser_settings": {"pure_mode": False},
+        }
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = "ok"
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = mock_result
+        executor._worker_getter = lambda: mock_worker
+
+        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
+            executor.execute_login()
+        call_kwargs = mock_worker.submit.call_args.kwargs
+        assert call_kwargs["timeout"] == 300
+
+    def test_login_timeout_minimum_60(self):
+        """login_timeout 低于 60 时应取 60 秒下限。"""
+        executor = self._make_executor()
+        executor._get_runtime_config = lambda: {
+            "browser_settings": {"pure_mode": False},
+            "login_timeout": 30,
+        }
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = "ok"
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = mock_result
+        executor._worker_getter = lambda: mock_worker
+
+        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
+            executor.execute_login()
+        call_kwargs = mock_worker.submit.call_args.kwargs
+        assert call_kwargs["timeout"] == 60
+
 
 # =====================================================================
 # TaskExecutor — _record_login_history

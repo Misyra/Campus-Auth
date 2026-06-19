@@ -3,6 +3,20 @@
 ## 2026-06-20
 
 ### fix
+- F08: `main.py` login_once 重试间隔改为固定间隔（与 LoginRetryManager 一致）
+  - `_execute_login_with_retries` 中 `min(interval * 2^(n-2), 300)` 指数退避改为 `time.sleep(retry_interval)` 固定间隔
+  - 引擎内 `LoginRetryManager` 使用 `get_retry_intervals(exponential=False)`（固定间隔），login_once 现在行为一致
+
+### fix
+- F09: 统一登录超时 — Worker timeout 使用 `login_timeout` 配置
+  - `main.py` `_execute_login_with_retries`：从 `runtime_config.get("login_timeout", 120)` 读取超时，替代硬编码 `timeout=120`
+  - `app/services/task_executor.py` `execute_login`：从 `config.get("login_timeout", 300)` 读取超时，下限 60s 防误配
+  - `app/services/config_service.py` `build_runtime_dict_from_payload`：新增 `base["login_timeout"] = gs.login_timeout`
+  - `app/services/engine.py` `run_manual_login`：API 等待超时改为 `max(login_timeout, 60) + 10`，大于 Worker 超时
+  - 新增 8 个测试：`TestLoginOnceRetryInterval`（3）+ `TestBuildRuntimeDictLoginTimeout`（2）+ `TestRunManualLogin.test_run_manual_login_api_timeout_buffered`（1）+ `TestTaskExecutorExecuteLogin`（3: timeout_from_config / default_300 / minimum_60）
+  - 更新 2 个已有测试（timeout_engine_alive / timeout_engine_dead）适配 buffered timeout
+
+### fix
 - `main.py` + `app/application.py` 校正 boot() 与 DashboardSink 注入顺序（F07）
   - 问题：`_run_full` 在 Uvicorn 启动前调用 `boot()`，此时 DashboardSink 尚未注入（注入发生在 lifespan 的 `start_web_services()` 中），启动期间日志丢失
   - `main.py` `_run_full`：移除直接调用 `container.engine.boot()`，改为传递 `boot_engine=should_boot_engine` 给 `run()`
