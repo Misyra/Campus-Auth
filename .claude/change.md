@@ -3,6 +3,16 @@
 ## 2026-06-20
 
 ### fix
+- `app/services/engine.py` 自动登录路径增加配置校验（F05）
+  - 原代码 `_handle_login`（手动入口）校验 username/password/auth_url，但 `_do_async_login`（自动入口）无校验
+  - 配置不完整时，空配置传入 Worker，启动浏览器后才在步骤级失败，浪费 5-15 秒
+  - 新增 `_validate_login_config(config)` 方法：校验配置完整性，返回 None 表示通过，否则返回错误信息
+  - `_do_async_login` 顶部统一调用 `_validate_login_config`，校验失败时记录 WARNING 日志、重置重试状态、直接返回 False
+  - `_handle_login` 改为复用 `_validate_login_config`，消除重复的内联校验逻辑
+  - 配置校验失败不触发 `_on_done` 回调（不提交任务、不注册回调），`_consecutive_login_failures` 不会累计
+  - 新增 `TestValidateLoginConfig`（7 个测试）和 `TestDoAsyncLogin` 补充测试（6 个测试），覆盖校验通过/失败/缺失字段/快照绕过等场景
+
+### fix
 - `app/services/engine.py` 网络检测不再无条件 reset 重试计数（F04）
   - 原代码每次 `need_login=True` 都调用 `_login_retry.reset()`，导致重试计数归零，认证服务器长期宕机时系统永不停机地循环"检测→重试系列→检测→重试系列"
   - `_do_network_check`：仅在 `count==0`（首次发现 need_login）时 reset+configure

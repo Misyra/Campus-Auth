@@ -631,6 +631,54 @@ class TestLoginRetryNeeded:
 
 
 # =====================================================================
+# _validate_login_config
+# =====================================================================
+
+
+class TestValidateLoginConfig:
+    def test_valid_config_returns_none(self, engine_factory):
+        svc = engine_factory(raw=True)
+        config = {"username": "u", "password": "p", "auth_url": "http://x"}
+        assert svc._validate_login_config(config) is None
+
+    def test_empty_config_returns_error(self, engine_factory):
+        svc = engine_factory(raw=True)
+        result = svc._validate_login_config({})
+        assert result is not None
+        assert "配置不完整" in result
+
+    def test_missing_username_returns_error(self, engine_factory):
+        svc = engine_factory(raw=True)
+        config = {"password": "p", "auth_url": "http://x"}
+        result = svc._validate_login_config(config)
+        assert result is not None
+
+    def test_missing_password_returns_error(self, engine_factory):
+        svc = engine_factory(raw=True)
+        config = {"username": "u", "auth_url": "http://x"}
+        result = svc._validate_login_config(config)
+        assert result is not None
+
+    def test_missing_auth_url_returns_error(self, engine_factory):
+        svc = engine_factory(raw=True)
+        config = {"username": "u", "password": "p"}
+        result = svc._validate_login_config(config)
+        assert result is not None
+
+    def test_none_config_uses_runtime_config(self, engine_factory):
+        """config=None 时应从 _copy_runtime_config 读取。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
+        assert svc._validate_login_config() is None
+
+    def test_none_config_empty_runtime_returns_error(self, engine_factory):
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {}
+        result = svc._validate_login_config()
+        assert result is not None
+
+
+# =====================================================================
 # _do_async_login
 # =====================================================================
 
@@ -692,6 +740,7 @@ class TestNetworkCheckBackoff:
     def test_on_done_auto_success_clears_failure_count(self, engine_factory):
         """自动登录成功应清空连续失败计数。"""
         svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         svc._consecutive_login_failures = 3
         future = Future()
         svc._task_executor.execute_login_async.return_value = future
@@ -703,6 +752,7 @@ class TestNetworkCheckBackoff:
     def test_on_done_auto_failure_increments_count(self, engine_factory):
         """自动登录失败应递增连续失败计数。"""
         svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         svc._consecutive_login_failures = 0
         future = Future()
         svc._task_executor.execute_login_async.return_value = future
@@ -714,6 +764,7 @@ class TestNetworkCheckBackoff:
     def test_on_done_auto_failure_triggers_backoff(self, engine_factory):
         """连续失败达到阈值后应触发降频。"""
         svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         svc._consecutive_login_failures = 2  # 再失败一次就达到阈值 3
         svc._backoff_check_multiplier = 1
         svc._monitor_check_interval = 300
@@ -729,6 +780,7 @@ class TestNetworkCheckBackoff:
     def test_on_done_manual_login_does_not_affect_failure_count(self, engine_factory):
         """手动登录结果不应影响连续失败计数。"""
         svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         svc._consecutive_login_failures = 2
         future = Future()
         svc._task_executor.execute_login_async.return_value = future
@@ -741,6 +793,7 @@ class TestNetworkCheckBackoff:
     def test_on_done_manual_success_does_not_clear_failure_count(self, engine_factory):
         """手动登录成功不应清空自动登录的连续失败计数。"""
         svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         svc._consecutive_login_failures = 2
         future = Future()
         svc._task_executor.execute_login_async.return_value = future
@@ -801,16 +854,19 @@ class TestNetworkCheckBackoff:
 class TestDoAsyncLogin:
     def test_already_in_progress(self, engine_factory):
         svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         svc._task_executor.is_login_running.return_value = True
         assert svc._do_async_login() is False
 
     def test_future_none(self, engine_factory):
         svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         svc._task_executor.execute_login_async.return_value = None
         assert svc._do_async_login() is False
 
     def test_future_success(self, engine_factory):
         svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         # 使用一个未完成的 Future，避免 done_callback 立即执行
         future = Future()
         svc._task_executor.execute_login_async.return_value = future
@@ -820,6 +876,7 @@ class TestDoAsyncLogin:
 
     def test_exception_propagates(self, engine_factory):
         svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         svc._task_executor.is_login_running.return_value = False
         svc._task_executor.execute_login_async.side_effect = RuntimeError("boom")
         with pytest.raises(RuntimeError):
@@ -828,6 +885,7 @@ class TestDoAsyncLogin:
     def test_exception_does_not_consume_retry(self, engine_factory):
         """execute_login_async 抛异常时不应递增重试计数（F03）。"""
         svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         svc._task_executor.is_login_running.return_value = False
         svc._task_executor.execute_login_async.side_effect = RuntimeError("pool closed")
         svc._login_retry.count = 0
@@ -838,12 +896,59 @@ class TestDoAsyncLogin:
     def test_success_increments_retry_count(self, engine_factory):
         """execute_login_async 成功后应递增重试计数。"""
         svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         future = Future()
         svc._task_executor.execute_login_async.return_value = future
         svc._task_executor.is_login_running.return_value = False
         svc._login_retry.count = 0
         svc._do_async_login()
         assert svc._login_retry.count == 1
+
+    def test_config_validation_blocks_auto_login(self, engine_factory):
+        """配置不完整时自动登录应被拦截，不提交任务。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {}  # 空配置
+        svc._task_executor.is_login_running.return_value = False
+        result = svc._do_async_login()
+        assert result is False
+        svc._task_executor.execute_login_async.assert_not_called()
+
+    def test_config_validation_resets_retry_on_failure(self, engine_factory):
+        """配置校验失败应重置重试状态。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {}
+        svc._login_retry.count = 2
+        svc._do_async_login()
+        assert svc._login_retry.count == 0
+
+    def test_config_validation_blocks_missing_username(self, engine_factory):
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {"password": "p", "auth_url": "http://x"}
+        svc._task_executor.is_login_running.return_value = False
+        assert svc._do_async_login() is False
+
+    def test_config_validation_blocks_missing_password(self, engine_factory):
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "auth_url": "http://x"}
+        svc._task_executor.is_login_running.return_value = False
+        assert svc._do_async_login() is False
+
+    def test_config_validation_blocks_missing_auth_url(self, engine_factory):
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p"}
+        svc._task_executor.is_login_running.return_value = False
+        assert svc._do_async_login() is False
+
+    def test_config_snapshot_bypasses_runtime_config(self, engine_factory):
+        """传入 config_snapshot 时应使用快照而非 _runtime_config。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {}  # 运行时配置为空
+        snapshot = {"username": "u", "password": "p", "auth_url": "http://x"}
+        future = Future()
+        svc._task_executor.execute_login_async.return_value = future
+        svc._task_executor.is_login_running.return_value = False
+        result = svc._do_async_login(config_snapshot=snapshot)
+        assert result is True
 
 
 
