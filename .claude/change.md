@@ -3,6 +3,13 @@
 ## 2026-06-19
 
 ### test
+- 新增 `tests/test_integration/test_login_once_mode.py` LOGIN_ONCE 模式测试（3 个场景）
+  - `test_success`：网络未连接 → 登录成功 → 返回 LoginResult.SUCCESS
+  - `test_temporary_failure`：网络未连接 → 登录失败 → 返回 LoginResult.TEMPORARY_FAILURE
+  - `test_config_error`：配置加载失败 → 返回 LoginResult.CONFIG_ERROR
+  - mock `_load_login_config`、`check_network_status`、`_execute_login_with_retries` 验证三种返回路径
+
+### test
 - 新增 `tests/test_integration/test_full_mode.py` 完整模式生命周期测试（1 个场景）
   - `test_full_lifecycle`：启动 → 断网登录 → 定时任务 → 手动登录 → 配置重载 → 关闭
   - 验证 engine.start_monitoring → engine.start_scheduler → task_executor.save_task → engine._do_network_check → engine._run_schedule_tick → engine.run_manual_login → save_and_apply → engine.shutdown 全链路
