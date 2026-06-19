@@ -221,6 +221,11 @@ class TaskExecutor:
         t = threading.Thread(target=_watcher, daemon=True, name="cancel-link")
         t.start()
 
+    def is_login_running(self) -> bool:
+        """登录任务是否正在执行中。"""
+        with self._login_lock:
+            return self._login_future is not None and not self._login_future.done()
+
     def cancel_login(self) -> None:
         """取消正在进行的登录。"""
         if self._login_cancel_event:
