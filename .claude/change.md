@@ -3,6 +3,14 @@
 ## 2026-06-19
 
 ### test
+- 新增 `tests/test_integration/test_full_mode.py` 完整模式生命周期测试（1 个场景）
+  - `test_full_lifecycle`：启动 → 断网登录 → 定时任务 → 手动登录 → 配置重载 → 关闭
+  - 验证 engine.start_monitoring → engine.start_scheduler → task_executor.save_task → engine._do_network_check → engine._run_schedule_tick → engine.run_manual_login → save_and_apply → engine.shutdown 全链路
+  - 使用 full_stack fixture，仅 mock Playwright worker 外部边界和 check_network_status 网络状态
+
+## 2026-06-19
+
+### test
 - 新增 `tests/test_integration/test_lightweight_mode.py` 轻量模式生命周期测试（1 个场景）
   - `test_full_lifecycle`：启动 → 断网登录 → 成功 → 再次断网 → 重试 → 手动登录 → 停止
   - 验证 engine.start_monitoring → task_executor.execute_login_async → engine.run_manual_login → engine.stop_monitoring 全链路
