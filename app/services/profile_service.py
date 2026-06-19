@@ -107,10 +107,11 @@ class ProfileService:
             if profile_id not in data.profiles:
                 return False, f"方案 '{profile_id}' 不存在"
 
+            profile_name = data.profiles[profile_id].name
             data.active_profile = profile_id
             self._save_unsafe(data)
         profile_logger.info("活动方案已切换: {}", profile_id)
-        return True, f"已切换到方案: {data.profiles[profile_id].name}"
+        return True, f"已切换到方案: {profile_name}"
 
     def save_profile(
         self, profile_id: str, settings: AuthProfile
@@ -161,17 +162,21 @@ class ProfileService:
         profile_logger.info("方案已删除: {}", profile_id)
         return True, "方案删除成功"
 
-    def detect_matching_profile(self) -> str | None:
+    def detect_matching_profile(self, data: ProfilesData | None = None) -> str | None:
         """检测当前网络环境并返回匹配的方案 ID，无匹配返回 None。
 
         匹配优先级：网关 IP > SSID（同一次遍历中先检查网关再检查 SSID）。
+
+        Args:
+            data: 预加载的配置数据。为 None 时内部调用 load()。
         """
         gateway = detect_gateway_ip()
         ssid = detect_wifi_ssid()
 
         profile_logger.debug("检测到网关: {}, SSID: {}", gateway, ssid)
 
-        data = self.load()
+        if data is None:
+            data = self.load()
         ssid_match_id: str | None = None
 
         for profile_id, settings in data.profiles.items():

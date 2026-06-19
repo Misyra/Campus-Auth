@@ -34,7 +34,6 @@ class NetworkMonitorCore:
 
     # 类常量：监控配置
     DEFAULT_INTERVAL_SECONDS = 300
-    MAX_CONSECUTIVE_LOGIN_FAILURES = 3
 
     # 类常量：网络检测配置
     DEFAULT_PING_TARGETS = DEFAULT_NETWORK_TARGETS.split(",")
@@ -316,7 +315,7 @@ class NetworkMonitorCore:
             if not data.auto_switch:
                 return
 
-            matched_id = self._profile_service.detect_matching_profile()
+            matched_id = self._profile_service.detect_matching_profile(data)
             if matched_id and matched_id != self._last_profile_id:
                 profile = data.profiles.get(matched_id)
                 profile_name = profile.name if profile else matched_id
