@@ -3,6 +3,15 @@
 ## 2026-06-20
 
 ### refactor
+- Task 11: 取消联动改常驻单线程，根治 F12（线程泄漏）/F13（冗余检查）
+  - `app/services/login_orchestrator.py` `_link_cancel` 从每次新建 daemon 线程改为队列 + 常驻单线程
+  - `__init__` 新增 `_cancel_link_queue`（Queue）和 `_cancel_link_thread`（Thread | None）
+  - 新增 `_ensure_cancel_link_thread()`（惰性启动常驻 watcher）和 `_cancel_link_loop()`（从队列取联动请求并监控）
+  - `shutdown()` 新增毒丸 `None` 投递，退出常驻 watcher 线程
+  - 新增 `import queue`
+  - 36 个既有测试全部通过
+
+### refactor
 - Task 10: engine 接入 MonitoredPolicy，根治 F04（无条件 reset 消除）
   - `app/services/engine.py` `__init__` 新增 `self._retry_policy = MonitoredPolicy()`，保留 `_login_retry` 向后兼容
   - `_do_network_check`：删除 `_login_retry.reset()` / `_configure_retry()` 无条件重置逻辑，改为通知 `MonitoredPolicy.on_network_check()` 管理退避状态
