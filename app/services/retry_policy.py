@@ -141,10 +141,3 @@ class MonitoredPolicy(RetryPolicy):
         if self._attempt >= self.max_retries:
             return None
         return self.delay_before(self._attempt)
-
-    # -- 内部方法 -------------------------------------------------------
-
-    def _reset_backoff(self) -> None:
-        """重置退避状态。"""
-        self._consecutive_failures = 0
-        self._attempt = 0
