@@ -367,6 +367,7 @@ class TestHandleLogin:
         svc = engine_factory(raw=True)
         svc._runtime_config = {}
         svc._copy_runtime_config = MagicMock(return_value={})
+        svc._orchestrator.validate.return_value = "登录配置不完整（请先设置认证地址、用户名和密码）"
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
         success, message = cmd.response_data
@@ -377,6 +378,7 @@ class TestHandleLogin:
         svc = engine_factory(raw=True)
         config = {"password": "p", "auth_url": "http://test.com"}
         svc._copy_runtime_config = MagicMock(return_value=config)
+        svc._orchestrator.validate.return_value = "登录配置不完整（请先设置认证地址、用户名和密码）"
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
         success, message = cmd.response_data
@@ -387,6 +389,7 @@ class TestHandleLogin:
         svc = engine_factory(raw=True)
         config = {"username": "u", "auth_url": "http://test.com"}
         svc._copy_runtime_config = MagicMock(return_value=config)
+        svc._orchestrator.validate.return_value = "登录配置不完整（请先设置认证地址、用户名和密码）"
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
         success, message = cmd.response_data
@@ -396,6 +399,7 @@ class TestHandleLogin:
         svc = engine_factory(raw=True)
         config = {"username": "u", "password": "p"}
         svc._copy_runtime_config = MagicMock(return_value=config)
+        svc._orchestrator.validate.return_value = "登录配置不完整（请先设置认证地址、用户名和密码）"
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
         success, message = cmd.response_data
@@ -409,6 +413,7 @@ class TestHandleLogin:
             "auth_url": "http://test.com",
         }
         svc._copy_runtime_config = MagicMock(return_value=config)
+        svc._orchestrator.validate.return_value = None
         svc._do_async_login = MagicMock(return_value=True)
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
@@ -422,6 +427,7 @@ class TestHandleLogin:
             "auth_url": "http://test.com",
         }
         svc._copy_runtime_config = MagicMock(return_value=config)
+        svc._orchestrator.validate.return_value = None
         svc._do_async_login = MagicMock(return_value=False)
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
@@ -743,8 +749,10 @@ class TestNetworkCheckBackoff:
         svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         svc._consecutive_login_failures = 3
         future = Future()
-        svc._task_executor.execute_login_async.return_value = future
-        svc._task_executor.is_login_running.return_value = False
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
         svc._do_async_login()
         future.set_result((True, "登录成功"))
         assert svc._consecutive_login_failures == 0
@@ -755,8 +763,10 @@ class TestNetworkCheckBackoff:
         svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         svc._consecutive_login_failures = 0
         future = Future()
-        svc._task_executor.execute_login_async.return_value = future
-        svc._task_executor.is_login_running.return_value = False
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
         svc._do_async_login()
         future.set_result((False, "登录失败"))
         assert svc._consecutive_login_failures == 1
@@ -769,8 +779,10 @@ class TestNetworkCheckBackoff:
         svc._backoff_check_multiplier = 1
         svc._monitor_check_interval = 300
         future = Future()
-        svc._task_executor.execute_login_async.return_value = future
-        svc._task_executor.is_login_running.return_value = False
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
         svc._do_async_login()
         future.set_result((False, "登录失败"))
         assert svc._consecutive_login_failures == 3
@@ -783,8 +795,10 @@ class TestNetworkCheckBackoff:
         svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         svc._consecutive_login_failures = 2
         future = Future()
-        svc._task_executor.execute_login_async.return_value = future
-        svc._task_executor.is_login_running.return_value = False
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
         svc._do_async_login(is_manual=True)
         future.set_result((False, "登录失败"))
         # 手动登录不应递增
@@ -796,8 +810,10 @@ class TestNetworkCheckBackoff:
         svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         svc._consecutive_login_failures = 2
         future = Future()
-        svc._task_executor.execute_login_async.return_value = future
-        svc._task_executor.is_login_running.return_value = False
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
         svc._do_async_login(is_manual=True)
         future.set_result((True, "登录成功"))
         assert svc._consecutive_login_failures == 2
@@ -853,53 +869,62 @@ class TestNetworkCheckBackoff:
 
 class TestDoAsyncLogin:
     def test_already_in_progress(self, engine_factory):
+        """去重命中：orchestrator.submit 返回旧 handle（future=None）。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
-        svc._task_executor.is_login_running.return_value = True
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = None
+        svc._orchestrator.submit.return_value = handle
         assert svc._do_async_login() is False
 
     def test_future_none(self, engine_factory):
+        """orchestrator 返回 rejected handle 时应返回 False。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
-        svc._task_executor.execute_login_async.return_value = None
+        handle = MagicMock()
+        handle.rejected_reason = "登录配置不完整"
+        handle.future = None
+        svc._orchestrator.submit.return_value = handle
         assert svc._do_async_login() is False
 
     def test_future_success(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
-        # 使用一个未完成的 Future，避免 done_callback 立即执行
         future = Future()
-        svc._task_executor.execute_login_async.return_value = future
-        svc._task_executor.is_login_running.return_value = False
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
         result = svc._do_async_login()
         assert result is True
 
     def test_exception_propagates(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
-        svc._task_executor.is_login_running.return_value = False
-        svc._task_executor.execute_login_async.side_effect = RuntimeError("boom")
+        svc._orchestrator.submit.side_effect = RuntimeError("boom")
         with pytest.raises(RuntimeError):
             svc._do_async_login()
 
     def test_exception_does_not_consume_retry(self, engine_factory):
-        """execute_login_async 抛异常时不应递增重试计数（F03）。"""
+        """orchestrator.submit 抛异常时不应递增重试计数。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
-        svc._task_executor.is_login_running.return_value = False
-        svc._task_executor.execute_login_async.side_effect = RuntimeError("pool closed")
+        svc._orchestrator.submit.side_effect = RuntimeError("pool closed")
         svc._login_retry.count = 0
         with pytest.raises(RuntimeError):
             svc._do_async_login()
         assert svc._login_retry.count == 0
 
     def test_success_increments_retry_count(self, engine_factory):
-        """execute_login_async 成功后应递增重试计数。"""
+        """成功提交后应递增重试计数。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         future = Future()
-        svc._task_executor.execute_login_async.return_value = future
-        svc._task_executor.is_login_running.return_value = False
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
         svc._login_retry.count = 0
         svc._do_async_login()
         assert svc._login_retry.count == 1
@@ -908,15 +933,21 @@ class TestDoAsyncLogin:
         """配置不完整时自动登录应被拦截，不提交任务。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = {}  # 空配置
-        svc._task_executor.is_login_running.return_value = False
+        handle = MagicMock()
+        handle.rejected_reason = "登录配置不完整"
+        handle.future = None
+        svc._orchestrator.submit.return_value = handle
         result = svc._do_async_login()
         assert result is False
-        svc._task_executor.execute_login_async.assert_not_called()
 
     def test_config_validation_resets_retry_on_failure(self, engine_factory):
         """配置校验失败应重置重试状态。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = {}
+        handle = MagicMock()
+        handle.rejected_reason = "登录配置不完整"
+        handle.future = None
+        svc._orchestrator.submit.return_value = handle
         svc._login_retry.count = 2
         svc._do_async_login()
         assert svc._login_retry.count == 0
@@ -924,19 +955,28 @@ class TestDoAsyncLogin:
     def test_config_validation_blocks_missing_username(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = {"password": "p", "auth_url": "http://x"}
-        svc._task_executor.is_login_running.return_value = False
+        handle = MagicMock()
+        handle.rejected_reason = "登录配置不完整"
+        handle.future = None
+        svc._orchestrator.submit.return_value = handle
         assert svc._do_async_login() is False
 
     def test_config_validation_blocks_missing_password(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = {"username": "u", "auth_url": "http://x"}
-        svc._task_executor.is_login_running.return_value = False
+        handle = MagicMock()
+        handle.rejected_reason = "登录配置不完整"
+        handle.future = None
+        svc._orchestrator.submit.return_value = handle
         assert svc._do_async_login() is False
 
     def test_config_validation_blocks_missing_auth_url(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = {"username": "u", "password": "p"}
-        svc._task_executor.is_login_running.return_value = False
+        handle = MagicMock()
+        handle.rejected_reason = "登录配置不完整"
+        handle.future = None
+        svc._orchestrator.submit.return_value = handle
         assert svc._do_async_login() is False
 
     def test_config_snapshot_bypasses_runtime_config(self, engine_factory):
@@ -945,8 +985,10 @@ class TestDoAsyncLogin:
         svc._runtime_config = {}  # 运行时配置为空
         snapshot = {"username": "u", "password": "p", "auth_url": "http://x"}
         future = Future()
-        svc._task_executor.execute_login_async.return_value = future
-        svc._task_executor.is_login_running.return_value = False
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
         result = svc._do_async_login(config_snapshot=snapshot)
         assert result is True
 

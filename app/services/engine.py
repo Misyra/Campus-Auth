@@ -152,6 +152,7 @@ class ScheduleEngine:
         self._engine_running = False
         self._next_network_check: float = 0
         self._monitor_check_interval: int = 300
+        self._orchestrator = None  # LoginOrchestrator，由 container 注入
         self._login_retry = LoginRetryManager()
 
         # 连续登录失败计数（用于降频检测）
@@ -345,69 +346,50 @@ class ScheduleEngine:
         return None
 
     def _do_async_login(self, is_manual: bool = False, config_snapshot: dict | None = None) -> bool:
-        """提交登录到 executor 的 login_pool。返回 True 表示已提交。"""
-        # 统一配置校验（自动登录路径此前缺失）
+        """【委托】提交登录到 LoginOrchestrator。签名兼容。"""
         config = config_snapshot if config_snapshot is not None else self._copy_runtime_config()
-        err = self._validate_login_config(config)
-        if err is not None:
-            logger.warning("跳过登录: {}", err)
-            self.record_log(err, level="WARNING", source="backend")
-            # 重置重试状态，避免持续触发
-            self._login_retry.reset()
+
+        source = "manual" if is_manual else "auto"
+        handle = self._orchestrator.submit(source=source, config=config)
+
+        if handle.rejected_reason is not None:
+            # 校验失败
+            if is_manual:
+                pass  # 手动登录的响应由 _handle_login 设置
+            else:
+                self.record_log(handle.rejected_reason, level="WARNING", source="backend")
+                self._login_retry.reset()
             return False
 
-        if self._task_executor.is_login_running():
-            if not is_manual:
-                return False
-            # 手动登录：取消卡住的自动登录，等待完成后重新提交
-            logger.info("手动登录：取消当前登录任务")
-            self._task_executor.cancel_login()
-            deadline = time.time() + 5
-            while self._task_executor.is_login_running() and time.time() < deadline:
-                time.sleep(0.1)
-            if self._task_executor.is_login_running():
-                logger.warning("取消当前登录超时，强制接管登录槽")
-                self._task_executor.force_clear_login_slot()
+        if handle.future is None:
+            # 复用了旧 handle（去重命中），不算新提交
+            return False
 
-        # 手动路径显式传入新的 cancel_event
-        manual_cancel = threading.Event() if is_manual else None
-        try:
-            future = self._task_executor.execute_login_async(
-                cancel_event=manual_cancel,
-                config_snapshot=config,
-            )
-        except Exception:
-            self._update_status_snapshot()
-            raise
+        # record_attempt 移到成功提交之后
         if not is_manual:
             self._login_retry.record_attempt(time.time())
-        if future is not None:
 
-            def _on_done(f: Future) -> None:
-                self._update_status_snapshot()
-                try:
-                    ok, msg = f.result()
-                    tag = "手动登录" if is_manual else "自动登录"
-                    if ok:
-                        logger.info("{}完成: {}", tag, msg)
-                        # 成功则清空失败计数
-                        if not is_manual:
-                            self._consecutive_login_failures = 0
-                    else:
-                        logger.warning("{}失败: {}", tag, msg)
-                        # 累计失败，达到阈值后降频
-                        if not is_manual:
-                            self._consecutive_login_failures += 1
-                            if self._consecutive_login_failures >= self._login_retry_max_cycles():
-                                self._apply_backoff_interval()
-                except Exception:
-                    logger.exception("登录任务异常")
-
-            future.add_done_callback(_on_done)
-            return True
-        else:
+        # done 回调（保留原有日志和失败计数逻辑）
+        def _on_done(f: Future) -> None:
             self._update_status_snapshot()
-            return False
+            try:
+                ok, msg = f.result()
+                tag = "手动登录" if is_manual else "自动登录"
+                if ok:
+                    logger.info("{}完成: {}", tag, msg)
+                    if not is_manual:
+                        self._consecutive_login_failures = 0
+                else:
+                    logger.warning("{}失败: {}", tag, msg)
+                    if not is_manual:
+                        self._consecutive_login_failures += 1
+                        if self._consecutive_login_failures >= self._login_retry_max_cycles():
+                            self._apply_backoff_interval()
+            except Exception:
+                logger.exception("登录任务异常")
+
+        handle.future.add_done_callback(_on_done)
+        return True
 
     def _run_schedule_tick(self) -> None:
         """执行定时任务调度（使用 TaskRegistry + TaskExecutor）。"""
@@ -475,7 +457,7 @@ class ScheduleEngine:
     def _handle_login(self, cmd: EngineCommand) -> None:
         """执行一次性登录（手动触发，异步执行）。"""
         config = self._copy_runtime_config()
-        err = self._validate_login_config(config)
+        err = self._orchestrator.validate(config)  # 复用唯一校验（F05）
         if err is not None:
             cmd.response_data = (False, err)
             return

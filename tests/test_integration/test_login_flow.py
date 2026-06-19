@@ -66,6 +66,9 @@ def _make_raw_engine() -> ScheduleEngine:
     svc.project_root = MagicMock()
     svc.record_log = MagicMock()
     svc._update_status_snapshot = MagicMock()
+    svc._orchestrator = MagicMock()
+    svc._consecutive_login_failures = 0
+    svc._backoff_check_multiplier = 1
     return svc
 
 
@@ -95,6 +98,7 @@ class TestFullLoginSequence:
             "auth_url": "http://auth.example.com",
         }
         svc._copy_runtime_config = MagicMock(return_value=config)
+        svc._orchestrator.validate.return_value = None
         svc._do_async_login = MagicMock(return_value=True)
 
         cmd = EngineCommand(
@@ -114,6 +118,7 @@ class TestFullLoginSequence:
             "auth_url": "http://auth.example.com",
         }
         svc._copy_runtime_config = MagicMock(return_value=config)
+        svc._orchestrator.validate.return_value = None
         svc._do_async_login = MagicMock(return_value=False)
 
         cmd = EngineCommand(
@@ -129,6 +134,7 @@ class TestFullLoginSequence:
         svc._copy_runtime_config = MagicMock(
             return_value={"username": "u"}  # 缺少 password 和 auth_url
         )
+        svc._orchestrator.validate.return_value = "登录配置不完整（请先设置认证地址、用户名和密码）"
 
         cmd = EngineCommand(
             type=EngineCmdType.LOGIN, response_event=threading.Event()
@@ -140,11 +146,13 @@ class TestFullLoginSequence:
         assert "配置不完整" in message
 
     def test_do_async_login_submits_to_executor(self):
-        """_do_async_login 正确提交到 TaskExecutor 并管理状态。"""
+        """_do_async_login 正确提交到 orchestrator 并管理状态。"""
         svc = _make_raw_engine()
         future = Future()
-        svc._task_executor.execute_login_async.return_value = future
-        svc._task_executor.is_login_running.return_value = False
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
 
         result = svc._do_async_login()
 
@@ -434,10 +442,12 @@ class TestLoginWithNetworkDetection:
             "retry_settings": {"max_retries": 3, "retry_interval": 30}
         })
 
-        # 使用真实的 _do_async_login
+        # 使用真实的 _do_async_login（通过 orchestrator）
         future = Future()
-        svc._task_executor.execute_login_async.return_value = future
-        svc._task_executor.is_login_running.return_value = False
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
         svc._login_retry.count = 0
 
         # 模拟引擎循环中的网络检测
@@ -592,33 +602,30 @@ class TestLoginConcurrencyProtection:
     """登录并发保护：防止同时提交多个登录任务。"""
 
     def test_do_async_login_rejects_when_in_progress(self):
-        """自动登录进行中时，_do_async_login 返回 False。"""
+        """去重命中时，_do_async_login 返回 False。"""
         svc = _make_raw_engine()
-        svc._task_executor.is_login_running.return_value = True
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = None  # 去重命中，复用旧 handle
+        svc._orchestrator.submit.return_value = handle
 
         result = svc._do_async_login()
 
         assert result is False
 
     def test_manual_login_cancels_in_progress_auto_login(self):
-        """手动登录应取消卡住的自动登录并重新提交。"""
+        """手动登录应抢占自动登录并重新提交。"""
         svc = _make_raw_engine()
-        # 模拟自动登录正在进行中
-        svc._task_executor.is_login_running.return_value = True
-
-        # 模拟 cancel_login 后 is_login_running 变为 False
-        def fake_cancel():
-            svc._task_executor.is_login_running.return_value = False
-
-        svc._task_executor.cancel_login.side_effect = fake_cancel
-
         future = Future()
-        svc._task_executor.execute_login_async.return_value = future
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
 
         result = svc._do_async_login(is_manual=True)
 
         assert result is True
-        svc._task_executor.cancel_login.assert_called_once()
+        svc._orchestrator.submit.assert_called_once_with(source="manual", config=svc._runtime_config)
 
         # 清理
         future.set_result((True, "登录成功"))
@@ -635,27 +642,26 @@ class TestLoginConcurrencyProtection:
         assert svc.login_in_progress is True
 
     def test_concurrent_login_rejection(self):
-        """并发登录请求：第一个成功，后续被拒绝。"""
+        """并发登录请求：第一个成功，后续被去重拒绝。"""
         svc = _make_raw_engine()
         future = Future()
-        svc._task_executor.execute_login_async.return_value = future
 
-        # 模拟第一次提交后 executor 状态变化
-        call_count = [0]
-        original_is_login_running = svc._task_executor.is_login_running
+        # 第一次提交返回新 handle，第二次返回去重的旧 handle（future=None）
+        new_handle = MagicMock()
+        new_handle.rejected_reason = None
+        new_handle.future = future
 
-        def mock_is_login_running():
-            call_count[0] += 1
-            # 第一次调用（检查）返回 False，后续返回 True
-            return call_count[0] > 1
+        dedup_handle = MagicMock()
+        dedup_handle.rejected_reason = None
+        dedup_handle.future = None
 
-        svc._task_executor.is_login_running = mock_is_login_running
+        svc._orchestrator.submit.side_effect = [new_handle, dedup_handle]
 
         # 第一次提交成功
         result1 = svc._do_async_login()
         assert result1 is True
 
-        # 第二次提交被拒绝
+        # 第二次提交被去重拒绝
         result2 = svc._do_async_login()
         assert result2 is False
 
@@ -718,39 +724,46 @@ class TestLoginConcurrencyProtection:
     def test_login_exception_propagates(self):
         """登录执行异常时，异常会向上传播。"""
         svc = _make_raw_engine()
-        svc._task_executor.is_login_running.return_value = False
-        svc._task_executor.execute_login_async.side_effect = RuntimeError(
-            "线程池已关闭"
-        )
+        svc._orchestrator.submit.side_effect = RuntimeError("线程池已关闭")
 
         with pytest.raises(RuntimeError):
             svc._do_async_login()
 
     def test_future_none_returns_false(self):
-        """execute_login_async 返回 None 时，返回 False。"""
+        """去重命中时，返回 False。"""
         svc = _make_raw_engine()
-        svc._task_executor.execute_login_async.return_value = None
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = None
+        svc._orchestrator.submit.return_value = handle
 
         result = svc._do_async_login()
 
         assert result is False
 
     def test_multiple_threads_competing_for_login(self):
-        """多线程竞争登录：只有一个成功提交。"""
+        """多线程竞争登录：由 orchestrator 内部去重，结果取决于 submit 返回。"""
         svc = _make_raw_engine()
         future = Future()
-        svc._task_executor.execute_login_async.return_value = future
 
-        # 模拟并发竞争：第一次调用返回 False，后续返回 True
+        # orchestrator.submit 由 _slot_lock 保护，模拟第一次返回新 handle，后续返回去重
+        new_handle = MagicMock()
+        new_handle.rejected_reason = None
+        new_handle.future = future
+
+        dedup_handle = MagicMock()
+        dedup_handle.rejected_reason = None
+        dedup_handle.future = None
+
         call_count = [0]
-        original_is_login_running = svc._task_executor.is_login_running
 
-        def mock_is_login_running():
+        def mock_submit(**kwargs):
             call_count[0] += 1
-            # 第一次调用（检查）返回 False，后续返回 True
-            return call_count[0] > 1
+            if call_count[0] == 1:
+                return new_handle
+            return dedup_handle
 
-        svc._task_executor.is_login_running = mock_is_login_running
+        svc._orchestrator.submit.side_effect = mock_submit
 
         results = []
         barrier = threading.Barrier(5)
@@ -765,7 +778,7 @@ class TestLoginConcurrencyProtection:
         for t in threads:
             t.join(timeout=2)
 
-        # 只有一个成功
+        # 第一个成功，后续被去重
         assert results.count(True) == 1
         assert results.count(False) == 4
 

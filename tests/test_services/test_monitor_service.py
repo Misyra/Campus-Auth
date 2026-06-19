@@ -385,6 +385,14 @@ class TestHandleLogin:
         svc._shutdown_event.set()  # 停止引擎线程，避免干扰
         time.sleep(0.1)
 
+        # 注入 orchestrator mock
+        svc._orchestrator = MagicMock()
+        svc._orchestrator.validate.return_value = None
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = Future()
+        svc._orchestrator.submit.return_value = handle
+
         # 提供有效配置，否则 _handle_login 会拒绝
         with patch.object(svc, "_copy_runtime_config", return_value={
             "username": "test", "password": "test", "auth_url": "http://test.com"
@@ -401,6 +409,8 @@ class TestHandleLogin:
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._update_status_snapshot = MagicMock()
         svc._task_executor = MagicMock()
+        svc._orchestrator = MagicMock()
+        svc._orchestrator.validate.return_value = "登录配置不完整（请先设置认证地址、用户名和密码）"
         # 返回空配置
         svc._runtime_config = {}
 
