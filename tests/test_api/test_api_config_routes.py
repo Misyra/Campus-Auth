@@ -4,12 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from app.schemas import (
-    AuthProfile,
-    MonitorConfigPayload,
-    ProfilesData,
-    SystemSettings,
-)
+from app.schemas import MonitorConfigPayload
 from app.services.config_service import SaveResult
 
 
