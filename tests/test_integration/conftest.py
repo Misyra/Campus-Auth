@@ -28,7 +28,7 @@ def _write_initial_config(tmp_path: Path, **overrides) -> None:
         "auto_switch": False,
         "active_profile": "default",
         "global_settings": {
-            "check_interval_seconds": 1,  # 短间隔加速测试
+            "check_interval_seconds": 10,  # 最小值，加速测试
             "max_retries": 3,
             "retry_interval": 1,
             "pause_enabled": False,
