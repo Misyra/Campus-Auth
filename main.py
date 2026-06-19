@@ -224,7 +224,7 @@ def _execute_login_with_retries(runtime_config: dict, logger) -> LoginResult:
         try:
             result = get_worker().submit(
                 CMD_LOGIN,
-                data={"config": runtime_config, "skip_pause_check": True},
+                data={"config": runtime_config},
                 timeout=120,
             )
             success = result.success
