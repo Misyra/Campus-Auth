@@ -9,9 +9,11 @@
 
 from __future__ import annotations
 
+import json
 import threading
 import time
-from unittest.mock import MagicMock
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -254,5 +256,65 @@ class TestCancelPropagation:
 
             assert not task_executor.is_login_running()
             assert task_executor._login_cancel_event is None
+        finally:
+            restore_fn()
+
+
+class TestReloadException:
+    """配置重载异常时正在执行的登录应继续完成。"""
+
+    def test_reload_during_login_config_error(self, integration_stack, tmp_path):
+        engine, profile_service, task_executor, mock_worker = integration_stack
+        _ensure_login_config(engine)
+
+        submit_called = threading.Event()
+        submit_release = threading.Event()
+
+        result_container, done_event, restore_fn = _capture_login_completion(
+            task_executor
+        )
+        try:
+            def blocking_submit(*args, **kwargs):
+                submit_called.set()
+                assert submit_release.wait(timeout=5), "submit was not released in time"
+                return WorkerResponse(success=True, data="登录成功")
+
+            mock_worker.submit.side_effect = blocking_submit
+
+            # 启动登录
+            future = task_executor.execute_login_async()
+
+            assert submit_called.wait(timeout=5), "worker.submit was not called in time"
+            assert task_executor.is_login_running()
+
+            # _reload_config_internal 底层用 profile_service.load()
+            # 读取 settings.json，且 ProfileService 对 IO 异常做了防御
+            # 处理（捕获 Exception 返回空 ProfilesData）。
+            # 因此 mock _reload_config_internal 返回 False 来模拟重载失败。
+            with patch.object(engine, "_reload_config_internal", return_value=False):
+                reload_cmd = EngineCommand(
+                    type=EngineCmdType.RELOAD,
+                    data={},
+                    response_event=threading.Event(),
+                )
+                engine._handle_reload(reload_cmd)
+
+                assert reload_cmd.response_data is not None
+                success, msg = reload_cmd.response_data
+                assert success is False
+                assert "配置重载失败" in msg
+
+            # 释放登录
+            submit_release.set()
+
+            # 等待登录完成
+            assert done_event.wait(timeout=5), "登录 Future 在超时内未完成"
+            ok, msg = result_container[0]
+            assert ok is True
+            assert msg == "登录成功"
+
+            # 验证引擎仍保留旧配置
+            assert engine._runtime_config["username"] == "testuser"
+            assert engine._runtime_config["auth_url"] == "http://10.0.0.1"
         finally:
             restore_fn()
