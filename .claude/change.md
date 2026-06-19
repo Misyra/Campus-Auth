@@ -1451,3 +1451,9 @@
   - [60] `app/utils/crypto.py` `save_password_field` 掩码判断从 `startswith("•")` 改为精确匹配 `"••••••••"`，避免以 bullet 开头的密码被误判
   - [61] `app/schemas.py` 提取 `_CommonSettingsMixin` 共享 mixin，消除 `_SystemFieldsMixin` 与 `GlobalSettings` 之间约 40 个重复字段定义和 2 个重复验证器
   - [66] `app/tasks/manager.py` `_extract_script_metadata` 使用 `ast.get_docstring()` 正确提取标准多行 docstring
+
+### refactor
+- PROFILE_RUNTIME_FIELDS 集中定义，消除 config_service 中的魔法列表
+  - `app/utils/config_utils.py` 新增 `PROFILE_RUNTIME_FIELDS` 模块级常量（8 个字段名元组）
+  - `app/services/config_service.py` `build_runtime_dict_from_payload` 改用 `list(PROFILE_RUNTIME_FIELDS)` 替代内联列表
+  - `tests/test_utils/test_utils.py` 新增 `TestProfileRuntimeFields`（类型检查 + 字段存在性检查）
