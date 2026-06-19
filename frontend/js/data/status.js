@@ -24,6 +24,7 @@ export function statusData() {
       save: false,
       monitor: false,
       action: false,
+      loginCooldown: false,
       autostart: false,
       detect: false,
       editorDetect: false,
