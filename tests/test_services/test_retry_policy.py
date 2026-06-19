@@ -130,7 +130,6 @@ class TestMonitoredPolicy:
         # 恢复
         result = policy.on_network_check(need_login=False)
         assert result is True
-        assert policy._consecutive_failures == 0
         assert policy._attempt == 0
 
     def test_stay_down_no_reset(self):
@@ -139,7 +138,6 @@ class TestMonitoredPolicy:
         policy.on_network_check(need_login=True)
         result = policy.on_network_check(need_login=True)
         assert result is False
-        assert policy._consecutive_failures == 2
 
     def test_stay_up_no_reset(self):
         """持续连通 → 不触发重置。"""
@@ -149,12 +147,11 @@ class TestMonitoredPolicy:
         assert result is False
 
     def test_up_to_down_no_reset(self):
-        """连通→断开 → 不重置，增加失败计数。"""
+        """连通→断开 → 不重置。"""
         policy = MonitoredPolicy()
         policy.on_network_check(need_login=False)
         result = policy.on_network_check(need_login=True)
         assert result is False
-        assert policy._consecutive_failures == 1
 
     def test_multiple_down_up_cycles(self):
         """多次 down->up 循环都能正确重置。"""
@@ -172,11 +169,9 @@ class TestMonitoredPolicy:
         """登录成功 → 重置并返回 0.0。"""
         policy = MonitoredPolicy()
         policy._attempt = 5
-        policy._consecutive_failures = 10
         result = policy.on_login_done(success=True)
         assert result == 0.0
         assert policy._attempt == 0
-        assert policy._consecutive_failures == 0
 
     def test_login_failure_returns_delay(self):
         """登录失败 → 返回下次延迟。"""

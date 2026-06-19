@@ -1,4 +1,8 @@
-"""重试策略框架 — 定义重试行为的抽象基类与具体策略。"""
+"""重试策略框架 — 定义重试行为的抽象基类与具体策略。
+
+本模块替代了原先的 ``LoginRetryManager``，作为登录编排重构的一部分，
+将重试策略从管理器中解耦为独立的策略类。
+"""
 
 from __future__ import annotations
 
@@ -31,8 +35,11 @@ class ImmediatePolicy(RetryPolicy):
         interval: 重试间隔秒数，最小值为 1，默认 5
     """
 
+    # max_retries 的上限
+    _MAX_RETRIES: int = 10
+
     def __init__(self, max_retries: int = 3, interval: int = 5) -> None:
-        self.max_retries = max(1, min(max_retries, 10))
+        self.max_retries = max(1, min(max_retries, self._MAX_RETRIES))
         self.interval = max(1, interval)
 
     def attempts(self) -> Iterator[int]:
@@ -74,7 +81,6 @@ class MonitoredPolicy(RetryPolicy):
         # 内部状态
         self._attempt: int = 0
         self._prev_network_ok: bool | None = None  # None = 未知
-        self._consecutive_failures: int = 0
 
     # -- 公开 API -------------------------------------------------------
 
@@ -113,17 +119,16 @@ class MonitoredPolicy(RetryPolicy):
 
         if self._prev_network_ok is False and current_ok is True:
             # down -> up 转换：重置退避状态
-            self._consecutive_failures = 0
             self._attempt = 0
             transitioned = True
-        elif need_login:
-            self._consecutive_failures += 1
 
         self._prev_network_ok = current_ok
         return transitioned
 
     def on_login_done(self, success: bool) -> float | None:
         """处理登录完成事件。
+
+        注意：首次失败返回 0.0 延迟（立即重试），这是有意设计。
 
         Args:
             success: 登录是否成功
@@ -134,7 +139,6 @@ class MonitoredPolicy(RetryPolicy):
         """
         if success:
             self._attempt = 0
-            self._consecutive_failures = 0
             return 0.0
 
         self._attempt += 1
