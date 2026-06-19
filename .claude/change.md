@@ -3,6 +3,15 @@
 ## 2026-06-19
 
 ### test
+- 新增 `tests/test_integration/test_config_connection.py` 配置链路连接测试（5 个场景）
+  - `test_save_apply_success`：保存配置 → 磁盘 + 运行时都更新
+  - `test_save_apply_rollback`：reload 失败 → 磁盘回滚，运行时不变
+  - `test_interval_reload`：修改 check_interval → 重载后生效
+  - `test_password_encrypt`：明文密码 → 保存后磁盘加密 → 读取后不等于明文
+  - `test_log_level_reload`：修改 backend_log_level → 重载后生效
+  - 使用真实组件栈（integration_stack fixture），验证 config_service → runtime_config → engine 链路
+
+### test
 - 新增 `tests/test_integration/test_login_connection.py` 登录链路连接测试（7 个场景）
   - `test_auto_login_success`：自动登录成功 → worker 被调用
   - `test_auto_login_retry`：登录失败 → 重试 → 最终成功
