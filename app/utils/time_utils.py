@@ -33,27 +33,3 @@ def is_in_pause_period(pause_config: dict[str, Any]) -> bool:
     else:
         # 跨天的时间段（如23点到6点）
         return current_hour >= start_hour or current_hour < end_hour
-
-
-def get_runtime_stats(start_time: float, check_count: int) -> tuple[str, str]:
-    """获取运行时统计信息。
-
-    参数:
-        start_time: 开始时间戳
-        check_count: 检测次数
-
-    返回:
-        (运行时间字符串, 统计信息字符串)
-    """
-    if start_time is not None:
-        elapsed = int(datetime.datetime.now().timestamp() - start_time)
-        hours = elapsed // 3600
-        minutes = (elapsed % 3600) // 60
-        seconds = elapsed % 60
-        runtime_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-    else:
-        runtime_str = "00:00:00"
-
-    stats_str = f"检测次数: {check_count}"
-
-    return runtime_str, stats_str
