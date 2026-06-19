@@ -99,7 +99,7 @@ def check_network_status(config: dict) -> tuple[bool, str, str]:
     ok = is_network_available(
         test_sites=test_sites,
         test_urls=test_urls,
-        timeout=monitor_config.get("network_check_timeout", 1.5),
+        timeout=monitor_config.get("network_check_timeout", 2),
         enable_tcp=enable_tcp,
         enable_http=enable_http,
         url_checks=url_checks,
@@ -138,7 +138,7 @@ def check_login_prerequisites(config: dict) -> tuple[bool, str]:
         return (False, "local_disconnected")
 
     # 认证地址可达性检查
-    if monitor_config.get("check_auth_url", True):
+    if monitor_config.get("check_auth_url", False):
         auth_url = config.get("auth_url", "")
         extra_targets = monitor_config.get("auth_url_targets")
         if not _is_auth_url_reachable(auth_url, extra_targets=extra_targets):

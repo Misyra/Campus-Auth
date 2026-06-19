@@ -8,7 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.engine import ScheduleEngine, StatusSnapshot, _LoginRetryState
+from app.services.engine import ScheduleEngine, StatusSnapshot
+from app.services.login_retry import LoginRetryManager
 
 
 @pytest.fixture
@@ -42,6 +43,10 @@ def engine_factory():
             mock_ps.load.return_value.global_settings.pure_mode = False
             mock_load_ui.return_value = MagicMock()
 
+            # 确保 task_executor 有默认值
+            if "task_executor" not in overrides:
+                overrides["task_executor"] = MagicMock()
+
             svc = ScheduleEngine.__new__(ScheduleEngine)
             ScheduleEngine.__init__(svc, MagicMock(), **overrides)
             svc._shutdown_event.set()
@@ -56,8 +61,7 @@ def engine_factory():
         svc._shutdown_event = threading.Event()
         svc._monitor_core = None
         svc._engine_running = False
-        svc._login_in_progress = threading.Event()
-        svc._login_retry = _LoginRetryState()
+        svc._login_retry = LoginRetryManager()
         svc._runtime_config = {}
         svc._runtime_snapshot = {}
         svc._monitor_check_interval = 300

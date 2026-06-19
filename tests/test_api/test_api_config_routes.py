@@ -4,12 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from app.schemas import (
-    AuthProfile,
-    MonitorConfigPayload,
-    ProfilesData,
-    SystemSettings,
-)
+from app.schemas import MonitorConfigPayload
+from app.services.config_service import SaveResult
 
 
 class TestLogLevels:
@@ -76,16 +72,12 @@ class TestGetDefaultStealthScript:
 class TestSaveConfig:
     """测试 PUT /api/config 端点。"""
 
-    @patch("app.api.config.save_config_combined")
-    def test_save_config_success(self, mock_save, api_client):
+    @patch("app.api.config.save_and_apply")
+    def test_save_config_success(self, mock_save_and_apply, api_client):
         test_client, mock_services = api_client
-        mock_save.return_value = None
+        mock_save_and_apply.return_value = SaveResult(success=True, message="配置保存成功")
         mock_services.engine.get_config.return_value = MonitorConfigPayload(
             username="testuser", password="••••••••", auth_url="http://10.0.0.1"
-        )
-        mock_services.profile_service.load.return_value = ProfilesData(
-            global_settings=SystemSettings(),
-            profiles={"default": AuthProfile(name="默认方案", username="testuser", password="ENC:test")},
         )
 
         payload = {

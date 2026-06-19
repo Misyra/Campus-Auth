@@ -308,16 +308,8 @@ class TaskExecutor:
             if post_delay is None:
                 post_delay = 5
             await asyncio.sleep(post_delay)
-            enable_tcp = (
-                cfg.get("enable_tcp_check")
-                if cfg.get("enable_tcp_check") is not None
-                else True
-            )
-            enable_http = (
-                cfg.get("enable_http_check")
-                if cfg.get("enable_http_check") is not None
-                else True
-            )
+            enable_tcp = cfg.get("enable_tcp_check", False)
+            enable_http = cfg.get("enable_http_check", False)
             timeout = cfg.get("network_check_timeout")
             if timeout is None:
                 timeout = 2

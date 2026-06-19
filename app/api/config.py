@@ -5,8 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.deps import get_monitor_service, get_profile_service
-from app.schemas import ActionResponse, MonitorConfigPayload, ProfilesData
-from app.services.config_service import save_config_combined
+from app.schemas import ActionResponse, MonitorConfigPayload
+from app.services.config_service import save_and_apply
 from app.services.engine import ScheduleEngine
 from app.services.profile_service import ProfileService
 from app.utils.logging import get_logger
@@ -129,7 +129,13 @@ def _log_config_changes(old_dict: dict, new_payload: MonitorConfigPayload) -> No
     IGNORE_FIELDS = {"password"}
 
     new_dict = new_payload.model_dump()
+
     changes = []
+
+    # 密码变更：仅记录"已修改"，不记录内容
+    new_pw = new_dict.get("password", "")
+    if new_pw and old_dict.get("password") != new_pw:
+        changes.append("密码已修改")
 
     for field_name in old_dict:
         if field_name in IGNORE_FIELDS:
@@ -162,36 +168,13 @@ def save_config(
     profile_svc: ProfileService = Depends(get_profile_service),
 ) -> ActionResponse:
     try:
-        # 获取当前配置用于比较（转为 dict）
-        old_config = svc.get_config()
-        old_dict = old_config.model_dump()
+        # 获取当前配置用于变更日志
+        old_dict = svc.get_config().model_dump()
 
-        # 备份当前配置，用于 reload 失败时回滚
-        import copy
-
-        backup_data = copy.deepcopy(profile_svc.load())
-
-        # 原子化保存：系统设置 + 活动方案
-        save_config_combined(payload, profile_svc)
-
-        # 同步更新 MonitorService 运行时配置
-        try:
-            svc.reload_config()
-        except Exception as reload_exc:
-            # reload 失败：回滚磁盘配置并重新加载
-            api_logger.error("配置重载失败，正在回滚: {}", reload_exc, exc_info=True)
-            try:
-                profile_svc.update(
-                    lambda data: _rollback_config(data, backup_data)
-                )
-                svc.reload_config()
-            except Exception as rollback_exc:
-                api_logger.error(
-                    "回滚失败（磁盘配置已回滚，运行时状态可能不一致）: {}",
-                    rollback_exc,
-                    exc_info=True,
-                )
-            raise reload_exc
+        # 保存 + 重载 + 失败回滚（事务逻辑在 config_service 中）
+        result = save_and_apply(payload, profile_svc, svc.reload_config)
+        if not result.success:
+            raise ValueError(result.message)
 
         # 记录配置变更
         _log_config_changes(old_dict, payload)
@@ -204,13 +187,3 @@ def save_config(
     except Exception as exc:
         api_logger.error("配置保存失败: {}", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=f"配置保存失败: {exc}") from exc
-
-
-def _rollback_config(data: ProfilesData, backup_data: ProfilesData) -> None:
-    """回滚配置到备份状态。
-
-    使用逐字段赋值而非 __dict__.update，确保 Pydantic 内部状态
-    （如 model_fields_set）保持一致。
-    """
-    for field_name in ProfilesData.model_fields:
-        setattr(data, field_name, getattr(backup_data, field_name))

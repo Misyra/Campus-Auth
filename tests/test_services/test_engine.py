@@ -20,8 +20,8 @@ from app.services.engine import (
     EngineCommand,
     ScheduleEngine,
     StatusSnapshot,
-    _LoginRetryState,
 )
+from app.services.login_retry import LoginRetryManager
 
 
 
@@ -60,11 +60,11 @@ class TestEngineCommand:
         event = threading.Event()
         cmd = EngineCommand(
             type=EngineCmdType.LOGIN,
-            data={"skip_pause_check": True},
+            data={"key": "value"},
             response_event=event,
         )
         assert cmd.type == "login"
-        assert cmd.data["skip_pause_check"] is True
+        assert cmd.data["key"] == "value"
         assert cmd.response_event is event
 
 
@@ -103,24 +103,6 @@ class TestStatusSnapshot:
 
 
 # =====================================================================
-# _LoginRetryState 数据类
-# =====================================================================
-
-
-class TestLoginRetryState:
-    def test_default_values(self):
-        state = _LoginRetryState()
-        assert state.count == 0
-        assert state.last_attempt == 0.0
-        assert state.config is None
-
-    def test_custom_values(self):
-        state = _LoginRetryState(count=2, last_attempt=100.0, config=(5, [10, 20, 30]))
-        assert state.count == 2
-        assert state.config == (5, [10, 20, 30])
-
-
-# =====================================================================
 # ScheduleEngine 初始化
 # =====================================================================
 
@@ -129,7 +111,6 @@ class TestEngineInit:
     def test_init_defaults(self, engine_factory):
         svc = engine_factory()
         assert svc._dashboard_sink is None
-        assert svc._login_in_progress.is_set() is False
         assert svc._scheduler_running is False
         assert svc._monitor_core is None
 
@@ -187,7 +168,7 @@ class TestCalculateWakeup:
     def test_wakeup_with_login_retry(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._monitor_core = None
-        svc._login_retry = _LoginRetryState(
+        svc._login_retry = LoginRetryManager(
             count=1,
             last_attempt=time.time() - 100,
             config=(3, [5, 10, 15]),
@@ -207,8 +188,8 @@ class TestCalculateWakeup:
         """异常时回退到 now+5。"""
         svc = engine_factory(raw=True)
         svc._monitor_core = None
-        # 通过让 _is_monitoring 属性检查出错来触发异常
-        svc._login_retry = _LoginRetryState(
+        # 通过让 next_wakeup 内部计算出错来触发异常
+        svc._login_retry = LoginRetryManager(
             count=1,
             last_attempt="not_a_number",  # 会导致 TypeError
             config=(3, [5, 10, 15]),
@@ -557,9 +538,12 @@ class TestDoNetworkCheck:
         mock_core.check_once.return_value = {"need_login": True, "interval": 300}
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._get_retry_config = MagicMock(return_value=(3, [30, 30, 30]))
+        svc._copy_runtime_config = MagicMock(return_value={
+            "retry_settings": {"max_retries": 3, "retry_interval": 30}
+        })
         svc._do_async_login = MagicMock()
-        svc._do_network_check()
+        with patch("app.utils.retry.get_retry_intervals", return_value=[30, 30, 30]):
+            svc._do_network_check()
         svc._do_async_login.assert_called_once()
         assert svc._login_retry.config == (3, [30, 30, 30])
 
@@ -615,7 +599,7 @@ class TestLoginRetryNeeded:
         svc = engine_factory(raw=True)
         svc._login_retry.count = 1
         svc._login_retry.config = (3, [10, 20, 30])
-        svc._login_in_progress.set()
+        svc._task_executor.is_login_running.return_value = True
         assert svc._login_retry_needed(time.time()) is False
 
     def test_no_retry_needed_when_max_retries_reached(self, engine_factory):
@@ -642,6 +626,7 @@ class TestLoginRetryNeeded:
         svc._login_retry.count = 1
         svc._login_retry.last_attempt = time.time() - 100
         svc._login_retry.config = (3, [10, 20, 30])
+        svc._task_executor.is_login_running.return_value = False
         assert svc._login_retry_needed(time.time()) is True
 
 
@@ -653,64 +638,30 @@ class TestLoginRetryNeeded:
 class TestDoAsyncLogin:
     def test_already_in_progress(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._login_in_progress.set()
+        svc._task_executor.is_login_running.return_value = True
         assert svc._do_async_login() is False
 
     def test_future_none(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._task_executor.execute_login_async.return_value = None
         assert svc._do_async_login() is False
-        assert not svc._login_in_progress.is_set()
 
     def test_future_success(self, engine_factory):
         svc = engine_factory(raw=True)
         # 使用一个未完成的 Future，避免 done_callback 立即执行
         future = Future()
         svc._task_executor.execute_login_async.return_value = future
+        svc._task_executor.is_login_running.return_value = False
         result = svc._do_async_login()
         assert result is True
-        # 在 Future 完成前，login_in_progress 应该被 set
-        assert svc._login_in_progress.is_set()
-        # 完成 Future 触发 callback 清除标志
-        future.set_result(None)
-        time.sleep(0.1)
-        assert not svc._login_in_progress.is_set()
 
-    def test_exception_clears_flag(self, engine_factory):
+    def test_exception_propagates(self, engine_factory):
         svc = engine_factory(raw=True)
+        svc._task_executor.is_login_running.return_value = False
         svc._task_executor.execute_login_async.side_effect = RuntimeError("boom")
         with pytest.raises(RuntimeError):
             svc._do_async_login()
-        assert not svc._login_in_progress.is_set()
 
-
-# =====================================================================
-# _get_retry_config
-# =====================================================================
-
-
-class TestGetRetryConfig:
-    def test_get_retry_config_normal(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._runtime_config = {
-            "retry_settings": {"max_retries": 5, "retry_interval": 60}
-        }
-        with patch("app.utils.retry.get_retry_intervals", return_value=[60, 60, 60, 60, 60]):
-            max_retries, intervals = svc._get_retry_config()
-        assert max_retries == 5
-        assert intervals == [60, 60, 60, 60, 60]
-
-    def test_get_retry_config_exception_fallback(self, engine_factory):
-        """异常时返回默认值 (3, [30, 30, 30])。"""
-        svc = engine_factory(raw=True)
-        svc._runtime_config = {}
-        with patch(
-            "app.utils.retry.get_retry_intervals",
-            side_effect=RuntimeError("boom"),
-        ):
-            max_retries, intervals = svc._get_retry_config()
-        assert max_retries == 3
-        assert intervals == [30, 30, 30]
 
 
 # =====================================================================
@@ -1205,8 +1156,9 @@ class TestTogglePureMode:
 class TestProperties:
     def test_login_in_progress_property(self, engine_factory):
         svc = engine_factory(raw=True)
+        svc._task_executor.is_login_running.return_value = False
         assert svc.login_in_progress is False
-        svc._login_in_progress.set()
+        svc._task_executor.is_login_running.return_value = True
         assert svc.login_in_progress is True
 
     def test_ws_broadcast_queue_default(self, engine_factory):

@@ -10,7 +10,12 @@ from app.schemas import (
     ProfilesData,
     SystemSettings,
 )
-from app.services.config_service import save_config_combined, _update_global_settings
+from app.services.config_service import (
+    SaveResult,
+    _update_global_settings,
+    save_and_apply,
+    save_config_combined,
+)
 
 
 class TestUpdateSystemSettings:
@@ -402,3 +407,50 @@ class TestSaveConfigCombined:
         assert profile.carrier == "移动"
         assert profile.carrier_custom == "custom"
         assert profile.active_task == "task1"
+
+
+class TestSaveAndApply:
+    """测试 save_and_apply 事务函数。"""
+
+    @patch("app.services.config_service.save_config_combined")
+    def test_success(self, mock_save):
+        mock_ps = MagicMock()
+        mock_ps.load.return_value = ProfilesData()
+        mock_reload = MagicMock(return_value=(True, "ok"))
+
+        result = save_and_apply(
+            MonitorConfigPayload(), mock_ps, mock_reload
+        )
+        assert result.success is True
+        assert result.message == "配置保存成功"
+        mock_save.assert_called_once()
+        mock_reload.assert_called_once()
+
+    @patch("app.services.config_service.save_config_combined")
+    def test_reload_failure_triggers_rollback(self, mock_save):
+        backup = ProfilesData()
+        mock_ps = MagicMock()
+        mock_ps.load.return_value = backup
+        # 第一次 reload 失败，第二次 reload（回滚后）成功
+        mock_reload = MagicMock(side_effect=[(False, "重载失败"), (True, "ok")])
+
+        result = save_and_apply(
+            MonitorConfigPayload(), mock_ps, mock_reload
+        )
+        assert result.success is False
+        assert "配置重载失败" in result.message
+        # 验证回滚调用了 update
+        mock_ps.update.assert_called_once()
+
+    @patch("app.services.config_service.save_config_combined")
+    def test_reload_failure_and_rollback_also_fails(self, mock_save):
+        mock_ps = MagicMock()
+        mock_ps.load.return_value = ProfilesData()
+        mock_ps.update.side_effect = RuntimeError("磁盘故障")
+        mock_reload = MagicMock(return_value=(False, "重载失败"))
+
+        result = save_and_apply(
+            MonitorConfigPayload(), mock_ps, mock_reload
+        )
+        assert result.success is False
+        # 回滚异常不抛出，只记录日志

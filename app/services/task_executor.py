@@ -23,46 +23,6 @@ from app.utils.shell_utils import detect_shells, get_default_shell
 logger = get_logger("task_executor", source="backend")
 
 
-class NullTaskExecutor:
-    """空任务执行器 — 轻量模式下使用，避免 None 检查。"""
-
-    def has_enabled_tasks(self) -> bool:
-        return False
-
-    def shutdown(self, wait: bool = True) -> None:
-        pass
-
-    def execute_task_async(self, task_id: str) -> Future | None:
-        return None
-
-    def execute_login_async(self, cancel_event=None, skip_pause_check=False) -> Future | None:
-        return None
-
-    def execute_task(self, task_id: str) -> tuple[bool, str]:
-        return False, "轻量模式下不支持定时任务"
-
-    def execute_login(self, cancel_event=None, skip_pause_check=False) -> Any:
-        return None
-
-    def cancel_login(self) -> None:
-        return None
-
-    def list_tasks(self) -> list[dict]:
-        return []
-
-    def get_task(self, task_id: str) -> dict | None:
-        return None
-
-    def save_task(self, task_id: str, config: dict) -> tuple[bool, str]:
-        return False, "轻量模式下不支持定时任务"
-
-    def delete_task(self, task_id: str) -> tuple[bool, str]:
-        return False, "轻量模式下不支持定时任务"
-
-    def get_history(self, task_id: str) -> list[dict]:
-        return []
-
-
 class BoundedExecutor:
     """带队列长度限制的线程池执行器。
 
@@ -208,7 +168,7 @@ class TaskExecutor:
     def execute_login_async(
         self,
         cancel_event: threading.Event | None = None,
-        skip_pause_check: bool = False,
+        config_snapshot: dict | None = None,
     ) -> Future:
         """异步执行登录（提交到 login_pool），带去重。
 
@@ -218,7 +178,7 @@ class TaskExecutor:
 
         Args:
             cancel_event: 取消事件，设置后登录流程应尽快退出
-            skip_pause_check: 是否跳过暂停时段和网络检测
+            config_snapshot: 校验通过的配置快照，避免二次读取产生竞态
 
         Returns:
             Future 对象（新的或已有的）
@@ -238,7 +198,7 @@ class TaskExecutor:
 
             # 提交新的登录任务
             future = self._login_pool.submit(
-                self.execute_login, cancel_event, skip_pause_check
+                self.execute_login, cancel_event, config_snapshot
             )
             self._login_future = future
             self._login_cancel_event = cancel_event
@@ -260,6 +220,11 @@ class TaskExecutor:
 
         t = threading.Thread(target=_watcher, daemon=True, name="cancel-link")
         t.start()
+
+    def is_login_running(self) -> bool:
+        """登录任务是否正在执行中。"""
+        with self._login_lock:
+            return self._login_future is not None and not self._login_future.done()
 
     def cancel_login(self) -> None:
         """取消正在进行的登录。"""
@@ -330,11 +295,12 @@ class TaskExecutor:
     def execute_login(
         self,
         cancel_event: threading.Event | None = None,
-        skip_pause_check: bool = False,
+        config_snapshot: dict | None = None,
     ) -> tuple[bool, str]:
         """同步执行登录（在 login_pool 工作线程中运行）。
 
         通过 PlaywrightWorker 执行浏览器自动化登录。
+        config_snapshot 优先使用，避免二次读取产生 TOCTOU 竞态。
         """
         start = time.perf_counter()
 
@@ -342,8 +308,8 @@ class TaskExecutor:
             # 延迟导入：测试需要模拟 playwright_worker 未安装的 ImportError 场景
             from app.workers.playwright_worker import CMD_LOGIN
 
-            # 获取运行时配置
-            config = self._get_runtime_config() if self._get_runtime_config else {}
+            # 获取运行时配置（优先使用传入的快照，避免 TOCTOU 竞态）
+            config = config_snapshot if config_snapshot is not None else (self._get_runtime_config() if self._get_runtime_config else {})
             pure_mode = config.get("browser_settings", {}).get("pure_mode", False)
 
             # 检查取消
@@ -357,7 +323,6 @@ class TaskExecutor:
                 data={
                     "config": config,
                     "pure_mode": pure_mode,
-                    "skip_pause_check": skip_pause_check,
                     "cancel_event": cancel_event,
                 },
                 wait=True,
@@ -439,7 +404,6 @@ class TaskExecutor:
                 data={
                     "config": config,
                     "pure_mode": pure_mode,
-                    "skip_pause_check": True,  # 定时任务跳过暂停检查
                 },
                 wait=True,
                 timeout=timeout,

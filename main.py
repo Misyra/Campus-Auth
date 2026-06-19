@@ -224,7 +224,7 @@ def _execute_login_with_retries(runtime_config: dict, logger) -> LoginResult:
         try:
             result = get_worker().submit(
                 CMD_LOGIN,
-                data={"config": runtime_config, "skip_pause_check": True},
+                data={"config": runtime_config},
                 timeout=120,
             )
             success = result.success
@@ -271,6 +271,10 @@ def _run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
         network_ok, reason, _ = check_network_status(runtime_config)
         if network_ok:
             print("网络已连接，无需登录，正在退出...")
+            return LoginResult.SUCCESS
+        if reason == "all_disabled":
+            # 所有检测方式禁用，无法判断网络状态，假定已连接跳过登录
+            print("网络检测已禁用，假定网络正常，跳过登录")
             return LoginResult.SUCCESS
         print(f"网络未连接 ({reason})，开始登录...")
     except Exception as exc:

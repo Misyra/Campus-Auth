@@ -1,5 +1,170 @@
 # 修改日志
 
+## 2026-06-19
+
+### test
+- 新增 `tests/test_integration/test_login_once_mode.py` LOGIN_ONCE 模式测试（3 个场景）
+  - `test_success`：网络未连接 → 登录成功 → 返回 LoginResult.SUCCESS
+  - `test_temporary_failure`：网络未连接 → 登录失败 → 返回 LoginResult.TEMPORARY_FAILURE
+  - `test_config_error`：配置加载失败 → 返回 LoginResult.CONFIG_ERROR
+  - mock `_load_login_config`、`check_network_status`、`_execute_login_with_retries` 验证三种返回路径
+
+### test
+- 新增 `tests/test_integration/test_full_mode.py` 完整模式生命周期测试（1 个场景）
+  - `test_full_lifecycle`：启动 → 断网登录 → 定时任务 → 手动登录 → 配置重载 → 关闭
+  - 验证 engine.start_monitoring → engine.start_scheduler → task_executor.save_task → engine._do_network_check → engine._run_schedule_tick → engine.run_manual_login → save_and_apply → engine.shutdown 全链路
+  - 使用 full_stack fixture，仅 mock Playwright worker 外部边界和 check_network_status 网络状态
+
+## 2026-06-19
+
+### test
+- 新增 `tests/test_integration/test_lightweight_mode.py` 轻量模式生命周期测试（1 个场景）
+  - `test_full_lifecycle`：启动 → 断网登录 → 成功 → 再次断网 → 重试 → 手动登录 → 停止
+  - 验证 engine.start_monitoring → task_executor.execute_login_async → engine.run_manual_login → engine.stop_monitoring 全链路
+  - 使用 integration_stack fixture，仅 mock Playwright worker 外部边界
+
+### test
+- 新增 `tests/test_integration/test_profile_connection.py` Profile 切换链路连接测试（3 个场景）
+  - `test_apply_profile`：切换方案 → engine 使用新凭证（profile_service.set_active_profile + engine.apply_profile）
+  - `test_switch_while_monitoring`：监控运行中切换 → 旧配置停、新配置起，无线程泄漏
+  - `test_delete_current_profile`：删除当前方案 → 回退到 default
+  - 使用真实组件栈（integration_stack fixture），直接设置 _monitor_core 绕过异步队列
+
+### test
+- 新增 `tests/test_integration/test_network_connection.py` 网络检测链路连接测试（5 个场景）
+  - `test_need_login`：网络不通 → check_once 返回 need_login=True
+  - `test_network_ok`：网络通 → check_once 返回 need_login=False
+  - `test_pause_window`：暂停时段 → check_once 跳过检测
+  - `test_probe_exception`：探测抛异常 → 引擎继续运行（_monitor_core 未被清除）
+  - `test_profile_switch_signal`：方案切换 → _do_network_check 触发 stop + start
+  - 直接创建 NetworkMonitorCore 绕过引擎异步队列，mock `app.services.monitor_service` 模块级导入
+
+### test
+- 新增 `tests/test_integration/test_config_connection.py` 配置链路连接测试（5 个场景）
+  - `test_save_apply_success`：保存配置 → 磁盘 + 运行时都更新
+  - `test_save_apply_rollback`：reload 失败 → 磁盘回滚，运行时不变
+  - `test_interval_reload`：修改 check_interval → 重载后生效
+  - `test_password_encrypt`：明文密码 → 保存后磁盘加密 → 读取后不等于明文
+  - `test_log_level_reload`：修改 backend_log_level → 重载后生效
+  - 使用真实组件栈（integration_stack fixture），验证 config_service → runtime_config → engine 链路
+
+### test
+- 新增 `tests/test_integration/test_login_connection.py` 登录链路连接测试（7 个场景）
+  - `test_auto_login_success`：自动登录成功 → worker 被调用
+  - `test_auto_login_retry`：登录失败 → 重试 → 最终成功
+  - `test_retry_exhausted`：连续失败达 max_retries → 停止重试
+  - `test_manual_preempt_auto`：手动登录取消卡住的自动登录
+  - `test_callback_updates_history`：登录完成 → 历史记录写入
+  - `test_concurrent_dedup`：两个线程同时提交 → 只有一个实际执行
+  - `test_reload_during_login`：登录进行中 → 保存配置 → reload → 旧登录正常结束，新配置已生效
+  - 使用真实组件栈（integration_stack fixture），仅 mock Playwright worker 外部边界
+
+### refactor
+- 抽取 LoginRetryManager，Engine 不再直接管理重试状态
+  - 新建 `app/services/login_retry.py`：`LoginRetryManager` 数据类，封装 `reset()`/`configure()`/`record_attempt()`/`need_retry()`/`next_wakeup()` 五个方法
+  - `app/services/engine.py`：删除 `_LoginRetryState` 数据类和 `_get_retry_config()` 方法；`_login_retry_needed` 简化为委托 `is_login_running()` + `need_retry()`；`_calculate_wakeup` 委托 `next_wakeup()`；`_do_network_check` 重试配置逻辑内联；`_do_async_login` 委托 `record_attempt()`；`_handle_start`/`_handle_stop` 委托 `reset()`
+  - 更新 4 个测试文件的 `_LoginRetryState` 引用为 `LoginRetryManager`：`conftest.py`、`test_engine.py`、`test_login_flow.py`、`test_monitor_service.py`
+  - 删除 `TestLoginRetryState`、`TestGetRetryConfig` 测试类和 `_get_retry_config` 相关集成测试
+  - 新建 `tests/test_services/test_login_retry.py`：12 个单元测试覆盖全部方法
+
+### refactor
+- 消灭双重登录状态，TaskExecutor 成为唯一状态持有者
+  - `app/services/task_executor.py` 新增 `is_login_running()` 公共方法，返回 `_login_future` 是否存在且未完成
+  - `app/services/engine.py` 删除 `_login_in_progress = threading.Event()` 属性
+  - `login_in_progress` 属性改为委托 `task_executor.is_login_running()`
+  - `_login_retry_needed` 中 `_login_in_progress.is_set()` 改为 `task_executor.is_login_running()`
+  - `_do_async_login` 移除所有 `_login_in_progress.set()/clear()` 操作，改为查询 executor 状态
+  - `_on_done` 回调移除 `_login_in_progress.clear()` 调用，状态管理完全由 TaskExecutor 的 `_login_future` 和 `_on_login_done` 处理
+  - 更新 5 个测试文件：删除所有 `_login_in_progress` 引用，改为使用 `task_executor.is_login_running()` mock
+  - `conftest.py` `_make_raw` 删除 `svc._login_in_progress = threading.Event()` 行
+
+### refactor
+- 删除 LoginAttemptHandler 中从未执行的前置检查代码，移除 `skip_pause_check` 参数
+  - `app/utils/login.py` `attempt_login` 删除 `skip_pause_check` 参数和 30 行死代码分支（暂停时段检查、网络状态检查、登录前置条件检查），移除不再使用的 `datetime` 导入
+  - `app/workers/playwright_worker.py` `_handle_login` 简化 `attempt_login()` 调用
+  - `app/services/engine.py` `_do_async_login` 删除 `skip_pause_check` 参数，`_handle_login` 和 `_engine_loop`/`_do_network_check` 不再传递该参数，`run_manual_login` 的 `cmd.data` 清空
+  - `app/services/task_executor.py` `execute_login_async` 和 `execute_login` 删除 `skip_pause_check` 参数，`execute_login` 和 `_execute_browser` 的 data dict 移除该字段
+  - 更新 7 个测试文件：删除测试死代码分支的测试类，简化 mock 签名
+
+### refactor
+- 配置保存事务逻辑从 API 层下沉到 config_service.save_and_apply
+  - `app/services/config_service.py` 新增 `SaveResult` 数据类、`save_and_apply` 函数和 `_rollback_config` 辅助函数
+  - `app/api/config.py` `save_config` 简化为调用 `save_and_apply` 一个函数，删除本地 `_rollback_config`
+  - `tests/test_services/test_config_service.py` 新增 `TestSaveAndApply`（3 个测试：成功、重载失败回滚、回滚也失败）
+  - `tests/test_api/test_api_config_routes.py` `TestSaveConfig` patch 目标更新为 `save_and_apply`
+
+### fix
+- 修复 `custom_browser_engine` 未传入浏览器配置的 bug
+  - `app/services/config_service.py` `browser_settings` 字典补充 `custom_browser_engine` 字段
+  - 修复自定义浏览器 engine 类型设置不生效的问题
+
+### fix
+- 修复 `retry_interval` 默认值不一致和条件构建问题
+  - `app/services/config_service.py` `retry_settings` 改为无条件构建（使用 `gs` 回退默认值）
+  - `app/services/engine.py` 异常回退值从 30 改为 5，与 schema 默认值一致
+  - `docs/login-flow.md` 同步更新默认值文档
+
+### fix
+- 修复 `save_config` 回滚逻辑为死代码、重载失败仍返回成功的 bug
+  - `app/api/config.py` 检查 `reload_config()` 返回值 `(bool, str)`，失败时触发回滚并返回错误
+  - 更新测试：`test_api_config_routes.py` mock `reload_config` 返回元组；`test_login_flow.py`、`test_engine.py` 断言更新为新默认值
+
+### fix
+- 密码变更记录到配置变更日志
+  - `app/api/config.py` `_log_config_changes` 新增密码变更检测，仅记录"密码已修改"
+
+### fix
+- `set_active_profile` 锁内捕获 profile name
+  - `app/services/profile_service.py` `data.profiles[profile_id].name` 移入锁内
+
+### fix
+- `detect_matching_profile` 避免重复 load
+  - `app/services/profile_service.py` 新增可选 `data` 参数，调用方可传入预加载数据
+  - `app/services/monitor_service.py` `_check_profile_switch` 传入已加载的 `data`
+
+### fix
+- 修复 `decision.py` 和 `browser_runner.py` 兜底值与 schema 默认值不一致
+  - `app/network/decision.py` `network_check_timeout` 兜底 `1.5`→`2`，`check_auth_url` 兜底 `True`→`False`
+  - `app/tasks/browser_runner.py` 登录后验证的 `enable_tcp_check`/`enable_http_check` 兜底 `True`→`False`，简化条件判断
+  - `app/services/engine.py` `test_network` 的 `timeout` 从硬编码 `2` 改为从配置读取，与其他两条检测路径一致
+
+### refactor
+- 清理登录链条遗留死代码
+  - 移除 `close_on_failure` 参数：浏览器复用已删除后该参数无意义，`BrowserContextManager.__aexit__` 始终关闭浏览器是正确行为
+    - `app/utils/login.py` 删除 `__init__` 的 `close_on_failure` 参数、实例变量、finally 中的条件判断
+    - `app/workers/playwright_worker.py` 删除 `close_on_failure=data.get("close_on_failure", True)` 传递
+  - 移除 `NullTaskExecutor` 类：轻量模式已改用真实 TaskExecutor，该类仅测试引用
+    - `app/services/task_executor.py` 删除 `NullTaskExecutor` 类定义
+  - 移除 `get_runtime_stats` 函数：`app/utils/time_utils.py` 中定义但无生产代码调用，仅测试引用
+    - 同步清理 `app/utils/__init__.py` 的 import 和 `__all__` 导出
+  - 移除 `MAX_CONSECUTIVE_LOGIN_FAILURES` 常量：`app/services/monitor_service.py` 中定义但从未引用，登录重试逻辑已迁移到 `engine.py`
+  - 移除 `PlaywrightWorker.close_browser` 公开方法：所有内部调用均使用 `_close_browser()`，公开包装无调用方
+  - 更新测试：删除 `test_login_failure_no_close_on_failure`、`test_init_close_on_failure_false`、`TestNullTaskExecutor`、`TestNullTaskExecutorSignature`、`test_null_task_executor_all_methods`、`TestGetRuntimeStats`；简化其余引用
+
+### fix
+- `app/services/engine.py` 和 `app/services/task_executor.py` 消除登录配置 TOCTOU 竞态（Task 4: P4）
+  - `_handle_login` 用 `_copy_runtime_config()` 校验配置，但 `_do_async_login` → `execute_login` 二次读取存在竞态窗口
+  - `_do_async_login` 新增 `config_snapshot` 参数，传递校验通过的配置快照
+  - `execute_login_async` 和 `execute_login` 新增 `config_snapshot` 参数，优先使用快照而非二次读取
+  - `config_snapshot` 默认 `None`，自动登录路径（非手动触发）不受影响
+  - 新增 `test_handle_login_uses_validated_config` 测试验证快照传递
+
+### fix
+- `main.py` LOGIN_ONCE 网络检测全部禁用时跳过登录
+  - `check_network_status` 返回 `(False, "all_disabled", "none")` 时，原代码进入登录流程
+  - 新增 `reason == "all_disabled"` 分支，假定网络正常并返回 `LoginResult.SUCCESS`
+  - 更新 `test_retries_exhausted` 测试：显式 mock `check_network_status` 返回 `network_down`，避免被 `all_disabled` 分支拦截
+  - 新增 `TestLoginOnceAllDisabled.test_login_once_all_disabled_skips_login` 测试
+
+### fix
+- `app/container.py` 轻量模式使用真实 TaskExecutor 替代 NullTaskExecutor
+  - P0 bug 修复：轻量模式（开机自启动默认模式）的 NullTaskExecutor 导致自动登录完全失效
+  - 移除 `if self._is_lightweight: NullTaskExecutor()` 分支，统一使用 TaskExecutor
+  - 移除未使用的 `NullTaskExecutor` 导入
+  - `set_runtime_config_getter` 调用不再区分轻量/完整模式
+- `tests/test_config/test_container.py` 更新轻量模式测试：验证创建 TaskExecutor 而非 NullTaskExecutor
+- `tests/test_services/test_container_fix.py` 新增测试：验证轻量模式登录能力（返回 Future）
+
 ## 2026-06-18
 
 ### refactor
@@ -1343,3 +1508,16 @@
   - [60] `app/utils/crypto.py` `save_password_field` 掩码判断从 `startswith("•")` 改为精确匹配 `"••••••••"`，避免以 bullet 开头的密码被误判
   - [61] `app/schemas.py` 提取 `_CommonSettingsMixin` 共享 mixin，消除 `_SystemFieldsMixin` 与 `GlobalSettings` 之间约 40 个重复字段定义和 2 个重复验证器
   - [66] `app/tasks/manager.py` `_extract_script_metadata` 使用 `ast.get_docstring()` 正确提取标准多行 docstring
+
+### refactor
+- PROFILE_RUNTIME_FIELDS 集中定义，消除 config_service 中的魔法列表
+  - `app/utils/config_utils.py` 新增 `PROFILE_RUNTIME_FIELDS` 模块级常量（8 个字段名元组）
+  - `app/services/config_service.py` `build_runtime_dict_from_payload` 改用 `list(PROFILE_RUNTIME_FIELDS)` 替代内联列表
+  - `tests/test_utils/test_utils.py` 新增 `TestProfileRuntimeFields`（类型检查 + 字段存在性检查）
+
+### test
+- 新增集成测试共享 fixture `tests/test_integration/conftest.py`
+  - `_write_initial_config(tmp_path)` 写入最小化 settings.json（短间隔加速测试）
+  - `mock_worker` fixture 模拟 Playwright worker
+  - `integration_stack` fixture 组装真实 ProfileService + TaskExecutor + ScheduleEngine
+  - `full_stack` fixture 额外暴露 TaskRegistry
