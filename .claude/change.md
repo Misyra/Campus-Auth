@@ -3,6 +3,12 @@
 ## 2026-06-19
 
 ### test
+- 新增 `tests/test_integration/test_lightweight_mode.py` 轻量模式生命周期测试（1 个场景）
+  - `test_full_lifecycle`：启动 → 断网登录 → 成功 → 再次断网 → 重试 → 手动登录 → 停止
+  - 验证 engine.start_monitoring → task_executor.execute_login_async → engine.run_manual_login → engine.stop_monitoring 全链路
+  - 使用 integration_stack fixture，仅 mock Playwright worker 外部边界
+
+### test
 - 新增 `tests/test_integration/test_profile_connection.py` Profile 切换链路连接测试（3 个场景）
   - `test_apply_profile`：切换方案 → engine 使用新凭证（profile_service.set_active_profile + engine.apply_profile）
   - `test_switch_while_monitoring`：监控运行中切换 → 旧配置停、新配置起，无线程泄漏
