@@ -327,7 +327,7 @@ class ScheduleEngine:
             while self._task_executor.is_login_running() and time.time() < deadline:
                 time.sleep(0.1)
             if self._task_executor.is_login_running():
-                logger.warning("取消当前登录超时，强制重置登录状态")
+                logger.warning("取消当前登录超时，将尝试提交新登录")
         self._login_retry.last_attempt = time.time()
         if not is_manual:
             self._login_retry.count += 1
