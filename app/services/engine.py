@@ -337,8 +337,25 @@ class ScheduleEngine:
             return False
         return self._login_retry.need_retry(now)
 
+    def _validate_login_config(self, config: dict | None = None) -> str | None:
+        """校验登录配置完整性。返回 None 表示通过，否则返回错误信息。"""
+        cfg = config if config is not None else self._copy_runtime_config()
+        if not cfg.get("username") or not cfg.get("password") or not cfg.get("auth_url"):
+            return "登录配置不完整（请先设置认证地址、用户名和密码）"
+        return None
+
     def _do_async_login(self, is_manual: bool = False, config_snapshot: dict | None = None) -> bool:
         """提交登录到 executor 的 login_pool。返回 True 表示已提交。"""
+        # 统一配置校验（自动登录路径此前缺失）
+        config = config_snapshot if config_snapshot is not None else self._copy_runtime_config()
+        err = self._validate_login_config(config)
+        if err is not None:
+            logger.warning("跳过登录: {}", err)
+            self.record_log(err, level="WARNING", source="backend")
+            # 重置重试状态，避免持续触发
+            self._login_retry.reset()
+            return False
+
         if self._task_executor.is_login_running():
             if not is_manual:
                 return False
@@ -453,8 +470,9 @@ class ScheduleEngine:
     def _handle_login(self, cmd: EngineCommand) -> None:
         """执行一次性登录（手动触发，异步执行）。"""
         config = self._copy_runtime_config()
-        if not config.get("username") or not config.get("password") or not config.get("auth_url"):
-            cmd.response_data = (False, "登录配置不完整（请先设置认证地址、用户名和密码）")
+        err = self._validate_login_config(config)
+        if err is not None:
+            cmd.response_data = (False, err)
             return
         if self._do_async_login(is_manual=True, config_snapshot=config):
             cmd.response_data = (True, "登录已提交")
