@@ -1521,3 +1521,123 @@ class TestTaskExecutorTaskAsync:
         assert executor._task_pool is not None
         executor._task_pool.shutdown(wait=False)
 
+    def test_dedup_skips_pending_task(self):
+        """同一 task_id 有 pending 任务时应返回已有 Future。"""
+        from app.services.task_executor import TaskExecutor
+
+        barrier = threading.Event()
+
+        def slow_task(task_id):
+            barrier.wait(timeout=5)
+            return (True, "ok")
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        executor.execute_task = slow_task
+
+        f1 = executor.execute_task_async("t1")
+        f2 = executor.execute_task_async("t1")
+        assert f1 is f2
+
+        barrier.set()
+        f1.result(timeout=5)
+        executor._task_pool.shutdown(wait=False)
+
+    def test_dedup_allows_after_completion(self):
+        """任务完成后，同一 task_id 可以再次提交。"""
+        from app.services.task_executor import TaskExecutor
+
+        call_count = {"n": 0}
+
+        def counting_task(task_id):
+            call_count["n"] += 1
+            return (True, f"run-{call_count['n']}")
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        executor.execute_task = counting_task
+
+        f1 = executor.execute_task_async("t1")
+        assert f1.result(timeout=5) == (True, "run-1")
+
+        f2 = executor.execute_task_async("t1")
+        assert f2.result(timeout=5) == (True, "run-2")
+        assert f1 is not f2
+        assert call_count["n"] == 2
+        executor._task_pool.shutdown(wait=False)
+
+    def test_dedup_different_task_ids(self):
+        """不同 task_id 不应互相干扰。"""
+        from app.services.task_executor import TaskExecutor
+
+        barrier = threading.Event()
+
+        def slow_task(task_id):
+            barrier.wait(timeout=5)
+            return (True, task_id)
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        executor.execute_task = slow_task
+
+        f1 = executor.execute_task_async("t1")
+        f2 = executor.execute_task_async("t2")
+        assert f1 is not f2
+
+        barrier.set()
+        assert f1.result(timeout=5) == (True, "t1")
+        assert f2.result(timeout=5) == (True, "t2")
+        executor._task_pool.shutdown(wait=False)
+
+    def test_cleanup_removes_task_from_map(self):
+        """任务完成后应从 _running_tasks 中清理。"""
+        from app.services.task_executor import TaskExecutor
+
+        barrier = threading.Event()
+
+        def slow_task(task_id):
+            barrier.wait(timeout=5)
+            return (True, "ok")
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        executor.execute_task = slow_task
+
+        f = executor.execute_task_async("t1")
+        assert "t1" in executor._running_tasks
+
+        barrier.set()
+        f.result(timeout=5)
+        # 回调异步触发，等待一小段时间
+        time.sleep(0.2)
+        assert "t1" not in executor._running_tasks
+        executor._task_pool.shutdown(wait=False)
+
+    def test_shutdown_clears_running_tasks(self):
+        """shutdown 应清空 _running_tasks。"""
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        executor.execute_task = lambda task_id: (True, "ok")
+        executor.execute_task_async("t1")
+        assert len(executor._running_tasks) > 0 or True  # 可能已完成
+
+        executor.shutdown(wait=False)
+        assert len(executor._running_tasks) == 0
+

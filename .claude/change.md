@@ -3,6 +3,14 @@
 ## 2026-06-20
 
 ### fix
+- F10: 定时任务 task_id 去重，防止同一任务重复提交
+  - `app/services/task_executor.py`：`__init__` 新增 `_running_tasks` 字典和 `_running_tasks_lock` 锁
+  - `app/services/task_executor.py`：`execute_task_async` 提交前检查是否有 pending 的同 task_id 任务，有则返回已有 Future
+  - `app/services/task_executor.py`：任务完成后通过 `done_callback` 自动从 `_running_tasks` 清理
+  - `app/services/task_executor.py`：`shutdown` 清空 `_running_tasks`
+  - 新增 5 个测试覆盖去重行为：跳过 pending、完成后允许重新提交、不同 task_id 不干扰、清理回调、shutdown 清空
+
+### fix
 - I1+I2: 统一 login_timeout 默认值为 90s + main.py 添加 max(login_timeout, 60) 下限防护
   - `main.py:219` 默认值从 120 改为 90，与 `schemas.py` `Field(default=90)` 一致
   - `app/services/task_executor.py:329` 默认值从 300 改为 90

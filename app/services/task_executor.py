@@ -106,6 +106,10 @@ class TaskExecutor:
         self._login_lock = threading.Lock()
         self._login_cancel_event: threading.Event | None = None
 
+        # 定时任务去重
+        self._running_tasks: dict[str, Future] = {}
+        self._running_tasks_lock = threading.Lock()
+
         # Shell 安全策略
         self._shell_policy = ShellCommandPolicy(
             allowlist=[shell["path"] for shell in detect_shells()]
@@ -155,7 +159,9 @@ class TaskExecutor:
     # ── 异步提交接口 ──
 
     def execute_task_async(self, task_id: str) -> Future:
-        """异步执行定时任务（提交到 task_pool）。
+        """异步执行定时任务（提交到 task_pool），带 task_id 去重。
+
+        如果同一 task_id 已有 pending 任务，返回已有 Future 而非重复提交。
 
         Returns:
             Future 对象，调用方可选择等待结果
@@ -163,7 +169,26 @@ class TaskExecutor:
         Raises:
             RuntimeError: 任务队列已满
         """
-        return self._ensure_task_pool().submit(self.execute_task, task_id)
+        with self._running_tasks_lock:
+            existing = self._running_tasks.get(task_id)
+            if existing is not None and not existing.done():
+                logger.info("定时任务 {} 已在执行中，跳过重复提交", task_id)
+                return existing
+
+            try:
+                future = self._ensure_task_pool().submit(self.execute_task, task_id)
+            except RuntimeError:
+                raise
+            self._running_tasks[task_id] = future
+
+        # 锁外注册清理回调
+        def _cleanup(f: Future, tid=task_id):
+            with self._running_tasks_lock:
+                if self._running_tasks.get(tid) is f:
+                    del self._running_tasks[tid]
+
+        future.add_done_callback(_cleanup)
+        return future
 
     def execute_login_async(
         self,
@@ -521,4 +546,6 @@ class TaskExecutor:
         if self._task_pool is not None:
             self._task_pool.shutdown(wait=wait)
         self._login_pool.shutdown(wait=wait)
+        with self._running_tasks_lock:
+            self._running_tasks.clear()
         logger.info("TaskExecutor 已关闭")
