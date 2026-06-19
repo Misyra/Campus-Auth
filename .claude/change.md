@@ -3,6 +3,13 @@
 ## 2026-06-20
 
 ### fix
+- I1+I2: 统一 login_timeout 默认值为 90s + main.py 添加 max(login_timeout, 60) 下限防护
+  - `main.py:219` 默认值从 120 改为 90，与 `schemas.py` `Field(default=90)` 一致
+  - `app/services/task_executor.py:329` 默认值从 300 改为 90
+  - `main.py` 添加 `max(login_timeout, 60)` 下限防护，与 `task_executor.py` 和 `engine.py` 一致
+  - 更新测试 `test_login_timeout_default_120` 断言从 120 改为 90
+
+### fix
 - F08: `main.py` login_once 重试间隔改为固定间隔（与 LoginRetryManager 一致）
   - `_execute_login_with_retries` 中 `min(interval * 2^(n-2), 300)` 指数退避改为 `time.sleep(retry_interval)` 固定间隔
   - 引擎内 `LoginRetryManager` 使用 `get_retry_intervals(exponential=False)`（固定间隔），login_once 现在行为一致

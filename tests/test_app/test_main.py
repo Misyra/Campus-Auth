@@ -763,7 +763,7 @@ class TestLoginOnceRetryInterval:
         ):
             _execute_login_with_retries(runtime_config, MagicMock())
             call_kwargs = mock_worker.submit.call_args
-            assert call_kwargs.kwargs["timeout"] == 120
+            assert call_kwargs.kwargs["timeout"] == 90
 
 
 # ══════════════════════════════════════════════════════════════════════
