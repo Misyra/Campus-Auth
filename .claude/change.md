@@ -3,6 +3,14 @@
 ## 2026-06-20
 
 ### fix
+- F12: 重构 _link_cancel_event，消除线程泄漏
+  - `app/services/task_executor.py`：`_link_cancel_event` 从 `@staticmethod` 改为实例方法，不再每次新建 daemon 线程
+  - `app/services/task_executor.py`：新增 `_cancel_link_queue`（事件队列）、`_cancel_link_thread`、`_cancel_link_lock` 三个 `__init__` 字段
+  - `app/services/task_executor.py`：新增 `_ensure_cancel_link_thread()`（惰性启动单个 watcher）和 `_cancel_link_loop()`（常驻 watcher 从队列取事件并监控）
+  - `app/services/task_executor.py`：`shutdown` 末尾投递毒丸 `None` 关闭 watcher 线程
+  - 新增 6 个测试：`TestCancelLinkWatcherThread`（单线程复用 / 高频不泄漏 / 联动传播 / 死亡重启 / 毒丸退出 / shutdown 幂等）
+
+### fix
 - F11+F20: 浏览器定时任务 cancel_event 支持 + 清理 pure_mode 死字段
   - F11: `app/services/task_executor.py` `_execute_browser` 新增 `cancel_event` 参数，传递给 `worker.submit` 的 data dict，支持定时浏览器任务取消
   - F20: `app/services/task_executor.py` `execute_login` 和 `_execute_browser` 的 data dict 移除 `pure_mode` 死字段（Worker `_handle_login` 仅从 `config["browser_settings"]["pure_mode"]` 读取，不读 `data["pure_mode"]`）

@@ -1776,3 +1776,125 @@ class TestTaskExecutorTaskAsync:
         executor.shutdown(wait=False)
         assert len(executor._running_tasks) == 0
 
+
+# =====================================================================
+# TaskExecutor — F12 cancel_link 单 watcher 线程重构
+# =====================================================================
+
+
+class TestCancelLinkWatcherThread:
+    """F12: 用单个常驻 watcher 线程替代每次新建 daemon 线程。"""
+
+    def _make_executor(self):
+        from app.services.task_executor import TaskExecutor
+
+        return TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+
+    def test_single_watcher_thread_reused(self):
+        """多次 _link_cancel_event 只启动一个 watcher 线程。"""
+        executor = self._make_executor()
+        try:
+            before = sum(
+                1 for t in threading.enumerate() if t.name == "cancel-link-watcher"
+            )
+            for _ in range(10):
+                executor._link_cancel_event(threading.Event(), threading.Event())
+                time.sleep(0.05)
+
+            # 本 executor 最多新增 1 个 watcher 线程
+            after = sum(
+                1 for t in threading.enumerate() if t.name == "cancel-link-watcher"
+            )
+            assert after - before <= 1
+        finally:
+            executor.shutdown(wait=False)
+
+    def test_high_frequency_dedup_no_thread_leak(self):
+        """高频去重不累积线程：100 次联动后本 executor 只新增 1 个 watcher 线程。"""
+        executor = self._make_executor()
+        try:
+            before = sum(
+                1 for t in threading.enumerate() if t.name == "cancel-link-watcher"
+            )
+            for _ in range(100):
+                executor._link_cancel_event(threading.Event(), threading.Event())
+
+            # 等待 watcher 处理队列
+            time.sleep(0.5)
+
+            after = sum(
+                1 for t in threading.enumerate() if t.name == "cancel-link-watcher"
+            )
+            assert after - before <= 1
+        finally:
+            executor.shutdown(wait=False)
+
+    def test_cancel_link_propagates_via_watcher(self):
+        """通过 watcher 线程联动：new_event set 后 target_event 也被 set。"""
+        executor = self._make_executor()
+        try:
+            new_event = threading.Event()
+            target_event = threading.Event()
+
+            executor._link_cancel_event(new_event, target_event)
+
+            # 触发 new_event
+            new_event.set()
+
+            # 等待 watcher 处理
+            assert target_event.wait(timeout=3.0), "target_event 应在联动后被 set"
+        finally:
+            executor.shutdown(wait=False)
+
+    def test_watcher_restarts_if_dead(self):
+        """watcher 线程死亡后应自动重启。"""
+        executor = self._make_executor()
+        try:
+            before = sum(
+                1 for t in threading.enumerate() if t.name == "cancel-link-watcher"
+            )
+            # 强制标记线程为已结束
+            executor._cancel_link_thread = threading.Thread(
+                target=lambda: None, name="dead-thread"
+            )
+            executor._cancel_link_thread.start()
+            executor._cancel_link_thread.join()
+
+            executor._link_cancel_event(threading.Event(), threading.Event())
+            time.sleep(0.2)
+
+            after = sum(
+                1 for t in threading.enumerate() if t.name == "cancel-link-watcher"
+            )
+            # 应该新增了一个 watcher 线程
+            assert after - before == 1
+        finally:
+            executor.shutdown(wait=False)
+
+    def test_shutdown_poison_pill_stops_watcher(self):
+        """shutdown 投递毒丸后 watcher 线程应退出。"""
+        executor = self._make_executor()
+        executor._link_cancel_event(threading.Event(), threading.Event())
+        time.sleep(0.2)
+
+        watcher = executor._cancel_link_thread
+        assert watcher is not None
+        assert watcher.is_alive()
+
+        executor.shutdown(wait=True)
+        # watcher 应在合理时间内退出
+        watcher.join(timeout=3.0)
+        assert not watcher.is_alive()
+
+    def test_shutdown_idempotent(self):
+        """shutdown 多次调用不应报错。"""
+        executor = self._make_executor()
+        executor._link_cancel_event(threading.Event(), threading.Event())
+        time.sleep(0.1)
+        executor.shutdown(wait=False)
+        executor.shutdown(wait=False)  # 不应抛异常
+
