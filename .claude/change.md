@@ -3,6 +3,15 @@
 ## 2026-06-20
 
 ### fix
+- `main.py` `_execute_login_with_retries` 记录登录历史（F02）
+  - 原代码直接调用 `get_worker().submit(CMD_LOGIN, ...)`，完全绕过 TaskExecutor 的 `_record_login_history()`
+  - `--startup-action login_once` 的登录在历史页面不可见
+  - 新增 `LoginHistoryService(AUTH_DATA_DIR)` 和 `create_profile_service()` 初始化
+  - 每次登录尝试后调用 `history.record(success=, duration_ms=, profile_service=, error=)` 记录历史
+  - 成功/失败都记录，与 TaskExecutor 行为一致
+  - 新增测试 `test_login_once_records_history` 和 `test_login_once_records_failure_history`
+
+### fix
 - `app/services/config_service.py` 配置回滚后检查第二次 reload 返回值（F01）
   - 原代码 `reload_fn()` 返回值被丢弃，回滚后重载失败时用户看到的是第一次失败信息
   - 捕获第二次 `reload_fn()` 返回值 `(rollback_ok, rollback_msg)`

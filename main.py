@@ -203,7 +203,14 @@ def _execute_login_with_retries(runtime_config: dict, logger) -> LoginResult:
         LoginResult.SUCCESS — 登录成功
         LoginResult.TEMPORARY_FAILURE — 重试耗尽仍失败
     """
+    from app.constants import AUTH_DATA_DIR
+    from app.services.login_history_service import LoginHistoryService
+    from app.services.profile_service import create_profile_service
     from app.workers.playwright_worker import CMD_LOGIN, get_worker
+
+    # 记录登录历史（与 TaskExecutor 内部一致的写法）
+    profile_service = create_profile_service()
+    history = LoginHistoryService(AUTH_DATA_DIR)
 
     retry_settings = runtime_config.get("retry_settings", {})
     raw = retry_settings.get("max_retries", 3)
@@ -219,6 +226,7 @@ def _execute_login_with_retries(runtime_config: dict, logger) -> LoginResult:
             print(f"等待 {delay} 秒后重试第 {attempt} 次...")
             time.sleep(delay)
 
+        start = time.perf_counter()
         success = False
         message = ""
         try:
@@ -231,6 +239,18 @@ def _execute_login_with_retries(runtime_config: dict, logger) -> LoginResult:
             message = result.data if result.success else result.error or "登录失败"
         except Exception as exc:
             message = f"登录异常: {exc}"
+
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        # 记录历史（成功/失败都记，与 TaskExecutor 行为一致）
+        try:
+            history.record(
+                success=success,
+                duration_ms=duration_ms,
+                profile_service=profile_service,
+                error="" if success else message,
+            )
+        except Exception:
+            logger.debug("记录登录历史失败", exc_info=True)
 
         if success:
             print(f"登录成功: {message}")
