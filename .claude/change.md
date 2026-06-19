@@ -1457,3 +1457,10 @@
   - `app/utils/config_utils.py` 新增 `PROFILE_RUNTIME_FIELDS` 模块级常量（8 个字段名元组）
   - `app/services/config_service.py` `build_runtime_dict_from_payload` 改用 `list(PROFILE_RUNTIME_FIELDS)` 替代内联列表
   - `tests/test_utils/test_utils.py` 新增 `TestProfileRuntimeFields`（类型检查 + 字段存在性检查）
+
+### test
+- 新增集成测试共享 fixture `tests/test_integration/conftest.py`
+  - `_write_initial_config(tmp_path)` 写入最小化 settings.json（短间隔加速测试）
+  - `mock_worker` fixture 模拟 Playwright worker
+  - `integration_stack` fixture 组装真实 ProfileService + TaskExecutor + ScheduleEngine
+  - `full_stack` fixture 额外暴露 TaskRegistry
