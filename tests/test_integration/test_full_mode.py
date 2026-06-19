@@ -70,8 +70,13 @@ class TestFullMode:
         if "test_task" in due:
             engine._run_schedule_tick()
             # 等待异步任务完成（execute_task_async 提交到线程池）
-            time.sleep(2)
-            history = task_executor.get_history("test_task")
+            deadline = time.time() + 10
+            history = []
+            while time.time() < deadline:
+                history = task_executor.get_history("test_task")
+                if len(history) >= 1:
+                    break
+                time.sleep(0.1)
             assert len(history) >= 1
         else:
             # 分钟边界导致任务不在当前 tick 中，验证任务已注册
