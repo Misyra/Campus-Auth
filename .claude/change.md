@@ -1,5 +1,27 @@
 # 修改日志
 
+## 2026-06-20
+
+### fix
+- `app/services/config_service.py` 配置回滚后检查第二次 reload 返回值（F01）
+  - 原代码 `reload_fn()` 返回值被丢弃，回滚后重载失败时用户看到的是第一次失败信息
+  - 捕获第二次 `reload_fn()` 返回值 `(rollback_ok, rollback_msg)`
+  - 回滚后重载也失败：message 同时包含两次失败信息
+  - 回滚后重载成功：message 标注"已回滚"
+  - 回滚过程异常：保持原有异常处理不变
+  - 新增测试 `test_reload_failure_and_rollback_reload_also_fails`
+
+### fix
+- `app/services/engine.py` record_attempt 移到 execute_login_async 成功提交之后（F03）
+  - 原代码在 `execute_login_async` 调用前递增重试计数，提交异常时白白消耗一次重试机会
+  - 移到 `execute_login_async` 成功返回后，异常时不会递增
+  - 新增测试 `test_exception_does_not_consume_retry` 和 `test_success_increments_retry_count`
+
+## 2026-06-19
+
+### chore
+- 删除过期的 Rust 迁移设计文档 `rustforcam/docs/2026-06-18-rust-migration-design.md`
+
 ## 2026-06-19
 
 ### test

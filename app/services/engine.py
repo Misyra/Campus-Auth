@@ -323,9 +323,6 @@ class ScheduleEngine:
                 time.sleep(0.1)
             if self._task_executor.is_login_running():
                 logger.warning("取消当前登录超时，将尝试提交新登录")
-        if not is_manual:
-            self._login_retry.record_attempt(time.time())
-
         try:
             future = self._task_executor.execute_login_async(
                 config_snapshot=config_snapshot,
@@ -333,6 +330,8 @@ class ScheduleEngine:
         except Exception:
             self._update_status_snapshot()
             raise
+        if not is_manual:
+            self._login_retry.record_attempt(time.time())
         if future is not None:
 
             def _on_done(f: Future) -> None:

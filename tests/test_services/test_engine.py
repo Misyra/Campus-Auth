@@ -662,6 +662,26 @@ class TestDoAsyncLogin:
         with pytest.raises(RuntimeError):
             svc._do_async_login()
 
+    def test_exception_does_not_consume_retry(self, engine_factory):
+        """execute_login_async 抛异常时不应递增重试计数（F03）。"""
+        svc = engine_factory(raw=True)
+        svc._task_executor.is_login_running.return_value = False
+        svc._task_executor.execute_login_async.side_effect = RuntimeError("pool closed")
+        svc._login_retry.count = 0
+        with pytest.raises(RuntimeError):
+            svc._do_async_login()
+        assert svc._login_retry.count == 0
+
+    def test_success_increments_retry_count(self, engine_factory):
+        """execute_login_async 成功后应递增重试计数。"""
+        svc = engine_factory(raw=True)
+        future = Future()
+        svc._task_executor.execute_login_async.return_value = future
+        svc._task_executor.is_login_running.return_value = False
+        svc._login_retry.count = 0
+        svc._do_async_login()
+        assert svc._login_retry.count == 1
+
 
 
 # =====================================================================
