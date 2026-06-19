@@ -2,6 +2,17 @@
 
 ## 2026-06-20
 
+### feat
+- 新增重试策略框架 `app/services/retry_policy.py`（Task 1）
+  - `RetryPolicy` 抽象基类：`attempts()` + `delay_before(attempt)` 两个抽象方法
+  - `ImmediatePolicy`：固定间隔快速重试，用于 login_once 路径
+    - `max_retries` 钳制 1-10（默认 3），`interval` 最小 1（默认 5）
+    - `attempts()` 产生 1..max_retries，`delay_before(1)` 返回 0，后续返回 interval
+  - `MonitoredPolicy`：引擎长期监控策略，自带指数退避（上限 1800s）
+    - `on_network_check(need_login) -> bool`：仅 down->up 转换时重置退避状态
+    - `on_login_done(success) -> float|None`：成功返回 0.0 并重置，失败返回延迟，超过 max_retries 返回 None
+  - 新增 `tests/test_services/test_retry_policy.py`：30 个单元测试覆盖边界值、退避计算、状态转换
+
 ### fix
 - F17+F18+F19: 文档注释 + OpenAPI description + 指数退避上限（3 项）
   - F17: `app/schemas.py` `SystemSettings` docstring 补充说明 auth_url/carrier/carrier_custom 同时存在于 global_settings 和 profile 是有意设计（全局默认值 + profile 实例覆盖）
