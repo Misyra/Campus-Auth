@@ -33,6 +33,7 @@ from app.utils.network import parse_ping_targets
 
 from .login_retry import LoginRetryManager
 from .profile_service import ProfileService
+from .retry_policy import MonitoredPolicy
 
 # ── 常量 ──
 
@@ -154,6 +155,7 @@ class ScheduleEngine:
         self._monitor_check_interval: int = 300
         self._orchestrator = None  # LoginOrchestrator，由 container 注入
         self._login_retry = LoginRetryManager()
+        self._retry_policy = MonitoredPolicy()
 
         # 连续登录失败计数（用于降频检测）
         self._consecutive_login_failures: int = 0
@@ -272,18 +274,16 @@ class ScheduleEngine:
             self._monitor_check_interval = interval
 
             if result.get("need_login", False):
-                # 仅在首次发现 need_login（重试尚未进行）时 reset+configure
-                if self._login_retry.count == 0:
-                    self._login_retry.reset()
-                    self._configure_retry()
+                # F04: 通知 policy 网络断开
+                self._retry_policy.on_network_check(True)
                 self._do_async_login()
             else:
-                # 网络恢复正常：清空失败计数，重置重试状态
+                # F04: 通知 policy 网络恢复，重置退避状态
+                self._retry_policy.on_network_check(False)
                 if self._consecutive_login_failures > 0:
                     logger.info("网络已恢复，重置重试状态")
                 self._consecutive_login_failures = 0
                 self._backoff_check_multiplier = 1
-                self._login_retry.reset()
 
             # 检查是否需要重启（自动切换方案）
             if core.consume_profile_switch_flag():
@@ -379,12 +379,18 @@ class ScheduleEngine:
                     logger.info("{}完成: {}", tag, msg)
                     if not is_manual:
                         self._consecutive_login_failures = 0
+                        self._retry_policy.on_login_done(success=True)
                 else:
                     logger.warning("{}失败: {}", tag, msg)
                     if not is_manual:
                         self._consecutive_login_failures += 1
                         if self._consecutive_login_failures >= self._login_retry_max_cycles():
                             self._apply_backoff_interval()
+                        # F04: 通知 policy 登录失败，获取降频延迟
+                        delay = self._retry_policy.on_login_done(success=False)
+                        if delay:
+                            self._next_network_check = time.time() + delay
+                            logger.warning("登录连续失败，下次检测推迟 {}s", int(delay))
             except Exception:
                 logger.exception("登录任务异常")
 

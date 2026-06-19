@@ -3,6 +3,14 @@
 ## 2026-06-20
 
 ### refactor
+- Task 10: engine 接入 MonitoredPolicy，根治 F04（无条件 reset 消除）
+  - `app/services/engine.py` `__init__` 新增 `self._retry_policy = MonitoredPolicy()`，保留 `_login_retry` 向后兼容
+  - `_do_network_check`：删除 `_login_retry.reset()` / `_configure_retry()` 无条件重置逻辑，改为通知 `MonitoredPolicy.on_network_check()` 管理退避状态
+  - `_do_async_login` `_on_done` 回调：自动登录成功调用 `_retry_policy.on_login_done(success=True)`；失败调用 `_retry_policy.on_login_done(success=False)` 获取降频延迟并设置 `_next_network_check`
+  - 更新 3 个测试文件的 raw engine fixture 补充 `_retry_policy` 属性：`conftest.py`、`test_login_flow.py`
+  - 更新测试断言：删除对 `_login_retry.config` / `_login_retry.count` 的过时断言，改为验证 `_consecutive_login_failures` 和 `_do_async_login` 调用
+
+### refactor
 - Task 8: main.py login_once 改用 Orchestrator + ImmediatePolicy（F02/F08/F09）
   - `main.py` `_execute_login_with_retries` 重写：不再自行管理重试循环/超时/历史记录
   - 改用 `ImmediatePolicy`（固定间隔重试）+ `LoginOrchestrator`（配置校验、Worker 提交、历史记录）
