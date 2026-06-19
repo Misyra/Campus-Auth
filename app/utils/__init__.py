@@ -8,7 +8,7 @@ from .logging import (
     get_logger,
 )
 from .login import LoginAttemptHandler
-from .time_utils import get_runtime_stats, is_in_pause_period
+from .time_utils import is_in_pause_period
 
 
 def str_to_bool(value: str) -> bool:
@@ -26,7 +26,6 @@ __all__ = [
     "decrypt_password",
     "encrypt_password",
     "get_logger",
-    "get_runtime_stats",
     "is_in_pause_period",
     "mask_password",
     "str_to_bool",

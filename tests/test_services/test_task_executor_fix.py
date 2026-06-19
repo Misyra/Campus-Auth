@@ -4,9 +4,8 @@
 1. TaskRegistry.get_tasks_dir() 公共方法
 2. TaskExecutor._get_script_path() 路径回退
 3. 定时任务线程池懒初始化
-4. NullTaskExecutor 所有方法
-5. BoundedExecutor 队列限制
-6. TaskExecutor CRUD 方法、登录去重、execute_task 分发、execute_login、execute_shell
+4. BoundedExecutor 队列限制
+5. TaskExecutor CRUD 方法、登录去重、execute_task 分发、execute_login、execute_shell
 """
 
 from __future__ import annotations
@@ -235,63 +234,6 @@ class TestTaskPoolLazyInit:
         assert len(results) == 10
         assert all(r is results[0] for r in results)
         executor._task_pool.shutdown(wait=False)
-
-
-# =====================================================================
-# NullTaskExecutor
-# =====================================================================
-
-
-class TestNullTaskExecutor:
-    """NullTaskExecutor — 轻量模式下使用。"""
-
-    def setup_method(self):
-        from app.services.task_executor import NullTaskExecutor
-
-        self.executor = NullTaskExecutor()
-
-    def test_has_enabled_tasks(self):
-        assert self.executor.has_enabled_tasks() is False
-
-    def test_shutdown(self):
-        # 不应抛出异常
-        self.executor.shutdown()
-        self.executor.shutdown(wait=False)
-
-    def test_execute_task_async(self):
-        assert self.executor.execute_task_async("any") is None
-
-    def test_execute_login_async(self):
-        assert self.executor.execute_login_async() is None
-        assert self.executor.execute_login_async(cancel_event=threading.Event()) is None
-
-    def test_execute_task(self):
-        success, msg = self.executor.execute_task("any")
-        assert success is False
-        assert "轻量模式" in msg
-
-    def test_execute_login(self):
-        assert self.executor.execute_login() is None
-        assert self.executor.execute_login(cancel_event=threading.Event()) is None
-
-    def test_list_tasks(self):
-        assert self.executor.list_tasks() == []
-
-    def test_get_task(self):
-        assert self.executor.get_task("any") is None
-
-    def test_save_task(self):
-        success, msg = self.executor.save_task("any", {})
-        assert success is False
-        assert "轻量模式" in msg
-
-    def test_delete_task(self):
-        success, msg = self.executor.delete_task("any")
-        assert success is False
-        assert "轻量模式" in msg
-
-    def test_get_history(self):
-        assert self.executor.get_history("any") == []
 
 
 # =====================================================================
@@ -1146,7 +1088,7 @@ class TestTaskExecutorLoginAsync:
         executor = self._make_executor()
 
         blocker = threading.Event()
-        def slow_login(cancel_event=None, skip_pause_check=False):
+        def slow_login(cancel_event=None, config_snapshot=None):
             blocker.wait(timeout=5)
             return (True, "ok")
 
@@ -1207,7 +1149,7 @@ class TestTaskExecutorLoginAsync:
         blocker = threading.Event()
         received_cancel = threading.Event()
 
-        def slow_login(cancel_event=None, skip_pause_check=False):
+        def slow_login(cancel_event=None, config_snapshot=None):
             # 模拟长时间登录，定期检查 cancel_event
             for _ in range(50):
                 if cancel_event and cancel_event.is_set():
@@ -1244,6 +1186,55 @@ class TestTaskExecutorLoginAsync:
         time.sleep(0.1)
 
         assert executor._login_cancel_event is None
+
+
+# =====================================================================
+# TaskExecutor — _on_login_done
+# =====================================================================
+
+
+# =====================================================================
+# TaskExecutor — is_login_running
+# =====================================================================
+
+
+class TestIsLoginRunning:
+    """测试 is_login_running 状态查询。"""
+
+    def test_no_login_returns_false(self):
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        assert executor.is_login_running() is False
+
+    def test_with_pending_future_returns_true(self):
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        future = Future()
+        executor._login_future = future
+        assert executor.is_login_running() is True
+
+    def test_with_done_future_returns_false(self):
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        future = Future()
+        future.set_result((True, "ok"))
+        executor._login_future = future
+        assert executor.is_login_running() is False
 
 
 # =====================================================================
@@ -1320,30 +1311,3 @@ class TestTaskExecutorTaskAsync:
         assert executor._task_pool is not None
         executor._task_pool.shutdown(wait=False)
 
-
-# =====================================================================
-# NullTaskExecutor — 签名兼容性
-# =====================================================================
-
-
-class TestNullTaskExecutorSignature:
-    """NullTaskExecutor 签名与 TaskExecutor 兼容。"""
-
-    def test_execute_login_async_accepts_skip_pause_check(self):
-        """NullTaskExecutor.execute_login_async 应接受 skip_pause_check 参数。"""
-        from app.services.task_executor import NullTaskExecutor
-
-        executor = NullTaskExecutor()
-        # 不应抛出 TypeError
-        result = executor.execute_login_async(
-            cancel_event=None, skip_pause_check=True
-        )
-        assert result is None
-
-    def test_execute_login_accepts_skip_pause_check(self):
-        """NullTaskExecutor.execute_login 应接受 skip_pause_check 参数。"""
-        from app.services.task_executor import NullTaskExecutor
-
-        executor = NullTaskExecutor()
-        result = executor.execute_login(cancel_event=None, skip_pause_check=True)
-        assert result is None

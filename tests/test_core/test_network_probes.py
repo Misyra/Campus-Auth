@@ -183,6 +183,12 @@ class TestIsNetworkAvailableHttp:
 
 
 class TestIsNetworkAvailableUrl:
+    def setup_method(self):
+        """清空 _probe_client 缓存，确保每次测试使用新的 mock。"""
+        import app.network.probes as probes_module
+
+        probes_module._probe_client = None
+
     def _setup_mock_client(self, MockClient, mock_resp):
         """_get_probe_client() 直接返回 client 实例，不需要 __enter__ 上下文。"""
         MockClient.return_value.get.return_value = mock_resp

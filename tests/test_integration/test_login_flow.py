@@ -21,8 +21,8 @@ from app.services.engine import (
     EngineCommand,
     ScheduleEngine,
     StatusSnapshot,
-    _LoginRetryState,
 )
+from app.services.login_retry import LoginRetryManager
 
 
 # ── 辅助工厂 ──
@@ -35,8 +35,7 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._shutdown_event = threading.Event()
     svc._monitor_core = None
     svc._engine_running = False
-    svc._login_in_progress = threading.Event()
-    svc._login_retry = _LoginRetryState()
+    svc._login_retry = LoginRetryManager()
     svc._runtime_config = {}
     svc._runtime_snapshot = {}
     svc._monitor_check_interval = 300
@@ -145,18 +144,13 @@ class TestFullLoginSequence:
         svc = _make_raw_engine()
         future = Future()
         svc._task_executor.execute_login_async.return_value = future
+        svc._task_executor.is_login_running.return_value = False
 
         result = svc._do_async_login()
 
         assert result is True
-        assert svc._login_in_progress.is_set()
         assert svc._login_retry.last_attempt > 0
         assert svc._login_retry.count == 1
-
-        # 完成 Future，触发回调清除状态
-        future.set_result((True, "登录成功"))
-        time.sleep(0.1)
-        assert not svc._login_in_progress.is_set()
 
     def test_task_executor_login_success(self):
         """TaskExecutor.execute_login 通过 Worker 成功执行登录。"""
@@ -306,7 +300,7 @@ class TestLoginWithNetworkDetection:
     """带网络检测的登录流程：网络异常触发登录 → 登录后验证网络恢复。"""
 
     def test_network_check_triggers_login(self):
-        """网络检测发现 need_login 时，触发异步登录。"""
+        """网络检测发现 need_login 时，触发异步登录并跳过冗余检测。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
         mock_core.check_once.return_value = {
@@ -315,10 +309,13 @@ class TestLoginWithNetworkDetection:
         }
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._get_retry_config = MagicMock(return_value=(3, [30, 30, 30]))
+        svc._copy_runtime_config = MagicMock(return_value={
+            "retry_settings": {"max_retries": 3, "retry_interval": 30}
+        })
         svc._do_async_login = MagicMock()
 
-        svc._do_network_check()
+        with patch("app.utils.retry.get_retry_intervals", return_value=[30, 30, 30]):
+            svc._do_network_check()
 
         svc._do_async_login.assert_called_once()
         assert svc._login_retry.config == (3, [30, 30, 30])
@@ -399,10 +396,13 @@ class TestLoginWithNetworkDetection:
         }
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._get_retry_config = MagicMock(return_value=(3, [30, 30, 30]))
+        svc._copy_runtime_config = MagicMock(return_value={
+            "retry_settings": {"max_retries": 3, "retry_interval": 30}
+        })
         svc._do_async_login = MagicMock()
 
-        svc._do_network_check()
+        with patch("app.utils.retry.get_retry_intervals", return_value=[30, 30, 30]):
+            svc._do_network_check()
         svc._do_async_login.assert_called_once()
 
         # 第二次检测：网络恢复正常
@@ -430,11 +430,14 @@ class TestLoginWithNetworkDetection:
         }
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._get_retry_config = MagicMock(return_value=(3, [30, 30, 30]))
+        svc._copy_runtime_config = MagicMock(return_value={
+            "retry_settings": {"max_retries": 3, "retry_interval": 30}
+        })
 
         # 使用真实的 _do_async_login
         future = Future()
         svc._task_executor.execute_login_async.return_value = future
+        svc._task_executor.is_login_running.return_value = False
         svc._login_retry.count = 0
 
         # 模拟引擎循环中的网络检测
@@ -445,7 +448,6 @@ class TestLoginWithNetworkDetection:
         if svc._is_monitoring and now >= svc._next_network_check:
             svc._do_network_check()
 
-        assert svc._login_in_progress.is_set()
         assert svc._login_retry.count == 1
 
         # 清理
@@ -467,6 +469,7 @@ class TestLoginRetryMechanism:
         svc._login_retry.count = 1
         svc._login_retry.last_attempt = time.time() - 100
         svc._login_retry.config = (3, [10, 20, 30])
+        svc._task_executor.is_login_running.return_value = False
 
         assert svc._login_retry_needed(time.time()) is True
 
@@ -493,7 +496,7 @@ class TestLoginRetryMechanism:
         svc._login_retry.count = 1
         svc._login_retry.last_attempt = time.time() - 100
         svc._login_retry.config = (3, [10, 20, 30])
-        svc._login_in_progress.set()
+        svc._task_executor.is_login_running.return_value = True
 
         assert svc._login_retry_needed(time.time()) is False
 
@@ -517,6 +520,7 @@ class TestLoginRetryMechanism:
         """重试间隔按配置递增。"""
         svc = _make_raw_engine()
         intervals = [10, 20, 30]
+        svc._task_executor.is_login_running.return_value = False
 
         # 第 1 次重试，间隔 10 秒
         svc._login_retry.count = 1
@@ -540,39 +544,6 @@ class TestLoginRetryMechanism:
         svc._login_retry.last_attempt = time.time() - 25
         assert svc._login_retry_needed(time.time()) is False
 
-    def test_retry_config_from_settings(self):
-        """从配置中获取重试参数。"""
-        svc = _make_raw_engine()
-        svc._runtime_config = {
-            "retry_settings": {
-                "max_retries": 5,
-                "retry_interval": 60,
-            },
-        }
-
-        with patch(
-            "app.utils.retry.get_retry_intervals",
-            return_value=[60, 60, 60, 60, 60],
-        ):
-            max_retries, intervals = svc._get_retry_config()
-
-        assert max_retries == 5
-        assert len(intervals) == 5
-
-    def test_retry_config_default_on_exception(self):
-        """配置获取异常时使用默认值。"""
-        svc = _make_raw_engine()
-        svc._runtime_config = {}
-
-        with patch(
-            "app.utils.retry.get_retry_intervals",
-            side_effect=RuntimeError("配置读取失败"),
-        ):
-            max_retries, intervals = svc._get_retry_config()
-
-        assert max_retries == 3
-        assert intervals == [30, 30, 30]
-
     def test_network_check_resets_retry_count(self):
         """网络检测触发登录时，重置重试计数。"""
         svc = _make_raw_engine()
@@ -584,10 +555,13 @@ class TestLoginRetryMechanism:
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
         svc._login_retry.count = 2  # 之前的重试
-        svc._get_retry_config = MagicMock(return_value=(3, [30, 30, 30]))
+        svc._copy_runtime_config = MagicMock(return_value={
+            "retry_settings": {"max_retries": 3, "retry_interval": 30}
+        })
         svc._do_async_login = MagicMock()
 
-        svc._do_network_check()
+        with patch("app.utils.retry.get_retry_intervals", return_value=[30, 30, 30]):
+            svc._do_network_check()
 
         # 网络检测触发登录时，先重置计数再递增
         assert svc._login_retry.config == (3, [30, 30, 30])
@@ -596,7 +570,7 @@ class TestLoginRetryMechanism:
         """引擎唤醒时间考虑重试间隔。"""
         svc = _make_raw_engine()
         now = time.time()
-        svc._login_retry = _LoginRetryState(
+        svc._login_retry = LoginRetryManager(
             count=1,
             last_attempt=now - 5,
             config=(3, [10, 20, 30]),
@@ -618,46 +592,64 @@ class TestLoginConcurrencyProtection:
     """登录并发保护：防止同时提交多个登录任务。"""
 
     def test_do_async_login_rejects_when_in_progress(self):
-        """登录进行中时，_do_async_login 返回 False。"""
+        """自动登录进行中时，_do_async_login 返回 False。"""
         svc = _make_raw_engine()
-        svc._login_in_progress.set()
+        svc._task_executor.is_login_running.return_value = True
 
         result = svc._do_async_login()
 
         assert result is False
 
-    def test_login_in_progress_property(self):
-        """login_in_progress 属性反映 Event 状态。"""
+    def test_manual_login_cancels_in_progress_auto_login(self):
+        """手动登录应取消卡住的自动登录并重新提交。"""
         svc = _make_raw_engine()
+        # 模拟自动登录正在进行中
+        svc._task_executor.is_login_running.return_value = True
 
-        assert svc.login_in_progress is False
+        # 模拟 cancel_login 后 is_login_running 变为 False
+        def fake_cancel():
+            svc._task_executor.is_login_running.return_value = False
 
-        svc._login_in_progress.set()
-        assert svc.login_in_progress is True
+        svc._task_executor.cancel_login.side_effect = fake_cancel
 
-        svc._login_in_progress.clear()
-        assert svc.login_in_progress is False
-
-    def test_future_done_clears_in_progress(self):
-        """登录 Future 完成后自动清除 in_progress 标志。"""
-        svc = _make_raw_engine()
         future = Future()
         svc._task_executor.execute_login_async.return_value = future
 
-        svc._do_async_login()
-        assert svc._login_in_progress.is_set()
+        result = svc._do_async_login(is_manual=True)
 
-        # 完成 Future
+        assert result is True
+        svc._task_executor.cancel_login.assert_called_once()
+
+        # 清理
         future.set_result((True, "登录成功"))
-        time.sleep(0.1)  # 等待回调执行
+        time.sleep(0.1)
 
-        assert not svc._login_in_progress.is_set()
+    def test_login_in_progress_property(self):
+        """login_in_progress 属性反映 task_executor.is_login_running() 状态。"""
+        svc = _make_raw_engine()
+
+        svc._task_executor.is_login_running.return_value = False
+        assert svc.login_in_progress is False
+
+        svc._task_executor.is_login_running.return_value = True
+        assert svc.login_in_progress is True
 
     def test_concurrent_login_rejection(self):
         """并发登录请求：第一个成功，后续被拒绝。"""
         svc = _make_raw_engine()
         future = Future()
         svc._task_executor.execute_login_async.return_value = future
+
+        # 模拟第一次提交后 executor 状态变化
+        call_count = [0]
+        original_is_login_running = svc._task_executor.is_login_running
+
+        def mock_is_login_running():
+            call_count[0] += 1
+            # 第一次调用（检查）返回 False，后续返回 True
+            return call_count[0] > 1
+
+        svc._task_executor.is_login_running = mock_is_login_running
 
         # 第一次提交成功
         result1 = svc._do_async_login()
@@ -717,15 +709,16 @@ class TestLoginConcurrencyProtection:
         svc._login_retry.count = 1
         svc._login_retry.last_attempt = time.time() - 100
         svc._login_retry.config = (3, [10, 20, 30])
-        svc._login_in_progress.set()  # 登录进行中
+        svc._task_executor.is_login_running.return_value = True  # 登录进行中
 
         result = svc._login_retry_needed(time.time())
 
         assert result is False
 
-    def test_login_exception_clears_in_progress(self):
-        """登录执行异常时，清除 in_progress 标志。"""
+    def test_login_exception_propagates(self):
+        """登录执行异常时，异常会向上传播。"""
         svc = _make_raw_engine()
+        svc._task_executor.is_login_running.return_value = False
         svc._task_executor.execute_login_async.side_effect = RuntimeError(
             "线程池已关闭"
         )
@@ -733,23 +726,31 @@ class TestLoginConcurrencyProtection:
         with pytest.raises(RuntimeError):
             svc._do_async_login()
 
-        assert not svc._login_in_progress.is_set()
-
-    def test_future_none_clears_in_progress(self):
-        """execute_login_async 返回 None 时，清除 in_progress 标志。"""
+    def test_future_none_returns_false(self):
+        """execute_login_async 返回 None 时，返回 False。"""
         svc = _make_raw_engine()
         svc._task_executor.execute_login_async.return_value = None
 
         result = svc._do_async_login()
 
         assert result is False
-        assert not svc._login_in_progress.is_set()
 
     def test_multiple_threads_competing_for_login(self):
         """多线程竞争登录：只有一个成功提交。"""
         svc = _make_raw_engine()
         future = Future()
         svc._task_executor.execute_login_async.return_value = future
+
+        # 模拟并发竞争：第一次调用返回 False，后续返回 True
+        call_count = [0]
+        original_is_login_running = svc._task_executor.is_login_running
+
+        def mock_is_login_running():
+            call_count[0] += 1
+            # 第一次调用（检查）返回 False，后续返回 True
+            return call_count[0] > 1
+
+        svc._task_executor.is_login_running = mock_is_login_running
 
         results = []
         barrier = threading.Barrier(5)

@@ -2,7 +2,6 @@
 
 import asyncio
 import contextlib
-import datetime
 import os
 import re
 import sys
@@ -30,7 +29,6 @@ class LoginAttemptHandler:
         self,
         config: dict[str, Any],
         cancel_event: threading.Event | None = None,
-        close_on_failure: bool = True,
     ):
         """
         初始化登录处理器
@@ -38,65 +36,26 @@ class LoginAttemptHandler:
         参数:
             config: 配置字典
             cancel_event: 取消事件，设置后中断登录操作
-            close_on_failure: 登录失败时是否关闭浏览器（默认 True）。
-                自动监控重试时设为 False 以复用浏览器，手动登录保持 True。
         """
         self.config = config
         self.cancel_event = cancel_event
-        self.close_on_failure = close_on_failure
         self.logger = get_logger("login", source="backend")
         self._browser_ctx: BrowserContextManager | None = None
         self._task_manager: Any | None = None
         self._project_root: Path | None = None
 
-    async def attempt_login(self, skip_pause_check: bool = False) -> tuple[bool, str]:
+    async def attempt_login(self) -> tuple[bool, str]:
         """
         尝试登录校园网（统一实现）
 
-        参数:
-            skip_pause_check: 是否跳过暂停时间检查
+        前置检查（暂停时段、网络状态、登录前置条件）由调用方负责。
+        本方法只负责执行登录任务。
 
         返回:
             tuple[bool, str]: (是否成功, 详细信息)
         """
         try:
-            # 使用统一的登录前决策（暂停时段、网络状态等）
-            if not skip_pause_check:
-                from app.network.decision import check_network_status, check_pause
-
-                is_paused, _ = check_pause(self.config)
-                if is_paused:
-                    pause_config = self.config.get("pause_login", {})
-                    current_hour = datetime.datetime.now().hour
-                    start_hour = pause_config.get("start_hour", 0)
-                    end_hour = pause_config.get("end_hour", 6)
-                    msg = f"当前时间 {current_hour}:xx 在暂停登录时段（{start_hour}点-{end_hour}点），跳过登录"
-                    self.logger.info(msg)
-                    return False, msg
-
-                net_ok, _, _ = await asyncio.to_thread(check_network_status, self.config)
-                if net_ok:
-                    msg = "网络正常，无需登录"
-                    self.logger.info(msg)
-                    return False, msg
-
-                # 网络异常，检查登录前置条件
-                from app.network.decision import check_login_prerequisites
-
-                prereq_ok, prereq_reason = check_login_prerequisites(self.config)
-                if not prereq_ok:
-                    if prereq_reason == "local_disconnected":
-                        msg = "物理网络未连接，跳过登录"
-                        self.logger.info(msg)
-                        return False, msg
-                    elif prereq_reason == "auth_url_unreachable":
-                        msg = f"认证地址 {self.config.get('auth_url', '?')} 不可达，跳过登录"
-                        self.logger.info(msg)
-                        return False, msg
-
-            # 使用延迟导入避免循环依赖
             return await self._perform_login_with_auth_class()
-
         except Exception as e:
             error_msg = f"登录过程中发生错误: {e!s}"
             self.logger.error(error_msg)
@@ -206,8 +165,6 @@ class LoginAttemptHandler:
             raise
         self.logger.info("浏览器就绪 ({:.1f}s)", time.perf_counter() - browser_start)
 
-        # 成功标志：默认 False，executor 返回成功时设为 True
-        # finally 中据此决策是否关闭浏览器
         success = False
         try:
             if not browser_manager.page:
@@ -228,7 +185,7 @@ class LoginAttemptHandler:
             )
 
             # 监听页面 alert/confirm/prompt，记录内容并延迟关闭让用户看到
-            # 每次执行后清理监听器，避免浏览器复用时监听器泄漏
+            # 执行后清理监听器，避免泄漏
             async def _handle_dialog(dialog):
                 self.logger.info("页面弹窗 [{}]: {}", dialog.type, dialog.message)
                 await asyncio.sleep(1.5)  # 延迟关闭，让页面有时间处理弹窗
@@ -250,9 +207,7 @@ class LoginAttemptHandler:
             self.logger.error("登录失败 (总耗时 {:.1f}s): {}", total, log_msg)
             return False, message
         finally:
-            # 单一关闭点：成功时始终关闭，失败/异常时按 close_on_failure 决策
-            if success or self.close_on_failure:
-                await self.close_browser()
+            await self.close_browser()
 
     async def _execute_script_task(
         self, task: Any, phase_start: float

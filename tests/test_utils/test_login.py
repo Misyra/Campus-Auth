@@ -58,14 +58,14 @@ def _make_script_task(task_id: str = "script1", script_path: str = "/tmp/login.p
     )
 
 
-# ── attempt_login: skip_pause_check=True ──
+# ── attempt_login ─────────────────────────────────────────────────────
 
 
-class TestAttemptLoginSkipPauseCheck:
-    """skip_pause_check=True 时跳过暂停和网络检查。"""
+class TestAttemptLogin:
+    """attempt_login 简化后直接委托 _perform_login_with_auth_class。"""
 
     @pytest.mark.asyncio
-    async def test_skip_pause_delegates_to_perform(self):
+    async def test_delegates_to_perform(self):
         config = _make_config()
         handler = LoginAttemptHandler(config)
 
@@ -73,108 +73,10 @@ class TestAttemptLoginSkipPauseCheck:
             handler, "_perform_login_with_auth_class", new_callable=AsyncMock
         ) as mock_perform:
             mock_perform.return_value = (True, "ok")
-            ok, msg = await handler.attempt_login(skip_pause_check=True)
+            ok, msg = await handler.attempt_login()
 
         assert ok is True
         assert msg == "ok"
-        mock_perform.assert_awaited_once()
-
-
-class TestAttemptLoginWithPause:
-    """不跳过暂停检查时的分支覆盖。"""
-
-    @pytest.mark.asyncio
-    async def test_pause_period_returns_false(self):
-        config = _make_config(
-            pause_login={"start_hour": 0, "end_hour": 6},
-        )
-        handler = LoginAttemptHandler(config)
-
-        with patch("app.utils.login.datetime") as mock_dt, patch(
-            "app.network.decision.check_pause", return_value=(True, "暂停中")
-        ):
-            mock_dt.datetime.now.return_value = MagicMock(hour=3)
-            ok, msg = await handler.attempt_login(skip_pause_check=False)
-
-        assert ok is False
-        assert "暂停登录时段" in msg
-
-    @pytest.mark.asyncio
-    async def test_network_ok_returns_false(self):
-        config = _make_config()
-        handler = LoginAttemptHandler(config)
-
-        # check_network_status 是同步函数，通过 asyncio.to_thread 调用
-        # mock asyncio.to_thread 返回结果即可
-        with patch(
-            "app.network.decision.check_pause", return_value=(False, None)
-        ), patch(
-            "app.utils.login.asyncio.to_thread", new_callable=AsyncMock
-        ) as mock_to_thread:
-            mock_to_thread.return_value = (True, "正常", "tcp")
-            ok, msg = await handler.attempt_login(skip_pause_check=False)
-
-        assert ok is False
-        assert "网络正常" in msg
-
-    @pytest.mark.asyncio
-    async def test_local_disconnected_returns_false(self):
-        config = _make_config()
-        handler = LoginAttemptHandler(config)
-
-        with patch(
-            "app.network.decision.check_pause", return_value=(False, None)
-        ), patch(
-            "app.utils.login.asyncio.to_thread", new_callable=AsyncMock
-        ) as mock_to_thread, patch(
-            "app.network.decision.check_login_prerequisites",
-            return_value=(False, "local_disconnected"),
-        ):
-            mock_to_thread.return_value = (False, "不通", "none")
-            ok, msg = await handler.attempt_login(skip_pause_check=False)
-
-        assert ok is False
-        assert "物理网络未连接" in msg
-
-    @pytest.mark.asyncio
-    async def test_auth_url_unreachable_returns_false(self):
-        config = _make_config(auth_url="http://10.0.0.1/auth")
-        handler = LoginAttemptHandler(config)
-
-        with patch(
-            "app.network.decision.check_pause", return_value=(False, None)
-        ), patch(
-            "app.utils.login.asyncio.to_thread", new_callable=AsyncMock
-        ) as mock_to_thread, patch(
-            "app.network.decision.check_login_prerequisites",
-            return_value=(False, "auth_url_unreachable"),
-        ):
-            mock_to_thread.return_value = (False, "不通", "none")
-            ok, msg = await handler.attempt_login(skip_pause_check=False)
-
-        assert ok is False
-        assert "不可达" in msg
-
-    @pytest.mark.asyncio
-    async def test_prereqs_ok_delegates_to_perform(self):
-        config = _make_config()
-        handler = LoginAttemptHandler(config)
-
-        with patch(
-            "app.network.decision.check_pause", return_value=(False, None)
-        ), patch(
-            "app.utils.login.asyncio.to_thread", new_callable=AsyncMock
-        ) as mock_to_thread, patch(
-            "app.network.decision.check_login_prerequisites",
-            return_value=(True, ""),
-        ), patch.object(
-            handler, "_perform_login_with_auth_class", new_callable=AsyncMock
-        ) as mock_perform:
-            mock_to_thread.return_value = (False, "不通", "none")
-            mock_perform.return_value = (True, "ok")
-            ok, msg = await handler.attempt_login(skip_pause_check=False)
-
-        assert ok is True
         mock_perform.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -188,7 +90,7 @@ class TestAttemptLoginWithPause:
             new_callable=AsyncMock,
             side_effect=RuntimeError("boom"),
         ):
-            ok, msg = await handler.attempt_login(skip_pause_check=True)
+            ok, msg = await handler.attempt_login()
 
         assert ok is False
         assert "boom" in msg
@@ -477,10 +379,10 @@ class TestExecuteBrowserTask:
         assert handler._browser_ctx is None
 
     @pytest.mark.asyncio
-    async def test_login_failure_with_close_on_failure(self):
-        """登录失败且 close_on_failure=True 时关闭浏览器（行 249-255）。"""
+    async def test_login_failure_closes_browser(self):
+        """登录失败时关闭浏览器。"""
         config = _make_config()
-        handler = LoginAttemptHandler(config, close_on_failure=True)
+        handler = LoginAttemptHandler(config)
 
         mock_page = MagicMock()
         mock_page.on = MagicMock()
@@ -509,39 +411,6 @@ class TestExecuteBrowserTask:
         assert ok is False
         assert msg == "密码错误"
         assert handler._browser_ctx is None
-
-    @pytest.mark.asyncio
-    async def test_login_failure_no_close_on_failure(self):
-        """登录失败且 close_on_failure=False 时保留浏览器（行 254）。"""
-        config = _make_config()
-        handler = LoginAttemptHandler(config, close_on_failure=False)
-
-        mock_page = MagicMock()
-        mock_page.on = MagicMock()
-        mock_page.remove_listener = MagicMock()
-
-        mock_browser_mgr = MagicMock()
-        mock_browser_mgr.page = mock_page
-        mock_browser_mgr.__aenter__ = AsyncMock(return_value=mock_browser_mgr)
-        mock_browser_mgr.__aexit__ = AsyncMock()
-
-        task = _make_task_config()
-
-        with patch(
-            "app.utils.login.BrowserContextManager", return_value=mock_browser_mgr
-        ), patch(
-            "app.utils.login.build_login_template_vars", return_value={}
-        ), patch(
-            "app.tasks.browser_runner.TaskExecutor"
-        ) as MockExecutor:
-            MockExecutor.return_value.execute = AsyncMock(
-                return_value=(False, "超时")
-            )
-
-            ok, msg = await handler._execute_browser_task(task, "default", time.perf_counter())
-
-        assert ok is False
-        assert handler._browser_ctx is not None
 
     @pytest.mark.asyncio
     async def test_dialog_handler_registered_and_removed(self):
@@ -582,7 +451,7 @@ class TestExecuteBrowserTask:
     async def test_screenshot_url_in_message(self):
         """失败消息包含截图 URL（行 249）。"""
         config = _make_config()
-        handler = LoginAttemptHandler(config, close_on_failure=True)
+        handler = LoginAttemptHandler(config)
 
         mock_page = MagicMock()
         mock_page.on = MagicMock()
@@ -878,14 +747,12 @@ class TestInit:
 
         assert handler.config is config
         assert handler.cancel_event is None
-        assert handler.close_on_failure is True
         assert handler._browser_ctx is None
         assert handler._task_manager is None
 
     def test_custom_values(self):
         config = _make_config()
         cancel = threading.Event()
-        handler = LoginAttemptHandler(config, cancel_event=cancel, close_on_failure=False)
+        handler = LoginAttemptHandler(config, cancel_event=cancel)
 
         assert handler.cancel_event is cancel
-        assert handler.close_on_failure is False

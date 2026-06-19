@@ -20,7 +20,7 @@ import pytest
 from app.utils import str_to_bool
 
 # ── config_helpers ──
-from app.utils.config_utils import assign_profile_fields
+from app.utils.config_utils import PROFILE_RUNTIME_FIELDS, assign_profile_fields
 
 # ── crypto ──
 from app.utils.crypto import (
@@ -59,7 +59,7 @@ from app.utils.platform import (
 )
 
 # ── time_utils ──
-from app.utils.time_utils import get_runtime_stats, is_in_pause_period
+from app.utils.time_utils import is_in_pause_period
 
 # ── version ──
 from app.version import get_project_version
@@ -217,6 +217,18 @@ class TestAssignProfileFields:
         target = {"a": 1}
         assign_profile_fields(target, {}, ["a"])
         assert target == {"a": 1}
+
+
+class TestProfileRuntimeFields:
+    def test_is_tuple_of_strings(self):
+        assert isinstance(PROFILE_RUNTIME_FIELDS, tuple)
+        for field in PROFILE_RUNTIME_FIELDS:
+            assert isinstance(field, str)
+
+    def test_contains_expected_fields(self):
+        assert "access_log" in PROFILE_RUNTIME_FIELDS
+        assert "shell_path" in PROFILE_RUNTIME_FIELDS
+        assert "custom_variables" in PROFILE_RUNTIME_FIELDS
 
 
 # =====================================================================
@@ -554,24 +566,6 @@ class TestIsInPausePeriod:
             assert is_in_pause_period(config) is False
 
 
-class TestGetRuntimeStats:
-    def test_basic(self):
-        start = time.time() - 3665  # ~1 小时 1 分前
-        runtime_str, stats_str = get_runtime_stats(start, 42)
-        assert "01:01:" in runtime_str
-        assert "42" in stats_str
-
-    def test_zero_time(self):
-        start = time.time()
-        runtime_str, stats_str = get_runtime_stats(start, 0)
-        assert "00:00:0" in runtime_str
-        assert "0" in stats_str
-
-    def test_none_start_time(self):
-        runtime_str, stats_str = get_runtime_stats(None, 10)
-        assert runtime_str == "00:00:00"
-        assert "10" in stats_str
-
 
 # =====================================================================
 # env — build_login_template_vars
@@ -818,7 +812,7 @@ class TestLoginAttemptHandlerCloseIdempotent:
         """多次调用 close_browser 不应报错（幂等）"""
         from app.utils.login import LoginAttemptHandler
 
-        handler = LoginAttemptHandler(config={}, close_on_failure=True)
+        handler = LoginAttemptHandler(config={})
         # _browser_ctx 为 None 时，close_browser 应安全返回
         import asyncio
 

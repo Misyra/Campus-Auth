@@ -16,8 +16,8 @@ from app.services.engine import (
     EngineCommand,
     ScheduleEngine,
     StatusSnapshot,
-    _LoginRetryState,
 )
+from app.services.login_retry import LoginRetryManager
 
 
 
@@ -97,7 +97,6 @@ class TestScheduleEngineInit:
     def test_init(self, engine_factory):
         svc = engine_factory()
         assert svc._dashboard_sink is None
-        assert svc._login_in_progress.is_set() is False
         assert svc.pure_mode is False
 
 
@@ -396,12 +395,10 @@ class TestHandleLogin:
             assert cmd.response_data == (True, "登录已提交")
         # 等待异步登录线程完成
         time.sleep(0.5)
-        assert not svc._login_in_progress.is_set()
 
     def test_handle_login_no_config_returns_false(self):
         """_handle_login 无配置时返回 False。"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
-        svc._login_in_progress = threading.Event()
         svc._update_status_snapshot = MagicMock()
         svc._task_executor = MagicMock()
         # 返回空配置
@@ -601,9 +598,8 @@ class TestTogglePureMode:
 class TestLoginInProgress:
     def test_login_in_progress_property(self, engine_factory):
         svc = engine_factory()
+        svc._task_executor.is_login_running.return_value = False
         assert svc.login_in_progress is False
-        svc._login_in_progress.set()
-        assert svc.login_in_progress is True
 
 
 # =====================================================================
@@ -800,19 +796,17 @@ class TestNetworkStateSetInConsumer:
     def test_do_async_login_delegates_to_task_executor(self):
         """_do_async_login 应委托给 task_executor.execute_login_async"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
-        svc._login_in_progress = threading.Event()
-        svc._login_retry = _LoginRetryState(count=0, last_attempt=0, config=None)
+        svc._login_retry = LoginRetryManager(count=0, last_attempt=0, config=None)
         svc._update_status_snapshot = MagicMock()
 
         mock_task_executor = MagicMock()
+        mock_task_executor.is_login_running.return_value = False
         mock_task_executor.execute_login_async.return_value = None
         svc._task_executor = mock_task_executor
 
         svc._do_async_login()
 
         mock_task_executor.execute_login_async.assert_called_once()
-        # future 为 None 时，_login_in_progress 应被清除
-        assert not svc._login_in_progress.is_set()
 
 
 # =====================================================================

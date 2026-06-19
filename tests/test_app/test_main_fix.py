@@ -153,3 +153,29 @@ class TestNoRedundantThreadingImport:
 
         # 模块级 threading 已导入
         assert hasattr(main_mod, "threading")
+
+
+# ==================== 修复 6: LOGIN_ONCE 网络预检 all_disabled 跳过登录 ====================
+
+
+class TestLoginOnceAllDisabled:
+    """验证 LOGIN_ONCE 模式下 all_disabled 时跳过登录。"""
+
+    def test_login_once_all_disabled_skips_login(self):
+        """当所有网络检测方式禁用时，LOGIN_ONCE 应跳过登录（假定已连接）。"""
+        from main import _run_login_then_exit, LoginResult
+
+        with (
+            patch("main._load_login_config") as mock_load,
+            patch("app.network.decision.check_network_status") as mock_check,
+            patch("main._execute_login_with_retries") as mock_exec,
+        ):
+            mock_load.return_value = (
+                {"username": "test", "password": "x", "auth_url": "http://x"},
+                None,
+            )
+            mock_check.return_value = (False, "all_disabled", "none")
+
+            result = _run_login_then_exit(None, MagicMock())
+            assert result == LoginResult.SUCCESS
+            mock_exec.assert_not_called()
