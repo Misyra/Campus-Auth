@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import queue
 import sys
 import threading
 import time
@@ -105,6 +107,11 @@ class TaskExecutor:
         self._login_future: Future | None = None
         self._login_lock = threading.Lock()
         self._login_cancel_event: threading.Event | None = None
+
+        # cancel 联动 watcher（单常驻线程，替代每次新建 daemon 线程）
+        self._cancel_link_queue: queue.Queue = queue.Queue()
+        self._cancel_link_thread: threading.Thread | None = None
+        self._cancel_link_lock = threading.Lock()
 
         # 定时任务去重
         self._running_tasks: dict[str, Future] = {}
@@ -232,19 +239,42 @@ class TaskExecutor:
         future.add_done_callback(self._on_login_done)
         return future
 
-    @staticmethod
+    def _ensure_cancel_link_thread(self) -> None:
+        """惰性启动单个 watcher 线程处理所有 cancel 联动。"""
+        with self._cancel_link_lock:
+            if self._cancel_link_thread is not None and self._cancel_link_thread.is_alive():
+                return
+            self._cancel_link_thread = threading.Thread(
+                target=self._cancel_link_loop, daemon=True, name="cancel-link-watcher"
+            )
+            self._cancel_link_thread.start()
+
+    def _cancel_link_loop(self) -> None:
+        """常驻 watcher：从队列取 (new_event, target_event) 并监控。"""
+        pending: list[tuple[threading.Event, threading.Event]] = []
+        while True:
+            try:
+                item = self._cancel_link_queue.get(timeout=1.0)
+                if item is None:  # 毒丸，shutdown 时使用
+                    return
+                pending.append(item)
+            except queue.Empty:
+                pass
+            # 检查所有 pending 的新事件是否已 set
+            still_pending = []
+            for new_event, target_event in pending:
+                if new_event.is_set():
+                    target_event.set()  # 联动，无需继续监控
+                else:
+                    still_pending.append((new_event, target_event))
+            pending = still_pending
+
     def _link_cancel_event(
-        new_event: threading.Event, target_event: threading.Event
+        self, new_event: threading.Event, target_event: threading.Event
     ) -> None:
-        """在后台线程监控 new_event，设置时联动到 target_event。"""
-
-        def _watcher() -> None:
-            new_event.wait(timeout=300)
-            if new_event.is_set():
-                target_event.set()
-
-        t = threading.Thread(target=_watcher, daemon=True, name="cancel-link")
-        t.start()
+        """将联动请求入队，由常驻 watcher 处理（不再每次新建线程）。"""
+        self._cancel_link_queue.put((new_event, target_event))
+        self._ensure_cancel_link_thread()
 
     def is_login_running(self) -> bool:
         """登录任务是否正在执行中。"""
@@ -545,6 +575,9 @@ class TaskExecutor:
     def shutdown(self, wait: bool = True) -> None:
         """关闭线程池。"""
         logger.info("TaskExecutor 开始关闭...")
+        if self._cancel_link_thread is not None:
+            with contextlib.suppress(Exception):
+                self._cancel_link_queue.put(None)
         if self._task_pool is not None:
             self._task_pool.shutdown(wait=wait)
         self._login_pool.shutdown(wait=wait)
