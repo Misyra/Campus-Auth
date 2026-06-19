@@ -78,10 +78,37 @@ class TestGetRetryIntervals:
 
     def test_large_interval(self):
         """较大间隔值应正确计算。"""
-        result = get_retry_intervals(100, 3, exponential=True)
+        result = get_retry_intervals(100, 3, exponential=True, max_interval=1000)
         assert result == [100, 200, 400]
 
     def test_default_exponential_is_false(self):
         """默认 exponential=False 等同于固定间隔。"""
         result = get_retry_intervals(3, 3)
         assert result == [3, 3, 3]
+
+    # ── max_interval 上限 ──
+
+    def test_max_interval_caps_exponential(self):
+        """指数退避应被 max_interval 截断。"""
+        result = get_retry_intervals(10, 6, exponential=True, max_interval=50)
+        assert result == [10, 20, 40, 50, 50, 50]
+
+    def test_max_interval_default_300(self):
+        """默认 max_interval=300 应生效。"""
+        result = get_retry_intervals(100, 4, exponential=True)
+        assert result == [100, 200, 300, 300]
+
+    def test_max_interval_no_effect_on_fixed(self):
+        """固定间隔模式下 max_interval 不生效。"""
+        result = get_retry_intervals(500, 3, max_interval=100)
+        assert result == [500, 500, 500]
+
+    def test_max_interval_less_than_base(self):
+        """max_interval 小于初始间隔时，所有值均被截断。"""
+        result = get_retry_intervals(100, 3, exponential=True, max_interval=50)
+        assert result == [50, 50, 50]
+
+    def test_max_interval_unlimited(self):
+        """max_interval 设为极大值等同于无上限。"""
+        result = get_retry_intervals(5, 5, exponential=True, max_interval=999999)
+        assert result == [5, 10, 20, 40, 80]

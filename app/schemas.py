@@ -115,10 +115,10 @@ _BROWSER_ARGS_DEFAULT = (
 class _MonitorFieldsMixin(BaseModel):
     """Profile 可覆盖的全局默认值（监控、认证、运营商等）"""
 
-    auth_url: str = Field(default="")
-    active_task: str = Field(default="")
-    carrier: str = Field(default="无")
-    carrier_custom: str = Field(default="")
+    auth_url: str = Field(default="", description="认证地址")
+    active_task: str = Field(default="", description="登录任务标识")
+    carrier: str = Field(default="无", description="运营商")
+    carrier_custom: str = Field(default="", description="自定义运营商关键字")
     check_interval_seconds: int = Field(
         default=300, ge=10, le=86400, description="检测间隔（秒）"
     )
@@ -289,6 +289,10 @@ class SystemSettings(_MonitorFieldsMixin, _CommonSettingsMixin):
 
     监控配置字段继承自 _MonitorFieldsMixin，系统配置字段继承自 _CommonSettingsMixin。
     仅声明不属于这两个 Mixin 的额外字段。
+
+    注意：auth_url / carrier / carrier_custom 同时存在于 global_settings（SystemSettings）
+    和 profile（AuthProfile）中，这是有意设计的"全局默认值 + profile 实例覆盖"模式。
+    profile 中这些字段留空时，运行时会回退到 global_settings 的值。
     """
 
     network_check_timeout: int = Field(
