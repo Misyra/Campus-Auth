@@ -542,9 +542,6 @@ def _run_full(
     port = resolve_port()
     container = ServiceContainer(Path(__file__).parent.resolve())
 
-    if should_boot_engine:
-        container.engine.boot()
-
     features = get_runtime_features(
         RuntimeMode.FULL,
         ctx.config.minimize_to_tray,
@@ -609,6 +606,7 @@ def _run_full(
             log_retention=_lr,
             existing_container=container,
             server_ref=_uvicorn_server,
+            boot_engine=should_boot_engine,
         )
     except KeyboardInterrupt:
         logger.info("收到退出信号，正在关闭服务...")
