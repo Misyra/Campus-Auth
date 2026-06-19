@@ -639,7 +639,16 @@ class ScheduleEngine:
         return self._task_executor.is_login_running()
 
     def set_dashboard_sink(self, sink) -> None:
-        """注入 DashboardSink 实例（由 container.start_web_services 调用）。"""
+        """注入 DashboardSink，并迁移轻量模式期间积累的广播消息。"""
+        # 迁移轻量模式期间积累的广播消息
+        old_queue = self._empty_broadcast_queue
+        if old_queue:
+            new_queue = sink.broadcast_queue
+            while old_queue:
+                try:
+                    new_queue.append(old_queue.popleft())
+                except IndexError:
+                    break
         self._dashboard_sink = sink
 
     @property

@@ -3,6 +3,13 @@
 ## 2026-06-20
 
 ### fix
+- F14+F15+F16: 健壮性改进（3 项防御性修复）
+  - F14: `main.py` `_run_lightweight` finally 块兜底清理 — 即使 `_web_server_state["started"]` 为 True，若 `server_ref[0]` 仍为 None（Uvicorn 子线程崩溃），仍执行容器 shutdown，防止资源泄漏
+  - F15: `app/services/engine.py` `set_dashboard_sink` 迁移轻量模式广播队列 — 注入新 DashboardSink 时，将 `_empty_broadcast_queue` 中积累的残留消息迁移到新 sink 的 `broadcast_queue`
+  - F16: `app/services/websocket_manager.py` `broadcast` 总体超时 — 用 `asyncio.wait_for` 包裹 `asyncio.gather`，总体超时 5 秒，防止 N 个卡住连接导致等待 N×5s
+  - 新增 10 个测试：`TestLightweightFallbackCleanup`（4）+ `TestSetDashboardSinkMigration`（3）+ `TestBroadcastOverallTimeout`（3）
+
+### fix
 - F12: 重构 _link_cancel_event，消除线程泄漏
   - `app/services/task_executor.py`：`_link_cancel_event` 从 `@staticmethod` 改为实例方法，不再每次新建 daemon 线程
   - `app/services/task_executor.py`：新增 `_cancel_link_queue`（事件队列）、`_cancel_link_thread`、`_cancel_link_lock` 三个 `__init__` 字段

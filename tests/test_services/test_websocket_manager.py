@@ -236,3 +236,57 @@ class TestWebSocketManagerInit:
         mgr = WebSocketManager()
         assert mgr._connections == []
         assert isinstance(mgr._lock, asyncio.Lock)
+
+
+# =====================================================================
+# F16 — broadcast 总体超时
+# =====================================================================
+
+
+class TestBroadcastOverallTimeout:
+    """F16: asyncio.gather 包裹 wait_for 5s 总体超时。"""
+
+    @pytest.mark.asyncio
+    async def test_broadcast_overall_timeout_does_not_hang(self):
+        """N 个连接全部卡住时，broadcast 应在 ~5s 内返回而非 N×5s。"""
+        import time
+
+        mgr = WebSocketManager()
+
+        # 创建 3 个永远卡住的连接
+        stuck_ws = []
+        for _ in range(3):
+            ws = AsyncMock()
+            ws.send_text = AsyncMock(
+                side_effect=lambda *_a, **_kw: asyncio.sleep(999)
+            )
+            stuck_ws.append(ws)
+            await mgr.connect(ws)
+
+        start = time.monotonic()
+        await mgr.broadcast("msg")
+        elapsed = time.monotonic() - start
+
+        # 应在 5s 超时内返回（留 1s 余量给调度）
+        assert elapsed < 6.5, f"broadcast 耗时 {elapsed:.1f}s，预期 <6.5s"
+
+    @pytest.mark.asyncio
+    async def test_broadcast_timeout_returns_gracefully(self):
+        """总体超时后不抛异常。"""
+        mgr = WebSocketManager()
+        ws = AsyncMock()
+        ws.send_text = AsyncMock(
+            side_effect=lambda *_a, **_kw: asyncio.sleep(999)
+        )
+        await mgr.connect(ws)
+        # 不应抛异常
+        await mgr.broadcast("msg")
+
+    @pytest.mark.asyncio
+    async def test_broadcast_fast_path_unchanged(self):
+        """正常快速广播行为不变。"""
+        mgr = WebSocketManager()
+        ws = AsyncMock()
+        await mgr.connect(ws)
+        await mgr.broadcast("hello")
+        ws.send_text.assert_awaited_once_with("hello")
