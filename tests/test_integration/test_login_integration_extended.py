@@ -206,3 +206,53 @@ class TestNetworkDetectionLogin:
             assert engine._login_retry.count == 2
         finally:
             restore_fn2()
+
+
+class TestCancelPropagation:
+    """取消事件在 engine ↔ executor 之间的传播。"""
+
+    def test_cancel_during_login(self, integration_stack):
+        engine, profile_service, task_executor, mock_worker = integration_stack
+        _ensure_login_config(engine)
+
+        submit_called = threading.Event()
+        submit_release = threading.Event()
+        captured_cancel_event = None
+
+        # 在触发登录前安装捕获器，用 Event 同步 _on_login_done 的完成
+        result_container, done_event, restore_fn = _capture_login_completion(
+            task_executor
+        )
+        try:
+            def blocking_submit(*args, **kwargs):
+                nonlocal captured_cancel_event
+                captured_cancel_event = kwargs.get("data", {}).get("cancel_event")
+                submit_called.set()
+                assert submit_release.wait(timeout=5), "submit was not released in time"
+                return WorkerResponse(success=True, data="登录成功")
+
+            mock_worker.submit.side_effect = blocking_submit
+
+            future = task_executor.execute_login_async()
+
+            assert submit_called.wait(timeout=5), "worker.submit was not called in time"
+            assert task_executor.is_login_running()
+
+            task_executor.cancel_login()
+
+            assert task_executor._login_cancel_event is not None
+            assert task_executor._login_cancel_event.is_set()
+            assert captured_cancel_event is task_executor._login_cancel_event
+            assert captured_cancel_event.is_set()
+
+            submit_release.set()
+
+            # 等待 _on_login_done 完成清理
+            assert done_event.wait(timeout=5), "登录完成回调未触发"
+            ok, msg = result_container[0]
+            assert ok is True
+
+            assert not task_executor.is_login_running()
+            assert task_executor._login_cancel_event is None
+        finally:
+            restore_fn()
