@@ -1238,6 +1238,157 @@ class TestIsLoginRunning:
 
 
 # =====================================================================
+# TaskExecutor — force_clear_login_slot
+# =====================================================================
+
+
+class TestForceClearLoginSlot:
+    """TaskExecutor.force_clear_login_slot() 测试。"""
+
+    def test_clears_login_future(self):
+        """force_clear_login_slot 应清理 _login_future。"""
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        # 模拟正在进行的登录
+        executor._login_future = MagicMock()
+        executor._login_future.done.return_value = False
+        executor._login_cancel_event = threading.Event()
+
+        executor.force_clear_login_slot()
+
+        assert executor._login_future is None
+        assert executor._login_cancel_event is None
+
+    def test_clears_cancel_event(self):
+        """force_clear_login_slot 应清理 _login_cancel_event。"""
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        executor._login_future = MagicMock()
+        executor._login_future.done.return_value = True
+        executor._login_cancel_event = threading.Event()
+
+        executor.force_clear_login_slot()
+
+        assert executor._login_cancel_event is None
+
+    def test_no_error_when_no_future(self):
+        """无 _login_future 时调用不应报错。"""
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        executor._login_future = None
+        executor._login_cancel_event = None
+
+        # 不应抛出异常
+        executor.force_clear_login_slot()
+        assert executor._login_future is None
+        assert executor._login_cancel_event is None
+
+    def test_thread_safety(self):
+        """并发调用 force_clear_login_slot 应线程安全。"""
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        executor._login_future = MagicMock()
+        executor._login_future.done.return_value = False
+        executor._login_cancel_event = threading.Event()
+
+        barrier = threading.Barrier(5)
+        results = []
+
+        def call_clear():
+            barrier.wait(timeout=5)
+            try:
+                executor.force_clear_login_slot()
+                results.append(True)
+            except Exception:
+                results.append(False)
+
+        threads = [threading.Thread(target=call_clear) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+
+        assert len(results) == 5
+        assert all(results)
+        assert executor._login_future is None
+        assert executor._login_cancel_event is None
+
+
+# =====================================================================
+# TaskExecutor — F13 cancel_event 冗余检查修复
+# =====================================================================
+
+
+class TestCancelEventRedundancyFix:
+    """F13: cancel_event 冗余检查修复。"""
+
+    def test_link_cancel_event_called_when_existing_login(self):
+        """已有登录时，新 cancel_event 应联动到已有任务。"""
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+
+        # 模拟已有正在进行的登录
+        existing_future = Future()
+        existing_cancel = threading.Event()
+        executor._login_future = existing_future
+        executor._login_cancel_event = existing_cancel
+
+        new_cancel = threading.Event()
+        with patch.object(executor, "_link_cancel_event") as mock_link:
+            result = executor.execute_login_async(cancel_event=new_cancel)
+
+        assert result is existing_future
+        mock_link.assert_called_once_with(new_cancel, existing_cancel)
+
+    def test_no_link_when_no_existing_cancel_event(self):
+        """已有登录但 _login_cancel_event 为 None 时不应联动。"""
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+
+        # 模拟已有登录但 _login_cancel_event 为 None
+        existing_future = Future()
+        executor._login_future = existing_future
+        executor._login_cancel_event = None
+
+        new_cancel = threading.Event()
+        with patch.object(executor, "_link_cancel_event") as mock_link:
+            result = executor.execute_login_async(cancel_event=new_cancel)
+
+        assert result is existing_future
+        mock_link.assert_not_called()
+
+
+# =====================================================================
 # TaskExecutor — _on_login_done
 # =====================================================================
 

@@ -192,7 +192,7 @@ class TaskExecutor:
             if self._login_future is not None and not self._login_future.done():
                 logger.debug("登录任务已在执行中，跳过重复提交")
                 # 联动新 cancel_event 到已有任务
-                if cancel_event is not None and self._login_cancel_event is not None:
+                if self._login_cancel_event is not None:
                     self._link_cancel_event(cancel_event, self._login_cancel_event)
                 return self._login_future
 
@@ -230,6 +230,15 @@ class TaskExecutor:
         """取消正在进行的登录。"""
         if self._login_cancel_event:
             self._login_cancel_event.set()
+
+    def force_clear_login_slot(self) -> None:
+        """强制清理旧登录引用（仅用于旧任务无法正常取消的兜底场景）。"""
+        with self._login_lock:
+            old_future = self._login_future
+            self._login_future = None
+            self._login_cancel_event = None
+        if old_future is not None and not old_future.done():
+            logger.warning("强制清理时旧登录仍未完成: {}", old_future)
 
     def _on_login_done(self, future: Future) -> None:
         """登录任务完成后清理引用。"""
