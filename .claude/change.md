@@ -3,6 +3,17 @@
 ## 2026-06-20
 
 ### fix
+- `main.py` + `app/application.py` 校正 boot() 与 DashboardSink 注入顺序（F07）
+  - 问题：`_run_full` 在 Uvicorn 启动前调用 `boot()`，此时 DashboardSink 尚未注入（注入发生在 lifespan 的 `start_web_services()` 中），启动期间日志丢失
+  - `main.py` `_run_full`：移除直接调用 `container.engine.boot()`，改为传递 `boot_engine=should_boot_engine` 给 `run()`
+  - `app/application.py` `run()`：新增 `boot_engine` 参数，透传给 `create_app()`
+  - `app/application.py` `create_app()`：新增 `boot_engine` 参数，透传给 `_create_lifespan()`
+  - `app/application.py` `_create_lifespan()`：新增 `boot_engine` 参数；existing_container 分支中，先 `start_web_services()` 注入 DashboardSink，再条件性调用 `engine.boot()`（`boot_engine=True` 且未在监控时）
+  - `container.startup()` 内部顺序已正确（先 start_web_services 后 boot），不需要修改
+  - 轻量模式 `main.py` 自己调 boot，无 Web 服务，不受影响
+  - 新增 10 个测试：`TestBootEnginePropagation`（2）+ `TestLifespanBootOrder`（5）+ `TestRunFullNoDirectBoot`（2）+ `TestContainerStartupOrder`（1）
+
+### fix
 - `app/services/engine.py` + `app/services/task_executor.py` 修复手动取消竞态窗口（F06）+ 消除 cancel_event 冗余检查（F13）
   - F06: 手动取消旧登录超时后，`_do_async_login` 不传 cancel_event，`execute_login_async` 自动新建空 Event，命中去重返回旧 future
   - `task_executor.py` 新增 `force_clear_login_slot()` 方法：强制清理旧 `_login_future` 和 `_login_cancel_event`
