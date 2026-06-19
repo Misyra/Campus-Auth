@@ -3,6 +3,18 @@
 ## 2026-06-20
 
 ### feat
+- 新增 `app/services/login_orchestrator.py`（Task 2: 登录编排器核心）
+  - `validate_login_config(config)` — F05 唯一配置校验实现，返回 None 或中文错误信息
+  - `resolve_worker_timeout(config, fallback)` — F09 超时解析，floor 60 / ceiling 600
+  - `LoginHandle` 数据类 — 封装 future + source + cancel_event，提供 done/result/cancel 方法
+  - `LoginOrchestrator` 类 — 登录执行唯一入口，整合配置校验、去重抢占、Worker 提交、历史记录、cancel_event 生命周期
+    - `submit(source, config, cancel_event)` — manual 可抢占 auto，auto 去重复用，login_once 总是新建
+    - `_dispatch` — 延迟导入 CMD_LOGIN，提交到 _pool 线程池
+    - `_link_cancel` — 简单 watcher 线程联动 cancel_event（Task 11 将替换）
+    - `_record_history` — 委托 LoginHistoryService.record
+  - `LoginSource` 类型 — `Literal["auto", "manual", "login_once"]`
+
+### feat
 - 新增重试策略框架 `app/services/retry_policy.py`（Task 1）
   - `RetryPolicy` 抽象基类：`attempts()` + `delay_before(attempt)` 两个抽象方法
   - `ImmediatePolicy`：固定间隔快速重试，用于 login_once 路径
