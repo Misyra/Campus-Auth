@@ -23,6 +23,7 @@ from app.services.engine import (
     StatusSnapshot,
 )
 from app.services.login_retry import LoginRetryManager
+from app.services.retry_policy import MonitoredPolicy
 
 
 # ── 辅助工厂 ──
@@ -36,6 +37,7 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._monitor_core = None
     svc._engine_running = False
     svc._login_retry = LoginRetryManager()
+    svc._retry_policy = MonitoredPolicy()
     svc._runtime_config = {}
     svc._runtime_snapshot = {}
     svc._monitor_check_interval = 300
@@ -308,7 +310,7 @@ class TestLoginWithNetworkDetection:
     """带网络检测的登录流程：网络异常触发登录 → 登录后验证网络恢复。"""
 
     def test_network_check_triggers_login(self):
-        """网络检测发现 need_login 时，触发异步登录并跳过冗余检测。"""
+        """网络检测发现 need_login 时，触发异步登录。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
         mock_core.check_once.return_value = {
@@ -317,20 +319,14 @@ class TestLoginWithNetworkDetection:
         }
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._copy_runtime_config = MagicMock(return_value={
-            "retry_settings": {"max_retries": 3, "retry_interval": 30}
-        })
         svc._do_async_login = MagicMock()
 
-        with patch("app.utils.retry.get_retry_intervals", return_value=[30, 30, 30]):
-            svc._do_network_check()
+        svc._do_network_check()
 
         svc._do_async_login.assert_called_once()
-        assert svc._login_retry.config == (3, [30, 30, 30])
-        assert svc._login_retry.count == 0  # 网络检测触发时重置计数
 
     def test_network_check_no_login_needed(self):
-        """网络正常时，不触发登录，重置重试计数。"""
+        """网络正常时，不触发登录，重置失败计数。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
         mock_core.check_once.return_value = {
@@ -339,11 +335,11 @@ class TestLoginWithNetworkDetection:
         }
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._login_retry.count = 2  # 之前的重试计数
+        svc._consecutive_login_failures = 2
 
         svc._do_network_check()
 
-        assert svc._login_retry.count == 0
+        assert svc._consecutive_login_failures == 0
         assert svc._next_network_check > time.time()
 
     def test_network_check_updates_interval(self):
@@ -554,8 +550,8 @@ class TestLoginRetryMechanism:
         svc._login_retry.last_attempt = time.time() - 25
         assert svc._login_retry_needed(time.time()) is False
 
-    def test_network_check_resets_retry_count(self):
-        """网络检测触发登录时，配置重试参数。"""
+    def test_network_check_triggers_login(self):
+        """网络检测触发登录。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
         mock_core.check_once.return_value = {
@@ -564,17 +560,11 @@ class TestLoginRetryMechanism:
         }
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._login_retry.count = 0  # 首次发现 need_login，触发 reset+configure
-        svc._copy_runtime_config = MagicMock(return_value={
-            "retry_settings": {"max_retries": 3, "retry_interval": 30}
-        })
         svc._do_async_login = MagicMock()
 
-        with patch("app.utils.retry.get_retry_intervals", return_value=[30, 30, 30]):
-            svc._do_network_check()
+        svc._do_network_check()
 
-        # _configure_retry 在首次 need_login 时设置 config
-        assert svc._login_retry.config == (3, [30, 30, 30])
+        svc._do_async_login.assert_called_once()
 
     def test_wakeup_considers_retry_intervals(self):
         """引擎唤醒时间考虑重试间隔。"""
