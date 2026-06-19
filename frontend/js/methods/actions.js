@@ -57,6 +57,7 @@ export const actionMethods = {
     }
   },
   async manualLogin() {
+    if (this.busy.loginCooldown) return;
     this.busy.action = true;
     try {
       this.frontendLogger.info('action', '手动登录请求');
@@ -70,6 +71,9 @@ export const actionMethods = {
       this.frontendLogger.error('action', '手动登录失败', msg);
       this.notify(false, this.stripScreenshotHint(msg), 'login');
     } finally {
+      // 3 秒防抖：API 返回后继续锁定按钮，防止短时间内重复点击
+      this.busy.loginCooldown = true;
+      setTimeout(() => { this.busy.loginCooldown = false; }, 3000);
       this.busy.action = false;
     }
   },
