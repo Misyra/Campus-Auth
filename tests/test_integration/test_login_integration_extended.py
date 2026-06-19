@@ -318,3 +318,69 @@ class TestReloadException:
             assert engine._runtime_config["auth_url"] == "http://10.0.0.1"
         finally:
             restore_fn()
+
+
+class TestLoginOnceRetry:
+    """LOGIN_ONCE 模式重试逻辑：_execute_login_with_retries 直接测试。"""
+
+    def test_execute_login_with_retries_success(self, integration_stack):
+        engine, _, _, _ = integration_stack
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = WorkerResponse(success=True, data="登录成功")
+        runtime_config = engine._copy_runtime_config()
+        runtime_config["retry_settings"] = {"max_retries": 3, "retry_interval": 1}
+
+        with (
+            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
+            patch("main.cleanup_orphan_browsers"),
+            patch("time.sleep"),
+        ):
+            from main import _execute_login_with_retries, LoginResult
+
+            result = _execute_login_with_retries(runtime_config, MagicMock())
+
+        assert result == LoginResult.SUCCESS
+        mock_worker.submit.assert_called_once()
+
+    def test_execute_login_with_retries_exhausted(self, integration_stack):
+        engine, _, _, _ = integration_stack
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = WorkerResponse(success=False, error="超时")
+        runtime_config = engine._copy_runtime_config()
+        runtime_config["retry_settings"] = {"max_retries": 2, "retry_interval": 0}
+
+        with (
+            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
+            patch("main.cleanup_orphan_browsers"),
+            patch("time.sleep"),
+        ):
+            from main import _execute_login_with_retries, LoginResult
+
+            result = _execute_login_with_retries(runtime_config, MagicMock())
+
+        assert result == LoginResult.TEMPORARY_FAILURE
+        assert mock_worker.submit.call_count == 2
+
+    def test_execute_login_with_retries_retry_then_succeed(self, integration_stack):
+        """第一次失败、重试后成功 → 返回 SUCCESS。"""
+        engine, _, _, _ = integration_stack
+        mock_worker = MagicMock()
+        mock_worker.submit.side_effect = [
+            WorkerResponse(success=False, error="超时"),
+            WorkerResponse(success=True, data="登录成功"),
+        ]
+        runtime_config = engine._copy_runtime_config()
+        runtime_config["retry_settings"] = {"max_retries": 3, "retry_interval": 0}
+
+        with (
+            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
+            patch("main.cleanup_orphan_browsers"),
+            patch("time.sleep"),
+        ):
+            from main import _execute_login_with_retries, LoginResult
+
+            result = _execute_login_with_retries(runtime_config, MagicMock())
+
+        assert result == LoginResult.SUCCESS
+        assert mock_worker.submit.call_count == 2
+
