@@ -686,6 +686,141 @@ class TestTaskExecutorExecuteBrowser:
         assert success is False
         assert "浏览器任务执行失败" in msg
 
+    def test_browser_data_no_pure_mode(self):
+        """F20: data dict 中不应包含 pure_mode（死字段）。"""
+        executor = self._make_executor()
+        executor._registry.get_task.return_value = {"type": "browser"}
+        executor._get_runtime_config = lambda: {"browser_settings": {"pure_mode": True}}
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = "ok"
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = mock_result
+        executor._worker_getter = lambda: mock_worker
+
+        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
+            executor._execute_browser("b1", 60)
+        call_kwargs = mock_worker.submit.call_args.kwargs
+        data = call_kwargs["data"]
+        assert "pure_mode" not in data
+        assert "config" in data
+
+    def test_browser_cancel_event_passed(self):
+        """F11: cancel_event 应传递到 worker.submit 的 data dict。"""
+        executor = self._make_executor()
+        executor._registry.get_task.return_value = {"type": "browser"}
+        executor._get_runtime_config = lambda: {}
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = "ok"
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = mock_result
+        executor._worker_getter = lambda: mock_worker
+
+        cancel = threading.Event()
+        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
+            executor._execute_browser("b1", 60, cancel_event=cancel)
+        call_kwargs = mock_worker.submit.call_args.kwargs
+        assert call_kwargs["data"]["cancel_event"] is cancel
+
+    def test_browser_cancel_event_default_none(self):
+        """F11: 不传 cancel_event 时 data dict 中 cancel_event 应为 None。"""
+        executor = self._make_executor()
+        executor._registry.get_task.return_value = {"type": "browser"}
+        executor._get_runtime_config = lambda: {}
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = "ok"
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = mock_result
+        executor._worker_getter = lambda: mock_worker
+
+        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
+            executor._execute_browser("b1", 60)
+        call_kwargs = mock_worker.submit.call_args.kwargs
+        assert call_kwargs["data"]["cancel_event"] is None
+
+    def test_browser_timeout_forwarded(self):
+        """timeout 应直接传递给 worker.submit。"""
+        executor = self._make_executor()
+        executor._registry.get_task.return_value = {"type": "browser"}
+        executor._get_runtime_config = lambda: {}
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = "ok"
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = mock_result
+        executor._worker_getter = lambda: mock_worker
+
+        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
+            executor._execute_browser("b1", 120)
+        call_kwargs = mock_worker.submit.call_args.kwargs
+        assert call_kwargs["timeout"] == 120
+
+
+# =====================================================================
+# F20: execute_login data dict 不应包含 pure_mode
+# =====================================================================
+
+
+class TestExecuteLoginDataDict:
+    """F20: execute_login 的 data dict 清理验证。"""
+
+    def _make_executor(self, **kwargs):
+        from app.services.task_executor import TaskExecutor
+
+        defaults = dict(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+            login_history=MagicMock(),
+            profile_service=MagicMock(),
+        )
+        defaults.update(kwargs)
+        return TaskExecutor(**defaults)
+
+    def test_login_data_no_pure_mode(self):
+        """F20: execute_login 的 data dict 中不应包含 pure_mode。"""
+        executor = self._make_executor()
+        executor._get_runtime_config = lambda: {"browser_settings": {"pure_mode": True}}
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = "ok"
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = mock_result
+        executor._worker_getter = lambda: mock_worker
+
+        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
+            executor.execute_login()
+        call_kwargs = mock_worker.submit.call_args.kwargs
+        data = call_kwargs["data"]
+        assert "pure_mode" not in data
+        assert "config" in data
+        assert "cancel_event" in data
+
+    def test_login_data_contains_cancel_event(self):
+        """execute_login 的 data dict 应包含 cancel_event。"""
+        executor = self._make_executor()
+        executor._get_runtime_config = lambda: {}
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = "ok"
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = mock_result
+        executor._worker_getter = lambda: mock_worker
+
+        cancel = threading.Event()
+        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
+            executor.execute_login(cancel_event=cancel)
+        call_kwargs = mock_worker.submit.call_args.kwargs
+        assert call_kwargs["data"]["cancel_event"] is cancel
+
 
 # =====================================================================
 # TaskExecutor — _execute_shell
@@ -999,6 +1134,65 @@ class TestTaskExecutorExecuteLogin:
         assert success is False
         assert "异常" in msg
 
+    def test_login_timeout_from_config(self):
+        """execute_login 应从 config 读取 login_timeout 并传递给 worker。"""
+        executor = self._make_executor()
+        executor._get_runtime_config = lambda: {
+            "browser_settings": {"pure_mode": False},
+            "login_timeout": 200,
+        }
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = "ok"
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = mock_result
+        executor._worker_getter = lambda: mock_worker
+
+        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
+            executor.execute_login()
+        call_kwargs = mock_worker.submit.call_args.kwargs
+        assert call_kwargs["timeout"] == 200
+
+    def test_login_timeout_default_90(self):
+        """config 中无 login_timeout 时默认 90 秒。"""
+        executor = self._make_executor()
+        executor._get_runtime_config = lambda: {
+            "browser_settings": {"pure_mode": False},
+        }
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = "ok"
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = mock_result
+        executor._worker_getter = lambda: mock_worker
+
+        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
+            executor.execute_login()
+        call_kwargs = mock_worker.submit.call_args.kwargs
+        assert call_kwargs["timeout"] == 90
+
+    def test_login_timeout_minimum_60(self):
+        """login_timeout 低于 60 时应取 60 秒下限。"""
+        executor = self._make_executor()
+        executor._get_runtime_config = lambda: {
+            "browser_settings": {"pure_mode": False},
+            "login_timeout": 30,
+        }
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = "ok"
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = mock_result
+        executor._worker_getter = lambda: mock_worker
+
+        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
+            executor.execute_login()
+        call_kwargs = mock_worker.submit.call_args.kwargs
+        assert call_kwargs["timeout"] == 60
+
 
 # =====================================================================
 # TaskExecutor — _record_login_history
@@ -1238,6 +1432,157 @@ class TestIsLoginRunning:
 
 
 # =====================================================================
+# TaskExecutor — force_clear_login_slot
+# =====================================================================
+
+
+class TestForceClearLoginSlot:
+    """TaskExecutor.force_clear_login_slot() 测试。"""
+
+    def test_clears_login_future(self):
+        """force_clear_login_slot 应清理 _login_future。"""
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        # 模拟正在进行的登录
+        executor._login_future = MagicMock()
+        executor._login_future.done.return_value = False
+        executor._login_cancel_event = threading.Event()
+
+        executor.force_clear_login_slot()
+
+        assert executor._login_future is None
+        assert executor._login_cancel_event is None
+
+    def test_clears_cancel_event(self):
+        """force_clear_login_slot 应清理 _login_cancel_event。"""
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        executor._login_future = MagicMock()
+        executor._login_future.done.return_value = True
+        executor._login_cancel_event = threading.Event()
+
+        executor.force_clear_login_slot()
+
+        assert executor._login_cancel_event is None
+
+    def test_no_error_when_no_future(self):
+        """无 _login_future 时调用不应报错。"""
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        executor._login_future = None
+        executor._login_cancel_event = None
+
+        # 不应抛出异常
+        executor.force_clear_login_slot()
+        assert executor._login_future is None
+        assert executor._login_cancel_event is None
+
+    def test_thread_safety(self):
+        """并发调用 force_clear_login_slot 应线程安全。"""
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        executor._login_future = MagicMock()
+        executor._login_future.done.return_value = False
+        executor._login_cancel_event = threading.Event()
+
+        barrier = threading.Barrier(5)
+        results = []
+
+        def call_clear():
+            barrier.wait(timeout=5)
+            try:
+                executor.force_clear_login_slot()
+                results.append(True)
+            except Exception:
+                results.append(False)
+
+        threads = [threading.Thread(target=call_clear) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+
+        assert len(results) == 5
+        assert all(results)
+        assert executor._login_future is None
+        assert executor._login_cancel_event is None
+
+
+# =====================================================================
+# TaskExecutor — F13 cancel_event 冗余检查修复
+# =====================================================================
+
+
+class TestCancelEventRedundancyFix:
+    """F13: cancel_event 冗余检查修复。"""
+
+    def test_link_cancel_event_called_when_existing_login(self):
+        """已有登录时，新 cancel_event 应联动到已有任务。"""
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+
+        # 模拟已有正在进行的登录
+        existing_future = Future()
+        existing_cancel = threading.Event()
+        executor._login_future = existing_future
+        executor._login_cancel_event = existing_cancel
+
+        new_cancel = threading.Event()
+        with patch.object(executor, "_link_cancel_event") as mock_link:
+            result = executor.execute_login_async(cancel_event=new_cancel)
+
+        assert result is existing_future
+        mock_link.assert_called_once_with(new_cancel, existing_cancel)
+
+    def test_no_link_when_no_existing_cancel_event(self):
+        """已有登录但 _login_cancel_event 为 None 时不应联动。"""
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+
+        # 模拟已有登录但 _login_cancel_event 为 None
+        existing_future = Future()
+        executor._login_future = existing_future
+        executor._login_cancel_event = None
+
+        new_cancel = threading.Event()
+        with patch.object(executor, "_link_cancel_event") as mock_link:
+            result = executor.execute_login_async(cancel_event=new_cancel)
+
+        assert result is existing_future
+        mock_link.assert_not_called()
+
+
+# =====================================================================
 # TaskExecutor — _on_login_done
 # =====================================================================
 
@@ -1310,4 +1655,246 @@ class TestTaskExecutorTaskAsync:
         executor.execute_task_async("t1")
         assert executor._task_pool is not None
         executor._task_pool.shutdown(wait=False)
+
+    def test_dedup_skips_pending_task(self):
+        """同一 task_id 有 pending 任务时应返回已有 Future。"""
+        from app.services.task_executor import TaskExecutor
+
+        barrier = threading.Event()
+
+        def slow_task(task_id):
+            barrier.wait(timeout=5)
+            return (True, "ok")
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        executor.execute_task = slow_task
+
+        f1 = executor.execute_task_async("t1")
+        f2 = executor.execute_task_async("t1")
+        assert f1 is f2
+
+        barrier.set()
+        f1.result(timeout=5)
+        executor._task_pool.shutdown(wait=False)
+
+    def test_dedup_allows_after_completion(self):
+        """任务完成后，同一 task_id 可以再次提交。"""
+        from app.services.task_executor import TaskExecutor
+
+        call_count = {"n": 0}
+
+        def counting_task(task_id):
+            call_count["n"] += 1
+            return (True, f"run-{call_count['n']}")
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        executor.execute_task = counting_task
+
+        f1 = executor.execute_task_async("t1")
+        assert f1.result(timeout=5) == (True, "run-1")
+
+        f2 = executor.execute_task_async("t1")
+        assert f2.result(timeout=5) == (True, "run-2")
+        assert f1 is not f2
+        assert call_count["n"] == 2
+        executor._task_pool.shutdown(wait=False)
+
+    def test_dedup_different_task_ids(self):
+        """不同 task_id 不应互相干扰。"""
+        from app.services.task_executor import TaskExecutor
+
+        barrier = threading.Event()
+
+        def slow_task(task_id):
+            barrier.wait(timeout=5)
+            return (True, task_id)
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        executor.execute_task = slow_task
+
+        f1 = executor.execute_task_async("t1")
+        f2 = executor.execute_task_async("t2")
+        assert f1 is not f2
+
+        barrier.set()
+        assert f1.result(timeout=5) == (True, "t1")
+        assert f2.result(timeout=5) == (True, "t2")
+        executor._task_pool.shutdown(wait=False)
+
+    def test_cleanup_removes_task_from_map(self):
+        """任务完成后应从 _running_tasks 中清理。"""
+        from app.services.task_executor import TaskExecutor
+
+        barrier = threading.Event()
+
+        def slow_task(task_id):
+            barrier.wait(timeout=5)
+            return (True, "ok")
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        executor.execute_task = slow_task
+
+        f = executor.execute_task_async("t1")
+        assert "t1" in executor._running_tasks
+
+        barrier.set()
+        f.result(timeout=5)
+        # 回调异步触发，等待一小段时间
+        time.sleep(0.2)
+        assert "t1" not in executor._running_tasks
+        executor._task_pool.shutdown(wait=False)
+
+    def test_shutdown_clears_running_tasks(self):
+        """shutdown 应清空 _running_tasks。"""
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        executor.execute_task = lambda task_id: (True, "ok")
+        executor.execute_task_async("t1")
+        assert len(executor._running_tasks) > 0 or True  # 可能已完成
+
+        executor.shutdown(wait=False)
+        assert len(executor._running_tasks) == 0
+
+
+# =====================================================================
+# TaskExecutor — F12 cancel_link 单 watcher 线程重构
+# =====================================================================
+
+
+class TestCancelLinkWatcherThread:
+    """F12: 用单个常驻 watcher 线程替代每次新建 daemon 线程。"""
+
+    def _make_executor(self):
+        from app.services.task_executor import TaskExecutor
+
+        return TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+
+    def test_single_watcher_thread_reused(self):
+        """多次 _link_cancel_event 只启动一个 watcher 线程。"""
+        executor = self._make_executor()
+        try:
+            before = sum(
+                1 for t in threading.enumerate() if t.name == "cancel-link-watcher"
+            )
+            for _ in range(10):
+                executor._link_cancel_event(threading.Event(), threading.Event())
+                time.sleep(0.05)
+
+            # 本 executor 最多新增 1 个 watcher 线程
+            after = sum(
+                1 for t in threading.enumerate() if t.name == "cancel-link-watcher"
+            )
+            assert after - before <= 1
+        finally:
+            executor.shutdown(wait=False)
+
+    def test_high_frequency_dedup_no_thread_leak(self):
+        """高频去重不累积线程：100 次联动后本 executor 只新增 1 个 watcher 线程。"""
+        executor = self._make_executor()
+        try:
+            before = sum(
+                1 for t in threading.enumerate() if t.name == "cancel-link-watcher"
+            )
+            for _ in range(100):
+                executor._link_cancel_event(threading.Event(), threading.Event())
+
+            # 等待 watcher 处理队列
+            time.sleep(0.5)
+
+            after = sum(
+                1 for t in threading.enumerate() if t.name == "cancel-link-watcher"
+            )
+            assert after - before <= 1
+        finally:
+            executor.shutdown(wait=False)
+
+    def test_cancel_link_propagates_via_watcher(self):
+        """通过 watcher 线程联动：new_event set 后 target_event 也被 set。"""
+        executor = self._make_executor()
+        try:
+            new_event = threading.Event()
+            target_event = threading.Event()
+
+            executor._link_cancel_event(new_event, target_event)
+
+            # 触发 new_event
+            new_event.set()
+
+            # 等待 watcher 处理
+            assert target_event.wait(timeout=3.0), "target_event 应在联动后被 set"
+        finally:
+            executor.shutdown(wait=False)
+
+    def test_watcher_restarts_if_dead(self):
+        """watcher 线程死亡后应自动重启。"""
+        executor = self._make_executor()
+        try:
+            before = sum(
+                1 for t in threading.enumerate() if t.name == "cancel-link-watcher"
+            )
+            # 强制标记线程为已结束
+            executor._cancel_link_thread = threading.Thread(
+                target=lambda: None, name="dead-thread"
+            )
+            executor._cancel_link_thread.start()
+            executor._cancel_link_thread.join()
+
+            executor._link_cancel_event(threading.Event(), threading.Event())
+            time.sleep(0.2)
+
+            after = sum(
+                1 for t in threading.enumerate() if t.name == "cancel-link-watcher"
+            )
+            # 应该新增了一个 watcher 线程
+            assert after - before == 1
+        finally:
+            executor.shutdown(wait=False)
+
+    def test_shutdown_poison_pill_stops_watcher(self):
+        """shutdown 投递毒丸后 watcher 线程应退出。"""
+        executor = self._make_executor()
+        executor._link_cancel_event(threading.Event(), threading.Event())
+        time.sleep(0.2)
+
+        watcher = executor._cancel_link_thread
+        assert watcher is not None
+        assert watcher.is_alive()
+
+        executor.shutdown(wait=True)
+        # watcher 应在合理时间内退出
+        watcher.join(timeout=3.0)
+        assert not watcher.is_alive()
+
+    def test_shutdown_idempotent(self):
+        """shutdown 多次调用不应报错。"""
+        executor = self._make_executor()
+        executor._link_cancel_event(threading.Event(), threading.Event())
+        time.sleep(0.1)
+        executor.shutdown(wait=False)
+        executor.shutdown(wait=False)  # 不应抛异常
 

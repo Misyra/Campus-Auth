@@ -87,6 +87,8 @@ def engine_factory():
         svc._ws_manager = None
         svc._ui_config = MagicMock()
         svc._ui_config.login_timeout = 120
+        svc._consecutive_login_failures = 0
+        svc._backoff_check_multiplier = 1
         svc._login_history = None
         svc._worker_getter = None
         svc._profile_service = MagicMock()

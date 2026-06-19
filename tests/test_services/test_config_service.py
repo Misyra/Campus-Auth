@@ -13,6 +13,7 @@ from app.schemas import (
 from app.services.config_service import (
     SaveResult,
     _update_global_settings,
+    build_runtime_dict_from_payload,
     save_and_apply,
     save_config_combined,
 )
@@ -439,8 +440,30 @@ class TestSaveAndApply:
         )
         assert result.success is False
         assert "配置重载失败" in result.message
+        assert "已回滚" in result.message
         # 验证回滚调用了 update
         mock_ps.update.assert_called_once()
+
+    @patch("app.services.config_service.save_config_combined")
+    def test_reload_failure_and_rollback_reload_also_fails(self, mock_save):
+        """回滚后重载也失败时，message 应同时包含两次失败信息。"""
+        mock_ps = MagicMock()
+        mock_ps.load.return_value = ProfilesData()
+        # 第一次 reload 失败，回滚后第二次 reload 也失败
+        mock_reload = MagicMock(
+            side_effect=[(False, "超时"), (False, "又超时")]
+        )
+
+        result = save_and_apply(
+            MonitorConfigPayload(), mock_ps, mock_reload
+        )
+        assert result.success is False
+        assert "超时" in result.message
+        assert "又超时" in result.message
+        # 验证回滚调用了 update
+        mock_ps.update.assert_called_once()
+        # 验证 reload_fn 被调用了两次（第一次 + 回滚后）
+        assert mock_reload.call_count == 2
 
     @patch("app.services.config_service.save_config_combined")
     def test_reload_failure_and_rollback_also_fails(self, mock_save):
@@ -454,3 +477,20 @@ class TestSaveAndApply:
         )
         assert result.success is False
         # 回滚异常不抛出，只记录日志
+
+
+class TestBuildRuntimeDictLoginTimeout:
+    """build_runtime_dict_from_payload 应包含 login_timeout。"""
+
+    def test_login_timeout_in_runtime_dict(self):
+        """login_timeout 应从 SystemSettings 读取并写入运行时字典。"""
+        gs = SystemSettings(login_timeout=180)
+        payload = MonitorConfigPayload()
+        result = build_runtime_dict_from_payload(payload, global_settings=gs)
+        assert result["login_timeout"] == 180
+
+    def test_login_timeout_default(self):
+        """未指定 global_settings 时 login_timeout 使用默认值 90。"""
+        payload = MonitorConfigPayload()
+        result = build_runtime_dict_from_payload(payload)
+        assert result["login_timeout"] == 90

@@ -193,7 +193,7 @@ def _load_login_config(logger):
 
 
 def _execute_login_with_retries(runtime_config: dict, logger) -> LoginResult:
-    """执行登录，含指数退避重试。
+    """执行登录，含固定间隔重试。
 
     Args:
         runtime_config: 运行时配置字典。
@@ -203,34 +203,54 @@ def _execute_login_with_retries(runtime_config: dict, logger) -> LoginResult:
         LoginResult.SUCCESS — 登录成功
         LoginResult.TEMPORARY_FAILURE — 重试耗尽仍失败
     """
+    from app.constants import AUTH_DATA_DIR
+    from app.services.login_history_service import LoginHistoryService
+    from app.services.profile_service import create_profile_service
     from app.workers.playwright_worker import CMD_LOGIN, get_worker
+
+    # 记录登录历史（与 TaskExecutor 内部一致的写法）
+    profile_service = create_profile_service()
+    history = LoginHistoryService(AUTH_DATA_DIR)
 
     retry_settings = runtime_config.get("retry_settings", {})
     raw = retry_settings.get("max_retries", 3)
     max_retries = max(1, min(raw, 10))
     retry_interval = int(retry_settings.get("retry_interval", 5))
+    login_timeout = max(int(runtime_config.get("login_timeout", 90)), 60)
 
     attempt = 0
     while True:
         attempt += 1
-        # 指数退避：首次间隔 0，后续 interval × 2^(attempt-2)
+        # CHANGED: 固定间隔，与 LoginRetryManager(exponential=False) 一致
         if attempt > 1:
-            delay = min(retry_interval * (2 ** (attempt - 2)), 300)
-            print(f"等待 {delay} 秒后重试第 {attempt} 次...")
-            time.sleep(delay)
+            time.sleep(retry_interval)
+            print(f"等待 {retry_interval} 秒后重试第 {attempt} 次...")
 
+        start = time.perf_counter()
         success = False
         message = ""
         try:
             result = get_worker().submit(
                 CMD_LOGIN,
                 data={"config": runtime_config},
-                timeout=120,
+                timeout=login_timeout,
             )
             success = result.success
             message = result.data if result.success else result.error or "登录失败"
         except Exception as exc:
             message = f"登录异常: {exc}"
+
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        # 记录历史（成功/失败都记，与 TaskExecutor 行为一致）
+        try:
+            history.record(
+                success=success,
+                duration_ms=duration_ms,
+                profile_service=profile_service,
+                error="" if success else message,
+            )
+        except Exception:
+            logger.debug("记录登录历史失败", exc_info=True)
 
         if success:
             print(f"登录成功: {message}")
@@ -496,12 +516,13 @@ def _run_lightweight(ctx: ApplicationContext, logger):
     finally:
         if tray_icon:
             tray_icon.stop()
-        # 如果 Web 服务已启动，shutdown 由 Uvicorn 的事件循环处理
-        if not _web_server_state["started"]:
+        # Web 服务已启动且 Uvicorn 已就绪：shutdown 由其事件循环处理。
+        # 否则（未启动 / 启动但 Uvicorn 子线程崩溃导致 server_ref 仍为 None）：兜底清理。
+        _web_ready = _web_server_state["started"] and _web_server_state["server_ref"][0] is not None
+        if not _web_ready:
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
-                    # 已有运行中的 loop，安排协程执行
                     loop.create_task(container.shutdown())
                 else:
                     loop.run_until_complete(container.shutdown())
@@ -521,9 +542,6 @@ def _run_full(
 
     port = resolve_port()
     container = ServiceContainer(Path(__file__).parent.resolve())
-
-    if should_boot_engine:
-        container.engine.boot()
 
     features = get_runtime_features(
         RuntimeMode.FULL,
@@ -589,6 +607,7 @@ def _run_full(
             log_retention=_lr,
             existing_container=container,
             server_ref=_uvicorn_server,
+            boot_engine=should_boot_engine,
         )
     except KeyboardInterrupt:
         logger.info("收到退出信号，正在关闭服务...")

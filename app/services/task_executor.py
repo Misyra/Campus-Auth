@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import queue
 import sys
 import threading
 import time
@@ -106,6 +108,15 @@ class TaskExecutor:
         self._login_lock = threading.Lock()
         self._login_cancel_event: threading.Event | None = None
 
+        # cancel 联动 watcher（单常驻线程，替代每次新建 daemon 线程）
+        self._cancel_link_queue: queue.Queue = queue.Queue()
+        self._cancel_link_thread: threading.Thread | None = None
+        self._cancel_link_lock = threading.Lock()
+
+        # 定时任务去重
+        self._running_tasks: dict[str, Future] = {}
+        self._running_tasks_lock = threading.Lock()
+
         # Shell 安全策略
         self._shell_policy = ShellCommandPolicy(
             allowlist=[shell["path"] for shell in detect_shells()]
@@ -155,7 +166,9 @@ class TaskExecutor:
     # ── 异步提交接口 ──
 
     def execute_task_async(self, task_id: str) -> Future:
-        """异步执行定时任务（提交到 task_pool）。
+        """异步执行定时任务（提交到 task_pool），带 task_id 去重。
+
+        如果同一 task_id 已有 pending 任务，返回已有 Future 而非重复提交。
 
         Returns:
             Future 对象，调用方可选择等待结果
@@ -163,7 +176,26 @@ class TaskExecutor:
         Raises:
             RuntimeError: 任务队列已满
         """
-        return self._ensure_task_pool().submit(self.execute_task, task_id)
+        with self._running_tasks_lock:
+            existing = self._running_tasks.get(task_id)
+            if existing is not None and not existing.done():
+                logger.info("定时任务 {} 已在执行中，跳过重复提交", task_id)
+                return existing
+
+            try:
+                future = self._ensure_task_pool().submit(self.execute_task, task_id)
+            except RuntimeError:
+                raise
+            self._running_tasks[task_id] = future
+
+        # 锁外注册清理回调
+        def _cleanup(f: Future, tid=task_id):
+            with self._running_tasks_lock:
+                if self._running_tasks.get(tid) is f:
+                    del self._running_tasks[tid]
+
+        future.add_done_callback(_cleanup)
+        return future
 
     def execute_login_async(
         self,
@@ -192,7 +224,7 @@ class TaskExecutor:
             if self._login_future is not None and not self._login_future.done():
                 logger.debug("登录任务已在执行中，跳过重复提交")
                 # 联动新 cancel_event 到已有任务
-                if cancel_event is not None and self._login_cancel_event is not None:
+                if self._login_cancel_event is not None:
                     self._link_cancel_event(cancel_event, self._login_cancel_event)
                 return self._login_future
 
@@ -207,19 +239,42 @@ class TaskExecutor:
         future.add_done_callback(self._on_login_done)
         return future
 
-    @staticmethod
+    def _ensure_cancel_link_thread(self) -> None:
+        """惰性启动单个 watcher 线程处理所有 cancel 联动。"""
+        with self._cancel_link_lock:
+            if self._cancel_link_thread is not None and self._cancel_link_thread.is_alive():
+                return
+            self._cancel_link_thread = threading.Thread(
+                target=self._cancel_link_loop, daemon=True, name="cancel-link-watcher"
+            )
+            self._cancel_link_thread.start()
+
+    def _cancel_link_loop(self) -> None:
+        """常驻 watcher：从队列取 (new_event, target_event) 并监控。"""
+        pending: list[tuple[threading.Event, threading.Event]] = []
+        while True:
+            try:
+                item = self._cancel_link_queue.get(timeout=1.0)
+                if item is None:  # 毒丸，shutdown 时使用
+                    return
+                pending.append(item)
+            except queue.Empty:
+                pass
+            # 检查所有 pending 的新事件是否已 set
+            still_pending = []
+            for new_event, target_event in pending:
+                if new_event.is_set():
+                    target_event.set()  # 联动，无需继续监控
+                else:
+                    still_pending.append((new_event, target_event))
+            pending = still_pending
+
     def _link_cancel_event(
-        new_event: threading.Event, target_event: threading.Event
+        self, new_event: threading.Event, target_event: threading.Event
     ) -> None:
-        """在后台线程监控 new_event，设置时联动到 target_event。"""
-
-        def _watcher() -> None:
-            new_event.wait(timeout=300)
-            if new_event.is_set():
-                target_event.set()
-
-        t = threading.Thread(target=_watcher, daemon=True, name="cancel-link")
-        t.start()
+        """将联动请求入队，由常驻 watcher 处理（不再每次新建线程）。"""
+        self._cancel_link_queue.put((new_event, target_event))
+        self._ensure_cancel_link_thread()
 
     def is_login_running(self) -> bool:
         """登录任务是否正在执行中。"""
@@ -230,6 +285,15 @@ class TaskExecutor:
         """取消正在进行的登录。"""
         if self._login_cancel_event:
             self._login_cancel_event.set()
+
+    def force_clear_login_slot(self) -> None:
+        """强制清理旧登录引用（仅用于旧任务无法正常取消的兜底场景）。"""
+        with self._login_lock:
+            old_future = self._login_future
+            self._login_future = None
+            self._login_cancel_event = None
+        if old_future is not None and not old_future.done():
+            logger.warning("强制清理时旧登录仍未完成: {}", old_future)
 
     def _on_login_done(self, future: Future) -> None:
         """登录任务完成后清理引用。"""
@@ -310,23 +374,23 @@ class TaskExecutor:
 
             # 获取运行时配置（优先使用传入的快照，避免 TOCTOU 竞态）
             config = config_snapshot if config_snapshot is not None else (self._get_runtime_config() if self._get_runtime_config else {})
-            pure_mode = config.get("browser_settings", {}).get("pure_mode", False)
 
             # 检查取消
             if cancel_event and cancel_event.is_set():
                 return False, "登录已取消"
 
-            # 获取 Worker 并提交登录命令
+            # 获取 Worker 并提交登录命令（timeout 从配置读取，下限 60s 防误配）
+            login_timeout = int(config.get("login_timeout", 90))
+            worker_timeout = max(login_timeout, 60)
             worker = self._worker_getter()
             result = worker.submit(
                 CMD_LOGIN,
                 data={
                     "config": config,
-                    "pure_mode": pure_mode,
                     "cancel_event": cancel_event,
                 },
                 wait=True,
-                timeout=300,
+                timeout=worker_timeout,
             )
 
             duration_ms = int((time.perf_counter() - start) * 1000)
@@ -378,7 +442,12 @@ class TaskExecutor:
 
         return runner.run()
 
-    def _execute_browser(self, task_id: str, timeout: int) -> tuple[bool, str]:
+    def _execute_browser(
+        self,
+        task_id: str,
+        timeout: int,
+        cancel_event: threading.Event | None = None,
+    ) -> tuple[bool, str]:
         """执行浏览器任务。
 
         通过 PlaywrightWorker 执行浏览器自动化任务。
@@ -395,7 +464,6 @@ class TaskExecutor:
 
             # 获取运行时配置
             config = self._get_runtime_config() if self._get_runtime_config else {}
-            pure_mode = config.get("browser_settings", {}).get("pure_mode", False)
 
             # 获取 Worker 并提交登录命令
             worker = self._worker_getter()
@@ -403,7 +471,7 @@ class TaskExecutor:
                 CMD_LOGIN,
                 data={
                     "config": config,
-                    "pure_mode": pure_mode,
+                    "cancel_event": cancel_event,
                 },
                 wait=True,
                 timeout=timeout,
@@ -507,7 +575,12 @@ class TaskExecutor:
     def shutdown(self, wait: bool = True) -> None:
         """关闭线程池。"""
         logger.info("TaskExecutor 开始关闭...")
+        if self._cancel_link_thread is not None:
+            with contextlib.suppress(Exception):
+                self._cancel_link_queue.put(None)
         if self._task_pool is not None:
             self._task_pool.shutdown(wait=wait)
         self._login_pool.shutdown(wait=wait)
+        with self._running_tasks_lock:
+            self._running_tasks.clear()
         logger.info("TaskExecutor 已关闭")

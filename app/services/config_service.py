@@ -116,14 +116,25 @@ def save_and_apply(
             profile_service.update(
                 lambda data: _rollback_config(data, backup_data)
             )
-            reload_fn()
+            rollback_ok, rollback_msg = reload_fn()
+            if not rollback_ok:
+                config_logger.error(
+                    "配置回滚后重载仍失败: {}（磁盘已回滚，运行时状态可能不一致）",
+                    rollback_msg,
+                )
+                return SaveResult(
+                    success=False,
+                    message=f"配置重载失败: {msg}（回滚后仍失败: {rollback_msg}）",
+                )
+            config_logger.warning("配置已回滚并重载成功（原失败: {}）", msg)
+            return SaveResult(success=False, message=f"配置重载失败，已回滚: {msg}")
         except Exception as rollback_exc:
             config_logger.error(
-                "回滚失败（磁盘配置已回滚，运行时状态可能不一致）: {}",
+                "回滚过程异常（磁盘配置已回滚，运行时状态可能不一致）: {}",
                 rollback_exc,
                 exc_info=True,
             )
-        return SaveResult(success=False, message=f"配置重载失败: {msg}")
+            return SaveResult(success=False, message=f"配置重载失败且回滚异常: {msg}")
 
     return SaveResult(success=True, message="配置保存成功")
 
@@ -231,6 +242,9 @@ def build_runtime_dict_from_payload(
 
     # 其他字段
     assign_profile_fields(base, payload.model_dump(), list(PROFILE_RUNTIME_FIELDS))
+
+    # 登录超时
+    base["login_timeout"] = gs.login_timeout
 
     # 重试策略
     base["retry_settings"] = {

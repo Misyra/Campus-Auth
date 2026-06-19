@@ -57,9 +57,16 @@ class WebSocketManager:
         if not connections:
             return
 
-        # 并发发送给所有连接
+        # 并发发送给所有连接，总体超时 5 秒
         tasks = [self._send_safe(ws, message) for ws in connections]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=5.0,
+            )
+        except TimeoutError:
+            ws_logger.warning("WebSocket 广播总体超时")
+            return
 
         # 清理断开连接
         # 已知：list.remove() 是 O(n)，k 个死亡连接总代价 O(k·n)。
