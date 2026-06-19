@@ -686,6 +686,141 @@ class TestTaskExecutorExecuteBrowser:
         assert success is False
         assert "浏览器任务执行失败" in msg
 
+    def test_browser_data_no_pure_mode(self):
+        """F20: data dict 中不应包含 pure_mode（死字段）。"""
+        executor = self._make_executor()
+        executor._registry.get_task.return_value = {"type": "browser"}
+        executor._get_runtime_config = lambda: {"browser_settings": {"pure_mode": True}}
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = "ok"
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = mock_result
+        executor._worker_getter = lambda: mock_worker
+
+        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
+            executor._execute_browser("b1", 60)
+        call_kwargs = mock_worker.submit.call_args.kwargs
+        data = call_kwargs["data"]
+        assert "pure_mode" not in data
+        assert "config" in data
+
+    def test_browser_cancel_event_passed(self):
+        """F11: cancel_event 应传递到 worker.submit 的 data dict。"""
+        executor = self._make_executor()
+        executor._registry.get_task.return_value = {"type": "browser"}
+        executor._get_runtime_config = lambda: {}
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = "ok"
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = mock_result
+        executor._worker_getter = lambda: mock_worker
+
+        cancel = threading.Event()
+        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
+            executor._execute_browser("b1", 60, cancel_event=cancel)
+        call_kwargs = mock_worker.submit.call_args.kwargs
+        assert call_kwargs["data"]["cancel_event"] is cancel
+
+    def test_browser_cancel_event_default_none(self):
+        """F11: 不传 cancel_event 时 data dict 中 cancel_event 应为 None。"""
+        executor = self._make_executor()
+        executor._registry.get_task.return_value = {"type": "browser"}
+        executor._get_runtime_config = lambda: {}
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = "ok"
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = mock_result
+        executor._worker_getter = lambda: mock_worker
+
+        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
+            executor._execute_browser("b1", 60)
+        call_kwargs = mock_worker.submit.call_args.kwargs
+        assert call_kwargs["data"]["cancel_event"] is None
+
+    def test_browser_timeout_forwarded(self):
+        """timeout 应直接传递给 worker.submit。"""
+        executor = self._make_executor()
+        executor._registry.get_task.return_value = {"type": "browser"}
+        executor._get_runtime_config = lambda: {}
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = "ok"
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = mock_result
+        executor._worker_getter = lambda: mock_worker
+
+        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
+            executor._execute_browser("b1", 120)
+        call_kwargs = mock_worker.submit.call_args.kwargs
+        assert call_kwargs["timeout"] == 120
+
+
+# =====================================================================
+# F20: execute_login data dict 不应包含 pure_mode
+# =====================================================================
+
+
+class TestExecuteLoginDataDict:
+    """F20: execute_login 的 data dict 清理验证。"""
+
+    def _make_executor(self, **kwargs):
+        from app.services.task_executor import TaskExecutor
+
+        defaults = dict(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+            login_history=MagicMock(),
+            profile_service=MagicMock(),
+        )
+        defaults.update(kwargs)
+        return TaskExecutor(**defaults)
+
+    def test_login_data_no_pure_mode(self):
+        """F20: execute_login 的 data dict 中不应包含 pure_mode。"""
+        executor = self._make_executor()
+        executor._get_runtime_config = lambda: {"browser_settings": {"pure_mode": True}}
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = "ok"
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = mock_result
+        executor._worker_getter = lambda: mock_worker
+
+        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
+            executor.execute_login()
+        call_kwargs = mock_worker.submit.call_args.kwargs
+        data = call_kwargs["data"]
+        assert "pure_mode" not in data
+        assert "config" in data
+        assert "cancel_event" in data
+
+    def test_login_data_contains_cancel_event(self):
+        """execute_login 的 data dict 应包含 cancel_event。"""
+        executor = self._make_executor()
+        executor._get_runtime_config = lambda: {}
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = "ok"
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = mock_result
+        executor._worker_getter = lambda: mock_worker
+
+        cancel = threading.Event()
+        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
+            executor.execute_login(cancel_event=cancel)
+        call_kwargs = mock_worker.submit.call_args.kwargs
+        assert call_kwargs["data"]["cancel_event"] is cancel
+
 
 # =====================================================================
 # TaskExecutor — _execute_shell
@@ -1019,8 +1154,8 @@ class TestTaskExecutorExecuteLogin:
         call_kwargs = mock_worker.submit.call_args.kwargs
         assert call_kwargs["timeout"] == 200
 
-    def test_login_timeout_default_300(self):
-        """config 中无 login_timeout 时默认 300 秒。"""
+    def test_login_timeout_default_90(self):
+        """config 中无 login_timeout 时默认 90 秒。"""
         executor = self._make_executor()
         executor._get_runtime_config = lambda: {
             "browser_settings": {"pure_mode": False},
@@ -1036,7 +1171,7 @@ class TestTaskExecutorExecuteLogin:
         with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
             executor.execute_login()
         call_kwargs = mock_worker.submit.call_args.kwargs
-        assert call_kwargs["timeout"] == 300
+        assert call_kwargs["timeout"] == 90
 
     def test_login_timeout_minimum_60(self):
         """login_timeout 低于 60 时应取 60 秒下限。"""

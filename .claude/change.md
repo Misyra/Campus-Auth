@@ -3,6 +3,14 @@
 ## 2026-06-20
 
 ### fix
+- F11+F20: 浏览器定时任务 cancel_event 支持 + 清理 pure_mode 死字段
+  - F11: `app/services/task_executor.py` `_execute_browser` 新增 `cancel_event` 参数，传递给 `worker.submit` 的 data dict，支持定时浏览器任务取消
+  - F20: `app/services/task_executor.py` `execute_login` 和 `_execute_browser` 的 data dict 移除 `pure_mode` 死字段（Worker `_handle_login` 仅从 `config["browser_settings"]["pure_mode"]` 读取，不读 `data["pure_mode"]`）
+  - `app/workers/playwright_worker.py` CMD_LOGIN 常量注释补充说明登录与浏览器定时任务共用此命令
+  - 新增 7 个测试：`TestTaskExecutorExecuteBrowser`（4: data_no_pure_mode / cancel_event_passed / cancel_event_default_none / timeout_forwarded）+ `TestExecuteLoginDataDict`（2: login_data_no_pure_mode / login_data_contains_cancel_event）
+  - 修复已有测试 `test_login_timeout_default_300` 断言值从 300 改为 90（与代码 `config.get("login_timeout", 90)` 默认值一致）
+
+### fix
 - F10: 定时任务 task_id 去重，防止同一任务重复提交
   - `app/services/task_executor.py`：`__init__` 新增 `_running_tasks` 字典和 `_running_tasks_lock` 锁
   - `app/services/task_executor.py`：`execute_task_async` 提交前检查是否有 pending 的同 task_id 任务，有则返回已有 Future
