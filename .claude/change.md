@@ -3,6 +3,14 @@
 ## 2026-06-20
 
 ### fix
+- `app/services/engine.py` + `app/services/task_executor.py` 修复手动取消竞态窗口（F06）+ 消除 cancel_event 冗余检查（F13）
+  - F06: 手动取消旧登录超时后，`_do_async_login` 不传 cancel_event，`execute_login_async` 自动新建空 Event，命中去重返回旧 future
+  - `task_executor.py` 新增 `force_clear_login_slot()` 方法：强制清理旧 `_login_future` 和 `_login_cancel_event`
+  - `engine.py` `_do_async_login`: 取消超时后调用 `force_clear_login_slot()` 强制接管登录槽；手动路径显式传入新的 `manual_cancel` Event
+  - F13: `execute_login_async` 第 195 行 `cancel_event is not None` 永真检查移除（第 186-187 行已保证非 None）
+  - 新增 7 个测试：`TestManualLoginCancelRaceFix`（5 个）+ `TestForceClearLoginSlot`（4 个）+ `TestCancelEventRedundancyFix`（2 个）
+
+### fix
 - `app/services/engine.py` 自动登录路径增加配置校验（F05）
   - 原代码 `_handle_login`（手动入口）校验 username/password/auth_url，但 `_do_async_login`（自动入口）无校验
   - 配置不完整时，空配置传入 Worker，启动浏览器后才在步骤级失败，浪费 5-15 秒

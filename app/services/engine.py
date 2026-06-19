@@ -366,10 +366,15 @@ class ScheduleEngine:
             while self._task_executor.is_login_running() and time.time() < deadline:
                 time.sleep(0.1)
             if self._task_executor.is_login_running():
-                logger.warning("取消当前登录超时，将尝试提交新登录")
+                logger.warning("取消当前登录超时，强制接管登录槽")
+                self._task_executor.force_clear_login_slot()
+
+        # 手动路径显式传入新的 cancel_event
+        manual_cancel = threading.Event() if is_manual else None
         try:
             future = self._task_executor.execute_login_async(
-                config_snapshot=config_snapshot,
+                cancel_event=manual_cancel,
+                config_snapshot=config,
             )
         except Exception:
             self._update_status_snapshot()
