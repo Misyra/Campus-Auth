@@ -3,6 +3,15 @@
 ## 2026-06-19
 
 ### test
+- 新增 `tests/test_integration/test_network_connection.py` 网络检测链路连接测试（5 个场景）
+  - `test_need_login`：网络不通 → check_once 返回 need_login=True
+  - `test_network_ok`：网络通 → check_once 返回 need_login=False
+  - `test_pause_window`：暂停时段 → check_once 跳过检测
+  - `test_probe_exception`：探测抛异常 → 引擎继续运行（_monitor_core 未被清除）
+  - `test_profile_switch_signal`：方案切换 → _do_network_check 触发 stop + start
+  - 直接创建 NetworkMonitorCore 绕过引擎异步队列，mock `app.services.monitor_service` 模块级导入
+
+### test
 - 新增 `tests/test_integration/test_config_connection.py` 配置链路连接测试（5 个场景）
   - `test_save_apply_success`：保存配置 → 磁盘 + 运行时都更新
   - `test_save_apply_rollback`：reload 失败 → 磁盘回滚，运行时不变
