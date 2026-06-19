@@ -153,8 +153,7 @@ class ScheduleEngine:
         # Lock-free status snapshot — written by consumer, read by API threads
         self._status_snapshot = StatusSnapshot()
 
-        # 登录并发控制 —— 防止同时提交多个登录任务到 Worker
-        self._login_in_progress = threading.Event()
+        # 登录并发控制 —— 委托 task_executor.is_login_running()
 
         # ── 统一引擎状态 ──
         self._engine_running = False
@@ -306,7 +305,7 @@ class ScheduleEngine:
         """检查是否需要登录重试。"""
         if self._login_retry.count == 0 or not self._login_retry.config:
             return False
-        if self._login_in_progress.is_set():
+        if self._task_executor.is_login_running():
             return False
         max_retries, intervals = self._login_retry.config
         if self._login_retry.count >= max_retries:
@@ -318,19 +317,17 @@ class ScheduleEngine:
 
     def _do_async_login(self, is_manual: bool = False, config_snapshot: dict | None = None) -> bool:
         """提交登录到 executor 的 login_pool。返回 True 表示已提交。"""
-        if self._login_in_progress.is_set():
+        if self._task_executor.is_login_running():
             if not is_manual:
                 return False
             # 手动登录：取消卡住的自动登录，等待完成后重新提交
             logger.info("手动登录：取消当前登录任务")
             self._task_executor.cancel_login()
             deadline = time.time() + 5
-            while self._login_in_progress.is_set() and time.time() < deadline:
+            while self._task_executor.is_login_running() and time.time() < deadline:
                 time.sleep(0.1)
-            if self._login_in_progress.is_set():
+            if self._task_executor.is_login_running():
                 logger.warning("取消当前登录超时，强制重置登录状态")
-                self._login_in_progress.clear()
-        self._login_in_progress.set()
         self._login_retry.last_attempt = time.time()
         if not is_manual:
             self._login_retry.count += 1
@@ -340,13 +337,11 @@ class ScheduleEngine:
                 config_snapshot=config_snapshot,
             )
         except Exception:
-            self._login_in_progress.clear()
             self._update_status_snapshot()
             raise
         if future is not None:
 
             def _on_done(f: Future) -> None:
-                self._login_in_progress.clear()
                 self._update_status_snapshot()
                 try:
                     ok, msg = f.result()
@@ -361,7 +356,6 @@ class ScheduleEngine:
             future.add_done_callback(_on_done)
             return True
         else:
-            self._login_in_progress.clear()
             self._update_status_snapshot()
             return False
 
@@ -604,7 +598,7 @@ class ScheduleEngine:
 
     @property
     def login_in_progress(self) -> bool:
-        return self._login_in_progress.is_set()
+        return self._task_executor.is_login_running()
 
     def set_dashboard_sink(self, sink) -> None:
         """注入 DashboardSink 实例（由 container.start_web_services 调用）。"""

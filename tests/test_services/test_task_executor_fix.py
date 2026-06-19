@@ -1193,6 +1193,55 @@ class TestTaskExecutorLoginAsync:
 # =====================================================================
 
 
+# =====================================================================
+# TaskExecutor — is_login_running
+# =====================================================================
+
+
+class TestIsLoginRunning:
+    """测试 is_login_running 状态查询。"""
+
+    def test_no_login_returns_false(self):
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        assert executor.is_login_running() is False
+
+    def test_with_pending_future_returns_true(self):
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        future = Future()
+        executor._login_future = future
+        assert executor.is_login_running() is True
+
+    def test_with_done_future_returns_false(self):
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+        )
+        future = Future()
+        future.set_result((True, "ok"))
+        executor._login_future = future
+        assert executor.is_login_running() is False
+
+
+# =====================================================================
+# TaskExecutor — _on_login_done
+# =====================================================================
+
+
 class TestTaskExecutorOnLoginDone:
     """TaskExecutor._on_login_done() 测试。"""
 

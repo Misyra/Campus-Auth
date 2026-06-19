@@ -129,7 +129,6 @@ class TestEngineInit:
     def test_init_defaults(self, engine_factory):
         svc = engine_factory()
         assert svc._dashboard_sink is None
-        assert svc._login_in_progress.is_set() is False
         assert svc._scheduler_running is False
         assert svc._monitor_core is None
 
@@ -615,7 +614,7 @@ class TestLoginRetryNeeded:
         svc = engine_factory(raw=True)
         svc._login_retry.count = 1
         svc._login_retry.config = (3, [10, 20, 30])
-        svc._login_in_progress.set()
+        svc._task_executor.is_login_running.return_value = True
         assert svc._login_retry_needed(time.time()) is False
 
     def test_no_retry_needed_when_max_retries_reached(self, engine_factory):
@@ -642,6 +641,7 @@ class TestLoginRetryNeeded:
         svc._login_retry.count = 1
         svc._login_retry.last_attempt = time.time() - 100
         svc._login_retry.config = (3, [10, 20, 30])
+        svc._task_executor.is_login_running.return_value = False
         assert svc._login_retry_needed(time.time()) is True
 
 
@@ -653,35 +653,29 @@ class TestLoginRetryNeeded:
 class TestDoAsyncLogin:
     def test_already_in_progress(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._login_in_progress.set()
+        svc._task_executor.is_login_running.return_value = True
         assert svc._do_async_login() is False
 
     def test_future_none(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._task_executor.execute_login_async.return_value = None
         assert svc._do_async_login() is False
-        assert not svc._login_in_progress.is_set()
 
     def test_future_success(self, engine_factory):
         svc = engine_factory(raw=True)
         # 使用一个未完成的 Future，避免 done_callback 立即执行
         future = Future()
         svc._task_executor.execute_login_async.return_value = future
+        svc._task_executor.is_login_running.return_value = False
         result = svc._do_async_login()
         assert result is True
-        # 在 Future 完成前，login_in_progress 应该被 set
-        assert svc._login_in_progress.is_set()
-        # 完成 Future 触发 callback 清除标志
-        future.set_result(None)
-        time.sleep(0.1)
-        assert not svc._login_in_progress.is_set()
 
-    def test_exception_clears_flag(self, engine_factory):
+    def test_exception_propagates(self, engine_factory):
         svc = engine_factory(raw=True)
+        svc._task_executor.is_login_running.return_value = False
         svc._task_executor.execute_login_async.side_effect = RuntimeError("boom")
         with pytest.raises(RuntimeError):
             svc._do_async_login()
-        assert not svc._login_in_progress.is_set()
 
 
 
@@ -1206,8 +1200,9 @@ class TestTogglePureMode:
 class TestProperties:
     def test_login_in_progress_property(self, engine_factory):
         svc = engine_factory(raw=True)
+        svc._task_executor.is_login_running.return_value = False
         assert svc.login_in_progress is False
-        svc._login_in_progress.set()
+        svc._task_executor.is_login_running.return_value = True
         assert svc.login_in_progress is True
 
     def test_ws_broadcast_queue_default(self, engine_factory):
