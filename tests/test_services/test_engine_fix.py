@@ -33,7 +33,7 @@ def test_engine_test_network_default_false():
 
 
 def test_handle_login_uses_validated_config():
-    """_handle_login 应将校验通过的配置传递给 executor，避免二次读取。"""
+    """_handle_login 应将校验通过的配置传递给 _do_async_login，避免二次读取。"""
     from app.services.engine import EngineCmdType, EngineCommand, ScheduleEngine
 
     engine = ScheduleEngine.__new__(ScheduleEngine)
@@ -43,6 +43,8 @@ def test_handle_login_uses_validated_config():
     snapshot = {"username": "u", "password": "p", "auth_url": "http://x"}
 
     engine._copy_runtime_config = MagicMock(return_value=snapshot)
+    engine._orchestrator = MagicMock()
+    engine._orchestrator.validate.return_value = None
     engine._do_async_login = MagicMock(return_value=True)
 
     cmd = EngineCommand(type=EngineCmdType.LOGIN, data={})
@@ -60,7 +62,7 @@ def test_handle_login_uses_validated_config():
 
 
 class TestManualLoginCancelRaceFix:
-    """F06: 手动取消超时后，应强制清理旧槽并提交新登录。"""
+    """F06: 手动登录委托 orchestrator 处理取消与抢占。"""
 
     def _make_engine(self):
         """构造一个最小化的 engine 用于测试。"""
@@ -71,10 +73,10 @@ class TestManualLoginCancelRaceFix:
         engine._login_retry = MagicMock()
         engine._login_retry.reset = MagicMock()
         engine._update_status_snapshot = MagicMock()
-        engine._validate_login_config = MagicMock(return_value=None)
         engine._copy_runtime_config = MagicMock(
             return_value={"username": "u", "password": "p", "auth_url": "http://x"}
         )
+        engine._orchestrator = MagicMock()
         engine._login_history = MagicMock()
         engine._ui_config = MagicMock()
         engine._ui_config.login_timeout = 30
@@ -84,126 +86,62 @@ class TestManualLoginCancelRaceFix:
         engine._apply_backoff_interval = MagicMock()
         return engine
 
-    def test_manual_login_force_clear_on_timeout(self):
-        """取消超时后应调用 force_clear_login_slot 并提交新 future。"""
+    def test_manual_login_submits_to_orchestrator(self):
+        """手动登录应通过 orchestrator.submit(source='manual') 提交。"""
         from concurrent.futures import Future
 
         engine = self._make_engine()
-
-        # is_login_running 先返回 True（取消前），然后 True（取消后超时），然后 False（force_clear 后）
-        call_count = [0]
-
-        def fake_is_running():
-            call_count[0] += 1
-            # 第1次: is_login_running 检查（进入 if）
-            # 第2次: while 循环条件（超时后仍为 True）
-            # 第3次: 超时后 if 检查（为 True，触发 force_clear）
-            if call_count[0] <= 3:
-                return True
-            # 之后 force_clear 已执行，新 future 提交后返回 False
-            return False
-
-        engine._task_executor.is_login_running = fake_is_running
-        engine._task_executor.cancel_login = MagicMock()
-
-        new_future = Future()
-        new_future.set_result((True, "ok"))
-        engine._task_executor.execute_login_async = MagicMock(return_value=new_future)
-
-        # 模拟 time.time 让 deadline 立即超时
-        times = [0, 100, 200]  # start, check1(超时), check2(超时)
-        time_iter = iter(times)
-
-        with patch("app.services.engine.time") as mock_time:
-            mock_time.time = MagicMock(side_effect=lambda: next(time_iter))
-            mock_time.sleep = MagicMock()
-            result = engine._do_async_login(is_manual=True)
-
-        assert result is True
-        engine._task_executor.cancel_login.assert_called_once()
-        engine._task_executor.force_clear_login_slot.assert_called_once()
-        # 验证传入了新的 cancel_event
-        call_kwargs = engine._task_executor.execute_login_async.call_args
-        assert call_kwargs.kwargs["cancel_event"] is not None
-        assert isinstance(call_kwargs.kwargs["cancel_event"], threading.Event)
-        assert call_kwargs.kwargs["config_snapshot"] is not None
-
-    def test_manual_login_no_force_clear_when_cancel_succeeds(self):
-        """取消成功（未超时）时不应调用 force_clear_login_slot。"""
-        from concurrent.futures import Future
-
-        engine = self._make_engine()
-
-        # is_login_running: True（初始）-> False（取消后）
-        call_count = [0]
-
-        def fake_is_running():
-            call_count[0] += 1
-            return call_count[0] <= 1
-
-        engine._task_executor.is_login_running = fake_is_running
-        engine._task_executor.cancel_login = MagicMock()
-
-        new_future = Future()
-        new_future.set_result((True, "ok"))
-        engine._task_executor.execute_login_async = MagicMock(return_value=new_future)
-
-        with patch("app.services.engine.time") as mock_time:
-            mock_time.time = MagicMock(return_value=0)
-            mock_time.sleep = MagicMock()
-            result = engine._do_async_login(is_manual=True)
-
-        assert result is True
-        engine._task_executor.cancel_login.assert_called_once()
-        engine._task_executor.force_clear_login_slot.assert_not_called()
-
-    def test_auto_login_no_force_clear(self):
-        """自动登录路径不应触发 force_clear。"""
-        from concurrent.futures import Future
-
-        engine = self._make_engine()
-        engine._task_executor.is_login_running = MagicMock(return_value=True)
-        engine._task_executor.cancel_login = MagicMock()
-        engine._task_executor.force_clear_login_slot = MagicMock()
-
-        result = engine._do_async_login(is_manual=False)
-
-        assert result is False
-        engine._task_executor.cancel_login.assert_not_called()
-        engine._task_executor.force_clear_login_slot.assert_not_called()
-
-    def test_manual_login_passes_cancel_event(self):
-        """手动登录应显式传入 cancel_event。"""
-        from concurrent.futures import Future
-
-        engine = self._make_engine()
-        engine._task_executor.is_login_running = MagicMock(return_value=False)
-
-        new_future = Future()
-        new_future.set_result((True, "ok"))
-        engine._task_executor.execute_login_async = MagicMock(return_value=new_future)
+        future = Future()
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        engine._orchestrator.submit.return_value = handle
 
         result = engine._do_async_login(is_manual=True)
 
         assert result is True
-        call_kwargs = engine._task_executor.execute_login_async.call_args
-        cancel = call_kwargs.kwargs["cancel_event"]
-        assert isinstance(cancel, threading.Event)
+        engine._orchestrator.submit.assert_called_once_with(
+            source="manual", config=engine._copy_runtime_config()
+        )
 
-    def test_auto_login_no_cancel_event(self):
-        """自动登录路径不应传入 cancel_event。"""
+    def test_auto_login_submits_to_orchestrator(self):
+        """自动登录应通过 orchestrator.submit(source='auto') 提交。"""
         from concurrent.futures import Future
 
         engine = self._make_engine()
-        engine._task_executor.is_login_running = MagicMock(return_value=False)
-
-        new_future = Future()
-        new_future.set_result((True, "ok"))
-        engine._task_executor.execute_login_async = MagicMock(return_value=new_future)
+        future = Future()
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        engine._orchestrator.submit.return_value = handle
 
         result = engine._do_async_login(is_manual=False)
 
         assert result is True
-        call_kwargs = engine._task_executor.execute_login_async.call_args
-        cancel = call_kwargs.kwargs["cancel_event"]
-        assert cancel is None
+        engine._orchestrator.submit.assert_called_once_with(
+            source="auto", config=engine._copy_runtime_config()
+        )
+
+    def test_rejected_handle_returns_false(self):
+        """orchestrator 返回 rejected handle 时应返回 False。"""
+        engine = self._make_engine()
+        handle = MagicMock()
+        handle.rejected_reason = "登录配置不完整"
+        handle.future = None
+        engine._orchestrator.submit.return_value = handle
+
+        result = engine._do_async_login(is_manual=False)
+
+        assert result is False
+
+    def test_dedup_handle_returns_false(self):
+        """orchestrator 返回去重 handle（future=None）时应返回 False。"""
+        engine = self._make_engine()
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = None
+        engine._orchestrator.submit.return_value = handle
+
+        result = engine._do_async_login(is_manual=False)
+
+        assert result is False

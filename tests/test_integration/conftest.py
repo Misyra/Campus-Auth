@@ -13,6 +13,7 @@ from app.schemas import AuthProfile, MonitorConfigPayload, ProfilesData, SystemS
 from app.services.config_service import save_config_combined
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
+from app.services.login_orchestrator import LoginOrchestrator
 from app.services.profile_service import ProfileService
 from app.services.task_executor import TaskExecutor
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
@@ -95,7 +96,17 @@ def integration_stack(tmp_path, mock_worker):
     )
     task_executor.set_runtime_config_getter(engine.get_runtime_config)
 
+    orchestrator = LoginOrchestrator(
+        worker_getter=lambda: mock_worker,
+        login_history=login_history,
+        profile_service=profile_service,
+        get_runtime_config=engine.get_runtime_config,
+    )
+    engine._orchestrator = orchestrator
+
     yield engine, profile_service, task_executor, mock_worker
+
+    orchestrator.shutdown(wait=False)
 
     engine.shutdown()
     task_executor.shutdown()
@@ -134,7 +145,16 @@ def full_stack(tmp_path, mock_worker):
     )
     task_executor.set_runtime_config_getter(engine.get_runtime_config)
 
+    orchestrator = LoginOrchestrator(
+        worker_getter=lambda: mock_worker,
+        login_history=login_history,
+        profile_service=profile_service,
+        get_runtime_config=engine.get_runtime_config,
+    )
+    engine._orchestrator = orchestrator
+
     yield engine, profile_service, task_executor, task_registry, mock_worker
 
     engine.shutdown()
     task_executor.shutdown()
+    orchestrator.shutdown(wait=False)

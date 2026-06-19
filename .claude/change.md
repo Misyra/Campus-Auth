@@ -3,6 +3,15 @@
 ## 2026-06-20
 
 ### refactor
+- Task 7: engine._do_async_login / _handle_login 委托 LoginOrchestrator
+  - `app/services/engine.py` `__init__` 新增 `self._orchestrator = None`（由 container 注入）
+  - `_do_async_login` 重构：配置校验、去重、手动抢占逻辑全部委托 `orchestrator.submit()`；保留引擎专属的 `_on_done` 回调（失败计数 + 降频退避）
+  - `_handle_login` 改用 `orchestrator.validate(config)` 替代 `_validate_login_config`
+  - `_validate_login_config` 保留未删除（向后兼容）
+  - 同步更新测试 fixtures 和集成测试：conftest、test_engine、test_engine_fix、test_monitor_service、test_login_flow、test_login_integration_extended
+  - 集成测试 fixture 注入真实 LoginOrchestrator，_capture_login_completion 同时 hook orchestrator 和 task_executor 两条路径
+
+### refactor
 - TaskExecutor 增加 LoginOrchestrator 委托层（Task 5）
   - `app/services/task_executor.py` `__init__` 新增 `login_orchestrator` 可选参数，默认 None
   - 原 `execute_login_async`/`execute_login`/`_on_login_done`/`_link_cancel_event` 重命名为 `_legacy_*` 前缀版本

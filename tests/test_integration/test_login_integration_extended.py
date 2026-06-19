@@ -26,27 +26,55 @@ def _ensure_login_config(engine) -> None:
     engine._runtime_config["auth_url"] = "http://10.0.0.1"
 
 
-def _capture_login_completion(task_executor, timeout: float = 5.0):
-    """安装 _on_login_done 包装器，在回调清除 _login_future 前捕获结果。
+def _capture_login_completion(task_executor, engine=None, timeout: float = 5.0):
+    """安装包装器捕获登录结果。
 
+    同时 hook orchestrator._dispatch 和 task_executor._on_login_done，
+    确保无论登录从哪条路径触发都能捕获。
     必须在调用 _handle_login / 触发登录之前调用。
     返回 (result_container, done_event, restore_fn)。
     """
     result = []
     done = threading.Event()
+    restores = []
 
-    original = task_executor._on_login_done
+    def _capture(f):
+        if not done.is_set():
+            try:
+                result.append(f.result(timeout=timeout))
+            except Exception as e:
+                result.append(e)
+            done.set()
+
+    # Hook orchestrator._dispatch（委托路径）
+    orchestrator = getattr(engine, "_orchestrator", None) if engine else None
+    if orchestrator is not None:
+        original_dispatch = orchestrator._dispatch
+
+        def wrapped_dispatch(config, source, cancel_event):
+            handle = original_dispatch(config, source, cancel_event)
+            if handle.future is not None:
+                handle.future.add_done_callback(_capture)
+            return handle
+
+        orchestrator._dispatch = wrapped_dispatch
+        restores.append(lambda: setattr(orchestrator, "_dispatch", original_dispatch))
+
+    # Hook task_executor._on_login_done（直接调用路径）
+    original_on_done = task_executor._on_login_done
 
     def wrapper(future):
-        try:
-            result.append(future.result(timeout=timeout))
-        except Exception as e:
-            result.append(e)
-        done.set()
-        original(future)
+        _capture(future)
+        original_on_done(future)
 
     task_executor._on_login_done = wrapper
-    return result, done, lambda: setattr(task_executor, "_on_login_done", original)
+    restores.append(lambda: setattr(task_executor, "_on_login_done", original_on_done))
+
+    def restore():
+        for fn in restores:
+            fn()
+
+    return result, done, restore
 
 
 class TestFullEngineLoginChain:
@@ -58,9 +86,9 @@ class TestFullEngineLoginChain:
 
         mock_worker.submit.return_value = WorkerResponse(success=True, data="登录成功")
 
-        # 在触发登录前安装捕获器（_on_login_done 会清除 _login_future 引用）
+        # 在触发登录前安装捕获器
         result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor
+            task_executor, engine=engine
         )
         try:
             cmd = EngineCommand(
@@ -95,7 +123,7 @@ class TestFullEngineLoginChain:
         )
 
         result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor
+            task_executor, engine=engine
         )
         try:
             cmd = EngineCommand(
@@ -137,7 +165,7 @@ class TestNetworkDetectionLogin:
         assert not task_executor.is_login_running()
 
         result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor
+            task_executor, engine=engine
         )
         try:
             engine._do_network_check()
@@ -162,7 +190,7 @@ class TestNetworkDetectionLogin:
 
         # 第一次登录（手动触发）
         result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor
+            task_executor, engine=engine
         )
         try:
             cmd = EngineCommand(
@@ -191,7 +219,7 @@ class TestNetworkDetectionLogin:
 
         # 第二次登录（自动重试路径）
         result_container2, done_event2, restore_fn2 = _capture_login_completion(
-            task_executor
+            task_executor, engine=engine
         )
         try:
             result = engine._do_async_login()
@@ -219,9 +247,9 @@ class TestCancelPropagation:
         submit_release = threading.Event()
         captured_cancel_event = None
 
-        # 在触发登录前安装捕获器，用 Event 同步 _on_login_done 的完成
+        # 在触发登录前安装捕获器，用 Event 同步登录完成
         result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor
+            task_executor, engine=engine
         )
         try:
             def blocking_submit(*args, **kwargs):
@@ -269,7 +297,7 @@ class TestReloadException:
         submit_release = threading.Event()
 
         result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor
+            task_executor, engine=engine
         )
         try:
             def blocking_submit(*args, **kwargs):
@@ -394,7 +422,7 @@ class TestProfileSwitchDuringLogin:
         submit_release = threading.Event()
 
         result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor
+            task_executor, engine=engine
         )
         try:
             def blocking_submit(*args, **kwargs):
