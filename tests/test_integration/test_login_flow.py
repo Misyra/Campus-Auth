@@ -21,8 +21,8 @@ from app.services.engine import (
     EngineCommand,
     ScheduleEngine,
     StatusSnapshot,
-    _LoginRetryState,
 )
+from app.services.login_retry import LoginRetryManager
 
 
 # ── 辅助工厂 ──
@@ -35,7 +35,7 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._shutdown_event = threading.Event()
     svc._monitor_core = None
     svc._engine_running = False
-    svc._login_retry = _LoginRetryState()
+    svc._login_retry = LoginRetryManager()
     svc._runtime_config = {}
     svc._runtime_snapshot = {}
     svc._monitor_check_interval = 300
@@ -309,10 +309,13 @@ class TestLoginWithNetworkDetection:
         }
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._get_retry_config = MagicMock(return_value=(3, [30, 30, 30]))
+        svc._copy_runtime_config = MagicMock(return_value={
+            "retry_settings": {"max_retries": 3, "retry_interval": 30}
+        })
         svc._do_async_login = MagicMock()
 
-        svc._do_network_check()
+        with patch("app.utils.retry.get_retry_intervals", return_value=[30, 30, 30]):
+            svc._do_network_check()
 
         svc._do_async_login.assert_called_once()
         assert svc._login_retry.config == (3, [30, 30, 30])
@@ -393,10 +396,13 @@ class TestLoginWithNetworkDetection:
         }
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._get_retry_config = MagicMock(return_value=(3, [30, 30, 30]))
+        svc._copy_runtime_config = MagicMock(return_value={
+            "retry_settings": {"max_retries": 3, "retry_interval": 30}
+        })
         svc._do_async_login = MagicMock()
 
-        svc._do_network_check()
+        with patch("app.utils.retry.get_retry_intervals", return_value=[30, 30, 30]):
+            svc._do_network_check()
         svc._do_async_login.assert_called_once()
 
         # 第二次检测：网络恢复正常
@@ -424,7 +430,9 @@ class TestLoginWithNetworkDetection:
         }
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._get_retry_config = MagicMock(return_value=(3, [30, 30, 30]))
+        svc._copy_runtime_config = MagicMock(return_value={
+            "retry_settings": {"max_retries": 3, "retry_interval": 30}
+        })
 
         # 使用真实的 _do_async_login
         future = Future()
@@ -536,39 +544,6 @@ class TestLoginRetryMechanism:
         svc._login_retry.last_attempt = time.time() - 25
         assert svc._login_retry_needed(time.time()) is False
 
-    def test_retry_config_from_settings(self):
-        """从配置中获取重试参数。"""
-        svc = _make_raw_engine()
-        svc._runtime_config = {
-            "retry_settings": {
-                "max_retries": 5,
-                "retry_interval": 60,
-            },
-        }
-
-        with patch(
-            "app.utils.retry.get_retry_intervals",
-            return_value=[60, 60, 60, 60, 60],
-        ):
-            max_retries, intervals = svc._get_retry_config()
-
-        assert max_retries == 5
-        assert len(intervals) == 5
-
-    def test_retry_config_default_on_exception(self):
-        """配置获取异常时使用默认值。"""
-        svc = _make_raw_engine()
-        svc._runtime_config = {}
-
-        with patch(
-            "app.utils.retry.get_retry_intervals",
-            side_effect=RuntimeError("配置读取失败"),
-        ):
-            max_retries, intervals = svc._get_retry_config()
-
-        assert max_retries == 3
-        assert intervals == [5, 5, 5]
-
     def test_network_check_resets_retry_count(self):
         """网络检测触发登录时，重置重试计数。"""
         svc = _make_raw_engine()
@@ -580,10 +555,13 @@ class TestLoginRetryMechanism:
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
         svc._login_retry.count = 2  # 之前的重试
-        svc._get_retry_config = MagicMock(return_value=(3, [30, 30, 30]))
+        svc._copy_runtime_config = MagicMock(return_value={
+            "retry_settings": {"max_retries": 3, "retry_interval": 30}
+        })
         svc._do_async_login = MagicMock()
 
-        svc._do_network_check()
+        with patch("app.utils.retry.get_retry_intervals", return_value=[30, 30, 30]):
+            svc._do_network_check()
 
         # 网络检测触发登录时，先重置计数再递增
         assert svc._login_retry.config == (3, [30, 30, 30])
@@ -592,7 +570,7 @@ class TestLoginRetryMechanism:
         """引擎唤醒时间考虑重试间隔。"""
         svc = _make_raw_engine()
         now = time.time()
-        svc._login_retry = _LoginRetryState(
+        svc._login_retry = LoginRetryManager(
             count=1,
             last_attempt=now - 5,
             config=(3, [10, 20, 30]),

@@ -16,8 +16,8 @@ from app.services.engine import (
     EngineCommand,
     ScheduleEngine,
     StatusSnapshot,
-    _LoginRetryState,
 )
+from app.services.login_retry import LoginRetryManager
 
 
 
@@ -796,7 +796,7 @@ class TestNetworkStateSetInConsumer:
     def test_do_async_login_delegates_to_task_executor(self):
         """_do_async_login 应委托给 task_executor.execute_login_async"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
-        svc._login_retry = _LoginRetryState(count=0, last_attempt=0, config=None)
+        svc._login_retry = LoginRetryManager(count=0, last_attempt=0, config=None)
         svc._update_status_snapshot = MagicMock()
 
         mock_task_executor = MagicMock()

@@ -20,8 +20,8 @@ from app.services.engine import (
     EngineCommand,
     ScheduleEngine,
     StatusSnapshot,
-    _LoginRetryState,
 )
+from app.services.login_retry import LoginRetryManager
 
 
 
@@ -103,24 +103,6 @@ class TestStatusSnapshot:
 
 
 # =====================================================================
-# _LoginRetryState 数据类
-# =====================================================================
-
-
-class TestLoginRetryState:
-    def test_default_values(self):
-        state = _LoginRetryState()
-        assert state.count == 0
-        assert state.last_attempt == 0.0
-        assert state.config is None
-
-    def test_custom_values(self):
-        state = _LoginRetryState(count=2, last_attempt=100.0, config=(5, [10, 20, 30]))
-        assert state.count == 2
-        assert state.config == (5, [10, 20, 30])
-
-
-# =====================================================================
 # ScheduleEngine 初始化
 # =====================================================================
 
@@ -186,7 +168,7 @@ class TestCalculateWakeup:
     def test_wakeup_with_login_retry(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._monitor_core = None
-        svc._login_retry = _LoginRetryState(
+        svc._login_retry = LoginRetryManager(
             count=1,
             last_attempt=time.time() - 100,
             config=(3, [5, 10, 15]),
@@ -206,8 +188,8 @@ class TestCalculateWakeup:
         """异常时回退到 now+5。"""
         svc = engine_factory(raw=True)
         svc._monitor_core = None
-        # 通过让 _is_monitoring 属性检查出错来触发异常
-        svc._login_retry = _LoginRetryState(
+        # 通过让 next_wakeup 内部计算出错来触发异常
+        svc._login_retry = LoginRetryManager(
             count=1,
             last_attempt="not_a_number",  # 会导致 TypeError
             config=(3, [5, 10, 15]),
@@ -556,9 +538,12 @@ class TestDoNetworkCheck:
         mock_core.check_once.return_value = {"need_login": True, "interval": 300}
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._get_retry_config = MagicMock(return_value=(3, [30, 30, 30]))
+        svc._copy_runtime_config = MagicMock(return_value={
+            "retry_settings": {"max_retries": 3, "retry_interval": 30}
+        })
         svc._do_async_login = MagicMock()
-        svc._do_network_check()
+        with patch("app.utils.retry.get_retry_intervals", return_value=[30, 30, 30]):
+            svc._do_network_check()
         svc._do_async_login.assert_called_once()
         assert svc._login_retry.config == (3, [30, 30, 30])
 
@@ -677,35 +662,6 @@ class TestDoAsyncLogin:
         with pytest.raises(RuntimeError):
             svc._do_async_login()
 
-
-
-# =====================================================================
-# _get_retry_config
-# =====================================================================
-
-
-class TestGetRetryConfig:
-    def test_get_retry_config_normal(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._runtime_config = {
-            "retry_settings": {"max_retries": 5, "retry_interval": 60}
-        }
-        with patch("app.utils.retry.get_retry_intervals", return_value=[60, 60, 60, 60, 60]):
-            max_retries, intervals = svc._get_retry_config()
-        assert max_retries == 5
-        assert intervals == [60, 60, 60, 60, 60]
-
-    def test_get_retry_config_exception_fallback(self, engine_factory):
-        """异常时返回默认值 (3, [30, 30, 30])。"""
-        svc = engine_factory(raw=True)
-        svc._runtime_config = {}
-        with patch(
-            "app.utils.retry.get_retry_intervals",
-            side_effect=RuntimeError("boom"),
-        ):
-            max_retries, intervals = svc._get_retry_config()
-        assert max_retries == 3
-        assert intervals == [5, 5, 5]
 
 
 # =====================================================================
