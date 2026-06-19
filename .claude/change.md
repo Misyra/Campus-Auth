@@ -3,6 +3,17 @@
 ## 2026-06-20
 
 ### fix
+- `app/services/engine.py` 网络检测不再无条件 reset 重试计数（F04）
+  - 原代码每次 `need_login=True` 都调用 `_login_retry.reset()`，导致重试计数归零，认证服务器长期宕机时系统永不停机地循环"检测→重试系列→检测→重试系列"
+  - `_do_network_check`：仅在 `count==0`（首次发现 need_login）时 reset+configure
+  - `_do_async_login` `_on_done` 回调：自动登录成功清空 `_consecutive_login_failures`；失败递增计数，达到 `_LOGIN_BACKOFF_THRESHOLD`(3) 后触发 `_apply_backoff_interval` 指数退避
+  - 新增 `_consecutive_login_failures` / `_backoff_check_multiplier` 两个 `__init__` 字段
+  - 新增 `_login_retry_max_cycles()` / `_apply_backoff_interval()` 辅助方法
+  - 退避乘数上限 6（`extra = (6-1) * interval = 1500s ≈ 25min`），网络恢复后立即清零
+  - `_handle_stop` 同步重置退避状态
+  - 新增 12 个测试覆盖全部新增分支（count>0 跳过 reset、失败累计、退避触发、手动登录隔离、乘数封顶等）
+
+### fix
 - `main.py` `_execute_login_with_retries` 记录登录历史（F02）
   - 原代码直接调用 `get_worker().submit(CMD_LOGIN, ...)`，完全绕过 TaskExecutor 的 `_record_login_history()`
   - `--startup-action login_once` 的登录在历史页面不可见

@@ -154,6 +154,10 @@ class ScheduleEngine:
         self._monitor_check_interval: int = 300
         self._login_retry = LoginRetryManager()
 
+        # 连续登录失败计数（用于降频检测）
+        self._consecutive_login_failures: int = 0
+        self._backoff_check_multiplier: int = 1
+
         # 统一引擎线程
         self._engine_thread = threading.Thread(target=self._engine_loop, daemon=True)
         self._engine_thread.start()
@@ -267,11 +271,17 @@ class ScheduleEngine:
             self._monitor_check_interval = interval
 
             if result.get("need_login", False):
-                self._login_retry.reset()
-                self._configure_retry()
-                # check_once 已完成暂停/网络检测，跳过 attempt_login 内冗余二次检测
+                # 仅在首次发现 need_login（重试尚未进行）时 reset+configure
+                if self._login_retry.count == 0:
+                    self._login_retry.reset()
+                    self._configure_retry()
                 self._do_async_login()
             else:
+                # 网络恢复正常：清空失败计数，重置重试状态
+                if self._consecutive_login_failures > 0:
+                    logger.info("网络已恢复，重置重试状态")
+                self._consecutive_login_failures = 0
+                self._backoff_check_multiplier = 1
                 self._login_retry.reset()
 
             # 检查是否需要重启（自动切换方案）
@@ -303,6 +313,23 @@ class ScheduleEngine:
         except Exception:
             logger.warning("加载重试配置失败，使用默认值")
             self._login_retry.configure(3, [5, 5, 5])
+
+    _LOGIN_BACKOFF_THRESHOLD = 3  # 连续 3 轮（每轮 max_retries 次）失败后降频
+
+    def _login_retry_max_cycles(self) -> int:
+        """返回触发降频的连续失败轮数阈值。"""
+        return self._LOGIN_BACKOFF_THRESHOLD
+
+    def _apply_backoff_interval(self) -> None:
+        """达到失败阈值后，延长下一次网络检测间隔（指数退避，上限 30 分钟）。"""
+        self._backoff_check_multiplier = min(self._backoff_check_multiplier * 2, 6)
+        extra = (self._backoff_check_multiplier - 1) * self._monitor_check_interval
+        self._next_network_check = time.time() + extra
+        logger.warning(
+            "登录已连续失败 {} 轮，下次网络检测降频至 {}s 后",
+            self._consecutive_login_failures,
+            int(extra),
+        )
 
     def _login_retry_needed(self, now: float) -> bool:
         """检查是否需要登录重试。"""
@@ -341,8 +368,16 @@ class ScheduleEngine:
                     tag = "手动登录" if is_manual else "自动登录"
                     if ok:
                         logger.info("{}完成: {}", tag, msg)
+                        # 成功则清空失败计数
+                        if not is_manual:
+                            self._consecutive_login_failures = 0
                     else:
                         logger.warning("{}失败: {}", tag, msg)
+                        # 累计失败，达到阈值后降频
+                        if not is_manual:
+                            self._consecutive_login_failures += 1
+                            if self._consecutive_login_failures >= self._login_retry_max_cycles():
+                                self._apply_backoff_interval()
                 except Exception:
                     logger.exception("登录任务异常")
 
@@ -404,6 +439,8 @@ class ScheduleEngine:
         core.stop_monitoring()
         self._monitor_core = None
         self._login_retry.reset()
+        self._consecutive_login_failures = 0
+        self._backoff_check_multiplier = 1
         self._next_network_check = 0
 
         self.record_log("监控已停止", level="INFO", source="backend")
