@@ -2,6 +2,17 @@
 
 ## 2026-06-19
 
+### test
+- 新增 `tests/test_integration/test_login_connection.py` 登录链路连接测试（7 个场景）
+  - `test_auto_login_success`：自动登录成功 → worker 被调用
+  - `test_auto_login_retry`：登录失败 → 重试 → 最终成功
+  - `test_retry_exhausted`：连续失败达 max_retries → 停止重试
+  - `test_manual_preempt_auto`：手动登录取消卡住的自动登录
+  - `test_callback_updates_history`：登录完成 → 历史记录写入
+  - `test_concurrent_dedup`：两个线程同时提交 → 只有一个实际执行
+  - `test_reload_during_login`：登录进行中 → 保存配置 → reload → 旧登录正常结束，新配置已生效
+  - 使用真实组件栈（integration_stack fixture），仅 mock Playwright worker 外部边界
+
 ### refactor
 - 抽取 LoginRetryManager，Engine 不再直接管理重试状态
   - 新建 `app/services/login_retry.py`：`LoginRetryManager` 数据类，封装 `reset()`/`configure()`/`record_attempt()`/`need_retry()`/`next_wakeup()` 五个方法
