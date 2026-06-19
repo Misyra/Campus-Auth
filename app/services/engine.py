@@ -827,8 +827,11 @@ class ScheduleEngine:
                 return False, "队列已满"
 
             # Wait for consumer to execute login (with timeout)
+            # API 等待超时应略大于 Worker 超时，给足执行余量
             login_timeout = self._ui_config.login_timeout
-            cmd.response_event.wait(timeout=login_timeout)
+            worker_timeout = max(login_timeout, 60)
+            api_wait_timeout = worker_timeout + 10
+            cmd.response_event.wait(timeout=api_wait_timeout)
 
             if cmd.response_data is None:
                 # 超时：检查引擎线程是否存活

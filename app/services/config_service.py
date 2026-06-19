@@ -243,6 +243,9 @@ def build_runtime_dict_from_payload(
     # 其他字段
     assign_profile_fields(base, payload.model_dump(), list(PROFILE_RUNTIME_FIELDS))
 
+    # 登录超时
+    base["login_timeout"] = gs.login_timeout
+
     # 重试策略
     base["retry_settings"] = {
         "max_retries": gs.max_retries,
