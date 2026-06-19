@@ -635,6 +635,169 @@ class TestLoginRetryNeeded:
 # =====================================================================
 
 
+# =====================================================================
+# F04: 网络检测不再无条件 reset 重试计数
+# =====================================================================
+
+
+class TestNetworkCheckBackoff:
+    def test_need_login_count_zero_resets_and_configures(self, engine_factory):
+        """count==0 时 need_login 应 reset+configure。"""
+        svc = engine_factory(raw=True)
+        mock_core = MagicMock()
+        mock_core.check_once.return_value = {"need_login": True, "interval": 300}
+        mock_core.consume_profile_switch_flag.return_value = False
+        svc._monitor_core = mock_core
+        svc._copy_runtime_config = MagicMock(return_value={
+            "retry_settings": {"max_retries": 3, "retry_interval": 30}
+        })
+        svc._do_async_login = MagicMock()
+        svc._login_retry.count = 0
+        with patch("app.utils.retry.get_retry_intervals", return_value=[30, 30, 30]):
+            svc._do_network_check()
+        svc._do_async_login.assert_called_once()
+        assert svc._login_retry.config == (3, [30, 30, 30])
+
+    def test_need_login_count_nonzero_skips_reset(self, engine_factory):
+        """count>0 时 need_login 应跳过 reset+configure，仅调用 _do_async_login。"""
+        svc = engine_factory(raw=True)
+        mock_core = MagicMock()
+        mock_core.check_once.return_value = {"need_login": True, "interval": 300}
+        mock_core.consume_profile_switch_flag.return_value = False
+        svc._monitor_core = mock_core
+        svc._do_async_login = MagicMock()
+        svc._login_retry.count = 2
+        svc._login_retry.config = (3, [5, 5, 5])
+        svc._do_network_check()
+        svc._do_async_login.assert_called_once()
+        # config 不应被覆盖
+        assert svc._login_retry.config == (3, [5, 5, 5])
+        # count 不应被 reset
+        assert svc._login_retry.count == 2
+
+    def test_no_login_needed_resets_failure_counters(self, engine_factory):
+        """need_login=False 应清空连续失败计数和退避乘数。"""
+        svc = engine_factory(raw=True)
+        mock_core = MagicMock()
+        mock_core.check_once.return_value = {"need_login": False, "interval": 600}
+        mock_core.consume_profile_switch_flag.return_value = False
+        svc._monitor_core = mock_core
+        svc._consecutive_login_failures = 5
+        svc._backoff_check_multiplier = 4
+        svc._do_network_check()
+        assert svc._consecutive_login_failures == 0
+        assert svc._backoff_check_multiplier == 1
+        assert svc._login_retry.count == 0
+
+    def test_on_done_auto_success_clears_failure_count(self, engine_factory):
+        """自动登录成功应清空连续失败计数。"""
+        svc = engine_factory(raw=True)
+        svc._consecutive_login_failures = 3
+        future = Future()
+        svc._task_executor.execute_login_async.return_value = future
+        svc._task_executor.is_login_running.return_value = False
+        svc._do_async_login()
+        future.set_result((True, "登录成功"))
+        assert svc._consecutive_login_failures == 0
+
+    def test_on_done_auto_failure_increments_count(self, engine_factory):
+        """自动登录失败应递增连续失败计数。"""
+        svc = engine_factory(raw=True)
+        svc._consecutive_login_failures = 0
+        future = Future()
+        svc._task_executor.execute_login_async.return_value = future
+        svc._task_executor.is_login_running.return_value = False
+        svc._do_async_login()
+        future.set_result((False, "登录失败"))
+        assert svc._consecutive_login_failures == 1
+
+    def test_on_done_auto_failure_triggers_backoff(self, engine_factory):
+        """连续失败达到阈值后应触发降频。"""
+        svc = engine_factory(raw=True)
+        svc._consecutive_login_failures = 2  # 再失败一次就达到阈值 3
+        svc._backoff_check_multiplier = 1
+        svc._monitor_check_interval = 300
+        future = Future()
+        svc._task_executor.execute_login_async.return_value = future
+        svc._task_executor.is_login_running.return_value = False
+        svc._do_async_login()
+        future.set_result((False, "登录失败"))
+        assert svc._consecutive_login_failures == 3
+        # 乘数应从 1 升至 2
+        assert svc._backoff_check_multiplier == 2
+
+    def test_on_done_manual_login_does_not_affect_failure_count(self, engine_factory):
+        """手动登录结果不应影响连续失败计数。"""
+        svc = engine_factory(raw=True)
+        svc._consecutive_login_failures = 2
+        future = Future()
+        svc._task_executor.execute_login_async.return_value = future
+        svc._task_executor.is_login_running.return_value = False
+        svc._do_async_login(is_manual=True)
+        future.set_result((False, "登录失败"))
+        # 手动登录不应递增
+        assert svc._consecutive_login_failures == 2
+
+    def test_on_done_manual_success_does_not_clear_failure_count(self, engine_factory):
+        """手动登录成功不应清空自动登录的连续失败计数。"""
+        svc = engine_factory(raw=True)
+        svc._consecutive_login_failures = 2
+        future = Future()
+        svc._task_executor.execute_login_async.return_value = future
+        svc._task_executor.is_login_running.return_value = False
+        svc._do_async_login(is_manual=True)
+        future.set_result((True, "登录成功"))
+        assert svc._consecutive_login_failures == 2
+
+    def test_login_retry_max_cycles(self, engine_factory):
+        svc = engine_factory(raw=True)
+        assert svc._login_retry_max_cycles() == 3
+
+    def test_apply_backoff_interval_caps_multiplier(self, engine_factory):
+        """退避乘数不应超过 6。"""
+        svc = engine_factory(raw=True)
+        svc._backoff_check_multiplier = 6
+        svc._monitor_check_interval = 300
+        svc._consecutive_login_failures = 10
+        svc._apply_backoff_interval()
+        assert svc._backoff_check_multiplier == 6
+
+    def test_apply_backoff_interval_increases_multiplier(self, engine_factory):
+        svc = engine_factory(raw=True)
+        svc._backoff_check_multiplier = 1
+        svc._monitor_check_interval = 300
+        svc._consecutive_login_failures = 3
+        svc._apply_backoff_interval()
+        assert svc._backoff_check_multiplier == 2
+        # extra = (2-1) * 300 = 300
+        assert svc._next_network_check > time.time() + 299
+
+    def test_apply_backoff_interval_doubles_each_time(self, engine_factory):
+        """连续触发退避应指数增长。"""
+        svc = engine_factory(raw=True)
+        svc._monitor_check_interval = 300
+        svc._consecutive_login_failures = 3
+
+        svc._backoff_check_multiplier = 1
+        svc._apply_backoff_interval()
+        assert svc._backoff_check_multiplier == 2  # extra = 300s
+
+        svc._apply_backoff_interval()
+        assert svc._backoff_check_multiplier == 4  # extra = 900s
+
+        svc._apply_backoff_interval()
+        assert svc._backoff_check_multiplier == 6  # extra = 1500s (cap)
+
+        svc._apply_backoff_interval()
+        assert svc._backoff_check_multiplier == 6  # 保持 cap
+
+    def test_init_fields_exist(self, engine_factory):
+        """__init__ 中应初始化降频相关字段。"""
+        svc = engine_factory(raw=True)
+        assert svc._consecutive_login_failures == 0
+        assert svc._backoff_check_multiplier == 1
+
+
 class TestDoAsyncLogin:
     def test_already_in_progress(self, engine_factory):
         svc = engine_factory(raw=True)
