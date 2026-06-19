@@ -326,7 +326,7 @@ class TaskExecutor:
                 return False, "登录已取消"
 
             # 获取 Worker 并提交登录命令（timeout 从配置读取，下限 60s 防误配）
-            login_timeout = int(config.get("login_timeout", 300))
+            login_timeout = int(config.get("login_timeout", 90))
             worker_timeout = max(login_timeout, 60)
             worker = self._worker_getter()
             result = worker.submit(

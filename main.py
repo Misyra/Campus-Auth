@@ -216,7 +216,7 @@ def _execute_login_with_retries(runtime_config: dict, logger) -> LoginResult:
     raw = retry_settings.get("max_retries", 3)
     max_retries = max(1, min(raw, 10))
     retry_interval = int(retry_settings.get("retry_interval", 5))
-    login_timeout = int(runtime_config.get("login_timeout", 120))
+    login_timeout = max(int(runtime_config.get("login_timeout", 90)), 60)
 
     attempt = 0
     while True:
