@@ -119,7 +119,7 @@ class LoginOrchestrator:
         self._get_runtime_config = get_runtime_config
 
         # 去重槽（替代 task_executor._login_future + _login_cancel_event）
-        self._slot_lock = threading.Lock()
+        self._slot_lock = threading.RLock()
         self._slot: LoginHandle | None = None
 
         # 线程池：默认单线程，外部可注入（TaskExecutor._login_pool）
@@ -238,10 +238,7 @@ class LoginOrchestrator:
                 )
                 duration_ms = int((time.perf_counter() - start) * 1000)
                 if result.success:
-                    self._record_history(
-                        True, duration_ms,
-                        result.data if isinstance(result.data, str) else "",
-                    )
+                    self._record_history(True, duration_ms)
                     msg = result.data if isinstance(result.data, str) else "登录成功"
                     return True, msg
                 err_msg = result.error or "登录失败"

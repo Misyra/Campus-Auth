@@ -195,6 +195,8 @@ def _load_login_config(logger):
 def _execute_login_with_retries(runtime_config: dict, logger) -> LoginResult:
     """执行登录，含固定间隔重试。
 
+    用 ImmediatePolicy + LoginOrchestrator，不再自己写重试/超时/历史。
+
     Args:
         runtime_config: 运行时配置字典。
         logger: 日志记录器。
@@ -205,65 +207,43 @@ def _execute_login_with_retries(runtime_config: dict, logger) -> LoginResult:
     """
     from app.constants import AUTH_DATA_DIR
     from app.services.login_history_service import LoginHistoryService
+    from app.services.login_orchestrator import LoginOrchestrator
     from app.services.profile_service import create_profile_service
-    from app.workers.playwright_worker import CMD_LOGIN, get_worker
+    from app.services.retry_policy import ImmediatePolicy
+    from app.workers.playwright_worker import get_worker
 
-    # 记录登录历史（与 TaskExecutor 内部一致的写法）
+    # 构造一次性 Orchestrator（login_once 在容器创建前运行）
     profile_service = create_profile_service()
     history = LoginHistoryService(AUTH_DATA_DIR)
+    orchestrator = LoginOrchestrator(
+        worker_getter=get_worker,
+        login_history=history,
+        profile_service=profile_service,
+    )
 
     retry_settings = runtime_config.get("retry_settings", {})
-    raw = retry_settings.get("max_retries", 3)
-    max_retries = max(1, min(raw, 10))
-    retry_interval = int(retry_settings.get("retry_interval", 5))
-    login_timeout = max(int(runtime_config.get("login_timeout", 90)), 60)
+    policy = ImmediatePolicy(
+        max_retries=retry_settings.get("max_retries", 3),
+        interval=retry_settings.get("retry_interval", 5),
+    )
 
-    attempt = 0
-    while True:
-        attempt += 1
-        # CHANGED: 固定间隔，与 LoginRetryManager(exponential=False) 一致
-        if attempt > 1:
-            time.sleep(retry_interval)
-            print(f"等待 {retry_interval} 秒后重试第 {attempt} 次...")
+    for attempt in policy.attempts():
+        delay = policy.delay_before(attempt)
+        if delay > 0:
+            print(f"等待 {int(delay)} 秒后重试第 {attempt} 次...")
+            time.sleep(delay)
 
-        start = time.perf_counter()
-        success = False
-        message = ""
-        try:
-            result = get_worker().submit(
-                CMD_LOGIN,
-                data={"config": runtime_config},
-                timeout=login_timeout,
-            )
-            success = result.success
-            message = result.data if result.success else result.error or "登录失败"
-        except Exception as exc:
-            message = f"登录异常: {exc}"
-
-        duration_ms = int((time.perf_counter() - start) * 1000)
-        # 记录历史（成功/失败都记，与 TaskExecutor 行为一致）
-        try:
-            history.record(
-                success=success,
-                duration_ms=duration_ms,
-                profile_service=profile_service,
-                error="" if success else message,
-            )
-        except Exception:
-            logger.debug("记录登录历史失败", exc_info=True)
-
-        if success:
-            print(f"登录成功: {message}")
+        handle = orchestrator.submit(source="login_once", config=runtime_config)
+        ok, msg = handle.result()
+        if ok:
+            print(f"登录成功: {msg}")
             cleanup_orphan_browsers()
             return LoginResult.SUCCESS
-
-        print(f"登录失败 (第 {attempt} 次): {message}")
-        if attempt >= max_retries:
-            break
+        print(f"登录失败 (第 {attempt} 次): {msg}")
 
     cleanup_orphan_browsers()
-    print(f"已重试 {max_retries} 次均失败，回退到正常模式")
-    logger.warning("登录失败（已重试 {} 次），回退到正常模式", max_retries)
+    print(f"已重试 {policy.max_retries} 次均失败，回退到正常模式")
+    logger.warning("登录失败（已重试 {} 次），回退到正常模式", policy.max_retries)
     return LoginResult.TEMPORARY_FAILURE
 
 
