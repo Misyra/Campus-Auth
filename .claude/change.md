@@ -3,6 +3,13 @@
 ## 2026-06-20
 
 ### fix
+- F17+F18+F19: 文档注释 + OpenAPI description + 指数退避上限（3 项）
+  - F17: `app/schemas.py` `SystemSettings` docstring 补充说明 auth_url/carrier/carrier_custom 同时存在于 global_settings 和 profile 是有意设计（全局默认值 + profile 实例覆盖）
+  - F18: `app/schemas.py` `_MonitorFieldsMixin` 的 auth_url/active_task/carrier/carrier_custom 四个字段补充 description，解决 MRO 中 `_MonitorFieldsMixin` 覆盖 `_SystemFieldsMixin` description 的问题
+  - F19: `app/utils/retry.py` `get_retry_intervals` 新增 `max_interval` 参数（默认 300s），指数退避时单次间隔不超过该上限，防止间隔过大
+  - 更新 `tests/test_utils/test_retry.py`：新增 5 个 max_interval 测试 + 修复 `test_large_interval` 适配 max_interval 默认值
+
+### fix
 - F14+F15+F16: 健壮性改进（3 项防御性修复）
   - F14: `main.py` `_run_lightweight` finally 块兜底清理 — 即使 `_web_server_state["started"]` 为 True，若 `server_ref[0]` 仍为 None（Uvicorn 子线程崩溃），仍执行容器 shutdown，防止资源泄漏
   - F15: `app/services/engine.py` `set_dashboard_sink` 迁移轻量模式广播队列 — 注入新 DashboardSink 时，将 `_empty_broadcast_queue` 中积累的残留消息迁移到新 sink 的 `broadcast_queue`
