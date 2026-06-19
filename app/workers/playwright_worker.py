@@ -41,7 +41,7 @@ logger = get_logger("playwright_worker", source="backend")
 
 # ── 命令类型常量 ──
 
-CMD_LOGIN = "login"  # 执行完整登录流程
+CMD_LOGIN = "login"  # 执行完整登录流程（登录和浏览器定时任务共用此命令）
 CMD_DEBUG_START = "debug_start"  # 启动调试会话
 CMD_DEBUG_STEP = "debug_step"  # 调试下一步
 CMD_DEBUG_STOP = "debug_stop"  # 停止调试会话

@@ -344,7 +344,6 @@ class TaskExecutor:
 
             # 获取运行时配置（优先使用传入的快照，避免 TOCTOU 竞态）
             config = config_snapshot if config_snapshot is not None else (self._get_runtime_config() if self._get_runtime_config else {})
-            pure_mode = config.get("browser_settings", {}).get("pure_mode", False)
 
             # 检查取消
             if cancel_event and cancel_event.is_set():
@@ -358,7 +357,6 @@ class TaskExecutor:
                 CMD_LOGIN,
                 data={
                     "config": config,
-                    "pure_mode": pure_mode,
                     "cancel_event": cancel_event,
                 },
                 wait=True,
@@ -414,7 +412,12 @@ class TaskExecutor:
 
         return runner.run()
 
-    def _execute_browser(self, task_id: str, timeout: int) -> tuple[bool, str]:
+    def _execute_browser(
+        self,
+        task_id: str,
+        timeout: int,
+        cancel_event: threading.Event | None = None,
+    ) -> tuple[bool, str]:
         """执行浏览器任务。
 
         通过 PlaywrightWorker 执行浏览器自动化任务。
@@ -431,7 +434,6 @@ class TaskExecutor:
 
             # 获取运行时配置
             config = self._get_runtime_config() if self._get_runtime_config else {}
-            pure_mode = config.get("browser_settings", {}).get("pure_mode", False)
 
             # 获取 Worker 并提交登录命令
             worker = self._worker_getter()
@@ -439,7 +441,7 @@ class TaskExecutor:
                 CMD_LOGIN,
                 data={
                     "config": config,
-                    "pure_mode": pure_mode,
+                    "cancel_event": cancel_event,
                 },
                 wait=True,
                 timeout=timeout,
