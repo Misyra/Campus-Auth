@@ -87,6 +87,7 @@ class TaskExecutor:
         login_history: Any = None,
         profile_service: Any = None,
         get_runtime_config: Callable[[], dict] | None = None,
+        login_orchestrator: Any = None,
     ) -> None:
         self._registry = registry
         self._history_store = history_store
@@ -94,6 +95,7 @@ class TaskExecutor:
         self._login_history = login_history
         self._profile_service = profile_service
         self._get_runtime_config = get_runtime_config
+        self._login_orchestrator = login_orchestrator
 
         # 线程池：登录池立即创建，任务池懒初始化（无定时任务时不创建线程）
         self._login_pool = ThreadPoolExecutor(
@@ -197,12 +199,12 @@ class TaskExecutor:
         future.add_done_callback(_cleanup)
         return future
 
-    def execute_login_async(
+    def _legacy_execute_login_async(
         self,
         cancel_event: threading.Event | None = None,
         config_snapshot: dict | None = None,
     ) -> Future:
-        """异步执行登录（提交到 login_pool），带去重。
+        """【遗留】异步执行登录（提交到 login_pool），带去重。
 
         如果已有登录任务在执行中，返回已有的 Future 而非重复提交。
         去重时，新调用方的 cancel_event 会联动到已有任务：
@@ -269,22 +271,79 @@ class TaskExecutor:
                     still_pending.append((new_event, target_event))
             pending = still_pending
 
-    def _link_cancel_event(
+    def _legacy_link_cancel_event(
         self, new_event: threading.Event, target_event: threading.Event
     ) -> None:
-        """将联动请求入队，由常驻 watcher 处理（不再每次新建线程）。"""
+        """【遗留】将联动请求入队，由常驻 watcher 处理（不再每次新建线程）。"""
         self._cancel_link_queue.put((new_event, target_event))
         self._ensure_cancel_link_thread()
 
+    # ── 委托方法（优先走 Orchestrator，回退走遗留路径）──
+
+    def execute_login_async(
+        self,
+        cancel_event: threading.Event | None = None,
+        config_snapshot: dict | None = None,
+    ) -> Future:
+        """【委托】异步执行登录。签名兼容。"""
+        if self._login_orchestrator is None:
+            return self._legacy_execute_login_async(cancel_event, config_snapshot)
+
+        handle = self._login_orchestrator.submit(
+            source="auto", config=config_snapshot, cancel_event=cancel_event,
+        )
+        if handle.future is not None:
+            return handle.future
+        # 被拒绝：返回已完成的 failed future
+        f: Future = Future()
+        f.set_result((False, handle.rejected_reason or "登录被拒绝"))
+        return f
+
+    def execute_login(
+        self,
+        cancel_event: threading.Event | None = None,
+        config_snapshot: dict | None = None,
+    ) -> tuple[bool, str]:
+        """【委托】同步执行登录。签名兼容。"""
+        if self._login_orchestrator is None:
+            return self._legacy_execute_login(cancel_event, config_snapshot)
+        cfg = config_snapshot if config_snapshot is not None else (
+            self._get_runtime_config() if self._get_runtime_config else {}
+        )
+        handle = self._login_orchestrator.submit(
+            source="auto", config=cfg, cancel_event=cancel_event,
+        )
+        return handle.result()
+
     def is_login_running(self) -> bool:
-        """登录任务是否正在执行中。"""
+        """【委托】检查是否有登录在执行。"""
+        if self._login_orchestrator is not None:
+            return self._login_orchestrator.is_running()
         with self._login_lock:
             return self._login_future is not None and not self._login_future.done()
 
     def cancel_login(self) -> None:
-        """取消正在进行的登录。"""
+        """【委托】取消当前登录。"""
+        if self._login_orchestrator is not None:
+            self._login_orchestrator.cancel_running()
+            return
         if self._login_cancel_event:
             self._login_cancel_event.set()
+
+    def _on_login_done(self, future: Future) -> None:
+        """登录完成后清理引用。"""
+        if self._login_orchestrator is not None:
+            return  # Orchestrator handles its own cleanup
+        self._legacy_on_login_done(future)
+
+    def _link_cancel_event(
+        self, new_event: threading.Event, target_event: threading.Event
+    ) -> None:
+        """联动取消事件。"""
+        if self._login_orchestrator is not None:
+            self._login_orchestrator._link_cancel(new_event, target_event)
+            return
+        self._legacy_link_cancel_event(new_event, target_event)
 
     def force_clear_login_slot(self) -> None:
         """强制清理旧登录引用（仅用于旧任务无法正常取消的兜底场景）。"""
@@ -295,8 +354,8 @@ class TaskExecutor:
         if old_future is not None and not old_future.done():
             logger.warning("强制清理时旧登录仍未完成: {}", old_future)
 
-    def _on_login_done(self, future: Future) -> None:
-        """登录任务完成后清理引用。"""
+    def _legacy_on_login_done(self, future: Future) -> None:
+        """【遗留】登录任务完成后清理引用。"""
         with self._login_lock:
             if self._login_future is future:
                 self._login_future = None
@@ -356,12 +415,12 @@ class TaskExecutor:
         )
         return success, message
 
-    def execute_login(
+    def _legacy_execute_login(
         self,
         cancel_event: threading.Event | None = None,
         config_snapshot: dict | None = None,
     ) -> tuple[bool, str]:
-        """同步执行登录（在 login_pool 工作线程中运行）。
+        """【遗留】同步执行登录（在 login_pool 工作线程中运行）。
 
         通过 PlaywrightWorker 执行浏览器自动化登录。
         config_snapshot 优先使用，避免二次读取产生 TOCTOU 竞态。
@@ -583,4 +642,6 @@ class TaskExecutor:
         self._login_pool.shutdown(wait=wait)
         with self._running_tasks_lock:
             self._running_tasks.clear()
+        if self._login_orchestrator is not None:
+            self._login_orchestrator.shutdown(wait=wait)
         logger.info("TaskExecutor 已关闭")

@@ -2,6 +2,15 @@
 
 ## 2026-06-20
 
+### refactor
+- TaskExecutor 增加 LoginOrchestrator 委托层（Task 5）
+  - `app/services/task_executor.py` `__init__` 新增 `login_orchestrator` 可选参数，默认 None
+  - 原 `execute_login_async`/`execute_login`/`_on_login_done`/`_link_cancel_event` 重命名为 `_legacy_*` 前缀版本
+  - 新增同名委托方法：优先走 Orchestrator 路径，orchestrator 为 None 时回退遗留路径，签名完全兼容
+  - 新增 `is_login_running`/`cancel_login` 委托：orchestrator 存在时委托给 orchestrator
+  - `shutdown` 新增 orchestrator 清理逻辑
+  - 确保 `login_orchestrator=None`（默认）时行为与改动前完全一致，所有 114 个 task_executor 测试通过
+
 ### fix
 - login_orchestrator 线程泄漏防护、shutdown、ImportError 友好提示、类型标注
   - C1: `_link_cancel` watcher 线程添加 300 秒 deadline，超时自动退出防止线程泄漏
