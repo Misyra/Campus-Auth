@@ -3,6 +3,13 @@
 ## 2026-06-19
 
 ### test
+- 新增 `tests/test_integration/test_profile_connection.py` Profile 切换链路连接测试（3 个场景）
+  - `test_apply_profile`：切换方案 → engine 使用新凭证（profile_service.set_active_profile + engine.apply_profile）
+  - `test_switch_while_monitoring`：监控运行中切换 → 旧配置停、新配置起，无线程泄漏
+  - `test_delete_current_profile`：删除当前方案 → 回退到 default
+  - 使用真实组件栈（integration_stack fixture），直接设置 _monitor_core 绕过异步队列
+
+### test
 - 新增 `tests/test_integration/test_network_connection.py` 网络检测链路连接测试（5 个场景）
   - `test_need_login`：网络不通 → check_once 返回 need_login=True
   - `test_network_ok`：网络通 → check_once 返回 need_login=False
