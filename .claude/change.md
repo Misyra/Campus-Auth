@@ -1,5 +1,135 @@
 # 修改日志
 
+## 2026-06-20
+
+### fix
+- F17+F18+F19: 文档注释 + OpenAPI description + 指数退避上限（3 项）
+  - F17: `app/schemas.py` `SystemSettings` docstring 补充说明 auth_url/carrier/carrier_custom 同时存在于 global_settings 和 profile 是有意设计（全局默认值 + profile 实例覆盖）
+  - F18: `app/schemas.py` `_MonitorFieldsMixin` 的 auth_url/active_task/carrier/carrier_custom 四个字段补充 description，解决 MRO 中 `_MonitorFieldsMixin` 覆盖 `_SystemFieldsMixin` description 的问题
+  - F19: `app/utils/retry.py` `get_retry_intervals` 新增 `max_interval` 参数（默认 300s），指数退避时单次间隔不超过该上限，防止间隔过大
+  - 更新 `tests/test_utils/test_retry.py`：新增 5 个 max_interval 测试 + 修复 `test_large_interval` 适配 max_interval 默认值
+
+### fix
+- F14+F15+F16: 健壮性改进（3 项防御性修复）
+  - F14: `main.py` `_run_lightweight` finally 块兜底清理 — 即使 `_web_server_state["started"]` 为 True，若 `server_ref[0]` 仍为 None（Uvicorn 子线程崩溃），仍执行容器 shutdown，防止资源泄漏
+  - F15: `app/services/engine.py` `set_dashboard_sink` 迁移轻量模式广播队列 — 注入新 DashboardSink 时，将 `_empty_broadcast_queue` 中积累的残留消息迁移到新 sink 的 `broadcast_queue`
+  - F16: `app/services/websocket_manager.py` `broadcast` 总体超时 — 用 `asyncio.wait_for` 包裹 `asyncio.gather`，总体超时 5 秒，防止 N 个卡住连接导致等待 N×5s
+  - 新增 10 个测试：`TestLightweightFallbackCleanup`（4）+ `TestSetDashboardSinkMigration`（3）+ `TestBroadcastOverallTimeout`（3）
+
+### fix
+- F12: 重构 _link_cancel_event，消除线程泄漏
+  - `app/services/task_executor.py`：`_link_cancel_event` 从 `@staticmethod` 改为实例方法，不再每次新建 daemon 线程
+  - `app/services/task_executor.py`：新增 `_cancel_link_queue`（事件队列）、`_cancel_link_thread`、`_cancel_link_lock` 三个 `__init__` 字段
+  - `app/services/task_executor.py`：新增 `_ensure_cancel_link_thread()`（惰性启动单个 watcher）和 `_cancel_link_loop()`（常驻 watcher 从队列取事件并监控）
+  - `app/services/task_executor.py`：`shutdown` 末尾投递毒丸 `None` 关闭 watcher 线程
+  - 新增 6 个测试：`TestCancelLinkWatcherThread`（单线程复用 / 高频不泄漏 / 联动传播 / 死亡重启 / 毒丸退出 / shutdown 幂等）
+
+### fix
+- F11+F20: 浏览器定时任务 cancel_event 支持 + 清理 pure_mode 死字段
+  - F11: `app/services/task_executor.py` `_execute_browser` 新增 `cancel_event` 参数，传递给 `worker.submit` 的 data dict，支持定时浏览器任务取消
+  - F20: `app/services/task_executor.py` `execute_login` 和 `_execute_browser` 的 data dict 移除 `pure_mode` 死字段（Worker `_handle_login` 仅从 `config["browser_settings"]["pure_mode"]` 读取，不读 `data["pure_mode"]`）
+  - `app/workers/playwright_worker.py` CMD_LOGIN 常量注释补充说明登录与浏览器定时任务共用此命令
+  - 新增 7 个测试：`TestTaskExecutorExecuteBrowser`（4: data_no_pure_mode / cancel_event_passed / cancel_event_default_none / timeout_forwarded）+ `TestExecuteLoginDataDict`（2: login_data_no_pure_mode / login_data_contains_cancel_event）
+  - 修复已有测试 `test_login_timeout_default_300` 断言值从 300 改为 90（与代码 `config.get("login_timeout", 90)` 默认值一致）
+
+### fix
+- F10: 定时任务 task_id 去重，防止同一任务重复提交
+  - `app/services/task_executor.py`：`__init__` 新增 `_running_tasks` 字典和 `_running_tasks_lock` 锁
+  - `app/services/task_executor.py`：`execute_task_async` 提交前检查是否有 pending 的同 task_id 任务，有则返回已有 Future
+  - `app/services/task_executor.py`：任务完成后通过 `done_callback` 自动从 `_running_tasks` 清理
+  - `app/services/task_executor.py`：`shutdown` 清空 `_running_tasks`
+  - 新增 5 个测试覆盖去重行为：跳过 pending、完成后允许重新提交、不同 task_id 不干扰、清理回调、shutdown 清空
+
+### fix
+- I1+I2: 统一 login_timeout 默认值为 90s + main.py 添加 max(login_timeout, 60) 下限防护
+  - `main.py:219` 默认值从 120 改为 90，与 `schemas.py` `Field(default=90)` 一致
+  - `app/services/task_executor.py:329` 默认值从 300 改为 90
+  - `main.py` 添加 `max(login_timeout, 60)` 下限防护，与 `task_executor.py` 和 `engine.py` 一致
+  - 更新测试 `test_login_timeout_default_120` 断言从 120 改为 90
+
+### fix
+- F08: `main.py` login_once 重试间隔改为固定间隔（与 LoginRetryManager 一致）
+  - `_execute_login_with_retries` 中 `min(interval * 2^(n-2), 300)` 指数退避改为 `time.sleep(retry_interval)` 固定间隔
+  - 引擎内 `LoginRetryManager` 使用 `get_retry_intervals(exponential=False)`（固定间隔），login_once 现在行为一致
+
+### fix
+- F09: 统一登录超时 — Worker timeout 使用 `login_timeout` 配置
+  - `main.py` `_execute_login_with_retries`：从 `runtime_config.get("login_timeout", 120)` 读取超时，替代硬编码 `timeout=120`
+  - `app/services/task_executor.py` `execute_login`：从 `config.get("login_timeout", 300)` 读取超时，下限 60s 防误配
+  - `app/services/config_service.py` `build_runtime_dict_from_payload`：新增 `base["login_timeout"] = gs.login_timeout`
+  - `app/services/engine.py` `run_manual_login`：API 等待超时改为 `max(login_timeout, 60) + 10`，大于 Worker 超时
+  - 新增 8 个测试：`TestLoginOnceRetryInterval`（3）+ `TestBuildRuntimeDictLoginTimeout`（2）+ `TestRunManualLogin.test_run_manual_login_api_timeout_buffered`（1）+ `TestTaskExecutorExecuteLogin`（3: timeout_from_config / default_300 / minimum_60）
+  - 更新 2 个已有测试（timeout_engine_alive / timeout_engine_dead）适配 buffered timeout
+
+### fix
+- `main.py` + `app/application.py` 校正 boot() 与 DashboardSink 注入顺序（F07）
+  - 问题：`_run_full` 在 Uvicorn 启动前调用 `boot()`，此时 DashboardSink 尚未注入（注入发生在 lifespan 的 `start_web_services()` 中），启动期间日志丢失
+  - `main.py` `_run_full`：移除直接调用 `container.engine.boot()`，改为传递 `boot_engine=should_boot_engine` 给 `run()`
+  - `app/application.py` `run()`：新增 `boot_engine` 参数，透传给 `create_app()`
+  - `app/application.py` `create_app()`：新增 `boot_engine` 参数，透传给 `_create_lifespan()`
+  - `app/application.py` `_create_lifespan()`：新增 `boot_engine` 参数；existing_container 分支中，先 `start_web_services()` 注入 DashboardSink，再条件性调用 `engine.boot()`（`boot_engine=True` 且未在监控时）
+  - `container.startup()` 内部顺序已正确（先 start_web_services 后 boot），不需要修改
+  - 轻量模式 `main.py` 自己调 boot，无 Web 服务，不受影响
+  - 新增 10 个测试：`TestBootEnginePropagation`（2）+ `TestLifespanBootOrder`（5）+ `TestRunFullNoDirectBoot`（2）+ `TestContainerStartupOrder`（1）
+
+### fix
+- `app/services/engine.py` + `app/services/task_executor.py` 修复手动取消竞态窗口（F06）+ 消除 cancel_event 冗余检查（F13）
+  - F06: 手动取消旧登录超时后，`_do_async_login` 不传 cancel_event，`execute_login_async` 自动新建空 Event，命中去重返回旧 future
+  - `task_executor.py` 新增 `force_clear_login_slot()` 方法：强制清理旧 `_login_future` 和 `_login_cancel_event`
+  - `engine.py` `_do_async_login`: 取消超时后调用 `force_clear_login_slot()` 强制接管登录槽；手动路径显式传入新的 `manual_cancel` Event
+  - F13: `execute_login_async` 第 195 行 `cancel_event is not None` 永真检查移除（第 186-187 行已保证非 None）
+  - 新增 7 个测试：`TestManualLoginCancelRaceFix`（5 个）+ `TestForceClearLoginSlot`（4 个）+ `TestCancelEventRedundancyFix`（2 个）
+
+### fix
+- `app/services/engine.py` 自动登录路径增加配置校验（F05）
+  - 原代码 `_handle_login`（手动入口）校验 username/password/auth_url，但 `_do_async_login`（自动入口）无校验
+  - 配置不完整时，空配置传入 Worker，启动浏览器后才在步骤级失败，浪费 5-15 秒
+  - 新增 `_validate_login_config(config)` 方法：校验配置完整性，返回 None 表示通过，否则返回错误信息
+  - `_do_async_login` 顶部统一调用 `_validate_login_config`，校验失败时记录 WARNING 日志、重置重试状态、直接返回 False
+  - `_handle_login` 改为复用 `_validate_login_config`，消除重复的内联校验逻辑
+  - 配置校验失败不触发 `_on_done` 回调（不提交任务、不注册回调），`_consecutive_login_failures` 不会累计
+  - 新增 `TestValidateLoginConfig`（7 个测试）和 `TestDoAsyncLogin` 补充测试（6 个测试），覆盖校验通过/失败/缺失字段/快照绕过等场景
+
+### fix
+- `app/services/engine.py` 网络检测不再无条件 reset 重试计数（F04）
+  - 原代码每次 `need_login=True` 都调用 `_login_retry.reset()`，导致重试计数归零，认证服务器长期宕机时系统永不停机地循环"检测→重试系列→检测→重试系列"
+  - `_do_network_check`：仅在 `count==0`（首次发现 need_login）时 reset+configure
+  - `_do_async_login` `_on_done` 回调：自动登录成功清空 `_consecutive_login_failures`；失败递增计数，达到 `_LOGIN_BACKOFF_THRESHOLD`(3) 后触发 `_apply_backoff_interval` 指数退避
+  - 新增 `_consecutive_login_failures` / `_backoff_check_multiplier` 两个 `__init__` 字段
+  - 新增 `_login_retry_max_cycles()` / `_apply_backoff_interval()` 辅助方法
+  - 退避乘数上限 6（`extra = (6-1) * interval = 1500s ≈ 25min`），网络恢复后立即清零
+  - `_handle_stop` 同步重置退避状态
+  - 新增 12 个测试覆盖全部新增分支（count>0 跳过 reset、失败累计、退避触发、手动登录隔离、乘数封顶等）
+
+### fix
+- `main.py` `_execute_login_with_retries` 记录登录历史（F02）
+  - 原代码直接调用 `get_worker().submit(CMD_LOGIN, ...)`，完全绕过 TaskExecutor 的 `_record_login_history()`
+  - `--startup-action login_once` 的登录在历史页面不可见
+  - 新增 `LoginHistoryService(AUTH_DATA_DIR)` 和 `create_profile_service()` 初始化
+  - 每次登录尝试后调用 `history.record(success=, duration_ms=, profile_service=, error=)` 记录历史
+  - 成功/失败都记录，与 TaskExecutor 行为一致
+  - 新增测试 `test_login_once_records_history` 和 `test_login_once_records_failure_history`
+
+### fix
+- `app/services/config_service.py` 配置回滚后检查第二次 reload 返回值（F01）
+  - 原代码 `reload_fn()` 返回值被丢弃，回滚后重载失败时用户看到的是第一次失败信息
+  - 捕获第二次 `reload_fn()` 返回值 `(rollback_ok, rollback_msg)`
+  - 回滚后重载也失败：message 同时包含两次失败信息
+  - 回滚后重载成功：message 标注"已回滚"
+  - 回滚过程异常：保持原有异常处理不变
+  - 新增测试 `test_reload_failure_and_rollback_reload_also_fails`
+
+### fix
+- `app/services/engine.py` record_attempt 移到 execute_login_async 成功提交之后（F03）
+  - 原代码在 `execute_login_async` 调用前递增重试计数，提交异常时白白消耗一次重试机会
+  - 移到 `execute_login_async` 成功返回后，异常时不会递增
+  - 新增测试 `test_exception_does_not_consume_retry` 和 `test_success_increments_retry_count`
+
+## 2026-06-19
+
+### chore
+- 删除过期的 Rust 迁移设计文档 `rustforcam/docs/2026-06-18-rust-migration-design.md`
+
 ## 2026-06-19
 
 ### test

@@ -631,23 +631,242 @@ class TestLoginRetryNeeded:
 
 
 # =====================================================================
+# _validate_login_config
+# =====================================================================
+
+
+class TestValidateLoginConfig:
+    def test_valid_config_returns_none(self, engine_factory):
+        svc = engine_factory(raw=True)
+        config = {"username": "u", "password": "p", "auth_url": "http://x"}
+        assert svc._validate_login_config(config) is None
+
+    def test_empty_config_returns_error(self, engine_factory):
+        svc = engine_factory(raw=True)
+        result = svc._validate_login_config({})
+        assert result is not None
+        assert "配置不完整" in result
+
+    def test_missing_username_returns_error(self, engine_factory):
+        svc = engine_factory(raw=True)
+        config = {"password": "p", "auth_url": "http://x"}
+        result = svc._validate_login_config(config)
+        assert result is not None
+
+    def test_missing_password_returns_error(self, engine_factory):
+        svc = engine_factory(raw=True)
+        config = {"username": "u", "auth_url": "http://x"}
+        result = svc._validate_login_config(config)
+        assert result is not None
+
+    def test_missing_auth_url_returns_error(self, engine_factory):
+        svc = engine_factory(raw=True)
+        config = {"username": "u", "password": "p"}
+        result = svc._validate_login_config(config)
+        assert result is not None
+
+    def test_none_config_uses_runtime_config(self, engine_factory):
+        """config=None 时应从 _copy_runtime_config 读取。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
+        assert svc._validate_login_config() is None
+
+    def test_none_config_empty_runtime_returns_error(self, engine_factory):
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {}
+        result = svc._validate_login_config()
+        assert result is not None
+
+
+# =====================================================================
 # _do_async_login
 # =====================================================================
+
+
+# =====================================================================
+# F04: 网络检测不再无条件 reset 重试计数
+# =====================================================================
+
+
+class TestNetworkCheckBackoff:
+    def test_need_login_count_zero_resets_and_configures(self, engine_factory):
+        """count==0 时 need_login 应 reset+configure。"""
+        svc = engine_factory(raw=True)
+        mock_core = MagicMock()
+        mock_core.check_once.return_value = {"need_login": True, "interval": 300}
+        mock_core.consume_profile_switch_flag.return_value = False
+        svc._monitor_core = mock_core
+        svc._copy_runtime_config = MagicMock(return_value={
+            "retry_settings": {"max_retries": 3, "retry_interval": 30}
+        })
+        svc._do_async_login = MagicMock()
+        svc._login_retry.count = 0
+        with patch("app.utils.retry.get_retry_intervals", return_value=[30, 30, 30]):
+            svc._do_network_check()
+        svc._do_async_login.assert_called_once()
+        assert svc._login_retry.config == (3, [30, 30, 30])
+
+    def test_need_login_count_nonzero_skips_reset(self, engine_factory):
+        """count>0 时 need_login 应跳过 reset+configure，仅调用 _do_async_login。"""
+        svc = engine_factory(raw=True)
+        mock_core = MagicMock()
+        mock_core.check_once.return_value = {"need_login": True, "interval": 300}
+        mock_core.consume_profile_switch_flag.return_value = False
+        svc._monitor_core = mock_core
+        svc._do_async_login = MagicMock()
+        svc._login_retry.count = 2
+        svc._login_retry.config = (3, [5, 5, 5])
+        svc._do_network_check()
+        svc._do_async_login.assert_called_once()
+        # config 不应被覆盖
+        assert svc._login_retry.config == (3, [5, 5, 5])
+        # count 不应被 reset
+        assert svc._login_retry.count == 2
+
+    def test_no_login_needed_resets_failure_counters(self, engine_factory):
+        """need_login=False 应清空连续失败计数和退避乘数。"""
+        svc = engine_factory(raw=True)
+        mock_core = MagicMock()
+        mock_core.check_once.return_value = {"need_login": False, "interval": 600}
+        mock_core.consume_profile_switch_flag.return_value = False
+        svc._monitor_core = mock_core
+        svc._consecutive_login_failures = 5
+        svc._backoff_check_multiplier = 4
+        svc._do_network_check()
+        assert svc._consecutive_login_failures == 0
+        assert svc._backoff_check_multiplier == 1
+        assert svc._login_retry.count == 0
+
+    def test_on_done_auto_success_clears_failure_count(self, engine_factory):
+        """自动登录成功应清空连续失败计数。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
+        svc._consecutive_login_failures = 3
+        future = Future()
+        svc._task_executor.execute_login_async.return_value = future
+        svc._task_executor.is_login_running.return_value = False
+        svc._do_async_login()
+        future.set_result((True, "登录成功"))
+        assert svc._consecutive_login_failures == 0
+
+    def test_on_done_auto_failure_increments_count(self, engine_factory):
+        """自动登录失败应递增连续失败计数。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
+        svc._consecutive_login_failures = 0
+        future = Future()
+        svc._task_executor.execute_login_async.return_value = future
+        svc._task_executor.is_login_running.return_value = False
+        svc._do_async_login()
+        future.set_result((False, "登录失败"))
+        assert svc._consecutive_login_failures == 1
+
+    def test_on_done_auto_failure_triggers_backoff(self, engine_factory):
+        """连续失败达到阈值后应触发降频。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
+        svc._consecutive_login_failures = 2  # 再失败一次就达到阈值 3
+        svc._backoff_check_multiplier = 1
+        svc._monitor_check_interval = 300
+        future = Future()
+        svc._task_executor.execute_login_async.return_value = future
+        svc._task_executor.is_login_running.return_value = False
+        svc._do_async_login()
+        future.set_result((False, "登录失败"))
+        assert svc._consecutive_login_failures == 3
+        # 乘数应从 1 升至 2
+        assert svc._backoff_check_multiplier == 2
+
+    def test_on_done_manual_login_does_not_affect_failure_count(self, engine_factory):
+        """手动登录结果不应影响连续失败计数。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
+        svc._consecutive_login_failures = 2
+        future = Future()
+        svc._task_executor.execute_login_async.return_value = future
+        svc._task_executor.is_login_running.return_value = False
+        svc._do_async_login(is_manual=True)
+        future.set_result((False, "登录失败"))
+        # 手动登录不应递增
+        assert svc._consecutive_login_failures == 2
+
+    def test_on_done_manual_success_does_not_clear_failure_count(self, engine_factory):
+        """手动登录成功不应清空自动登录的连续失败计数。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
+        svc._consecutive_login_failures = 2
+        future = Future()
+        svc._task_executor.execute_login_async.return_value = future
+        svc._task_executor.is_login_running.return_value = False
+        svc._do_async_login(is_manual=True)
+        future.set_result((True, "登录成功"))
+        assert svc._consecutive_login_failures == 2
+
+    def test_login_retry_max_cycles(self, engine_factory):
+        svc = engine_factory(raw=True)
+        assert svc._login_retry_max_cycles() == 3
+
+    def test_apply_backoff_interval_caps_multiplier(self, engine_factory):
+        """退避乘数不应超过 6。"""
+        svc = engine_factory(raw=True)
+        svc._backoff_check_multiplier = 6
+        svc._monitor_check_interval = 300
+        svc._consecutive_login_failures = 10
+        svc._apply_backoff_interval()
+        assert svc._backoff_check_multiplier == 6
+
+    def test_apply_backoff_interval_increases_multiplier(self, engine_factory):
+        svc = engine_factory(raw=True)
+        svc._backoff_check_multiplier = 1
+        svc._monitor_check_interval = 300
+        svc._consecutive_login_failures = 3
+        svc._apply_backoff_interval()
+        assert svc._backoff_check_multiplier == 2
+        # extra = (2-1) * 300 = 300
+        assert svc._next_network_check > time.time() + 299
+
+    def test_apply_backoff_interval_doubles_each_time(self, engine_factory):
+        """连续触发退避应指数增长。"""
+        svc = engine_factory(raw=True)
+        svc._monitor_check_interval = 300
+        svc._consecutive_login_failures = 3
+
+        svc._backoff_check_multiplier = 1
+        svc._apply_backoff_interval()
+        assert svc._backoff_check_multiplier == 2  # extra = 300s
+
+        svc._apply_backoff_interval()
+        assert svc._backoff_check_multiplier == 4  # extra = 900s
+
+        svc._apply_backoff_interval()
+        assert svc._backoff_check_multiplier == 6  # extra = 1500s (cap)
+
+        svc._apply_backoff_interval()
+        assert svc._backoff_check_multiplier == 6  # 保持 cap
+
+    def test_init_fields_exist(self, engine_factory):
+        """__init__ 中应初始化降频相关字段。"""
+        svc = engine_factory(raw=True)
+        assert svc._consecutive_login_failures == 0
+        assert svc._backoff_check_multiplier == 1
 
 
 class TestDoAsyncLogin:
     def test_already_in_progress(self, engine_factory):
         svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         svc._task_executor.is_login_running.return_value = True
         assert svc._do_async_login() is False
 
     def test_future_none(self, engine_factory):
         svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         svc._task_executor.execute_login_async.return_value = None
         assert svc._do_async_login() is False
 
     def test_future_success(self, engine_factory):
         svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         # 使用一个未完成的 Future，避免 done_callback 立即执行
         future = Future()
         svc._task_executor.execute_login_async.return_value = future
@@ -657,10 +876,79 @@ class TestDoAsyncLogin:
 
     def test_exception_propagates(self, engine_factory):
         svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         svc._task_executor.is_login_running.return_value = False
         svc._task_executor.execute_login_async.side_effect = RuntimeError("boom")
         with pytest.raises(RuntimeError):
             svc._do_async_login()
+
+    def test_exception_does_not_consume_retry(self, engine_factory):
+        """execute_login_async 抛异常时不应递增重试计数（F03）。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
+        svc._task_executor.is_login_running.return_value = False
+        svc._task_executor.execute_login_async.side_effect = RuntimeError("pool closed")
+        svc._login_retry.count = 0
+        with pytest.raises(RuntimeError):
+            svc._do_async_login()
+        assert svc._login_retry.count == 0
+
+    def test_success_increments_retry_count(self, engine_factory):
+        """execute_login_async 成功后应递增重试计数。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
+        future = Future()
+        svc._task_executor.execute_login_async.return_value = future
+        svc._task_executor.is_login_running.return_value = False
+        svc._login_retry.count = 0
+        svc._do_async_login()
+        assert svc._login_retry.count == 1
+
+    def test_config_validation_blocks_auto_login(self, engine_factory):
+        """配置不完整时自动登录应被拦截，不提交任务。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {}  # 空配置
+        svc._task_executor.is_login_running.return_value = False
+        result = svc._do_async_login()
+        assert result is False
+        svc._task_executor.execute_login_async.assert_not_called()
+
+    def test_config_validation_resets_retry_on_failure(self, engine_factory):
+        """配置校验失败应重置重试状态。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {}
+        svc._login_retry.count = 2
+        svc._do_async_login()
+        assert svc._login_retry.count == 0
+
+    def test_config_validation_blocks_missing_username(self, engine_factory):
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {"password": "p", "auth_url": "http://x"}
+        svc._task_executor.is_login_running.return_value = False
+        assert svc._do_async_login() is False
+
+    def test_config_validation_blocks_missing_password(self, engine_factory):
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "auth_url": "http://x"}
+        svc._task_executor.is_login_running.return_value = False
+        assert svc._do_async_login() is False
+
+    def test_config_validation_blocks_missing_auth_url(self, engine_factory):
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {"username": "u", "password": "p"}
+        svc._task_executor.is_login_running.return_value = False
+        assert svc._do_async_login() is False
+
+    def test_config_snapshot_bypasses_runtime_config(self, engine_factory):
+        """传入 config_snapshot 时应使用快照而非 _runtime_config。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = {}  # 运行时配置为空
+        snapshot = {"username": "u", "password": "p", "auth_url": "http://x"}
+        future = Future()
+        svc._task_executor.execute_login_async.return_value = future
+        svc._task_executor.is_login_running.return_value = False
+        result = svc._do_async_login(config_snapshot=snapshot)
+        assert result is True
 
 
 
@@ -1064,12 +1352,17 @@ class TestRunManualLogin:
     def test_run_manual_login_timeout_engine_alive(self, engine_factory):
         svc = engine_factory(raw=True)
         def fake_enqueue(cmd):
+            # 不设置 response_data，模拟超时
             return True
         svc._enqueue = fake_enqueue
         svc._engine_thread = MagicMock()
         svc._engine_thread.is_alive.return_value = True
         svc._ui_config.login_timeout = 0.01
-        ok, msg = svc.run_manual_login()
+        # 用 mock Event 使 wait 立即返回 False，避免真实等待 70s
+        fast_event = MagicMock()
+        fast_event.wait.return_value = False
+        with patch("threading.Event", return_value=fast_event):
+            ok, msg = svc.run_manual_login()
         assert ok is False
         assert "超时" in msg
         assert not svc._manual_login_in_progress
@@ -1082,9 +1375,38 @@ class TestRunManualLogin:
         svc._engine_thread = MagicMock()
         svc._engine_thread.is_alive.return_value = False
         svc._ui_config.login_timeout = 0.01
-        ok, msg = svc.run_manual_login()
+        fast_event = MagicMock()
+        fast_event.wait.return_value = False
+        with patch("threading.Event", return_value=fast_event):
+            ok, msg = svc.run_manual_login()
         assert ok is False
         assert "引擎线程已退出" in msg
+
+    def test_run_manual_login_api_timeout_buffered(self, engine_factory):
+        """API 等待超时应为 max(login_timeout, 60) + 10，大于 Worker 超时。"""
+        svc = engine_factory(raw=True)
+        wait_calls = []
+
+        def fake_enqueue(cmd):
+            # 模拟引擎线程设置响应
+            cmd.response_data = (True, "登录已提交")
+            return True
+        svc._enqueue = fake_enqueue
+        svc._engine_thread = MagicMock()
+        svc._engine_thread.is_alive.return_value = True
+        svc._ui_config.login_timeout = 150
+
+        spy_event = MagicMock()
+        spy_event.wait.side_effect = lambda timeout=None: (
+            wait_calls.append(timeout) or True
+        )
+        with patch("threading.Event", return_value=spy_event):
+            ok, msg = svc.run_manual_login()
+
+        assert ok is True
+        # 等待超时应为 max(150, 60) + 10 = 160
+        assert len(wait_calls) >= 1
+        assert wait_calls[-1] == 160
 
 
 # =====================================================================
@@ -1355,3 +1677,56 @@ class TestWsDrain:
         svc._ws_manager.broadcast.side_effect = RuntimeError("ws error")
         svc._empty_broadcast_queue.append({"type": "status", "data": {}})
         await svc.drain_ws_queue()
+
+
+# =====================================================================
+# F15 — set_dashboard_sink 迁移轻量模式广播队列
+# =====================================================================
+
+
+class TestSetDashboardSinkMigration:
+    """F15: set_dashboard_sink 应将 _empty_broadcast_queue 内容迁移到新 sink。"""
+
+    def test_migrates_old_queue_to_new_sink(self, engine_factory):
+        """有残留消息时应迁移到新 sink 的 broadcast_queue。"""
+        svc = engine_factory(raw=True)
+        svc._dashboard_sink = None
+        msg1 = {"type": "status", "data": {"monitoring": True}}
+        msg2 = {"type": "status", "data": {"monitoring": False}}
+        svc._empty_broadcast_queue.append(msg1)
+        svc._empty_broadcast_queue.append(msg2)
+
+        mock_sink = MagicMock()
+        mock_sink.broadcast_queue = deque()
+        svc.set_dashboard_sink(mock_sink)
+
+        assert list(mock_sink.broadcast_queue) == [msg1, msg2]
+        assert len(svc._empty_broadcast_queue) == 0
+
+    def test_empty_old_queue_noop(self, engine_factory):
+        """旧队列为空时不应影响新 sink。"""
+        svc = engine_factory(raw=True)
+        svc._dashboard_sink = None
+        assert len(svc._empty_broadcast_queue) == 0
+
+        mock_sink = MagicMock()
+        mock_sink.broadcast_queue = deque()
+        svc.set_dashboard_sink(mock_sink)
+
+        assert len(mock_sink.broadcast_queue) == 0
+        assert svc._dashboard_sink is mock_sink
+
+    def test_migrates_even_when_old_queue_full(self, engine_factory):
+        """旧队列满（maxlen=10）时迁移现有内容。"""
+        svc = engine_factory(raw=True)
+        svc._dashboard_sink = None
+        for i in range(12):
+            svc._empty_broadcast_queue.append({"type": "status", "data": {"i": i}})
+
+        mock_sink = MagicMock()
+        mock_sink.broadcast_queue = deque()
+        svc.set_dashboard_sink(mock_sink)
+
+        # maxlen=10，所以只有最后 10 条
+        assert len(mock_sink.broadcast_queue) == 10
+        assert len(svc._empty_broadcast_queue) == 0

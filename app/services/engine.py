@@ -154,6 +154,10 @@ class ScheduleEngine:
         self._monitor_check_interval: int = 300
         self._login_retry = LoginRetryManager()
 
+        # 连续登录失败计数（用于降频检测）
+        self._consecutive_login_failures: int = 0
+        self._backoff_check_multiplier: int = 1
+
         # 统一引擎线程
         self._engine_thread = threading.Thread(target=self._engine_loop, daemon=True)
         self._engine_thread.start()
@@ -267,11 +271,17 @@ class ScheduleEngine:
             self._monitor_check_interval = interval
 
             if result.get("need_login", False):
-                self._login_retry.reset()
-                self._configure_retry()
-                # check_once 已完成暂停/网络检测，跳过 attempt_login 内冗余二次检测
+                # 仅在首次发现 need_login（重试尚未进行）时 reset+configure
+                if self._login_retry.count == 0:
+                    self._login_retry.reset()
+                    self._configure_retry()
                 self._do_async_login()
             else:
+                # 网络恢复正常：清空失败计数，重置重试状态
+                if self._consecutive_login_failures > 0:
+                    logger.info("网络已恢复，重置重试状态")
+                self._consecutive_login_failures = 0
+                self._backoff_check_multiplier = 1
                 self._login_retry.reset()
 
             # 检查是否需要重启（自动切换方案）
@@ -304,14 +314,48 @@ class ScheduleEngine:
             logger.warning("加载重试配置失败，使用默认值")
             self._login_retry.configure(3, [5, 5, 5])
 
+    _LOGIN_BACKOFF_THRESHOLD = 3  # 连续 3 轮（每轮 max_retries 次）失败后降频
+
+    def _login_retry_max_cycles(self) -> int:
+        """返回触发降频的连续失败轮数阈值。"""
+        return self._LOGIN_BACKOFF_THRESHOLD
+
+    def _apply_backoff_interval(self) -> None:
+        """达到失败阈值后，延长下一次网络检测间隔（指数退避，上限 30 分钟）。"""
+        self._backoff_check_multiplier = min(self._backoff_check_multiplier * 2, 6)
+        extra = (self._backoff_check_multiplier - 1) * self._monitor_check_interval
+        self._next_network_check = time.time() + extra
+        logger.warning(
+            "登录已连续失败 {} 轮，下次网络检测降频至 {}s 后",
+            self._consecutive_login_failures,
+            int(extra),
+        )
+
     def _login_retry_needed(self, now: float) -> bool:
         """检查是否需要登录重试。"""
         if self._task_executor.is_login_running():
             return False
         return self._login_retry.need_retry(now)
 
+    def _validate_login_config(self, config: dict | None = None) -> str | None:
+        """校验登录配置完整性。返回 None 表示通过，否则返回错误信息。"""
+        cfg = config if config is not None else self._copy_runtime_config()
+        if not cfg.get("username") or not cfg.get("password") or not cfg.get("auth_url"):
+            return "登录配置不完整（请先设置认证地址、用户名和密码）"
+        return None
+
     def _do_async_login(self, is_manual: bool = False, config_snapshot: dict | None = None) -> bool:
         """提交登录到 executor 的 login_pool。返回 True 表示已提交。"""
+        # 统一配置校验（自动登录路径此前缺失）
+        config = config_snapshot if config_snapshot is not None else self._copy_runtime_config()
+        err = self._validate_login_config(config)
+        if err is not None:
+            logger.warning("跳过登录: {}", err)
+            self.record_log(err, level="WARNING", source="backend")
+            # 重置重试状态，避免持续触发
+            self._login_retry.reset()
+            return False
+
         if self._task_executor.is_login_running():
             if not is_manual:
                 return False
@@ -322,17 +366,21 @@ class ScheduleEngine:
             while self._task_executor.is_login_running() and time.time() < deadline:
                 time.sleep(0.1)
             if self._task_executor.is_login_running():
-                logger.warning("取消当前登录超时，将尝试提交新登录")
-        if not is_manual:
-            self._login_retry.record_attempt(time.time())
+                logger.warning("取消当前登录超时，强制接管登录槽")
+                self._task_executor.force_clear_login_slot()
 
+        # 手动路径显式传入新的 cancel_event
+        manual_cancel = threading.Event() if is_manual else None
         try:
             future = self._task_executor.execute_login_async(
-                config_snapshot=config_snapshot,
+                cancel_event=manual_cancel,
+                config_snapshot=config,
             )
         except Exception:
             self._update_status_snapshot()
             raise
+        if not is_manual:
+            self._login_retry.record_attempt(time.time())
         if future is not None:
 
             def _on_done(f: Future) -> None:
@@ -342,8 +390,16 @@ class ScheduleEngine:
                     tag = "手动登录" if is_manual else "自动登录"
                     if ok:
                         logger.info("{}完成: {}", tag, msg)
+                        # 成功则清空失败计数
+                        if not is_manual:
+                            self._consecutive_login_failures = 0
                     else:
                         logger.warning("{}失败: {}", tag, msg)
+                        # 累计失败，达到阈值后降频
+                        if not is_manual:
+                            self._consecutive_login_failures += 1
+                            if self._consecutive_login_failures >= self._login_retry_max_cycles():
+                                self._apply_backoff_interval()
                 except Exception:
                     logger.exception("登录任务异常")
 
@@ -405,6 +461,8 @@ class ScheduleEngine:
         core.stop_monitoring()
         self._monitor_core = None
         self._login_retry.reset()
+        self._consecutive_login_failures = 0
+        self._backoff_check_multiplier = 1
         self._next_network_check = 0
 
         self.record_log("监控已停止", level="INFO", source="backend")
@@ -417,8 +475,9 @@ class ScheduleEngine:
     def _handle_login(self, cmd: EngineCommand) -> None:
         """执行一次性登录（手动触发，异步执行）。"""
         config = self._copy_runtime_config()
-        if not config.get("username") or not config.get("password") or not config.get("auth_url"):
-            cmd.response_data = (False, "登录配置不完整（请先设置认证地址、用户名和密码）")
+        err = self._validate_login_config(config)
+        if err is not None:
+            cmd.response_data = (False, err)
             return
         if self._do_async_login(is_manual=True, config_snapshot=config):
             cmd.response_data = (True, "登录已提交")
@@ -580,7 +639,16 @@ class ScheduleEngine:
         return self._task_executor.is_login_running()
 
     def set_dashboard_sink(self, sink) -> None:
-        """注入 DashboardSink 实例（由 container.start_web_services 调用）。"""
+        """注入 DashboardSink，并迁移轻量模式期间积累的广播消息。"""
+        # 迁移轻量模式期间积累的广播消息
+        old_queue = self._empty_broadcast_queue
+        if old_queue:
+            new_queue = sink.broadcast_queue
+            while old_queue:
+                try:
+                    new_queue.append(old_queue.popleft())
+                except IndexError:
+                    break
         self._dashboard_sink = sink
 
     @property
@@ -768,8 +836,11 @@ class ScheduleEngine:
                 return False, "队列已满"
 
             # Wait for consumer to execute login (with timeout)
+            # API 等待超时应略大于 Worker 超时，给足执行余量
             login_timeout = self._ui_config.login_timeout
-            cmd.response_event.wait(timeout=login_timeout)
+            worker_timeout = max(login_timeout, 60)
+            api_wait_timeout = worker_timeout + 10
+            cmd.response_event.wait(timeout=api_wait_timeout)
 
             if cmd.response_data is None:
                 # 超时：检查引擎线程是否存活

@@ -679,6 +679,93 @@ class TestRunLoginThenExit:
             mock_worker.submit.assert_called_once()
 
 
+class TestLoginOnceRetryInterval:
+    """login_once 固定间隔重试 + login_timeout 统一。"""
+
+    def test_fixed_retry_interval(self, tmp_pid_dir):
+        """重试间隔应为固定值，不使用指数退避。"""
+        from main import _execute_login_with_retries
+
+        mock_worker = MagicMock()
+        fail_result = MagicMock(success=False, error="timeout")
+        success_result = MagicMock(success=True, data="ok")
+        mock_worker.submit.side_effect = [fail_result, fail_result, success_result]
+
+        runtime_config = {
+            "retry_settings": {"max_retries": 3, "retry_interval": 5},
+            "login_timeout": 120,
+        }
+
+        with (
+            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
+            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
+            patch("app.services.profile_service.ProfileService"),
+            patch("app.services.login_history_service.LoginHistoryService"),
+            patch("main.AUTH_DATA_DIR", tmp_pid_dir),
+            patch("main.cleanup_orphan_browsers"),
+            patch("time.sleep") as mock_sleep,
+        ):
+            result = _execute_login_with_retries(runtime_config, MagicMock())
+            assert result == LoginResult.SUCCESS
+            # 两次重试都应 sleep(retry_interval=5)，而非指数递增
+            assert mock_sleep.call_count == 2
+            for call in mock_sleep.call_args_list:
+                assert call.args == (5,)
+
+    def test_login_timeout_passed_to_worker(self, tmp_pid_dir):
+        """login_timeout 应从配置读取并传递给 worker。"""
+        from main import _execute_login_with_retries
+
+        mock_worker = MagicMock()
+        success_result = MagicMock(success=True, data="ok")
+        mock_worker.submit.return_value = success_result
+
+        runtime_config = {
+            "retry_settings": {"max_retries": 1},
+            "login_timeout": 200,
+        }
+
+        with (
+            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
+            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
+            patch("app.services.profile_service.ProfileService"),
+            patch("app.services.login_history_service.LoginHistoryService"),
+            patch("main.AUTH_DATA_DIR", tmp_pid_dir),
+            patch("main.cleanup_orphan_browsers"),
+            patch("time.sleep"),
+        ):
+            _execute_login_with_retries(runtime_config, MagicMock())
+            mock_worker.submit.assert_called_once()
+            call_kwargs = mock_worker.submit.call_args
+            assert call_kwargs.kwargs["timeout"] == 200
+
+    def test_login_timeout_default_120(self, tmp_pid_dir):
+        """配置中无 login_timeout 时默认 120 秒。"""
+        from main import _execute_login_with_retries
+
+        mock_worker = MagicMock()
+        success_result = MagicMock(success=True, data="ok")
+        mock_worker.submit.return_value = success_result
+
+        runtime_config = {
+            "retry_settings": {"max_retries": 1},
+            # 无 login_timeout
+        }
+
+        with (
+            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
+            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
+            patch("app.services.profile_service.ProfileService"),
+            patch("app.services.login_history_service.LoginHistoryService"),
+            patch("main.AUTH_DATA_DIR", tmp_pid_dir),
+            patch("main.cleanup_orphan_browsers"),
+            patch("time.sleep"),
+        ):
+            _execute_login_with_retries(runtime_config, MagicMock())
+            call_kwargs = mock_worker.submit.call_args
+            assert call_kwargs.kwargs["timeout"] == 90
+
+
 # ══════════════════════════════════════════════════════════════════════
 #  TestRunServer
 # ══════════════════════════════════════════════════════════════════════
