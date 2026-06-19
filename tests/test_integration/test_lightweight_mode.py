@@ -1,0 +1,70 @@
+"""轻量模式生命周期测试 — 模拟自启动轻量模式的完整流程。"""
+
+from __future__ import annotations
+
+import threading
+import time
+from unittest.mock import patch
+
+import pytest
+
+from app.workers.playwright_worker import WorkerResponse
+
+
+def _ensure_login_config(engine) -> None:
+    """确保引擎运行时配置包含登录所需字段。"""
+    engine._runtime_config["username"] = "testuser"
+    engine._runtime_config["password"] = "testpass"
+    engine._runtime_config["auth_url"] = "http://10.0.0.1"
+
+
+class TestLightweightMode:
+    """轻量模式全生命周期。"""
+
+    def test_full_lifecycle(self, integration_stack):
+        """轻量模式：启动 → 断网登录 → 成功 → 再次断网 → 重试 → 手动登录 → 停止。"""
+        engine, profile_service, task_executor, mock_worker = integration_stack
+        _ensure_login_config(engine)
+
+        login_count = [0]
+        login_done = threading.Event()
+
+        def counting_login(*args, **kwargs):
+            login_count[0] += 1
+            login_done.set()
+            return WorkerResponse(success=True, data="登录成功")
+
+        mock_worker.submit.side_effect = counting_login
+
+        # t0: 启动监控
+        result = engine.start_monitoring()
+        assert result[0] is True
+        # 等待引擎线程处理 START 命令
+        time.sleep(0.5)
+        assert engine._is_monitoring
+
+        # t1: 断网 → 自动登录成功
+        future1 = task_executor.execute_login_async()
+        ok1, msg1 = future1.result(timeout=5)
+        assert ok1 is True
+        assert login_count[0] >= 1
+
+        # t2: 再次断网 → 自动登录
+        login_done.clear()
+        future2 = task_executor.execute_login_async()
+        ok2, msg2 = future2.result(timeout=5)
+        assert ok2 is True
+        assert login_count[0] >= 2
+
+        # t3: 手动登录
+        login_done.clear()
+        mock_worker.submit.side_effect = None
+        mock_worker.submit.return_value = WorkerResponse(success=True, data="手动登录成功")
+
+        ok, msg = engine.run_manual_login()
+        assert ok is True
+
+        # t4: 停止监控
+        engine.stop_monitoring()
+        time.sleep(0.5)
+        assert not engine._is_monitoring
