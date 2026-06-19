@@ -146,7 +146,7 @@ def build_runtime_dict_from_payload(
 
     ⚠ 返回字典包含明文 password 字段，切勿整体记录到日志中。
     """
-    from app.utils.config_utils import assign_profile_fields
+    from app.utils.config_utils import PROFILE_RUNTIME_FIELDS, assign_profile_fields
     from app.utils.network import parse_url_checks
 
     config_logger.debug(
@@ -230,20 +230,7 @@ def build_runtime_dict_from_payload(
     }
 
     # 其他字段
-    assign_profile_fields(
-        base,
-        payload.model_dump(),
-        [
-            "access_log",
-            "minimize_to_tray",
-            "startup_action",
-            "autostart_lightweight",
-            "log_retention_days",
-            "custom_variables",
-            "block_proxy",
-            "shell_path",
-        ],
-    )
+    assign_profile_fields(base, payload.model_dump(), list(PROFILE_RUNTIME_FIELDS))
 
     # 重试策略
     base["retry_settings"] = {
