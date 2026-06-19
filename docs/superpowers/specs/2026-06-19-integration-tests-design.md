@@ -7,8 +7,15 @@
 ## 范围
 
 - 4 条链路的连接测试（登录、配置、网络检测、Profile 切换）
-- 3 种自启动模式的全生命周期模拟（轻量、完整、LOGIN_ONCE）
-- 约 24 个新增测试
+- 3 种自启动模式的生命周期模拟（轻量、完整、LOGIN_ONCE）
+- 约 20 个新增测试
+
+## 设计原则
+
+1. **验证行为，不验证实现细节** — 断言 `login_history.count`、`engine.status`，不断言 `engine._retry_count`、`future._callbacks`
+2. **Event 同步，不用 sleep** — 用 `threading.Event` 协调测试线程和引擎线程
+3. **短间隔加速** — `check_interval_seconds=1`，避免 CI 慢
+4. **不重复单元测试** — 连接测试关注组件间数据流转，不覆盖已有单元测试的分支
 
 ## 测试基础设施
 
@@ -41,109 +48,130 @@ def full_stack(tmp_path):
 
     在 integration_stack 基础上增加：
     - 真实 TaskRegistry + TaskHistoryStore
-    - 调度器启用
     """
 ```
 
 ### 同步策略
 
-引擎线程和测试线程之间用 `threading.Event` 同步，避免 `time.sleep`：
-- 登录完成事件：mock worker 的 side_effect 在执行后 set 一个 event
-- 检测完成事件：engine 的 `_update_status_snapshot` 后检查条件
-- 短间隔：`check_interval_seconds=1` 加速检测周期
+```python
+# 登录完成事件：mock worker side_effect 在执行后 set
+login_done = threading.Event()
+
+def mock_submit(*args, **kwargs):
+    login_done.set()
+    return WorkerResponse(success=True, data="登录成功")
+
+mock_worker.submit.side_effect = mock_submit
+
+# 测试线程等待
+engine._do_network_check()
+login_done.wait(timeout=5)
+```
 
 ---
 
 ## 测试文件 1：`test_login_connection.py`
 
-验证 **engine → task_executor → mock worker → login.py** 完整链路。
+验证 **engine → task_executor → mock worker** 完整链路。
 
 ### 场景
 
 | # | 场景 | 验证点 |
 |---|---|---|
-| 1 | 自动登录成功 | engine 发信号 → task_executor 提交 → worker 执行 → 登录历史 +1 |
-| 2 | 自动登录失败 | worker 返回失败 → 重试计数递增 → 重试间隔正确 |
-| 3 | 登录重试耗尽 | 连续失败达 max_retries → 停止重试 |
-| 4 | 手动登录抢占自动登录 | 手动登录取消卡住的自动登录 → 重新提交成功 |
-| 5 | 登录完成回调 | Future done_callback → 状态快照更新 + 历史记录写入 |
-| 6 | 并发登录去重 | 两个线程同时提交 → 只有一个实际执行 |
-| 7 | 配置快照传递 | config_snapshot 正确传递到 worker，无 TOCTOU |
+| 1 | auto_login_success | 自动登录成功 → 登录历史 +1，status 更新 |
+| 2 | auto_login_retry | 登录失败 → 重试 → 最终成功 |
+| 3 | retry_exhausted | 连续失败达 max_retries → 停止重试，历史记录失败 |
+| 4 | manual_preempt_auto | 手动登录取消卡住的自动登录 → 手动登录成功 |
+| 5 | callback_updates_history | 登录完成 → 历史记录写入 + 状态快照更新 |
+| 6 | concurrent_dedup | 用 Event 阻塞 worker → 两个线程提交 → submit 只调一次 |
+| 7 | reload_during_login | 登录进行中 → 保存配置 → reload → 旧登录正常结束，新配置已生效 |
 
-### Mock 设计
+### 并发去重的稳定写法
 
 ```python
-# mock worker 模拟登录成功
-mock_worker = MagicMock()
-mock_worker.submit.return_value = WorkerResponse(success=True, data="登录成功")
+start_event = threading.Event()
+release_event = threading.Event()
 
-# mock worker 模拟登录失败（用 side_effect 控制序列）
-mock_worker.submit.side_effect = [
-    WorkerResponse(success=False, error="网络超时"),
-    WorkerResponse(success=False, error="网络超时"),
-    WorkerResponse(success=True, data="登录成功"),
-]
+def blocking_submit(*args, **kwargs):
+    start_event.set()
+    release_event.wait(timeout=5)
+    return WorkerResponse(success=True, data="ok")
+
+mock_worker.submit.side_effect = blocking_submit
+
+# 线程 A 提交登录
+engine._do_async_login()
+start_event.wait(timeout=5)  # 等 worker 开始执行
+
+# 线程 B 尝试提交，应被去重
+future_b = task_executor.execute_login_async()
+assert future_b is not None  # 返回已有 future
+
+# 验证 submit 只调了一次
+assert mock_worker.submit.call_count == 1
+
+release_event.set()  # 释放 worker
+```
+
+### reload_during_login 场景
+
+```python
+login_done = threading.Event()
+release_login = threading.Event()
+
+def slow_login(*args, **kwargs):
+    login_done.set()
+    release_login.wait(timeout=5)
+    return WorkerResponse(success=True, data="ok")
+
+mock_worker.submit.side_effect = slow_login
+
+# 启动登录
+engine._do_async_login()
+login_done.wait(timeout=5)
+
+# 登录进行中，保存新配置
+new_payload = MonitorConfigPayload(check_interval_seconds=60, ...)
+save_and_apply(new_payload, profile_service, engine.reload_config)
+
+# 释放登录
+release_login.wait(timeout=5)
+
+# 验证：旧登录正常完成，新配置已生效
+assert engine.get_config().check_interval_seconds == 60
 ```
 
 ---
 
 ## 测试文件 2：`test_config_connection.py`
 
-验证 **API → config_service → runtime_config → engine 配置生效**。
+验证 **config_service → runtime_config → engine 配置生效**。
 
 ### 场景
 
 | # | 场景 | 验证点 |
 |---|---|---|
-| 1 | 保存配置 → 运行时生效 | save_and_apply → reload → get_config 返回新值 |
-| 2 | 保存失败回滚 | reload 失败 → 磁盘回滚到备份 → 运行时不变 |
-| 3 | 配置变更 → 监控参数更新 | 修改 check_interval → 重载后 monitor 使用新间隔 |
-| 4 | 密码加密保存 | 明文 → 保存后磁盘 ENC: → 读取后解密还原 |
-| 5 | 日志级别变更 | 修改 backend_log_level → 重载后生效 |
-
-### 验证方式
-
-```python
-# 保存后验证
-result = save_and_apply(payload, profile_service, engine.reload_config)
-assert result.success is True
-
-# 读取磁盘验证
-data = profile_service.load()
-assert data.global_settings.check_interval_seconds == 60
-
-# 运行时验证
-config = engine.get_config()
-assert config.check_interval_seconds == 60
-```
+| 1 | save_apply_success | 保存 → 磁盘 + 运行时都更新 |
+| 2 | save_apply_rollback | reload 失败 → 磁盘回滚，运行时不变 |
+| 3 | interval_reload | 修改 check_interval → 重载后生效 |
+| 4 | password_encrypt | 明文 → 磁盘 ENC: → 读取后解密还原 |
+| 5 | log_level_reload | 修改 backend_log_level → 重载后生效 |
 
 ---
 
 ## 测试文件 3：`test_network_connection.py`
 
-验证 **monitor_service → decision → mock probes → engine 登录触发**。
+验证 **monitor_service → decision → engine 登录触发**。
 
 ### 场景
 
 | # | 场景 | 验证点 |
 |---|---|---|
-| 1 | 网络不通 → 触发登录 | check_once 返回 need_login → engine 提交登录 |
-| 2 | 网络通 → 不触发登录 | check_once 返回正常 → login_retry 重置 |
-| 3 | 暂停时段 → 跳过检测 | 当前时间在暂停范围 → check_once 跳过 |
-| 4 | 检测异常 → 不崩溃 | 探测抛异常 → 引擎继续运行 |
-| 5 | 方案切换信号 | check_once 触发 profile switch → engine reload + restart |
-
-### Mock 设计
-
-```python
-# mock 网络不通
-with patch("app.network.decision.is_network_available", return_value=False):
-    core.check_once()
-
-# mock 暂停时段
-with patch("app.network.decision.check_pause", return_value=(True, None)):
-    result = core.check_once()
-```
+| 1 | need_login | 网络不通 → 触发登录 → 历史 +1 |
+| 2 | network_ok | 网络通 → 不触发登录，重试计数重置 |
+| 3 | pause_window | 暂停时段 → check_once 跳过 |
+| 4 | probe_exception | 探测抛异常 → 引擎继续运行 |
+| 5 | profile_switch_signal | 方案切换 → engine reload + restart |
 
 ---
 
@@ -155,18 +183,32 @@ with patch("app.network.decision.check_pause", return_value=(True, None)):
 
 | # | 场景 | 验证点 |
 |---|---|---|
-| 1 | 切换方案 → 配置生效 | apply_profile → engine 使用新 profile 凭证 |
-| 2 | 自动切换 | 网关 IP 变化 → detect_matching_profile → 自动切换 |
-| 3 | 方案删除 | 删除当前方案 → 回退到 default |
-| 4 | 方案切换失败 | reload 失败 → 继续使用旧方案 |
+| 1 | apply_profile | 切换方案 → engine 使用新凭证 |
+| 2 | switch_while_monitoring | 监控运行中切换 → 旧配置停、新配置起，无线程泄漏 |
+| 3 | delete_current_profile | 删除当前方案 → 回退到 default |
+
+### switch_while_monitoring 场景
+
+```python
+# 启动监控
+engine.start_monitoring()
+assert engine._is_monitoring
+
+# 切换方案（监控运行中）
+engine.apply_profile("profile-b")
+
+# 验证：监控重启，使用新配置
+assert engine._is_monitoring
+assert engine.get_config().username == "user-b"
+```
 
 ---
 
-## 测试文件 5：`test_autostart_simulation.py`
+## 测试文件 5：`test_lightweight_mode.py`
 
-模拟三种自启动模式的完整生命周期。
+轻量模式全生命周期。
 
-### 场景 A：轻量模式
+### 场景
 
 ```
 t0  轻量模式启动 → engine 监控启动
@@ -176,51 +218,64 @@ t3  手动登录 → 验证可抢占
 t4  停止监控 → 验证清理
 ```
 
-### 场景 B：完整模式
+验证行为：
+- `engine._is_monitoring == True`（启动后）
+- `login_history.count` 递增（登录成功后）
+- `engine.get_status().network_state` 更新
+- 关闭后所有线程 join 完成
+
+---
+
+## 测试文件 6：`test_full_mode.py`
+
+完整模式全生命周期（含定时任务）。
+
+### 场景
 
 ```
-t0  完整模式启动 → engine + web 服务 + 调度器
-t1  注册定时任务（shell 类型，echo 命令）
+t0  完整模式启动 → engine + 调度器
+t1  注册定时任务（shell 类型）
 t2  断网 → 自动登录 → 成功
-t3  定时任务触发 → 验证执行 + 历史记录
+t3  触发 tick → 定时任务执行 → 历史记录
 t4  手动登录 → 验证与定时任务不冲突
-t5  保存配置 → 验证重载后监控参数更新
+t5  保存配置 → 验证重载后生效
 t6  关闭 → 验证线程池清理
 ```
 
-### 场景 C：LOGIN_ONCE 模式
+### 定时任务测试
 
-LOGIN_ONCE 逻辑在 `main.py::_run_login_then_exit` 中，测试直接调用该函数。
-
-```
-t0  配置 startup_action=LOGIN_ONCE，写入 settings.json
-t1  断网 → _run_login_then_exit → 自动登录成功 → 验证返回 LoginResult.EXIT
-t2  登录失败 → 验证返回 LoginResult.TEMPORARY_FAILURE
-t3  配置错误（无密码）→ 验证返回 LoginResult.CONFIG_ERROR
-```
-
-### 定时任务测试细节
+直接调用 `engine._run_schedule_tick()`，不等待真实时间：
 
 ```python
-# 注册一个 shell 定时任务
-task_config = {
+task_executor.save_task("test-task", {
     "name": "测试任务",
     "type": "shell",
     "command": "echo hello",
     "enabled": True,
-    "hour": now_hour,  # 当前小时，确保立即触发
-    "minute": now_minute,
-}
-task_executor.save_task("test-task", task_config)
+    "hour": datetime.now().hour,
+    "minute": datetime.now().minute,
+})
 
-# 触发调度 tick
 engine._run_schedule_tick()
 
-# 验证执行历史
 history = task_executor.get_history("test-task")
 assert len(history) == 1
 assert history[0]["status"] == "success"
 ```
+
+---
+
+## 测试文件 7：`test_login_once_mode.py`
+
+LOGIN_ONCE 逻辑在 `main.py::_run_login_then_exit` 中。
+
+### 场景
+
+| # | 场景 | 验证点 |
+|---|---|---|
+| 1 | success | 登录成功 → 返回 LoginResult.EXIT |
+| 2 | temporary_failure | 登录失败 → 返回 LoginResult.TEMPORARY_FAILURE |
+| 3 | config_error | 无密码配置 → 返回 LoginResult.CONFIG_ERROR |
 
 ---
 
@@ -240,3 +295,24 @@ assert history[0]["status"] == "success"
 - 不测试真实 Playwright 浏览器（CI 无头环境不稳定）
 - 不测试前端 API 调用（已有 test_api/ 覆盖）
 - 不重复现有单元测试已覆盖的分支
+- 不验证内部实现细节（`_retry_count`、`_callbacks` 等）
+- 不用 `time.sleep` 同步（用 `threading.Event`）
+- 不真实等待定时任务调度（直接调用 `_run_schedule_tick()`）
+
+## 文件结构
+
+```
+tests/test_integration/
+├── conftest.py                    (新增 fixture)
+├── test_login_connection.py       (7 tests)
+├── test_config_connection.py      (5 tests)
+├── test_network_connection.py     (5 tests)
+├── test_profile_connection.py     (3 tests)
+├── test_lightweight_mode.py       (1 test)
+├── test_full_mode.py              (1 test)
+├── test_login_once_mode.py        (3 tests)
+├── test_app_startup.py            (已有)
+├── test_login_flow.py             (已有)
+├── test_scheduled_task.py         (已有)
+└── test_multi_browser.py          (已有)
+```
