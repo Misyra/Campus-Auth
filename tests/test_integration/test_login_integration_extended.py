@@ -9,10 +9,8 @@
 
 from __future__ import annotations
 
-import json
 import threading
 import time
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -384,3 +382,50 @@ class TestLoginOnceRetry:
         assert result == LoginResult.SUCCESS
         assert mock_worker.submit.call_count == 2
 
+
+class TestProfileSwitchDuringLogin:
+    """方案切换在登录过程中的并发安全性。"""
+
+    def test_profile_switch_during_login(self, integration_stack):
+        engine, profile_service, task_executor, mock_worker = integration_stack
+        _ensure_login_config(engine)
+
+        submit_called = threading.Event()
+        submit_release = threading.Event()
+
+        result_container, done_event, restore_fn = _capture_login_completion(
+            task_executor
+        )
+        try:
+            def blocking_submit(*args, **kwargs):
+                submit_called.set()
+                assert submit_release.wait(timeout=5), "submit was not released in time"
+                return WorkerResponse(success=True, data="登录成功")
+
+            mock_worker.submit.side_effect = blocking_submit
+
+            future = task_executor.execute_login_async()
+
+            assert submit_called.wait(timeout=5), "worker.submit was not called in time"
+            assert task_executor.is_login_running()
+
+            switch_cmd = EngineCommand(
+                type=EngineCmdType.APPLY_PROFILE,
+                data={"profile_id": "default"},
+                response_event=threading.Event(),
+            )
+            engine._handle_apply_profile(switch_cmd)
+
+            assert switch_cmd.response_data == (True, "方案切换成功")
+
+            submit_release.set()
+
+            assert done_event.wait(timeout=5), "登录 Future 在超时内未完成"
+            ok, msg = result_container[0]
+            assert ok is True
+            assert msg == "登录成功"
+
+            assert engine._runtime_config.get("username") == "testuser"
+            assert engine._runtime_config.get("auth_url") == "http://10.0.0.1"
+        finally:
+            restore_fn()
