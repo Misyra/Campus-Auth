@@ -267,15 +267,8 @@ class ScheduleEngine:
             self._monitor_check_interval = interval
 
             if result.get("need_login", False):
-                # 延迟导入：测试中需要 mock 此函数，顶层导入会导致 mock 路径变化
-                from app.utils.retry import get_retry_intervals
-                config = self._copy_runtime_config()
-                retry = config.get("retry_settings", {})
-                max_retries = retry.get("max_retries", 3)
-                interval = retry.get("retry_interval", 5)
-                intervals = get_retry_intervals(interval, max_retries, exponential=False)
                 self._login_retry.reset()
-                self._login_retry.configure(max_retries, intervals)
+                self._configure_retry()
                 # check_once 已完成暂停/网络检测，跳过 attempt_login 内冗余二次检测
                 self._do_async_login()
             else:
@@ -296,6 +289,20 @@ class ScheduleEngine:
         except Exception:
             logger.exception("网络检测异常")
             self._next_network_check = time.time() + self._monitor_check_interval
+
+    def _configure_retry(self) -> None:
+        """从运行时配置加载重试参数。异常时使用默认值兜底。"""
+        try:
+            from app.utils.retry import get_retry_intervals
+            config = self._copy_runtime_config()
+            retry = config.get("retry_settings", {})
+            max_retries = retry.get("max_retries", 3)
+            interval = retry.get("retry_interval", 5)
+            intervals = get_retry_intervals(interval, max_retries, exponential=False)
+            self._login_retry.configure(max_retries, intervals)
+        except Exception:
+            logger.warning("加载重试配置失败，使用默认值")
+            self._login_retry.configure(3, [5, 5, 5])
 
     def _login_retry_needed(self, now: float) -> bool:
         """检查是否需要登录重试。"""

@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-
-from app.utils.logging import get_logger
-
-logger = get_logger("login_retry", source="backend")
+from dataclasses import dataclass
 
 
 @dataclass
@@ -65,7 +61,9 @@ class LoginRetryManager:
         """返回下次重试的唤醒时间，无重试时返回 None。"""
         if self.count == 0 or not self.config:
             return None
-        _, intervals = self.config
+        max_retries, intervals = self.config
+        if self.count >= max_retries:
+            return None
         idx = self.count - 1
         if idx >= len(intervals):
             return None
