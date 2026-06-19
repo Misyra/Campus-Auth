@@ -8,7 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.engine import ScheduleEngine, StatusSnapshot, _LoginRetryState
+from app.services.engine import ScheduleEngine, StatusSnapshot
+from app.services.login_retry import LoginRetryManager
 
 
 @pytest.fixture
@@ -60,7 +61,7 @@ def engine_factory():
         svc._shutdown_event = threading.Event()
         svc._monitor_core = None
         svc._engine_running = False
-        svc._login_retry = _LoginRetryState()
+        svc._login_retry = LoginRetryManager()
         svc._runtime_config = {}
         svc._runtime_snapshot = {}
         svc._monitor_check_interval = 300

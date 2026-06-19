@@ -31,6 +31,7 @@ from app.utils.logging import get_logger
 from app.utils.login import SCREENSHOT_URL_PATTERN
 from app.utils.network import parse_ping_targets
 
+from .login_retry import LoginRetryManager
 from .profile_service import ProfileService
 
 # ── 常量 ──
@@ -79,14 +80,6 @@ class StatusSnapshot:
 
 logger = get_logger("engine", source="backend")
 
-
-@dataclass
-class _LoginRetryState:
-    """登录重试状态。"""
-
-    count: int = 0
-    last_attempt: float = 0.0
-    config: tuple[int, list[int]] | None = None  # (max_retries, intervals)
 
 
 # ── ScheduleEngine ──
@@ -159,7 +152,7 @@ class ScheduleEngine:
         self._engine_running = False
         self._next_network_check: float = 0
         self._monitor_check_interval: int = 300
-        self._login_retry = _LoginRetryState()
+        self._login_retry = LoginRetryManager()
 
         # 统一引擎线程
         self._engine_thread = threading.Thread(target=self._engine_loop, daemon=True)
@@ -228,13 +221,9 @@ class ScheduleEngine:
             if self._is_monitoring:
                 candidates.append(float(self._next_network_check))
 
-            if self._login_retry.count > 0 and self._login_retry.config:
-                _, intervals = self._login_retry.config
-                idx = self._login_retry.count - 1
-                if idx < len(intervals):
-                    candidates.append(
-                        float(self._login_retry.last_attempt + intervals[idx])
-                    )
+            wakeup = self._login_retry.next_wakeup()
+            if wakeup is not None:
+                candidates.append(wakeup)
 
             if self._scheduler_running:
                 candidates.append(self._next_schedule_tick)
@@ -278,12 +267,19 @@ class ScheduleEngine:
             self._monitor_check_interval = interval
 
             if result.get("need_login", False):
-                self._login_retry.config = self._get_retry_config()
-                self._login_retry.count = 0
+                # 延迟导入：测试中需要 mock 此函数，顶层导入会导致 mock 路径变化
+                from app.utils.retry import get_retry_intervals
+                config = self._copy_runtime_config()
+                retry = config.get("retry_settings", {})
+                max_retries = retry.get("max_retries", 3)
+                interval = retry.get("retry_interval", 5)
+                intervals = get_retry_intervals(interval, max_retries, exponential=False)
+                self._login_retry.reset()
+                self._login_retry.configure(max_retries, intervals)
                 # check_once 已完成暂停/网络检测，跳过 attempt_login 内冗余二次检测
                 self._do_async_login()
             else:
-                self._login_retry.count = 0
+                self._login_retry.reset()
 
             # 检查是否需要重启（自动切换方案）
             if core.consume_profile_switch_flag():
@@ -303,17 +299,9 @@ class ScheduleEngine:
 
     def _login_retry_needed(self, now: float) -> bool:
         """检查是否需要登录重试。"""
-        if self._login_retry.count == 0 or not self._login_retry.config:
-            return False
         if self._task_executor.is_login_running():
             return False
-        max_retries, intervals = self._login_retry.config
-        if self._login_retry.count >= max_retries:
-            return False
-        idx = self._login_retry.count - 1
-        if idx >= len(intervals):
-            return False
-        return now >= self._login_retry.last_attempt + intervals[idx]
+        return self._login_retry.need_retry(now)
 
     def _do_async_login(self, is_manual: bool = False, config_snapshot: dict | None = None) -> bool:
         """提交登录到 executor 的 login_pool。返回 True 表示已提交。"""
@@ -328,9 +316,8 @@ class ScheduleEngine:
                 time.sleep(0.1)
             if self._task_executor.is_login_running():
                 logger.warning("取消当前登录超时，将尝试提交新登录")
-        self._login_retry.last_attempt = time.time()
         if not is_manual:
-            self._login_retry.count += 1
+            self._login_retry.record_attempt(time.time())
 
         try:
             future = self._task_executor.execute_login_async(
@@ -358,21 +345,6 @@ class ScheduleEngine:
         else:
             self._update_status_snapshot()
             return False
-
-    def _get_retry_config(self) -> tuple[int, list[int]]:
-        """获取登录重试配置。"""
-        try:
-            config = self._copy_runtime_config()
-            retry = config.get("retry_settings", {})
-            max_retries = retry.get("max_retries", 3)
-            interval = retry.get("retry_interval", 5)
-            # 延迟导入：测试中需要 mock 此函数，顶层导入会导致 mock 路径变化
-            from app.utils.retry import get_retry_intervals
-
-            intervals = get_retry_intervals(interval, max_retries, exponential=False)
-            return max_retries, intervals
-        except Exception:
-            return 3, [5, 5, 5]
 
     def _run_schedule_tick(self) -> None:
         """执行定时任务调度（使用 TaskRegistry + TaskExecutor）。"""
@@ -413,7 +385,7 @@ class ScheduleEngine:
         core.init_monitoring()  # 只初始化，不启动循环
         self._monitor_core = core
         self._next_network_check = time.time()  # 立即执行第一次检测
-        self._login_retry.count = 0
+        self._login_retry.reset()
         self._update_status_snapshot(force=True)
         self.record_log("监控已启动", level="INFO", source="backend")
 
@@ -425,7 +397,7 @@ class ScheduleEngine:
 
         core.stop_monitoring()
         self._monitor_core = None
-        self._login_retry.count = 0
+        self._login_retry.reset()
         self._next_network_check = 0
 
         self.record_log("监控已停止", level="INFO", source="backend")

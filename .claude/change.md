@@ -3,6 +3,25 @@
 ## 2026-06-19
 
 ### refactor
+- 抽取 LoginRetryManager，Engine 不再直接管理重试状态
+  - 新建 `app/services/login_retry.py`：`LoginRetryManager` 数据类，封装 `reset()`/`configure()`/`record_attempt()`/`need_retry()`/`next_wakeup()` 五个方法
+  - `app/services/engine.py`：删除 `_LoginRetryState` 数据类和 `_get_retry_config()` 方法；`_login_retry_needed` 简化为委托 `is_login_running()` + `need_retry()`；`_calculate_wakeup` 委托 `next_wakeup()`；`_do_network_check` 重试配置逻辑内联；`_do_async_login` 委托 `record_attempt()`；`_handle_start`/`_handle_stop` 委托 `reset()`
+  - 更新 4 个测试文件的 `_LoginRetryState` 引用为 `LoginRetryManager`：`conftest.py`、`test_engine.py`、`test_login_flow.py`、`test_monitor_service.py`
+  - 删除 `TestLoginRetryState`、`TestGetRetryConfig` 测试类和 `_get_retry_config` 相关集成测试
+  - 新建 `tests/test_services/test_login_retry.py`：12 个单元测试覆盖全部方法
+
+### refactor
+- 消灭双重登录状态，TaskExecutor 成为唯一状态持有者
+  - `app/services/task_executor.py` 新增 `is_login_running()` 公共方法，返回 `_login_future` 是否存在且未完成
+  - `app/services/engine.py` 删除 `_login_in_progress = threading.Event()` 属性
+  - `login_in_progress` 属性改为委托 `task_executor.is_login_running()`
+  - `_login_retry_needed` 中 `_login_in_progress.is_set()` 改为 `task_executor.is_login_running()`
+  - `_do_async_login` 移除所有 `_login_in_progress.set()/clear()` 操作，改为查询 executor 状态
+  - `_on_done` 回调移除 `_login_in_progress.clear()` 调用，状态管理完全由 TaskExecutor 的 `_login_future` 和 `_on_login_done` 处理
+  - 更新 5 个测试文件：删除所有 `_login_in_progress` 引用，改为使用 `task_executor.is_login_running()` mock
+  - `conftest.py` `_make_raw` 删除 `svc._login_in_progress = threading.Event()` 行
+
+### refactor
 - 删除 LoginAttemptHandler 中从未执行的前置检查代码，移除 `skip_pause_check` 参数
   - `app/utils/login.py` `attempt_login` 删除 `skip_pause_check` 参数和 30 行死代码分支（暂停时段检查、网络状态检查、登录前置条件检查），移除不再使用的 `datetime` 导入
   - `app/workers/playwright_worker.py` `_handle_login` 简化 `attempt_login()` 调用
