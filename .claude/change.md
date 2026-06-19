@@ -2,6 +2,61 @@
 
 ## 2026-06-19
 
+### refactor
+- 配置保存事务逻辑从 API 层下沉到 config_service.save_and_apply
+  - `app/services/config_service.py` 新增 `SaveResult` 数据类、`save_and_apply` 函数和 `_rollback_config` 辅助函数
+  - `app/api/config.py` `save_config` 简化为调用 `save_and_apply` 一个函数，删除本地 `_rollback_config`
+  - `tests/test_services/test_config_service.py` 新增 `TestSaveAndApply`（3 个测试：成功、重载失败回滚、回滚也失败）
+  - `tests/test_api/test_api_config_routes.py` `TestSaveConfig` patch 目标更新为 `save_and_apply`
+
+### fix
+- 修复 `custom_browser_engine` 未传入浏览器配置的 bug
+  - `app/services/config_service.py` `browser_settings` 字典补充 `custom_browser_engine` 字段
+  - 修复自定义浏览器 engine 类型设置不生效的问题
+
+### fix
+- 修复 `retry_interval` 默认值不一致和条件构建问题
+  - `app/services/config_service.py` `retry_settings` 改为无条件构建（使用 `gs` 回退默认值）
+  - `app/services/engine.py` 异常回退值从 30 改为 5，与 schema 默认值一致
+  - `docs/login-flow.md` 同步更新默认值文档
+
+### fix
+- 修复 `save_config` 回滚逻辑为死代码、重载失败仍返回成功的 bug
+  - `app/api/config.py` 检查 `reload_config()` 返回值 `(bool, str)`，失败时触发回滚并返回错误
+  - 更新测试：`test_api_config_routes.py` mock `reload_config` 返回元组；`test_login_flow.py`、`test_engine.py` 断言更新为新默认值
+
+### fix
+- 密码变更记录到配置变更日志
+  - `app/api/config.py` `_log_config_changes` 新增密码变更检测，仅记录"密码已修改"
+
+### fix
+- `set_active_profile` 锁内捕获 profile name
+  - `app/services/profile_service.py` `data.profiles[profile_id].name` 移入锁内
+
+### fix
+- `detect_matching_profile` 避免重复 load
+  - `app/services/profile_service.py` 新增可选 `data` 参数，调用方可传入预加载数据
+  - `app/services/monitor_service.py` `_check_profile_switch` 传入已加载的 `data`
+
+### fix
+- 修复 `decision.py` 和 `browser_runner.py` 兜底值与 schema 默认值不一致
+  - `app/network/decision.py` `network_check_timeout` 兜底 `1.5`→`2`，`check_auth_url` 兜底 `True`→`False`
+  - `app/tasks/browser_runner.py` 登录后验证的 `enable_tcp_check`/`enable_http_check` 兜底 `True`→`False`，简化条件判断
+  - `app/services/engine.py` `test_network` 的 `timeout` 从硬编码 `2` 改为从配置读取，与其他两条检测路径一致
+
+### refactor
+- 清理登录链条遗留死代码
+  - 移除 `close_on_failure` 参数：浏览器复用已删除后该参数无意义，`BrowserContextManager.__aexit__` 始终关闭浏览器是正确行为
+    - `app/utils/login.py` 删除 `__init__` 的 `close_on_failure` 参数、实例变量、finally 中的条件判断
+    - `app/workers/playwright_worker.py` 删除 `close_on_failure=data.get("close_on_failure", True)` 传递
+  - 移除 `NullTaskExecutor` 类：轻量模式已改用真实 TaskExecutor，该类仅测试引用
+    - `app/services/task_executor.py` 删除 `NullTaskExecutor` 类定义
+  - 移除 `get_runtime_stats` 函数：`app/utils/time_utils.py` 中定义但无生产代码调用，仅测试引用
+    - 同步清理 `app/utils/__init__.py` 的 import 和 `__all__` 导出
+  - 移除 `MAX_CONSECUTIVE_LOGIN_FAILURES` 常量：`app/services/monitor_service.py` 中定义但从未引用，登录重试逻辑已迁移到 `engine.py`
+  - 移除 `PlaywrightWorker.close_browser` 公开方法：所有内部调用均使用 `_close_browser()`，公开包装无调用方
+  - 更新测试：删除 `test_login_failure_no_close_on_failure`、`test_init_close_on_failure_false`、`TestNullTaskExecutor`、`TestNullTaskExecutorSignature`、`test_null_task_executor_all_methods`、`TestGetRuntimeStats`；简化其余引用
+
 ### fix
 - `app/services/engine.py` 和 `app/services/task_executor.py` 消除登录配置 TOCTOU 竞态（Task 4: P4）
   - `_handle_login` 用 `_copy_runtime_config()` 校验配置，但 `_do_async_login` → `execute_login` 二次读取存在竞态窗口
