@@ -2,6 +2,14 @@
 
 ## 2026-06-20
 
+### fix
+- login_orchestrator 线程泄漏防护、shutdown、ImportError 友好提示、类型标注
+  - C1: `_link_cancel` watcher 线程添加 300 秒 deadline，超时自动退出防止线程泄漏
+  - C2: 新增 `shutdown(wait=True)` 方法，清理内部线程池
+  - I1: `_dispatch._run()` 捕获 `ImportError` 返回友好提示"登录需要额外依赖，请检查 Playwright 安装状态"
+  - I2: `Callable` 导入从 `typing` 改为 `collections.abc`
+  - I4: 添加 `TYPE_CHECKING` 块，`login_history` 和 `profile_service` 参数类型从 `object` 改为具体类型
+
 ### feat
 - 新增 `app/services/login_orchestrator.py`（Task 2: 登录编排器核心）
   - `validate_login_config(config)` — F05 唯一配置校验实现，返回 None 或中文错误信息

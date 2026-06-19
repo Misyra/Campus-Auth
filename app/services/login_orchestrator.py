@@ -12,11 +12,16 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Callable, Literal
+from typing import TYPE_CHECKING, Literal
 
 from app.utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from app.services.login_history_service import LoginHistoryService
+    from app.services.profile_service import ProfileService
 
 logger = get_logger("login_orchestrator", source="backend")
 
@@ -104,8 +109,8 @@ class LoginOrchestrator:
     def __init__(
         self,
         worker_getter: Callable,
-        login_history: object | None = None,
-        profile_service: object | None = None,
+        login_history: LoginHistoryService | None = None,
+        profile_service: ProfileService | None = None,
         get_runtime_config: Callable[[], dict] | None = None,
     ) -> None:
         self._worker_getter = worker_getter
@@ -201,6 +206,10 @@ class LoginOrchestrator:
             if self._slot is not None and not self._slot.done():
                 self._slot.cancel()
 
+    def shutdown(self, wait: bool = True) -> None:
+        """关闭编排器，清理线程池。"""
+        self._pool.shutdown(wait=wait)
+
     # ── 内部 ──
 
     def _dispatch(
@@ -238,6 +247,10 @@ class LoginOrchestrator:
                 err_msg = result.error or "登录失败"
                 self._record_history(False, duration_ms, error=err_msg)
                 return False, err_msg
+            except ImportError as exc:
+                duration_ms = int((time.perf_counter() - start) * 1000)
+                self._record_history(False, duration_ms, error=str(exc))
+                return False, "登录需要额外依赖，请检查 Playwright 安装状态"
             except Exception as exc:
                 duration_ms = int((time.perf_counter() - start) * 1000)
                 self._record_history(False, duration_ms, error=str(exc))
@@ -285,13 +298,18 @@ class LoginOrchestrator:
         """联动取消事件（Task 11 会替换为事件循环实现）。
 
         当前使用简单的 watcher 线程：监控 new_event，set 时联动到 target_event。
+        300 秒超时自动退出，防止线程泄漏。
         """
-        def _watch() -> None:
-            # 等待 new_event 被设置，或 target_event 已设置（无需再监控）
-            while not target_event.is_set():
-                if new_event.wait(timeout=1.0):
+        deadline = time.time() + 300  # 5 分钟超时自动退出
+
+        def _watcher() -> None:
+            while time.time() < deadline:
+                if new_event.is_set():
                     target_event.set()
                     return
+                if target_event.is_set():
+                    return
+                time.sleep(0.2)
 
-        t = threading.Thread(target=_watch, daemon=True, name="cancel-link-watcher")
+        t = threading.Thread(target=_watcher, daemon=True, name="cancel-link-watcher")
         t.start()
