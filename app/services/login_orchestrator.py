@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import queue
 import threading
 import time
 from collections.abc import Callable
@@ -128,6 +129,10 @@ class LoginOrchestrator:
             thread_name_prefix="login-exec",
         )
 
+        # 取消联动：常驻单线程（F12 根治：不再每次新建线程）
+        self._cancel_link_queue: queue.Queue = queue.Queue()
+        self._cancel_link_thread: threading.Thread | None = None
+
     # ── 公共 API ──
 
     def validate(self, config: dict | None = None) -> str | None:
@@ -208,6 +213,9 @@ class LoginOrchestrator:
 
     def shutdown(self, wait: bool = True) -> None:
         """关闭编排器，清理线程池。"""
+        # 发送毒丸退出常驻 watcher 线程
+        if self._cancel_link_thread is not None:
+            self._cancel_link_queue.put(None)
         self._pool.shutdown(wait=wait)
 
     # ── 内部 ──
@@ -292,21 +300,37 @@ class LoginOrchestrator:
     def _link_cancel(
         self, new_event: threading.Event, target_event: threading.Event
     ) -> None:
-        """联动取消事件（Task 11 会替换为事件循环实现）。
+        """入队联动请求，由常驻单线程处理（F12 根治：不再每次新建线程）。"""
+        self._cancel_link_queue.put((new_event, target_event, time.time() + 300))
+        self._ensure_cancel_link_thread()
 
-        当前使用简单的 watcher 线程：监控 new_event，set 时联动到 target_event。
-        300 秒超时自动退出，防止线程泄漏。
-        """
-        deadline = time.time() + 300  # 5 分钟超时自动退出
+    def _ensure_cancel_link_thread(self) -> None:
+        """确保常驻 watcher 线程在运行。"""
+        if self._cancel_link_thread and self._cancel_link_thread.is_alive():
+            return
+        self._cancel_link_thread = threading.Thread(
+            target=self._cancel_link_loop, daemon=True, name="orch-cancel-link"
+        )
+        self._cancel_link_thread.start()
 
-        def _watcher() -> None:
-            while time.time() < deadline:
-                if new_event.is_set():
-                    target_event.set()
+    def _cancel_link_loop(self) -> None:
+        """常驻 watcher：从队列取联动请求并监控。"""
+        pending: list[tuple[threading.Event, threading.Event, float]] = []
+        while True:
+            try:
+                item = self._cancel_link_queue.get(timeout=1.0)
+                if item is None:  # 毒丸，shutdown 时使用
                     return
-                if target_event.is_set():
-                    return
-                time.sleep(0.2)
-
-        t = threading.Thread(target=_watcher, daemon=True, name="cancel-link-watcher")
-        t.start()
+                pending.append(item)
+            except queue.Empty:
+                pass
+            now = time.time()
+            still = []
+            for new_ev, tgt_ev, deadline in pending:
+                if new_ev.is_set():
+                    tgt_ev.set()
+                elif tgt_ev.is_set():
+                    pass  # 目标已取消，丢弃
+                elif now < deadline:
+                    still.append((new_ev, tgt_ev, deadline))
+            pending = still
