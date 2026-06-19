@@ -804,10 +804,19 @@ class TestNetworkStateSetInConsumer:
     """P1-BE-7: network_state 在异步登录线程中统一赋值"""
 
     def test_do_async_login_delegates_to_task_executor(self):
-        """_do_async_login 应委托给 task_executor.execute_login_async"""
+        """_do_async_login 应委托给 orchestrator.submit"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._login_retry = LoginRetryManager(count=0, last_attempt=0, config=None)
+        svc._runtime_config = {}
         svc._update_status_snapshot = MagicMock()
+        svc.record_log = MagicMock()
+        svc._orchestrator = MagicMock()
+
+        future = Future()
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
 
         mock_task_executor = MagicMock()
         mock_task_executor.is_login_running.return_value = False
@@ -816,7 +825,11 @@ class TestNetworkStateSetInConsumer:
 
         svc._do_async_login()
 
-        mock_task_executor.execute_login_async.assert_called_once()
+        svc._orchestrator.submit.assert_called_once()
+
+        # 清理
+        future.set_result(None)
+        time.sleep(0.1)
 
 
 # =====================================================================
