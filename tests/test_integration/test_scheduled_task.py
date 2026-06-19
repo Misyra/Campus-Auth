@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.task_executor import BoundedExecutor, NullTaskExecutor, TaskExecutor
+from app.services.task_executor import BoundedExecutor, TaskExecutor
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
 
 
@@ -561,7 +561,7 @@ class TestTaskCancellation:
         # 使用延迟返回的 mock 避免回调死锁
         import time as _time
 
-        def slow_login(cancel_event=None, skip_pause_check=False, config_snapshot=None):
+        def slow_login(cancel_event=None, config_snapshot=None):
             _time.sleep(0.1)
             return (True, "登录成功")
 
@@ -599,24 +599,6 @@ class TestTaskCancellation:
         # 清理
         blocker.set()
         pool.shutdown(wait=True)
-
-    def test_null_task_executor_all_methods(self):
-        """NullTaskExecutor 所有方法返回空/失败，不抛异常。"""
-        null = NullTaskExecutor()
-
-        assert null.has_enabled_tasks() is False
-        assert null.list_tasks() == []
-        assert null.get_task("any") is None
-        assert null.get_history("any") == []
-        assert null.execute_task("any") == (False, "轻量模式下不支持定时任务")
-        assert null.save_task("any", {}) == (False, "轻量模式下不支持定时任务")
-        assert null.delete_task("any") == (False, "轻量模式下不支持定时任务")
-        assert null.execute_task_async("any") is None
-        assert null.execute_login_async() is None
-        assert null.execute_login() is None
-
-        # shutdown 不抛异常
-        null.shutdown()
 
     def test_task_executor_shutdown(self, tmp_path: Path):
         """TaskExecutor.shutdown 正确关闭线程池。"""
@@ -661,7 +643,7 @@ class TestTaskCancellation:
         # 使用延迟返回的 mock 避免回调死锁
         import time as _time
 
-        def slow_login(cancel_event=None, skip_pause_check=False, config_snapshot=None):
+        def slow_login(cancel_event=None, config_snapshot=None):
             _time.sleep(0.05)
             return (True, "ok")
 

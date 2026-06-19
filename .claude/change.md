@@ -3,6 +3,14 @@
 ## 2026-06-19
 
 ### refactor
+- 删除 LoginAttemptHandler 中从未执行的前置检查代码，移除 `skip_pause_check` 参数
+  - `app/utils/login.py` `attempt_login` 删除 `skip_pause_check` 参数和 30 行死代码分支（暂停时段检查、网络状态检查、登录前置条件检查），移除不再使用的 `datetime` 导入
+  - `app/workers/playwright_worker.py` `_handle_login` 简化 `attempt_login()` 调用
+  - `app/services/engine.py` `_do_async_login` 删除 `skip_pause_check` 参数，`_handle_login` 和 `_engine_loop`/`_do_network_check` 不再传递该参数，`run_manual_login` 的 `cmd.data` 清空
+  - `app/services/task_executor.py` `execute_login_async` 和 `execute_login` 删除 `skip_pause_check` 参数，`execute_login` 和 `_execute_browser` 的 data dict 移除该字段
+  - 更新 7 个测试文件：删除测试死代码分支的测试类，简化 mock 签名
+
+### refactor
 - 配置保存事务逻辑从 API 层下沉到 config_service.save_and_apply
   - `app/services/config_service.py` 新增 `SaveResult` 数据类、`save_and_apply` 函数和 `_rollback_config` 辅助函数
   - `app/api/config.py` `save_config` 简化为调用 `save_and_apply` 一个函数，删除本地 `_rollback_config`

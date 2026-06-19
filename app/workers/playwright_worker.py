@@ -433,8 +433,7 @@ class PlaywrightWorker:
         """处理登录命令。
 
         创建 LoginAttemptHandler 执行完整登录流程。
-        LoginAttemptHandler 内部管理浏览器生命周期（创建/复用/关闭）。
-        如果提供了 cancel_event，启动取消信号桥接线程。
+        LoginAttemptHandler 内部管理浏览器生命周期（创建/关闭）。
         """
         from app.utils.login import LoginAttemptHandler
 
@@ -445,11 +444,8 @@ class PlaywrightWorker:
             handler = LoginAttemptHandler(
                 config=config,
                 cancel_event=cancel_event,
-                close_on_failure=data.get("close_on_failure", True),
             )
-            success, message = await handler.attempt_login(
-                skip_pause_check=data.get("skip_pause_check", False),
-            )
+            success, message = await handler.attempt_login()
             return WorkerResponse(success=success, data=message)
         except Exception as e:
             logger.exception("登录执行异常")
@@ -641,14 +637,6 @@ class PlaywrightWorker:
         仅用于释放 BrowserContextManager 的引用计数。
         """
         return WorkerResponse(success=True, data="Browser released (alive in Worker)")
-
-    async def close_browser(self) -> None:
-        """关闭浏览器并释放所有资源。
-
-        可从 Worker 事件循环内（同一线程）安全调用。
-        外部调用者应使用 submit(CMD_BROWSER_CLOSE)。
-        """
-        await self._close_browser()
 
     async def _handle_browser_close(self) -> WorkerResponse:
         """处理 CMD_BROWSER_CLOSE —— 实际关闭浏览器进程。"""

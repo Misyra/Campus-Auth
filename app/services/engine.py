@@ -208,7 +208,7 @@ class ScheduleEngine:
 
                 # 登录重试：前次 check_once 已判定 need_login，跳过 attempt_login 内冗余检测
                 if self._login_retry_needed(now):
-                    self._do_async_login(skip_pause_check=True)
+                    self._do_async_login()
 
                 # 定时任务
                 if self._scheduler_running and now >= self._next_schedule_tick:
@@ -282,7 +282,7 @@ class ScheduleEngine:
                 self._login_retry.config = self._get_retry_config()
                 self._login_retry.count = 0
                 # check_once 已完成暂停/网络检测，跳过 attempt_login 内冗余二次检测
-                self._do_async_login(skip_pause_check=True)
+                self._do_async_login()
             else:
                 self._login_retry.count = 0
 
@@ -316,7 +316,7 @@ class ScheduleEngine:
             return False
         return now >= self._login_retry.last_attempt + intervals[idx]
 
-    def _do_async_login(self, skip_pause_check: bool = False, is_manual: bool = False, config_snapshot: dict | None = None) -> bool:
+    def _do_async_login(self, is_manual: bool = False, config_snapshot: dict | None = None) -> bool:
         """提交登录到 executor 的 login_pool。返回 True 表示已提交。"""
         if self._login_in_progress.is_set():
             if not is_manual:
@@ -337,7 +337,6 @@ class ScheduleEngine:
 
         try:
             future = self._task_executor.execute_login_async(
-                skip_pause_check=skip_pause_check,
                 config_snapshot=config_snapshot,
             )
         except Exception:
@@ -372,14 +371,14 @@ class ScheduleEngine:
             config = self._copy_runtime_config()
             retry = config.get("retry_settings", {})
             max_retries = retry.get("max_retries", 3)
-            interval = retry.get("retry_interval", 30)
+            interval = retry.get("retry_interval", 5)
             # 延迟导入：测试中需要 mock 此函数，顶层导入会导致 mock 路径变化
             from app.utils.retry import get_retry_intervals
 
             intervals = get_retry_intervals(interval, max_retries, exponential=False)
             return max_retries, intervals
         except Exception:
-            return 3, [30, 30, 30]
+            return 3, [5, 5, 5]
 
     def _run_schedule_tick(self) -> None:
         """执行定时任务调度（使用 TaskRegistry + TaskExecutor）。"""
@@ -448,8 +447,7 @@ class ScheduleEngine:
         if not config.get("username") or not config.get("password") or not config.get("auth_url"):
             cmd.response_data = (False, "登录配置不完整（请先设置认证地址、用户名和密码）")
             return
-        skip_pause_check = cmd.data.get("skip_pause_check", False)
-        if self._do_async_login(skip_pause_check=skip_pause_check, is_manual=True, config_snapshot=config):
+        if self._do_async_login(is_manual=True, config_snapshot=config):
             cmd.response_data = (True, "登录已提交")
         else:
             cmd.response_data = (False, "登录任务已在执行中，请稍后再试")
@@ -790,7 +788,7 @@ class ScheduleEngine:
 
             cmd = EngineCommand(
                 type=EngineCmdType.LOGIN,
-                data={"skip_pause_check": True},
+                data={},
                 response_event=threading.Event(),
             )
             if not self._enqueue(cmd):
@@ -841,9 +839,10 @@ class ScheduleEngine:
         self.record_log("开始手动网络测试", "INFO", "network")
         logger.debug("检测方式: {}", "+".join(mode_desc) or "无")
         try:
+            timeout = monitor_cfg.get("network_check_timeout", 2)
             is_available = is_network_available(
                 test_sites=test_sites if test_sites else None,
-                timeout=2,
+                timeout=timeout,
                 enable_tcp=enable_tcp,
                 enable_http=enable_http,
                 url_checks=url_checks if url_checks else None,
