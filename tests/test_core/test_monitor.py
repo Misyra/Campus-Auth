@@ -70,7 +70,6 @@ class TestLoginAttemptHandlerInit:
         handler = LoginAttemptHandler(config={})
         assert handler.config == {}
         assert handler.cancel_event is None
-        assert handler.close_on_failure is True
         assert handler._browser_ctx is None
         assert handler._task_manager is None
 
@@ -78,10 +77,6 @@ class TestLoginAttemptHandlerInit:
         event = threading.Event()
         handler = LoginAttemptHandler(config={}, cancel_event=event)
         assert handler.cancel_event is event
-
-    def test_init_close_on_failure_false(self):
-        handler = LoginAttemptHandler(config={}, close_on_failure=False)
-        assert handler.close_on_failure is False
 
 
 # =====================================================================
@@ -91,138 +86,31 @@ class TestLoginAttemptHandlerInit:
 
 class TestAttemptLogin:
     @pytest.mark.asyncio
-    async def test_pause_period_skip(self):
-        """暂停时段应跳过登录"""
-        config = {"pause_login": {"start_hour": 0, "end_hour": 23}}
-        handler = LoginAttemptHandler(config=config)
-
-        with patch("app.utils.login.datetime") as mock_dt:
-            mock_dt.datetime.now.return_value.hour = 3
-            mock_dt.datetime.now.return_value.minute = 0
-
-            with patch(
-                "app.network.decision.check_pause",
-                return_value=(True, "pause_period"),
-            ):
-                ok, msg = await handler.attempt_login(skip_pause_check=False)
-                assert ok is False
-                assert "暂停" in msg
-
-    @pytest.mark.asyncio
-    async def test_network_disconnected_skip(self):
-        """物理网络未连接时应跳过登录"""
+    async def test_delegates_to_perform(self):
+        """attempt_login 直接委托 _perform_login_with_auth_class。"""
         handler = LoginAttemptHandler(config={})
 
-        with (
-            patch(
-                "app.network.decision.check_pause",
-                return_value=(False, ""),
-            ),
-            patch(
-                "app.network.decision.check_network_status",
-                return_value=(False, "network_down", "none"),
-            ),
-            patch(
-                "app.network.decision.check_login_prerequisites",
-                return_value=(False, "local_disconnected"),
-            ),
-        ):
-            ok, msg = await handler.attempt_login(skip_pause_check=False)
-            assert ok is False
-            assert "未连接" in msg
-
-    @pytest.mark.asyncio
-    async def test_auth_url_unreachable_skip(self):
-        """认证地址不可达时应跳过登录"""
-        config = {"auth_url": "http://10.0.0.1"}
-        handler = LoginAttemptHandler(config=config)
-
-        with (
-            patch(
-                "app.network.decision.check_pause",
-                return_value=(False, ""),
-            ),
-            patch(
-                "app.network.decision.check_network_status",
-                return_value=(False, "network_down", "none"),
-            ),
-            patch(
-                "app.network.decision.check_login_prerequisites",
-                return_value=(False, "auth_url_unreachable"),
-            ),
-        ):
-            ok, msg = await handler.attempt_login(skip_pause_check=False)
-            assert ok is False
-            assert "不可达" in msg
-
-    @pytest.mark.asyncio
-    async def test_network_ok_skip(self):
-        """网络正常时应跳过登录"""
-        handler = LoginAttemptHandler(config={})
-
-        with (
-            patch(
-                "app.network.decision.check_pause",
-                return_value=(False, ""),
-            ),
-            patch(
-                "app.network.decision.check_network_status",
-                return_value=(True, "network_ok", "tcp"),
-            ),
-        ):
-            ok, msg = await handler.attempt_login(skip_pause_check=False)
-            assert ok is False
-            assert "正常" in msg
-
-    @pytest.mark.asyncio
-    async def test_login_cancelled(self):
-        """取消事件触发时应返回取消消息"""
-        event = threading.Event()
-        event.set()
-        handler = LoginAttemptHandler(config={}, cancel_event=event)
-
-        with (
-            patch(
-                "app.network.decision.check_pause",
-                return_value=(False, ""),
-            ),
-            patch(
-                "app.network.decision.check_network_status",
-                return_value=(False, "network_down", "none"),
-            ),
-            patch(
-                "app.network.decision.check_login_prerequisites",
-                return_value=(True, ""),
-            ),
-        ):
-            ok, msg = await handler.attempt_login(skip_pause_check=False)
-            # 取消事件已设置，最终会返回取消或失败
-            assert ok is False
-
-    @pytest.mark.asyncio
-    async def test_skip_pause_check(self):
-        """skip_pause_check=True 时应跳过暂停检查"""
-        handler = LoginAttemptHandler(config={})
-
-        # 不检查暂停，但没有活动任务，应返回失败
         with patch.object(
             handler,
             "_perform_login_with_auth_class",
-            return_value=(False, "未找到可执行的活动任务"),
+            return_value=(True, "成功"),
         ):
-            ok, msg = await handler.attempt_login(skip_pause_check=True)
-            assert ok is False
+            ok, msg = await handler.attempt_login()
+
+        assert ok is True
+        assert "成功" in msg
 
     @pytest.mark.asyncio
     async def test_exception_returns_error(self):
         """异常应被捕获并返回错误消息"""
         handler = LoginAttemptHandler(config={})
 
-        with patch(
-            "app.network.decision.check_pause",
+        with patch.object(
+            handler,
+            "_perform_login_with_auth_class",
             side_effect=RuntimeError("test error"),
         ):
-            ok, msg = await handler.attempt_login(skip_pause_check=False)
+            ok, msg = await handler.attempt_login()
             assert ok is False
             assert "test error" in msg
 
@@ -502,23 +390,3 @@ class TestMonitorCoreLogMessage:
         core.log_message("测试消息", "INFO")
 
 
-# ── LoginAttemptHandler 详细检查 ──
-
-
-class TestAttemptLoginDetailedChecks:
-    """attempt_login 前置检查详细测试。"""
-
-    @pytest.mark.asyncio
-    async def test_skip_pause_check(self):
-        """skip_pause_check=True 时跳过前置检查直接执行登录。"""
-        handler = LoginAttemptHandler(config={})
-
-        with patch.object(
-            handler,
-            "_perform_login_with_auth_class",
-            return_value=(True, "成功"),
-        ):
-            ok, msg = await handler.attempt_login(skip_pause_check=True)
-
-        assert ok is True
-        assert "成功" in msg

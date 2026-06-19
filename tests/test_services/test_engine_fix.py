@@ -49,5 +49,5 @@ def test_handle_login_uses_validated_config():
 
     # _do_async_login 应收到 config_snapshot 参数
     engine._do_async_login.assert_called_once_with(
-        skip_pause_check=False, is_manual=True, config_snapshot=snapshot,
+        is_manual=True, config_snapshot=snapshot,
     )

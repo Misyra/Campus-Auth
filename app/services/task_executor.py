@@ -23,46 +23,6 @@ from app.utils.shell_utils import detect_shells, get_default_shell
 logger = get_logger("task_executor", source="backend")
 
 
-class NullTaskExecutor:
-    """空任务执行器 — 轻量模式下使用，避免 None 检查。"""
-
-    def has_enabled_tasks(self) -> bool:
-        return False
-
-    def shutdown(self, wait: bool = True) -> None:
-        pass
-
-    def execute_task_async(self, task_id: str) -> Future | None:
-        return None
-
-    def execute_login_async(self, cancel_event=None, skip_pause_check=False, config_snapshot=None) -> Future | None:
-        return None
-
-    def execute_task(self, task_id: str) -> tuple[bool, str]:
-        return False, "轻量模式下不支持定时任务"
-
-    def execute_login(self, cancel_event=None, skip_pause_check=False, config_snapshot=None) -> Any:
-        return None
-
-    def cancel_login(self) -> None:
-        return None
-
-    def list_tasks(self) -> list[dict]:
-        return []
-
-    def get_task(self, task_id: str) -> dict | None:
-        return None
-
-    def save_task(self, task_id: str, config: dict) -> tuple[bool, str]:
-        return False, "轻量模式下不支持定时任务"
-
-    def delete_task(self, task_id: str) -> tuple[bool, str]:
-        return False, "轻量模式下不支持定时任务"
-
-    def get_history(self, task_id: str) -> list[dict]:
-        return []
-
-
 class BoundedExecutor:
     """带队列长度限制的线程池执行器。
 
@@ -208,7 +168,6 @@ class TaskExecutor:
     def execute_login_async(
         self,
         cancel_event: threading.Event | None = None,
-        skip_pause_check: bool = False,
         config_snapshot: dict | None = None,
     ) -> Future:
         """异步执行登录（提交到 login_pool），带去重。
@@ -219,7 +178,6 @@ class TaskExecutor:
 
         Args:
             cancel_event: 取消事件，设置后登录流程应尽快退出
-            skip_pause_check: 是否跳过暂停时段和网络检测
             config_snapshot: 校验通过的配置快照，避免二次读取产生竞态
 
         Returns:
@@ -240,7 +198,7 @@ class TaskExecutor:
 
             # 提交新的登录任务
             future = self._login_pool.submit(
-                self.execute_login, cancel_event, skip_pause_check, config_snapshot
+                self.execute_login, cancel_event, config_snapshot
             )
             self._login_future = future
             self._login_cancel_event = cancel_event
@@ -332,7 +290,6 @@ class TaskExecutor:
     def execute_login(
         self,
         cancel_event: threading.Event | None = None,
-        skip_pause_check: bool = False,
         config_snapshot: dict | None = None,
     ) -> tuple[bool, str]:
         """同步执行登录（在 login_pool 工作线程中运行）。
@@ -361,7 +318,6 @@ class TaskExecutor:
                 data={
                     "config": config,
                     "pure_mode": pure_mode,
-                    "skip_pause_check": skip_pause_check,
                     "cancel_event": cancel_event,
                 },
                 wait=True,
@@ -443,7 +399,6 @@ class TaskExecutor:
                 data={
                     "config": config,
                     "pure_mode": pure_mode,
-                    "skip_pause_check": True,  # 定时任务跳过暂停检查
                 },
                 wait=True,
                 timeout=timeout,

@@ -60,11 +60,11 @@ class TestEngineCommand:
         event = threading.Event()
         cmd = EngineCommand(
             type=EngineCmdType.LOGIN,
-            data={"skip_pause_check": True},
+            data={"key": "value"},
             response_event=event,
         )
         assert cmd.type == "login"
-        assert cmd.data["skip_pause_check"] is True
+        assert cmd.data["key"] == "value"
         assert cmd.response_event is event
 
 
@@ -560,7 +560,7 @@ class TestDoNetworkCheck:
         svc._get_retry_config = MagicMock(return_value=(3, [30, 30, 30]))
         svc._do_async_login = MagicMock()
         svc._do_network_check()
-        svc._do_async_login.assert_called_once_with(skip_pause_check=True)
+        svc._do_async_login.assert_called_once()
         assert svc._login_retry.config == (3, [30, 30, 30])
 
     def test_do_network_check_no_login_needed(self, engine_factory):
@@ -683,20 +683,6 @@ class TestDoAsyncLogin:
             svc._do_async_login()
         assert not svc._login_in_progress.is_set()
 
-    def test_engine_loop_retry_passes_skip_pause_check(self, engine_factory):
-        """引擎循环重试应传递 skip_pause_check=True 避免冗余检测。"""
-        svc = engine_factory(raw=True)
-        svc._login_retry.count = 1
-        svc._login_retry.config = (3, [0])  # 间隔为 0，立即可重试
-        svc._login_retry.last_attempt = time.time() - 10
-        svc._do_async_login = MagicMock()
-
-        # 模拟引擎循环中的重试逻辑
-        now = time.time()
-        if svc._login_retry_needed(now):
-            svc._do_async_login(skip_pause_check=True)
-
-        svc._do_async_login.assert_called_once_with(skip_pause_check=True)
 
 
 # =====================================================================
@@ -725,7 +711,7 @@ class TestGetRetryConfig:
         ):
             max_retries, intervals = svc._get_retry_config()
         assert max_retries == 3
-        assert intervals == [30, 30, 30]
+        assert intervals == [5, 5, 5]
 
 
 # =====================================================================

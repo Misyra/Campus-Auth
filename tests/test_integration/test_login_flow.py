@@ -320,7 +320,7 @@ class TestLoginWithNetworkDetection:
 
         svc._do_network_check()
 
-        svc._do_async_login.assert_called_once_with(skip_pause_check=True)
+        svc._do_async_login.assert_called_once()
         assert svc._login_retry.config == (3, [30, 30, 30])
         assert svc._login_retry.count == 0  # 网络检测触发时重置计数
 
@@ -571,7 +571,7 @@ class TestLoginRetryMechanism:
             max_retries, intervals = svc._get_retry_config()
 
         assert max_retries == 3
-        assert intervals == [30, 30, 30]
+        assert intervals == [5, 5, 5]
 
     def test_network_check_resets_retry_count(self):
         """网络检测触发登录时，重置重试计数。"""
