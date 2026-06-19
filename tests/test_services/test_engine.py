@@ -1677,3 +1677,56 @@ class TestWsDrain:
         svc._ws_manager.broadcast.side_effect = RuntimeError("ws error")
         svc._empty_broadcast_queue.append({"type": "status", "data": {}})
         await svc.drain_ws_queue()
+
+
+# =====================================================================
+# F15 — set_dashboard_sink 迁移轻量模式广播队列
+# =====================================================================
+
+
+class TestSetDashboardSinkMigration:
+    """F15: set_dashboard_sink 应将 _empty_broadcast_queue 内容迁移到新 sink。"""
+
+    def test_migrates_old_queue_to_new_sink(self, engine_factory):
+        """有残留消息时应迁移到新 sink 的 broadcast_queue。"""
+        svc = engine_factory(raw=True)
+        svc._dashboard_sink = None
+        msg1 = {"type": "status", "data": {"monitoring": True}}
+        msg2 = {"type": "status", "data": {"monitoring": False}}
+        svc._empty_broadcast_queue.append(msg1)
+        svc._empty_broadcast_queue.append(msg2)
+
+        mock_sink = MagicMock()
+        mock_sink.broadcast_queue = deque()
+        svc.set_dashboard_sink(mock_sink)
+
+        assert list(mock_sink.broadcast_queue) == [msg1, msg2]
+        assert len(svc._empty_broadcast_queue) == 0
+
+    def test_empty_old_queue_noop(self, engine_factory):
+        """旧队列为空时不应影响新 sink。"""
+        svc = engine_factory(raw=True)
+        svc._dashboard_sink = None
+        assert len(svc._empty_broadcast_queue) == 0
+
+        mock_sink = MagicMock()
+        mock_sink.broadcast_queue = deque()
+        svc.set_dashboard_sink(mock_sink)
+
+        assert len(mock_sink.broadcast_queue) == 0
+        assert svc._dashboard_sink is mock_sink
+
+    def test_migrates_even_when_old_queue_full(self, engine_factory):
+        """旧队列满（maxlen=10）时迁移现有内容。"""
+        svc = engine_factory(raw=True)
+        svc._dashboard_sink = None
+        for i in range(12):
+            svc._empty_broadcast_queue.append({"type": "status", "data": {"i": i}})
+
+        mock_sink = MagicMock()
+        mock_sink.broadcast_queue = deque()
+        svc.set_dashboard_sink(mock_sink)
+
+        # maxlen=10，所以只有最后 10 条
+        assert len(mock_sink.broadcast_queue) == 10
+        assert len(svc._empty_broadcast_queue) == 0

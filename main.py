@@ -516,12 +516,13 @@ def _run_lightweight(ctx: ApplicationContext, logger):
     finally:
         if tray_icon:
             tray_icon.stop()
-        # 如果 Web 服务已启动，shutdown 由 Uvicorn 的事件循环处理
-        if not _web_server_state["started"]:
+        # Web 服务已启动且 Uvicorn 已就绪：shutdown 由其事件循环处理。
+        # 否则（未启动 / 启动但 Uvicorn 子线程崩溃导致 server_ref 仍为 None）：兜底清理。
+        _web_ready = _web_server_state["started"] and _web_server_state["server_ref"][0] is not None
+        if not _web_ready:
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
-                    # 已有运行中的 loop，安排协程执行
                     loop.create_task(container.shutdown())
                 else:
                     loop.run_until_complete(container.shutdown())
