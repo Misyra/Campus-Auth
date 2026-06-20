@@ -2,6 +2,14 @@
 
 ## 2026-06-21
 
+### fix(engine): 移除重复的 get_runtime_config 和未使用的导入
+- `app/services/engine.py`：
+  - 移除第 612 行 `from .config_service import build_runtime_dict_from_payload`（未使用的导入）
+  - 移除第 667-669 行的第一个 `get_runtime_config()` 方法（被第 882 行的同名方法遮蔽）
+- 验收：173 个 engine 测试全通过
+
+## 2026-06-21
+
 ### refactor(engine): 迁移至 RuntimeConfig 并添加 sync_scheduler_state
 - `app/services/engine.py`：
   - `_runtime_config` 类型从 `dict` 改为 `RuntimeConfig`（frozen，无需 deepcopy）
