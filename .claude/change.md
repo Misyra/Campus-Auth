@@ -2,6 +2,20 @@
 
 ## 2026-06-21
 
+### refactor(orchestrator): 完成 LoginOrchestrator 迁移至 RuntimeConfig
+- `app/services/login_orchestrator.py`：
+  - `validate_login_config` 仅接受 `RuntimeConfig`（移除 hasattr 双重支持）
+  - `resolve_worker_timeout` 仅接受 `RuntimeConfig`（移除 hasattr 双重支持）
+  - `submit()`/`validate()`/`_dispatch()` 类型注解改为 `RuntimeConfig`
+  - `_runtime_config()` 返回 `RuntimeConfig`（默认 `RuntimeConfig()`）
+  - `_runtime_config_to_legacy_dict` 重命名为 `_runtime_config_to_worker_dict`
+  - `_runtime_config_to_worker_dict` 新增 `access_log`/`log_retention_days` 字段
+  - 构造函数 `get_runtime_config` 类型改为 `Callable[[], RuntimeConfig]`
+- `tests/test_services/test_login_orchestrator.py`：
+  - 测试用例改用 `RuntimeConfig` 构造配置
+  - 移除 Pydantic 已保证的边界测试（None/非法字符串/超限值）
+- 已知：调用方（main.py/engine.py）仍传递 dict，需后续任务迁移
+
 ### fix(orchestrator): 移除 submit 方法 docstring 重复行
 - `app/services/login_orchestrator.py`：
   - 第 195-196 行存在两行 `config:` docstring 描述（"配置（dict 或 RuntimeConfig）"和"配置快照"）
