@@ -25,8 +25,8 @@ def test_browser_settings_defaults():
     assert bs.viewport_height == 720
 
 
-def test_login_credentials_required_fields():
-    """LoginCredentials 必须有 username/password/auth_url。"""
+def test_login_credentials_defaults():
+    """LoginCredentials 默认值测试。"""
     from app.schemas import LoginCredentials
     creds = LoginCredentials(username="user", password="pass", auth_url="https://example.com")
     assert creds.isp == ""
@@ -56,7 +56,7 @@ def test_runtime_config_composition():
     )
     assert rc.browser.headless is True
     assert rc.credentials.username == "u"
-    assert rc.active_task is None
+    assert rc.active_task == ""
     assert rc.custom_variables == {}
     assert rc.block_proxy is False
 

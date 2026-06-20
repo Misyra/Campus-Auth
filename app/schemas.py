@@ -528,7 +528,7 @@ class RuntimeConfig(BaseModel, frozen=True):
     retry: RetrySettings = Field(default_factory=RetrySettings)
 
     # 直接透传字段
-    active_task: str | None = None
+    active_task: str = ""
     custom_variables: dict[str, str] = Field(default_factory=dict)
     block_proxy: bool = False
     shell_path: str = ""
