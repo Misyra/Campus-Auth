@@ -155,10 +155,6 @@ class ScheduleEngine:
         self._orchestrator = None  # LoginOrchestrator，由 container 注入
         self._retry_policy = MonitoredPolicy()
 
-        # 连续登录失败计数（用于降频检测）
-        self._consecutive_login_failures: int = 0
-        self._backoff_check_multiplier: int = 1
-
         # 统一引擎线程
         self._engine_thread = threading.Thread(target=self._engine_loop, daemon=True)
         self._engine_thread.start()
@@ -264,21 +260,13 @@ class ScheduleEngine:
             self._monitor_check_interval = interval
 
             if result.get("need_login", False):
-                # F04: 通知 policy 网络断开
                 self._retry_policy.on_network_check(True)
                 self._do_async_login()
             else:
-                # F04: 通知 policy 网络恢复，重置退避状态
                 self._retry_policy.on_network_check(False)
-                if self._consecutive_login_failures > 0:
-                    logger.info("网络已恢复，重置重试状态")
-                self._consecutive_login_failures = 0
-                self._backoff_check_multiplier = 1
 
             # 检查是否需要重启（自动切换方案）
             if core.consume_profile_switch_flag():
-                logger.info("检测到方案切换，准备重启监控")
-                # 先 reload，成功后再 stop → start（失败则旧 core 继续运行）
                 if self._reload_config_internal():
                     self._handle_stop()
                     self._handle_start(EngineCommand(type=EngineCmdType.START))
@@ -290,23 +278,6 @@ class ScheduleEngine:
         except Exception:
             logger.exception("网络检测异常")
             self._next_network_check = time.time() + self._monitor_check_interval
-
-    _LOGIN_BACKOFF_THRESHOLD = 3  # 连续 3 轮（每轮 max_retries 次）失败后降频
-
-    def _login_retry_max_cycles(self) -> int:
-        """返回触发降频的连续失败轮数阈值。"""
-        return self._LOGIN_BACKOFF_THRESHOLD
-
-    def _apply_backoff_interval(self) -> None:
-        """达到失败阈值后，延长下一次网络检测间隔（指数退避，上限 30 分钟）。"""
-        self._backoff_check_multiplier = min(self._backoff_check_multiplier * 2, 6)
-        extra = (self._backoff_check_multiplier - 1) * self._monitor_check_interval
-        self._next_network_check = time.time() + extra
-        logger.warning(
-            "登录已连续失败 {} 轮，下次网络检测降频至 {}s 后",
-            self._consecutive_login_failures,
-            int(extra),
-        )
 
     def _do_async_login(self, is_manual: bool = False, config_snapshot: dict | None = None) -> bool:
         """【委托】提交登录到 LoginOrchestrator。签名兼容。"""
@@ -327,7 +298,6 @@ class ScheduleEngine:
             # 复用了旧 handle（去重命中），不算新提交
             return False
 
-        # done 回调（保留原有日志和失败计数逻辑）
         def _on_done(f: Future) -> None:
             self._update_status_snapshot()
             try:
@@ -336,21 +306,13 @@ class ScheduleEngine:
                 if ok:
                     logger.info("{}完成: {}", tag, msg)
                     if not is_manual:
-                        self._consecutive_login_failures = 0
                         self._retry_policy.on_login_done(success=True)
                 else:
                     logger.warning("{}失败: {}", tag, msg)
                     if not is_manual:
-                        self._consecutive_login_failures += 1
-                        if self._consecutive_login_failures >= self._login_retry_max_cycles():
-                            self._apply_backoff_interval()
-                        # F04: 通知 policy 登录失败，获取降频延迟
                         delay = self._retry_policy.on_login_done(success=False)
                         if delay is not None and delay > 0:
-                            # 取 engine 退避和 policy 退避的最大值，避免相互覆盖
-                            policy_target = time.time() + delay
-                            if policy_target > self._next_network_check:
-                                self._next_network_check = policy_target
+                            self._next_network_check = time.time() + delay
                             logger.warning("登录连续失败，下次检测推迟 {}s", int(delay))
             except Exception:
                 logger.exception("登录任务异常")
@@ -408,8 +370,6 @@ class ScheduleEngine:
 
         core.stop_monitoring()
         self._monitor_core = None
-        self._consecutive_login_failures = 0
-        self._backoff_check_multiplier = 1
         self._next_network_check = 0
 
         self.record_log("监控已停止", level="INFO", source="backend")
