@@ -44,7 +44,7 @@ class TestProfileConnection:
 
         # 直接设置 monitor_core，绕过异步队列
         from app.services.monitor_service import NetworkMonitorCore
-        config = engine._copy_runtime_config()
+        config = engine.get_runtime_config().model_dump()
         core = NetworkMonitorCore(
             config=config,
             log_callback=engine.record_log,

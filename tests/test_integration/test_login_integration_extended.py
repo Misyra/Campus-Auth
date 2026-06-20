@@ -15,15 +15,20 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.engine import EngineCmdType, EngineCommand
+from app.services.engine import EngineCmdType, EngineCommand, ScheduleEngine
 from app.workers.playwright_worker import WorkerResponse
 
 
 def _ensure_login_config(engine) -> None:
     """确保引擎运行时配置包含登录所需字段。"""
-    engine._runtime_config["username"] = "testuser"
-    engine._runtime_config["password"] = "testpass"
-    engine._runtime_config["auth_url"] = "http://10.0.0.1"
+    from app.schemas import LoginCredentials
+    old = engine._runtime_config
+    engine._runtime_config = old.model_copy(update={
+        "credentials": LoginCredentials(
+            username="testuser", password="testpass", auth_url="http://10.0.0.1",
+            isp=old.credentials.isp, carrier_custom=old.credentials.carrier_custom,
+        ),
+    })
 
 
 def _capture_login_completion(task_executor, engine=None, timeout: float = 5.0):
@@ -123,10 +128,10 @@ class TestNetworkDetectionLogin:
         mock_core.monitoring = True
         engine._monitor_core = mock_core
 
-        engine._runtime_config["retry_settings"] = {
-            "max_retries": 3,
-            "retry_interval": 30,
-        }
+        from app.schemas import RetrySettings
+        engine._runtime_config = engine._runtime_config.model_copy(update={
+            "retry": RetrySettings(max_retries=3, retry_interval=30),
+        })
 
         assert not task_executor.is_login_running()
 
@@ -282,8 +287,8 @@ class TestReloadException:
             assert msg == "登录成功"
 
             # 验证引擎仍保留旧配置
-            assert engine._runtime_config["username"] == "testuser"
-            assert engine._runtime_config["auth_url"] == "http://10.0.0.1"
+            assert engine._runtime_config.credentials.username == "testuser"
+            assert engine._runtime_config.credentials.auth_url == "http://10.0.0.1"
         finally:
             restore_fn()
 
@@ -296,7 +301,7 @@ class TestLoginOnceRetry:
         _ensure_login_config(engine)
         mock_worker = MagicMock()
         mock_worker.submit.return_value = WorkerResponse(success=True, data="登录成功")
-        runtime_config = engine._copy_runtime_config()
+        runtime_config = ScheduleEngine._runtime_config_to_dict(engine.get_runtime_config())
         runtime_config["retry_settings"] = {"max_retries": 3, "retry_interval": 1}
 
         with (
@@ -316,7 +321,7 @@ class TestLoginOnceRetry:
         _ensure_login_config(engine)
         mock_worker = MagicMock()
         mock_worker.submit.return_value = WorkerResponse(success=False, error="超时")
-        runtime_config = engine._copy_runtime_config()
+        runtime_config = ScheduleEngine._runtime_config_to_dict(engine.get_runtime_config())
         runtime_config["retry_settings"] = {"max_retries": 2, "retry_interval": 0}
 
         with (
@@ -340,7 +345,7 @@ class TestLoginOnceRetry:
             WorkerResponse(success=False, error="超时"),
             WorkerResponse(success=True, data="登录成功"),
         ]
-        runtime_config = engine._copy_runtime_config()
+        runtime_config = ScheduleEngine._runtime_config_to_dict(engine.get_runtime_config())
         runtime_config["retry_settings"] = {"max_retries": 3, "retry_interval": 0}
 
         with (
@@ -398,7 +403,7 @@ class TestProfileSwitchDuringLogin:
             assert ok is True
             assert msg == "登录成功"
 
-            assert engine._runtime_config.get("username") == "testuser"
-            assert engine._runtime_config.get("auth_url") == "http://10.0.0.1"
+            assert engine._runtime_config.credentials.username == "testuser"
+            assert engine._runtime_config.credentials.auth_url == "http://10.0.0.1"
         finally:
             restore_fn()
