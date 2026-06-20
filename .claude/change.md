@@ -1,5 +1,21 @@
 # 修改日志
 
+## 2026-06-21 (3)
+
+### fix: 修复 debug_service 和 env.py 的 RuntimeConfig 类型兼容
+- `app/utils/env.py`：
+  - `build_login_template_vars` 签名从 `dict[str, Any]` 改为 `RuntimeConfig | dict[str, Any]`
+  - 通过 `hasattr(runtime_config, "credentials")` 分支支持两种类型
+  - RuntimeConfig 分支使用属性访问（`.credentials.auth_url`），dict 分支保留 `.get()` 调用
+  - `custom_variables` 参数为 None 时自动从 RuntimeConfig 的 `custom_variables` 属性读取
+- `app/services/debug_service.py`：
+  - `build_login_template_vars` 调用从 `runtime_config.get("custom_variables", {})` 改为 `runtime_config.custom_variables`
+  - `browser_settings` 访问从 `.get("browser_settings", {})` 改为 `.browser.timeout` / `.browser.navigation_timeout` 属性访问
+  - Worker 数据的 `config` 从直接传 `runtime_config` 改为通过 `_runtime_config_to_worker_dict()` 转换为 dict
+- 测试文件同步更新：
+  - `tests/test_services/test_debug_service.py`：mock 改为模拟 RuntimeConfig 属性结构，增加 `_runtime_config_to_worker_dict` patch
+  - `tests/test_services/test_debug_session_manager.py`：3 处 mock 从 dict 改为模拟 RuntimeConfig，增加 `_runtime_config_to_worker_dict` patch
+
 ## 2026-06-21 (2)
 
 ### fix: 修复 login.py check_network_status 类型不匹配并移除 engine 死代码

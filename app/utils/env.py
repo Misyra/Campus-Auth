@@ -39,36 +39,53 @@ _ENV_DENYLIST_UPPER = {k.upper() for k in _ENV_DENYLIST}
 
 
 def build_login_template_vars(
-    runtime_config: dict[str, Any],
+    runtime_config: "RuntimeConfig | dict[str, Any]",
     task_url: str | None = None,
     custom_variables: dict[str, str] | None = None,
 ) -> dict[str, str]:
-    """构建登录模板变量，用于任务步骤中的 {{VAR_NAME}} 替换。"""
+    """构建登录模板变量，用于任务步骤中的 {{VAR_NAME}} 替换。
+
+    *runtime_config* 可以是 RuntimeConfig（Pydantic model）或旧版 dict。
+    """
     template_vars: dict[str, str] = {}
 
-    auth_url = runtime_config.get("auth_url", "")
+    # 支持 RuntimeConfig 和旧版 dict 两种类型
+    if hasattr(runtime_config, "credentials"):
+        auth_url = runtime_config.credentials.auth_url
+        isp = runtime_config.credentials.isp
+        username = runtime_config.credentials.username
+        password = runtime_config.credentials.password
+        resolved_custom_vars = (
+            custom_variables
+            if custom_variables is not None
+            else runtime_config.custom_variables
+        )
+    else:
+        auth_url = runtime_config.get("auth_url", "")
+        isp = runtime_config.get("isp", "")
+        username = runtime_config.get("username", "")
+        password = runtime_config.get("password", "")
+        resolved_custom_vars = custom_variables
+
     if auth_url:
         template_vars["LOGIN_URL"] = auth_url
 
     # 在解析 task_url 之前注入运行时配置变量，
     # 确保 task_url 中的 {{USERNAME}}/{{PASSWORD}}/{{ISP}} 解析为校园网配置值
-    isp = runtime_config.get("isp", "")
     if isp:
         template_vars["ISP"] = isp
 
-    username = runtime_config.get("username", "")
     if username:
         template_vars["USERNAME"] = username
 
-    password = runtime_config.get("password", "")
     if password:
         template_vars["PASSWORD"] = password
 
     # 内置变量集合，防止自定义变量覆盖 LOGIN_URL、ISP、USERNAME、PASSWORD
     _builtin_keys = {k for k in template_vars if k}
 
-    if custom_variables and isinstance(custom_variables, dict):
-        for k, v in custom_variables.items():
+    if resolved_custom_vars and isinstance(resolved_custom_vars, dict):
+        for k, v in resolved_custom_vars.items():
             if k.upper() in _ENV_DENYLIST_UPPER:
                 logger.warning("自定义变量 '{}' 与系统保留名冲突，已跳过", k)
             elif k.upper() in _builtin_keys:
