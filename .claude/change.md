@@ -2,6 +2,18 @@
 
 ## 2026-06-21
 
+### refactor(login): LoginAttemptHandler 解构 config dict 为命名属性
+- `app/utils/login.py`：
+  - 构造函数新增解构逻辑：`_credentials`（username/password/auth_url/isp）、`_browser_settings`、`_monitor_settings`、`_active_task`、`_custom_variables`
+  - `_perform_login_with_active_task`：`self.config.get("active_task", "").strip()` 改为 `self._active_task`
+  - `_execute_browser_task`：凭证访问从 `self.config.get("auth_url", "")` 改为 `self._credentials["auth_url"]` 等
+  - `_execute_browser_task`：`self.config.get("custom_variables", {})` 改为 `self._custom_variables`
+  - `_execute_browser_task`：`self.config.get("browser_settings", {})` 改为 `self._browser_settings`，删除中间变量 `browser_settings`
+  - `_execute_browser_task`：`self.config.get("monitor", {})` 改为 `self._monitor_settings`
+  - `_execute_script_task`：`self.config.get("monitor", {}).get("script_timeout", 60)` 改为 `self._monitor_settings.get("script_timeout", 60)`
+  - `self.config` 整体仍保留用于传递给 `build_login_template_vars`、`BrowserContextManager`、`check_network_status` 等期望完整 config 的函数
+- 验收：36 个核心 monitor/login 测试全通过，pre-existing 的 main.py/orchestrator dict 问题与本次改动无关
+
 ### test: 适配 monitor/decision 测试至 RuntimeConfig
 - `tests/test_services/test_monitor_service_fix.py`：dict 配置改为 `RuntimeConfig(LoginCredentials(...), MonitorSettings(...))` 构造
 - `tests/test_integration/test_network_connection.py`：`_make_monitor_core` 移除 `.model_dump()` 调用，直接传递 `RuntimeConfig`
