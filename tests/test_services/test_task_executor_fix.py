@@ -1057,62 +1057,6 @@ class TestTaskExecutorExecuteLogin:
 
 
 # =====================================================================
-# TaskExecutor — _record_login_history
-# =====================================================================
-
-
-class TestTaskExecutorRecordLoginHistory:
-    """TaskExecutor._record_login_history() 测试。"""
-
-    def _make_executor(self, **kwargs):
-        from app.services.task_executor import TaskExecutor
-
-        defaults = dict(
-            registry=MagicMock(),
-            history_store=MagicMock(),
-            worker_getter=MagicMock(),
-            login_history=MagicMock(),
-            profile_service=MagicMock(),
-            login_orchestrator=MagicMock(),
-        )
-        defaults.update(kwargs)
-        return TaskExecutor(**defaults)
-
-    def test_no_login_history_service(self):
-        """无 login_history 时应直接返回。"""
-        executor = self._make_executor(login_history=None)
-        executor._record_login_history(True, 100)
-        # 不应抛出异常
-
-    def test_records_success(self):
-        executor = self._make_executor()
-        executor._record_login_history(True, 150)
-        executor._login_history.record.assert_called_once_with(
-            success=True,
-            duration_ms=150,
-            profile_service=executor._profile_service,
-            error="",
-        )
-
-    def test_records_failure_with_error(self):
-        executor = self._make_executor()
-        executor._record_login_history(False, 200, error="timeout")
-        executor._login_history.record.assert_called_once_with(
-            success=False,
-            duration_ms=200,
-            profile_service=executor._profile_service,
-            error="timeout",
-        )
-
-    def test_record_exception_caught(self):
-        """record 抛异常时应被静默捕获。"""
-        executor = self._make_executor()
-        executor._login_history.record.side_effect = RuntimeError("db error")
-        executor._record_login_history(True, 100)
-        # 不应抛出异常
-
-
-# =====================================================================
 # TaskExecutor — execute_login_async (去重机制)
 # =====================================================================
 

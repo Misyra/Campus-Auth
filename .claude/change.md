@@ -2,6 +2,10 @@
 
 ## 2026-06-20
 
+### fix — 退避逻辑冲突
+- `_on_done` 中 MonitoredPolicy delay 与 `_apply_backoff_interval` 取最大值，避免相互覆盖
+- 之前 MonitoredPolicy 的固定 30s delay 会覆盖 engine 级指数退避（300s/900s/1500s）
+
 ### refactor — LoginRetryManager 清理
 - 删除 `app/services/login_retry.py`（LoginRetryManager 类）
 - `engine.py` 删除：`_validate_login_config`、`_configure_retry`、`_login_retry_needed`、`_login_retry` 字段及所有引用

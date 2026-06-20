@@ -284,65 +284,6 @@ class TaskExecutor:
         )
         return success, message
 
-    def _legacy_execute_login(
-        self,
-        cancel_event: threading.Event | None = None,
-        config_snapshot: dict | None = None,
-    ) -> tuple[bool, str]:
-        """【遗留】同步执行登录（在 login_pool 工作线程中运行）。
-
-        通过 PlaywrightWorker 执行浏览器自动化登录。
-        config_snapshot 优先使用，避免二次读取产生 TOCTOU 竞态。
-        """
-        start = time.perf_counter()
-
-        try:
-            # 延迟导入：测试需要模拟 playwright_worker 未安装的 ImportError 场景
-            from app.workers.playwright_worker import CMD_LOGIN
-
-            # 获取运行时配置（优先使用传入的快照，避免 TOCTOU 竞态）
-            config = config_snapshot if config_snapshot is not None else (self._get_runtime_config() if self._get_runtime_config else {})
-
-            # 检查取消
-            if cancel_event and cancel_event.is_set():
-                return False, "登录已取消"
-
-            # 获取 Worker 并提交登录命令（timeout 从配置读取，下限 60s 防误配）
-            login_timeout = int(config.get("login_timeout", 90))
-            worker_timeout = max(login_timeout, 60)
-            worker = self._worker_getter()
-            result = worker.submit(
-                CMD_LOGIN,
-                data={
-                    "config": config,
-                    "cancel_event": cancel_event,
-                },
-                wait=True,
-                timeout=worker_timeout,
-            )
-
-            duration_ms = int((time.perf_counter() - start) * 1000)
-
-            if result.success:
-                self._record_login_history(True, duration_ms)
-                message = result.data if isinstance(result.data, str) else "登录成功"
-                return True, message
-            else:
-                error_msg = result.error or "登录失败"
-                self._record_login_history(False, duration_ms, error=error_msg)
-                return False, error_msg
-
-        except ImportError as exc:
-            duration_ms = int((time.perf_counter() - start) * 1000)
-            logger.warning("登录执行缺少依赖: {}", exc)
-            self._record_login_history(False, duration_ms, error=str(exc))
-            return False, "登录需要额外依赖，请检查 Playwright 安装状态"
-        except Exception as exc:
-            duration_ms = int((time.perf_counter() - start) * 1000)
-            logger.error("登录执行异常: {}", exc)
-            self._record_login_history(False, duration_ms, error=str(exc))
-            return False, f"登录执行异常: {exc}"
-
     # ── 内部执行方法 ──
 
     def _execute_script(self, script_id: str, timeout: int) -> tuple[bool, str]:
@@ -472,22 +413,6 @@ class TaskExecutor:
             return False, f"执行异常: {exc}"
 
     # ── 辅助方法 ──
-
-    def _record_login_history(
-        self, success: bool, duration_ms: int, error: str = ""
-    ) -> None:
-        """记录登录历史（委托 LoginHistoryService.record 自动提取方案/任务名称）。"""
-        if self._login_history is None:
-            return
-        try:
-            self._login_history.record(
-                success=success,
-                duration_ms=duration_ms,
-                profile_service=self._profile_service,
-                error=error,
-            )
-        except Exception:
-            logger.debug("记录登录历史失败", exc_info=True)
 
     def _get_script_path(self, script_id: str):
         """获取脚本任务的文件路径。
