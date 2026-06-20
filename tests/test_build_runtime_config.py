@@ -82,9 +82,54 @@ def test_build_runtime_config_passthrough_fields():
 
 
 def test_build_runtime_config_strip_fields():
-    """proxy 和 browser_custom_path 应被 strip。"""
+    """browser_custom_path 应被 strip。"""
     from app.services.config_service import build_runtime_config
 
     gs = _make_gs(proxy="  http://proxy:8080  ", browser_custom_path="  /usr/bin/chrome  ")
     rc = build_runtime_config(_make_payload(), gs)
     assert rc.browser.browser_custom_path == "/usr/bin/chrome"
+
+
+def test_build_runtime_config_password_masked():
+    """以 • 开头的密码应被清空。"""
+    from app.services.config_service import build_runtime_config
+
+    rc = build_runtime_config(_make_payload(password="••••••"), _make_gs())
+    assert rc.credentials.password == ""
+
+
+def test_build_runtime_config_pause_logging_retry():
+    """暂停、日志、重试设置正确传递。"""
+    from app.services.config_service import build_runtime_config
+
+    payload = _make_payload(
+        pause_enabled=False,
+        pause_start_hour=22,
+        pause_end_hour=7,
+        backend_log_level="debug",
+        frontend_log_level="warning",
+        log_retention_days=14,
+        access_log=True,
+    )
+    gs = _make_gs(max_retries=5, retry_interval=10)
+    rc = build_runtime_config(payload, gs)
+    assert rc.pause.enabled is False
+    assert rc.pause.start_hour == 22
+    assert rc.pause.end_hour == 7
+    assert rc.logging.level == "DEBUG"
+    assert rc.logging.frontend_level == "WARNING"
+    assert rc.logging.log_retention_days == 14
+    assert rc.logging.access_log is True
+    assert rc.retry.max_retries == 5
+    assert rc.retry.retry_interval == 10
+
+
+def test_build_runtime_config_url_check_urls():
+    """url_check_urls 解析为字典列表。"""
+    from app.services.config_service import build_runtime_config
+
+    payload = _make_payload(url_check_urls="https://example.com|OK")
+    rc = build_runtime_config(payload, _make_gs())
+    assert isinstance(rc.monitor.url_check_urls, list)
+    assert len(rc.monitor.url_check_urls) == 1
+    assert rc.monitor.url_check_urls[0]["url"] == "https://example.com"
