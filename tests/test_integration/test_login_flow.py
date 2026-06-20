@@ -67,6 +67,7 @@ def _make_raw_engine() -> ScheduleEngine:
     svc.record_log = MagicMock()
     svc._update_status_snapshot = MagicMock()
     svc._orchestrator = MagicMock()
+    svc._registered_futures = set()
     return svc
 
 

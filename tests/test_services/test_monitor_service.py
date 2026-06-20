@@ -808,6 +808,7 @@ class TestNetworkStateSetInConsumer:
         svc._update_status_snapshot = MagicMock()
         svc.record_log = MagicMock()
         svc._orchestrator = MagicMock()
+        svc._registered_futures = set()
 
         future = Future()
         handle = MagicMock()

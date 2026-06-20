@@ -83,6 +83,7 @@ class TestManualLoginCancelRaceFix:
         engine._login_history = MagicMock()
         engine._ui_config = MagicMock()
         engine._ui_config.login_timeout = 30
+        engine._registered_futures = set()
         return engine
 
     def test_manual_login_submits_to_orchestrator(self):
