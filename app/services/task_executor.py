@@ -4,13 +4,11 @@
 - login_pool(1) — 登录专用，永不阻塞
 - task_pool(2, queue=10, 懒初始化) — 定时任务，BoundedExecutor 限制队列
 
-登录去重机制：_login_future 防止重复提交。
+登录逻辑委托 LoginOrchestrator。
 """
 
 from __future__ import annotations
 
-import contextlib
-import queue
 import sys
 import threading
 import time
@@ -70,13 +68,12 @@ class BoundedExecutor:
 
 
 class TaskExecutor:
-    """任务执行中心 — 双线程池 + 登录去重。
+    """任务执行中心 — 双线程池 + 登录委托。
 
     Attributes:
         _login_pool: 登录专用线程池（1 个工作线程，立即创建）
         _task_pool: 定时任务线程池（懒初始化，无定时任务时不创建）
-        _login_future: 当前登录 Future，用于去重
-        _login_lock: 保护 _login_future 的锁
+        _login_orchestrator: 登录编排器（由 container 注入）
     """
 
     def __init__(
@@ -104,16 +101,6 @@ class TaskExecutor:
         )
         self._task_pool: BoundedExecutor | None = None
         self._task_pool_lock = threading.Lock()
-
-        # 登录去重
-        self._login_future: Future | None = None
-        self._login_lock = threading.Lock()
-        self._login_cancel_event: threading.Event | None = None
-
-        # cancel 联动 watcher（单常驻线程，替代每次新建 daemon 线程）
-        self._cancel_link_queue: queue.Queue = queue.Queue()
-        self._cancel_link_thread: threading.Thread | None = None
-        self._cancel_link_lock = threading.Lock()
 
         # 定时任务去重
         self._running_tasks: dict[str, Future] = {}
@@ -199,96 +186,14 @@ class TaskExecutor:
         future.add_done_callback(_cleanup)
         return future
 
-    def _legacy_execute_login_async(
-        self,
-        cancel_event: threading.Event | None = None,
-        config_snapshot: dict | None = None,
-    ) -> Future:
-        """【遗留】异步执行登录（提交到 login_pool），带去重。
-
-        如果已有登录任务在执行中，返回已有的 Future 而非重复提交。
-        去重时，新调用方的 cancel_event 会联动到已有任务：
-        当新 cancel_event 被设置时，已有任务的 cancel_event 也会被设置。
-
-        Args:
-            cancel_event: 取消事件，设置后登录流程应尽快退出
-            config_snapshot: 校验通过的配置快照，避免二次读取产生竞态
-
-        Returns:
-            Future 对象（新的或已有的）
-        """
-        if cancel_event is None:
-            cancel_event = threading.Event()
-
-        future = None
-        with self._login_lock:
-            # 检查是否已有登录在进行
-            if self._login_future is not None and not self._login_future.done():
-                logger.debug("登录任务已在执行中，跳过重复提交")
-                # 联动新 cancel_event 到已有任务
-                if self._login_cancel_event is not None:
-                    self._link_cancel_event(cancel_event, self._login_cancel_event)
-                return self._login_future
-
-            # 提交新的登录任务
-            future = self._login_pool.submit(
-                self.execute_login, cancel_event, config_snapshot
-            )
-            self._login_future = future
-            self._login_cancel_event = cancel_event
-
-        # 锁外注册回调，避免时序问题
-        future.add_done_callback(self._on_login_done)
-        return future
-
-    def _ensure_cancel_link_thread(self) -> None:
-        """惰性启动单个 watcher 线程处理所有 cancel 联动。"""
-        with self._cancel_link_lock:
-            if self._cancel_link_thread is not None and self._cancel_link_thread.is_alive():
-                return
-            self._cancel_link_thread = threading.Thread(
-                target=self._cancel_link_loop, daemon=True, name="cancel-link-watcher"
-            )
-            self._cancel_link_thread.start()
-
-    def _cancel_link_loop(self) -> None:
-        """常驻 watcher：从队列取 (new_event, target_event) 并监控。"""
-        pending: list[tuple[threading.Event, threading.Event]] = []
-        while True:
-            try:
-                item = self._cancel_link_queue.get(timeout=1.0)
-                if item is None:  # 毒丸，shutdown 时使用
-                    return
-                pending.append(item)
-            except queue.Empty:
-                pass
-            # 检查所有 pending 的新事件是否已 set
-            still_pending = []
-            for new_event, target_event in pending:
-                if new_event.is_set():
-                    target_event.set()  # 联动，无需继续监控
-                else:
-                    still_pending.append((new_event, target_event))
-            pending = still_pending
-
-    def _legacy_link_cancel_event(
-        self, new_event: threading.Event, target_event: threading.Event
-    ) -> None:
-        """【遗留】将联动请求入队，由常驻 watcher 处理（不再每次新建线程）。"""
-        self._cancel_link_queue.put((new_event, target_event))
-        self._ensure_cancel_link_thread()
-
-    # ── 委托方法（优先走 Orchestrator，回退走遗留路径）──
+    # ── 登录接口（委托 LoginOrchestrator）──
 
     def execute_login_async(
         self,
         cancel_event: threading.Event | None = None,
         config_snapshot: dict | None = None,
     ) -> Future:
-        """【委托】异步执行登录。签名兼容。"""
-        if self._login_orchestrator is None:
-            return self._legacy_execute_login_async(cancel_event, config_snapshot)
-
+        """异步执行登录。签名兼容。"""
         handle = self._login_orchestrator.submit(
             source="auto", config=config_snapshot, cancel_event=cancel_event,
         )
@@ -304,9 +209,7 @@ class TaskExecutor:
         cancel_event: threading.Event | None = None,
         config_snapshot: dict | None = None,
     ) -> tuple[bool, str]:
-        """【委托】同步执行登录。签名兼容。"""
-        if self._login_orchestrator is None:
-            return self._legacy_execute_login(cancel_event, config_snapshot)
+        """同步执行登录。签名兼容。"""
         cfg = config_snapshot if config_snapshot is not None else (
             self._get_runtime_config() if self._get_runtime_config else {}
         )
@@ -316,50 +219,16 @@ class TaskExecutor:
         return handle.result()
 
     def is_login_running(self) -> bool:
-        """【委托】检查是否有登录在执行。"""
-        if self._login_orchestrator is not None:
-            return self._login_orchestrator.is_running()
-        with self._login_lock:
-            return self._login_future is not None and not self._login_future.done()
+        """检查是否有登录在执行。"""
+        return self._login_orchestrator.is_running()
 
     def cancel_login(self) -> None:
-        """【委托】取消当前登录。"""
-        if self._login_orchestrator is not None:
-            self._login_orchestrator.cancel_running()
-            return
-        if self._login_cancel_event:
-            self._login_cancel_event.set()
-
-    def _on_login_done(self, future: Future) -> None:
-        """登录完成后清理引用。"""
-        if self._login_orchestrator is not None:
-            return  # Orchestrator handles its own cleanup
-        self._legacy_on_login_done(future)
-
-    def _link_cancel_event(
-        self, new_event: threading.Event, target_event: threading.Event
-    ) -> None:
-        """联动取消事件。"""
-        if self._login_orchestrator is not None:
-            self._login_orchestrator._link_cancel(new_event, target_event)
-            return
-        self._legacy_link_cancel_event(new_event, target_event)
+        """取消当前登录。"""
+        self._login_orchestrator.cancel_running()
 
     def force_clear_login_slot(self) -> None:
         """强制清理旧登录引用（仅用于旧任务无法正常取消的兜底场景）。"""
-        with self._login_lock:
-            old_future = self._login_future
-            self._login_future = None
-            self._login_cancel_event = None
-        if old_future is not None and not old_future.done():
-            logger.warning("强制清理时旧登录仍未完成: {}", old_future)
-
-    def _legacy_on_login_done(self, future: Future) -> None:
-        """【遗留】登录任务完成后清理引用。"""
-        with self._login_lock:
-            if self._login_future is future:
-                self._login_future = None
-                self._login_cancel_event = None
+        self._login_orchestrator.cancel_running()
 
     # ── 同步执行接口 ──
 
@@ -634,9 +503,6 @@ class TaskExecutor:
     def shutdown(self, wait: bool = True) -> None:
         """关闭线程池。"""
         logger.info("TaskExecutor 开始关闭...")
-        if self._cancel_link_thread is not None:
-            with contextlib.suppress(Exception):
-                self._cancel_link_queue.put(None)
         if self._task_pool is not None:
             self._task_pool.shutdown(wait=wait)
         self._login_pool.shutdown(wait=wait)

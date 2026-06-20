@@ -301,20 +301,6 @@ class ScheduleEngine:
             logger.exception("网络检测异常")
             self._next_network_check = time.time() + self._monitor_check_interval
 
-    def _configure_retry(self) -> None:
-        """从运行时配置加载重试参数。异常时使用默认值兜底。"""
-        try:
-            from app.utils.retry import get_retry_intervals
-            config = self._copy_runtime_config()
-            retry = config.get("retry_settings", {})
-            max_retries = retry.get("max_retries", 3)
-            interval = retry.get("retry_interval", 5)
-            intervals = get_retry_intervals(interval, max_retries, exponential=False)
-            self._login_retry.configure(max_retries, intervals)
-        except Exception:
-            logger.warning("加载重试配置失败，使用默认值")
-            self._login_retry.configure(3, [5, 5, 5])
-
     _LOGIN_BACKOFF_THRESHOLD = 3  # 连续 3 轮（每轮 max_retries 次）失败后降频
 
     def _login_retry_max_cycles(self) -> int:
@@ -337,13 +323,6 @@ class ScheduleEngine:
         if self._task_executor.is_login_running():
             return False
         return self._login_retry.need_retry(now)
-
-    def _validate_login_config(self, config: dict | None = None) -> str | None:
-        """校验登录配置完整性。返回 None 表示通过，否则返回错误信息。"""
-        cfg = config if config is not None else self._copy_runtime_config()
-        if not cfg.get("username") or not cfg.get("password") or not cfg.get("auth_url"):
-            return "登录配置不完整（请先设置认证地址、用户名和密码）"
-        return None
 
     def _do_async_login(self, is_manual: bool = False, config_snapshot: dict | None = None) -> bool:
         """【委托】提交登录到 LoginOrchestrator。签名兼容。"""

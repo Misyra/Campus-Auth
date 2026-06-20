@@ -163,59 +163,49 @@ class TestFullLoginSequence:
         assert svc._login_retry.count == 1
 
     def test_task_executor_login_success(self):
-        """TaskExecutor.execute_login 通过 Worker 成功执行登录。"""
+        """TaskExecutor.execute_login 委托到 LoginOrchestrator 并返回成功。"""
         from app.services.task_executor import TaskExecutor
 
-        mock_registry = MagicMock()
-        mock_history = MagicMock()
-        mock_worker = MagicMock()
-        mock_worker_getter = MagicMock(return_value=mock_worker)
-        mock_login_history = MagicMock()
-        mock_profile_service = MagicMock()
+        mock_orchestrator = MagicMock()
+        mock_handle = MagicMock()
+        mock_handle.result.return_value = (True, "登录成功")
+        mock_orchestrator.submit.return_value = mock_handle
 
         executor = TaskExecutor(
-            registry=mock_registry,
+            registry=MagicMock(),
             history_store=MagicMock(),
-            worker_getter=mock_worker_getter,
-            login_history=mock_login_history,
-            profile_service=mock_profile_service,
+            worker_getter=MagicMock(),
+            login_history=MagicMock(),
+            profile_service=MagicMock(),
             get_runtime_config=lambda: {
                 "browser_settings": {"pure_mode": False},
             },
-        )
-
-        mock_worker.submit.return_value = _make_worker_result(
-            True, data="登录成功"
+            login_orchestrator=mock_orchestrator,
         )
 
         success, message = executor.execute_login()
 
         assert success is True
         assert message == "登录成功"
-        mock_worker.submit.assert_called_once()
-        mock_login_history.record.assert_called_once_with(
-            success=True,
-            duration_ms=pytest.approx(0, abs=5000),
-            profile_service=mock_profile_service,
-            error="",
-        )
+        mock_orchestrator.submit.assert_called_once()
 
     def test_task_executor_login_failure(self):
-        """TaskExecutor.execute_login 处理 Worker 登录失败。"""
+        """TaskExecutor.execute_login 委托到 LoginOrchestrator 并返回失败。"""
         from app.services.task_executor import TaskExecutor
 
-        mock_worker = MagicMock()
+        mock_orchestrator = MagicMock()
+        mock_handle = MagicMock()
+        mock_handle.result.return_value = (False, "密码错误")
+        mock_orchestrator.submit.return_value = mock_handle
+
         executor = TaskExecutor(
             registry=MagicMock(),
             history_store=MagicMock(),
-            worker_getter=MagicMock(return_value=mock_worker),
+            worker_getter=MagicMock(),
             login_history=MagicMock(),
             profile_service=MagicMock(),
             get_runtime_config=lambda: {"browser_settings": {}},
-        )
-
-        mock_worker.submit.return_value = _make_worker_result(
-            False, error="密码错误"
+            login_orchestrator=mock_orchestrator,
         )
 
         success, message = executor.execute_login()
@@ -224,8 +214,13 @@ class TestFullLoginSequence:
         assert message == "密码错误"
 
     def test_task_executor_login_cancelled(self):
-        """TaskExecutor.execute_login 处理取消事件。"""
+        """TaskExecutor.execute_login 委托到 LoginOrchestrator 并处理取消。"""
         from app.services.task_executor import TaskExecutor
+
+        mock_orchestrator = MagicMock()
+        mock_handle = MagicMock()
+        mock_handle.result.return_value = (False, "登录已取消")
+        mock_orchestrator.submit.return_value = mock_handle
 
         executor = TaskExecutor(
             registry=MagicMock(),
@@ -233,6 +228,7 @@ class TestFullLoginSequence:
             worker_getter=MagicMock(),
             login_history=MagicMock(),
             get_runtime_config=lambda: {},
+            login_orchestrator=mock_orchestrator,
         )
 
         cancel_event = threading.Event()
@@ -244,19 +240,22 @@ class TestFullLoginSequence:
         assert "取消" in message
 
     def test_task_executor_login_worker_exception(self):
-        """TaskExecutor.execute_login 处理 Worker 异常。"""
+        """TaskExecutor.execute_login 委托到 LoginOrchestrator 并处理异常。"""
         from app.services.task_executor import TaskExecutor
 
-        mock_worker = MagicMock()
-        mock_worker.submit.side_effect = RuntimeError("浏览器启动失败")
+        mock_orchestrator = MagicMock()
+        mock_handle = MagicMock()
+        mock_handle.result.return_value = (False, "异常: 浏览器启动失败")
+        mock_orchestrator.submit.return_value = mock_handle
 
         executor = TaskExecutor(
             registry=MagicMock(),
             history_store=MagicMock(),
-            worker_getter=MagicMock(return_value=mock_worker),
+            worker_getter=MagicMock(),
             login_history=MagicMock(),
             profile_service=MagicMock(),
             get_runtime_config=lambda: {"browser_settings": {}},
+            login_orchestrator=mock_orchestrator,
         )
 
         success, message = executor.execute_login()

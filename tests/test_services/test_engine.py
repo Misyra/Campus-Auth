@@ -631,54 +631,6 @@ class TestLoginRetryNeeded:
 
 
 # =====================================================================
-# _validate_login_config
-# =====================================================================
-
-
-class TestValidateLoginConfig:
-    def test_valid_config_returns_none(self, engine_factory):
-        svc = engine_factory(raw=True)
-        config = {"username": "u", "password": "p", "auth_url": "http://x"}
-        assert svc._validate_login_config(config) is None
-
-    def test_empty_config_returns_error(self, engine_factory):
-        svc = engine_factory(raw=True)
-        result = svc._validate_login_config({})
-        assert result is not None
-        assert "配置不完整" in result
-
-    def test_missing_username_returns_error(self, engine_factory):
-        svc = engine_factory(raw=True)
-        config = {"password": "p", "auth_url": "http://x"}
-        result = svc._validate_login_config(config)
-        assert result is not None
-
-    def test_missing_password_returns_error(self, engine_factory):
-        svc = engine_factory(raw=True)
-        config = {"username": "u", "auth_url": "http://x"}
-        result = svc._validate_login_config(config)
-        assert result is not None
-
-    def test_missing_auth_url_returns_error(self, engine_factory):
-        svc = engine_factory(raw=True)
-        config = {"username": "u", "password": "p"}
-        result = svc._validate_login_config(config)
-        assert result is not None
-
-    def test_none_config_uses_runtime_config(self, engine_factory):
-        """config=None 时应从 _copy_runtime_config 读取。"""
-        svc = engine_factory(raw=True)
-        svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
-        assert svc._validate_login_config() is None
-
-    def test_none_config_empty_runtime_returns_error(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._runtime_config = {}
-        result = svc._validate_login_config()
-        assert result is not None
-
-
-# =====================================================================
 # _do_async_login
 # =====================================================================
 

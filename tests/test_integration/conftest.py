@@ -103,6 +103,7 @@ def integration_stack(tmp_path, mock_worker):
         get_runtime_config=engine.get_runtime_config,
     )
     engine._orchestrator = orchestrator
+    task_executor._login_orchestrator = orchestrator
 
     yield engine, profile_service, task_executor, mock_worker
 
@@ -152,6 +153,7 @@ def full_stack(tmp_path, mock_worker):
         get_runtime_config=engine.get_runtime_config,
     )
     engine._orchestrator = orchestrator
+    task_executor._login_orchestrator = orchestrator
 
     yield engine, profile_service, task_executor, task_registry, mock_worker
 
