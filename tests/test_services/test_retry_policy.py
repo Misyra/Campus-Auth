@@ -71,9 +71,7 @@ class TestMonitoredPolicy:
 
     def test_default_params(self):
         policy = MonitoredPolicy()
-        assert policy.max_retries == 10
-        assert policy.interval == 30
-        assert policy.backoff_after_cycles == 3
+        assert policy.max_retries == 5
 
     def test_attempts_yields_1_to_max(self):
         policy = MonitoredPolicy(max_retries=5)
@@ -85,34 +83,28 @@ class TestMonitoredPolicy:
         policy = MonitoredPolicy()
         assert policy.delay_before(1) == 0.0
 
-    def test_delay_within_backoff_after_cycles(self):
-        """在 backoff_after_cycles 之前返回固定 interval。"""
-        policy = MonitoredPolicy(interval=10, backoff_after_cycles=3)
-        assert policy.delay_before(2) == 10.0
-        assert policy.delay_before(3) == 10.0
+    def test_delay_within_table(self):
+        """前几次重试使用固定延迟表。"""
+        policy = MonitoredPolicy()
+        assert policy.delay_before(2) == 0.0
+        assert policy.delay_before(3) == 30.0
 
-    def test_delay_exponential_backoff(self):
-        """超过 backoff_after_cycles 后指数退避。"""
-        policy = MonitoredPolicy(interval=10, backoff_after_cycles=3)
-        # attempt=4 → exponent=1 → 10 * 2^1 = 20
-        assert policy.delay_before(4) == 20.0
-        # attempt=5 → exponent=2 → 10 * 2^2 = 40
-        assert policy.delay_before(5) == 40.0
+    def test_delay_fixed_table(self):
+        """延迟表 [0, 0, 30, 60, 120]，超出后取最后一个值。"""
+        policy = MonitoredPolicy()
+        assert policy.delay_before(1) == 0.0
+        assert policy.delay_before(2) == 0.0
+        assert policy.delay_before(3) == 30.0
+        assert policy.delay_before(4) == 60.0
+        assert policy.delay_before(5) == 120.0
+        # 超出表长，取最后一个
+        assert policy.delay_before(100) == 120.0
 
-    def test_delay_capped_at_1800(self):
-        """退避上限 1800 秒。"""
-        policy = MonitoredPolicy(interval=30, backoff_after_cycles=1)
-        # 大 attempt 值 → 30 * 2^(attempt-1)，但上限 1800
-        delay = policy.delay_before(100)
-        assert delay == 1800.0
-
-    def test_delay_exactly_at_cap_boundary(self):
-        """退避刚好到达上限。"""
-        policy = MonitoredPolicy(interval=1, backoff_after_cycles=1)
-        # attempt=11 → exponent=10 → 1 * 2^10 = 1024 < 1800
-        assert policy.delay_before(11) == 1024.0
-        # attempt=12 → exponent=11 → 1 * 2^11 = 2048 > 1800 → capped
-        assert policy.delay_before(12) == 1800.0
+    def test_delay_table_max(self):
+        """超出延迟表范围时取最后一个值。"""
+        policy = MonitoredPolicy()
+        assert policy.delay_before(100) == 120.0
+        assert policy.delay_before(1000) == 120.0
 
     # -- on_network_check -----------------------------------------------
 
@@ -166,32 +158,31 @@ class TestMonitoredPolicy:
     # -- on_login_done --------------------------------------------------
 
     def test_login_success_resets(self):
-        """登录成功 → 重置并返回 0.0。"""
+        """登录成功 → 重置并返回 None。"""
         policy = MonitoredPolicy()
         policy._attempt = 5
         result = policy.on_login_done(success=True)
-        assert result == 0.0
+        assert result is None
         assert policy._attempt == 0
 
     def test_login_failure_returns_delay(self):
-        """登录失败 → 返回下次延迟。"""
-        policy = MonitoredPolicy(interval=10, backoff_after_cycles=3)
-        # 第一次失败 → attempt=1，delay_before(1)=0? 不对，on_login_done 先 +1 再查
-        # _attempt 从 0 开始，失败后变为 1，delay_before(1) = 0.0
+        """登录失败 → 返回下次延迟（查表）。"""
+        policy = MonitoredPolicy()
+        # 第一次失败 → _attempt=1，delay_before(1)=0.0
         result = policy.on_login_done(success=False)
-        assert result == 0.0  # 第一次失败，delay_before(1)=0
+        assert result == 0.0
 
     def test_login_failure_subsequent_delays(self):
-        """多次登录失败 → 递增延迟。"""
-        policy = MonitoredPolicy(interval=10, backoff_after_cycles=3)
+        """多次登录失败 → 按延迟表递增。"""
+        policy = MonitoredPolicy()
         # 第 1 次失败: _attempt=1 → delay_before(1)=0.0
         assert policy.on_login_done(success=False) == 0.0
-        # 第 2 次失败: _attempt=2 → delay_before(2)=10.0
-        assert policy.on_login_done(success=False) == 10.0
-        # 第 3 次失败: _attempt=3 → delay_before(3)=10.0
-        assert policy.on_login_done(success=False) == 10.0
-        # 第 4 次失败: _attempt=4 → delay_before(4)=20.0 (指数退避开始)
-        assert policy.on_login_done(success=False) == 20.0
+        # 第 2 次失败: _attempt=2 → delay_before(2)=0.0
+        assert policy.on_login_done(success=False) == 0.0
+        # 第 3 次失败: _attempt=3 → delay_before(3)=30.0
+        assert policy.on_login_done(success=False) == 30.0
+        # 第 4 次失败: _attempt=4 → delay_before(4)=60.0
+        assert policy.on_login_done(success=False) == 60.0
 
     def test_login_failure_exceeds_max_returns_none(self):
         """超过最大重试次数 → 返回 None。"""
@@ -203,11 +194,11 @@ class TestMonitoredPolicy:
 
     def test_login_success_after_failures_resets(self):
         """登录失败后再成功 → 重置状态。"""
-        policy = MonitoredPolicy(interval=10, backoff_after_cycles=2)
+        policy = MonitoredPolicy()
         policy.on_login_done(success=False)  # attempt=1
         policy.on_login_done(success=False)  # attempt=2
         result = policy.on_login_done(success=True)
-        assert result == 0.0
+        assert result is None
         assert policy._attempt == 0
         # 再次失败应该从头开始
         assert policy.on_login_done(success=False) == 0.0  # delay_before(1)=0
@@ -218,10 +209,10 @@ class TestMonitoredPolicy:
         policy = MonitoredPolicy(max_retries=0)
         assert policy.max_retries == 1
 
-    def test_interval_min_clamped(self):
-        policy = MonitoredPolicy(interval=0)
-        assert policy.interval == 1
+    def test_max_retries_clamped_to_one(self):
+        """max_retries 下限为 1。"""
+        policy = MonitoredPolicy(max_retries=0)
+        assert policy.max_retries == 1
 
-    def test_backoff_after_cycles_min_clamped(self):
-        policy = MonitoredPolicy(backoff_after_cycles=0)
-        assert policy.backoff_after_cycles == 1
+        policy = MonitoredPolicy(max_retries=-5)
+        assert policy.max_retries == 1

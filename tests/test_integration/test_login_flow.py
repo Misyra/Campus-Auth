@@ -67,8 +67,6 @@ def _make_raw_engine() -> ScheduleEngine:
     svc.record_log = MagicMock()
     svc._update_status_snapshot = MagicMock()
     svc._orchestrator = MagicMock()
-    svc._consecutive_login_failures = 0
-    svc._backoff_check_multiplier = 1
     return svc
 
 
@@ -314,7 +312,7 @@ class TestLoginWithNetworkDetection:
         svc._do_async_login.assert_called_once()
 
     def test_network_check_no_login_needed(self):
-        """网络正常时，不触发登录，重置失败计数。"""
+        """网络正常时，不触发登录，通过 _retry_policy 重置退避。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
         mock_core.check_once.return_value = {
@@ -323,11 +321,12 @@ class TestLoginWithNetworkDetection:
         }
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._consecutive_login_failures = 2
+        svc._retry_policy._attempt = 2
+        svc._retry_policy._prev_network_ok = False  # 模拟之前断开
 
         svc._do_network_check()
 
-        assert svc._consecutive_login_failures == 0
+        assert svc._retry_policy._attempt == 0
         assert svc._next_network_check > time.time()
 
     def test_network_check_updates_interval(self):
@@ -431,7 +430,7 @@ class TestLoginWithNetworkDetection:
         handle.rejected_reason = None
         handle.future = future
         svc._orchestrator.submit.return_value = handle
-        svc._consecutive_login_failures = 0
+        svc._retry_policy._attempt = 0
 
         # 模拟引擎循环中的网络检测
         now = time.time()

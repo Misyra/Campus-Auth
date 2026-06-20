@@ -98,7 +98,7 @@ class TestFullEngineLoginChain:
             mock_worker.submit.assert_called_once()
 
             # 手动登录不触发自动失败计数
-            assert engine._consecutive_login_failures == 0
+            assert engine._retry_policy._attempt == 0
         finally:
             restore_fn()
 
@@ -128,7 +128,7 @@ class TestFullEngineLoginChain:
 
             mock_worker.submit.assert_called_once()
             # 手动登录不触发自动失败计数
-            assert engine._consecutive_login_failures == 0
+            assert engine._retry_policy._attempt == 0
         finally:
             restore_fn()
 
@@ -196,7 +196,7 @@ class TestNetworkDetectionLogin:
             restore_fn()
 
         # 模拟重试状态：一次失败后
-        engine._consecutive_login_failures = 1
+        engine._retry_policy._attempt = 1
 
         # 第二次登录（自动重试路径）
         result_container2, done_event2, restore_fn2 = _capture_login_completion(
@@ -212,8 +212,8 @@ class TestNetworkDetectionLogin:
             assert msg == "认证失败"
 
             assert mock_worker.submit.call_count == 2
-            # 自动登录失败应递增连续失败计数
-            assert engine._consecutive_login_failures >= 1
+            # 自动登录失败应递增退避计数
+            assert engine._retry_policy._attempt >= 1
         finally:
             restore_fn2()
 

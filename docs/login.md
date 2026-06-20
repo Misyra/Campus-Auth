@@ -78,7 +78,7 @@ main.py（CLI 入口）
 ### 2.2 核心数据结构
 
 ```python
-LoginSource = Literal["auto", "manual", "login_once"]
+LoginSource = Literal["auto", "manual", "login_once", "browser"]
 
 @dataclass
 class LoginHandle:
@@ -356,6 +356,13 @@ class TaskExecutor:
         handle = self._login_orchestrator.submit(source="auto", ...)
         return handle.result()
 
+    def _execute_browser(self, task_id, timeout, cancel_event=None) -> tuple[bool, str]:
+        config = self._get_runtime_config() if self._get_runtime_config else {}
+        handle = self._login_orchestrator.submit(
+            source="browser", config=config, cancel_event=cancel_event, timeout=timeout,
+        )
+        return handle.result()
+
     def is_login_running(self) -> bool:
         return self._login_orchestrator.is_running()
 
@@ -397,6 +404,7 @@ self.engine._orchestrator = self.login_orchestrator
 | F09 | 三处超时不统一 | resolve_worker_timeout 唯一来源 | ✅ |
 | F12 | _link_cancel_event 线程泄漏 | CompositeCancelEvent 无线程 | ✅ |
 | F13 | cancel_event 冗余检查 | 惰性扫描消除 | ✅ |
+| F11 | 定时浏览器任务与登录共享 CMD_LOGIN | _execute_browser 委托 Orchestrator | ✅ |
 | — | LoginRetryManager 双轨运行 | 完全删除，MonitoredPolicy 统一管理 | ✅ |
 | — | engine.py 死代码 | 删除 _validate_login_config、_configure_retry | ✅ |
 | — | TaskExecutor 死代码 | 删除 _legacy_*、_record_login_history、死参数 | ✅ |
@@ -412,5 +420,4 @@ self.engine._orchestrator = self.login_orchestrator
 - 最小化：TaskExecutor 只保留线程池 + 定时任务，登录相关字段全部移交
 
 **遗留项**：
-- 定时浏览器任务与登录共享 CMD_LOGIN 的并发控制问题（F11）
 - engine.py 仍有 `_consecutive_login_failures` + `_apply_backoff_interval` 与 MonitoredPolicy 的退避交互（已修复为取最大值）
