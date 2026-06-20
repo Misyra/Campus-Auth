@@ -33,7 +33,7 @@ def test_engine_test_network_default_false():
 
 
 def test_handle_login_uses_validated_config():
-    """_handle_login 应将校验通过的配置传递给 _do_async_login，避免二次读取。"""
+    """_handle_login 应将校验通过的配置传递给 orchestrator.submit。"""
     from app.services.engine import EngineCmdType, EngineCommand, ScheduleEngine
 
     engine = ScheduleEngine.__new__(ScheduleEngine)
@@ -45,15 +45,20 @@ def test_handle_login_uses_validated_config():
     engine._copy_runtime_config = MagicMock(return_value=snapshot)
     engine._orchestrator = MagicMock()
     engine._orchestrator.validate.return_value = None
-    engine._do_async_login = MagicMock(return_value=True)
+    mock_handle = MagicMock()
+    mock_handle.rejected_reason = None
+    mock_handle.future = MagicMock()
+    mock_handle.result.return_value = (True, "登录成功")
+    engine._orchestrator.submit.return_value = mock_handle
 
     cmd = EngineCommand(type=EngineCmdType.LOGIN, data={})
     engine._handle_login(cmd)
 
-    # _do_async_login 应收到 config_snapshot 参数
-    engine._do_async_login.assert_called_once_with(
-        is_manual=True, config_snapshot=snapshot,
+    # orchestrator.submit 应收到正确的 source 和 config
+    engine._orchestrator.submit.assert_called_once_with(
+        source="manual", config=snapshot,
     )
+    assert cmd.response_data == (True, "登录成功")
 
 
 # =====================================================================

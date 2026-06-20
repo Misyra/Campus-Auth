@@ -380,16 +380,24 @@ class ScheduleEngine:
         self._handle_stop()
 
     def _handle_login(self, cmd: EngineCommand) -> None:
-        """执行一次性登录（手动触发，异步执行）。"""
+        """执行一次性登录（手动触发，等待完成）。"""
         config = self._copy_runtime_config()
-        err = self._orchestrator.validate(config)  # 复用唯一校验（F05）
+        err = self._orchestrator.validate(config)
         if err is not None:
             cmd.response_data = (False, err)
             return
-        if self._do_async_login(is_manual=True, config_snapshot=config):
-            cmd.response_data = (True, "登录已提交")
-        else:
+
+        handle = self._orchestrator.submit(source="manual", config=config)
+        if handle.rejected_reason is not None:
+            cmd.response_data = (False, handle.rejected_reason)
+            return
+        if handle.future is None:
             cmd.response_data = (False, "登录任务已在执行中，请稍后再试")
+            return
+
+        # 等待登录实际完成
+        ok, msg = handle.result()
+        cmd.response_data = (ok, msg)
 
     def _handle_reload(self, cmd: EngineCommand) -> None:
         """重载配置并重启监控（仅在引擎线程中调用）。"""
