@@ -2,6 +2,17 @@
 
 ## 2026-06-20
 
+### feat — 新建 CompositeCancelEvent（惰性扫描组合取消事件）
+- 新增 `app/utils/cancel_token.py`：`CompositeCancelEvent` 类，继承 `threading.Event`
+  - `add_source(event)` — 添加取消源，若源已 set 则立即传播
+  - `is_set()` — 惰性扫描所有源，首次发现源 set 后缓存到 `super().set()`
+  - `clear()` — 仅清除自身标志，保留源列表
+  - `_lock` 保护 `_sources` 列表，线程安全
+- 新增 `tests/test_utils/test_cancel_token.py`：11 个测试覆盖全部场景
+  - 初始状态、直接 set、已 set 源立即传播、延迟传播、多源触发、去重、clear 行为、缓存、并发安全、clear 后重新传播
+
+## 2026-06-20
+
 ### refactor — TaskExecutor 移除 login_history/profile_service 死参数
 - `app/services/task_executor.py` `__init__` 移除 `login_history` 和 `profile_service` 参数（已在之前的重构中移除生产代码引用）
 - 测试文件同步清理：
@@ -10,6 +21,10 @@
   - `tests/test_integration/conftest.py`：`integration_stack` 和 `full_stack` 两个 fixture 移除参数
   - `tests/test_services/test_task_executor_fix.py`：`TestTaskExecutorExecuteLogin._make_executor` 移除参数
 - 最终：2322 测试全通过
+
+### refactor — TaskExecutor 死参数清理
+- 删除 `login_history`、`profile_service` 构造参数和字段（登录历史已由 Orchestrator 管理）
+- 更新 container.py + 4 个测试文件移除参数传递
 
 ### fix — 退避逻辑冲突
 - `_on_done` 中 MonitoredPolicy delay 与 `_apply_backoff_interval` 取最大值，避免相互覆盖
