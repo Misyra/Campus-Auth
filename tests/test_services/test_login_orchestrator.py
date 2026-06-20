@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.schemas import RuntimeConfig
 from app.services.login_orchestrator import (
     LoginHandle,
     LoginOrchestrator,
@@ -14,7 +15,23 @@ from app.services.login_orchestrator import (
 )
 
 
-VALID_CONFIG = {"username": "u", "password": "p", "auth_url": "http://x"}
+def _make_runtime_config(**overrides) -> RuntimeConfig:
+    """创建测试用 RuntimeConfig，默认凭据完整。"""
+    creds = {
+        "username": overrides.get("username", "u"),
+        "password": overrides.get("password", "p"),
+        "auth_url": overrides.get("auth_url", "http://x"),
+    }
+    browser = {}
+    if "login_timeout" in overrides:
+        browser["login_timeout"] = overrides["login_timeout"]
+    return RuntimeConfig(
+        credentials=creds,
+        browser=browser,
+    )
+
+
+VALID_CONFIG = _make_runtime_config()
 
 
 # ── validate_login_config ──
@@ -25,23 +42,20 @@ class TestValidateLoginConfig:
         assert validate_login_config(VALID_CONFIG) is None
 
     def test_missing_username(self):
-        cfg = {**VALID_CONFIG, "username": ""}
+        cfg = _make_runtime_config(username="")
         assert validate_login_config(cfg) is not None
 
     def test_missing_password(self):
-        cfg = {**VALID_CONFIG, "password": ""}
+        cfg = _make_runtime_config(password="")
         assert validate_login_config(cfg) is not None
 
     def test_missing_auth_url(self):
-        cfg = {**VALID_CONFIG, "auth_url": ""}
+        cfg = _make_runtime_config(auth_url="")
         assert validate_login_config(cfg) is not None
 
-    def test_none_username(self):
-        cfg = {**VALID_CONFIG, "username": None}
-        assert validate_login_config(cfg) is not None
-
-    def test_empty_dict(self):
-        assert validate_login_config({}) is not None
+    def test_default_config_fails(self):
+        """默认 RuntimeConfig 无凭据，校验应失败。"""
+        assert validate_login_config(RuntimeConfig()) is not None
 
 
 # ── resolve_worker_timeout ──
@@ -49,28 +63,29 @@ class TestValidateLoginConfig:
 
 class TestResolveWorkerTimeout:
     def test_uses_login_timeout(self):
-        assert resolve_worker_timeout({"login_timeout": 120}) == 120
+        cfg = _make_runtime_config(login_timeout=120)
+        assert resolve_worker_timeout(cfg) == 120
 
-    def test_falls_back_when_missing(self):
-        assert resolve_worker_timeout({}) == 300
+    def test_default_login_timeout(self):
+        """默认 login_timeout=90，直接返回（不触发 fallback）。"""
+        cfg = RuntimeConfig()
+        assert resolve_worker_timeout(cfg) == 90
 
-    def test_custom_fallback(self):
-        assert resolve_worker_timeout({}, fallback=200) == 200
+    def test_custom_fallback_only_when_invalid(self):
+        """fallback 仅在 login_timeout 无法解析时使用。
+        RuntimeConfig 保证 login_timeout 是 int，所以 fallback 实际不会触发。"""
+        cfg = _make_runtime_config(login_timeout=120)
+        assert resolve_worker_timeout(cfg, fallback=200) == 120
 
     def test_floor_60(self):
-        assert resolve_worker_timeout({"login_timeout": 10}) == 60
+        cfg = _make_runtime_config(login_timeout=10)
+        assert resolve_worker_timeout(cfg) == 60
 
-    def test_ceiling_600(self):
-        assert resolve_worker_timeout({"login_timeout": 999}) == 600
-
-    def test_non_int_graceful_fallback(self):
-        assert resolve_worker_timeout({"login_timeout": "abc"}) == 300
-
-    def test_string_int_works(self):
-        assert resolve_worker_timeout({"login_timeout": "180"}) == 180
-
-    def test_none_value_falls_back(self):
-        assert resolve_worker_timeout({"login_timeout": None}) == 300
+    def test_ceiling_clamped_by_pydantic(self):
+        """Pydantic 约束 le=600，超过 600 的值无法构造 RuntimeConfig。
+        测试边界值 600。"""
+        cfg = _make_runtime_config(login_timeout=600)
+        assert resolve_worker_timeout(cfg) == 600
 
 
 # ── LoginHandle ──
@@ -171,7 +186,7 @@ class TestOrchestratorSubmit:
         handle.result(timeout=5)
 
     def test_submit_rejected_on_bad_config(self, orchestrator):
-        handle = orchestrator.submit(source="auto", config={})
+        handle = orchestrator.submit(source="auto", config=RuntimeConfig())
         assert handle.future is None
         assert handle.rejected_reason is not None
 
@@ -269,7 +284,7 @@ class TestOrchestratorValidate:
         assert orchestrator.validate(VALID_CONFIG) is None
 
     def test_validate_fails_bad_config(self, orchestrator):
-        assert orchestrator.validate({}) is not None
+        assert orchestrator.validate(RuntimeConfig()) is not None
 
     def test_validate_uses_runtime_config(self):
         worker = _make_slow_worker()

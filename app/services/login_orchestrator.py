@@ -17,6 +17,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
+from app.schemas import RuntimeConfig
 from app.utils.cancel_token import CompositeCancelEvent
 from app.utils.logging import get_logger
 
@@ -29,46 +30,45 @@ logger = get_logger("login_orchestrator", source="backend")
 LoginSource = Literal["auto", "manual", "login_once", "browser"]
 
 
-def _runtime_config_to_legacy_dict(rc) -> dict:
-    """将 RuntimeConfig 转为旧格式扁平 dict，兼容 Worker。"""
-    return {
-        "username": rc.credentials.username,
-        "password": rc.credentials.password,
-        "auth_url": rc.credentials.auth_url,
-        "isp": rc.credentials.isp,
-        "active_task": rc.active_task,
-        "block_proxy": rc.block_proxy,
-        "shell_path": rc.shell_path,
-        "minimize_to_tray": rc.minimize_to_tray,
-        "startup_action": rc.startup_action,
-        "autostart_lightweight": rc.autostart_lightweight,
-        "custom_variables": rc.custom_variables,
-        "browser_settings": rc.browser.model_dump(),
-        "monitor": rc.monitor.model_dump(),
-        "pause_login": rc.pause.model_dump(),
-        "logging": {"level": rc.logging.level},
-        "frontend_logging": {"level": rc.logging.frontend_level},
-        "retry_settings": rc.retry.model_dump(),
-        "login_timeout": rc.browser.login_timeout,
+def _runtime_config_to_worker_dict(config: RuntimeConfig) -> dict:
+    """将 RuntimeConfig 转换为 Worker 进程期望的 dict 格式。
+
+    Worker 是独立进程，通过 dict 通信。此函数确保 dict 键名与旧
+    build_runtime_dict_from_payload 的输出完全兼容。
+    """
+    creds = config.credentials.model_dump()
+    d: dict = {
+        "username": creds["username"],
+        "password": creds["password"],
+        "auth_url": creds["auth_url"],
+        "isp": creds["isp"],
     }
+    d["browser_settings"] = config.browser.model_dump()
+    d["pause_login"] = config.pause.model_dump()
+    d["monitor"] = config.monitor.model_dump()
+    d["logging"] = {"level": config.logging.level}
+    d["frontend_logging"] = {"level": config.logging.frontend_level}
+    d["login_timeout"] = config.browser.login_timeout
+    d["retry_settings"] = config.retry.model_dump()
+    d["active_task"] = config.active_task
+    d["custom_variables"] = config.custom_variables
+    d["block_proxy"] = config.block_proxy
+    d["shell_path"] = config.shell_path
+    d["access_log"] = config.logging.access_log
+    d["minimize_to_tray"] = config.minimize_to_tray
+    d["startup_action"] = config.startup_action
+    d["autostart_lightweight"] = config.autostart_lightweight
+    d["log_retention_days"] = config.logging.log_retention_days
+    return d
 
 
 # ── 配置校验（F05 唯一实现）──
 
 
-def validate_login_config(config) -> str | None:
-    """校验登录配置完整性。接受 dict 或 RuntimeConfig。
-
-    Returns:
-        None 表示通过；否则返回中文错误信息。
-    """
-    if hasattr(config, "credentials"):
-        # RuntimeConfig
-        c = config.credentials
-        if not c.username or not c.password or not c.auth_url:
-            return "登录配置不完整（请先设置认证地址、用户名和密码）"
-        return None
-    if not config.get("username") or not config.get("password") or not config.get("auth_url"):
+def validate_login_config(config: RuntimeConfig) -> str | None:
+    """校验登录配置完整性。"""
+    creds = config.credentials
+    if not creds.username or not creds.password or not creds.auth_url:
         return "登录配置不完整（请先设置认证地址、用户名和密码）"
     return None
 
@@ -76,17 +76,13 @@ def validate_login_config(config) -> str | None:
 # ── 超时解析（F09 单一来源）──
 
 
-def resolve_worker_timeout(config, fallback: int = 300) -> int:
-    """从运行时配置解析 Worker 提交超时。接受 dict 或 RuntimeConfig。
+def resolve_worker_timeout(config: RuntimeConfig, fallback: int = 300) -> int:
+    """从 RuntimeConfig 解析 Worker 提交超时。
 
     优先用 login_timeout（用户在 UI 配置），缺失时用 fallback。
     下限 60s 防止误配导致登录必失败；上限 600s 与 MonitorConfigPayload(le=600) 对齐。
     """
-    if hasattr(config, "browser"):
-        # RuntimeConfig
-        raw = config.browser.login_timeout
-    else:
-        raw = config.get("login_timeout", fallback)
+    raw = config.browser.login_timeout
     try:
         timeout = int(raw)
     except (TypeError, ValueError):
@@ -146,7 +142,7 @@ class LoginOrchestrator:
         worker_getter: Callable,
         login_history: LoginHistoryService | None = None,
         profile_service: ProfileService | None = None,
-        get_runtime_config: Callable[[], dict] | None = None,
+        get_runtime_config: Callable[[], RuntimeConfig] | None = None,
     ) -> None:
         self._worker_getter = worker_getter
         self._login_history = login_history
@@ -166,7 +162,7 @@ class LoginOrchestrator:
 
     # ── 公共 API ──
 
-    def validate(self, config: dict | None = None) -> str | None:
+    def validate(self, config: RuntimeConfig | None = None) -> str | None:
         """校验。config 为 None 时从 get_runtime_config 读取。"""
         cfg = config if config is not None else self._runtime_config()
         return validate_login_config(cfg)
@@ -180,7 +176,7 @@ class LoginOrchestrator:
         self,
         *,
         source: LoginSource,
-        config=None,
+        config: RuntimeConfig | None = None,
         cancel_event: threading.Event | None = None,
         timeout: int | None = None,
     ) -> LoginHandle:
@@ -192,7 +188,7 @@ class LoginOrchestrator:
                 - auto 命中运行中的 handle 则复用（去重）
                 - login_once 总是新提交（进程级一次性任务）
                 - browser 由调用方自行校验，跳过登录配置校验和历史记录
-            config: 配置（dict 或 RuntimeConfig）；None 则从 get_runtime_config 读取
+            config: RuntimeConfig；None 则从 get_runtime_config 读取
             cancel_event: 取消事件；None 则内部新建
             timeout: Worker 超时（秒）；None 则从 config 解析
 
@@ -257,15 +253,15 @@ class LoginOrchestrator:
     # ── 内部 ──
 
     def _dispatch(
-        self, config, source: LoginSource, cancel_event: threading.Event,
+        self, config: RuntimeConfig, source: LoginSource, cancel_event: threading.Event,
         timeout: int | None = None,
     ) -> LoginHandle:
-        """提交到 Worker，注册历史/状态回调。config 可以是 dict 或 RuntimeConfig。"""
+        """提交到 Worker，注册历史/状态回调。"""
         # 延迟导入：避免模块级导入导致循环依赖
         from app.workers.playwright_worker import CMD_LOGIN
 
-        # Worker 仍使用 dict 接口
-        worker_config = config if isinstance(config, dict) else _runtime_config_to_legacy_dict(config)
+        # Build compatible dict for Worker process (Worker is separate process, communicates via dict)
+        worker_config = _runtime_config_to_worker_dict(config)
         worker_timeout = timeout if timeout is not None else resolve_worker_timeout(config)  # F09 单一来源
 
         def _run() -> tuple[bool, str]:
@@ -334,10 +330,10 @@ class LoginOrchestrator:
         except Exception:
             logger.debug("记录登录历史失败", exc_info=True)
 
-    def _runtime_config(self) -> dict:
-        """获取运行时配置快照。"""
+    def _runtime_config(self) -> RuntimeConfig:
+        """获取运行时配置。"""
         if self._get_runtime_config is None:
-            return {}
+            return RuntimeConfig()
         return self._get_runtime_config()
 
     def _link_cancel(
