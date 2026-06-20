@@ -357,7 +357,7 @@ class TestHandleLogin:
     def test_handle_login_submits_async(
         self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
     ):
-        """_handle_login 有配置时提交异步登录并返回成功。"""
+        """_handle_login 有配置时提交登录并等待完成返回结果。"""
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.global_settings.pure_mode = False
@@ -389,7 +389,8 @@ class TestHandleLogin:
         svc._orchestrator.validate.return_value = None
         handle = MagicMock()
         handle.rejected_reason = None
-        handle.future = Future()
+        handle.future = MagicMock()
+        handle.result.return_value = (True, "登录成功")
         svc._orchestrator.submit.return_value = handle
 
         # 提供有效配置，否则 _handle_login 会拒绝
@@ -398,10 +399,8 @@ class TestHandleLogin:
         }):
             cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
             svc._handle_login(cmd)
-            # 异步模式：立即返回提交状态，不等待结果
-            assert cmd.response_data == (True, "登录已提交")
-        # 等待异步登录线程完成
-        time.sleep(0.5)
+            # 同步模式：等待完成后返回登录结果
+            assert cmd.response_data == (True, "登录成功")
 
     def test_handle_login_no_config_returns_false(self):
         """_handle_login 无配置时返回 False。"""
