@@ -296,6 +296,7 @@ def build_runtime_config(
         password=password,
         auth_url=auth_url,
         isp=isp,
+        carrier_custom=custom_isp,
     )
 
     # ── 浏览器 ──

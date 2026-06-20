@@ -39,6 +39,7 @@ def test_build_runtime_config_credentials():
     assert rc.credentials.password == "testpass"
     assert rc.credentials.auth_url == "https://auth.example.com"
     assert rc.credentials.isp == "myisp"
+    assert rc.credentials.carrier_custom == "myisp"
 
 
 def test_build_runtime_config_carrier_mapping():
