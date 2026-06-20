@@ -22,7 +22,6 @@ from app.services.engine import (
     ScheduleEngine,
     StatusSnapshot,
 )
-from app.services.login_retry import LoginRetryManager
 from app.services.retry_policy import MonitoredPolicy
 
 
@@ -36,7 +35,6 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._shutdown_event = threading.Event()
     svc._monitor_core = None
     svc._engine_running = False
-    svc._login_retry = LoginRetryManager()
     svc._retry_policy = MonitoredPolicy()
     svc._runtime_config = {}
     svc._runtime_snapshot = {}
@@ -159,8 +157,6 @@ class TestFullLoginSequence:
         result = svc._do_async_login()
 
         assert result is True
-        assert svc._login_retry.last_attempt > 0
-        assert svc._login_retry.count == 1
 
     def test_task_executor_login_success(self):
         """TaskExecutor.execute_login 委托到 LoginOrchestrator 并返回成功。"""
@@ -418,7 +414,6 @@ class TestLoginWithNetworkDetection:
         svc._do_network_check()
 
         svc._do_async_login.assert_not_called()
-        assert svc._login_retry.count == 0
 
     def test_engine_loop_integration_with_network_login(self):
         """引擎循环中网络检测触发登录的集成测试。"""
@@ -443,7 +438,7 @@ class TestLoginWithNetworkDetection:
         handle.rejected_reason = None
         handle.future = future
         svc._orchestrator.submit.return_value = handle
-        svc._login_retry.count = 0
+        svc._consecutive_login_failures = 0
 
         # 模拟引擎循环中的网络检测
         now = time.time()
@@ -453,137 +448,13 @@ class TestLoginWithNetworkDetection:
         if svc._is_monitoring and now >= svc._next_network_check:
             svc._do_network_check()
 
-        assert svc._login_retry.count == 1
-
         # 清理
         future.set_result(None)
         time.sleep(0.1)
 
 
 # =====================================================================
-# 3. 登录失败重试机制测试
-# =====================================================================
-
-
-class TestLoginRetryMechanism:
-    """登录失败重试机制：重试计数、间隔判断、最大重试次数。"""
-
-    def test_retry_needed_basic(self):
-        """基本重试判断：超过间隔时间，需要重试。"""
-        svc = _make_raw_engine()
-        svc._login_retry.count = 1
-        svc._login_retry.last_attempt = time.time() - 100
-        svc._login_retry.config = (3, [10, 20, 30])
-        svc._task_executor.is_login_running.return_value = False
-
-        assert svc._login_retry_needed(time.time()) is True
-
-    def test_retry_not_needed_too_early(self):
-        """未到重试间隔时间，不需要重试。"""
-        svc = _make_raw_engine()
-        svc._login_retry.count = 1
-        svc._login_retry.last_attempt = time.time()
-        svc._login_retry.config = (3, [60, 60, 60])
-
-        assert svc._login_retry_needed(time.time()) is False
-
-    def test_retry_not_needed_max_reached(self):
-        """达到最大重试次数，不再重试。"""
-        svc = _make_raw_engine()
-        svc._login_retry.count = 3
-        svc._login_retry.config = (3, [10, 20, 30])
-
-        assert svc._login_retry_needed(time.time()) is False
-
-    def test_retry_not_needed_login_in_progress(self):
-        """登录正在进行中，不触发重试。"""
-        svc = _make_raw_engine()
-        svc._login_retry.count = 1
-        svc._login_retry.last_attempt = time.time() - 100
-        svc._login_retry.config = (3, [10, 20, 30])
-        svc._task_executor.is_login_running.return_value = True
-
-        assert svc._login_retry_needed(time.time()) is False
-
-    def test_retry_not_needed_no_config(self):
-        """无重试配置，不触发重试。"""
-        svc = _make_raw_engine()
-        svc._login_retry.count = 1
-        svc._login_retry.config = None
-
-        assert svc._login_retry_needed(time.time()) is False
-
-    def test_retry_not_needed_count_zero(self):
-        """重试计数为 0，不触发重试。"""
-        svc = _make_raw_engine()
-        svc._login_retry.count = 0
-        svc._login_retry.config = (3, [10, 20, 30])
-
-        assert svc._login_retry_needed(time.time()) is False
-
-    def test_retry_intervals_progression(self):
-        """重试间隔按配置递增。"""
-        svc = _make_raw_engine()
-        intervals = [10, 20, 30]
-        svc._task_executor.is_login_running.return_value = False
-
-        # 第 1 次重试，间隔 10 秒
-        svc._login_retry.count = 1
-        svc._login_retry.last_attempt = time.time() - 5
-        svc._login_retry.config = (3, intervals)
-        assert svc._login_retry_needed(time.time()) is False
-
-        svc._login_retry.last_attempt = time.time() - 11
-        assert svc._login_retry_needed(time.time()) is True
-
-        # 第 2 次重试，间隔 20 秒
-        svc._login_retry.count = 2
-        svc._login_retry.last_attempt = time.time() - 15
-        assert svc._login_retry_needed(time.time()) is False
-
-        svc._login_retry.last_attempt = time.time() - 21
-        assert svc._login_retry_needed(time.time()) is True
-
-        # 第 3 次重试，间隔 30 秒
-        svc._login_retry.count = 3
-        svc._login_retry.last_attempt = time.time() - 25
-        assert svc._login_retry_needed(time.time()) is False
-
-    def test_network_check_triggers_login(self):
-        """网络检测触发登录。"""
-        svc = _make_raw_engine()
-        mock_core = MagicMock()
-        mock_core.check_once.return_value = {
-            "need_login": True,
-            "interval": 300,
-        }
-        mock_core.consume_profile_switch_flag.return_value = False
-        svc._monitor_core = mock_core
-        svc._do_async_login = MagicMock()
-
-        svc._do_network_check()
-
-        svc._do_async_login.assert_called_once()
-
-    def test_wakeup_considers_retry_intervals(self):
-        """引擎唤醒时间考虑重试间隔。"""
-        svc = _make_raw_engine()
-        now = time.time()
-        svc._login_retry = LoginRetryManager(
-            count=1,
-            last_attempt=now - 5,
-            config=(3, [10, 20, 30]),
-        )
-
-        wakeup = svc._calculate_wakeup()
-
-        # 唤醒时间应在 last_attempt + interval[0] 附近
-        expected_wakeup = now - 5 + 10  # = now + 5
-        assert wakeup <= expected_wakeup + 1
-
-
-# =====================================================================
-# 4. 登录并发保护测试
+# 3. 登录并发保护测试
 # =====================================================================
 
 
@@ -699,16 +570,11 @@ class TestLoginConcurrencyProtection:
         assert svc._manual_login_in_progress is False
 
     def test_retry_not_triggered_during_login(self):
-        """登录进行中时，重试机制不触发。"""
+        """登录进行中时，login_in_progress 属性为 True。"""
         svc = _make_raw_engine()
-        svc._login_retry.count = 1
-        svc._login_retry.last_attempt = time.time() - 100
-        svc._login_retry.config = (3, [10, 20, 30])
         svc._task_executor.is_login_running.return_value = True  # 登录进行中
 
-        result = svc._login_retry_needed(time.time())
-
-        assert result is False
+        assert svc.login_in_progress is True
 
     def test_login_exception_propagates(self):
         """登录执行异常时，异常会向上传播。"""

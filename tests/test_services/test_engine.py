@@ -21,7 +21,6 @@ from app.services.engine import (
     ScheduleEngine,
     StatusSnapshot,
 )
-from app.services.login_retry import LoginRetryManager
 
 
 
@@ -166,15 +165,11 @@ class TestCalculateWakeup:
         assert wakeup <= time.time() + 11
 
     def test_wakeup_with_login_retry(self, engine_factory):
+        """向后兼容测试：无 _login_retry 字段时，唤醒仍正常。"""
         svc = engine_factory(raw=True)
         svc._monitor_core = None
-        svc._login_retry = LoginRetryManager(
-            count=1,
-            last_attempt=time.time() - 100,
-            config=(3, [5, 10, 15]),
-        )
         wakeup = svc._calculate_wakeup()
-        assert wakeup <= time.time() + 60
+        assert wakeup <= time.time() + 61
 
     def test_wakeup_with_scheduler(self, engine_factory):
         svc = engine_factory(raw=True)
@@ -187,13 +182,11 @@ class TestCalculateWakeup:
     def test_wakeup_exception_fallback(self, engine_factory):
         """异常时回退到 now+5。"""
         svc = engine_factory(raw=True)
-        svc._monitor_core = None
-        # 通过让 next_wakeup 内部计算出错来触发异常
-        svc._login_retry = LoginRetryManager(
-            count=1,
-            last_attempt="not_a_number",  # 会导致 TypeError
-            config=(3, [5, 10, 15]),
-        )
+        # 让 _is_monitoring 为 True，同时设置非法值触发异常
+        mock_core = MagicMock()
+        mock_core.monitoring = True
+        svc._monitor_core = mock_core
+        svc._next_network_check = "not_a_number"
         svc._scheduler_running = False
         now = time.time()
         wakeup = svc._calculate_wakeup()
@@ -339,7 +332,6 @@ class TestHandleStop:
         svc._handle_stop()
         mock_core.stop_monitoring.assert_called_once()
         assert svc._monitor_core is None
-        assert svc._login_retry.count == 0
 
 
 # =====================================================================
@@ -580,57 +572,6 @@ class TestDoNetworkCheck:
 
 
 # =====================================================================
-# _login_retry_needed
-# =====================================================================
-
-
-class TestLoginRetryNeeded:
-    def test_no_retry_needed_when_count_zero(self, engine_factory):
-        svc = engine_factory(raw=True)
-        assert svc._login_retry_needed(time.time()) is False
-
-    def test_no_retry_needed_when_no_config(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._login_retry.count = 1
-        svc._login_retry.config = None
-        assert svc._login_retry_needed(time.time()) is False
-
-    def test_no_retry_needed_when_login_in_progress(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._login_retry.count = 1
-        svc._login_retry.config = (3, [10, 20, 30])
-        svc._task_executor.is_login_running.return_value = True
-        assert svc._login_retry_needed(time.time()) is False
-
-    def test_no_retry_needed_when_max_retries_reached(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._login_retry.count = 3
-        svc._login_retry.config = (3, [10, 20, 30])
-        assert svc._login_retry_needed(time.time()) is False
-
-    def test_no_retry_needed_when_index_out_of_range(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._login_retry.count = 4
-        svc._login_retry.config = (5, [10])
-        assert svc._login_retry_needed(time.time()) is False
-
-    def test_no_retry_needed_when_too_early(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._login_retry.count = 1
-        svc._login_retry.last_attempt = time.time()
-        svc._login_retry.config = (3, [60, 60, 60])
-        assert svc._login_retry_needed(time.time()) is False
-
-    def test_retry_needed(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._login_retry.count = 1
-        svc._login_retry.last_attempt = time.time() - 100
-        svc._login_retry.config = (3, [10, 20, 30])
-        svc._task_executor.is_login_running.return_value = False
-        assert svc._login_retry_needed(time.time()) is True
-
-
-# =====================================================================
 # _do_async_login
 # =====================================================================
 
@@ -829,17 +770,17 @@ class TestDoAsyncLogin:
             svc._do_async_login()
 
     def test_exception_does_not_consume_retry(self, engine_factory):
-        """orchestrator.submit 抛异常时不应递增重试计数。"""
+        """orchestrator.submit 抛异常时不应递增失败计数。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         svc._orchestrator.submit.side_effect = RuntimeError("pool closed")
-        svc._login_retry.count = 0
+        svc._consecutive_login_failures = 0
         with pytest.raises(RuntimeError):
             svc._do_async_login()
-        assert svc._login_retry.count == 0
+        assert svc._consecutive_login_failures == 0
 
     def test_success_increments_retry_count(self, engine_factory):
-        """成功提交后应递增重试计数。"""
+        """成功提交后连续失败计数应保持不变。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         future = Future()
@@ -847,9 +788,10 @@ class TestDoAsyncLogin:
         handle.rejected_reason = None
         handle.future = future
         svc._orchestrator.submit.return_value = handle
-        svc._login_retry.count = 0
+        svc._consecutive_login_failures = 0
         svc._do_async_login()
-        assert svc._login_retry.count == 1
+        # 自动登录成功时失败计数由 done callback 重置
+        assert svc._consecutive_login_failures == 0
 
     def test_config_validation_blocks_auto_login(self, engine_factory):
         """配置不完整时自动登录应被拦截，不提交任务。"""
@@ -863,16 +805,16 @@ class TestDoAsyncLogin:
         assert result is False
 
     def test_config_validation_resets_retry_on_failure(self, engine_factory):
-        """配置校验失败应重置重试状态。"""
+        """配置校验失败时 _do_async_login 返回 False。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = {}
         handle = MagicMock()
         handle.rejected_reason = "登录配置不完整"
         handle.future = None
         svc._orchestrator.submit.return_value = handle
-        svc._login_retry.count = 2
-        svc._do_async_login()
-        assert svc._login_retry.count == 0
+        svc._consecutive_login_failures = 2
+        result = svc._do_async_login()
+        assert result is False
 
     def test_config_validation_blocks_missing_username(self, engine_factory):
         svc = engine_factory(raw=True)

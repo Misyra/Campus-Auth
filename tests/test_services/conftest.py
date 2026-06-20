@@ -9,7 +9,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.services.engine import ScheduleEngine, StatusSnapshot
-from app.services.login_retry import LoginRetryManager
 from app.services.retry_policy import MonitoredPolicy
 
 
@@ -62,7 +61,6 @@ def engine_factory():
         svc._shutdown_event = threading.Event()
         svc._monitor_core = None
         svc._engine_running = False
-        svc._login_retry = LoginRetryManager()
         svc._retry_policy = MonitoredPolicy()
         svc._runtime_config = {}
         svc._runtime_snapshot = {}

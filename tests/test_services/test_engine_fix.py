@@ -70,8 +70,6 @@ class TestManualLoginCancelRaceFix:
 
         engine = ScheduleEngine.__new__(ScheduleEngine)
         engine._task_executor = MagicMock()
-        engine._login_retry = MagicMock()
-        engine._login_retry.reset = MagicMock()
         engine._update_status_snapshot = MagicMock()
         engine._copy_runtime_config = MagicMock(
             return_value={"username": "u", "password": "p", "auth_url": "http://x"}

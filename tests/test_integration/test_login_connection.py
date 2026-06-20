@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import threading
 import time
+from concurrent.futures import Future
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -73,7 +74,7 @@ class TestLoginConnection:
         assert mock_worker.submit.call_count == 2
 
     def test_retry_exhausted(self, integration_stack):
-        """连续失败达 max_retries → 停止重试。"""
+        """连续失败达阈值 → 连续失败计数递增。"""
         engine, profile_service, task_executor, mock_worker = integration_stack
         _ensure_login_config(engine)
 
@@ -81,21 +82,20 @@ class TestLoginConnection:
             success=False, error="网络超时"
         )
 
-        # 配置重试
-        engine._login_retry.configure(3, [0.1, 0.1, 0.1])
-
-        # 连续登录直到耗尽重试
+        # 通过引擎的 _do_async_login 连续提交登录（走 done callback 路径）
         for i in range(3):
-            future = task_executor.execute_login_async()
-            ok, msg = future.result(timeout=5)
-            assert ok is False
-            engine._login_retry.record_attempt(time.time())
+            future = Future()
+            handle = MagicMock()
+            handle.rejected_reason = None
+            handle.future = future
+            with patch.object(engine._orchestrator, "submit", return_value=handle):
+                result = engine._do_async_login()
+            assert result is True
+            future.set_result((False, "网络超时"))
+            time.sleep(0.2)
 
-        # 第 4 次应该不需要重试（已达上限）
-        assert engine._login_retry.need_retry(time.time()) is False
-
-        # submit 只被调了 3 次
-        assert mock_worker.submit.call_count == 3
+        # 连续失败计数应为 3
+        assert engine._consecutive_login_failures == 3
 
     def test_manual_preempt_auto(self, integration_stack):
         """手动登录取消卡住的自动登录。"""
