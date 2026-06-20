@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 logger = get_logger("login_orchestrator", source="backend")
 
-LoginSource = Literal["auto", "manual", "login_once"]
+LoginSource = Literal["auto", "manual", "login_once", "browser"]
 
 
 # ── 配置校验（F05 唯一实现）──
@@ -148,32 +148,36 @@ class LoginOrchestrator:
         source: LoginSource,
         config: dict | None = None,
         cancel_event: threading.Event | None = None,
+        timeout: int | None = None,
     ) -> LoginHandle:
         """提交一次登录。
 
         Args:
-            source: "auto" | "manual" | "login_once"
+            source: "auto" | "manual" | "login_once" | "browser"
                 - manual 可抢占 auto（取消旧的、提交新的）
                 - auto 命中运行中的 handle 则复用（去重）
                 - login_once 总是新提交（进程级一次性任务）
+                - browser 由调用方自行校验，跳过登录配置校验和历史记录
             config: 配置快照；None 则从 get_runtime_config 读取
             cancel_event: 取消事件；None 则内部新建
+            timeout: Worker 超时（秒）；None 则从 config 解析
 
         Returns:
             LoginHandle。若校验失败，future 为 None 且 rejected_reason 非空。
         """
         cfg = config if config is not None else self._runtime_config()
 
-        # 1. 校验（F05 唯一实现）
-        err = validate_login_config(cfg)
-        if err is not None:
-            logger.warning("跳过登录(source={}): {}", source, err)
-            return LoginHandle(
-                future=None,
-                source=source,
-                cancel_event=cancel_event or CompositeCancelEvent(),
-                rejected_reason=err,
-            )
+        # 1. 校验（browser 任务由调用方自行校验）
+        if source != "browser":
+            err = validate_login_config(cfg)
+            if err is not None:
+                logger.warning("跳过登录(source={}): {}", source, err)
+                return LoginHandle(
+                    future=None,
+                    source=source,
+                    cancel_event=cancel_event or CompositeCancelEvent(),
+                    rejected_reason=err,
+                )
 
         if cancel_event is None:
             cancel_event = CompositeCancelEvent()
@@ -201,7 +205,7 @@ class LoginOrchestrator:
                     return existing
 
             # 3. 提交新登录
-            handle = self._dispatch(cfg, source, cancel_event)
+            handle = self._dispatch(cfg, source, cancel_event, timeout=timeout)
             self._slot = handle
 
         return handle
@@ -219,13 +223,14 @@ class LoginOrchestrator:
     # ── 内部 ──
 
     def _dispatch(
-        self, config: dict, source: LoginSource, cancel_event: threading.Event
+        self, config: dict, source: LoginSource, cancel_event: threading.Event,
+        timeout: int | None = None,
     ) -> LoginHandle:
         """提交到 Worker，注册历史/状态回调。"""
         # 延迟导入：避免模块级导入导致循环依赖
         from app.workers.playwright_worker import CMD_LOGIN
 
-        worker_timeout = resolve_worker_timeout(config)  # F09 单一来源
+        worker_timeout = timeout if timeout is not None else resolve_worker_timeout(config)  # F09 单一来源
 
         def _run() -> tuple[bool, str]:
             start = time.perf_counter()
@@ -244,19 +249,23 @@ class LoginOrchestrator:
                 )
                 duration_ms = int((time.perf_counter() - start) * 1000)
                 if result.success:
-                    self._record_history(True, duration_ms)
+                    if source != "browser":
+                        self._record_history(True, duration_ms)
                     msg = result.data if isinstance(result.data, str) else "登录成功"
                     return True, msg
                 err_msg = result.error or "登录失败"
-                self._record_history(False, duration_ms, error=err_msg)
+                if source != "browser":
+                    self._record_history(False, duration_ms, error=err_msg)
                 return False, err_msg
             except ImportError as exc:
                 duration_ms = int((time.perf_counter() - start) * 1000)
-                self._record_history(False, duration_ms, error=str(exc))
+                if source != "browser":
+                    self._record_history(False, duration_ms, error=str(exc))
                 return False, "登录需要额外依赖，请检查 Playwright 安装状态"
             except Exception as exc:
                 duration_ms = int((time.perf_counter() - start) * 1000)
-                self._record_history(False, duration_ms, error=str(exc))
+                if source != "browser":
+                    self._record_history(False, duration_ms, error=str(exc))
                 logger.error("登录执行异常: {}", exc, exc_info=True)
                 return False, f"登录执行异常: {exc}"
 

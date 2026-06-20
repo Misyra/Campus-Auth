@@ -313,52 +313,24 @@ class TaskExecutor:
         timeout: int,
         cancel_event: threading.Event | None = None,
     ) -> tuple[bool, str]:
-        """执行浏览器任务。
-
-        通过 PlaywrightWorker 执行浏览器自动化任务。
-        """
+        """执行浏览器任务。委托 LoginOrchestrator，与登录共享去重。"""
         task = self._registry.get_task(task_id)
         if not task or task.get("type") != "browser":
             return False, f"浏览器任务不存在: {task_id}"
 
-        start_time = time.perf_counter()
+        config = self._get_runtime_config() if self._get_runtime_config else {}
+        handle = self._login_orchestrator.submit(
+            source="browser", config=config,
+            cancel_event=cancel_event, timeout=timeout,
+        )
 
-        try:
-            # 延迟导入：测试需要模拟 playwright_worker 未安装的 ImportError 场景
-            from app.workers.playwright_worker import CMD_LOGIN
+        if handle.rejected_reason is not None:
+            return False, handle.rejected_reason
 
-            # 获取运行时配置
-            config = self._get_runtime_config() if self._get_runtime_config else {}
-
-            # 获取 Worker 并提交登录命令
-            worker = self._worker_getter()
-            result = worker.submit(
-                CMD_LOGIN,
-                data={
-                    "config": config,
-                    "cancel_event": cancel_event,
-                },
-                wait=True,
-                timeout=timeout,
-            )
-
-            duration_ms = int((time.perf_counter() - start_time) * 1000)
-
-            if result.success:
-                return True, (
-                    result.data
-                    if isinstance(result.data, str)
-                    else "浏览器任务执行成功"
-                )
-            else:
-                return False, result.error or "浏览器任务执行失败"
-
-        except ImportError as exc:
-            logger.warning("浏览器任务执行缺少依赖: {}", exc)
-            return False, "浏览器任务需要额外依赖，请检查 Playwright 安装状态"
-        except Exception as exc:
-            logger.error("浏览器任务执行异常: {}", exc)
-            return False, f"浏览器任务执行异常: {exc}"
+        ok, msg = handle.result()
+        if ok:
+            return True, msg if isinstance(msg, str) else "浏览器任务执行成功"
+        return False, msg or "浏览器任务执行失败"
 
     def _execute_shell(
         self, command: str, timeout: int, shell_path: str = ""
