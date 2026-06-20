@@ -599,37 +599,6 @@ class ScheduleEngine:
     def get_config(self) -> MonitorConfigPayload:
         return self._ui_config.model_copy(deep=True)
 
-    @staticmethod
-    def _runtime_config_to_dict(rc: RuntimeConfig) -> dict:
-        """将 RuntimeConfig 转为旧格式扁平 dict，兼容 Orchestrator/Worker/NetworkMonitorCore。
-
-        旧 dict 格式: {"username": ..., "password": ..., "browser_settings": {...}, ...}
-        RuntimeConfig 结构: rc.credentials.username, rc.browser.headless, ...
-        """
-        # 从 RuntimeConfig 反向构建 MonitorConfigPayload 再转 dict 太绕。
-        # 直接手动拼接：凭证字段平铺 + 子模型 model_dump()。
-        d: dict = {
-            "username": rc.credentials.username,
-            "password": rc.credentials.password,
-            "auth_url": rc.credentials.auth_url,
-            "isp": rc.credentials.isp,
-            "active_task": rc.active_task,
-            "block_proxy": rc.block_proxy,
-            "shell_path": rc.shell_path,
-            "minimize_to_tray": rc.minimize_to_tray,
-            "startup_action": rc.startup_action,
-            "autostart_lightweight": rc.autostart_lightweight,
-            "custom_variables": rc.custom_variables,
-            "browser_settings": rc.browser.model_dump(),
-            "monitor": rc.monitor.model_dump(),
-            "pause_login": rc.pause.model_dump(),
-            "logging": {"level": rc.logging.level},
-            "frontend_logging": {"level": rc.logging.frontend_level},
-            "retry_settings": rc.retry.model_dump(),
-            "login_timeout": rc.browser.login_timeout,
-        }
-        return d
-
     def _reload_config_internal(self) -> bool:
         """从 settings.json 重新加载 UI 和运行时配置。返回 True 表示成功。"""
         # 延迟导入：测试中需要 mock 这些函数的返回值，顶层导入会导致 mock 路径变化
