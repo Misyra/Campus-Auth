@@ -2,6 +2,30 @@
 
 ## 2026-06-20
 
+### fix — 修复统一退避引入的测试失败
+- `tests/test_integration/test_login_connection.py`：
+  - `test_retry_exhausted` 断言从 `engine._consecutive_login_failures == 3` 改为 `engine._retry_policy._attempt == 3`
+  - `MonitoredPolicy._attempt` 是统一退避重构后的等效行为
+  - 修复后 `test_login_connection.py` 全部 7 个测试通过
+
+## 2026-06-20
+
+### refactor — 浏览器任务通过 LoginOrchestrator 提交（F11 修复）
+- `app/services/login_orchestrator.py`：
+  - `LoginSource` 类型扩展为 `Literal["auto", "manual", "login_once", "browser"]`
+  - `submit()` 新增 `timeout` 参数，传递给 `_dispatch()`
+  - `submit()` 中 browser 任务跳过 `validate_login_config` 校验（由调用方自行校验）
+  - `_dispatch()` 新增 `timeout` 参数，`timeout if timeout is not None else resolve_worker_timeout(config)` 替代无条件解析
+  - `_run()` 中 browser 任务跳过 `_record_history` 调用（浏览器定时任务由 TaskExecutor._history_store 管理历史）
+- `app/services/task_executor.py`：
+  - `_execute_browser()` 重写：不再直接调用 `worker.submit(CMD_LOGIN, ...)`，改为委托 `self._login_orchestrator.submit(source="browser", ...)`
+  - 消除 ImportError/通用异常 catch 分支（由 Orchestrator 内部处理）
+- `tests/test_services/test_task_executor_fix.py`：
+  - 8 个浏览器任务测试全部重写：mock 从 `worker.submit` 改为 `orchestrator.submit`，使用 `LoginHandle` 模拟返回
+- 验收：1681 测试全通过
+
+## 2026-06-20
+
 ### refactor — LoginOrchestrator 改用 CompositeCancelEvent，删除 watcher 线程
 - `app/services/login_orchestrator.py`：
   - `LoginHandle.cancel_event` 类型从 `threading.Event` 改为 `CompositeCancelEvent`
