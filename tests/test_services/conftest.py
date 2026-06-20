@@ -94,6 +94,7 @@ def engine_factory():
         svc.project_root = MagicMock()
         svc.record_log = MagicMock()
         svc._update_status_snapshot = MagicMock()
+        svc._registered_futures = set()
         return svc
 
     def factory(raw=False, **overrides):

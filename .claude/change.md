@@ -2,6 +2,16 @@
 
 ## 2026-06-20
 
+### fix — 修复手动登录等待完成引入的测试失败
+- `tests/test_integration/test_login_flow.py`：
+  - `test_login_command_success`：mock `_do_async_login` 改为 mock `orchestrator.submit` 返回 handle，`handle.result()` 返回 `(True, "登录成功")`
+  - `test_login_command_failure_already_in_progress`：mock handle 的 `future=None` 模拟去重命中
+- `tests/test_integration/test_login_integration_extended.py`：
+  - `test_chain_success`/`test_chain_failure`/`test_retry_after_failure`：移除 `_capture_login_completion` 包装和异步等待，直接断言 `_handle_login` 返回的实际登录结果
+- `tests/test_services/test_monitor_service.py`：
+  - `test_handle_login_submits_async`：`handle.future` 从空 `Future()`（永远不 resolve）改为 `MagicMock()`，`handle.result()` 返回 `(True, "登录成功")`
+- 验收：2325 测试全通过（3 个预存在的 hang 跳过）
+
 ### fix — 手动登录 API 等待登录完成后返回
 - `app/services/engine.py`：`_handle_login` 从异步提交改为同步等待结果
   - 直接调用 `orchestrator.submit(source="manual", config=...)` 获取 handle

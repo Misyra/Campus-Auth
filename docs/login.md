@@ -141,9 +141,8 @@ ImmediatePolicy(RetryPolicy)
   └── 固定间隔，无指数退避
 
 MonitoredPolicy(RetryPolicy)
-  ├── max_retries: int (默认 10)
-  ├── interval: int (默认 30)
-  ├── backoff_after_cycles: int (默认 3)
+  ├── max_retries: int (默认 5)
+  ├── _DELAYS: [0.0, 0.0, 30.0, 60.0, 120.0]  # 固定延迟表
   ├── on_network_check(need_login) → bool
   └── on_login_done(success) → float | None
 ```
@@ -156,34 +155,21 @@ MonitoredPolicy(RetryPolicy)
 | 引擎自动登录（网络监控） | `MonitoredPolicy` | engine._do_network_check |
 | 手动登录（API 触发） | 无策略（单次提交） | engine._handle_login |
 
-### 3.3 MonitoredPolicy 状态机
+### 3.3 MonitoredPolicy 退避表
 
-```
-                    ┌──────────────┐
-                    │   初始状态    │
-                    │ count=0      │
-                    │ failed=0     │
-                    └──────┬───────┘
-                           │
-          ┌────────────────┼────────────────┐
-          ▼                ▼                ▼
-   need_login=True   need_login=False   login_done(ok=True)
-   on_network_check  on_network_check   on_login_done
-   → 不触发登录      → 重置 count/failed → 重置 count/failed
-   （count>=max）    （down→up 转换时）
-          │
-          ▼
-   login_done(ok=False)
-   → count += 1
-   → 若 count >= max_retries:
-       failed_cycles += 1
-       → 若 failed_cycles >= backoff_after_cycles:
-           返回 delay（指数退避，上限 1800s）
-       → 否则返回 None
-   → 否则返回 0.0（立即重试）
-```
+| 失败次数 | 延迟 | 说明 |
+|---------|------|------|
+| 第 1 次 | 0s | 立即重试 |
+| 第 2 次 | 0s | 立即重试 |
+| 第 3 次 | 30s | 开始退避 |
+| 第 4 次 | 60s | |
+| 第 5 次 | 120s | 上限 |
+| 第 6 次+ | 停止 | max_retries=5 |
 
-**关键设计**：reset 只在网络从 down→up 恢复时发生，不再每次网络检测都重置。
+**关键设计**：
+- 单一决策源，行为完全可预测
+- reset 只在网络从 down→up 恢复时发生
+- 登录成功立即 reset
 
 ---
 
@@ -419,5 +405,4 @@ self.engine._orchestrator = self.login_orchestrator
 - 无线程：CompositeCancelEvent 惰性扫描替代 watcher 线程
 - 最小化：TaskExecutor 只保留线程池 + 定时任务，登录相关字段全部移交
 
-**遗留项**：
-- engine.py 仍有 `_consecutive_login_failures` + `_apply_backoff_interval` 与 MonitoredPolicy 的退避交互（已修复为取最大值）
+**遗留项**：无
