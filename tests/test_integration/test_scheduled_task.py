@@ -354,22 +354,26 @@ class TestTaskExecutionWithVariableResolution:
 
     def test_execute_browser_task_with_variables(self, tmp_path: Path):
         """浏览器任务执行时正确传递变量配置。"""
+        from app.services.login_orchestrator import LoginHandle
+        from app.utils.cancel_token import CompositeCancelEvent
+
         registry = TaskRegistry(tmp_path)
         config = _make_task_config(task_type="browser", target_id="test_task")
         registry.save_task("test_task", config)
 
-        executor = _make_executor(registry=registry)
+        mock_orchestrator = MagicMock()
+        mock_handle = LoginHandle(
+            future=None,
+            source="browser",
+            cancel_event=CompositeCancelEvent(),
+        )
+        mock_handle.result = MagicMock(return_value=(True, "浏览器任务执行成功"))
+        mock_handle.rejected_reason = None
+        mock_orchestrator.submit.return_value = mock_handle
 
-        mock_worker = MagicMock()
-        mock_result = MagicMock()
-        mock_result.success = True
-        mock_result.data = "登录成功"
-        mock_worker.submit.return_value = mock_result
+        executor = _make_executor(registry=registry, login_orchestrator=mock_orchestrator)
 
-        executor._worker_getter = MagicMock(return_value=mock_worker)
-
-        with patch("app.workers.playwright_worker.CMD_LOGIN", "login"):
-            success, message = executor._execute_browser("test_task", 30)
+        success, message = executor._execute_browser("test_task", 30)
 
         assert success is True
         assert "成功" in message

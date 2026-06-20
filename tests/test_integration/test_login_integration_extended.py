@@ -50,8 +50,8 @@ def _capture_login_completion(task_executor, engine=None, timeout: float = 5.0):
     if orchestrator is not None:
         original_dispatch = orchestrator._dispatch
 
-        def wrapped_dispatch(config, source, cancel_event):
-            handle = original_dispatch(config, source, cancel_event)
+        def wrapped_dispatch(config, source, cancel_event, **kwargs):
+            handle = original_dispatch(config, source, cancel_event, **kwargs)
             if handle.future is not None:
                 handle.future.add_done_callback(_capture)
             return handle
