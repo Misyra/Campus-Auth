@@ -50,11 +50,12 @@ def test_handle_login_uses_validated_config():
     cmd = EngineCommand(type=EngineCmdType.LOGIN, data={})
     engine._handle_login(cmd)
 
-    # orchestrator.submit 应收到正确的 source 和 config（扁平 dict 格式）
+    # orchestrator.submit 应收到正确的 source 和 config（RuntimeConfig 格式）
     submitted_config = engine._orchestrator.submit.call_args[1]["config"]
-    assert submitted_config["username"] == "u"
-    assert submitted_config["password"] == "p"
-    assert submitted_config["auth_url"] == "http://x"
+    assert isinstance(submitted_config, RuntimeConfig)
+    assert submitted_config.credentials.username == "u"
+    assert submitted_config.credentials.password == "p"
+    assert submitted_config.credentials.auth_url == "http://x"
     assert cmd.response_data == (True, "登录成功")
 
 
@@ -101,7 +102,8 @@ class TestManualLoginCancelRaceFix:
         assert result is True
         call_kwargs = engine._orchestrator.submit.call_args[1]
         assert call_kwargs["source"] == "manual"
-        assert call_kwargs["config"]["username"] == "u"
+        assert isinstance(call_kwargs["config"], RuntimeConfig)
+        assert call_kwargs["config"].credentials.username == "u"
 
     def test_auto_login_submits_to_orchestrator(self):
         """自动登录应通过 orchestrator.submit(source='auto') 提交。"""
@@ -119,7 +121,8 @@ class TestManualLoginCancelRaceFix:
         assert result is True
         call_kwargs = engine._orchestrator.submit.call_args[1]
         assert call_kwargs["source"] == "auto"
-        assert call_kwargs["config"]["username"] == "u"
+        assert isinstance(call_kwargs["config"], RuntimeConfig)
+        assert call_kwargs["config"].credentials.username == "u"
 
     def test_rejected_handle_returns_false(self):
         """orchestrator 返回 rejected handle 时应返回 False。"""

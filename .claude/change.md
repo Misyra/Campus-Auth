@@ -2,6 +2,17 @@
 
 ## 2026-06-21
 
+### fix(engine): 直接传递 RuntimeConfig 给 orchestrator，移除不必要的桥接转换
+- `app/services/engine.py`：
+  - `_do_async_login`：移除 `_runtime_config_to_dict` 转换，直接传递 `RuntimeConfig` 给 `orchestrator.submit()`
+  - `_handle_login`：移除 `_runtime_config_to_dict` 转换，直接传递 `RuntimeConfig` 给 `orchestrator.validate()` 和 `orchestrator.submit()`
+  - `_runtime_config_to_dict` 保留仅用于 `_handle_start` 中传递给 `NetworkMonitorCore`（该组件仍接受 dict）
+- `tests/test_services/test_engine_fix.py`：
+  - `test_handle_login_uses_validated_config`：断言从 dict 下标访问改为 `RuntimeConfig` 属性访问
+  - `test_manual_login_submits_to_orchestrator`：同上
+  - `test_auto_login_submits_to_orchestrator`：同上
+- 验收：211 个 engine/orchestrator 测试全通过
+
 ### refactor(orchestrator): 完成 LoginOrchestrator 迁移至 RuntimeConfig
 - `app/services/login_orchestrator.py`：
   - `validate_login_config` 仅接受 `RuntimeConfig`（移除 hasattr 双重支持）

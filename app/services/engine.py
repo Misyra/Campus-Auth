@@ -280,11 +280,9 @@ class ScheduleEngine:
             logger.exception("网络检测异常")
             self._next_network_check = time.time() + self._monitor_check_interval
 
-    def _do_async_login(self, is_manual: bool = False, config_snapshot: dict | None = None) -> bool:
-        """【委托】提交登录到 LoginOrchestrator。签名兼容。"""
-        raw_config = config_snapshot if config_snapshot is not None else self._runtime_config
-        # Orchestrator/Worker 仍使用旧 dict 接口
-        config = raw_config if isinstance(raw_config, dict) else self._runtime_config_to_dict(raw_config)
+    def _do_async_login(self, is_manual: bool = False, config_snapshot: RuntimeConfig | None = None) -> bool:
+        """【委托】提交登录到 LoginOrchestrator。"""
+        config = config_snapshot if config_snapshot is not None else self._runtime_config
 
         source = "manual" if is_manual else "auto"
         handle = self._orchestrator.submit(source=source, config=config)
@@ -391,13 +389,12 @@ class ScheduleEngine:
 
     def _handle_login(self, cmd: EngineCommand) -> None:
         """执行一次性登录（手动触发，等待完成）。"""
-        config = self._runtime_config_to_dict(self._runtime_config)
-        err = self._orchestrator.validate(config)
+        err = self._orchestrator.validate(self._runtime_config)
         if err is not None:
             cmd.response_data = (False, err)
             return
 
-        handle = self._orchestrator.submit(source="manual", config=config)
+        handle = self._orchestrator.submit(source="manual", config=self._runtime_config)
         if handle.rejected_reason is not None:
             cmd.response_data = (False, handle.rejected_reason)
             return
