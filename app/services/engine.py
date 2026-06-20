@@ -388,7 +388,7 @@ class ScheduleEngine:
                             self._apply_backoff_interval()
                         # F04: 通知 policy 登录失败，获取降频延迟
                         delay = self._retry_policy.on_login_done(success=False)
-                        if delay:
+                        if delay is not None and delay > 0:
                             self._next_network_check = time.time() + delay
                             logger.warning("登录连续失败，下次检测推迟 {}s", int(delay))
             except Exception:

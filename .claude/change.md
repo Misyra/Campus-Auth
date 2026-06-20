@@ -2,6 +2,17 @@
 
 ## 2026-06-20
 
+### refactor — 登录链路三步重构完成
+- **第 1 步（Task 1-9）**：LoginOrchestrator + RetryPolicy 框架，消化 F02/F03/F05/F06/F08/F09
+  - 新建 `app/services/login_orchestrator.py`（编排器）和 `app/services/retry_policy.py`（策略框架）
+  - `task_executor.py` 增加委托层（保留 `_legacy_*` 回退）
+  - `container.py` 注入 Orchestrator
+  - `engine.py` `_do_async_login`/`_handle_login` 改委托
+  - `main.py` login_once 改用 ImmediatePolicy + Orchestrator
+- **第 2 步（Task 10）**：MonitoredPolicy 接入 engine，根治 F04
+- **第 3 步（Task 11）**：取消联动改常驻单线程，根治 F12/F13
+- 验收结果：2383 测试全通过，新模块覆盖率 89%
+
 ### refactor
 - Task 11: 取消联动改常驻单线程，根治 F12（线程泄漏）/F13（冗余检查）
   - `app/services/login_orchestrator.py` `_link_cancel` 从每次新建 daemon 线程改为队列 + 常驻单线程
