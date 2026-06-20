@@ -2,6 +2,18 @@
 
 ## 2026-06-20
 
+### refactor — LoginOrchestrator 改用 CompositeCancelEvent，删除 watcher 线程
+- `app/services/login_orchestrator.py`：
+  - `LoginHandle.cancel_event` 类型从 `threading.Event` 改为 `CompositeCancelEvent`
+  - `submit()` 中 `cancel_event is None` 时创建 `CompositeCancelEvent()`；传入 plain `threading.Event` 时自动包装为 `CompositeCancelEvent` 并添加原事件为源
+  - `_link_cancel` 从队列+watcher 线程简化为一行 `target_event.add_source(new_event)`
+  - 删除 `_ensure_cancel_link_thread`、`_cancel_link_loop` 两个方法
+  - `__init__` 删除 `_cancel_link_queue`、`_cancel_link_thread`、`_cancel_link_lock` 三个字段
+  - `shutdown()` 删除毒丸投递逻辑
+  - 移除 `import queue`（不再需要）
+- `tests/test_services/test_login_orchestrator.py`：`test_submit_passes_cancel_event` 适配包装行为（原事件被包装后 `is` 不再成立，改为验证传播语义）
+- 验收：2333 测试全通过
+
 ### feat — 新建 CompositeCancelEvent（惰性扫描组合取消事件）
 - 新增 `app/utils/cancel_token.py`：`CompositeCancelEvent` 类，继承 `threading.Event`
   - `add_source(event)` — 添加取消源，若源已 set 则立即传播

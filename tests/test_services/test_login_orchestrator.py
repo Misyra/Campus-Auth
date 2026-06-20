@@ -214,12 +214,16 @@ class TestOrchestratorSubmit:
         h1.result(timeout=5)
 
     def test_submit_passes_cancel_event(self, orchestrator):
-        """外部传入的 cancel_event 被正确使用。"""
+        """外部传入的 cancel_event 被包装为 CompositeCancelEvent，原事件作为源。"""
         evt = threading.Event()
         handle = orchestrator.submit(
             source="auto", config=VALID_CONFIG, cancel_event=evt
         )
-        assert handle.cancel_event is evt
+        # 原事件被包装，不是同一个对象，但设置原事件会传播
+        assert handle.cancel_event is not evt
+        assert not handle.cancel_event.is_set()
+        evt.set()
+        assert handle.cancel_event.is_set()
         handle.result(timeout=5)
 
 

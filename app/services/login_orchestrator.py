@@ -10,7 +10,6 @@
 
 from __future__ import annotations
 
-import queue
 import threading
 import time
 from collections.abc import Callable
@@ -18,6 +17,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
+from app.utils.cancel_token import CompositeCancelEvent
 from app.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -69,7 +69,7 @@ class LoginHandle:
 
     future: Future | None
     source: LoginSource
-    cancel_event: threading.Event
+    cancel_event: CompositeCancelEvent
     rejected_reason: str | None = None
 
     def done(self) -> bool:
@@ -129,10 +129,6 @@ class LoginOrchestrator:
             thread_name_prefix="login-exec",
         )
 
-        # 取消联动：常驻单线程（F12 根治：不再每次新建线程）
-        self._cancel_link_queue: queue.Queue = queue.Queue()
-        self._cancel_link_thread: threading.Thread | None = None
-        self._cancel_link_lock = threading.Lock()
 
     # ── 公共 API ──
 
@@ -175,12 +171,16 @@ class LoginOrchestrator:
             return LoginHandle(
                 future=None,
                 source=source,
-                cancel_event=cancel_event or threading.Event(),
+                cancel_event=cancel_event or CompositeCancelEvent(),
                 rejected_reason=err,
             )
 
         if cancel_event is None:
-            cancel_event = threading.Event()
+            cancel_event = CompositeCancelEvent()
+        elif not isinstance(cancel_event, CompositeCancelEvent):
+            wrapper = CompositeCancelEvent()
+            wrapper.add_source(cancel_event)
+            cancel_event = wrapper
 
         # 2. 去重与抢占
         with self._slot_lock:
@@ -214,9 +214,6 @@ class LoginOrchestrator:
 
     def shutdown(self, wait: bool = True) -> None:
         """关闭编排器，清理线程池。"""
-        # 发送毒丸退出常驻 watcher 线程
-        if self._cancel_link_thread is not None:
-            self._cancel_link_queue.put(None)
         self._pool.shutdown(wait=wait)
 
     # ── 内部 ──
@@ -299,40 +296,7 @@ class LoginOrchestrator:
         return self._get_runtime_config()
 
     def _link_cancel(
-        self, new_event: threading.Event, target_event: threading.Event
+        self, new_event: threading.Event, target_event: CompositeCancelEvent
     ) -> None:
-        """入队联动请求，由常驻单线程处理（F12 根治：不再每次新建线程）。"""
-        self._cancel_link_queue.put((new_event, target_event, time.time() + 300))
-        self._ensure_cancel_link_thread()
-
-    def _ensure_cancel_link_thread(self) -> None:
-        """确保常驻 watcher 线程在运行。"""
-        with self._cancel_link_lock:
-            if self._cancel_link_thread and self._cancel_link_thread.is_alive():
-                return
-            self._cancel_link_thread = threading.Thread(
-                target=self._cancel_link_loop, daemon=True, name="orch-cancel-link"
-            )
-            self._cancel_link_thread.start()
-
-    def _cancel_link_loop(self) -> None:
-        """常驻 watcher：从队列取联动请求并监控。"""
-        pending: list[tuple[threading.Event, threading.Event, float]] = []
-        while True:
-            try:
-                item = self._cancel_link_queue.get(timeout=1.0)
-                if item is None:  # 毒丸，shutdown 时使用
-                    return
-                pending.append(item)
-            except queue.Empty:
-                pass
-            now = time.time()
-            still = []
-            for new_ev, tgt_ev, deadline in pending:
-                if new_ev.is_set():
-                    tgt_ev.set()
-                elif tgt_ev.is_set():
-                    pass  # 目标已取消，丢弃
-                elif now < deadline:
-                    still.append((new_ev, tgt_ev, deadline))
-            pending = still
+        """将新 cancel_event 添加为源（无线程，惰性扫描）。"""
+        target_event.add_source(new_event)
