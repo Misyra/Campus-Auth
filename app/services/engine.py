@@ -609,8 +609,6 @@ class ScheduleEngine:
         旧 dict 格式: {"username": ..., "password": ..., "browser_settings": {...}, ...}
         RuntimeConfig 结构: rc.credentials.username, rc.browser.headless, ...
         """
-        from .config_service import build_runtime_dict_from_payload
-
         # 从 RuntimeConfig 反向构建 MonitorConfigPayload 再转 dict 太绕。
         # 直接手动拼接：凭证字段平铺 + 子模型 model_dump()。
         d: dict = {
@@ -663,10 +661,6 @@ class ScheduleEngine:
             with self._pure_mode_lock:
                 self._pure_mode = False
             return False
-
-    def get_runtime_config(self) -> RuntimeConfig:
-        """线程安全地获取运行时配置（frozen 对象，直接返回引用）。"""
-        return self._runtime_config
 
     def reload_config(self) -> tuple[bool, str]:
         """重新加载配置并重启监控（如果正在运行）。
