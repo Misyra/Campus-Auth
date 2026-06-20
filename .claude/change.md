@@ -2,6 +2,15 @@
 
 ## 2026-06-21
 
+### refactor(scheduler): 定时任务 API 端点统一使用 sync_scheduler_state
+- `app/api/scheduled_tasks.py`：
+  - `create_scheduled_task`：`if ok and config.get("enabled", True): engine.start_scheduler()` 改为 `if ok: engine.sync_scheduler_state()`
+  - `update_scheduled_task`：同上
+  - `toggle_scheduled_task`：`if ok and task["enabled"]: engine.start_scheduler()` 改为 `if ok: engine.sync_scheduler_state()`
+  - `delete_scheduled_task`：新增 `if ok: engine.sync_scheduler_state()` 调用，删除后自动检查是否应停止调度器
+- `tests/test_api/test_api_scheduled_tasks_routes.py`：`test_create_starts_scheduler_when_enabled` 断言从 `start_scheduler.assert_called()` 改为 `sync_scheduler_state.assert_called()`
+- 验收：91 个定时任务测试全通过
+
 ### refactor: 迁移 TaskExecutor/main/application 至 RuntimeConfig
 - `app/services/task_executor.py`：
   - `__init__` 和 `set_runtime_config_getter` 类型注解从 `Callable[[], dict]` 改为 `Callable[[], RuntimeConfig]`

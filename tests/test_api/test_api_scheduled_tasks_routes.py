@@ -176,7 +176,7 @@ class TestCreateScheduledTask:
             },
         )
         assert resp.status_code == 200
-        mock_engine.start_scheduler.assert_called()
+        mock_engine.sync_scheduler_state.assert_called()
 
 
 # ── 更新定时任务 ──
