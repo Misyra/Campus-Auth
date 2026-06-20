@@ -31,7 +31,6 @@ from app.utils.logging import get_logger
 from app.utils.login import SCREENSHOT_URL_PATTERN
 from app.utils.network import parse_ping_targets
 
-from .login_retry import LoginRetryManager
 from .profile_service import ProfileService
 from .retry_policy import MonitoredPolicy
 
@@ -154,7 +153,6 @@ class ScheduleEngine:
         self._next_network_check: float = 0
         self._monitor_check_interval: int = 300
         self._orchestrator = None  # LoginOrchestrator，由 container 注入
-        self._login_retry = LoginRetryManager()
         self._retry_policy = MonitoredPolicy()
 
         # 连续登录失败计数（用于降频检测）
@@ -205,10 +203,6 @@ class ScheduleEngine:
                 if self._is_monitoring and now >= self._next_network_check:
                     self._do_network_check()
 
-                # 登录重试：前次 check_once 已判定 need_login，跳过 attempt_login 内冗余检测
-                if self._login_retry_needed(now):
-                    self._do_async_login()
-
                 # 定时任务
                 if self._scheduler_running and now >= self._next_schedule_tick:
                     self._run_schedule_tick()
@@ -227,10 +221,6 @@ class ScheduleEngine:
         try:
             if self._is_monitoring:
                 candidates.append(float(self._next_network_check))
-
-            wakeup = self._login_retry.next_wakeup()
-            if wakeup is not None:
-                candidates.append(wakeup)
 
             if self._scheduler_running:
                 candidates.append(self._next_schedule_tick)
@@ -318,12 +308,6 @@ class ScheduleEngine:
             int(extra),
         )
 
-    def _login_retry_needed(self, now: float) -> bool:
-        """检查是否需要登录重试。"""
-        if self._task_executor.is_login_running():
-            return False
-        return self._login_retry.need_retry(now)
-
     def _do_async_login(self, is_manual: bool = False, config_snapshot: dict | None = None) -> bool:
         """【委托】提交登录到 LoginOrchestrator。签名兼容。"""
         config = config_snapshot if config_snapshot is not None else self._copy_runtime_config()
@@ -337,16 +321,11 @@ class ScheduleEngine:
                 pass  # 手动登录的响应由 _handle_login 设置
             else:
                 self.record_log(handle.rejected_reason, level="WARNING", source="backend")
-                self._login_retry.reset()
             return False
 
         if handle.future is None:
             # 复用了旧 handle（去重命中），不算新提交
             return False
-
-        # record_attempt 移到成功提交之后
-        if not is_manual:
-            self._login_retry.record_attempt(time.time())
 
         # done 回调（保留原有日志和失败计数逻辑）
         def _on_done(f: Future) -> None:
@@ -415,7 +394,6 @@ class ScheduleEngine:
         core.init_monitoring()  # 只初始化，不启动循环
         self._monitor_core = core
         self._next_network_check = time.time()  # 立即执行第一次检测
-        self._login_retry.reset()
         self._update_status_snapshot(force=True)
         self.record_log("监控已启动", level="INFO", source="backend")
 
@@ -427,7 +405,6 @@ class ScheduleEngine:
 
         core.stop_monitoring()
         self._monitor_core = None
-        self._login_retry.reset()
         self._consecutive_login_failures = 0
         self._backoff_check_multiplier = 1
         self._next_network_check = 0
