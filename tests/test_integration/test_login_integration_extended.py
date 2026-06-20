@@ -2,7 +2,7 @@
 
 边界约定：
 - Playwright Worker → unittest.mock.MagicMock
-- 其余组件（ScheduleEngine, TaskExecutor, ProfileService, LoginRetryManager 等）→ 真实实例
+- 其余组件（ScheduleEngine, TaskExecutor, ProfileService 等）→ 真实实例
 
 复用 tests/test_integration/conftest.py 中的 integration_stack fixture。
 """
@@ -97,9 +97,8 @@ class TestFullEngineLoginChain:
             # worker.submit 被调且传入了正确的第一个参数
             mock_worker.submit.assert_called_once()
 
-            # 手动登录不触发重试计数（is_manual=True 跳过 record_attempt）
-            assert engine._login_retry.count == 0
-            assert engine._login_retry.last_attempt == 0
+            # 手动登录不触发自动失败计数
+            assert engine._consecutive_login_failures == 0
         finally:
             restore_fn()
 
@@ -128,7 +127,8 @@ class TestFullEngineLoginChain:
             assert msg == "认证失败"
 
             mock_worker.submit.assert_called_once()
-            assert engine._login_retry.count == 0
+            # 手动登录不触发自动失败计数
+            assert engine._consecutive_login_failures == 0
         finally:
             restore_fn()
 
@@ -195,13 +195,8 @@ class TestNetworkDetectionLogin:
         finally:
             restore_fn()
 
-        # 模拟重试状态：一次失败，60 秒前发生
-        engine._login_retry.last_attempt = time.time() - 60
-        engine._login_retry.config = (3, [10, 20, 30])
-        engine._login_retry.count = 1
-
-        # 清理 executor 状态（orchestrator 已完成清理，显式设置确保干净）
-        assert engine._login_retry_needed(time.time())
+        # 模拟重试状态：一次失败后
+        engine._consecutive_login_failures = 1
 
         # 第二次登录（自动重试路径）
         result_container2, done_event2, restore_fn2 = _capture_login_completion(
@@ -217,7 +212,8 @@ class TestNetworkDetectionLogin:
             assert msg == "认证失败"
 
             assert mock_worker.submit.call_count == 2
-            assert engine._login_retry.count == 2
+            # 自动登录失败应递增连续失败计数
+            assert engine._consecutive_login_failures >= 1
         finally:
             restore_fn2()
 

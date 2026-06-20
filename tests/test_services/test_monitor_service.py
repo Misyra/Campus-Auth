@@ -17,7 +17,6 @@ from app.services.engine import (
     ScheduleEngine,
     StatusSnapshot,
 )
-from app.services.login_retry import LoginRetryManager
 
 
 
@@ -806,7 +805,6 @@ class TestNetworkStateSetInConsumer:
     def test_do_async_login_delegates_to_task_executor(self):
         """_do_async_login 应委托给 orchestrator.submit"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
-        svc._login_retry = LoginRetryManager(count=0, last_attempt=0, config=None)
         svc._runtime_config = {}
         svc._update_status_snapshot = MagicMock()
         svc.record_log = MagicMock()
