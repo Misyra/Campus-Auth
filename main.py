@@ -227,24 +227,27 @@ def _execute_login_with_retries(runtime_config: dict, logger) -> LoginResult:
         interval=retry_settings.get("retry_interval", 5),
     )
 
-    for attempt in policy.attempts():
-        delay = policy.delay_before(attempt)
-        if delay > 0:
-            print(f"等待 {int(delay)} 秒后重试第 {attempt} 次...")
-            time.sleep(delay)
+    try:
+        for attempt in policy.attempts():
+            delay = policy.delay_before(attempt)
+            if delay > 0:
+                print(f"等待 {int(delay)} 秒后重试第 {attempt} 次...")
+                time.sleep(delay)
 
-        handle = orchestrator.submit(source="login_once", config=runtime_config)
-        ok, msg = handle.result()
-        if ok:
-            print(f"登录成功: {msg}")
-            cleanup_orphan_browsers()
-            return LoginResult.SUCCESS
-        print(f"登录失败 (第 {attempt} 次): {msg}")
+            handle = orchestrator.submit(source="login_once", config=runtime_config)
+            ok, msg = handle.result()
+            if ok:
+                print(f"登录成功: {msg}")
+                cleanup_orphan_browsers()
+                return LoginResult.SUCCESS
+            print(f"登录失败 (第 {attempt} 次): {msg}")
 
-    cleanup_orphan_browsers()
-    print(f"已重试 {policy.max_retries} 次均失败，回退到正常模式")
-    logger.warning("登录失败（已重试 {} 次），回退到正常模式", policy.max_retries)
-    return LoginResult.TEMPORARY_FAILURE
+        cleanup_orphan_browsers()
+        print(f"已重试 {policy.max_retries} 次均失败，回退到正常模式")
+        logger.warning("登录失败（已重试 {} 次），回退到正常模式", policy.max_retries)
+        return LoginResult.TEMPORARY_FAILURE
+    finally:
+        orchestrator.shutdown(wait=False)
 
 
 def _run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
