@@ -88,7 +88,7 @@ class TestFullLoginSequence:
     """完整登录序列：引擎接收登录命令 → 提交到 TaskExecutor → Worker 执行 → 返回结果。"""
 
     def test_login_command_success(self):
-        """手动登录命令成功：配置完整 → async_login 提交成功 → 返回成功。"""
+        """手动登录命令成功：配置完整 → orchestrator 提交并等待 → 返回成功。"""
         svc = _make_raw_engine()
         config = {
             "username": "testuser",
@@ -97,15 +97,19 @@ class TestFullLoginSequence:
         }
         svc._copy_runtime_config = MagicMock(return_value=config)
         svc._orchestrator.validate.return_value = None
-        svc._do_async_login = MagicMock(return_value=True)
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = MagicMock()
+        handle.result.return_value = (True, "登录成功")
+        svc._orchestrator.submit.return_value = handle
 
         cmd = EngineCommand(
             type=EngineCmdType.LOGIN, response_event=threading.Event()
         )
         svc._handle_login(cmd)
 
-        assert cmd.response_data == (True, "登录已提交")
-        svc._do_async_login.assert_called_once()
+        assert cmd.response_data == (True, "登录成功")
+        svc._orchestrator.submit.assert_called_once_with(source="manual", config=config)
 
     def test_login_command_failure_already_in_progress(self):
         """登录任务已在执行中时，返回失败。"""
@@ -117,7 +121,10 @@ class TestFullLoginSequence:
         }
         svc._copy_runtime_config = MagicMock(return_value=config)
         svc._orchestrator.validate.return_value = None
-        svc._do_async_login = MagicMock(return_value=False)
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = None  # 去重命中
+        svc._orchestrator.submit.return_value = handle
 
         cmd = EngineCommand(
             type=EngineCmdType.LOGIN, response_event=threading.Event()

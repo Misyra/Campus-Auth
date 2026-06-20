@@ -75,32 +75,19 @@ class TestFullEngineLoginChain:
 
         mock_worker.submit.return_value = WorkerResponse(success=True, data="登录成功")
 
-        # 在触发登录前安装捕获器
-        result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor, engine=engine
+        cmd = EngineCommand(
+            type=EngineCmdType.LOGIN, response_event=threading.Event()
         )
-        try:
-            cmd = EngineCommand(
-                type=EngineCmdType.LOGIN, response_event=threading.Event()
-            )
-            engine._handle_login(cmd)
+        engine._handle_login(cmd)
 
-            # _do_async_login 返回 True → response_data 为提交成功
-            assert cmd.response_data == (True, "登录已提交")
+        # _handle_login 现在等待完成，直接返回登录结果
+        assert cmd.response_data == (True, "登录成功")
 
-            # 等待 login_pool 线程实际执行 execute_login
-            assert done_event.wait(timeout=5), "登录 Future 在超时内未完成"
-            ok, msg = result_container[0]
-            assert ok is True
-            assert msg == "登录成功"
+        # worker.submit 被调且传入了正确的第一个参数
+        mock_worker.submit.assert_called_once()
 
-            # worker.submit 被调且传入了正确的第一个参数
-            mock_worker.submit.assert_called_once()
-
-            # 手动登录不触发自动失败计数
-            assert engine._retry_policy._attempt == 0
-        finally:
-            restore_fn()
+        # 手动登录不触发自动失败计数
+        assert engine._retry_policy._attempt == 0
 
     def test_chain_failure(self, integration_stack):
         engine, profile_service, task_executor, mock_worker = integration_stack
@@ -110,27 +97,17 @@ class TestFullEngineLoginChain:
             success=False, error="认证失败"
         )
 
-        result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor, engine=engine
+        cmd = EngineCommand(
+            type=EngineCmdType.LOGIN, response_event=threading.Event()
         )
-        try:
-            cmd = EngineCommand(
-                type=EngineCmdType.LOGIN, response_event=threading.Event()
-            )
-            engine._handle_login(cmd)
+        engine._handle_login(cmd)
 
-            assert cmd.response_data == (True, "登录已提交")
+        # _handle_login 现在等待完成，直接返回登录结果
+        assert cmd.response_data == (False, "认证失败")
 
-            assert done_event.wait(timeout=5), "登录 Future 在超时内未完成"
-            ok, msg = result_container[0]
-            assert ok is False
-            assert msg == "认证失败"
-
-            mock_worker.submit.assert_called_once()
-            # 手动登录不触发自动失败计数
-            assert engine._retry_policy._attempt == 0
-        finally:
-            restore_fn()
+        mock_worker.submit.assert_called_once()
+        # 手动登录不触发自动失败计数
+        assert engine._retry_policy._attempt == 0
 
 
 class TestNetworkDetectionLogin:
@@ -177,23 +154,12 @@ class TestNetworkDetectionLogin:
             success=False, error="认证失败"
         )
 
-        # 第一次登录（手动触发）
-        result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor, engine=engine
+        # 第一次登录（手动触发，_handle_login 等待完成）
+        cmd = EngineCommand(
+            type=EngineCmdType.LOGIN, response_event=threading.Event()
         )
-        try:
-            cmd = EngineCommand(
-                type=EngineCmdType.LOGIN, response_event=threading.Event()
-            )
-            engine._handle_login(cmd)
-            assert cmd.response_data == (True, "登录已提交")
-
-            assert done_event.wait(timeout=5), "第一次登录未在超时内完成"
-            ok, msg = result_container[0]
-            assert ok is False
-            assert msg == "认证失败"
-        finally:
-            restore_fn()
+        engine._handle_login(cmd)
+        assert cmd.response_data == (False, "认证失败")
 
         # 模拟重试状态：一次失败后
         engine._retry_policy._attempt = 1
