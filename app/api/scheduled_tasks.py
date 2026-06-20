@@ -129,9 +129,8 @@ def create_scheduled_task(
 
     ok, message = engine.tasks.save_task(task_id, config)
     api_logger.info("创建定时任务 {} -> success={}, message={}", task_id, ok, message)
-    # 新建任务默认启用，确保调度器在运行
-    if ok and config.get("enabled", True):
-        engine.start_scheduler()
+    if ok:
+        engine.sync_scheduler_state()
     return ActionResponse(success=ok, message=message)
 
 
@@ -154,9 +153,8 @@ def update_scheduled_task(
 
     ok, message = engine.tasks.save_task(task_id, config)
     api_logger.info("更新定时任务 {} -> success={}, message={}", task_id, ok, message)
-    # 更新后任务启用时，确保调度器在运行
-    if ok and config.get("enabled", True):
-        engine.start_scheduler()
+    if ok:
+        engine.sync_scheduler_state()
     return ActionResponse(success=ok, message=message)
 
 
@@ -168,6 +166,8 @@ def delete_scheduled_task(
     """删除定时任务。"""
     ok, message = engine.tasks.delete_task(task_id)
     api_logger.info("删除定时任务 {} -> success={}, message={}", task_id, ok, message)
+    if ok:
+        engine.sync_scheduler_state()
     return ActionResponse(success=ok, message=message)
 
 
@@ -214,9 +214,8 @@ def toggle_scheduled_task(
     ok, message = engine.tasks.save_task(task_id, task)
     status = "启用" if task["enabled"] else "禁用"
     api_logger.info("切换定时任务 {} -> {}", task_id, status)
-    # 启用任务时确保调度器在运行
-    if ok and task["enabled"]:
-        engine.start_scheduler()
+    if ok:
+        engine.sync_scheduler_state()
     return ActionResponse(success=ok, message=f"定时任务已{status}")
 
 
