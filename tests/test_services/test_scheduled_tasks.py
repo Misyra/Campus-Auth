@@ -160,6 +160,7 @@ class TestExecuteShellUsesPolicy:
             registry=registry,
             history_store=history_store,
             worker_getter=lambda: None,
+            login_orchestrator=MagicMock(),
         )
 
     def test_execute_shell_uses_policy(self, executor):

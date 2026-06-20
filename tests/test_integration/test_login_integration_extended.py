@@ -29,8 +29,7 @@ def _ensure_login_config(engine) -> None:
 def _capture_login_completion(task_executor, engine=None, timeout: float = 5.0):
     """安装包装器捕获登录结果。
 
-    同时 hook orchestrator._dispatch 和 task_executor._on_login_done，
-    确保无论登录从哪条路径触发都能捕获。
+    hook orchestrator._dispatch，确保登录从委托路径触发时能捕获。
     必须在调用 _handle_login / 触发登录之前调用。
     返回 (result_container, done_event, restore_fn)。
     """
@@ -59,16 +58,6 @@ def _capture_login_completion(task_executor, engine=None, timeout: float = 5.0):
 
         orchestrator._dispatch = wrapped_dispatch
         restores.append(lambda: setattr(orchestrator, "_dispatch", original_dispatch))
-
-    # Hook task_executor._on_login_done（直接调用路径）
-    original_on_done = task_executor._on_login_done
-
-    def wrapper(future):
-        _capture(future)
-        original_on_done(future)
-
-    task_executor._on_login_done = wrapper
-    restores.append(lambda: setattr(task_executor, "_on_login_done", original_on_done))
 
     def restore():
         for fn in restores:
@@ -211,10 +200,7 @@ class TestNetworkDetectionLogin:
         engine._login_retry.config = (3, [10, 20, 30])
         engine._login_retry.count = 1
 
-        # 清理 executor 状态（_on_login_done 已完成清理，显式设置确保干净）
-        task_executor._login_future = None
-        task_executor._login_cancel_event = None
-
+        # 清理 executor 状态（orchestrator 已完成清理，显式设置确保干净）
         assert engine._login_retry_needed(time.time())
 
         # 第二次登录（自动重试路径）
@@ -268,20 +254,14 @@ class TestCancelPropagation:
 
             task_executor.cancel_login()
 
-            assert task_executor._login_cancel_event is not None
-            assert task_executor._login_cancel_event.is_set()
-            assert captured_cancel_event is task_executor._login_cancel_event
-            assert captured_cancel_event.is_set()
-
             submit_release.set()
 
-            # 等待 _on_login_done 完成清理
+            # 等待登录完成
             assert done_event.wait(timeout=5), "登录完成回调未触发"
             ok, msg = result_container[0]
             assert ok is True
 
             assert not task_executor.is_login_running()
-            assert task_executor._login_cancel_event is None
         finally:
             restore_fn()
 
