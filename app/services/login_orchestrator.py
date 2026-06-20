@@ -15,7 +15,7 @@ import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 from app.utils.logging import get_logger
@@ -132,6 +132,7 @@ class LoginOrchestrator:
         # 取消联动：常驻单线程（F12 根治：不再每次新建线程）
         self._cancel_link_queue: queue.Queue = queue.Queue()
         self._cancel_link_thread: threading.Thread | None = None
+        self._cancel_link_lock = threading.Lock()
 
     # ── 公共 API ──
 
@@ -306,12 +307,13 @@ class LoginOrchestrator:
 
     def _ensure_cancel_link_thread(self) -> None:
         """确保常驻 watcher 线程在运行。"""
-        if self._cancel_link_thread and self._cancel_link_thread.is_alive():
-            return
-        self._cancel_link_thread = threading.Thread(
-            target=self._cancel_link_loop, daemon=True, name="orch-cancel-link"
-        )
-        self._cancel_link_thread.start()
+        with self._cancel_link_lock:
+            if self._cancel_link_thread and self._cancel_link_thread.is_alive():
+                return
+            self._cancel_link_thread = threading.Thread(
+                target=self._cancel_link_loop, daemon=True, name="orch-cancel-link"
+            )
+            self._cancel_link_thread.start()
 
     def _cancel_link_loop(self) -> None:
         """常驻 watcher：从队列取联动请求并监控。"""
