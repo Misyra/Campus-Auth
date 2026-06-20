@@ -347,7 +347,10 @@ class ScheduleEngine:
                         # F04: 通知 policy 登录失败，获取降频延迟
                         delay = self._retry_policy.on_login_done(success=False)
                         if delay is not None and delay > 0:
-                            self._next_network_check = time.time() + delay
+                            # 取 engine 退避和 policy 退避的最大值，避免相互覆盖
+                            policy_target = time.time() + delay
+                            if policy_target > self._next_network_check:
+                                self._next_network_check = policy_target
                             logger.warning("登录连续失败，下次检测推迟 {}s", int(delay))
             except Exception:
                 logger.exception("登录任务异常")

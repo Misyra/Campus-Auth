@@ -2,6 +2,30 @@
 
 ## 2026-06-20
 
+### refactor — LoginRetryManager 清理
+- 删除 `app/services/login_retry.py`（LoginRetryManager 类）
+- `engine.py` 删除：`_validate_login_config`、`_configure_retry`、`_login_retry_needed`、`_login_retry` 字段及所有引用
+- `_calculate_wakeup` 移除 `_login_retry.next_wakeup()` 依赖
+- `_do_async_login` 移除 `_login_retry.reset()` 和 `_login_retry.record_attempt()`
+- `_handle_start`/`_handle_stop` 移除 `_login_retry.reset()`
+- 删除 `test_login_retry.py`（12 个测试），删除 `TestLoginRetryNeeded`（7 个）和 `TestLoginRetryMechanism`（11 个）
+- 8 个测试文件移除 LoginRetryManager 引用，改为 `_consecutive_login_failures` 验证
+- 最终：2326 测试全通过
+
+### refactor
+- 测试全面移除 LoginRetryManager 依赖
+  - `app/services/login_retry.py` 已删除，测试中大量引用该类导致运行失败
+  - `tests/test_services/conftest.py`：移除 `LoginRetryManager` 导入和 `_login_retry` 字段初始化
+  - `tests/test_services/test_login_retry.py`：整个删除（测试已不存在的类）
+  - `tests/test_services/test_engine.py`：移除导入、删除 `TestLoginRetryNeeded` 测试类（7 个测试）、修复 `TestCalculateWakeup`/`TestHandleStop`/`TestDoAsyncLogin` 中的 `_login_retry` 引用
+  - `tests/test_services/test_engine_fix.py`：移除 `_make_engine` 中 `_login_retry` mock 初始化
+  - `tests/test_services/test_monitor_service.py`：移除导入和 `TestNetworkStateSetInConsumer` 中的 `LoginRetryManager` 构造
+  - `tests/test_integration/test_login_flow.py`：移除导入和 `_make_raw_engine` 中 `_login_retry` 初始化、删除 `TestLoginRetryMechanism` 整个测试类（11 个测试）、修复并发保护测试中的引用
+  - `tests/test_integration/test_login_connection.py`：`test_retry_exhausted` 改为验证 `_consecutive_login_failures` 递增
+  - `tests/test_integration/test_login_integration_extended.py`：移除 `_login_retry.count/last_attempt` 断言，改为 `_consecutive_login_failures` 验证
+
+## 2026-06-20
+
 ### refactor — 登录链路三步重构完成
 - **第 1 步（Task 1-9）**：LoginOrchestrator + RetryPolicy 框架，消化 F02/F03/F05/F06/F08/F09
   - 新建 `app/services/login_orchestrator.py`（编排器）和 `app/services/retry_policy.py`（策略框架）
