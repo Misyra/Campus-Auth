@@ -11,6 +11,7 @@ import time
 from concurrent.futures import Future
 from unittest.mock import MagicMock, patch
 
+from app.schemas import LoginCredentials, RuntimeConfig
 from app.services.engine import (
     EngineCmdType,
     EngineCommand,
@@ -394,13 +395,15 @@ class TestHandleLogin:
         svc._orchestrator.submit.return_value = handle
 
         # 提供有效配置，否则 _handle_login 会拒绝
-        with patch.object(svc, "_copy_runtime_config", return_value={
-            "username": "test", "password": "test", "auth_url": "http://test.com"
-        }):
-            cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
-            svc._handle_login(cmd)
-            # 同步模式：等待完成后返回登录结果
-            assert cmd.response_data == (True, "登录成功")
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="test", password="test", auth_url="http://test.com",
+            ),
+        )
+        cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
+        svc._handle_login(cmd)
+        # 同步模式：等待完成后返回登录结果
+        assert cmd.response_data == (True, "登录成功")
 
     def test_handle_login_no_config_returns_false(self):
         """_handle_login 无配置时返回 False。"""
@@ -410,7 +413,7 @@ class TestHandleLogin:
         svc._orchestrator = MagicMock()
         svc._orchestrator.validate.return_value = "登录配置不完整（请先设置认证地址、用户名和密码）"
         # 返回空配置
-        svc._runtime_config = {}
+        svc._runtime_config = RuntimeConfig()
 
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
@@ -617,8 +620,8 @@ class TestLoginInProgress:
 
 class TestGetConfig:
     @patch(
-        "app.services.config_service.build_runtime_dict_from_payload",
-        return_value={"key": "value"},
+        "app.services.config_service.build_runtime_config",
+        return_value=RuntimeConfig(),
     )
     @patch(
         "app.services.runtime_config.load_runtime_config",
@@ -638,10 +641,8 @@ class TestGetConfig:
 
         svc = ScheduleEngine(MagicMock())
         config = svc.get_runtime_config()
-        assert config == {"key": "value"}
-        # 修改返回值不应影响内部状态
-        config["key"] = "modified"
-        assert svc._runtime_config.get("key") == "value"
+        assert isinstance(config, RuntimeConfig)
+        assert config is svc._runtime_config  # frozen 对象，直接返回引用
 
 
 # =====================================================================
@@ -743,7 +744,7 @@ class TestManualLoginTimeout:
         svc._cmd_queue = queue.Queue(maxsize=50)
         svc._manual_login_in_progress = False
         svc._manual_login_lock = threading.Lock()
-        svc._runtime_config = {"auth_url": "http://test.com", "username": "test"}
+        svc._runtime_config = RuntimeConfig()
         svc._ui_config = MagicMock()
         svc._ui_config.login_timeout = 0.01  # 极短超时
         svc._monitor_core = None
@@ -752,8 +753,7 @@ class TestManualLoginTimeout:
         svc._engine_thread = MagicMock()
         svc._engine_thread.is_alive.return_value = True
 
-        with patch.object(svc, "_copy_runtime_config", return_value={}):
-            ok, msg = svc.run_manual_login()
+        ok, msg = svc.run_manual_login()
 
         assert not ok
         assert "超时" in msg
@@ -769,11 +769,11 @@ class TestStartMonitoringPutNowait:
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._cmd_queue = queue.Queue(maxsize=1)
         svc._monitor_core = None
-        svc._runtime_config = {
-            "auth_url": "http://test.com",
-            "username": "test",
-            "monitor": {},
-        }
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                auth_url="http://test.com", username="test", password="test",
+            ),
+        )
         svc._pure_mode = False
         svc._pure_mode_lock = threading.Lock()
         svc._start_stop_lock = threading.Lock()
@@ -786,7 +786,6 @@ class TestStartMonitoringPutNowait:
                 "app.services.engine.ConfigValidator.validate_env_config",
                 return_value=(True, ""),
             ),
-            patch.object(svc, "_copy_runtime_config", return_value={}),
         ):
             start = time.time()
             ok, msg = svc.start_monitoring()
@@ -804,7 +803,7 @@ class TestNetworkStateSetInConsumer:
     def test_do_async_login_delegates_to_task_executor(self):
         """_do_async_login 应委托给 orchestrator.submit"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
-        svc._runtime_config = {}
+        svc._runtime_config = RuntimeConfig()
         svc._update_status_snapshot = MagicMock()
         svc.record_log = MagicMock()
         svc._orchestrator = MagicMock()
@@ -895,7 +894,7 @@ class TestManualLoginConsumerDead:
         svc._cmd_queue = queue.Queue(maxsize=50)
         svc._manual_login_in_progress = False
         svc._manual_login_lock = threading.Lock()
-        svc._runtime_config = {"auth_url": "http://test.com", "username": "test"}
+        svc._runtime_config = RuntimeConfig()
         svc._ui_config = MagicMock()
         svc._ui_config.login_timeout = 0.01
         svc._monitor_core = None
@@ -907,8 +906,7 @@ class TestManualLoginConsumerDead:
         svc._engine_thread = MagicMock()
         svc._engine_thread.is_alive.return_value = False
 
-        with patch.object(svc, "_copy_runtime_config", return_value={}):
-            ok, msg = svc.run_manual_login()
+        ok, msg = svc.run_manual_login()
 
         assert not svc._manual_login_in_progress, (
             "引擎线程已死时，_manual_login_in_progress 应被 finally 清除"

@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from app.network.decision import is_network_available
-from app.schemas import MonitorConfigPayload, MonitorStatusResponse
+from app.schemas import MonitorConfigPayload, MonitorStatusResponse, RuntimeConfig
 from app.services.monitor_service import NetworkMonitorCore
 from app.services.websocket_manager import WebSocketManager
 from app.utils import ConfigValidator
@@ -124,11 +124,11 @@ class ScheduleEngine:
         self._pure_mode_lock: threading.Lock = threading.Lock()
         self._start_stop_lock: threading.Lock = threading.Lock()
 
-        # 运行时配置快照（仅在 reload 时深拷贝，读取零拷贝）
-        self._runtime_snapshot: dict = {}
+        # 运行时配置快照（仅在 reload 时更新，读取零拷贝）
+        self._runtime_snapshot: RuntimeConfig | None = None
         # 配置对象（由 _reload_config_internal 初始化）
         self._ui_config: MonitorConfigPayload = MonitorConfigPayload()
-        self._runtime_config: dict = {}
+        self._runtime_config: RuntimeConfig = RuntimeConfig()
 
         # 状态快照限流
         self._last_snapshot_time: float = 0
@@ -282,7 +282,9 @@ class ScheduleEngine:
 
     def _do_async_login(self, is_manual: bool = False, config_snapshot: dict | None = None) -> bool:
         """【委托】提交登录到 LoginOrchestrator。签名兼容。"""
-        config = config_snapshot if config_snapshot is not None else self._copy_runtime_config()
+        raw_config = config_snapshot if config_snapshot is not None else self._runtime_config
+        # Orchestrator/Worker 仍使用旧 dict 接口
+        config = raw_config if isinstance(raw_config, dict) else self._runtime_config_to_dict(raw_config)
 
         source = "manual" if is_manual else "auto"
         handle = self._orchestrator.submit(source=source, config=config)
@@ -351,13 +353,14 @@ class ScheduleEngine:
             )
             return
 
-        config = self._copy_runtime_config()
+        config = self._runtime_config
         pure_mode = cmd.data.get("pure_mode", self.pure_mode)
         if pure_mode:
-            config.setdefault("browser_settings", {})["pure_mode"] = True
+            # frozen model: create new browser copy with pure_mode=True
+            config = config.model_copy(update={"browser": config.browser.model_copy(update={"pure_mode": True})})
 
         core = NetworkMonitorCore(
-            config=config,
+            config=self._runtime_config_to_dict(config),
             log_callback=self.record_log,
             login_history=self._login_history,
             worker_getter=self._worker_getter,
@@ -388,7 +391,7 @@ class ScheduleEngine:
 
     def _handle_login(self, cmd: EngineCommand) -> None:
         """执行一次性登录（手动触发，等待完成）。"""
-        config = self._copy_runtime_config()
+        config = self._runtime_config_to_dict(self._runtime_config)
         err = self._orchestrator.validate(config)
         if err is not None:
             cmd.response_data = (False, err)
@@ -435,8 +438,8 @@ class ScheduleEngine:
             return
 
         # 直接用 profile_id 记录日志，避免重复 load
-        new_url = self._runtime_config.get("auth_url", "")
-        new_user = self._runtime_config.get("username", "")
+        new_url = self._runtime_config.credentials.auth_url
+        new_user = self._runtime_config.credentials.username
         self.record_log(f"切换方案: {profile_id}", level="INFO", source="backend")
         logger.debug("方案详情: 认证={}, 用户={}", new_url, new_user)
 
@@ -599,12 +602,43 @@ class ScheduleEngine:
     def get_config(self) -> MonitorConfigPayload:
         return self._ui_config.model_copy(deep=True)
 
+    @staticmethod
+    def _runtime_config_to_dict(rc: RuntimeConfig) -> dict:
+        """将 RuntimeConfig 转为旧格式扁平 dict，兼容 Orchestrator/Worker/NetworkMonitorCore。
+
+        旧 dict 格式: {"username": ..., "password": ..., "browser_settings": {...}, ...}
+        RuntimeConfig 结构: rc.credentials.username, rc.browser.headless, ...
+        """
+        from .config_service import build_runtime_dict_from_payload
+
+        # 从 RuntimeConfig 反向构建 MonitorConfigPayload 再转 dict 太绕。
+        # 直接手动拼接：凭证字段平铺 + 子模型 model_dump()。
+        d: dict = {
+            "username": rc.credentials.username,
+            "password": rc.credentials.password,
+            "auth_url": rc.credentials.auth_url,
+            "isp": rc.credentials.isp,
+            "active_task": rc.active_task,
+            "block_proxy": rc.block_proxy,
+            "shell_path": rc.shell_path,
+            "minimize_to_tray": rc.minimize_to_tray,
+            "startup_action": rc.startup_action,
+            "autostart_lightweight": rc.autostart_lightweight,
+            "custom_variables": rc.custom_variables,
+            "browser_settings": rc.browser.model_dump(),
+            "monitor": rc.monitor.model_dump(),
+            "pause_login": rc.pause.model_dump(),
+            "logging": {"level": rc.logging.level},
+            "frontend_logging": {"level": rc.logging.frontend_level},
+            "retry_settings": rc.retry.model_dump(),
+            "login_timeout": rc.browser.login_timeout,
+        }
+        return d
+
     def _reload_config_internal(self) -> bool:
         """从 settings.json 重新加载 UI 和运行时配置。返回 True 表示成功。"""
-        import copy
-
         # 延迟导入：测试中需要 mock 这些函数的返回值，顶层导入会导致 mock 路径变化
-        from .config_service import build_runtime_dict_from_payload
+        from .config_service import build_runtime_config
         from .runtime_config import load_runtime_config, load_ui_config
 
         try:
@@ -616,11 +650,11 @@ class ScheduleEngine:
                 )
                 if has_decrypt_error:
                     logger.warning("配置重载时部分密码解密失败")
-                self._runtime_config = build_runtime_dict_from_payload(
+                self._runtime_config = build_runtime_config(
                     runtime_payload,
                     global_settings=data.global_settings,
                 )
-                self._runtime_snapshot = copy.deepcopy(self._runtime_config)
+                self._runtime_snapshot = self._runtime_config  # frozen, no deepcopy needed
                 with self._pure_mode_lock:
                     self._pure_mode = data.global_settings.pure_mode
             return True
@@ -630,11 +664,9 @@ class ScheduleEngine:
                 self._pure_mode = False
             return False
 
-    def _copy_runtime_config(self) -> dict:
-        """返回运行时配置快照（仅在 reload 时更新，读取零拷贝）。"""
-        import copy
-
-        return copy.deepcopy(self._runtime_config)
+    def get_runtime_config(self) -> RuntimeConfig:
+        """线程安全地获取运行时配置（frozen 对象，直接返回引用）。"""
+        return self._runtime_config
 
     def reload_config(self) -> tuple[bool, str]:
         """重新加载配置并重启监控（如果正在运行）。
@@ -679,7 +711,12 @@ class ScheduleEngine:
             if self._is_monitoring:
                 return False, "监控已在运行中"
 
-            valid, error = ConfigValidator.validate_env_config(self._runtime_config)
+            cfg = self._runtime_config
+            valid, error = ConfigValidator.validate_env_config({
+                "username": cfg.credentials.username,
+                "password": cfg.credentials.password,
+                "auth_url": cfg.credentials.auth_url,
+            })
             if not valid:
                 return False, f"配置无效: {error}"
 
@@ -702,7 +739,7 @@ class ScheduleEngine:
         """两阶段 shutdown：先通知引擎线程退出，等待确认后再清理资源。"""
         if self._shutdown_event.is_set():
             return
-        self._scheduler_running = False
+        self._stop_scheduler()
 
         # 阶段 1：通知引擎线程退出
         self._shutdown_event.set()
@@ -788,12 +825,11 @@ class ScheduleEngine:
 
     def test_network(self) -> tuple[bool, str]:
         logger.debug("开始手动网络测试")
-        config = self._copy_runtime_config()
-        monitor_cfg = config.get("monitor", {})
-        targets = monitor_cfg.get("ping_targets", [])
-        enable_tcp = monitor_cfg.get("enable_tcp_check", False)
-        enable_http = monitor_cfg.get("enable_http_check", False)
-        url_checks = monitor_cfg.get("url_check_urls", None)
+        config = self._runtime_config
+        targets = config.monitor.ping_targets
+        enable_tcp = config.monitor.enable_tcp_check
+        enable_http = config.monitor.enable_http_check
+        url_checks = config.monitor.url_check_urls
         test_sites = parse_ping_targets(targets)
         mode_desc = []
         if enable_tcp:
@@ -805,7 +841,7 @@ class ScheduleEngine:
         self.record_log("开始手动网络测试", "INFO", "network")
         logger.debug("检测方式: {}", "+".join(mode_desc) or "无")
         try:
-            timeout = monitor_cfg.get("network_check_timeout", 2)
+            timeout = config.monitor.network_check_timeout
             is_available = is_network_available(
                 test_sites=test_sites if test_sites else None,
                 timeout=timeout,
@@ -843,9 +879,9 @@ class ScheduleEngine:
             self._pure_mode = new_value
             return new_value
 
-    def get_runtime_config(self) -> dict:
-        """线程安全地获取运行时配置副本"""
-        return self._copy_runtime_config()
+    def get_runtime_config(self) -> RuntimeConfig:
+        """线程安全地获取运行时配置（frozen 对象，直接返回引用）。"""
+        return self._runtime_config
 
     # ── 定时任务调度 ──
 
@@ -858,15 +894,31 @@ class ScheduleEngine:
         """检查是否存在启用的定时任务（委托）。"""
         return self._task_executor.has_enabled_tasks()
 
-    def start_scheduler(self) -> None:
-        """启动定时任务调度。"""
+    def sync_scheduler_state(self) -> None:
+        """根据是否有启用任务自动启停调度器。"""
+        has_tasks = self._task_executor.has_enabled_tasks() if self._task_executor else False
+        if has_tasks and not self._scheduler_running:
+            self._start_scheduler()
+        elif not has_tasks and self._scheduler_running:
+            self._stop_scheduler()
+
+    def _start_scheduler(self) -> None:
+        """启动定时任务调度（内部方法）。"""
         if self._scheduler_running:
             return
         self._scheduler_running = True
         self._next_schedule_tick = (int(time.time() // 60) * 60) + 60
         logger.info("定时任务调度器已启动")
 
-    def stop_scheduler(self) -> None:
-        """停止定时任务调度。"""
+    def _stop_scheduler(self) -> None:
+        """停止定时任务调度（内部方法）。"""
         self._scheduler_running = False
         logger.info("定时任务调度器已停止")
+
+    def start_scheduler(self) -> None:
+        """已废弃：请使用 sync_scheduler_state()。"""
+        self._start_scheduler()
+
+    def stop_scheduler(self) -> None:
+        """已废弃：请使用 sync_scheduler_state()。"""
+        self._stop_scheduler()

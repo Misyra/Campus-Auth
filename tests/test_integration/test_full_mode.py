@@ -10,15 +10,20 @@ from unittest.mock import patch
 import pytest
 
 from app.schemas import MonitorConfigPayload
+from app.schemas import LoginCredentials, RuntimeConfig
 from app.services.config_service import save_and_apply
 from app.workers.playwright_worker import WorkerResponse
 
 
 def _ensure_login_config(engine) -> None:
     """确保引擎运行时配置包含登录所需字段。"""
-    engine._runtime_config["username"] = "testuser"
-    engine._runtime_config["password"] = "testpass"
-    engine._runtime_config["auth_url"] = "http://10.0.0.1"
+    old = engine._runtime_config
+    engine._runtime_config = old.model_copy(update={
+        "credentials": LoginCredentials(
+            username="testuser", password="testpass", auth_url="http://10.0.0.1",
+            isp=old.credentials.isp, carrier_custom=old.credentials.carrier_custom,
+        ),
+    })
 
 
 class TestFullMode:

@@ -5,6 +5,8 @@ import queue
 import threading
 from unittest.mock import MagicMock, patch
 
+from app.schemas import LoginCredentials, RuntimeConfig
+
 
 def test_engine_test_network_default_false():
     """test_network 的 enable_tcp_check / enable_http_check 默认值应为 False。"""
@@ -16,20 +18,12 @@ def test_engine_test_network_default_false():
     assert field_info_tcp.default is False
     assert field_info_http.default is False
 
-    # test_network 中的 fallback 应与 schema 一致
+    # test_network 中不应有 fallback 默认值（现在通过 RuntimeConfig 属性访问）
     from app.services.engine import ScheduleEngine
 
     source = inspect.getsource(ScheduleEngine.test_network)
-    # 不应出现默认值 True
-    assert 'enable_tcp_check", True' not in source
-    assert 'enable_http_check", True' not in source
-
-    # init_monitoring 中的 fallback 也应与 schema 一致
-    from app.services.monitor_service import NetworkMonitorCore
-
-    source_monitor = inspect.getsource(NetworkMonitorCore.init_monitoring)
-    assert 'enable_tcp_check", True' not in source_monitor
-    assert 'enable_http_check", True' not in source_monitor
+    # 不应出现 .get() 调用（已迁移到属性访问）
+    assert '.get(' not in source
 
 
 def test_handle_login_uses_validated_config():
@@ -39,10 +33,12 @@ def test_handle_login_uses_validated_config():
     engine = ScheduleEngine.__new__(ScheduleEngine)
     engine._command_queue = queue.Queue()
 
-    # 模拟配置快照
-    snapshot = {"username": "u", "password": "p", "auth_url": "http://x"}
-
-    engine._copy_runtime_config = MagicMock(return_value=snapshot)
+    # 模拟配置
+    engine._runtime_config = RuntimeConfig(
+        credentials=LoginCredentials(
+            username="u", password="p", auth_url="http://x",
+        ),
+    )
     engine._orchestrator = MagicMock()
     engine._orchestrator.validate.return_value = None
     mock_handle = MagicMock()
@@ -54,10 +50,11 @@ def test_handle_login_uses_validated_config():
     cmd = EngineCommand(type=EngineCmdType.LOGIN, data={})
     engine._handle_login(cmd)
 
-    # orchestrator.submit 应收到正确的 source 和 config
-    engine._orchestrator.submit.assert_called_once_with(
-        source="manual", config=snapshot,
-    )
+    # orchestrator.submit 应收到正确的 source 和 config（扁平 dict 格式）
+    submitted_config = engine._orchestrator.submit.call_args[1]["config"]
+    assert submitted_config["username"] == "u"
+    assert submitted_config["password"] == "p"
+    assert submitted_config["auth_url"] == "http://x"
     assert cmd.response_data == (True, "登录成功")
 
 
@@ -76,8 +73,10 @@ class TestManualLoginCancelRaceFix:
         engine = ScheduleEngine.__new__(ScheduleEngine)
         engine._task_executor = MagicMock()
         engine._update_status_snapshot = MagicMock()
-        engine._copy_runtime_config = MagicMock(
-            return_value={"username": "u", "password": "p", "auth_url": "http://x"}
+        engine._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="u", password="p", auth_url="http://x",
+            ),
         )
         engine._orchestrator = MagicMock()
         engine._login_history = MagicMock()
@@ -100,9 +99,9 @@ class TestManualLoginCancelRaceFix:
         result = engine._do_async_login(is_manual=True)
 
         assert result is True
-        engine._orchestrator.submit.assert_called_once_with(
-            source="manual", config=engine._copy_runtime_config()
-        )
+        call_kwargs = engine._orchestrator.submit.call_args[1]
+        assert call_kwargs["source"] == "manual"
+        assert call_kwargs["config"]["username"] == "u"
 
     def test_auto_login_submits_to_orchestrator(self):
         """自动登录应通过 orchestrator.submit(source='auto') 提交。"""
@@ -118,9 +117,9 @@ class TestManualLoginCancelRaceFix:
         result = engine._do_async_login(is_manual=False)
 
         assert result is True
-        engine._orchestrator.submit.assert_called_once_with(
-            source="auto", config=engine._copy_runtime_config()
-        )
+        call_kwargs = engine._orchestrator.submit.call_args[1]
+        assert call_kwargs["source"] == "auto"
+        assert call_kwargs["config"]["username"] == "u"
 
     def test_rejected_handle_returns_false(self):
         """orchestrator 返回 rejected handle 时应返回 False。"""

@@ -29,15 +29,45 @@ logger = get_logger("login_orchestrator", source="backend")
 LoginSource = Literal["auto", "manual", "login_once", "browser"]
 
 
+def _runtime_config_to_legacy_dict(rc) -> dict:
+    """将 RuntimeConfig 转为旧格式扁平 dict，兼容 Worker。"""
+    return {
+        "username": rc.credentials.username,
+        "password": rc.credentials.password,
+        "auth_url": rc.credentials.auth_url,
+        "isp": rc.credentials.isp,
+        "active_task": rc.active_task,
+        "block_proxy": rc.block_proxy,
+        "shell_path": rc.shell_path,
+        "minimize_to_tray": rc.minimize_to_tray,
+        "startup_action": rc.startup_action,
+        "autostart_lightweight": rc.autostart_lightweight,
+        "custom_variables": rc.custom_variables,
+        "browser_settings": rc.browser.model_dump(),
+        "monitor": rc.monitor.model_dump(),
+        "pause_login": rc.pause.model_dump(),
+        "logging": {"level": rc.logging.level},
+        "frontend_logging": {"level": rc.logging.frontend_level},
+        "retry_settings": rc.retry.model_dump(),
+        "login_timeout": rc.browser.login_timeout,
+    }
+
+
 # ── 配置校验（F05 唯一实现）──
 
 
-def validate_login_config(config: dict) -> str | None:
-    """校验登录配置完整性。
+def validate_login_config(config) -> str | None:
+    """校验登录配置完整性。接受 dict 或 RuntimeConfig。
 
     Returns:
         None 表示通过；否则返回中文错误信息。
     """
+    if hasattr(config, "credentials"):
+        # RuntimeConfig
+        c = config.credentials
+        if not c.username or not c.password or not c.auth_url:
+            return "登录配置不完整（请先设置认证地址、用户名和密码）"
+        return None
     if not config.get("username") or not config.get("password") or not config.get("auth_url"):
         return "登录配置不完整（请先设置认证地址、用户名和密码）"
     return None
@@ -46,13 +76,17 @@ def validate_login_config(config: dict) -> str | None:
 # ── 超时解析（F09 单一来源）──
 
 
-def resolve_worker_timeout(config: dict, fallback: int = 300) -> int:
-    """从运行时配置解析 Worker 提交超时。
+def resolve_worker_timeout(config, fallback: int = 300) -> int:
+    """从运行时配置解析 Worker 提交超时。接受 dict 或 RuntimeConfig。
 
     优先用 login_timeout（用户在 UI 配置），缺失时用 fallback。
     下限 60s 防止误配导致登录必失败；上限 600s 与 MonitorConfigPayload(le=600) 对齐。
     """
-    raw = config.get("login_timeout", fallback)
+    if hasattr(config, "browser"):
+        # RuntimeConfig
+        raw = config.browser.login_timeout
+    else:
+        raw = config.get("login_timeout", fallback)
     try:
         timeout = int(raw)
     except (TypeError, ValueError):
@@ -146,7 +180,7 @@ class LoginOrchestrator:
         self,
         *,
         source: LoginSource,
-        config: dict | None = None,
+        config=None,
         cancel_event: threading.Event | None = None,
         timeout: int | None = None,
     ) -> LoginHandle:
@@ -158,6 +192,7 @@ class LoginOrchestrator:
                 - auto 命中运行中的 handle 则复用（去重）
                 - login_once 总是新提交（进程级一次性任务）
                 - browser 由调用方自行校验，跳过登录配置校验和历史记录
+            config: 配置（dict 或 RuntimeConfig）；None 则从 get_runtime_config 读取
             config: 配置快照；None 则从 get_runtime_config 读取
             cancel_event: 取消事件；None 则内部新建
             timeout: Worker 超时（秒）；None 则从 config 解析
@@ -223,13 +258,15 @@ class LoginOrchestrator:
     # ── 内部 ──
 
     def _dispatch(
-        self, config: dict, source: LoginSource, cancel_event: threading.Event,
+        self, config, source: LoginSource, cancel_event: threading.Event,
         timeout: int | None = None,
     ) -> LoginHandle:
-        """提交到 Worker，注册历史/状态回调。"""
+        """提交到 Worker，注册历史/状态回调。config 可以是 dict 或 RuntimeConfig。"""
         # 延迟导入：避免模块级导入导致循环依赖
         from app.workers.playwright_worker import CMD_LOGIN
 
+        # Worker 仍使用 dict 接口
+        worker_config = config if isinstance(config, dict) else _runtime_config_to_legacy_dict(config)
         worker_timeout = timeout if timeout is not None else resolve_worker_timeout(config)  # F09 单一来源
 
         def _run() -> tuple[bool, str]:
@@ -241,7 +278,7 @@ class LoginOrchestrator:
                 result = worker.submit(
                     CMD_LOGIN,
                     data={
-                        "config": config,
+                        "config": worker_config,
                         "cancel_event": cancel_event,
                     },
                     wait=True,

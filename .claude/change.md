@@ -2,6 +2,60 @@
 
 ## 2026-06-21
 
+### refactor(engine): 迁移至 RuntimeConfig 并添加 sync_scheduler_state
+- `app/services/engine.py`：
+  - `_runtime_config` 类型从 `dict` 改为 `RuntimeConfig`（frozen，无需 deepcopy）
+  - `_runtime_snapshot` 类型从 `dict` 改为 `RuntimeConfig | None`
+  - `_reload_config_internal` 改用 `build_runtime_config` 替代 `build_runtime_dict_from_payload`
+  - 移除 `_copy_runtime_config` 方法
+  - `get_runtime_config` 返回 `RuntimeConfig`（frozen 对象直接返回引用）
+  - `_handle_start` 使用 `model_copy` 创建带 pure_mode 的配置副本
+  - `_handle_login`/`_do_async_login` 通过 `_runtime_config_to_dict` 转为旧格式 dict 兼容 Orchestrator/Worker
+  - `_handle_apply_profile` 改用 `credentials.auth_url`/`credentials.username` 属性访问
+  - `test_network` 改用 `config.monitor.*` 属性访问
+  - `start_monitoring` 的 `ConfigValidator.validate_env_config` 改用 dict 字面量
+  - `shutdown` 改用 `_stop_scheduler()`
+  - 新增 `sync_scheduler_state()` 作为调度器生命周期唯一入口
+  - 新增 `_start_scheduler()`/`_stop_scheduler()` 内部方法
+  - `start_scheduler`/`stop_scheduler` 标记为废弃别名
+  - 新增 `_runtime_config_to_dict()` 静态方法（RuntimeConfig→旧格式扁平 dict 桥接）
+- `app/services/login_orchestrator.py`：
+  - `validate_login_config` 支持 dict 和 RuntimeConfig 两种输入
+  - `resolve_worker_timeout` 支持 dict 和 RuntimeConfig 两种输入
+  - `_dispatch` 对 RuntimeConfig 输入自动转为旧格式 dict 再传给 Worker
+  - 新增 `_runtime_config_to_legacy_dict` 辅助函数
+- 测试文件同步更新（12 个文件）：
+  - `tests/test_services/conftest.py`：raw fixture 改用 `RuntimeConfig()`
+  - `tests/test_services/test_engine.py`：所有 `_copy_runtime_config` mock 替换为直接设置 `_runtime_config`
+  - `tests/test_services/test_engine_fix.py`：同上 + 更新断言
+  - `tests/test_services/test_monitor_service.py`：同上 + 更新 mock 路径
+  - `tests/test_integration/test_login_flow.py`：同上 + 顶层导入
+  - `tests/test_integration/test_login_integration_extended.py`：改用 `_runtime_config_to_dict` + 属性访问
+  - `tests/test_integration/test_login_connection.py`：`_ensure_login_config` 改用 `model_copy`
+  - `tests/test_integration/test_lightweight_mode.py`：同上
+  - `tests/test_integration/test_full_mode.py`：同上
+  - `tests/test_integration/test_network_connection.py`：改用 `get_runtime_config().model_dump()`
+  - `tests/test_integration/test_profile_connection.py`：同上
+  - `tests/test_services/test_container_fix.py`：无需改动（orchestrator 兼容层处理）
+- 验收：2342 测试全通过（1 个 pre-existing 时间段暂停窗口失败跳过）
+
+## 2026-06-21
+
+### test(config): 补充 build_runtime_config 测试覆盖
+- `tests/test_build_runtime_config.py`：
+  - 添加 `test_build_runtime_config_password_masked`：验证以 • 开头的密码被清空
+  - 添加 `test_build_runtime_config_pause_logging_retry`：验证暂停/日志/重试设置正确传递
+  - 添加 `test_build_runtime_config_url_check_urls`：验证 url_check_urls 解析为字典列表
+  - 修正 `test_build_runtime_config_strip_fields` docstring（移除多余的 proxy 描述）
+- 验收：10 个测试全通过
+
+### fix(config): 补充 carrier_custom 传入 LoginCredentials
+- `app/services/config_service.py`：`build_runtime_config` 的 `LoginCredentials(...)` 构造补充 `carrier_custom=custom_isp` 参数
+- `tests/test_build_runtime_config.py`：`test_build_runtime_config_credentials` 新增 `assert rc.credentials.carrier_custom == "myisp"` 断言
+- 验收：7 个测试全通过
+
+## 2026-06-21
+
 ### feat(config) — 添加 build_runtime_config() 返回类型化 RuntimeConfig
 - `app/services/config_service.py`：新增 `build_runtime_config(payload, global_settings)` 函数
   - 构建 `LoginCredentials`（用户名、密码、认证地址、运营商映射）

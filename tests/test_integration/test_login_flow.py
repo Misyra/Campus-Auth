@@ -16,6 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.schemas import LoginCredentials, RuntimeConfig
 from app.services.engine import (
     EngineCmdType,
     EngineCommand,
@@ -36,8 +37,8 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._monitor_core = None
     svc._engine_running = False
     svc._retry_policy = MonitoredPolicy()
-    svc._runtime_config = {}
-    svc._runtime_snapshot = {}
+    svc._runtime_config = RuntimeConfig()
+    svc._runtime_snapshot = None
     svc._monitor_check_interval = 300
     svc._next_network_check = 0
     svc._scheduler_running = False
@@ -91,12 +92,11 @@ class TestFullLoginSequence:
     def test_login_command_success(self):
         """手动登录命令成功：配置完整 → orchestrator 提交并等待 → 返回成功。"""
         svc = _make_raw_engine()
-        config = {
-            "username": "testuser",
-            "password": "testpass",
-            "auth_url": "http://auth.example.com",
-        }
-        svc._copy_runtime_config = MagicMock(return_value=config)
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="testuser", password="testpass", auth_url="http://auth.example.com",
+            ),
+        )
         svc._orchestrator.validate.return_value = None
         handle = MagicMock()
         handle.rejected_reason = None
@@ -110,17 +110,18 @@ class TestFullLoginSequence:
         svc._handle_login(cmd)
 
         assert cmd.response_data == (True, "登录成功")
-        svc._orchestrator.submit.assert_called_once_with(source="manual", config=config)
+        call_kwargs = svc._orchestrator.submit.call_args[1]
+        assert call_kwargs["source"] == "manual"
+        assert call_kwargs["config"]["username"] == "testuser"
 
     def test_login_command_failure_already_in_progress(self):
         """登录任务已在执行中时，返回失败。"""
         svc = _make_raw_engine()
-        config = {
-            "username": "testuser",
-            "password": "testpass",
-            "auth_url": "http://auth.example.com",
-        }
-        svc._copy_runtime_config = MagicMock(return_value=config)
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="testuser", password="testpass", auth_url="http://auth.example.com",
+            ),
+        )
         svc._orchestrator.validate.return_value = None
         handle = MagicMock()
         handle.rejected_reason = None
@@ -137,8 +138,8 @@ class TestFullLoginSequence:
     def test_login_command_missing_config(self):
         """配置不完整时，登录命令直接返回失败。"""
         svc = _make_raw_engine()
-        svc._copy_runtime_config = MagicMock(
-            return_value={"username": "u"}  # 缺少 password 和 auth_url
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(username="u"),  # 缺少 password 和 auth_url
         )
         svc._orchestrator.validate.return_value = "登录配置不完整（请先设置认证地址、用户名和密码）"
 
@@ -395,9 +396,7 @@ class TestLoginWithNetworkDetection:
         }
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._copy_runtime_config = MagicMock(return_value={
-            "retry_settings": {"max_retries": 3, "retry_interval": 30}
-        })
+        svc._runtime_config = RuntimeConfig()
         svc._do_async_login = MagicMock()
 
         with patch("app.utils.retry.get_retry_intervals", return_value=[30, 30, 30]):
@@ -428,9 +427,7 @@ class TestLoginWithNetworkDetection:
         }
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._copy_runtime_config = MagicMock(return_value={
-            "retry_settings": {"max_retries": 3, "retry_interval": 30}
-        })
+        svc._runtime_config = RuntimeConfig()
 
         # 使用真实的 _do_async_login（通过 orchestrator）
         future = Future()
@@ -485,7 +482,9 @@ class TestLoginConcurrencyProtection:
         result = svc._do_async_login(is_manual=True)
 
         assert result is True
-        svc._orchestrator.submit.assert_called_once_with(source="manual", config=svc._runtime_config)
+        call_kwargs = svc._orchestrator.submit.call_args[1]
+        assert call_kwargs["source"] == "manual"
+        assert isinstance(call_kwargs["config"], dict)
 
         # 清理
         future.set_result((True, "登录成功"))
