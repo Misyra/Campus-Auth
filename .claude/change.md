@@ -2,6 +2,12 @@
 
 ## 2026-06-21
 
+### fix(orchestrator): 移除 submit 方法 docstring 重复行
+- `app/services/login_orchestrator.py`：
+  - 第 195-196 行存在两行 `config:` docstring 描述（"配置（dict 或 RuntimeConfig）"和"配置快照"）
+  - 移除重复行，保留更准确的描述"配置（dict 或 RuntimeConfig）"
+- 验收：1092 测试通过（1 个 pre-existing 网络测试失败跳过）
+
 ### fix(engine): 移除重复的 get_runtime_config 和未使用的导入
 - `app/services/engine.py`：
   - 移除第 612 行 `from .config_service import build_runtime_dict_from_payload`（未使用的导入）
