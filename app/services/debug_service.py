@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from app.utils.env import build_login_template_vars
 from app.utils.logging import get_logger
+from app.services.login_orchestrator import _runtime_config_to_worker_dict
 
 if TYPE_CHECKING:
     from starlette.requests import Request
@@ -115,7 +116,7 @@ class DebugSessionManager:
         # 构建模板变量（复用 service 的运行时配置）
         runtime_config = monitor_service.get_runtime_config()
         template_vars = build_login_template_vars(
-            runtime_config, task.url, runtime_config.get("custom_variables", {})
+            runtime_config, task.url, runtime_config.custom_variables
         )
 
         # 解析任务 URL
@@ -123,13 +124,12 @@ class DebugSessionManager:
         for k, v in template_vars.items():
             url = url.replace("{{" + k + "}}", v)
 
-        browser_settings = runtime_config.get("browser_settings", {})
-        browser_timeout = browser_settings.get("timeout", 8) * 1000
-        navigation_timeout = browser_settings.get("navigation_timeout", 15) * 1000
+        browser_timeout = runtime_config.browser.timeout * 1000
+        navigation_timeout = runtime_config.browser.navigation_timeout * 1000
 
         # 构建 Worker 启动数据
         worker_data = {
-            "config": runtime_config,
+            "config": _runtime_config_to_worker_dict(runtime_config),
             "task_url": url if url else "",
             "task_data": task.to_dict(),
             "template_vars": template_vars,

@@ -147,16 +147,25 @@ class TestStartTemplateVarReplacement:
         mock_request.app.state.services.task_service = mock_task_service
 
         mock_monitor = MagicMock()
-        mock_monitor.get_runtime_config.return_value = {
-            "custom_variables": {},
-            "browser_settings": {},
-        }
+        mock_runtime = MagicMock()
+        mock_runtime.custom_variables = {}
+        mock_runtime.browser.timeout = 8
+        mock_runtime.browser.navigation_timeout = 15
+        mock_runtime.credentials.auth_url = ""
+        mock_runtime.credentials.isp = ""
+        mock_runtime.credentials.username = ""
+        mock_runtime.credentials.password = ""
+        mock_monitor.get_runtime_config.return_value = mock_runtime
 
         with (
             patch("app.workers.playwright_worker.get_worker") as mock_get_worker,
             patch(
                 "app.services.debug_service.build_login_template_vars",
                 return_value={"domain": "example.com"},
+            ),
+            patch(
+                "app.services.debug_service._runtime_config_to_worker_dict",
+                return_value={},
             ),
         ):
             mock_worker = MagicMock()
