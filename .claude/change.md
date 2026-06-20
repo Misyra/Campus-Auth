@@ -2,6 +2,20 @@
 
 ## 2026-06-20
 
+### fix — 手动登录 API 等待登录完成后返回
+- `app/services/engine.py`：`_handle_login` 从异步提交改为同步等待结果
+  - 直接调用 `orchestrator.submit(source="manual", config=...)` 获取 handle
+  - 通过 `handle.result()` 阻塞等待登录实际完成后再返回
+  - 支持 `rejected_reason` 和 `future is None` 两种拒绝场景
+- `tests/test_services/test_engine.py`：更新 `TestHandleLogin` 测试适配新 API
+- `tests/test_services/test_engine_fix.py`：更新 `test_handle_login_uses_validated_config` 适配新 API
+
+### refactor — 统一退避系统
+- MonitoredPolicy 改为固定延迟表 `[0, 0, 30, 60, 120]`，max_retries=5
+- 删除 Engine 层退避：`_consecutive_login_failures`、`_backoff_check_multiplier`、`_apply_backoff_interval`、`_login_retry_max_cycles`、`_LOGIN_BACKOFF_THRESHOLD`
+- `_do_network_check` 和 `_on_done` 回调简化，单一决策源
+- 更新 6 个测试文件适配，2327 测试全通过
+
 ### fix — 修复统一退避引入的测试失败
 - `tests/test_integration/test_login_connection.py`：
   - `test_retry_exhausted` 断言从 `engine._consecutive_login_failures == 3` 改为 `engine._retry_policy._attempt == 3`

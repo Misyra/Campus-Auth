@@ -397,7 +397,7 @@ class TestHandleLogin:
         success, message = cmd.response_data
         assert success is False
 
-    def test_handle_login_async_success(self, engine_factory):
+    def test_handle_login_success(self, engine_factory):
         svc = engine_factory(raw=True)
         config = {
             "username": "u",
@@ -406,10 +406,14 @@ class TestHandleLogin:
         }
         svc._copy_runtime_config = MagicMock(return_value=config)
         svc._orchestrator.validate.return_value = None
-        svc._do_async_login = MagicMock(return_value=True)
+        mock_handle = MagicMock()
+        mock_handle.rejected_reason = None
+        mock_handle.future = MagicMock()
+        mock_handle.result.return_value = (True, "登录成功")
+        svc._orchestrator.submit.return_value = mock_handle
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
-        assert cmd.response_data == (True, "登录已提交")
+        assert cmd.response_data == (True, "登录成功")
 
     def test_handle_login_already_in_progress(self, engine_factory):
         svc = engine_factory(raw=True)
@@ -420,10 +424,29 @@ class TestHandleLogin:
         }
         svc._copy_runtime_config = MagicMock(return_value=config)
         svc._orchestrator.validate.return_value = None
-        svc._do_async_login = MagicMock(return_value=False)
+        mock_handle = MagicMock()
+        mock_handle.rejected_reason = None
+        mock_handle.future = None
+        svc._orchestrator.submit.return_value = mock_handle
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
         assert cmd.response_data == (False, "登录任务已在执行中，请稍后再试")
+
+    def test_handle_login_rejected(self, engine_factory):
+        svc = engine_factory(raw=True)
+        config = {
+            "username": "u",
+            "password": "p",
+            "auth_url": "http://test.com",
+        }
+        svc._copy_runtime_config = MagicMock(return_value=config)
+        svc._orchestrator.validate.return_value = None
+        mock_handle = MagicMock()
+        mock_handle.rejected_reason = "提交被拒绝"
+        svc._orchestrator.submit.return_value = mock_handle
+        cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
+        svc._handle_login(cmd)
+        assert cmd.response_data == (False, "提交被拒绝")
 
 
 # =====================================================================
