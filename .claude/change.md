@@ -2,6 +2,26 @@
 
 ## 2026-06-21
 
+### refactor(monitor): 迁移 NetworkMonitorCore 和 decision.py 至类型化配置
+- `app/services/monitor_service.py`：
+  - 构造函数 `config` 参数类型从 `dict[str, Any] | None` 改为 `RuntimeConfig`
+  - `_get_monitor_interval` 改用 `self.config.monitor.check_interval_seconds` 属性访问
+  - `init_monitoring` 改用 `self.config.credentials.*` 和 `self.config.monitor.*` 属性访问
+  - `check_once` 中 `check_pause` 改为传递 `self.config.pause`
+  - `check_once` 中 `check_network_status` 改为传递 `self.config.monitor`
+  - `_build_test_sites` 改用 `self.config.monitor.ping_targets` 属性访问
+- `app/network/decision.py`：
+  - `check_pause` 签名从 `config: dict` 改为 `pause: PauseSettings`，内部构建 dict 传递给 `is_in_pause_period`
+  - `check_network_status` 签名从 `config: dict` 改为 `monitor: MonitorSettings`
+  - `check_login_prerequisites` 签名从 `config: dict` 改为 `(monitor: MonitorSettings, auth_url: str)`
+  - 三个公共函数内部全部改为直接属性访问
+- `app/services/engine.py`：
+  - `_handle_start` 中 `NetworkMonitorCore` 构造改为直接传递 `RuntimeConfig`（移除 `_runtime_config_to_dict` 转换）
+- 测试文件同步更新：
+  - `tests/test_core/test_monitor.py`：所有 `NetworkMonitorCore()` 调用改为传递 `RuntimeConfig()`
+  - `tests/test_core/test_network_probes.py`：`check_pause`/`check_network_status`/`check_login_prerequisites` 测试改用类型化模型
+- 验收：83 个核心测试全通过（2 个 pre-existing 的 main.py 测试失败与本次改动无关）
+
 ### fix(engine): 直接传递 RuntimeConfig 给 orchestrator，移除不必要的桥接转换
 - `app/services/engine.py`：
   - `_do_async_login`：移除 `_runtime_config_to_dict` 转换，直接传递 `RuntimeConfig` 给 `orchestrator.submit()`

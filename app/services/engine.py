@@ -358,7 +358,7 @@ class ScheduleEngine:
             config = config.model_copy(update={"browser": config.browser.model_copy(update={"pure_mode": True})})
 
         core = NetworkMonitorCore(
-            config=self._runtime_config_to_dict(config),
+            config=config,
             log_callback=self.record_log,
             login_history=self._login_history,
             worker_getter=self._worker_getter,

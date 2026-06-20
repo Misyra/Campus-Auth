@@ -21,6 +21,7 @@ from app.network.probes import (
     is_network_available_url,
     set_block_proxy,
 )
+from app.schemas import MonitorSettings, PauseSettings
 
 # =====================================================================
 # network_probes — set_block_proxy
@@ -250,13 +251,13 @@ class TestIsNetworkAvailableUrl:
 class TestCheckPause:
     @patch("app.network.decision.is_in_pause_period", return_value=True)
     def test_in_pause_period(self, *mocks):
-        is_paused, reason = check_pause({"pause_login": {"enabled": True}})
+        is_paused, reason = check_pause(PauseSettings(enabled=True))
         assert is_paused is True
         assert reason == "pause_period"
 
     @patch("app.network.decision.is_in_pause_period", return_value=False)
     def test_not_in_pause_period(self, *mocks):
-        is_paused, reason = check_pause({"pause_login": {"enabled": False}})
+        is_paused, reason = check_pause(PauseSettings(enabled=False))
         assert is_paused is False
         assert reason == ""
 
@@ -268,18 +269,16 @@ class TestCheckPause:
 
 class TestCheckNetworkStatus:
     def _make_config(self, **overrides):
-        config = {
-            "monitor": {
-                "enable_tcp_check": True,
-                "enable_http_check": True,
-                "ping_targets": None,
-                "test_urls": None,
-                "url_check_urls": None,
-                "network_check_timeout": 1.5,
-            },
+        defaults = {
+            "enable_tcp_check": True,
+            "enable_http_check": True,
+            "ping_targets": [],
+            "test_urls": [],
+            "url_check_urls": [],
+            "network_check_timeout": 2,
         }
-        config["monitor"].update(overrides)
-        return config
+        defaults.update(overrides)
+        return MonitorSettings(**defaults)
 
     @patch("app.network.decision.is_network_available", return_value=True)
     def test_network_ok(self, *mocks):
@@ -300,7 +299,7 @@ class TestCheckNetworkStatus:
             self._make_config(
                 enable_tcp_check=False,
                 enable_http_check=False,
-                url_check_urls=None,
+                url_check_urls=[],
             )
         )
         assert ok is False
@@ -315,36 +314,37 @@ class TestCheckNetworkStatus:
 
 class TestCheckLoginPrerequisites:
     def _make_config(self, **overrides):
-        config = {
-            "auth_url": "http://10.0.0.1/login",
-            "monitor": {
-                "enable_local_check": True,
-                "check_auth_url": True,
-                "auth_url_targets": None,
-            },
+        defaults = {
+            "enable_local_check": True,
+            "check_auth_url": True,
+            "auth_url_targets": [],
         }
-        if "monitor" in overrides:
-            config["monitor"].update(overrides.pop("monitor"))
-        config.update(overrides)
-        return config
+        defaults.update(overrides)
+        return MonitorSettings(**defaults)
 
     @patch("app.network.decision._is_auth_url_reachable", return_value=True)
     @patch("app.network.decision.is_local_network_connected", return_value=True)
     def test_all_pass(self, *mocks):
-        ok, reason = check_login_prerequisites(self._make_config())
+        ok, reason = check_login_prerequisites(
+            self._make_config(), "http://10.0.0.1/login"
+        )
         assert ok is True
         assert reason == ""
 
     @patch("app.network.decision.is_local_network_connected", return_value=False)
     def test_local_disconnected(self, *mocks):
-        ok, reason = check_login_prerequisites(self._make_config())
+        ok, reason = check_login_prerequisites(
+            self._make_config(), "http://10.0.0.1/login"
+        )
         assert ok is False
         assert reason == "local_disconnected"
 
     @patch("app.network.decision._is_auth_url_reachable", return_value=False)
     @patch("app.network.decision.is_local_network_connected", return_value=True)
     def test_auth_url_unreachable(self, *mocks):
-        ok, reason = check_login_prerequisites(self._make_config())
+        ok, reason = check_login_prerequisites(
+            self._make_config(), "http://10.0.0.1/login"
+        )
         assert ok is False
         assert reason == "auth_url_unreachable"
 
@@ -352,9 +352,8 @@ class TestCheckLoginPrerequisites:
     @patch("app.network.decision.is_local_network_connected", return_value=False)
     def test_local_check_disabled(self, *mocks):
         ok, reason = check_login_prerequisites(
-            self._make_config(
-                monitor={"enable_local_check": False},
-            )
+            self._make_config(enable_local_check=False),
+            "http://10.0.0.1/login",
         )
         assert ok is False
         assert reason == "auth_url_unreachable"
@@ -363,9 +362,8 @@ class TestCheckLoginPrerequisites:
     @patch("app.network.decision.is_local_network_connected", return_value=True)
     def test_auth_url_check_disabled(self, *mocks):
         ok, reason = check_login_prerequisites(
-            self._make_config(
-                monitor={"check_auth_url": False},
-            )
+            self._make_config(check_auth_url=False),
+            "http://10.0.0.1/login",
         )
         assert ok is True
         assert reason == ""
@@ -374,9 +372,8 @@ class TestCheckLoginPrerequisites:
     @patch("app.network.decision.is_local_network_connected", return_value=False)
     def test_both_disabled(self, *mocks):
         ok, reason = check_login_prerequisites(
-            self._make_config(
-                monitor={"enable_local_check": False, "check_auth_url": False},
-            )
+            self._make_config(enable_local_check=False, check_auth_url=False),
+            "http://10.0.0.1/login",
         )
         assert ok is True
         assert reason == ""
