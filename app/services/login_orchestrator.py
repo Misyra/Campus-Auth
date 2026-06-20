@@ -193,7 +193,6 @@ class LoginOrchestrator:
                 - login_once 总是新提交（进程级一次性任务）
                 - browser 由调用方自行校验，跳过登录配置校验和历史记录
             config: 配置（dict 或 RuntimeConfig）；None 则从 get_runtime_config 读取
-            config: 配置快照；None 则从 get_runtime_config 读取
             cancel_event: 取消事件；None 则内部新建
             timeout: Worker 超时（秒）；None 则从 config 解析
 
