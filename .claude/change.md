@@ -2,6 +2,15 @@
 
 ## 2026-06-21
 
+### test: 适配 monitor/decision 测试至 RuntimeConfig
+- `tests/test_services/test_monitor_service_fix.py`：dict 配置改为 `RuntimeConfig(LoginCredentials(...), MonitorSettings(...))` 构造
+- `tests/test_integration/test_network_connection.py`：`_make_monitor_core` 移除 `.model_dump()` 调用，直接传递 `RuntimeConfig`
+- `tests/test_integration/test_profile_connection.py`：同上，移除 `.model_dump()`
+- `tests/test_services/test_engine.py`：`test_handle_start_pure_mode` 断言从 `call_config["browser_settings"]["pure_mode"]` 改为 `call_config.browser.pure_mode`
+- `tests/test_services/test_monitor_service.py`：`TestProfileSwitchFlag` 3 个测试从 `NetworkMonitorCore()` 改为 `NetworkMonitorCore(config=RuntimeConfig())`
+- `tests/test_integration/test_login_flow.py`：`test_login_command_success` 断言从 `call_kwargs["config"]["username"]` 改为 `call_kwargs["config"].credentials.username`；`test_manual_login_cancels_in_progress_auto_login` 断言从 `isinstance(..., dict)` 改为 `isinstance(..., RuntimeConfig)`
+- 验收：2279 测试通过，5 个 pre-existing 的 main.py dict 问题失败与本次改动无关
+
 ### refactor(monitor): 迁移 NetworkMonitorCore 和 decision.py 至类型化配置
 - `app/services/monitor_service.py`：
   - 构造函数 `config` 参数类型从 `dict[str, Any] | None` 改为 `RuntimeConfig`

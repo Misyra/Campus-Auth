@@ -927,7 +927,7 @@ class TestProfileSwitchFlag:
         """测试自动切换方案设置标志位"""
         from app.services.monitor_service import NetworkMonitorCore
 
-        core = NetworkMonitorCore()
+        core = NetworkMonitorCore(config=RuntimeConfig())
         mock_profile_service = MagicMock()
         mock_profile_service.load.return_value.auto_switch = True
         mock_profile_service.detect_matching_profile.return_value = "new_profile"
@@ -944,7 +944,7 @@ class TestProfileSwitchFlag:
         """测试方案未变化时不设置标志位"""
         from app.services.monitor_service import NetworkMonitorCore
 
-        core = NetworkMonitorCore()
+        core = NetworkMonitorCore(config=RuntimeConfig())
         mock_profile_service = MagicMock()
         mock_profile_service.load.return_value.auto_switch = True
         mock_profile_service.detect_matching_profile.return_value = "same_profile"
@@ -959,7 +959,7 @@ class TestProfileSwitchFlag:
         """测试消费标志位"""
         from app.services.monitor_service import NetworkMonitorCore
 
-        core = NetworkMonitorCore()
+        core = NetworkMonitorCore(config=RuntimeConfig())
         core._profile_switch_needed = True
 
         assert core.consume_profile_switch_flag() is True

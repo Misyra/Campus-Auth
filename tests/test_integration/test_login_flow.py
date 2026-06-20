@@ -112,7 +112,7 @@ class TestFullLoginSequence:
         assert cmd.response_data == (True, "登录成功")
         call_kwargs = svc._orchestrator.submit.call_args[1]
         assert call_kwargs["source"] == "manual"
-        assert call_kwargs["config"]["username"] == "testuser"
+        assert call_kwargs["config"].credentials.username == "testuser"
 
     def test_login_command_failure_already_in_progress(self):
         """登录任务已在执行中时，返回失败。"""
@@ -484,7 +484,7 @@ class TestLoginConcurrencyProtection:
         assert result is True
         call_kwargs = svc._orchestrator.submit.call_args[1]
         assert call_kwargs["source"] == "manual"
-        assert isinstance(call_kwargs["config"], dict)
+        assert isinstance(call_kwargs["config"], RuntimeConfig)
 
         # 清理
         future.set_result((True, "登录成功"))

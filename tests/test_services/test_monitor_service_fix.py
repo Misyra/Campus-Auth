@@ -7,6 +7,11 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from app.schemas import (
+    LoginCredentials,
+    MonitorSettings,
+    RuntimeConfig,
+)
 from app.services.monitor_service import NetworkMonitorCore
 
 
@@ -20,17 +25,19 @@ class TestInitMonitoringLogMasking:
         def mock_log_callback(message: str, level: str = "INFO", **kwargs):
             captured_logs.append(message)
 
-        config = {
-            "auth_url": auth_url,
-            "username": username,
-            "isp": "移动",
-            "block_proxy": True,
-            "monitor": {
-                "interval": 300,
-                "enable_tcp_check": True,
-                "enable_http_check": True,
-            },
-        }
+        config = RuntimeConfig(
+            credentials=LoginCredentials(
+                auth_url=auth_url,
+                username=username,
+                isp="移动",
+            ),
+            monitor=MonitorSettings(
+                check_interval_seconds=300,
+                enable_tcp_check=True,
+                enable_http_check=True,
+            ),
+            block_proxy=True,
+        )
 
         core = NetworkMonitorCore(config=config, log_callback=mock_log_callback)
         # mock _get_test_sites 以避免真实网络调用
