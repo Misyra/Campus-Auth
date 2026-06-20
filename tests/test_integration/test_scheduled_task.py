@@ -58,8 +58,6 @@ def _make_executor(
         registry=registry,
         history_store=history_store,
         worker_getter=kwargs.get("worker_getter", MagicMock()),
-        login_history=kwargs.get("login_history", MagicMock()),
-        profile_service=kwargs.get("profile_service", MagicMock()),
         get_runtime_config=kwargs.get(
             "get_runtime_config", lambda: {"browser_settings": {}}
         ),

@@ -55,8 +55,6 @@ class ServiceContainer:
             registry=self.task_registry,
             history_store=self.task_history_store,
             worker_getter=_get_worker,
-            login_history=self.login_history_service,
-            profile_service=self.profile_service,
         )
 
         # 统一引擎（替代 MonitorService + SchedulerService）

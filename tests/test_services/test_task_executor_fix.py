@@ -977,8 +977,6 @@ class TestTaskExecutorExecuteLogin:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
-            login_history=MagicMock(),
-            profile_service=MagicMock(),
             login_orchestrator=mock_orchestrator,
         )
         defaults.update(kwargs)

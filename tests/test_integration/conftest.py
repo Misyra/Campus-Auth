@@ -81,8 +81,6 @@ def integration_stack(tmp_path, mock_worker):
         registry=task_registry,
         history_store=task_history_store,
         worker_getter=lambda: mock_worker,
-        login_history=login_history,
-        profile_service=profile_service,
     )
 
     engine = ScheduleEngine(
@@ -131,8 +129,6 @@ def full_stack(tmp_path, mock_worker):
         registry=task_registry,
         history_store=task_history_store,
         worker_getter=lambda: mock_worker,
-        login_history=login_history,
-        profile_service=profile_service,
     )
 
     engine = ScheduleEngine(

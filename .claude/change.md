@@ -2,6 +2,15 @@
 
 ## 2026-06-20
 
+### refactor — TaskExecutor 移除 login_history/profile_service 死参数
+- `app/services/task_executor.py` `__init__` 移除 `login_history` 和 `profile_service` 参数（已在之前的重构中移除生产代码引用）
+- 测试文件同步清理：
+  - `tests/test_integration/test_login_flow.py`：4 处 TaskExecutor 调用移除参数
+  - `tests/test_integration/test_scheduled_task.py`：`_make_executor` 辅助函数移除参数
+  - `tests/test_integration/conftest.py`：`integration_stack` 和 `full_stack` 两个 fixture 移除参数
+  - `tests/test_services/test_task_executor_fix.py`：`TestTaskExecutorExecuteLogin._make_executor` 移除参数
+- 最终：2322 测试全通过
+
 ### fix — 退避逻辑冲突
 - `_on_done` 中 MonitoredPolicy delay 与 `_apply_backoff_interval` 取最大值，避免相互覆盖
 - 之前 MonitoredPolicy 的固定 30s delay 会覆盖 engine 级指数退避（300s/900s/1500s）
