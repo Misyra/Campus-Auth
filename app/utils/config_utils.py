@@ -1,42 +1,11 @@
 #!/usr/bin/env python3
 """
-配置工具模块 — 验证、字段赋值
+配置工具模块 — 验证
 
 合并自原 config.py（ConfigValidator）和 config_helpers.py。
 """
 
 from __future__ import annotations
-
-
-# ── 字段赋值 ──────────────────────────────────────────────────────────
-
-
-# 从 MonitorConfigPayload 直接拷入运行时 dict 的字段（不做转换，直接赋值）
-PROFILE_RUNTIME_FIELDS = (
-    "access_log",
-    "minimize_to_tray",
-    "startup_action",
-    "autostart_lightweight",
-    "log_retention_days",
-    "custom_variables",
-    "block_proxy",
-    "shell_path",
-)
-
-
-def assign_profile_fields(target: dict, source: dict, field_names: list[str]) -> None:
-    """将 source 字典中的指定字段原地赋值到 target 字典。
-
-    对于 field_names 中每个字段，如果 source 中存在则覆盖 target 中同名键。
-    Args:
-        target: 目标字典（原地修改）
-        source: 源字典（通常为 MonitorConfigPayload.model_dump() 结果）
-        field_names: 需要复制的字段名列表
-    """
-    for name in field_names:
-        if name in source:
-            target[name] = source[name]
-
 
 
 # ── 验证器 ────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@
 import pytest
 
 from app.schemas import MonitorConfigPayload, SystemSettings
-from app.services.config_service import build_runtime_dict_from_payload
+from app.services.config_service import build_runtime_config
 from app.utils.browser_registry import detect_browsers
 
 
@@ -14,13 +14,13 @@ def test_global_settings_default_channel():
     assert gs.browser_custom_path == ""
 
 
-def test_build_runtime_dict_from_payload_includes_channel():
-    """build_runtime_dict_from_payload 应包含 browser_channel。"""
+def test_build_runtime_config_includes_channel():
+    """build_runtime_config 应包含 browser_channel。"""
     gs = SystemSettings()
     gs.browser_channel = "msedge"
     payload = MonitorConfigPayload()
-    config = build_runtime_dict_from_payload(payload, gs)
-    assert config["browser_settings"]["browser_channel"] == "msedge"
+    config = build_runtime_config(payload, gs)
+    assert config.browser.browser_channel == "msedge"
 
 
 def test_detect_browsers_returns_all_channels():

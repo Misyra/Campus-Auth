@@ -48,7 +48,7 @@ class TestFullMode:
         # 等待引擎线程处理 START 命令
         time.sleep(0.5)
         assert engine._is_monitoring
-        engine.start_scheduler()
+        engine._start_scheduler()
         assert engine.scheduler_running
 
         # t1: 注册定时任务（时间设为当前，确保 tick 时命中）

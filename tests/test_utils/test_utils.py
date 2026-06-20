@@ -20,7 +20,6 @@ import pytest
 from app.utils import str_to_bool
 
 # ── config_helpers ──
-from app.utils.config_utils import PROFILE_RUNTIME_FIELDS, assign_profile_fields
 
 # ── crypto ──
 from app.utils.crypto import (
@@ -180,55 +179,6 @@ class TestSavePasswordField:
 # =====================================================================
 # config_helpers
 # =====================================================================
-
-
-class TestAssignProfileFields:
-    def test_basic(self):
-        target = {"existing": "old"}
-        source = {"a": 1, "b": 2}
-        assign_profile_fields(target, source, ["a", "b"])
-        assert target == {"existing": "old", "a": 1, "b": 2}
-
-    def test_overwrites_existing(self):
-        target = {"a": "old"}
-        source = {"a": "new"}
-        assign_profile_fields(target, source, ["a"])
-        assert target["a"] == "new"
-
-    def test_missing_keys_not_assigned(self):
-        target = {}
-        source = {"a": 1}
-        assign_profile_fields(target, source, ["a", "b"])
-        assert target == {"a": 1}
-        assert "b" not in target
-
-    def test_source_extra_keys_not_copied(self):
-        target = {}
-        source = {"a": 1, "secret": "leaked"}
-        assign_profile_fields(target, source, ["a"])
-        assert "secret" not in target
-
-    def test_empty_field_names(self):
-        target = {"a": 1}
-        assign_profile_fields(target, {"b": 2}, [])
-        assert target == {"a": 1}
-
-    def test_empty_source(self):
-        target = {"a": 1}
-        assign_profile_fields(target, {}, ["a"])
-        assert target == {"a": 1}
-
-
-class TestProfileRuntimeFields:
-    def test_is_tuple_of_strings(self):
-        assert isinstance(PROFILE_RUNTIME_FIELDS, tuple)
-        for field in PROFILE_RUNTIME_FIELDS:
-            assert isinstance(field, str)
-
-    def test_contains_expected_fields(self):
-        assert "access_log" in PROFILE_RUNTIME_FIELDS
-        assert "shell_path" in PROFILE_RUNTIME_FIELDS
-        assert "custom_variables" in PROFILE_RUNTIME_FIELDS
 
 
 # =====================================================================

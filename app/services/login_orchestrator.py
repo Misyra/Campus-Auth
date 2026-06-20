@@ -33,8 +33,7 @@ LoginSource = Literal["auto", "manual", "login_once", "browser"]
 def _runtime_config_to_worker_dict(config: RuntimeConfig) -> dict:
     """将 RuntimeConfig 转换为 Worker 进程期望的 dict 格式。
 
-    Worker 是独立进程，通过 dict 通信。此函数确保 dict 键名与旧
-    build_runtime_dict_from_payload 的输出完全兼容。
+    Worker 是独立进程，通过 dict 通信。
     """
     creds = config.credentials.model_dump()
     d: dict = {

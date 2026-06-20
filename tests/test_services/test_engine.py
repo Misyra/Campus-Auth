@@ -1479,21 +1479,21 @@ class TestProperties:
 class TestSchedulerControl:
     def test_start_scheduler(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc.start_scheduler()
+        svc._start_scheduler()
         assert svc._scheduler_running is True
         assert svc._next_schedule_tick > time.time()
 
     def test_start_scheduler_idempotent(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc.start_scheduler()
+        svc._start_scheduler()
         first_tick = svc._next_schedule_tick
-        svc.start_scheduler()
+        svc._start_scheduler()
         assert svc._next_schedule_tick == first_tick
 
     def test_stop_scheduler(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._scheduler_running = True
-        svc.stop_scheduler()
+        svc._stop_scheduler()
         assert svc._scheduler_running is False
 
     def test_has_enabled_tasks(self, engine_factory):

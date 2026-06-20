@@ -2,6 +2,30 @@
 
 ## 2026-06-21
 
+### cleanup: 移除旧配置 dict 构建器和废弃的调度器方法
+- `app/services/config_service.py`：
+  - 移除 `build_runtime_dict_from_payload` 函数（已被 `build_runtime_config` 替代）
+  - 移除未使用的 `from typing import Any` 导入
+- `app/utils/config_utils.py`：
+  - 移除 `PROFILE_RUNTIME_FIELDS` 常量和 `assign_profile_fields` 函数（仅被已删除的 `build_runtime_dict_from_payload` 使用）
+  - 更新模块 docstring
+- `app/services/engine.py`：
+  - 移除废弃的 `start_scheduler()` / `stop_scheduler()` 公开别名（已被 `sync_scheduler_state()` 替代）
+- `app/services/login_orchestrator.py`：
+  - 更新 `_runtime_config_to_worker_dict` docstring，移除对已删除函数的引用
+- 测试文件同步更新：
+  - `tests/test_app/test_backend_services.py`：import 和测试类从 `build_runtime_dict_from_payload` 改为 `build_runtime_config`，断言改为属性访问
+  - `tests/test_services/test_config_service.py`：同上
+  - `tests/test_integration/test_multi_browser.py`：同上
+  - `tests/test_utils/test_utils.py`：移除 `TestAssignProfileFields` 和 `TestProfileRuntimeFields` 测试类及导入
+  - `tests/test_services/test_monitor_service.py`：8 处 mock 路径从 `build_runtime_dict_from_payload` 改为 `build_runtime_config`
+  - `tests/test_services/test_engine.py`：调度器测试从 `start_scheduler`/`stop_scheduler` 改为 `_start_scheduler`/`_stop_scheduler`
+  - `tests/test_integration/test_full_mode.py`：同上
+- 保留项：`_STRIP_FIELDS` 和 `_LOG_LEVEL_FIELDS`（仍被 `_update_global_settings` 使用）
+- 验收：2332 测试全通过，lint 无新增错误
+
+## 2026-06-21
+
 ### refactor(scheduler): 定时任务 API 端点统一使用 sync_scheduler_state
 - `app/api/scheduled_tasks.py`：
   - `create_scheduled_task`：`if ok and config.get("enabled", True): engine.start_scheduler()` 改为 `if ok: engine.sync_scheduler_state()`

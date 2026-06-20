@@ -905,11 +905,3 @@ class ScheduleEngine:
         """停止定时任务调度（内部方法）。"""
         self._scheduler_running = False
         logger.info("定时任务调度器已停止")
-
-    def start_scheduler(self) -> None:
-        """已废弃：请使用 sync_scheduler_state()。"""
-        self._start_scheduler()
-
-    def stop_scheduler(self) -> None:
-        """已废弃：请使用 sync_scheduler_state()。"""
-        self._stop_scheduler()
