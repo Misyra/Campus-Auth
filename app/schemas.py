@@ -433,6 +433,110 @@ def get_runtime_features(
     )
 
 
+# ── 类型化配置子集模型 ──
+
+
+class BrowserSettings(BaseModel, frozen=True):
+    """浏览器运行参数 — PlaywrightWorker / LoginAttemptHandler 消费。
+
+    字段名与旧 dict 键名保持兼容，最小化消费端迁移量。
+    """
+
+    headless: bool = True
+    timeout: int = Field(default=8, ge=1, le=60)
+    navigation_timeout: int = Field(default=15, ge=3, le=60)
+    login_timeout: int = Field(default=90, ge=10, le=600)
+    user_agent: str = ""
+    low_resource_mode: bool = False
+    disable_web_security: bool = False
+    extra_headers_json: str = ""
+    browser_args: str = _BROWSER_ARGS_DEFAULT
+    stealth_mode: bool = False
+    stealth_custom_script: str = ""
+    locale: str = "zh-CN"
+    timezone_id: str = "Asia/Shanghai"
+    viewport_width: int = Field(default=1280, ge=320, le=3840)
+    viewport_height: int = Field(default=720, ge=240, le=2160)
+    pure_mode: bool = True
+    browser_channel: str = "playwright"
+    browser_custom_path: str = ""
+    custom_browser_engine: str = "auto"
+
+
+class LoginCredentials(BaseModel, frozen=True):
+    """登录凭证 — LoginAttemptHandler / LoginOrchestrator 消费。"""
+
+    username: str = ""
+    password: str = ""
+    auth_url: str = ""
+    isp: str = ""
+    carrier_custom: str = ""
+
+
+class MonitorSettings(BaseModel, frozen=True):
+    """网络监控参数 — NetworkMonitorCore 消费。"""
+
+    check_interval_seconds: int = Field(default=300, ge=10, le=86400)
+    network_check_timeout: int = Field(default=2, ge=1, le=30)
+    ping_targets: list[str] = Field(default_factory=list)
+    enable_tcp_check: bool = False
+    enable_http_check: bool = False
+    enable_local_check: bool = True
+    test_urls: list[str] = Field(default_factory=list)
+    check_auth_url: bool = False
+    auth_url_targets: list[str] = Field(default_factory=list)
+    url_check_urls: list[dict] = Field(default_factory=list)
+    script_timeout: int = Field(default=60, ge=5, le=600)
+
+
+class PauseSettings(BaseModel, frozen=True):
+    """暂停时段配置 — check_pause() 消费。"""
+
+    enabled: bool = True
+    start_hour: int = Field(default=0, ge=0, le=23)
+    end_hour: int = Field(default=6, ge=0, le=23)
+
+
+class LoggingSettings(BaseModel, frozen=True):
+    """日志配置 — 日志初始化模块消费。"""
+
+    level: str = "INFO"
+    frontend_level: str = "INFO"
+    log_retention_days: int = Field(default=7, ge=1, le=365)
+    access_log: bool = False
+
+
+class RetrySettings(BaseModel, frozen=True):
+    """重试策略 — LoginOrchestrator 消费。"""
+
+    max_retries: int = Field(default=3, ge=0, le=10)
+    retry_interval: int = Field(default=5, ge=1, le=300)
+
+
+class RuntimeConfig(BaseModel, frozen=True):
+    """运行时配置根模型 — 替代旧 dict[str, Any]。
+
+    组合所有子集模型 + 直接透传字段。
+    frozen=True 保证线程安全，无需 deepcopy。
+    """
+
+    browser: BrowserSettings = Field(default_factory=BrowserSettings)
+    credentials: LoginCredentials = Field(default_factory=LoginCredentials)
+    monitor: MonitorSettings = Field(default_factory=MonitorSettings)
+    pause: PauseSettings = Field(default_factory=PauseSettings)
+    logging: LoggingSettings = Field(default_factory=LoggingSettings)
+    retry: RetrySettings = Field(default_factory=RetrySettings)
+
+    # 直接透传字段
+    active_task: str | None = None
+    custom_variables: dict[str, str] = Field(default_factory=dict)
+    block_proxy: bool = False
+    shell_path: str = ""
+    minimize_to_tray: bool = False
+    startup_action: str = "none"
+    autostart_lightweight: bool = True
+
+
 # ── 字段映射常量 ──
 
 # SystemSettings 与 MonitorConfigPayload 的共享字段集合。
