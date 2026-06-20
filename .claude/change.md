@@ -1,5 +1,31 @@
 # 修改日志
 
+## 2026-06-21
+
+### feat(config) — 添加 build_runtime_config() 返回类型化 RuntimeConfig
+- `app/services/config_service.py`：新增 `build_runtime_config(payload, global_settings)` 函数
+  - 构建 `LoginCredentials`（用户名、密码、认证地址、运营商映射）
+  - 构建 `BrowserSettings`（从 SystemSettings 读取浏览器配置，含 strip 处理）
+  - 构建 `MonitorSettings`（监控间隔、ping 目标、URL 检测等，从 payload 读取）
+  - 构建 `PauseSettings`、`LoggingSettings`、`RetrySettings`
+  - 组装 `RuntimeConfig`（透传 block_proxy/shell_path/minimize_to_tray 等字段）
+  - 旧 `build_runtime_dict_from_payload` 暂时保留以兼容迁移
+- `tests/test_build_runtime_config.py`：7 个单元测试覆盖返回类型、凭证、运营商映射、浏览器配置、监控字段、透传字段、strip 处理
+- 修正：`network_check_timeout` 从 `SystemSettings`（gs）读取而非 payload；`url_check_urls` 将元组转为字典列表以匹配 `MonitorSettings` 类型
+- 验收：7 个新测试 + 564 个既有测试全通过
+
+### feat(schemas) — 添加类型化 RuntimeConfig 子集模型
+- `app/schemas.py`：在 `GLOBAL_SETTINGS_FIELDS` 前新增 7 个 frozen Pydantic 模型
+  - `BrowserSettings`：浏览器运行参数（headless/timeout/navigation_timeout/viewport 等 20 个字段）
+  - `LoginCredentials`：登录凭证（username/password/auth_url/isp/carrier_custom）
+  - `MonitorSettings`：网络监控参数（check_interval_seconds/network_check_timeout/ping_targets 等 11 个字段）
+  - `PauseSettings`：暂停时段配置（enabled/start_hour/end_hour）
+  - `LoggingSettings`：日志配置（level/frontend_level/log_retention_days/access_log）
+  - `RetrySettings`：重试策略（max_retries/retry_interval）
+  - `RuntimeConfig`：运行时配置根模型，组合所有子集模型 + 直接透传字段（active_task/custom_variables/block_proxy/shell_path/minimize_to_tray/startup_action/autostart_lightweight）
+- `tests/test_runtime_config_models.py`：6 个单元测试覆盖 frozen 不可变性、默认值、校验、组合、透传字段
+- 验收：6 个新测试 + 151 个既有 config 测试全通过
+
 ## 2026-06-20
 
 ### fix — 修复手动登录等待完成引入的测试失败
@@ -1849,3 +1875,18 @@
   - `mock_worker` fixture 模拟 Playwright worker
   - `integration_stack` fixture 组装真实 ProfileService + TaskExecutor + ScheduleEngine
   - `full_stack` fixture 额外暴露 TaskRegistry
+
+## 2026-06-20
+
+### fix — 防止去重命中时重复注册 _on_done 回调（P1-01）
+- `app/services/engine.py`：
+  - `__init__` 新增 `self._registered_futures: set[Future] = set()`
+  - `_do_async_login` 添加去重检查：`if handle.future in self._registered_futures: return False`
+  - `_on_done` 回调开头添加 `self._registered_futures.discard(f)` 清理
+  - `add_done_callback` 前添加 `self._registered_futures.add(handle.future)` 注册
+- 测试文件同步更新：
+  - `tests/test_services/conftest.py`：`_make_raw` 添加 `svc._registered_futures = set()`
+  - `tests/test_integration/test_login_flow.py`：`_make_raw_engine` 添加 `svc._registered_futures = set()`
+  - `tests/test_services/test_engine_fix.py`：`_make_engine` 添加 `engine._registered_futures = set()`
+  - `tests/test_services/test_monitor_service.py`：`test_do_async_login_delegates_to_task_executor` 添加 `svc._registered_futures = set()`
+- 验收：2328 测试全通过

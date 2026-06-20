@@ -253,3 +253,137 @@ def build_runtime_dict_from_payload(
     }
 
     return base
+
+
+def build_runtime_config(
+    payload: MonitorConfigPayload,
+    global_settings: SystemSettings | None = None,
+) -> "RuntimeConfig":
+    """从 MonitorConfigPayload + SystemSettings 构建类型化 RuntimeConfig。
+
+    替代 build_runtime_dict_from_payload，返回 frozen Pydantic 模型。
+    """
+    from app.schemas import (
+        BrowserSettings,
+        LoginCredentials,
+        LoggingSettings,
+        MonitorSettings,
+        PauseSettings,
+        RetrySettings,
+        RuntimeConfig,
+    )
+    from app.utils.network import parse_url_checks
+
+    gs = global_settings or SystemSettings()
+
+    # ── 凭证 ──
+    username = payload.username.strip()
+    raw_password = payload.password.strip()
+    password = raw_password if (raw_password and not raw_password.startswith("•")) else ""
+    auth_url = payload.auth_url.strip()
+
+    carrier = str(payload.carrier or "无").strip() or "无"
+    custom_isp = str(payload.carrier_custom or "").strip()
+    if carrier == "自定义":
+        isp = custom_isp
+    elif carrier == "无":
+        isp = ""
+    else:
+        isp = carrier
+
+    credentials = LoginCredentials(
+        username=username,
+        password=password,
+        auth_url=auth_url,
+        isp=isp,
+    )
+
+    # ── 浏览器 ──
+    browser_channel = gs.browser_channel
+    if hasattr(browser_channel, "value"):
+        browser_channel_str = browser_channel.value
+    else:
+        browser_channel_str = str(browser_channel)
+
+    browser = BrowserSettings(
+        headless=gs.headless,
+        timeout=gs.browser_timeout,
+        navigation_timeout=gs.browser_navigation_timeout,
+        login_timeout=gs.login_timeout,
+        user_agent=gs.browser_user_agent.strip(),
+        low_resource_mode=gs.browser_low_resource_mode,
+        disable_web_security=gs.browser_disable_web_security,
+        extra_headers_json=gs.browser_extra_headers_json,
+        browser_args=gs.browser_args.strip(),
+        stealth_mode=gs.stealth_mode,
+        stealth_custom_script=gs.stealth_custom_script.strip(),
+        locale=gs.browser_locale.strip(),
+        timezone_id=gs.browser_timezone.strip(),
+        viewport_width=gs.browser_viewport_width,
+        viewport_height=gs.browser_viewport_height,
+        pure_mode=gs.pure_mode,
+        browser_channel=browser_channel_str,
+        browser_custom_path=gs.browser_custom_path.strip(),
+        custom_browser_engine=gs.custom_browser_engine,
+    )
+
+    # ── 监控 ──
+    monitor = MonitorSettings(
+        check_interval_seconds=payload.check_interval_seconds,
+        network_check_timeout=gs.network_check_timeout,
+        ping_targets=[
+            item.strip() for item in payload.network_targets.split(",") if item.strip()
+        ],
+        enable_tcp_check=payload.enable_tcp_check,
+        enable_http_check=payload.enable_http_check,
+        enable_local_check=payload.enable_local_check,
+        test_urls=[
+            item.strip() for item in payload.http_targets.split(",") if item.strip()
+        ],
+        check_auth_url=payload.check_auth_url,
+        auth_url_targets=[
+            item.strip() for item in payload.auth_url_targets.split(",") if item.strip()
+        ],
+        url_check_urls=[
+            {"url": url, "expected": expected}
+            for url, expected in parse_url_checks(payload.url_check_urls)
+        ],
+    )
+
+    # ── 暂停时段 ──
+    pause = PauseSettings(
+        enabled=payload.pause_enabled,
+        start_hour=payload.pause_start_hour,
+        end_hour=payload.pause_end_hour,
+    )
+
+    # ── 日志 ──
+    logging_settings = LoggingSettings(
+        level=normalize_level(payload.backend_log_level, "WARNING"),
+        frontend_level=normalize_level(payload.frontend_log_level, "WARNING"),
+        log_retention_days=payload.log_retention_days,
+        access_log=payload.access_log,
+    )
+
+    # ── 重试 ──
+    retry = RetrySettings(
+        max_retries=gs.max_retries,
+        retry_interval=gs.retry_interval,
+    )
+
+    # ── 组装 ──
+    return RuntimeConfig(
+        browser=browser,
+        credentials=credentials,
+        monitor=monitor,
+        pause=pause,
+        logging=logging_settings,
+        retry=retry,
+        active_task=payload.active_task.strip(),
+        custom_variables=payload.custom_variables,
+        block_proxy=payload.block_proxy,
+        shell_path=payload.shell_path,
+        minimize_to_tray=payload.minimize_to_tray,
+        startup_action=str(payload.startup_action),
+        autostart_lightweight=payload.autostart_lightweight,
+    )
