@@ -13,7 +13,7 @@ from app.schemas import (
 from app.services.config_service import (
     SaveResult,
     _update_global_settings,
-    build_runtime_dict_from_payload,
+    build_runtime_config,
     save_and_apply,
     save_config_combined,
 )
@@ -479,18 +479,18 @@ class TestSaveAndApply:
         # 回滚异常不抛出，只记录日志
 
 
-class TestBuildRuntimeDictLoginTimeout:
-    """build_runtime_dict_from_payload 应包含 login_timeout。"""
+class TestBuildRuntimeConfigLoginTimeout:
+    """build_runtime_config 应包含 login_timeout。"""
 
-    def test_login_timeout_in_runtime_dict(self):
-        """login_timeout 应从 SystemSettings 读取并写入运行时字典。"""
+    def test_login_timeout_in_runtime_config(self):
+        """login_timeout 应从 SystemSettings 读取并写入 RuntimeConfig。"""
         gs = SystemSettings(login_timeout=180)
         payload = MonitorConfigPayload()
-        result = build_runtime_dict_from_payload(payload, global_settings=gs)
-        assert result["login_timeout"] == 180
+        result = build_runtime_config(payload, global_settings=gs)
+        assert result.browser.login_timeout == 180
 
     def test_login_timeout_default(self):
         """未指定 global_settings 时 login_timeout 使用默认值 90。"""
         payload = MonitorConfigPayload()
-        result = build_runtime_dict_from_payload(payload)
-        assert result["login_timeout"] == 90
+        result = build_runtime_config(payload)
+        assert result.browser.login_timeout == 90
