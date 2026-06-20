@@ -312,7 +312,7 @@ class TestHandleStart:
         cmd = EngineCommand(type=EngineCmdType.START, data={})
         svc._handle_start(cmd)
         call_config = mock_core_cls.call_args[1]["config"]
-        assert call_config["browser_settings"]["pure_mode"] is True
+        assert call_config.browser.pure_mode is True
 
 
 # =====================================================================
