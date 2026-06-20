@@ -301,8 +301,10 @@ class TestLoginOnceRetry:
         _ensure_login_config(engine)
         mock_worker = MagicMock()
         mock_worker.submit.return_value = WorkerResponse(success=True, data="登录成功")
-        runtime_config = ScheduleEngine._runtime_config_to_dict(engine.get_runtime_config())
-        runtime_config["retry_settings"] = {"max_retries": 3, "retry_interval": 1}
+        from app.schemas import RetrySettings
+        runtime_config = engine.get_runtime_config().model_copy(
+            update={"retry": RetrySettings(max_retries=3, retry_interval=1)}
+        )
 
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
@@ -321,8 +323,10 @@ class TestLoginOnceRetry:
         _ensure_login_config(engine)
         mock_worker = MagicMock()
         mock_worker.submit.return_value = WorkerResponse(success=False, error="超时")
-        runtime_config = ScheduleEngine._runtime_config_to_dict(engine.get_runtime_config())
-        runtime_config["retry_settings"] = {"max_retries": 2, "retry_interval": 0}
+        from app.schemas import RetrySettings
+        runtime_config = engine.get_runtime_config().model_copy(
+            update={"retry": RetrySettings(max_retries=2, retry_interval=1)}
+        )
 
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
@@ -345,8 +349,10 @@ class TestLoginOnceRetry:
             WorkerResponse(success=False, error="超时"),
             WorkerResponse(success=True, data="登录成功"),
         ]
-        runtime_config = ScheduleEngine._runtime_config_to_dict(engine.get_runtime_config())
-        runtime_config["retry_settings"] = {"max_retries": 3, "retry_interval": 0}
+        from app.schemas import RetrySettings
+        runtime_config = engine.get_runtime_config().model_copy(
+            update={"retry": RetrySettings(max_retries=3, retry_interval=1)}
+        )
 
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),

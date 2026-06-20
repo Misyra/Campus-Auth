@@ -16,6 +16,7 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any
 
+from app.schemas import RuntimeConfig
 from app.utils.logging import get_logger
 from app.utils.shell_policy import ShellCommandPolicy
 from app.utils.shell_utils import detect_shells, get_default_shell
@@ -81,7 +82,7 @@ class TaskExecutor:
         registry: Any,
         history_store: Any,
         worker_getter: Callable,
-        get_runtime_config: Callable[[], dict] | None = None,
+        get_runtime_config: Callable[[], RuntimeConfig] | None = None,
         login_orchestrator: Any = None,
     ) -> None:
         self._registry = registry
@@ -107,7 +108,7 @@ class TaskExecutor:
             allowlist=[shell["path"] for shell in detect_shells()]
         )
 
-    def set_runtime_config_getter(self, getter: Callable[[], dict]) -> None:
+    def set_runtime_config_getter(self, getter: Callable[[], RuntimeConfig]) -> None:
         """设置运行时配置获取器（公共接口）。"""
         self._get_runtime_config = getter
 
@@ -187,7 +188,7 @@ class TaskExecutor:
     def execute_login_async(
         self,
         cancel_event: threading.Event | None = None,
-        config_snapshot: dict | None = None,
+        config_snapshot: RuntimeConfig | None = None,
     ) -> Future:
         """异步执行登录。签名兼容。"""
         handle = self._login_orchestrator.submit(
@@ -203,11 +204,11 @@ class TaskExecutor:
     def execute_login(
         self,
         cancel_event: threading.Event | None = None,
-        config_snapshot: dict | None = None,
+        config_snapshot: RuntimeConfig | None = None,
     ) -> tuple[bool, str]:
         """同步执行登录。签名兼容。"""
         cfg = config_snapshot if config_snapshot is not None else (
-            self._get_runtime_config() if self._get_runtime_config else {}
+            self._get_runtime_config() if self._get_runtime_config else RuntimeConfig()
         )
         handle = self._login_orchestrator.submit(
             source="auto", config=cfg, cancel_event=cancel_event,
@@ -318,7 +319,7 @@ class TaskExecutor:
         if not task or task.get("type") != "browser":
             return False, f"浏览器任务不存在: {task_id}"
 
-        config = self._get_runtime_config() if self._get_runtime_config else {}
+        config = self._get_runtime_config() if self._get_runtime_config else RuntimeConfig()
         handle = self._login_orchestrator.submit(
             source="browser", config=config,
             cancel_event=cancel_event, timeout=timeout,
@@ -342,8 +343,8 @@ class TaskExecutor:
         # 如果没有指定 shell，使用全局配置或默认值
         if not shell_path:
             try:
-                config = self._get_runtime_config() if self._get_runtime_config else {}
-                shell_path = config.get("shell_path", "")
+                config = self._get_runtime_config() if self._get_runtime_config else RuntimeConfig()
+                shell_path = config.shell_path
             except Exception:
                 logger.debug("获取运行时 shell_path 失败，使用默认值", exc_info=True)
 

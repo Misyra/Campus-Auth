@@ -200,10 +200,10 @@ class TestStartup:
     def test_startup_starts_scheduler_when_enabled(
         self, mock_logger, mock_dashboard_sink, mock_cleanup, container_for_startup
     ):
-        """当存在启用的定时任务时，startup 应启动调度器。"""
+        """当存在启用的定时任务时，startup 应同步调度器状态。"""
         container_for_startup.task_registry.has_enabled_tasks.return_value = True
         asyncio.run(container_for_startup.startup())
-        container_for_startup.engine.start_scheduler.assert_called_once()
+        container_for_startup.engine.sync_scheduler_state.assert_called_once()
 
     @patch("app.workers.playwright_worker.cleanup_orphan_browsers")
     @patch("app.container.DashboardSink")
@@ -211,10 +211,10 @@ class TestStartup:
     def test_startup_skips_scheduler_when_no_enabled_tasks(
         self, mock_logger, mock_dashboard_sink, mock_cleanup, container_for_startup
     ):
-        """没有启用的定时任务时，startup 不应启动调度器。"""
+        """没有启用的定时任务时，startup 也应同步调度器状态（由 sync 内部判断）。"""
         container_for_startup.task_registry.has_enabled_tasks.return_value = False
         asyncio.run(container_for_startup.startup())
-        container_for_startup.engine.start_scheduler.assert_not_called()
+        container_for_startup.engine.sync_scheduler_state.assert_called_once()
 
     @patch("app.workers.playwright_worker.cleanup_orphan_browsers")
     @patch("app.container.DashboardSink")

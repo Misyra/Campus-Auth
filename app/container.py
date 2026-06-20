@@ -116,8 +116,7 @@ class ServiceContainer:
             cleanup_orphan_browsers()
             self.start_web_services()
             self.engine.boot()
-            if self.task_registry.has_enabled_tasks():
-                self.engine.start_scheduler()
+            self.engine.sync_scheduler_state()
             container_logger.info("服务容器启动完成")
         except Exception:
             container_logger.exception("服务启动失败，正在清理...")

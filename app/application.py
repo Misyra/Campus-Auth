@@ -117,8 +117,7 @@ def _create_lifespan(existing_container, boot_engine=False):
             services.start_web_services()
             if boot_engine and not services.engine._is_monitoring:
                 services.engine.boot()
-            if services.engine.has_enabled_tasks():
-                services.engine.start_scheduler()
+            services.engine.sync_scheduler_state()
         else:
             from app.container import ServiceContainer
 

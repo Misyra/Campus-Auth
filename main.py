@@ -25,6 +25,7 @@ from app.schemas import (  # noqa: E402
     LaunchContext,
     LaunchSource,
     LoginResult,
+    RuntimeConfig,
     RuntimeMode,
     StartupAction,
     StartupResult,
@@ -174,31 +175,31 @@ def _load_login_config(logger):
     """加载登录所需的运行时配置。
 
     Returns:
-        (runtime_config, None) — 成功时返回配置字典和 None。
+        (RuntimeConfig, None) — 成功时返回 RuntimeConfig 和 None。
         (None, LoginResult.CONFIG_ERROR) — 失败时返回 None 和错误结果。
     """
-    from app.services.config_service import build_runtime_dict_from_payload
+    from app.services.config_service import build_runtime_config
     from app.services.runtime_config import load_runtime_config
 
     ps = create_profile_service()
     data = ps.load()
-    payload, has_decrypt_error = load_runtime_config(ps)
+    payload, has_decrypt_error = load_runtime_config(ps, data)
     if has_decrypt_error:
         logger.warning("密码解密失败，请检查配置")
         return None, LoginResult.CONFIG_ERROR
-    runtime_config = build_runtime_dict_from_payload(
+    runtime_config = build_runtime_config(
         payload, global_settings=data.global_settings
     )
     return runtime_config, None
 
 
-def _execute_login_with_retries(runtime_config: dict, logger) -> LoginResult:
+def _execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginResult:
     """执行登录，含固定间隔重试。
 
     用 ImmediatePolicy + LoginOrchestrator，不再自己写重试/超时/历史。
 
     Args:
-        runtime_config: 运行时配置字典。
+        runtime_config: 运行时配置。
         logger: 日志记录器。
 
     Returns:
@@ -221,10 +222,9 @@ def _execute_login_with_retries(runtime_config: dict, logger) -> LoginResult:
         profile_service=profile_service,
     )
 
-    retry_settings = runtime_config.get("retry_settings", {})
     policy = ImmediatePolicy(
-        max_retries=retry_settings.get("max_retries", 3),
-        interval=retry_settings.get("retry_interval", 5),
+        max_retries=runtime_config.retry.max_retries,
+        interval=runtime_config.retry.retry_interval,
     )
 
     try:
@@ -271,7 +271,7 @@ def _run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
     try:
         from app.network.decision import check_network_status
 
-        network_ok, reason, _ = check_network_status(runtime_config)
+        network_ok, reason, _ = check_network_status(runtime_config.monitor)
         if network_ok:
             print("网络已连接，无需登录，正在退出...")
             return LoginResult.SUCCESS
@@ -432,8 +432,7 @@ def _run_lightweight(ctx: ApplicationContext, logger):
         Path(__file__).parent.resolve(), mode="lightweight"
     )
     container.engine.boot()
-    if container.engine.has_enabled_tasks():
-        container.engine.start_scheduler()
+    container.engine.sync_scheduler_state()
     logger.info("轻量模式启动: 仅监控 + 定时任务，按 Ctrl+C 停止")
 
     # Web 服务状态

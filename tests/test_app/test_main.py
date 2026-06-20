@@ -14,7 +14,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.schemas import LoginResult
+from app.schemas import LoginCredentials, LoginResult, RetrySettings, RuntimeConfig
+
+_TEST_CREDS = LoginCredentials(username="u", password="p", auth_url="http://x")
 
 # ══════════════════════════════════════════════════════════════════════
 #  辅助工具
@@ -500,11 +502,8 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_dict_from_payload",
-                return_value={
-                    "username": "u", "password": "p", "auth_url": "http://x",
-                    "retry_settings": {"max_retries": 3},
-                },
+                "app.services.config_service.build_runtime_config",
+                return_value=RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)),
             ),
             patch(
                 "app.services.runtime_config.load_runtime_config",
@@ -532,11 +531,8 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_dict_from_payload",
-                return_value={
-                    "username": "u", "password": "p", "auth_url": "http://x",
-                    "retry_settings": {"max_retries": 3, "retry_interval": 1},
-                },
+                "app.services.config_service.build_runtime_config",
+                return_value=RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3, retry_interval=1)),
             ),
             patch(
                 "app.services.runtime_config.load_runtime_config",
@@ -563,11 +559,8 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_dict_from_payload",
-                return_value={
-                    "username": "u", "password": "p", "auth_url": "http://x",
-                    "retry_settings": {"max_retries": 2, "retry_interval": 0},
-                },
+                "app.services.config_service.build_runtime_config",
+                return_value=RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=2, retry_interval=1)),
             ),
             patch(
                 "app.services.runtime_config.load_runtime_config",
@@ -598,11 +591,8 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_dict_from_payload",
-                return_value={
-                    "username": "u", "password": "p", "auth_url": "http://x",
-                    "retry_settings": {"max_retries": 3},
-                },
+                "app.services.config_service.build_runtime_config",
+                return_value=RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)),
             ),
             patch(
                 "app.services.runtime_config.load_runtime_config",
@@ -633,11 +623,8 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_dict_from_payload",
-                return_value={
-                    "username": "u", "password": "p", "auth_url": "http://x",
-                    "retry_settings": {"max_retries": 3},
-                },
+                "app.services.config_service.build_runtime_config",
+                return_value=RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)),
             ),
             patch(
                 "app.services.runtime_config.load_runtime_config",
@@ -669,11 +656,8 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_dict_from_payload",
-                return_value={
-                    "username": "u", "password": "p", "auth_url": "http://x",
-                    "retry_settings": {"max_retries": 3},
-                },
+                "app.services.config_service.build_runtime_config",
+                return_value=RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)),
             ),
             patch(
                 "app.services.runtime_config.load_runtime_config",
@@ -705,11 +689,7 @@ class TestLoginOnceRetryInterval:
         success_result = MagicMock(success=True, data="ok")
         mock_worker.submit.side_effect = [fail_result, fail_result, success_result]
 
-        runtime_config = {
-            "username": "u", "password": "p", "auth_url": "http://x",
-            "retry_settings": {"max_retries": 3, "retry_interval": 5},
-            "login_timeout": 120,
-        }
+        runtime_config = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3, retry_interval=5))
 
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
@@ -735,11 +715,12 @@ class TestLoginOnceRetryInterval:
         success_result = MagicMock(success=True, data="ok")
         mock_worker.submit.return_value = success_result
 
-        runtime_config = {
-            "username": "u", "password": "p", "auth_url": "http://x",
-            "retry_settings": {"max_retries": 1},
-            "login_timeout": 200,
-        }
+        from app.schemas import BrowserSettings
+        runtime_config = RuntimeConfig(
+            credentials=_TEST_CREDS,
+            retry=RetrySettings(max_retries=1),
+            browser=BrowserSettings(login_timeout=200),
+        )
 
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
@@ -763,11 +744,7 @@ class TestLoginOnceRetryInterval:
         success_result = MagicMock(success=True, data="ok")
         mock_worker.submit.return_value = success_result
 
-        runtime_config = {
-            "username": "u", "password": "p", "auth_url": "http://x",
-            "retry_settings": {"max_retries": 1},
-            # 无 login_timeout
-        }
+        runtime_config = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=1))
 
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
