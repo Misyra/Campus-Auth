@@ -2,6 +2,31 @@
 
 ## 2026-06-21
 
+### refactor: 迁移 TaskExecutor/main/application 至 RuntimeConfig
+- `app/services/task_executor.py`：
+  - `__init__` 和 `set_runtime_config_getter` 类型注解从 `Callable[[], dict]` 改为 `Callable[[], RuntimeConfig]`
+  - `execute_login_async`/`execute_login` 的 `config_snapshot` 类型从 `dict | None` 改为 `RuntimeConfig | None`
+  - `_execute_browser` fallback 从 `{}` 改为 `RuntimeConfig()`
+  - `_execute_shell` 的 `config.get("shell_path", "")` 改为 `config.shell_path` 属性访问
+  - `execute_login` fallback 从 `{}` 改为 `RuntimeConfig()`
+- `main.py`：
+  - `_load_login_config` 改用 `build_runtime_config` 替代 `build_runtime_dict_from_payload`，返回 `RuntimeConfig`
+  - `_execute_login_with_retries` 参数类型从 `dict` 改为 `RuntimeConfig`，重试设置访问改为 `runtime_config.retry.max_retries` / `runtime_config.retry.retry_interval`
+  - `check_network_status` 调用改为传递 `runtime_config.monitor`
+  - `_run_lightweight` 调度器启动改为 `sync_scheduler_state()`
+  - 顶部新增 `RuntimeConfig` 导入
+- `app/application.py`：lifespan 中调度器启动改为 `services.engine.sync_scheduler_state()`
+- `app/container.py`：startup 中调度器启动改为 `self.engine.sync_scheduler_state()`
+- 测试文件同步更新（6 个文件）：
+  - `tests/test_app/test_main.py`：patch 目标从 `build_runtime_dict_from_payload` 改为 `build_runtime_config`，返回值从 dict 改为 `RuntimeConfig(credentials=_TEST_CREDS, retry=...)`
+  - `tests/test_app/test_main_fix.py`：mock `_load_login_config` 返回 `RuntimeConfig()`
+  - `tests/test_integration/test_login_once_mode.py`：同上 + 直接传递 `RuntimeConfig` 给 `_execute_login_with_retries`
+  - `tests/test_integration/test_login_integration_extended.py`：`_runtime_config_to_dict` 改为 `model_copy(update={"retry": ...})`
+  - `tests/test_config/test_container.py`：断言从 `start_scheduler` 改为 `sync_scheduler_state`
+  - `tests/test_integration/test_app_startup.py`：同上
+  - `tests/test_services/test_task_executor_fix.py`：所有 `_get_runtime_config` 返回值从 dict 改为 `RuntimeConfig`
+- 验收：2340 测试全通过
+
 ### refactor(login): LoginAttemptHandler 解构 config dict 为命名属性
 - `app/utils/login.py`：
   - 构造函数新增解构逻辑：`_credentials`（username/password/auth_url/isp）、`_browser_settings`、`_monitor_settings`、`_active_task`、`_custom_variables`

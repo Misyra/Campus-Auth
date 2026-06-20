@@ -7,6 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.schemas import RuntimeConfig
+
 
 # ==================== 修复 1: _open_browser 逻辑简化 ====================
 # （保留原有 4 个行为测试，无变化）
@@ -171,8 +173,7 @@ class TestLoginOnceAllDisabled:
             patch("main._execute_login_with_retries") as mock_exec,
         ):
             mock_load.return_value = (
-                {"username": "test", "password": "x", "auth_url": "http://x"},
-                None,
+                RuntimeConfig(), None,
             )
             mock_check.return_value = (False, "all_disabled", "none")
 

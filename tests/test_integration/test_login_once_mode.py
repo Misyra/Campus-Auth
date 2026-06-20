@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.schemas import LoginResult
+from app.schemas import LoginCredentials, LoginResult, RuntimeConfig
 
 
 class TestLoginOnceMode:
@@ -30,8 +30,7 @@ class TestLoginOnceMode:
             patch("main._execute_login_with_retries") as mock_login,
         ):
             mock_load.return_value = (
-                {"username": "testuser", "password": "pass", "auth_url": "http://10.0.0.1"},
-                None,
+                RuntimeConfig(), None,
             )
             mock_net.return_value = (False, "network_down", "")
             mock_login.return_value = LoginResult.SUCCESS
@@ -53,8 +52,7 @@ class TestLoginOnceMode:
             patch("main._execute_login_with_retries") as mock_login,
         ):
             mock_load.return_value = (
-                {"username": "testuser", "password": "pass", "auth_url": "http://10.0.0.1"},
-                None,
+                RuntimeConfig(), None,
             )
             mock_net.return_value = (False, "network_down", "")
             mock_login.return_value = LoginResult.TEMPORARY_FAILURE
@@ -82,11 +80,8 @@ class TestLoginOnceMode:
         from main import _execute_login_with_retries
 
         logger = MagicMock()
-        runtime_config = {
-            "username": "testuser",
-            "password": "pass",
-            "auth_url": "http://10.0.0.1",
-        }
+        _creds = LoginCredentials(username="testuser", password="pass", auth_url="http://10.0.0.1")
+        runtime_config = RuntimeConfig(credentials=_creds)
 
         mock_result = MagicMock()
         mock_result.success = True
@@ -114,14 +109,11 @@ class TestLoginOnceMode:
     def test_login_once_records_failure_history(self):
         """login_once 登录失败后应记录失败历史。"""
         from main import _execute_login_with_retries
+        from app.schemas import RetrySettings
 
         logger = MagicMock()
-        runtime_config = {
-            "username": "testuser",
-            "password": "pass",
-            "auth_url": "http://10.0.0.1",
-            "retry_settings": {"max_retries": 1},
-        }
+        _creds = LoginCredentials(username="testuser", password="pass", auth_url="http://10.0.0.1")
+        runtime_config = RuntimeConfig(credentials=_creds, retry=RetrySettings(max_retries=1))
 
         mock_result = MagicMock()
         mock_result.success = False
