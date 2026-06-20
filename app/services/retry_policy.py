@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import math
 from abc import ABC, abstractmethod
 from typing import Iterator
 
@@ -54,93 +53,45 @@ class ImmediatePolicy(RetryPolicy):
 
 
 class MonitoredPolicy(RetryPolicy):
-    """监控重试策略 — 用于引擎长期网络监控，自带退避管理。
-
-    关键行为：仅在网络从断开恢复到连通时重置退避状态，
-    而非每次网络检测都重置。
+    """监控重试策略 — 固定延迟表，用于引擎长期网络监控。
 
     Args:
-        max_retries: 最大重试次数
-        interval: 基础重试间隔秒数
-        backoff_after_cycles: 经过多少个循环周期后开始指数退避
+        max_retries: 最大重试次数（默认 5）
     """
 
-    # 退避上限：30 分钟
-    _MAX_BACKOFF: float = 1800.0
+    # 固定延迟表：attempt → delay_seconds
+    _DELAYS: list[float] = [0.0, 0.0, 30.0, 60.0, 120.0]
 
-    def __init__(
-        self,
-        max_retries: int = 10,
-        interval: int = 30,
-        backoff_after_cycles: int = 3,
-    ) -> None:
+    def __init__(self, max_retries: int = 5) -> None:
         self.max_retries = max(1, max_retries)
-        self.interval = max(1, interval)
-        self.backoff_after_cycles = max(1, backoff_after_cycles)
-
-        # 内部状态
         self._attempt: int = 0
-        self._prev_network_ok: bool | None = None  # None = 未知
-
-    # -- 公开 API -------------------------------------------------------
+        self._prev_network_ok: bool | None = None
 
     def attempts(self) -> Iterator[int]:
-        """产生 1..max_retries 的重试序号。"""
         yield from range(1, self.max_retries + 1)
 
     def delay_before(self, attempt: int) -> float:
-        """返回第 attempt 次重试前的延迟。
-
-        在 backoff_after_cycles 之前返回固定 interval；
-        之后按指数退避计算，上限 1800 秒。
-        """
+        """返回第 attempt 次重试前的延迟（查表）。"""
         if attempt <= 1:
             return 0.0
-        if attempt <= self.backoff_after_cycles:
-            return float(self.interval)
-        exponent = attempt - self.backoff_after_cycles
-        delay = self.interval * math.pow(2, exponent)
-        return min(delay, self._MAX_BACKOFF)
+        idx = min(attempt - 1, len(self._DELAYS) - 1)
+        return self._DELAYS[idx]
 
     def on_network_check(self, need_login: bool) -> bool:
-        """处理一次网络检测结果。
-
-        仅在网络从 "需要登录"（断开）恢复到 "不需要登录"（连通）时
-        重置退避状态。
-
-        Args:
-            need_login: True 表示当前网络断开/需要认证
-
-        Returns:
-            True 表示检测到 down->up 恢复转换（调用方可据此重置重试计数）
-        """
+        """网络检测结果回调。仅在 down→up 转换时重置。"""
         current_ok = not need_login
         transitioned = False
-
         if self._prev_network_ok is False and current_ok is True:
-            # down -> up 转换：重置退避状态
             self._attempt = 0
             transitioned = True
-
         self._prev_network_ok = current_ok
         return transitioned
 
     def on_login_done(self, success: bool) -> float | None:
-        """处理登录完成事件。
-
-        注意：首次失败返回 0.0 延迟（立即重试），这是有意设计。
-
-        Args:
-            success: 登录是否成功
-
-        Returns:
-            成功时返回 0.0，失败时返回下次重试的延迟秒数，
-            超过 max_retries 时返回 None
-        """
+        """登录完成回调。返回下次检测前的延迟秒数（None=停止）。"""
         if success:
             self._attempt = 0
-            return 0.0
-
+            return None
         self._attempt += 1
         if self._attempt >= self.max_retries:
             return None
