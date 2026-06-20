@@ -1,5 +1,14 @@
 # 修改日志
 
+## 2026-06-21 (2)
+
+### fix: 修复 login.py check_network_status 类型不匹配并移除 engine 死代码
+- `app/utils/login.py`：
+  - `_execute_script_task` 中 `check_network_status` 调用从传入 `self.config`（dict）改为构造 `MonitorSettings`（Pydantic 模型）
+  - 修复运行时 AttributeError（check_network_status 签名要求 MonitorSettings 而非 dict）
+- `app/services/engine.py`：
+  - 移除 `_runtime_config_to_dict` 静态方法（无调用者，死代码）
+
 ## 2026-06-21
 
 ### cleanup: 移除旧配置 dict 构建器和废弃的调度器方法

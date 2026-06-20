@@ -253,7 +253,9 @@ class LoginAttemptHandler:
         self.logger.info("脚本已执行，等待网络验证...")
         await asyncio.sleep(LOGIN_SUCCESS_SETTLE_SECONDS)
 
-        net_ok, net_msg, _ = await asyncio.to_thread(check_network_status, self.config)
+        from app.schemas import MonitorSettings
+        monitor_settings = MonitorSettings(**{k: v for k, v in self._monitor_settings.items() if k in MonitorSettings.model_fields})
+        net_ok, net_msg, _ = await asyncio.to_thread(check_network_status, monitor_settings)
 
         total = time.perf_counter() - phase_start
         if net_ok:
