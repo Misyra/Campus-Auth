@@ -547,7 +547,7 @@ class TestDoNetworkCheck:
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
         svc._do_network_check()
-        assert svc._consecutive_login_failures == 0
+        assert svc._retry_policy._attempt == 0
 
     def test_do_network_check_profile_switch(self, engine_factory):
         svc = engine_factory(raw=True)
@@ -594,23 +594,22 @@ class TestNetworkCheckBackoff:
         svc._do_async_login.assert_called_once()
 
     def test_no_login_needed_resets_failure_counters(self, engine_factory):
-        """need_login=False 应清空连续失败计数和退避乘数。"""
+        """need_login=False 应通过 _retry_policy.on_network_check 重置退避。"""
         svc = engine_factory(raw=True)
         mock_core = MagicMock()
         mock_core.check_once.return_value = {"need_login": False, "interval": 600}
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._consecutive_login_failures = 5
-        svc._backoff_check_multiplier = 4
+        svc._retry_policy._attempt = 5
+        svc._retry_policy._prev_network_ok = False  # 模拟之前断开
         svc._do_network_check()
-        assert svc._consecutive_login_failures == 0
-        assert svc._backoff_check_multiplier == 1
+        assert svc._retry_policy._attempt == 0
 
     def test_on_done_auto_success_clears_failure_count(self, engine_factory):
-        """自动登录成功应清空连续失败计数。"""
+        """自动登录成功应通过 _retry_policy.on_login_done 重置退避。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
-        svc._consecutive_login_failures = 3
+        svc._retry_policy._attempt = 3
         future = Future()
         handle = MagicMock()
         handle.rejected_reason = None
@@ -618,13 +617,14 @@ class TestNetworkCheckBackoff:
         svc._orchestrator.submit.return_value = handle
         svc._do_async_login()
         future.set_result((True, "登录成功"))
-        assert svc._consecutive_login_failures == 0
+        import time; time.sleep(0.1)  # 等待回调执行
+        assert svc._retry_policy._attempt == 0
 
     def test_on_done_auto_failure_increments_count(self, engine_factory):
-        """自动登录失败应递增连续失败计数。"""
+        """自动登录失败应通过 _retry_policy.on_login_done 递增退避计数。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
-        svc._consecutive_login_failures = 0
+        svc._retry_policy._attempt = 0
         future = Future()
         handle = MagicMock()
         handle.rejected_reason = None
@@ -632,15 +632,14 @@ class TestNetworkCheckBackoff:
         svc._orchestrator.submit.return_value = handle
         svc._do_async_login()
         future.set_result((False, "登录失败"))
-        assert svc._consecutive_login_failures == 1
+        import time; time.sleep(0.1)  # 等待回调执行
+        assert svc._retry_policy._attempt == 1
 
     def test_on_done_auto_failure_triggers_backoff(self, engine_factory):
-        """连续失败达到阈值后应触发降频。"""
+        """连续失败后 _retry_policy 应返回退避延迟。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
-        svc._consecutive_login_failures = 2  # 再失败一次就达到阈值 3
-        svc._backoff_check_multiplier = 1
-        svc._monitor_check_interval = 300
+        svc._retry_policy._attempt = 2  # 再失败一次就到 attempt=3，delay=30
         future = Future()
         handle = MagicMock()
         handle.rejected_reason = None
@@ -648,15 +647,16 @@ class TestNetworkCheckBackoff:
         svc._orchestrator.submit.return_value = handle
         svc._do_async_login()
         future.set_result((False, "登录失败"))
-        assert svc._consecutive_login_failures == 3
-        # 乘数应从 1 升至 2
-        assert svc._backoff_check_multiplier == 2
+        import time; time.sleep(0.1)  # 等待回调执行
+        assert svc._retry_policy._attempt == 3
+        # attempt=3 → delay_before(3)=30.0
+        assert svc._next_network_check > time.time() + 29
 
     def test_on_done_manual_login_does_not_affect_failure_count(self, engine_factory):
-        """手动登录结果不应影响连续失败计数。"""
+        """手动登录结果不应影响自动登录的退避计数。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
-        svc._consecutive_login_failures = 2
+        svc._retry_policy._attempt = 2
         future = Future()
         handle = MagicMock()
         handle.rejected_reason = None
@@ -664,14 +664,15 @@ class TestNetworkCheckBackoff:
         svc._orchestrator.submit.return_value = handle
         svc._do_async_login(is_manual=True)
         future.set_result((False, "登录失败"))
+        import time; time.sleep(0.1)  # 等待回调执行
         # 手动登录不应递增
-        assert svc._consecutive_login_failures == 2
+        assert svc._retry_policy._attempt == 2
 
     def test_on_done_manual_success_does_not_clear_failure_count(self, engine_factory):
-        """手动登录成功不应清空自动登录的连续失败计数。"""
+        """手动登录成功不应清空自动登录的退避计数。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
-        svc._consecutive_login_failures = 2
+        svc._retry_policy._attempt = 2
         future = Future()
         handle = MagicMock()
         handle.rejected_reason = None
@@ -679,55 +680,13 @@ class TestNetworkCheckBackoff:
         svc._orchestrator.submit.return_value = handle
         svc._do_async_login(is_manual=True)
         future.set_result((True, "登录成功"))
-        assert svc._consecutive_login_failures == 2
+        import time; time.sleep(0.1)  # 等待回调执行
+        assert svc._retry_policy._attempt == 2
 
-    def test_login_retry_max_cycles(self, engine_factory):
+    def test_retry_policy_init_field_exist(self, engine_factory):
+        """__init__ 中应初始化 _retry_policy。"""
         svc = engine_factory(raw=True)
-        assert svc._login_retry_max_cycles() == 3
-
-    def test_apply_backoff_interval_caps_multiplier(self, engine_factory):
-        """退避乘数不应超过 6。"""
-        svc = engine_factory(raw=True)
-        svc._backoff_check_multiplier = 6
-        svc._monitor_check_interval = 300
-        svc._consecutive_login_failures = 10
-        svc._apply_backoff_interval()
-        assert svc._backoff_check_multiplier == 6
-
-    def test_apply_backoff_interval_increases_multiplier(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._backoff_check_multiplier = 1
-        svc._monitor_check_interval = 300
-        svc._consecutive_login_failures = 3
-        svc._apply_backoff_interval()
-        assert svc._backoff_check_multiplier == 2
-        # extra = (2-1) * 300 = 300
-        assert svc._next_network_check > time.time() + 299
-
-    def test_apply_backoff_interval_doubles_each_time(self, engine_factory):
-        """连续触发退避应指数增长。"""
-        svc = engine_factory(raw=True)
-        svc._monitor_check_interval = 300
-        svc._consecutive_login_failures = 3
-
-        svc._backoff_check_multiplier = 1
-        svc._apply_backoff_interval()
-        assert svc._backoff_check_multiplier == 2  # extra = 300s
-
-        svc._apply_backoff_interval()
-        assert svc._backoff_check_multiplier == 4  # extra = 900s
-
-        svc._apply_backoff_interval()
-        assert svc._backoff_check_multiplier == 6  # extra = 1500s (cap)
-
-        svc._apply_backoff_interval()
-        assert svc._backoff_check_multiplier == 6  # 保持 cap
-
-    def test_init_fields_exist(self, engine_factory):
-        """__init__ 中应初始化降频相关字段。"""
-        svc = engine_factory(raw=True)
-        assert svc._consecutive_login_failures == 0
-        assert svc._backoff_check_multiplier == 1
+        assert svc._retry_policy._attempt == 0
 
 
 class TestDoAsyncLogin:
@@ -774,13 +733,13 @@ class TestDoAsyncLogin:
         svc = engine_factory(raw=True)
         svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         svc._orchestrator.submit.side_effect = RuntimeError("pool closed")
-        svc._consecutive_login_failures = 0
+        svc._retry_policy._attempt = 0
         with pytest.raises(RuntimeError):
             svc._do_async_login()
-        assert svc._consecutive_login_failures == 0
+        assert svc._retry_policy._attempt == 0
 
     def test_success_increments_retry_count(self, engine_factory):
-        """成功提交后连续失败计数应保持不变。"""
+        """成功提交后退避计数应保持不变。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = {"username": "u", "password": "p", "auth_url": "http://x"}
         future = Future()
@@ -788,10 +747,10 @@ class TestDoAsyncLogin:
         handle.rejected_reason = None
         handle.future = future
         svc._orchestrator.submit.return_value = handle
-        svc._consecutive_login_failures = 0
+        svc._retry_policy._attempt = 0
         svc._do_async_login()
-        # 自动登录成功时失败计数由 done callback 重置
-        assert svc._consecutive_login_failures == 0
+        # 提交成功，退避计数不受提交影响（由回调处理）
+        assert svc._retry_policy._attempt == 0
 
     def test_config_validation_blocks_auto_login(self, engine_factory):
         """配置不完整时自动登录应被拦截，不提交任务。"""
@@ -812,7 +771,6 @@ class TestDoAsyncLogin:
         handle.rejected_reason = "登录配置不完整"
         handle.future = None
         svc._orchestrator.submit.return_value = handle
-        svc._consecutive_login_failures = 2
         result = svc._do_async_login()
         assert result is False
 
