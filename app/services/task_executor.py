@@ -81,16 +81,12 @@ class TaskExecutor:
         registry: Any,
         history_store: Any,
         worker_getter: Callable,
-        login_history: Any = None,
-        profile_service: Any = None,
         get_runtime_config: Callable[[], dict] | None = None,
         login_orchestrator: Any = None,
     ) -> None:
         self._registry = registry
         self._history_store = history_store
         self._worker_getter = worker_getter
-        self._login_history = login_history
-        self._profile_service = profile_service
         self._get_runtime_config = get_runtime_config
         self._login_orchestrator = login_orchestrator
 
