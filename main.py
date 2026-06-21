@@ -568,10 +568,12 @@ def _run_full(
     try:
         try:
             _ps = create_profile_service()
-            _logging = _ps.load().config.logging
+            _data = _ps.load()
+            _logging = _data.config.logging
             _al = bool(_logging.access_log)
             _lr = max(1, int(_logging.log_retention_days))
         except (AttributeError, TypeError, ValueError):
+            _data = None
             _al, _lr = False, 7
 
         run(
@@ -580,6 +582,7 @@ def _run_full(
             existing_container=container,
             server_ref=_uvicorn_server,
             boot_engine=should_boot_engine,
+            logging_settings=_logging if _data else None,
         )
     except KeyboardInterrupt:
         logger.info("收到退出信号，正在关闭服务...")

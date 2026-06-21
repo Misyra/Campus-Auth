@@ -24,6 +24,7 @@ from app.constants import (
     SCREENSHOTS_DIR,
     TEMP_DIR,
 )
+from app.schemas import LoggingSettings
 from app.utils.logging import LogConfigCenter, get_logger
 from app.utils.ports import resolve_port
 
@@ -384,6 +385,7 @@ def run(
     existing_container=None,
     server_ref: list | None = None,
     boot_engine: bool = False,
+    logging_settings: LoggingSettings | None = None,
 ) -> None:
     """启动 uvicorn Web 服务器。
 
@@ -395,40 +397,28 @@ def run(
 
     import uvicorn
 
-    sys_logging = None
-    if access_log_enabled is None or log_retention is None:
-        # 调用方未传入日志配置，从 settings.json 读取
+    # 使用调用方传入的日志配置，或从 settings.json 读取
+    if logging_settings is None and (access_log_enabled is None or log_retention is None):
         try:
             from app.services.profile_service import ProfileService
 
             profile_service = ProfileService(PROJECT_ROOT)
-            sys_logging = profile_service.load().config.logging
-            if access_log_enabled is None:
-                access_log_enabled = bool(sys_logging.access_log)
-            if log_retention is None:
-                log_retention = max(1, sys_logging.log_retention_days)
+            logging_settings = profile_service.load().config.logging
         except Exception:
             startup_logger.warning("读取日志配置失败，使用默认值", exc_info=True)
-            if access_log_enabled is None:
-                access_log_enabled = False
-            if log_retention is None:
-                log_retention = 7
-    else:
-        # 调用方已传入日志配置，但仍需读取 source_levels
-        try:
-            from app.services.profile_service import ProfileService
 
-            profile_service = ProfileService(PROJECT_ROOT)
-            sys_logging = profile_service.load().config.logging
-        except Exception:
-            pass  # source_levels 恢复失败不影响启动
+    # 填充未传入的参数
+    if access_log_enabled is None:
+        access_log_enabled = bool(logging_settings.access_log) if logging_settings else False
+    if log_retention is None:
+        log_retention = max(1, logging_settings.log_retention_days) if logging_settings else 7
 
     log_center = LogConfigCenter.get_instance()
     log_center.initialize({"level": "INFO"}, source="backend")
 
-    # 从 settings.json 恢复 source 级别配置
-    if sys_logging is not None and sys_logging.source_levels:
-        for src, lvl in sys_logging.source_levels.items():
+    # 恢复 source 级别日志配置
+    if logging_settings is not None and logging_settings.source_levels:
+        for src, lvl in logging_settings.source_levels.items():
             with contextlib.suppress(ValueError):
                 log_center.set_source_level(src, lvl)
 
