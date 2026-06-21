@@ -1,5 +1,45 @@
 # 修改日志
 
+## 2026-06-21 (14)
+
+### refactor(engine): _ui_config 改用 RuntimeConfig
+- `app/services/engine.py`：
+  - 删除 `MonitorConfigPayload` 导入（第 26 行）
+  - `_ui_config` 字段类型从 `MonitorConfigPayload` 改为 `RuntimeConfig`，初始值从 `MonitorConfigPayload()` 改为 `RuntimeConfig()`
+  - `get_config()` 返回类型从 `MonitorConfigPayload` 改为 `RuntimeConfig`
+  - engine.py 中不再引用 `MonitorConfigPayload`
+
+## 2026-06-21 (13)
+
+### refactor: 合并 runtime_config.py 到 config_service.py
+- `app/services/config_service.py`：新增 `load_active_config(profile_service) -> tuple[RuntimeConfig, bool]`，从活跃 Profile 加载并解密密码，返回完整 RuntimeConfig
+- `app/services/engine.py`：`_reload_config_internal` 改用 `load_active_config`，`_ui_config` 改为 `data.config`（RuntimeConfig 类型）
+- `main.py`：`_load_login_config` 改用 `load_active_config`，删除旧版 `build_runtime_config` + `load_runtime_config` 调用
+- 删除 `app/services/runtime_config.py`（`load_payload_from_profiles`、`load_ui_config`、`load_runtime_config`）
+- 测试修复：`test_backend_services.py`、`test_config_merge.py`、`test_main.py`、`test_integration/conftest.py` 更新 import 和 mock 路径
+- 清理已删除的 `save_config_combined` 相关 import 和测试类
+
+## 2026-06-21 (12)
+
+### refactor(config_service): 重写 build_runtime_config 和 save_and_apply
+- `app/services/config_service.py`：
+  - 删除 `_update_global_settings` 函数（旧版全局设置循环赋值）
+  - 删除 `save_config_combined` 函数（旧版原子化保存）
+  - 删除旧版 `build_runtime_config(payload: MonitorConfigPayload, global_settings: SystemSettings | None)`（130 行逐字段搬运）
+  - 新增 `build_runtime_config(config: RuntimeConfig, profile: Profile) -> RuntimeConfig`：从 RuntimeConfig + Profile 合并凭证，返回新的 RuntimeConfig
+  - 新增 `save_and_apply(config: RuntimeConfig, profile_service, reload_fn) -> SaveResult`：保存 config 到 ProfilesData，失败自动回滚
+  - 删除 `_STRIP_FIELDS`、`_LOG_LEVEL_FIELDS` 常量（仅被删除的函数使用）
+  - 删除 `GLOBAL_SETTINGS_FIELDS`、`MonitorConfigPayload`、`SystemSettings` 导入
+  - 新增 `LoginCredentials`、`Profile`、`RuntimeConfig` 导入
+- `tests/test_services/test_config_service.py`：
+  - 删除 `TestUpdateSystemSettings`（9 个测试，对应已删除的 `_update_global_settings`）
+  - 删除 `TestSaveConfigCombined`（8 个测试，对应已删除的 `save_config_combined`）
+  - 删除 `TestBuildRuntimeConfigLoginTimeout`（2 个测试，对应旧版 `build_runtime_config`）
+  - 新增 `TestBuildRuntimeConfigV3`（7 个测试）：凭证构建、carrier 映射、browser 配置保留、掩码密码清空、active_task、credentials 替换
+  - 新增 `TestSaveAndApply`（5 个测试）：成功保存、保存失败、重载失败回滚、回滚后重载仍失败、回滚过程异常
+  - 新增 `TestRollbackConfig`（2 个测试）：字段恢复、全部字段回滚
+- 验收：14 个测试全通过
+
 ## 2026-06-21 (11)
 
 ### refactor(schemas): ProfilesData 改用 RuntimeConfig + Profile

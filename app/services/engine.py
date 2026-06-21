@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from app.network.decision import is_network_available
-from app.schemas import MonitorConfigPayload, MonitorStatusResponse, RuntimeConfig
+from app.schemas import MonitorStatusResponse, RuntimeConfig
 from app.services.monitor_service import NetworkMonitorCore
 from app.services.websocket_manager import WebSocketManager
 from app.utils import ConfigValidator
@@ -127,7 +127,7 @@ class ScheduleEngine:
         # 运行时配置快照（仅在 reload 时更新，读取零拷贝）
         self._runtime_snapshot: RuntimeConfig | None = None
         # 配置对象（由 _reload_config_internal 初始化）
-        self._ui_config: MonitorConfigPayload = MonitorConfigPayload()
+        self._ui_config: RuntimeConfig = RuntimeConfig()
         self._runtime_config: RuntimeConfig = RuntimeConfig()
 
         # 状态快照限流
@@ -595,7 +595,7 @@ class ScheduleEngine:
         """定时任务接口（供 API 路由使用）。"""
         return self._task_executor
 
-    def get_config(self) -> MonitorConfigPayload:
+    def get_config(self) -> RuntimeConfig:
         return self._ui_config.model_copy(deep=True)
 
     def _reload_config_internal(self) -> bool:
