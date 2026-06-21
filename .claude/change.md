@@ -1,5 +1,13 @@
 # 修改日志
 
+## 2026-06-22 (10)
+
+### refactor: 收敛日志配置读取为统一入口
+
+- `main.py:_run_full()`：`_ps.load()` 中间结果存入 `_data`，异常时置 `_data = None`；`run()` 新增 `logging_settings=_logging if _data else None` 参数
+- `app/application.py`：`run()` 签名新增 `logging_settings: LoggingSettings | None = None` 参数，新增 `from app.schemas import LoggingSettings` 导入
+- `app/application.py:run()` 函数体：合并原有三段日志读取逻辑为单一分支：优先使用 `logging_settings` 参数，仅当参数为 None 且 `access_log_enabled`/`log_retention` 未传入时才回退到 settings.json 读取；`source_levels` 恢复统一使用 `logging_settings`
+
 ## 2026-06-22 (9)
 
 ### fix: LogConfigCenter._source_levels 线程安全
@@ -2454,3 +2462,10 @@
   - `tests/test_services/test_engine_fix.py`：`_make_engine` 添加 `engine._registered_futures = set()`
   - `tests/test_services/test_monitor_service.py`：`test_do_async_login_delegates_to_task_executor` 添加 `svc._registered_futures = set()`
 - 验收：2328 测试全通过
+
+## 2026-06-22 (11)
+
+### config: 添加 lightweight_tray 和 auto_open_browser 默认值
+
+- `config/settings.json`：在 `config` 对象中添加 `lightweight_tray: true` 和 `auto_open_browser: false` 字段，与 `RuntimeConfig` 模型默认值保持一致
+- 注意：`config/` 目录在 `.gitignore` 中，使用 `git add -f` 强制添加
