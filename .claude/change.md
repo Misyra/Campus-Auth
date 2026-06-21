@@ -1,5 +1,19 @@
 # 修改日志
 
+## 2026-06-21 (4)
+
+### refactor(time): is_in_pause_period 直接接受 PauseSettings
+- `app/utils/time_utils.py`：
+  - 函数签名从 `is_in_pause_period(pause_config: dict[str, Any])` 改为 `is_in_pause_period(pause: PauseSettings)`
+  - 移除所有 `.get()` 调用，直接通过属性访问 `pause.enabled`、`pause.start_hour`、`pause.end_hour`
+  - 使用 `TYPE_CHECKING` 避免与 `app.schemas` 的循环导入
+- `app/network/decision.py`：
+  - `check_pause()` 移除从 `PauseSettings` 构造 dict 的中间层，直接将 `pause` 传递给 `is_in_pause_period`
+  - debug 日志从 `{}` 格式化改为具名参数输出
+- `tests/test_utils/test_utils.py`：
+  - 所有测试从 dict 构造改为 `PauseSettings(...)` 实例
+  - `test_missing_keys_*` 重命名为 `test_defaults_*`，使用 `PauseSettings()` 默认值
+
 ## 2026-06-21 (3)
 
 ### fix: 修复 debug_service 和 env.py 的 RuntimeConfig 类型兼容

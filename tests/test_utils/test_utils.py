@@ -58,6 +58,7 @@ from app.utils.platform import (
 )
 
 # ── time_utils ──
+from app.schemas import PauseSettings
 from app.utils.time_utils import is_in_pause_period
 
 # ── version ──
@@ -466,54 +467,54 @@ class TestGetProjectVersion:
 
 class TestIsInPausePeriod:
     def test_disabled(self):
-        config = {"enabled": False, "start_hour": 0, "end_hour": 6}
-        assert is_in_pause_period(config) is False
+        pause = PauseSettings(enabled=False, start_hour=0, end_hour=6)
+        assert is_in_pause_period(pause) is False
 
     def test_same_hour_means_all_day(self):
-        config = {"enabled": True, "start_hour": 5, "end_hour": 5}
-        assert is_in_pause_period(config) is True
+        pause = PauseSettings(enabled=True, start_hour=5, end_hour=5)
+        assert is_in_pause_period(pause) is True
 
     def test_normal_range_in_pause(self):
-        config = {"enabled": True, "start_hour": 0, "end_hour": 6}
+        pause = PauseSettings(enabled=True, start_hour=0, end_hour=6)
         mock_now = datetime.datetime(2025, 1, 1, 3, 0, 0)
         with patch("app.utils.time_utils.datetime") as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period(config) is True
+            assert is_in_pause_period(pause) is True
 
     def test_normal_range_outside_pause(self):
-        config = {"enabled": True, "start_hour": 0, "end_hour": 6}
+        pause = PauseSettings(enabled=True, start_hour=0, end_hour=6)
         mock_now = datetime.datetime(2025, 1, 1, 12, 0, 0)
         with patch("app.utils.time_utils.datetime") as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period(config) is False
+            assert is_in_pause_period(pause) is False
 
     def test_cross_midnight_in_pause(self):
-        config = {"enabled": True, "start_hour": 23, "end_hour": 6}
+        pause = PauseSettings(enabled=True, start_hour=23, end_hour=6)
         mock_now = datetime.datetime(2025, 1, 1, 2, 0, 0)
         with patch("app.utils.time_utils.datetime") as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period(config) is True
+            assert is_in_pause_period(pause) is True
 
     def test_cross_midnight_outside_pause(self):
-        config = {"enabled": True, "start_hour": 23, "end_hour": 6}
+        pause = PauseSettings(enabled=True, start_hour=23, end_hour=6)
         mock_now = datetime.datetime(2025, 1, 1, 12, 0, 0)
         with patch("app.utils.time_utils.datetime") as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period(config) is False
+            assert is_in_pause_period(pause) is False
 
-    def test_missing_keys_in_pause(self):
-        config = {}
+    def test_defaults_in_pause(self):
+        pause = PauseSettings()
         mock_now = datetime.datetime(2025, 1, 1, 3, 0, 0)
         with patch("app.utils.time_utils.datetime") as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period(config) is True
+            assert is_in_pause_period(pause) is True
 
-    def test_missing_keys_outside_pause(self):
-        config = {}
+    def test_defaults_outside_pause(self):
+        pause = PauseSettings()
         mock_now = datetime.datetime(2025, 1, 1, 12, 0, 0)
         with patch("app.utils.time_utils.datetime") as mock_dt:
             mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period(config) is False
+            assert is_in_pause_period(pause) is False
 
 
 

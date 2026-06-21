@@ -43,20 +43,11 @@ logger = get_logger("network_decision", source="network")
 
 
 def check_pause(pause: PauseSettings) -> tuple[bool, str]:
-    """暂停时段检查。
-
-    Returns:
-        (True, "pause_period") — 当前处于暂停时段，应跳过检测
-        (False, "")            — 不在暂停时段，可以继续
-    """
-    pause_config = {
-        "enabled": pause.enabled,
-        "start_hour": pause.start_hour,
-        "end_hour": pause.end_hour,
-    }
-    if is_in_pause_period(pause_config):
+    """暂停时段检查。"""
+    if is_in_pause_period(pause):
         logger.info("暂停时段，跳过检测")
-        logger.debug("暂停配置: {}", pause_config)
+        logger.debug("暂停配置: enabled={}, start={}, end={}",
+                      pause.enabled, pause.start_hour, pause.end_hour)
         return (True, "pause_period")
     return (False, "")
 
