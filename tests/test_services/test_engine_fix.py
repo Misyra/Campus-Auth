@@ -10,11 +10,11 @@ from app.schemas import LoginCredentials, RuntimeConfig
 
 def test_engine_test_network_default_false():
     """test_network 的 enable_tcp_check / enable_http_check 默认值应为 False。"""
-    from app.schemas import _MonitorFieldsMixin
+    from app.schemas import MonitorSettings
 
     # 获取 schema 权威默认值
-    field_info_tcp = _MonitorFieldsMixin.model_fields["enable_tcp_check"]
-    field_info_http = _MonitorFieldsMixin.model_fields["enable_http_check"]
+    field_info_tcp = MonitorSettings.model_fields["enable_tcp_check"]
+    field_info_http = MonitorSettings.model_fields["enable_http_check"]
     assert field_info_tcp.default is False
     assert field_info_http.default is False
 

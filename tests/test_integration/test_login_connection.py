@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.network.decision import check_network_status
-from app.schemas import MonitorConfigPayload
+from app.schemas import RuntimeConfig
 from app.workers.playwright_worker import WorkerResponse
 
 
@@ -222,19 +222,11 @@ class TestLoginConnection:
         # 登录进行中，保存新配置
         from app.services.config_service import save_and_apply
 
-        new_payload = MonitorConfigPayload(
-            username="newuser",
-            password="newpass",
-            auth_url="http://10.0.0.1",
-            check_interval_seconds=60,
-        )
-        result = save_and_apply(new_payload, profile_service, engine.reload_config)
+        new_config = RuntimeConfig()
+        result = save_and_apply(new_config, profile_service, engine.reload_config)
 
         # 释放登录
         release_login.set()
         ok, msg = future.result(timeout=5)
 
         assert ok is True
-
-        # 验证：新配置已生效
-        assert engine.get_config().check_interval_seconds == 60

@@ -1,5 +1,38 @@
 # 修改日志
 
+## 2026-06-21 (19)
+
+### cleanup(schemas): 删除 SystemSettings/MonitorConfigPayload/Mixin
+- `app/schemas.py`：
+  - 删除 `_MonitorFieldsMixin` 类
+  - 删除 `_CommonSettingsMixin` 类
+  - 删除 `_SystemFieldsMixin` 类
+  - 删除 `SystemSettings` 类
+  - 删除 `MonitorConfigPayload` 类
+  - 删除 `GLOBAL_SETTINGS_FIELDS` 常量
+  - `AuthProfile` 保留为 `AuthProfile = Profile` 向后兼容别名
+  - 清理不再使用的导入（`DEFAULT_HTTP_TARGETS`, `DEFAULT_NETWORK_TARGETS`, `DEFAULT_URL_CHECK_URLS`, `get_default_ua`）
+- `app/services/login_orchestrator.py`：
+  - 更新注释中的 `MonitorConfigPayload` 引用为 `BrowserSettings`
+- 测试文件修复：
+  - `tests/test_integration/conftest.py`：移除 `MonitorConfigPayload`, `SystemSettings` 导入
+  - `tests/test_api/test_api_repo_routes.py`：`MonitorConfigPayload` → `RuntimeConfig`，移除 `global_settings=SystemSettings()`
+  - `tests/test_api/test_api_system_routes.py`：`MonitorConfigPayload` → `RuntimeConfig`
+  - `tests/test_api/test_api_tasks_routes.py`：`MonitorConfigPayload` → `RuntimeConfig`
+  - `tests/test_api/test_browsers.py`：`MonitorConfigPayload` → `RuntimeConfig`
+  - `tests/test_api/test_config_fix.py`：移除 `SystemSettings` 导入和 `global_settings` 参数
+  - `tests/test_app/test_backend_services.py`：移除 `SystemSettings` 导入
+  - `tests/test_config/test_config_schemas.py`：删除对旧模型的测试类（`TestNormalizeHeadersJson`, `TestAuthUrlValidator`, `TestHeadersJsonValidator`, `TestLogLevelValidator`, `TestCustomVariablesValidator`, `TestConstrainedFields`, `TestSystemSettings`, `TestMonitorConfigPayloadFull`）
+  - `tests/test_integration/test_full_mode.py`：`MonitorConfigPayload` → `RuntimeConfig`
+  - `tests/test_integration/test_login_connection.py`：`MonitorConfigPayload` → `RuntimeConfig`
+  - `tests/test_services/test_engine_fix.py`：`_MonitorFieldsMixin` → `MonitorSettings`
+  - `tests/test_services/test_profile_service.py`：更新测试数据结构（`global_settings` → `config`）
+  - `tests/test_utils/test_utils.py`：删除 `test_schemas_uses_constant` 测试
+- 删除的测试文件：
+  - `tests/test_build_runtime_config.py`（测试旧的 `build_runtime_config(payload, gs)` 接口）
+  - `tests/test_integration/test_config_connection.py`（测试旧的 `save_and_apply(payload, ...)` 接口）
+  - `tests/test_integration/test_multi_browser.py`（测试旧的 `SystemSettings` 和 `MonitorConfigPayload`）
+
 ## 2026-06-21 (18)
 
 ### refactor(frontend): 设置页面适配嵌套配置结构
