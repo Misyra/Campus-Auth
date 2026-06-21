@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.deps import get_monitor_service, get_profile_service
-from app.schemas import ActionResponse, MonitorConfigPayload
+from app.schemas import ActionResponse, RuntimeConfig
 from app.services.config_service import save_and_apply
 from app.services.engine import ScheduleEngine
 from app.services.profile_service import ProfileService
@@ -58,18 +58,20 @@ def _persist_source_levels(request: Request, config):
     """将 source_levels 持久化到 settings.json"""
     profile_service = request.app.state.services.profile_service
     profile_service.update(
-        lambda d: setattr(d.global_settings, "source_levels", config.get_all_source_levels())
+        lambda d: setattr(d.config, "logging", d.config.logging.model_copy(update={"source_levels": config.get_all_source_levels()}))
     )
 
 
-@router.get("/api/config", response_model=MonitorConfigPayload)
+@router.get("/api/config", response_model=RuntimeConfig)
 def get_config(
     svc: ScheduleEngine = Depends(get_monitor_service),
-) -> MonitorConfigPayload:
+) -> RuntimeConfig:
     config = svc.get_config()
     # 掩码密码，不暴露加密密文（save_password_field 已识别 "•" 前缀为掩码）
-    if config.password:
-        config.password = "••••••••"
+    if config.credentials.password:
+        config = config.model_copy(update={
+            "credentials": config.credentials.model_copy(update={"password": "••••••••"})
+        })
     return config
 
 
@@ -81,7 +83,7 @@ def get_default_stealth_script() -> dict:
     return {"script": STEALTH_INIT_SCRIPT}
 
 
-def _log_config_changes(old_dict: dict, new_payload: MonitorConfigPayload) -> None:
+def _log_config_changes(old_dict: dict, new_payload: RuntimeConfig) -> None:
     """记录配置变更日志
 
     规则：
@@ -163,7 +165,7 @@ def _log_config_changes(old_dict: dict, new_payload: MonitorConfigPayload) -> No
 
 @router.put("/api/config", response_model=ActionResponse)
 def save_config(
-    payload: MonitorConfigPayload,
+    payload: RuntimeConfig,
     svc: ScheduleEngine = Depends(get_monitor_service),
     profile_svc: ProfileService = Depends(get_profile_service),
 ) -> ActionResponse:

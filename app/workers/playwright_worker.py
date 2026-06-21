@@ -777,10 +777,7 @@ class PlaywrightWorker:
                 await self._apply_stealth_and_routes(browser_settings)
 
             self._page = await self._context.new_page()
-
-            # 纯净模式下也需要应用反检测脚本（如果启用）
-            if pure_mode and browser_settings.get("stealth_mode", False):
-                await self._apply_stealth_and_routes(browser_settings)
+            # 纯净模式不注入反检测脚本——设计意图
         except Exception:
             logger.warning("浏览器启动中间步骤失败，回滚已创建的资源", exc_info=True)
             await self._close_browser()

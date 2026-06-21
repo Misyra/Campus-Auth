@@ -119,14 +119,14 @@ def get_init_status(
 ) -> dict:
     from app.utils.crypto import has_decryption_error
 
-    config = svc.get_config()
-    is_initialized = bool(config.username and config.password)
+    config = svc.get_runtime_config()
+    is_initialized = bool(config.credentials.username and config.credentials.password)
     if not is_initialized:
         api_logger.info(
             "初始化状态: 未完成 — username={}, password={}, auth_url={}",
-            f"'{config.username}'" if config.username else "空",
-            "已设置" if config.password else "空",
-            f"'{config.auth_url}'" if config.auth_url else "空",
+            f"'{config.credentials.username}'" if config.credentials.username else "空",
+            "已设置" if config.credentials.password else "空",
+            f"'{config.credentials.auth_url}'" if config.credentials.auth_url else "空",
         )
     return {
         "initialized": is_initialized,
