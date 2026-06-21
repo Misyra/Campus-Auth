@@ -142,6 +142,7 @@ class LoginOrchestrator:
         login_history: LoginHistoryService | None = None,
         profile_service: ProfileService | None = None,
         get_runtime_config: Callable[[], RuntimeConfig] | None = None,
+        pool: ThreadPoolExecutor | None = None,
     ) -> None:
         self._worker_getter = worker_getter
         self._login_history = login_history
@@ -152,8 +153,9 @@ class LoginOrchestrator:
         self._slot_lock = threading.RLock()
         self._slot: LoginHandle | None = None
 
-        # 线程池：默认单线程，外部可注入（TaskExecutor._login_pool）
-        self._pool: ThreadPoolExecutor = ThreadPoolExecutor(
+        # 线程池：外部可注入（与 TaskExecutor._login_pool 共享），
+        # 未注入时自行创建单线程池
+        self._pool: ThreadPoolExecutor = pool or ThreadPoolExecutor(
             max_workers=1,
             thread_name_prefix="login-exec",
         )
