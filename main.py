@@ -297,18 +297,14 @@ def _build_app_config(
     from app.utils.logging import get_logger
 
     logger = get_logger("startup", source="backend")
-    config = AppConfig()
-
     # 从 settings.json 加载
     try:
         _ps = create_profile_service()
         _data = _ps.load()
-        _cfg = _data.config
-        config.startup_action = StartupAction(_cfg.startup_action)
-        config.minimize_to_tray = _cfg.minimize_to_tray
-        # lightweight_tray 和 auto_open_browser 不在 RuntimeConfig 中，使用默认值
+        config = AppConfig.from_runtime_config(_data.config)
     except Exception:
         logger.debug("加载配置失败，使用默认值", exc_info=True)
+        config = AppConfig()
 
     # CLI 覆盖
     if cli_startup_action is not None:
