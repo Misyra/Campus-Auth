@@ -1,5 +1,38 @@
 # 修改日志
 
+## 2026-06-21 (10)
+
+### feat(migration): 新增 v2→v3 配置迁移逻辑
+- `app/services/config_migration.py`：
+  - 新增 `migrate_v2_to_v3(data)` 函数：将 v2 格式（扁平 global_settings）迁移到 v3 格式（结构化 config + 独立凭证 Profile）
+  - v3 格式直接返回（幂等）
+  - `_build_config_from_flat(gs)`：从扁平字段构建 browser/monitor/pause/logging/retry 子结构
+  - `_merge_credential(profile, gs)`：profile 留空字段从 global_settings 继承（含 carrier "无" 视为未设置的特殊处理）
+  - `_resolve_carrier(profile_val, global_val)`：carrier 字段回退逻辑，"无" 视为未设置
+  - `_parse_url_check_urls(raw)`：解析 url_check_urls 字符串为字典列表
+- `tests/test_services/test_config_migration.py`：5 个单元测试覆盖基本迁移、凭证回退、缺少 default profile 自动创建、多 profile 保留、v3 透传
+- 验收：5 个测试全通过
+
+## 2026-06-21 (9)
+
+### feat(schemas): 新增 Profile 模型（凭证独立持有）
+- `app/schemas.py`：
+  - 在 `AuthProfile` 类定义之后新增 `Profile` 类
+  - Profile 的字段与 AuthProfile 完全相同：name, match_gateway_ip, match_ssid, username, password, auth_url, carrier, carrier_custom, active_task
+  - 所有字段默认值为空字符串或合理默认值
+  - 保留 `auth_url` 的 `field_validator`（复用已有的 `_validate_auth_url` 函数）
+  - 不修改 AuthProfile（保持向后兼容），不修改 ProfilesData（后续 Task 会改）
+- 设计语义：每个方案独立持有凭证，不存在"留空回退到全局"语义
+- 验收：96 个测试全通过
+
+## 2026-06-21 (8)
+
+### fix(worker): 移除纯净模式下多余的 stealth 注入
+- `app/workers/playwright_worker.py`：
+  - 删除 `_start_browser` 中纯净模式下 `if pure_mode and stealth_mode` 的 `_apply_stealth_and_routes` 调用（第 781-783 行）
+  - 纯净模式设计意图为不注入反检测脚本，该分支是多余逻辑
+  - 保留注释说明设计意图
+
 ## 2026-06-21 (7)
 
 ### refactor(env): build_login_template_vars 改为显式参数
