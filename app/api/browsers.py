@@ -25,8 +25,8 @@ async def get_browsers(
 
         profile_data = profile_svc.load()
         current = "playwright"
-        if profile_data and profile_data.global_settings:
-            current = profile_data.global_settings.browser_channel
+        if profile_data and profile_data.config:
+            current = profile_data.config.browser.browser_channel
 
         return {
             "browsers": [
