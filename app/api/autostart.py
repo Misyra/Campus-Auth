@@ -43,6 +43,9 @@ def _save_autostart_lightweight(lightweight: bool) -> None:
     from app.services.profile_service import ProfileService
     from pathlib import Path
 
+    # NOTE: 每次 new ProfileService 实例，与全局注入实例的锁不同。
+    # 理论上与 config.py 的 save_and_apply 并发写 settings.json 会丢更新，
+    # 但单用户桌面应用场景下触发概率极低，暂不修复。
     ps = ProfileService(Path(__file__).parent.parent.parent.resolve())
     ps.update(lambda d: setattr(d, "config", d.config.model_copy(update={"autostart_lightweight": lightweight})))
 
