@@ -399,6 +399,28 @@ class AuthProfile(BaseModel):
         return _validate_auth_url(v)
 
 
+class Profile(BaseModel):
+    """认证方案 — 凭证 + 匹配规则。
+
+    每个方案独立持有自己的凭证，不存在"留空回退到全局"语义。
+    替代 AuthProfile，用于新的 ProfilesData 结构。
+    """
+    name: str = Field(default="默认方案")
+    match_gateway_ip: str = ""
+    match_ssid: str = ""
+    username: str = ""
+    password: str = ""          # ENC: 加密存储
+    auth_url: str = ""
+    carrier: str = "无"
+    carrier_custom: str = ""
+    active_task: str = ""
+
+    @field_validator("auth_url")
+    @classmethod
+    def validate_auth_url(cls, v: str) -> str:
+        return _validate_auth_url(v)
+
+
 class ProfilesData(BaseModel):
     """Top-level structure of settings.json"""
 
