@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 import time
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -21,12 +20,7 @@ class TestResolvePort:
 
     def test_default_port(self):
         """默认端口 50721。"""
-        with (
-            patch.dict("os.environ", {"APP_PORT": ""}, clear=False),
-            patch("app.utils.ports.PROJECT_ROOT") as mock_root,
-        ):
-            # mock settings.json 不存在
-            mock_root.__truediv__ = lambda self, x: Path("/nonexistent/settings.json")
+        with patch.dict("os.environ", {"APP_PORT": ""}, clear=False):
             port = resolve_port()
             assert port == 50721
 
@@ -38,21 +32,13 @@ class TestResolvePort:
 
     def test_invalid_env_port(self):
         """无效环境变量 APP_PORT 回退到默认值。"""
-        with (
-            patch.dict("os.environ", {"APP_PORT": "not_a_number"}),
-            patch("app.utils.ports.PROJECT_ROOT") as mock_root,
-        ):
-            mock_root.__truediv__ = lambda self, x: Path("/nonexistent/settings.json")
+        with patch.dict("os.environ", {"APP_PORT": "not_a_number"}):
             port = resolve_port()
             assert port == 50721
 
     def test_out_of_range_port(self):
         """超出范围的端口回退到默认值。"""
-        with (
-            patch.dict("os.environ", {"APP_PORT": "99999"}),
-            patch("app.utils.ports.PROJECT_ROOT") as mock_root,
-        ):
-            mock_root.__truediv__ = lambda self, x: Path("/nonexistent/settings.json")
+        with patch.dict("os.environ", {"APP_PORT": "99999"}):
             port = resolve_port()
             assert port == 50721
 

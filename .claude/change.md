@@ -1,5 +1,29 @@
 # 修改日志
 
+## 2026-06-22 (3)
+
+### fix(ports): 移除不存在的 global_settings.app_port 读取
+
+- `app/utils/ports.py`：移除 `json`、`PROJECT_ROOT` 导入和 settings.json 读取逻辑，简化为仅从环境变量 APP_PORT 读取
+- `tests/test_utils/test_ports.py`：删除 `TestResolvePortFromSettings`、`TestResolvePortSettingsErrors`、`TestResolvePortPriority` 测试类（对应已删除的 settings.json 读取逻辑）
+- `tests/test_app/test_application_logic.py`：`TestResolvePort` 中移除 `PROJECT_ROOT` mock 和 `Path` 导入
+
+## 2026-06-22 (2)
+
+### fix(bootstrap): 修复 browser_channel 读取路径
+
+- `app/workers/playwright_bootstrap.py`：`_get_browser_channel()` 从原始 JSON 读取改为使用 ProfileService 加载 Pydantic 模型
+  - 旧路径：`json.load(settings_path).get("global_settings", {}).get("browser_channel")`（不存在的字段）
+  - 新路径：`create_profile_service().load().config.browser.browser_channel`
+
+## 2026-06-22
+
+### fix(main): 修复 _run_full 中日志配置读取路径
+
+- `main.py:573-580`：`_ps.load().global_settings` → `_ps.load().config.logging`
+- `ProfilesData` 没有 `global_settings` 字段（v3 结构），正确路径是 `config.logging`（`LoggingSettings` 模型）
+- `access_log` 和 `log_retention_days` 现在能从 settings.json 正确读取
+
 ## 2026-06-21 (20)
 
 ### test: 清理旧配置模型残留引用
