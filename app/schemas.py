@@ -69,6 +69,16 @@ class AppConfig:
     lightweight_tray: bool = True
     auto_open_browser: bool = False
 
+    @classmethod
+    def from_runtime_config(cls, config: RuntimeConfig) -> AppConfig:
+        """从 RuntimeConfig 统一派生 AppConfig，消除手动同步风险。"""
+        return cls(
+            startup_action=StartupAction(config.startup_action),
+            minimize_to_tray=config.minimize_to_tray,
+            lightweight_tray=config.lightweight_tray,
+            auto_open_browser=config.auto_open_browser,
+        )
+
 
 @dataclass
 class LaunchContext:
