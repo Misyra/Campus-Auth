@@ -395,7 +395,7 @@ def run(
 
     import uvicorn
 
-    sys_settings = None
+    sys_logging = None
     if access_log_enabled is None or log_retention is None:
         # 调用方未传入日志配置，从 settings.json 读取
         try:
@@ -413,13 +413,22 @@ def run(
                 access_log_enabled = False
             if log_retention is None:
                 log_retention = 7
+    else:
+        # 调用方已传入日志配置，但仍需读取 source_levels
+        try:
+            from app.services.profile_service import ProfileService
+
+            profile_service = ProfileService(PROJECT_ROOT)
+            sys_logging = profile_service.load().config.logging
+        except Exception:
+            pass  # source_levels 恢复失败不影响启动
 
     log_center = LogConfigCenter.get_instance()
     log_center.initialize({"level": "INFO"}, source="backend")
 
     # 从 settings.json 恢复 source 级别配置
-    if sys_settings is not None and hasattr(sys_settings, "source_levels") and sys_settings.source_levels:
-        for src, lvl in sys_settings.source_levels.items():
+    if sys_logging is not None and sys_logging.source_levels:
+        for src, lvl in sys_logging.source_levels.items():
             with contextlib.suppress(ValueError):
                 log_center.set_source_level(src, lvl)
 
