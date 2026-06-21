@@ -18,6 +18,33 @@ from .profile_service import ProfileService
 config_logger = get_logger("config_service", source="backend")
 
 
+def load_active_config(
+    profile_service: ProfileService,
+) -> tuple[RuntimeConfig, bool]:
+    """加载活跃方案的完整运行时配置。
+
+    Returns:
+        (RuntimeConfig, has_decrypt_error)
+    """
+    from app.utils.crypto import decrypt_password_field
+
+    data = profile_service.load()
+    config = data.config
+    profile = data.profiles.get(data.active_profile)
+    if profile is None:
+        profile = data.profiles.get("default", Profile())
+
+    # 解密密码
+    has_error = False
+    if profile.password:
+        decrypted, err = decrypt_password_field(profile.password)
+        if err:
+            has_error = True
+        profile = profile.model_copy(update={"password": decrypted or ""})
+
+    return build_runtime_config(config, profile), has_error
+
+
 @dataclass
 class SaveResult:
     """配置保存结果。"""

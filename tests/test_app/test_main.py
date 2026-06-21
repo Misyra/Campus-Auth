@@ -502,12 +502,8 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_config",
-                return_value=RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)),
-            ),
-            patch(
-                "app.services.runtime_config.load_runtime_config",
-                return_value=(MagicMock(), False),
+                "app.services.config_service.load_active_config",
+                return_value=(RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)), False),
             ),
             patch("main.cleanup_orphan_browsers"),
             patch("time.sleep"),
@@ -531,12 +527,8 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_config",
-                return_value=RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3, retry_interval=1)),
-            ),
-            patch(
-                "app.services.runtime_config.load_runtime_config",
-                return_value=(MagicMock(), False),
+                "app.services.config_service.load_active_config",
+                return_value=(RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3, retry_interval=1)), False),
             ),
             patch("main.cleanup_orphan_browsers"),
             patch("time.sleep"),
@@ -559,12 +551,8 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_config",
-                return_value=RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=2, retry_interval=1)),
-            ),
-            patch(
-                "app.services.runtime_config.load_runtime_config",
-                return_value=(MagicMock(), False),
+                "app.services.config_service.load_active_config",
+                return_value=(RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=2, retry_interval=1)), False),
             ),
             patch(
                 "app.network.decision.check_network_status",
@@ -591,12 +579,8 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_config",
-                return_value=RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)),
-            ),
-            patch(
-                "app.services.runtime_config.load_runtime_config",
-                return_value=(MagicMock(), False),
+                "app.services.config_service.load_active_config",
+                return_value=(RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)), False),
             ),
             patch(
                 "app.network.decision.check_network_status",
@@ -623,12 +607,8 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_config",
-                return_value=RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)),
-            ),
-            patch(
-                "app.services.runtime_config.load_runtime_config",
-                return_value=(MagicMock(), False),
+                "app.services.config_service.load_active_config",
+                return_value=(RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)), False),
             ),
             patch(
                 "app.network.decision.check_network_status",
@@ -656,12 +636,8 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService", return_value=mock_ps),
             patch(
-                "app.services.config_service.build_runtime_config",
-                return_value=RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)),
-            ),
-            patch(
-                "app.services.runtime_config.load_runtime_config",
-                return_value=(MagicMock(), False),
+                "app.services.config_service.load_active_config",
+                return_value=(RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)), False),
             ),
             patch(
                 "app.network.decision.check_network_status",
