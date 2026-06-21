@@ -16,6 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.network.decision import NetworkCheckResult
 from app.schemas import LoginCredentials, RuntimeConfig
 from app.services.engine import (
     EngineCmdType,
@@ -23,6 +24,7 @@ from app.services.engine import (
     ScheduleEngine,
     StatusSnapshot,
 )
+from app.services.monitor_service import CheckOnceResult
 from app.services.retry_policy import MonitoredPolicy
 
 
@@ -308,10 +310,7 @@ class TestLoginWithNetworkDetection:
         """网络检测发现 need_login 时，触发异步登录。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
-        mock_core.check_once.return_value = {
-            "need_login": True,
-            "interval": 300,
-        }
+        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=False, net_reason="down", need_login=True, check_num=1, interval=300, result=NetworkCheckResult(available=False, method="none", latency_ms=0, detail="down"))
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
         svc._do_async_login = MagicMock()
@@ -324,10 +323,7 @@ class TestLoginWithNetworkDetection:
         """网络正常时，不触发登录，通过 _retry_policy 重置退避。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
-        mock_core.check_once.return_value = {
-            "need_login": False,
-            "interval": 600,
-        }
+        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=True, net_reason="", need_login=False, check_num=1, interval=600, result=NetworkCheckResult(available=True, method="tcp", latency_ms=0, detail=""))
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
         svc._retry_policy._attempt = 2
@@ -342,10 +338,7 @@ class TestLoginWithNetworkDetection:
         """网络检测后更新检测间隔。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
-        mock_core.check_once.return_value = {
-            "need_login": False,
-            "interval": 120,
-        }
+        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=True, net_reason="", need_login=False, check_num=1, interval=120, result=NetworkCheckResult(available=True, method="tcp", latency_ms=0, detail=""))
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
 
@@ -357,10 +350,7 @@ class TestLoginWithNetworkDetection:
         """网络检测时检测到方案切换，重启监控。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
-        mock_core.check_once.return_value = {
-            "need_login": False,
-            "interval": 300,
-        }
+        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=True, net_reason="", need_login=False, check_num=1, interval=300, result=NetworkCheckResult(available=True, method="tcp", latency_ms=0, detail=""))
         mock_core.consume_profile_switch_flag.return_value = True
         svc._monitor_core = mock_core
         svc._handle_stop = MagicMock()
@@ -390,10 +380,7 @@ class TestLoginWithNetworkDetection:
 
         # 第一次检测：网络异常，触发登录
         mock_core = MagicMock()
-        mock_core.check_once.return_value = {
-            "need_login": True,
-            "interval": 300,
-        }
+        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=False, net_reason="down", need_login=True, check_num=1, interval=300, result=NetworkCheckResult(available=False, method="none", latency_ms=0, detail="down"))
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
         svc._runtime_config = RuntimeConfig()
@@ -404,10 +391,7 @@ class TestLoginWithNetworkDetection:
         svc._do_async_login.assert_called_once()
 
         # 第二次检测：网络恢复正常
-        mock_core.check_once.return_value = {
-            "need_login": False,
-            "interval": 300,
-        }
+        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=True, net_reason="", need_login=False, check_num=1, interval=300, result=NetworkCheckResult(available=True, method="tcp", latency_ms=0, detail=""))
         svc._do_async_login.reset_mock()
 
         svc._do_network_check()
@@ -421,10 +405,7 @@ class TestLoginWithNetworkDetection:
         # 创建一个真实的 monitor_core（_is_monitoring 是 property，通过设置 monitor_core 控制）
         mock_core = MagicMock()
         mock_core.monitoring = True
-        mock_core.check_once.return_value = {
-            "need_login": True,
-            "interval": 300,
-        }
+        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=False, net_reason="down", need_login=True, check_num=1, interval=300, result=NetworkCheckResult(available=False, method="none", latency_ms=0, detail="down"))
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
         svc._runtime_config = RuntimeConfig()

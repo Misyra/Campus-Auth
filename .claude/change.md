@@ -1,5 +1,22 @@
 # 修改日志
 
+## 2026-06-21 (6)
+
+### refactor(monitor): check_once() 返回类型化 CheckOnceResult dataclass
+- `app/services/monitor_service.py`：
+  - 新增 `CheckOnceResult` dataclass（frozen, slots），包含 `paused`/`net_ok`/`net_reason`/`need_login`/`check_num`/`interval`/`result` 7 个字段
+  - `check_once()` 返回类型从 `dict[str, Any]` 改为 `CheckOnceResult`
+  - 两处 `return { ... }` 替换为 `return CheckOnceResult(...)`
+- `app/services/engine.py`：
+  - `_do_network_check()` 消费端从 `result.get("interval", ...)` / `result.get("need_login", False)` 改为 `result.interval` / `result.need_login` 属性访问
+  - 移除中间变量 `interval`，直接使用 `result.interval`
+- 测试文件同步更新（5 个文件）：
+  - `tests/test_services/test_engine.py`：mock 返回值从 dict 改为 `CheckOnceResult(...)` 实例，新增 `CheckOnceResult` 和 `NetworkCheckResult` 导入
+  - `tests/test_integration/test_login_flow.py`：同上
+  - `tests/test_integration/test_login_integration_extended.py`：同上
+  - `tests/test_integration/test_network_connection.py`：`result.get(...)` 改为 `result.paused` / `result.need_login` 属性访问，mock 返回值改为 `CheckOnceResult(...)`
+- 验收：2332 测试全通过
+
 ## 2026-06-21 (5)
 
 ### refactor(validator): ConfigValidator 直接接受 RuntimeConfig

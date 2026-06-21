@@ -15,7 +15,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.network.decision import NetworkCheckResult
 from app.services.engine import EngineCmdType, EngineCommand, ScheduleEngine
+from app.services.monitor_service import CheckOnceResult
 from app.workers.playwright_worker import WorkerResponse
 
 
@@ -123,7 +125,7 @@ class TestNetworkDetectionLogin:
         _ensure_login_config(engine)
 
         mock_core = MagicMock()
-        mock_core.check_once.return_value = {"need_login": True, "interval": 300}
+        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=False, net_reason="down", need_login=True, check_num=1, interval=300, result=NetworkCheckResult(available=False, method="none", latency_ms=0, detail="down"))
         mock_core.consume_profile_switch_flag.return_value = False
         mock_core.monitoring = True
         engine._monitor_core = mock_core
