@@ -296,6 +296,8 @@ class RuntimeConfig(BaseModel, frozen=True):
     minimize_to_tray: bool = False
     startup_action: str = "none"
     autostart_lightweight: bool = True
+    lightweight_tray: bool = True
+    auto_open_browser: bool = False
 
 
 class ProfilesData(BaseModel):
