@@ -95,7 +95,12 @@ def save_and_apply(
     backup_data = copy.deepcopy(profile_service.load())
 
     def _apply(data: ProfilesData):
-        data.config = config
+        # 剥离 credentials 和 active_task — 实际数据在 profiles 中，
+        # config 中只存全局默认配置（browser/monitor/pause/logging/retry + 透传字段）
+        data.config = config.model_copy(update={
+            "credentials": LoginCredentials(),
+            "active_task": "",
+        })
 
     try:
         profile_service.update(_apply)
