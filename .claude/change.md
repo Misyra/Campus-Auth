@@ -1,5 +1,22 @@
 # 修改日志
 
+## 2026-06-21 (11)
+
+### refactor(schemas): ProfilesData 改用 RuntimeConfig + Profile
+- `app/schemas.py`：
+  - `ProfilesData` 从第 424 行移到第 545 行（`RuntimeConfig` 定义之后），避免前向引用问题
+  - 删除 `global_settings: SystemSettings` 字段
+  - 新增 `config_version: int = Field(default=3)` 字段
+  - 新增 `config: RuntimeConfig = Field(default_factory=RuntimeConfig)` 字段
+  - `profiles` 类型从 `dict[str, AuthProfile]` 改为 `dict[str, Profile]`
+  - `ensure_default_profile` 中 `AuthProfile()` 改为 `Profile()`
+  - docstring 更新为 "settings.json 顶层结构（v3）"
+- `tests/test_config/test_config_schemas.py`：
+  - 更新 `TestProfilesData` 测试类适配 v3 结构
+  - 新增 `test_config_version_default`、`test_config_is_runtime_config`、`test_no_global_settings` 测试
+  - 所有 profile 相关测试改用 `Profile` 类型
+- 验收：98 个测试全通过
+
 ## 2026-06-21 (10)
 
 ### feat(migration): 新增 v2→v3 配置迁移逻辑
