@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import socket
 from collections.abc import Iterable, Sequence
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import as_completed
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -31,10 +31,6 @@ class NetworkCheckResult:
     latency_ms: float
     detail: str = ""  # 失败时的附加信息
 
-
-_decision_executor = ThreadPoolExecutor(
-    max_workers=3, thread_name_prefix="net-decision"
-)
 
 logger = get_logger("network_decision", source="network")
 
@@ -174,7 +170,7 @@ def is_network_available(
         "开" if enable_url else "关",
     )
 
-    pool = _decision_executor
+    pool = _executor
     futures = {}
     if enable_tcp:
         futures[

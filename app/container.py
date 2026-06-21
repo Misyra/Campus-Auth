@@ -79,10 +79,10 @@ class ServiceContainer:
             login_history=self.login_history_service,
             profile_service=self.profile_service,
             get_runtime_config=self.engine.get_runtime_config,
+            pool=self.task_executor._login_pool,
         )
-        # TaskExecutor 复用 Orchestrator（注入 _login_pool）
+        # TaskExecutor 复用 Orchestrator
         self.task_executor._login_orchestrator = self.login_orchestrator
-        self.login_orchestrator._pool = self.task_executor._login_pool
         # engine 持有引用（后续 Task 7 使用）
         self.engine._orchestrator = self.login_orchestrator
 

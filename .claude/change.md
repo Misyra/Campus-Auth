@@ -1,5 +1,21 @@
 # 修改日志
 
+## 2026-06-22 (5)
+
+### fix: 修复 H1 双 login 线程池 + H2 嵌套线程池饥饿
+
+- H1: `app/services/login_orchestrator.py`：`__init__` 新增 `pool` 可选参数，外部可注入共享线程池，未注入时自行创建
+- H1: `app/container.py`：构造 `LoginOrchestrator` 时显式传入 `pool=self.task_executor._login_pool`，删除 `self.login_orchestrator._pool = ...` 的私有属性篡改
+- H2: `app/network/probes.py`：全局 `executor` 从 `max_workers=3` 扩容为 `max_workers=8, thread_name_prefix="net"`，作为网络检测共享池
+- H2: `app/network/decision.py`：删除 `_decision_executor`（3 workers 外层池），改用 `probes.executor`（共享池），消除嵌套线程池饥饿风险
+
+## 2026-06-22 (4)
+
+### fix: LoggingSettings 添加 source_levels + 修复 application.py 源级别恢复
+
+- `app/schemas.py`：为 `LoggingSettings` 添加 `source_levels: dict[str, str]` 字段，修复 `api/config.py:_persist_source_levels()` 写入被 Pydantic 静默忽略的问题
+- `app/application.py`：修复 `run()` 中 `sys_settings` 始终为 `None` 的 bug，source_levels 日志级别配置现在能正确从 settings.json 恢复
+
 ## 2026-06-22 (3)
 
 ### fix(ports): 移除不存在的 global_settings.app_port 读取
