@@ -572,9 +572,9 @@ def _run_full(
     try:
         try:
             _ps = create_profile_service()
-            _sys = _ps.load().global_settings
-            _al = bool(_sys.access_log)
-            _lr = max(1, int(_sys.log_retention_days))
+            _logging = _ps.load().config.logging
+            _al = bool(_logging.access_log)
+            _lr = max(1, int(_logging.log_retention_days))
         except (AttributeError, TypeError, ValueError):
             _al, _lr = False, 7
 
