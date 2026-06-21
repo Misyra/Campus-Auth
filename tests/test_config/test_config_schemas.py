@@ -538,22 +538,33 @@ class TestSystemSettings:
 class TestProfilesData:
     def test_default_profile_auto_created(self):
         """测试自动创建 default profile"""
+        from app.schemas import Profile
+
         data = ProfilesData()
         assert "default" in data.profiles
+        assert isinstance(data.profiles["default"], Profile)
         assert data.profiles["default"].name == "默认方案"
 
-    def test_global_settings_default(self):
-        """测试 SystemSettings 默认值"""
+    def test_config_version_default(self):
         data = ProfilesData()
-        assert isinstance(data.global_settings, SystemSettings)
-        assert data.global_settings.backend_log_level == "INFO"
+        assert data.config_version == 3
+
+    def test_config_is_runtime_config(self):
+        data = ProfilesData()
+        assert isinstance(data.config, RuntimeConfig)
+
+    def test_no_global_settings(self):
+        data = ProfilesData()
+        assert not hasattr(data, "global_settings")
 
     def test_custom_profiles(self):
         """测试自定义 profiles"""
+        from app.schemas import Profile
+
         data = ProfilesData(
             profiles={
-                "default": AuthProfile(name="默认"),
-                "custom": AuthProfile(name="自定义"),
+                "default": Profile(name="默认"),
+                "custom": Profile(name="自定义"),
             }
         )
         assert len(data.profiles) == 2
@@ -561,19 +572,24 @@ class TestProfilesData:
         assert data.profiles["custom"].name == "自定义"
 
     def test_defaults(self):
+        from app.schemas import Profile
+
         data = ProfilesData()
         assert data.auto_switch is False
         assert data.active_profile == "default"
-        assert isinstance(data.global_settings, SystemSettings)
+        assert isinstance(data.config, RuntimeConfig)
         assert isinstance(data.profiles, dict)
+        assert isinstance(data.profiles["default"], Profile)
 
     def test_with_profiles(self):
+        from app.schemas import Profile
+
         data = ProfilesData(
             auto_switch=True,
             active_profile="campus",
             profiles={
-                "default": AuthProfile(name="默认"),
-                "campus": AuthProfile(name="校园"),
+                "default": Profile(name="默认"),
+                "campus": Profile(name="校园"),
             },
         )
         assert data.auto_switch is True
@@ -582,8 +598,11 @@ class TestProfilesData:
         assert data.profiles["default"].name == "默认"
 
     def test_empty_profiles_creates_default(self):
+        from app.schemas import Profile
+
         data = ProfilesData(profiles={})
         assert "default" in data.profiles
+        assert isinstance(data.profiles["default"], Profile)
         assert data.profiles["default"].name == "默认方案"
 
 

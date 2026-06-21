@@ -421,22 +421,6 @@ class Profile(BaseModel):
         return _validate_auth_url(v)
 
 
-class ProfilesData(BaseModel):
-    """Top-level structure of settings.json"""
-
-    auto_switch: bool = Field(default=False, description="是否根据网关 IP 自动切换方案")
-    active_profile: str = Field(default="default")
-    global_settings: SystemSettings = Field(default_factory=SystemSettings)
-    profiles: dict[str, AuthProfile] = Field(default_factory=dict)
-
-    @model_validator(mode="after")
-    def ensure_default_profile(self) -> ProfilesData:
-        """确保 default profile 存在"""
-        if "default" not in self.profiles:
-            self.profiles["default"] = AuthProfile()
-        return self
-
-
 def get_runtime_features(
     mode: RuntimeMode | str, minimize_to_tray: bool, auto_open_browser: bool,
     lightweight_tray: bool = True
@@ -557,6 +541,23 @@ class RuntimeConfig(BaseModel, frozen=True):
     minimize_to_tray: bool = False
     startup_action: str = "none"
     autostart_lightweight: bool = True
+
+
+class ProfilesData(BaseModel):
+    """settings.json 顶层结构（v3）"""
+
+    config_version: int = Field(default=3)
+    config: RuntimeConfig = Field(default_factory=RuntimeConfig)
+    auto_switch: bool = Field(default=False, description="是否根据网关 IP 自动切换方案")
+    active_profile: str = Field(default="default")
+    profiles: dict[str, Profile] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def ensure_default_profile(self) -> ProfilesData:
+        """确保 default profile 存在"""
+        if "default" not in self.profiles:
+            self.profiles["default"] = Profile()
+        return self
 
 
 # ── 字段映射常量 ──
