@@ -671,12 +671,7 @@ class ScheduleEngine:
             if self._is_monitoring:
                 return False, "监控已在运行中"
 
-            cfg = self._runtime_config
-            valid, error = ConfigValidator.validate_env_config({
-                "username": cfg.credentials.username,
-                "password": cfg.credentials.password,
-                "auth_url": cfg.credentials.auth_url,
-            })
+            valid, error = ConfigValidator.validate_env_config(self._runtime_config)
             if not valid:
                 return False, f"配置无效: {error}"
 
