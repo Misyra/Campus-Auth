@@ -24,7 +24,7 @@ def test_get_browsers_returns_200(api_client):
     _setup_browser_mocks(mock_services)
     mock_profile = MagicMock()
     mock_profile_data = MagicMock()
-    mock_profile_data.global_settings.browser_channel = "playwright"
+    mock_profile_data.config.browser.browser_channel = "playwright"
     mock_profile.load.return_value = mock_profile_data
     mock_services.profile_service = mock_profile
 
@@ -38,7 +38,7 @@ def test_get_browsers_structure(api_client):
     _setup_browser_mocks(mock_services)
     mock_profile = MagicMock()
     mock_profile_data = MagicMock()
-    mock_profile_data.global_settings.browser_channel = "playwright"
+    mock_profile_data.config.browser.browser_channel = "playwright"
     mock_profile.load.return_value = mock_profile_data
     mock_services.profile_service = mock_profile
 
@@ -55,7 +55,7 @@ def test_get_browsers_contains_all_channels(api_client):
     _setup_browser_mocks(mock_services)
     mock_profile = MagicMock()
     mock_profile_data = MagicMock()
-    mock_profile_data.global_settings.browser_channel = "playwright"
+    mock_profile_data.config.browser.browser_channel = "playwright"
     mock_profile.load.return_value = mock_profile_data
     mock_services.profile_service = mock_profile
 
@@ -76,7 +76,7 @@ def test_get_browsers_current_field(api_client):
     _setup_browser_mocks(mock_services)
     mock_profile = MagicMock()
     mock_profile_data = MagicMock()
-    mock_profile_data.global_settings.browser_channel = "playwright"
+    mock_profile_data.config.browser.browser_channel = "playwright"
     mock_profile.load.return_value = mock_profile_data
     mock_services.profile_service = mock_profile
 
@@ -91,7 +91,7 @@ def test_get_browsers_item_structure(api_client):
     _setup_browser_mocks(mock_services)
     mock_profile = MagicMock()
     mock_profile_data = MagicMock()
-    mock_profile_data.global_settings.browser_channel = "playwright"
+    mock_profile_data.config.browser.browser_channel = "playwright"
     mock_profile.load.return_value = mock_profile_data
     mock_services.profile_service = mock_profile
 
