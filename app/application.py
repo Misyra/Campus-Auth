@@ -137,11 +137,11 @@ def _create_lifespan(existing_container, boot_engine=False):
         cfg = services.monitor_service.get_config()
         startup_logger.info(
             "当前配置: 用户={}, 密码={}, 认证={}, 运营商={}, 间隔={}min",
-            f"'{cfg.username}'" if cfg.username else "(空)",
-            "已设置" if cfg.password else "(空)",
-            f"'{cfg.auth_url}'" if cfg.auth_url else "(空)",
-            cfg.carrier,
-            cfg.check_interval_seconds,
+            f"'{cfg.credentials.username}'" if cfg.credentials.username else "(空)",
+            "已设置" if cfg.credentials.password else "(空)",
+            f"'{cfg.credentials.auth_url}'" if cfg.credentials.auth_url else "(空)",
+            cfg.credentials.isp,
+            cfg.monitor.check_interval_seconds // 60,
         )
 
         # 检查 cryptography 库是否可用
@@ -402,11 +402,11 @@ def run(
             from app.services.profile_service import ProfileService
 
             profile_service = ProfileService(PROJECT_ROOT)
-            sys_settings = profile_service.load().global_settings
+            sys_logging = profile_service.load().config.logging
             if access_log_enabled is None:
-                access_log_enabled = bool(sys_settings.access_log)
+                access_log_enabled = bool(sys_logging.access_log)
             if log_retention is None:
-                log_retention = max(1, sys_settings.log_retention_days)
+                log_retention = max(1, sys_logging.log_retention_days)
         except Exception:
             startup_logger.warning("读取日志配置失败，使用默认值", exc_info=True)
             if access_log_enabled is None:

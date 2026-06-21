@@ -33,7 +33,7 @@ def _read_autostart_lightweight() -> bool:
         from pathlib import Path
 
         ps = ProfileService(Path(__file__).parent.parent.parent.resolve())
-        return bool(ps.load().global_settings.autostart_lightweight)
+        return bool(ps.load().config.autostart_lightweight)
     except Exception:
         return True  # 默认轻量
 
@@ -44,7 +44,7 @@ def _save_autostart_lightweight(lightweight: bool) -> None:
     from pathlib import Path
 
     ps = ProfileService(Path(__file__).parent.parent.parent.resolve())
-    ps.update(lambda d: setattr(d.global_settings, "autostart_lightweight", lightweight))
+    ps.update(lambda d: setattr(d, "config", d.config.model_copy(update={"autostart_lightweight": lightweight})))
 
 
 @router.get("/api/autostart/status", response_model=AutoStartStatusResponse)
