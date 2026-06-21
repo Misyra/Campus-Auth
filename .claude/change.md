@@ -1,5 +1,26 @@
 # 修改日志
 
+## 2026-06-22 (8)
+
+### fix: MonitoredPolicy 和 _registered_futures 线程安全
+
+- `app/services/retry_policy.py`：`MonitoredPolicy` 新增 `_lock`，`on_network_check` 和 `on_login_done` 加锁保护 `_attempt`/`_prev_network_ok` 的读写，消除引擎线程与回调线程的 lost update 竞态
+- `app/services/engine.py`：`_registered_futures` 新增 `_futures_lock`，`add`/`discard`/`in` 操作加锁保护
+
+## 2026-06-22 (7)
+
+### feat(schema): AppConfig 添加 from_runtime_config() 映射方法
+
+- `app/schemas.py`：为 `AppConfig` 添加 `from_runtime_config(config: RuntimeConfig) -> AppConfig` 类方法
+- 统一从 RuntimeConfig 派生 AppConfig，消除手动同步 startup_action/minimize_to_tray/lightweight_tray/auto_open_browser 字段的风险
+
+## 2026-06-22 (6)
+
+### feat(schema): RuntimeConfig 添加 lightweight_tray 和 auto_open_browser
+
+- `app/schemas.py`：`RuntimeConfig` 直接透传字段部分新增 `lightweight_tray: bool = True` 和 `auto_open_browser: bool = False`
+- 消除 AppConfig 中无法持久化的字段，用户现在可以通过 Web UI 配置并保存
+
 ## 2026-06-22 (5)
 
 ### fix: 修复 H1 双 login 线程池 + H2 嵌套线程池饥饿

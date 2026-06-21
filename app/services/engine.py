@@ -156,6 +156,7 @@ class ScheduleEngine:
         self._orchestrator = None  # LoginOrchestrator，由 container 注入
         self._retry_policy = MonitoredPolicy()
         self._registered_futures: set[Future] = set()
+        self._futures_lock = threading.Lock()
 
         # 统一引擎线程
         self._engine_thread = threading.Thread(target=self._engine_loop, daemon=True)
@@ -300,11 +301,13 @@ class ScheduleEngine:
             return False
 
         # 防止去重命中时重复注册回调
-        if handle.future in self._registered_futures:
-            return False
+        with self._futures_lock:
+            if handle.future in self._registered_futures:
+                return False
 
         def _on_done(f: Future) -> None:
-            self._registered_futures.discard(f)
+            with self._futures_lock:
+                self._registered_futures.discard(f)
             self._update_status_snapshot()
             try:
                 ok, msg = f.result()
@@ -323,7 +326,8 @@ class ScheduleEngine:
             except Exception:
                 logger.exception("登录任务异常")
 
-        self._registered_futures.add(handle.future)
+        with self._futures_lock:
+            self._registered_futures.add(handle.future)
         handle.future.add_done_callback(_on_done)
         return True
 

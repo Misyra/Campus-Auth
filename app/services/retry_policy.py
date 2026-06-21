@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import threading
 from abc import ABC, abstractmethod
 from typing import Iterator
 
@@ -66,6 +67,7 @@ class MonitoredPolicy(RetryPolicy):
         self.max_retries = max(1, max_retries)
         self._attempt: int = 0
         self._prev_network_ok: bool | None = None
+        self._lock = threading.Lock()
 
     def attempts(self) -> Iterator[int]:
         yield from range(1, self.max_retries + 1)
@@ -78,21 +80,23 @@ class MonitoredPolicy(RetryPolicy):
         return self._DELAYS[idx]
 
     def on_network_check(self, need_login: bool) -> bool:
-        """网络检测结果回调。仅在 down→up 转换时重置。"""
-        current_ok = not need_login
-        transitioned = False
-        if self._prev_network_ok is False and current_ok is True:
-            self._attempt = 0
-            transitioned = True
-        self._prev_network_ok = current_ok
-        return transitioned
+        """网络检测结果回调。仅在 down→up 转换时重置。线程安全。"""
+        with self._lock:
+            current_ok = not need_login
+            transitioned = False
+            if self._prev_network_ok is False and current_ok is True:
+                self._attempt = 0
+                transitioned = True
+            self._prev_network_ok = current_ok
+            return transitioned
 
     def on_login_done(self, success: bool) -> float | None:
-        """登录完成回调。返回下次检测前的延迟秒数（None=停止）。"""
-        if success:
-            self._attempt = 0
-            return None
-        self._attempt += 1
-        if self._attempt >= self.max_retries:
-            return None
-        return self.delay_before(self._attempt)
+        """登录完成回调。返回下次检测前的延迟秒数（None=停止）。线程安全。"""
+        with self._lock:
+            if success:
+                self._attempt = 0
+                return None
+            self._attempt += 1
+            if self._attempt >= self.max_retries:
+                return None
+            return self.delay_before(self._attempt)
