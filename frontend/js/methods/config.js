@@ -26,14 +26,29 @@ export const configMethods = {
   async fetchConfig(updateSnapshot = false) {
     try {
       const { data } = await this.$api.get('/api/config');
+      // 后端返回嵌套 RuntimeConfig，深度合并默认值
       this.config = {
-        ...DEFAULT_CONFIG,
-        ...data,
-        browser_extra_headers_json: data.browser_extra_headers_json || '',
+        browser: { ...DEFAULT_CONFIG.browser, ...(data.browser || {}) },
+        monitor: { ...DEFAULT_CONFIG.monitor, ...(data.monitor || {}) },
+        pause: { ...DEFAULT_CONFIG.pause, ...(data.pause || {}) },
+        logging: { ...DEFAULT_CONFIG.logging, ...(data.logging || {}) },
+        retry: { ...DEFAULT_CONFIG.retry, ...(data.retry || {}) },
+        credentials: { ...DEFAULT_CONFIG.credentials, ...(data.credentials || {}) },
+        active_task: data.active_task ?? DEFAULT_CONFIG.active_task,
+        custom_variables: data.custom_variables ?? DEFAULT_CONFIG.custom_variables,
+        block_proxy: data.block_proxy ?? DEFAULT_CONFIG.block_proxy,
+        shell_path: data.shell_path ?? DEFAULT_CONFIG.shell_path,
+        minimize_to_tray: data.minimize_to_tray ?? DEFAULT_CONFIG.minimize_to_tray,
+        lightweight_tray: data.lightweight_tray ?? DEFAULT_CONFIG.lightweight_tray,
+        startup_action: data.startup_action ?? DEFAULT_CONFIG.startup_action,
+        autostart_lightweight: data.autostart_lightweight ?? DEFAULT_CONFIG.autostart_lightweight,
+        auto_open_browser: data.auto_open_browser ?? DEFAULT_CONFIG.auto_open_browser,
+        proxy: data.proxy ?? DEFAULT_CONFIG.proxy,
+        app_port: data.app_port ?? DEFAULT_CONFIG.app_port,
       };
       // 同步浏览器选择状态
-      if (data.browser_channel) {
-        this.selectedBrowser = data.browser_channel;
+      if (data.browser?.browser_channel) {
+        this.selectedBrowser = data.browser.browser_channel;
       }
       if (updateSnapshot) {
         this._lastSavedConfig = JSON.stringify(this.config);
@@ -59,13 +74,13 @@ export const configMethods = {
     }
 
     // 关键字段检查（自动保存时跳过确认弹窗）
-    if (!this.config.auth_url) {
+    if (!this.config.credentials.auth_url) {
       this.frontendLogger.warn('config', '认证地址为空，自动认证将无法工作');
     }
-    if (!this.config.username) {
+    if (!this.config.credentials.username) {
       this.frontendLogger.warn('config', '账号为空，自动认证将无法工作');
     }
-    if (!this.config.enable_tcp_check && !this.config.enable_http_check && !(this.config.url_check_urls && this.config.url_check_urls.trim())) {
+    if (!this.config.monitor.enable_tcp_check && !this.config.monitor.enable_http_check && !(this.config.monitor.url_check_urls && this.config.monitor.url_check_urls.length)) {
       this.toastOnly(false, '至少需要启用一种网络检测方式（TCP / HTTP / 网址响应）');
       return;
     }
@@ -80,8 +95,8 @@ export const configMethods = {
     this.saveFailed = false;
     try {
       const payload = { ...this.config };
-      if (payload.carrier !== '自定义') {
-        payload.carrier_custom = '';
+      if (payload.credentials.isp !== '自定义') {
+        payload.credentials.carrier_custom = '';
       }
       const { data } = await this.$api.put('/api/config', payload, {
         signal: this._saveAbortController.signal,
@@ -133,7 +148,7 @@ export const configMethods = {
   async loadDefaultStealthScript() {
     try {
       const { data } = await this.$api.get('/api/config/default-stealth-script');
-      this.config.stealth_custom_script = data.script || '';
+      this.config.browser.stealth_custom_script = data.script || '';
       this.frontendLogger.info('config', '已加载默认反检测脚本');
     } catch (error) {
       this.frontendLogger.warn('config', '获取默认反检测脚本失败', error);
