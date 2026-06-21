@@ -1,5 +1,11 @@
 # 修改日志
 
+## 2026-06-22 (9)
+
+### fix: LogConfigCenter._source_levels 线程安全
+
+- `app/utils/logging.py`：`_source_levels` 新增 `_source_levels_lock`，`set_source_level`/`get_source_level`/`remove_source_level`/`get_all_source_levels` 四个方法加锁保护，消除 API 路由写入与 loguru 内部线程读取的竞态
+
 ## 2026-06-22 (8)
 
 ### fix: MonitoredPolicy 和 _registered_futures 线程安全
