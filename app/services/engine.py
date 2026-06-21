@@ -257,10 +257,9 @@ class ScheduleEngine:
 
         try:
             result = core.check_once()
-            interval = int(result.get("interval", self._monitor_check_interval))
-            self._monitor_check_interval = interval
+            self._monitor_check_interval = result.interval
 
-            if result.get("need_login", False):
+            if result.need_login:
                 self._retry_policy.on_network_check(True)
                 self._do_async_login()
             else:
@@ -274,7 +273,7 @@ class ScheduleEngine:
                 else:
                     logger.error("配置重载失败，继续使用当前配置")
 
-            self._next_network_check = time.time() + interval
+            self._next_network_check = time.time() + result.interval
             self._update_status_snapshot(force=True)
         except Exception:
             logger.exception("网络检测异常")

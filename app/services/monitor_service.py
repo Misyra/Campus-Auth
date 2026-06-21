@@ -4,6 +4,7 @@ import datetime
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
@@ -20,6 +21,19 @@ from app.utils.network import parse_ping_targets
 
 if TYPE_CHECKING:
     from app.services.profile_service import ProfileService
+
+
+@dataclass(frozen=True, slots=True)
+class CheckOnceResult:
+    """check_once() 的返回值。"""
+
+    paused: bool
+    net_ok: bool
+    net_reason: str
+    need_login: bool
+    check_num: int
+    interval: int
+    result: NetworkCheckResult
 
 
 class NetworkState(str, Enum):
@@ -191,20 +205,8 @@ class NetworkMonitorCore:
             f"认证地址: {masked_url} | 账号: {masked_username} | 运营商: {isp}"
         )
 
-    def check_once(self) -> dict[str, Any]:
-        """执行一次网络检测（不阻塞，不做登录重试）。
-
-        返回:
-            dict: {
-                "paused": bool,
-                "net_ok": bool,
-                "net_reason": str,
-                "need_login": bool,
-                "check_num": int,
-                "interval": int,
-                "result": NetworkCheckResult,
-            }
-        """
+    def check_once(self) -> CheckOnceResult:
+        """执行一次网络检测（不阻塞，不做登录重试）。"""
         interval = self._get_monitor_interval()
         test_sites = self._get_test_sites()
 
@@ -229,20 +231,20 @@ class NetworkMonitorCore:
             self.log_message(
                 f"暂停时段 ({start_hour}:00-{end_hour}:00)，跳过检测", "INFO"
             )
-            return {
-                "paused": True,
-                "net_ok": True,
-                "net_reason": "",
-                "need_login": False,
-                "check_num": check_num,
-                "interval": interval,
-                "result": NetworkCheckResult(
+            return CheckOnceResult(
+                paused=True,
+                net_ok=True,
+                net_reason="",
+                need_login=False,
+                check_num=check_num,
+                interval=interval,
+                result=NetworkCheckResult(
                     available=None,
                     method="paused",
                     latency_ms=0,
                     detail=f"暂停时段（{start_hour}:00-{end_hour}:00）",
                 ),
-            }
+            )
 
         # 2. 网络状态检测
         net_ok, net_reason, net_method = check_network_status(self.config.monitor)
@@ -264,20 +266,20 @@ class NetworkMonitorCore:
         # 自动切换检测
         self._check_profile_switch()
 
-        return {
-            "paused": False,
-            "net_ok": net_ok,
-            "net_reason": net_reason,
-            "need_login": not net_ok and net_reason != "all_disabled",
-            "check_num": check_num,
-            "interval": interval,
-            "result": NetworkCheckResult(
+        return CheckOnceResult(
+            paused=False,
+            net_ok=net_ok,
+            net_reason=net_reason,
+            need_login=not net_ok and net_reason != "all_disabled",
+            check_num=check_num,
+            interval=interval,
+            result=NetworkCheckResult(
                 available=net_ok,
                 method=net_method,
                 latency_ms=0,
                 detail="" if net_ok else net_reason,
             ),
-        }
+        )
 
     def stop_monitoring(self) -> None:
         """停止监控（状态清理）。"""
