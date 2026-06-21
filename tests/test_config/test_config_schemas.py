@@ -22,6 +22,7 @@ from app.schemas import (
     SystemSettings,
 )
 from app.utils.crypto import decrypt_password_field, safe_decrypt
+from app.schemas import LoginCredentials, RuntimeConfig
 from app.utils.config_utils import ConfigValidator
 from app.utils.crypto import encrypt_password
 from app.utils.logging import normalize_level as _normalize_level
@@ -40,61 +41,67 @@ class TestValidateEnvConfig:
 
     def test_valid_config(self):
         ok, msg = ConfigValidator.validate_env_config(
-            {
-                "username": "testuser",
-                "password": "testpass",
-                "auth_url": "http://10.0.0.1",
-            }
+            RuntimeConfig(
+                credentials=LoginCredentials(
+                    username="testuser",
+                    password="testpass",
+                    auth_url="http://10.0.0.1",
+                )
+            )
         )
         assert ok is True
 
     def test_missing_username(self):
         ok, msg = ConfigValidator.validate_env_config(
-            {
-                "username": "",
-                "password": "pass",
-                "auth_url": "http://10.0.0.1",
-            }
+            RuntimeConfig(
+                credentials=LoginCredentials(
+                    username="",
+                    password="pass",
+                    auth_url="http://10.0.0.1",
+                )
+            )
         )
         assert ok is False
 
     def test_missing_auth_url(self):
         ok, msg = ConfigValidator.validate_env_config(
-            {
-                "username": "user",
-                "password": "pass",
-                "auth_url": "",
-            }
+            RuntimeConfig(
+                credentials=LoginCredentials(
+                    username="user",
+                    password="pass",
+                    auth_url="",
+                )
+            )
         )
         assert ok is False
 
     def test_missing_password(self):
         ok, msg = ConfigValidator.validate_env_config(
-            {
-                "username": "user",
-                "password": "",
-                "auth_url": "http://10.0.0.1",
-            }
+            RuntimeConfig(
+                credentials=LoginCredentials(
+                    username="user",
+                    password="",
+                    auth_url="http://10.0.0.1",
+                )
+            )
         )
         assert ok is False
 
     def test_all_empty(self):
         ok, msg = ConfigValidator.validate_env_config(
-            {
-                "username": "",
-                "password": "",
-                "auth_url": "",
-            }
+            RuntimeConfig(
+                credentials=LoginCredentials(
+                    username="",
+                    password="",
+                    auth_url="",
+                )
+            )
         )
         assert ok is False
 
     def test_none_values(self):
         ok, msg = ConfigValidator.validate_env_config(
-            {
-                "username": None,
-                "password": None,
-                "auth_url": None,
-            }
+            RuntimeConfig()
         )
         assert ok is False
 

@@ -1,5 +1,18 @@
 # 修改日志
 
+## 2026-06-21 (5)
+
+### refactor(validator): ConfigValidator 直接接受 RuntimeConfig
+- `app/utils/config_utils.py`：
+  - `validate_env_config` 签名从 `config: dict` 改为 `config: RuntimeConfig`
+  - 使用 `TYPE_CHECKING` 避免与 `app.schemas` 的循环导入
+  - 移除所有 `.get()` 调用，通过 `config.credentials` 属性访问
+- `app/services/engine.py`：
+  - `start_monitoring()` 移除从 `RuntimeConfig` 手动构造 dict 的转换，直接传递 `self._runtime_config`
+- `tests/test_config/test_config_schemas.py`：
+  - 所有 `validate_env_config` 测试从 dict 构造改为 `RuntimeConfig(credentials=LoginCredentials(...))` 实例
+- 验收：2332 测试全通过
+
 ## 2026-06-21 (4)
 
 ### refactor(time): is_in_pause_period 直接接受 PauseSettings
