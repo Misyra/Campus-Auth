@@ -600,26 +600,19 @@ class ScheduleEngine:
 
     def _reload_config_internal(self) -> bool:
         """从 settings.json 重新加载 UI 和运行时配置。返回 True 表示成功。"""
-        # 延迟导入：测试中需要 mock 这些函数的返回值，顶层导入会导致 mock 路径变化
-        from .config_service import build_runtime_config
-        from .runtime_config import load_runtime_config, load_ui_config
+        from .config_service import load_active_config
 
         try:
             with self._reload_lock:
                 data = self._profile_service.load()
-                self._ui_config = load_ui_config(self._profile_service, data=data)
-                runtime_payload, has_decrypt_error = load_runtime_config(
-                    self._profile_service, data=data
-                )
+                self._ui_config = data.config
+                runtime_config, has_decrypt_error = load_active_config(self._profile_service)
                 if has_decrypt_error:
                     logger.warning("配置重载时部分密码解密失败")
-                self._runtime_config = build_runtime_config(
-                    runtime_payload,
-                    global_settings=data.global_settings,
-                )
-                self._runtime_snapshot = self._runtime_config  # frozen, no deepcopy needed
+                self._runtime_config = runtime_config
+                self._runtime_snapshot = self._runtime_config
                 with self._pure_mode_lock:
-                    self._pure_mode = data.global_settings.pure_mode
+                    self._pure_mode = data.config.browser.pure_mode
             return True
         except Exception:
             logger.exception("配置重载失败")

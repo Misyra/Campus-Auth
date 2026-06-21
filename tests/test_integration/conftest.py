@@ -10,7 +10,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.schemas import AuthProfile, MonitorConfigPayload, ProfilesData, SystemSettings
-from app.services.config_service import save_config_combined
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
 from app.services.login_orchestrator import LoginOrchestrator

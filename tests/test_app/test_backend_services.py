@@ -16,12 +16,11 @@ import pytest
 from app.network.detect import detect_gateway_ip, detect_wifi_ssid
 from app.schemas import (
     AuthProfile,
-    MonitorConfigPayload,
     ProfilesData,
+    RuntimeConfig,
     SystemSettings,
 )
-from app.services.config_service import build_runtime_config, save_config_combined
-from app.services.runtime_config import load_runtime_config, load_ui_config
+from app.services.config_service import build_runtime_config, load_active_config
 from app.services.debug_session import (
     DebugSession,
     _next_debug_gen,
@@ -236,11 +235,11 @@ class TestTaskService:
 
 
 # =====================================================================
-# load_ui_config
+# load_active_config
 # =====================================================================
 
 
-class TestLoadUiConfig:
+class TestLoadActiveConfig:
     @pytest.fixture
     def profile_service(self, tmp_path):
         # 创建目录结构
@@ -251,10 +250,6 @@ class TestLoadUiConfig:
         settings_data = {
             "auto_switch": False,
             "active_profile": "default",
-            "global_settings": {
-                "backend_log_level": "INFO",
-                "frontend_log_level": "DEBUG",
-            },
             "profiles": {
                 "default": {
                     "name": "默认方案",
@@ -262,7 +257,6 @@ class TestLoadUiConfig:
                     "password": "ENC:test",
                     "auth_url": "http://10.0.0.1",
                     "carrier": "移动",
-                    "network_targets": "8.8.8.8:53",
                 },
             },
         }
@@ -272,45 +266,27 @@ class TestLoadUiConfig:
 
         return ProfileService(tmp_path)
 
-    def test_returns_payload(self, profile_service):
-        config = load_ui_config(profile_service)
-        assert isinstance(config, MonitorConfigPayload)
+    def test_returns_runtime_config(self, profile_service):
+        config, has_error = load_active_config(profile_service)
+        assert isinstance(config, RuntimeConfig)
+        assert isinstance(has_error, bool)
 
-    def test_username_from_system(self, profile_service):
-        config = load_ui_config(profile_service)
-        assert config.username == "admin"
+    def test_username_from_profile(self, profile_service):
+        config, _ = load_active_config(profile_service)
+        assert config.credentials.username == "admin"
 
-    def test_password_masked(self, profile_service):
-        config = load_ui_config(profile_service)
-        assert "•" in config.password or config.password == ""
+    def test_auth_url_from_profile(self, profile_service):
+        config, _ = load_active_config(profile_service)
+        assert config.credentials.auth_url == "http://10.0.0.1"
 
-    def test_auth_url_from_system(self, profile_service):
-        config = load_ui_config(profile_service)
-        assert config.auth_url == "http://10.0.0.1"
+    def test_carrier_mapped(self, profile_service):
+        config, _ = load_active_config(profile_service)
+        assert config.credentials.isp == "移动"
 
-    def test_log_levels_normalized(self, profile_service):
-        config = load_ui_config(profile_service)
-        assert config.backend_log_level == "INFO"
-        assert config.frontend_log_level == "DEBUG"
-
-    def test_network_targets_normalized(self, profile_service):
-        config = load_ui_config(profile_service)
-        assert "8.8.8.8:53" in config.network_targets
-
-
-# =====================================================================
-# load_runtime_config
-# =====================================================================
-
-
-class TestLoadRuntimeConfig:
-    @pytest.fixture
-    def profile_service(self, tmp_path):
-        # 创建目录结构
+    def test_uses_active_profile(self, tmp_path):
         config_dir = tmp_path / "config"
         config_dir.mkdir(parents=True)
 
-        # 写入 settings.json
         settings_data = {
             "auto_switch": False,
             "active_profile": "campus",
@@ -320,10 +296,8 @@ class TestLoadRuntimeConfig:
                 },
                 "campus": {
                     "name": "校园",
-                    "use_global_credentials": False,
                     "username": "campus_user",
                     "password": "ENC:campus_pass",
-                    "use_global_auth_url": False,
                     "auth_url": "http://campus.url",
                 },
             },
@@ -332,20 +306,10 @@ class TestLoadRuntimeConfig:
             json.dumps(settings_data, ensure_ascii=False), encoding="utf-8"
         )
 
-        return ProfileService(tmp_path)
-
-    def test_returns_payload(self, profile_service):
-        config, has_error = load_runtime_config(profile_service)
-        assert isinstance(config, MonitorConfigPayload)
-        assert isinstance(has_error, bool)
-
-    def test_uses_profile_credentials(self, profile_service):
-        config, _ = load_runtime_config(profile_service)
-        assert config.username == "campus_user"
-
-    def test_uses_profile_auth_url(self, profile_service):
-        config, _ = load_runtime_config(profile_service)
-        assert config.auth_url == "http://campus.url"
+        svc = ProfileService(tmp_path)
+        config, _ = load_active_config(svc)
+        assert config.credentials.username == "campus_user"
+        assert config.credentials.auth_url == "http://campus.url"
 
 
 # =====================================================================
@@ -355,191 +319,41 @@ class TestLoadRuntimeConfig:
 
 class TestBuildRuntimeConfig:
     def test_basic(self):
-        payload = MonitorConfigPayload(
+        from app.schemas import Profile
+        config = RuntimeConfig()
+        profile = Profile(
             username="admin",
             password="testpass",
             auth_url="http://10.0.0.1",
             carrier="移动",
         )
-        config = build_runtime_config(payload)
-        assert config.credentials.username == "admin"
-        assert config.credentials.password == "testpass"
-        assert config.credentials.auth_url == "http://10.0.0.1"
-        assert config.credentials.isp == "移动"
+        result = build_runtime_config(config, profile)
+        assert result.credentials.username == "admin"
+        assert result.credentials.password == "testpass"
+        assert result.credentials.auth_url == "http://10.0.0.1"
+        assert result.credentials.isp == "移动"
 
     def test_carrier_custom(self):
-        payload = MonitorConfigPayload(carrier="自定义", carrier_custom="校园网")
-        config = build_runtime_config(payload)
-        assert config.credentials.isp == "校园网"
+        from app.schemas import Profile
+        config = RuntimeConfig()
+        profile = Profile(carrier="自定义", carrier_custom="校园网")
+        result = build_runtime_config(config, profile)
+        assert result.credentials.isp == "校园网"
 
     def test_carrier_none(self):
-        payload = MonitorConfigPayload(carrier="无")
-        config = build_runtime_config(payload)
-        assert config.credentials.isp == ""
+        from app.schemas import Profile
+        config = RuntimeConfig()
+        profile = Profile(carrier="无")
+        result = build_runtime_config(config, profile)
+        assert result.credentials.isp == ""
 
     def test_masked_password_returns_empty(self):
-        payload = MonitorConfigPayload(password="••••••••")
-        config = build_runtime_config(payload)
-        assert config.credentials.password == ""
+        from app.schemas import Profile
+        config = RuntimeConfig()
+        profile = Profile(password="••••••••")
+        result = build_runtime_config(config, profile)
+        assert result.credentials.password == ""
 
-    def test_browser_settings(self):
-        from app.schemas import SystemSettings
-        payload = MonitorConfigPayload()
-        global_settings = SystemSettings(
-            headless=False,
-            browser_timeout=15,
-            browser_user_agent="Custom UA",
-        )
-        config = build_runtime_config(payload, global_settings=global_settings)
-        assert config.browser.headless is False
-        assert config.browser.timeout == 15
-        assert config.browser.user_agent == "Custom UA"
-
-    def test_pause_settings(self):
-        payload = MonitorConfigPayload(
-            pause_enabled=True,
-            pause_start_hour=23,
-            pause_end_hour=6,
-        )
-        config = build_runtime_config(payload)
-        assert config.pause.enabled is True
-        assert config.pause.start_hour == 23
-        assert config.pause.end_hour == 6
-
-    def test_monitor_settings(self):
-        payload = MonitorConfigPayload(
-            check_interval_seconds=600,
-            network_targets="8.8.8.8:53,1.1.1.1:443",
-            enable_tcp_check=True,
-            enable_http_check=False,
-        )
-        config = build_runtime_config(payload)
-        assert config.monitor.check_interval_seconds == 600
-        assert "8.8.8.8:53" in config.monitor.ping_targets
-        assert config.monitor.enable_tcp_check is True
-        assert config.monitor.enable_http_check is False
-
-    def test_url_check_urls(self):
-        payload = MonitorConfigPayload(
-            url_check_urls="http://test.com|Success\nhttp://other.com|OK"
-        )
-        config = build_runtime_config(payload)
-        url_check = config.monitor.url_check_urls
-        assert len(url_check) == 2
-        assert url_check[0] == {"url": "http://test.com", "expected": "Success"}
-
-    def test_retry_settings(self):
-        payload = MonitorConfigPayload()
-        gs = SystemSettings(max_retries=5, retry_interval=10)
-        config = build_runtime_config(payload, gs)
-        assert config.retry.max_retries == 5
-        assert config.retry.retry_interval == 10
-
-    def test_browser_settings_pure_mode(self):
-        """测试 pure_mode 正确传递到 browser"""
-        payload = MonitorConfigPayload()
-
-        # 默认值应为 True
-        gs_default = SystemSettings()
-        config = build_runtime_config(payload, global_settings=gs_default)
-        assert config.browser.pure_mode is True
-
-        # 显式设置为 False
-        gs_false = SystemSettings(pure_mode=False)
-        config = build_runtime_config(payload, global_settings=gs_false)
-        assert config.browser.pure_mode is False
-
-        # 无 global_settings 时回退默认值
-        config = build_runtime_config(payload)
-        assert config.browser.pure_mode is True
-
-    def test_login_timeout_in_payload(self):
-        """测试 login_timeout 正确通过 MonitorConfigPayload 传递"""
-        # 默认值应为 90
-        payload_default = MonitorConfigPayload()
-        assert payload_default.login_timeout == 90
-
-        # 显式设置值
-        payload_custom = MonitorConfigPayload(login_timeout=120)
-        assert payload_custom.login_timeout == 120
-
-        # 边界值
-        payload_min = MonitorConfigPayload(login_timeout=10)
-        assert payload_min.login_timeout == 10
-
-        payload_max = MonitorConfigPayload(login_timeout=600)
-        assert payload_max.login_timeout == 600
-
-
-# =====================================================================
-# save_config_combined
-# =====================================================================
-
-
-class TestSaveConfigCombined:
-    @pytest.fixture
-    def profile_service(self, tmp_path):
-        # 创建目录结构
-        config_dir = tmp_path / "config"
-        config_dir.mkdir(parents=True)
-
-        # 写入 settings.json
-        settings_data = {
-            "auto_switch": False,
-            "active_profile": "default",
-            "global_settings": {},
-            "profiles": {
-                "default": {
-                    "name": "默认",
-                    "username": "old_user",
-                    "password": "ENC:old",
-                },
-            },
-        }
-        (config_dir / "settings.json").write_text(
-            json.dumps(settings_data, ensure_ascii=False), encoding="utf-8"
-        )
-
-        return ProfileService(tmp_path)
-
-    def test_saves_username(self, profile_service):
-        payload = MonitorConfigPayload(username="new_user", password="••••••••")
-        save_config_combined(payload, profile_service)
-        data = profile_service.load()
-        assert data.profiles["default"].username == "new_user"
-
-    def test_saves_auth_url(self, profile_service):
-        payload = MonitorConfigPayload(auth_url="http://new.url")
-        save_config_combined(payload, profile_service)
-        data = profile_service.load()
-        assert data.profiles["default"].auth_url == "http://new.url"
-
-    def test_saves_carrier(self, profile_service):
-        payload = MonitorConfigPayload(carrier="联通")
-        save_config_combined(payload, profile_service)
-        data = profile_service.load()
-        assert data.profiles["default"].carrier == "联通"
-
-    def test_saves_log_level(self, profile_service):
-        payload = MonitorConfigPayload(backend_log_level="DEBUG")
-        save_config_combined(payload, profile_service)
-        data = profile_service.load()
-        assert data.global_settings.backend_log_level == "DEBUG"
-
-    def test_preserves_password_when_masked(self, profile_service):
-        payload = MonitorConfigPayload(password="••••••••")
-        save_config_combined(payload, profile_service)
-        data = profile_service.load()
-        assert data.profiles["default"].password == "ENC:old"
-
-    def test_updates_default_profile(self, profile_service):
-        payload = MonitorConfigPayload(
-            check_interval_seconds=600,
-        )
-        save_config_combined(payload, profile_service)
-        data = profile_service.load()
-        # 监控配置已移至 global_settings
-        assert data.global_settings.check_interval_seconds == 600
 
 
 # =====================================================================
