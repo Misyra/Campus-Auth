@@ -18,7 +18,6 @@ from app.schemas import (
     AuthProfile,
     ProfilesData,
     RuntimeConfig,
-    SystemSettings,
 )
 from app.services.config_service import build_runtime_config, load_active_config
 from app.services.debug_session import (

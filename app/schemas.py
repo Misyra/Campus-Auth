@@ -7,9 +7,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.constants import DEFAULT_HTTP_TARGETS, DEFAULT_NETWORK_TARGETS, DEFAULT_URL_CHECK_URLS
 from app.utils.logging import VALID_LOG_LEVELS
-from app.utils.platform import get_default_ua
 
 _URL_PATTERN = re.compile(r"^https?://")
 
@@ -112,228 +110,6 @@ _BROWSER_ARGS_DEFAULT = (
 )
 
 
-class _MonitorFieldsMixin(BaseModel):
-    """Profile 可覆盖的全局默认值（监控、认证、运营商等）"""
-
-    auth_url: str = Field(default="", description="认证地址")
-    active_task: str = Field(default="", description="登录任务标识")
-    carrier: str = Field(default="无", description="运营商")
-    carrier_custom: str = Field(default="", description="自定义运营商关键字")
-    check_interval_seconds: int = Field(
-        default=300, ge=10, le=86400, description="检测间隔（秒）"
-    )
-    network_targets: str = Field(default=DEFAULT_NETWORK_TARGETS)
-    http_targets: str = Field(
-        default=DEFAULT_HTTP_TARGETS,
-        description="HTTP 检测目标地址，逗号分隔",
-    )
-    enable_tcp_check: bool = Field(
-        default=False, description="通过 TCP 端口连接检测目标地址是否可达"
-    )
-    enable_http_check: bool = Field(
-        default=False, description="通过 HTTP 请求检测网页是否可正常访问"
-    )
-    enable_local_check: bool = Field(
-        default=True,
-        description="物理网络连接检查：未连接 WiFi/网线时跳过登录",
-    )
-    check_auth_url: bool = Field(
-        default=False, description="登录前检测认证地址是否可达，不可达则跳过登录"
-    )
-    auth_url_targets: str = Field(
-        default="",
-        description="认证地址可达性附加检测目标，逗号分隔的 host:port，留空则仅检测认证地址本身",
-    )
-    url_check_urls: str = Field(
-        default=DEFAULT_URL_CHECK_URLS,
-        description="网址响应检测地址，每行一个：URL|预期内容，留空不启用",
-    )
-    custom_variables: dict[str, str] = Field(default_factory=dict)
-
-    @field_validator("auth_url")
-    @classmethod
-    def validate_auth_url(cls, v: str) -> str:
-        return _validate_auth_url(v)
-
-
-class _CommonSettingsMixin(BaseModel):
-    """_SystemFieldsMixin 与 SystemSettings 共享的系统配置字段"""
-
-    # 日志配置
-    backend_log_level: str = Field(default="INFO")
-    frontend_log_level: str = Field(default="INFO")
-    access_log: bool = Field(default=False, description="Uvicorn HTTP 请求日志")
-    log_retention_days: int = Field(
-        default=7, ge=1, le=365, description="日志保留天数"
-    )
-
-    # UI 配置
-    startup_action: StartupAction = Field(
-        default=StartupAction.NONE,
-        description="启动行为：none=不自动执行, monitor=自动监控, login_once=自动登录成功后退出",
-    )
-    autostart_lightweight: bool = Field(
-        default=True, description="自启动轻量模式：True=仅监控, False=完整模式(含Web)"
-    )
-    lightweight_tray: bool = Field(default=True, description="轻量模式显示系统托盘")
-    minimize_to_tray: bool = Field(default=True, description="最小化到系统托盘")
-    auto_open_browser: bool = Field(default=False, description="启动后自动打开浏览器")
-
-    # 暂停时段
-    pause_enabled: bool = Field(default=True, description="启用暂停时段")
-    pause_start_hour: int = Field(default=0, ge=0, le=23, description="暂停开始（小时）")
-    pause_end_hour: int = Field(default=6, ge=0, le=23, description="暂停结束（小时）")
-
-    # 网络配置
-    proxy: str = Field(default="", description="网络代理地址")
-    block_proxy: bool = Field(default=True, description="屏蔽系统代理")
-
-    # 应用配置
-    app_port: int = Field(default=50721, ge=1024, le=65535, description="网页界面端口")
-    shell_path: str = Field(
-        default="", description="自定义 Shell 路径（留空使用系统默认）"
-    )
-    pure_mode: bool = Field(default=True, description="纯净模式")
-
-    # 重试配置
-    max_retries: int = Field(default=3, ge=0, le=10)
-    retry_interval: int = Field(default=5, ge=1, le=300, description="重试间隔（秒）")
-
-    # 浏览器配置
-    browser_channel: BrowserChannel = Field(
-        default=BrowserChannel.PLAYWRIGHT,
-        description="浏览器类型: playwright(自带Chromium) | msedge(系统Edge) | chrome(系统Chrome) | firefox | custom(自定义路径)"
-    )
-    browser_custom_path: str = Field(
-        default="",
-        description="自定义浏览器可执行文件路径（仅 browser_channel='custom' 时生效）"
-    )
-    custom_browser_engine: str = Field(
-        default="auto",
-        description="自定义浏览器引擎: auto(默认Chromium) | firefox | webkit"
-    )
-    headless: bool = Field(default=True)
-    browser_timeout: int = Field(default=8, ge=1, le=60, description="页面操作超时（秒）")
-    browser_navigation_timeout: int = Field(default=15, ge=3, le=60, description="打开登录页面超时（秒）")
-    login_timeout: int = Field(
-        default=90, ge=10, le=600, description="手动登录等待超时（秒）"
-    )
-    browser_user_agent: str = Field(default_factory=get_default_ua)
-    browser_low_resource_mode: bool = Field(default=False)
-    browser_disable_web_security: bool = Field(default=False)
-    browser_extra_headers_json: str = Field(default="")
-    browser_args: str = Field(default=_BROWSER_ARGS_DEFAULT, description="自定义 Chromium 启动参数，每行一个")
-    stealth_mode: bool = Field(default=False, description="隐藏浏览器自动操作特征，降低被识别为工具操作的风险")
-    stealth_custom_script: str = Field(default="", description="在反检测模式开启时额外执行的自定义 JavaScript 脚本")
-    browser_locale: str = Field(default="zh-CN", description="浏览器语言区域")
-    browser_timezone: str = Field(default="Asia/Shanghai", description="浏览器时区 ID")
-    browser_viewport_width: int = Field(default=1280, ge=320, le=3840, description="浏览器视口宽度")
-    browser_viewport_height: int = Field(default=720, ge=240, le=2160, description="浏览器视口高度")
-
-    @field_validator("backend_log_level", "frontend_log_level")
-    @classmethod
-    def validate_log_level(cls, v: str) -> str:
-        v = v.upper().strip()
-        if v and v not in VALID_LOG_LEVELS:
-            raise ValueError(
-                f"无效的日志级别: {v}，可选值: {', '.join(VALID_LOG_LEVELS)}"
-            )
-        return v
-
-    @field_validator("browser_custom_path")
-    @classmethod
-    def validate_custom_path(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            return v
-        if "\0" in v:
-            raise ValueError("路径包含非法字符（null 字节）")
-        return v
-
-    @field_validator("browser_extra_headers_json")
-    @classmethod
-    def validate_headers_json(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            return ""
-        try:
-            parsed = json.loads(v)
-        except json.JSONDecodeError as e:
-            raise ValueError(
-                f"浏览器请求头格式不正确，请确认输入的是合法的 JSON 对象: {e}"
-            ) from e
-        if not isinstance(parsed, dict):
-            raise ValueError(
-                '浏览器请求头格式不正确，应为键值对形式，例如: {"Referer": "https://example.com"}'
-            )
-        return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
-
-
-class _SystemFieldsMixin(_CommonSettingsMixin):
-    """MonitorConfigPayload 额外需要的凭证及业务配置字段"""
-
-    username: str = Field(default="", description="全局校园网用户名")
-    password: str = Field(default="", description="全局校园网密码（ENC: 加密）")
-    auth_url: str = Field(default="", description="全局认证地址")
-    carrier: str = Field(default="无", description="全局运营商")
-    carrier_custom: str = Field(default="", description="自定义运营商关键字")
-
-    @field_validator("auth_url")
-    @classmethod
-    def validate_auth_url(cls, v: str) -> str:
-        return _validate_auth_url(v)
-
-
-class SystemSettings(_MonitorFieldsMixin, _CommonSettingsMixin):
-    """系统运行配置 — 监控、浏览器、日志、暂停、重试等。
-
-    监控配置字段继承自 _MonitorFieldsMixin，系统配置字段继承自 _CommonSettingsMixin。
-    仅声明不属于这两个 Mixin 的额外字段。
-
-    注意：auth_url / carrier / carrier_custom 同时存在于 global_settings（SystemSettings）
-    和 profile（AuthProfile）中，这是有意设计的"全局默认值 + profile 实例覆盖"模式。
-    profile 中这些字段留空时，运行时会回退到 global_settings 的值。
-    """
-
-    network_check_timeout: int = Field(
-        default=2, ge=1, le=30, description="TCP 网络检测超时（秒）"
-    )
-
-    # Source 级别配置
-    source_levels: dict[str, str] = {}
-
-
-# ── 主要模型 ──
-
-
-class MonitorConfigPayload(
-    _MonitorFieldsMixin,
-    _SystemFieldsMixin,
-):
-    network_check_timeout: int = Field(
-        default=2,
-        ge=1,
-        le=30,
-        description="TCP 网络检测超时（秒），检测网络连通性时使用",
-    )
-
-    @field_validator("custom_variables")
-    @classmethod
-    def validate_custom_variables(cls, v: dict[str, str]) -> dict[str, str]:
-        _ENV_KEY_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-        if len(v) > 50:
-            raise ValueError("自定义变量最多 50 个")
-        for key, val in v.items():
-            if not _ENV_KEY_PATTERN.match(key):
-                raise ValueError(
-                    f"变量名格式无效: {key}，须以字母或下划线开头，仅含字母、数字和下划线"
-                )
-            if len(key) > 100:
-                raise ValueError(f"变量名过长（最大 100 字符）: {key}")
-            if len(val) > 10000:
-                raise ValueError(f"变量 {key} 的值过长（最大 10000 字符）")
-        return v
-
 
 class ActionResponse(BaseModel):
     success: bool
@@ -373,32 +149,6 @@ class AutoStartStatusResponse(BaseModel):
     lightweight: bool = True
 
 
-class AuthProfile(BaseModel):
-    """认证方案 — 仅含凭证和匹配规则"""
-
-    # 基本信息
-    name: str = Field(default="默认方案")
-    match_gateway_ip: str = Field(
-        default="", description="匹配的网关 IP，留空表示不匹配（手动选择时使用）"
-    )
-    match_ssid: str = Field(default="", description="匹配的 WiFi SSID，留空表示不匹配")
-
-    # 凭证配置
-    username: str = Field(default="", description="方案独立账号，留空则使用全局账号")
-    password: str = Field(
-        default="", description="方案独立密码（加密存储），留空则使用全局密码"
-    )
-    carrier: str = Field(default="无", description="方案独立运营商，留空则使用全局")
-    carrier_custom: str = Field(default="", description="自定义运营商关键字")
-    auth_url: str = Field(default="", description="方案独立认证地址，留空则使用全局")
-    active_task: str = Field(default="", description="方案独立任务，留空则使用全局任务")
-
-    @field_validator("auth_url")
-    @classmethod
-    def validate_auth_url(cls, v: str) -> str:
-        return _validate_auth_url(v)
-
-
 class Profile(BaseModel):
     """认证方案 — 凭证 + 匹配规则。
 
@@ -419,6 +169,10 @@ class Profile(BaseModel):
     @classmethod
     def validate_auth_url(cls, v: str) -> str:
         return _validate_auth_url(v)
+
+
+# 向后兼容别名
+AuthProfile = Profile
 
 
 def get_runtime_features(
@@ -560,12 +314,3 @@ class ProfilesData(BaseModel):
         return self
 
 
-# ── 字段映射常量 ──
-
-# SystemSettings 与 MonitorConfigPayload 的共享字段集合。
-# 用于 config_service._update_global_settings（循环赋值）和
-# runtime_config.load_payload_from_profiles（model_dump include）。
-GLOBAL_SETTINGS_FIELDS = frozenset(
-    f for f in SystemSettings.model_fields
-    if f in MonitorConfigPayload.model_fields
-)

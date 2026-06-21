@@ -824,14 +824,6 @@ class TestDefaultConstants:
         for part in parts:
             assert part.startswith("http")
 
-    def test_schemas_uses_constant(self):
-        """MonitorConfigPayload 默认值应引用常量"""
-        from app.constants import DEFAULT_HTTP_TARGETS, DEFAULT_NETWORK_TARGETS
-        from app.schemas import MonitorConfigPayload
-
-        m = MonitorConfigPayload()
-        assert m.network_targets == DEFAULT_NETWORK_TARGETS
-        assert m.http_targets == DEFAULT_HTTP_TARGETS
 
 
 # ── has_decryption_error / clear_decryption_error ──

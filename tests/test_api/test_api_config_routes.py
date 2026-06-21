@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from app.schemas import MonitorConfigPayload
+from app.schemas import RuntimeConfig
 from app.services.config_service import SaveResult
 
 
@@ -38,23 +38,23 @@ class TestGetConfig:
 
     def test_get_config_returns_200(self, api_client):
         test_client, mock_services = api_client
-        mock_services.engine.get_config.return_value = MonitorConfigPayload(
-            username="testuser", password="••••••••", auth_url="http://10.0.0.1"
+        mock_services.engine.get_config.return_value = RuntimeConfig(
+            credentials={"username": "testuser", "password": "secret", "auth_url": "http://10.0.0.1"},
         )
         resp = test_client.get("/api/config")
         assert resp.status_code == 200
         data = resp.json()
-        assert "username" in data
-        assert "auth_url" in data
+        assert "credentials" in data
+        assert "auth_url" in data["credentials"]
 
     def test_get_config_contains_expected_fields(self, api_client):
         test_client, mock_services = api_client
-        mock_services.engine.get_config.return_value = MonitorConfigPayload(
-            username="testuser", password="••••••••", auth_url="http://10.0.0.1"
+        mock_services.engine.get_config.return_value = RuntimeConfig(
+            credentials={"username": "testuser", "password": "secret", "auth_url": "http://10.0.0.1"},
         )
         data = test_client.get("/api/config").json()
-        assert data["username"] == "testuser"
-        assert data["auth_url"] == "http://10.0.0.1"
+        assert data["credentials"]["username"] == "testuser"
+        assert data["credentials"]["auth_url"] == "http://10.0.0.1"
 
 
 class TestGetDefaultStealthScript:
@@ -76,8 +76,8 @@ class TestSaveConfig:
     def test_save_config_success(self, mock_save_and_apply, api_client):
         test_client, mock_services = api_client
         mock_save_and_apply.return_value = SaveResult(success=True, message="配置保存成功")
-        mock_services.engine.get_config.return_value = MonitorConfigPayload(
-            username="testuser", password="••••••••", auth_url="http://10.0.0.1"
+        mock_services.engine.get_config.return_value = RuntimeConfig(
+            credentials={"username": "testuser", "password": "secret", "auth_url": "http://10.0.0.1"},
         )
 
         payload = {

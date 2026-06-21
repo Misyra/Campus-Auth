@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from app.schemas import MonitorConfigPayload, MonitorStatusResponse
+from app.schemas import MonitorStatusResponse, RuntimeConfig
 
 
 def _setup_task_mocks(mock_services):
     """配置 task_service 和 engine mock 返回值。"""
-    mock_services.engine.get_config.return_value = MonitorConfigPayload(
-        username="testuser", password="••••••••", auth_url="http://10.0.0.1"
-    )
+    mock_services.engine.get_config.return_value = RuntimeConfig()
     mock_services.engine.get_status.return_value = MonitorStatusResponse(
         monitoring=False,
         network_check_count=0,

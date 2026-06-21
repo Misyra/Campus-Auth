@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from app.schemas import MonitorConfigPayload
+from app.schemas import RuntimeConfig
 
 
 # ── 健康检查 ──
@@ -33,9 +33,7 @@ class TestInitStatus:
     def test_initialized(self, api_client):
         """已初始化时返回 True。"""
         test_client, mock_services = api_client
-        mock_services.engine.get_config.return_value = MonitorConfigPayload(
-            username="testuser", password="secret", auth_url="http://10.0.0.1"
-        )
+        mock_services.engine.get_config.return_value = RuntimeConfig()
         with patch("app.utils.crypto.has_decryption_error", return_value=False):
             resp = test_client.get("/api/init-status")
         assert resp.status_code == 200
@@ -45,9 +43,7 @@ class TestInitStatus:
     def test_not_initialized(self, api_client):
         """未初始化时返回 False。"""
         test_client, mock_services = api_client
-        mock_services.engine.get_config.return_value = MonitorConfigPayload(
-            username="", password="", auth_url=""
-        )
+        mock_services.engine.get_config.return_value = RuntimeConfig()
         with patch("app.utils.crypto.has_decryption_error", return_value=False):
             resp = test_client.get("/api/init-status")
         assert resp.status_code == 200
