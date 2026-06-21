@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.schemas import AuthProfile, ProfilesData
+from app.schemas import Profile, ProfilesData
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
 from app.services.login_orchestrator import LoginOrchestrator

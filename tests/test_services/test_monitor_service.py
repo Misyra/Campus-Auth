@@ -20,6 +20,11 @@ from app.services.engine import (
 )
 
 
+def _fake_reload():
+    """模拟 _reload_config_internal 的返回值。__init__ 已初始化 _ui_config/_runtime_config。"""
+    return True
+
+
 
 # =====================================================================
 # EngineCommand
@@ -165,22 +170,14 @@ class TestListLogs:
         finally:
             logger.remove(handler_id)
 
-    @patch("app.services.config_service.build_runtime_config", return_value=RuntimeConfig())
-    @patch(
-        "app.services.runtime_config.load_runtime_config",
-        return_value=(MagicMock(), False),
-    )
-    @patch("app.services.runtime_config.load_ui_config")
+    @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
     def test_list_logs_returns_all_when_limit_exceeds(
-        self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_ps_cls, mock_reload
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.global_settings.pure_mode = False
-        mock_ui_config = MagicMock()
-
-        mock_load_ui.return_value = mock_ui_config
+        mock_ps.load.return_value.config.browser.pure_mode = False
 
         svc = ScheduleEngine(MagicMock())
         from loguru import logger
@@ -269,26 +266,18 @@ class TestUpdateStatusSnapshot:
 
 
 class TestStartStopMonitoring:
-    @patch("app.services.config_service.build_runtime_config", return_value=RuntimeConfig())
-    @patch(
-        "app.services.runtime_config.load_runtime_config",
-        return_value=(MagicMock(), False),
-    )
-    @patch("app.services.runtime_config.load_ui_config")
+    @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
     @patch(
         "app.services.engine.ConfigValidator.validate_env_config",
         return_value=(True, ""),
     )
     def test_start_monitoring(
-        self, mock_validate, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_validate, mock_ps_cls, mock_reload
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.global_settings.pure_mode = False
-        mock_ui_config = MagicMock()
-
-        mock_load_ui.return_value = mock_ui_config
+        mock_ps.load.return_value.config.browser.pure_mode = False
 
         svc = ScheduleEngine(MagicMock())
         ok, msg = svc.start_monitoring()
@@ -348,24 +337,15 @@ class TestHandleStartStop:
 
 
 class TestHandleLogin:
-    @patch("app.services.config_service.build_runtime_config", return_value=RuntimeConfig())
-    @patch(
-        "app.services.runtime_config.load_runtime_config",
-        return_value=(MagicMock(), False),
-    )
-    @patch("app.services.runtime_config.load_ui_config")
+    @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
     def test_handle_login_submits_async(
-        self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_ps_cls, mock_reload
     ):
         """_handle_login 有配置时提交登录并等待完成返回结果。"""
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.global_settings.pure_mode = False
-        mock_ui_config = MagicMock()
-
-        mock_ui_config.login_timeout = 120
-        mock_load_ui.return_value = mock_ui_config
+        mock_ps.load.return_value.config.browser.pure_mode = False
 
         mock_worker = MagicMock()
         mock_result = MagicMock()
@@ -443,71 +423,47 @@ class TestRunManualLogin:
 
 
 class TestNetwork:
-    @patch("app.services.config_service.build_runtime_config", return_value=RuntimeConfig())
-    @patch(
-        "app.services.runtime_config.load_runtime_config",
-        return_value=(MagicMock(), False),
-    )
-    @patch("app.services.runtime_config.load_ui_config")
+    @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
     @patch("app.services.engine.is_network_available", return_value=True)
     def test_network_ok(
-        self, mock_net, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_net, mock_ps_cls, mock_reload
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.global_settings.pure_mode = False
-        mock_ui_config = MagicMock()
-
-        mock_load_ui.return_value = mock_ui_config
+        mock_ps.load.return_value.config.browser.pure_mode = False
 
         svc = ScheduleEngine(MagicMock())
         ok, msg = svc.test_network()
         assert ok is True
         assert "正常" in msg
 
-    @patch("app.services.config_service.build_runtime_config", return_value=RuntimeConfig())
-    @patch(
-        "app.services.runtime_config.load_runtime_config",
-        return_value=(MagicMock(), False),
-    )
-    @patch("app.services.runtime_config.load_ui_config")
+    @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
     @patch("app.services.engine.is_network_available", return_value=False)
     def test_network_fail(
-        self, mock_net, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_net, mock_ps_cls, mock_reload
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.global_settings.pure_mode = False
-        mock_ui_config = MagicMock()
-
-        mock_load_ui.return_value = mock_ui_config
+        mock_ps.load.return_value.config.browser.pure_mode = False
 
         svc = ScheduleEngine(MagicMock())
         ok, msg = svc.test_network()
         assert ok is False
         assert "异常" in msg
 
-    @patch("app.services.config_service.build_runtime_config", return_value=RuntimeConfig())
-    @patch(
-        "app.services.runtime_config.load_runtime_config",
-        return_value=(MagicMock(), False),
-    )
-    @patch("app.services.runtime_config.load_ui_config")
+    @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
     @patch(
         "app.services.engine.is_network_available", side_effect=RuntimeError("timeout")
     )
     def test_network_exception(
-        self, mock_net, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_net, mock_ps_cls, mock_reload
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.global_settings.pure_mode = False
-        mock_ui_config = MagicMock()
-
-        mock_load_ui.return_value = mock_ui_config
+        mock_ps.load.return_value.config.browser.pure_mode = False
 
         svc = ScheduleEngine(MagicMock())
         ok, msg = svc.test_network()
@@ -521,53 +477,51 @@ class TestNetwork:
 
 
 class TestTogglePureMode:
-    @patch("app.services.config_service.build_runtime_config", return_value=RuntimeConfig())
-    @patch(
-        "app.services.runtime_config.load_runtime_config",
-        return_value=(MagicMock(), False),
-    )
-    @patch("app.services.runtime_config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     def test_toggle_pure_mode(
-        self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_ps_cls
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_data = MagicMock()
-        mock_data.global_settings.pure_mode = False
+        mock_data.config.browser.pure_mode = False
         mock_ps.load.return_value = mock_data
-        mock_ui_config = MagicMock()
 
-        mock_load_ui.return_value = mock_ui_config
+        def _fake_reload(self_inner):
+            self_inner._ui_config = RuntimeConfig()
+            self_inner._runtime_config = RuntimeConfig()
+            self_inner._runtime_snapshot = self_inner._runtime_config
+            self_inner._pure_mode = False
+            return True
 
-        svc = ScheduleEngine(MagicMock())
+        with patch.object(ScheduleEngine, "_reload_config_internal", _fake_reload):
+            svc = ScheduleEngine(MagicMock())
         assert svc.pure_mode is False
         new_value = svc.toggle_pure_mode()
         assert new_value is True
         assert svc.pure_mode is True
         mock_ps.update.assert_called_once()
 
-    @patch("app.services.config_service.build_runtime_config", return_value=RuntimeConfig())
-    @patch(
-        "app.services.runtime_config.load_runtime_config",
-        return_value=(MagicMock(), False),
-    )
-    @patch("app.services.runtime_config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     def test_pure_mode_read_write_thread_safe(
-        self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_ps_cls
     ):
         """读写线程安全：2 线程同时读/写 1000 次，无异常且值始终为 bool。"""
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_data = MagicMock()
-        mock_data.global_settings.pure_mode = False
+        mock_data.config.browser.pure_mode = False
         mock_ps.load.return_value = mock_data
-        mock_ui_config = MagicMock()
 
-        mock_load_ui.return_value = mock_ui_config
+        def _fake_reload(self_inner):
+            self_inner._ui_config = RuntimeConfig()
+            self_inner._runtime_config = RuntimeConfig()
+            self_inner._runtime_snapshot = self_inner._runtime_config
+            self_inner._pure_mode = False
+            return True
 
-        svc = ScheduleEngine(MagicMock())
+        with patch.object(ScheduleEngine, "_reload_config_internal", _fake_reload):
+            svc = ScheduleEngine(MagicMock())
         errors: list[Exception] = []
         values_seen: list[bool] = []
 
@@ -619,25 +573,14 @@ class TestLoginInProgress:
 
 
 class TestGetConfig:
-    @patch(
-        "app.services.config_service.build_runtime_config",
-        return_value=RuntimeConfig(),
-    )
-    @patch(
-        "app.services.runtime_config.load_runtime_config",
-        return_value=(MagicMock(), False),
-    )
-    @patch("app.services.runtime_config.load_ui_config")
+    @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
     def test_get_runtime_config(
-        self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_ps_cls, mock_reload
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.global_settings.pure_mode = False
-        mock_ui_config = MagicMock()
-
-        mock_load_ui.return_value = mock_ui_config
+        mock_ps.load.return_value.config.browser.pure_mode = False
 
         svc = ScheduleEngine(MagicMock())
         config = svc.get_runtime_config()
@@ -655,7 +598,7 @@ class TestSaveProfileApplyId:
 
     def test_apply_profile_uses_id_not_name(self):
         from app.api.profiles import save_profile
-        from app.schemas import AuthProfile
+        from app.schemas import Profile
 
         mock_profile_svc = MagicMock()
         mock_monitor_svc = MagicMock()
@@ -668,7 +611,7 @@ class TestSaveProfileApplyId:
         mock_profile_svc.load.return_value = mock_data
 
         # payload.name 与 profile_id 不同 —— 这是 bug 的核心
-        payload = AuthProfile(name="完全不同的展示名")
+        payload = Profile(name="完全不同的展示名")
         save_profile(
             profile_id="my_profile_id",
             payload=payload,
@@ -746,8 +689,7 @@ class TestManualLoginTimeout:
         svc._manual_login_lock = threading.Lock()
         svc._runtime_config = RuntimeConfig()
         svc._ui_config = MagicMock()
-        svc._ui_config.login_timeout = 0.01  # 极短超时
-        svc._monitor_core = None
+        svc._ui_config.browser.login_timeout = 0.01  # 极短超时
         svc._pure_mode = False
         svc._pure_mode_lock = threading.Lock()
         svc._engine_thread = MagicMock()
@@ -896,8 +838,7 @@ class TestManualLoginConsumerDead:
         svc._manual_login_lock = threading.Lock()
         svc._runtime_config = RuntimeConfig()
         svc._ui_config = MagicMock()
-        svc._ui_config.login_timeout = 0.01
-        svc._monitor_core = None
+        svc._ui_config.browser.login_timeout = 0.01
         svc._pure_mode = False
         svc._pure_mode_lock = threading.Lock()
         svc._start_stop_lock = threading.Lock()

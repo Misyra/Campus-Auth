@@ -1,5 +1,26 @@
 # 修改日志
 
+## 2026-06-21 (20)
+
+### test: 清理旧配置模型残留引用
+
+- `app/services/engine.py`：`self._ui_config.login_timeout` → `self._ui_config.browser.login_timeout`
+- 测试文件修复：
+  - `tests/test_integration/test_login_flow.py`：`svc._ui_config.login_timeout` → `svc._ui_config.browser.login_timeout`
+  - `tests/test_services/conftest.py`：`svc._ui_config.login_timeout` → `svc._ui_config.browser.login_timeout`
+  - `tests/test_services/test_engine.py`：`svc._ui_config.login_timeout` → `svc._ui_config.browser.login_timeout`
+  - `tests/test_services/test_monitor_service.py`：`svc._ui_config.login_timeout` → `svc._ui_config.browser.login_timeout`
+- `AuthProfile` → `Profile` 替换：
+  - `tests/test_config/test_config_schemas.py`
+  - `tests/test_api/test_api_repo_routes.py`
+  - `tests/test_api/test_config_fix.py`
+  - `tests/test_app/test_backend_services.py`
+  - `tests/test_integration/conftest.py`
+  - `tests/test_integration/test_network_connection.py`
+  - `tests/test_integration/test_profile_connection.py`
+  - `tests/test_services/test_monitor_service.py`
+  - `tests/test_services/test_profile_service.py`
+
 ## 2026-06-21 (19)
 
 ### cleanup(schemas): 删除 SystemSettings/MonitorConfigPayload/Mixin

@@ -13,7 +13,7 @@ from pydantic import ValidationError
 
 from app.schemas import (
     ActionResponse,
-    AuthProfile,
+    Profile,
     AutoStartStatusResponse,
     LogEntry,
     MonitorStatusResponse,
@@ -192,13 +192,13 @@ class TestLogEntry:
 
 
 # ---------------------------------------------------------------------
-# AuthProfile
+# Profile
 # ---------------------------------------------------------------------
 
 
 class TestAuthProfileDefaults:
     def test_defaults(self):
-        p = AuthProfile()
+        p = Profile()
         assert p.name == "默认方案"
         assert p.username == ""
         assert p.password == ""
@@ -206,11 +206,11 @@ class TestAuthProfileDefaults:
         assert p.auth_url == ""
 
     def test_custom_name(self):
-        p = AuthProfile(name="自定义方案")
+        p = Profile(name="自定义方案")
         assert p.name == "自定义方案"
 
     def test_match_fields(self):
-        p = AuthProfile(
+        p = Profile(
             match_gateway_ip="10.0.0.1",
             match_ssid="CampusWiFi",
         )
@@ -219,11 +219,11 @@ class TestAuthProfileDefaults:
 
 
 class TestAuthProfile:
-    """AuthProfile 测试"""
+    """Profile 测试"""
 
     def test_custom_values(self):
         """测试自定义值"""
-        profile = AuthProfile(
+        profile = Profile(
             name="测试方案",
             username="testuser",
             password="testpass",
@@ -239,7 +239,7 @@ class TestAuthProfile:
     def test_invalid_auth_url(self):
         """测试无效认证地址"""
         with pytest.raises(ValidationError, match="认证地址必须以 http"):
-            AuthProfile(auth_url="not-a-url")
+            Profile(auth_url="not-a-url")
 
 
 # ---------------------------------------------------------------------

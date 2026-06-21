@@ -62,7 +62,7 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._empty_broadcast_queue = __import__("collections").deque(maxlen=10)
     svc._ws_manager = None
     svc._ui_config = MagicMock()
-    svc._ui_config.login_timeout = 120
+    svc._ui_config.browser.login_timeout = 120
     svc._login_history = None
     svc._worker_getter = None
     svc._profile_service = MagicMock()
