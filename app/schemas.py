@@ -264,6 +264,7 @@ class LoggingSettings(BaseModel, frozen=True):
     frontend_level: str = "INFO"
     log_retention_days: int = Field(default=7, ge=1, le=365)
     access_log: bool = False
+    source_levels: dict[str, str] = Field(default_factory=dict)
 
 
 class RetrySettings(BaseModel, frozen=True):
