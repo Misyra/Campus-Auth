@@ -31,11 +31,16 @@ def parse_url_checks(raw: str | list | None) -> list[tuple[str, str]]:
         return entries
 
     if isinstance(raw, list):
-        return [
-            (e[0], e[1])
-            for e in raw
-            if isinstance(e, list | tuple) and len(e) >= 2 and e[0] and e[1]
-        ]
+        entries = []
+        for e in raw:
+            if isinstance(e, dict):
+                url = e.get("url", "")
+                expected = e.get("expected", "")
+                if url and expected:
+                    entries.append((url, expected))
+            elif isinstance(e, list | tuple) and len(e) >= 2 and e[0] and e[1]:
+                entries.append((e[0], e[1]))
+        return entries
 
     return []
 
