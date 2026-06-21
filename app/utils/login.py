@@ -151,7 +151,12 @@ class LoginAttemptHandler:
         )
 
         template_vars = build_login_template_vars(
-            self.config, task.url, self._custom_variables
+            auth_url=self._credentials.get("auth_url", ""),
+            username=self._credentials.get("username", ""),
+            password=self._credentials.get("password", ""),
+            isp=self._credentials.get("isp", ""),
+            task_url=task.url,
+            custom_variables=self._custom_variables,
         )
 
         if self.cancel_event and self.cancel_event.is_set():

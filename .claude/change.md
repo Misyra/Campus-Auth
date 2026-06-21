@@ -1,5 +1,22 @@
 # 修改日志
 
+## 2026-06-21 (7)
+
+### refactor(env): build_login_template_vars 改为显式参数
+- `app/utils/env.py`：
+  - 函数签名从 `build_login_template_vars(runtime_config: RuntimeConfig | dict[str, Any], task_url, custom_variables)` 改为 `build_login_template_vars(auth_url, username, password, isp, task_url, custom_variables)`
+  - 移除 `hasattr(runtime_config, "credentials")` 双路径判断
+  - 移除 `from typing import Any` 导入
+  - 自定义变量值统一通过 `str(v)` 转换
+- `app/utils/login.py`：
+  - 调用点从 `build_login_template_vars(self.config, task.url, self._custom_variables)` 改为关键字参数形式，从 `self._credentials` 解构
+- `app/services/debug_service.py`：
+  - 调用点从 `build_login_template_vars(runtime_config, task.url, runtime_config.custom_variables)` 改为关键字参数形式，从 `runtime_config.credentials` 解构
+- 测试文件同步更新（2 个文件）：
+  - `tests/test_utils/test_env_fix.py`：6 个测试从 dict 参数改为显式关键字参数
+  - `tests/test_utils/test_utils.py`：8 个测试从 dict 参数改为显式关键字参数
+- 验收：2332 测试全通过
+
 ## 2026-06-21 (6)
 
 ### refactor(monitor): check_once() 返回类型化 CheckOnceResult dataclass

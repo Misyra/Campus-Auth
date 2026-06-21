@@ -116,7 +116,12 @@ class DebugSessionManager:
         # 构建模板变量（复用 service 的运行时配置）
         runtime_config = monitor_service.get_runtime_config()
         template_vars = build_login_template_vars(
-            runtime_config, task.url, runtime_config.custom_variables
+            auth_url=runtime_config.credentials.auth_url,
+            username=runtime_config.credentials.username,
+            password=runtime_config.credentials.password,
+            isp=runtime_config.credentials.isp,
+            task_url=task.url,
+            custom_variables=runtime_config.custom_variables,
         )
 
         # 解析任务 URL

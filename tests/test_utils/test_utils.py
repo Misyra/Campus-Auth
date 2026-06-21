@@ -526,13 +526,12 @@ class TestIsInPausePeriod:
 class TestBuildLoginTemplateVars:
     def test_basic_config(self):
         """基本配置应正确注入模板变量"""
-        config = {
-            "auth_url": "http://10.0.0.1/login",
-            "username": "testuser",
-            "password": "testpass",
-            "isp": "移动",
-        }
-        result = build_login_template_vars(config)
+        result = build_login_template_vars(
+            auth_url="http://10.0.0.1/login",
+            username="testuser",
+            password="testpass",
+            isp="移动",
+        )
         assert result["LOGIN_URL"] == "http://10.0.0.1/login"
         assert result["USERNAME"] == "testuser"
         assert result["PASSWORD"] == "testpass"
@@ -540,56 +539,65 @@ class TestBuildLoginTemplateVars:
 
     def test_task_url_template_resolution(self):
         """task_url 中的变量模板应被解析"""
-        config = {
-            "auth_url": "http://10.0.0.1/login",
-            "username": "user1",
-            "password": "pass1",
-            "isp": "联通",
-        }
         task_url = "http://10.0.0.1/login?user={{USERNAME}}&isp={{ISP}}"
-        result = build_login_template_vars(config, task_url=task_url)
+        result = build_login_template_vars(
+            auth_url="http://10.0.0.1/login",
+            username="user1",
+            password="pass1",
+            isp="联通",
+            task_url=task_url,
+        )
         assert result["LOGIN_URL"] == "http://10.0.0.1/login?user=user1&isp=联通"
 
     def test_custom_variables_injected(self):
         """自定义变量应注入到模板变量"""
-        config = {"auth_url": "http://test.com", "username": "u", "password": "p"}
         custom = {"MY_VAR": "hello", "ANOTHER": "world"}
-        result = build_login_template_vars(config, custom_variables=custom)
+        result = build_login_template_vars(
+            auth_url="http://test.com",
+            username="u",
+            password="p",
+            custom_variables=custom,
+        )
         assert result["MY_VAR"] == "hello"
         assert result["ANOTHER"] == "world"
 
     def test_denylist_not_overridden(self):
         """保留名自定义变量应被拒绝"""
-        config = {"auth_url": "", "username": "", "password": ""}
         custom = {"PATH": "/evil/path", "PYTHONPATH": "/evil"}
-        result = build_login_template_vars(config, custom_variables=custom)
+        result = build_login_template_vars(custom_variables=custom)
         assert result.get("PATH") is None
         assert result.get("PYTHONPATH") is None
 
     def test_empty_config(self):
-        """空配置应返回空字典"""
-        config = {}
-        result = build_login_template_vars(config)
+        """空参数应返回空字典"""
+        result = build_login_template_vars()
         assert isinstance(result, dict)
         assert result.get("LOGIN_URL", "") == ""
 
     def test_none_custom_variables(self):
         """custom_variables=None 不应报错"""
-        config = {"auth_url": "http://test.com"}
-        result = build_login_template_vars(config, custom_variables=None)
+        result = build_login_template_vars(auth_url="http://test.com", custom_variables=None)
         assert "LOGIN_URL" in result
 
     def test_task_url_with_login_url_fallback(self):
         """task_url 中无模板变量时，LOGIN_URL 应被设置为解析后的 task_url"""
-        config = {"auth_url": "http://10.0.0.1", "username": "u", "password": "p"}
         task_url = "http://10.0.0.1/specific"
-        result = build_login_template_vars(config, task_url=task_url)
+        result = build_login_template_vars(
+            auth_url="http://10.0.0.1",
+            username="u",
+            password="p",
+            task_url=task_url,
+        )
         assert result["LOGIN_URL"] == "http://10.0.0.1/specific"
 
     def test_empty_task_url_falls_back_to_auth_url(self):
         """task_url 为空时，LOGIN_URL 应使用 auth_url"""
-        config = {"auth_url": "http://10.0.0.1", "username": "u", "password": "p"}
-        result = build_login_template_vars(config, task_url="")
+        result = build_login_template_vars(
+            auth_url="http://10.0.0.1",
+            username="u",
+            password="p",
+            task_url="",
+        )
         assert result["LOGIN_URL"] == "http://10.0.0.1"
 
 
