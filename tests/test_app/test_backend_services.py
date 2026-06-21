@@ -15,7 +15,7 @@ import pytest
 
 from app.network.detect import detect_gateway_ip, detect_wifi_ssid
 from app.schemas import (
-    AuthProfile,
+    Profile,
     ProfilesData,
     RuntimeConfig,
 )
@@ -406,14 +406,14 @@ class TestProfileService:
 
     def test_save_creates_file(self, service, tmp_path):
         data = ProfilesData()
-        data.profiles["default"] = AuthProfile(name="测试")
+        data.profiles["default"] = Profile(name="测试")
         service.save(data)
         assert (tmp_path / "config" / "settings.json").exists()
         # ProfileService 保存所有数据到 settings.json，不创建单独的 profile 文件
 
     def test_save_and_load_roundtrip(self, service):
         data = ProfilesData()
-        data.profiles["test"] = AuthProfile(name="往返测试")
+        data.profiles["test"] = Profile(name="往返测试")
         service.save(data)
         loaded = service.load()
         assert loaded.profiles["test"].name == "往返测试"
@@ -462,25 +462,25 @@ class TestProfileService:
         assert "不存在" in msg
 
     def test_save_profile_new(self, service):
-        settings = AuthProfile(name="新方案")
+        settings = Profile(name="新方案")
         ok, msg = service.save_profile("new_profile", settings)
         assert ok is True
         data = service.load()
         assert "new_profile" in data.profiles
 
     def test_save_profile_update(self, service_with_profiles):
-        settings = AuthProfile(name="更新后方案")
+        settings = Profile(name="更新后方案")
         ok, msg = service_with_profiles.save_profile("default", settings)
         assert ok is True
         data = service_with_profiles.load()
         assert data.profiles["default"].name == "更新后方案"
 
     def test_save_profile_empty_id(self, service):
-        ok, msg = service.save_profile("", AuthProfile())
+        ok, msg = service.save_profile("", Profile())
         assert ok is False
 
     def test_save_profile_invalid_id(self, service):
-        ok, msg = service.save_profile("my-profile", AuthProfile())
+        ok, msg = service.save_profile("my-profile", Profile())
         assert ok is False
         assert "字母" in msg or "下划线" in msg
 
@@ -493,7 +493,7 @@ class TestProfileService:
             encoding="utf-8",
         )
         service = ProfileService(tmp_path)
-        settings = AuthProfile(name="唯一方案")
+        settings = Profile(name="唯一方案")
         service.save_profile("only", settings)
         data = service.load()
         # save_profile 在 len(data.profiles) == 1 时设置 active_profile
@@ -636,11 +636,11 @@ class TestProfileService:
     def test_update_modifies_data(self, service):
         """update() 应在锁内执行读-改-写"""
         data = service.load()
-        data.profiles["default"] = AuthProfile(name="原始")
+        data.profiles["default"] = Profile(name="原始")
         service.save(data)
 
         def modifier(d: ProfilesData):
-            d.profiles["default"] = AuthProfile(name="通过update修改")
+            d.profiles["default"] = Profile(name="通过update修改")
 
         service.update(modifier)
         loaded = service.load()
@@ -651,7 +651,7 @@ class TestProfileService:
         service = ProfileService(tmp_path)
 
         def modifier(d: ProfilesData):
-            d.profiles["new"] = AuthProfile(name="新建方案")
+            d.profiles["new"] = Profile(name="新建方案")
 
         service.update(modifier)
         assert (tmp_path / "config" / "settings.json").exists()
@@ -663,7 +663,7 @@ class TestProfileService:
         """update() 不应丢失未修改的字段"""
         data = ProfilesData(
             auto_switch=True,
-            profiles={"default": AuthProfile(name="默认")},
+            profiles={"default": Profile(name="默认")},
         )
         service.save(data)
 

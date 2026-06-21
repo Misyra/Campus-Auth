@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.network.decision import NetworkCheckResult
-from app.schemas import AuthProfile
+from app.schemas import Profile
 from app.services.monitor_service import CheckOnceResult, NetworkMonitorCore
 from app.workers.playwright_worker import WorkerResponse
 

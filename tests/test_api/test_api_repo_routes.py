@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 from app.schemas import (
-    AuthProfile,
+    Profile,
     MonitorStatusResponse,
     ProfilesData,
     RuntimeConfig,
@@ -28,7 +28,7 @@ class TestRepoFetchIndex:
         )
         mock_services.engine.list_logs.return_value = []
         mock_services.profile_service.load.return_value = ProfilesData(
-            profiles={"default": AuthProfile(name="默认方案", username="testuser", password="ENC:test")},
+            profiles={"default": Profile(name="默认方案", username="testuser", password="ENC:test")},
         )
         mock_fetch.return_value = [{"id": "task1", "name": "任务1"}]
         resp = test_client.get("/api/repo/fetch?url=https://example.com/index.json")
@@ -42,7 +42,7 @@ class TestRepoFetchIndex:
         test_client, mock_services = api_client
         mock_services.engine.get_config.return_value = RuntimeConfig()
         mock_services.profile_service.load.return_value = ProfilesData(
-            profiles={"default": AuthProfile(name="默认方案", username="testuser", password="ENC:test")},
+            profiles={"default": Profile(name="默认方案", username="testuser", password="ENC:test")},
         )
         mock_fetch.return_value = []
         resp = test_client.get("/api/repo/fetch?url=https://example.com/index.json")
@@ -58,7 +58,7 @@ class TestRepoFetchTask:
         test_client, mock_services = api_client
         mock_services.engine.get_config.return_value = RuntimeConfig()
         mock_services.profile_service.load.return_value = ProfilesData(
-            profiles={"default": AuthProfile(name="默认方案", username="testuser", password="ENC:test")},
+            profiles={"default": Profile(name="默认方案", username="testuser", password="ENC:test")},
         )
         mock_fetch.return_value = {"name": "任务详情", "steps": []}
         resp = test_client.get("/api/repo/task?url=https://example.com/task.json")

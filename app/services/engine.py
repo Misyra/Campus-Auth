@@ -122,6 +122,7 @@ class ScheduleEngine:
         self._manual_login_lock: threading.Lock = threading.Lock()
         self._reload_lock: threading.Lock = threading.Lock()
         self._pure_mode_lock: threading.Lock = threading.Lock()
+        self._pure_mode: bool = False
         self._start_stop_lock: threading.Lock = threading.Lock()
 
         # 运行时配置快照（仅在 reload 时更新，读取零拷贝）
@@ -743,7 +744,7 @@ class ScheduleEngine:
 
             # Wait for consumer to execute login (with timeout)
             # API 等待超时应略大于 Worker 超时，给足执行余量
-            login_timeout = self._ui_config.login_timeout
+            login_timeout = self._ui_config.browser.login_timeout
             worker_timeout = max(login_timeout, 60)
             api_wait_timeout = worker_timeout + 10
             cmd.response_event.wait(timeout=api_wait_timeout)
@@ -827,7 +828,7 @@ class ScheduleEngine:
         with self._pure_mode_lock:
             new_value = not self._pure_mode
             self._profile_service.update(
-                lambda d: setattr(d.global_settings, "pure_mode", new_value)
+                lambda d: setattr(d, "config", d.config.model_copy(update={"browser": d.config.browser.model_copy(update={"pure_mode": new_value})}))
             )
             self._pure_mode = new_value
             return new_value

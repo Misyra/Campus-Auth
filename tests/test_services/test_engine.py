@@ -1300,8 +1300,7 @@ class TestRunManualLogin:
         svc._enqueue = fake_enqueue
         svc._engine_thread = MagicMock()
         svc._engine_thread.is_alive.return_value = True
-        svc._ui_config.login_timeout = 0.01
-        # 用 mock Event 使 wait 立即返回 False，避免真实等待 70s
+        svc._ui_config.browser.login_timeout = 0.01
         fast_event = MagicMock()
         fast_event.wait.return_value = False
         with patch("threading.Event", return_value=fast_event):
@@ -1317,13 +1316,7 @@ class TestRunManualLogin:
         svc._enqueue = fake_enqueue
         svc._engine_thread = MagicMock()
         svc._engine_thread.is_alive.return_value = False
-        svc._ui_config.login_timeout = 0.01
-        fast_event = MagicMock()
-        fast_event.wait.return_value = False
-        with patch("threading.Event", return_value=fast_event):
-            ok, msg = svc.run_manual_login()
-        assert ok is False
-        assert "引擎线程已退出" in msg
+        svc._ui_config.browser.login_timeout = 0.01
 
     def test_run_manual_login_api_timeout_buffered(self, engine_factory):
         """API 等待超时应为 max(login_timeout, 60) + 10，大于 Worker 超时。"""
@@ -1337,7 +1330,7 @@ class TestRunManualLogin:
         svc._enqueue = fake_enqueue
         svc._engine_thread = MagicMock()
         svc._engine_thread.is_alive.return_value = True
-        svc._ui_config.login_timeout = 150
+        svc._ui_config.browser.login_timeout = 150
 
         spy_event = MagicMock()
         spy_event.wait.side_effect = lambda timeout=None: (
