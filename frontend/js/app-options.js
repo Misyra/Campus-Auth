@@ -154,10 +154,10 @@ export const appOptions = {
     },
     urlCheckEnabled: {
       get() {
-        return !!(this.config.url_check_urls && this.config.url_check_urls.trim());
+        return !!(this.config.monitor.url_check_urls && this.config.monitor.url_check_urls.length);
       },
       set(val) {
-        this.config.url_check_urls = val ? (this.config.url_check_urls || this.defaultUrlCheckUrls) : '';
+        this.config.monitor.url_check_urls = val ? (this.config.monitor.url_check_urls.length ? this.config.monitor.url_check_urls : this.defaultUrlCheckUrls) : [];
       },
     },
     filteredRepoTasks() {
@@ -289,20 +289,20 @@ export const appOptions = {
         }
       }
       if (step === 2) {
-        if (!data.config.username) {
+        if (!data.config.credentials.username) {
           errors.username = '请输入账号';
         }
-        if (!data.config.password) {
+        if (!data.config.credentials.password) {
           errors.password = '请输入密码';
-        } else if (data.config.password.length < 2) {
+        } else if (data.config.credentials.password.length < 2) {
           errors.password = '密码长度不能少于2位';
         }
-        if (!data.config.auth_url) {
+        if (!data.config.credentials.auth_url) {
           errors.auth_url = '请输入认证地址';
-        } else if (!/^https?:\/\//i.test(data.config.auth_url)) {
+        } else if (!/^https?:\/\//i.test(data.config.credentials.auth_url)) {
           errors.auth_url = '认证地址必须以 http:// 或 https:// 开头';
         }
-        if (data.config.carrier === '自定义' && (!data.config.carrier_custom || !data.config.carrier_custom.trim())) {
+        if (data.config.credentials.isp === '自定义' && (!data.config.credentials.carrier_custom || !data.config.credentials.carrier_custom.trim())) {
           errors.carrier_custom = '请输入自定义运营商关键字';
         }
       }

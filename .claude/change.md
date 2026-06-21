@@ -1,5 +1,80 @@
 # 修改日志
 
+## 2026-06-21 (18)
+
+### refactor(frontend): 设置页面适配嵌套配置结构
+- `frontend/partials/pages/settings/settings-browser.html`：
+  - 所有 `config.xxx` 浏览器字段改为 `config.browser.xxx`（headless/timeout/navigation_timeout/low_resource_mode/locale/timezone_id/disable_web_security/stealth_mode/stealth_custom_script/pure_mode/browser_channel/browser_args/user_agent/extra_headers_json/viewport_width/viewport_height）
+- `frontend/partials/pages/settings/settings-monitor.html`：
+  - 检测字段改为 `config.monitor.xxx`（check_interval_seconds/network_check_timeout/enable_tcp_check/enable_http_check/enable_local_check/check_auth_url）
+  - 数组字段 `ping_targets`/`test_urls`/`auth_url_targets` 改用 `:value + @input` 绑定，前端逗号分隔字符串与后端数组双向转换
+  - `url_check_urls` 改用 `:value + @input` 绑定，换行符分隔字符串与后端数组双向转换
+  - 重试字段改为 `config.retry.xxx`（max_retries/retry_interval）
+  - `login_timeout` 改为 `config.browser.login_timeout`
+  - 暂停字段改为 `config.pause.xxx`（enabled/start_hour/end_hour）
+- `frontend/partials/pages/settings/settings-system.html`：
+  - 日志字段改为 `config.logging.xxx`（log_retention_days/access_log）
+- `frontend/partials/pages/settings/settings-account.html`：
+  - 凭证字段改为 `config.credentials.xxx`（username/password/auth_url/isp/carrier_custom）
+- `frontend/partials/wizard.html`：
+  - 同步更新所有凭证/检测/暂停/浏览器字段为嵌套路径
+  - 配置摘要显示改为嵌套路径访问
+- `frontend/partials/shared/browser-selection.html`：
+  - `config.browser_custom_path` 改为 `config.browser.browser_custom_path`
+- `frontend/js/app-options.js`：
+  - 向导验证改为 `data.config.credentials.xxx` 嵌套路径
+  - `urlCheckEnabled` computed 改为数组长度判断
+- `frontend/js/methods/actions.js`：
+  - `config.login_timeout` 改为 `config.browser.login_timeout`
+- `frontend/js/methods/ui.js`：
+  - `config.browser_channel` 改为 `config.browser.browser_channel`
+  - `config.username`/`config.auth_url` 改为 `config.credentials.xxx`
+  - `config.browser_custom_path` 改为 `config.browser.browser_custom_path`
+
+## 2026-06-21 (17)
+
+### refactor(frontend): 配置数据结构改为嵌套
+- `frontend/js/constants.js`：
+  - 删除 `_SHARED_DEFAULTS` 常量
+  - `DEFAULT_CONFIG` 从扁平结构改为嵌套结构（browser/monitor/pause/logging/retry/credentials 六个子对象 + 顶层透传字段），与后端 RuntimeConfig 对齐
+  - `DEFAULT_PROFILE_SETTINGS` 从展开 `_SHARED_DEFAULTS` 改为内联完整默认值（保持扁平结构，供 profile 编辑器使用）
+- `frontend/js/data/config.js`：
+  - 新增 `cloneConfig()` 深拷贝函数，替代 `{ ...DEFAULT_CONFIG }` 浅拷贝
+  - `configData()` 使用 `cloneConfig(DEFAULT_CONFIG)` 初始化 config
+  - `defaultUrlCheckUrls` 从 `DEFAULT_CONFIG.url_check_urls` 改为 `DEFAULT_CONFIG.monitor.url_check_urls`
+- `frontend/js/methods/config.js`：
+  - `fetchConfig()`：从扁平合并改为逐层深度合并（browser/monitor/pause/logging/retry/credentials 各自 spread 合并，顶层字段用 `??` 回退）
+  - `saveConfig()`：字段访问改为嵌套路径（`config.credentials.auth_url`、`config.monitor.enable_tcp_check`、`config.credentials.isp`）
+  - `loadDefaultStealthScript()`：`config.stealth_custom_script` 改为 `config.browser.stealth_custom_script`
+- **已知影响**：HTML 模板和 `app-options.js`/`actions.js`/`ui.js` 中仍有大量扁平字段绑定（`config.headless`、`config.check_interval_seconds` 等），需后续步骤适配
+
+## 2026-06-21 (16)
+
+### refactor(profile_service): AuthProfile → Profile
+- `app/services/profile_service.py`：
+  - import 从 `AuthProfile, ProfilesData` 改为 `Profile, ProfilesData`
+  - `get_active_profile()` 返回类型从 `AuthProfile` 改为 `Profile`
+  - `save_profile()` 参数类型从 `AuthProfile` 改为 `Profile`
+  - `AuthProfile()` 构造改为 `Profile()`
+  - `_load_unsafe`/`_save_unsafe` 使用 `ProfilesData`，结构已变（`config` 替代 `global_settings`），Pydantic 自动处理序列化/反序列化，无需额外改动
+  - `detect_matching_profile` 通过 `data.profiles` 访问，与新结构兼容
+
+## 2026-06-21 (15)
+
+### refactor(api): config/profiles 端点适配新模型
+- `app/api/config.py`：
+  - import 从 `MonitorConfigPayload` 改为 `RuntimeConfig`
+  - `get_config` 端点：response_model 和返回类型改为 `RuntimeConfig`，密码掩码改为通过 `credentials.model_copy(update=...)` 修改嵌套字段（RuntimeConfig 是 frozen 模型）
+  - `save_config` 端点：参数类型从 `MonitorConfigPayload` 改为 `RuntimeConfig`
+  - `_log_config_changes` 函数签名：`new_payload: MonitorConfigPayload` 改为 `new_payload: RuntimeConfig`
+- `app/api/profiles.py`：
+  - import 从 `AuthProfile` 改为 `Profile`
+  - `save_profile` 端点：参数类型从 `AuthProfile` 改为 `Profile`
+- 测试文件同步更新：
+  - `tests/test_api/test_api_config_routes.py`：import 从 `MonitorConfigPayload` 改为 `RuntimeConfig`，mock 返回值从扁平构造改为 `RuntimeConfig(credentials={...})`
+  - `tests/test_api/test_api_profiles_routes.py`：import 从 `AuthProfile, SystemSettings` 改为 `Profile`，`ProfilesData` 构造移除 `global_settings` 参数，`AuthProfile` 改为 `Profile`
+- 验收：16 个测试全通过
+
 ## 2026-06-21 (14)
 
 ### refactor(engine): _ui_config 改用 RuntimeConfig
