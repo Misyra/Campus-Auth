@@ -303,11 +303,10 @@ def _build_app_config(
     try:
         _ps = create_profile_service()
         _data = _ps.load()
-        _sys = _data.global_settings
-        config.startup_action = StartupAction(getattr(_sys, "startup_action", "none"))
-        config.minimize_to_tray = bool(getattr(_sys, "minimize_to_tray", True))
-        config.lightweight_tray = bool(getattr(_sys, "lightweight_tray", True))
-        config.auto_open_browser = bool(getattr(_sys, "auto_open_browser", False))
+        _cfg = _data.config
+        config.startup_action = StartupAction(_cfg.startup_action)
+        config.minimize_to_tray = _cfg.minimize_to_tray
+        # lightweight_tray 和 auto_open_browser 不在 RuntimeConfig 中，使用默认值
     except Exception:
         logger.debug("加载配置失败，使用默认值", exc_info=True)
 
