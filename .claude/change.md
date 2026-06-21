@@ -1,5 +1,12 @@
 # 修改日志
 
+## 2026-06-22 (11)
+
+### fix: 保存配置时剥离冗余 credentials 和 active_task
+
+- `app/services/config_service.py`：`save_and_apply` 的 `_apply` 在写入 settings.json 前将 `credentials` 重置为空壳、`active_task` 清空
+- 实际凭证和 active_task 只存在于 `profiles` 中，`config` 字段不再持久化冗余数据
+
 ## 2026-06-22 (10)
 
 ### refactor: 收敛日志配置读取为统一入口
