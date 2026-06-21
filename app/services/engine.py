@@ -783,7 +783,13 @@ class ScheduleEngine:
         targets = config.monitor.ping_targets
         enable_tcp = config.monitor.enable_tcp_check
         enable_http = config.monitor.enable_http_check
-        url_checks = config.monitor.url_check_urls
+        # MonitorSettings.url_check_urls 是 list[dict]，转为 (url, expected) 元组
+        raw_url_checks = config.monitor.url_check_urls
+        url_checks = [
+            (d["url"], d["expected"])
+            for d in raw_url_checks
+            if isinstance(d, dict) and d["url"] and d["expected"]
+        ] if raw_url_checks else []
         test_sites = parse_ping_targets(targets)
         mode_desc = []
         if enable_tcp:
