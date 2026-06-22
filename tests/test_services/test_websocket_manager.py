@@ -246,6 +246,18 @@ class TestWebSocketManagerInit:
 class TestBroadcastOverallTimeout:
     """F16: asyncio.gather 包裹 wait_for 5s 总体超时。"""
 
+    @staticmethod
+    def _make_stuck_ws():
+        """创建一个 send_text 永远不会完成的 WebSocket mock。"""
+        ws = AsyncMock()
+
+        async def _stuck_send(*args, **kwargs):
+            # 使用永远不会 resolve 的 Future，避免协程泄漏警告
+            await asyncio.get_running_loop().create_future()
+
+        ws.send_text = AsyncMock(side_effect=_stuck_send)
+        return ws
+
     @pytest.mark.asyncio
     async def test_broadcast_overall_timeout_does_not_hang(self):
         """N 个连接全部卡住时，broadcast 应在 ~5s 内返回而非 N×5s。"""
@@ -256,10 +268,7 @@ class TestBroadcastOverallTimeout:
         # 创建 3 个永远卡住的连接
         stuck_ws = []
         for _ in range(3):
-            ws = AsyncMock()
-            ws.send_text = AsyncMock(
-                side_effect=lambda *_a, **_kw: asyncio.sleep(999)
-            )
+            ws = self._make_stuck_ws()
             stuck_ws.append(ws)
             await mgr.connect(ws)
 
@@ -274,10 +283,7 @@ class TestBroadcastOverallTimeout:
     async def test_broadcast_timeout_returns_gracefully(self):
         """总体超时后不抛异常。"""
         mgr = WebSocketManager()
-        ws = AsyncMock()
-        ws.send_text = AsyncMock(
-            side_effect=lambda *_a, **_kw: asyncio.sleep(999)
-        )
+        ws = self._make_stuck_ws()
         await mgr.connect(ws)
         # 不应抛异常
         await mgr.broadcast("msg")
