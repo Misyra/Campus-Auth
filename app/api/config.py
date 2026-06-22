@@ -5,8 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.deps import get_monitor_service, get_profile_service
-from app.schemas import ActionResponse, RuntimeConfig
-from app.services.config_service import save_and_apply
+from app.schemas import ActionResponse, ConfigResponseDTO
+from app.services.config_service import save_global_and_profile
 from app.services.engine import ScheduleEngine
 from app.services.profile_service import ProfileService
 from app.utils.logging import get_logger
@@ -62,21 +62,35 @@ def _persist_source_levels(request: Request, config):
     )
 
 
-@router.get("/api/config", response_model=RuntimeConfig)
+@router.get("/api/config", response_model=ConfigResponseDTO)
 def get_config(
     svc: ScheduleEngine = Depends(get_monitor_service),
     profile_svc: ProfileService = Depends(get_profile_service),
-) -> RuntimeConfig:
-    # 使用 profile_service 构建运行时配置（含 ISP 转换和密码解密）
+) -> ConfigResponseDTO:
     data = profile_svc.load()
-    config = profile_svc.build_runtime_config(data)
-
-    # 掩码密码，不暴露加密密文（save_password_field 已识别 "•" 前缀为掩码）
-    if config.credentials.password:
-        config = config.model_copy(update={
-            "credentials": config.credentials.model_copy(update={"password": "••••••••"})
-        })
-    return config
+    cfg = profile_svc.build_runtime_config(data)
+    return ConfigResponseDTO(
+        browser=cfg.browser,
+        monitor=cfg.monitor,
+        retry=cfg.retry,
+        pause=cfg.pause,
+        logging=cfg.logging,
+        username=cfg.credentials.username,
+        password="••••••••" if cfg.credentials.password else "",
+        auth_url=cfg.credentials.auth_url,
+        isp=cfg.credentials.isp,
+        carrier_custom=cfg.credentials.carrier_custom,
+        active_task=cfg.active_task,
+        block_proxy=cfg.block_proxy,
+        shell_path=cfg.shell_path,
+        minimize_to_tray=cfg.minimize_to_tray,
+        startup_action=cfg.startup_action,
+        autostart_lightweight=cfg.autostart_lightweight,
+        lightweight_tray=cfg.lightweight_tray,
+        auto_open_browser=cfg.auto_open_browser,
+        proxy=cfg.proxy,
+        app_port=cfg.app_port,
+    )
 
 
 @router.get("/api/config/default-stealth-script")
@@ -99,7 +113,7 @@ def _flatten_dict(d: dict, parent_key: str = "", sep: str = ".") -> dict:
     return dict(items)
 
 
-def _log_config_changes(old_dict: dict, new_payload: RuntimeConfig) -> None:
+def _log_config_changes(old_dict: dict, new_payload: ConfigResponseDTO) -> None:
     """记录配置变更日志
 
     规则：
@@ -144,7 +158,7 @@ def _log_config_changes(old_dict: dict, new_payload: RuntimeConfig) -> None:
     }
 
     # 直接忽略的字段（不记录变更）
-    IGNORE_FIELDS = {"credentials.password"}
+    IGNORE_FIELDS = {"password"}
 
     # BUG-005 修复：扁平化嵌套字典后再比较
     flat_old = _flatten_dict(old_dict)
@@ -152,9 +166,9 @@ def _log_config_changes(old_dict: dict, new_payload: RuntimeConfig) -> None:
 
     changes = []
 
-    # BUG-006 修复：使用正确路径获取密码
-    new_pw = flat_new.get("credentials.password", "")
-    old_pw = flat_old.get("credentials.password", "")
+    # 密码变更检测（顶层 password，不再嵌套在 credentials 下）
+    new_pw = flat_new.get("password", "")
+    old_pw = flat_old.get("password", "")
     if new_pw and old_pw != new_pw:
         changes.append("密码已修改")
 
@@ -184,16 +198,18 @@ def _log_config_changes(old_dict: dict, new_payload: RuntimeConfig) -> None:
 
 @router.put("/api/config", response_model=ActionResponse)
 def save_config(
-    payload: RuntimeConfig,
+    payload: ConfigResponseDTO,
     svc: ScheduleEngine = Depends(get_monitor_service),
     profile_svc: ProfileService = Depends(get_profile_service),
 ) -> ActionResponse:
     try:
         # 获取当前配置用于变更日志
-        old_dict = svc.get_config().model_dump()
+        old_data = profile_svc.load()
+        old_cfg = profile_svc.build_runtime_config(old_data)
+        old_dict = old_cfg.model_dump()
 
-        # 保存 + 重载 + 失败回滚（事务逻辑在 config_service 中）
-        result = save_and_apply(payload, profile_svc, svc.reload_config)
+        # 一次保存全局配置 + 方案凭据
+        result = save_global_and_profile(payload, profile_svc, svc.reload_config)
         if not result.success:
             raise ValueError(result.message)
 
