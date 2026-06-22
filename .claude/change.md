@@ -2,6 +2,22 @@
 
 ## 2026-06-23
 
+### refactor: ProfileService 接管配置构建，删除 load_active_config
+
+- `app/services/profile_service.py`：新增三个方法
+  - `get_runtime_config() -> RuntimeConfig`：读磁盘 → 构建运行时配置
+  - `build_runtime_config(data: ProfilesData) -> RuntimeConfig`：从已加载 data 构建（避免重复读盘）
+  - `_get_active_profile(data: ProfilesData) -> Profile`：获取活跃方案并解密密码
+  - 新增 `RuntimeConfig` 导入
+- `app/services/config_service.py`：删除 `load_active_config` 和旧 `build_runtime_config`，仅保留 `save_and_apply` / `_rollback_config` / `SaveResult`；移除 `GlobalConfig`、`Profile` 导入
+- `app/services/engine.py`：`_reload_config_internal` 改用 `profile_service.build_runtime_config(data)`，删除 `load_active_config` 导入和 `has_decrypt_error` 检查逻辑
+- `main.py`：`_load_login_config` 改用 `ps.get_runtime_config()`，删除 `load_active_config` 导入和解密错误返回 CONFIG_ERROR 的逻辑
+- `app/api/config.py`：`get_config` 改用 `profile_svc.build_runtime_config(data)`，删除手动凭据注入和 ISP 映射逻辑（由 ConfigBuilder 统一处理）
+- `tests/test_config/test_config_merge.py`：改用 `svc.get_runtime_config()` 替代 `load_active_config(svc)`
+- `tests/test_services/test_config_service.py`：`TestBuildRuntimeConfigV3` 改为 `TestConfigBuilderBuild`，import 从 `config_service.build_runtime_config` 改为 `ConfigBuilder.build`
+- `tests/test_app/test_backend_services.py`：`TestLoadActiveConfig` 改为 `TestProfileServiceRuntimeConfig`，`TestBuildRuntimeConfig` 改为 `TestConfigBuilderBuild`；import 改为 `ConfigBuilder`
+- `tests/test_app/test_main.py`：6 处 mock patch 从 `app.services.config_service.load_active_config` 改为 `main.create_profile_service`（返回 mock_ps），`get_runtime_config` 返回值从 tuple 改为单个 RuntimeConfig
+
 ### feat: 新建 ConfigBuilder — 唯一配置构建器
 
 - 新建 `app/services/config_builder.py`：

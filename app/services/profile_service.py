@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from app.network.detect import detect_gateway_ip, detect_wifi_ssid
-from app.schemas import Profile, ProfilesData
+from app.schemas import Profile, ProfilesData, RuntimeConfig
 from app.utils.crypto import save_password_field
 from app.utils.files import atomic_write
 from app.utils.logging import get_logger
@@ -207,6 +207,36 @@ class ProfileService:
             )
 
         return ssid_match_id
+
+    def get_runtime_config(self) -> RuntimeConfig:
+        """读磁盘 → 构建运行时配置。"""
+        from app.services.config_builder import ConfigBuilder
+
+        data = self.load()
+        profile = self._get_active_profile(data)
+        return ConfigBuilder.build(data.global_config, profile)
+
+    def build_runtime_config(self, data: ProfilesData) -> RuntimeConfig:
+        """从已加载的 data 构建运行时配置（避免重复读盘）。"""
+        from app.services.config_builder import ConfigBuilder
+
+        profile = self._get_active_profile(data)
+        return ConfigBuilder.build(data.global_config, profile)
+
+    def _get_active_profile(self, data: ProfilesData) -> Profile:
+        """获取活跃方案并解密密码。"""
+        from app.utils.crypto import decrypt_password_field
+
+        profile = data.profiles.get(data.active_profile)
+        if profile is None:
+            profile = data.profiles.get("default", Profile())
+        # 解密密码
+        if profile.password:
+            decrypted, err = decrypt_password_field(profile.password)
+            if err:
+                profile_logger.warning("密码解密失败")
+            profile = profile.model_copy(update={"password": decrypted or ""})
+        return profile
 
     def set_auto_switch(self, enabled: bool) -> None:
         """设置自动切换开关"""

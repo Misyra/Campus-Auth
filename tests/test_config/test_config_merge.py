@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.services.config_service import load_active_config
 from app.services.profile_service import ProfileService
 
 
@@ -15,7 +14,7 @@ def test_profile_active_task_overrides_global(tmp_path: Path):
     data.profiles["default"].active_task = "task_123"
     svc.save(data)
 
-    config, _ = load_active_config(svc)
+    config = svc.get_runtime_config()
     assert config.active_task == "task_123"
 
 
@@ -26,5 +25,5 @@ def test_profile_auth_url_overrides_global(tmp_path: Path):
     data.profiles["default"].auth_url = "http://profile.example.com"
     svc.save(data)
 
-    config, _ = load_active_config(svc)
+    config = svc.get_runtime_config()
     assert config.credentials.auth_url == "http://profile.example.com"

@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import copy
+
 from dataclasses import dataclass
 
 from app.schemas import (
-    GlobalConfig,
     LoginCredentials,
-    Profile,
     ProfilesData,
     RuntimeConfig,
 )
@@ -19,73 +18,12 @@ from .profile_service import ProfileService
 config_logger = get_logger("config_service", source="backend")
 
 
-def load_active_config(
-    profile_service: ProfileService,
-) -> tuple[RuntimeConfig, bool]:
-    """加载活跃方案的完整运行时配置。
-
-    Returns:
-        (RuntimeConfig, has_decrypt_error)
-    """
-    from app.utils.crypto import decrypt_password_field
-
-    data = profile_service.load()
-    config = data.global_config
-    profile = data.profiles.get(data.active_profile)
-    if profile is None:
-        profile = data.profiles.get("default", Profile())
-
-    # 解密密码
-    has_error = False
-    if profile.password:
-        decrypted, err = decrypt_password_field(profile.password)
-        if err:
-            has_error = True
-        profile = profile.model_copy(update={"password": decrypted or ""})
-
-    return build_runtime_config(config, profile), has_error
-
-
 @dataclass
 class SaveResult:
     """配置保存结果。"""
 
     success: bool
     message: str
-
-
-def build_runtime_config(
-    config: GlobalConfig,
-    profile: Profile,
-) -> RuntimeConfig:
-    """全局配置 + 活跃方案 → 最终运行时配置。凭证从 profile 读取。"""
-    username = profile.username.strip()
-    raw_password = profile.password.strip()
-    password = raw_password if (raw_password and not raw_password.startswith("•")) else ""
-    auth_url = profile.auth_url.strip()
-
-    carrier = str(profile.carrier or "无").strip() or "无"
-    custom_isp = str(profile.carrier_custom or "").strip()
-    if carrier == "自定义":
-        isp = custom_isp
-    elif carrier == "无":
-        isp = ""
-    else:
-        isp = carrier
-
-    credentials = LoginCredentials(
-        username=username,
-        password=password,
-        auth_url=auth_url,
-        isp=isp,
-        carrier_custom=custom_isp,
-    )
-
-    return RuntimeConfig(
-        **config.model_dump(exclude={"credentials", "active_task"}),
-        credentials=credentials,
-        active_task=profile.active_task.strip(),
-    )
 
 
 def save_and_apply(

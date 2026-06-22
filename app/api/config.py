@@ -67,27 +67,9 @@ def get_config(
     svc: ScheduleEngine = Depends(get_monitor_service),
     profile_svc: ProfileService = Depends(get_profile_service),
 ) -> RuntimeConfig:
-    config = svc.get_config()
-
-    # 从活跃方案注入凭据（credentials 存在 profile 中，不在 config 中）
-    try:
-        profile = profile_svc.get_active_profile()
-        if profile and hasattr(profile, "password"):
-            from app.utils.crypto import decrypt_password_field
-
-            password, _ = decrypt_password_field(profile.password)
-            config = config.model_copy(update={
-                "credentials": config.credentials.model_copy(update={
-                    "username": profile.username or "",
-                    "password": password or "",
-                    "auth_url": profile.auth_url or "",
-                    "isp": str(profile.carrier or "无"),
-                    "carrier_custom": profile.carrier_custom or "",
-                }),
-                "active_task": profile.active_task or "",
-            })
-    except Exception:
-        api_logger.debug("从活跃方案注入凭据失败，使用配置中的凭据", exc_info=True)
+    # 使用 profile_service 构建运行时配置（含 ISP 转换和密码解密）
+    data = profile_svc.load()
+    config = profile_svc.build_runtime_config(data)
 
     # 掩码密码，不暴露加密密文（save_password_field 已识别 "•" 前缀为掩码）
     if config.credentials.password:
