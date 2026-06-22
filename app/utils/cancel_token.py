@@ -42,3 +42,8 @@ class CompositeCancelEvent(threading.Event):
     def clear(self) -> None:
         """重置（仅清除自身标志，保留源列表）。"""
         super().clear()
+
+    def clear_sources(self) -> None:
+        """清除所有源（用于 handle 销毁时释放引用）。"""
+        with self._lock:
+            self._sources.clear()
