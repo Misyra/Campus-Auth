@@ -104,6 +104,10 @@ export const configMethods = {
       if (data.success) {
         this._lastSavedConfig = current;
         this.frontendLogger.info('config', '配置保存成功');
+
+        // 同步保存 credentials 到当前活跃的 profile
+        await this._saveCredentialsToProfile();
+
         // 用后端规范化值刷新 config 并重置 savedConfigSnapshot
         await this.fetchConfig(true);
         await this.fetchProfiles();
@@ -120,6 +124,30 @@ export const configMethods = {
       this.saveFailed = true;
     } finally {
       this.busy.save = false;
+    }
+  },
+
+  async _saveCredentialsToProfile() {
+    // 将 credentials 保存到当前活跃的 profile
+    const profileId = this.activeProfileId || 'default';
+    const profileData = this.profiles[profileId];
+    if (!profileData) return;
+
+    const credentials = this.config.credentials;
+    const updatedProfile = {
+      ...profileData,
+      username: credentials.username || '',
+      password: credentials.password || '',
+      auth_url: credentials.auth_url || '',
+      carrier: credentials.isp === '' ? '无' : (credentials.isp || '无'),
+      carrier_custom: credentials.carrier_custom || '',
+    };
+
+    try {
+      await this.$api.put(`/api/profiles/${profileId}`, updatedProfile);
+      this.frontendLogger.debug('config', `credentials 已同步到方案 ${profileId}`);
+    } catch (error) {
+      this.frontendLogger.warn('config', `同步 credentials 到方案失败: ${error.message}`);
     }
   },
   resetConfig() {

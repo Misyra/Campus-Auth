@@ -116,6 +116,8 @@ def _create_lifespan(existing_container, boot_engine=False):
         if existing_container is not None:
             services = existing_container
             services.start_web_services()
+            # 引擎线程必须始终运行（处理配置保存等命令），监控按需启动
+            services.engine.start_thread()
             if boot_engine and not services.engine._is_monitoring:
                 services.engine.boot()
             services.engine.sync_scheduler_state()

@@ -1,5 +1,17 @@
 # 修改日志
 
+## 2026-06-22 (12)
+
+### fix: 向导保存超时 — 引擎线程未启动导致 RELOAD 命令无人消费
+
+**问题**：`startup_action: "none"` 时，`boot_engine=False`，lifespan 不调用 `engine.boot()`，引擎线程从未启动。向导保存时 `reload_config()` 派发 RELOAD 命令到队列，但无消费者，10 秒超时。
+
+**修复**：将引擎线程启动与监控启动解耦，lifespan 中始终启动引擎线程：
+
+- `app/services/engine.py`：新增 `start_thread()` 方法（仅启动命令处理循环，不启动监控）；`boot()` 改为调用 `start_thread()` + `start_monitoring()`
+- `app/application.py`：lifespan 的 `existing_container` 分支中，在条件性调用 `boot()` 前先调用 `start_thread()`
+- `tests/test_app/test_boot_engine_flag.py`：更新 4 个测试用例，验证 `start_thread()` 始终被调用
+
 ## 2026-06-22 (11)
 
 ### fix: 保存配置时剥离冗余 credentials 和 active_task

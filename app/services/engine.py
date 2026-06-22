@@ -562,11 +562,19 @@ class ScheduleEngine:
 
     # ── 公共 API（监控 — 从 API 线程 / main.py 调用）──
 
-    def boot(self) -> None:
-        """启动引擎。由调用方决定是否调用，不再自行判断配置。"""
-        # 启动引擎线程（确保所有依赖注入完成后再启动）
+    def start_thread(self) -> None:
+        """仅启动引擎线程（命令处理循环），不启动监控。
+
+        用于 startup_action=none 场景：引擎线程必须运行以处理
+        配置保存等命令，但监控由用户手动启动。
+        """
         if not self._engine_thread.is_alive():
             self._engine_thread.start()
+
+    def boot(self) -> None:
+        """启动引擎（线程 + 监控）。由调用方决定是否调用，不再自行判断配置。"""
+        # 启动引擎线程（确保所有依赖注入完成后再启动）
+        self.start_thread()
         self.start_monitoring()
 
     @property
