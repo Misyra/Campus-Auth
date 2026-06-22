@@ -71,6 +71,7 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._update_status_snapshot = MagicMock()
     svc._orchestrator = MagicMock()
     svc._registered_futures = set()
+    svc._futures_lock = threading.Lock()
     return svc
 
 
@@ -277,7 +278,7 @@ class TestFullLoginSequence:
         success, message = svc.run_manual_login()
 
         assert success is True
-        assert "已提交" in message
+        assert "成功" in message
 
     def test_full_sequence_manual_login_failure(self):
         """完整手动登录失败序列：run_manual_login → 队列 → handle_login → 失败。"""

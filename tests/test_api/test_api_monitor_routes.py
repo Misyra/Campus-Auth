@@ -84,7 +84,7 @@ class TestManualLogin:
 
     def test_manual_login_success(self, api_client):
         test_client, mock_services = api_client
-        mock_services.engine.run_manual_login.return_value = (True, "登录已提交")
+        mock_services.engine.run_manual_login.return_value = (True, "登录成功")
         resp = test_client.post("/api/actions/login")
         assert resp.status_code == 200
         assert resp.json()["success"] is True
