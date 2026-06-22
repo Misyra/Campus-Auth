@@ -773,12 +773,12 @@ class ScheduleEngine:
             if success:
                 # network_state 已由消费者 _handle_login 统一赋值，无需 API 线程操作
                 self._update_status_snapshot()
-                logger.info("手动登录任务已提交")
-                return True, "登录已提交"
+                logger.info("手动登录成功")
+                return True, "登录成功"
 
             log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
-            logger.warning("手动登录提交失败: {}", log_msg)
-            return False, f"登录提交失败：{message}"
+            logger.warning("手动登录失败: {}", log_msg)
+            return False, f"登录失败：{message}"
         finally:
             with self._manual_login_lock:
                 self._manual_login_in_progress = False

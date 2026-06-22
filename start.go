@@ -233,9 +233,10 @@ func runCommand(name string, args ...string) error {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		<-sigChan
-		if cmd.Process != nil {
-			cmd.Process.Signal(os.Interrupt)
+		for sig := range sigChan {
+			if cmd.Process != nil {
+				cmd.Process.Signal(sig)
+			}
 		}
 	}()
 
