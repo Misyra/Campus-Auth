@@ -1,5 +1,23 @@
 # 修改日志
 
+## 2026-06-23
+
+### feat: 新建 ConfigBuilder — 唯一配置构建器
+
+- 新建 `app/services/config_builder.py`：
+  - `ConfigBuilder.build(global_config, profile) -> RuntimeConfig`：全项目唯一的 `GlobalConfig + Profile → RuntimeConfig` 构建器
+  - ISP 转换：carrier="自定义"→carrier_custom, carrier="无"→"", 其他→carrier 原值
+  - 密码过滤：以 "•" 开头的掩码密码清空为空字符串
+  - 字段完整性：global_config 的所有透传字段（block_proxy/shell_path/minimize_to_tray/startup_action/autostart_lightweight/lightweight_tray/auto_open_browser/proxy/app_port）完整传递
+  - `custom_variables` 设为空 dict（GlobalConfig 不含此字段）
+  - `active_task` 从 profile 传递
+- 新建 `tests/test_services/test_config_builder.py`：24 个单元测试
+  - `TestCarrierToIsp`（8 个）：自定义→custom、无→""、中国移动/联通/电信透传、空字符串、空白字符串处理
+  - `TestPasswordFiltering`（6 个）：掩码密码清空、明文保留、空/空白保持、单点前缀
+  - `TestFieldCompleteness`（5 个）：browser/monitor 透传、所有直接字段透传、custom_variables 为空、credentials 结构完整性
+  - `TestActiveTask`（3 个）：profile 传递、空默认值、空白去除
+  - `TestEndToEnd`（2 个）：全自定义组合场景、frozen 不可变性验证
+
 ## 2026-06-22 (23)
 
 ### fix: 修复遗漏的 data.config → data.global_config 引用
