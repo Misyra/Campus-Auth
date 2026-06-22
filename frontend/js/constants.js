@@ -110,7 +110,11 @@ export const DEFAULT_CONFIG = {
     test_urls: ["https://www.baidu.com", "https://www.qq.com"],
     check_auth_url: false,
     auth_url_targets: [],
-    url_check_urls: [],
+    url_check_urls: [
+      "http://captive.apple.com/hotspot-detect.html|Success",
+      "http://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test",
+      "http://detectportal.firefox.com/success.txt|success",
+    ],
   },
   pause: {
     enabled: true,

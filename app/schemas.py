@@ -255,7 +255,11 @@ class MonitorSettings(BaseModel, frozen=True):
     test_urls: list[str] = Field(default_factory=lambda: ["https://www.baidu.com", "https://www.qq.com"])
     check_auth_url: bool = False
     auth_url_targets: list[str] = Field(default_factory=list)
-    url_check_urls: list[dict] = Field(default_factory=list)
+    url_check_urls: list[str] = Field(default_factory=lambda: [
+        "http://captive.apple.com/hotspot-detect.html|Success",
+        "http://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test",
+        "http://detectportal.firefox.com/success.txt|success",
+    ])
     script_timeout: int = Field(default=60, ge=5, le=600)
 
 

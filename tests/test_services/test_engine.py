@@ -1382,7 +1382,7 @@ class TestNetwork:
                 ping_targets=["8.8.8.8", "1.1.1.1"],
                 enable_tcp_check=True,
                 enable_http_check=False,
-                url_check_urls=[{"url": "http://example.com", "expected": ""}],
+                url_check_urls=["http://example.com|success"],
             ),
         )
         with patch("app.services.engine.is_network_available", return_value=True):
