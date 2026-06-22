@@ -228,7 +228,7 @@ class BrowserSettings(BaseModel, frozen=True):
     viewport_width: int = Field(default=1280, ge=320, le=3840)
     viewport_height: int = Field(default=720, ge=240, le=2160)
     pure_mode: bool = True
-    browser_channel: str = "playwright"
+    browser_channel: str = "msedge"
     browser_custom_path: str = ""
     custom_browser_engine: str = "auto"
 
@@ -255,7 +255,6 @@ class MonitorSettings(BaseModel, frozen=True):
     test_urls: list[str] = Field(default_factory=lambda: [
         "https://connect.rom.miui.com/generate_204",
         "https://connectivitycheck.platform.hicloud.com/generate_204",
-        "https://connectivitycheck.oppo.com/generate_204",
     ])
     check_auth_url: bool = False
     auth_url_targets: list[str] = Field(default_factory=list)
