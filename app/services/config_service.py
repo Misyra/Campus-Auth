@@ -29,7 +29,7 @@ def load_active_config(
     from app.utils.crypto import decrypt_password_field
 
     data = profile_service.load()
-    config = data.config
+    config = data.global_config
     profile = data.profiles.get(data.active_profile)
     if profile is None:
         profile = data.profiles.get("default", Profile())
@@ -96,8 +96,8 @@ def save_and_apply(
 
     def _apply(data: ProfilesData):
         # 剥离 credentials 和 active_task — 实际数据在 profiles 中，
-        # config 中只存全局默认配置（browser/monitor/pause/logging/retry + 透传字段）
-        data.config = config.model_copy(update={
+        # global_config 中只存全局默认配置（browser/monitor/pause/logging/retry + 透传字段）
+        data.global_config = config.model_copy(update={
             "credentials": LoginCredentials(),
             "active_task": "",
         })

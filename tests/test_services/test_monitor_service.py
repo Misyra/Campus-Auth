@@ -177,7 +177,7 @@ class TestListLogs:
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.config.browser.pure_mode = False
+        mock_ps.load.return_value.global_config.browser.pure_mode = False
 
         svc = ScheduleEngine(MagicMock())
         from loguru import logger
@@ -277,7 +277,7 @@ class TestStartStopMonitoring:
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.config.browser.pure_mode = False
+        mock_ps.load.return_value.global_config.browser.pure_mode = False
 
         svc = ScheduleEngine(MagicMock())
         ok, msg = svc.start_monitoring()
@@ -345,7 +345,7 @@ class TestHandleLogin:
         """_handle_login 有配置时提交登录并等待完成返回结果。"""
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.config.browser.pure_mode = False
+        mock_ps.load.return_value.global_config.browser.pure_mode = False
 
         mock_worker = MagicMock()
         mock_result = MagicMock()
@@ -431,7 +431,7 @@ class TestNetwork:
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.config.browser.pure_mode = False
+        mock_ps.load.return_value.global_config.browser.pure_mode = False
 
         svc = ScheduleEngine(MagicMock())
         ok, msg = svc.test_network()
@@ -446,7 +446,7 @@ class TestNetwork:
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.config.browser.pure_mode = False
+        mock_ps.load.return_value.global_config.browser.pure_mode = False
 
         svc = ScheduleEngine(MagicMock())
         ok, msg = svc.test_network()
@@ -463,7 +463,7 @@ class TestNetwork:
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.config.browser.pure_mode = False
+        mock_ps.load.return_value.global_config.browser.pure_mode = False
 
         svc = ScheduleEngine(MagicMock())
         ok, msg = svc.test_network()
@@ -484,7 +484,7 @@ class TestTogglePureMode:
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_data = MagicMock()
-        mock_data.config.browser.pure_mode = False
+        mock_data.global_config.browser.pure_mode = False
         mock_ps.load.return_value = mock_data
 
         def _fake_reload(self_inner):
@@ -510,7 +510,7 @@ class TestTogglePureMode:
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_data = MagicMock()
-        mock_data.config.browser.pure_mode = False
+        mock_data.global_config.browser.pure_mode = False
         mock_ps.load.return_value = mock_data
 
         def _fake_reload(self_inner):
@@ -580,7 +580,7 @@ class TestGetConfig:
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.config.browser.pure_mode = False
+        mock_ps.load.return_value.global_config.browser.pure_mode = False
 
         svc = ScheduleEngine(MagicMock())
         config = svc.get_runtime_config()

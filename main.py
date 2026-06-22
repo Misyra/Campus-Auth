@@ -301,7 +301,7 @@ def _build_app_config(
     try:
         _ps = create_profile_service()
         _data = _ps.load()
-        config = AppConfig.from_runtime_config(_data.config)
+        config = AppConfig.from_runtime_config(_data.global_config)
     except Exception:
         logger.debug("加载配置失败，使用默认值", exc_info=True)
         config = AppConfig()
@@ -567,7 +567,7 @@ def _run_full(
         try:
             _ps = create_profile_service()
             _data = _ps.load()
-            _logging = _data.config.logging
+            _logging = _data.global_config.logging
             _al = bool(_logging.access_log)
             _lr = max(1, int(_logging.log_retention_days))
         except (AttributeError, TypeError, ValueError):

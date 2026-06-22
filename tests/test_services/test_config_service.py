@@ -168,12 +168,12 @@ class TestRollbackConfig:
 
     def test_rollback_restores_fields(self):
         data = ProfilesData()
-        data.config = RuntimeConfig(active_task="new")
+        data.global_config = RuntimeConfig(active_task="new")
         backup = ProfilesData()
-        backup.config = RuntimeConfig(active_task="old")
+        backup.global_config = RuntimeConfig(active_task="old")
 
         _rollback_config(data, backup)
-        assert data.config.active_task == "old"
+        assert data.global_config.active_task == "old"
 
     def test_rollback_all_fields(self):
         """回滚应恢复 ProfilesData 的所有字段。"""

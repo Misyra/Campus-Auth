@@ -264,11 +264,12 @@ class TestProfilesData:
 
     def test_config_version_default(self):
         data = ProfilesData()
-        assert data.config_version == 3
+        assert data.config_version == 4
 
-    def test_config_is_runtime_config(self):
+    def test_config_is_global_config(self):
+        from app.schemas import GlobalConfig
         data = ProfilesData()
-        assert isinstance(data.config, RuntimeConfig)
+        assert isinstance(data.global_config, GlobalConfig)
 
     def test_no_global_settings(self):
         data = ProfilesData()
@@ -289,12 +290,12 @@ class TestProfilesData:
         assert data.profiles["custom"].name == "自定义"
 
     def test_defaults(self):
-        from app.schemas import Profile
+        from app.schemas import GlobalConfig, Profile
 
         data = ProfilesData()
         assert data.auto_switch is False
         assert data.active_profile == "default"
-        assert isinstance(data.config, RuntimeConfig)
+        assert isinstance(data.global_config, GlobalConfig)
         assert isinstance(data.profiles, dict)
         assert isinstance(data.profiles["default"], Profile)
 

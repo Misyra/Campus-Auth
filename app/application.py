@@ -405,7 +405,7 @@ def run(
             from app.services.profile_service import ProfileService
 
             profile_service = ProfileService(PROJECT_ROOT)
-            logging_settings = profile_service.load().config.logging
+            logging_settings = profile_service.load().global_config.logging
         except Exception:
             startup_logger.warning("读取日志配置失败，使用默认值", exc_info=True)
 
