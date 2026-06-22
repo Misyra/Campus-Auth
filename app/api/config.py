@@ -169,7 +169,7 @@ def _log_config_changes(old_dict: dict, new_payload: ConfigResponseDTO) -> None:
     # 密码变更检测（顶层 password，不再嵌套在 credentials 下）
     new_pw = flat_new.get("password", "")
     old_pw = flat_old.get("password", "")
-    if new_pw and old_pw != new_pw:
+    if new_pw and not new_pw.startswith("•") and old_pw != new_pw:
         changes.append("密码已修改")
 
     for field_name in flat_old:

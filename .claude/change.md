@@ -2,6 +2,11 @@
 
 ## 2026-06-23
 
+### fix: 修复测试类型混用和密码变更日志误报
+
+- `tests/test_services/test_config_service.py`：`test_rollback_restores_fields` 中 `data.global_config = RuntimeConfig(...)` 和 `backup.global_config = RuntimeConfig(...)` 改为 `GlobalConfig(...)`，新增 `GlobalConfig` 导入，验证字段改为 `browser.timeout`（GlobalConfig 实际持有的字段）
+- `app/api/config.py`：`_log_config_changes` 密码变更检测跳过以 "•" 开头的掩码值（前端未修改密码时传回掩码），避免误报"密码已修改"
+
 ### refactor: 清理 V2 重构残留的旧配置函数
 
 - `app/services/config_service.py`：删除 `save_and_apply` 函数（已被 `save_global_and_profile` 完全替代）；移除未使用的导入 `LoginCredentials`、`RuntimeConfig`
