@@ -128,7 +128,6 @@ class ScheduleEngine:
         # 运行时配置快照（仅在 reload 时更新，读取零拷贝）
         self._runtime_snapshot: RuntimeConfig | None = None
         # 配置对象（由 _reload_config_internal 初始化）
-        self._ui_config: RuntimeConfig = RuntimeConfig()
         self._runtime_config: RuntimeConfig = RuntimeConfig()
 
         # 状态快照限流
@@ -408,7 +407,7 @@ class ScheduleEngine:
             return
 
         # 等待登录实际完成（添加超时，防止引擎线程死锁）
-        login_timeout = self._ui_config.browser.login_timeout
+        login_timeout = self._runtime_config.browser.login_timeout
         worker_timeout = max(login_timeout, 60)
         try:
             ok, msg = handle.result(timeout=worker_timeout + 60)
@@ -618,14 +617,13 @@ class ScheduleEngine:
         return self._task_executor
 
     def get_config(self) -> RuntimeConfig:
-        return self._ui_config.model_copy(deep=True)
+        return self._runtime_config
 
     def _reload_config_internal(self) -> bool:
         """从 settings.json 重新加载 UI 和运行时配置。返回 True 表示成功。"""
         try:
             with self._reload_lock:
                 data = self._profile_service.load()
-                self._ui_config = data.global_config
                 self._runtime_config = self._profile_service.build_runtime_config(data)
                 self._runtime_snapshot = self._runtime_config
                 with self._pure_mode_lock:
@@ -633,7 +631,6 @@ class ScheduleEngine:
             return True
         except Exception:
             logger.exception("配置重载失败")
-            # BUG-014 修复：失败时保留原有 _pure_mode 值，不因重载失败而改变
             return False
 
     def reload_config(self) -> tuple[bool, str]:
@@ -759,7 +756,7 @@ class ScheduleEngine:
 
             # Wait for consumer to execute login (with timeout)
             # API 等待超时应略大于 Worker 超时，给足执行余量
-            login_timeout = self._ui_config.browser.login_timeout
+            login_timeout = self._runtime_config.browser.login_timeout
             worker_timeout = max(login_timeout, 60)
             api_wait_timeout = worker_timeout + 10
             cmd.response_event.wait(timeout=api_wait_timeout)

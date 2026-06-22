@@ -21,7 +21,7 @@ from app.services.engine import (
 
 
 def _fake_reload():
-    """模拟 _reload_config_internal 的返回值。__init__ 已初始化 _ui_config/_runtime_config。"""
+    """模拟 _reload_config_internal 的返回值。__init__ 已初始化 _runtime_config。"""
     return True
 
 
@@ -488,7 +488,6 @@ class TestTogglePureMode:
         mock_ps.load.return_value = mock_data
 
         def _fake_reload(self_inner):
-            self_inner._ui_config = RuntimeConfig()
             self_inner._runtime_config = RuntimeConfig()
             self_inner._runtime_snapshot = self_inner._runtime_config
             self_inner._pure_mode = False
@@ -514,7 +513,6 @@ class TestTogglePureMode:
         mock_ps.load.return_value = mock_data
 
         def _fake_reload(self_inner):
-            self_inner._ui_config = RuntimeConfig()
             self_inner._runtime_config = RuntimeConfig()
             self_inner._runtime_snapshot = self_inner._runtime_config
             self_inner._pure_mode = False
@@ -687,9 +685,9 @@ class TestManualLoginTimeout:
         svc._cmd_queue = queue.Queue(maxsize=50)
         svc._manual_login_in_progress = False
         svc._manual_login_lock = threading.Lock()
-        svc._runtime_config = RuntimeConfig()
-        svc._ui_config = MagicMock()
-        svc._ui_config.browser.login_timeout = 0.01  # 极短超时
+        svc._runtime_config = RuntimeConfig().model_copy(update={
+            "browser": RuntimeConfig().browser.model_copy(update={"login_timeout": 0.01})
+        })
         svc._pure_mode = False
         svc._pure_mode_lock = threading.Lock()
         svc._engine_thread = MagicMock()
@@ -837,9 +835,9 @@ class TestManualLoginConsumerDead:
         svc._cmd_queue = queue.Queue(maxsize=50)
         svc._manual_login_in_progress = False
         svc._manual_login_lock = threading.Lock()
-        svc._runtime_config = RuntimeConfig()
-        svc._ui_config = MagicMock()
-        svc._ui_config.browser.login_timeout = 0.01
+        svc._runtime_config = RuntimeConfig().model_copy(update={
+            "browser": RuntimeConfig().browser.model_copy(update={"login_timeout": 0.01})
+        })
         svc._pure_mode = False
         svc._pure_mode_lock = threading.Lock()
         svc._start_stop_lock = threading.Lock()
