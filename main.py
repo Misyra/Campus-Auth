@@ -345,7 +345,7 @@ def handle_startup_action(
                 # 配置错误无法自动恢复，退出让用户修正
                 return StartupResult.EXIT, False
             # TEMPORARY_FAILURE → 网络等临时性问题，继续监控等待恢复
-            return StartupResult.CONTINUE, False
+            return StartupResult.CONTINUE, True
         case _:
             return StartupResult.CONTINUE, False
 
@@ -458,7 +458,11 @@ def _run_lightweight(ctx: ApplicationContext, logger):
             if is_local_port_in_use(port):
                 break
             time.sleep(0.5)
-        webbrowser.open(f"http://127.0.0.1:{port}")
+        # BUG-059 修复：端口未就绪时不打开浏览器
+        if is_local_port_in_use(port):
+            webbrowser.open(f"http://127.0.0.1:{port}")
+        else:
+            logger.warning("Web 服务未在 15s 内就绪，跳过打开浏览器")
 
     # 系统托盘（可选）
     features = get_runtime_features(
@@ -488,20 +492,14 @@ def _run_lightweight(ctx: ApplicationContext, logger):
     finally:
         if tray_icon:
             tray_icon.stop()
-        # Web 服务已启动且 Uvicorn 已就绪：shutdown 由其事件循环处理。
-        # 否则（未启动 / 启动但 Uvicorn 子线程崩溃导致 server_ref 仍为 None）：兜底清理。
-        _web_ready = _web_server_state["started"] and _web_server_state["server_ref"][0] is not None
-        if not _web_ready:
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    loop.create_task(container.shutdown())
-                else:
-                    loop.run_until_complete(container.shutdown())
-            except RuntimeError:
-                # 无可用 event loop，跳过异步 shutdown
-                container.task_executor.shutdown(wait=False)
-                container.engine.shutdown()
+        # BUG-009/032 修复：无论 Web 服务状态如何，强制执行 container.shutdown()
+        # 容器已有 _shutdown_done 守卫保证幂等性
+        try:
+            asyncio.run(container.shutdown())
+        except RuntimeError:
+            # 无可用 event loop，跳过异步 shutdown
+            container.task_executor.shutdown(wait=False)
+            container.engine.shutdown()
 
 
 def _run_full(
@@ -609,9 +607,6 @@ def _run_server(ctx: ApplicationContext, force: bool = False) -> None:
     # 检测已运行实例
     _handle_existing_instance(ctx, force=force)
 
-    write_pid(ctx.config.runtime_mode.value)
-    atexit.register(cleanup_pid)
-
     # Playwright 检查
     stage_begin = time.perf_counter()
     startup_logger.info("正在检查 Playwright 环境")
@@ -624,6 +619,10 @@ def _run_server(ctx: ApplicationContext, force: bool = False) -> None:
         "Playwright 环境检查完成 ({:.3f}s)",
         time.perf_counter() - stage_begin,
     )
+
+    # BUG-040 修复：在 Playwright 安装完成后再写入 PID 文件
+    write_pid(ctx.config.runtime_mode.value)
+    atexit.register(cleanup_pid)
 
     # 启动摘要
     _label = {"manual": "手动", "autostart": "自启动"}

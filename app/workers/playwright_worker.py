@@ -153,6 +153,15 @@ class PlaywrightWorker:
             return
         self._stop_event.clear()
         self._worker_ready.clear()
+
+        # BUG-036 修复：重启时防御性重置浏览器相关状态
+        self._playwright = None
+        self._browser = None
+        self._context = None
+        self._page = None
+        self._debug_page = None
+        self._debug_executor = None
+        self._last_browser_settings = None
         self._consumer_thread = threading.Thread(
             target=self._worker_entry,
             daemon=True,
@@ -505,7 +514,7 @@ class PlaywrightWorker:
         if task_url:
             try:
                 await self._page.goto(
-                    task_url, wait_until="domcontentloaded", timeout=30000
+                    task_url, wait_until="domcontentloaded", timeout=navigation_timeout
                 )
             except Exception as e:
                 logger.warning("调试页面加载失败: {}", e)

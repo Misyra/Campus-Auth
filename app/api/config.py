@@ -83,6 +83,18 @@ def get_default_stealth_script() -> dict:
     return {"script": STEALTH_INIT_SCRIPT}
 
 
+def _flatten_dict(d: dict, parent_key: str = "", sep: str = ".") -> dict:
+    """将嵌套字典扁平化为点分键。"""
+    items: list[tuple[str, object]] = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(_flatten_dict(v, new_key, sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+
 def _log_config_changes(old_dict: dict, new_payload: RuntimeConfig) -> None:
     """记录配置变更日志
 
@@ -92,59 +104,62 @@ def _log_config_changes(old_dict: dict, new_payload: RuntimeConfig) -> None:
     - password 字段：完全忽略
     """
     FIELD_NAMES = {
-        "headless": "无头模式",
-        "pure_mode": "纯净模式",
-        "stealth_mode": "反检测模式",
-        "browser_low_resource_mode": "低资源模式",
-        "browser_disable_web_security": "禁用同源策略",
-        "enable_tcp_check": "TCP检测",
-        "enable_http_check": "HTTP检测",
-        "enable_local_check": "本地网络检测",
-        "check_auth_url": "认证地址检测",
-        "pause_enabled": "暂停时段",
+        "browser.headless": "无头模式",
+        "browser.pure_mode": "纯净模式",
+        "browser.stealth_mode": "反检测模式",
+        "browser.low_resource_mode": "低资源模式",
+        "browser.disable_web_security": "禁用同源策略",
+        "monitor.enable_tcp_check": "TCP检测",
+        "monitor.enable_http_check": "HTTP检测",
+        "monitor.enable_local_check": "本地网络检测",
+        "monitor.check_auth_url": "认证地址检测",
+        "pause.enabled": "暂停时段",
         "block_proxy": "屏蔽系统代理",
         "minimize_to_tray": "最小化到托盘",
         "auto_open_browser": "自动打开浏览器",
         "autostart_lightweight": "自启动轻量模式",
-        "access_log": "HTTP访问日志",
-        "browser_channel": "浏览器类型",
-        "browser_timeout": "浏览器超时",
-        "browser_navigation_timeout": "页面加载超时",
-        "login_timeout": "登录超时",
-        "check_interval_seconds": "检测间隔",
-        "max_retries": "最大重试次数",
-        "retry_interval": "重试间隔",
-        "log_retention_days": "日志保留天数",
-        "backend_log_level": "后端日志级别",
-        "frontend_log_level": "前端日志级别",
+        "logging.access_log": "HTTP访问日志",
+        "browser.channel": "浏览器类型",
+        "browser.timeout": "浏览器超时",
+        "browser.navigation_timeout": "页面加载超时",
+        "browser.login_timeout": "登录超时",
+        "monitor.check_interval_seconds": "检测间隔",
+        "retry.max_retries": "最大重试次数",
+        "retry.retry_interval": "重试间隔",
+        "logging.log_retention_days": "日志保留天数",
+        "logging.backend_log_level": "后端日志级别",
+        "logging.frontend_log_level": "前端日志级别",
         "app_port": "网页端口",
         "proxy": "网络代理",
         "shell_path": "Shell路径",
-        "browser_viewport_width": "视口宽度",
-        "browser_viewport_height": "视口高度",
-        "pause_start_hour": "暂停开始时间",
-        "pause_end_hour": "暂停结束时间",
-        "network_check_timeout": "网络检测超时",
+        "browser.viewport_width": "视口宽度",
+        "browser.viewport_height": "视口高度",
+        "pause.start_hour": "暂停开始时间",
+        "pause.end_hour": "暂停结束时间",
+        "monitor.network_check_timeout": "网络检测超时",
     }
 
     # 直接忽略的字段（不记录变更）
-    IGNORE_FIELDS = {"password"}
+    IGNORE_FIELDS = {"credentials.password"}
 
-    new_dict = new_payload.model_dump()
+    # BUG-005 修复：扁平化嵌套字典后再比较
+    flat_old = _flatten_dict(old_dict)
+    flat_new = _flatten_dict(new_payload.model_dump())
 
     changes = []
 
-    # 密码变更：仅记录"已修改"，不记录内容
-    new_pw = new_dict.get("password", "")
-    if new_pw and old_dict.get("password") != new_pw:
+    # BUG-006 修复：使用正确路径获取密码
+    new_pw = flat_new.get("credentials.password", "")
+    old_pw = flat_old.get("credentials.password", "")
+    if new_pw and old_pw != new_pw:
         changes.append("密码已修改")
 
-    for field_name in old_dict:
+    for field_name in flat_old:
         if field_name in IGNORE_FIELDS:
             continue
 
-        old_val = old_dict.get(field_name)
-        new_val = new_dict.get(field_name)
+        old_val = flat_old.get(field_name)
+        new_val = flat_new.get(field_name)
 
         if old_val == new_val:
             continue

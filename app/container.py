@@ -178,9 +178,10 @@ class ServiceContainer:
         # 复用 stop_web_services — 消除重复代码并修复 _ws_drain_task = None 遗漏 bug
         await self.stop_web_services()
 
-        self.task_executor.shutdown(wait=False)
-
+        # BUG-013 修复：先关闭引擎（停止提交任务），再关闭线程池
         self.engine.shutdown()
+
+        self.task_executor.shutdown(wait=False)
 
         if self._debug_manager is not None:
             await self._debug_manager.close()
