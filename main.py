@@ -178,13 +178,8 @@ def _load_login_config(logger):
         (RuntimeConfig, None) — 成功时返回 RuntimeConfig 和 None。
         (None, LoginResult.CONFIG_ERROR) — 失败时返回 None 和错误结果。
     """
-    from app.services.config_service import load_active_config
-
     ps = create_profile_service()
-    runtime_config, has_decrypt_error = load_active_config(ps)
-    if has_decrypt_error:
-        logger.warning("密码解密失败，请检查配置")
-        return None, LoginResult.CONFIG_ERROR
+    runtime_config = ps.get_runtime_config()
     return runtime_config, None
 
 

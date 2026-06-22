@@ -19,7 +19,8 @@ from app.schemas import (
     ProfilesData,
     RuntimeConfig,
 )
-from app.services.config_service import build_runtime_config, load_active_config
+from app.services.config_builder import ConfigBuilder
+from app.services.profile_service import ProfileService
 from app.services.debug_session import (
     DebugSession,
     _next_debug_gen,
@@ -234,11 +235,11 @@ class TestTaskService:
 
 
 # =====================================================================
-# load_active_config
+# ProfileService.get_runtime_config / build_runtime_config
 # =====================================================================
 
 
-class TestLoadActiveConfig:
+class TestProfileServiceRuntimeConfig:
     @pytest.fixture
     def profile_service(self, tmp_path):
         # 创建目录结构
@@ -266,20 +267,19 @@ class TestLoadActiveConfig:
         return ProfileService(tmp_path)
 
     def test_returns_runtime_config(self, profile_service):
-        config, has_error = load_active_config(profile_service)
+        config = profile_service.get_runtime_config()
         assert isinstance(config, RuntimeConfig)
-        assert isinstance(has_error, bool)
 
     def test_username_from_profile(self, profile_service):
-        config, _ = load_active_config(profile_service)
+        config = profile_service.get_runtime_config()
         assert config.credentials.username == "admin"
 
     def test_auth_url_from_profile(self, profile_service):
-        config, _ = load_active_config(profile_service)
+        config = profile_service.get_runtime_config()
         assert config.credentials.auth_url == "http://10.0.0.1"
 
     def test_carrier_mapped(self, profile_service):
-        config, _ = load_active_config(profile_service)
+        config = profile_service.get_runtime_config()
         assert config.credentials.isp == "移动"
 
     def test_uses_active_profile(self, tmp_path):
@@ -306,17 +306,17 @@ class TestLoadActiveConfig:
         )
 
         svc = ProfileService(tmp_path)
-        config, _ = load_active_config(svc)
+        config = svc.get_runtime_config()
         assert config.credentials.username == "campus_user"
         assert config.credentials.auth_url == "http://campus.url"
 
 
 # =====================================================================
-# build_runtime_config
+# ConfigBuilder.build
 # =====================================================================
 
 
-class TestBuildRuntimeConfig:
+class TestConfigBuilderBuild:
     def test_basic(self):
         from app.schemas import Profile
         config = RuntimeConfig()
@@ -326,7 +326,7 @@ class TestBuildRuntimeConfig:
             auth_url="http://10.0.0.1",
             carrier="移动",
         )
-        result = build_runtime_config(config, profile)
+        result = ConfigBuilder.build(config, profile)
         assert result.credentials.username == "admin"
         assert result.credentials.password == "testpass"
         assert result.credentials.auth_url == "http://10.0.0.1"
@@ -336,21 +336,21 @@ class TestBuildRuntimeConfig:
         from app.schemas import Profile
         config = RuntimeConfig()
         profile = Profile(carrier="自定义", carrier_custom="校园网")
-        result = build_runtime_config(config, profile)
+        result = ConfigBuilder.build(config, profile)
         assert result.credentials.isp == "校园网"
 
     def test_carrier_none(self):
         from app.schemas import Profile
         config = RuntimeConfig()
         profile = Profile(carrier="无")
-        result = build_runtime_config(config, profile)
+        result = ConfigBuilder.build(config, profile)
         assert result.credentials.isp == ""
 
     def test_masked_password_returns_empty(self):
         from app.schemas import Profile
         config = RuntimeConfig()
         profile = Profile(password="••••••••")
-        result = build_runtime_config(config, profile)
+        result = ConfigBuilder.build(config, profile)
         assert result.credentials.password == ""
 
 

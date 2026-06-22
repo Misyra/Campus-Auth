@@ -622,16 +622,11 @@ class ScheduleEngine:
 
     def _reload_config_internal(self) -> bool:
         """从 settings.json 重新加载 UI 和运行时配置。返回 True 表示成功。"""
-        from .config_service import load_active_config
-
         try:
             with self._reload_lock:
                 data = self._profile_service.load()
                 self._ui_config = data.global_config
-                runtime_config, has_decrypt_error = load_active_config(self._profile_service)
-                if has_decrypt_error:
-                    logger.warning("配置重载时部分密码解密失败")
-                self._runtime_config = runtime_config
+                self._runtime_config = self._profile_service.build_runtime_config(data)
                 self._runtime_snapshot = self._runtime_config
                 with self._pure_mode_lock:
                     self._pure_mode = data.global_config.browser.pure_mode
