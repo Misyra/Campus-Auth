@@ -2,9 +2,18 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from app.schemas import RuntimeConfig
+from app.schemas import (
+    BrowserSettings,
+    ConfigResponseDTO,
+    LoginCredentials,
+    LoggingSettings,
+    MonitorSettings,
+    PauseSettings,
+    RetrySettings,
+    RuntimeConfig,
+)
 from app.services.config_service import SaveResult
 
 
@@ -33,28 +42,41 @@ class TestLogLevels:
         data = response.json()
         assert data["success"] is True
 
+
+def _make_runtime_config(**kwargs):
+    """构建带凭据的 RuntimeConfig 用于 build_runtime_config mock 返回值。"""
+    defaults = dict(
+        browser=BrowserSettings(),
+        monitor=MonitorSettings(),
+        credentials=LoginCredentials(
+            username="testuser",
+            password="secret",
+            auth_url="http://10.0.0.1",
+        ),
+    )
+    defaults.update(kwargs)
+    return RuntimeConfig(**defaults)
+
+
 class TestGetConfig:
     """测试 GET /api/config 端点。"""
 
     def test_get_config_returns_200(self, api_client):
         test_client, mock_services = api_client
-        mock_services.engine.get_config.return_value = RuntimeConfig(
-            credentials={"username": "testuser", "password": "secret", "auth_url": "http://10.0.0.1"},
-        )
+        mock_services.profile_service.build_runtime_config.return_value = _make_runtime_config()
         resp = test_client.get("/api/config")
         assert resp.status_code == 200
         data = resp.json()
-        assert "credentials" in data
-        assert "auth_url" in data["credentials"]
+        assert "username" in data
+        assert "browser" in data
 
     def test_get_config_contains_expected_fields(self, api_client):
         test_client, mock_services = api_client
-        mock_services.engine.get_config.return_value = RuntimeConfig(
-            credentials={"username": "testuser", "password": "secret", "auth_url": "http://10.0.0.1"},
-        )
+        mock_services.profile_service.build_runtime_config.return_value = _make_runtime_config()
         data = test_client.get("/api/config").json()
-        assert data["credentials"]["username"] == "testuser"
-        assert data["credentials"]["auth_url"] == "http://10.0.0.1"
+        assert data["username"] == "testuser"
+        assert data["auth_url"] == "http://10.0.0.1"
+        assert data["password"] == "••••••••"
 
 
 class TestGetDefaultStealthScript:
@@ -72,19 +94,24 @@ class TestGetDefaultStealthScript:
 class TestSaveConfig:
     """测试 PUT /api/config 端点。"""
 
-    @patch("app.api.config.save_and_apply")
-    def test_save_config_success(self, mock_save_and_apply, api_client):
+    @patch("app.api.config.save_global_and_profile")
+    def test_save_config_success(self, mock_save, api_client):
         test_client, mock_services = api_client
-        mock_save_and_apply.return_value = SaveResult(success=True, message="配置保存成功")
-        mock_services.engine.get_config.return_value = RuntimeConfig(
-            credentials={"username": "testuser", "password": "secret", "auth_url": "http://10.0.0.1"},
-        )
+        mock_save.return_value = SaveResult(success=True, message="配置保存成功")
+        mock_services.profile_service.build_runtime_config.return_value = _make_runtime_config()
 
-        payload = {
-            "username": "newuser",
-            "password": "newpass",
-            "auth_url": "http://10.0.0.1",
-        }
+        # 构建完整 payload（含必填嵌套字段）
+        payload = ConfigResponseDTO(
+            browser=BrowserSettings(),
+            monitor=MonitorSettings(),
+            retry=RetrySettings(),
+            pause=PauseSettings(),
+            logging=LoggingSettings(),
+            username="newuser",
+            password="newpass",
+            auth_url="http://10.0.0.1",
+            isp="移动",
+        ).model_dump()
         resp = test_client.put("/api/config", json=payload)
         assert resp.status_code == 200
         assert resp.json()["success"] is True

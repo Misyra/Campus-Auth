@@ -2,6 +2,26 @@
 
 ## 2026-06-23
 
+### refactor: API config 改用 ConfigResponseDTO，一次保存全局+方案
+
+- `app/api/config.py`：
+  - `get_config`：返回类型从 `RuntimeConfig` 改为 `ConfigResponseDTO`，凭据字段扁平化（`username`/`password`/`auth_url`/`isp`/`carrier_custom`），不再依赖 `svc.get_config()`（engine 方法），直接从 `profile_svc.build_runtime_config(data)` 构建
+  - `save_config`：参数类型从 `RuntimeConfig` 改为 `ConfigResponseDTO`，调用 `save_global_and_profile` 替代 `save_and_apply`，一次保存全局配置 + 方案凭据
+  - `_log_config_changes`：参数类型从 `RuntimeConfig` 改为 `ConfigResponseDTO`，`IGNORE_FIELDS` 从 `credentials.password` 改为 `password`（顶层字段），密码变更检测从 `credentials.password` 改为 `password`
+  - 清理未使用的导入（`RuntimeConfig`、`save_and_apply`）
+- `app/services/config_service.py`：
+  - 新增 `save_global_and_profile(payload, profile_service, reload_fn) -> SaveResult`：原子保存 `GlobalConfig`（从 `ConfigResponseDTO` 剥离凭据）+ 活跃方案凭据
+  - ISP 反向映射：`carrier_custom` 非空→"自定义"，`isp` 为空→"无"，其他→原值
+  - 密码处理：调用 `save_password_field` 处理掩码/明文/空值
+  - 重载失败自动回滚（复用 `_rollback_config`）
+  - 新增导入：`ConfigResponseDTO`、`GlobalConfig`、`Profile`、`save_password_field`
+  - 保留旧 `save_and_apply`（集成测试仍在使用）
+- `tests/test_api/test_api_config_routes.py`：
+  - `TestGetConfig`：mock 从 `engine.get_config` 改为 `profile_service.build_runtime_config`，断言从 `credentials.username` 改为 `username`（顶层）
+  - `TestSaveConfig`：patch 从 `save_and_apply` 改为 `save_global_and_profile`，payload 从扁平 dict 改为 `ConfigResponseDTO(...).model_dump()`
+  - 新增 `_make_runtime_config` 辅助函数
+  - 新增导入：`BrowserSettings`、`ConfigResponseDTO`、`LoginCredentials`、`LoggingSettings`、`MonitorSettings`、`PauseSettings`、`RetrySettings`
+
 ### refactor: engine.py 删除 _ui_config，统一为 _runtime_config
 
 - `app/services/engine.py`：
