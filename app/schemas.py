@@ -252,7 +252,11 @@ class MonitorSettings(BaseModel, frozen=True):
     enable_tcp_check: bool = False
     enable_http_check: bool = False
     enable_local_check: bool = True
-    test_urls: list[str] = Field(default_factory=lambda: ["https://www.baidu.com", "https://www.qq.com"])
+    test_urls: list[str] = Field(default_factory=lambda: [
+        "https://connect.rom.miui.com/generate_204",
+        "https://connectivitycheck.platform.hicloud.com/generate_204",
+        "https://connectivitycheck.oppo.com/generate_204",
+    ])
     check_auth_url: bool = False
     auth_url_targets: list[str] = Field(default_factory=list)
     url_check_urls: list[str] = Field(default_factory=lambda: [

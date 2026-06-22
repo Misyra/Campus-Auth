@@ -107,7 +107,11 @@ export const DEFAULT_CONFIG = {
     enable_tcp_check: false,
     enable_http_check: false,
     enable_local_check: true,
-    test_urls: ["https://www.baidu.com", "https://www.qq.com"],
+    test_urls: [
+      "https://connect.rom.miui.com/generate_204",
+      "https://connectivitycheck.platform.hicloud.com/generate_204",
+      "https://connectivitycheck.oppo.com/generate_204",
+    ],
     check_auth_url: false,
     auth_url_targets: [],
     url_check_urls: [
