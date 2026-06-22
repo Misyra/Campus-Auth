@@ -102,6 +102,9 @@ def integration_stack(tmp_path, mock_worker):
     engine._orchestrator = orchestrator
     task_executor._login_orchestrator = orchestrator
 
+    # 启动引擎线程（BUG-007 修复后需要显式调用 boot）
+    engine.boot()
+
     yield engine, profile_service, task_executor, mock_worker
 
     orchestrator.shutdown(wait=False)
@@ -149,6 +152,9 @@ def full_stack(tmp_path, mock_worker):
     )
     engine._orchestrator = orchestrator
     task_executor._login_orchestrator = orchestrator
+
+    # 启动引擎线程（BUG-007 修复后需要显式调用 boot）
+    engine.boot()
 
     yield engine, profile_service, task_executor, task_registry, mock_worker
 
