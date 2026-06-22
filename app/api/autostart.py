@@ -33,7 +33,7 @@ def _read_autostart_lightweight() -> bool:
         from pathlib import Path
 
         ps = ProfileService(Path(__file__).parent.parent.parent.resolve())
-        return bool(ps.load().config.autostart_lightweight)
+        return bool(ps.load().global_config.autostart_lightweight)
     except Exception:
         return True  # 默认轻量
 
@@ -47,7 +47,7 @@ def _save_autostart_lightweight(lightweight: bool) -> None:
     # 理论上与 config.py 的 save_and_apply 并发写 settings.json 会丢更新，
     # 但单用户桌面应用场景下触发概率极低，暂不修复。
     ps = ProfileService(Path(__file__).parent.parent.parent.resolve())
-    ps.update(lambda d: setattr(d, "config", d.config.model_copy(update={"autostart_lightweight": lightweight})))
+    ps.update(lambda d: setattr(d, "global_config", d.global_config.model_copy(update={"autostart_lightweight": lightweight})))
 
 
 @router.get("/api/autostart/status", response_model=AutoStartStatusResponse)
