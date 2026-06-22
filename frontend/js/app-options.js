@@ -151,7 +151,15 @@ export const appOptions = {
         return !!(this.config.monitor.url_check_urls && this.config.monitor.url_check_urls.length);
       },
       set(val) {
-        this.config.monitor.url_check_urls = val ? (this.config.monitor.url_check_urls.length ? this.config.monitor.url_check_urls : this.defaultUrlCheckUrls) : [];
+        if (val) {
+          if (!this.config.monitor.url_check_urls.length) {
+            this.config.monitor.url_check_urls = this.defaultUrlCheckUrls.length
+              ? [...this.defaultUrlCheckUrls]
+              : [''];
+          }
+        } else {
+          this.config.monitor.url_check_urls = [];
+        }
       },
     },
     filteredRepoTasks() {
