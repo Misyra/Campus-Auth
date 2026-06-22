@@ -20,7 +20,7 @@ TEMP_DIR = PROJECT_ROOT / "temp"
 
 # 默认网络检测目标（单一来源，避免 schemas/config_service/monitor_service 重复）
 DEFAULT_NETWORK_TARGETS: str = "8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
-DEFAULT_HTTP_TARGETS: str = "https://www.baidu.com,https://www.qq.com"
+DEFAULT_HTTP_TARGETS: str = "https://connect.rom.miui.com/generate_204,https://connectivitycheck.platform.hicloud.com/generate_204"
 DEFAULT_URL_CHECK_URLS: str = (
     "http://captive.apple.com/hotspot-detect.html|Success\n"
     "http://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test\n"

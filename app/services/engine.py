@@ -798,7 +798,7 @@ class ScheduleEngine:
         enable_tcp = config.monitor.enable_tcp_check
         enable_http = config.monitor.enable_http_check
         raw_url_checks = config.monitor.url_check_urls
-        if raw_url_checks and isinstance(raw_url_checks[0], str):
+        if raw_url_checks:
             from app.utils.network import parse_url_checks
             url_checks = parse_url_checks("\n".join(raw_url_checks))
         else:

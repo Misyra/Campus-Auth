@@ -169,10 +169,10 @@ class TestIsNetworkAvailableHttp:
             assert result is False
 
     def test_empty_urls_uses_defaults(self):
-        """空列表回退到默认 URL，实际发送请求"""
+        """空列表回退到默认 URL（captive portal），需要 204 才算成功"""
         with patch("app.network.probes.httpx.Client") as MockClient:
             mock_resp = MagicMock()
-            mock_resp.status_code = 200
+            mock_resp.status_code = 204
             self._setup_mock_client(MockClient, mock_resp)
             result = is_network_available_http(test_urls=[], timeout=2.0)
             assert result is True
