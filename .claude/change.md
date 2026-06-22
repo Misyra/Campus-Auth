@@ -1,5 +1,18 @@
 # 修改日志
 
+## 2026-06-22 (23)
+
+### fix: 修复遗漏的 data.config → data.global_config 引用
+
+- `app/api/autostart.py`：
+  - `_read_autostart_lightweight`：`ps.load().config` → `ps.load().global_config`
+  - `_save_autostart_lightweight` lambda：`d.config` → `d.global_config`（setattr 和 model_copy 两处）
+- `app/services/engine.py`：
+  - `toggle_pure_mode` lambda：`d.config` → `d.global_config`（setattr 和 model_copy 三处）
+- `app/services/config_service.py`：
+  - `build_runtime_config` 参数类型标注从 `RuntimeConfig` 改为 `GlobalConfig`，新增 `GlobalConfig` 导入
+  - 函数体内 `config.model_copy(update={...})` 改为 `RuntimeConfig(**config.model_dump(exclude={"credentials", "active_task"}), credentials=..., active_task=...)`，因为 GlobalConfig 不含 credentials/active_task 字段
+
 ## 2026-06-22 (22)
 
 ### refactor: 新增 GlobalConfig、ConfigResponseDTO，更新 RuntimeConfig 和 ProfilesData

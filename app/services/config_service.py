@@ -6,6 +6,7 @@ import copy
 from dataclasses import dataclass
 
 from app.schemas import (
+    GlobalConfig,
     LoginCredentials,
     Profile,
     ProfilesData,
@@ -54,7 +55,7 @@ class SaveResult:
 
 
 def build_runtime_config(
-    config: RuntimeConfig,
+    config: GlobalConfig,
     profile: Profile,
 ) -> RuntimeConfig:
     """全局配置 + 活跃方案 → 最终运行时配置。凭证从 profile 读取。"""
@@ -80,10 +81,11 @@ def build_runtime_config(
         carrier_custom=custom_isp,
     )
 
-    return config.model_copy(update={
-        "credentials": credentials,
-        "active_task": profile.active_task.strip(),
-    })
+    return RuntimeConfig(
+        **config.model_dump(exclude={"credentials", "active_task"}),
+        credentials=credentials,
+        active_task=profile.active_task.strip(),
+    )
 
 
 def save_and_apply(

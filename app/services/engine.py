@@ -848,7 +848,7 @@ class ScheduleEngine:
         with self._pure_mode_lock:
             new_value = not self._pure_mode
             self._profile_service.update(
-                lambda d: setattr(d, "config", d.config.model_copy(update={"browser": d.config.browser.model_copy(update={"pure_mode": new_value})}))
+                lambda d: setattr(d, "global_config", d.global_config.model_copy(update={"browser": d.global_config.browser.model_copy(update={"pure_mode": new_value})}))
             )
             self._pure_mode = new_value
             return new_value
