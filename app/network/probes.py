@@ -105,7 +105,11 @@ def is_network_available_socket(
     test_sites: Sequence[tuple[str, int]] | None = None,
     timeout: float = 1.5,
 ) -> bool:
-    targets = test_sites or (("www.baidu.com", 443), ("1.1.1.1", 53))
+    if not test_sites:
+        from app.constants import DEFAULT_NETWORK_TARGETS
+        from app.utils.network import parse_ping_targets
+        test_sites = parse_ping_targets(DEFAULT_NETWORK_TARGETS)
+    targets = test_sites
 
     def _connect_one(host: str, port: int) -> tuple[str, bool, str]:
         start = time.perf_counter()
@@ -143,14 +147,9 @@ def is_network_available_url(
     返回 True 表示至少有一个检测 URL 返回了预期内容（网络正常）。
     """
     if url_checks is None:
-        url_checks = [
-            ("http://captive.apple.com/hotspot-detect.html", "Success"),
-            (
-                "http://www.msftconnecttest.com/connecttest.txt",
-                "Microsoft Connect Test",
-            ),
-            ("http://detectportal.firefox.com/success.txt", "success"),
-        ]
+        from app.constants import DEFAULT_URL_CHECK_URLS
+        from app.utils.network import parse_url_checks
+        url_checks = parse_url_checks(DEFAULT_URL_CHECK_URLS)
     if not url_checks:
         return True
 
@@ -201,7 +200,10 @@ def is_network_available_http(
     captive portal URL（含 generate_204/connectivitycheck）：仅 204 表示正常，
     200 为门户劫持。普通 URL：200<=status<300 表示连通。
     """
-    urls = list(test_urls or ("https://www.baidu.com", "https://www.qq.com"))
+    if not test_urls:
+        from app.constants import DEFAULT_HTTP_TARGETS
+        test_urls = DEFAULT_HTTP_TARGETS.split(",")
+    urls = list(test_urls)
     if len(urls) == 0:
         return False
 

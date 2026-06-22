@@ -68,17 +68,9 @@ def check_network_status(monitor: MonitorSettings) -> tuple[bool, str, str]:
     if isinstance(url_checks_raw, str) and url_checks_raw.strip():
         url_checks = parse_url_checks(url_checks_raw)
     elif isinstance(url_checks_raw, list) and url_checks_raw:
-        # 支持 list[str]（"url|expected" 格式）和 list[dict]（向后兼容）
-        if isinstance(url_checks_raw[0], str):
-            url_checks = parse_url_checks("\n".join(url_checks_raw))
-        else:
-            url_checks = [
-                (d["url"], d["expected"])
-                for d in url_checks_raw
-                if isinstance(d, dict) and d.get("url") and d.get("expected")
-            ]
+        url_checks = parse_url_checks("\n".join(url_checks_raw))
     else:
-        url_checks = url_checks_raw if url_checks_raw else None
+        url_checks = None
     enable_url = bool(url_checks)
 
     # 所有检测都未启用
@@ -161,9 +153,10 @@ def is_network_available(
     if not enable_tcp and not enable_http and not enable_url:
         return True
 
-    # HTTP 检测：配置为空时使用默认 URL
-    _DEFAULT_HTTP_URLS = ("https://www.baidu.com", "https://www.qq.com")
-    urls_list = list(test_urls or _DEFAULT_HTTP_URLS) if enable_http else []
+    if enable_http and not test_urls:
+        from app.constants import DEFAULT_HTTP_TARGETS
+        test_urls = DEFAULT_HTTP_TARGETS.split(",")
+    urls_list = list(test_urls) if enable_http and test_urls else []
 
     logger.debug(
         "开始网络检测 (TCP={}, HTTP={}, URL={})",
