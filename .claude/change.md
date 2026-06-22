@@ -2,6 +2,16 @@
 
 ## 2026-06-23
 
+### refactor: 清理 V2 重构残留的旧配置函数
+
+- `app/services/config_service.py`：删除 `save_and_apply` 函数（已被 `save_global_and_profile` 完全替代）；移除未使用的导入 `LoginCredentials`、`RuntimeConfig`
+- `app/api/autostart.py`：注释中 `save_and_apply` 引用更新为 `save_global_and_profile`
+- `tests/test_services/test_config_service.py`：删除 `TestSaveAndApply` 类（被测函数已移除）；移除 `save_and_apply` 导入
+- `tests/test_integration/test_full_mode.py`：`save_and_apply` 改为 `save_global_and_profile`，使用 `ConfigResponseDTO` 参数
+- `tests/test_integration/test_login_connection.py`：同上
+
+### feat: settings.json v3→v4 自动迁移
+
 ### feat: settings.json v3→v4 自动迁移
 
 - `app/services/profile_service.py`：

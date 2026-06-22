@@ -9,10 +9,8 @@ from dataclasses import dataclass
 from app.schemas import (
     ConfigResponseDTO,
     GlobalConfig,
-    LoginCredentials,
     Profile,
     ProfilesData,
-    RuntimeConfig,
 )
 from app.utils.crypto import save_password_field
 from app.utils.logging import get_logger
@@ -28,54 +26,6 @@ class SaveResult:
 
     success: bool
     message: str
-
-
-def save_and_apply(
-    config: RuntimeConfig,
-    profile_service: ProfileService,
-    reload_fn,
-) -> SaveResult:
-    """保存配置并重载运行时状态。失败时自动回滚。"""
-    backup_data = copy.deepcopy(profile_service.load())
-
-    def _apply(data: ProfilesData):
-        # 剥离 credentials 和 active_task — 实际数据在 profiles 中，
-        # global_config 中只存全局默认配置（browser/monitor/pause/logging/retry + 透传字段）
-        data.global_config = config.model_copy(update={
-            "credentials": LoginCredentials(),
-            "active_task": "",
-        })
-
-    try:
-        profile_service.update(_apply)
-    except Exception as exc:
-        config_logger.error("保存配置失败: {}", exc)
-        return SaveResult(success=False, message=f"保存失败: {exc}")
-
-    ok, msg = reload_fn()
-    if not ok:
-        config_logger.error("配置重载失败，正在回滚: {}", msg)
-        try:
-            profile_service.update(lambda data: _rollback_config(data, backup_data))
-            rollback_ok, rollback_msg = reload_fn()
-            if not rollback_ok:
-                config_logger.error(
-                    "配置回滚后重载仍失败: {}（磁盘已回滚，运行时状态可能不一致）",
-                    rollback_msg,
-                )
-                return SaveResult(
-                    success=False,
-                    message=f"配置重载失败: {msg}（回滚后仍失败: {rollback_msg}）",
-                )
-            config_logger.warning("配置已回滚并重载成功（原失败: {}）", msg)
-            return SaveResult(success=False, message=f"配置重载失败，已回滚: {msg}")
-        except Exception as rollback_exc:
-            config_logger.error(
-                "回滚过程异常: {}", rollback_exc, exc_info=True,
-            )
-            return SaveResult(success=False, message=f"配置重载失败且回滚异常: {msg}")
-
-    return SaveResult(success=True, message="配置保存成功")
 
 
 def _rollback_config(data: ProfilesData, backup_data: ProfilesData) -> None:

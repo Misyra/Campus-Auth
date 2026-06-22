@@ -15,7 +15,6 @@ from app.schemas import (
 from app.services.config_service import (
     SaveResult,
     _rollback_config,
-    save_and_apply,
 )
 from app.services.config_builder import ConfigBuilder
 
@@ -82,85 +81,6 @@ class TestConfigBuilderBuild:
         assert result.credentials.username == "new"
         assert result.credentials.password == "new_pwd"
 
-
-class TestSaveAndApply:
-    """测试 save_and_apply 事务函数。"""
-
-    def test_success(self):
-        mock_ps = MagicMock()
-        mock_ps.load.return_value = ProfilesData()
-        mock_reload = MagicMock(return_value=(True, "ok"))
-
-        result = save_and_apply(
-            RuntimeConfig(), mock_ps, mock_reload
-        )
-        assert result.success is True
-        assert result.message == "配置保存成功"
-        mock_ps.update.assert_called_once()
-        mock_reload.assert_called_once()
-
-    def test_save_failure(self):
-        mock_ps = MagicMock()
-        mock_ps.load.return_value = ProfilesData()
-        mock_ps.update.side_effect = OSError("磁盘满")
-        mock_reload = MagicMock(return_value=(True, "ok"))
-
-        result = save_and_apply(
-            RuntimeConfig(), mock_ps, mock_reload
-        )
-        assert result.success is False
-        assert "保存失败" in result.message
-        mock_reload.assert_not_called()
-
-    def test_reload_failure_triggers_rollback(self):
-        backup = ProfilesData()
-        mock_ps = MagicMock()
-        mock_ps.load.return_value = backup
-        # 第一次 reload 失败，第二次 reload（回滚后）成功
-        mock_reload = MagicMock(side_effect=[(False, "重载失败"), (True, "ok")])
-
-        result = save_and_apply(
-            RuntimeConfig(), mock_ps, mock_reload
-        )
-        assert result.success is False
-        assert "配置重载失败" in result.message
-        assert "已回滚" in result.message
-        # 验证回滚调用了 update（第一次 save + 第二次 rollback）
-        assert mock_ps.update.call_count == 2
-
-    def test_reload_failure_and_rollback_reload_also_fails(self):
-        """回滚后重载也失败时，message 应同时包含两次失败信息。"""
-        mock_ps = MagicMock()
-        mock_ps.load.return_value = ProfilesData()
-        # 第一次 reload 失败，回滚后第二次 reload 也失败
-        mock_reload = MagicMock(
-            side_effect=[(False, "超时"), (False, "又超时")]
-        )
-
-        result = save_and_apply(
-            RuntimeConfig(), mock_ps, mock_reload
-        )
-        assert result.success is False
-        assert "超时" in result.message
-        assert "又超时" in result.message
-        # 验证回滚调用了 update（第一次 save + 第二次 rollback）
-        assert mock_ps.update.call_count == 2
-        # 验证 reload_fn 被调用了两次（第一次 + 回滚后）
-        assert mock_reload.call_count == 2
-
-    def test_reload_failure_and_rollback_also_fails(self):
-        """回滚过程中抛异常，不抛出，只记录日志。"""
-        mock_ps = MagicMock()
-        mock_ps.load.return_value = ProfilesData()
-        # 第一次 update 成功，第二次 update（rollback）抛异常
-        mock_ps.update.side_effect = [None, RuntimeError("磁盘故障")]
-        mock_reload = MagicMock(return_value=(False, "重载失败"))
-
-        result = save_and_apply(
-            RuntimeConfig(), mock_ps, mock_reload
-        )
-        assert result.success is False
-        assert "回滚异常" in result.message
 
 
 class TestRollbackConfig:
