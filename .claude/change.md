@@ -2,6 +2,24 @@
 
 ## 2026-06-23
 
+### feat: settings.json v3→v4 自动迁移
+
+- `app/services/profile_service.py`：
+  - 新增 `migrate_v3_to_v4(data: dict) -> dict` 函数：将 v3 的 `config` 字段重命名为 `global_config`，剥离 `credentials`/`active_task`/`custom_variables` 运行时字段
+  - `_load_unsafe`：从 `ProfilesData.model_validate_json(raw)` 改为 `json.loads(raw)` → `migrate_v3_to_v4(data)` → `ProfilesData.model_validate(data)`，加载时自动迁移旧格式
+- `tests/test_services/test_profile_service.py`：
+  - 新增 `TestMigrateV3ToV4` 测试类（8 个测试）：基本迁移、v4 不变、缺少 config 字段、剥离 credentials/active_task/custom_variables、保留 profiles
+  - 新增 `TestProfileServiceLoadMigration` 测试类（4 个测试）：加载 v3 自动迁移、credentials 剥离、active_task 剥离、v4 直接加载
+  - 修复 `test_load_reads_settings_json` 测试：v3 格式现在能正确迁移到 v4，`global_config.logging.level` 正确读取为 "DEBUG"
+- 验收：19 个测试全通过
+
+### refactor: 前端适配 ConfigResponseDTO，删除 _saveCredentialsToProfile
+
+- `frontend/js/methods/config.js`：
+  - `fetchConfig`：从 API 响应（扁平凭据字段）映射回前端内部嵌套 `credentials` 结构
+  - `saveConfig`：构建 ConfigResponseDTO 格式 payload，凭据从 `config.credentials` 展开为顶层字段；移除 `_saveCredentialsToProfile()` 调用和 `fetchProfiles()` 调用（后端 PUT /api/config 一次保存全局+方案）
+  - 删除 `_saveCredentialsToProfile()` 方法（后端自动处理方案保存）
+
 ### refactor: API config 改用 ConfigResponseDTO，一次保存全局+方案
 
 - `app/api/config.py`：

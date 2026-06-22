@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import threading
 import time
@@ -13,6 +14,28 @@ from app.utils.files import atomic_write
 from app.utils.logging import get_logger
 
 profile_logger = get_logger("profile_service", source="backend")
+
+
+def migrate_v3_to_v4(data: dict) -> dict:
+    """将 v3 的 config 字段重命名为 global_config，剥离 credentials/active_task。
+
+    v3 格式: {"config": {...}, ...}
+    v4 格式: {"global_config": {...}, "config_version": 4, ...}
+    """
+    if data.get("config_version", 3) >= 4:
+        return data
+
+    old_config = data.get("config", {})
+    # 剥离运行时字段（不应持久化到 global_config）
+    old_config.pop("credentials", None)
+    old_config.pop("active_task", None)
+    # 移除 custom_variables（如果存在）
+    old_config.pop("custom_variables", None)
+
+    data["global_config"] = old_config
+    data.pop("config", None)
+    data["config_version"] = 4
+    return data
 
 
 class ProfileService:
@@ -42,7 +65,9 @@ class ProfileService:
 
         try:
             raw = self._settings_path.read_text(encoding="utf-8")
-            return ProfilesData.model_validate_json(raw)
+            data = json.loads(raw)
+            data = migrate_v3_to_v4(data)
+            return ProfilesData.model_validate(data)
         except Exception:
             profile_logger.exception("加载 settings.json 失败")
             corrupt_name = f"settings.corrupt.{int(time.time())}.json"
