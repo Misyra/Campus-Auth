@@ -165,7 +165,7 @@ class TestLifespanBootOrder:
         mock_container.engine.boot.assert_called_once()
 
     def test_boot_not_called_when_flag_false(self, mock_all_routers, mock_deps):
-        """boot_engine=False 时，lifespan 不应调用 boot()。"""
+        """boot_engine=False 时，lifespan 不应调用 boot()，但应启动引擎线程。"""
         from app.application import create_app
 
         mock_container = _make_mock_container()
@@ -176,12 +176,13 @@ class TestLifespanBootOrder:
         self._run_lifespan(_app)
 
         mock_container.start_web_services.assert_called_once()
+        mock_container.engine.start_thread.assert_called_once()
         mock_container.engine.boot.assert_not_called()
 
     def test_boot_not_called_when_already_monitoring(
         self, mock_all_routers, mock_deps
     ):
-        """引擎已在监控时，即使 boot_engine=True 也不应重复调用 boot()。"""
+        """引擎已在监控时，即使 boot_engine=True 也不应重复调用 boot()，但应启动线程。"""
         from app.application import create_app
 
         mock_container = _make_mock_container()
@@ -193,10 +194,11 @@ class TestLifespanBootOrder:
         self._run_lifespan(_app)
 
         mock_container.start_web_services.assert_called_once()
+        mock_container.engine.start_thread.assert_called_once()
         mock_container.engine.boot.assert_not_called()
 
     def test_boot_default_flag_false(self, mock_all_routers, mock_deps):
-        """create_app() 默认 boot_engine=False，不调用 boot()。"""
+        """create_app() 默认 boot_engine=False，不调用 boot()，但应启动引擎线程。"""
         from app.application import create_app
 
         mock_container = _make_mock_container()
@@ -205,17 +207,19 @@ class TestLifespanBootOrder:
         self._run_lifespan(_app)
 
         mock_container.start_web_services.assert_called_once()
+        mock_container.engine.start_thread.assert_called_once()
         mock_container.engine.boot.assert_not_called()
 
     def test_call_order_start_web_services_then_boot(
         self, mock_all_routers, mock_deps
     ):
-        """验证调用顺序：start_web_services 先于 boot。"""
+        """验证调用顺序：start_web_services → start_thread → boot。"""
         from app.application import create_app
 
         mock_container = _make_mock_container()
         call_order = []
         mock_container.start_web_services.side_effect = lambda: call_order.append("start_web_services")
+        mock_container.engine.start_thread.side_effect = lambda: call_order.append("start_thread")
         mock_container.engine.boot.side_effect = lambda: call_order.append("boot")
 
         _app = create_app(
@@ -224,7 +228,7 @@ class TestLifespanBootOrder:
 
         self._run_lifespan(_app)
 
-        assert call_order == ["start_web_services", "boot"]
+        assert call_order == ["start_web_services", "start_thread", "boot"]
 
 
 # ── _run_full 不再直接调 boot ──
