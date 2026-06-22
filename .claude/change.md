@@ -1,16 +1,36 @@
 # 修改日志
 
+## 2026-06-22 (13)
+
+### refactor: 简化向导为纯协议同意页
+
+- `frontend/partials/wizard.html`：删除步骤 2-5（账号/监控/浏览器/完成），只保留协议同意页 + "同意并开始使用"按钮
+- `frontend/js/methods/lifecycle.js`：`checkInitStatus` 改用 `data.agreed` 控制向导显示；`finishWizard` 简化为调用 `POST /api/agree` 关闭向导
+- `frontend/js/methods/ui.js`：删除 `nextWizardStep` 和 `skipWizard` 方法
+- `frontend/js/app-options.js`：删除 `validateWizardStep`、`canProceed`、`wizardErrors`
+- `frontend/js/data/ui.js`：删除 `wizardStep` 状态
+- `app/api/system.py`：`init-status` 新增 `agreed` 字段（检查 `config/.agree` 文件）；新增 `POST /api/agree` 端点创建标记文件
+- `frontend/styles/pages/wizard.css`：删除步骤指示器、配置摘要、表单错误等不再使用的样式
+
 ## 2026-06-22 (12)
 
-### fix: 向导保存超时 — 引擎线程未启动导致 RELOAD 命令无人消费
+### fix: 向导保存超时 + 凭据未持久化
 
-**问题**：`startup_action: "none"` 时，`boot_engine=False`，lifespan 不调用 `engine.boot()`，引擎线程从未启动。向导保存时 `reload_config()` 派发 RELOAD 命令到队列，但无消费者，10 秒超时。
+**问题 1**：`startup_action: "none"` 时，`boot_engine=False`，lifespan 不调用 `engine.boot()`，引擎线程从未启动。向导保存时 `reload_config()` 派发 RELOAD 命令到队列，但无消费者，10 秒超时。
 
-**修复**：将引擎线程启动与监控启动解耦，lifespan 中始终启动引擎线程：
+**修复 1**：将引擎线程启动与监控启动解耦，lifespan 中始终启动引擎线程：
 
 - `app/services/engine.py`：新增 `start_thread()` 方法（仅启动命令处理循环，不启动监控）；`boot()` 改为调用 `start_thread()` + `start_monitoring()`
 - `app/application.py`：lifespan 的 `existing_container` 分支中，在条件性调用 `boot()` 前先调用 `start_thread()`
 - `tests/test_app/test_boot_engine_flag.py`：更新 4 个测试用例，验证 `start_thread()` 始终被调用
+
+**问题 2**：向导 `finishWizard` 仅调用 `PUT /api/config`（credentials 被 `save_and_apply` 剥离），未将凭据同步到活跃方案，导致 `init-status` 持续返回 `username=空, password=空`。
+
+**修复 2**：`frontend/js/methods/lifecycle.js` `finishWizard` 中，在 config 保存成功后调用 `fetchProfiles()` + `_saveCredentialsToProfile()`，与设置页面 `saveConfig` 行为一致。
+
+**问题 3**：`GET /api/config` 从 `_ui_config` 返回，而 `_ui_config.credentials` 在 `save_and_apply` 时被剥离为空。设置页面通过此接口读取凭据，始终显示空值。
+
+**修复 3**：`app/api/config.py` `get_config` 中，从活跃 profile 注入凭据到返回值，密码脱敏后返回。异常时降级到原始 `_ui_config` 凭据。
 
 ## 2026-06-22 (11)
 

@@ -121,17 +121,32 @@ def get_init_status(
 
     config = svc.get_runtime_config()
     is_initialized = bool(config.credentials.username and config.credentials.password)
-    if not is_initialized:
-        api_logger.info(
-            "初始化状态: 未完成 — username={}, password={}, auth_url={}",
-            f"'{config.credentials.username}'" if config.credentials.username else "空",
-            "已设置" if config.credentials.password else "空",
-            f"'{config.credentials.auth_url}'" if config.credentials.auth_url else "空",
-        )
+
+    # 检查用户是否已同意使用协议
+    agree_file = svc.project_root / "config" / ".agree"
+    agreed = agree_file.exists()
+
     return {
         "initialized": is_initialized,
+        "agreed": agreed,
         "password_decryption_failed": has_decryption_error(),
     }
+
+
+@router.post("/api/agree", response_model=ActionResponse)
+def agree_to_terms(
+    svc: ScheduleEngine = Depends(get_monitor_service),
+) -> ActionResponse:
+    """用户同意使用协议，生成 .agree 标记文件。"""
+    try:
+        agree_file = svc.project_root / "config" / ".agree"
+        agree_file.parent.mkdir(parents=True, exist_ok=True)
+        agree_file.write_text("", encoding="utf-8")
+        api_logger.info("用户已同意使用协议")
+        return ActionResponse(success=True, message="已同意协议")
+    except Exception as exc:
+        api_logger.error("保存协议同意状态失败: {}", exc)
+        raise HTTPException(status_code=500, detail=f"保存失败: {exc}") from exc
 
 
 # ── 关机 ──

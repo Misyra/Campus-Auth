@@ -4,7 +4,6 @@ export function uiData() {
     currentPage: 'dashboard',
     showMoreNav: false,
     showWizard: false,
-    wizardStep: 1,
     agreedToTerms: false,
     currentSettingsTab: 'account',
     isLoading: true,
