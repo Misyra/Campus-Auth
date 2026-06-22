@@ -750,6 +750,7 @@ class TestNetworkStateSetInConsumer:
         svc.record_log = MagicMock()
         svc._orchestrator = MagicMock()
         svc._registered_futures = set()
+        svc._futures_lock = threading.Lock()
 
         future = Future()
         handle = MagicMock()

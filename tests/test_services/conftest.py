@@ -96,6 +96,7 @@ def engine_factory():
         svc.record_log = MagicMock()
         svc._update_status_snapshot = MagicMock()
         svc._registered_futures = set()
+        svc._futures_lock = threading.Lock()
         return svc
 
     def factory(raw=False, **overrides):

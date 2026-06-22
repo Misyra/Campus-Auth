@@ -39,6 +39,8 @@ def test_handle_login_uses_validated_config():
             username="u", password="p", auth_url="http://x",
         ),
     )
+    engine._ui_config = MagicMock()
+    engine._ui_config.browser.login_timeout = 30
     engine._orchestrator = MagicMock()
     engine._orchestrator.validate.return_value = None
     mock_handle = MagicMock()
@@ -69,6 +71,8 @@ class TestManualLoginCancelRaceFix:
 
     def _make_engine(self):
         """构造一个最小化的 engine 用于测试。"""
+        import threading
+
         from app.services.engine import ScheduleEngine
 
         engine = ScheduleEngine.__new__(ScheduleEngine)
@@ -82,8 +86,9 @@ class TestManualLoginCancelRaceFix:
         engine._orchestrator = MagicMock()
         engine._login_history = MagicMock()
         engine._ui_config = MagicMock()
-        engine._ui_config.login_timeout = 30
+        engine._ui_config.browser.login_timeout = 30
         engine._registered_futures = set()
+        engine._futures_lock = threading.Lock()
         return engine
 
     def test_manual_login_submits_to_orchestrator(self):

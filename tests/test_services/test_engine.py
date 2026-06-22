@@ -1277,7 +1277,7 @@ class TestRunManualLogin:
         svc._update_status_snapshot = MagicMock()
         ok, msg = svc.run_manual_login()
         assert ok is True
-        assert "已提交" in msg
+        assert "成功" in msg
 
     def test_run_manual_login_failure(self, engine_factory):
         svc = engine_factory(raw=True)
@@ -1325,7 +1325,7 @@ class TestRunManualLogin:
 
         def fake_enqueue(cmd):
             # 模拟引擎线程设置响应
-            cmd.response_data = (True, "登录已提交")
+            cmd.response_data = (True, "登录成功")
             return True
         svc._enqueue = fake_enqueue
         svc._engine_thread = MagicMock()
