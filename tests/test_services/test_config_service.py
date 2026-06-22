@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 from app.schemas import (
     BrowserSettings,
+    GlobalConfig,
     LoginCredentials,
     Profile,
     ProfilesData,
@@ -88,12 +89,12 @@ class TestRollbackConfig:
 
     def test_rollback_restores_fields(self):
         data = ProfilesData()
-        data.global_config = RuntimeConfig(active_task="new")
+        data.global_config = GlobalConfig(browser=BrowserSettings(timeout=60))
         backup = ProfilesData()
-        backup.global_config = RuntimeConfig(active_task="old")
+        backup.global_config = GlobalConfig(browser=BrowserSettings(timeout=30))
 
         _rollback_config(data, backup)
-        assert data.global_config.active_task == "old"
+        assert data.global_config.browser.timeout == 30
 
     def test_rollback_all_fields(self):
         """回滚应恢复 ProfilesData 的所有字段。"""
