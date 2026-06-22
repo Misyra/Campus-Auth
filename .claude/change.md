@@ -1,5 +1,103 @@
 # 修改日志
 
+## 2026-06-22 (22)
+
+### refactor: 新增 GlobalConfig、ConfigResponseDTO，更新 RuntimeConfig 和 ProfilesData
+
+- `app/schemas.py`：
+  - 新增 `GlobalConfig` 类：持久化配置，不含 `credentials` 和 `active_task`，用于 `settings.json` 写盘
+  - 新增 `ConfigResponseDTO` 类：API 响应专用，凭据字段扁平化（username/password/auth_url/isp/carrier_custom），密码已掩码
+  - 更新 `RuntimeConfig` docstring：说明此模型仅存在于内存，不直接写盘
+  - 更新 `ProfilesData`：`config` 字段改名为 `global_config`，`config_version` 默认值改为 4
+  - `RuntimeConfig` 新增 `proxy: str` 和 `app_port: int` 字段（与 `GlobalConfig` 保持一致）
+- `app/services/config_service.py`：
+  - `load_active_config`：`data.config` → `data.global_config`
+  - `save_and_apply` 的 `_apply`：`data.config` → `data.global_config`
+  - 注释更新：`config` → `global_config`
+- `app/services/engine.py`：
+  - `_reload_config_internal`：`data.config` → `data.global_config`（两处）
+- `app/api/config.py`：
+  - `_persist_source_levels`：`d.config` → `d.global_config`
+- `app/api/browsers.py`：
+  - `profile_data.config` → `profile_data.global_config`
+- `app/workers/playwright_bootstrap.py`：
+  - `_get_browser_channel`：`_data.config` → `_data.global_config`
+- `app/application.py`：
+  - `run()`：`profile_service.load().config.logging` → `profile_service.load().global_config.logging`
+- `main.py`：
+  - `_load_app_config`：`_data.config` → `_data.global_config`
+  - `_run_full`：`_data.config.logging` → `_data.global_config.logging`
+- 测试文件同步更新（6 个文件）：
+  - `tests/test_config/test_config_schemas.py`：`data.config` → `data.global_config`，`config_version` 断言改为 4
+  - `tests/test_services/test_config_service.py`：`data.config` → `data.global_config`
+  - `tests/test_services/test_profile_service.py`：`data.config.logging` → `data.global_config.logging`
+  - `tests/test_services/test_monitor_service.py`：`mock_ps.load.return_value.config` → `mock_ps.load.return_value.global_config`（6 处）
+  - `tests/test_api/test_browsers.py`：`mock_profile_data.config` → `mock_profile_data.global_config`（5 处）
+
+## 2026-06-22 (21)
+
+### fix: 清理 DEFAULT_PROFILE_SETTINGS 中后端已废弃的扁平字段
+
+- `frontend/js/constants.js`：移除 `DEFAULT_PROFILE_SETTINGS` 中 17 个后端 Profile 模型已不持有的字段（browser_timeout、max_retries、stealth_mode、custom_variables 等），仅保留 Profile 实际持有的 9 个字段
+
+## 2026-06-22 (20)
+
+### fix: 添加 proxy/app_port 到 RuntimeConfig，消除幽灵字段
+
+- `schemas.py`：`RuntimeConfig` 新增 `proxy: str` 和 `app_port: int` 字段
+- `ports.py`：`resolve_port()` 新增 `config_port` 可选参数，优先级 env > config > default
+- `application.py`：`run()` 从 config 读取端口，传给 `create_app()` 和 uvicorn；`create_app()` 新增 `port` 参数用于 CORS
+- `repo.py`：仓库请求从 config 读取 `proxy` 传递给 `async_repo_fetch_json`
+
+## 2026-06-22 (19)
+
+### refactor: 统一网络检测默认值到 constants.py
+
+- `constants.py`：`DEFAULT_HTTP_TARGETS` 改为小米/华为 captive portal 地址
+- `probes.py`：`is_network_available_socket`/`_http`/`_url` 默认值统一引用 constants
+- `decision.py`：移除 `_DEFAULT_HTTP_URLS` 硬编码，引用 constants；清理 `url_check_urls` 冗余类型检查
+- `engine.py`：简化 `test_network` 中 `url_check_urls` 处理
+
+## 2026-06-22 (18)
+
+### fix: 手动网络测试未传递 test_urls
+
+- `engine.py` `test_network()`：调用 `is_network_available` 时补充 `test_urls` 参数，修复回退到百度默认值的问题
+- 同步修复 `url_check_urls` 格式处理（`list[str]` 而非 `list[dict]`）
+
+## 2026-06-22 (17)
+
+### fix: HTTP 检测使用国内 captive portal 地址
+
+- 默认 HTTP 检测地址改为小米/华为/OPPO 的 `generate_204` 端点
+- `probes.py`：captive portal URL（含 `generate_204`/`connectivitycheck`）仅接受 204，普通 URL 接受 200-299
+
+## 2026-06-22 (16)
+
+### fix: 调整默认配置
+
+- TCP/HTTP 检测默认关闭，仅开启网址响应检测
+- `minimize_to_tray` 默认 `True`
+- `block_proxy` 默认 `True`
+
+## 2026-06-22 (15)
+
+### feat: 网址响应检测添加默认检测地址
+
+- `app/schemas.py`：`url_check_urls` 类型从 `list[dict]` 改为 `list[str]`，默认填充 Apple/Microsoft/Firefox captive portal 地址
+- `app/network/decision.py`：`check_network_status` 兼容 `list[str]` 和 `list[dict]` 两种格式
+- `frontend/js/constants.js`：同步前端默认值
+- `tests/test_services/test_engine.py`：更新测试数据格式
+
+## 2026-06-22 (14)
+
+### fix: 补全网络检测默认值 + 修复网址响应检测开关
+
+- `app/schemas.py` `MonitorSettings`：TCP/HTTP 检测默认开启，`ping_targets` 和 `test_urls` 填充常见目标
+- `frontend/js/constants.js`：同步前端默认配置
+- `frontend/js/app-options.js`：修复 `urlCheckEnabled` setter 在 `defaultUrlCheckUrls` 为空时开关弹回的 Bug
+- `tests/test_services/test_engine_fix.py`：更新默认值断言
+
 ## 2026-06-22 (13)
 
 ### refactor: 简化向导为纯协议同意页

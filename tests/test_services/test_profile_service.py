@@ -43,7 +43,7 @@ class TestProfileServiceLoad:
 
         assert data.auto_switch is True
         assert data.active_profile == "campus"
-        assert data.config.logging.level == "DEBUG"
+        assert data.global_config.logging.level == "DEBUG"
         assert data.profiles["default"].username == "user1"
         assert data.profiles["campus"].username == "user2"
         assert data.profiles["campus"].match_ssid == "CampusWiFi"

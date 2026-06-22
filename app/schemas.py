@@ -296,6 +296,8 @@ class RuntimeConfig(BaseModel, frozen=True):
 
     组合所有子集模型 + 直接透传字段。
     frozen=True 保证线程安全，无需 deepcopy。
+
+    注意：此模型仅存在于内存，不直接写盘。
     """
 
     browser: BrowserSettings = Field(default_factory=BrowserSettings)
@@ -315,13 +317,65 @@ class RuntimeConfig(BaseModel, frozen=True):
     autostart_lightweight: bool = True
     lightweight_tray: bool = True
     auto_open_browser: bool = False
+    proxy: str = ""
+    app_port: int = Field(default=50721, ge=1, le=65535)
+
+
+class GlobalConfig(BaseModel):
+    """持久化配置 — 仅全局共享设置，不含凭据和 active_task。"""
+
+    browser: BrowserSettings = Field(default_factory=BrowserSettings)
+    monitor: MonitorSettings = Field(default_factory=MonitorSettings)
+    retry: RetrySettings = Field(default_factory=RetrySettings)
+    pause: PauseSettings = Field(default_factory=PauseSettings)
+    logging: LoggingSettings = Field(default_factory=LoggingSettings)
+
+    # 透传字段
+    block_proxy: bool = True
+    shell_path: str = ""
+    minimize_to_tray: bool = True
+    startup_action: str = "none"
+    autostart_lightweight: bool = True
+    lightweight_tray: bool = True
+    auto_open_browser: bool = False
+    proxy: str = ""
+    app_port: int = Field(default=50721, ge=1, le=65535)
+
+
+class ConfigResponseDTO(BaseModel):
+    """API 响应专用 — 不暴露内部结构。"""
+
+    browser: BrowserSettings
+    monitor: MonitorSettings
+    retry: RetrySettings
+    pause: PauseSettings
+    logging: LoggingSettings
+
+    # 凭据（密码已掩码）
+    username: str = ""
+    password: str = ""          # "••••••••" 或空
+    auth_url: str = ""
+    isp: str = ""
+    carrier_custom: str = ""
+
+    active_task: str = ""
+
+    block_proxy: bool = True
+    shell_path: str = ""
+    minimize_to_tray: bool = True
+    startup_action: str = "none"
+    autostart_lightweight: bool = True
+    lightweight_tray: bool = True
+    auto_open_browser: bool = False
+    proxy: str = ""
+    app_port: int = 50721
 
 
 class ProfilesData(BaseModel):
-    """settings.json 顶层结构（v3）"""
+    """settings.json 顶层结构（v4）"""
 
-    config_version: int = Field(default=3)
-    config: RuntimeConfig = Field(default_factory=RuntimeConfig)
+    config_version: int = Field(default=4)
+    global_config: GlobalConfig = Field(default_factory=GlobalConfig)
     auto_switch: bool = Field(default=False, description="是否根据网关 IP 自动切换方案")
     active_profile: str = Field(default="default")
     profiles: dict[str, Profile] = Field(default_factory=dict)

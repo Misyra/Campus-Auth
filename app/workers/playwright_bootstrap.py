@@ -69,7 +69,7 @@ def _get_browser_channel() -> str | None:
 
         _ps = create_profile_service()
         _data = _ps.load()
-        channel = _data.config.browser.browser_channel
+        channel = _data.global_config.browser.browser_channel
         if channel:
             return channel
     except Exception:
