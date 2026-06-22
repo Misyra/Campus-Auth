@@ -8,15 +8,15 @@ from unittest.mock import MagicMock, patch
 from app.schemas import LoginCredentials, RuntimeConfig
 
 
-def test_engine_test_network_default_false():
-    """test_network 的 enable_tcp_check / enable_http_check 默认值应为 False。"""
+def test_engine_test_network_default_true():
+    """test_network 的 enable_tcp_check / enable_http_check 默认值应为 True。"""
     from app.schemas import MonitorSettings
 
     # 获取 schema 权威默认值
     field_info_tcp = MonitorSettings.model_fields["enable_tcp_check"]
     field_info_http = MonitorSettings.model_fields["enable_http_check"]
-    assert field_info_tcp.default is False
-    assert field_info_http.default is False
+    assert field_info_tcp.default is True
+    assert field_info_http.default is True
 
     # test_network 中不应有 fallback 默认值（现在通过 RuntimeConfig 属性访问）
     from app.services.engine import ScheduleEngine
