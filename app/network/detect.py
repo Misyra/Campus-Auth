@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import locale
 import re
 import subprocess
@@ -18,6 +19,15 @@ from app.utils.platform import (
 )
 
 logger = get_logger("network_detect", source="network")
+
+
+def _is_valid_ipv4(ip: str) -> bool:
+    """验证是否为合法的 IPv4 地址。"""
+    try:
+        addr = ipaddress.ip_address(ip)
+        return isinstance(addr, ipaddress.IPv4Address)
+    except ValueError:
+        return False
 
 
 # ── 公共 API ──
@@ -101,7 +111,7 @@ def _detect_gateway_windows() -> str | None:
         )
         if result.returncode == 0:
             ip = result.stdout.strip()
-            if ip and re.fullmatch(r"\d+\.\d+\.\d+\.\d+", ip) and ip != "0.0.0.0":
+            if ip and _is_valid_ipv4(ip) and ip != "0.0.0.0":
                 logger.info("检测到网关 IP (PowerShell): {}", ip)
                 return ip
     except FileNotFoundError:
@@ -265,21 +275,22 @@ def _detect_ssid_linux() -> str | None:
 
 
 def _detect_gateway_darwin() -> str | None:
-    """macOS: 解析 netstat -nr 获取默认网关"""
+    """macOS: 解析 route -n get default 获取默认网关"""
     try:
         result = subprocess.run(
-            ["netstat", "-nr"],
+            ["route", "-n", "get", "default"],
             capture_output=True,
             text=True,
             timeout=5,
         )
-        for line in result.stdout.splitlines():
-            if line.startswith("default"):
-                parts = line.split()
-                if len(parts) >= 2:
-                    ip = parts[1]
-                    if re.fullmatch(r"\d+\.\d+\.\d+\.\d+", ip) and ip != "0.0.0.0":
-                        return ip
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                if "gateway" in line.lower():
+                    parts = line.split(":")
+                    if len(parts) >= 2:
+                        ip = parts[1].strip()
+                        if _is_valid_ipv4(ip) and ip != "0.0.0.0":
+                            return ip
     except Exception as exc:
         logger.debug("macOS 网关检测失败: {}", exc)
 

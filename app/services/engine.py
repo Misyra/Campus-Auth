@@ -158,9 +158,8 @@ class ScheduleEngine:
         self._registered_futures: set[Future] = set()
         self._futures_lock = threading.Lock()
 
-        # 统一引擎线程
+        # 统一引擎线程（延迟到 boot() 启动，确保依赖注入完成）
         self._engine_thread = threading.Thread(target=self._engine_loop, daemon=True)
-        self._engine_thread.start()
 
     # ── 队列入队辅助 ──
 
@@ -261,19 +260,21 @@ class ScheduleEngine:
             result = core.check_once()
             self._monitor_check_interval = result.interval
 
+            # BUG-026 修复：先检查方案切换，再决定登录（避免使用旧凭据）
+            if core.consume_profile_switch_flag():
+                if self._reload_config_internal():
+                    self._handle_stop()
+                    self._handle_start(EngineCommand(type=EngineCmdType.START))
+                    # BUG-016 修复：方案切换后立即检测，不覆盖 _next_network_check
+                    return
+                else:
+                    logger.error("配置重载失败，继续使用当前配置")
+
             if result.need_login:
                 self._retry_policy.on_network_check(True)
                 self._do_async_login()
             else:
                 self._retry_policy.on_network_check(False)
-
-            # 检查是否需要重启（自动切换方案）
-            if core.consume_profile_switch_flag():
-                if self._reload_config_internal():
-                    self._handle_stop()
-                    self._handle_start(EngineCommand(type=EngineCmdType.START))
-                else:
-                    logger.error("配置重载失败，继续使用当前配置")
 
             self._next_network_check = time.time() + result.interval
             self._update_status_snapshot(force=True)
@@ -406,8 +407,13 @@ class ScheduleEngine:
             cmd.response_data = (False, "登录任务已在执行中，请稍后再试")
             return
 
-        # 等待登录实际完成
-        ok, msg = handle.result()
+        # 等待登录实际完成（添加超时，防止引擎线程死锁）
+        login_timeout = self._ui_config.browser.login_timeout
+        worker_timeout = max(login_timeout, 60)
+        try:
+            ok, msg = handle.result(timeout=worker_timeout + 60)
+        except TimeoutError:
+            ok, msg = False, "登录超时"
         cmd.response_data = (ok, msg)
 
     def _handle_reload(self, cmd: EngineCommand) -> None:
@@ -558,6 +564,9 @@ class ScheduleEngine:
 
     def boot(self) -> None:
         """启动引擎。由调用方决定是否调用，不再自行判断配置。"""
+        # 启动引擎线程（确保所有依赖注入完成后再启动）
+        if not self._engine_thread.is_alive():
+            self._engine_thread.start()
         self.start_monitoring()
 
     @property
@@ -621,8 +630,7 @@ class ScheduleEngine:
             return True
         except Exception:
             logger.exception("配置重载失败")
-            with self._pure_mode_lock:
-                self._pure_mode = False
+            # BUG-014 修复：失败时保留原有 _pure_mode 值，不因重载失败而改变
             return False
 
     def reload_config(self) -> tuple[bool, str]:
