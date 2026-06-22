@@ -58,7 +58,7 @@ def test_runtime_config_composition():
     assert rc.credentials.username == "u"
     assert rc.active_task == ""
     assert rc.custom_variables == {}
-    assert rc.block_proxy is False
+    assert rc.block_proxy is True
 
 
 def test_runtime_config_frozen():
