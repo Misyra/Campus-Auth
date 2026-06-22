@@ -797,13 +797,12 @@ class ScheduleEngine:
         targets = config.monitor.ping_targets
         enable_tcp = config.monitor.enable_tcp_check
         enable_http = config.monitor.enable_http_check
-        # MonitorSettings.url_check_urls 是 list[dict]，转为 (url, expected) 元组
         raw_url_checks = config.monitor.url_check_urls
-        url_checks = [
-            (d["url"], d["expected"])
-            for d in raw_url_checks
-            if isinstance(d, dict) and d["url"] and d["expected"]
-        ] if raw_url_checks else []
+        if raw_url_checks and isinstance(raw_url_checks[0], str):
+            from app.utils.network import parse_url_checks
+            url_checks = parse_url_checks("\n".join(raw_url_checks))
+        else:
+            url_checks = []
         test_sites = parse_ping_targets(targets)
         mode_desc = []
         if enable_tcp:
@@ -818,6 +817,7 @@ class ScheduleEngine:
             timeout = config.monitor.network_check_timeout
             is_available = is_network_available(
                 test_sites=test_sites if test_sites else None,
+                test_urls=config.monitor.test_urls or None,
                 timeout=timeout,
                 enable_tcp=enable_tcp,
                 enable_http=enable_http,
