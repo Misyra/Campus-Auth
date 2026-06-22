@@ -108,7 +108,7 @@ export const lifecycleMethods = {
   async checkInitStatus() {
     try {
       const { data } = await this.$api.get('/api/init-status');
-      this.showWizard = !data.initialized;
+      this.showWizard = !data.agreed;
       if (data.password_decryption_failed) {
         this.frontendLogger.error('init', '密码解密失败，请在设置页面重新输入密码');
         this.notify(false, '密码解密失败，请在设置页面重新输入密码', 'security');
@@ -169,20 +169,18 @@ export const lifecycleMethods = {
   async finishWizard() {
     this.busy.save = true;
     try {
-      const { data } = await this.$api.put('/api/config', this.config);
+      const { data } = await this.$api.post('/api/agree');
       if (data.success) {
         this.showWizard = false;
         this.agreedToTerms = false;
-        // 从 API 重新加载配置以获取服务端规范化后的值，确保快照一致
-        await this.fetchConfig(true);
-        this.frontendLogger.info('lifecycle', '配置完成');
+        this.frontendLogger.info('lifecycle', '已同意协议');
       } else {
-        this.frontendLogger.warn('lifecycle', '向导保存失败: ' + data.message);
+        this.frontendLogger.warn('lifecycle', '同意协议失败: ' + data.message);
         this.toastOnly(false, data.message);
       }
     } catch (error) {
-      const msg = extractApiError(error, '保存失败');
-      this.frontendLogger.error('lifecycle', '向导保存异常: ' + msg, error);
+      const msg = extractApiError(error, '操作失败');
+      this.frontendLogger.error('lifecycle', '同意协议异常: ' + msg, error);
       this.toastOnly(false, msg);
     } finally {
       this.busy.save = false;

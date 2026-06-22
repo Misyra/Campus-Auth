@@ -226,27 +226,6 @@ export const uiMethods = {
         this.playwrightDownloading = false;
       });
   },
-  nextWizardStep() {
-    const errors = this.validateWizardStep(this.wizardStep, this);
-    if (Object.keys(errors).length) {
-      this.toastOnly(false, Object.values(errors)[0]);
-      return;
-    }
-    // 步骤 4 通过后同步浏览器选择到 config
-    if (this.wizardStep === 4) {
-      this.config.browser.browser_channel = this.selectedBrowser;
-    }
-    if (this.wizardStep < 5) {
-      this.wizardStep++;
-    }
-  },
-  skipWizard() {
-    // 至少要有用户名和认证地址才能跳过
-    if (!this.config.credentials.username || !this.config.credentials.auth_url) {
-      if (!confirm('账号和认证地址尚未填写，跳过向导将无法使用自动认证。\n\n确定要跳过吗？')) return;
-    }
-    this.showWizard = false;
-  },
   setSettingsTab(tabId) {
     this.currentSettingsTab = tabId;
   },

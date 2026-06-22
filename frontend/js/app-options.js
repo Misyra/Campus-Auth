@@ -123,12 +123,6 @@ export const appOptions = {
       };
       return titles[this.currentPage] || '仪表盘';
     },
-    canProceed() {
-      return Object.keys(this.validateWizardStep(this.wizardStep, this)).length === 0;
-    },
-    wizardErrors() {
-      return this.validateWizardStep(this.wizardStep, this);
-    },
     configDirty() {
       return this._lastSavedConfig !== null && JSON.stringify(this.config) !== this._lastSavedConfig;
     },
@@ -280,40 +274,6 @@ export const appOptions = {
     if (this.ws) this.ws.close();
   },
   methods: {
-    // ── 向导验证（F2: 单点定义）──
-    validateWizardStep(step, data) {
-      const errors = {};
-      if (step === 1) {
-        if (!data.agreedToTerms) {
-          errors.agreedToTerms = '请先阅读并同意使用协议';
-        }
-      }
-      if (step === 2) {
-        if (!data.config.credentials.username) {
-          errors.username = '请输入账号';
-        }
-        if (!data.config.credentials.password) {
-          errors.password = '请输入密码';
-        } else if (data.config.credentials.password.length < 2) {
-          errors.password = '密码长度不能少于2位';
-        }
-        if (!data.config.credentials.auth_url) {
-          errors.auth_url = '请输入认证地址';
-        } else if (!/^https?:\/\//i.test(data.config.credentials.auth_url)) {
-          errors.auth_url = '认证地址必须以 http:// 或 https:// 开头';
-        }
-        if (data.config.credentials.isp === '自定义' && (!data.config.credentials.carrier_custom || !data.config.credentials.carrier_custom.trim())) {
-          errors.carrier_custom = '请输入自定义运营商关键字';
-        }
-      }
-      if (step === 4) {
-        if (!data.selectedBrowser) {
-          errors.selectedBrowser = '请选择一个浏览器';
-        }
-      }
-      return errors;
-    },
-
     ...uiMethods,
     ...formatterMethods,
     ...lifecycleMethods,
