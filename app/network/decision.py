@@ -62,19 +62,21 @@ def check_network_status(monitor: MonitorSettings) -> tuple[bool, str, str]:
     enable_tcp = monitor.enable_tcp_check
     enable_http = monitor.enable_http_check
 
-    # C09: url_check_urls 已在 MonitorSettings 中为 list[dict]，无需解析
     from app.utils.network import parse_url_checks
 
     url_checks_raw = monitor.url_check_urls
     if isinstance(url_checks_raw, str) and url_checks_raw.strip():
         url_checks = parse_url_checks(url_checks_raw)
     elif isinstance(url_checks_raw, list) and url_checks_raw:
-        # MonitorSettings.url_check_urls 是 list[dict]，转为 (url, expected) 元组
-        url_checks = [
-            (d["url"], d["expected"])
-            for d in url_checks_raw
-            if isinstance(d, dict) and d.get("url") and d.get("expected")
-        ]
+        # 支持 list[str]（"url|expected" 格式）和 list[dict]（向后兼容）
+        if isinstance(url_checks_raw[0], str):
+            url_checks = parse_url_checks("\n".join(url_checks_raw))
+        else:
+            url_checks = [
+                (d["url"], d["expected"])
+                for d in url_checks_raw
+                if isinstance(d, dict) and d.get("url") and d.get("expected")
+            ]
     else:
         url_checks = url_checks_raw if url_checks_raw else None
     enable_url = bool(url_checks)
