@@ -26,14 +26,20 @@ export const configMethods = {
   async fetchConfig(updateSnapshot = false) {
     try {
       const { data } = await this.$api.get('/api/config');
-      // 后端返回嵌套 RuntimeConfig，深度合并默认值
+      // ConfigResponseDTO: 凭据为顶层字段，映射回前端内部嵌套结构
       this.config = {
         browser: { ...DEFAULT_CONFIG.browser, ...(data.browser || {}) },
         monitor: { ...DEFAULT_CONFIG.monitor, ...(data.monitor || {}) },
         pause: { ...DEFAULT_CONFIG.pause, ...(data.pause || {}) },
         logging: { ...DEFAULT_CONFIG.logging, ...(data.logging || {}) },
         retry: { ...DEFAULT_CONFIG.retry, ...(data.retry || {}) },
-        credentials: { ...DEFAULT_CONFIG.credentials, ...(data.credentials || {}) },
+        credentials: {
+          username: data.username ?? DEFAULT_CONFIG.credentials.username,
+          password: data.password ?? DEFAULT_CONFIG.credentials.password,
+          auth_url: data.auth_url ?? DEFAULT_CONFIG.credentials.auth_url,
+          isp: data.isp ?? DEFAULT_CONFIG.credentials.isp,
+          carrier_custom: data.carrier_custom ?? DEFAULT_CONFIG.credentials.carrier_custom,
+        },
         active_task: data.active_task ?? DEFAULT_CONFIG.active_task,
         custom_variables: data.custom_variables ?? DEFAULT_CONFIG.custom_variables,
         block_proxy: data.block_proxy ?? DEFAULT_CONFIG.block_proxy,
@@ -94,10 +100,32 @@ export const configMethods = {
     this.busy.save = true;
     this.saveFailed = false;
     try {
-      const payload = { ...this.config };
-      if (payload.credentials.isp !== '自定义') {
-        payload.credentials.carrier_custom = '';
-      }
+      const c = this.config;
+      // 构建 ConfigResponseDTO 格式：凭据展开为顶层字段
+      const payload = {
+        browser: c.browser,
+        monitor: c.monitor,
+        pause: c.pause,
+        logging: c.logging,
+        retry: c.retry,
+        // 凭据展开为顶层字段
+        username: c.credentials.username || '',
+        password: c.credentials.password || '',
+        auth_url: c.credentials.auth_url || '',
+        isp: c.credentials.isp || '',
+        carrier_custom: c.credentials.isp === '自定义' ? (c.credentials.carrier_custom || '') : '',
+        active_task: c.active_task || '',
+        custom_variables: c.custom_variables || {},
+        block_proxy: c.block_proxy,
+        shell_path: c.shell_path || '',
+        minimize_to_tray: c.minimize_to_tray,
+        lightweight_tray: c.lightweight_tray,
+        startup_action: c.startup_action || 'none',
+        autostart_lightweight: c.autostart_lightweight,
+        auto_open_browser: c.auto_open_browser,
+        proxy: c.proxy || '',
+        app_port: c.app_port || 50721,
+      };
       const { data } = await this.$api.put('/api/config', payload, {
         signal: this._saveAbortController.signal,
       });
@@ -105,12 +133,8 @@ export const configMethods = {
         this._lastSavedConfig = current;
         this.frontendLogger.info('config', '配置保存成功');
 
-        // 同步保存 credentials 到当前活跃的 profile
-        await this._saveCredentialsToProfile();
-
         // 用后端规范化值刷新 config 并重置 savedConfigSnapshot
         await this.fetchConfig(true);
-        await this.fetchProfiles();
       } else {
         this.frontendLogger.warn('config', '保存配置被拒绝: ' + data.message);
         this.toastOnly(false, data.message);
@@ -124,30 +148,6 @@ export const configMethods = {
       this.saveFailed = true;
     } finally {
       this.busy.save = false;
-    }
-  },
-
-  async _saveCredentialsToProfile() {
-    // 将 credentials 保存到当前活跃的 profile
-    const profileId = this.activeProfileId || 'default';
-    const profileData = this.profiles[profileId];
-    if (!profileData) return;
-
-    const credentials = this.config.credentials;
-    const updatedProfile = {
-      ...profileData,
-      username: credentials.username || '',
-      password: credentials.password || '',
-      auth_url: credentials.auth_url || '',
-      carrier: credentials.isp === '' ? '无' : (credentials.isp || '无'),
-      carrier_custom: credentials.carrier_custom || '',
-    };
-
-    try {
-      await this.$api.put(`/api/profiles/${profileId}`, updatedProfile);
-      this.frontendLogger.debug('config', `credentials 已同步到方案 ${profileId}`);
-    } catch (error) {
-      this.frontendLogger.warn('config', `同步 credentials 到方案失败: ${error.message}`);
     }
   },
   resetConfig() {
