@@ -248,11 +248,11 @@ class MonitorSettings(BaseModel, frozen=True):
 
     check_interval_seconds: int = Field(default=300, ge=10, le=86400)
     network_check_timeout: int = Field(default=2, ge=1, le=30)
-    ping_targets: list[str] = Field(default_factory=list)
-    enable_tcp_check: bool = False
-    enable_http_check: bool = False
+    ping_targets: list[str] = Field(default_factory=lambda: ["8.8.8.8:53", "114.114.114.114:53", "www.baidu.com:443"])
+    enable_tcp_check: bool = True
+    enable_http_check: bool = True
     enable_local_check: bool = True
-    test_urls: list[str] = Field(default_factory=list)
+    test_urls: list[str] = Field(default_factory=lambda: ["https://www.baidu.com", "https://www.qq.com"])
     check_auth_url: bool = False
     auth_url_targets: list[str] = Field(default_factory=list)
     url_check_urls: list[dict] = Field(default_factory=list)
