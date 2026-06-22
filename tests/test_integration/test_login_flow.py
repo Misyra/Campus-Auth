@@ -61,8 +61,6 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._dashboard_sink = None
     svc._empty_broadcast_queue = __import__("collections").deque(maxlen=10)
     svc._ws_manager = None
-    svc._ui_config = MagicMock()
-    svc._ui_config.browser.login_timeout = 120
     svc._login_history = None
     svc._worker_getter = None
     svc._profile_service = MagicMock()
@@ -544,7 +542,10 @@ class TestLoginConcurrencyProtection:
             return True  # 不设置 response_data，模拟超时
 
         svc._enqueue = fake_enqueue
-        svc._ui_config.login_timeout = 0.01
+        from app.schemas import BrowserSettings
+        svc._runtime_config = svc._runtime_config.model_copy(update={
+            "browser": svc._runtime_config.browser.model_copy(update={"login_timeout": 0.01})
+        })
 
         svc.run_manual_login()
 

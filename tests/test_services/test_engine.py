@@ -1300,7 +1300,9 @@ class TestRunManualLogin:
         svc._enqueue = fake_enqueue
         svc._engine_thread = MagicMock()
         svc._engine_thread.is_alive.return_value = True
-        svc._ui_config.browser.login_timeout = 0.01
+        svc._runtime_config = svc._runtime_config.model_copy(update={
+            "browser": svc._runtime_config.browser.model_copy(update={"login_timeout": 0.01})
+        })
         fast_event = MagicMock()
         fast_event.wait.return_value = False
         with patch("threading.Event", return_value=fast_event):
@@ -1316,7 +1318,9 @@ class TestRunManualLogin:
         svc._enqueue = fake_enqueue
         svc._engine_thread = MagicMock()
         svc._engine_thread.is_alive.return_value = False
-        svc._ui_config.browser.login_timeout = 0.01
+        svc._runtime_config = svc._runtime_config.model_copy(update={
+            "browser": svc._runtime_config.browser.model_copy(update={"login_timeout": 0.01})
+        })
 
     def test_run_manual_login_api_timeout_buffered(self, engine_factory):
         """API 等待超时应为 max(login_timeout, 60) + 10，大于 Worker 超时。"""
@@ -1330,7 +1334,9 @@ class TestRunManualLogin:
         svc._enqueue = fake_enqueue
         svc._engine_thread = MagicMock()
         svc._engine_thread.is_alive.return_value = True
-        svc._ui_config.browser.login_timeout = 150
+        svc._runtime_config = svc._runtime_config.model_copy(update={
+            "browser": svc._runtime_config.browser.model_copy(update={"login_timeout": 150})
+        })
 
         spy_event = MagicMock()
         spy_event.wait.side_effect = lambda timeout=None: (
@@ -1503,11 +1509,12 @@ class TestSchedulerControl:
 
 
 class TestGetConfig:
-    def test_get_config_returns_copy(self, engine_factory):
+    def test_get_config_returns_runtime_config(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._ui_config = MagicMock()
+        svc._runtime_config = RuntimeConfig()
         config = svc.get_config()
-        svc._ui_config.model_copy.assert_called_once_with(deep=True)
+        assert config is svc._runtime_config
+        assert isinstance(config, RuntimeConfig)
 
     def test_get_runtime_config_returns_reference(self, engine_factory):
         svc = engine_factory(raw=True)

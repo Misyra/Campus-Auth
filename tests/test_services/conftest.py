@@ -31,7 +31,6 @@ def engine_factory():
 
         def _fake_reload(self_inner):
             """模拟 _reload_config_internal：设置所有由原方法初始化的属性。"""
-            self_inner._ui_config = RuntimeConfig()
             self_inner._runtime_config = RuntimeConfig()
             self_inner._runtime_snapshot = self_inner._runtime_config
             self_inner._pure_mode = False
@@ -86,8 +85,6 @@ def engine_factory():
         from collections import deque
         svc._empty_broadcast_queue = deque(maxlen=10)
         svc._ws_manager = None
-        svc._ui_config = MagicMock()
-        svc._ui_config.browser.login_timeout = 120
         svc._orchestrator = MagicMock()
         svc._login_history = None
         svc._worker_getter = None

@@ -2,6 +2,21 @@
 
 ## 2026-06-23
 
+### refactor: engine.py 删除 _ui_config，统一为 _runtime_config
+
+- `app/services/engine.py`：
+  - 删除 `self._ui_config` 声明和初始化
+  - `_reload_config_internal`：删除 `self._ui_config = data.global_config` 赋值
+  - `get_config`：返回 `self._runtime_config`（frozen 对象，无需 `model_copy(deep=True)`）
+  - `_handle_login`：`login_timeout` 改读 `_runtime_config.browser.login_timeout`
+  - `run_manual_login`：`login_timeout` 改读 `_runtime_config.browser.login_timeout`
+- 测试文件同步更新：
+  - `tests/test_services/conftest.py`：删除 `_ui_config` 初始化
+  - `tests/test_services/test_engine.py`：`_ui_config` 改为 `_runtime_config`，使用 `model_copy` 替代直接赋值
+  - `tests/test_services/test_engine_fix.py`：删除 `_ui_config` 初始化
+  - `tests/test_services/test_monitor_service.py`：删除 `_ui_config` 初始化，使用 `model_copy` 替代直接赋值
+  - `tests/test_integration/test_login_flow.py`：删除 `_ui_config` 初始化，使用 `model_copy` 替代直接赋值
+
 ### refactor: ProfileService 接管配置构建，删除 load_active_config
 
 - `app/services/profile_service.py`：新增三个方法

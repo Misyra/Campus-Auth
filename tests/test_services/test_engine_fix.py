@@ -39,8 +39,6 @@ def test_handle_login_uses_validated_config():
             username="u", password="p", auth_url="http://x",
         ),
     )
-    engine._ui_config = MagicMock()
-    engine._ui_config.browser.login_timeout = 30
     engine._orchestrator = MagicMock()
     engine._orchestrator.validate.return_value = None
     mock_handle = MagicMock()
@@ -85,8 +83,6 @@ class TestManualLoginCancelRaceFix:
         )
         engine._orchestrator = MagicMock()
         engine._login_history = MagicMock()
-        engine._ui_config = MagicMock()
-        engine._ui_config.browser.login_timeout = 30
         engine._registered_futures = set()
         engine._futures_lock = threading.Lock()
         return engine
