@@ -5,14 +5,18 @@
 **审查范围**: 后端核心（schemas / engine / config_service / profile_service / container / API）+ 前端（constants.js / config.js）
 
 > 两份报告的问题已合并去重，同类问题只保留一条并标注来源。
+>
+> ✅ = 已通过 V2 配置架构重构修复（2026-06-23）
 
 ---
 
 ## 🔴 P0 — 用户数据丢失 / 配置静默失效
 
-### BUG-01: `proxy` 和 `app_port` 前端有 UI，后端 Schema 不存在
+### ✅ BUG-01: `proxy` 和 `app_port` 前端有 UI，后端 Schema 不存在
 
 **来源**: config #1 + architecture H2
+
+**已修复**: V2 重构中 `GlobalConfig` 和 `RuntimeConfig` 均包含 `proxy: str` 和 `app_port: int` 字段，前端保存的值不再被 Pydantic 静默丢弃。
 
 **相关代码**:
 
@@ -67,9 +71,11 @@ def resolve_port() -> int:
 
 ---
 
-### BUG-02: `get_config()` API 返回的 ISP 与登录实际使用的不一致
+### ✅ BUG-02: `get_config()` API 返回的 ISP 与登录实际使用的不一致
 
 **来源**: config #2 + architecture H3（部分）
+
+**已修复**: V2 重构中 ISP 转换逻辑收敛到 `ConfigBuilder.build` 唯一入口，`GET /api/config` 直接从 `profile_svc.build_runtime_config(data)` 获取已转换的 ISP 值，不再有独立的注入逻辑。
 
 **相关代码**:
 
@@ -111,9 +117,11 @@ else:
 
 ---
 
-### BUG-03: 启动诊断永远显示空凭据
+### ✅ BUG-03: 启动诊断永远显示空凭据
 
 **来源**: config #9 + architecture review（启动日志）
+
+**已修复**: V2 重构中 `_ui_config` 已删除，`engine.get_config()` 直接返回 `_runtime_config`（含凭据），启动诊断能正确显示用户名、密码状态、ISP。
 
 **相关代码**:
 
@@ -153,9 +161,11 @@ def _apply(data: ProfilesData):
 
 ## 🟠 P1 — 功能缺陷 / 逻辑错误
 
-### BUG-04: `_handle_login` 读取 `_ui_config` 的 `login_timeout` 而非 `_runtime_config`
+### ~~BUG-04~~: 已排除（误报）+ 已修复
 
 **来源**: architecture H3
+
+**状态**: `Profile` 不含 `login_timeout` 字段，`_ui_config` 和 `_runtime_config` 的 `browser` 子配置来源相同，值无差异。此外 V2 重构已删除 `_ui_config`，`_handle_login` 改读 `_runtime_config`。
 
 **相关代码**:
 
@@ -185,9 +195,9 @@ def _handle_login(self, cmd: EngineCommand) -> None:
 
 **相关代码**:
 
-`app/services/engine.py:411-416`：
+`app/services/engine.py`（V2 重构后）：
 ```python
-login_timeout = self._ui_config.browser.login_timeout
+login_timeout = self._runtime_config.browser.login_timeout
 worker_timeout = max(login_timeout, 60)
 try:
     ok, msg = handle.result(timeout=worker_timeout + 60)  # 阻塞 120-660 秒
@@ -311,15 +321,12 @@ class LoggingSettings(BaseModel, frozen=True):
 
 **相关代码**:
 
-`source_levels` 通过独立的 `PUT /api/config/source-level` 端点写入，直接修改 `settings.json`。但主配置保存 `save_and_apply()` 的 `_apply` 会**整体替换** `data.config`：
+`source_levels` 通过独立的 `PUT /api/config/source-level` 端点写入，直接修改 `settings.json`。但主配置保存 `save_global_and_profile()` 的 `_apply` 会**整体替换** `data.global_config`：
 
-`app/services/config_service.py:97-103`：
+`app/services/config_service.py`：
 ```python
 def _apply(data: ProfilesData):
-    data.config = config.model_copy(update={
-        "credentials": LoginCredentials(),
-        "active_task": "",
-    })
+    data.global_config = global_config
     # source_levels 来自 payload，可能是旧快照
 ```
 
@@ -486,9 +493,11 @@ class PauseSettings(BaseModel, frozen=True):
 
 ---
 
-### BUG-16: `config_version` 不一致
+### ✅ BUG-16: `config_version` 不一致
 
 **来源**: config #15 + architecture L3
+
+**已修复**: V2 重构中 `ProfilesData.config_version` 默认值改为 4，v3→v4 迁移函数自动更新旧配置文件。`AppConfig.config_version` 仍为 2（独立于 ProfilesData），但两者不再语义混淆。
 
 **相关代码**:
 
@@ -559,9 +568,11 @@ d: dict = {
 
 ---
 
-### BUG-19: `_reload_config_internal` 双重磁盘读取
+### ✅ BUG-19: `_reload_config_internal` 双重磁盘读取
 
 **来源**: config #17
+
+**已修复**: V2 重构中 `_reload_config_internal` 只调用一次 `profile_service.load()`，然后将 `data` 传递给 `profile_service.build_runtime_config(data)`，不再重复读盘。
 
 **相关代码**:
 
@@ -734,50 +745,63 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 
 ## 总览表
 
-| 编号 | 优先级 | 问题 | 位置 | 工作量 | 影响 |
-|------|--------|------|------|--------|------|
-| BUG-01 | 🔴 P0 | proxy/app_port 幽灵字段 | constants.js:153, schemas.py | ~1h | 用户改端口/代理不生效 |
-| BUG-02 | 🔴 P0 | ISP 映射不一致 | api/config.py:84 vs config_service.py:66 | ~15min | 前端显示与运行时不同 |
-| BUG-03 | 🔴 P0 | 启动诊断永远显示空 | application.py:140, engine.py:620 | ~15min | 诊断信息无意义 |
-| BUG-04 | 🟠 P1 | login_timeout 读错配置源 | engine.py:411 | ~5min | 超时值可能不对 |
-| BUG-05 | 🟠 P1 | _handle_login 阻塞引擎 | engine.py:411-416 | ~4h | 登录期间所有命令卡死 |
-| BUG-06 | 🟠 P1 | apply_profile 忽略 profile_id | engine.py:436-445 | ~30min | 隐式契约脆弱 |
-| BUG-07 | 🟠 P1 | container 私有属性篡改 | container.py:77-87 | ~2h | 启动竞态窗口 |
-| BUG-08 | 🟠 P1 | FIELD_NAMES 键名错误 | api/config.py:144 | ~5min | 变更日志显示错误名称 |
-| BUG-09 | 🟠 P1 | source_levels 覆盖竞态 | config_service.py:97-103 | ~30min | 日志级别被意外重置 |
-| BUG-10 | 🟠 P1 | script_timeout 前端缺失 | constants.js:103-121 | ~5min | 重置后丢失自定义值 |
-| BUG-11 | 🟠 P1 | 配置验证仅 API 路径执行 | engine.py:687 | ~30min | 无效配置可启动监控 |
-| BUG-12 | 🟡 P2 | Profile 废弃字段 | constants.js:206-242 | ~2h | 用户改无效字段无提示 |
-| BUG-13 | 🟡 P2 | BrowserChannel 枚举死代码 | schemas.py:30-37 | ~10min | 无类型安全 |
-| BUG-14 | 🟡 P2 | startup_action 未约束 | schemas.py | ~5min | 无效值不报错 |
-| BUG-15 | 🟡 P2 | PauseSettings 无交叉验证 | schemas.py:269-274 | ~15min | start==end 语义不明 |
-| BUG-16 | 🟡 P2 | config_version 不一致 | schemas.py:65, 321 | ~5min | 死字段造成困惑 |
-| BUG-17 | 🟡 P2 | Worker dict 含 UI 字段 | login_orchestrator.py:57-59 | ~5min | IPC payload 噪音 |
-| BUG-18 | 🟡 P2 | Worker dict 缺 carrier_custom | login_orchestrator.py:38-44 | ~5min | 字段完整性缺失 |
-| BUG-19 | 🟡 P2 | 双重磁盘读取 | engine.py:629-631 | ~15min | 性能微损 |
-| BUG-20 | 🟡 P2 | monitor_service 别名 | container.py:96 | ~1h | 命名误导 |
-| BUG-21 | 🟠 P1 | 超时后命令积压 | engine.py:654-657 | 随 BUG-05 | 意外多次重载 |
-| BUG-22 | 🟡 P2 | TCP/HTTP 默认值前后不一致 | constants.js:237 vs schemas.py:253 | ~5min | 新建方案行为不符预期 |
-| BUG-23 | 🟡 P2 | LoggingSettings.level 无校验 | schemas.py | ~10min | 无效级别静默忽略 |
-| BUG-24 | 🟡 P2 | 线程池生命周期耦合 | container.py:77-82 | ~30min | 双重 shutdown |
-| BUG-25 | 🟡 P2 | user_agent 默认值不一致 | constants.js:87 | ~5min | 前端显示与实际不符 |
-| BUG-26 | 🟡 P2 | 关键命令静默丢弃 | engine.py:144 | ~30min | 高频场景丢命令 |
+> ✅ = 已通过 V2 配置架构重构修复（2026-06-23）
+
+| 编号 | 优先级 | 问题 | 位置 | 工作量 | 影响 | 状态 |
+|------|--------|------|------|--------|------|------|
+| BUG-01 | 🔴 P0 | proxy/app_port 幽灵字段 | constants.js:153, schemas.py | ~1h | 用户改端口/代理不生效 | ✅ 已修复 |
+| BUG-02 | 🔴 P0 | ISP 映射不一致 | api/config.py:84 vs config_service.py:66 | ~15min | 前端显示与运行时不同 | ✅ 已修复 |
+| BUG-03 | 🔴 P0 | 启动诊断永远显示空 | application.py:140, engine.py:620 | ~15min | 诊断信息无意义 | ✅ 已修复 |
+| BUG-04 | 🟠 P1 | login_timeout 读错配置源 | engine.py:411 | ~5min | 超时值可能不对 | ✅ 误报+已修复 |
+| BUG-05 | 🟠 P1 | _handle_login 阻塞引擎 | engine.py:411-416 | ~4h | 登录期间所有命令卡死 | ❌ 未修复 |
+| BUG-06 | 🟠 P1 | apply_profile 忽略 profile_id | engine.py:436-445 | ~30min | 隐式契约脆弱 | ❌ 未修复 |
+| BUG-07 | 🟠 P1 | container 私有属性篡改 | container.py:77-87 | ~2h | 启动竞态窗口 | ❌ 未修复 |
+| BUG-08 | 🟠 P1 | FIELD_NAMES 键名错误 | api/config.py:144 | ~5min | 变更日志显示错误名称 | ❌ 未修复 |
+| BUG-09 | 🟠 P1 | source_levels 覆盖竞态 | config_service.py:97-103 | ~30min | 日志级别被意外重置 | ❌ 未修复 |
+| BUG-10 | 🟠 P1 | script_timeout 前端缺失 | constants.js:103-121 | ~5min | 重置后丢失自定义值 | ❌ 未修复 |
+| BUG-11 | 🟠 P1 | 配置验证仅 API 路径执行 | engine.py:687 | ~30min | 无效配置可启动监控 | ❌ 未修复 |
+| BUG-12 | 🟡 P2 | Profile 废弃字段 | constants.js:206-242 | ~2h | 用户改无效字段无提示 | ✅ 已修复 |
+| BUG-13 | 🟡 P2 | BrowserChannel 枚举死代码 | schemas.py:30-37 | ~10min | 无类型安全 | ❌ 未修复 |
+| BUG-14 | 🟡 P2 | startup_action 未约束 | schemas.py | ~5min | 无效值不报错 | ❌ 未修复 |
+| BUG-15 | 🟡 P2 | PauseSettings 无交叉验证 | schemas.py:269-274 | ~15min | start==end 语义不明 | ❌ 未修复 |
+| BUG-16 | 🟡 P2 | config_version 不一致 | schemas.py:65, 321 | ~5min | 死字段造成困惑 | ✅ 已修复 |
+| BUG-17 | 🟡 P2 | Worker dict 含 UI 字段 | login_orchestrator.py:57-59 | ~5min | IPC payload 噪音 | ❌ 未修复 |
+| BUG-18 | 🟡 P2 | Worker dict 缺 carrier_custom | login_orchestrator.py:38-44 | ~5min | 字段完整性缺失 | ❌ 未修复 |
+| BUG-19 | 🟡 P2 | 双重磁盘读取 | engine.py:629-631 | ~15min | 性能微损 | ✅ 已修复 |
+| BUG-20 | 🟡 P2 | monitor_service 别名 | container.py:96 | ~1h | 命名误导 | ❌ 未修复 |
+| BUG-21 | 🟠 P1 | 超时后命令积压 | engine.py:654-657 | 随 BUG-05 | 意外多次重载 | ❌ 未修复 |
+| BUG-22 | 🟡 P2 | TCP/HTTP 默认值前后不一致 | constants.js:237 vs schemas.py:253 | ~5min | 新建方案行为不符预期 | ❌ 未修复 |
+| BUG-23 | 🟡 P2 | LoggingSettings.level 无校验 | schemas.py | ~10min | 无效级别静默忽略 | ❌ 未修复 |
+| BUG-24 | 🟡 P2 | 线程池生命周期耦合 | container.py:77-82 | ~30min | 双重 shutdown | ❌ 未修复 |
+| BUG-25 | 🟡 P2 | user_agent 默认值不一致 | constants.js:87 | ~5min | 前端显示与实际不符 | ❌ 未修复 |
+| BUG-26 | 🟡 P2 | 关键命令静默丢弃 | engine.py:144 | ~30min | 高频场景丢命令 | ❌ 未修复 |
 
 ---
 
-## 建议修复路线
+## 修复进度
 
-**第一批（P0，用户可感知的数据问题）**:
-1. BUG-01: 移除前端 proxy/app_port 控件
-2. BUG-02: 统一 ISP 映射逻辑
-3. BUG-03: 启动诊断改读 _runtime_config
+**V2 配置架构重构（2026-06-23）已修复 7 个问题**:
+- ✅ BUG-01: proxy/app_port 幽灵字段
+- ✅ BUG-02: ISP 映射不一致
+- ✅ BUG-03: 启动诊断永远显示空
+- ✅ BUG-04: login_timeout 读错配置源（误报+已修复）
+- ✅ BUG-12: Profile 废弃字段
+- ✅ BUG-16: config_version 不一致
+- ✅ BUG-19: 双重磁盘读取
+
+**剩余 19 个问题待修复**（按优先级）:
+- P1: BUG-05/06/07/08/09/10/11/21
+- P2: BUG-13/14/15/17/18/20/22/23/24/25/26
 
 **第二批（P1，核心功能缺陷）**:
-4. BUG-04 + BUG-05 + BUG-21: _handle_login 非阻塞化（关联修复）
-5. BUG-06: apply_profile 自包含
-6. BUG-07: container 构造重构
-7. BUG-08 + BUG-10: 快速修复（字段名 + 缺失字段）
-8. BUG-09 + BUG-11: source_levels merge + 统一验证
+1. BUG-05 + BUG-21: _handle_login 非阻塞化（关联修复）
+2. BUG-06: apply_profile 自包含
+3. BUG-07: container 构造重构
+4. BUG-08 + BUG-10: 快速修复（字段名 + 缺失字段）
+5. BUG-09 + BUG-11: source_levels merge + 统一验证
 
 **第三批（P2，设计改进）**:
-9. BUG-12 ~ BUG-26: 按依赖关系逐个修复
+6. BUG-13/14/15: schemas 类型约束
+7. BUG-17/18: Worker dict 清理
+8. BUG-20: monitor_service 别名
+9. BUG-22/23/24/25/26: 一致性修复

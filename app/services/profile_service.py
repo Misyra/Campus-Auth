@@ -29,8 +29,7 @@ def migrate_v3_to_v4(data: dict) -> dict:
     # 剥离运行时字段（不应持久化到 global_config）
     old_config.pop("credentials", None)
     old_config.pop("active_task", None)
-    # 移除 custom_variables（如果存在）
-    old_config.pop("custom_variables", None)
+    # custom_variables 保留（属于用户配置，归入 global_config）
 
     data["global_config"] = old_config
     data.pop("config", None)
