@@ -198,6 +198,7 @@ class LoginAttemptHandler:
                 default_timeout=browser_timeout,
                 navigation_timeout=navigation_timeout,
                 monitor_config=self._monitor_settings,
+                cancel_event=self.cancel_event,
             )
 
             # 监听页面 alert/confirm/prompt，记录内容并延迟关闭让用户看到
