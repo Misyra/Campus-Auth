@@ -2,6 +2,16 @@
 
 ## 2026-06-23
 
+### fix: 修复 5 个 P2 小问题（枚举约束、交叉验证、Worker dict 清理）
+
+- `app/schemas.py`：
+  - BUG-14: `RuntimeConfig`、`GlobalConfig`、`ConfigResponseDTO` 的 `startup_action` 字段从 `str = "none"` 改为 `StartupAction = StartupAction.NONE`，统一使用枚举类型约束
+  - BUG-15: `PauseSettings` 新增 `@model_validator(mode="after")` 交叉验证，`start_hour == end_hour` 时自动禁用暂停（语义为"不暂停"）
+  - BUG-23: `LoggingSettings` 的 `level` 和 `frontend_level` 添加 `pattern` 正则约束，仅允许 DEBUG/INFO/WARNING/ERROR/CRITICAL
+- `app/services/login_orchestrator.py`：
+  - BUG-17: `_runtime_config_to_worker_dict` 删除 `minimize_to_tray`、`startup_action`、`autostart_lightweight` 三个无关 UI 字段
+  - BUG-18: Worker dict 初始化添加 `carrier_custom` 字段，确保自定义运营商信息传递到 Worker
+
 ### feat: 登录按钮支持取消，登录中切换为取消登录
 
 - `frontend/js/methods/actions.js`：`manualLogin` 添加 `busy.login` 标志控制按钮状态，新增 `cancelLogin` 方法调用 `POST /api/actions/cancel-login`

@@ -41,6 +41,7 @@ def _runtime_config_to_worker_dict(config: RuntimeConfig) -> dict:
         "password": creds["password"],
         "auth_url": creds["auth_url"],
         "isp": creds["isp"],
+        "carrier_custom": creds["carrier_custom"],
     }
     d["browser_settings"] = config.browser.model_dump()
     d["pause_login"] = config.pause.model_dump()
@@ -54,9 +55,6 @@ def _runtime_config_to_worker_dict(config: RuntimeConfig) -> dict:
     d["block_proxy"] = config.block_proxy
     d["shell_path"] = config.shell_path
     d["access_log"] = config.logging.access_log
-    d["minimize_to_tray"] = config.minimize_to_tray
-    d["startup_action"] = config.startup_action
-    d["autostart_lightweight"] = config.autostart_lightweight
     d["log_retention_days"] = config.logging.log_retention_days
     return d
 

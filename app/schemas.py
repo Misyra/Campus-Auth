@@ -273,12 +273,20 @@ class PauseSettings(BaseModel, frozen=True):
     start_hour: int = Field(default=0, ge=0, le=23)
     end_hour: int = Field(default=6, ge=0, le=23)
 
+    @model_validator(mode="after")
+    def _validate_hours(self):
+        if self.start_hour == self.end_hour:
+            # start==end 时语义为"不暂停"，自动禁用
+            if self.enabled:
+                return self.model_copy(update={"enabled": False})
+        return self
+
 
 class LoggingSettings(BaseModel, frozen=True):
     """日志配置 — 日志初始化模块消费。"""
 
-    level: str = "INFO"
-    frontend_level: str = "INFO"
+    level: str = Field(default="INFO", pattern=r"^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
+    frontend_level: str = Field(default="INFO", pattern=r"^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
     log_retention_days: int = Field(default=7, ge=1, le=365)
     access_log: bool = False
     source_levels: dict[str, str] = Field(default_factory=dict)
@@ -313,7 +321,7 @@ class RuntimeConfig(BaseModel, frozen=True):
     block_proxy: bool = True
     shell_path: str = ""
     minimize_to_tray: bool = True
-    startup_action: str = "none"
+    startup_action: StartupAction = StartupAction.NONE
     autostart_lightweight: bool = True
     lightweight_tray: bool = True
     auto_open_browser: bool = False
@@ -334,7 +342,7 @@ class GlobalConfig(BaseModel):
     block_proxy: bool = True
     shell_path: str = ""
     minimize_to_tray: bool = True
-    startup_action: str = "none"
+    startup_action: StartupAction = StartupAction.NONE
     autostart_lightweight: bool = True
     lightweight_tray: bool = True
     auto_open_browser: bool = False
@@ -364,7 +372,7 @@ class ConfigResponseDTO(BaseModel):
     block_proxy: bool = True
     shell_path: str = ""
     minimize_to_tray: bool = True
-    startup_action: str = "none"
+    startup_action: StartupAction = StartupAction.NONE
     autostart_lightweight: bool = True
     lightweight_tray: bool = True
     auto_open_browser: bool = False
