@@ -665,6 +665,15 @@ class ScheduleEngine:
         配置保存等命令，但监控由用户手动启动。
         """
         if not self._engine_thread.is_alive():
+            self._shutdown_event.clear()
+            self._wakeup_event.clear()
+            # 清除上次残留的命令
+            while not self._cmd_queue.empty():
+                try:
+                    self._cmd_queue.get_nowait()
+                except Exception:
+                    break
+            self._engine_thread = threading.Thread(target=self._engine_loop, daemon=True)
             self._engine_thread.start()
 
     def boot(self) -> None:
