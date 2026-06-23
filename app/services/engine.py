@@ -156,6 +156,7 @@ class ScheduleEngine:
         self._retry_policy = MonitoredPolicy()
         self._registered_futures: set[Future] = set()
         self._futures_lock = threading.Lock()
+        self._wakeup_event = threading.Event()  # 唤醒引擎循环
 
         # 统一引擎线程（延迟到 boot() 启动，确保依赖注入完成）
         self._engine_thread = threading.Thread(target=self._engine_loop, daemon=True)
@@ -176,6 +177,8 @@ class ScheduleEngine:
         """尝试将命令入队。返回 True 表示成功。"""
         try:
             self._cmd_queue.put_nowait(cmd)
+            if hasattr(self, "_wakeup_event"):
+                self._wakeup_event.set()
             return True
         except queue.Full:
             logger.warning("命令队列已满 (type={})，操作被跳过", cmd.type)
@@ -195,28 +198,34 @@ class ScheduleEngine:
         while not self._shutdown_event.is_set():
             try:
                 wakeup_time = self._calculate_wakeup()
+                timeout = min(self._MAX_LOOP_SLEEP, max(0.01, wakeup_time - time.time()))
 
-                try:
-                    timeout = min(self._MAX_LOOP_SLEEP, max(0.01, wakeup_time - time.time()))
-                    cmd = self._cmd_queue.get(timeout=timeout)
-                except queue.Empty:
-                    cmd = None
+                # 等待唤醒事件（可被 _on_done 等回调中断）或超时
+                self._wakeup_event.wait(timeout=timeout)
+                self._wakeup_event.clear()
 
-                if cmd is not None:
+                # 排干命令队列
+                while True:
+                    try:
+                        cmd = self._cmd_queue.get_nowait()
+                    except queue.Empty:
+                        break
                     self._process_command(cmd)
                     if cmd.type == EngineCmdType.SHUTDOWN:
                         break
+                else:
+                    now = time.time()
+
+                    # 网络检测
+                    if self._is_monitoring and now >= self._next_network_check:
+                        self._do_network_check()
+
+                    # 定时任务
+                    if self._scheduler_running and now >= self._next_schedule_tick:
+                        self._run_schedule_tick()
                     continue
-
-                now = time.time()
-
-                # 网络检测
-                if self._is_monitoring and now >= self._next_network_check:
-                    self._do_network_check()
-
-                # 定时任务
-                if self._scheduler_running and now >= self._next_schedule_tick:
-                    self._run_schedule_tick()
+                # SHUTDOWN 命令已处理，退出循环
+                break
             except Exception:
                 logger.exception("引擎循环异常，继续运行")
                 time.sleep(1)
@@ -353,6 +362,7 @@ class ScheduleEngine:
                             logger.warning("登录重试次数已用尽，停止自动重试")
                         else:
                             self._next_network_check = time.time() + delay
+                            self._wakeup_event.set()
                             if delay > 0:
                                 logger.warning("登录连续失败，下次检测推迟 {}s", int(delay))
             except Exception:

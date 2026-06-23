@@ -59,6 +59,7 @@ def engine_factory():
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._cmd_queue = queue.Queue(maxsize=50)
         svc._shutdown_event = threading.Event()
+        svc._wakeup_event = threading.Event()
         svc._monitor_core = None
         svc._engine_running = False
         svc._retry_policy = MonitoredPolicy()

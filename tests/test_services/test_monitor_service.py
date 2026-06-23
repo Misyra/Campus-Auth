@@ -633,6 +633,7 @@ class TestShutdownSynchronous:
         """测试 shutdown 通过队列发送 stop 命令"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._cmd_queue = queue.Queue(maxsize=50)
+        svc._wakeup_event = threading.Event()
         svc._shutdown_event = threading.Event()
         svc._status_snapshot = MagicMock()
         svc._status_snapshot.monitoring = True
@@ -685,6 +686,7 @@ class TestManualLoginTimeout:
         """测试超时后 _manual_login_in_progress 在 finally 中被清除"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._cmd_queue = queue.Queue(maxsize=50)
+        svc._wakeup_event = threading.Event()
         svc._manual_login_in_progress = False
         svc._manual_login_lock = threading.Lock()
         svc._runtime_config = RuntimeConfig().model_copy(update={
@@ -710,6 +712,7 @@ class TestStartMonitoringPutNowait:
         """测试队列满时 start_monitoring 不阻塞，返回错误"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._cmd_queue = queue.Queue(maxsize=1)
+        svc._wakeup_event = threading.Event()
         svc._monitor_core = None
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
@@ -835,6 +838,7 @@ class TestManualLoginConsumerDead:
         """测试超时且引擎线程已死时，_manual_login_in_progress 被 finally 清除。"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._cmd_queue = queue.Queue(maxsize=50)
+        svc._wakeup_event = threading.Event()
         svc._manual_login_in_progress = False
         svc._manual_login_lock = threading.Lock()
         svc._runtime_config = RuntimeConfig().model_copy(update={
