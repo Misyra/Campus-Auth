@@ -384,13 +384,18 @@ class TaskExecutor:
 
     async def _capture_screenshot(self, page) -> str | None:
         """捕获截图 → 指定目录或 debug/screenshots/{date}/ 目录"""
-        from app.constants import SCREENSHOTS_DIR
+        from app.constants import SCREENSHOTS_DIR, TEMP_DIR
         from app.utils.files import save_screenshot
 
         try:
             if self._screenshot_dir:
                 out_dir = self._screenshot_dir
-                url_prefix = "/temp"
+                # 计算相对于 TEMP_DIR 的子目录路径，确保 URL 与实际存储路径一致
+                try:
+                    rel = self._screenshot_dir.relative_to(TEMP_DIR)
+                    url_prefix = f"/temp/{rel}" if str(rel) != "." else "/temp"
+                except ValueError:
+                    url_prefix = "/temp"
             else:
                 date_str = datetime.now().strftime("%Y-%m-%d")
                 out_dir = SCREENSHOTS_DIR / date_str
