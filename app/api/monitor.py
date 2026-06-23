@@ -57,6 +57,15 @@ async def manual_login(
     return ActionResponse(success=ok, message=message)
 
 
+@router.post("/api/actions/cancel-login", response_model=ActionResponse)
+async def cancel_login(
+    svc: ScheduleEngine = Depends(get_monitor_service),
+) -> ActionResponse:
+    ok, message = svc.cancel_login()
+    api_logger.info("取消登录 -> success={}, message={}", ok, message)
+    return ActionResponse(success=ok, message=message)
+
+
 @router.post("/api/actions/test-network", response_model=ActionResponse)
 def test_network(
     svc: ScheduleEngine = Depends(get_monitor_service),
