@@ -294,7 +294,11 @@ class TestHandleStart:
         """正常启动时创建 NetworkMonitorCore。"""
         svc = engine_factory(raw=True)
         svc._profile_service = MagicMock()
-        svc._runtime_config = RuntimeConfig()
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="test", password="pass", auth_url="http://10.0.0.1"
+            ),
+        )
         mock_core = MagicMock()
         mock_core_cls.return_value = mock_core
         cmd = EngineCommand(type=EngineCmdType.START, data={"pure_mode": False})
@@ -307,7 +311,11 @@ class TestHandleStart:
         """纯净模式标志传递给 config。"""
         svc = engine_factory(raw=True)
         svc._profile_service = MagicMock()
-        svc._runtime_config = RuntimeConfig()
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="test", password="pass", auth_url="http://10.0.0.1"
+            ),
+        )
         svc._pure_mode = True
         mock_core = MagicMock()
         mock_core_cls.return_value = mock_core

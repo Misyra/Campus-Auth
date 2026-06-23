@@ -21,7 +21,7 @@ class TestProfileConnection:
         # 创建第二个 profile 并设为活动方案
         profile_service.update(
             lambda d: d.profiles.update({"profile-b": Profile(
-                name="方案B", username="user-b", auth_url="http://10.0.0.2"
+                name="方案B", username="user-b", password="pass-b", auth_url="http://10.0.0.2"
             )})
         )
         profile_service.set_active_profile("profile-b")
@@ -38,7 +38,7 @@ class TestProfileConnection:
 
         profile_service.update(
             lambda d: d.profiles.update({"profile-b": Profile(
-                name="方案B", username="user-b", auth_url="http://10.0.0.2"
+                name="方案B", username="user-b", password="pass-b", auth_url="http://10.0.0.2"
             )})
         )
 

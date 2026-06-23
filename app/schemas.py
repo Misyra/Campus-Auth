@@ -267,19 +267,15 @@ class MonitorSettings(BaseModel, frozen=True):
 
 
 class PauseSettings(BaseModel, frozen=True):
-    """暂停时段配置 — check_pause() 消费。"""
+    """暂停时段配置 — check_pause() 消费。
+
+    start_hour == end_hour 语义为全天暂停（见 is_in_pause_period）。
+    start_hour > end_hour 语义为跨天（如 23:00-06:00）。
+    """
 
     enabled: bool = True
     start_hour: int = Field(default=0, ge=0, le=23)
     end_hour: int = Field(default=6, ge=0, le=23)
-
-    @model_validator(mode="after")
-    def _validate_hours(self):
-        if self.start_hour == self.end_hour:
-            # start==end 时语义为"不暂停"，自动禁用
-            if self.enabled:
-                return self.model_copy(update={"enabled": False})
-        return self
 
 
 class LoggingSettings(BaseModel, frozen=True):
