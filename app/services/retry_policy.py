@@ -69,6 +69,11 @@ class MonitoredPolicy(RetryPolicy):
         self._prev_network_ok: bool | None = None
         self._lock = threading.Lock()
 
+    @property
+    def retries_exhausted(self) -> bool:
+        """是否已用尽重试次数。"""
+        return self._attempt >= self.max_retries
+
     def attempts(self) -> Iterator[int]:
         yield from range(1, self.max_retries + 1)
 
