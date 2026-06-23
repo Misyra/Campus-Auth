@@ -92,7 +92,7 @@ class TestSetActiveProfile:
 
     def test_set_active_profile_success(self, api_client):
         test_client, mock_services = api_client
-        mock_services.profile_service.set_active_profile.return_value = (True, "切换成功")
+        mock_services.engine.apply_profile.return_value = (True, "切换成功")
         resp = test_client.post("/api/profiles/active/default")
         assert resp.status_code == 200
         assert resp.json()["success"] is True

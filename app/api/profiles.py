@@ -101,19 +101,13 @@ def delete_profile(
 @router.post("/api/profiles/active/{profile_id}", response_model=ActionResponse)
 def set_active_profile(
     profile_id: str,
-    profile_svc: ProfileService = Depends(get_profile_service),
     monitor_svc: ScheduleEngine = Depends(get_monitor_service),
 ) -> ActionResponse:
-    ok, message = profile_svc.set_active_profile(profile_id)
+    # apply_profile 内部已包含 set_active_profile，无需重复调用
+    ok, message = monitor_svc.apply_profile(profile_id)
     api_logger.info(
-        "设置活动方案 {} -> success={}, message={}", profile_id, ok, message
+        "切换活动方案 {} -> success={}, message={}", profile_id, ok, message
     )
-    if ok:
-        try:
-            # 统一传 profile_id，apply_profile 内部解析名称用于日志
-            monitor_svc.apply_profile(profile_id)
-        except Exception:
-            api_logger.warning("应用方案失败", exc_info=True)
     return ActionResponse(success=ok, message=message)
 
 
@@ -175,7 +169,7 @@ def toggle_auto_switch(
                     profile = data.profiles.get(matched_id)
                     profile_name = profile.name if profile else matched_id
                     api_logger.info("自动切换检测到匹配方案: {}", profile_name)
-                    profile_svc.set_active_profile(matched_id)
+                    # apply_profile 内部已包含 set_active_profile
                     monitor_svc.apply_profile(matched_id)
                     active_profile = matched_id
                 else:
