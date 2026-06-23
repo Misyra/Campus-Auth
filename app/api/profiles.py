@@ -77,6 +77,7 @@ def save_profile(
                 monitor_svc.apply_profile(profile_id)
             except Exception:
                 api_logger.warning("保存方案后应用方案失败", exc_info=True)
+                message = f"{message}（注意：方案已保存但应用到引擎失败，请手动重载）"
     return ActionResponse(success=ok, message=message)
 
 
@@ -95,6 +96,7 @@ def delete_profile(
             monitor_svc.apply_profile(new_data.active_profile)
         except Exception:
             api_logger.warning("删除方案后应用方案失败", exc_info=True)
+            message = f"{message}（注意：方案已删除但引擎重载失败，请手动重载）"
     return ActionResponse(success=ok, message=message)
 
 

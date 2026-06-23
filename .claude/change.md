@@ -1,5 +1,31 @@
 # 修改日志
 
+## 2026-06-23 (5)
+
+### fix: login_once 未取消旧任务，新旧登录在单 worker 池中串行执行
+
+- `app/services/login_orchestrator.py`：`submit()` 中 `source == "login_once"` 分支从 `pass` 改为 `existing.cancel()`，取消旧任务后再提交新的，避免两个登录串行执行（最长等待 600s）
+
+## 2026-06-23 (4)
+
+### fix: list_recent 读取 JSONL 文件未持锁，与写入存在竞态
+
+- `app/services/login_history_service.py`：`list_recent()` 的文件读取操作外层加 `with self._lock`，与 `add()` 和 `_cleanup_old()` 的写入操作互斥，避免读到不完整或空文件
+
+## 2026-06-23 (3)
+
+### fix: Go/Shell 启动器镜像 fallback 链完整性修复
+
+- `start.go`：解压失败和 uv.exe 缺失从 `return` 改为 `continue`，继续尝试后续镜像而非直接放弃
+- `start.sh`：SHA256 校验从循环外移入循环内，校验失败时 `continue` 尝试下一个镜像而非 `exit 1`
+
+## 2026-06-23 (2)
+
+### fix: 修复 cancel_login 阻塞事件循环及 resolve_for_js 双重编码问题
+
+- `app/api/monitor.py`：`cancel_login` 去掉 `async` 关键字，改为同步 `def`，FastAPI 自动使用线程池执行，避免阻塞事件循环
+- `app/tasks/variable_resolver.py`：`resolve_for_js` 的 replacer 对 `runtime_vars` 中的非字符串值（int/bool/None）直接 `json.dumps`，避免双重编码导致类型丢失（5 → "5" 而非 5）
+
 ## 2026-06-23
 
 ### fix: 修复 5 个 P2 小问题（枚举约束、交叉验证、Worker dict 清理）

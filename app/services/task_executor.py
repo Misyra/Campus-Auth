@@ -164,7 +164,10 @@ class TaskExecutor:
             try:
                 future = self._ensure_task_pool().submit(self.execute_task, task_id)
             except RuntimeError:
-                raise
+                logger.warning("任务队列已满，任务 {} 被拒绝", task_id)
+                f: Future = Future()
+                f.set_exception(RuntimeError(f"任务队列已满，无法提交任务 {task_id}"))
+                return f
             self._running_tasks[task_id] = future
 
         # 锁外注册清理回调
