@@ -609,34 +609,8 @@ class PlaywrightWorker:
         """停止调试会话并清理 Worker 内部状态。"""
         await self._cleanup_debug_session()
 
-        # 重建主页面
-        if self._context is not None and not self._context.is_closed():
-            # 先关闭旧主页面，保证一个 context 一个主 page
-            old_page = self._page
-            if old_page is not None and not old_page.is_closed():
-                with contextlib.suppress(Exception):
-                    await old_page.close()
-            # context 级 init_script 自动继承到新页面，无需重新应用 stealth
-            try:
-                self._page = await self._context.new_page()
-            except Exception:
-                logger.exception("新建页面失败，尝试重建浏览器")
-                self._page = None
-                try:
-                    config = {"browser_settings": self._last_browser_settings or {}}
-                    await self._close_browser()
-                    await self._start_browser(config)
-                except Exception:
-                    logger.exception("重建浏览器失败")
-        else:
-            # context 已关闭，尝试重建完整链路
-            logger.warning("Context 已关闭，尝试重建浏览器")
-            try:
-                config = {"browser_settings": self._last_browser_settings or {}}
-                await self._close_browser()
-                await self._start_browser(config)
-            except Exception:
-                logger.exception("重建浏览器失败")
+        # 关闭整个浏览器（用户点击"停止并关闭"期望完全关闭）
+        await self._close_browser()
 
         logger.info("调试会话已停止，Worker 内部状态已清理")
         return WorkerResponse(success=True, data="调试会话已停止")

@@ -333,9 +333,12 @@ class TaskExecutor:
 
             cfg = self.monitor_config
             # 使用 MonitorSettings 填充默认值，确保未配置的字段有合理的默认行为
+            # 仅过滤 None 和空容器，保留 False、0 等合法值
             monitor = MonitorSettings(**{
                 k: v for k, v in cfg.items()
-                if k in MonitorSettings.model_fields and v is not None
+                if k in MonitorSettings.model_fields
+                and v is not None
+                and not (isinstance(v, (list, str, dict)) and not v)
             })
 
             # 等待网址响应处理认证请求
