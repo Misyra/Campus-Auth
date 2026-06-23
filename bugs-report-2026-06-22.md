@@ -695,9 +695,11 @@ class LoggingSettings(BaseModel, frozen=True):
 
 ---
 
-### BUG-24: `LoginOrchestrator` 与 `TaskExecutor` 共享线程池的生命周期耦合
+### ~~BUG-24~~: 已不存在
 
 **来源**: architecture M6
+
+**状态**: `LoginOrchestrator` 已自行创建线程池（不传 `pool` 参数时默认新建），`TaskExecutor` 不再有 `_login_pool`。两个池独立，shutdown 各管各的。
 
 **相关代码**:
 
@@ -796,7 +798,7 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 | BUG-21 | 🟠 P1 | 超时后命令积压 | engine.py:654-657 | 随 BUG-05 | 意外多次重载 | ⚠️ 已缓解 |
 | ~~BUG-22~~ | 🟡 P2 | ~~TCP/HTTP 默认值前后不一致~~ | — | — | 已不存在 | ✅ 已清理 |
 | BUG-23 | 🟡 P2 | LoggingSettings.level 无校验 | schemas.py | ~10min | 无效级别静默忽略 | ❌ 未修复 |
-| BUG-24 | 🟡 P2 | 线程池生命周期耦合 | container.py:77-82 | ~30min | 双重 shutdown | ❌ 未修复 |
+| ~~BUG-24~~ | 🟡 P2 | ~~线程池生命周期耦合~~ | — | — | 已不存在 | ✅ 已清理 |
 | BUG-25 | 🟡 P2 | user_agent 默认值不一致 | constants.js:87 | ~5min | 前端显示与实际不符 | ✅ 已修复 |
 | BUG-26 | 🟡 P2 | 关键命令静默丢弃 | engine.py:144 | ~30min | 高频场景丢命令 | ⚠️ 已缓解 |
 
@@ -804,7 +806,7 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 
 ## 修复进度
 
-**已修复 16 个问题**:
+**已修复 17 个问题**:
 - ✅ BUG-01: proxy/app_port 幽灵字段
 - ✅ BUG-02: ISP 映射不一致
 - ✅ BUG-03: 启动诊断永远显示空
@@ -826,8 +828,8 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 - ⚠️ BUG-21: 超时后命令积压（随 BUG-05 缓解）
 - ⚠️ BUG-26: 关键命令静默丢弃（随 BUG-05 缓解）
 
-**剩余 7 个问题待修复**（按优先级）:
-- P2: BUG-14/15/17/18/20/23/24
+**剩余 6 个问题待修复**（按优先级）:
+- P2: BUG-14/15/17/18/20/23
 
 **第二批（P1）**: ✅ 已全部修复
 
@@ -835,4 +837,4 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 2. BUG-14/15: schemas 类型约束
 3. BUG-17/18: Worker dict 清理
 4. BUG-20: monitor_service 别名
-5. BUG-23/24: 一致性修复
+5. BUG-23: LoggingSettings.level 校验
