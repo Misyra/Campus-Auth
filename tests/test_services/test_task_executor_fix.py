@@ -176,30 +176,29 @@ class TestTaskPoolLazyInit:
         executor.shutdown()
 
     def test_shutdown_with_task_pool(self):
-        """有 _task_pool 时 shutdown 应同时关闭两个池。"""
+        """有 _task_pool 时 shutdown 应关闭 task_pool 并调用 orchestrator.shutdown。"""
         from app.services.task_executor import TaskExecutor
 
         registry = MagicMock()
         history_store = MagicMock()
+        mock_orchestrator = MagicMock()
 
         executor = TaskExecutor(
             registry=registry,
             history_store=history_store,
             worker_getter=MagicMock(),
-            login_orchestrator=MagicMock(),
+            login_orchestrator=mock_orchestrator,
         )
         # 手动触发 _task_pool 创建
         executor._ensure_task_pool()
         assert executor._task_pool is not None
 
         mock_task_pool = MagicMock()
-        mock_login_pool = MagicMock()
         executor._task_pool = mock_task_pool
-        executor._login_pool = mock_login_pool
 
         executor.shutdown(wait=True)
         mock_task_pool.shutdown.assert_called_once_with(wait=True)
-        mock_login_pool.shutdown.assert_called_once_with(wait=True)
+        mock_orchestrator.shutdown.assert_called_once_with(wait=True)
 
     def test_ensure_task_pool_creates_once(self):
         """多次调用 _ensure_task_pool 应返回同一实例。"""

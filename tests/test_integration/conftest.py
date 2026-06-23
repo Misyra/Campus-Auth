@@ -76,12 +76,6 @@ def integration_stack(tmp_path, mock_worker):
     task_registry = TaskRegistry(tmp_path / "tasks" / "scheduled")
     task_history_store = TaskHistoryStore(tmp_path / "tasks" / "scheduled" / "history")
 
-    task_executor = TaskExecutor(
-        registry=task_registry,
-        history_store=task_history_store,
-        worker_getter=lambda: mock_worker,
-    )
-
     engine = ScheduleEngine(
         project_root=tmp_path,
         profile_service=profile_service,
@@ -89,9 +83,7 @@ def integration_stack(tmp_path, mock_worker):
         login_history_service=login_history,
         worker_getter=lambda: mock_worker,
         task_registry=task_registry,
-        task_executor=task_executor,
     )
-    task_executor.set_runtime_config_getter(engine.get_runtime_config)
 
     orchestrator = LoginOrchestrator(
         worker_getter=lambda: mock_worker,
@@ -99,10 +91,17 @@ def integration_stack(tmp_path, mock_worker):
         profile_service=profile_service,
         get_runtime_config=engine.get_runtime_config,
     )
-    engine._orchestrator = orchestrator
-    task_executor._login_orchestrator = orchestrator
+    engine.set_orchestrator(orchestrator)
 
-    # 启动引擎线程（BUG-007 修复后需要显式调用 boot）
+    task_executor = TaskExecutor(
+        registry=task_registry,
+        history_store=task_history_store,
+        worker_getter=lambda: mock_worker,
+        login_orchestrator=orchestrator,
+    )
+    task_executor.set_runtime_config_getter(engine.get_runtime_config)
+
+    # 启动引擎线程
     engine.boot()
 
     yield engine, profile_service, task_executor, mock_worker
@@ -127,12 +126,6 @@ def full_stack(tmp_path, mock_worker):
     task_registry = TaskRegistry(tmp_path / "tasks" / "scheduled")
     task_history_store = TaskHistoryStore(tmp_path / "tasks" / "scheduled" / "history")
 
-    task_executor = TaskExecutor(
-        registry=task_registry,
-        history_store=task_history_store,
-        worker_getter=lambda: mock_worker,
-    )
-
     engine = ScheduleEngine(
         project_root=tmp_path,
         profile_service=profile_service,
@@ -140,9 +133,7 @@ def full_stack(tmp_path, mock_worker):
         login_history_service=login_history,
         worker_getter=lambda: mock_worker,
         task_registry=task_registry,
-        task_executor=task_executor,
     )
-    task_executor.set_runtime_config_getter(engine.get_runtime_config)
 
     orchestrator = LoginOrchestrator(
         worker_getter=lambda: mock_worker,
@@ -150,10 +141,17 @@ def full_stack(tmp_path, mock_worker):
         profile_service=profile_service,
         get_runtime_config=engine.get_runtime_config,
     )
-    engine._orchestrator = orchestrator
-    task_executor._login_orchestrator = orchestrator
+    engine.set_orchestrator(orchestrator)
 
-    # 启动引擎线程（BUG-007 修复后需要显式调用 boot）
+    task_executor = TaskExecutor(
+        registry=task_registry,
+        history_store=task_history_store,
+        worker_getter=lambda: mock_worker,
+        login_orchestrator=orchestrator,
+    )
+    task_executor.set_runtime_config_getter(engine.get_runtime_config)
+
+    # 启动引擎线程
     engine.boot()
 
     yield engine, profile_service, task_executor, task_registry, mock_worker

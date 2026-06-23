@@ -160,6 +160,12 @@ class ScheduleEngine:
         # 统一引擎线程（延迟到 boot() 启动，确保依赖注入完成）
         self._engine_thread = threading.Thread(target=self._engine_loop, daemon=True)
 
+    # ── 依赖注入 ──
+
+    def set_orchestrator(self, orchestrator) -> None:
+        """设置登录编排器（公共接口）。"""
+        self._orchestrator = orchestrator
+
     # ── 队列入队辅助 ──
 
     def _enqueue(self, cmd: EngineCommand) -> bool:

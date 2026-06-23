@@ -81,9 +81,9 @@ def save_global_and_profile(
         else:
             carrier = payload.isp
 
-        # 密码处理：掩码保留原值，明文加密
+        # 密码处理：掩码保留原值，空串清除，明文加密
         new_password = save_password_field(
-            payload.password or None,
+            payload.password,
             existing.password or "",
         )
 

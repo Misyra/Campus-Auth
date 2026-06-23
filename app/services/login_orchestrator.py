@@ -153,8 +153,7 @@ class LoginOrchestrator:
         self._slot_lock = threading.RLock()
         self._slot: LoginHandle | None = None
 
-        # 线程池：外部可注入（与 TaskExecutor._login_pool 共享），
-        # 未注入时自行创建单线程池
+        # 线程池：自行创建单线程池
         self._pool: ThreadPoolExecutor = pool or ThreadPoolExecutor(
             max_workers=1,
             thread_name_prefix="login-exec",
