@@ -137,7 +137,7 @@ def _create_lifespan(existing_container, boot_engine=False):
             settings_path.exists(),
             settings_path.stat().st_size if settings_path.exists() else 0,
         )
-        cfg = services.monitor_service.get_config()
+        cfg = services.engine.get_config()
         startup_logger.info(
             "当前配置: 用户={}, 密码={}, 认证={}, 运营商={}, 间隔={}min",
             f"'{cfg.credentials.username}'" if cfg.credentials.username else "(空)",
@@ -331,7 +331,7 @@ def create_app(existing_container=None, boot_engine=False):
     async def websocket_logs(websocket: WebSocket):
         services = _app.state.services
         ws_mgr = services.ws_manager
-        monitor_svc = services.monitor_service
+        monitor_svc = services.engine
 
         await ws_mgr.connect(websocket)
         try:
