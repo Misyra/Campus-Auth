@@ -3,7 +3,7 @@ name = "campus-auth"
 version = "4.0.5"
 description = "校园网自动认证工具，前后端分离（FastAPI + Web UI）"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "playwright>=1.60.0,<2.0.0",
     "fastapi>=0.136.3,<1.0.0",

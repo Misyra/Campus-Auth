@@ -77,7 +77,7 @@ class TaskExecutor:
             # 等待表单元素出现（最长 5s），覆盖 SPA 门户延迟渲染的场景
             # 如果页面没有表单元素，静默跳过，不阻塞流程
             with contextlib.suppress(TimeoutError):
-                await page.wait_for_selector("input,textarea", timeout=5000)
+                await page.wait_for_selector("input:not([type='hidden']), textarea", timeout=5000)
 
             # reveal_hidden: 强制显示所有隐藏输入框，让后续 fill() 可以直接操作
             if self.config.reveal_hidden and any(

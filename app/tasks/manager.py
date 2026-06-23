@@ -384,9 +384,9 @@ class TaskManager:
             return False
 
     def delete_task(self, task_id: str) -> bool:
-        if task_id == "default":
-            return False
         normalized = normalize_task_id(task_id)
+        if normalized == "default":
+            return False
         if not is_valid_task_id(normalized):
             return False
         with self._lock:
@@ -401,6 +401,17 @@ class TaskManager:
                             deleted = True
                         except Exception as e:
                             logger.error("无法删除任务文件 {}: {}", file, e)
+            # 删除活动任务后回退到默认任务
+            if deleted:
+                active = self.get_active_task()
+                if active == normalized:
+                    try:
+                        atomic_write(
+                            str(self.tasks_dir / "active.txt"), "browser:default"
+                        )
+                        logger.info("活动任务已删除，已回退到默认任务")
+                    except Exception as e:
+                        logger.error("回退活动任务失败: {}", e)
             return deleted
 
     def _find_task_type(self, task_id: str) -> str | None:
