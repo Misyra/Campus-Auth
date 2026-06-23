@@ -649,7 +649,7 @@ class ScreenshotHandler(StepHandler):
             task_id = resolver.config.task_id or resolver.config.name or "unknown"
             step_id = step.id or "s0"
             result = await save_screenshot(
-                page, date_dir, task_id=task_id, step_id=step_id
+                page, date_dir, prefix="", task_id=task_id, step_id=step_id
             )
         else:
             safe_name = Path(path).name

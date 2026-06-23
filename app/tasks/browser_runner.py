@@ -414,7 +414,7 @@ class TaskExecutor:
 
             task_id = self.config.task_id or self.config.name or "unknown"
             local_path = await asyncio.wait_for(
-                save_screenshot(page, out_dir, task_id=task_id),
+                save_screenshot(page, out_dir, prefix="", task_id=task_id),
                 timeout=5,
             )
             if local_path:
