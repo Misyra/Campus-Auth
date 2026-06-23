@@ -1,5 +1,30 @@
 # 修改日志
 
+## 2026-06-23 (10)
+
+### fix: 自动登录失败后无法及时重试 + 接入登录前置检查 + 修复 cancel_event 缺失 + 恢复丢失代码
+
+- `app/services/engine.py`：`_engine_loop` 引擎循环最大睡眠时间从 `check_interval`（300s）限制为 5 秒（`_MAX_LOOP_SLEEP`），确保 `_on_done` 回调更新 `_next_network_check` 后引擎线程能及时唤醒执行重试
+- `app/services/engine.py`：`_do_async_login` 自动登录前接入 `check_login_prerequisites`（物理网络连接 + 认证地址可达性），仅在 `enable_local_check` 或 `check_auth_url` 启用时执行，手动登录不检查
+- `app/tasks/browser_runner.py`：`TaskExecutor.__init__` 新增 `cancel_event` 参数，修复 `login.py` 传入 `cancel_event` 时 `TypeError` 崩溃；步骤循环中新增取消检查
+- `app/tasks/browser_runner.py`：恢复 `_auto_navigate` 中丢失的 `navigation_wait` AJAX 等待逻辑
+- `app/tasks/browser_runner.py`：恢复 `_network_detection_check` 中 `MonitorSettings` 默认值填充逻辑（替代手动 `cfg.get()` 回退）
+- `app/tasks/browser_runner.py`：恢复 `_capture_screenshot` 中 `TEMP_DIR` 相对路径计算逻辑
+
+### fix: Ctrl+C 关闭进程卡死
+
+- `main.py`：`_run_full` 和 `_run_lightweight` 的 `finally` 块中 `asyncio.run(container.shutdown())` 添加 5 秒超时防护，避免 Windows 下 asyncio 清理逻辑卡死导致进程无法退出
+- `main.py`：两个运行模式的 `finally` 块末尾显式调用 `cleanup_pid()` + `os._exit(0)` 强制退出，确保关闭流程完成后进程立即终止
+- 根因：lifespan 的 `finally` 已完成容器关闭（幂等），但 `_run_full` 的防御性 `asyncio.run()` 在创建新事件循环后可能卡在 Windows 的 asyncio 清理逻辑
+
+### fix: 网络检测 url_check_urls 解析统一 + 调用方冗余转换清理
+
+- `app/utils/network.py`：`parse_url_checks` 的 list 分支新增 `str` 元素处理（含 `|` 分隔符的字符串），修复 `list[str]` 格式传入时返回空列表的问题
+- `app/network/decision.py`：`check_network_status` 移除冗余的 `"\n".join()` 预处理和类型判断分支，直接调用 `parse_url_checks(monitor.url_check_urls)`
+- `app/services/engine.py`：`test_network` 移除冗余的 `"\n".join()` 预处理和局部 import
+- `app/tasks/browser_runner.py`：`_network_detection_check` 合并两处分散的局部 import 为一行，简化 `parse_url_checks` 结果处理
+- 根因：`parse_url_checks` 已支持 `str | list | None` 三种输入格式，调用方无需做任何预处理
+
 ## 2026-06-23 (9)
 
 ### feat: 新增 `navigation_wait` 任务参数 + 修复任务执行器网络检测默认值

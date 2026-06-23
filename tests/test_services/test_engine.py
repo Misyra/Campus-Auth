@@ -948,7 +948,9 @@ class TestDoAsyncLogin:
         """传入 config_snapshot 时应使用快照而非 _runtime_config。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()  # 运行时配置为空
-        snapshot = {"username": "u", "password": "p", "auth_url": "http://x"}
+        snapshot = RuntimeConfig(
+            credentials=LoginCredentials(username="u", password="p", auth_url="http://x"),
+        )
         future = Future()
         handle = MagicMock()
         handle.rejected_reason = None

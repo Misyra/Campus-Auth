@@ -490,11 +490,15 @@ def _run_lightweight(ctx: ApplicationContext, logger):
         # BUG-009/032 修复：无论 Web 服务状态如何，强制执行 container.shutdown()
         # 容器已有 _shutdown_done 守卫保证幂等性
         try:
-            asyncio.run(container.shutdown())
+            asyncio.run(asyncio.wait_for(container.shutdown(), timeout=5))
         except RuntimeError:
             # 无可用 event loop，跳过异步 shutdown
             container.task_executor.shutdown(wait=False)
             container.engine.shutdown()
+        except Exception:
+            logger.debug("容器关闭（幂等跳过或超时）")
+        cleanup_pid()
+        os._exit(0)
 
 
 def _run_full(
@@ -584,9 +588,11 @@ def _run_full(
             tray_icon.stop()
         # lifespan 通常已执行 shutdown，此处为防御性补调（幂等安全）
         try:
-            asyncio.run(container.shutdown())
+            asyncio.run(asyncio.wait_for(container.shutdown(), timeout=5))
         except Exception:
-            logger.exception("容器关闭失败")
+            logger.debug("容器关闭（幂等跳过或超时）")
+        cleanup_pid()
+        os._exit(0)
 
 
 # ==================== 主启动 ====================

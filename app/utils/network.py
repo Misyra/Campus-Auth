@@ -6,9 +6,10 @@ from __future__ import annotations
 def parse_url_checks(raw: str | list | None) -> list[tuple[str, str]]:
     """解析网址响应检测 URL 列表，返回 [(url, expected_text), ...]。
 
-    支持两种格式：
+    支持三种格式：
     - 字符串：每行一个 "url|expected_text"
     - 列表：[[url, expected_text], ...] 或 [(url, expected_text), ...]
+    - 字符串列表：["url|expected_text", ...]
 
     参数:
         raw: 原始网址响应检测配置
@@ -40,6 +41,12 @@ def parse_url_checks(raw: str | list | None) -> list[tuple[str, str]]:
                     entries.append((url, expected))
             elif isinstance(e, list | tuple) and len(e) >= 2 and e[0] and e[1]:
                 entries.append((e[0], e[1]))
+            elif isinstance(e, str) and "|" in e:
+                url, _, expected = e.partition("|")
+                url = url.strip()
+                expected = expected.strip()
+                if url and expected:
+                    entries.append((url, expected))
         return entries
 
     return []
