@@ -204,28 +204,27 @@ class ScheduleEngine:
                 self._wakeup_event.wait(timeout=timeout)
                 self._wakeup_event.clear()
 
-                # 排干命令队列
-                while True:
-                    try:
-                        cmd = self._cmd_queue.get_nowait()
-                    except queue.Empty:
-                        break
+                # 处理命令队列（优先处理命令）
+                try:
+                    cmd = self._cmd_queue.get_nowait()
+                except queue.Empty:
+                    cmd = None
+
+                if cmd is not None:
                     self._process_command(cmd)
                     if cmd.type == EngineCmdType.SHUTDOWN:
                         break
-                else:
-                    now = time.time()
-
-                    # 网络检测
-                    if self._is_monitoring and now >= self._next_network_check:
-                        self._do_network_check()
-
-                    # 定时任务
-                    if self._scheduler_running and now >= self._next_schedule_tick:
-                        self._run_schedule_tick()
                     continue
-                # SHUTDOWN 命令已处理，退出循环
-                break
+
+                now = time.time()
+
+                # 网络检测
+                if self._is_monitoring and now >= self._next_network_check:
+                    self._do_network_check()
+
+                # 定时任务
+                if self._scheduler_running and now >= self._next_schedule_tick:
+                    self._run_schedule_tick()
             except Exception:
                 logger.exception("引擎循环异常，继续运行")
                 time.sleep(1)
