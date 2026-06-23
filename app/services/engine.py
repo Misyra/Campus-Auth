@@ -348,9 +348,13 @@ class ScheduleEngine:
                     logger.warning("{}失败: {}", tag, msg)
                     if not is_manual:
                         delay = self._retry_policy.on_login_done(success=False)
-                        if delay is not None and delay > 0:
+                        if delay is None:
+                            # 超过最大重试次数，不再重试
+                            logger.warning("登录重试次数已用尽，停止自动重试")
+                        else:
                             self._next_network_check = time.time() + delay
-                            logger.warning("登录连续失败，下次检测推迟 {}s", int(delay))
+                            if delay > 0:
+                                logger.warning("登录连续失败，下次检测推迟 {}s", int(delay))
             except Exception:
                 logger.exception("登录任务异常")
 
