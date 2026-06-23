@@ -456,11 +456,20 @@ class ScheduleEngine:
         cmd.response_data = (True, "配置重载成功")
 
     def _handle_apply_profile(self, cmd: EngineCommand) -> None:
-        """切换方案并重启监控（仅在引擎线程中调用）。"""
+        """切换方案并重启监控（仅在引擎线程中调用）。
+
+        内部自动设置活跃方案，调用方无需先调 set_active_profile。
+        """
         profile_id = cmd.data.get("profile_id", "")
         was_monitoring = self._is_monitoring
 
-        # 先加载新配置（不修改当前运行状态）
+        # 内部设置活跃方案，不再依赖调用方
+        ok, msg = self._profile_service.set_active_profile(profile_id)
+        if not ok:
+            cmd.response_data = (False, msg)
+            return
+
+        # 加载新配置
         if not self._reload_config_internal():
             logger.error("配置重载失败，监控继续使用旧方案运行")
             cmd.response_data = (False, "方案切换失败")

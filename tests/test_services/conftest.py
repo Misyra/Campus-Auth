@@ -89,6 +89,7 @@ def engine_factory():
         svc._login_history = None
         svc._worker_getter = None
         svc._profile_service = MagicMock()
+        svc._profile_service.set_active_profile.return_value = (True, "ok")
         svc.project_root = MagicMock()
         svc.record_log = MagicMock()
         svc._update_status_snapshot = MagicMock()
