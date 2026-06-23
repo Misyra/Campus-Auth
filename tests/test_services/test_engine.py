@@ -215,7 +215,6 @@ class TestProcessCommand:
         svc._handle_start = MagicMock()
         self._put_and_process(svc, cmd)
         svc._handle_start.assert_called_once()
-        assert cmd.response_event.is_set()
 
     def test_dispatch_stop(self, engine_factory):
         svc = engine_factory(raw=True)
@@ -256,12 +255,15 @@ class TestProcessCommand:
         svc._handle_apply_profile.assert_called_once()
 
     def test_process_sets_response_event(self, engine_factory):
+        """response_event 由处理器自行触发，_process_command 不再自动 set。"""
         svc = engine_factory(raw=True)
         event = threading.Event()
         cmd = EngineCommand(type=EngineCmdType.START, response_event=event)
+        # mock 的 _handle_start 不会触发 response_event，这是预期行为
         svc._handle_start = MagicMock()
         self._put_and_process(svc, cmd)
-        assert event.is_set()
+        # 新设计：_process_command 不自动触发，由处理器负责
+        assert not event.is_set()
 
     def test_process_exception_still_sets_event(self, engine_factory):
         """handler 抛出异常时，response_event 仍被 set。"""
@@ -420,11 +422,14 @@ class TestHandleLogin:
         svc._orchestrator.validate.return_value = None
         mock_handle = MagicMock()
         mock_handle.rejected_reason = None
-        mock_handle.future = MagicMock()
-        mock_handle.result.return_value = (True, "登录成功")
+        mock_future = Future()
+        mock_handle.future = mock_future
         svc._orchestrator.submit.return_value = mock_handle
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
+        # 异步模式：模拟登录完成，触发回调
+        mock_future.set_result((True, "登录成功"))
+        cmd.response_event.wait(timeout=2)
         assert cmd.response_data == (True, "登录成功")
 
     def test_handle_login_already_in_progress(self, engine_factory):

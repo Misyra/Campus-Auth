@@ -82,7 +82,7 @@ export const DEFAULT_CONFIG = {
   browser: {
     headless: true,
     timeout: 8,
-    navigation_timeout: 15,
+    navigation_timeout: 8,
     login_timeout: 90,
     user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
     low_resource_mode: false,
