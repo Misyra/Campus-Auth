@@ -2,6 +2,12 @@
 
 ## 2026-06-23
 
+### feat: 登录按钮支持取消，登录中切换为取消登录
+
+- `frontend/js/methods/actions.js`：`manualLogin` 添加 `busy.login` 标志控制按钮状态，新增 `cancelLogin` 方法调用 `POST /api/actions/cancel-login`
+- `frontend/js/data/status.js`：`busy` 对象新增 `login: false` 响应式属性
+- `frontend/partials/pages/dashboard.html`：登录按钮改为 `v-if`/`v-else` 条件渲染，登录中显示取消登录按钮（`btn-danger`），空闲时显示手动登录按钮（`btn-secondary`）
+
 ### feat: 新增 POST /api/actions/cancel-login 端点
 
 - `app/api/monitor.py`：在 `manual_login` 端点之后添加 `cancel_login` 端点，调用 `svc.cancel_login()` 返回 `(bool, str)`

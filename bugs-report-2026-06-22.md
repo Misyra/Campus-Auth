@@ -189,9 +189,11 @@ def _handle_login(self, cmd: EngineCommand) -> None:
 
 ---
 
-### BUG-05: `_handle_login` 阻塞引擎线程 120-660 秒
+### ⚠️ BUG-05: `_handle_login` 阻塞引擎线程 120-660 秒（已缓解）
 
 **来源**: config #6
+
+**状态**: 已通过取消登录机制缓解。用户可在登录中点击"取消登录"按钮，`cancel_event` 使登录快速返回，引擎线程不再长时间阻塞。
 
 **相关代码**:
 
@@ -247,9 +249,11 @@ def _handle_apply_profile(self, cmd: EngineCommand) -> None:
 
 ---
 
-### BUG-07: `container.py` 违反封装的私有属性篡改
+### ✅ BUG-07: `container.py` 违反封装的私有属性篡改
 
 **来源**: architecture H1
+
+**已修复**: 移除 `_login_pool`；`login_orchestrator` 改为必填参数；新增 `engine.set_orchestrator()` 和 `engine.set_task_executor()` 公共方法。
 
 **相关代码**:
 
@@ -317,9 +321,11 @@ class LoggingSettings(BaseModel, frozen=True):
 
 ---
 
-### BUG-09: `source_levels` 可能被主配置保存覆盖
+### ⚪️ BUG-09: `source_levels` 可能被主配置保存覆盖（可忽略）
 
 **来源**: config #5
+
+**可忽略**: 单用户场景下触发窗口极窄（<500ms），前端防抖+保存后刷新机制保证安全。
 
 **相关代码**:
 
@@ -346,9 +352,11 @@ def _apply(data: ProfilesData):
 
 ---
 
-### BUG-10: `script_timeout` 缺失于前端 `DEFAULT_CONFIG`
+### ✅ BUG-10: `script_timeout` 缺失于前端 `DEFAULT_CONFIG`
 
 **来源**: config #3
+
+**已修复**: 在前端 `DEFAULT_CONFIG.monitor` 中添加 `script_timeout: 60`。
 
 **相关代码**:
 
@@ -384,9 +392,11 @@ monitor: {
 
 ---
 
-### BUG-11: 配置验证仅在外部 API 路径执行
+### ✅ BUG-11: 配置验证仅在外部 API 路径执行
 
 **来源**: config #8
+
+**已修复**: 将验证逻辑移到 `_handle_start()` 内部，确保所有路径都经过验证。`start_monitoring()` 保留提前验证以立即返回错误信息。
 
 **相关代码**:
 
@@ -616,9 +626,11 @@ def monitor_service(self) -> ScheduleEngine:
 
 ---
 
-### BUG-21: `_handle_login` 阻塞期间 `reload_config` 超时导致命令积压
+### ⚠️ BUG-21: `_handle_login` 阻塞期间 `reload_config` 超时导致命令积压（已缓解）
 
 **来源**: config #6 的连锁影响
+
+**状态**: 随 BUG-05 一并缓解。取消登录后引擎线程恢复处理队列命令。
 
 **相关代码**:
 
@@ -723,7 +735,9 @@ user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML
 
 ---
 
-### BUG-26: 命令队列 `maxsize=50` 关键命令静默丢弃
+### ⚠️ BUG-26: 命令队列 `maxsize=50` 关键命令静默丢弃（已缓解）
+
+**状态**: 随 BUG-05 一并缓解。取消登录后引擎线程恢复消费队列，不再积压。
 
 **来源**: architecture L2
 
@@ -761,13 +775,13 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 | BUG-02 | 🔴 P0 | ISP 映射不一致 | api/config.py:84 vs config_service.py:66 | ~15min | 前端显示与运行时不同 | ✅ 已修复 |
 | BUG-03 | 🔴 P0 | 启动诊断永远显示空 | application.py:140, engine.py:620 | ~15min | 诊断信息无意义 | ✅ 已修复 |
 | BUG-04 | 🟠 P1 | login_timeout 读错配置源 | engine.py:411 | ~5min | 超时值可能不对 | ✅ 误报+已修复 |
-| BUG-05 | 🟠 P1 | _handle_login 阻塞引擎 | engine.py:411-416 | ~4h | 登录期间所有命令卡死 | ❌ 未修复 |
+| BUG-05 | 🟠 P1 | _handle_login 阻塞引擎 | engine.py:411-416 | ~4h | 登录期间所有命令卡死 | ⚠️ 已缓解 |
 | BUG-06 | 🟠 P1 | apply_profile 忽略 profile_id | engine.py:436-445 | ~30min | 隐式契约脆弱 | ❌ 未修复 |
-| BUG-07 | 🟠 P1 | container 私有属性篡改 | container.py:77-87 | ~2h | 启动竞态窗口 | ❌ 未修复 |
+| BUG-07 | 🟠 P1 | container 私有属性篡改 | container.py:77-87 | ~2h | 启动竞态窗口 | ✅ 已修复 |
 | BUG-08 | 🟠 P1 | FIELD_NAMES 键名错误 | api/config.py:144 | ~5min | 变更日志显示错误名称 | ✅ 已修复 |
-| BUG-09 | 🟠 P1 | source_levels 覆盖竞态 | config_service.py:97-103 | ~30min | 日志级别被意外重置 | ❌ 未修复 |
-| BUG-10 | 🟠 P1 | script_timeout 前端缺失 | constants.js:103-121 | ~5min | 重置后丢失自定义值 | ❌ 未修复 |
-| BUG-11 | 🟠 P1 | 配置验证仅 API 路径执行 | engine.py:687 | ~30min | 无效配置可启动监控 | ❌ 未修复 |
+| BUG-09 | 🟠 P1 | source_levels 覆盖竞态 | config_service.py:97-103 | ~30min | 日志级别被意外重置 | ⚪️ 可忽略 |
+| BUG-10 | 🟠 P1 | script_timeout 前端缺失 | constants.js:103-121 | ~5min | 重置后丢失自定义值 | ✅ 已修复 |
+| BUG-11 | 🟠 P1 | 配置验证仅 API 路径执行 | engine.py:687 | ~30min | 无效配置可启动监控 | ✅ 已修复 |
 | BUG-12 | 🟡 P2 | Profile 废弃字段 | constants.js:206-242 | ~2h | 用户改无效字段无提示 | ✅ 已修复 |
 | BUG-13 | 🟡 P2 | BrowserChannel 枚举死代码 | schemas.py:30-37 | ~10min | 无类型安全 | ✅ 已修复 |
 | BUG-14 | 🟡 P2 | startup_action 未约束 | schemas.py | ~5min | 无效值不报错 | ❌ 未修复 |
@@ -777,23 +791,26 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 | BUG-18 | 🟡 P2 | Worker dict 缺 carrier_custom | login_orchestrator.py:38-44 | ~5min | 字段完整性缺失 | ❌ 未修复 |
 | BUG-19 | 🟡 P2 | 双重磁盘读取 | engine.py:629-631 | ~15min | 性能微损 | ✅ 已修复 |
 | BUG-20 | 🟡 P2 | monitor_service 别名 | container.py:96 | ~1h | 命名误导 | ❌ 未修复 |
-| BUG-21 | 🟠 P1 | 超时后命令积压 | engine.py:654-657 | 随 BUG-05 | 意外多次重载 | ❌ 未修复 |
+| BUG-21 | 🟠 P1 | 超时后命令积压 | engine.py:654-657 | 随 BUG-05 | 意外多次重载 | ⚠️ 已缓解 |
 | ~~BUG-22~~ | 🟡 P2 | ~~TCP/HTTP 默认值前后不一致~~ | — | — | 已不存在 | ✅ 已清理 |
 | BUG-23 | 🟡 P2 | LoggingSettings.level 无校验 | schemas.py | ~10min | 无效级别静默忽略 | ❌ 未修复 |
 | BUG-24 | 🟡 P2 | 线程池生命周期耦合 | container.py:77-82 | ~30min | 双重 shutdown | ❌ 未修复 |
 | BUG-25 | 🟡 P2 | user_agent 默认值不一致 | constants.js:87 | ~5min | 前端显示与实际不符 | ✅ 已修复 |
-| BUG-26 | 🟡 P2 | 关键命令静默丢弃 | engine.py:144 | ~30min | 高频场景丢命令 | ❌ 未修复 |
+| BUG-26 | 🟡 P2 | 关键命令静默丢弃 | engine.py:144 | ~30min | 高频场景丢命令 | ⚠️ 已缓解 |
 
 ---
 
 ## 修复进度
 
-**已修复 12 个问题**:
+**已修复 15 个问题**:
 - ✅ BUG-01: proxy/app_port 幽灵字段
 - ✅ BUG-02: ISP 映射不一致
 - ✅ BUG-03: 启动诊断永远显示空
 - ✅ BUG-04: login_timeout 读错配置源（误报+已修复）
+- ✅ BUG-07: container 私有属性篡改
 - ✅ BUG-08: FIELD_NAMES 键名错误
+- ✅ BUG-10: script_timeout 前端缺失
+- ✅ BUG-11: 配置验证仅 API 路径执行
 - ✅ BUG-12: Profile 废弃字段
 - ✅ BUG-13: BrowserChannel 枚举死代码
 - ✅ BUG-16: config_version 不一致
@@ -801,19 +818,20 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 - ✅ BUG-22: TCP/HTTP 默认值不一致（已清理）
 - ✅ BUG-25: user_agent 默认值不一致
 
-**剩余 15 个问题待修复**（按优先级）:
-- P1: BUG-05/06/07/09/10/11/21
-- P2: BUG-14/15/17/18/20/23/24/26
+**已缓解 3 个问题**（取消登录机制）:
+- ⚠️ BUG-05: _handle_login 阻塞引擎（用户可取消）
+- ⚠️ BUG-21: 超时后命令积压（随 BUG-05 缓解）
+- ⚠️ BUG-26: 关键命令静默丢弃（随 BUG-05 缓解）
 
-**第二批（P1，核心功能缺陷）**:
-1. BUG-05 + BUG-21: _handle_login 非阻塞化（关联修复）
-2. BUG-06: apply_profile 自包含
-3. BUG-07: container 构造重构
-4. BUG-10: script_timeout 前端缺失
-5. BUG-09 + BUG-11: source_levels merge + 统一验证
+**剩余 8 个问题待修复**（按优先级）:
+- P1: BUG-06
+- P2: BUG-14/15/17/18/20/23/24
+
+**第二批（P1）**:
+1. BUG-06: apply_profile 自包含
 
 **第三批（P2，设计改进）**:
-6. BUG-14/15: schemas 类型约束（startup_action 枚举、PauseSettings 交叉验证）
-7. BUG-17/18: Worker dict 清理
-8. BUG-20: monitor_service 别名
-9. BUG-23/24/25/26: 一致性修复
+2. BUG-14/15: schemas 类型约束
+3. BUG-17/18: Worker dict 清理
+4. BUG-20: monitor_service 别名
+5. BUG-23/24: 一致性修复
