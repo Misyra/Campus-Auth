@@ -60,8 +60,9 @@ class MonitoredPolicy(RetryPolicy):
         max_retries: 最大重试次数（默认 5）
     """
 
-    # 固定延迟表：attempt → delay_seconds
-    _DELAYS: list[float] = [0.0, 0.0, 30.0, 60.0, 120.0]
+    # 固定延迟表：每次登录失败后的等待秒数
+    # 索引 = attempt - 1（第 1 次失败 → _DELAYS[0]，第 2 次 → _DELAYS[1]，依此类推）
+    _DELAYS: list[float] = [5.0, 10.0, 20.0, 60.0, 100.0]
 
     def __init__(self, max_retries: int = 5) -> None:
         self.max_retries = max(1, max_retries)
@@ -83,9 +84,7 @@ class MonitoredPolicy(RetryPolicy):
         yield from range(1, self.max_retries + 1)
 
     def delay_before(self, attempt: int) -> float:
-        """返回第 attempt 次重试前的延迟（查表）。"""
-        if attempt <= 1:
-            return 0.0
+        """返回第 attempt 次登录失败后的延迟（查表）。"""
         idx = min(attempt - 1, len(self._DELAYS) - 1)
         return self._DELAYS[idx]
 
@@ -101,12 +100,12 @@ class MonitoredPolicy(RetryPolicy):
             return transitioned
 
     def on_login_done(self, success: bool) -> float | None:
-        """登录完成回调。返回下次检测前的延迟秒数（None=停止）。线程安全。"""
+        """登录完成回调。返回下次重试前的延迟秒数（None=停止重试）。线程安全。"""
         with self._lock:
             if success:
                 self._attempt = 0
                 return None
             self._attempt += 1
-            if self._attempt >= self.max_retries:
+            if self._attempt > self.max_retries:
                 return None
             return self.delay_before(self._attempt)

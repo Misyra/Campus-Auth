@@ -714,7 +714,7 @@ class TestNetworkCheckBackoff:
                 username="u", password="p", auth_url="http://x",
             ),
         )
-        svc._retry_policy._attempt = 2  # 再失败一次就到 attempt=3，delay=30
+        svc._retry_policy._attempt = 2  # 再失败一次就到 attempt=3，delay=20
         callback_done = threading.Event()
         future = Future()
         _orig_adc = future.add_done_callback
@@ -734,8 +734,8 @@ class TestNetworkCheckBackoff:
         future.set_result((False, "登录失败"))
         callback_done.wait(timeout=2)
         assert svc._retry_policy._attempt == 3
-        # attempt=3 → delay_before(3)=30.0
-        assert svc._next_network_check > time.time() + 29
+        # attempt=3 → delay_before(3)=20.0 → 设置到 _next_retry_time
+        assert svc._next_retry_time > time.time() + 19
 
     def test_on_done_manual_login_does_not_affect_failure_count(self, engine_factory):
         """手动登录结果不应影响自动登录的退避计数。"""

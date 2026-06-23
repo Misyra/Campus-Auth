@@ -157,6 +157,7 @@ class ScheduleEngine:
         self._registered_futures: set[Future] = set()
         self._futures_lock = threading.Lock()
         self._wakeup_event = threading.Event()  # 唤醒引擎循环
+        self._next_retry_time: float = 0  # 下次重试时间（独立于网络检测）
 
         # 统一引擎线程（延迟到 boot() 启动，确保依赖注入完成）
         self._engine_thread = threading.Thread(target=self._engine_loop, daemon=True)
@@ -218,6 +219,11 @@ class ScheduleEngine:
 
                 now = time.time()
 
+                # 重试（独立于网络检测，延迟后直接登录）
+                if self._is_monitoring and self._next_retry_time > 0 and now >= self._next_retry_time:
+                    self._next_retry_time = 0
+                    self._do_async_login()
+
                 # 网络检测
                 if self._is_monitoring and now >= self._next_network_check:
                     self._do_network_check()
@@ -240,6 +246,8 @@ class ScheduleEngine:
         try:
             if self._is_monitoring:
                 candidates.append(float(self._next_network_check))
+                if self._next_retry_time > 0:
+                    candidates.append(self._next_retry_time)
 
             if self._scheduler_running:
                 candidates.append(self._next_schedule_tick)
@@ -294,13 +302,19 @@ class ScheduleEngine:
                 else:
                     logger.error("配置重载失败，继续使用当前配置")
 
+            # 网络检测前清除重试定时（避免重复触发）
+            self._next_retry_time = 0
+
             if result.need_login:
                 self._retry_policy.on_network_check(True)
                 if self._retry_policy.retries_exhausted:
-                    # 一个检测周期已过，重置重试计数，允许下一轮重试
+                    # 重试用尽，重置计数，由下次网络检测触发新一轮重试
                     self._retry_policy.reset()
-                    self.record_log("网络异常，重置重试计数，开始新一轮登录", level="WARNING", source="network")
-                    self._do_async_login()
+                    self.record_log(
+                        f"重试已用尽（{self._retry_policy.max_retries}/{self._retry_policy.max_retries}），"
+                        f"等待下次网络检测（{self._monitor_check_interval}s 后）",
+                        level="WARNING", source="network",
+                    )
                 else:
                     self._do_async_login()
             else:
@@ -358,17 +372,29 @@ class ScheduleEngine:
                     logger.info("{}完成: {}", tag, msg)
                     if not is_manual:
                         self._retry_policy.on_login_done(success=True)
+                        self._next_retry_time = 0
                 else:
                     logger.warning("{}失败: {}", tag, msg)
                     if not is_manual:
                         delay = self._retry_policy.on_login_done(success=False)
                         if delay is None:
-                            # 超过最大重试次数，不再尝试登录（网络检测继续，恢复后自动重置）
-                            logger.warning("登录重试次数已用尽，等待网络恢复（下次检测 {}s 后）", self._monitor_check_interval)
+                            # 超过最大重试次数，不再尝试登录，等待网络检测恢复后重置
+                            self._next_retry_time = 0
+                            logger.warning(
+                                "登录重试次数已用尽（{}/{}），等待网络恢复（下次检测 {}s 后）",
+                                self._retry_policy._attempt, self._retry_policy.max_retries,
+                                self._monitor_check_interval,
+                            )
                         else:
-                            self._next_network_check = time.time() + delay
+                            self._next_retry_time = time.time() + delay
                             self._wakeup_event.set()
-                            logger.info("下次重试: {}s 后", int(delay))
+                            from datetime import datetime as _dt
+                            next_time = _dt.fromtimestamp(self._next_retry_time).strftime("%H:%M:%S")
+                            logger.info(
+                                "重试 {}/{}, 下次重试: {}s 后 ({})",
+                                self._retry_policy._attempt, self._retry_policy.max_retries,
+                                int(delay), next_time,
+                            )
             except Exception:
                 logger.exception("登录任务异常")
 
@@ -443,6 +469,7 @@ class ScheduleEngine:
         core.stop_monitoring()
         self._monitor_core = None
         self._next_network_check = 0
+        self._next_retry_time = 0
 
         self.record_log("监控已停止", level="INFO", source="backend")
         self._update_status_snapshot(force=True)

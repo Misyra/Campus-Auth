@@ -79,32 +79,33 @@ class TestMonitoredPolicy:
 
     # -- delay_before ---------------------------------------------------
 
-    def test_delay_first_attempt_zero(self):
+    def test_delay_first_attempt(self):
         policy = MonitoredPolicy()
-        assert policy.delay_before(1) == 0.0
+        assert policy.delay_before(1) == 5.0
 
     def test_delay_within_table(self):
-        """前几次重试使用固定延迟表。"""
+        """每次失败使用固定延迟表。"""
         policy = MonitoredPolicy()
-        assert policy.delay_before(2) == 0.0
-        assert policy.delay_before(3) == 30.0
+        assert policy.delay_before(1) == 5.0
+        assert policy.delay_before(2) == 10.0
+        assert policy.delay_before(3) == 20.0
 
     def test_delay_fixed_table(self):
-        """延迟表 [0, 0, 30, 60, 120]，超出后取最后一个值。"""
+        """延迟表 [5, 10, 20, 60, 100]，超出后取最后一个值。"""
         policy = MonitoredPolicy()
-        assert policy.delay_before(1) == 0.0
-        assert policy.delay_before(2) == 0.0
-        assert policy.delay_before(3) == 30.0
+        assert policy.delay_before(1) == 5.0
+        assert policy.delay_before(2) == 10.0
+        assert policy.delay_before(3) == 20.0
         assert policy.delay_before(4) == 60.0
-        assert policy.delay_before(5) == 120.0
+        assert policy.delay_before(5) == 100.0
         # 超出表长，取最后一个
-        assert policy.delay_before(100) == 120.0
+        assert policy.delay_before(100) == 100.0
 
     def test_delay_table_max(self):
         """超出延迟表范围时取最后一个值。"""
         policy = MonitoredPolicy()
-        assert policy.delay_before(100) == 120.0
-        assert policy.delay_before(1000) == 120.0
+        assert policy.delay_before(100) == 100.0
+        assert policy.delay_before(1000) == 100.0
 
     # -- on_network_check -----------------------------------------------
 
@@ -168,28 +169,31 @@ class TestMonitoredPolicy:
     def test_login_failure_returns_delay(self):
         """登录失败 → 返回下次延迟（查表）。"""
         policy = MonitoredPolicy()
-        # 第一次失败 → _attempt=1，delay_before(1)=0.0
+        # 第一次失败 → _attempt=1，delay_before(1)=5.0
         result = policy.on_login_done(success=False)
-        assert result == 0.0
+        assert result == 5.0
 
     def test_login_failure_subsequent_delays(self):
         """多次登录失败 → 按延迟表递增。"""
         policy = MonitoredPolicy()
-        # 第 1 次失败: _attempt=1 → delay_before(1)=0.0
-        assert policy.on_login_done(success=False) == 0.0
-        # 第 2 次失败: _attempt=2 → delay_before(2)=0.0
-        assert policy.on_login_done(success=False) == 0.0
-        # 第 3 次失败: _attempt=3 → delay_before(3)=30.0
-        assert policy.on_login_done(success=False) == 30.0
+        # 第 1 次失败: _attempt=1 → delay_before(1)=5.0
+        assert policy.on_login_done(success=False) == 5.0
+        # 第 2 次失败: _attempt=2 → delay_before(2)=10.0
+        assert policy.on_login_done(success=False) == 10.0
+        # 第 3 次失败: _attempt=3 → delay_before(3)=20.0
+        assert policy.on_login_done(success=False) == 20.0
         # 第 4 次失败: _attempt=4 → delay_before(4)=60.0
         assert policy.on_login_done(success=False) == 60.0
+        # 第 5 次失败: _attempt=5 → delay_before(5)=100.0
+        assert policy.on_login_done(success=False) == 100.0
 
     def test_login_failure_exceeds_max_returns_none(self):
         """超过最大重试次数 → 返回 None。"""
         policy = MonitoredPolicy(max_retries=3)
-        policy.on_login_done(success=False)  # attempt=1
-        policy.on_login_done(success=False)  # attempt=2
-        result = policy.on_login_done(success=False)  # attempt=3 >= max_retries
+        assert policy.on_login_done(success=False) == 5.0   # attempt=1
+        assert policy.on_login_done(success=False) == 10.0  # attempt=2
+        assert policy.on_login_done(success=False) == 20.0  # attempt=3
+        result = policy.on_login_done(success=False)         # attempt=4 > max_retries
         assert result is None
 
     def test_login_success_after_failures_resets(self):
@@ -201,7 +205,7 @@ class TestMonitoredPolicy:
         assert result is None
         assert policy._attempt == 0
         # 再次失败应该从头开始
-        assert policy.on_login_done(success=False) == 0.0  # delay_before(1)=0
+        assert policy.on_login_done(success=False) == 5.0  # delay_before(1)=5
 
     # -- 参数 clamping --------------------------------------------------
 
