@@ -1,5 +1,16 @@
 # 修改日志
 
+## 2026-06-23 (9)
+
+### feat: 新增 `navigation_wait` 任务参数 + 修复任务执行器网络检测默认值
+
+- `app/tasks/models.py`：`TaskConfig` 新增 `navigation_wait` 字段（浮点数，单位秒，默认 1）
+- `app/tasks/browser_runner.py`：`_auto_navigate` 导航完成后根据 `navigation_wait` 额外等待，解决 AJAX 动态渲染表单导致步骤找不到元素的问题
+- `app/tasks/browser_runner.py`：`_network_detection_check` 使用 `MonitorSettings` 填充默认值，修复未配置时 TCP/HTTP/网址响应全部显示"关"的问题
+- `docs/task-writing-guide.md`：补充 `navigation_wait` 参数说明、AJAX 场景提示和 FAQ
+- `docs/task-manual.md`：更新执行流程描述
+- `frontend/partials/pages/tasks.html`：任务编辑器帮助内容新增顶层配置说明（`reveal_hidden`、`step_delay`、`navigation_wait`）
+
 ## 2026-06-23 (8)
 
 ### fix: 代码审查修复（6 个问题）

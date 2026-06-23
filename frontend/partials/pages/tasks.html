@@ -175,6 +175,12 @@
           <ul>
             <li><code>frame</code> - 目标 frame 名称、URL 片段或 CSS 选择器（字符串，不支持布尔值），用于 frameset/iframe 页面</li>
           </ul>
+          <h4>顶层配置</h4>
+          <ul>
+            <li><code>reveal_hidden</code> - 执行前强制显示所有隐藏输入框（布尔值，默认 false）。通常无需开启，每个步骤在普通操作失败后会自动降级到强制模式</li>
+            <li><code>step_delay</code> - 步骤间休眠时间（秒，默认 0.5）</li>
+            <li><code>navigation_wait</code> - 页面加载后额外等待时间（秒，默认 1）。适用于页面通过 AJAX 动态渲染表单的场景，等待时间不足会导致后续步骤找不到元素</li>
+          </ul>
           <h4>可用变量</h4>
           <ul>
             <li><code v-pre>{{USERNAME}}</code> / <code v-pre>{{username}}</code> - 用户名（系统变量 / 需 variables 映射）</li>
@@ -185,6 +191,8 @@
           <h4>示例</h4>
           <pre v-pre>{
   "variables": {"username": "{{USERNAME}}", "isp": "{{ISP}}"},
+  "navigation_wait": 3,
+  "reveal_hidden": false,
   "steps": [
     {
       "type": "input",

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import time
 from dataclasses import replace
 from datetime import datetime
@@ -73,11 +72,6 @@ class TaskExecutor:
 
         try:
             await self._auto_navigate(page)
-
-            # 等待表单元素出现（最长 5s），覆盖 SPA 门户延迟渲染的场景
-            # 如果页面没有表单元素，静默跳过，不阻塞流程
-            with contextlib.suppress(TimeoutError):
-                await page.wait_for_selector("input:not([type='hidden']), textarea", timeout=5000)
 
             # reveal_hidden: 强制显示所有隐藏输入框，让后续 fill() 可以直接操作
             if self.config.reveal_hidden and any(
@@ -161,6 +155,9 @@ class TaskExecutor:
             )
             await page.goto(url, wait_until="load", timeout=self.navigation_timeout)
             await self._wait_url_stable(page)
+            if self.config.navigation_wait > 0:
+                logger.info("等待页面 AJAX 初始化: {}s", self.config.navigation_wait)
+                await asyncio.sleep(self.config.navigation_wait)
 
     async def _wait_url_stable(self, page, timeout_ms: int = 3000):
         """等待 URL 稳定，处理 JS 重定向链（最多 5 跳）"""
@@ -299,31 +296,34 @@ class TaskExecutor:
         """任务步骤全部通过后，验证网络是否已恢复连通。"""
         try:
             from app.network.decision import is_network_available
+            from app.schemas import MonitorSettings
 
             cfg = self.monitor_config
+            # 使用 MonitorSettings 填充默认值，确保未配置的字段有合理的默认行为
+            monitor = MonitorSettings(**{
+                k: v for k, v in cfg.items()
+                if k in MonitorSettings.model_fields and v is not None
+            })
 
-            # 等待网址响应处理认证请求（可通过 post_login_delay 配置）
-            # cfg.get(key, default) 在 JSON 值为 null 时返回 None 而非默认值，需显式处理
+            # 等待网址响应处理认证请求
             post_delay = cfg.get("post_login_delay")
             if post_delay is None:
                 post_delay = 5
             await asyncio.sleep(post_delay)
-            enable_tcp = cfg.get("enable_tcp_check", False)
-            enable_http = cfg.get("enable_http_check", False)
-            timeout = cfg.get("network_check_timeout")
-            if timeout is None:
-                timeout = 2
+            enable_tcp = monitor.enable_tcp_check
+            enable_http = monitor.enable_http_check
+            timeout = monitor.network_check_timeout
 
             # 解析网址响应检测 URL
             from app.utils.network import parse_url_checks
 
-            url_checks = parse_url_checks(cfg.get("url_check_urls", ""))
+            url_checks = parse_url_checks(monitor.url_check_urls)
             url_checks = url_checks if url_checks else None
 
             # 解析 TCP 检测目标
             from app.utils.network import parse_ping_targets
 
-            test_sites = parse_ping_targets(cfg.get("ping_targets", [])) or None
+            test_sites = parse_ping_targets(monitor.ping_targets) or None
 
             logger.info(
                 "验证网络连通性 (网络检测方式: TCP={}, HTTP={}, 网址响应={}, 超时={}s)",
@@ -333,7 +333,7 @@ class TaskExecutor:
                 timeout,
             )
 
-            test_urls = cfg.get("test_urls", None)
+            test_urls = monitor.test_urls or None
 
             result = await asyncio.to_thread(
                 is_network_available,

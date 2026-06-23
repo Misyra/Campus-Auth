@@ -178,6 +178,7 @@ class TaskConfig:
     )  # 用户自定义元数据，执行器不使用
     reveal_hidden: bool = False  # 默认关闭，由每个步骤的 force 降级自动处理隐藏输入框
     step_delay: float = 0.5
+    navigation_wait: float = 1  # 页面加载后额外等待秒数，用于等待 AJAX 初始化
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TaskConfig:
@@ -199,6 +200,7 @@ class TaskConfig:
             metadata=data.get("metadata", {}),
             reveal_hidden=data.get("reveal_hidden", False),
             step_delay=_safe_float(data.get("step_delay"), 0.5),
+            navigation_wait=_safe_float(data.get("navigation_wait"), 1),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -223,6 +225,8 @@ class TaskConfig:
             result["reveal_hidden"] = True
         if self.step_delay != 0.5:
             result["step_delay"] = self.step_delay
+        if self.navigation_wait != 1:
+            result["navigation_wait"] = self.navigation_wait
         return result
 
 
