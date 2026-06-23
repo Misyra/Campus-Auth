@@ -425,6 +425,13 @@ class ScheduleEngine:
             ok, msg = False, "登录超时"
         cmd.response_data = (ok, msg)
 
+    def cancel_login(self) -> tuple[bool, str]:
+        """取消当前正在执行的登录。"""
+        if self._orchestrator is None:
+            return False, "登录服务未初始化"
+        self._orchestrator.cancel_running()
+        return True, "登录已取消"
+
     def _handle_reload(self, cmd: EngineCommand) -> None:
         """重载配置并重启监控（仅在引擎线程中调用）。"""
         was_monitoring = self._is_monitoring
@@ -588,7 +595,7 @@ class ScheduleEngine:
 
     @property
     def login_in_progress(self) -> bool:
-        return self._task_executor.is_login_running()
+        return self._task_executor.is_login_running() if self._task_executor else False
 
     def set_dashboard_sink(self, sink) -> None:
         """注入 DashboardSink，并迁移轻量模式期间积累的广播消息。"""
@@ -868,7 +875,7 @@ class ScheduleEngine:
 
     def has_enabled_tasks(self) -> bool:
         """检查是否存在启用的定时任务（委托）。"""
-        return self._task_executor.has_enabled_tasks()
+        return self._task_executor.has_enabled_tasks() if self._task_executor else False
 
     def sync_scheduler_state(self) -> None:
         """根据是否有启用任务自动启停调度器。"""
