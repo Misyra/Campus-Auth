@@ -1,5 +1,47 @@
 # 修改日志
 
+## 2026-06-23 (6)
+
+### fix: 代码审查报告批量修复（29 个问题）
+
+**Major（7 个）：**
+- [4] `task_executor.py`：`execute_task_async` 队列满时返回带异常的 Future 而非 re-raise
+- [5] `engine.py`：`_handle_login` 异常时将错误信息写入 `cmd.response_data`，不再误报为"超时"
+- [6] `playwright_worker.py`：`_handle_debug_stop` 中 `new_page()` 添加 try/except，失败时重建浏览器
+- [7] `validator.py`：新增 `variables` 字段类型校验（非 dict 则报错）
+- [8] `validator.py`：新增任务级 `timeout` 正数校验
+- [9] `manager.py`：`_find_task_type` 搜索顺序改为 browser 优先，与 `load_task` 一致
+- [10] `profiles.py`：`save_profile`/`delete_profile` 中 `apply_profile` 失败时 message 附加警告
+
+**Minor — 服务/工具层（12 个）：**
+- [11] `config.py`：`FIELD_NAMES` 补充 isp/carrier_custom，`_log_config_changes` 补充新增字段检测
+- [13] `config.py`：`set_source_level` 检查实际生效级别，降级时返回提示
+- [14] `concurrent.py`：`race_first_success` 超时时取消残留 future
+- [15] `concurrent.py`：`future.result()` 添加 try/except 防御，循环后显式 `return False`
+- [16] `probes.py`：`_get_probe_client` 的 `return` 移入锁内
+- [17] `detect.py`：ipconfig 回退增加 `_is_valid_ipv4` 校验
+- [18] `detect.py`：nmcli SSID 解析添加 `\:` 反转义
+- [21] `detect.py`：macOS 网关匹配改为 `startswith("gateway:")`
+- [27] `files.py`：`atomic_write` 中 `os.fdopen` 失败时关闭 fd
+- [28] `crypto.py`：移除 `InvalidSignature` 死代码导入
+- [29] `crypto.py`：密钥长度异常时添加 warning 日志
+- [32] `shell_policy.py`：`run_sync` 超时后调用 `proc.wait()` 回收僵尸进程
+- [33] `logging.py`：`set_level` 写 `_config` 加锁
+
+**Minor — 前端（2 个）：**
+- [23] `config.js`：`saveConfig` 的 `finally` 检查 controller 引用，避免旧请求重置状态
+- [25] `config.js`：`closeEditor` 仅在 `configDirty` 时弹确认框
+
+**Minor — 启动器（1 个）：**
+- [35] `start.go`：`runCommand` 中 `cmd.Wait()` 后调用 `signal.Stop` + `close` 清理 goroutine
+
+**Minor — 测试（4 个）：**
+- [38] `test_engine.py`：补充 `_handle_start.assert_called_once()` 断言
+- [39] `test_network_probes.py`：`test_extra_targets_empty_skip` 添加网络 mock
+- [42] `test_engine.py`：`TestNetworkCheckBackoff` 用 `threading.Event` 替代 `time.sleep`
+- [44] `test_login_flow.py`：多线程计数器改用 `itertools.count()`
+- [45] `test_login_integration_extended.py`：移除 `_capture_login_completion` 未使用的参数
+
 ## 2026-06-23 (5)
 
 ### fix: login_once 未取消旧任务，新旧登录在单 worker 池中串行执行
