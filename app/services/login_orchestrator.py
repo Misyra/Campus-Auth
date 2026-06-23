@@ -220,7 +220,8 @@ class LoginOrchestrator:
             if existing is not None and not existing.done():
                 # login_once 一次性任务，不复用
                 if source == "login_once":
-                    pass  # 落到下方新建分支
+                    logger.info("login_once 取消旧任务(source={})", existing.source)
+                    existing.cancel()
                 # manual 抢占 auto：取消旧的，提交新的
                 elif source == "manual" and existing.source == "auto":
                     logger.info("手动登录抢占自动登录(source={})", existing.source)
