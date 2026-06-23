@@ -358,8 +358,9 @@ class ScheduleEngine:
                     if not is_manual:
                         delay = self._retry_policy.on_login_done(success=False)
                         if delay is None:
-                            # 超过最大重试次数，不再重试
-                            logger.warning("登录重试次数已用尽，停止自动重试")
+                            # 超过最大重试次数，停止检测直到网络恢复
+                            self._next_network_check = float("inf")
+                            logger.warning("登录重试次数已用尽，停止自动重试（等待网络恢复）")
                         else:
                             self._next_network_check = time.time() + delay
                             self._wakeup_event.set()
