@@ -297,7 +297,10 @@ class ScheduleEngine:
             if result.need_login:
                 self._retry_policy.on_network_check(True)
                 if self._retry_policy.retries_exhausted:
-                    self.record_log("网络异常，但登录重试次数已用尽，跳过登录", level="WARNING", source="network")
+                    self.record_log(
+                        "网络异常，登录重试已用尽，下次检测 {}s 后".format(result.interval),
+                        level="WARNING", source="network",
+                    )
                 else:
                     self._do_async_login()
             else:
@@ -361,12 +364,11 @@ class ScheduleEngine:
                         delay = self._retry_policy.on_login_done(success=False)
                         if delay is None:
                             # 超过最大重试次数，不再尝试登录（网络检测继续，恢复后自动重置）
-                            logger.warning("登录重试次数已用尽，等待网络恢复")
+                            logger.warning("登录重试次数已用尽，等待网络恢复（下次检测 {}s 后）", self._monitor_check_interval)
                         else:
                             self._next_network_check = time.time() + delay
                             self._wakeup_event.set()
-                            if delay > 0:
-                                logger.warning("登录连续失败，下次检测推迟 {}s", int(delay))
+                            logger.info("下次重试: {}s 后", int(delay))
             except Exception:
                 logger.exception("登录任务异常")
 
