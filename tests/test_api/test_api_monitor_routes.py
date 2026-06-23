@@ -90,6 +90,26 @@ class TestManualLogin:
         assert resp.json()["success"] is True
 
 
+class TestCancelLogin:
+    """测试 POST /api/actions/cancel-login 端点。"""
+
+    def test_cancel_login_success(self, api_client):
+        test_client, mock_services = api_client
+        mock_services.engine.cancel_login.return_value = (True, "已取消登录")
+        resp = test_client.post("/api/actions/cancel-login")
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+        assert resp.json()["message"] == "已取消登录"
+
+    def test_cancel_login_no_pending(self, api_client):
+        test_client, mock_services = api_client
+        mock_services.engine.cancel_login.return_value = (False, "没有待取消的登录")
+        resp = test_client.post("/api/actions/cancel-login")
+        assert resp.status_code == 200
+        assert resp.json()["success"] is False
+        assert resp.json()["message"] == "没有待取消的登录"
+
+
 class TestTestNetwork:
     """测试 POST /api/actions/test-network 端点。"""
 

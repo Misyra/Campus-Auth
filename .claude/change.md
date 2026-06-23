@@ -2,6 +2,11 @@
 
 ## 2026-06-23
 
+### feat: 新增 POST /api/actions/cancel-login 端点
+
+- `app/api/monitor.py`：在 `manual_login` 端点之后添加 `cancel_login` 端点，调用 `svc.cancel_login()` 返回 `(bool, str)`
+- `tests/test_api/test_api_monitor_routes.py`：新增 `TestCancelLogin` 测试类（2 个测试：成功取消、无待取消登录）
+
 ### feat: engine 新增 cancel_login 方法
 
 - `app/services/engine.py`：在 `_handle_login` 方法之后新增 `cancel_login` 方法，暴露 `LoginOrchestrator.cancel_running()` 给 API 层，用于取消当前正在执行的登录
