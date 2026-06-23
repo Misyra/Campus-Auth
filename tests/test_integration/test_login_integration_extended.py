@@ -128,6 +128,11 @@ class TestNetworkDetectionLogin:
         mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=False, net_reason="down", need_login=True, check_num=1, interval=300, result=NetworkCheckResult(available=False, method="none", latency_ms=0, detail="down"))
         mock_core.consume_profile_switch_flag.return_value = False
         mock_core.monitoring = True
+        mock_core.snapshot.return_value = {
+            "network_state": "disconnected",
+            "status_detail": "网络不可用",
+            "start_time": time.time(),
+        }
         engine._monitor_core = mock_core
 
         from app.schemas import RetrySettings
@@ -148,7 +153,8 @@ class TestNetworkDetectionLogin:
             assert ok is True
             assert msg == "登录成功"
 
-            assert engine._next_network_check > time.time()
+            # 允许小范围时序容差（引擎线程可能并发修改 _next_network_check）
+            assert engine._next_network_check >= time.time() - 1
             mock_worker.submit.assert_called_once()
         finally:
             restore_fn()

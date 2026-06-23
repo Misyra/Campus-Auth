@@ -41,7 +41,7 @@ def _write_initial_config(tmp_path: Path, **overrides) -> None:
             "default": {
                 "name": "默认方案",
                 "username": "testuser",
-                "password": "",  # 测试中按需设置
+                "password": "testpass",
                 "auth_url": "http://10.0.0.1",
                 "carrier": "无",
             }
