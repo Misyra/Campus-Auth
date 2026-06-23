@@ -702,9 +702,11 @@ self.login_orchestrator = LoginOrchestrator(
 
 ---
 
-### BUG-25: 前端 `user_agent` 写死 Chrome 125，后端默认为空
+### ✅ BUG-25: 前端 `user_agent` 写死 Chrome 125，后端默认为空
 
 **来源**: architecture L6
+
+**已修复**: 后端 `BrowserSettings.user_agent` 默认值改为空 Chrome 125 UA，与前端一致。
 
 **相关代码**:
 
@@ -779,14 +781,14 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 | ~~BUG-22~~ | 🟡 P2 | ~~TCP/HTTP 默认值前后不一致~~ | — | — | 已不存在 | ✅ 已清理 |
 | BUG-23 | 🟡 P2 | LoggingSettings.level 无校验 | schemas.py | ~10min | 无效级别静默忽略 | ❌ 未修复 |
 | BUG-24 | 🟡 P2 | 线程池生命周期耦合 | container.py:77-82 | ~30min | 双重 shutdown | ❌ 未修复 |
-| BUG-25 | 🟡 P2 | user_agent 默认值不一致 | constants.js:87 | ~5min | 前端显示与实际不符 | ❌ 未修复 |
+| BUG-25 | 🟡 P2 | user_agent 默认值不一致 | constants.js:87 | ~5min | 前端显示与实际不符 | ✅ 已修复 |
 | BUG-26 | 🟡 P2 | 关键命令静默丢弃 | engine.py:144 | ~30min | 高频场景丢命令 | ❌ 未修复 |
 
 ---
 
 ## 修复进度
 
-**V2 配置架构重构（2026-06-23）已修复 11 个问题**:
+**已修复 12 个问题**:
 - ✅ BUG-01: proxy/app_port 幽灵字段
 - ✅ BUG-02: ISP 映射不一致
 - ✅ BUG-03: 启动诊断永远显示空
@@ -797,10 +799,11 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 - ✅ BUG-16: config_version 不一致
 - ✅ BUG-19: 双重磁盘读取
 - ✅ BUG-22: TCP/HTTP 默认值不一致（已清理）
+- ✅ BUG-25: user_agent 默认值不一致
 
-**剩余 16 个问题待修复**（按优先级）:
+**剩余 15 个问题待修复**（按优先级）:
 - P1: BUG-05/06/07/09/10/11/21
-- P2: BUG-14/15/17/18/20/23/24/25/26
+- P2: BUG-14/15/17/18/20/23/24/26
 
 **第二批（P1，核心功能缺陷）**:
 1. BUG-05 + BUG-21: _handle_login 非阻塞化（关联修复）
