@@ -216,7 +216,7 @@ class BrowserSettings(BaseModel, frozen=True):
     timeout: int = Field(default=8, ge=1, le=60)
     navigation_timeout: int = Field(default=15, ge=3, le=60)
     login_timeout: int = Field(default=90, ge=10, le=600)
-    user_agent: str = ""
+    user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
     low_resource_mode: bool = False
     disable_web_security: bool = False
     extra_headers_json: str = ""
