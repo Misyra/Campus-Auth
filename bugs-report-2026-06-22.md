@@ -221,9 +221,11 @@ except TimeoutError:
 
 ---
 
-### BUG-06: `_handle_apply_profile` 忽略传入的 `profile_id`
+### ✅ BUG-06: `_handle_apply_profile` 忽略传入的 `profile_id`
 
 **来源**: architecture H5
+
+**已修复**: `_handle_apply_profile` 内部调用 `set_active_profile(profile_id)`，不再依赖调用方先 set。API 层删除冗余的 `set_active_profile` 调用。
 
 **相关代码**:
 
@@ -776,7 +778,7 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 | BUG-03 | 🔴 P0 | 启动诊断永远显示空 | application.py:140, engine.py:620 | ~15min | 诊断信息无意义 | ✅ 已修复 |
 | BUG-04 | 🟠 P1 | login_timeout 读错配置源 | engine.py:411 | ~5min | 超时值可能不对 | ✅ 误报+已修复 |
 | BUG-05 | 🟠 P1 | _handle_login 阻塞引擎 | engine.py:411-416 | ~4h | 登录期间所有命令卡死 | ⚠️ 已缓解 |
-| BUG-06 | 🟠 P1 | apply_profile 忽略 profile_id | engine.py:436-445 | ~30min | 隐式契约脆弱 | ❌ 未修复 |
+| BUG-06 | 🟠 P1 | apply_profile 忽略 profile_id | engine.py:436-445 | ~30min | 隐式契约脆弱 | ✅ 已修复 |
 | BUG-07 | 🟠 P1 | container 私有属性篡改 | container.py:77-87 | ~2h | 启动竞态窗口 | ✅ 已修复 |
 | BUG-08 | 🟠 P1 | FIELD_NAMES 键名错误 | api/config.py:144 | ~5min | 变更日志显示错误名称 | ✅ 已修复 |
 | BUG-09 | 🟠 P1 | source_levels 覆盖竞态 | config_service.py:97-103 | ~30min | 日志级别被意外重置 | ⚪️ 可忽略 |
@@ -802,11 +804,12 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 
 ## 修复进度
 
-**已修复 15 个问题**:
+**已修复 16 个问题**:
 - ✅ BUG-01: proxy/app_port 幽灵字段
 - ✅ BUG-02: ISP 映射不一致
 - ✅ BUG-03: 启动诊断永远显示空
 - ✅ BUG-04: login_timeout 读错配置源（误报+已修复）
+- ✅ BUG-06: apply_profile 忽略 profile_id
 - ✅ BUG-07: container 私有属性篡改
 - ✅ BUG-08: FIELD_NAMES 键名错误
 - ✅ BUG-10: script_timeout 前端缺失
@@ -823,12 +826,10 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 - ⚠️ BUG-21: 超时后命令积压（随 BUG-05 缓解）
 - ⚠️ BUG-26: 关键命令静默丢弃（随 BUG-05 缓解）
 
-**剩余 8 个问题待修复**（按优先级）:
-- P1: BUG-06
+**剩余 7 个问题待修复**（按优先级）:
 - P2: BUG-14/15/17/18/20/23/24
 
-**第二批（P1）**:
-1. BUG-06: apply_profile 自包含
+**第二批（P1）**: ✅ 已全部修复
 
 **第三批（P2，设计改进）**:
 2. BUG-14/15: schemas 类型约束
