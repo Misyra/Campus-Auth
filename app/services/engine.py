@@ -365,6 +365,12 @@ class ScheduleEngine:
             )
             return
 
+        # 统一验证配置（确保所有路径都经过验证）
+        valid, error = ConfigValidator.validate_env_config(self._runtime_config)
+        if not valid:
+            self.record_log(f"配置无效，无法启动监控: {error}", level="ERROR", source="backend")
+            return
+
         config = self._runtime_config
         pure_mode = cmd.data.get("pure_mode", self.pure_mode)
         if pure_mode:
@@ -693,6 +699,7 @@ class ScheduleEngine:
             if self._is_monitoring:
                 return False, "监控已在运行中"
 
+            # 提前验证，立即返回错误信息（_handle_start 中也会验证）
             valid, error = ConfigValidator.validate_env_config(self._runtime_config)
             if not valid:
                 return False, f"配置无效: {error}"

@@ -118,6 +118,7 @@ export const DEFAULT_CONFIG = {
       "http://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test",
       "http://detectportal.firefox.com/success.txt|success",
     ],
+    script_timeout: 60,
   },
   pause: {
     enabled: true,
