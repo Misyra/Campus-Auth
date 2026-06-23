@@ -553,7 +553,14 @@ class PlaywrightWorker:
                 ss_dir.mkdir(parents=True, exist_ok=True)
                 local_path = str(ss_dir / filename)
                 await self._debug_page.screenshot(path=local_path, full_page=True)
-                screenshot_url = f"/temp/{filename}"
+                # 计算相对于 temp 目录的子路径，确保 URL 与实际存储路径一致
+                from app.constants import TEMP_DIR
+
+                try:
+                    rel = ss_dir.relative_to(TEMP_DIR)
+                    screenshot_url = f"/temp/{rel}/{filename}" if str(rel) != "." else f"/temp/{filename}"
+                except ValueError:
+                    screenshot_url = f"/temp/{filename}"
             except Exception as e:
                 logger.warning("初始截图失败: {}", e)
 
