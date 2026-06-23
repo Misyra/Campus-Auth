@@ -297,10 +297,10 @@ class ScheduleEngine:
             if result.need_login:
                 self._retry_policy.on_network_check(True)
                 if self._retry_policy.retries_exhausted:
-                    self.record_log(
-                        "网络异常，登录重试已用尽，下次检测 {}s 后".format(result.interval),
-                        level="WARNING", source="network",
-                    )
+                    # 一个检测周期已过，重置重试计数，允许下一轮重试
+                    self._retry_policy.reset()
+                    self.record_log("网络异常，重置重试计数，开始新一轮登录", level="WARNING", source="network")
+                    self._do_async_login()
                 else:
                     self._do_async_login()
             else:
