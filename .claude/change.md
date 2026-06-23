@@ -6,7 +6,7 @@
 
 - `app/services/task_executor.py`：移除冗余的 `_login_pool`（登录逻辑已委托 LoginOrchestrator）；`login_orchestrator` 参数改为必填
 - `app/container.py`：调整创建顺序（先 LoginOrchestrator 后 TaskExecutor）；移除 `_login_pool`、`_login_orchestrator`、`_orchestrator` 私有属性访问
-- `app/services/engine.py`：新增 `set_orchestrator()` 公共方法，替代直接写入 `_orchestrator`
+- `app/services/engine.py`：新增 `set_orchestrator()` 和 `set_task_executor()` 公共方法，替代直接写入私有属性
 - `app/services/login_orchestrator.py`：更新注释，移除"共享线程池"说明
 - `tests/test_services/test_task_executor_fix.py`：更新 `test_shutdown_with_task_pool` 测试
 - `docs/login.md`：更新依赖注入示例代码

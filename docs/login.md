@@ -1,7 +1,7 @@
 # Campus-Auth 登录链路架构文档
 
-> **更新日期**: 2026-06-20
-> **基于**: 登录链路重构 + LoginRetryManager 清理 + CompositeCancelEvent 替代
+> **更新日期**: 2026-06-23
+> **基于**: 登录链路重构 + LoginRetryManager 清理 + CompositeCancelEvent 替代 + BUG-07 私有属性修复
 > **前置文档**: 本文档替代旧版 `login.md`
 
 ---
@@ -325,14 +325,14 @@ class CompositeCancelEvent(threading.Event):
 
 ## 六、TaskExecutor 委托层
 
-TaskExecutor 登录逻辑完全委托 Orchestrator，自身只保留线程池与定时任务：
+TaskExecutor 登录逻辑完全委托 Orchestrator，自身只保留任务线程池与定时任务：
 
 ```python
 class TaskExecutor:
     def __init__(self, registry, history_store, worker_getter,
-                 get_runtime_config=None, login_orchestrator=None):
+                 login_orchestrator, get_runtime_config=None):
         self._login_orchestrator = login_orchestrator
-        # 登录历史由 Orchestrator 管理，TaskExecutor 不再持有
+        # 登录历史和登录线程池由 Orchestrator 管理，TaskExecutor 不再持有
 
     def execute_login_async(self, cancel_event=None, config_snapshot=None) -> Future:
         handle = self._login_orchestrator.submit(source="auto", ...)
@@ -359,11 +359,10 @@ class TaskExecutor:
 ### 依赖注入（container.py）
 
 ```python
-self.task_executor = TaskExecutor(
-    registry=..., history_store=..., worker_getter=_get_worker,
-)
+# 1. 创建引擎
 self.engine = ScheduleEngine(...)
 
+# 2. 创建 LoginOrchestrator（自行管理登录线程池）
 self.login_orchestrator = LoginOrchestrator(
     worker_getter=_get_worker,
     login_history=self.login_history_service,
@@ -372,8 +371,11 @@ self.login_orchestrator = LoginOrchestrator(
 )
 self.engine.set_orchestrator(self.login_orchestrator)
 
+# 3. 创建 TaskExecutor（传入 login_orchestrator，必填）
 self.task_executor = TaskExecutor(
-    ...,
+    registry=...,
+    history_store=...,
+    worker_getter=_get_worker,
     login_orchestrator=self.login_orchestrator,
 )
 ```
@@ -397,6 +399,7 @@ self.task_executor = TaskExecutor(
 | — | LoginRetryManager 双轨运行 | 完全删除，MonitoredPolicy 统一管理 | ✅ |
 | — | engine.py 死代码 | 删除 _validate_login_config、_configure_retry | ✅ |
 | — | TaskExecutor 死代码 | 删除 _legacy_*、_record_login_history、死参数 | ✅ |
+| BUG-07 | container.py 私有属性篡改 | 移除 _login_pool；login_orchestrator 改为必填；engine.set_orchestrator() | ✅ |
 
 ---
 
@@ -406,6 +409,7 @@ self.task_executor = TaskExecutor(
 - 单一入口：所有登录路径通过 `Orchestrator.submit()` 统一进入
 - 策略分离：重试策略（RetryPolicy）与执行逻辑（Orchestrator）解耦
 - 无线程：CompositeCancelEvent 惰性扫描替代 watcher 线程
-- 最小化：TaskExecutor 只保留线程池 + 定时任务，登录相关字段全部移交
+- 最小化：TaskExecutor 只保留任务线程池 + 定时任务，登录相关字段全部移交
+- 封装清晰：依赖通过构造函数注入，无私有属性访问
 
 **遗留项**：无

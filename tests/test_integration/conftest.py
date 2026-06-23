@@ -99,6 +99,7 @@ def integration_stack(tmp_path, mock_worker):
         worker_getter=lambda: mock_worker,
         login_orchestrator=orchestrator,
     )
+    engine.set_task_executor(task_executor)
     task_executor.set_runtime_config_getter(engine.get_runtime_config)
 
     # 启动引擎线程
@@ -149,6 +150,7 @@ def full_stack(tmp_path, mock_worker):
         worker_getter=lambda: mock_worker,
         login_orchestrator=orchestrator,
     )
+    engine.set_task_executor(task_executor)
     task_executor.set_runtime_config_getter(engine.get_runtime_config)
 
     # 启动引擎线程

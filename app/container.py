@@ -78,6 +78,7 @@ class ServiceContainer:
             worker_getter=_get_worker,
             login_orchestrator=self.login_orchestrator,
         )
+        self.engine.set_task_executor(self.task_executor)
 
         # 延迟绑定：TaskExecutor 通过引擎获取运行时配置
         self.task_executor.set_runtime_config_getter(self.engine.get_runtime_config)

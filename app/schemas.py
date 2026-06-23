@@ -228,7 +228,7 @@ class BrowserSettings(BaseModel, frozen=True):
     viewport_width: int = Field(default=1280, ge=320, le=3840)
     viewport_height: int = Field(default=720, ge=240, le=2160)
     pure_mode: bool = True
-    browser_channel: str = "msedge"
+    browser_channel: BrowserChannel = BrowserChannel.MSEdge
     browser_custom_path: str = ""
     custom_browser_engine: str = "auto"
 

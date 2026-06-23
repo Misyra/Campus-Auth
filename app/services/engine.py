@@ -166,6 +166,10 @@ class ScheduleEngine:
         """设置登录编排器（公共接口）。"""
         self._orchestrator = orchestrator
 
+    def set_task_executor(self, task_executor) -> None:
+        """设置任务执行器（公共接口）。"""
+        self._task_executor = task_executor
+
     # ── 队列入队辅助 ──
 
     def _enqueue(self, cmd: EngineCommand) -> bool:
