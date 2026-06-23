@@ -1,5 +1,23 @@
 # 修改日志
 
+## 2026-06-23 (8)
+
+### fix: 代码审查修复（6 个问题）
+
+- `app/tasks/browser_runner.py`：`wait_for_selector` 排除 `type='hidden'` 的 input，避免 SPA 门户 hidden input 导致表单就绪误判
+- `app/tasks/step_handlers.py`：`_select_with_fallback` 空白字符串 value 时提前返回，避免 `"" in "anything"` 恒真导致误匹配
+- `app/tasks/step_handlers.py`：`_FORCE_INPUT_JS` OcrHandler 强制输入从追加改为覆盖，防止验证码残留拼接
+- `app/tasks/step_handlers.py`：`_click_option` trigger 父容器未命中时回退到全局搜索，支持 Portal 框架的下拉面板
+- `app/tasks/manager.py`：`delete_task` 先 normalize 再检查 `"default"`，防止带空格的 task_id 绕过保护
+- `pyproject.toml`：Python 版本限制为 `>=3.12,<3.13`
+- 新增 2 个测试覆盖 `_click_option` 的 trigger 分支和全局回退
+
+## 2026-06-23 (7)
+
+### fix: read_pid_file 缺失 create_time 时视为无效，防止 PID 复用误判
+
+- `app/utils/process.py`：`read_pid_file` 增加 `create_time` 必须存在的校验，缺失则返回 None。`write_pid` 始终写入 `create_time`，所以仅影响手动编辑或旧版本的 PID 文件
+
 ## 2026-06-23 (6)
 
 ### fix: 代码审查报告批量修复（29 个问题）
