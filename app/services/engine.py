@@ -10,7 +10,7 @@ NOT-TO-DO: 不要拆分此文件。ScheduleEngine 是调度核心，职责清晰
 from __future__ import annotations
 
 import contextlib
-from concurrent.futures import Future
+from concurrent.futures import CancelledError, Future
 import json
 import queue
 import re
@@ -238,7 +238,7 @@ class ScheduleEngine:
         return min(candidates)
 
     def _process_command(self, cmd: EngineCommand) -> None:
-        """处理一个命令。"""
+        """处理一个命令。response_event 由各处理器自行触发。"""
         try:
             if cmd.type == EngineCmdType.START:
                 self._handle_start(cmd)
@@ -254,9 +254,12 @@ class ScheduleEngine:
                 self._handle_apply_profile(cmd)
         except Exception:
             logger.exception("命令执行失败: {}", cmd.type)
-        finally:
+            # 异常兜底：必须触发 response_event，否则调用方永远阻塞
             if cmd.response_event:
+                if cmd.response_data is None:
+                    cmd.response_data = (False, f"命令执行异常: {cmd.type}")
                 cmd.response_event.set()
+        finally:
             self._cmd_queue.task_done()
 
     def _do_network_check(self) -> None:
@@ -363,12 +366,16 @@ class ScheduleEngine:
                 level="WARNING",
                 source="backend",
             )
+            if cmd.response_event:
+                cmd.response_event.set()
             return
 
         # 统一验证配置（确保所有路径都经过验证）
         valid, error = ConfigValidator.validate_env_config(self._runtime_config)
         if not valid:
             self.record_log(f"配置无效，无法启动监控: {error}", level="ERROR", source="backend")
+            if cmd.response_event:
+                cmd.response_event.set()
             return
 
         config = self._runtime_config
@@ -389,11 +396,15 @@ class ScheduleEngine:
         self._next_network_check = time.time()  # 立即执行第一次检测
         self._update_status_snapshot(force=True)
         self.record_log("监控已启动", level="INFO", source="backend")
+        if cmd.response_event:
+            cmd.response_event.set()
 
     def _handle_stop(self, cmd: EngineCommand | None = None) -> None:
         """停止监控。"""
         core = self._monitor_core
         if core is None:
+            if cmd and cmd.response_event:
+                cmd.response_event.set()
             return
 
         core.stop_monitoring()
@@ -402,34 +413,47 @@ class ScheduleEngine:
 
         self.record_log("监控已停止", level="INFO", source="backend")
         self._update_status_snapshot(force=True)
+        if cmd and cmd.response_event:
+            cmd.response_event.set()
 
     def _handle_shutdown(self, cmd: EngineCommand) -> None:
         """处理关闭命令。"""
         self._handle_stop()
 
     def _handle_login(self, cmd: EngineCommand) -> None:
-        """执行一次性登录（手动触发，等待完成）。"""
+        """执行一次性登录（手动触发，异步等待完成）。
+
+        提交登录任务后立即返回，由 done_callback 通知 API 线程结果。
+        引擎线程不再阻塞，可继续处理 STOP/RELOAD/SHUTDOWN 等命令。
+        """
         err = self._orchestrator.validate(self._runtime_config)
         if err is not None:
             cmd.response_data = (False, err)
+            cmd.response_event.set()
             return
 
         handle = self._orchestrator.submit(source="manual", config=self._runtime_config)
         if handle.rejected_reason is not None:
             cmd.response_data = (False, handle.rejected_reason)
+            cmd.response_event.set()
             return
         if handle.future is None:
             cmd.response_data = (False, "登录任务已在执行中，请稍后再试")
+            cmd.response_event.set()
             return
 
-        # 等待登录实际完成（添加超时，防止引擎线程死锁）
-        login_timeout = self._runtime_config.browser.login_timeout
-        worker_timeout = max(login_timeout, 60)
-        try:
-            ok, msg = handle.result(timeout=worker_timeout + 60)
-        except TimeoutError:
-            ok, msg = False, "登录超时"
-        cmd.response_data = (ok, msg)
+        # 非阻塞：注册回调，由回调通知 API 线程
+        def _on_login_done(f: Future) -> None:
+            try:
+                ok, msg = f.result()
+            except CancelledError:
+                ok, msg = False, "登录已取消"
+            except Exception as e:
+                ok, msg = False, f"登录异常: {e}"
+            cmd.response_data = (ok, msg)
+            cmd.response_event.set()
+
+        handle.future.add_done_callback(_on_login_done)
 
     def cancel_login(self) -> tuple[bool, str]:
         """取消当前正在执行的登录。"""
@@ -446,6 +470,8 @@ class ScheduleEngine:
         if not self._reload_config_internal():
             logger.error("配置重载失败，监控继续使用旧配置运行")
             cmd.response_data = (False, "配置重载失败")
+            if cmd.response_event:
+                cmd.response_event.set()
             return
 
         # 仅当重载成功且之前处于监控状态时，才执行 stop/start
@@ -454,6 +480,8 @@ class ScheduleEngine:
             self._handle_start(EngineCommand(type=EngineCmdType.START))
         logger.info("配置已重载")
         cmd.response_data = (True, "配置重载成功")
+        if cmd.response_event:
+            cmd.response_event.set()
 
     def _handle_apply_profile(self, cmd: EngineCommand) -> None:
         """切换方案并重启监控（仅在引擎线程中调用）。
@@ -467,12 +495,16 @@ class ScheduleEngine:
         ok, msg = self._profile_service.set_active_profile(profile_id)
         if not ok:
             cmd.response_data = (False, msg)
+            if cmd.response_event:
+                cmd.response_event.set()
             return
 
         # 加载新配置
         if not self._reload_config_internal():
             logger.error("配置重载失败，监控继续使用旧方案运行")
             cmd.response_data = (False, "方案切换失败")
+            if cmd.response_event:
+                cmd.response_event.set()
             return
 
         # 直接用 profile_id 记录日志，避免重复 load
@@ -490,6 +522,8 @@ class ScheduleEngine:
                 source="backend",
             )
         cmd.response_data = (True, "方案切换成功")
+        if cmd.response_event:
+            cmd.response_event.set()
 
     # ── 日志 / 状态快照桥接 ──
 

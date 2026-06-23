@@ -153,8 +153,9 @@ export const configMethods = {
   resetConfig() {
     if (!confirm('确定要恢复默认设置吗？当前修改将丢失。')) return;
     this.config = structuredClone(DEFAULT_CONFIG);
-    this._lastSavedConfig = null;  // 重置快照，configDirty 会自动检测到变更
+    this._lastSavedConfig = null;
     this.frontendLogger.info('config', '已恢复默认设置');
+    this.saveConfig();
   },
   onShellFileSelected(e) {
     const file = e.target.files?.[0];
@@ -288,7 +289,13 @@ export const configMethods = {
   async fetchLogLevels() {
     try {
       const { data } = await this.$api.get('/api/config/log-levels');
-      this.logLevels = data;
+      // 统一更新到 config.logging，不再使用独立的 logLevels
+      if (data.global_level) {
+        this.config.logging.level = data.global_level;
+      }
+      if (data.source_levels) {
+        this.config.logging.source_levels = data.source_levels;
+      }
     } catch (error) {
       this.frontendLogger.warn('config', '获取日志级别配置失败', error);
     }
@@ -296,7 +303,14 @@ export const configMethods = {
   async setSourceLevel(source, level) {
     try {
       await this.$api.put('/api/config/source-level', { source, level });
-      this.logLevels.source_levels[source] = level;
+      if (source === 'global') {
+        this.config.logging.level = level;
+      } else {
+        if (!this.config.logging.source_levels) {
+          this.config.logging.source_levels = {};
+        }
+        this.config.logging.source_levels[source] = level;
+      }
       this.frontendLogger.info('config', `已设置 ${source} 级别为 ${level}`);
       this.toastOnly(true, `已设置 ${source} 级别为 ${level}`);
     } catch (error) {

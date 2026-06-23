@@ -87,7 +87,10 @@ class TestFullEngineLoginChain:
         )
         engine._handle_login(cmd)
 
-        # _handle_login 现在等待完成，直接返回登录结果
+        # 异步模式：等待回调完成
+        assert cmd.response_event.wait(timeout=10), "登录回调未在超时内完成"
+
+        # _handle_login 通过回调返回登录结果
         assert cmd.response_data == (True, "登录成功")
 
         # worker.submit 被调且传入了正确的第一个参数
@@ -109,7 +112,10 @@ class TestFullEngineLoginChain:
         )
         engine._handle_login(cmd)
 
-        # _handle_login 现在等待完成，直接返回登录结果
+        # 异步模式：等待回调完成
+        assert cmd.response_event.wait(timeout=10), "登录回调未在超时内完成"
+
+        # _handle_login 通过回调返回登录结果
         assert cmd.response_data == (False, "认证失败")
 
         mock_worker.submit.assert_called_once()
@@ -167,11 +173,13 @@ class TestNetworkDetectionLogin:
             success=False, error="认证失败"
         )
 
-        # 第一次登录（手动触发，_handle_login 等待完成）
+        # 第一次登录（手动触发，异步等待回调）
         cmd = EngineCommand(
             type=EngineCmdType.LOGIN, response_event=threading.Event()
         )
         engine._handle_login(cmd)
+        # 异步模式：等待回调完成
+        assert cmd.response_event.wait(timeout=10), "登录回调未在超时内完成"
         assert cmd.response_data == (False, "认证失败")
 
         # 模拟重试状态：一次失败后

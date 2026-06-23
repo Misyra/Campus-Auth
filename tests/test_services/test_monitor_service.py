@@ -370,8 +370,8 @@ class TestHandleLogin:
         svc._orchestrator.validate.return_value = None
         handle = MagicMock()
         handle.rejected_reason = None
-        handle.future = MagicMock()
-        handle.result.return_value = (True, "登录成功")
+        mock_future = Future()
+        handle.future = mock_future
         svc._orchestrator.submit.return_value = handle
 
         # 提供有效配置，否则 _handle_login 会拒绝
@@ -382,7 +382,9 @@ class TestHandleLogin:
         )
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
-        # 同步模式：等待完成后返回登录结果
+        # 异步模式：模拟登录完成，触发回调
+        mock_future.set_result((True, "登录成功"))
+        cmd.response_event.wait(timeout=2)
         assert cmd.response_data == (True, "登录成功")
 
     def test_handle_login_no_config_returns_false(self):

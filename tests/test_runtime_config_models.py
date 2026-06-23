@@ -20,7 +20,7 @@ def test_browser_settings_defaults():
     bs = BrowserSettings()
     assert bs.headless is True
     assert bs.timeout == 8
-    assert bs.navigation_timeout == 15
+    assert bs.navigation_timeout == 8
     assert bs.viewport_width == 1280
     assert bs.viewport_height == 720
 

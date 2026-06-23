@@ -48,12 +48,17 @@ def save_global_and_profile(
 
     def _apply(data: ProfilesData):
         # 1. 更新全局配置
+        # 保留磁盘上已有的 source_levels，避免被 payload 中的陈旧值覆盖
+        # （source_levels 通过 /api/config/source-level 即时修改，与主配置保存独立）
+        persisted_source_levels = data.global_config.logging.source_levels
+        logging = payload.logging.model_copy(update={"source_levels": persisted_source_levels})
+
         data.global_config = GlobalConfig(
             browser=payload.browser,
             monitor=payload.monitor,
             retry=payload.retry,
             pause=payload.pause,
-            logging=payload.logging,
+            logging=logging,
             block_proxy=payload.block_proxy,
             shell_path=payload.shell_path,
             minimize_to_tray=payload.minimize_to_tray,

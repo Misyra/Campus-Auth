@@ -43,12 +43,16 @@ def test_handle_login_uses_validated_config():
     engine._orchestrator.validate.return_value = None
     mock_handle = MagicMock()
     mock_handle.rejected_reason = None
-    mock_handle.future = MagicMock()
-    mock_handle.result.return_value = (True, "登录成功")
+    from concurrent.futures import Future
+    mock_future = Future()
+    mock_handle.future = mock_future
     engine._orchestrator.submit.return_value = mock_handle
 
-    cmd = EngineCommand(type=EngineCmdType.LOGIN, data={})
+    cmd = EngineCommand(type=EngineCmdType.LOGIN, data={}, response_event=threading.Event())
     engine._handle_login(cmd)
+    # 异步模式：模拟登录完成，触发回调
+    mock_future.set_result((True, "登录成功"))
+    cmd.response_event.wait(timeout=2)
 
     # orchestrator.submit 应收到正确的 source 和 config（RuntimeConfig 格式）
     submitted_config = engine._orchestrator.submit.call_args[1]["config"]

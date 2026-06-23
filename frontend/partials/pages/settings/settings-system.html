@@ -35,7 +35,7 @@
             <span class="field-help" tabindex="0" role="note" data-tip="设置所有日志来源的默认级别。低于该级别的日志将被过滤。">?</span>
           </div>
           <custom-select
-            v-model="logLevels.global_level"
+            v-model="config.logging.level"
             :options="logLevelOptions"
             @change="(val) => { setSourceLevel('global', val); onConfigChange('log_level', val, 'toggle'); }"
           ></custom-select>

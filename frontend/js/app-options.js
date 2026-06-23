@@ -52,7 +52,7 @@ export const appOptions = {
       // 全局共享状态
       settingsTabs: SETTINGS_TABS,
       carrierOptions: [
-        { value: '无', label: '无' },
+        { value: '', label: '无' },
         { value: '移动', label: '移动' },
         { value: '联通', label: '联通' },
         { value: '电信', label: '电信' },
