@@ -340,6 +340,7 @@ class GlobalConfig(BaseModel):
     auto_open_browser: bool = False
     proxy: str = ""
     app_port: int = Field(default=50721, ge=1, le=65535)
+    custom_variables: dict[str, str] = Field(default_factory=dict)
 
 
 class ConfigResponseDTO(BaseModel):
@@ -369,6 +370,7 @@ class ConfigResponseDTO(BaseModel):
     auto_open_browser: bool = False
     proxy: str = ""
     app_port: int = 50721
+    custom_variables: dict[str, str] = Field(default_factory=dict)
 
 
 class ProfilesData(BaseModel):

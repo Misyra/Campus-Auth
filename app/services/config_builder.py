@@ -47,7 +47,7 @@ class ConfigBuilder:
             logging=global_config.logging,
             credentials=credentials,
             active_task=profile.active_task.strip(),
-            custom_variables={},
+            custom_variables=global_config.custom_variables,
             block_proxy=global_config.block_proxy,
             shell_path=global_config.shell_path,
             minimize_to_tray=global_config.minimize_to_tray,

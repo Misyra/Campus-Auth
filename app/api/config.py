@@ -90,6 +90,7 @@ def get_config(
         auto_open_browser=cfg.auto_open_browser,
         proxy=cfg.proxy,
         app_port=cfg.app_port,
+        custom_variables=cfg.custom_variables,
     )
 
 
@@ -161,7 +162,12 @@ def _log_config_changes(old_dict: dict, new_payload: ConfigResponseDTO) -> None:
     IGNORE_FIELDS = {"password"}
 
     # BUG-005 修复：扁平化嵌套字典后再比较
-    flat_old = _flatten_dict(old_dict)
+    # old_dict 来自 RuntimeConfig（credentials 嵌套），new_payload 来自 ConfigResponseDTO（扁平）
+    # 需要将 old_dict 的 credentials 扁平化到顶层后再比较
+    _old = dict(old_dict)
+    _old_creds = _old.pop("credentials", {})
+    _old.update(_old_creds)
+    flat_old = _flatten_dict(_old)
     flat_new = _flatten_dict(new_payload.model_dump())
 
     changes = []

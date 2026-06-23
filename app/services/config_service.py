@@ -63,6 +63,7 @@ def save_global_and_profile(
             auto_open_browser=payload.auto_open_browser,
             proxy=payload.proxy,
             app_port=payload.app_port,
+            custom_variables=payload.custom_variables,
         )
 
         # 2. 更新活跃方案的凭据

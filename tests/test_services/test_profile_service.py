@@ -259,12 +259,12 @@ class TestMigrateV3ToV4:
 
         result = migrate_v3_to_v4(v3_data)
 
-        # custom_variables 应被移除
-        assert "custom_variables" not in result["global_config"]
+        # custom_variables 保留（属于用户配置）
+        assert result["global_config"]["custom_variables"] == {"key1": "value1"}
         assert result["global_config"]["logging"]["level"] == "INFO"
 
     def test_migrate_strips_all_runtime_fields(self):
-        """所有运行时字段（credentials, active_task, custom_variables）都被剥离"""
+        """运行时字段（credentials, active_task）被剥离，custom_variables 保留"""
         v3_data = {
             "config": {
                 "logging": {"level": "DEBUG"},
@@ -281,7 +281,7 @@ class TestMigrateV3ToV4:
 
         assert "credentials" not in result["global_config"]
         assert "active_task" not in result["global_config"]
-        assert "custom_variables" not in result["global_config"]
+        assert result["global_config"]["custom_variables"] == {"env": "production"}
         # 非运行时字段应保留
         assert result["global_config"]["logging"]["level"] == "DEBUG"
         assert result["global_config"]["browser"]["headless"] is False
