@@ -113,7 +113,7 @@ export const configMethods = {
         password: c.credentials.password || '',
         auth_url: c.credentials.auth_url || '',
         isp: c.credentials.isp || '',
-        carrier_custom: c.credentials.isp === '自定义' ? (c.credentials.carrier_custom || '') : '',
+        carrier_custom: c.credentials.carrier_custom || '',
         active_task: c.active_task || '',
         custom_variables: c.custom_variables || {},
         block_proxy: c.block_proxy,

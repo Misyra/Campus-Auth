@@ -50,13 +50,6 @@ class ServiceContainer:
 
             return get_worker()
 
-        # 任务执行器（轻量模式仅用于登录，完整模式支持定时任务）
-        self.task_executor = TaskExecutor(
-            registry=self.task_registry,
-            history_store=self.task_history_store,
-            worker_getter=_get_worker,
-        )
-
         # 统一引擎（替代 MonitorService + SchedulerService）
         self.engine = ScheduleEngine(
             project_root,
@@ -65,13 +58,9 @@ class ServiceContainer:
             login_history_service=self.login_history_service,
             worker_getter=_get_worker,
             task_registry=self.task_registry,
-            task_executor=self.task_executor,
         )
 
-        # 延迟绑定：TaskExecutor 通过引擎获取运行时配置
-        self.task_executor.set_runtime_config_getter(self.engine.get_runtime_config)
-
-        # 注入 LoginOrchestrator — 登录执行的唯一入口
+        # 注入 LoginOrchestrator — 登录执行的唯一入口（自行管理线程池）
         from app.services.login_orchestrator import LoginOrchestrator
 
         self.login_orchestrator = LoginOrchestrator(
@@ -79,12 +68,19 @@ class ServiceContainer:
             login_history=self.login_history_service,
             profile_service=self.profile_service,
             get_runtime_config=self.engine.get_runtime_config,
-            pool=self.task_executor._login_pool,
         )
-        # TaskExecutor 复用 Orchestrator
-        self.task_executor._login_orchestrator = self.login_orchestrator
-        # engine 持有引用（后续 Task 7 使用）
-        self.engine._orchestrator = self.login_orchestrator
+        self.engine.set_orchestrator(self.login_orchestrator)
+
+        # 任务执行器（轻量模式仅用于登录，完整模式支持定时任务）
+        self.task_executor = TaskExecutor(
+            registry=self.task_registry,
+            history_store=self.task_history_store,
+            worker_getter=_get_worker,
+            login_orchestrator=self.login_orchestrator,
+        )
+
+        # 延迟绑定：TaskExecutor 通过引擎获取运行时配置
+        self.task_executor.set_runtime_config_getter(self.engine.get_runtime_config)
 
         self._ws_drain_task: asyncio.Task | None = None
         self._log_handler_id: int | None = None

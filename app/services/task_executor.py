@@ -1,10 +1,8 @@
 """TaskExecutor — 任务执行中心。
 
-双线程池架构：
-- login_pool(1) — 登录专用，永不阻塞
+线程池架构：
 - task_pool(2, queue=10, 懒初始化) — 定时任务，BoundedExecutor 限制队列
-
-登录逻辑委托 LoginOrchestrator。
+- 登录逻辑委托 LoginOrchestrator（自行管理登录线程池）
 """
 
 from __future__ import annotations
@@ -69,12 +67,11 @@ class BoundedExecutor:
 
 
 class TaskExecutor:
-    """任务执行中心 — 双线程池 + 登录委托。
+    """任务执行中心 — 任务线程池 + 登录委托。
 
     Attributes:
-        _login_pool: 登录专用线程池（1 个工作线程，立即创建）
         _task_pool: 定时任务线程池（懒初始化，无定时任务时不创建）
-        _login_orchestrator: 登录编排器（由 container 注入）
+        _login_orchestrator: 登录编排器（由 container 注入，必填）
     """
 
     def __init__(
@@ -82,8 +79,8 @@ class TaskExecutor:
         registry: Any,
         history_store: Any,
         worker_getter: Callable,
+        login_orchestrator: Any,
         get_runtime_config: Callable[[], RuntimeConfig] | None = None,
-        login_orchestrator: Any = None,
     ) -> None:
         self._registry = registry
         self._history_store = history_store
@@ -91,11 +88,7 @@ class TaskExecutor:
         self._get_runtime_config = get_runtime_config
         self._login_orchestrator = login_orchestrator
 
-        # 线程池：登录池立即创建，任务池懒初始化（无定时任务时不创建线程）
-        self._login_pool = ThreadPoolExecutor(
-            max_workers=1,
-            thread_name_prefix="login-exec",
-        )
+        # 线程池：任务池懒初始化（无定时任务时不创建线程）
         self._task_pool: BoundedExecutor | None = None
         self._task_pool_lock = threading.Lock()
 
@@ -399,7 +392,6 @@ class TaskExecutor:
         logger.info("TaskExecutor 开始关闭...")
         if self._task_pool is not None:
             self._task_pool.shutdown(wait=wait)
-        self._login_pool.shutdown(wait=wait)
         with self._running_tasks_lock:
             self._running_tasks.clear()
         if self._login_orchestrator is not None:

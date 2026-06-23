@@ -362,7 +362,7 @@ class TaskExecutor:
 self.task_executor = TaskExecutor(
     registry=..., history_store=..., worker_getter=_get_worker,
 )
-self.engine = ScheduleEngine(..., task_executor=self.task_executor)
+self.engine = ScheduleEngine(...)
 
 self.login_orchestrator = LoginOrchestrator(
     worker_getter=_get_worker,
@@ -370,9 +370,12 @@ self.login_orchestrator = LoginOrchestrator(
     profile_service=self.profile_service,
     get_runtime_config=self.engine.get_runtime_config,
 )
-self.task_executor._login_orchestrator = self.login_orchestrator
-self.login_orchestrator._pool = self.task_executor._login_pool
-self.engine._orchestrator = self.login_orchestrator
+self.engine.set_orchestrator(self.login_orchestrator)
+
+self.task_executor = TaskExecutor(
+    ...,
+    login_orchestrator=self.login_orchestrator,
+)
 ```
 
 ---
