@@ -636,9 +636,11 @@ if not cmd.response_event.wait(timeout=10):
 
 ---
 
-### BUG-22: 前端 `enable_tcp_check` / `enable_http_check` 默认值与后端不一致
+### ~~BUG-22~~: 已不存在
 
 **来源**: config #10
+
+**状态**: `DEFAULT_PROFILE_SETTINGS` 已清理，不再包含 monitor 字段。`DEFAULT_CONFIG.monitor` 中 `enable_tcp_check: false`、`enable_http_check: false` 与后端默认值一致。
 
 **相关代码**:
 
@@ -774,7 +776,7 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 | BUG-19 | 🟡 P2 | 双重磁盘读取 | engine.py:629-631 | ~15min | 性能微损 | ✅ 已修复 |
 | BUG-20 | 🟡 P2 | monitor_service 别名 | container.py:96 | ~1h | 命名误导 | ❌ 未修复 |
 | BUG-21 | 🟠 P1 | 超时后命令积压 | engine.py:654-657 | 随 BUG-05 | 意外多次重载 | ❌ 未修复 |
-| BUG-22 | 🟡 P2 | TCP/HTTP 默认值前后不一致 | constants.js:237 vs schemas.py:253 | ~5min | 新建方案行为不符预期 | ❌ 未修复 |
+| ~~BUG-22~~ | 🟡 P2 | ~~TCP/HTTP 默认值前后不一致~~ | — | — | 已不存在 | ✅ 已清理 |
 | BUG-23 | 🟡 P2 | LoggingSettings.level 无校验 | schemas.py | ~10min | 无效级别静默忽略 | ❌ 未修复 |
 | BUG-24 | 🟡 P2 | 线程池生命周期耦合 | container.py:77-82 | ~30min | 双重 shutdown | ❌ 未修复 |
 | BUG-25 | 🟡 P2 | user_agent 默认值不一致 | constants.js:87 | ~5min | 前端显示与实际不符 | ❌ 未修复 |
@@ -784,7 +786,7 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 
 ## 修复进度
 
-**V2 配置架构重构（2026-06-23）已修复 10 个问题**:
+**V2 配置架构重构（2026-06-23）已修复 11 个问题**:
 - ✅ BUG-01: proxy/app_port 幽灵字段
 - ✅ BUG-02: ISP 映射不一致
 - ✅ BUG-03: 启动诊断永远显示空
@@ -794,10 +796,11 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 - ✅ BUG-13: BrowserChannel 枚举死代码
 - ✅ BUG-16: config_version 不一致
 - ✅ BUG-19: 双重磁盘读取
+- ✅ BUG-22: TCP/HTTP 默认值不一致（已清理）
 
-**剩余 17 个问题待修复**（按优先级）:
+**剩余 16 个问题待修复**（按优先级）:
 - P1: BUG-05/06/07/09/10/11/21
-- P2: BUG-14/15/17/18/20/22/23/24/25/26
+- P2: BUG-14/15/17/18/20/23/24/25/26
 
 **第二批（P1，核心功能缺陷）**:
 1. BUG-05 + BUG-21: _handle_login 非阻塞化（关联修复）
@@ -810,4 +813,4 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 6. BUG-14/15: schemas 类型约束（startup_action 枚举、PauseSettings 交叉验证）
 7. BUG-17/18: Worker dict 清理
 8. BUG-20: monitor_service 别名
-9. BUG-22/23/24/25/26: 一致性修复
+9. BUG-23/24/25/26: 一致性修复
