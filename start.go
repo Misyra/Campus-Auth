@@ -178,12 +178,14 @@ func downloadUv(uvDir, uvExe string) error {
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
 			os.Remove(archive)
-			return fmt.Errorf("解压失败: %v", err)
+			fmt.Printf(" 解压失败: %v，尝试下一个源...\n", err)
+			continue
 		}
 		os.Remove(archive)
 
 		if _, err := os.Stat(uvExe); err != nil {
-			return fmt.Errorf("解压后未找到 uv.exe")
+			fmt.Println(" 解压后未找到 uv.exe，尝试下一个源...")
+			continue
 		}
 
 		fmt.Println("[OK] uv 下载完成")
