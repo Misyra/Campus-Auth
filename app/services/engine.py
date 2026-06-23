@@ -183,6 +183,10 @@ class ScheduleEngine:
 
     # ── 统一引擎循环 ──
 
+    # 引擎循环最大睡眠时间（秒）。限制此值确保 _on_done 回调更新
+    # _next_network_check 后，引擎线程能及时唤醒执行重试。
+    _MAX_LOOP_SLEEP: float = 5.0
+
     def _engine_loop(self) -> None:
         """统一引擎循环：命令处理 + 网络检测 + 定时任务调度。"""
         self._engine_running = True
@@ -193,7 +197,7 @@ class ScheduleEngine:
                 wakeup_time = self._calculate_wakeup()
 
                 try:
-                    timeout = max(0.01, wakeup_time - time.time())
+                    timeout = min(self._MAX_LOOP_SLEEP, max(0.01, wakeup_time - time.time()))
                     cmd = self._cmd_queue.get(timeout=timeout)
                 except queue.Empty:
                     cmd = None
@@ -297,6 +301,17 @@ class ScheduleEngine:
     def _do_async_login(self, is_manual: bool = False, config_snapshot: RuntimeConfig | None = None) -> bool:
         """【委托】提交登录到 LoginOrchestrator。"""
         config = config_snapshot if config_snapshot is not None else self._runtime_config
+
+        # 自动登录前检查物理网络和认证地址可达性（仅在启用相关检测时）
+        if not is_manual:
+            m = config.monitor
+            if m.enable_local_check or m.check_auth_url:
+                from app.network.decision import check_login_prerequisites
+
+                ok, reason = check_login_prerequisites(m, config.credentials.auth_url)
+                if not ok:
+                    self.record_log(f"登录前置检查未通过: {reason}", level="WARNING", source="backend")
+                    return False
 
         source = "manual" if is_manual else "auto"
         handle = self._orchestrator.submit(source=source, config=config)
@@ -857,12 +872,9 @@ class ScheduleEngine:
         targets = config.monitor.ping_targets
         enable_tcp = config.monitor.enable_tcp_check
         enable_http = config.monitor.enable_http_check
-        raw_url_checks = config.monitor.url_check_urls
-        if raw_url_checks:
-            from app.utils.network import parse_url_checks
-            url_checks = parse_url_checks("\n".join(raw_url_checks))
-        else:
-            url_checks = []
+        from app.utils.network import parse_url_checks
+
+        url_checks = parse_url_checks(config.monitor.url_check_urls)
         test_sites = parse_ping_targets(targets)
         mode_desc = []
         if enable_tcp:

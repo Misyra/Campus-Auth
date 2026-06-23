@@ -64,13 +64,7 @@ def check_network_status(monitor: MonitorSettings) -> tuple[bool, str, str]:
 
     from app.utils.network import parse_url_checks
 
-    url_checks_raw = monitor.url_check_urls
-    if isinstance(url_checks_raw, str) and url_checks_raw.strip():
-        url_checks = parse_url_checks(url_checks_raw)
-    elif isinstance(url_checks_raw, list) and url_checks_raw:
-        url_checks = parse_url_checks("\n".join(url_checks_raw))
-    else:
-        url_checks = None
+    url_checks = parse_url_checks(monitor.url_check_urls) or None
     enable_url = bool(url_checks)
 
     # 所有检测都未启用

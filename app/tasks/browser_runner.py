@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import threading
 import time
 from dataclasses import replace
@@ -52,27 +53,6 @@ class TaskExecutor:
         self.monitor_config = monitor_config
         self.cancel_event = cancel_event
 
-    def _is_cancelled(self) -> bool:
-        """检查是否已请求取消"""
-        return self.cancel_event is not None and self.cancel_event.is_set()
-
-    def _start_cancel_watcher(self, page) -> asyncio.Task | None:
-        """启动后台取消监听：取消事件触发时关闭页面，中断所有 Playwright 操作"""
-        if self.cancel_event is None:
-            return None
-
-        async def _watch():
-            loop = asyncio.get_running_loop()
-            # 在线程中等待 Event，不阻塞事件循环
-            await loop.run_in_executor(None, self.cancel_event.wait)
-            logger.info("取消事件触发，关闭页面以中断任务")
-            try:
-                await page.close(run_before_unload=False)
-            except Exception:
-                pass  # 页面可能已关闭
-
-        return asyncio.create_task(_watch())
-
     async def execute(self, page) -> tuple[bool, str]:
         """执行任务
 
@@ -94,11 +74,13 @@ class TaskExecutor:
         )
         self._step_results = []
 
-        # 启动取消监听：取消时立即关闭页面，中断所有 Playwright 操作
-        cancel_task = self._start_cancel_watcher(page)
-
         try:
             await self._auto_navigate(page)
+
+            # 等待表单元素出现（最长 5s），覆盖 SPA 门户延迟渲染的场景
+            # 如果页面没有表单元素，静默跳过，不阻塞流程
+            with contextlib.suppress(TimeoutError):
+                await page.wait_for_selector("input,textarea", timeout=5000)
 
             # reveal_hidden: 强制显示所有隐藏输入框，让后续 fill() 可以直接操作
             if self.config.reveal_hidden and any(
@@ -108,8 +90,9 @@ class TaskExecutor:
 
             for i, step in enumerate(self.config.steps):
                 # 取消检查
-                if self._is_cancelled():
-                    return False, "登录已取消"
+                if self.cancel_event and self.cancel_event.is_set():
+                    return await self._handle_failure(page, None, "任务已取消")
+
                 # 任务超时检查
                 remaining_s = task_deadline - time.perf_counter()
                 if remaining_s <= 0:
@@ -168,9 +151,6 @@ class TaskExecutor:
                 return await self._handle_failure(page, None, f"内部错误: {e}")
             except Exception:
                 return (False, f"内部错误: {e}")
-        finally:
-            if cancel_task and not cancel_task.done():
-                cancel_task.cancel()
 
     async def _auto_navigate(self, page) -> None:
         """自动导航到任务URL（优先任务 url，回退到 LOGIN_URL）
@@ -350,15 +330,10 @@ class TaskExecutor:
             enable_http = monitor.enable_http_check
             timeout = monitor.network_check_timeout
 
-            # 解析网址响应检测 URL
-            from app.utils.network import parse_url_checks
+            # 解析检测参数（parse_url/parse_ping 内部处理 str/list/None）
+            from app.utils.network import parse_ping_targets, parse_url_checks
 
-            url_checks = parse_url_checks(monitor.url_check_urls)
-            url_checks = url_checks if url_checks else None
-
-            # 解析 TCP 检测目标
-            from app.utils.network import parse_ping_targets
-
+            url_checks = parse_url_checks(monitor.url_check_urls) or None
             test_sites = parse_ping_targets(monitor.ping_targets) or None
 
             logger.info(
