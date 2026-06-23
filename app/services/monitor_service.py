@@ -217,7 +217,15 @@ class NetworkMonitorCore:
             if self.network_state == NetworkState.UNKNOWN:
                 self.status_detail = "正在检测网络"
 
-        targets_str = ", ".join(f"{h}:{p}" for h, p in test_sites)
+        monitor_cfg = self.config.monitor
+        targets_parts = []
+        if monitor_cfg.enable_tcp_check:
+            targets_parts.append(f"TCP: {', '.join(f'{h}:{p}' for h, p in test_sites)}")
+        if monitor_cfg.enable_http_check:
+            targets_parts.append(f"HTTP: {', '.join(monitor_cfg.test_urls)}")
+        if monitor_cfg.url_check_urls:
+            targets_parts.append(f"网址响应: {', '.join(monitor_cfg.url_check_urls)}")
+        targets_str = " | ".join(targets_parts) if targets_parts else "无检测目标"
         self.log_message(f"[#{check_num}] 网络检测 -> {targets_str}")
 
         # 1. 暂停时段检查

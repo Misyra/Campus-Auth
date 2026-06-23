@@ -1,5 +1,19 @@
 # 修改日志
 
+## 2026-06-23 (11)
+
+### fix: 调整重试延迟间隔 + 重试用尽后自动循环 + 日志显示重试进度
+
+- `app/services/retry_policy.py`：`MonitoredPolicy._DELAYS` 从 `[0, 0, 30, 60, 120]` 改为 `[5, 10, 20, 60, 100]`，首次登录失败即有 5s 延迟
+- `app/services/retry_policy.py`：`delay_before` 移除 `attempt <= 1` 的零延迟特判，统一查表
+- `app/services/retry_policy.py`：`on_login_done` 退出条件从 `>= max_retries` 改为 `> max_retries`，确保第 5 次失败后仍返回延迟（100s）而非直接停止
+- `app/services/engine.py`：`_do_network_check` 重试用尽后重置计数并开始新一轮重试（5→10→20→60→100 循环），间隔由 `_monitor_check_interval`（300s）控制
+- `app/services/engine.py`：`_on_done` 日志显示重试进度（`重试 3/5, 下次重试: 20s 后 (23:20:24)`）
+- `app/services/engine.py`：重试用尽日志显示（`重试已用尽（5/5），开始新一轮重试`）
+- `app/services/monitor_service.py`：网络检测日志显示实际在用的检测目标（TCP/HTTP/网址响应），而非仅 ping_targets
+- `tests/test_services/test_retry_policy.py`：更新 6 个测试用例适配新延迟值
+- `tests/test_services/test_engine.py`：更新退避测试断言（30→20）
+
 ## 2026-06-23 (10)
 
 ### fix: 自动登录失败后无法及时重试 + 接入登录前置检查 + 修复 cancel_event 缺失 + 恢复丢失代码
