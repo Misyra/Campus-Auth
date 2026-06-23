@@ -33,7 +33,7 @@ def _ensure_login_config(engine) -> None:
     })
 
 
-def _capture_login_completion(task_executor, engine=None, timeout: float = 5.0):
+def _capture_login_completion(engine=None, timeout: float = 5.0):
     """安装包装器捕获登录结果。
 
     hook orchestrator._dispatch，确保登录从委托路径触发时能捕获。
@@ -149,7 +149,7 @@ class TestNetworkDetectionLogin:
         assert not task_executor.is_login_running()
 
         result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor, engine=engine
+            engine=engine
         )
         try:
             engine._do_network_check()
@@ -187,7 +187,7 @@ class TestNetworkDetectionLogin:
 
         # 第二次登录（自动重试路径）
         result_container2, done_event2, restore_fn2 = _capture_login_completion(
-            task_executor, engine=engine
+            engine=engine
         )
         try:
             result = engine._do_async_login()
@@ -218,7 +218,7 @@ class TestCancelPropagation:
 
         # 在触发登录前安装捕获器，用 Event 同步登录完成
         result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor, engine=engine
+            engine=engine
         )
         try:
             def blocking_submit(*args, **kwargs):
@@ -260,7 +260,7 @@ class TestReloadException:
         submit_release = threading.Event()
 
         result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor, engine=engine
+            engine=engine
         )
         try:
             def blocking_submit(*args, **kwargs):
@@ -394,7 +394,7 @@ class TestProfileSwitchDuringLogin:
         submit_release = threading.Event()
 
         result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor, engine=engine
+            engine=engine
         )
         try:
             def blocking_submit(*args, **kwargs):

@@ -97,6 +97,7 @@ export const configMethods = {
     }
     this._saveAbortController = new AbortController();
 
+    const controller = this._saveAbortController;
     this.busy.save = true;
     this.saveFailed = false;
     try {
@@ -147,7 +148,9 @@ export const configMethods = {
       this.toastOnly(false, msg);
       this.saveFailed = true;
     } finally {
-      this.busy.save = false;
+      if (this._saveAbortController === controller) {
+        this.busy.save = false;
+      }
     }
   },
   resetConfig() {

@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import itertools
 import threading
 import time
 from concurrent.futures import Future
@@ -595,11 +596,10 @@ class TestLoginConcurrencyProtection:
         dedup_handle.rejected_reason = None
         dedup_handle.future = None
 
-        call_count = [0]
+        counter = itertools.count()
 
         def mock_submit(**kwargs):
-            call_count[0] += 1
-            if call_count[0] == 1:
+            if next(counter) == 0:
                 return new_handle
             return dedup_handle
 

@@ -40,7 +40,12 @@ def atomic_write(
         dir=parent or ".", prefix=prefix, suffix=suffix
     )
     try:
-        with os.fdopen(tmp_fd, "w", encoding=encoding, errors=errors) as f:
+        try:
+            f = os.fdopen(tmp_fd, "w", encoding=encoding, errors=errors)
+        except Exception:
+            os.close(tmp_fd)
+            raise
+        with f:
             f.write(content)
             f.flush()
             os.fsync(f.fileno())

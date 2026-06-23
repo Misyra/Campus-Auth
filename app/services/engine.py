@@ -449,9 +449,10 @@ class ScheduleEngine:
             except CancelledError:
                 ok, msg = False, "登录已取消"
             except Exception as e:
-                ok, msg = False, f"登录异常: {e}"
+                ok, msg = False, f"登录内部错误: {e}"
             cmd.response_data = (ok, msg)
-            cmd.response_event.set()
+            if cmd.response_event:
+                cmd.response_event.set()
 
         handle.future.add_done_callback(_on_login_done)
 

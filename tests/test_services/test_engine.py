@@ -603,6 +603,7 @@ class TestDoNetworkCheck:
         svc._do_network_check()
         svc._handle_stop.assert_called_once()
         svc._reload_config_internal.assert_called_once()
+        svc._handle_start.assert_called_once()
 
     def test_do_network_check_exception(self, engine_factory):
         svc = engine_factory(raw=True)
@@ -656,14 +657,24 @@ class TestNetworkCheckBackoff:
             ),
         )
         svc._retry_policy._attempt = 3
+        callback_done = threading.Event()
         future = Future()
+        _orig_adc = future.add_done_callback
+
+        def _wrapping_adc(cb):
+            def _wrapped(f):
+                cb(f)
+                callback_done.set()
+            _orig_adc(_wrapped)
+
+        future.add_done_callback = _wrapping_adc
         handle = MagicMock()
         handle.rejected_reason = None
         handle.future = future
         svc._orchestrator.submit.return_value = handle
         svc._do_async_login()
         future.set_result((True, "登录成功"))
-        import time; time.sleep(0.1)  # 等待回调执行
+        callback_done.wait(timeout=2)
         assert svc._retry_policy._attempt == 0
 
     def test_on_done_auto_failure_increments_count(self, engine_factory):
@@ -675,14 +686,24 @@ class TestNetworkCheckBackoff:
             ),
         )
         svc._retry_policy._attempt = 0
+        callback_done = threading.Event()
         future = Future()
+        _orig_adc = future.add_done_callback
+
+        def _wrapping_adc(cb):
+            def _wrapped(f):
+                cb(f)
+                callback_done.set()
+            _orig_adc(_wrapped)
+
+        future.add_done_callback = _wrapping_adc
         handle = MagicMock()
         handle.rejected_reason = None
         handle.future = future
         svc._orchestrator.submit.return_value = handle
         svc._do_async_login()
         future.set_result((False, "登录失败"))
-        import time; time.sleep(0.1)  # 等待回调执行
+        callback_done.wait(timeout=2)
         assert svc._retry_policy._attempt == 1
 
     def test_on_done_auto_failure_triggers_backoff(self, engine_factory):
@@ -694,14 +715,24 @@ class TestNetworkCheckBackoff:
             ),
         )
         svc._retry_policy._attempt = 2  # 再失败一次就到 attempt=3，delay=30
+        callback_done = threading.Event()
         future = Future()
+        _orig_adc = future.add_done_callback
+
+        def _wrapping_adc(cb):
+            def _wrapped(f):
+                cb(f)
+                callback_done.set()
+            _orig_adc(_wrapped)
+
+        future.add_done_callback = _wrapping_adc
         handle = MagicMock()
         handle.rejected_reason = None
         handle.future = future
         svc._orchestrator.submit.return_value = handle
         svc._do_async_login()
         future.set_result((False, "登录失败"))
-        import time; time.sleep(0.1)  # 等待回调执行
+        callback_done.wait(timeout=2)
         assert svc._retry_policy._attempt == 3
         # attempt=3 → delay_before(3)=30.0
         assert svc._next_network_check > time.time() + 29
@@ -715,14 +746,24 @@ class TestNetworkCheckBackoff:
             ),
         )
         svc._retry_policy._attempt = 2
+        callback_done = threading.Event()
         future = Future()
+        _orig_adc = future.add_done_callback
+
+        def _wrapping_adc(cb):
+            def _wrapped(f):
+                cb(f)
+                callback_done.set()
+            _orig_adc(_wrapped)
+
+        future.add_done_callback = _wrapping_adc
         handle = MagicMock()
         handle.rejected_reason = None
         handle.future = future
         svc._orchestrator.submit.return_value = handle
         svc._do_async_login(is_manual=True)
         future.set_result((False, "登录失败"))
-        import time; time.sleep(0.1)  # 等待回调执行
+        callback_done.wait(timeout=2)
         # 手动登录不应递增
         assert svc._retry_policy._attempt == 2
 
@@ -735,14 +776,24 @@ class TestNetworkCheckBackoff:
             ),
         )
         svc._retry_policy._attempt = 2
+        callback_done = threading.Event()
         future = Future()
+        _orig_adc = future.add_done_callback
+
+        def _wrapping_adc(cb):
+            def _wrapped(f):
+                cb(f)
+                callback_done.set()
+            _orig_adc(_wrapped)
+
+        future.add_done_callback = _wrapping_adc
         handle = MagicMock()
         handle.rejected_reason = None
         handle.future = future
         svc._orchestrator.submit.return_value = handle
         svc._do_async_login(is_manual=True)
         future.set_result((True, "登录成功"))
-        import time; time.sleep(0.1)  # 等待回调执行
+        callback_done.wait(timeout=2)
         assert svc._retry_policy._attempt == 2
 
     def test_retry_policy_init_field_exist(self, engine_factory):

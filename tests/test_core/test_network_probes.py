@@ -478,7 +478,8 @@ class TestIsAuthUrlReachable:
                 is False
             )
 
-    def test_extra_targets_empty_skip(self):
+    @patch('app.network.decision.socket.create_connection', side_effect=TimeoutError)
+    def test_extra_targets_empty_skip(self, mock_conn):
         """extra_targets 解析为空时跳过检测。"""
         from app.network.decision import _is_auth_url_reachable
 

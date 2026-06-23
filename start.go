@@ -242,7 +242,10 @@ func runCommand(name string, args ...string) error {
 		}
 	}()
 
-	return cmd.Wait()
+	err := cmd.Wait()
+	signal.Stop(sigChan)
+	close(sigChan)
+	return err
 }
 
 // fatal 输出错误信息并退出

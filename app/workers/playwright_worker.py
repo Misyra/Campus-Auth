@@ -610,7 +610,17 @@ class PlaywrightWorker:
                 with contextlib.suppress(Exception):
                     await old_page.close()
             # context 级 init_script 自动继承到新页面，无需重新应用 stealth
-            self._page = await self._context.new_page()
+            try:
+                self._page = await self._context.new_page()
+            except Exception:
+                logger.exception("新建页面失败，尝试重建浏览器")
+                self._page = None
+                try:
+                    config = {"browser_settings": self._last_browser_settings or {}}
+                    await self._close_browser()
+                    await self._start_browser(config)
+                except Exception:
+                    logger.exception("重建浏览器失败")
         else:
             # context 已关闭，尝试重建完整链路
             logger.warning("Context 已关闭，尝试重建浏览器")

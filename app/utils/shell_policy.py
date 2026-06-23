@@ -235,6 +235,7 @@ class ShellCommandPolicy:
             stdout_str, stderr_str = proc.communicate(timeout=effective_timeout)
         except subprocess.TimeoutExpired:
             self._kill_process_tree_sync(proc.pid)
+            proc.wait()
             return -1, "", f"命令执行超时 ({effective_timeout}s)"
         except FileNotFoundError:
             return -1, "", f"执行文件不存在: {executable}"

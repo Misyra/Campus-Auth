@@ -245,7 +245,8 @@ class LogConfigCenter:
         """
         normalized = normalize_level(level)
         logger.level(normalized)
-        self._config["level"] = normalized
+        with self._source_levels_lock:
+            self._config["level"] = normalized
 
     def get_config(self) -> dict[str, Any]:
         return self._config.copy()

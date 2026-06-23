@@ -51,7 +51,7 @@ def _get_probe_client(block_proxy: bool) -> httpx.Client:
             ),
         )
         _probe_block_proxy = block_proxy
-    return _probe_client
+        return _probe_client
 
 
 def _close_probe_client() -> None:

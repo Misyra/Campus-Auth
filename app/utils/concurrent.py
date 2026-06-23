@@ -42,7 +42,11 @@ def race_first_success(
     """
     try:
         for future in as_completed(futures, timeout=timeout):
-            result = future.result(timeout=1)
+            try:
+                result = future.result(timeout=1)
+            except Exception:
+                logger.debug("{} 探测异常", label, exc_info=True)
+                continue
 
             # 解析结果：3-tuple (label, ok, detail) 或 bool
             if isinstance(result, tuple) and len(result) == 3:
@@ -63,12 +67,14 @@ def race_first_success(
             if fail_prefix:
                 logger.debug("{} 失败: {} -- {}", fail_prefix, result_label, detail)
 
-    except TimeoutError:
-        logger.warning("{} 检测超时 ({:.1f}s)", label, timeout)
         return False
 
-    logger.warning("所有 {} 目标均不可达 ({} 个)", label, len(futures))
-    return False
+    except TimeoutError:
+        logger.warning("{} 检测超时 ({:.1f}s)", label, timeout)
+        for f in futures:
+            if not f.done():
+                f.cancel()
+        return False
 
 
 def cancel_pending(futures: dict[Future, object]) -> None:

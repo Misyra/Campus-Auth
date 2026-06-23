@@ -43,6 +43,9 @@ def set_source_level(payload: dict, request: Request):
 
     if source == "global":
         config.set_level(level)
+        actual = config.get_config().get("level", "INFO")
+        if actual != level.upper():
+            return {"success": True, "message": f"无效级别 '{level}'，已降级为 {actual}"}
     else:
         try:
             config.set_source_level(source, level)
@@ -156,6 +159,8 @@ def _log_config_changes(old_dict: dict, new_payload: ConfigResponseDTO) -> None:
         "pause.start_hour": "暂停开始时间",
         "pause.end_hour": "暂停结束时间",
         "monitor.network_check_timeout": "网络检测超时",
+        "isp": "运营商",
+        "carrier_custom": "自定义运营商",
     }
 
     # 直接忽略的字段（不记录变更）
@@ -197,6 +202,14 @@ def _log_config_changes(old_dict: dict, new_payload: ConfigResponseDTO) -> None:
             changes.append(f"{name}: {old_status} → {new_status}")
         else:
             changes.append(f"{name}已修改")
+
+    for field_name in flat_new:
+        if field_name in flat_old or field_name in IGNORE_FIELDS:
+            continue
+        new_val = flat_new.get(field_name)
+        if new_val:
+            name = FIELD_NAMES.get(field_name, field_name)
+            changes.append(f"{name}已设置")
 
     if changes:
         config_logger.info("配置变更: {}", "; ".join(changes))

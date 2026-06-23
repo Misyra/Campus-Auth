@@ -77,7 +77,7 @@ _download_uv() {
         else
             echo "  尝试: ${mirror}" >&2
         fi
-        if ! curl -fsSL --connect-timeout 10 --max-time 120 -o "$archive" "$url" 2>/dev/null; then
+        if ! curl -fsSL --connect-timeout 10 --max-time 120 -o "$archive" "$url" 2>&1; then
             continue
         fi
         if ! tar -tzf "$archive" &>/dev/null; then

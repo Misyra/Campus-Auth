@@ -408,12 +408,12 @@ class TaskManager:
         normalized = normalize_task_id(task_id)
         if not is_valid_task_id(normalized):
             return None
-        for ext in (".json", ".py"):
-            if (self.scripts_dir / f"{normalized}{ext}").exists():
-                return "scripts"
         for ext in (".json",):
             if (self.browser_dir / f"{normalized}{ext}").exists():
                 return "browser"
+        for ext in (".json", ".py"):
+            if (self.scripts_dir / f"{normalized}{ext}").exists():
+                return "scripts"
         return None
 
     def get_active_task(self) -> str:

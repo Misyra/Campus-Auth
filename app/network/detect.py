@@ -149,14 +149,14 @@ def _detect_gateway_windows() -> str | None:
         pattern = re.compile(combined + rb"[\s.:]*(\d+\.\d+\.\d+\.\d+)", re.DOTALL)
         for match in pattern.finditer(output):
             ip = match.group(1).decode("ascii")
-            if ip != "0.0.0.0":
+            if ip != "0.0.0.0" and _is_valid_ipv4(ip):
                 return ip
 
         # 回退：查找网关标签后缩进的 IPv4 地址（通常在下一行）
         gateway_line_pattern = re.compile(combined + rb"[^\n]*\n\s+(\d+\.\d+\.\d+\.\d+)")
         for match in gateway_line_pattern.finditer(output):
             ip = match.group(1).decode("ascii")
-            if ip != "0.0.0.0":
+            if ip != "0.0.0.0" and _is_valid_ipv4(ip):
                 return ip
 
         logger.debug("ipconfig 输出中未找到网关地址")
@@ -264,7 +264,7 @@ def _detect_ssid_linux() -> str | None:
         )
         for line in result.stdout.splitlines():
             if line.startswith("yes:"):
-                return line.split(":", 1)[1].strip()
+                return line.split(":", 1)[1].strip().replace("\\:", ":")
     except Exception as exc:
         logger.debug("Linux SSID 检测失败 (nmcli): {}", exc)
 
@@ -285,7 +285,7 @@ def _detect_gateway_darwin() -> str | None:
         )
         if result.returncode == 0:
             for line in result.stdout.splitlines():
-                if "gateway" in line.lower():
+                if line.strip().lower().startswith("gateway:"):
                     parts = line.split(":")
                     if len(parts) >= 2:
                         ip = parts[1].strip()
