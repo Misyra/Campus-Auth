@@ -63,6 +63,13 @@ _download_uv() {
     local archive="$UV_DIR/uv.tar.gz"
     local success=0
 
+    local expected
+    expected="$(_sha256_for "$filename")"
+    if [[ -z "$expected" ]]; then
+        echo "[X] 未知文件 $filename，无法校验 SHA256" >&2
+        exit 1
+    fi
+
     for mirror in "${MIRRORS[@]}"; do
         local url="${mirror}${github_url}"
         if [[ -z "$mirror" ]]; then
@@ -70,15 +77,32 @@ _download_uv() {
         else
             echo "  尝试: ${mirror}" >&2
         fi
-        if curl -fsSL --connect-timeout 10 --max-time 120 -o "$archive" "$url" 2>/dev/null; then
-            if tar -tzf "$archive" &>/dev/null; then
-                success=1
-                break
-            else
-                echo "  [!] 文件无效，尝试下一个源..." >&2
-                rm -f "$archive"
-            fi
+        if ! curl -fsSL --connect-timeout 10 --max-time 120 -o "$archive" "$url" 2>/dev/null; then
+            continue
         fi
+        if ! tar -tzf "$archive" &>/dev/null; then
+            echo "  [!] 文件无效，尝试下一个源..." >&2
+            rm -f "$archive"
+            continue
+        fi
+
+        # SHA256 校验
+        echo -n "  校验 SHA256..." >&2
+        local actual
+        if command -v sha256sum &>/dev/null; then
+            actual="$(sha256sum "$archive" | cut -d' ' -f1)"
+        else
+            actual="$(shasum -a 256 "$archive" | cut -d' ' -f1)"
+        fi
+        if [[ "$actual" != "$expected" ]]; then
+            echo " 失败: 期望 $expected, 实际 $actual" >&2
+            rm -f "$archive"
+            continue
+        fi
+        echo " 通过" >&2
+
+        success=1
+        break
     done
 
     if [[ "$success" -eq 0 ]]; then
@@ -86,28 +110,6 @@ _download_uv() {
         echo "    请手动安装 uv: https://docs.astral.sh/uv/" >&2
         exit 1
     fi
-
-    # SHA256 校验
-    echo -n "  校验 SHA256..." >&2
-    local expected
-    expected="$(_sha256_for "$filename")"
-    if [[ -z "$expected" ]]; then
-        echo " 失败: 未知文件 $filename" >&2
-        rm -f "$archive"
-        exit 1
-    fi
-    local actual
-    if command -v sha256sum &>/dev/null; then
-        actual="$(sha256sum "$archive" | cut -d' ' -f1)"
-    else
-        actual="$(shasum -a 256 "$archive" | cut -d' ' -f1)"
-    fi
-    if [[ "$actual" != "$expected" ]]; then
-        echo " 失败: 期望 $expected, 实际 $actual" >&2
-        rm -f "$archive"
-        exit 1
-    fi
-    echo " 通过" >&2
 
     echo "正在解压..." >&2
     tar -xzf "$archive" -C "$UV_DIR"
