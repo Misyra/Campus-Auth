@@ -462,7 +462,7 @@ class BrowserSettings(BaseModel, frozen=True):
 
 ---
 
-### BUG-14: `startup_action` 类型未约束为枚举
+### ✅ BUG-14: `startup_action` 类型未约束为枚举
 
 **来源**: config #12
 
@@ -487,7 +487,7 @@ class StartupAction(StrEnum):
 
 ---
 
-### BUG-15: `PauseSettings` 缺少跨字段验证
+### ✅ BUG-15: `PauseSettings` 缺少跨字段验证
 
 **来源**: config #13
 
@@ -538,7 +538,7 @@ class ProfilesData(BaseModel):
 
 ---
 
-### BUG-17: `Worker dict` 包含无关 UI 字段
+### ✅ BUG-17: `Worker dict` 包含无关 UI 字段
 
 **来源**: config #16
 
@@ -559,7 +559,7 @@ d["autostart_lightweight"] = config.autostart_lightweight
 
 ---
 
-### BUG-18: `Worker dict` 遗漏 `carrier_custom`
+### ✅ BUG-18: `Worker dict` 遗漏 `carrier_custom`
 
 **来源**: config #7
 
@@ -607,7 +607,7 @@ runtime_config, has_decrypt_error = load_active_config(self._profile_service)  #
 
 ---
 
-### BUG-20: `monitor_service` 别名误导
+### ✅ BUG-20: `monitor_service` 别名误导
 
 **来源**: architecture M1
 
@@ -676,7 +676,7 @@ enable_http_check: bool = False
 
 ---
 
-### BUG-23: `LoggingSettings.level` 未做枚举校验
+### ✅ BUG-23: `LoggingSettings.level` 未做枚举校验
 
 **来源**: config #18
 
@@ -788,16 +788,16 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 | BUG-11 | 🟠 P1 | 配置验证仅 API 路径执行 | engine.py:687 | ~30min | 无效配置可启动监控 | ✅ 已修复 |
 | BUG-12 | 🟡 P2 | Profile 废弃字段 | constants.js:206-242 | ~2h | 用户改无效字段无提示 | ✅ 已修复 |
 | BUG-13 | 🟡 P2 | BrowserChannel 枚举死代码 | schemas.py:30-37 | ~10min | 无类型安全 | ✅ 已修复 |
-| BUG-14 | 🟡 P2 | startup_action 未约束 | schemas.py | ~5min | 无效值不报错 | ❌ 未修复 |
-| BUG-15 | 🟡 P2 | PauseSettings 无交叉验证 | schemas.py:269-274 | ~15min | start==end 语义不明 | ❌ 未修复 |
+| BUG-14 | 🟡 P2 | startup_action 未约束 | schemas.py | ~5min | 无效值不报错 | ✅ 已修复 |
+| BUG-15 | 🟡 P2 | PauseSettings 无交叉验证 | schemas.py:269-274 | ~15min | start==end 语义不明 | ✅ 已修复 |
 | BUG-16 | 🟡 P2 | config_version 不一致 | schemas.py:65, 321 | ~5min | 死字段造成困惑 | ✅ 已修复 |
-| BUG-17 | 🟡 P2 | Worker dict 含 UI 字段 | login_orchestrator.py:57-59 | ~5min | IPC payload 噪音 | ❌ 未修复 |
-| BUG-18 | 🟡 P2 | Worker dict 缺 carrier_custom | login_orchestrator.py:38-44 | ~5min | 字段完整性缺失 | ❌ 未修复 |
+| BUG-17 | 🟡 P2 | Worker dict 含 UI 字段 | login_orchestrator.py:57-59 | ~5min | IPC payload 噪音 | ✅ 已修复 |
+| BUG-18 | 🟡 P2 | Worker dict 缺 carrier_custom | login_orchestrator.py:38-44 | ~5min | 字段完整性缺失 | ✅ 已修复 |
 | BUG-19 | 🟡 P2 | 双重磁盘读取 | engine.py:629-631 | ~15min | 性能微损 | ✅ 已修复 |
-| BUG-20 | 🟡 P2 | monitor_service 别名 | container.py:96 | ~1h | 命名误导 | ❌ 未修复 |
+| BUG-20 | 🟡 P2 | monitor_service 别名 | container.py:96 | ~1h | 命名误导 | ✅ 已修复 |
 | BUG-21 | 🟠 P1 | 超时后命令积压 | engine.py:654-657 | 随 BUG-05 | 意外多次重载 | ⚠️ 已缓解 |
 | ~~BUG-22~~ | 🟡 P2 | ~~TCP/HTTP 默认值前后不一致~~ | — | — | 已不存在 | ✅ 已清理 |
-| BUG-23 | 🟡 P2 | LoggingSettings.level 无校验 | schemas.py | ~10min | 无效级别静默忽略 | ❌ 未修复 |
+| BUG-23 | 🟡 P2 | LoggingSettings.level 无校验 | schemas.py | ~10min | 无效级别静默忽略 | ✅ 已修复 |
 | ~~BUG-24~~ | 🟡 P2 | ~~线程池生命周期耦合~~ | — | — | 已不存在 | ✅ 已清理 |
 | BUG-25 | 🟡 P2 | user_agent 默认值不一致 | constants.js:87 | ~5min | 前端显示与实际不符 | ✅ 已修复 |
 | BUG-26 | 🟡 P2 | 关键命令静默丢弃 | engine.py:144 | ~30min | 高频场景丢命令 | ⚠️ 已缓解 |
@@ -806,7 +806,7 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 
 ## 修复进度
 
-**已修复 17 个问题**:
+**已修复 23 个问题**:
 - ✅ BUG-01: proxy/app_port 幽灵字段
 - ✅ BUG-02: ISP 映射不一致
 - ✅ BUG-03: 启动诊断永远显示空
@@ -818,7 +818,13 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 - ✅ BUG-11: 配置验证仅 API 路径执行
 - ✅ BUG-12: Profile 废弃字段
 - ✅ BUG-13: BrowserChannel 枚举死代码
+- ✅ BUG-14: startup_action 未约束为枚举
+- ✅ BUG-15: PauseSettings 无交叉验证
 - ✅ BUG-16: config_version 不一致
+- ✅ BUG-17: Worker dict 含 UI 字段
+- ✅ BUG-18: Worker dict 缺 carrier_custom
+- ✅ BUG-20: monitor_service 别名
+- ✅ BUG-23: LoggingSettings.level 无校验
 - ✅ BUG-19: 双重磁盘读取
 - ✅ BUG-22: TCP/HTTP 默认值不一致（已清理）
 - ✅ BUG-25: user_agent 默认值不一致
@@ -828,13 +834,8 @@ def _enqueue(self, cmd: EngineCommand) -> bool:
 - ⚠️ BUG-21: 超时后命令积压（随 BUG-05 缓解）
 - ⚠️ BUG-26: 关键命令静默丢弃（随 BUG-05 缓解）
 
-**剩余 6 个问题待修复**（按优先级）:
-- P2: BUG-14/15/17/18/20/23
+**所有问题已清零。**
 
 **第二批（P1）**: ✅ 已全部修复
 
-**第三批（P2，设计改进）**:
-2. BUG-14/15: schemas 类型约束
-3. BUG-17/18: Worker dict 清理
-4. BUG-20: monitor_service 别名
-5. BUG-23: LoggingSettings.level 校验
+**第三批（P2）**: ✅ 已全部修复
