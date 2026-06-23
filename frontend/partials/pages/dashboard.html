@@ -83,7 +83,16 @@
         </div>
         <div class="card-body">
           <div class="action-buttons">
-            <button class="btn btn-secondary" @click="manualLogin" :disabled="busy.action || busy.loginCooldown" :title="busy.loginCooldown ? '请稍后再试' : '立即执行一次登录认证，不影响自动监控'">
+            <!-- 登录中：显示取消按钮 -->
+            <button v-if="busy.login" class="btn btn-danger" @click="cancelLogin" title="取消正在执行的登录">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+              取消登录
+            </button>
+            <!-- 空闲：显示登录按钮 -->
+            <button v-else class="btn btn-secondary" @click="manualLogin" :disabled="busy.action || busy.loginCooldown" :title="busy.loginCooldown ? '请稍后再试' : '立即执行一次登录认证，不影响自动监控'">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
                 <polyline points="10 17 15 12 10 7"/>

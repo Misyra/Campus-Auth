@@ -59,6 +59,7 @@ export const actionMethods = {
   async manualLogin() {
     if (this.busy.loginCooldown) return;
     this.busy.action = true;
+    this.busy.login = true;
     try {
       this.frontendLogger.info('action', '手动登录请求');
       const loginTimeoutMs = (this.config.browser.login_timeout || 90) * 1000;
@@ -71,10 +72,22 @@ export const actionMethods = {
       this.frontendLogger.error('action', '手动登录失败', msg);
       this.notify(false, this.stripScreenshotHint(msg), 'login');
     } finally {
+      this.busy.login = false;
       // 3 秒防抖：API 返回后继续锁定按钮，防止短时间内重复点击
       this.busy.loginCooldown = true;
       setTimeout(() => { this.busy.loginCooldown = false; }, 3000);
       this.busy.action = false;
+    }
+  },
+  async cancelLogin() {
+    try {
+      this.frontendLogger.info('action', '取消登录请求');
+      const { data } = await this.$api.post('/api/actions/cancel-login');
+      this.toastOnly(data.success, data.message);
+    } catch (error) {
+      const msg = extractApiError(error, '取消登录失败');
+      this.frontendLogger.error('action', '取消登录失败', msg);
+      this.toastOnly(false, msg);
     }
   },
   async testNetwork() {
