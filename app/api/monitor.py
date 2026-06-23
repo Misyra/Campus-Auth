@@ -58,7 +58,7 @@ async def manual_login(
 
 
 @router.post("/api/actions/cancel-login", response_model=ActionResponse)
-async def cancel_login(
+def cancel_login(
     svc: ScheduleEngine = Depends(get_monitor_service),
 ) -> ActionResponse:
     ok, message = svc.cancel_login()
