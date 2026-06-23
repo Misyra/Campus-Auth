@@ -110,11 +110,19 @@ class VariableResolver:
             return value
 
         def replacer(match: re.Match) -> str:
+            var_name = match.group(1)
+            # runtime_vars 中的非字符串值直接序列化，避免双重编码
+            if var_name in self.runtime_vars:
+                raw = self.runtime_vars[var_name]
+                if raw is None:
+                    return "null"
+                if not isinstance(raw, str):
+                    return json.dumps(raw, ensure_ascii=False)
+            # 字符串值和未解析变量：走 resolve → json.dumps 加引号
             resolved = self.resolve(match.group(0))
-            # If variable not found, resolve returns the original pattern
             if resolved == match.group(0):
                 logger.warning("[var] 未解析的变量: {}", match.group(0))
-                return json.dumps(match.group(0))  # 保留原样，转义后作为 JS 字符串
+                return json.dumps(match.group(0))
             return json.dumps(str(resolved))
 
         return self.TEMPLATE_PATTERN.sub(replacer, value)
