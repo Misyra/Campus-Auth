@@ -92,6 +92,7 @@ class ServiceContainer:
 
     @property
     def monitor_service(self) -> ScheduleEngine:
+        """已废弃：请使用 services.engine。"""
         return self.engine
 
     @property
