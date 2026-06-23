@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from dataclasses import replace
 from datetime import datetime
@@ -32,6 +33,7 @@ class TaskExecutor:
         default_timeout: int | None = None,
         navigation_timeout: int | None = None,
         monitor_config: dict[str, Any] | None = None,
+        cancel_event: threading.Event | None = None,
     ):
         self.config = config
         self.template_vars = template_vars or {}
@@ -48,6 +50,28 @@ class TaskExecutor:
         self._step_results: list[dict[str, Any]] = []
         self._screenshot_dir = Path(screenshot_dir) if screenshot_dir else None
         self.monitor_config = monitor_config
+        self.cancel_event = cancel_event
+
+    def _is_cancelled(self) -> bool:
+        """检查是否已请求取消"""
+        return self.cancel_event is not None and self.cancel_event.is_set()
+
+    def _start_cancel_watcher(self, page) -> asyncio.Task | None:
+        """启动后台取消监听：取消事件触发时关闭页面，中断所有 Playwright 操作"""
+        if self.cancel_event is None:
+            return None
+
+        async def _watch():
+            loop = asyncio.get_running_loop()
+            # 在线程中等待 Event，不阻塞事件循环
+            await loop.run_in_executor(None, self.cancel_event.wait)
+            logger.info("取消事件触发，关闭页面以中断任务")
+            try:
+                await page.close(run_before_unload=False)
+            except Exception:
+                pass  # 页面可能已关闭
+
+        return asyncio.create_task(_watch())
 
     async def execute(self, page) -> tuple[bool, str]:
         """执行任务
@@ -70,6 +94,9 @@ class TaskExecutor:
         )
         self._step_results = []
 
+        # 启动取消监听：取消时立即关闭页面，中断所有 Playwright 操作
+        cancel_task = self._start_cancel_watcher(page)
+
         try:
             await self._auto_navigate(page)
 
@@ -80,6 +107,9 @@ class TaskExecutor:
                 await self._reveal_hidden_inputs(page)
 
             for i, step in enumerate(self.config.steps):
+                # 取消检查
+                if self._is_cancelled():
+                    return False, "登录已取消"
                 # 任务超时检查
                 remaining_s = task_deadline - time.perf_counter()
                 if remaining_s <= 0:
@@ -138,6 +168,9 @@ class TaskExecutor:
                 return await self._handle_failure(page, None, f"内部错误: {e}")
             except Exception:
                 return (False, f"内部错误: {e}")
+        finally:
+            if cancel_task and not cancel_task.done():
+                cancel_task.cancel()
 
     async def _auto_navigate(self, page) -> None:
         """自动导航到任务URL（优先任务 url，回退到 LOGIN_URL）
