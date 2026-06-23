@@ -74,6 +74,11 @@ class MonitoredPolicy(RetryPolicy):
         """是否已用尽重试次数。"""
         return self._attempt >= self.max_retries
 
+    def reset(self) -> None:
+        """重置重试计数。"""
+        with self._lock:
+            self._attempt = 0
+
     def attempts(self) -> Iterator[int]:
         yield from range(1, self.max_retries + 1)
 
