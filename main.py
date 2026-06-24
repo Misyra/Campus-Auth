@@ -423,6 +423,7 @@ def _run_lightweight(ctx: ApplicationContext, logger):
     # Web 服务状态
     _web_server_lock = threading.Lock()
     _web_server_state = {"started": False, "server_ref": [None]}
+    _web_server_shutdown_event = threading.Event()
 
     def _start_web_server():
         """按需启动 Web 服务（在子线程中运行）。"""
@@ -441,6 +442,9 @@ def _run_lightweight(ctx: ApplicationContext, logger):
             except Exception as e:
                 logger.error("Web 服务启动失败: {}", e)
                 _web_server_state["started"] = False
+            finally:
+                # Web 服务退出后通知主循环
+                _web_server_shutdown_event.set()
 
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -481,7 +485,10 @@ def _run_lightweight(ctx: ApplicationContext, logger):
 
     try:
         while True:
-            time.sleep(60)
+            # 等待 web 服务关闭事件或 60 秒超时
+            if _web_server_shutdown_event.wait(timeout=60):
+                logger.info("Web 服务已退出，轻量模式即将关闭")
+                break
     except KeyboardInterrupt:
         logger.info("收到退出信号，正在关闭服务...")
     finally:
@@ -495,6 +502,9 @@ def _run_lightweight(ctx: ApplicationContext, logger):
             # 无可用 event loop，跳过异步 shutdown
             container.task_executor.shutdown(wait=False)
             container.engine.shutdown()
+        except KeyboardInterrupt:
+            # asyncio.run 在信号处理上下文中可能重新抛出 KeyboardInterrupt
+            logger.debug("容器关闭被信号中断")
         except Exception:
             logger.debug("容器关闭（幂等跳过或超时）")
         cleanup_pid()
