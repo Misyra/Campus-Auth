@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Campus-Auth 任务录制器
 // @namespace    https://github.com/Misyra/Campus-Auth
-// @version      4.0.5
+// @version      4.1.0
 // @description  可视化选取校园网登录页面元素，自动生成任务 JSON 或结构化文档
 // @author       Misyra
 // @match        http://*/*
@@ -19,7 +19,7 @@
 
   // ==================== 配置 ====================
 
-  const VERSION = "4.0.4"; // 同步修改顶部 @version
+  const VERSION = "4.1.0"; // 同步修改顶部 @version
 
   const STEP_TYPES = {
     username: { category: "basic", label: "账号输入框", icon: "👤", color: "#4CAF50", primary: true, hint: "点击页面上真实的账号输入框（不是旁边的文字标签），支持自动检测隐藏输入框" },

@@ -1,5 +1,13 @@
 # 修改日志
 
+## 2026-06-24 (4)
+
+### chore: 版本升级至 v4.1.0
+
+- `pyproject.toml`：version 4.0.6 → 4.1.0
+- `res/tools/task-recorder.user.js`：@version 和 VERSION 常量同步更新至 4.1.0
+- `docs/update_log.md`：新增 v4.1.0 版本更新日志，汇总 v4.0.4 以来所有变更
+
 ## 2026-06-24 (3)
 
 ### fix: 修复文档中 MonitoredPolicy 延迟表、API 端点遗漏等问题
