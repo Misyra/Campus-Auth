@@ -204,9 +204,9 @@ window.chrome = {
 
 返回空响应，减少带宽和内存占用。
 
-### 安全模式
+### 纯净模式
 
-使用纯净 Chromium 启动（不加载任何扩展），通过 `--disable-extensions` 参数实现，用于解决浏览器插件冲突问题。
+使用纯净 Chromium 启动（不加载任何扩展），通过 `--disable-extensions` 参数实现，用于解决浏览器插件冲突问题。API：`GET /api/pure-mode`（获取状态）、`POST /api/pure-mode`（切换）。
 
 ---
 
@@ -235,11 +235,11 @@ window.chrome = {
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| `retry_settings.max_retries` | 3 | 最大重试次数 |
-| `retry_settings.retry_interval` | 5 | 基础重试间隔（秒） |
+| `retry_settings.max_retries` | 3 | 最大重试次数（仅用于 login_once 的 ImmediatePolicy） |
+| `retry_settings.retry_interval` | 5 | 基础重试间隔（秒，仅用于 login_once 的 ImmediatePolicy） |
 
-**退避算法：** 指数退避，第 N 次重试的等待时间为 `retry_interval × 2^(N-1)`。
-- 默认配置下：5s → 10s → 20s
+**退避算法：** 引擎自动登录使用 `MonitoredPolicy` 固定延迟表，由 `_DELAYS = [5.0, 10.0, 20.0, 60.0, 100.0]` 定义。
+- 失败后依次等待：5s → 10s → 20s → 60s → 100s
 
 **重试结果：**
 - `"retry"` — 等待后重试
