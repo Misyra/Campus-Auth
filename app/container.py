@@ -130,6 +130,12 @@ class ServiceContainer:
             return
         from loguru import logger
 
+        # 轻量模式唤醒时，将 NullWebSocketManager 切换为真正的 WebSocketManager
+        if self._is_lightweight and isinstance(self.ws_manager, NullWebSocketManager):
+            self.ws_manager = WebSocketManager()
+            self.engine._ws_manager = self.ws_manager
+            container_logger.info("WebSocket 管理器已切换为实时模式")
+
         if self._log_handler_id is None:
             dashboard_sink = DashboardSink()
             self._log_handler_id = logger.add(

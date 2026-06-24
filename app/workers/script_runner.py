@@ -117,7 +117,8 @@ class ScriptRunner:
                         script_file,
                     ]
                 elif exe_name == "cmd":
-                    return [self.binary_path, "/c", f'call "{script_file}"']
+                    # cmd /c 直接执行脚本文件，无需 call（call 用于调用另一个 bat 并返回）
+                    return [self.binary_path, "/c", script_file]
             else:
                 if exe_name in ("bash", "sh", "zsh", "fish"):
                     return [self.binary_path, script_file]
@@ -142,7 +143,8 @@ class ScriptRunner:
                     script,
                 ]
             elif exe_name == "cmd":
-                return [self.binary_path, "/c", f'call "{script}"']
+                # cmd /c 直接执行脚本文件，无需 call（call 用于调用另一个 bat 并返回）
+                return [self.binary_path, "/c", script]
         else:
             if exe_name in ("bash", "sh", "zsh", "fish"):
                 return [self.binary_path, script]
