@@ -8,8 +8,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.schemas import RuntimeConfig
 from app.services.engine import ScheduleEngine, StatusSnapshot
-from app.services.login_retry import LoginRetryManager
+from app.services.retry_policy import MonitoredPolicy
 
 
 @pytest.fixture
@@ -20,28 +21,27 @@ def engine_factory():
     - engine_factory(): 标准初始化（启动后停止引擎线程）
     - engine_factory(raw=True): 使用 __new__ 跳过 __init__，用于单元隔离测试
 
-    所有模式都 patch 相同的 4 个依赖：
-    - config_service.build_runtime_dict_from_payload
-    - runtime_config.load_runtime_config
-    - runtime_config.load_ui_config
+    所有模式都 patch 相同的 2 个依赖：
+    - engine._reload_config_internal
     - engine.ProfileService
     """
 
     def _make(**overrides):
         """标准模式：完整初始化后停止引擎线程。"""
+
+        def _fake_reload(self_inner):
+            """模拟 _reload_config_internal：设置所有由原方法初始化的属性。"""
+            self_inner._runtime_config = RuntimeConfig()
+            self_inner._runtime_snapshot = self_inner._runtime_config
+            self_inner._pure_mode = False
+            return True
+
         with (
-            patch("app.services.config_service.build_runtime_dict_from_payload", return_value={}),
-            patch(
-                "app.services.runtime_config.load_runtime_config",
-                return_value=(MagicMock(), False),
-            ),
-            patch("app.services.runtime_config.load_ui_config") as mock_load_ui,
+            patch.object(ScheduleEngine, "_reload_config_internal", _fake_reload),
             patch("app.services.engine.ProfileService") as mock_ps_cls,
         ):
             mock_ps = MagicMock()
             mock_ps_cls.return_value = mock_ps
-            mock_ps.load.return_value.global_settings.pure_mode = False
-            mock_load_ui.return_value = MagicMock()
 
             # 确保 task_executor 有默认值
             if "task_executor" not in overrides:
@@ -59,11 +59,12 @@ def engine_factory():
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._cmd_queue = queue.Queue(maxsize=50)
         svc._shutdown_event = threading.Event()
+        svc._wakeup_event = threading.Event()
         svc._monitor_core = None
         svc._engine_running = False
-        svc._login_retry = LoginRetryManager()
-        svc._runtime_config = {}
-        svc._runtime_snapshot = {}
+        svc._retry_policy = MonitoredPolicy()
+        svc._runtime_config = RuntimeConfig()
+        svc._runtime_snapshot = None
         svc._monitor_check_interval = 300
         svc._next_network_check = 0
         svc._scheduler_running = False
@@ -85,14 +86,16 @@ def engine_factory():
         from collections import deque
         svc._empty_broadcast_queue = deque(maxlen=10)
         svc._ws_manager = None
-        svc._ui_config = MagicMock()
-        svc._ui_config.login_timeout = 120
+        svc._orchestrator = MagicMock()
         svc._login_history = None
         svc._worker_getter = None
         svc._profile_service = MagicMock()
+        svc._profile_service.set_active_profile.return_value = (True, "ok")
         svc.project_root = MagicMock()
         svc.record_log = MagicMock()
         svc._update_status_snapshot = MagicMock()
+        svc._registered_futures = set()
+        svc._futures_lock = threading.Lock()
         return svc
 
     def factory(raw=False, **overrides):

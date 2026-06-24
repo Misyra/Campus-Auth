@@ -48,68 +48,6 @@
   color: var(--text-secondary);
 }
 
-.wizard-steps {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px 40px;
-  gap: 8px;
-}
-
-.step {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.step-number {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--bg-primary);
-  border: 2px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-muted);
-  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
-}
-
-.step.active .step-number {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--bg-primary);
-  box-shadow: 0 0 16px rgba(34, 211, 238, 0.35);
-}
-
-.step.completed .step-number {
-  background: var(--success);
-  border-color: var(--success);
-  color: var(--text-on-accent);
-}
-
-.step-label {
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.step.active .step-label {
-  color: var(--text-primary);
-}
-
-.step-line {
-  width: 40px;
-  height: 2px;
-  background: var(--border);
-  transition: background 0.2s ease;
-}
-
-.step-line.completed {
-  background: var(--success);
-}
-
 .wizard-content {
   padding: 24px 40px;
 }
@@ -117,43 +55,6 @@
 .wizard-page h2 {
   font-size: 20px;
   margin-bottom: 8px;
-}
-
-.wizard-page .description {
-  color: var(--text-secondary);
-  margin-bottom: 24px;
-}
-
-.config-summary {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-  backdrop-filter: blur(4px);
-}
-
-.config-summary h4 {
-  font-size: 14px;
-  margin-bottom: 12px;
-}
-
-.summary-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.summary-item:last-child {
-  border-bottom: none;
-}
-
-.summary-item .label {
-  color: var(--text-secondary);
-}
-
-.summary-item .value {
-  font-weight: 500;
 }
 
 .wizard-footer {
@@ -228,18 +129,4 @@
   font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
-}
-
-/* 错误提示样式 */
-.wizard-page .input-error {
-  border-color: var(--error) !important;
-  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
-}
-
-.wizard-page .error-text {
-  display: block;
-  color: var(--error);
-  font-size: 12px;
-  margin-top: 6px;
-  line-height: 1.4;
 }

@@ -5,7 +5,7 @@
     "created": "2025-01-01"
   },
   "url": "{{LOGIN_URL}}",
-  "timeout": 20000,
+  "timeout": 30000,
   "variables": {
     "username": "{{USERNAME}}",
     "password": "{{PASSWORD}}",

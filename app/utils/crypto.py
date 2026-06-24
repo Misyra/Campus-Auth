@@ -51,6 +51,8 @@ def _get_or_create_key() -> bytes:
                 if len(key) == 32:
                     _cached_raw_key = key
                     return key
+                else:
+                    logger.warning("密钥文件长度异常: 期望 32 字节，实际 {} 字节", len(key))
             except Exception as exc:
                 logger.error("读取加密密钥失败: {}", exc)
                 # 备份损坏的密钥文件
@@ -160,7 +162,6 @@ def decrypt_password(ciphertext: str) -> str:
     encrypted_data = ciphertext[len(_ENC_PREFIX) :]
 
     try:
-        from cryptography.exceptions import InvalidSignature
         from cryptography.fernet import Fernet, InvalidToken
 
         key = _derive_fernet_key()
@@ -170,7 +171,7 @@ def decrypt_password(ciphertext: str) -> str:
         _decryption_failed.set()
         logger.error("cryptography 库未安装，无法解密密码，请安装依赖后重试")
         raise DecryptionError("cryptography 库未安装，无法解密密码") from None
-    except (InvalidToken, InvalidSignature, ValueError, OSError) as e:
+    except (InvalidToken, ValueError, OSError) as e:
         # 解密失败：可能是密钥变更，记录错误并抛出异常
         _decryption_failed.set()
         logger.error(

@@ -25,6 +25,7 @@ from app.schemas import (  # noqa: E402
     LaunchContext,
     LaunchSource,
     LoginResult,
+    RuntimeConfig,
     RuntimeMode,
     StartupAction,
     StartupResult,
@@ -174,77 +175,69 @@ def _load_login_config(logger):
     """加载登录所需的运行时配置。
 
     Returns:
-        (runtime_config, None) — 成功时返回配置字典和 None。
+        (RuntimeConfig, None) — 成功时返回 RuntimeConfig 和 None。
         (None, LoginResult.CONFIG_ERROR) — 失败时返回 None 和错误结果。
     """
-    from app.services.config_service import build_runtime_dict_from_payload
-    from app.services.runtime_config import load_runtime_config
-
     ps = create_profile_service()
-    data = ps.load()
-    payload, has_decrypt_error = load_runtime_config(ps)
-    if has_decrypt_error:
-        logger.warning("密码解密失败，请检查配置")
-        return None, LoginResult.CONFIG_ERROR
-    runtime_config = build_runtime_dict_from_payload(
-        payload, global_settings=data.global_settings
-    )
+    runtime_config = ps.get_runtime_config()
     return runtime_config, None
 
 
-def _execute_login_with_retries(runtime_config: dict, logger) -> LoginResult:
-    """执行登录，含指数退避重试。
+def _execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginResult:
+    """执行登录，含固定间隔重试。
+
+    用 ImmediatePolicy + LoginOrchestrator，不再自己写重试/超时/历史。
 
     Args:
-        runtime_config: 运行时配置字典。
+        runtime_config: 运行时配置。
         logger: 日志记录器。
 
     Returns:
         LoginResult.SUCCESS — 登录成功
         LoginResult.TEMPORARY_FAILURE — 重试耗尽仍失败
     """
-    from app.workers.playwright_worker import CMD_LOGIN, get_worker
+    from app.constants import AUTH_DATA_DIR
+    from app.services.login_history_service import LoginHistoryService
+    from app.services.login_orchestrator import LoginOrchestrator
+    from app.services.profile_service import create_profile_service
+    from app.services.retry_policy import ImmediatePolicy
+    from app.workers.playwright_worker import get_worker
 
-    retry_settings = runtime_config.get("retry_settings", {})
-    raw = retry_settings.get("max_retries", 3)
-    max_retries = max(1, min(raw, 10))
-    retry_interval = int(retry_settings.get("retry_interval", 5))
+    # 构造一次性 Orchestrator（login_once 在容器创建前运行）
+    profile_service = create_profile_service()
+    history = LoginHistoryService(AUTH_DATA_DIR)
+    orchestrator = LoginOrchestrator(
+        worker_getter=get_worker,
+        login_history=history,
+        profile_service=profile_service,
+    )
 
-    attempt = 0
-    while True:
-        attempt += 1
-        # 指数退避：首次间隔 0，后续 interval × 2^(attempt-2)
-        if attempt > 1:
-            delay = min(retry_interval * (2 ** (attempt - 2)), 300)
-            print(f"等待 {delay} 秒后重试第 {attempt} 次...")
-            time.sleep(delay)
+    policy = ImmediatePolicy(
+        max_retries=runtime_config.retry.max_retries,
+        interval=runtime_config.retry.retry_interval,
+    )
 
-        success = False
-        message = ""
-        try:
-            result = get_worker().submit(
-                CMD_LOGIN,
-                data={"config": runtime_config},
-                timeout=120,
-            )
-            success = result.success
-            message = result.data if result.success else result.error or "登录失败"
-        except Exception as exc:
-            message = f"登录异常: {exc}"
+    try:
+        for attempt in policy.attempts():
+            delay = policy.delay_before(attempt)
+            if delay > 0:
+                print(f"等待 {int(delay)} 秒后重试第 {attempt} 次...")
+                time.sleep(delay)
 
-        if success:
-            print(f"登录成功: {message}")
-            cleanup_orphan_browsers()
-            return LoginResult.SUCCESS
+            handle = orchestrator.submit(source="login_once", config=runtime_config)
+            ok, msg = handle.result()
+            if ok:
+                print(f"登录成功: {msg}")
+                cleanup_orphan_browsers()
+                return LoginResult.SUCCESS
+            print(f"登录失败 (第 {attempt} 次): {msg}")
 
-        print(f"登录失败 (第 {attempt} 次): {message}")
-        if attempt >= max_retries:
-            break
-
-    cleanup_orphan_browsers()
-    print(f"已重试 {max_retries} 次均失败，回退到正常模式")
-    logger.warning("登录失败（已重试 {} 次），回退到正常模式", max_retries)
-    return LoginResult.TEMPORARY_FAILURE
+        cleanup_orphan_browsers()
+        print(f"已重试 {policy.max_retries} 次均失败，回退到正常模式")
+        logger.warning("登录失败（已重试 {} 次），回退到正常模式", policy.max_retries)
+        return LoginResult.TEMPORARY_FAILURE
+    finally:
+        orchestrator.shutdown(wait=False)
 
 
 def _run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
@@ -268,7 +261,7 @@ def _run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
     try:
         from app.network.decision import check_network_status
 
-        network_ok, reason, _ = check_network_status(runtime_config)
+        network_ok, reason, _ = check_network_status(runtime_config.monitor)
         if network_ok:
             print("网络已连接，无需登录，正在退出...")
             return LoginResult.SUCCESS
@@ -299,19 +292,14 @@ def _build_app_config(
     from app.utils.logging import get_logger
 
     logger = get_logger("startup", source="backend")
-    config = AppConfig()
-
     # 从 settings.json 加载
     try:
         _ps = create_profile_service()
         _data = _ps.load()
-        _sys = _data.global_settings
-        config.startup_action = StartupAction(getattr(_sys, "startup_action", "none"))
-        config.minimize_to_tray = bool(getattr(_sys, "minimize_to_tray", True))
-        config.lightweight_tray = bool(getattr(_sys, "lightweight_tray", True))
-        config.auto_open_browser = bool(getattr(_sys, "auto_open_browser", False))
+        config = AppConfig.from_runtime_config(_data.global_config)
     except Exception:
         logger.debug("加载配置失败，使用默认值", exc_info=True)
+        config = AppConfig()
 
     # CLI 覆盖
     if cli_startup_action is not None:
@@ -352,7 +340,7 @@ def handle_startup_action(
                 # 配置错误无法自动恢复，退出让用户修正
                 return StartupResult.EXIT, False
             # TEMPORARY_FAILURE → 网络等临时性问题，继续监控等待恢复
-            return StartupResult.CONTINUE, False
+            return StartupResult.CONTINUE, True
         case _:
             return StartupResult.CONTINUE, False
 
@@ -429,13 +417,13 @@ def _run_lightweight(ctx: ApplicationContext, logger):
         Path(__file__).parent.resolve(), mode="lightweight"
     )
     container.engine.boot()
-    if container.engine.has_enabled_tasks():
-        container.engine.start_scheduler()
+    container.engine.sync_scheduler_state()
     logger.info("轻量模式启动: 仅监控 + 定时任务，按 Ctrl+C 停止")
 
     # Web 服务状态
     _web_server_lock = threading.Lock()
     _web_server_state = {"started": False, "server_ref": [None]}
+    _web_server_shutdown_event = threading.Event()
 
     def _start_web_server():
         """按需启动 Web 服务（在子线程中运行）。"""
@@ -454,6 +442,9 @@ def _run_lightweight(ctx: ApplicationContext, logger):
             except Exception as e:
                 logger.error("Web 服务启动失败: {}", e)
                 _web_server_state["started"] = False
+            finally:
+                # Web 服务退出后通知主循环
+                _web_server_shutdown_event.set()
 
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -466,7 +457,11 @@ def _run_lightweight(ctx: ApplicationContext, logger):
             if is_local_port_in_use(port):
                 break
             time.sleep(0.5)
-        webbrowser.open(f"http://127.0.0.1:{port}")
+        # BUG-059 修复：端口未就绪时不打开浏览器
+        if is_local_port_in_use(port):
+            webbrowser.open(f"http://127.0.0.1:{port}")
+        else:
+            logger.warning("Web 服务未在 15s 内就绪，跳过打开浏览器")
 
     # 系统托盘（可选）
     features = get_runtime_features(
@@ -490,25 +485,30 @@ def _run_lightweight(ctx: ApplicationContext, logger):
 
     try:
         while True:
-            time.sleep(60)
+            # 等待 web 服务关闭事件或 60 秒超时
+            if _web_server_shutdown_event.wait(timeout=60):
+                logger.info("Web 服务已退出，轻量模式即将关闭")
+                break
     except KeyboardInterrupt:
         logger.info("收到退出信号，正在关闭服务...")
     finally:
         if tray_icon:
             tray_icon.stop()
-        # 如果 Web 服务已启动，shutdown 由 Uvicorn 的事件循环处理
-        if not _web_server_state["started"]:
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # 已有运行中的 loop，安排协程执行
-                    loop.create_task(container.shutdown())
-                else:
-                    loop.run_until_complete(container.shutdown())
-            except RuntimeError:
-                # 无可用 event loop，跳过异步 shutdown
-                container.task_executor.shutdown(wait=False)
-                container.engine.shutdown()
+        # BUG-009/032 修复：无论 Web 服务状态如何，强制执行 container.shutdown()
+        # 容器已有 _shutdown_done 守卫保证幂等性
+        try:
+            asyncio.run(asyncio.wait_for(container.shutdown(), timeout=5))
+        except RuntimeError:
+            # 无可用 event loop，跳过异步 shutdown
+            container.task_executor.shutdown(wait=False)
+            container.engine.shutdown()
+        except KeyboardInterrupt:
+            # asyncio.run 在信号处理上下文中可能重新抛出 KeyboardInterrupt
+            logger.debug("容器关闭被信号中断")
+        except Exception:
+            logger.debug("容器关闭（幂等跳过或超时）")
+        cleanup_pid()
+        os._exit(0)
 
 
 def _run_full(
@@ -521,9 +521,6 @@ def _run_full(
 
     port = resolve_port()
     container = ServiceContainer(Path(__file__).parent.resolve())
-
-    if should_boot_engine:
-        container.engine.boot()
 
     features = get_runtime_features(
         RuntimeMode.FULL,
@@ -578,10 +575,12 @@ def _run_full(
     try:
         try:
             _ps = create_profile_service()
-            _sys = _ps.load().global_settings
-            _al = bool(_sys.access_log)
-            _lr = max(1, int(_sys.log_retention_days))
+            _data = _ps.load()
+            _logging = _data.global_config.logging
+            _al = bool(_logging.access_log)
+            _lr = max(1, int(_logging.log_retention_days))
         except (AttributeError, TypeError, ValueError):
+            _data = None
             _al, _lr = False, 7
 
         run(
@@ -589,6 +588,8 @@ def _run_full(
             log_retention=_lr,
             existing_container=container,
             server_ref=_uvicorn_server,
+            boot_engine=should_boot_engine,
+            logging_settings=_logging if _data else None,
         )
     except KeyboardInterrupt:
         logger.info("收到退出信号，正在关闭服务...")
@@ -597,9 +598,11 @@ def _run_full(
             tray_icon.stop()
         # lifespan 通常已执行 shutdown，此处为防御性补调（幂等安全）
         try:
-            asyncio.run(container.shutdown())
+            asyncio.run(asyncio.wait_for(container.shutdown(), timeout=5))
         except Exception:
-            logger.exception("容器关闭失败")
+            logger.debug("容器关闭（幂等跳过或超时）")
+        cleanup_pid()
+        os._exit(0)
 
 
 # ==================== 主启动 ====================
@@ -615,9 +618,6 @@ def _run_server(ctx: ApplicationContext, force: bool = False) -> None:
     # 检测已运行实例
     _handle_existing_instance(ctx, force=force)
 
-    write_pid(ctx.config.runtime_mode.value)
-    atexit.register(cleanup_pid)
-
     # Playwright 检查
     stage_begin = time.perf_counter()
     startup_logger.info("正在检查 Playwright 环境")
@@ -630,6 +630,10 @@ def _run_server(ctx: ApplicationContext, force: bool = False) -> None:
         "Playwright 环境检查完成 ({:.3f}s)",
         time.perf_counter() - stage_begin,
     )
+
+    # BUG-040 修复：在 Playwright 安装完成后再写入 PID 文件
+    write_pid(ctx.config.runtime_mode.value)
+    atexit.register(cleanup_pid)
 
     # 启动摘要
     _label = {"manual": "手动", "autostart": "自启动"}

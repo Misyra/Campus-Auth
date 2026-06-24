@@ -60,6 +60,7 @@ class TestExecuteShellUsesPolicy:
             registry=registry,
             history_store=history_store,
             worker_getter=lambda: None,
+            login_orchestrator=MagicMock(),
         )
 
     def test_rejected_shell_path_returns_failure(self, executor):

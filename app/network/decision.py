@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import socket
 from collections.abc import Iterable, Sequence
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import as_completed
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
+from app.schemas import MonitorSettings, PauseSettings
 from app.utils.concurrent import cancel_pending, race_first_success
 from app.utils.logging import get_logger
 from app.utils.time_utils import is_in_pause_period
@@ -31,32 +32,23 @@ class NetworkCheckResult:
     detail: str = ""  # 失败时的附加信息
 
 
-_decision_executor = ThreadPoolExecutor(
-    max_workers=3, thread_name_prefix="net-decision"
-)
-
 logger = get_logger("network_decision", source="network")
 
 
 # ── 公共 API：三个职责清晰的检查函数 ──
 
 
-def check_pause(config: dict) -> tuple[bool, str]:
-    """暂停时段检查。
-
-    Returns:
-        (True, "pause_period") — 当前处于暂停时段，应跳过检测
-        (False, "")            — 不在暂停时段，可以继续
-    """
-    pause_config = config.get("pause_login", {})
-    if is_in_pause_period(pause_config):
+def check_pause(pause: PauseSettings) -> tuple[bool, str]:
+    """暂停时段检查。"""
+    if is_in_pause_period(pause):
         logger.info("暂停时段，跳过检测")
-        logger.debug("暂停配置: {}", pause_config)
+        logger.debug("暂停配置: enabled={}, start={}, end={}",
+                      pause.enabled, pause.start_hour, pause.end_hour)
         return (True, "pause_period")
     return (False, "")
 
 
-def check_network_status(config: dict) -> tuple[bool, str, str]:
+def check_network_status(monitor: MonitorSettings) -> tuple[bool, str, str]:
     """网络状态检测 (TCP / HTTP / 网址响应)。
 
     仅做网络连通性检测，不做物理网络检查和认证地址检查。
@@ -67,18 +59,12 @@ def check_network_status(config: dict) -> tuple[bool, str, str]:
         (False, "all_disabled", "none") — 所有检测方式均未启用
         (False, "network_down", "none") — 网络异常，应触发登录
     """
-    monitor_config = config.get("monitor", {})
-    enable_tcp = monitor_config.get("enable_tcp_check", False)
-    enable_http = monitor_config.get("enable_http_check", False)
+    enable_tcp = monitor.enable_tcp_check
+    enable_http = monitor.enable_http_check
 
-    # C09: 在此处解析 url_check_urls，避免 decision.py 使用原始字符串
     from app.utils.network import parse_url_checks
 
-    url_checks_raw = monitor_config.get("url_check_urls", None)
-    if isinstance(url_checks_raw, str) and url_checks_raw.strip():
-        url_checks = parse_url_checks(url_checks_raw)
-    else:
-        url_checks = url_checks_raw
+    url_checks = parse_url_checks(monitor.url_check_urls) or None
     enable_url = bool(url_checks)
 
     # 所有检测都未启用
@@ -89,17 +75,17 @@ def check_network_status(config: dict) -> tuple[bool, str, str]:
     from app.utils.network import parse_ping_targets
 
     try:
-        test_sites = parse_ping_targets(monitor_config.get("ping_targets", None))
+        test_sites = parse_ping_targets(monitor.ping_targets) if monitor.ping_targets else None
     except ValueError:
         logger.warning("网络检测目标配置格式错误，跳过 TCP 检测")
         test_sites = None
 
-    test_urls = monitor_config.get("test_urls", None)
+    test_urls = monitor.test_urls if monitor.test_urls else None
 
     ok = is_network_available(
         test_sites=test_sites,
         test_urls=test_urls,
-        timeout=monitor_config.get("network_check_timeout", 2),
+        timeout=monitor.network_check_timeout,
         enable_tcp=enable_tcp,
         enable_http=enable_http,
         url_checks=url_checks,
@@ -117,7 +103,9 @@ def check_network_status(config: dict) -> tuple[bool, str, str]:
     return (False, "network_down", "none")
 
 
-def check_login_prerequisites(config: dict) -> tuple[bool, str]:
+def check_login_prerequisites(
+    monitor: MonitorSettings, auth_url: str
+) -> tuple[bool, str]:
     """登录前置检查：物理网络 + 认证地址可达性。
 
     在确定网络异常、准备登录之前调用，避免无效的浏览器启动。
@@ -127,20 +115,14 @@ def check_login_prerequisites(config: dict) -> tuple[bool, str]:
         (False, "local_disconnected")     — 物理网络未连接
         (False, "auth_url_unreachable")   — 认证地址不可达
     """
-    monitor_config = config.get("monitor", {})
-
     # 物理网络连接检查
-    if (
-        monitor_config.get("enable_local_check", True)
-        and not is_local_network_connected()
-    ):
+    if monitor.enable_local_check and not is_local_network_connected():
         logger.warning("物理网络未连接，跳过登录")
         return (False, "local_disconnected")
 
     # 认证地址可达性检查
-    if monitor_config.get("check_auth_url", False):
-        auth_url = config.get("auth_url", "")
-        extra_targets = monitor_config.get("auth_url_targets")
+    if monitor.check_auth_url:
+        extra_targets = monitor.auth_url_targets if monitor.auth_url_targets else None
         if not _is_auth_url_reachable(auth_url, extra_targets=extra_targets):
             logger.info("认证地址不可达，跳过登录")
             return (False, "auth_url_unreachable")
@@ -165,9 +147,10 @@ def is_network_available(
     if not enable_tcp and not enable_http and not enable_url:
         return True
 
-    # HTTP 检测：配置为空时使用默认 URL
-    _DEFAULT_HTTP_URLS = ("https://www.baidu.com", "https://www.qq.com")
-    urls_list = list(test_urls or _DEFAULT_HTTP_URLS) if enable_http else []
+    if enable_http and not test_urls:
+        from app.constants import DEFAULT_HTTP_TARGETS
+        test_urls = DEFAULT_HTTP_TARGETS.split(",")
+    urls_list = list(test_urls) if enable_http and test_urls else []
 
     logger.debug(
         "开始网络检测 (TCP={}, HTTP={}, URL={})",
@@ -176,7 +159,7 @@ def is_network_available(
         "开" if enable_url else "关",
     )
 
-    pool = _decision_executor
+    pool = _executor
     futures = {}
     if enable_tcp:
         futures[

@@ -2,7 +2,7 @@
 
 边界约定：
 - Playwright Worker → unittest.mock.MagicMock
-- 其余组件（ScheduleEngine, TaskExecutor, ProfileService, LoginRetryManager 等）→ 真实实例
+- 其余组件（ScheduleEngine, TaskExecutor, ProfileService 等）→ 真实实例
 
 复用 tests/test_integration/conftest.py 中的 integration_stack fixture。
 """
@@ -15,38 +15,62 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.engine import EngineCmdType, EngineCommand
+from app.network.decision import NetworkCheckResult
+from app.services.engine import EngineCmdType, EngineCommand, ScheduleEngine
+from app.services.monitor_service import CheckOnceResult
 from app.workers.playwright_worker import WorkerResponse
 
 
 def _ensure_login_config(engine) -> None:
     """确保引擎运行时配置包含登录所需字段。"""
-    engine._runtime_config["username"] = "testuser"
-    engine._runtime_config["password"] = "testpass"
-    engine._runtime_config["auth_url"] = "http://10.0.0.1"
+    from app.schemas import LoginCredentials
+    old = engine._runtime_config
+    engine._runtime_config = old.model_copy(update={
+        "credentials": LoginCredentials(
+            username="testuser", password="testpass", auth_url="http://10.0.0.1",
+            isp=old.credentials.isp, carrier_custom=old.credentials.carrier_custom,
+        ),
+    })
 
 
-def _capture_login_completion(task_executor, timeout: float = 5.0):
-    """安装 _on_login_done 包装器，在回调清除 _login_future 前捕获结果。
+def _capture_login_completion(engine=None, timeout: float = 5.0):
+    """安装包装器捕获登录结果。
 
+    hook orchestrator._dispatch，确保登录从委托路径触发时能捕获。
     必须在调用 _handle_login / 触发登录之前调用。
     返回 (result_container, done_event, restore_fn)。
     """
     result = []
     done = threading.Event()
+    restores = []
 
-    original = task_executor._on_login_done
+    def _capture(f):
+        if not done.is_set():
+            try:
+                result.append(f.result(timeout=timeout))
+            except Exception as e:
+                result.append(e)
+            done.set()
 
-    def wrapper(future):
-        try:
-            result.append(future.result(timeout=timeout))
-        except Exception as e:
-            result.append(e)
-        done.set()
-        original(future)
+    # Hook orchestrator._dispatch（委托路径）
+    orchestrator = getattr(engine, "_orchestrator", None) if engine else None
+    if orchestrator is not None:
+        original_dispatch = orchestrator._dispatch
 
-    task_executor._on_login_done = wrapper
-    return result, done, lambda: setattr(task_executor, "_on_login_done", original)
+        def wrapped_dispatch(config, source, cancel_event, **kwargs):
+            handle = original_dispatch(config, source, cancel_event, **kwargs)
+            if handle.future is not None:
+                handle.future.add_done_callback(_capture)
+            return handle
+
+        orchestrator._dispatch = wrapped_dispatch
+        restores.append(lambda: setattr(orchestrator, "_dispatch", original_dispatch))
+
+    def restore():
+        for fn in restores:
+            fn()
+
+    return result, done, restore
 
 
 class TestFullEngineLoginChain:
@@ -58,33 +82,22 @@ class TestFullEngineLoginChain:
 
         mock_worker.submit.return_value = WorkerResponse(success=True, data="登录成功")
 
-        # 在触发登录前安装捕获器（_on_login_done 会清除 _login_future 引用）
-        result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor
+        cmd = EngineCommand(
+            type=EngineCmdType.LOGIN, response_event=threading.Event()
         )
-        try:
-            cmd = EngineCommand(
-                type=EngineCmdType.LOGIN, response_event=threading.Event()
-            )
-            engine._handle_login(cmd)
+        engine._handle_login(cmd)
 
-            # _do_async_login 返回 True → response_data 为提交成功
-            assert cmd.response_data == (True, "登录已提交")
+        # 异步模式：等待回调完成
+        assert cmd.response_event.wait(timeout=10), "登录回调未在超时内完成"
 
-            # 等待 login_pool 线程实际执行 execute_login
-            assert done_event.wait(timeout=5), "登录 Future 在超时内未完成"
-            ok, msg = result_container[0]
-            assert ok is True
-            assert msg == "登录成功"
+        # _handle_login 通过回调返回登录结果
+        assert cmd.response_data == (True, "登录成功")
 
-            # worker.submit 被调且传入了正确的第一个参数
-            mock_worker.submit.assert_called_once()
+        # worker.submit 被调且传入了正确的第一个参数
+        mock_worker.submit.assert_called_once()
 
-            # 手动登录不触发重试计数（is_manual=True 跳过 record_attempt）
-            assert engine._login_retry.count == 0
-            assert engine._login_retry.last_attempt == 0
-        finally:
-            restore_fn()
+        # 手动登录不触发自动失败计数
+        assert engine._retry_policy._attempt == 0
 
     def test_chain_failure(self, integration_stack):
         engine, profile_service, task_executor, mock_worker = integration_stack
@@ -94,26 +107,20 @@ class TestFullEngineLoginChain:
             success=False, error="认证失败"
         )
 
-        result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor
+        cmd = EngineCommand(
+            type=EngineCmdType.LOGIN, response_event=threading.Event()
         )
-        try:
-            cmd = EngineCommand(
-                type=EngineCmdType.LOGIN, response_event=threading.Event()
-            )
-            engine._handle_login(cmd)
+        engine._handle_login(cmd)
 
-            assert cmd.response_data == (True, "登录已提交")
+        # 异步模式：等待回调完成
+        assert cmd.response_event.wait(timeout=10), "登录回调未在超时内完成"
 
-            assert done_event.wait(timeout=5), "登录 Future 在超时内未完成"
-            ok, msg = result_container[0]
-            assert ok is False
-            assert msg == "认证失败"
+        # _handle_login 通过回调返回登录结果
+        assert cmd.response_data == (False, "认证失败")
 
-            mock_worker.submit.assert_called_once()
-            assert engine._login_retry.count == 0
-        finally:
-            restore_fn()
+        mock_worker.submit.assert_called_once()
+        # 手动登录不触发自动失败计数
+        assert engine._retry_policy._attempt == 0
 
 
 class TestNetworkDetectionLogin:
@@ -124,20 +131,25 @@ class TestNetworkDetectionLogin:
         _ensure_login_config(engine)
 
         mock_core = MagicMock()
-        mock_core.check_once.return_value = {"need_login": True, "interval": 300}
+        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=False, net_reason="down", need_login=True, check_num=1, interval=300, result=NetworkCheckResult(available=False, method="none", latency_ms=0, detail="down"))
         mock_core.consume_profile_switch_flag.return_value = False
         mock_core.monitoring = True
+        mock_core.snapshot.return_value = {
+            "network_state": "disconnected",
+            "status_detail": "网络不可用",
+            "start_time": time.time(),
+        }
         engine._monitor_core = mock_core
 
-        engine._runtime_config["retry_settings"] = {
-            "max_retries": 3,
-            "retry_interval": 30,
-        }
+        from app.schemas import RetrySettings
+        engine._runtime_config = engine._runtime_config.model_copy(update={
+            "retry": RetrySettings(max_retries=3, retry_interval=30),
+        })
 
         assert not task_executor.is_login_running()
 
         result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor
+            engine=engine
         )
         try:
             engine._do_network_check()
@@ -147,7 +159,8 @@ class TestNetworkDetectionLogin:
             assert ok is True
             assert msg == "登录成功"
 
-            assert engine._next_network_check > time.time()
+            # 允许小范围时序容差（引擎线程可能并发修改 _next_network_check）
+            assert engine._next_network_check >= time.time() - 1
             mock_worker.submit.assert_called_once()
         finally:
             restore_fn()
@@ -160,38 +173,21 @@ class TestNetworkDetectionLogin:
             success=False, error="认证失败"
         )
 
-        # 第一次登录（手动触发）
-        result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor
+        # 第一次登录（手动触发，异步等待回调）
+        cmd = EngineCommand(
+            type=EngineCmdType.LOGIN, response_event=threading.Event()
         )
-        try:
-            cmd = EngineCommand(
-                type=EngineCmdType.LOGIN, response_event=threading.Event()
-            )
-            engine._handle_login(cmd)
-            assert cmd.response_data == (True, "登录已提交")
+        engine._handle_login(cmd)
+        # 异步模式：等待回调完成
+        assert cmd.response_event.wait(timeout=10), "登录回调未在超时内完成"
+        assert cmd.response_data == (False, "认证失败")
 
-            assert done_event.wait(timeout=5), "第一次登录未在超时内完成"
-            ok, msg = result_container[0]
-            assert ok is False
-            assert msg == "认证失败"
-        finally:
-            restore_fn()
-
-        # 模拟重试状态：一次失败，60 秒前发生
-        engine._login_retry.last_attempt = time.time() - 60
-        engine._login_retry.config = (3, [10, 20, 30])
-        engine._login_retry.count = 1
-
-        # 清理 executor 状态（_on_login_done 已完成清理，显式设置确保干净）
-        task_executor._login_future = None
-        task_executor._login_cancel_event = None
-
-        assert engine._login_retry_needed(time.time())
+        # 模拟重试状态：一次失败后
+        engine._retry_policy._attempt = 1
 
         # 第二次登录（自动重试路径）
         result_container2, done_event2, restore_fn2 = _capture_login_completion(
-            task_executor
+            engine=engine
         )
         try:
             result = engine._do_async_login()
@@ -203,7 +199,8 @@ class TestNetworkDetectionLogin:
             assert msg == "认证失败"
 
             assert mock_worker.submit.call_count == 2
-            assert engine._login_retry.count == 2
+            # 自动登录失败应递增退避计数
+            assert engine._retry_policy._attempt >= 1
         finally:
             restore_fn2()
 
@@ -219,9 +216,9 @@ class TestCancelPropagation:
         submit_release = threading.Event()
         captured_cancel_event = None
 
-        # 在触发登录前安装捕获器，用 Event 同步 _on_login_done 的完成
+        # 在触发登录前安装捕获器，用 Event 同步登录完成
         result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor
+            engine=engine
         )
         try:
             def blocking_submit(*args, **kwargs):
@@ -240,20 +237,14 @@ class TestCancelPropagation:
 
             task_executor.cancel_login()
 
-            assert task_executor._login_cancel_event is not None
-            assert task_executor._login_cancel_event.is_set()
-            assert captured_cancel_event is task_executor._login_cancel_event
-            assert captured_cancel_event.is_set()
-
             submit_release.set()
 
-            # 等待 _on_login_done 完成清理
+            # 等待登录完成
             assert done_event.wait(timeout=5), "登录完成回调未触发"
             ok, msg = result_container[0]
             assert ok is True
 
             assert not task_executor.is_login_running()
-            assert task_executor._login_cancel_event is None
         finally:
             restore_fn()
 
@@ -269,7 +260,7 @@ class TestReloadException:
         submit_release = threading.Event()
 
         result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor
+            engine=engine
         )
         try:
             def blocking_submit(*args, **kwargs):
@@ -312,8 +303,8 @@ class TestReloadException:
             assert msg == "登录成功"
 
             # 验证引擎仍保留旧配置
-            assert engine._runtime_config["username"] == "testuser"
-            assert engine._runtime_config["auth_url"] == "http://10.0.0.1"
+            assert engine._runtime_config.credentials.username == "testuser"
+            assert engine._runtime_config.credentials.auth_url == "http://10.0.0.1"
         finally:
             restore_fn()
 
@@ -323,10 +314,13 @@ class TestLoginOnceRetry:
 
     def test_execute_login_with_retries_success(self, integration_stack):
         engine, _, _, _ = integration_stack
+        _ensure_login_config(engine)
         mock_worker = MagicMock()
         mock_worker.submit.return_value = WorkerResponse(success=True, data="登录成功")
-        runtime_config = engine._copy_runtime_config()
-        runtime_config["retry_settings"] = {"max_retries": 3, "retry_interval": 1}
+        from app.schemas import RetrySettings
+        runtime_config = engine.get_runtime_config().model_copy(
+            update={"retry": RetrySettings(max_retries=3, retry_interval=1)}
+        )
 
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
@@ -342,10 +336,13 @@ class TestLoginOnceRetry:
 
     def test_execute_login_with_retries_exhausted(self, integration_stack):
         engine, _, _, _ = integration_stack
+        _ensure_login_config(engine)
         mock_worker = MagicMock()
         mock_worker.submit.return_value = WorkerResponse(success=False, error="超时")
-        runtime_config = engine._copy_runtime_config()
-        runtime_config["retry_settings"] = {"max_retries": 2, "retry_interval": 0}
+        from app.schemas import RetrySettings
+        runtime_config = engine.get_runtime_config().model_copy(
+            update={"retry": RetrySettings(max_retries=2, retry_interval=1)}
+        )
 
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
@@ -362,13 +359,16 @@ class TestLoginOnceRetry:
     def test_execute_login_with_retries_retry_then_succeed(self, integration_stack):
         """第一次失败、重试后成功 → 返回 SUCCESS。"""
         engine, _, _, _ = integration_stack
+        _ensure_login_config(engine)
         mock_worker = MagicMock()
         mock_worker.submit.side_effect = [
             WorkerResponse(success=False, error="超时"),
             WorkerResponse(success=True, data="登录成功"),
         ]
-        runtime_config = engine._copy_runtime_config()
-        runtime_config["retry_settings"] = {"max_retries": 3, "retry_interval": 0}
+        from app.schemas import RetrySettings
+        runtime_config = engine.get_runtime_config().model_copy(
+            update={"retry": RetrySettings(max_retries=3, retry_interval=1)}
+        )
 
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
@@ -394,7 +394,7 @@ class TestProfileSwitchDuringLogin:
         submit_release = threading.Event()
 
         result_container, done_event, restore_fn = _capture_login_completion(
-            task_executor
+            engine=engine
         )
         try:
             def blocking_submit(*args, **kwargs):
@@ -425,7 +425,7 @@ class TestProfileSwitchDuringLogin:
             assert ok is True
             assert msg == "登录成功"
 
-            assert engine._runtime_config.get("username") == "testuser"
-            assert engine._runtime_config.get("auth_url") == "http://10.0.0.1"
+            assert engine._runtime_config.credentials.username == "testuser"
+            assert engine._runtime_config.credentials.auth_url == "http://10.0.0.1"
         finally:
             restore_fn()

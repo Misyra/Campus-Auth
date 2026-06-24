@@ -5,8 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.deps import get_monitor_service, get_profile_service
-from app.schemas import ActionResponse, MonitorConfigPayload
-from app.services.config_service import save_and_apply
+from app.schemas import ActionResponse, ConfigResponseDTO
+from app.services.config_service import save_global_and_profile
 from app.services.engine import ScheduleEngine
 from app.services.profile_service import ProfileService
 from app.utils.logging import get_logger
@@ -43,6 +43,9 @@ def set_source_level(payload: dict, request: Request):
 
     if source == "global":
         config.set_level(level)
+        actual = config.get_config().get("level", "INFO")
+        if actual != level.upper():
+            return {"success": True, "message": f"无效级别 '{level}'，已降级为 {actual}"}
     else:
         try:
             config.set_source_level(source, level)
@@ -58,19 +61,40 @@ def _persist_source_levels(request: Request, config):
     """将 source_levels 持久化到 settings.json"""
     profile_service = request.app.state.services.profile_service
     profile_service.update(
-        lambda d: setattr(d.global_settings, "source_levels", config.get_all_source_levels())
+        lambda d: setattr(d.global_config, "logging", d.global_config.logging.model_copy(update={"source_levels": config.get_all_source_levels()}))
     )
 
 
-@router.get("/api/config", response_model=MonitorConfigPayload)
+@router.get("/api/config", response_model=ConfigResponseDTO)
 def get_config(
     svc: ScheduleEngine = Depends(get_monitor_service),
-) -> MonitorConfigPayload:
-    config = svc.get_config()
-    # 掩码密码，不暴露加密密文（save_password_field 已识别 "•" 前缀为掩码）
-    if config.password:
-        config.password = "••••••••"
-    return config
+    profile_svc: ProfileService = Depends(get_profile_service),
+) -> ConfigResponseDTO:
+    data = profile_svc.load()
+    cfg = profile_svc.build_runtime_config(data)
+    return ConfigResponseDTO(
+        browser=cfg.browser,
+        monitor=cfg.monitor,
+        retry=cfg.retry,
+        pause=cfg.pause,
+        logging=cfg.logging,
+        username=cfg.credentials.username,
+        password="••••••••" if cfg.credentials.password else "",
+        auth_url=cfg.credentials.auth_url,
+        isp=cfg.credentials.isp,
+        carrier_custom=cfg.credentials.carrier_custom,
+        active_task=cfg.active_task,
+        block_proxy=cfg.block_proxy,
+        shell_path=cfg.shell_path,
+        minimize_to_tray=cfg.minimize_to_tray,
+        startup_action=cfg.startup_action,
+        autostart_lightweight=cfg.autostart_lightweight,
+        lightweight_tray=cfg.lightweight_tray,
+        auto_open_browser=cfg.auto_open_browser,
+        proxy=cfg.proxy,
+        app_port=cfg.app_port,
+        custom_variables=cfg.custom_variables,
+    )
 
 
 @router.get("/api/config/default-stealth-script")
@@ -81,7 +105,19 @@ def get_default_stealth_script() -> dict:
     return {"script": STEALTH_INIT_SCRIPT}
 
 
-def _log_config_changes(old_dict: dict, new_payload: MonitorConfigPayload) -> None:
+def _flatten_dict(d: dict, parent_key: str = "", sep: str = ".") -> dict:
+    """将嵌套字典扁平化为点分键。"""
+    items: list[tuple[str, object]] = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(_flatten_dict(v, new_key, sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+
+def _log_config_changes(old_dict: dict, new_payload: ConfigResponseDTO) -> None:
     """记录配置变更日志
 
     规则：
@@ -90,59 +126,69 @@ def _log_config_changes(old_dict: dict, new_payload: MonitorConfigPayload) -> No
     - password 字段：完全忽略
     """
     FIELD_NAMES = {
-        "headless": "无头模式",
-        "pure_mode": "纯净模式",
-        "stealth_mode": "反检测模式",
-        "browser_low_resource_mode": "低资源模式",
-        "browser_disable_web_security": "禁用同源策略",
-        "enable_tcp_check": "TCP检测",
-        "enable_http_check": "HTTP检测",
-        "enable_local_check": "本地网络检测",
-        "check_auth_url": "认证地址检测",
-        "pause_enabled": "暂停时段",
+        "browser.headless": "无头模式",
+        "browser.pure_mode": "纯净模式",
+        "browser.stealth_mode": "反检测模式",
+        "browser.low_resource_mode": "低资源模式",
+        "browser.disable_web_security": "禁用同源策略",
+        "monitor.enable_tcp_check": "TCP检测",
+        "monitor.enable_http_check": "HTTP检测",
+        "monitor.enable_local_check": "本地网络检测",
+        "monitor.check_auth_url": "认证地址检测",
+        "pause.enabled": "暂停时段",
         "block_proxy": "屏蔽系统代理",
         "minimize_to_tray": "最小化到托盘",
         "auto_open_browser": "自动打开浏览器",
         "autostart_lightweight": "自启动轻量模式",
-        "access_log": "HTTP访问日志",
-        "browser_channel": "浏览器类型",
-        "browser_timeout": "浏览器超时",
-        "browser_navigation_timeout": "页面加载超时",
-        "login_timeout": "登录超时",
-        "check_interval_seconds": "检测间隔",
-        "max_retries": "最大重试次数",
-        "retry_interval": "重试间隔",
-        "log_retention_days": "日志保留天数",
-        "backend_log_level": "后端日志级别",
-        "frontend_log_level": "前端日志级别",
+        "logging.access_log": "HTTP访问日志",
+        "browser.browser_channel": "浏览器类型",
+        "browser.timeout": "浏览器超时",
+        "browser.navigation_timeout": "页面加载超时",
+        "browser.login_timeout": "登录超时",
+        "monitor.check_interval_seconds": "检测间隔",
+        "retry.max_retries": "最大重试次数",
+        "retry.retry_interval": "重试间隔",
+        "logging.log_retention_days": "日志保留天数",
+        "logging.level": "后端日志级别",
+        "logging.frontend_level": "前端日志级别",
         "app_port": "网页端口",
         "proxy": "网络代理",
         "shell_path": "Shell路径",
-        "browser_viewport_width": "视口宽度",
-        "browser_viewport_height": "视口高度",
-        "pause_start_hour": "暂停开始时间",
-        "pause_end_hour": "暂停结束时间",
-        "network_check_timeout": "网络检测超时",
+        "browser.viewport_width": "视口宽度",
+        "browser.viewport_height": "视口高度",
+        "pause.start_hour": "暂停开始时间",
+        "pause.end_hour": "暂停结束时间",
+        "monitor.network_check_timeout": "网络检测超时",
+        "isp": "运营商",
+        "carrier_custom": "自定义运营商",
     }
 
     # 直接忽略的字段（不记录变更）
     IGNORE_FIELDS = {"password"}
 
-    new_dict = new_payload.model_dump()
+    # BUG-005 修复：扁平化嵌套字典后再比较
+    # old_dict 来自 RuntimeConfig（credentials 嵌套），new_payload 来自 ConfigResponseDTO（扁平）
+    # 需要将 old_dict 的 credentials 扁平化到顶层后再比较
+    _old = dict(old_dict)
+    _old_creds = _old.pop("credentials", {})
+    _old.update(_old_creds)
+    flat_old = _flatten_dict(_old)
+    flat_new = _flatten_dict(new_payload.model_dump())
 
     changes = []
 
-    # 密码变更：仅记录"已修改"，不记录内容
-    new_pw = new_dict.get("password", "")
-    if new_pw and old_dict.get("password") != new_pw:
+    # 密码变更检测（顶层 password，不再嵌套在 credentials 下）
+    new_pw = flat_new.get("password", "")
+    old_pw = flat_old.get("password", "")
+    if new_pw and not new_pw.startswith("•") and old_pw != new_pw:
         changes.append("密码已修改")
 
-    for field_name in old_dict:
+    for field_name in flat_old:
         if field_name in IGNORE_FIELDS:
             continue
 
-        old_val = old_dict.get(field_name)
-        new_val = new_dict.get(field_name)
+        old_val = flat_old.get(field_name)
+        new_val = flat_new.get(field_name)
 
         if old_val == new_val:
             continue
@@ -157,22 +203,32 @@ def _log_config_changes(old_dict: dict, new_payload: MonitorConfigPayload) -> No
         else:
             changes.append(f"{name}已修改")
 
+    for field_name in flat_new:
+        if field_name in flat_old or field_name in IGNORE_FIELDS:
+            continue
+        new_val = flat_new.get(field_name)
+        if new_val:
+            name = FIELD_NAMES.get(field_name, field_name)
+            changes.append(f"{name}已设置")
+
     if changes:
         config_logger.info("配置变更: {}", "; ".join(changes))
 
 
 @router.put("/api/config", response_model=ActionResponse)
 def save_config(
-    payload: MonitorConfigPayload,
+    payload: ConfigResponseDTO,
     svc: ScheduleEngine = Depends(get_monitor_service),
     profile_svc: ProfileService = Depends(get_profile_service),
 ) -> ActionResponse:
     try:
         # 获取当前配置用于变更日志
-        old_dict = svc.get_config().model_dump()
+        old_data = profile_svc.load()
+        old_cfg = profile_svc.build_runtime_config(old_data)
+        old_dict = old_cfg.model_dump()
 
-        # 保存 + 重载 + 失败回滚（事务逻辑在 config_service 中）
-        result = save_and_apply(payload, profile_svc, svc.reload_config)
+        # 一次保存全局配置 + 方案凭据
+        result = save_global_and_profile(payload, profile_svc, svc.reload_config)
         if not result.success:
             raise ValueError(result.message)
 

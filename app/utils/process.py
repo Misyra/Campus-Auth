@@ -58,6 +58,9 @@ def read_pid_file() -> dict | None:
         pid = data.get("pid")
         if not isinstance(pid, int) or pid <= 0:
             return None
+        # create_time 是进程身份验证的必要字段，缺失则视为无效 PID 文件
+        if "create_time" not in data:
+            return None
         return data
     except (json.JSONDecodeError, ValueError, OSError):
         return None

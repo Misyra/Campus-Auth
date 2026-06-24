@@ -50,15 +50,6 @@ class ServiceContainer:
 
             return get_worker()
 
-        # 任务执行器（轻量模式仅用于登录，完整模式支持定时任务）
-        self.task_executor = TaskExecutor(
-            registry=self.task_registry,
-            history_store=self.task_history_store,
-            worker_getter=_get_worker,
-            login_history=self.login_history_service,
-            profile_service=self.profile_service,
-        )
-
         # 统一引擎（替代 MonitorService + SchedulerService）
         self.engine = ScheduleEngine(
             project_root,
@@ -67,8 +58,27 @@ class ServiceContainer:
             login_history_service=self.login_history_service,
             worker_getter=_get_worker,
             task_registry=self.task_registry,
-            task_executor=self.task_executor,
         )
+
+        # 注入 LoginOrchestrator — 登录执行的唯一入口（自行管理线程池）
+        from app.services.login_orchestrator import LoginOrchestrator
+
+        self.login_orchestrator = LoginOrchestrator(
+            worker_getter=_get_worker,
+            login_history=self.login_history_service,
+            profile_service=self.profile_service,
+            get_runtime_config=self.engine.get_runtime_config,
+        )
+        self.engine.set_orchestrator(self.login_orchestrator)
+
+        # 任务执行器（轻量模式仅用于登录，完整模式支持定时任务）
+        self.task_executor = TaskExecutor(
+            registry=self.task_registry,
+            history_store=self.task_history_store,
+            worker_getter=_get_worker,
+            login_orchestrator=self.login_orchestrator,
+        )
+        self.engine.set_task_executor(self.task_executor)
 
         # 延迟绑定：TaskExecutor 通过引擎获取运行时配置
         self.task_executor.set_runtime_config_getter(self.engine.get_runtime_config)
@@ -82,6 +92,7 @@ class ServiceContainer:
 
     @property
     def monitor_service(self) -> ScheduleEngine:
+        """已废弃：请使用 services.engine。"""
         return self.engine
 
     @property
@@ -103,8 +114,7 @@ class ServiceContainer:
             cleanup_orphan_browsers()
             self.start_web_services()
             self.engine.boot()
-            if self.task_registry.has_enabled_tasks():
-                self.engine.start_scheduler()
+            self.engine.sync_scheduler_state()
             container_logger.info("服务容器启动完成")
         except Exception:
             container_logger.exception("服务启动失败，正在清理...")
@@ -119,6 +129,12 @@ class ServiceContainer:
         if self._web_services_started:
             return
         from loguru import logger
+
+        # 轻量模式唤醒时，将 NullWebSocketManager 切换为真正的 WebSocketManager
+        if self._is_lightweight and isinstance(self.ws_manager, NullWebSocketManager):
+            self.ws_manager = WebSocketManager()
+            self.engine._ws_manager = self.ws_manager
+            container_logger.info("WebSocket 管理器已切换为实时模式")
 
         if self._log_handler_id is None:
             dashboard_sink = DashboardSink()
@@ -166,9 +182,10 @@ class ServiceContainer:
         # 复用 stop_web_services — 消除重复代码并修复 _ws_drain_task = None 遗漏 bug
         await self.stop_web_services()
 
-        self.task_executor.shutdown(wait=False)
-
+        # BUG-013 修复：先关闭引擎（停止提交任务），再关闭线程池
         self.engine.shutdown()
+
+        self.task_executor.shutdown(wait=False)
 
         if self._debug_manager is not None:
             await self._debug_manager.close()

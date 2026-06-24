@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.schemas import AuthProfile, ProfilesData, SystemSettings
+from app.schemas import Profile, ProfilesData
 
 
 class TestDictUpdateBreaksPydantic:
@@ -18,12 +18,10 @@ class TestDictUpdateBreaksPydantic:
     def test_dict_update_preserves_field_values(self):
         """__dict__.update 能正确替换字段值。"""
         data = ProfilesData(
-            global_settings=SystemSettings(),
-            profiles={"default": AuthProfile(name="当前方案", username="current")},
+            profiles={"default": Profile(name="当前方案", username="current")},
         )
         backup = ProfilesData(
-            global_settings=SystemSettings(),
-            profiles={"default": AuthProfile(name="备份方案", username="backup")},
+            profiles={"default": Profile(name="备份方案", username="backup")},
         )
 
         # 当前的回滚方式
@@ -40,15 +38,13 @@ class TestDictUpdateBreaksPydantic:
         """
         # data 只设置了部分字段
         data = ProfilesData(
-            global_settings=SystemSettings(),
-            profiles={"default": AuthProfile(username="current")},
+            profiles={"default": Profile(username="current")},
         )
         # backup 设置了所有字段
         backup = ProfilesData(
             auto_switch=True,
             active_profile="custom",
-            global_settings=SystemSettings(),
-            profiles={"default": AuthProfile(name="备份方案", username="backup")},
+            profiles={"default": Profile(name="备份方案", username="backup")},
         )
 
         # 记录 backup 的 fields_set
@@ -69,12 +65,10 @@ class TestDictUpdateBreaksPydantic:
         这个测试记录了当前行为，但不保证未来兼容性。
         """
         data = ProfilesData(
-            global_settings=SystemSettings(),
-            profiles={"default": AuthProfile(name="当前方案", username="current")},
+            profiles={"default": Profile(name="当前方案", username="current")},
         )
         backup = ProfilesData(
-            global_settings=SystemSettings(),
-            profiles={"default": AuthProfile(name="备份方案", username="backup")},
+            profiles={"default": Profile(name="备份方案", username="backup")},
         )
 
         backup_dump = backup.model_dump()
@@ -88,14 +82,12 @@ class TestDictUpdateBreaksPydantic:
     def test_proper_rollback_via_field_assignment(self):
         """正确的回滚方式：逐字段赋值，保持 Pydantic 内部状态一致。"""
         data = ProfilesData(
-            global_settings=SystemSettings(),
-            profiles={"default": AuthProfile(name="当前方案", username="current")},
+            profiles={"default": Profile(name="当前方案", username="current")},
         )
         backup = ProfilesData(
             auto_switch=True,
             active_profile="custom",
-            global_settings=SystemSettings(),
-            profiles={"default": AuthProfile(name="备份方案", username="backup")},
+            profiles={"default": Profile(name="备份方案", username="backup")},
         )
 
         # 正确的回滚方式
@@ -110,5 +102,5 @@ class TestDictUpdateBreaksPydantic:
         # model_dump 也正确
         assert data.model_dump() == backup.model_dump()
 
-        # fields_set 也正确
-        assert data.model_fields_set == backup.model_fields_set
+        # 逐字段赋值后 data 的 fields_set 包含所有字段（因为每个字段都被 setattr 设置过）
+        assert data.model_fields_set == set(ProfilesData.model_fields)

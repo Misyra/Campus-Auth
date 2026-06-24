@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,8 @@ class TaskManager:
         self.scripts_dir = tasks_dir / "scripts"
         self.browser_dir.mkdir(parents=True, exist_ok=True)
         self.scripts_dir.mkdir(parents=True, exist_ok=True)
+        # BUG-048 修复：添加锁保护文件操作
+        self._lock = threading.Lock()
 
     # ── 路径工具 ──
 
@@ -330,28 +333,29 @@ class TaskManager:
         self, task_id: str, config: dict[str, Any], task_type: str = "browser"
     ) -> bool:
         """保存任务（支持 browser 和 script 两种类型）。"""
-        if task_type == "scripts":
-            return self._save_script_task(task_id, config)
+        with self._lock:
+            if task_type == "scripts":
+                return self._save_script_task(task_id, config)
 
-        # 浏览器任务：带验证
-        is_valid, errors = TaskValidator.validate(config)
-        if not is_valid:
-            logger.error("任务验证失败: {}", errors)
-            return False
+            # 浏览器任务：带验证
+            is_valid, errors = TaskValidator.validate(config)
+            if not is_valid:
+                logger.error("任务验证失败: {}", errors)
+                return False
 
-        file = self._safe_json_path(task_id, task_type="browser")
-        if file is None:
-            return False
+            file = self._safe_json_path(task_id, task_type="browser")
+            if file is None:
+                return False
 
-        try:
-            atomic_write(
-                str(file),
-                json.dumps(config, ensure_ascii=False, indent=2),
-            )
-            return True
-        except Exception as e:
-            logger.error("无法保存任务 {}: {}", task_id, e)
-            return False
+            try:
+                atomic_write(
+                    str(file),
+                    json.dumps(config, ensure_ascii=False, indent=2),
+                )
+                return True
+            except Exception as e:
+                logger.error("无法保存任务 {}: {}", task_id, e)
+                return False
 
     def _save_script_task(self, task_id: str, config: dict[str, Any]) -> bool:
         """保存自定义脚本任务（JSON 格式，存入 scripts/ 目录）。"""
@@ -380,35 +384,47 @@ class TaskManager:
             return False
 
     def delete_task(self, task_id: str) -> bool:
-        if task_id == "default":
-            return False
         normalized = normalize_task_id(task_id)
+        if normalized == "default":
+            return False
         if not is_valid_task_id(normalized):
             return False
-        deleted = False
-        # 从两个子目录中删除
-        for subdir in (self.browser_dir, self.scripts_dir):
-            for ext in (".json", ".py", ".meta.json"):
-                file = subdir / f"{normalized}{ext}"
-                if file.exists():
+        with self._lock:
+            deleted = False
+            # 从两个子目录中删除
+            for subdir in (self.browser_dir, self.scripts_dir):
+                for ext in (".json", ".py", ".meta.json"):
+                    file = subdir / f"{normalized}{ext}"
+                    if file.exists():
+                        try:
+                            file.unlink()
+                            deleted = True
+                        except Exception as e:
+                            logger.error("无法删除任务文件 {}: {}", file, e)
+            # 删除活动任务后回退到默认任务
+            if deleted:
+                active = self.get_active_task()
+                if active == normalized:
                     try:
-                        file.unlink()
-                        deleted = True
+                        atomic_write(
+                            str(self.tasks_dir / "active.txt"), "browser:default"
+                        )
+                        logger.info("活动任务已删除，已回退到默认任务")
                     except Exception as e:
-                        logger.error("无法删除任务文件 {}: {}", file, e)
-        return deleted
+                        logger.error("回退活动任务失败: {}", e)
+            return deleted
 
     def _find_task_type(self, task_id: str) -> str | None:
         """查找任务所在的子目录类型，返回 'browser' 或 'scripts'，未找到返回 None。"""
         normalized = normalize_task_id(task_id)
         if not is_valid_task_id(normalized):
             return None
-        for ext in (".json", ".py"):
-            if (self.scripts_dir / f"{normalized}{ext}").exists():
-                return "scripts"
         for ext in (".json",):
             if (self.browser_dir / f"{normalized}{ext}").exists():
                 return "browser"
+        for ext in (".json", ".py"):
+            if (self.scripts_dir / f"{normalized}{ext}").exists():
+                return "scripts"
         return None
 
     def get_active_task(self) -> str:

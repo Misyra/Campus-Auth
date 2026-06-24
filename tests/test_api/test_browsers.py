@@ -2,14 +2,12 @@
 
 from unittest.mock import MagicMock
 
-from app.schemas import MonitorConfigPayload, MonitorStatusResponse
+from app.schemas import MonitorStatusResponse, RuntimeConfig
 
 
 def _setup_browser_mocks(mock_services):
     """配置 engine 和 profile_service mock 返回值。"""
-    mock_services.engine.get_config.return_value = MonitorConfigPayload(
-        username="testuser", password="••••••••", auth_url="http://10.0.0.1"
-    )
+    mock_services.engine.get_config.return_value = RuntimeConfig()
     mock_services.engine.get_status.return_value = MonitorStatusResponse(
         monitoring=False,
         network_check_count=0,
@@ -26,7 +24,7 @@ def test_get_browsers_returns_200(api_client):
     _setup_browser_mocks(mock_services)
     mock_profile = MagicMock()
     mock_profile_data = MagicMock()
-    mock_profile_data.global_settings.browser_channel = "playwright"
+    mock_profile_data.global_config.browser.browser_channel = "playwright"
     mock_profile.load.return_value = mock_profile_data
     mock_services.profile_service = mock_profile
 
@@ -40,7 +38,7 @@ def test_get_browsers_structure(api_client):
     _setup_browser_mocks(mock_services)
     mock_profile = MagicMock()
     mock_profile_data = MagicMock()
-    mock_profile_data.global_settings.browser_channel = "playwright"
+    mock_profile_data.global_config.browser.browser_channel = "playwright"
     mock_profile.load.return_value = mock_profile_data
     mock_services.profile_service = mock_profile
 
@@ -57,7 +55,7 @@ def test_get_browsers_contains_all_channels(api_client):
     _setup_browser_mocks(mock_services)
     mock_profile = MagicMock()
     mock_profile_data = MagicMock()
-    mock_profile_data.global_settings.browser_channel = "playwright"
+    mock_profile_data.global_config.browser.browser_channel = "playwright"
     mock_profile.load.return_value = mock_profile_data
     mock_services.profile_service = mock_profile
 
@@ -78,7 +76,7 @@ def test_get_browsers_current_field(api_client):
     _setup_browser_mocks(mock_services)
     mock_profile = MagicMock()
     mock_profile_data = MagicMock()
-    mock_profile_data.global_settings.browser_channel = "playwright"
+    mock_profile_data.global_config.browser.browser_channel = "playwright"
     mock_profile.load.return_value = mock_profile_data
     mock_services.profile_service = mock_profile
 
@@ -93,7 +91,7 @@ def test_get_browsers_item_structure(api_client):
     _setup_browser_mocks(mock_services)
     mock_profile = MagicMock()
     mock_profile_data = MagicMock()
-    mock_profile_data.global_settings.browser_channel = "playwright"
+    mock_profile_data.global_config.browser.browser_channel = "playwright"
     mock_profile.load.return_value = mock_profile_data
     mock_services.profile_service = mock_profile
 

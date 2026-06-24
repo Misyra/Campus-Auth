@@ -14,7 +14,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.schemas import LoginResult
+from app.schemas import LoginCredentials, LoginResult, RetrySettings, RuntimeConfig
+
+_TEST_CREDS = LoginCredentials(username="u", password="p", auth_url="http://x")
 
 # ══════════════════════════════════════════════════════════════════════
 #  辅助工具
@@ -495,18 +497,11 @@ class TestRunLoginThenExit:
         mock_worker.submit.return_value = success_result
 
         # 所有 local import 需要 patch 到源模块
+        mock_ps.get_runtime_config.return_value = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3))
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile_service.ProfileService", return_value=mock_ps),
-            patch(
-                "app.services.config_service.build_runtime_dict_from_payload",
-                return_value={"retry_settings": {"max_retries": 3}},
-            ),
-            patch(
-                "app.services.runtime_config.load_runtime_config",
-                return_value=(MagicMock(), False),
-            ),
+            patch("main.create_profile_service", return_value=mock_ps),
             patch("main.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
@@ -524,20 +519,11 @@ class TestRunLoginThenExit:
         success_result = MagicMock(success=True, data="ok")
         mock_worker.submit.side_effect = [fail_result, success_result]
 
+        mock_ps.get_runtime_config.return_value = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3, retry_interval=1))
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile_service.ProfileService", return_value=mock_ps),
-            patch(
-                "app.services.config_service.build_runtime_dict_from_payload",
-                return_value={
-                    "retry_settings": {"max_retries": 3, "retry_interval": 1}
-                },
-            ),
-            patch(
-                "app.services.runtime_config.load_runtime_config",
-                return_value=(MagicMock(), False),
-            ),
+            patch("main.create_profile_service", return_value=mock_ps),
             patch("main.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
@@ -554,20 +540,11 @@ class TestRunLoginThenExit:
         fail_result = MagicMock(success=False, error="timeout")
         mock_worker.submit.return_value = fail_result
 
+        mock_ps.get_runtime_config.return_value = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=2, retry_interval=1))
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile_service.ProfileService", return_value=mock_ps),
-            patch(
-                "app.services.config_service.build_runtime_dict_from_payload",
-                return_value={
-                    "retry_settings": {"max_retries": 2, "retry_interval": 0}
-                },
-            ),
-            patch(
-                "app.services.runtime_config.load_runtime_config",
-                return_value=(MagicMock(), False),
-            ),
+            patch("main.create_profile_service", return_value=mock_ps),
             patch(
                 "app.network.decision.check_network_status",
                 return_value=(False, "network_down", "none"),
@@ -588,18 +565,11 @@ class TestRunLoginThenExit:
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
 
+        mock_ps.get_runtime_config.return_value = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3))
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile_service.ProfileService", return_value=mock_ps),
-            patch(
-                "app.services.config_service.build_runtime_dict_from_payload",
-                return_value={"retry_settings": {"max_retries": 3}},
-            ),
-            patch(
-                "app.services.runtime_config.load_runtime_config",
-                return_value=(MagicMock(), False),
-            ),
+            patch("main.create_profile_service", return_value=mock_ps),
             patch(
                 "app.network.decision.check_network_status",
                 return_value=(True, "network_ok", "tcp"),
@@ -620,18 +590,11 @@ class TestRunLoginThenExit:
         success_result = MagicMock(success=True, data="ok")
         mock_worker.submit.return_value = success_result
 
+        mock_ps.get_runtime_config.return_value = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3))
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile_service.ProfileService", return_value=mock_ps),
-            patch(
-                "app.services.config_service.build_runtime_dict_from_payload",
-                return_value={"retry_settings": {"max_retries": 3}},
-            ),
-            patch(
-                "app.services.runtime_config.load_runtime_config",
-                return_value=(MagicMock(), False),
-            ),
+            patch("main.create_profile_service", return_value=mock_ps),
             patch(
                 "app.network.decision.check_network_status",
                 return_value=(False, "network_down", "none"),
@@ -653,18 +616,11 @@ class TestRunLoginThenExit:
         success_result = MagicMock(success=True, data="ok")
         mock_worker.submit.return_value = success_result
 
+        mock_ps.get_runtime_config.return_value = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3))
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile_service.ProfileService", return_value=mock_ps),
-            patch(
-                "app.services.config_service.build_runtime_dict_from_payload",
-                return_value={"retry_settings": {"max_retries": 3}},
-            ),
-            patch(
-                "app.services.runtime_config.load_runtime_config",
-                return_value=(MagicMock(), False),
-            ),
+            patch("main.create_profile_service", return_value=mock_ps),
             patch(
                 "app.network.decision.check_network_status",
                 side_effect=RuntimeError("probe failed"),
@@ -677,6 +633,88 @@ class TestRunLoginThenExit:
             result = _run_login_then_exit(mock_ctx, MagicMock())
             assert result == LoginResult.SUCCESS
             mock_worker.submit.assert_called_once()
+
+
+class TestLoginOnceRetryInterval:
+    """login_once 固定间隔重试 + login_timeout 统一。"""
+
+    def test_fixed_retry_interval(self, tmp_pid_dir):
+        """重试间隔应为固定值，不使用指数退避。"""
+        from main import _execute_login_with_retries
+
+        mock_worker = MagicMock()
+        fail_result = MagicMock(success=False, error="timeout")
+        success_result = MagicMock(success=True, data="ok")
+        mock_worker.submit.side_effect = [fail_result, fail_result, success_result]
+
+        runtime_config = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3, retry_interval=5))
+
+        with (
+            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
+            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
+            patch("app.services.profile_service.ProfileService"),
+            patch("app.services.login_history_service.LoginHistoryService"),
+            patch("main.AUTH_DATA_DIR", tmp_pid_dir),
+            patch("main.cleanup_orphan_browsers"),
+            patch("time.sleep") as mock_sleep,
+        ):
+            result = _execute_login_with_retries(runtime_config, MagicMock())
+            assert result == LoginResult.SUCCESS
+            # 两次重试都应 sleep(retry_interval=5)，而非指数递增
+            assert mock_sleep.call_count == 2
+            for call in mock_sleep.call_args_list:
+                assert call.args == (5,)
+
+    def test_login_timeout_passed_to_worker(self, tmp_pid_dir):
+        """login_timeout 应从配置读取并传递给 worker。"""
+        from main import _execute_login_with_retries
+
+        mock_worker = MagicMock()
+        success_result = MagicMock(success=True, data="ok")
+        mock_worker.submit.return_value = success_result
+
+        from app.schemas import BrowserSettings
+        runtime_config = RuntimeConfig(
+            credentials=_TEST_CREDS,
+            retry=RetrySettings(max_retries=1),
+            browser=BrowserSettings(login_timeout=200),
+        )
+
+        with (
+            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
+            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
+            patch("app.services.profile_service.ProfileService"),
+            patch("app.services.login_history_service.LoginHistoryService"),
+            patch("main.AUTH_DATA_DIR", tmp_pid_dir),
+            patch("main.cleanup_orphan_browsers"),
+            patch("time.sleep"),
+        ):
+            _execute_login_with_retries(runtime_config, MagicMock())
+            mock_worker.submit.assert_called_once()
+            call_kwargs = mock_worker.submit.call_args
+            assert call_kwargs.kwargs["timeout"] == 200
+
+    def test_login_timeout_default(self, tmp_pid_dir):
+        """配置中无 login_timeout 时由 Orchestrator 兜底（resolve_worker_timeout fallback=300）。"""
+        from main import _execute_login_with_retries
+
+        mock_worker = MagicMock()
+        success_result = MagicMock(success=True, data="ok")
+        mock_worker.submit.return_value = success_result
+
+        runtime_config = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=1))
+
+        with (
+            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
+            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
+            patch("app.services.profile_service.ProfileService"),
+            patch("app.services.login_history_service.LoginHistoryService"),
+            patch("main.AUTH_DATA_DIR", tmp_pid_dir),
+            patch("main.cleanup_orphan_browsers"),
+            patch("time.sleep"),
+        ):
+            result = _execute_login_with_retries(runtime_config, MagicMock())
+            assert result == LoginResult.SUCCESS
 
 
 # ══════════════════════════════════════════════════════════════════════

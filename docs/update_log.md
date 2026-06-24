@@ -1,5 +1,82 @@
 # 更新日志
 
+## v4.1.0
+
+### 新增功能
+
+- **登录取消**：登录按钮支持取消，登录中切换为取消登录；新增 `POST /api/actions/cancel-login` 端点和 `CompositeCancelEvent` 惰性扫描组合取消事件
+- **导航等待参数**：任务步骤新增 `navigation_wait` 参数，控制页面加载后的等待时间
+- **配置迁移**：settings.json v3→v4 自动迁移，新增 `GlobalConfig`、`ConfigResponseDTO`、`ConfigBuilder` 唯一配置构建器
+- **重试策略框架**：新增 `retry_policy` 模块，统一管理登录重试逻辑
+- **登录编排器**：新增 `LoginOrchestrator`，解耦登录流程与 Engine/TaskExecutor
+- **并发工具**：新增 `race_first_success` / `cancel_pending` 并发竞态工具函数
+- **手动登录防抖**：手动登录按钮 3 秒防抖，防止重复点击
+- **默认检测地址**：网址响应检测添加默认检测地址，统一三种网络检测方式的默认值
+
+### 优化
+
+- **引擎循环修复**：修复 `while-else` 误用导致网络检测和定时任务从未执行；引擎重启时清除 `shutdown_event`；添加唤醒机制消除延迟重试
+- **重试与网络检测解耦**：重试用尽后停止检测并等待网络恢复；300s 后重置计数允许新一轮重试；日志显示重试进度和下次检测时间
+- **网络检测统一**：解析逻辑统一，HTTP 检测使用国内 captive portal 地址，204 判定正常
+- **取消登录**：取消时直接关闭页面中断 Playwright 操作，解决取消响应不及时问题
+- **轻量模式**：唤醒 web 后日志实时更新，bat 脚本执行修复，退出信号处理改进
+- **调试截图**：文件名去掉多余 `screenshot_` 前缀，URL 路径补充 `debug/` 子目录
+- **手动登录日志**：消除"提交成功"与"登录成功"的歧义，登录完成时新增日志
+- **配置保存**：事务逻辑从 API 层下沉到 `config_service.save_and_apply`，保存时剥离冗余 credentials 和 active_task
+- **RuntimeConfig**：新增类型化 `RuntimeConfig` 子集模型，Engine/TaskExecutor/NetworkMonitor 全链路迁移
+- **ProfileService**：内存缓存移除，`apply_profile` 自包含 `set_active_profile`，消除隐式契约
+- **密码处理**：`safe_decrypt`/`decrypt_password_field` 集中到 `crypto.py`
+- **默认浏览器**：改为 Edge；`BrowserSettings.user_agent` 默认值改为 Chrome 125 UA
+
+### 修复
+
+- 修复 `read_pid_file` 缺失 `create_time` 时视为无效，防止 PID 复用误判
+- 修复 `login_once` 未取消旧任务，新旧登录在单 worker 池中串行执行
+- 修复 `list_recent` 读取 JSONL 文件未持锁，与写入存在竞态
+- 修复 `cancel_login` 阻塞事件循环及 `resolve_for_js` 双重编码问题
+- 修复 `BrowserChannel` 枚举接入 `browser_channel` 字段类型
+- 修复密码清空失效、ISP 自定义 `carrier_custom` 丢失、`FIELD_NAMES` 错误
+- 修复 `custom_variables` 丢失和变更日志字段路径不匹配
+- 修复测试类型混用和密码变更日志误报
+- 修复手动网络测试未传递 `test_urls`，回退到百度默认值
+- 修复配置重载顺序，避免重载失败时监控被意外停止
+- 修复 `_run_full()` shutdown — loop 未定义导致容器关闭永不执行
+- 修复 `NullTaskExecutor` 签名与 `TaskExecutor` 兼容
+- 修复 `Axios` 拦截器仅对幂等请求执行自动重试
+- 修复登录并发保护不足
+- 修复 `run_sync` 超时后杀死子进程树
+- 修复 `save_task` 改为磁盘优先模式，I/O 不在全局锁内
+- 修复 `Playwright` 安装 readline 空闲超时保护
+- 修复 `LogConfigCenter._source_levels` 线程安全
+- 修复 `MonitoredPolicy` 和 `_registered_futures` 线程安全
+- 修复 H1 双 login 线程池 + H2 嵌套线程池饥饿
+- 修复 `LoggingSettings` 缺少 `source_levels` 字段
+- 修复 `browser_channel`、日志配置、`global_settings` 多处读取路径错误
+- 修复 `url_check_urls` dict→tuple 转换缺失
+- 修复 `debug_service` 和 `env.py` 的 `RuntimeConfig` 类型兼容
+- 修复 `login.py check_network_status` 类型不匹配并移除 engine 死代码
+- 修复 Go/Shell 启动器镜像 fallback 链完整性
+- 修复代码审查报告中 29 个问题及 3 个预先存在的测试失败
+- 修复 `profile override` 覆盖语义
+- 修复 `_handle_existing_instance` force 模式重复等待
+- 修复 `test_api_tools_routes` mock 方法名 `iter_bytes` → `aiter_bytes`
+- 修复 `start.sh` macOS 兼容性：`declare -A` 改为 `case` 函数，兼容 bash 3.2
+
+### 重构
+
+- **LoginOrchestrator**：浏览器任务通过编排器提交，Engine 委托 `cancel_login`，`TaskExecutor` 增加委托层
+- **MonitoredPolicy**：统一退避系统，固定延迟表 `[0,0,30,60,120]`，消除 `LoginRetryManager`
+- **取消联动**：改常驻单线程，根治线程泄漏和冗余检查
+- **RuntimeConfig 迁移**：`engine.py`、`orchestrator`、`monitor`、`decision`、`login` 全链路迁移至类型化配置
+- **配置系统**：合并 `runtime_config.py` 到 `config_service.py`，`ProfilesData` 改用 `RuntimeConfig` + `Profile`
+- **前端适配**：设置页面适配嵌套配置结构，配置数据结构改为嵌套
+- **GlobalSettings**：继承 Mixin 消除 12 个重复字段
+- **`_build_config_payload`**：53 行逐字段取值改为 `model_dump`
+- **NetworkMonitorCore**：探测函数使用 `race_first_success` 消除竞态重复代码
+- **application.py**：`create_app` 拆分为 `_create_lifespan`/`_register_routes`/`_register_static`
+- **main.py**：提取 `_load_login_config`/`_execute_login_with_retries`/`_create_tray`/`_wait_for_exit`
+- **测试**：全面移除 `LoginRetryManager` 依赖，补充 158 个单元测试，新增集成测试覆盖登录链路、配置链路、网络检测、Profile 切换、轻量模式、完整模式等 20 个场景
+
 ## v4.0.5
 
 ### 优化

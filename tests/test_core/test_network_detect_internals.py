@@ -265,33 +265,36 @@ class TestDetectGatewayDarwin:
 
     @patch("subprocess.run")
     def test_standard_netstat(self, mock_run, *_):
-        """标准 netstat -nr 输出，默认路由 10.0.0.1。"""
+        """标准 route -n get default 输出，默认路由 10.0.0.1。"""
         mock_run.return_value = _make_subprocess_result(
-            "Routing tables\n"
-            "\n"
-            "Internet:\n"
-            "Destination        Gateway            Flags        Netif Expire\n"
-            "default            10.0.0.1           UGScg        en0\n"
-            "127.0.0.1          127.0.0.1          UH           lo0\n"
+            "   route to: default\n"
+            "destination: default\n"
+            "       mask: default\n"
+            "    gateway: 10.0.0.1\n"
+            "  interface: en0\n"
+            "      flags: <UP,GATEWAY,DONE,STATIC,PRCLONING>\n"
         )
         assert nd._detect_gateway_darwin() == "10.0.0.1"
 
     @patch("subprocess.run")
     def test_multiple_defaults_returns_first(self, mock_run, *_):
-        """多条 default 路由时返回第一条。"""
+        """多条 gateway 行时返回第一条。"""
         mock_run.return_value = _make_subprocess_result(
-            "Routing tables\n"
-            "\n"
-            "default            192.168.1.1        UGScg        en0\n"
-            "default            10.0.0.1           UGScI        en1\n"
+            "   route to: default\n"
+            "destination: default\n"
+            "       mask: default\n"
+            "    gateway: 192.168.1.1\n"
+            "  interface: en0\n"
         )
         assert nd._detect_gateway_darwin() == "192.168.1.1"
 
     @patch("subprocess.run")
     def test_no_default_route(self, mock_run, *_):
-        """netstat 输出中无 default 行时返回 None。"""
+        """route 输出中无 gateway 行时返回 None。"""
         mock_run.return_value = _make_subprocess_result(
-            "Routing tables\n\n127.0.0.1          127.0.0.1          UH           lo0\n"
+            "   route to: default\n"
+            "destination: default\n"
+            "       mask: default\n"
         )
         assert nd._detect_gateway_darwin() is None
 

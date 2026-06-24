@@ -1,7 +1,5 @@
 """登录模板变量构建工具"""
 
-from typing import Any
-
 from .logging import get_logger
 
 logger = get_logger("env", source="backend")
@@ -39,28 +37,25 @@ _ENV_DENYLIST_UPPER = {k.upper() for k in _ENV_DENYLIST}
 
 
 def build_login_template_vars(
-    runtime_config: dict[str, Any],
+    auth_url: str = "",
+    username: str = "",
+    password: str = "",
+    isp: str = "",
     task_url: str | None = None,
     custom_variables: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """构建登录模板变量，用于任务步骤中的 {{VAR_NAME}} 替换。"""
     template_vars: dict[str, str] = {}
 
-    auth_url = runtime_config.get("auth_url", "")
     if auth_url:
         template_vars["LOGIN_URL"] = auth_url
 
-    # 在解析 task_url 之前注入运行时配置变量，
-    # 确保 task_url 中的 {{USERNAME}}/{{PASSWORD}}/{{ISP}} 解析为校园网配置值
-    isp = runtime_config.get("isp", "")
     if isp:
         template_vars["ISP"] = isp
 
-    username = runtime_config.get("username", "")
     if username:
         template_vars["USERNAME"] = username
 
-    password = runtime_config.get("password", "")
     if password:
         template_vars["PASSWORD"] = password
 
@@ -74,7 +69,7 @@ def build_login_template_vars(
             elif k.upper() in _builtin_keys:
                 logger.warning("自定义变量 '{}' 与内置变量冲突，已跳过", k)
             else:
-                template_vars[k] = v
+                template_vars[k] = str(v)
 
     # 在所有变量注入后解析 task_url 模板
     if task_url:

@@ -9,10 +9,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.schemas import AuthProfile, MonitorConfigPayload, ProfilesData, SystemSettings
-from app.services.config_service import save_config_combined
+from app.schemas import Profile, ProfilesData
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
+from app.services.login_orchestrator import LoginOrchestrator
 from app.services.profile_service import ProfileService
 from app.services.task_executor import TaskExecutor
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
@@ -41,7 +41,7 @@ def _write_initial_config(tmp_path: Path, **overrides) -> None:
             "default": {
                 "name": "默认方案",
                 "username": "testuser",
-                "password": "",  # 测试中按需设置
+                "password": "testpass",
                 "auth_url": "http://10.0.0.1",
                 "carrier": "无",
             }
@@ -76,14 +76,6 @@ def integration_stack(tmp_path, mock_worker):
     task_registry = TaskRegistry(tmp_path / "tasks" / "scheduled")
     task_history_store = TaskHistoryStore(tmp_path / "tasks" / "scheduled" / "history")
 
-    task_executor = TaskExecutor(
-        registry=task_registry,
-        history_store=task_history_store,
-        worker_getter=lambda: mock_worker,
-        login_history=login_history,
-        profile_service=profile_service,
-    )
-
     engine = ScheduleEngine(
         project_root=tmp_path,
         profile_service=profile_service,
@@ -91,11 +83,31 @@ def integration_stack(tmp_path, mock_worker):
         login_history_service=login_history,
         worker_getter=lambda: mock_worker,
         task_registry=task_registry,
-        task_executor=task_executor,
     )
+
+    orchestrator = LoginOrchestrator(
+        worker_getter=lambda: mock_worker,
+        login_history=login_history,
+        profile_service=profile_service,
+        get_runtime_config=engine.get_runtime_config,
+    )
+    engine.set_orchestrator(orchestrator)
+
+    task_executor = TaskExecutor(
+        registry=task_registry,
+        history_store=task_history_store,
+        worker_getter=lambda: mock_worker,
+        login_orchestrator=orchestrator,
+    )
+    engine.set_task_executor(task_executor)
     task_executor.set_runtime_config_getter(engine.get_runtime_config)
 
+    # 启动引擎线程
+    engine.boot()
+
     yield engine, profile_service, task_executor, mock_worker
+
+    orchestrator.shutdown(wait=False)
 
     engine.shutdown()
     task_executor.shutdown()
@@ -115,14 +127,6 @@ def full_stack(tmp_path, mock_worker):
     task_registry = TaskRegistry(tmp_path / "tasks" / "scheduled")
     task_history_store = TaskHistoryStore(tmp_path / "tasks" / "scheduled" / "history")
 
-    task_executor = TaskExecutor(
-        registry=task_registry,
-        history_store=task_history_store,
-        worker_getter=lambda: mock_worker,
-        login_history=login_history,
-        profile_service=profile_service,
-    )
-
     engine = ScheduleEngine(
         project_root=tmp_path,
         profile_service=profile_service,
@@ -130,11 +134,30 @@ def full_stack(tmp_path, mock_worker):
         login_history_service=login_history,
         worker_getter=lambda: mock_worker,
         task_registry=task_registry,
-        task_executor=task_executor,
     )
+
+    orchestrator = LoginOrchestrator(
+        worker_getter=lambda: mock_worker,
+        login_history=login_history,
+        profile_service=profile_service,
+        get_runtime_config=engine.get_runtime_config,
+    )
+    engine.set_orchestrator(orchestrator)
+
+    task_executor = TaskExecutor(
+        registry=task_registry,
+        history_store=task_history_store,
+        worker_getter=lambda: mock_worker,
+        login_orchestrator=orchestrator,
+    )
+    engine.set_task_executor(task_executor)
     task_executor.set_runtime_config_getter(engine.get_runtime_config)
+
+    # 启动引擎线程
+    engine.boot()
 
     yield engine, profile_service, task_executor, task_registry, mock_worker
 
     engine.shutdown()
     task_executor.shutdown()
+    orchestrator.shutdown(wait=False)

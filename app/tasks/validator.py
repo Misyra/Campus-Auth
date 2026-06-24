@@ -51,6 +51,16 @@ class TaskValidator:
                         errors.append(f"steps[{i}] 步骤ID '{sid}' 重复")
                     seen_ids.add(sid)
 
+        variables = config.get("variables")
+        if variables is not None and not isinstance(variables, dict):
+            errors.append("'variables' 必须是对象（dict），当前值类型: " + type(variables).__name__)
+
+        timeout = config.get("timeout")
+        if timeout is not None and (
+            not isinstance(timeout, int | float) or timeout <= 0
+        ):
+            errors.append(f"任务级 timeout 必须为正数，当前值: {timeout}")
+
         return len(errors) == 0, errors
 
     @classmethod

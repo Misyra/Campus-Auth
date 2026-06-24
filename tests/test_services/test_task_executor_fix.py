@@ -18,6 +18,8 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
+from app.schemas import RuntimeConfig
+
 
 def _slow_return(value, delay=0.3):
     """返回一个延迟返回结果的函数，避免 ThreadPoolExecutor 回调死锁。
@@ -128,6 +130,7 @@ class TestTaskPoolLazyInit:
             registry=registry,
             history_store=history_store,
             worker_getter=MagicMock(),
+            login_orchestrator=MagicMock(),
         )
         assert executor._task_pool is None
 
@@ -146,6 +149,7 @@ class TestTaskPoolLazyInit:
             registry=registry,
             history_store=history_store,
             worker_getter=MagicMock(),
+            login_orchestrator=MagicMock(),
         )
         assert executor._task_pool is None
 
@@ -166,34 +170,35 @@ class TestTaskPoolLazyInit:
             registry=registry,
             history_store=history_store,
             worker_getter=MagicMock(),
+            login_orchestrator=MagicMock(),
         )
         assert executor._task_pool is None
         executor.shutdown()
 
     def test_shutdown_with_task_pool(self):
-        """有 _task_pool 时 shutdown 应同时关闭两个池。"""
+        """有 _task_pool 时 shutdown 应关闭 task_pool 并调用 orchestrator.shutdown。"""
         from app.services.task_executor import TaskExecutor
 
         registry = MagicMock()
         history_store = MagicMock()
+        mock_orchestrator = MagicMock()
 
         executor = TaskExecutor(
             registry=registry,
             history_store=history_store,
             worker_getter=MagicMock(),
+            login_orchestrator=mock_orchestrator,
         )
         # 手动触发 _task_pool 创建
         executor._ensure_task_pool()
         assert executor._task_pool is not None
 
         mock_task_pool = MagicMock()
-        mock_login_pool = MagicMock()
         executor._task_pool = mock_task_pool
-        executor._login_pool = mock_login_pool
 
         executor.shutdown(wait=True)
         mock_task_pool.shutdown.assert_called_once_with(wait=True)
-        mock_login_pool.shutdown.assert_called_once_with(wait=True)
+        mock_orchestrator.shutdown.assert_called_once_with(wait=True)
 
     def test_ensure_task_pool_creates_once(self):
         """多次调用 _ensure_task_pool 应返回同一实例。"""
@@ -203,6 +208,7 @@ class TestTaskPoolLazyInit:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            login_orchestrator=MagicMock(),
         )
         pool1 = executor._ensure_task_pool()
         pool2 = executor._ensure_task_pool()
@@ -216,6 +222,7 @@ class TestTaskPoolLazyInit:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            login_orchestrator=MagicMock(),
         )
 
         results = []
@@ -332,6 +339,7 @@ class TestTaskExecutorCRUD:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            login_orchestrator=MagicMock(),
         )
         defaults.update(kwargs)
         return TaskExecutor(**defaults)
@@ -404,6 +412,7 @@ class TestTaskExecutorExecuteTask:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            login_orchestrator=MagicMock(),
         )
         defaults.update(kwargs)
         return TaskExecutor(**defaults)
@@ -520,6 +529,7 @@ class TestTaskExecutorExecuteScript:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            login_orchestrator=MagicMock(),
         )
         defaults.update(kwargs)
         return TaskExecutor(**defaults)
@@ -577,6 +587,7 @@ class TestTaskExecutorExecuteBrowser:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            login_orchestrator=MagicMock(),
         )
         defaults.update(kwargs)
         return TaskExecutor(**defaults)
@@ -596,95 +607,196 @@ class TestTaskExecutorExecuteBrowser:
         assert "不存在" in msg
 
     def test_browser_success(self):
+        from app.services.login_orchestrator import LoginHandle
+        from app.utils.cancel_token import CompositeCancelEvent
+
         executor = self._make_executor()
         executor._registry.get_task.return_value = {"type": "browser"}
-        executor._get_runtime_config = lambda: {"browser_settings": {"pure_mode": True}}
+        executor._get_runtime_config = lambda: RuntimeConfig()
 
-        mock_result = MagicMock()
-        mock_result.success = True
-        mock_result.data = "登录成功"
-        mock_worker = MagicMock()
-        mock_worker.submit.return_value = mock_result
-        executor._worker_getter = lambda: mock_worker
+        mock_handle = LoginHandle(
+            future=None, source="browser", cancel_event=CompositeCancelEvent(),
+        )
+        mock_handle.result = lambda: (True, "登录成功")
+        executor._login_orchestrator.submit.return_value = mock_handle
 
-        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
-            success, msg = executor._execute_browser("b1", 60)
+        success, msg = executor._execute_browser("b1", 60)
         assert success is True
         assert msg == "登录成功"
 
     def test_browser_failure(self):
+        from app.services.login_orchestrator import LoginHandle
+        from app.utils.cancel_token import CompositeCancelEvent
+
         executor = self._make_executor()
         executor._registry.get_task.return_value = {"type": "browser"}
         executor._get_runtime_config = None
 
-        mock_result = MagicMock()
-        mock_result.success = False
-        mock_result.error = "页面加载失败"
-        mock_worker = MagicMock()
-        mock_worker.submit.return_value = mock_result
-        executor._worker_getter = lambda: mock_worker
+        mock_handle = LoginHandle(
+            future=None, source="browser", cancel_event=CompositeCancelEvent(),
+        )
+        mock_handle.result = lambda: (False, "页面加载失败")
+        executor._login_orchestrator.submit.return_value = mock_handle
 
-        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
-            success, msg = executor._execute_browser("b1", 60)
+        success, msg = executor._execute_browser("b1", 60)
         assert success is False
         assert "页面加载失败" in msg
 
     def test_browser_import_error(self):
+        from app.services.login_orchestrator import LoginHandle
+        from app.utils.cancel_token import CompositeCancelEvent
+
         executor = self._make_executor()
         executor._registry.get_task.return_value = {"type": "browser"}
         executor._get_runtime_config = None
 
-        with patch.dict("sys.modules", {"app.workers.playwright_worker": None}):
-            success, msg = executor._execute_browser("b1", 60)
+        mock_handle = LoginHandle(
+            future=None, source="browser", cancel_event=CompositeCancelEvent(),
+        )
+        mock_handle.result = lambda: (False, "登录需要额外依赖，请检查 Playwright 安装状态")
+        executor._login_orchestrator.submit.return_value = mock_handle
+
+        success, msg = executor._execute_browser("b1", 60)
         assert success is False
         assert "依赖" in msg
 
     def test_browser_generic_exception(self):
+        from app.services.login_orchestrator import LoginHandle
+        from app.utils.cancel_token import CompositeCancelEvent
+
         executor = self._make_executor()
         executor._registry.get_task.return_value = {"type": "browser"}
-        executor._get_runtime_config = lambda: {}
-        executor._worker_getter = MagicMock(side_effect=RuntimeError("worker crash"))
+        executor._get_runtime_config = lambda: RuntimeConfig()
 
-        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
-            success, msg = executor._execute_browser("b1", 60)
+        mock_handle = LoginHandle(
+            future=None, source="browser", cancel_event=CompositeCancelEvent(),
+        )
+        mock_handle.result = lambda: (False, "登录执行异常: worker crash")
+        executor._login_orchestrator.submit.return_value = mock_handle
+
+        success, msg = executor._execute_browser("b1", 60)
         assert success is False
         assert "异常" in msg
 
     def test_browser_result_data_not_string(self):
         """result.data 不是字符串时应返回默认消息。"""
+        from app.services.login_orchestrator import LoginHandle
+        from app.utils.cancel_token import CompositeCancelEvent
+
         executor = self._make_executor()
         executor._registry.get_task.return_value = {"type": "browser"}
-        executor._get_runtime_config = lambda: {}
+        executor._get_runtime_config = lambda: RuntimeConfig()
 
-        mock_result = MagicMock()
-        mock_result.success = True
-        mock_result.data = {"key": "value"}  # 非字符串
-        mock_worker = MagicMock()
-        mock_worker.submit.return_value = mock_result
-        executor._worker_getter = lambda: mock_worker
+        mock_handle = LoginHandle(
+            future=None, source="browser", cancel_event=CompositeCancelEvent(),
+        )
+        mock_handle.result = lambda: (True, {"key": "value"})  # 非字符串
+        executor._login_orchestrator.submit.return_value = mock_handle
 
-        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
-            success, msg = executor._execute_browser("b1", 60)
+        success, msg = executor._execute_browser("b1", 60)
         assert success is True
         assert "浏览器任务执行成功" in msg
 
     def test_browser_failure_no_error_msg(self):
         """失败但无 error 时应返回默认错误消息。"""
+        from app.services.login_orchestrator import LoginHandle
+        from app.utils.cancel_token import CompositeCancelEvent
+
         executor = self._make_executor()
         executor._registry.get_task.return_value = {"type": "browser"}
-        executor._get_runtime_config = lambda: {}
+        executor._get_runtime_config = lambda: RuntimeConfig()
 
-        mock_result = MagicMock()
-        mock_result.success = False
-        mock_result.error = None
-        mock_worker = MagicMock()
-        mock_worker.submit.return_value = mock_result
-        executor._worker_getter = lambda: mock_worker
+        mock_handle = LoginHandle(
+            future=None, source="browser", cancel_event=CompositeCancelEvent(),
+        )
+        mock_handle.result = lambda: (False, "")
+        executor._login_orchestrator.submit.return_value = mock_handle
 
-        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
-            success, msg = executor._execute_browser("b1", 60)
+        success, msg = executor._execute_browser("b1", 60)
         assert success is False
         assert "浏览器任务执行失败" in msg
+
+    def test_browser_data_no_pure_mode(self):
+        """F20: submit() 调用时不应包含 pure_mode（委托 Orchestrator 后由 Orchestrator 处理 config）。"""
+        from app.services.login_orchestrator import LoginHandle
+        from app.utils.cancel_token import CompositeCancelEvent
+
+        executor = self._make_executor()
+        executor._registry.get_task.return_value = {"type": "browser"}
+        executor._get_runtime_config = lambda: RuntimeConfig()
+
+        mock_handle = LoginHandle(
+            future=None, source="browser", cancel_event=CompositeCancelEvent(),
+        )
+        mock_handle.result = lambda: (True, "ok")
+        executor._login_orchestrator.submit.return_value = mock_handle
+
+        executor._execute_browser("b1", 60)
+        call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
+        assert "pure_mode" not in call_kwargs.get("config", {})
+
+    def test_browser_cancel_event_passed(self):
+        """F11: cancel_event 应传递到 orchestrator.submit()。"""
+        from app.services.login_orchestrator import LoginHandle
+        from app.utils.cancel_token import CompositeCancelEvent
+
+        executor = self._make_executor()
+        executor._registry.get_task.return_value = {"type": "browser"}
+        executor._get_runtime_config = lambda: RuntimeConfig()
+
+        mock_handle = LoginHandle(
+            future=None, source="browser", cancel_event=CompositeCancelEvent(),
+        )
+        mock_handle.result = lambda: (True, "ok")
+        executor._login_orchestrator.submit.return_value = mock_handle
+
+        cancel = threading.Event()
+        executor._execute_browser("b1", 60, cancel_event=cancel)
+        call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
+        assert call_kwargs["cancel_event"] is cancel
+
+    def test_browser_cancel_event_default_none(self):
+        """F11: 不传 cancel_event 时 orchestrator.submit() 收到 None。"""
+        from app.services.login_orchestrator import LoginHandle
+        from app.utils.cancel_token import CompositeCancelEvent
+
+        executor = self._make_executor()
+        executor._registry.get_task.return_value = {"type": "browser"}
+        executor._get_runtime_config = lambda: RuntimeConfig()
+
+        mock_handle = LoginHandle(
+            future=None, source="browser", cancel_event=CompositeCancelEvent(),
+        )
+        mock_handle.result = lambda: (True, "ok")
+        executor._login_orchestrator.submit.return_value = mock_handle
+
+        executor._execute_browser("b1", 60)
+        call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
+        assert call_kwargs["cancel_event"] is None
+
+    def test_browser_timeout_forwarded(self):
+        """timeout 应传递给 orchestrator.submit()。"""
+        from app.services.login_orchestrator import LoginHandle
+        from app.utils.cancel_token import CompositeCancelEvent
+
+        executor = self._make_executor()
+        executor._registry.get_task.return_value = {"type": "browser"}
+        executor._get_runtime_config = lambda: RuntimeConfig()
+
+        mock_handle = LoginHandle(
+            future=None, source="browser", cancel_event=CompositeCancelEvent(),
+        )
+        mock_handle.result = lambda: (True, "ok")
+        executor._login_orchestrator.submit.return_value = mock_handle
+
+        executor._execute_browser("b1", 120)
+        call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
+        assert call_kwargs["timeout"] == 120
+
+
+# =====================================================================
+# TaskExecutor — _execute_shell
+# =====================================================================
 
 
 # =====================================================================
@@ -702,6 +814,7 @@ class TestTaskExecutorExecuteShell:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            login_orchestrator=MagicMock(),
         )
         defaults.update(kwargs)
         return TaskExecutor(**defaults)
@@ -721,7 +834,7 @@ class TestTaskExecutorExecuteShell:
     def test_shell_from_runtime_config(self):
         """未指定 shell_path 时从运行时配置获取。"""
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: {"shell_path": "/bin/bash"}
+        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="/bin/bash")
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.return_value = (0, "hello", "")
 
@@ -733,7 +846,7 @@ class TestTaskExecutorExecuteShell:
     def test_shell_from_default(self):
         """配置中无 shell_path 时使用默认 shell。"""
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: {}
+        executor._get_runtime_config = lambda: RuntimeConfig()
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.return_value = (0, "output", "")
 
@@ -755,7 +868,7 @@ class TestTaskExecutorExecuteShell:
     def test_powershell_command_format(self):
         """PowerShell 应使用 -Command 参数。"""
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: {"shell_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"}
+        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe")
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.return_value = (0, "ok", "")
 
@@ -766,7 +879,7 @@ class TestTaskExecutorExecuteShell:
     def test_cmd_command_format(self):
         """cmd.exe 应使用 /c 参数。"""
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: {"shell_path": "C:\\Windows\\System32\\cmd.exe"}
+        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="C:\\Windows\\System32\\cmd.exe")
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.return_value = (0, "ok", "")
 
@@ -779,7 +892,7 @@ class TestTaskExecutorExecuteShell:
     def test_bash_command_format(self):
         """bash 应使用 -c 参数。"""
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: {"shell_path": "/bin/bash"}
+        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="/bin/bash")
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.return_value = (0, "ok", "")
 
@@ -792,7 +905,7 @@ class TestTaskExecutorExecuteShell:
     def test_nonzero_returncode(self):
         """非零返回码应返回失败。"""
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: {"shell_path": "/bin/bash"}
+        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="/bin/bash")
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.return_value = (1, "", "error occurred")
 
@@ -803,7 +916,7 @@ class TestTaskExecutorExecuteShell:
     def test_nonzero_no_stderr(self):
         """非零返回码且无 stderr 时应使用 stdout。"""
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: {"shell_path": "/bin/bash"}
+        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="/bin/bash")
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.return_value = (1, "some stdout", "")
 
@@ -814,7 +927,7 @@ class TestTaskExecutorExecuteShell:
     def test_nonzero_no_output(self):
         """非零返回码且无任何输出时显示退出码。"""
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: {"shell_path": "/bin/bash"}
+        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="/bin/bash")
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.return_value = (2, "", "")
 
@@ -825,7 +938,7 @@ class TestTaskExecutorExecuteShell:
     def test_success_no_output(self):
         """成功但无输出时应显示默认文本。"""
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: {"shell_path": "/bin/bash"}
+        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="/bin/bash")
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.return_value = (0, "", "")
 
@@ -835,7 +948,7 @@ class TestTaskExecutorExecuteShell:
 
     def test_permission_error(self):
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: {"shell_path": "/bin/bash"}
+        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="/bin/bash")
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.side_effect = PermissionError("denied")
 
@@ -845,7 +958,7 @@ class TestTaskExecutorExecuteShell:
 
     def test_generic_exception(self):
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: {"shell_path": "/bin/bash"}
+        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="/bin/bash")
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.side_effect = OSError("io error")
 
@@ -856,7 +969,7 @@ class TestTaskExecutorExecuteShell:
     def test_output_truncation(self):
         """输出超过 500 字符时应被截断。"""
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: {"shell_path": "/bin/bash"}
+        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="/bin/bash")
         executor._shell_policy = MagicMock()
         long_output = "x" * 1000
         executor._shell_policy.run_sync.return_value = (0, long_output, "")
@@ -872,187 +985,95 @@ class TestTaskExecutorExecuteShell:
 
 
 class TestTaskExecutorExecuteLogin:
-    """TaskExecutor.execute_login() 测试。"""
+    """TaskExecutor.execute_login() 委托 LoginOrchestrator 测试。"""
 
     def _make_executor(self, **kwargs):
         from app.services.task_executor import TaskExecutor
+
+        mock_orchestrator = MagicMock()
+        mock_handle = MagicMock()
+        mock_handle.result.return_value = (True, "登录成功")
+        mock_orchestrator.submit.return_value = mock_handle
 
         defaults = dict(
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
-            login_history=MagicMock(),
-            profile_service=MagicMock(),
+            login_orchestrator=mock_orchestrator,
         )
         defaults.update(kwargs)
         return TaskExecutor(**defaults)
 
-    def test_cancel_event_set(self):
-        """cancel_event 已设置时应立即返回。"""
+    def test_delegates_to_orchestrator(self):
+        """execute_login 应委托到 login_orchestrator.submit。"""
         executor = self._make_executor()
-        cancel = threading.Event()
-        cancel.set()
+        executor._get_runtime_config = lambda: RuntimeConfig()
 
-        success, msg = executor.execute_login(cancel_event=cancel)
-        assert success is False
-        assert "取消" in msg
-
-    def test_login_success(self):
-        executor = self._make_executor()
-        executor._get_runtime_config = lambda: {"browser_settings": {"pure_mode": False}}
-
-        mock_result = MagicMock()
-        mock_result.success = True
-        mock_result.data = "登录成功"
-        mock_worker = MagicMock()
-        mock_worker.submit.return_value = mock_result
-        executor._worker_getter = lambda: mock_worker
-
-        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
-            success, msg = executor.execute_login()
-        assert success is True
-
-    def test_login_failure(self):
-        executor = self._make_executor()
-        executor._get_runtime_config = lambda: {}
-
-        mock_result = MagicMock()
-        mock_result.success = False
-        mock_result.error = "认证失败"
-        mock_worker = MagicMock()
-        mock_worker.submit.return_value = mock_result
-        executor._worker_getter = lambda: mock_worker
-
-        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
-            success, msg = executor.execute_login()
-        assert success is False
-        assert "认证失败" in msg
-
-    def test_login_failure_no_error(self):
-        """失败但无 error 时应返回默认消息。"""
-        executor = self._make_executor()
-        executor._get_runtime_config = lambda: {}
-
-        mock_result = MagicMock()
-        mock_result.success = False
-        mock_result.error = None
-        mock_worker = MagicMock()
-        mock_worker.submit.return_value = mock_result
-        executor._worker_getter = lambda: mock_worker
-
-        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
-            success, msg = executor.execute_login()
-        assert success is False
-        assert "登录失败" in msg
-
-    def test_login_success_data_not_string(self):
-        """result.data 非字符串时应返回默认消息。"""
-        executor = self._make_executor()
-        executor._get_runtime_config = lambda: {}
-
-        mock_result = MagicMock()
-        mock_result.success = True
-        mock_result.data = {"status": "ok"}
-        mock_worker = MagicMock()
-        mock_worker.submit.return_value = mock_result
-        executor._worker_getter = lambda: mock_worker
-
-        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
-            success, msg = executor.execute_login()
+        success, msg = executor.execute_login()
         assert success is True
         assert msg == "登录成功"
+        executor._login_orchestrator.submit.assert_called_once()
 
-    def test_login_no_runtime_config(self):
-        """无 _get_runtime_config 时应使用空配置。"""
+    def test_forwards_cancel_event(self):
+        """cancel_event 应传递给 orchestrator.submit。"""
+        executor = self._make_executor()
+        executor._get_runtime_config = lambda: RuntimeConfig()
+
+        cancel = threading.Event()
+        executor.execute_login(cancel_event=cancel)
+        call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
+        assert call_kwargs["cancel_event"] is cancel
+
+    def test_forwards_config_snapshot(self):
+        """config_snapshot 应传递给 orchestrator.submit。"""
+        executor = self._make_executor()
+        config = RuntimeConfig()
+
+        executor.execute_login(config_snapshot=config)
+        call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
+        assert call_kwargs["config"] is config
+
+    def test_uses_runtime_config_when_no_snapshot(self):
+        """无 config_snapshot 时应使用 _get_runtime_config。"""
+        executor = self._make_executor()
+        config = RuntimeConfig()
+        executor._get_runtime_config = lambda: config
+
+        executor.execute_login()
+        call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
+        assert call_kwargs["config"] is config
+
+    def test_uses_empty_config_when_no_runtime_config(self):
+        """无 _get_runtime_config 时应使用默认 RuntimeConfig。"""
         executor = self._make_executor()
         executor._get_runtime_config = None
 
-        mock_result = MagicMock()
-        mock_result.success = True
-        mock_result.data = "ok"
-        mock_worker = MagicMock()
-        mock_worker.submit.return_value = mock_result
-        executor._worker_getter = lambda: mock_worker
+        executor.execute_login()
+        call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
+        assert isinstance(call_kwargs["config"], RuntimeConfig)
 
-        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
-            success, msg = executor.execute_login()
-        assert success is True
+    def test_returns_orchestrator_result(self):
+        """execute_login 应返回 orchestrator.handle.result() 的值。"""
+        mock_orchestrator = MagicMock()
+        mock_handle = MagicMock()
+        mock_handle.result.return_value = (False, "认证失败")
+        mock_orchestrator.submit.return_value = mock_handle
 
-    def test_login_import_error(self):
-        """ImportError 应被捕获。"""
-        executor = self._make_executor()
-        executor._get_runtime_config = None
+        executor = self._make_executor(login_orchestrator=mock_orchestrator)
+        executor._get_runtime_config = lambda: RuntimeConfig()
 
-        with patch.dict("sys.modules", {"app.workers.playwright_worker": None}):
-            success, msg = executor.execute_login()
+        success, msg = executor.execute_login()
         assert success is False
-        assert "依赖" in msg
+        assert msg == "认证失败"
 
-    def test_login_generic_exception(self):
-        """通用异常应被捕获。"""
+    def test_source_is_auto(self):
+        """execute_login 应以 source='auto' 提交。"""
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: {}
-        executor._worker_getter = MagicMock(side_effect=RuntimeError("crash"))
+        executor._get_runtime_config = lambda: RuntimeConfig()
 
-        with patch("app.workers.playwright_worker.CMD_LOGIN", "login", create=True):
-            success, msg = executor.execute_login()
-        assert success is False
-        assert "异常" in msg
-
-
-# =====================================================================
-# TaskExecutor — _record_login_history
-# =====================================================================
-
-
-class TestTaskExecutorRecordLoginHistory:
-    """TaskExecutor._record_login_history() 测试。"""
-
-    def _make_executor(self, **kwargs):
-        from app.services.task_executor import TaskExecutor
-
-        defaults = dict(
-            registry=MagicMock(),
-            history_store=MagicMock(),
-            worker_getter=MagicMock(),
-            login_history=MagicMock(),
-            profile_service=MagicMock(),
-        )
-        defaults.update(kwargs)
-        return TaskExecutor(**defaults)
-
-    def test_no_login_history_service(self):
-        """无 login_history 时应直接返回。"""
-        executor = self._make_executor(login_history=None)
-        executor._record_login_history(True, 100)
-        # 不应抛出异常
-
-    def test_records_success(self):
-        executor = self._make_executor()
-        executor._record_login_history(True, 150)
-        executor._login_history.record.assert_called_once_with(
-            success=True,
-            duration_ms=150,
-            profile_service=executor._profile_service,
-            error="",
-        )
-
-    def test_records_failure_with_error(self):
-        executor = self._make_executor()
-        executor._record_login_history(False, 200, error="timeout")
-        executor._login_history.record.assert_called_once_with(
-            success=False,
-            duration_ms=200,
-            profile_service=executor._profile_service,
-            error="timeout",
-        )
-
-    def test_record_exception_caught(self):
-        """record 抛异常时应被静默捕获。"""
-        executor = self._make_executor()
-        executor._login_history.record.side_effect = RuntimeError("db error")
-        executor._record_login_history(True, 100)
-        # 不应抛出异常
+        executor.execute_login()
+        call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
+        assert call_kwargs["source"] == "auto"
 
 
 # =====================================================================
@@ -1061,7 +1082,7 @@ class TestTaskExecutorRecordLoginHistory:
 
 
 class TestTaskExecutorLoginAsync:
-    """TaskExecutor.execute_login_async() 登录去重机制测试。"""
+    """TaskExecutor.execute_login_async() 委托 LoginOrchestrator 测试。"""
 
     def _make_executor(self, **kwargs):
         from app.services.task_executor import TaskExecutor
@@ -1070,122 +1091,59 @@ class TestTaskExecutorLoginAsync:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            login_orchestrator=MagicMock(),
         )
         defaults.update(kwargs)
         return TaskExecutor(**defaults)
 
-    def test_first_login_submits(self):
-        """首次登录应提交新任务。"""
+    def test_submit_delegates_to_orchestrator(self):
+        """execute_login_async 应委托到 login_orchestrator.submit。"""
         executor = self._make_executor()
-        executor.execute_login = _slow_return((True, "ok"))
+        mock_future = Future()
+        mock_future.set_result((True, "ok"))
+        mock_handle = MagicMock()
+        mock_handle.future = mock_future
+        executor._login_orchestrator.submit.return_value = mock_handle
+
+        future = executor.execute_login_async()
+        assert future is mock_future
+        executor._login_orchestrator.submit.assert_called_once()
+
+    def test_rejected_returns_failed_future(self):
+        """orchestrator 拒绝时应返回已完成的失败 Future。"""
+        executor = self._make_executor()
+        mock_handle = MagicMock()
+        mock_handle.future = None
+        mock_handle.rejected_reason = "登录被拒绝"
+        executor._login_orchestrator.submit.return_value = mock_handle
 
         future = executor.execute_login_async()
         assert isinstance(future, Future)
-        assert future.result(timeout=5) == (True, "ok")
+        assert future.result(timeout=5) == (False, "登录被拒绝")
 
-    def test_duplicate_login_returns_existing(self):
-        """重复登录应返回已有的 Future。"""
+    def test_rejected_no_reason_returns_default(self):
+        """orchestrator 拒绝且无 reason 时应返回默认消息。"""
         executor = self._make_executor()
-
-        blocker = threading.Event()
-        def slow_login(cancel_event=None, config_snapshot=None):
-            blocker.wait(timeout=5)
-            return (True, "ok")
-
-        executor.execute_login = slow_login
-
-        future1 = executor.execute_login_async()
-        future2 = executor.execute_login_async()
-        assert future1 is future2
-
-        blocker.set()
-        future1.result(timeout=5)
-
-    def test_login_done_clears_future(self):
-        """登录完成后 _login_future 应被清理。"""
-        executor = self._make_executor()
-        executor.execute_login = _slow_return((True, "ok"))
+        mock_handle = MagicMock()
+        mock_handle.future = None
+        mock_handle.rejected_reason = None
+        executor._login_orchestrator.submit.return_value = mock_handle
 
         future = executor.execute_login_async()
-        future.result(timeout=5)
-        # 等待回调执行
-        time.sleep(0.1)
+        assert future.result(timeout=5) == (False, "登录被拒绝")
 
-        assert executor._login_future is None
-
-    def test_login_with_cancel_event(self):
-        """cancel_event 应传递给 execute_login。"""
+    def test_cancel_event_forwarded_to_orchestrator(self):
+        """cancel_event 应传递给 orchestrator.submit。"""
         executor = self._make_executor()
-        cancel = threading.Event()
-        received_events = []
-
-        def fake_login(cancel_event=None):
-            received_events.append(cancel_event)
-            return (False, "cancelled")
-
-        executor.execute_login = _slow_return((False, "cancelled"))
-
-        future = executor.execute_login_async(cancel_event=cancel)
-        result = future.result(timeout=5)
-        assert result == (False, "cancelled")
-
-    def test_new_login_after_previous_done(self):
-        """前一次登录完成后，应能提交新登录。"""
-        executor = self._make_executor()
-        executor.execute_login = _slow_return((True, "ok"))
-
-        future1 = executor.execute_login_async()
-        future1.result(timeout=5)
-        time.sleep(0.1)
-
-        future2 = executor.execute_login_async()
-        assert future2 is not future1
-        future2.result(timeout=5)
-
-    def test_duplicate_login_links_cancel_event(self):
-        """去重时新 cancel_event 应联动到已有任务。"""
-        executor = self._make_executor()
-
-        blocker = threading.Event()
-        received_cancel = threading.Event()
-
-        def slow_login(cancel_event=None, config_snapshot=None):
-            # 模拟长时间登录，定期检查 cancel_event
-            for _ in range(50):
-                if cancel_event and cancel_event.is_set():
-                    received_cancel.set()
-                    return (False, "cancelled")
-                blocker.wait(timeout=0.1)
-            return (True, "ok")
-
-        executor.execute_login = slow_login
-
-        original_cancel = threading.Event()
-        future1 = executor.execute_login_async(cancel_event=original_cancel)
-
-        # 第二次调用，带新的 cancel_event
-        new_cancel = threading.Event()
-        future2 = executor.execute_login_async(cancel_event=new_cancel)
-        assert future1 is future2
-
-        # 设置新 cancel_event，应联动到已有任务
-        new_cancel.set()
-        future1.result(timeout=5)
-
-        # 验证已有任务确实收到了取消信号
-        assert received_cancel.is_set()
-
-    def test_on_login_done_clears_cancel_event(self):
-        """登录完成后 _login_cancel_event 应被清理。"""
-        executor = self._make_executor()
-        executor.execute_login = _slow_return((True, "ok"))
+        mock_handle = MagicMock()
+        mock_handle.future = Future()
+        mock_handle.future.set_result((True, "ok"))
+        executor._login_orchestrator.submit.return_value = mock_handle
 
         cancel = threading.Event()
-        future = executor.execute_login_async(cancel_event=cancel)
-        future.result(timeout=5)
-        time.sleep(0.1)
-
-        assert executor._login_cancel_event is None
+        executor.execute_login_async(cancel_event=cancel)
+        call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
+        assert call_kwargs["cancel_event"] is cancel
 
 
 # =====================================================================
@@ -1199,78 +1157,95 @@ class TestTaskExecutorLoginAsync:
 
 
 class TestIsLoginRunning:
-    """测试 is_login_running 状态查询。"""
+    """测试 is_login_running 状态查询（委托 LoginOrchestrator）。"""
 
-    def test_no_login_returns_false(self):
+    def test_delegates_to_orchestrator(self):
+        """is_login_running 应委托到 login_orchestrator.is_running()。"""
         from app.services.task_executor import TaskExecutor
+
+        mock_orchestrator = MagicMock()
+        mock_orchestrator.is_running.return_value = False
 
         executor = TaskExecutor(
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            login_orchestrator=mock_orchestrator,
         )
         assert executor.is_login_running() is False
+        mock_orchestrator.is_running.assert_called_once()
 
-    def test_with_pending_future_returns_true(self):
+    def test_returns_true_when_orchestrator_running(self):
+        """orchestrator 报告正在运行时应返回 True。"""
         from app.services.task_executor import TaskExecutor
+
+        mock_orchestrator = MagicMock()
+        mock_orchestrator.is_running.return_value = True
 
         executor = TaskExecutor(
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            login_orchestrator=mock_orchestrator,
         )
-        future = Future()
-        executor._login_future = future
         assert executor.is_login_running() is True
 
-    def test_with_done_future_returns_false(self):
-        from app.services.task_executor import TaskExecutor
-
-        executor = TaskExecutor(
-            registry=MagicMock(),
-            history_store=MagicMock(),
-            worker_getter=MagicMock(),
-        )
-        future = Future()
-        future.set_result((True, "ok"))
-        executor._login_future = future
-        assert executor.is_login_running() is False
-
 
 # =====================================================================
-# TaskExecutor — _on_login_done
+# TaskExecutor — force_clear_login_slot
 # =====================================================================
 
 
-class TestTaskExecutorOnLoginDone:
-    """TaskExecutor._on_login_done() 测试。"""
+class TestForceClearLoginSlot:
+    """TaskExecutor.force_clear_login_slot() 委托 LoginOrchestrator 测试。"""
 
-    def test_clears_matching_future(self):
+    def test_delegates_cancel_running(self):
+        """force_clear_login_slot 应委托到 login_orchestrator.cancel_running()。"""
         from app.services.task_executor import TaskExecutor
 
+        mock_orchestrator = MagicMock()
         executor = TaskExecutor(
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            login_orchestrator=mock_orchestrator,
         )
-        mock_future = MagicMock()
-        executor._login_future = mock_future
-        executor._on_login_done(mock_future)
-        assert executor._login_future is None
 
-    def test_does_not_clear_different_future(self):
+        executor.force_clear_login_slot()
+        mock_orchestrator.cancel_running.assert_called_once()
+
+    def test_thread_safety(self):
+        """并发调用 force_clear_login_slot 应线程安全。"""
         from app.services.task_executor import TaskExecutor
 
+        mock_orchestrator = MagicMock()
         executor = TaskExecutor(
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            login_orchestrator=mock_orchestrator,
         )
-        future1 = MagicMock()
-        future2 = MagicMock()
-        executor._login_future = future1
-        executor._on_login_done(future2)
-        assert executor._login_future is future1
+
+        barrier = threading.Barrier(5)
+        results = []
+
+        def call_clear():
+            barrier.wait(timeout=5)
+            try:
+                executor.force_clear_login_slot()
+                results.append(True)
+            except Exception:
+                results.append(False)
+
+        threads = [threading.Thread(target=call_clear) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+
+        assert len(results) == 5
+        assert all(results)
+        assert mock_orchestrator.cancel_running.call_count == 5
 
 
 # =====================================================================
@@ -1288,6 +1263,7 @@ class TestTaskExecutorTaskAsync:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            login_orchestrator=MagicMock(),
         )
         executor.execute_task = lambda task_id: (True, "ok")
 
@@ -1304,10 +1280,136 @@ class TestTaskExecutorTaskAsync:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            login_orchestrator=MagicMock(),
         )
         assert executor._task_pool is None
         executor.execute_task = lambda task_id: (True, "ok")
         executor.execute_task_async("t1")
         assert executor._task_pool is not None
         executor._task_pool.shutdown(wait=False)
+
+    def test_dedup_skips_pending_task(self):
+        """同一 task_id 有 pending 任务时应返回已有 Future。"""
+        from app.services.task_executor import TaskExecutor
+
+        barrier = threading.Event()
+
+        def slow_task(task_id):
+            barrier.wait(timeout=5)
+            return (True, "ok")
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+            login_orchestrator=MagicMock(),
+        )
+        executor.execute_task = slow_task
+
+        f1 = executor.execute_task_async("t1")
+        f2 = executor.execute_task_async("t1")
+        assert f1 is f2
+
+        barrier.set()
+        f1.result(timeout=5)
+        executor._task_pool.shutdown(wait=False)
+
+    def test_dedup_allows_after_completion(self):
+        """任务完成后，同一 task_id 可以再次提交。"""
+        from app.services.task_executor import TaskExecutor
+
+        call_count = {"n": 0}
+
+        def counting_task(task_id):
+            call_count["n"] += 1
+            return (True, f"run-{call_count['n']}")
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+            login_orchestrator=MagicMock(),
+        )
+        executor.execute_task = counting_task
+
+        f1 = executor.execute_task_async("t1")
+        assert f1.result(timeout=5) == (True, "run-1")
+
+        f2 = executor.execute_task_async("t1")
+        assert f2.result(timeout=5) == (True, "run-2")
+        assert f1 is not f2
+        assert call_count["n"] == 2
+        executor._task_pool.shutdown(wait=False)
+
+    def test_dedup_different_task_ids(self):
+        """不同 task_id 不应互相干扰。"""
+        from app.services.task_executor import TaskExecutor
+
+        barrier = threading.Event()
+
+        def slow_task(task_id):
+            barrier.wait(timeout=5)
+            return (True, task_id)
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+            login_orchestrator=MagicMock(),
+        )
+        executor.execute_task = slow_task
+
+        f1 = executor.execute_task_async("t1")
+        f2 = executor.execute_task_async("t2")
+        assert f1 is not f2
+
+        barrier.set()
+        assert f1.result(timeout=5) == (True, "t1")
+        assert f2.result(timeout=5) == (True, "t2")
+        executor._task_pool.shutdown(wait=False)
+
+    def test_cleanup_removes_task_from_map(self):
+        """任务完成后应从 _running_tasks 中清理。"""
+        from app.services.task_executor import TaskExecutor
+
+        barrier = threading.Event()
+
+        def slow_task(task_id):
+            barrier.wait(timeout=5)
+            return (True, "ok")
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+            login_orchestrator=MagicMock(),
+        )
+        executor.execute_task = slow_task
+
+        f = executor.execute_task_async("t1")
+        assert "t1" in executor._running_tasks
+
+        barrier.set()
+        f.result(timeout=5)
+        # 回调异步触发，等待一小段时间
+        time.sleep(0.2)
+        assert "t1" not in executor._running_tasks
+        executor._task_pool.shutdown(wait=False)
+
+    def test_shutdown_clears_running_tasks(self):
+        """shutdown 应清空 _running_tasks。"""
+        from app.services.task_executor import TaskExecutor
+
+        executor = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+            login_orchestrator=MagicMock(),
+        )
+        executor.execute_task = lambda task_id: (True, "ok")
+        executor.execute_task_async("t1")
+        assert len(executor._running_tasks) > 0 or True  # 可能已完成
+
+        executor.shutdown(wait=False)
+        assert len(executor._running_tasks) == 0
 

@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.schemas import AuthProfile
+from app.schemas import Profile
 from app.workers.playwright_worker import WorkerResponse
 
 
@@ -20,8 +20,8 @@ class TestProfileConnection:
 
         # 创建第二个 profile 并设为活动方案
         profile_service.update(
-            lambda d: d.profiles.update({"profile-b": AuthProfile(
-                name="方案B", username="user-b", auth_url="http://10.0.0.2"
+            lambda d: d.profiles.update({"profile-b": Profile(
+                name="方案B", username="user-b", password="pass-b", auth_url="http://10.0.0.2"
             )})
         )
         profile_service.set_active_profile("profile-b")
@@ -29,22 +29,22 @@ class TestProfileConnection:
         ok, msg = engine.apply_profile("profile-b")
         assert ok is True
 
-        config = engine.get_config()
-        assert config.username == "user-b"
+        config = engine.get_runtime_config()
+        assert config.credentials.username == "user-b"
 
     def test_switch_while_monitoring(self, integration_stack):
         """监控运行中切换 → 旧配置停、新配置起，无线程泄漏。"""
         engine, profile_service, task_executor, mock_worker = integration_stack
 
         profile_service.update(
-            lambda d: d.profiles.update({"profile-b": AuthProfile(
-                name="方案B", username="user-b", auth_url="http://10.0.0.2"
+            lambda d: d.profiles.update({"profile-b": Profile(
+                name="方案B", username="user-b", password="pass-b", auth_url="http://10.0.0.2"
             )})
         )
 
         # 直接设置 monitor_core，绕过异步队列
         from app.services.monitor_service import NetworkMonitorCore
-        config = engine._copy_runtime_config()
+        config = engine.get_runtime_config()
         core = NetworkMonitorCore(
             config=config,
             log_callback=engine.record_log,
@@ -65,7 +65,7 @@ class TestProfileConnection:
         time.sleep(0.5)
 
         assert engine._is_monitoring
-        assert engine.get_config().username == "user-b"
+        assert engine.get_runtime_config().credentials.username == "user-b"
 
     def test_delete_current_profile(self, integration_stack):
         """删除当前方案 → 回退到 default。"""
@@ -73,13 +73,13 @@ class TestProfileConnection:
 
         # 确保 default profile 有完整凭证
         profile_service.update(
-            lambda d: d.profiles.update({"default": AuthProfile(
+            lambda d: d.profiles.update({"default": Profile(
                 name="默认方案", username="testuser", auth_url="http://10.0.0.1"
             )})
         )
 
         profile_service.update(
-            lambda d: d.profiles.update({"profile-b": AuthProfile(
+            lambda d: d.profiles.update({"profile-b": Profile(
                 name="方案B", username="user-b", auth_url="http://10.0.0.2"
             )})
         )
@@ -90,5 +90,5 @@ class TestProfileConnection:
         assert ok is True
 
         engine.reload_config()
-        config = engine.get_config()
-        assert config.username == "testuser"
+        config = engine.get_runtime_config()
+        assert config.credentials.username == "testuser"

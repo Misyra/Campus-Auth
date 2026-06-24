@@ -32,18 +32,19 @@ _FORCE_INPUT_JS = """(el, params) => {
   el.removeAttribute('disabled');
   // 1. focus — 触发页面 JS 的显隐切换/占位收起
   el.dispatchEvent(new FocusEvent('focus', {bubbles:true}));
-  // 2. 清空
+  // 2. 清空或追加
   if (doClear) {
     nativeSet.call(el, '');
   }
   // 3. beforeinput — React 17+ 受控组件需要
+  const finalVal = doClear ? val : el.value + val;
   el.dispatchEvent(new InputEvent('beforeinput',
-    {bubbles:true, inputType:'insertText', data:val}));
+    {bubbles:true, inputType:'insertText', data:finalVal}));
   // 4. 设置值
-  nativeSet.call(el, val);
+  nativeSet.call(el, finalVal);
   // 5. input — 所有框架都监听此事件更新状态
   el.dispatchEvent(new InputEvent('input',
-    {bubbles:true, inputType:'insertText', data:val}));
+    {bubbles:true, inputType:'insertText', data:finalVal}));
   // 6. keyup — 部分门户做逐字校验
   el.dispatchEvent(new KeyboardEvent('keyup', {bubbles:true}));
   // 7. change
@@ -369,7 +370,7 @@ class SelectHandler(StepHandler):
         return True, ""
 
     async def _select_with_fallback(self, element, value: str, timeout: int) -> bool:
-        """优先按 value 精确选择，失败后按标签文本包含匹配。"""
+        """优先按 value 精确选择，失败后按标签文本匹配（精确优先，包含仅唯一匹配时采用）。"""
         try:
             result = await element.select_option(value, timeout=timeout)
             if result:
@@ -389,21 +390,42 @@ class SelectHandler(StepHandler):
 
         logger.debug("[select] 可用选项: {}", option_texts)
         normalized_target = value.strip().lower()
+        if not normalized_target:
+            logger.warning("[select] value 为空或纯空白，跳过模糊匹配: '{}'", value)
+            return False
+
+        # 第一轮：精确匹配标签文本
         for text in option_texts:
             current = str(text or "").strip()
             if not current:
                 continue
-            normalized = current.lower()
-            if normalized_target == normalized or normalized_target in normalized:
+            if normalized_target == current.lower():
                 try:
                     result = await element.select_option(label=current, timeout=timeout)
                     if result:
-                        logger.info(
-                            "[select] 模糊匹配成功: '{}' 匹配选项 '{}'", value, current
-                        )
+                        logger.info("[select] 标签精确匹配: '{}' -> '{}'", value, current)
                         return True
                 except Exception:
                     continue
+
+        # 第二轮：包含匹配，仅唯一匹配时采用（避免 "本科" 误选 "本科生"）
+        contains = [
+            t for t in option_texts
+            if t and normalized_target in str(t).strip().lower()
+        ]
+        if len(contains) == 1:
+            text = str(contains[0]).strip()
+            try:
+                result = await element.select_option(label=text, timeout=timeout)
+                if result:
+                    logger.info("[select] 标签包含匹配: '{}' -> '{}'", value, text)
+                    return True
+            except Exception:
+                pass
+        elif len(contains) > 1:
+            logger.warning(
+                "[select] 包含匹配到多个选项 {}，已跳过以防误选", contains
+            )
 
         return False
 
@@ -452,7 +474,7 @@ class ClickSelectHandler(StepHandler):
         logger.info("[click_select] 触发器已点击，等待 {}ms 后查找选项", select_delay)
         await page.wait_for_timeout(select_delay)
 
-        clicked = await self._click_option(ctx, value, option_selector, timeout)
+        clicked = await self._click_option(ctx, value, option_selector, timeout, trigger)
         if not clicked:
             logger.debug("[click_select] 未匹配到选项，跳过: {}", value)
             if step.required:
@@ -460,21 +482,46 @@ class ClickSelectHandler(StepHandler):
         return True, ""
 
     async def _click_option(
-        self, ctx, text: str, option_selector: str, timeout: int
+        self, ctx, text: str, option_selector: str, timeout: int, trigger=None
     ) -> bool:
-        try:
-            if option_selector:
-                container = ctx.locator(option_selector).first
-                option = container.get_by_text(text, exact=False).first
+        if option_selector:
+            container = ctx.locator(option_selector).first
+            option = container.get_by_text(text, exact=False).first
+            logger.debug(
+                "[click_select] 在容器 '{}' 内搜索选项 '{}'", option_selector, text
+            )
+            try:
+                await option.wait_for(state="visible", timeout=timeout)
+                await option.click(timeout=timeout)
+                logger.info("[click_select] 选项点击成功: '{}'", text)
+                return True
+            except Exception:
+                logger.debug("[click_select] 容器内未找到选项: '{}'", text)
+                return False
+        elif trigger is not None:
+            # 优先在触发器父容器内搜索，避免全页面搜索误点到同名元素
+            container = trigger.locator("..")
+            option = container.get_by_text(text, exact=False).first
+            logger.debug(
+                "[click_select] 在触发器父容器内搜索选项 '{}'", text
+            )
+            try:
+                await option.wait_for(state="visible", timeout=timeout)
+                await option.click(timeout=timeout)
+                logger.info("[click_select] 选项点击成功（父容器）: '{}'", text)
+                return True
+            except Exception:
+                # Portal 框架下选项渲染在 body 而非父容器，回退到全局搜索
                 logger.debug(
-                    "[click_select] 在容器 '{}' 内搜索选项 '{}'", option_selector, text
+                    "[click_select] 父容器内未找到，回退全局搜索 '{}'", text
                 )
-            else:
-                option = ctx.get_by_text(text, exact=False).first
-                logger.debug("[click_select] 全局搜索选项 '{}'", text)
+        # 全局搜索（option_selector 为空，或 trigger 父容器未命中）
+        try:
+            option = ctx.get_by_text(text, exact=False).first
+            logger.debug("[click_select] 全局搜索选项 '{}'", text)
             await option.wait_for(state="visible", timeout=timeout)
             await option.click(timeout=timeout)
-            logger.info("[click_select] 选项点击成功: '{}'", text)
+            logger.info("[click_select] 选项点击成功（全局）: '{}'", text)
             return True
         except Exception:
             logger.debug("[click_select] 选项未找到或点击失败: '{}'", text)
@@ -602,7 +649,7 @@ class ScreenshotHandler(StepHandler):
             task_id = resolver.config.task_id or resolver.config.name or "unknown"
             step_id = step.id or "s0"
             result = await save_screenshot(
-                page, date_dir, task_id=task_id, step_id=step_id
+                page, date_dir, prefix="", task_id=task_id, step_id=step_id
             )
         else:
             safe_name = Path(path).name
@@ -817,7 +864,7 @@ class OcrHandler(StepHandler):
                     await target.wait_for(state="attached", timeout=timeout)
                     await target.evaluate(
                         _FORCE_INPUT_JS,
-                        {"val": result, "doClear": False},
+                        {"val": result, "doClear": True},
                     )
                     logger.info(
                         "[ocr] 强制输入成功 -> {}, 值='{}'", target_selector, result

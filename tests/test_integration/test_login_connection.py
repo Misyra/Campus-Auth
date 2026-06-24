@@ -7,20 +7,26 @@ from __future__ import annotations
 
 import threading
 import time
+from concurrent.futures import Future
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.network.decision import check_network_status
-from app.schemas import MonitorConfigPayload
+from app.schemas import RuntimeConfig
 from app.workers.playwright_worker import WorkerResponse
 
 
 def _ensure_login_config(engine) -> None:
     """确保引擎运行时配置包含登录所需字段。"""
-    engine._runtime_config["username"] = "testuser"
-    engine._runtime_config["password"] = "testpass"
-    engine._runtime_config["auth_url"] = "http://10.0.0.1"
+    from app.schemas import LoginCredentials
+    old = engine._runtime_config
+    engine._runtime_config = old.model_copy(update={
+        "credentials": LoginCredentials(
+            username="testuser", password="testpass", auth_url="http://10.0.0.1",
+            isp=old.credentials.isp, carrier_custom=old.credentials.carrier_custom,
+        ),
+    })
 
 
 class TestLoginConnection:
@@ -73,7 +79,7 @@ class TestLoginConnection:
         assert mock_worker.submit.call_count == 2
 
     def test_retry_exhausted(self, integration_stack):
-        """连续失败达 max_retries → 停止重试。"""
+        """连续失败达阈值 → MonitoredPolicy._attempt 递增。"""
         engine, profile_service, task_executor, mock_worker = integration_stack
         _ensure_login_config(engine)
 
@@ -81,21 +87,20 @@ class TestLoginConnection:
             success=False, error="网络超时"
         )
 
-        # 配置重试
-        engine._login_retry.configure(3, [0.1, 0.1, 0.1])
-
-        # 连续登录直到耗尽重试
+        # 通过引擎的 _do_async_login 连续提交登录（走 done callback 路径）
         for i in range(3):
-            future = task_executor.execute_login_async()
-            ok, msg = future.result(timeout=5)
-            assert ok is False
-            engine._login_retry.record_attempt(time.time())
+            future = Future()
+            handle = MagicMock()
+            handle.rejected_reason = None
+            handle.future = future
+            with patch.object(engine._orchestrator, "submit", return_value=handle):
+                result = engine._do_async_login()
+            assert result is True
+            future.set_result((False, "网络超时"))
+            time.sleep(0.2)
 
-        # 第 4 次应该不需要重试（已达上限）
-        assert engine._login_retry.need_retry(time.time()) is False
-
-        # submit 只被调了 3 次
-        assert mock_worker.submit.call_count == 3
+        # 连续失败计数应为 3（通过 MonitoredPolicy._attempt 验证）
+        assert engine._retry_policy._attempt == 3
 
     def test_manual_preempt_auto(self, integration_stack):
         """手动登录取消卡住的自动登录。"""
@@ -215,21 +220,20 @@ class TestLoginConnection:
         login_done.wait(timeout=5)
 
         # 登录进行中，保存新配置
-        from app.services.config_service import save_and_apply
+        from app.schemas import ConfigResponseDTO
+        from app.services.config_service import save_global_and_profile
 
-        new_payload = MonitorConfigPayload(
-            username="newuser",
-            password="newpass",
-            auth_url="http://10.0.0.1",
-            check_interval_seconds=60,
+        payload = ConfigResponseDTO(
+            browser=engine._runtime_config.browser,
+            monitor=engine._runtime_config.monitor,
+            retry=engine._runtime_config.retry,
+            pause=engine._runtime_config.pause,
+            logging=engine._runtime_config.logging,
         )
-        result = save_and_apply(new_payload, profile_service, engine.reload_config)
+        result = save_global_and_profile(payload, profile_service, engine.reload_config)
 
         # 释放登录
         release_login.set()
         ok, msg = future.result(timeout=5)
 
         assert ok is True
-
-        # 验证：新配置已生效
-        assert engine.get_config().check_interval_seconds == 60

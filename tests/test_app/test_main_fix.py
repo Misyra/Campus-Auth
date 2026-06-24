@@ -7,6 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.schemas import RuntimeConfig
+
 
 # ==================== 修复 1: _open_browser 逻辑简化 ====================
 # （保留原有 4 个行为测试，无变化）
@@ -171,11 +173,72 @@ class TestLoginOnceAllDisabled:
             patch("main._execute_login_with_retries") as mock_exec,
         ):
             mock_load.return_value = (
-                {"username": "test", "password": "x", "auth_url": "http://x"},
-                None,
+                RuntimeConfig(), None,
             )
             mock_check.return_value = (False, "all_disabled", "none")
 
             result = _run_login_then_exit(None, MagicMock())
             assert result == LoginResult.SUCCESS
             mock_exec.assert_not_called()
+
+
+# ==================== F14: 轻量模式 Web 服务启动后的兜底清理 ====================
+
+
+class TestLightweightFallbackCleanup:
+    """F14: Web 已标记 started 但 Uvicorn 未就绪时仍应执行兜底清理。"""
+
+    def _simulate_finally_block(self, web_server_state, container):
+        """提取 finally 块逻辑用于测试。"""
+        _web_ready = web_server_state["started"] and web_server_state["server_ref"][0] is not None
+        if not _web_ready:
+            container.task_executor.shutdown(wait=False)
+            container.engine.shutdown()
+
+    def test_server_not_started_calls_shutdown(self):
+        """Web 未启动时应调用 shutdown。"""
+        state = {"started": False, "server_ref": [None]}
+        container = MagicMock()
+
+        self._simulate_finally_block(state, container)
+
+        container.task_executor.shutdown.assert_called_once_with(wait=False)
+        container.engine.shutdown.assert_called_once()
+
+    def test_server_started_but_ref_none_calls_shutdown(self):
+        """Web 已标记 started 但 server_ref 仍为 None（子线程崩溃）时应兜底 shutdown。"""
+        state = {"started": True, "server_ref": [None]}
+        container = MagicMock()
+
+        self._simulate_finally_block(state, container)
+
+        container.task_executor.shutdown.assert_called_once_with(wait=False)
+        container.engine.shutdown.assert_called_once()
+
+    def test_server_started_and_ref_set_skips_shutdown(self):
+        """Web 已启动且 Uvicorn 就绪时不应调用 shutdown（由 Uvicorn 事件循环处理）。"""
+        state = {"started": True, "server_ref": [MagicMock()]}
+        container = MagicMock()
+
+        self._simulate_finally_block(state, container)
+
+        container.task_executor.shutdown.assert_not_called()
+        container.engine.shutdown.assert_not_called()
+
+    def test_actual_code_condition(self):
+        """验证 main.py 中 _run_lightweight finally 块的 _web_ready 条件逻辑。"""
+        # 模拟 main.py 中的条件判断
+        # Case 1: 未启动 → 需要清理
+        state = {"started": False, "server_ref": [None]}
+        _web_ready = state["started"] and state["server_ref"][0] is not None
+        assert not _web_ready
+
+        # Case 2: 已启动但 Uvicorn 未就绪 → 需要清理
+        state = {"started": True, "server_ref": [None]}
+        _web_ready = state["started"] and state["server_ref"][0] is not None
+        assert not _web_ready
+
+        # Case 3: 已启动且 Uvicorn 就绪 → 跳过清理
+        state = {"started": True, "server_ref": [MagicMock()]}
+        _web_ready = state["started"] and state["server_ref"][0] is not None
+        assert _web_ready

@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.services.profile_service import ProfileService
-from app.services.runtime_config import load_runtime_config
 
 
 def test_profile_active_task_overrides_global(tmp_path: Path):
@@ -13,23 +12,10 @@ def test_profile_active_task_overrides_global(tmp_path: Path):
     svc = ProfileService(tmp_path)
     data = svc.load()
     data.profiles["default"].active_task = "task_123"
-    data.global_settings.active_task = ""
     svc.save(data)
 
-    payload, _ = load_runtime_config(svc)
-    assert payload.active_task == "task_123"
-
-
-def test_global_active_task_used_when_profile_empty(tmp_path: Path):
-    """Profile 的 active_task 为空时，应使用全局 active_task。"""
-    svc = ProfileService(tmp_path)
-    data = svc.load()
-    data.profiles["default"].active_task = ""
-    data.global_settings.active_task = "task_global"
-    svc.save(data)
-
-    payload, _ = load_runtime_config(svc)
-    assert payload.active_task == "task_global"
+    config = svc.get_runtime_config()
+    assert config.active_task == "task_123"
 
 
 def test_profile_auth_url_overrides_global(tmp_path: Path):
@@ -37,8 +23,7 @@ def test_profile_auth_url_overrides_global(tmp_path: Path):
     svc = ProfileService(tmp_path)
     data = svc.load()
     data.profiles["default"].auth_url = "http://profile.example.com"
-    data.global_settings.auth_url = "http://global.example.com"
     svc.save(data)
 
-    payload, _ = load_runtime_config(svc)
-    assert payload.auth_url == "http://profile.example.com"
+    config = svc.get_runtime_config()
+    assert config.credentials.auth_url == "http://profile.example.com"

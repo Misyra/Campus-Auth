@@ -4,6 +4,7 @@ import datetime
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
@@ -14,11 +15,25 @@ from app.network.decision import (
     check_pause,
 )
 from app.network.probes import set_block_proxy
+from app.schemas import RuntimeConfig
 from app.utils import get_logger
 from app.utils.network import parse_ping_targets
 
 if TYPE_CHECKING:
     from app.services.profile_service import ProfileService
+
+
+@dataclass(frozen=True, slots=True)
+class CheckOnceResult:
+    """check_once() 的返回值。"""
+
+    paused: bool
+    net_ok: bool
+    net_reason: str
+    need_login: bool
+    check_num: int
+    interval: int
+    result: NetworkCheckResult
 
 
 class NetworkState(str, Enum):
@@ -40,12 +55,12 @@ class NetworkMonitorCore:
 
     def __init__(
         self,
-        config: dict[str, Any] | None = None,
+        config: RuntimeConfig,
         log_callback: Callable[[str, str, str], None] | None = None,
         login_history: Any = None,
         worker_getter: Callable | None = None,
     ) -> None:
-        self.config = config if config is not None else {}
+        self.config = config
         self.log_callback = log_callback
         self._login_history = login_history
         self._worker_getter = worker_getter
@@ -143,11 +158,7 @@ class NetworkMonitorCore:
 
     def _get_monitor_interval(self) -> int:
         """获取当前配置的检测间隔（秒）。"""
-        return int(
-            self.config.get("monitor", {}).get(
-                "interval", self.DEFAULT_INTERVAL_SECONDS
-            )
-        )
+        return self.config.monitor.check_interval_seconds
 
     def init_monitoring(self) -> None:
         """初始化监控状态（不启动循环，由引擎驱动检测）。"""
@@ -166,21 +177,21 @@ class NetworkMonitorCore:
         )
 
         interval = self._get_monitor_interval()
-        auth_url = self.config.get("auth_url", "未设置")
-        username = self.config.get("username", "未设置")
-        isp = self.config.get("isp", "无") or "无"
-        block_proxy = self.config.get("block_proxy", True)
+        auth_url = self.config.credentials.auth_url or "未设置"
+        username = self.config.credentials.username or "未设置"
+        isp = self.config.credentials.isp or "无"
+        block_proxy = self.config.block_proxy
         set_block_proxy(block_proxy if block_proxy is not None else True)
         test_sites_info = self._get_test_sites()
 
-        monitor_cfg = self.config.get("monitor", {})
+        monitor_cfg = self.config.monitor
         modes = []
-        if monitor_cfg.get("enable_tcp_check", False):
+        if monitor_cfg.enable_tcp_check:
             modes.append(f"TCP({len(test_sites_info)})")
-        if monitor_cfg.get("enable_http_check", False):
-            http_urls = monitor_cfg.get("test_urls", [])
+        if monitor_cfg.enable_http_check:
+            http_urls = monitor_cfg.test_urls
             modes.append(f"HTTP({len(http_urls)})")
-        url_checks = monitor_cfg.get("url_check_urls")
+        url_checks = monitor_cfg.url_check_urls
         if url_checks:
             modes.append(f"网址响应({len(url_checks)})")
         modes_str = " + ".join(modes) if modes else "无"
@@ -194,20 +205,8 @@ class NetworkMonitorCore:
             f"认证地址: {masked_url} | 账号: {masked_username} | 运营商: {isp}"
         )
 
-    def check_once(self) -> dict[str, Any]:
-        """执行一次网络检测（不阻塞，不做登录重试）。
-
-        返回:
-            dict: {
-                "paused": bool,
-                "net_ok": bool,
-                "net_reason": str,
-                "need_login": bool,
-                "check_num": int,
-                "interval": int,
-                "result": NetworkCheckResult,
-            }
-        """
+    def check_once(self) -> CheckOnceResult:
+        """执行一次网络检测（不阻塞，不做登录重试）。"""
         interval = self._get_monitor_interval()
         test_sites = self._get_test_sites()
 
@@ -218,38 +217,45 @@ class NetworkMonitorCore:
             if self.network_state == NetworkState.UNKNOWN:
                 self.status_detail = "正在检测网络"
 
-        targets_str = ", ".join(f"{h}:{p}" for h, p in test_sites)
+        monitor_cfg = self.config.monitor
+        targets_parts = []
+        if monitor_cfg.enable_tcp_check:
+            targets_parts.append(f"TCP: {', '.join(f'{h}:{p}' for h, p in test_sites)}")
+        if monitor_cfg.enable_http_check:
+            targets_parts.append(f"HTTP: {', '.join(monitor_cfg.test_urls)}")
+        if monitor_cfg.url_check_urls:
+            targets_parts.append(f"网址响应: {', '.join(monitor_cfg.url_check_urls)}")
+        targets_str = " | ".join(targets_parts) if targets_parts else "无检测目标"
         self.log_message(f"[#{check_num}] 网络检测 -> {targets_str}")
 
         # 1. 暂停时段检查
-        is_paused, _ = check_pause(self.config)
+        is_paused, _ = check_pause(self.config.pause)
         if is_paused:
-            pause_config = self.config.get("pause_login", {})
-            start_hour = pause_config.get("start_hour", 0)
-            end_hour = pause_config.get("end_hour", 6)
+            start_hour = self.config.pause.start_hour
+            end_hour = self.config.pause.end_hour
             self._update_state(
                 status_detail=f"暂停时段（{start_hour}:00-{end_hour}:00），跳过检测"
             )
             self.log_message(
                 f"暂停时段 ({start_hour}:00-{end_hour}:00)，跳过检测", "INFO"
             )
-            return {
-                "paused": True,
-                "net_ok": True,
-                "net_reason": "",
-                "need_login": False,
-                "check_num": check_num,
-                "interval": interval,
-                "result": NetworkCheckResult(
+            return CheckOnceResult(
+                paused=True,
+                net_ok=True,
+                net_reason="",
+                need_login=False,
+                check_num=check_num,
+                interval=interval,
+                result=NetworkCheckResult(
                     available=None,
                     method="paused",
                     latency_ms=0,
                     detail=f"暂停时段（{start_hour}:00-{end_hour}:00）",
                 ),
-            }
+            )
 
         # 2. 网络状态检测
-        net_ok, net_reason, net_method = check_network_status(self.config)
+        net_ok, net_reason, net_method = check_network_status(self.config.monitor)
         if net_ok:
             self._update_state(
                 login_attempt_count=0,
@@ -268,20 +274,20 @@ class NetworkMonitorCore:
         # 自动切换检测
         self._check_profile_switch()
 
-        return {
-            "paused": False,
-            "net_ok": net_ok,
-            "net_reason": net_reason,
-            "need_login": not net_ok and net_reason != "all_disabled",
-            "check_num": check_num,
-            "interval": interval,
-            "result": NetworkCheckResult(
+        return CheckOnceResult(
+            paused=False,
+            net_ok=net_ok,
+            net_reason=net_reason,
+            need_login=not net_ok and net_reason != "all_disabled",
+            check_num=check_num,
+            interval=interval,
+            result=NetworkCheckResult(
                 available=net_ok,
                 method=net_method,
                 latency_ms=0,
                 detail="" if net_ok else net_reason,
             ),
-        }
+        )
 
     def stop_monitoring(self) -> None:
         """停止监控（状态清理）。"""
@@ -296,7 +302,7 @@ class NetworkMonitorCore:
 
     def _build_test_sites(self) -> list[tuple[str, int]]:
         """构建测试站点列表"""
-        targets = self.config.get("monitor", {}).get("ping_targets", [])
+        targets = self.config.monitor.ping_targets
         result = parse_ping_targets(targets)
         if not result:
             result = parse_ping_targets(self.DEFAULT_PING_TARGETS)

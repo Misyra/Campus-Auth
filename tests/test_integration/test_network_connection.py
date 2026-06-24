@@ -10,14 +10,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.schemas import AuthProfile
-from app.services.monitor_service import NetworkMonitorCore
+from app.network.decision import NetworkCheckResult
+from app.schemas import Profile
+from app.services.monitor_service import CheckOnceResult, NetworkMonitorCore
 from app.workers.playwright_worker import WorkerResponse
 
 
 def _make_monitor_core(engine) -> NetworkMonitorCore:
     """直接创建 NetworkMonitorCore，绕过引擎异步队列。"""
-    config = engine._copy_runtime_config()
+    config = engine.get_runtime_config()
     core = NetworkMonitorCore(
         config=config,
         log_callback=engine.record_log,
@@ -44,7 +45,7 @@ class TestNetworkConnection:
         ):
             result = core.check_once()
 
-        assert result.get("need_login") is True
+        assert result.need_login is True
 
     def test_network_ok(self, integration_stack):
         """网络通 → 不触发登录。"""
@@ -58,7 +59,7 @@ class TestNetworkConnection:
         ):
             result = core.check_once()
 
-        assert result.get("need_login") is False
+        assert result.need_login is False
 
     def test_pause_window(self, integration_stack):
         """暂停时段 → check_once 跳过。"""
@@ -72,8 +73,8 @@ class TestNetworkConnection:
         ):
             result = core.check_once()
 
-        assert result.get("paused") is True
-        assert result.get("need_login") is False
+        assert result.paused is True
+        assert result.need_login is False
 
     def test_probe_exception(self, integration_stack):
         """探测抛异常 → 引擎继续运行。"""
@@ -106,7 +107,7 @@ class TestNetworkConnection:
             with patch.object(
                 core,
                 "check_once",
-                return_value={"need_login": False, "interval": 1},
+                return_value=CheckOnceResult(paused=False, net_ok=True, net_reason="", need_login=False, check_num=1, interval=1, result=NetworkCheckResult(available=True, method="tcp", latency_ms=0, detail="")),
             ):
                 with patch.object(engine, "_reload_config_internal", return_value=True):
                     with patch.object(engine, "_handle_stop") as mock_stop:
