@@ -34,7 +34,8 @@
 |------|------|------|
 | GET | `/api/health` | 健康检查，返回状态和版本 |
 | GET | `/api/check-update` | 检查 GitHub 更新版本 |
-| GET | `/api/init-status` | 初始化状态（是否已设置账号密码） |
+| GET | `/api/init-status` | 初始化状态（返回 `initialized`、`agreed`、`password_decryption_failed`） |
+| POST | `/api/agree` | 同意使用协议 |
 | POST | `/api/shutdown` | 关闭服务（停止监控、托盘、进程） |
 
 ## 配置管理
@@ -43,8 +44,8 @@
 |------|------|------|
 | GET | `/api/config` | 获取当前配置 |
 | PUT | `/api/config` | 保存配置 |
-| GET | `/api/config/log-levels` | 获取可选日志级别列表 |
-| PUT | `/api/config/source-level` | 设置日志源级别 |
+| GET | `/api/config/log-levels` | 获取日志级别配置（全局级别 + 各来源级别） |
+| PUT | `/api/config/source-level` | 设置日志级别（source=global 时设置全局级别，否则设置指定来源级别） |
 | GET | `/api/config/default-stealth-script` | 获取默认反检测脚本 |
 
 ## 配置方案
@@ -72,7 +73,15 @@
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/api/actions/login` | 手动触发登录 |
+| POST | `/api/actions/cancel-login` | 取消当前登录 |
 | POST | `/api/actions/test-network` | 测试网络连通性 |
+
+## 浏览器管理
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/browsers` | 获取浏览器列表和当前配置 |
+| POST | `/api/browsers/install-playwright` | 安装 Playwright Chromium |
 
 ## 纯净模式
 
@@ -108,7 +117,7 @@
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/logs?limit=` | 获取历史日志（内存缓冲区，最多 1200 条） |
+| GET | `/api/logs?limit=` | 获取历史日志（默认 200，最大 1000 条） |
 | WS | `/ws/logs` | WebSocket 实时日志流 |
 
 ## 登录历史
@@ -187,6 +196,12 @@
 | POST | `/api/background/fetch-url` | 从远程 URL 下载图片并保存 |
 | GET | `/api/background/{filename}` | 获取背景图片 |
 | DELETE | `/api/background/{filename}` | 删除背景图片 |
+
+## 图标
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/icons/{filename}` | 获取 SVG 图标文件 |
 
 ## 静态资源
 

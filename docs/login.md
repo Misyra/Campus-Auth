@@ -142,7 +142,7 @@ ImmediatePolicy(RetryPolicy)
 
 MonitoredPolicy(RetryPolicy)
   ├── max_retries: int (默认 5)
-  ├── _DELAYS: [0.0, 0.0, 30.0, 60.0, 120.0]  # 固定延迟表
+  ├── _DELAYS: [5.0, 10.0, 20.0, 60.0, 100.0]  # 固定延迟表
   ├── on_network_check(need_login) → bool
   └── on_login_done(success) → float | None
 ```
@@ -159,11 +159,11 @@ MonitoredPolicy(RetryPolicy)
 
 | 失败次数 | 延迟 | 说明 |
 |---------|------|------|
-| 第 1 次 | 0s | 立即重试 |
-| 第 2 次 | 0s | 立即重试 |
-| 第 3 次 | 30s | 开始退避 |
+| 第 1 次 | 5s | |
+| 第 2 次 | 10s | |
+| 第 3 次 | 20s | |
 | 第 4 次 | 60s | |
-| 第 5 次 | 120s | 上限 |
+| 第 5 次 | 100s | 上限 |
 | 第 6 次+ | 停止 | max_retries=5 |
 
 **关键设计**：
