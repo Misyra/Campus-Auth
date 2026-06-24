@@ -1,5 +1,14 @@
 # 修改日志
 
+## 2026-06-24
+
+### fix: 轻量模式唤醒web后日志实时更新 + bat脚本执行 + 退出信号处理
+
+- `app/container.py`：轻量模式唤醒 web 服务时将 `NullWebSocketManager` 切换为真正的 `WebSocketManager`，解决日志不实时推送的问题
+- `app/workers/script_runner.py`：`cmd /c` 执行 bat 文件移除 `call` 和引号包裹，修复 Windows 无法识别路径的问题
+- `main.py`：轻量模式主循环监听 `_web_server_shutdown_event`，web 服务退出后自动关闭进程
+- `main.py`：捕获 `asyncio.run` 在信号处理上下文中重新抛出的 `KeyboardInterrupt`
+
 ## 2026-06-23 (11)
 
 ### fix: 调整重试延迟间隔 + 重试用尽后自动循环 + 日志显示重试进度
