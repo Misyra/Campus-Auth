@@ -1,5 +1,17 @@
 # 修改日志
 
+## 2026-06-24 (3)
+
+### fix: 修复文档中 MonitoredPolicy 延迟表、API 端点遗漏等问题
+
+- `docs/login.md`：修复 MonitoredPolicy 延迟表 `[0,0,30,60,120]` → `[5,10,20,60,100]`
+- `docs/api-doc.md`：补充 `cancel-login`、`agree`、`browsers`、`icons` 端点
+- `docs/api-doc.md`：修复 `log-levels`、`source-level`、`init-status` 描述
+- `docs/api-doc.md`：修复日志 API limit 上限 1200 → 1000
+- `docs/task-manual.md`：修复退避算法描述（指数退避 → 固定延迟表）
+- `docs/task-manual.md`：修复「安全模式」→「纯净模式」
+- `docs/task-writing-guide.md`：统一变量解析优先级描述
+
 ## 2026-06-24 (2)
 
 ### chore: 统一任务 JSON 格式 + 更新文档步骤 id 命名规范
