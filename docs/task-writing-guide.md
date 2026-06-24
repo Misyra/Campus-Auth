@@ -70,7 +70,7 @@
 
 | 字段 | 必填 | 说明 |
 |------|------|------|
-| `id` | 是 | 唯一标识，格式须匹配 `^[A-Za-z][A-Za-z0-9_]*$`，建议用 `s1`、`s2` |
+| `id` | 是 | 唯一标识，格式须匹配 `^[A-Za-z][A-Za-z0-9_]*$`，建议用描述性名称如 `fill_username`、`click_login` |
 | `type` | 是 | 步骤类型 |
 | `description` | 否 | 步骤描述，会输出到日志 |
 | `timeout` | 否 | 超时时间（毫秒），默认值因类型而异 |
@@ -106,7 +106,7 @@
 
 ```json
 {
-  "id": "s1",
+  "id": "fill_username",
   "type": "input",
   "description": "输入账号",
   "selector": "input[name='DDDDD'], #username",
@@ -117,7 +117,7 @@
 
 ```json
 {
-  "id": "s2",
+  "id": "fill_password",
   "type": "input",
   "description": "输入密码",
   "selector": "#password",
@@ -138,7 +138,7 @@
 
 ```json
 {
-  "id": "s2",
+  "id": "click_login",
   "type": "click",
   "description": "点击登录按钮",
   "selector": "input[name='0MKKey'], button[type='submit']"
@@ -163,7 +163,7 @@
 
 ```json
 {
-  "id": "s3",
+  "id": "select_carrier",
   "type": "select",
   "description": "选择运营商",
   "selector": "select[name='ISP_select'], select[name='isp']",
@@ -189,7 +189,7 @@
 
 ```json
 {
-  "id": "s3",
+  "id": "select_carrier",
   "type": "click_select",
   "description": "选择运营商",
   "selector": "#serviceSelector, .service-selector",
@@ -209,7 +209,7 @@
 
 ```json
 {
-  "id": "s4",
+  "id": "wait_result",
   "type": "wait",
   "description": "等待结果弹出",
   "selector": ".success, .error, #msg",
@@ -228,7 +228,7 @@
 
 ```json
 {
-  "id": "s5",
+  "id": "wait_redirect",
   "type": "wait_url",
   "description": "等待跳转到成功页",
   "pattern": "success|welcome",
@@ -247,7 +247,7 @@
 
 ```json
 {
-  "id": "s6",
+  "id": "check_login_status",
   "type": "eval",
   "description": "检查登录状态",
   "script": "() => { const text = document.body.innerText; return text.includes('成功') || text.includes('已连接'); }",
@@ -266,7 +266,7 @@
 | `path` | 否 | 自动生成 | 截图保存路径（仅文件名生效，目录由系统管理） |
 
 ```json
-{ "id": "s8", "type": "screenshot", "description": "截图保存" }
+{ "id": "screenshot_after", "type": "screenshot", "description": "截图保存" }
 ```
 
 ### sleep — 休眠等待
@@ -278,7 +278,7 @@
 | `duration` | 否 | `1000` | 休眠时间（毫秒），最大 300000 |
 
 ```json
-{ "id": "s9", "type": "sleep", "description": "等待加载", "duration": 2000 }
+{ "id": "wait_load", "type": "sleep", "description": "等待加载", "duration": 2000 }
 ```
 
 ### ocr — 验证码识别
@@ -316,13 +316,13 @@
 
 ```json
 // 纯数字验证码
-{ "id": "s1", "type": "ocr", "selector": "#captcha-img", "target_selector": "#captcha-input", "char_range": "0123456789" }
+{ "id": "ocr_captcha", "type": "ocr", "selector": "#captcha-img", "target_selector": "#captcha-input", "char_range": "0123456789" }
 
 // 数学运算验证码（数字 + 运算符）
-{ "id": "s1", "type": "ocr", "selector": "#captcha-img", "store_as": "captcha_expr", "char_range": "0123456789+-*/=xX÷" }
+{ "id": "ocr_captcha", "type": "ocr", "selector": "#captcha-img", "store_as": "captcha_expr", "char_range": "0123456789+-*/=xX÷" }
 
 // 使用内置字符集（大小写英文 + 数字）
-{ "id": "s1", "type": "ocr", "selector": "#captcha-img", "target_selector": "#captcha-input", "char_range": 6 }
+{ "id": "ocr_captcha", "type": "ocr", "selector": "#captcha-img", "target_selector": "#captcha-input", "char_range": 6 }
 ```
 
 > **提示：** 数学运算验证码建议配合 `store_as` + `eval` 两步使用——`ocr` 识别图片存入变量，`eval` 从变量读取算式并计算结果填入输入框。
@@ -348,13 +348,13 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
 
 ```json
 // 模式一：自动填入（推荐）
-{ "id": "s1", "type": "ocr", "selector": "#captcha-img", "target_selector": "#captcha-input" }
+{ "id": "ocr_captcha", "type": "ocr", "selector": "#captcha-img", "target_selector": "#captcha-input" }
 
 // 模式二：存储到变量，后续步骤再填入
-{ "id": "s1", "type": "ocr", "selector": "#captcha-img", "store_as": "captcha_code" }
+{ "id": "ocr_captcha", "type": "ocr", "selector": "#captcha-img", "store_as": "captcha_code" }
 
 // 模式三：同时自动填入并存储
-{ "id": "s1", "type": "ocr", "selector": "#captcha-img", "target_selector": "#captcha-input", "store_as": "captcha_code" }
+{ "id": "ocr_captcha", "type": "ocr", "selector": "#captcha-img", "target_selector": "#captcha-input", "store_as": "captcha_code" }
 ```
 
 **超时与错误处理：**
@@ -429,7 +429,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
 
 ```json
 {
-  "id": "s1",
+  "id": "fill_username",
   "type": "input",
   "description": "在 iframe 中输入账号",
   "selector": "#username",
@@ -482,7 +482,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
   },
   "steps": [
     {
-      "id": "s1",
+      "id": "fill_username",
       "type": "input",
       "description": "输入账号",
       "selector": "input[name='DDDDD'], input[name='username'], #username",
@@ -490,7 +490,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
       "clear": true
     },
     {
-      "id": "s2",
+      "id": "fill_password",
       "type": "input",
       "description": "输入密码",
       "selector": "input[name='upass'], input[type='password'], #password",
@@ -498,14 +498,14 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
       "clear": true
     },
     {
-      "id": "s3",
+      "id": "select_carrier",
       "type": "select",
       "description": "选择运营商",
       "selector": "select[name='ISP_select'], select[name='isp']",
       "value": "{{isp}}"
     },
     {
-      "id": "s4",
+      "id": "click_login",
       "type": "click",
       "description": "点击登录",
       "selector": "input[name='0MKKey'], button[type='submit'], #login-btn"
@@ -527,9 +527,9 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
   "url": "{{LOGIN_URL}}",
   "timeout": 15000,
   "steps": [
-    { "id": "s1", "type": "input", "selector": "#username", "value": "{{USERNAME}}" },
-    { "id": "s2", "type": "input", "selector": "#password", "value": "{{PASSWORD}}" },
-    { "id": "s3", "type": "click", "selector": "#login-btn" }
+    { "id": "fill_username", "type": "input", "selector": "#username", "value": "{{USERNAME}}" },
+    { "id": "fill_password", "type": "input", "selector": "#password", "value": "{{PASSWORD}}" },
+    { "id": "click_login", "type": "click", "selector": "#login-btn" }
   ],
   "on_success": { "message": "登录成功" },
   "on_failure": { "message": "登录失败", "screenshot": true }
@@ -545,17 +545,17 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
   "url": "{{LOGIN_URL}}",
   "timeout": 30000,
   "steps": [
-    { "id": "s1", "type": "input", "selector": "#username", "value": "{{USERNAME}}" },
-    { "id": "s2", "type": "input", "selector": "#password", "value": "{{PASSWORD}}" },
+    { "id": "fill_username", "type": "input", "selector": "#username", "value": "{{USERNAME}}" },
+    { "id": "fill_password", "type": "input", "selector": "#password", "value": "{{PASSWORD}}" },
     {
-      "id": "s3",
+      "id": "ocr_captcha",
       "type": "ocr",
       "description": "识别验证码并填入",
       "selector": "#captcha-img",
       "target_selector": "#captcha-input",
       "char_range": "0123456789"
     },
-    { "id": "s4", "type": "click", "selector": "#login-btn" }
+    { "id": "click_login", "type": "click", "selector": "#login-btn" }
   ],
   "on_success": { "message": "登录成功" },
   "on_failure": { "message": "登录失败", "screenshot": true }
@@ -571,10 +571,10 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
   "url": "{{LOGIN_URL}}",
   "timeout": 30000,
   "steps": [
-    { "id": "s1", "type": "input", "selector": "#username", "value": "{{USERNAME}}" },
-    { "id": "s2", "type": "input", "selector": "#password", "value": "{{PASSWORD}}" },
+    { "id": "fill_username", "type": "input", "selector": "#username", "value": "{{USERNAME}}" },
+    { "id": "fill_password", "type": "input", "selector": "#password", "value": "{{PASSWORD}}" },
     {
-      "id": "s3",
+      "id": "ocr_captcha",
       "type": "ocr",
       "description": "识别数学验证码图片",
       "selector": "#captchaCanvas",
@@ -582,13 +582,13 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
       "char_range": "0123456789+-*/=xX÷"
     },
     {
-      "id": "s4",
+      "id": "solve_captcha",
       "type": "eval",
       "description": "计算验证码结果并填入",
       "script": "() => { let expr = '{{captcha_expr}}'; const cnMap={'一':'1','二':'2','三':'3','四':'4','五':'5','六':'6','七':'7','八':'8','九':'9','零':'0'}; expr=expr.replace(/[xX]/g,'*').replace(/[oO]/g,'0').replace(/[lI|]/g,'1').replace(/记/g,'1').replace(/÷/g,'/').replace(/[一二三四五六七八九零]/g,c=>cnMap[c]||c); const tail=expr.match(/^(\\d+)([+\\-*\\/])$/); if(tail){const n=tail[1],op=tail[2];const mid=Math.ceil(n.length/2);expr=n.slice(0,mid)+op+n.slice(mid);} let m=expr.match(/(\\d+)\\s*([+\\-*\\/])\\s*(\\d+)/); if(!m){const ops=expr.match(/[+\\-*\\/]/g);const nums=expr.match(/\\d+/g);if(nums&&nums.length>=2&&ops&&ops.length>=1)m=[null,nums[0],ops[0],nums[1]];} if(!m)return'NO_MATCH:'+expr; const a=parseInt(m[1]),b=parseInt(m[3]),op=m[2]; let r; if(op==='+')r=a+b; else if(op==='-')r=a-b; else if(op==='*')r=a*b; else r=b!==0?Math.floor(a/b):0; const v=r.toString(); const el=document.querySelector('#captchaInput'); if(el){el.value=v;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));} return v; }",
       "store_as": "captcha_result"
     },
-    { "id": "s5", "type": "click", "selector": "#login-btn" }
+    { "id": "click_login", "type": "click", "selector": "#login-btn" }
   ],
   "on_success": { "message": "登录成功" },
   "on_failure": { "message": "登录失败", "screenshot": true }
@@ -605,7 +605,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
   "timeout": 30000,
   "steps": [
     {
-      "id": "s1",
+      "id": "fill_username",
       "type": "input",
       "description": "在 iframe 中输入账号",
       "selector": "#username",
@@ -613,7 +613,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
       "frame": "mainFrame"
     },
     {
-      "id": "s2",
+      "id": "fill_password",
       "type": "input",
       "description": "在 iframe 中输入密码",
       "selector": "#password",
@@ -621,7 +621,7 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
       "frame": "mainFrame"
     },
     {
-      "id": "s3",
+      "id": "click_login",
       "type": "click",
       "description": "在 iframe 中点击登录",
       "selector": "#login-btn",
@@ -647,21 +647,21 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
   "timeout": 30000,
   "steps": [
     {
-      "id": "s1",
+      "id": "fill_username",
       "type": "input",
       "description": "输入账号",
       "selector": "#username",
       "value": "{{USERNAME}}"
     },
     {
-      "id": "s2",
+      "id": "fill_password",
       "type": "input",
       "description": "输入密码",
       "selector": "#password",
       "value": "{{PASSWORD}}"
     },
     {
-      "id": "s3",
+      "id": "click_login",
       "type": "click",
       "description": "点击登录按钮",
       "selector": "#login_button"

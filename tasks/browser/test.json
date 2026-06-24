@@ -14,36 +14,36 @@
   },
   "steps": [
     {
-      "id": "s1",
+      "id": "fill_username",
       "type": "input",
       "description": "输入账号",
       "selector": "#quick_username, input[placeholder='账号']",
-      "value": "{{USERNAME}}",
+      "value": "{{username}}",
       "clear": true
     },
     {
-      "id": "s2",
+      "id": "fill_password",
       "type": "input",
       "description": "输入密码（自动处理隐藏输入框）",
       "selector": "#quick_password, input[name='pwd']",
-      "value": "{{PASSWORD}}",
+      "value": "{{password}}",
       "clear": true
     },
     {
-      "id": "s3",
+      "id": "solve_captcha",
       "type": "eval",
       "description": "读取文本数学验证码并计算结果填入",
       "script": "() => { const exprElem = document.querySelector('#quick_captcha_box'); if (!exprElem) return 'NO_ELEM'; const text = (exprElem.textContent || exprElem.innerText || '').trim(); if (!text) return 'NO_TEXT'; let expr = text.replace(/[×xX]/g, '*').replace(/[÷]/g, '/'); const match = expr.match(/(\\d+)\\s*([+\\-*\\/])\\s*(\\d+)/); if (!match) return 'NO_MATCH:' + text; const a = parseInt(match[1]); const b = parseInt(match[3]); const op = match[2]; let result; if (op === '+') result = a + b; else if (op === '-') result = a - b; else if (op === '*') result = a * b; else if (op === '/') result = b !== 0 ? Math.floor(a / b) : 0; else result = 0; const finalResult = result.toString(); const input = document.querySelector('#quick_captcha_input'); if (input) { input.value = finalResult; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); } return finalResult; }",
       "store_as": "captcha_result"
     },
     {
-      "id": "s4",
+      "id": "check_agreement",
       "type": "click",
       "description": "勾选免责声明",
       "selector": "#quick_disclaimer_account .ant-checkbox-inner, #quick_disclaimer_account label, #quick_disclaimer_account input[type='checkbox']"
     },
     {
-      "id": "s5",
+      "id": "click_login",
       "type": "click",
       "description": "点击登录按钮",
       "selector": "#quick_login_button, button[type='submit']"
