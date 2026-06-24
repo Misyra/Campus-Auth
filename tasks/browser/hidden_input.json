@@ -6,7 +6,7 @@
   },
   "url": "{{LOGIN_URL}}",
   "reveal_hidden": true,
-  "timeout": 20000,
+  "timeout": 30000,
   "variables": {
     "username": "{{USERNAME}}",
     "password": "{{PASSWORD}}",
