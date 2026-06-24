@@ -1,5 +1,12 @@
 # 修改日志
 
+## 2026-06-24 (2)
+
+### chore: 统一任务 JSON 格式 + 更新文档步骤 id 命名规范
+
+- `tasks/browser/*.json`：统一 `timeout=30000`、`variables` 使用大写 `{{USERNAME}}`、步骤 id 使用描述性名称（如 `fill_username`、`click_login`）
+- `docs/task-writing-guide.md`：更新步骤 id 建议为描述性名称，同步更新所有示例
+
 ## 2026-06-24
 
 ### fix: 轻量模式唤醒web后日志实时更新 + bat脚本执行 + 退出信号处理
