@@ -65,17 +65,13 @@ def _get_browser_channel() -> str | None:
         None: 配置文件不存在或读取失败
     """
     try:
-        import json
+        from app.services.profile_service import create_profile_service
 
-        from app.constants import PROJECT_ROOT
-
-        settings_path = PROJECT_ROOT / "config" / "settings.json"
-        if settings_path.exists():
-            with open(settings_path, encoding="utf-8") as f:
-                data = json.load(f)
-            channel = data.get("global_settings", {}).get("browser_channel")
-            if channel:
-                return channel
+        _ps = create_profile_service()
+        _data = _ps.load()
+        channel = _data.global_config.browser.browser_channel
+        if channel:
+            return channel
     except Exception:
         logger.debug("读取 browser_channel 配置失败", exc_info=True)
     return None  # 配置文件不存在或未配置

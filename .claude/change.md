@@ -1,5 +1,1389 @@
 # 修改日志
 
+## 2026-06-24 (4)
+
+### chore: 版本升级至 v4.1.0
+
+- `pyproject.toml`：version 4.0.6 → 4.1.0
+- `res/tools/task-recorder.user.js`：@version 和 VERSION 常量同步更新至 4.1.0
+- `docs/update_log.md`：新增 v4.1.0 版本更新日志，汇总 v4.0.4 以来所有变更
+
+## 2026-06-24 (3)
+
+### fix: 修复文档中 MonitoredPolicy 延迟表、API 端点遗漏等问题
+
+- `docs/login.md`：修复 MonitoredPolicy 延迟表 `[0,0,30,60,120]` → `[5,10,20,60,100]`
+- `docs/api-doc.md`：补充 `cancel-login`、`agree`、`browsers`、`icons` 端点
+- `docs/api-doc.md`：修复 `log-levels`、`source-level`、`init-status` 描述
+- `docs/api-doc.md`：修复日志 API limit 上限 1200 → 1000
+- `docs/task-manual.md`：修复退避算法描述（指数退避 → 固定延迟表）
+- `docs/task-manual.md`：修复「安全模式」→「纯净模式」
+- `docs/task-writing-guide.md`：统一变量解析优先级描述
+
+## 2026-06-24 (2)
+
+### chore: 统一任务 JSON 格式 + 更新文档步骤 id 命名规范
+
+- `tasks/browser/*.json`：统一 `timeout=30000`、`variables` 使用大写 `{{USERNAME}}`、步骤 id 使用描述性名称（如 `fill_username`、`click_login`）
+- `docs/task-writing-guide.md`：更新步骤 id 建议为描述性名称，同步更新所有示例
+
+## 2026-06-24
+
+### fix: 轻量模式唤醒web后日志实时更新 + bat脚本执行 + 退出信号处理
+
+- `app/container.py`：轻量模式唤醒 web 服务时将 `NullWebSocketManager` 切换为真正的 `WebSocketManager`，解决日志不实时推送的问题
+- `app/workers/script_runner.py`：`cmd /c` 执行 bat 文件移除 `call` 和引号包裹，修复 Windows 无法识别路径的问题
+- `main.py`：轻量模式主循环监听 `_web_server_shutdown_event`，web 服务退出后自动关闭进程
+- `main.py`：捕获 `asyncio.run` 在信号处理上下文中重新抛出的 `KeyboardInterrupt`
+
+## 2026-06-23 (11)
+
+### fix: 调整重试延迟间隔 + 重试用尽后自动循环 + 日志显示重试进度
+
+- `app/services/retry_policy.py`：`MonitoredPolicy._DELAYS` 从 `[0, 0, 30, 60, 120]` 改为 `[5, 10, 20, 60, 100]`，首次登录失败即有 5s 延迟
+- `app/services/retry_policy.py`：`delay_before` 移除 `attempt <= 1` 的零延迟特判，统一查表
+- `app/services/retry_policy.py`：`on_login_done` 退出条件从 `>= max_retries` 改为 `> max_retries`，确保第 5 次失败后仍返回延迟（100s）而非直接停止
+- `app/services/engine.py`：`_do_network_check` 重试用尽后重置计数并开始新一轮重试（5→10→20→60→100 循环），间隔由 `_monitor_check_interval`（300s）控制
+- `app/services/engine.py`：`_on_done` 日志显示重试进度（`重试 3/5, 下次重试: 20s 后 (23:20:24)`）
+- `app/services/engine.py`：重试用尽日志显示（`重试已用尽（5/5），开始新一轮重试`）
+- `app/services/monitor_service.py`：网络检测日志显示实际在用的检测目标（TCP/HTTP/网址响应），而非仅 ping_targets
+- `tests/test_services/test_retry_policy.py`：更新 6 个测试用例适配新延迟值
+- `tests/test_services/test_engine.py`：更新退避测试断言（30→20）
+
+## 2026-06-23 (10)
+
+### fix: 自动登录失败后无法及时重试 + 接入登录前置检查 + 修复 cancel_event 缺失 + 恢复丢失代码
+
+- `app/services/engine.py`：`_engine_loop` 引擎循环最大睡眠时间从 `check_interval`（300s）限制为 5 秒（`_MAX_LOOP_SLEEP`），确保 `_on_done` 回调更新 `_next_network_check` 后引擎线程能及时唤醒执行重试
+- `app/services/engine.py`：`_do_async_login` 自动登录前接入 `check_login_prerequisites`（物理网络连接 + 认证地址可达性），仅在 `enable_local_check` 或 `check_auth_url` 启用时执行，手动登录不检查
+- `app/tasks/browser_runner.py`：`TaskExecutor.__init__` 新增 `cancel_event` 参数，修复 `login.py` 传入 `cancel_event` 时 `TypeError` 崩溃；步骤循环中新增取消检查
+- `app/tasks/browser_runner.py`：恢复 `_auto_navigate` 中丢失的 `navigation_wait` AJAX 等待逻辑
+- `app/tasks/browser_runner.py`：恢复 `_network_detection_check` 中 `MonitorSettings` 默认值填充逻辑（替代手动 `cfg.get()` 回退）
+- `app/tasks/browser_runner.py`：恢复 `_capture_screenshot` 中 `TEMP_DIR` 相对路径计算逻辑
+
+### fix: Ctrl+C 关闭进程卡死
+
+- `main.py`：`_run_full` 和 `_run_lightweight` 的 `finally` 块中 `asyncio.run(container.shutdown())` 添加 5 秒超时防护，避免 Windows 下 asyncio 清理逻辑卡死导致进程无法退出
+- `main.py`：两个运行模式的 `finally` 块末尾显式调用 `cleanup_pid()` + `os._exit(0)` 强制退出，确保关闭流程完成后进程立即终止
+- 根因：lifespan 的 `finally` 已完成容器关闭（幂等），但 `_run_full` 的防御性 `asyncio.run()` 在创建新事件循环后可能卡在 Windows 的 asyncio 清理逻辑
+
+### fix: 网络检测 url_check_urls 解析统一 + 调用方冗余转换清理
+
+- `app/utils/network.py`：`parse_url_checks` 的 list 分支新增 `str` 元素处理（含 `|` 分隔符的字符串），修复 `list[str]` 格式传入时返回空列表的问题
+- `app/network/decision.py`：`check_network_status` 移除冗余的 `"\n".join()` 预处理和类型判断分支，直接调用 `parse_url_checks(monitor.url_check_urls)`
+- `app/services/engine.py`：`test_network` 移除冗余的 `"\n".join()` 预处理和局部 import
+- `app/tasks/browser_runner.py`：`_network_detection_check` 合并两处分散的局部 import 为一行，简化 `parse_url_checks` 结果处理
+- 根因：`parse_url_checks` 已支持 `str | list | None` 三种输入格式，调用方无需做任何预处理
+
+## 2026-06-23 (9)
+
+### feat: 新增 `navigation_wait` 任务参数 + 修复任务执行器网络检测默认值
+
+- `app/tasks/models.py`：`TaskConfig` 新增 `navigation_wait` 字段（浮点数，单位秒，默认 1）
+- `app/tasks/browser_runner.py`：`_auto_navigate` 导航完成后根据 `navigation_wait` 额外等待，解决 AJAX 动态渲染表单导致步骤找不到元素的问题
+- `app/tasks/browser_runner.py`：`_network_detection_check` 使用 `MonitorSettings` 填充默认值，修复未配置时 TCP/HTTP/网址响应全部显示"关"的问题
+- `docs/task-writing-guide.md`：补充 `navigation_wait` 参数说明、AJAX 场景提示和 FAQ
+- `docs/task-manual.md`：更新执行流程描述
+- `frontend/partials/pages/tasks.html`：任务编辑器帮助内容新增顶层配置说明（`reveal_hidden`、`step_delay`、`navigation_wait`）
+
+## 2026-06-23 (8)
+
+### fix: 代码审查修复（6 个问题）
+
+- `app/tasks/browser_runner.py`：`wait_for_selector` 排除 `type='hidden'` 的 input，避免 SPA 门户 hidden input 导致表单就绪误判
+- `app/tasks/step_handlers.py`：`_select_with_fallback` 空白字符串 value 时提前返回，避免 `"" in "anything"` 恒真导致误匹配
+- `app/tasks/step_handlers.py`：`_FORCE_INPUT_JS` OcrHandler 强制输入从追加改为覆盖，防止验证码残留拼接
+- `app/tasks/step_handlers.py`：`_click_option` trigger 父容器未命中时回退到全局搜索，支持 Portal 框架的下拉面板
+- `app/tasks/manager.py`：`delete_task` 先 normalize 再检查 `"default"`，防止带空格的 task_id 绕过保护
+- `pyproject.toml`：Python 版本限制为 `>=3.12,<3.13`
+- 新增 2 个测试覆盖 `_click_option` 的 trigger 分支和全局回退
+
+## 2026-06-23 (7)
+
+### fix: read_pid_file 缺失 create_time 时视为无效，防止 PID 复用误判
+
+- `app/utils/process.py`：`read_pid_file` 增加 `create_time` 必须存在的校验，缺失则返回 None。`write_pid` 始终写入 `create_time`，所以仅影响手动编辑或旧版本的 PID 文件
+
+## 2026-06-23 (6)
+
+### fix: 代码审查报告批量修复（29 个问题）
+
+**Major（7 个）：**
+- [4] `task_executor.py`：`execute_task_async` 队列满时返回带异常的 Future 而非 re-raise
+- [5] `engine.py`：`_handle_login` 异常时将错误信息写入 `cmd.response_data`，不再误报为"超时"
+- [6] `playwright_worker.py`：`_handle_debug_stop` 中 `new_page()` 添加 try/except，失败时重建浏览器
+- [7] `validator.py`：新增 `variables` 字段类型校验（非 dict 则报错）
+- [8] `validator.py`：新增任务级 `timeout` 正数校验
+- [9] `manager.py`：`_find_task_type` 搜索顺序改为 browser 优先，与 `load_task` 一致
+- [10] `profiles.py`：`save_profile`/`delete_profile` 中 `apply_profile` 失败时 message 附加警告
+
+**Minor — 服务/工具层（12 个）：**
+- [11] `config.py`：`FIELD_NAMES` 补充 isp/carrier_custom，`_log_config_changes` 补充新增字段检测
+- [13] `config.py`：`set_source_level` 检查实际生效级别，降级时返回提示
+- [14] `concurrent.py`：`race_first_success` 超时时取消残留 future
+- [15] `concurrent.py`：`future.result()` 添加 try/except 防御，循环后显式 `return False`
+- [16] `probes.py`：`_get_probe_client` 的 `return` 移入锁内
+- [17] `detect.py`：ipconfig 回退增加 `_is_valid_ipv4` 校验
+- [18] `detect.py`：nmcli SSID 解析添加 `\:` 反转义
+- [21] `detect.py`：macOS 网关匹配改为 `startswith("gateway:")`
+- [27] `files.py`：`atomic_write` 中 `os.fdopen` 失败时关闭 fd
+- [28] `crypto.py`：移除 `InvalidSignature` 死代码导入
+- [29] `crypto.py`：密钥长度异常时添加 warning 日志
+- [32] `shell_policy.py`：`run_sync` 超时后调用 `proc.wait()` 回收僵尸进程
+- [33] `logging.py`：`set_level` 写 `_config` 加锁
+
+**Minor — 前端（2 个）：**
+- [23] `config.js`：`saveConfig` 的 `finally` 检查 controller 引用，避免旧请求重置状态
+- [25] `config.js`：`closeEditor` 仅在 `configDirty` 时弹确认框
+
+**Minor — 启动器（1 个）：**
+- [35] `start.go`：`runCommand` 中 `cmd.Wait()` 后调用 `signal.Stop` + `close` 清理 goroutine
+
+**Minor — 测试（4 个）：**
+- [38] `test_engine.py`：补充 `_handle_start.assert_called_once()` 断言
+- [39] `test_network_probes.py`：`test_extra_targets_empty_skip` 添加网络 mock
+- [42] `test_engine.py`：`TestNetworkCheckBackoff` 用 `threading.Event` 替代 `time.sleep`
+- [44] `test_login_flow.py`：多线程计数器改用 `itertools.count()`
+- [45] `test_login_integration_extended.py`：移除 `_capture_login_completion` 未使用的参数
+
+## 2026-06-23 (5)
+
+### fix: login_once 未取消旧任务，新旧登录在单 worker 池中串行执行
+
+- `app/services/login_orchestrator.py`：`submit()` 中 `source == "login_once"` 分支从 `pass` 改为 `existing.cancel()`，取消旧任务后再提交新的，避免两个登录串行执行（最长等待 600s）
+
+## 2026-06-23 (4)
+
+### fix: list_recent 读取 JSONL 文件未持锁，与写入存在竞态
+
+- `app/services/login_history_service.py`：`list_recent()` 的文件读取操作外层加 `with self._lock`，与 `add()` 和 `_cleanup_old()` 的写入操作互斥，避免读到不完整或空文件
+
+## 2026-06-23 (3)
+
+### fix: Go/Shell 启动器镜像 fallback 链完整性修复
+
+- `start.go`：解压失败和 uv.exe 缺失从 `return` 改为 `continue`，继续尝试后续镜像而非直接放弃
+- `start.sh`：SHA256 校验从循环外移入循环内，校验失败时 `continue` 尝试下一个镜像而非 `exit 1`
+
+## 2026-06-23 (2)
+
+### fix: 修复 cancel_login 阻塞事件循环及 resolve_for_js 双重编码问题
+
+- `app/api/monitor.py`：`cancel_login` 去掉 `async` 关键字，改为同步 `def`，FastAPI 自动使用线程池执行，避免阻塞事件循环
+- `app/tasks/variable_resolver.py`：`resolve_for_js` 的 replacer 对 `runtime_vars` 中的非字符串值（int/bool/None）直接 `json.dumps`，避免双重编码导致类型丢失（5 → "5" 而非 5）
+
+## 2026-06-23
+
+### fix: 修复 5 个 P2 小问题（枚举约束、交叉验证、Worker dict 清理）
+
+- `app/schemas.py`：
+  - BUG-14: `RuntimeConfig`、`GlobalConfig`、`ConfigResponseDTO` 的 `startup_action` 字段从 `str = "none"` 改为 `StartupAction = StartupAction.NONE`，统一使用枚举类型约束
+  - BUG-15: `PauseSettings` 新增 `@model_validator(mode="after")` 交叉验证，`start_hour == end_hour` 时自动禁用暂停（语义为"不暂停"）
+  - BUG-23: `LoggingSettings` 的 `level` 和 `frontend_level` 添加 `pattern` 正则约束，仅允许 DEBUG/INFO/WARNING/ERROR/CRITICAL
+- `app/services/login_orchestrator.py`：
+  - BUG-17: `_runtime_config_to_worker_dict` 删除 `minimize_to_tray`、`startup_action`、`autostart_lightweight` 三个无关 UI 字段
+  - BUG-18: Worker dict 初始化添加 `carrier_custom` 字段，确保自定义运营商信息传递到 Worker
+
+### feat: 登录按钮支持取消，登录中切换为取消登录
+
+- `frontend/js/methods/actions.js`：`manualLogin` 添加 `busy.login` 标志控制按钮状态，新增 `cancelLogin` 方法调用 `POST /api/actions/cancel-login`
+- `frontend/js/data/status.js`：`busy` 对象新增 `login: false` 响应式属性
+- `frontend/partials/pages/dashboard.html`：登录按钮改为 `v-if`/`v-else` 条件渲染，登录中显示取消登录按钮（`btn-danger`），空闲时显示手动登录按钮（`btn-secondary`）
+
+### feat: 新增 POST /api/actions/cancel-login 端点
+
+- `app/api/monitor.py`：在 `manual_login` 端点之后添加 `cancel_login` 端点，调用 `svc.cancel_login()` 返回 `(bool, str)`
+- `tests/test_api/test_api_monitor_routes.py`：新增 `TestCancelLogin` 测试类（2 个测试：成功取消、无待取消登录）
+
+### feat: engine 新增 cancel_login 方法
+
+- `app/services/engine.py`：在 `_handle_login` 方法之后新增 `cancel_login` 方法，暴露 `LoginOrchestrator.cancel_running()` 给 API 层，用于取消当前正在执行的登录
+
+### refactor: 修复 BUG-07 container.py 私有属性篡改
+
+- `app/services/task_executor.py`：移除冗余的 `_login_pool`（登录逻辑已委托 LoginOrchestrator）；`login_orchestrator` 参数改为必填
+- `app/container.py`：调整创建顺序（先 LoginOrchestrator 后 TaskExecutor）；移除 `_login_pool`、`_login_orchestrator`、`_orchestrator` 私有属性访问
+- `app/services/engine.py`：新增 `set_orchestrator()` 和 `set_task_executor()` 公共方法，替代直接写入私有属性；`login_in_progress` 和 `has_enabled_tasks` 添加空值检查
+- `app/services/login_orchestrator.py`：更新注释，移除"共享线程池"说明
+- `tests/test_services/test_task_executor_fix.py`：更新 `test_shutdown_with_task_pool` 测试
+- `docs/login.md`：更新依赖注入示例代码
+
+### fix: 修复测试类型混用和密码变更日志误报
+
+- `tests/test_services/test_config_service.py`：`test_rollback_restores_fields` 中 `data.global_config = RuntimeConfig(...)` 和 `backup.global_config = RuntimeConfig(...)` 改为 `GlobalConfig(...)`，新增 `GlobalConfig` 导入，验证字段改为 `browser.timeout`（GlobalConfig 实际持有的字段）
+- `app/api/config.py`：`_log_config_changes` 密码变更检测跳过以 "•" 开头的掩码值（前端未修改密码时传回掩码），避免误报"密码已修改"
+
+### refactor: 清理 V2 重构残留的旧配置函数
+
+- `app/services/config_service.py`：删除 `save_and_apply` 函数（已被 `save_global_and_profile` 完全替代）；移除未使用的导入 `LoginCredentials`、`RuntimeConfig`
+- `app/api/autostart.py`：注释中 `save_and_apply` 引用更新为 `save_global_and_profile`
+- `tests/test_services/test_config_service.py`：删除 `TestSaveAndApply` 类（被测函数已移除）；移除 `save_and_apply` 导入
+- `tests/test_integration/test_full_mode.py`：`save_and_apply` 改为 `save_global_and_profile`，使用 `ConfigResponseDTO` 参数
+- `tests/test_integration/test_login_connection.py`：同上
+
+### feat: settings.json v3→v4 自动迁移
+
+### feat: settings.json v3→v4 自动迁移
+
+- `app/services/profile_service.py`：
+  - 新增 `migrate_v3_to_v4(data: dict) -> dict` 函数：将 v3 的 `config` 字段重命名为 `global_config`，剥离 `credentials`/`active_task`/`custom_variables` 运行时字段
+  - `_load_unsafe`：从 `ProfilesData.model_validate_json(raw)` 改为 `json.loads(raw)` → `migrate_v3_to_v4(data)` → `ProfilesData.model_validate(data)`，加载时自动迁移旧格式
+- `tests/test_services/test_profile_service.py`：
+  - 新增 `TestMigrateV3ToV4` 测试类（8 个测试）：基本迁移、v4 不变、缺少 config 字段、剥离 credentials/active_task/custom_variables、保留 profiles
+  - 新增 `TestProfileServiceLoadMigration` 测试类（4 个测试）：加载 v3 自动迁移、credentials 剥离、active_task 剥离、v4 直接加载
+  - 修复 `test_load_reads_settings_json` 测试：v3 格式现在能正确迁移到 v4，`global_config.logging.level` 正确读取为 "DEBUG"
+- 验收：19 个测试全通过
+
+### refactor: 前端适配 ConfigResponseDTO，删除 _saveCredentialsToProfile
+
+- `frontend/js/methods/config.js`：
+  - `fetchConfig`：从 API 响应（扁平凭据字段）映射回前端内部嵌套 `credentials` 结构
+  - `saveConfig`：构建 ConfigResponseDTO 格式 payload，凭据从 `config.credentials` 展开为顶层字段；移除 `_saveCredentialsToProfile()` 调用和 `fetchProfiles()` 调用（后端 PUT /api/config 一次保存全局+方案）
+  - 删除 `_saveCredentialsToProfile()` 方法（后端自动处理方案保存）
+
+### refactor: API config 改用 ConfigResponseDTO，一次保存全局+方案
+
+- `app/api/config.py`：
+  - `get_config`：返回类型从 `RuntimeConfig` 改为 `ConfigResponseDTO`，凭据字段扁平化（`username`/`password`/`auth_url`/`isp`/`carrier_custom`），不再依赖 `svc.get_config()`（engine 方法），直接从 `profile_svc.build_runtime_config(data)` 构建
+  - `save_config`：参数类型从 `RuntimeConfig` 改为 `ConfigResponseDTO`，调用 `save_global_and_profile` 替代 `save_and_apply`，一次保存全局配置 + 方案凭据
+  - `_log_config_changes`：参数类型从 `RuntimeConfig` 改为 `ConfigResponseDTO`，`IGNORE_FIELDS` 从 `credentials.password` 改为 `password`（顶层字段），密码变更检测从 `credentials.password` 改为 `password`
+  - 清理未使用的导入（`RuntimeConfig`、`save_and_apply`）
+- `app/services/config_service.py`：
+  - 新增 `save_global_and_profile(payload, profile_service, reload_fn) -> SaveResult`：原子保存 `GlobalConfig`（从 `ConfigResponseDTO` 剥离凭据）+ 活跃方案凭据
+  - ISP 反向映射：`carrier_custom` 非空→"自定义"，`isp` 为空→"无"，其他→原值
+  - 密码处理：调用 `save_password_field` 处理掩码/明文/空值
+  - 重载失败自动回滚（复用 `_rollback_config`）
+  - 新增导入：`ConfigResponseDTO`、`GlobalConfig`、`Profile`、`save_password_field`
+  - 保留旧 `save_and_apply`（集成测试仍在使用）
+- `tests/test_api/test_api_config_routes.py`：
+  - `TestGetConfig`：mock 从 `engine.get_config` 改为 `profile_service.build_runtime_config`，断言从 `credentials.username` 改为 `username`（顶层）
+  - `TestSaveConfig`：patch 从 `save_and_apply` 改为 `save_global_and_profile`，payload 从扁平 dict 改为 `ConfigResponseDTO(...).model_dump()`
+  - 新增 `_make_runtime_config` 辅助函数
+  - 新增导入：`BrowserSettings`、`ConfigResponseDTO`、`LoginCredentials`、`LoggingSettings`、`MonitorSettings`、`PauseSettings`、`RetrySettings`
+
+### refactor: engine.py 删除 _ui_config，统一为 _runtime_config
+
+- `app/services/engine.py`：
+  - 删除 `self._ui_config` 声明和初始化
+  - `_reload_config_internal`：删除 `self._ui_config = data.global_config` 赋值
+  - `get_config`：返回 `self._runtime_config`（frozen 对象，无需 `model_copy(deep=True)`）
+  - `_handle_login`：`login_timeout` 改读 `_runtime_config.browser.login_timeout`
+  - `run_manual_login`：`login_timeout` 改读 `_runtime_config.browser.login_timeout`
+- 测试文件同步更新：
+  - `tests/test_services/conftest.py`：删除 `_ui_config` 初始化
+  - `tests/test_services/test_engine.py`：`_ui_config` 改为 `_runtime_config`，使用 `model_copy` 替代直接赋值
+  - `tests/test_services/test_engine_fix.py`：删除 `_ui_config` 初始化
+  - `tests/test_services/test_monitor_service.py`：删除 `_ui_config` 初始化，使用 `model_copy` 替代直接赋值
+  - `tests/test_integration/test_login_flow.py`：删除 `_ui_config` 初始化，使用 `model_copy` 替代直接赋值
+
+### refactor: ProfileService 接管配置构建，删除 load_active_config
+
+- `app/services/profile_service.py`：新增三个方法
+  - `get_runtime_config() -> RuntimeConfig`：读磁盘 → 构建运行时配置
+  - `build_runtime_config(data: ProfilesData) -> RuntimeConfig`：从已加载 data 构建（避免重复读盘）
+  - `_get_active_profile(data: ProfilesData) -> Profile`：获取活跃方案并解密密码
+  - 新增 `RuntimeConfig` 导入
+- `app/services/config_service.py`：删除 `load_active_config` 和旧 `build_runtime_config`，仅保留 `save_and_apply` / `_rollback_config` / `SaveResult`；移除 `GlobalConfig`、`Profile` 导入
+- `app/services/engine.py`：`_reload_config_internal` 改用 `profile_service.build_runtime_config(data)`，删除 `load_active_config` 导入和 `has_decrypt_error` 检查逻辑
+- `main.py`：`_load_login_config` 改用 `ps.get_runtime_config()`，删除 `load_active_config` 导入和解密错误返回 CONFIG_ERROR 的逻辑
+- `app/api/config.py`：`get_config` 改用 `profile_svc.build_runtime_config(data)`，删除手动凭据注入和 ISP 映射逻辑（由 ConfigBuilder 统一处理）
+- `tests/test_config/test_config_merge.py`：改用 `svc.get_runtime_config()` 替代 `load_active_config(svc)`
+- `tests/test_services/test_config_service.py`：`TestBuildRuntimeConfigV3` 改为 `TestConfigBuilderBuild`，import 从 `config_service.build_runtime_config` 改为 `ConfigBuilder.build`
+- `tests/test_app/test_backend_services.py`：`TestLoadActiveConfig` 改为 `TestProfileServiceRuntimeConfig`，`TestBuildRuntimeConfig` 改为 `TestConfigBuilderBuild`；import 改为 `ConfigBuilder`
+- `tests/test_app/test_main.py`：6 处 mock patch 从 `app.services.config_service.load_active_config` 改为 `main.create_profile_service`（返回 mock_ps），`get_runtime_config` 返回值从 tuple 改为单个 RuntimeConfig
+
+### feat: 新建 ConfigBuilder — 唯一配置构建器
+
+- 新建 `app/services/config_builder.py`：
+  - `ConfigBuilder.build(global_config, profile) -> RuntimeConfig`：全项目唯一的 `GlobalConfig + Profile → RuntimeConfig` 构建器
+  - ISP 转换：carrier="自定义"→carrier_custom, carrier="无"→"", 其他→carrier 原值
+  - 密码过滤：以 "•" 开头的掩码密码清空为空字符串
+  - 字段完整性：global_config 的所有透传字段（block_proxy/shell_path/minimize_to_tray/startup_action/autostart_lightweight/lightweight_tray/auto_open_browser/proxy/app_port）完整传递
+  - `custom_variables` 设为空 dict（GlobalConfig 不含此字段）
+  - `active_task` 从 profile 传递
+- 新建 `tests/test_services/test_config_builder.py`：24 个单元测试
+  - `TestCarrierToIsp`（8 个）：自定义→custom、无→""、中国移动/联通/电信透传、空字符串、空白字符串处理
+  - `TestPasswordFiltering`（6 个）：掩码密码清空、明文保留、空/空白保持、单点前缀
+  - `TestFieldCompleteness`（5 个）：browser/monitor 透传、所有直接字段透传、custom_variables 为空、credentials 结构完整性
+  - `TestActiveTask`（3 个）：profile 传递、空默认值、空白去除
+  - `TestEndToEnd`（2 个）：全自定义组合场景、frozen 不可变性验证
+
+## 2026-06-22 (23)
+
+### fix: 修复遗漏的 data.config → data.global_config 引用
+
+- `app/api/autostart.py`：
+  - `_read_autostart_lightweight`：`ps.load().config` → `ps.load().global_config`
+  - `_save_autostart_lightweight` lambda：`d.config` → `d.global_config`（setattr 和 model_copy 两处）
+- `app/services/engine.py`：
+  - `toggle_pure_mode` lambda：`d.config` → `d.global_config`（setattr 和 model_copy 三处）
+- `app/services/config_service.py`：
+  - `build_runtime_config` 参数类型标注从 `RuntimeConfig` 改为 `GlobalConfig`，新增 `GlobalConfig` 导入
+  - 函数体内 `config.model_copy(update={...})` 改为 `RuntimeConfig(**config.model_dump(exclude={"credentials", "active_task"}), credentials=..., active_task=...)`，因为 GlobalConfig 不含 credentials/active_task 字段
+
+## 2026-06-22 (22)
+
+### refactor: 新增 GlobalConfig、ConfigResponseDTO，更新 RuntimeConfig 和 ProfilesData
+
+- `app/schemas.py`：
+  - 新增 `GlobalConfig` 类：持久化配置，不含 `credentials` 和 `active_task`，用于 `settings.json` 写盘
+  - 新增 `ConfigResponseDTO` 类：API 响应专用，凭据字段扁平化（username/password/auth_url/isp/carrier_custom），密码已掩码
+  - 更新 `RuntimeConfig` docstring：说明此模型仅存在于内存，不直接写盘
+  - 更新 `ProfilesData`：`config` 字段改名为 `global_config`，`config_version` 默认值改为 4
+  - `RuntimeConfig` 新增 `proxy: str` 和 `app_port: int` 字段（与 `GlobalConfig` 保持一致）
+- `app/services/config_service.py`：
+  - `load_active_config`：`data.config` → `data.global_config`
+  - `save_and_apply` 的 `_apply`：`data.config` → `data.global_config`
+  - 注释更新：`config` → `global_config`
+- `app/services/engine.py`：
+  - `_reload_config_internal`：`data.config` → `data.global_config`（两处）
+- `app/api/config.py`：
+  - `_persist_source_levels`：`d.config` → `d.global_config`
+- `app/api/browsers.py`：
+  - `profile_data.config` → `profile_data.global_config`
+- `app/workers/playwright_bootstrap.py`：
+  - `_get_browser_channel`：`_data.config` → `_data.global_config`
+- `app/application.py`：
+  - `run()`：`profile_service.load().config.logging` → `profile_service.load().global_config.logging`
+- `main.py`：
+  - `_load_app_config`：`_data.config` → `_data.global_config`
+  - `_run_full`：`_data.config.logging` → `_data.global_config.logging`
+- 测试文件同步更新（6 个文件）：
+  - `tests/test_config/test_config_schemas.py`：`data.config` → `data.global_config`，`config_version` 断言改为 4
+  - `tests/test_services/test_config_service.py`：`data.config` → `data.global_config`
+  - `tests/test_services/test_profile_service.py`：`data.config.logging` → `data.global_config.logging`
+  - `tests/test_services/test_monitor_service.py`：`mock_ps.load.return_value.config` → `mock_ps.load.return_value.global_config`（6 处）
+  - `tests/test_api/test_browsers.py`：`mock_profile_data.config` → `mock_profile_data.global_config`（5 处）
+
+## 2026-06-22 (21)
+
+### fix: 清理 DEFAULT_PROFILE_SETTINGS 中后端已废弃的扁平字段
+
+- `frontend/js/constants.js`：移除 `DEFAULT_PROFILE_SETTINGS` 中 17 个后端 Profile 模型已不持有的字段（browser_timeout、max_retries、stealth_mode、custom_variables 等），仅保留 Profile 实际持有的 9 个字段
+
+## 2026-06-22 (20)
+
+### fix: 添加 proxy/app_port 到 RuntimeConfig，消除幽灵字段
+
+- `schemas.py`：`RuntimeConfig` 新增 `proxy: str` 和 `app_port: int` 字段
+- `ports.py`：`resolve_port()` 新增 `config_port` 可选参数，优先级 env > config > default
+- `application.py`：`run()` 从 config 读取端口，传给 `create_app()` 和 uvicorn；`create_app()` 新增 `port` 参数用于 CORS
+- `repo.py`：仓库请求从 config 读取 `proxy` 传递给 `async_repo_fetch_json`
+
+## 2026-06-22 (19)
+
+### refactor: 统一网络检测默认值到 constants.py
+
+- `constants.py`：`DEFAULT_HTTP_TARGETS` 改为小米/华为 captive portal 地址
+- `probes.py`：`is_network_available_socket`/`_http`/`_url` 默认值统一引用 constants
+- `decision.py`：移除 `_DEFAULT_HTTP_URLS` 硬编码，引用 constants；清理 `url_check_urls` 冗余类型检查
+- `engine.py`：简化 `test_network` 中 `url_check_urls` 处理
+
+## 2026-06-22 (18)
+
+### fix: 手动网络测试未传递 test_urls
+
+- `engine.py` `test_network()`：调用 `is_network_available` 时补充 `test_urls` 参数，修复回退到百度默认值的问题
+- 同步修复 `url_check_urls` 格式处理（`list[str]` 而非 `list[dict]`）
+
+## 2026-06-22 (17)
+
+### fix: HTTP 检测使用国内 captive portal 地址
+
+- 默认 HTTP 检测地址改为小米/华为/OPPO 的 `generate_204` 端点
+- `probes.py`：captive portal URL（含 `generate_204`/`connectivitycheck`）仅接受 204，普通 URL 接受 200-299
+
+## 2026-06-22 (16)
+
+### fix: 调整默认配置
+
+- TCP/HTTP 检测默认关闭，仅开启网址响应检测
+- `minimize_to_tray` 默认 `True`
+- `block_proxy` 默认 `True`
+
+## 2026-06-22 (15)
+
+### feat: 网址响应检测添加默认检测地址
+
+- `app/schemas.py`：`url_check_urls` 类型从 `list[dict]` 改为 `list[str]`，默认填充 Apple/Microsoft/Firefox captive portal 地址
+- `app/network/decision.py`：`check_network_status` 兼容 `list[str]` 和 `list[dict]` 两种格式
+- `frontend/js/constants.js`：同步前端默认值
+- `tests/test_services/test_engine.py`：更新测试数据格式
+
+## 2026-06-22 (14)
+
+### fix: 补全网络检测默认值 + 修复网址响应检测开关
+
+- `app/schemas.py` `MonitorSettings`：TCP/HTTP 检测默认开启，`ping_targets` 和 `test_urls` 填充常见目标
+- `frontend/js/constants.js`：同步前端默认配置
+- `frontend/js/app-options.js`：修复 `urlCheckEnabled` setter 在 `defaultUrlCheckUrls` 为空时开关弹回的 Bug
+- `tests/test_services/test_engine_fix.py`：更新默认值断言
+
+## 2026-06-22 (13)
+
+### refactor: 简化向导为纯协议同意页
+
+- `frontend/partials/wizard.html`：删除步骤 2-5（账号/监控/浏览器/完成），只保留协议同意页 + "同意并开始使用"按钮
+- `frontend/js/methods/lifecycle.js`：`checkInitStatus` 改用 `data.agreed` 控制向导显示；`finishWizard` 简化为调用 `POST /api/agree` 关闭向导
+- `frontend/js/methods/ui.js`：删除 `nextWizardStep` 和 `skipWizard` 方法
+- `frontend/js/app-options.js`：删除 `validateWizardStep`、`canProceed`、`wizardErrors`
+- `frontend/js/data/ui.js`：删除 `wizardStep` 状态
+- `app/api/system.py`：`init-status` 新增 `agreed` 字段（检查 `config/.agree` 文件）；新增 `POST /api/agree` 端点创建标记文件
+- `frontend/styles/pages/wizard.css`：删除步骤指示器、配置摘要、表单错误等不再使用的样式
+
+## 2026-06-22 (12)
+
+### fix: 向导保存超时 + 凭据未持久化
+
+**问题 1**：`startup_action: "none"` 时，`boot_engine=False`，lifespan 不调用 `engine.boot()`，引擎线程从未启动。向导保存时 `reload_config()` 派发 RELOAD 命令到队列，但无消费者，10 秒超时。
+
+**修复 1**：将引擎线程启动与监控启动解耦，lifespan 中始终启动引擎线程：
+
+- `app/services/engine.py`：新增 `start_thread()` 方法（仅启动命令处理循环，不启动监控）；`boot()` 改为调用 `start_thread()` + `start_monitoring()`
+- `app/application.py`：lifespan 的 `existing_container` 分支中，在条件性调用 `boot()` 前先调用 `start_thread()`
+- `tests/test_app/test_boot_engine_flag.py`：更新 4 个测试用例，验证 `start_thread()` 始终被调用
+
+**问题 2**：向导 `finishWizard` 仅调用 `PUT /api/config`（credentials 被 `save_and_apply` 剥离），未将凭据同步到活跃方案，导致 `init-status` 持续返回 `username=空, password=空`。
+
+**修复 2**：`frontend/js/methods/lifecycle.js` `finishWizard` 中，在 config 保存成功后调用 `fetchProfiles()` + `_saveCredentialsToProfile()`，与设置页面 `saveConfig` 行为一致。
+
+**问题 3**：`GET /api/config` 从 `_ui_config` 返回，而 `_ui_config.credentials` 在 `save_and_apply` 时被剥离为空。设置页面通过此接口读取凭据，始终显示空值。
+
+**修复 3**：`app/api/config.py` `get_config` 中，从活跃 profile 注入凭据到返回值，密码脱敏后返回。异常时降级到原始 `_ui_config` 凭据。
+
+## 2026-06-22 (11)
+
+### fix: 保存配置时剥离冗余 credentials 和 active_task
+
+- `app/services/config_service.py`：`save_and_apply` 的 `_apply` 在写入 settings.json 前将 `credentials` 重置为空壳、`active_task` 清空
+- 实际凭证和 active_task 只存在于 `profiles` 中，`config` 字段不再持久化冗余数据
+
+## 2026-06-22 (10)
+
+### refactor: 收敛日志配置读取为统一入口
+
+- `main.py:_run_full()`：`_ps.load()` 中间结果存入 `_data`，异常时置 `_data = None`；`run()` 新增 `logging_settings=_logging if _data else None` 参数
+- `app/application.py`：`run()` 签名新增 `logging_settings: LoggingSettings | None = None` 参数，新增 `from app.schemas import LoggingSettings` 导入
+- `app/application.py:run()` 函数体：合并原有三段日志读取逻辑为单一分支：优先使用 `logging_settings` 参数，仅当参数为 None 且 `access_log_enabled`/`log_retention` 未传入时才回退到 settings.json 读取；`source_levels` 恢复统一使用 `logging_settings`
+
+## 2026-06-22 (9)
+
+### fix: LogConfigCenter._source_levels 线程安全
+
+- `app/utils/logging.py`：`_source_levels` 新增 `_source_levels_lock`，`set_source_level`/`get_source_level`/`remove_source_level`/`get_all_source_levels` 四个方法加锁保护，消除 API 路由写入与 loguru 内部线程读取的竞态
+
+## 2026-06-22 (8)
+
+### fix: MonitoredPolicy 和 _registered_futures 线程安全
+
+- `app/services/retry_policy.py`：`MonitoredPolicy` 新增 `_lock`，`on_network_check` 和 `on_login_done` 加锁保护 `_attempt`/`_prev_network_ok` 的读写，消除引擎线程与回调线程的 lost update 竞态
+- `app/services/engine.py`：`_registered_futures` 新增 `_futures_lock`，`add`/`discard`/`in` 操作加锁保护
+
+## 2026-06-22 (7)
+
+### feat(schema): AppConfig 添加 from_runtime_config() 映射方法
+
+- `app/schemas.py`：为 `AppConfig` 添加 `from_runtime_config(config: RuntimeConfig) -> AppConfig` 类方法
+- 统一从 RuntimeConfig 派生 AppConfig，消除手动同步 startup_action/minimize_to_tray/lightweight_tray/auto_open_browser 字段的风险
+
+## 2026-06-22 (6)
+
+### feat(schema): RuntimeConfig 添加 lightweight_tray 和 auto_open_browser
+
+- `app/schemas.py`：`RuntimeConfig` 直接透传字段部分新增 `lightweight_tray: bool = True` 和 `auto_open_browser: bool = False`
+- 消除 AppConfig 中无法持久化的字段，用户现在可以通过 Web UI 配置并保存
+
+## 2026-06-22 (5)
+
+### fix: 修复 H1 双 login 线程池 + H2 嵌套线程池饥饿
+
+- H1: `app/services/login_orchestrator.py`：`__init__` 新增 `pool` 可选参数，外部可注入共享线程池，未注入时自行创建
+- H1: `app/container.py`：构造 `LoginOrchestrator` 时显式传入 `pool=self.task_executor._login_pool`，删除 `self.login_orchestrator._pool = ...` 的私有属性篡改
+- H2: `app/network/probes.py`：全局 `executor` 从 `max_workers=3` 扩容为 `max_workers=8, thread_name_prefix="net"`，作为网络检测共享池
+- H2: `app/network/decision.py`：删除 `_decision_executor`（3 workers 外层池），改用 `probes.executor`（共享池），消除嵌套线程池饥饿风险
+
+## 2026-06-22 (4)
+
+### fix: LoggingSettings 添加 source_levels + 修复 application.py 源级别恢复
+
+- `app/schemas.py`：为 `LoggingSettings` 添加 `source_levels: dict[str, str]` 字段，修复 `api/config.py:_persist_source_levels()` 写入被 Pydantic 静默忽略的问题
+- `app/application.py`：修复 `run()` 中 `sys_settings` 始终为 `None` 的 bug，source_levels 日志级别配置现在能正确从 settings.json 恢复
+
+## 2026-06-22 (3)
+
+### fix(ports): 移除不存在的 global_settings.app_port 读取
+
+- `app/utils/ports.py`：移除 `json`、`PROJECT_ROOT` 导入和 settings.json 读取逻辑，简化为仅从环境变量 APP_PORT 读取
+- `tests/test_utils/test_ports.py`：删除 `TestResolvePortFromSettings`、`TestResolvePortSettingsErrors`、`TestResolvePortPriority` 测试类（对应已删除的 settings.json 读取逻辑）
+- `tests/test_app/test_application_logic.py`：`TestResolvePort` 中移除 `PROJECT_ROOT` mock 和 `Path` 导入
+
+## 2026-06-22 (2)
+
+### fix(bootstrap): 修复 browser_channel 读取路径
+
+- `app/workers/playwright_bootstrap.py`：`_get_browser_channel()` 从原始 JSON 读取改为使用 ProfileService 加载 Pydantic 模型
+  - 旧路径：`json.load(settings_path).get("global_settings", {}).get("browser_channel")`（不存在的字段）
+  - 新路径：`create_profile_service().load().config.browser.browser_channel`
+
+## 2026-06-22
+
+### fix(main): 修复 _run_full 中日志配置读取路径
+
+- `main.py:573-580`：`_ps.load().global_settings` → `_ps.load().config.logging`
+- `ProfilesData` 没有 `global_settings` 字段（v3 结构），正确路径是 `config.logging`（`LoggingSettings` 模型）
+- `access_log` 和 `log_retention_days` 现在能从 settings.json 正确读取
+
+## 2026-06-21 (20)
+
+### test: 清理旧配置模型残留引用
+
+- `app/services/engine.py`：`self._ui_config.login_timeout` → `self._ui_config.browser.login_timeout`
+- 测试文件修复：
+  - `tests/test_integration/test_login_flow.py`：`svc._ui_config.login_timeout` → `svc._ui_config.browser.login_timeout`
+  - `tests/test_services/conftest.py`：`svc._ui_config.login_timeout` → `svc._ui_config.browser.login_timeout`
+  - `tests/test_services/test_engine.py`：`svc._ui_config.login_timeout` → `svc._ui_config.browser.login_timeout`
+  - `tests/test_services/test_monitor_service.py`：`svc._ui_config.login_timeout` → `svc._ui_config.browser.login_timeout`
+- `AuthProfile` → `Profile` 替换：
+  - `tests/test_config/test_config_schemas.py`
+  - `tests/test_api/test_api_repo_routes.py`
+  - `tests/test_api/test_config_fix.py`
+  - `tests/test_app/test_backend_services.py`
+  - `tests/test_integration/conftest.py`
+  - `tests/test_integration/test_network_connection.py`
+  - `tests/test_integration/test_profile_connection.py`
+  - `tests/test_services/test_monitor_service.py`
+  - `tests/test_services/test_profile_service.py`
+
+## 2026-06-21 (19)
+
+### cleanup(schemas): 删除 SystemSettings/MonitorConfigPayload/Mixin
+- `app/schemas.py`：
+  - 删除 `_MonitorFieldsMixin` 类
+  - 删除 `_CommonSettingsMixin` 类
+  - 删除 `_SystemFieldsMixin` 类
+  - 删除 `SystemSettings` 类
+  - 删除 `MonitorConfigPayload` 类
+  - 删除 `GLOBAL_SETTINGS_FIELDS` 常量
+  - `AuthProfile` 保留为 `AuthProfile = Profile` 向后兼容别名
+  - 清理不再使用的导入（`DEFAULT_HTTP_TARGETS`, `DEFAULT_NETWORK_TARGETS`, `DEFAULT_URL_CHECK_URLS`, `get_default_ua`）
+- `app/services/login_orchestrator.py`：
+  - 更新注释中的 `MonitorConfigPayload` 引用为 `BrowserSettings`
+- 测试文件修复：
+  - `tests/test_integration/conftest.py`：移除 `MonitorConfigPayload`, `SystemSettings` 导入
+  - `tests/test_api/test_api_repo_routes.py`：`MonitorConfigPayload` → `RuntimeConfig`，移除 `global_settings=SystemSettings()`
+  - `tests/test_api/test_api_system_routes.py`：`MonitorConfigPayload` → `RuntimeConfig`
+  - `tests/test_api/test_api_tasks_routes.py`：`MonitorConfigPayload` → `RuntimeConfig`
+  - `tests/test_api/test_browsers.py`：`MonitorConfigPayload` → `RuntimeConfig`
+  - `tests/test_api/test_config_fix.py`：移除 `SystemSettings` 导入和 `global_settings` 参数
+  - `tests/test_app/test_backend_services.py`：移除 `SystemSettings` 导入
+  - `tests/test_config/test_config_schemas.py`：删除对旧模型的测试类（`TestNormalizeHeadersJson`, `TestAuthUrlValidator`, `TestHeadersJsonValidator`, `TestLogLevelValidator`, `TestCustomVariablesValidator`, `TestConstrainedFields`, `TestSystemSettings`, `TestMonitorConfigPayloadFull`）
+  - `tests/test_integration/test_full_mode.py`：`MonitorConfigPayload` → `RuntimeConfig`
+  - `tests/test_integration/test_login_connection.py`：`MonitorConfigPayload` → `RuntimeConfig`
+  - `tests/test_services/test_engine_fix.py`：`_MonitorFieldsMixin` → `MonitorSettings`
+  - `tests/test_services/test_profile_service.py`：更新测试数据结构（`global_settings` → `config`）
+  - `tests/test_utils/test_utils.py`：删除 `test_schemas_uses_constant` 测试
+- 删除的测试文件：
+  - `tests/test_build_runtime_config.py`（测试旧的 `build_runtime_config(payload, gs)` 接口）
+  - `tests/test_integration/test_config_connection.py`（测试旧的 `save_and_apply(payload, ...)` 接口）
+  - `tests/test_integration/test_multi_browser.py`（测试旧的 `SystemSettings` 和 `MonitorConfigPayload`）
+
+## 2026-06-21 (18)
+
+### refactor(frontend): 设置页面适配嵌套配置结构
+- `frontend/partials/pages/settings/settings-browser.html`：
+  - 所有 `config.xxx` 浏览器字段改为 `config.browser.xxx`（headless/timeout/navigation_timeout/low_resource_mode/locale/timezone_id/disable_web_security/stealth_mode/stealth_custom_script/pure_mode/browser_channel/browser_args/user_agent/extra_headers_json/viewport_width/viewport_height）
+- `frontend/partials/pages/settings/settings-monitor.html`：
+  - 检测字段改为 `config.monitor.xxx`（check_interval_seconds/network_check_timeout/enable_tcp_check/enable_http_check/enable_local_check/check_auth_url）
+  - 数组字段 `ping_targets`/`test_urls`/`auth_url_targets` 改用 `:value + @input` 绑定，前端逗号分隔字符串与后端数组双向转换
+  - `url_check_urls` 改用 `:value + @input` 绑定，换行符分隔字符串与后端数组双向转换
+  - 重试字段改为 `config.retry.xxx`（max_retries/retry_interval）
+  - `login_timeout` 改为 `config.browser.login_timeout`
+  - 暂停字段改为 `config.pause.xxx`（enabled/start_hour/end_hour）
+- `frontend/partials/pages/settings/settings-system.html`：
+  - 日志字段改为 `config.logging.xxx`（log_retention_days/access_log）
+- `frontend/partials/pages/settings/settings-account.html`：
+  - 凭证字段改为 `config.credentials.xxx`（username/password/auth_url/isp/carrier_custom）
+- `frontend/partials/wizard.html`：
+  - 同步更新所有凭证/检测/暂停/浏览器字段为嵌套路径
+  - 配置摘要显示改为嵌套路径访问
+- `frontend/partials/shared/browser-selection.html`：
+  - `config.browser_custom_path` 改为 `config.browser.browser_custom_path`
+- `frontend/js/app-options.js`：
+  - 向导验证改为 `data.config.credentials.xxx` 嵌套路径
+  - `urlCheckEnabled` computed 改为数组长度判断
+- `frontend/js/methods/actions.js`：
+  - `config.login_timeout` 改为 `config.browser.login_timeout`
+- `frontend/js/methods/ui.js`：
+  - `config.browser_channel` 改为 `config.browser.browser_channel`
+  - `config.username`/`config.auth_url` 改为 `config.credentials.xxx`
+  - `config.browser_custom_path` 改为 `config.browser.browser_custom_path`
+
+## 2026-06-21 (17)
+
+### refactor(frontend): 配置数据结构改为嵌套
+- `frontend/js/constants.js`：
+  - 删除 `_SHARED_DEFAULTS` 常量
+  - `DEFAULT_CONFIG` 从扁平结构改为嵌套结构（browser/monitor/pause/logging/retry/credentials 六个子对象 + 顶层透传字段），与后端 RuntimeConfig 对齐
+  - `DEFAULT_PROFILE_SETTINGS` 从展开 `_SHARED_DEFAULTS` 改为内联完整默认值（保持扁平结构，供 profile 编辑器使用）
+- `frontend/js/data/config.js`：
+  - 新增 `cloneConfig()` 深拷贝函数，替代 `{ ...DEFAULT_CONFIG }` 浅拷贝
+  - `configData()` 使用 `cloneConfig(DEFAULT_CONFIG)` 初始化 config
+  - `defaultUrlCheckUrls` 从 `DEFAULT_CONFIG.url_check_urls` 改为 `DEFAULT_CONFIG.monitor.url_check_urls`
+- `frontend/js/methods/config.js`：
+  - `fetchConfig()`：从扁平合并改为逐层深度合并（browser/monitor/pause/logging/retry/credentials 各自 spread 合并，顶层字段用 `??` 回退）
+  - `saveConfig()`：字段访问改为嵌套路径（`config.credentials.auth_url`、`config.monitor.enable_tcp_check`、`config.credentials.isp`）
+  - `loadDefaultStealthScript()`：`config.stealth_custom_script` 改为 `config.browser.stealth_custom_script`
+- **已知影响**：HTML 模板和 `app-options.js`/`actions.js`/`ui.js` 中仍有大量扁平字段绑定（`config.headless`、`config.check_interval_seconds` 等），需后续步骤适配
+
+## 2026-06-21 (16)
+
+### refactor(profile_service): AuthProfile → Profile
+- `app/services/profile_service.py`：
+  - import 从 `AuthProfile, ProfilesData` 改为 `Profile, ProfilesData`
+  - `get_active_profile()` 返回类型从 `AuthProfile` 改为 `Profile`
+  - `save_profile()` 参数类型从 `AuthProfile` 改为 `Profile`
+  - `AuthProfile()` 构造改为 `Profile()`
+  - `_load_unsafe`/`_save_unsafe` 使用 `ProfilesData`，结构已变（`config` 替代 `global_settings`），Pydantic 自动处理序列化/反序列化，无需额外改动
+  - `detect_matching_profile` 通过 `data.profiles` 访问，与新结构兼容
+
+## 2026-06-21 (15)
+
+### refactor(api): config/profiles 端点适配新模型
+- `app/api/config.py`：
+  - import 从 `MonitorConfigPayload` 改为 `RuntimeConfig`
+  - `get_config` 端点：response_model 和返回类型改为 `RuntimeConfig`，密码掩码改为通过 `credentials.model_copy(update=...)` 修改嵌套字段（RuntimeConfig 是 frozen 模型）
+  - `save_config` 端点：参数类型从 `MonitorConfigPayload` 改为 `RuntimeConfig`
+  - `_log_config_changes` 函数签名：`new_payload: MonitorConfigPayload` 改为 `new_payload: RuntimeConfig`
+- `app/api/profiles.py`：
+  - import 从 `AuthProfile` 改为 `Profile`
+  - `save_profile` 端点：参数类型从 `AuthProfile` 改为 `Profile`
+- 测试文件同步更新：
+  - `tests/test_api/test_api_config_routes.py`：import 从 `MonitorConfigPayload` 改为 `RuntimeConfig`，mock 返回值从扁平构造改为 `RuntimeConfig(credentials={...})`
+  - `tests/test_api/test_api_profiles_routes.py`：import 从 `AuthProfile, SystemSettings` 改为 `Profile`，`ProfilesData` 构造移除 `global_settings` 参数，`AuthProfile` 改为 `Profile`
+- 验收：16 个测试全通过
+
+## 2026-06-21 (14)
+
+### refactor(engine): _ui_config 改用 RuntimeConfig
+- `app/services/engine.py`：
+  - 删除 `MonitorConfigPayload` 导入（第 26 行）
+  - `_ui_config` 字段类型从 `MonitorConfigPayload` 改为 `RuntimeConfig`，初始值从 `MonitorConfigPayload()` 改为 `RuntimeConfig()`
+  - `get_config()` 返回类型从 `MonitorConfigPayload` 改为 `RuntimeConfig`
+  - engine.py 中不再引用 `MonitorConfigPayload`
+
+## 2026-06-21 (13)
+
+### refactor: 合并 runtime_config.py 到 config_service.py
+- `app/services/config_service.py`：新增 `load_active_config(profile_service) -> tuple[RuntimeConfig, bool]`，从活跃 Profile 加载并解密密码，返回完整 RuntimeConfig
+- `app/services/engine.py`：`_reload_config_internal` 改用 `load_active_config`，`_ui_config` 改为 `data.config`（RuntimeConfig 类型）
+- `main.py`：`_load_login_config` 改用 `load_active_config`，删除旧版 `build_runtime_config` + `load_runtime_config` 调用
+- 删除 `app/services/runtime_config.py`（`load_payload_from_profiles`、`load_ui_config`、`load_runtime_config`）
+- 测试修复：`test_backend_services.py`、`test_config_merge.py`、`test_main.py`、`test_integration/conftest.py` 更新 import 和 mock 路径
+- 清理已删除的 `save_config_combined` 相关 import 和测试类
+
+## 2026-06-21 (12)
+
+### refactor(config_service): 重写 build_runtime_config 和 save_and_apply
+- `app/services/config_service.py`：
+  - 删除 `_update_global_settings` 函数（旧版全局设置循环赋值）
+  - 删除 `save_config_combined` 函数（旧版原子化保存）
+  - 删除旧版 `build_runtime_config(payload: MonitorConfigPayload, global_settings: SystemSettings | None)`（130 行逐字段搬运）
+  - 新增 `build_runtime_config(config: RuntimeConfig, profile: Profile) -> RuntimeConfig`：从 RuntimeConfig + Profile 合并凭证，返回新的 RuntimeConfig
+  - 新增 `save_and_apply(config: RuntimeConfig, profile_service, reload_fn) -> SaveResult`：保存 config 到 ProfilesData，失败自动回滚
+  - 删除 `_STRIP_FIELDS`、`_LOG_LEVEL_FIELDS` 常量（仅被删除的函数使用）
+  - 删除 `GLOBAL_SETTINGS_FIELDS`、`MonitorConfigPayload`、`SystemSettings` 导入
+  - 新增 `LoginCredentials`、`Profile`、`RuntimeConfig` 导入
+- `tests/test_services/test_config_service.py`：
+  - 删除 `TestUpdateSystemSettings`（9 个测试，对应已删除的 `_update_global_settings`）
+  - 删除 `TestSaveConfigCombined`（8 个测试，对应已删除的 `save_config_combined`）
+  - 删除 `TestBuildRuntimeConfigLoginTimeout`（2 个测试，对应旧版 `build_runtime_config`）
+  - 新增 `TestBuildRuntimeConfigV3`（7 个测试）：凭证构建、carrier 映射、browser 配置保留、掩码密码清空、active_task、credentials 替换
+  - 新增 `TestSaveAndApply`（5 个测试）：成功保存、保存失败、重载失败回滚、回滚后重载仍失败、回滚过程异常
+  - 新增 `TestRollbackConfig`（2 个测试）：字段恢复、全部字段回滚
+- 验收：14 个测试全通过
+
+## 2026-06-21 (11)
+
+### refactor(schemas): ProfilesData 改用 RuntimeConfig + Profile
+- `app/schemas.py`：
+  - `ProfilesData` 从第 424 行移到第 545 行（`RuntimeConfig` 定义之后），避免前向引用问题
+  - 删除 `global_settings: SystemSettings` 字段
+  - 新增 `config_version: int = Field(default=3)` 字段
+  - 新增 `config: RuntimeConfig = Field(default_factory=RuntimeConfig)` 字段
+  - `profiles` 类型从 `dict[str, AuthProfile]` 改为 `dict[str, Profile]`
+  - `ensure_default_profile` 中 `AuthProfile()` 改为 `Profile()`
+  - docstring 更新为 "settings.json 顶层结构（v3）"
+- `tests/test_config/test_config_schemas.py`：
+  - 更新 `TestProfilesData` 测试类适配 v3 结构
+  - 新增 `test_config_version_default`、`test_config_is_runtime_config`、`test_no_global_settings` 测试
+  - 所有 profile 相关测试改用 `Profile` 类型
+- 验收：98 个测试全通过
+
+## 2026-06-21 (10)
+
+### feat(migration): 新增 v2→v3 配置迁移逻辑
+- `app/services/config_migration.py`：
+  - 新增 `migrate_v2_to_v3(data)` 函数：将 v2 格式（扁平 global_settings）迁移到 v3 格式（结构化 config + 独立凭证 Profile）
+  - v3 格式直接返回（幂等）
+  - `_build_config_from_flat(gs)`：从扁平字段构建 browser/monitor/pause/logging/retry 子结构
+  - `_merge_credential(profile, gs)`：profile 留空字段从 global_settings 继承（含 carrier "无" 视为未设置的特殊处理）
+  - `_resolve_carrier(profile_val, global_val)`：carrier 字段回退逻辑，"无" 视为未设置
+  - `_parse_url_check_urls(raw)`：解析 url_check_urls 字符串为字典列表
+- `tests/test_services/test_config_migration.py`：5 个单元测试覆盖基本迁移、凭证回退、缺少 default profile 自动创建、多 profile 保留、v3 透传
+- 验收：5 个测试全通过
+
+## 2026-06-21 (9)
+
+### feat(schemas): 新增 Profile 模型（凭证独立持有）
+- `app/schemas.py`：
+  - 在 `AuthProfile` 类定义之后新增 `Profile` 类
+  - Profile 的字段与 AuthProfile 完全相同：name, match_gateway_ip, match_ssid, username, password, auth_url, carrier, carrier_custom, active_task
+  - 所有字段默认值为空字符串或合理默认值
+  - 保留 `auth_url` 的 `field_validator`（复用已有的 `_validate_auth_url` 函数）
+  - 不修改 AuthProfile（保持向后兼容），不修改 ProfilesData（后续 Task 会改）
+- 设计语义：每个方案独立持有凭证，不存在"留空回退到全局"语义
+- 验收：96 个测试全通过
+
+## 2026-06-21 (8)
+
+### fix(worker): 移除纯净模式下多余的 stealth 注入
+- `app/workers/playwright_worker.py`：
+  - 删除 `_start_browser` 中纯净模式下 `if pure_mode and stealth_mode` 的 `_apply_stealth_and_routes` 调用（第 781-783 行）
+  - 纯净模式设计意图为不注入反检测脚本，该分支是多余逻辑
+  - 保留注释说明设计意图
+
+## 2026-06-21 (7)
+
+### refactor(env): build_login_template_vars 改为显式参数
+- `app/utils/env.py`：
+  - 函数签名从 `build_login_template_vars(runtime_config: RuntimeConfig | dict[str, Any], task_url, custom_variables)` 改为 `build_login_template_vars(auth_url, username, password, isp, task_url, custom_variables)`
+  - 移除 `hasattr(runtime_config, "credentials")` 双路径判断
+  - 移除 `from typing import Any` 导入
+  - 自定义变量值统一通过 `str(v)` 转换
+- `app/utils/login.py`：
+  - 调用点从 `build_login_template_vars(self.config, task.url, self._custom_variables)` 改为关键字参数形式，从 `self._credentials` 解构
+- `app/services/debug_service.py`：
+  - 调用点从 `build_login_template_vars(runtime_config, task.url, runtime_config.custom_variables)` 改为关键字参数形式，从 `runtime_config.credentials` 解构
+- 测试文件同步更新（2 个文件）：
+  - `tests/test_utils/test_env_fix.py`：6 个测试从 dict 参数改为显式关键字参数
+  - `tests/test_utils/test_utils.py`：8 个测试从 dict 参数改为显式关键字参数
+- 验收：2332 测试全通过
+
+## 2026-06-21 (6)
+
+### refactor(monitor): check_once() 返回类型化 CheckOnceResult dataclass
+- `app/services/monitor_service.py`：
+  - 新增 `CheckOnceResult` dataclass（frozen, slots），包含 `paused`/`net_ok`/`net_reason`/`need_login`/`check_num`/`interval`/`result` 7 个字段
+  - `check_once()` 返回类型从 `dict[str, Any]` 改为 `CheckOnceResult`
+  - 两处 `return { ... }` 替换为 `return CheckOnceResult(...)`
+- `app/services/engine.py`：
+  - `_do_network_check()` 消费端从 `result.get("interval", ...)` / `result.get("need_login", False)` 改为 `result.interval` / `result.need_login` 属性访问
+  - 移除中间变量 `interval`，直接使用 `result.interval`
+- 测试文件同步更新（5 个文件）：
+  - `tests/test_services/test_engine.py`：mock 返回值从 dict 改为 `CheckOnceResult(...)` 实例，新增 `CheckOnceResult` 和 `NetworkCheckResult` 导入
+  - `tests/test_integration/test_login_flow.py`：同上
+  - `tests/test_integration/test_login_integration_extended.py`：同上
+  - `tests/test_integration/test_network_connection.py`：`result.get(...)` 改为 `result.paused` / `result.need_login` 属性访问，mock 返回值改为 `CheckOnceResult(...)`
+- 验收：2332 测试全通过
+
+## 2026-06-21 (5)
+
+### refactor(validator): ConfigValidator 直接接受 RuntimeConfig
+- `app/utils/config_utils.py`：
+  - `validate_env_config` 签名从 `config: dict` 改为 `config: RuntimeConfig`
+  - 使用 `TYPE_CHECKING` 避免与 `app.schemas` 的循环导入
+  - 移除所有 `.get()` 调用，通过 `config.credentials` 属性访问
+- `app/services/engine.py`：
+  - `start_monitoring()` 移除从 `RuntimeConfig` 手动构造 dict 的转换，直接传递 `self._runtime_config`
+- `tests/test_config/test_config_schemas.py`：
+  - 所有 `validate_env_config` 测试从 dict 构造改为 `RuntimeConfig(credentials=LoginCredentials(...))` 实例
+- 验收：2332 测试全通过
+
+## 2026-06-21 (4)
+
+### refactor(time): is_in_pause_period 直接接受 PauseSettings
+- `app/utils/time_utils.py`：
+  - 函数签名从 `is_in_pause_period(pause_config: dict[str, Any])` 改为 `is_in_pause_period(pause: PauseSettings)`
+  - 移除所有 `.get()` 调用，直接通过属性访问 `pause.enabled`、`pause.start_hour`、`pause.end_hour`
+  - 使用 `TYPE_CHECKING` 避免与 `app.schemas` 的循环导入
+- `app/network/decision.py`：
+  - `check_pause()` 移除从 `PauseSettings` 构造 dict 的中间层，直接将 `pause` 传递给 `is_in_pause_period`
+  - debug 日志从 `{}` 格式化改为具名参数输出
+- `tests/test_utils/test_utils.py`：
+  - 所有测试从 dict 构造改为 `PauseSettings(...)` 实例
+  - `test_missing_keys_*` 重命名为 `test_defaults_*`，使用 `PauseSettings()` 默认值
+
+## 2026-06-21 (3)
+
+### fix: 修复 debug_service 和 env.py 的 RuntimeConfig 类型兼容
+- `app/utils/env.py`：
+  - `build_login_template_vars` 签名从 `dict[str, Any]` 改为 `RuntimeConfig | dict[str, Any]`
+  - 通过 `hasattr(runtime_config, "credentials")` 分支支持两种类型
+  - RuntimeConfig 分支使用属性访问（`.credentials.auth_url`），dict 分支保留 `.get()` 调用
+  - `custom_variables` 参数为 None 时自动从 RuntimeConfig 的 `custom_variables` 属性读取
+- `app/services/debug_service.py`：
+  - `build_login_template_vars` 调用从 `runtime_config.get("custom_variables", {})` 改为 `runtime_config.custom_variables`
+  - `browser_settings` 访问从 `.get("browser_settings", {})` 改为 `.browser.timeout` / `.browser.navigation_timeout` 属性访问
+  - Worker 数据的 `config` 从直接传 `runtime_config` 改为通过 `_runtime_config_to_worker_dict()` 转换为 dict
+- 测试文件同步更新：
+  - `tests/test_services/test_debug_service.py`：mock 改为模拟 RuntimeConfig 属性结构，增加 `_runtime_config_to_worker_dict` patch
+  - `tests/test_services/test_debug_session_manager.py`：3 处 mock 从 dict 改为模拟 RuntimeConfig，增加 `_runtime_config_to_worker_dict` patch
+
+## 2026-06-21 (2)
+
+### fix: 修复 login.py check_network_status 类型不匹配并移除 engine 死代码
+- `app/utils/login.py`：
+  - `_execute_script_task` 中 `check_network_status` 调用从传入 `self.config`（dict）改为构造 `MonitorSettings`（Pydantic 模型）
+  - 修复运行时 AttributeError（check_network_status 签名要求 MonitorSettings 而非 dict）
+- `app/services/engine.py`：
+  - 移除 `_runtime_config_to_dict` 静态方法（无调用者，死代码）
+
+## 2026-06-21
+
+### cleanup: 移除旧配置 dict 构建器和废弃的调度器方法
+- `app/services/config_service.py`：
+  - 移除 `build_runtime_dict_from_payload` 函数（已被 `build_runtime_config` 替代）
+  - 移除未使用的 `from typing import Any` 导入
+- `app/utils/config_utils.py`：
+  - 移除 `PROFILE_RUNTIME_FIELDS` 常量和 `assign_profile_fields` 函数（仅被已删除的 `build_runtime_dict_from_payload` 使用）
+  - 更新模块 docstring
+- `app/services/engine.py`：
+  - 移除废弃的 `start_scheduler()` / `stop_scheduler()` 公开别名（已被 `sync_scheduler_state()` 替代）
+- `app/services/login_orchestrator.py`：
+  - 更新 `_runtime_config_to_worker_dict` docstring，移除对已删除函数的引用
+- 测试文件同步更新：
+  - `tests/test_app/test_backend_services.py`：import 和测试类从 `build_runtime_dict_from_payload` 改为 `build_runtime_config`，断言改为属性访问
+  - `tests/test_services/test_config_service.py`：同上
+  - `tests/test_integration/test_multi_browser.py`：同上
+  - `tests/test_utils/test_utils.py`：移除 `TestAssignProfileFields` 和 `TestProfileRuntimeFields` 测试类及导入
+  - `tests/test_services/test_monitor_service.py`：8 处 mock 路径从 `build_runtime_dict_from_payload` 改为 `build_runtime_config`
+  - `tests/test_services/test_engine.py`：调度器测试从 `start_scheduler`/`stop_scheduler` 改为 `_start_scheduler`/`_stop_scheduler`
+  - `tests/test_integration/test_full_mode.py`：同上
+- 保留项：`_STRIP_FIELDS` 和 `_LOG_LEVEL_FIELDS`（仍被 `_update_global_settings` 使用）
+- 验收：2332 测试全通过，lint 无新增错误
+
+## 2026-06-21
+
+### refactor(scheduler): 定时任务 API 端点统一使用 sync_scheduler_state
+- `app/api/scheduled_tasks.py`：
+  - `create_scheduled_task`：`if ok and config.get("enabled", True): engine.start_scheduler()` 改为 `if ok: engine.sync_scheduler_state()`
+  - `update_scheduled_task`：同上
+  - `toggle_scheduled_task`：`if ok and task["enabled"]: engine.start_scheduler()` 改为 `if ok: engine.sync_scheduler_state()`
+  - `delete_scheduled_task`：新增 `if ok: engine.sync_scheduler_state()` 调用，删除后自动检查是否应停止调度器
+- `tests/test_api/test_api_scheduled_tasks_routes.py`：`test_create_starts_scheduler_when_enabled` 断言从 `start_scheduler.assert_called()` 改为 `sync_scheduler_state.assert_called()`
+- 验收：91 个定时任务测试全通过
+
+### refactor: 迁移 TaskExecutor/main/application 至 RuntimeConfig
+- `app/services/task_executor.py`：
+  - `__init__` 和 `set_runtime_config_getter` 类型注解从 `Callable[[], dict]` 改为 `Callable[[], RuntimeConfig]`
+  - `execute_login_async`/`execute_login` 的 `config_snapshot` 类型从 `dict | None` 改为 `RuntimeConfig | None`
+  - `_execute_browser` fallback 从 `{}` 改为 `RuntimeConfig()`
+  - `_execute_shell` 的 `config.get("shell_path", "")` 改为 `config.shell_path` 属性访问
+  - `execute_login` fallback 从 `{}` 改为 `RuntimeConfig()`
+- `main.py`：
+  - `_load_login_config` 改用 `build_runtime_config` 替代 `build_runtime_dict_from_payload`，返回 `RuntimeConfig`
+  - `_execute_login_with_retries` 参数类型从 `dict` 改为 `RuntimeConfig`，重试设置访问改为 `runtime_config.retry.max_retries` / `runtime_config.retry.retry_interval`
+  - `check_network_status` 调用改为传递 `runtime_config.monitor`
+  - `_run_lightweight` 调度器启动改为 `sync_scheduler_state()`
+  - 顶部新增 `RuntimeConfig` 导入
+- `app/application.py`：lifespan 中调度器启动改为 `services.engine.sync_scheduler_state()`
+- `app/container.py`：startup 中调度器启动改为 `self.engine.sync_scheduler_state()`
+- 测试文件同步更新（6 个文件）：
+  - `tests/test_app/test_main.py`：patch 目标从 `build_runtime_dict_from_payload` 改为 `build_runtime_config`，返回值从 dict 改为 `RuntimeConfig(credentials=_TEST_CREDS, retry=...)`
+  - `tests/test_app/test_main_fix.py`：mock `_load_login_config` 返回 `RuntimeConfig()`
+  - `tests/test_integration/test_login_once_mode.py`：同上 + 直接传递 `RuntimeConfig` 给 `_execute_login_with_retries`
+  - `tests/test_integration/test_login_integration_extended.py`：`_runtime_config_to_dict` 改为 `model_copy(update={"retry": ...})`
+  - `tests/test_config/test_container.py`：断言从 `start_scheduler` 改为 `sync_scheduler_state`
+  - `tests/test_integration/test_app_startup.py`：同上
+  - `tests/test_services/test_task_executor_fix.py`：所有 `_get_runtime_config` 返回值从 dict 改为 `RuntimeConfig`
+- 验收：2340 测试全通过
+
+### refactor(login): LoginAttemptHandler 解构 config dict 为命名属性
+- `app/utils/login.py`：
+  - 构造函数新增解构逻辑：`_credentials`（username/password/auth_url/isp）、`_browser_settings`、`_monitor_settings`、`_active_task`、`_custom_variables`
+  - `_perform_login_with_active_task`：`self.config.get("active_task", "").strip()` 改为 `self._active_task`
+  - `_execute_browser_task`：凭证访问从 `self.config.get("auth_url", "")` 改为 `self._credentials["auth_url"]` 等
+  - `_execute_browser_task`：`self.config.get("custom_variables", {})` 改为 `self._custom_variables`
+  - `_execute_browser_task`：`self.config.get("browser_settings", {})` 改为 `self._browser_settings`，删除中间变量 `browser_settings`
+  - `_execute_browser_task`：`self.config.get("monitor", {})` 改为 `self._monitor_settings`
+  - `_execute_script_task`：`self.config.get("monitor", {}).get("script_timeout", 60)` 改为 `self._monitor_settings.get("script_timeout", 60)`
+  - `self.config` 整体仍保留用于传递给 `build_login_template_vars`、`BrowserContextManager`、`check_network_status` 等期望完整 config 的函数
+- 验收：36 个核心 monitor/login 测试全通过，pre-existing 的 main.py/orchestrator dict 问题与本次改动无关
+
+### test: 适配 monitor/decision 测试至 RuntimeConfig
+- `tests/test_services/test_monitor_service_fix.py`：dict 配置改为 `RuntimeConfig(LoginCredentials(...), MonitorSettings(...))` 构造
+- `tests/test_integration/test_network_connection.py`：`_make_monitor_core` 移除 `.model_dump()` 调用，直接传递 `RuntimeConfig`
+- `tests/test_integration/test_profile_connection.py`：同上，移除 `.model_dump()`
+- `tests/test_services/test_engine.py`：`test_handle_start_pure_mode` 断言从 `call_config["browser_settings"]["pure_mode"]` 改为 `call_config.browser.pure_mode`
+- `tests/test_services/test_monitor_service.py`：`TestProfileSwitchFlag` 3 个测试从 `NetworkMonitorCore()` 改为 `NetworkMonitorCore(config=RuntimeConfig())`
+- `tests/test_integration/test_login_flow.py`：`test_login_command_success` 断言从 `call_kwargs["config"]["username"]` 改为 `call_kwargs["config"].credentials.username`；`test_manual_login_cancels_in_progress_auto_login` 断言从 `isinstance(..., dict)` 改为 `isinstance(..., RuntimeConfig)`
+- 验收：2279 测试通过，5 个 pre-existing 的 main.py dict 问题失败与本次改动无关
+
+### refactor(monitor): 迁移 NetworkMonitorCore 和 decision.py 至类型化配置
+- `app/services/monitor_service.py`：
+  - 构造函数 `config` 参数类型从 `dict[str, Any] | None` 改为 `RuntimeConfig`
+  - `_get_monitor_interval` 改用 `self.config.monitor.check_interval_seconds` 属性访问
+  - `init_monitoring` 改用 `self.config.credentials.*` 和 `self.config.monitor.*` 属性访问
+  - `check_once` 中 `check_pause` 改为传递 `self.config.pause`
+  - `check_once` 中 `check_network_status` 改为传递 `self.config.monitor`
+  - `_build_test_sites` 改用 `self.config.monitor.ping_targets` 属性访问
+- `app/network/decision.py`：
+  - `check_pause` 签名从 `config: dict` 改为 `pause: PauseSettings`，内部构建 dict 传递给 `is_in_pause_period`
+  - `check_network_status` 签名从 `config: dict` 改为 `monitor: MonitorSettings`
+  - `check_login_prerequisites` 签名从 `config: dict` 改为 `(monitor: MonitorSettings, auth_url: str)`
+  - 三个公共函数内部全部改为直接属性访问
+- `app/services/engine.py`：
+  - `_handle_start` 中 `NetworkMonitorCore` 构造改为直接传递 `RuntimeConfig`（移除 `_runtime_config_to_dict` 转换）
+- 测试文件同步更新：
+  - `tests/test_core/test_monitor.py`：所有 `NetworkMonitorCore()` 调用改为传递 `RuntimeConfig()`
+  - `tests/test_core/test_network_probes.py`：`check_pause`/`check_network_status`/`check_login_prerequisites` 测试改用类型化模型
+- 验收：83 个核心测试全通过（2 个 pre-existing 的 main.py 测试失败与本次改动无关）
+
+### fix(engine): 直接传递 RuntimeConfig 给 orchestrator，移除不必要的桥接转换
+- `app/services/engine.py`：
+  - `_do_async_login`：移除 `_runtime_config_to_dict` 转换，直接传递 `RuntimeConfig` 给 `orchestrator.submit()`
+  - `_handle_login`：移除 `_runtime_config_to_dict` 转换，直接传递 `RuntimeConfig` 给 `orchestrator.validate()` 和 `orchestrator.submit()`
+  - `_runtime_config_to_dict` 保留仅用于 `_handle_start` 中传递给 `NetworkMonitorCore`（该组件仍接受 dict）
+- `tests/test_services/test_engine_fix.py`：
+  - `test_handle_login_uses_validated_config`：断言从 dict 下标访问改为 `RuntimeConfig` 属性访问
+  - `test_manual_login_submits_to_orchestrator`：同上
+  - `test_auto_login_submits_to_orchestrator`：同上
+- 验收：211 个 engine/orchestrator 测试全通过
+
+### refactor(orchestrator): 完成 LoginOrchestrator 迁移至 RuntimeConfig
+- `app/services/login_orchestrator.py`：
+  - `validate_login_config` 仅接受 `RuntimeConfig`（移除 hasattr 双重支持）
+  - `resolve_worker_timeout` 仅接受 `RuntimeConfig`（移除 hasattr 双重支持）
+  - `submit()`/`validate()`/`_dispatch()` 类型注解改为 `RuntimeConfig`
+  - `_runtime_config()` 返回 `RuntimeConfig`（默认 `RuntimeConfig()`）
+  - `_runtime_config_to_legacy_dict` 重命名为 `_runtime_config_to_worker_dict`
+  - `_runtime_config_to_worker_dict` 新增 `access_log`/`log_retention_days` 字段
+  - 构造函数 `get_runtime_config` 类型改为 `Callable[[], RuntimeConfig]`
+- `tests/test_services/test_login_orchestrator.py`：
+  - 测试用例改用 `RuntimeConfig` 构造配置
+  - 移除 Pydantic 已保证的边界测试（None/非法字符串/超限值）
+- 已知：调用方（main.py/engine.py）仍传递 dict，需后续任务迁移
+
+### fix(orchestrator): 移除 submit 方法 docstring 重复行
+- `app/services/login_orchestrator.py`：
+  - 第 195-196 行存在两行 `config:` docstring 描述（"配置（dict 或 RuntimeConfig）"和"配置快照"）
+  - 移除重复行，保留更准确的描述"配置（dict 或 RuntimeConfig）"
+- 验收：1092 测试通过（1 个 pre-existing 网络测试失败跳过）
+
+### fix(engine): 移除重复的 get_runtime_config 和未使用的导入
+- `app/services/engine.py`：
+  - 移除第 612 行 `from .config_service import build_runtime_dict_from_payload`（未使用的导入）
+  - 移除第 667-669 行的第一个 `get_runtime_config()` 方法（被第 882 行的同名方法遮蔽）
+- 验收：173 个 engine 测试全通过
+
+## 2026-06-21
+
+### refactor(engine): 迁移至 RuntimeConfig 并添加 sync_scheduler_state
+- `app/services/engine.py`：
+  - `_runtime_config` 类型从 `dict` 改为 `RuntimeConfig`（frozen，无需 deepcopy）
+  - `_runtime_snapshot` 类型从 `dict` 改为 `RuntimeConfig | None`
+  - `_reload_config_internal` 改用 `build_runtime_config` 替代 `build_runtime_dict_from_payload`
+  - 移除 `_copy_runtime_config` 方法
+  - `get_runtime_config` 返回 `RuntimeConfig`（frozen 对象直接返回引用）
+  - `_handle_start` 使用 `model_copy` 创建带 pure_mode 的配置副本
+  - `_handle_login`/`_do_async_login` 通过 `_runtime_config_to_dict` 转为旧格式 dict 兼容 Orchestrator/Worker
+  - `_handle_apply_profile` 改用 `credentials.auth_url`/`credentials.username` 属性访问
+  - `test_network` 改用 `config.monitor.*` 属性访问
+  - `start_monitoring` 的 `ConfigValidator.validate_env_config` 改用 dict 字面量
+  - `shutdown` 改用 `_stop_scheduler()`
+  - 新增 `sync_scheduler_state()` 作为调度器生命周期唯一入口
+  - 新增 `_start_scheduler()`/`_stop_scheduler()` 内部方法
+  - `start_scheduler`/`stop_scheduler` 标记为废弃别名
+  - 新增 `_runtime_config_to_dict()` 静态方法（RuntimeConfig→旧格式扁平 dict 桥接）
+- `app/services/login_orchestrator.py`：
+  - `validate_login_config` 支持 dict 和 RuntimeConfig 两种输入
+  - `resolve_worker_timeout` 支持 dict 和 RuntimeConfig 两种输入
+  - `_dispatch` 对 RuntimeConfig 输入自动转为旧格式 dict 再传给 Worker
+  - 新增 `_runtime_config_to_legacy_dict` 辅助函数
+- 测试文件同步更新（12 个文件）：
+  - `tests/test_services/conftest.py`：raw fixture 改用 `RuntimeConfig()`
+  - `tests/test_services/test_engine.py`：所有 `_copy_runtime_config` mock 替换为直接设置 `_runtime_config`
+  - `tests/test_services/test_engine_fix.py`：同上 + 更新断言
+  - `tests/test_services/test_monitor_service.py`：同上 + 更新 mock 路径
+  - `tests/test_integration/test_login_flow.py`：同上 + 顶层导入
+  - `tests/test_integration/test_login_integration_extended.py`：改用 `_runtime_config_to_dict` + 属性访问
+  - `tests/test_integration/test_login_connection.py`：`_ensure_login_config` 改用 `model_copy`
+  - `tests/test_integration/test_lightweight_mode.py`：同上
+  - `tests/test_integration/test_full_mode.py`：同上
+  - `tests/test_integration/test_network_connection.py`：改用 `get_runtime_config().model_dump()`
+  - `tests/test_integration/test_profile_connection.py`：同上
+  - `tests/test_services/test_container_fix.py`：无需改动（orchestrator 兼容层处理）
+- 验收：2342 测试全通过（1 个 pre-existing 时间段暂停窗口失败跳过）
+
+## 2026-06-21
+
+### test(config): 补充 build_runtime_config 测试覆盖
+- `tests/test_build_runtime_config.py`：
+  - 添加 `test_build_runtime_config_password_masked`：验证以 • 开头的密码被清空
+  - 添加 `test_build_runtime_config_pause_logging_retry`：验证暂停/日志/重试设置正确传递
+  - 添加 `test_build_runtime_config_url_check_urls`：验证 url_check_urls 解析为字典列表
+  - 修正 `test_build_runtime_config_strip_fields` docstring（移除多余的 proxy 描述）
+- 验收：10 个测试全通过
+
+### fix(config): 补充 carrier_custom 传入 LoginCredentials
+- `app/services/config_service.py`：`build_runtime_config` 的 `LoginCredentials(...)` 构造补充 `carrier_custom=custom_isp` 参数
+- `tests/test_build_runtime_config.py`：`test_build_runtime_config_credentials` 新增 `assert rc.credentials.carrier_custom == "myisp"` 断言
+- 验收：7 个测试全通过
+
+## 2026-06-21
+
+### feat(config) — 添加 build_runtime_config() 返回类型化 RuntimeConfig
+- `app/services/config_service.py`：新增 `build_runtime_config(payload, global_settings)` 函数
+  - 构建 `LoginCredentials`（用户名、密码、认证地址、运营商映射）
+  - 构建 `BrowserSettings`（从 SystemSettings 读取浏览器配置，含 strip 处理）
+  - 构建 `MonitorSettings`（监控间隔、ping 目标、URL 检测等，从 payload 读取）
+  - 构建 `PauseSettings`、`LoggingSettings`、`RetrySettings`
+  - 组装 `RuntimeConfig`（透传 block_proxy/shell_path/minimize_to_tray 等字段）
+  - 旧 `build_runtime_dict_from_payload` 暂时保留以兼容迁移
+- `tests/test_build_runtime_config.py`：7 个单元测试覆盖返回类型、凭证、运营商映射、浏览器配置、监控字段、透传字段、strip 处理
+- 修正：`network_check_timeout` 从 `SystemSettings`（gs）读取而非 payload；`url_check_urls` 将元组转为字典列表以匹配 `MonitorSettings` 类型
+- 验收：7 个新测试 + 564 个既有测试全通过
+
+### feat(schemas) — 添加类型化 RuntimeConfig 子集模型
+- `app/schemas.py`：在 `GLOBAL_SETTINGS_FIELDS` 前新增 7 个 frozen Pydantic 模型
+  - `BrowserSettings`：浏览器运行参数（headless/timeout/navigation_timeout/viewport 等 20 个字段）
+  - `LoginCredentials`：登录凭证（username/password/auth_url/isp/carrier_custom）
+  - `MonitorSettings`：网络监控参数（check_interval_seconds/network_check_timeout/ping_targets 等 11 个字段）
+  - `PauseSettings`：暂停时段配置（enabled/start_hour/end_hour）
+  - `LoggingSettings`：日志配置（level/frontend_level/log_retention_days/access_log）
+  - `RetrySettings`：重试策略（max_retries/retry_interval）
+  - `RuntimeConfig`：运行时配置根模型，组合所有子集模型 + 直接透传字段（active_task/custom_variables/block_proxy/shell_path/minimize_to_tray/startup_action/autostart_lightweight）
+- `tests/test_runtime_config_models.py`：6 个单元测试覆盖 frozen 不可变性、默认值、校验、组合、透传字段
+- 验收：6 个新测试 + 151 个既有 config 测试全通过
+
+## 2026-06-20
+
+### fix — 修复手动登录等待完成引入的测试失败
+- `tests/test_integration/test_login_flow.py`：
+  - `test_login_command_success`：mock `_do_async_login` 改为 mock `orchestrator.submit` 返回 handle，`handle.result()` 返回 `(True, "登录成功")`
+  - `test_login_command_failure_already_in_progress`：mock handle 的 `future=None` 模拟去重命中
+- `tests/test_integration/test_login_integration_extended.py`：
+  - `test_chain_success`/`test_chain_failure`/`test_retry_after_failure`：移除 `_capture_login_completion` 包装和异步等待，直接断言 `_handle_login` 返回的实际登录结果
+- `tests/test_services/test_monitor_service.py`：
+  - `test_handle_login_submits_async`：`handle.future` 从空 `Future()`（永远不 resolve）改为 `MagicMock()`，`handle.result()` 返回 `(True, "登录成功")`
+- 验收：2325 测试全通过（3 个预存在的 hang 跳过）
+
+### fix — 手动登录 API 等待登录完成后返回
+- `app/services/engine.py`：`_handle_login` 从异步提交改为同步等待结果
+  - 直接调用 `orchestrator.submit(source="manual", config=...)` 获取 handle
+  - 通过 `handle.result()` 阻塞等待登录实际完成后再返回
+  - 支持 `rejected_reason` 和 `future is None` 两种拒绝场景
+- `tests/test_services/test_engine.py`：更新 `TestHandleLogin` 测试适配新 API
+- `tests/test_services/test_engine_fix.py`：更新 `test_handle_login_uses_validated_config` 适配新 API
+
+### refactor — 统一退避系统
+- MonitoredPolicy 改为固定延迟表 `[0, 0, 30, 60, 120]`，max_retries=5
+- 删除 Engine 层退避：`_consecutive_login_failures`、`_backoff_check_multiplier`、`_apply_backoff_interval`、`_login_retry_max_cycles`、`_LOGIN_BACKOFF_THRESHOLD`
+- `_do_network_check` 和 `_on_done` 回调简化，单一决策源
+- 更新 6 个测试文件适配，2327 测试全通过
+
+### fix — 修复统一退避引入的测试失败
+- `tests/test_integration/test_login_connection.py`：
+  - `test_retry_exhausted` 断言从 `engine._consecutive_login_failures == 3` 改为 `engine._retry_policy._attempt == 3`
+  - `MonitoredPolicy._attempt` 是统一退避重构后的等效行为
+  - 修复后 `test_login_connection.py` 全部 7 个测试通过
+
+## 2026-06-20
+
+### refactor — 浏览器任务通过 LoginOrchestrator 提交（F11 修复）
+- `app/services/login_orchestrator.py`：
+  - `LoginSource` 类型扩展为 `Literal["auto", "manual", "login_once", "browser"]`
+  - `submit()` 新增 `timeout` 参数，传递给 `_dispatch()`
+  - `submit()` 中 browser 任务跳过 `validate_login_config` 校验（由调用方自行校验）
+  - `_dispatch()` 新增 `timeout` 参数，`timeout if timeout is not None else resolve_worker_timeout(config)` 替代无条件解析
+  - `_run()` 中 browser 任务跳过 `_record_history` 调用（浏览器定时任务由 TaskExecutor._history_store 管理历史）
+- `app/services/task_executor.py`：
+  - `_execute_browser()` 重写：不再直接调用 `worker.submit(CMD_LOGIN, ...)`，改为委托 `self._login_orchestrator.submit(source="browser", ...)`
+  - 消除 ImportError/通用异常 catch 分支（由 Orchestrator 内部处理）
+- `tests/test_services/test_task_executor_fix.py`：
+  - 8 个浏览器任务测试全部重写：mock 从 `worker.submit` 改为 `orchestrator.submit`，使用 `LoginHandle` 模拟返回
+- 验收：1681 测试全通过
+
+## 2026-06-20
+
+### refactor — LoginOrchestrator 改用 CompositeCancelEvent，删除 watcher 线程
+- `app/services/login_orchestrator.py`：
+  - `LoginHandle.cancel_event` 类型从 `threading.Event` 改为 `CompositeCancelEvent`
+  - `submit()` 中 `cancel_event is None` 时创建 `CompositeCancelEvent()`；传入 plain `threading.Event` 时自动包装为 `CompositeCancelEvent` 并添加原事件为源
+  - `_link_cancel` 从队列+watcher 线程简化为一行 `target_event.add_source(new_event)`
+  - 删除 `_ensure_cancel_link_thread`、`_cancel_link_loop` 两个方法
+  - `__init__` 删除 `_cancel_link_queue`、`_cancel_link_thread`、`_cancel_link_lock` 三个字段
+  - `shutdown()` 删除毒丸投递逻辑
+  - 移除 `import queue`（不再需要）
+- `tests/test_services/test_login_orchestrator.py`：`test_submit_passes_cancel_event` 适配包装行为（原事件被包装后 `is` 不再成立，改为验证传播语义）
+- 验收：2333 测试全通过
+
+### feat — 新建 CompositeCancelEvent（惰性扫描组合取消事件）
+- 新增 `app/utils/cancel_token.py`：`CompositeCancelEvent` 类，继承 `threading.Event`
+  - `add_source(event)` — 添加取消源，若源已 set 则立即传播
+  - `is_set()` — 惰性扫描所有源，首次发现源 set 后缓存到 `super().set()`
+  - `clear()` — 仅清除自身标志，保留源列表
+  - `_lock` 保护 `_sources` 列表，线程安全
+- 新增 `tests/test_utils/test_cancel_token.py`：11 个测试覆盖全部场景
+  - 初始状态、直接 set、已 set 源立即传播、延迟传播、多源触发、去重、clear 行为、缓存、并发安全、clear 后重新传播
+
+## 2026-06-20
+
+### refactor — TaskExecutor 移除 login_history/profile_service 死参数
+- `app/services/task_executor.py` `__init__` 移除 `login_history` 和 `profile_service` 参数（已在之前的重构中移除生产代码引用）
+- 测试文件同步清理：
+  - `tests/test_integration/test_login_flow.py`：4 处 TaskExecutor 调用移除参数
+  - `tests/test_integration/test_scheduled_task.py`：`_make_executor` 辅助函数移除参数
+  - `tests/test_integration/conftest.py`：`integration_stack` 和 `full_stack` 两个 fixture 移除参数
+  - `tests/test_services/test_task_executor_fix.py`：`TestTaskExecutorExecuteLogin._make_executor` 移除参数
+- 最终：2322 测试全通过
+
+### refactor — TaskExecutor 死参数清理
+- 删除 `login_history`、`profile_service` 构造参数和字段（登录历史已由 Orchestrator 管理）
+- 更新 container.py + 4 个测试文件移除参数传递
+
+### fix — 退避逻辑冲突
+- `_on_done` 中 MonitoredPolicy delay 与 `_apply_backoff_interval` 取最大值，避免相互覆盖
+- 之前 MonitoredPolicy 的固定 30s delay 会覆盖 engine 级指数退避（300s/900s/1500s）
+
+### refactor — LoginRetryManager 清理
+- 删除 `app/services/login_retry.py`（LoginRetryManager 类）
+- `engine.py` 删除：`_validate_login_config`、`_configure_retry`、`_login_retry_needed`、`_login_retry` 字段及所有引用
+- `_calculate_wakeup` 移除 `_login_retry.next_wakeup()` 依赖
+- `_do_async_login` 移除 `_login_retry.reset()` 和 `_login_retry.record_attempt()`
+- `_handle_start`/`_handle_stop` 移除 `_login_retry.reset()`
+- 删除 `test_login_retry.py`（12 个测试），删除 `TestLoginRetryNeeded`（7 个）和 `TestLoginRetryMechanism`（11 个）
+- 8 个测试文件移除 LoginRetryManager 引用，改为 `_consecutive_login_failures` 验证
+- 最终：2326 测试全通过
+
+### refactor
+- 测试全面移除 LoginRetryManager 依赖
+  - `app/services/login_retry.py` 已删除，测试中大量引用该类导致运行失败
+  - `tests/test_services/conftest.py`：移除 `LoginRetryManager` 导入和 `_login_retry` 字段初始化
+  - `tests/test_services/test_login_retry.py`：整个删除（测试已不存在的类）
+  - `tests/test_services/test_engine.py`：移除导入、删除 `TestLoginRetryNeeded` 测试类（7 个测试）、修复 `TestCalculateWakeup`/`TestHandleStop`/`TestDoAsyncLogin` 中的 `_login_retry` 引用
+  - `tests/test_services/test_engine_fix.py`：移除 `_make_engine` 中 `_login_retry` mock 初始化
+  - `tests/test_services/test_monitor_service.py`：移除导入和 `TestNetworkStateSetInConsumer` 中的 `LoginRetryManager` 构造
+  - `tests/test_integration/test_login_flow.py`：移除导入和 `_make_raw_engine` 中 `_login_retry` 初始化、删除 `TestLoginRetryMechanism` 整个测试类（11 个测试）、修复并发保护测试中的引用
+  - `tests/test_integration/test_login_connection.py`：`test_retry_exhausted` 改为验证 `_consecutive_login_failures` 递增
+  - `tests/test_integration/test_login_integration_extended.py`：移除 `_login_retry.count/last_attempt` 断言，改为 `_consecutive_login_failures` 验证
+
+## 2026-06-20
+
+### refactor — 登录链路三步重构完成
+- **第 1 步（Task 1-9）**：LoginOrchestrator + RetryPolicy 框架，消化 F02/F03/F05/F06/F08/F09
+  - 新建 `app/services/login_orchestrator.py`（编排器）和 `app/services/retry_policy.py`（策略框架）
+  - `task_executor.py` 增加委托层（保留 `_legacy_*` 回退）
+  - `container.py` 注入 Orchestrator
+  - `engine.py` `_do_async_login`/`_handle_login` 改委托
+  - `main.py` login_once 改用 ImmediatePolicy + Orchestrator
+- **第 2 步（Task 10）**：MonitoredPolicy 接入 engine，根治 F04
+- **第 3 步（Task 11）**：取消联动改常驻单线程，根治 F12/F13
+- 验收结果：2383 测试全通过，新模块覆盖率 89%
+
+### refactor
+- Task 11: 取消联动改常驻单线程，根治 F12（线程泄漏）/F13（冗余检查）
+  - `app/services/login_orchestrator.py` `_link_cancel` 从每次新建 daemon 线程改为队列 + 常驻单线程
+  - `__init__` 新增 `_cancel_link_queue`（Queue）和 `_cancel_link_thread`（Thread | None）
+  - 新增 `_ensure_cancel_link_thread()`（惰性启动常驻 watcher）和 `_cancel_link_loop()`（从队列取联动请求并监控）
+  - `shutdown()` 新增毒丸 `None` 投递，退出常驻 watcher 线程
+  - 新增 `import queue`
+  - 36 个既有测试全部通过
+
+### refactor
+- Task 10: engine 接入 MonitoredPolicy，根治 F04（无条件 reset 消除）
+  - `app/services/engine.py` `__init__` 新增 `self._retry_policy = MonitoredPolicy()`，保留 `_login_retry` 向后兼容
+  - `_do_network_check`：删除 `_login_retry.reset()` / `_configure_retry()` 无条件重置逻辑，改为通知 `MonitoredPolicy.on_network_check()` 管理退避状态
+  - `_do_async_login` `_on_done` 回调：自动登录成功调用 `_retry_policy.on_login_done(success=True)`；失败调用 `_retry_policy.on_login_done(success=False)` 获取降频延迟并设置 `_next_network_check`
+  - 更新 3 个测试文件的 raw engine fixture 补充 `_retry_policy` 属性：`conftest.py`、`test_login_flow.py`
+  - 更新测试断言：删除对 `_login_retry.config` / `_login_retry.count` 的过时断言，改为验证 `_consecutive_login_failures` 和 `_do_async_login` 调用
+
+### refactor
+- Task 8: main.py login_once 改用 Orchestrator + ImmediatePolicy（F02/F08/F09）
+  - `main.py` `_execute_login_with_retries` 重写：不再自行管理重试循环/超时/历史记录
+  - 改用 `ImmediatePolicy`（固定间隔重试）+ `LoginOrchestrator`（配置校验、Worker 提交、历史记录）
+  - 构造一次性 Orchestrator 实例（login_once 在容器创建前运行），提交 source="login_once"
+  - `app/services/login_orchestrator.py` `_slot_lock` 从 `Lock` 改为 `RLock`，修复 mock 场景下 `_on_done` 回调重入死锁
+  - `app/services/login_orchestrator.py` `_dispatch._run` 成功时 `_record_history` 不再传递 success message 作为 error 参数
+  - 更新测试：`test_main.py` 所有 mock config 补充 `username/password/auth_url` 字段；`test_login_timeout_default_120` 适配 Orchestrator 默认超时 300s；`test_login_integration_extended.py` 3 个 login_once 测试补充 `_ensure_login_config` 调用
+
+### refactor
+- Task 7: engine._do_async_login / _handle_login 委托 LoginOrchestrator
+  - `app/services/engine.py` `__init__` 新增 `self._orchestrator = None`（由 container 注入）
+  - `_do_async_login` 重构：配置校验、去重、手动抢占逻辑全部委托 `orchestrator.submit()`；保留引擎专属的 `_on_done` 回调（失败计数 + 降频退避）
+  - `_handle_login` 改用 `orchestrator.validate(config)` 替代 `_validate_login_config`
+  - `_validate_login_config` 保留未删除（向后兼容）
+  - 同步更新测试 fixtures 和集成测试：conftest、test_engine、test_engine_fix、test_monitor_service、test_login_flow、test_login_integration_extended
+  - 集成测试 fixture 注入真实 LoginOrchestrator，_capture_login_completion 同时 hook orchestrator 和 task_executor 两条路径
+
+### refactor
+- TaskExecutor 增加 LoginOrchestrator 委托层（Task 5）
+  - `app/services/task_executor.py` `__init__` 新增 `login_orchestrator` 可选参数，默认 None
+  - 原 `execute_login_async`/`execute_login`/`_on_login_done`/`_link_cancel_event` 重命名为 `_legacy_*` 前缀版本
+  - 新增同名委托方法：优先走 Orchestrator 路径，orchestrator 为 None 时回退遗留路径，签名完全兼容
+  - 新增 `is_login_running`/`cancel_login` 委托：orchestrator 存在时委托给 orchestrator
+  - `shutdown` 新增 orchestrator 清理逻辑
+  - 确保 `login_orchestrator=None`（默认）时行为与改动前完全一致，所有 114 个 task_executor 测试通过
+
+### fix
+- login_orchestrator 线程泄漏防护、shutdown、ImportError 友好提示、类型标注
+  - C1: `_link_cancel` watcher 线程添加 300 秒 deadline，超时自动退出防止线程泄漏
+  - C2: 新增 `shutdown(wait=True)` 方法，清理内部线程池
+  - I1: `_dispatch._run()` 捕获 `ImportError` 返回友好提示"登录需要额外依赖，请检查 Playwright 安装状态"
+  - I2: `Callable` 导入从 `typing` 改为 `collections.abc`
+  - I4: 添加 `TYPE_CHECKING` 块，`login_history` 和 `profile_service` 参数类型从 `object` 改为具体类型
+
+### feat
+- 新增 `app/services/login_orchestrator.py`（Task 2: 登录编排器核心）
+  - `validate_login_config(config)` — F05 唯一配置校验实现，返回 None 或中文错误信息
+  - `resolve_worker_timeout(config, fallback)` — F09 超时解析，floor 60 / ceiling 600
+  - `LoginHandle` 数据类 — 封装 future + source + cancel_event，提供 done/result/cancel 方法
+  - `LoginOrchestrator` 类 — 登录执行唯一入口，整合配置校验、去重抢占、Worker 提交、历史记录、cancel_event 生命周期
+    - `submit(source, config, cancel_event)` — manual 可抢占 auto，auto 去重复用，login_once 总是新建
+    - `_dispatch` — 延迟导入 CMD_LOGIN，提交到 _pool 线程池
+    - `_link_cancel` — 简单 watcher 线程联动 cancel_event（Task 11 将替换）
+    - `_record_history` — 委托 LoginHistoryService.record
+  - `LoginSource` 类型 — `Literal["auto", "manual", "login_once"]`
+
+### feat
+- 新增重试策略框架 `app/services/retry_policy.py`（Task 1）
+  - `RetryPolicy` 抽象基类：`attempts()` + `delay_before(attempt)` 两个抽象方法
+  - `ImmediatePolicy`：固定间隔快速重试，用于 login_once 路径
+    - `max_retries` 钳制 1-10（默认 3），`interval` 最小 1（默认 5）
+    - `attempts()` 产生 1..max_retries，`delay_before(1)` 返回 0，后续返回 interval
+  - `MonitoredPolicy`：引擎长期监控策略，自带指数退避（上限 1800s）
+    - `on_network_check(need_login) -> bool`：仅 down->up 转换时重置退避状态
+    - `on_login_done(success) -> float|None`：成功返回 0.0 并重置，失败返回延迟，超过 max_retries 返回 None
+  - 新增 `tests/test_services/test_retry_policy.py`：30 个单元测试覆盖边界值、退避计算、状态转换
+
+### fix
+- F17+F18+F19: 文档注释 + OpenAPI description + 指数退避上限（3 项）
+  - F17: `app/schemas.py` `SystemSettings` docstring 补充说明 auth_url/carrier/carrier_custom 同时存在于 global_settings 和 profile 是有意设计（全局默认值 + profile 实例覆盖）
+  - F18: `app/schemas.py` `_MonitorFieldsMixin` 的 auth_url/active_task/carrier/carrier_custom 四个字段补充 description，解决 MRO 中 `_MonitorFieldsMixin` 覆盖 `_SystemFieldsMixin` description 的问题
+  - F19: `app/utils/retry.py` `get_retry_intervals` 新增 `max_interval` 参数（默认 300s），指数退避时单次间隔不超过该上限，防止间隔过大
+  - 更新 `tests/test_utils/test_retry.py`：新增 5 个 max_interval 测试 + 修复 `test_large_interval` 适配 max_interval 默认值
+
+### fix
+- F14+F15+F16: 健壮性改进（3 项防御性修复）
+  - F14: `main.py` `_run_lightweight` finally 块兜底清理 — 即使 `_web_server_state["started"]` 为 True，若 `server_ref[0]` 仍为 None（Uvicorn 子线程崩溃），仍执行容器 shutdown，防止资源泄漏
+  - F15: `app/services/engine.py` `set_dashboard_sink` 迁移轻量模式广播队列 — 注入新 DashboardSink 时，将 `_empty_broadcast_queue` 中积累的残留消息迁移到新 sink 的 `broadcast_queue`
+  - F16: `app/services/websocket_manager.py` `broadcast` 总体超时 — 用 `asyncio.wait_for` 包裹 `asyncio.gather`，总体超时 5 秒，防止 N 个卡住连接导致等待 N×5s
+  - 新增 10 个测试：`TestLightweightFallbackCleanup`（4）+ `TestSetDashboardSinkMigration`（3）+ `TestBroadcastOverallTimeout`（3）
+
+### fix
+- F12: 重构 _link_cancel_event，消除线程泄漏
+  - `app/services/task_executor.py`：`_link_cancel_event` 从 `@staticmethod` 改为实例方法，不再每次新建 daemon 线程
+  - `app/services/task_executor.py`：新增 `_cancel_link_queue`（事件队列）、`_cancel_link_thread`、`_cancel_link_lock` 三个 `__init__` 字段
+  - `app/services/task_executor.py`：新增 `_ensure_cancel_link_thread()`（惰性启动单个 watcher）和 `_cancel_link_loop()`（常驻 watcher 从队列取事件并监控）
+  - `app/services/task_executor.py`：`shutdown` 末尾投递毒丸 `None` 关闭 watcher 线程
+  - 新增 6 个测试：`TestCancelLinkWatcherThread`（单线程复用 / 高频不泄漏 / 联动传播 / 死亡重启 / 毒丸退出 / shutdown 幂等）
+
+### fix
+- F11+F20: 浏览器定时任务 cancel_event 支持 + 清理 pure_mode 死字段
+  - F11: `app/services/task_executor.py` `_execute_browser` 新增 `cancel_event` 参数，传递给 `worker.submit` 的 data dict，支持定时浏览器任务取消
+  - F20: `app/services/task_executor.py` `execute_login` 和 `_execute_browser` 的 data dict 移除 `pure_mode` 死字段（Worker `_handle_login` 仅从 `config["browser_settings"]["pure_mode"]` 读取，不读 `data["pure_mode"]`）
+  - `app/workers/playwright_worker.py` CMD_LOGIN 常量注释补充说明登录与浏览器定时任务共用此命令
+  - 新增 7 个测试：`TestTaskExecutorExecuteBrowser`（4: data_no_pure_mode / cancel_event_passed / cancel_event_default_none / timeout_forwarded）+ `TestExecuteLoginDataDict`（2: login_data_no_pure_mode / login_data_contains_cancel_event）
+  - 修复已有测试 `test_login_timeout_default_300` 断言值从 300 改为 90（与代码 `config.get("login_timeout", 90)` 默认值一致）
+
+### fix
+- F10: 定时任务 task_id 去重，防止同一任务重复提交
+  - `app/services/task_executor.py`：`__init__` 新增 `_running_tasks` 字典和 `_running_tasks_lock` 锁
+  - `app/services/task_executor.py`：`execute_task_async` 提交前检查是否有 pending 的同 task_id 任务，有则返回已有 Future
+  - `app/services/task_executor.py`：任务完成后通过 `done_callback` 自动从 `_running_tasks` 清理
+  - `app/services/task_executor.py`：`shutdown` 清空 `_running_tasks`
+  - 新增 5 个测试覆盖去重行为：跳过 pending、完成后允许重新提交、不同 task_id 不干扰、清理回调、shutdown 清空
+
+### fix
+- I1+I2: 统一 login_timeout 默认值为 90s + main.py 添加 max(login_timeout, 60) 下限防护
+  - `main.py:219` 默认值从 120 改为 90，与 `schemas.py` `Field(default=90)` 一致
+  - `app/services/task_executor.py:329` 默认值从 300 改为 90
+  - `main.py` 添加 `max(login_timeout, 60)` 下限防护，与 `task_executor.py` 和 `engine.py` 一致
+  - 更新测试 `test_login_timeout_default_120` 断言从 120 改为 90
+
+### fix
+- F08: `main.py` login_once 重试间隔改为固定间隔（与 LoginRetryManager 一致）
+  - `_execute_login_with_retries` 中 `min(interval * 2^(n-2), 300)` 指数退避改为 `time.sleep(retry_interval)` 固定间隔
+  - 引擎内 `LoginRetryManager` 使用 `get_retry_intervals(exponential=False)`（固定间隔），login_once 现在行为一致
+
+### fix
+- F09: 统一登录超时 — Worker timeout 使用 `login_timeout` 配置
+  - `main.py` `_execute_login_with_retries`：从 `runtime_config.get("login_timeout", 120)` 读取超时，替代硬编码 `timeout=120`
+  - `app/services/task_executor.py` `execute_login`：从 `config.get("login_timeout", 300)` 读取超时，下限 60s 防误配
+  - `app/services/config_service.py` `build_runtime_dict_from_payload`：新增 `base["login_timeout"] = gs.login_timeout`
+  - `app/services/engine.py` `run_manual_login`：API 等待超时改为 `max(login_timeout, 60) + 10`，大于 Worker 超时
+  - 新增 8 个测试：`TestLoginOnceRetryInterval`（3）+ `TestBuildRuntimeDictLoginTimeout`（2）+ `TestRunManualLogin.test_run_manual_login_api_timeout_buffered`（1）+ `TestTaskExecutorExecuteLogin`（3: timeout_from_config / default_300 / minimum_60）
+  - 更新 2 个已有测试（timeout_engine_alive / timeout_engine_dead）适配 buffered timeout
+
+### fix
+- `main.py` + `app/application.py` 校正 boot() 与 DashboardSink 注入顺序（F07）
+  - 问题：`_run_full` 在 Uvicorn 启动前调用 `boot()`，此时 DashboardSink 尚未注入（注入发生在 lifespan 的 `start_web_services()` 中），启动期间日志丢失
+  - `main.py` `_run_full`：移除直接调用 `container.engine.boot()`，改为传递 `boot_engine=should_boot_engine` 给 `run()`
+  - `app/application.py` `run()`：新增 `boot_engine` 参数，透传给 `create_app()`
+  - `app/application.py` `create_app()`：新增 `boot_engine` 参数，透传给 `_create_lifespan()`
+  - `app/application.py` `_create_lifespan()`：新增 `boot_engine` 参数；existing_container 分支中，先 `start_web_services()` 注入 DashboardSink，再条件性调用 `engine.boot()`（`boot_engine=True` 且未在监控时）
+  - `container.startup()` 内部顺序已正确（先 start_web_services 后 boot），不需要修改
+  - 轻量模式 `main.py` 自己调 boot，无 Web 服务，不受影响
+  - 新增 10 个测试：`TestBootEnginePropagation`（2）+ `TestLifespanBootOrder`（5）+ `TestRunFullNoDirectBoot`（2）+ `TestContainerStartupOrder`（1）
+
+### fix
+- `app/services/engine.py` + `app/services/task_executor.py` 修复手动取消竞态窗口（F06）+ 消除 cancel_event 冗余检查（F13）
+  - F06: 手动取消旧登录超时后，`_do_async_login` 不传 cancel_event，`execute_login_async` 自动新建空 Event，命中去重返回旧 future
+  - `task_executor.py` 新增 `force_clear_login_slot()` 方法：强制清理旧 `_login_future` 和 `_login_cancel_event`
+  - `engine.py` `_do_async_login`: 取消超时后调用 `force_clear_login_slot()` 强制接管登录槽；手动路径显式传入新的 `manual_cancel` Event
+  - F13: `execute_login_async` 第 195 行 `cancel_event is not None` 永真检查移除（第 186-187 行已保证非 None）
+  - 新增 7 个测试：`TestManualLoginCancelRaceFix`（5 个）+ `TestForceClearLoginSlot`（4 个）+ `TestCancelEventRedundancyFix`（2 个）
+
+### fix
+- `app/services/engine.py` 自动登录路径增加配置校验（F05）
+  - 原代码 `_handle_login`（手动入口）校验 username/password/auth_url，但 `_do_async_login`（自动入口）无校验
+  - 配置不完整时，空配置传入 Worker，启动浏览器后才在步骤级失败，浪费 5-15 秒
+  - 新增 `_validate_login_config(config)` 方法：校验配置完整性，返回 None 表示通过，否则返回错误信息
+  - `_do_async_login` 顶部统一调用 `_validate_login_config`，校验失败时记录 WARNING 日志、重置重试状态、直接返回 False
+  - `_handle_login` 改为复用 `_validate_login_config`，消除重复的内联校验逻辑
+  - 配置校验失败不触发 `_on_done` 回调（不提交任务、不注册回调），`_consecutive_login_failures` 不会累计
+  - 新增 `TestValidateLoginConfig`（7 个测试）和 `TestDoAsyncLogin` 补充测试（6 个测试），覆盖校验通过/失败/缺失字段/快照绕过等场景
+
+### fix
+- `app/services/engine.py` 网络检测不再无条件 reset 重试计数（F04）
+  - 原代码每次 `need_login=True` 都调用 `_login_retry.reset()`，导致重试计数归零，认证服务器长期宕机时系统永不停机地循环"检测→重试系列→检测→重试系列"
+  - `_do_network_check`：仅在 `count==0`（首次发现 need_login）时 reset+configure
+  - `_do_async_login` `_on_done` 回调：自动登录成功清空 `_consecutive_login_failures`；失败递增计数，达到 `_LOGIN_BACKOFF_THRESHOLD`(3) 后触发 `_apply_backoff_interval` 指数退避
+  - 新增 `_consecutive_login_failures` / `_backoff_check_multiplier` 两个 `__init__` 字段
+  - 新增 `_login_retry_max_cycles()` / `_apply_backoff_interval()` 辅助方法
+  - 退避乘数上限 6（`extra = (6-1) * interval = 1500s ≈ 25min`），网络恢复后立即清零
+  - `_handle_stop` 同步重置退避状态
+  - 新增 12 个测试覆盖全部新增分支（count>0 跳过 reset、失败累计、退避触发、手动登录隔离、乘数封顶等）
+
+### fix
+- `main.py` `_execute_login_with_retries` 记录登录历史（F02）
+  - 原代码直接调用 `get_worker().submit(CMD_LOGIN, ...)`，完全绕过 TaskExecutor 的 `_record_login_history()`
+  - `--startup-action login_once` 的登录在历史页面不可见
+  - 新增 `LoginHistoryService(AUTH_DATA_DIR)` 和 `create_profile_service()` 初始化
+  - 每次登录尝试后调用 `history.record(success=, duration_ms=, profile_service=, error=)` 记录历史
+  - 成功/失败都记录，与 TaskExecutor 行为一致
+  - 新增测试 `test_login_once_records_history` 和 `test_login_once_records_failure_history`
+
+### fix
+- `app/services/config_service.py` 配置回滚后检查第二次 reload 返回值（F01）
+  - 原代码 `reload_fn()` 返回值被丢弃，回滚后重载失败时用户看到的是第一次失败信息
+  - 捕获第二次 `reload_fn()` 返回值 `(rollback_ok, rollback_msg)`
+  - 回滚后重载也失败：message 同时包含两次失败信息
+  - 回滚后重载成功：message 标注"已回滚"
+  - 回滚过程异常：保持原有异常处理不变
+  - 新增测试 `test_reload_failure_and_rollback_reload_also_fails`
+
+### fix
+- `app/services/engine.py` record_attempt 移到 execute_login_async 成功提交之后（F03）
+  - 原代码在 `execute_login_async` 调用前递增重试计数，提交异常时白白消耗一次重试机会
+  - 移到 `execute_login_async` 成功返回后，异常时不会递增
+  - 新增测试 `test_exception_does_not_consume_retry` 和 `test_success_increments_retry_count`
+
+## 2026-06-19
+
+### chore
+- 删除过期的 Rust 迁移设计文档 `rustforcam/docs/2026-06-18-rust-migration-design.md`
+
 ## 2026-06-19
 
 ### test
@@ -1521,3 +2905,25 @@
   - `mock_worker` fixture 模拟 Playwright worker
   - `integration_stack` fixture 组装真实 ProfileService + TaskExecutor + ScheduleEngine
   - `full_stack` fixture 额外暴露 TaskRegistry
+
+## 2026-06-20
+
+### fix — 防止去重命中时重复注册 _on_done 回调（P1-01）
+- `app/services/engine.py`：
+  - `__init__` 新增 `self._registered_futures: set[Future] = set()`
+  - `_do_async_login` 添加去重检查：`if handle.future in self._registered_futures: return False`
+  - `_on_done` 回调开头添加 `self._registered_futures.discard(f)` 清理
+  - `add_done_callback` 前添加 `self._registered_futures.add(handle.future)` 注册
+- 测试文件同步更新：
+  - `tests/test_services/conftest.py`：`_make_raw` 添加 `svc._registered_futures = set()`
+  - `tests/test_integration/test_login_flow.py`：`_make_raw_engine` 添加 `svc._registered_futures = set()`
+  - `tests/test_services/test_engine_fix.py`：`_make_engine` 添加 `engine._registered_futures = set()`
+  - `tests/test_services/test_monitor_service.py`：`test_do_async_login_delegates_to_task_executor` 添加 `svc._registered_futures = set()`
+- 验收：2328 测试全通过
+
+## 2026-06-22 (11)
+
+### config: 添加 lightweight_tray 和 auto_open_browser 默认值
+
+- `config/settings.json`：在 `config` 对象中添加 `lightweight_tray: true` 和 `auto_open_browser: false` 字段，与 `RuntimeConfig` 模型默认值保持一致
+- 注意：`config/` 目录在 `.gitignore` 中，使用 `git add -f` 强制添加

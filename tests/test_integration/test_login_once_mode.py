@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.schemas import LoginResult
+from app.schemas import LoginCredentials, LoginResult, RuntimeConfig
 
 
 class TestLoginOnceMode:
@@ -30,8 +30,7 @@ class TestLoginOnceMode:
             patch("main._execute_login_with_retries") as mock_login,
         ):
             mock_load.return_value = (
-                {"username": "testuser", "password": "pass", "auth_url": "http://10.0.0.1"},
-                None,
+                RuntimeConfig(), None,
             )
             mock_net.return_value = (False, "network_down", "")
             mock_login.return_value = LoginResult.SUCCESS
@@ -53,8 +52,7 @@ class TestLoginOnceMode:
             patch("main._execute_login_with_retries") as mock_login,
         ):
             mock_load.return_value = (
-                {"username": "testuser", "password": "pass", "auth_url": "http://10.0.0.1"},
-                None,
+                RuntimeConfig(), None,
             )
             mock_net.return_value = (False, "network_down", "")
             mock_login.return_value = LoginResult.TEMPORARY_FAILURE
@@ -76,3 +74,65 @@ class TestLoginOnceMode:
             result = _run_login_then_exit(ctx, logger)
 
         assert result == LoginResult.CONFIG_ERROR
+
+    def test_login_once_records_history(self):
+        """login_once 登录成功后应记录登录历史。"""
+        from main import _execute_login_with_retries
+
+        logger = MagicMock()
+        _creds = LoginCredentials(username="testuser", password="pass", auth_url="http://10.0.0.1")
+        runtime_config = RuntimeConfig(credentials=_creds)
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = "登录成功"
+
+        with (
+            patch("app.services.profile_service.create_profile_service") as mock_profile_factory,
+            patch("app.services.login_history_service.LoginHistoryService") as mock_history_cls,
+            patch("app.workers.playwright_worker.get_worker") as mock_get_worker,
+            patch("main.cleanup_orphan_browsers"),
+        ):
+            mock_history = MagicMock()
+            mock_history_cls.return_value = mock_history
+            mock_get_worker.return_value.submit.return_value = mock_result
+
+            result = _execute_login_with_retries(runtime_config, logger)
+
+        assert result == LoginResult.SUCCESS
+        mock_history.record.assert_called_once()
+        call_kwargs = mock_history.record.call_args[1]
+        assert call_kwargs["success"] is True
+        assert call_kwargs["duration_ms"] >= 0
+        assert call_kwargs["error"] == ""
+
+    def test_login_once_records_failure_history(self):
+        """login_once 登录失败后应记录失败历史。"""
+        from main import _execute_login_with_retries
+        from app.schemas import RetrySettings
+
+        logger = MagicMock()
+        _creds = LoginCredentials(username="testuser", password="pass", auth_url="http://10.0.0.1")
+        runtime_config = RuntimeConfig(credentials=_creds, retry=RetrySettings(max_retries=1))
+
+        mock_result = MagicMock()
+        mock_result.success = False
+        mock_result.error = "密码错误"
+
+        with (
+            patch("app.services.profile_service.create_profile_service") as mock_profile_factory,
+            patch("app.services.login_history_service.LoginHistoryService") as mock_history_cls,
+            patch("app.workers.playwright_worker.get_worker") as mock_get_worker,
+            patch("main.cleanup_orphan_browsers"),
+        ):
+            mock_history = MagicMock()
+            mock_history_cls.return_value = mock_history
+            mock_get_worker.return_value.submit.return_value = mock_result
+
+            result = _execute_login_with_retries(runtime_config, logger)
+
+        assert result == LoginResult.TEMPORARY_FAILURE
+        mock_history.record.assert_called_once()
+        call_kwargs = mock_history.record.call_args[1]
+        assert call_kwargs["success"] is False
+        assert call_kwargs["error"] == "密码错误"

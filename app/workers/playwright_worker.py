@@ -41,7 +41,7 @@ logger = get_logger("playwright_worker", source="backend")
 
 # ── 命令类型常量 ──
 
-CMD_LOGIN = "login"  # 执行完整登录流程
+CMD_LOGIN = "login"  # 执行完整登录流程（登录和浏览器定时任务共用此命令）
 CMD_DEBUG_START = "debug_start"  # 启动调试会话
 CMD_DEBUG_STEP = "debug_step"  # 调试下一步
 CMD_DEBUG_STOP = "debug_stop"  # 停止调试会话
@@ -153,6 +153,15 @@ class PlaywrightWorker:
             return
         self._stop_event.clear()
         self._worker_ready.clear()
+
+        # BUG-036 修复：重启时防御性重置浏览器相关状态
+        self._playwright = None
+        self._browser = None
+        self._context = None
+        self._page = None
+        self._debug_page = None
+        self._debug_executor = None
+        self._last_browser_settings = None
         self._consumer_thread = threading.Thread(
             target=self._worker_entry,
             daemon=True,
@@ -505,7 +514,7 @@ class PlaywrightWorker:
         if task_url:
             try:
                 await self._page.goto(
-                    task_url, wait_until="domcontentloaded", timeout=30000
+                    task_url, wait_until="domcontentloaded", timeout=navigation_timeout
                 )
             except Exception as e:
                 logger.warning("调试页面加载失败: {}", e)
@@ -544,7 +553,14 @@ class PlaywrightWorker:
                 ss_dir.mkdir(parents=True, exist_ok=True)
                 local_path = str(ss_dir / filename)
                 await self._debug_page.screenshot(path=local_path, full_page=True)
-                screenshot_url = f"/temp/{filename}"
+                # 计算相对于 temp 目录的子路径，确保 URL 与实际存储路径一致
+                from app.constants import TEMP_DIR
+
+                try:
+                    rel = ss_dir.relative_to(TEMP_DIR)
+                    screenshot_url = f"/temp/{rel}/{filename}" if str(rel) != "." else f"/temp/{filename}"
+                except ValueError:
+                    screenshot_url = f"/temp/{filename}"
             except Exception as e:
                 logger.warning("初始截图失败: {}", e)
 
@@ -593,24 +609,8 @@ class PlaywrightWorker:
         """停止调试会话并清理 Worker 内部状态。"""
         await self._cleanup_debug_session()
 
-        # 重建主页面
-        if self._context is not None and not self._context.is_closed():
-            # 先关闭旧主页面，保证一个 context 一个主 page
-            old_page = self._page
-            if old_page is not None and not old_page.is_closed():
-                with contextlib.suppress(Exception):
-                    await old_page.close()
-            # context 级 init_script 自动继承到新页面，无需重新应用 stealth
-            self._page = await self._context.new_page()
-        else:
-            # context 已关闭，尝试重建完整链路
-            logger.warning("Context 已关闭，尝试重建浏览器")
-            try:
-                config = {"browser_settings": self._last_browser_settings or {}}
-                await self._close_browser()
-                await self._start_browser(config)
-            except Exception:
-                logger.exception("重建浏览器失败")
+        # 关闭整个浏览器（用户点击"停止并关闭"期望完全关闭）
+        await self._close_browser()
 
         logger.info("调试会话已停止，Worker 内部状态已清理")
         return WorkerResponse(success=True, data="调试会话已停止")
@@ -777,10 +777,7 @@ class PlaywrightWorker:
                 await self._apply_stealth_and_routes(browser_settings)
 
             self._page = await self._context.new_page()
-
-            # 纯净模式下也需要应用反检测脚本（如果启用）
-            if pure_mode and browser_settings.get("stealth_mode", False):
-                await self._apply_stealth_and_routes(browser_settings)
+            # 纯净模式不注入反检测脚本——设计意图
         except Exception:
             logger.warning("浏览器启动中间步骤失败，回滚已创建的资源", exc_info=True)
             await self._close_browser()

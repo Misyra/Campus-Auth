@@ -26,14 +26,35 @@ export const configMethods = {
   async fetchConfig(updateSnapshot = false) {
     try {
       const { data } = await this.$api.get('/api/config');
+      // ConfigResponseDTO: 凭据为顶层字段，映射回前端内部嵌套结构
       this.config = {
-        ...DEFAULT_CONFIG,
-        ...data,
-        browser_extra_headers_json: data.browser_extra_headers_json || '',
+        browser: { ...DEFAULT_CONFIG.browser, ...(data.browser || {}) },
+        monitor: { ...DEFAULT_CONFIG.monitor, ...(data.monitor || {}) },
+        pause: { ...DEFAULT_CONFIG.pause, ...(data.pause || {}) },
+        logging: { ...DEFAULT_CONFIG.logging, ...(data.logging || {}) },
+        retry: { ...DEFAULT_CONFIG.retry, ...(data.retry || {}) },
+        credentials: {
+          username: data.username ?? DEFAULT_CONFIG.credentials.username,
+          password: data.password ?? DEFAULT_CONFIG.credentials.password,
+          auth_url: data.auth_url ?? DEFAULT_CONFIG.credentials.auth_url,
+          isp: data.isp ?? DEFAULT_CONFIG.credentials.isp,
+          carrier_custom: data.carrier_custom ?? DEFAULT_CONFIG.credentials.carrier_custom,
+        },
+        active_task: data.active_task ?? DEFAULT_CONFIG.active_task,
+        custom_variables: data.custom_variables ?? DEFAULT_CONFIG.custom_variables,
+        block_proxy: data.block_proxy ?? DEFAULT_CONFIG.block_proxy,
+        shell_path: data.shell_path ?? DEFAULT_CONFIG.shell_path,
+        minimize_to_tray: data.minimize_to_tray ?? DEFAULT_CONFIG.minimize_to_tray,
+        lightweight_tray: data.lightweight_tray ?? DEFAULT_CONFIG.lightweight_tray,
+        startup_action: data.startup_action ?? DEFAULT_CONFIG.startup_action,
+        autostart_lightweight: data.autostart_lightweight ?? DEFAULT_CONFIG.autostart_lightweight,
+        auto_open_browser: data.auto_open_browser ?? DEFAULT_CONFIG.auto_open_browser,
+        proxy: data.proxy ?? DEFAULT_CONFIG.proxy,
+        app_port: data.app_port ?? DEFAULT_CONFIG.app_port,
       };
       // 同步浏览器选择状态
-      if (data.browser_channel) {
-        this.selectedBrowser = data.browser_channel;
+      if (data.browser?.browser_channel) {
+        this.selectedBrowser = data.browser.browser_channel;
       }
       if (updateSnapshot) {
         this._lastSavedConfig = JSON.stringify(this.config);
@@ -59,13 +80,13 @@ export const configMethods = {
     }
 
     // 关键字段检查（自动保存时跳过确认弹窗）
-    if (!this.config.auth_url) {
+    if (!this.config.credentials.auth_url) {
       this.frontendLogger.warn('config', '认证地址为空，自动认证将无法工作');
     }
-    if (!this.config.username) {
+    if (!this.config.credentials.username) {
       this.frontendLogger.warn('config', '账号为空，自动认证将无法工作');
     }
-    if (!this.config.enable_tcp_check && !this.config.enable_http_check && !(this.config.url_check_urls && this.config.url_check_urls.trim())) {
+    if (!this.config.monitor.enable_tcp_check && !this.config.monitor.enable_http_check && !(this.config.monitor.url_check_urls && this.config.monitor.url_check_urls.length)) {
       this.toastOnly(false, '至少需要启用一种网络检测方式（TCP / HTTP / 网址响应）');
       return;
     }
@@ -76,22 +97,45 @@ export const configMethods = {
     }
     this._saveAbortController = new AbortController();
 
+    const controller = this._saveAbortController;
     this.busy.save = true;
     this.saveFailed = false;
     try {
-      const payload = { ...this.config };
-      if (payload.carrier !== '自定义') {
-        payload.carrier_custom = '';
-      }
+      const c = this.config;
+      // 构建 ConfigResponseDTO 格式：凭据展开为顶层字段
+      const payload = {
+        browser: c.browser,
+        monitor: c.monitor,
+        pause: c.pause,
+        logging: c.logging,
+        retry: c.retry,
+        // 凭据展开为顶层字段
+        username: c.credentials.username || '',
+        password: c.credentials.password || '',
+        auth_url: c.credentials.auth_url || '',
+        isp: c.credentials.isp || '',
+        carrier_custom: c.credentials.carrier_custom || '',
+        active_task: c.active_task || '',
+        custom_variables: c.custom_variables || {},
+        block_proxy: c.block_proxy,
+        shell_path: c.shell_path || '',
+        minimize_to_tray: c.minimize_to_tray,
+        lightweight_tray: c.lightweight_tray,
+        startup_action: c.startup_action || 'none',
+        autostart_lightweight: c.autostart_lightweight,
+        auto_open_browser: c.auto_open_browser,
+        proxy: c.proxy || '',
+        app_port: c.app_port || 50721,
+      };
       const { data } = await this.$api.put('/api/config', payload, {
         signal: this._saveAbortController.signal,
       });
       if (data.success) {
         this._lastSavedConfig = current;
         this.frontendLogger.info('config', '配置保存成功');
+
         // 用后端规范化值刷新 config 并重置 savedConfigSnapshot
         await this.fetchConfig(true);
-        await this.fetchProfiles();
       } else {
         this.frontendLogger.warn('config', '保存配置被拒绝: ' + data.message);
         this.toastOnly(false, data.message);
@@ -104,14 +148,17 @@ export const configMethods = {
       this.toastOnly(false, msg);
       this.saveFailed = true;
     } finally {
-      this.busy.save = false;
+      if (this._saveAbortController === controller) {
+        this.busy.save = false;
+      }
     }
   },
   resetConfig() {
     if (!confirm('确定要恢复默认设置吗？当前修改将丢失。')) return;
     this.config = structuredClone(DEFAULT_CONFIG);
-    this._lastSavedConfig = null;  // 重置快照，configDirty 会自动检测到变更
+    this._lastSavedConfig = null;
     this.frontendLogger.info('config', '已恢复默认设置');
+    this.saveConfig();
   },
   onShellFileSelected(e) {
     const file = e.target.files?.[0];
@@ -133,7 +180,7 @@ export const configMethods = {
   async loadDefaultStealthScript() {
     try {
       const { data } = await this.$api.get('/api/config/default-stealth-script');
-      this.config.stealth_custom_script = data.script || '';
+      this.config.browser.stealth_custom_script = data.script || '';
       this.frontendLogger.info('config', '已加载默认反检测脚本');
     } catch (error) {
       this.frontendLogger.warn('config', '获取默认反检测脚本失败', error);
@@ -245,7 +292,13 @@ export const configMethods = {
   async fetchLogLevels() {
     try {
       const { data } = await this.$api.get('/api/config/log-levels');
-      this.logLevels = data;
+      // 统一更新到 config.logging，不再使用独立的 logLevels
+      if (data.global_level) {
+        this.config.logging.level = data.global_level;
+      }
+      if (data.source_levels) {
+        this.config.logging.source_levels = data.source_levels;
+      }
     } catch (error) {
       this.frontendLogger.warn('config', '获取日志级别配置失败', error);
     }
@@ -253,7 +306,14 @@ export const configMethods = {
   async setSourceLevel(source, level) {
     try {
       await this.$api.put('/api/config/source-level', { source, level });
-      this.logLevels.source_levels[source] = level;
+      if (source === 'global') {
+        this.config.logging.level = level;
+      } else {
+        if (!this.config.logging.source_levels) {
+          this.config.logging.source_levels = {};
+        }
+        this.config.logging.source_levels[source] = level;
+      }
       this.frontendLogger.info('config', `已设置 ${source} 级别为 ${level}`);
       this.toastOnly(true, `已设置 ${source} 级别为 ${level}`);
     } catch (error) {

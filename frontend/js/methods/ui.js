@@ -110,7 +110,7 @@ export const uiMethods = {
       // 只在已有选择时同步，向导模式下默认不选择
       if (this.selectedBrowser) {
         this.selectedBrowser = data.current;
-        this.config.browser_channel = data.current;
+        this.config.browser.browser_channel = data.current;
       }
     } catch (error) {
       console.error('获取浏览器列表失败:', error);
@@ -121,7 +121,7 @@ export const uiMethods = {
   // 选择浏览器
   selectBrowser(channel) {
     this.selectedBrowser = channel;
-    this.config.browser_channel = channel;
+    this.config.browser.browser_channel = channel;
     this.onConfigChange('browser_channel', channel, 'toggle');
   },
   // 辅助方法：获取浏览器信息
@@ -144,14 +144,14 @@ export const uiMethods = {
   },
   // 浏览器选择共享 partial 辅助：返回当前活跃的浏览器 channel
   getActiveBrowserChannel() {
-    // wizard 模式用 selectedBrowser，settings 模式用 config.browser_channel
-    return this.selectedBrowser || this.config.browser_channel;
+    // wizard 模式用 selectedBrowser，settings 模式用 config.browser.browser_channel
+    return this.selectedBrowser || this.config.browser.browser_channel;
   },
   // 浏览器选择共享 partial 辅助：自定义路径输入处理
   onBrowserCustomPathInput() {
     // settings 模式下需要触发配置保存
     if (this.onConfigChange) {
-      this.onConfigChange('browser_custom_path', this.config.browser_custom_path, 'input');
+      this.onConfigChange('browser_custom_path', this.config.browser.browser_custom_path, 'input');
     }
   },
   // 处理浏览器点击
@@ -225,27 +225,6 @@ export const uiMethods = {
         clearTimeout(timeoutId);
         this.playwrightDownloading = false;
       });
-  },
-  nextWizardStep() {
-    const errors = this.validateWizardStep(this.wizardStep, this);
-    if (Object.keys(errors).length) {
-      this.toastOnly(false, Object.values(errors)[0]);
-      return;
-    }
-    // 步骤 4 通过后同步浏览器选择到 config
-    if (this.wizardStep === 4) {
-      this.config.browser_channel = this.selectedBrowser;
-    }
-    if (this.wizardStep < 5) {
-      this.wizardStep++;
-    }
-  },
-  skipWizard() {
-    // 至少要有用户名和认证地址才能跳过
-    if (!this.config.username || !this.config.auth_url) {
-      if (!confirm('账号和认证地址尚未填写，跳过向导将无法使用自动认证。\n\n确定要跳过吗？')) return;
-    }
-    this.showWizard = false;
   },
   setSettingsTab(tabId) {
     this.currentSettingsTab = tabId;

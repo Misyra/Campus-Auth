@@ -87,11 +87,7 @@ async def run_script(
     # 从配置读取脚本超时，默认 60 秒
     try:
         services = request.app.state.services
-        timeout = (
-            services.monitor_service.get_runtime_config()
-            .get("monitor", {})
-            .get("script_timeout", 60)
-        )
+        timeout = services.engine.get_runtime_config().monitor.script_timeout
     except Exception:
         timeout = 60
 

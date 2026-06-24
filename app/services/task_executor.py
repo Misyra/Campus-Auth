@@ -1,10 +1,8 @@
 """TaskExecutor — 任务执行中心。
 
-双线程池架构：
-- login_pool(1) — 登录专用，永不阻塞
+线程池架构：
 - task_pool(2, queue=10, 懒初始化) — 定时任务，BoundedExecutor 限制队列
-
-登录去重机制：_login_future 防止重复提交。
+- 登录逻辑委托 LoginOrchestrator（自行管理登录线程池）
 """
 
 from __future__ import annotations
@@ -16,6 +14,7 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any
 
+from app.schemas import RuntimeConfig
 from app.utils.logging import get_logger
 from app.utils.shell_policy import ShellCommandPolicy
 from app.utils.shell_utils import detect_shells, get_default_shell
@@ -68,13 +67,11 @@ class BoundedExecutor:
 
 
 class TaskExecutor:
-    """任务执行中心 — 双线程池 + 登录去重。
+    """任务执行中心 — 任务线程池 + 登录委托。
 
     Attributes:
-        _login_pool: 登录专用线程池（1 个工作线程，立即创建）
         _task_pool: 定时任务线程池（懒初始化，无定时任务时不创建）
-        _login_future: 当前登录 Future，用于去重
-        _login_lock: 保护 _login_future 的锁
+        _login_orchestrator: 登录编排器（由 container 注入，必填）
     """
 
     def __init__(
@@ -82,36 +79,29 @@ class TaskExecutor:
         registry: Any,
         history_store: Any,
         worker_getter: Callable,
-        login_history: Any = None,
-        profile_service: Any = None,
-        get_runtime_config: Callable[[], dict] | None = None,
+        login_orchestrator: Any,
+        get_runtime_config: Callable[[], RuntimeConfig] | None = None,
     ) -> None:
         self._registry = registry
         self._history_store = history_store
         self._worker_getter = worker_getter
-        self._login_history = login_history
-        self._profile_service = profile_service
         self._get_runtime_config = get_runtime_config
+        self._login_orchestrator = login_orchestrator
 
-        # 线程池：登录池立即创建，任务池懒初始化（无定时任务时不创建线程）
-        self._login_pool = ThreadPoolExecutor(
-            max_workers=1,
-            thread_name_prefix="login-exec",
-        )
+        # 线程池：任务池懒初始化（无定时任务时不创建线程）
         self._task_pool: BoundedExecutor | None = None
         self._task_pool_lock = threading.Lock()
 
-        # 登录去重
-        self._login_future: Future | None = None
-        self._login_lock = threading.Lock()
-        self._login_cancel_event: threading.Event | None = None
+        # 定时任务去重
+        self._running_tasks: dict[str, Future] = {}
+        self._running_tasks_lock = threading.Lock()
 
         # Shell 安全策略
         self._shell_policy = ShellCommandPolicy(
             allowlist=[shell["path"] for shell in detect_shells()]
         )
 
-    def set_runtime_config_getter(self, getter: Callable[[], dict]) -> None:
+    def set_runtime_config_getter(self, getter: Callable[[], RuntimeConfig]) -> None:
         """设置运行时配置获取器（公共接口）。"""
         self._get_runtime_config = getter
 
@@ -155,7 +145,9 @@ class TaskExecutor:
     # ── 异步提交接口 ──
 
     def execute_task_async(self, task_id: str) -> Future:
-        """异步执行定时任务（提交到 task_pool）。
+        """异步执行定时任务（提交到 task_pool），带 task_id 去重。
+
+        如果同一 task_id 已有 pending 任务，返回已有 Future 而非重复提交。
 
         Returns:
             Future 对象，调用方可选择等待结果
@@ -163,80 +155,73 @@ class TaskExecutor:
         Raises:
             RuntimeError: 任务队列已满
         """
-        return self._ensure_task_pool().submit(self.execute_task, task_id)
+        with self._running_tasks_lock:
+            existing = self._running_tasks.get(task_id)
+            if existing is not None and not existing.done():
+                logger.info("定时任务 {} 已在执行中，跳过重复提交", task_id)
+                return existing
+
+            try:
+                future = self._ensure_task_pool().submit(self.execute_task, task_id)
+            except RuntimeError:
+                logger.warning("任务队列已满，任务 {} 被拒绝", task_id)
+                f: Future = Future()
+                f.set_exception(RuntimeError(f"任务队列已满，无法提交任务 {task_id}"))
+                return f
+            self._running_tasks[task_id] = future
+
+        # 锁外注册清理回调
+        def _cleanup(f: Future, tid=task_id):
+            with self._running_tasks_lock:
+                if self._running_tasks.get(tid) is f:
+                    del self._running_tasks[tid]
+
+        future.add_done_callback(_cleanup)
+        return future
+
+    # ── 登录接口（委托 LoginOrchestrator）──
 
     def execute_login_async(
         self,
         cancel_event: threading.Event | None = None,
-        config_snapshot: dict | None = None,
+        config_snapshot: RuntimeConfig | None = None,
     ) -> Future:
-        """异步执行登录（提交到 login_pool），带去重。
+        """异步执行登录。签名兼容。"""
+        handle = self._login_orchestrator.submit(
+            source="auto", config=config_snapshot, cancel_event=cancel_event,
+        )
+        if handle.future is not None:
+            return handle.future
+        # 被拒绝：返回已完成的 failed future
+        f: Future = Future()
+        f.set_result((False, handle.rejected_reason or "登录被拒绝"))
+        return f
 
-        如果已有登录任务在执行中，返回已有的 Future 而非重复提交。
-        去重时，新调用方的 cancel_event 会联动到已有任务：
-        当新 cancel_event 被设置时，已有任务的 cancel_event 也会被设置。
-
-        Args:
-            cancel_event: 取消事件，设置后登录流程应尽快退出
-            config_snapshot: 校验通过的配置快照，避免二次读取产生竞态
-
-        Returns:
-            Future 对象（新的或已有的）
-        """
-        if cancel_event is None:
-            cancel_event = threading.Event()
-
-        future = None
-        with self._login_lock:
-            # 检查是否已有登录在进行
-            if self._login_future is not None and not self._login_future.done():
-                logger.debug("登录任务已在执行中，跳过重复提交")
-                # 联动新 cancel_event 到已有任务
-                if cancel_event is not None and self._login_cancel_event is not None:
-                    self._link_cancel_event(cancel_event, self._login_cancel_event)
-                return self._login_future
-
-            # 提交新的登录任务
-            future = self._login_pool.submit(
-                self.execute_login, cancel_event, config_snapshot
-            )
-            self._login_future = future
-            self._login_cancel_event = cancel_event
-
-        # 锁外注册回调，避免时序问题
-        future.add_done_callback(self._on_login_done)
-        return future
-
-    @staticmethod
-    def _link_cancel_event(
-        new_event: threading.Event, target_event: threading.Event
-    ) -> None:
-        """在后台线程监控 new_event，设置时联动到 target_event。"""
-
-        def _watcher() -> None:
-            new_event.wait(timeout=300)
-            if new_event.is_set():
-                target_event.set()
-
-        t = threading.Thread(target=_watcher, daemon=True, name="cancel-link")
-        t.start()
+    def execute_login(
+        self,
+        cancel_event: threading.Event | None = None,
+        config_snapshot: RuntimeConfig | None = None,
+    ) -> tuple[bool, str]:
+        """同步执行登录。签名兼容。"""
+        cfg = config_snapshot if config_snapshot is not None else (
+            self._get_runtime_config() if self._get_runtime_config else RuntimeConfig()
+        )
+        handle = self._login_orchestrator.submit(
+            source="auto", config=cfg, cancel_event=cancel_event,
+        )
+        return handle.result()
 
     def is_login_running(self) -> bool:
-        """登录任务是否正在执行中。"""
-        with self._login_lock:
-            return self._login_future is not None and not self._login_future.done()
+        """检查是否有登录在执行。"""
+        return self._login_orchestrator.is_running()
 
     def cancel_login(self) -> None:
-        """取消正在进行的登录。"""
-        if self._login_cancel_event:
-            self._login_cancel_event.set()
+        """取消当前登录。"""
+        self._login_orchestrator.cancel_running()
 
-    def _on_login_done(self, future: Future) -> None:
-        """登录任务完成后清理引用。"""
-        with self._login_lock:
-            if self._login_future is future:
-                self._login_future = None
-                self._login_cancel_event = None
+    def force_clear_login_slot(self) -> None:
+        """强制清理旧登录引用（仅用于旧任务无法正常取消的兜底场景）。"""
+        self._login_orchestrator.cancel_running()
 
     # ── 同步执行接口 ──
 
@@ -292,65 +277,6 @@ class TaskExecutor:
         )
         return success, message
 
-    def execute_login(
-        self,
-        cancel_event: threading.Event | None = None,
-        config_snapshot: dict | None = None,
-    ) -> tuple[bool, str]:
-        """同步执行登录（在 login_pool 工作线程中运行）。
-
-        通过 PlaywrightWorker 执行浏览器自动化登录。
-        config_snapshot 优先使用，避免二次读取产生 TOCTOU 竞态。
-        """
-        start = time.perf_counter()
-
-        try:
-            # 延迟导入：测试需要模拟 playwright_worker 未安装的 ImportError 场景
-            from app.workers.playwright_worker import CMD_LOGIN
-
-            # 获取运行时配置（优先使用传入的快照，避免 TOCTOU 竞态）
-            config = config_snapshot if config_snapshot is not None else (self._get_runtime_config() if self._get_runtime_config else {})
-            pure_mode = config.get("browser_settings", {}).get("pure_mode", False)
-
-            # 检查取消
-            if cancel_event and cancel_event.is_set():
-                return False, "登录已取消"
-
-            # 获取 Worker 并提交登录命令
-            worker = self._worker_getter()
-            result = worker.submit(
-                CMD_LOGIN,
-                data={
-                    "config": config,
-                    "pure_mode": pure_mode,
-                    "cancel_event": cancel_event,
-                },
-                wait=True,
-                timeout=300,
-            )
-
-            duration_ms = int((time.perf_counter() - start) * 1000)
-
-            if result.success:
-                self._record_login_history(True, duration_ms)
-                message = result.data if isinstance(result.data, str) else "登录成功"
-                return True, message
-            else:
-                error_msg = result.error or "登录失败"
-                self._record_login_history(False, duration_ms, error=error_msg)
-                return False, error_msg
-
-        except ImportError as exc:
-            duration_ms = int((time.perf_counter() - start) * 1000)
-            logger.warning("登录执行缺少依赖: {}", exc)
-            self._record_login_history(False, duration_ms, error=str(exc))
-            return False, "登录需要额外依赖，请检查 Playwright 安装状态"
-        except Exception as exc:
-            duration_ms = int((time.perf_counter() - start) * 1000)
-            logger.error("登录执行异常: {}", exc)
-            self._record_login_history(False, duration_ms, error=str(exc))
-            return False, f"登录执行异常: {exc}"
-
     # ── 内部执行方法 ──
 
     def _execute_script(self, script_id: str, timeout: int) -> tuple[bool, str]:
@@ -378,54 +304,30 @@ class TaskExecutor:
 
         return runner.run()
 
-    def _execute_browser(self, task_id: str, timeout: int) -> tuple[bool, str]:
-        """执行浏览器任务。
-
-        通过 PlaywrightWorker 执行浏览器自动化任务。
-        """
+    def _execute_browser(
+        self,
+        task_id: str,
+        timeout: int,
+        cancel_event: threading.Event | None = None,
+    ) -> tuple[bool, str]:
+        """执行浏览器任务。委托 LoginOrchestrator，与登录共享去重。"""
         task = self._registry.get_task(task_id)
         if not task or task.get("type") != "browser":
             return False, f"浏览器任务不存在: {task_id}"
 
-        start_time = time.perf_counter()
+        config = self._get_runtime_config() if self._get_runtime_config else RuntimeConfig()
+        handle = self._login_orchestrator.submit(
+            source="browser", config=config,
+            cancel_event=cancel_event, timeout=timeout,
+        )
 
-        try:
-            # 延迟导入：测试需要模拟 playwright_worker 未安装的 ImportError 场景
-            from app.workers.playwright_worker import CMD_LOGIN
+        if handle.rejected_reason is not None:
+            return False, handle.rejected_reason
 
-            # 获取运行时配置
-            config = self._get_runtime_config() if self._get_runtime_config else {}
-            pure_mode = config.get("browser_settings", {}).get("pure_mode", False)
-
-            # 获取 Worker 并提交登录命令
-            worker = self._worker_getter()
-            result = worker.submit(
-                CMD_LOGIN,
-                data={
-                    "config": config,
-                    "pure_mode": pure_mode,
-                },
-                wait=True,
-                timeout=timeout,
-            )
-
-            duration_ms = int((time.perf_counter() - start_time) * 1000)
-
-            if result.success:
-                return True, (
-                    result.data
-                    if isinstance(result.data, str)
-                    else "浏览器任务执行成功"
-                )
-            else:
-                return False, result.error or "浏览器任务执行失败"
-
-        except ImportError as exc:
-            logger.warning("浏览器任务执行缺少依赖: {}", exc)
-            return False, "浏览器任务需要额外依赖，请检查 Playwright 安装状态"
-        except Exception as exc:
-            logger.error("浏览器任务执行异常: {}", exc)
-            return False, f"浏览器任务执行异常: {exc}"
+        ok, msg = handle.result()
+        if ok:
+            return True, msg if isinstance(msg, str) else "浏览器任务执行成功"
+        return False, msg or "浏览器任务执行失败"
 
     def _execute_shell(
         self, command: str, timeout: int, shell_path: str = ""
@@ -437,8 +339,8 @@ class TaskExecutor:
         # 如果没有指定 shell，使用全局配置或默认值
         if not shell_path:
             try:
-                config = self._get_runtime_config() if self._get_runtime_config else {}
-                shell_path = config.get("shell_path", "")
+                config = self._get_runtime_config() if self._get_runtime_config else RuntimeConfig()
+                shell_path = config.shell_path
             except Exception:
                 logger.debug("获取运行时 shell_path 失败，使用默认值", exc_info=True)
 
@@ -477,22 +379,6 @@ class TaskExecutor:
 
     # ── 辅助方法 ──
 
-    def _record_login_history(
-        self, success: bool, duration_ms: int, error: str = ""
-    ) -> None:
-        """记录登录历史（委托 LoginHistoryService.record 自动提取方案/任务名称）。"""
-        if self._login_history is None:
-            return
-        try:
-            self._login_history.record(
-                success=success,
-                duration_ms=duration_ms,
-                profile_service=self._profile_service,
-                error=error,
-            )
-        except Exception:
-            logger.debug("记录登录历史失败", exc_info=True)
-
     def _get_script_path(self, script_id: str):
         """获取脚本任务的文件路径。
 
@@ -509,5 +395,8 @@ class TaskExecutor:
         logger.info("TaskExecutor 开始关闭...")
         if self._task_pool is not None:
             self._task_pool.shutdown(wait=wait)
-        self._login_pool.shutdown(wait=wait)
+        with self._running_tasks_lock:
+            self._running_tasks.clear()
+        if self._login_orchestrator is not None:
+            self._login_orchestrator.shutdown(wait=wait)
         logger.info("TaskExecutor 已关闭")

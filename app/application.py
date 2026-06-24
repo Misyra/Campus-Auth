@@ -24,6 +24,7 @@ from app.constants import (
     SCREENSHOTS_DIR,
     TEMP_DIR,
 )
+from app.schemas import LoggingSettings
 from app.utils.logging import LogConfigCenter, get_logger
 from app.utils.ports import resolve_port
 
@@ -89,11 +90,12 @@ app = None
 # ==================== 工厂辅助函数 ====================
 
 
-def _create_lifespan(existing_container):
+def _create_lifespan(existing_container, boot_engine=False):
     """创建 FastAPI 生命周期管理器。
 
     Args:
         existing_container: 已有的 ServiceContainer（轻量模式升级时使用），或 None。
+        boot_engine: 是否在 lifespan 内启动监控引擎（仅 existing_container 分支有效）。
 
     Returns:
         async context manager 函数，供 FastAPI(lifespan=...) 使用。
@@ -114,8 +116,11 @@ def _create_lifespan(existing_container):
         if existing_container is not None:
             services = existing_container
             services.start_web_services()
-            if services.engine.has_enabled_tasks():
-                services.engine.start_scheduler()
+            # 引擎线程必须始终运行（处理配置保存等命令），监控按需启动
+            services.engine.start_thread()
+            if boot_engine and not services.engine._is_monitoring:
+                services.engine.boot()
+            services.engine.sync_scheduler_state()
         else:
             from app.container import ServiceContainer
 
@@ -132,14 +137,14 @@ def _create_lifespan(existing_container):
             settings_path.exists(),
             settings_path.stat().st_size if settings_path.exists() else 0,
         )
-        cfg = services.monitor_service.get_config()
+        cfg = services.engine.get_config()
         startup_logger.info(
             "当前配置: 用户={}, 密码={}, 认证={}, 运营商={}, 间隔={}min",
-            f"'{cfg.username}'" if cfg.username else "(空)",
-            "已设置" if cfg.password else "(空)",
-            f"'{cfg.auth_url}'" if cfg.auth_url else "(空)",
-            cfg.carrier,
-            cfg.check_interval_seconds,
+            f"'{cfg.credentials.username}'" if cfg.credentials.username else "(空)",
+            "已设置" if cfg.credentials.password else "(空)",
+            f"'{cfg.credentials.auth_url}'" if cfg.credentials.auth_url else "(空)",
+            cfg.credentials.isp,
+            cfg.monitor.check_interval_seconds // 60,
         )
 
         # 检查 cryptography 库是否可用
@@ -255,13 +260,14 @@ def _register_static(app) -> None:
     app.mount("/temp", StaticFiles(directory=TEMP_DIR), name="temp")
 
 
-def create_app(existing_container=None):
+def create_app(existing_container=None, boot_engine=False):
     """创建 FastAPI 应用实例。
 
     Args:
         existing_container: 已有的 ServiceContainer（轻量模式→完整模式转换时使用）。
             若不为 None，复用该容器并启动 Web 服务和调度器；
             若为 None，创建新的 ServiceContainer 并执行完整启动。
+        boot_engine: 是否在 lifespan 内启动监控引擎（仅 existing_container 分支有效）。
     """
     from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
     from fastapi.middleware.cors import CORSMiddleware
@@ -270,7 +276,7 @@ def create_app(existing_container=None):
 
     # ==================== 生命周期 ====================
 
-    lifespan = _create_lifespan(existing_container)
+    lifespan = _create_lifespan(existing_container, boot_engine=boot_engine)
 
     _app = FastAPI(
         title="校园网认证助手 API",
@@ -325,7 +331,7 @@ def create_app(existing_container=None):
     async def websocket_logs(websocket: WebSocket):
         services = _app.state.services
         ws_mgr = services.ws_manager
-        monitor_svc = services.monitor_service
+        monitor_svc = services.engine
 
         await ws_mgr.connect(websocket)
         try:
@@ -380,41 +386,41 @@ def run(
     log_retention: int | None = None,
     existing_container=None,
     server_ref: list | None = None,
+    boot_engine: bool = False,
+    logging_settings: LoggingSettings | None = None,
 ) -> None:
     """启动 uvicorn Web 服务器。
 
     Args:
         server_ref: 若传入，运行后 [0] 为 uvicorn.Server 实例（供外部停止）。
+        boot_engine: 是否在 lifespan 内启动监控引擎（仅 existing_container 分支有效）。
     """
     global app
 
     import uvicorn
 
-    sys_settings = None
-    if access_log_enabled is None or log_retention is None:
-        # 调用方未传入日志配置，从 settings.json 读取
+    # 使用调用方传入的日志配置，或从 settings.json 读取
+    if logging_settings is None and (access_log_enabled is None or log_retention is None):
         try:
             from app.services.profile_service import ProfileService
 
             profile_service = ProfileService(PROJECT_ROOT)
-            sys_settings = profile_service.load().global_settings
-            if access_log_enabled is None:
-                access_log_enabled = bool(sys_settings.access_log)
-            if log_retention is None:
-                log_retention = max(1, sys_settings.log_retention_days)
+            logging_settings = profile_service.load().global_config.logging
         except Exception:
             startup_logger.warning("读取日志配置失败，使用默认值", exc_info=True)
-            if access_log_enabled is None:
-                access_log_enabled = False
-            if log_retention is None:
-                log_retention = 7
+
+    # 填充未传入的参数
+    if access_log_enabled is None:
+        access_log_enabled = bool(logging_settings.access_log) if logging_settings else False
+    if log_retention is None:
+        log_retention = max(1, logging_settings.log_retention_days) if logging_settings else 7
 
     log_center = LogConfigCenter.get_instance()
     log_center.initialize({"level": "INFO"}, source="backend")
 
-    # 从 settings.json 恢复 source 级别配置
-    if sys_settings is not None and hasattr(sys_settings, "source_levels") and sys_settings.source_levels:
-        for src, lvl in sys_settings.source_levels.items():
+    # 恢复 source 级别日志配置
+    if logging_settings is not None and logging_settings.source_levels:
+        for src, lvl in logging_settings.source_levels.items():
             with contextlib.suppress(ValueError):
                 log_center.set_source_level(src, lvl)
 
@@ -449,7 +455,7 @@ def run(
         log.addHandler(_UvicornLogHandler())
 
     # 创建 FastAPI 应用
-    _app = create_app(existing_container=existing_container)
+    _app = create_app(existing_container=existing_container, boot_engine=boot_engine)
     app = _app
 
     # 使用 Server 实例而非 uvicorn.run()，以便 _wait_shutdown 可通过

@@ -135,6 +135,16 @@ class TestReadPidFile:
             result = read_pid_file()
             assert result is None
 
+    def test_missing_create_time(self, tmp_path):
+        """缺失 create_time 字段 → None（防止 PID 复用误判）。"""
+        pid_file = tmp_path / "test.pid"
+        data = {"pid": 12345, "mode": "lightweight"}
+        pid_file.write_text(json.dumps(data), encoding="utf-8")
+
+        with patch("app.utils.process.get_pid_file", return_value=pid_file):
+            result = read_pid_file()
+            assert result is None
+
 
 # ── get_pid_file ──
 
@@ -352,6 +362,17 @@ class TestIsServiceRunning:
             assert running is True
             assert result_pid == pid
 
+    def test_missing_create_time_cleans_up(self, tmp_path):
+        """PID 文件缺失 create_time → 清理并返回未运行。"""
+        pid_file = tmp_path / "test.pid"
+        data = {"pid": os.getpid(), "mode": "lightweight"}
+        pid_file.write_text(json.dumps(data), encoding="utf-8")
+        with patch("app.utils.process.get_pid_file", return_value=pid_file):
+            running, pid = is_service_running()
+            assert running is False
+            assert pid is None
+            assert not pid_file.exists()
+
 
 # ── read_pid_mode ──
 
@@ -409,6 +430,8 @@ class TestWritePidAndCleanup:
             written_data = json.loads(mock_write.call_args[0][1])
             assert written_data["mode"] == "lightweight"
             assert written_data["pid"] > 0
+            assert "create_time" in written_data
+            assert written_data["create_time"] > 0
 
     def test_cleanup_nonexistent(self, tmp_path):
         """清理不存在的文件不报错。"""

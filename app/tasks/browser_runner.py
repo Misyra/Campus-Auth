@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import threading
 import time
 from dataclasses import replace
 from datetime import datetime
@@ -33,6 +34,7 @@ class TaskExecutor:
         default_timeout: int | None = None,
         navigation_timeout: int | None = None,
         monitor_config: dict[str, Any] | None = None,
+        cancel_event: threading.Event | None = None,
     ):
         self.config = config
         self.template_vars = template_vars or {}
@@ -49,6 +51,7 @@ class TaskExecutor:
         self._step_results: list[dict[str, Any]] = []
         self._screenshot_dir = Path(screenshot_dir) if screenshot_dir else None
         self.monitor_config = monitor_config
+        self.cancel_event = cancel_event
 
     async def execute(self, page) -> tuple[bool, str]:
         """执行任务
@@ -86,6 +89,10 @@ class TaskExecutor:
                 await self._reveal_hidden_inputs(page)
 
             for i, step in enumerate(self.config.steps):
+                # 取消检查
+                if self.cancel_event and self.cancel_event.is_set():
+                    return await self._handle_failure(page, None, "任务已取消")
+
                 # 任务超时检查
                 remaining_s = task_deadline - time.perf_counter()
                 if remaining_s <= 0:
@@ -161,6 +168,9 @@ class TaskExecutor:
             )
             await page.goto(url, wait_until="load", timeout=self.navigation_timeout)
             await self._wait_url_stable(page)
+            if self.config.navigation_wait > 0:
+                logger.info("等待页面 AJAX 初始化: {}s", self.config.navigation_wait)
+                await asyncio.sleep(self.config.navigation_wait)
 
     async def _wait_url_stable(self, page, timeout_ms: int = 3000):
         """等待 URL 稳定，处理 JS 重定向链（最多 5 跳）"""
@@ -299,31 +309,32 @@ class TaskExecutor:
         """任务步骤全部通过后，验证网络是否已恢复连通。"""
         try:
             from app.network.decision import is_network_available
+            from app.schemas import MonitorSettings
 
             cfg = self.monitor_config
+            # 使用 MonitorSettings 填充默认值，确保未配置的字段有合理的默认行为
+            # 仅过滤 None 和空容器，保留 False、0 等合法值
+            monitor = MonitorSettings(**{
+                k: v for k, v in cfg.items()
+                if k in MonitorSettings.model_fields
+                and v is not None
+                and not (isinstance(v, (list, str, dict)) and not v)
+            })
 
-            # 等待网址响应处理认证请求（可通过 post_login_delay 配置）
-            # cfg.get(key, default) 在 JSON 值为 null 时返回 None 而非默认值，需显式处理
+            # 等待网址响应处理认证请求
             post_delay = cfg.get("post_login_delay")
             if post_delay is None:
                 post_delay = 5
             await asyncio.sleep(post_delay)
-            enable_tcp = cfg.get("enable_tcp_check", False)
-            enable_http = cfg.get("enable_http_check", False)
-            timeout = cfg.get("network_check_timeout")
-            if timeout is None:
-                timeout = 2
+            enable_tcp = monitor.enable_tcp_check
+            enable_http = monitor.enable_http_check
+            timeout = monitor.network_check_timeout
 
-            # 解析网址响应检测 URL
-            from app.utils.network import parse_url_checks
+            # 解析检测参数（parse_url/parse_ping 内部处理 str/list/None）
+            from app.utils.network import parse_ping_targets, parse_url_checks
 
-            url_checks = parse_url_checks(cfg.get("url_check_urls", ""))
-            url_checks = url_checks if url_checks else None
-
-            # 解析 TCP 检测目标
-            from app.utils.network import parse_ping_targets
-
-            test_sites = parse_ping_targets(cfg.get("ping_targets", [])) or None
+            url_checks = parse_url_checks(monitor.url_check_urls) or None
+            test_sites = parse_ping_targets(monitor.ping_targets) or None
 
             logger.info(
                 "验证网络连通性 (网络检测方式: TCP={}, HTTP={}, 网址响应={}, 超时={}s)",
@@ -333,7 +344,7 @@ class TaskExecutor:
                 timeout,
             )
 
-            test_urls = cfg.get("test_urls", None)
+            test_urls = monitor.test_urls or None
 
             result = await asyncio.to_thread(
                 is_network_available,
@@ -384,13 +395,18 @@ class TaskExecutor:
 
     async def _capture_screenshot(self, page) -> str | None:
         """捕获截图 → 指定目录或 debug/screenshots/{date}/ 目录"""
-        from app.constants import SCREENSHOTS_DIR
+        from app.constants import SCREENSHOTS_DIR, TEMP_DIR
         from app.utils.files import save_screenshot
 
         try:
             if self._screenshot_dir:
                 out_dir = self._screenshot_dir
-                url_prefix = "/temp"
+                # 计算相对于 TEMP_DIR 的子目录路径，确保 URL 与实际存储路径一致
+                try:
+                    rel = self._screenshot_dir.relative_to(TEMP_DIR)
+                    url_prefix = f"/temp/{rel}" if str(rel) != "." else "/temp"
+                except ValueError:
+                    url_prefix = "/temp"
             else:
                 date_str = datetime.now().strftime("%Y-%m-%d")
                 out_dir = SCREENSHOTS_DIR / date_str
@@ -398,7 +414,7 @@ class TaskExecutor:
 
             task_id = self.config.task_id or self.config.name or "unknown"
             local_path = await asyncio.wait_for(
-                save_screenshot(page, out_dir, task_id=task_id),
+                save_screenshot(page, out_dir, prefix="", task_id=task_id),
                 timeout=5,
             )
             if local_path:

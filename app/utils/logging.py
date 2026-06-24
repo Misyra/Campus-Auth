@@ -203,8 +203,9 @@ class LogConfigCenter:
         self._initialized = True
         self._file_sink_id: int | None = None
         self._frontend_file_sink_id: int | None = None
-        # source 级别配置
+        # source 级别配置（读写均需 _source_levels_lock 保护）
         self._source_levels: dict[str, str] = {}
+        self._source_levels_lock = threading.Lock()
 
     @classmethod
     def get_instance(cls) -> LogConfigCenter:
@@ -244,7 +245,8 @@ class LogConfigCenter:
         """
         normalized = normalize_level(level)
         logger.level(normalized)
-        self._config["level"] = normalized
+        with self._source_levels_lock:
+            self._config["level"] = normalized
 
     def get_config(self) -> dict[str, Any]:
         return self._config.copy()
@@ -307,14 +309,16 @@ class LogConfigCenter:
         if source not in VALID_SOURCES:
             raise ValueError(f"无效的 source: {source}，有效值: {VALID_SOURCES}")
         normalized = normalize_level(level)
-        self._source_levels[source] = normalized
+        with self._source_levels_lock:
+            self._source_levels[source] = normalized
 
     def get_source_level(self, source: str) -> str:
         """获取指定 source 的日志级别
 
         如果未设置，返回全局级别
         """
-        return self._source_levels.get(source, self._config.get("level", "INFO"))
+        with self._source_levels_lock:
+            return self._source_levels.get(source, self._config.get("level", "INFO"))
 
     def should_emit(self, source: str, level: str) -> bool:
         """判断是否应该输出日志
@@ -330,8 +334,10 @@ class LogConfigCenter:
 
     def remove_source_level(self, source: str) -> None:
         """移除指定 source 的级别配置（回退到全局级别）"""
-        self._source_levels.pop(source, None)
+        with self._source_levels_lock:
+            self._source_levels.pop(source, None)
 
     def get_all_source_levels(self) -> dict[str, str]:
         """获取所有 source 级别配置"""
-        return self._source_levels.copy()
+        with self._source_levels_lock:
+            return self._source_levels.copy()

@@ -44,6 +44,18 @@ class LoginAttemptHandler:
         self._task_manager: Any | None = None
         self._project_root: Path | None = None
 
+        # 解构常用字段为命名属性（dict 结构由 _runtime_config_to_worker_dict 保证）
+        self._credentials: dict[str, str] = {
+            "username": config.get("username", ""),
+            "password": config.get("password", ""),
+            "auth_url": config.get("auth_url", ""),
+            "isp": config.get("isp", ""),
+        }
+        self._browser_settings: dict[str, Any] = config.get("browser_settings", {})
+        self._monitor_settings: dict[str, Any] = config.get("monitor", {})
+        self._active_task: str = config.get("active_task", "").strip()
+        self._custom_variables: dict[str, str] = config.get("custom_variables", {})
+
     async def attempt_login(self) -> tuple[bool, str]:
         """
         尝试登录校园网（统一实现）
@@ -80,7 +92,7 @@ class LoginAttemptHandler:
             self._ensure_task_manager()
 
             task_manager = self._task_manager
-            profile_task_id = self.config.get("active_task", "").strip()
+            profile_task_id = self._active_task
             if profile_task_id:
                 active_task_id = profile_task_id
                 task = task_manager.load_task(profile_task_id)
@@ -126,9 +138,9 @@ class LoginAttemptHandler:
         """执行浏览器任务。"""
         from ..tasks.browser_runner import TaskExecutor
 
-        login_url = self.config.get("auth_url", "")
-        username = self.config.get("username", "")
-        isp = self.config.get("isp", "")
+        login_url = self._credentials["auth_url"]
+        username = self._credentials["username"]
+        isp = self._credentials["isp"]
         self.logger.info(
             "登录开始 -> 任务={} URL={} 用户={} 运营商={} {}个步骤",
             active_task_id,
@@ -139,7 +151,12 @@ class LoginAttemptHandler:
         )
 
         template_vars = build_login_template_vars(
-            self.config, task.url, self.config.get("custom_variables", {})
+            auth_url=self._credentials.get("auth_url", ""),
+            username=self._credentials.get("username", ""),
+            password=self._credentials.get("password", ""),
+            isp=self._credentials.get("isp", ""),
+            task_url=task.url,
+            custom_variables=self._custom_variables,
         )
 
         if self.cancel_event and self.cancel_event.is_set():
@@ -170,10 +187,9 @@ class LoginAttemptHandler:
             if not browser_manager.page:
                 raise RuntimeError("浏览器页面初始化失败")
 
-            browser_settings = self.config.get("browser_settings", {})
-            browser_timeout = browser_settings.get("timeout", 8) * 1000  # 秒 → 毫秒
+            browser_timeout = self._browser_settings.get("timeout", 8) * 1000  # 秒 → 毫秒
             navigation_timeout = (
-                browser_settings.get("navigation_timeout", 15) * 1000
+                self._browser_settings.get("navigation_timeout", 15) * 1000
             )  # 秒 → 毫秒
 
             executor = TaskExecutor(
@@ -181,7 +197,8 @@ class LoginAttemptHandler:
                 template_vars,
                 default_timeout=browser_timeout,
                 navigation_timeout=navigation_timeout,
-                monitor_config=self.config.get("monitor", {}),
+                monitor_config=self._monitor_settings,
+                cancel_event=self.cancel_event,
             )
 
             # 监听页面 alert/confirm/prompt，记录内容并延迟关闭让用户看到
@@ -228,7 +245,7 @@ class LoginAttemptHandler:
         if self.cancel_event and self.cancel_event.is_set():
             return False, "登录已取消"
 
-        timeout = self.config.get("monitor", {}).get("script_timeout", 60)
+        timeout = self._monitor_settings.get("script_timeout", 60)
         runner = ScriptRunner(task.script_path, timeout=timeout)
 
         loop = asyncio.get_running_loop()
@@ -242,7 +259,9 @@ class LoginAttemptHandler:
         self.logger.info("脚本已执行，等待网络验证...")
         await asyncio.sleep(LOGIN_SUCCESS_SETTLE_SECONDS)
 
-        net_ok, net_msg, _ = await asyncio.to_thread(check_network_status, self.config)
+        from app.schemas import MonitorSettings
+        monitor_settings = MonitorSettings(**{k: v for k, v in self._monitor_settings.items() if k in MonitorSettings.model_fields})
+        net_ok, net_msg, _ = await asyncio.to_thread(check_network_status, monitor_settings)
 
         total = time.perf_counter() - phase_start
         if net_ok:

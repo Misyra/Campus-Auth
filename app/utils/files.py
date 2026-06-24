@@ -1,6 +1,7 @@
 import contextlib
 import os
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -39,12 +40,26 @@ def atomic_write(
         dir=parent or ".", prefix=prefix, suffix=suffix
     )
     try:
-        with os.fdopen(tmp_fd, "w", encoding=encoding, errors=errors) as f:
+        try:
+            f = os.fdopen(tmp_fd, "w", encoding=encoding, errors=errors)
+        except Exception:
+            os.close(tmp_fd)
+            raise
+        with f:
             f.write(content)
             f.flush()
             os.fsync(f.fileno())
 
-        os.replace(tmp_path, path)
+        # BUG-066 修复：Windows 上添加重试逻辑，处理文件锁定
+        for attempt in range(3):
+            try:
+                os.replace(tmp_path, path)
+                break
+            except PermissionError:
+                if attempt < 2:
+                    time.sleep(0.1)
+                else:
+                    raise
     except Exception:
         with contextlib.suppress(OSError):
             os.unlink(tmp_path)

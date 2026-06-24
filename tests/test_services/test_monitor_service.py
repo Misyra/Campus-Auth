@@ -11,13 +11,18 @@ import time
 from concurrent.futures import Future
 from unittest.mock import MagicMock, patch
 
+from app.schemas import LoginCredentials, RuntimeConfig
 from app.services.engine import (
     EngineCmdType,
     EngineCommand,
     ScheduleEngine,
     StatusSnapshot,
 )
-from app.services.login_retry import LoginRetryManager
+
+
+def _fake_reload():
+    """模拟 _reload_config_internal 的返回值。__init__ 已初始化 _runtime_config。"""
+    return True
 
 
 
@@ -165,22 +170,14 @@ class TestListLogs:
         finally:
             logger.remove(handler_id)
 
-    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
-    @patch(
-        "app.services.runtime_config.load_runtime_config",
-        return_value=(MagicMock(), False),
-    )
-    @patch("app.services.runtime_config.load_ui_config")
+    @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
     def test_list_logs_returns_all_when_limit_exceeds(
-        self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_ps_cls, mock_reload
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.global_settings.pure_mode = False
-        mock_ui_config = MagicMock()
-
-        mock_load_ui.return_value = mock_ui_config
+        mock_ps.load.return_value.global_config.browser.pure_mode = False
 
         svc = ScheduleEngine(MagicMock())
         from loguru import logger
@@ -269,26 +266,18 @@ class TestUpdateStatusSnapshot:
 
 
 class TestStartStopMonitoring:
-    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
-    @patch(
-        "app.services.runtime_config.load_runtime_config",
-        return_value=(MagicMock(), False),
-    )
-    @patch("app.services.runtime_config.load_ui_config")
+    @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
     @patch(
         "app.services.engine.ConfigValidator.validate_env_config",
         return_value=(True, ""),
     )
     def test_start_monitoring(
-        self, mock_validate, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_validate, mock_ps_cls, mock_reload
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.global_settings.pure_mode = False
-        mock_ui_config = MagicMock()
-
-        mock_load_ui.return_value = mock_ui_config
+        mock_ps.load.return_value.global_config.browser.pure_mode = False
 
         svc = ScheduleEngine(MagicMock())
         ok, msg = svc.start_monitoring()
@@ -348,24 +337,15 @@ class TestHandleStartStop:
 
 
 class TestHandleLogin:
-    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
-    @patch(
-        "app.services.runtime_config.load_runtime_config",
-        return_value=(MagicMock(), False),
-    )
-    @patch("app.services.runtime_config.load_ui_config")
+    @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
     def test_handle_login_submits_async(
-        self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_ps_cls, mock_reload
     ):
-        """_handle_login 有配置时提交异步登录并返回成功。"""
+        """_handle_login 有配置时提交登录并等待完成返回结果。"""
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.global_settings.pure_mode = False
-        mock_ui_config = MagicMock()
-
-        mock_ui_config.login_timeout = 120
-        mock_load_ui.return_value = mock_ui_config
+        mock_ps.load.return_value.global_config.browser.pure_mode = False
 
         mock_worker = MagicMock()
         mock_result = MagicMock()
@@ -385,24 +365,37 @@ class TestHandleLogin:
         svc._shutdown_event.set()  # 停止引擎线程，避免干扰
         time.sleep(0.1)
 
+        # 注入 orchestrator mock
+        svc._orchestrator = MagicMock()
+        svc._orchestrator.validate.return_value = None
+        handle = MagicMock()
+        handle.rejected_reason = None
+        mock_future = Future()
+        handle.future = mock_future
+        svc._orchestrator.submit.return_value = handle
+
         # 提供有效配置，否则 _handle_login 会拒绝
-        with patch.object(svc, "_copy_runtime_config", return_value={
-            "username": "test", "password": "test", "auth_url": "http://test.com"
-        }):
-            cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
-            svc._handle_login(cmd)
-            # 异步模式：立即返回提交状态，不等待结果
-            assert cmd.response_data == (True, "登录已提交")
-        # 等待异步登录线程完成
-        time.sleep(0.5)
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="test", password="test", auth_url="http://test.com",
+            ),
+        )
+        cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
+        svc._handle_login(cmd)
+        # 异步模式：模拟登录完成，触发回调
+        mock_future.set_result((True, "登录成功"))
+        cmd.response_event.wait(timeout=2)
+        assert cmd.response_data == (True, "登录成功")
 
     def test_handle_login_no_config_returns_false(self):
         """_handle_login 无配置时返回 False。"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._update_status_snapshot = MagicMock()
         svc._task_executor = MagicMock()
+        svc._orchestrator = MagicMock()
+        svc._orchestrator.validate.return_value = "登录配置不完整（请先设置认证地址、用户名和密码）"
         # 返回空配置
-        svc._runtime_config = {}
+        svc._runtime_config = RuntimeConfig()
 
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
@@ -432,71 +425,47 @@ class TestRunManualLogin:
 
 
 class TestNetwork:
-    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
-    @patch(
-        "app.services.runtime_config.load_runtime_config",
-        return_value=(MagicMock(), False),
-    )
-    @patch("app.services.runtime_config.load_ui_config")
+    @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
     @patch("app.services.engine.is_network_available", return_value=True)
     def test_network_ok(
-        self, mock_net, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_net, mock_ps_cls, mock_reload
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.global_settings.pure_mode = False
-        mock_ui_config = MagicMock()
-
-        mock_load_ui.return_value = mock_ui_config
+        mock_ps.load.return_value.global_config.browser.pure_mode = False
 
         svc = ScheduleEngine(MagicMock())
         ok, msg = svc.test_network()
         assert ok is True
         assert "正常" in msg
 
-    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
-    @patch(
-        "app.services.runtime_config.load_runtime_config",
-        return_value=(MagicMock(), False),
-    )
-    @patch("app.services.runtime_config.load_ui_config")
+    @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
     @patch("app.services.engine.is_network_available", return_value=False)
     def test_network_fail(
-        self, mock_net, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_net, mock_ps_cls, mock_reload
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.global_settings.pure_mode = False
-        mock_ui_config = MagicMock()
-
-        mock_load_ui.return_value = mock_ui_config
+        mock_ps.load.return_value.global_config.browser.pure_mode = False
 
         svc = ScheduleEngine(MagicMock())
         ok, msg = svc.test_network()
         assert ok is False
         assert "异常" in msg
 
-    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
-    @patch(
-        "app.services.runtime_config.load_runtime_config",
-        return_value=(MagicMock(), False),
-    )
-    @patch("app.services.runtime_config.load_ui_config")
+    @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
     @patch(
         "app.services.engine.is_network_available", side_effect=RuntimeError("timeout")
     )
     def test_network_exception(
-        self, mock_net, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_net, mock_ps_cls, mock_reload
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.global_settings.pure_mode = False
-        mock_ui_config = MagicMock()
-
-        mock_load_ui.return_value = mock_ui_config
+        mock_ps.load.return_value.global_config.browser.pure_mode = False
 
         svc = ScheduleEngine(MagicMock())
         ok, msg = svc.test_network()
@@ -510,53 +479,49 @@ class TestNetwork:
 
 
 class TestTogglePureMode:
-    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
-    @patch(
-        "app.services.runtime_config.load_runtime_config",
-        return_value=(MagicMock(), False),
-    )
-    @patch("app.services.runtime_config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     def test_toggle_pure_mode(
-        self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_ps_cls
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_data = MagicMock()
-        mock_data.global_settings.pure_mode = False
+        mock_data.global_config.browser.pure_mode = False
         mock_ps.load.return_value = mock_data
-        mock_ui_config = MagicMock()
 
-        mock_load_ui.return_value = mock_ui_config
+        def _fake_reload(self_inner):
+            self_inner._runtime_config = RuntimeConfig()
+            self_inner._runtime_snapshot = self_inner._runtime_config
+            self_inner._pure_mode = False
+            return True
 
-        svc = ScheduleEngine(MagicMock())
+        with patch.object(ScheduleEngine, "_reload_config_internal", _fake_reload):
+            svc = ScheduleEngine(MagicMock())
         assert svc.pure_mode is False
         new_value = svc.toggle_pure_mode()
         assert new_value is True
         assert svc.pure_mode is True
         mock_ps.update.assert_called_once()
 
-    @patch("app.services.config_service.build_runtime_dict_from_payload", return_value={})
-    @patch(
-        "app.services.runtime_config.load_runtime_config",
-        return_value=(MagicMock(), False),
-    )
-    @patch("app.services.runtime_config.load_ui_config")
     @patch("app.services.engine.ProfileService")
     def test_pure_mode_read_write_thread_safe(
-        self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_ps_cls
     ):
         """读写线程安全：2 线程同时读/写 1000 次，无异常且值始终为 bool。"""
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_data = MagicMock()
-        mock_data.global_settings.pure_mode = False
+        mock_data.global_config.browser.pure_mode = False
         mock_ps.load.return_value = mock_data
-        mock_ui_config = MagicMock()
 
-        mock_load_ui.return_value = mock_ui_config
+        def _fake_reload(self_inner):
+            self_inner._runtime_config = RuntimeConfig()
+            self_inner._runtime_snapshot = self_inner._runtime_config
+            self_inner._pure_mode = False
+            return True
 
-        svc = ScheduleEngine(MagicMock())
+        with patch.object(ScheduleEngine, "_reload_config_internal", _fake_reload):
+            svc = ScheduleEngine(MagicMock())
         errors: list[Exception] = []
         values_seen: list[bool] = []
 
@@ -608,32 +573,19 @@ class TestLoginInProgress:
 
 
 class TestGetConfig:
-    @patch(
-        "app.services.config_service.build_runtime_dict_from_payload",
-        return_value={"key": "value"},
-    )
-    @patch(
-        "app.services.runtime_config.load_runtime_config",
-        return_value=(MagicMock(), False),
-    )
-    @patch("app.services.runtime_config.load_ui_config")
+    @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
     def test_get_runtime_config(
-        self, mock_ps_cls, mock_load_ui, mock_load_rt, mock_build
+        self, mock_ps_cls, mock_reload
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
-        mock_ps.load.return_value.global_settings.pure_mode = False
-        mock_ui_config = MagicMock()
-
-        mock_load_ui.return_value = mock_ui_config
+        mock_ps.load.return_value.global_config.browser.pure_mode = False
 
         svc = ScheduleEngine(MagicMock())
         config = svc.get_runtime_config()
-        assert config == {"key": "value"}
-        # 修改返回值不应影响内部状态
-        config["key"] = "modified"
-        assert svc._runtime_config.get("key") == "value"
+        assert isinstance(config, RuntimeConfig)
+        assert config is svc._runtime_config  # frozen 对象，直接返回引用
 
 
 # =====================================================================
@@ -646,7 +598,7 @@ class TestSaveProfileApplyId:
 
     def test_apply_profile_uses_id_not_name(self):
         from app.api.profiles import save_profile
-        from app.schemas import AuthProfile
+        from app.schemas import Profile
 
         mock_profile_svc = MagicMock()
         mock_monitor_svc = MagicMock()
@@ -659,7 +611,7 @@ class TestSaveProfileApplyId:
         mock_profile_svc.load.return_value = mock_data
 
         # payload.name 与 profile_id 不同 —— 这是 bug 的核心
-        payload = AuthProfile(name="完全不同的展示名")
+        payload = Profile(name="完全不同的展示名")
         save_profile(
             profile_id="my_profile_id",
             payload=payload,
@@ -681,6 +633,7 @@ class TestShutdownSynchronous:
         """测试 shutdown 通过队列发送 stop 命令"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._cmd_queue = queue.Queue(maxsize=50)
+        svc._wakeup_event = threading.Event()
         svc._shutdown_event = threading.Event()
         svc._status_snapshot = MagicMock()
         svc._status_snapshot.monitoring = True
@@ -733,19 +686,18 @@ class TestManualLoginTimeout:
         """测试超时后 _manual_login_in_progress 在 finally 中被清除"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._cmd_queue = queue.Queue(maxsize=50)
+        svc._wakeup_event = threading.Event()
         svc._manual_login_in_progress = False
         svc._manual_login_lock = threading.Lock()
-        svc._runtime_config = {"auth_url": "http://test.com", "username": "test"}
-        svc._ui_config = MagicMock()
-        svc._ui_config.login_timeout = 0.01  # 极短超时
-        svc._monitor_core = None
+        svc._runtime_config = RuntimeConfig().model_copy(update={
+            "browser": RuntimeConfig().browser.model_copy(update={"login_timeout": 0.01})
+        })
         svc._pure_mode = False
         svc._pure_mode_lock = threading.Lock()
         svc._engine_thread = MagicMock()
         svc._engine_thread.is_alive.return_value = True
 
-        with patch.object(svc, "_copy_runtime_config", return_value={}):
-            ok, msg = svc.run_manual_login()
+        ok, msg = svc.run_manual_login()
 
         assert not ok
         assert "超时" in msg
@@ -760,12 +712,13 @@ class TestStartMonitoringPutNowait:
         """测试队列满时 start_monitoring 不阻塞，返回错误"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._cmd_queue = queue.Queue(maxsize=1)
+        svc._wakeup_event = threading.Event()
         svc._monitor_core = None
-        svc._runtime_config = {
-            "auth_url": "http://test.com",
-            "username": "test",
-            "monitor": {},
-        }
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                auth_url="http://test.com", username="test", password="test",
+            ),
+        )
         svc._pure_mode = False
         svc._pure_mode_lock = threading.Lock()
         svc._start_stop_lock = threading.Lock()
@@ -778,7 +731,6 @@ class TestStartMonitoringPutNowait:
                 "app.services.engine.ConfigValidator.validate_env_config",
                 return_value=(True, ""),
             ),
-            patch.object(svc, "_copy_runtime_config", return_value={}),
         ):
             start = time.time()
             ok, msg = svc.start_monitoring()
@@ -794,10 +746,20 @@ class TestNetworkStateSetInConsumer:
     """P1-BE-7: network_state 在异步登录线程中统一赋值"""
 
     def test_do_async_login_delegates_to_task_executor(self):
-        """_do_async_login 应委托给 task_executor.execute_login_async"""
+        """_do_async_login 应委托给 orchestrator.submit"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
-        svc._login_retry = LoginRetryManager(count=0, last_attempt=0, config=None)
+        svc._runtime_config = RuntimeConfig()
         svc._update_status_snapshot = MagicMock()
+        svc.record_log = MagicMock()
+        svc._orchestrator = MagicMock()
+        svc._registered_futures = set()
+        svc._futures_lock = threading.Lock()
+
+        future = Future()
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
 
         mock_task_executor = MagicMock()
         mock_task_executor.is_login_running.return_value = False
@@ -806,7 +768,11 @@ class TestNetworkStateSetInConsumer:
 
         svc._do_async_login()
 
-        mock_task_executor.execute_login_async.assert_called_once()
+        svc._orchestrator.submit.assert_called_once()
+
+        # 清理
+        future.set_result(None)
+        time.sleep(0.1)
 
 
 # =====================================================================
@@ -872,12 +838,12 @@ class TestManualLoginConsumerDead:
         """测试超时且引擎线程已死时，_manual_login_in_progress 被 finally 清除。"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
         svc._cmd_queue = queue.Queue(maxsize=50)
+        svc._wakeup_event = threading.Event()
         svc._manual_login_in_progress = False
         svc._manual_login_lock = threading.Lock()
-        svc._runtime_config = {"auth_url": "http://test.com", "username": "test"}
-        svc._ui_config = MagicMock()
-        svc._ui_config.login_timeout = 0.01
-        svc._monitor_core = None
+        svc._runtime_config = RuntimeConfig().model_copy(update={
+            "browser": RuntimeConfig().browser.model_copy(update={"login_timeout": 0.01})
+        })
         svc._pure_mode = False
         svc._pure_mode_lock = threading.Lock()
         svc._start_stop_lock = threading.Lock()
@@ -886,8 +852,7 @@ class TestManualLoginConsumerDead:
         svc._engine_thread = MagicMock()
         svc._engine_thread.is_alive.return_value = False
 
-        with patch.object(svc, "_copy_runtime_config", return_value={}):
-            ok, msg = svc.run_manual_login()
+        ok, msg = svc.run_manual_login()
 
         assert not svc._manual_login_in_progress, (
             "引擎线程已死时，_manual_login_in_progress 应被 finally 清除"
@@ -908,7 +873,7 @@ class TestProfileSwitchFlag:
         """测试自动切换方案设置标志位"""
         from app.services.monitor_service import NetworkMonitorCore
 
-        core = NetworkMonitorCore()
+        core = NetworkMonitorCore(config=RuntimeConfig())
         mock_profile_service = MagicMock()
         mock_profile_service.load.return_value.auto_switch = True
         mock_profile_service.detect_matching_profile.return_value = "new_profile"
@@ -925,7 +890,7 @@ class TestProfileSwitchFlag:
         """测试方案未变化时不设置标志位"""
         from app.services.monitor_service import NetworkMonitorCore
 
-        core = NetworkMonitorCore()
+        core = NetworkMonitorCore(config=RuntimeConfig())
         mock_profile_service = MagicMock()
         mock_profile_service.load.return_value.auto_switch = True
         mock_profile_service.detect_matching_profile.return_value = "same_profile"
@@ -940,7 +905,7 @@ class TestProfileSwitchFlag:
         """测试消费标志位"""
         from app.services.monitor_service import NetworkMonitorCore
 
-        core = NetworkMonitorCore()
+        core = NetworkMonitorCore(config=RuntimeConfig())
         core._profile_switch_needed = True
 
         assert core.consume_profile_switch_flag() is True

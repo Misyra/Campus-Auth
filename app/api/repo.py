@@ -18,8 +18,7 @@ async def repo_fetch_index(
 ) -> list:
     """代理获取任务仓库索引，避免前端跨域问题"""
     validate_url(url)
-    proxy = (profile_svc.load().global_settings.proxy or "").strip()
-    return await async_repo_fetch_json(url, list, "索引", proxy=proxy)
+    return await async_repo_fetch_json(url, list, "索引")
 
 
 @router.get("/api/repo/task")
@@ -29,5 +28,4 @@ async def repo_fetch_task(
 ) -> dict:
     """代理获取单个任务配置"""
     validate_url(url)
-    proxy = (profile_svc.load().global_settings.proxy or "").strip()
-    return await async_repo_fetch_json(url, dict, "任务", proxy=proxy)
+    return await async_repo_fetch_json(url, dict, "任务")

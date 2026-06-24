@@ -559,6 +559,45 @@ class TestClickSelectHandler:
         ok = await handler._click_option(page, "Missing", "", 5000)
         assert ok is False
 
+    @pytest.mark.asyncio
+    async def test_click_option_with_trigger_parent(self):
+        """_click_option 使用触发器父容器搜索选项。"""
+        handler = ClickSelectHandler()
+        page = _make_page()
+        mock_trigger = MagicMock()
+        mock_parent = MagicMock()
+        mock_option = MagicMock()
+        mock_option.wait_for = AsyncMock()
+        mock_option.click = AsyncMock()
+        mock_parent.get_by_text.return_value.first = mock_option
+        mock_trigger.locator.return_value = mock_parent
+
+        ok = await handler._click_option(page, "Opt", "", 5000, trigger=mock_trigger)
+        assert ok is True
+        mock_trigger.locator.assert_called_with("..")
+        mock_parent.get_by_text.assert_called_with("Opt", exact=False)
+
+    @pytest.mark.asyncio
+    async def test_click_option_trigger_fallback_to_global(self):
+        """trigger 父容器未命中时回退到全局搜索。"""
+        handler = ClickSelectHandler()
+        page = _make_page()
+        mock_trigger = MagicMock()
+        mock_parent = MagicMock()
+        mock_parent_option = MagicMock()
+        mock_parent_option.wait_for = AsyncMock(side_effect=Exception("not in parent"))
+        mock_parent.get_by_text.return_value.first = mock_parent_option
+        mock_trigger.locator.return_value = mock_parent
+
+        mock_global_option = MagicMock()
+        mock_global_option.wait_for = AsyncMock()
+        mock_global_option.click = AsyncMock()
+        page.get_by_text.return_value.first = mock_global_option
+
+        ok = await handler._click_option(page, "Opt", "", 5000, trigger=mock_trigger)
+        assert ok is True
+        mock_global_option.click.assert_called_once()
+
 
 # ── WaitHandler ──
 

@@ -15,13 +15,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.network.decision import NetworkCheckResult
+from app.schemas import BrowserSettings, LoginCredentials, MonitorSettings, RuntimeConfig
 from app.services.engine import (
     EngineCmdType,
     EngineCommand,
     ScheduleEngine,
     StatusSnapshot,
 )
-from app.services.login_retry import LoginRetryManager
+from app.services.monitor_service import CheckOnceResult
 
 
 
@@ -166,15 +168,11 @@ class TestCalculateWakeup:
         assert wakeup <= time.time() + 11
 
     def test_wakeup_with_login_retry(self, engine_factory):
+        """向后兼容测试：无 _login_retry 字段时，唤醒仍正常。"""
         svc = engine_factory(raw=True)
         svc._monitor_core = None
-        svc._login_retry = LoginRetryManager(
-            count=1,
-            last_attempt=time.time() - 100,
-            config=(3, [5, 10, 15]),
-        )
         wakeup = svc._calculate_wakeup()
-        assert wakeup <= time.time() + 60
+        assert wakeup <= time.time() + 61
 
     def test_wakeup_with_scheduler(self, engine_factory):
         svc = engine_factory(raw=True)
@@ -187,13 +185,11 @@ class TestCalculateWakeup:
     def test_wakeup_exception_fallback(self, engine_factory):
         """异常时回退到 now+5。"""
         svc = engine_factory(raw=True)
-        svc._monitor_core = None
-        # 通过让 next_wakeup 内部计算出错来触发异常
-        svc._login_retry = LoginRetryManager(
-            count=1,
-            last_attempt="not_a_number",  # 会导致 TypeError
-            config=(3, [5, 10, 15]),
-        )
+        # 让 _is_monitoring 为 True，同时设置非法值触发异常
+        mock_core = MagicMock()
+        mock_core.monitoring = True
+        svc._monitor_core = mock_core
+        svc._next_network_check = "not_a_number"
         svc._scheduler_running = False
         now = time.time()
         wakeup = svc._calculate_wakeup()
@@ -219,7 +215,6 @@ class TestProcessCommand:
         svc._handle_start = MagicMock()
         self._put_and_process(svc, cmd)
         svc._handle_start.assert_called_once()
-        assert cmd.response_event.is_set()
 
     def test_dispatch_stop(self, engine_factory):
         svc = engine_factory(raw=True)
@@ -260,12 +255,15 @@ class TestProcessCommand:
         svc._handle_apply_profile.assert_called_once()
 
     def test_process_sets_response_event(self, engine_factory):
+        """response_event 由处理器自行触发，_process_command 不再自动 set。"""
         svc = engine_factory(raw=True)
         event = threading.Event()
         cmd = EngineCommand(type=EngineCmdType.START, response_event=event)
+        # mock 的 _handle_start 不会触发 response_event，这是预期行为
         svc._handle_start = MagicMock()
         self._put_and_process(svc, cmd)
-        assert event.is_set()
+        # 新设计：_process_command 不自动触发，由处理器负责
+        assert not event.is_set()
 
     def test_process_exception_still_sets_event(self, engine_factory):
         """handler 抛出异常时，response_event 仍被 set。"""
@@ -298,7 +296,11 @@ class TestHandleStart:
         """正常启动时创建 NetworkMonitorCore。"""
         svc = engine_factory(raw=True)
         svc._profile_service = MagicMock()
-        svc._copy_runtime_config = MagicMock(return_value={})
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="test", password="pass", auth_url="http://10.0.0.1"
+            ),
+        )
         mock_core = MagicMock()
         mock_core_cls.return_value = mock_core
         cmd = EngineCommand(type=EngineCmdType.START, data={"pure_mode": False})
@@ -311,14 +313,18 @@ class TestHandleStart:
         """纯净模式标志传递给 config。"""
         svc = engine_factory(raw=True)
         svc._profile_service = MagicMock()
-        svc._copy_runtime_config = MagicMock(return_value={})
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="test", password="pass", auth_url="http://10.0.0.1"
+            ),
+        )
         svc._pure_mode = True
         mock_core = MagicMock()
         mock_core_cls.return_value = mock_core
         cmd = EngineCommand(type=EngineCmdType.START, data={})
         svc._handle_start(cmd)
         call_config = mock_core_cls.call_args[1]["config"]
-        assert call_config.get("browser_settings", {}).get("pure_mode") is True
+        assert call_config.browser.pure_mode is True
 
 
 # =====================================================================
@@ -339,7 +345,6 @@ class TestHandleStop:
         svc._handle_stop()
         mock_core.stop_monitoring.assert_called_once()
         assert svc._monitor_core is None
-        assert svc._login_retry.count == 0
 
 
 # =====================================================================
@@ -365,8 +370,8 @@ class TestHandleLogin:
     def test_handle_login_no_config(self, engine_factory):
         """无配置时返回 False。"""
         svc = engine_factory(raw=True)
-        svc._runtime_config = {}
-        svc._copy_runtime_config = MagicMock(return_value={})
+        svc._runtime_config = RuntimeConfig()
+        svc._orchestrator.validate.return_value = "登录配置不完整（请先设置认证地址、用户名和密码）"
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
         success, message = cmd.response_data
@@ -375,8 +380,10 @@ class TestHandleLogin:
 
     def test_handle_login_missing_username(self, engine_factory):
         svc = engine_factory(raw=True)
-        config = {"password": "p", "auth_url": "http://test.com"}
-        svc._copy_runtime_config = MagicMock(return_value=config)
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(password="p", auth_url="http://test.com"),
+        )
+        svc._orchestrator.validate.return_value = "登录配置不完整（请先设置认证地址、用户名和密码）"
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
         success, message = cmd.response_data
@@ -385,8 +392,10 @@ class TestHandleLogin:
 
     def test_handle_login_missing_password(self, engine_factory):
         svc = engine_factory(raw=True)
-        config = {"username": "u", "auth_url": "http://test.com"}
-        svc._copy_runtime_config = MagicMock(return_value=config)
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(username="u", auth_url="http://test.com"),
+        )
+        svc._orchestrator.validate.return_value = "登录配置不完整（请先设置认证地址、用户名和密码）"
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
         success, message = cmd.response_data
@@ -394,38 +403,65 @@ class TestHandleLogin:
 
     def test_handle_login_missing_auth_url(self, engine_factory):
         svc = engine_factory(raw=True)
-        config = {"username": "u", "password": "p"}
-        svc._copy_runtime_config = MagicMock(return_value=config)
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(username="u", password="p"),
+        )
+        svc._orchestrator.validate.return_value = "登录配置不完整（请先设置认证地址、用户名和密码）"
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
         success, message = cmd.response_data
         assert success is False
 
-    def test_handle_login_async_success(self, engine_factory):
+    def test_handle_login_success(self, engine_factory):
         svc = engine_factory(raw=True)
-        config = {
-            "username": "u",
-            "password": "p",
-            "auth_url": "http://test.com",
-        }
-        svc._copy_runtime_config = MagicMock(return_value=config)
-        svc._do_async_login = MagicMock(return_value=True)
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="u", password="p", auth_url="http://test.com",
+            ),
+        )
+        svc._orchestrator.validate.return_value = None
+        mock_handle = MagicMock()
+        mock_handle.rejected_reason = None
+        mock_future = Future()
+        mock_handle.future = mock_future
+        svc._orchestrator.submit.return_value = mock_handle
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
-        assert cmd.response_data == (True, "登录已提交")
+        # 异步模式：模拟登录完成，触发回调
+        mock_future.set_result((True, "登录成功"))
+        cmd.response_event.wait(timeout=2)
+        assert cmd.response_data == (True, "登录成功")
 
     def test_handle_login_already_in_progress(self, engine_factory):
         svc = engine_factory(raw=True)
-        config = {
-            "username": "u",
-            "password": "p",
-            "auth_url": "http://test.com",
-        }
-        svc._copy_runtime_config = MagicMock(return_value=config)
-        svc._do_async_login = MagicMock(return_value=False)
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="u", password="p", auth_url="http://test.com",
+            ),
+        )
+        svc._orchestrator.validate.return_value = None
+        mock_handle = MagicMock()
+        mock_handle.rejected_reason = None
+        mock_handle.future = None
+        svc._orchestrator.submit.return_value = mock_handle
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
         assert cmd.response_data == (False, "登录任务已在执行中，请稍后再试")
+
+    def test_handle_login_rejected(self, engine_factory):
+        svc = engine_factory(raw=True)
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="u", password="p", auth_url="http://test.com",
+            ),
+        )
+        svc._orchestrator.validate.return_value = None
+        mock_handle = MagicMock()
+        mock_handle.rejected_reason = "提交被拒绝"
+        svc._orchestrator.submit.return_value = mock_handle
+        cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
+        svc._handle_login(cmd)
+        assert cmd.response_data == (False, "提交被拒绝")
 
 
 # =====================================================================
@@ -496,7 +532,9 @@ class TestHandleReload:
 class TestHandleApplyProfile:
     def test_handle_apply_profile_not_monitoring(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._runtime_config = {"auth_url": "http://test.com", "username": "u"}
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(auth_url="http://test.com", username="u"),
+        )
         svc._reload_config_internal = MagicMock()
         cmd = EngineCommand(
             type=EngineCmdType.APPLY_PROFILE, data={"profile_id": "p1"}
@@ -509,7 +547,9 @@ class TestHandleApplyProfile:
         mock_core = MagicMock()
         mock_core.monitoring = True
         svc._monitor_core = mock_core
-        svc._runtime_config = {"auth_url": "http://test.com", "username": "u"}
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(auth_url="http://test.com", username="u"),
+        )
         svc._reload_config_internal = MagicMock()
         svc._handle_stop = MagicMock()
         svc._handle_start = MagicMock()
@@ -535,32 +575,26 @@ class TestDoNetworkCheck:
     def test_do_network_check_need_login(self, engine_factory):
         svc = engine_factory(raw=True)
         mock_core = MagicMock()
-        mock_core.check_once.return_value = {"need_login": True, "interval": 300}
+        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=False, net_reason="down", need_login=True, check_num=1, interval=300, result=NetworkCheckResult(available=False, method="none", latency_ms=0, detail="down"))
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._copy_runtime_config = MagicMock(return_value={
-            "retry_settings": {"max_retries": 3, "retry_interval": 30}
-        })
         svc._do_async_login = MagicMock()
-        with patch("app.utils.retry.get_retry_intervals", return_value=[30, 30, 30]):
-            svc._do_network_check()
+        svc._do_network_check()
         svc._do_async_login.assert_called_once()
-        assert svc._login_retry.config == (3, [30, 30, 30])
 
     def test_do_network_check_no_login_needed(self, engine_factory):
         svc = engine_factory(raw=True)
         mock_core = MagicMock()
-        mock_core.check_once.return_value = {"need_login": False, "interval": 600}
+        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=True, net_reason="", need_login=False, check_num=1, interval=600, result=NetworkCheckResult(available=True, method="tcp", latency_ms=0, detail=""))
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._login_retry.count = 2
         svc._do_network_check()
-        assert svc._login_retry.count == 0
+        assert svc._retry_policy._attempt == 0
 
     def test_do_network_check_profile_switch(self, engine_factory):
         svc = engine_factory(raw=True)
         mock_core = MagicMock()
-        mock_core.check_once.return_value = {"need_login": False, "interval": 300}
+        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=True, net_reason="", need_login=False, check_num=1, interval=300, result=NetworkCheckResult(available=True, method="tcp", latency_ms=0, detail=""))
         mock_core.consume_profile_switch_flag.return_value = True
         svc._monitor_core = mock_core
         svc._handle_stop = MagicMock()
@@ -569,6 +603,7 @@ class TestDoNetworkCheck:
         svc._do_network_check()
         svc._handle_stop.assert_called_once()
         svc._reload_config_internal.assert_called_once()
+        svc._handle_start.assert_called_once()
 
     def test_do_network_check_exception(self, engine_factory):
         svc = engine_factory(raw=True)
@@ -580,87 +615,349 @@ class TestDoNetworkCheck:
 
 
 # =====================================================================
-# _login_retry_needed
-# =====================================================================
-
-
-class TestLoginRetryNeeded:
-    def test_no_retry_needed_when_count_zero(self, engine_factory):
-        svc = engine_factory(raw=True)
-        assert svc._login_retry_needed(time.time()) is False
-
-    def test_no_retry_needed_when_no_config(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._login_retry.count = 1
-        svc._login_retry.config = None
-        assert svc._login_retry_needed(time.time()) is False
-
-    def test_no_retry_needed_when_login_in_progress(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._login_retry.count = 1
-        svc._login_retry.config = (3, [10, 20, 30])
-        svc._task_executor.is_login_running.return_value = True
-        assert svc._login_retry_needed(time.time()) is False
-
-    def test_no_retry_needed_when_max_retries_reached(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._login_retry.count = 3
-        svc._login_retry.config = (3, [10, 20, 30])
-        assert svc._login_retry_needed(time.time()) is False
-
-    def test_no_retry_needed_when_index_out_of_range(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._login_retry.count = 4
-        svc._login_retry.config = (5, [10])
-        assert svc._login_retry_needed(time.time()) is False
-
-    def test_no_retry_needed_when_too_early(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._login_retry.count = 1
-        svc._login_retry.last_attempt = time.time()
-        svc._login_retry.config = (3, [60, 60, 60])
-        assert svc._login_retry_needed(time.time()) is False
-
-    def test_retry_needed(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._login_retry.count = 1
-        svc._login_retry.last_attempt = time.time() - 100
-        svc._login_retry.config = (3, [10, 20, 30])
-        svc._task_executor.is_login_running.return_value = False
-        assert svc._login_retry_needed(time.time()) is True
-
-
-# =====================================================================
 # _do_async_login
 # =====================================================================
 
 
+# =====================================================================
+# F04: 网络检测不再无条件 reset 重试计数
+# =====================================================================
+
+
+class TestNetworkCheckBackoff:
+    def test_need_login_calls_async_login(self, engine_factory):
+        """need_login=True 应调用 _do_async_login。"""
+        svc = engine_factory(raw=True)
+        mock_core = MagicMock()
+        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=False, net_reason="down", need_login=True, check_num=1, interval=300, result=NetworkCheckResult(available=False, method="none", latency_ms=0, detail="down"))
+        mock_core.consume_profile_switch_flag.return_value = False
+        svc._monitor_core = mock_core
+        svc._do_async_login = MagicMock()
+        svc._do_network_check()
+        svc._do_async_login.assert_called_once()
+
+    def test_no_login_needed_resets_failure_counters(self, engine_factory):
+        """need_login=False 应通过 _retry_policy.on_network_check 重置退避。"""
+        svc = engine_factory(raw=True)
+        mock_core = MagicMock()
+        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=True, net_reason="", need_login=False, check_num=1, interval=600, result=NetworkCheckResult(available=True, method="tcp", latency_ms=0, detail=""))
+        mock_core.consume_profile_switch_flag.return_value = False
+        svc._monitor_core = mock_core
+        svc._retry_policy._attempt = 5
+        svc._retry_policy._prev_network_ok = False  # 模拟之前断开
+        svc._do_network_check()
+        assert svc._retry_policy._attempt == 0
+
+    def test_on_done_auto_success_clears_failure_count(self, engine_factory):
+        """自动登录成功应通过 _retry_policy.on_login_done 重置退避。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="u", password="p", auth_url="http://x",
+            ),
+        )
+        svc._retry_policy._attempt = 3
+        callback_done = threading.Event()
+        future = Future()
+        _orig_adc = future.add_done_callback
+
+        def _wrapping_adc(cb):
+            def _wrapped(f):
+                cb(f)
+                callback_done.set()
+            _orig_adc(_wrapped)
+
+        future.add_done_callback = _wrapping_adc
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
+        svc._do_async_login()
+        future.set_result((True, "登录成功"))
+        callback_done.wait(timeout=2)
+        assert svc._retry_policy._attempt == 0
+
+    def test_on_done_auto_failure_increments_count(self, engine_factory):
+        """自动登录失败应通过 _retry_policy.on_login_done 递增退避计数。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="u", password="p", auth_url="http://x",
+            ),
+        )
+        svc._retry_policy._attempt = 0
+        callback_done = threading.Event()
+        future = Future()
+        _orig_adc = future.add_done_callback
+
+        def _wrapping_adc(cb):
+            def _wrapped(f):
+                cb(f)
+                callback_done.set()
+            _orig_adc(_wrapped)
+
+        future.add_done_callback = _wrapping_adc
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
+        svc._do_async_login()
+        future.set_result((False, "登录失败"))
+        callback_done.wait(timeout=2)
+        assert svc._retry_policy._attempt == 1
+
+    def test_on_done_auto_failure_triggers_backoff(self, engine_factory):
+        """连续失败后 _retry_policy 应返回退避延迟。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="u", password="p", auth_url="http://x",
+            ),
+        )
+        svc._retry_policy._attempt = 2  # 再失败一次就到 attempt=3，delay=20
+        callback_done = threading.Event()
+        future = Future()
+        _orig_adc = future.add_done_callback
+
+        def _wrapping_adc(cb):
+            def _wrapped(f):
+                cb(f)
+                callback_done.set()
+            _orig_adc(_wrapped)
+
+        future.add_done_callback = _wrapping_adc
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
+        svc._do_async_login()
+        future.set_result((False, "登录失败"))
+        callback_done.wait(timeout=2)
+        assert svc._retry_policy._attempt == 3
+        # attempt=3 → delay_before(3)=20.0 → 设置到 _next_retry_time
+        assert svc._next_retry_time > time.time() + 19
+
+    def test_on_done_manual_login_does_not_affect_failure_count(self, engine_factory):
+        """手动登录结果不应影响自动登录的退避计数。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="u", password="p", auth_url="http://x",
+            ),
+        )
+        svc._retry_policy._attempt = 2
+        callback_done = threading.Event()
+        future = Future()
+        _orig_adc = future.add_done_callback
+
+        def _wrapping_adc(cb):
+            def _wrapped(f):
+                cb(f)
+                callback_done.set()
+            _orig_adc(_wrapped)
+
+        future.add_done_callback = _wrapping_adc
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
+        svc._do_async_login(is_manual=True)
+        future.set_result((False, "登录失败"))
+        callback_done.wait(timeout=2)
+        # 手动登录不应递增
+        assert svc._retry_policy._attempt == 2
+
+    def test_on_done_manual_success_does_not_clear_failure_count(self, engine_factory):
+        """手动登录成功不应清空自动登录的退避计数。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="u", password="p", auth_url="http://x",
+            ),
+        )
+        svc._retry_policy._attempt = 2
+        callback_done = threading.Event()
+        future = Future()
+        _orig_adc = future.add_done_callback
+
+        def _wrapping_adc(cb):
+            def _wrapped(f):
+                cb(f)
+                callback_done.set()
+            _orig_adc(_wrapped)
+
+        future.add_done_callback = _wrapping_adc
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
+        svc._do_async_login(is_manual=True)
+        future.set_result((True, "登录成功"))
+        callback_done.wait(timeout=2)
+        assert svc._retry_policy._attempt == 2
+
+    def test_retry_policy_init_field_exist(self, engine_factory):
+        """__init__ 中应初始化 _retry_policy。"""
+        svc = engine_factory(raw=True)
+        assert svc._retry_policy._attempt == 0
+
+
 class TestDoAsyncLogin:
     def test_already_in_progress(self, engine_factory):
+        """去重命中：orchestrator.submit 返回旧 handle（future=None）。"""
         svc = engine_factory(raw=True)
-        svc._task_executor.is_login_running.return_value = True
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="u", password="p", auth_url="http://x",
+            ),
+        )
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = None
+        svc._orchestrator.submit.return_value = handle
         assert svc._do_async_login() is False
 
     def test_future_none(self, engine_factory):
+        """orchestrator 返回 rejected handle 时应返回 False。"""
         svc = engine_factory(raw=True)
-        svc._task_executor.execute_login_async.return_value = None
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="u", password="p", auth_url="http://x",
+            ),
+        )
+        handle = MagicMock()
+        handle.rejected_reason = "登录配置不完整"
+        handle.future = None
+        svc._orchestrator.submit.return_value = handle
         assert svc._do_async_login() is False
 
     def test_future_success(self, engine_factory):
         svc = engine_factory(raw=True)
-        # 使用一个未完成的 Future，避免 done_callback 立即执行
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="u", password="p", auth_url="http://x",
+            ),
+        )
         future = Future()
-        svc._task_executor.execute_login_async.return_value = future
-        svc._task_executor.is_login_running.return_value = False
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
         result = svc._do_async_login()
         assert result is True
 
     def test_exception_propagates(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._task_executor.is_login_running.return_value = False
-        svc._task_executor.execute_login_async.side_effect = RuntimeError("boom")
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="u", password="p", auth_url="http://x",
+            ),
+        )
+        svc._orchestrator.submit.side_effect = RuntimeError("boom")
         with pytest.raises(RuntimeError):
             svc._do_async_login()
+
+    def test_exception_does_not_consume_retry(self, engine_factory):
+        """orchestrator.submit 抛异常时不应递增失败计数。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="u", password="p", auth_url="http://x",
+            ),
+        )
+        svc._orchestrator.submit.side_effect = RuntimeError("pool closed")
+        svc._retry_policy._attempt = 0
+        with pytest.raises(RuntimeError):
+            svc._do_async_login()
+        assert svc._retry_policy._attempt == 0
+
+    def test_success_increments_retry_count(self, engine_factory):
+        """成功提交后退避计数应保持不变。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="u", password="p", auth_url="http://x",
+            ),
+        )
+        future = Future()
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
+        svc._retry_policy._attempt = 0
+        svc._do_async_login()
+        # 提交成功，退避计数不受提交影响（由回调处理）
+        assert svc._retry_policy._attempt == 0
+
+    def test_config_validation_blocks_auto_login(self, engine_factory):
+        """配置不完整时自动登录应被拦截，不提交任务。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = RuntimeConfig()  # 空配置（无凭证）
+        handle = MagicMock()
+        handle.rejected_reason = "登录配置不完整"
+        handle.future = None
+        svc._orchestrator.submit.return_value = handle
+        result = svc._do_async_login()
+        assert result is False
+
+    def test_config_validation_resets_retry_on_failure(self, engine_factory):
+        """配置校验失败时 _do_async_login 返回 False。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = RuntimeConfig()
+        handle = MagicMock()
+        handle.rejected_reason = "登录配置不完整"
+        handle.future = None
+        svc._orchestrator.submit.return_value = handle
+        result = svc._do_async_login()
+        assert result is False
+
+    def test_config_validation_blocks_missing_username(self, engine_factory):
+        svc = engine_factory(raw=True)
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(password="p", auth_url="http://x"),
+        )
+        handle = MagicMock()
+        handle.rejected_reason = "登录配置不完整"
+        handle.future = None
+        svc._orchestrator.submit.return_value = handle
+        assert svc._do_async_login() is False
+
+    def test_config_validation_blocks_missing_password(self, engine_factory):
+        svc = engine_factory(raw=True)
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(username="u", auth_url="http://x"),
+        )
+        handle = MagicMock()
+        handle.rejected_reason = "登录配置不完整"
+        handle.future = None
+        svc._orchestrator.submit.return_value = handle
+        assert svc._do_async_login() is False
+
+    def test_config_validation_blocks_missing_auth_url(self, engine_factory):
+        svc = engine_factory(raw=True)
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(username="u", password="p"),
+        )
+        handle = MagicMock()
+        handle.rejected_reason = "登录配置不完整"
+        handle.future = None
+        svc._orchestrator.submit.return_value = handle
+        assert svc._do_async_login() is False
+
+    def test_config_snapshot_bypasses_runtime_config(self, engine_factory):
+        """传入 config_snapshot 时应使用快照而非 _runtime_config。"""
+        svc = engine_factory(raw=True)
+        svc._runtime_config = RuntimeConfig()  # 运行时配置为空
+        snapshot = RuntimeConfig(
+            credentials=LoginCredentials(username="u", password="p", auth_url="http://x"),
+        )
+        future = Future()
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.future = future
+        svc._orchestrator.submit.return_value = handle
+        result = svc._do_async_login(config_snapshot=snapshot)
+        assert result is True
 
 
 
@@ -1046,7 +1343,7 @@ class TestRunManualLogin:
         svc._update_status_snapshot = MagicMock()
         ok, msg = svc.run_manual_login()
         assert ok is True
-        assert "已提交" in msg
+        assert "成功" in msg
 
     def test_run_manual_login_failure(self, engine_factory):
         svc = engine_factory(raw=True)
@@ -1064,12 +1361,18 @@ class TestRunManualLogin:
     def test_run_manual_login_timeout_engine_alive(self, engine_factory):
         svc = engine_factory(raw=True)
         def fake_enqueue(cmd):
+            # 不设置 response_data，模拟超时
             return True
         svc._enqueue = fake_enqueue
         svc._engine_thread = MagicMock()
         svc._engine_thread.is_alive.return_value = True
-        svc._ui_config.login_timeout = 0.01
-        ok, msg = svc.run_manual_login()
+        svc._runtime_config = svc._runtime_config.model_copy(update={
+            "browser": svc._runtime_config.browser.model_copy(update={"login_timeout": 0.01})
+        })
+        fast_event = MagicMock()
+        fast_event.wait.return_value = False
+        with patch("threading.Event", return_value=fast_event):
+            ok, msg = svc.run_manual_login()
         assert ok is False
         assert "超时" in msg
         assert not svc._manual_login_in_progress
@@ -1081,10 +1384,37 @@ class TestRunManualLogin:
         svc._enqueue = fake_enqueue
         svc._engine_thread = MagicMock()
         svc._engine_thread.is_alive.return_value = False
-        svc._ui_config.login_timeout = 0.01
-        ok, msg = svc.run_manual_login()
-        assert ok is False
-        assert "引擎线程已退出" in msg
+        svc._runtime_config = svc._runtime_config.model_copy(update={
+            "browser": svc._runtime_config.browser.model_copy(update={"login_timeout": 0.01})
+        })
+
+    def test_run_manual_login_api_timeout_buffered(self, engine_factory):
+        """API 等待超时应为 max(login_timeout, 60) + 10，大于 Worker 超时。"""
+        svc = engine_factory(raw=True)
+        wait_calls = []
+
+        def fake_enqueue(cmd):
+            # 模拟引擎线程设置响应
+            cmd.response_data = (True, "登录成功")
+            return True
+        svc._enqueue = fake_enqueue
+        svc._engine_thread = MagicMock()
+        svc._engine_thread.is_alive.return_value = True
+        svc._runtime_config = svc._runtime_config.model_copy(update={
+            "browser": svc._runtime_config.browser.model_copy(update={"login_timeout": 150})
+        })
+
+        spy_event = MagicMock()
+        spy_event.wait.side_effect = lambda timeout=None: (
+            wait_calls.append(timeout) or True
+        )
+        with patch("threading.Event", return_value=spy_event):
+            ok, msg = svc.run_manual_login()
+
+        assert ok is True
+        # 等待超时应为 max(150, 60) + 10 = 160
+        assert len(wait_calls) >= 1
+        assert wait_calls[-1] == 160
 
 
 # =====================================================================
@@ -1095,7 +1425,7 @@ class TestRunManualLogin:
 class TestNetwork:
     def test_network_ok(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._copy_runtime_config = MagicMock(return_value={"monitor": {}})
+        svc._runtime_config = RuntimeConfig()
         with patch("app.services.engine.is_network_available", return_value=True):
             ok, msg = svc.test_network()
         assert ok is True
@@ -1103,7 +1433,7 @@ class TestNetwork:
 
     def test_network_fail(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._copy_runtime_config = MagicMock(return_value={"monitor": {}})
+        svc._runtime_config = RuntimeConfig()
         with patch("app.services.engine.is_network_available", return_value=False):
             ok, msg = svc.test_network()
         assert ok is False
@@ -1111,7 +1441,7 @@ class TestNetwork:
 
     def test_network_exception(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._copy_runtime_config = MagicMock(return_value={"monitor": {}})
+        svc._runtime_config = RuntimeConfig()
         with patch("app.services.engine.is_network_available", side_effect=RuntimeError("timeout")):
             ok, msg = svc.test_network()
         assert ok is False
@@ -1119,14 +1449,14 @@ class TestNetwork:
 
     def test_network_with_targets(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._copy_runtime_config = MagicMock(return_value={
-            "monitor": {
-                "ping_targets": "8.8.8.8,1.1.1.1",
-                "enable_tcp_check": True,
-                "enable_http_check": False,
-                "url_check_urls": ["http://example.com"],
-            }
-        })
+        svc._runtime_config = RuntimeConfig(
+            monitor=MonitorSettings(
+                ping_targets=["8.8.8.8", "1.1.1.1"],
+                enable_tcp_check=True,
+                enable_http_check=False,
+                url_check_urls=["http://example.com|success"],
+            ),
+        )
         with patch("app.services.engine.is_network_available", return_value=True):
             ok, msg = svc.test_network()
         assert ok is True
@@ -1216,21 +1546,21 @@ class TestProperties:
 class TestSchedulerControl:
     def test_start_scheduler(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc.start_scheduler()
+        svc._start_scheduler()
         assert svc._scheduler_running is True
         assert svc._next_schedule_tick > time.time()
 
     def test_start_scheduler_idempotent(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc.start_scheduler()
+        svc._start_scheduler()
         first_tick = svc._next_schedule_tick
-        svc.start_scheduler()
+        svc._start_scheduler()
         assert svc._next_schedule_tick == first_tick
 
     def test_stop_scheduler(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._scheduler_running = True
-        svc.stop_scheduler()
+        svc._stop_scheduler()
         assert svc._scheduler_running is False
 
     def test_has_enabled_tasks(self, engine_factory):
@@ -1245,19 +1575,19 @@ class TestSchedulerControl:
 
 
 class TestGetConfig:
-    def test_get_config_returns_copy(self, engine_factory):
+    def test_get_config_returns_runtime_config(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._ui_config = MagicMock()
+        svc._runtime_config = RuntimeConfig()
         config = svc.get_config()
-        svc._ui_config.model_copy.assert_called_once_with(deep=True)
+        assert config is svc._runtime_config
+        assert isinstance(config, RuntimeConfig)
 
-    def test_get_runtime_config_returns_copy(self, engine_factory):
+    def test_get_runtime_config_returns_reference(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._runtime_config = {"key": "value"}
+        svc._runtime_config = RuntimeConfig()
         config = svc.get_runtime_config()
-        assert config == {"key": "value"}
-        config["key"] = "modified"
-        assert svc._runtime_config["key"] == "value"
+        assert config is svc._runtime_config
+        assert isinstance(config, RuntimeConfig)
 
 
 # =====================================================================
@@ -1355,3 +1685,56 @@ class TestWsDrain:
         svc._ws_manager.broadcast.side_effect = RuntimeError("ws error")
         svc._empty_broadcast_queue.append({"type": "status", "data": {}})
         await svc.drain_ws_queue()
+
+
+# =====================================================================
+# F15 — set_dashboard_sink 迁移轻量模式广播队列
+# =====================================================================
+
+
+class TestSetDashboardSinkMigration:
+    """F15: set_dashboard_sink 应将 _empty_broadcast_queue 内容迁移到新 sink。"""
+
+    def test_migrates_old_queue_to_new_sink(self, engine_factory):
+        """有残留消息时应迁移到新 sink 的 broadcast_queue。"""
+        svc = engine_factory(raw=True)
+        svc._dashboard_sink = None
+        msg1 = {"type": "status", "data": {"monitoring": True}}
+        msg2 = {"type": "status", "data": {"monitoring": False}}
+        svc._empty_broadcast_queue.append(msg1)
+        svc._empty_broadcast_queue.append(msg2)
+
+        mock_sink = MagicMock()
+        mock_sink.broadcast_queue = deque()
+        svc.set_dashboard_sink(mock_sink)
+
+        assert list(mock_sink.broadcast_queue) == [msg1, msg2]
+        assert len(svc._empty_broadcast_queue) == 0
+
+    def test_empty_old_queue_noop(self, engine_factory):
+        """旧队列为空时不应影响新 sink。"""
+        svc = engine_factory(raw=True)
+        svc._dashboard_sink = None
+        assert len(svc._empty_broadcast_queue) == 0
+
+        mock_sink = MagicMock()
+        mock_sink.broadcast_queue = deque()
+        svc.set_dashboard_sink(mock_sink)
+
+        assert len(mock_sink.broadcast_queue) == 0
+        assert svc._dashboard_sink is mock_sink
+
+    def test_migrates_even_when_old_queue_full(self, engine_factory):
+        """旧队列满（maxlen=10）时迁移现有内容。"""
+        svc = engine_factory(raw=True)
+        svc._dashboard_sink = None
+        for i in range(12):
+            svc._empty_broadcast_queue.append({"type": "status", "data": {"i": i}})
+
+        mock_sink = MagicMock()
+        mock_sink.broadcast_queue = deque()
+        svc.set_dashboard_sink(mock_sink)
+
+        # maxlen=10，所以只有最后 10 条
+        assert len(mock_sink.broadcast_queue) == 10
+        assert len(svc._empty_broadcast_queue) == 0

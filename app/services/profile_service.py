@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import threading
 import time
@@ -7,12 +8,33 @@ from collections.abc import Callable
 from pathlib import Path
 
 from app.network.detect import detect_gateway_ip, detect_wifi_ssid
-from app.schemas import AuthProfile, ProfilesData
+from app.schemas import Profile, ProfilesData, RuntimeConfig
 from app.utils.crypto import save_password_field
 from app.utils.files import atomic_write
 from app.utils.logging import get_logger
 
 profile_logger = get_logger("profile_service", source="backend")
+
+
+def migrate_v3_to_v4(data: dict) -> dict:
+    """将 v3 的 config 字段重命名为 global_config，剥离 credentials/active_task。
+
+    v3 格式: {"config": {...}, ...}
+    v4 格式: {"global_config": {...}, "config_version": 4, ...}
+    """
+    if data.get("config_version", 3) >= 4:
+        return data
+
+    old_config = data.get("config", {})
+    # 剥离运行时字段（不应持久化到 global_config）
+    old_config.pop("credentials", None)
+    old_config.pop("active_task", None)
+    # custom_variables 保留（属于用户配置，归入 global_config）
+
+    data["global_config"] = old_config
+    data.pop("config", None)
+    data["config_version"] = 4
+    return data
 
 
 class ProfileService:
@@ -42,7 +64,9 @@ class ProfileService:
 
         try:
             raw = self._settings_path.read_text(encoding="utf-8")
-            return ProfilesData.model_validate_json(raw)
+            data = json.loads(raw)
+            data = migrate_v3_to_v4(data)
+            return ProfilesData.model_validate(data)
         except Exception:
             profile_logger.exception("加载 settings.json 失败")
             corrupt_name = f"settings.corrupt.{int(time.time())}.json"
@@ -82,7 +106,7 @@ class ProfileService:
             func(data)
             self._save_unsafe(data)
 
-    def get_active_profile(self) -> AuthProfile:
+    def get_active_profile(self) -> Profile:
         """获取当前活动方案的设置（返回值由 load() 深拷贝保护，无需再次拷贝）"""
         data = self.load()
         profile_id = data.active_profile
@@ -93,7 +117,7 @@ class ProfileService:
         if data.profiles:
             first_id = next(iter(data.profiles))
             return data.profiles[first_id]
-        return AuthProfile()
+        return Profile()
 
     def get_active_profile_id(self) -> str:
         """获取当前活动方案 ID"""
@@ -114,7 +138,7 @@ class ProfileService:
         return True, f"已切换到方案: {profile_name}"
 
     def save_profile(
-        self, profile_id: str, settings: AuthProfile
+        self, profile_id: str, settings: Profile
     ) -> tuple[bool, str]:
         """创建或更新一个方案"""
         if not profile_id or not profile_id.strip():
@@ -207,6 +231,36 @@ class ProfileService:
             )
 
         return ssid_match_id
+
+    def get_runtime_config(self) -> RuntimeConfig:
+        """读磁盘 → 构建运行时配置。"""
+        from app.services.config_builder import ConfigBuilder
+
+        data = self.load()
+        profile = self._get_active_profile(data)
+        return ConfigBuilder.build(data.global_config, profile)
+
+    def build_runtime_config(self, data: ProfilesData) -> RuntimeConfig:
+        """从已加载的 data 构建运行时配置（避免重复读盘）。"""
+        from app.services.config_builder import ConfigBuilder
+
+        profile = self._get_active_profile(data)
+        return ConfigBuilder.build(data.global_config, profile)
+
+    def _get_active_profile(self, data: ProfilesData) -> Profile:
+        """获取活跃方案并解密密码。"""
+        from app.utils.crypto import decrypt_password_field
+
+        profile = data.profiles.get(data.active_profile)
+        if profile is None:
+            profile = data.profiles.get("default", Profile())
+        # 解密密码
+        if profile.password:
+            decrypted, err = decrypt_password_field(profile.password)
+            if err:
+                profile_logger.warning("密码解密失败")
+            profile = profile.model_copy(update={"password": decrypted or ""})
+        return profile
 
     def set_auto_switch(self, enabled: bool) -> None:
         """设置自动切换开关"""

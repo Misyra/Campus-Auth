@@ -178,12 +178,14 @@ func downloadUv(uvDir, uvExe string) error {
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
 			os.Remove(archive)
-			return fmt.Errorf("解压失败: %v", err)
+			fmt.Printf(" 解压失败: %v，尝试下一个源...\n", err)
+			continue
 		}
 		os.Remove(archive)
 
 		if _, err := os.Stat(uvExe); err != nil {
-			return fmt.Errorf("解压后未找到 uv.exe")
+			fmt.Println(" 解压后未找到 uv.exe，尝试下一个源...")
+			continue
 		}
 
 		fmt.Println("[OK] uv 下载完成")
@@ -233,13 +235,17 @@ func runCommand(name string, args ...string) error {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		<-sigChan
-		if cmd.Process != nil {
-			cmd.Process.Signal(os.Interrupt)
+		for sig := range sigChan {
+			if cmd.Process != nil {
+				cmd.Process.Signal(sig)
+			}
 		}
 	}()
 
-	return cmd.Wait()
+	err := cmd.Wait()
+	signal.Stop(sigChan)
+	close(sigChan)
+	return err
 }
 
 // fatal 输出错误信息并退出

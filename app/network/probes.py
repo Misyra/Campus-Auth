@@ -16,7 +16,7 @@ from app.utils.logging import get_logger
 
 logger = get_logger("network_probes", source="network")
 
-executor = ThreadPoolExecutor(max_workers=3)
+executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="net")
 atexit.register(executor.shutdown, wait=False, cancel_futures=True)
 _proxy_lock = threading.Lock()
 _block_proxy = True  # 默认屏蔽系统代理，避免代理影响网络检测
@@ -51,7 +51,7 @@ def _get_probe_client(block_proxy: bool) -> httpx.Client:
             ),
         )
         _probe_block_proxy = block_proxy
-    return _probe_client
+        return _probe_client
 
 
 def _close_probe_client() -> None:
@@ -105,7 +105,11 @@ def is_network_available_socket(
     test_sites: Sequence[tuple[str, int]] | None = None,
     timeout: float = 1.5,
 ) -> bool:
-    targets = test_sites or (("www.baidu.com", 443), ("1.1.1.1", 53))
+    if not test_sites:
+        from app.constants import DEFAULT_NETWORK_TARGETS
+        from app.utils.network import parse_ping_targets
+        test_sites = parse_ping_targets(DEFAULT_NETWORK_TARGETS)
+    targets = test_sites
 
     def _connect_one(host: str, port: int) -> tuple[str, bool, str]:
         start = time.perf_counter()
@@ -143,14 +147,9 @@ def is_network_available_url(
     返回 True 表示至少有一个检测 URL 返回了预期内容（网络正常）。
     """
     if url_checks is None:
-        url_checks = [
-            ("http://captive.apple.com/hotspot-detect.html", "Success"),
-            (
-                "http://www.msftconnecttest.com/connecttest.txt",
-                "Microsoft Connect Test",
-            ),
-            ("http://detectportal.firefox.com/success.txt", "success"),
-        ]
+        from app.constants import DEFAULT_URL_CHECK_URLS
+        from app.utils.network import parse_url_checks
+        url_checks = parse_url_checks(DEFAULT_URL_CHECK_URLS)
     if not url_checks:
         return True
 
@@ -182,6 +181,11 @@ def is_network_available_url(
     )
 
 
+def _is_captive_portal_url(url: str) -> bool:
+    """判断是否为 captive portal 检测 URL（返回 204 表示正常，200 表示被劫持）。"""
+    return "generate_204" in url or "connectivitycheck" in url
+
+
 def is_network_available_http(
     test_urls: Iterable[str] | None = None,
     timeout: float = 2.0,
@@ -193,11 +197,13 @@ def is_network_available_http(
     会用自签名证书拦截 HTTPS 流量。目的是检测连通性，而非验证 TLS 安全性。
     这与 browser.py 中的 ignore_https_errors=True 一致。
 
-    在 follow_redirects=False 模式下，200<=status<300 表示连通正常；
-    门户的 302 重定向不算正常（会触发登录）。注意：门户返回 200 且内容为
-    登录页面（无重定向）是已知的检测限制。
+    captive portal URL（含 generate_204/connectivitycheck）：仅 204 表示正常，
+    200 为门户劫持。普通 URL：200<=status<300 表示连通。
     """
-    urls = list(test_urls or ("https://www.baidu.com", "https://www.qq.com"))
+    if not test_urls:
+        from app.constants import DEFAULT_HTTP_TARGETS
+        test_urls = DEFAULT_HTTP_TARGETS.split(",")
+    urls = list(test_urls)
     if len(urls) == 0:
         return False
 
@@ -210,7 +216,11 @@ def is_network_available_http(
                 url, timeout=timeout, follow_redirects=follow_redirects
             )
             elapsed = (time.perf_counter() - start) * 1000
-            if 200 <= resp.status_code < 300:
+            if _is_captive_portal_url(url):
+                ok = resp.status_code == 204
+            else:
+                ok = 200 <= resp.status_code < 300
+            if ok:
                 return (url, True, f"HTTP {resp.status_code} ({elapsed:.0f}ms)")
             return (url, False, f"HTTP {resp.status_code} ({elapsed:.0f}ms)")
         except Exception as exc:

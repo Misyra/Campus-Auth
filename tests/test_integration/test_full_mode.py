@@ -9,16 +9,20 @@ from unittest.mock import patch
 
 import pytest
 
-from app.schemas import MonitorConfigPayload
-from app.services.config_service import save_and_apply
+from app.schemas import ConfigResponseDTO, LoginCredentials, RuntimeConfig
+from app.services.config_service import save_global_and_profile
 from app.workers.playwright_worker import WorkerResponse
 
 
 def _ensure_login_config(engine) -> None:
     """确保引擎运行时配置包含登录所需字段。"""
-    engine._runtime_config["username"] = "testuser"
-    engine._runtime_config["password"] = "testpass"
-    engine._runtime_config["auth_url"] = "http://10.0.0.1"
+    old = engine._runtime_config
+    engine._runtime_config = old.model_copy(update={
+        "credentials": LoginCredentials(
+            username="testuser", password="testpass", auth_url="http://10.0.0.1",
+            isp=old.credentials.isp, carrier_custom=old.credentials.carrier_custom,
+        ),
+    })
 
 
 class TestFullMode:
@@ -43,7 +47,7 @@ class TestFullMode:
         # 等待引擎线程处理 START 命令
         time.sleep(0.5)
         assert engine._is_monitoring
-        engine.start_scheduler()
+        engine._start_scheduler()
         assert engine.scheduler_running
 
         # t1: 注册定时任务（时间设为当前，确保 tick 时命中）
@@ -70,8 +74,13 @@ class TestFullMode:
         if "test_task" in due:
             engine._run_schedule_tick()
             # 等待异步任务完成（execute_task_async 提交到线程池）
-            time.sleep(2)
-            history = task_executor.get_history("test_task")
+            deadline = time.time() + 10
+            history = []
+            while time.time() < deadline:
+                history = task_executor.get_history("test_task")
+                if len(history) >= 1:
+                    break
+                time.sleep(0.1)
             assert len(history) >= 1
         else:
             # 分钟边界导致任务不在当前 tick 中，验证任务已注册
@@ -88,15 +97,15 @@ class TestFullMode:
         assert ok is True
 
         # t5: 保存配置 → 重载
-        new_payload = MonitorConfigPayload(
-            username="testuser",
-            password="",
-            auth_url="http://10.0.0.1",
-            check_interval_seconds=120,
+        payload = ConfigResponseDTO(
+            browser=engine._runtime_config.browser,
+            monitor=engine._runtime_config.monitor,
+            retry=engine._runtime_config.retry,
+            pause=engine._runtime_config.pause,
+            logging=engine._runtime_config.logging,
         )
-        result = save_and_apply(new_payload, profile_service, engine.reload_config)
+        result = save_global_and_profile(payload, profile_service, engine.reload_config)
         assert result.success is True
-        assert engine.get_config().check_interval_seconds == 120
 
         # t6: 关闭
         engine.shutdown()

@@ -189,7 +189,7 @@ class TestAppLifespan:
         self._run_lifespan(_app, _check)
 
     def test_starts_scheduler_when_enabled(self, mock_all_routers, mock_deps):
-        """有启用的定时任务时 lifespan 应启动调度器。"""
+        """有启用的定时任务时 lifespan 应同步调度器状态。"""
         from app.application import create_app
 
         mock_container = _make_mock_container()
@@ -197,12 +197,12 @@ class TestAppLifespan:
         _app = create_app(existing_container=mock_container)
 
         async def _check(app):
-            mock_container.engine.start_scheduler.assert_called_once()
+            mock_container.engine.sync_scheduler_state.assert_called_once()
 
         self._run_lifespan(_app, _check)
 
     def test_skips_scheduler_when_no_enabled_tasks(self, mock_all_routers, mock_deps):
-        """无启用的定时任务时 lifespan 不应启动调度器。"""
+        """无启用的定时任务时 lifespan 也应同步调度器状态（由 sync 内部判断）。"""
         from app.application import create_app
 
         mock_container = _make_mock_container()
@@ -210,7 +210,7 @@ class TestAppLifespan:
         _app = create_app(existing_container=mock_container)
 
         async def _check(app):
-            mock_container.engine.start_scheduler.assert_not_called()
+            mock_container.engine.sync_scheduler_state.assert_called_once()
 
         self._run_lifespan(_app, _check)
 

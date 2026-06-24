@@ -58,11 +58,10 @@ def _make_executor(
         registry=registry,
         history_store=history_store,
         worker_getter=kwargs.get("worker_getter", MagicMock()),
-        login_history=kwargs.get("login_history", MagicMock()),
-        profile_service=kwargs.get("profile_service", MagicMock()),
         get_runtime_config=kwargs.get(
             "get_runtime_config", lambda: {"browser_settings": {}}
         ),
+        login_orchestrator=kwargs.get("login_orchestrator", MagicMock()),
     )
     return executor
 
@@ -355,22 +354,26 @@ class TestTaskExecutionWithVariableResolution:
 
     def test_execute_browser_task_with_variables(self, tmp_path: Path):
         """浏览器任务执行时正确传递变量配置。"""
+        from app.services.login_orchestrator import LoginHandle
+        from app.utils.cancel_token import CompositeCancelEvent
+
         registry = TaskRegistry(tmp_path)
         config = _make_task_config(task_type="browser", target_id="test_task")
         registry.save_task("test_task", config)
 
-        executor = _make_executor(registry=registry)
+        mock_orchestrator = MagicMock()
+        mock_handle = LoginHandle(
+            future=None,
+            source="browser",
+            cancel_event=CompositeCancelEvent(),
+        )
+        mock_handle.result = MagicMock(return_value=(True, "浏览器任务执行成功"))
+        mock_handle.rejected_reason = None
+        mock_orchestrator.submit.return_value = mock_handle
 
-        mock_worker = MagicMock()
-        mock_result = MagicMock()
-        mock_result.success = True
-        mock_result.data = "登录成功"
-        mock_worker.submit.return_value = mock_result
+        executor = _make_executor(registry=registry, login_orchestrator=mock_orchestrator)
 
-        executor._worker_getter = MagicMock(return_value=mock_worker)
-
-        with patch("app.workers.playwright_worker.CMD_LOGIN", "login"):
-            success, message = executor._execute_browser("test_task", 30)
+        success, message = executor._execute_browser("test_task", 30)
 
         assert success is True
         assert "成功" in message
@@ -543,8 +546,12 @@ class TestTaskCancellation:
     """任务取消：取消事件传播、线程池行为。"""
 
     def test_login_cancel_event(self):
-        """登录取消事件正确传播。"""
-        executor = _make_executor()
+        """登录取消事件正确传播到 orchestrator。"""
+        mock_orchestrator = MagicMock()
+        mock_handle = MagicMock()
+        mock_handle.result.return_value = (False, "登录已取消")
+        mock_orchestrator.submit.return_value = mock_handle
+        executor = _make_executor(login_orchestrator=mock_orchestrator)
 
         cancel_event = threading.Event()
         cancel_event.set()
@@ -553,30 +560,23 @@ class TestTaskCancellation:
 
         assert success is False
         assert "取消" in message
+        call_kwargs = mock_orchestrator.submit.call_args.kwargs
+        assert call_kwargs["cancel_event"] is cancel_event
 
     def test_login_async_deduplication(self):
-        """登录异步去重：并发提交只执行一次。"""
-        executor = _make_executor()
+        """登录异步委托到 orchestrator。"""
+        mock_orchestrator = MagicMock()
+        mock_future = Future()
+        mock_future.set_result((True, "登录成功"))
+        mock_handle = MagicMock()
+        mock_handle.future = mock_future
+        mock_orchestrator.submit.return_value = mock_handle
 
-        # 使用延迟返回的 mock 避免回调死锁
-        import time as _time
+        executor = _make_executor(login_orchestrator=mock_orchestrator)
 
-        def slow_login(cancel_event=None, config_snapshot=None):
-            _time.sleep(0.1)
-            return (True, "登录成功")
-
-        executor.execute_login = slow_login
-
-        future1 = executor.execute_login_async()
-        # 短暂等待确保第一个任务已提交但未完成
-        _time.sleep(0.02)
-        future2 = executor.execute_login_async()
-
-        # 去重：返回同一个 Future
-        assert future1 is future2
-
-        # 等待完成
-        result = future1.result(timeout=5)
+        future = executor.execute_login_async()
+        assert future is mock_future
+        result = future.result(timeout=5)
         assert result[0] is True
 
     def test_bounded_executor_rejects_when_full(self):
@@ -637,17 +637,15 @@ class TestTaskCancellation:
         pool.shutdown(wait=True)
 
     def test_execute_login_async_returns_future(self):
-        """execute_login_async 返回 Future 对象。"""
-        executor = _make_executor()
+        """execute_login_async 返回 orchestrator 的 Future 对象。"""
+        mock_orchestrator = MagicMock()
+        mock_future = Future()
+        mock_future.set_result((True, "ok"))
+        mock_handle = MagicMock()
+        mock_handle.future = mock_future
+        mock_orchestrator.submit.return_value = mock_handle
 
-        # 使用延迟返回的 mock 避免回调死锁
-        import time as _time
-
-        def slow_login(cancel_event=None, config_snapshot=None):
-            _time.sleep(0.05)
-            return (True, "ok")
-
-        executor.execute_login = slow_login
+        executor = _make_executor(login_orchestrator=mock_orchestrator)
 
         future = executor.execute_login_async()
 
