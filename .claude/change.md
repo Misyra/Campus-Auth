@@ -1,5 +1,27 @@
 # 修改日志
 
+## 2026-06-25 (2)
+
+### refactor: 消除 TaskService 冗余层 — 合并到 TaskManager
+
+- `app/services/task_service.py`：删除（219 行），逻辑合并到 TaskManager
+- `app/tasks/manager.py`：
+  - 新增 `_DANGEROUS_STEP_TYPES` 常量和 `_check_dangerous_steps()` 函数（从 TaskService 迁移）
+  - 新增 `get_task_detail()` 方法：加载任务详情（含脚本内容读取），统一浏览器/脚本任务返回格式
+  - 新增 `save_task_with_validation()` 方法：保存任务（含危险步骤检查和 ID 校验）
+  - 新增 `_save_script_task_validated()` 方法：保存脚本任务（含内容大小验证）
+  - 新增 `delete_task_with_validation()` 方法：删除任务（含 ID 校验）
+  - 新增 `set_active_task_with_validation()` 方法：设置活动任务（含 ID 和存在性校验）
+  - 新增 `get_script_path_public()` 方法：公开接口封装 `_safe_task_path`
+  - 新增 `save_order_with_validation()` 方法：保存排序配置（含格式验证）
+- `app/container.py`：`TaskService(project_root)` → `TaskManager(project_root / "tasks")`，TaskExecutor 注入 `task_manager`
+- `app/deps.py`：`get_task_service` → `get_task_manager`
+- `app/api/tasks.py`：7 个路由从 `Depends(get_task_service)` 改为 `Depends(get_task_manager)`
+- `app/api/scripts.py`：5 个路由从 `Depends(get_task_service)` 改为 `Depends(get_task_manager)`
+- `app/services/debug_service.py`：`services.task_service.task_manager.load_task()` → `services.task_manager.load_task()`
+- `app/services/task_executor.py`：新增 `task_manager` 参数和 `task_manager` 属性
+- 测试文件同步更新（8 个文件）：所有 `task_service` mock 引用改为 `task_manager`，方法名映射同步更新
+
 ## 2026-06-25
 
 ### refactor: ProfileService 单例化 — 消除多余实例化点

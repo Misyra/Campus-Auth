@@ -28,7 +28,7 @@ def mock_classes():
         patch("app.container.ProfileService") as mock_profile_cls,
         patch("app.container.LoginHistoryService") as mock_lh_cls,
         patch("app.container.ScheduleEngine") as mock_engine_cls,
-        patch("app.container.TaskService") as mock_task_cls,
+        patch("app.container.TaskManager") as mock_task_cls,
         patch("app.container.AutoStartService") as mock_autostart_cls,
         patch("app.container.TaskRegistry") as mock_tr_cls,
         patch("app.container.TaskHistoryStore") as mock_ths_cls,
@@ -40,7 +40,7 @@ def mock_classes():
             "ProfileService": mock_profile_cls,
             "LoginHistoryService": mock_lh_cls,
             "ScheduleEngine": mock_engine_cls,
-            "TaskService": mock_task_cls,
+            "TaskManager": mock_task_cls,
             "AutoStartService": mock_autostart_cls,
             "TaskRegistry": mock_tr_cls,
             "TaskHistoryStore": mock_ths_cls,
@@ -104,11 +104,11 @@ class TestInit:
         assert call_args[0][0] == project_root
         assert call_args[1]["login_history_service"] is container.login_history_service
 
-    def test_task_service_created_with_root(
+    def test_task_manager_created_with_root(
         self, container, project_root, mock_classes
     ):
-        """TaskService 应以 project_root 构造。"""
-        mock_classes["TaskService"].assert_called_once_with(project_root)
+        """TaskManager 应以 project_root / 'tasks' 构造。"""
+        mock_classes["TaskManager"].assert_called_once_with(project_root / "tasks")
 
     def test_autostart_service_created(self, container, project_root, mock_classes):
         """AutoStartService 应以 project_root 构造。"""
@@ -126,7 +126,7 @@ class TestInit:
         assert hasattr(container, "login_history_service")
         assert hasattr(container, "engine")
         assert hasattr(container, "monitor_service")  # 向后兼容别名
-        assert hasattr(container, "task_service")
+        assert hasattr(container, "task_manager")
         assert hasattr(container, "autostart_service")
         assert hasattr(container, "debug_manager")
         assert hasattr(container, "task_registry")
@@ -374,7 +374,7 @@ class TestIntegration:
     ):
         """所有通过容器创建的服务都应基于相同的 project_root。"""
         assert mock_classes["ProfileService"].call_args[0][0] == project_root
-        assert mock_classes["TaskService"].call_args[0][0] == project_root
+        assert mock_classes["TaskManager"].call_args[0][0] == project_root / "tasks"
         assert mock_classes["AutoStartService"].call_args[0][0] == project_root
         _ = container.debug_manager  # 触发延迟初始化
         assert mock_classes["DebugSessionManager"].call_args[0][0] == project_root

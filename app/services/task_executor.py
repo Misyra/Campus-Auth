@@ -80,6 +80,7 @@ class TaskExecutor:
         history_store: Any,
         worker_getter: Callable,
         login_orchestrator: Any,
+        task_manager: Any = None,
         get_runtime_config: Callable[[], RuntimeConfig] | None = None,
     ) -> None:
         self._registry = registry
@@ -87,6 +88,7 @@ class TaskExecutor:
         self._worker_getter = worker_getter
         self._get_runtime_config = get_runtime_config
         self._login_orchestrator = login_orchestrator
+        self._task_manager = task_manager
 
         # 线程池：任务池懒初始化（无定时任务时不创建线程）
         self._task_pool: BoundedExecutor | None = None
@@ -104,6 +106,11 @@ class TaskExecutor:
     def set_runtime_config_getter(self, getter: Callable[[], RuntimeConfig]) -> None:
         """设置运行时配置获取器（公共接口）。"""
         self._get_runtime_config = getter
+
+    @property
+    def task_manager(self):
+        """浏览器/脚本任务管理器（供 API 路由访问）。"""
+        return self._task_manager
 
     def _ensure_task_pool(self) -> BoundedExecutor:
         """确保定时任务线程池存在（懒初始化，双检锁）。"""

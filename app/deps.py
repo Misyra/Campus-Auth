@@ -10,7 +10,7 @@ from app.services.debug_service import DebugSessionManager
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
 from app.services.profile_service import ProfileService
-from app.services.task_service import TaskService
+from app.tasks import TaskManager
 
 
 def get_services(request: Request) -> ServiceContainer:
@@ -25,8 +25,8 @@ def get_profile_service(request: Request) -> ProfileService:
     return request.app.state.services.profile_service
 
 
-def get_task_service(request: Request) -> TaskService:
-    return request.app.state.services.task_service
+def get_task_manager(request: Request) -> TaskManager:
+    return request.app.state.services.task_manager
 
 
 def get_autostart_service(request: Request) -> AutoStartService:

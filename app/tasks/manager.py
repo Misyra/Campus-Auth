@@ -15,6 +15,37 @@ from .validator import TaskValidator
 
 logger = get_logger("task_manager", source="task")
 
+_DANGEROUS_STEP_TYPES = {"eval", "custom_js"}
+
+
+def _check_dangerous_steps(task_data: dict[str, Any]) -> list[dict[str, Any]]:
+    """检查任务中的危险步骤，返回详细信息列表（含代码内容）。"""
+    warnings = []
+    steps = task_data.get("steps", [])
+    for i, step in enumerate(steps):
+        if not isinstance(step, dict):
+            continue
+        step_type = step.get("type", "")
+        if step_type in _DANGEROUS_STEP_TYPES:
+            desc = step.get("description", step.get("id", f"步骤{i + 1}"))
+            extra = step.get("extra", {})
+            code = (
+                step.get("script")
+                or step.get("code")
+                or extra.get("script")
+                or extra.get("code")
+                or ""
+            )
+            warnings.append(
+                {
+                    "step_index": i + 1,
+                    "step_type": step_type,
+                    "description": desc,
+                    "code": str(code)[:2000],
+                }
+            )
+    return warnings
+
 
 def normalize_task_id(task_id: str | None) -> str:
     if not isinstance(task_id, str):
@@ -465,3 +496,142 @@ class TaskManager:
         except Exception as e:
             logger.error("无法设置活动任务: {}", e)
             return False
+
+    # ── 验证包装方法（原 TaskService 逻辑）──
+
+    def get_task_detail(self, task_id: str) -> dict[str, Any] | None:
+        """加载任务详情（含脚本内容读取），统一浏览器/脚本任务返回格式。"""
+        task_id = normalize_task_id(task_id)
+        if not is_valid_task_id(task_id):
+            return None
+        task = self.load_task(task_id)
+        if task is None:
+            return None
+
+        if isinstance(task, ScriptTaskInfo):
+            content = ""
+            if task.script_path.suffix.lower() == ".json":
+                try:
+                    data = json.loads(task.script_path.read_text(encoding="utf-8"))
+                    content = data.get("content", "")
+                except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    logger.error("读取脚本 JSON 失败 {}: {}", task.script_path, exc)
+                    return None
+            else:
+                try:
+                    content = task.script_path.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError) as exc:
+                    logger.error("读取脚本文件失败 {}: {}", task.script_path, exc)
+                    return None
+            return {
+                "id": task_id,
+                "name": task.name,
+                "description": task.description,
+                "type": "script",
+                "content": content,
+                "binary_path": task.binary_path,
+            }
+
+        result = task.to_dict()
+        result["id"] = task_id
+        result["type"] = "browser"
+        try:
+            json_path = self._safe_json_path(task_id, task_type="browser")
+            if json_path and json_path.exists():
+                result["raw_json"] = json.loads(json_path.read_text(encoding="utf-8"))
+        except Exception:
+            logger.warning(
+                "读取任务原始 JSON 失败 (task_id={})", task_id, exc_info=True
+            )
+        return result
+
+    def save_task_with_validation(self, task_id: str, config: dict[str, Any]) -> tuple[bool, str]:
+        """保存任务（含危险步骤检查和 ID 校验）。"""
+        task_id = normalize_task_id(task_id)
+        if not is_valid_task_id(task_id):
+            return False, "任务ID必须以字母开头，且只能包含字母、数字和下划线"
+
+        task_type = config.get("type", "browser")
+        if task_type == "script":
+            return self._save_script_task_validated(task_id, config)
+
+        if not config.get("name"):
+            return False, "任务名称不能为空"
+        if not config.get("steps"):
+            return False, "至少需要一个执行步骤"
+
+        warnings = _check_dangerous_steps(config)
+        for w in warnings:
+            logger.warning("任务 {}: {}", task_id, w)
+
+        success = self.save_task(task_id, config)
+        if success:
+            logger.info("任务已保存: {}", task_id)
+            return True, "任务保存成功"
+        return False, "任务保存失败"
+
+    def _save_script_task_validated(self, task_id: str, config: dict[str, Any]) -> tuple[bool, str]:
+        """保存自定义脚本任务（含验证）。"""
+        content = config.get("content", "")
+        if not content.strip():
+            return False, "脚本内容不能为空"
+
+        max_size = 100 * 1024
+        if len(content.encode("utf-8")) > max_size:
+            return False, f"脚本内容超过大小限制（最大 {max_size // 1024}KB）"
+
+        save_data = {
+            "content": content,
+            "name": config.get("name", ""),
+            "description": config.get("description", ""),
+            "binary_path": config.get("binary_path", ""),
+        }
+        success = self.save_task(task_id, save_data, task_type="scripts")
+        if success:
+            logger.info("脚本任务已保存: {}", task_id)
+            return True, "脚本任务保存成功"
+        return False, "脚本任务保存失败"
+
+    def delete_task_with_validation(self, task_id: str) -> tuple[bool, str]:
+        """删除任务（含 ID 校验）。"""
+        task_id = normalize_task_id(task_id)
+        if not is_valid_task_id(task_id):
+            return False, "任务ID必须以字母开头，且只能包含字母、数字和下划线"
+        if task_id == "default":
+            return False, "不能删除默认任务"
+
+        success = self.delete_task(task_id)
+        if success:
+            logger.info("任务已删除: {}", task_id)
+            return True, "任务删除成功"
+        return False, "任务不存在或删除失败"
+
+    def set_active_task_with_validation(self, task_id: str) -> tuple[bool, str]:
+        """设置活动任务（含 ID 校验）。"""
+        task_id = normalize_task_id(task_id)
+        if not is_valid_task_id(task_id):
+            return False, "任务ID必须以字母开头，且只能包含字母、数字和下划线"
+
+        if not self.load_task(task_id):
+            return False, "任务不存在"
+
+        success = self.set_active_task(task_id)
+        if success:
+            logger.info("活动任务已设置: {}", task_id)
+            return True, "活动任务已设置"
+        logger.error("设置活动任务失败: {}", task_id)
+        return False, "设置活动任务失败"
+
+    def get_script_path_public(self, task_id: str) -> Path | None:
+        """获取脚本任务文件路径（公开接口，封装内部 _safe_task_path）。"""
+        return self._safe_task_path(task_id, task_type="scripts")
+
+    def save_order_with_validation(self, order: dict[str, list[str]]) -> tuple[bool, str]:
+        """保存任务排序配置。"""
+        if not isinstance(order, dict):
+            return False, "排序数据格式无效"
+        success = self.save_order(order)
+        if success:
+            logger.info("任务排序已保存")
+            return True, "排序保存成功"
+        return False, "排序保存失败"
