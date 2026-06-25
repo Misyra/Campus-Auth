@@ -32,7 +32,7 @@
           id="settings-password"
           v-model="config.credentials.password"
           name="password"
-          type="password"
+          type="text"
           :placeholder="config.credentials.password && config.credentials.password.startsWith('•') ? '密码已加密保存，清空后输入新密码' : '输入密码'"
           autocomplete="current-password"
           @focus="$event.target.select()"
@@ -69,7 +69,7 @@
             data-tip="校园网登录页面的运营商选择。选择&quot;无&quot;则跳过运营商步骤；选择&quot;自定义&quot;可输入关键字匹配登录页面的运营商列表，适用于非标准运营商名称。"
           >?</span>
         </div>
-        <custom-select v-model="config.credentials.isp" :options="carrierOptions" @change="(val) => onConfigChange('carrier', val, 'toggle')"></custom-select>
+        <custom-select v-model="config.credentials.isp" :options="carrierOptions" @change="(val) => { if (val !== '自定义') config.credentials.carrier_custom = ''; onConfigChange('carrier', val, 'toggle'); }"></custom-select>
       </div>
       <div v-if="config.credentials.isp === '自定义'" class="form-group">
         <label for="settings-carrier-custom">自定义运营商关键字</label>

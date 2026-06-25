@@ -72,6 +72,13 @@ def get_config(
 ) -> ConfigResponseDTO:
     data = profile_svc.load()
     cfg = profile_svc.build_runtime_config(data)
+
+    # 从 Profile 获取原始 carrier 值（前端下拉框需要 "自定义" 而不是转换后的 isp）
+    profile = profile_svc.get_active_profile()
+    carrier = profile.carrier or "无"
+    # 映射到前端 isp 值：carrier 为 "无" 时返回空串，其他返回原值
+    isp = "" if carrier == "无" else carrier
+
     return ConfigResponseDTO(
         browser=cfg.browser,
         monitor=cfg.monitor,
@@ -81,7 +88,7 @@ def get_config(
         username=cfg.credentials.username,
         password="••••••••" if cfg.credentials.password else "",
         auth_url=cfg.credentials.auth_url,
-        isp=cfg.credentials.isp,
+        isp=isp,
         carrier_custom=cfg.credentials.carrier_custom,
         active_task=cfg.active_task,
         block_proxy=cfg.block_proxy,
