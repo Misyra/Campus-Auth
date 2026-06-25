@@ -408,6 +408,30 @@ def _create_tray(
 
 
 
+def _shutdown_container(container, logger, fallback_shutdown: bool = False) -> None:
+    """统一关闭容器（幂等安全）。
+
+    Args:
+        container: ServiceContainer 实例。
+        logger: 日志记录器。
+        fallback_shutdown: 当 asyncio.run 失败时是否使用同步降级关闭。
+            lightweight 模式为 True（无 uvicorn lifespan 兜底），
+            full 模式为 False（lifespan 通常已执行 shutdown）。
+    """
+    try:
+        asyncio.run(asyncio.wait_for(container.shutdown(), timeout=5))
+    except RuntimeError:
+        if fallback_shutdown:
+            container.task_executor.shutdown(wait=False)
+            container.engine.shutdown()
+        else:
+            logger.debug("容器关闭（幂等跳过或超时）")
+    except KeyboardInterrupt:
+        logger.debug("容器关闭被信号中断")
+    except Exception:
+        logger.debug("容器关闭（幂等跳过或超时）")
+
+
 def _run_lightweight(ctx: ApplicationContext, logger):
     """轻量模式：始终启动监控 + 定时任务，可选托盘，支持按需唤醒 WebUI。"""
     from app.container import ServiceContainer
@@ -496,17 +520,7 @@ def _run_lightweight(ctx: ApplicationContext, logger):
             tray_icon.stop()
         # BUG-009/032 修复：无论 Web 服务状态如何，强制执行 container.shutdown()
         # 容器已有 _shutdown_done 守卫保证幂等性
-        try:
-            asyncio.run(asyncio.wait_for(container.shutdown(), timeout=5))
-        except RuntimeError:
-            # 无可用 event loop，跳过异步 shutdown
-            container.task_executor.shutdown(wait=False)
-            container.engine.shutdown()
-        except KeyboardInterrupt:
-            # asyncio.run 在信号处理上下文中可能重新抛出 KeyboardInterrupt
-            logger.debug("容器关闭被信号中断")
-        except Exception:
-            logger.debug("容器关闭（幂等跳过或超时）")
+        _shutdown_container(container, logger, fallback_shutdown=True)
         cleanup_pid()
         os._exit(0)
 
@@ -574,8 +588,7 @@ def _run_full(
 
     try:
         try:
-            _ps = create_profile_service()
-            _data = _ps.load()
+            _data = container.profile_service.load()
             _logging = _data.global_config.logging
             _al = bool(_logging.access_log)
             _lr = max(1, int(_logging.log_retention_days))
@@ -597,10 +610,7 @@ def _run_full(
         if tray_icon:
             tray_icon.stop()
         # lifespan 通常已执行 shutdown，此处为防御性补调（幂等安全）
-        try:
-            asyncio.run(asyncio.wait_for(container.shutdown(), timeout=5))
-        except Exception:
-            logger.debug("容器关闭（幂等跳过或超时）")
+        _shutdown_container(container, logger)
         cleanup_pid()
         os._exit(0)
 
