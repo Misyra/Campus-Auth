@@ -310,10 +310,18 @@ class LoginOrchestrator:
                 return False, f"登录执行异常: {exc}"
 
         # 提交到登录线程池
-        if self._executor is not None:
-            future = self._executor.submit(_run)
-        else:
-            future = self._pool.submit(_run)
+        try:
+            if self._executor is not None:
+                future = self._executor.submit(_run)
+            else:
+                future = self._pool.submit(_run)
+        except RuntimeError as exc:
+            # BoundedExecutor 队列满时抛出 RuntimeError，转为 rejected handle
+            logger.warning("登录提交被拒绝: {}", exc)
+            return LoginHandle(
+                future=None, source=source, cancel_event=cancel_event,
+                rejected_reason=f"登录队列已满，请稍后重试",
+            )
         handle = LoginHandle(future=future, source=source, cancel_event=cancel_event)
 
         # 清理槽位（替代 task_executor._on_login_done）
