@@ -92,7 +92,9 @@ def save_global_and_profile(
             existing.password or "",
         )
 
-        data.profiles[profile_id] = existing.model_copy(update={
+        # 使用 model_validate 确保验证（model_copy 不触发验证）
+        data.profiles[profile_id] = Profile.model_validate({
+            **existing.model_dump(),
             "username": payload.username or "",
             "password": new_password,
             "auth_url": payload.auth_url or "",

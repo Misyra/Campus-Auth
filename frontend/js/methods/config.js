@@ -16,11 +16,10 @@ export const configMethods = {
     }, delay);
   },
 
-  // 配置变更时调用
+  // 配置变更时调用（统一 1 秒防抖）
   onConfigChange(field, value, type = 'toggle') {
     if (!this._isConfigLoaded) return;
-    const delay = type === 'input' ? 1000 : 500;
-    this._debounceSave(delay);
+    this._debounceSave(1000);
   },
 
   async fetchConfig(updateSnapshot = false) {
@@ -72,6 +71,49 @@ export const configMethods = {
       this._recordInitError('加载配置失败');
     }
   },
+  // 前端校验配置
+  _validateConfig() {
+    const errors = [];
+    const url = this.config.credentials.auth_url;
+    if (url && !/^https?:\/\//.test(url)) {
+      errors.push('认证地址必须以 http:// 或 https:// 开头');
+    }
+    const port = this.config.app_port;
+    if (port && (port < 1 || port > 65535)) {
+      errors.push('端口范围必须在 1-65535 之间');
+    }
+    return errors;
+  },
+
+  // 检查网络检测方式数量
+  _getActiveCheckCount() {
+    let count = 0;
+    if (this.config.monitor.enable_tcp_check) count++;
+    if (this.config.monitor.enable_http_check) count++;
+    if (this.config.monitor.url_check_urls && this.config.monitor.url_check_urls.length > 0) count++;
+    return count;
+  },
+
+  // 切换网络检测方式前检查
+  onCheckToggle(field, value) {
+    // 如果是关闭操作，检查是否是最后一种检测方式
+    if (!value && this._getActiveCheckCount() === 0) {
+      this.toastOnly(false, '至少需要保留一种网络检测方式');
+      // 恢复为开启状态
+      this.$nextTick(() => {
+        if (field === 'tcp') this.config.monitor.enable_tcp_check = true;
+        if (field === 'http') this.config.monitor.enable_http_check = true;
+        if (field === 'url') {
+          this.config.monitor.url_check_urls = this.defaultUrlCheckUrls?.length
+            ? [...this.defaultUrlCheckUrls]
+            : ['http://captive.apple.com/hotspot-detect.html|Success'];
+        }
+      });
+      return;
+    }
+    this.onConfigChange(field, value, 'toggle');
+  },
+
   async saveConfig() {
     // 脏值检测
     const current = JSON.stringify(this.config);
@@ -79,7 +121,15 @@ export const configMethods = {
       return;
     }
 
-    // 关键字段检查（自动保存时跳过确认弹窗）
+    // 前端校验
+    const errors = this._validateConfig();
+    if (errors.length > 0) {
+      this.toastOnly(false, errors.join('；'));
+      this.saveFailed = true;
+      return;
+    }
+
+    // 警告级提示（不阻塞保存）
     if (!this.config.credentials.auth_url) {
       this.frontendLogger.warn('config', '认证地址为空，自动认证将无法工作');
     }
@@ -87,8 +137,7 @@ export const configMethods = {
       this.frontendLogger.warn('config', '账号为空，自动认证将无法工作');
     }
     if (!this.config.monitor.enable_tcp_check && !this.config.monitor.enable_http_check && !(this.config.monitor.url_check_urls && this.config.monitor.url_check_urls.length)) {
-      this.toastOnly(false, '至少需要启用一种网络检测方式（TCP / HTTP / 网址响应）');
-      return;
+      this.frontendLogger.warn('config', '未启用任何网络检测方式，自动认证可能无法正常工作');
     }
 
     // 取消上一次请求
