@@ -533,8 +533,9 @@ class ScheduleEngine:
     def _update_status_snapshot(self, force: bool = False) -> None:
         self._status_manager.update_snapshot(force=force)
 
-    def _queue_status_broadcast(self) -> None:
-        pass  # 已由 StatusManager.update_snapshot 内部调用
+    def set_ws_broadcaster(self, ws_broadcaster) -> None:
+        """注入 WsBroadcaster（供 container 轻量模式唤醒时调用）。"""
+        self._status_manager.set_ws_broadcaster(ws_broadcaster)
 
     # ── 公共 API（监控 — 从 API 线程 / main.py 调用）──
 
