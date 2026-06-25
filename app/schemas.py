@@ -7,6 +7,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.constants import DEFAULT_HTTP_TARGETS, DEFAULT_NETWORK_TARGETS, DEFAULT_URL_CHECK_URLS
 from app.utils.logging import VALID_LOG_LEVELS
 
 _URL_PATTERN = re.compile(r"^https?://")
@@ -239,26 +240,27 @@ class LoginCredentials(BaseModel, frozen=True):
     carrier_custom: str = ""
 
 
+def _parse_targets(raw: str) -> list[str]:
+    return [t.strip() for t in raw.split(",") if t.strip()]
+
+
+def _parse_url_check(raw: str) -> list[str]:
+    return [line.strip() for line in raw.split("\n") if line.strip()]
+
+
 class MonitorSettings(BaseModel, frozen=True):
     """网络监控参数 — NetworkMonitorCore 消费。"""
 
     check_interval_seconds: int = Field(default=300, ge=10, le=86400)
     network_check_timeout: int = Field(default=2, ge=1, le=30)
-    ping_targets: list[str] = Field(default_factory=lambda: ["8.8.8.8:53", "114.114.114.114:53", "www.baidu.com:443"])
+    ping_targets: list[str] = Field(default_factory=lambda: _parse_targets(DEFAULT_NETWORK_TARGETS))
     enable_tcp_check: bool = False
     enable_http_check: bool = False
     enable_local_check: bool = True
-    test_urls: list[str] = Field(default_factory=lambda: [
-        "https://connect.rom.miui.com/generate_204",
-        "https://connectivitycheck.platform.hicloud.com/generate_204",
-    ])
+    test_urls: list[str] = Field(default_factory=lambda: _parse_targets(DEFAULT_HTTP_TARGETS))
     check_auth_url: bool = False
     auth_url_targets: list[str] = Field(default_factory=list)
-    url_check_urls: list[str] = Field(default_factory=lambda: [
-        "http://captive.apple.com/hotspot-detect.html|Success",
-        "http://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test",
-        "http://detectportal.firefox.com/success.txt|success",
-    ])
+    url_check_urls: list[str] = Field(default_factory=lambda: _parse_url_check(DEFAULT_URL_CHECK_URLS))
     script_timeout: int = Field(default=60, ge=5, le=600)
 
 
