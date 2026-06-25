@@ -1,5 +1,22 @@
 # 修改日志
 
+## 2026-06-25 (4)
+
+### refactor: 统一登录线程池 — LoginOrchestrator 复用 BoundedExecutor
+
+- `app/services/login_orchestrator.py`：
+  - `__init__` 新增 `executor` 参数，支持注入外部 BoundedExecutor
+  - 优先使用外部 `executor`，无注入时 fallback 到自建 `ThreadPoolExecutor`
+  - 新增 `set_executor()` 方法，支持延迟注入（container 中 TaskExecutor 创建后调用）
+  - `_dispatch` 中提交逻辑改为双路径：`executor.submit` 或 `pool.submit`
+  - `shutdown` 改为仅关闭自建池（外部 executor 由调用方管理）
+  - 保留 `_slot` + `_slot_lock` 抢占机制不变
+- `app/services/task_executor.py`：
+  - `__init__` 新增 `_login_executor = BoundedExecutor(max_workers=1, queue_size=1)`
+  - `shutdown` 新增 `self._login_executor.shutdown(wait=wait)`
+- `app/container.py`：
+  - TaskExecutor 创建后，调用 `login_orchestrator.set_executor(task_executor._login_executor)` 注入共享执行器
+
 ## 2026-06-25 (3)
 
 ### refactor: 提取 WsBroadcaster 和 NetworkTester from ScheduleEngine

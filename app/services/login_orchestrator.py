@@ -141,6 +141,7 @@ class LoginOrchestrator:
         profile_service: ProfileService | None = None,
         get_runtime_config: Callable[[], RuntimeConfig] | None = None,
         pool: ThreadPoolExecutor | None = None,
+        executor=None,
     ) -> None:
         self._worker_getter = worker_getter
         self._login_history = login_history
@@ -151,11 +152,14 @@ class LoginOrchestrator:
         self._slot_lock = threading.RLock()
         self._slot: LoginHandle | None = None
 
-        # 线程池：自行创建单线程池
-        self._pool: ThreadPoolExecutor = pool or ThreadPoolExecutor(
-            max_workers=1,
-            thread_name_prefix="login-exec",
-        )
+        # 优先使用外部 executor（BoundedExecutor），否则 fallback 到自建池
+        self._executor = executor
+        self._pool: ThreadPoolExecutor | None = pool
+        if self._executor is None and self._pool is None:
+            self._pool = ThreadPoolExecutor(
+                max_workers=1,
+                thread_name_prefix="login-exec",
+            )
 
 
     # ── 公共 API ──
@@ -245,9 +249,14 @@ class LoginOrchestrator:
             if self._slot is not None and not self._slot.done():
                 self._slot.cancel()
 
+    def set_executor(self, executor) -> None:
+        """注入外部执行器（由 container 在 TaskExecutor 创建后调用）。"""
+        self._executor = executor
+
     def shutdown(self, wait: bool = True) -> None:
-        """关闭编排器，清理线程池。"""
-        self._pool.shutdown(wait=wait)
+        """关闭编排器。仅关闭自建池（外部 executor 由调用方管理）。"""
+        if self._pool is not None:
+            self._pool.shutdown(wait=wait)
 
     # ── 内部 ──
 
@@ -301,7 +310,10 @@ class LoginOrchestrator:
                 return False, f"登录执行异常: {exc}"
 
         # 提交到登录线程池
-        future = self._pool.submit(_run)
+        if self._executor is not None:
+            future = self._executor.submit(_run)
+        else:
+            future = self._pool.submit(_run)
         handle = LoginHandle(future=future, source=source, cancel_event=cancel_event)
 
         # 清理槽位（替代 task_executor._on_login_done）

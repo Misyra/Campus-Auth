@@ -87,6 +87,8 @@ class ServiceContainer:
             login_orchestrator=self.login_orchestrator,
             task_manager=self.task_manager,
         )
+        # 注入登录专用 executor（消除 LoginOrchestrator 自建线程池）
+        self.login_orchestrator.set_executor(self.task_executor._login_executor)
         self.engine.set_task_executor(self.task_executor)
 
         # 延迟绑定：TaskExecutor 通过引擎获取运行时配置
