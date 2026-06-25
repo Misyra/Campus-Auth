@@ -97,8 +97,6 @@ def engine_factory():
         svc.project_root = MagicMock()
         svc.record_log = MagicMock()
         svc._update_status_snapshot = MagicMock()
-        svc._registered_futures = set()
-        svc._futures_lock = threading.Lock()
 
         # LoginBridge — 登录委托
         from app.services.engine_login_bridge import LoginBridge

@@ -152,8 +152,6 @@ class ScheduleEngine:
         self._monitor_check_interval: int = 300
         self._orchestrator = None  # LoginOrchestrator，由 container 注入
         self._retry_policy = MonitoredPolicy()
-        self._registered_futures: set[Future] = set()
-        self._futures_lock = threading.Lock()
         self._wakeup_event = threading.Event()  # 唤醒引擎循环
         self._next_retry_time: float = 0  # 下次重试时间（独立于网络检测）
 

@@ -756,8 +756,6 @@ class TestNetworkStateSetInConsumer:
         svc._update_status_snapshot = MagicMock()
         svc.record_log = MagicMock()
         svc._orchestrator = MagicMock()
-        svc._registered_futures = set()
-        svc._futures_lock = threading.Lock()
         svc._wakeup_event = threading.Event()
         svc._retry_policy = MonitoredPolicy()
         svc._monitor_check_interval = 300

@@ -69,8 +69,6 @@ def _make_raw_engine() -> ScheduleEngine:
     svc.record_log = MagicMock()
     svc._update_status_snapshot = MagicMock()
     svc._orchestrator = MagicMock()
-    svc._registered_futures = set()
-    svc._futures_lock = threading.Lock()
     svc._wakeup_event = threading.Event()
     # LoginBridge — 登录委托
     from app.services.engine_login_bridge import LoginBridge
