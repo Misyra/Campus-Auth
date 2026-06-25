@@ -29,10 +29,10 @@ class BoundedExecutor:
     队列满时 submit 抛出 RuntimeError，防止任务堆积。
     """
 
-    def __init__(self, max_workers: int, queue_size: int) -> None:
+    def __init__(self, max_workers: int, queue_size: int, thread_name_prefix: str = "task-exec") -> None:
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers,
-            thread_name_prefix="task-exec",
+            thread_name_prefix=thread_name_prefix,
         )
         # Semaphore 初始值 = queue_size，控制同时排队的任务数
         self._semaphore = threading.Semaphore(queue_size)
@@ -95,7 +95,7 @@ class TaskExecutor:
         self._task_pool_lock = threading.Lock()
 
         # 登录专用执行器（max_workers=1, queue_size=1 — 信号量天然保证单并发）
-        self._login_executor = BoundedExecutor(max_workers=1, queue_size=1)
+        self._login_executor = BoundedExecutor(max_workers=1, queue_size=1, thread_name_prefix="login-exec")
 
         # 定时任务去重
         self._running_tasks: dict[str, Future] = {}
