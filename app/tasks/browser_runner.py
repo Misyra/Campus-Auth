@@ -21,8 +21,8 @@ from .variable_resolver import VariableResolver
 logger = get_logger("task_executor", source="task")
 
 
-class TaskExecutor:
-    """任务执行器"""
+class BrowserTaskRunner:
+    """浏览器任务执行器。"""
 
     DEFAULT_NAVIGATION_TIMEOUT = 15000
 

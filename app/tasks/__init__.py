@@ -5,7 +5,7 @@
 
 from app.constants import DEFAULT_STEP_TIMEOUT_MS, DEFAULT_TASK_TIMEOUT_MS
 
-from .browser_runner import TaskExecutor
+from .browser_runner import BrowserTaskRunner
 from .manager import TaskManager, is_valid_task_id, normalize_task_id
 from .models import (
     TASK_ID_PATTERN,
@@ -33,6 +33,9 @@ from .step_handlers import (
 from .validator import TaskValidator
 from .variable_resolver import VariableResolver
 
+# 向后兼容（将在后续版本移除）
+TaskExecutor = BrowserTaskRunner
+
 __all__ = [
     "DEFAULT_STEP_TIMEOUT_MS",
     "DEFAULT_TASK_TIMEOUT_MS",
@@ -53,7 +56,8 @@ __all__ = [
     "StepType",
     "TaskConfig",
     "TaskError",
-    "TaskExecutor",
+    "BrowserTaskRunner",
+    "TaskExecutor",  # deprecated: use BrowserTaskRunner
     "TaskManager",
     "TaskValidator",
     "VariableResolver",
