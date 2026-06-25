@@ -13,7 +13,7 @@
   - `__init__` 新增 `_login_bridge` 初始化 + 三个桥接回调（`_bridge_retry_scheduled` / `_bridge_login_success` / `_bridge_retry_exhausted`）
   - `_do_async_login` 从 75 行逻辑缩减为 1 行委托 `self._login_bridge.submit_login()`
   - `cancel_login` 从 5 行缩减为 1 行委托 `self._login_bridge.cancel_login()`
-  - `_registered_futures` / `_futures_lock` 保留（向后兼容），实际管理已迁移到 LoginBridge
+  - `_registered_futures` / `_futures_lock` 已从 engine 移除（孤儿清理），实际管理已迁移到 LoginBridge
 - 测试文件同步更新（4 个文件）：
   - `tests/test_services/conftest.py`：`_make_raw()` 新增 `_login_bridge` 初始化 + 三个桥接回调
   - `tests/test_services/test_engine_fix.py`：`_make_engine()` 新增 `_login_bridge` 初始化 + 三个桥接回调

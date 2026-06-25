@@ -90,8 +90,6 @@ class TestManualLoginCancelRaceFix:
         )
         engine._orchestrator = MagicMock()
         engine._login_history = MagicMock()
-        engine._registered_futures = set()
-        engine._futures_lock = threading.Lock()
         engine._wakeup_event = threading.Event()
         engine._retry_policy = MonitoredPolicy()
         engine._monitor_check_interval = 300
