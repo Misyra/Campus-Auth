@@ -94,12 +94,20 @@ def perform(keys: list[str]) -> list[CleanupResult]:
 # ==================== 内部实现 ====================
 
 
+_autostart_service = None
+
+
+def _get_autostart_service():
+    global _autostart_service
+    if _autostart_service is None:
+        from app.services.autostart import AutoStartService
+        _autostart_service = AutoStartService(PROJECT_ROOT)
+    return _autostart_service
+
+
 def _check_autostart() -> dict:
     try:
-        from app.services.autostart import AutoStartService
-
-        autostart_service = AutoStartService(PROJECT_ROOT)
-        return autostart_service.status()
+        return _get_autostart_service().status()
     except Exception:
         return {
             "enabled": False,
@@ -111,10 +119,7 @@ def _check_autostart() -> dict:
 
 def _remove_autostart() -> tuple[bool, str]:
     try:
-        from app.services.autostart import AutoStartService
-
-        autostart_service = AutoStartService(PROJECT_ROOT)
-        return autostart_service.disable()
+        return _get_autostart_service().disable()
     except Exception as exc:
         return False, f"移除开机自启失败: {exc}"
 

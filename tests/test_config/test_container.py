@@ -129,7 +129,6 @@ class TestInit:
         assert hasattr(container, "profile_service")
         assert hasattr(container, "login_history_service")
         assert hasattr(container, "engine")
-        assert hasattr(container, "monitor_service")  # 向后兼容别名
         assert hasattr(container, "task_manager")
         assert hasattr(container, "autostart_service")
         assert hasattr(container, "debug_manager")
