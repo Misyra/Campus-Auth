@@ -65,11 +65,11 @@ def _persist_source_levels(request: Request, config):
     )
 
 
-@router.get("/api/config", response_model=ConfigResponseDTO)
+@router.get("/api/config")
 def get_config(
     svc: ScheduleEngine = Depends(get_monitor_service),
     profile_svc: ProfileService = Depends(get_profile_service),
-) -> ConfigResponseDTO:
+) -> dict:
     data = profile_svc.load()
     cfg = profile_svc.build_runtime_config(data)
 
@@ -79,7 +79,7 @@ def get_config(
     # 映射到前端 isp 值：carrier 为 "无" 时返回空串，其他返回原值
     isp = "" if carrier == "无" else carrier
 
-    return ConfigResponseDTO(
+    dto = ConfigResponseDTO(
         browser=cfg.browser,
         monitor=cfg.monitor,
         retry=cfg.retry,
@@ -93,6 +93,37 @@ def get_config(
         carrier_custom=cfg.credentials.carrier_custom,
         active_task=cfg.active_task,
     )
+    # 展平 app_settings 到顶层，保持前端兼容
+    return _dto_to_flat_dict(dto)
+
+
+def _dto_to_flat_dict(dto: ConfigResponseDTO) -> dict:
+    """将 ConfigResponseDTO 转为前端兼容的扁平字典（app_settings 展开到顶层）。"""
+    d = dto.model_dump()
+    app = d.pop("app_settings", {})
+    d.update(app)
+    return d
+
+
+# 前端扁平字段中属于 app_settings 的字段列表
+_APP_SETTINGS_KEYS = {
+    "block_proxy", "shell_path", "minimize_to_tray", "startup_action",
+    "autostart_lightweight", "lightweight_tray", "auto_open_browser",
+    "proxy", "app_port", "custom_variables",
+}
+
+
+def _flat_dict_to_dto(d: dict) -> ConfigResponseDTO:
+    """将前端扁平字典转为 ConfigResponseDTO（提取 app_settings 子对象）。"""
+    app_settings = {}
+    rest = {}
+    for k, v in d.items():
+        if k in _APP_SETTINGS_KEYS:
+            app_settings[k] = v
+        else:
+            rest[k] = v
+    rest["app_settings"] = app_settings
+    return ConfigResponseDTO(**rest)
 
 
 @router.get("/api/config/default-stealth-script")
@@ -215,23 +246,26 @@ def _log_config_changes(old_dict: dict, new_payload: ConfigResponseDTO) -> None:
 
 @router.put("/api/config", response_model=ActionResponse)
 def save_config(
-    payload: ConfigResponseDTO,
+    payload: dict,
     svc: ScheduleEngine = Depends(get_monitor_service),
     profile_svc: ProfileService = Depends(get_profile_service),
 ) -> ActionResponse:
     try:
+        # 前端发送扁平字段，后端需嵌套 app_settings
+        dto = _flat_dict_to_dto(payload)
+
         # 获取当前配置用于变更日志
         old_data = profile_svc.load()
         old_cfg = profile_svc.build_runtime_config(old_data)
         old_dict = old_cfg.model_dump()
 
         # 一次保存全局配置 + 方案凭据
-        result = save_global_and_profile(payload, profile_svc, svc.reload_config)
+        result = save_global_and_profile(dto, profile_svc, svc.reload_config)
         if not result.success:
             raise ValueError(result.message)
 
         # 记录配置变更
-        _log_config_changes(old_dict, payload)
+        _log_config_changes(old_dict, dto)
 
         api_logger.info("配置已保存 -> success=True")
         return ActionResponse(success=True, message="配置保存成功")
