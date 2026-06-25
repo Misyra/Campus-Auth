@@ -179,7 +179,7 @@ class TestListLogs:
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.global_config.browser.pure_mode = False
 
-        svc = ScheduleEngine(MagicMock())
+        svc = ScheduleEngine(MagicMock(), profile_service=MagicMock())
         from loguru import logger
 
         from app.utils.logging import DashboardSink
@@ -279,7 +279,7 @@ class TestStartStopMonitoring:
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.global_config.browser.pure_mode = False
 
-        svc = ScheduleEngine(MagicMock())
+        svc = ScheduleEngine(MagicMock(), profile_service=MagicMock())
         ok, msg = svc.start_monitoring()
         assert ok is True
         assert "已启动" in msg
@@ -360,7 +360,7 @@ class TestHandleLogin:
         mock_task_executor.execute_login_async.return_value = future
 
         svc = ScheduleEngine(
-            MagicMock(), worker_getter=mock_get_worker, task_executor=mock_task_executor
+            MagicMock(), profile_service=MagicMock(), worker_getter=mock_get_worker, task_executor=mock_task_executor
         )
         svc._shutdown_event.set()  # 停止引擎线程，避免干扰
         time.sleep(0.1)
@@ -427,47 +427,48 @@ class TestRunManualLogin:
 class TestNetwork:
     @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
-    @patch("app.services.engine.is_network_available", return_value=True)
     def test_network_ok(
-        self, mock_net, mock_ps_cls, mock_reload
+        self, mock_ps_cls, mock_reload
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.global_config.browser.pure_mode = False
 
-        svc = ScheduleEngine(MagicMock())
+        mock_tester = MagicMock()
+        mock_tester.test_network.return_value = (True, "网络连接正常")
+        svc = ScheduleEngine(MagicMock(), profile_service=MagicMock(), network_tester=mock_tester)
         ok, msg = svc.test_network()
         assert ok is True
         assert "正常" in msg
 
     @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
-    @patch("app.services.engine.is_network_available", return_value=False)
     def test_network_fail(
-        self, mock_net, mock_ps_cls, mock_reload
+        self, mock_ps_cls, mock_reload
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.global_config.browser.pure_mode = False
 
-        svc = ScheduleEngine(MagicMock())
+        mock_tester = MagicMock()
+        mock_tester.test_network.return_value = (False, "网络连接异常")
+        svc = ScheduleEngine(MagicMock(), profile_service=MagicMock(), network_tester=mock_tester)
         ok, msg = svc.test_network()
         assert ok is False
         assert "异常" in msg
 
     @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
-    @patch(
-        "app.services.engine.is_network_available", side_effect=RuntimeError("timeout")
-    )
     def test_network_exception(
-        self, mock_net, mock_ps_cls, mock_reload
+        self, mock_ps_cls, mock_reload
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.global_config.browser.pure_mode = False
 
-        svc = ScheduleEngine(MagicMock())
+        mock_tester = MagicMock()
+        mock_tester.test_network.return_value = (False, "网络测试失败: timeout")
+        svc = ScheduleEngine(MagicMock(), profile_service=MagicMock(), network_tester=mock_tester)
         ok, msg = svc.test_network()
         assert ok is False
         assert "失败" in msg
@@ -496,7 +497,7 @@ class TestTogglePureMode:
             return True
 
         with patch.object(ScheduleEngine, "_reload_config_internal", _fake_reload):
-            svc = ScheduleEngine(MagicMock())
+            svc = ScheduleEngine(MagicMock(), profile_service=mock_ps)
         assert svc.pure_mode is False
         new_value = svc.toggle_pure_mode()
         assert new_value is True
@@ -521,7 +522,7 @@ class TestTogglePureMode:
             return True
 
         with patch.object(ScheduleEngine, "_reload_config_internal", _fake_reload):
-            svc = ScheduleEngine(MagicMock())
+            svc = ScheduleEngine(MagicMock(), profile_service=MagicMock())
         errors: list[Exception] = []
         values_seen: list[bool] = []
 
@@ -582,7 +583,7 @@ class TestGetConfig:
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.global_config.browser.pure_mode = False
 
-        svc = ScheduleEngine(MagicMock())
+        svc = ScheduleEngine(MagicMock(), profile_service=MagicMock())
         config = svc.get_runtime_config()
         assert isinstance(config, RuntimeConfig)
         assert config is svc._runtime_config  # frozen 对象，直接返回引用
