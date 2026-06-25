@@ -2,6 +2,17 @@
 
 ## 2026-06-26
 
+### refactor: LoginHistoryService.record() 解耦，改用 add() 直接传入名称
+
+- `app/services/login_history_service.py`：
+  - 删除 `record()` 方法（原 48-82 行），调用方自行查找 profile/task 名称后直接调用 `add()`
+  - 删除 `TYPE_CHECKING` 块（`ProfileService`/`TaskManager` 仅被 `record()` 使用）
+- `app/services/login_orchestrator.py`：
+  - `_record_history` 方法：从调用 `self._login_history.record()` 改为直接查找 `profile_name` 后调用 `self._login_history.add()`
+  - 逻辑内联：`_profile_service.get_active_profile()` + `getattr(active, "name", "")` 移入 `_record_history`
+- `tests/test_services/test_login_history.py`：
+  - 删除 `TestRecord` 测试类（9 个测试，对应已删除的 `record()` 方法）
+
 ### refactor: 合并 config_service 到 profile_service
 - `app/services/profile_service.py`：新增 `SaveResult`、`_rollback_config`、`save_global_and_profile`（从 config_service 迁入）
 - `app/services/config_service.py`：删除（已合并到 profile_service）

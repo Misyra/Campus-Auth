@@ -335,14 +335,23 @@ class LoginOrchestrator:
     def _record_history(
         self, success: bool, duration_ms: int, error: str = ""
     ) -> None:
-        """记录登录历史（原 F02：login_once 路径此前不记录）。"""
+        """记录登录历史（使用 add() 直接传入名称）。"""
         if self._login_history is None:
             return
         try:
-            self._login_history.record(
+            profile_name = ""
+            if self._profile_service is not None:
+                try:
+                    active = self._profile_service.get_active_profile()
+                    if active:
+                        profile_name = getattr(active, "name", "")
+                except Exception:
+                    pass
+
+            self._login_history.add(
                 success=success,
                 duration_ms=duration_ms,
-                profile_service=self._profile_service,
+                profile_name=profile_name,
                 error=error,
             )
         except Exception:
