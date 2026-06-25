@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.network.decision import check_network_status
-from app.schemas import RuntimeConfig
+from app.schemas import AppSettings, RuntimeConfig
 from app.workers.playwright_worker import WorkerResponse
 
 
@@ -229,6 +229,7 @@ class TestLoginConnection:
             retry=engine._runtime_config.retry,
             pause=engine._runtime_config.pause,
             logging=engine._runtime_config.logging,
+            app_settings=AppSettings(),
         )
         result = save_global_and_profile(payload, profile_service, engine.reload_config)
 

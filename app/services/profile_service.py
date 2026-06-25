@@ -37,6 +37,33 @@ def migrate_v3_to_v4(data: dict) -> dict:
     return data
 
 
+def migrate_v4_to_v5(data: dict) -> dict:
+    """将平铺透传字段迁移到 app_settings 子模型。
+
+    v4: global_config 下的 block_proxy、shell_path 等平铺字段。
+    v5: 这些字段嵌套到 global_config.app_settings 子对象中。
+    """
+    if data.get("config_version", 4) >= 5:
+        return data
+
+    gc = data.get("global_config", {})
+    app_settings_keys = [
+        "block_proxy", "shell_path", "minimize_to_tray", "startup_action",
+        "autostart_lightweight", "lightweight_tray", "auto_open_browser",
+        "proxy", "app_port", "custom_variables",
+    ]
+    app_settings = {}
+    for key in app_settings_keys:
+        if key in gc:
+            app_settings[key] = gc.pop(key)
+    if app_settings:
+        gc["app_settings"] = app_settings
+
+    data["global_config"] = gc
+    data["config_version"] = 5
+    return data
+
+
 class ProfileService:
     """配置方案管理服务 — 读写 config/settings.json"""
 
@@ -66,6 +93,7 @@ class ProfileService:
             raw = self._settings_path.read_text(encoding="utf-8")
             data = json.loads(raw)
             data = migrate_v3_to_v4(data)
+            data = migrate_v4_to_v5(data)
             return ProfilesData.model_validate(data)
         except Exception:
             profile_logger.exception("加载 settings.json 失败")

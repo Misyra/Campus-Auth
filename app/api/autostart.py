@@ -30,7 +30,7 @@ def _read_autostart_lightweight(request: Request) -> bool:
     """从 container 共享的 ProfileService 读取自启动轻量模式偏好。"""
     try:
         ps = request.app.state.services.profile_service
-        return bool(ps.load().global_config.autostart_lightweight)
+        return bool(ps.load().global_config.app_settings.autostart_lightweight)
     except Exception:
         return True  # 默认轻量
 
@@ -38,8 +38,8 @@ def _read_autostart_lightweight(request: Request) -> bool:
 def _save_autostart_lightweight(request: Request, lightweight: bool) -> None:
     """通过 container 共享的 ProfileService 保存自启动轻量模式偏好。"""
     ps = request.app.state.services.profile_service
-    ps.update(lambda d: setattr(d, "global_config",
-        d.global_config.model_copy(update={"autostart_lightweight": lightweight})))
+    ps.update(lambda d: setattr(d.global_config, "app_settings",
+        d.global_config.app_settings.model_copy(update={"autostart_lightweight": lightweight})))
 
 
 @router.get("/api/autostart/status", response_model=AutoStartStatusResponse)

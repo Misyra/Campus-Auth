@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
-from app.schemas import RuntimeConfig
+from app.schemas import AppSettings, RuntimeConfig
 
 
 def _slow_return(value, delay=0.3):
@@ -834,7 +834,7 @@ class TestTaskExecutorExecuteShell:
     def test_shell_from_runtime_config(self):
         """未指定 shell_path 时从运行时配置获取。"""
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="/bin/bash")
+        executor._get_runtime_config = lambda: RuntimeConfig(app_settings=AppSettings(shell_path="/bin/bash"))
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.return_value = (0, "hello", "")
 
@@ -868,7 +868,7 @@ class TestTaskExecutorExecuteShell:
     def test_powershell_command_format(self):
         """PowerShell 应使用 -Command 参数。"""
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe")
+        executor._get_runtime_config = lambda: RuntimeConfig(app_settings=AppSettings(shell_path="C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"))
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.return_value = (0, "ok", "")
 
@@ -879,7 +879,7 @@ class TestTaskExecutorExecuteShell:
     def test_cmd_command_format(self):
         """cmd.exe 应使用 /c 参数。"""
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="C:\\Windows\\System32\\cmd.exe")
+        executor._get_runtime_config = lambda: RuntimeConfig(app_settings=AppSettings(shell_path="C:\\Windows\\System32\\cmd.exe"))
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.return_value = (0, "ok", "")
 
@@ -892,7 +892,7 @@ class TestTaskExecutorExecuteShell:
     def test_bash_command_format(self):
         """bash 应使用 -c 参数。"""
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="/bin/bash")
+        executor._get_runtime_config = lambda: RuntimeConfig(app_settings=AppSettings(shell_path="/bin/bash"))
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.return_value = (0, "ok", "")
 
@@ -905,7 +905,7 @@ class TestTaskExecutorExecuteShell:
     def test_nonzero_returncode(self):
         """非零返回码应返回失败。"""
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="/bin/bash")
+        executor._get_runtime_config = lambda: RuntimeConfig(app_settings=AppSettings(shell_path="/bin/bash"))
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.return_value = (1, "", "error occurred")
 
@@ -916,7 +916,7 @@ class TestTaskExecutorExecuteShell:
     def test_nonzero_no_stderr(self):
         """非零返回码且无 stderr 时应使用 stdout。"""
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="/bin/bash")
+        executor._get_runtime_config = lambda: RuntimeConfig(app_settings=AppSettings(shell_path="/bin/bash"))
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.return_value = (1, "some stdout", "")
 
@@ -927,7 +927,7 @@ class TestTaskExecutorExecuteShell:
     def test_nonzero_no_output(self):
         """非零返回码且无任何输出时显示退出码。"""
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="/bin/bash")
+        executor._get_runtime_config = lambda: RuntimeConfig(app_settings=AppSettings(shell_path="/bin/bash"))
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.return_value = (2, "", "")
 
@@ -938,7 +938,7 @@ class TestTaskExecutorExecuteShell:
     def test_success_no_output(self):
         """成功但无输出时应显示默认文本。"""
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="/bin/bash")
+        executor._get_runtime_config = lambda: RuntimeConfig(app_settings=AppSettings(shell_path="/bin/bash"))
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.return_value = (0, "", "")
 
@@ -948,7 +948,7 @@ class TestTaskExecutorExecuteShell:
 
     def test_permission_error(self):
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="/bin/bash")
+        executor._get_runtime_config = lambda: RuntimeConfig(app_settings=AppSettings(shell_path="/bin/bash"))
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.side_effect = PermissionError("denied")
 
@@ -958,7 +958,7 @@ class TestTaskExecutorExecuteShell:
 
     def test_generic_exception(self):
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="/bin/bash")
+        executor._get_runtime_config = lambda: RuntimeConfig(app_settings=AppSettings(shell_path="/bin/bash"))
         executor._shell_policy = MagicMock()
         executor._shell_policy.run_sync.side_effect = OSError("io error")
 
@@ -969,7 +969,7 @@ class TestTaskExecutorExecuteShell:
     def test_output_truncation(self):
         """输出超过 500 字符时应被截断。"""
         executor = self._make_executor()
-        executor._get_runtime_config = lambda: RuntimeConfig(shell_path="/bin/bash")
+        executor._get_runtime_config = lambda: RuntimeConfig(app_settings=AppSettings(shell_path="/bin/bash"))
         executor._shell_policy = MagicMock()
         long_output = "x" * 1000
         executor._shell_policy.run_sync.return_value = (0, long_output, "")

@@ -51,9 +51,9 @@ def _runtime_config_to_worker_dict(config: RuntimeConfig) -> dict:
     d["login_timeout"] = config.browser.login_timeout
     d["retry_settings"] = config.retry.model_dump()
     d["active_task"] = config.active_task
-    d["custom_variables"] = config.custom_variables
-    d["block_proxy"] = config.block_proxy
-    d["shell_path"] = config.shell_path
+    d["custom_variables"] = config.app_settings.custom_variables
+    d["block_proxy"] = config.app_settings.block_proxy
+    d["shell_path"] = config.app_settings.shell_path
     d["access_log"] = config.logging.access_log
     d["log_retention_days"] = config.logging.log_retention_days
     return d

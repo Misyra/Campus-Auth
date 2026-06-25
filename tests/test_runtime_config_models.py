@@ -57,8 +57,8 @@ def test_runtime_config_composition():
     assert rc.browser.headless is True
     assert rc.credentials.username == "u"
     assert rc.active_task == ""
-    assert rc.custom_variables == {}
-    assert rc.block_proxy is True
+    assert rc.app_settings.custom_variables == {}
+    assert rc.app_settings.block_proxy is True
 
 
 def test_runtime_config_frozen():

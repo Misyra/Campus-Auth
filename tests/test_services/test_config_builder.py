@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.schemas import (
+    AppSettings,
     BrowserSettings,
     GlobalConfig,
     LoginCredentials,
@@ -19,7 +20,10 @@ from app.services.config_builder import ConfigBuilder
 
 
 def _default_global_config(**overrides) -> GlobalConfig:
-    """创建默认 GlobalConfig，支持覆盖部分字段。"""
+    """创建默认 GlobalConfig，支持覆盖部分字段。
+
+    app_settings 字段接受 AppSettings 实例。
+    """
     return GlobalConfig(**overrides)
 
 
@@ -136,30 +140,32 @@ class TestFieldCompleteness:
 
     def test_all_direct_fields_passed(self):
         gc = _default_global_config(
-            block_proxy=False,
-            shell_path="/usr/bin/bash",
-            minimize_to_tray=False,
-            startup_action="monitor",
-            autostart_lightweight=False,
-            lightweight_tray=False,
-            auto_open_browser=True,
-            proxy="http://proxy:8080",
-            app_port=12345,
+            app_settings=AppSettings(
+                block_proxy=False,
+                shell_path="/usr/bin/bash",
+                minimize_to_tray=False,
+                startup_action="monitor",
+                autostart_lightweight=False,
+                lightweight_tray=False,
+                auto_open_browser=True,
+                proxy="http://proxy:8080",
+                app_port=12345,
+            ),
         )
         rc = ConfigBuilder.build(gc, _default_profile())
-        assert rc.block_proxy is False
-        assert rc.shell_path == "/usr/bin/bash"
-        assert rc.minimize_to_tray is False
-        assert rc.startup_action == "monitor"
-        assert rc.autostart_lightweight is False
-        assert rc.lightweight_tray is False
-        assert rc.auto_open_browser is True
-        assert rc.proxy == "http://proxy:8080"
-        assert rc.app_port == 12345
+        assert rc.app_settings.block_proxy is False
+        assert rc.app_settings.shell_path == "/usr/bin/bash"
+        assert rc.app_settings.minimize_to_tray is False
+        assert rc.app_settings.startup_action == "monitor"
+        assert rc.app_settings.autostart_lightweight is False
+        assert rc.app_settings.lightweight_tray is False
+        assert rc.app_settings.auto_open_browser is True
+        assert rc.app_settings.proxy == "http://proxy:8080"
+        assert rc.app_settings.app_port == 12345
 
     def test_custom_variables_is_empty_dict(self):
         rc = ConfigBuilder.build(_default_global_config(), _default_profile())
-        assert rc.custom_variables == {}
+        assert rc.app_settings.custom_variables == {}
 
     def test_credentials_structure(self):
         profile = _default_profile(
@@ -208,15 +214,17 @@ class TestEndToEnd:
     def test_full_build_with_all_custom_values(self):
         """所有字段都自定义时，RuntimeConfig 完整反映设置。"""
         gc = _default_global_config(
-            block_proxy=False,
-            shell_path="/bin/zsh",
-            minimize_to_tray=False,
-            startup_action="login_once",
-            autostart_lightweight=False,
-            lightweight_tray=False,
-            auto_open_browser=True,
-            proxy="socks5://127.0.0.1:1080",
-            app_port=9999,
+            app_settings=AppSettings(
+                block_proxy=False,
+                shell_path="/bin/zsh",
+                minimize_to_tray=False,
+                startup_action="login_once",
+                autostart_lightweight=False,
+                lightweight_tray=False,
+                auto_open_browser=True,
+                proxy="socks5://127.0.0.1:1080",
+                app_port=9999,
+            ),
         )
         profile = _default_profile(
             username="student",
@@ -234,10 +242,10 @@ class TestEndToEnd:
         assert rc.credentials.isp == "CampusNet"
         assert rc.credentials.carrier_custom == "CampusNet"
         assert rc.active_task == "login_once"
-        assert rc.block_proxy is False
-        assert rc.proxy == "socks5://127.0.0.1:1080"
-        assert rc.app_port == 9999
-        assert rc.custom_variables == {}
+        assert rc.app_settings.block_proxy is False
+        assert rc.app_settings.proxy == "socks5://127.0.0.1:1080"
+        assert rc.app_settings.app_port == 9999
+        assert rc.app_settings.custom_variables == {}
 
     def test_build_returns_frozen_model(self):
         """RuntimeConfig 是 frozen 的，不允许修改。"""

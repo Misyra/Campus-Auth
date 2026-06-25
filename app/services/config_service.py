@@ -59,16 +59,7 @@ def save_global_and_profile(
             retry=payload.retry,
             pause=payload.pause,
             logging=logging,
-            block_proxy=payload.block_proxy,
-            shell_path=payload.shell_path,
-            minimize_to_tray=payload.minimize_to_tray,
-            startup_action=payload.startup_action,
-            autostart_lightweight=payload.autostart_lightweight,
-            lightweight_tray=payload.lightweight_tray,
-            auto_open_browser=payload.auto_open_browser,
-            proxy=payload.proxy,
-            app_port=payload.app_port,
-            custom_variables=payload.custom_variables,
+            app_settings=payload.app_settings,
         )
 
         # 2. 更新活跃方案的凭据

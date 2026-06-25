@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.schemas import ConfigResponseDTO, LoginCredentials, RuntimeConfig
+from app.schemas import AppSettings, ConfigResponseDTO, LoginCredentials, RuntimeConfig
 from app.services.config_service import save_global_and_profile
 from app.workers.playwright_worker import WorkerResponse
 
@@ -103,6 +103,7 @@ class TestFullMode:
             retry=engine._runtime_config.retry,
             pause=engine._runtime_config.pause,
             logging=engine._runtime_config.logging,
+            app_settings=AppSettings(),
         )
         result = save_global_and_profile(payload, profile_service, engine.reload_config)
         assert result.success is True
