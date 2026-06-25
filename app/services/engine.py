@@ -157,6 +157,29 @@ class ScheduleEngine:
         self._wakeup_event = threading.Event()  # 唤醒引擎循环
         self._next_retry_time: float = 0  # 下次重试时间（独立于网络检测）
 
+        # LoginBridge — 登录委托
+        from app.services.engine_login_bridge import LoginBridge
+        self._login_bridge = LoginBridge(
+            get_orchestrator=lambda: self._orchestrator,
+            get_runtime_config=self.get_runtime_config,
+            retry_policy=self._retry_policy,
+            status_update_callback=self._update_status_snapshot,
+            record_log=self.record_log,
+            wakeup_event=self._wakeup_event,
+            get_monitor_check_interval=lambda: self._monitor_check_interval,
+        )
+        # 桥接回调：LoginBridge 调度重试/成功/用尽时更新 engine 状态
+        def _bridge_retry_scheduled(delay: float) -> None:
+            self._next_retry_time = time.time() + delay
+            self._wakeup_event.set()
+        def _bridge_login_success() -> None:
+            self._next_retry_time = 0
+        def _bridge_retry_exhausted() -> None:
+            self._next_retry_time = 0
+        self._login_bridge._on_retry_scheduled = _bridge_retry_scheduled
+        self._login_bridge._on_login_success = _bridge_login_success
+        self._login_bridge._on_retry_exhausted = _bridge_retry_exhausted
+
         # 统一引擎线程（延迟到 boot() 启动，确保依赖注入完成）
         self._engine_thread = threading.Thread(target=self._engine_loop, daemon=True)
 
@@ -325,81 +348,8 @@ class ScheduleEngine:
             self._next_network_check = time.time() + self._monitor_check_interval
 
     def _do_async_login(self, is_manual: bool = False, config_snapshot: RuntimeConfig | None = None) -> bool:
-        """【委托】提交登录到 LoginOrchestrator。"""
-        config = config_snapshot if config_snapshot is not None else self._runtime_config
-
-        # 自动登录前检查物理网络和认证地址可达性（仅在启用相关检测时）
-        if not is_manual:
-            m = config.monitor
-            if m.enable_local_check or m.check_auth_url:
-                from app.network.decision import check_login_prerequisites
-
-                ok, reason = check_login_prerequisites(m, config.credentials.auth_url)
-                if not ok:
-                    self.record_log(f"登录前置检查未通过: {reason}", level="WARNING", source="backend")
-                    return False
-
-        source = "manual" if is_manual else "auto"
-        handle = self._orchestrator.submit(source=source, config=config)
-
-        if handle.rejected_reason is not None:
-            # 校验失败
-            if is_manual:
-                pass  # 手动登录的响应由 _handle_login 设置
-            else:
-                self.record_log(handle.rejected_reason, level="WARNING", source="backend")
-            return False
-
-        if handle.future is None:
-            # 复用了旧 handle（去重命中），不算新提交
-            return False
-
-        # 防止去重命中时重复注册回调
-        with self._futures_lock:
-            if handle.future in self._registered_futures:
-                return False
-
-        def _on_done(f: Future) -> None:
-            with self._futures_lock:
-                self._registered_futures.discard(f)
-            self._update_status_snapshot()
-            try:
-                ok, msg = f.result()
-                tag = "手动登录" if is_manual else "自动登录"
-                if ok:
-                    logger.info("{}完成: {}", tag, msg)
-                    if not is_manual:
-                        self._retry_policy.on_login_done(success=True)
-                        self._next_retry_time = 0
-                else:
-                    logger.warning("{}失败: {}", tag, msg)
-                    if not is_manual:
-                        delay = self._retry_policy.on_login_done(success=False)
-                        if delay is None:
-                            # 超过最大重试次数，不再尝试登录，等待网络检测恢复后重置
-                            self._next_retry_time = 0
-                            logger.warning(
-                                "登录重试次数已用尽（{}/{}），等待网络恢复（下次检测 {}s 后）",
-                                self._retry_policy._attempt, self._retry_policy.max_retries,
-                                self._monitor_check_interval,
-                            )
-                        else:
-                            self._next_retry_time = time.time() + delay
-                            self._wakeup_event.set()
-                            from datetime import datetime as _dt
-                            next_time = _dt.fromtimestamp(self._next_retry_time).strftime("%H:%M:%S")
-                            logger.info(
-                                "重试 {}/{}, 下次重试: {}s 后 ({})",
-                                self._retry_policy._attempt, self._retry_policy.max_retries,
-                                int(delay), next_time,
-                            )
-            except Exception:
-                logger.exception("登录任务异常")
-
-        with self._futures_lock:
-            self._registered_futures.add(handle.future)
-        handle.future.add_done_callback(_on_done)
-        return True
+        """【委托】提交登录到 LoginBridge。"""
+        return self._login_bridge.submit_login(is_manual=is_manual, config_snapshot=config_snapshot)
 
     def _run_schedule_tick(self) -> None:
         """执行定时任务调度（使用 TaskRegistry + TaskExecutor）。"""
@@ -516,10 +466,7 @@ class ScheduleEngine:
 
     def cancel_login(self) -> tuple[bool, str]:
         """取消当前正在执行的登录。"""
-        if self._orchestrator is None:
-            return False, "登录服务未初始化"
-        self._orchestrator.cancel_running()
-        return True, "登录已取消"
+        return self._login_bridge.cancel_login()
 
     def _handle_reload(self, cmd: EngineCommand) -> None:
         """重载配置并重启监控（仅在引擎线程中调用）。"""

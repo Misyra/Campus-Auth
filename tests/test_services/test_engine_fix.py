@@ -3,6 +3,7 @@
 import inspect
 import queue
 import threading
+import time
 from unittest.mock import MagicMock, patch
 
 from app.schemas import LoginCredentials, RuntimeConfig
@@ -76,6 +77,8 @@ class TestManualLoginCancelRaceFix:
         import threading
 
         from app.services.engine import ScheduleEngine
+        from app.services.engine_login_bridge import LoginBridge
+        from app.services.retry_policy import MonitoredPolicy
 
         engine = ScheduleEngine.__new__(ScheduleEngine)
         engine._task_executor = MagicMock()
@@ -89,6 +92,30 @@ class TestManualLoginCancelRaceFix:
         engine._login_history = MagicMock()
         engine._registered_futures = set()
         engine._futures_lock = threading.Lock()
+        engine._wakeup_event = threading.Event()
+        engine._retry_policy = MonitoredPolicy()
+        engine._monitor_check_interval = 300
+        engine.record_log = MagicMock()
+        engine._login_bridge = LoginBridge(
+            get_orchestrator=lambda: engine._orchestrator,
+            get_runtime_config=lambda: engine._runtime_config,
+            retry_policy=engine._retry_policy,
+            status_update_callback=engine._update_status_snapshot,
+            record_log=engine.record_log,
+            wakeup_event=engine._wakeup_event,
+            get_monitor_check_interval=lambda: engine._monitor_check_interval,
+        )
+        def _bridge_retry_scheduled(delay: float) -> None:
+            engine._next_retry_time = time.time() + delay
+            engine._wakeup_event.set()
+        def _bridge_login_success() -> None:
+            engine._next_retry_time = 0
+        def _bridge_retry_exhausted() -> None:
+            engine._next_retry_time = 0
+        engine._login_bridge._on_retry_scheduled = _bridge_retry_scheduled
+        engine._login_bridge._on_login_success = _bridge_login_success
+        engine._login_bridge._on_retry_exhausted = _bridge_retry_exhausted
+        engine._next_retry_time = 0
         return engine
 
     def test_manual_login_submits_to_orchestrator(self):

@@ -1,5 +1,26 @@
 # 修改日志
 
+## 2026-06-26
+
+### refactor: 提取 LoginBridge from ScheduleEngine
+
+- 新建 `app/services/engine_login_bridge.py`：`LoginBridge` 类，从 `ScheduleEngine._do_async_login` 提取登录提交与回调管理
+  - `submit_login(is_manual, config_snapshot)` — 提交登录到 LoginOrchestrator，含前置检查、去重、回调注册
+  - `cancel_login()` — 取消当前登录
+  - `_on_retry_scheduled(delay)` / `_on_login_success()` / `_on_retry_exhausted()` — 可覆盖的回调钩子，由 engine 桥接设置 `_next_retry_time`
+  - 内置 `_registered_futures` + `_futures_lock` 线程安全 future 管理
+- `app/services/engine.py`：
+  - `__init__` 新增 `_login_bridge` 初始化 + 三个桥接回调（`_bridge_retry_scheduled` / `_bridge_login_success` / `_bridge_retry_exhausted`）
+  - `_do_async_login` 从 75 行逻辑缩减为 1 行委托 `self._login_bridge.submit_login()`
+  - `cancel_login` 从 5 行缩减为 1 行委托 `self._login_bridge.cancel_login()`
+  - `_registered_futures` / `_futures_lock` 保留（向后兼容），实际管理已迁移到 LoginBridge
+- 测试文件同步更新（4 个文件）：
+  - `tests/test_services/conftest.py`：`_make_raw()` 新增 `_login_bridge` 初始化 + 三个桥接回调
+  - `tests/test_services/test_engine_fix.py`：`_make_engine()` 新增 `_login_bridge` 初始化 + 三个桥接回调
+  - `tests/test_services/test_monitor_service.py`：`test_do_async_login_delegates_to_task_executor` 新增 `_login_bridge` 初始化
+  - `tests/test_integration/test_login_flow.py`：`_make_raw_engine()` 新增 `_login_bridge` 初始化 + 三个桥接回调
+- 验收：178 个 engine 相关测试全通过，28 个 login_flow 集成测试全通过
+
 ## 2026-06-25 (6)
 
 ### refactor: 提取 _shutdown_container 并修复冗余 ProfileService 实例化
