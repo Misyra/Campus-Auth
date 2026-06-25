@@ -3,8 +3,8 @@
 合并 MonitorService（网络监控）和 SchedulerService（定时任务调度）的全部功能，
 使用 Actor 模型（线程 + 队列）进行命令派发，零 asyncio 依赖的核心逻辑。
 
-NOT-TO-DO: 不要拆分此文件。ScheduleEngine 是调度核心，职责清晰（命令队列、
-监控循环、重试逻辑、调度器），拆分只会增加模块间耦合。
+职责边界：命令队列、监控循环、重试逻辑、调度器。
+WS 广播委托给 WsBroadcaster，网络测试委托给 NetworkTester。
 """
 
 from __future__ import annotations

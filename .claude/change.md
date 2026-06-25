@@ -1,5 +1,15 @@
 # 修改日志
 
+## 2026-06-25 (6)
+
+### refactor: 提取 _shutdown_container 并修复冗余 ProfileService 实例化
+
+- `main.py`：
+  - 新增 `_shutdown_container(container, logger, fallback_shutdown=False)` 辅助函数：统一 `_run_lightweight` 和 `_run_full` 的容器关闭逻辑（约 40 行缩减为 1 处）
+  - `_run_lightweight` finally 块：替换内联 try/except 为 `_shutdown_container(container, logger, fallback_shutdown=True)` 调用
+  - `_run_full` finally 块：替换内联 try/except 为 `_shutdown_container(container, logger)` 调用
+  - `_run_full` 中 `create_profile_service()` 独立实例化改为 `container.profile_service.load()`，复用容器已有实例
+
 ## 2026-06-25 (5)
 
 ### refactor: 提取 AppSettings 子模型，消除配置透传字段重复
