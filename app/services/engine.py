@@ -11,33 +11,27 @@ from __future__ import annotations
 
 import contextlib
 from concurrent.futures import CancelledError, Future
-import json
 import queue
 import re
 import threading
 import time
-from collections import deque
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from app.network.decision import is_network_available
 from app.schemas import MonitorStatusResponse, RuntimeConfig
 from app.services.monitor_service import NetworkMonitorCore
 from app.services.websocket_manager import WebSocketManager
 from app.utils import ConfigValidator
 from app.utils.logging import get_logger
 from app.utils.login import SCREENSHOT_URL_PATTERN
-from app.utils.network import parse_ping_targets
 
 from .profile_service import ProfileService
 from .retry_policy import MonitoredPolicy
 
-# ── 常量 ──
-
-# WS 广播队列排空间隔（秒）
-WS_DRAIN_INTERVAL_SECONDS = 0.05
+# 向后兼容：常量已迁移至 ws_broadcaster 模块
+from app.services.ws_broadcaster import WS_DRAIN_INTERVAL_SECONDS  # noqa: F401
 
 # ── Actor 模型：类型化命令派发 ──
 
@@ -97,6 +91,8 @@ class ScheduleEngine:
         worker_getter=None,
         task_registry=None,
         task_executor=None,
+        ws_broadcaster=None,
+        network_tester=None,
     ):
         self.project_root = project_root
         if profile_service is None:
@@ -109,15 +105,15 @@ class ScheduleEngine:
         # 新组件注入
         self._task_registry = task_registry
         self._task_executor = task_executor
+        self._ws_broadcaster = ws_broadcaster
+        self._network_tester = network_tester
 
         # 调度状态（从 ScheduledTaskService 搬入）
         self._scheduler_running = False
         self._next_schedule_tick = 0.0
 
-        # DashboardSink — 由 container.startup 注入
+        # DashboardSink — 由 container.startup 注入（仅用于 list_logs）
         self._dashboard_sink = None
-        # 轻量模式下的空广播队列（仅接收不消费，小容量即可）
-        self._empty_broadcast_queue: deque = deque(maxlen=10)
 
         # 锁（必须在 _reload_config_internal 之前初始化）
         self._manual_login_in_progress = False
@@ -647,46 +643,13 @@ class ScheduleEngine:
 
     def _queue_status_broadcast(self) -> None:
         """将当前状态放入 WS 广播队列。"""
+        if self._ws_broadcaster is None:
+            return
         try:
             status = self.get_status()
-            self.ws_broadcast_queue.append(
-                {"type": "status", "data": status.model_dump()}
-            )
+            self._ws_broadcaster.enqueue_status(status.model_dump())
         except Exception:
             logger.exception("状态广播队列失败")
-
-    # ── WebSocket 排空（主事件循环）──
-
-    async def ws_drain_loop(self) -> None:
-        """后台 asyncio 任务：定期排空 WS 广播队列。
-
-        Runs until the asyncio task is cancelled (by lifespan shutdown).
-        """
-        import asyncio
-
-        while True:
-            try:
-                await asyncio.sleep(WS_DRAIN_INTERVAL_SECONDS)
-                await self.drain_ws_queue()
-            except asyncio.CancelledError:
-                break
-            except Exception:
-                logger.exception("WS 排空循环异常")
-
-    async def drain_ws_queue(self) -> None:
-        """Flush pending WS broadcast messages to WebSocket clients."""
-        if self._ws_manager is None:
-            return
-        broadcast_queue = self.ws_broadcast_queue
-        while True:
-            try:
-                data = broadcast_queue.popleft()
-            except IndexError:
-                break
-            try:
-                await self._ws_manager.broadcast(json.dumps(data))
-            except Exception:
-                logger.exception("WS 广播发送失败")
 
     # ── 公共 API（监控 — 从 API 线程 / main.py 调用）──
 
@@ -719,24 +682,8 @@ class ScheduleEngine:
         return self._task_executor.is_login_running() if self._task_executor else False
 
     def set_dashboard_sink(self, sink) -> None:
-        """注入 DashboardSink，并迁移轻量模式期间积累的广播消息。"""
-        # 迁移轻量模式期间积累的广播消息
-        old_queue = self._empty_broadcast_queue
-        if old_queue:
-            new_queue = sink.broadcast_queue
-            while old_queue:
-                try:
-                    new_queue.append(old_queue.popleft())
-                except IndexError:
-                    break
+        """注入 DashboardSink（供日志查询使用）。"""
         self._dashboard_sink = sink
-
-    @property
-    def ws_broadcast_queue(self) -> deque:
-        """WS 广播队列（从 DashboardSink 获取）。"""
-        if self._dashboard_sink is None:
-            return self._empty_broadcast_queue
-        return self._dashboard_sink.broadcast_queue
 
     @property
     def pure_mode(self) -> bool:
@@ -923,47 +870,18 @@ class ScheduleEngine:
                 self._manual_login_in_progress = False
 
     def test_network(self) -> tuple[bool, str]:
-        logger.debug("开始手动网络测试")
-        config = self._runtime_config
-        targets = config.monitor.ping_targets
-        enable_tcp = config.monitor.enable_tcp_check
-        enable_http = config.monitor.enable_http_check
-        from app.utils.network import parse_url_checks
-
-        url_checks = parse_url_checks(config.monitor.url_check_urls)
-        test_sites = parse_ping_targets(targets)
-        mode_desc = []
-        if enable_tcp:
-            mode_desc.append(f"TCP({len(test_sites) if test_sites else 2})")
-        if enable_http:
-            mode_desc.append("HTTP(2)")
-        if url_checks:
-            mode_desc.append(f"网址响应({len(url_checks)})")
+        """委托 NetworkTester 执行手动网络测试。"""
+        if self._network_tester is None:
+            return False, "网络测试服务未初始化"
         self.record_log("开始手动网络测试", "INFO", "network")
-        logger.debug("检测方式: {}", "+".join(mode_desc) or "无")
-        try:
-            timeout = config.monitor.network_check_timeout
-            is_available = is_network_available(
-                test_sites=test_sites if test_sites else None,
-                test_urls=config.monitor.test_urls or None,
-                timeout=timeout,
-                enable_tcp=enable_tcp,
-                enable_http=enable_http,
-                url_checks=url_checks if url_checks else None,
-            )
-            if is_available:
-                self.record_log("手动测试结果: 网络正常", "INFO", "network")
-                self.notify_network_state_changed()  # 新增
-                return True, "网络连接正常"
-            else:
-                self.record_log("手动测试结果: 网络异常", "WARNING", "network")
-                self.notify_network_state_changed()  # 新增
-                return False, "网络连接异常"
-        except Exception as exc:
-            logger.exception("网络测试失败")
-            self.record_log(f"手动测试异常: {exc}", "ERROR", "network")
-            self.notify_network_state_changed()  # 新增
-            return False, f"网络测试失败: {exc}"
+        result = self._network_tester.test_network(self._runtime_config)
+        success, message = result
+        if success:
+            self.record_log("手动测试结果: 网络正常", "INFO", "network")
+        else:
+            self.record_log("手动测试结果: 网络异常", "WARNING", "network")
+        self.notify_network_state_changed()
+        return result
 
     def list_logs(self, limit: int = 200) -> list:
         """返回最近 limit 条日志（从 DashboardSink 读取）。"""
