@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -98,6 +99,31 @@ def engine_factory():
         svc._update_status_snapshot = MagicMock()
         svc._registered_futures = set()
         svc._futures_lock = threading.Lock()
+
+        # LoginBridge — 登录委托
+        from app.services.engine_login_bridge import LoginBridge
+        svc._login_bridge = LoginBridge(
+            get_orchestrator=lambda: svc._orchestrator,
+            get_runtime_config=lambda: svc._runtime_config,
+            retry_policy=svc._retry_policy,
+            status_update_callback=svc._update_status_snapshot,
+            record_log=svc.record_log,
+            wakeup_event=svc._wakeup_event,
+            get_monitor_check_interval=lambda: svc._monitor_check_interval,
+        )
+        # 桥接回调：模拟 engine 的 _bridge_retry_scheduled / _bridge_login_success / _bridge_retry_exhausted
+        def _bridge_retry_scheduled(delay: float) -> None:
+            svc._next_retry_time = time.time() + delay
+            svc._wakeup_event.set()
+        def _bridge_login_success() -> None:
+            svc._next_retry_time = 0
+        def _bridge_retry_exhausted() -> None:
+            svc._next_retry_time = 0
+        svc._login_bridge._on_retry_scheduled = _bridge_retry_scheduled
+        svc._login_bridge._on_login_success = _bridge_login_success
+        svc._login_bridge._on_retry_exhausted = _bridge_retry_exhausted
+        svc._next_retry_time = 0
+
         return svc
 
     def factory(raw=False, **overrides):
