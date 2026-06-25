@@ -91,7 +91,7 @@ class ScheduleEngine:
     def __init__(
         self,
         project_root: Path,
-        profile_service: ProfileService | None = None,
+        profile_service: ProfileService = None,
         ws_manager: WebSocketManager | None = None,
         login_history_service=None,
         worker_getter=None,
