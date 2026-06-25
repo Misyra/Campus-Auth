@@ -249,10 +249,6 @@ class LoginOrchestrator:
             if self._slot is not None and not self._slot.done():
                 self._slot.cancel()
 
-    def set_executor(self, executor) -> None:
-        """注入外部执行器（由 container 在 TaskExecutor 创建后调用）。"""
-        self._executor = executor
-
     def shutdown(self, wait: bool = True) -> None:
         """关闭编排器。仅关闭自建池（外部 executor 由调用方管理）。"""
         if self._pool is not None:

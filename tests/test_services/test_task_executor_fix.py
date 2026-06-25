@@ -393,7 +393,7 @@ class TestTaskExecutorCRUD:
     def test_set_runtime_config_getter(self):
         executor = self._make_executor()
         getter = lambda: {"key": "value"}
-        executor.set_runtime_config_getter(getter)
+        executor._get_runtime_config = getter
         assert executor._get_runtime_config is getter
 
 

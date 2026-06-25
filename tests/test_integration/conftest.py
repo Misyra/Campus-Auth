@@ -83,15 +83,15 @@ def integration_stack(tmp_path, mock_worker):
         login_history_service=login_history,
         worker_getter=lambda: mock_worker,
         task_registry=task_registry,
+        task_executor=None,
+        orchestrator=None,
     )
 
     orchestrator = LoginOrchestrator(
         worker_getter=lambda: mock_worker,
         login_history=login_history,
         profile_service=profile_service,
-        get_runtime_config=engine.get_runtime_config,
     )
-    engine.set_orchestrator(orchestrator)
 
     task_executor = TaskExecutor(
         registry=task_registry,
@@ -99,8 +99,11 @@ def integration_stack(tmp_path, mock_worker):
         worker_getter=lambda: mock_worker,
         login_orchestrator=orchestrator,
     )
-    engine.set_task_executor(task_executor)
-    task_executor.set_runtime_config_getter(engine.get_runtime_config)
+    # 构造器注入后绑定
+    engine._orchestrator = orchestrator
+    engine._task_executor = task_executor
+    orchestrator._get_runtime_config = engine.get_runtime_config
+    task_executor._get_runtime_config = engine.get_runtime_config
 
     # 启动引擎线程
     engine.boot()
@@ -134,15 +137,15 @@ def full_stack(tmp_path, mock_worker):
         login_history_service=login_history,
         worker_getter=lambda: mock_worker,
         task_registry=task_registry,
+        task_executor=None,
+        orchestrator=None,
     )
 
     orchestrator = LoginOrchestrator(
         worker_getter=lambda: mock_worker,
         login_history=login_history,
         profile_service=profile_service,
-        get_runtime_config=engine.get_runtime_config,
     )
-    engine.set_orchestrator(orchestrator)
 
     task_executor = TaskExecutor(
         registry=task_registry,
@@ -150,8 +153,11 @@ def full_stack(tmp_path, mock_worker):
         worker_getter=lambda: mock_worker,
         login_orchestrator=orchestrator,
     )
-    engine.set_task_executor(task_executor)
-    task_executor.set_runtime_config_getter(engine.get_runtime_config)
+    # 构造器注入后绑定
+    engine._orchestrator = orchestrator
+    engine._task_executor = task_executor
+    orchestrator._get_runtime_config = engine.get_runtime_config
+    task_executor._get_runtime_config = engine.get_runtime_config
 
     # 启动引擎线程
     engine.boot()
