@@ -6,7 +6,7 @@ from app.schemas import MonitorStatusResponse, RuntimeConfig
 
 
 def _setup_task_mocks(mock_services):
-    """配置 task_service 和 engine mock 返回值。"""
+    """配置 task_manager 和 engine mock 返回值。"""
     mock_services.engine.get_config.return_value = RuntimeConfig()
     mock_services.engine.get_status.return_value = MonitorStatusResponse(
         monitoring=False,
@@ -17,19 +17,19 @@ def _setup_task_mocks(mock_services):
     )
     mock_services.engine.list_logs.return_value = []
 
-    mock_services.task_service.list_tasks.return_value = [
+    mock_services.task_manager.list_tasks.return_value = [
         {"id": "default", "name": "默认任务"}
     ]
-    mock_services.task_service.get_active_task.return_value = "default"
-    mock_services.task_service.get_task.return_value = {
+    mock_services.task_manager.get_active_task.return_value = "default"
+    mock_services.task_manager.get_task_detail.return_value = {
         "id": "default",
         "name": "默认任务",
         "steps": [{"id": "s1", "type": "click", "selector": "#btn"}],
     }
-    mock_services.task_service.save_task.return_value = (True, "保存成功")
-    mock_services.task_service.delete_task.return_value = (True, "删除成功")
-    mock_services.task_service.set_active_task.return_value = (True, "切换成功")
-    mock_services.task_service.save_task_order.return_value = (True, "排序成功")
+    mock_services.task_manager.save_task_with_validation.return_value = (True, "保存成功")
+    mock_services.task_manager.delete_task_with_validation.return_value = (True, "删除成功")
+    mock_services.task_manager.set_active_task_with_validation.return_value = (True, "切换成功")
+    mock_services.task_manager.save_order_with_validation.return_value = (True, "排序成功")
 
 
 class TestListTasks:
@@ -74,7 +74,7 @@ class TestGetTask:
     def test_get_task_not_found(self, api_client):
         test_client, mock_services = api_client
         _setup_task_mocks(mock_services)
-        mock_services.task_service.get_task.return_value = None
+        mock_services.task_manager.get_task_detail.return_value = None
         resp = test_client.get("/api/tasks/nonexistent")
         assert resp.status_code == 404
 

@@ -14,7 +14,7 @@ class TestListScripts:
     def test_list_empty(self, api_client):
         """无脚本时返回空列表。"""
         test_client, mock_services = api_client
-        mock_services.task_service.list_scripts.return_value = []
+        mock_services.task_manager.list_script_tasks.return_value = []
         resp = test_client.get("/api/scripts")
         assert resp.status_code == 200
         assert resp.json() == []
@@ -22,7 +22,7 @@ class TestListScripts:
     def test_list_with_scripts(self, api_client):
         """有脚本时返回列表。"""
         test_client, mock_services = api_client
-        mock_services.task_service.list_scripts.return_value = [
+        mock_services.task_manager.list_script_tasks.return_value = [
             {"id": "script1", "name": "脚本1", "type": "script"},
             {"id": "script2", "name": "脚本2", "type": "script"},
         ]
@@ -40,7 +40,7 @@ class TestGetScript:
     def test_get_existing_script(self, api_client):
         """获取存在的脚本任务。"""
         test_client, mock_services = api_client
-        mock_services.task_service.get_task.return_value = {
+        mock_services.task_manager.get_task_detail.return_value = {
             "id": "script1",
             "name": "测试脚本",
             "type": "script",
@@ -53,14 +53,14 @@ class TestGetScript:
     def test_get_nonexistent_script(self, api_client):
         """获取不存在的脚本返回 404。"""
         test_client, mock_services = api_client
-        mock_services.task_service.get_task.return_value = None
+        mock_services.task_manager.get_task_detail.return_value = None
         resp = test_client.get("/api/scripts/nonexistent")
         assert resp.status_code == 404
 
     def test_get_browser_task_as_script(self, api_client):
         """浏览器任务类型不是 script 返回 404。"""
         test_client, mock_services = api_client
-        mock_services.task_service.get_task.return_value = {
+        mock_services.task_manager.get_task_detail.return_value = {
             "id": "task1",
             "name": "浏览器任务",
             "type": "browser",
@@ -78,7 +78,7 @@ class TestSaveScript:
     def test_save_script_success(self, api_client):
         """保存脚本成功。"""
         test_client, mock_services = api_client
-        mock_services.task_service.save_task.return_value = (True, "保存成功")
+        mock_services.task_manager.save_task_with_validation.return_value = (True, "保存成功")
         resp = test_client.put(
             "/api/scripts/new_script",
             json={"name": "新脚本", "content": "echo test", "type": "script"},
@@ -89,7 +89,7 @@ class TestSaveScript:
     def test_save_script_failure(self, api_client):
         """保存脚本失败。"""
         test_client, mock_services = api_client
-        mock_services.task_service.save_task.return_value = (False, "保存失败")
+        mock_services.task_manager.save_task_with_validation.return_value = (False, "保存失败")
         resp = test_client.put(
             "/api/scripts/bad_script",
             json={"name": "坏脚本"},
@@ -107,7 +107,7 @@ class TestDeleteScript:
     def test_delete_existing_script(self, api_client):
         """删除存在的脚本。"""
         test_client, mock_services = api_client
-        mock_services.task_service.delete_task.return_value = (True, "删除成功")
+        mock_services.task_manager.delete_task_with_validation.return_value = (True, "删除成功")
         resp = test_client.delete("/api/scripts/script1")
         assert resp.status_code == 200
         assert resp.json()["success"] is True
@@ -115,7 +115,7 @@ class TestDeleteScript:
     def test_delete_nonexistent_script(self, api_client):
         """删除不存在的脚本。"""
         test_client, mock_services = api_client
-        mock_services.task_service.delete_task.return_value = (False, "脚本不存在")
+        mock_services.task_manager.delete_task_with_validation.return_value = (False, "脚本不存在")
         resp = test_client.delete("/api/scripts/nonexistent")
         assert resp.status_code == 200
         assert resp.json()["success"] is False
@@ -133,13 +133,13 @@ class TestRunScript:
         script_file = tmp_path / "test_script.sh"
         script_file.write_text("echo hello", encoding="utf-8")
 
-        mock_services.task_service.get_task.return_value = {
+        mock_services.task_manager.get_task_detail.return_value = {
             "id": "script1",
             "name": "测试",
             "type": "script",
             "binary_path": "",
         }
-        mock_services.task_service.get_script_path.return_value = script_file
+        mock_services.task_manager.get_script_path_public.return_value = script_file
 
         with patch("app.api.scripts.ScriptRunner") as MockRunner:
             mock_runner = MagicMock()
@@ -154,19 +154,19 @@ class TestRunScript:
     def test_run_script_not_found(self, api_client):
         """运行不存在的脚本返回 404。"""
         test_client, mock_services = api_client
-        mock_services.task_service.get_task.return_value = None
+        mock_services.task_manager.get_task_detail.return_value = None
         resp = test_client.post("/api/scripts/nonexistent/run")
         assert resp.status_code == 404
 
     def test_run_script_file_missing(self, api_client):
         """脚本文件不存在时返回失败。"""
         test_client, mock_services = api_client
-        mock_services.task_service.get_task.return_value = {
+        mock_services.task_manager.get_task_detail.return_value = {
             "id": "script1",
             "name": "测试",
             "type": "script",
         }
-        mock_services.task_service.get_script_path.return_value = None
+        mock_services.task_manager.get_script_path_public.return_value = None
         resp = test_client.post("/api/scripts/script1/run")
         assert resp.status_code == 200
         assert resp.json()["success"] is False

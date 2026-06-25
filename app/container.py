@@ -13,8 +13,8 @@ from app.services.login_history_service import LoginHistoryService
 from app.services.profile_service import ProfileService
 from app.services.task_executor import TaskExecutor
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
-from app.services.task_service import TaskService
 from app.services.websocket_manager import NullWebSocketManager, WebSocketManager
+from app.tasks import TaskManager
 from app.utils.logging import DashboardSink, get_logger
 
 container_logger = get_logger("container", source="backend")
@@ -35,7 +35,7 @@ class ServiceContainer:
         from app.constants import AUTH_DATA_DIR
 
         self.login_history_service = LoginHistoryService(AUTH_DATA_DIR)
-        self.task_service = TaskService(project_root)
+        self.task_manager = TaskManager(project_root / "tasks")
         self.autostart_service = AutoStartService(project_root)
         self._debug_manager = None  # 延迟初始化，避免轻量模式加载 FastAPI
 
@@ -77,6 +77,7 @@ class ServiceContainer:
             history_store=self.task_history_store,
             worker_getter=_get_worker,
             login_orchestrator=self.login_orchestrator,
+            task_manager=self.task_manager,
         )
         self.engine.set_task_executor(self.task_executor)
 

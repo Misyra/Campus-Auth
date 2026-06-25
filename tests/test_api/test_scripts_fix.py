@@ -24,9 +24,9 @@ class TestScriptThreadPool:
         captured_executor = {}
 
         # 构造 mock 依赖
-        mock_task_service = MagicMock()
-        mock_task_service.get_task.return_value = {"type": "script", "binary_path": ""}
-        mock_task_service.get_script_path.return_value = MagicMock(
+        mock_task_mgr = MagicMock()
+        mock_task_mgr.get_task_detail.return_value = {"type": "script", "binary_path": ""}
+        mock_task_mgr.get_script_path_public.return_value = MagicMock(
             exists=MagicMock(return_value=True)
         )
 
@@ -47,7 +47,7 @@ class TestScriptThreadPool:
             mock_runner = MagicMock()
             mock_runner_cls.return_value = mock_runner
 
-            result = await run_script(mock_request, "test_task", mock_task_service)
+            result = await run_script(mock_request, "test_task", mock_task_mgr)
 
         assert result.success is True
         executor = captured_executor.get("executor")

@@ -7,9 +7,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from app.deps import get_task_service
+from app.deps import get_task_manager
 from app.schemas import ActionResponse
-from app.services.task_service import TaskService
+from app.tasks import TaskManager
 from app.utils.logging import get_logger
 from app.workers.script_runner import ScriptRunner, detect_available_binaries
 
@@ -20,10 +20,10 @@ _script_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="script_
 
 @router.get("/api/scripts")
 def list_scripts(
-    task_svc: TaskService = Depends(get_task_service),
+    task_mgr: TaskManager = Depends(get_task_manager),
 ) -> list[dict[str, str]]:
     """列出所有自定义脚本任务。"""
-    return task_svc.list_scripts()
+    return task_mgr.list_script_tasks()
 
 
 @router.get("/api/scripts/binaries")
@@ -35,10 +35,10 @@ def list_binaries() -> list[dict[str, str]]:
 @router.get("/api/scripts/{task_id}")
 def get_script(
     task_id: str,
-    task_svc: TaskService = Depends(get_task_service),
+    task_mgr: TaskManager = Depends(get_task_manager),
 ) -> dict:
     """获取脚本任务详情（含脚本内容）。"""
-    task = task_svc.get_task(task_id)
+    task = task_mgr.get_task_detail(task_id)
     if not task or task.get("type") != "script":
         raise HTTPException(status_code=404, detail="脚本任务不存在")
     return task
@@ -48,11 +48,11 @@ def get_script(
 def save_script(
     task_id: str,
     payload: dict,
-    task_svc: TaskService = Depends(get_task_service),
+    task_mgr: TaskManager = Depends(get_task_manager),
 ) -> ActionResponse:
     """保存自定义脚本任务。"""
     payload["type"] = "script"
-    ok, message = task_svc.save_task(task_id, payload)
+    ok, message = task_mgr.save_task_with_validation(task_id, payload)
     api_logger.info("保存脚本 {} -> success={}, message={}", task_id, ok, message)
     return ActionResponse(success=ok, message=message)
 
@@ -60,10 +60,10 @@ def save_script(
 @router.delete("/api/scripts/{task_id}", response_model=ActionResponse)
 def delete_script(
     task_id: str,
-    task_svc: TaskService = Depends(get_task_service),
+    task_mgr: TaskManager = Depends(get_task_manager),
 ) -> ActionResponse:
     """删除脚本任务。"""
-    ok, message = task_svc.delete_task(task_id)
+    ok, message = task_mgr.delete_task_with_validation(task_id)
     api_logger.info("删除脚本 {} -> success={}, message={}", task_id, ok, message)
     return ActionResponse(success=ok, message=message)
 
@@ -72,15 +72,15 @@ def delete_script(
 async def run_script(
     request: Request,
     task_id: str,
-    task_svc: TaskService = Depends(get_task_service),
+    task_mgr: TaskManager = Depends(get_task_manager),
 ) -> ActionResponse:
     """手动执行脚本任务（测试用）。"""
-    task = task_svc.get_task(task_id)
+    task = task_mgr.get_task_detail(task_id)
     if not task or task.get("type") != "script":
         raise HTTPException(status_code=404, detail="脚本任务不存在")
 
     # 通过 TaskManager 安全路径查找脚本文件
-    script_path = task_svc.get_script_path(task_id)
+    script_path = task_mgr.get_script_path_public(task_id)
     if not script_path or not script_path.exists():
         return ActionResponse(success=False, message="脚本文件不存在")
 

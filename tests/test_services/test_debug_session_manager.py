@@ -299,9 +299,9 @@ class TestDebugSessionManagerStart:
         mock_request = MagicMock()
         mock_request.json = AsyncMock(return_value={"task_id": "missing_task"})
 
-        mock_task_service = MagicMock()
-        mock_task_service.task_manager.load_task.return_value = None
-        mock_request.app.state.services.task_service = mock_task_service
+        mock_task_mgr = MagicMock()
+        mock_task_mgr.load_task.return_value = None
+        mock_request.app.state.services.task_manager = mock_task_mgr
 
         mock_monitor = MagicMock()
 
@@ -326,9 +326,9 @@ class TestDebugSessionManagerStart:
 
         mock_request = MagicMock()
         mock_request.json = AsyncMock(return_value={"task_id": "task1"})
-        mock_task_service = MagicMock()
-        mock_task_service.task_manager.load_task.return_value = mock_task
-        mock_request.app.state.services.task_service = mock_task_service
+        mock_task_mgr = MagicMock()
+        mock_task_mgr.load_task.return_value = mock_task
+        mock_request.app.state.services.task_manager = mock_task_mgr
 
         mock_monitor = MagicMock()
         mock_runtime = MagicMock()
@@ -376,9 +376,9 @@ class TestDebugSessionManagerStart:
 
         mock_request = MagicMock()
         mock_request.json = AsyncMock(return_value={"task_id": "task1"})
-        mock_task_service = MagicMock()
-        mock_task_service.task_manager.load_task.return_value = mock_task
-        mock_request.app.state.services.task_service = mock_task_service
+        mock_task_mgr = MagicMock()
+        mock_task_mgr.load_task.return_value = mock_task
+        mock_request.app.state.services.task_manager = mock_task_mgr
 
         mock_monitor = MagicMock()
         mock_runtime = MagicMock()
@@ -420,9 +420,9 @@ class TestDebugSessionManagerStart:
 
         mock_request = MagicMock()
         mock_request.json = AsyncMock(return_value={"task_id": "task2"})
-        mock_task_service = MagicMock()
-        mock_task_service.task_manager.load_task.return_value = mock_task
-        mock_request.app.state.services.task_service = mock_task_service
+        mock_task_mgr = MagicMock()
+        mock_task_mgr.load_task.return_value = mock_task
+        mock_request.app.state.services.task_manager = mock_task_mgr
 
         mock_monitor = MagicMock()
         mock_runtime = MagicMock()

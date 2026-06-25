@@ -23,7 +23,7 @@ def mock_container_deps():
         patch("app.container.ProfileService") as ps,
         patch("app.container.LoginHistoryService") as lhs,
         patch("app.container.ScheduleEngine") as se,
-        patch("app.container.TaskService") as ts,
+        patch("app.container.TaskManager") as ts,
         patch("app.container.AutoStartService") as ats,
         patch("app.container.TaskRegistry") as tr,
         patch("app.container.TaskHistoryStore") as ths,
@@ -35,7 +35,7 @@ def mock_container_deps():
         mocks["profile_service"] = ps
         mocks["login_history"] = lhs
         mocks["engine"] = se
-        mocks["task_service"] = ts
+        mocks["task_manager"] = ts
         mocks["autostart"] = ats
         mocks["task_registry"] = tr
         mocks["task_history"] = ths

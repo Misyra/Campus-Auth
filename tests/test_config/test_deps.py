@@ -16,7 +16,7 @@ from app.deps import (
     get_monitor_service,
     get_profile_service,
     get_services,
-    get_task_service,
+    get_task_manager,
 )
 
 
@@ -38,7 +38,7 @@ class TestDeps:
         svc = MagicMock()
         svc.engine = MagicMock(name="ScheduleEngine")
         svc.profile_service = MagicMock(name="ProfileService")
-        svc.task_service = MagicMock(name="TaskService")
+        svc.task_manager = MagicMock(name="TaskManager")
         svc.autostart_service = MagicMock(name="AutoStartService")
         svc.debug_manager = MagicMock(name="DebugSessionManager")
         svc.login_history_service = MagicMock(name="LoginHistoryService")
@@ -56,9 +56,9 @@ class TestDeps:
         request = _make_request(services)
         assert get_profile_service(request) is services.profile_service
 
-    def test_get_task_service(self, services):
+    def test_get_task_manager(self, services):
         request = _make_request(services)
-        assert get_task_service(request) is services.task_service
+        assert get_task_manager(request) is services.task_manager
 
     def test_get_autostart_service(self, services):
         request = _make_request(services)
