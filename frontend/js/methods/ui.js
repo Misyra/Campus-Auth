@@ -82,6 +82,23 @@ export const uiMethods = {
     const labels = { login: '登录', monitor: '监控', network: '网络', update: '更新', security: '安全', install: '安装' };
     return labels[category] || '';
   },
+  // 通知下拉菜单：切换 + 点击外部关闭
+  toggleNotifications() {
+    this.showNotifications = !this.showNotifications;
+    if (this.showNotifications) {
+      this.unreadNotifications = 0;
+      document.addEventListener('mousedown', this._onNotifyOutsideClick);
+    } else {
+      document.removeEventListener('mousedown', this._onNotifyOutsideClick);
+    }
+  },
+  _onNotifyOutsideClick(e) {
+    const wrapper = document.querySelector('.notification-wrapper');
+    if (wrapper && !wrapper.contains(e.target)) {
+      this.showNotifications = false;
+      document.removeEventListener('mousedown', this._onNotifyOutsideClick);
+    }
+  },
   notify(success, message, category, action) {
     const entry = {
       success,
@@ -260,12 +277,14 @@ export const uiMethods = {
       key = `var_${index}`;
     }
     this.config.custom_variables[key] = '';
+    this.onConfigChange('custom_variables', this.config.custom_variables, 'toggle');
   },
   removeCustomVar(key) {
     if (this.config.custom_variables && key in this.config.custom_variables) {
       const newVars = { ...this.config.custom_variables };
       delete newVars[key];
       this.config.custom_variables = newVars;
+      this.onConfigChange('custom_variables', this.config.custom_variables, 'toggle');
     }
   },
   updateCustomVarKey(oldKey, newKey) {
@@ -298,6 +317,7 @@ export const uiMethods = {
       }
     }
     this.config.custom_variables = newVars;
+    this.onConfigChange('custom_variables', this.config.custom_variables, 'toggle');
   },
   _isViewerAtBottom() {
     const logViewer = this.$refs?.logViewer;
