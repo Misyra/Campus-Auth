@@ -121,7 +121,7 @@ class DebugSessionManager:
             password=runtime_config.credentials.password,
             isp=runtime_config.credentials.isp,
             task_url=task.url,
-            custom_variables=runtime_config.custom_variables,
+            custom_variables=runtime_config.app_settings.custom_variables,
         )
 
         # 解析任务 URL

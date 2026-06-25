@@ -350,7 +350,7 @@ class TaskExecutor:
         if not shell_path:
             try:
                 config = self._get_runtime_config() if self._get_runtime_config else RuntimeConfig()
-                shell_path = config.shell_path
+                shell_path = config.app_settings.shell_path
             except Exception:
                 logger.debug("获取运行时 shell_path 失败，使用默认值", exc_info=True)
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from app.schemas import (
+    AppSettings,
     BrowserSettings,
     ConfigResponseDTO,
     LoginCredentials,
@@ -107,6 +108,7 @@ class TestSaveConfig:
             retry=RetrySettings(),
             pause=PauseSettings(),
             logging=LoggingSettings(),
+            app_settings=AppSettings(),
             username="newuser",
             password="newpass",
             auth_url="http://10.0.0.1",

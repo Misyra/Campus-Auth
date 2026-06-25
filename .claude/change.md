@@ -1,5 +1,29 @@
 # 修改日志
 
+## 2026-06-25 (5)
+
+### refactor: 提取 AppSettings 子模型，消除配置透传字段重复
+
+- `app/schemas.py`：
+  - 新增 `AppSettings` frozen 模型：包含 10 个透传字段（block_proxy/shell_path/minimize_to_tray/startup_action/autostart_lightweight/lightweight_tray/auto_open_browser/proxy/app_port/custom_variables）
+  - `RuntimeConfig`：10 个平铺字段替换为 `app_settings: AppSettings`
+  - `GlobalConfig`：10 个平铺字段替换为 `app_settings: AppSettings`
+  - `ConfigResponseDTO`：10 个平铺字段替换为 `app_settings: AppSettings`
+  - `AppConfig.from_runtime_config`：字段访问改为 `config.app_settings.xxx`
+  - `ProfilesData.config_version` 默认值从 4 改为 5
+- `app/services/config_builder.py`：`build()` 10 个逐字段映射替换为 `app_settings=global_config.app_settings`
+- `app/services/config_service.py`：`save_global_and_profile` 10 个逐字段映射替换为 `app_settings=payload.app_settings`
+- `app/api/config.py`：
+  - `get_config` 返回 `ConfigResponseDTO` 改用 `app_settings=cfg.app_settings`
+  - `_log_config_changes` FIELD_NAMES 中平铺字段键名加 `app_settings.` 前缀
+- `app/services/login_orchestrator.py`：`block_proxy`/`shell_path`/`custom_variables` 访问改为 `config.app_settings.xxx`
+- `app/services/monitor_service.py`：`self.config.block_proxy` → `self.config.app_settings.block_proxy`
+- `app/services/task_executor.py`：`config.shell_path` → `config.app_settings.shell_path`
+- `app/services/debug_service.py`：`runtime_config.custom_variables` → `runtime_config.app_settings.custom_variables`
+- `app/api/autostart.py`：`global_config.autostart_lightweight` → `global_config.app_settings.autostart_lightweight`（读写两处）
+- `app/services/profile_service.py`：新增 `migrate_v4_to_v5` 迁移函数（已在前次实现），`_load_unsafe` 链式调用
+- 测试文件同步更新（8 个文件）：所有平铺字段断言改为 `rc.app_settings.xxx`
+
 ## 2026-06-25 (4)
 
 ### refactor: 统一登录线程池 — LoginOrchestrator 复用 BoundedExecutor

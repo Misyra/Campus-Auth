@@ -180,7 +180,7 @@ class NetworkMonitorCore:
         auth_url = self.config.credentials.auth_url or "未设置"
         username = self.config.credentials.username or "未设置"
         isp = self.config.credentials.isp or "无"
-        block_proxy = self.config.block_proxy
+        block_proxy = self.config.app_settings.block_proxy
         set_block_proxy(block_proxy if block_proxy is not None else True)
         test_sites_info = self._get_test_sites()
 

@@ -264,7 +264,7 @@ class TestProfilesData:
 
     def test_config_version_default(self):
         data = ProfilesData()
-        assert data.config_version == 4
+        assert data.config_version == 5
 
     def test_config_is_global_config(self):
         from app.schemas import GlobalConfig

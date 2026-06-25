@@ -73,10 +73,10 @@ class AppConfig:
     def from_runtime_config(cls, config: RuntimeConfig) -> AppConfig:
         """从 RuntimeConfig 统一派生 AppConfig，消除手动同步风险。"""
         return cls(
-            startup_action=StartupAction(config.startup_action),
-            minimize_to_tray=config.minimize_to_tray,
-            lightweight_tray=config.lightweight_tray,
-            auto_open_browser=config.auto_open_browser,
+            startup_action=StartupAction(config.app_settings.startup_action),
+            minimize_to_tray=config.app_settings.minimize_to_tray,
+            lightweight_tray=config.app_settings.lightweight_tray,
+            auto_open_browser=config.app_settings.auto_open_browser,
         )
 
 
@@ -295,10 +295,28 @@ class RetrySettings(BaseModel, frozen=True):
     retry_interval: int = Field(default=5, ge=1, le=300)
 
 
+class AppSettings(BaseModel, frozen=True):
+    """应用级设置 — 全局共享，不含凭据。
+
+    被 GlobalConfig、RuntimeConfig、ConfigResponseDTO 组合复用。
+    """
+
+    block_proxy: bool = True
+    shell_path: str = ""
+    minimize_to_tray: bool = True
+    startup_action: StartupAction = StartupAction.NONE
+    autostart_lightweight: bool = True
+    lightweight_tray: bool = True
+    auto_open_browser: bool = False
+    proxy: str = ""
+    app_port: int = Field(default=50721, ge=1, le=65535)
+    custom_variables: dict[str, str] = Field(default_factory=dict)
+
+
 class RuntimeConfig(BaseModel, frozen=True):
     """运行时配置根模型 — 替代旧 dict[str, Any]。
 
-    组合所有子集模型 + 直接透传字段。
+    组合所有子集模型。
     frozen=True 保证线程安全，无需 deepcopy。
 
     注意：此模型仅存在于内存，不直接写盘。
@@ -310,19 +328,9 @@ class RuntimeConfig(BaseModel, frozen=True):
     pause: PauseSettings = Field(default_factory=PauseSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     retry: RetrySettings = Field(default_factory=RetrySettings)
+    app_settings: AppSettings = Field(default_factory=AppSettings)
 
-    # 直接透传字段
     active_task: str = ""
-    custom_variables: dict[str, str] = Field(default_factory=dict)
-    block_proxy: bool = True
-    shell_path: str = ""
-    minimize_to_tray: bool = True
-    startup_action: StartupAction = StartupAction.NONE
-    autostart_lightweight: bool = True
-    lightweight_tray: bool = True
-    auto_open_browser: bool = False
-    proxy: str = ""
-    app_port: int = Field(default=50721, ge=1, le=65535)
 
 
 class GlobalConfig(BaseModel):
@@ -333,18 +341,7 @@ class GlobalConfig(BaseModel):
     retry: RetrySettings = Field(default_factory=RetrySettings)
     pause: PauseSettings = Field(default_factory=PauseSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
-
-    # 透传字段
-    block_proxy: bool = True
-    shell_path: str = ""
-    minimize_to_tray: bool = True
-    startup_action: StartupAction = StartupAction.NONE
-    autostart_lightweight: bool = True
-    lightweight_tray: bool = True
-    auto_open_browser: bool = False
-    proxy: str = ""
-    app_port: int = Field(default=50721, ge=1, le=65535)
-    custom_variables: dict[str, str] = Field(default_factory=dict)
+    app_settings: AppSettings = Field(default_factory=AppSettings)
 
 
 class ConfigResponseDTO(BaseModel):
@@ -355,6 +352,7 @@ class ConfigResponseDTO(BaseModel):
     retry: RetrySettings
     pause: PauseSettings
     logging: LoggingSettings
+    app_settings: AppSettings
 
     # 凭据（密码已掩码）
     username: str = ""
@@ -365,22 +363,11 @@ class ConfigResponseDTO(BaseModel):
 
     active_task: str = ""
 
-    block_proxy: bool = True
-    shell_path: str = ""
-    minimize_to_tray: bool = True
-    startup_action: StartupAction = StartupAction.NONE
-    autostart_lightweight: bool = True
-    lightweight_tray: bool = True
-    auto_open_browser: bool = False
-    proxy: str = ""
-    app_port: int = 50721
-    custom_variables: dict[str, str] = Field(default_factory=dict)
-
 
 class ProfilesData(BaseModel):
-    """settings.json 顶层结构（v4）"""
+    """settings.json 顶层结构（v5）"""
 
-    config_version: int = Field(default=4)
+    config_version: int = Field(default=5)
     global_config: GlobalConfig = Field(default_factory=GlobalConfig)
     auto_switch: bool = Field(default=False, description="是否根据网关 IP 自动切换方案")
     active_profile: str = Field(default="default")

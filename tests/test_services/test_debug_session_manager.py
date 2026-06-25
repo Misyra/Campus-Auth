@@ -332,7 +332,7 @@ class TestDebugSessionManagerStart:
 
         mock_monitor = MagicMock()
         mock_runtime = MagicMock()
-        mock_runtime.custom_variables = {}
+        mock_runtime.app_settings.custom_variables = {}
         mock_runtime.browser.timeout = 8
         mock_runtime.browser.navigation_timeout = 15
         mock_runtime.credentials.auth_url = "http://auth.example.com"
@@ -382,7 +382,7 @@ class TestDebugSessionManagerStart:
 
         mock_monitor = MagicMock()
         mock_runtime = MagicMock()
-        mock_runtime.custom_variables = {}
+        mock_runtime.app_settings.custom_variables = {}
         mock_runtime.browser.timeout = 8
         mock_runtime.browser.navigation_timeout = 15
         mock_monitor.get_runtime_config.return_value = mock_runtime
@@ -426,7 +426,7 @@ class TestDebugSessionManagerStart:
 
         mock_monitor = MagicMock()
         mock_runtime = MagicMock()
-        mock_runtime.custom_variables = {}
+        mock_runtime.app_settings.custom_variables = {}
         mock_runtime.browser.timeout = 8
         mock_runtime.browser.navigation_timeout = 15
         mock_monitor.get_runtime_config.return_value = mock_runtime
