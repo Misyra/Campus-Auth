@@ -1,7 +1,7 @@
 """src/task_executor.py — 任务执行器综合测试
 
 覆盖 StepConfig, TaskConfig, VariableResolver, StepHandler 子类,
-StepExecutorRegistry, TaskValidator, TaskExecutor, TaskManager 等核心类。
+StepExecutorRegistry, TaskValidator, BrowserTaskRunner, TaskManager 等核心类。
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.tasks.browser_runner import TaskExecutor
+from app.tasks.browser_runner import BrowserTaskRunner
 from app.tasks.manager import TaskManager, is_valid_task_id, normalize_task_id
 from app.tasks.models import (
     StepConfig,
@@ -902,18 +902,18 @@ class TestTaskManager:
 
 
 # =====================================================================
-# TaskExecutor（使用 mock page）
+# BrowserTaskRunner（使用 mock page）
 # =====================================================================
 
 
-class TestTaskExecutor:
+class TestBrowserTaskRunner:
     @pytest.mark.asyncio
     async def test_execute_step_at_out_of_range(self):
         config = TaskConfig(
             name="test",
             steps=[StepConfig(id="s1", type="click", selector="#btn")],
         )
-        executor = TaskExecutor(config)
+        executor = BrowserTaskRunner(config)
         mock_page = MagicMock()
         result = await executor.execute_step_at(mock_page, -1)
         assert result["success"] is False
@@ -931,7 +931,7 @@ class TestTaskExecutor:
                 StepConfig(id="s1", type="eval", script="return true"),
             ],
         )
-        executor = TaskExecutor(config)
+        executor = BrowserTaskRunner(config)
 
         mock_page = MagicMock()
         mock_page.evaluate = AsyncMock(return_value=True)
@@ -952,7 +952,7 @@ class TestTaskExecutor:
                 StepConfig(id="s2", type="eval", script=""),
             ],
         )
-        executor = TaskExecutor(config)
+        executor = BrowserTaskRunner(config)
 
         mock_page = MagicMock()
         mock_page.evaluate = AsyncMock(return_value=True)
@@ -967,13 +967,13 @@ class TestTaskExecutor:
 
     def test_registry_initialized(self):
         config = TaskConfig(name="test")
-        executor = TaskExecutor(config)
+        executor = BrowserTaskRunner(config)
         assert executor.registry is not None
         assert isinstance(executor.registry, StepExecutorRegistry)
 
     def test_resolver_initialized(self):
         config = TaskConfig(name="test", variables={"X": "1"})
-        executor = TaskExecutor(config, template_vars={"Y": "2"})
+        executor = BrowserTaskRunner(config, template_vars={"Y": "2"})
         assert executor.resolver is not None
         assert executor.resolver.resolve("{{X}}") == "1"
         assert executor.resolver.resolve("{{Y}}") == "2"
@@ -986,7 +986,7 @@ class TestTaskExecutor:
             timeout=5000,
             steps=[StepConfig(id="s1", type="eval", script="return 1", timeout=10000)],
         )
-        executor = TaskExecutor(config)
+        executor = BrowserTaskRunner(config)
         mock_page = MagicMock()
         mock_page.evaluate = AsyncMock(return_value=1)
 
@@ -1007,7 +1007,7 @@ class TestTaskExecutor:
             timeout=5000,
             steps=[StepConfig(id="s1", type="sleep", duration=300000)],
         )
-        executor = TaskExecutor(config)
+        executor = BrowserTaskRunner(config)
         mock_page = MagicMock()
         mock_page.wait_for_timeout = AsyncMock()
 
