@@ -352,7 +352,7 @@ class ConfigResponseDTO(BaseModel):
     retry: RetrySettings
     pause: PauseSettings
     logging: LoggingSettings
-    app_settings: AppSettings
+    app_settings: AppSettings = Field(default_factory=AppSettings)
 
     # 凭据（密码已掩码）
     username: str = ""
