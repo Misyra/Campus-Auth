@@ -2,6 +2,29 @@
 
 ## 2026-06-26
 
+### refactor: 提取 StatusManager from ScheduleEngine
+
+- 新建 `app/services/engine_status.py`：`StatusManager` 类，从 `ScheduleEngine` 提取状态快照管理
+  - `StatusSnapshot` 数据类 — 监控状态快照（monitoring/last_network_ok/start_time/network_check_count/login_attempt_count/last_check_time/snapshot_time/status_detail/network_state）
+  - `StatusManager` 类 — 状态快照管理与 WS 广播桥接
+    - `update_snapshot(force)` — 从 monitor_core 读取状态，写入 lock-free StatusSnapshot
+    - `_queue_status_broadcast()` — 将状态广播到 WS 队列
+    - `get_status()` — 返回 MonitorStatusResponse
+    - `list_logs(limit)` — 从 DashboardSink 读取日志
+    - `set_ws_broadcaster(broadcaster)` — 注入 WS 广播器
+    - `set_dashboard_sink(sink)` — 注入 DashboardSink
+- `app/services/engine.py`：
+  - 移除 `StatusSnapshot` 数据类定义（60-72 行），改从 `engine_status` 导入
+  - `__init__` 移除 `_dashboard_sink`、`_last_snapshot_time`、`_snapshot_min_interval`、`_status_snapshot` 字段
+  - `__init__` 新增 `_status_manager` 初始化
+  - `_update_status_snapshot` / `_queue_status_broadcast` / `get_status` / `list_logs` / `set_dashboard_sink` 改为委托 `_status_manager`
+- `app/container.py`：
+  - `start_web_services` 轻量模式唤醒时新增 `engine._status_manager.set_ws_broadcaster(self.ws_broadcaster)` 调用
+- 测试文件同步更新：
+  - `tests/test_services/conftest.py`：`_make_raw()` 移除 `_status_snapshot`/`_snapshot_min_interval`/`_last_snapshot_time`/`_dashboard_sink` 字段，新增 `_status_manager` 初始化
+  - `tests/test_services/test_engine.py`：导入改为从 `engine_status` 导入 `StatusSnapshot`；`_status_snapshot` 访问改为 `_status_manager._status_snapshot`；`_dashboard_sink` 访问改为 `_status_manager._dashboard_sink`
+- 验收：131 个 engine 测试全通过
+
 ### refactor: 提取 LoginBridge from ScheduleEngine
 
 - 新建 `app/services/engine_login_bridge.py`：`LoginBridge` 类，从 `ScheduleEngine._do_async_login` 提取登录提交与回调管理

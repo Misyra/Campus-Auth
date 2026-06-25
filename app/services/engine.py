@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from app.schemas import MonitorStatusResponse, RuntimeConfig
+from app.services.engine_status import StatusManager, StatusSnapshot
 from app.services.monitor_service import NetworkMonitorCore
 from app.services.websocket_manager import WebSocketManager
 from app.utils import ConfigValidator
@@ -55,21 +56,6 @@ class EngineCommand:
     data: dict = field(default_factory=dict)
     response_event: threading.Event | None = None  # 调用方在此事件上等待
     response_data: Any = None  # 由消费者设置
-
-
-@dataclass
-class StatusSnapshot:
-    """基于引用替换的监控状态快照，由 API 处理器直接读取。"""
-
-    monitoring: bool = False
-    last_network_ok: bool = False
-    start_time: float | None = None
-    network_check_count: int = 0
-    login_attempt_count: int = 0
-    last_check_time: str | None = None
-    snapshot_time: float = 0.0
-    status_detail: str = "正常"
-    network_state: str = "unknown"
 
 
 logger = get_logger("engine", source="backend")
@@ -112,9 +98,6 @@ class ScheduleEngine:
         self._scheduler_running = False
         self._next_schedule_tick = 0.0
 
-        # DashboardSink — 由 container.startup 注入（仅用于 list_logs）
-        self._dashboard_sink = None
-
         # 锁（必须在 _reload_config_internal 之前初始化）
         self._manual_login_in_progress = False
         self._manual_login_lock: threading.Lock = threading.Lock()
@@ -128,10 +111,6 @@ class ScheduleEngine:
         # 配置对象（由 _reload_config_internal 初始化）
         self._runtime_config: RuntimeConfig = RuntimeConfig()
 
-        # 状态快照限流
-        self._last_snapshot_time: float = 0
-        self._snapshot_min_interval: float = 1.0
-
         # 加载配置（复用 _reload_config_internal）
         self._reload_config_internal()
 
@@ -141,8 +120,11 @@ class ScheduleEngine:
         self._cmd_queue: queue.Queue[EngineCommand] = queue.Queue(maxsize=50)
         self._shutdown_event = threading.Event()
 
-        # Lock-free status snapshot — written by consumer, read by API threads
-        self._status_snapshot = StatusSnapshot()
+        # StatusManager — 状态快照与广播
+        self._status_manager = StatusManager(
+            get_monitor_core=lambda: self._monitor_core,
+            ws_broadcaster=self._ws_broadcaster,
+        )
 
         # 登录并发控制 —— 委托 task_executor.is_login_running()
 
@@ -549,52 +531,10 @@ class ScheduleEngine:
         self._update_status_snapshot()
 
     def _update_status_snapshot(self, force: bool = False) -> None:
-        """Read monitor_core state into lock-free StatusSnapshot.
-
-        Args:
-            force: 跳过节流，立即更新（用于状态切换等关键场景）。
-        """
-        now = time.time()
-        if not force and now - self._last_snapshot_time < self._snapshot_min_interval:
-            return
-        self._last_snapshot_time = now
-
-        core = self._monitor_core
-        if core is not None:
-            try:
-                snap = core.snapshot()
-                # 将 network_state 枚举转换为 network_connected 布尔值
-                network_state = snap.get("network_state", "unknown")
-                network_connected = network_state == "connected"
-                self._status_snapshot = StatusSnapshot(
-                    monitoring=core.monitoring,
-                    last_network_ok=network_connected,
-                    start_time=snap.get("start_time"),
-                    network_check_count=int(snap.get("network_check_count", 0)),
-                    login_attempt_count=int(snap.get("login_attempt_count", 0)),
-                    last_check_time=snap.get("last_check_time"),
-                    snapshot_time=time.time(),
-                    status_detail=snap.get("status_detail", "正常"),
-                    network_state=network_state,
-                )
-            except Exception:
-                logger.exception("状态快照更新失败")
-        else:
-            self._status_snapshot = StatusSnapshot(
-                snapshot_time=time.time(), status_detail="已停止"
-            )
-
-        self._queue_status_broadcast()
+        self._status_manager.update_snapshot(force=force)
 
     def _queue_status_broadcast(self) -> None:
-        """将当前状态放入 WS 广播队列。"""
-        if self._ws_broadcaster is None:
-            return
-        try:
-            status = self.get_status()
-            self._ws_broadcaster.enqueue_status(status.model_dump())
-        except Exception:
-            logger.exception("状态广播队列失败")
+        pass  # 已由 StatusManager.update_snapshot 内部调用
 
     # ── 公共 API（监控 — 从 API 线程 / main.py 调用）──
 
@@ -627,8 +567,7 @@ class ScheduleEngine:
         return self._task_executor.is_login_running() if self._task_executor else False
 
     def set_dashboard_sink(self, sink) -> None:
-        """注入 DashboardSink（供日志查询使用）。"""
-        self._dashboard_sink = sink
+        self._status_manager.set_dashboard_sink(sink)
 
     @property
     def pure_mode(self) -> bool:
@@ -751,23 +690,7 @@ class ScheduleEngine:
         logger.info("引擎服务已关闭")
 
     def get_status(self) -> MonitorStatusResponse:
-        """Lock-free status read directly from StatusSnapshot."""
-        snap = self._status_snapshot
-        runtime_seconds = (
-            int(time.time() - snap.start_time)
-            if snap.monitoring and snap.start_time
-            else 0
-        )
-        return MonitorStatusResponse(
-            monitoring=snap.monitoring,
-            network_check_count=snap.network_check_count,
-            login_attempt_count=snap.login_attempt_count,
-            last_check_time=snap.last_check_time,
-            runtime_seconds=runtime_seconds,
-            network_connected=snap.monitoring and snap.last_network_ok,
-            status_detail=snap.status_detail,
-            network_state=snap.network_state,
-        )
+        return self._status_manager.get_status()
 
     def run_manual_login(self) -> tuple[bool, str]:
         with self._manual_login_lock:
@@ -829,10 +752,7 @@ class ScheduleEngine:
         return result
 
     def list_logs(self, limit: int = 200) -> list:
-        """返回最近 limit 条日志（从 DashboardSink 读取）。"""
-        if limit <= 0 or self._dashboard_sink is None:
-            return []
-        return self._dashboard_sink.list_logs(limit=limit)
+        return self._status_manager.list_logs(limit=limit)
 
     def toggle_pure_mode(self) -> bool:
         """切换纯净模式，返回新值"""

@@ -21,8 +21,8 @@ from app.services.engine import (
     EngineCmdType,
     EngineCommand,
     ScheduleEngine,
-    StatusSnapshot,
 )
+from app.services.engine_status import StatusSnapshot
 from app.services.monitor_service import CheckOnceResult
 
 
@@ -112,7 +112,7 @@ class TestStatusSnapshot:
 class TestEngineInit:
     def test_init_defaults(self, engine_factory):
         svc = engine_factory()
-        assert svc._dashboard_sink is None
+        assert svc._status_manager._dashboard_sink is None
         assert svc._scheduler_running is False
         assert svc._monitor_core is None
 
@@ -997,16 +997,16 @@ class TestUpdateStatusSnapshot:
     def test_update_no_core(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
-        svc._queue_status_broadcast = MagicMock()
+        svc._status_manager._queue_status_broadcast = MagicMock()
         svc._monitor_core = None
         svc._update_status_snapshot(force=True)
-        assert svc._status_snapshot.monitoring is False
-        assert svc._status_snapshot.status_detail == "已停止"
+        assert svc._status_manager._status_snapshot.monitoring is False
+        assert svc._status_manager._status_snapshot.status_detail == "已停止"
 
     def test_update_with_core_connected(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
-        svc._queue_status_broadcast = MagicMock()
+        svc._status_manager._queue_status_broadcast = MagicMock()
         mock_core = MagicMock()
         mock_core.monitoring = True
         mock_core.snapshot.return_value = {
@@ -1019,15 +1019,15 @@ class TestUpdateStatusSnapshot:
         }
         svc._monitor_core = mock_core
         svc._update_status_snapshot(force=True)
-        assert svc._status_snapshot.monitoring is True
-        assert svc._status_snapshot.last_network_ok is True
-        assert svc._status_snapshot.network_state == "connected"
-        assert svc._status_snapshot.network_check_count == 10
+        assert svc._status_manager._status_snapshot.monitoring is True
+        assert svc._status_manager._status_snapshot.last_network_ok is True
+        assert svc._status_manager._status_snapshot.network_state == "connected"
+        assert svc._status_manager._status_snapshot.network_check_count == 10
 
     def test_update_with_core_disconnected(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
-        svc._queue_status_broadcast = MagicMock()
+        svc._status_manager._queue_status_broadcast = MagicMock()
         mock_core = MagicMock()
         mock_core.monitoring = True
         mock_core.snapshot.return_value = {
@@ -1040,24 +1040,24 @@ class TestUpdateStatusSnapshot:
         }
         svc._monitor_core = mock_core
         svc._update_status_snapshot(force=True)
-        assert svc._status_snapshot.last_network_ok is False
+        assert svc._status_manager._status_snapshot.last_network_ok is False
 
     def test_update_throttled(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
-        svc._queue_status_broadcast = MagicMock()
-        svc._last_snapshot_time = time.time()
+        svc._status_manager._queue_status_broadcast = MagicMock()
+        svc._status_manager._last_snapshot_time = time.time()
         svc._monitor_core = MagicMock()
         svc._monitor_core.monitoring = True
         svc._monitor_core.snapshot.return_value = {"network_state": "connected"}
         svc._update_status_snapshot(force=False)
-        assert svc._status_snapshot.monitoring is False
+        assert svc._status_manager._status_snapshot.monitoring is False
 
     def test_update_force_skips_throttle(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
-        svc._queue_status_broadcast = MagicMock()
-        svc._last_snapshot_time = time.time()
+        svc._status_manager._queue_status_broadcast = MagicMock()
+        svc._status_manager._last_snapshot_time = time.time()
         mock_core = MagicMock()
         mock_core.monitoring = True
         mock_core.snapshot.return_value = {
@@ -1070,12 +1070,12 @@ class TestUpdateStatusSnapshot:
         }
         svc._monitor_core = mock_core
         svc._update_status_snapshot(force=True)
-        assert svc._status_snapshot.monitoring is True
+        assert svc._status_manager._status_snapshot.monitoring is True
 
     def test_update_core_exception(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
-        svc._queue_status_broadcast = MagicMock()
+        svc._status_manager._queue_status_broadcast = MagicMock()
         mock_core = MagicMock()
         mock_core.monitoring = True
         mock_core.snapshot.side_effect = RuntimeError("boom")
@@ -1091,24 +1091,22 @@ class TestUpdateStatusSnapshot:
 class TestQueueStatusBroadcast:
     def test_queue_status_broadcast_delegates_to_broadcaster(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._queue_status_broadcast = ScheduleEngine._queue_status_broadcast.__get__(svc)
-        svc.get_status = MagicMock(return_value=MagicMock(model_dump=lambda: {"monitoring": False}))
-        svc._queue_status_broadcast()
+        # 直接测试 StatusManager 的 _queue_status_broadcast
+        svc._status_manager.get_status = MagicMock(return_value=MagicMock(model_dump=lambda: {"monitoring": False}))
+        svc._status_manager._queue_status_broadcast()
         svc._ws_broadcaster.enqueue_status.assert_called_once_with({"monitoring": False})
 
     def test_queue_status_broadcast_no_broadcaster(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._queue_status_broadcast = ScheduleEngine._queue_status_broadcast.__get__(svc)
-        svc._ws_broadcaster = None
-        svc.get_status = MagicMock(return_value=MagicMock(model_dump=lambda: {"monitoring": False}))
+        svc._status_manager._ws_broadcaster = None
+        svc._status_manager.get_status = MagicMock(return_value=MagicMock(model_dump=lambda: {"monitoring": False}))
         # 不应抛异常
-        svc._queue_status_broadcast()
+        svc._status_manager._queue_status_broadcast()
 
     def test_queue_status_broadcast_exception(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._queue_status_broadcast = ScheduleEngine._queue_status_broadcast.__get__(svc)
-        svc.get_status = MagicMock(side_effect=RuntimeError("boom"))
-        svc._queue_status_broadcast()
+        svc._status_manager.get_status = MagicMock(side_effect=RuntimeError("boom"))
+        svc._status_manager._queue_status_broadcast()
 
 
 # =====================================================================
@@ -1126,7 +1124,7 @@ class TestGetStatus:
 
     def test_get_status_running(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._status_snapshot = StatusSnapshot(
+        svc._status_manager._status_snapshot = StatusSnapshot(
             monitoring=True,
             last_network_ok=True,
             start_time=time.time() - 120,
@@ -1624,7 +1622,7 @@ class TestListLogs:
         svc = engine_factory(raw=True)
         mock_sink = MagicMock()
         mock_sink.list_logs.return_value = [{"msg": "test"}]
-        svc._dashboard_sink = mock_sink
+        svc._status_manager._dashboard_sink = mock_sink
         result = svc.list_logs(limit=10)
         assert result == [{"msg": "test"}]
         mock_sink.list_logs.assert_called_once_with(limit=10)

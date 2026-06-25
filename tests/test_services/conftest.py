@@ -10,7 +10,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.schemas import RuntimeConfig
-from app.services.engine import ScheduleEngine, StatusSnapshot
+from app.services.engine import ScheduleEngine
+from app.services.engine_status import StatusManager, StatusSnapshot
 from app.services.retry_policy import MonitoredPolicy
 
 
@@ -74,9 +75,6 @@ def engine_factory():
         svc._next_schedule_tick = 0.0
         svc._task_registry = MagicMock()
         svc._task_executor = MagicMock()
-        svc._status_snapshot = StatusSnapshot()
-        svc._snapshot_min_interval = 1.0
-        svc._last_snapshot_time = 0
         svc._engine_thread = MagicMock()
         svc._engine_thread.is_alive.return_value = False
         svc._manual_login_in_progress = False
@@ -85,7 +83,6 @@ def engine_factory():
         svc._pure_mode_lock = threading.Lock()
         svc._start_stop_lock = threading.Lock()
         svc._pure_mode = False
-        svc._dashboard_sink = None
         svc._ws_manager = None
         svc._ws_broadcaster = MagicMock()
         svc._network_tester = MagicMock()
@@ -97,6 +94,12 @@ def engine_factory():
         svc.project_root = MagicMock()
         svc.record_log = MagicMock()
         svc._update_status_snapshot = MagicMock()
+
+        # StatusManager — 状态快照与广播
+        svc._status_manager = StatusManager(
+            get_monitor_core=lambda: svc._monitor_core,
+            ws_broadcaster=svc._ws_broadcaster,
+        )
 
         # LoginBridge — 登录委托
         from app.services.engine_login_bridge import LoginBridge
