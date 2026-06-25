@@ -410,6 +410,6 @@ class TestProfileServiceLoadMigration:
         service = ProfileService(tmp_path)
         data = service.load()
 
-        # 应该直接使用 v4 格式
+        # v4 格式应被自动迁移到 v5
         assert data.global_config.logging.level == "WARNING"
-        assert data.config_version == 4
+        assert data.config_version == 5
