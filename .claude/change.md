@@ -1,5 +1,14 @@
 # 修改日志
 
+## 2026-06-25
+
+### refactor: ProfileService 单例化 — 消除多余实例化点
+
+- `app/services/engine.py`：`ScheduleEngine.__init__` 移除 `profile_service or ProfileService(project_root)` 回退，改为 `profile_service is None` 时抛出 `ValueError`，强制通过 ServiceContainer 注入
+- `app/api/autostart.py`：`_read_autostart_lightweight` 和 `_save_autostart_lightweight` 改为从 `request.app.state.services.profile_service` 获取共享实例，不再每次新建 ProfileService；三个路由函数添加 `request: Request` 参数
+- `tests/test_services/conftest.py`：`engine_factory` 工厂函数显式传入 `profile_service=mock_ps`，适配强制注入变更
+- 背景：原有 5 个独立实例化点导致多个 ProfileService 实例各自持有 `_lock`，并发写 settings.json 时锁不共享可能丢更新
+
 ## 2026-06-24 (4)
 
 ### chore: 版本升级至 v4.1.0

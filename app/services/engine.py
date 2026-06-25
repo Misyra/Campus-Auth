@@ -99,7 +99,9 @@ class ScheduleEngine:
         task_executor=None,
     ):
         self.project_root = project_root
-        self._profile_service = profile_service or ProfileService(project_root)
+        if profile_service is None:
+            raise ValueError("profile_service is required; inject from ServiceContainer")
+        self._profile_service = profile_service
         self._ws_manager = ws_manager
         self._login_history = login_history_service
         self._worker_getter = worker_getter

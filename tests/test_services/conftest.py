@@ -46,6 +46,8 @@ def engine_factory():
             # 确保 task_executor 有默认值
             if "task_executor" not in overrides:
                 overrides["task_executor"] = MagicMock()
+            if "profile_service" not in overrides:
+                overrides["profile_service"] = mock_ps
 
             svc = ScheduleEngine.__new__(ScheduleEngine)
             ScheduleEngine.__init__(svc, MagicMock(), **overrides)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
 from app.deps import get_autostart_service
@@ -26,32 +26,25 @@ def list_shells() -> dict:
     }
 
 
-def _read_autostart_lightweight() -> bool:
-    """从 settings.json 读取自启动轻量模式偏好。"""
+def _read_autostart_lightweight(request: Request) -> bool:
+    """从 container 共享的 ProfileService 读取自启动轻量模式偏好。"""
     try:
-        from app.services.profile_service import ProfileService
-        from pathlib import Path
-
-        ps = ProfileService(Path(__file__).parent.parent.parent.resolve())
+        ps = request.app.state.services.profile_service
         return bool(ps.load().global_config.autostart_lightweight)
     except Exception:
         return True  # 默认轻量
 
 
-def _save_autostart_lightweight(lightweight: bool) -> None:
-    """保存自启动轻量模式偏好到 settings.json。"""
-    from app.services.profile_service import ProfileService
-    from pathlib import Path
-
-    # NOTE: 每次 new ProfileService 实例，与全局注入实例的锁不同。
-    # 理论上与 config.py 的 save_global_and_profile 并发写 settings.json 会丢更新，
-    # 但单用户桌面应用场景下触发概率极低，暂不修复。
-    ps = ProfileService(Path(__file__).parent.parent.parent.resolve())
-    ps.update(lambda d: setattr(d, "global_config", d.global_config.model_copy(update={"autostart_lightweight": lightweight})))
+def _save_autostart_lightweight(request: Request, lightweight: bool) -> None:
+    """通过 container 共享的 ProfileService 保存自启动轻量模式偏好。"""
+    ps = request.app.state.services.profile_service
+    ps.update(lambda d: setattr(d, "global_config",
+        d.global_config.model_copy(update={"autostart_lightweight": lightweight})))
 
 
 @router.get("/api/autostart/status", response_model=AutoStartStatusResponse)
 def autostart_status(
+    request: Request,
     autostart_svc=Depends(get_autostart_service),
 ) -> AutoStartStatusResponse:
     status = autostart_svc.status()
@@ -60,7 +53,7 @@ def autostart_status(
         enabled=bool(status.get("enabled", False)),
         method=str(status.get("method", "")),
         location=str(status.get("location", "")),
-        lightweight=_read_autostart_lightweight(),
+        lightweight=_read_autostart_lightweight(request),
     )
 
 
@@ -70,11 +63,12 @@ class _EnableBody(BaseModel):
 
 @router.post("/api/autostart/enable", response_model=ActionResponse)
 def enable_autostart(
+    request: Request,
     body: _EnableBody | None = None,
     autostart_svc=Depends(get_autostart_service),
 ) -> ActionResponse:
     lightweight = body.lightweight if body else True
-    _save_autostart_lightweight(lightweight)
+    _save_autostart_lightweight(request, lightweight)
     ok, message = autostart_svc.enable(lightweight=lightweight)
     api_logger.info("启用自启动 -> success={}, lightweight={}, message={}", ok, lightweight, message)
     return ActionResponse(success=ok, message=message)
@@ -91,11 +85,12 @@ def disable_autostart(
 
 @router.post("/api/autostart/mode", response_model=ActionResponse)
 def set_autostart_mode(
+    request: Request,
     body: _EnableBody,
     autostart_svc=Depends(get_autostart_service),
 ) -> ActionResponse:
     """切换自启动运行模式（重新生成脚本）。"""
-    _save_autostart_lightweight(body.lightweight)
+    _save_autostart_lightweight(request, body.lightweight)
     status = autostart_svc.status()
     if not status.get("enabled"):
         return ActionResponse(success=True, message="自启动未启用，模式已保存")
