@@ -94,6 +94,9 @@ class TaskExecutor:
         self._task_pool: BoundedExecutor | None = None
         self._task_pool_lock = threading.Lock()
 
+        # 登录专用执行器（max_workers=1, queue_size=1 — 信号量天然保证单并发）
+        self._login_executor = BoundedExecutor(max_workers=1, queue_size=1)
+
         # 定时任务去重
         self._running_tasks: dict[str, Future] = {}
         self._running_tasks_lock = threading.Lock()
@@ -402,6 +405,7 @@ class TaskExecutor:
         logger.info("TaskExecutor 开始关闭...")
         if self._task_pool is not None:
             self._task_pool.shutdown(wait=wait)
+        self._login_executor.shutdown(wait=wait)
         with self._running_tasks_lock:
             self._running_tasks.clear()
         if self._login_orchestrator is not None:
