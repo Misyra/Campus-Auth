@@ -56,30 +56,16 @@ class ServiceContainer:
         self.ws_broadcaster = WsBroadcaster(ws_manager=self.ws_manager)
         self.network_tester = NetworkTester()
 
-        # 统一引擎（替代 MonitorService + SchedulerService）
-        self.engine = ScheduleEngine(
-            project_root,
-            self.profile_service,
-            self.ws_manager,
-            login_history_service=self.login_history_service,
-            worker_getter=_get_worker,
-            task_registry=self.task_registry,
-            ws_broadcaster=self.ws_broadcaster,
-            network_tester=self.network_tester,
-        )
-
-        # 注入 LoginOrchestrator — 登录执行的唯一入口（自行管理线程池）
+        # 1. 创建 LoginOrchestrator（executor 在 TaskExecutor 创建后绑定）
         from app.services.login_orchestrator import LoginOrchestrator
 
         self.login_orchestrator = LoginOrchestrator(
             worker_getter=_get_worker,
             login_history=self.login_history_service,
             profile_service=self.profile_service,
-            get_runtime_config=self.engine.get_runtime_config,
         )
-        self.engine.set_orchestrator(self.login_orchestrator)
 
-        # 任务执行器（轻量模式仅用于登录，完整模式支持定时任务）
+        # 2. 创建 TaskExecutor（传入 login_orchestrator）
         self.task_executor = TaskExecutor(
             registry=self.task_registry,
             history_store=self.task_history_store,
@@ -87,12 +73,27 @@ class ServiceContainer:
             login_orchestrator=self.login_orchestrator,
             task_manager=self.task_manager,
         )
-        # 注入登录专用 executor（消除 LoginOrchestrator 自建线程池）
-        self.login_orchestrator.set_executor(self.task_executor._login_executor)
-        self.engine.set_task_executor(self.task_executor)
 
-        # 延迟绑定：TaskExecutor 通过引擎获取运行时配置
-        self.task_executor.set_runtime_config_getter(self.engine.get_runtime_config)
+        # 绑定登录专用 executor（复用 TaskExecutor 内部的 _login_executor）
+        self.login_orchestrator._executor = self.task_executor._login_executor
+
+        # 4. 创建 ScheduleEngine（传入 orchestrator + task_executor）
+        self.engine = ScheduleEngine(
+            project_root,
+            self.profile_service,
+            self.ws_manager,
+            login_history_service=self.login_history_service,
+            worker_getter=_get_worker,
+            task_registry=self.task_registry,
+            task_executor=self.task_executor,
+            ws_broadcaster=self.ws_broadcaster,
+            network_tester=self.network_tester,
+            orchestrator=self.login_orchestrator,
+        )
+
+        # 5. 绑定 get_runtime_config（engine 现在存在）
+        self.login_orchestrator._get_runtime_config = self.engine.get_runtime_config
+        self.task_executor._get_runtime_config = self.engine.get_runtime_config
 
         self._ws_drain_task: asyncio.Task | None = None
         self._log_handler_id: int | None = None

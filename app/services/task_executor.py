@@ -106,10 +106,6 @@ class TaskExecutor:
             allowlist=[shell["path"] for shell in detect_shells()]
         )
 
-    def set_runtime_config_getter(self, getter: Callable[[], RuntimeConfig]) -> None:
-        """设置运行时配置获取器（公共接口）。"""
-        self._get_runtime_config = getter
-
     @property
     def task_manager(self):
         """浏览器/脚本任务管理器（供 API 路由访问）。"""

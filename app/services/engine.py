@@ -79,6 +79,7 @@ class ScheduleEngine:
         task_executor=None,
         ws_broadcaster=None,
         network_tester=None,
+        orchestrator=None,
     ):
         self.project_root = project_root
         if profile_service is None:
@@ -132,7 +133,7 @@ class ScheduleEngine:
         self._engine_running = False
         self._next_network_check: float = 0
         self._monitor_check_interval: int = 300
-        self._orchestrator = None  # LoginOrchestrator，由 container 注入
+        self._orchestrator = orchestrator  # LoginOrchestrator
         self._retry_policy = MonitoredPolicy()
         self._wakeup_event = threading.Event()  # 唤醒引擎循环
         self._next_retry_time: float = 0  # 下次重试时间（独立于网络检测）
@@ -162,16 +163,6 @@ class ScheduleEngine:
 
         # 统一引擎线程（延迟到 boot() 启动，确保依赖注入完成）
         self._engine_thread = threading.Thread(target=self._engine_loop, daemon=True)
-
-    # ── 依赖注入 ──
-
-    def set_orchestrator(self, orchestrator) -> None:
-        """设置登录编排器（公共接口）。"""
-        self._orchestrator = orchestrator
-
-    def set_task_executor(self, task_executor) -> None:
-        """设置任务执行器（公共接口）。"""
-        self._task_executor = task_executor
 
     # ── 队列入队辅助 ──
 
