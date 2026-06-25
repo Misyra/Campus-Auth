@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from app.schemas import AppSettings, ConfigResponseDTO, LoginCredentials, RuntimeConfig
-from app.services.config_service import save_global_and_profile
+from app.services.profile_service import save_global_and_profile
 from app.workers.playwright_worker import WorkerResponse
 
 

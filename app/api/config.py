@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.deps import get_monitor_service, get_profile_service
 from app.schemas import ActionResponse, ConfigResponseDTO
-from app.services.config_service import save_global_and_profile
+from app.services.profile_service import save_global_and_profile
 from app.services.engine import ScheduleEngine
 from app.services.profile_service import ProfileService
 from app.utils.logging import get_logger
