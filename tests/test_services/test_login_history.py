@@ -1,6 +1,6 @@
 """登录历史服务测试 — LoginHistoryEntry / LoginHistoryService
 
-覆盖：add / list_recent / clear / _cleanup_old / record / 边界条件 / 异常分支
+覆盖：add / list_recent / clear / _cleanup_old / 边界条件 / 异常分支
 """
 
 from __future__ import annotations
@@ -232,110 +232,6 @@ class TestLoginHistoryService:
         # 旧记录应被清理
         ids = [e.id for e in entries]
         assert "old" not in ids
-
-
-# =====================================================================
-# record 方法
-# =====================================================================
-
-
-class TestRecord:
-    @pytest.fixture
-    def service(self, tmp_path: Path) -> LoginHistoryService:
-        return LoginHistoryService(tmp_path)
-
-    def test_record_without_services(self, service: LoginHistoryService):
-        """无 profile_service / task_manager 时 record 退化为 add。"""
-        service.record(success=True, duration_ms=200)
-        entries = service.list_recent(limit=1)
-        assert len(entries) == 1
-        assert entries[0].success is True
-        assert entries[0].duration_ms == 200
-        assert entries[0].profile_name == ""
-        assert entries[0].task_name == ""
-
-    def test_record_with_profile_service(self, service: LoginHistoryService):
-        """record 从 profile_service 提取活动方案名称。"""
-        mock_profile = MagicMock()
-        mock_profile.name = "校园网方案"
-        ps = MagicMock()
-        ps.get_active_profile.return_value = mock_profile
-
-        service.record(success=True, duration_ms=100, profile_service=ps)
-        entries = service.list_recent(limit=1)
-        assert entries[0].profile_name == "校园网方案"
-
-    def test_record_with_profile_service_returns_none(
-        self, service: LoginHistoryService
-    ):
-        """profile_service.get_active_profile 返回 None 时 profile_name 为空。"""
-        ps = MagicMock()
-        ps.get_active_profile.return_value = None
-
-        service.record(success=True, duration_ms=100, profile_service=ps)
-        entries = service.list_recent(limit=1)
-        assert entries[0].profile_name == ""
-
-    def test_record_with_profile_service_raises(self, service: LoginHistoryService):
-        """profile_service.get_active_profile 抛异常时静默跳过。"""
-        ps = MagicMock()
-        ps.get_active_profile.side_effect = RuntimeError("boom")
-
-        service.record(success=True, duration_ms=100, profile_service=ps)
-        entries = service.list_recent(limit=1)
-        assert entries[0].profile_name == ""
-
-    def test_record_with_task_manager(self, service: LoginHistoryService):
-        """record 从 task_manager 提取活动任务名称。"""
-        tm = MagicMock()
-        tm.get_active_task.return_value = "task_001"
-        task_info = MagicMock()
-        task_info.name = "每日登录"
-        tm.load_task.return_value = task_info
-
-        service.record(success=True, duration_ms=100, task_manager=tm)
-        entries = service.list_recent(limit=1)
-        assert entries[0].task_name == "每日登录"
-
-    def test_record_with_task_manager_no_name(self, service: LoginHistoryService):
-        """task 对象无 name 属性时回退到 task_id。"""
-        tm = MagicMock()
-        tm.get_active_task.return_value = "task_002"
-        task_info = MagicMock(spec=[])  # 无 name 属性
-        tm.load_task.return_value = task_info
-
-        service.record(success=True, duration_ms=100, task_manager=tm)
-        entries = service.list_recent(limit=1)
-        # getattr(task, "name", task_id) — spec=[] 无 name，回退 task_id
-        assert entries[0].task_name == "task_002"
-
-    def test_record_with_task_manager_load_returns_none(
-        self, service: LoginHistoryService
-    ):
-        """task_manager.load_task 返回 None 时 task_name 为空。"""
-        tm = MagicMock()
-        tm.get_active_task.return_value = "task_x"
-        tm.load_task.return_value = None
-
-        service.record(success=True, duration_ms=100, task_manager=tm)
-        entries = service.list_recent(limit=1)
-        assert entries[0].task_name == ""
-
-    def test_record_with_task_manager_raises(self, service: LoginHistoryService):
-        """task_manager 抛异常时静默跳过。"""
-        tm = MagicMock()
-        tm.get_active_task.side_effect = RuntimeError("boom")
-
-        service.record(success=True, duration_ms=100, task_manager=tm)
-        entries = service.list_recent(limit=1)
-        assert entries[0].task_name == ""
-
-    def test_record_with_error(self, service: LoginHistoryService):
-        """record 传递 error 参数。"""
-        service.record(success=False, duration_ms=300, error="连接失败")
-        entries = service.list_recent(limit=1)
-        assert entries[0].success is False
-        assert entries[0].error == "连接失败"
 
 
 # =====================================================================

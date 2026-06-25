@@ -8,16 +8,10 @@ import threading
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
-
 from pydantic import BaseModel
 
 from app.utils.files import atomic_write
 from app.utils.logging import get_logger
-
-if TYPE_CHECKING:
-    from app.services.profile_service import ProfileService
-    from app.tasks.manager import TaskManager
 
 logger = get_logger("login_history", source="backend")
 
@@ -44,42 +38,6 @@ class LoginHistoryService:
         self._lock = threading.Lock()
         self._cleanup_lock = threading.Lock()
         self._write_count = 0
-
-    def record(
-        self,
-        success: bool,
-        duration_ms: int,
-        profile_service: ProfileService | None = None,
-        task_manager: TaskManager | None = None,
-        error: str = "",
-    ) -> None:
-        """记录登录历史，自动从服务对象提取 profile/task 名称。"""
-        profile_name = ""
-        if profile_service is not None:
-            try:
-                active = profile_service.get_active_profile()
-                if active:
-                    profile_name = getattr(active, "name", "")
-            except Exception:
-                logger.debug("获取当前方案名称失败（跳过方案记录）", exc_info=True)
-
-        task_name = ""
-        if task_manager is not None:
-            try:
-                task_id = task_manager.get_active_task()
-                task = task_manager.load_task(task_id)
-                if task:
-                    task_name = getattr(task, "name", task_id)
-            except Exception:
-                logger.debug("获取当前任务名称失败（跳过任务记录）", exc_info=True)
-
-        self.add(
-            success=success,
-            duration_ms=duration_ms,
-            profile_name=profile_name,
-            task_name=task_name,
-            error=error,
-        )
 
     def add(
         self,
