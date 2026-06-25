@@ -245,6 +245,10 @@ class TestDirSizeMb:
 
 
 class TestUninstallCheckAutostart:
+    def setup_method(self):
+        from app.services.uninstall import _reset_autostart_service
+        _reset_autostart_service()
+
     @patch("app.services.autostart.AutoStartService")
     def test_enabled(self, mock_svc_class):
         mock_svc = MagicMock()

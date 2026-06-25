@@ -105,6 +105,12 @@ def _get_autostart_service():
     return _autostart_service
 
 
+def _reset_autostart_service():
+    """重置单例（仅用于测试）。"""
+    global _autostart_service
+    _autostart_service = None
+
+
 def _check_autostart() -> dict:
     try:
         return _get_autostart_service().status()

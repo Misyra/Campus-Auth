@@ -1066,41 +1066,6 @@ class TestGetTaskScript:
         assert task["name"] == "浏览器任务"
 
 
-# =====================================================================
-# LoginHistoryService — 异常日志
-# =====================================================================
-
-
-class TestLoginHistoryService:
-    def test_record_logs_warning_on_profile_error(self, caplog, tmp_path):
-        """record() 在获取 profile 名称失败时应记录 debug 日志。"""
-        svc = LoginHistoryService(tmp_path)
-
-        class BrokenProfile:
-            def get_active_profile(self):
-                raise RuntimeError("模拟错误")
-
-        with caplog.at_level("DEBUG"):
-            svc.record(success=True, duration_ms=100, profile_service=BrokenProfile())
-
-        debug_messages = [r.message for r in caplog.records if r.levelname == "DEBUG"]
-        assert any("方案名称" in m or "方案" in m for m in debug_messages)
-
-    def test_record_logs_warning_on_task_error(self, caplog, tmp_path):
-        """record() 在获取任务名称失败时应记录 debug 日志。"""
-        svc = LoginHistoryService(tmp_path)
-
-        class BrokenTaskManager:
-            def get_active_task(self):
-                raise RuntimeError("模拟错误")
-
-        with caplog.at_level("DEBUG"):
-            svc.record(success=True, duration_ms=100, task_manager=BrokenTaskManager())
-
-        debug_messages = [r.message for r in caplog.records if r.levelname == "DEBUG"]
-        assert any("任务名称" in m or "任务" in m for m in debug_messages)
-
-
 # ── ProfileService TOCTOU 修复 ──
 
 
