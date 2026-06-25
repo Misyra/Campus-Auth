@@ -49,7 +49,7 @@ def _make_mock_container():
     mock_container.engine.has_enabled_tasks.return_value = False
     mock_container.start_web_services = MagicMock()
     mock_container.shutdown = AsyncMock()
-    mock_container.monitor_service.get_config.return_value = MagicMock(
+    mock_container.engine.get_config.return_value = MagicMock(
         username="", password="", auth_url="",
         carrier="默认", check_interval_seconds=60,
     )
@@ -236,7 +236,7 @@ class TestAppLifespan:
         mock_container = _make_mock_container()
         mock_container.engine.has_enabled_tasks.return_value = True
         mock_container.engine.start_scheduler = MagicMock()
-        mock_container.monitor_service.get_config.return_value = MagicMock(
+        mock_container.engine.get_config.return_value = MagicMock(
             username="admin", password="secret", auth_url="http://auth.example.com",
             carrier="中国移动", check_interval_seconds=30,
         )
@@ -300,8 +300,8 @@ class TestDependencyInjection:
 
         asyncio.run(_run_lifespan_coro(_app, _check))
 
-    def test_monitor_service_config_accessible(self, mock_all_routers, mock_deps):
-        """lifespan 中应能通过 monitor_service.get_config() 获取配置。"""
+    def test_engine_config_accessible(self, mock_all_routers, mock_deps):
+        """lifespan 中应能通过 engine.get_config() 获取配置。"""
         from app.application import create_app
 
         mock_config = MagicMock(
@@ -310,11 +310,11 @@ class TestDependencyInjection:
             check_interval_seconds=120,
         )
         mock_container = _make_mock_container()
-        mock_container.monitor_service.get_config.return_value = mock_config
+        mock_container.engine.get_config.return_value = mock_config
         _app = create_app(existing_container=mock_container)
 
         async def _check(app):
-            cfg = mock_container.monitor_service.get_config()
+            cfg = mock_container.engine.get_config()
             assert cfg.username == "testuser"
             assert cfg.carrier == "中国电信"
             assert cfg.check_interval_seconds == 120

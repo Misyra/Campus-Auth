@@ -181,10 +181,6 @@ class Profile(BaseModel):
         return _validate_auth_url(v)
 
 
-# 向后兼容别名
-AuthProfile = Profile
-
-
 def get_runtime_features(
     mode: RuntimeMode | str, minimize_to_tray: bool, auto_open_browser: bool,
     lightweight_tray: bool = True

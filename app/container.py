@@ -100,12 +100,7 @@ class ServiceContainer:
         self._web_services_started = False
         self._shutdown_done = False
 
-    # ── 属性别名（保持 API 路由兼容）──
-
-    @property
-    def monitor_service(self) -> ScheduleEngine:
-        """已废弃：请使用 services.engine。"""
-        return self.engine
+    # ── 属性别名 ──
 
     @property
     def debug_manager(self):

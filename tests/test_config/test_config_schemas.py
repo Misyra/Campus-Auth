@@ -196,7 +196,7 @@ class TestLogEntry:
 # ---------------------------------------------------------------------
 
 
-class TestAuthProfileDefaults:
+class TestProfileDefaults:
     def test_defaults(self):
         p = Profile()
         assert p.name == "默认方案"
@@ -218,7 +218,7 @@ class TestAuthProfileDefaults:
         assert p.match_ssid == "CampusWiFi"
 
 
-class TestAuthProfile:
+class TestProfile:
     """Profile 测试"""
 
     def test_custom_values(self):
