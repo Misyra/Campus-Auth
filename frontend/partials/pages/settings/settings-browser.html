@@ -163,7 +163,7 @@
           <button type="button" class="btn btn-sm btn-secondary" @click="loadDefaultStealthScript()">
             加载默认脚本
           </button>
-          <button type="button" class="btn btn-sm btn-ghost" v-if="config.browser.stealth_custom_script" @click="config.browser.stealth_custom_script = ''">
+          <button type="button" class="btn btn-sm btn-ghost" v-if="config.browser.stealth_custom_script" @click="config.browser.stealth_custom_script = ''; onConfigChange('stealth_custom_script', '', 'toggle')">
             恢复默认
           </button>
         </div>
