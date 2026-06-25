@@ -161,6 +161,9 @@ class LoginOrchestrator:
                 thread_name_prefix="login-exec",
             )
 
+    def bind_runtime_config(self, getter: Callable[[], RuntimeConfig]) -> None:
+        """延迟绑定运行时配置获取器（用于解决 Engine 循环依赖）。"""
+        self._get_runtime_config = getter
 
     # ── 公共 API ──
 

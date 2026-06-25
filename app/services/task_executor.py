@@ -106,6 +106,10 @@ class TaskExecutor:
             allowlist=[shell["path"] for shell in detect_shells()]
         )
 
+    def bind_runtime_config(self, getter: Callable[[], RuntimeConfig]) -> None:
+        """延迟绑定运行时配置获取器（用于解决 Engine 循环依赖）。"""
+        self._get_runtime_config = getter
+
     @property
     def task_manager(self):
         """浏览器/脚本任务管理器（供 API 路由访问）。"""
