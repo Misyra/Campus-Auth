@@ -2,6 +2,15 @@
 
 ## 2026-06-26
 
+### fix: 适配 test_monitor_service.py 到 StatusManager 重构
+
+- `tests/test_services/test_monitor_service.py`：
+  - `StatusSnapshot` 导入从 `app.services.engine` 改为 `app.services.engine_status`
+  - `svc._dashboard_sink` 访问改为 `svc._status_manager._dashboard_sink`（4 处）
+  - `svc._status_snapshot` 访问改为 `svc._status_manager._status_snapshot`（10 处）
+  - `TestShutdownSynchronous` 移除 `__new__` 模式下对 `_status_snapshot` 的无效赋值（shutdown 不访问该属性）
+- 验收：41 个测试全通过
+
 ### refactor: 提取 StatusManager from ScheduleEngine
 
 - 新建 `app/services/engine_status.py`：`StatusManager` 类，从 `ScheduleEngine` 提取状态快照管理

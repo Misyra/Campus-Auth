@@ -16,8 +16,8 @@ from app.services.engine import (
     EngineCmdType,
     EngineCommand,
     ScheduleEngine,
-    StatusSnapshot,
 )
+from app.services.engine_status import StatusSnapshot
 
 
 def _fake_reload():
@@ -101,7 +101,7 @@ class TestStatusSnapshot:
 class TestScheduleEngineInit:
     def test_init(self, engine_factory):
         svc = engine_factory()
-        assert svc._dashboard_sink is None
+        assert svc._status_manager._dashboard_sink is None
         assert svc.pure_mode is False
 
 
@@ -123,7 +123,7 @@ class TestRecordLog:
         from app.utils.logging import DashboardSink
 
         sink = DashboardSink(maxlen=100, broadcast_maxlen=100)
-        svc._dashboard_sink = sink
+        svc._status_manager._dashboard_sink = sink
         handler_id = logger.add(
             sink.write,
             format="{name} | {message}",
@@ -155,7 +155,7 @@ class TestListLogs:
         from app.utils.logging import DashboardSink
 
         sink = DashboardSink(maxlen=100, broadcast_maxlen=100)
-        svc._dashboard_sink = sink
+        svc._status_manager._dashboard_sink = sink
         handler_id = logger.add(
             sink.write,
             format="{name} | {message}",
@@ -185,7 +185,7 @@ class TestListLogs:
         from app.utils.logging import DashboardSink
 
         sink = DashboardSink(maxlen=100, broadcast_maxlen=100)
-        svc._dashboard_sink = sink
+        svc._status_manager._dashboard_sink = sink
         handler_id = logger.add(
             sink.write,
             format="{name} | {message}",
@@ -214,7 +214,7 @@ class TestGetStatus:
 
     def test_get_status_running(self, engine_factory):
         svc = engine_factory()
-        svc._status_snapshot = StatusSnapshot(
+        svc._status_manager._status_snapshot = StatusSnapshot(
             monitoring=True,
             last_network_ok=True,
             start_time=time.time() - 120,
@@ -238,8 +238,8 @@ class TestUpdateStatusSnapshot:
         svc = engine_factory()
         svc._monitor_core = None
         svc._update_status_snapshot()
-        assert svc._status_snapshot.monitoring is False
-        assert svc._status_snapshot.status_detail == "已停止"
+        assert svc._status_manager._status_snapshot.monitoring is False
+        assert svc._status_manager._status_snapshot.status_detail == "已停止"
 
     def test_update_with_core(self, engine_factory):
         svc = engine_factory()
@@ -255,9 +255,9 @@ class TestUpdateStatusSnapshot:
         }
         svc._monitor_core = mock_core
         svc._update_status_snapshot()
-        assert svc._status_snapshot.monitoring is True
-        assert svc._status_snapshot.network_state == "connected"
-        assert svc._status_snapshot.network_check_count == 10
+        assert svc._status_manager._status_snapshot.monitoring is True
+        assert svc._status_manager._status_snapshot.network_state == "connected"
+        assert svc._status_manager._status_snapshot.network_check_count == 10
 
 
 # =====================================================================
@@ -636,8 +636,6 @@ class TestShutdownSynchronous:
         svc._cmd_queue = queue.Queue(maxsize=50)
         svc._wakeup_event = threading.Event()
         svc._shutdown_event = threading.Event()
-        svc._status_snapshot = MagicMock()
-        svc._status_snapshot.monitoring = True
         svc._monitor_core = MagicMock()
         svc._monitor_thread = MagicMock()
         svc._monitor_thread.is_alive.return_value = False
@@ -804,7 +802,7 @@ class TestReloadConfigQueueDispatch:
     def test_reload_config_enqueues_reload_command(self, engine_factory):
         """测试 reload_config 将 RELOAD 命令放入队列。"""
         svc = engine_factory()
-        svc._status_snapshot = StatusSnapshot(monitoring=False)
+        svc._status_manager._status_snapshot = StatusSnapshot(monitoring=False)
 
         enqueued = []
 
@@ -829,7 +827,7 @@ class TestApplyProfileQueueDispatch:
     def test_apply_profile_enqueues_command(self, engine_factory):
         """测试 apply_profile 将 APPLY_PROFILE 命令放入队列。"""
         svc = engine_factory()
-        svc._status_snapshot = StatusSnapshot(monitoring=False)
+        svc._status_manager._status_snapshot = StatusSnapshot(monitoring=False)
 
         enqueued = []
 
