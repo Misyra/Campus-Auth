@@ -2,7 +2,6 @@
 
 import asyncio
 import contextlib
-import json
 import mimetypes
 import os
 import signal
@@ -30,7 +29,6 @@ from app.utils.ports import resolve_port
 
 http_logger = get_logger("http", source="backend")
 startup_logger = get_logger("startup", source="backend")
-ws_logger = get_logger("ws", source="backend")
 
 # temp 目录中截图的最大保留天数
 _TEMP_SCREENSHOT_MAX_AGE_DAYS = 7
@@ -329,46 +327,9 @@ def create_app(existing_container=None, boot_engine=False):
 
     @_app.websocket("/ws/logs")
     async def websocket_logs(websocket: WebSocket):
+        from app.api.ws import websocket_logs_handler
         services = _app.state.services
-        ws_mgr = services.ws_manager
-        monitor_svc = services.engine
-
-        await ws_mgr.connect(websocket)
-        try:
-            while True:
-                raw = await websocket.receive_text()
-                # WebSocket 消息大小预检，防止超大消息导致内存问题
-                if len(raw) > 65536:
-                    ws_logger.warning(
-                        "WebSocket 消息过大 ({} bytes)，断开连接", len(raw)
-                    )
-                    await ws_mgr.disconnect(websocket)
-                    return
-                try:
-                    msg = json.loads(raw)
-                    msg_type = msg.get("type")
-                    if msg_type == "ping":
-                        # 应用层 ping/pong，防止代理切断空闲连接
-                        await websocket.send_text('{"type":"pong"}')
-                    elif msg_type == "frontend_log":
-                        d = msg.get("data", {})
-                        message_text = str(d.get("message", ""))[:10000]
-                        scope = str(d.get("scope", "?"))[:200]
-                        if message_text:
-                            monitor_svc.record_log(
-                                message=f"[{scope}] {message_text}",
-                                level=str(d.get("level", "INFO"))[:20],
-                                source="frontend",
-                            )
-                except json.JSONDecodeError:
-                    ws_logger.debug("WebSocket 消息解析失败", exc_info=True)
-                except Exception:
-                    ws_logger.debug("WebSocket 消息处理异常", exc_info=True)
-        except WebSocketDisconnect:
-            await ws_mgr.disconnect(websocket)
-        except Exception:
-            ws_logger.exception("WebSocket 通信异常")
-            await ws_mgr.disconnect(websocket)
+        await websocket_logs_handler(websocket, services.ws_manager, services.engine)
 
     # ==================== 路由 + 静态文件 ====================
 
