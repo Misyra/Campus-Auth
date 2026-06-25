@@ -1,6 +1,29 @@
 # 修改日志
 
+## 2026-06-26 (Task 8)
+
+### refactor: 移除 AuthProfile 别名、monitor_service 属性，修复 uninstall 冗余
+
+- `app/schemas.py`：删除 `AuthProfile = Profile` 向后兼容别名（第 184-185 行）
+- `app/container.py`：删除 `monitor_service` 废弃属性（第 103-108 行），保留 `debug_manager` 属性
+- `app/services/uninstall.py`：`_check_autostart` 和 `_remove_autostart` 各自新建 `AutoStartService` 实例改为共享单例 `_get_autostart_service()`
+- `tests/test_config/test_config_schemas.py`：`TestAuthProfileDefaults` → `TestProfileDefaults`，`TestAuthProfile` → `TestProfile`
+- `tests/test_config/test_container.py`：删除 `assert hasattr(container, "monitor_service")` 断言
+- `tests/test_integration/test_app_startup.py`：所有 `mock_container.monitor_service` 改为 `mock_container.engine`
+- 验收：97 个测试全通过
+
 ## 2026-06-26
+
+### refactor: 提取 WebSocket 处理到 app/api/ws.py 独立模块
+
+- 新建 `app/api/ws.py`：从 `application.py` 提取 WebSocket `/ws/logs` 处理逻辑
+  - `websocket_logs_handler(websocket, ws_manager, engine)` — 独立的 WebSocket 处理函数
+  - 包含消息大小预检、ping/pong、前端日志转发、异常处理
+- `app/application.py`：
+  - WebSocket 处理从 40 行内联代码替换为 4 行委托调用
+  - 移除未使用的 `import json`
+  - 移除未使用的 `ws_logger` 定义
+- 验收：所有 WebSocket 相关测试通过
 
 ### refactor: LoginHistoryService.record() 解耦，改用 add() 直接传入名称
 
