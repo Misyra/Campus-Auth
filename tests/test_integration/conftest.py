@@ -102,8 +102,8 @@ def integration_stack(tmp_path, mock_worker):
     # 构造器注入后绑定
     engine._orchestrator = orchestrator
     engine._task_executor = task_executor
-    orchestrator._get_runtime_config = engine.get_runtime_config
-    task_executor._get_runtime_config = engine.get_runtime_config
+    orchestrator.bind_runtime_config(engine.get_runtime_config)
+    task_executor.bind_runtime_config(engine.get_runtime_config)
 
     # 启动引擎线程
     engine.boot()
@@ -156,8 +156,8 @@ def full_stack(tmp_path, mock_worker):
     # 构造器注入后绑定
     engine._orchestrator = orchestrator
     engine._task_executor = task_executor
-    orchestrator._get_runtime_config = engine.get_runtime_config
-    task_executor._get_runtime_config = engine.get_runtime_config
+    orchestrator.bind_runtime_config(engine.get_runtime_config)
+    task_executor.bind_runtime_config(engine.get_runtime_config)
 
     # 启动引擎线程
     engine.boot()

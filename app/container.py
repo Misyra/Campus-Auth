@@ -74,7 +74,7 @@ class ServiceContainer:
             task_manager=self.task_manager,
         )
 
-        # 绑定登录专用 executor（复用 TaskExecutor 内部的 _login_executor）
+        # 3. 绑定登录专用 executor（复用 TaskExecutor 内部的 _login_executor）
         self.login_orchestrator._executor = self.task_executor._login_executor
 
         # 4. 创建 ScheduleEngine（传入 orchestrator + task_executor）
@@ -91,9 +91,9 @@ class ServiceContainer:
             orchestrator=self.login_orchestrator,
         )
 
-        # 5. 绑定 get_runtime_config（engine 现在存在）
-        self.login_orchestrator._get_runtime_config = self.engine.get_runtime_config
-        self.task_executor._get_runtime_config = self.engine.get_runtime_config
+        # 5. 延迟绑定 get_runtime_config（engine 现在存在）
+        self.login_orchestrator.bind_runtime_config(self.engine.get_runtime_config)
+        self.task_executor.bind_runtime_config(self.engine.get_runtime_config)
 
         self._ws_drain_task: asyncio.Task | None = None
         self._log_handler_id: int | None = None
