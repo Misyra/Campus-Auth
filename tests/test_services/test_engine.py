@@ -11,7 +11,7 @@ import threading
 import time
 from collections import deque
 from concurrent.futures import Future
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -1089,23 +1089,20 @@ class TestUpdateStatusSnapshot:
 
 
 class TestQueueStatusBroadcast:
-    def test_queue_status_broadcast_default_queue(self, engine_factory):
+    def test_queue_status_broadcast_delegates_to_broadcaster(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._queue_status_broadcast = ScheduleEngine._queue_status_broadcast.__get__(svc)
         svc.get_status = MagicMock(return_value=MagicMock(model_dump=lambda: {"monitoring": False}))
         svc._queue_status_broadcast()
-        assert len(svc._empty_broadcast_queue) == 1
-        assert svc._empty_broadcast_queue[0]["type"] == "status"
+        svc._ws_broadcaster.enqueue_status.assert_called_once_with({"monitoring": False})
 
-    def test_queue_status_broadcast_with_dashboard_sink(self, engine_factory):
+    def test_queue_status_broadcast_no_broadcaster(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._queue_status_broadcast = ScheduleEngine._queue_status_broadcast.__get__(svc)
-        mock_sink = MagicMock()
-        mock_sink.broadcast_queue = deque()
-        svc._dashboard_sink = mock_sink
-        svc.get_status = MagicMock(return_value=MagicMock(model_dump=lambda: {"monitoring": True}))
+        svc._ws_broadcaster = None
+        svc.get_status = MagicMock(return_value=MagicMock(model_dump=lambda: {"monitoring": False}))
+        # 不应抛异常
         svc._queue_status_broadcast()
-        assert len(mock_sink.broadcast_queue) == 1
 
     def test_queue_status_broadcast_exception(self, engine_factory):
         svc = engine_factory(raw=True)
@@ -1426,40 +1423,41 @@ class TestNetwork:
     def test_network_ok(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()
-        with patch("app.services.engine.is_network_available", return_value=True):
-            ok, msg = svc.test_network()
+        svc._network_tester.test_network.return_value = (True, "网络连接正常")
+        ok, msg = svc.test_network()
         assert ok is True
         assert "正常" in msg
+        svc._network_tester.test_network.assert_called_once_with(svc._runtime_config)
 
     def test_network_fail(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()
-        with patch("app.services.engine.is_network_available", return_value=False):
-            ok, msg = svc.test_network()
+        svc._network_tester.test_network.return_value = (False, "网络连接异常")
+        ok, msg = svc.test_network()
         assert ok is False
         assert "异常" in msg
 
     def test_network_exception(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()
-        with patch("app.services.engine.is_network_available", side_effect=RuntimeError("timeout")):
-            ok, msg = svc.test_network()
+        svc._network_tester.test_network.return_value = (False, "网络测试失败: timeout")
+        ok, msg = svc.test_network()
         assert ok is False
         assert "失败" in msg
 
     def test_network_with_targets(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._runtime_config = RuntimeConfig(
-            monitor=MonitorSettings(
-                ping_targets=["8.8.8.8", "1.1.1.1"],
-                enable_tcp_check=True,
-                enable_http_check=False,
-                url_check_urls=["http://example.com|success"],
-            ),
-        )
-        with patch("app.services.engine.is_network_available", return_value=True):
-            ok, msg = svc.test_network()
+        svc._runtime_config = RuntimeConfig()
+        svc._network_tester.test_network.return_value = (True, "网络连接正常")
+        ok, msg = svc.test_network()
         assert ok is True
+
+    def test_network_no_tester(self, engine_factory):
+        svc = engine_factory(raw=True)
+        svc._network_tester = None
+        ok, msg = svc.test_network()
+        assert ok is False
+        assert "未初始化" in msg
 
 
 # =====================================================================
@@ -1492,18 +1490,11 @@ class TestProperties:
         assert svc.login_in_progress is True
 
     def test_ws_broadcast_queue_default(self, engine_factory):
+        """ws_broadcast_queue 已迁移至 WsBroadcaster，此测试验证 engine 不再拥有该属性。"""
         svc = engine_factory(raw=True)
-        svc._dashboard_sink = None
-        q = svc.ws_broadcast_queue
-        assert q is svc._empty_broadcast_queue
-
-    def test_ws_broadcast_queue_with_sink(self, engine_factory):
-        svc = engine_factory(raw=True)
-        mock_sink = MagicMock()
-        mock_sink.broadcast_queue = deque()
-        svc._dashboard_sink = mock_sink
-        q = svc.ws_broadcast_queue
-        assert q is mock_sink.broadcast_queue
+        assert not hasattr(svc, "ws_broadcast_queue") or isinstance(
+            getattr(type(svc), "ws_broadcast_queue", None), property
+        ) is False
 
     def test_pure_mode_property(self, engine_factory):
         svc = engine_factory(raw=True)
@@ -1657,84 +1648,6 @@ class TestBoot:
 
 
 # =====================================================================
-# ws_drain_loop / drain_ws_queue
+# ws_drain_loop / drain_ws_queue / set_dashboard_sink 迁移
+# 已迁移至 WsBroadcaster，测试见 test_ws_broadcaster.py
 # =====================================================================
-
-
-class TestWsDrain:
-    @pytest.mark.asyncio
-    async def test_drain_ws_queue_empty(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._ws_manager = AsyncMock()
-        await svc.drain_ws_queue()
-        svc._ws_manager.broadcast.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_drain_ws_queue_with_messages(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._ws_manager = AsyncMock()
-        svc._empty_broadcast_queue.append({"type": "status", "data": {}})
-        svc._empty_broadcast_queue.append({"type": "log", "data": {}})
-        await svc.drain_ws_queue()
-        assert svc._ws_manager.broadcast.call_count == 2
-
-    @pytest.mark.asyncio
-    async def test_drain_ws_queue_broadcast_error(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._ws_manager = AsyncMock()
-        svc._ws_manager.broadcast.side_effect = RuntimeError("ws error")
-        svc._empty_broadcast_queue.append({"type": "status", "data": {}})
-        await svc.drain_ws_queue()
-
-
-# =====================================================================
-# F15 — set_dashboard_sink 迁移轻量模式广播队列
-# =====================================================================
-
-
-class TestSetDashboardSinkMigration:
-    """F15: set_dashboard_sink 应将 _empty_broadcast_queue 内容迁移到新 sink。"""
-
-    def test_migrates_old_queue_to_new_sink(self, engine_factory):
-        """有残留消息时应迁移到新 sink 的 broadcast_queue。"""
-        svc = engine_factory(raw=True)
-        svc._dashboard_sink = None
-        msg1 = {"type": "status", "data": {"monitoring": True}}
-        msg2 = {"type": "status", "data": {"monitoring": False}}
-        svc._empty_broadcast_queue.append(msg1)
-        svc._empty_broadcast_queue.append(msg2)
-
-        mock_sink = MagicMock()
-        mock_sink.broadcast_queue = deque()
-        svc.set_dashboard_sink(mock_sink)
-
-        assert list(mock_sink.broadcast_queue) == [msg1, msg2]
-        assert len(svc._empty_broadcast_queue) == 0
-
-    def test_empty_old_queue_noop(self, engine_factory):
-        """旧队列为空时不应影响新 sink。"""
-        svc = engine_factory(raw=True)
-        svc._dashboard_sink = None
-        assert len(svc._empty_broadcast_queue) == 0
-
-        mock_sink = MagicMock()
-        mock_sink.broadcast_queue = deque()
-        svc.set_dashboard_sink(mock_sink)
-
-        assert len(mock_sink.broadcast_queue) == 0
-        assert svc._dashboard_sink is mock_sink
-
-    def test_migrates_even_when_old_queue_full(self, engine_factory):
-        """旧队列满（maxlen=10）时迁移现有内容。"""
-        svc = engine_factory(raw=True)
-        svc._dashboard_sink = None
-        for i in range(12):
-            svc._empty_broadcast_queue.append({"type": "status", "data": {"i": i}})
-
-        mock_sink = MagicMock()
-        mock_sink.broadcast_queue = deque()
-        svc.set_dashboard_sink(mock_sink)
-
-        # maxlen=10，所以只有最后 10 条
-        assert len(mock_sink.broadcast_queue) == 10
-        assert len(svc._empty_broadcast_queue) == 0

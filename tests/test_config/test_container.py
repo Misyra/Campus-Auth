@@ -33,6 +33,8 @@ def mock_classes():
         patch("app.container.TaskRegistry") as mock_tr_cls,
         patch("app.container.TaskHistoryStore") as mock_ths_cls,
         patch("app.container.TaskExecutor") as mock_te_cls,
+        patch("app.container.WsBroadcaster") as mock_bc_cls,
+        patch("app.container.NetworkTester") as mock_nt_cls,
         patch("app.services.debug_service.DebugSessionManager") as mock_debug_cls,
     ):
         yield {
@@ -45,6 +47,8 @@ def mock_classes():
             "TaskRegistry": mock_tr_cls,
             "TaskHistoryStore": mock_ths_cls,
             "TaskExecutor": mock_te_cls,
+            "WsBroadcaster": mock_bc_cls,
+            "NetworkTester": mock_nt_cls,
             "DebugSessionManager": mock_debug_cls,
         }
 
@@ -57,7 +61,7 @@ def container(project_root: Path, mock_classes: dict):
     c = ServiceContainer(project_root)
 
     # ws_drain_loop 必须返回协程，否则 asyncio.create_task 会失败
-    c.engine.ws_drain_loop = AsyncMock()
+    c.ws_broadcaster.ws_drain_loop = AsyncMock()
 
     c._mock_classes = mock_classes
     return c
@@ -132,6 +136,8 @@ class TestInit:
         assert hasattr(container, "task_registry")
         assert hasattr(container, "task_history_store")
         assert hasattr(container, "task_executor")
+        assert hasattr(container, "ws_broadcaster")
+        assert hasattr(container, "network_tester")
 
     def test_lightweight_mode_uses_null_ws_manager(self, project_root, mock_classes):
         """轻量模式下应使用 NullWebSocketManager。"""

@@ -10,10 +10,12 @@ from pathlib import Path
 from app.services.autostart import AutoStartService
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
+from app.services.network_tester import NetworkTester
 from app.services.profile_service import ProfileService
 from app.services.task_executor import TaskExecutor
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
 from app.services.websocket_manager import NullWebSocketManager, WebSocketManager
+from app.services.ws_broadcaster import WsBroadcaster
 from app.tasks import TaskManager
 from app.utils.logging import DashboardSink, get_logger
 
@@ -50,6 +52,10 @@ class ServiceContainer:
 
             return get_worker()
 
+        # 新组件
+        self.ws_broadcaster = WsBroadcaster(ws_manager=self.ws_manager)
+        self.network_tester = NetworkTester()
+
         # 统一引擎（替代 MonitorService + SchedulerService）
         self.engine = ScheduleEngine(
             project_root,
@@ -58,6 +64,8 @@ class ServiceContainer:
             login_history_service=self.login_history_service,
             worker_getter=_get_worker,
             task_registry=self.task_registry,
+            ws_broadcaster=self.ws_broadcaster,
+            network_tester=self.network_tester,
         )
 
         # 注入 LoginOrchestrator — 登录执行的唯一入口（自行管理线程池）
@@ -134,6 +142,7 @@ class ServiceContainer:
         # 轻量模式唤醒时，将 NullWebSocketManager 切换为真正的 WebSocketManager
         if self._is_lightweight and isinstance(self.ws_manager, NullWebSocketManager):
             self.ws_manager = WebSocketManager()
+            self.ws_broadcaster.set_ws_manager(self.ws_manager)
             self.engine._ws_manager = self.ws_manager
             container_logger.info("WebSocket 管理器已切换为实时模式")
 
@@ -145,8 +154,9 @@ class ServiceContainer:
                 level="DEBUG",
                 filter=lambda record: record["extra"].get("source") != "frontend",
             )
-            self.engine.set_dashboard_sink(dashboard_sink)
-        self._ws_drain_task = asyncio.create_task(self.engine.ws_drain_loop())
+            self.engine.set_dashboard_sink(dashboard_sink)  # for list_logs
+            self.ws_broadcaster.set_dashboard_sink(dashboard_sink)  # for broadcast
+        self._ws_drain_task = asyncio.create_task(self.ws_broadcaster.ws_drain_loop())
         self._web_services_started = True
         container_logger.info("Web 服务已启动")
 

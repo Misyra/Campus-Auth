@@ -7,7 +7,13 @@ class TestWSConstant:
     """WS_DRAIN_INTERVAL_SECONDS 常量测试"""
 
     def test_ws_drain_interval_constant_exists(self):
-        """monitor_service 中应存在 WS_DRAIN_INTERVAL_SECONDS 常量"""
+        """ws_broadcaster 中应存在 WS_DRAIN_INTERVAL_SECONDS 常量"""
+        from app.services.ws_broadcaster import WS_DRAIN_INTERVAL_SECONDS
+
+        assert WS_DRAIN_INTERVAL_SECONDS == 0.05
+
+    def test_ws_drain_interval_reexport_from_engine(self):
+        """engine 模块应向后兼容 re-export WS_DRAIN_INTERVAL_SECONDS"""
         from app.services.engine import WS_DRAIN_INTERVAL_SECONDS
 
         assert WS_DRAIN_INTERVAL_SECONDS == 0.05

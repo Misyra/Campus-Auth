@@ -1,5 +1,32 @@
 # 修改日志
 
+## 2026-06-25 (3)
+
+### refactor: 提取 WsBroadcaster 和 NetworkTester from ScheduleEngine
+
+- 新建 `app/services/ws_broadcaster.py`：WS 广播队列管理器，从 engine.py 提取
+  - `WsBroadcaster` 类：管理 broadcast_queue、ws_drain_loop、drain_ws_queue、set_dashboard_sink、enqueue_status
+  - `WS_DRAIN_INTERVAL_SECONDS` 常量迁移至此
+- 新建 `app/services/network_tester.py`：手动网络测试封装，从 engine.py 提取
+  - `NetworkTester` 类：封装 `is_network_available` 调用和模式描述日志
+- `app/services/engine.py`：
+  - `__init__` 新增 `ws_broadcaster` 和 `network_tester` 可选参数
+  - `_queue_status_broadcast` 委托 `ws_broadcaster.enqueue_status`
+  - `test_network` 委托 `network_tester.test_network`
+  - `set_dashboard_sink` 简化为仅设置 `_dashboard_sink`（供 list_logs 使用）
+  - 删除 `ws_drain_loop`、`drain_ws_queue`、`ws_broadcast_queue` 属性、`_empty_broadcast_queue` 字段
+  - `WS_DRAIN_INTERVAL_SECONDS` 改为从 ws_broadcaster 模块 re-export（向后兼容）
+  - 移除不再使用的 `json`、`deque`、`is_network_available`、`parse_ping_targets` 导入
+- `app/container.py`：
+  - 新建 `WsBroadcaster` 和 `NetworkTester` 实例，注入到 ScheduleEngine
+  - `start_web_services` 改用 `ws_broadcaster.set_ws_manager`、`ws_broadcaster.set_dashboard_sink`、`ws_broadcaster.ws_drain_loop`
+- 新建 `tests/test_services/test_ws_broadcaster.py`：19 个单元测试覆盖全部 WsBroadcaster 功能
+- 更新 `tests/test_services/test_engine.py`：TestNetwork 改为 mock `_network_tester`，TestQueueStatusBroadcast 改为验证委托，删除 TestWsDrain 和 TestSetDashboardSinkMigration
+- 更新 `tests/test_services/conftest.py`：raw fixture 新增 `_ws_broadcaster` 和 `_network_tester` mock
+- 更新 `tests/test_config/test_container.py`：mock_classes 新增 WsBroadcaster/NetworkTester，fixture 改用 `ws_broadcaster.ws_drain_loop`
+- 更新 `tests/test_config/test_constants.py`：新增 re-export 测试
+- 更新 `tests/test_services/test_engine_fix.py`：NetworkTester 源码检查替代 engine
+
 ## 2026-06-25 (2)
 
 ### refactor: 消除 TaskService 冗余层 — 合并到 TaskManager

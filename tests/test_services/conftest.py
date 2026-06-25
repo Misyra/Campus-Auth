@@ -85,9 +85,9 @@ def engine_factory():
         svc._start_stop_lock = threading.Lock()
         svc._pure_mode = False
         svc._dashboard_sink = None
-        from collections import deque
-        svc._empty_broadcast_queue = deque(maxlen=10)
         svc._ws_manager = None
+        svc._ws_broadcaster = MagicMock()
+        svc._network_tester = MagicMock()
         svc._orchestrator = MagicMock()
         svc._login_history = None
         svc._worker_getter = None
