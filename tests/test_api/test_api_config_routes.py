@@ -15,7 +15,7 @@ from app.schemas import (
     RetrySettings,
     RuntimeConfig,
 )
-from app.services.config_service import SaveResult
+from app.services.profile_service import SaveResult
 
 
 class TestLogLevels:

@@ -2,6 +2,26 @@
 
 ## 2026-06-26
 
+### refactor: 合并 config_service 到 profile_service
+- `app/services/profile_service.py`：新增 `SaveResult`、`_rollback_config`、`save_global_and_profile`（从 config_service 迁入）
+- `app/services/config_service.py`：删除（已合并到 profile_service）
+- `app/api/config.py`：导入从 `app.services.config_service` 改为 `app.services.profile_service`
+- `tests/test_services/test_config_service.py`：导入从 `app.services.config_service` 改为 `app.services.profile_service`
+- `tests/test_api/test_api_config_routes.py`：`SaveResult` 导入改为 `app.services.profile_service`
+- `tests/test_integration/test_full_mode.py`：`save_global_and_profile` 导入改为 `app.services.profile_service`
+- `tests/test_integration/test_login_connection.py`：同上
+
+### refactor: 构造器注入替代 setter，消除循环依赖注入
+
+- `app/services/engine.py`：`__init__` 新增 `orchestrator` 参数，删除 `set_orchestrator()` 和 `set_task_executor()` 方法
+- `app/services/login_orchestrator.py`：删除 `set_executor()` 方法
+- `app/services/task_executor.py`：删除 `set_runtime_config_getter()` 方法
+- `app/container.py`：重排服务创建顺序（LoginOrchestrator → TaskExecutor → ScheduleEngine），构造器注入后绑定 `get_runtime_config`
+- `tests/test_integration/conftest.py`：两个 fixture（`integration_stack`/`full_stack`）改用直接属性赋值，补充 `orchestrator._get_runtime_config` 绑定
+- `tests/test_services/test_task_executor_fix.py`：`test_set_runtime_config_getter` 改为直接赋值
+
+### fix: 适配 test_monitor_service.py 到 StatusManager 重构
+
 ### fix: 适配 test_monitor_service.py 到 StatusManager 重构
 
 - `tests/test_services/test_monitor_service.py`：

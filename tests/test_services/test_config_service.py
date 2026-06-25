@@ -13,7 +13,7 @@ from app.schemas import (
     ProfilesData,
     RuntimeConfig,
 )
-from app.services.config_service import (
+from app.services.profile_service import (
     SaveResult,
     _rollback_config,
 )

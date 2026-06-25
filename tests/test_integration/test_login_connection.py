@@ -221,7 +221,7 @@ class TestLoginConnection:
 
         # 登录进行中，保存新配置
         from app.schemas import ConfigResponseDTO
-        from app.services.config_service import save_global_and_profile
+        from app.services.profile_service import save_global_and_profile
 
         payload = ConfigResponseDTO(
             browser=engine._runtime_config.browser,
