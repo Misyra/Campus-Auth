@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from app.schemas import MonitorStatusResponse, RuntimeConfig
-from app.services.engine_status import StatusManager, StatusSnapshot
+from app.services.engine_status import StatusManager
 from app.services.monitor_service import NetworkMonitorCore
 from app.services.websocket_manager import WebSocketManager
 from app.utils import ConfigValidator
@@ -405,6 +405,10 @@ class ScheduleEngine:
         提交登录任务后立即返回，由 done_callback 通知 API 线程结果。
         引擎线程不再阻塞，可继续处理 STOP/RELOAD/SHUTDOWN 等命令。
         """
+        if self._orchestrator is None:
+            cmd.response_data = (False, "登录服务未初始化")
+            cmd.response_event.set()
+            return
         err = self._orchestrator.validate(self._runtime_config)
         if err is not None:
             cmd.response_data = (False, err)
