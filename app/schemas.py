@@ -458,3 +458,32 @@ class ProfilesData(BaseModel):
         return self
 
 
+class ScheduleTime(BaseModel):
+    """定时任务执行时间。"""
+
+    hour: int = Field(ge=0, le=23)
+    minute: int = Field(ge=0, le=59)
+
+
+class ScheduledTaskConfig(BaseModel):
+    """定时任务配置 — 替代 scheduled_tasks.py 中的手写校验。"""
+
+    name: str = Field(min_length=1, description="任务名称")
+    description: str = ""
+    type: str = Field(pattern=r"^(script|browser|shell)$", description="任务类型")
+    target_id: str = ""
+    command: str = ""
+    shell_path: str = ""
+    enabled: bool = True
+    schedule: ScheduleTime
+    timeout: int = Field(default=60, ge=5, le=3600)
+
+    @model_validator(mode="after")
+    def validate_type_fields(self) -> "ScheduledTaskConfig":
+        if self.type == "shell" and not self.command:
+            raise ValueError("Shell 命令不能为空")
+        if self.type in ("script", "browser") and not self.target_id:
+            raise ValueError("请选择目标任务")
+        return self
+
+

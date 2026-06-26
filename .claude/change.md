@@ -1,5 +1,23 @@
 # 修改日志
 
+## 2026-06-27 (Task 4)
+
+### refactor(scheduled-tasks): replace manual validation with Pydantic model
+
+- `app/schemas.py`：新增 `ScheduleTime` 和 `ScheduledTaskConfig` 两个 Pydantic 模型
+  - `ScheduleTime`：hour(0-23) + minute(0-59)
+  - `ScheduledTaskConfig`：name(min_length=1)、type(pattern=script|browser|shell)、schedule、timeout(ge=5,le=3600) 等字段
+  - `model_validator`：shell 类型 command 不能为空、script/browser 类型 target_id 不能为空
+- `app/api/scheduled_tasks.py`：
+  - 删除 `_validate_create_payload` 和 `_validate_update_payload` 两个手写校验函数（约 80 行）
+  - `create_scheduled_task`：参数从 `payload: dict` 改为 `payload: ScheduledTaskConfig`，Pydantic 自动校验，无效输入返回 422
+  - `update_scheduled_task`：保留 `payload: dict`（部分更新），合并后通过 `ScheduledTaskConfig.model_validate(merged)` 校验，无效输入返回 400
+  - 导入新增 `ScheduledTaskConfig`
+- `tests/test_api/test_api_scheduled_tasks_routes.py`：
+  - 5 个 create 校验失败测试断言从 `status_code == 200 + success == False` 改为 `status_code == 422`
+  - 3 个 update 校验失败测试断言从 `status_code == 200 + success == False` 改为 `status_code == 400`
+- 验收：24 个定时任务测试全通过
+
 ## 2026-06-27 (Task 3)
 
 ### refactor(config): use nested structure, eliminate flat dict conversion
