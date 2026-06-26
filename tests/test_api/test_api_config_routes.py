@@ -65,6 +65,9 @@ class TestGetConfig:
     def test_get_config_returns_200(self, api_client):
         test_client, mock_services = api_client
         mock_services.profile_service.build_runtime_config.return_value = _make_runtime_config()
+        mock_profile = MagicMock()
+        mock_profile.carrier = "移动"
+        mock_services.profile_service.get_active_profile.return_value = mock_profile
         resp = test_client.get("/api/config")
         assert resp.status_code == 200
         data = resp.json()
@@ -74,6 +77,9 @@ class TestGetConfig:
     def test_get_config_contains_expected_fields(self, api_client):
         test_client, mock_services = api_client
         mock_services.profile_service.build_runtime_config.return_value = _make_runtime_config()
+        mock_profile = MagicMock()
+        mock_profile.carrier = "移动"
+        mock_services.profile_service.get_active_profile.return_value = mock_profile
         data = test_client.get("/api/config").json()
         assert data["username"] == "testuser"
         assert data["auth_url"] == "http://10.0.0.1"
