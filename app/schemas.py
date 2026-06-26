@@ -451,6 +451,52 @@ class PureModeResponse(BaseModel):
     enabled: bool
 
 
+class StealthScriptResponse(BaseModel):
+    """GET /api/config/default-stealth-script 响应。"""
+    script: str = ""
+
+
+class NetworkDetectResponse(BaseModel):
+    """POST /api/profiles/detect 响应。"""
+    gateway_ip: str | None = None
+    ssid: str | None = None
+    matched_profile_id: str | None = None
+    matched_profile_name: str | None = None
+
+
+class BinaryInfo(BaseModel):
+    """可执行二进制信息。"""
+    path: str = ""
+    name: str = ""
+
+
+class OcrStatusResponse(BaseModel):
+    """GET /api/ocr/status 响应。"""
+    installed: bool = False
+    size_mb: float = 0.0
+
+
+class UpdateCheckResponse(BaseModel):
+    """GET /api/check-update 响应。"""
+    current: str = ""
+    latest: str | None = None
+    has_update: bool = False
+    url: str = ""
+    body: str = ""
+    published_at: str = ""
+    cached: bool = False
+    error: str | None = None
+
+
+class UninstallItem(BaseModel):
+    """可清理项目。"""
+    key: str
+    label: str
+    exists: bool = False
+    path: str = ""
+    size_mb: float = 0.0
+
+
 class RuntimeConfig(BaseModel, frozen=True):
     """运行时配置根模型 — 替代旧 dict[str, Any]。
 

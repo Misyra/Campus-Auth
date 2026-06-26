@@ -12,7 +12,14 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from app.constants import AUTH_DATA_DIR, PROJECT_ROOT
 from app.deps import get_monitor_service
-from app.schemas import ApiResponse, HealthResponse, InitStatusResponse, UninstallRequest
+from app.schemas import (
+    ApiResponse,
+    HealthResponse,
+    InitStatusResponse,
+    UninstallItem,
+    UninstallRequest,
+    UpdateCheckResponse,
+)
 from app.services.engine import ScheduleEngine
 from app.utils.logging import get_logger
 from app.version import compare_versions, get_project_version
@@ -58,8 +65,8 @@ def health() -> HealthResponse:
     )
 
 
-@router.get("/api/check-update")
-async def check_update() -> dict:
+@router.get("/api/check-update", response_model=UpdateCheckResponse)
+async def check_update() -> UpdateCheckResponse:
     global _update_cache, _update_cache_time
 
     current = get_project_version(PROJECT_ROOT)
@@ -67,7 +74,7 @@ async def check_update() -> dict:
     async with _update_lock:
         # 缓存命中直接返回
         if _update_cache and (time.monotonic() - _update_cache_time) < _UPDATE_CACHE_TTL:
-            return {**_update_cache, "current": current}
+            return UpdateCheckResponse(**_update_cache, current=current)
 
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -81,33 +88,33 @@ async def check_update() -> dict:
             resp.raise_for_status()
             data = resp.json()
             tag = data.get("tag_name", "").lstrip("v")
-            result = {
-                "current": current,
-                "latest": tag,
-                "has_update": compare_versions(tag, current) > 0,
-                "url": data.get("html_url", ""),
-                "body": data.get("body", ""),
-                "published_at": data.get("published_at", ""),
-            }
-            # 更新缓存
-            _update_cache = result
+            result = UpdateCheckResponse(
+                current=current,
+                latest=tag,
+                has_update=compare_versions(tag, current) > 0,
+                url=data.get("html_url", ""),
+                body=data.get("body", ""),
+                published_at=data.get("published_at", ""),
+            )
+            # 更新缓存（存储为 dict 以便后续拼接 current）
+            _update_cache = result.model_dump()
             _update_cache_time = time.monotonic()
             return result
         except Exception as e:
             # 请求失败但有旧缓存，返回旧缓存 + 错误信息
             if _update_cache:
-                return {
+                return UpdateCheckResponse(
                     **_update_cache,
-                    "current": current,
-                    "cached": True,
-                    "error": str(e),
-                }
-            return {
-                "current": current,
-                "latest": None,
-                "has_update": False,
-                "error": str(e),
-            }
+                    current=current,
+                    cached=True,
+                    error=str(e),
+                )
+            return UpdateCheckResponse(
+                current=current,
+                latest=None,
+                has_update=False,
+                error=str(e),
+            )
 
 
 # ── 初始化状态 ──
@@ -192,20 +199,20 @@ def _trigger_shutdown_event(request: Request) -> None:
 # ── 卸载 ──
 
 
-@router.get("/api/uninstall/detect")
-def uninstall_detect() -> list[dict]:
+@router.get("/api/uninstall/detect", response_model=list[UninstallItem])
+def uninstall_detect() -> list[UninstallItem]:
     """检测可清理的外部残留项目"""
     from app.services.uninstall import detect
 
     items = detect()
     return [
-        {
-            "key": it.key,
-            "label": it.label,
-            "exists": it.exists,
-            "path": it.path,
-            "size_mb": round(it.size_mb, 1),
-        }
+        UninstallItem(
+            key=it.key,
+            label=it.label,
+            exists=it.exists,
+            path=it.path,
+            size_mb=round(it.size_mb, 1),
+        )
         for it in items
     ]
 

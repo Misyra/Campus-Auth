@@ -16,6 +16,7 @@ from app.schemas import (
     PauseSettings,
     RetrySettings,
     SourceLevelRequest,
+    StealthScriptResponse,
 )
 from app.services.profile_service import save_global_and_profile
 from app.services.engine import ScheduleEngine
@@ -98,12 +99,12 @@ def get_config(
     }
 
 
-@router.get("/api/config/default-stealth-script")
-def get_default_stealth_script() -> dict:
+@router.get("/api/config/default-stealth-script", response_model=StealthScriptResponse)
+def get_default_stealth_script() -> StealthScriptResponse:
     """获取默认反检测脚本内容。"""
     from app.utils.browser import STEALTH_INIT_SCRIPT
 
-    return {"script": STEALTH_INIT_SCRIPT}
+    return StealthScriptResponse(script=STEALTH_INIT_SCRIPT)
 
 
 @router.get("/api/config/defaults")

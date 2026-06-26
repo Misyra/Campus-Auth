@@ -70,8 +70,8 @@ def download_task_manual():
 # ── 背景图片管理 ──
 
 
-@router.post("/api/background/upload")
-async def upload_background(file: UploadFile) -> dict:
+@router.post("/api/background/upload", response_model=ApiResponse)
+async def upload_background(file: UploadFile) -> ApiResponse:
     """上传背景图片"""
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -87,7 +87,7 @@ async def upload_background(file: UploadFile) -> dict:
 
     _cleanup_old_backgrounds(filename)
 
-    return {"filename": filename, "url": f"/api/background/{filename}"}
+    return ApiResponse(success=True, message="背景图片已上传", data={"filename": filename, "url": f"/api/background/{filename}"})
 
 
 @router.post("/api/background/fetch-url", response_model=ApiResponse)

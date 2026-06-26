@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.deps import get_task_manager
-from app.schemas import ApiResponse, TaskSummary
+from app.schemas import ApiResponse, BinaryInfo, TaskSummary
 from app.tasks import TaskManager
 from app.utils.logging import get_logger
 from app.workers.script_runner import ScriptRunner, detect_available_binaries
@@ -26,10 +26,11 @@ def list_scripts(
     return task_mgr.list_script_tasks()
 
 
-@router.get("/api/scripts/binaries")
-def list_binaries() -> list[dict[str, str]]:
+@router.get("/api/scripts/binaries", response_model=list[BinaryInfo])
+def list_binaries() -> list[BinaryInfo]:
     """获取系统可用的执行二进制列表。"""
-    return detect_available_binaries()
+    raw = detect_available_binaries()
+    return [BinaryInfo(path=b.get("path", ""), name=b.get("name", "")) for b in raw]
 
 
 @router.get("/api/scripts/{task_id}")

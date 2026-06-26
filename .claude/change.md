@@ -1,5 +1,25 @@
 # 修改日志
 
+## 2026-06-27 (Task 13)
+
+### feat(api): 补全所有遗漏端点的格式统一 — 类型化响应模型
+
+- `app/schemas.py`：新增 6 个响应模型
+  - `StealthScriptResponse`：GET /api/config/default-stealth-script 响应
+  - `NetworkDetectResponse`：POST /api/profiles/detect 响应
+  - `BinaryInfo`：可执行二进制信息（path/name）
+  - `OcrStatusResponse`：GET /api/ocr/status 响应
+  - `UpdateCheckResponse`：GET /api/check-update 响应（含 cached/error 字段）
+  - `UninstallItem`：可清理项目（key/label/exists/path/size_mb）
+- `app/api/config.py`：`default-stealth-script` 返回 `StealthScriptResponse`
+- `app/api/profiles.py`：`detect` 返回 `NetworkDetectResponse`
+- `app/api/install_playwright.py`：`install-playwright` 返回 `ApiResponse`（原返回 raw dict）
+- `app/api/ocr.py`：`status` 返回 `OcrStatusResponse`
+- `app/api/system.py`：`check-update` 返回 `UpdateCheckResponse`，`uninstall/detect` 返回 `list[UninstallItem]`
+- `app/api/scheduled_tasks.py`：list 和 history 添加 `response_model=list[dict[str, Any]]`
+- `app/api/tools.py`：`background/upload` 返回 `ApiResponse`（原返回 raw dict）
+- `app/api/scripts.py`：`binaries` 返回 `list[BinaryInfo]`
+
 ## 2026-06-27 (Task 11)
 
 ### feat: 添加全局异常处理中间件，统一错误响应格式
