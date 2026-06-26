@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.deps import get_task_manager
-from app.schemas import ApiResponse
+from app.schemas import ApiResponse, TaskSummary
 from app.tasks import TaskManager
 from app.utils.logging import get_logger
 from app.workers.script_runner import ScriptRunner, detect_available_binaries
@@ -18,7 +18,7 @@ api_logger = get_logger("api", source="backend")
 _script_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="script_runner")
 
 
-@router.get("/api/scripts")
+@router.get("/api/scripts", response_model=list[TaskSummary])
 def list_scripts(
     task_mgr: TaskManager = Depends(get_task_manager),
 ) -> list[dict[str, str]]:

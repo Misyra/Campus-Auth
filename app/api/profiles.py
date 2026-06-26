@@ -5,7 +5,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.deps import get_monitor_service, get_profile_service
-from app.schemas import ApiResponse, AutoSwitchRequest, Profile
+from app.schemas import (
+    ApiResponse,
+    AutoSwitchRequest,
+    Profile,
+    ProfileDetailResponse,
+    ProfileListResponse,
+    ProfileSummary,
+)
 from app.services.engine import ScheduleEngine
 from app.services.profile_service import ProfileService
 from app.utils.logging import get_logger
@@ -23,42 +30,39 @@ def _safe_detect(func, label: str, default=None):
         return default
 
 
-@router.get("/api/profiles")
+@router.get("/api/profiles", response_model=ProfileListResponse)
 def list_profiles(
     profile_svc: ProfileService = Depends(get_profile_service),
-) -> dict:
+) -> ProfileListResponse:
     data = profile_svc.load()
-    result = {}
+    result: dict[str, ProfileSummary] = {}
     for pid, settings in data.profiles.items():
-        result[pid] = {
-            "name": settings.name,
-            "match_gateway_ip": settings.match_gateway_ip,
-            "match_ssid": settings.match_ssid,
-            "carrier": settings.carrier,
-            "carrier_custom": settings.carrier_custom,
-            "auth_url": settings.auth_url,
-            "active_task": settings.active_task,
-        }
-    return {
-        "profiles": result,
-        "active_profile": data.active_profile,
-        "auto_switch": data.auto_switch,
-    }
+        result[pid] = ProfileSummary(
+            name=settings.name,
+            match_gateway_ip=settings.match_gateway_ip,
+            match_ssid=settings.match_ssid,
+            carrier=settings.carrier,
+            carrier_custom=settings.carrier_custom,
+            auth_url=settings.auth_url,
+            active_task=settings.active_task,
+        )
+    return ProfileListResponse(
+        profiles=result,
+        active_profile=data.active_profile,
+        auto_switch=data.auto_switch,
+    )
 
 
-@router.get("/api/profiles/{profile_id}")
+@router.get("/api/profiles/{profile_id}", response_model=ProfileDetailResponse)
 def get_profile(
     profile_id: str,
     profile_svc: ProfileService = Depends(get_profile_service),
-) -> dict:
+) -> ProfileDetailResponse:
     data = profile_svc.load()
     profile = data.profiles.get(profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="方案不存在")
-    return {
-        "profile_id": profile_id,
-        "settings": profile.model_dump(),
-    }
+    return ProfileDetailResponse(profile_id=profile_id, settings=profile)
 
 
 @router.put("/api/profiles/{profile_id}", response_model=ApiResponse)
