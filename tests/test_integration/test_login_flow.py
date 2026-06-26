@@ -23,8 +23,8 @@ from app.services.engine import (
     EngineCmdType,
     EngineCommand,
     ScheduleEngine,
-    StatusSnapshot,
 )
+from app.services.engine_status import StatusSnapshot
 from app.services.monitor_service import CheckOnceResult
 from app.services.retry_policy import MonitoredPolicy
 
