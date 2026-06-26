@@ -1750,6 +1750,48 @@ class TestRetryTimeLock:
             assert engine._next_retry_time in results
 
 
+class TestEngineLoopBatchCommands:
+    """_engine_loop 应批量排空命令队列。"""
+
+    def test_multiple_commands_processed_in_one_iteration(self):
+        """多条命令应在单次唤醒中被批量处理。"""
+        engine = ScheduleEngine.__new__(ScheduleEngine)
+        engine._cmd_queue = queue.Queue()
+        engine._shutdown_event = threading.Event()
+        engine._wakeup_event = threading.Event()
+        engine._engine_running = False
+        engine._monitor_core = None
+        engine._scheduler_running = False
+        engine._next_retry_time = 0
+        engine._MAX_LOOP_SLEEP = 1.0
+        engine._retry_time_lock = threading.Lock()
+
+        processed = []
+
+        def mock_process(cmd):
+            processed.append(cmd.type)
+            if cmd.response_event:
+                cmd.response_event.set()
+
+        engine._process_command = mock_process
+        engine._calculate_wakeup = lambda: time.time() + 60
+
+        # 入队 3 条命令 + 1 条 SHUTDOWN
+        for _ in range(3):
+            engine._cmd_queue.put(EngineCommand(type=EngineCmdType.RELOAD))
+        shutdown_event = threading.Event()
+        engine._cmd_queue.put(EngineCommand(
+            type=EngineCmdType.SHUTDOWN, response_event=shutdown_event
+        ))
+
+        # 运行引擎循环（应在一次迭代中处理所有命令）
+        engine._engine_loop()
+
+        # 所有 4 条命令都应被处理
+        assert len(processed) == 4
+        assert processed[-1] == "shutdown"
+
+
 class TestPureModeLockConsolidation:
     """_pure_mode 统一由 _reload_lock 保护。"""
 
