@@ -35,10 +35,23 @@ class WsBroadcaster:
         self._dashboard_sink: DashboardSink | None = None
         # 轻量模式下的空广播队列（仅接收不消费，小容量即可）
         self._empty_broadcast_queue: deque = deque(maxlen=10)
+        self._drain_event: asyncio.Event = asyncio.Event()
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     def set_ws_manager(self, ws_manager: WebSocketManager) -> None:
         """切换 WS 管理器（轻量模式唤醒时调用）。"""
         self._ws_manager = ws_manager
+
+    def set_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        """记录事件循环引用，用于跨线程安全唤醒。"""
+        self._loop = loop
+
+    def _notify_drain(self) -> None:
+        """唤醒 drain loop（线程安全）。"""
+        if self._loop is not None and self._loop.is_running():
+            self._loop.call_soon_threadsafe(self._drain_event.set)
+        else:
+            self._drain_event.set()
 
     def set_dashboard_sink(self, sink: DashboardSink) -> None:
         """注入 DashboardSink，并迁移轻量模式期间积累的广播消息。"""
@@ -51,6 +64,8 @@ class WsBroadcaster:
                 except IndexError:
                     break
         self._dashboard_sink = sink
+        # 注入 drain 通知器
+        sink.set_drain_notifier(self._notify_drain)
 
     @property
     def broadcast_queue(self) -> deque:
@@ -63,17 +78,21 @@ class WsBroadcaster:
         """将状态更新放入广播队列。"""
         try:
             self.broadcast_queue.append({"type": "status", "data": status_dict})
+            self._notify_drain()
         except Exception:
             logger.exception("状态广播入队失败")
 
     async def ws_drain_loop(self) -> None:
-        """后台 asyncio 任务：定期排空 WS 广播队列。
+        """后台 asyncio 任务：事件驱动排空 WS 广播队列。
 
-        Runs until the asyncio task is cancelled (by lifespan shutdown).
+        空闲时阻塞在 _drain_event.wait()，有新消息入队时通过 set() 唤醒。
+        异常不会退出循环，CancelledError 由外层捕获退出。
         """
+        self.set_loop(asyncio.get_running_loop())
         while True:
             try:
-                await asyncio.sleep(WS_DRAIN_INTERVAL_SECONDS)
+                await self._drain_event.wait()
+                self._drain_event.clear()
                 await self.drain_ws_queue()
             except asyncio.CancelledError:
                 break
