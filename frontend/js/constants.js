@@ -143,16 +143,18 @@ export const DEFAULT_CONFIG = {
     carrier_custom: "",
   },
   active_task: "",
-  custom_variables: {},
-  block_proxy: true,
-  shell_path: "",
-  minimize_to_tray: true,
-  lightweight_tray: true,
-  startup_action: "none",
-  autostart_lightweight: true,
-  auto_open_browser: false,
-  proxy: "",
-  app_port: 50721,
+  app_settings: {
+    block_proxy: true,
+    shell_path: "",
+    minimize_to_tray: true,
+    startup_action: "none",
+    autostart_lightweight: true,
+    lightweight_tray: true,
+    auto_open_browser: false,
+    proxy: "",
+    app_port: 50721,
+    custom_variables: {},
+  },
 };
 
 export const SETTINGS_TABS = [

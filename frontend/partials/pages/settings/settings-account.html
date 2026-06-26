@@ -94,7 +94,7 @@
       <p class="form-help-text">在任务模板中使用 <code v-pre>{{变量名}}</code> 引用这些变量</p>
 
       <!-- 表头 -->
-      <div v-if="Object.keys(config.custom_variables || {}).length > 0" class="custom-vars-header">
+      <div v-if="Object.keys(config.app_settings.custom_variables || {}).length > 0" class="custom-vars-header">
         <span class="header-name">变量名</span>
         <span class="header-separator"></span>
         <span class="header-value">变量值</span>
@@ -102,7 +102,7 @@
       </div>
 
       <div class="custom-vars-list">
-        <div v-for="(value, key) in config.custom_variables" :key="key" class="custom-var-item">
+        <div v-for="(value, key) in config.app_settings.custom_variables" :key="key" class="custom-var-item">
           <div class="var-name-col">
             <input
               type="text"
@@ -116,9 +116,9 @@
           <div class="var-value-col">
             <input
               type="text"
-              v-model="config.custom_variables[key]"
+              v-model="config.app_settings.custom_variables[key]"
               placeholder="变量值"
-              @input="onConfigChange('custom_variables', config.custom_variables, 'input')"
+              @input="onConfigChange('custom_variables', config.app_settings.custom_variables, 'input')"
             />
           </div>
           <button type="button" class="btn btn-icon-only btn-danger btn-delete-var" @click="removeCustomVar(key)" title="删除">
