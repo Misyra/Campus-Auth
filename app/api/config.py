@@ -5,7 +5,18 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.deps import get_monitor_service, get_profile_service
-from app.schemas import ActionResponse, ConfigResponseDTO
+from app.schemas import (
+    ActionResponse,
+    ApiResponse,
+    AppSettings,
+    BrowserSettings,
+    ConfigSaveRequest,
+    LoggingSettings,
+    MonitorSettings,
+    PauseSettings,
+    RetrySettings,
+    SourceLevelRequest,
+)
 from app.services.profile_service import save_global_and_profile
 from app.services.engine import ScheduleEngine
 from app.services.profile_service import ProfileService
@@ -28,33 +39,26 @@ def get_log_levels():
     }
 
 
-@router.put("/api/config/source-level")
-def set_source_level(payload: dict, request: Request):
+@router.put("/api/config/source-level", response_model=ApiResponse)
+def set_source_level(payload: SourceLevelRequest, request: Request) -> ApiResponse:
     """设置日志级别。source='global' 时设置全局级别，否则设置来源级别。"""
     from app.utils.logging import LogConfigCenter
 
-    source = payload.get("source")
-    level = payload.get("level")
-
-    if not source or not level:
-        raise HTTPException(400, "缺少 source 或 level 参数")
-
     config = LogConfigCenter.get_instance()
 
-    if source == "global":
-        config.set_level(level)
+    if payload.source == "global":
+        config.set_level(payload.level)
         actual = config.get_config().get("level", "INFO")
-        if actual != level.upper():
-            return {"success": True, "message": f"无效级别 '{level}'，已降级为 {actual}"}
+        if actual != payload.level.upper():
+            return ApiResponse(success=True, message=f"无效级别 '{payload.level}'，已降级为 {actual}")
     else:
         try:
-            config.set_source_level(source, level)
+            config.set_source_level(payload.source, payload.level)
         except ValueError as e:
             raise HTTPException(400, str(e)) from e
 
     _persist_source_levels(request, config)
-
-    return {"success": True, "message": f"已设置 {source} 级别为 {level}"}
+    return ApiResponse(success=True, message=f"已设置 {payload.source} 级别为 {payload.level}")
 
 
 def _persist_source_levels(request: Request, config):
@@ -73,57 +77,25 @@ def get_config(
     data = profile_svc.load()
     cfg = profile_svc.build_runtime_config(data)
 
-    # 从 Profile 获取原始 carrier 值（前端下拉框需要 "自定义" 而不是转换后的 isp）
     profile = profile_svc.get_active_profile()
     carrier = profile.carrier or "无"
-    # 映射到前端 isp 值：carrier 为 "无" 时返回空串，其他返回原值
     isp = "" if carrier == "无" else carrier
 
-    dto = ConfigResponseDTO(
-        browser=cfg.browser,
-        monitor=cfg.monitor,
-        retry=cfg.retry,
-        pause=cfg.pause,
-        logging=cfg.logging,
-        app_settings=cfg.app_settings,
-        username=cfg.credentials.username,
-        password="••••••••" if cfg.credentials.password else "",
-        auth_url=cfg.credentials.auth_url,
-        isp=isp,
-        carrier_custom=cfg.credentials.carrier_custom,
-        active_task=cfg.active_task,
-    )
-    # 展平 app_settings 到顶层，保持前端兼容
-    return _dto_to_flat_dict(dto)
-
-
-def _dto_to_flat_dict(dto: ConfigResponseDTO) -> dict:
-    """将 ConfigResponseDTO 转为前端兼容的扁平字典（app_settings 展开到顶层）。"""
-    d = dto.model_dump()
-    app = d.pop("app_settings", {})
-    d.update(app)
-    return d
-
-
-# 前端扁平字段中属于 app_settings 的字段列表
-_APP_SETTINGS_KEYS = {
-    "block_proxy", "shell_path", "minimize_to_tray", "startup_action",
-    "autostart_lightweight", "lightweight_tray", "auto_open_browser",
-    "proxy", "app_port", "custom_variables",
-}
-
-
-def _flat_dict_to_dto(d: dict) -> ConfigResponseDTO:
-    """将前端扁平字典转为 ConfigResponseDTO（提取 app_settings 子对象）。"""
-    app_settings = {}
-    rest = {}
-    for k, v in d.items():
-        if k in _APP_SETTINGS_KEYS:
-            app_settings[k] = v
-        else:
-            rest[k] = v
-    rest["app_settings"] = app_settings
-    return ConfigResponseDTO(**rest)
+    return {
+        "browser": cfg.browser.model_dump(),
+        "monitor": cfg.monitor.model_dump(),
+        "retry": cfg.retry.model_dump(),
+        "pause": cfg.pause.model_dump(),
+        "logging": cfg.logging.model_dump(),
+        "app_settings": cfg.app_settings.model_dump(),
+        # 凭据平铺（与 ConfigSaveRequest 对齐）
+        "username": cfg.credentials.username,
+        "password": "••••••••" if cfg.credentials.password else "",
+        "auth_url": cfg.credentials.auth_url,
+        "isp": isp,
+        "carrier_custom": cfg.credentials.carrier_custom,
+        "active_task": cfg.active_task,
+    }
 
 
 @router.get("/api/config/default-stealth-script")
@@ -132,6 +104,19 @@ def get_default_stealth_script() -> dict:
     from app.utils.browser import STEALTH_INIT_SCRIPT
 
     return {"script": STEALTH_INIT_SCRIPT}
+
+
+@router.get("/api/config/defaults")
+def get_config_defaults() -> dict:
+    """获取所有配置字段的默认值。"""
+    return {
+        "browser": BrowserSettings().model_dump(),
+        "monitor": MonitorSettings().model_dump(),
+        "retry": RetrySettings().model_dump(),
+        "pause": PauseSettings().model_dump(),
+        "logging": LoggingSettings().model_dump(),
+        "app_settings": AppSettings().model_dump(),
+    }
 
 
 def _flatten_dict(d: dict, parent_key: str = "", sep: str = ".") -> dict:
@@ -146,7 +131,7 @@ def _flatten_dict(d: dict, parent_key: str = "", sep: str = ".") -> dict:
     return dict(items)
 
 
-def _log_config_changes(old_dict: dict, new_payload: ConfigResponseDTO) -> None:
+def _log_config_changes(old_dict: dict, new_payload: ConfigSaveRequest) -> None:
     """记录配置变更日志
 
     规则：
@@ -196,7 +181,7 @@ def _log_config_changes(old_dict: dict, new_payload: ConfigResponseDTO) -> None:
     IGNORE_FIELDS = {"password"}
 
     # BUG-005 修复：扁平化嵌套字典后再比较
-    # old_dict 来自 RuntimeConfig（credentials 嵌套），new_payload 来自 ConfigResponseDTO（扁平）
+    # old_dict 来自 RuntimeConfig（credentials 嵌套），new_payload 来自 ConfigSaveRequest（凭据平铺）
     # 需要将 old_dict 的 credentials 扁平化到顶层后再比较
     _old = dict(old_dict)
     _old_creds = _old.pop("credentials", {})
@@ -246,26 +231,20 @@ def _log_config_changes(old_dict: dict, new_payload: ConfigResponseDTO) -> None:
 
 @router.put("/api/config", response_model=ActionResponse)
 def save_config(
-    payload: dict,
+    payload: ConfigSaveRequest,
     svc: ScheduleEngine = Depends(get_monitor_service),
     profile_svc: ProfileService = Depends(get_profile_service),
 ) -> ActionResponse:
     try:
-        # 前端发送扁平字段，后端需嵌套 app_settings
-        dto = _flat_dict_to_dto(payload)
-
-        # 获取当前配置用于变更日志
         old_data = profile_svc.load()
         old_cfg = profile_svc.build_runtime_config(old_data)
         old_dict = old_cfg.model_dump()
 
-        # 一次保存全局配置 + 方案凭据
-        result = save_global_and_profile(dto, profile_svc, svc.reload_config)
+        result = save_global_and_profile(payload, profile_svc, svc.reload_config)
         if not result.success:
             raise ValueError(result.message)
 
-        # 记录配置变更
-        _log_config_changes(old_dict, dto)
+        _log_config_changes(old_dict, payload)
 
         api_logger.info("配置已保存 -> success=True")
         return ActionResponse(success=True, message="配置保存成功")
