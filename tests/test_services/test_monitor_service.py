@@ -692,7 +692,6 @@ class TestManualLoginTimeout:
             "browser": RuntimeConfig().browser.model_copy(update={"login_timeout": 0.01})
         })
         svc._pure_mode = False
-        svc._pure_mode_lock = threading.Lock()
         svc._engine_thread = MagicMock()
         svc._engine_thread.is_alive.return_value = True
 
@@ -719,7 +718,6 @@ class TestStartMonitoringPutNowait:
             ),
         )
         svc._pure_mode = False
-        svc._pure_mode_lock = threading.Lock()
         svc._start_stop_lock = threading.Lock()
 
         # 填满队列
@@ -871,7 +869,6 @@ class TestManualLoginConsumerDead:
             "browser": RuntimeConfig().browser.model_copy(update={"login_timeout": 0.01})
         })
         svc._pure_mode = False
-        svc._pure_mode_lock = threading.Lock()
         svc._start_stop_lock = threading.Lock()
 
         # 模拟引擎线程已死亡
