@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.deps import get_task_manager
-from app.schemas import ApiResponse, TaskSummary
+from app.schemas import ApiResponse, TaskOrderRequest, TaskSummary
 from app.tasks import TaskManager
 from app.utils.logging import get_logger
 
@@ -71,9 +71,9 @@ def set_active_task(
 
 @router.post("/api/tasks/order", response_model=ApiResponse)
 def save_task_order(
-    payload: dict,
+    payload: TaskOrderRequest,
     task_mgr: TaskManager = Depends(get_task_manager),
 ) -> ApiResponse:
-    ok, message = task_mgr.save_order_with_validation(payload)
+    ok, message = task_mgr.save_order_with_validation({"order": payload.order})
     api_logger.info("保存任务排序 -> success={}, message={}", ok, message)
     return ApiResponse(success=ok, message=message)

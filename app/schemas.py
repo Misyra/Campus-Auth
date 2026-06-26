@@ -446,6 +446,36 @@ class ShellListResponse(BaseModel):
     default: str = ""
 
 
+class DebugStepResult(BaseModel):
+    """调试步骤执行结果。"""
+    step_index: int
+    success: bool = False
+    message: str = ""
+    screenshot: str | None = None
+
+
+class DebugSessionResponse(BaseModel):
+    """调试会话状态响应（start/next/run-all/stop 共用）。"""
+    running: bool = False
+    task_id: str | None = None
+    current_step: int = 0
+    total_steps: int = 0
+    steps: list = Field(default_factory=list)
+    results: list = Field(default_factory=list)
+    screenshot_url: str | None = None
+    message: str = ""
+
+
+class AutostartEnableRequest(BaseModel):
+    """POST /api/autostart/enable|mode 请求体。"""
+    lightweight: bool = True
+
+
+class TaskOrderRequest(BaseModel):
+    """POST /api/tasks/order 请求体。"""
+    order: list[str] = Field(default_factory=list, description="任务 ID 有序列表")
+
+
 class PureModeResponse(BaseModel):
     """GET/POST /api/pure-mode 响应。"""
     enabled: bool

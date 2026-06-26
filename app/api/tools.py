@@ -163,8 +163,8 @@ async def get_background(filename: str):
     return FileResponse(filepath)
 
 
-@router.delete("/api/background/{filename}")
-async def delete_background(filename: str) -> dict:
+@router.delete("/api/background/{filename}", response_model=ApiResponse)
+async def delete_background(filename: str) -> ApiResponse:
     """删除背景图片"""
     safe_name = Path(filename).name
     if safe_name != filename or not safe_name:
@@ -173,4 +173,4 @@ async def delete_background(filename: str) -> dict:
     if not filepath.exists():
         raise HTTPException(status_code=404, detail="文件不存在")
     filepath.unlink()
-    return {"success": True, "message": "背景图片已删除"}
+    return ApiResponse(success=True, message="背景图片已删除")
