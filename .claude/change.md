@@ -1,5 +1,16 @@
 # 修改日志
 
+## 2026-06-27 (Task 2)
+
+### refactor(api): 统一写操作端点响应格式为 ApiResponse 信封
+
+- `app/api/profiles.py`：`toggle_auto_switch` 请求体从 `dict = Body(default={})` 改为 `AutoSwitchRequest`，返回 `ApiResponse` 信封；移除未使用的 `Body` 导入
+- `app/api/monitor.py`：`get_pure_mode` 返回 `PureModeResponse`，`toggle_pure_mode` 返回 `ApiResponse` 信封
+- `app/api/history.py`：`clear_login_history` 返回 `ApiResponse` 信封
+- `app/api/system.py`：`health` 返回 `HealthResponse`，`get_init_status` 返回 `InitStatusResponse`，`uninstall_perform` 请求体改为 `UninstallRequest`、返回 `ApiResponse` 信封
+- `app/api/tools.py`：`fetch_background_url` 请求体改为 `FetchUrlRequest`、返回 `ApiResponse` 信封
+- 验收：174 通过、7 失败（均为测试期望旧格式，符合预期）
+
 ## 2026-06-27 (Task 1)
 
 ### feat(schemas): 新增 ApiResponse 信封和类型化请求/响应模型
