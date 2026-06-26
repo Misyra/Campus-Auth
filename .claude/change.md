@@ -1,5 +1,23 @@
 # 修改日志
 
+## 2026-06-27 (Task 10)
+
+### feat(api): 为所有 GET 端点添加 Pydantic response_model
+
+- `app/schemas.py`：新增 7 个 GET 响应模型
+  - `ProfileSummary`：方案列表摘要（name/match_gateway_ip/match_ssid/carrier/carrier_custom/auth_url/active_task）
+  - `ProfileListResponse`：GET /api/profiles 响应（profiles/active_profile/auto_switch）
+  - `ProfileDetailResponse`：GET /api/profiles/{id} 响应（profile_id/settings）
+  - `BrowserInfo`：浏览器信息 Pydantic 模型（channel/name/icon/installed/needs_download/description）
+  - `BrowserListResponse`：GET /api/browsers 响应（browsers/current）
+  - `TaskSummary`：任务列表摘要（id/name/description/type/binary_path）
+  - `LogLevelResponse`：GET /api/config/log-levels 响应（global_level/source_levels）
+- `app/api/profiles.py`：list_profiles 改用 ProfileListResponse，get_profile 改用 ProfileDetailResponse
+- `app/api/browsers.py`：get_browsers 改用 BrowserListResponse + BrowserInfo
+- `app/api/config.py`：get_log_levels 改用 LogLevelResponse
+- `app/api/tasks.py`：list_tasks 添加 response_model=list[TaskSummary]
+- `app/api/scripts.py`：list_scripts 添加 response_model=list[TaskSummary]
+
 ## 2026-06-27 (Task 9)
 
 ### fix: start_thread 清空残留命令时调用 task_done()，防止 join() 阻塞
