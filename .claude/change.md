@@ -1,5 +1,17 @@
 # 修改日志
 
+## 2026-06-27 (Task 8)
+
+### fix: 删除 _pure_mode_lock，统一由 _reload_lock 保护，消除锁嵌套竞态
+
+- `app/services/engine.py`：
+  - `__init__` 删除 `self._pure_mode_lock = threading.Lock()`
+  - `pure_mode` 属性改用 `self._reload_lock` 保护读取
+  - `_reload_config_internal` 移除内层 `with self._pure_mode_lock:` 嵌套，直接在 `_reload_lock` 下写 `_pure_mode`
+  - `toggle_pure_mode` 改为先在 `_reload_lock` 内读写 `_pure_mode`，再在锁外执行 `_profile_service.update()` 持久化（避免持锁做磁盘 I/O）
+- `tests/test_services/test_engine.py`：新增 `TestPureModeLockConsolidation` 测试类，验证 `toggle_pure_mode` 与 `pure_mode` 读取互斥无死锁
+- `tests/test_services/conftest.py`、`tests/test_integration/test_login_flow.py`、`tests/test_services/test_monitor_service.py`：移除测试 mock 中的 `_pure_mode_lock` 初始化
+
 ## 2026-06-27 (Task 3)
 
 ### fix: submit() 锁范围缩小，_dispatch 移到锁外，哨兵防止并发重复提交

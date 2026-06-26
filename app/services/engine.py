@@ -103,7 +103,6 @@ class ScheduleEngine:
         self._manual_login_in_progress = False
         self._manual_login_lock: threading.Lock = threading.Lock()
         self._reload_lock: threading.Lock = threading.Lock()
-        self._pure_mode_lock: threading.Lock = threading.Lock()
         self._pure_mode: bool = False
         self._start_stop_lock: threading.Lock = threading.Lock()
         self._retry_time_lock: threading.Lock = threading.Lock()
@@ -578,7 +577,7 @@ class ScheduleEngine:
     @property
     def pure_mode(self) -> bool:
         """线程安全地读取纯净模式标志。"""
-        with self._pure_mode_lock:
+        with self._reload_lock:
             return self._pure_mode
 
     @property
@@ -601,8 +600,7 @@ class ScheduleEngine:
                 data = self._profile_service.load()
                 self._runtime_config = self._profile_service.build_runtime_config(data)
                 self._runtime_snapshot = self._runtime_config
-                with self._pure_mode_lock:
-                    self._pure_mode = data.global_config.browser.pure_mode
+                self._pure_mode = data.global_config.browser.pure_mode
             return True
         except Exception:
             logger.exception("配置重载失败")
@@ -761,14 +759,20 @@ class ScheduleEngine:
         return self._status_manager.list_logs(limit=limit)
 
     def toggle_pure_mode(self) -> bool:
-        """切换纯净模式，返回新值"""
-        with self._pure_mode_lock:
+        """切换纯净模式，返回新值。"""
+        with self._reload_lock:
             new_value = not self._pure_mode
-            self._profile_service.update(
-                lambda d: setattr(d, "global_config", d.global_config.model_copy(update={"browser": d.global_config.browser.model_copy(update={"pure_mode": new_value})}))
-            )
             self._pure_mode = new_value
-            return new_value
+        # 持久化在锁外执行，避免持锁做磁盘 I/O
+        self._profile_service.update(
+            lambda d: setattr(
+                d, "global_config",
+                d.global_config.model_copy(update={
+                    "browser": d.global_config.browser.model_copy(update={"pure_mode": new_value})
+                }),
+            )
+        )
+        return new_value
 
     def get_runtime_config(self) -> RuntimeConfig:
         """线程安全地获取运行时配置（frozen 对象，直接返回引用）。"""

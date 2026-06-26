@@ -56,7 +56,6 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._manual_login_in_progress = False
     svc._manual_login_lock = threading.Lock()
     svc._reload_lock = threading.Lock()
-    svc._pure_mode_lock = threading.Lock()
     svc._start_stop_lock = threading.Lock()
     svc._pure_mode = False
     svc._dashboard_sink = None

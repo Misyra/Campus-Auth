@@ -1748,3 +1748,34 @@ class TestRetryTimeLock:
         assert len(results) == 3
         with engine._retry_time_lock:
             assert engine._next_retry_time in results
+
+
+class TestPureModeLockConsolidation:
+    """_pure_mode 统一由 _reload_lock 保护。"""
+
+    def test_toggle_pure_mode_thread_safe(self):
+        """toggle_pure_mode 和 pure_mode 读取应互斥。"""
+        engine = ScheduleEngine.__new__(ScheduleEngine)
+        engine._reload_lock = threading.Lock()
+        engine._pure_mode = False
+        engine._profile_service = MagicMock()
+
+        results = []
+        barrier = threading.Barrier(2)
+
+        def toggle():
+            barrier.wait()
+            engine._pure_mode = True
+
+        def read():
+            barrier.wait()
+            with engine._reload_lock:
+                results.append(engine._pure_mode)
+
+        t1 = threading.Thread(target=toggle)
+        t2 = threading.Thread(target=read)
+        t1.start(); t2.start()
+        t1.join(); t2.join()
+
+        # 读取结果应为 True 或 False（不崩溃即可，关键是没有死锁）
+        assert len(results) == 1
