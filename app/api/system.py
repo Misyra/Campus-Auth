@@ -96,8 +96,8 @@ async def check_update() -> UpdateCheckResponse:
                 body=data.get("body", ""),
                 published_at=data.get("published_at", ""),
             )
-            # 更新缓存（存储为 dict 以便后续拼接 current）
-            _update_cache = result.model_dump()
+            # 更新缓存（排除 current，避免重建时重复传参）
+            _update_cache = result.model_dump(exclude={"current"})
             _update_cache_time = time.monotonic()
             return result
         except Exception as e:
