@@ -46,6 +46,10 @@ class LoginBridge:
         config_snapshot: RuntimeConfig | None = None,
     ) -> bool:
         """提交登录到 LoginOrchestrator。"""
+        # 清理已完成的 Future 引用，防止极端情况下残留
+        with self._futures_lock:
+            self._registered_futures = {f for f in self._registered_futures if not f.done()}
+
         orchestrator = self._get_orchestrator()
         if orchestrator is None:
             return False
