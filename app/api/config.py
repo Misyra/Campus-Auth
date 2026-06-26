@@ -10,6 +10,7 @@ from app.schemas import (
     AppSettings,
     BrowserSettings,
     ConfigSaveRequest,
+    LogLevelResponse,
     LoggingSettings,
     MonitorSettings,
     PauseSettings,
@@ -26,16 +27,16 @@ api_logger = get_logger("api", source="backend")
 config_logger = get_logger("config", source="backend")
 
 
-@router.get("/api/config/log-levels")
-def get_log_levels():
+@router.get("/api/config/log-levels", response_model=LogLevelResponse)
+def get_log_levels() -> LogLevelResponse:
     """获取日志级别配置"""
     from app.utils.logging import LogConfigCenter
 
     config = LogConfigCenter.get_instance()
-    return {
-        "global_level": config.get_config().get("level", "INFO"),
-        "source_levels": config.get_all_source_levels(),
-    }
+    return LogLevelResponse(
+        global_level=config.get_config().get("level", "INFO"),
+        source_levels=config.get_all_source_levels(),
+    )
 
 
 @router.put("/api/config/source-level", response_model=ApiResponse)

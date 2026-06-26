@@ -126,6 +126,64 @@ _BROWSER_ARGS_DEFAULT = (
 # 逐步迁移后删除此别名
 
 
+# ── GET 端点响应模型 ──
+
+
+class ProfileSummary(BaseModel):
+    """方案列表中的单个方案摘要。"""
+    name: str = ""
+    match_gateway_ip: str = ""
+    match_ssid: str = ""
+    carrier: str = "无"
+    carrier_custom: str = ""
+    auth_url: str = ""
+    active_task: str = ""
+
+
+class ProfileListResponse(BaseModel):
+    """GET /api/profiles 响应。"""
+    profiles: dict[str, ProfileSummary] = Field(default_factory=dict)
+    active_profile: str = "default"
+    auto_switch: bool = False
+
+
+class ProfileDetailResponse(BaseModel):
+    """GET /api/profiles/{id} 响应。"""
+    profile_id: str
+    settings: Profile
+
+
+class BrowserInfo(BaseModel):
+    """浏览器信息。"""
+    channel: str
+    name: str
+    icon: str = ""
+    installed: bool = False
+    needs_download: bool = False
+    description: str = ""
+
+
+class BrowserListResponse(BaseModel):
+    """GET /api/browsers 响应。"""
+    browsers: list[BrowserInfo] = Field(default_factory=list)
+    current: str = "playwright"
+
+
+class TaskSummary(BaseModel):
+    """任务列表中的单个任务。"""
+    id: str = ""
+    name: str = ""
+    description: str = ""
+    type: str = ""
+    binary_path: str = ""
+
+
+class LogLevelResponse(BaseModel):
+    """GET /api/config/log-levels 响应。"""
+    global_level: str = "INFO"
+    source_levels: dict[str, str] = Field(default_factory=dict)
+
+
 class MonitorStatusResponse(BaseModel):
     monitoring: bool
     network_check_count: int

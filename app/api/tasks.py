@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.deps import get_task_manager
-from app.schemas import ApiResponse
+from app.schemas import ApiResponse, TaskSummary
 from app.tasks import TaskManager
 from app.utils.logging import get_logger
 
@@ -13,7 +13,7 @@ router = APIRouter()
 api_logger = get_logger("api", source="backend")
 
 
-@router.get("/api/tasks")
+@router.get("/api/tasks", response_model=list[TaskSummary])
 def list_tasks(
     task_mgr: TaskManager = Depends(get_task_manager),
 ) -> list[dict[str, str]]:
