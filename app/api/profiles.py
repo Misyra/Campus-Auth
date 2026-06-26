@@ -8,6 +8,7 @@ from app.deps import get_monitor_service, get_profile_service
 from app.schemas import (
     ApiResponse,
     AutoSwitchRequest,
+    NetworkDetectResponse,
     Profile,
     ProfileDetailResponse,
     ProfileListResponse,
@@ -117,10 +118,10 @@ def set_active_profile(
     return ApiResponse(success=ok, message=message)
 
 
-@router.post("/api/profiles/detect")
+@router.post("/api/profiles/detect", response_model=NetworkDetectResponse)
 def detect_network_profile(
     profile_svc: ProfileService = Depends(get_profile_service),
-) -> dict:
+) -> NetworkDetectResponse:
     from app.network.detect import detect_gateway_ip, detect_wifi_ssid
 
     gateway = _safe_detect(detect_gateway_ip, "网关")
@@ -138,12 +139,12 @@ def detect_network_profile(
         ssid,
         matched_id,
     )
-    return {
-        "gateway_ip": gateway,
-        "ssid": ssid,
-        "matched_profile_id": matched_id,
-        "matched_profile_name": matched_name,
-    }
+    return NetworkDetectResponse(
+        gateway_ip=gateway,
+        ssid=ssid,
+        matched_profile_id=matched_id,
+        matched_profile_name=matched_name,
+    )
 
 
 @router.post("/api/profiles/auto-switch", response_model=ApiResponse)

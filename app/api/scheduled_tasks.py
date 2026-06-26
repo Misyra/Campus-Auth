@@ -17,7 +17,7 @@ router = APIRouter()
 api_logger = get_logger("api", source="backend")
 
 
-@router.get("/api/scheduled-tasks")
+@router.get("/api/scheduled-tasks", response_model=list[dict[str, Any]])
 def list_scheduled_tasks(
     engine: ScheduleEngine = Depends(get_monitor_service),
 ) -> list[dict[str, Any]]:
@@ -133,7 +133,7 @@ def toggle_scheduled_task(
     return ApiResponse(success=ok, message=f"定时任务已{status}")
 
 
-@router.get("/api/scheduled-tasks/{task_id}/history")
+@router.get("/api/scheduled-tasks/{task_id}/history", response_model=list[dict[str, Any]])
 def get_scheduled_task_history(
     task_id: str,
     engine: ScheduleEngine = Depends(get_monitor_service),

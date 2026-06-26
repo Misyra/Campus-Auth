@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from app.constants import PROJECT_ROOT
-from app.schemas import ApiResponse
+from app.schemas import ApiResponse, OcrStatusResponse
 from app.utils.files import dir_size_mb
 from app.utils.logging import get_logger
 from app.utils.platform import CREATE_NO_WINDOW_FLAG
@@ -48,8 +48,8 @@ def _estimate_pkg_size_mb(pkg_name: str) -> float:
     return dir_size_mb(pkg_path)
 
 
-@router.get("/api/ocr/status")
-def ocr_status() -> dict:
+@router.get("/api/ocr/status", response_model=OcrStatusResponse)
+def ocr_status() -> OcrStatusResponse:
     """获取 OCR 依赖安装状态"""
     installed = _check_ddddocr_installed()
     size_mb = 0.0
@@ -57,10 +57,10 @@ def ocr_status() -> dict:
         size_mb = round(
             _estimate_pkg_size_mb("ddddocr") + _estimate_pkg_size_mb("onnxruntime"), 1
         )
-    return {
-        "installed": installed,
-        "size_mb": size_mb,
-    }
+    return OcrStatusResponse(
+        installed=installed,
+        size_mb=size_mb,
+    )
 
 
 @router.post("/api/ocr/install", response_model=ApiResponse)
