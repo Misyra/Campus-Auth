@@ -1,5 +1,23 @@
 # 修改日志
 
+## 2026-06-27 (Task 1)
+
+### feat(schemas): 新增 ApiResponse 信封和类型化请求/响应模型
+
+- `app/schemas.py`：在 `AppSettings` 之后、`RuntimeConfig` 之前新增 10 个 API 模型
+  - `ApiResponse`：所有写操作的标准响应信封（success/message/data）
+  - `ConfigSaveRequest`：PUT /api/config 请求体，嵌套结构与 RuntimeConfig 对齐
+  - `SourceLevelRequest`：PUT /api/config/source-level 请求体
+  - `AutoSwitchRequest`：POST /api/profiles/auto-switch 请求体
+  - `UninstallRequest`：POST /api/uninstall 请求体
+  - `FetchUrlRequest`：POST /api/background/fetch-url 请求体
+  - `InitStatusResponse`：GET /api/init-status 响应
+  - `HealthResponse`：GET /api/health 响应
+  - `ShellListResponse`：GET /api/shells 响应
+  - `PureModeResponse`：GET/POST /api/pure-mode 响应
+- 注意：新模型放在 `AppSettings` 之后而非 `ActionResponse` 之后，因为 `ConfigSaveRequest` 的 `Field(default_factory=BrowserSettings)` 需要运行时引用已定义的设置类
+- 验收：10 个新模型全部可正常导入
+
 ## 2026-06-26 (Task 8)
 
 ### refactor: 移除 AuthProfile 别名、monitor_service 属性，修复 uninstall 冗余
