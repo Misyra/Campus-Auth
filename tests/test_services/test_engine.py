@@ -1662,14 +1662,16 @@ class TestRetryTimeLock:
         engine._next_retry_time = 0
         engine._retry_time_lock = threading.Lock()
         engine._wakeup_event = threading.Event()
+        engine._login_bridge = MagicMock()
 
-        # 模拟桥接回调
+        # 注册与 __init__ 一致的桥接回调
         def _bridge_retry_scheduled(delay: float) -> None:
             with engine._retry_time_lock:
                 engine._next_retry_time = time.time() + delay
             engine._wakeup_event.set()
+        engine._login_bridge._on_retry_scheduled = _bridge_retry_scheduled
 
-        _bridge_retry_scheduled(30.0)
+        engine._login_bridge._on_retry_scheduled(30.0)
         with engine._retry_time_lock:
             assert engine._next_retry_time > time.time()
 
@@ -1693,12 +1695,15 @@ class TestRetryTimeLock:
         engine = ScheduleEngine.__new__(ScheduleEngine)
         engine._next_retry_time = time.time() + 30
         engine._retry_time_lock = threading.Lock()
+        engine._login_bridge = MagicMock()
 
+        # 注册与 __init__ 一致的桥接回调
         def _bridge_login_success() -> None:
             with engine._retry_time_lock:
                 engine._next_retry_time = 0
+        engine._login_bridge._on_login_success = _bridge_login_success
 
-        _bridge_login_success()
+        engine._login_bridge._on_login_success()
         assert engine._next_retry_time == 0
 
     def test_bridge_retry_exhausted_clears_time(self):
@@ -1706,12 +1711,15 @@ class TestRetryTimeLock:
         engine = ScheduleEngine.__new__(ScheduleEngine)
         engine._next_retry_time = time.time() + 30
         engine._retry_time_lock = threading.Lock()
+        engine._login_bridge = MagicMock()
 
+        # 注册与 __init__ 一致的桥接回调
         def _bridge_retry_exhausted() -> None:
             with engine._retry_time_lock:
                 engine._next_retry_time = 0
+        engine._login_bridge._on_retry_exhausted = _bridge_retry_exhausted
 
-        _bridge_retry_exhausted()
+        engine._login_bridge._on_retry_exhausted()
         assert engine._next_retry_time == 0
 
     def test_concurrent_write_no_data_loss(self):

@@ -103,13 +103,17 @@ class TestManualLoginCancelRaceFix:
             wakeup_event=engine._wakeup_event,
             get_monitor_check_interval=lambda: engine._monitor_check_interval,
         )
+        engine._retry_time_lock = threading.Lock()
         def _bridge_retry_scheduled(delay: float) -> None:
-            engine._next_retry_time = time.time() + delay
+            with engine._retry_time_lock:
+                engine._next_retry_time = time.time() + delay
             engine._wakeup_event.set()
         def _bridge_login_success() -> None:
-            engine._next_retry_time = 0
+            with engine._retry_time_lock:
+                engine._next_retry_time = 0
         def _bridge_retry_exhausted() -> None:
-            engine._next_retry_time = 0
+            with engine._retry_time_lock:
+                engine._next_retry_time = 0
         engine._login_bridge._on_retry_scheduled = _bridge_retry_scheduled
         engine._login_bridge._on_login_success = _bridge_login_success
         engine._login_bridge._on_retry_exhausted = _bridge_retry_exhausted

@@ -81,14 +81,18 @@ def _make_raw_engine() -> ScheduleEngine:
         wakeup_event=svc._wakeup_event,
         get_monitor_check_interval=lambda: svc._monitor_check_interval,
     )
+    svc._retry_time_lock = threading.Lock()
     import time as _time
     def _bridge_retry_scheduled(delay: float) -> None:
-        svc._next_retry_time = _time.time() + delay
+        with svc._retry_time_lock:
+            svc._next_retry_time = _time.time() + delay
         svc._wakeup_event.set()
     def _bridge_login_success() -> None:
-        svc._next_retry_time = 0
+        with svc._retry_time_lock:
+            svc._next_retry_time = 0
     def _bridge_retry_exhausted() -> None:
-        svc._next_retry_time = 0
+        with svc._retry_time_lock:
+            svc._next_retry_time = 0
     svc._login_bridge._on_retry_scheduled = _bridge_retry_scheduled
     svc._login_bridge._on_login_success = _bridge_login_success
     svc._login_bridge._on_retry_exhausted = _bridge_retry_exhausted
