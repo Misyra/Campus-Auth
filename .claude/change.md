@@ -1,5 +1,43 @@
 # 修改日志
 
+## 2026-06-27 (Task 7-frontend)
+
+### refactor(frontend): 适配 config/profiles 方法的 ApiResponse 信封格式
+
+- `frontend/js/methods/config.js`：`setSourceLevel` 解构 `{ data }`，新增 `data.success` 检查，成功时从 `data.message` 取提示文案，失败时 warn 日志 + toast 提示
+- `frontend/js/methods/profiles.js`：`toggleAutoSwitch` 中 `data.active_profile` 改为 `data.data?.active_profile`（ApiResponse 信封包裹后附加数据在 data.data 中）
+
+## 2026-06-27 (Task 14)
+
+### feat(api): 补全 debug/tools/autostart/tasks 遗漏端点的响应模型
+
+- `app/schemas.py`：新增 4 个模型
+  - `DebugStepResult`：调试步骤执行结果（step_index/success/message/screenshot）
+  - `DebugSessionResponse`：调试会话状态响应，start/next/run-all/stop 共用（running/task_id/current_step/total_steps/steps/results/screenshot_url/message）
+  - `AutostartEnableRequest`：POST /api/autostart/enable|mode 请求体（lightweight）
+  - `TaskOrderRequest`：POST /api/tasks/order 请求体（order: list[str]）
+- `app/api/debug.py`：4 个端点（start/next/run-all/stop）改用 `DebugSessionResponse` 作为 response_model，返回类型从 `dict[str, object]` 改为 `DebugSessionResponse`
+- `app/api/tools.py`：`delete_background` 端点改用 `ApiResponse` 作为 response_model，返回类型从 `dict` 改为 `ApiResponse`
+- `app/api/autostart.py`：删除私有 `_EnableBody` 类，改用 `schemas.AutostartEnableRequest`；`list_shells` 改用 `ShellListResponse` 作为 response_model
+- `app/api/tasks.py`：`save_task_order` 参数类型从 `dict` 改为 `TaskOrderRequest`
+
+## 2026-06-27 (Task 11)
+
+### fix: submit() 用 Condition 替换哨兵，修复并发 dispatch 和 preemption 竞态
+
+- `app/services/login_orchestrator.py`：
+  - `_slot_lock` 从 `threading.RLock()` 改为 `threading.Condition(threading.Lock())`
+  - `submit()` 去重逻辑新增 `while self._slot is _DISPATCHING: self._slot_lock.wait()` 循环，后到线程等待 dispatch 完成再走正常去重/抢占逻辑，修复并发 auto submit 重复 dispatch、manual 无法抢占 dispatch 中的 auto 的竞态
+  - `_dispatch` 调用包裹 `try/except`：dispatch 异常时清除哨兵（`self._slot = None`）并 `notify_all()` 唤醒等待者，修复 `_dispatch` 抛异常导致 slot 永久卡在 `_DISPATCHING` 的 Bug
+  - `_dispatch` 成功后 `notify_all()` 唤醒等待者
+  - `_on_done` 回调新增 `notify_all()` 调用，唤醒等待 slot 清除的线程
+- `app/services/engine.py`：
+  - `toggle_pure_mode` 的 `self._profile_service.update(...)` 移入 `with self._reload_lock:` 块内，修复磁盘写入在锁外执行导致 `_reload_config_internal` 可能读到过期数据的竞态
+- `tests/test_services/test_login_orchestrator.py`：
+  - `test_dispatch_called_outside_lock`：从 `CountingRLock` 包装改为 `Condition.acquire(timeout=0.1)` 探测，验证 `_dispatch` 执行时锁未被持有
+  - `test_concurrent_submit_respects_sentinel`：改用 `threading.Barrier` + 慢速 `_dispatch` 模拟并发，验证第二个 auto submit 等待完成后复用 handle（去重生效）
+  - 新增 `test_dispatch_exception_clears_sentinel`：验证 `_dispatch` 抛异常后 `orch._slot` 为 None 而非卡在 `_DISPATCHING`
+
 ## 2026-06-27 (Task 10)
 
 ### feat(api): 为所有 GET 端点添加 Pydantic response_model
