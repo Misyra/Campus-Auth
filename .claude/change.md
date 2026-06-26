@@ -2,6 +2,13 @@
 
 ## 2026-06-27 (Task 1)
 
+### fix: 测试文件补全 _retry_time_lock，桥接回调测试改用实际注册回调
+
+- `tests/test_services/test_engine_fix.py`：`_make_engine()` 补充 `_retry_time_lock` 初始化，桥接回调加锁保护 `_next_retry_time` 写入
+- `tests/test_integration/test_login_flow.py`：`_make_raw_engine()` 补充 `_retry_time_lock` 初始化，桥接回调加锁保护 `_next_retry_time` 写入
+- `tests/test_services/test_monitor_service.py`：`test_do_async_login_delegates_to_task_executor` 补充 `_retry_time_lock` 初始化，桥接回调从 lambda 改为具名函数 + 加锁保护
+- `tests/test_services/test_engine.py`：`TestRetryTimeLock` 三个桥接回调测试（bridge_retry_scheduled_sets_time / bridge_login_success_clears_time / bridge_retry_exhausted_clears_time）从内联函数直接调用改为通过 `engine._login_bridge` 注册后调用，与 `__init__` 一致
+
 ### fix: _next_retry_time 跨线程读写加锁保护，消除 TOCTOU 竞态
 
 - `app/services/engine.py`：

@@ -766,9 +766,19 @@ class TestNetworkStateSetInConsumer:
             wakeup_event=svc._wakeup_event,
             get_monitor_check_interval=lambda: svc._monitor_check_interval,
         )
-        svc._login_bridge._on_retry_scheduled = lambda delay: setattr(svc, '_next_retry_time', time.time() + delay)
-        svc._login_bridge._on_login_success = lambda: setattr(svc, '_next_retry_time', 0)
-        svc._login_bridge._on_retry_exhausted = lambda: setattr(svc, '_next_retry_time', 0)
+        svc._retry_time_lock = threading.Lock()
+        def _bridge_retry_scheduled(delay: float) -> None:
+            with svc._retry_time_lock:
+                svc._next_retry_time = time.time() + delay
+        def _bridge_login_success() -> None:
+            with svc._retry_time_lock:
+                svc._next_retry_time = 0
+        def _bridge_retry_exhausted() -> None:
+            with svc._retry_time_lock:
+                svc._next_retry_time = 0
+        svc._login_bridge._on_retry_scheduled = _bridge_retry_scheduled
+        svc._login_bridge._on_login_success = _bridge_login_success
+        svc._login_bridge._on_retry_exhausted = _bridge_retry_exhausted
         svc._next_retry_time = 0
 
         future = Future()
