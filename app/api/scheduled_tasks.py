@@ -10,7 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from app.deps import get_monitor_service
 from app.services.engine import ScheduleEngine
-from app.schemas import ActionResponse, ScheduledTaskConfig
+from app.schemas import ApiResponse, ScheduledTaskConfig
 from app.utils.logging import get_logger
 
 router = APIRouter()
@@ -25,11 +25,11 @@ def list_scheduled_tasks(
     return engine.tasks.list_tasks()
 
 
-@router.post("/api/scheduled-tasks", response_model=ActionResponse)
+@router.post("/api/scheduled-tasks", response_model=ApiResponse)
 def create_scheduled_task(
     payload: ScheduledTaskConfig,
     engine: ScheduleEngine = Depends(get_monitor_service),
-) -> ActionResponse:
+) -> ApiResponse:
     """创建定时任务。"""
 
     task_id = f"task_{uuid.uuid4().hex[:12]}"
@@ -38,15 +38,15 @@ def create_scheduled_task(
     api_logger.info("创建定时任务 {} -> success={}, message={}", task_id, ok, message)
     if ok:
         engine.sync_scheduler_state()
-    return ActionResponse(success=ok, message=message)
+    return ApiResponse(success=ok, message=message)
 
 
-@router.put("/api/scheduled-tasks/{task_id}", response_model=ActionResponse)
+@router.put("/api/scheduled-tasks/{task_id}", response_model=ApiResponse)
 def update_scheduled_task(
     task_id: str,
     payload: dict,
     engine: ScheduleEngine = Depends(get_monitor_service),
-) -> ActionResponse:
+) -> ApiResponse:
     """更新定时任务。"""
 
     existing = engine.tasks.get_task(task_id)
@@ -69,28 +69,28 @@ def update_scheduled_task(
     ok, message = engine.tasks.save_task(task_id, config)
     if ok:
         engine.sync_scheduler_state()
-    return ActionResponse(success=ok, message=message)
+    return ApiResponse(success=ok, message=message)
 
 
-@router.delete("/api/scheduled-tasks/{task_id}", response_model=ActionResponse)
+@router.delete("/api/scheduled-tasks/{task_id}", response_model=ApiResponse)
 def delete_scheduled_task(
     task_id: str,
     engine: ScheduleEngine = Depends(get_monitor_service),
-) -> ActionResponse:
+) -> ApiResponse:
     """删除定时任务。"""
     ok, message = engine.tasks.delete_task(task_id)
     api_logger.info("删除定时任务 {} -> success={}, message={}", task_id, ok, message)
     if ok:
         engine.sync_scheduler_state()
-    return ActionResponse(success=ok, message=message)
+    return ApiResponse(success=ok, message=message)
 
 
-@router.post("/api/scheduled-tasks/{task_id}/run", response_model=ActionResponse)
+@router.post("/api/scheduled-tasks/{task_id}/run", response_model=ApiResponse)
 def run_scheduled_task(
     task_id: str,
     bg_tasks: BackgroundTasks,
     engine: ScheduleEngine = Depends(get_monitor_service),
-) -> ActionResponse:
+) -> ApiResponse:
     """手动执行定时任务（异步后台执行，避免 HTTP 连接长时间阻塞）。"""
     if not engine.tasks.get_task(task_id):
         raise HTTPException(status_code=404, detail="定时任务不存在")
@@ -109,16 +109,16 @@ def run_scheduled_task(
 
     bg_tasks.add_task(_execute)
     api_logger.info("定时任务 {} 已提交后台执行", task_id)
-    return ActionResponse(
+    return ApiResponse(
         success=True, message="任务已提交后台执行，请查看执行历史获取结果"
     )
 
 
-@router.post("/api/scheduled-tasks/{task_id}/toggle", response_model=ActionResponse)
+@router.post("/api/scheduled-tasks/{task_id}/toggle", response_model=ApiResponse)
 def toggle_scheduled_task(
     task_id: str,
     engine: ScheduleEngine = Depends(get_monitor_service),
-) -> ActionResponse:
+) -> ApiResponse:
     """启用/禁用定时任务。"""
     task = engine.tasks.get_task(task_id)
     if not task:
@@ -130,7 +130,7 @@ def toggle_scheduled_task(
     api_logger.info("切换定时任务 {} -> {}", task_id, status)
     if ok:
         engine.sync_scheduler_state()
-    return ActionResponse(success=ok, message=f"定时任务已{status}")
+    return ApiResponse(success=ok, message=f"定时任务已{status}")
 
 
 @router.get("/api/scheduled-tasks/{task_id}/history")

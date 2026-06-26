@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.deps import get_monitor_service, get_profile_service
-from app.schemas import ActionResponse, ApiResponse, AutoSwitchRequest, Profile
+from app.schemas import ApiResponse, AutoSwitchRequest, Profile
 from app.services.engine import ScheduleEngine
 from app.services.profile_service import ProfileService
 from app.utils.logging import get_logger
@@ -61,13 +61,13 @@ def get_profile(
     }
 
 
-@router.put("/api/profiles/{profile_id}", response_model=ActionResponse)
+@router.put("/api/profiles/{profile_id}", response_model=ApiResponse)
 def save_profile(
     profile_id: str,
     payload: Profile,
     profile_svc: ProfileService = Depends(get_profile_service),
     monitor_svc: ScheduleEngine = Depends(get_monitor_service),
-) -> ActionResponse:
+) -> ApiResponse:
     ok, message = profile_svc.save_profile(profile_id, payload)
     api_logger.info("保存方案 {} -> success={}, message={}", profile_id, ok, message)
     if ok:
@@ -78,15 +78,15 @@ def save_profile(
             except Exception:
                 api_logger.warning("保存方案后应用方案失败", exc_info=True)
                 message = f"{message}（注意：方案已保存但应用到引擎失败，请手动重载）"
-    return ActionResponse(success=ok, message=message)
+    return ApiResponse(success=ok, message=message)
 
 
-@router.delete("/api/profiles/{profile_id}", response_model=ActionResponse)
+@router.delete("/api/profiles/{profile_id}", response_model=ApiResponse)
 def delete_profile(
     profile_id: str,
     profile_svc: ProfileService = Depends(get_profile_service),
     monitor_svc: ScheduleEngine = Depends(get_monitor_service),
-) -> ActionResponse:
+) -> ApiResponse:
     ok, message = profile_svc.delete_profile(profile_id)
     api_logger.info("删除方案 {} -> success={}, message={}", profile_id, ok, message)
     # 删除成功后始终通知监控重载配置（安全做法，避免 TOCTOU 竞态）
@@ -97,20 +97,20 @@ def delete_profile(
         except Exception:
             api_logger.warning("删除方案后应用方案失败", exc_info=True)
             message = f"{message}（注意：方案已删除但引擎重载失败，请手动重载）"
-    return ActionResponse(success=ok, message=message)
+    return ApiResponse(success=ok, message=message)
 
 
-@router.post("/api/profiles/active/{profile_id}", response_model=ActionResponse)
+@router.post("/api/profiles/active/{profile_id}", response_model=ApiResponse)
 def set_active_profile(
     profile_id: str,
     monitor_svc: ScheduleEngine = Depends(get_monitor_service),
-) -> ActionResponse:
+) -> ApiResponse:
     # apply_profile 内部已包含 set_active_profile，无需重复调用
     ok, message = monitor_svc.apply_profile(profile_id)
     api_logger.info(
         "切换活动方案 {} -> success={}, message={}", profile_id, ok, message
     )
-    return ActionResponse(success=ok, message=message)
+    return ApiResponse(success=ok, message=message)
 
 
 @router.post("/api/profiles/detect")

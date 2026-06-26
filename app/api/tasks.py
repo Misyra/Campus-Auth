@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.deps import get_task_manager
-from app.schemas import ActionResponse
+from app.schemas import ApiResponse
 from app.tasks import TaskManager
 from app.utils.logging import get_logger
 
@@ -38,42 +38,42 @@ def get_task(
     raise HTTPException(status_code=404, detail="任务不存在")
 
 
-@router.put("/api/tasks/{task_id}", response_model=ActionResponse)
+@router.put("/api/tasks/{task_id}", response_model=ApiResponse)
 def save_task(
     task_id: str,
     payload: dict,
     task_mgr: TaskManager = Depends(get_task_manager),
-) -> ActionResponse:
+) -> ApiResponse:
     ok, message = task_mgr.save_task_with_validation(task_id, payload)
     api_logger.info("保存任务 {} -> success={}, message={}", task_id, ok, message)
-    return ActionResponse(success=ok, message=message)
+    return ApiResponse(success=ok, message=message)
 
 
-@router.delete("/api/tasks/{task_id}", response_model=ActionResponse)
+@router.delete("/api/tasks/{task_id}", response_model=ApiResponse)
 def delete_task(
     task_id: str,
     task_mgr: TaskManager = Depends(get_task_manager),
-) -> ActionResponse:
+) -> ApiResponse:
     ok, message = task_mgr.delete_task_with_validation(task_id)
     api_logger.info("删除任务 {} -> success={}, message={}", task_id, ok, message)
-    return ActionResponse(success=ok, message=message)
+    return ApiResponse(success=ok, message=message)
 
 
-@router.post("/api/tasks/active/{task_id}", response_model=ActionResponse)
+@router.post("/api/tasks/active/{task_id}", response_model=ApiResponse)
 def set_active_task(
     task_id: str,
     task_mgr: TaskManager = Depends(get_task_manager),
-) -> ActionResponse:
+) -> ApiResponse:
     ok, message = task_mgr.set_active_task_with_validation(task_id)
     api_logger.info("设置活动任务 {} -> success={}, message={}", task_id, ok, message)
-    return ActionResponse(success=ok, message=message)
+    return ApiResponse(success=ok, message=message)
 
 
-@router.post("/api/tasks/order", response_model=ActionResponse)
+@router.post("/api/tasks/order", response_model=ApiResponse)
 def save_task_order(
     payload: dict,
     task_mgr: TaskManager = Depends(get_task_manager),
-) -> ActionResponse:
+) -> ApiResponse:
     ok, message = task_mgr.save_order_with_validation(payload)
     api_logger.info("保存任务排序 -> success={}, message={}", ok, message)
-    return ActionResponse(success=ok, message=message)
+    return ApiResponse(success=ok, message=message)

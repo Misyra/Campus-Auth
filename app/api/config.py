@@ -6,7 +6,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.deps import get_monitor_service, get_profile_service
 from app.schemas import (
-    ActionResponse,
     ApiResponse,
     AppSettings,
     BrowserSettings,
@@ -229,12 +228,12 @@ def _log_config_changes(old_dict: dict, new_payload: ConfigSaveRequest) -> None:
         config_logger.info("配置变更: {}", "; ".join(changes))
 
 
-@router.put("/api/config", response_model=ActionResponse)
+@router.put("/api/config", response_model=ApiResponse)
 def save_config(
     payload: ConfigSaveRequest,
     svc: ScheduleEngine = Depends(get_monitor_service),
     profile_svc: ProfileService = Depends(get_profile_service),
-) -> ActionResponse:
+) -> ApiResponse:
     try:
         old_data = profile_svc.load()
         old_cfg = profile_svc.build_runtime_config(old_data)
@@ -247,7 +246,7 @@ def save_config(
         _log_config_changes(old_dict, payload)
 
         api_logger.info("配置已保存 -> success=True")
-        return ActionResponse(success=True, message="配置保存成功")
+        return ApiResponse(success=True, message="配置保存成功")
     except ValueError as exc:
         api_logger.warning("配置更新被拒绝: {}", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -1,5 +1,25 @@
 # 修改日志
 
+## 2026-06-27 (Task 9)
+
+### refactor: 合并 ActionResponse → ApiResponse，消除双模型混乱
+
+- `app/schemas.py`：
+  - 删除 `ActionResponse` 类定义（原 125-127 行）
+  - 在 `ApiResponse` 类定义之后新增 `ActionResponse = ApiResponse` 向后兼容别名
+- 9 个 API 文件全局替换：
+  - `app/api/autostart.py`：import + 4 处构造 + 3 处 response_model + 3 处返回类型
+  - `app/api/config.py`：import + 1 处构造 + 1 处 response_model + 1 处返回类型
+  - `app/api/monitor.py`：import + 5 处构造 + 5 处 response_model + 5 处返回类型
+  - `app/api/ocr.py`：import + 10 处构造 + 2 处 response_model + 2 处返回类型
+  - `app/api/profiles.py`：import + 3 处构造 + 3 处 response_model + 3 处返回类型
+  - `app/api/scheduled_tasks.py`：import + 6 处构造 + 5 处 response_model + 5 处返回类型
+  - `app/api/scripts.py`：import + 3 处构造 + 3 处 response_model + 3 处返回类型
+  - `app/api/system.py`：import + 2 处构造 + 2 处 response_model + 2 处返回类型
+  - `app/api/tasks.py`：import + 4 处构造 + 4 处 response_model + 4 处返回类型
+- `tests/test_config/test_config_schemas.py`：import `ApiResponse` 替代 `ActionResponse`，`TestActionResponse` 重命名为 `TestApiResponse`
+- 验收：280 个测试通过（7 个 pre-existing 失败与本次改动无关），schemas.py 中 `ActionResponse` 仅作为别名存在
+
 ## 2026-06-27 (Task 4)
 
 ### refactor(scheduled-tasks): replace manual validation with Pydantic model
