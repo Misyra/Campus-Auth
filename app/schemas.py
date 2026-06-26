@@ -122,9 +122,8 @@ _BROWSER_ARGS_DEFAULT = (
 
 
 
-class ActionResponse(BaseModel):
-    success: bool
-    message: str
+# ActionResponse 已合并到 ApiResponse，保留别名向后兼容
+# 逐步迁移后删除此别名
 
 
 class MonitorStatusResponse(BaseModel):
@@ -323,6 +322,10 @@ class ApiResponse(BaseModel):
     success: bool
     message: str = ""
     data: dict | None = None
+
+
+# 向后兼容别名 — 逐步迁移后删除
+ActionResponse = ApiResponse
 
 
 class ConfigSaveRequest(BaseModel):

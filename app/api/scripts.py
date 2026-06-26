@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.deps import get_task_manager
-from app.schemas import ActionResponse
+from app.schemas import ApiResponse
 from app.tasks import TaskManager
 from app.utils.logging import get_logger
 from app.workers.script_runner import ScriptRunner, detect_available_binaries
@@ -44,36 +44,36 @@ def get_script(
     return task
 
 
-@router.put("/api/scripts/{task_id}", response_model=ActionResponse)
+@router.put("/api/scripts/{task_id}", response_model=ApiResponse)
 def save_script(
     task_id: str,
     payload: dict,
     task_mgr: TaskManager = Depends(get_task_manager),
-) -> ActionResponse:
+) -> ApiResponse:
     """保存自定义脚本任务。"""
     payload["type"] = "script"
     ok, message = task_mgr.save_task_with_validation(task_id, payload)
     api_logger.info("保存脚本 {} -> success={}, message={}", task_id, ok, message)
-    return ActionResponse(success=ok, message=message)
+    return ApiResponse(success=ok, message=message)
 
 
-@router.delete("/api/scripts/{task_id}", response_model=ActionResponse)
+@router.delete("/api/scripts/{task_id}", response_model=ApiResponse)
 def delete_script(
     task_id: str,
     task_mgr: TaskManager = Depends(get_task_manager),
-) -> ActionResponse:
+) -> ApiResponse:
     """删除脚本任务。"""
     ok, message = task_mgr.delete_task_with_validation(task_id)
     api_logger.info("删除脚本 {} -> success={}, message={}", task_id, ok, message)
-    return ActionResponse(success=ok, message=message)
+    return ApiResponse(success=ok, message=message)
 
 
-@router.post("/api/scripts/{task_id}/run", response_model=ActionResponse)
+@router.post("/api/scripts/{task_id}/run", response_model=ApiResponse)
 async def run_script(
     request: Request,
     task_id: str,
     task_mgr: TaskManager = Depends(get_task_manager),
-) -> ActionResponse:
+) -> ApiResponse:
     """手动执行脚本任务（测试用）。"""
     task = task_mgr.get_task_detail(task_id)
     if not task or task.get("type") != "script":
@@ -82,7 +82,7 @@ async def run_script(
     # 通过 TaskManager 安全路径查找脚本文件
     script_path = task_mgr.get_script_path_public(task_id)
     if not script_path or not script_path.exists():
-        return ActionResponse(success=False, message="脚本文件不存在")
+        return ApiResponse(success=False, message="脚本文件不存在")
 
     # 从配置读取脚本超时，默认 60 秒
     try:
@@ -98,4 +98,4 @@ async def run_script(
     success, message = await loop.run_in_executor(_script_executor, runner.run)
 
     api_logger.info("运行脚本 {} -> success={}, message={}", task_id, success, message)
-    return ActionResponse(success=success, message=message)
+    return ApiResponse(success=success, message=message)

@@ -12,7 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from app.constants import AUTH_DATA_DIR, PROJECT_ROOT
 from app.deps import get_monitor_service
-from app.schemas import ActionResponse, ApiResponse, HealthResponse, InitStatusResponse, UninstallRequest
+from app.schemas import ApiResponse, HealthResponse, InitStatusResponse, UninstallRequest
 from app.services.engine import ScheduleEngine
 from app.utils.logging import get_logger
 from app.version import compare_versions, get_project_version
@@ -133,17 +133,17 @@ def get_init_status(
     )
 
 
-@router.post("/api/agree", response_model=ActionResponse)
+@router.post("/api/agree", response_model=ApiResponse)
 def agree_to_terms(
     svc: ScheduleEngine = Depends(get_monitor_service),
-) -> ActionResponse:
+) -> ApiResponse:
     """用户同意使用协议，生成 .agree 标记文件。"""
     try:
         agree_file = svc.project_root / "config" / ".agree"
         agree_file.parent.mkdir(parents=True, exist_ok=True)
         agree_file.write_text("", encoding="utf-8")
         api_logger.info("用户已同意使用协议")
-        return ActionResponse(success=True, message="已同意协议")
+        return ApiResponse(success=True, message="已同意协议")
     except Exception as exc:
         api_logger.error("保存协议同意状态失败: {}", exc)
         raise HTTPException(status_code=500, detail=f"保存失败: {exc}") from exc
@@ -152,12 +152,12 @@ def agree_to_terms(
 # ── 关机 ──
 
 
-@router.post("/api/shutdown", response_model=ActionResponse)
+@router.post("/api/shutdown", response_model=ApiResponse)
 def shutdown_server(
     request: Request,
     bg_tasks: BackgroundTasks,
     svc: ScheduleEngine = Depends(get_monitor_service),
-) -> ActionResponse:
+) -> ApiResponse:
     """关闭服务器 — 通过 shutdown_event 触发 lifespan 正常清理"""
     api_logger.warning("收到关机请求")
 
@@ -178,7 +178,7 @@ def shutdown_server(
     # 通过 shutdown_event 触发 lifespan 正常关闭
     bg_tasks.add_task(_trigger_shutdown_event, request)
 
-    return ActionResponse(
+    return ApiResponse(
         success=True, message="服务器正在关闭，请稍候，页面将自动断开"
     )
 
