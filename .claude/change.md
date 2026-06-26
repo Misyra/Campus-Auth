@@ -1,5 +1,12 @@
 # 修改日志
 
+## 2026-06-27 (Task 7)
+
+### fix: submit_login 入口清理已完成的 Future 引用，防止残留
+
+- `app/services/engine_login_bridge.py`：`submit_login` 方法开头新增已完成 Future 清理逻辑（`{f for f in self._registered_futures if not f.done()}`），防止极端情况下（如 Future 被取消且 `_on_done` 未被调用）引用残留
+- `tests/test_services/test_engine_login_bridge.py`：新增 `TestRegisteredFuturesCleanup` 测试类（1 个测试），验证已完成的 Future 在下次 submit_login 时被清理
+
 ## 2026-06-27 (Task 6)
 
 ### perf: 引擎循环改为内循环批量排空命令，减少多次唤醒周期
