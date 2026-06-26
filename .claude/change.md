@@ -1,5 +1,17 @@
 # 修改日志
 
+## 2026-06-27 (Task 8 - 修复测试)
+
+### fix(tests): 适配 API 变更后的 11 个测试失败
+
+- `app/api/system.py`：`check_update` 缓存存储排除 `current` 字段（`model_dump(exclude={"current"})`），修复重建 `UpdateCheckResponse` 时 `current` 重复传参的 TypeError
+- `tests/test_api/test_api_monitor_routes.py`：`test_toggle_pure_mode` 断言适配 ApiResponse 信封（`resp.json()["data"]["enabled"]`）
+- `tests/test_api/test_api_profiles_routes.py`：`test_auto_switch_enable/disable` 从 query params 改为 JSON body（`AutoSwitchRequest`）
+- `tests/test_api/test_api_system_routes.py`：`test_uninstall_perform_invalid_keys` 断言从 400 改为 422（Pydantic 验证）
+- `tests/test_api/test_api_tools_routes.py`：`test_upload_png_success` 适配 ApiResponse 信封；`TestFetchUrlContentLength` 3 个测试改用 `FetchUrlRequest` 对象 + 属性访问
+- `tests/test_api/test_system_update_cache.py`：3 个测试从 dict 下标访问改为 `UpdateCheckResponse` 属性访问（`result.latest`、`result.current`）
+- 验收：181 个 API 测试全通过，2271 个总测试全通过
+
 ## 2026-06-27 (Task 12)
 
 ### feat(frontend): resetConfig 使用后端默认值 + extractApiError 增强

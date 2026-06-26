@@ -15,6 +15,7 @@ from app.api.tools import (
     MAX_FILE_SIZE,
     _cleanup_old_backgrounds,
 )
+from app.schemas import FetchUrlRequest
 
 
 @pytest.fixture
@@ -65,7 +66,9 @@ class TestUploadBackground:
             files={"file": ("bg.png", io.BytesIO(png_data), "image/png")},
         )
         assert resp.status_code == 200
-        data = resp.json()
+        body = resp.json()
+        assert body["success"] is True
+        data = body["data"]
         assert "filename" in data
         assert data["url"].startswith("/api/background/")
         assert data["filename"].endswith(".png")
@@ -322,7 +325,7 @@ class TestFetchUrlContentLength:
             from app.api.tools import fetch_background_url
 
             with pytest.raises(Exception) as exc_info:
-                await fetch_background_url({"url": "https://example.com/big.png"})
+                await fetch_background_url(FetchUrlRequest(url="https://example.com/big.png"))
             assert exc_info.value.status_code == 400
             assert "5MB" in exc_info.value.detail
 
@@ -348,9 +351,10 @@ class TestFetchUrlContentLength:
         ):
             from app.api.tools import fetch_background_url
 
-            result = await fetch_background_url({"url": "https://example.com/small.png"})
-            assert "filename" in result
-            assert result["url"].startswith("/api/background/")
+            result = await fetch_background_url(FetchUrlRequest(url="https://example.com/small.png"))
+            assert result.success is True
+            assert "filename" in result.data
+            assert result.data["url"].startswith("/api/background/")
 
     @pytest.mark.asyncio
     async def test_falls_back_to_body_size_when_no_content_length(self, tmp_path):
@@ -374,5 +378,6 @@ class TestFetchUrlContentLength:
         ):
             from app.api.tools import fetch_background_url
 
-            result = await fetch_background_url({"url": "https://example.com/no-header.png"})
-            assert "filename" in result
+            result = await fetch_background_url(FetchUrlRequest(url="https://example.com/no-header.png"))
+            assert result.success is True
+            assert "filename" in result.data
