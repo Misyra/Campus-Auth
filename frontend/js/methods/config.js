@@ -181,12 +181,28 @@ export const configMethods = {
       }
     }
   },
-  resetConfig() {
+  async resetConfig() {
     if (!confirm('确定要恢复默认设置吗？当前修改将丢失。')) return;
-    this.config = structuredClone(DEFAULT_CONFIG);
-    this._lastSavedConfig = null;
-    this.frontendLogger.info('config', '已恢复默认设置');
-    this.saveConfig();
+    try {
+      const { data } = await this.$api.get('/api/config/defaults');
+      // 保留 credentials（凭据不重置）
+      this.config = {
+        browser: { ...data.browser },
+        monitor: { ...data.monitor },
+        pause: { ...data.pause },
+        logging: { ...data.logging },
+        retry: { ...data.retry },
+        app_settings: { ...data.app_settings },
+        credentials: { ...this.config.credentials },
+        active_task: '',
+      };
+      this._lastSavedConfig = null;
+      this.frontendLogger.info('config', '已恢复默认设置');
+      this.saveConfig();
+    } catch (error) {
+      this.frontendLogger.error('config', '获取默认配置失败', error);
+      this.toastOnly(false, '获取默认配置失败');
+    }
   },
   onShellFileSelected(e) {
     const file = e.target.files?.[0];

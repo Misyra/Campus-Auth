@@ -1,5 +1,12 @@
 # 修改日志
 
+## 2026-06-27 (Task 12)
+
+### feat(frontend): resetConfig 使用后端默认值 + extractApiError 增强
+
+- `frontend/js/methods/config.js`：`resetConfig` 从硬编码 `structuredClone(DEFAULT_CONFIG)` 改为调用 `GET /api/config/defaults` 获取后端默认值，保留 `credentials`（凭据不重置），添加错误处理和 toast 提示
+- `frontend/js/methods/utils.js`：`extractApiError` 增强 FastAPI 422 验证错误支持，数组格式 `detail` 项为对象时提取 `loc` 最后一段作为字段名前缀（如 `[field_name] msg`），字符串项直接保留
+
 ## 2026-06-27 (Task 5)
 
 ### refactor(frontend): 前端配置数据模型改为嵌套 app_settings 结构
