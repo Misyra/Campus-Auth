@@ -2,6 +2,7 @@
 
 import threading
 import time
+from concurrent.futures import Future
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -10,6 +11,7 @@ from app.schemas import RuntimeConfig
 from app.services.login_orchestrator import (
     LoginHandle,
     LoginOrchestrator,
+    _DISPATCHING,
     resolve_worker_timeout,
     validate_login_config,
 )
@@ -337,3 +339,93 @@ class TestDispatchClearsCancelSources:
 
         # 源列表应被清空
         assert len(cancel_event._sources) == 0
+
+
+# ── submit 锁范围 ──
+
+
+class TestSubmitLockScope:
+    """submit() 应在锁外执行 _dispatch，锁内仅做去重判断。"""
+
+    def test_dispatch_called_outside_lock(self):
+        """_dispatch 应在 _slot_lock 释放后被调用。"""
+        mock_pool = MagicMock()
+        mock_future = Future()
+        mock_pool.submit.return_value = mock_future
+
+        orch = LoginOrchestrator(
+            worker_getter=MagicMock(),
+            pool=mock_pool,
+            get_runtime_config=lambda: VALID_CONFIG,
+        )
+
+        # 用计数器跟踪锁的 acquire/release 边界，在 _dispatch 被调用时
+        # 计数器应为偶数（锁已完全释放）
+        acquire_count = 0
+        release_count = 0
+        dispatch_called = []
+        original_dispatch = orch._dispatch
+
+        real_lock = orch._slot_lock
+
+        class CountingRLock:
+            """包装 RLock，跟踪 acquire/release 计数。"""
+            def acquire(self, *a, **kw):
+                nonlocal acquire_count
+                acquire_count += 1
+                return real_lock.acquire(*a, **kw)
+            def release(self, *a, **kw):
+                nonlocal release_count
+                release_count += 1
+                return real_lock.release(*a, **kw)
+            def __enter__(self):
+                self.acquire()
+                return self
+            def __exit__(self, *a):
+                self.release()
+
+        orch._slot_lock = CountingRLock()
+
+        def tracking_dispatch(*args, **kwargs):
+            dispatch_called.append(acquire_count - release_count)
+            return original_dispatch(*args, **kwargs)
+
+        orch._dispatch = tracking_dispatch
+
+        orch.submit(source="auto")
+
+        # _dispatch 被调用时，锁不应被持有（acquire == release 差为 0）
+        assert len(dispatch_called) == 1
+        assert dispatch_called[0] == 0
+
+    def test_concurrent_submit_respects_sentinel(self):
+        """并发 submit 时，哨兵应防止重复提交。"""
+        mock_pool = MagicMock()
+
+        future1 = Future()
+        future2 = Future()
+
+        call_count = [0]
+        def mock_submit(fn, *args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return future1
+            return future2
+
+        mock_pool.submit = mock_submit
+
+        orch = LoginOrchestrator(
+            worker_getter=MagicMock(),
+            pool=mock_pool,
+            get_runtime_config=lambda: VALID_CONFIG,
+        )
+
+        # 第一次提交
+        handle1 = orch.submit(source="auto")
+        assert handle1.future is future1
+
+        # 第二次提交（auto→auto 去重）应复用旧 handle
+        handle2 = orch.submit(source="auto")
+        assert handle2 is handle1
+        # pool.submit 只应被调用一次
+        assert call_count[0] == 1

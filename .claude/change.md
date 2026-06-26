@@ -1,5 +1,18 @@
 # 修改日志
 
+## 2026-06-27 (Task 3)
+
+### fix: submit() 锁范围缩小，_dispatch 移到锁外，哨兵防止并发重复提交
+
+- `app/services/login_orchestrator.py`：
+  - 新增模块级 `_DISPATCHING` 哨兵（`LoginHandle(future=None, source="auto", cancel_event=CompositeCancelEvent())`），用于 `submit()` 锁外 dispatch 期间占位
+  - `submit()` 去重逻辑新增 `existing is not _DISPATCHING` 前置检查，防止哨兵被误判为正常 handle（哨兵 `done()` 返回 True，但 `is not` 在 `not existing.done()` 之前求值）
+  - `submit()` 将 `_dispatch` 调用移到 `_slot_lock` 外：锁内仅做去重判断和哨兵占位，锁外执行 `_dispatch`，再用独立的锁块写回 `self._slot = handle`
+- `tests/test_services/test_login_orchestrator.py`：
+  - 新增 `TestSubmitLockScope` 测试类（2 个测试）
+  - `test_dispatch_called_outside_lock`：用 `CountingRLock` 包装 `_slot_lock`，验证 `_dispatch` 被调用时 acquire/release 差为 0（锁未持有）
+  - `test_concurrent_submit_respects_sentinel`：验证连续两次 auto submit 只触发一次 `pool.submit`（去重生效）
+
 ## 2026-06-27 (Task 2)
 
 ### fix: _dispatch _on_done 回调清理 CompositeCancelEvent 源列表，防止内存泄漏

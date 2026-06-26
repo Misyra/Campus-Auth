@@ -116,6 +116,12 @@ class LoginHandle:
         self.cancel_event.set()
 
 
+# ── 哨兵 ──
+
+# submit() 锁外 dispatch 时的占位哨兵，防止并发重复提交
+_DISPATCHING = LoginHandle(future=None, source="auto", cancel_event=CompositeCancelEvent())
+
+
 # ── 编排器 ──
 
 
@@ -221,10 +227,10 @@ class LoginOrchestrator:
             wrapper.add_source(cancel_event)
             cancel_event = wrapper
 
-        # 2. 去重与抢占
+        # 2. 去重与抢占（锁内仅做判断和占位）
         with self._slot_lock:
             existing = self._slot
-            if existing is not None and not existing.done():
+            if existing is not None and existing is not _DISPATCHING and not existing.done():
                 # login_once 一次性任务，不复用
                 if source == "login_once":
                     logger.info("login_once 取消旧任务(source={})", existing.source)
@@ -240,8 +246,13 @@ class LoginOrchestrator:
                     self._link_cancel(cancel_event, existing.cancel_event)
                     return existing
 
-            # 3. 提交新登录
-            handle = self._dispatch(cfg, source, cancel_event, timeout=timeout)
+            # 哨兵占位：标记正在 dispatch，防止并发重复提交
+            self._slot = _DISPATCHING
+
+        # 3. 锁外提交新登录
+        handle = self._dispatch(cfg, source, cancel_event, timeout=timeout)
+
+        with self._slot_lock:
             self._slot = handle
 
         return handle
