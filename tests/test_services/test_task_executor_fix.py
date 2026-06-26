@@ -390,10 +390,10 @@ class TestTaskExecutorCRUD:
         executor._registry.has_enabled_tasks.return_value = True
         assert executor.has_enabled_tasks() is True
 
-    def test_set_runtime_config_getter(self):
+    def test_bind_runtime_config(self):
         executor = self._make_executor()
         getter = lambda: {"key": "value"}
-        executor._get_runtime_config = getter
+        executor.bind_runtime_config(getter)
         assert executor._get_runtime_config is getter
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
-from concurrent.futures import Future
+from concurrent.futures import CancelledError, Future
 from typing import TYPE_CHECKING, Callable
 
 from app.schemas import RuntimeConfig
@@ -122,6 +122,8 @@ class LoginBridge:
                             )
                             # 通过回调设置下次重试时间
                             self._on_retry_scheduled(delay)
+            except CancelledError:
+                logger.info("登录任务已取消")
             except Exception:
                 logger.exception("登录任务异常")
 
