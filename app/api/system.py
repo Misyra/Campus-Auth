@@ -12,7 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from app.constants import AUTH_DATA_DIR, PROJECT_ROOT
 from app.deps import get_monitor_service
-from app.schemas import ActionResponse
+from app.schemas import ActionResponse, ApiResponse, HealthResponse, InitStatusResponse, UninstallRequest
 from app.services.engine import ScheduleEngine
 from app.utils.logging import get_logger
 from app.version import compare_versions, get_project_version
@@ -38,24 +38,24 @@ def _safe_psutil_call(fn, default=-1):
         return default
 
 
-@router.get("/api/health")
-def health() -> dict:
+@router.get("/api/health", response_model=HealthResponse)
+def health() -> HealthResponse:
     proc = psutil.Process(os.getpid())
     mem = proc.memory_info()
-    return {
-        "status": "ok",
-        "version": get_project_version(PROJECT_ROOT),
-        "python_version": f"{os.sys.version_info.major}.{os.sys.version_info.minor}.{os.sys.version_info.micro}",
-        "memory": {
+    return HealthResponse(
+        status="ok",
+        version=get_project_version(PROJECT_ROOT),
+        python_version=f"{os.sys.version_info.major}.{os.sys.version_info.minor}.{os.sys.version_info.micro}",
+        memory={
             "rss_mb": round(mem.rss / 1024 / 1024, 1),
             "vms_mb": round(mem.vms / 1024 / 1024, 1),
         },
-        "process": {
+        process={
             "threads": _safe_psutil_call(proc.threads),
             "open_files": _safe_psutil_call(proc.open_files),
             "pid": proc.pid,
         },
-    }
+    )
 
 
 @router.get("/api/check-update")
@@ -113,10 +113,10 @@ async def check_update() -> dict:
 # ── 初始化状态 ──
 
 
-@router.get("/api/init-status")
+@router.get("/api/init-status", response_model=InitStatusResponse)
 def get_init_status(
     svc: ScheduleEngine = Depends(get_monitor_service),
-) -> dict:
+) -> InitStatusResponse:
     from app.utils.crypto import has_decryption_error
 
     config = svc.get_runtime_config()
@@ -126,11 +126,11 @@ def get_init_status(
     agree_file = svc.project_root / "config" / ".agree"
     agreed = agree_file.exists()
 
-    return {
-        "initialized": is_initialized,
-        "agreed": agreed,
-        "password_decryption_failed": has_decryption_error(),
-    }
+    return InitStatusResponse(
+        initialized=is_initialized,
+        agreed=agreed,
+        password_decryption_failed=has_decryption_error(),
+    )
 
 
 @router.post("/api/agree", response_model=ActionResponse)
@@ -210,20 +210,20 @@ def uninstall_detect() -> list[dict]:
     ]
 
 
-@router.post("/api/uninstall")
-def uninstall_perform(payload: dict) -> dict:
+@router.post("/api/uninstall", response_model=ApiResponse)
+def uninstall_perform(payload: UninstallRequest) -> ApiResponse:
     """执行卸载清理"""
     from app.services.uninstall import perform
 
-    keys = payload.get("keys", [])
-    if not isinstance(keys, list):
-        raise HTTPException(400, "keys 必须是列表")
-    api_logger.warning("收到卸载请求, keys={}", keys)
-    results = perform(keys)
-    return {
-        "success": all(r.success for r in results),
-        "results": [
-            {"key": r.key, "label": r.label, "success": r.success, "message": r.message}
-            for r in results
-        ],
-    }
+    api_logger.warning("收到卸载请求, keys={}", payload.keys)
+    results = perform(payload.keys)
+    all_ok = all(r.success for r in results)
+    detail = [
+        {"key": r.key, "label": r.label, "success": r.success, "message": r.message}
+        for r in results
+    ]
+    return ApiResponse(
+        success=all_ok,
+        message=f"清理完成（{sum(1 for r in results if r.success)}/{len(results)}）",
+        data={"results": detail},
+    )

@@ -7,7 +7,7 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.deps import get_monitor_service
-from app.schemas import ActionResponse, LogEntry, MonitorStatusResponse
+from app.schemas import ActionResponse, ApiResponse, LogEntry, MonitorStatusResponse, PureModeResponse
 from app.services.engine import ScheduleEngine
 from app.utils.logging import get_logger
 
@@ -78,21 +78,21 @@ def test_network(
 # ── 纯净模式 ──
 
 
-@router.get("/api/pure-mode")
+@router.get("/api/pure-mode", response_model=PureModeResponse)
 def get_pure_mode(
     svc: ScheduleEngine = Depends(get_monitor_service),
-) -> dict:
-    return {"enabled": svc.pure_mode}
+) -> PureModeResponse:
+    return PureModeResponse(enabled=svc.pure_mode)
 
 
-@router.post("/api/pure-mode")
+@router.post("/api/pure-mode", response_model=ApiResponse)
 def toggle_pure_mode(
     svc: ScheduleEngine = Depends(get_monitor_service),
-) -> dict:
+) -> ApiResponse:
     try:
         new_value = svc.toggle_pure_mode()
         api_logger.info("纯净模式已切换 -> {}", new_value)
-        return {"enabled": new_value}
+        return ApiResponse(success=True, message=f"纯净模式: {'开启' if new_value else '关闭'}", data={"enabled": new_value})
     except Exception as exc:
         api_logger.error("切换纯净模式失败: {}", exc)
         raise HTTPException(status_code=500, detail=f"切换纯净模式失败: {exc}") from exc

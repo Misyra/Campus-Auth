@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.deps import get_monitor_service, get_profile_service
-from app.schemas import ActionResponse, Profile
+from app.schemas import ActionResponse, ApiResponse, AutoSwitchRequest, Profile
 from app.services.engine import ScheduleEngine
 from app.services.profile_service import ProfileService
 from app.utils.logging import get_logger
@@ -142,51 +142,37 @@ def detect_network_profile(
     }
 
 
-@router.post("/api/profiles/auto-switch")
+@router.post("/api/profiles/auto-switch", response_model=ApiResponse)
 def toggle_auto_switch(
-    body: dict = Body(default={}),
+    body: AutoSwitchRequest,
     profile_svc: ProfileService = Depends(get_profile_service),
     monitor_svc: ScheduleEngine = Depends(get_monitor_service),
-) -> dict:
-    enabled = body.get("enabled", True)
-    if isinstance(enabled, str):
-        enabled_bool = enabled.strip().lower() in ("true", "1", "yes", "on")
-    else:
-        enabled_bool = bool(enabled)
-    profile_svc.set_auto_switch(enabled_bool)
-    state = "开启" if enabled_bool else "关闭"
+) -> ApiResponse:
+    profile_svc.set_auto_switch(body.enabled)
+    state = "开启" if body.enabled else "关闭"
     api_logger.info("自动切换 {}", state)
 
-    # 获取当前活动方案
     data = profile_svc.load()
     active_profile = data.active_profile
 
-    # 开启自动切换时，立即进行一次检测
     warning = None
-    if enabled_bool:
+    if body.enabled:
         try:
             matched_id = profile_svc.detect_matching_profile()
-            if matched_id:
-                if matched_id != data.active_profile:
-                    profile = data.profiles.get(matched_id)
-                    profile_name = profile.name if profile else matched_id
-                    api_logger.info("自动切换检测到匹配方案: {}", profile_name)
-                    # apply_profile 内部已包含 set_active_profile
-                    monitor_svc.apply_profile(matched_id)
-                    active_profile = matched_id
-                else:
-                    api_logger.info("当前方案已匹配，无需切换")
+            if matched_id and matched_id != data.active_profile:
+                profile = data.profiles.get(matched_id)
+                profile_name = profile.name if profile else matched_id
+                api_logger.info("自动切换检测到匹配方案: {}", profile_name)
+                monitor_svc.apply_profile(matched_id)
+                active_profile = matched_id
             else:
-                api_logger.info("未检测到匹配方案，保持当前方案")
+                api_logger.info("未检测到匹配方案或当前方案已匹配")
         except Exception as exc:
             api_logger.warning("自动切换检测失败: {}", exc)
             warning = f"首次检测失败: {exc}"
 
-    result = {
-        "success": True,
-        "message": f"自动切换已{state}",
-        "active_profile": active_profile,
-    }
+    result_data = {"active_profile": active_profile}
+    message = f"自动切换已{state}"
     if warning:
-        result["warning"] = warning
-    return result
+        message += f"（{warning}）"
+    return ApiResponse(success=True, message=message, data=result_data)

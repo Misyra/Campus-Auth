@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from app.constants import PROJECT_ROOT
+from app.schemas import ApiResponse, FetchUrlRequest
 from app.utils.repo_proxy import validate_url
 
 router = APIRouter()
@@ -89,12 +90,10 @@ async def upload_background(file: UploadFile) -> dict:
     return {"filename": filename, "url": f"/api/background/{filename}"}
 
 
-@router.post("/api/background/fetch-url")
-async def fetch_background_url(body: dict) -> dict:
+@router.post("/api/background/fetch-url", response_model=ApiResponse)
+async def fetch_background_url(body: FetchUrlRequest) -> ApiResponse:
     """从远程 URL 下载图片并保存到本地"""
-    url = body.get("url", "").strip()
-    if not url:
-        raise HTTPException(400, "请提供图片 URL")
+    url = body.url.strip()
     validate_url(url)
 
     try:
@@ -149,7 +148,7 @@ async def fetch_background_url(body: dict) -> dict:
 
     _cleanup_old_backgrounds(filename)
 
-    return {"filename": filename, "url": f"/api/background/{filename}"}
+    return ApiResponse(success=True, message="图片已下载", data={"filename": filename, "url": f"/api/background/{filename}"})
 
 
 @router.get("/api/background/{filename}")
