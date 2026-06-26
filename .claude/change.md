@@ -1,5 +1,23 @@
 # 修改日志
 
+## 2026-06-27 (Task 4)
+
+### perf: WsBroadcaster 改用 asyncio.Event 按需唤醒，消除空闲 50ms 固定轮询
+
+- `app/services/ws_broadcaster.py`：
+  - `__init__` 新增 `_drain_event`（asyncio.Event）和 `_loop`（事件循环引用）
+  - 新增 `set_loop(loop)` 方法：记录事件循环引用
+  - 新增 `_notify_drain()` 方法：线程安全唤醒 drain loop（`loop.call_soon_threadsafe(event.set)` fallback `event.set()`）
+  - `set_dashboard_sink` 新增 `sink.set_drain_notifier(self._notify_drain)` 调用
+  - `enqueue_status` 新增 `self._notify_drain()` 调用
+  - `ws_drain_loop` 从 `asyncio.sleep(0.05)` 固定轮询改为 `await self._drain_event.wait()` 事件驱动
+- `app/utils/logging.py`：
+  - `DashboardSink.__init__` 新增 `_drain_notifier` 字段
+  - 新增 `set_drain_notifier(notifier)` 方法
+  - `write()` 末尾新增 `self._drain_notifier()` 调用（线程安全唤醒 asyncio 循环）
+  - 新增 `from collections.abc import Callable` 导入
+- `tests/test_services/test_ws_broadcaster.py`：新增 12 个测试覆盖事件驱动行为（TestSetLoop / TestNotifyDrain / TestEnqueueStatus.test_enqueue_triggers_drain_event / TestSetDashboardSinkMigration.test_injects_drain_notifier / TestWsDrainLoop 新增 4 个测试）
+
 ## 2026-06-27 (Task 8)
 
 ### fix: 删除 _pure_mode_lock，统一由 _reload_lock 保护，消除锁嵌套竞态

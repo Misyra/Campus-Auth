@@ -15,6 +15,7 @@ import sys
 import threading
 from collections import deque
 from datetime import datetime
+from collections.abc import Callable
 from typing import Any
 
 from loguru import logger
@@ -126,8 +127,13 @@ class DashboardSink:
         self.buffer: deque[dict] = deque(maxlen=maxlen)
         self.broadcast_queue: deque[dict] = deque(maxlen=broadcast_maxlen)
         self._lock = threading.Lock()
+        self._drain_notifier: Callable[[], None] | None = None
         # 获取配置中心实例
         self._config_center = LogConfigCenter.get_instance()
+
+    def set_drain_notifier(self, notifier: Callable[[], None]) -> None:
+        """设置 drain 通知器（由 WsBroadcaster 注入）。"""
+        self._drain_notifier = notifier
 
     def write(self, message) -> None:
         """loguru sink 接口 — 接收格式化后的消息。"""
@@ -162,6 +168,8 @@ class DashboardSink:
                     "data": entry,
                 }
             )
+        if self._drain_notifier is not None:
+            self._drain_notifier()
 
     def list_logs(self, limit: int = 200) -> list[dict]:
         """返回最近 limit 条日志（供 dashboard API 读取）。"""
