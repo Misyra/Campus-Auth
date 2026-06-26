@@ -348,7 +348,11 @@ class TestSubmitLockScope:
     """submit() 应在锁外执行 _dispatch，锁内仅做去重判断。"""
 
     def test_dispatch_called_outside_lock(self):
-        """_dispatch 应在 _slot_lock 释放后被调用。"""
+        """_dispatch 应在 _slot_lock 释放后被调用。
+
+        通过在 _dispatch 执行时向 _slot_lock 写入 None 来验证锁未被持有——
+        若锁仍被持有，写入会死锁。
+        """
         mock_pool = MagicMock()
         mock_future = Future()
         mock_pool.submit.return_value = mock_future
@@ -359,73 +363,80 @@ class TestSubmitLockScope:
             get_runtime_config=lambda: VALID_CONFIG,
         )
 
-        # 用计数器跟踪锁的 acquire/release 边界，在 _dispatch 被调用时
-        # 计数器应为偶数（锁已完全释放）
-        acquire_count = 0
-        release_count = 0
-        dispatch_called = []
         original_dispatch = orch._dispatch
-
-        real_lock = orch._slot_lock
-
-        class CountingRLock:
-            """包装 RLock，跟踪 acquire/release 计数。"""
-            def acquire(self, *a, **kw):
-                nonlocal acquire_count
-                acquire_count += 1
-                return real_lock.acquire(*a, **kw)
-            def release(self, *a, **kw):
-                nonlocal release_count
-                release_count += 1
-                return real_lock.release(*a, **kw)
-            def __enter__(self):
-                self.acquire()
-                return self
-            def __exit__(self, *a):
-                self.release()
-
-        orch._slot_lock = CountingRLock()
+        lock_held_during_dispatch = []
 
         def tracking_dispatch(*args, **kwargs):
-            dispatch_called.append(acquire_count - release_count)
+            # 若锁被持有，acquire 会阻塞 → 超时 → _held=False
+            _held = orch._slot_lock.acquire(timeout=0.1)
+            lock_held_during_dispatch.append(_held)
+            if _held:
+                orch._slot_lock.release()
             return original_dispatch(*args, **kwargs)
 
         orch._dispatch = tracking_dispatch
 
         orch.submit(source="auto")
 
-        # _dispatch 被调用时，锁不应被持有（acquire == release 差为 0）
-        assert len(dispatch_called) == 1
-        assert dispatch_called[0] == 0
+        assert len(lock_held_during_dispatch) == 1
+        # _dispatch 执行时锁不应被持有（acquire 成功说明锁空闲）
+        assert lock_held_during_dispatch[0] is True
 
     def test_concurrent_submit_respects_sentinel(self):
-        """并发 submit 时，哨兵应防止重复提交。"""
-        mock_pool = MagicMock()
-
-        future1 = Future()
-        future2 = Future()
-
+        """并发 auto submit 时，后到的线程应等待 dispatch 完成后复用 handle。"""
         call_count = [0]
-        def mock_submit(fn, *args, **kwargs):
-            call_count[0] += 1
-            if call_count[0] == 1:
-                return future1
-            return future2
+        dispatch_barrier = threading.Barrier(2, timeout=5)
+        slow_future = Future()
 
-        mock_pool.submit = mock_submit
+        def slow_dispatch(config, source, cancel_event, timeout=None):
+            call_count[0] += 1
+            # 同步：确保两个线程都已就绪
+            dispatch_barrier.wait()
+            time.sleep(0.15)
+            return LoginHandle(
+                future=slow_future, source=source,
+                cancel_event=cancel_event or threading.Event(),
+            )
 
         orch = LoginOrchestrator(
             worker_getter=MagicMock(),
-            pool=mock_pool,
             get_runtime_config=lambda: VALID_CONFIG,
         )
+        orch._dispatch = slow_dispatch
 
-        # 第一次提交
-        handle1 = orch.submit(source="auto")
-        assert handle1.future is future1
+        results = []
 
-        # 第二次提交（auto→auto 去重）应复用旧 handle
-        handle2 = orch.submit(source="auto")
-        assert handle2 is handle1
-        # pool.submit 只应被调用一次
+        def first_submit():
+            results.append(orch.submit(source="auto", config=VALID_CONFIG))
+
+        def second_submit():
+            dispatch_barrier.wait()
+            time.sleep(0.02)
+            results.append(orch.submit(source="auto", config=VALID_CONFIG))
+
+        t1 = threading.Thread(target=first_submit)
+        t2 = threading.Thread(target=second_submit)
+        t1.start()
+        t2.start()
+        t1.join(timeout=5)
+        t2.join(timeout=5)
+
+        assert len(results) == 2
+        # 第二个 auto submit 应复用第一个的 handle（去重）
+        assert results[0] is results[1]
+        # _dispatch 只应被调用一次
         assert call_count[0] == 1
+
+    def test_dispatch_exception_clears_sentinel(self):
+        """如果 _dispatch 抛异常，slot 应被清除，不卡在 _DISPATCHING。"""
+        orch = LoginOrchestrator(
+            worker_getter=MagicMock(),
+            get_runtime_config=lambda: VALID_CONFIG,
+        )
+        orch._dispatch = MagicMock(side_effect=RuntimeError("pool full"))
+
+        with pytest.raises(RuntimeError):
+            orch.submit(source="auto", config=VALID_CONFIG)
+
+        # slot 应为 None，不是 _DISPATCHING
+        assert orch._slot is None

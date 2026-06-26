@@ -155,7 +155,7 @@ class LoginOrchestrator:
         self._get_runtime_config = get_runtime_config
 
         # 去重槽（替代 task_executor._login_future + _login_cancel_event）
-        self._slot_lock = threading.RLock()
+        self._slot_lock = threading.Condition(threading.Lock())
         self._slot: LoginHandle | None = None
 
         # 优先使用外部 executor（BoundedExecutor），否则 fallback 到自建池
@@ -227,33 +227,40 @@ class LoginOrchestrator:
             wrapper.add_source(cancel_event)
             cancel_event = wrapper
 
-        # 2. 去重与抢占（锁内仅做判断和占位）
+        # 2. 去重与抢占（Condition 保护）
         with self._slot_lock:
+            # 等待 dispatch 完成（_slot 不再是 _DISPATCHING）
+            while self._slot is _DISPATCHING:
+                self._slot_lock.wait()
+
             existing = self._slot
-            if existing is not None and existing is not _DISPATCHING and not existing.done():
-                # login_once 一次性任务，不复用
+            if existing is not None and not existing.done():
                 if source == "login_once":
                     logger.info("login_once 取消旧任务(source={})", existing.source)
                     existing.cancel()
-                # manual 抢占 auto：取消旧的，提交新的
                 elif source == "manual" and existing.source == "auto":
                     logger.info("手动登录抢占自动登录(source={})", existing.source)
                     existing.cancel()
-                    # 不立即 return，落到下方提交新 handle
                 else:
-                    # 复用旧 handle（auto→auto, auto→manual 同源, manual→*）
-                    # 联动新 cancel_event 到旧任务
                     self._link_cancel(cancel_event, existing.cancel_event)
                     return existing
 
-            # 哨兵占位：标记正在 dispatch，防止并发重复提交
+            # 哨兵占位
             self._slot = _DISPATCHING
 
         # 3. 锁外提交新登录
-        handle = self._dispatch(cfg, source, cancel_event, timeout=timeout)
+        try:
+            handle = self._dispatch(cfg, source, cancel_event, timeout=timeout)
+        except Exception:
+            # dispatch 失败，清除哨兵并唤醒等待者
+            with self._slot_lock:
+                self._slot = None
+                self._slot_lock.notify_all()
+            raise
 
         with self._slot_lock:
             self._slot = handle
+            self._slot_lock.notify_all()
 
         return handle
 
@@ -339,6 +346,7 @@ class LoginOrchestrator:
             with self._slot_lock:
                 if self._slot is handle:
                     self._slot = None
+                self._slot_lock.notify_all()
             # 释放 CompositeCancelEvent 的源引用，防止内存泄漏
             if isinstance(handle.cancel_event, CompositeCancelEvent):
                 handle.cancel_event.clear_sources()

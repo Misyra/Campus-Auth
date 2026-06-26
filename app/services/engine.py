@@ -767,15 +767,14 @@ class ScheduleEngine:
         with self._reload_lock:
             new_value = not self._pure_mode
             self._pure_mode = new_value
-        # 持久化在锁外执行，避免持锁做磁盘 I/O
-        self._profile_service.update(
-            lambda d: setattr(
-                d, "global_config",
-                d.global_config.model_copy(update={
-                    "browser": d.global_config.browser.model_copy(update={"pure_mode": new_value})
-                }),
+            self._profile_service.update(
+                lambda d: setattr(
+                    d, "global_config",
+                    d.global_config.model_copy(update={
+                        "browser": d.global_config.browser.model_copy(update={"pure_mode": new_value})
+                    }),
+                )
             )
-        )
         return new_value
 
     def get_runtime_config(self) -> RuntimeConfig:
