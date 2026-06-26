@@ -179,13 +179,13 @@ export const appOptions = {
     shellPathMode: {
       get() {
         if (this.shellCustomMode) return '__custom__';
-        if (!this.config.shell_path) return '';
-        if (this.availableShells.some(s => s.path === this.config.shell_path)) return this.config.shell_path;
+        if (!this.config.app_settings.shell_path) return '';
+        if (this.availableShells.some(s => s.path === this.config.app_settings.shell_path)) return this.config.app_settings.shell_path;
         return '__custom__';
       },
       set(val) {
         this.shellCustomMode = (val === '__custom__');
-        if (val !== '__custom__') this.config.shell_path = val;
+        if (val !== '__custom__') this.config.app_settings.shell_path = val;
       },
     },
     shellPathOptions() {
@@ -210,10 +210,10 @@ export const appOptions = {
         monitor: '程序启动后自动开始网络监控，断网时自动重连',
         login_once: '启动后尝试登录一次，成功后自动退出。适用于开机自启动场景',
       };
-      return hints[this.config.startup_action] || hints.none;
+      return hints[this.config.app_settings.startup_action] || hints.none;
     },
     startupActionLabel() {
-      const opt = this.loginActionOptions.find(o => o.value === this.config.startup_action);
+      const opt = this.loginActionOptions.find(o => o.value === this.config.app_settings.startup_action);
       return opt ? opt.label.replace('（推荐）', '') : '不自动执行';
     },
     binaryOptions() {

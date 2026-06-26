@@ -266,25 +266,25 @@ export const uiMethods = {
   },
   addCustomVar() {
     // 确保 custom_variables 是对象
-    if (!this.config.custom_variables || typeof this.config.custom_variables !== 'object') {
-      this.config.custom_variables = {};
+    if (!this.config.app_settings.custom_variables || typeof this.config.app_settings.custom_variables !== 'object') {
+      this.config.app_settings.custom_variables = {};
     }
     // 生成默认变量名
     let index = 1;
     let key = `var_${index}`;
-    while (Object.hasOwn(this.config.custom_variables, key)) {
+    while (Object.hasOwn(this.config.app_settings.custom_variables, key)) {
       index++;
       key = `var_${index}`;
     }
-    this.config.custom_variables[key] = '';
-    this.onConfigChange('custom_variables', this.config.custom_variables, 'toggle');
+    this.config.app_settings.custom_variables[key] = '';
+    this.onConfigChange('custom_variables', this.config.app_settings.custom_variables, 'toggle');
   },
   removeCustomVar(key) {
-    if (this.config.custom_variables && key in this.config.custom_variables) {
-      const newVars = { ...this.config.custom_variables };
+    if (this.config.app_settings.custom_variables && key in this.config.app_settings.custom_variables) {
+      const newVars = { ...this.config.app_settings.custom_variables };
       delete newVars[key];
-      this.config.custom_variables = newVars;
-      this.onConfigChange('custom_variables', this.config.custom_variables, 'toggle');
+      this.config.app_settings.custom_variables = newVars;
+      this.onConfigChange('custom_variables', this.config.app_settings.custom_variables, 'toggle');
     }
   },
   updateCustomVarKey(oldKey, newKey) {
@@ -302,22 +302,22 @@ export const uiMethods = {
       });
       return;
     }
-    if (Object.hasOwn(this.config.custom_variables, newKey)) {
+    if (Object.hasOwn(this.config.app_settings.custom_variables, newKey)) {
       this.frontendLogger.warn('config', '自定义变量名已存在: ' + newKey);
       this.toastOnly(false, '变量名已存在');
       return;
     }
     // 创建新键并复制值
     const newVars = {};
-    for (const [k, v] of Object.entries(this.config.custom_variables)) {
+    for (const [k, v] of Object.entries(this.config.app_settings.custom_variables)) {
       if (k === oldKey) {
         newVars[newKey] = v;
       } else {
         newVars[k] = v;
       }
     }
-    this.config.custom_variables = newVars;
-    this.onConfigChange('custom_variables', this.config.custom_variables, 'toggle');
+    this.config.app_settings.custom_variables = newVars;
+    this.onConfigChange('custom_variables', this.config.app_settings.custom_variables, 'toggle');
   },
   _isViewerAtBottom() {
     const logViewer = this.$refs?.logViewer;

@@ -1,5 +1,22 @@
 # 修改日志
 
+## 2026-06-27 (Task 5)
+
+### refactor(frontend): 前端配置数据模型改为嵌套 app_settings 结构
+
+- `frontend/js/constants.js`：`DEFAULT_CONFIG` 中 10 个扁平 app_settings 字段移入 `app_settings` 子对象
+- `frontend/js/data/config.js`：`cloneConfig` 适配嵌套结构，`app_settings` 内含 `custom_variables` 深拷贝
+- `frontend/js/methods/config.js`：
+  - `fetchConfig` 直接映射后端返回的嵌套 `app_settings` 结构（不再手动展平）
+  - `saveConfig` payload 直接发送嵌套 `app_settings`（不再手动扁平化）
+  - `_validateConfig` 引用路径改为 `config.app_settings.app_port`
+  - `onShellFileSelected` 引用路径改为 `config.app_settings.shell_path`
+- `frontend/js/app-options.js`：`config.shell_path` / `config.startup_action` 改为 `config.app_settings.*`
+- `frontend/js/methods/ui.js`：`config.custom_variables` 改为 `config.app_settings.custom_variables`（全部 12 处）
+- `frontend/partials/pages/settings/settings-monitor.html`：`config.block_proxy` → `config.app_settings.block_proxy`
+- `frontend/partials/pages/settings/settings-system.html`：7 个字段改为 `config.app_settings.*`
+- `frontend/partials/pages/settings/settings-account.html`：`config.custom_variables` → `config.app_settings.custom_variables`
+
 ## 2026-06-27 (Task 13)
 
 ### feat(api): 补全所有遗漏端点的格式统一 — 类型化响应模型
