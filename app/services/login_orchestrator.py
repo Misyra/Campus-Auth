@@ -328,6 +328,9 @@ class LoginOrchestrator:
             with self._slot_lock:
                 if self._slot is handle:
                     self._slot = None
+            # 释放 CompositeCancelEvent 的源引用，防止内存泄漏
+            if isinstance(handle.cancel_event, CompositeCancelEvent):
+                handle.cancel_event.clear_sources()
 
         future.add_done_callback(_on_done)
         return handle

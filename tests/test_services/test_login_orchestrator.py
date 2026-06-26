@@ -301,3 +301,39 @@ class TestOrchestratorValidate:
 class TestOrchestratorShutdown:
     def test_shutdown(self, orchestrator):
         orchestrator.shutdown(wait=False)
+
+
+# ── _dispatch cancel_event 源清理 ──
+
+
+class TestDispatchClearsCancelSources:
+    """_dispatch 的 _on_done 回调应清理 CompositeCancelEvent 源列表。"""
+
+    def test_on_done_clears_composite_cancel_sources(self):
+        """登录完成后，cancel_event 的源列表应被清空。"""
+        from app.utils.cancel_token import CompositeCancelEvent
+
+        worker = _make_mock_worker()
+        orch = LoginOrchestrator(
+            worker_getter=lambda: worker,
+            login_history=MagicMock(),
+            profile_service=MagicMock(),
+        )
+
+        cancel_event = CompositeCancelEvent()
+        src1 = threading.Event()
+        src2 = threading.Event()
+        cancel_event.add_source(src1)
+        cancel_event.add_source(src2)
+        assert len(cancel_event._sources) == 2
+
+        # 通过 _dispatch 提交，触发 _on_done 回调
+        handle = orch._dispatch(VALID_CONFIG, "auto", cancel_event)
+        assert handle.future is not None
+
+        # 等待 future 完成 + done_callback 执行
+        handle.result(timeout=5)
+        time.sleep(0.1)
+
+        # 源列表应被清空
+        assert len(cancel_event._sources) == 0
