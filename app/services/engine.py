@@ -200,17 +200,20 @@ class ScheduleEngine:
                 self._wakeup_event.wait(timeout=timeout)
                 self._wakeup_event.clear()
 
-                # 处理命令队列（优先处理命令）
-                try:
-                    cmd = self._cmd_queue.get_nowait()
-                except queue.Empty:
-                    cmd = None
-
-                if cmd is not None:
+                # 批量处理所有待处理命令
+                shutdown_requested = False
+                while True:
+                    try:
+                        cmd = self._cmd_queue.get_nowait()
+                    except queue.Empty:
+                        break
                     self._process_command(cmd)
                     if cmd.type == EngineCmdType.SHUTDOWN:
+                        shutdown_requested = True
                         break
-                    continue
+
+                if shutdown_requested:
+                    break
 
                 now = time.time()
 

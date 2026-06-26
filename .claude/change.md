@@ -1,5 +1,13 @@
 # 修改日志
 
+## 2026-06-27 (Task 6)
+
+### perf: 引擎循环改为内循环批量排空命令，减少多次唤醒周期
+
+- `app/services/engine.py`：`_engine_loop` 命令处理从单条 `get_nowait()` + `continue` 改为 `while True` 内循环批量排空命令队列，多条快速入队的命令在单次唤醒中全部处理
+- `tests/test_services/test_engine.py`：新增 `TestEngineLoopBatchCommands` 测试类（1 个测试），验证 3 条 RELOAD + 1 条 SHUTDOWN 在单次迭代中全部处理
+- 验收：138 个 engine 测试全通过
+
 ## 2026-06-27 (Task 4)
 
 ### perf: WsBroadcaster 改用 asyncio.Event 按需唤醒，消除空闲 50ms 固定轮询
