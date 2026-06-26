@@ -556,10 +556,11 @@ class ScheduleEngine:
             self._shutdown_event.clear()
             self._wakeup_event.clear()
             # 清除上次残留的命令
-            while not self._cmd_queue.empty():
+            while True:
                 try:
                     self._cmd_queue.get_nowait()
-                except Exception:
+                    self._cmd_queue.task_done()
+                except queue.Empty:
                     break
             self._engine_thread = threading.Thread(target=self._engine_loop, daemon=True)
             self._engine_thread.start()
