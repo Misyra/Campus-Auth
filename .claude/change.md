@@ -1,5 +1,12 @@
 # 修改日志
 
+## 2026-06-27 (Task 2)
+
+### fix: _dispatch _on_done 回调清理 CompositeCancelEvent 源列表，防止内存泄漏
+
+- `app/services/login_orchestrator.py`：`_dispatch` 方法的 `_on_done` 回调在清空 `_slot` 后，新增 `handle.cancel_event.clear_sources()` 调用（`isinstance` 检查后），释放去重积累的源引用
+- `tests/test_services/test_login_orchestrator.py`：新增 `TestDispatchClearsCancelSources` 测试类（1 个测试），验证登录完成后 `CompositeCancelEvent._sources` 被清空
+
 ## 2026-06-27 (Task 1)
 
 ### fix: 测试文件补全 _retry_time_lock，桥接回调测试改用实际注册回调
