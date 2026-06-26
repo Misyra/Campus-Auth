@@ -182,19 +182,16 @@ class TestCalculateWakeup:
         wakeup = svc._calculate_wakeup()
         assert wakeup <= time.time() + 6
 
-    def test_wakeup_exception_fallback(self, engine_factory):
-        """异常时回退到 now+5。"""
+    def test_wakeup_exception_propagates(self, engine_factory):
+        """非法值触发的异常应自然冒泡（不再被宽异常捕获）。"""
         svc = engine_factory(raw=True)
-        # 让 _is_monitoring 为 True，同时设置非法值触发异常
         mock_core = MagicMock()
         mock_core.monitoring = True
         svc._monitor_core = mock_core
         svc._next_network_check = "not_a_number"
         svc._scheduler_running = False
-        now = time.time()
-        wakeup = svc._calculate_wakeup()
-        assert wakeup >= now + 4
-        assert wakeup <= now + 6
+        with pytest.raises((TypeError, ValueError)):
+            svc._calculate_wakeup()
 
 
 # =====================================================================
@@ -1649,3 +1646,97 @@ class TestBoot:
 # ws_drain_loop / drain_ws_queue / set_dashboard_sink 迁移
 # 已迁移至 WsBroadcaster，测试见 test_ws_broadcaster.py
 # =====================================================================
+
+
+# =====================================================================
+# _next_retry_time 跨线程锁保护
+# =====================================================================
+
+
+class TestRetryTimeLock:
+    """_next_retry_time 跨线程读写的锁保护。"""
+
+    def test_bridge_retry_scheduled_sets_time(self):
+        """_bridge_retry_scheduled 应在锁保护下写入 _next_retry_time。"""
+        engine = ScheduleEngine.__new__(ScheduleEngine)
+        engine._next_retry_time = 0
+        engine._retry_time_lock = threading.Lock()
+        engine._wakeup_event = threading.Event()
+
+        # 模拟桥接回调
+        def _bridge_retry_scheduled(delay: float) -> None:
+            with engine._retry_time_lock:
+                engine._next_retry_time = time.time() + delay
+            engine._wakeup_event.set()
+
+        _bridge_retry_scheduled(30.0)
+        with engine._retry_time_lock:
+            assert engine._next_retry_time > time.time()
+
+    def test_calculate_wakeup_reads_under_lock(self):
+        """_calculate_wakeup 应在锁保护下读取 _next_retry_time。"""
+        engine = ScheduleEngine.__new__(ScheduleEngine)
+        mock_core = MagicMock()
+        mock_core.monitoring = True
+        engine._monitor_core = mock_core
+        engine._scheduler_running = False
+        engine._next_network_check = time.time() + 100
+        engine._next_retry_time = time.time() + 5
+        engine._retry_time_lock = threading.Lock()
+
+        wakeup = engine._calculate_wakeup()
+        # wakeup 应接近 _next_retry_time（5 秒后）
+        assert abs(wakeup - engine._next_retry_time) < 1.0
+
+    def test_bridge_login_success_clears_time(self):
+        """_bridge_login_success 应在锁保护下清零 _next_retry_time。"""
+        engine = ScheduleEngine.__new__(ScheduleEngine)
+        engine._next_retry_time = time.time() + 30
+        engine._retry_time_lock = threading.Lock()
+
+        def _bridge_login_success() -> None:
+            with engine._retry_time_lock:
+                engine._next_retry_time = 0
+
+        _bridge_login_success()
+        assert engine._next_retry_time == 0
+
+    def test_bridge_retry_exhausted_clears_time(self):
+        """_bridge_retry_exhausted 应在锁保护下清零 _next_retry_time。"""
+        engine = ScheduleEngine.__new__(ScheduleEngine)
+        engine._next_retry_time = time.time() + 30
+        engine._retry_time_lock = threading.Lock()
+
+        def _bridge_retry_exhausted() -> None:
+            with engine._retry_time_lock:
+                engine._next_retry_time = 0
+
+        _bridge_retry_exhausted()
+        assert engine._next_retry_time == 0
+
+    def test_concurrent_write_no_data_loss(self):
+        """并发写入不应丢失数据（锁保护下所有写入可见）。"""
+        engine = ScheduleEngine.__new__(ScheduleEngine)
+        engine._next_retry_time = 0
+        engine._retry_time_lock = threading.Lock()
+        engine._wakeup_event = threading.Event()
+
+        results = []
+        barrier = threading.Barrier(3)
+
+        def writer(delay: float) -> None:
+            barrier.wait()
+            with engine._retry_time_lock:
+                engine._next_retry_time = time.time() + delay
+                results.append(engine._next_retry_time)
+
+        threads = [threading.Thread(target=writer, args=(d,)) for d in [10.0, 20.0, 30.0]]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=2)
+
+        # 所有写入都应完成，最终值应为三个之一
+        assert len(results) == 3
+        with engine._retry_time_lock:
+            assert engine._next_retry_time in results

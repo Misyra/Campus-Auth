@@ -1,5 +1,35 @@
 # 修改日志
 
+## 2026-06-27 (Task 1)
+
+### fix: _next_retry_time 跨线程读写加锁保护，消除 TOCTOU 竞态
+
+- `app/services/engine.py`：
+  - `__init__` 新增 `_retry_time_lock: threading.Lock`（L109）
+  - `_bridge_retry_scheduled` / `_bridge_login_success` / `_bridge_retry_exhausted` 三个桥接回调加锁保护 `_next_retry_time` 写入（L154-163）
+  - `_engine_loop` 重试判断改为锁内原子 check-then-act：读取 → 判断 → 清零全在同一 `with` 块内（L219-228）
+  - `_calculate_wakeup` 锁保护 `_next_retry_time` 读取，移除 `try/except (TypeError, ValueError, AttributeError)` 宽异常捕获，异常自然冒泡到 `_engine_loop` 顶层兜底（L249-252）
+  - `_do_network_check` 网络检测前清零重试定时加锁保护（L306-307）
+  - `_handle_stop` 停止监控时清零重试定时加锁保护（L400-401）
+- `tests/test_services/conftest.py`：`_make_raw()` 新增 `_retry_time_lock` 初始化，桥接回调加锁保护
+- `tests/test_services/test_engine.py`：
+  - `TestCalculateWakeup.test_wakeup_exception_fallback` 重命名为 `test_wakeup_exception_propagates`，断言改为 `pytest.raises((TypeError, ValueError))`
+  - 新增 `TestRetryTimeLock` 测试类（5 个测试）：bridge_retry_scheduled_sets_time、calculate_wakeup_reads_under_lock、bridge_login_success_clears_time、bridge_retry_exhausted_clears_time、concurrent_write_no_data_loss
+- 验收：136 个 engine 测试全通过
+
+## 2026-06-26 (Task 9)
+
+### refactor: MonitorSettings 默认值归一化，引用 constants 常量
+
+- `app/schemas.py`：
+  - 新增 `from app.constants import DEFAULT_HTTP_TARGETS, DEFAULT_NETWORK_TARGETS, DEFAULT_URL_CHECK_URLS` 导入
+  - 新增 `_parse_targets(raw)` 辅助函数：逗号分隔字符串转 list[str]
+  - 新增 `_parse_url_check(raw)` 辅助函数：换行分隔字符串转 list[str]
+  - `MonitorSettings.ping_targets`：`default_factory` 从内联列表改为 `_parse_targets(DEFAULT_NETWORK_TARGETS)`
+  - `MonitorSettings.test_urls`：`default_factory` 从内联列表改为 `_parse_targets(DEFAULT_HTTP_TARGETS)`
+  - `MonitorSettings.url_check_urls`：`default_factory` 从内联列表改为 `_parse_url_check(DEFAULT_URL_CHECK_URLS)`
+- 验收：44 个测试全通过
+
 ## 2026-06-26 (Task 8)
 
 ### refactor: 移除 AuthProfile 别名、monitor_service 属性，修复 uninstall 冗余
