@@ -311,6 +311,85 @@ class AppSettings(BaseModel, frozen=True):
     custom_variables: dict[str, str] = Field(default_factory=dict)
 
 
+# ── API 请求/响应模型 ──
+
+
+class ApiResponse(BaseModel):
+    """所有写操作的标准响应信封。
+
+    success=True 表示业务成功；success=False 表示业务失败（HTTP 200）。
+    data 可选，用于附加返回数据。
+    """
+    success: bool
+    message: str = ""
+    data: dict | None = None
+
+
+class ConfigSaveRequest(BaseModel):
+    """PUT /api/config 请求体 — 嵌套结构，与 RuntimeConfig 对齐。"""
+    browser: BrowserSettings = Field(default_factory=BrowserSettings)
+    monitor: MonitorSettings = Field(default_factory=MonitorSettings)
+    retry: RetrySettings = Field(default_factory=RetrySettings)
+    pause: PauseSettings = Field(default_factory=PauseSettings)
+    logging: LoggingSettings = Field(default_factory=LoggingSettings)
+    app_settings: AppSettings = Field(default_factory=AppSettings)
+    # 凭据（平铺，与 ConfigResponseDTO 对齐）
+    username: str = ""
+    password: str = ""
+    auth_url: str = ""
+    isp: str = ""
+    carrier_custom: str = ""
+    active_task: str = ""
+
+
+class SourceLevelRequest(BaseModel):
+    """PUT /api/config/source-level 请求体。"""
+    source: str = Field(min_length=1, description="日志来源，'global' 表示全局")
+    level: str = Field(min_length=1, description="日志级别")
+
+
+class AutoSwitchRequest(BaseModel):
+    """POST /api/profiles/auto-switch 请求体。"""
+    enabled: bool = True
+
+
+class UninstallRequest(BaseModel):
+    """POST /api/uninstall 请求体。"""
+    keys: list[str] = Field(default_factory=list)
+
+
+class FetchUrlRequest(BaseModel):
+    """POST /api/background/fetch-url 请求体。"""
+    url: str = Field(min_length=1, description="图片 URL")
+
+
+class InitStatusResponse(BaseModel):
+    """GET /api/init-status 响应。"""
+    initialized: bool
+    agreed: bool
+    password_decryption_failed: bool = False
+
+
+class HealthResponse(BaseModel):
+    """GET /api/health 响应。"""
+    status: str = "ok"
+    version: str = ""
+    python_version: str = ""
+    memory: dict = Field(default_factory=dict)
+    process: dict = Field(default_factory=dict)
+
+
+class ShellListResponse(BaseModel):
+    """GET /api/shells 响应。"""
+    shells: list[str] = Field(default_factory=list)
+    default: str = ""
+
+
+class PureModeResponse(BaseModel):
+    """GET/POST /api/pure-mode 响应。"""
+    enabled: bool
+
+
 class RuntimeConfig(BaseModel, frozen=True):
     """运行时配置根模型 — 替代旧 dict[str, Any]。
 
