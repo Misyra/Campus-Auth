@@ -1,5 +1,17 @@
 # 修改日志
 
+## 2026-06-27 (Task 11)
+
+### feat: 添加全局异常处理中间件，统一错误响应格式
+
+- `app/application.py`：
+  - 模块级新增 `api_logger = get_logger("api", source="backend")`
+  - `create_app` 内新增 `from fastapi.responses import JSONResponse` 导入
+  - CORS 配置之后新增 `global_exception_handler`（捕获所有未处理 Exception，返回 500 + 统一 JSON 格式）
+  - 新增 `value_error_handler`（捕获 ValueError，返回 400 + 错误消息）
+- 前端 `extractApiError` 已兼容 `detail` 为字符串和数组两种格式，无需修改
+- 验收：23 个现有测试全通过，模块导入正常
+
 ## 2026-06-27 (Task 9)
 
 ### refactor: 合并 ActionResponse → ApiResponse，消除双模型混乱
