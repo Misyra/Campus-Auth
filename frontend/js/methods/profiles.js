@@ -153,9 +153,9 @@ export const profileMethods = {
       const { data } = await this.$api.post('/api/profiles/auto-switch', { enabled: newState });
       if (data.success) {
         this.autoSwitch = newState;
-        // 更新活动方案
-        if (data.active_profile) {
-          this.activeProfileId = data.active_profile;
+        // 更新活动方案（ApiResponse 信封，active_profile 在 data.data 中）
+        if (data.data?.active_profile) {
+          this.activeProfileId = data.data.active_profile;
         }
         this.frontendLogger.info('profiles', data.message);
         this.toastOnly(true, data.message);

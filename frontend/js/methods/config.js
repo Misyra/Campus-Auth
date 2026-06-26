@@ -354,17 +354,22 @@ export const configMethods = {
   },
   async setSourceLevel(source, level) {
     try {
-      await this.$api.put('/api/config/source-level', { source, level });
-      if (source === 'global') {
-        this.config.logging.level = level;
-      } else {
-        if (!this.config.logging.source_levels) {
-          this.config.logging.source_levels = {};
+      const { data } = await this.$api.put('/api/config/source-level', { source, level });
+      if (data.success) {
+        if (source === 'global') {
+          this.config.logging.level = level;
+        } else {
+          if (!this.config.logging.source_levels) {
+            this.config.logging.source_levels = {};
+          }
+          this.config.logging.source_levels[source] = level;
         }
-        this.config.logging.source_levels[source] = level;
+        this.frontendLogger.info('config', `日志级别已设置: ${source} -> ${level}`);
+        this.toastOnly(true, data.message);
+      } else {
+        this.frontendLogger.warn('config', '设置日志级别被拒绝: ' + data.message);
+        this.toastOnly(false, data.message);
       }
-      this.frontendLogger.info('config', `已设置 ${source} 级别为 ${level}`);
-      this.toastOnly(true, `已设置 ${source} 级别为 ${level}`);
     } catch (error) {
       const msg = extractApiError(error, '设置失败');
       this.frontendLogger.error('config', `设置日志级别失败: ${msg}`, error);
