@@ -1,5 +1,21 @@
 # 修改日志
 
+## 2026-06-27 (Task 3)
+
+### refactor(config): use nested structure, eliminate flat dict conversion
+
+- `app/api/config.py`：
+  - `get_config` 返回嵌套结构（`app_settings` 作为子对象），不再展平到顶层
+  - `save_config` 请求体从 `dict` 改为 `ConfigSaveRequest`（嵌套结构），移除 `_flat_dict_to_dto` 转换
+  - `set_source_level` 请求体从 `dict` 改为 `SourceLevelRequest`，返回 `ApiResponse` 信封
+  - `_log_config_changes` 参数从 `ConfigResponseDTO` 改为 `ConfigSaveRequest`
+  - 删除 `_dto_to_flat_dict`、`_flat_dict_to_dto`、`_APP_SETTINGS_KEYS` 三个扁平转换函数
+  - 新增 `GET /api/config/defaults` 端点，返回所有配置字段默认值
+- `app/services/profile_service.py`：`save_global_and_profile` 参数从 `ConfigResponseDTO` 改为 `ConfigSaveRequest`
+- `tests/test_integration/test_full_mode.py`：`ConfigResponseDTO` 改为 `ConfigSaveRequest`
+- `tests/test_integration/test_login_connection.py`：同上
+- 验收：7 个 config 相关测试全通过
+
 ## 2026-06-27 (Task 2)
 
 ### refactor(api): 统一写操作端点响应格式为 ApiResponse 信封
