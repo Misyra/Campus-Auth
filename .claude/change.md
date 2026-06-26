@@ -1,5 +1,12 @@
 # 修改日志
 
+## 2026-06-27 (Task 9)
+
+### fix: start_thread 清空残留命令时调用 task_done()，防止 join() 阻塞
+
+- `app/services/engine.py`：`start_thread` 队列清空从 `while not queue.empty()` + `get_nowait()` 改为 `while True` + `get_nowait()` + `task_done()` + `except queue.Empty: break`，消除不可靠的 `empty()` 检查并正确维护 task_done 计数器
+- `tests/test_services/test_engine.py`：新增 `TestStartThreadQueueCleanup` 测试类（1 个测试），验证清空残留命令后 `queue.join()` 不阻塞
+
 ## 2026-06-27 (Task 7)
 
 ### fix: submit_login 入口清理已完成的 Future 引用，防止残留

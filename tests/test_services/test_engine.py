@@ -1821,3 +1821,30 @@ class TestPureModeLockConsolidation:
 
         # 读取结果应为 True 或 False（不崩溃即可，关键是没有死锁）
         assert len(results) == 1
+
+
+class TestStartThreadQueueCleanup:
+    """start_thread 应正确清空残留命令并调用 task_done。"""
+
+    def test_start_thread_calls_task_done(self):
+        """清空残留命令时应调用 task_done()，防止 join() 阻塞。"""
+        engine = ScheduleEngine.__new__(ScheduleEngine)
+        engine._cmd_queue = queue.Queue()
+        engine._shutdown_event = threading.Event()
+        engine._wakeup_event = threading.Event()
+        engine._engine_thread = MagicMock()
+        engine._engine_thread.is_alive.return_value = False
+        engine._engine_loop = lambda: None
+
+        # 入队 3 条残留命令
+        for _ in range(3):
+            engine._cmd_queue.put(EngineCommand(type=EngineCmdType.RELOAD))
+
+        assert engine._cmd_queue.qsize() == 3
+
+        engine.start_thread()
+
+        # 队列应为空，且 task_done 计数器平衡
+        assert engine._cmd_queue.qsize() == 0
+        # join() 应立即返回（不阻塞），说明 task_done 已被正确调用
+        engine._cmd_queue.join()  # 不应阻塞
