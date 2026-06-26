@@ -106,6 +106,7 @@ class ScheduleEngine:
         self._pure_mode_lock: threading.Lock = threading.Lock()
         self._pure_mode: bool = False
         self._start_stop_lock: threading.Lock = threading.Lock()
+        self._retry_time_lock: threading.Lock = threading.Lock()
 
         # 运行时配置快照（仅在 reload 时更新，读取零拷贝）
         self._runtime_snapshot: RuntimeConfig | None = None
@@ -151,12 +152,15 @@ class ScheduleEngine:
         )
         # 桥接回调：LoginBridge 调度重试/成功/用尽时更新 engine 状态
         def _bridge_retry_scheduled(delay: float) -> None:
-            self._next_retry_time = time.time() + delay
+            with self._retry_time_lock:
+                self._next_retry_time = time.time() + delay
             self._wakeup_event.set()
         def _bridge_login_success() -> None:
-            self._next_retry_time = 0
+            with self._retry_time_lock:
+                self._next_retry_time = 0
         def _bridge_retry_exhausted() -> None:
-            self._next_retry_time = 0
+            with self._retry_time_lock:
+                self._next_retry_time = 0
         self._login_bridge._on_retry_scheduled = _bridge_retry_scheduled
         self._login_bridge._on_login_success = _bridge_login_success
         self._login_bridge._on_retry_exhausted = _bridge_retry_exhausted
@@ -212,9 +216,16 @@ class ScheduleEngine:
                 now = time.time()
 
                 # 重试（独立于网络检测，延迟后直接登录）
-                if self._is_monitoring and self._next_retry_time > 0 and now >= self._next_retry_time:
-                    self._next_retry_time = 0
-                    self._do_async_login()
+                if self._is_monitoring:
+                    with self._retry_time_lock:
+                        retry_time = self._next_retry_time
+                        if retry_time > 0 and now >= retry_time:
+                            self._next_retry_time = 0
+                            retry_fired = True
+                        else:
+                            retry_fired = False
+                    if retry_fired:
+                        self._do_async_login()
 
                 # 网络检测
                 if self._is_monitoring and now >= self._next_network_check:
@@ -235,17 +246,14 @@ class ScheduleEngine:
         now = time.time()
         candidates: list[float] = [now + 60]
 
-        try:
-            if self._is_monitoring:
-                candidates.append(float(self._next_network_check))
+        if self._is_monitoring:
+            candidates.append(float(self._next_network_check))
+            with self._retry_time_lock:
                 if self._next_retry_time > 0:
                     candidates.append(self._next_retry_time)
 
-            if self._scheduler_running:
-                candidates.append(self._next_schedule_tick)
-        except (TypeError, ValueError, AttributeError):
-            # 异常时回退到默认唤醒时间
-            return now + 5
+        if self._scheduler_running:
+            candidates.append(self._next_schedule_tick)
 
         return min(candidates)
 
@@ -295,7 +303,8 @@ class ScheduleEngine:
                     logger.error("配置重载失败，继续使用当前配置")
 
             # 网络检测前清除重试定时（避免重复触发）
-            self._next_retry_time = 0
+            with self._retry_time_lock:
+                self._next_retry_time = 0
 
             if result.need_login:
                 self._retry_policy.on_network_check(True)
@@ -388,7 +397,8 @@ class ScheduleEngine:
         core.stop_monitoring()
         self._monitor_core = None
         self._next_network_check = 0
-        self._next_retry_time = 0
+        with self._retry_time_lock:
+            self._next_retry_time = 0
 
         self.record_log("监控已停止", level="INFO", source="backend")
         self._update_status_snapshot(force=True)

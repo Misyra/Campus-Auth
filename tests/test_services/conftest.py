@@ -82,6 +82,7 @@ def engine_factory():
         svc._reload_lock = threading.Lock()
         svc._pure_mode_lock = threading.Lock()
         svc._start_stop_lock = threading.Lock()
+        svc._retry_time_lock = threading.Lock()
         svc._pure_mode = False
         svc._ws_manager = None
         svc._ws_broadcaster = MagicMock()
@@ -114,12 +115,15 @@ def engine_factory():
         )
         # 桥接回调：模拟 engine 的 _bridge_retry_scheduled / _bridge_login_success / _bridge_retry_exhausted
         def _bridge_retry_scheduled(delay: float) -> None:
-            svc._next_retry_time = time.time() + delay
+            with svc._retry_time_lock:
+                svc._next_retry_time = time.time() + delay
             svc._wakeup_event.set()
         def _bridge_login_success() -> None:
-            svc._next_retry_time = 0
+            with svc._retry_time_lock:
+                svc._next_retry_time = 0
         def _bridge_retry_exhausted() -> None:
-            svc._next_retry_time = 0
+            with svc._retry_time_lock:
+                svc._next_retry_time = 0
         svc._login_bridge._on_retry_scheduled = _bridge_retry_scheduled
         svc._login_bridge._on_login_success = _bridge_login_success
         svc._login_bridge._on_retry_exhausted = _bridge_retry_exhausted
