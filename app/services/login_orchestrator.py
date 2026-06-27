@@ -167,6 +167,17 @@ class LoginOrchestrator:
                 thread_name_prefix="login-exec",
             )
 
+    def set_executor(self, executor) -> None:
+        """绑定外部 BoundedExecutor，关闭自建 fallback pool。
+
+        在 container 初始化时调用，将 LoginOrchestrator 的执行器
+        替换为 TaskExecutor 内部的 login_executor（BoundedExecutor）。
+        """
+        if self._pool is not None:
+            self._pool.shutdown(wait=False)
+            self._pool = None
+        self._executor = executor
+
     def bind_runtime_config(self, getter: Callable[[], RuntimeConfig]) -> None:
         """延迟绑定运行时配置获取器（用于解决 Engine 循环依赖）。"""
         self._get_runtime_config = getter
