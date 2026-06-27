@@ -294,7 +294,7 @@ def create_app(existing_container=None, boot_engine=False):
             f"http://localhost:{_cors_port}",
         ],
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type"],
     )
 
