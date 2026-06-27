@@ -440,3 +440,53 @@ class TestSubmitLockScope:
 
         # slot 应为 None，不是 _DISPATCHING
         assert orch._slot is None
+
+
+# ── set_executor ──
+
+
+class TestSetExecutor:
+    def test_set_executor_closes_fallback_pool(self):
+        """绑定外部 executor 后，自建 fallback pool 应被关闭。"""
+        orch = LoginOrchestrator(worker_getter=lambda: None)
+        assert orch._pool is not None  # 自建 fallback
+        pool_ref = orch._pool
+
+        mock_executor = MagicMock()
+        orch.set_executor(mock_executor)
+
+        assert orch._executor is mock_executor
+        assert orch._pool is None
+        # fallback pool 应已 shutdown
+        # ThreadPoolExecutor.shutdown 后 _threads 为空，但无法直接检测
+        # 改为验证 _pool is None（set_executor 内部已置 None）
+
+    def test_set_executor_no_pool_no_error(self):
+        """如果初始就有 executor（无 pool），set_executor 不应报错。"""
+        mock_exec = MagicMock()
+        orch = LoginOrchestrator(worker_getter=lambda: None, executor=mock_exec)
+        assert orch._pool is None
+
+        new_exec = MagicMock()
+        orch.set_executor(new_exec)
+        assert orch._executor is new_exec
+        assert orch._pool is None
+
+
+# ── TaskExecutor.login_executor property ──
+
+
+class TestTaskExecutorLoginExecutor:
+    def test_login_executor_property_exposed(self):
+        """TaskExecutor 应暴露 login_executor 只读 property。"""
+        from app.services.task_executor import TaskExecutor
+
+        te = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=lambda: None,
+            login_orchestrator=MagicMock(),
+        )
+        # login_executor 应返回 BoundedExecutor 实例
+        assert te.login_executor is not None
+        assert hasattr(te.login_executor, "submit")

@@ -74,8 +74,8 @@ class ServiceContainer:
             task_manager=self.task_manager,
         )
 
-        # 3. 绑定登录专用 executor（复用 TaskExecutor 内部的 _login_executor）
-        self.login_orchestrator._executor = self.task_executor._login_executor
+        # 3. 绑定登录专用 executor（复用 TaskExecutor 内部的 login_executor）
+        self.login_orchestrator.set_executor(self.task_executor.login_executor)
 
         # 4. 创建 ScheduleEngine（传入 orchestrator + task_executor）
         self.engine = ScheduleEngine(

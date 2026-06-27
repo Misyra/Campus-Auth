@@ -106,6 +106,11 @@ class TaskExecutor:
             allowlist=[shell["path"] for shell in detect_shells()]
         )
 
+    @property
+    def login_executor(self):
+        """登录专用 BoundedExecutor（只读，供 container 注入 LoginOrchestrator）。"""
+        return self._login_executor
+
     def bind_runtime_config(self, getter: Callable[[], RuntimeConfig]) -> None:
         """延迟绑定运行时配置获取器（用于解决 Engine 循环依赖）。"""
         self._get_runtime_config = getter
