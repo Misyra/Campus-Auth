@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.schemas import AppSettings, ConfigResponseDTO, LoginCredentials, RuntimeConfig
+from app.schemas import AppSettings, ConfigSaveRequest, LoginCredentials, RuntimeConfig
 from app.services.profile_service import save_global_and_profile
 from app.workers.playwright_worker import WorkerResponse
 
@@ -97,7 +97,7 @@ class TestFullMode:
         assert ok is True
 
         # t5: 保存配置 → 重载
-        payload = ConfigResponseDTO(
+        payload = ConfigSaveRequest(
             browser=engine._runtime_config.browser,
             monitor=engine._runtime_config.monitor,
             retry=engine._runtime_config.retry,

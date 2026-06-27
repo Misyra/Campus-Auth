@@ -1,6 +1,6 @@
 # 修改日志
 
-## 2026-06-27 (Task 7-frontend)
+## 2026-06-27 (Task 8 - 修复测试)
 
 ### refactor(frontend): 适配 config/profiles 方法的 ApiResponse 信封格式
 
@@ -164,6 +164,157 @@
   - `MonitorSettings.test_urls`：`default_factory` 从内联列表改为 `_parse_targets(DEFAULT_HTTP_TARGETS)`
   - `MonitorSettings.url_check_urls`：`default_factory` 从内联列表改为 `_parse_url_check(DEFAULT_URL_CHECK_URLS)`
 - 验收：44 个测试全通过
+
+## 2026-06-27 (Task 8 - 修复测试)
+
+### fix(tests): 适配 API 变更后的 11 个测试失败
+
+- `app/api/system.py`：`check_update` 缓存存储排除 `current` 字段（`model_dump(exclude={"current"})`），修复重建 `UpdateCheckResponse` 时 `current` 重复传参的 TypeError
+- `tests/test_api/test_api_monitor_routes.py`：`test_toggle_pure_mode` 断言适配 ApiResponse 信封（`resp.json()["data"]["enabled"]`）
+- `tests/test_api/test_api_profiles_routes.py`：`test_auto_switch_enable/disable` 从 query params 改为 JSON body（`AutoSwitchRequest`）
+- `tests/test_api/test_api_system_routes.py`：`test_uninstall_perform_invalid_keys` 断言从 400 改为 422（Pydantic 验证）
+- `tests/test_api/test_api_tools_routes.py`：`test_upload_png_success` 适配 ApiResponse 信封；`TestFetchUrlContentLength` 3 个测试改用 `FetchUrlRequest` 对象 + 属性访问
+- `tests/test_api/test_system_update_cache.py`：3 个测试从 dict 下标访问改为 `UpdateCheckResponse` 属性访问（`result.latest`、`result.current`）
+- 验收：181 个 API 测试全通过，2271 个总测试全通过
+
+## 2026-06-27 (Task 12)
+
+### feat(frontend): resetConfig 使用后端默认值 + extractApiError 增强
+
+- `frontend/js/methods/config.js`：`resetConfig` 从硬编码 `structuredClone(DEFAULT_CONFIG)` 改为调用 `GET /api/config/defaults` 获取后端默认值，保留 `credentials`（凭据不重置），添加错误处理和 toast 提示
+- `frontend/js/methods/utils.js`：`extractApiError` 增强 FastAPI 422 验证错误支持，数组格式 `detail` 项为对象时提取 `loc` 最后一段作为字段名前缀（如 `[field_name] msg`），字符串项直接保留
+
+## 2026-06-27 (Task 5)
+
+### refactor(frontend): 前端配置数据模型改为嵌套 app_settings 结构
+
+- `frontend/js/constants.js`：`DEFAULT_CONFIG` 中 10 个扁平 app_settings 字段移入 `app_settings` 子对象
+- `frontend/js/data/config.js`：`cloneConfig` 适配嵌套结构，`app_settings` 内含 `custom_variables` 深拷贝
+- `frontend/js/methods/config.js`：
+  - `fetchConfig` 直接映射后端返回的嵌套 `app_settings` 结构（不再手动展平）
+  - `saveConfig` payload 直接发送嵌套 `app_settings`（不再手动扁平化）
+  - `_validateConfig` 引用路径改为 `config.app_settings.app_port`
+  - `onShellFileSelected` 引用路径改为 `config.app_settings.shell_path`
+- `frontend/js/app-options.js`：`config.shell_path` / `config.startup_action` 改为 `config.app_settings.*`
+- `frontend/js/methods/ui.js`：`config.custom_variables` 改为 `config.app_settings.custom_variables`（全部 12 处）
+- `frontend/partials/pages/settings/settings-monitor.html`：`config.block_proxy` → `config.app_settings.block_proxy`
+- `frontend/partials/pages/settings/settings-system.html`：7 个字段改为 `config.app_settings.*`
+- `frontend/partials/pages/settings/settings-account.html`：`config.custom_variables` → `config.app_settings.custom_variables`
+
+## 2026-06-27 (Task 13)
+
+### feat(api): 补全所有遗漏端点的格式统一 — 类型化响应模型
+
+- `app/schemas.py`：新增 6 个响应模型
+  - `StealthScriptResponse`：GET /api/config/default-stealth-script 响应
+  - `NetworkDetectResponse`：POST /api/profiles/detect 响应
+  - `BinaryInfo`：可执行二进制信息（path/name）
+  - `OcrStatusResponse`：GET /api/ocr/status 响应
+  - `UpdateCheckResponse`：GET /api/check-update 响应（含 cached/error 字段）
+  - `UninstallItem`：可清理项目（key/label/exists/path/size_mb）
+- `app/api/config.py`：`default-stealth-script` 返回 `StealthScriptResponse`
+- `app/api/profiles.py`：`detect` 返回 `NetworkDetectResponse`
+- `app/api/install_playwright.py`：`install-playwright` 返回 `ApiResponse`（原返回 raw dict）
+- `app/api/ocr.py`：`status` 返回 `OcrStatusResponse`
+- `app/api/system.py`：`check-update` 返回 `UpdateCheckResponse`，`uninstall/detect` 返回 `list[UninstallItem]`
+- `app/api/scheduled_tasks.py`：list 和 history 添加 `response_model=list[dict[str, Any]]`
+- `app/api/tools.py`：`background/upload` 返回 `ApiResponse`（原返回 raw dict）
+- `app/api/scripts.py`：`binaries` 返回 `list[BinaryInfo]`
+
+## 2026-06-27 (Task 11)
+
+### feat: 添加全局异常处理中间件，统一错误响应格式
+
+- `app/application.py`：
+  - 模块级新增 `api_logger = get_logger("api", source="backend")`
+  - `create_app` 内新增 `from fastapi.responses import JSONResponse` 导入
+  - CORS 配置之后新增 `global_exception_handler`（捕获所有未处理 Exception，返回 500 + 统一 JSON 格式）
+  - 新增 `value_error_handler`（捕获 ValueError，返回 400 + 错误消息）
+- 前端 `extractApiError` 已兼容 `detail` 为字符串和数组两种格式，无需修改
+- 验收：23 个现有测试全通过，模块导入正常
+
+## 2026-06-27 (Task 9)
+
+### refactor: 合并 ActionResponse → ApiResponse，消除双模型混乱
+
+- `app/schemas.py`：
+  - 删除 `ActionResponse` 类定义（原 125-127 行）
+  - 在 `ApiResponse` 类定义之后新增 `ActionResponse = ApiResponse` 向后兼容别名
+- 9 个 API 文件全局替换：
+  - `app/api/autostart.py`：import + 4 处构造 + 3 处 response_model + 3 处返回类型
+  - `app/api/config.py`：import + 1 处构造 + 1 处 response_model + 1 处返回类型
+  - `app/api/monitor.py`：import + 5 处构造 + 5 处 response_model + 5 处返回类型
+  - `app/api/ocr.py`：import + 10 处构造 + 2 处 response_model + 2 处返回类型
+  - `app/api/profiles.py`：import + 3 处构造 + 3 处 response_model + 3 处返回类型
+  - `app/api/scheduled_tasks.py`：import + 6 处构造 + 5 处 response_model + 5 处返回类型
+  - `app/api/scripts.py`：import + 3 处构造 + 3 处 response_model + 3 处返回类型
+  - `app/api/system.py`：import + 2 处构造 + 2 处 response_model + 2 处返回类型
+  - `app/api/tasks.py`：import + 4 处构造 + 4 处 response_model + 4 处返回类型
+- `tests/test_config/test_config_schemas.py`：import `ApiResponse` 替代 `ActionResponse`，`TestActionResponse` 重命名为 `TestApiResponse`
+- 验收：280 个测试通过（7 个 pre-existing 失败与本次改动无关），schemas.py 中 `ActionResponse` 仅作为别名存在
+
+## 2026-06-27 (Task 4)
+
+### refactor(scheduled-tasks): replace manual validation with Pydantic model
+
+- `app/schemas.py`：新增 `ScheduleTime` 和 `ScheduledTaskConfig` 两个 Pydantic 模型
+  - `ScheduleTime`：hour(0-23) + minute(0-59)
+  - `ScheduledTaskConfig`：name(min_length=1)、type(pattern=script|browser|shell)、schedule、timeout(ge=5,le=3600) 等字段
+  - `model_validator`：shell 类型 command 不能为空、script/browser 类型 target_id 不能为空
+- `app/api/scheduled_tasks.py`：
+  - 删除 `_validate_create_payload` 和 `_validate_update_payload` 两个手写校验函数（约 80 行）
+  - `create_scheduled_task`：参数从 `payload: dict` 改为 `payload: ScheduledTaskConfig`，Pydantic 自动校验，无效输入返回 422
+  - `update_scheduled_task`：保留 `payload: dict`（部分更新），合并后通过 `ScheduledTaskConfig.model_validate(merged)` 校验，无效输入返回 400
+  - 导入新增 `ScheduledTaskConfig`
+- `tests/test_api/test_api_scheduled_tasks_routes.py`：
+  - 5 个 create 校验失败测试断言从 `status_code == 200 + success == False` 改为 `status_code == 422`
+  - 3 个 update 校验失败测试断言从 `status_code == 200 + success == False` 改为 `status_code == 400`
+- 验收：24 个定时任务测试全通过
+
+## 2026-06-27 (Task 3)
+
+### refactor(config): use nested structure, eliminate flat dict conversion
+
+- `app/api/config.py`：
+  - `get_config` 返回嵌套结构（`app_settings` 作为子对象），不再展平到顶层
+  - `save_config` 请求体从 `dict` 改为 `ConfigSaveRequest`（嵌套结构），移除 `_flat_dict_to_dto` 转换
+  - `set_source_level` 请求体从 `dict` 改为 `SourceLevelRequest`，返回 `ApiResponse` 信封
+  - `_log_config_changes` 参数从 `ConfigResponseDTO` 改为 `ConfigSaveRequest`
+  - 删除 `_dto_to_flat_dict`、`_flat_dict_to_dto`、`_APP_SETTINGS_KEYS` 三个扁平转换函数
+  - 新增 `GET /api/config/defaults` 端点，返回所有配置字段默认值
+- `app/services/profile_service.py`：`save_global_and_profile` 参数从 `ConfigResponseDTO` 改为 `ConfigSaveRequest`
+- `tests/test_integration/test_full_mode.py`：`ConfigResponseDTO` 改为 `ConfigSaveRequest`
+- `tests/test_integration/test_login_connection.py`：同上
+- 验收：7 个 config 相关测试全通过
+
+## 2026-06-27 (Task 2)
+
+### refactor(api): 统一写操作端点响应格式为 ApiResponse 信封
+
+- `app/api/profiles.py`：`toggle_auto_switch` 请求体从 `dict = Body(default={})` 改为 `AutoSwitchRequest`，返回 `ApiResponse` 信封；移除未使用的 `Body` 导入
+- `app/api/monitor.py`：`get_pure_mode` 返回 `PureModeResponse`，`toggle_pure_mode` 返回 `ApiResponse` 信封
+- `app/api/history.py`：`clear_login_history` 返回 `ApiResponse` 信封
+- `app/api/system.py`：`health` 返回 `HealthResponse`，`get_init_status` 返回 `InitStatusResponse`，`uninstall_perform` 请求体改为 `UninstallRequest`、返回 `ApiResponse` 信封
+- `app/api/tools.py`：`fetch_background_url` 请求体改为 `FetchUrlRequest`、返回 `ApiResponse` 信封
+- 验收：174 通过、7 失败（均为测试期望旧格式，符合预期）
+
+## 2026-06-27 (Task 1)
+
+### feat(schemas): 新增 ApiResponse 信封和类型化请求/响应模型
+
+- `app/schemas.py`：在 `AppSettings` 之后、`RuntimeConfig` 之前新增 10 个 API 模型
+  - `ApiResponse`：所有写操作的标准响应信封（success/message/data）
+  - `ConfigSaveRequest`：PUT /api/config 请求体，嵌套结构与 RuntimeConfig 对齐
+  - `SourceLevelRequest`：PUT /api/config/source-level 请求体
+  - `AutoSwitchRequest`：POST /api/profiles/auto-switch 请求体
+  - `UninstallRequest`：POST /api/uninstall 请求体
+  - `FetchUrlRequest`：POST /api/background/fetch-url 请求体
+  - `InitStatusResponse`：GET /api/init-status 响应
+  - `HealthResponse`：GET /api/health 响应
+  - `ShellListResponse`：GET /api/shells 响应
+  - `PureModeResponse`：GET/POST /api/pure-mode 响应
+- 注意：新模型放在 `AppSettings` 之后而非 `ActionResponse` 之后，因为 `ConfigSaveRequest` 的 `Field(default_factory=BrowserSettings)` 需要运行时引用已定义的设置类
+- 验收：10 个新模型全部可正常导入
 
 ## 2026-06-26 (Task 8)
 

@@ -7,7 +7,12 @@
 export function extractApiError(error, fallback = '操作失败') {
   const detail = error?.response?.data?.detail;
   if (Array.isArray(detail)) {
-    return detail.map(d => d.msg || d.detail || String(d)).join('; ') || fallback;
+    // FastAPI 422 validation errors: [{loc: [...], msg: "...", type: "..."}]
+    return detail.map(d => {
+      if (typeof d === 'string') return d;
+      const loc = d.loc ? `[${d.loc[d.loc.length - 1]}] ` : '';
+      return loc + (d.msg || d.detail || String(d));
+    }).join('; ') || fallback;
   }
   return detail || error?.message || fallback;
 }

@@ -120,13 +120,13 @@ class TestAutoSwitch:
     def test_auto_switch_enable(self, api_client):
         test_client, mock_services = api_client
         mock_services.profile_service.set_auto_switch.return_value = None
-        resp = test_client.post("/api/profiles/auto-switch?enabled=true")
+        resp = test_client.post("/api/profiles/auto-switch", json={"enabled": True})
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
     def test_auto_switch_disable(self, api_client):
         test_client, mock_services = api_client
         mock_services.profile_service.set_auto_switch.return_value = None
-        resp = test_client.post("/api/profiles/auto-switch?enabled=false")
+        resp = test_client.post("/api/profiles/auto-switch", json={"enabled": False})
         assert resp.status_code == 200
         assert resp.json()["success"] is True

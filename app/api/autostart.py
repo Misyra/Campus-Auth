@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel
 
 from app.deps import get_autostart_service
-from app.schemas import ActionResponse, AutoStartStatusResponse
+from app.schemas import ApiResponse, AutoStartStatusResponse, AutostartEnableRequest, ShellListResponse
 from app.utils.logging import get_logger
 from app.utils.shell_utils import detect_shells as detect_available_shells
 from app.utils.shell_utils import get_default_shell
@@ -15,15 +14,12 @@ router = APIRouter()
 api_logger = get_logger("api", source="backend")
 
 
-@router.get("/api/shells")
-def list_shells() -> dict:
+@router.get("/api/shells", response_model=ShellListResponse)
+def list_shells() -> ShellListResponse:
     """获取系统可用的 Shell 列表。"""
     shells = detect_available_shells()
     default_shell = get_default_shell()
-    return {
-        "shells": shells,
-        "default": default_shell,
-    }
+    return ShellListResponse(shells=[s["path"] for s in shells], default=default_shell)
 
 
 def _read_autostart_lightweight(request: Request) -> bool:
@@ -57,43 +53,39 @@ def autostart_status(
     )
 
 
-class _EnableBody(BaseModel):
-    lightweight: bool = True
-
-
-@router.post("/api/autostart/enable", response_model=ActionResponse)
+@router.post("/api/autostart/enable", response_model=ApiResponse)
 def enable_autostart(
     request: Request,
-    body: _EnableBody | None = None,
+    body: AutostartEnableRequest | None = None,
     autostart_svc=Depends(get_autostart_service),
-) -> ActionResponse:
+) -> ApiResponse:
     lightweight = body.lightweight if body else True
     _save_autostart_lightweight(request, lightweight)
     ok, message = autostart_svc.enable(lightweight=lightweight)
     api_logger.info("启用自启动 -> success={}, lightweight={}, message={}", ok, lightweight, message)
-    return ActionResponse(success=ok, message=message)
+    return ApiResponse(success=ok, message=message)
 
 
-@router.post("/api/autostart/disable", response_model=ActionResponse)
+@router.post("/api/autostart/disable", response_model=ApiResponse)
 def disable_autostart(
     autostart_svc=Depends(get_autostart_service),
-) -> ActionResponse:
+) -> ApiResponse:
     ok, message = autostart_svc.disable()
     api_logger.info("禁用自启动 -> success={}, message={}", ok, message)
-    return ActionResponse(success=ok, message=message)
+    return ApiResponse(success=ok, message=message)
 
 
-@router.post("/api/autostart/mode", response_model=ActionResponse)
+@router.post("/api/autostart/mode", response_model=ApiResponse)
 def set_autostart_mode(
     request: Request,
-    body: _EnableBody,
+    body: AutostartEnableRequest,
     autostart_svc=Depends(get_autostart_service),
-) -> ActionResponse:
+) -> ApiResponse:
     """切换自启动运行模式（重新生成脚本）。"""
     _save_autostart_lightweight(request, body.lightweight)
     status = autostart_svc.status()
     if not status.get("enabled"):
-        return ActionResponse(success=True, message="自启动未启用，模式已保存")
+        return ApiResponse(success=True, message="自启动未启用，模式已保存")
     ok, message = autostart_svc.enable(lightweight=body.lightweight)
     api_logger.info("切换自启动模式 -> lightweight={}, success={}", body.lightweight, ok)
-    return ActionResponse(success=ok, message=message)
+    return ApiResponse(success=ok, message=message)

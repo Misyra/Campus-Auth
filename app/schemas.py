@@ -122,9 +122,66 @@ _BROWSER_ARGS_DEFAULT = (
 
 
 
-class ActionResponse(BaseModel):
-    success: bool
-    message: str
+# ActionResponse 已合并到 ApiResponse，保留别名向后兼容
+# 逐步迁移后删除此别名
+
+
+# ── GET 端点响应模型 ──
+
+
+class ProfileSummary(BaseModel):
+    """方案列表中的单个方案摘要。"""
+    name: str = ""
+    match_gateway_ip: str = ""
+    match_ssid: str = ""
+    carrier: str = "无"
+    carrier_custom: str = ""
+    auth_url: str = ""
+    active_task: str = ""
+
+
+class ProfileListResponse(BaseModel):
+    """GET /api/profiles 响应。"""
+    profiles: dict[str, ProfileSummary] = Field(default_factory=dict)
+    active_profile: str = "default"
+    auto_switch: bool = False
+
+
+class ProfileDetailResponse(BaseModel):
+    """GET /api/profiles/{id} 响应。"""
+    profile_id: str
+    settings: Profile
+
+
+class BrowserInfo(BaseModel):
+    """浏览器信息。"""
+    channel: str
+    name: str
+    icon: str = ""
+    installed: bool = False
+    needs_download: bool = False
+    description: str = ""
+
+
+class BrowserListResponse(BaseModel):
+    """GET /api/browsers 响应。"""
+    browsers: list[BrowserInfo] = Field(default_factory=list)
+    current: str = "playwright"
+
+
+class TaskSummary(BaseModel):
+    """任务列表中的单个任务。"""
+    id: str = ""
+    name: str = ""
+    description: str = ""
+    type: str = ""
+    binary_path: str = ""
+
+
+class LogLevelResponse(BaseModel):
+    """GET /api/config/log-levels 响应。"""
+    global_level: str = "INFO"
+    source_levels: dict[str, str] = Field(default_factory=dict)
 
 
 class MonitorStatusResponse(BaseModel):
@@ -311,6 +368,165 @@ class AppSettings(BaseModel, frozen=True):
     custom_variables: dict[str, str] = Field(default_factory=dict)
 
 
+# ── API 请求/响应模型 ──
+
+
+class ApiResponse(BaseModel):
+    """所有写操作的标准响应信封。
+
+    success=True 表示业务成功；success=False 表示业务失败（HTTP 200）。
+    data 可选，用于附加返回数据。
+    """
+    success: bool
+    message: str = ""
+    data: dict | None = None
+
+
+# 向后兼容别名 — 逐步迁移后删除
+ActionResponse = ApiResponse
+
+
+class ConfigSaveRequest(BaseModel):
+    """PUT /api/config 请求体 — 嵌套结构，与 RuntimeConfig 对齐。"""
+    browser: BrowserSettings = Field(default_factory=BrowserSettings)
+    monitor: MonitorSettings = Field(default_factory=MonitorSettings)
+    retry: RetrySettings = Field(default_factory=RetrySettings)
+    pause: PauseSettings = Field(default_factory=PauseSettings)
+    logging: LoggingSettings = Field(default_factory=LoggingSettings)
+    app_settings: AppSettings = Field(default_factory=AppSettings)
+    # 凭据（平铺，与 ConfigResponseDTO 对齐）
+    username: str = ""
+    password: str = ""
+    auth_url: str = ""
+    isp: str = ""
+    carrier_custom: str = ""
+    active_task: str = ""
+
+
+class SourceLevelRequest(BaseModel):
+    """PUT /api/config/source-level 请求体。"""
+    source: str = Field(min_length=1, description="日志来源，'global' 表示全局")
+    level: str = Field(min_length=1, description="日志级别")
+
+
+class AutoSwitchRequest(BaseModel):
+    """POST /api/profiles/auto-switch 请求体。"""
+    enabled: bool = True
+
+
+class UninstallRequest(BaseModel):
+    """POST /api/uninstall 请求体。"""
+    keys: list[str] = Field(default_factory=list)
+
+
+class FetchUrlRequest(BaseModel):
+    """POST /api/background/fetch-url 请求体。"""
+    url: str = Field(min_length=1, description="图片 URL")
+
+
+class InitStatusResponse(BaseModel):
+    """GET /api/init-status 响应。"""
+    initialized: bool
+    agreed: bool
+    password_decryption_failed: bool = False
+
+
+class HealthResponse(BaseModel):
+    """GET /api/health 响应。"""
+    status: str = "ok"
+    version: str = ""
+    python_version: str = ""
+    memory: dict = Field(default_factory=dict)
+    process: dict = Field(default_factory=dict)
+
+
+class ShellListResponse(BaseModel):
+    """GET /api/shells 响应。"""
+    shells: list[str] = Field(default_factory=list)
+    default: str = ""
+
+
+class DebugStepResult(BaseModel):
+    """调试步骤执行结果。"""
+    step_index: int
+    success: bool = False
+    message: str = ""
+    screenshot: str | None = None
+
+
+class DebugSessionResponse(BaseModel):
+    """调试会话状态响应（start/next/run-all/stop 共用）。"""
+    running: bool = False
+    task_id: str | None = None
+    current_step: int = 0
+    total_steps: int = 0
+    steps: list = Field(default_factory=list)
+    results: list = Field(default_factory=list)
+    screenshot_url: str | None = None
+    message: str = ""
+
+
+class AutostartEnableRequest(BaseModel):
+    """POST /api/autostart/enable|mode 请求体。"""
+    lightweight: bool = True
+
+
+class TaskOrderRequest(BaseModel):
+    """POST /api/tasks/order 请求体。"""
+    order: list[str] = Field(default_factory=list, description="任务 ID 有序列表")
+
+
+class PureModeResponse(BaseModel):
+    """GET/POST /api/pure-mode 响应。"""
+    enabled: bool
+
+
+class StealthScriptResponse(BaseModel):
+    """GET /api/config/default-stealth-script 响应。"""
+    script: str = ""
+
+
+class NetworkDetectResponse(BaseModel):
+    """POST /api/profiles/detect 响应。"""
+    gateway_ip: str | None = None
+    ssid: str | None = None
+    matched_profile_id: str | None = None
+    matched_profile_name: str | None = None
+
+
+class BinaryInfo(BaseModel):
+    """可执行二进制信息。"""
+    path: str = ""
+    name: str = ""
+
+
+class OcrStatusResponse(BaseModel):
+    """GET /api/ocr/status 响应。"""
+    installed: bool = False
+    size_mb: float = 0.0
+
+
+class UpdateCheckResponse(BaseModel):
+    """GET /api/check-update 响应。"""
+    current: str = ""
+    latest: str | None = None
+    has_update: bool = False
+    url: str = ""
+    body: str = ""
+    published_at: str = ""
+    cached: bool = False
+    error: str | None = None
+
+
+class UninstallItem(BaseModel):
+    """可清理项目。"""
+    key: str
+    label: str
+    exists: bool = False
+    path: str = ""
+    size_mb: float = 0.0
+
+
 class RuntimeConfig(BaseModel, frozen=True):
     """运行时配置根模型 — 替代旧 dict[str, Any]。
 
@@ -376,6 +592,35 @@ class ProfilesData(BaseModel):
         """确保 default profile 存在"""
         if "default" not in self.profiles:
             self.profiles["default"] = Profile()
+        return self
+
+
+class ScheduleTime(BaseModel):
+    """定时任务执行时间。"""
+
+    hour: int = Field(ge=0, le=23)
+    minute: int = Field(ge=0, le=59)
+
+
+class ScheduledTaskConfig(BaseModel):
+    """定时任务配置 — 替代 scheduled_tasks.py 中的手写校验。"""
+
+    name: str = Field(min_length=1, description="任务名称")
+    description: str = ""
+    type: str = Field(pattern=r"^(script|browser|shell)$", description="任务类型")
+    target_id: str = ""
+    command: str = ""
+    shell_path: str = ""
+    enabled: bool = True
+    schedule: ScheduleTime
+    timeout: int = Field(default=60, ge=5, le=3600)
+
+    @model_validator(mode="after")
+    def validate_type_fields(self) -> "ScheduledTaskConfig":
+        if self.type == "shell" and not self.command:
+            raise ValueError("Shell 命令不能为空")
+        if self.type in ("script", "browser") and not self.target_id:
+            raise ValueError("请选择目标任务")
         return self
 
 

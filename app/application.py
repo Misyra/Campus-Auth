@@ -29,6 +29,7 @@ from app.utils.ports import resolve_port
 
 http_logger = get_logger("http", source="backend")
 startup_logger = get_logger("startup", source="backend")
+api_logger = get_logger("api", source="backend")
 
 # temp 目录中截图的最大保留天数
 _TEMP_SCREENSHOT_MAX_AGE_DAYS = 7
@@ -269,6 +270,7 @@ def create_app(existing_container=None, boot_engine=False):
     """
     from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
     from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import JSONResponse
 
     from app.version import get_project_version
 
@@ -295,6 +297,27 @@ def create_app(existing_container=None, boot_engine=False):
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type"],
     )
+
+    # ==================== 全局异常处理 ====================
+
+    @_app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        """捕获所有未处理异常，返回统一 JSON 格式。"""
+        api_logger.error(
+            "未处理异常: {} {}", request.method, request.url.path, exc_info=True
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"服务器内部错误: {type(exc).__name__}"},
+        )
+
+    @_app.exception_handler(ValueError)
+    async def value_error_handler(request: Request, exc: ValueError):
+        """业务逻辑校验错误统一返回 400。"""
+        return JSONResponse(
+            status_code=400,
+            content={"detail": str(exc)},
+        )
 
     # ==================== 中间件 ====================
 

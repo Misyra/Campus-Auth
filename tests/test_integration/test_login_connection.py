@@ -220,10 +220,10 @@ class TestLoginConnection:
         login_done.wait(timeout=5)
 
         # 登录进行中，保存新配置
-        from app.schemas import ConfigResponseDTO
+        from app.schemas import ConfigSaveRequest
         from app.services.profile_service import save_global_and_profile
 
-        payload = ConfigResponseDTO(
+        payload = ConfigSaveRequest(
             browser=engine._runtime_config.browser,
             monitor=engine._runtime_config.monitor,
             retry=engine._runtime_config.retry,

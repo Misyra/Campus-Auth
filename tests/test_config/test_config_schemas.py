@@ -12,7 +12,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas import (
-    ActionResponse,
+    ApiResponse,
     Profile,
     AutoStartStatusResponse,
     LogEntry,
@@ -325,18 +325,18 @@ class TestProfilesData:
 
 
 # ---------------------------------------------------------------------
-# ActionResponse
+# ApiResponse (原 ActionResponse)
 # ---------------------------------------------------------------------
 
 
-class TestActionResponse:
+class TestApiResponse:
     def test_success(self):
-        r = ActionResponse(success=True, message="操作成功")
+        r = ApiResponse(success=True, message="操作成功")
         assert r.success is True
         assert r.message == "操作成功"
 
     def test_failure(self):
-        r = ActionResponse(success=False, message="操作失败")
+        r = ApiResponse(success=False, message="操作失败")
         assert r.success is False
         assert r.message == "操作失败"
 

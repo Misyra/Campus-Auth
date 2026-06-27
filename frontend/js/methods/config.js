@@ -25,7 +25,6 @@ export const configMethods = {
   async fetchConfig(updateSnapshot = false) {
     try {
       const { data } = await this.$api.get('/api/config');
-      // ConfigResponseDTO: 凭据为顶层字段，映射回前端内部嵌套结构
       this.config = {
         browser: { ...DEFAULT_CONFIG.browser, ...(data.browser || {}) },
         monitor: { ...DEFAULT_CONFIG.monitor, ...(data.monitor || {}) },
@@ -33,23 +32,14 @@ export const configMethods = {
         logging: { ...DEFAULT_CONFIG.logging, ...(data.logging || {}) },
         retry: { ...DEFAULT_CONFIG.retry, ...(data.retry || {}) },
         credentials: {
-          username: data.username ?? DEFAULT_CONFIG.credentials.username,
-          password: data.password ?? DEFAULT_CONFIG.credentials.password,
-          auth_url: data.auth_url ?? DEFAULT_CONFIG.credentials.auth_url,
-          isp: data.isp ?? DEFAULT_CONFIG.credentials.isp,
-          carrier_custom: data.carrier_custom ?? DEFAULT_CONFIG.credentials.carrier_custom,
+          username: data.username ?? '',
+          password: data.password ?? '',
+          auth_url: data.auth_url ?? '',
+          isp: data.isp ?? '',
+          carrier_custom: data.carrier_custom ?? '',
         },
-        active_task: data.active_task ?? DEFAULT_CONFIG.active_task,
-        custom_variables: data.custom_variables ?? DEFAULT_CONFIG.custom_variables,
-        block_proxy: data.block_proxy ?? DEFAULT_CONFIG.block_proxy,
-        shell_path: data.shell_path ?? DEFAULT_CONFIG.shell_path,
-        minimize_to_tray: data.minimize_to_tray ?? DEFAULT_CONFIG.minimize_to_tray,
-        lightweight_tray: data.lightweight_tray ?? DEFAULT_CONFIG.lightweight_tray,
-        startup_action: data.startup_action ?? DEFAULT_CONFIG.startup_action,
-        autostart_lightweight: data.autostart_lightweight ?? DEFAULT_CONFIG.autostart_lightweight,
-        auto_open_browser: data.auto_open_browser ?? DEFAULT_CONFIG.auto_open_browser,
-        proxy: data.proxy ?? DEFAULT_CONFIG.proxy,
-        app_port: data.app_port ?? DEFAULT_CONFIG.app_port,
+        active_task: data.active_task ?? '',
+        app_settings: { ...DEFAULT_CONFIG.app_settings, ...(data.app_settings || {}) },
       };
       // 同步浏览器选择状态
       if (data.browser?.browser_channel) {
@@ -78,7 +68,7 @@ export const configMethods = {
     if (url && !/^https?:\/\//.test(url)) {
       errors.push('认证地址必须以 http:// 或 https:// 开头');
     }
-    const port = this.config.app_port;
+    const port = this.config.app_settings.app_port;
     if (port && (port < 1 || port > 65535)) {
       errors.push('端口范围必须在 1-65535 之间');
     }
@@ -151,30 +141,19 @@ export const configMethods = {
     this.saveFailed = false;
     try {
       const c = this.config;
-      // 构建 ConfigResponseDTO 格式：凭据展开为顶层字段
       const payload = {
         browser: c.browser,
         monitor: c.monitor,
         pause: c.pause,
         logging: c.logging,
         retry: c.retry,
-        // 凭据展开为顶层字段
+        app_settings: c.app_settings,
         username: c.credentials.username || '',
         password: c.credentials.password || '',
         auth_url: c.credentials.auth_url || '',
         isp: c.credentials.isp || '',
         carrier_custom: c.credentials.carrier_custom || '',
         active_task: c.active_task || '',
-        custom_variables: c.custom_variables || {},
-        block_proxy: c.block_proxy,
-        shell_path: c.shell_path || '',
-        minimize_to_tray: c.minimize_to_tray,
-        lightweight_tray: c.lightweight_tray,
-        startup_action: c.startup_action || 'none',
-        autostart_lightweight: c.autostart_lightweight,
-        auto_open_browser: c.auto_open_browser,
-        proxy: c.proxy || '',
-        app_port: c.app_port || 50721,
       };
       const { data } = await this.$api.put('/api/config', payload, {
         signal: this._saveAbortController.signal,
@@ -202,17 +181,33 @@ export const configMethods = {
       }
     }
   },
-  resetConfig() {
+  async resetConfig() {
     if (!confirm('确定要恢复默认设置吗？当前修改将丢失。')) return;
-    this.config = structuredClone(DEFAULT_CONFIG);
-    this._lastSavedConfig = null;
-    this.frontendLogger.info('config', '已恢复默认设置');
-    this.saveConfig();
+    try {
+      const { data } = await this.$api.get('/api/config/defaults');
+      // 保留 credentials（凭据不重置）
+      this.config = {
+        browser: { ...data.browser },
+        monitor: { ...data.monitor },
+        pause: { ...data.pause },
+        logging: { ...data.logging },
+        retry: { ...data.retry },
+        app_settings: { ...data.app_settings },
+        credentials: { ...this.config.credentials },
+        active_task: '',
+      };
+      this._lastSavedConfig = null;
+      this.frontendLogger.info('config', '已恢复默认设置');
+      this.saveConfig();
+    } catch (error) {
+      this.frontendLogger.error('config', '获取默认配置失败', error);
+      this.toastOnly(false, '获取默认配置失败');
+    }
   },
   onShellFileSelected(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    this.config.shell_path = file.path || file.name;
+    this.config.app_settings.shell_path = file.path || file.name;
     e.target.value = '';
   },
   async fetchShells() {

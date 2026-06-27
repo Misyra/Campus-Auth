@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.network.detect import detect_gateway_ip, detect_wifi_ssid
-from app.schemas import ConfigResponseDTO, GlobalConfig, Profile, ProfilesData, RuntimeConfig
+from app.schemas import ConfigSaveRequest, GlobalConfig, Profile, ProfilesData, RuntimeConfig
 from app.utils.crypto import save_password_field
 from app.utils.files import atomic_write
 from app.utils.logging import get_logger
@@ -337,7 +337,7 @@ def _rollback_config(data: ProfilesData, backup_data: ProfilesData) -> None:
 
 
 def save_global_and_profile(
-    payload: ConfigResponseDTO,
+    payload: ConfigSaveRequest,
     profile_service: ProfileService,
     reload_fn,
 ) -> SaveResult:
