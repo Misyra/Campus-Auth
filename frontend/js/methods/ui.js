@@ -369,7 +369,7 @@ export const uiMethods = {
         this.ws.onerror = null;
         this.ws.close();
       }
-      await this.$api.post('/api/shutdown');
+      await this.$apiService.system.shutdown();
       // 显示退出提示页面
       this._showExitOverlay();
     } catch (error) {

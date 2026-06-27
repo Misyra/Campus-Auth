@@ -79,7 +79,7 @@ export const lifecycleMethods = {
   },
   async autoCheckUpdateOnStartup() {
     try {
-      const { data } = await this.$api.get('/api/check-update');
+      const data = await this.$apiService.system.checkUpdate();
       this.updateInfo = data;
       if (!data?.has_update) return;
 
@@ -107,7 +107,7 @@ export const lifecycleMethods = {
   },
   async checkInitStatus() {
     try {
-      const { data } = await this.$api.get('/api/init-status');
+      const data = await this.$apiService.system.initStatus();
       this.showWizard = !data.agreed;
       if (data.password_decryption_failed) {
         this.frontendLogger.error('init', '密码解密失败，请在设置页面重新输入密码');
@@ -124,7 +124,7 @@ export const lifecycleMethods = {
   },
   async fetchAppVersion() {
     try {
-      const { data } = await this.$api.get('/api/health');
+      const data = await this.$apiService.system.health();
       if (data?.version) {
         this.appVersion = data.version;
         if (data.python_version) this.pythonVersion = data.python_version;
@@ -158,7 +158,7 @@ export const lifecycleMethods = {
     this.updateLoading = true;
     this.updateInfo = null;
     try {
-      const { data } = await this.$api.get('/api/check-update');
+      const data = await this.$apiService.system.checkUpdate();
       this.updateInfo = data;
     } catch {
       this.updateInfo = { error: '检查更新失败，请检查网络连接' };
@@ -169,7 +169,7 @@ export const lifecycleMethods = {
   async finishWizard() {
     this.busy.save = true;
     try {
-      const { data } = await this.$api.post('/api/agree');
+      const data = await this.$apiService.system.agree();
       if (data.success) {
         this.showWizard = false;
         this.agreedToTerms = false;
@@ -285,7 +285,7 @@ export const lifecycleMethods = {
   },
   async fetchStatus() {
     try {
-      const { data } = await this.$api.get('/api/status');
+      const data = await this.$apiService.monitor.fetchStatus();
       this.status = data;
       if (this.fetchStatusFailCount > 0) {
         this.fetchStatusFailCount = 0;
@@ -301,7 +301,7 @@ export const lifecycleMethods = {
   },
   async fetchLogs() {
     try {
-      const { data } = await this.$api.get('/api/logs', { params: { limit: LIMITS.LOG_MAX_ENTRIES } });
+      const data = await this.$apiService.system.fetchLogs(LIMITS.LOG_MAX_ENTRIES);
       this.logs = data;
       this.$nextTick(() => this.scrollToBottom());
     } catch (error) {

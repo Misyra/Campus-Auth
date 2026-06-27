@@ -1,4 +1,5 @@
 import { api, SETTINGS_TABS, LOG_LEVELS, LEVEL_VALUES } from './constants.js';
+import { apiService } from './api-service.js';
 import { createFrontendLogger } from './logger.js';
 import { actionMethods } from './methods/actions.js';
 import { appearanceMethods } from './methods/appearance.js';
@@ -260,6 +261,7 @@ export const appOptions = {
   mounted() {
     document.getElementById('app').style.display = '';
     this.$api = api;
+    this.$apiService = apiService;
     this.init();
     // 应用保存的外观设置
     this.applyAppearance();

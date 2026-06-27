@@ -24,7 +24,7 @@ export const configMethods = {
 
   async fetchConfig(updateSnapshot = false) {
     try {
-      const { data } = await this.$api.get('/api/config');
+      const data = await this.$apiService.config.fetch();
       this.config = {
         browser: { ...DEFAULT_CONFIG.browser, ...(data.browser || {}) },
         monitor: { ...DEFAULT_CONFIG.monitor, ...(data.monitor || {}) },
@@ -161,7 +161,7 @@ export const configMethods = {
         payload.carrier_custom = c.credentials.carrier_custom || '';
       }
 
-      const { data } = await this.$api.patch('/api/config', payload, {
+      const data = await this.$apiService.config.patch(payload, {
         signal: this._saveAbortController.signal,
       });
       if (data.success) {
@@ -191,7 +191,7 @@ export const configMethods = {
   async resetConfig() {
     if (!confirm('确定要恢复默认设置吗？当前修改将丢失。')) return;
     try {
-      const { data } = await this.$api.get('/api/config/defaults');
+      const data = await this.$apiService.config.fetchDefaults();
       // 保留 credentials（凭据不重置）
       this.config = {
         browser: { ...data.browser },
@@ -219,7 +219,7 @@ export const configMethods = {
   },
   async fetchShells() {
     try {
-      const { data } = await this.$api.get('/api/shells');
+      const data = await this.$apiService.autostart.fetchShells();
       this.availableShells = data.shells || [];
       this.defaultShell = data.default || '';
     } catch (error) {
@@ -230,7 +230,7 @@ export const configMethods = {
   },
   async loadDefaultStealthScript() {
     try {
-      const { data } = await this.$api.get('/api/config/default-stealth-script');
+      const data = await this.$apiService.config.fetchStealthScript();
       this.config.browser.stealth_custom_script = data.script || '';
       this.frontendLogger.info('config', '已加载默认反检测脚本');
     } catch (error) {
@@ -240,7 +240,7 @@ export const configMethods = {
   // ── OCR 依赖管理 ──
   async fetchOcrStatus() {
     try {
-      const { data } = await this.$api.get('/api/ocr/status');
+      const data = await this.$apiService.ocr.fetchStatus();
       this.ocrStatus = data;
     } catch {
       this.ocrStatus = { installed: false, size_mb: 0 };
@@ -254,7 +254,7 @@ export const configMethods = {
     if (!confirm(confirmText)) return;
     this.busy.ocr = true;
     try {
-      const { data } = await this.$api.post(`/api/ocr/${action}`);
+      const data = await (action === 'install' ? this.$apiService.ocr.install() : this.$apiService.ocr.uninstall());
       if (data.success) {
         this.frontendLogger.info('ocr', data.message);
         this.notify(true, data.message + '，需重启程序后生效', 'install');
@@ -280,7 +280,7 @@ export const configMethods = {
     if (this._autostartInFlight) return;
     this._autostartInFlight = true;
     try {
-      const { data } = await this.$api.get('/api/autostart/status');
+      const data = await this.$apiService.autostart.fetchStatus();
       this.autostart = data;
     } catch (error) {
       this.frontendLogger.warn('autostart', '获取自启动状态失败', error);
@@ -301,7 +301,7 @@ export const configMethods = {
     const label = enable ? '启用' : '关闭';
     this.busy.autostart = true;
     try {
-      const { data } = await this.$api.post(`/api/autostart/${action}`);
+      const data = await this.$apiService.autostart.toggle(enable);
       if (data.success) {
         this.frontendLogger.info('autostart', data.message);
         this.toastOnly(true, data.message);
@@ -326,7 +326,7 @@ export const configMethods = {
   async disableAutostart() { return this._toggleAutostart(false); },
   async setAutostartMode(lightweight) {
     try {
-      const { data } = await this.$api.post('/api/autostart/mode', { lightweight });
+      const data = await this.$apiService.autostart.setMode(lightweight);
       if (data.success) {
         this.frontendLogger.info('autostart', data.message);
         this.toastOnly(true, data.message);
@@ -342,7 +342,7 @@ export const configMethods = {
   // ── 日志级别管理 ──
   async fetchLogLevels() {
     try {
-      const { data } = await this.$api.get('/api/config/log-levels');
+      const data = await this.$apiService.config.fetchLogLevels();
       // 统一更新到 config.logging，不再使用独立的 logLevels
       if (data.global_level) {
         this.config.logging.level = data.global_level;
@@ -356,7 +356,7 @@ export const configMethods = {
   },
   async setSourceLevel(source, level) {
     try {
-      const { data } = await this.$api.put('/api/config/source-level', { source, level });
+      const data = await this.$apiService.config.setSourceLevel(source, level);
       if (data.success) {
         if (source === 'global') {
           this.config.logging.level = level;
