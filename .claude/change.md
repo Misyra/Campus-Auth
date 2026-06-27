@@ -1,44 +1,21 @@
 # 修改日志
 
-## 2026-06-27 (Task 6 - 前端校验降级为 UX 提示)
+## 2026-06-27 (Task 4 - 前端 API 服务层)
 
-### refactor(frontend): downgrade client validation to UX hints, backend as authority
+### refactor(frontend): 引入 apiService 集中管理 API 调用
 
-- `frontend/js/methods/config.js`：`_validateConfig()` 的 `errors` 数组重命名为 `warnings`，语义从阻塞校验降级为警告提示
-- `frontend/js/methods/config.js`：`saveConfig()` 中 `_validateConfig()` 结果检查从阻塞返回改为 `frontendLogger.warn` 记录日志，不再阻止配置保存
-
-## 2026-06-27 (Task 5 - 配置增量保存 PATCH)
-
-### feat: 新增 PATCH /api/config 配置增量保存
-
-- `app/schemas.py`：新增 `ConfigPatchRequest` 模型，所有字段 Optional（浏览器/监控/重试/暂停/日志/应用设置/凭据/active_task），未传字段不修改
-- `app/api/config.py`：新增 `patch_config` 端点（PATCH /api/config），合并逻辑：顶层字段直接覆盖，嵌套字段（browser/monitor/retry/pause/logging/app_settings）深度合并，复用 `save_global_and_profile` 持久化
-- `frontend/js/methods/config.js`：`saveConfig` 从 PUT 切换为 PATCH，凭据字段（username/auth_url/isp/carrier_custom）仅在 `_credentialsChanged` 为 true 时发送；成功回调重置 `_credentialsChanged`
-- `frontend/js/data/config.js`：新增 `_credentialsChanged: false` 标记
-- `frontend/partials/pages/settings/settings-account.html`：username/auth_url/isp/carrier_custom 的 @input 事件追加 `_credentialsChanged = true`
-
-## 2026-06-27 (Task 3 - 清理 onConfigChange 无用参数)
-
-### refactor(frontend): 移除 onConfigChange 无用参数 (47+ dead args)
-
-- `frontend/js/methods/config.js`：`onConfigChange(field, value, type = 'toggle')` 签名改为 `onConfigChange()`，函数体不变（仅使用 `this._debounceSave(1000)`，参数完全未使用）；`onCheckToggle` 中的调用同步去参
-- `frontend/js/methods/ui.js`：5 处 `onConfigChange(...)` 调用全部改为 `onConfigChange()`
-- `frontend/partials/pages/settings/settings-monitor.html`：16 处调用去参
-- `frontend/partials/pages/settings/settings-browser.html`：15 处调用去参
-- `frontend/partials/pages/settings/settings-system.html`：11 处调用去参
-- `frontend/partials/pages/settings/settings-account.html`：6 处调用去参
-
-## 2026-06-27 (Task 1 - 密码字段处理优化)
-
-### refactor: 简化密码处理，消除掩码往返
-
-- `app/utils/crypto.py`：`save_password_field` 删除 `startswith("•")` 掩码检测分支，空串语义改为"不修改"（返回 existing_encrypted）
-- `app/api/config.py`：GET /api/config 密码字段始终返回空串；`_log_config_changes` 中删除掩码检测条件
-- `app/schemas.py`：更新 `ConfigResponseDTO.password` 注释
-- `frontend/js/data/config.js`：新增 `_passwordChanged: false` 标志
-- `frontend/js/methods/config.js`：`saveConfig` 中密码字段条件发送（`_passwordChanged` 为 true 时才发送）；`fetchConfig` 成功后重置标志
-- `frontend/partials/pages/settings/settings-account.html`：密码输入框 `@input` 追加 `_passwordChanged = true`；移除掩码相关 placeholder 逻辑
-- 测试适配：更新 `test_crypto.py`、`test_utils.py`、`test_api_config_routes.py` 中的断言以匹配新语义
+- 新建 `frontend/js/api-service.js`：封装所有 API 调用，集中管理路径和响应解包
+  - 按功能域分组：config / monitor / actions / system / profiles / autostart / ocr / history / uninstall / debug
+  - 使用 constants.js 导出的 `api` 实例，所有方法返回解包后的 `r.data`
+  - `config.save` / `config.patch` 支持 `opts` 参数透传 AbortController signal
+- `frontend/js/app-options.js`：import apiService，mounted 中注入 `this.$apiService = apiService`
+- `frontend/js/methods/config.js`：12 处 API 调用迁移至 apiService（fetchConfig/saveConfig/resetConfig/fetchShells/loadDefaultStealthScript/fetchOcrStatus/installOcr+uninstallOcr/fetchAutostart/_toggleAutostart/setAutostartMode/fetchLogLevels/setSourceLevel）
+- `frontend/js/methods/actions.js`：8 处 API 调用迁移至 apiService（openUninstall/confirmUninstall/toggleMonitor/manualLogin/cancelLogin/testNetwork/fetchLoginHistory/clearLoginHistory）
+- `frontend/js/methods/profiles.js`：7 处 API 调用迁移至 apiService（fetchProfiles/showProfileEditor/saveProfile/deleteProfile/setActiveProfile/_detectNetwork/toggleAutoSwitch）
+- `frontend/js/methods/lifecycle.js`：7 处 API 调用迁移至 apiService（autoCheckUpdateOnStartup/checkInitStatus/fetchAppVersion/checkUpdate/finishWizard/fetchStatus/fetchLogs）
+- `frontend/js/methods/ui.js`：quitApp 迁移至 apiService.system.shutdown()
+- `frontend/js/tasks/debug.js`：5 处 API 调用迁移至 apiService（startDebug/debugNextStep/debugRunAll/debugStop + _debugAction 重构为接受 apiCall 函数）
+- 保留 `this.$api`（原始 axios 实例）不删除，供未迁移的模块继续使用（tasks/scripts/scheduled_tasks/appearance/drag）
 
 ## 2026-06-27 (Task 8 - 修复测试)
 
