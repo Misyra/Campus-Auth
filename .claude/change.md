@@ -2,6 +2,11 @@
 
 ## 2026-06-27
 
+### docs: 添加 PR 模板
+
+- 新建 `.github/PULL_REQUEST_TEMPLATE.md`：GitHub Pull Request 标准化模板
+  - 变更说明、变更类型（8 种复选框）、关联 Issue、测试情况、补充信息
+
 ### docs: 完善目录约定和测试配套规则
 
 - `docs/code-style-guide.md`：
