@@ -2,6 +2,22 @@
 
 ## 2026-06-27
 
+### docs: 合并 API 错误响应规范到接口文档，删除独立文件
+
+- `docs/api-doc.md`：在标题和描述之后、目录之前插入 API 错误响应规范（错误场景表格 + 关键原则 + 前端处理说明）
+- `docs/api-conventions.md`：删除（内容已合并到 api-doc.md）
+
+### docs: 修正贡献指南中 pre-commit 安装命令
+
+- `CONTRIBUTING.md`：`pre-commit install` 改为 `uvx pre-commit install`，因 pre-commit 不在 dev 依赖中，直接调用会失败
+
+### docs: 添加 Bug 反馈和功能请求 Issue 模板
+
+- 新建 `.github/ISSUE_TEMPLATE/bug_report.md`：GitHub Bug 反馈标准化模板
+  - 问题描述、复现步骤、期望行为、实际行为、环境信息、日志/截图
+- 新建 `.github/ISSUE_TEMPLATE/feature_request.md`：GitHub 功能请求标准化模板
+  - 功能描述、使用场景、建议实现方式、补充信息
+
 ### docs: 补充 PR 模板变更类型多选提示
 
 - `.github/PULL_REQUEST_TEMPLATE.md`：在「变更类型」标题下方添加 `<!-- 选择所有适用的类型 -->` HTML 注释，明确告知提交者可多选
