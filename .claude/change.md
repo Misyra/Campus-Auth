@@ -1,5 +1,13 @@
 # 修改日志
 
+## 2026-06-27
+
+### docs: 完善目录约定和测试配套规则
+
+- `docs/code-style-guide.md`：
+  - 4.1 后端模块放置表格下方新增注释，补充说明 `app/network/`（网络检测）、`app/workers/`（Playwright 工作进程）、`app/core/`（核心模块）、`app/ui/`（系统托盘界面）等模块
+  - 4.2 测试配套新增通用命名规则说明：`app/<模块名>/<文件>.py` → `tests/test_<模块名>/test_<文件>.py`，补充 `app/network/detector.py` 示例
+
 ## 2026-06-27 (Task 4 - 前端 API 服务层)
 
 ### refactor(frontend): 引入 apiService 集中管理 API 调用
