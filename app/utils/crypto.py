@@ -198,41 +198,17 @@ def mask_password(value: str) -> str:
 
 
 def save_password_field(raw: str | None, existing_encrypted: str) -> str:
-    """处理前端提交的密码：掩码保留原值，ENC 原样返回，明文加密存储。
+    """处理前端提交的密码。
 
-    分支行为：
-    - raw is None （字段未传）→ 静默返回 existing_encrypted（无日志）
-    - raw == ""    （显式传空）→ 返回 existing_encrypted
-      + existing_encrypted 为空 → 警告 + 返回 ""
-      + existing_encrypted 有值 → 保留（无日志）
-    - raw startswith "•" （掩码）→ 同 raw=="" 行为
-    - raw startswith "ENC:" （已是加密值）→ 原样返回，不二次加密
-    - 其他（明文密码） → encrypt_password(raw) 加密后返回
-
-    Args:
-        raw: 前端传来的原始值。None = 未传（静默），"" = 显式置空
-        existing_encrypted: 数据库中已有的加密密码（ENC:xxx 或 ""）
-
-    Returns:
-        加密后的密码字符串（ENC: 前缀）或空字符串
+    语义：
+    - raw is None 或 "" → 不修改，返回 existing_encrypted
+    - raw startswith "ENC:" → 已是加密值，原样返回
+    - 其他（明文密码） → 加密后返回
     """
-    if raw is None:
-        # 未传密码 → 无操作，保留原值。不发警告（合法场景）
-        return existing_encrypted or ""
-    if raw.startswith("•"):
-        # 掩码 → 保留已有密码
-        # 已知限制：若用户真实密码以 • (U+2022) 开头会被误判为掩码。
-        # 实际不会发生：校园网密码格式为字母数字，不含 Unicode bullet 字符。
-        # 前端掩码固定为 "••••••••"（8 个 •），此处用 startswith 而非精确匹配
-        # 是为了兼容掩码长度可能变化的情况。
-        return existing_encrypted or ""
-    if raw == "":
-        # 显式置空 → 清除密码
-        return ""
+    if raw is None or raw == "":
+        return existing_encrypted
     if raw.startswith("ENC:"):
-        # 已是加密值（来自已保存的方案）→ 原样返回
         return raw
-    # 明文密码 → 加密存储
     return encrypt_password(raw)
 
 

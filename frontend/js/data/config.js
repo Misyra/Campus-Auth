@@ -27,5 +27,7 @@ export function configData() {
     ocrStatus: { installed: false, size_mb: 0 },
     // 并发锁（防止重复请求）
     _autostartInFlight: false,
+    // 密码字段是否被用户修改过
+    _passwordChanged: false,
   };
 }

@@ -41,6 +41,7 @@ export const configMethods = {
         active_task: data.active_task ?? '',
         app_settings: { ...DEFAULT_CONFIG.app_settings, ...(data.app_settings || {}) },
       };
+      this._passwordChanged = false;
       // 同步浏览器选择状态
       if (data.browser?.browser_channel) {
         this.selectedBrowser = data.browser.browser_channel;
@@ -149,7 +150,7 @@ export const configMethods = {
         retry: c.retry,
         app_settings: c.app_settings,
         username: c.credentials.username || '',
-        password: c.credentials.password || '',
+        password: this._passwordChanged ? (c.credentials.password || '') : '',
         auth_url: c.credentials.auth_url || '',
         isp: c.credentials.isp || '',
         carrier_custom: c.credentials.carrier_custom || '',

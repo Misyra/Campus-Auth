@@ -367,17 +367,14 @@ class TestSavePasswordField:
         """raw=None 且 existing 为空应返回空。"""
         assert crypto_mod.save_password_field(None, "") == ""
 
-    def test_raw_mask_returns_existing(self):
-        """掩码值应保留已有加密。"""
-        assert crypto_mod.save_password_field("••••••••", "ENC:old") == "ENC:old"
+    def test_raw_mask_gets_encrypted(self):
+        """掩码值不再特殊处理，作为明文加密。"""
+        result = crypto_mod.save_password_field("••••••••", "ENC:old")
+        assert result.startswith("ENC:")
 
-    def test_raw_mask_existing_empty(self):
-        """掩码值且 existing 为空应返回空。"""
-        assert crypto_mod.save_password_field("••••••••", "") == ""
-
-    def test_raw_empty_returns_empty(self):
-        """显式置空应返回空。"""
-        assert crypto_mod.save_password_field("", "ENC:old") == ""
+    def test_raw_empty_preserves_existing(self):
+        """空串应保留已有加密值。"""
+        assert crypto_mod.save_password_field("", "ENC:old") == "ENC:old"
 
     def test_raw_enc_returns_same(self):
         """已加密值应原样返回。"""

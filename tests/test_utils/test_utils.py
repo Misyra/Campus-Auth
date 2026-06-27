@@ -150,13 +150,14 @@ class TestSavePasswordField:
         """raw=None 时应返回原加密值"""
         assert save_password_field(None, "ENC:existing") == "ENC:existing"
 
-    def test_empty_raw_clears_password(self):
-        """raw 为空字符串时应清除密码"""
-        assert save_password_field("", "ENC:existing") == ""
+    def test_empty_raw_preserves_existing(self):
+        """raw 为空字符串时应保留原加密值"""
+        assert save_password_field("", "ENC:existing") == "ENC:existing"
 
-    def test_mask_preserves_existing(self):
-        """raw 为掩码时应保留原加密值"""
-        assert save_password_field("••••••••", "ENC:existing") == "ENC:existing"
+    def test_mask_gets_encrypted(self):
+        """raw 为掩码时不再特殊处理，作为明文加密"""
+        result = save_password_field("••••••••", "ENC:existing")
+        assert result.startswith("ENC:")
 
     def test_enc_passthrough(self):
         """raw 已有 ENC: 前缀应原样返回"""
@@ -862,19 +863,15 @@ class TestDecryptionError:
 # ── 日志安全 ──
 
 
-def test_save_password_field_logs_no_plaintext(caplog):
-    """save_password_field 的 warning 日志不应包含密码明文。"""
+def test_save_password_field_no_warning_for_empty(caplog):
+    """save_password_field 对空串输入不应产生 warning 日志。"""
     from app.utils.crypto import save_password_field
 
-    for raw_value in ("", "••••••••"):
-        caplog.clear()
-        with caplog.at_level("WARNING"):
-            result = save_password_field(raw_value, existing_encrypted="")
+    caplog.clear()
+    with caplog.at_level("WARNING"):
+        save_password_field("", existing_encrypted="ENC:old")
 
-        assert result == ""
-        for record in caplog.records:
-            msg = record.message
-            assert repr(raw_value[:20]) not in msg, f"日志泄露了原始输入内容: {msg}"
+    assert not caplog.records
 
 
 # =====================================================================
