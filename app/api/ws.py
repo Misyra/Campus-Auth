@@ -45,7 +45,13 @@ async def websocket_logs_handler(websocket, ws_manager, engine):
             except Exception:
                 ws_logger.debug("WebSocket 消息处理异常", exc_info=True)
     except WebSocketDisconnect:
-        await ws_manager.disconnect(websocket)
+        try:
+            await ws_manager.disconnect(websocket)
+        except Exception:
+            ws_logger.debug("WebSocket 断开连接时异常", exc_info=True)
     except Exception:
         ws_logger.exception("WebSocket 通信异常")
-        await ws_manager.disconnect(websocket)
+        try:
+            await ws_manager.disconnect(websocket)
+        except Exception:
+            ws_logger.debug("WebSocket 断开连接时异常", exc_info=True)
