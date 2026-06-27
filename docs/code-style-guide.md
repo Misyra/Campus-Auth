@@ -164,6 +164,8 @@ mimetypes.add_type("application/javascript", ".js")  # 添加 JS MIME 类型
 | 数据模型 | `app/schemas.py` |
 | 常量 | `app/constants.py` |
 
+> 上述为常见目录，项目中还有 `app/network/`（网络检测）、`app/workers/`（Playwright 工作进程）、`app/core/`（核心模块）、`app/ui/`（系统托盘界面）等模块，请参考实际目录结构。
+
 ### 4.2 测试配套
 
 新增模块必须配套测试文件，路径规则：
@@ -171,7 +173,10 @@ mimetypes.add_type("application/javascript", ".js")  # 添加 JS MIME 类型
 ```
 app/services/engine.py       →  tests/test_services/test_engine.py
 app/utils/crypto.py          →  tests/test_utils/test_crypto.py
+app/network/detector.py      →  tests/test_network/test_detector.py
 ```
+
+通用规则：`app/<模块名>/<文件>.py` → `tests/test_<模块名>/test_<文件>.py`
 
 ### 4.3 前端资源
 
