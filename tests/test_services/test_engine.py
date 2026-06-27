@@ -24,6 +24,7 @@ from app.services.engine import (
 )
 from app.services.engine_status import StatusSnapshot
 from app.services.monitor_service import CheckOnceResult
+from app.services.scheduler_service import SchedulerService
 
 
 
@@ -113,7 +114,7 @@ class TestEngineInit:
     def test_init_defaults(self, engine_factory):
         svc = engine_factory()
         assert svc._status_manager._dashboard_sink is None
-        assert svc._scheduler_running is False
+        assert svc.scheduler_running is False
         assert svc._monitor_core is None
 
     def test_init_with_task_components(self, engine_factory):
@@ -177,8 +178,8 @@ class TestCalculateWakeup:
     def test_wakeup_with_scheduler(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._monitor_core = None
-        svc._scheduler_running = True
-        svc._next_schedule_tick = time.time() + 5
+        svc._scheduler.running = True
+        svc._scheduler.next_tick_time = time.time() + 5
         wakeup = svc._calculate_wakeup()
         assert wakeup <= time.time() + 6
 
@@ -189,7 +190,7 @@ class TestCalculateWakeup:
         mock_core.monitoring = True
         svc._monitor_core = mock_core
         svc._next_network_check = "not_a_number"
-        svc._scheduler_running = False
+        svc._scheduler.running = False
         with pytest.raises((TypeError, ValueError)):
             svc._calculate_wakeup()
 
@@ -966,23 +967,26 @@ class TestDoAsyncLogin:
 class TestRunScheduleTick:
     def test_run_schedule_tick(self, engine_factory):
         svc = engine_factory(raw=True)
+        svc._scheduler = SchedulerService(svc._task_registry, svc._task_executor)
         svc._task_registry.get_due_tasks.return_value = ["task1", "task2"]
-        svc._run_schedule_tick()
+        svc._scheduler.tick(time.time())
         svc._task_executor.execute_task_async.assert_any_call("task1")
         svc._task_executor.execute_task_async.assert_any_call("task2")
-        assert svc._next_schedule_tick > time.time()
+        assert svc._scheduler.next_tick_time > time.time()
 
     def test_run_schedule_tick_no_due_tasks(self, engine_factory):
         svc = engine_factory(raw=True)
+        svc._scheduler = SchedulerService(svc._task_registry, svc._task_executor)
         svc._task_registry.get_due_tasks.return_value = []
-        svc._run_schedule_tick()
+        svc._scheduler.tick(time.time())
         svc._task_executor.execute_task_async.assert_not_called()
 
     def test_run_schedule_tick_no_registry(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._task_registry = None
-        svc._run_schedule_tick()
-        assert svc._next_schedule_tick > time.time()
+        svc._scheduler = SchedulerService(svc._task_registry, svc._task_executor)
+        svc._scheduler.tick(time.time())
+        assert svc._scheduler.next_tick_time > time.time()
 
 
 # =====================================================================
@@ -1158,9 +1162,9 @@ class TestShutdown:
 
     def test_shutdown_stops_scheduler(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._scheduler_running = True
+        svc._scheduler.running = True
         svc.shutdown()
-        assert svc._scheduler_running is False
+        svc._scheduler.stop.assert_called_once()
 
 
 # =====================================================================
@@ -1520,7 +1524,7 @@ class TestProperties:
     def test_scheduler_running_property(self, engine_factory):
         svc = engine_factory(raw=True)
         assert svc.scheduler_running is False
-        svc._scheduler_running = True
+        svc._scheduler.running = True
         assert svc.scheduler_running is True
 
 
@@ -1532,26 +1536,29 @@ class TestProperties:
 class TestSchedulerControl:
     def test_start_scheduler(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._start_scheduler()
-        assert svc._scheduler_running is True
-        assert svc._next_schedule_tick > time.time()
+        svc._scheduler = SchedulerService(svc._task_registry, svc._task_executor)
+        svc._scheduler.start()
+        assert svc._scheduler.running is True
+        assert svc._scheduler.next_tick_time > time.time()
 
     def test_start_scheduler_idempotent(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._start_scheduler()
-        first_tick = svc._next_schedule_tick
-        svc._start_scheduler()
-        assert svc._next_schedule_tick == first_tick
+        svc._scheduler = SchedulerService(svc._task_registry, svc._task_executor)
+        svc._scheduler.start()
+        first_tick = svc._scheduler.next_tick_time
+        svc._scheduler.start()
+        assert svc._scheduler.next_tick_time == first_tick
 
     def test_stop_scheduler(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._scheduler_running = True
-        svc._stop_scheduler()
-        assert svc._scheduler_running is False
+        svc._scheduler = SchedulerService(svc._task_registry, svc._task_executor)
+        svc._scheduler.start()
+        svc._scheduler.stop()
+        assert svc._scheduler.running is False
 
     def test_has_enabled_tasks(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._task_executor.has_enabled_tasks.return_value = True
+        svc._scheduler.has_enabled_tasks.return_value = True
         assert svc.has_enabled_tasks() is True
 
 
@@ -1681,7 +1688,8 @@ class TestRetryTimeLock:
         mock_core = MagicMock()
         mock_core.monitoring = True
         engine._monitor_core = mock_core
-        engine._scheduler_running = False
+        engine._scheduler = MagicMock()
+        engine._scheduler.running = False
         engine._next_network_check = time.time() + 100
         engine._next_retry_time = time.time() + 5
         engine._retry_time_lock = threading.Lock()
