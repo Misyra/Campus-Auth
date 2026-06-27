@@ -25,9 +25,9 @@ class TestLoginOnceMode:
         logger = MagicMock()
 
         with (
-            patch("main._load_login_config") as mock_load,
+            patch("app.services.login_runner.load_login_config") as mock_load,
             patch("app.network.decision.check_network_status") as mock_net,
-            patch("main._execute_login_with_retries") as mock_login,
+            patch("app.services.login_runner.execute_login_with_retries") as mock_login,
         ):
             mock_load.return_value = (
                 RuntimeConfig(), None,
@@ -47,9 +47,9 @@ class TestLoginOnceMode:
         logger = MagicMock()
 
         with (
-            patch("main._load_login_config") as mock_load,
+            patch("app.services.login_runner.load_login_config") as mock_load,
             patch("app.network.decision.check_network_status") as mock_net,
-            patch("main._execute_login_with_retries") as mock_login,
+            patch("app.services.login_runner.execute_login_with_retries") as mock_login,
         ):
             mock_load.return_value = (
                 RuntimeConfig(), None,
@@ -68,7 +68,7 @@ class TestLoginOnceMode:
         ctx = self._make_ctx()
         logger = MagicMock()
 
-        with patch("main._load_login_config") as mock_load:
+        with patch("app.services.login_runner.load_login_config") as mock_load:
             mock_load.return_value = (None, LoginResult.CONFIG_ERROR)
 
             result = _run_login_then_exit(ctx, logger)
@@ -91,7 +91,7 @@ class TestLoginOnceMode:
             patch("app.services.profile_service.create_profile_service") as mock_profile_factory,
             patch("app.services.login_history_service.LoginHistoryService") as mock_history_cls,
             patch("app.workers.playwright_worker.get_worker") as mock_get_worker,
-            patch("main.cleanup_orphan_browsers"),
+            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
         ):
             mock_history = MagicMock()
             mock_history_cls.return_value = mock_history
@@ -123,7 +123,7 @@ class TestLoginOnceMode:
             patch("app.services.profile_service.create_profile_service") as mock_profile_factory,
             patch("app.services.login_history_service.LoginHistoryService") as mock_history_cls,
             patch("app.workers.playwright_worker.get_worker") as mock_get_worker,
-            patch("main.cleanup_orphan_browsers"),
+            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
         ):
             mock_history = MagicMock()
             mock_history_cls.return_value = mock_history

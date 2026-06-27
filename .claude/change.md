@@ -2,6 +2,31 @@
 
 ## 2026-06-28
 
+### refactor: 从 main.py 提取 launcher + login_runner
+
+- `app/services/launcher.py`：新建启动器模块，从 main.py 迁移 12 个函数
+  - `shutdown_container`：统一关闭容器（幂等安全）
+  - `open_browser`：浏览器控制
+  - `create_tray`：系统托盘创建
+  - `handle_startup_action`：启动动作状态机
+  - `handle_existing_instance`：已运行实例检测
+  - `launch_lightweight`：轻量模式（闭包改为参数传递）
+  - `launch_full`：完整模式（signal handler 保留内嵌 nonlocal）
+  - `launch_server`：主启动流程
+  - `_start_web_server` / `_open_console`：闭包辅助函数改为顶层函数+参数传递
+  - `_terminate_process` / `_wait_for_exit`：进程管理内部辅助
+- `app/services/login_runner.py`：新建自动登录执行器，从 main.py 迁移 3 个函数
+  - `load_login_config`：加载登录配置
+  - `execute_login_with_retries`：执行登录含重试
+  - `run_login_then_exit`：自动登录成功后退出
+- `main.py`：从 ~787 行精简至 ~275 行，保留 CLI 命令、`_build_app_config`、`_setup_exception_hooks`、`main()` 入口；添加向后兼容 re-export
+- `tests/test_services/test_launcher.py`：新增 6 个基础测试（shutdown_container 幂等性 + open_browser 行为）
+- `tests/test_app/test_main.py`：更新 5 个 _run_server 测试的 patch 目标（main → app.services.launcher）
+- `tests/test_app/test_main_fix.py`：更新 TestOpenBrowser（4 个）和 TestOnExitLambda（2 个）的 patch/inspect 目标
+- `tests/test_app/test_boot_engine_flag.py`：更新 2 个 _run_full 测试的 patch 目标和 mock 设置
+- `tests/test_integration/test_login_once_mode.py`：更新 5 个测试的 patch 目标（main → login_runner/launcher）
+- `tests/test_integration/test_login_integration_extended.py`：更新 3 个测试的 cleanup_orphan_browsers patch 目标
+
 ### refactor: 添加 shutdown 工具函数，替换 os._exit 为 force_exit
 
 - `app/utils/shutdown.py`：新增退出工具模块，提供 `force_exit`（atexit 钩子 + os._exit）和 `request_graceful_exit`（SIGTERM）
