@@ -42,6 +42,7 @@ export const configMethods = {
         app_settings: { ...DEFAULT_CONFIG.app_settings, ...(data.app_settings || {}) },
       };
       this._passwordChanged = false;
+      this._credentialsChanged = false;
       // 同步浏览器选择状态
       if (data.browser?.browser_channel) {
         this.selectedBrowser = data.browser.browser_channel;
@@ -149,18 +150,25 @@ export const configMethods = {
         logging: c.logging,
         retry: c.retry,
         app_settings: c.app_settings,
-        username: c.credentials.username || '',
-        password: this._passwordChanged ? (c.credentials.password || '') : '',
-        auth_url: c.credentials.auth_url || '',
-        isp: c.credentials.isp || '',
-        carrier_custom: c.credentials.carrier_custom || '',
         active_task: c.active_task || '',
       };
-      const { data } = await this.$api.put('/api/config', payload, {
+      // 凭据：仅发送变更项
+      if (this._passwordChanged) {
+        payload.password = c.credentials.password || '';
+      }
+      if (this._credentialsChanged) {
+        payload.username = c.credentials.username || '';
+        payload.auth_url = c.credentials.auth_url || '';
+        payload.isp = c.credentials.isp || '';
+        payload.carrier_custom = c.credentials.carrier_custom || '';
+      }
+
+      const { data } = await this.$api.patch('/api/config', payload, {
         signal: this._saveAbortController.signal,
       });
       if (data.success) {
         this._lastSavedConfig = current;
+        this._credentialsChanged = false;
         this.frontendLogger.info('config', '配置保存成功');
 
         // 用后端规范化值刷新 config 并重置 savedConfigSnapshot

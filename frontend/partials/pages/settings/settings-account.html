@@ -23,7 +23,7 @@
           type="text"
           placeholder="学号/账号"
           autocomplete="username"
-          @input="onConfigChange()"
+          @input="_credentialsChanged = true; onConfigChange()"
         />
       </div>
       <div class="form-group">
@@ -56,7 +56,7 @@
           v-model.trim="config.credentials.auth_url"
           type="text"
           placeholder="http://"
-          @input="onConfigChange()"
+          @input="_credentialsChanged = true; onConfigChange()"
         />
       </div>
       <div class="form-group">
@@ -69,7 +69,7 @@
             data-tip="校园网登录页面的运营商选择。选择&quot;无&quot;则跳过运营商步骤；选择&quot;自定义&quot;可输入关键字匹配登录页面的运营商列表，适用于非标准运营商名称。"
           >?</span>
         </div>
-        <custom-select v-model="config.credentials.isp" :options="carrierOptions" @change="(val) => { if (val !== '自定义') config.credentials.carrier_custom = ''; onConfigChange(); }"></custom-select>
+        <custom-select v-model="config.credentials.isp" :options="carrierOptions" @change="(val) => { if (val !== '自定义') config.credentials.carrier_custom = ''; _credentialsChanged = true; onConfigChange(); }"></custom-select>
       </div>
       <div v-if="config.credentials.isp === '自定义'" class="form-group">
         <label for="settings-carrier-custom">自定义运营商关键字</label>
@@ -79,7 +79,7 @@
           name="carrier_custom"
           type="text"
           placeholder="例如：校园专网、宿舍网、移动(新)"
-          @input="onConfigChange()"
+          @input="_credentialsChanged = true; onConfigChange()"
         />
       </div>
     </div>
