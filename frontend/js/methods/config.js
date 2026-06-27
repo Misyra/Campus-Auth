@@ -1,4 +1,4 @@
-import { DEFAULT_CONFIG } from '../constants.js';
+﻿import { DEFAULT_CONFIG } from '../constants.js';
 import { extractApiError } from './utils.js';
 
 export const configMethods = {
@@ -17,7 +17,7 @@ export const configMethods = {
   },
 
   // 配置变更时调用（统一 1 秒防抖）
-  onConfigChange(field, value, type = 'toggle') {
+  onConfigChange() {
     if (!this._isConfigLoaded) return;
     this._debounceSave(1000);
   },
@@ -102,7 +102,7 @@ export const configMethods = {
       });
       return;
     }
-    this.onConfigChange(field, value, 'toggle');
+    this.onConfigChange();
   },
 
   async saveConfig() {

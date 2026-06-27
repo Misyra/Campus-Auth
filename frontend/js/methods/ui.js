@@ -1,4 +1,4 @@
-import { TIMING, LIMITS } from '../constants.js';
+﻿import { TIMING, LIMITS } from '../constants.js';
 
 export const uiMethods = {
   // 弹窗焦点陷阱：将焦点限制在指定容器内
@@ -139,7 +139,7 @@ export const uiMethods = {
   selectBrowser(channel) {
     this.selectedBrowser = channel;
     this.config.browser.browser_channel = channel;
-    this.onConfigChange('browser_channel', channel, 'toggle');
+    this.onConfigChange();
   },
   // 辅助方法：获取浏览器信息
   getBrowser(channel) {
@@ -168,7 +168,7 @@ export const uiMethods = {
   onBrowserCustomPathInput() {
     // settings 模式下需要触发配置保存
     if (this.onConfigChange) {
-      this.onConfigChange('browser_custom_path', this.config.browser.browser_custom_path, 'input');
+      this.onConfigChange();
     }
   },
   // 处理浏览器点击
@@ -277,14 +277,14 @@ export const uiMethods = {
       key = `var_${index}`;
     }
     this.config.app_settings.custom_variables[key] = '';
-    this.onConfigChange('custom_variables', this.config.app_settings.custom_variables, 'toggle');
+    this.onConfigChange();
   },
   removeCustomVar(key) {
     if (this.config.app_settings.custom_variables && key in this.config.app_settings.custom_variables) {
       const newVars = { ...this.config.app_settings.custom_variables };
       delete newVars[key];
       this.config.app_settings.custom_variables = newVars;
-      this.onConfigChange('custom_variables', this.config.app_settings.custom_variables, 'toggle');
+      this.onConfigChange();
     }
   },
   updateCustomVarKey(oldKey, newKey) {
@@ -317,7 +317,7 @@ export const uiMethods = {
       }
     }
     this.config.app_settings.custom_variables = newVars;
-    this.onConfigChange('custom_variables', this.config.app_settings.custom_variables, 'toggle');
+    this.onConfigChange();
   },
   _isViewerAtBottom() {
     const logViewer = this.$refs?.logViewer;

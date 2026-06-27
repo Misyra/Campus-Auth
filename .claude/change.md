@@ -1,5 +1,16 @@
 # 修改日志
 
+## 2026-06-27 (Task 3 - 清理 onConfigChange 无用参数)
+
+### refactor(frontend): 移除 onConfigChange 无用参数 (47+ dead args)
+
+- `frontend/js/methods/config.js`：`onConfigChange(field, value, type = 'toggle')` 签名改为 `onConfigChange()`，函数体不变（仅使用 `this._debounceSave(1000)`，参数完全未使用）；`onCheckToggle` 中的调用同步去参
+- `frontend/js/methods/ui.js`：5 处 `onConfigChange(...)` 调用全部改为 `onConfigChange()`
+- `frontend/partials/pages/settings/settings-monitor.html`：16 处调用去参
+- `frontend/partials/pages/settings/settings-browser.html`：15 处调用去参
+- `frontend/partials/pages/settings/settings-system.html`：11 处调用去参
+- `frontend/partials/pages/settings/settings-account.html`：6 处调用去参
+
 ## 2026-06-27 (Task 1 - 密码字段处理优化)
 
 ### refactor: 简化密码处理，消除掩码往返
