@@ -302,7 +302,8 @@ def _parse_targets(raw: str) -> list[str]:
 
 
 def _parse_url_check(raw: str) -> list[str]:
-    return [line.strip() for line in raw.split("\n") if line.strip()]
+    import re
+    return [s.strip() for s in re.split(r'[,\n]', raw) if s.strip()]
 
 
 class MonitorSettings(BaseModel, frozen=True):
