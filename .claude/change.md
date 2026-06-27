@@ -1,5 +1,22 @@
 # 修改日志
 
+## 2026-06-27 (Task 6 - 前端校验降级为 UX 提示)
+
+### refactor(frontend): downgrade client validation to UX hints, backend as authority
+
+- `frontend/js/methods/config.js`：`_validateConfig()` 的 `errors` 数组重命名为 `warnings`，语义从阻塞校验降级为警告提示
+- `frontend/js/methods/config.js`：`saveConfig()` 中 `_validateConfig()` 结果检查从阻塞返回改为 `frontendLogger.warn` 记录日志，不再阻止配置保存
+
+## 2026-06-27 (Task 5 - 配置增量保存 PATCH)
+
+### feat: 新增 PATCH /api/config 配置增量保存
+
+- `app/schemas.py`：新增 `ConfigPatchRequest` 模型，所有字段 Optional（浏览器/监控/重试/暂停/日志/应用设置/凭据/active_task），未传字段不修改
+- `app/api/config.py`：新增 `patch_config` 端点（PATCH /api/config），合并逻辑：顶层字段直接覆盖，嵌套字段（browser/monitor/retry/pause/logging/app_settings）深度合并，复用 `save_global_and_profile` 持久化
+- `frontend/js/methods/config.js`：`saveConfig` 从 PUT 切换为 PATCH，凭据字段（username/auth_url/isp/carrier_custom）仅在 `_credentialsChanged` 为 true 时发送；成功回调重置 `_credentialsChanged`
+- `frontend/js/data/config.js`：新增 `_credentialsChanged: false` 标记
+- `frontend/partials/pages/settings/settings-account.html`：username/auth_url/isp/carrier_custom 的 @input 事件追加 `_credentialsChanged = true`
+
 ## 2026-06-27 (Task 3 - 清理 onConfigChange 无用参数)
 
 ### refactor(frontend): 移除 onConfigChange 无用参数 (47+ dead args)
