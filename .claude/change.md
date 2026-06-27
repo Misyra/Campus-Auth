@@ -2,6 +2,23 @@
 
 ## 2026-06-28
 
+### test: 修复 os._exit 杀死 pytest 进程
+
+- `tests/test_app/test_boot_engine_flag.py`：TestRunFullNoDirectBoot 调用 `launcher.launch_full`，其 `finally` 块调用 `force_exit(0)` 即 `os._exit(0)`
+  - 添加 `patch("app.services.launcher.force_exit")` 到 `test_run_full_does_not_call_boot_directly` 和 `test_run_full_passes_boot_engine_false`
+  - 修复前全量测试在 ~13% 处被 `os._exit(0)` 杀死
+
+### test: 修复 Task 5 测试 — 更新 patch 目标和 asyncio 兼容性
+
+- `tests/test_services/test_launcher.py`：替换已废弃的 `asyncio.coroutine()` 为 `async def` helper
+- `tests/test_app/test_main.py`：更新 patch 目标到实际源模块
+  - TestRunServer / TestSignalHandler：`main.is_service_running` → `app.services.launcher.is_service_running`
+  - TestRunLoginThenExit：`main.create_profile_service` → `app.services.profile_service.create_profile_service`
+  - TestRunLoginThenExit：`main.cleanup_orphan_browsers` → `app.workers.playwright_worker.cleanup_orphan_browsers`
+  - TestLoginOnceRetryInterval：`main.AUTH_DATA_DIR` → `app.constants.AUTH_DATA_DIR`
+  - TestSignalHandler：`main.cleanup_pid` → `app.services.launcher.cleanup_pid`
+- `tests/test_integration/test_login_integration_extended.py`：已使用正确的 patch 目标，无需修改
+
 ### refactor: 从 main.py 提取 launcher + login_runner
 
 - `app/services/launcher.py`：新建启动器模块，从 main.py 迁移 12 个函数
