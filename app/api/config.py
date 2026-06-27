@@ -9,6 +9,7 @@ from app.schemas import (
     ApiResponse,
     AppSettings,
     BrowserSettings,
+    ConfigPatchRequest,
     ConfigSaveRequest,
     LogLevelResponse,
     LoggingSettings,
@@ -254,4 +255,38 @@ def save_config(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         api_logger.error("配置保存失败: {}", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"配置保存失败: {exc}") from exc
+
+
+@router.patch("/api/config", response_model=ApiResponse)
+def patch_config(
+    payload: ConfigPatchRequest,
+    svc: ScheduleEngine = Depends(get_monitor_service),
+    profile_svc: ProfileService = Depends(get_profile_service),
+) -> ApiResponse:
+    """增量更新配置 — 仅修改 payload 中非 None 的字段。"""
+    try:
+        old_data = profile_svc.load()
+        old_cfg = profile_svc.build_runtime_config(old_data)
+
+        current = old_cfg.model_dump()
+        patch_data = payload.model_dump(exclude_none=True)
+
+        merged = {**current, **patch_data}
+        for key in ("browser", "monitor", "retry", "pause", "logging", "app_settings"):
+            if key in patch_data:
+                merged[key] = {**current.get(key, {}), **patch_data[key]}
+
+        full_request = ConfigSaveRequest.model_validate(merged)
+        result = save_global_and_profile(full_request, profile_svc, svc.reload_config)
+        if not result.success:
+            raise ValueError(result.message)
+
+        _log_config_changes(old_cfg.model_dump(), full_request)
+        api_logger.info("配置增量保存 -> success=True, fields={}", list(patch_data.keys()))
+        return ApiResponse(success=True, message="配置保存成功", data={"patched": list(patch_data.keys())})
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        api_logger.error("配置增量保存失败: {}", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=f"配置保存失败: {exc}") from exc

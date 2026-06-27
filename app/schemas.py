@@ -403,6 +403,26 @@ class ConfigSaveRequest(BaseModel):
     active_task: str = ""
 
 
+class ConfigPatchRequest(BaseModel):
+    """PATCH /api/config 请求体 — 仅包含变更字段。
+
+    所有字段均为 Optional，未传的字段不修改。
+    """
+    browser: BrowserSettings | None = None
+    monitor: MonitorSettings | None = None
+    retry: RetrySettings | None = None
+    pause: PauseSettings | None = None
+    logging: LoggingSettings | None = None
+    app_settings: AppSettings | None = None
+    # 凭据字段：None 表示不修改
+    username: str | None = None
+    password: str | None = None
+    auth_url: str | None = None
+    isp: str | None = None
+    carrier_custom: str | None = None
+    active_task: str | None = None
+
+
 class SourceLevelRequest(BaseModel):
     """PUT /api/config/source-level 请求体。"""
     source: str = Field(min_length=1, description="日志来源，'global' 表示全局")
@@ -568,9 +588,9 @@ class ConfigResponseDTO(BaseModel):
     logging: LoggingSettings
     app_settings: AppSettings = Field(default_factory=AppSettings)
 
-    # 凭据（密码已掩码）
+    # 凭据
     username: str = ""
-    password: str = ""          # "••••••••" 或空
+    password: str = ""          # 始终返回空串，前端以空串表示"未修改"
     auth_url: str = ""
     isp: str = ""
     carrier_custom: str = ""

@@ -29,5 +29,7 @@ export function configData() {
     _autostartInFlight: false,
     // 密码字段是否被用户修改过
     _passwordChanged: false,
+    // 凭据字段（username/auth_url/isp/carrier_custom）是否被用户修改过
+    _credentialsChanged: false,
   };
 }
