@@ -642,7 +642,8 @@ class TestShutdownSynchronous:
         svc._thread_done = threading.Event()
         svc._engine_thread = MagicMock()
         svc._engine_thread.is_alive.return_value = False
-        svc._scheduler_running = False
+        svc._scheduler = MagicMock()
+        svc._scheduler.running = False
         svc._running_task_threads = []
         svc._running_tasks_lock = threading.Lock()
 

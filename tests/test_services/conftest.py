@@ -71,8 +71,10 @@ def engine_factory():
         svc._runtime_snapshot = None
         svc._monitor_check_interval = 300
         svc._next_network_check = 0
-        svc._scheduler_running = False
-        svc._next_schedule_tick = 0.0
+        svc._scheduler = MagicMock()
+        svc._scheduler.running = False
+        svc._scheduler.next_tick_time = 0.0
+        svc._scheduler.has_enabled_tasks.return_value = False
         svc._task_registry = MagicMock()
         svc._task_executor = MagicMock()
         svc._engine_thread = MagicMock()
