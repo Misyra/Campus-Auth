@@ -107,7 +107,7 @@ class TaskExecutor:
         )
 
     @property
-    def login_executor(self):
+    def login_executor(self) -> BoundedExecutor:
         """登录专用 BoundedExecutor（只读，供 container 注入 LoginOrchestrator）。"""
         return self._login_executor
 

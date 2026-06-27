@@ -15,7 +15,7 @@ import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from app.schemas import RuntimeConfig
 from app.utils.cancel_token import CompositeCancelEvent
@@ -167,12 +167,14 @@ class LoginOrchestrator:
                 thread_name_prefix="login-exec",
             )
 
-    def set_executor(self, executor) -> None:
+    def set_executor(self, executor: Any) -> None:
         """绑定外部 BoundedExecutor，关闭自建 fallback pool。
 
         在 container 初始化时调用，将 LoginOrchestrator 的执行器
         替换为 TaskExecutor 内部的 login_executor（BoundedExecutor）。
         """
+        if executor is None:
+            raise ValueError("executor 不能为 None")
         if self._pool is not None:
             self._pool.shutdown(wait=False)
             self._pool = None
