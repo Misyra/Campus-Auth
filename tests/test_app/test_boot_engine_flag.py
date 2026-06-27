@@ -252,21 +252,16 @@ class TestRunFullNoDirectBoot:
             patch("app.utils.ports.resolve_port", return_value=50721),
             patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.run") as mock_run,
-            patch("main.get_runtime_features") as mock_features,
-            patch("main.signal.signal"),
-            patch("main.create_profile_service") as mock_ps,
+            patch("app.services.launcher.get_runtime_features") as mock_features,
+            patch("app.services.launcher.signal.signal"),
         ):
             mock_container = MagicMock()
             mock_container_cls.return_value = mock_container
             mock_features.return_value = MagicMock(
                 tray_enabled=False, browser_enabled=False
             )
-            mock_ps_instance = MagicMock()
-            mock_sys_settings = MagicMock()
-            mock_sys_settings.access_log = False
-            mock_sys_settings.log_retention_days = 7
-            mock_ps_instance.load.return_value.global_settings = mock_sys_settings
-            mock_ps.return_value = mock_ps_instance
+            mock_container.profile_service.load.return_value.global_config.logging.access_log = False
+            mock_container.profile_service.load.return_value.global_config.logging.log_retention_days = 7
 
             # should_boot_engine=True
             _run_full(ctx, should_boot_engine=True, logger=logger, startup_begin=0.0)
@@ -294,21 +289,16 @@ class TestRunFullNoDirectBoot:
             patch("app.utils.ports.resolve_port", return_value=50721),
             patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.run") as mock_run,
-            patch("main.get_runtime_features") as mock_features,
-            patch("main.signal.signal"),
-            patch("main.create_profile_service") as mock_ps,
+            patch("app.services.launcher.get_runtime_features") as mock_features,
+            patch("app.services.launcher.signal.signal"),
         ):
             mock_container = MagicMock()
             mock_container_cls.return_value = mock_container
             mock_features.return_value = MagicMock(
                 tray_enabled=False, browser_enabled=False
             )
-            mock_ps_instance = MagicMock()
-            mock_sys_settings = MagicMock()
-            mock_sys_settings.access_log = False
-            mock_sys_settings.log_retention_days = 7
-            mock_ps_instance.load.return_value.global_settings = mock_sys_settings
-            mock_ps.return_value = mock_ps_instance
+            mock_container.profile_service.load.return_value.global_config.logging.access_log = False
+            mock_container.profile_service.load.return_value.global_config.logging.log_retention_days = 7
 
             _run_full(ctx, should_boot_engine=False, logger=logger, startup_begin=0.0)
 

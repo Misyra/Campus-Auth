@@ -324,7 +324,7 @@ class TestLoginOnceRetry:
 
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
-            patch("main.cleanup_orphan_browsers"),
+            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
             from main import _execute_login_with_retries, LoginResult
@@ -346,7 +346,7 @@ class TestLoginOnceRetry:
 
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
-            patch("main.cleanup_orphan_browsers"),
+            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
             from main import _execute_login_with_retries, LoginResult
@@ -372,7 +372,7 @@ class TestLoginOnceRetry:
 
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
-            patch("main.cleanup_orphan_browsers"),
+            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
             from main import _execute_login_with_retries, LoginResult

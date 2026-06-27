@@ -17,7 +17,7 @@ from app.schemas import RuntimeConfig
 class TestOpenBrowser:
     """验证 _open_browser 对 setting 参数的处理。"""
 
-    @patch("main.threading.Thread")
+    @patch("app.services.launcher.threading.Thread")
     def test_setting_true_opens_browser(self, mock_thread_cls):
         """setting=True 应启动线程打开浏览器。"""
         from main import _open_browser
@@ -25,7 +25,7 @@ class TestOpenBrowser:
         _open_browser(50721, setting=True)
         mock_thread_cls.assert_called_once()
 
-    @patch("main.threading.Thread")
+    @patch("app.services.launcher.threading.Thread")
     def test_setting_false_does_not_open(self, mock_thread_cls):
         """setting=False 不应打开浏览器。"""
         from main import _open_browser
@@ -33,7 +33,7 @@ class TestOpenBrowser:
         _open_browser(50721, setting=False)
         mock_thread_cls.assert_not_called()
 
-    @patch("main.threading.Thread")
+    @patch("app.services.launcher.threading.Thread")
     def test_setting_none_does_not_open(self, mock_thread_cls):
         """setting=None 不应打开浏览器。"""
         from main import _open_browser
@@ -41,7 +41,7 @@ class TestOpenBrowser:
         _open_browser(50721, setting=None)
         mock_thread_cls.assert_not_called()
 
-    @patch("main.threading.Thread")
+    @patch("app.services.launcher.threading.Thread")
     def test_setting_default_does_not_open(self, mock_thread_cls):
         """不传 setting（默认 None）不应打开浏览器。"""
         from main import _open_browser
@@ -85,9 +85,9 @@ class TestOnExitLambda:
     def test_on_exit_does_not_call_cleanup_pid(self):
         """on_exit lambda 执行时不应调用 cleanup_pid。"""
         import inspect
-        import main as main_mod
+        from app.services import launcher as launcher_mod
 
-        source = inspect.getsource(main_mod)
+        source = inspect.getsource(launcher_mod)
         lines = source.split("\n")
         for i, line in enumerate(lines):
             if "on_exit=lambda" in line:
@@ -104,9 +104,9 @@ class TestOnExitLambda:
     def test_on_exit_uses_signal_or_os_exit(self):
         """on_exit lambda 使用 SIGTERM 或 os._exit(0)。"""
         import inspect
-        import main as main_mod
+        from app.services import launcher as launcher_mod
 
-        source = inspect.getsource(main_mod)
+        source = inspect.getsource(launcher_mod)
         lines = source.split("\n")
         on_exit_lines = []
         capture = False
@@ -168,9 +168,9 @@ class TestLoginOnceAllDisabled:
         from main import _run_login_then_exit, LoginResult
 
         with (
-            patch("main._load_login_config") as mock_load,
+            patch("app.services.login_runner.load_login_config") as mock_load,
             patch("app.network.decision.check_network_status") as mock_check,
-            patch("main._execute_login_with_retries") as mock_exec,
+            patch("app.services.login_runner.execute_login_with_retries") as mock_exec,
         ):
             mock_load.return_value = (
                 RuntimeConfig(), None,

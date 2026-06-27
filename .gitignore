@@ -51,6 +51,7 @@ debug/
 
 # 本地工具（不随仓库分发）
 launcher.py
+!app/services/launcher.py
 package_zip.ps1
 
 # Claude Code
