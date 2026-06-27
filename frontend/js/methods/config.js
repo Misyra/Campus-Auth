@@ -65,16 +65,16 @@ export const configMethods = {
   },
   // 前端校验配置
   _validateConfig() {
-    const errors = [];
+    const warnings = [];
     const url = this.config.credentials.auth_url;
     if (url && !/^https?:\/\//.test(url)) {
-      errors.push('认证地址必须以 http:// 或 https:// 开头');
+      warnings.push('认证地址必须以 http:// 或 https:// 开头');
     }
     const port = this.config.app_settings.app_port;
     if (port && (port < 1 || port > 65535)) {
-      errors.push('端口范围必须在 1-65535 之间');
+      warnings.push('端口范围必须在 1-65535 之间');
     }
-    return errors;
+    return warnings;
   },
 
   // 检查网络检测方式数量
@@ -113,12 +113,10 @@ export const configMethods = {
       return;
     }
 
-    // 前端校验
-    const errors = this._validateConfig();
-    if (errors.length > 0) {
-      this.toastOnly(false, errors.join('；'));
-      this.saveFailed = true;
-      return;
+    // 前端校验（仅警告，不阻塞保存）
+    const warnings = this._validateConfig();
+    if (warnings.length > 0) {
+      this.frontendLogger.warn('config', warnings.join('；'));
     }
 
     // 警告级提示（不阻塞保存）
