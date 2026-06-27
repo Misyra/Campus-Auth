@@ -77,7 +77,15 @@ class ServiceContainer:
         # 3. 绑定登录专用 executor（复用 TaskExecutor 内部的 login_executor）
         self.login_orchestrator.set_executor(self.task_executor.login_executor)
 
-        # 4. 创建 ScheduleEngine（传入 orchestrator + task_executor）
+        # 3.5 创建 SchedulerService
+        from app.services.scheduler_service import SchedulerService
+
+        self.scheduler_service = SchedulerService(
+            task_registry=self.task_registry,
+            task_executor=self.task_executor,
+        )
+
+        # 4. 创建 ScheduleEngine（传入 orchestrator + task_executor + scheduler）
         self.engine = ScheduleEngine(
             project_root,
             self.profile_service,
@@ -89,6 +97,7 @@ class ServiceContainer:
             ws_broadcaster=self.ws_broadcaster,
             network_tester=self.network_tester,
             orchestrator=self.login_orchestrator,
+            scheduler=self.scheduler_service,
         )
 
         # 5. 延迟绑定 get_runtime_config（engine 现在存在）

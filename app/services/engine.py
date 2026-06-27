@@ -80,6 +80,7 @@ class ScheduleEngine:
         ws_broadcaster=None,
         network_tester=None,
         orchestrator=None,
+        scheduler=None,
     ):
         self.project_root = project_root
         if profile_service is None:
@@ -95,9 +96,8 @@ class ScheduleEngine:
         self._ws_broadcaster = ws_broadcaster
         self._network_tester = network_tester
 
-        # 调度状态（从 ScheduledTaskService 搬入）
-        self._scheduler_running = False
-        self._next_schedule_tick = 0.0
+        # 调度器（从 ScheduleEngine 提取为独立组件）
+        self._scheduler = scheduler
 
         # 锁（必须在 _reload_config_internal 之前初始化）
         self._manual_login_in_progress = False
@@ -234,8 +234,8 @@ class ScheduleEngine:
                     self._do_network_check()
 
                 # 定时任务
-                if self._scheduler_running and now >= self._next_schedule_tick:
-                    self._run_schedule_tick()
+                if self._scheduler and self._scheduler.should_tick(now):
+                    self._scheduler.tick(now)
             except Exception:
                 logger.exception("引擎循环异常，继续运行")
                 time.sleep(1)
@@ -254,8 +254,8 @@ class ScheduleEngine:
                 if self._next_retry_time > 0:
                     candidates.append(self._next_retry_time)
 
-        if self._scheduler_running:
-            candidates.append(self._next_schedule_tick)
+        if self._scheduler and self._scheduler.running:
+            candidates.append(self._scheduler.next_tick_time)
 
         return min(candidates)
 
@@ -332,20 +332,6 @@ class ScheduleEngine:
     def _do_async_login(self, is_manual: bool = False, config_snapshot: RuntimeConfig | None = None) -> bool:
         """【委托】提交登录到 LoginBridge。"""
         return self._login_bridge.submit_login(is_manual=is_manual, config_snapshot=config_snapshot)
-
-    def _run_schedule_tick(self) -> None:
-        """执行定时任务调度（使用 TaskRegistry + TaskExecutor）。"""
-        from datetime import datetime
-
-        now = datetime.now()
-        registry = getattr(self, "_task_registry", None)
-        executor = getattr(self, "_task_executor", None)
-        if registry and executor:
-            due_tasks = registry.get_due_tasks(now.hour, now.minute)
-            for task_id in due_tasks:
-                executor.execute_task_async(task_id)
-        # 计算下一个整分钟
-        self._next_schedule_tick = (int(time.time() // 60) * 60) + 60
 
     def _handle_start(self, cmd: EngineCommand) -> None:
         """启动监控（在引擎循环中调用）。"""
@@ -677,7 +663,8 @@ class ScheduleEngine:
         """两阶段 shutdown：先通知引擎线程退出，等待确认后再清理资源。"""
         if self._shutdown_event.is_set():
             return
-        self._stop_scheduler()
+        if self._scheduler:
+            self._scheduler.stop()
 
         # 阶段 1：通知引擎线程退出
         self._shutdown_event.set()
@@ -781,34 +768,18 @@ class ScheduleEngine:
         """线程安全地获取运行时配置（frozen 对象，直接返回引用）。"""
         return self._runtime_config
 
-    # ── 定时任务调度 ──
+    # ── 定时任务调度（委托代理，向后兼容 API 路由）──
 
     @property
     def scheduler_running(self) -> bool:
         """调度器是否正在运行。"""
-        return self._scheduler_running
+        return self._scheduler.running if self._scheduler else False
+
+    def sync_scheduler_state(self) -> None:
+        """根据是否有启用任务自动启停调度器（委托）。"""
+        if self._scheduler:
+            self._scheduler.sync_state()
 
     def has_enabled_tasks(self) -> bool:
         """检查是否存在启用的定时任务（委托）。"""
-        return self._task_executor.has_enabled_tasks() if self._task_executor else False
-
-    def sync_scheduler_state(self) -> None:
-        """根据是否有启用任务自动启停调度器。"""
-        has_tasks = self._task_executor.has_enabled_tasks() if self._task_executor else False
-        if has_tasks and not self._scheduler_running:
-            self._start_scheduler()
-        elif not has_tasks and self._scheduler_running:
-            self._stop_scheduler()
-
-    def _start_scheduler(self) -> None:
-        """启动定时任务调度（内部方法）。"""
-        if self._scheduler_running:
-            return
-        self._scheduler_running = True
-        self._next_schedule_tick = (int(time.time() // 60) * 60) + 60
-        logger.info("定时任务调度器已启动")
-
-    def _stop_scheduler(self) -> None:
-        """停止定时任务调度（内部方法）。"""
-        self._scheduler_running = False
-        logger.info("定时任务调度器已停止")
+        return self._scheduler.has_enabled_tasks() if self._scheduler else False
