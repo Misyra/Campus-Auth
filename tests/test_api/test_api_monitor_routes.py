@@ -138,4 +138,6 @@ class TestPureMode:
         mock_services.engine.toggle_pure_mode.return_value = True
         resp = test_client.post("/api/pure-mode")
         assert resp.status_code == 200
-        assert "enabled" in resp.json()
+        body = resp.json()
+        assert body["success"] is True
+        assert body["data"]["enabled"] is True

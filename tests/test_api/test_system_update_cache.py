@@ -39,7 +39,7 @@ class TestUpdateCache:
             result = await sys_mod.check_update()
 
         assert call_count == 0
-        assert result["latest"] == "v99.0.0"
+        assert result.latest == "v99.0.0"
 
     @pytest.mark.asyncio
     async def test_cache_expired_triggers_network(self):
@@ -68,7 +68,7 @@ class TestUpdateCache:
         with patch("httpx.AsyncClient.get", mock_get):
             result = await sys_mod.check_update()
 
-        assert result["latest"] == "99.0.0"
+        assert result.latest == "99.0.0"
         assert sys_mod._update_cache["latest"] == "99.0.0"
 
     @pytest.mark.asyncio
@@ -103,8 +103,8 @@ class TestUpdateCache:
             )
 
         # 所有请求都应返回有效结果
-        assert all("current" in r for r in results)
-        assert all("latest" in r for r in results)
+        assert all(r.current for r in results)
+        assert all(r.latest for r in results)
         # 缓存应被正确更新（最后一个请求的值）
         assert sys_mod._update_cache is not None
         assert sys_mod._update_cache["latest"] == "99.0.0"

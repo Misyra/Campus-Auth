@@ -6,6 +6,7 @@ import time
 
 from fastapi import APIRouter
 
+from app.schemas import ApiResponse
 from app.utils.logging import get_logger
 from app.utils.platform import CREATE_NO_WINDOW_FLAG, is_windows
 
@@ -17,11 +18,11 @@ router = APIRouter()
 _install_lock = asyncio.Lock()
 
 
-@router.post("/api/browsers/install-playwright")
-async def install_playwright_chromium():
+@router.post("/api/browsers/install-playwright", response_model=ApiResponse)
+async def install_playwright_chromium() -> ApiResponse:
     """安装 Playwright Chromium 浏览器（异步执行）。"""
     if _install_lock.locked():
-        return {"success": False, "message": "安装正在进行中，请稍后再试"}
+        return ApiResponse(success=False, message="安装正在进行中，请稍后再试")
 
     async with _install_lock:
         try:
@@ -70,11 +71,11 @@ async def install_playwright_chromium():
 
             if process.returncode == 0:
                 logger.info("Playwright Chromium 安装成功")
-                return {"success": True, "message": "Playwright Chromium 安装成功"}
+                return ApiResponse(success=True, message="Playwright Chromium 安装成功")
             else:
                 error_msg = "\n".join(output_lines)
                 logger.error("Playwright Chromium 安装失败: {}", error_msg)
-                return {"success": False, "message": error_msg}
+                return ApiResponse(success=False, message=error_msg)
         except Exception as e:
             logger.exception("Playwright Chromium 安装异常")
-            return {"success": False, "message": str(e)}
+            return ApiResponse(success=False, message=str(e))

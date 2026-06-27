@@ -10,16 +10,7 @@ function cloneConfig(src) {
     retry: { ...src.retry },
     credentials: { ...src.credentials },
     active_task: src.active_task,
-    custom_variables: { ...src.custom_variables },
-    block_proxy: src.block_proxy,
-    shell_path: src.shell_path,
-    minimize_to_tray: src.minimize_to_tray,
-    lightweight_tray: src.lightweight_tray,
-    startup_action: src.startup_action,
-    autostart_lightweight: src.autostart_lightweight,
-    auto_open_browser: src.auto_open_browser,
-    proxy: src.proxy,
-    app_port: src.app_port,
+    app_settings: { ...src.app_settings, custom_variables: { ...src.app_settings.custom_variables } },
   };
 }
 

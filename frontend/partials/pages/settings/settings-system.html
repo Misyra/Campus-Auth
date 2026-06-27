@@ -57,7 +57,7 @@
         </div>
         <custom-select
           id="settings-startup-action"
-          v-model="config.startup_action"
+          v-model="config.app_settings.startup_action"
           :options="loginActionOptions"
           @change="(val) => onConfigChange('startup_action', val, 'toggle')"
         ></custom-select>
@@ -93,7 +93,7 @@
         <div class="toggle-group" style="margin-top: 12px;">
           <div class="toggle-with-help">
             <label class="toggle toggle-help-inline">
-              <input type="checkbox" v-model="config.lightweight_tray" @change="onConfigChange('lightweight_tray', config.lightweight_tray, 'toggle')" />
+              <input type="checkbox" v-model="config.app_settings.lightweight_tray" @change="onConfigChange('lightweight_tray', config.app_settings.lightweight_tray, 'toggle')" />
               <span class="toggle-slider"></span>
               <span class="toggle-label">轻量模式托盘开关</span>
               <span class="field-help" tabindex="0" role="note" data-tip="开启后可以通过托盘打开管理界面，但是会增加 10MB 左右内存。关闭后无法进入 Web 界面，只能通过命令行管理。建议在完成所有配置后打开。">?</span>
@@ -107,7 +107,7 @@
       <div class="toggle-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
-            <input type="checkbox" v-model="config.minimize_to_tray" :disabled="config.startup_action === 'login_once'" @change="onConfigChange('minimize_to_tray', config.minimize_to_tray, 'toggle')" />
+            <input type="checkbox" v-model="config.app_settings.minimize_to_tray" :disabled="config.app_settings.startup_action === 'login_once'" @change="onConfigChange('minimize_to_tray', config.app_settings.minimize_to_tray, 'toggle')" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">最小化到系统托盘</span>
             <span class="field-help" tabindex="0" role="note" data-tip="关闭窗口时最小化到系统托盘，可通过托盘图标重新打开界面。关闭后可降低内存占用，但只能手动打开 Web 界面。">?</span>
@@ -117,7 +117,7 @@
       <div class="toggle-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
-            <input type="checkbox" :checked="!config.auto_open_browser" @change="config.auto_open_browser = !$event.target.checked; onConfigChange('auto_open_browser', config.auto_open_browser, 'toggle')" />
+            <input type="checkbox" :checked="!config.app_settings.auto_open_browser" @change="config.app_settings.auto_open_browser = !$event.target.checked; onConfigChange('auto_open_browser', config.app_settings.auto_open_browser, 'toggle')" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">静默启动</span>
             <span
@@ -145,11 +145,11 @@
           </div>
           <input
             id="settings-app-port"
-            v-model.number="config.app_port"
+            v-model.number="config.app_settings.app_port"
             type="number"
             min="1024"
             max="65535"
-            @input="onConfigChange('app_port', config.app_port, 'input')"
+            @input="onConfigChange('app_port', config.app_settings.app_port, 'input')"
           />
         </div>
         <div class="form-group">
@@ -159,10 +159,10 @@
           </div>
           <input
             id="settings-proxy"
-            v-model.trim="config.proxy"
+            v-model.trim="config.app_settings.proxy"
             type="text"
             placeholder="留空不使用代理，例如 http://127.0.0.1:7897"
-            @input="onConfigChange('proxy', config.proxy, 'input')"
+            @input="onConfigChange('proxy', config.app_settings.proxy, 'input')"
           />
         </div>
       </div>
@@ -171,13 +171,13 @@
           <label for="settings-shell">Shell 路径</label>
           <span class="field-help" tabindex="0" role="note" data-tip="定时任务执行 Shell 命令时使用的 Shell。留空使用系统默认（Windows 优先 PowerShell，Linux/macOS 使用 bash）。">?</span>
         </div>
-        <custom-select v-model="shellPathMode" :options="shellPathOptions" @change="(val) => onConfigChange('shell_path', config.shell_path, 'toggle')"></custom-select>
+        <custom-select v-model="shellPathMode" :options="shellPathOptions" @change="(val) => onConfigChange('shell_path', config.app_settings.shell_path, 'toggle')"></custom-select>
         <div v-if="shellPathMode === '__custom__' || shellCustomMode" class="shell-custom-input">
           <input
-            v-model.trim="config.shell_path"
+            v-model.trim="config.app_settings.shell_path"
             type="text"
             placeholder="输入 Shell 可执行文件的完整路径"
-            @input="onConfigChange('shell_path', config.shell_path, 'input')"
+            @input="onConfigChange('shell_path', config.app_settings.shell_path, 'input')"
           />
           <button type="button" class="btn btn-sm btn-secondary" @click="$refs.shellFileInput.click()">浏览...</button>
           <input
@@ -188,8 +188,8 @@
             @change="onShellFileSelected"
           />
         </div>
-        <span class="hint" v-if="config.shell_path && shellPathMode !== '__custom__'">当前: {{ config.shell_path }}</span>
-        <span class="hint" v-else-if="!config.shell_path">默认: {{ defaultShell }}</span>
+        <span class="hint" v-if="config.app_settings.shell_path && shellPathMode !== '__custom__'">当前: {{ config.app_settings.shell_path }}</span>
+        <span class="hint" v-else-if="!config.app_settings.shell_path">默认: {{ defaultShell }}</span>
       </div>
     </div>
   </section>
