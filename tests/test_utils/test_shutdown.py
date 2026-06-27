@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -59,3 +59,12 @@ class TestRequestGracefulExit:
             # 验证信号为 SIGTERM
             args = mock_kill.call_args
             assert args[0][0] == os.getpid()
+
+    def test_fallback_to_force_exit_when_no_sigterm(self):
+        """无 SIGTERM 支持时应回退到 force_exit。"""
+        from app.utils.shutdown import request_graceful_exit
+
+        with patch("app.utils.shutdown.signal", spec=[]):
+            with patch("app.utils.shutdown.force_exit") as mock_force:
+                request_graceful_exit(42)
+                mock_force.assert_called_once_with(42)
