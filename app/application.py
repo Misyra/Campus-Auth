@@ -176,7 +176,9 @@ def _create_lifespan(existing_container, boot_engine=False):
                 if hasattr(signal, "SIGTERM"):
                     os.kill(os.getpid(), signal.SIGTERM)
                 else:
-                    os._exit(0)
+                    # 无 uvicorn server 引用，无法优雅关闭，强制退出
+                    from app.utils.shutdown import force_exit
+                    force_exit(0)
 
         shutdown_waiter = asyncio.create_task(_wait_shutdown())
 

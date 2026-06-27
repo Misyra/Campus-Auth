@@ -2,6 +2,24 @@
 
 ## 2026-06-28
 
+### refactor: 添加 shutdown 工具函数，替换 os._exit 为 force_exit
+
+- `app/utils/shutdown.py`：新增退出工具模块，提供 `force_exit`（atexit 钩子 + os._exit）和 `request_graceful_exit`（SIGTERM）
+- `main.py`：4 处 `os._exit` 替换为 `force_exit`（轻量 finally、uvicorn 未就绪、完整 finally），1 处双击 Ctrl+C 保留 `os._exit(1)` 并加注释
+- `app/application.py`：1 处 `os._exit(0)` 替换为 `force_exit(0)`
+- `tests/test_utils/test_shutdown.py`：新增 5 个测试覆盖 force_exit 和 request_graceful_exit
+
+### fix: 加固 ws disconnect 异常处理 + parse_url_check 兼容逗号分隔
+
+- `app/api/ws.py`：disconnect 异常处理加 try-except 保护 `ws_manager.disconnect()`，防止连接已关闭时二次异常导致 handler 崩溃
+- `app/schemas.py`：`_parse_url_check` 分隔符从仅换行 `\n` 改为 `re.split(r'[,\n]', raw)`，同时支持逗号和换行分隔
+
+### test: 更新 engine 测试适配 SchedulerService 委托模式
+
+- `tests/test_services/conftest.py`：raw 工厂将 `_scheduler_running`/`_next_schedule_tick` 替换为 `_scheduler` MagicMock（`.running`、`.next_tick_time`、`.has_enabled_tasks()`）
+- `tests/test_services/test_engine.py`：17 个测试适配新委托模式 — `_start_scheduler()`/`_stop_scheduler()` 改为 `scheduler.start()`/`scheduler.stop()`，`_run_schedule_tick()` 改为 `SchedulerService.tick()`，`_scheduler_running` 改为 `scheduler.running`
+- `tests/test_services/test_monitor_service.py`：`test_shutdown_sends_stop_through_queue` 适配 `_scheduler` 替代 `_scheduler_running`
+
 ### refactor: 从 ScheduleEngine 提取 SchedulerService
 
 - `app/services/scheduler_service.py`：新增独立的定时任务调度器组件，包含 start/stop/tick/sync_state 等完整生命周期管理
