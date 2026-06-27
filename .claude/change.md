@@ -2,6 +2,11 @@
 
 ## 2026-06-27
 
+### docs: 修正 API 文档术语并补充错误类型说明
+
+- `docs/api-doc.md`：`ActionResponse` 替换为 `ApiResponse`（表格行、关键原则 2 处）
+- `docs/api-doc.md`：表格和"关键原则"之间补充"区分说明"段落（业务失败 vs 程序异常）
+
 ### docs: 合并 API 错误响应规范到接口文档，删除独立文件
 
 - `docs/api-doc.md`：在标题和描述之后、目录之前插入 API 错误响应规范（错误场景表格 + 关键原则 + 前端处理说明）
