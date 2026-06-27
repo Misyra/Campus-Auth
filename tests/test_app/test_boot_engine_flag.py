@@ -254,6 +254,7 @@ class TestRunFullNoDirectBoot:
             patch("app.application.run") as mock_run,
             patch("app.services.launcher.get_runtime_features") as mock_features,
             patch("app.services.launcher.signal.signal"),
+            patch("app.services.launcher.force_exit"),
         ):
             mock_container = MagicMock()
             mock_container_cls.return_value = mock_container
@@ -291,6 +292,7 @@ class TestRunFullNoDirectBoot:
             patch("app.application.run") as mock_run,
             patch("app.services.launcher.get_runtime_features") as mock_features,
             patch("app.services.launcher.signal.signal"),
+            patch("app.services.launcher.force_exit"),
         ):
             mock_container = MagicMock()
             mock_container_cls.return_value = mock_container
