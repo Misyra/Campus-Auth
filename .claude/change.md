@@ -2,6 +2,10 @@
 
 ## 2026-06-27
 
+### docs: 补充 PR 模板变更类型多选提示
+
+- `.github/PULL_REQUEST_TEMPLATE.md`：在「变更类型」标题下方添加 `<!-- 选择所有适用的类型 -->` HTML 注释，明确告知提交者可多选
+
 ### docs: 添加 PR 模板
 
 - 新建 `.github/PULL_REQUEST_TEMPLATE.md`：GitHub Pull Request 标准化模板
