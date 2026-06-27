@@ -1,5 +1,17 @@
 # 修改日志
 
+## 2026-06-27 (Task 1 - 密码字段处理优化)
+
+### refactor: 简化密码处理，消除掩码往返
+
+- `app/utils/crypto.py`：`save_password_field` 删除 `startswith("•")` 掩码检测分支，空串语义改为"不修改"（返回 existing_encrypted）
+- `app/api/config.py`：GET /api/config 密码字段始终返回空串；`_log_config_changes` 中删除掩码检测条件
+- `app/schemas.py`：更新 `ConfigResponseDTO.password` 注释
+- `frontend/js/data/config.js`：新增 `_passwordChanged: false` 标志
+- `frontend/js/methods/config.js`：`saveConfig` 中密码字段条件发送（`_passwordChanged` 为 true 时才发送）；`fetchConfig` 成功后重置标志
+- `frontend/partials/pages/settings/settings-account.html`：密码输入框 `@input` 追加 `_passwordChanged = true`；移除掩码相关 placeholder 逻辑
+- 测试适配：更新 `test_crypto.py`、`test_utils.py`、`test_api_config_routes.py` 中的断言以匹配新语义
+
 ## 2026-06-27 (Task 8 - 修复测试)
 
 ### refactor(frontend): 适配 config/profiles 方法的 ApiResponse 信封格式

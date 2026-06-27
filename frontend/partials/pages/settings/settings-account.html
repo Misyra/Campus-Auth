@@ -33,10 +33,10 @@
           v-model="config.credentials.password"
           name="password"
           type="text"
-          :placeholder="config.credentials.password && config.credentials.password.startsWith('•') ? '密码已加密保存，清空后输入新密码' : '输入密码'"
+          placeholder="输入密码"
           autocomplete="current-password"
           @focus="$event.target.select()"
-          @input="onConfigChange('password', config.credentials.password, 'input')"
+          @input="_passwordChanged = true; onConfigChange('password', config.credentials.password, 'input')"
         />
         <span class="hint">密码不会随配置切换导出，仅在本机生效</span>
         <span class="hint">密码本地存储，不保证意外删除后可恢复</span>

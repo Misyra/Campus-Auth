@@ -23,7 +23,7 @@ from app.services.engine import ScheduleEngine
 from app.services.profile_service import ProfileService
 from app.utils.logging import get_logger
 
-router = APIRouter()
+router = APIRouter(tags=["配置"])
 api_logger = get_logger("api", source="backend")
 config_logger = get_logger("config", source="backend")
 
@@ -91,7 +91,7 @@ def get_config(
         "app_settings": cfg.app_settings.model_dump(),
         # 凭据平铺（与 ConfigSaveRequest 对齐）
         "username": cfg.credentials.username,
-        "password": "••••••••" if cfg.credentials.password else "",
+        "password": "",  # 始终返回空串，前端以空串表示"未修改"
         "auth_url": cfg.credentials.auth_url,
         "isp": isp,
         "carrier_custom": cfg.credentials.carrier_custom,
@@ -195,7 +195,7 @@ def _log_config_changes(old_dict: dict, new_payload: ConfigSaveRequest) -> None:
     # 密码变更检测（顶层 password，不再嵌套在 credentials 下）
     new_pw = flat_new.get("password", "")
     old_pw = flat_old.get("password", "")
-    if new_pw and not new_pw.startswith("•") and old_pw != new_pw:
+    if new_pw and old_pw != new_pw:
         changes.append("密码已修改")
 
     for field_name in flat_old:

@@ -83,7 +83,7 @@ class TestGetConfig:
         data = test_client.get("/api/config").json()
         assert data["username"] == "testuser"
         assert data["auth_url"] == "http://10.0.0.1"
-        assert data["password"] == "••••••••"
+        assert data["password"] == ""
 
 
 class TestGetDefaultStealthScript:
