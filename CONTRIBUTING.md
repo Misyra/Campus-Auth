@@ -20,7 +20,7 @@ cd Campus-Auth
 uv sync
 
 # 安装 pre-commit hook（自动格式化和 lint 检查）
-pre-commit install
+uvx pre-commit install
 
 # 安装 Playwright 浏览器（测试需要）
 uv run playwright install chromium
