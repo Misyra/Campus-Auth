@@ -19,6 +19,7 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from app.constants import AUTH_DATA_DIR  # noqa: E402, F401 — 测试 fixture 需要
+from app.utils.shutdown import force_exit
 from app.schemas import (  # noqa: E402
     AppConfig,
     ApplicationContext,
@@ -522,7 +523,8 @@ def _run_lightweight(ctx: ApplicationContext, logger):
         # 容器已有 _shutdown_done 守卫保证幂等性
         _shutdown_container(container, logger, fallback_shutdown=True)
         cleanup_pid()
-        os._exit(0)
+        # daemon 线程（web server worker）阻止自然退出，强制退出
+        force_exit(0)
 
 
 def _run_full(
@@ -551,6 +553,7 @@ def _run_full(
         if _shutdown_initiated:
             # 双击 Ctrl+C：强制退出（cleanup_pid 在首次信号时已完成）
             cleanup_pid()
+            # 用户双击 Ctrl+C 紧急退出 — 绕过所有清理，立即退出
             os._exit(1)
         _shutdown_initiated = True
         logger.info("收到退出信号，正在关闭服务...")
@@ -558,8 +561,8 @@ def _run_full(
         if _uvicorn_server[0] is not None:
             _uvicorn_server[0].should_exit = True
         else:
-            # uvicorn 未就绪，PID 已清理，直接退出
-            os._exit(0)
+            # uvicorn 未就绪，PID 已清理，强制退出
+            force_exit(0)
 
     signal.signal(signal.SIGINT, _signal_handler)
     if hasattr(signal, "SIGTERM"):
@@ -612,7 +615,8 @@ def _run_full(
         # lifespan 通常已执行 shutdown，此处为防御性补调（幂等安全）
         _shutdown_container(container, logger)
         cleanup_pid()
-        os._exit(0)
+        # uvicorn 已退出但 daemon 线程可能存活，强制退出
+        force_exit(0)
 
 
 # ==================== 主启动 ====================
