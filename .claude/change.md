@@ -1,5 +1,21 @@
 # 修改日志
 
+## 2026-06-28
+
+### refactor: 从 ScheduleEngine 提取 SchedulerService
+
+- `app/services/scheduler_service.py`：新增独立的定时任务调度器组件，包含 start/stop/tick/sync_state 等完整生命周期管理
+- `app/services/engine.py`：移除 `_scheduler_running`、`_next_schedule_tick` 字段及 `_run_schedule_tick`、`_start_scheduler`、`_stop_scheduler` 方法，改为委托 `SchedulerService`；`__init__` 新增 `scheduler` 参数
+- `app/container.py`：创建 `SchedulerService` 实例并注入 `ScheduleEngine`
+- `tests/test_services/test_scheduler_service_new.py`：新增 13 个单元测试覆盖生命周期、tick 调度、状态同步
+
+### refactor: 修复封装 — 添加 set_executor/login_executor 公共 API
+
+- `app/services/login_orchestrator.py`：新增 `set_executor()` 方法，绑定外部 executor 并关闭自建 fallback pool
+- `app/services/task_executor.py`：新增 `login_executor` 只读 property，暴露登录专用 BoundedExecutor
+- `app/container.py`：将 `_executor` 私有属性直接访问替换为 `set_executor()`/`login_executor` 公共 API
+- `tests/test_services/test_login_orchestrator.py`：新增 `TestSetExecutor`（2 个用例）和 `TestTaskExecutorLoginExecutor`（1 个用例）
+
 ## 2026-06-27
 
 ### docs: 修正 API 文档术语并补充错误类型说明
