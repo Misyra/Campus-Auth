@@ -501,8 +501,8 @@ class TestRunLoginThenExit:
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("main.create_profile_service", return_value=mock_ps),
-            patch("main.cleanup_orphan_browsers"),
+            patch("app.services.profile_service.create_profile_service", return_value=mock_ps),
+            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
             mock_ps.load.return_value = mock_data
@@ -523,8 +523,8 @@ class TestRunLoginThenExit:
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("main.create_profile_service", return_value=mock_ps),
-            patch("main.cleanup_orphan_browsers"),
+            patch("app.services.profile_service.create_profile_service", return_value=mock_ps),
+            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
             mock_ps.load.return_value = mock_data
@@ -544,12 +544,12 @@ class TestRunLoginThenExit:
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("main.create_profile_service", return_value=mock_ps),
+            patch("app.services.profile_service.create_profile_service", return_value=mock_ps),
             patch(
                 "app.network.decision.check_network_status",
                 return_value=(False, "network_down", "none"),
             ),
-            patch("main.cleanup_orphan_browsers"),
+            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
             mock_ps.load.return_value = mock_data
@@ -569,7 +569,7 @@ class TestRunLoginThenExit:
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("main.create_profile_service", return_value=mock_ps),
+            patch("app.services.profile_service.create_profile_service", return_value=mock_ps),
             patch(
                 "app.network.decision.check_network_status",
                 return_value=(True, "network_ok", "tcp"),
@@ -594,12 +594,12 @@ class TestRunLoginThenExit:
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("main.create_profile_service", return_value=mock_ps),
+            patch("app.services.profile_service.create_profile_service", return_value=mock_ps),
             patch(
                 "app.network.decision.check_network_status",
                 return_value=(False, "network_down", "none"),
             ),
-            patch("main.cleanup_orphan_browsers"),
+            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
             mock_ps.load.return_value = mock_data
@@ -620,12 +620,12 @@ class TestRunLoginThenExit:
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("main.create_profile_service", return_value=mock_ps),
+            patch("app.services.profile_service.create_profile_service", return_value=mock_ps),
             patch(
                 "app.network.decision.check_network_status",
                 side_effect=RuntimeError("probe failed"),
             ),
-            patch("main.cleanup_orphan_browsers"),
+            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
             mock_ps.load.return_value = mock_data
@@ -654,8 +654,8 @@ class TestLoginOnceRetryInterval:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService"),
             patch("app.services.login_history_service.LoginHistoryService"),
-            patch("main.AUTH_DATA_DIR", tmp_pid_dir),
-            patch("main.cleanup_orphan_browsers"),
+            patch("app.constants.AUTH_DATA_DIR", tmp_pid_dir),
+            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
             patch("time.sleep") as mock_sleep,
         ):
             result = _execute_login_with_retries(runtime_config, MagicMock())
@@ -685,8 +685,8 @@ class TestLoginOnceRetryInterval:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService"),
             patch("app.services.login_history_service.LoginHistoryService"),
-            patch("main.AUTH_DATA_DIR", tmp_pid_dir),
-            patch("main.cleanup_orphan_browsers"),
+            patch("app.constants.AUTH_DATA_DIR", tmp_pid_dir),
+            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
             _execute_login_with_retries(runtime_config, MagicMock())
@@ -709,8 +709,8 @@ class TestLoginOnceRetryInterval:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService"),
             patch("app.services.login_history_service.LoginHistoryService"),
-            patch("main.AUTH_DATA_DIR", tmp_pid_dir),
-            patch("main.cleanup_orphan_browsers"),
+            patch("app.constants.AUTH_DATA_DIR", tmp_pid_dir),
+            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
             result = _execute_login_with_retries(runtime_config, MagicMock())
@@ -743,8 +743,8 @@ class TestRunServer:
         mock_ctx.launch.source = LaunchSource.MANUAL
 
         with (
-            patch("main.is_service_running", return_value=(True, 1234)),
-            patch("main.is_local_port_in_use", return_value=True),
+            patch("app.services.launcher.is_service_running", return_value=(True, 1234)),
+            patch("app.services.launcher.is_local_port_in_use", return_value=True),
             patch("app.utils.ports.resolve_port", return_value=50721),
         ):
             with pytest.raises(SystemExit) as exc_info:
@@ -774,8 +774,8 @@ class TestRunServer:
         mock_ctx.launch.source = LaunchSource.MANUAL
 
         with (
-            patch("main.is_service_running", return_value=(False, None)),
-            patch("main.is_local_port_in_use", return_value=False),
+            patch("app.services.launcher.is_service_running", return_value=(False, None)),
+            patch("app.services.launcher.is_local_port_in_use", return_value=False),
             patch("app.workers.playwright_bootstrap.ensure_playwright_ready"),
             patch("app.utils.ports.resolve_port", return_value=50721),
             patch("app.services.profile_service.ProfileService") as mock_ps_cls,
@@ -823,8 +823,8 @@ class TestRunServer:
         mock_ctx.launch.source = LaunchSource.MANUAL
 
         with (
-            patch("main.is_service_running", return_value=(False, None)),
-            patch("main.is_local_port_in_use", return_value=False),
+            patch("app.services.launcher.is_service_running", return_value=(False, None)),
+            patch("app.services.launcher.is_local_port_in_use", return_value=False),
             patch("app.workers.playwright_bootstrap.ensure_playwright_ready"),
             patch("app.utils.ports.resolve_port", return_value=50721),
             patch("app.services.profile_service.ProfileService") as mock_ps_cls,
@@ -873,8 +873,8 @@ class TestRunServer:
         mock_ctx.launch.source = LaunchSource.MANUAL
 
         with (
-            patch("main.is_service_running", return_value=(False, None)),
-            patch("main.is_local_port_in_use", return_value=False),
+            patch("app.services.launcher.is_service_running", return_value=(False, None)),
+            patch("app.services.launcher.is_local_port_in_use", return_value=False),
             patch("app.workers.playwright_bootstrap.ensure_playwright_ready"),
             patch("app.utils.ports.resolve_port", return_value=50721),
             patch("app.services.profile_service.ProfileService") as mock_ps_cls,
@@ -944,8 +944,8 @@ class TestSignalHandler:
             return handler
 
         with (
-            patch("main.is_service_running", return_value=(False, None)),
-            patch("main.is_local_port_in_use", return_value=False),
+            patch("app.services.launcher.is_service_running", return_value=(False, None)),
+            patch("app.services.launcher.is_local_port_in_use", return_value=False),
             patch("app.workers.playwright_bootstrap.ensure_playwright_ready"),
             patch("app.utils.ports.resolve_port", return_value=50721),
             patch("app.services.profile_service.ProfileService") as mock_ps_cls,
@@ -973,7 +973,7 @@ class TestSignalHandler:
             # 模拟 SIGINT 触发（仍在 os._exit mock 范围内）
             assert signal.SIGINT in registered
             with (
-                patch("main.cleanup_pid"),
+                patch("app.services.launcher.cleanup_pid"),
                 patch(
                     "app.workers.playwright_worker.get_worker",
                     side_effect=Exception("not init"),
@@ -994,8 +994,8 @@ class TestSignalHandler:
             return handler
 
         with (
-            patch("main.is_service_running", return_value=(False, None)),
-            patch("main.is_local_port_in_use", return_value=False),
+            patch("app.services.launcher.is_service_running", return_value=(False, None)),
+            patch("app.services.launcher.is_local_port_in_use", return_value=False),
             patch("app.workers.playwright_bootstrap.ensure_playwright_ready"),
             patch("app.utils.ports.resolve_port", return_value=50721),
             patch("app.services.profile_service.ProfileService") as mock_ps_cls,

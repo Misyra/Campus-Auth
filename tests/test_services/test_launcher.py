@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+async def _dummy_shutdown():
+    """替代已废弃的 asyncio.coroutine()。"""
+    pass
 
 
 class TestShutdownContainer:
@@ -16,7 +20,7 @@ class TestShutdownContainer:
         from app.services.launcher import shutdown_container
 
         mock_container = MagicMock()
-        mock_container.shutdown = MagicMock(return_value=asyncio.coroutine(lambda: None)())
+        mock_container.shutdown = MagicMock(return_value=_dummy_shutdown())
 
         with patch("app.services.launcher.asyncio.run") as mock_run:
             shutdown_container(mock_container, MagicMock())
