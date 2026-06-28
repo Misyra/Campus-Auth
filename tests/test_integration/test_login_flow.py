@@ -13,7 +13,7 @@ import itertools
 import threading
 import time
 from concurrent.futures import Future
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -414,8 +414,7 @@ class TestLoginWithNetworkDetection:
         svc._runtime_config = RuntimeConfig()
         svc._do_async_login = MagicMock()
 
-        with patch("app.utils.retry.get_retry_intervals", return_value=[30, 30, 30]):
-            svc._do_network_check()
+        svc._do_network_check()
         svc._do_async_login.assert_called_once()
 
         # 第二次检测：网络恢复正常
