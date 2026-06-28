@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.deps import get_monitor_service, get_profile_service
@@ -27,6 +29,20 @@ from app.utils.logging import get_logger
 router = APIRouter(tags=["配置"])
 api_logger = get_logger("api", source="backend")
 config_logger = get_logger("config", source="backend")
+
+
+@contextmanager
+def _handle_config_error(operation: str, *, log_warning: bool = False):
+    """统一配置端点的 ValueError / 通用异常处理。"""
+    try:
+        yield
+    except ValueError as exc:
+        if log_warning:
+            api_logger.warning("配置更新被拒绝: {}", exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        api_logger.error("{}失败: {}", operation, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"{operation}失败: {exc}") from exc
 
 
 @router.get("/api/config/log-levels", response_model=LogLevelResponse)
@@ -121,13 +137,13 @@ def get_config_defaults() -> dict:
     }
 
 
-def _flatten_dict(d: dict, parent_key: str = "", sep: str = ".") -> dict:
+def _flatten_dict(d: dict, parent_key: str = "") -> dict:
     """将嵌套字典扁平化为点分键。"""
     items: list[tuple[str, object]] = []
     for k, v in d.items():
-        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        new_key = f"{parent_key}.{k}" if parent_key else k
         if isinstance(v, dict):
-            items.extend(_flatten_dict(v, new_key, sep).items())
+            items.extend(_flatten_dict(v, new_key).items())
         else:
             items.append((new_key, v))
     return dict(items)
@@ -237,7 +253,7 @@ def save_config(
     svc: ScheduleEngine = Depends(get_monitor_service),
     profile_svc: ProfileService = Depends(get_profile_service),
 ) -> ApiResponse:
-    try:
+    with _handle_config_error("配置保存", log_warning=True):
         old_data = profile_svc.load()
         old_cfg = profile_svc.build_runtime_config(old_data)
         old_dict = old_cfg.model_dump()
@@ -250,12 +266,6 @@ def save_config(
 
         api_logger.info("配置已保存 -> success=True")
         return ApiResponse(success=True, message="配置保存成功")
-    except ValueError as exc:
-        api_logger.warning("配置更新被拒绝: {}", exc)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        api_logger.error("配置保存失败: {}", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"配置保存失败: {exc}") from exc
 
 
 @router.patch("/api/config", response_model=ApiResponse)
@@ -265,7 +275,7 @@ def patch_config(
     profile_svc: ProfileService = Depends(get_profile_service),
 ) -> ApiResponse:
     """增量更新配置 — 仅修改 payload 中非 None 的字段。"""
-    try:
+    with _handle_config_error("配置增量保存"):
         old_data = profile_svc.load()
         old_cfg = profile_svc.build_runtime_config(old_data)
 
@@ -285,8 +295,3 @@ def patch_config(
         _log_config_changes(old_cfg.model_dump(), full_request)
         api_logger.info("配置增量保存 -> success=True, fields={}", list(patch_data.keys()))
         return ApiResponse(success=True, message="配置保存成功", data={"patched": list(patch_data.keys())})
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        api_logger.error("配置增量保存失败: {}", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"配置保存失败: {exc}") from exc
