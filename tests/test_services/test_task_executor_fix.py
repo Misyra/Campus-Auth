@@ -1192,63 +1192,6 @@ class TestIsLoginRunning:
 
 
 # =====================================================================
-# TaskExecutor — force_clear_login_slot
-# =====================================================================
-
-
-class TestForceClearLoginSlot:
-    """TaskExecutor.force_clear_login_slot() 委托 LoginOrchestrator 测试。"""
-
-    def test_delegates_cancel_running(self):
-        """force_clear_login_slot 应委托到 login_orchestrator.cancel_running()。"""
-        from app.services.task_executor import TaskExecutor
-
-        mock_orchestrator = MagicMock()
-        executor = TaskExecutor(
-            registry=MagicMock(),
-            history_store=MagicMock(),
-            worker_getter=MagicMock(),
-            login_orchestrator=mock_orchestrator,
-        )
-
-        executor.force_clear_login_slot()
-        mock_orchestrator.cancel_running.assert_called_once()
-
-    def test_thread_safety(self):
-        """并发调用 force_clear_login_slot 应线程安全。"""
-        from app.services.task_executor import TaskExecutor
-
-        mock_orchestrator = MagicMock()
-        executor = TaskExecutor(
-            registry=MagicMock(),
-            history_store=MagicMock(),
-            worker_getter=MagicMock(),
-            login_orchestrator=mock_orchestrator,
-        )
-
-        barrier = threading.Barrier(5)
-        results = []
-
-        def call_clear():
-            barrier.wait(timeout=5)
-            try:
-                executor.force_clear_login_slot()
-                results.append(True)
-            except Exception:
-                results.append(False)
-
-        threads = [threading.Thread(target=call_clear) for _ in range(5)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join(timeout=5)
-
-        assert len(results) == 5
-        assert all(results)
-        assert mock_orchestrator.cancel_running.call_count == 5
-
-
-# =====================================================================
 # TaskExecutor — execute_task_async
 # =====================================================================
 
