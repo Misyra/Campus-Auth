@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import threading
 from pathlib import Path
@@ -16,6 +17,19 @@ from .validator import TaskValidator
 logger = get_logger("task_manager", source="task")
 
 _DANGEROUS_STEP_TYPES = {"eval", "custom_js"}
+
+_INVALID_ID_MSG = "任务ID必须以字母开头，且只能包含字母、数字和下划线"
+
+
+def _with_task_id_validation(func):
+    """装饰器：规范化 task_id 并校验有效性，无效时返回 (False, 错误消息)。"""
+    @functools.wraps(func)
+    def wrapper(self, task_id: str, *args, **kwargs):
+        task_id = normalize_task_id(task_id)
+        if not is_valid_task_id(task_id):
+            return False, _INVALID_ID_MSG
+        return func(self, task_id, *args, **kwargs)
+    return wrapper
 
 
 def _check_dangerous_steps(task_data: dict[str, Any]) -> list[dict[str, Any]]:
@@ -161,10 +175,6 @@ class TaskManager:
         except Exception as e:
             logger.error("无法保存脚本元数据 {}: {}", task_id, e)
             return False
-
-    @staticmethod
-    def _is_script_file(path: Path) -> bool:
-        return path.suffix.lower() == ".py"
 
     @staticmethod
     def _extract_script_metadata(file: Path) -> dict[str, str]:
@@ -330,7 +340,7 @@ class TaskManager:
                         binary_path=data.get("binary_path", ""),
                     )
                 # .py 文件（兼容旧格式）
-                if self._is_script_file(file):
+                if file.suffix.lower() == ".py":
                     file_meta = self._read_meta(task_id)
                     if file_meta:
                         name = file_meta.get("name", file.stem)
@@ -450,9 +460,8 @@ class TaskManager:
         normalized = normalize_task_id(task_id)
         if not is_valid_task_id(normalized):
             return None
-        for ext in (".json",):
-            if (self.browser_dir / f"{normalized}{ext}").exists():
-                return "browser"
+        if (self.browser_dir / f"{normalized}.json").exists():
+            return "browser"
         for ext in (".json", ".py"):
             if (self.scripts_dir / f"{normalized}{ext}").exists():
                 return "scripts"
@@ -545,12 +554,9 @@ class TaskManager:
             )
         return result
 
+    @_with_task_id_validation
     def save_task_with_validation(self, task_id: str, config: dict[str, Any]) -> tuple[bool, str]:
         """保存任务（含危险步骤检查和 ID 校验）。"""
-        task_id = normalize_task_id(task_id)
-        if not is_valid_task_id(task_id):
-            return False, "任务ID必须以字母开头，且只能包含字母、数字和下划线"
-
         task_type = config.get("type", "browser")
         if task_type == "script":
             return self._save_script_task_validated(task_id, config)
@@ -592,11 +598,9 @@ class TaskManager:
             return True, "脚本任务保存成功"
         return False, "脚本任务保存失败"
 
+    @_with_task_id_validation
     def delete_task_with_validation(self, task_id: str) -> tuple[bool, str]:
         """删除任务（含 ID 校验）。"""
-        task_id = normalize_task_id(task_id)
-        if not is_valid_task_id(task_id):
-            return False, "任务ID必须以字母开头，且只能包含字母、数字和下划线"
         if task_id == "default":
             return False, "不能删除默认任务"
 
@@ -606,12 +610,9 @@ class TaskManager:
             return True, "任务删除成功"
         return False, "任务不存在或删除失败"
 
+    @_with_task_id_validation
     def set_active_task_with_validation(self, task_id: str) -> tuple[bool, str]:
         """设置活动任务（含 ID 校验）。"""
-        task_id = normalize_task_id(task_id)
-        if not is_valid_task_id(task_id):
-            return False, "任务ID必须以字母开头，且只能包含字母、数字和下划线"
-
         if not self.load_task(task_id):
             return False, "任务不存在"
 
@@ -621,10 +622,6 @@ class TaskManager:
             return True, "活动任务已设置"
         logger.error("设置活动任务失败: {}", task_id)
         return False, "设置活动任务失败"
-
-    def get_script_path_public(self, task_id: str) -> Path | None:
-        """获取脚本任务文件路径（公开接口，封装内部 _safe_task_path）。"""
-        return self._safe_task_path(task_id, task_type="scripts")
 
     def save_order_with_validation(self, order: dict[str, list[str]]) -> tuple[bool, str]:
         """保存任务排序配置。"""

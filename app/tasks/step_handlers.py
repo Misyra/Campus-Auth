@@ -898,18 +898,3 @@ DEFAULT_HANDLERS: dict[str, StepHandler] = {
 }
 # custom_js 已合并到 eval，保留映射以兼容旧任务
 DEFAULT_HANDLERS["custom_js"] = DEFAULT_HANDLERS[StepType.EVAL]
-
-
-class StepExecutorRegistry:
-    """步骤执行器注册表 — 薄包装层，底层共享 DEFAULT_HANDLERS 常量。"""
-
-    def __init__(self):
-        self._handlers: dict[str, StepHandler] = dict(DEFAULT_HANDLERS)
-
-    def register(self, handler: StepHandler) -> None:
-        """注册处理器"""
-        self._handlers[handler.step_type] = handler
-
-    def get(self, step_type: str) -> StepHandler | None:
-        """获取处理器"""
-        return self._handlers.get(step_type)

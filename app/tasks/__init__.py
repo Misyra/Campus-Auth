@@ -25,16 +25,12 @@ from .step_handlers import (
     ScreenshotHandler,
     SelectHandler,
     SleepHandler,
-    StepExecutorRegistry,
     StepHandler,
     WaitHandler,
     WaitUrlHandler,
 )
 from .validator import TaskValidator
 from .variable_resolver import VariableResolver
-
-# 向后兼容（将在后续版本移除）
-TaskExecutor = BrowserTaskRunner
 
 __all__ = [
     "DEFAULT_STEP_TIMEOUT_MS",
@@ -51,13 +47,11 @@ __all__ = [
     "SleepHandler",
     "StepConfig",
     "StepError",
-    "StepExecutorRegistry",
     "StepHandler",
     "StepType",
     "TaskConfig",
     "TaskError",
     "BrowserTaskRunner",
-    "TaskExecutor",  # deprecated: use BrowserTaskRunner
     "TaskManager",
     "TaskValidator",
     "VariableResolver",

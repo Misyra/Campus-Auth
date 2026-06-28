@@ -1,7 +1,7 @@
-"""步骤处理器测试 — 覆盖 StepExecutorRegistry 和各 StepHandler 子类核心功能。
+"""步骤处理器测试 — 覆盖 DEFAULT_HANDLERS 和各 StepHandler 子类核心功能。
 
 重点覆盖：
-- StepExecutorRegistry 注册与获取
+- DEFAULT_HANDLERS 映射完整性
 - InputHandler / ClickHandler 降级逻辑（_try_candidates_with_fallback）
 - SelectHandler 模糊匹配
 - ClickSelectHandler 完整流程
@@ -22,6 +22,7 @@ import pytest
 
 from app.tasks.models import StepConfig, StepType, TaskConfig
 from app.tasks.step_handlers import (
+    DEFAULT_HANDLERS,
     ClickHandler,
     ClickSelectHandler,
     EvalHandler,
@@ -30,7 +31,6 @@ from app.tasks.step_handlers import (
     ScreenshotHandler,
     SelectHandler,
     SleepHandler,
-    StepExecutorRegistry,
     StepHandler,
     WaitHandler,
     WaitUrlHandler,
@@ -67,49 +67,34 @@ def _make_locator(page: MagicMock, visible: bool = True):
     return locator
 
 
-# ── StepExecutorRegistry ──
+# ── DEFAULT_HANDLERS ──
 
 
-class TestStepExecutorRegistry:
-    """步骤执行器注册表。"""
+class TestDefaultHandlers:
+    """默认处理器映射。"""
 
     def test_all_step_types_registered(self):
         """所有 StepType 枚举值都应有对应处理器。"""
-        registry = StepExecutorRegistry()
+        registry = dict(DEFAULT_HANDLERS)
         for step_type in StepType:
             handler = registry.get(step_type.value)
             assert handler is not None, f"缺少处理器: {step_type.value}"
 
     def test_custom_js_alias(self):
         """custom_js 应被别名为 eval 处理器。"""
-        registry = StepExecutorRegistry()
+        registry = dict(DEFAULT_HANDLERS)
         eval_handler = registry.get("eval")
         custom_js_handler = registry.get("custom_js")
         assert custom_js_handler is eval_handler
 
     def test_get_unknown_returns_none(self):
         """未知类型返回 None。"""
-        registry = StepExecutorRegistry()
+        registry = dict(DEFAULT_HANDLERS)
         assert registry.get("nonexistent_type") is None
-
-    def test_register_custom_handler(self):
-        """自定义处理器可注册并获取。"""
-        registry = StepExecutorRegistry()
-
-        class MyHandler(StepHandler):
-            @property
-            def step_type(self):
-                return "my_custom"
-
-            async def execute(self, page, step, resolver):
-                return True, ""
-
-        registry.register(MyHandler())
-        assert registry.get("my_custom") is not None
 
     def test_handler_instances_are_singletons(self):
         """同一类型多次 get 返回同一实例。"""
-        registry = StepExecutorRegistry()
+        registry = dict(DEFAULT_HANDLERS)
         h1 = registry.get("input")
         h2 = registry.get("input")
         assert h1 is h2

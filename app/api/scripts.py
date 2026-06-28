@@ -81,7 +81,7 @@ async def run_script(
         raise HTTPException(status_code=404, detail="脚本任务不存在")
 
     # 通过 TaskManager 安全路径查找脚本文件
-    script_path = task_mgr.get_script_path_public(task_id)
+    script_path = task_mgr._safe_task_path(task_id, task_type="scripts")
     if not script_path or not script_path.exists():
         return ApiResponse(success=False, message="脚本文件不存在")
 

@@ -26,7 +26,7 @@ class TestScriptThreadPool:
         # 构造 mock 依赖
         mock_task_mgr = MagicMock()
         mock_task_mgr.get_task_detail.return_value = {"type": "script", "binary_path": ""}
-        mock_task_mgr.get_script_path_public.return_value = MagicMock(
+        mock_task_mgr._safe_task_path.return_value = MagicMock(
             exists=MagicMock(return_value=True)
         )
 
