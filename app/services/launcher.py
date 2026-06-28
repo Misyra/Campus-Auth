@@ -14,6 +14,8 @@ import webbrowser
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import psutil
+
 from app.schemas import (
     ApplicationContext,
     LaunchContext,
@@ -27,7 +29,6 @@ from app.schemas import (
 from app.utils.platform import CREATE_NO_WINDOW_FLAG, is_windows
 from app.utils.process import (
     cleanup_pid,
-    get_process_name,
     is_local_port_in_use,
     is_service_running,
     read_pid_mode,
@@ -52,11 +53,14 @@ def _wait_for_exit(pid: int, max_wait: int = 5) -> bool:
     Returns:
         True 表示进程已退出，False 表示超时仍在运行。
     """
-    for _ in range(max_wait):
-        time.sleep(1)
-        if get_process_name(pid) is None:
-            return True
-    return False
+    try:
+        proc = psutil.Process(pid)
+        proc.wait(timeout=max_wait)
+        return True
+    except psutil.TimeoutExpired:
+        return False
+    except psutil.NoSuchProcess:
+        return True
 
 
 def _terminate_process(pid: int) -> None:
