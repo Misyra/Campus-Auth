@@ -4,17 +4,12 @@ from __future__ import annotations
 
 from fastapi import Request
 
-from app.container import ServiceContainer
 from app.services.autostart import AutoStartService
 from app.services.debug_service import DebugSessionManager
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
 from app.services.profile_service import ProfileService
 from app.tasks import TaskManager
-
-
-def get_services(request: Request) -> ServiceContainer:
-    return request.app.state.services
 
 
 def get_monitor_service(request: Request) -> ScheduleEngine:

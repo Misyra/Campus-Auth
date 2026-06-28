@@ -43,7 +43,6 @@ class LaunchSource(StrEnum):
 
     MANUAL = "manual"
     AUTOSTART = "autostart"
-    UNKNOWN = "unknown"
 
 
 class StartupResult(StrEnum):
@@ -63,7 +62,6 @@ class LoginResult(StrEnum):
 
 @dataclass
 class AppConfig:
-    config_version: int = 2
     startup_action: StartupAction = StartupAction.NONE
     runtime_mode: RuntimeMode = RuntimeMode.FULL  # CLI --runtime-mode 覆盖
     minimize_to_tray: bool = True
@@ -302,7 +300,6 @@ def _parse_targets(raw: str) -> list[str]:
 
 
 def _parse_url_check(raw: str) -> list[str]:
-    import re
     return [s.strip() for s in re.split(r'[,\n]', raw) if s.strip()]
 
 
@@ -382,9 +379,6 @@ class ApiResponse(BaseModel):
     message: str = ""
     data: dict | None = None
 
-
-# 向后兼容别名 — 逐步迁移后删除
-ActionResponse = ApiResponse
 
 
 class ConfigSaveRequest(BaseModel):

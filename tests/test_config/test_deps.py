@@ -15,7 +15,6 @@ from app.deps import (
     get_login_history_service,
     get_monitor_service,
     get_profile_service,
-    get_services,
     get_task_manager,
 )
 
@@ -43,10 +42,6 @@ class TestDeps:
         svc.debug_manager = MagicMock(name="DebugSessionManager")
         svc.login_history_service = MagicMock(name="LoginHistoryService")
         return svc
-
-    def test_get_services(self, services):
-        request = _make_request(services)
-        assert get_services(request) is services
 
     def test_get_monitor_service(self, services):
         request = _make_request(services)
