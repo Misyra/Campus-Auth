@@ -2,6 +2,14 @@
 
 ## 2026-06-29
 
+### refactor: 用 check_network_status 简化 _network_detection_check
+
+- `app/tasks/browser_runner.py`：
+  - `_network_detection_check` 方法从约 60 行简化为约 25 行
+  - 移除手动解包 `MonitorSettings`、调用 `parse_ping_targets`、`parse_url_checks`、`is_network_available` 的冗余逻辑
+  - 改为直接调用 `check_network_status(monitor)`，该函数已封装全部检测逻辑
+  - 保留 `post_login_delay` 等待逻辑和 `MonitorSettings` 默认值填充
+
 ### chore: 删除散落的死函数
 
 - `app/utils/crypto.py`：删除 `mask_password` 函数（零生产调用）
