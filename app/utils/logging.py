@@ -239,12 +239,6 @@ class LogConfigCenter:
 
             self._configured = True
 
-    def get_logger(self, name: str, source: str | None = None) -> logger:
-        """获取配置好的日志器"""
-        if not self._configured:
-            self.initialize()
-        return get_logger(name, source or self._source)
-
     def set_level(self, level: str) -> None:
         """动态修改全局日志级别（热更新）。
 
@@ -258,9 +252,6 @@ class LogConfigCenter:
 
     def get_config(self) -> dict[str, Any]:
         return self._config.copy()
-
-    def is_initialized(self) -> bool:
-        return self._configured
 
     def add_file_handler(self, log_dir: str, retention_days: int = 7) -> None:
         """添加按日期存储的日志 sink（loguru 原生轮转）"""
@@ -339,11 +330,6 @@ class LogConfigCenter:
         """
         source_level = self.get_source_level(source)
         return self._LEVEL_ORDER.get(level, 0) >= self._LEVEL_ORDER.get(source_level, 0)
-
-    def remove_source_level(self, source: str) -> None:
-        """移除指定 source 的级别配置（回退到全局级别）"""
-        with self._source_levels_lock:
-            self._source_levels.pop(source, None)
 
     def get_all_source_levels(self) -> dict[str, str]:
         """获取所有 source 级别配置"""

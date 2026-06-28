@@ -1185,7 +1185,7 @@ class TestStartStopMonitoring:
     def test_start_monitoring_invalid_config(self, engine_factory):
         svc = engine_factory(raw=True)
         with patch(
-            "app.services.engine.ConfigValidator.validate_env_config",
+            "app.services.engine.validate_env_config",
             return_value=(False, "缺少认证地址"),
         ):
             ok, msg = svc.start_monitoring()
@@ -1197,7 +1197,7 @@ class TestStartStopMonitoring:
         svc._cmd_queue = queue.Queue(maxsize=1)
         svc._cmd_queue.put_nowait(EngineCommand(type=EngineCmdType.START))
         with patch(
-            "app.services.engine.ConfigValidator.validate_env_config",
+            "app.services.engine.validate_env_config",
             return_value=(True, ""),
         ):
             ok, msg = svc.start_monitoring()
@@ -1207,7 +1207,7 @@ class TestStartStopMonitoring:
     def test_start_monitoring_success(self, engine_factory):
         svc = engine_factory(raw=True)
         with patch(
-            "app.services.engine.ConfigValidator.validate_env_config",
+            "app.services.engine.validate_env_config",
             return_value=(True, ""),
         ):
             ok, msg = svc.start_monitoring()

@@ -1,5 +1,5 @@
 from .browser import BrowserContextManager
-from .config_utils import ConfigValidator
+from .config_utils import validate_env_config
 from .crypto import decrypt_password, encrypt_password, mask_password
 from .exceptions import LoginCancelledError
 from .logging import (
@@ -17,7 +17,7 @@ def str_to_bool(value: str) -> bool:
 
 __all__ = [
     "BrowserContextManager",
-    "ConfigValidator",
+    "validate_env_config",
     "DashboardSink",
     "LogConfigCenter",
     "LoginCancelledError",

@@ -21,7 +21,7 @@ from app.schemas import (
 )
 from app.utils.crypto import decrypt_password_field, safe_decrypt
 from app.schemas import LoginCredentials, RuntimeConfig
-from app.utils.config_utils import ConfigValidator
+from app.utils.config_utils import validate_env_config
 from app.utils.crypto import encrypt_password
 from app.utils.logging import normalize_level as _normalize_level
 
@@ -38,7 +38,7 @@ class TestValidateEnvConfig:
         clear_decryption_error()
 
     def test_valid_config(self):
-        ok, msg = ConfigValidator.validate_env_config(
+        ok, msg = validate_env_config(
             RuntimeConfig(
                 credentials=LoginCredentials(
                     username="testuser",
@@ -50,7 +50,7 @@ class TestValidateEnvConfig:
         assert ok is True
 
     def test_missing_username(self):
-        ok, msg = ConfigValidator.validate_env_config(
+        ok, msg = validate_env_config(
             RuntimeConfig(
                 credentials=LoginCredentials(
                     username="",
@@ -62,7 +62,7 @@ class TestValidateEnvConfig:
         assert ok is False
 
     def test_missing_auth_url(self):
-        ok, msg = ConfigValidator.validate_env_config(
+        ok, msg = validate_env_config(
             RuntimeConfig(
                 credentials=LoginCredentials(
                     username="user",
@@ -74,7 +74,7 @@ class TestValidateEnvConfig:
         assert ok is False
 
     def test_missing_password(self):
-        ok, msg = ConfigValidator.validate_env_config(
+        ok, msg = validate_env_config(
             RuntimeConfig(
                 credentials=LoginCredentials(
                     username="user",
@@ -86,7 +86,7 @@ class TestValidateEnvConfig:
         assert ok is False
 
     def test_all_empty(self):
-        ok, msg = ConfigValidator.validate_env_config(
+        ok, msg = validate_env_config(
             RuntimeConfig(
                 credentials=LoginCredentials(
                     username="",
@@ -98,7 +98,7 @@ class TestValidateEnvConfig:
         assert ok is False
 
     def test_none_values(self):
-        ok, msg = ConfigValidator.validate_env_config(
+        ok, msg = validate_env_config(
             RuntimeConfig()
         )
         assert ok is False

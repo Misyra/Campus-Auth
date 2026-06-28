@@ -43,22 +43,15 @@ def normalize_repo_url(url: str) -> str:
     return url
 
 
-async def async_repo_get(url: str, proxy: str = ""):
-    """异步请求远程 JSON，使用配置的代理（如有）。供异步路由使用，避免阻塞事件循环。"""
-    headers = {"User-Agent": "Campus-Auth"}
-
-    async with httpx.AsyncClient(proxy=proxy or None, timeout=httpx.Timeout(15)) as client:
-        resp = await client.get(url, headers=headers)
-        resp.raise_for_status()
-        return resp
-
-
 async def async_repo_fetch_json(url: str, expected_type: type, label: str, proxy: str = ""):
     """异步版本的远程 JSON 获取：校验类型 + 统一异常处理。供异步路由使用。"""
     url = normalize_repo_url(url)
     logger.info("获取远程{}: {}", label, url)
     try:
-        resp = await async_repo_get(url, proxy=proxy)
+        headers = {"User-Agent": "Campus-Auth"}
+        async with httpx.AsyncClient(proxy=proxy or None, timeout=httpx.Timeout(15)) as client:
+            resp = await client.get(url, headers=headers)
+            resp.raise_for_status()
         data = resp.json()
         if not isinstance(data, expected_type):
             type_name = "JSON 数组" if expected_type is list else "JSON 对象"

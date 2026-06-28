@@ -269,7 +269,7 @@ class TestStartStopMonitoring:
     @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
     @patch(
-        "app.services.engine.ConfigValidator.validate_env_config",
+        "app.services.engine.validate_env_config",
         return_value=(True, ""),
     )
     def test_start_monitoring(
@@ -721,7 +721,7 @@ class TestStartMonitoringPutNowait:
 
         with (
             patch(
-                "app.services.engine.ConfigValidator.validate_env_config",
+                "app.services.engine.validate_env_config",
                 return_value=(True, ""),
             ),
         ):
