@@ -725,6 +725,13 @@ class TestLoginOnceRetryInterval:
 class TestRunServer:
     """_run_server — 已运行/PID 写入+atexit/托盘降级。"""
 
+    @pytest.fixture(autouse=True)
+    def _protect_caplog(self):
+        """force_exit→atexit._run_exitfuncs→logger.remove() 销毁 caplog 所需
+        的 _to_std_logging 桥接 sink。patch 掉 atexit 防止此问题。"""
+        with patch("atexit._run_exitfuncs"):
+            yield
+
     def test_already_running(self, tmp_pid_dir, patched_webbrowser):
         """检测到已运行时打开浏览器并退出。"""
         from app.schemas import (
@@ -836,7 +843,7 @@ class TestRunServer:
             patch("app.services.launcher.signal.signal"),
             patch("app.services.launcher.os._exit"),
             patch.object(time, "sleep", side_effect=[None, KeyboardInterrupt]),
-            patch("app.ui.system_tray.SystemTray", side_effect=ImportError("no tray")),
+            patch("app.system_tray.SystemTray", side_effect=ImportError("no tray")),
         ):
             mock_ps = MagicMock()
             mock_ps.load.return_value.system = MagicMock(

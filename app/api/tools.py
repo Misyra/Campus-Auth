@@ -35,7 +35,7 @@ def _cleanup_old_backgrounds(exclude_filename: str) -> None:
 @router.get("/api/tools/task-recorder.user.js")
 def download_task_recorder():
     """下载任务录制器用户脚本"""
-    script_path = PROJECT_ROOT / "res" / "tools" / "task-recorder.user.js"
+    script_path = PROJECT_ROOT / "resources" / "tools" / "task-recorder.user.js"
     if not script_path.exists():
         raise HTTPException(
             status_code=404, detail="任务录制器脚本文件缺失，可能需要重新安装或更新软件"

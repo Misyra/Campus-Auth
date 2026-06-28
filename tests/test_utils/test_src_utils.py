@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.ui.system_tray import SystemTray
+from app.system_tray import SystemTray
 from app.utils.browser import STEALTH_INIT_SCRIPT, BrowserContextManager
 from app.utils.exceptions import LoginCancelledError
 from app.utils.notify import (
@@ -288,7 +288,7 @@ class TestSystemTrayMethods:
         tray._quit(None, None)
         callback.assert_called_once()
 
-    @patch("app.ui.system_tray.threading.Thread")
+    @patch("app.system_tray.threading.Thread")
     def test_start(self, mock_thread_cls):
         mock_thread = MagicMock()
         mock_thread_cls.return_value = mock_thread
@@ -306,7 +306,7 @@ class TestSystemTrayMethods:
         mock_thread_cls.assert_called_once()
         mock_thread.start.assert_called_once()
 
-    @patch("app.ui.system_tray.threading.Thread")
+    @patch("app.system_tray.threading.Thread")
     def test_start_already_running(self, mock_thread_cls):
         tray = SystemTray()
         mock_thread = MagicMock()
@@ -763,7 +763,7 @@ class TestLoadIcon:
         fake_path.exists.return_value = True
         fake_path.as_uri.return_value = "file:///fake/icon.svg"
 
-        with patch("app.ui.system_tray.Path") as mock_path_cls:
+        with patch("app.system_tray.Path") as mock_path_cls:
             mock_path_cls.return_value.parent.parent.parent.__truediv__ = MagicMock(
                 return_value=fake_path
             )

@@ -139,7 +139,7 @@ def create_tray(
         SystemTray 实例（已 start），失败时返回 None。
     """
     try:
-        from app.ui.system_tray import SystemTray
+        from app.system_tray import SystemTray
 
         tray_icon = SystemTray(
             port=port,
