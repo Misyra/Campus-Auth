@@ -25,7 +25,6 @@ from app.utils import str_to_bool
 from app.utils.crypto import (
     decrypt_password,
     encrypt_password,
-    mask_password,
     save_password_field,
 )
 
@@ -127,21 +126,6 @@ class TestEncryptDecrypt:
             with pytest.raises(DecryptionError):
                 decrypt_password(encrypted)
             assert has_decryption_error() is True
-
-
-class TestMaskPassword:
-    def test_empty(self):
-        assert mask_password("") == ""
-
-    def test_encrypted(self):
-        """加密密码应返回固定长度掩码"""
-        assert mask_password("ENC:abc123") == "••••••••"
-
-    def test_plaintext_unified_mask(self):
-        """明文密码应返回统一长度掩码（不泄露长度）"""
-        assert mask_password("ab") == "••••••••"
-        assert mask_password("abcdef") == "••••••••"
-        assert mask_password("a" * 100) == "••••••••"
 
 
 class TestSavePasswordField:

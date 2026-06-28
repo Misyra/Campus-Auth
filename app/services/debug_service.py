@@ -320,10 +320,6 @@ class DebugSessionManager:
         debug_logger.info("调试会话已停止")
         return {"running": False, "message": "调试会话已关闭"}
 
-    def get_status(self) -> dict:
-        """获取会话状态。"""
-        return self._debug_response()
-
     async def close(self):
         """关闭调试会话（用于 lifespan 清理）。"""
         async with self._lock:

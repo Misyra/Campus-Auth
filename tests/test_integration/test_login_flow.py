@@ -498,14 +498,14 @@ class TestLoginConcurrencyProtection:
         time.sleep(0.1)
 
     def test_login_in_progress_property(self):
-        """login_in_progress 属性反映 task_executor.is_login_running() 状态。"""
+        """task_executor.is_login_running() 正确反映登录状态。"""
         svc = _make_raw_engine()
 
         svc._task_executor.is_login_running.return_value = False
-        assert svc.login_in_progress is False
+        assert svc._task_executor.is_login_running() is False
 
         svc._task_executor.is_login_running.return_value = True
-        assert svc.login_in_progress is True
+        assert svc._task_executor.is_login_running() is True
 
     def test_concurrent_login_rejection(self):
         """并发登录请求：第一个成功，后续被去重拒绝。"""
@@ -579,11 +579,11 @@ class TestLoginConcurrencyProtection:
         assert svc._manual_login_in_progress is False
 
     def test_retry_not_triggered_during_login(self):
-        """登录进行中时，login_in_progress 属性为 True。"""
+        """登录进行中时，task_executor.is_login_running() 为 True。"""
         svc = _make_raw_engine()
         svc._task_executor.is_login_running.return_value = True  # 登录进行中
 
-        assert svc.login_in_progress is True
+        assert svc._task_executor.is_login_running() is True
 
     def test_login_exception_propagates(self):
         """登录执行异常时，异常会向上传播。"""

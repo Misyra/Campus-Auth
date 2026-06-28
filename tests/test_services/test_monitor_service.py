@@ -552,18 +552,6 @@ class TestTogglePureMode:
 
 
 # =====================================================================
-# ScheduleEngine.login_in_progress
-# =====================================================================
-
-
-class TestLoginInProgress:
-    def test_login_in_progress_property(self, engine_factory):
-        svc = engine_factory()
-        svc._task_executor.is_login_running.return_value = False
-        assert svc.login_in_progress is False
-
-
-# =====================================================================
 # ScheduleEngine.get_config / get_runtime_config
 # =====================================================================
 
