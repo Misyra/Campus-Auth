@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.services.debug_service import DebugSessionManager
-from app.services.debug_session import empty_debug_session
+from app.services.debug_session import DebugSession
 from app.workers.playwright_worker import WorkerResponse
 
 
@@ -32,7 +32,7 @@ def _fail_response(error="失败") -> WorkerResponse:
 
 
 def _set_session_running(manager: DebugSessionManager, task_id="t1", steps=None):
-    session = empty_debug_session()
+    session = DebugSession()
     session.running = True
     session._browser_active = True
     session.task_id = task_id
@@ -203,7 +203,7 @@ class TestNextStepSessionReplaced:
             original_submit = mock_worker.submit
 
             def _submit_and_replace(*args, **kwargs):
-                manager._session = empty_debug_session()
+                manager._session = DebugSession()
                 return WorkerResponse(success=False, error="失败")
 
             mock_worker.submit.side_effect = _submit_and_replace
@@ -224,7 +224,7 @@ class TestNextStepSessionReplaced:
             mock_get_worker.return_value = mock_worker
 
             def _submit_and_replace(*args, **kwargs):
-                manager._session = empty_debug_session()
+                manager._session = DebugSession()
                 return WorkerResponse(
                     success=True,
                     data={
@@ -272,7 +272,7 @@ class TestRunAllSessionReplaced:
                 call_count += 1
                 if call_count == 1:
                     # 第一步成功后替换会话
-                    manager._session = empty_debug_session()
+                    manager._session = DebugSession()
                     return WorkerResponse(
                         success=True,
                         data={
@@ -353,7 +353,7 @@ class TestRunAllSessionReplaced:
             mock_get_worker.return_value = mock_worker
 
             def _submit_and_replace(*args, **kwargs):
-                manager._session = empty_debug_session()
+                manager._session = DebugSession()
                 return WorkerResponse(
                     success=True,
                     data={

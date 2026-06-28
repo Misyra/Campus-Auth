@@ -21,10 +21,10 @@ if TYPE_CHECKING:
     from starlette.requests import Request
 
 from .debug_session import (
+    DebugSession,
     _current_gen,
     _next_debug_gen,
     debug_to_response,
-    empty_debug_session,
 )
 
 debug_logger = get_logger("debug_manager", source="debug")
@@ -36,7 +36,7 @@ class DebugSessionManager:
     def __init__(self, project_root: Path):
         self._project_root = project_root
         self._temp_dir = project_root / "temp" / "debug"
-        self._session = empty_debug_session()
+        self._session = DebugSession()
         self._lock = asyncio.Lock()
         self._exec_sem = asyncio.Semaphore(1)
 
@@ -91,7 +91,7 @@ class DebugSessionManager:
                             if self._session._browser_active:
                                 await self._close_debug_browser()
                         finally:
-                            self._session = empty_debug_session()
+                            self._session = DebugSession()
                         return  # 超时后退出，不再空转
                     # 未超时时释放锁，下一轮 sleep 后重新检查
         except asyncio.CancelledError:
@@ -159,7 +159,7 @@ class DebugSessionManager:
             ]
 
             gen = _next_debug_gen()
-            self._session = empty_debug_session()
+            self._session = DebugSession()
             self._session._browser_active = True
             self._session.task_id = task_id
             self._session.steps = steps_info
@@ -308,7 +308,7 @@ class DebugSessionManager:
             await self._cancel_debug_timer()
             if self._session._browser_active:
                 await self._close_debug_browser()
-            self._session = empty_debug_session()
+            self._session = DebugSession()
         # 清理临时调试截图（仅删除调试专用子目录中的文件）
         try:
             if self._temp_dir.exists():
@@ -332,4 +332,4 @@ class DebugSessionManager:
                 if self._session._browser_active:
                     await self._close_debug_browser()
             finally:
-                self._session = empty_debug_session()
+                self._session = DebugSession()

@@ -25,7 +25,6 @@ from app.services.debug_session import (
     DebugSession,
     _next_debug_gen,
     debug_to_response,
-    empty_debug_session,
 )
 from app.services.login_history_service import LoginHistoryService
 from app.services.profile_service import ProfileService
@@ -789,14 +788,14 @@ class TestDebugSession:
 
 class TestEmptyDebugSession:
     def test_returns_fresh_session(self):
-        session = empty_debug_session()
+        session = DebugSession()
         assert isinstance(session, DebugSession)
         assert session.running is False
         assert session.task_id is None
 
     def test_returns_new_instance(self):
-        s1 = empty_debug_session()
-        s2 = empty_debug_session()
+        s1 = DebugSession()
+        s2 = DebugSession()
         assert s1 is not s2
 
 
@@ -826,7 +825,7 @@ class TestDebugToResponse:
         assert response["screenshot_url"] == "/temp/test.png"
 
     def test_empty_session(self):
-        session = empty_debug_session()
+        session = DebugSession()
         response = debug_to_response(session)
         assert response["running"] is False
         assert response["task_id"] is None

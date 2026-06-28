@@ -434,8 +434,7 @@ class TestNetwork:
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.global_config.browser.pure_mode = False
 
-        mock_tester = MagicMock()
-        mock_tester.test_network.return_value = (True, "网络连接正常")
+        mock_tester = MagicMock(return_value=(True, "网络连接正常"))
         svc = ScheduleEngine(MagicMock(), profile_service=MagicMock(), network_tester=mock_tester)
         ok, msg = svc.test_network()
         assert ok is True
@@ -450,8 +449,7 @@ class TestNetwork:
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.global_config.browser.pure_mode = False
 
-        mock_tester = MagicMock()
-        mock_tester.test_network.return_value = (False, "网络连接异常")
+        mock_tester = MagicMock(return_value=(False, "网络连接异常"))
         svc = ScheduleEngine(MagicMock(), profile_service=MagicMock(), network_tester=mock_tester)
         ok, msg = svc.test_network()
         assert ok is False
@@ -466,8 +464,7 @@ class TestNetwork:
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.global_config.browser.pure_mode = False
 
-        mock_tester = MagicMock()
-        mock_tester.test_network.return_value = (False, "网络测试失败: timeout")
+        mock_tester = MagicMock(return_value=(False, "网络测试失败: timeout"))
         svc = ScheduleEngine(MagicMock(), profile_service=MagicMock(), network_tester=mock_tester)
         ok, msg = svc.test_network()
         assert ok is False

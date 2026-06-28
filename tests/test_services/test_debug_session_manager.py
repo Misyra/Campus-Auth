@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.services.debug_service import DebugSessionManager
-from app.services.debug_session import empty_debug_session
+from app.services.debug_session import DebugSession
 from app.workers.playwright_worker import WorkerResponse
 
 # ---------------------------------------------------------------------------
@@ -34,7 +34,7 @@ def _fail_response(error="失败") -> WorkerResponse:
 
 def _set_session_running(manager: DebugSessionManager, task_id="t1", steps=None):
     """手动将管理器的内部会话设置为运行中状态。"""
-    session = empty_debug_session()
+    session = DebugSession()
     session.running = True
     session._browser_active = True
     session.task_id = task_id
@@ -787,7 +787,7 @@ class TestDebugSessionManagerTimeoutWatcher:
             async with manager._lock:
                 if manager._session._browser_active:
                     await manager._close_debug_browser()
-                manager._session = empty_debug_session()
+                manager._session = DebugSession()
 
         # 验证关闭浏览器被调用
         close_mock.assert_awaited_once()
