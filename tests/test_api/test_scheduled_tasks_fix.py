@@ -24,9 +24,9 @@ class TestToggleNoSideEffect:
         mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
 
-        mock_tasks.get_task.return_value = None
-        mock_tasks.list_tasks.return_value = []
-        mock_tasks.save_task.return_value = (True, "保存成功")
+        mock_tasks.registry.get_task.return_value = None
+        mock_tasks.registry.list_tasks.return_value = []
+        mock_tasks.registry.save_task.return_value = (True, "保存成功")
 
         original_task = {
             "id": "task1",
@@ -36,8 +36,8 @@ class TestToggleNoSideEffect:
             "command": "echo",
             "schedule": {"hour": 0, "minute": 0},
         }
-        mock_tasks.get_task.return_value = original_task
-        mock_tasks.save_task.return_value = (True, "成功")
+        mock_tasks.registry.get_task.return_value = original_task
+        mock_tasks.registry.save_task.return_value = (True, "成功")
 
         resp = test_client.post("/api/scheduled-tasks/task1/toggle")
         assert resp.status_code == 200
@@ -49,7 +49,7 @@ class TestToggleNoSideEffect:
         )
 
         # save_task 应收到 enabled=True 的字典
-        saved_task = mock_tasks.save_task.call_args[0][1]
+        saved_task = mock_tasks.registry.save_task.call_args[0][1]
         assert saved_task["enabled"] is True
 
     def test_toggle_to_disable_does_not_mutate(self, api_client):
@@ -60,9 +60,9 @@ class TestToggleNoSideEffect:
         mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
 
-        mock_tasks.get_task.return_value = None
-        mock_tasks.list_tasks.return_value = []
-        mock_tasks.save_task.return_value = (True, "保存成功")
+        mock_tasks.registry.get_task.return_value = None
+        mock_tasks.registry.list_tasks.return_value = []
+        mock_tasks.registry.save_task.return_value = (True, "保存成功")
 
         original_task = {
             "id": "task2",
@@ -72,8 +72,8 @@ class TestToggleNoSideEffect:
             "command": "echo",
             "schedule": {"hour": 8, "minute": 0},
         }
-        mock_tasks.get_task.return_value = original_task
-        mock_tasks.save_task.return_value = (True, "成功")
+        mock_tasks.registry.get_task.return_value = original_task
+        mock_tasks.registry.save_task.return_value = (True, "成功")
 
         resp = test_client.post("/api/scheduled-tasks/task2/toggle")
         assert resp.status_code == 200
@@ -83,5 +83,5 @@ class TestToggleNoSideEffect:
             "toggle 端点不应原地修改 get_task 返回的字典"
         )
 
-        saved_task = mock_tasks.save_task.call_args[0][1]
+        saved_task = mock_tasks.registry.save_task.call_args[0][1]
         assert saved_task["enabled"] is False

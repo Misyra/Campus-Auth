@@ -107,6 +107,16 @@ class TaskExecutor:
         )
 
     @property
+    def registry(self):
+        """定时任务注册中心（只读，供 API 路由直接访问）。"""
+        return self._registry
+
+    @property
+    def history_store(self):
+        """任务历史存储（只读，供 API 路由直接访问）。"""
+        return self._history_store
+
+    @property
     def login_executor(self) -> BoundedExecutor:
         """登录专用 BoundedExecutor（只读，供 container 注入 LoginOrchestrator）。"""
         return self._login_executor
@@ -128,19 +138,7 @@ class TaskExecutor:
                     self._task_pool = BoundedExecutor(max_workers=2, queue_size=10)
         return self._task_pool
 
-    # ── 定时任务 CRUD（原 TaskFacade 方法）──
-
-    def list_tasks(self) -> list[dict]:
-        """列出所有定时任务。"""
-        return self._registry.list_tasks()
-
-    def get_task(self, task_id: str) -> dict | None:
-        """获取单个定时任务。"""
-        return self._registry.get_task(task_id)
-
-    def save_task(self, task_id: str, config: dict) -> tuple[bool, str]:
-        """保存定时任务。"""
-        return self._registry.save_task(task_id, config)
+    # ── 定时任务删除（协调 registry + history_store）──
 
     def delete_task(self, task_id: str) -> tuple[bool, str]:
         """删除定时任务及其历史。"""
@@ -148,14 +146,6 @@ class TaskExecutor:
         if success:
             self._history_store.delete_history(task_id)
         return success, message
-
-    def get_history(self, task_id: str) -> list[dict]:
-        """获取任务执行历史。"""
-        return self._history_store.get_history(task_id)
-
-    def has_enabled_tasks(self) -> bool:
-        """检查是否存在启用的定时任务。"""
-        return self._registry.has_enabled_tasks()
 
     # ── 异步提交接口 ──
 

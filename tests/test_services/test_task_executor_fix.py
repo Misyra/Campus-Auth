@@ -305,7 +305,7 @@ class TestBoundedExecutor:
 
 
 class TestTaskExecutorCRUD:
-    """TaskExecutor CRUD 委托到 registry 的测试。"""
+    """TaskExecutor CRUD 属性和 delete_task 协调测试。"""
 
     def _make_executor(self, **kwargs):
         from app.services.task_executor import TaskExecutor
@@ -319,23 +319,15 @@ class TestTaskExecutorCRUD:
         defaults.update(kwargs)
         return TaskExecutor(**defaults)
 
-    def test_list_tasks(self):
+    def test_registry_property(self):
+        """registry 属性应返回注入的注册中心。"""
         executor = self._make_executor()
-        executor._registry.list_tasks.return_value = [{"id": "t1"}]
-        assert executor.list_tasks() == [{"id": "t1"}]
-        executor._registry.list_tasks.assert_called_once()
+        assert executor.registry is executor._registry
 
-    def test_get_task(self):
+    def test_history_store_property(self):
+        """history_store 属性应返回注入的历史存储。"""
         executor = self._make_executor()
-        executor._registry.get_task.return_value = {"id": "t1"}
-        assert executor.get_task("t1") == {"id": "t1"}
-        executor._registry.get_task.assert_called_once_with("t1")
-
-    def test_save_task(self):
-        executor = self._make_executor()
-        executor._registry.save_task.return_value = (True, "ok")
-        assert executor.save_task("t1", {"name": "test"}) == (True, "ok")
-        executor._registry.save_task.assert_called_once_with("t1", {"name": "test"})
+        assert executor.history_store is executor._history_store
 
     def test_delete_task_success(self):
         """删除成功时应同时删除历史。"""
@@ -353,17 +345,6 @@ class TestTaskExecutorCRUD:
         success, msg = executor.delete_task("t1")
         assert success is False
         executor._history_store.delete_history.assert_not_called()
-
-    def test_get_history(self):
-        executor = self._make_executor()
-        executor._history_store.get_history.return_value = [{"status": "success"}]
-        assert executor.get_history("t1") == [{"status": "success"}]
-        executor._history_store.get_history.assert_called_once_with("t1")
-
-    def test_has_enabled_tasks(self):
-        executor = self._make_executor()
-        executor._registry.has_enabled_tasks.return_value = True
-        assert executor.has_enabled_tasks() is True
 
     def test_bind_runtime_config(self):
         executor = self._make_executor()

@@ -18,7 +18,7 @@ class TestCreateScheduledTask:
         mock_tasks = MagicMock()
         mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
-        mock_tasks.save_task.return_value = (True, "创建成功")
+        mock_tasks.registry.save_task.return_value = (True, "创建成功")
         resp = test_client.post(
             "/api/scheduled-tasks",
             json={
@@ -38,7 +38,7 @@ class TestCreateScheduledTask:
         mock_tasks = MagicMock()
         mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
-        mock_tasks.save_task.return_value = (True, "创建成功")
+        mock_tasks.registry.save_task.return_value = (True, "创建成功")
         resp = test_client.post(
             "/api/scheduled-tasks",
             json={
@@ -58,7 +58,7 @@ class TestCreateScheduledTask:
         mock_tasks = MagicMock()
         mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
-        mock_tasks.save_task.return_value = (True, "创建成功")
+        mock_tasks.registry.save_task.return_value = (True, "创建成功")
         resp = test_client.post(
             "/api/scheduled-tasks",
             json={
@@ -159,7 +159,7 @@ class TestCreateScheduledTask:
         mock_tasks = MagicMock()
         mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
-        mock_tasks.save_task.return_value = (True, "创建成功")
+        mock_tasks.registry.save_task.return_value = (True, "创建成功")
         resp = test_client.post(
             "/api/scheduled-tasks",
             json={
@@ -187,7 +187,7 @@ class TestUpdateScheduledTask:
         mock_tasks = MagicMock()
         mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
-        mock_tasks.get_task.return_value = {
+        mock_tasks.registry.get_task.return_value = {
             "id": "task1",
             "name": "旧名称",
             "type": "shell",
@@ -196,7 +196,7 @@ class TestUpdateScheduledTask:
             "schedule": {"hour": 8, "minute": 0},
             "timeout": 60,
         }
-        mock_tasks.save_task.return_value = (True, "更新成功")
+        mock_tasks.registry.save_task.return_value = (True, "更新成功")
         resp = test_client.put(
             "/api/scheduled-tasks/task1",
             json={"name": "新名称", "command": "echo new"},
@@ -211,7 +211,7 @@ class TestUpdateScheduledTask:
         mock_tasks = MagicMock()
         mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
-        mock_tasks.get_task.return_value = None
+        mock_tasks.registry.get_task.return_value = None
         resp = test_client.put(
             "/api/scheduled-tasks/nonexistent",
             json={"name": "test"},
@@ -225,7 +225,7 @@ class TestUpdateScheduledTask:
         mock_tasks = MagicMock()
         mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
-        mock_tasks.get_task.return_value = {
+        mock_tasks.registry.get_task.return_value = {
             "id": "task1",
             "name": "旧名称",
             "type": "shell",
@@ -245,7 +245,7 @@ class TestUpdateScheduledTask:
         mock_tasks = MagicMock()
         mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
-        mock_tasks.get_task.return_value = {
+        mock_tasks.registry.get_task.return_value = {
             "id": "task1",
             "name": "test",
             "type": "shell",
@@ -265,7 +265,7 @@ class TestUpdateScheduledTask:
         mock_tasks = MagicMock()
         mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
-        mock_tasks.get_task.return_value = {
+        mock_tasks.registry.get_task.return_value = {
             "id": "task1",
             "name": "test",
             "type": "script",
@@ -292,7 +292,7 @@ class TestToggleScheduledTask:
         mock_tasks = MagicMock()
         mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
-        mock_tasks.get_task.return_value = {
+        mock_tasks.registry.get_task.return_value = {
             "id": "task1",
             "name": "test",
             "enabled": False,
@@ -300,7 +300,7 @@ class TestToggleScheduledTask:
             "command": "echo",
             "schedule": {"hour": 0, "minute": 0},
         }
-        mock_tasks.save_task.return_value = (True, "成功")
+        mock_tasks.registry.save_task.return_value = (True, "成功")
         resp = test_client.post("/api/scheduled-tasks/task1/toggle")
         assert resp.status_code == 200
         assert resp.json()["success"] is True
@@ -313,7 +313,7 @@ class TestToggleScheduledTask:
         mock_tasks = MagicMock()
         mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
-        mock_tasks.get_task.return_value = {
+        mock_tasks.registry.get_task.return_value = {
             "id": "task1",
             "name": "test",
             "enabled": True,
@@ -321,7 +321,7 @@ class TestToggleScheduledTask:
             "command": "echo",
             "schedule": {"hour": 0, "minute": 0},
         }
-        mock_tasks.save_task.return_value = (True, "成功")
+        mock_tasks.registry.save_task.return_value = (True, "成功")
         resp = test_client.post("/api/scheduled-tasks/task1/toggle")
         assert resp.status_code == 200
         assert "禁用" in resp.json()["message"]
@@ -333,7 +333,7 @@ class TestToggleScheduledTask:
         mock_tasks = MagicMock()
         mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
-        mock_tasks.get_task.return_value = None
+        mock_tasks.registry.get_task.return_value = None
         resp = test_client.post("/api/scheduled-tasks/nonexistent/toggle")
         assert resp.status_code == 404
 
@@ -351,7 +351,7 @@ class TestRunScheduledTask:
         mock_tasks = MagicMock()
         mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
-        mock_tasks.get_task.return_value = {"id": "task1", "name": "test"}
+        mock_tasks.registry.get_task.return_value = {"id": "task1", "name": "test"}
         mock_tasks.execute_task = MagicMock(return_value=(True, "执行成功"))
         resp = test_client.post("/api/scheduled-tasks/task1/run")
         assert resp.status_code == 200
@@ -364,7 +364,7 @@ class TestRunScheduledTask:
         mock_tasks = MagicMock()
         mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
-        mock_tasks.get_task.return_value = None
+        mock_tasks.registry.get_task.return_value = None
         resp = test_client.post("/api/scheduled-tasks/nonexistent/run")
         assert resp.status_code == 404
 
@@ -375,7 +375,7 @@ class TestRunScheduledTask:
         mock_tasks = MagicMock()
         mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
-        mock_tasks.get_task.return_value = {"id": "task1", "name": "test"}
+        mock_tasks.registry.get_task.return_value = {"id": "task1", "name": "test"}
         mock_tasks.execute_task = MagicMock(return_value=(False, "执行超时"))
         resp = test_client.post("/api/scheduled-tasks/task1/run")
         assert resp.status_code == 200
@@ -396,8 +396,8 @@ class TestGetScheduledTaskHistory:
         mock_tasks = MagicMock()
         mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
-        mock_tasks.get_task.return_value = {"id": "task1", "name": "test"}
-        mock_tasks.get_history.return_value = [
+        mock_tasks.registry.get_task.return_value = {"id": "task1", "name": "test"}
+        mock_tasks.history_store.get_history.return_value = [
             {"timestamp": "2026-06-08T10:00:00", "status": "success", "message": "ok"},
             {"timestamp": "2026-06-08T09:00:00", "status": "failure", "message": "err"},
         ]
@@ -412,6 +412,6 @@ class TestGetScheduledTaskHistory:
         mock_tasks = MagicMock()
         mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
-        mock_tasks.get_task.return_value = None
+        mock_tasks.registry.get_task.return_value = None
         resp = test_client.get("/api/scheduled-tasks/nonexistent/history")
         assert resp.status_code == 404

@@ -22,7 +22,7 @@ def list_scheduled_tasks(
     engine: ScheduleEngine = Depends(get_monitor_service),
 ) -> list[dict[str, Any]]:
     """列出所有定时任务。"""
-    return engine.tasks.list_tasks()
+    return engine.tasks.registry.list_tasks()
 
 
 @router.post("/api/scheduled-tasks", response_model=ApiResponse)
@@ -34,7 +34,7 @@ def create_scheduled_task(
 
     task_id = f"task_{uuid.uuid4().hex[:12]}"
     config = payload.model_dump()
-    ok, message = engine.tasks.save_task(task_id, config)
+    ok, message = engine.tasks.registry.save_task(task_id, config)
     api_logger.info("创建定时任务 {} -> success={}, message={}", task_id, ok, message)
     if ok:
         engine.sync_scheduler_state()
@@ -49,7 +49,7 @@ def update_scheduled_task(
 ) -> ApiResponse:
     """更新定时任务。"""
 
-    existing = engine.tasks.get_task(task_id)
+    existing = engine.tasks.registry.get_task(task_id)
     if not existing:
         raise HTTPException(status_code=404, detail="定时任务不存在")
 
@@ -66,7 +66,7 @@ def update_scheduled_task(
     config["last_run"] = existing.get("last_run")
     config["last_status"] = existing.get("last_status")
 
-    ok, message = engine.tasks.save_task(task_id, config)
+    ok, message = engine.tasks.registry.save_task(task_id, config)
     if ok:
         engine.sync_scheduler_state()
     return ApiResponse(success=ok, message=message)
@@ -92,7 +92,7 @@ def run_scheduled_task(
     engine: ScheduleEngine = Depends(get_monitor_service),
 ) -> ApiResponse:
     """手动执行定时任务（异步后台执行，避免 HTTP 连接长时间阻塞）。"""
-    if not engine.tasks.get_task(task_id):
+    if not engine.tasks.registry.get_task(task_id):
         raise HTTPException(status_code=404, detail="定时任务不存在")
 
     # 后台执行，不阻塞 HTTP 响应
@@ -120,12 +120,12 @@ def toggle_scheduled_task(
     engine: ScheduleEngine = Depends(get_monitor_service),
 ) -> ApiResponse:
     """启用/禁用定时任务。"""
-    task = engine.tasks.get_task(task_id)
+    task = engine.tasks.registry.get_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="定时任务不存在")
 
     task = {**task, "enabled": not task.get("enabled", True)}
-    ok, message = engine.tasks.save_task(task_id, task)
+    ok, message = engine.tasks.registry.save_task(task_id, task)
     status = "启用" if task["enabled"] else "禁用"
     api_logger.info("切换定时任务 {} -> {}", task_id, status)
     if ok:
@@ -139,6 +139,6 @@ def get_scheduled_task_history(
     engine: ScheduleEngine = Depends(get_monitor_service),
 ) -> list[dict[str, Any]]:
     """获取定时任务执行历史。"""
-    if not engine.tasks.get_task(task_id):
+    if not engine.tasks.registry.get_task(task_id):
         raise HTTPException(status_code=404, detail="定时任务不存在")
-    return engine.tasks.get_history(task_id)
+    return engine.tasks.history_store.get_history(task_id)
