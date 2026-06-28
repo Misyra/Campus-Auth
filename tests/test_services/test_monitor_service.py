@@ -492,7 +492,6 @@ class TestTogglePureMode:
 
         def _fake_reload(self_inner):
             self_inner._runtime_config = RuntimeConfig()
-            self_inner._runtime_snapshot = self_inner._runtime_config
             self_inner._pure_mode = False
             return True
 
@@ -517,7 +516,6 @@ class TestTogglePureMode:
 
         def _fake_reload(self_inner):
             self_inner._runtime_config = RuntimeConfig()
-            self_inner._runtime_snapshot = self_inner._runtime_config
             self_inner._pure_mode = False
             return True
 

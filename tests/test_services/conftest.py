@@ -34,7 +34,6 @@ def engine_factory():
         def _fake_reload(self_inner):
             """模拟 _reload_config_internal：设置所有由原方法初始化的属性。"""
             self_inner._runtime_config = RuntimeConfig()
-            self_inner._runtime_snapshot = self_inner._runtime_config
             self_inner._pure_mode = False
             return True
 
@@ -68,7 +67,6 @@ def engine_factory():
         svc._engine_running = False
         svc._retry_policy = MonitoredPolicy()
         svc._runtime_config = RuntimeConfig()
-        svc._runtime_snapshot = None
         svc._monitor_check_interval = 300
         svc._next_network_check = 0
         svc._scheduler = MagicMock()

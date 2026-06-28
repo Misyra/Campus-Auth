@@ -234,10 +234,6 @@ class TaskExecutor:
         """取消当前登录。"""
         self._login_orchestrator.cancel_running()
 
-    def force_clear_login_slot(self) -> None:
-        """强制清理旧登录引用（仅用于旧任务无法正常取消的兜底场景）。"""
-        self._login_orchestrator.cancel_running()
-
     # ── 同步执行接口 ──
 
     def execute_task(self, task_id: str) -> tuple[bool, str]:

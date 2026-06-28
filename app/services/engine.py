@@ -107,8 +107,6 @@ class ScheduleEngine:
         self._start_stop_lock: threading.Lock = threading.Lock()
         self._retry_time_lock: threading.Lock = threading.Lock()
 
-        # 运行时配置快照（仅在 reload 时更新，读取零拷贝）
-        self._runtime_snapshot: RuntimeConfig | None = None
         # 配置对象（由 _reload_config_internal 初始化）
         self._runtime_config: RuntimeConfig = RuntimeConfig()
 
@@ -589,7 +587,6 @@ class ScheduleEngine:
             with self._reload_lock:
                 data = self._profile_service.load()
                 self._runtime_config = self._profile_service.build_runtime_config(data)
-                self._runtime_snapshot = self._runtime_config
                 self._pure_mode = data.global_config.browser.pure_mode
             return True
         except Exception:

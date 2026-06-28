@@ -41,7 +41,6 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._engine_running = False
     svc._retry_policy = MonitoredPolicy()
     svc._runtime_config = RuntimeConfig()
-    svc._runtime_snapshot = None
     svc._monitor_check_interval = 300
     svc._next_network_check = 0
     svc._scheduler_running = False
