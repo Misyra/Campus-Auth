@@ -10,10 +10,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .browser import BrowserContextManager
-from .env import build_login_template_vars
-from .exceptions import LoginCancelledError
-from .logging import get_logger
+from app.utils.browser import BrowserContextManager
+from app.utils.env import build_login_template_vars
+from app.utils.exceptions import LoginCancelledError
+from app.utils.logging import get_logger
 
 # 用于从日志消息中移除截图路径的正则表达式
 SCREENSHOT_URL_PATTERN = r"\s*截图[:：]\s*/\S+\.(?:png|jpg|jpeg|webp|gif)"
@@ -85,7 +85,7 @@ class LoginAttemptHandler:
 
     async def _perform_login_with_active_task(self) -> tuple[bool, str] | None:
         """执行当前活动任务；返回 None 表示未找到可执行任务。"""
-        from ..tasks.models import ScriptTaskInfo
+        from app.tasks.models import ScriptTaskInfo
 
         phase_start = time.perf_counter()
         try:
@@ -122,7 +122,7 @@ class LoginAttemptHandler:
     def _ensure_task_manager(self) -> None:
         """懒初始化 TaskManager。"""
         if self._task_manager is None:
-            from ..tasks.manager import TaskManager
+            from app.tasks.manager import TaskManager
 
             root_override = os.getenv("CAMPUS_AUTH_PROJECT_ROOT", "").strip()
             self._project_root = (
@@ -136,7 +136,7 @@ class LoginAttemptHandler:
         self, task: Any, active_task_id: str, phase_start: float
     ) -> tuple[bool, str]:
         """执行浏览器任务。"""
-        from ..tasks.browser_runner import TaskExecutor
+        from app.tasks import TaskExecutor
 
         login_url = self._credentials["auth_url"]
         username = self._credentials["username"]
@@ -233,8 +233,8 @@ class LoginAttemptHandler:
 
         脚本只负责发请求，登录是否成功通过网络检测判断。
         """
-        from ..network.decision import check_network_status
-        from ..workers.script_runner import ScriptRunner
+        from app.network.decision import check_network_status
+        from app.workers.script_runner import ScriptRunner
 
         self.logger.info(
             "脚本任务开始 -> 任务={} 脚本={}",

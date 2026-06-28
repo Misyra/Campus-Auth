@@ -19,7 +19,7 @@ from app.services.monitor_service import (
     NetworkMonitorCore,
     NetworkState,
 )
-from app.utils.login import SCREENSHOT_URL_PATTERN, LoginAttemptHandler
+from app.services.login_handler import SCREENSHOT_URL_PATTERN, LoginAttemptHandler
 
 # ── 第一部分：LoginAttemptHandler（原 test_login.py）──
 
