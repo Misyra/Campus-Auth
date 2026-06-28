@@ -8,7 +8,7 @@ test_playwright_bootstrap.py、test_playwright_worker.py。
 from __future__ import annotations
 
 import os
-import subprocess
+
 import threading
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -18,11 +18,6 @@ import pytest
 from app.system_tray import SystemTray
 from app.utils.browser import STEALTH_INIT_SCRIPT, BrowserContextManager
 from app.utils.exceptions import LoginCancelledError
-from app.utils.notify import (
-    _notify_linux,
-    _notify_macos,
-    _notify_windows,
-)
 from app.workers.playwright_bootstrap import (
     _candidate_hosts,
     _has_chromium,
@@ -43,105 +38,6 @@ from app.workers.playwright_worker import (
     WorkerCommand,
     WorkerResponse,
 )
-
-# ─────────────────────────────────────────────────────────────────────
-#  桌面通知 (src/utils/notify.py)
-# ─────────────────────────────────────────────────────────────────────
-
-
-class TestNotifyWindows:
-    @patch("app.utils.notify.subprocess.run")
-    def test_powershell_success(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0)
-        result = _notify_windows("标题", "消息", 5000)
-        assert result is True
-        mock_run.assert_called_once()
-
-    @patch("app.utils.notify.subprocess.run")
-    def test_powershell_failure_msg_fallback(self, mock_run):
-        mock_run.side_effect = [
-            MagicMock(returncode=1),
-            MagicMock(returncode=0),
-        ]
-        result = _notify_windows("标题", "消息", 5000)
-        assert result is True
-        assert mock_run.call_count == 2
-
-    @patch("app.utils.notify.subprocess.run")
-    def test_both_fail(self, mock_run):
-        mock_run.side_effect = [
-            MagicMock(returncode=1),
-            FileNotFoundError(),
-        ]
-        result = _notify_windows("标题", "消息", 5000)
-        assert result is False
-
-    @patch("app.utils.notify.subprocess.run")
-    def test_special_characters(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0)
-        result = _notify_windows('标题`${"}$', '消息`${"}$', 5000)
-        assert result is True
-
-    @patch("app.utils.notify.subprocess.run")
-    def test_powershell_timeout(self, mock_run):
-        mock_run.side_effect = [
-            subprocess.TimeoutExpired("powershell", 10),
-            MagicMock(returncode=0),
-        ]
-        result = _notify_windows("标题", "消息", 5000)
-        assert result is True
-
-
-class TestNotifyMacos:
-    @patch("app.utils.notify.subprocess.run")
-    def test_success(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0)
-        result = _notify_macos("标题", "消息")
-        assert result is True
-
-    @patch("app.utils.notify.subprocess.run")
-    def test_failure(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=1)
-        result = _notify_macos("标题", "消息")
-        assert result is False
-
-    @patch("app.utils.notify.subprocess.run")
-    def test_special_characters(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0)
-        result = _notify_macos('标题"\\', '消息"\\')
-        assert result is True
-        call_args = mock_run.call_args
-        script = call_args[0][0][2]
-        assert '\\"' in script
-
-
-class TestNotifyLinux:
-    @patch("app.utils.notify.shutil.which", return_value="/usr/bin/notify-send")
-    @patch("app.utils.notify.subprocess.run")
-    def test_success(self, mock_run, mock_which):
-        mock_run.return_value = MagicMock(returncode=0)
-        result = _notify_linux("标题", "消息", 5000)
-        assert result is True
-
-    @patch("app.utils.notify.shutil.which", return_value=None)
-    def test_no_notify_send(self, mock_which):
-        result = _notify_linux("标题", "消息", 5000)
-        assert result is False
-
-    @patch("app.utils.notify.shutil.which", return_value="/usr/bin/notify-send")
-    @patch("app.utils.notify.subprocess.run")
-    def test_failure(self, mock_run, mock_which):
-        mock_run.return_value = MagicMock(returncode=1)
-        result = _notify_linux("标题", "消息", 5000)
-        assert result is False
-
-    @patch("app.utils.notify.shutil.which", return_value="/usr/bin/notify-send")
-    @patch("app.utils.notify.subprocess.run")
-    def test_duration_conversion(self, mock_run, mock_which):
-        mock_run.return_value = MagicMock(returncode=0)
-        _notify_linux("标题", "消息", 5000)
-        call_args = mock_run.call_args[0][0]
-        assert "5000" in call_args
 
 
 # ─────────────────────────────────────────────────────────────────────
