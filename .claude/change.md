@@ -55,6 +55,51 @@
   - 调用处改为直接调用 `has_playwright_chromium()`
 - 测试文件同步更新
 
+**任务组 5: shell_policy.py**
+- `app/utils/shell_policy.py`：
+  - 删除 `async run()` 方法（零生产调用，仅 `run_sync` 被使用）
+  - 删除 `async _kill_process_tree()` 方法（仅被 async run 调用）
+  - 删除 `audit_hook` 参数及相关代码（两个生产调用方均未传入）
+
+**任务组 6: logging.py**
+- `app/utils/logging.py`：
+  - 删除 `LogConfigCenter.get_logger()` 类方法（零生产调用，模块级 `get_logger` 函数才是被广泛使用的）
+  - 删除 `LogConfigCenter.is_initialized()` 方法（仅测试调用）
+  - 删除 `LogConfigCenter.remove_source_level()` 方法（零调用）
+
+**任务组 7: platform.py + retry.py**
+- `app/utils/platform.py`：
+  - 删除 `_WINDOWS_UA`、`_MACOS_UA`、`_LINUX_UA` 三个 UA 常量
+  - 删除 `get_default_ua()` 函数（仅测试使用，Chrome 125 已过时）
+  - 从 `__all__` 中移除 `"get_default_ua"`
+- 删除 `app/utils/retry.py` 整个文件（`get_retry_intervals` 零生产调用者）
+
+**任务组 8: engine.py + task_executor.py**
+- `app/services/engine.py`：删除 `_runtime_snapshot` 死字段（仅写入，零读取）
+- `app/services/task_executor.py`：删除 `force_clear_login_slot` 方法（与 `cancel_login` 完全相同，零调用）
+
+**任务组 9: login_handler.py + engine_login_bridge.py**
+- `app/services/login_handler.py`：
+  - 合并 `_perform_login_with_auth_class` 中间层到 `attempt_login`
+  - 调用链从 3 层简化为 2 层：`attempt_login` → `_perform_login_with_active_task`
+- `app/services/engine_login_bridge.py` + `app/services/engine.py`：
+  - LoginBridge 回调从猴子补丁改为构造函数参数注入
+  - 新增 `on_retry_scheduled`、`on_login_success`、`on_retry_exhausted` 可选参数
+
+**任务组 10: network_tester.py + debug_session.py + uninstall.py**
+- `app/services/network_tester.py`：`NetworkTester` 类改为模块级函数 `test_network(config)`
+- `app/services/debug_session.py`：删除 `empty_debug_session()` 工厂函数，调用处改为 `DebugSession()`
+- `app/services/uninstall.py`：删除 `_reset_autostart_service()` 函数（仅测试使用）
+
+### test: 修复因删除死方法导致的测试引用
+
+- `tests/test_core/test_monitor.py`：`_perform_login_with_auth_class` → `_perform_login_with_active_task`
+- `tests/test_utils/test_login.py`：
+  - `TestAttemptLogin` 改 patch `_perform_login_with_active_task`
+  - `TestPerformLoginWithAuthClass` 合并到 `TestAttemptLogin`
+  - `app.tasks.TaskExecutor` → `app.tasks.BrowserTaskRunner`（5 处）
+- `tests/test_utils/test_utils.py`：删除 `test_is_initialized_default_false`（方法已不存在）
+
 ### test: 修复 os._exit 杀死 pytest 进程
 
 - `tests/test_app/test_boot_engine_flag.py`：TestRunFullNoDirectBoot 调用 `launcher.launch_full`，其 `finally` 块调用 `force_exit(0)` 即 `os._exit(0)`
