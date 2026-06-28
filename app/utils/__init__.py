@@ -7,7 +7,6 @@ from .logging import (
     LogConfigCenter,
     get_logger,
 )
-from .login import LoginAttemptHandler
 from .time_utils import is_in_pause_period
 
 
@@ -21,7 +20,6 @@ __all__ = [
     "ConfigValidator",
     "DashboardSink",
     "LogConfigCenter",
-    "LoginAttemptHandler",
     "LoginCancelledError",
     "decrypt_password",
     "encrypt_password",

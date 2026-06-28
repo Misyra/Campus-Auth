@@ -24,6 +24,6 @@ class TestLoginConstant:
 
     def test_login_settle_seconds_constant_exists(self):
         """login 模块中应存在 LOGIN_SUCCESS_SETTLE_SECONDS 常量"""
-        from app.utils.login import LOGIN_SUCCESS_SETTLE_SECONDS
+        from app.services.login_handler import LOGIN_SUCCESS_SETTLE_SECONDS
 
         assert LOGIN_SUCCESS_SETTLE_SECONDS == 2

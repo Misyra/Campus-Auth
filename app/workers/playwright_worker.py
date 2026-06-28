@@ -444,7 +444,7 @@ class PlaywrightWorker:
         创建 LoginAttemptHandler 执行完整登录流程。
         LoginAttemptHandler 内部管理浏览器生命周期（创建/关闭）。
         """
-        from app.utils.login import LoginAttemptHandler
+        from app.services.login_handler import LoginAttemptHandler
 
         config = data.get("config", {})
         cancel_event: threading.Event | None = data.get("cancel_event")
