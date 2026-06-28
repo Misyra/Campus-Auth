@@ -2,6 +2,23 @@
 
 ## 2026-06-29
 
+### chore: 删除散落的死函数
+
+- `app/utils/crypto.py`：删除 `mask_password` 函数（零生产调用）
+- `app/utils/__init__.py`：移除 `mask_password` 导入和 `__all__` 条目
+- `app/utils/shutdown.py`：删除 `request_graceful_exit` 函数和 `signal` 导入（零生产调用）
+- `app/utils/process.py`：删除 `normalize_proc_name` 函数和 `__all__` 条目（零生产调用）
+- `app/services/debug_service.py`：删除 `DebugSessionManager.get_status` 方法（零生产调用）
+- `app/services/task_registry.py`：删除 `TaskRegistry.get_tasks_dir` 方法（零生产调用）
+- 测试同步更新：
+  - `tests/test_utils/test_crypto.py`：删除 `TestMaskPassword` 测试类
+  - `tests/test_utils/test_utils.py`：删除 `mask_password` 导入和 `TestMaskPassword` 测试类
+  - `tests/test_utils/test_shutdown.py`：删除 `TestRequestGracefulExit` 测试类和 `os` 导入
+  - `tests/test_app/test_main.py`：删除 `TestNormalizeProcName` 测试类
+  - `tests/test_utils/test_process.py`：删除 `normalize_proc_name` 导入和 `TestNormalizeProcName` 测试类
+  - `tests/test_services/test_debug_session_manager.py`：删除 `TestDebugSessionManagerGetStatus` 测试类
+  - `tests/test_services/test_task_executor_fix.py`：删除 `TestTaskRegistryGetTasksDir` 测试类
+
 ### chore: 删除 engine.py 测试专用死属性
 
 - `app/services/engine.py`：
