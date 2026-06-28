@@ -2,6 +2,59 @@
 
 ## 2026-06-28
 
+### refactor: 代码质量优化 — 清理死代码和冗余抽象
+
+**任务组 1: schemas.py + deps.py**
+- `app/schemas.py`：
+  - 删除 `ActionResponse = ApiResponse` 死别名（零引用）
+  - 删除 `LaunchSource.UNKNOWN` 枚举值（零引用）
+  - 删除 `AppConfig.config_version` 死字段（零读取）
+  - 删除 `_parse_url_check` 函数内冗余 `import re`（模块顶层已导入）
+- `app/deps.py`：
+  - 删除 `get_services` 函数（零 API 端点使用）
+  - 删除未使用的 `ServiceContainer` 导入
+- `tests/test_config/test_deps.py`：同步删除 `get_services` 测试和导入
+
+**任务组 2: repo.py + tools.py + config.py**
+- `app/api/repo.py`：
+  - 删除两个端点未使用的 `ProfileService` 注入参数
+  - 删除未使用的 `get_profile_service` 和 `ProfileService` 导入
+- `app/api/tools.py`：
+  - 提取 `_serve_doc(relative_path, media_type, filename)` 辅助函数
+  - 提取 `_save_background(content, ext)` 辅助函数
+  - `download_task_writing_guide` 和 `download_task_manual` 改用 `_serve_doc`
+  - `upload_background` 和 `fetch_background_url` 改用 `_save_background`
+- `app/api/config.py`：
+  - 提取 `_handle_config_error` 上下文管理器统一错误处理
+  - `save_config` 和 `patch_config` 改用 `_handle_config_error`（保留差异：`log_warning` 参数）
+  - 删除 `_flatten_dict` 无用 `sep` 参数，硬编码 "."
+
+**任务组 3: tasks/ 模块**
+- `app/tasks/step_handlers.py`：删除 `StepExecutorRegistry` 类（`register()` 从未调用）
+- `app/tasks/browser_runner.py`：
+  - `self.registry = StepExecutorRegistry()` → `self.registry = dict(DEFAULT_HANDLERS)`
+  - 更新导入
+- `app/tasks/__init__.py`：
+  - 从导入和 `__all__` 中删除 `StepExecutorRegistry`
+  - 删除 `TaskExecutor = BrowserTaskRunner` 向后兼容别名
+- `app/tasks/manager.py`：
+  - 提取 `_with_task_id_validation` 装饰器，三个验证方法改用装饰器
+  - 删除 `_find_task_type` 中单元素循环 `for ext in (".json",):`
+  - 删除 `_is_script_file` 静态方法，内联为条件表达式
+  - 删除 `get_script_path_public` 委托方法
+- `app/services/login_handler.py`：`TaskExecutor` → `BrowserTaskRunner`
+- `app/api/scripts.py`：`get_script_path_public` → `_safe_task_path`
+- 测试文件同步更新
+
+**任务组 4: workers/ + 工具文件**
+- `app/workers/playwright_worker.py`：删除 `submit_nowait` 方法（零生产调用）
+- `app/workers/playwright_bootstrap.py`：从 `VALID_CHANNELS` 删除 `msedge`/`chrome`/`custom`（L135 提前 return 后不可达）
+- `app/utils/browser.py`：删除 `self._worker_managed` 属性（零读取）
+- `app/utils/browser_registry.py`：
+  - 删除 `_has_playwright_chromium()` 空壳函数
+  - 调用处改为直接调用 `has_playwright_chromium()`
+- 测试文件同步更新
+
 ### test: 修复 os._exit 杀死 pytest 进程
 
 - `tests/test_app/test_boot_engine_flag.py`：TestRunFullNoDirectBoot 调用 `launcher.launch_full`，其 `finally` 块调用 `force_exit(0)` 即 `os._exit(0)`
