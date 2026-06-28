@@ -136,7 +136,7 @@ class LoginAttemptHandler:
         self, task: Any, active_task_id: str, phase_start: float
     ) -> tuple[bool, str]:
         """执行浏览器任务。"""
-        from app.tasks import TaskExecutor
+        from app.tasks import BrowserTaskRunner
 
         login_url = self._credentials["auth_url"]
         username = self._credentials["username"]
@@ -192,7 +192,7 @@ class LoginAttemptHandler:
                 self._browser_settings.get("navigation_timeout", 15) * 1000
             )  # 秒 → 毫秒
 
-            executor = TaskExecutor(
+            executor = BrowserTaskRunner(
                 task,
                 template_vars,
                 default_timeout=browser_timeout,

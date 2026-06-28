@@ -1,7 +1,7 @@
 """src/task_executor.py — 任务执行器综合测试
 
 覆盖 StepConfig, TaskConfig, VariableResolver, StepHandler 子类,
-StepExecutorRegistry, TaskValidator, BrowserTaskRunner, TaskManager 等核心类。
+DEFAULT_HANDLERS, TaskValidator, BrowserTaskRunner, TaskManager 等核心类。
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from app.tasks.models import (
     TaskConfig,
 )
 from app.tasks.step_handlers import (
+    DEFAULT_HANDLERS,
     ClickHandler,
     EvalHandler,
     InputHandler,
@@ -28,7 +29,6 @@ from app.tasks.step_handlers import (
     ScreenshotHandler,
     SelectHandler,
     SleepHandler,
-    StepExecutorRegistry,
     StepHandler,
     WaitHandler,
     WaitUrlHandler,
@@ -622,38 +622,24 @@ class TestOcrHandler:
 
 
 # =====================================================================
-# StepExecutorRegistry
+# DEFAULT_HANDLERS
 # =====================================================================
 
 
-class TestStepExecutorRegistry:
+class TestDefaultHandlers:
     def test_all_default_handlers_registered(self):
-        registry = StepExecutorRegistry()
+        registry = dict(DEFAULT_HANDLERS)
         for step_type in StepType:
             assert registry.get(step_type.value) is not None
 
     def test_custom_js_alias(self):
-        registry = StepExecutorRegistry()
+        registry = dict(DEFAULT_HANDLERS)
         assert registry.get("custom_js") is not None
         assert registry.get("custom_js") is registry.get("eval")
 
     def test_get_unknown_returns_none(self):
-        registry = StepExecutorRegistry()
+        registry = dict(DEFAULT_HANDLERS)
         assert registry.get("nonexistent") is None
-
-    def test_register_custom_handler(self):
-        registry = StepExecutorRegistry()
-
-        class CustomHandler(StepHandler):
-            @property
-            def step_type(self):
-                return "custom_type"
-
-            async def execute(self, page, step, resolver):
-                return True, ""
-
-        registry.register(CustomHandler())
-        assert registry.get("custom_type") is not None
 
 
 # =====================================================================
@@ -969,7 +955,7 @@ class TestBrowserTaskRunner:
         config = TaskConfig(name="test")
         executor = BrowserTaskRunner(config)
         assert executor.registry is not None
-        assert isinstance(executor.registry, StepExecutorRegistry)
+        assert isinstance(executor.registry, dict)
 
     def test_resolver_initialized(self):
         config = TaskConfig(name="test", variables={"X": "1"})

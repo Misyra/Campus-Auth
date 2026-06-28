@@ -15,7 +15,7 @@ from app.constants import DEFAULT_STEP_TIMEOUT_MS, DEFAULT_TASK_TIMEOUT_MS
 from app.utils.logging import get_logger
 
 from .models import StepConfig, StepType, TaskConfig
-from .step_handlers import StepExecutorRegistry
+from .step_handlers import DEFAULT_HANDLERS
 from .variable_resolver import VariableResolver
 
 logger = get_logger("task_executor", source="task")
@@ -47,7 +47,7 @@ class BrowserTaskRunner:
             else self.DEFAULT_NAVIGATION_TIMEOUT
         )
         self.resolver = VariableResolver(config, self.template_vars)
-        self.registry = StepExecutorRegistry()
+        self.registry = dict(DEFAULT_HANDLERS)
         self._step_results: list[dict[str, Any]] = []
         self._screenshot_dir = Path(screenshot_dir) if screenshot_dir else None
         self.monitor_config = monitor_config

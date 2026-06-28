@@ -139,7 +139,7 @@ class TestRunScript:
             "type": "script",
             "binary_path": "",
         }
-        mock_services.task_manager.get_script_path_public.return_value = script_file
+        mock_services.task_manager._safe_task_path.return_value = script_file
 
         with patch("app.api.scripts.ScriptRunner") as MockRunner:
             mock_runner = MagicMock()
@@ -166,7 +166,7 @@ class TestRunScript:
             "name": "测试",
             "type": "script",
         }
-        mock_services.task_manager.get_script_path_public.return_value = None
+        mock_services.task_manager._safe_task_path.return_value = None
         resp = test_client.post("/api/scripts/script1/run")
         assert resp.status_code == 200
         assert resp.json()["success"] is False
