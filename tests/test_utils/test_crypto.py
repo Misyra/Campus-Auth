@@ -6,7 +6,6 @@
 - encrypt_password: 空字符串、正常加密、cryptography 未安装
 - decrypt_password: 空字符串、明文回退、正常解密、cryptography 未安装、解密失败
 - has_decryption_error / clear_decryption_error
-- mask_password
 - save_password_field: 全部分支
 """
 
@@ -330,27 +329,6 @@ class TestDecryptionErrorFlag:
         assert crypto_mod.has_decryption_error()
         crypto_mod.clear_decryption_error()
         assert not crypto_mod.has_decryption_error()
-
-
-# ── mask_password ──
-
-
-class TestMaskPassword:
-    """验证密码脱敏逻辑。"""
-
-    def test_mask_empty(self):
-        assert crypto_mod.mask_password("") == ""
-
-    def test_mask_none(self):
-        assert crypto_mod.mask_password(None) == ""
-
-    def test_mask_normal(self):
-        assert crypto_mod.mask_password("secret") == "••••••••"
-
-    def test_mask_preserves_length(self):
-        """不论密码长度，掩码统一为 8 个点。"""
-        assert crypto_mod.mask_password("a") == "••••••••"
-        assert crypto_mod.mask_password("a" * 100) == "••••••••"
 
 
 # ── save_password_field ──

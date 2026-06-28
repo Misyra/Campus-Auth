@@ -1,11 +1,10 @@
 """TaskExecutor 及相关组件测试。
 
 覆盖：
-1. TaskRegistry.get_tasks_dir() 公共方法
-2. TaskExecutor._get_script_path() 路径回退
-3. 定时任务线程池懒初始化
-4. BoundedExecutor 队列限制
-5. TaskExecutor CRUD 方法、登录去重、execute_task 分发、execute_login、execute_shell
+1. TaskExecutor._get_script_path() 路径回退
+2. 定时任务线程池懒初始化
+3. BoundedExecutor 队列限制
+4. TaskExecutor CRUD 方法、登录去重、execute_task 分发、execute_login、execute_shell
 """
 
 from __future__ import annotations
@@ -36,30 +35,6 @@ def _slow_return(value, delay=0.3):
     return wrapper
 
 from app.services.task_registry import TaskRegistry
-
-
-# =====================================================================
-# TaskRegistry.get_tasks_dir()
-# =====================================================================
-
-
-class TestTaskRegistryGetTasksDir:
-    """TaskRegistry.get_tasks_dir() 公共方法测试。"""
-
-    def test_get_tasks_dir_returns_path(self, tmp_path: Path) -> None:
-        tasks_dir = tmp_path / "tasks"
-        reg = TaskRegistry(tasks_dir)
-        assert reg.get_tasks_dir() == tasks_dir
-
-    def test_get_tasks_dir_creates_dir(self, tmp_path: Path) -> None:
-        tasks_dir = tmp_path / "new_tasks"
-        reg = TaskRegistry(tasks_dir)
-        assert reg.get_tasks_dir().exists()
-
-    def test_get_tasks_dir_returns_same_as_private(self, tmp_path: Path) -> None:
-        tasks_dir = tmp_path / "tasks"
-        reg = TaskRegistry(tasks_dir)
-        assert reg.get_tasks_dir() == reg._tasks_dir
 
 
 # =====================================================================

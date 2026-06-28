@@ -22,7 +22,6 @@ __all__ = [
     "get_process_name",
     "is_local_port_in_use",
     "is_service_running",
-    "normalize_proc_name",
     "read_pid_file",
     "read_pid_mode",
     "verify_process_identity",
@@ -80,11 +79,6 @@ def get_process_create_time(pid: int) -> float | None:
         return psutil.Process(pid).create_time()
     except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
         return None
-
-
-def normalize_proc_name(name: str) -> str:
-    """标准化进程名（小写 + 移除 .exe 后缀）。"""
-    return name.lower().removesuffix(".exe")
 
 
 def verify_process_identity(pid: int, stored_create_time: float | None = None) -> bool:

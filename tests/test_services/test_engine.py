@@ -114,7 +114,7 @@ class TestEngineInit:
     def test_init_defaults(self, engine_factory):
         svc = engine_factory()
         assert svc._status_manager._dashboard_sink is None
-        assert svc.scheduler_running is False
+        assert svc._scheduler is None or svc._scheduler.running is False
         assert svc._monitor_core is None
 
     def test_init_with_task_components(self, engine_factory):
@@ -1481,13 +1481,6 @@ class TestTogglePureMode:
 
 
 class TestProperties:
-    def test_login_in_progress_property(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._task_executor.is_login_running.return_value = False
-        assert svc.login_in_progress is False
-        svc._task_executor.is_login_running.return_value = True
-        assert svc.login_in_progress is True
-
     def test_ws_broadcast_queue_default(self, engine_factory):
         """ws_broadcast_queue 已迁移至 WsBroadcaster，此测试验证 engine 不再拥有该属性。"""
         svc = engine_factory(raw=True)
@@ -1521,12 +1514,6 @@ class TestProperties:
         svc = engine_factory(raw=True)
         assert svc.tasks is svc._task_executor
 
-    def test_scheduler_running_property(self, engine_factory):
-        svc = engine_factory(raw=True)
-        assert svc.scheduler_running is False
-        svc._scheduler.running = True
-        assert svc.scheduler_running is True
-
 
 # =====================================================================
 # 调度器控制
@@ -1555,11 +1542,6 @@ class TestSchedulerControl:
         svc._scheduler.start()
         svc._scheduler.stop()
         assert svc._scheduler.running is False
-
-    def test_has_enabled_tasks(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._scheduler.has_enabled_tasks.return_value = True
-        assert svc.has_enabled_tasks() is True
 
 
 # =====================================================================

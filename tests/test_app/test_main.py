@@ -134,45 +134,6 @@ class TestGetProcessName:
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  TestNormalizeProcName
-# ══════════════════════════════════════════════════════════════════════
-
-
-class TestNormalizeProcName:
-    """_normalize_proc_name — 大小写 + .exe 后缀。"""
-
-    def test_lowercase_with_exe(self):
-        from app.utils.process import normalize_proc_name
-
-        assert normalize_proc_name("Python.EXE") == "python"
-
-    def test_no_exe_suffix(self):
-        """无 .exe 后缀时原样返回（小写）。"""
-        from app.utils.process import normalize_proc_name
-
-        result = normalize_proc_name("node")
-        assert result == "node"
-
-    def test_chrome_exe(self):
-        """正确去除 .exe 后缀。"""
-        from app.utils.process import normalize_proc_name
-
-        assert normalize_proc_name("chrome.exe") == "chrome"
-
-    def test_axe_no_suffix(self):
-        """末尾含 e/x 但非 .exe 后缀时不去除。"""
-        from app.utils.process import normalize_proc_name
-
-        assert normalize_proc_name("axe") == "axe"
-
-    def test_exe_only(self):
-        """仅 .exe 后缀时去除。"""
-        from app.utils.process import normalize_proc_name
-
-        assert normalize_proc_name(".exe") == ""
-
-
-# ══════════════════════════════════════════════════════════════════════
 #  TestIsServiceRunning
 # ══════════════════════════════════════════════════════════════════════
 

@@ -558,10 +558,6 @@ class ScheduleEngine:
         self.start_thread()
         self.start_monitoring()
 
-    @property
-    def login_in_progress(self) -> bool:
-        return self._task_executor.is_login_running() if self._task_executor else False
-
     def set_dashboard_sink(self, sink) -> None:
         self._status_manager.set_dashboard_sink(sink)
 
@@ -770,16 +766,8 @@ class ScheduleEngine:
 
     # ── 定时任务调度（委托代理，向后兼容 API 路由）──
 
-    @property
-    def scheduler_running(self) -> bool:
-        """调度器是否正在运行。"""
-        return self._scheduler.running if self._scheduler else False
-
     def sync_scheduler_state(self) -> None:
         """根据是否有启用任务自动启停调度器（委托）。"""
         if self._scheduler:
             self._scheduler.sync_state()
 
-    def has_enabled_tasks(self) -> bool:
-        """检查是否存在启用的定时任务（委托）。"""
-        return self._scheduler.has_enabled_tasks() if self._scheduler else False

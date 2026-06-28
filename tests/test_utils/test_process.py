@@ -17,47 +17,11 @@ from app.utils.process import (
     get_process_name,
     is_local_port_in_use,
     is_service_running,
-    normalize_proc_name,
     read_pid_file,
     read_pid_mode,
     verify_process_identity,
     write_pid,
 )
-
-# ── normalize_proc_name ──
-
-
-class TestNormalizeProcName:
-    """进程名标准化。"""
-
-    def test_lowercase(self):
-        """转小写。"""
-        assert normalize_proc_name("Python.exe") == "python"
-
-    def test_remove_exe_suffix(self):
-        """移除 .exe 后缀。"""
-        assert normalize_proc_name("python.exe") == "python"
-
-    def test_no_suffix(self):
-        """无后缀。"""
-        assert normalize_proc_name("python") == "python"
-
-    def test_uppercase_with_exe(self):
-        """大写带 .exe。"""
-        assert normalize_proc_name("PYTHON.EXE") == "python"
-
-    def test_empty_string(self):
-        """空字符串。"""
-        assert normalize_proc_name("") == ""
-
-    def test_exe_only(self):
-        """仅 .exe。"""
-        assert normalize_proc_name(".exe") == ""
-
-    def test_multiple_exe(self):
-        """多个 .exe。"""
-        assert normalize_proc_name("test.exe.exe") == "test.exe"
-
 
 # ── read_pid_file ──
 

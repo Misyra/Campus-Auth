@@ -47,10 +47,6 @@ class TaskRegistry:
 
     # ── 公开查询 ──
 
-    def get_tasks_dir(self) -> Path:
-        """获取任务目录路径。"""
-        return self._tasks_dir
-
     def get_script_path(self, script_id: str) -> Path | None:
         """获取脚本任务的文件路径。
 

@@ -190,13 +190,6 @@ def clear_decryption_error() -> None:
     _decryption_failed.clear()
 
 
-def mask_password(value: str) -> str:
-    """密码脱敏：返回掩码用于前端显示"""
-    if not value:
-        return ""
-    return "••••••••"  # 统一长度掩码，不泄露密码长度
-
-
 def save_password_field(raw: str | None, existing_encrypted: str) -> str:
     """处理前端提交的密码。
 

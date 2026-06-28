@@ -78,52 +78,6 @@ class TestDebugSessionManagerInit:
 
 
 # =====================================================================
-# get_status
-# =====================================================================
-
-
-class TestDebugSessionManagerGetStatus:
-    """状态获取。"""
-
-    def test_returns_debug_response(self, tmp_path):
-        """返回调试响应字典。"""
-        manager = _make_manager(tmp_path)
-        status = manager.get_status()
-        assert isinstance(status, dict)
-        assert "running" in status
-        assert "task_id" in status
-        assert "current_step" in status
-        assert "total_steps" in status
-        assert "steps" in status
-        assert "results" in status
-        assert "screenshot_url" in status
-
-    def test_initial_status_not_running(self, tmp_path):
-        """初始状态未运行。"""
-        manager = _make_manager(tmp_path)
-        status = manager.get_status()
-        assert status["running"] is False
-        assert status["task_id"] is None
-        assert status["current_step"] == 0
-        assert status["total_steps"] == 0
-
-    def test_status_reflects_session_changes(self, tmp_path):
-        """状态反映会话变更。"""
-        manager = _make_manager(tmp_path)
-        _set_session_running(
-            manager,
-            task_id="my_task",
-            steps=[
-                {"index": 0, "id": "s1", "type": "click", "description": "步骤1"},
-            ],
-        )
-        status = manager.get_status()
-        assert status["running"] is True
-        assert status["task_id"] == "my_task"
-        assert status["total_steps"] == 1
-
-
-# =====================================================================
 # _debug_response
 # =====================================================================
 
