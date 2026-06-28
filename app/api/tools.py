@@ -24,12 +24,31 @@ ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
 
+def _serve_doc(relative_path: str, media_type: str, filename: str) -> FileResponse:
+    """检查文档文件存在性并返回 FileResponse。"""
+    doc_path = PROJECT_ROOT / relative_path
+    if not doc_path.exists():
+        raise HTTPException(
+            status_code=404, detail="文档文件缺失，可能需要重新安装或更新软件"
+        )
+    return FileResponse(doc_path, media_type=media_type, filename=filename)
+
+
 def _cleanup_old_backgrounds(exclude_filename: str) -> None:
     """清理旧的背景图片，保留指定文件。"""
     for old_file in BG_DIR.iterdir():
         if old_file.name != exclude_filename:
             with contextlib.suppress(OSError):
                 old_file.unlink()
+
+
+def _save_background(content: bytes, ext: str) -> dict:
+    """保存背景图片并清理旧文件，返回 {filename, url}。"""
+    filename = f"{uuid.uuid4().hex}{ext}"
+    filepath = BG_DIR / filename
+    filepath.write_bytes(content)
+    _cleanup_old_backgrounds(filename)
+    return {"filename": filename, "url": f"/api/background/{filename}"}
 
 
 @router.get("/api/tools/task-recorder.user.js")
@@ -46,25 +65,13 @@ def download_task_recorder():
 @router.get("/api/docs/task-writing-guide")
 def download_task_writing_guide():
     """下载任务编写指南文档"""
-    doc_path = PROJECT_ROOT / "docs" / "task-writing-guide.md"
-    if not doc_path.exists():
-        raise HTTPException(
-            status_code=404, detail="文档文件缺失，可能需要重新安装或更新软件"
-        )
-    return FileResponse(
-        doc_path, media_type="text/markdown", filename="task-writing-guide.md"
-    )
+    return _serve_doc("docs/task-writing-guide.md", "text/markdown", "task-writing-guide.md")
 
 
 @router.get("/api/docs/task-manual")
 def download_task_manual():
     """下载任务手册文档"""
-    doc_path = PROJECT_ROOT / "docs" / "task-manual.md"
-    if not doc_path.exists():
-        raise HTTPException(
-            status_code=404, detail="文档文件缺失，可能需要重新安装或更新软件"
-        )
-    return FileResponse(doc_path, media_type="text/markdown", filename="task-manual.md")
+    return _serve_doc("docs/task-manual.md", "text/markdown", "task-manual.md")
 
 
 # ── 背景图片管理 ──
@@ -81,13 +88,8 @@ async def upload_background(file: UploadFile) -> ApiResponse:
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(400, "文件大小不能超过 5MB")
 
-    filename = f"{uuid.uuid4().hex}{ext}"
-    filepath = BG_DIR / filename
-    filepath.write_bytes(content)
-
-    _cleanup_old_backgrounds(filename)
-
-    return ApiResponse(success=True, message="背景图片已上传", data={"filename": filename, "url": f"/api/background/{filename}"})
+    data = _save_background(content, ext)
+    return ApiResponse(success=True, message="背景图片已上传", data=data)
 
 
 @router.post("/api/background/fetch-url", response_model=ApiResponse)
@@ -142,13 +144,8 @@ async def fetch_background_url(body: FetchUrlRequest) -> ApiResponse:
             400, "下载图片失败，请检查网络连接或确认地址是否正确"
         ) from exc
 
-    filename = f"{uuid.uuid4().hex}{ext}"
-    filepath = BG_DIR / filename
-    filepath.write_bytes(content)
-
-    _cleanup_old_backgrounds(filename)
-
-    return ApiResponse(success=True, message="图片已下载", data={"filename": filename, "url": f"/api/background/{filename}"})
+    data = _save_background(content, ext)
+    return ApiResponse(success=True, message="图片已下载", data=data)
 
 
 @router.get("/api/background/{filename}")
