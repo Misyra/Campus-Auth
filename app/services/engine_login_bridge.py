@@ -29,6 +29,9 @@ class LoginBridge:
         record_log: Callable[..., None],
         wakeup_event: threading.Event,
         get_monitor_check_interval: Callable[[], int],
+        on_retry_scheduled: Callable[[float], None] | None = None,
+        on_login_success: Callable[[], None] | None = None,
+        on_retry_exhausted: Callable[[], None] | None = None,
     ) -> None:
         self._get_orchestrator = get_orchestrator
         self._get_runtime_config = get_runtime_config
@@ -39,6 +42,9 @@ class LoginBridge:
         self._get_monitor_check_interval = get_monitor_check_interval
         self._registered_futures: set[Future] = set()
         self._futures_lock = threading.Lock()
+        self._on_retry_scheduled = on_retry_scheduled or self._default_retry_scheduled
+        self._on_login_success = on_login_success or (lambda: None)
+        self._on_retry_exhausted = on_retry_exhausted or (lambda: None)
 
     def submit_login(
         self,
@@ -136,17 +142,9 @@ class LoginBridge:
         handle.future.add_done_callback(_on_done)
         return True
 
-    def _on_retry_scheduled(self, delay: float) -> None:
-        """重试已调度 — 由外部覆盖以设置 _next_retry_time。"""
+    def _default_retry_scheduled(self, delay: float) -> None:
+        """重试已调度 — 默认实现：唤醒引擎循环。"""
         self._wakeup_event.set()
-
-    def _on_login_success(self) -> None:
-        """自动登录成功 — 由外部覆盖以清除重试计时。"""
-        pass
-
-    def _on_retry_exhausted(self) -> None:
-        """重试次数用尽 — 由外部覆盖以清除重试计时。"""
-        pass
 
     def cancel_login(self) -> tuple[bool, str]:
         """取消当前正在执行的登录。"""

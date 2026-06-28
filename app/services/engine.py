@@ -138,6 +138,20 @@ class ScheduleEngine:
 
         # LoginBridge — 登录委托
         from app.services.engine_login_bridge import LoginBridge
+
+        def _bridge_retry_scheduled(delay: float) -> None:
+            with self._retry_time_lock:
+                self._next_retry_time = time.time() + delay
+            self._wakeup_event.set()
+
+        def _bridge_login_success() -> None:
+            with self._retry_time_lock:
+                self._next_retry_time = 0
+
+        def _bridge_retry_exhausted() -> None:
+            with self._retry_time_lock:
+                self._next_retry_time = 0
+
         self._login_bridge = LoginBridge(
             get_orchestrator=lambda: self._orchestrator,
             get_runtime_config=self.get_runtime_config,
@@ -146,21 +160,10 @@ class ScheduleEngine:
             record_log=self.record_log,
             wakeup_event=self._wakeup_event,
             get_monitor_check_interval=lambda: self._monitor_check_interval,
+            on_retry_scheduled=_bridge_retry_scheduled,
+            on_login_success=_bridge_login_success,
+            on_retry_exhausted=_bridge_retry_exhausted,
         )
-        # 桥接回调：LoginBridge 调度重试/成功/用尽时更新 engine 状态
-        def _bridge_retry_scheduled(delay: float) -> None:
-            with self._retry_time_lock:
-                self._next_retry_time = time.time() + delay
-            self._wakeup_event.set()
-        def _bridge_login_success() -> None:
-            with self._retry_time_lock:
-                self._next_retry_time = 0
-        def _bridge_retry_exhausted() -> None:
-            with self._retry_time_lock:
-                self._next_retry_time = 0
-        self._login_bridge._on_retry_scheduled = _bridge_retry_scheduled
-        self._login_bridge._on_login_success = _bridge_login_success
-        self._login_bridge._on_retry_exhausted = _bridge_retry_exhausted
 
         # 统一引擎线程（延迟到 boot() 启动，确保依赖注入完成）
         self._engine_thread = threading.Thread(target=self._engine_loop, daemon=True)
