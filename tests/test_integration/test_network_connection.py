@@ -39,9 +39,15 @@ class TestNetworkConnection:
 
         core = _make_monitor_core(engine)
 
-        with patch(
-            "app.services.monitor_service.check_network_status",
-            return_value=(False, "network_down", "none"),
+        with (
+            patch(
+                "app.services.monitor_service.check_network_status",
+                return_value=(False, "network_down", "none"),
+            ),
+            patch(
+                "app.services.monitor_service.check_pause",
+                return_value=(False, ""),
+            ),
         ):
             result = core.check_once()
 
@@ -53,9 +59,15 @@ class TestNetworkConnection:
 
         core = _make_monitor_core(engine)
 
-        with patch(
-            "app.services.monitor_service.check_network_status",
-            return_value=(True, "network_ok", "tcp"),
+        with (
+            patch(
+                "app.services.monitor_service.check_network_status",
+                return_value=(True, "network_ok", "tcp"),
+            ),
+            patch(
+                "app.services.monitor_service.check_pause",
+                return_value=(False, ""),
+            ),
         ):
             result = core.check_once()
 

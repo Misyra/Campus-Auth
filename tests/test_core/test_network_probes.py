@@ -6,7 +6,32 @@
 from __future__ import annotations
 
 import socket
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock, patch
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _fresh_executor():
+    """确保模块级 executor 未被关闭（atexit 或前序测试可能已触发 shutdown）。"""
+    import app.network.probes as probes_mod
+    import app.network.decision as decision_mod
+
+    old = probes_mod.executor
+    try:
+        old.submit(lambda: None).result(timeout=1)
+    except RuntimeError:
+        # executor 已关闭，替换为新实例
+        fresh = ThreadPoolExecutor(max_workers=8, thread_name_prefix="net-test")
+        probes_mod.executor = fresh
+        decision_mod._executor = fresh
+        yield
+        fresh.shutdown(wait=False, cancel_futures=True)
+        probes_mod.executor = old
+        decision_mod._executor = old
+        return
+    yield
 
 from app.network.decision import (
     check_login_prerequisites,

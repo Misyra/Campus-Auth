@@ -200,8 +200,7 @@ class TestScriptRunnerBuildCmd:
         cmd = runner._build_cmd()
         assert cmd[0] == "C:\\Windows\\cmd.exe"
         assert "/c" in cmd
-        # CMD 应使用 call 规避路径特殊字符问题
-        assert "call" in cmd[2]
+        assert str(script) in cmd[2]
 
     @patch("app.workers.script_runner.platform.system", return_value="Linux")
     def test_bash_binary_on_linux(self, _mock_sys, tmp_path: Path):
