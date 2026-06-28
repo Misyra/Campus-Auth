@@ -46,7 +46,7 @@ from app.utils.logging import (
 )
 
 # ── network ──
-from app.utils.network import parse_host_port
+from app.network.parsers import parse_host_port
 
 # ── platform ──
 from app.utils.platform import (

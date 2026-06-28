@@ -62,7 +62,7 @@ def check_network_status(monitor: MonitorSettings) -> tuple[bool, str, str]:
     enable_tcp = monitor.enable_tcp_check
     enable_http = monitor.enable_http_check
 
-    from app.utils.network import parse_url_checks
+    from app.network.parsers import parse_url_checks
 
     url_checks = parse_url_checks(monitor.url_check_urls) or None
     enable_url = bool(url_checks)
@@ -72,7 +72,7 @@ def check_network_status(monitor: MonitorSettings) -> tuple[bool, str, str]:
         logger.warning("所有网络检测方式均已关闭，无法判断网络状态")
         return (False, "all_disabled", "none")
 
-    from app.utils.network import parse_ping_targets
+    from app.network.parsers import parse_ping_targets
 
     try:
         test_sites = parse_ping_targets(monitor.ping_targets) if monitor.ping_targets else None
@@ -232,7 +232,7 @@ def _is_auth_url_reachable(
     # 有 extra_targets 时只检测自定义目标，不回退到 auth_url。
     # 这是故意设计：用户配置 extra_targets 意味着用自定义目标替代认证地址做可达性判断。
     if extra_targets:
-        from app.utils.network import parse_host_port
+        from app.network.parsers import parse_host_port
 
         try:
             targets = parse_host_port(list(extra_targets))
