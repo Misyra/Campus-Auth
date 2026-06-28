@@ -100,6 +100,22 @@
   - `app.tasks.TaskExecutor` → `app.tasks.BrowserTaskRunner`（5 处）
 - `tests/test_utils/test_utils.py`：删除 `test_is_initialized_default_false`（方法已不存在）
 
+### test: 修复预存测试失败
+
+- `tests/test_core/test_network_probes.py`：
+  - 添加 `_fresh_executor` autouse fixture，解决模块级 `ThreadPoolExecutor` 被 atexit 关闭后后续测试全部失败的问题
+  - fixture 检测 executor 是否已关闭，关闭时替换为新实例并在测试后恢复
+- `tests/test_integration/test_network_connection.py`：
+  - `test_need_login` 和 `test_network_ok` 添加 `check_pause` mock，避免凌晨时段测试因暂停时段检查而失败
+- `tests/test_integration/test_login_once_mode.py`：
+  - `mock_history.record` → `mock_history.add`（`LoginHistoryService` 方法名已从 `record` 改为 `add`）
+- `tests/test_integration/test_full_mode.py`：
+  - 删除 `engine._start_scheduler()` 调用（调度器已随监控一起启动）
+  - 删除 `engine._run_schedule_tick()` 调用（已不存在），改为直接调用 `engine._scheduler.tick(now)`
+  - 添加 `check_pause` mock 避免时段依赖
+- `tests/test_services/test_script_runner.py`：
+  - `test_cmd_binary_on_windows` 断言从 `"call" in cmd[2]` 改为 `str(script) in cmd[2]`（代码已不加 "call"）
+
 ### test: 修复 os._exit 杀死 pytest 进程
 
 - `tests/test_app/test_boot_engine_flag.py`：TestRunFullNoDirectBoot 调用 `launcher.launch_full`，其 `finally` 块调用 `force_exit(0)` 即 `os._exit(0)`
