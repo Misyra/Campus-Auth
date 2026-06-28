@@ -24,7 +24,7 @@ from app.schemas import MonitorStatusResponse, RuntimeConfig
 from app.services.engine_status import StatusManager
 from app.services.monitor_service import NetworkMonitorCore
 from app.services.websocket_manager import WebSocketManager
-from app.utils import ConfigValidator
+from app.utils import validate_env_config
 from app.utils.logging import get_logger
 from app.services.login_handler import SCREENSHOT_URL_PATTERN
 
@@ -347,7 +347,7 @@ class ScheduleEngine:
             return
 
         # 统一验证配置（确保所有路径都经过验证）
-        valid, error = ConfigValidator.validate_env_config(self._runtime_config)
+        valid, error = validate_env_config(self._runtime_config)
         if not valid:
             self.record_log(f"配置无效，无法启动监控: {error}", level="ERROR", source="backend")
             if cmd.response_event:
@@ -640,7 +640,7 @@ class ScheduleEngine:
                 return False, "监控已在运行中"
 
             # 提前验证，立即返回错误信息（_handle_start 中也会验证）
-            valid, error = ConfigValidator.validate_env_config(self._runtime_config)
+            valid, error = validate_env_config(self._runtime_config)
             if not valid:
                 return False, f"配置无效: {error}"
 
