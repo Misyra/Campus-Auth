@@ -88,12 +88,12 @@ class TestLoginAttemptHandlerInit:
 class TestAttemptLogin:
     @pytest.mark.asyncio
     async def test_delegates_to_perform(self):
-        """attempt_login 直接委托 _perform_login_with_auth_class。"""
+        """attempt_login 直接委托 _perform_login_with_active_task。"""
         handler = LoginAttemptHandler(config={})
 
         with patch.object(
             handler,
-            "_perform_login_with_auth_class",
+            "_perform_login_with_active_task",
             return_value=(True, "成功"),
         ):
             ok, msg = await handler.attempt_login()
@@ -108,7 +108,7 @@ class TestAttemptLogin:
 
         with patch.object(
             handler,
-            "_perform_login_with_auth_class",
+            "_perform_login_with_active_task",
             side_effect=RuntimeError("test error"),
         ):
             ok, msg = await handler.attempt_login()

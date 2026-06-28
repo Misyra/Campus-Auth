@@ -62,7 +62,7 @@ def _make_script_task(task_id: str = "script1", script_path: str = "/tmp/login.p
 
 
 class TestAttemptLogin:
-    """attempt_login 简化后直接委托 _perform_login_with_auth_class。"""
+    """attempt_login 直接委托 _perform_login_with_active_task。"""
 
     @pytest.mark.asyncio
     async def test_delegates_to_perform(self):
@@ -70,7 +70,7 @@ class TestAttemptLogin:
         handler = LoginAttemptHandler(config)
 
         with patch.object(
-            handler, "_perform_login_with_auth_class", new_callable=AsyncMock
+            handler, "_perform_login_with_active_task", new_callable=AsyncMock
         ) as mock_perform:
             mock_perform.return_value = (True, "ok")
             ok, msg = await handler.attempt_login()
@@ -86,7 +86,7 @@ class TestAttemptLogin:
 
         with patch.object(
             handler,
-            "_perform_login_with_auth_class",
+            "_perform_login_with_active_task",
             new_callable=AsyncMock,
             side_effect=RuntimeError("boom"),
         ):
@@ -94,12 +94,6 @@ class TestAttemptLogin:
 
         assert ok is False
         assert "boom" in msg
-
-
-# ── _perform_login_with_auth_class ───────────────────────────────────
-
-
-class TestPerformLoginWithAuthClass:
 
     @pytest.mark.asyncio
     async def test_active_task_returns_result(self):
@@ -110,7 +104,7 @@ class TestPerformLoginWithAuthClass:
             handler, "_perform_login_with_active_task", new_callable=AsyncMock
         ) as mock_active:
             mock_active.return_value = (True, "任务成功")
-            ok, msg = await handler._perform_login_with_auth_class()
+            ok, msg = await handler.attempt_login()
 
         assert ok is True
         assert msg == "任务成功"
@@ -124,7 +118,7 @@ class TestPerformLoginWithAuthClass:
             handler, "_perform_login_with_active_task", new_callable=AsyncMock
         ) as mock_active:
             mock_active.return_value = None
-            ok, msg = await handler._perform_login_with_auth_class()
+            ok, msg = await handler.attempt_login()
 
         assert ok is False
         assert "未找到可执行的任务" in msg
@@ -292,7 +286,7 @@ class TestExecuteBrowserTask:
         ), patch(
             "app.services.login_handler.build_login_template_vars", return_value={}
         ), patch(
-            "app.tasks.TaskExecutor"
+            "app.tasks.BrowserTaskRunner"
         ) as MockExecutor:
             MockExecutor.return_value.execute = AsyncMock(return_value=(True, "登录成功"))
 
@@ -365,7 +359,7 @@ class TestExecuteBrowserTask:
         ), patch(
             "app.services.login_handler.build_login_template_vars", return_value={}
         ), patch(
-            "app.tasks.TaskExecutor"
+            "app.tasks.BrowserTaskRunner"
         ) as MockExecutor, patch(
             "app.services.login_handler.asyncio.sleep", new_callable=AsyncMock
         ) as mock_sleep:
@@ -400,7 +394,7 @@ class TestExecuteBrowserTask:
         ), patch(
             "app.services.login_handler.build_login_template_vars", return_value={}
         ), patch(
-            "app.tasks.TaskExecutor"
+            "app.tasks.BrowserTaskRunner"
         ) as MockExecutor:
             MockExecutor.return_value.execute = AsyncMock(
                 return_value=(False, "密码错误")
@@ -434,7 +428,7 @@ class TestExecuteBrowserTask:
         ), patch(
             "app.services.login_handler.build_login_template_vars", return_value={}
         ), patch(
-            "app.tasks.TaskExecutor"
+            "app.tasks.BrowserTaskRunner"
         ) as MockExecutor:
             MockExecutor.return_value.execute = AsyncMock(return_value=(True, "ok"))
 
@@ -469,7 +463,7 @@ class TestExecuteBrowserTask:
         ), patch(
             "app.services.login_handler.build_login_template_vars", return_value={}
         ), patch(
-            "app.tasks.TaskExecutor"
+            "app.tasks.BrowserTaskRunner"
         ) as MockExecutor:
             MockExecutor.return_value.execute = AsyncMock(
                 return_value=(False, "操作失败 截图：/tmp/shot.png")
