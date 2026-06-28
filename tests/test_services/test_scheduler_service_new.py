@@ -88,14 +88,14 @@ class TestSchedulerServiceSyncState:
 
     def test_sync_state_starts_when_tasks_exist(self):
         executor = MagicMock()
-        executor.has_enabled_tasks.return_value = True
+        executor.registry.has_enabled_tasks.return_value = True
         svc = SchedulerService(task_registry=MagicMock(), task_executor=executor)
         svc.sync_state()
         assert svc.running is True
 
     def test_sync_state_stops_when_no_tasks(self):
         executor = MagicMock()
-        executor.has_enabled_tasks.return_value = False
+        executor.registry.has_enabled_tasks.return_value = False
         svc = SchedulerService(task_registry=MagicMock(), task_executor=executor)
         svc.start()
         svc.sync_state()
@@ -103,10 +103,10 @@ class TestSchedulerServiceSyncState:
 
     def test_has_enabled_tasks_delegates(self):
         executor = MagicMock()
-        executor.has_enabled_tasks.return_value = True
+        executor.registry.has_enabled_tasks.return_value = True
         svc = SchedulerService(task_registry=MagicMock(), task_executor=executor)
         assert svc.has_enabled_tasks() is True
-        executor.has_enabled_tasks.assert_called_once()
+        executor.registry.has_enabled_tasks.assert_called_once()
 
     def test_has_enabled_tasks_no_executor(self):
         svc = SchedulerService(task_registry=MagicMock(), task_executor=None)

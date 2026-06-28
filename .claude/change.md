@@ -3766,3 +3766,35 @@
   - `tests/test_integration/test_lightweight_mode.py`：更新为直接调用 `_login_orchestrator.submit()`
   - `tests/test_integration/test_login_integration_extended.py`：更新为直接调用 `_login_orchestrator.submit()`
   - `tests/test_services/test_monitor_service.py`：删除无用的 `execute_login_async` mock 设置
+
+## 2026-06-29 (2)
+
+### refactor: 用 psutil.Process.wait() 替换 _wait_for_exit 轮询循环
+
+- `app/services/launcher.py`：
+  - `_wait_for_exit` 改用 `psutil.Process(pid).wait(timeout=max_wait)` 替代逐秒轮询
+  - 处理 `TimeoutExpired`（超时返回 False）和 `NoSuchProcess`（进程已退出返回 True）
+  - 新增 `import psutil`，移除不再使用的 `get_process_name` import
+
+## 2026-06-29 (3)
+
+### refactor: 移除 TaskExecutor CRUD 透传，暴露 registry/history_store 属性
+
+- `app/services/task_executor.py`：
+  - 新增 `registry` 和 `history_store` 只读属性，供 API 路由直接访问底层组件
+  - 删除 5 个 CRUD 透传方法：`list_tasks`、`get_task`、`save_task`、`get_history`、`has_enabled_tasks`
+  - 保留 `delete_task`（协调 registry + history_store 的删除逻辑）
+- `app/api/scheduled_tasks.py`：
+  - 所有 `engine.tasks.list_tasks()` → `engine.tasks.registry.list_tasks()`
+  - 所有 `engine.tasks.get_task()` → `engine.tasks.registry.get_task()`
+  - 所有 `engine.tasks.save_task()` → `engine.tasks.registry.save_task()`
+  - 所有 `engine.tasks.get_history()` → `engine.tasks.history_store.get_history()`
+  - `engine.tasks.delete_task()` 保持不变（仍走 TaskExecutor 协调方法）
+- `app/services/scheduler_service.py`：
+  - `self._task_executor.has_enabled_tasks()` → `self._task_executor.registry.has_enabled_tasks()`
+- 测试文件同步更新：
+  - `tests/test_services/test_task_executor_fix.py`：删除 5 个 CRUD 透传测试，新增 `test_registry_property` 和 `test_history_store_property`
+  - `tests/test_integration/test_full_mode.py`：更新为 `task_executor.registry.*` / `task_executor.history_store.*`
+  - `tests/test_services/test_scheduler_service_new.py`：mock 改为 `executor.registry.has_enabled_tasks`
+  - `tests/test_api/test_api_scheduled_tasks_routes.py`：mock 改为 `mock_tasks.registry.*` / `mock_tasks.history_store.*`
+  - `tests/test_api/test_scheduled_tasks_fix.py`：同上

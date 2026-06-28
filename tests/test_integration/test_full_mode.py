@@ -50,7 +50,7 @@ class TestFullMode:
 
         # t1: 注册定时任务（时间设为当前，确保 tick 时命中）
         now = datetime.now()
-        task_executor.save_task("test_task", {
+        task_executor.registry.save_task("test_task", {
             "name": "测试任务",
             "type": "shell",
             "command": "echo hello",
@@ -73,7 +73,7 @@ class TestFullMode:
         login_done.wait(timeout=5)
 
         # t3: 验证定时任务已注册
-        assert task_executor.get_task("test_task") is not None
+        assert task_executor.registry.get_task("test_task") is not None
         # 直接触发 scheduler tick 验证任务可执行
         if engine._scheduler:
             due = task_registry.get_due_tasks(now.hour, now.minute)
@@ -81,7 +81,7 @@ class TestFullMode:
                 engine._scheduler.tick(now)
                 deadline = time.time() + 10
                 while time.time() < deadline:
-                    history = task_executor.get_history("test_task")
+                    history = task_executor.history_store.get_history("test_task")
                     if len(history) >= 1:
                         break
                     time.sleep(0.1)

@@ -83,4 +83,4 @@ class SchedulerService:
 
     def has_enabled_tasks(self) -> bool:
         """检查是否存在启用的定时任务。"""
-        return self._task_executor.has_enabled_tasks() if self._task_executor else False
+        return self._task_executor.registry.has_enabled_tasks() if self._task_executor else False
