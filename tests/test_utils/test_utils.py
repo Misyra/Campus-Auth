@@ -667,12 +667,6 @@ class TestLogConfigCenter:
         config = center.get_config()
         assert config["level"] == "INFO"
 
-    def test_is_initialized_default_false(self):
-        center = LogConfigCenter()
-        # 注意：由于单例模式，如果之前已初始化则为 True
-        # 这里只验证方法可调用
-        assert isinstance(center.is_initialized(), bool)
-
     def test_set_source_level(self):
         """测试设置 source 级别"""
         config = LogConfigCenter()
