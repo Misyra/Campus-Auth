@@ -2,66 +2,14 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
-
 from app.utils.shell_policy import _MAX_TIMEOUT, ShellCommandPolicy
 
 
 class TestReturncodeNoneBug:
-    """Bug 1: proc.returncode 为 None 时应返回 -1，不是 0。"""
+    """Bug 1: proc.returncode 为 None 时应返回 -1，不是 0。
 
-    @pytest.mark.asyncio
-    async def test_async_returncode_none_returns_minus_one(self):
-        """异步 run 当 proc.returncode 为 None 时应返回 -1。"""
-        policy = ShellCommandPolicy(allowlist=["/bin/sh"])
-
-        mock_proc = MagicMock()
-        mock_proc.communicate = AsyncMock(return_value=(b"out", b"err"))
-        mock_proc.returncode = None  # 异常状态
-
-        with patch(
-            "app.utils.shell_policy.asyncio.create_subprocess_exec",
-            return_value=mock_proc,
-        ):
-            code, _, _ = await policy.run(["/bin/sh", "-c", "test"])
-            assert code == -1, (
-                f"proc.returncode=None 时应返回 -1，实际返回 {code}"
-            )
-
-    @pytest.mark.asyncio
-    async def test_async_returncode_zero_still_works(self):
-        """异步 run 正常返回 0 不受影响。"""
-        policy = ShellCommandPolicy(allowlist=["/bin/sh"])
-
-        mock_proc = MagicMock()
-        mock_proc.communicate = AsyncMock(return_value=(b"ok", b""))
-        mock_proc.returncode = 0
-
-        with patch(
-            "app.utils.shell_policy.asyncio.create_subprocess_exec",
-            return_value=mock_proc,
-        ):
-            code, out, _ = await policy.run(["/bin/sh", "-c", "echo ok"])
-            assert code == 0
-            assert out == "ok"
-
-    @pytest.mark.asyncio
-    async def test_async_returncode_negative_preserved(self):
-        """异步 run 负返回码应原样保留（不被 `or 0` 吞掉）。"""
-        policy = ShellCommandPolicy(allowlist=["/bin/sh"])
-
-        mock_proc = MagicMock()
-        mock_proc.communicate = AsyncMock(return_value=(b"", b"err"))
-        mock_proc.returncode = -9
-
-        with patch(
-            "app.utils.shell_policy.asyncio.create_subprocess_exec",
-            return_value=mock_proc,
-        ):
-            code, _, _ = await policy.run(["/bin/sh", "-c", "kill"])
-            assert code == -9
+    注：async run() 已删除（零生产调用），以下测试仅覆盖 run_sync。
+    """
 
 
 class TestTimeoutBehavior:
