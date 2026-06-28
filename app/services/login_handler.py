@@ -67,21 +67,17 @@ class LoginAttemptHandler:
             tuple[bool, str]: (是否成功, 详细信息)
         """
         try:
-            return await self._perform_login_with_auth_class()
+            task_result = await self._perform_login_with_active_task()
+            if task_result is not None:
+                return task_result
+
+            error_msg = "未找到可执行的任务，请先在任务管理页面创建并启用一个登录任务"
+            self.logger.error("{}", error_msg)
+            return False, error_msg
         except Exception as e:
             error_msg = f"登录过程中发生错误: {e!s}"
             self.logger.error(error_msg)
             return False, error_msg
-
-    async def _perform_login_with_auth_class(self) -> tuple[bool, str]:
-        """使用活动任务执行登录。"""
-        task_result = await self._perform_login_with_active_task()
-        if task_result is not None:
-            return task_result
-
-        error_msg = "未找到可执行的任务，请先在任务管理页面创建并启用一个登录任务"
-        self.logger.error("{}", error_msg)
-        return False, error_msg
 
     async def _perform_login_with_active_task(self) -> tuple[bool, str] | None:
         """执行当前活动任务；返回 None 表示未找到可执行任务。"""
