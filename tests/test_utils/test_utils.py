@@ -50,7 +50,6 @@ from app.network.parsers import parse_host_port
 
 # ── platform ──
 from app.utils.platform import (
-    get_default_ua,
     get_platform,
     is_linux,
     is_macos,
@@ -332,28 +331,6 @@ class TestIsLinux:
         with patch("app.utils.platform.sys") as mock_sys:
             mock_sys.platform = "win32"
             assert is_linux() is False
-
-
-class TestGetDefaultUa:
-    def test_windows_ua(self):
-        with patch("app.utils.platform.get_platform", return_value="windows"):
-            ua = get_default_ua()
-            assert "Windows" in ua
-
-    def test_macos_ua(self):
-        with patch("app.utils.platform.get_platform", return_value="darwin"):
-            ua = get_default_ua()
-            assert "Macintosh" in ua
-
-    def test_linux_ua(self):
-        with patch("app.utils.platform.get_platform", return_value="linux"):
-            ua = get_default_ua()
-            assert "Linux" in ua
-
-    def test_unknown_platform_falls_back_to_linux(self):
-        with patch("app.utils.platform.get_platform", return_value="freebsd"):
-            ua = get_default_ua()
-            assert "Linux" in ua
 
 
 # =====================================================================
