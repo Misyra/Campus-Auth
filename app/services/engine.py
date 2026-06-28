@@ -733,11 +733,11 @@ class ScheduleEngine:
                 self._manual_login_in_progress = False
 
     def test_network(self) -> tuple[bool, str]:
-        """委托 NetworkTester 执行手动网络测试。"""
+        """执行手动网络测试。"""
         if self._network_tester is None:
             return False, "网络测试服务未初始化"
         self.record_log("开始手动网络测试", "INFO", "network")
-        result = self._network_tester.test_network(self._runtime_config)
+        result = self._network_tester(self._runtime_config)
         success, message = result
         if success:
             self.record_log("手动测试结果: 网络正常", "INFO", "network")

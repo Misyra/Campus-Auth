@@ -34,7 +34,6 @@ def mock_classes():
         patch("app.container.TaskHistoryStore") as mock_ths_cls,
         patch("app.container.TaskExecutor") as mock_te_cls,
         patch("app.container.WsBroadcaster") as mock_bc_cls,
-        patch("app.container.NetworkTester") as mock_nt_cls,
         patch("app.services.debug_service.DebugSessionManager") as mock_debug_cls,
     ):
         yield {
@@ -48,7 +47,6 @@ def mock_classes():
             "TaskHistoryStore": mock_ths_cls,
             "TaskExecutor": mock_te_cls,
             "WsBroadcaster": mock_bc_cls,
-            "NetworkTester": mock_nt_cls,
             "DebugSessionManager": mock_debug_cls,
         }
 
@@ -136,7 +134,6 @@ class TestInit:
         assert hasattr(container, "task_history_store")
         assert hasattr(container, "task_executor")
         assert hasattr(container, "ws_broadcaster")
-        assert hasattr(container, "network_tester")
 
     def test_lightweight_mode_uses_null_ws_manager(self, project_root, mock_classes):
         """轻量模式下应使用 NullWebSocketManager。"""

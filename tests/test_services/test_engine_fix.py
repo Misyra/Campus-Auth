@@ -19,10 +19,10 @@ def test_engine_test_network_default_false():
     assert field_info_tcp.default is False
     assert field_info_http.default is False
 
-    # NetworkTester.test_network 中不应有 fallback 默认值（通过 RuntimeConfig 属性访问）
-    from app.services.network_tester import NetworkTester
+    # test_network 中不应有 fallback 默认值（通过 RuntimeConfig 属性访问）
+    from app.services.network_tester import test_network
 
-    source = inspect.getsource(NetworkTester.test_network)
+    source = inspect.getsource(test_network)
     # 不应出现 .get() 调用（已迁移到属性访问）
     assert '.get(' not in source
 

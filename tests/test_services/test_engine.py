@@ -1422,16 +1422,16 @@ class TestNetwork:
     def test_network_ok(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()
-        svc._network_tester.test_network.return_value = (True, "网络连接正常")
+        svc._network_tester.return_value = (True, "网络连接正常")
         ok, msg = svc.test_network()
         assert ok is True
         assert "正常" in msg
-        svc._network_tester.test_network.assert_called_once_with(svc._runtime_config)
+        svc._network_tester.assert_called_once_with(svc._runtime_config)
 
     def test_network_fail(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()
-        svc._network_tester.test_network.return_value = (False, "网络连接异常")
+        svc._network_tester.return_value = (False, "网络连接异常")
         ok, msg = svc.test_network()
         assert ok is False
         assert "异常" in msg
@@ -1439,7 +1439,7 @@ class TestNetwork:
     def test_network_exception(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()
-        svc._network_tester.test_network.return_value = (False, "网络测试失败: timeout")
+        svc._network_tester.return_value = (False, "网络测试失败: timeout")
         ok, msg = svc.test_network()
         assert ok is False
         assert "失败" in msg
@@ -1447,7 +1447,7 @@ class TestNetwork:
     def test_network_with_targets(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()
-        svc._network_tester.test_network.return_value = (True, "网络连接正常")
+        svc._network_tester.return_value = (True, "网络连接正常")
         ok, msg = svc.test_network()
         assert ok is True
 
