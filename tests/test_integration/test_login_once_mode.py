@@ -100,8 +100,8 @@ class TestLoginOnceMode:
             result = _execute_login_with_retries(runtime_config, logger)
 
         assert result == LoginResult.SUCCESS
-        mock_history.record.assert_called_once()
-        call_kwargs = mock_history.record.call_args[1]
+        mock_history.add.assert_called_once()
+        call_kwargs = mock_history.add.call_args[1]
         assert call_kwargs["success"] is True
         assert call_kwargs["duration_ms"] >= 0
         assert call_kwargs["error"] == ""
@@ -132,7 +132,7 @@ class TestLoginOnceMode:
             result = _execute_login_with_retries(runtime_config, logger)
 
         assert result == LoginResult.TEMPORARY_FAILURE
-        mock_history.record.assert_called_once()
-        call_kwargs = mock_history.record.call_args[1]
+        mock_history.add.assert_called_once()
+        call_kwargs = mock_history.add.call_args[1]
         assert call_kwargs["success"] is False
         assert call_kwargs["error"] == "密码错误"
