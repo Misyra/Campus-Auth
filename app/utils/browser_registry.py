@@ -70,7 +70,7 @@ def detect_browsers() -> list[BrowserInfo]:
 
 def _detect_playwright_chromium() -> BrowserInfo:
     """检测 Playwright Chromium 是否已下载。"""
-    installed = _has_playwright_chromium()
+    installed = has_playwright_chromium()
     return BrowserInfo(
         channel="playwright",
         name="Playwright Chromium",
@@ -202,11 +202,6 @@ def has_playwright_chromium() -> bool:
                 if candidate.exists():
                     return True
     return False
-
-
-def _has_playwright_chromium() -> bool:
-    """检查 Playwright Chromium 是否已下载（内部便捷函数）。"""
-    return has_playwright_chromium()
 
 
 def _check_command_exists(command: str) -> bool:

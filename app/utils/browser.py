@@ -85,9 +85,6 @@ class BrowserContextManager:
         self.context = None
         self.page = None
 
-        # Worker 管理模式标志 — True 时表示浏览器由 Worker 管理生命周期
-        self._worker_managed = False
-
     def _is_cancelled(self) -> bool:
         return self.cancel_event is not None and self.cancel_event.is_set()
 
@@ -108,7 +105,6 @@ class BrowserContextManager:
         await worker.ensure_browser(self.config)
 
         # 从 Worker 获取浏览器对象引用（同线程，通过只读属性访问）
-        self._worker_managed = True
         self.playwright = worker.playwright_instance
         self.browser = worker.browser
         self.context = worker.context

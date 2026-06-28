@@ -305,20 +305,6 @@ class PlaywrightWorker:
             return cmd.response_data
         return WorkerResponse(success=True, data=cmd.response_data)
 
-    def submit_nowait(self, cmd_type: str, data: dict | None = None) -> None:
-        """提交命令但不等待响应（fire-and-forget）。"""
-        try:
-            self._cmd_queue.put_nowait(WorkerCommand(type=cmd_type, data=data or {}))
-        except queue.Full:
-            logger.warning("submit_nowait 队列已满 (maxsize={})，丢弃命令 {}", self._cmd_queue.maxsize, cmd_type)
-            return
-
-        # 唤醒 Worker 事件循环处理新命令
-        loop = self._loop
-        if loop is not None:
-            with contextlib.suppress(RuntimeError):
-                asyncio.run_coroutine_threadsafe(self._wake_async(), loop)
-
     # ── Worker 线程入口 ──
 
     def _worker_entry(self) -> None:

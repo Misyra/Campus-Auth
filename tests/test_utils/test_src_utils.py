@@ -176,7 +176,6 @@ class TestBrowserContextManager:
         assert ctx.config == config
         assert ctx.browser_settings == {"headless": True}
         assert ctx.cancel_event is None
-        assert ctx._worker_managed is False
 
     def test_init_with_cancel_event(self):
         event = threading.Event()
@@ -662,7 +661,6 @@ class TestBrowserContextManagerInit:
         assert mgr.browser is None
         assert mgr.context is None
         assert mgr.page is None
-        assert mgr._worker_managed is False
 
     def test_empty_config(self):
         """空配置。"""
@@ -1606,20 +1604,6 @@ class TestSubmitResponseData:
 
         assert result.success is True
         assert result.data == "plain_value"
-
-
-# ── PlaywrightWorker.submit_nowait ──
-
-
-class TestSubmitNowait:
-    """submit_nowait 方法。"""
-
-    def test_puts_command_in_queue(self):
-        """命令被放入队列。"""
-        worker = PlaywrightWorker()
-        worker.submit_nowait(CMD_SHUTDOWN)
-        cmd = worker._cmd_queue.get_nowait()
-        assert cmd.type == CMD_SHUTDOWN
 
 
 # ── PlaywrightWorker._cleanup_browser ──
