@@ -1,5 +1,23 @@
 # 修改日志
 
+## 2026-06-29
+
+### chore: 删除 engine.py 测试专用死属性
+
+- `app/services/engine.py`：
+  - 删除 `login_in_progress` property（委托 `_task_executor.is_login_running()`，零生产调用）
+  - 删除 `scheduler_running` property（委托 `_scheduler.running`，零生产调用）
+  - 删除 `has_enabled_tasks()` method（委托 `_scheduler.has_enabled_tasks()`，零生产调用）
+- 测试同步更新：
+  - `tests/test_services/test_engine.py`：
+    - `test_init_defaults`：`svc.scheduler_running` → `svc._scheduler.running`（加 None 守卫）
+    - 删除 `TestProperties.test_login_in_progress_property`、`test_scheduler_running_property`
+    - 删除 `TestSchedulerControl.test_has_enabled_tasks`
+  - `tests/test_integration/test_login_flow.py`：
+    - `test_login_in_progress_property`：改用 `svc._task_executor.is_login_running()` 直接断言
+    - `test_retry_not_triggered_during_login`：改用 `svc._task_executor.is_login_running()` 直接断言
+  - `tests/test_services/test_monitor_service.py`：删除 `TestLoginInProgress` 整个测试类
+
 ## 2026-06-28
 
 ### refactor: 代码质量优化 — 清理死代码和冗余抽象
