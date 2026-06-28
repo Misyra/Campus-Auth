@@ -17,7 +17,7 @@ from app.network.decision import (
 from app.network.probes import set_block_proxy
 from app.schemas import RuntimeConfig
 from app.utils import get_logger
-from app.utils.network import parse_ping_targets
+from app.network.parsers import parse_ping_targets
 
 if TYPE_CHECKING:
     from app.services.profile_service import ProfileService

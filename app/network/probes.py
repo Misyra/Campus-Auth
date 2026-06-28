@@ -107,7 +107,7 @@ def is_network_available_socket(
 ) -> bool:
     if not test_sites:
         from app.constants import DEFAULT_NETWORK_TARGETS
-        from app.utils.network import parse_ping_targets
+        from app.network.parsers import parse_ping_targets
         test_sites = parse_ping_targets(DEFAULT_NETWORK_TARGETS)
     targets = test_sites
 
@@ -148,7 +148,7 @@ def is_network_available_url(
     """
     if url_checks is None:
         from app.constants import DEFAULT_URL_CHECK_URLS
-        from app.utils.network import parse_url_checks
+        from app.network.parsers import parse_url_checks
         url_checks = parse_url_checks(DEFAULT_URL_CHECK_URLS)
     if not url_checks:
         return True

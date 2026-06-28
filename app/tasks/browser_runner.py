@@ -331,7 +331,7 @@ class BrowserTaskRunner:
             timeout = monitor.network_check_timeout
 
             # 解析检测参数（parse_url/parse_ping 内部处理 str/list/None）
-            from app.utils.network import parse_ping_targets, parse_url_checks
+            from app.network.parsers import parse_ping_targets, parse_url_checks
 
             url_checks = parse_url_checks(monitor.url_check_urls) or None
             test_sites = parse_ping_targets(monitor.ping_targets) or None

@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from app.network.decision import is_network_available
 from app.utils.logging import get_logger
-from app.utils.network import parse_ping_targets
+from app.network.parsers import parse_ping_targets
 
 if TYPE_CHECKING:
     from app.schemas import RuntimeConfig
@@ -36,7 +36,7 @@ class NetworkTester:
         enable_tcp = monitor.enable_tcp_check
         enable_http = monitor.enable_http_check
 
-        from app.utils.network import parse_url_checks
+        from app.network.parsers import parse_url_checks
 
         url_checks = parse_url_checks(monitor.url_check_urls)
         test_sites = parse_ping_targets(targets)
