@@ -308,12 +308,10 @@ class BrowserTaskRunner:
     async def _network_detection_check(self) -> bool:
         """任务步骤全部通过后，验证网络是否已恢复连通。"""
         try:
-            from app.network.decision import is_network_available
+            from app.network.decision import check_network_status
             from app.schemas import MonitorSettings
 
             cfg = self.monitor_config
-            # 使用 MonitorSettings 填充默认值，确保未配置的字段有合理的默认行为
-            # 仅过滤 None 和空容器，保留 False、0 等合法值
             monitor = MonitorSettings(**{
                 k: v for k, v in cfg.items()
                 if k in MonitorSettings.model_fields
@@ -322,46 +320,18 @@ class BrowserTaskRunner:
             })
 
             # 等待网址响应处理认证请求
-            post_delay = cfg.get("post_login_delay")
-            if post_delay is None:
-                post_delay = 5
-            await asyncio.sleep(post_delay)
-            enable_tcp = monitor.enable_tcp_check
-            enable_http = monitor.enable_http_check
-            timeout = monitor.network_check_timeout
+            await asyncio.sleep(cfg.get("post_login_delay") or 5)
 
-            # 解析检测参数（parse_url/parse_ping 内部处理 str/list/None）
-            from app.network.parsers import parse_ping_targets, parse_url_checks
-
-            url_checks = parse_url_checks(monitor.url_check_urls) or None
-            test_sites = parse_ping_targets(monitor.ping_targets) or None
-
-            logger.info(
-                "验证网络连通性 (网络检测方式: TCP={}, HTTP={}, 网址响应={}, 超时={}s)",
-                "开" if enable_tcp else "关",
-                "开" if enable_http else "关",
-                "开" if bool(url_checks) else "关",
-                timeout,
+            ok, status, method = await asyncio.to_thread(
+                check_network_status, monitor
             )
 
-            test_urls = monitor.test_urls or None
-
-            result = await asyncio.to_thread(
-                is_network_available,
-                test_sites=test_sites,
-                test_urls=test_urls,
-                timeout=timeout,
-                enable_tcp=enable_tcp,
-                enable_http=enable_http,
-                url_checks=url_checks,
-            )
-
-            if result:
-                logger.info("网络已恢复，登录认证生效")
+            if ok:
+                logger.info("网络已恢复，登录认证生效 (检测方式: {})", method)
             else:
-                logger.warning("网络仍不可达，登录认证未生效")
+                logger.warning("网络仍不可达 (状态: {})", status)
 
-            return result
+            return ok
 
         except Exception as e:
             logger.exception("网络验证异常: {}", e)
