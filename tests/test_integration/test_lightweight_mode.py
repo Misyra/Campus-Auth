@@ -49,14 +49,17 @@ class TestLightweightMode:
         assert engine._is_monitoring
 
         # t1: 断网 → 自动登录成功
-        future1 = task_executor.execute_login_async()
+        config = engine.get_runtime_config()
+        handle1 = task_executor._login_orchestrator.submit(source="auto", config=config)
+        future1 = handle1.future
         ok1, msg1 = future1.result(timeout=5)
         assert ok1 is True
         assert login_count[0] >= 1
 
         # t2: 再次断网 → 自动登录
         login_done.clear()
-        future2 = task_executor.execute_login_async()
+        handle2 = task_executor._login_orchestrator.submit(source="auto", config=config)
+        future2 = handle2.future
         ok2, msg2 = future2.result(timeout=5)
         assert ok2 is True
         assert login_count[0] >= 2

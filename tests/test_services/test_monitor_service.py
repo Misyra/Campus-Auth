@@ -355,9 +355,6 @@ class TestHandleLogin:
         mock_get_worker = MagicMock(return_value=mock_worker)
 
         mock_task_executor = MagicMock()
-        future = Future()
-        future.set_result((True, "登录成功"))
-        mock_task_executor.execute_login_async.return_value = future
 
         svc = ScheduleEngine(
             MagicMock(), profile_service=MagicMock(), worker_getter=mock_get_worker, task_executor=mock_task_executor
@@ -771,7 +768,6 @@ class TestNetworkStateSetInConsumer:
 
         mock_task_executor = MagicMock()
         mock_task_executor.is_login_running.return_value = False
-        mock_task_executor.execute_login_async.return_value = None
         svc._task_executor = mock_task_executor
 
         svc._do_async_login()

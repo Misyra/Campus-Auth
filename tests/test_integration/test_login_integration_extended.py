@@ -230,7 +230,9 @@ class TestCancelPropagation:
 
             mock_worker.submit.side_effect = blocking_submit
 
-            future = task_executor.execute_login_async()
+            config = engine.get_runtime_config()
+            handle = task_executor._login_orchestrator.submit(source="auto", config=config)
+            future = handle.future
 
             assert submit_called.wait(timeout=5), "worker.submit was not called in time"
             assert task_executor.is_login_running()
@@ -271,7 +273,9 @@ class TestReloadException:
             mock_worker.submit.side_effect = blocking_submit
 
             # 启动登录
-            future = task_executor.execute_login_async()
+            config = engine.get_runtime_config()
+            handle = task_executor._login_orchestrator.submit(source="auto", config=config)
+            future = handle.future
 
             assert submit_called.wait(timeout=5), "worker.submit was not called in time"
             assert task_executor.is_login_running()
@@ -404,7 +408,9 @@ class TestProfileSwitchDuringLogin:
 
             mock_worker.submit.side_effect = blocking_submit
 
-            future = task_executor.execute_login_async()
+            config = engine.get_runtime_config()
+            handle = task_executor._login_orchestrator.submit(source="auto", config=config)
+            future = handle.future
 
             assert submit_called.wait(timeout=5), "worker.submit was not called in time"
             assert task_executor.is_login_running()

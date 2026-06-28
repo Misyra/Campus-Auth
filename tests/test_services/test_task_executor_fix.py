@@ -509,13 +509,6 @@ class TestTaskExecutorExecuteScript:
         defaults.update(kwargs)
         return TaskExecutor(**defaults)
 
-    def test_no_registry(self):
-        executor = self._make_executor()
-        executor._registry = None
-        success, msg = executor._execute_script("s1", 30)
-        assert success is False
-        assert "未初始化" in msg
-
     def test_task_not_found(self):
         executor = self._make_executor()
         executor._registry.get_task.return_value = None
@@ -709,45 +702,6 @@ class TestTaskExecutorExecuteBrowser:
         executor._execute_browser("b1", 60)
         call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
         assert "pure_mode" not in call_kwargs.get("config", {})
-
-    def test_browser_cancel_event_passed(self):
-        """F11: cancel_event 应传递到 orchestrator.submit()。"""
-        from app.services.login_orchestrator import LoginHandle
-        from app.utils.cancel_token import CompositeCancelEvent
-
-        executor = self._make_executor()
-        executor._registry.get_task.return_value = {"type": "browser"}
-        executor._get_runtime_config = lambda: RuntimeConfig()
-
-        mock_handle = LoginHandle(
-            future=None, source="browser", cancel_event=CompositeCancelEvent(),
-        )
-        mock_handle.result = lambda: (True, "ok")
-        executor._login_orchestrator.submit.return_value = mock_handle
-
-        cancel = threading.Event()
-        executor._execute_browser("b1", 60, cancel_event=cancel)
-        call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
-        assert call_kwargs["cancel_event"] is cancel
-
-    def test_browser_cancel_event_default_none(self):
-        """F11: 不传 cancel_event 时 orchestrator.submit() 收到 None。"""
-        from app.services.login_orchestrator import LoginHandle
-        from app.utils.cancel_token import CompositeCancelEvent
-
-        executor = self._make_executor()
-        executor._registry.get_task.return_value = {"type": "browser"}
-        executor._get_runtime_config = lambda: RuntimeConfig()
-
-        mock_handle = LoginHandle(
-            future=None, source="browser", cancel_event=CompositeCancelEvent(),
-        )
-        mock_handle.result = lambda: (True, "ok")
-        executor._login_orchestrator.submit.return_value = mock_handle
-
-        executor._execute_browser("b1", 60)
-        call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
-        assert call_kwargs["cancel_event"] is None
 
     def test_browser_timeout_forwarded(self):
         """timeout 应传递给 orchestrator.submit()。"""

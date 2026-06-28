@@ -3739,3 +3739,22 @@
 
 - `config/settings.json`：在 `config` 对象中添加 `lightweight_tray: true` 和 `auto_open_browser: false` 字段，与 `RuntimeConfig` 模型默认值保持一致
 - 注意：`config/` 目录在 `.gitignore` 中，使用 `git add -f` 强制添加
+
+## 2026-06-29 (1)
+
+### chore: 删除 TaskExecutor 死方法并简化守卫
+
+- `app/services/task_executor.py`：
+  - 删除 `execute_login_async()` 方法（死方法，engine 直接调 LoginOrchestrator.submit()）
+  - 删除 `execute_login()` 方法（死方法，engine 直接调 LoginOrchestrator.submit()）
+  - `_execute_script` 删除 `if not self._registry` 不可能守卫（构造函数必填参数）
+  - `_execute_browser` 删除 `cancel_event` 参数（无生产调用者传递此参数）
+- 测试文件同步更新：
+  - `tests/test_services/test_task_executor_fix.py`：删除 `TestTaskExecutorExecuteLogin`、`TestTaskExecutorLoginAsync`、`test_no_registry`、`test_browser_cancel_event_passed`、`test_browser_cancel_event_default_none`
+  - `tests/test_services/test_container_fix.py`：删除 `test_lightweight_execute_login_async_returns_future`
+  - `tests/test_integration/test_login_flow.py`：删除 4 个 execute_login 测试方法
+  - `tests/test_integration/test_scheduled_task.py`：删除 `test_login_cancel_event`、`test_login_async_deduplication`、`test_execute_login_async_returns_future`
+  - `tests/test_integration/test_login_connection.py`：更新为直接调用 `_login_orchestrator.submit()`
+  - `tests/test_integration/test_lightweight_mode.py`：更新为直接调用 `_login_orchestrator.submit()`
+  - `tests/test_integration/test_login_integration_extended.py`：更新为直接调用 `_login_orchestrator.submit()`
+  - `tests/test_services/test_monitor_service.py`：删除无用的 `execute_login_async` mock 设置
