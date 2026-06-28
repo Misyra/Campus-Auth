@@ -196,36 +196,6 @@ class TaskExecutor:
 
     # ── 登录接口（委托 LoginOrchestrator）──
 
-    def execute_login_async(
-        self,
-        cancel_event: threading.Event | None = None,
-        config_snapshot: RuntimeConfig | None = None,
-    ) -> Future:
-        """异步执行登录。签名兼容。"""
-        handle = self._login_orchestrator.submit(
-            source="auto", config=config_snapshot, cancel_event=cancel_event,
-        )
-        if handle.future is not None:
-            return handle.future
-        # 被拒绝：返回已完成的 failed future
-        f: Future = Future()
-        f.set_result((False, handle.rejected_reason or "登录被拒绝"))
-        return f
-
-    def execute_login(
-        self,
-        cancel_event: threading.Event | None = None,
-        config_snapshot: RuntimeConfig | None = None,
-    ) -> tuple[bool, str]:
-        """同步执行登录。签名兼容。"""
-        cfg = config_snapshot if config_snapshot is not None else (
-            self._get_runtime_config() if self._get_runtime_config else RuntimeConfig()
-        )
-        handle = self._login_orchestrator.submit(
-            source="auto", config=cfg, cancel_event=cancel_event,
-        )
-        return handle.result()
-
     def is_login_running(self) -> bool:
         """检查是否有登录在执行。"""
         return self._login_orchestrator.is_running()
@@ -292,9 +262,6 @@ class TaskExecutor:
 
     def _execute_script(self, script_id: str, timeout: int) -> tuple[bool, str]:
         """执行自定义脚本任务。"""
-        if not self._registry:
-            return False, "任务服务未初始化"
-
         task = self._registry.get_task(script_id)
         if not task or task.get("type") != "script":
             return False, f"脚本任务不存在: {script_id}"
@@ -319,7 +286,6 @@ class TaskExecutor:
         self,
         task_id: str,
         timeout: int,
-        cancel_event: threading.Event | None = None,
     ) -> tuple[bool, str]:
         """执行浏览器任务。委托 LoginOrchestrator，与登录共享去重。"""
         task = self._registry.get_task(task_id)
@@ -329,7 +295,7 @@ class TaskExecutor:
         config = self._get_runtime_config() if self._get_runtime_config else RuntimeConfig()
         handle = self._login_orchestrator.submit(
             source="browser", config=config,
-            cancel_event=cancel_event, timeout=timeout,
+            timeout=timeout,
         )
 
         if handle.rejected_reason is not None:
