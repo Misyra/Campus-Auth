@@ -351,7 +351,7 @@ class RetrySettings(BaseModel, frozen=True):
 class AppSettings(BaseModel, frozen=True):
     """应用级设置 — 全局共享，不含凭据。
 
-    被 GlobalConfig、RuntimeConfig、ConfigResponseDTO 组合复用。
+    被 GlobalConfig、RuntimeConfig 组合复用。
     """
 
     block_proxy: bool = True
@@ -389,7 +389,7 @@ class ConfigSaveRequest(BaseModel):
     pause: PauseSettings = Field(default_factory=PauseSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     app_settings: AppSettings = Field(default_factory=AppSettings)
-    # 凭据（平铺，与 ConfigResponseDTO 对齐）
+    # 凭据（平铺）
     username: str = ""
     password: str = ""
     auth_url: str = ""
@@ -459,14 +459,6 @@ class ShellListResponse(BaseModel):
     """GET /api/shells 响应。"""
     shells: list[str] = Field(default_factory=list)
     default: str = ""
-
-
-class DebugStepResult(BaseModel):
-    """调试步骤执行结果。"""
-    step_index: int
-    success: bool = False
-    message: str = ""
-    screenshot: str | None = None
 
 
 class DebugSessionResponse(BaseModel):
@@ -571,26 +563,6 @@ class GlobalConfig(BaseModel):
     pause: PauseSettings = Field(default_factory=PauseSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     app_settings: AppSettings = Field(default_factory=AppSettings)
-
-
-class ConfigResponseDTO(BaseModel):
-    """API 响应专用 — 不暴露内部结构。"""
-
-    browser: BrowserSettings
-    monitor: MonitorSettings
-    retry: RetrySettings
-    pause: PauseSettings
-    logging: LoggingSettings
-    app_settings: AppSettings = Field(default_factory=AppSettings)
-
-    # 凭据
-    username: str = ""
-    password: str = ""          # 始终返回空串，前端以空串表示"未修改"
-    auth_url: str = ""
-    isp: str = ""
-    carrier_custom: str = ""
-
-    active_task: str = ""
 
 
 class ProfilesData(BaseModel):

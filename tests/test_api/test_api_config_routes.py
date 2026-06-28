@@ -5,14 +5,9 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from app.schemas import (
-    AppSettings,
     BrowserSettings,
-    ConfigResponseDTO,
     LoginCredentials,
-    LoggingSettings,
     MonitorSettings,
-    PauseSettings,
-    RetrySettings,
     RuntimeConfig,
 )
 from app.services.profile_service import SaveResult
@@ -108,18 +103,18 @@ class TestSaveConfig:
         mock_services.profile_service.build_runtime_config.return_value = _make_runtime_config()
 
         # 构建完整 payload（含必填嵌套字段）
-        payload = ConfigResponseDTO(
-            browser=BrowserSettings(),
-            monitor=MonitorSettings(),
-            retry=RetrySettings(),
-            pause=PauseSettings(),
-            logging=LoggingSettings(),
-            app_settings=AppSettings(),
-            username="newuser",
-            password="newpass",
-            auth_url="http://10.0.0.1",
-            isp="移动",
-        ).model_dump()
+        payload = {
+            "browser": {"block_proxy": True},
+            "monitor": {"check_interval": 60},
+            "retry": {"max_retries": 5},
+            "pause": {"pause_on_failure": False},
+            "logging": {"global_level": "INFO"},
+            "app_settings": {"block_proxy": True},
+            "username": "newuser",
+            "password": "newpass",
+            "auth_url": "http://10.0.0.1",
+            "isp": "移动",
+        }
         resp = test_client.put("/api/config", json=payload)
         assert resp.status_code == 200
         assert resp.json()["success"] is True

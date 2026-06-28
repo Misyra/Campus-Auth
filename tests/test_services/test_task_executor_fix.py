@@ -4,7 +4,7 @@
 1. TaskExecutor._get_script_path() 路径回退
 2. 定时任务线程池懒初始化
 3. BoundedExecutor 队列限制
-4. TaskExecutor CRUD 方法、登录去重、execute_task 分发、execute_login、execute_shell
+4. TaskExecutor CRUD 方法、登录去重、execute_task 分发、execute_shell
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from app.schemas import AppSettings, RuntimeConfig
 def _slow_return(value, delay=0.3):
     """返回一个延迟返回结果的函数，避免 ThreadPoolExecutor 回调死锁。
 
-    注意：execute_login_async 中 add_done_callback 在锁内调用，
+    注意：execute_task_async 中 add_done_callback 在锁内调用，
     如果 future 在 add_done_callback 返回前就已完成，回调会在同一线程执行，
     尝试再次获取同一个 Lock 导致死锁。延迟函数确保 future 不会立即完成。
     """
@@ -952,173 +952,6 @@ class TestTaskExecutorExecuteShell:
         success, msg = executor._execute_shell("cmd", 30)
         assert success is True
         assert len(msg) <= 500
-
-
-# =====================================================================
-# TaskExecutor — execute_login
-# =====================================================================
-
-
-class TestTaskExecutorExecuteLogin:
-    """TaskExecutor.execute_login() 委托 LoginOrchestrator 测试。"""
-
-    def _make_executor(self, **kwargs):
-        from app.services.task_executor import TaskExecutor
-
-        mock_orchestrator = MagicMock()
-        mock_handle = MagicMock()
-        mock_handle.result.return_value = (True, "登录成功")
-        mock_orchestrator.submit.return_value = mock_handle
-
-        defaults = dict(
-            registry=MagicMock(),
-            history_store=MagicMock(),
-            worker_getter=MagicMock(),
-            login_orchestrator=mock_orchestrator,
-        )
-        defaults.update(kwargs)
-        return TaskExecutor(**defaults)
-
-    def test_delegates_to_orchestrator(self):
-        """execute_login 应委托到 login_orchestrator.submit。"""
-        executor = self._make_executor()
-        executor._get_runtime_config = lambda: RuntimeConfig()
-
-        success, msg = executor.execute_login()
-        assert success is True
-        assert msg == "登录成功"
-        executor._login_orchestrator.submit.assert_called_once()
-
-    def test_forwards_cancel_event(self):
-        """cancel_event 应传递给 orchestrator.submit。"""
-        executor = self._make_executor()
-        executor._get_runtime_config = lambda: RuntimeConfig()
-
-        cancel = threading.Event()
-        executor.execute_login(cancel_event=cancel)
-        call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
-        assert call_kwargs["cancel_event"] is cancel
-
-    def test_forwards_config_snapshot(self):
-        """config_snapshot 应传递给 orchestrator.submit。"""
-        executor = self._make_executor()
-        config = RuntimeConfig()
-
-        executor.execute_login(config_snapshot=config)
-        call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
-        assert call_kwargs["config"] is config
-
-    def test_uses_runtime_config_when_no_snapshot(self):
-        """无 config_snapshot 时应使用 _get_runtime_config。"""
-        executor = self._make_executor()
-        config = RuntimeConfig()
-        executor._get_runtime_config = lambda: config
-
-        executor.execute_login()
-        call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
-        assert call_kwargs["config"] is config
-
-    def test_uses_empty_config_when_no_runtime_config(self):
-        """无 _get_runtime_config 时应使用默认 RuntimeConfig。"""
-        executor = self._make_executor()
-        executor._get_runtime_config = None
-
-        executor.execute_login()
-        call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
-        assert isinstance(call_kwargs["config"], RuntimeConfig)
-
-    def test_returns_orchestrator_result(self):
-        """execute_login 应返回 orchestrator.handle.result() 的值。"""
-        mock_orchestrator = MagicMock()
-        mock_handle = MagicMock()
-        mock_handle.result.return_value = (False, "认证失败")
-        mock_orchestrator.submit.return_value = mock_handle
-
-        executor = self._make_executor(login_orchestrator=mock_orchestrator)
-        executor._get_runtime_config = lambda: RuntimeConfig()
-
-        success, msg = executor.execute_login()
-        assert success is False
-        assert msg == "认证失败"
-
-    def test_source_is_auto(self):
-        """execute_login 应以 source='auto' 提交。"""
-        executor = self._make_executor()
-        executor._get_runtime_config = lambda: RuntimeConfig()
-
-        executor.execute_login()
-        call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
-        assert call_kwargs["source"] == "auto"
-
-
-# =====================================================================
-# TaskExecutor — execute_login_async (去重机制)
-# =====================================================================
-
-
-class TestTaskExecutorLoginAsync:
-    """TaskExecutor.execute_login_async() 委托 LoginOrchestrator 测试。"""
-
-    def _make_executor(self, **kwargs):
-        from app.services.task_executor import TaskExecutor
-
-        defaults = dict(
-            registry=MagicMock(),
-            history_store=MagicMock(),
-            worker_getter=MagicMock(),
-            login_orchestrator=MagicMock(),
-        )
-        defaults.update(kwargs)
-        return TaskExecutor(**defaults)
-
-    def test_submit_delegates_to_orchestrator(self):
-        """execute_login_async 应委托到 login_orchestrator.submit。"""
-        executor = self._make_executor()
-        mock_future = Future()
-        mock_future.set_result((True, "ok"))
-        mock_handle = MagicMock()
-        mock_handle.future = mock_future
-        executor._login_orchestrator.submit.return_value = mock_handle
-
-        future = executor.execute_login_async()
-        assert future is mock_future
-        executor._login_orchestrator.submit.assert_called_once()
-
-    def test_rejected_returns_failed_future(self):
-        """orchestrator 拒绝时应返回已完成的失败 Future。"""
-        executor = self._make_executor()
-        mock_handle = MagicMock()
-        mock_handle.future = None
-        mock_handle.rejected_reason = "登录被拒绝"
-        executor._login_orchestrator.submit.return_value = mock_handle
-
-        future = executor.execute_login_async()
-        assert isinstance(future, Future)
-        assert future.result(timeout=5) == (False, "登录被拒绝")
-
-    def test_rejected_no_reason_returns_default(self):
-        """orchestrator 拒绝且无 reason 时应返回默认消息。"""
-        executor = self._make_executor()
-        mock_handle = MagicMock()
-        mock_handle.future = None
-        mock_handle.rejected_reason = None
-        executor._login_orchestrator.submit.return_value = mock_handle
-
-        future = executor.execute_login_async()
-        assert future.result(timeout=5) == (False, "登录被拒绝")
-
-    def test_cancel_event_forwarded_to_orchestrator(self):
-        """cancel_event 应传递给 orchestrator.submit。"""
-        executor = self._make_executor()
-        mock_handle = MagicMock()
-        mock_handle.future = Future()
-        mock_handle.future.set_result((True, "ok"))
-        executor._login_orchestrator.submit.return_value = mock_handle
-
-        cancel = threading.Event()
-        executor.execute_login_async(cancel_event=cancel)
-        call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
-        assert call_kwargs["cancel_event"] is cancel
 
 
 # =====================================================================
