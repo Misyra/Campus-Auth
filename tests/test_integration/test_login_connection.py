@@ -65,13 +65,16 @@ class TestLoginConnection:
         ]
 
         # 第一次登录
-        future1 = task_executor.execute_login_async()
+        config = engine.get_runtime_config()
+        handle1 = task_executor._login_orchestrator.submit(source="auto", config=config)
+        future1 = handle1.future
         ok1, msg1 = future1.result(timeout=5)
         assert ok1 is False
         assert "网络超时" in msg1
 
         # 重试登录
-        future2 = task_executor.execute_login_async()
+        handle2 = task_executor._login_orchestrator.submit(source="auto", config=config)
+        future2 = handle2.future
         ok2, msg2 = future2.result(timeout=5)
         assert ok2 is True
         assert "登录成功" in msg2
@@ -118,7 +121,9 @@ class TestLoginConnection:
         mock_worker.submit.side_effect = blocking_login
 
         # 启动自动登录（异步）
-        future_auto = task_executor.execute_login_async()
+        config = engine.get_runtime_config()
+        handle_auto = task_executor._login_orchestrator.submit(source="auto", config=config)
+        future_auto = handle_auto.future
         login_started.wait(timeout=5)
 
         # 确认登录正在进行
@@ -138,7 +143,8 @@ class TestLoginConnection:
             success=True, data="手动登录成功"
         )
 
-        future_manual = task_executor.execute_login_async()
+        handle_manual = task_executor._login_orchestrator.submit(source="auto", config=config)
+        future_manual = handle_manual.future
         ok, msg = future_manual.result(timeout=5)
         assert ok is True
         assert "手动登录成功" in msg
@@ -156,7 +162,9 @@ class TestLoginConnection:
 
         mock_worker.submit.side_effect = submit_with_event
 
-        future = task_executor.execute_login_async()
+        config = engine.get_runtime_config()
+        handle = task_executor._login_orchestrator.submit(source="auto", config=config)
+        future = handle.future
         login_done.wait(timeout=5)
         ok, msg = future.result(timeout=5)
 
@@ -185,11 +193,14 @@ class TestLoginConnection:
         mock_worker.submit.side_effect = blocking_submit
 
         # 线程 A 提交登录
-        future_a = task_executor.execute_login_async()
+        config = engine.get_runtime_config()
+        handle_a = task_executor._login_orchestrator.submit(source="auto", config=config)
+        future_a = handle_a.future
         start_event.wait(timeout=5)
 
         # 线程 B 尝试提交，应被去重（返回同一个 Future）
-        future_b = task_executor.execute_login_async()
+        handle_b = task_executor._login_orchestrator.submit(source="auto", config=config)
+        future_b = handle_b.future
 
         # 验证 submit 只调了一次
         assert call_count == 1
@@ -216,7 +227,9 @@ class TestLoginConnection:
         mock_worker.submit.side_effect = slow_login
 
         # 启动登录
-        future = task_executor.execute_login_async()
+        config = engine.get_runtime_config()
+        handle = task_executor._login_orchestrator.submit(source="auto", config=config)
+        future = handle.future
         login_done.wait(timeout=5)
 
         # 登录进行中，保存新配置
