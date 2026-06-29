@@ -1558,26 +1558,6 @@ class TestGetConfig:
         assert isinstance(config, RuntimeConfig)
 
 
-# =====================================================================
-# record_log
-# =====================================================================
-
-
-class TestRecordLog:
-    def test_record_log_basic(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc.record_log = ScheduleEngine.record_log.__get__(svc)
-        svc.record_log("测试消息", level="INFO", source="backend")
-
-    def test_record_log_no_side_effect(self, engine_factory):
-        """record_log 不应再触发 _update_status_snapshot。"""
-        svc = engine_factory(raw=True)
-        svc.record_log = ScheduleEngine.record_log.__get__(svc)
-        svc._update_status_snapshot = MagicMock()
-        svc.record_log("网络检测", level="INFO", source="network")
-        svc._update_status_snapshot.assert_not_called()
-
-
 class TestNotifyNetworkStateChanged:
     def test_notify_network_state_changed(self, engine_factory):
         svc = engine_factory(raw=True)

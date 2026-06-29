@@ -22,8 +22,12 @@ class TestInitMonitoringLogMasking:
         """调用 init_monitoring 并捕获日志输出。"""
         captured_logs: list[str] = []
 
-        def mock_log_callback(message: str, level: str = "INFO", **kwargs):
-            captured_logs.append(message)
+        class _CaptureLogger:
+            def info(self, fmt, *args):
+                captured_logs.append(args[0] if args else fmt)
+            warning = info
+            error = info
+            debug = info
 
         config = RuntimeConfig(
             credentials=LoginCredentials(
@@ -39,7 +43,7 @@ class TestInitMonitoringLogMasking:
             block_proxy=True,
         )
 
-        core = NetworkMonitorCore(config=config, log_callback=mock_log_callback)
+        core = NetworkMonitorCore(config=config, logger=_CaptureLogger())
         # mock _get_test_sites 以避免真实网络调用
         with patch.object(core, "_get_test_sites", return_value=[("1.1.1.1", 80)]):
             core.init_monitoring()

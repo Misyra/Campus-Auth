@@ -90,7 +90,7 @@ def engine_factory():
         svc._profile_service = MagicMock()
         svc._profile_service.set_active_profile.return_value = (True, "ok")
         svc.project_root = MagicMock()
-        svc.record_log = MagicMock()
+        svc._logger = MagicMock()
         svc._update_status_snapshot = MagicMock()
 
         # StatusManager — 状态快照与广播
@@ -106,7 +106,7 @@ def engine_factory():
             get_runtime_config=lambda: svc._runtime_config,
             retry_policy=svc._retry_policy,
             status_update_callback=svc._update_status_snapshot,
-            record_log=svc.record_log,
+            logger=svc._logger,
             wakeup_event=svc._wakeup_event,
             get_monitor_check_interval=lambda: svc._monitor_check_interval,
         )

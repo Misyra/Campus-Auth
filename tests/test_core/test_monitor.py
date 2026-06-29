@@ -193,14 +193,14 @@ class TestMonitorCoreInit:
         core = NetworkMonitorCore(config=config)
         assert core.config == config
 
-    def test_custom_log_callback(self):
-        callback = MagicMock()
-        core = NetworkMonitorCore(config=RuntimeConfig(), log_callback=callback)
+    def test_custom_logger(self):
+        logger = MagicMock()
+        core = NetworkMonitorCore(config=RuntimeConfig(), logger=logger)
         core.log_message("test message")
-        callback.assert_called_once()
+        logger.info.assert_called_once_with("{}", "test message")
 
-    def test_default_log_callback(self):
-        """无回调时应使用 logger"""
+    def test_default_logger(self):
+        """无自定义 logger 时应使用 logger"""
         core = NetworkMonitorCore(config=RuntimeConfig())
         # 不应抛异常
         core.log_message("test message")
@@ -312,32 +312,32 @@ class TestMonitorCoreStopMonitoring:
 class TestLogMessageExcInfo:
     def test_exc_info_false_by_default(self):
         """默认不附加堆栈"""
-        callback = MagicMock()
-        core = NetworkMonitorCore(config=RuntimeConfig(), log_callback=callback)
+        logger = MagicMock()
+        core = NetworkMonitorCore(config=RuntimeConfig(), logger=logger)
         core.log_message("test", "INFO")
-        args = callback.call_args[0]
-        assert "Traceback" not in args[0]
+        args = logger.info.call_args[0]
+        assert "Traceback" not in args[1]
 
     def test_exc_info_true_appends_traceback(self):
         """exc_info=True 时应附加堆栈信息"""
-        callback = MagicMock()
-        core = NetworkMonitorCore(config=RuntimeConfig(), log_callback=callback)
+        logger = MagicMock()
+        core = NetworkMonitorCore(config=RuntimeConfig(), logger=logger)
         try:
             raise ValueError("test error")
         except ValueError:
             core.log_message("出错了", "ERROR", exc_info=True)
-        args = callback.call_args[0]
-        assert "出错了" in args[0]
-        assert "ValueError" in args[0]
-        assert "test error" in args[0]
+        args = logger.error.call_args[0]
+        assert "出错了" in args[1]
+        assert "ValueError" in args[1]
+        assert "test error" in args[1]
 
     def test_exc_info_without_active_exception(self):
         """无活跃异常时不应附加无意义的堆栈"""
-        callback = MagicMock()
-        core = NetworkMonitorCore(config=RuntimeConfig(), log_callback=callback)
+        logger = MagicMock()
+        core = NetworkMonitorCore(config=RuntimeConfig(), logger=logger)
         core.log_message("正常消息", "INFO", exc_info=True)
-        args = callback.call_args[0]
-        assert "Traceback" not in args[0]
+        args = logger.info.call_args[0]
+        assert "Traceback" not in args[1]
 
 
 # =====================================================================
@@ -375,18 +375,16 @@ class TestMonitorCoreDetailedSnapshot:
 class TestMonitorCoreLogMessage:
     """log_message 分发逻辑。"""
 
-    def test_uses_callback_when_set(self):
-        """有 callback 时使用 callback。"""
-        core = NetworkMonitorCore(config=RuntimeConfig())
-        callback = MagicMock()
-        core.log_callback = callback
+    def test_uses_logger_when_set(self):
+        """有自定义 logger 时使用 logger。"""
+        logger = MagicMock()
+        core = NetworkMonitorCore(config=RuntimeConfig(), logger=logger)
         core.log_message("测试消息", "INFO")
-        callback.assert_called_once()
+        logger.info.assert_called_once_with("{}", "测试消息")
 
-    def test_uses_logger_when_no_callback(self):
-        """无 callback 时使用 logger。"""
+    def test_uses_default_logger_when_no_custom(self):
+        """无自定义 logger 时使用默认 logger。"""
         core = NetworkMonitorCore(config=RuntimeConfig())
-        core.log_callback = None
         # 不应抛异常
         core.log_message("测试消息", "INFO")
 
