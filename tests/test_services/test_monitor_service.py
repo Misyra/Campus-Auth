@@ -422,47 +422,47 @@ class TestRunManualLogin:
 
 
 class TestNetwork:
+    @patch("app.services.engine.is_network_available", return_value=True)
     @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
     def test_network_ok(
-        self, mock_ps_cls, mock_reload
+        self, mock_ps_cls, mock_reload, mock_is_available
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.global_config.browser.pure_mode = False
 
-        mock_tester = MagicMock(return_value=(True, "网络连接正常"))
-        svc = ScheduleEngine(MagicMock(), profile_service=MagicMock(), network_tester=mock_tester)
+        svc = ScheduleEngine(MagicMock(), profile_service=MagicMock())
         ok, msg = svc.test_network()
         assert ok is True
         assert "正常" in msg
 
+    @patch("app.services.engine.is_network_available", return_value=False)
     @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
     def test_network_fail(
-        self, mock_ps_cls, mock_reload
+        self, mock_ps_cls, mock_reload, mock_is_available
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.global_config.browser.pure_mode = False
 
-        mock_tester = MagicMock(return_value=(False, "网络连接异常"))
-        svc = ScheduleEngine(MagicMock(), profile_service=MagicMock(), network_tester=mock_tester)
+        svc = ScheduleEngine(MagicMock(), profile_service=MagicMock())
         ok, msg = svc.test_network()
         assert ok is False
         assert "异常" in msg
 
+    @patch("app.services.engine.is_network_available", side_effect=TimeoutError("timeout"))
     @patch.object(ScheduleEngine, "_reload_config_internal", side_effect=_fake_reload)
     @patch("app.services.engine.ProfileService")
     def test_network_exception(
-        self, mock_ps_cls, mock_reload
+        self, mock_ps_cls, mock_reload, mock_is_available
     ):
         mock_ps = MagicMock()
         mock_ps_cls.return_value = mock_ps
         mock_ps.load.return_value.global_config.browser.pure_mode = False
 
-        mock_tester = MagicMock(return_value=(False, "网络测试失败: timeout"))
-        svc = ScheduleEngine(MagicMock(), profile_service=MagicMock(), network_tester=mock_tester)
+        svc = ScheduleEngine(MagicMock(), profile_service=MagicMock())
         ok, msg = svc.test_network()
         assert ok is False
         assert "失败" in msg

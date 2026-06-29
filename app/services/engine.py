@@ -3,8 +3,8 @@
 合并 MonitorService（网络监控）和 SchedulerService（定时任务调度）的全部功能，
 使用 Actor 模型（线程 + 队列）进行命令派发，零 asyncio 依赖的核心逻辑。
 
-职责边界：命令队列、监控循环、重试逻辑、调度器。
-WS 广播委托给 WsBroadcaster，网络测试委托给 NetworkTester。
+职责边界：命令队列、监控循环、重试逻辑、调度器、手动网络测试。
+WS 广播委托给 WsBroadcaster。
 """
 
 from __future__ import annotations
@@ -20,6 +20,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from app.network.decision import is_network_available
+from app.network.parsers import parse_ping_targets, parse_url_checks
 from app.schemas import MonitorStatusResponse, RuntimeConfig
 from app.services.engine_status import StatusManager
 from app.services.monitor_service import NetworkMonitorCore
@@ -78,7 +80,6 @@ class ScheduleEngine:
         task_registry=None,
         task_executor=None,
         ws_broadcaster=None,
-        network_tester=None,
         orchestrator=None,
         scheduler=None,
     ):
@@ -94,7 +95,6 @@ class ScheduleEngine:
         self._task_registry = task_registry
         self._task_executor = task_executor
         self._ws_broadcaster = ws_broadcaster
-        self._network_tester = network_tester
 
         # 调度器（从 ScheduleEngine 提取为独立组件）
         self._scheduler = scheduler
@@ -730,17 +730,50 @@ class ScheduleEngine:
 
     def test_network(self) -> tuple[bool, str]:
         """执行手动网络测试。"""
-        if self._network_tester is None:
-            return False, "网络测试服务未初始化"
         self.record_log("开始手动网络测试", "INFO", "network")
-        result = self._network_tester(self._runtime_config)
-        success, message = result
-        if success:
-            self.record_log("手动测试结果: 网络正常", "INFO", "network")
-        else:
+        monitor = self._runtime_config.monitor
+        targets = monitor.ping_targets
+        enable_tcp = monitor.enable_tcp_check
+        enable_http = monitor.enable_http_check
+
+        url_checks = parse_url_checks(monitor.url_check_urls)
+        test_sites = parse_ping_targets(targets)
+
+        mode_desc = []
+        if enable_tcp:
+            mode_desc.append(f"TCP({len(test_sites) if test_sites else 2})")
+        if enable_http:
+            mode_desc.append("HTTP(2)")
+        if url_checks:
+            mode_desc.append(f"网址响应({len(url_checks)})")
+
+        logger.debug("手动网络测试: {}", "+".join(mode_desc) or "无")
+
+        try:
+            timeout = monitor.network_check_timeout
+            is_available = is_network_available(
+                test_sites=test_sites if test_sites else None,
+                test_urls=monitor.test_urls or None,
+                timeout=timeout,
+                enable_tcp=enable_tcp,
+                enable_http=enable_http,
+                url_checks=url_checks if url_checks else None,
+            )
+            if is_available:
+                logger.info("手动测试结果: 网络正常")
+                self.record_log("手动测试结果: 网络正常", "INFO", "network")
+                self.notify_network_state_changed()
+                return True, "网络连接正常"
+            else:
+                logger.warning("手动测试结果: 网络异常")
+                self.record_log("手动测试结果: 网络异常", "WARNING", "network")
+                self.notify_network_state_changed()
+                return False, "网络连接异常"
+        except Exception as exc:
+            logger.exception("网络测试失败")
             self.record_log("手动测试结果: 网络异常", "WARNING", "network")
-        self.notify_network_state_changed()
-        return result
+            self.notify_network_state_changed()
+            return False, f"网络测试失败: {exc}"
 
     def list_logs(self, limit: int = 200) -> list:
         return self._status_manager.list_logs(limit=limit)

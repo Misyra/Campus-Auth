@@ -10,7 +10,6 @@ from pathlib import Path
 from app.services.autostart import AutoStartService
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
-from app.services.network_tester import test_network
 from app.services.profile_service import ProfileService
 from app.services.task_executor import TaskExecutor
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
@@ -94,7 +93,6 @@ class ServiceContainer:
             task_registry=self.task_registry,
             task_executor=self.task_executor,
             ws_broadcaster=self.ws_broadcaster,
-            network_tester=test_network,
             orchestrator=self.login_orchestrator,
             scheduler=self.scheduler_service,
         )

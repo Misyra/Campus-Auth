@@ -1419,44 +1419,37 @@ class TestRunManualLogin:
 
 
 class TestNetwork:
-    def test_network_ok(self, engine_factory):
+    @patch("app.services.engine.is_network_available", return_value=True)
+    def test_network_ok(self, mock_is_available, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()
-        svc._network_tester.return_value = (True, "网络连接正常")
         ok, msg = svc.test_network()
         assert ok is True
         assert "正常" in msg
-        svc._network_tester.assert_called_once_with(svc._runtime_config)
+        mock_is_available.assert_called_once()
 
-    def test_network_fail(self, engine_factory):
+    @patch("app.services.engine.is_network_available", return_value=False)
+    def test_network_fail(self, mock_is_available, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()
-        svc._network_tester.return_value = (False, "网络连接异常")
         ok, msg = svc.test_network()
         assert ok is False
         assert "异常" in msg
 
-    def test_network_exception(self, engine_factory):
+    @patch("app.services.engine.is_network_available", side_effect=TimeoutError("timeout"))
+    def test_network_exception(self, mock_is_available, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()
-        svc._network_tester.return_value = (False, "网络测试失败: timeout")
         ok, msg = svc.test_network()
         assert ok is False
         assert "失败" in msg
 
-    def test_network_with_targets(self, engine_factory):
+    @patch("app.services.engine.is_network_available", return_value=True)
+    def test_network_with_targets(self, mock_is_available, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()
-        svc._network_tester.return_value = (True, "网络连接正常")
         ok, msg = svc.test_network()
         assert ok is True
-
-    def test_network_no_tester(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._network_tester = None
-        ok, msg = svc.test_network()
-        assert ok is False
-        assert "未初始化" in msg
 
 
 # =====================================================================
