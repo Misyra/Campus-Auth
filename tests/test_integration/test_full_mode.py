@@ -42,14 +42,11 @@ class TestFullMode:
 
         mock_worker.submit.side_effect = login_with_event
 
-        # t0: 启动监控（调度器随监控一起启动）
-        result = engine.start_monitoring()
-        assert result[0] is True, f"start_monitoring 失败: {result[1]}"
-        # 轮询等待引擎线程处理 START 命令（CI 环境较慢，不用固定 sleep）
+        # t0: boot() 已启动监控，等待引擎线程就绪
         deadline = time.time() + 5
         while time.time() < deadline and not engine._is_monitoring:
             time.sleep(0.05)
-        assert engine._is_monitoring
+        assert engine._is_monitoring, "引擎监控未在 5 秒内启动"
 
         # t1: 注册定时任务（时间设为当前，确保 tick 时命中）
         now = datetime.now()
