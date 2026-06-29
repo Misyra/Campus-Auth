@@ -2,6 +2,21 @@
 
 ## 2026-06-29
 
+### refactor: 合并 WsBroadcaster 到 WebSocketManager，删除 NullWebSocketManager
+
+- `app/services/ws_broadcaster.py`：已删除，广播队列功能合入 `WebSocketManager`
+- `app/services/websocket_manager.py`：新增 `_broadcast_queue`、`_drain_event`、`set_dashboard_sink`、`broadcast_queue`、`enqueue_status`、`_notify_drain`、`ws_drain_loop`、`_drain_queue` 方法；删除 `NullWebSocketManager` 类
+- `app/services/engine.py`：删除 `ws_broadcaster` 参数，`set_ws_broadcaster` 改名为 `set_ws_manager`；`WS_DRAIN_INTERVAL_SECONDS` re-export 改从 `websocket_manager` 导入
+- `app/services/engine_status.py`：`ws_broadcaster` 参数改名为 `ws_manager`
+- `app/container.py`：删除 `WsBroadcaster` 和 `NullWebSocketManager` 引用，统一使用 `WebSocketManager`
+- `app/utils/logging.py`：更新 `set_drain_notifier` 注释
+- `tests/test_services/test_ws_broadcaster.py`：重写为测试 `WebSocketManager` 广播队列功能
+- `tests/test_services/test_websocket_manager.py`：删除 `NullWebSocketManager` 测试
+- `tests/test_services/conftest.py`：`_ws_broadcaster` 改为 `_ws_manager`
+- `tests/test_services/test_engine.py`：更新 `ws_broadcaster` 引用为 `ws_manager`
+- `tests/test_config/test_container.py`：删除 `WsBroadcaster` 和 `NullWebSocketManager` 相关 patch 和断言
+- `tests/test_config/test_constants.py`：更新 `WS_DRAIN_INTERVAL_SECONDS` 导入路径
+
 ### refactor: 合并 engine_status.py 和 engine_login_bridge.py 回 engine.py
 
 - `app/services/engine_status.py`：已删除，`StatusSnapshot` 和 `StatusManager` 合并入 `engine.py`
