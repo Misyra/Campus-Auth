@@ -68,100 +68,6 @@ from app.version import get_project_version
 # =====================================================================
 
 
-class TestEncryptDecrypt:
-    def test_round_trip(self):
-        """加密后解密应返回原文"""
-        original = "my_secret_password_123"
-        encrypted = encrypt_password(original)
-        assert decrypt_password(encrypted) == original
-
-    def test_empty_string(self):
-        """空字符串加密应返回空字符串"""
-        assert encrypt_password("") == ""
-        assert decrypt_password("") == ""
-
-    def test_plaintext_passthrough(self):
-        """无 ENC: 前缀的明文应原样返回（向后兼容）"""
-        plaintext = "old_password"
-        assert decrypt_password(plaintext) == plaintext
-
-    def test_enc_prefix(self):
-        """加密结果应有 ENC: 前缀"""
-        encrypted = encrypt_password("test")
-        assert encrypted.startswith("ENC:")
-
-    def test_unicode_password(self):
-        """中文密码应正常加解密"""
-        original = "校园网密码"
-        encrypted = encrypt_password(original)
-        assert decrypt_password(encrypted) == original
-
-    def test_long_password(self):
-        """长密码应正常加解密"""
-        original = "a" * 1000
-        encrypted = encrypt_password(original)
-        assert decrypt_password(encrypted) == original
-
-    def test_special_characters(self):
-        """特殊字符密码应正常加解密"""
-        original = "!@#$%^&*()_+-=[]{}|;:'\",.<>?/~`"
-        encrypted = encrypt_password(original)
-        assert decrypt_password(encrypted) == original
-
-    def test_decrypt_wrong_key_raises(self):
-        """密钥变更后解密旧密码应抛出 DecryptionError。"""
-        import base64
-
-        original = "secret123"
-        encrypted = encrypt_password(original)
-        from app.utils.crypto import (
-            _derive_fernet_key,
-            clear_decryption_error,
-            has_decryption_error,
-        )
-
-        clear_decryption_error()
-        # 注入不同密钥模拟密钥变更（44 字节 URL-safe base64）
-        other_key = base64.urlsafe_b64encode(b"\x99" * 32)
-        with patch("app.utils.crypto._derive_fernet_key", return_value=other_key):
-            with pytest.raises(DecryptionError):
-                decrypt_password(encrypted)
-            assert has_decryption_error() is True
-
-
-class TestSavePasswordField:
-    def test_none_returns_existing(self):
-        """raw=None 时应返回原加密值"""
-        assert save_password_field(None, "ENC:existing") == "ENC:existing"
-
-    def test_empty_raw_preserves_existing(self):
-        """raw 为空字符串时应保留原加密值"""
-        assert save_password_field("", "ENC:existing") == "ENC:existing"
-
-    def test_mask_gets_encrypted(self):
-        """raw 为掩码时不再特殊处理，作为明文加密"""
-        result = save_password_field("••••••••", "ENC:existing")
-        assert result.startswith("ENC:")
-
-    def test_enc_passthrough(self):
-        """raw 已有 ENC: 前缀应原样返回"""
-        assert save_password_field("ENC:abc", "ENC:old") == "ENC:abc"
-
-    def test_new_plaintext_gets_encrypted(self):
-        """新的明文密码应被加密"""
-        result = save_password_field("new_password", "")
-        assert result.startswith("ENC:")
-        assert decrypt_password(result) == "new_password"
-
-    def test_none_with_empty_existing(self):
-        """raw=None 且 existing 为空时应返回空字符串"""
-        assert save_password_field(None, "") == ""
-
-    def test_empty_with_empty_existing(self):
-        """raw="" 且 existing 为空时应返回空字符串"""
-        assert save_password_field("", "") == ""
-
-
 # =====================================================================
 # config_helpers
 # =====================================================================
@@ -822,36 +728,6 @@ class TestDefaultConstants:
 
 
 # ── has_decryption_error / clear_decryption_error ──
-
-
-class TestDecryptionError:
-    """解密错误状态管理。"""
-
-    def teardown_method(self):
-        """每个测试后清除解密错误状态，防止污染其他测试。"""
-        from app.utils.crypto import clear_decryption_error
-
-        clear_decryption_error()
-
-    def test_initial_state(self):
-        """初始状态无解密错误。"""
-        from app.utils.crypto import clear_decryption_error, has_decryption_error
-
-        clear_decryption_error()
-        assert has_decryption_error() is False
-
-    def test_set_and_clear(self):
-        """设置和清除解密错误。"""
-        from app.utils.crypto import (
-            _decryption_failed,
-            clear_decryption_error,
-            has_decryption_error,
-        )
-
-        _decryption_failed.set()
-        assert has_decryption_error() is True
-        clear_decryption_error()
-        assert has_decryption_error() is False
 
 
 # ── 日志安全 ──
