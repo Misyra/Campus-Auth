@@ -13,8 +13,6 @@ from app.utils.platform import get_platform, get_playwright_cache_dir
 
 logger = get_logger("uninstall", source="backend")
 
-USER_DATA_DIR = AUTH_DATA_DIR
-
 PLATFORM = get_platform()  # 使用 platform 获取平台标识（"windows"/"darwin"/"linux"）
 
 
@@ -48,8 +46,8 @@ def detect() -> list[CleanupItem]:
         items.append(CleanupItem("autostart", "开机自启动", False))
 
     # 用户数据
-    if USER_DATA_DIR.exists():
-        items.append(CleanupItem("userdata", "用户数据", True, str(USER_DATA_DIR)))
+    if AUTH_DATA_DIR.exists():
+        items.append(CleanupItem("userdata", "用户数据", True, str(AUTH_DATA_DIR)))
     else:
         items.append(CleanupItem("userdata", "用户数据", False))
 
@@ -125,19 +123,19 @@ def _remove_autostart() -> tuple[bool, str]:
 
 
 def _remove_user_data() -> tuple[bool, str]:
-    if not USER_DATA_DIR.exists():
+    if not AUTH_DATA_DIR.exists():
         return True, "用户数据目录不存在，跳过"
 
     # 路径校验：确保删除的是预期的用户数据目录
     expected_name = ".campus_network_auth"
-    if USER_DATA_DIR.name != expected_name:
+    if AUTH_DATA_DIR.name != expected_name:
         return False, f"安全检查失败：目录名不是 {expected_name}"
 
     try:
-        file_count = sum(1 for _ in USER_DATA_DIR.rglob("*") if _.is_file())
-        logger.warning("即将删除用户数据目录: {} ({} 个文件)", USER_DATA_DIR, file_count)
-        shutil.rmtree(USER_DATA_DIR)
-        return True, f"已删除 {USER_DATA_DIR}"
+        file_count = sum(1 for _ in AUTH_DATA_DIR.rglob("*") if _.is_file())
+        logger.warning("即将删除用户数据目录: {} ({} 个文件)", AUTH_DATA_DIR, file_count)
+        shutil.rmtree(AUTH_DATA_DIR)
+        return True, f"已删除 {AUTH_DATA_DIR}"
     except Exception as exc:
         return False, f"删除用户数据失败: {exc}"
 
