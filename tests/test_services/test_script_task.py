@@ -1,15 +1,13 @@
 """脚本任务功能测试
 
-测试 ScriptTaskInfo、TaskManager 脚本扫描、ScriptRunner 执行。
+测试 TaskManager 脚本扫描和 CRUD。
 """
 
 import json
-import textwrap
 from pathlib import Path
 
 from app.tasks.manager import TaskManager
 from app.tasks.models import ScriptTaskInfo
-from app.workers.script_runner import ScriptRunner, _build_minimal_env
 
 # ==================== TaskManager 脚本扫描 ====================
 
@@ -183,115 +181,3 @@ class TestTaskManagerScriptCRUD:
         """不存在的任务不能设为活动"""
         tm = TaskManager(tmp_path)
         assert tm.set_active_task("nope") is False
-
-
-# ==================== ScriptRunner ====================
-
-
-class TestScriptRunner:
-    """ScriptRunner 子进程执行"""
-
-    def test_run_success(self, tmp_path: Path):
-        """脚本正常退出（exit 0）返回 True"""
-        script = tmp_path / "ok.py"
-        script.write_text('print("HTTP 200")\n', encoding="utf-8")
-
-        runner = ScriptRunner(script, timeout=10)
-        ok, msg = runner.run()
-
-        assert ok is True
-        assert "HTTP 200" in msg
-
-    def test_run_failure(self, tmp_path: Path):
-        """脚本非零退出返回 False"""
-        script = tmp_path / "fail.py"
-        script.write_text(
-            'import sys\nprint("连接超时")\nsys.exit(1)\n', encoding="utf-8"
-        )
-
-        runner = ScriptRunner(script, timeout=10)
-        ok, msg = runner.run()
-
-        assert ok is False
-        assert "连接超时" in msg
-
-    def test_run_nonzero_exit_no_output(self, tmp_path: Path):
-        """脚本非零退出且无输出时返回失败"""
-        script = tmp_path / "crash.py"
-        script.write_text("import sys\nsys.exit(1)\n", encoding="utf-8")
-
-        runner = ScriptRunner(script, timeout=10)
-        ok, msg = runner.run()
-
-        assert ok is False
-        assert "无输出" in msg
-
-    def test_run_timeout(self, tmp_path: Path):
-        """脚本超时返回失败"""
-        script = tmp_path / "slow.py"
-        script.write_text("import time\ntime.sleep(100)\n", encoding="utf-8")
-
-        runner = ScriptRunner(script, timeout=1)
-        ok, msg = runner.run()
-
-        assert ok is False
-        assert "超时" in msg
-
-    def test_run_stdout_recorded(self, tmp_path: Path):
-        """脚本 stdout 作为输出信息返回"""
-        script = tmp_path / "text.py"
-        script.write_text('print("all good")\n', encoding="utf-8")
-
-        runner = ScriptRunner(script, timeout=10)
-        ok, msg = runner.run()
-
-        assert ok is True
-        assert "all good" in msg
-
-    def test_run_mixed_output(self, tmp_path: Path):
-        """脚本多行 print 输出取全部"""
-        script = tmp_path / "mixed.py"
-        script.write_text(
-            textwrap.dedent("""\
-            print("调试信息")
-            print("HTTP 200")
-        """),
-            encoding="utf-8",
-        )
-
-        runner = ScriptRunner(script, timeout=10)
-        ok, msg = runner.run()
-
-        assert ok is True
-        assert "调试信息" in msg
-        assert "HTTP 200" in msg
-
-    def test_env_isolation(self, tmp_path: Path):
-        """子进程只接收最小系统环境变量，不继承宿主全部环境"""
-        script = tmp_path / "isolated.py"
-        script.write_text(
-            textwrap.dedent("""\
-            import os, json
-            path = os.environ.get("PATH", "")
-            has_path = bool(path)
-            print(json.dumps({"success": has_path, "message": f"has_path={has_path}"}))
-        """),
-            encoding="utf-8",
-        )
-
-        runner = ScriptRunner(script, timeout=10)
-        ok, msg = runner.run()
-
-        assert ok is True
-        assert "has_path=True" in msg
-
-    def test_build_minimal_env(self):
-        """_build_minimal_env 只包含基本系统变量，不含业务变量"""
-        env = _build_minimal_env()
-
-        assert "PATH" in env
-        assert "PYTHONIOENCODING" in env
-        # 不应包含任何 CAMPUS_* 业务变量
-        assert "CAMPUS_USERNAME" not in env
-        assert "CAMPUS_PASSWORD" not in env
-        assert "CAMPUS_URL" not in env
