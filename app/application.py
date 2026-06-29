@@ -77,7 +77,7 @@ def _cleanup_screenshots() -> None:
                     "启动时清理旧截图: 删除 {} 个日期目录", removed_dirs
                 )
     except Exception as exc:
-        startup_logger.warning("清理旧截图失败: {}".format(exc))
+        startup_logger.warning("清理旧截图失败: {}", exc)
 
 
 _access_log_event = threading.Event()  # 默认未 set（即关闭）
@@ -403,12 +403,6 @@ def run(
 
     log_center = LogConfigCenter.get_instance()
     log_center.initialize({"level": "INFO"}, source="backend")
-
-    # 恢复 source 级别日志配置
-    if logging_settings is not None and logging_settings.source_levels:
-        for src, lvl in logging_settings.source_levels.items():
-            with contextlib.suppress(ValueError):
-                log_center.set_source_level(src, lvl)
 
     # 压制第三方库的 DEBUG 日志
     import logging

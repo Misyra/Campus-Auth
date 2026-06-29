@@ -347,9 +347,7 @@ export const configMethods = {
       if (data.global_level) {
         this.config.logging.level = data.global_level;
       }
-      if (data.source_levels) {
-        this.config.logging.source_levels = data.source_levels;
-      }
+
     } catch (error) {
       this.frontendLogger.warn('config', '获取日志级别配置失败', error);
     }
