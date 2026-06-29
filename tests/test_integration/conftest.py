@@ -9,7 +9,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.schemas import Profile, ProfilesData
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
 from app.services.login_orchestrator import LoginOrchestrator
@@ -67,60 +66,6 @@ def integration_stack(tmp_path, mock_worker):
 
     Mock 边界：Playwright worker。
     Returns:
-        (engine, profile_service, task_executor, mock_worker)
-    """
-    _write_initial_config(tmp_path)
-
-    profile_service = ProfileService(tmp_path)
-    login_history = LoginHistoryService(tmp_path / "history")
-    task_registry = TaskRegistry(tmp_path / "tasks" / "scheduled")
-    task_history_store = TaskHistoryStore(tmp_path / "tasks" / "scheduled" / "history")
-
-    engine = ScheduleEngine(
-        project_root=tmp_path,
-        profile_service=profile_service,
-        ws_manager=None,
-        login_history_service=login_history,
-        worker_getter=lambda: mock_worker,
-        task_registry=task_registry,
-        task_executor=None,
-        orchestrator=None,
-    )
-
-    orchestrator = LoginOrchestrator(
-        worker_getter=lambda: mock_worker,
-        login_history=login_history,
-        profile_service=profile_service,
-    )
-
-    task_executor = TaskExecutor(
-        registry=task_registry,
-        history_store=task_history_store,
-        worker_getter=lambda: mock_worker,
-        login_orchestrator=orchestrator,
-    )
-    # 构造器注入后绑定
-    engine._orchestrator = orchestrator
-    engine._task_executor = task_executor
-    orchestrator.bind_runtime_config(engine.get_runtime_config)
-    task_executor.bind_runtime_config(engine.get_runtime_config)
-
-    # 启动引擎线程
-    engine.boot()
-
-    yield engine, profile_service, task_executor, mock_worker
-
-    orchestrator.shutdown(wait=False)
-
-    engine.shutdown()
-    task_executor.shutdown()
-
-
-@pytest.fixture
-def full_stack(tmp_path, mock_worker):
-    """完整模式组件栈：含 TaskRegistry + TaskHistoryStore。
-
-    Returns:
         (engine, profile_service, task_executor, task_registry, mock_worker)
     """
     _write_initial_config(tmp_path)
@@ -164,6 +109,6 @@ def full_stack(tmp_path, mock_worker):
 
     yield engine, profile_service, task_executor, task_registry, mock_worker
 
+    orchestrator.shutdown(wait=False)
     engine.shutdown()
     task_executor.shutdown()
-    orchestrator.shutdown(wait=False)

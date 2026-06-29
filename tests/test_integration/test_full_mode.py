@@ -9,8 +9,9 @@ from unittest.mock import patch
 
 import pytest
 
-from app.schemas import AppSettings, ConfigSaveRequest, LoginCredentials, RuntimeConfig
+from app.schemas import AppSettings, ConfigSaveRequest, RuntimeConfig
 from app.services.profile_service import save_global_and_profile
+from app.schemas import LoginCredentials
 from app.workers.playwright_worker import WorkerResponse
 
 
@@ -28,9 +29,9 @@ def _ensure_login_config(engine) -> None:
 class TestFullMode:
     """完整模式全生命周期。"""
 
-    def test_full_lifecycle(self, full_stack):
+    def test_full_lifecycle(self, integration_stack):
         """完整模式：启动 → 断网登录 → 定时任务 → 手动登录 → 配置重载 → 关闭。"""
-        engine, profile_service, task_executor, task_registry, mock_worker = full_stack
+        engine, profile_service, task_executor, task_registry, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         login_done = threading.Event()

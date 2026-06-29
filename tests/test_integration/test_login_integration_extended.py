@@ -18,12 +18,12 @@ import pytest
 from app.network.decision import NetworkCheckResult
 from app.services.engine import EngineCmdType, EngineCommand, ScheduleEngine
 from app.services.monitor_service import CheckOnceResult
+from app.schemas import LoginCredentials
 from app.workers.playwright_worker import WorkerResponse
 
 
 def _ensure_login_config(engine) -> None:
     """确保引擎运行时配置包含登录所需字段。"""
-    from app.schemas import LoginCredentials
     old = engine._runtime_config
     engine._runtime_config = old.model_copy(update={
         "credentials": LoginCredentials(
@@ -77,7 +77,7 @@ class TestFullEngineLoginChain:
     """引擎 → TaskExecutor → worker 完整登录链路（通过 _handle_login 直接触发）。"""
 
     def test_chain_success(self, integration_stack):
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         mock_worker.submit.return_value = WorkerResponse(success=True, data="登录成功")
@@ -100,7 +100,7 @@ class TestFullEngineLoginChain:
         assert engine._retry_policy._attempt == 0
 
     def test_chain_failure(self, integration_stack):
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         mock_worker.submit.return_value = WorkerResponse(
@@ -127,7 +127,7 @@ class TestNetworkDetectionLogin:
     """网络检测触发自动登录 + 重试。"""
 
     def test_network_triggers_login(self, integration_stack):
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         mock_core = MagicMock()
@@ -166,7 +166,7 @@ class TestNetworkDetectionLogin:
             restore_fn()
 
     def test_retry_after_failure(self, integration_stack):
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         mock_worker.submit.return_value = WorkerResponse(
@@ -209,7 +209,7 @@ class TestCancelPropagation:
     """取消事件在 engine ↔ executor 之间的传播。"""
 
     def test_cancel_during_login(self, integration_stack):
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         submit_called = threading.Event()
@@ -255,7 +255,7 @@ class TestReloadException:
     """配置重载异常时正在执行的登录应继续完成。"""
 
     def test_reload_during_login_config_error(self, integration_stack, tmp_path):
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         submit_called = threading.Event()
@@ -317,7 +317,7 @@ class TestLoginOnceRetry:
     """LOGIN_ONCE 模式重试逻辑：_execute_login_with_retries 直接测试。"""
 
     def test_execute_login_with_retries_success(self, integration_stack):
-        engine, _, _, _ = integration_stack
+        engine, _, _, _, _ = integration_stack
         _ensure_login_config(engine)
         mock_worker = MagicMock()
         mock_worker.submit.return_value = WorkerResponse(success=True, data="登录成功")
@@ -340,7 +340,7 @@ class TestLoginOnceRetry:
         mock_worker.submit.assert_called_once()
 
     def test_execute_login_with_retries_exhausted(self, integration_stack):
-        engine, _, _, _ = integration_stack
+        engine, _, _, _, _ = integration_stack
         _ensure_login_config(engine)
         mock_worker = MagicMock()
         mock_worker.submit.return_value = WorkerResponse(success=False, error="超时")
@@ -364,7 +364,7 @@ class TestLoginOnceRetry:
 
     def test_execute_login_with_retries_retry_then_succeed(self, integration_stack):
         """第一次失败、重试后成功 → 返回 SUCCESS。"""
-        engine, _, _, _ = integration_stack
+        engine, _, _, _, _ = integration_stack
         _ensure_login_config(engine)
         mock_worker = MagicMock()
         mock_worker.submit.side_effect = [
@@ -394,7 +394,7 @@ class TestProfileSwitchDuringLogin:
     """方案切换在登录过程中的并发安全性。"""
 
     def test_profile_switch_during_login(self, integration_stack):
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         submit_called = threading.Event()
