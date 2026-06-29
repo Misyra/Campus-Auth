@@ -43,7 +43,10 @@ def stop_monitoring(
     svc: MonitorServiceDep,
 ) -> ApiResponse:
     ok, message = svc.stop_monitoring()
-    api_logger.info("停止监控 -> success={}, message={}", ok, message)
+    if ok:
+        api_logger.info("停止监控 -> success={}, message={}", ok, message)
+    else:
+        api_logger.warning("停止监控 -> success={}, message={}", ok, message)
     return ApiResponse(success=ok, message=message)
 
 
@@ -70,7 +73,10 @@ def test_network(
     svc: MonitorServiceDep,
 ) -> ApiResponse:
     ok, message = svc.test_network()
-    api_logger.info("网络测试 -> success={}, message={}", ok, message)
+    if ok:
+        api_logger.info("网络测试 -> success={}, message={}", ok, message)
+    else:
+        api_logger.warning("网络测试 -> success={}, message={}", ok, message)
     return ApiResponse(success=ok, message=message)
 
 

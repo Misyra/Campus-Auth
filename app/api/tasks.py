@@ -74,5 +74,8 @@ def save_task_order(
     task_mgr: TaskManagerDep,
 ) -> ApiResponse:
     ok, message = task_mgr.save_order_with_validation({"order": payload.order})
-    api_logger.info("保存任务排序 -> success={}, message={}", ok, message)
+    if ok:
+        api_logger.info("保存任务排序 -> success={}, message={}", ok, message)
+    else:
+        api_logger.warning("保存任务排序 -> success={}, message={}", ok, message)
     return ApiResponse(success=ok, message=message)

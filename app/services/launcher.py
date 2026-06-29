@@ -106,11 +106,11 @@ def shutdown_container(container, logger, fallback_shutdown: bool = False) -> No
             container.task_executor.shutdown(wait=False)
             container.engine.shutdown()
         else:
-            logger.debug("容器关闭（幂等跳过或超时）")
+            logger.debug("容器关闭（幂等跳过）")
     except KeyboardInterrupt:
         logger.debug("容器关闭被信号中断")
     except Exception:
-        logger.debug("容器关闭（幂等跳过或超时）")
+        logger.debug("容器关闭超时或异常")
 
 
 def open_browser(port: int, setting: bool | None = None) -> None:
@@ -324,7 +324,7 @@ def launch_lightweight(ctx: ApplicationContext, logger):
                 logger.info("Web 服务已退出，轻量模式即将关闭")
                 break
     except KeyboardInterrupt:
-        logger.info("收到退出信号，正在关闭服务...")
+        logger.info("收到退出信号（轻量模式），正在关闭服务...")
     finally:
         if tray_icon:
             tray_icon.stop()
@@ -417,7 +417,7 @@ def launch_full(
             logging_settings=_logging if _data else None,
         )
     except KeyboardInterrupt:
-        logger.info("收到退出信号，正在关闭服务...")
+        logger.info("收到退出信号（完整模式），正在关闭服务...")
     finally:
         if tray_icon:
             tray_icon.stop()

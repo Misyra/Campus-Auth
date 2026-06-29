@@ -63,7 +63,6 @@ class ProfileService:
         self._ensure_dirs()
         settings_content = data.model_dump_json(indent=2)
         atomic_write(self._settings_path, settings_content)
-        profile_logger.info("配置已保存")
 
     def load(self) -> ProfilesData:
         """加载配置，不存在则返回空结构"""

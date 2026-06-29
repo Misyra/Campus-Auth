@@ -94,12 +94,15 @@ def check_network_status(monitor: MonitorSettings) -> tuple[bool, str, str]:
     if ok:
         # M21: 返回实际使用的检测方法
         if enable_tcp:
-            return (True, "network_ok", "tcp")
-        if enable_http:
-            return (True, "network_ok", "http")
-        if enable_url:
-            return (True, "network_ok", "url")
-        return (True, "network_ok", "local_only")
+            method = "tcp"
+        elif enable_http:
+            method = "http"
+        elif enable_url:
+            method = "url"
+        else:
+            method = "local_only"
+        logger.debug("网络检测通过: 方式={}", method)
+        return (True, "network_ok", method)
     return (False, "network_down", "none")
 
 
@@ -269,5 +272,5 @@ def _is_auth_url_reachable(
         except Exception as exc:
             logger.debug("认证地址解析失败 {}: {}", auth_url, exc)
 
-    logger.info("认证地址不可达")
+    logger.info("认证地址不可达: {}", auth_url)
     return False

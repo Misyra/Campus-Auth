@@ -233,7 +233,7 @@ class LoginBridge:
         if handle.rejected_reason is not None:
             # 手动登录的响应由 _handle_login 设置，此处仅记录自动登录的拒绝
             if not is_manual:
-                self._logger.warning("{}", handle.rejected_reason)
+                self._logger.warning("登录被拒绝: {}", handle.rejected_reason)
             return False
 
         if handle.future is None:
@@ -542,7 +542,7 @@ class ScheduleEngine:
                     # BUG-016 修复：方案切换后立即检测，不覆盖 _next_network_check
                     return
                 else:
-                    logger.error("配置重载失败，继续使用当前配置")
+                    logger.error("配置重载失败，继续使用当前配置: {}", "")
 
             # 网络检测前清除重试定时（避免重复触发）
             with self._retry_time_lock:
@@ -576,7 +576,7 @@ class ScheduleEngine:
     def _handle_start(self, cmd: EngineCommand) -> None:
         """启动监控（在引擎循环中调用）。"""
         if self._monitor_core is not None and self._monitor_core.monitoring:
-            self._logger.warning("监控已在运行中")
+            self._logger.info("监控已在运行中")
             if cmd.response_event:
                 cmd.response_event.set()
             return
@@ -682,7 +682,7 @@ class ScheduleEngine:
 
         # 先加载新配置（不修改当前运行状态）
         if not self._reload_config_internal():
-            logger.error("配置重载失败，监控继续使用旧配置运行")
+            logger.error("配置重载失败，继续使用当前配置: {}", "")
             cmd.response_data = (False, "配置重载失败")
             if cmd.response_event:
                 cmd.response_event.set()
@@ -715,7 +715,7 @@ class ScheduleEngine:
 
         # 加载新配置
         if not self._reload_config_internal():
-            logger.error("配置重载失败，监控继续使用旧方案运行")
+            logger.error("配置重载失败，继续使用当前配置: {}", "")
             cmd.response_data = (False, "方案切换失败")
             if cmd.response_event:
                 cmd.response_event.set()
@@ -725,7 +725,7 @@ class ScheduleEngine:
         new_url = self._runtime_config.credentials.auth_url
         new_user = self._runtime_config.credentials.username
         self._logger.info("切换方案: {}", profile_id)
-        logger.debug("方案详情: 认证={}, 用户={}", new_url, new_user)
+        logger.debug("方案详情: 认证={}, 用户={}", new_url, new_user[:3] + "***" if new_user else "")
 
         if was_monitoring:
             self._handle_stop()
@@ -934,12 +934,11 @@ class ScheduleEngine:
             success, message = cmd.response_data
             if success:
                 # network_state 已由消费者 _handle_login 统一赋值，无需 API 线程操作
+                # 登录结果由 LoginBridge._on_done 回调统一记录，此处不再重复日志
                 self._update_status_snapshot()
-                logger.info("手动登录成功")
                 return True, "登录成功"
 
-            log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
-            logger.warning("手动登录失败: {}", log_msg)
+            # 登录失败详情由 LoginBridge._on_done 回调统一记录，此处不再重复日志
             return False, f"登录失败：{message}"
         finally:
             with self._manual_login_lock:
@@ -978,17 +977,14 @@ class ScheduleEngine:
             )
             if is_available:
                 logger.info("手动测试结果: 网络正常")
-                self._logger.info("手动测试结果: 网络正常")
                 self.notify_network_state_changed()
                 return True, "网络连接正常"
             else:
                 logger.warning("手动测试结果: 网络异常")
-                self._logger.warning("手动测试结果: 网络异常")
                 self.notify_network_state_changed()
                 return False, "网络连接异常"
         except Exception as exc:
             logger.exception("网络测试失败")
-            self._logger.warning("手动测试结果: 网络异常")
             self.notify_network_state_changed()
             return False, f"网络测试失败: {exc}"
 

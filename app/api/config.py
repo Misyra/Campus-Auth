@@ -234,7 +234,7 @@ def save_config(
 
         _log_config_changes(old_dict, payload)
 
-        api_logger.info("配置已保存 -> success=True")
+        api_logger.info("配置已保存")
         return ApiResponse(success=True, message="配置保存成功")
 
 

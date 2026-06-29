@@ -100,6 +100,7 @@ async def check_update() -> UpdateCheckResponse:
             _update_cache_time = time.monotonic()
             return result
         except Exception as e:
+            api_logger.warning("检查更新失败: {}", e)
             # 请求失败但有旧缓存，返回旧缓存 + 错误信息
             if _update_cache:
                 return UpdateCheckResponse(
@@ -221,7 +222,7 @@ def uninstall_perform(payload: UninstallRequest) -> ApiResponse:
     """执行卸载清理"""
     from app.services.uninstall import perform
 
-    api_logger.warning("收到卸载请求, keys={}", payload.keys)
+    api_logger.info("收到卸载请求, keys={}", payload.keys)
     results = perform(payload.keys)
     all_ok = all(r.success for r in results)
     detail = [

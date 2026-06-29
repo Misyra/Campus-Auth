@@ -518,7 +518,10 @@ class TestRunLoginThenExit:
             mock_logger = MagicMock()
             result = _run_login_then_exit(mock_ctx, mock_logger)
             assert result == LoginResult.TEMPORARY_FAILURE
-            mock_logger.warning.assert_called_once()
+            # 每次重试失败记一次 warning + 重试耗尽记一次 warning
+            mock_logger.warning.assert_called()
+            last_call = mock_logger.warning.call_args
+            assert "已重试" in last_call.args[0]
 
     def test_network_already_connected_exits(self, tmp_pid_dir):
         """网络已连接时应返回 SUCCESS，不启动浏览器登录。"""

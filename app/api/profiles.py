@@ -73,7 +73,10 @@ def save_profile(
     monitor_svc: MonitorServiceDep,
 ) -> ApiResponse:
     ok, message = profile_svc.save_profile(profile_id, payload)
-    api_logger.info("保存方案 {} -> success={}, message={}", profile_id, ok, message)
+    if ok:
+        api_logger.info("保存方案 {} -> success={}, message={}", profile_id, ok, message)
+    else:
+        api_logger.warning("保存方案 {} -> success={}, message={}", profile_id, ok, message)
     if ok:
         data = profile_svc.load()
         if data.active_profile == profile_id:
@@ -92,7 +95,10 @@ def delete_profile(
     monitor_svc: MonitorServiceDep,
 ) -> ApiResponse:
     ok, message = profile_svc.delete_profile(profile_id)
-    api_logger.info("删除方案 {} -> success={}, message={}", profile_id, ok, message)
+    if ok:
+        api_logger.info("删除方案 {} -> success={}, message={}", profile_id, ok, message)
+    else:
+        api_logger.warning("删除方案 {} -> success={}, message={}", profile_id, ok, message)
     # 删除成功后始终通知监控重载配置（安全做法，避免 TOCTOU 竞态）
     if ok:
         try:
@@ -111,9 +117,14 @@ def set_active_profile(
 ) -> ApiResponse:
     # apply_profile 内部已包含 set_active_profile，无需重复调用
     ok, message = monitor_svc.apply_profile(profile_id)
-    api_logger.info(
-        "切换活动方案 {} -> success={}, message={}", profile_id, ok, message
-    )
+    if ok:
+        api_logger.info(
+            "切换活动方案 {} -> success={}, message={}", profile_id, ok, message
+        )
+    else:
+        api_logger.warning(
+            "切换活动方案 {} -> success={}, message={}", profile_id, ok, message
+        )
     return ApiResponse(success=ok, message=message)
 
 
@@ -170,7 +181,7 @@ def toggle_auto_switch(
                 monitor_svc.apply_profile(matched_id)
                 active_profile = matched_id
             else:
-                api_logger.info("未检测到匹配方案或当前方案已匹配")
+                api_logger.debug("未检测到匹配方案或当前方案已匹配")
         except Exception as exc:
             api_logger.warning("自动切换检测失败: {}", exc)
             warning = f"首次检测失败: {exc}"

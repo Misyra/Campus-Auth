@@ -33,6 +33,10 @@ _cached_fernet_key: bytes | None = None
 _decryption_failed = threading.Event()
 _key_lock = threading.RLock()
 
+# 一次性告警标志：cryptography 缺失时避免重复刷日志
+_crypto_missing_warned = False
+_crypto_missing_decrypt_warned = False
+
 
 def _get_or_create_key() -> bytes:
     """获取或创建加密密钥（Fernet 要求 32 字节 base64 编码的密钥）"""
@@ -139,10 +143,13 @@ def encrypt_password(plaintext: str) -> str:
         # cryptography 是 pyproject.toml 中的必需依赖（uv sync 会自动安装），
         # 正常部署下不可能缺失。此分支仅作为极端防御（如手动删除 .venv 中的包）。
         # 密码以明文写入 settings.json，已有 warning 日志提示用户。
-        logger.warning(
-            "cryptography 库未安装，密码将以明文存储，"
-            "建议通过 uv add cryptography 安装依赖以启用加密保护"
-        )
+        global _crypto_missing_warned
+        if not _crypto_missing_warned:
+            logger.warning(
+                "cryptography 库未安装，密码将以明文存储，"
+                "建议通过 uv add cryptography 安装依赖以启用加密保护"
+            )
+            _crypto_missing_warned = True
         return plaintext
 
     key = _derive_fernet_key()
@@ -172,7 +179,10 @@ def decrypt_password(ciphertext: str) -> str:
         return f.decrypt(encrypted_data.encode("ascii")).decode("utf-8")
     except ImportError:
         _decryption_failed.set()
-        logger.error("cryptography 库未安装，无法解密密码，请安装依赖后重试")
+        global _crypto_missing_decrypt_warned
+        if not _crypto_missing_decrypt_warned:
+            logger.warning("cryptography 库未安装，无法解密密码，请安装依赖后重试")
+            _crypto_missing_decrypt_warned = True
         raise _DecryptionError("cryptography 库未安装，无法解密密码") from None
     except (InvalidToken, ValueError, OSError) as e:
         # 解密失败：可能是密钥变更，记录错误并抛出异常
@@ -229,14 +239,12 @@ def decrypt_password_field(
         try:
             return (decrypt_password(raw_pwd), False)
         except _DecryptionError:
-            logger.error("密码解密失败，使用空密码")
             return ("", True)
     elif raw_pwd.startswith("•"):
         if fallback_pwd:
             try:
                 return (decrypt_password(fallback_pwd), False)
             except _DecryptionError:
-                logger.error("密码解密失败，使用空密码")
                 return ("", True)
         else:
             if label:

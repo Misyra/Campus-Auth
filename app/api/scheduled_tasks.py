@@ -66,6 +66,7 @@ def update_scheduled_task(
     config["last_status"] = existing.get("last_status")
 
     ok, message = engine.tasks.registry.save_task(task_id, config)
+    api_logger.info("更新定时任务 {} -> success={}, message={}", task_id, ok, message)
     if ok:
         engine.sync_scheduler_state()
     return ApiResponse(success=ok, message=message)

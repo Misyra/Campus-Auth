@@ -22,6 +22,7 @@ _install_lock = asyncio.Lock()
 async def install_playwright_chromium() -> ApiResponse:
     """安装 Playwright Chromium 浏览器（异步执行）。"""
     if _install_lock.locked():
+        logger.info("Playwright 安装已在进行中，跳过重复请求")
         return ApiResponse(success=False, message="安装正在进行中，请稍后再试")
 
     async with _install_lock:

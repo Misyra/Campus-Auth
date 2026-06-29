@@ -6,8 +6,10 @@ from fastapi import APIRouter, Request
 
 from app.deps import DebugManagerDep, MonitorServiceDep
 from app.schemas import DebugSessionResponse
+from app.utils.logging import get_logger
 
 router = APIRouter()
+api_logger = get_logger("api", source="backend")
 
 
 @router.post("/api/debug/start", response_model=DebugSessionResponse)
@@ -25,6 +27,7 @@ async def debug_next(
     debug_mgr: DebugManagerDep,
 ) -> DebugSessionResponse:
     result = await debug_mgr.next_step()
+    api_logger.debug("调试下一步: step_index={}", result.get("current_step"))
     return DebugSessionResponse(**result)
 
 

@@ -163,9 +163,9 @@ def _detect_gateway_windows() -> str | None:
     except FileNotFoundError:
         logger.error("ipconfig 命令不存在")
     except subprocess.TimeoutExpired:
-        logger.error("ipconfig 执行超时")
+        logger.warning("ipconfig 执行超时")
     except Exception as exc:
-        logger.error("Windows 网关检测失败: {}", exc, exc_info=True)
+        logger.warning("Windows 网关检测失败: {}", exc, exc_info=True)
 
     return None
 

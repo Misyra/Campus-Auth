@@ -121,7 +121,7 @@ def _build_app_config(
         _data = _ps.load()
         config = AppConfig.from_runtime_config(_data.global_config)
     except Exception:
-        logger.debug("加载配置失败，使用默认值", exc_info=True)
+        logger.warning("加载配置失败，使用默认值", exc_info=True)
         config = AppConfig()
 
     # CLI 覆盖
@@ -154,7 +154,7 @@ def _setup_exception_hooks() -> None:
 
     def _threading_excepthook(args: threading.ExceptHookArgs) -> None:
         _hook_logger.error(
-            "线程 %s 未捕获异常",
+            "线程 {} 未捕获异常",
             args.thread.name if args.thread else "unknown",
             exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
         )

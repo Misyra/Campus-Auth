@@ -104,13 +104,13 @@ def _create_lifespan(existing_container, boot_engine=False):
     async def lifespan(app_instance):
         """应用生命周期管理"""
         start = time.perf_counter()
-        startup_logger.info("FastAPI 启动: 创建 shutdown_event")
+        startup_logger.debug("FastAPI 启动: 创建 shutdown_event")
 
         # 创建 shutdown_event 用于优雅关闭
         shutdown_event = asyncio.Event()
         app_instance.state.shutdown_event = shutdown_event
 
-        startup_logger.info("FastAPI 启动: 开始设置服务引导")
+        startup_logger.debug("FastAPI 启动: 开始设置服务引导")
 
         if existing_container is not None:
             services = existing_container
@@ -151,8 +151,7 @@ def _create_lifespan(existing_container, boot_engine=False):
             import cryptography  # noqa: F401
         except ImportError:
             startup_logger.warning(
-                "cryptography 库未安装，密码仅使用 Base64 编码存储（非加密），"
-                "建议安装: pip install cryptography"
+                "cryptography 库未安装，密码将以明文存储（非加密），建议安装 cryptography"
             )
 
         # 启动时清理截图文件
@@ -340,11 +339,12 @@ def create_app(existing_container=None, boot_engine=False):
             return response
         except Exception:
             duration_ms = (time.perf_counter() - start) * 1000
-            http_logger.exception(
+            http_logger.debug(
                 "{} {} -> EXCEPTION ({:.1f}ms)",
                 request.method,
                 request.url.path,
                 duration_ms,
+                exc_info=True,
             )
             raise
 

@@ -82,6 +82,9 @@ class NetworkMonitorCore:
         self._last_profile_id: str | None = None
         self._profile_switch_needed: bool = False
 
+        # 一次性告警去重：所有网络检测均未启用时仅首次告警 WARNING
+        self._detection_disabled_warned: bool = False
+
     def log_message(self, message: str, level: str = "INFO", exc_info: bool = False) -> None:
         if exc_info:
             import traceback
@@ -211,7 +214,7 @@ class NetworkMonitorCore:
         if monitor_cfg.url_check_urls:
             targets_parts.append(f"网址响应: {', '.join(monitor_cfg.url_check_urls)}")
         targets_str = " | ".join(targets_parts) if targets_parts else "无检测目标"
-        self.log_message(f"[#{check_num}] 网络检测 -> {targets_str}")
+        self.log_message(f"[#{check_num}] 网络检测 -> {targets_str}", "DEBUG")
 
         # 1. 暂停时段检查
         is_paused, _ = check_pause(self.config.pause)
@@ -247,9 +250,13 @@ class NetworkMonitorCore:
                 network_state=NetworkState.CONNECTED,
                 status_detail="网络正常",
             )
-            self.log_message(f"[#{check_num}] 网络正常，无需登录", "INFO")
+            self.log_message(f"[#{check_num}] 网络正常，无需登录", "DEBUG")
         elif net_reason == "all_disabled":
-            self.log_message("所有网络检测均未启用，跳过", "WARNING")
+            if not self._detection_disabled_warned:
+                self.log_message("所有网络检测均未启用，跳过", "WARNING")
+                self._detection_disabled_warned = True
+            else:
+                self.log_message("所有网络检测均未启用，跳过", "DEBUG")
         else:
             self._update_state(
                 network_state=NetworkState.DISCONNECTED,

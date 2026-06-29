@@ -27,7 +27,8 @@ def _read_autostart_lightweight(request: Request) -> bool:
     try:
         ps = request.app.state.services.profile_service
         return bool(ps.load().global_config.app_settings.autostart_lightweight)
-    except Exception:
+    except Exception as e:
+        api_logger.warning("读取自启动轻量模式失败，使用默认值: {}", e)
         return True  # 默认轻量
 
 
@@ -62,7 +63,10 @@ def enable_autostart(
     lightweight = body.lightweight if body else True
     _save_autostart_lightweight(request, lightweight)
     ok, message = autostart_svc.enable(lightweight=lightweight)
-    api_logger.info("启用自启动 -> success={}, lightweight={}, message={}", ok, lightweight, message)
+    if ok:
+        api_logger.info("启用自启动 -> success={}, lightweight={}, message={}", ok, lightweight, message)
+    else:
+        api_logger.warning("启用自启动 -> success={}, lightweight={}, message={}", ok, lightweight, message)
     return ApiResponse(success=ok, message=message)
 
 
@@ -71,7 +75,10 @@ def disable_autostart(
     autostart_svc: AutoStartServiceDep,
 ) -> ApiResponse:
     ok, message = autostart_svc.disable()
-    api_logger.info("禁用自启动 -> success={}, message={}", ok, message)
+    if ok:
+        api_logger.info("禁用自启动 -> success={}, message={}", ok, message)
+    else:
+        api_logger.warning("禁用自启动 -> success={}, message={}", ok, message)
     return ApiResponse(success=ok, message=message)
 
 
@@ -87,5 +94,8 @@ def set_autostart_mode(
     if not status.get("enabled"):
         return ApiResponse(success=True, message="自启动未启用，模式已保存")
     ok, message = autostart_svc.enable(lightweight=body.lightweight)
-    api_logger.info("切换自启动模式 -> lightweight={}, success={}", body.lightweight, ok)
+    if ok:
+        api_logger.info("切换自启动模式 -> lightweight={}, success={}", body.lightweight, ok)
+    else:
+        api_logger.warning("切换自启动模式 -> lightweight={}, success={}", body.lightweight, ok)
     return ApiResponse(success=ok, message=message)

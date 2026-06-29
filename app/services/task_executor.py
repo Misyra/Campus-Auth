@@ -202,6 +202,7 @@ class TaskExecutor:
         根据任务类型分发到 _execute_script / _execute_browser / _execute_shell。
         执行完成后记录历史和更新 last_run。
         """
+        logger.debug("开始执行定时任务: {}", task_id)
         task = self._registry.get_task(task_id)
         if not task:
             return False, "定时任务不存在"
