@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from app.schemas import (
     Profile,
@@ -130,3 +130,32 @@ class TestAutoSwitch:
         resp = test_client.post("/api/profiles/auto-switch", json={"enabled": False})
         assert resp.status_code == 200
         assert resp.json()["success"] is True
+
+
+# ── save_profile 参数验证 ──
+
+
+class TestSaveProfileApplyId:
+    """验证 save_profile 路由传递 profile_id 而非 payload.name 给 apply_profile。"""
+
+    def test_apply_profile_uses_id_not_name(self):
+        from app.api.profiles import save_profile
+        from app.schemas import Profile
+
+        mock_profile_svc = MagicMock()
+        mock_monitor_svc = MagicMock()
+
+        mock_profile_svc.save_profile.return_value = (True, "OK")
+        mock_data = MagicMock()
+        mock_data.active_profile = "my_profile_id"
+        mock_profile_svc.load.return_value = mock_data
+
+        payload = Profile(name="完全不同的展示名")
+        save_profile(
+            profile_id="my_profile_id",
+            payload=payload,
+            profile_svc=mock_profile_svc,
+            monitor_svc=mock_monitor_svc,
+        )
+
+        mock_monitor_svc.apply_profile.assert_called_once_with("my_profile_id")
