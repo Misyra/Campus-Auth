@@ -36,7 +36,9 @@ class ServiceContainer:
         self.login_history_service = LoginHistoryService(AUTH_DATA_DIR)
         self.task_manager = TaskManager(project_root / "tasks")
         self.autostart_service = AutoStartService(project_root)
-        self._debug_manager = None  # 延迟初始化，避免轻量模式加载 FastAPI
+        from app.services.debug_service import DebugSessionManager
+
+        self.debug_manager = DebugSessionManager(project_root)
 
         # 定时任务注册中心
         self.task_registry = TaskRegistry(project_root / "tasks" / "scheduled")
@@ -101,17 +103,6 @@ class ServiceContainer:
         self._log_handler_id: int | None = None
         self._web_services_started = False
         self._shutdown_done = False
-
-    # ── 属性别名 ──
-
-    @property
-    def debug_manager(self):
-        """延迟初始化 DebugSessionManager（避免轻量模式加载 FastAPI）。"""
-        if self._debug_manager is None:
-            from app.services.debug_service import DebugSessionManager
-
-            self._debug_manager = DebugSessionManager(self.project_root)
-        return self._debug_manager
 
     # ── 生命周期 ──
 
@@ -191,8 +182,7 @@ class ServiceContainer:
 
         self.task_executor.shutdown(wait=False)
 
-        if self._debug_manager is not None:
-            await self._debug_manager.close()
+        await self.debug_manager.close()
         await self.ws_manager.close_all()
 
         try:
