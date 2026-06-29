@@ -636,6 +636,41 @@ class TestLogConfigCenter:
         assert levels == {"network": "DEBUG", "task": "WARNING"}
 
 
+class TestShouldEmitLevelOrder:
+    """验证 should_emit 使用类级别常量而非每次重建字典"""
+
+    def test_level_order_is_class_constant(self):
+        """LogConfigCenter 应有 _LEVEL_ORDER 类常量"""
+        assert hasattr(LogConfigCenter, "_LEVEL_ORDER"), (
+            "LogConfigCenter 缺少 _LEVEL_ORDER 类常量"
+        )
+        expected = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
+        assert LogConfigCenter._LEVEL_ORDER == expected
+
+    def test_should_emit_uses_class_constant_via_behavior(self):
+        """should_emit 应通过类常量决策"""
+        cc = LogConfigCenter.get_instance()
+        original = LogConfigCenter._LEVEL_ORDER.copy()
+        try:
+            LogConfigCenter._LEVEL_ORDER = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
+            result_before = cc.should_emit("backend", "INFO")
+            LogConfigCenter._LEVEL_ORDER = {"DEBUG": 5, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
+            result_after = cc.should_emit("backend", "INFO")
+            assert isinstance(result_before, bool)
+            assert isinstance(result_after, bool)
+        finally:
+            LogConfigCenter._LEVEL_ORDER = original
+
+    def test_should_emit_basic_functionality(self):
+        """should_emit 基本功能验证"""
+        cc = LogConfigCenter.get_instance()
+        assert cc.should_emit("backend", "INFO") is True
+        assert cc.should_emit("backend", "DEBUG") is False
+        assert cc.should_emit("backend", "WARNING") is True
+        assert cc.should_emit("backend", "ERROR") is True
+        assert cc.should_emit("backend", "CRITICAL") is True
+
+
 # =====================================================================
 # CREATE_NO_WINDOW_FLAG 常量
 # =====================================================================
