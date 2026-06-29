@@ -13,11 +13,11 @@ class TestRemoveUserDataSafety:
     """_remove_user_data 应校验路径，防止误删非预期目录"""
 
     def test_rejects_non_standard_directory_name(self):
-        """当 USER_DATA_DIR 名称不是 .campus_network_auth 时应拒绝删除"""
+        """当 AUTH_DATA_DIR 名称不是 .campus_network_auth 时应拒绝删除"""
         from app.services import uninstall
 
         fake_dir = Path("/tmp/evil_directory")
-        with patch.object(uninstall, "USER_DATA_DIR", fake_dir):
+        with patch.object(uninstall, "AUTH_DATA_DIR", fake_dir):
             # 即使目录存在，名称不匹配也应拒绝
             with patch.object(Path, "exists", return_value=True):
                 success, message = uninstall._remove_user_data()
@@ -26,11 +26,11 @@ class TestRemoveUserDataSafety:
                 assert ".campus_network_auth" in message
 
     def test_accepts_correct_directory_name(self):
-        """当 USER_DATA_DIR 名称是 .campus_network_auth 时应允许删除"""
+        """当 AUTH_DATA_DIR 名称是 .campus_network_auth 时应允许删除"""
         from app.services import uninstall
 
         correct_dir = Path("/tmp/.campus_network_auth")
-        with patch.object(uninstall, "USER_DATA_DIR", correct_dir):
+        with patch.object(uninstall, "AUTH_DATA_DIR", correct_dir):
             with patch.object(Path, "exists", return_value=True):
                 # mock shutil.rmtree 避免真实删除
                 with patch("app.services.uninstall.shutil.rmtree") as mock_rmtree:
@@ -52,7 +52,7 @@ class TestRemoveUserDataSafety:
         from app.services import uninstall
 
         correct_dir = Path("/tmp/.campus_network_auth")
-        with patch.object(uninstall, "USER_DATA_DIR", correct_dir):
+        with patch.object(uninstall, "AUTH_DATA_DIR", correct_dir):
             with patch.object(Path, "exists", return_value=True):
                 with patch("app.services.uninstall.shutil.rmtree"):
                     with patch("app.services.uninstall.logger") as mock_logger:
