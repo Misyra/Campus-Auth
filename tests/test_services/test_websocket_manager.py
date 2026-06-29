@@ -1,6 +1,6 @@
 """websocket_manager.py — WebSocket 管理器单元测试
 
-覆盖 WebSocketManager 和 NullWebSocketManager 的连接管理、消息广播、异常处理。
+覆盖 WebSocketManager 的连接管理、消息广播、异常处理。
 """
 
 from __future__ import annotations
@@ -10,39 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.websocket_manager import NullWebSocketManager, WebSocketManager
-
-
-# =====================================================================
-# NullWebSocketManager
-# =====================================================================
-
-
-class TestNullWebSocketManager:
-    """NullWebSocketManager 所有方法应为空操作，不抛异常。"""
-
-    @pytest.mark.asyncio
-    async def test_connect(self):
-        mgr = NullWebSocketManager()
-        ws = AsyncMock()
-        await mgr.connect(ws)  # 不抛异常即通过
-        ws.accept.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_disconnect(self):
-        mgr = NullWebSocketManager()
-        ws = MagicMock()
-        await mgr.disconnect(ws)
-
-    @pytest.mark.asyncio
-    async def test_broadcast(self):
-        mgr = NullWebSocketManager()
-        await mgr.broadcast("hello")
-
-    @pytest.mark.asyncio
-    async def test_close_all(self):
-        mgr = NullWebSocketManager()
-        await mgr.close_all()
+from app.services.websocket_manager import WebSocketManager
 
 
 # =====================================================================
