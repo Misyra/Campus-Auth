@@ -281,7 +281,6 @@ body {
 .log-level-badge.level-info { color: #60a5fa; }
 .log-level-badge.level-warning { color: #fbbf24; }
 .log-level-badge.level-error { color: #f87171; }
-.log-level-badge.level-critical { color: #f87171; }
 .log-level-badge.level-debug { color: #94a3b8; }
 
 .log-source-badge {
@@ -291,16 +290,10 @@ body {
 }
 
 .log-source-badge.source-backend { color: #94a3b8; }
-.log-source-badge.source-network { color: #fbbf24; }
-.log-source-badge.source-task { color: #c4b5fd; }
 .log-source-badge.source-frontend { color: #93c5fd; }
-.log-source-badge.source-debug { color: #6b7280; }
 
 [data-theme="light"] .log-source-badge.source-backend { color: #475569; }
-[data-theme="light"] .log-source-badge.source-network { color: #b45309; }
-[data-theme="light"] .log-source-badge.source-task { color: #7c3aed; }
 [data-theme="light"] .log-source-badge.source-frontend { color: #1d4ed8; }
-[data-theme="light"] .log-source-badge.source-debug { color: #64748b; }
 
 /* 日志过滤工具栏 */
 .log-toolbar {

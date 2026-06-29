@@ -354,19 +354,12 @@ export const configMethods = {
       this.frontendLogger.warn('config', '获取日志级别配置失败', error);
     }
   },
-  async setSourceLevel(source, level) {
+  async setLogLevel(level) {
     try {
-      const data = await this.$apiService.config.setSourceLevel(source, level);
+      const data = await this.$apiService.config.setLogLevel(level);
       if (data.success) {
-        if (source === 'global') {
-          this.config.logging.level = level;
-        } else {
-          if (!this.config.logging.source_levels) {
-            this.config.logging.source_levels = {};
-          }
-          this.config.logging.source_levels[source] = level;
-        }
-        this.frontendLogger.info('config', `日志级别已设置: ${source} -> ${level}`);
+        this.config.logging.level = level;
+        this.frontendLogger.info('config', `日志级别已设置: ${level}`);
         this.toastOnly(true, data.message);
       } else {
         this.frontendLogger.warn('config', '设置日志级别被拒绝: ' + data.message);
