@@ -12,9 +12,11 @@ from fastapi.responses import FileResponse
 
 from app.constants import PROJECT_ROOT
 from app.schemas import ApiResponse, FetchUrlRequest
+from app.utils.logging import get_logger
 from app.utils.repo_proxy import validate_url
 
 router = APIRouter()
+api_logger = get_logger("api")
 
 # 背景图片目录
 BG_DIR = PROJECT_ROOT / "frontend" / "background"
@@ -139,12 +141,14 @@ async def fetch_background_url(body: FetchUrlRequest) -> ApiResponse:
                         raise HTTPException(400, "图片大小超过 5MB 限制")
                     chunks.append(chunk)
                 content = b"".join(chunks)
-    except httpx.HTTPError as exc:
+    except httpx.HTTPError as e:
+        api_logger.warning("下载失败: {}", e)
         raise HTTPException(
             400, "下载图片失败，请检查网络连接或确认地址是否正确"
-        ) from exc
+        ) from e
 
     data = _save_background(content, ext)
+    api_logger.info("背景图片已下载: {}", data.get("filename"))
     return ApiResponse(success=True, message="图片已下载", data=data)
 
 

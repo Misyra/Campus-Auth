@@ -131,8 +131,4 @@ class BrowserContextManager:
         self.context = None
         self.page = None
 
-        if exc_type:
-            self.logger.error(
-                "浏览器操作异常: {}: {}", exc_type.__name__, str(exc_val)[:200]
-            )
         return False

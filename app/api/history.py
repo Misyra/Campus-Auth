@@ -7,8 +7,10 @@ from fastapi import APIRouter, Query
 from app.deps import LoginHistoryDep
 from app.schemas import ApiResponse
 from app.services.login_history_service import LoginHistoryEntry
+from app.utils.logging import get_logger
 
 router = APIRouter()
+api_logger = get_logger("api", source="backend")
 
 
 @router.get("/api/login-history", response_model=list[LoginHistoryEntry])
@@ -26,4 +28,5 @@ def clear_login_history(
 ) -> ApiResponse:
     """清空所有登录历史记录。"""
     count = svc.clear()
+    api_logger.info("清空登录历史: 删除 {} 条记录", count)
     return ApiResponse(success=True, message=f"已清空 {count} 条登录记录")

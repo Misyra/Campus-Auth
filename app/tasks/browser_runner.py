@@ -169,7 +169,7 @@ class BrowserTaskRunner:
             await page.goto(url, wait_until="load", timeout=self.navigation_timeout)
             await self._wait_url_stable(page)
             if self.config.navigation_wait > 0:
-                logger.info("等待页面 AJAX 初始化: {}s", self.config.navigation_wait)
+                logger.debug("等待页面 AJAX 初始化: {}s", self.config.navigation_wait)
                 await asyncio.sleep(self.config.navigation_wait)
 
     async def _wait_url_stable(self, page, timeout_ms: int = 3000):
@@ -183,7 +183,7 @@ class BrowserTaskRunner:
             await asyncio.sleep(0.5)
             current = page.url
             if current != last_url:
-                logger.info("URL 重定向: {} -> {}", last_url, current)
+                logger.debug("URL 重定向: {} -> {}", last_url, current)
                 last_url = current
                 redirects += 1
                 deadline = max(deadline, time.perf_counter() + timeout_ms / 1000)
@@ -192,7 +192,7 @@ class BrowserTaskRunner:
         """强制显示所有隐藏的表单输入框（含同源 iframe）。
         通过 JS 将 display:none / visibility:hidden / opacity:0 的 input 变为可见，
         后续 fill()/click() 可直接操作，无需 force 降级。覆盖 text/password/checkbox/radio 等。"""
-        logger.info("[reveal] 强制显示隐藏输入框")
+        logger.debug("[reveal] 强制显示隐藏输入框")
         reveal_js = """
             () => {
                 const inputs = document.querySelectorAll('input,textarea');
@@ -224,7 +224,7 @@ class BrowserTaskRunner:
                 total += await frame.evaluate(reveal_js)
             except Exception:
                 logger.debug("[reveal] 跨域 frame 执行失败，跳过", exc_info=True)
-        logger.info("[reveal] 已强制显示 {} 个隐藏输入框", total)
+        logger.debug("[reveal] 已强制显示 {} 个隐藏输入框", total)
         return total
 
     async def _execute_step(
@@ -340,7 +340,6 @@ class BrowserTaskRunner:
     async def _handle_success(self, page) -> tuple[bool, str]:
         """处理成功情况"""
         message = self.config.on_success.get("message", "任务执行成功")
-        logger.info("任务执行成功: {}", message)
         return True, message
 
     async def _handle_failure(
@@ -359,8 +358,6 @@ class BrowserTaskRunner:
         if screenshot_url:
             message += f" 截图: {screenshot_url}"
 
-        # 日志只输出不含截图 URL 的部分，避免上层重复打印时出现两张截图
-        logger.error("任务执行失败: {}: {}", base_message, reason)
         return False, message
 
     async def _capture_screenshot(self, page) -> str | None:

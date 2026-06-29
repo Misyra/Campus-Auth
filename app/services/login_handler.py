@@ -66,6 +66,7 @@ class LoginAttemptHandler:
         返回:
             tuple[bool, str]: (是否成功, 详细信息)
         """
+        self.logger.debug("attempt_login 开始")
         try:
             task_result = await self._perform_login_with_active_task()
             if task_result is not None:
@@ -217,7 +218,7 @@ class LoginAttemptHandler:
                 )  # 登录成功后等待，让页面完成跳转和状态更新
                 return True, message
             log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
-            self.logger.error("登录失败 (总耗时 {:.1f}s): {}", total, log_msg)
+            self.logger.warning("登录失败 (总耗时 {:.1f}s): {}", total, log_msg)
             return False, message
         finally:
             await self.close_browser()

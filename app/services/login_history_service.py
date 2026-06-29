@@ -99,7 +99,7 @@ class LoginHistoryService:
                 try:
                     result.append(LoginHistoryEntry.model_validate_json(line))
                 except Exception:
-                    logger.debug("解析登录历史条目失败，跳过", exc_info=True)
+                    logger.warning("解析登录历史条目失败，跳过", exc_info=True)
                     continue
             return result
         except Exception:

@@ -128,6 +128,7 @@ def ocr_uninstall() -> ApiResponse:
             api_logger.error("ddddocr 卸载失败: {}", error_msg)
             return ApiResponse(success=False, message=f"卸载失败: {error_msg}")
     except FileNotFoundError:
+        api_logger.warning("ddddocr 卸载失败：uv 未找到")
         return ApiResponse(success=False, message="未找到 uv 包管理器")
     except Exception as e:
         api_logger.error("ddddocr 卸载异常: {}", e)

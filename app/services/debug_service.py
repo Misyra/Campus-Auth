@@ -180,6 +180,7 @@ class DebugSessionManager:
         if not response.success:
             async with self._lock:
                 await self._close_debug_browser()
+            debug_logger.warning("调试会话启动失败: {}", response.error)
             raise RuntimeError(f"调试会话启动失败: {response.error}")
 
         if isinstance(response.data, dict):
@@ -235,6 +236,8 @@ class DebugSessionManager:
     async def run_all(self) -> dict:
         """执行所有步骤。"""
         from app.workers.playwright_worker import CMD_DEBUG_STEP, get_worker
+
+        debug_logger.info("调试运行所有步骤: task_id={}", self._session.task_id)
 
         async with self._lock:
             self._require_debug_session()

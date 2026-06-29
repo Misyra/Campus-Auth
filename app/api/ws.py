@@ -42,7 +42,7 @@ async def websocket_logs_handler(websocket, ws_manager, engine):
             except json.JSONDecodeError:
                 ws_logger.debug("WebSocket 消息解析失败", exc_info=True)
             except Exception:
-                ws_logger.debug("WebSocket 消息处理异常", exc_info=True)
+                ws_logger.warning("WebSocket 消息处理异常", exc_info=True)
     except WebSocketDisconnect:
         try:
             await ws_manager.disconnect(websocket)
@@ -53,4 +53,4 @@ async def websocket_logs_handler(websocket, ws_manager, engine):
         try:
             await ws_manager.disconnect(websocket)
         except Exception:
-            ws_logger.debug("WebSocket 断开连接时异常", exc_info=True)
+            pass

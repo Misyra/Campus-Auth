@@ -174,6 +174,8 @@ class PlaywrightWorker:
             logger.warning(
                 "PlaywrightWorker 事件循环启动超时 ({}s)", WORKER_READY_TIMEOUT
             )
+        else:
+            logger.info("PlaywrightWorker 已启动")
 
     def stop(self, timeout: float = 5) -> None:
         """发送关闭信号并等待线程结束。
@@ -443,7 +445,7 @@ class PlaywrightWorker:
             success, message = await handler.attempt_login()
             return WorkerResponse(success=success, data=message)
         except Exception as e:
-            logger.exception("登录执行异常")
+            logger.exception("登录执行异常: task_id={}", config.get("task_id", "unknown"))
             return WorkerResponse(success=False, error=str(e))
 
     async def _cleanup_debug_session(self):
@@ -572,7 +574,7 @@ class PlaywrightWorker:
             )
 
         step_index = data.get("step_index", 0)
-        logger.info("调试下一步: step_index={}", step_index)
+        logger.debug("调试下一步: step_index={}", step_index)
 
         try:
             # TaskExecutor.execute_step_at 在 Worker 线程内执行，
@@ -912,7 +914,7 @@ class PlaywrightWorker:
         if graceful:
             logger.info("浏览器资源已清理")
         else:
-            logger.warning("浏览器资源强制清理完成")
+            logger.info("浏览器资源强制清理完成")
 
     async def _close_browser(self) -> None:
         """关闭浏览器并释放所有资源（优雅模式）。

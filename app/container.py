@@ -154,7 +154,7 @@ class ServiceContainer:
             try:
                 _loguru_logger.remove(self._log_handler_id)
             except Exception as exc:
-                container_logger.debug("移除日志处理器失败: {}", exc)
+                container_logger.warning("移除日志处理器失败: {}", exc)
             self._log_handler_id = None
 
         if self._ws_drain_task:

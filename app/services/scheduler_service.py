@@ -68,6 +68,7 @@ class SchedulerService:
             due_tasks = registry.get_due_tasks(dt_now.hour, dt_now.minute)
             for task_id in due_tasks:
                 executor.execute_task_async(task_id)
+            logger.debug("调度 tick: 处理 {} 个到期任务", len(due_tasks))
         # 计算下一个整分钟
         self._next_schedule_tick = (int(time.time() // 60) * 60) + 60
 

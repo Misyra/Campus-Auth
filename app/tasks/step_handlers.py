@@ -166,12 +166,12 @@ class StepHandler(ABC):
             # 优先按 name 匹配
             frame = page.frame(name=frame_selector)
             if frame:
-                logger.info("[frame] 使用 frame (name): {}", frame_selector)
+                logger.debug("[frame] 使用 frame (name): {}", frame_selector)
                 return frame
             # 回退到 URL 匹配
             frame = page.frame(url=frame_selector)
             if frame:
-                logger.info("[frame] 使用 frame (url): {}", frame_selector)
+                logger.debug("[frame] 使用 frame (url): {}", frame_selector)
                 return frame
             # 最后尝试 CSS 选择器匹配 iframe 元素
             try:
@@ -179,7 +179,7 @@ class StepHandler(ABC):
                 if frame_element:
                     frame = await frame_element.content_frame()
                     if frame:
-                        logger.info(
+                        logger.debug(
                             "[frame] 使用 frame (content_frame): {}", frame_selector
                         )
                         return frame
@@ -215,7 +215,7 @@ class StepHandler(ABC):
                 await locator.first.wait_for(
                     state="visible", timeout=int(remaining * 1000)
                 )
-                logger.info("[find] 选择器命中: {}", selector)
+                logger.debug("[find] 选择器命中: {}", selector)
                 return locator.first
             except Exception:
                 logger.debug("[find] 选择器未匹配: {}", selector)
@@ -374,7 +374,7 @@ class SelectHandler(StepHandler):
         try:
             result = await element.select_option(value, timeout=timeout)
             if result:
-                logger.info("[select] 精确匹配成功: value={}", value)
+                logger.debug("[select] 精确匹配成功: value={}", value)
                 return True
         except Exception:
             logger.debug("[select] 精确匹配失败: value={}, 尝试模糊匹配", value)
@@ -403,7 +403,7 @@ class SelectHandler(StepHandler):
                 try:
                     result = await element.select_option(label=current, timeout=timeout)
                     if result:
-                        logger.info("[select] 标签精确匹配: '{}' -> '{}'", value, current)
+                        logger.debug("[select] 标签精确匹配: '{}' -> '{}'", value, current)
                         return True
                 except Exception:
                     continue
@@ -418,7 +418,7 @@ class SelectHandler(StepHandler):
             try:
                 result = await element.select_option(label=text, timeout=timeout)
                 if result:
-                    logger.info("[select] 标签包含匹配: '{}' -> '{}'", value, text)
+                    logger.debug("[select] 标签包含匹配: '{}' -> '{}'", value, text)
                     return True
             except Exception:
                 pass
@@ -471,7 +471,7 @@ class ClickSelectHandler(StepHandler):
 
         await trigger.click(timeout=timeout)
         select_delay = step.extra.get("select_delay", 500) if step.extra else 500
-        logger.info("[click_select] 触发器已点击，等待 {}ms 后查找选项", select_delay)
+        logger.debug("[click_select] 触发器已点击，等待 {}ms 后查找选项", select_delay)
         await page.wait_for_timeout(select_delay)
 
         clicked = await self._click_option(ctx, value, option_selector, timeout, trigger)
@@ -493,7 +493,7 @@ class ClickSelectHandler(StepHandler):
             try:
                 await option.wait_for(state="visible", timeout=timeout)
                 await option.click(timeout=timeout)
-                logger.info("[click_select] 选项点击成功: '{}'", text)
+                logger.debug("[click_select] 选项点击成功: '{}'", text)
                 return True
             except Exception:
                 logger.debug("[click_select] 容器内未找到选项: '{}'", text)
@@ -508,7 +508,7 @@ class ClickSelectHandler(StepHandler):
             try:
                 await option.wait_for(state="visible", timeout=timeout)
                 await option.click(timeout=timeout)
-                logger.info("[click_select] 选项点击成功（父容器）: '{}'", text)
+                logger.debug("[click_select] 选项点击成功（父容器）: '{}'", text)
                 return True
             except Exception:
                 # Portal 框架下选项渲染在 body 而非父容器，回退到全局搜索
@@ -521,7 +521,7 @@ class ClickSelectHandler(StepHandler):
             logger.debug("[click_select] 全局搜索选项 '{}'", text)
             await option.wait_for(state="visible", timeout=timeout)
             await option.click(timeout=timeout)
-            logger.info("[click_select] 选项点击成功（全局）: '{}'", text)
+            logger.debug("[click_select] 选项点击成功（全局）: '{}'", text)
             return True
         except Exception:
             logger.debug("[click_select] 选项未找到或点击失败: '{}'", text)
@@ -553,7 +553,7 @@ class WaitHandler(StepHandler):
             return False, f"等待元素超时 ({timeout}ms): {selector}"
         except Exception as e:
             return False, f"等待元素失败: {selector}, 错误: {e}"
-        logger.info("[wait] 元素已出现: {}", selector)
+        logger.debug("[wait] 元素已出现: {}", selector)
         return True, ""
 
 
@@ -584,7 +584,7 @@ class WaitUrlHandler(StepHandler):
         while True:
             current_url = page.url
             if compiled.search(current_url):
-                logger.info("[wait_url] URL 已匹配: {}", current_url)
+                logger.debug("[wait_url] URL 已匹配: {}", current_url)
                 return True, ""
             remaining = deadline - asyncio.get_running_loop().time()
             if remaining <= 0:
@@ -758,7 +758,7 @@ class OcrHandler(StepHandler):
         with cls._ocr_lock:
             if old in cls._ocr_instances:
                 del cls._ocr_instances[old]
-                logger.info(
+                logger.debug(
                     "[ocr] 模型已卸载 (old={})，空闲超过 {}s", old, cls._IDLE_TIMEOUT
                 )
             cls._cleanup_timers.pop(old, None)
@@ -785,7 +785,7 @@ class OcrHandler(StepHandler):
 
         timeout = step.timeout or DEFAULT_STEP_TIMEOUT_MS
         ctx = await self._resolve_frame(page, step)
-        logger.info(
+        logger.debug(
             "[ocr] selector={}, target={}, old={}, char_range={}",
             selector,
             target_selector or "(无)",
@@ -818,7 +818,7 @@ class OcrHandler(StepHandler):
             local_path = date_dir / filename
             local_path.write_bytes(img_bytes)
             screenshot_url = f"/debug/screenshots/{date_str}/{filename}"
-            logger.info("[ocr] 验证码截图已保存: {}", screenshot_url)
+            logger.debug("[ocr] 验证码截图已保存: {}", screenshot_url)
         except Exception as e:
             logger.warning("[ocr] 保存验证码截图失败: {}", e)
 
@@ -845,7 +845,7 @@ class OcrHandler(StepHandler):
             # 存储到变量
             if store_as:
                 resolver.set_runtime_var(store_as, result)
-                logger.info("[ocr] 结果已存入变量 {}", store_as)
+                logger.debug("[ocr] 结果已存入变量 {}", store_as)
 
             # 自动填入目标输入框
             if target_selector:
@@ -854,9 +854,7 @@ class OcrHandler(StepHandler):
                     return False, f"未找到验证码输入框: {target_selector}"
                 try:
                     await target.fill(result, timeout=timeout)
-                    logger.info(
-                        "[ocr] 普通 fill 成功 -> {}, 值='{}'", target_selector, result
-                    )
+                    logger.info("[ocr] 普通 fill 成功 -> {}", target_selector)
                 except Exception:
                     logger.info(
                         "[ocr] 普通 fill 失败，降级到强制输入 -> {}", target_selector
@@ -866,9 +864,7 @@ class OcrHandler(StepHandler):
                         _FORCE_INPUT_JS,
                         {"val": result, "doClear": True},
                     )
-                    logger.info(
-                        "[ocr] 强制输入成功 -> {}, 值='{}'", target_selector, result
-                    )
+                    logger.info("[ocr] 强制输入成功 -> {}", target_selector)
 
             # 返回结果，包含截图 URL
             message = result

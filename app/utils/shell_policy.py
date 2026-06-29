@@ -57,7 +57,7 @@ class ShellCommandPolicy:
     def _audit(self, argv: list[str], timeout: int) -> None:
         """执行审计日志。"""
         logger.info(
-            "Shell 命令执行审计: argv=%s, timeout=%ds",
+            "Shell 命令执行审计: argv={}, timeout={}s",
             argv[:5] if len(argv) > 5 else argv,
             timeout,
         )

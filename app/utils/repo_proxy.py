@@ -56,16 +56,16 @@ async def async_repo_fetch_json(url: str, expected_type: type, label: str, proxy
             raise HTTPException(
                 status_code=422, detail=f"{label}格式不正确，应为 {type_name}"
             )
-        logger.info("远程{}获取成功", label)
+        logger.debug("远程{}获取成功", label)
         return data
     except httpx.HTTPStatusError as exc:
         status = exc.response.status_code if exc.response is not None else 502
-        logger.error("远程{}获取失败: HTTP {} ({})", label, status, url)
+        logger.warning("远程{}获取失败: HTTP {} ({})", label, status, url)
         raise HTTPException(
             status_code=status, detail=f"远程返回错误: {status} ({url})"
         ) from exc
     except HTTPException:
         raise
     except Exception as exc:
-        logger.error("远程{}获取失败: {} ({})", label, exc, url)
+        logger.warning("远程{}获取失败: {} ({})", label, exc, url)
         raise HTTPException(status_code=502, detail=f"获取{label}失败: {exc}") from exc

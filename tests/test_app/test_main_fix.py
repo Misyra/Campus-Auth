@@ -58,7 +58,7 @@ class TestBuildAppConfigExceptionLogging:
     """验证 _build_app_config 在加载配置失败时记录日志而非静默吞异常。"""
 
     def test_load_failure_logs_warning(self):
-        """加载配置异常时应记录 debug 日志。"""
+        """加载配置异常时应记录 warning 日志。"""
         from main import _build_app_config
 
         mock_logger = MagicMock()
@@ -70,8 +70,8 @@ class TestBuildAppConfigExceptionLogging:
             return_value=mock_logger,
         ):
             _build_app_config()
-            mock_logger.debug.assert_called()
-            args, kwargs = mock_logger.debug.call_args
+            mock_logger.warning.assert_called()
+            args, kwargs = mock_logger.warning.call_args
             assert "加载配置失败" in args[0]
             assert kwargs.get("exc_info") is True
 

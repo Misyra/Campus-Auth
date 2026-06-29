@@ -64,7 +64,10 @@ def delete_script(
 ) -> ApiResponse:
     """删除脚本任务。"""
     ok, message = task_mgr.delete_task_with_validation(task_id)
-    api_logger.info("删除脚本 {} -> success={}, message={}", task_id, ok, message)
+    if ok:
+        api_logger.info("删除脚本 {} -> success={}, message={}", task_id, ok, message)
+    else:
+        api_logger.warning("删除脚本 {} -> success={}, message={}", task_id, ok, message)
     return ApiResponse(success=ok, message=message)
 
 

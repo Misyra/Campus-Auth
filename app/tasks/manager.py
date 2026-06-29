@@ -377,7 +377,7 @@ class TaskManager:
             # 浏览器任务：带验证
             is_valid, errors = TaskValidator.validate(config)
             if not is_valid:
-                logger.error("任务验证失败: {}", errors)
+                logger.warning("任务验证失败: {}", errors)
                 return False
 
             file = self._safe_json_path(task_id, task_type="browser")
@@ -398,7 +398,7 @@ class TaskManager:
         """保存自定义脚本任务（JSON 格式，存入 scripts/ 目录）。"""
         script_content = config.get("content", "")
         if not script_content.strip():
-            logger.error("脚本内容不能为空")
+            logger.warning("脚本内容不能为空")
             return False
 
         file = self._safe_json_path(task_id, task_type="scripts")
@@ -616,7 +616,6 @@ class TaskManager:
         if success:
             logger.info("活动任务已设置: {}", task_id)
             return True, "活动任务已设置"
-        logger.error("设置活动任务失败: {}", task_id)
         return False, "设置活动任务失败"
 
     def save_order_with_validation(self, order: dict[str, list[str]]) -> tuple[bool, str]:

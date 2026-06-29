@@ -121,7 +121,6 @@ class VariableResolver:
             # 字符串值和未解析变量：走 resolve → json.dumps 加引号
             resolved = self.resolve(match.group(0))
             if resolved == match.group(0):
-                logger.warning("[var] 未解析的变量: {}", match.group(0))
                 return json.dumps(match.group(0))
             return json.dumps(str(resolved))
 

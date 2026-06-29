@@ -274,18 +274,21 @@ class LoginOrchestrator:
             self._slot = handle
             self._slot_lock.notify_all()
 
+        logger.debug("登录已提交: source={}", source)
         return handle
 
     def cancel_running(self) -> None:
         """取消当前正在运行的登录（供外部主动取消）。"""
         with self._slot_lock:
             if self._slot is not None and not self._slot.done():
+                logger.info("取消正在运行的登录任务")
                 self._slot.cancel()
 
     def shutdown(self, wait: bool = True) -> None:
         """关闭编排器。仅关闭自建池（外部 executor 由调用方管理）。"""
         if self._pool is not None:
             self._pool.shutdown(wait=wait)
+        logger.info("登录调度器已关闭")
 
     # ── 内部 ──
 
@@ -389,7 +392,7 @@ class LoginOrchestrator:
                 error=error,
             )
         except Exception:
-            logger.debug("记录登录历史失败", exc_info=True)
+            logger.warning("记录登录历史失败", exc_info=True)
 
     def _runtime_config(self) -> RuntimeConfig:
         """获取运行时配置。"""

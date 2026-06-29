@@ -56,7 +56,7 @@ class TestSuppressExceptionFix:
     def test_stop_web_services_logs_on_remove_failure(
         self, tmp_path: Path, mock_container_deps: dict
     ):
-        """stop_web_services 中 loguru.remove 失败时应记录 debug 日志而非静默吞掉。"""
+        """stop_web_services 中 loguru.remove 失败时应记录 warning 日志而非静默吞掉。"""
         container = _make_container(tmp_path, mock_container_deps)
         container._web_services_started = True
         container._log_handler_id = 42
@@ -67,15 +67,15 @@ class TestSuppressExceptionFix:
                 mock_loguru.remove.side_effect = RuntimeError("remove failed")
                 asyncio.run(container.stop_web_services())
 
-                # 应记录 debug 日志，包含异常信息
-                mock_logger.debug.assert_called()
-                call_args = mock_logger.debug.call_args
+                # 应记录 warning 日志，包含异常信息
+                mock_logger.warning.assert_called()
+                call_args = mock_logger.warning.call_args
                 assert "移除日志处理器失败" in call_args[0][0]
 
     def test_shutdown_logs_on_remove_failure(
         self, tmp_path: Path, mock_container_deps: dict
     ):
-        """shutdown 中 loguru.remove 失败时应记录 debug 日志而非静默吞掉。"""
+        """shutdown 中 loguru.remove 失败时应记录 warning 日志而非静默吞掉。"""
         container = _make_container(tmp_path, mock_container_deps)
         container._log_handler_id = 42
         container._ws_drain_task = None
@@ -86,9 +86,9 @@ class TestSuppressExceptionFix:
                 mock_loguru.remove.side_effect = RuntimeError("remove failed")
                 asyncio.run(container.shutdown())
 
-                # 应记录 debug 日志，包含异常信息
-                mock_logger.debug.assert_called()
-                call_args = mock_logger.debug.call_args
+                # 应记录 warning 日志，包含异常信息
+                mock_logger.warning.assert_called()
+                call_args = mock_logger.warning.call_args
                 assert "移除日志处理器失败" in call_args[0][0]
 
     def test_stop_web_services_success_no_log(

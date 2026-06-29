@@ -57,20 +57,19 @@ def execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginRe
     try:
         for attempt in range(1, max_retries + 1):
             if attempt > 1:
-                print(f"等待 {interval} 秒后重试第 {attempt} 次...")
+                logger.info("等待 {} 秒后重试第 {} 次...", interval, attempt)
                 time.sleep(interval)
 
             handle = orchestrator.submit(source="login_once", config=runtime_config)
             ok, msg = handle.result()
             if ok:
-                print(f"登录成功: {msg}")
+                logger.info("登录成功: {}", msg)
                 cleanup_orphan_browsers()
                 return LoginResult.SUCCESS
-            print(f"登录失败 (第 {attempt} 次): {msg}")
+            logger.warning("登录失败 (第 {} 次): {}", attempt, msg)
 
         cleanup_orphan_browsers()
-        print(f"已重试 {max_retries} 次均失败，回退到正常模式")
-        logger.warning("登录失败（已重试 {} 次），回退到正常模式", max_retries)
+        logger.warning("已重试 {} 次均失败，回退到正常模式", max_retries)
         return LoginResult.TEMPORARY_FAILURE
     finally:
         orchestrator.shutdown(wait=False)
@@ -99,15 +98,15 @@ def run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
 
         network_ok, reason, _ = check_network_status(runtime_config.monitor)
         if network_ok:
-            print("网络已连接，无需登录，正在退出...")
+            logger.info("网络已连接，无需登录，正在退出...")
             return LoginResult.SUCCESS
         if reason == "all_disabled":
             # 所有检测方式禁用，无法判断网络状态，假定已连接跳过登录
-            print("网络检测已禁用，假定网络正常，跳过登录")
+            logger.info("网络检测已禁用，假定网络正常，跳过登录")
             return LoginResult.SUCCESS
-        print(f"网络未连接 ({reason})，开始登录...")
+        logger.info("网络未连接 ({})，开始登录...", reason)
     except Exception as exc:
         logger.debug("网络检测异常，继续尝试登录: {}", exc)
-        print("网络检测异常，开始登录...")
+        logger.warning("网络检测异常，开始登录...")
 
     return execute_login_with_retries(runtime_config, logger)

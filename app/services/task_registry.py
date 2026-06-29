@@ -166,7 +166,7 @@ class TaskRegistry:
                 json.dumps(snapshot, ensure_ascii=False, indent=2),
             )
         except Exception as exc:
-            logger.error("更新定时任务状态失败 {}: {}", task_id, exc)
+            logger.warning("更新定时任务状态失败 {}: {}", task_id, exc)
 
     # ── 内部方法 ──
 

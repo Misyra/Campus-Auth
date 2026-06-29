@@ -378,7 +378,7 @@ WantedBy=default.target
                 f"自启动脚本创建后被拦截，请暂时关闭杀毒软件后重试\n预期位置: {startup_vbs}",
             )
 
-        logger.debug("Windows VBS 已写入: {}", startup_vbs)
+        logger.info("自启动已启用 (Windows)")
         return True, f"已启用 Windows 开机自启动: {startup_vbs}"
 
     def _disable_windows(self) -> tuple[bool, str]:

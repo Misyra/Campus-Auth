@@ -36,6 +36,7 @@ class WebSocketManager:
         await websocket.accept()
         async with self._lock:
             self._connections.append(websocket)
+        ws_logger.debug("WebSocket 客户端已连接")
 
     async def disconnect(self, websocket: WebSocket):
         async with self._lock:
@@ -150,6 +151,7 @@ class WebSocketManager:
         异常不会退出循环，CancelledError 由外层捕获退出。
         """
         self.set_loop(asyncio.get_running_loop())
+        ws_logger.info("WS 排空循环已启动")
         while True:
             try:
                 await self._drain_event.wait()
@@ -159,6 +161,7 @@ class WebSocketManager:
                 break
             except Exception:
                 ws_logger.exception("WS 排空循环异常")
+                await asyncio.sleep(1)
 
     async def _drain_queue(self) -> None:
         """排空 WS 广播队列到 WebSocket 客户端。"""

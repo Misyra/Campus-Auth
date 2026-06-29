@@ -72,6 +72,7 @@ class SystemTray:
         )
 
     def _quit(self, icon, item):
+        logger.info("用户通过托盘菜单退出")
         if self.icon:
             self.icon.stop()
         if self.on_exit:
@@ -99,14 +100,17 @@ class SystemTray:
         )
         self._thread = threading.Thread(target=self.icon.run, daemon=True)
         self._thread.start()
+        logger.info("系统托盘已启动")
 
     def stop(self):
         if self.icon:
             self.icon.stop()
             self.icon = None
+        logger.info("系统托盘已停止")
 
     def update_status(self, monitoring: bool):
         self._monitoring = monitoring
+        logger.info("监控状态切换: {}", monitoring)
         icon = self.icon
         if not icon:
             return

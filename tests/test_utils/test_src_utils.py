@@ -608,7 +608,7 @@ class TestBrowserContextManagerAexit:
 
     @pytest.mark.asyncio
     async def test_logs_exception(self):
-        """异常被记录。"""
+        """异常不在此处记录（由调用方记录），__aexit__ 返回 False 让异常传播。"""
         mgr = BrowserContextManager({})
         mgr.logger = MagicMock()
 
@@ -616,8 +616,9 @@ class TestBrowserContextManagerAexit:
         with patch(
             "app.workers.playwright_worker.get_worker", return_value=mock_worker
         ):
-            await mgr.__aexit__(ValueError, ValueError("test error"), None)
-            mgr.logger.error.assert_called()
+            result = await mgr.__aexit__(ValueError, ValueError("test error"), None)
+            assert result is False  # 异常传播，由调用方记录
+            mgr.logger.error.assert_not_called()
 
 
 # ── SystemTray 详细测试 ──

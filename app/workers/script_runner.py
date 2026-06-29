@@ -181,7 +181,7 @@ class ScriptRunner:
         try:
             content = self._load_script_content()
         except ValueError as e:
-            logger.error("脚本加载失败: {}", e)
+            logger.warning("脚本加载失败: {}", e)
             return False, str(e)
 
         if content is not None:
@@ -214,10 +214,10 @@ class ScriptRunner:
                 **kwargs,
             )
         except PermissionError as e:
-            logger.error("脚本执行被拒绝: {}", e)
+            logger.warning("脚本执行被拒绝: {}", e)
             return False, str(e)
         except FileNotFoundError as e:
-            logger.error("脚本或解释器不存在: {}", e)
+            logger.warning("脚本或解释器不存在: {}", e)
             return False, f"脚本或解释器不存在: {e}"
         except Exception as e:
             logger.error("脚本执行异常: {}", e)

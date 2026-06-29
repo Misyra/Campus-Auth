@@ -106,7 +106,8 @@ def _get_autostart_service():
 def _check_autostart() -> dict:
     try:
         return _get_autostart_service().status()
-    except Exception:
+    except Exception as e:
+        logger.debug("检查自启动状态失败", exc_info=True)
         return {
             "enabled": False,
             "platform": PLATFORM,
@@ -143,6 +144,7 @@ def _remove_user_data() -> tuple[bool, str]:
 def _remove_playwright_cache(cache_dir: Path) -> tuple[bool, str]:
     if not cache_dir.exists():
         return True, "Playwright 缓存不存在，跳过"
+    logger.info("正在清理 Playwright 缓存")
     try:
         shutil.rmtree(cache_dir)
         return True, f"已删除 {cache_dir}"
