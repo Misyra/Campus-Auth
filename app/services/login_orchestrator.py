@@ -47,7 +47,6 @@ def _runtime_config_to_worker_dict(config: RuntimeConfig) -> dict:
     d["pause_login"] = config.pause.model_dump()
     d["monitor"] = config.monitor.model_dump()
     d["logging"] = {"level": config.logging.level}
-    d["frontend_logging"] = {"level": config.logging.frontend_level}
     d["login_timeout"] = config.browser.login_timeout
     d["retry_settings"] = config.retry.model_dump()
     d["active_task"] = config.active_task

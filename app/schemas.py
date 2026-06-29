@@ -177,9 +177,7 @@ class TaskSummary(BaseModel):
 
 
 class LogLevelResponse(BaseModel):
-    """GET /api/config/log-levels 响应。"""
-    global_level: str = "INFO"
-    source_levels: dict[str, str] = Field(default_factory=dict)
+    level: str = "INFO"
 
 
 class MonitorStatusResponse(BaseModel):
@@ -328,13 +326,9 @@ class PauseSettings(BaseModel, frozen=True):
 
 
 class LoggingSettings(BaseModel, frozen=True):
-    """日志配置 — 日志初始化模块消费。"""
-
-    level: str = Field(default="INFO", pattern=r"^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
-    frontend_level: str = Field(default="INFO", pattern=r"^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
+    level: str = Field(default="INFO", pattern=r"^(DEBUG|INFO|WARNING|ERROR)$")
     log_retention_days: int = Field(default=7, ge=1, le=365)
     access_log: bool = False
-    source_levels: dict[str, str] = Field(default_factory=dict)
 
 
 class RetrySettings(BaseModel, frozen=True):
@@ -414,10 +408,8 @@ class ConfigPatchRequest(BaseModel):
     active_task: str | None = None
 
 
-class SourceLevelRequest(BaseModel):
-    """PUT /api/config/source-level 请求体。"""
-    source: str = Field(min_length=1, description="日志来源，'global' 表示全局")
-    level: str = Field(min_length=1, description="日志级别")
+class LogLevelRequest(BaseModel):
+    level: str = Field(min_length=1, description="日志级别（DEBUG/INFO/WARNING/ERROR）")
 
 
 class AutoSwitchRequest(BaseModel):

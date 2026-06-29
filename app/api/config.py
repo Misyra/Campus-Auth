@@ -8,18 +8,10 @@ from fastapi import APIRouter, HTTPException, Request
 
 from app.deps import MonitorServiceDep, ProfileServiceDep
 from app.schemas import (
-    ApiResponse,
-    AppSettings,
-    BrowserSettings,
-    ConfigPatchRequest,
-    ConfigSaveRequest,
-    LogLevelResponse,
-    LoggingSettings,
-    MonitorSettings,
-    PauseSettings,
-    RetrySettings,
-    SourceLevelRequest,
-    StealthScriptResponse,
+    ApiResponse, AppSettings, BrowserSettings,
+    ConfigPatchRequest, ConfigSaveRequest,
+    LogLevelRequest, LogLevelResponse, LoggingSettings,
+    MonitorSettings, PauseSettings, RetrySettings, StealthScriptResponse,
 )
 from app.services.profile_service import save_global_and_profile
 from app.utils.logging import get_logger
@@ -45,44 +37,24 @@ def _handle_config_error(operation: str, *, log_warning: bool = False):
 
 @router.get("/api/config/log-levels", response_model=LogLevelResponse)
 def get_log_levels() -> LogLevelResponse:
-    """获取日志级别配置"""
     from app.utils.logging import LogConfigCenter
-
     config = LogConfigCenter.get_instance()
-    return LogLevelResponse(
-        global_level=config.get_config().get("level", "INFO"),
-        source_levels=config.get_all_source_levels(),
-    )
+    return LogLevelResponse(level=config.get_config().get("level", "INFO"))
 
 
-@router.put("/api/config/source-level", response_model=ApiResponse)
-def set_source_level(payload: SourceLevelRequest, request: Request) -> ApiResponse:
-    """设置日志级别。source='global' 时设置全局级别，否则设置来源级别。"""
+@router.put("/api/config/log-level", response_model=ApiResponse)
+def set_log_level(payload: LogLevelRequest, request: Request) -> ApiResponse:
     from app.utils.logging import LogConfigCenter
-
     config = LogConfigCenter.get_instance()
-
-    if payload.source == "global":
-        config.set_level(payload.level)
-        actual = config.get_config().get("level", "INFO")
-        if actual != payload.level.upper():
-            return ApiResponse(success=True, message=f"无效级别 '{payload.level}'，已降级为 {actual}")
-    else:
-        try:
-            config.set_source_level(payload.source, payload.level)
-        except ValueError as e:
-            raise HTTPException(400, str(e)) from e
-
-    _persist_source_levels(request, config)
-    return ApiResponse(success=True, message=f"已设置 {payload.source} 级别为 {payload.level}")
-
-
-def _persist_source_levels(request: Request, config):
-    """将 source_levels 持久化到 settings.json"""
+    config.set_level(payload.level)
+    actual = config.get_config().get("level", "INFO")
     profile_service = request.app.state.services.profile_service
     profile_service.update(
-        lambda d: setattr(d.global_config, "logging", d.global_config.logging.model_copy(update={"source_levels": config.get_all_source_levels()}))
+        lambda d: setattr(d.global_config, "logging", d.global_config.logging.model_copy(update={"level": actual}))
     )
+    if actual != payload.level.upper():
+        return ApiResponse(success=True, message=f"无效级别 '{payload.level}'，已降级为 {actual}")
+    return ApiResponse(success=True, message=f"已设置全局日志级别为 {actual}")
 
 
 @router.get("/api/config")
@@ -180,7 +152,7 @@ def _log_config_changes(old_dict: dict, new_payload: ConfigSaveRequest) -> None:
         "retry.retry_interval": "重试间隔",
         "logging.log_retention_days": "日志保留天数",
         "logging.level": "后端日志级别",
-        "logging.frontend_level": "前端日志级别",
+
         "app_settings.app_port": "网页端口",
         "app_settings.proxy": "网络代理",
         "app_settings.shell_path": "Shell路径",
