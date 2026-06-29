@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import app.utils.crypto as crypto_mod
-from app.utils.exceptions import DecryptionError
+from app.utils.crypto import _DecryptionError
 
 
 @pytest.fixture(autouse=True)
@@ -281,7 +281,7 @@ class TestDecryptPassword:
         assert decrypted == "testpass"
 
     def test_decrypt_cryptography_not_installed(self, _reset_crypto_cache):
-        """cryptography 未安装时解密应抛出 DecryptionError。"""
+        """cryptography 未安装时解密应抛出 _DecryptionError。"""
         crypto_mod = _reset_crypto_cache
 
         import builtins
@@ -294,20 +294,20 @@ class TestDecryptPassword:
             return real_import(name, *args, **kwargs)
 
         with patch("builtins.__import__", side_effect=mock_import):
-            with pytest.raises(DecryptionError, match="cryptography"):
+            with pytest.raises(_DecryptionError, match="cryptography"):
                 crypto_mod.decrypt_password("ENC:somedata")
 
         assert crypto_mod.has_decryption_error()
 
     def test_decrypt_failure_sets_error_flag(self, _reset_crypto_cache):
-        """解密失败应设置失败标记并抛出 DecryptionError。"""
+        """解密失败应设置失败标记并抛出 _DecryptionError。"""
         crypto_mod = _reset_crypto_cache
         with patch.object(crypto_mod, "is_windows", return_value=False):
             # 先生成密钥
             crypto_mod._derive_fernet_key()
 
         # 使用无效的加密数据
-        with pytest.raises(DecryptionError, match="解密失败"):
+        with pytest.raises(_DecryptionError, match="解密失败"):
             crypto_mod.decrypt_password("ENC:invaliddata")
 
         assert crypto_mod.has_decryption_error()
@@ -316,7 +316,7 @@ class TestDecryptPassword:
 # ── has_decryption_error / clear_decryption_error ──
 
 
-class TestDecryptionErrorFlag:
+class Test_DecryptionErrorFlag:
     """验证解密失败标记的读写。"""
 
     def test_initial_state_no_error(self, _reset_crypto_cache):
