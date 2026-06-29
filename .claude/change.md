@@ -2,6 +2,20 @@
 
 ## 2026-06-29
 
+### refactor: 移动 DecryptionError 到 crypto.py 作为 _DecryptionError + 内联 safe_decrypt()
+
+- `app/utils/crypto.py`：新增 `_DecryptionError` 私有异常类，移除 `DecryptionError` 导入；删除 `safe_decrypt()` 函数，其逻辑内联到 `decrypt_password_field()`
+- `app/utils/exceptions.py`：删除 `DecryptionError` 类
+- `tests/test_utils/test_crypto.py`：更新导入为 `_DecryptionError`（从 `app.utils.crypto`）
+- `tests/test_utils/test_utils.py`：移除 `DecryptionError` 导入和相关测试
+- `tests/test_config/test_config_schemas.py`：移除 `safe_decrypt` 导入和 `TestSafeDecrypt` 测试类
+
+### refactor: 删除前端死函数 — getBrowser/getBrowserIcon/isBrowserInstalled/getOtherBrowsers/formatFileSize/togglePureMode/fetchPureMode + _notifyCategoryLabel 改常量
+
+- `frontend/js/methods/ui.js`：删除 `getBrowser`、`getBrowserIcon`、`isBrowserInstalled`、`getOtherBrowsers` 四个未调用方法；将 `_notifyCategoryLabel` 方法转换为模块级常量 `NOTIFY_CATEGORY_LABELS`
+- `frontend/js/methods/formatters.js`：删除未调用的 `formatFileSize` 方法
+- `frontend/js/api-service.js`：删除未调用的 `togglePureMode`、`fetchPureMode`（实际调用走 editor.js 直接请求）
+
 ### refactor: ConfigBuilder 类改为 build_runtime_config() 函数
 
 - `app/services/config_builder.py`：移除 `ConfigBuilder` 类，`build()` 静态方法改为顶层函数 `build_runtime_config()`
