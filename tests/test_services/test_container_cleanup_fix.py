@@ -13,6 +13,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.container import ServiceContainer
+
 
 @pytest.fixture
 def mock_container_deps():
@@ -45,8 +47,6 @@ def mock_container_deps():
 
 def _make_container(tmp_path: Path, mock_container_deps: dict):
     """创建一个已 mock 依赖的 ServiceContainer 实例。"""
-    from app.container import ServiceContainer
-
     return ServiceContainer(tmp_path)
 
 
@@ -170,3 +170,11 @@ class TestCleanupEfficiencyFix:
         # 临时目录应存在但内容应被清空
         assert temp_dir.exists()
         assert list(temp_dir.iterdir()) == []
+
+
+def test_lightweight_container_has_real_task_executor(tmp_path):
+    """轻量模式应使用真实 TaskExecutor。"""
+    from app.services.task_executor import TaskExecutor
+
+    container = ServiceContainer(tmp_path, mode="lightweight")
+    assert isinstance(container.task_executor, TaskExecutor)
