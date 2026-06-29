@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 # ── 列出脚本 ──
@@ -189,3 +193,58 @@ class TestListBinaries:
         resp = test_client.get("/api/scripts/binaries")
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
+
+
+# ── 线程池验证 ──
+
+
+class TestScriptThreadPool:
+    """验证 run_script 使用专用线程池。"""
+
+    @pytest.mark.asyncio
+    async def test_run_script_uses_dedicated_executor(self):
+        """run_script 应使用专用 ThreadPoolExecutor 而非默认线程池。"""
+        from app.api.scripts import run_script
+
+        if hasattr(run_script, "_executor"):
+            delattr(run_script, "_executor")
+
+        captured_executor = {}
+
+        mock_task_mgr = MagicMock()
+        mock_task_mgr.get_task_detail.return_value = {"type": "script", "binary_path": ""}
+        mock_task_mgr._safe_task_path.return_value = MagicMock(
+            exists=MagicMock(return_value=True)
+        )
+
+        mock_request = MagicMock()
+        mock_request.app.state.services.monitor_service.get_runtime_config.return_value = {
+            "monitor": {"script_timeout": 60}
+        }
+
+        async def mock_run_in_executor(executor, func):
+            captured_executor["executor"] = executor
+            return True, "mock success"
+
+        with (
+            patch("app.api.scripts.ScriptRunner") as mock_runner_cls,
+            patch.object(asyncio.BaseEventLoop, "run_in_executor", side_effect=mock_run_in_executor),
+        ):
+            mock_runner = MagicMock()
+            mock_runner_cls.return_value = mock_runner
+            result = await run_script(mock_request, "test_task", mock_task_mgr)
+
+        assert result.success is True
+        executor = captured_executor.get("executor")
+        assert executor is not None
+        assert isinstance(executor, ThreadPoolExecutor)
+        assert executor._thread_name_prefix == "script_runner"
+
+    @pytest.mark.asyncio
+    async def test_executor_is_reused(self):
+        """模块级 executor 应存在并可复用。"""
+        from app.api.scripts import _script_executor
+
+        assert _script_executor is not None
+        assert isinstance(_script_executor, ThreadPoolExecutor)
+        assert _script_executor._thread_name_prefix == "script_runner"
