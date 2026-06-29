@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime
 import os
+import tempfile
 import time
 from pathlib import Path
 from unittest.mock import patch
@@ -241,6 +242,44 @@ class TestAtomicWrite:
         target = tmp_path / "test.txt"
         atomic_write(str(target), "content", suffix="x" * 21)
         assert target.read_text(encoding="utf-8") == "content"
+
+
+class TestAtomicWriteCrossFilesystem:
+    """测试 atomic_write 的跨文件系统兼容性。"""
+
+    def test_temp_file_created_in_target_directory(self, tmp_path: Path):
+        """验证临时文件在目标文件所在目录创建。"""
+        target = tmp_path / "test.txt"
+        captured_dir = None
+
+        original_mkstemp = tempfile.mkstemp
+
+        def mock_mkstemp(**kwargs):
+            nonlocal captured_dir
+            captured_dir = kwargs.get("dir")
+            return original_mkstemp(**kwargs)
+
+        with patch("app.utils.files.tempfile.mkstemp", side_effect=mock_mkstemp):
+            atomic_write(target, "hello")
+
+        assert captured_dir == str(tmp_path)
+
+    def test_temp_file_created_in_parent_for_relative_path(self):
+        """验证相对路径时临时文件在当前目录创建。"""
+        captured_dir = None
+        original_mkstemp = tempfile.mkstemp
+
+        def mock_mkstemp(**kwargs):
+            nonlocal captured_dir
+            captured_dir = kwargs.get("dir")
+            return original_mkstemp(**kwargs)
+
+        with patch("app.utils.files.tempfile.mkstemp", side_effect=mock_mkstemp):
+            atomic_write("test_relative_file.txt", "hello")
+            if os.path.exists("test_relative_file.txt"):
+                os.unlink("test_relative_file.txt")
+
+        assert captured_dir == "."
 
 
 # =====================================================================
