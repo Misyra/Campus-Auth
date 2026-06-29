@@ -17,11 +17,11 @@ from app.services.profile_service import (
     SaveResult,
     _rollback_config,
 )
-from app.services.config_builder import ConfigBuilder
+from app.services.config_builder import build_runtime_config
 
 
 class TestConfigBuilderBuild:
-    """ConfigBuilder.build 测试（原 build_runtime_config 测试）。"""
+    """build_runtime_config 测试。"""
 
     def test_build_from_config_and_profile(self):
         config = RuntimeConfig()
@@ -31,7 +31,7 @@ class TestConfigBuilderBuild:
             auth_url="http://10.0.0.1/login",
             carrier="移动",
         )
-        result = ConfigBuilder.build(config, profile)
+        result = build_runtime_config(config, profile)
 
         assert result.credentials.username == "student"
         assert result.credentials.password == "ENC:abc"
@@ -41,20 +41,20 @@ class TestConfigBuilderBuild:
     def test_carrier_custom_mapping(self):
         config = RuntimeConfig()
         profile = Profile(carrier="自定义", carrier_custom="myisp")
-        result = ConfigBuilder.build(config, profile)
+        result = build_runtime_config(config, profile)
         assert result.credentials.isp == "myisp"
         assert result.credentials.carrier_custom == "myisp"
 
     def test_carrier_none_mapping(self):
         config = RuntimeConfig()
         profile = Profile(carrier="无")
-        result = ConfigBuilder.build(config, profile)
+        result = build_runtime_config(config, profile)
         assert result.credentials.isp == ""
 
     def test_browser_config_preserved(self):
         config = RuntimeConfig(browser=BrowserSettings(headless=False, timeout=15))
         profile = Profile(username="u", password="p", auth_url="http://x")
-        result = ConfigBuilder.build(config, profile)
+        result = build_runtime_config(config, profile)
 
         assert result.browser.headless is False
         assert result.browser.timeout == 15
@@ -63,13 +63,13 @@ class TestConfigBuilderBuild:
         """以 • 开头的密码被清空（掩码值）。"""
         config = RuntimeConfig()
         profile = Profile(username="u", password="••••••••", auth_url="http://x")
-        result = ConfigBuilder.build(config, profile)
+        result = build_runtime_config(config, profile)
         assert result.credentials.password == ""
 
     def test_active_task_from_profile(self):
         config = RuntimeConfig()
         profile = Profile(active_task="  my_task  ")
-        result = ConfigBuilder.build(config, profile)
+        result = build_runtime_config(config, profile)
         assert result.active_task == "my_task"
 
     def test_credentials_replaced_not_merged(self):
@@ -78,7 +78,7 @@ class TestConfigBuilderBuild:
             credentials=LoginCredentials(username="old", password="old_pwd")
         )
         profile = Profile(username="new", password="new_pwd", auth_url="http://y")
-        result = ConfigBuilder.build(config, profile)
+        result = build_runtime_config(config, profile)
         assert result.credentials.username == "new"
         assert result.credentials.password == "new_pwd"
 
