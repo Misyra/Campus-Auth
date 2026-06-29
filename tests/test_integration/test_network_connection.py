@@ -23,7 +23,6 @@ def _make_monitor_core(engine) -> NetworkMonitorCore:
         config=config,
         log_callback=engine.record_log,
         login_history=engine._login_history,
-        worker_getter=engine._worker_getter,
     )
     core.set_profile_service(engine._profile_service)
     core.init_monitoring()
