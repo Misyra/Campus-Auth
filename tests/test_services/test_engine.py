@@ -22,7 +22,7 @@ from app.services.engine import (
     EngineCommand,
     ScheduleEngine,
 )
-from app.services.engine_status import StatusSnapshot
+from app.services.engine import StatusSnapshot
 from app.services.monitor_service import CheckOnceResult
 from app.services.scheduler_service import SchedulerService
 
@@ -1090,16 +1090,16 @@ class TestUpdateStatusSnapshot:
 
 
 class TestQueueStatusBroadcast:
-    def test_queue_status_broadcast_delegates_to_broadcaster(self, engine_factory):
+    def test_queue_status_broadcast_delegates_to_ws_manager(self, engine_factory):
         svc = engine_factory(raw=True)
         # 直接测试 StatusManager 的 _queue_status_broadcast
         svc._status_manager.get_status = MagicMock(return_value=MagicMock(model_dump=lambda: {"monitoring": False}))
         svc._status_manager._queue_status_broadcast()
-        svc._ws_broadcaster.enqueue_status.assert_called_once_with({"monitoring": False})
+        svc._ws_manager.enqueue_status.assert_called_once_with({"monitoring": False})
 
-    def test_queue_status_broadcast_no_broadcaster(self, engine_factory):
+    def test_queue_status_broadcast_no_ws_manager(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._status_manager._ws_broadcaster = None
+        svc._status_manager._ws_manager = None
         svc._status_manager.get_status = MagicMock(return_value=MagicMock(model_dump=lambda: {"monitoring": False}))
         # 不应抛异常
         svc._status_manager._queue_status_broadcast()
@@ -1475,7 +1475,7 @@ class TestTogglePureMode:
 
 class TestProperties:
     def test_ws_broadcast_queue_default(self, engine_factory):
-        """ws_broadcast_queue 已迁移至 WsBroadcaster，此测试验证 engine 不再拥有该属性。"""
+        """ws_broadcast_queue 已迁移至 WebSocketManager，此测试验证 engine 不再拥有该属性。"""
         svc = engine_factory(raw=True)
         assert not hasattr(svc, "ws_broadcast_queue") or isinstance(
             getattr(type(svc), "ws_broadcast_queue", None), property
@@ -1626,7 +1626,7 @@ class TestBoot:
 
 # =====================================================================
 # ws_drain_loop / drain_ws_queue / set_dashboard_sink 迁移
-# 已迁移至 WsBroadcaster，测试见 test_ws_broadcaster.py
+# 已迁移至 WebSocketManager，测试见 test_websocket_manager.py
 # =====================================================================
 
 

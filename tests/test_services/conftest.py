@@ -11,7 +11,7 @@ import pytest
 
 from app.schemas import RuntimeConfig
 from app.services.engine import ScheduleEngine
-from app.services.engine_status import StatusManager, StatusSnapshot
+from app.services.engine import StatusManager, StatusSnapshot
 from app.services.retry_policy import MonitoredPolicy
 
 
@@ -84,7 +84,7 @@ def engine_factory():
         svc._retry_time_lock = threading.Lock()
         svc._pure_mode = False
         svc._ws_manager = None
-        svc._ws_broadcaster = MagicMock()
+        svc._ws_manager = MagicMock()
         svc._orchestrator = MagicMock()
         svc._login_history = None
         svc._worker_getter = None
@@ -97,11 +97,11 @@ def engine_factory():
         # StatusManager — 状态快照与广播
         svc._status_manager = StatusManager(
             get_monitor_core=lambda: svc._monitor_core,
-            ws_broadcaster=svc._ws_broadcaster,
+            ws_manager=svc._ws_manager,
         )
 
         # LoginBridge — 登录委托
-        from app.services.engine_login_bridge import LoginBridge
+        from app.services.engine import LoginBridge
         svc._login_bridge = LoginBridge(
             get_orchestrator=lambda: svc._orchestrator,
             get_runtime_config=lambda: svc._runtime_config,

@@ -4,7 +4,7 @@
 使用 Actor 模型（线程 + 队列）进行命令派发，零 asyncio 依赖的核心逻辑。
 
 职责边界：命令队列、监控循环、重试逻辑、调度器、手动网络测试。
-WS 广播委托给 WsBroadcaster。
+WS 广播委托给 WebSocketManager。
 """
 
 from __future__ import annotations
@@ -18,12 +18,15 @@ import time
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Callable
+
+if TYPE_CHECKING:
+    from app.services.login_orchestrator import LoginOrchestrator
+    from app.utils.logging import DashboardSink
 
 from app.network.decision import is_network_available
 from app.network.parsers import parse_ping_targets, parse_url_checks
 from app.schemas import MonitorStatusResponse, RuntimeConfig
-from app.services.engine_status import StatusManager
 from app.services.monitor_service import NetworkMonitorCore
 from app.services.websocket_manager import WebSocketManager
 from app.utils import validate_env_config
@@ -33,8 +36,8 @@ from app.services.login_handler import SCREENSHOT_URL_PATTERN
 from .profile_service import ProfileService
 from .retry_policy import MonitoredPolicy
 
-# 向后兼容：常量已迁移至 ws_broadcaster 模块
-from app.services.ws_broadcaster import WS_DRAIN_INTERVAL_SECONDS  # noqa: F401
+# 向后兼容 re-export
+from app.services.websocket_manager import WS_DRAIN_INTERVAL_SECONDS  # noqa: F401
 
 # ── Actor 模型：类型化命令派发 ──
 
@@ -63,6 +66,251 @@ class EngineCommand:
 logger = get_logger("engine", source="backend")
 
 
+# ── StatusSnapshot / StatusManager ──
+
+
+@dataclass
+class StatusSnapshot:
+    """基于引用替换的监控状态快照，由 API 处理器直接读取。"""
+
+    monitoring: bool = False
+    last_network_ok: bool = False
+    start_time: float | None = None
+    network_check_count: int = 0
+    login_attempt_count: int = 0
+    last_check_time: str | None = None
+    snapshot_time: float = 0.0
+    status_detail: str = "正常"
+    network_state: str = "unknown"
+
+
+class StatusManager:
+    """状态快照管理与 WS 广播桥接。"""
+
+    def __init__(
+        self,
+        get_monitor_core: Callable[[], NetworkMonitorCore | None],
+        ws_manager: WebSocketManager | None = None,
+    ) -> None:
+        self._get_monitor_core = get_monitor_core
+        self._ws_manager = ws_manager
+        self._status_snapshot = StatusSnapshot()
+        self._last_snapshot_time: float = 0
+        self._snapshot_min_interval: float = 1.0
+        self._dashboard_sink: DashboardSink | None = None
+
+    def set_ws_manager(self, ws_manager: WebSocketManager) -> None:
+        self._ws_manager = ws_manager
+
+    def set_dashboard_sink(self, sink: DashboardSink) -> None:
+        self._dashboard_sink = sink
+
+    def update_snapshot(self, force: bool = False) -> None:
+        """Read monitor_core state into lock-free StatusSnapshot."""
+        now = time.time()
+        if not force and now - self._last_snapshot_time < self._snapshot_min_interval:
+            return
+        self._last_snapshot_time = now
+
+        core = self._get_monitor_core()
+        if core is not None:
+            try:
+                snap = core.snapshot()
+                network_state = snap.get("network_state", "unknown")
+                network_connected = network_state == "connected"
+                self._status_snapshot = StatusSnapshot(
+                    monitoring=core.monitoring,
+                    last_network_ok=network_connected,
+                    start_time=snap.get("start_time"),
+                    network_check_count=int(snap.get("network_check_count", 0)),
+                    login_attempt_count=int(snap.get("login_attempt_count", 0)),
+                    last_check_time=snap.get("last_check_time"),
+                    snapshot_time=time.time(),
+                    status_detail=snap.get("status_detail", "正常"),
+                    network_state=network_state,
+                )
+            except Exception:
+                logger.exception("状态快照更新失败")
+        else:
+            self._status_snapshot = StatusSnapshot(
+                snapshot_time=time.time(), status_detail="已停止"
+            )
+
+        self._queue_status_broadcast()
+
+    def _queue_status_broadcast(self) -> None:
+        if self._ws_manager is None:
+            return
+        try:
+            status = self.get_status()
+            self._ws_manager.enqueue_status(status.model_dump())
+        except Exception:
+            logger.exception("状态广播队列失败")
+
+    def get_status(self) -> MonitorStatusResponse:
+        snap = self._status_snapshot
+        runtime_seconds = (
+            int(time.time() - snap.start_time)
+            if snap.monitoring and snap.start_time
+            else 0
+        )
+        return MonitorStatusResponse(
+            monitoring=snap.monitoring,
+            network_check_count=snap.network_check_count,
+            login_attempt_count=snap.login_attempt_count,
+            last_check_time=snap.last_check_time,
+            runtime_seconds=runtime_seconds,
+            network_connected=snap.monitoring and snap.last_network_ok,
+            status_detail=snap.status_detail,
+            network_state=snap.network_state,
+        )
+
+    def list_logs(self, limit: int = 200) -> list:
+        if limit <= 0 or self._dashboard_sink is None:
+            return []
+        return self._dashboard_sink.list_logs(limit=limit)
+
+
+# ── LoginBridge ──
+
+
+class LoginBridge:
+    """登录提交与回调管理，从 ScheduleEngine._do_async_login 提取。"""
+
+    def __init__(
+        self,
+        get_orchestrator: Callable[[], LoginOrchestrator | None],
+        get_runtime_config: Callable[[], RuntimeConfig],
+        retry_policy: MonitoredPolicy,
+        status_update_callback: Callable[[], None],
+        record_log: Callable[..., None],
+        wakeup_event: threading.Event,
+        get_monitor_check_interval: Callable[[], int],
+        on_retry_scheduled: Callable[[float], None] | None = None,
+        on_login_success: Callable[[], None] | None = None,
+        on_retry_exhausted: Callable[[], None] | None = None,
+    ) -> None:
+        self._get_orchestrator = get_orchestrator
+        self._get_runtime_config = get_runtime_config
+        self._retry_policy = retry_policy
+        self._status_update_callback = status_update_callback
+        self._record_log = record_log
+        self._wakeup_event = wakeup_event
+        self._get_monitor_check_interval = get_monitor_check_interval
+        self._registered_futures: set[Future] = set()
+        self._futures_lock = threading.Lock()
+        self._on_retry_scheduled = on_retry_scheduled or self._default_retry_scheduled
+        self._on_login_success = on_login_success or (lambda: None)
+        self._on_retry_exhausted = on_retry_exhausted or (lambda: None)
+
+    def submit_login(
+        self,
+        is_manual: bool = False,
+        config_snapshot: RuntimeConfig | None = None,
+    ) -> bool:
+        """提交登录到 LoginOrchestrator。"""
+        # 清理已完成的 Future 引用，防止极端情况下残留
+        with self._futures_lock:
+            self._registered_futures = {f for f in self._registered_futures if not f.done()}
+
+        orchestrator = self._get_orchestrator()
+        if orchestrator is None:
+            return False
+
+        config = config_snapshot if config_snapshot is not None else self._get_runtime_config()
+
+        # 自动登录前检查物理网络和认证地址可达性
+        if not is_manual:
+            m = config.monitor
+            if m.enable_local_check or m.check_auth_url:
+                from app.network.decision import check_login_prerequisites
+
+                ok, reason = check_login_prerequisites(m, config.credentials.auth_url)
+                if not ok:
+                    self._record_log(
+                        f"登录前置检查未通过: {reason}",
+                        level="WARNING", source="backend",
+                    )
+                    return False
+
+        source = "manual" if is_manual else "auto"
+        handle = orchestrator.submit(source=source, config=config)
+
+        if handle.rejected_reason is not None:
+            # 手动登录的响应由 _handle_login 设置，此处仅记录自动登录的拒绝
+            if not is_manual:
+                self._record_log(handle.rejected_reason, level="WARNING", source="backend")
+            return False
+
+        if handle.future is None:
+            # 复用了旧 handle（去重命中），不算新提交
+            return False
+
+        # 防止去重命中时重复注册回调
+        with self._futures_lock:
+            if handle.future in self._registered_futures:
+                return False
+
+        def _on_done(f: Future) -> None:
+            with self._futures_lock:
+                self._registered_futures.discard(f)
+            self._status_update_callback()
+            try:
+                ok, msg = f.result()
+                tag = "手动登录" if is_manual else "自动登录"
+                if ok:
+                    logger.info("{}完成: {}", tag, msg)
+                    if not is_manual:
+                        self._retry_policy.on_login_done(success=True)
+                        self._on_login_success()
+                else:
+                    logger.warning("{}失败: {}", tag, msg)
+                    if not is_manual:
+                        delay = self._retry_policy.on_login_done(success=False)
+                        if delay is None:
+                            # 超过最大重试次数，不再尝试登录，等待网络检测恢复后重置
+                            self._on_retry_exhausted()
+                            logger.warning(
+                                "登录重试次数已用尽（{}/{}），等待网络恢复（下次检测 {}s 后）",
+                                self._retry_policy._attempt,
+                                self._retry_policy.max_retries,
+                                self._get_monitor_check_interval(),
+                            )
+                        else:
+                            from datetime import datetime as _dt
+                            next_time = _dt.fromtimestamp(
+                                time.time() + delay
+                            ).strftime("%H:%M:%S")
+                            logger.info(
+                                "重试 {}/{}, 下次重试: {}s 后 ({})",
+                                self._retry_policy._attempt,
+                                self._retry_policy.max_retries,
+                                int(delay), next_time,
+                            )
+                            # 通过回调设置下次重试时间
+                            self._on_retry_scheduled(delay)
+            except CancelledError:
+                logger.info("登录任务已取消")
+            except Exception:
+                logger.exception("登录任务异常")
+
+        with self._futures_lock:
+            self._registered_futures.add(handle.future)
+        handle.future.add_done_callback(_on_done)
+        return True
+
+    def _default_retry_scheduled(self, delay: float) -> None:
+        """重试已调度 — 默认实现：唤醒引擎循环。"""
+        self._wakeup_event.set()
+
+    def cancel_login(self) -> tuple[bool, str]:
+        """取消当前正在执行的登录。"""
+        orchestrator = self._get_orchestrator()
+        if orchestrator is None:
+            return False, "登录服务未初始化"
+        orchestrator.cancel_running()
+        return True, "登录已取消"
+
 
 # ── ScheduleEngine ──
 
@@ -79,7 +327,6 @@ class ScheduleEngine:
         worker_getter=None,
         task_registry=None,
         task_executor=None,
-        ws_broadcaster=None,
         orchestrator=None,
         scheduler=None,
     ):
@@ -94,7 +341,6 @@ class ScheduleEngine:
         # 新组件注入
         self._task_registry = task_registry
         self._task_executor = task_executor
-        self._ws_broadcaster = ws_broadcaster
 
         # 调度器（从 ScheduleEngine 提取为独立组件）
         self._scheduler = scheduler
@@ -122,7 +368,7 @@ class ScheduleEngine:
         # StatusManager — 状态快照与广播
         self._status_manager = StatusManager(
             get_monitor_core=lambda: self._monitor_core,
-            ws_broadcaster=self._ws_broadcaster,
+            ws_manager=self._ws_manager,
         )
 
         # 登录并发控制 —— 委托 task_executor.is_login_running()
@@ -137,8 +383,6 @@ class ScheduleEngine:
         self._next_retry_time: float = 0  # 下次重试时间（独立于网络检测）
 
         # LoginBridge — 登录委托
-        from app.services.engine_login_bridge import LoginBridge
-
         def _bridge_retry_scheduled(delay: float) -> None:
             with self._retry_time_lock:
                 self._next_retry_time = time.time() + delay
@@ -527,9 +771,10 @@ class ScheduleEngine:
     def _update_status_snapshot(self, force: bool = False) -> None:
         self._status_manager.update_snapshot(force=force)
 
-    def set_ws_broadcaster(self, ws_broadcaster) -> None:
-        """注入 WsBroadcaster（供 container 轻量模式唤醒时调用）。"""
-        self._status_manager.set_ws_broadcaster(ws_broadcaster)
+    def set_ws_manager(self, ws_manager: WebSocketManager) -> None:
+        """注入 WebSocketManager（供 container 轻量模式唤醒时调用）。"""
+        self._ws_manager = ws_manager
+        self._status_manager.set_ws_manager(ws_manager)
 
     # ── 公共 API（监控 — 从 API 线程 / main.py 调用）──
 

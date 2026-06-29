@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 from concurrent.futures import Future
 
-from app.services.engine_login_bridge import LoginBridge
+from app.services.engine import LoginBridge
 
 
 class TestRegisteredFuturesCleanup:
