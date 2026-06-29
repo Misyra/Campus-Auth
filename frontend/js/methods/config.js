@@ -344,8 +344,8 @@ export const configMethods = {
     try {
       const data = await this.$apiService.config.fetchLogLevels();
       // 统一更新到 config.logging，不再使用独立的 logLevels
-      if (data.global_level) {
-        this.config.logging.level = data.global_level;
+      if (data.level) {
+        this.config.logging.level = data.level;
       }
 
     } catch (error) {
@@ -357,6 +357,7 @@ export const configMethods = {
       const data = await this.$apiService.config.setLogLevel(level);
       if (data.success) {
         this.config.logging.level = level;
+        this.frontendLogger.setLevel(level);
         this.frontendLogger.info('config', `日志级别已设置: ${level}`);
         this.toastOnly(true, data.message);
       } else {

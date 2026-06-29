@@ -6,8 +6,8 @@ export function createFrontendLogger(initialLevel = 'INFO') {
   let _ws = null;
 
   const shouldLog = (level) => {
-    const left = LEVEL_VALUES[String(level || '').toUpperCase()] || LEVEL_VALUES.INFO;
-    const right = LEVEL_VALUES[currentLevel] || LEVEL_VALUES.INFO;
+    const left = LEVEL_VALUES[String(level || '').toUpperCase()] ?? LEVEL_VALUES.INFO;
+    const right = LEVEL_VALUES[currentLevel] ?? LEVEL_VALUES.INFO;
     return left >= right;
   };
 
@@ -33,7 +33,7 @@ export function createFrontendLogger(initialLevel = 'INFO') {
     },
     setLevel(level) {
       const next = String(level || '').toUpperCase();
-      currentLevel = LEVEL_VALUES[next] ? next : 'INFO';
+      currentLevel = (LEVEL_VALUES[next] ?? -1) >= 0 ? next : 'INFO';
       console.info(...format('INFO', 'logger', `frontend log level => ${currentLevel}`));
     },
     debug(scope, message, meta) {

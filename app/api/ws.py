@@ -35,7 +35,6 @@ async def websocket_logs_handler(websocket, ws_manager, engine):
                     message_text = str(d.get("message", ""))[:10000]
                     scope = str(d.get("scope", "?"))[:200]
                     if message_text:
-                        from app.utils.logging import get_logger
                         fe_logger = get_logger("frontend", source="frontend")
                         level_name = str(d.get("level", "INFO")).upper()
                         log_func = getattr(fe_logger, level_name.lower(), fe_logger.info)

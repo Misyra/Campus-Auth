@@ -402,7 +402,7 @@ def run(
         log_retention = max(1, logging_settings.log_retention_days) if logging_settings else 7
 
     log_center = LogConfigCenter.get_instance()
-    log_center.initialize({"level": "INFO"}, source="backend")
+    log_center.initialize({"level": logging_settings.level if logging_settings else "INFO"}, source="backend")
 
     # 压制第三方库的 DEBUG 日志
     import logging
