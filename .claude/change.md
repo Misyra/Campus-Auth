@@ -2,6 +2,11 @@
 
 ## 2026-06-29
 
+### test: 删除 test_engine_fix.py — 已被 test_engine.py 全面覆盖
+
+- 删除 `tests/test_services/test_engine_fix.py`（183 行，6 个测试）
+- 6 个测试已由 `test_engine.py` 全面覆盖（135 passed，含 TestDoAsyncLogin + TestNetworkCheckBackoff）
+
 ### refactor: 测试套件瘦身 — 删除死代码、合并重复 fixture
 
 - `tests/test_config/test_constants.py`：删除（常量存在性测试，已在 `test_ws_broadcaster.py` 和 `test_login.py` 中覆盖）
@@ -3862,3 +3867,15 @@
 - 测试文件同步更新：所有 `from main import _xxx` 改为从源模块导入（`app.services.launcher`, `app.services.login_runner`, `app.schemas`）
 - `tests/conftest.py`：移除 `monkeypatch.setattr("main.AUTH_DATA_DIR", ...)`（不再在 main 中 re-export）
 - `tests/test_config/test_deps.py`：重写为测试 `_get` 工厂函数
+
+## 2026-06-29 — Ponytail 全仓库审查 + 实施计划
+
+- 提交：移除 profile_service 中已废弃的 v3→v4→v5 迁移函数（-320 行）
+- 生成全仓库过度工程化审查报告：83 个发现，预估可削减 ~3,600 行
+- 复核修正：4 项"不应执行"（detectPerformance、StepHandler ABC、set_autostart_mode、test_debug_service 直接删）
+- 复核修正：5 项事实错误（文件名搞混、对照对象错、_validateConfig 描述、404 计数、重叠比例）
+- 生成 4 个实施计划（排除问题条目后 ~40 项安全条目）：
+  - 测试套件瘦身（9 tasks）— 删除冗余测试、合并重叠覆盖
+  - 服务层与任务层清理（11 tasks）— 删除死方法、ConfigBuilder 改函数
+  - 工具层与核心层清理（10 tasks）— 删除死常量、内联单调用函数
+  - 前端清理（6 tasks）— 删除死函数、合并 data 工厂文件
