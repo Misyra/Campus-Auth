@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 
-from app.deps import get_monitor_service, get_profile_service
+from app.deps import MonitorServiceDep, ProfileServiceDep
 from app.schemas import (
     ApiResponse,
     AutoSwitchRequest,
@@ -14,9 +14,8 @@ from app.schemas import (
     ProfileListResponse,
     ProfileSummary,
 )
-from app.services.engine import ScheduleEngine
-from app.services.profile_service import ProfileService
 from app.utils.logging import get_logger
+
 
 router = APIRouter()
 api_logger = get_logger("api", source="backend")
@@ -33,7 +32,7 @@ def _safe_detect(func, label: str, default=None):
 
 @router.get("/api/profiles", response_model=ProfileListResponse)
 def list_profiles(
-    profile_svc: ProfileService = Depends(get_profile_service),
+    profile_svc: ProfileServiceDep,
 ) -> ProfileListResponse:
     data = profile_svc.load()
     result: dict[str, ProfileSummary] = {}
@@ -57,7 +56,7 @@ def list_profiles(
 @router.get("/api/profiles/{profile_id}", response_model=ProfileDetailResponse)
 def get_profile(
     profile_id: str,
-    profile_svc: ProfileService = Depends(get_profile_service),
+    profile_svc: ProfileServiceDep,
 ) -> ProfileDetailResponse:
     data = profile_svc.load()
     profile = data.profiles.get(profile_id)
@@ -70,8 +69,8 @@ def get_profile(
 def save_profile(
     profile_id: str,
     payload: Profile,
-    profile_svc: ProfileService = Depends(get_profile_service),
-    monitor_svc: ScheduleEngine = Depends(get_monitor_service),
+    profile_svc: ProfileServiceDep,
+    monitor_svc: MonitorServiceDep,
 ) -> ApiResponse:
     ok, message = profile_svc.save_profile(profile_id, payload)
     api_logger.info("保存方案 {} -> success={}, message={}", profile_id, ok, message)
@@ -89,8 +88,8 @@ def save_profile(
 @router.delete("/api/profiles/{profile_id}", response_model=ApiResponse)
 def delete_profile(
     profile_id: str,
-    profile_svc: ProfileService = Depends(get_profile_service),
-    monitor_svc: ScheduleEngine = Depends(get_monitor_service),
+    profile_svc: ProfileServiceDep,
+    monitor_svc: MonitorServiceDep,
 ) -> ApiResponse:
     ok, message = profile_svc.delete_profile(profile_id)
     api_logger.info("删除方案 {} -> success={}, message={}", profile_id, ok, message)
@@ -108,7 +107,7 @@ def delete_profile(
 @router.post("/api/profiles/active/{profile_id}", response_model=ApiResponse)
 def set_active_profile(
     profile_id: str,
-    monitor_svc: ScheduleEngine = Depends(get_monitor_service),
+    monitor_svc: MonitorServiceDep,
 ) -> ApiResponse:
     # apply_profile 内部已包含 set_active_profile，无需重复调用
     ok, message = monitor_svc.apply_profile(profile_id)
@@ -120,7 +119,7 @@ def set_active_profile(
 
 @router.post("/api/profiles/detect", response_model=NetworkDetectResponse)
 def detect_network_profile(
-    profile_svc: ProfileService = Depends(get_profile_service),
+    profile_svc: ProfileServiceDep,
 ) -> NetworkDetectResponse:
     from app.network.detect import detect_gateway_ip, detect_wifi_ssid
 
@@ -150,8 +149,8 @@ def detect_network_profile(
 @router.post("/api/profiles/auto-switch", response_model=ApiResponse)
 def toggle_auto_switch(
     body: AutoSwitchRequest,
-    profile_svc: ProfileService = Depends(get_profile_service),
-    monitor_svc: ScheduleEngine = Depends(get_monitor_service),
+    profile_svc: ProfileServiceDep,
+    monitor_svc: MonitorServiceDep,
 ) -> ApiResponse:
     profile_svc.set_auto_switch(body.enabled)
     state = "开启" if body.enabled else "关闭"

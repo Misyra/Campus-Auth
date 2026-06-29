@@ -5,11 +5,10 @@ from __future__ import annotations
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 
-from app.deps import get_task_manager
+from app.deps import TaskManagerDep
 from app.schemas import ApiResponse, BinaryInfo, TaskSummary
-from app.tasks import TaskManager
 from app.utils.logging import get_logger
 from app.workers.script_runner import ScriptRunner, detect_available_binaries
 
@@ -20,7 +19,7 @@ _script_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="script_
 
 @router.get("/api/scripts", response_model=list[TaskSummary])
 def list_scripts(
-    task_mgr: TaskManager = Depends(get_task_manager),
+    task_mgr: TaskManagerDep,
 ) -> list[dict[str, str]]:
     """列出所有自定义脚本任务。"""
     return task_mgr.list_script_tasks()
@@ -36,7 +35,7 @@ def list_binaries() -> list[BinaryInfo]:
 @router.get("/api/scripts/{task_id}")
 def get_script(
     task_id: str,
-    task_mgr: TaskManager = Depends(get_task_manager),
+    task_mgr: TaskManagerDep,
 ) -> dict:
     """获取脚本任务详情（含脚本内容）。"""
     task = task_mgr.get_task_detail(task_id)
@@ -49,7 +48,7 @@ def get_script(
 def save_script(
     task_id: str,
     payload: dict,
-    task_mgr: TaskManager = Depends(get_task_manager),
+    task_mgr: TaskManagerDep,
 ) -> ApiResponse:
     """保存自定义脚本任务。"""
     payload["type"] = "script"
@@ -61,7 +60,7 @@ def save_script(
 @router.delete("/api/scripts/{task_id}", response_model=ApiResponse)
 def delete_script(
     task_id: str,
-    task_mgr: TaskManager = Depends(get_task_manager),
+    task_mgr: TaskManagerDep,
 ) -> ApiResponse:
     """删除脚本任务。"""
     ok, message = task_mgr.delete_task_with_validation(task_id)
@@ -73,7 +72,7 @@ def delete_script(
 async def run_script(
     request: Request,
     task_id: str,
-    task_mgr: TaskManager = Depends(get_task_manager),
+    task_mgr: TaskManagerDep,
 ) -> ApiResponse:
     """手动执行脚本任务（测试用）。"""
     task = task_mgr.get_task_detail(task_id)

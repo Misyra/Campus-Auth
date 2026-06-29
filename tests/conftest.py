@@ -29,7 +29,6 @@ def tmp_pid_dir(tmp_path: Path, monkeypatch):
     pid_dir = tmp_path / "pid_data"
     pid_dir.mkdir()
     monkeypatch.setattr("app.utils.process.AUTH_DATA_DIR", pid_dir)
-    monkeypatch.setattr("main.AUTH_DATA_DIR", pid_dir)
     return pid_dir
 
 

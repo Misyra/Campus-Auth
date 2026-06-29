@@ -331,7 +331,8 @@ class TestLoginOnceRetry:
             patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
-            from main import _execute_login_with_retries, LoginResult
+            from app.schemas import LoginResult
+            from app.services.login_runner import execute_login_with_retries as _execute_login_with_retries
 
             result = _execute_login_with_retries(runtime_config, MagicMock())
 
@@ -353,7 +354,8 @@ class TestLoginOnceRetry:
             patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
-            from main import _execute_login_with_retries, LoginResult
+            from app.schemas import LoginResult
+            from app.services.login_runner import execute_login_with_retries as _execute_login_with_retries
 
             result = _execute_login_with_retries(runtime_config, MagicMock())
 
@@ -379,7 +381,8 @@ class TestLoginOnceRetry:
             patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
             patch("time.sleep"),
         ):
-            from main import _execute_login_with_retries, LoginResult
+            from app.schemas import LoginResult
+            from app.services.login_runner import execute_login_with_retries as _execute_login_with_retries
 
             result = _execute_login_with_retries(runtime_config, MagicMock())
 

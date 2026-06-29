@@ -19,7 +19,7 @@ class TestLoginOnceMode:
 
     def test_success(self):
         """网络未连接 → 登录成功 → 返回 LoginResult.SUCCESS。"""
-        from main import _run_login_then_exit
+        from app.services.login_runner import run_login_then_exit as _run_login_then_exit
 
         ctx = self._make_ctx()
         logger = MagicMock()
@@ -41,7 +41,7 @@ class TestLoginOnceMode:
 
     def test_temporary_failure(self):
         """网络未连接 → 登录失败 → 返回 LoginResult.TEMPORARY_FAILURE。"""
-        from main import _run_login_then_exit
+        from app.services.login_runner import run_login_then_exit as _run_login_then_exit
 
         ctx = self._make_ctx()
         logger = MagicMock()
@@ -63,7 +63,7 @@ class TestLoginOnceMode:
 
     def test_config_error(self):
         """配置加载失败 → 返回 LoginResult.CONFIG_ERROR。"""
-        from main import _run_login_then_exit
+        from app.services.login_runner import run_login_then_exit as _run_login_then_exit
 
         ctx = self._make_ctx()
         logger = MagicMock()
@@ -77,7 +77,7 @@ class TestLoginOnceMode:
 
     def test_login_once_records_history(self):
         """login_once 登录成功后应记录登录历史。"""
-        from main import _execute_login_with_retries
+        from app.services.login_runner import execute_login_with_retries as _execute_login_with_retries
 
         logger = MagicMock()
         _creds = LoginCredentials(username="testuser", password="pass", auth_url="http://10.0.0.1")
@@ -108,7 +108,7 @@ class TestLoginOnceMode:
 
     def test_login_once_records_failure_history(self):
         """login_once 登录失败后应记录失败历史。"""
-        from main import _execute_login_with_retries
+        from app.services.login_runner import execute_login_with_retries as _execute_login_with_retries
         from app.schemas import RetrySettings
 
         logger = MagicMock()

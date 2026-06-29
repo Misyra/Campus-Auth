@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 
-from app.deps import get_autostart_service
+from app.deps import AutoStartServiceDep
 from app.schemas import ApiResponse, AutoStartStatusResponse, AutostartEnableRequest, ShellListResponse
 from app.utils.logging import get_logger
 from app.utils.shell_utils import detect_shells as detect_available_shells
@@ -41,7 +41,7 @@ def _save_autostart_lightweight(request: Request, lightweight: bool) -> None:
 @router.get("/api/autostart/status", response_model=AutoStartStatusResponse)
 def autostart_status(
     request: Request,
-    autostart_svc=Depends(get_autostart_service),
+    autostart_svc: AutoStartServiceDep,
 ) -> AutoStartStatusResponse:
     status = autostart_svc.status()
     return AutoStartStatusResponse(
@@ -55,9 +55,9 @@ def autostart_status(
 
 @router.post("/api/autostart/enable", response_model=ApiResponse)
 def enable_autostart(
+    autostart_svc: AutoStartServiceDep,
     request: Request,
     body: AutostartEnableRequest | None = None,
-    autostart_svc=Depends(get_autostart_service),
 ) -> ApiResponse:
     lightweight = body.lightweight if body else True
     _save_autostart_lightweight(request, lightweight)
@@ -68,7 +68,7 @@ def enable_autostart(
 
 @router.post("/api/autostart/disable", response_model=ApiResponse)
 def disable_autostart(
-    autostart_svc=Depends(get_autostart_service),
+    autostart_svc: AutoStartServiceDep,
 ) -> ApiResponse:
     ok, message = autostart_svc.disable()
     api_logger.info("禁用自启动 -> success={}, message={}", ok, message)
@@ -79,7 +79,7 @@ def disable_autostart(
 def set_autostart_mode(
     request: Request,
     body: AutostartEnableRequest,
-    autostart_svc=Depends(get_autostart_service),
+    autostart_svc: AutoStartServiceDep,
 ) -> ApiResponse:
     """切换自启动运行模式（重新生成脚本）。"""
     _save_autostart_lightweight(request, body.lightweight)

@@ -8,10 +8,10 @@ import time
 
 import httpx
 import psutil
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from app.constants import AUTH_DATA_DIR, PROJECT_ROOT
-from app.deps import get_monitor_service
+from app.deps import MonitorServiceDep
 from app.schemas import (
     ApiResponse,
     HealthResponse,
@@ -20,7 +20,6 @@ from app.schemas import (
     UninstallRequest,
     UpdateCheckResponse,
 )
-from app.services.engine import ScheduleEngine
 from app.utils.logging import get_logger
 from app.version import compare_versions, get_project_version
 
@@ -122,7 +121,7 @@ async def check_update() -> UpdateCheckResponse:
 
 @router.get("/api/init-status", response_model=InitStatusResponse)
 def get_init_status(
-    svc: ScheduleEngine = Depends(get_monitor_service),
+    svc: MonitorServiceDep,
 ) -> InitStatusResponse:
     from app.utils.crypto import has_decryption_error
 
@@ -142,7 +141,7 @@ def get_init_status(
 
 @router.post("/api/agree", response_model=ApiResponse)
 def agree_to_terms(
-    svc: ScheduleEngine = Depends(get_monitor_service),
+    svc: MonitorServiceDep,
 ) -> ApiResponse:
     """用户同意使用协议，生成 .agree 标记文件。"""
     try:
@@ -163,7 +162,7 @@ def agree_to_terms(
 def shutdown_server(
     request: Request,
     bg_tasks: BackgroundTasks,
-    svc: ScheduleEngine = Depends(get_monitor_service),
+    svc: MonitorServiceDep,
 ) -> ApiResponse:
     """关闭服务器 — 通过 shutdown_event 触发 lifespan 正常清理"""
     api_logger.warning("收到关机请求")

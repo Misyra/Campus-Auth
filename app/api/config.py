@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 
-from app.deps import get_monitor_service, get_profile_service
+from app.deps import MonitorServiceDep, ProfileServiceDep
 from app.schemas import (
     ApiResponse,
     AppSettings,
@@ -22,8 +22,6 @@ from app.schemas import (
     StealthScriptResponse,
 )
 from app.services.profile_service import save_global_and_profile
-from app.services.engine import ScheduleEngine
-from app.services.profile_service import ProfileService
 from app.utils.logging import get_logger
 
 router = APIRouter(tags=["配置"])
@@ -89,8 +87,8 @@ def _persist_source_levels(request: Request, config):
 
 @router.get("/api/config")
 def get_config(
-    svc: ScheduleEngine = Depends(get_monitor_service),
-    profile_svc: ProfileService = Depends(get_profile_service),
+    svc: MonitorServiceDep,
+    profile_svc: ProfileServiceDep,
 ) -> dict:
     data = profile_svc.load()
     cfg = profile_svc.build_runtime_config(data)
@@ -250,8 +248,8 @@ def _log_config_changes(old_dict: dict, new_payload: ConfigSaveRequest) -> None:
 @router.put("/api/config", response_model=ApiResponse)
 def save_config(
     payload: ConfigSaveRequest,
-    svc: ScheduleEngine = Depends(get_monitor_service),
-    profile_svc: ProfileService = Depends(get_profile_service),
+    svc: MonitorServiceDep,
+    profile_svc: ProfileServiceDep,
 ) -> ApiResponse:
     with _handle_config_error("配置保存", log_warning=True):
         old_data = profile_svc.load()
@@ -271,8 +269,8 @@ def save_config(
 @router.patch("/api/config", response_model=ApiResponse)
 def patch_config(
     payload: ConfigPatchRequest,
-    svc: ScheduleEngine = Depends(get_monitor_service),
-    profile_svc: ProfileService = Depends(get_profile_service),
+    svc: MonitorServiceDep,
+    profile_svc: ProfileServiceDep,
 ) -> ApiResponse:
     """增量更新配置 — 仅修改 payload 中非 None 的字段。"""
     with _handle_config_error("配置增量保存"):

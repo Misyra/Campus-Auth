@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 
-from app.deps import get_profile_service
+from app.deps import ProfileServiceDep
 from app.schemas import BrowserInfo, BrowserListResponse
-from app.services.profile_service import ProfileService
 from app.utils.browser_registry import detect_browsers
 from app.utils.logging import get_logger
 
@@ -17,7 +16,7 @@ router = APIRouter()
 
 @router.get("/api/browsers", response_model=BrowserListResponse)
 async def get_browsers(
-    profile_svc: ProfileService = Depends(get_profile_service),
+    profile_svc: ProfileServiceDep,
 ) -> BrowserListResponse:
     """获取浏览器列表和当前配置。"""
     try:
