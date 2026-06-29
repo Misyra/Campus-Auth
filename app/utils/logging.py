@@ -72,7 +72,6 @@ def _to_std_logging(message):
         "INFO": logging.INFO,
         "WARNING": logging.WARNING,
         "ERROR": logging.ERROR,
-        "CRITICAL": logging.CRITICAL,
     }
     std_level = level_map.get(level, logging.INFO)
 
