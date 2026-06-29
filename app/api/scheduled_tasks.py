@@ -6,10 +6,9 @@ import asyncio
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 
-from app.deps import get_monitor_service
-from app.services.engine import ScheduleEngine
+from app.deps import MonitorServiceDep
 from app.schemas import ApiResponse, ScheduledTaskConfig
 from app.utils.logging import get_logger
 
@@ -19,7 +18,7 @@ api_logger = get_logger("api", source="backend")
 
 @router.get("/api/scheduled-tasks", response_model=list[dict[str, Any]])
 def list_scheduled_tasks(
-    engine: ScheduleEngine = Depends(get_monitor_service),
+    engine: MonitorServiceDep,
 ) -> list[dict[str, Any]]:
     """列出所有定时任务。"""
     return engine.tasks.registry.list_tasks()
@@ -28,7 +27,7 @@ def list_scheduled_tasks(
 @router.post("/api/scheduled-tasks", response_model=ApiResponse)
 def create_scheduled_task(
     payload: ScheduledTaskConfig,
-    engine: ScheduleEngine = Depends(get_monitor_service),
+    engine: MonitorServiceDep,
 ) -> ApiResponse:
     """创建定时任务。"""
 
@@ -45,7 +44,7 @@ def create_scheduled_task(
 def update_scheduled_task(
     task_id: str,
     payload: dict,
-    engine: ScheduleEngine = Depends(get_monitor_service),
+    engine: MonitorServiceDep,
 ) -> ApiResponse:
     """更新定时任务。"""
 
@@ -75,7 +74,7 @@ def update_scheduled_task(
 @router.delete("/api/scheduled-tasks/{task_id}", response_model=ApiResponse)
 def delete_scheduled_task(
     task_id: str,
-    engine: ScheduleEngine = Depends(get_monitor_service),
+    engine: MonitorServiceDep,
 ) -> ApiResponse:
     """删除定时任务。"""
     ok, message = engine.tasks.delete_task(task_id)
@@ -89,7 +88,7 @@ def delete_scheduled_task(
 def run_scheduled_task(
     task_id: str,
     bg_tasks: BackgroundTasks,
-    engine: ScheduleEngine = Depends(get_monitor_service),
+    engine: MonitorServiceDep,
 ) -> ApiResponse:
     """手动执行定时任务（异步后台执行，避免 HTTP 连接长时间阻塞）。"""
     if not engine.tasks.registry.get_task(task_id):
@@ -117,7 +116,7 @@ def run_scheduled_task(
 @router.post("/api/scheduled-tasks/{task_id}/toggle", response_model=ApiResponse)
 def toggle_scheduled_task(
     task_id: str,
-    engine: ScheduleEngine = Depends(get_monitor_service),
+    engine: MonitorServiceDep,
 ) -> ApiResponse:
     """启用/禁用定时任务。"""
     task = engine.tasks.registry.get_task(task_id)
@@ -136,7 +135,7 @@ def toggle_scheduled_task(
 @router.get("/api/scheduled-tasks/{task_id}/history", response_model=list[dict[str, Any]])
 def get_scheduled_task_history(
     task_id: str,
-    engine: ScheduleEngine = Depends(get_monitor_service),
+    engine: MonitorServiceDep,
 ) -> list[dict[str, Any]]:
     """获取定时任务执行历史。"""
     if not engine.tasks.registry.get_task(task_id):

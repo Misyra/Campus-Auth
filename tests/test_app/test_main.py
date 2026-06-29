@@ -451,7 +451,7 @@ class TestRunLoginThenExit:
 
     def test_success_first_try(self, tmp_pid_dir):
         """首次登录成功应返回 SUCCESS。"""
-        from main import _run_login_then_exit
+        from app.services.login_runner import run_login_then_exit as _run_login_then_exit
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
         success_result = MagicMock(success=True, data="ok")
@@ -473,7 +473,7 @@ class TestRunLoginThenExit:
 
     def test_retry_then_succeed(self, tmp_pid_dir):
         """第一次失败、第二次成功。返回 SUCCESS。"""
-        from main import _run_login_then_exit
+        from app.services.login_runner import run_login_then_exit as _run_login_then_exit
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
         fail_result = MagicMock(success=False, error="timeout")
@@ -495,7 +495,7 @@ class TestRunLoginThenExit:
 
     def test_retries_exhausted(self, tmp_pid_dir):
         """所有重试均失败，返回 TEMPORARY_FAILURE。"""
-        from main import _run_login_then_exit
+        from app.services.login_runner import run_login_then_exit as _run_login_then_exit
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
         fail_result = MagicMock(success=False, error="timeout")
@@ -522,7 +522,7 @@ class TestRunLoginThenExit:
 
     def test_network_already_connected_exits(self, tmp_pid_dir):
         """网络已连接时应返回 SUCCESS，不启动浏览器登录。"""
-        from main import _run_login_then_exit
+        from app.services.login_runner import run_login_then_exit as _run_login_then_exit
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
 
@@ -545,7 +545,7 @@ class TestRunLoginThenExit:
 
     def test_network_down_proceeds_with_login(self, tmp_pid_dir):
         """网络未连接时应继续尝试登录，返回 SUCCESS。"""
-        from main import _run_login_then_exit
+        from app.services.login_runner import run_login_then_exit as _run_login_then_exit
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
         success_result = MagicMock(success=True, data="ok")
@@ -571,7 +571,7 @@ class TestRunLoginThenExit:
 
     def test_network_check_exception_proceeds(self, tmp_pid_dir):
         """网络检测异常时应降级继续尝试登录，返回 SUCCESS。"""
-        from main import _run_login_then_exit
+        from app.services.login_runner import run_login_then_exit as _run_login_then_exit
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
         success_result = MagicMock(success=True, data="ok")
@@ -601,7 +601,7 @@ class TestLoginOnceRetryInterval:
 
     def test_fixed_retry_interval(self, tmp_pid_dir):
         """重试间隔应为固定值，不使用指数退避。"""
-        from main import _execute_login_with_retries
+        from app.services.login_runner import execute_login_with_retries as _execute_login_with_retries
 
         mock_worker = MagicMock()
         fail_result = MagicMock(success=False, error="timeout")
@@ -628,7 +628,7 @@ class TestLoginOnceRetryInterval:
 
     def test_login_timeout_passed_to_worker(self, tmp_pid_dir):
         """login_timeout 应从配置读取并传递给 worker。"""
-        from main import _execute_login_with_retries
+        from app.services.login_runner import execute_login_with_retries as _execute_login_with_retries
 
         mock_worker = MagicMock()
         success_result = MagicMock(success=True, data="ok")
@@ -657,7 +657,7 @@ class TestLoginOnceRetryInterval:
 
     def test_login_timeout_default(self, tmp_pid_dir):
         """配置中无 login_timeout 时由 Orchestrator 兜底（resolve_worker_timeout fallback=300）。"""
-        from main import _execute_login_with_retries
+        from app.services.login_runner import execute_login_with_retries as _execute_login_with_retries
 
         mock_worker = MagicMock()
         success_result = MagicMock(success=True, data="ok")
@@ -702,7 +702,7 @@ class TestRunServer:
             LaunchSource,
             RuntimeMode,
         )
-        from main import _run_server
+        from app.services.launcher import launch_server as _run_server
 
         mock_ctx = MagicMock(spec=ApplicationContext)
         mock_ctx.config = MagicMock(spec=AppConfig)
@@ -730,7 +730,7 @@ class TestRunServer:
             RuntimeMode,
             StartupAction,
         )
-        from main import _run_server
+        from app.services.launcher import launch_server as _run_server
 
         mock_ctx = MagicMock(spec=ApplicationContext)
         mock_ctx.config = MagicMock(spec=AppConfig)
@@ -779,7 +779,7 @@ class TestRunServer:
             RuntimeMode,
             StartupAction,
         )
-        from main import _run_server
+        from app.services.launcher import launch_server as _run_server
 
         mock_ctx = MagicMock(spec=ApplicationContext)
         mock_ctx.config = MagicMock(spec=AppConfig)
@@ -829,7 +829,7 @@ class TestRunServer:
             RuntimeMode,
             StartupAction,
         )
-        from main import _run_server
+        from app.services.launcher import launch_server as _run_server
 
         mock_ctx = MagicMock(spec=ApplicationContext)
         mock_ctx.config = MagicMock(spec=AppConfig)
@@ -903,7 +903,7 @@ class TestSignalHandler:
 
     def test_sigint_triggers_cleanup(self, tmp_pid_dir):
         """SIGINT 触发 cleanup 和 os._exit(0)。"""
-        from main import _run_server
+        from app.services.launcher import launch_server as _run_server
 
         registered = {}
 
@@ -953,7 +953,7 @@ class TestSignalHandler:
 
     def test_sigterm_guard_on_windows(self, tmp_pid_dir):
         """_run_server 使用 hasattr(signal, 'SIGTERM') 守卫。"""
-        from main import _run_server
+        from app.services.launcher import launch_server as _run_server
 
         registered = {}
 
@@ -1005,7 +1005,7 @@ class TestOpenBrowser:
 
     def test_setting_true(self, patched_webbrowser):
         """setting=True 时应启动后台线程。"""
-        from main import _open_browser
+        from app.services.launcher import open_browser as _open_browser
 
         threads = []
         original_thread = threading.Thread
@@ -1023,14 +1023,14 @@ class TestOpenBrowser:
 
     def test_setting_false(self, patched_webbrowser):
         """setting=False 时不打开浏览器。"""
-        from main import _open_browser
+        from app.services.launcher import open_browser as _open_browser
 
         _open_browser(8080, setting=False)
         patched_webbrowser.assert_not_called()
 
     def test_setting_none_not_open(self, patched_webbrowser):
         """setting=None 时不打开浏览器。"""
-        from main import _open_browser
+        from app.services.launcher import open_browser as _open_browser
 
         _open_browser(8080, setting=None)
         patched_webbrowser.assert_not_called()

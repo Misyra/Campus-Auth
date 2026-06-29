@@ -1,6 +1,6 @@
-"""依赖注入函数测试 — backend/deps.py
+"""依赖注入测试 — app/deps.py
 
-覆盖：所有 get_* 函数从 request.app.state.services 正确提取服务实例
+覆盖：_get 工厂函数从 request.app.state.services 正确提取服务实例
 """
 
 from __future__ import annotations
@@ -9,14 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.deps import (
-    get_autostart_service,
-    get_debug_manager,
-    get_login_history_service,
-    get_monitor_service,
-    get_profile_service,
-    get_task_manager,
-)
+from app.deps import _get
 
 
 def _make_request(services) -> MagicMock:
@@ -27,7 +20,7 @@ def _make_request(services) -> MagicMock:
 
 
 # =====================================================================
-# 依赖注入函数
+# 依赖注入工厂函数
 # =====================================================================
 
 
@@ -43,26 +36,32 @@ class TestDeps:
         svc.login_history_service = MagicMock(name="LoginHistoryService")
         return svc
 
-    def test_get_monitor_service(self, services):
+    def test_get_engine(self, services):
         request = _make_request(services)
-        assert get_monitor_service(request) is services.engine
+        dep = _get("engine")
+        assert dep(request) is services.engine
 
     def test_get_profile_service(self, services):
         request = _make_request(services)
-        assert get_profile_service(request) is services.profile_service
+        dep = _get("profile_service")
+        assert dep(request) is services.profile_service
 
     def test_get_task_manager(self, services):
         request = _make_request(services)
-        assert get_task_manager(request) is services.task_manager
+        dep = _get("task_manager")
+        assert dep(request) is services.task_manager
 
     def test_get_autostart_service(self, services):
         request = _make_request(services)
-        assert get_autostart_service(request) is services.autostart_service
+        dep = _get("autostart_service")
+        assert dep(request) is services.autostart_service
 
     def test_get_debug_manager(self, services):
         request = _make_request(services)
-        assert get_debug_manager(request) is services.debug_manager
+        dep = _get("debug_manager")
+        assert dep(request) is services.debug_manager
 
     def test_get_login_history_service(self, services):
         request = _make_request(services)
-        assert get_login_history_service(request) is services.login_history_service
+        dep = _get("login_history_service")
+        assert dep(request) is services.login_history_service

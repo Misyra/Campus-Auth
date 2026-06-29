@@ -20,7 +20,7 @@ class TestOpenBrowser:
     @patch("app.services.launcher.threading.Thread")
     def test_setting_true_opens_browser(self, mock_thread_cls):
         """setting=True 应启动线程打开浏览器。"""
-        from main import _open_browser
+        from app.services.launcher import open_browser as _open_browser
 
         _open_browser(50721, setting=True)
         mock_thread_cls.assert_called_once()
@@ -28,7 +28,7 @@ class TestOpenBrowser:
     @patch("app.services.launcher.threading.Thread")
     def test_setting_false_does_not_open(self, mock_thread_cls):
         """setting=False 不应打开浏览器。"""
-        from main import _open_browser
+        from app.services.launcher import open_browser as _open_browser
 
         _open_browser(50721, setting=False)
         mock_thread_cls.assert_not_called()
@@ -36,7 +36,7 @@ class TestOpenBrowser:
     @patch("app.services.launcher.threading.Thread")
     def test_setting_none_does_not_open(self, mock_thread_cls):
         """setting=None 不应打开浏览器。"""
-        from main import _open_browser
+        from app.services.launcher import open_browser as _open_browser
 
         _open_browser(50721, setting=None)
         mock_thread_cls.assert_not_called()
@@ -44,7 +44,7 @@ class TestOpenBrowser:
     @patch("app.services.launcher.threading.Thread")
     def test_setting_default_does_not_open(self, mock_thread_cls):
         """不传 setting（默认 None）不应打开浏览器。"""
-        from main import _open_browser
+        from app.services.launcher import open_browser as _open_browser
 
         _open_browser(50721)
         mock_thread_cls.assert_not_called()
@@ -131,12 +131,10 @@ class TestPlaywrightReadyCallback:
 
     def test_ensure_playwright_ready_called_with_logger_callback(self):
         """ensure_playwright_ready 应接收 logger 回调而非 print。"""
-        import main as main_mod
+        from app.services import launcher as launcher_mod
 
-        # _log_playwright_ready 应存在且可调用
-        assert hasattr(main_mod, "_log_playwright_ready") or hasattr(
-            main_mod, "_run_full"
-        ), "main 模块应有 Playwright 就绪回调机制"
+        # launch_full 应存在且可调用（Playwright 就绪回调在 launcher 中）
+        assert hasattr(launcher_mod, "launch_full"), "launcher 模块应有 launch_full 函数"
 
 
 # ==================== 修复 5: 不重复 import threading ====================
@@ -165,7 +163,8 @@ class TestLoginOnceAllDisabled:
 
     def test_login_once_all_disabled_skips_login(self):
         """当所有网络检测方式禁用时，LOGIN_ONCE 应跳过登录（假定已连接）。"""
-        from main import _run_login_then_exit, LoginResult
+        from app.schemas import LoginResult
+        from app.services.login_runner import run_login_then_exit as _run_login_then_exit
 
         with (
             patch("app.services.login_runner.load_login_config") as mock_load,

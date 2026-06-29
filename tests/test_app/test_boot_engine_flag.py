@@ -239,7 +239,7 @@ class TestRunFullNoDirectBoot:
 
     def test_run_full_does_not_call_boot_directly(self):
         """_run_full 应将 boot_engine 传递给 run()，而非直接调 boot()。"""
-        from main import _run_full
+        from app.services.launcher import launch_full as _run_full
         from app.schemas import ApplicationContext, AppConfig, LaunchContext, LaunchSource
 
         ctx = ApplicationContext(
@@ -277,7 +277,7 @@ class TestRunFullNoDirectBoot:
 
     def test_run_full_passes_boot_engine_false(self):
         """should_boot_engine=False 时传递 boot_engine=False。"""
-        from main import _run_full
+        from app.services.launcher import launch_full as _run_full
         from app.schemas import ApplicationContext, AppConfig, LaunchContext, LaunchSource
 
         ctx = ApplicationContext(

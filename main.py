@@ -2,9 +2,8 @@
 """Campus-Auth 校园网自动认证 - 统一启动入口"""
 
 import argparse
-import signal  # noqa: F401 — 向后兼容：测试 patch("main.signal.signal")
 import sys
-import threading  # noqa: F401 — _setup_exception_hooks 使用，测试断言需要模块级导入
+import threading
 import time
 from pathlib import Path
 
@@ -13,7 +12,6 @@ _project_root = Path(__file__).resolve().parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from app.constants import AUTH_DATA_DIR  # noqa: E402, F401 — 测试 fixture 需要
 from app.schemas import (  # noqa: E402
     AppConfig,
     ApplicationContext,
@@ -24,17 +22,7 @@ from app.schemas import (  # noqa: E402
 )
 from app.services.launcher import (  # noqa: E402
     _terminate_process,
-    _wait_for_exit,
-    handle_startup_action,
     launch_server,
-    # 向后兼容：现有测试从 main 导入这些旧名称
-    create_tray as _create_tray,
-    handle_existing_instance as _handle_existing_instance,
-    launch_full as _run_full,
-    launch_lightweight as _run_lightweight,
-    launch_server as _run_server,
-    open_browser as _open_browser,
-    shutdown_container as _shutdown_container,
 )
 from app.utils.process import (  # noqa: E402
     cleanup_pid,
@@ -43,14 +31,7 @@ from app.utils.process import (  # noqa: E402
     is_service_running,
     read_pid_mode,
 )
-from app.workers.playwright_worker import cleanup_orphan_browsers  # noqa: E402, F401 — 测试 fixture 需要
 from app.services.profile_service import create_profile_service  # noqa: E402
-from app.services.login_runner import (  # noqa: E402 — 向后兼容：现有测试从 main 导入这些名称
-    LoginResult,
-    execute_login_with_retries as _execute_login_with_retries,
-    load_login_config as _load_login_config,
-    run_login_then_exit as _run_login_then_exit,
-)
 
 
 # ==================== CLI 命令 ====================

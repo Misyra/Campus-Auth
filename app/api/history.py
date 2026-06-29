@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 
-from app.deps import get_login_history_service
+from app.deps import LoginHistoryDep
 from app.schemas import ApiResponse
-from app.services.login_history_service import LoginHistoryEntry, LoginHistoryService
+from app.services.login_history_service import LoginHistoryEntry
 
 router = APIRouter()
 
 
 @router.get("/api/login-history", response_model=list[LoginHistoryEntry])
 def get_login_history(
+    svc: LoginHistoryDep,
     limit: int = Query(default=30, ge=1, le=500),
-    svc: LoginHistoryService = Depends(get_login_history_service),
 ) -> list[LoginHistoryEntry]:
     """获取最近的登录历史记录。"""
     return svc.list_recent(limit=limit)
@@ -22,7 +22,7 @@ def get_login_history(
 
 @router.delete("/api/login-history", response_model=ApiResponse)
 def clear_login_history(
-    svc: LoginHistoryService = Depends(get_login_history_service),
+    svc: LoginHistoryDep,
 ) -> ApiResponse:
     """清空所有登录历史记录。"""
     count = svc.clear()
