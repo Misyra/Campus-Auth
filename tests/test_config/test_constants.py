@@ -7,8 +7,8 @@ class TestWSConstant:
     """WS_DRAIN_INTERVAL_SECONDS 常量测试"""
 
     def test_ws_drain_interval_constant_exists(self):
-        """ws_broadcaster 中应存在 WS_DRAIN_INTERVAL_SECONDS 常量"""
-        from app.services.ws_broadcaster import WS_DRAIN_INTERVAL_SECONDS
+        """websocket_manager 中应存在 WS_DRAIN_INTERVAL_SECONDS 常量"""
+        from app.services.websocket_manager import WS_DRAIN_INTERVAL_SECONDS
 
         assert WS_DRAIN_INTERVAL_SECONDS == 0.05
 

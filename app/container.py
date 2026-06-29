@@ -13,8 +13,7 @@ from app.services.login_history_service import LoginHistoryService
 from app.services.profile_service import ProfileService
 from app.services.task_executor import TaskExecutor
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
-from app.services.websocket_manager import NullWebSocketManager, WebSocketManager
-from app.services.ws_broadcaster import WsBroadcaster
+from app.services.websocket_manager import WebSocketManager
 from app.tasks import TaskManager
 from app.utils.logging import DashboardSink, get_logger
 
@@ -30,8 +29,7 @@ class ServiceContainer:
         self._is_lightweight = mode == "lightweight"
 
         # 基础服务
-        # 轻量模式下使用 Null Object，避免 None 检查
-        self.ws_manager = NullWebSocketManager() if self._is_lightweight else WebSocketManager()
+        self.ws_manager = WebSocketManager()
         self.profile_service = ProfileService(project_root)
         from app.constants import AUTH_DATA_DIR
 
@@ -52,7 +50,6 @@ class ServiceContainer:
             return get_worker()
 
         # 新组件
-        self.ws_broadcaster = WsBroadcaster(ws_manager=self.ws_manager)
 
         # 1. 创建 LoginOrchestrator（executor 在 TaskExecutor 创建后绑定）
         from app.services.login_orchestrator import LoginOrchestrator
@@ -92,7 +89,6 @@ class ServiceContainer:
             worker_getter=_get_worker,
             task_registry=self.task_registry,
             task_executor=self.task_executor,
-            ws_broadcaster=self.ws_broadcaster,
             orchestrator=self.login_orchestrator,
             scheduler=self.scheduler_service,
         )
@@ -143,14 +139,6 @@ class ServiceContainer:
             return
         from loguru import logger
 
-        # 轻量模式唤醒时，将 NullWebSocketManager 切换为真正的 WebSocketManager
-        if self._is_lightweight and isinstance(self.ws_manager, NullWebSocketManager):
-            self.ws_manager = WebSocketManager()
-            self.ws_broadcaster.set_ws_manager(self.ws_manager)
-            self.engine._ws_manager = self.ws_manager
-            self.engine.set_ws_broadcaster(self.ws_broadcaster)
-            container_logger.info("WebSocket 管理器已切换为实时模式")
-
         if self._log_handler_id is None:
             dashboard_sink = DashboardSink()
             self._log_handler_id = logger.add(
@@ -160,8 +148,8 @@ class ServiceContainer:
                 filter=lambda record: record["extra"].get("source") != "frontend",
             )
             self.engine.set_dashboard_sink(dashboard_sink)  # for list_logs
-            self.ws_broadcaster.set_dashboard_sink(dashboard_sink)  # for broadcast
-        self._ws_drain_task = asyncio.create_task(self.ws_broadcaster.ws_drain_loop())
+            self.ws_manager.set_dashboard_sink(dashboard_sink)  # for broadcast
+        self._ws_drain_task = asyncio.create_task(self.ws_manager.ws_drain_loop())
         self._web_services_started = True
         container_logger.info("Web 服务已启动")
 

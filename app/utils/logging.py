@@ -132,7 +132,7 @@ class DashboardSink:
         self._config_center = LogConfigCenter.get_instance()
 
     def set_drain_notifier(self, notifier: Callable[[], None]) -> None:
-        """设置 drain 通知器（由 WsBroadcaster 注入）。"""
+        """设置 drain 通知器（由 WebSocketManager 注入）。"""
         self._drain_notifier = notifier
 
     def write(self, message) -> None:
