@@ -47,9 +47,6 @@ class NetworkState(str, Enum):
 class NetworkMonitorCore:
     """网络监控核心类"""
 
-    # 类常量：监控配置
-    DEFAULT_INTERVAL_SECONDS = 300
-
     # 类常量：网络检测配置
     DEFAULT_PING_TARGETS = DEFAULT_NETWORK_TARGETS.split(",")
 
@@ -58,12 +55,10 @@ class NetworkMonitorCore:
         config: RuntimeConfig,
         log_callback: Callable[[str, str, str], None] | None = None,
         login_history: Any = None,
-        worker_getter: Callable | None = None,
     ) -> None:
         self.config = config
         self.log_callback = log_callback
         self._login_history = login_history
-        self._worker_getter = worker_getter
 
         # 状态锁：保护 snapshot() 读取的状态字段，防止跨线程竞态
         self._state_lock = threading.Lock()

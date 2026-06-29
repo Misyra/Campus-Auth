@@ -276,7 +276,7 @@ class TestMonitorCoreGetTestSites:
 class TestMonitorCoreGetMonitorInterval:
     def test_default_interval(self):
         core = NetworkMonitorCore(config=RuntimeConfig())
-        assert core._get_monitor_interval() == core.DEFAULT_INTERVAL_SECONDS
+        assert core._get_monitor_interval() == 300
 
     def test_custom_interval(self):
         config = RuntimeConfig(monitor=MonitorSettings(check_interval_seconds=600))

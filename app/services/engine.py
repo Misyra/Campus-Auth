@@ -608,7 +608,6 @@ class ScheduleEngine:
             config=config,
             log_callback=self.record_log,
             login_history=self._login_history,
-            worker_getter=self._worker_getter,
         )
         core.set_profile_service(self._profile_service)
         core.init_monitoring()  # 只初始化，不启动循环
