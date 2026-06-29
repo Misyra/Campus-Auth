@@ -1,67 +1,6 @@
-"""RetryPolicy 框架单元测试。"""
+"""MonitoredPolicy 重试策略单元测试。"""
 
-from app.services.retry_policy import ImmediatePolicy, MonitoredPolicy, RetryPolicy
-
-
-class TestRetryPolicyBase:
-    """RetryPolicy 抽象基类测试。"""
-
-    def test_cannot_instantiate_directly(self):
-        """不能直接实例化抽象基类。"""
-        import pytest
-
-        with pytest.raises(TypeError):
-            RetryPolicy()  # type: ignore[abstract]
-
-
-class TestImmediatePolicy:
-    """ImmediatePolicy 测试。"""
-
-    def test_default_params(self):
-        policy = ImmediatePolicy()
-        assert policy.max_retries == 3
-        assert policy.interval == 5
-
-    def test_attempts_yields_1_to_max(self):
-        policy = ImmediatePolicy(max_retries=4)
-        assert list(policy.attempts()) == [1, 2, 3, 4]
-
-    def test_delay_before_first_attempt_is_zero(self):
-        policy = ImmediatePolicy()
-        assert policy.delay_before(1) == 0.0
-
-    def test_delay_before_subsequent_returns_interval(self):
-        policy = ImmediatePolicy(interval=7)
-        assert policy.delay_before(2) == 7.0
-        assert policy.delay_before(3) == 7.0
-        assert policy.delay_before(100) == 7.0  # 无论 attempt 多大
-
-    def test_max_retries_clamped_low(self):
-        """max_retries 下限为 1。"""
-        policy = ImmediatePolicy(max_retries=0)
-        assert policy.max_retries == 1
-
-        policy = ImmediatePolicy(max_retries=-5)
-        assert policy.max_retries == 1
-
-    def test_max_retries_clamped_high(self):
-        """max_retries 上限为 10。"""
-        policy = ImmediatePolicy(max_retries=20)
-        assert policy.max_retries == 10
-
-    def test_interval_min_clamped(self):
-        """interval 最小值为 1。"""
-        policy = ImmediatePolicy(interval=0)
-        assert policy.interval == 1
-
-        policy = ImmediatePolicy(interval=-3)
-        assert policy.interval == 1
-
-    def test_single_retry(self):
-        """max_retries=1 时只产生一次重试。"""
-        policy = ImmediatePolicy(max_retries=1)
-        assert list(policy.attempts()) == [1]
-        assert policy.delay_before(1) == 0.0
+from app.services.retry_policy import MonitoredPolicy
 
 
 class TestMonitoredPolicy:

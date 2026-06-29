@@ -28,8 +28,6 @@ def load_login_config(logger):
 def execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginResult:
     """执行登录，含固定间隔重试。
 
-    用 ImmediatePolicy + LoginOrchestrator，不再自己写重试/超时/历史。
-
     Args:
         runtime_config: 运行时配置。
         logger: 日志记录器。
@@ -42,7 +40,6 @@ def execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginRe
     from app.services.login_history_service import LoginHistoryService
     from app.services.login_orchestrator import LoginOrchestrator
     from app.services.profile_service import create_profile_service
-    from app.services.retry_policy import ImmediatePolicy
     from app.workers.playwright_worker import cleanup_orphan_browsers, get_worker
 
     # 构造一次性 Orchestrator（login_once 在容器创建前运行）
@@ -54,17 +51,14 @@ def execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginRe
         profile_service=profile_service,
     )
 
-    policy = ImmediatePolicy(
-        max_retries=runtime_config.retry.max_retries,
-        interval=runtime_config.retry.retry_interval,
-    )
+    max_retries = max(1, min(runtime_config.retry.max_retries, 10))
+    interval = max(1, runtime_config.retry.retry_interval)
 
     try:
-        for attempt in policy.attempts():
-            delay = policy.delay_before(attempt)
-            if delay > 0:
-                print(f"等待 {int(delay)} 秒后重试第 {attempt} 次...")
-                time.sleep(delay)
+        for attempt in range(1, max_retries + 1):
+            if attempt > 1:
+                print(f"等待 {interval} 秒后重试第 {attempt} 次...")
+                time.sleep(interval)
 
             handle = orchestrator.submit(source="login_once", config=runtime_config)
             ok, msg = handle.result()
@@ -75,8 +69,8 @@ def execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginRe
             print(f"登录失败 (第 {attempt} 次): {msg}")
 
         cleanup_orphan_browsers()
-        print(f"已重试 {policy.max_retries} 次均失败，回退到正常模式")
-        logger.warning("登录失败（已重试 {} 次），回退到正常模式", policy.max_retries)
+        print(f"已重试 {max_retries} 次均失败，回退到正常模式")
+        logger.warning("登录失败（已重试 {} 次），回退到正常模式", max_retries)
         return LoginResult.TEMPORARY_FAILURE
     finally:
         orchestrator.shutdown(wait=False)

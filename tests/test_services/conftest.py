@@ -85,7 +85,6 @@ def engine_factory():
         svc._pure_mode = False
         svc._ws_manager = None
         svc._ws_broadcaster = MagicMock()
-        svc._network_tester = MagicMock()
         svc._orchestrator = MagicMock()
         svc._login_history = None
         svc._worker_getter = None
