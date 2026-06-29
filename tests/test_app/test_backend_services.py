@@ -19,7 +19,7 @@ from app.schemas import (
     ProfilesData,
     RuntimeConfig,
 )
-from app.services.config_builder import ConfigBuilder
+from app.services.config_builder import build_runtime_config
 from app.services.profile_service import ProfileService
 from app.services.debug_session import (
     DebugSession,
@@ -311,7 +311,7 @@ class TestProfileServiceRuntimeConfig:
 
 
 # =====================================================================
-# ConfigBuilder.build
+# build_runtime_config
 # =====================================================================
 
 
@@ -325,7 +325,7 @@ class TestConfigBuilderBuild:
             auth_url="http://10.0.0.1",
             carrier="移动",
         )
-        result = ConfigBuilder.build(config, profile)
+        result = build_runtime_config(config, profile)
         assert result.credentials.username == "admin"
         assert result.credentials.password == "testpass"
         assert result.credentials.auth_url == "http://10.0.0.1"
@@ -335,21 +335,21 @@ class TestConfigBuilderBuild:
         from app.schemas import Profile
         config = RuntimeConfig()
         profile = Profile(carrier="自定义", carrier_custom="校园网")
-        result = ConfigBuilder.build(config, profile)
+        result = build_runtime_config(config, profile)
         assert result.credentials.isp == "校园网"
 
     def test_carrier_none(self):
         from app.schemas import Profile
         config = RuntimeConfig()
         profile = Profile(carrier="无")
-        result = ConfigBuilder.build(config, profile)
+        result = build_runtime_config(config, profile)
         assert result.credentials.isp == ""
 
     def test_masked_password_returns_empty(self):
         from app.schemas import Profile
         config = RuntimeConfig()
         profile = Profile(password="••••••••")
-        result = ConfigBuilder.build(config, profile)
+        result = build_runtime_config(config, profile)
         assert result.credentials.password == ""
 
 

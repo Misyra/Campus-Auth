@@ -214,18 +214,18 @@ class ProfileService:
 
     def get_runtime_config(self) -> RuntimeConfig:
         """读磁盘 → 构建运行时配置。"""
-        from app.services.config_builder import ConfigBuilder
+        from app.services.config_builder import build_runtime_config
 
         data = self.load()
         profile = self._get_active_profile(data)
-        return ConfigBuilder.build(data.global_config, profile)
+        return build_runtime_config(data.global_config, profile)
 
     def build_runtime_config(self, data: ProfilesData) -> RuntimeConfig:
         """从已加载的 data 构建运行时配置（避免重复读盘）。"""
-        from app.services.config_builder import ConfigBuilder
+        from app.services.config_builder import build_runtime_config
 
         profile = self._get_active_profile(data)
-        return ConfigBuilder.build(data.global_config, profile)
+        return build_runtime_config(data.global_config, profile)
 
     def _get_active_profile(self, data: ProfilesData) -> Profile:
         """获取活跃方案并解密密码。"""
