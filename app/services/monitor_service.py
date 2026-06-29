@@ -53,11 +53,11 @@ class NetworkMonitorCore:
     def __init__(
         self,
         config: RuntimeConfig,
-        log_callback: Callable[[str, str, str], None] | None = None,
+        logger=None,
         login_history: Any = None,
     ) -> None:
         self.config = config
-        self.log_callback = log_callback
+        self._log_callback_logger = logger
         self._login_history = login_history
 
         # 状态锁：保护 snapshot() 读取的状态字段，防止跨线程竞态
@@ -82,25 +82,15 @@ class NetworkMonitorCore:
         self._last_profile_id: str | None = None
         self._profile_switch_needed: bool = False
 
-    def log_message(
-        self, message: str, level: str = "INFO", exc_info: bool = False
-    ) -> None:
+    def log_message(self, message: str, level: str = "INFO", exc_info: bool = False) -> None:
         if exc_info:
             import traceback
-
             tb = traceback.format_exc()
             if tb and tb != "NoneType: None\n":
                 message = f"{message}\n{tb}"
-        if self.log_callback:
-            self.log_callback(
-                message,
-                level,
-                source="network",
-                name="monitor_core",
-            )
-        else:
-            log_func = getattr(self.logger, level.lower(), self.logger.info)
-            log_func(message)
+        target_logger = self._log_callback_logger or self.logger
+        log_func = getattr(target_logger, level.lower(), target_logger.info)
+        log_func("{}", message)
 
     def _update_state(
         self,

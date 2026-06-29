@@ -180,7 +180,7 @@ class LoginBridge:
         get_runtime_config: Callable[[], RuntimeConfig],
         retry_policy: MonitoredPolicy,
         status_update_callback: Callable[[], None],
-        record_log: Callable[..., None],
+        logger,
         wakeup_event: threading.Event,
         get_monitor_check_interval: Callable[[], int],
         on_retry_scheduled: Callable[[float], None] | None = None,
@@ -191,7 +191,7 @@ class LoginBridge:
         self._get_runtime_config = get_runtime_config
         self._retry_policy = retry_policy
         self._status_update_callback = status_update_callback
-        self._record_log = record_log
+        self._logger = logger
         self._wakeup_event = wakeup_event
         self._get_monitor_check_interval = get_monitor_check_interval
         self._registered_futures: set[Future] = set()
@@ -224,10 +224,7 @@ class LoginBridge:
 
                 ok, reason = check_login_prerequisites(m, config.credentials.auth_url)
                 if not ok:
-                    self._record_log(
-                        f"登录前置检查未通过: {reason}",
-                        level="WARNING", source="backend",
-                    )
+                    self._logger.warning("登录前置检查未通过: {}", reason)
                     return False
 
         source = "manual" if is_manual else "auto"
@@ -236,7 +233,7 @@ class LoginBridge:
         if handle.rejected_reason is not None:
             # 手动登录的响应由 _handle_login 设置，此处仅记录自动登录的拒绝
             if not is_manual:
-                self._record_log(handle.rejected_reason, level="WARNING", source="backend")
+                self._logger.warning("{}", handle.rejected_reason)
             return False
 
         if handle.future is None:
@@ -375,6 +372,7 @@ class ScheduleEngine:
         self._next_network_check: float = 0
         self._monitor_check_interval: int = 300
         self._orchestrator = orchestrator  # LoginOrchestrator
+        self._logger = get_logger("engine", source="backend")
         self._retry_policy = MonitoredPolicy()
         self._wakeup_event = threading.Event()  # 唤醒引擎循环
         self._next_retry_time: float = 0  # 下次重试时间（独立于网络检测）
@@ -398,7 +396,7 @@ class ScheduleEngine:
             get_runtime_config=self.get_runtime_config,
             retry_policy=self._retry_policy,
             status_update_callback=self._update_status_snapshot,
-            record_log=self.record_log,
+            logger=self._logger,
             wakeup_event=self._wakeup_event,
             get_monitor_check_interval=lambda: self._monitor_check_interval,
             on_retry_scheduled=_bridge_retry_scheduled,
@@ -555,10 +553,10 @@ class ScheduleEngine:
                 if self._retry_policy.retries_exhausted:
                     # 重试用尽，重置计数，由下次网络检测触发新一轮重试
                     self._retry_policy.reset()
-                    self.record_log(
-                        f"重试已用尽（{self._retry_policy.max_retries}/{self._retry_policy.max_retries}），"
-                        f"等待下次网络检测（{self._monitor_check_interval}s 后）",
-                        level="WARNING", source="network",
+                    self._logger.warning(
+                        "重试已用尽（{}/{}），等待下次网络检测（{}s 后）",
+                        self._retry_policy.max_retries, self._retry_policy.max_retries,
+                        self._monitor_check_interval,
                     )
                 else:
                     self._do_async_login()
@@ -578,11 +576,7 @@ class ScheduleEngine:
     def _handle_start(self, cmd: EngineCommand) -> None:
         """启动监控（在引擎循环中调用）。"""
         if self._monitor_core is not None and self._monitor_core.monitoring:
-            self.record_log(
-                "监控已在运行中",
-                level="WARNING",
-                source="backend",
-            )
+            self._logger.warning("监控已在运行中")
             if cmd.response_event:
                 cmd.response_event.set()
             return
@@ -590,7 +584,7 @@ class ScheduleEngine:
         # 统一验证配置（确保所有路径都经过验证）
         valid, error = validate_env_config(self._runtime_config)
         if not valid:
-            self.record_log(f"配置无效，无法启动监控: {error}", level="ERROR", source="backend")
+            self._logger.error("配置无效，无法启动监控: {}", error)
             if cmd.response_event:
                 cmd.response_event.set()
             return
@@ -603,7 +597,7 @@ class ScheduleEngine:
 
         core = NetworkMonitorCore(
             config=config,
-            log_callback=self.record_log,
+            logger=self._logger,
             login_history=self._login_history,
         )
         core.set_profile_service(self._profile_service)
@@ -611,7 +605,7 @@ class ScheduleEngine:
         self._monitor_core = core
         self._next_network_check = time.time()  # 立即执行第一次检测
         self._update_status_snapshot(force=True)
-        self.record_log("监控已启动", level="INFO", source="backend")
+        self._logger.info("监控已启动")
         if cmd.response_event:
             cmd.response_event.set()
 
@@ -629,7 +623,7 @@ class ScheduleEngine:
         with self._retry_time_lock:
             self._next_retry_time = 0
 
-        self.record_log("监控已停止", level="INFO", source="backend")
+        self._logger.info("监控已停止")
         self._update_status_snapshot(force=True)
         if cmd and cmd.response_event:
             cmd.response_event.set()
@@ -730,35 +724,17 @@ class ScheduleEngine:
         # 直接用 profile_id 记录日志，避免重复 load
         new_url = self._runtime_config.credentials.auth_url
         new_user = self._runtime_config.credentials.username
-        self.record_log(f"切换方案: {profile_id}", level="INFO", source="backend")
+        self._logger.info("切换方案: {}", profile_id)
         logger.debug("方案详情: 认证={}, 用户={}", new_url, new_user)
 
         if was_monitoring:
             self._handle_stop()
             self._handle_start(EngineCommand(type=EngineCmdType.START))
-            self.record_log(
-                "监控正在按新方案重启",
-                level="INFO",
-                source="backend",
-            )
+            self._logger.info("监控正在按新方案重启")
         cmd.response_data = (True, "方案切换成功")
         if cmd.response_event:
             cmd.response_event.set()
 
-    # ── 日志 / 状态快照桥接 ──
-
-    def record_log(
-        self,
-        message: str,
-        level: str = "INFO",
-        source: str = "backend",
-        name: str = "engine",
-    ) -> None:
-        """委托 loguru 统一处理（自动触发所有 sink）。"""
-        bound_logger = get_logger(name, source)
-        level_name = str(level or "INFO").upper()
-        log_func = getattr(bound_logger, level_name.lower(), bound_logger.info)
-        log_func("{}", message)
 
     def notify_network_state_changed(self) -> None:
         """网络状态变化时显式调用，更新状态快照。"""
@@ -971,7 +947,7 @@ class ScheduleEngine:
 
     def test_network(self) -> tuple[bool, str]:
         """执行手动网络测试。"""
-        self.record_log("开始手动网络测试", "INFO", "network")
+        self._logger.info("开始手动网络测试")
         monitor = self._runtime_config.monitor
         targets = monitor.ping_targets
         enable_tcp = monitor.enable_tcp_check
@@ -1002,17 +978,17 @@ class ScheduleEngine:
             )
             if is_available:
                 logger.info("手动测试结果: 网络正常")
-                self.record_log("手动测试结果: 网络正常", "INFO", "network")
+                self._logger.info("手动测试结果: 网络正常")
                 self.notify_network_state_changed()
                 return True, "网络连接正常"
             else:
                 logger.warning("手动测试结果: 网络异常")
-                self.record_log("手动测试结果: 网络异常", "WARNING", "network")
+                self._logger.warning("手动测试结果: 网络异常")
                 self.notify_network_state_changed()
                 return False, "网络连接异常"
         except Exception as exc:
             logger.exception("网络测试失败")
-            self.record_log("手动测试结果: 网络异常", "WARNING", "network")
+            self._logger.warning("手动测试结果: 网络异常")
             self.notify_network_state_changed()
             return False, f"网络测试失败: {exc}"
 
