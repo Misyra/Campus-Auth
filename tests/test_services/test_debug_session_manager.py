@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.services.debug_service import DebugSessionManager
-from app.services.debug_session import DebugSession
+from app.services.debug_session import DebugSession, debug_to_response
 from app.workers.playwright_worker import WorkerResponse
 
 # ---------------------------------------------------------------------------
@@ -78,23 +78,23 @@ class TestDebugSessionManagerInit:
 
 
 # =====================================================================
-# _debug_response
+# debug_to_response
 # =====================================================================
 
 
 class TestDebugSessionManagerDebugResponse:
-    """内部 _debug_response 方法。"""
+    """debug_to_response 返回值验证。"""
 
     def test_returns_dict(self, tmp_path):
         """返回字典。"""
         manager = _make_manager(tmp_path)
-        result = manager._debug_response()
+        result = debug_to_response(manager._session)
         assert isinstance(result, dict)
 
     def test_excludes_internal_fields(self, tmp_path):
         """不包含内部字段。"""
         manager = _make_manager(tmp_path)
-        result = manager._debug_response()
+        result = debug_to_response(manager._session)
         assert "_browser_active" not in result
         assert "_last_activity" not in result
         assert "_timer_task" not in result

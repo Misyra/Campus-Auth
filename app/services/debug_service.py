@@ -40,9 +40,6 @@ class DebugSessionManager:
         self._lock = asyncio.Lock()
         self._exec_sem = asyncio.Semaphore(1)
 
-    def _debug_response(self) -> dict:
-        return debug_to_response(self._session)
-
     async def _cancel_debug_timer(self) -> None:
         """取消调试会话的超时定时器（如存在）。"""
         timer = self._session._timer_task
@@ -190,7 +187,7 @@ class DebugSessionManager:
                 self._session.screenshot_url = response.data.get("screenshot_url")
 
         debug_logger.info("调试会话已启动，任务: {}", task_id)
-        return self._debug_response()
+        return debug_to_response(self._session)
 
     async def next_step(self) -> dict:
         """执行下一步。"""
@@ -203,7 +200,7 @@ class DebugSessionManager:
                 idx = session.current_step
 
                 if idx >= len(session.steps):
-                    return {**self._debug_response(), "message": "所有步骤已执行完毕"}
+                    return {**debug_to_response(self._session), "message": "所有步骤已执行完毕"}
 
             response = await asyncio.to_thread(
                 lambda: get_worker().submit(CMD_DEBUG_STEP, data={"step_index": idx})
@@ -211,7 +208,7 @@ class DebugSessionManager:
             if not response.success:
                 async with self._lock:
                     if self._session is not session:
-                        return self._debug_response()
+                        return debug_to_response(self._session)
                     session.results.append(
                         {
                             "step_index": idx,
@@ -222,18 +219,18 @@ class DebugSessionManager:
                     )
                     session.current_step = idx + 1
                     session._last_activity = time.monotonic()
-                    return self._debug_response()
+                    return debug_to_response(self._session)
 
             result = response.data
 
             async with self._lock:
                 if self._session is not session:
-                    return self._debug_response()
+                    return debug_to_response(self._session)
                 session.results.append(result)
                 session.screenshot_url = result.get("screenshot_url")
                 session.current_step = idx + 1
                 session._last_activity = time.monotonic()
-                return self._debug_response()
+                return debug_to_response(self._session)
 
     async def run_all(self) -> dict:
         """执行所有步骤。"""
@@ -245,7 +242,7 @@ class DebugSessionManager:
             from_idx = session.current_step
 
             if from_idx >= len(session.steps):
-                return {**self._debug_response(), "message": "所有步骤已执行完毕"}
+                return {**debug_to_response(self._session), "message": "所有步骤已执行完毕"}
 
         # 一次性获取信号量，持有到整个批量执行完成，防止 next_step 插入
         async with self._exec_sem:
@@ -292,7 +289,7 @@ class DebugSessionManager:
 
         async with self._lock:
             if self._session is not session:
-                return self._debug_response()
+                return debug_to_response(self._session)
             session.results.extend(results)
             session.current_step = (
                 len(session.steps) if all_success else from_idx + len(results)
@@ -300,7 +297,7 @@ class DebugSessionManager:
             session._last_activity = time.monotonic()
             if results:
                 session.screenshot_url = results[-1].get("screenshot_url")
-            return self._debug_response()
+            return debug_to_response(self._session)
 
     async def stop(self) -> dict:
         """停止调试会话。"""
