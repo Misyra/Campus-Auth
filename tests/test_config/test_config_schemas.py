@@ -19,7 +19,7 @@ from app.schemas import (
     MonitorStatusResponse,
     ProfilesData,
 )
-from app.utils.crypto import decrypt_password_field, safe_decrypt
+from app.utils.crypto import decrypt_password_field
 from app.schemas import LoginCredentials, RuntimeConfig
 from app.utils.config_utils import validate_env_config
 from app.utils.crypto import encrypt_password
@@ -107,27 +107,6 @@ class TestValidateEnvConfig:
 # =====================================================================
 # 第二部分：config_service 工具函数（原 test_config.py 后半部分）
 # =====================================================================
-
-
-class TestSafeDecrypt:
-    def test_decrypt_encrypted_value(self):
-        """应能解密 ENC: 前缀的值"""
-        encrypted = encrypt_password("test123")
-        result, has_error = safe_decrypt(encrypted)
-        assert result == "test123"
-        assert has_error is False
-
-    def test_decrypt_empty_string(self):
-        """空字符串应返回空字符串"""
-        result, has_error = safe_decrypt("")
-        assert result == ""
-        assert has_error is False
-
-    def test_decrypt_plaintext_passthrough(self):
-        """无 ENC: 前缀的明文应原样返回"""
-        result, has_error = safe_decrypt("plaintext")
-        assert result == "plaintext"
-        assert has_error is False
 
 
 class TestNormalizeLevelService:

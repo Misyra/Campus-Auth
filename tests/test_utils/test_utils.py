@@ -33,7 +33,7 @@ from app.utils.crypto import (
 from app.utils.env import build_login_template_vars
 
 # ── exceptions ──
-from app.utils.exceptions import DecryptionError, LoginCancelledError
+from app.utils.exceptions import LoginCancelledError
 
 # ── files ──
 from app.utils.files import atomic_write
@@ -519,16 +519,8 @@ class TestExceptions:
         with pytest.raises(LoginCancelledError):
             raise LoginCancelledError("cancelled")
 
-    def test_decryption_error(self):
-        """DecryptionError 应为 Exception 子类"""
-        with pytest.raises(DecryptionError):
-            raise DecryptionError("decryption failed")
-
     def test_login_cancelled_error_is_exception(self):
         assert issubclass(LoginCancelledError, Exception)
-
-    def test_decryption_error_is_exception(self):
-        assert issubclass(DecryptionError, Exception)
 
 
 # =====================================================================

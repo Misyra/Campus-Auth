@@ -14,12 +14,15 @@ import time
 
 from app.constants import AUTH_DATA_DIR
 
-from .exceptions import DecryptionError
 from .files import atomic_write
 from .logging import get_logger
 from .platform import CREATE_NO_WINDOW_FLAG, is_windows
 
 logger = get_logger("crypto", source="backend")
+
+
+class _DecryptionError(Exception):
+    """密码解密失败异常（密钥变更或数据损坏）"""
 
 _KEY_DIR = AUTH_DATA_DIR
 _KEY_FILE = _KEY_DIR / ".enc_key"
@@ -170,14 +173,14 @@ def decrypt_password(ciphertext: str) -> str:
     except ImportError:
         _decryption_failed.set()
         logger.error("cryptography 库未安装，无法解密密码，请安装依赖后重试")
-        raise DecryptionError("cryptography 库未安装，无法解密密码") from None
+        raise _DecryptionError("cryptography 库未安装，无法解密密码") from None
     except (InvalidToken, ValueError, OSError) as e:
         # 解密失败：可能是密钥变更，记录错误并抛出异常
         _decryption_failed.set()
         logger.error(
             "密码解密失败（可能是密钥变更或数据损坏），请在设置页面重新输入密码"
         )
-        raise DecryptionError("密码解密失败，请重新输入密码") from e
+        raise _DecryptionError("密码解密失败，请重新输入密码") from e
 
 
 def has_decryption_error() -> bool:
@@ -205,17 +208,6 @@ def save_password_field(raw: str | None, existing_encrypted: str) -> str:
     return encrypt_password(raw)
 
 
-def safe_decrypt(ciphertext: str) -> tuple[str, bool]:
-    """解密密码。返回 (解密结果, 是否有错误)"""
-    if not ciphertext:
-        return ("", False)
-    try:
-        return (decrypt_password(ciphertext), False)
-    except DecryptionError:
-        logger.error("密码解密失败，使用空密码")
-        return ("", True)
-
-
 def decrypt_password_field(
     raw_pwd: str,
     fallback_pwd: str = "",
@@ -234,10 +226,18 @@ def decrypt_password_field(
         (解密结果, 是否有错误)
     """
     if raw_pwd.startswith("ENC:"):
-        return safe_decrypt(raw_pwd)
+        try:
+            return (decrypt_password(raw_pwd), False)
+        except _DecryptionError:
+            logger.error("密码解密失败，使用空密码")
+            return ("", True)
     elif raw_pwd.startswith("•"):
         if fallback_pwd:
-            return safe_decrypt(fallback_pwd)
+            try:
+                return (decrypt_password(fallback_pwd), False)
+            except _DecryptionError:
+                logger.error("密码解密失败，使用空密码")
+                return ("", True)
         else:
             if label:
                 logger.warning("{} 密码为掩码但回退密码为空", label)
@@ -248,6 +248,10 @@ def decrypt_password_field(
         if fallback_pwd:
             if label:
                 logger.warning("{} 密码为空，使用回退密码", label)
-            return safe_decrypt(fallback_pwd)
+            try:
+                return (decrypt_password(fallback_pwd), False)
+            except _DecryptionError:
+                logger.error("密码解密失败，使用空密码")
+                return ("", True)
         else:
             return ("", False)
