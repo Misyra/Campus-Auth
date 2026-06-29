@@ -26,7 +26,6 @@ class ServiceContainer:
     def __init__(self, project_root: Path, mode: str = "full"):
         self.project_root = project_root
         self._temp_dir = project_root / "temp"
-        self._is_lightweight = mode == "lightweight"
 
         # 基础服务
         self.ws_manager = WebSocketManager()

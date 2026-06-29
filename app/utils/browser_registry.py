@@ -16,9 +16,6 @@ logger = get_logger("browser_registry", source="backend")
 
 PLATFORM = get_platform()
 
-# 图标目录
-ICONS_DIR = Path(__file__).parent.parent.parent / "resources" / "icons"
-
 
 def _get_icon_url(filename: str) -> str:
     """获取图标 URL。"""

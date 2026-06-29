@@ -35,8 +35,6 @@ WORKER_SUBMIT_TIMEOUT = 300  # Worker 命令提交超时
 WORKER_READY_TIMEOUT = 5  # Worker 就绪等待
 WORKER_JOIN_TIMEOUT = 3  # Worker 线程 join
 WORKER_QUEUE_PUT_TIMEOUT = 10  # 命令入队超时
-MONITOR_STOP_TIMEOUT = 10  # 监控停止等待
-PORTAL_WAIT_AFTER_LOGIN = 5  # 登录后等待 Portal 更新
 DEFAULT_STEP_TIMEOUT_MS = 10000  # 步骤默认超时（毫秒）
 DEFAULT_TASK_TIMEOUT_MS = 30000  # 任务默认超时（毫秒）
 
