@@ -3826,3 +3826,7 @@
   - `tests/test_services/test_scheduler_service_new.py`：mock 改为 `executor.registry.has_enabled_tasks`
   - `tests/test_api/test_api_scheduled_tasks_routes.py`：mock 改为 `mock_tasks.registry.*` / `mock_tasks.history_store.*`
   - `tests/test_api/test_scheduled_tasks_fix.py`：同上
+
+## 2026-06-29: 移除 container.py 中 debug_manager 的不必要延迟初始化
+
+- `app/container.py`：将 `debug_manager` 从延迟初始化（`@property` + `_debug_manager`）改为 `__init__` 中直接初始化，删除 `@property def debug_manager` 方法，简化 `shutdown` 中的引用
