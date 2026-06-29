@@ -19,9 +19,6 @@ from app.utils.logging import get_logger
 
 ws_logger = get_logger("websocket_manager", source="backend")
 
-# WS 广播队列排空间隔（秒）
-WS_DRAIN_INTERVAL_SECONDS = 0.05
-
 
 class WebSocketManager:
     """WebSocket 管理器 — 连接管理 + 广播队列"""

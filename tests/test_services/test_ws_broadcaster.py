@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.websocket_manager import WebSocketManager, WS_DRAIN_INTERVAL_SECONDS
+from app.services.websocket_manager import WebSocketManager
 
 
 class TestBroadcastQueueInit:
@@ -257,6 +257,3 @@ class TestWsDrainLoop:
         assert not task.cancelled()
 
 
-class TestConstant:
-    def test_ws_drain_interval_value(self):
-        assert WS_DRAIN_INTERVAL_SECONDS == 0.05
