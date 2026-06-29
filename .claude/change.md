@@ -2,6 +2,14 @@
 
 ## 2026-06-29
 
+### refactor: ConfigBuilder 类改为 build_runtime_config() 函数
+
+- `app/services/config_builder.py`：移除 `ConfigBuilder` 类，`build()` 静态方法改为顶层函数 `build_runtime_config()`
+- `app/services/profile_service.py`：更新导入和调用（`ConfigBuilder.build(...)` → `build_runtime_config(...)`）
+- `tests/test_services/test_config_builder.py`：更新导入和所有调用
+- `tests/test_app/test_backend_services.py`：更新导入和所有调用
+- `tests/test_services/test_config_service.py`：更新导入和所有调用
+
 ### test: 删除 test_engine_fix.py — 已被 test_engine.py 全面覆盖
 
 - 删除 `tests/test_services/test_engine_fix.py`（183 行，6 个测试）
