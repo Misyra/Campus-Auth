@@ -36,9 +36,6 @@ from app.services.login_handler import SCREENSHOT_URL_PATTERN
 from .profile_service import ProfileService
 from .retry_policy import MonitoredPolicy
 
-# 向后兼容 re-export
-from app.services.websocket_manager import WS_DRAIN_INTERVAL_SECONDS  # noqa: F401
-
 # ── Actor 模型：类型化命令派发 ──
 
 
