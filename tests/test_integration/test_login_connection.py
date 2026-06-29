@@ -49,7 +49,9 @@ class TestLoginConnection:
         assert result is True
 
         # 等待 login_pool 中的任务完成
-        time.sleep(0.5)
+        deadline = time.time() + 5
+        while time.time() < deadline and not mock_worker.submit.called:
+            time.sleep(0.05)
 
         mock_worker.submit.assert_called()
 
@@ -134,7 +136,9 @@ class TestLoginConnection:
         login_release.set()
 
         # 等待自动登录结束
-        time.sleep(0.5)
+        deadline = time.time() + 5
+        while time.time() < deadline and task_executor.is_login_running():
+            time.sleep(0.05)
         assert task_executor.is_login_running() is False
 
         # 现在手动登录应该能成功提交

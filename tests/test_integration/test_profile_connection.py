@@ -61,7 +61,9 @@ class TestProfileConnection:
         assert ok is True
 
         # apply_profile 通过队列异步处理，等待引擎线程处理完成
-        time.sleep(0.5)
+        deadline = time.time() + 5
+        while time.time() < deadline and not engine._is_monitoring:
+            time.sleep(0.05)
 
         assert engine._is_monitoring
         assert engine.get_runtime_config().credentials.username == "user-b"

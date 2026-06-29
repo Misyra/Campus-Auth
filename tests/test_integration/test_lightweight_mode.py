@@ -44,8 +44,10 @@ class TestLightweightMode:
         # t0: 启动监控
         result = engine.start_monitoring()
         assert result[0] is True
-        # 等待引擎线程处理 START 命令
-        time.sleep(0.5)
+        # 轮询等待引擎线程处理 START 命令
+        deadline = time.time() + 5
+        while time.time() < deadline and not engine._is_monitoring:
+            time.sleep(0.05)
         assert engine._is_monitoring
 
         # t1: 断网 → 自动登录成功
@@ -74,5 +76,7 @@ class TestLightweightMode:
 
         # t4: 停止监控
         engine.stop_monitoring()
-        time.sleep(0.5)
+        deadline = time.time() + 5
+        while time.time() < deadline and engine._is_monitoring:
+            time.sleep(0.05)
         assert not engine._is_monitoring
