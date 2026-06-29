@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import threading
-from typing import Iterator
 
 
 class MonitoredPolicy:
@@ -36,9 +35,6 @@ class MonitoredPolicy:
         """重置重试计数。"""
         with self._lock:
             self._attempt = 0
-
-    def attempts(self) -> Iterator[int]:
-        yield from range(1, self.max_retries + 1)
 
     def delay_before(self, attempt: int) -> float:
         """返回第 attempt 次登录失败后的延迟（查表）。"""

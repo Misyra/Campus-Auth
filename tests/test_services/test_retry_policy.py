@@ -12,10 +12,6 @@ class TestMonitoredPolicy:
         policy = MonitoredPolicy()
         assert policy.max_retries == 5
 
-    def test_attempts_yields_1_to_max(self):
-        policy = MonitoredPolicy(max_retries=5)
-        assert list(policy.attempts()) == [1, 2, 3, 4, 5]
-
     # -- delay_before ---------------------------------------------------
 
     def test_delay_first_attempt(self):
