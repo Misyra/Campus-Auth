@@ -1,6 +1,5 @@
 from .browser import BrowserContextManager
 from .config_utils import validate_env_config
-from .crypto import decrypt_password, encrypt_password
 from .exceptions import LoginCancelledError
 from .logging import (
     DashboardSink,
@@ -21,8 +20,6 @@ __all__ = [
     "DashboardSink",
     "LogConfigCenter",
     "LoginCancelledError",
-    "decrypt_password",
-    "encrypt_password",
     "get_logger",
     "is_in_pause_period",
     "str_to_bool",
