@@ -23,20 +23,7 @@ class TestLogLevels:
 
         assert response.status_code == 200
         data = response.json()
-        assert "global_level" in data
-        assert "source_levels" in data
-
-    def test_set_source_level(self, api_client):
-        """测试设置 source 级别"""
-        test_client, _ = api_client
-        response = test_client.put(
-            "/api/config/source-level",
-            json={"source": "network", "level": "DEBUG"},
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is True
+        assert "level" in data
 
 
 def _make_runtime_config(**kwargs):

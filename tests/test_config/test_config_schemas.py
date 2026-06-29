@@ -115,7 +115,7 @@ class TestNormalizeLevelService:
         assert _normalize_level("INFO") == "INFO"
         assert _normalize_level("WARNING") == "WARNING"
         assert _normalize_level("ERROR") == "ERROR"
-        assert _normalize_level("CRITICAL") == "CRITICAL"
+        assert _normalize_level("CRITICAL") == "INFO"
 
     def test_case_insensitive(self):
         assert _normalize_level("debug") == "DEBUG"

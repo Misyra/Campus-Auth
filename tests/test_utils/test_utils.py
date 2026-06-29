@@ -534,7 +534,7 @@ class TestNormalizeLevel:
         assert normalize_level("INFO") == "INFO"
         assert normalize_level("WARNING") == "WARNING"
         assert normalize_level("ERROR") == "ERROR"
-        assert normalize_level("CRITICAL") == "CRITICAL"
+        assert normalize_level("CRITICAL") == "INFO"
 
     def test_case_insensitive(self):
         assert normalize_level("debug") == "DEBUG"
@@ -588,79 +588,7 @@ class TestLogConfigCenter:
         config = center.get_config()
         assert config["level"] == "INFO"
 
-    def test_set_source_level(self):
-        """测试设置 source 级别"""
-        config = LogConfigCenter()
-        config.initialize()
-        config.set_source_level("network", "DEBUG")
-        assert config.get_source_level("network") == "DEBUG"
 
-    def test_get_source_level_default(self):
-        """测试获取未设置的 source 级别返回全局级别"""
-        config = LogConfigCenter()
-        config.initialize()
-        config.set_level("INFO")
-        config._source_levels.clear()
-        assert config.get_source_level("network") == "INFO"
-
-    def test_should_emit_with_source_level(self):
-        """测试 should_emit 过滤逻辑"""
-        config = LogConfigCenter()
-        config.initialize()
-        config.set_level("INFO")
-        config.set_source_level("network", "DEBUG")
-
-        # network source 应该输出 DEBUG
-        assert config.should_emit("network", "DEBUG") is True
-        assert config.should_emit("network", "INFO") is True
-
-        # backend source 使用全局级别 INFO，不应该输出 DEBUG
-        assert config.should_emit("backend", "DEBUG") is False
-        assert config.should_emit("backend", "INFO") is True
-
-    def test_get_all_source_levels(self):
-        """测试获取所有 source 级别配置"""
-        config = LogConfigCenter()
-        config.initialize()
-        config.set_source_level("network", "DEBUG")
-        config.set_source_level("task", "WARNING")
-        levels = config.get_all_source_levels()
-        assert levels == {"network": "DEBUG", "task": "WARNING"}
-
-
-class TestShouldEmitLevelOrder:
-    """验证 should_emit 使用类级别常量而非每次重建字典"""
-
-    def test_level_order_is_class_constant(self):
-        """LogConfigCenter 应有 _LEVEL_ORDER 类常量"""
-        assert hasattr(LogConfigCenter, "_LEVEL_ORDER"), (
-            "LogConfigCenter 缺少 _LEVEL_ORDER 类常量"
-        )
-        expected = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
-        assert LogConfigCenter._LEVEL_ORDER == expected
-
-    def test_should_emit_uses_class_constant_via_behavior(self):
-        """should_emit 应通过类常量决策"""
-        cc = LogConfigCenter.get_instance()
-        original = LogConfigCenter._LEVEL_ORDER.copy()
-        try:
-            LogConfigCenter._LEVEL_ORDER = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
-            result_before = cc.should_emit("backend", "INFO")
-            LogConfigCenter._LEVEL_ORDER = {"DEBUG": 5, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
-            result_after = cc.should_emit("backend", "INFO")
-            assert isinstance(result_before, bool)
-            assert isinstance(result_after, bool)
-        finally:
-            LogConfigCenter._LEVEL_ORDER = original
-
-    def test_should_emit_basic_functionality(self):
-        """should_emit 基本功能验证"""
-        cc = LogConfigCenter.get_instance()
-        assert cc.should_emit("backend", "INFO") is True
-        assert cc.should_emit("backend", "DEBUG") is False
-        assert cc.should_emit("backend", "WARNING") is True
-        assert cc.should_emit("backend", "ERROR") is True
-        assert cc.should_emit("backend", "CRITICAL") is True
 
 
 # =====================================================================
@@ -862,64 +790,12 @@ class TestValidLogLevels:
         assert "INFO" in VALID_LOG_LEVELS
         assert "WARNING" in VALID_LOG_LEVELS
         assert "ERROR" in VALID_LOG_LEVELS
-        assert "CRITICAL" in VALID_LOG_LEVELS
 
     def test_count(self):
         """级别数量。"""
         from app.utils.logging import VALID_LOG_LEVELS
 
-        assert len(VALID_LOG_LEVELS) == 5
-
-
-# ── DashboardSink source 级别过滤 ──
-
-
-def test_dashboard_sink_filters_by_source_level():
-    """测试 DashboardSink 根据 source 级别过滤"""
-    from unittest.mock import MagicMock
-
-    from app.utils.logging import DashboardSink, LogConfigCenter
-
-    config = LogConfigCenter()
-    config.initialize()
-    config.set_level("INFO")
-    config.set_source_level("network", "WARNING")
-
-    sink = DashboardSink()
-
-    level_debug = MagicMock()
-    level_debug.name = "DEBUG"
-    level_warning = MagicMock()
-    level_warning.name = "WARNING"
-    level_info = MagicMock()
-    level_info.name = "INFO"
-
-    def make_msg(source, level_mock):
-        msg = MagicMock()
-        msg.record = {
-            "extra": {"source": source, "name": "test"},
-            "level": level_mock,
-            "time": MagicMock(timestamp=lambda: 0),
-            "name": "test",
-        }
-        msg.__str__ = lambda self: "test message"
-        return msg
-
-    # network source 设置为 WARNING，DEBUG 应该被过滤
-    sink.write(make_msg("network", level_debug))
-    assert len(sink.buffer) == 0
-
-    # network source 设置为 WARNING，WARNING 应该通过
-    sink.write(make_msg("network", level_warning))
-    assert len(sink.buffer) == 1
-
-    # backend source 使用全局级别 INFO，DEBUG 应该被过滤
-    sink.write(make_msg("backend", level_debug))
-    assert len(sink.buffer) == 1
-
-    # backend source 使用全局级别 INFO，INFO 应该通过
-    sink.write(make_msg("backend", level_info))
-    assert len(sink.buffer) == 2
+        assert len(VALID_LOG_LEVELS) == 4
 
 
 # ── DashboardSink ──

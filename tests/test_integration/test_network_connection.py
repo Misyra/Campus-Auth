@@ -21,7 +21,7 @@ def _make_monitor_core(engine) -> NetworkMonitorCore:
     config = engine.get_runtime_config()
     core = NetworkMonitorCore(
         config=config,
-        log_callback=engine.record_log,
+        logger=engine._logger,
         login_history=engine._login_history,
     )
     core.set_profile_service(engine._profile_service)

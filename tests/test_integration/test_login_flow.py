@@ -64,7 +64,7 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._worker_getter = None
     svc._profile_service = MagicMock()
     svc.project_root = MagicMock()
-    svc.record_log = MagicMock()
+    svc._logger = MagicMock()
     svc._update_status_snapshot = MagicMock()
     svc._orchestrator = MagicMock()
     svc._wakeup_event = threading.Event()
@@ -75,7 +75,7 @@ def _make_raw_engine() -> ScheduleEngine:
         get_runtime_config=lambda: svc._runtime_config,
         retry_policy=svc._retry_policy,
         status_update_callback=svc._update_status_snapshot,
-        record_log=svc.record_log,
+        logger=svc._logger,
         wakeup_event=svc._wakeup_event,
         get_monitor_check_interval=lambda: svc._monitor_check_interval,
     )

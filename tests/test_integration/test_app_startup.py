@@ -344,7 +344,7 @@ class TestDependencyInjection:
             mock_sys_settings = MagicMock()
             mock_sys_settings.access_log = False
             mock_sys_settings.log_retention_days = 7
-            mock_sys_settings.source_levels = {}
+
             mock_ps_instance.load.return_value.global_settings = mock_sys_settings
             mock_ps.return_value = mock_ps_instance
 
@@ -374,7 +374,7 @@ class TestDependencyInjection:
             mock_sys_settings = MagicMock()
             mock_sys_settings.access_log = False
             mock_sys_settings.log_retention_days = 7
-            mock_sys_settings.source_levels = {}
+
             mock_ps_instance.load.return_value.global_settings = mock_sys_settings
             mock_ps.return_value = mock_ps_instance
 
@@ -403,7 +403,7 @@ class TestDependencyInjection:
             mock_lcc.get_instance.return_value = MagicMock()
             mock_ps_instance = MagicMock()
             mock_sys_settings = MagicMock()
-            mock_sys_settings.source_levels = {}
+
             mock_ps_instance.load.return_value.global_settings = mock_sys_settings
             mock_ps.return_value = mock_ps_instance
 
