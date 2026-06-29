@@ -24,7 +24,7 @@ from app.services.engine import (
     EngineCommand,
     ScheduleEngine,
 )
-from app.services.engine_status import StatusSnapshot
+from app.services.engine import StatusSnapshot
 from app.services.monitor_service import CheckOnceResult
 from app.services.retry_policy import MonitoredPolicy
 
@@ -69,7 +69,7 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._orchestrator = MagicMock()
     svc._wakeup_event = threading.Event()
     # LoginBridge — 登录委托
-    from app.services.engine_login_bridge import LoginBridge
+    from app.services.engine import LoginBridge
     svc._login_bridge = LoginBridge(
         get_orchestrator=lambda: svc._orchestrator,
         get_runtime_config=lambda: svc._runtime_config,

@@ -77,7 +77,7 @@ class TestManualLoginCancelRaceFix:
         import threading
 
         from app.services.engine import ScheduleEngine
-        from app.services.engine_login_bridge import LoginBridge
+        from app.services.engine import LoginBridge
         from app.services.retry_policy import MonitoredPolicy
 
         engine = ScheduleEngine.__new__(ScheduleEngine)

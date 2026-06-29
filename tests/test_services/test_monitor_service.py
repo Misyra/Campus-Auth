@@ -17,7 +17,7 @@ from app.services.engine import (
     EngineCommand,
     ScheduleEngine,
 )
-from app.services.engine_status import StatusSnapshot
+from app.services.engine import StatusSnapshot
 
 
 def _fake_reload():
@@ -725,7 +725,7 @@ class TestNetworkStateSetInConsumer:
 
     def test_do_async_login_delegates_to_task_executor(self):
         """_do_async_login 应委托给 orchestrator.submit"""
-        from app.services.engine_login_bridge import LoginBridge
+        from app.services.engine import LoginBridge
         from app.services.retry_policy import MonitoredPolicy
 
         svc = ScheduleEngine.__new__(ScheduleEngine)

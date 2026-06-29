@@ -2,6 +2,19 @@
 
 ## 2026-06-29
 
+### refactor: 合并 engine_status.py 和 engine_login_bridge.py 回 engine.py
+
+- `app/services/engine_status.py`：已删除，`StatusSnapshot` 和 `StatusManager` 合并入 `engine.py`
+- `app/services/engine_login_bridge.py`：已删除，`LoginBridge` 合并入 `engine.py`
+- `app/services/engine.py`：新增 `StatusSnapshot`、`StatusManager`、`LoginBridge` 三个类，删除对旧模块的导入和延迟导入
+- `tests/test_services/conftest.py`：更新导入路径
+- `tests/test_services/test_engine.py`：更新导入路径
+- `tests/test_services/test_engine_login_bridge.py`：更新导入路径
+- `tests/test_services/test_engine_fix.py`：更新导入路径
+- `tests/test_services/test_monitor_service.py`：更新导入路径
+- `tests/test_integration/test_login_flow.py`：更新导入路径
+- `StatusManager` 适配 `ws_manager`/`WebSocketManager` 接口（替代原 `ws_broadcaster`/`WsBroadcaster`）
+
 ### refactor: 用 check_network_status 简化 _network_detection_check
 
 - `app/tasks/browser_runner.py`：
