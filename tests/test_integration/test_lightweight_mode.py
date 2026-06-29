@@ -41,14 +41,11 @@ class TestLightweightMode:
 
         mock_worker.submit.side_effect = counting_login
 
-        # t0: 启动监控
-        result = engine.start_monitoring()
-        assert result[0] is True, f"start_monitoring 失败: {result[1]}"
-        # 轮询等待引擎线程处理 START 命令
+        # t0: boot() 已启动监控，等待引擎线程就绪
         deadline = time.time() + 5
         while time.time() < deadline and not engine._is_monitoring:
             time.sleep(0.05)
-        assert engine._is_monitoring
+        assert engine._is_monitoring, "引擎监控未在 5 秒内启动"
 
         # t1: 断网 → 自动登录成功
         config = engine.get_runtime_config()
