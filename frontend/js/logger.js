@@ -1,15 +1,13 @@
-import { LOG_LEVELS } from './constants.js';
+import { LOG_LEVELS, LEVEL_VALUES } from './constants.js';
 
-// 日志级别数值映射（用于级别比较）
-const _LEVEL_VALUES = Object.fromEntries(LOG_LEVELS.map((l, i) => [l.value, (i + 1) * 10]));
 
 export function createFrontendLogger(initialLevel = 'INFO') {
   let currentLevel = String(initialLevel || 'INFO').toUpperCase();
   let _ws = null;
 
   const shouldLog = (level) => {
-    const left = _LEVEL_VALUES[String(level || '').toUpperCase()] || _LEVEL_VALUES.INFO;
-    const right = _LEVEL_VALUES[currentLevel] || _LEVEL_VALUES.INFO;
+    const left = LEVEL_VALUES[String(level || '').toUpperCase()] || LEVEL_VALUES.INFO;
+    const right = LEVEL_VALUES[currentLevel] || LEVEL_VALUES.INFO;
     return left >= right;
   };
 
@@ -35,7 +33,7 @@ export function createFrontendLogger(initialLevel = 'INFO') {
     },
     setLevel(level) {
       const next = String(level || '').toUpperCase();
-      currentLevel = _LEVEL_VALUES[next] ? next : 'INFO';
+      currentLevel = LEVEL_VALUES[next] ? next : 'INFO';
       console.info(...format('INFO', 'logger', `frontend log level => ${currentLevel}`));
     },
     debug(scope, message, meta) {

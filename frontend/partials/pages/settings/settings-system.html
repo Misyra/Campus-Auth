@@ -37,7 +37,7 @@
           <custom-select
             v-model="config.logging.level"
             :options="logLevelOptions"
-            @change="(val) => { setSourceLevel('global', val); onConfigChange(); }"
+            @change="(val) => { setLogLevel(val); onConfigChange(); }"
           ></custom-select>
         </div>
       </div>

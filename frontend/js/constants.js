@@ -60,20 +60,16 @@ export const LOG_LEVELS = [
   { value: 'INFO', label: 'INFO' },
   { value: 'WARNING', label: 'WARNING' },
   { value: 'ERROR', label: 'ERROR' },
-  { value: 'CRITICAL', label: 'CRITICAL' },
 ];
 
 // 日志级别数值映射（数值越大级别越高）
 export const LEVEL_VALUES = Object.fromEntries(LOG_LEVELS.map((l, i) => [l.value, i]));
-// { DEBUG: 0, INFO: 1, WARNING: 2, ERROR: 3, CRITICAL: 4 }
+// { DEBUG: 0, INFO: 1, WARNING: 2, ERROR: 3 }
 
 // 日志来源列表
 export const LOG_SOURCES = [
-  { value: 'backend', label: 'backend', color: '#4fc3f7' },
-  { value: 'network', label: 'network', color: '#81c784' },
-  { value: 'task', label: 'task', color: '#fff176' },
-  { value: 'frontend', label: 'frontend', color: '#ce93d8' },
-  { value: 'debug', label: 'debug', color: '#ffab91' },
+  { value: "backend",  label: "backend",  color: "#60a5fa" },
+  { value: "frontend", label: "frontend", color: "#a78bfa" }
 ];
 
 export const BROWSER_ARGS_DEFAULT = "--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees\n--disable-ipc-flooding-protection\n--disable-hang-monitor\n--disable-popup-blocking";
@@ -127,7 +123,6 @@ export const DEFAULT_CONFIG = {
   },
   logging: {
     level: "INFO",
-    frontend_level: "INFO",
     log_retention_days: 7,
     access_log: false,
   },

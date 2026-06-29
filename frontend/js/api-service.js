@@ -16,7 +16,7 @@ export const apiService = {
     patch: (payload, opts) => api.patch('/api/config', payload, opts).then(r => r.data),
     fetchDefaults: () => api.get('/api/config/defaults').then(r => r.data),
     fetchLogLevels: () => api.get('/api/config/log-levels').then(r => r.data),
-    setSourceLevel: (source, level) => api.put('/api/config/source-level', { source, level }).then(r => r.data),
+    setLogLevel: (level) => api.put('/api/config/log-level', { level }).then(r => r.data),
     fetchStealthScript: () => api.get('/api/config/default-stealth-script').then(r => r.data),
   },
 

@@ -305,7 +305,7 @@ export const uiMethods = {
     return logViewer.scrollTop + logViewer.clientHeight >= logViewer.scrollHeight - LIMITS.SCROLL_BOTTOM_THRESHOLD;
   },
   _appendLogs(entries) {
-    this.logs.push(...entries);
+    this.logs.push(...entries.map(e => Object.freeze(e)));
     if (this.logs.length > LIMITS.LOG_MAX_ENTRIES) {
       this.logs = this.logs.slice(-LIMITS.LOG_MAX_ENTRIES);
     }

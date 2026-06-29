@@ -64,14 +64,10 @@ export const appOptions = {
         { value: 'monitor', label: '启动后开始监控（推荐）' },
         { value: 'login_once', label: '自动登录，成功后退出' },
       ],
-      logSourceOptions: [
-        { value: '', label: '全部来源' },
-        { value: 'backend', label: 'BAK' },
-        { value: 'network', label: 'NET' },
-        { value: 'task', label: 'TSK' },
-        { value: 'frontend', label: 'FRT' },
-        { value: 'debug', label: 'DBG' },
-      ],
+      logSourceOptions: (() => {
+        const srcs = [{ value: 'backend',  label: 'backend' }, { value: 'frontend', label: 'frontend' }];
+        return [{ value: '', label: '全部来源' }, ...srcs];
+      })(),
       scheduledTaskTypeOptions: [
         { value: 'script', label: '自定义脚本' },
         { value: 'browser', label: '浏览器任务' },
