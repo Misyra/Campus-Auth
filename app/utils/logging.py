@@ -81,8 +81,6 @@ def _to_std_logging(message):
 
 
 # 添加标准 logging 桥接 sink（仅测试环境）
-import sys
-
 if "pytest" in sys.modules:
     logger.add(_to_std_logging, level="DEBUG", format="{message}")
 
@@ -130,8 +128,6 @@ class DashboardSink:
         self.broadcast_queue: deque[dict] = deque(maxlen=broadcast_maxlen)
         self._lock = threading.Lock()
         self._drain_notifier: Callable[[], None] | None = None
-        # 获取配置中心实例
-        self._config_center = LogConfigCenter.get_instance()
 
     def set_drain_notifier(self, notifier: Callable[[], None]) -> None:
         """设置 drain 通知器（由 WebSocketManager 注入）。"""
