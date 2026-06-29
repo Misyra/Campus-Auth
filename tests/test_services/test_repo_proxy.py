@@ -1,4 +1,4 @@
-"""仓库代理工具测试 — normalize_repo_url / repo_get / repo_fetch_json
+"""仓库代理工具测试 — _normalize_repo_url / repo_get / repo_fetch_json
 
 覆盖：GitHub URL 转换 / Gitee URL 转换 / 非转换 URL / 网络请求 / 类型校验 / 异步版本
 """
@@ -12,19 +12,19 @@ import pytest
 from fastapi import HTTPException
 
 from app.utils.repo_proxy import (
+    _normalize_repo_url,
     async_repo_fetch_json,
-    normalize_repo_url,
 )
 
 # =====================================================================
-# normalize_repo_url
+# _normalize_repo_url
 # =====================================================================
 
 
 class TestNormalizeRepoUrl:
     def test_github_blob_to_raw(self):
         url = "https://github.com/user/repo/blob/main/path/to/file.json"
-        result = normalize_repo_url(url)
+        result = _normalize_repo_url(url)
         assert (
             result
             == "https://raw.githubusercontent.com/user/repo/main/path/to/file.json"
@@ -32,39 +32,39 @@ class TestNormalizeRepoUrl:
 
     def test_gitee_blob_to_raw(self):
         url = "https://gitee.com/user/repo/blob/master/data.json"
-        result = normalize_repo_url(url)
+        result = _normalize_repo_url(url)
         assert result == "https://gitee.com/user/repo/raw/master/data.json"
 
     def test_github_deep_path(self):
         url = "https://github.com/org/project/blob/dev/a/b/c/d.json"
-        result = normalize_repo_url(url)
+        result = _normalize_repo_url(url)
         assert (
             result == "https://raw.githubusercontent.com/org/project/dev/a/b/c/d.json"
         )
 
     def test_non_github_url_unchanged(self):
         url = "https://example.com/data.json"
-        assert normalize_repo_url(url) == url
+        assert _normalize_repo_url(url) == url
 
     def test_raw_github_url_unchanged(self):
         url = "https://raw.githubusercontent.com/user/repo/main/file.json"
-        assert normalize_repo_url(url) == url
+        assert _normalize_repo_url(url) == url
 
     def test_http_github_url(self):
         url = "http://github.com/user/repo/blob/main/file.json"
-        result = normalize_repo_url(url)
+        result = _normalize_repo_url(url)
         assert result == "https://raw.githubusercontent.com/user/repo/main/file.json"
 
     def test_empty_string(self):
-        assert normalize_repo_url("") == ""
+        assert _normalize_repo_url("") == ""
 
     def test_github_no_blob_path(self):
         url = "https://github.com/user/repo"
-        assert normalize_repo_url(url) == url
+        assert _normalize_repo_url(url) == url
 
     def test_github_tree_url_not_converted(self):
         url = "https://github.com/user/repo/tree/main"
-        assert normalize_repo_url(url) == url
+        assert _normalize_repo_url(url) == url
 
 
 # =====================================================================

@@ -296,10 +296,6 @@ class LoginCredentials(BaseModel, frozen=True):
 
 
 def _parse_targets(raw: str) -> list[str]:
-    return [t.strip() for t in raw.split(",") if t.strip()]
-
-
-def _parse_url_check(raw: str) -> list[str]:
     return [s.strip() for s in re.split(r'[,\n]', raw) if s.strip()]
 
 
@@ -315,7 +311,7 @@ class MonitorSettings(BaseModel, frozen=True):
     test_urls: list[str] = Field(default_factory=lambda: _parse_targets(DEFAULT_HTTP_TARGETS))
     check_auth_url: bool = False
     auth_url_targets: list[str] = Field(default_factory=list)
-    url_check_urls: list[str] = Field(default_factory=lambda: _parse_url_check(DEFAULT_URL_CHECK_URLS))
+    url_check_urls: list[str] = Field(default_factory=lambda: _parse_targets(DEFAULT_URL_CHECK_URLS))
     script_timeout: int = Field(default=60, ge=5, le=600)
 
 
