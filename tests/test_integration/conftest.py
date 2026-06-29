@@ -68,6 +68,10 @@ def integration_stack(tmp_path, mock_worker):
     Returns:
         (engine, profile_service, task_executor, task_registry, mock_worker)
     """
+    # 清除可能由其他测试遗留的解密错误状态
+    from app.utils.crypto import clear_decryption_error
+    clear_decryption_error()
+
     _write_initial_config(tmp_path)
 
     profile_service = ProfileService(tmp_path)

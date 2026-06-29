@@ -43,7 +43,7 @@ class TestLightweightMode:
 
         # t0: 启动监控
         result = engine.start_monitoring()
-        assert result[0] is True
+        assert result[0] is True, f"start_monitoring 失败: {result[1]}"
         # 轮询等待引擎线程处理 START 命令
         deadline = time.time() + 5
         while time.time() < deadline and not engine._is_monitoring:
