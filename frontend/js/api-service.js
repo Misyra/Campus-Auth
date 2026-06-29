@@ -25,8 +25,6 @@ export const apiService = {
     fetchStatus: () => api.get('/api/status').then(r => r.data),
     start: () => api.post('/api/monitor/start').then(r => r.data),
     stop: () => api.post('/api/monitor/stop').then(r => r.data),
-    togglePureMode: () => api.post('/api/pure-mode').then(r => r.data),
-    fetchPureMode: () => api.get('/api/pure-mode').then(r => r.data),
   },
 
   // ── 登录操作 ──

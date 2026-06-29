@@ -1,5 +1,7 @@
 ﻿import { TIMING, LIMITS } from '../constants.js';
 
+const NOTIFY_CATEGORY_LABELS = { login: '登录', monitor: '监控', network: '网络', update: '更新', security: '安全', install: '安装' };
+
 export const uiMethods = {
   // 弹窗焦点陷阱：将焦点限制在指定容器内
   _trapFocus(container) {
@@ -78,10 +80,6 @@ export const uiMethods = {
     const s = String(now.getSeconds()).padStart(2, '0');
     return `${now.getMonth() + 1}/${now.getDate()} ${h}:${m}:${s}`;
   },
-  _notifyCategoryLabel(category) {
-    const labels = { login: '登录', monitor: '监控', network: '网络', update: '更新', security: '安全', install: '安装' };
-    return labels[category] || '';
-  },
   // 通知下拉菜单：切换 + 点击外部关闭
   toggleNotifications() {
     this.showNotifications = !this.showNotifications;
@@ -106,7 +104,7 @@ export const uiMethods = {
       time: this._formatNotifyTime(),
       category: category || '',
       icon: this._notifyCategoryIcon(category),
-      label: this._notifyCategoryLabel(category),
+      label: NOTIFY_CATEGORY_LABELS[category] || '',
       action: action || null,
     };
     this.notifications.unshift(entry);
@@ -140,24 +138,6 @@ export const uiMethods = {
     this.selectedBrowser = channel;
     this.config.browser.browser_channel = channel;
     this.onConfigChange();
-  },
-  // 辅助方法：获取浏览器信息
-  getBrowser(channel) {
-    return this.availableBrowsers.find(b => b.channel === channel) || { channel, installed: false };
-  },
-  // 辅助方法：获取浏览器图标
-  getBrowserIcon(channel) {
-    const browser = this.availableBrowsers.find(b => b.channel === channel);
-    return browser ? browser.icon : '';
-  },
-  // 辅助方法：检查浏览器是否已安装
-  isBrowserInstalled(channel) {
-    const browser = this.availableBrowsers.find(b => b.channel === channel);
-    return browser ? browser.installed : false;
-  },
-  // 辅助方法：获取其他浏览器（排除 Playwright）
-  getOtherBrowsers() {
-    return this.availableBrowsers.filter(b => b.channel !== 'playwright');
   },
   // 浏览器选择共享 partial 辅助：返回当前活跃的浏览器 channel
   getActiveBrowserChannel() {

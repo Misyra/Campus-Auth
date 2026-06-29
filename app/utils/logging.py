@@ -80,8 +80,11 @@ def _to_std_logging(message):
     std_logger.log(std_level, str(message).strip())
 
 
-# 添加标准 logging 桥接 sink
-logger.add(_to_std_logging, level="DEBUG", format="{message}")
+# 添加标准 logging 桥接 sink（仅测试环境）
+import sys
+
+if "pytest" in sys.modules:
+    logger.add(_to_std_logging, level="DEBUG", format="{message}")
 
 # ==================== 日志级别标准化 ====================
 
