@@ -14,7 +14,7 @@ import psutil
 from app.utils.concurrent import race_first_success
 from app.utils.logging import get_logger
 
-logger = get_logger("network_probes", source="network")
+logger = get_logger("network_probes", source="backend")
 
 executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="net")
 atexit.register(executor.shutdown, wait=False, cancel_futures=True)

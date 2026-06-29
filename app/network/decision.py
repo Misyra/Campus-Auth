@@ -32,7 +32,7 @@ class NetworkCheckResult:
     detail: str = ""  # 失败时的附加信息
 
 
-logger = get_logger("network_decision", source="network")
+logger = get_logger("network_decision", source="backend")
 
 
 # ── 公共 API：三个职责清晰的检查函数 ──

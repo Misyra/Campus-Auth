@@ -11,7 +11,7 @@ from typing import Any
 from app.constants import DEFAULT_TASK_TIMEOUT_MS
 from app.utils.logging import get_logger
 
-logger = get_logger("task_models", source="task")
+logger = get_logger("task_models", source="backend")
 
 # 任务ID验证正则
 TASK_ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")

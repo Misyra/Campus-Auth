@@ -27,7 +27,7 @@ from .debug_session import (
     debug_to_response,
 )
 
-debug_logger = get_logger("debug_manager", source="debug")
+debug_logger = get_logger("debug_manager", source="backend")
 
 
 class DebugSessionManager:

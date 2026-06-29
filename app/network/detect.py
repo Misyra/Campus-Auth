@@ -18,7 +18,7 @@ from app.utils.platform import (
     is_windows,
 )
 
-logger = get_logger("network_detect", source="network")
+logger = get_logger("network_detect", source="backend")
 
 
 def _is_valid_ipv4(ip: str) -> bool:
