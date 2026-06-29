@@ -72,7 +72,7 @@ class NetworkMonitorCore:
         self.network_state: NetworkState = NetworkState.UNKNOWN
 
         self._test_sites_cache: list[tuple[str, int]] | None = None
-        self.logger = get_logger("monitor_core", source="network")
+        self.logger = get_logger("monitor_core", source="backend")
 
         # 状态详情
         self.status_detail: str = "正常"

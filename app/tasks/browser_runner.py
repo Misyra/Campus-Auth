@@ -18,7 +18,7 @@ from .models import StepConfig, StepType, TaskConfig
 from .step_handlers import DEFAULT_HANDLERS
 from .variable_resolver import VariableResolver
 
-logger = get_logger("task_executor", source="task")
+logger = get_logger("task_executor", source="backend")
 
 
 class BrowserTaskRunner:
