@@ -44,7 +44,7 @@ class TestFullMode:
 
         # t0: 启动监控（调度器随监控一起启动）
         result = engine.start_monitoring()
-        assert result[0] is True
+        assert result[0] is True, f"start_monitoring 失败: {result[1]}"
         # 轮询等待引擎线程处理 START 命令（CI 环境较慢，不用固定 sleep）
         deadline = time.time() + 5
         while time.time() < deadline and not engine._is_monitoring:
