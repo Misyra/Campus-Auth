@@ -347,13 +347,8 @@ class TaskExecutor:
     # ── 辅助方法 ──
 
     def _get_script_path(self, script_id: str):
-        """获取脚本任务的文件路径。
-
-        委托 TaskRegistry.get_script_path() 查找。
-        """
-        if hasattr(self._registry, "get_script_path"):
-            return self._registry.get_script_path(script_id)
-        return None
+        """获取脚本任务的文件路径。"""
+        return self._registry.get_script_path(script_id)
 
     # ── 生命周期 ──
 

@@ -146,10 +146,6 @@ class TaskManager:
         subdir = self.scripts_dir if task_type == "scripts" else self.browser_dir
         return self._safe_subdir_path(subdir, task_id, ".json")
 
-    def _safe_script_path(self, task_id: str) -> Path | None:
-        """返回 scripts/ 下的 .py 路径。"""
-        return self._safe_subdir_path(self.scripts_dir, task_id, ".py")
-
     def _safe_meta_path(self, task_id: str) -> Path | None:
         """返回 scripts/ 下的 .meta.json 路径。"""
         return self._safe_subdir_path(self.scripts_dir, task_id, ".meta.json")

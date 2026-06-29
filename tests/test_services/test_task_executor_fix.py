@@ -46,18 +46,6 @@ class TestTaskExecutorGetScriptPath:
         assert result is mock_path
         mock_registry.get_script_path.assert_called_once_with("test")
 
-    def test_returns_none_when_no_method(self) -> None:
-        """registry 无 get_script_path 时返回 None。"""
-        mock_registry = MagicMock(spec=[])
-
-        from app.services.task_executor import TaskExecutor
-
-        executor = TaskExecutor.__new__(TaskExecutor)
-        executor._registry = mock_registry
-
-        result = executor._get_script_path("nonexistent")
-        assert result is None
-
     def test_returns_none_when_registry_returns_none(self) -> None:
         """registry.get_script_path 返回 None 时返回 None。"""
         mock_registry = MagicMock(spec=["get_script_path"])
