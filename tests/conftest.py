@@ -20,9 +20,6 @@ if sys.platform != "win32":
     sys.modules["pystray"] = _pystray_mock
 
 
-# ── app.py 相关 fixtures ──────────────────────────────────────────────
-
-
 @pytest.fixture
 def tmp_pid_dir(tmp_path: Path, monkeypatch):
     """创建临时 PID 目录，monkeypatch AUTH_DATA_DIR 指向它。"""
