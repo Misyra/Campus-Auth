@@ -8,12 +8,12 @@ from unittest.mock import patch
 
 import pytest
 
+from app.schemas import LoginCredentials
 from app.workers.playwright_worker import WorkerResponse
 
 
 def _ensure_login_config(engine) -> None:
     """确保引擎运行时配置包含登录所需字段。"""
-    from app.schemas import LoginCredentials
     old = engine._runtime_config
     engine._runtime_config = old.model_copy(update={
         "credentials": LoginCredentials(
@@ -28,7 +28,7 @@ class TestLightweightMode:
 
     def test_full_lifecycle(self, integration_stack):
         """轻量模式：启动 → 断网登录 → 成功 → 再次断网 → 重试 → 手动登录 → 停止。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         login_count = [0]

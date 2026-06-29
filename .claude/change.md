@@ -2,6 +2,20 @@
 
 ## 2026-06-29
 
+### refactor: 测试套件瘦身 — 删除死代码、合并重复 fixture
+
+- `tests/test_config/test_constants.py`：删除（常量存在性测试，已在 `test_ws_broadcaster.py` 和 `test_login.py` 中覆盖）
+- `tests/test_integration/__init__.py`：删除（空文件）
+- `tests/test_utils/test_shell_policy_fix.py`：删除空测试类 `TestReturncodeNoneBug`
+- `tests/test_services/test_task_executor_fix.py`：删除未使用的 `_slow_return` 工具函数
+- `tests/test_integration/conftest.py`：合并 `full_stack` 到 `integration_stack`（返回 5-tuple 含 `task_registry`），删除 `full_stack` fixture
+- `tests/test_integration/test_full_mode.py`：改用 `integration_stack`，更新解构
+- `tests/test_integration/test_lightweight_mode.py`：更新解构适配 5-tuple
+- `tests/test_integration/test_login_connection.py`：更新解构适配 5-tuple
+- `tests/test_integration/test_login_integration_extended.py`：更新解构适配 5-tuple
+- `tests/test_integration/test_network_connection.py`：更新解构适配 5-tuple
+- `tests/test_integration/test_profile_connection.py`：更新解构适配 5-tuple
+
 ### refactor: 合并 WsBroadcaster 到 WebSocketManager，删除 NullWebSocketManager
 
 - `app/services/ws_broadcaster.py`：已删除，广播队列功能合入 `WebSocketManager`
@@ -3830,3 +3844,21 @@
 ## 2026-06-29: 移除 container.py 中 debug_manager 的不必要延迟初始化
 
 - `app/container.py`：将 `debug_manager` 从延迟初始化（`@property` + `_debug_manager`）改为 `__init__` 中直接初始化，删除 `@property def debug_manager` 方法，简化 `shutdown` 中的引用
+
+## 2026-06-29: 简化 deps.py 为 Annotated 别名，清理 main.py 向后兼容 re-export
+
+- ：重写为 Annotated 类型别名，用 `_get(attr)` 工厂函数替代 6 个独立的 `get_*` 函数
+- 11 个路由文件：所有 `Depends(get_xxx)` 改为 Annotated 类型别名（如 `MonitorServiceDep`），移除 `Depends` 和服务类型导入
+- `main.py`：删除向后兼容 re-export（`_run_server`, `_open_browser`, `_run_full`, `_run_login_then_exit`, `_execute_login_with_retries`, `LoginResult` 等），仅保留实际使用的导入
+- 测试文件同步更新：所有 `from main import _xxx` 改为从源模块导入（`app.services.launcher`, `app.services.login_runner`, `app.schemas`）
+- `tests/conftest.py`：移除 `monkeypatch.setattr("main.AUTH_DATA_DIR", ...)`（不再在 main 中 re-export）
+- `tests/test_config/test_deps.py`：重写为测试 `_get` 工厂函数
+
+## 2026-06-29: 简化 deps.py 为 Annotated 别名，清理 main.py 向后兼容 re-export
+
+- `app/deps.py`：重写为 Annotated 类型别名，用 `_get(attr)` 工厂函数替代 6 个独立的 `get_*` 函数
+- 11 个路由文件：所有 `Depends(get_xxx)` 改为 Annotated 类型别名（如 `MonitorServiceDep`），移除 `Depends` 和服务类型导入
+- `main.py`：删除向后兼容 re-export（`_run_server`, `_open_browser`, `_run_full`, `_run_login_then_exit`, `_execute_login_with_retries`, `LoginResult` 等），仅保留实际使用的导入
+- 测试文件同步更新：所有 `from main import _xxx` 改为从源模块导入（`app.services.launcher`, `app.services.login_runner`, `app.schemas`）
+- `tests/conftest.py`：移除 `monkeypatch.setattr("main.AUTH_DATA_DIR", ...)`（不再在 main 中 re-export）
+- `tests/test_config/test_deps.py`：重写为测试 `_get` 工厂函数

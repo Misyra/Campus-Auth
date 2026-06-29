@@ -35,7 +35,7 @@ class TestNetworkConnection:
 
     def test_need_login(self, integration_stack):
         """网络不通 → 触发登录。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
 
         core = _make_monitor_core(engine)
 
@@ -55,7 +55,7 @@ class TestNetworkConnection:
 
     def test_network_ok(self, integration_stack):
         """网络通 → 不触发登录。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
 
         core = _make_monitor_core(engine)
 
@@ -75,7 +75,7 @@ class TestNetworkConnection:
 
     def test_pause_window(self, integration_stack):
         """暂停时段 → check_once 跳过。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
 
         core = _make_monitor_core(engine)
 
@@ -90,7 +90,7 @@ class TestNetworkConnection:
 
     def test_probe_exception(self, integration_stack):
         """探测抛异常 → 引擎继续运行。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
 
         # 手动设置 _monitor_core，让 _do_network_check 可以调用
         core = _make_monitor_core(engine)
@@ -108,7 +108,7 @@ class TestNetworkConnection:
 
     def test_profile_switch_signal(self, integration_stack):
         """方案切换 → engine reload + restart。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
 
         # 手动设置 _monitor_core
         core = _make_monitor_core(engine)

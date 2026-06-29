@@ -20,20 +20,6 @@ import pytest
 from app.schemas import AppSettings, RuntimeConfig
 
 
-def _slow_return(value, delay=0.3):
-    """返回一个延迟返回结果的函数，避免 ThreadPoolExecutor 回调死锁。
-
-    注意：execute_task_async 中 add_done_callback 在锁内调用，
-    如果 future 在 add_done_callback 返回前就已完成，回调会在同一线程执行，
-    尝试再次获取同一个 Lock 导致死锁。延迟函数确保 future 不会立即完成。
-    """
-
-    def wrapper(*args, **kwargs):
-        time.sleep(delay)
-        return value
-
-    return wrapper
-
 from app.services.task_registry import TaskRegistry
 
 

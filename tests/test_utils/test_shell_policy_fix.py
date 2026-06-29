@@ -5,13 +5,6 @@ from __future__ import annotations
 from app.utils.shell_policy import _MAX_TIMEOUT, ShellCommandPolicy
 
 
-class TestReturncodeNoneBug:
-    """Bug 1: proc.returncode 为 None 时应返回 -1，不是 0。
-
-    注：async run() 已删除（零生产调用），以下测试仅覆盖 run_sync。
-    """
-
-
 class TestTimeoutBehavior:
     """Bug 2: 超时上限应为 _MAX_TIMEOUT (3600)，验证实际 clamp 行为。"""
 

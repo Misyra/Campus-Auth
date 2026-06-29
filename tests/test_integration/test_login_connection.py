@@ -14,12 +14,12 @@ import pytest
 
 from app.network.decision import check_network_status
 from app.schemas import AppSettings, RuntimeConfig
+from app.schemas import LoginCredentials
 from app.workers.playwright_worker import WorkerResponse
 
 
 def _ensure_login_config(engine) -> None:
     """确保引擎运行时配置包含登录所需字段。"""
-    from app.schemas import LoginCredentials
     old = engine._runtime_config
     engine._runtime_config = old.model_copy(update={
         "credentials": LoginCredentials(
@@ -34,7 +34,7 @@ class TestLoginConnection:
 
     def test_auto_login_success(self, integration_stack):
         """自动登录成功 → worker 被调用。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         mock_worker.submit.return_value = WorkerResponse(success=True, data="登录成功")
@@ -55,7 +55,7 @@ class TestLoginConnection:
 
     def test_auto_login_retry(self, integration_stack):
         """登录失败 → 重试 → 最终成功。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         # 第一次失败，第二次成功
@@ -83,7 +83,7 @@ class TestLoginConnection:
 
     def test_retry_exhausted(self, integration_stack):
         """连续失败达阈值 → MonitoredPolicy._attempt 递增。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         mock_worker.submit.return_value = WorkerResponse(
@@ -107,7 +107,7 @@ class TestLoginConnection:
 
     def test_manual_preempt_auto(self, integration_stack):
         """手动登录取消卡住的自动登录。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         login_started = threading.Event()
@@ -151,7 +151,7 @@ class TestLoginConnection:
 
     def test_callback_updates_history(self, integration_stack):
         """登录完成 → 历史记录写入。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         login_done = threading.Event()
@@ -176,7 +176,7 @@ class TestLoginConnection:
 
     def test_concurrent_dedup(self, integration_stack):
         """两个线程同时提交 → 只有一个实际执行。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         start_event = threading.Event()
@@ -213,7 +213,7 @@ class TestLoginConnection:
 
     def test_reload_during_login(self, integration_stack):
         """登录进行中 → 保存配置 → reload → 旧登录正常结束，新配置已生效。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         login_done = threading.Event()
