@@ -266,7 +266,7 @@ class LoginBridge:
                             self._on_retry_exhausted()
                             logger.warning(
                                 "登录重试次数已用尽（{}/{}），等待网络恢复（下次检测 {}s 后）",
-                                self._retry_policy._attempt,
+                                self._retry_policy.attempt,
                                 self._retry_policy.max_retries,
                                 self._get_monitor_check_interval(),
                             )
@@ -277,7 +277,7 @@ class LoginBridge:
                             ).strftime("%H:%M:%S")
                             logger.info(
                                 "重试 {}/{}, 下次重试: {}s 后 ({})",
-                                self._retry_policy._attempt,
+                                self._retry_policy.attempt,
                                 self._retry_policy.max_retries,
                                 int(delay), next_time,
                             )
@@ -640,22 +640,26 @@ class ScheduleEngine:
         """
         if self._orchestrator is None:
             cmd.response_data = (False, "登录服务未初始化")
-            cmd.response_event.set()
+            if cmd.response_event:
+                cmd.response_event.set()
             return
         err = self._orchestrator.validate(self._runtime_config)
         if err is not None:
             cmd.response_data = (False, err)
-            cmd.response_event.set()
+            if cmd.response_event:
+                cmd.response_event.set()
             return
 
         handle = self._orchestrator.submit(source="manual", config=self._runtime_config)
         if handle.rejected_reason is not None:
             cmd.response_data = (False, handle.rejected_reason)
-            cmd.response_event.set()
+            if cmd.response_event:
+                cmd.response_event.set()
             return
         if handle.future is None:
             cmd.response_data = (False, "登录任务已在执行中，请稍后再试")
-            cmd.response_event.set()
+            if cmd.response_event:
+                cmd.response_event.set()
             return
 
         # 非阻塞：注册回调，由回调通知 API 线程
@@ -924,6 +928,8 @@ class ScheduleEngine:
             cmd.response_event.wait(timeout=api_wait_timeout)
 
             if cmd.response_data is None:
+                # 超时：取消正在执行的登录任务，避免浏览器资源泄漏
+                self._login_bridge.cancel_login()
                 # 超时：检查引擎线程是否存活
                 # 如果引擎线程已死，返回明确错误信息
                 if not self._engine_thread.is_alive():

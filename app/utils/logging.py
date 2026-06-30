@@ -152,6 +152,14 @@ class DashboardSink:
         }
         with self._lock:
             self.buffer.append(entry)
+            if (
+                self.broadcast_queue.maxlen is not None
+                and len(self.broadcast_queue) >= self.broadcast_queue.maxlen
+            ):
+                logging.getLogger(__name__).debug(
+                    "broadcast_queue 已满 (maxlen=%d)，新日志将丢弃最旧消息",
+                    self.broadcast_queue.maxlen,
+                )
             self.broadcast_queue.append(
                 {
                     "type": "log",

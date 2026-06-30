@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import platform
+import psutil
 import subprocess
 import sys
 from .logging import get_logger
@@ -87,7 +88,6 @@ class ShellCommandPolicy:
     def _kill_process_tree_sync(self, pid: int) -> None:
         """同步版进程树清理。"""
         try:
-            import psutil
             parent = psutil.Process(pid)
             for child in parent.children(recursive=True):
                 with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
@@ -146,7 +146,11 @@ class ShellCommandPolicy:
             stdout_str, stderr_str = proc.communicate(timeout=effective_timeout)
         except subprocess.TimeoutExpired:
             self._kill_process_tree_sync(proc.pid)
-            proc.wait()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self._kill_process_tree_sync(proc.pid)
+                logger.warning("进程在 kill 后仍未退出 (pid={})", proc.pid)
             return -1, "", f"命令执行超时 ({effective_timeout}s)"
         except FileNotFoundError:
             return -1, "", f"执行文件不存在: {executable}"

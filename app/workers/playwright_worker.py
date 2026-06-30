@@ -546,7 +546,7 @@ class PlaywrightWorker:
 
                 try:
                     rel = ss_dir.relative_to(TEMP_DIR)
-                    screenshot_url = f"/temp/{rel}/{filename}" if str(rel) != "." else f"/temp/{filename}"
+                    screenshot_url = f"/temp/{rel.as_posix()}/{filename}" if str(rel) != "." else f"/temp/{filename}"
                 except ValueError:
                     screenshot_url = f"/temp/{filename}"
             except Exception as e:

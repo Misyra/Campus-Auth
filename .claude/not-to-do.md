@@ -95,3 +95,5 @@
 - **DOM 元素内存泄漏** — detached 节点，GC 可正常回收
 - **Promise 闭包泄漏** — beforeUnmount 已清除 timer
 - **profile_service.load() 冗余深拷贝** — _load_unsafe() 内部已做 model_copy(deep=True)
+- **`_check_success` 无 monitor_config 返回 True** — 故意设计：无网络检测配置时只校验任务步骤是否执行成功，登录成功判定不强制依赖 monitor_config；改为 False 会导致无配置场景下登录永远失败
+- **WS 重连耗尽后永久放弃** — 故意设计：耗尽后由 visibilitychange 在用户切回页面时主动重连（[51] 重置 wsRetryCount 是有意为之）；后台低频探活会在后端长期故障时产生无效请求与日志噪声，单用户桌面场景下用户交互触发重连已足够

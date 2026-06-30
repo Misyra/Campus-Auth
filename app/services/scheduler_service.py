@@ -61,16 +61,18 @@ class SchedulerService:
         """执行一次调度 tick：查询到期任务并提交执行。"""
         from datetime import datetime
 
-        dt_now = datetime.now()
-        registry = self._task_registry
-        executor = self._task_executor
-        if registry and executor:
-            due_tasks = registry.get_due_tasks(dt_now.hour, dt_now.minute)
-            for task_id in due_tasks:
-                executor.execute_task_async(task_id)
-            logger.debug("调度 tick: 处理 {} 个到期任务", len(due_tasks))
-        # 计算下一个整分钟
-        self._next_schedule_tick = (int(time.time() // 60) * 60) + 60
+        try:
+            dt_now = datetime.now()
+            registry = self._task_registry
+            executor = self._task_executor
+            if registry and executor:
+                due_tasks = registry.get_due_tasks(dt_now.hour, dt_now.minute)
+                for task_id in due_tasks:
+                    executor.execute_task_async(task_id)
+                logger.debug("调度 tick: 处理 {} 个到期任务", len(due_tasks))
+        finally:
+            # 无论是否抛异常，都推进下一次 tick 时间，避免引擎循环每秒重试
+            self._next_schedule_tick = (int(time.time() // 60) * 60) + 60
 
     # ── 状态同步 ──
 

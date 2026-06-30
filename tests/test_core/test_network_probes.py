@@ -415,10 +415,11 @@ class TestIsAuthUrlReachable:
 
         assert _is_auth_url_reachable("") is True
 
-    def test_no_hostname_returns_true(self):
+    def test_no_hostname_returns_false(self):
         from app.network.decision import _is_auth_url_reachable
 
-        assert _is_auth_url_reachable("http://") is True
+        # hostname 解析失败视为不可达（[44] 修复：原错误返回 True）
+        assert _is_auth_url_reachable("http://") is False
 
     def test_successful_connection(self):
         from app.network.decision import _is_auth_url_reachable

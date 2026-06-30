@@ -274,6 +274,7 @@ export const appOptions = {
     if (this._saveAbortController) this._saveAbortController.abort();
     if (this._logScrollRaf) cancelAnimationFrame(this._logScrollRaf);
     document.removeEventListener('mousedown', this._onNotifyOutsideClick);
+    if (this._releaseFocusTrap) this._releaseFocusTrap();
     this.timers.forEach((t) => clearInterval(t));
     if (this._visibilityHandler) {
       document.removeEventListener('visibilitychange', this._visibilityHandler);

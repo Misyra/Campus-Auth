@@ -114,6 +114,10 @@ def _create_lifespan(existing_container, boot_engine=False):
 
         if existing_container is not None:
             services = existing_container
+            # 升级路径同样清理上一次崩溃残留的浏览器进程
+            from app.workers.playwright_worker import cleanup_orphan_browsers
+
+            cleanup_orphan_browsers()
             services.start_web_services()
             # 引擎线程必须始终运行（处理配置保存等命令），监控按需启动
             services.engine.start_thread()
@@ -171,13 +175,16 @@ def _create_lifespan(existing_container, boot_engine=False):
             if _server is not None:
                 _server.should_exit = True
             else:
-                # 回退：发送 SIGTERM（仅在无法获取 server 引用时）
-                if hasattr(signal, "SIGTERM"):
-                    os.kill(os.getpid(), signal.SIGTERM)
-                else:
-                    # 无 uvicorn server 引用，无法优雅关闭，强制退出
-                    from app.utils.shutdown import force_exit
-                    force_exit(0)
+                # 回退：无法获取 server 引用。
+                # Windows 上 os.kill(pid, SIGTERM) 实为 TerminateProcess 硬终止，
+                # 会跳过 lifespan yield 之后的 services.shutdown() 清理逻辑。
+                # 因此先同步执行 services.shutdown()，再 force_exit。
+                try:
+                    await app_instance.state.services.shutdown()
+                except Exception:
+                    startup_logger.exception("回退关闭时 services.shutdown() 异常")
+                from app.utils.shutdown import force_exit
+                force_exit(0)
 
         shutdown_waiter = asyncio.create_task(_wait_shutdown())
 
@@ -339,6 +346,13 @@ def create_app(existing_container=None, boot_engine=False):
             return response
         except Exception:
             duration_ms = (time.perf_counter() - start) * 1000
+            if _access_log_event.is_set():
+                http_logger.warning(
+                    "{} {} -> EXCEPTION ({:.1f}ms)",
+                    request.method,
+                    request.url.path,
+                    duration_ms,
+                )
             http_logger.debug(
                 "{} {} -> EXCEPTION ({:.1f}ms)",
                 request.method,
@@ -354,7 +368,7 @@ def create_app(existing_container=None, boot_engine=False):
     async def websocket_logs(websocket: WebSocket):
         from app.api.ws import websocket_logs_handler
         services = _app.state.services
-        await websocket_logs_handler(websocket, services.ws_manager, services.engine)
+        await websocket_logs_handler(websocket, services.ws_manager)
 
     # ==================== 路由 + 静态文件 ====================
 
@@ -388,9 +402,12 @@ def run(
     # 使用调用方传入的日志配置，或从 settings.json 读取
     if logging_settings is None and (access_log_enabled is None or log_retention is None):
         try:
-            from app.services.profile_service import ProfileService
+            if existing_container is not None:
+                profile_service = existing_container.profile_service
+            else:
+                from app.services.profile_service import ProfileService
 
-            profile_service = ProfileService(PROJECT_ROOT)
+                profile_service = ProfileService(PROJECT_ROOT)
             logging_settings = profile_service.load().global_config.logging
         except Exception:
             startup_logger.warning("读取日志配置失败，使用默认值", exc_info=True)

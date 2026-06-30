@@ -197,6 +197,13 @@ def handle_existing_instance(ctx: ApplicationContext, force: bool = False):
         print(f"强制模式：正在终止已运行的实例 (PID: {pid})...")
         _terminate_process(pid)
         cleanup_pid()
+        # 等待端口释放，避免新进程绑定同一端口时失败
+        from app.utils.ports import resolve_port
+        _port = resolve_port()
+        for _ in range(20):  # 最多等待约 5 秒
+            if not is_local_port_in_use(_port):
+                break
+            time.sleep(0.25)
         print("已终止，继续启动...")
         return
 
@@ -317,11 +324,27 @@ def launch_lightweight(ctx: ApplicationContext, logger):
         if tray_icon:
             logger.info("系统托盘已启动")
 
+    # [7] 修复：注册 SIGTERM 处理器，确保托盘退出（on_exit 发送 SIGTERM）时
+    # 触发正常的 finally 清理路径，而非 Python 默认的直接终止
+    _signal_received = False
+
+    def _signal_handler(signum, _frame):
+        nonlocal _signal_received
+        if _signal_received:
+            return
+        _signal_received = True
+        logger.info("收到退出信号（轻量模式），正在关闭服务...")
+        _web_server_shutdown_event.set()
+
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, _signal_handler)
+
     try:
         while True:
             # 等待 web 服务关闭事件或 60 秒超时
             if _web_server_shutdown_event.wait(timeout=60):
-                logger.info("Web 服务已退出，轻量模式即将关闭")
+                if not _signal_received:
+                    logger.info("Web 服务已退出，轻量模式即将关闭")
                 break
     except KeyboardInterrupt:
         logger.info("收到退出信号（轻量模式），正在关闭服务...")

@@ -55,6 +55,8 @@ def engine_factory():
             svc._shutdown_event.set()
             if svc._engine_thread and svc._engine_thread.is_alive():
                 svc._engine_thread.join(timeout=1)
+            # 将 fake reload 显式绑定到实例，避免 with 退出后恢复真实方法
+            svc._reload_config_internal = lambda: _fake_reload(svc)
             return svc
 
     def _make_raw():

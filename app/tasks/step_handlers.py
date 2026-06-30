@@ -11,6 +11,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+try:
+    from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+except ImportError:
+    PlaywrightTimeoutError = TimeoutError
+
 from app.constants import DEFAULT_STEP_TIMEOUT_MS, SCREENSHOTS_DIR
 from app.utils.logging import get_logger
 
@@ -549,7 +554,7 @@ class WaitHandler(StepHandler):
         logger.debug("[wait] selector={}, timeout={}", selector, timeout)
         try:
             await ctx.locator(selector).first.wait_for(timeout=timeout)
-        except TimeoutError:
+        except (PlaywrightTimeoutError, TimeoutError):
             return False, f"等待元素超时 ({timeout}ms): {selector}"
         except Exception as e:
             return False, f"等待元素失败: {selector}, 错误: {e}"

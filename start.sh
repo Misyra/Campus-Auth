@@ -118,7 +118,7 @@ _download_uv() {
     # uv 解压后可能在子目录，找到并移到 UV_DIR
     if [[ ! -f "$UV_DIR/uv" ]]; then
         local found
-        found=$(find "$UV_DIR" -name "uv" -type f | head -1)
+        found=$(find "$UV_DIR" -maxdepth 2 -name "uv" -type f -perm -u+x | head -1)
         if [[ -n "$found" ]]; then
             mv "$found" "$UV_DIR/uv"
         fi
@@ -154,7 +154,7 @@ echo "使用 uv: $UV_CMD"
 cd "$PROJECT_ROOT"
 
 echo "[1/2] 安装依赖..."
-$UV_CMD sync
+"$UV_CMD" sync
 
 # 检查 --install-only 参数
 for arg in "$@"; do

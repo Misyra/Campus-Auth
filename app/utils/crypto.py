@@ -134,6 +134,7 @@ def _derive_fernet_key() -> bytes:
 
 def encrypt_password(plaintext: str) -> str:
     """加密密码，返回 ENC: 前缀的密文字符串"""
+    global _crypto_missing_warned, _crypto_missing_decrypt_warned
     if not plaintext:
         return ""
 
@@ -143,25 +144,29 @@ def encrypt_password(plaintext: str) -> str:
         # cryptography 是 pyproject.toml 中的必需依赖（uv sync 会自动安装），
         # 正常部署下不可能缺失。此分支仅作为极端防御（如手动删除 .venv 中的包）。
         # 密码以明文写入 settings.json，已有 warning 日志提示用户。
-        global _crypto_missing_warned
-        if not _crypto_missing_warned:
-            logger.warning(
-                "cryptography 库未安装，密码将以明文存储，"
-                "建议通过 uv add cryptography 安装依赖以启用加密保护"
-            )
-            _crypto_missing_warned = True
+        with _key_lock:
+            if not _crypto_missing_warned:
+                logger.warning(
+                    "cryptography 库未安装，密码将以明文存储，"
+                    "建议通过 uv add cryptography 安装依赖以启用加密保护"
+                )
+                _crypto_missing_warned = True
         return plaintext
+
+    # cryptography 可用，重置告警标志（依赖恢复后重新启用告警机制）
+    with _key_lock:
+        _crypto_missing_warned = False
+        _crypto_missing_decrypt_warned = False
 
     key = _derive_fernet_key()
     f = Fernet(key)
     encrypted = f.encrypt(plaintext.encode("utf-8"))
-    # 新密码加密成功，清除之前的解密失败标记
-    clear_decryption_error()
     return f"{_ENC_PREFIX}{encrypted.decode('ascii')}"
 
 
 def decrypt_password(ciphertext: str) -> str:
     """解密密码。如果不是加密格式（无 ENC: 前缀），原样返回（向后兼容明文）"""
+    global _crypto_missing_warned, _crypto_missing_decrypt_warned
     if not ciphertext:
         return ""
 
@@ -174,15 +179,23 @@ def decrypt_password(ciphertext: str) -> str:
     try:
         from cryptography.fernet import Fernet, InvalidToken
 
+        # cryptography 可用，重置告警标志（依赖恢复后重新启用告警机制）
+        with _key_lock:
+            _crypto_missing_warned = False
+            _crypto_missing_decrypt_warned = False
+
         key = _derive_fernet_key()
         f = Fernet(key)
-        return f.decrypt(encrypted_data.encode("ascii")).decode("utf-8")
+        result = f.decrypt(encrypted_data.encode("ascii")).decode("utf-8")
+        # 解密成功，清除之前的解密失败标记（按活跃方案粒度，避免误清其他方案）
+        clear_decryption_error()
+        return result
     except ImportError:
         _decryption_failed.set()
-        global _crypto_missing_decrypt_warned
-        if not _crypto_missing_decrypt_warned:
-            logger.warning("cryptography 库未安装，无法解密密码，请安装依赖后重试")
-            _crypto_missing_decrypt_warned = True
+        with _key_lock:
+            if not _crypto_missing_decrypt_warned:
+                logger.warning("cryptography 库未安装，无法解密密码，请安装依赖后重试")
+                _crypto_missing_decrypt_warned = True
         raise _DecryptionError("cryptography 库未安装，无法解密密码") from None
     except (InvalidToken, ValueError, OSError) as e:
         # 解密失败：可能是密钥变更，记录错误并抛出异常
@@ -238,13 +251,21 @@ def decrypt_password_field(
     if raw_pwd.startswith("ENC:"):
         try:
             return (decrypt_password(raw_pwd), False)
-        except _DecryptionError:
+        except _DecryptionError as e:
+            if label:
+                logger.warning("{} 密码解密失败: {}", label, e)
+            else:
+                logger.warning("密码解密失败: {}", e)
             return ("", True)
     elif raw_pwd.startswith("•"):
         if fallback_pwd:
             try:
                 return (decrypt_password(fallback_pwd), False)
-            except _DecryptionError:
+            except _DecryptionError as e:
+                if label:
+                    logger.warning("{} 回退密码解密失败: {}", label, e)
+                else:
+                    logger.warning("回退密码解密失败: {}", e)
                 return ("", True)
         else:
             if label:
@@ -258,8 +279,8 @@ def decrypt_password_field(
                 logger.warning("{} 密码为空，使用回退密码", label)
             try:
                 return (decrypt_password(fallback_pwd), False)
-            except _DecryptionError:
-                logger.error("密码解密失败，使用空密码")
+            except _DecryptionError as e:
+                logger.error("回退密码解密失败，使用空密码: {}", e)
                 return ("", True)
         else:
             return ("", False)

@@ -27,6 +27,11 @@ class MonitoredPolicy:
         self._lock = threading.Lock()
 
     @property
+    def attempt(self) -> int:
+        """当前尝试次数（只读，外部访问入口）。"""
+        return self._attempt
+
+    @property
     def retries_exhausted(self) -> bool:
         """是否已用尽重试次数。"""
         return self._attempt >= self.max_retries
@@ -59,6 +64,6 @@ class MonitoredPolicy:
                 self._attempt = 0
                 return None
             self._attempt += 1
-            if self._attempt > self.max_retries:
+            if self._attempt >= self.max_retries:
                 return None
             return self.delay_before(self._attempt)

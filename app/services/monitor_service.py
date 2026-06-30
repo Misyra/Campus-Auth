@@ -257,6 +257,11 @@ class NetworkMonitorCore:
                 self._detection_disabled_warned = True
             else:
                 self.log_message("所有网络检测均未启用，跳过", "DEBUG")
+            # 所有网络检测均未启用时更新状态，避免 UI 显示与实际不符
+            self._update_state(
+                network_state=NetworkState.UNKNOWN,
+                status_detail="网络检测已禁用",
+            )
         else:
             self._update_state(
                 network_state=NetworkState.DISCONNECTED,

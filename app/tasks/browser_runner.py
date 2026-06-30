@@ -320,7 +320,8 @@ class BrowserTaskRunner:
             })
 
             # 等待网址响应处理认证请求
-            await asyncio.sleep(cfg.get("post_login_delay") or 5)
+            delay = cfg.get("post_login_delay")
+            await asyncio.sleep(delay if delay is not None else 5)
 
             ok, status, method = await asyncio.to_thread(
                 check_network_status, monitor
@@ -371,7 +372,7 @@ class BrowserTaskRunner:
                 # 计算相对于 TEMP_DIR 的子目录路径，确保 URL 与实际存储路径一致
                 try:
                     rel = self._screenshot_dir.relative_to(TEMP_DIR)
-                    url_prefix = f"/temp/{rel}" if str(rel) != "." else "/temp"
+                    url_prefix = f"/temp/{rel.as_posix()}" if str(rel) != "." else "/temp"
                 except ValueError:
                     url_prefix = "/temp"
             else:

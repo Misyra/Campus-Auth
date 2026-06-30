@@ -36,6 +36,8 @@ class BoundedExecutor:
         )
         # Semaphore 初始值 = queue_size，控制同时排队的任务数
         self._semaphore = threading.Semaphore(queue_size)
+        self._futures: set[Future] = set()
+        self._futures_lock = threading.Lock()
 
     def submit(self, func, *args, **kwargs) -> Future:
         """提交任务到线程池。
@@ -52,10 +54,18 @@ class BoundedExecutor:
             self._semaphore.release()
             raise
         # 任务完成或取消时释放信号量
-        future.add_done_callback(lambda _: self._semaphore.release())
+        with self._futures_lock:
+            self._futures.add(future)
+
+        def _on_done(fut: Future) -> None:
+            self._semaphore.release()
+            with self._futures_lock:
+                self._futures.discard(fut)
+
+        future.add_done_callback(_on_done)
         return future
 
-    def shutdown(self, wait: bool = True) -> None:
+    def shutdown(self, wait: bool = True, timeout: float | None = None) -> None:
         """关闭线程池。
 
         Note:
@@ -63,7 +73,19 @@ class BoundedExecutor:
             因为 done_callback 可能未被触发。这仅影响优雅退出场景，
             进程退出后信号量随资源回收，不会造成实际问题。
         """
-        self._executor.shutdown(wait=wait)
+        if wait and timeout is not None:
+            self._executor.shutdown(wait=False, cancel_futures=True)
+            deadline = time.monotonic() + timeout
+            with self._futures_lock:
+                pending = list(self._futures)
+            for fut in pending:
+                remaining = max(0.0, deadline - time.monotonic())
+                try:
+                    fut.result(timeout=remaining)
+                except Exception:
+                    pass
+        else:
+            self._executor.shutdown(wait=wait)
 
 
 class TaskExecutor:
@@ -142,6 +164,12 @@ class TaskExecutor:
 
     def delete_task(self, task_id: str) -> tuple[bool, str]:
         """删除定时任务及其历史。"""
+        with self._running_tasks_lock:
+            future = self._running_tasks.get(task_id)
+        if future is not None and not future.done():
+            future.cancel()
+            logger.info("已取消运行中的任务: {}", task_id)
+
         success, message = self._registry.delete_task(task_id)
         if success:
             self._history_store.delete_history(task_id)
@@ -353,12 +381,18 @@ class TaskExecutor:
 
     # ── 生命周期 ──
 
-    def shutdown(self, wait: bool = True) -> None:
+    def shutdown(self, wait: bool = True, timeout: float | None = None) -> None:
         """关闭线程池。"""
         logger.info("TaskExecutor 开始关闭...")
         if self._task_pool is not None:
-            self._task_pool.shutdown(wait=wait)
-        self._login_executor.shutdown(wait=wait)
+            if timeout is not None:
+                self._task_pool.shutdown(wait=wait, timeout=timeout)
+            else:
+                self._task_pool.shutdown(wait=wait)
+        if timeout is not None:
+            self._login_executor.shutdown(wait=wait, timeout=timeout)
+        else:
+            self._login_executor.shutdown(wait=wait)
         with self._running_tasks_lock:
             self._running_tasks.clear()
         if self._login_orchestrator is not None:

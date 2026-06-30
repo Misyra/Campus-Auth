@@ -337,24 +337,24 @@ class Test_DecryptionErrorFlag:
 class TestSavePasswordField:
     """验证 save_password_field 的全部分支。"""
 
-    def test_raw_none_returns_existing(self):
+    def test_raw_none_returns_existing(self, _reset_crypto_cache):
         """raw=None 应返回 existing_encrypted。"""
         assert crypto_mod.save_password_field(None, "ENC:old") == "ENC:old"
 
-    def test_raw_none_existing_empty(self):
+    def test_raw_none_existing_empty(self, _reset_crypto_cache):
         """raw=None 且 existing 为空应返回空。"""
         assert crypto_mod.save_password_field(None, "") == ""
 
-    def test_raw_mask_gets_encrypted(self):
+    def test_raw_mask_gets_encrypted(self, _reset_crypto_cache):
         """掩码值不再特殊处理，作为明文加密。"""
         result = crypto_mod.save_password_field("••••••••", "ENC:old")
         assert result.startswith("ENC:")
 
-    def test_raw_empty_preserves_existing(self):
+    def test_raw_empty_preserves_existing(self, _reset_crypto_cache):
         """空串应保留已有加密值。"""
         assert crypto_mod.save_password_field("", "ENC:old") == "ENC:old"
 
-    def test_raw_enc_returns_same(self):
+    def test_raw_enc_returns_same(self, _reset_crypto_cache):
         """已加密值应原样返回。"""
         enc = "ENC:already_encrypted"
         assert crypto_mod.save_password_field(enc, "ENC:old") == enc

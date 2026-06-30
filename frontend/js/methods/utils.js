@@ -14,7 +14,7 @@ export function extractApiError(error, fallback = '操作失败') {
       return loc + (d.msg || d.detail || String(d));
     }).join('; ') || fallback;
   }
-  return detail || error?.message || fallback;
+  return detail || error?.response?.data?.message || error?.message || fallback;
 }
 
 /**
