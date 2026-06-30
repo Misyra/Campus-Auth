@@ -235,6 +235,8 @@ export const lifecycleMethods = {
           } else {
             this.frontendLogger.warn('websocket', 'log 消息数据非对象: ' + typeof data.data);
           }
+        } else if (data.type === 'pong') {
+          // 心跳响应，无需处理
         } else {
           this.frontendLogger.warn('websocket', '未知消息类型: ' + data.type);
         }
