@@ -1,9 +1,11 @@
-import { LOG_LEVELS, LEVEL_VALUES } from './constants.js';
+import { LOG_LEVELS, LEVEL_VALUES, LIMITS } from './constants.js';
 
 
 export function createFrontendLogger(initialLevel = 'INFO') {
   let currentLevel = String(initialLevel || 'INFO').toUpperCase();
   let _ws = null;
+  // WS 断连期间的日志缓冲，重连成功后 flush
+  const _logBuffer = [];
 
   const shouldLog = (level) => {
     const left = LEVEL_VALUES[String(level || '').toUpperCase()] ?? LEVEL_VALUES.INFO;
@@ -24,12 +26,32 @@ export function createFrontendLogger(initialLevel = 'INFO') {
           data: { level, scope, message, meta: meta || '' },
         }));
       } catch (_) { /* ignore send errors */ }
+    } else {
+      // WS 不可用时缓冲日志，重连后批量补发；超限丢弃最旧
+      _logBuffer.push({ level, scope, message, meta: meta || '' });
+      if (_logBuffer.length > LIMITS.WS_LOG_BUFFER_MAX) {
+        _logBuffer.shift();
+      }
+    }
+  };
+
+  const _flushBuffer = () => {
+    if (!_ws || _ws.readyState !== WebSocket.OPEN || _logBuffer.length === 0) return;
+    while (_logBuffer.length > 0) {
+      const entry = _logBuffer.shift();
+      try {
+        _ws.send(JSON.stringify({
+          type: 'frontend_log',
+          data: { level: entry.level, scope: entry.scope, message: entry.message, meta: entry.meta },
+        }));
+      } catch (_) { /* ignore send errors */ }
     }
   };
 
   return {
     setWebSocket(ws) {
       _ws = ws;
+      _flushBuffer();
     },
     setLevel(level) {
       const next = String(level || '').toUpperCase();

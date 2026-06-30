@@ -46,12 +46,16 @@ export const TIMING = {
   WS_READY_TIMEOUT: 2000,         // WebSocket 就绪等待超时（ms）
   OPENAPI_TIMEOUT: 5000,          // OpenAPI 请求超时（ms）
   DRAG_SWAP_COOLDOWN: 120,        // 拖拽交换冷却时间（ms）
+  WS_BACKOFF_BASE: 1000,          // WebSocket 重连退避基础延迟（ms）
+  WS_BACKOFF_MAX: 30000,          // WebSocket 重连退避上限（ms）
+  WS_PING_INTERVAL: 30000,        // WebSocket 应用层 ping 间隔（ms）
 };
 
 export const LIMITS = {
   LOG_MAX_ENTRIES: 100,           // 前端日志最大条数
   FILE_UPLOAD_MAX: 5 * 1024 * 1024, // 文件上传最大大小（5MB）
   SCROLL_BOTTOM_THRESHOLD: 50,    // 判断滚动到底部的阈值（px）
+  WS_LOG_BUFFER_MAX: 100,         // WS 断连期间前端日志缓冲上限
 };
 
 // 日志级别选项

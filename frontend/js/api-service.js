@@ -82,6 +82,12 @@ export const apiService = {
     perform: (keys) => api.post('/api/uninstall', { keys }).then(r => r.data),
   },
 
+  // ── 浏览器 ──
+  browsers: {
+    fetch: () => api.get('/api/browsers').then(r => r.data),
+    installPlaywright: (opts) => api.post('/api/browsers/install-playwright', null, opts).then(r => r.data),
+  },
+
   // ── 调试 ──
   debug: {
     start: (taskId) => api.post('/api/debug/start', { task_id: taskId }).then(r => r.data),

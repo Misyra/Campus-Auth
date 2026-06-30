@@ -6,5 +6,6 @@ export function timerData() {
     _repoDisclaimerTimer: null,
     _toastTimer: null,
     _toastLeavingTimer: null,
+    _loginCooldownTimer: null,
   };
 }

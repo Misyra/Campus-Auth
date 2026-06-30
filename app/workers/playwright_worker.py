@@ -491,8 +491,14 @@ class PlaywrightWorker:
             await self._close_browser()
             await self._start_browser(config)
 
-        if self._page is None:
-            return WorkerResponse(success=False, error="浏览器页面初始化失败")
+        if self._page is None or self._page.is_closed():
+            if self._context is None:
+                return WorkerResponse(success=False, error="浏览器页面初始化失败")
+            try:
+                self._page = await self._context.new_page()
+            except Exception as e:
+                logger.warning("调试页面重建失败: {}", e)
+                return WorkerResponse(success=False, error=f"浏览器页面初始化失败: {e}")
 
         # 保存调试页面引用
         self._debug_page = self._page
@@ -636,8 +642,15 @@ class PlaywrightWorker:
 
         此方法供同线程调用者使用（如 BrowserContextManager），
         外部调用应使用 CMD_BROWSER_ACQUIRE 命令通过 submit 队列派发。
-        每次调用都会关闭旧浏览器并启动新浏览器，不复用。
+        复用已存在的浏览器实例，仅在未就绪或配置变更时重建。
         """
+        browser_settings = config.get("browser_settings", {})
+        if (
+            self._browser is not None
+            and await self._health_check()
+            and self._last_browser_settings == browser_settings
+        ):
+            return
         await self._close_browser()
         await self._start_browser(config)
 

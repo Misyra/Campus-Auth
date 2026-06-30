@@ -1,4 +1,4 @@
-﻿import { TIMING, LIMITS } from '../constants.js';
+import { TIMING, LIMITS } from '../constants.js';
 
 const NOTIFY_CATEGORY_LABELS = { login: '登录', monitor: '监控', network: '网络', update: '更新', security: '安全', install: '安装' };
 
@@ -116,11 +116,7 @@ export const uiMethods = {
   async fetchBrowsers() {
     this.browserLoading = true;
     try {
-      const response = await fetch('/api/browsers');
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const data = await response.json();
+      const data = await this.$apiService.browsers.fetch();
       this.availableBrowsers = data.browsers;
       // 只在已有选择时同步，向导模式下默认不选择
       if (this.selectedBrowser) {
@@ -128,7 +124,7 @@ export const uiMethods = {
         this.config.browser.browser_channel = data.current;
       }
     } catch (error) {
-      console.error('获取浏览器列表失败:', error);
+      this.frontendLogger.error('browser', '获取浏览器列表失败', error);
     } finally {
       this.browserLoading = false;
     }
@@ -194,11 +190,7 @@ export const uiMethods = {
     this.frontendLogger.info('browser', '开始下载 Playwright Chromium');
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 分钟超时
-    fetch('/api/browsers/install-playwright', {
-      method: 'POST',
-      signal: controller.signal,
-    })
-      .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
+    this.$apiService.browsers.installPlaywright({ signal: controller.signal, timeout: 600000 })
       .then(data => {
         if (data.success) {
           this.frontendLogger.info('browser', 'Playwright Chromium 安装成功');
@@ -210,7 +202,7 @@ export const uiMethods = {
         }
       })
       .catch(error => {
-        if (error.name === 'AbortError') {
+        if (error.name === 'AbortError' || error.name === 'CanceledError') {
           this.frontendLogger.error('browser', '安装超时（超过 10 分钟）');
           this.notify(false, '安装超时，请检查网络后重试', 'install');
         } else {

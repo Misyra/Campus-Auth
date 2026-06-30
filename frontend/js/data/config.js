@@ -31,5 +31,7 @@ export function configData() {
     _passwordChanged: false,
     // 凭据字段（username/auth_url/isp/carrier_custom）是否被用户修改过
     _credentialsChanged: false,
+    // 用于 configDirty computed 的快照（响应式，使 dirty 指示器及时更新）
+    _lastSavedConfig: null,
   };
 }

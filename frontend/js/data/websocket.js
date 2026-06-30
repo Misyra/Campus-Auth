@@ -4,6 +4,7 @@ export function websocketData() {
     ws: null,
     _wsDestroyed: false,
     _wsRetryTimer: null,
+    _wsPingTimer: null,
     _wsWasConnected: false,
     wsReconnecting: false,
     wsRetryCount: 0,

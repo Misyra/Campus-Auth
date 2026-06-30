@@ -74,7 +74,8 @@ export const actionMethods = {
       this.busy.login = false;
       // 3 秒防抖：API 返回后继续锁定按钮，防止短时间内重复点击
       this.busy.loginCooldown = true;
-      setTimeout(() => { this.busy.loginCooldown = false; }, 3000);
+      if (this._loginCooldownTimer) clearTimeout(this._loginCooldownTimer);
+      this._loginCooldownTimer = setTimeout(() => { this.busy.loginCooldown = false; }, 3000);
       this.busy.action = false;
     }
   },
