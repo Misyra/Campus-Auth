@@ -112,6 +112,12 @@ export const configMethods = {
       return;
     }
 
+    // 捕获保存开始时的标志位状态
+    // 用于区分"本次保存包含的变更"与"保存期间用户的新输入"，
+    // 防止保存完成后无条件重置标志位导致竞态期间用户输入的凭据丢失
+    const credsChangedAtStart = this._credentialsChanged;
+    const pwdChangedAtStart = this._passwordChanged;
+
     // 前端校验（仅警告，不阻塞保存）
     const warnings = this._validateConfig();
     if (warnings.length > 0) {
@@ -149,11 +155,11 @@ export const configMethods = {
         app_settings: c.app_settings,
         active_task: c.active_task || '',
       };
-      // 凭据：仅发送变更项
-      if (this._passwordChanged) {
+      // 凭据：仅发送本次保存开始时已标记为变更的项
+      if (pwdChangedAtStart) {
         payload.password = c.credentials.password || '';
       }
-      if (this._credentialsChanged) {
+      if (credsChangedAtStart) {
         CREDENTIAL_FIELDS.forEach(f => {
           if (f === 'password') return;
           payload[f] = c.credentials[f] || '';
@@ -164,12 +170,26 @@ export const configMethods = {
         signal: this._saveAbortController.signal,
       });
       if (data.success) {
-        this._lastSavedConfig = current;
-        this._credentialsChanged = false;
+        // 仅重置本次保存包含的标志位；
+        // 保存期间用户新输入的变更（标志位从 false→true）不会被重置，避免竞态丢失
+        if (credsChangedAtStart) {
+          this._credentialsChanged = false;
+        }
+        if (pwdChangedAtStart) {
+          this._passwordChanged = false;
+          // 密码已加密存储到服务端，前端清空显示
+          // （与服务端 GET /api/config 始终返回空串的行为一致）
+          this.config.credentials.password = '';
+        }
+        // 快照基于保存开始时的状态（与服务端已保存内容一致），
+        // 同步 password 清空以避免 configDirty 误报。
+        // 不调用 fetchConfig(true) —— 那会用服务端旧值覆盖保存期间用户的新输入。
+        const snapshot = JSON.parse(current);
+        if (snapshot.credentials) {
+          snapshot.credentials.password = '';
+        }
+        this._lastSavedConfig = JSON.stringify(snapshot);
         this.frontendLogger.info('config', '配置保存成功');
-
-        // 用后端规范化值刷新 config 并重置 savedConfigSnapshot
-        await this.fetchConfig(true);
       } else {
         this.frontendLogger.warn('config', '保存配置被拒绝: ' + data.message);
         this.toastOnly(false, data.message);
