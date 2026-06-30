@@ -41,7 +41,7 @@ logger = get_logger("network_decision", source="backend")
 def check_pause(pause: PauseSettings) -> tuple[bool, str]:
     """暂停时段检查。"""
     if is_in_pause_period(pause):
-        logger.info("暂停时段，跳过检测")
+        logger.debug("暂停时段，跳过检测")
         logger.debug("暂停配置: enabled={}, start={}, end={}",
                       pause.enabled, pause.start_hour, pause.end_hour)
         return (True, "pause_period")
@@ -120,14 +120,14 @@ def check_login_prerequisites(
     """
     # 物理网络连接检查
     if monitor.enable_local_check and not is_local_network_connected():
-        logger.warning("物理网络未连接，跳过登录")
+        logger.debug("物理网络未连接，跳过登录")
         return (False, "local_disconnected")
 
     # 认证地址可达性检查
     if monitor.check_auth_url:
         extra_targets = monitor.auth_url_targets if monitor.auth_url_targets else None
         if not _is_auth_url_reachable(auth_url, extra_targets=extra_targets):
-            logger.info("认证地址不可达，跳过登录")
+            logger.debug("认证地址不可达，跳过登录")
             return (False, "auth_url_unreachable")
 
     return (True, "")
@@ -204,7 +204,7 @@ def is_network_available(
                 cancel_pending(futures)
                 return False
     except TimeoutError:
-        logger.warning("网络检测超时 ({:.1f}s)，视为网络异常", overall_timeout)
+        logger.warning("网络检测失败: 超时 ({:.1f}s)", overall_timeout)
         cancel_pending(futures)
         return False
 
@@ -246,7 +246,7 @@ def _is_auth_url_reachable(
             for host, port in targets:
                 if _check_host_port(host, port, f"{host}:{port}"):
                     return True
-        logger.info("自定义检测目标均不可达")
+        logger.debug("自定义检测目标均不可达")
         return False
 
     if auth_url:
@@ -262,5 +262,5 @@ def _is_auth_url_reachable(
         except Exception as exc:
             logger.debug("认证地址解析失败 {}: {}", auth_url, exc)
 
-    logger.info("认证地址不可达: {}", auth_url)
+    logger.debug("认证地址不可达: {}", auth_url)
     return False

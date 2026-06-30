@@ -43,5 +43,5 @@ async def get_browsers(
             current=current,
         )
     except Exception as e:
-        logger.exception("获取浏览器列表失败")
+        logger.warning("获取浏览器列表失败: {}", e, exc_info=True)
         raise HTTPException(500, f"获取浏览器列表失败: {e}")

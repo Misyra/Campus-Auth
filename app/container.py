@@ -114,13 +114,13 @@ class ServiceContainer:
             self.start_web_services()
             self.engine.boot()
             self.engine.sync_scheduler_state()
-            container_logger.info("服务容器启动完成")
-        except Exception:
-            container_logger.exception("服务启动失败，正在清理...")
+            container_logger.info("服务容器启动成功")
+        except Exception as e:
+            container_logger.exception("服务启动异常，正在清理: {}", e)
             try:
                 await self.shutdown()
-            except Exception:
-                container_logger.exception("清理过程中也发生异常")
+            except Exception as e2:
+                container_logger.exception("清理过程异常: {}", e2)
             raise
 
     def start_web_services(self):
@@ -171,7 +171,7 @@ class ServiceContainer:
         if self._shutdown_done:
             return
         self._shutdown_done = True
-        container_logger.info("服务容器开始关闭...")
+        container_logger.debug("服务容器开始关闭")
 
         # BUG-013 修复：先关闭引擎（停止提交任务），再关闭线程池
         self.engine.shutdown()
@@ -189,8 +189,8 @@ class ServiceContainer:
 
             shutdown_worker(timeout=2)
             container_logger.info("Playwright Worker 已关闭")
-        except Exception:
-            container_logger.warning("关闭 Playwright Worker 异常", exc_info=True)
+        except Exception as e:
+            container_logger.exception("关闭 Playwright Worker 异常: {}", e)
 
         try:
             if self._temp_dir.exists():

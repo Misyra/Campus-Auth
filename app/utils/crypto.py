@@ -61,18 +61,18 @@ def _get_or_create_key() -> bytes:
                 else:
                     logger.warning("密钥文件长度异常: 期望 32 字节，实际 {} 字节", len(key))
             except Exception as exc:
-                logger.error("读取加密密钥失败: {}", exc)
+                logger.warning("读取加密密钥失败: {}", exc)
                 # 备份损坏的密钥文件
                 backup_path = _KEY_FILE.with_suffix(f".bak.{int(time.time())}")
                 try:
                     _KEY_FILE.rename(backup_path)
-                    logger.info("已备份损坏的密钥文件到: {}", backup_path)
+                    logger.info("备份密钥文件成功: {}", backup_path)
                 except FileNotFoundError:
                     pass  # 文件不存在，无需备份
                 except OSError as backup_err:
                     logger.warning("备份密钥文件失败: {}", backup_err)
                 logger.warning(
-                    "将生成新密钥，此前保存的密码将无法自动恢复，请在设置中重新输入密码"
+                    "将生成新密钥，此前保存的密码将无法自动恢复，请重新输入密码"
                 )
 
         # 生成新密钥
@@ -200,9 +200,7 @@ def decrypt_password(ciphertext: str) -> str:
     except (InvalidToken, ValueError, OSError) as e:
         # 解密失败：可能是密钥变更，记录错误并抛出异常
         _decryption_failed.set()
-        logger.error(
-            "密码解密失败（可能是密钥变更或数据损坏），请在设置页面重新输入密码"
-        )
+        logger.warning("密码解密失败: 可能是密钥变更或数据损坏，请重新输入密码")
         raise _DecryptionError("密码解密失败，请重新输入密码") from e
 
 
@@ -276,11 +274,11 @@ def decrypt_password_field(
     else:
         if fallback_pwd:
             if label:
-                logger.warning("{} 密码为空，使用回退密码", label)
+                logger.debug("{} 密码为空，使用回退密码", label)
             try:
                 return (decrypt_password(fallback_pwd), False)
             except _DecryptionError as e:
-                logger.error("回退密码解密失败，使用空密码: {}", e)
+                logger.warning("回退密码解密失败，使用空密码: {}", e)
                 return ("", True)
         else:
             return ("", False)

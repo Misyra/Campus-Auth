@@ -189,8 +189,8 @@ class NetworkMonitorCore:
         masked_username = username[:3] + "***" if len(username) > 3 else "***"
 
         self.log_message(
-            f"网络监控已启动 | 检测间隔: {interval}s | 方式: {modes_str}\n"
-            f"认证地址: {masked_url} | 账号: {masked_username} | 运营商: {isp}"
+            f"网络监控已启动: 间隔={interval}s, 方式={modes_str}, "
+            f"认证地址={masked_url}, 账号={masked_username}, 运营商={isp}"
         )
 
     def check_once(self) -> CheckOnceResult:
@@ -214,7 +214,7 @@ class NetworkMonitorCore:
         if monitor_cfg.url_check_urls:
             targets_parts.append(f"网址响应: {', '.join(monitor_cfg.url_check_urls)}")
         targets_str = " | ".join(targets_parts) if targets_parts else "无检测目标"
-        self.log_message(f"[#{check_num}] 网络检测 -> {targets_str}", "DEBUG")
+        self.log_message(f"网络检测 #{check_num}: {targets_str}", "DEBUG")
 
         # 1. 暂停时段检查
         is_paused, _ = check_pause(self.config.pause)
@@ -250,7 +250,7 @@ class NetworkMonitorCore:
                 network_state=NetworkState.CONNECTED,
                 status_detail="网络正常",
             )
-            self.log_message(f"[#{check_num}] 网络正常，无需登录", "DEBUG")
+            self.log_message(f"网络检测 #{check_num}: 正常", "DEBUG")
         elif net_reason == "all_disabled":
             if not self._detection_disabled_warned:
                 self.log_message("所有网络检测均未启用，跳过", "WARNING")
@@ -324,7 +324,7 @@ class NetworkMonitorCore:
                 )
 
                 self.log_message(
-                    f"检测到网络环境变化，方案切换: {old_name} -> {profile_name}",
+                    f"方案切换: {old_name} 至 {profile_name}",
                     "INFO",
                 )
 
@@ -333,12 +333,12 @@ class NetworkMonitorCore:
                 if not ok:
                     # 方案可能在检测后被删除，回退缓存状态
                     self._last_profile_id = self._profile_service.load().active_profile
-                    self.log_message(f"方案切换失败: {msg}", "WARNING")
+                    self.log_message(f"方案切换失败: {matched_id}, {msg}", "WARNING")
                 else:
                     # 方案切换成功，设置标志位
                     self._profile_switch_needed = True
         except Exception as exc:
-            self.log_message(f"方案切换检测异常: {exc}", "WARNING")
+            self.log_message(f"方案切换检测失败: {exc}", "WARNING")
 
     def consume_profile_switch_flag(self) -> bool:
         """消费重启标志位（由引擎线程串行调用，无需额外同步）。"""

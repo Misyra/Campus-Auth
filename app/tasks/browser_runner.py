@@ -66,8 +66,8 @@ class BrowserTaskRunner:
             else DEFAULT_TASK_TIMEOUT_MS
         )
         task_deadline = task_start + task_timeout_ms / 1000
-        logger.info(
-            "任务开始 [{}], {} 个步骤, 超时 {}ms",
+        logger.debug(
+            "任务开始: {}, 步骤数={}, 超时={}ms",
             self.config.name,
             len(self.config.steps),
             task_timeout_ms,
@@ -105,8 +105,8 @@ class BrowserTaskRunner:
                 success, message = await self._execute_step(page, step, task_deadline)
                 step_elapsed = (time.perf_counter() - step_start) * 1000
                 status = "OK" if success else "FAIL"
-                logger.info(
-                    "  步骤[{}/{}] {} ({}) -> {} ({:.0f}ms){}",
+                logger.debug(
+                    "步骤[{}/{}] {} ({}) 完成: {} ({:.0f}ms){}",
                     i + 1,
                     len(self.config.steps),
                     step.id,
@@ -132,20 +132,20 @@ class BrowserTaskRunner:
 
             total_elapsed = (time.perf_counter() - task_start) * 1000
             logger.info(
-                "任务成功 [{}] 总耗时 {:.0f}ms", self.config.name, total_elapsed
+                "任务执行成功: {} (耗时 {:.0f}ms)", self.config.name, total_elapsed
             )
             return await self._handle_success(page)
 
         except (TimeoutError, OSError) as e:
             total_elapsed = (time.perf_counter() - task_start) * 1000
-            logger.error(
-                "任务异常 [{}] 耗时 {:.0f}ms: {}", self.config.name, total_elapsed, e
+            logger.exception(
+                "任务执行异常: {} (耗时 {:.0f}ms): {}", self.config.name, total_elapsed, e
             )
             return await self._handle_failure(page, None, str(e))
         except Exception as e:
             total_elapsed = (time.perf_counter() - task_start) * 1000
             logger.exception(
-                "任务未知异常 [{}] 耗时 {:.0f}ms", self.config.name, total_elapsed
+                "任务执行异常: {} (耗时 {:.0f}ms): {}", self.config.name, total_elapsed, e
             )
             try:
                 return await self._handle_failure(page, None, f"内部错误: {e}")
@@ -163,8 +163,8 @@ class BrowserTaskRunner:
         if not url:
             url = self.template_vars.get("LOGIN_URL", "").strip()
         if url:
-            logger.info(
-                "自动导航到任务URL: {} (超时 {}ms)", url, self.navigation_timeout
+            logger.debug(
+                "自动导航: {} (超时={}ms)", url, self.navigation_timeout
             )
             await page.goto(url, wait_until="load", timeout=self.navigation_timeout)
             await self._wait_url_stable(page)
@@ -183,7 +183,7 @@ class BrowserTaskRunner:
             await asyncio.sleep(0.5)
             current = page.url
             if current != last_url:
-                logger.debug("URL 重定向: {} -> {}", last_url, current)
+                logger.debug("URL 重定向: {} 至 {}", last_url, current)
                 last_url = current
                 redirects += 1
                 deadline = max(deadline, time.perf_counter() + timeout_ms / 1000)
@@ -271,7 +271,7 @@ class BrowserTaskRunner:
         try:
             return await handler.execute(page, effective_step, self.resolver)
         except Exception as e:
-            logger.exception("步骤 [{}/{}] 执行失败", step.id, step.type)
+            logger.exception("步骤执行异常 [{}/{}]: {}", step.id, step.type, e)
             return False, str(e)
 
     async def execute_step_at(self, page, step_index: int) -> dict[str, Any]:
@@ -328,9 +328,9 @@ class BrowserTaskRunner:
             )
 
             if ok:
-                logger.info("网络已恢复，登录认证生效 (检测方式: {})", method)
+                logger.info("网络已恢复，登录认证生效 (检测方式={})", method)
             else:
-                logger.warning("网络仍不可达 (状态: {})", status)
+                logger.warning("网络仍不可达 (状态={})", status)
 
             return ok
 
@@ -390,8 +390,12 @@ class BrowserTaskRunner:
                 return f"{url_prefix}/{filename}"
             return None
         except TimeoutError:
-            logger.warning("截图超时（5s），已跳过")
+            logger.warning("截图失败: 超时 (5s)，已跳过")
             return None
         except Exception as e:
-            logger.warning("截图失败: {}", e)
+            logger.warning(
+                "截图失败 [{}]: {}",
+                self.config.task_id or self.config.name or "unknown",
+                e,
+            )
             return None

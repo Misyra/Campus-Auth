@@ -110,7 +110,7 @@ class BrowserContextManager:
         self.context = worker.context
         self.page = worker.page
 
-        self.logger.info("浏览器已通过 Worker 就绪")
+        self.logger.info("浏览器就绪成功")
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -123,8 +123,8 @@ class BrowserContextManager:
         worker = get_worker()
         try:
             await worker._close_browser()
-        except Exception:
-            self.logger.warning("关闭浏览器异常", exc_info=True)
+        except Exception as e:
+            self.logger.exception("关闭浏览器异常: {}", e)
 
         self.playwright = None
         self.browser = None

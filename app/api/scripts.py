@@ -53,7 +53,10 @@ def save_script(
     """保存自定义脚本任务。"""
     payload["type"] = "script"
     ok, message = task_mgr.save_task_with_validation(task_id, payload)
-    api_logger.info("保存脚本 {} -> success={}, message={}", task_id, ok, message)
+    if ok:
+        api_logger.info("保存脚本 {} 成功", task_id)
+    else:
+        api_logger.warning("保存脚本 {} 失败: {}", task_id, message)
     return ApiResponse(success=ok, message=message)
 
 
@@ -65,9 +68,9 @@ def delete_script(
     """删除脚本任务。"""
     ok, message = task_mgr.delete_task_with_validation(task_id)
     if ok:
-        api_logger.info("删除脚本 {} -> success={}, message={}", task_id, ok, message)
+        api_logger.info("删除脚本 {} 成功", task_id)
     else:
-        api_logger.warning("删除脚本 {} -> success={}, message={}", task_id, ok, message)
+        api_logger.warning("删除脚本 {} 失败: {}", task_id, message)
     return ApiResponse(success=ok, message=message)
 
 
@@ -100,5 +103,8 @@ async def run_script(
     loop = asyncio.get_running_loop()
     success, message = await loop.run_in_executor(_script_executor, runner.run)
 
-    api_logger.info("运行脚本 {} -> success={}, message={}", task_id, success, message)
+    if success:
+        api_logger.info("运行脚本 {} 成功", task_id)
+    else:
+        api_logger.warning("运行脚本 {} 失败: {}", task_id, message)
     return ApiResponse(success=success, message=message)

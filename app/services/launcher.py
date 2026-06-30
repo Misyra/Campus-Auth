@@ -242,7 +242,7 @@ def _start_web_server(
                 server_ref=_web_server_state["server_ref"],
             )
         except Exception as e:
-            logger.error("Web 服务启动失败: {}", e)
+            logger.warning("Web 服务启动失败: {}", e)
             _web_server_state["started"] = False
         finally:
             # Web 服务退出后通知主循环
@@ -278,7 +278,7 @@ def _open_console(
     if is_local_port_in_use(port):
         webbrowser.open(f"http://127.0.0.1:{port}")
     else:
-        logger.warning("Web 服务未在 15s 内就绪，跳过打开浏览器")
+        logger.warning("Web 服务未就绪 (15s)，跳过打开浏览器")
 
 
 def launch_lightweight(ctx: ApplicationContext, logger):
@@ -333,7 +333,7 @@ def launch_lightweight(ctx: ApplicationContext, logger):
         if _signal_received:
             return
         _signal_received = True
-        logger.info("收到退出信号（轻量模式），正在关闭服务...")
+        logger.debug("收到退出信号 (轻量模式)，开始关闭服务")
         _web_server_shutdown_event.set()
 
     if hasattr(signal, "SIGTERM"):
@@ -344,10 +344,10 @@ def launch_lightweight(ctx: ApplicationContext, logger):
             # 等待 web 服务关闭事件或 60 秒超时
             if _web_server_shutdown_event.wait(timeout=60):
                 if not _signal_received:
-                    logger.info("Web 服务已退出，轻量模式即将关闭")
+                    logger.debug("Web 服务已退出，轻量模式即将关闭")
                 break
     except KeyboardInterrupt:
-        logger.info("收到退出信号（轻量模式），正在关闭服务...")
+        pass
     finally:
         if tray_icon:
             tray_icon.stop()
@@ -388,7 +388,7 @@ def launch_full(
             # 用户双击 Ctrl+C 紧急退出 — 绕过所有清理，立即退出
             os._exit(1)
         _shutdown_initiated = True
-        logger.info("收到退出信号，正在关闭服务...")
+        logger.debug("收到退出信号，开始关闭服务")
         cleanup_pid()
         if _uvicorn_server[0] is not None:
             _uvicorn_server[0].should_exit = True
@@ -440,7 +440,7 @@ def launch_full(
             logging_settings=_logging if _data else None,
         )
     except KeyboardInterrupt:
-        logger.info("收到退出信号（完整模式），正在关闭服务...")
+        logger.debug("收到退出信号 (完整模式)，开始关闭服务")
     finally:
         if tray_icon:
             tray_icon.stop()
@@ -467,7 +467,7 @@ def launch_server(ctx: ApplicationContext, force: bool = False) -> None:
 
     # Playwright 检查
     stage_begin = time.perf_counter()
-    startup_logger.info("正在检查 Playwright 环境")
+    startup_logger.debug("检查 Playwright 环境")
 
     def _log_playwright_ready(msg: str):
         startup_logger.info(msg)
@@ -484,7 +484,7 @@ def launch_server(ctx: ApplicationContext, force: bool = False) -> None:
 
     # 启动摘要
     _label = {"manual": "手动", "autostart": "自启动"}
-    startup_logger.info(
+    startup_logger.debug(
         "启动摘要: 来源={}, 动作={}, 模式={}, 托盘={}, 浏览器={}",
         _label.get(ctx.launch.source.value, ctx.launch.source.value),
         ctx.config.startup_action.value,

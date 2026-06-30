@@ -69,9 +69,9 @@ class LoginHistoryService:
                 # 每 50 次写入概率性清理旧记录
                 if self._write_count % 50 == 0:
                     need_cleanup = True
-            except Exception:
+            except Exception as exc:
                 logger.warning(
-                    "写入登录历史失败: {}", self._history_path, exc_info=True
+                    "写入登录历史失败: {}", exc, exc_info=True
                 )
         # 清理在主写入锁外执行，避免长时间持有 _lock 阻塞并发写入
         if need_cleanup:
@@ -106,8 +106,8 @@ class LoginHistoryService:
                     logger.warning("解析登录历史条目失败，跳过", exc_info=True)
                     continue
             return result
-        except Exception:
-            logger.warning("读取登录历史失败: {}", self._history_path, exc_info=True)
+        except Exception as exc:
+            logger.warning("读取登录历史失败: {}", exc, exc_info=True)
             return []
 
     def clear(self) -> int:
@@ -122,7 +122,7 @@ class LoginHistoryService:
                         if line.strip():
                             count += 1
                 atomic_write(str(self._history_path), "", encoding="utf-8")
-                logger.info("登录历史已清空，共删除 {} 条记录", count)
+                logger.info("清空登录历史成功: 删除 {} 条记录", count)
                 return count
             except Exception:
                 logger.warning(

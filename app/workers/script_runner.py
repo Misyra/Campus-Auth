@@ -181,7 +181,7 @@ class ScriptRunner:
         try:
             content = self._load_script_content()
         except ValueError as e:
-            logger.warning("脚本加载失败: {}", e)
+            logger.warning("脚本加载失败 (script={}): {}", self.script_path, e)
             return False, str(e)
 
         if content is not None:
@@ -196,8 +196,8 @@ class ScriptRunner:
             self._cache_available_binaries = detect_available_binaries()
         available = [b["path"] for b in self._cache_available_binaries]
         if self.binary_path not in available:
-            logger.warning(
-                "binary_path 不在系统已知列表中，已自动添加: {}", self.binary_path
+            logger.debug(
+                "binary_path 不在已知列表，已自动添加: {}", self.binary_path
             )
             available.append(self.binary_path)
         policy = ShellCommandPolicy(allowlist=available)
@@ -214,13 +214,13 @@ class ScriptRunner:
                 **kwargs,
             )
         except PermissionError as e:
-            logger.warning("脚本执行被拒绝: {}", e)
+            logger.warning("脚本执行被拒绝 (script={}): {}", self.script_path, e)
             return False, str(e)
         except FileNotFoundError as e:
-            logger.warning("脚本或解释器不存在: {}", e)
+            logger.warning("脚本或解释器不存在 (script={}): {}", self.script_path, e)
             return False, f"脚本或解释器不存在: {e}"
         except Exception as e:
-            logger.error("脚本执行异常: {}", e)
+            logger.exception("脚本执行异常: {}", e)
             return False, f"执行异常: {e}"
         finally:
             if temp_path is not None:
@@ -230,17 +230,17 @@ class ScriptRunner:
         elapsed = time.perf_counter() - start
 
         if stderr_str:
-            logger.warning("脚本 stderr: {}", stderr_str[:500])
+            logger.debug("脚本 stderr: {}", stderr_str[:500])
 
         if returncode == 0:
             output = stdout_str[:500] or f"(无输出, exit code 0)"
-            logger.info("脚本执行完成 ({:.1f}s): {}", elapsed, output)
+            logger.info("脚本执行成功 (耗时 {:.1f}s)", elapsed)
             return True, output
         else:
             # 失败时优先使用 stderr
             output = stderr_str[:500] or stdout_str[:500] or f"(无输出, exit code {returncode})"
             logger.warning(
-                "脚本执行失败 ({:.1f}s, exit {}): {}", elapsed, returncode, output
+                "脚本执行失败: {} (耗时 {:.1f}s, exit {})", output, elapsed, returncode
             )
             return False, output
 

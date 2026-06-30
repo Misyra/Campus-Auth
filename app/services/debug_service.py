@@ -62,7 +62,7 @@ class DebugSessionManager:
         try:
             await asyncio.to_thread(lambda: get_worker().submit(CMD_DEBUG_STOP))
         except Exception:
-            debug_logger.debug("关闭调试会话 Worker 提交失败", exc_info=True)
+            debug_logger.warning("关闭调试会话失败: Worker 提交失败", exc_info=True)
         self._session._browser_active = False
 
     async def _debug_timeout_watcher(
@@ -80,8 +80,8 @@ class DebugSessionManager:
                         time.monotonic() - self._session._last_activity
                         > timeout_seconds
                     ):
-                        debug_logger.info(
-                            "调试会话超时（{}s 无操作），正在关闭浏览器",
+                        debug_logger.debug(
+                            "调试会话超时 ({}s 无操作)，关闭浏览器",
                             timeout_seconds,
                         )
                         try:
@@ -186,14 +186,14 @@ class DebugSessionManager:
             async with self._lock:
                 await self._cancel_debug_timer()
                 await self._close_debug_browser()
-            debug_logger.warning("调试会话启动失败: {}", response.error)
+            debug_logger.warning("调试会话启动失败: task={}, {}", task_id, response.error)
             raise RuntimeError(f"调试会话启动失败: {response.error}")
 
         if isinstance(response.data, dict):
             async with self._lock:
                 self._session.screenshot_url = response.data.get("screenshot_url")
 
-        debug_logger.info("调试会话已启动，任务: {}", task_id)
+        debug_logger.info("启动调试会话成功: task={}", task_id)
         return debug_to_response(self._session)
 
     async def next_step(self) -> dict:
@@ -243,7 +243,7 @@ class DebugSessionManager:
         """执行所有步骤。"""
         from app.workers.playwright_worker import CMD_DEBUG_STEP, get_worker
 
-        debug_logger.info("调试运行所有步骤: task_id={}", self._session.task_id)
+        debug_logger.debug("调试运行所有步骤: task={}", self._session.task_id)
 
         async with self._lock:
             self._require_debug_session()
@@ -322,8 +322,8 @@ class DebugSessionManager:
                     if item.is_file():
                         item.unlink(missing_ok=True)
         except Exception:
-            debug_logger.warning("调试临时目录清理失败", exc_info=True)
-        debug_logger.info("调试会话已停止")
+            debug_logger.warning("调试临时目录清理失败: {}", self._temp_dir, exc_info=True)
+        debug_logger.info("停止调试会话成功")
         return {"running": False, "message": "调试会话已关闭"}
 
     async def close(self):

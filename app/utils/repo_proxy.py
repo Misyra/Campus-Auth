@@ -44,7 +44,7 @@ def _normalize_repo_url(url: str) -> str:
 async def async_repo_fetch_json(url: str, expected_type: type, label: str, proxy: str = ""):
     """异步版本的远程 JSON 获取：校验类型 + 统一异常处理。供异步路由使用。"""
     url = _normalize_repo_url(url)
-    logger.info("获取远程{}: {}", label, url)
+    logger.debug("获取远程{}: {}", label, url)
     try:
         headers = {"User-Agent": "Campus-Auth"}
         async with httpx.AsyncClient(proxy=proxy or None, timeout=httpx.Timeout(15)) as client:

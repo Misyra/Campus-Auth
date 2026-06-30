@@ -28,5 +28,5 @@ def clear_login_history(
 ) -> ApiResponse:
     """清空所有登录历史记录。"""
     count = svc.clear()
-    api_logger.info("清空登录历史: 删除 {} 条记录", count)
+    api_logger.info("清空登录历史成功: 删除 {} 条记录", count)
     return ApiResponse(success=True, message=f"已清空 {count} 条登录记录")

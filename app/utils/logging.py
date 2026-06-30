@@ -285,6 +285,6 @@ class LogConfigCenter:
                 filter=lambda record: record["extra"].get("source") == "frontend",
             )
 
-            logger.info("日志系统启动 | 目录: {} | 保留 {} 天", log_dir, retention_days)
+            logger.info("日志系统启动成功 (目录={}, 保留={}天)", log_dir, retention_days)
         except Exception as e:
-            logger.warning("无法启用文件日志 {}: {}", log_dir, e)
+            logger.warning("启用文件日志失败: {}", e)

@@ -131,7 +131,7 @@ class StepHandler(ABC):
                 await loc.wait_for(state="visible", timeout=wait_timeout)
                 remaining_ms = max(500, int((deadline - time.perf_counter()) * 1000))
                 await action_fn(loc, remaining_ms)
-                logger.debug("{} 普通操作成功 -> {}", label, candidate)
+                logger.debug("{} 普通操作成功: {}", label, candidate)
                 return True, ""
             except Exception:
                 logger.debug("{} 普通操作候选失败: {}", label, candidate)
@@ -147,7 +147,7 @@ class StepHandler(ABC):
                 loc = ctx.locator(candidate).first
                 await loc.wait_for(state="attached", timeout=remaining)
                 await fallback_fn(loc, remaining)
-                logger.debug("{} 降级操作成功 -> {}", label, candidate)
+                logger.debug("{} 降级操作成功: {}", label, candidate)
                 return True, ""
             except Exception:
                 logger.debug("{} 降级操作候选失败: {}", label, candidate)
@@ -408,7 +408,7 @@ class SelectHandler(StepHandler):
                 try:
                     result = await element.select_option(label=current, timeout=timeout)
                     if result:
-                        logger.debug("[select] 标签精确匹配: '{}' -> '{}'", value, current)
+                        logger.debug("[select] 标签精确匹配: '{}', '{}'", value, current)
                         return True
                 except Exception:
                     continue
@@ -423,7 +423,7 @@ class SelectHandler(StepHandler):
             try:
                 result = await element.select_option(label=text, timeout=timeout)
                 if result:
-                    logger.debug("[select] 标签包含匹配: '{}' -> '{}'", value, text)
+                    logger.debug("[select] 标签包含匹配: '{}', '{}'", value, text)
                     return True
             except Exception:
                 pass
@@ -593,7 +593,7 @@ class WaitUrlHandler(StepHandler):
                 return True, ""
             remaining = deadline - asyncio.get_running_loop().time()
             if remaining <= 0:
-                logger.warning("[wait_url] 超时，当前URL: {}", current_url)
+                logger.warning("[wait_url] 等待超时: 当前URL={}", current_url)
                 return False, f"等待 URL 匹配 '{pattern}' 超时，当前: {current_url}"
             await asyncio.sleep(min(0.2, remaining))
 
@@ -859,17 +859,17 @@ class OcrHandler(StepHandler):
                     return False, f"未找到验证码输入框: {target_selector}"
                 try:
                     await target.fill(result, timeout=timeout)
-                    logger.info("[ocr] 普通 fill 成功 -> {}", target_selector)
+                    logger.info("[ocr] 普通 fill 成功: {}", target_selector)
                 except Exception:
                     logger.info(
-                        "[ocr] 普通 fill 失败，降级到强制输入 -> {}", target_selector
+                        "[ocr] 普通 fill 失败，降级到强制输入: {}", target_selector
                     )
                     await target.wait_for(state="attached", timeout=timeout)
                     await target.evaluate(
                         _FORCE_INPUT_JS,
                         {"val": result, "doClear": True},
                     )
-                    logger.info("[ocr] 强制输入成功 -> {}", target_selector)
+                    logger.info("[ocr] 强制输入成功: {}", target_selector)
 
             # 返回结果，包含截图 URL
             message = result

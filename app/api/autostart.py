@@ -64,9 +64,9 @@ def enable_autostart(
     _save_autostart_lightweight(request, lightweight)
     ok, message = autostart_svc.enable(lightweight=lightweight)
     if ok:
-        api_logger.info("启用自启动 -> success={}, lightweight={}, message={}", ok, lightweight, message)
+        api_logger.info("启用自启动成功 (轻量={})", lightweight)
     else:
-        api_logger.warning("启用自启动 -> success={}, lightweight={}, message={}", ok, lightweight, message)
+        api_logger.warning("启用自启动失败: {}", message)
     return ApiResponse(success=ok, message=message)
 
 
@@ -76,9 +76,9 @@ def disable_autostart(
 ) -> ApiResponse:
     ok, message = autostart_svc.disable()
     if ok:
-        api_logger.info("禁用自启动 -> success={}, message={}", ok, message)
+        api_logger.info("禁用自启动成功")
     else:
-        api_logger.warning("禁用自启动 -> success={}, message={}", ok, message)
+        api_logger.warning("禁用自启动失败: {}", message)
     return ApiResponse(success=ok, message=message)
 
 
@@ -95,7 +95,7 @@ def set_autostart_mode(
         return ApiResponse(success=True, message="自启动未启用，模式已保存")
     ok, message = autostart_svc.enable(lightweight=body.lightweight)
     if ok:
-        api_logger.info("切换自启动模式 -> lightweight={}, success={}", body.lightweight, ok)
+        api_logger.info("切换自启动模式成功 (轻量={})", body.lightweight)
     else:
-        api_logger.warning("切换自启动模式 -> lightweight={}, success={}", body.lightweight, ok)
+        api_logger.warning("切换自启动模式失败: {}", message)
     return ApiResponse(success=ok, message=message)

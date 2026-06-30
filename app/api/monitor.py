@@ -34,7 +34,10 @@ def start_monitoring(
     svc: MonitorServiceDep,
 ) -> ApiResponse:
     ok, message = svc.start_monitoring()
-    api_logger.info("启动监控 -> success={}, message={}", ok, message)
+    if ok:
+        api_logger.info("启动监控成功")
+    else:
+        api_logger.warning("启动监控失败: {}", message)
     return ApiResponse(success=ok, message=message)
 
 
@@ -44,9 +47,9 @@ def stop_monitoring(
 ) -> ApiResponse:
     ok, message = svc.stop_monitoring()
     if ok:
-        api_logger.info("停止监控 -> success={}, message={}", ok, message)
+        api_logger.info("停止监控成功")
     else:
-        api_logger.warning("停止监控 -> success={}, message={}", ok, message)
+        api_logger.warning("停止监控失败: {}", message)
     return ApiResponse(success=ok, message=message)
 
 
@@ -55,7 +58,10 @@ async def manual_login(
     svc: MonitorServiceDep,
 ) -> ApiResponse:
     ok, message = await asyncio.to_thread(svc.run_manual_login)
-    api_logger.info("手动登录 -> success={}, message={}", ok, message)
+    if ok:
+        api_logger.info("手动登录成功")
+    else:
+        api_logger.warning("手动登录失败: {}", message)
     return ApiResponse(success=ok, message=message)
 
 
@@ -64,7 +70,10 @@ def cancel_login(
     svc: MonitorServiceDep,
 ) -> ApiResponse:
     ok, message = svc.cancel_login()
-    api_logger.info("取消登录 -> success={}, message={}", ok, message)
+    if ok:
+        api_logger.info("取消登录成功")
+    else:
+        api_logger.warning("取消登录失败: {}", message)
     return ApiResponse(success=ok, message=message)
 
 
@@ -74,9 +83,9 @@ def test_network(
 ) -> ApiResponse:
     ok, message = svc.test_network()
     if ok:
-        api_logger.info("网络测试 -> success={}, message={}", ok, message)
+        api_logger.info("网络测试成功: {}", message)
     else:
-        api_logger.warning("网络测试 -> success={}, message={}", ok, message)
+        api_logger.warning("网络测试失败: {}", message)
     return ApiResponse(success=ok, message=message)
 
 
@@ -96,8 +105,8 @@ def toggle_pure_mode(
 ) -> ApiResponse:
     try:
         new_value = svc.toggle_pure_mode()
-        api_logger.info("纯净模式已切换 -> {}", new_value)
+        api_logger.info("切换纯净模式成功: {}", new_value)
         return ApiResponse(success=True, message=f"纯净模式: {'开启' if new_value else '关闭'}", data={"enabled": new_value})
     except Exception as exc:
-        api_logger.error("切换纯净模式失败: {}", exc)
+        api_logger.warning("切换纯净模式失败: {}", exc)
         raise HTTPException(status_code=500, detail=f"切换纯净模式失败: {exc}") from exc

@@ -9,6 +9,7 @@ import ipaddress
 import locale
 import re
 import subprocess
+import sys
 
 from app.utils.logging import get_logger
 from app.utils.platform import (
@@ -45,16 +46,16 @@ def detect_gateway_ip() -> str | None:
         elif is_macos():
             result = _detect_gateway_darwin()
         else:
-            logger.warning("不支持的平台")
+            logger.warning("不支持的平台: {}", sys.platform)
             return None
 
         if result:
-            logger.info("检测到网关 IP: {}", result)
+            logger.info("检测网关 IP 成功: {}", result)
         else:
-            logger.warning("未能检测到网关 IP")
+            logger.warning("检测网关 IP 失败: 未检测到")
         return result
     except Exception as exc:
-        logger.error("网关检测异常: {}", exc, exc_info=True)
+        logger.exception("网关检测异常: {}", exc)
         return None
 
 
@@ -70,16 +71,16 @@ def detect_wifi_ssid() -> str | None:
         elif is_macos():
             result = _detect_ssid_darwin()
         else:
-            logger.warning("不支持的平台")
+            logger.warning("不支持的平台: {}", sys.platform)
             return None
 
         if result:
-            logger.info("检测到 SSID: {}", result)
+            logger.info("检测 SSID 成功: {}", result)
         else:
-            logger.warning("未能检测到 SSID（可能未连接 WiFi）")
+            logger.warning("检测 SSID 失败: 未检测到 (可能未连接 WiFi)")
         return result
     except Exception as exc:
-        logger.error("SSID 检测异常: {}", exc, exc_info=True)
+        logger.exception("SSID 检测异常: {}", exc)
         return None
 
 
@@ -112,7 +113,7 @@ def _detect_gateway_windows() -> str | None:
         if result.returncode == 0:
             ip = result.stdout.strip()
             if ip and _is_valid_ipv4(ip) and ip != "0.0.0.0":
-                logger.info("检测到网关 IP (PowerShell): {}", ip)
+                logger.info("检测网关 IP 成功 (PowerShell): {}", ip)
                 return ip
     except FileNotFoundError:
         logger.debug("PowerShell 不可用，回退到 ipconfig")
@@ -161,11 +162,11 @@ def _detect_gateway_windows() -> str | None:
 
         logger.debug("ipconfig 输出中未找到网关地址")
     except FileNotFoundError:
-        logger.error("ipconfig 命令不存在")
+        logger.warning("ipconfig 命令不存在")
     except subprocess.TimeoutExpired:
         logger.warning("ipconfig 执行超时")
     except Exception as exc:
-        logger.warning("Windows 网关检测失败: {}", exc, exc_info=True)
+        logger.exception("Windows 网关检测异常: {}", exc)
 
     return None
 
