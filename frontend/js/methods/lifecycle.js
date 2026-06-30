@@ -254,7 +254,7 @@ export const lifecycleMethods = {
         return;
       }
       this.wsReconnecting = true;
-      const delay = Math.min(1000 * Math.pow(2, this.wsRetryCount), 30000);
+      const delay = Math.min(TIMING.WS_BACKOFF_BASE * Math.pow(2, this.wsRetryCount), TIMING.WS_BACKOFF_MAX);
       this.wsRetryCount++;
       this._wsRetryTimer = setTimeout(() => {
         if (!this._wsDestroyed) this.connectWebSocket();
@@ -276,7 +276,7 @@ export const lifecycleMethods = {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({ type: 'ping' }));
       }
-    }, 30000);
+    }, TIMING.WS_PING_INTERVAL);
     this.timers.push(this._wsPingTimer);
   },
   _setupVisibilityChange() {

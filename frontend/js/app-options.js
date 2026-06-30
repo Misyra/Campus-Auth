@@ -271,11 +271,13 @@ export const appOptions = {
     if (this._toastLeavingTimer) clearTimeout(this._toastLeavingTimer);
     if (this._appearanceTimer) clearTimeout(this._appearanceTimer);
     if (this._saveConfigTimer) clearTimeout(this._saveConfigTimer);
+    if (this._loginCooldownTimer) clearTimeout(this._loginCooldownTimer);
     if (this._saveAbortController) this._saveAbortController.abort();
     if (this._logScrollRaf) cancelAnimationFrame(this._logScrollRaf);
     document.removeEventListener('mousedown', this._onNotifyOutsideClick);
     if (this._releaseFocusTrap) this._releaseFocusTrap();
-    this.timers.forEach((t) => clearInterval(t));
+    // 同时调用 clearTimeout/clearInterval 以兼容 setTimeout 与 setInterval id（二者对异类 id 互为安全 no-op）
+    this.timers.forEach((t) => { clearTimeout(t); clearInterval(t); });
     if (this._visibilityHandler) {
       document.removeEventListener('visibilitychange', this._visibilityHandler);
     }

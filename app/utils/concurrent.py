@@ -59,9 +59,6 @@ def race_first_success(
                     logger.debug(
                         "{} 成功: {} {}", success_prefix, result_label, detail
                     )
-                for f in futures:
-                    if not f.done():
-                        f.cancel()
                 return True
 
             if fail_prefix:
@@ -71,10 +68,12 @@ def race_first_success(
 
     except TimeoutError:
         logger.warning("{} 检测超时 ({:.1f}s)", label, timeout)
+        return False
+    finally:
+        # 确保任何路径（含 BaseException 逃逸）都尝试取消未完成的 future
         for f in futures:
             if not f.done():
                 f.cancel()
-        return False
 
 
 def cancel_pending(futures: dict[Future, object]) -> None:

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from urllib.parse import urlparse
 
 from app.schemas import MonitorSettings, PauseSettings
-from app.utils.concurrent import cancel_pending, race_first_success
+from app.utils.concurrent import cancel_pending
 from app.utils.logging import get_logger
 from app.utils.time_utils import is_in_pause_period
 
@@ -243,20 +243,9 @@ def _is_auth_url_reachable(
             logger.warning("认证地址附加目标格式错误，跳过检测")
             targets = []
         if targets:
-            futures = {
-                _executor.submit(
-                    _check_host_port, host, port, f"{host}:{port}"
-                ): (host, port)
-                for host, port in targets
-            }
-            if race_first_success(
-                futures,
-                timeout=4,
-                label="认证可达性",
-                success_prefix="",
-                fail_prefix="",
-            ):
-                return True
+            for host, port in targets:
+                if _check_host_port(host, port, f"{host}:{port}"):
+                    return True
         logger.info("自定义检测目标均不可达")
         return False
 

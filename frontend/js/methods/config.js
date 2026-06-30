@@ -1,10 +1,13 @@
-﻿import { DEFAULT_CONFIG } from '../constants.js';
+import { DEFAULT_CONFIG } from '../constants.js';
 import { extractApiError } from './utils.js';
+
+// 凭据字段映射：前端嵌套 config.credentials.* ↔ 后端平铺字段
+// 新增凭据字段只需在此处登记，fetchConfig/saveConfig 自动同步
+const CREDENTIAL_FIELDS = ['username', 'password', 'auth_url', 'isp', 'carrier_custom'];
 
 export const configMethods = {
   // 自动保存相关属性
   _isConfigLoaded: false,
-  _lastSavedConfig: null,
   _saveConfigTimer: null,
   _saveAbortController: null,
 
@@ -31,13 +34,9 @@ export const configMethods = {
         pause: { ...DEFAULT_CONFIG.pause, ...(data.pause || {}) },
         logging: { ...DEFAULT_CONFIG.logging, ...(data.logging || {}) },
         retry: { ...DEFAULT_CONFIG.retry, ...(data.retry || {}) },
-        credentials: {
-          username: data.username ?? '',
-          password: data.password ?? '',
-          auth_url: data.auth_url ?? '',
-          isp: data.isp ?? '',
-          carrier_custom: data.carrier_custom ?? '',
-        },
+        credentials: Object.fromEntries(
+          CREDENTIAL_FIELDS.map(f => [f, data[f] ?? ''])
+        ),
         active_task: data.active_task ?? '',
         app_settings: { ...DEFAULT_CONFIG.app_settings, ...(data.app_settings || {}) },
       };
@@ -155,10 +154,10 @@ export const configMethods = {
         payload.password = c.credentials.password || '';
       }
       if (this._credentialsChanged) {
-        payload.username = c.credentials.username || '';
-        payload.auth_url = c.credentials.auth_url || '';
-        payload.isp = c.credentials.isp || '';
-        payload.carrier_custom = c.credentials.carrier_custom || '';
+        CREDENTIAL_FIELDS.forEach(f => {
+          if (f === 'password') return;
+          payload[f] = c.credentials[f] || '';
+        });
       }
 
       const data = await this.$apiService.config.patch(payload, {

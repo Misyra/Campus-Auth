@@ -52,14 +52,13 @@ def detect_browsers() -> list[BrowserInfo]:
     with _DETECT_CACHE_LOCK:
         if _DETECT_CACHE is not None and (now - _DETECT_CACHE_TIME) < _DETECT_CACHE_TTL:
             return _DETECT_CACHE
-    browsers = [
-        _detect_playwright_chromium(),
-        _detect_edge(),
-        _detect_chrome(),
-        _detect_firefox(),
-        _detect_custom(),
-    ]
-    with _DETECT_CACHE_LOCK:
+        browsers = [
+            _detect_playwright_chromium(),
+            _detect_edge(),
+            _detect_chrome(),
+            _detect_firefox(),
+            _detect_custom(),
+        ]
         _DETECT_CACHE = browsers
         _DETECT_CACHE_TIME = now
     return browsers
@@ -98,7 +97,10 @@ def _detect_edge() -> BrowserInfo:
 
 def _detect_chrome() -> BrowserInfo:
     """检测系统是否安装 Google Chrome。"""
-    installed = _check_command_exists("google-chrome") or _check_command_exists("chrome")
+    installed = any(
+        _check_command_exists(cmd)
+        for cmd in ("google-chrome", "google-chrome-stable", "chrome", "chromium", "chromium-browser")
+    )
     if PLATFORM == "darwin":
         installed = installed or Path("/Applications/Google Chrome.app").exists()
     elif PLATFORM == "windows":
