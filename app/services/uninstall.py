@@ -107,7 +107,7 @@ def _check_autostart() -> dict:
     try:
         return _get_autostart_service().status()
     except Exception as e:
-        logger.debug("检查自启动状态失败", exc_info=True)
+        logger.warning("检查自启动状态失败", exc_info=True)
         return {
             "enabled": False,
             "platform": PLATFORM,
@@ -134,7 +134,7 @@ def _remove_user_data() -> tuple[bool, str]:
 
     try:
         file_count = sum(1 for _ in AUTH_DATA_DIR.rglob("*") if _.is_file())
-        logger.warning("即将删除用户数据目录: {} ({} 个文件)", AUTH_DATA_DIR, file_count)
+        logger.info("删除用户数据目录: {} ({} 个文件)", AUTH_DATA_DIR, file_count)
         shutil.rmtree(AUTH_DATA_DIR)
         return True, f"已删除 {AUTH_DATA_DIR}"
     except Exception as exc:
@@ -160,7 +160,7 @@ def _remove_playwright_cache(cache_dir: Path) -> tuple[bool, str]:
     except Exception as exc:
         return False, f"安全检查失败：路径解析异常: {exc}"
 
-    logger.info("正在清理 Playwright 缓存")
+    logger.debug("清理 Playwright 缓存")
     try:
         shutil.rmtree(cache_dir)
         return True, f"已删除 {cache_dir}"

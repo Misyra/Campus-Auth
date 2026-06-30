@@ -47,7 +47,7 @@ class WebSocketManager:
             try:
                 await websocket.close()
             except Exception:
-                ws_logger.debug("ws close 失败", exc_info=True)
+                ws_logger.warning("WebSocket 关闭失败", exc_info=True)
 
     async def broadcast(self, message: str):
         """广播消息（直接发送，保证实时性）"""
@@ -66,7 +66,7 @@ class WebSocketManager:
                 timeout=5.0,
             )
         except TimeoutError:
-            ws_logger.warning("WebSocket 广播总体超时")
+            ws_logger.warning("WebSocket 广播失败: 超时")
             # 超时时取消未完成的任务，清理对应连接
             # _send_safe 内部会清理单个超时的连接，但总体超时时
             # 有些任务被取消了，没机会执行清理，需要手动处理
@@ -81,7 +81,7 @@ class WebSocketManager:
                 try:
                     await ws.close()
                 except Exception:
-                    ws_logger.debug("ws close 失败", exc_info=True)
+                    ws_logger.warning("WebSocket 关闭失败", exc_info=True)
             return
 
         # 清理断开连接
@@ -98,7 +98,7 @@ class WebSocketManager:
             try:
                 await ws.close()
             except Exception:
-                ws_logger.debug("ws close 失败", exc_info=True)
+                ws_logger.warning("WebSocket 关闭失败", exc_info=True)
 
     async def close_all(self):
         """关闭所有 WebSocket 连接"""
@@ -110,13 +110,13 @@ class WebSocketManager:
             try:
                 await ws.close(code=1001, reason="Server shutting down")
             except Exception:
-                ws_logger.debug("ws close 失败", exc_info=True)
+                ws_logger.warning("WebSocket 关闭失败", exc_info=True)
 
     async def _send_safe(self, ws: WebSocket, message: str):
         try:
             await asyncio.wait_for(ws.send_text(message), timeout=2.0)
         except TimeoutError:
-            ws_logger.warning("WebSocket 发送超时，断开连接")
+            ws_logger.warning("WebSocket 发送失败: 超时")
             async with self._lock:
                 removed = ws in self._connections
                 if removed:
@@ -125,7 +125,7 @@ class WebSocketManager:
                 try:
                     await ws.close()
                 except Exception:
-                    ws_logger.debug("ws close 失败", exc_info=True)
+                    ws_logger.warning("WebSocket 关闭失败", exc_info=True)
 
     # ── 广播队列（原 WsBroadcaster）──
 
@@ -180,13 +180,13 @@ class WebSocketManager:
             queue = self.broadcast_queue
             if queue.maxlen is not None and len(queue) >= queue.maxlen:
                 ws_logger.warning(
-                    "WS 广播队列已满 (maxlen={})，新消息将丢弃最旧消息",
+                    "WebSocket 广播队列已满 (maxlen={})，丢弃最旧消息",
                     queue.maxlen,
                 )
             queue.append({"type": "status", "data": status_dict})
             self._notify_drain()
-        except Exception:
-            ws_logger.exception("状态广播入队失败")
+        except Exception as exc:
+            ws_logger.exception("状态广播入队失败: {}", exc)
 
     async def ws_drain_loop(self) -> None:
         """后台 asyncio 任务：事件驱动排空 WS 广播队列。
@@ -195,7 +195,7 @@ class WebSocketManager:
         异常不会退出循环，CancelledError 由外层捕获退出。
         """
         self.set_loop(asyncio.get_running_loop())
-        ws_logger.info("WS 排空循环已启动")
+        ws_logger.info("WebSocket 排空循环已启动")
         while True:
             try:
                 await self._drain_event.wait()
@@ -203,8 +203,8 @@ class WebSocketManager:
                 await self._drain_queue()
             except asyncio.CancelledError:
                 break
-            except Exception:
-                ws_logger.exception("WS 排空循环异常")
+            except Exception as exc:
+                ws_logger.exception("WebSocket 排空循环异常: {}", exc)
                 await asyncio.sleep(1)
 
     async def _drain_queue(self) -> None:
@@ -217,5 +217,5 @@ class WebSocketManager:
                 break
             try:
                 await self.broadcast(json.dumps(data))
-            except Exception:
-                ws_logger.exception("WS 广播发送失败")
+            except Exception as exc:
+                ws_logger.exception("WebSocket 广播发送异常: {}", exc)

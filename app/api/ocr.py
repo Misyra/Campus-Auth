@@ -69,7 +69,7 @@ def ocr_install() -> ApiResponse:
     if _check_ddddocr_installed():
         return ApiResponse(success=True, message="ddddocr 已安装")
 
-    api_logger.info("开始安装 ddddocr")
+    api_logger.debug("开始安装 ddddocr")
     try:
         uv_exe = "uv"
         result = subprocess.run(
@@ -81,25 +81,25 @@ def ocr_install() -> ApiResponse:
             creationflags=CREATE_NO_WINDOW_FLAG,
         )
         if result.returncode == 0:
-            api_logger.info("ddddocr 安装成功")
+            api_logger.info("安装 ddddocr 成功")
             return ApiResponse(success=True, message="ddddocr 安装成功")
         else:
             error_msg = result.stderr.strip() or result.stdout.strip() or "未知错误"
-            api_logger.error("ddddocr 安装失败: {}", error_msg)
+            api_logger.warning("安装 ddddocr 失败: {}", error_msg)
             return ApiResponse(success=False, message=f"安装失败: {error_msg}")
     except subprocess.TimeoutExpired:
-        api_logger.error("ddddocr 安装超时")
+        api_logger.warning("安装 ddddocr 失败: 超时")
         return ApiResponse(
             success=False, message="安装超时（超过 5 分钟），请检查网络后重试"
         )
     except FileNotFoundError:
-        api_logger.error("uv 未找到")
+        api_logger.warning("安装 ddddocr 失败: uv 未找到")
         return ApiResponse(
             success=False,
             message="未找到 uv 包管理器，请先通过 https://docs.astral.sh/uv/ 安装",
         )
     except Exception as e:
-        api_logger.error("ddddocr 安装异常: {}", e)
+        api_logger.exception("安装 ddddocr 异常: {}", e)
         raise HTTPException(status_code=500, detail=f"安装异常: {e}") from e
 
 
@@ -109,7 +109,7 @@ def ocr_uninstall() -> ApiResponse:
     if not _check_ddddocr_installed():
         return ApiResponse(success=True, message="ddddocr 未安装，无需卸载")
 
-    api_logger.info("开始卸载 ddddocr")
+    api_logger.debug("开始卸载 ddddocr")
     try:
         uv_exe = "uv"
         result = subprocess.run(
@@ -121,15 +121,14 @@ def ocr_uninstall() -> ApiResponse:
             creationflags=CREATE_NO_WINDOW_FLAG,
         )
         if result.returncode == 0:
-            api_logger.info("ddddocr 卸载成功")
+            api_logger.info("卸载 ddddocr 成功")
             return ApiResponse(success=True, message="ddddocr 已卸载")
         else:
             error_msg = result.stderr.strip() or result.stdout.strip() or "未知错误"
-            api_logger.error("ddddocr 卸载失败: {}", error_msg)
+            api_logger.warning("卸载 ddddocr 失败: {}", error_msg)
             return ApiResponse(success=False, message=f"卸载失败: {error_msg}")
     except FileNotFoundError:
-        api_logger.warning("ddddocr 卸载失败：uv 未找到")
         return ApiResponse(success=False, message="未找到 uv 包管理器")
     except Exception as e:
-        api_logger.error("ddddocr 卸载异常: {}", e)
+        api_logger.exception("卸载 ddddocr 异常: {}", e)
         raise HTTPException(status_code=500, detail=f"卸载异常: {e}") from e

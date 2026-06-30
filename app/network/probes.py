@@ -247,9 +247,9 @@ def is_network_available_http(
             elapsed = (time.perf_counter() - start) * 1000
             # SSL 证书验证失败（校园网门户 HTTPS 劫持自签名证书）降级为 DEBUG
             if isinstance(exc, ssl.SSLError) or "CERTIFICATE_VERIFY_FAILED" in str(exc):
-                logger.debug("SSL 证书验证失败 (预期行为): {} -- {}", url, exc)
+                logger.debug("SSL 证书验证失败 (预期行为): {} - {}", url, exc)
             else:
-                logger.debug("HTTP 请求异常: {} -- {}", url, exc)
+                logger.debug("HTTP 请求异常: {} - {}", url, exc)
             return (url, False, f"{type(exc).__name__}: {exc}")
 
     futures = {executor.submit(_check_one, url): url for url in urls}

@@ -127,7 +127,7 @@ class StatusManager:
                     network_state=network_state,
                 )
             except Exception:
-                logger.exception("状态快照更新失败")
+                logger.warning("状态快照更新失败", exc_info=True)
         else:
             self._status_snapshot = StatusSnapshot(
                 snapshot_time=time.time(), status_detail="已停止"
@@ -142,7 +142,7 @@ class StatusManager:
             status = self.get_status()
             self._ws_manager.enqueue_status(status.model_dump())
         except Exception:
-            logger.exception("状态广播队列失败")
+            logger.warning("状态广播队列失败", exc_info=True)
 
     def get_status(self) -> MonitorStatusResponse:
         snap = self._status_snapshot
@@ -253,12 +253,10 @@ class LoginBridge:
                 ok, msg = f.result()
                 tag = "手动登录" if is_manual else "自动登录"
                 if ok:
-                    logger.info("{}完成: {}", tag, msg)
                     if not is_manual:
                         self._retry_policy.on_login_done(success=True)
                         self._on_login_success()
                 else:
-                    logger.warning("{}失败: {}", tag, msg)
                     if not is_manual:
                         delay = self._retry_policy.on_login_done(success=False)
                         if delay is None:
@@ -275,7 +273,7 @@ class LoginBridge:
                             next_time = _dt.fromtimestamp(
                                 time.time() + delay
                             ).strftime("%H:%M:%S")
-                            logger.info(
+                            logger.debug(
                                 "重试 {}/{}, 下次重试: {}s 后 ({})",
                                 self._retry_policy.attempt,
                                 self._retry_policy.max_retries,
@@ -284,9 +282,9 @@ class LoginBridge:
                             # 通过回调设置下次重试时间
                             self._on_retry_scheduled(delay)
             except CancelledError:
-                logger.info("登录任务已取消")
-            except Exception:
-                logger.exception("登录任务异常")
+                logger.warning("登录任务已取消 (source={})", source)
+            except Exception as e:
+                logger.exception("登录任务异常: {}", e)
 
         with self._futures_lock:
             self._registered_futures.add(handle.future)
@@ -417,7 +415,7 @@ class ScheduleEngine:
                 self._wakeup_event.set()
             return True
         except queue.Full:
-            logger.warning("命令队列已满 (type={})，操作被跳过", cmd.type)
+            logger.warning("命令队列已满，操作被跳过 (type={})", cmd.type)
             return False
 
     # ── 统一引擎循环 ──
@@ -476,12 +474,12 @@ class ScheduleEngine:
                 # 定时任务
                 if self._scheduler and self._scheduler.should_tick(now):
                     self._scheduler.tick(now)
-            except Exception:
-                logger.exception("引擎循环异常，继续运行")
+            except Exception as e:
+                logger.exception("引擎循环异常，继续运行: {}", e)
                 time.sleep(1)
 
         self._engine_running = False
-        logger.info("引擎循环已退出")
+        logger.debug("引擎循环已退出")
 
     def _calculate_wakeup(self) -> float:
         """计算下次唤醒时间。"""
@@ -515,7 +513,7 @@ class ScheduleEngine:
             elif cmd.type == EngineCmdType.APPLY_PROFILE:
                 self._handle_apply_profile(cmd)
         except Exception:
-            logger.exception("命令执行失败: {}", cmd.type)
+            logger.warning("命令执行失败: {}", cmd.type, exc_info=True)
             # 异常兜底：必须触发 response_event，否则调用方永远阻塞
             if cmd.response_event:
                 if cmd.response_data is None:
@@ -542,7 +540,7 @@ class ScheduleEngine:
                     # BUG-016 修复：方案切换后立即检测，不覆盖 _next_network_check
                     return
                 else:
-                    logger.error("配置重载失败，继续使用当前配置: {}", "")
+                    logger.warning("配置重载失败，继续使用当前配置")
 
             # 网络检测前清除重试定时（避免重复触发）
             with self._retry_time_lock:
@@ -554,7 +552,7 @@ class ScheduleEngine:
                     # 重试用尽，重置计数，由下次网络检测触发新一轮重试
                     self._retry_policy.reset()
                     self._logger.warning(
-                        "重试已用尽（{}/{}），等待下次网络检测（{}s 后）",
+                        "重试已用尽 ({}/{})，等待下次网络检测 ({}s 后)",
                         self._retry_policy.max_retries, self._retry_policy.max_retries,
                         self._monitor_check_interval,
                     )
@@ -565,8 +563,8 @@ class ScheduleEngine:
 
             self._next_network_check = time.time() + result.interval
             self._update_status_snapshot(force=True)
-        except Exception:
-            logger.exception("网络检测异常")
+        except Exception as e:
+            logger.exception("网络检测异常: {}", e)
             self._next_network_check = time.time() + self._monitor_check_interval
 
     def _do_async_login(self, is_manual: bool = False, config_snapshot: RuntimeConfig | None = None) -> bool:
@@ -576,7 +574,7 @@ class ScheduleEngine:
     def _handle_start(self, cmd: EngineCommand) -> None:
         """启动监控（在引擎循环中调用）。"""
         if self._monitor_core is not None and self._monitor_core.monitoring:
-            self._logger.info("监控已在运行中")
+            self._logger.warning("监控已在运行中")
             if cmd.response_event:
                 cmd.response_event.set()
             return
@@ -584,7 +582,7 @@ class ScheduleEngine:
         # 统一验证配置（确保所有路径都经过验证）
         valid, error = validate_env_config(self._runtime_config)
         if not valid:
-            self._logger.error("配置无效，无法启动监控: {}", error)
+            self._logger.warning("启动监控失败: 配置无效: {}", error)
             if cmd.response_event:
                 cmd.response_event.set()
             return
@@ -686,7 +684,7 @@ class ScheduleEngine:
 
         # 先加载新配置（不修改当前运行状态）
         if not self._reload_config_internal():
-            logger.error("配置重载失败，继续使用当前配置: {}", "")
+            logger.warning("配置重载失败，继续使用当前配置")
             cmd.response_data = (False, "配置重载失败")
             if cmd.response_event:
                 cmd.response_event.set()
@@ -719,7 +717,7 @@ class ScheduleEngine:
 
         # 加载新配置
         if not self._reload_config_internal():
-            logger.error("配置重载失败，继续使用当前配置: {}", "")
+            logger.warning("配置重载失败，继续使用当前配置")
             cmd.response_data = (False, "方案切换失败")
             if cmd.response_event:
                 cmd.response_event.set()
@@ -734,7 +732,7 @@ class ScheduleEngine:
         if was_monitoring:
             self._handle_stop()
             self._handle_start(EngineCommand(type=EngineCmdType.START))
-            self._logger.info("监控正在按新方案重启")
+            self._logger.debug("监控正在按新方案重启")
         cmd.response_data = (True, "方案切换成功")
         if cmd.response_event:
             cmd.response_event.set()
@@ -810,7 +808,7 @@ class ScheduleEngine:
                 self._pure_mode = data.global_config.browser.pure_mode
             return True
         except Exception:
-            logger.exception("配置重载失败")
+            logger.warning("配置重载失败", exc_info=True)
             return False
 
     def reload_config(self) -> tuple[bool, str]:
@@ -933,7 +931,7 @@ class ScheduleEngine:
                 # 超时：检查引擎线程是否存活
                 # 如果引擎线程已死，返回明确错误信息
                 if not self._engine_thread.is_alive():
-                    logger.error("引擎线程已退出")
+                    logger.warning("引擎线程已退出")
                     return False, "手动登录超时（引擎线程已退出）"
                 return False, "手动登录超时"
 
@@ -952,7 +950,7 @@ class ScheduleEngine:
 
     def test_network(self) -> tuple[bool, str]:
         """执行手动网络测试。"""
-        self._logger.info("开始手动网络测试")
+        logger.debug("收到手动网络测试请求")
         monitor = self._runtime_config.monitor
         targets = monitor.ping_targets
         enable_tcp = monitor.enable_tcp_check
@@ -982,15 +980,13 @@ class ScheduleEngine:
                 url_checks=url_checks if url_checks else None,
             )
             if is_available:
-                logger.info("手动测试结果: 网络正常")
                 self.notify_network_state_changed()
                 return True, "网络连接正常"
             else:
-                logger.warning("手动测试结果: 网络异常")
                 self.notify_network_state_changed()
                 return False, "网络连接异常"
         except Exception as exc:
-            logger.exception("网络测试失败")
+            logger.warning("网络测试失败", exc_info=True)
             self.notify_network_state_changed()
             return False, f"网络测试失败: {exc}"
 

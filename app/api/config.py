@@ -31,7 +31,7 @@ def _handle_config_error(operation: str, *, log_warning: bool = False):
             api_logger.warning("配置更新被拒绝: {}", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        api_logger.error("{}失败: {}", operation, exc, exc_info=True)
+        api_logger.warning("{}失败: {}", operation, exc, exc_info=True)
         raise HTTPException(status_code=500, detail=f"{operation}失败: {exc}") from exc
 
 
@@ -216,7 +216,7 @@ def _log_config_changes(old_dict: dict, new_payload: ConfigSaveRequest) -> None:
             changes.append(f"{name}已设置")
 
     if changes:
-        config_logger.info("配置变更: {}", "; ".join(changes))
+        config_logger.debug("配置变更: {}", "; ".join(changes))
 
 
 @router.put("/api/config", response_model=ApiResponse)
@@ -236,7 +236,7 @@ def save_config(
 
         _log_config_changes(old_dict, payload)
 
-        api_logger.info("配置已保存")
+        api_logger.info("保存配置成功")
         return ApiResponse(success=True, message="配置保存成功")
 
 
@@ -273,5 +273,5 @@ def patch_config(
             raise ValueError(result.message)
 
         _log_config_changes(old_cfg.model_dump(), full_request)
-        api_logger.info("配置增量保存 -> success=True, fields={}", list(patch_data.keys()))
+        api_logger.info("配置增量保存成功 (fields={})", list(patch_data.keys()))
         return ApiResponse(success=True, message="配置保存成功", data={"patched": list(patch_data.keys())})

@@ -44,7 +44,10 @@ def save_task(
     task_mgr: TaskManagerDep,
 ) -> ApiResponse:
     ok, message = task_mgr.save_task_with_validation(task_id, payload)
-    api_logger.info("保存任务 {} -> success={}, message={}", task_id, ok, message)
+    if ok:
+        api_logger.info("保存任务 {} 成功", task_id)
+    else:
+        api_logger.warning("保存任务 {} 失败: {}", task_id, message)
     return ApiResponse(success=ok, message=message)
 
 
@@ -54,7 +57,10 @@ def delete_task(
     task_mgr: TaskManagerDep,
 ) -> ApiResponse:
     ok, message = task_mgr.delete_task_with_validation(task_id)
-    api_logger.info("删除任务 {} -> success={}, message={}", task_id, ok, message)
+    if ok:
+        api_logger.info("删除任务 {} 成功", task_id)
+    else:
+        api_logger.warning("删除任务 {} 失败: {}", task_id, message)
     return ApiResponse(success=ok, message=message)
 
 
@@ -64,7 +70,10 @@ def set_active_task(
     task_mgr: TaskManagerDep,
 ) -> ApiResponse:
     ok, message = task_mgr.set_active_task_with_validation(task_id)
-    api_logger.info("设置活动任务 {} -> success={}, message={}", task_id, ok, message)
+    if ok:
+        api_logger.info("设置活动任务 {} 成功", task_id)
+    else:
+        api_logger.warning("设置活动任务 {} 失败: {}", task_id, message)
     return ApiResponse(success=ok, message=message)
 
 
@@ -75,7 +84,7 @@ def save_task_order(
 ) -> ApiResponse:
     ok, message = task_mgr.save_order_with_validation({"order": payload.order})
     if ok:
-        api_logger.info("保存任务排序 -> success={}, message={}", ok, message)
+        api_logger.info("保存任务排序成功")
     else:
-        api_logger.warning("保存任务排序 -> success={}, message={}", ok, message)
+        api_logger.warning("保存任务排序失败: {}", message)
     return ApiResponse(success=ok, message=message)

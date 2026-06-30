@@ -20,7 +20,7 @@ class SystemTray:
 
     def _load_icon(self):
         """加载托盘图标（需要先调用 start() 初始化模块）。"""
-        icon_path = Path(__file__).parent.parent.parent / "frontend" / "tray-icon.svg"
+        icon_path = Path(__file__).parent.parent / "frontend" / "tray-icon.svg"
         if icon_path.exists():
             try:
                 import io
@@ -39,7 +39,7 @@ class SystemTray:
             except Exception:
                 logger.warning("SVG 图标加载失败，使用默认图标", exc_info=True)
         else:
-            logger.warning("图标文件不存在: {}", icon_path)
+            logger.warning("加载图标失败: 文件不存在: {}", icon_path)
         return self._Image.new("RGBA", (64, 64), (34, 211, 238, 255))
 
     def _get_status_label(self, item) -> str:
@@ -100,17 +100,17 @@ class SystemTray:
         )
         self._thread = threading.Thread(target=self.icon.run, daemon=True)
         self._thread.start()
-        logger.info("系统托盘已启动")
+        logger.info("启动系统托盘成功")
 
     def stop(self):
         if self.icon:
             self.icon.stop()
             self.icon = None
-        logger.info("系统托盘已停止")
+        logger.info("停止系统托盘成功")
 
     def update_status(self, monitoring: bool):
         self._monitoring = monitoring
-        logger.info("监控状态切换: {}", monitoring)
+        logger.debug("监控状态切换: {}", monitoring)
         icon = self.icon
         if not icon:
             return

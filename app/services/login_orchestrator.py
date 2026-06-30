@@ -224,7 +224,7 @@ class LoginOrchestrator:
         if source != "browser":
             err = validate_login_config(cfg)
             if err is not None:
-                logger.warning("跳过登录(source={}): {}", source, err)
+                logger.warning("跳过登录: {} (source={})", err, source)
                 return LoginHandle(
                     future=None,
                     source=source,
@@ -248,10 +248,10 @@ class LoginOrchestrator:
             existing = self._slot
             if existing is not None and not existing.done():
                 if source == "login_once":
-                    logger.info("login_once 取消旧任务(source={})", existing.source)
+                    logger.warning("取消旧登录任务 (source={})", existing.source)
                     existing.cancel()
                 elif source == "manual" and existing.source == "auto":
-                    logger.info("手动登录抢占自动登录(source={})", existing.source)
+                    logger.debug("手动登录抢占自动登录 (source={})", existing.source)
                     existing.cancel()
                 else:
                     self._link_cancel(cancel_event, existing.cancel_event)
@@ -274,14 +274,14 @@ class LoginOrchestrator:
             self._slot = handle
             self._slot_lock.notify_all()
 
-        logger.debug("登录已提交: source={}", source)
+        logger.debug("登录已提交 (source={})", source)
         return handle
 
     def cancel_running(self) -> None:
         """取消当前正在运行的登录（供外部主动取消）。"""
         with self._slot_lock:
             if self._slot is not None and not self._slot.done():
-                logger.info("取消正在运行的登录任务")
+                logger.warning("取消正在运行的登录任务")
                 self._slot.cancel()
 
     def shutdown(self, wait: bool = True) -> None:
@@ -338,7 +338,7 @@ class LoginOrchestrator:
                 duration_ms = int((time.perf_counter() - start) * 1000)
                 if source != "browser":
                     self._record_history(False, duration_ms, error=str(exc))
-                logger.error("登录执行异常: {}", exc, exc_info=True)
+                logger.exception("登录执行异常: {}", exc)
                 return False, f"登录执行异常: {exc}"
 
         # 提交到登录线程池
@@ -349,7 +349,7 @@ class LoginOrchestrator:
                 future = self._pool.submit(_run)
         except RuntimeError as exc:
             # BoundedExecutor 队列满时抛出 RuntimeError，转为 rejected handle
-            logger.warning("登录提交被拒绝: {}", exc)
+            logger.warning("登录提交被拒绝: {} (source={})", exc, source)
             return LoginHandle(
                 future=None, source=source, cancel_event=cancel_event,
                 rejected_reason=f"登录队列已满，请稍后重试",

@@ -54,8 +54,8 @@ def _cleanup_screenshots() -> None:
                     f.unlink()
                     removed_temp += 1
             if removed_temp:
-                startup_logger.info(
-                    "启动时清理 temp 截图: 删除 {} 个过期文件", removed_temp
+                startup_logger.debug(
+                    "清理 temp 截图: 删除 {} 个过期文件", removed_temp
                 )
     except Exception as exc:
         startup_logger.warning("清理 temp 截图失败: {}", exc)
@@ -73,8 +73,8 @@ def _cleanup_screenshots() -> None:
                     shutil.rmtree(d, ignore_errors=True)
                     removed_dirs += 1
             if removed_dirs:
-                startup_logger.info(
-                    "启动时清理旧截图: 删除 {} 个日期目录", removed_dirs
+                startup_logger.debug(
+                    "清理旧截图: 删除 {} 个日期目录", removed_dirs
                 )
     except Exception as exc:
         startup_logger.warning("清理旧截图失败: {}", exc)
@@ -141,7 +141,7 @@ def _create_lifespan(existing_container, boot_engine=False):
             settings_path.stat().st_size if settings_path.exists() else 0,
         )
         cfg = services.engine.get_config()
-        startup_logger.info(
+        startup_logger.debug(
             "当前配置: 用户={}, 密码={}, 认证={}, 运营商={}, 间隔={}min",
             f"'{cfg.credentials.username}'" if cfg.credentials.username else "(空)",
             "已设置" if cfg.credentials.password else "(空)",
@@ -162,7 +162,7 @@ def _create_lifespan(existing_container, boot_engine=False):
         _cleanup_screenshots()
 
         startup_logger.info(
-            "FastAPI 启动: 完成，耗时 {:.3f}s",
+            "FastAPI 启动成功 (耗时 {:.3f}s)",
             time.perf_counter() - start,
         )
 
@@ -181,8 +181,8 @@ def _create_lifespan(existing_container, boot_engine=False):
                 # 因此先同步执行 services.shutdown()，再 force_exit。
                 try:
                     await app_instance.state.services.shutdown()
-                except Exception:
-                    startup_logger.exception("回退关闭时 services.shutdown() 异常")
+                except Exception as e:
+                    startup_logger.exception("回退关闭异常: {}", e)
                 from app.utils.shutdown import force_exit
                 force_exit(0)
 
@@ -195,9 +195,9 @@ def _create_lifespan(existing_container, boot_engine=False):
         with contextlib.suppress(asyncio.CancelledError):
             await shutdown_waiter
 
-        startup_logger.info("FastAPI 关闭: 正在停止服务...")
+        startup_logger.debug("FastAPI 关闭: 开始停止服务")
         await services.shutdown()
-        startup_logger.info("FastAPI 关闭: 完成")
+        startup_logger.info("FastAPI 关闭完成")
 
     return lifespan
 
@@ -336,7 +336,7 @@ def create_app(existing_container=None, boot_engine=False):
             response = await call_next(request)
             if _access_log_event.is_set():
                 duration_ms = (time.perf_counter() - start) * 1000
-                http_logger.info(
+                http_logger.debug(
                     "{} {} -> {} ({:.1f}ms)",
                     request.method,
                     request.url.path,
@@ -348,13 +348,13 @@ def create_app(existing_container=None, boot_engine=False):
             duration_ms = (time.perf_counter() - start) * 1000
             if _access_log_event.is_set():
                 http_logger.warning(
-                    "{} {} -> EXCEPTION ({:.1f}ms)",
+                    "{} {} 异常 ({:.1f}ms)",
                     request.method,
                     request.url.path,
                     duration_ms,
                 )
             http_logger.debug(
-                "{} {} -> EXCEPTION ({:.1f}ms)",
+                "{} {} 异常 ({:.1f}ms)",
                 request.method,
                 request.url.path,
                 duration_ms,

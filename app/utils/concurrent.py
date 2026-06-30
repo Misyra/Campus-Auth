@@ -44,8 +44,8 @@ def race_first_success(
         for future in as_completed(futures, timeout=timeout):
             try:
                 result = future.result(timeout=1)
-            except Exception:
-                logger.debug("{} 探测异常", label, exc_info=True)
+            except Exception as e:
+                logger.debug("{} 探测异常: {}", label, e, exc_info=True)
                 continue
 
             # 解析结果：3-tuple (label, ok, detail) 或 bool
@@ -62,7 +62,7 @@ def race_first_success(
                 return True
 
             if fail_prefix:
-                logger.debug("{} 失败: {} -- {}", fail_prefix, result_label, detail)
+                logger.debug("{} 失败: {} - {}", fail_prefix, result_label, detail)
 
         return False
 

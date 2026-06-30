@@ -73,7 +73,7 @@ def _get_browser_channel() -> str | None:
         if channel:
             return channel
     except Exception:
-        logger.debug("读取 browser_channel 配置失败", exc_info=True)
+        logger.warning("读取 browser_channel 配置失败", exc_info=True)
     return None  # 配置文件不存在或未配置
 
 
@@ -105,7 +105,7 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
     """
     global _BOOTSTRAP_DONE, _BOOTSTRAP_SKIPPED
 
-    logger.info("开始检查 Playwright 浏览器就绪状态")
+    logger.debug("检查 Playwright 浏览器就绪状态")
 
     with _BOOTSTRAP_LOCK:
         if _BOOTSTRAP_DONE:
@@ -152,10 +152,10 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
         try:
             if _has_browser(channel):
                 _BOOTSTRAP_DONE = True
-                logger.info("Playwright 浏览器已就绪")
+                logger.info("Playwright 浏览器就绪成功")
                 return True
         except Exception:
-            logger.debug("快速路径浏览器检查失败，回退到慢速路径", exc_info=True)
+            logger.debug("快速检查失败，回退到慢速路径", exc_info=True)
 
         # 慢速路径：需要导入 playwright 来安装
         try:
@@ -185,7 +185,7 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
                     _BOOTSTRAP_DONE = True
                     if log:
                         log(f"Playwright {install_target} 下载完成")
-                    logger.info("Playwright 浏览器已就绪")
+                    logger.info("Playwright 浏览器就绪成功")
                     return True
 
                 if log:

@@ -168,7 +168,7 @@ class TaskExecutor:
             future = self._running_tasks.get(task_id)
         if future is not None and not future.done():
             future.cancel()
-            logger.info("已取消运行中的任务: {}", task_id)
+            logger.warning("取消运行中任务: {}", task_id)
 
         success, message = self._registry.delete_task(task_id)
         if success:
@@ -191,13 +191,13 @@ class TaskExecutor:
         with self._running_tasks_lock:
             existing = self._running_tasks.get(task_id)
             if existing is not None and not existing.done():
-                logger.info("定时任务 {} 已在执行中，跳过重复提交", task_id)
+                logger.debug("定时任务 {} 已在执行中，跳过重复提交", task_id)
                 return existing
 
             try:
                 future = self._ensure_task_pool().submit(self.execute_task, task_id)
             except RuntimeError:
-                logger.warning("任务队列已满，任务 {} 被拒绝", task_id)
+                logger.warning("提交任务 {} 失败: 队列已满", task_id)
                 f: Future = Future()
                 f.set_exception(RuntimeError(f"任务队列已满，无法提交任务 {task_id}"))
                 return f
@@ -230,7 +230,7 @@ class TaskExecutor:
         根据任务类型分发到 _execute_script / _execute_browser / _execute_shell。
         执行完成后记录历史和更新 last_run。
         """
-        logger.debug("开始执行定时任务: {}", task_id)
+        logger.debug("收到执行定时任务请求: {}", task_id)
         task = self._registry.get_task(task_id)
         if not task:
             return False, "定时任务不存在"
@@ -269,12 +269,10 @@ class TaskExecutor:
         # 更新最后执行时间
         self._registry.update_last_run(task_id, status)
 
-        logger.info(
-            "定时任务执行完成 {}: success={}, message={}",
-            task_id,
-            success,
-            message[:100],
-        )
+        if success:
+            logger.info("定时任务 {} 执行成功", task_id)
+        else:
+            logger.warning("定时任务 {} 执行失败: {}", task_id, message[:100])
         return success, message
 
     # ── 内部执行方法 ──
@@ -338,7 +336,7 @@ class TaskExecutor:
                 config = self._get_runtime_config() if self._get_runtime_config else RuntimeConfig()
                 shell_path = config.app_settings.shell_path
             except Exception:
-                logger.debug("获取运行时 shell_path 失败，使用默认值", exc_info=True)
+                logger.warning("获取 shell_path 失败，使用默认值", exc_info=True)
 
         if not shell_path:
             shell_path = get_default_shell()
@@ -383,7 +381,7 @@ class TaskExecutor:
 
     def shutdown(self, wait: bool = True, timeout: float | None = None) -> None:
         """关闭线程池。"""
-        logger.info("TaskExecutor 开始关闭...")
+        logger.debug("任务执行器开始关闭")
         if self._task_pool is not None:
             if timeout is not None:
                 self._task_pool.shutdown(wait=wait, timeout=timeout)
@@ -397,4 +395,4 @@ class TaskExecutor:
             self._running_tasks.clear()
         if self._login_orchestrator is not None:
             self._login_orchestrator.shutdown(wait=wait)
-        logger.info("TaskExecutor 已关闭")
+        logger.info("任务执行器已关闭")

@@ -97,7 +97,7 @@ async def save_screenshot(
         await page.screenshot(path=local_path, full_page=True)
         return local_path
     except Exception as e:
-        logger.warning("截图保存失败: {}", e)
+        logger.warning("截图保存失败: path={}, error={}", local_path, e)
         return None
 
 

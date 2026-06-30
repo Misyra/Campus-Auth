@@ -152,7 +152,7 @@ def agree_to_terms(
         api_logger.info("用户已同意使用协议")
         return ApiResponse(success=True, message="已同意协议")
     except Exception as exc:
-        api_logger.error("保存协议同意状态失败: {}", exc)
+        api_logger.warning("保存协议同意状态失败: {}", exc)
         raise HTTPException(status_code=500, detail=f"保存失败: {exc}") from exc
 
 
@@ -166,7 +166,7 @@ def shutdown_server(
     svc: MonitorServiceDep,
 ) -> ApiResponse:
     """关闭服务器 — 通过 shutdown_event 触发 lifespan 正常清理"""
-    api_logger.warning("收到关机请求")
+    api_logger.info("收到关机请求")
 
     # 停止监控服务
     try:

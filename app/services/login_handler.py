@@ -66,18 +66,17 @@ class LoginAttemptHandler:
         返回:
             tuple[bool, str]: (是否成功, 详细信息)
         """
-        self.logger.debug("attempt_login 开始")
+        self.logger.debug("登录开始")
         try:
             task_result = await self._perform_login_with_active_task()
             if task_result is not None:
                 return task_result
 
             error_msg = "未找到可执行的任务，请先在任务管理页面创建并启用一个登录任务"
-            self.logger.error("{}", error_msg)
+            self.logger.warning("登录失败: {}", error_msg)
             return False, error_msg
         except Exception as e:
             error_msg = f"登录过程中发生错误: {e!s}"
-            self.logger.error(error_msg)
             return False, error_msg
 
     async def _perform_login_with_active_task(self) -> tuple[bool, str] | None:
@@ -109,11 +108,11 @@ class LoginAttemptHandler:
             return await self._execute_browser_task(task, active_task_id, phase_start)
 
         except LoginCancelledError:
-            self.logger.info("登录已取消")
+            self.logger.warning("登录已取消")
             return False, "登录已取消"
         except Exception as e:
             total = time.perf_counter() - phase_start
-            self.logger.error("登录异常 (总耗时 {:.1f}s): {}", total, e)
+            self.logger.exception("登录异常: {} (耗时 {:.1f}s)", e, total)
             return False, f"任务执行异常: {e}"
 
     def _ensure_task_manager(self) -> None:
@@ -138,11 +137,11 @@ class LoginAttemptHandler:
         login_url = self._credentials["auth_url"]
         username = self._credentials["username"]
         isp = self._credentials["isp"]
-        self.logger.info(
-            "登录开始 -> 任务={} URL={} 用户={} 运营商={} {}个步骤",
+        self.logger.debug(
+            "登录开始: task={}, url={}, 用户={}, 运营商={}, 步骤数={}",
             active_task_id,
             login_url,
-            username,
+            username[:3] + "***" if username else "",
             isp or "无",
             len(task.steps),
         )
@@ -163,7 +162,7 @@ class LoginAttemptHandler:
         if self._browser_ctx is not None:
             await self.close_browser()
 
-        self.logger.info("启动浏览器...")
+        self.logger.debug("启动浏览器")
         browser_start = time.perf_counter()
         browser_manager = BrowserContextManager(
             self.config, cancel_event=self.cancel_event
@@ -177,7 +176,7 @@ class LoginAttemptHandler:
             with contextlib.suppress(Exception):
                 await browser_manager.__aexit__(*sys.exc_info())
             raise
-        self.logger.info("浏览器就绪 ({:.1f}s)", time.perf_counter() - browser_start)
+        self.logger.debug("浏览器就绪 ({:.1f}s)", time.perf_counter() - browser_start)
 
         success = False
         try:
@@ -201,7 +200,7 @@ class LoginAttemptHandler:
             # 监听页面 alert/confirm/prompt，记录内容并延迟关闭让用户看到
             # 执行后清理监听器，避免泄漏
             async def _handle_dialog(dialog):
-                self.logger.info("页面弹窗 [{}]: {}", dialog.type, dialog.message)
+                self.logger.debug("页面弹窗 [{}]: {}", dialog.type, dialog.message)
                 await asyncio.sleep(1.5)  # 延迟关闭，让页面有时间处理弹窗
                 await dialog.accept()
 
@@ -212,13 +211,13 @@ class LoginAttemptHandler:
                 browser_manager.page.remove_listener("dialog", _handle_dialog)
             total = time.perf_counter() - phase_start
             if success:
-                self.logger.info("登录成功 (总耗时 {:.1f}s): {}", total, message)
+                self.logger.info("登录成功: {} (耗时 {:.1f}s)", message, total)
                 await asyncio.sleep(
                     LOGIN_SUCCESS_SETTLE_SECONDS
                 )  # 登录成功后等待，让页面完成跳转和状态更新
                 return True, message
             log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
-            self.logger.warning("登录失败 (总耗时 {:.1f}s): {}", total, log_msg)
+            self.logger.warning("登录失败: {} (耗时 {:.1f}s)", log_msg, total)
             return False, message
         finally:
             await self.close_browser()
@@ -233,8 +232,8 @@ class LoginAttemptHandler:
         from app.network.decision import check_network_status
         from app.workers.script_runner import ScriptRunner
 
-        self.logger.info(
-            "脚本任务开始 -> 任务={} 脚本={}",
+        self.logger.debug(
+            "脚本任务开始: task={}, 脚本={}",
             task.task_id,
             task.script_path,
         )
@@ -250,10 +249,10 @@ class LoginAttemptHandler:
 
         if not ran_ok:
             total = time.perf_counter() - phase_start
-            self.logger.error("脚本执行失败 (总耗时 {:.1f}s): {}", total, script_output)
+            self.logger.warning("脚本执行失败: {} (耗时 {:.1f}s)", script_output, total)
             return False, f"脚本执行失败: {script_output}"
 
-        self.logger.info("脚本已执行，等待网络验证...")
+        self.logger.debug("脚本已执行，等待网络验证")
         await asyncio.sleep(LOGIN_SUCCESS_SETTLE_SECONDS)
 
         from app.schemas import MonitorSettings
@@ -262,10 +261,10 @@ class LoginAttemptHandler:
 
         total = time.perf_counter() - phase_start
         if net_ok:
-            self.logger.info("登录成功 (总耗时 {:.1f}s): 网络已连通", total)
+            self.logger.info("登录成功: 网络已连通 (耗时 {:.1f}s)", total)
             return True, "登录成功"
         else:
-            self.logger.warning("登录可能失败 (总耗时 {:.1f}s): {}", total, net_msg)
+            self.logger.warning("登录失败: {} (耗时 {:.1f}s)", net_msg, total)
             return False, f"网络未连通: {net_msg}"
 
     async def close_browser(self) -> None:
@@ -274,7 +273,7 @@ class LoginAttemptHandler:
             try:
                 await self._browser_ctx.__aexit__(None, None, None)
             except Exception as exc:
-                self.logger.warning("浏览器上下文关闭异常: {}", exc)
+                self.logger.warning("浏览器上下文关闭失败: {}", exc)
             finally:
                 self._browser_ctx = None
-                self.logger.info("浏览器上下文已释放")
+                self.logger.debug("浏览器上下文已释放")

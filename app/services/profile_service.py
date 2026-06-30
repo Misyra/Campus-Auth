@@ -48,12 +48,12 @@ class ProfileService:
             data = json.loads(raw)
             return ProfilesData.model_validate(data)
         except Exception:
-            profile_logger.exception("加载 settings.json 失败")
+            profile_logger.warning("加载配置文件失败", exc_info=True)
             corrupt_name = f"settings.corrupt.{int(time.time())}.json"
             corrupt_path = self._config_dir / corrupt_name
             try:
                 self._settings_path.rename(corrupt_path)
-                profile_logger.info("已备份损坏文件到: {}", corrupt_path)
+                profile_logger.info("备份损坏文件成功: {}", corrupt_path)
             except (FileNotFoundError, OSError):
                 pass
             return ProfilesData()
@@ -113,7 +113,7 @@ class ProfileService:
             profile_name = data.profiles[profile_id].name
             data.active_profile = profile_id
             self._save_unsafe(data)
-        profile_logger.info("活动方案已切换: {}", profile_id)
+        profile_logger.info("切换活动方案 {} 成功", profile_id)
         return True, f"已切换到方案: {profile_name}"
 
     def save_profile(
@@ -140,7 +140,7 @@ class ProfileService:
                 data.active_profile = profile_id
 
             self._save_unsafe(data)
-        profile_logger.info("方案已保存: {} ({})", profile_id, settings.name)
+        profile_logger.info("保存方案 {} 成功 ({})", profile_id, settings.name)
         return True, f"方案 '{settings.name}' 保存成功"
 
     def delete_profile(self, profile_id: str) -> tuple[bool, str]:
@@ -162,7 +162,7 @@ class ProfileService:
                 data.active_profile = next(iter(data.profiles))
 
             self._save_unsafe(data)
-        profile_logger.info("方案已删除: {}", profile_id)
+        profile_logger.info("删除方案 {} 成功", profile_id)
         return True, "方案删除成功"
 
     def detect_matching_profile(self, data: ProfilesData | None = None) -> str | None:
@@ -237,7 +237,7 @@ class ProfileService:
         if profile.password:
             decrypted, err = decrypt_password_field(profile.password)
             if err:
-                profile_logger.warning("密码解密失败")
+                profile_logger.warning("密码解密失败: profile_id={}", data.active_profile)
             profile = profile.model_copy(update={"password": decrypted or ""})
         return profile
 
@@ -341,13 +341,13 @@ def save_global_and_profile(
     try:
         profile_service.update(_apply)
     except Exception as exc:
-        profile_logger.error("保存配置失败: {}", exc)
+        profile_logger.warning("保存配置失败: {}", exc)
         return SaveResult(success=False, message=f"保存失败: {exc}")
 
     ok, msg = reload_fn()
     if not ok:
         # 回滚
-        profile_logger.error("配置重载失败，正在回滚: {}", msg)
+        profile_logger.warning("配置重载失败，正在回滚: {}", msg)
         try:
             profile_service.update(lambda data: _rollback_config(data, backup_data))
             rollback_ok, rollback_msg = reload_fn()
@@ -358,7 +358,7 @@ def save_global_and_profile(
                 )
             return SaveResult(success=False, message=f"配置重载失败，已回滚: {msg}")
         except Exception as rollback_exc:
-            profile_logger.error("回滚过程异常: {}", rollback_exc, exc_info=True)
+            profile_logger.exception("回滚异常: {}", rollback_exc)
             return SaveResult(
                 success=False, message=f"配置重载失败且回滚异常: {msg}"
             )

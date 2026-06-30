@@ -57,7 +57,7 @@ class ShellCommandPolicy:
 
     def _audit(self, argv: list[str], timeout: int) -> None:
         """执行审计日志。"""
-        logger.info(
+        logger.debug(
             "Shell 命令执行审计: argv={}, timeout={}s",
             argv[:5] if len(argv) > 5 else argv,
             timeout,
@@ -150,7 +150,7 @@ class ShellCommandPolicy:
                 proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 self._kill_process_tree_sync(proc.pid)
-                logger.warning("进程在 kill 后仍未退出 (pid={})", proc.pid)
+                logger.warning("终止进程失败: kill 后仍未退出 (pid={})", proc.pid)
             return -1, "", f"命令执行超时 ({effective_timeout}s)"
         except FileNotFoundError:
             return -1, "", f"执行文件不存在: {executable}"

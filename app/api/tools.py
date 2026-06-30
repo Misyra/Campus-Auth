@@ -142,13 +142,13 @@ async def fetch_background_url(body: FetchUrlRequest) -> ApiResponse:
                     chunks.append(chunk)
                 content = b"".join(chunks)
     except httpx.HTTPError as e:
-        api_logger.warning("下载失败: {}", e)
+        api_logger.warning("下载失败: url={}, error={}", url, e)
         raise HTTPException(
             400, "下载图片失败，请检查网络连接或确认地址是否正确"
         ) from e
 
     data = _save_background(content, ext)
-    api_logger.info("背景图片已下载: {}", data.get("filename"))
+    api_logger.info("下载背景图片成功: {}", data.get("filename"))
     return ApiResponse(success=True, message="图片已下载", data=data)
 
 

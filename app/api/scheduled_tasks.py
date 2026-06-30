@@ -34,7 +34,10 @@ def create_scheduled_task(
     task_id = f"task_{uuid.uuid4().hex[:12]}"
     config = payload.model_dump()
     ok, message = engine.tasks.registry.save_task(task_id, config)
-    api_logger.info("创建定时任务 {} -> success={}, message={}", task_id, ok, message)
+    if ok:
+        api_logger.info("创建定时任务 {} 成功", task_id)
+    else:
+        api_logger.warning("创建定时任务 {} 失败: {}", task_id, message)
     if ok:
         engine.sync_scheduler_state()
     return ApiResponse(success=ok, message=message)
@@ -66,7 +69,10 @@ def update_scheduled_task(
     config["last_status"] = existing.get("last_status")
 
     ok, message = engine.tasks.registry.save_task(task_id, config)
-    api_logger.info("更新定时任务 {} -> success={}, message={}", task_id, ok, message)
+    if ok:
+        api_logger.info("更新定时任务 {} 成功", task_id)
+    else:
+        api_logger.warning("更新定时任务 {} 失败: {}", task_id, message)
     if ok:
         engine.sync_scheduler_state()
     return ApiResponse(success=ok, message=message)
@@ -79,7 +85,10 @@ def delete_scheduled_task(
 ) -> ApiResponse:
     """删除定时任务。"""
     ok, message = engine.tasks.delete_task(task_id)
-    api_logger.info("删除定时任务 {} -> success={}, message={}", task_id, ok, message)
+    if ok:
+        api_logger.info("删除定时任务 {} 成功", task_id)
+    else:
+        api_logger.warning("删除定时任务 {} 失败: {}", task_id, message)
     if ok:
         engine.sync_scheduler_state()
     return ApiResponse(success=ok, message=message)
@@ -101,11 +110,12 @@ def run_scheduled_task(
             success, message = await asyncio.to_thread(
                 engine.tasks.execute_task, task_id
             )
-            api_logger.info(
-                "后台定时任务 {} -> success={}, message={}", task_id, success, message
-            )
+            if success:
+                api_logger.info("执行定时任务 {} 成功", task_id)
+            else:
+                api_logger.warning("执行定时任务 {} 失败: {}", task_id, message)
         except Exception as e:
-            api_logger.error("后台定时任务执行异常 {}: {}", task_id, e, exc_info=True)
+            api_logger.error("执行定时任务 {} 异常", task_id, exc_info=True)
 
     bg_tasks.add_task(_execute)
     api_logger.info("定时任务 {} 已提交后台执行", task_id)
@@ -127,9 +137,11 @@ def toggle_scheduled_task(
     task = {**task, "enabled": not task.get("enabled", True)}
     ok, message = engine.tasks.registry.save_task(task_id, task)
     status = "启用" if task["enabled"] else "禁用"
-    api_logger.info("切换定时任务 {} -> {}", task_id, status)
     if ok:
+        api_logger.info("{}定时任务 {} 成功", status, task_id)
         engine.sync_scheduler_state()
+    else:
+        api_logger.warning("{}定时任务 {} 失败: {}", status, task_id, message)
     return ApiResponse(success=ok, message=f"定时任务已{status}")
 
 

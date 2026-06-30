@@ -39,17 +39,17 @@ async def websocket_logs_handler(websocket, ws_manager):
                         level_name = str(d.get("level", "INFO")).upper()
                         log_func = getattr(fe_logger, level_name.lower(), fe_logger.info)
                         log_func("[{}] {}", scope, message_text)
-            except json.JSONDecodeError:
-                ws_logger.debug("WebSocket 消息解析失败", exc_info=True)
-            except Exception:
-                ws_logger.warning("WebSocket 消息处理异常", exc_info=True)
+            except json.JSONDecodeError as e:
+                ws_logger.warning("WebSocket 消息解析失败: {}", e, exc_info=True)
+            except Exception as e:
+                ws_logger.exception("WebSocket 消息处理异常: {}", e)
     except WebSocketDisconnect:
         try:
             await ws_manager.disconnect(websocket)
-        except Exception:
-            ws_logger.debug("WebSocket 断开连接时异常", exc_info=True)
-    except Exception:
-        ws_logger.exception("WebSocket 通信异常")
+        except Exception as e:
+            ws_logger.warning("WebSocket 断开连接失败: {}", e, exc_info=True)
+    except Exception as e:
+        ws_logger.exception("WebSocket 通信异常: {}", e)
         try:
             await ws_manager.disconnect(websocket)
         except Exception:
