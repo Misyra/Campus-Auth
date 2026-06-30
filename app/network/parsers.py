@@ -123,8 +123,12 @@ def parse_ping_targets(raw: str | list | None) -> list[tuple[str, int]]:
     targets: list[str] = []
     for item in items:
         if item.startswith("["):
-            # 已是 [IPv6]:port 格式，直接传递
-            targets.append(item)
+            # [IPv6] 或 [IPv6]:port 格式
+            if "]" in item and not item.split("]", 1)[1].startswith(":"):
+                # 无端口，补全默认 DNS 端口
+                targets.append(f"{item}:53")
+            else:
+                targets.append(item)
         elif ":" in item:
             # 可能是 IPv6 地址（含多个冒号）或 host:port
             colon_count = item.count(":")

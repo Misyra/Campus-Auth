@@ -87,11 +87,31 @@ def is_block_proxy() -> bool:
         return _block_proxy
 
 
+_VIRTUAL_NIC_PREFIXES = (
+    "docker",   # docker0, docker-*
+    "veth",     # veth pair (Docker/K8s)
+    "br-",      # bridge (Docker)
+    "vmnet",    # VMware
+    "vboxnet",  # VirtualBox
+    "virbr",    # libvirt
+    "tap-",     # TAP (OpenVPN 等)
+)
+
+
+def _is_virtual_nic(name: str) -> bool:
+    """判断接口名是否为虚拟网卡（docker/bridge/虚拟机/TAP 等）。"""
+    return name.lower().startswith(_VIRTUAL_NIC_PREFIXES)
+
+
 def is_local_network_connected() -> bool:
     """检查本地网络是否有实际连接（有线或无线）。"""
     try:
         for name, stats in psutil.net_if_stats().items():
-            if stats.isup and not name.lower().startswith("lo"):
+            if (
+                stats.isup
+                and not name.lower().startswith("lo")
+                and not _is_virtual_nic(name)
+            ):
                 logger.debug("网络接口已连接: {} (speed={}Mbps)", name, stats.speed)
                 return True
     except Exception as exc:

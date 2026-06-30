@@ -18,13 +18,13 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.network.decision import NetworkCheckResult
-from app.schemas import LoginCredentials, RuntimeConfig
+from app.schemas import LoginCredentials, MonitorSettings, RuntimeConfig
 from app.services.engine import (
     EngineCmdType,
     EngineCommand,
     ScheduleEngine,
 )
-from app.services.engine import StatusSnapshot
+from app.services.engine import StatusManager, StatusSnapshot
 from app.services.monitor_service import CheckOnceResult
 from app.services.retry_policy import MonitoredPolicy
 
@@ -43,13 +43,12 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._runtime_config = RuntimeConfig()
     svc._monitor_check_interval = 300
     svc._next_network_check = 0
-    svc._scheduler_running = False
-    svc._next_schedule_tick = 0.0
+    svc._scheduler = MagicMock()
+    svc._scheduler.running = False
+    svc._scheduler.next_tick_time = 0.0
+    svc._scheduler.has_enabled_tasks.return_value = False
     svc._task_registry = MagicMock()
     svc._task_executor = MagicMock()
-    svc._status_snapshot = StatusSnapshot()
-    svc._snapshot_min_interval = 1.0
-    svc._last_snapshot_time = 0
     svc._engine_thread = MagicMock()
     svc._engine_thread.is_alive.return_value = False
     svc._manual_login_in_progress = False
@@ -57,9 +56,11 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._reload_lock = threading.Lock()
     svc._start_stop_lock = threading.Lock()
     svc._pure_mode = False
-    svc._dashboard_sink = None
-    svc._empty_broadcast_queue = __import__("collections").deque(maxlen=10)
-    svc._ws_manager = None
+    svc._ws_manager = MagicMock()
+    svc._status_manager = StatusManager(
+        get_monitor_core=lambda: svc._monitor_core,
+        ws_manager=svc._ws_manager,
+    )
     svc._login_history = None
     svc._worker_getter = None
     svc._profile_service = MagicMock()
@@ -340,10 +341,23 @@ class TestLoginWithNetworkDetection:
         mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=False, net_reason="down", need_login=True, check_num=1, interval=300, result=NetworkCheckResult(available=False, method="none", latency_ms=0, detail="down"))
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._runtime_config = RuntimeConfig()
+        # 关闭登录前置检查，确保 _do_async_login 真正提交到 orchestrator
+        svc._runtime_config = RuntimeConfig(
+            monitor=MonitorSettings(enable_local_check=False, check_auth_url=False),
+        )
 
         # 使用真实的 _do_async_login（通过 orchestrator）
+        callback_done = threading.Event()
         future = Future()
+        _orig_adc = future.add_done_callback
+
+        def _wrapping_adc(cb):
+            def _wrapped(f):
+                cb(f)
+                callback_done.set()
+            _orig_adc(_wrapped)
+
+        future.add_done_callback = _wrapping_adc
         handle = MagicMock()
         handle.rejected_reason = None
         handle.future = future
@@ -355,12 +369,21 @@ class TestLoginWithNetworkDetection:
         svc._next_network_check = now  # 立即检测
 
         # 手动执行一次循环逻辑（_is_monitoring 是 property，通过 mock_core.monitoring 控制）
-        if svc._is_monitoring and now >= svc._next_network_check:
-            svc._do_network_check()
+        assert svc._is_monitoring is True
+        assert now >= svc._next_network_check
+        svc._do_network_check()
 
-        # 清理
-        future.set_result(None)
-        time.sleep(0.1)
+        # 网络检测应触发自动登录提交到 orchestrator
+        svc._orchestrator.submit.assert_called_once()
+        call_kwargs = svc._orchestrator.submit.call_args[1]
+        assert call_kwargs["source"] == "auto"
+
+        # 模拟登录成功完成回调（元组契约），确定性等待回调执行
+        future.set_result((True, "登录成功"))
+        assert callback_done.wait(timeout=2)
+        # 登录成功后重试计数应被重置、重试定时清零
+        assert svc._retry_policy._attempt == 0
+        assert svc._next_retry_time == 0
 
 
 # =====================================================================
@@ -386,7 +409,17 @@ class TestLoginConcurrencyProtection:
     def test_manual_login_cancels_in_progress_auto_login(self):
         """手动登录应抢占自动登录并重新提交。"""
         svc = _make_raw_engine()
+        callback_done = threading.Event()
         future = Future()
+        _orig_adc = future.add_done_callback
+
+        def _wrapping_adc(cb):
+            def _wrapped(f):
+                cb(f)
+                callback_done.set()
+            _orig_adc(_wrapped)
+
+        future.add_done_callback = _wrapping_adc
         handle = MagicMock()
         handle.rejected_reason = None
         handle.future = future
@@ -399,9 +432,9 @@ class TestLoginConcurrencyProtection:
         assert call_kwargs["source"] == "manual"
         assert isinstance(call_kwargs["config"], RuntimeConfig)
 
-        # 清理
+        # 清理：确定性等待回调完成
         future.set_result((True, "登录成功"))
-        time.sleep(0.1)
+        assert callback_done.wait(timeout=2)
 
     def test_login_in_progress_property(self):
         """task_executor.is_login_running() 正确反映登录状态。"""
@@ -416,7 +449,17 @@ class TestLoginConcurrencyProtection:
     def test_concurrent_login_rejection(self):
         """并发登录请求：第一个成功，后续被去重拒绝。"""
         svc = _make_raw_engine()
+        callback_done = threading.Event()
         future = Future()
+        _orig_adc = future.add_done_callback
+
+        def _wrapping_adc(cb):
+            def _wrapped(f):
+                cb(f)
+                callback_done.set()
+            _orig_adc(_wrapped)
+
+        future.add_done_callback = _wrapping_adc
 
         # 第一次提交返回新 handle，第二次返回去重的旧 handle（future=None）
         new_handle = MagicMock()
@@ -437,9 +480,9 @@ class TestLoginConcurrencyProtection:
         result2 = svc._do_async_login()
         assert result2 is False
 
-        # 清理
-        future.set_result(None)
-        time.sleep(0.1)
+        # 清理：确定性等待回调完成
+        future.set_result((True, "登录成功"))
+        assert callback_done.wait(timeout=2)
 
     def test_login_lock_prevents_double_manual_login(self):
         """手动登录锁防止重复触发。"""
@@ -514,7 +557,17 @@ class TestLoginConcurrencyProtection:
     def test_multiple_threads_competing_for_login(self):
         """多线程竞争登录：由 orchestrator 内部去重，结果取决于 submit 返回。"""
         svc = _make_raw_engine()
+        callback_done = threading.Event()
         future = Future()
+        _orig_adc = future.add_done_callback
+
+        def _wrapping_adc(cb):
+            def _wrapped(f):
+                cb(f)
+                callback_done.set()
+            _orig_adc(_wrapped)
+
+        future.add_done_callback = _wrapping_adc
 
         # orchestrator.submit 由 _slot_lock 保护，模拟第一次返回新 handle，后续返回去重
         new_handle = MagicMock()
@@ -551,6 +604,6 @@ class TestLoginConcurrencyProtection:
         assert results.count(True) == 1
         assert results.count(False) == 4
 
-        # 清理
-        future.set_result(None)
-        time.sleep(0.1)
+        # 清理：确定性等待回调完成
+        future.set_result((True, "登录成功"))
+        assert callback_done.wait(timeout=2)

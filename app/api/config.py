@@ -44,16 +44,18 @@ def get_log_levels() -> LogLevelResponse:
 
 @router.put("/api/config/log-level", response_model=ApiResponse)
 def set_log_level(payload: LogLevelRequest, request: Request) -> ApiResponse:
-    from app.utils.logging import LogConfigCenter
+    from app.utils.logging import VALID_LOG_LEVELS, LogConfigCenter
+    requested = payload.level.strip().upper()
+    if requested not in VALID_LOG_LEVELS:
+        # 无效级别直接拒绝，避免 set_level 静默降级后仍返回 success=True（BUG-081）
+        raise HTTPException(status_code=400, detail=f"无效的日志级别: {payload.level}")
     config = LogConfigCenter.get_instance()
-    config.set_level(payload.level)
+    config.set_level(requested)
     actual = config.get_config().get("level", "INFO")
     profile_service = request.app.state.services.profile_service
     profile_service.update(
         lambda d: setattr(d.global_config, "logging", d.global_config.logging.model_copy(update={"level": actual}))
     )
-    if actual != payload.level.upper():
-        return ApiResponse(success=True, message=f"无效级别 '{payload.level}'，已降级为 {actual}")
     return ApiResponse(success=True, message=f"已设置全局日志级别为 {actual}")
 
 
@@ -250,6 +252,14 @@ def patch_config(
         old_cfg = profile_svc.build_runtime_config(old_data)
 
         current = old_cfg.model_dump()
+        # 将 credentials 扁平化到顶层，与 ConfigSaveRequest/ConfigPatchRequest 的平铺结构对齐
+        # 否则 merged 顶层缺失 username/auth_url/isp/carrier_custom，ConfigSaveRequest 取默认空串，
+        # save_global_and_profile 会用空串覆盖已有凭据（BUG-027）
+        creds = current.pop("credentials", {})
+        current.update(creds)
+        # password 空串语义为不修改（见 save_password_field），不回填运行时明文以免无谓重新加密
+        current["password"] = ""
+
         patch_data = payload.model_dump(exclude_none=True)
 
         merged = {**current, **patch_data}

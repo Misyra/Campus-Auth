@@ -111,14 +111,13 @@ class VariableResolver:
 
         def replacer(match: re.Match) -> str:
             var_name = match.group(1)
-            # runtime_vars 中的非字符串值直接序列化，避免双重编码
+            # runtime_vars 中的值直接序列化，避免双重解析
             if var_name in self.runtime_vars:
                 raw = self.runtime_vars[var_name]
                 if raw is None:
                     return "null"
-                if not isinstance(raw, str):
-                    return json.dumps(raw, ensure_ascii=False)
-            # 字符串值和未解析变量：走 resolve → json.dumps 加引号
+                return json.dumps(raw, ensure_ascii=False)
+            # 未解析变量：走 resolve → json.dumps 加引号
             resolved = self.resolve(match.group(0))
             if resolved == match.group(0):
                 return json.dumps(match.group(0))

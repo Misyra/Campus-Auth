@@ -13,11 +13,29 @@ PROJECT_ROOT = Path(__file__).parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+
 # ── 无显示服务器环境（CI）下 mock pystray ─────────────────
-# pystray 在 Linux/macOS 上需要 GUI 后端，CI 环境中没有可用显示
-if sys.platform != "win32":
-    _pystray_mock = MagicMock()
-    sys.modules["pystray"] = _pystray_mock
+# pystray 在 Linux/macOS 上需要 GUI 后端，CI 环境中没有可用显示。
+# 使用 autouse session 级 fixture，会话结束后恢复 sys.modules，避免全局污染。
+@pytest.fixture(autouse=True, scope="session")
+def _mock_pystray_headless():
+    """无显示服务器环境下 mock pystray，会话结束后恢复 sys.modules。
+
+    替代原模块级 sys.modules 赋值：原写法在收集阶段即污染全局且无 finalizer；
+    此 fixture 以 session 级 autouse 应用，会话结束 try/finally 恢复原始状态。
+    """
+    if sys.platform == "win32":
+        yield
+        return
+    original = sys.modules.get("pystray")
+    sys.modules["pystray"] = MagicMock()
+    try:
+        yield
+    finally:
+        if original is None:
+            sys.modules.pop("pystray", None)
+        else:
+            sys.modules["pystray"] = original
 
 
 @pytest.fixture

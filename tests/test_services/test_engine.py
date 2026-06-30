@@ -1477,9 +1477,7 @@ class TestProperties:
     def test_ws_broadcast_queue_default(self, engine_factory):
         """ws_broadcast_queue 已迁移至 WebSocketManager，此测试验证 engine 不再拥有该属性。"""
         svc = engine_factory(raw=True)
-        assert not hasattr(svc, "ws_broadcast_queue") or isinstance(
-            getattr(type(svc), "ws_broadcast_queue", None), property
-        ) is False
+        assert not hasattr(svc, "ws_broadcast_queue")
 
     def test_pure_mode_property(self, engine_factory):
         svc = engine_factory(raw=True)

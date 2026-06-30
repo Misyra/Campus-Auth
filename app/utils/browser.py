@@ -2,7 +2,7 @@
 
 浏览器生命周期由 PlaywrightWorker 管理，BrowserContextManager 作为轻量代理:
 - __aenter__: 通过 Worker 确保浏览器已就绪，获取浏览器对象引用
-- __aexit__: 通知 Worker 释放引用（浏览器常驻 Worker 不实际关闭）
+- __aexit__: 调用 Worker._close_browser 释放当前浏览器实例（每次登录周期会关闭并重建）
 """
 
 import threading
@@ -54,8 +54,8 @@ Object.defineProperty(navigator, 'languages', {
 });
 
 // 隐藏 Playwright 注入的属性（Object.defineProperty 防止 non-configurable 属性 delete 静默失败）
-Object.defineProperty(window, '__playwright', {value: undefined, writable: false, configurable: false});
-Object.defineProperty(window, '__pw_manual', {value: undefined, writable: false, configurable: false});
+Object.defineProperty(window, '__playwright', {value: undefined, writable: false, configurable: true});
+Object.defineProperty(window, '__pw_manual', {value: undefined, writable: false, configurable: true});
 """.lstrip()
 
 

@@ -68,14 +68,20 @@ def _cmd_stop() -> None:
     try:
         _terminate_process(pid)
         # 验证进程已实际退出
+        stopped = False
         for _ in range(10):
             time.sleep(0.5)
             if not is_service_running()[0]:
+                stopped = True
                 break
-        print("服务已停止")
+        if stopped:
+            print("服务已停止")
+            cleanup_pid()
+        else:
+            # 超时未退出：保留 PID 文件以便后续重试
+            print(f"停止超时：进程 {pid} 仍在运行，PID 文件已保留")
     except OSError:
         print("服务未运行")
-    finally:
         cleanup_pid()
 
 

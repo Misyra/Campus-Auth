@@ -40,8 +40,14 @@ class WebSocketManager:
 
     async def disconnect(self, websocket: WebSocket):
         async with self._lock:
-            if websocket in self._connections:
+            removed = websocket in self._connections
+            if removed:
                 self._connections.remove(websocket)
+        if removed:
+            try:
+                await websocket.close()
+            except Exception:
+                ws_logger.debug("ws close 失败", exc_info=True)
 
     async def broadcast(self, message: str):
         """广播消息（直接发送，保证实时性）"""
@@ -64,22 +70,35 @@ class WebSocketManager:
             # 超时时取消未完成的任务，清理对应连接
             # _send_safe 内部会清理单个超时的连接，但总体超时时
             # 有些任务被取消了，没机会执行清理，需要手动处理
+            to_close = []
             async with self._lock:
                 for ws, task in zip(connections, tasks):
                     if not task.done() and ws in self._connections:
                         self._connections.remove(ws)
-                        ws_logger.debug("清理超时连接")
+                        to_close.append(ws)
                         task.cancel()
+            for ws in to_close:
+                try:
+                    await ws.close()
+                except Exception:
+                    ws_logger.debug("ws close 失败", exc_info=True)
             return
 
         # 清理断开连接
         # 已知：list.remove() 是 O(n)，k 个死亡连接总代价 O(k·n)。
         # 实际无影响：本地桌面应用仅监听 127.0.0.1，连接数通常为 1-2 个（浏览器标签页），
         # O(n²) 在 n≤2 时等价于 O(1)。无需改为 set/dict。
+        to_close = []
         async with self._lock:
             for ws, result in zip(connections, results, strict=False):
                 if isinstance(result, Exception) and ws in self._connections:
                     self._connections.remove(ws)
+                    to_close.append(ws)
+        for ws in to_close:
+            try:
+                await ws.close()
+            except Exception:
+                ws_logger.debug("ws close 失败", exc_info=True)
 
     async def close_all(self):
         """关闭所有 WebSocket 连接"""
@@ -95,12 +114,18 @@ class WebSocketManager:
 
     async def _send_safe(self, ws: WebSocket, message: str):
         try:
-            await asyncio.wait_for(ws.send_text(message), timeout=5.0)
+            await asyncio.wait_for(ws.send_text(message), timeout=2.0)
         except TimeoutError:
             ws_logger.warning("WebSocket 发送超时，断开连接")
             async with self._lock:
-                if ws in self._connections:
+                removed = ws in self._connections
+                if removed:
                     self._connections.remove(ws)
+            if removed:
+                try:
+                    await ws.close()
+                except Exception:
+                    ws_logger.debug("ws close 失败", exc_info=True)
 
     # ── 广播队列（原 WsBroadcaster）──
 
@@ -111,23 +136,36 @@ class WebSocketManager:
     def _notify_drain(self) -> None:
         """唤醒 drain loop（线程安全）。"""
         if self._loop is not None and self._loop.is_running():
-            self._loop.call_soon_threadsafe(self._drain_event.set)
+            try:
+                self._loop.call_soon_threadsafe(self._drain_event.set)
+            except RuntimeError:
+                # loop 关闭过程中 call_soon_threadsafe 可能失败，回退到直接 set
+                self._drain_event.set()
         else:
             self._drain_event.set()
 
     def set_dashboard_sink(self, sink: DashboardSink) -> None:
         """注入 DashboardSink，并迁移轻量模式期间积累的广播消息。"""
         old_queue = self._empty_broadcast_queue
+        new_queue = sink.broadcast_queue
         if old_queue:
-            new_queue = sink.broadcast_queue
             while old_queue:
                 try:
                     new_queue.append(old_queue.popleft())
                 except IndexError:
                     break
+        # 原子切换：此后 enqueue_status 直接入队到 sink，不再写入 old_queue
         self._dashboard_sink = sink
-        # 注入 drain 通知器
+        # 捕获迁移窗口（迁移循环结束 -> 赋值）期间新入队的消息
+        if old_queue:
+            while old_queue:
+                try:
+                    new_queue.append(old_queue.popleft())
+                except IndexError:
+                    break
+        # 注入 drain 通知器并立即唤醒 drain loop，避免已迁移消息延迟排空
         sink.set_drain_notifier(self._notify_drain)
+        self._notify_drain()
 
     @property
     def broadcast_queue(self) -> deque:
@@ -139,7 +177,13 @@ class WebSocketManager:
     def enqueue_status(self, status_dict: dict) -> None:
         """将状态更新放入广播队列。"""
         try:
-            self.broadcast_queue.append({"type": "status", "data": status_dict})
+            queue = self.broadcast_queue
+            if queue.maxlen is not None and len(queue) >= queue.maxlen:
+                ws_logger.warning(
+                    "WS 广播队列已满 (maxlen={})，新消息将丢弃最旧消息",
+                    queue.maxlen,
+                )
+            queue.append({"type": "status", "data": status_dict})
             self._notify_drain()
         except Exception:
             ws_logger.exception("状态广播入队失败")

@@ -144,6 +144,22 @@ def _remove_user_data() -> tuple[bool, str]:
 def _remove_playwright_cache(cache_dir: Path) -> tuple[bool, str]:
     if not cache_dir.exists():
         return True, "Playwright 缓存不存在，跳过"
+
+    # 路径校验：确保删除的是 Playwright 标准缓存目录，避免环境变量或软链接指向敏感目录
+    expected_name = "ms-playwright"
+    if cache_dir.name != expected_name:
+        return False, f"安全检查失败：目录名不是 {expected_name}"
+
+    # 校验路径上任一节点不是软链接（防止链接到用户其他目录造成误删）
+    try:
+        current = cache_dir
+        while current and current != current.parent:
+            if current.is_symlink():
+                return False, f"安全检查失败：路径 {current} 是软链接，拒绝删除"
+            current = current.parent
+    except Exception as exc:
+        return False, f"安全检查失败：路径解析异常: {exc}"
+
     logger.info("正在清理 Playwright 缓存")
     try:
         shutil.rmtree(cache_dir)

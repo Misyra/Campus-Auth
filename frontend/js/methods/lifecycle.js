@@ -224,9 +224,19 @@ export const lifecycleMethods = {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'status') {
-          this.status = { ...this.status, ...data.data };
+          if (typeof data.data === 'object' && data.data !== null) {
+            this.status = data.data;
+          } else {
+            this.frontendLogger.warn('websocket', 'status 消息数据非对象: ' + typeof data.data);
+          }
         } else if (data.type === 'log') {
-          this._appendLogs([data.data]);
+          if (typeof data.data === 'object' && data.data !== null) {
+            this._appendLogs([data.data]);
+          } else {
+            this.frontendLogger.warn('websocket', 'log 消息数据非对象: ' + typeof data.data);
+          }
+        } else {
+          this.frontendLogger.warn('websocket', '未知消息类型: ' + data.type);
         }
       } catch (e) {
         this.frontendLogger.error('websocket', '消息解析错误', e);

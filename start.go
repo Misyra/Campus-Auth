@@ -4,6 +4,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -105,16 +106,21 @@ func main() {
 	}
 }
 
-// findUv 查找 uv 命令：PATH → 本地 .uv → 下载
+// findUv 查找 uv 命令：PATH → 本地 .uv（校验版本）→ 下载
 func findUv(uvDir, uvExe string) string {
 	// 1. 检查 PATH
 	if path, err := exec.LookPath("uv"); err == nil {
 		return path
 	}
 
-	// 2. 检查本地 .uv 目录
+	// 2. 检查本地 .uv 目录（校验版本）
 	if _, err := os.Stat(uvExe); err == nil {
-		return uvExe
+		if isUvVersionMatch(uvDir) {
+			return uvExe
+		}
+		// 版本不匹配，清理旧文件并重新下载
+		fmt.Printf("本地 uv 版本不匹配（期望 %s），重新下载...\n", uvVersion)
+		os.Remove(uvExe)
 	}
 
 	// 3. 下载
@@ -122,6 +128,16 @@ func findUv(uvDir, uvExe string) string {
 		fatal("[X] uv 下载失败: %v", err)
 	}
 	return uvExe
+}
+
+// isUvVersionMatch 检查 .uv/version.txt 是否匹配当前 uvVersion
+func isUvVersionMatch(uvDir string) bool {
+	versionFile := filepath.Join(uvDir, "version.txt")
+	data, err := os.ReadFile(versionFile)
+	if err != nil {
+		return false
+	}
+	return string(bytes.TrimSpace(data)) == uvVersion
 }
 
 // downloadUv 从镜像源下载 uv（使用系统 curl 和 tar）
@@ -188,6 +204,9 @@ func downloadUv(uvDir, uvExe string) error {
 			continue
 		}
 
+		// [57] 记录版本号，供 findUv 校验
+		os.WriteFile(filepath.Join(uvDir, "version.txt"), []byte(uvVersion), 0644)
+
 		fmt.Println("[OK] uv 下载完成")
 		return nil
 	}
@@ -233,11 +252,19 @@ func runCommand(name string, args ...string) error {
 
 	// 转发信号给子进程
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	if runtime.GOOS == "windows" {
+		// Windows: Ctrl+C 会同时发送给父进程和子进程（CTRL_C_EVENT），
+		// 不需要显式转发 SIGINT，否则会双重触发。
+		signal.Notify(sigChan, syscall.SIGTERM)
+	} else {
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	}
 	go func() {
 		for sig := range sigChan {
 			if cmd.Process != nil {
-				cmd.Process.Signal(sig)
+				if err := cmd.Process.Signal(sig); err != nil {
+					fmt.Fprintf(os.Stderr, "转发信号失败: %v\n", err)
+				}
 			}
 		}
 	}()

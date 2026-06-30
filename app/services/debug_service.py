@@ -110,16 +110,20 @@ class DebugSessionManager:
         if not task:
             raise HTTPException(status_code=404, detail="任务不存在")
 
-        # 构建模板变量（复用 service 的运行时配置）
-        runtime_config = monitor_service.get_runtime_config()
-        template_vars = build_login_template_vars(
-            auth_url=runtime_config.credentials.auth_url,
-            username=runtime_config.credentials.username,
-            password=runtime_config.credentials.password,
-            isp=runtime_config.credentials.isp,
-            task_url=task.url,
-            custom_variables=runtime_config.app_settings.custom_variables,
-        )
+        # 构建模板变量（复用 service 的运行时配置）— 通过 to_thread 避免磁盘 I/O 与加密操作阻塞事件循环
+        def _build_template_vars():
+            rc = monitor_service.get_runtime_config()
+            tv = build_login_template_vars(
+                auth_url=rc.credentials.auth_url,
+                username=rc.credentials.username,
+                password=rc.credentials.password,
+                isp=rc.credentials.isp,
+                task_url=task.url,
+                custom_variables=rc.app_settings.custom_variables,
+            )
+            return rc, tv
+
+        runtime_config, template_vars = await asyncio.to_thread(_build_template_vars)
 
         # 解析任务 URL
         url = task.url or ""
@@ -174,11 +178,13 @@ class DebugSessionManager:
             )
         except Exception:
             async with self._lock:
+                await self._cancel_debug_timer()
                 await self._close_debug_browser()
             raise
 
         if not response.success:
             async with self._lock:
+                await self._cancel_debug_timer()
                 await self._close_debug_browser()
             debug_logger.warning("调试会话启动失败: {}", response.error)
             raise RuntimeError(f"调试会话启动失败: {response.error}")

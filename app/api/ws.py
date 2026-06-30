@@ -9,7 +9,7 @@ from app.utils.logging import get_logger
 ws_logger = get_logger("ws", source="backend")
 
 
-async def websocket_logs_handler(websocket, ws_manager, engine):
+async def websocket_logs_handler(websocket, ws_manager):
     """WebSocket /ws/logs 处理逻辑。"""
     from fastapi import WebSocketDisconnect
 

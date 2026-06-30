@@ -58,6 +58,7 @@ class LoginHistoryService:
             task_name=task_name,
             error=error[:200] if error else "",
         )
+        need_cleanup = False
         with self._lock:
             try:
                 with open(self._history_path, "a", encoding="utf-8") as f:
@@ -67,11 +68,14 @@ class LoginHistoryService:
                 self._write_count += 1
                 # 每 50 次写入概率性清理旧记录
                 if self._write_count % 50 == 0:
-                    self._cleanup_old(max_age_days=30)
+                    need_cleanup = True
             except Exception:
                 logger.warning(
                     "写入登录历史失败: {}", self._history_path, exc_info=True
                 )
+        # 清理在主写入锁外执行，避免长时间持有 _lock 阻塞并发写入
+        if need_cleanup:
+            self._cleanup_old(max_age_days=30)
 
     def list_recent(self, limit: int = 50) -> list[LoginHistoryEntry]:
         """读取最近 N 条登录记录（从新到旧）。"""
@@ -127,30 +131,35 @@ class LoginHistoryService:
                 return 0
 
     def _cleanup_old(self, max_age_days: int = 30) -> None:
-        """清理超过 max_age_days 天的旧记录。"""
-        if not self._history_path.exists():
-            return
-        cutoff = datetime.now() - timedelta(days=max_age_days)
-        cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
-        try:
-            kept: list[str] = []
-            with open(self._history_path, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        data = json.loads(line)
-                        if data.get("timestamp", "") >= cutoff_str:
+        """清理超过 max_age_days 天的旧记录。
+
+        使用独立的 _cleanup_lock 防止并发清理，且不持有主写入锁 _lock，
+        避免清理期间阻塞并发写入。
+        """
+        with self._cleanup_lock:
+            if not self._history_path.exists():
+                return
+            cutoff = datetime.now() - timedelta(days=max_age_days)
+            cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
+            try:
+                kept: list[str] = []
+                with open(self._history_path, encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            data = json.loads(line)
+                            if data.get("timestamp", "") >= cutoff_str:
+                                kept.append(line)
+                        except Exception:
                             kept.append(line)
-                    except Exception:
-                        kept.append(line)
-            content = "\n".join(kept)
-            if kept:
-                content += "\n"
-            atomic_write(str(self._history_path), content, encoding="utf-8")
-            kept_count = len(kept)
-            if kept_count > 0:
-                logger.debug("登录历史清理完成，保留 {} 条记录", kept_count)
-        except Exception:
-            logger.warning("清理登录历史失败: {}", self._history_path, exc_info=True)
+                content = "\n".join(kept)
+                if kept:
+                    content += "\n"
+                atomic_write(str(self._history_path), content, encoding="utf-8")
+                kept_count = len(kept)
+                if kept_count > 0:
+                    logger.debug("登录历史清理完成，保留 {} 条记录", kept_count)
+            except Exception:
+                logger.warning("清理登录历史失败: {}", self._history_path, exc_info=True)

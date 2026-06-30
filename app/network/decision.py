@@ -265,7 +265,8 @@ def _is_auth_url_reachable(
             parsed = urlparse(auth_url)
             host = parsed.hostname
             if not host:
-                return True
+                logger.debug("认证地址 hostname 解析失败，视为不可达: {}", auth_url)
+                return False
             port = parsed.port or (443 if parsed.scheme == "https" else 80)
             if _check_host_port(host, port, auth_url):
                 return True

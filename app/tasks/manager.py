@@ -422,7 +422,7 @@ class TaskManager:
 
     def delete_task(self, task_id: str) -> bool:
         normalized = normalize_task_id(task_id)
-        if normalized == "default":
+        if normalized.lower() == "default":
             return False
         if not is_valid_task_id(normalized):
             return False
@@ -597,7 +597,7 @@ class TaskManager:
     @_with_task_id_validation
     def delete_task_with_validation(self, task_id: str) -> tuple[bool, str]:
         """删除任务（含 ID 校验）。"""
-        if task_id == "default":
+        if task_id.lower() == "default":
             return False, "不能删除默认任务"
 
         success = self.delete_task(task_id)
